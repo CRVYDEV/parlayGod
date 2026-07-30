@@ -2709,3 +2709,41 @@ attention, the higher-variance-not-higher-EV intent.
 specs — refused while the layer had no feed, purchasable again now they buy a real effect
 (`business:spec` $OMR burn unchanged). §10.4: zero new reasons — the fine rides the existing
 `business:raid` sink, the seized pending was never minted, and the sim stays drift-0.
+
+
+## THE STREET WAR & THE RIVALS LEDGER (founder-directed 2026-07-30)
+
+Founder: "Crimes should also directly target the assets of users at random — PvP … Rob Player X's
+Laundromat … a Rivals system to track crimes and players that have shown malice to you … Cars should
+be able to get stolen." Design: `omerta-street-rivals-design.md`. The §10.4 record, load-bearing:
+**this drop adds ZERO new emission** —
+
+- **Rob a front** (`business:rob`) is a REDIRECT of the venue's PENDING income (the audited shakedown
+  mechanism at half the rate: owner keeps the rest pending, the clock advances by only the stolen
+  share), and rob + shakedown share ONE per-venue window (`businesses.shakedown_at`, 8h) — so the
+  per-venue extraction BOUND is exactly what the signed shakedown audit assumed (max 30% per 8h).
+  The reason rides the existing `business:` prefix — zero invariants.js change.
+- **Steal a car** moves a ROW — cars conserve by row count (the chop/pink-slip/market-seize
+  precedent), no ledger row, no currency. The thief's clock is the signed §7.5 `gta_at` window
+  (no new farm cadence).
+- **The Rivals ledger** moves NOTHING — pure intel over acts whose existing notify already NAMES the
+  aggressor (jump / shakedown / rob / car theft / hostile takeover / a fire-kill). Anonymous acts
+  stay anonymous; the $OMR peek/trace remain the only piercers.
+
+| lever | value | note |
+|---|---|---|
+| `RIVALS.ROB_RATE_BPS` | **1500** | 15% of pending — half the shakedown's 30%, on the SAME shared window |
+| `RIVALS.ROB_ENERGY` / `ROB_HEAT` / `ROB_JAIL_S` | **8 / 6 / 300** | cheaper + pettier than the shakedown; a failed rob is JAIL (it's a crime), not a beating |
+| `RIVALS.VICTIM_MIN_LVL` | **8** | rookie protection, rob + theft both (the npcHit-floor posture) |
+| `RIVALS.CAR_THEFT.BASE_P/STAT_SCALE/ALARM_DIV` | **0.35 / 300 / 3000** | `p = clamp(BASE + (cun+spd/2)/SCALE − √carVal/ALARM_DIV, MIN_P, MAX_P)` — expensive iron protects itself (an apex car floors at MIN_P) |
+| `RIVALS.CAR_THEFT.MIN_P/MAX_P` | **0.05 / 0.7** | the clamp |
+| `RIVALS.CAR_THEFT.ENERGY/JAIL_S/HEAT` | **10 / 600 / 10** | heat win or lose; a miss is 10 min in lockup |
+| `RIVALS.CAR_THEFT.VICTIM_SHIELD_MS` | **24h** | a player loses at most ONE car per day to theft, however many thieves try |
+| `RIVALS.RETENTION_D` | **90** | grudges older than a season fade off the ledger |
+
+Grief bounds, each one deliberate: the shared 8h venue window (rob can never stack on top of a
+shakedown), the GTA clock, the victim shield, the rookie floor, `GARAGE_CAP` refusal, listed/pledged
+iron escrow-locked, hospitalized/witpro/family off-limits. **No new faucet → no new sim probe**
+(the sim stays drift-0 with the drop live). `CAR_THEFT_P` is a TEST-ONLY roll knob
+(preflight-classified, the BUSINESS_RAID_P precedent). Step-two roadmap (trunk goods, boat theft,
+residents as marks, revenge teeth, rival-aware coach/Wire) is founder picks — design doc §4.

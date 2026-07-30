@@ -2379,3 +2379,20 @@ CREATE TABLE IF NOT EXISTS career_claims (
   task_id TEXT NOT NULL,
   PRIMARY KEY (account_id, task_id)
 );
+
+-- THE STREET WAR + THE RIVALS LEDGER (omerta-street-rivals-design.md, founder-directed).
+-- rival_events is ACCOUNT-keyed on BOTH sides (malice follows the bloodline — the vendetta/dm_blocks
+-- posture; no character_id column, so the estate wipe never touches it by construction). It records
+-- ONLY acts whose existing notify already NAMES the aggressor to the victim — the info-economy rule.
+CREATE TABLE IF NOT EXISTS rival_events (
+  id UUID PRIMARY KEY,
+  victim_account UUID NOT NULL,
+  aggressor_account UUID NOT NULL,
+  kind TEXT NOT NULL,                              -- jump | shakedown | rob | car_theft | takeover | kill
+  detail JSONB NOT NULL DEFAULT '{}',
+  at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_rival_events_victim ON rival_events (victim_account, at DESC);
+-- the victim's car-theft shield: a player loses at most ONE car per window to theft, however many
+-- thieves try (direct-SQL under the withTwoCharacters victim lock — outside persistCharacter's list)
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS car_stolen_at TIMESTAMPTZ;

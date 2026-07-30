@@ -9,8 +9,9 @@
 // `swap:buy` ledger (no new reason). Step-two scrutiny/raid/extortion risk is deferred by design.
 import crypto from 'node:crypto';
 import { GameError, bus, skillMult, trunkCap, bumpMastery, masteryFx } from './game.js';
-import { CONSTANTS, M3, CASINO, BUSINESSES, SKILLS, BUSINESS_EMPIRE, businessOf, businessTierOf, businessMaxTier,
+import { CONSTANTS, M3, CASINO, BUSINESSES, SKILLS, BUSINESS_EMPIRE, RIVALS, businessOf, businessTierOf, businessMaxTier,
   businessAssessedValue, launderRankOf, levelOf, effStat, pathFx } from './rules.js';
+import { recordRival } from './rivals.js';
 import { denAvailable, denDistribute } from './casino.js';
 import { spendOmr } from './vanity.js';
 
@@ -305,50 +306,86 @@ export async function launderAtBusiness() {
 // cooldown protects the front from spam; heat lands on the attacker win or lose (extortion is
 // exposure); family is off-limits; a safehouse blocks offense (P1.3), never defense here — the
 // venue is a street address, not the man.
-export async function shakedownBusiness(ch, victim, businessId, client, h) {
+// ONE core for the two extortion verbs (the resetFrontToNewOwner lesson — a copied block here is
+// how the sackEmpire rake-cursor drifted). SHAKEDOWN is the signed MUSCLE play (30% cut, security
+// beats a failed attempt bloody); ROB — "hit the register" (omerta-street-rivals-design.md §1) —
+// is the STEALTH play (15%, cunning+speed both sides, and a failed attempt is JAIL: it's a crime,
+// you get pinched). Both stamp and respect the SAME per-venue window (shakedown_at), so total
+// per-venue PvP extraction stays bounded at max(SHAKEDOWN_RATE) per SHAKEDOWN_CD_MS exactly as
+// the signed shakedown audit assumed — the rob verb adds reach, never a wider bound. Both are
+// RIVALS-ledger feeds (the victim's notify names the aggressor either way).
+async function extortFront(ch, victim, businessId, client, h, verb) {
+  const rob = verb === 'rob';
+  const energy = rob ? RIVALS.ROB_ENERGY : CONSTANTS.SHAKEDOWN_ENERGY;
+  const heat = rob ? RIVALS.ROB_HEAT : CONSTANTS.SHAKEDOWN_HEAT;
+  const rate = rob ? RIVALS.ROB_RATE_BPS / 10000 : CONSTANTS.SHAKEDOWN_RATE;
   if (jailed(ch)) throw new GameError('jailed', 'No street work from lockup.');
   if (safeHoused(ch)) throw new GameError('safe', "Can't run extortion while you're to ground — a safehouse is a shield, not a bunker.");
   if (hospitalized(ch)) throw new GameError('hosp_self', 'No leaning on anyone from a hospital bed.');
   if (Number(ch.health) < M3.JUMP_MIN_HEALTH) throw new GameError('health', "You're in no shape to lean on anyone.");
-  if (Number(ch.energy) < CONSTANTS.SHAKEDOWN_ENERGY) throw new GameError('energy', `Need ${CONSTANTS.SHAKEDOWN_ENERGY} energy to lean on a front.`);
+  if (Number(ch.energy) < energy) throw new GameError('energy', `Need ${energy} energy for that.`);
   if (hospitalized(victim)) throw new GameError('hosp', "They're under the Doc's care. Even we have rules.");
   if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId) throw new GameError('family', "They're family. Omertà.");
+  // rookie protection on the NEW verb only — the signed shakedown keeps its signed gate set
+  if (rob && levelOf(Number(victim.respect)) < RIVALS.VICTIM_MIN_LVL)
+    throw new GameError('rookie', 'Nothing worth taking off a corner kid — pick a made mark.');
   const r = (await client.query('SELECT * FROM businesses WHERE id=$1 FOR UPDATE', [businessId])).rows[0];
   if (!r || r.character_id !== victim.id) throw new GameError('bad_business', 'No such front on them.');
   if (r.shakedown_at && Date.now() - new Date(r.shakedown_at).getTime() < CONSTANTS.SHAKEDOWN_CD_MS)
     throw new GameError('cooldown', 'That front just had a visit — let the dust settle.');
-  ch.energy = Number(ch.energy) - CONSTANTS.SHAKEDOWN_ENERGY;
-  ch.heat = Math.min(100, Number(ch.heat || 0) + CONSTANTS.SHAKEDOWN_HEAT); // extortion is exposure, win or lose (clamp 100, audit LOW-2)
+  ch.energy = Number(ch.energy) - energy;
+  ch.heat = Math.min(100, Number(ch.heat || 0) + heat); // exposure win or lose (clamp 100, audit LOW-2)
   await client.query('UPDATE businesses SET shakedown_at=now() WHERE id=$1', [businessId]);
 
   const eff = (s) => effStat(ch[s], s, h.owned.assets, h.owned.gear);
   const vEff = (s) => effStat(victim[s], s, h.victimOwned.assets, h.victimOwned.gear);
-  // BRUISER (skills): the enforcer leans harder — a new modifier, sign-off lever
-  const atk = (eff('muscle') + eff('cunning') * 0.5) * skillMult(h, 'bruiser', SKILLS.FX.BRUISER_MULT) * skillMult(h, 'made_man', SKILLS.FX.MADE_MAN_MULT)
-    * masteryFx(h, 'muscle') + Math.random() * 25; // TRADES perk (the shakedown half of the muscle axis)
-  const def = vEff('muscle') + vEff('cunning') * 0.5 + Math.random() * 25;
-  await h.rngLog(client, ch.id, `shakedown:${victim.id}`, Math.round(atk * 100) / 100, atk > def ? 'win' : 'loss');
+  // shakedown: the enforcer's contest (BRUISER/MADE MAN/muscle-mastery stack — signed levers).
+  // rob: the sneak-thief's — cunning + speed both sides (a different build wins), deliberately
+  // NO skill/mastery stack in step one (new XP/perk surface is its own review — design roadmap).
+  const atk = rob
+    ? eff('cunning') + eff('speed') * 0.5 + Math.random() * 25
+    : (eff('muscle') + eff('cunning') * 0.5) * skillMult(h, 'bruiser', SKILLS.FX.BRUISER_MULT) * skillMult(h, 'made_man', SKILLS.FX.MADE_MAN_MULT)
+      * masteryFx(h, 'muscle') + Math.random() * 25; // TRADES perk (the shakedown half of the muscle axis)
+  const def = rob
+    ? vEff('cunning') + vEff('speed') * 0.5 + Math.random() * 25
+    : vEff('muscle') + vEff('cunning') * 0.5 + Math.random() * 25;
+  await h.rngLog(client, ch.id, `${verb}:${victim.id}`, Math.round(atk * 100) / 100, atk > def ? 'win' : 'loss');
 
   if (atk > def) {
     const pending = accrued(r);
-    const cut = Math.floor(pending * CONSTANTS.SHAKEDOWN_RATE);
+    const cut = Math.floor(pending * rate);
     // advance the clock by only the STOLEN share — the owner keeps the rest pending
     const elapsed = Math.min(Date.now() - new Date(r.last_collect_at).getTime(), CONSTANTS.BUSINESS_CAP_MS);
     await client.query('UPDATE businesses SET last_collect_at=$2 WHERE id=$1',
-      [businessId, new Date(Date.now() - Math.floor(Math.max(0, elapsed) * (1 - CONSTANTS.SHAKEDOWN_RATE)))]);
+      [businessId, new Date(Date.now() - Math.floor(Math.max(0, elapsed) * (1 - rate)))]);
     if (cut > 0) {
       ch.cash = Number(ch.cash) + cut;
-      await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: cut, reason: 'business:shakedown', counterparty: victim.id });
+      await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: cut, reason: rob ? 'business:rob' : 'business:shakedown', counterparty: victim.id });
     }
-    await h.notify(client, victim.id, 'shakedown', { from: ch.name, kind: r.kind, cut });
-    await bumpMastery(client, h, ch, 'muscle', 'shakedown'); // THE TRADES — extortion is the protection craft
-    bus.emit('streets', { type: 'shakedown', by: ch.name, on: victim.name, kind: r.kind });
-    return { ok: true, win: true, kind: r.kind, cut };
+    await h.notify(client, victim.id, rob ? 'robbed' : 'shakedown', { from: ch.name, kind: r.kind, cut });
+    await recordRival(client, victim.account_id, ch, verb, { kind: r.kind, cut });
+    if (!rob) await bumpMastery(client, h, ch, 'muscle', 'shakedown'); // THE TRADES — extortion is the protection craft
+    bus.emit('streets', { type: verb, by: ch.name, on: victim.name, kind: r.kind });
+    return { ok: true, win: true, kind: r.kind, cut, ...(rob ? { robbed: true } : {}) };
+  }
+  if (rob) {
+    // pinched at the register — a failed robbery is a CRIME caught in the act
+    ch.jail_until = new Date(Date.now() + RIVALS.ROB_JAIL_S * 1000);
+    await h.notify(client, victim.id, 'rob_failed', { from: ch.name, kind: r.kind });
+    await recordRival(client, victim.account_id, ch, verb, { kind: r.kind, failed: true });
+    return { ok: true, win: false, kind: r.kind, cut: 0, robbed: true, jailedS: RIVALS.ROB_JAIL_S };
   }
   // the front's security saw you off
   ch.health = Math.max(1, Number(ch.health) - rand(10, 25));
   await h.notify(client, victim.id, 'shakedown_failed', { from: ch.name, kind: r.kind });
+  await recordRival(client, victim.account_id, ch, verb, { kind: r.kind, failed: true });
   return { ok: true, win: false, kind: r.kind, cut: 0 };
+}
+export async function shakedownBusiness(ch, victim, businessId, client, h) {
+  return extortFront(ch, victim, businessId, client, h, 'shakedown');
+}
+export async function robBusiness(ch, victim, businessId, client, h) {
+  return extortFront(ch, victim, businessId, client, h, 'rob');
 }
 
 // ── Tier-4: FRONT SPECIALIZATION — a MAX-TIER front can be given ONE build-identity spec for a $OMR
@@ -430,6 +467,7 @@ export async function takeoverBusiness(ch, owner, businessId, client, h) {
   if (!won) {
     ch.health = Math.max(1, Number(ch.health) - rand(10, 25));
     await h.notify(client, owner.id, 'takeover_failed', { from: ch.name, kind: r.kind });
+    await recordRival(client, owner.account_id, ch, 'takeover', { kind: r.kind, failed: true });
     return { ok: true, won: false, kind: r.kind, feeBurned: fee };
   }
   // WON — settle the owner's pending scrutiny FIRST (a friendly takeover must not wash a pending fine),
@@ -444,6 +482,7 @@ export async function takeoverBusiness(ch, owner, businessId, client, h) {
   await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [tax]); // singleton LAST (canonical order)
   h.owned.businesses = await businessesOf(client, ch.id);
   await h.notify(client, owner.id, 'takeover', { from: ch.name, kind: r.kind, net });
+  await recordRival(client, owner.account_id, ch, 'takeover', { kind: r.kind });
   bus.emit('streets', { type: 'business_takeover', by: ch.name, from: owner.name, kind: r.kind });
   return { ok: true, won: true, kind: r.kind, price, net, feeBurned: fee };
 }

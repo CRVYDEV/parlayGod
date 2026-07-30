@@ -3637,3 +3637,26 @@ export const CAREER = {
     ] },
   ],
 };
+
+// ══════════ THE STREET WAR + THE RIVALS LEDGER (omerta-street-rivals-design.md) ══════════
+// Founder-directed: crimes that directly target player ASSETS, and a ledger of who has shown you
+// malice. Every mechanic is a REDIRECT or an OWNERSHIP MOVE — zero new emission (the design's §0
+// constraint): robbing a front takes a cut of its PENDING income on the audited shakedown
+// mechanism at HALF the rate on the SAME shared per-venue window (so the signed per-venue
+// extraction bound is unchanged); stealing a car moves a row (cars conserve by row count).
+// ALL numbers are founder sign-off levers (pinned in test/levers.js, tabled in BALANCE.md).
+export const RIVALS = {
+  // rob a front — the shakedown's petty sibling: stealth build (cunning+speed/2), smaller cut,
+  // a failed attempt is JAIL (it's a crime), sharing the shakedown's 8h per-venue window
+  ROB_RATE_BPS: 1500, ROB_ENERGY: 8, ROB_HEAT: 6, ROB_JAIL_S: 300,
+  VICTIM_MIN_LVL: 8,                 // rookie protection — both verbs (the LOOT_MIN_LVL posture)
+  CAR_THEFT: {
+    // p = clamp(BASE_P + (cunning + speed/2)/STAT_SCALE − sqrt(carVal)/ALARM_DIV, MIN_P, MAX_P)
+    // — expensive iron protects itself (a $5k beater ~0.45 for a mid thief, an apex car floors
+    // at MIN_P). The thief's clock is the GTA clock (gta_at — the signed §7.5 pacing, no new farm
+    // cadence); the victim loses at most one car per VICTIM_SHIELD_MS. CAR_THEFT_P is TEST-ONLY.
+    BASE_P: 0.35, STAT_SCALE: 300, ALARM_DIV: 3000, MIN_P: 0.05, MAX_P: 0.7,
+    ENERGY: 10, JAIL_S: 600, HEAT: 10, VICTIM_SHIELD_MS: 24 * 3600 * 1000,
+  },
+  RETENTION_D: 90,                   // the rivals ledger's memory (worker sweep)
+};
