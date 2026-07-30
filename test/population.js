@@ -176,16 +176,24 @@ const escrow0 = await escrowDrift();
 // its own way of coming up empty by luck:
 //
 //   • the DUEL ladder needs a resident who can actually reach DUELS.STAKE_MIN. A limit is bps of
-//     their own cash, so only the richer bands qualify at all — with a dozen residents there is a
-//     real chance the band draw hands out nobody who can. More residents, not more turns, fixes it.
+//     their own cash, so only the richer bands qualify at all — and whether ANY of them turns up is
+//     a weighted band draw, i.e. a PROBABILISTIC precondition for a DETERMINISTIC claim.
 //   • the ESCROW assertions need a resident to reach the SHYLOCK / market branches, and a resident's
 //     FIRST turn is always consumed by the consent-limit branch (it returns 'listed'). So those
 //     branches are only reachable on a second turn onward. More turns, not more residents, fixes it.
 //
-// Measured before this: ~1 run in 12 failed, on one or the other. A gate that reddens at random
-// teaches people to ignore it, so the fix is to make the conditions overwhelmingly likely rather
-// than to weaken what is being asserted — the assertions themselves are the point.
+// Measured before this: ~1 run in 12 failed, on one or the other. Raising the headcount and the
+// turn count took the duel case down to roughly 1 run in 80 — better odds, same defect, and the
+// residual still reddened a full `npm test` (2026-07-30). A gate that reddens at random teaches
+// people to ignore it, so the precondition is now GUARANTEED rather than made likely: one resident
+// is spawned from a band whose seed range clears the threshold outright, through the ordinary
+// ledgered spawn path. What is being asserted is untouched — residentAct still has to notice them
+// and list them, which is the actual claim, and every OTHER resident still arrives by the real draw.
 for (let i = 0; i < 4; i++) await runPopulation(pool);          // headcount, for the band draw
+const bossBand = POPULATION.BANDS.find((b) => b.id === 'boss');
+assert(bossBand.seed[0] * POPULATION.BEHAVIOUR.DUEL_BPS / 10000 >= DUELS.STAKE_MIN,
+  'the boss band must clear the duel floor outright, or this precondition is not guaranteed after all');
+assert(await spawnResident(pool, { band: bossBand }), 'the guaranteed duel-capable resident spawns');
 for (let i = 0; i < 60; i++) await runResidentBehaviour(pool);  // turns, for the later branches
 
 // (1) CONSENT LIMITS — this is what lights up the bodyguard market, the fade board and the duel

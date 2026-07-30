@@ -206,6 +206,47 @@ cash that players spend is what backs the cash that $OMR redeems for. On the $OM
 every window redemption flows to the top families (**the family yield**). Spenders fund earners;
 nothing is created to make it so.
 
+### Why it is built this way
+
+Almost every game with a token has the same pipe: you farm the game's own currency, convert it to the
+token, and sell. It is one pipe, and everything bad runs through it. Farming is unbounded, so the token
+is unbounded. The people converting are the people leaving, so the sell pressure grows exactly as fast
+as the game succeeds. And because the token is the only reason to grind, the grind is optimised until
+it stops resembling a game. The genre's most-studied collapse — Axie's SLP — is that pipe running to
+completion.
+
+**OMERTÀ does not have the pipe.** Cash cannot become $OMR at any price, through any route, at any
+rate. There is no swap, no wash house, no laundering at your own front — those routes exist as code
+that answers `retired`. This is not a rate that was tuned down or a cap that was lowered; the
+conversion does not exist.
+
+Four things follow, and each is a mechanism rather than a policy:
+
+- **Grinding cannot inflate the token.** Grinding makes cash, and cash has nowhere to go but back into
+  the city. A player who plays twenty hours a day is a rich player, not a source of new supply.
+- **Supply is enumerated.** In-game, $OMR can be created by exactly three things: mission rewards,
+  the Vig prize pool, and the Street Wage. The ledger check is `buckets == genesis + mints − burns`,
+  and a reason nobody enumerated is itself an alarm. There is no fourth tap to find.
+- **The Street Wage is a published schedule, not a yield.** A daily budget that halves on a fixed
+  interval, drawn against a lifetime endowment, capped per account, and paid only for respect
+  actually earned that day. The budget is a ceiling: unearned budget is never minted.
+- **The one conversion runs the other way, and only on money that already exists.** The Window burns
+  $OMR and pays cash out of a till that real cash sinks filled. A short till refuses and burns
+  nothing. It is a claim on what was collected, never a promise about what will be.
+
+**Why this particular game.** OMERTÀ's whole thesis is that things are lost — death is permanent, your
+pocket is lootable, your empire is seizable by someone who wants it more. A token you can farm and dump
+is, structurally, a way to opt out of that: convert your position into something the game cannot take,
+and leave. Severing the pipe means effort converts to $OMR only by being paid for playing well, and
+$OMR converts to power only by being burned. The currency cannot be used as an exit from the risk that
+the game is about.
+
+**The honest tension.** Staked $OMR cannot be looted. That is deliberate — a game with no safe harbour
+teaches players to hold nothing — but it *is* a hedge, and the price of it is real: unstaking exposes
+the principal for six hours, staking pays no personal yield (the yield goes to families), and every
+route out of the city passes an early-exit toll that starts at 50% and decays over 48 hours. The safe
+harbour costs time and optionality rather than nothing at all.
+
 **Flat passive income** (buy one time, then earn continuously — this is different from Businesses):
 **Rackets** (`/v1/rackets/:id/buy`, Laundromat L3 to The Invisible Hand L100) and **Assets**
 (`/v1/assets/:id/buy`, `/sell` for 80% — vehicles, property, and legal businesses that increase your cargo,
