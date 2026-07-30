@@ -1604,6 +1604,7 @@
     no_number: "you don't have their number — meet them face to face, or put a wire on them",
     taken: "already taken", not_taken: "take the job first — then do the work",
     capped: "you've hit the cap on that",
+    done_kind: "the corner already paid you for that kind of work today",
     no_call: "nobody is waiting on you", wrong_contact: "that's not who called you",
     short: "you're short of what's needed",
     // The city is up, its records room isn't. Distinct from `internal` on purpose: this one is not your
@@ -1643,8 +1644,11 @@
     // WORD ON THE STREET — took a corner job / collected the envelope
     if (body.corner === 'accepted') bits.push(`📋 took the job — ${body.how || body.kind}. Do the work, then collect here.`);
     if (body.corner === 'claimed') bits.push(`📋 THE ENVELOPE — $${fmt(body.cash)} + ${body.respect} respect (${body.claimedToday}/${body.maxDay} today)`);
-    // THE CALL — settled a contact's request (paid from THEIR pocket)
-    if (body.call === true && body.from) bits.push(body.kind === 'freight'
+    // THE CALL — settled a contact's request (paid from THEIR pocket). A voided call is a 200
+    // (the delete must COMMIT — a thrown error would roll it back and jam the slot), so it
+    // renders here, not through ERRMAP.
+    if (body.call === true && body.voided) bits.push(`📞 ${body.message || "the job's off — they got turned over since they called."}`);
+    else if (body.call === true && body.from) bits.push(body.kind === 'freight'
       ? `📞 delivered ${fmt(body.qty)} ${body.good} to ${body.from} — they paid $${fmt(body.pay)}`
       : `📞 paid ${body.from} a visit — worth $${fmt(body.pay)}`);
     if (body.win === true && !spec) bits.push(`WIN — +$${fmt(Math.abs(body.net ?? 0))}`);

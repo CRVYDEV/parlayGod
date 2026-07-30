@@ -68,10 +68,18 @@ export async function claimCorner(ch, slot, client, h) {
     [ch.id, day, ch.loc, t.slot])).rows[0];
   if (!job) throw new GameError('not_taken', 'Take the job first — then do the work.');
   if (job.claimed) throw new GameError('claimed', 'That envelope is already in your pocket.');
-  const claimedToday = Number((await client.query(
-    'SELECT COUNT(*) n FROM corner_jobs WHERE character_id=$1 AND day=$2 AND claimed', [ch.id, day])).rows[0].n);
+  const claimedRows = (await client.query(
+    'SELECT district, slot FROM corner_jobs WHERE character_id=$1 AND day=$2 AND claimed', [ch.id, day])).rows;
+  const claimedToday = claimedRows.length;
   if (claimedToday >= CORNER.MAX_DAY)
     throw new GameError('capped', `The corner pays ${CORNER.MAX_DAY} envelopes a day — fresh work tomorrow.`);
+  // (AUDIT-street-life, Lens D LOW-1) one envelope per KIND of work per day: the same kind sits in
+  // several districts' pools and every accepted slot snapshots the SAME shared daily counter, so
+  // without this five same-kind slots were all satisfied by ONE action ($2k for one jump). The
+  // corner pays for work, not for walking the map — a second same-kind envelope needs tomorrow's draw.
+  if (claimedRows.some((j) =>
+    (cornerTasksOf(j.district, day).find((x) => x.slot === Number(j.slot)) || {}).kind === t.kind))
+    throw new GameError('done_kind', 'The corner already paid you for that kind of work today — different job, different envelope.');
   const counters = await countersOf(client, ch.id, day);
   const base = JSON.parse(job.baseline || '{}');
   if (Number(counters[t.kind] || 0) <= Number(base[t.kind] || 0))

@@ -774,7 +774,11 @@ async function persistAccount(client, accountId, a) {
 // account rows in stable id order — every multi-lock txn follows characters-then-
 // accounts so lock acquisition can never cycle. Both sides accrue (§7.1: a player is
 // "touched" when targeted). fn gets (ch, victim, client, h) with h.victimOwned loaded.
-export async function withTwoCharacters(pool, accountId, targetCharacterId, fn) {
+// opts.meet=false: COVERT actions (an anonymous NPC hit, a burner-phone hire, a wire-blamed secret
+// exposure) opt OUT of the black-book meeting grant — the actor never openly met the victim, and
+// granting the victim their number would reveal exactly what those mechanics sell as hidden
+// (AUDIT-street-life HIGH-1). The route declares covertness; every named/consensual action defaults in.
+export async function withTwoCharacters(pool, accountId, targetCharacterId, fn, { meet = true } = {}) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -807,11 +811,12 @@ export async function withTwoCharacters(pool, accountId, targetCharacterId, fn) 
                 victimAcct, victimOwned };
     const result = await fn(ch, victim, client, h);
 
-    // STREET LIFE (the black book): any COMPLETED two-party action is a MEETING — both sides walk
+    // STREET LIFE (the black book): a COMPLETED two-party action is a MEETING — both sides walk
     // away with the other's number (the founder's discoverability rule: numbers come from meeting
     // or intel, never free). Best-effort leaf insert; a gate refusal (a thrown GameError) never
-    // reaches here, so a refused approach is not a meeting.
-    await recordMeeting(client, ch.account_id, victim.account_id);
+    // reaches here, so a refused approach is not a meeting — and a COVERT action (opts.meet=false)
+    // is not one either: the victim met a hired gun / "the wire", never the actor.
+    if (meet) await recordMeeting(client, ch.account_id, victim.account_id);
 
     await persistCharacter(client, ch);
     await persistKitchen(client, ch, owned);

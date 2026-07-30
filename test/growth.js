@@ -1163,5 +1163,39 @@ assert.equal((await call('POST', '/v1/respec', { token: chef.token, body: { musc
   assert.equal(r.body.error, 'capped', `the corner pays ${CORNER.MAX_DAY} envelopes a day — the hard faucet bound`);
 }
 
+// ── (AUDIT-street-life, lenses A+D) ONE ENVELOPE PER KIND PER DAY: the same kind sits in several
+// districts' pools and every accepted slot snapshots the SAME shared daily counter, so ONE action
+// used to satisfy every same-kind slot on the map (accept crime in 5 districts → 1 crime → 5 × $400).
+// Deterministic by PIGEONHOLE: 6 districts × PER_DAY draws over ~11 kinds guarantees some kind is
+// drawn in two districts every day — find that pair and prove the second envelope refuses. ──
+{
+  const cw2 = await mk('Map Walker');
+  const day = dayOf();
+  const seen = new Map(); let pair = null;
+  for (const d of DISTRICTS.map((x) => x.id)) {
+    for (const t of cornerTasksOf(d, day)) {
+      if (seen.has(t.kind) && seen.get(t.kind).district !== d) { pair = [seen.get(t.kind), { district: d, slot: t.slot, kind: t.kind }]; break; }
+      if (!seen.has(t.kind)) seen.set(t.kind, { district: d, slot: t.slot, kind: t.kind });
+    }
+    if (pair) break;
+  }
+  assert(pair, 'pigeonhole: some kind is drawn in two districts every day (18 draws over ~11 kinds)');
+  const [a, b] = pair;
+  await seedCh(cw2.id, `loc='${a.district}', nerve=100, energy=200`);
+  assert.equal((await call('POST', `/v1/corner/${a.slot}/accept`, { token: cw2.token })).code, 200, 'accept the kind at district A');
+  await seedCh(cw2.id, `loc='${b.district}'`);
+  assert.equal((await call('POST', `/v1/corner/${b.slot}/accept`, { token: cw2.token })).code, 200, 'accept the SAME kind at district B');
+  // one counted action (the SQL fallback — the delta gate itself is covered above)
+  await pool.query('INSERT INTO daily_progress (character_id, day, counters) VALUES ($1,$2,$3)',
+    [cw2.id, day, JSON.stringify({ [a.kind]: 1 })]);
+  await seedCh(cw2.id, `loc='${a.district}'`);
+  let r = await call('POST', `/v1/corner/${a.slot}/claim`, { token: cw2.token });
+  assert.equal(r.code, 200, 'the first envelope of that kind pays');
+  await seedCh(cw2.id, `loc='${b.district}'`);
+  r = await call('POST', `/v1/corner/${b.slot}/claim`, { token: cw2.token });
+  assert.equal(r.body.error, 'done_kind',
+    'one envelope per KIND per day — one action can never cash two same-kind slots across the map');
+}
+
 console.log('✅ M4 growth test passed — paths, kitchen (makings/cook/collect/deal/crew/raid/laylow/cleanpapers), heist, missions (+$OMR faucet), dailies (+all-three bonus), First Week (+capstone), referrals (+milestones, agent exclusion), telemetry, mod tools, M8 stat respec (sum-conserving, floor-gated, ledgered burn), THE HUSTLE (the three-stop chain: location gates, legwork delta, ledgered once-a-day payoff), WORD ON THE STREET (per-district seed boards, conflict guaranteed, accept/delta/claim, ledgered corner:job, the MAX_DAY cap) + THE MARK (every job names a victim; residents in your district get named)');
 await app.close();

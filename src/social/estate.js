@@ -166,6 +166,10 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // cooldown rows both ways (AUDIT-full-system-v2 C-LOW-2; harmless row-hygiene, the heir's fresh id
   // never inherits them, but no orphans left behind).
   await client.query('DELETE FROM npc_hits WHERE payer=$1 OR target=$1', [victim.id]);
+  // (AUDIT-street-life F5) a pending contact call FROM the dead street (npc_character side — the
+  // loop above wipes only the character_id side) dies with them: the caller is gone, so the call
+  // would only jam the other player's one-open-call slot until the TTL sweep.
+  await client.query('DELETE FROM contact_calls WHERE npc_character=$1', [victim.id]);
   // World step three: a dead co-op raid leader's plan is abandoned so the crew can recrew (the
   // crew_heists precedent — the member rows above are already wiped; this frees the leadership).
   // (R42) notify the stranded crew like the heist/break paths do — capture them BEFORE the abandon

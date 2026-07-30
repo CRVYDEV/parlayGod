@@ -2773,6 +2773,16 @@ with two explicitly counted `rng_audit` terms (grants + retires); **the Sacking 
 residents for fronts would be a value spawn). Revenge honor is a pure status axis. Sim P9.25 prints
 all the marks ceilings every run so any retune is re-measured; drift-0 with the whole drop live.
 
+**Honest framing (AUDIT-street-life, lens A):** `TURNOVER.PER_DAY` meters the `npc:seed` faucet
+ONLY (~$499k/day at the weighted mean seed). The resident ASSET faucets ride their own bounded
+curves ON TOP: the marks front redirect (~$342k/day worst case), boat resale (~$68k/day) and beater
+melts — so **the honest total resident-extraction ceiling is the SUM (~$900k/day base-wide across
+every extraction verb), not "PER_DAY × mean seed" alone.** All ledgered, all bounded, no drift —
+`FRONT_INCOME_BPS`/`TURNOVER.PER_DAY`/the boat/car maps are the dials if the additive total wants
+trimming. Related note: `death:legacy` heir stakes ($500 + $100×prestige) top up the drainable seed
+pool OUTSIDE the turnover ceiling — bounded by `RETIRE_GENERATIONS` (6) per line and kill cadence,
+not player-extractable directly (the stake lands on the NEW resident), §10.4-clean.
+
 ## STREET LIFE — the corner boards, the black book, the call (founder-directed 2026-07-30, task #318)
 
 Founder: "more tasks located in each area… push you into conflict or meet other players… phone
@@ -2800,3 +2810,11 @@ generation, a robbed-blind contact VOIDS the request at fulfilment). The black b
 account-keyed both sides) and the `no_number` DM gate move no value. The 📣 broadcast button was
 REMOVED (founder option) — the share loop lives in the brag prompts + My Profile, both `?ref`-carrying,
 so §7.13 attribution is untouched.
+
+**Post-audit tightenings (AUDIT-street-life, all inside the levers above — no new lever):** one
+envelope per KIND per day (`done_kind` — one action could otherwise cash every same-kind slot on
+the map; MAX_DAY stays reachable via distinct kinds), the freight pay re-clamps to the LIVE price
+× premium at fulfilment (the frozen quote was a free option across the daily price drift), and the
+visit tip is FIXED — a contact who can't cover it doesn't call (a sub-tip pay encoded the NPC's
+exact pocket). The covert opt-out (`{ meet: false }` on npcHit/burnerHit/exposeSecret) keeps the
+black book from revealing what the game hides.

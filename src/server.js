@@ -1357,7 +1357,9 @@ export async function buildServer() {
   app.post('/v1/feud/:targetId/peace/accept', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.acceptPeace(ch, req.params.targetId, client, h)));
   app.post('/v1/streets/:targetId/npchit', { preHandler: auth }, async (req) => {
-    const r = await G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => S.npcHit(ch, victim, client, h, req.body?.tier));
+    // COVERT (meet:false) — the victim only ever meets "a hired gun"; the payer's number must not
+    // land in their black book (AUDIT-street-life HIGH-1)
+    const r = await G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => S.npcHit(ch, victim, client, h, req.body?.tier), { meet: false });
     await closeSocketsOnKill(r, req.params.targetId);
     return r;
   });
@@ -1740,8 +1742,10 @@ export async function buildServer() {
     if (!s) return { error: 'no_secret', message: 'That page has already turned.' };
     const mark = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [s.target_account])).rows[0];
     if (!mark) return { error: 'gone', message: 'The dirt died with them.' };
+    // COVERT (meet:false) — the exposure is blamed on "the wire"; the mark must not learn the
+    // holder's number from the act itself (AUDIT-street-life HIGH-1)
     return G.withTwoCharacters(pool, req.user.sub, mark.id,
-      (ch, markCh, client, h) => Secrets.exposeSecret(ch, markCh, req.params.id, client, h));
+      (ch, markCh, client, h) => Secrets.exposeSecret(ch, markCh, req.params.id, client, h), { meet: false });
   });
   // THE COLLECTION — the account-level completion ledger (pure status)
   app.get('/v1/collection', { preHandler: auth }, async (req) => Collection.collectionBoard(pool, req.user.sub));

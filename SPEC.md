@@ -18,7 +18,7 @@ Written 2026-07-25. Every number below was measured from the tree, not recalled.
 | Ops dashboard + wiki | `public/admin.html`, `public/wiki.html` |
 | Smart contracts | **1276** lines Solidity, 8 contracts, 107 Foundry tests passing |
 | Harnesses | `tools/sim.js` (economy), `tools/playthrough.js` (player experience), `tools/pgcheck.js` (real Postgres), `tools/loadtest.js` (concurrency), `tools/chaos.js` (interruption), `tools/mobile.js` (the screens, at phone size), `tools/scale.js` (market liquidity at population scale), `tools/bond-dials.js` (sizing the on-chain mint walls) |
-| Design + audit docs | **140** markdown files, **32063** lines — indexed in `docs/AUDITS.md`, which states they are point-in-time |
+| Design + audit docs | **141** markdown files, **32305** lines — indexed in `docs/AUDITS.md`, which states they are point-in-time |
 | Ledger invariants | 18 named escrow/identity checks + per-currency conservation, **drift-0** |
 
 Roughly **55,000 lines** of code, tests, schema and contracts.
@@ -407,7 +407,7 @@ report; `test/routes.js` asserts the route count, which needs the app booted. Al
 mutation-tested. File COUNTS are exact; LINE totals get a 2% band, because a guard that nags on every
 unrelated edit gets deleted, and every error worth catching here was off by 27%, 140% or 5×.
 
-`docs/AUDITS.md` indexes all 57 audit reports with dates and subjects, and says plainly that they are
+`docs/AUDITS.md` indexes all 63 audit reports with dates and subjects, and says plainly that they are
 point-in-time records while this file is what is current. They were deliberately NOT relocated: 68
 source comments name a design doc and 32 name an audit report, so moving them would stale 100 references
 to gain a tidier root. CLAUDE.md's chronological drop log was likewise kept in place, for a sharper

@@ -12,7 +12,7 @@ name ("the fade pattern", "the refundPot discipline", "the casino:pvp transfer")
 those names are defined. Read it that way — search it for the precedent you need, don't read it front to
 back. For current architecture, the invariants, and the open technical-debt register, read `SPEC.md`
 (~450 lines); for the balance levers, `BALANCE.md` and `SIGN-OFF.md`; for the audit trail,
-`docs/AUDITS.md`, which indexes all 57 reports and states that they are point-in-time.
+`docs/AUDITS.md`, which indexes all 63 reports and states that they are point-in-time.
 
 ## Ground rules
 1. **`omerta-backend-spec.md` is the contract.** Every formula, table, and timer is specified there with production values. Do not invent mechanics or "improve" balance — the numbers were sim-audited.
@@ -5896,7 +5896,7 @@ stale prose does not fail loudly, it makes the next maintainer confidently do th
 the pass found five live examples including a comment telling the reader to re-apply a line by hand
 after every extractor run (a hazard that had not existed since the rules split). Every figure in
 SPEC §1 is now asserted against the tree — file COUNTS exactly, line TOTALS within 2%, because a
-test that asserts its own line count chases itself. `docs/AUDITS.md` indexes all 57 audit reports as
+test that asserts its own line count chases itself. `docs/AUDITS.md` indexes all 63 audit reports as
 point-in-time. **(2) The alarm reaches a human**: `INVARIANT_WEBHOOK_URL` posted `{alert, failed}`,
 which has neither `text` nor `content`, so Slack AND Discord both 400 it and the error is swallowed
 — the §10.4 drift alarm was firing into nothing. Now `webhookText()` renders a readable message on
@@ -6870,3 +6870,46 @@ doesn't export it — the hustle.js pattern). All `CORNER.*`/`CONTACTS.*` number
 levers (BALANCE.md § STREET LIFE; pinned in test/levers.js — POOLS/CONFLICT as parent-object pins).
 Deferred (step two, founder picks): player-posted calls (needs an escrow surface), corner CHAINS
 (multi-day district storylines), a contact-count status ladder, standing-scaled resident requests.
+
+**RED-TEAM over Street War step two + Street Life (`AUDIT-street-life.md`, task #319).** Four
+independent lenses (§10.4/emission, correctness/locks/retirement, death/estate/info-leak,
+exploit/grief/Sybil), every finding source-verified, a regression + a named-assertion mutation per
+fix. **No CRITICAL, no §10.4 drift; the headline attacks all died at the source** (every
+revenge-paying WIN branch records itself one line away, so REVENGE_HONOR net-owed converges after
+exactly ONE revenge strike — there is no verb that pays without recording). Fixed in-commit:
+**C-HIGH-1** — the black book leaked the identity behind DELIBERATELY-ANONYMOUS actions
+(`withTwoCharacters` recorded a mutual meeting after ANY completed two-party fn, so an npcHit/
+burnerHit victim and an exposeSecret mark each gained a fresh `met` line naming the anonymous
+actor); the meeting grant is now opt-out (`{ meet: false }` on the three covert routes) —
+**the black book must never reveal what the game hides** is now enforced, not assumed.
+**B-F1 (HIGH)** — a resident lender's RETIREMENT stranded a TAKEN loan (retirement is not a death,
+so voidLoansAtDeath never ran and there is no heir): the borrower could not repay a corpse yet the
+sweep would brand them WELSHER + WANTED for the unpayable debt, and the pledged car grace-forfeited
+into a dead heirless fleet; `retireResident` now voids active loans (pledge unlocked, borrower
+notified — §10.4-neutral, the principal moved at take-time). **B-F2 (MED, real-PG-only)** — the
+recordContact SAVEPOINT probe-once cache was set by whichever CONTEXT ran first, and real Postgres
+refuses SAVEPOINT in autocommit — so in-txn-first meant every sendDm 'called' grant silently
+vanished forever (invisible to pg-mem, which can't parse SAVEPOINT either way); the savepoint is
+now attempted PER CALL, **verified against a real Postgres 16** (the old code reproduces the loss,
+the new records in both contexts, both orders). **B-F3** — fulfillCall's broke-void DELETEd then
+THREW, and the rollback resurrected the dead call to jam the one-open-call slot 24h; the void is
+now a 200 RETURN (the burner rule: a side-effect that must survive the refusal has to COMMIT).
+**B-F4** — trunk robbery reached a mark in LOCKUP (assertStreetCrime lacked the jailed/penSafe/
+inHole victim gates; trunk freight rides ON the man — the jump v3 class); property crimes
+(car/boat/sabotage/front) deliberately stay reachable while the owner is away. **B-F5** — a
+dead/retired resident's pending call jammed the slot (estate + retirement now delete
+`npc_character`-side calls). **A-F1/D-LOW-1 (both lenses independently)** — one action cashed
+every same-kind corner envelope on the map (the delta gate reads the SHARED daily counter; the
+same kind sits in several districts' pools) → one envelope per KIND per day (`done_kind`), the
+regression deterministic by PIGEONHOLE (18 draws over ~11 kinds guarantees a cross-district
+duplicate every day). **D-LOW-2** — the frozen freight quote was a free option on the daily price
+drift → fulfilment re-clamps to live × premium. **C-LOW-1** — retired residents left PERMANENT
+dead lines in every black book (retirement leaves no heir, unlike a death — the number is a
+disconnected line and now leaves with them). **C-LOW-2** — a sub-tip visit pay encoded the NPC's
+exact pocket → the tip is fixed; a broke contact doesn't call. Accepted (recorded): the book's
+`loc` field (already on /v1/streets + the wire; weak signal), revenge pair-trading (the honor-farm
+posture), corner/call Sybil (the petty-faucet posture), and — now stated honestly in BALANCE.md —
+**the resident-extraction ceiling is ADDITIVE** (`npc:seed` ~$499k/day + the marks front redirect
+~$342k + boats/cars ≈ ~$900k/day base-wide), with `death:legacy` heir stakes outside the turnover
+meter (bounded by RETIRE_GENERATIONS + kill cadence, not player-extractable directly). Suite green
++ sim drift-0.

@@ -23,6 +23,7 @@
 // same name, generation+1 — IS the respawn. social.js needs zero changes and the population
 // self-heals. The worker only tops up headcount and retires old bloodlines.
 import crypto from 'node:crypto';
+import { notify } from './game.js';
 import { POPULATION, NPC_FIRST, NPC_LAST, npcBandOf, DISTRICTS, PACING, dayOf,
          LOAN, loanOwed, GOODS, BLACK_MARKET, M3, DUELS, CASINO, CARS, goodPriceOf } from './rules.js';
 
@@ -146,7 +147,7 @@ export async function spawnResident(client, opts = {}) {
  */
 export async function retireResident(client, charId) {
   const c = (await client.query(
-    'SELECT id, cash, bank FROM characters WHERE id=$1 AND alive AND is_npc FOR UPDATE', [charId])).rows[0];
+    'SELECT id, account_id, cash, bank FROM characters WHERE id=$1 AND alive AND is_npc FOR UPDATE', [charId])).rows[0];
   if (!c) return null;
 
   // STEP TWO: pull their escrows back in FIRST. A retiring resident with a live loan offer or buy
@@ -175,6 +176,30 @@ export async function retireResident(client, charId) {
     }
   }
   if (reclaimed > 0) await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [charId, reclaimed]);
+
+  // (AUDIT-street-life F1) A TAKEN loan must not outlive its lender. Retirement is not a death —
+  // runEstate/voidLoansAtDeath never see this character and there is no heir — so an active loan
+  // would strand pointing at a dead lender: the borrower CANNOT repay (the two-party repay needs a
+  // living lender → 'gone'), yet sweepLoans would brand them welsher + WANTED for the unpayable
+  // debt, and a pledged car would grace-forfeit into a dead fleet. The claim voids instead: the
+  // pledge unlocks, the borrower keeps the principal (it moved at take-time — §10.4-neutral, zero
+  // ledger rows), and they're told the book closed. Lock order characters → loans (the sweep's).
+  const actives = (await client.query(
+    "SELECT id, borrower_character, collateral_car FROM loans WHERE lender_character=$1 AND status='active' FOR UPDATE", [charId])).rows;
+  for (const l of actives) {
+    if (l.collateral_car) await client.query('UPDATE cars SET pledged=false WHERE id=$1', [l.collateral_car]);
+    await client.query('DELETE FROM loans WHERE id=$1', [l.id]);
+    if (l.borrower_character) await notify(client, l.borrower_character, 'loan_voided', { reason: 'lender_gone' }).catch(() => {});
+  }
+  // (F5) a pending contact call from this resident dies with them — otherwise it jams the player's
+  // one-open-call slot until the TTL sweep (fulfilment would only ever find 'gone').
+  await client.query('DELETE FROM contact_calls WHERE npc_character=$1', [charId]);
+  // (Lens C LOW-1) and so does their line in every black book: retirement leaves NO heir (unlike a
+  // death), so a kept contact row would render `street: null` FOREVER — permanent dead clutter, one
+  // row per retired resident a long-lived player ever met, with no sweep to reap it. A PLAYER's
+  // number surviving death is the design (the heir answers); a retired resident's number is a
+  // disconnected line, so it goes with them, both directions.
+  await client.query('DELETE FROM contacts WHERE owner_account=$1 OR contact_account=$1', [c.account_id]);
 
   const held = Number(c.cash) + Number(c.bank) + reclaimed;
   if (held > 0) {
