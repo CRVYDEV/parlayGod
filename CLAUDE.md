@@ -3911,6 +3911,54 @@ zero (welcome money excluded both currencies), tier-2 included at ladder level, 
 (made/coming-up/gone); browser-probed end-to-end (desktop + mobile screenshots read, zero page errors,
 clipboard fallback toast). SPIN_TRACKS are fictional only (the Broadcast legal posture).
 
+**THE MIRROR LEARNS THE RAW-BIND IDIOM — 23 renderers come out of the dark (task #298).** The My Profile
+build proved the hole by construction (two planted mutations survived a green run): `const r = await
+api('GET', '/p'); … r.body` is how 14+ renderers hold their board — they need `r.code` for the error card
+before unwrapping — and the mirror guard could not see it, so Law, Wire, Store, Pen, City, Den, the phone,
+chat and the rest had every displayed field UNCHECKED while the run printed a pass. `test/client.js` now
+resolves the idiom to the same bindings as GETBIND: the path may be a literal, a `'lit/' + id` concat
+(→ `:p`), or a TERNARY of two literals (reads bind to BOTH boards); the `.body` unwrap alias handles
+plain / `|| {}` / the `r.code < 400 ? r.body : {}` guard / one sub deep; direct `r.body?.field` reads are
+charged to the route (`error`/`message` excluded BY NAME — the error envelope, or every error guard is a
+standing false positive); and the honesty rule stands — any `.body` touch not consumed by a recognised
+shape is COUNTED, never skipped. One level of object alias follows too (`const S = r.body, o = S.owned`).
+**The extension's own mutation run caught a bug in the extension** — the alias binding anchored its region
+PAST the consumed terminator, and that terminator can be the `,` of a same-statement follow-on alias, so
+the `o` binding was never created and the planted Store mutation SURVIVED; anchoring at match START fixed
+it, and all three mutations now fail by name (renderLaw top-level, renderStore sub-alias, renderPen yard
+list element). Coverage: **62 → 86 boards, 323 → 492 top-level fields, 82 → 112 lists.** The fixture grew
+to make one of everything observable (a live tournament/futurity/stakes/wire-sub "open" shape, taps +
+informants, a DM thread, a market listing, a boosted car — with `gta_at` cleared per retry, since a FAILED
+boost still arms the boost cooldown and the reset that only refilled energy left every retry bouncing —
+a track entry, a boat, estate staff, the pen yard seeded LAST since jail gates actions), and seedLists now
+runs BEFORE the top-level reads pass (two-shape boards: a closed tournament and an open one return
+different fields). **One real server finding:** `denInfo`'s OPEN tournament shape omitted `open: true` —
+the only sibling of futurity/stakes to do so, and the client gates on `open === false` (src/casino.js,
+shape-consistency fix). Suite green + sim drift-0.
+
+**CATALOG ART — 105 generated still-life plates, and the procedural icons retire (task #299).** The
+`tools/art.js` manifest grew a CATALOG pass over the live rules: all **60 cars** (hand-mapped subjects on
+the shared NOIR vocabulary, condition tiered by value), **15 guns** + **6 vests** (table/armory still
+lifes), **8 drugs** (fictional apothecary framing — no real-drug depiction), **10 trade goods**, **6
+boats** (keyed by CATALOG id, not array index — an index key silently re-points every image if the ladder
+gains a rung). $6.40 lifetime spend against the $12 cap, every prompt/seed/price ledgered in
+`public/art/manifest.json`. **Reviewed as contact sheets, not prompts** (the art-pass lesson): 102/105
+passed on the first roll; three rejects re-rolled — `gun-chorusline` came back a MODERN tactical rifle
+("belt-fed machine gun" needs a period anchor: "First World War water-cooled…"), `vest-heavyv` a thin
+leather harness (now riveted blued-steel trench plate), `drug-vim` a fully BLACK image (a filtered/failed
+generation that still returns bytes — only looking at the output catches it). **Wiring:** the existing
+`GET /v1/art/:kind/:id` procedural-SVG route is now PHOTO-FIRST — it serves `public/art/<kind>-<id>.jpg`
+off the same boot-time ALLOWLIST Map as `/art/:file` (no traversal surface by construction), falling
+through to the SVG emblem only for unknown ids — so every existing `ico()` call site (garage fleet,
+armory guns, kitchen drugs, streets goods, port boatyard) upgraded at once with zero client churn. Client:
+`.ico` switched `contain` → `cover` (a 4:3 photo letterboxed into a 74px strip reads as a floating sliver),
+the armory's bare vest `<select>` became "The Tailor's Back Room" photo cards (buy-and-wear, WEARING chip),
+and the Black Market's car/good/order cards gained thumbs. Chromium-probed (garage/armory/vests/streets:
+zero page errors, zero failed art requests); wiring guard + mirror green over the changes; mobile 62/62.
+Suite green + sim drift-0. Deliberately NOT generated: gear (its market is the on-chain GearVault rail —
+art can wait for the NFT metadata call) and per-district goods variants (one plate per good is the thumb
+job).
+
 ## Sensitive design notes
 - **The Street Wage pays players on a schedule — legal surface (counsel-gated messaging).** Paying
   players real-value $OMR at scale can trigger money-transmission / employment / securities questions

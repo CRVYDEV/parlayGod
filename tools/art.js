@@ -167,6 +167,163 @@ const MANIFEST = [
     prompt: 'an overhead night view of a 1940s harbour city divided into districts by dark canals and rail lines, rivers of amber light running between blocks of black rooftops, rain, drawn as a hand-inked antique map in amber and teal on charcoal, no lettering, no labels, no writing, no watermark' },
 ];
 
+// ═══ CATALOG ART — one image per catalog item the console renders as bare text ═══
+// Cars, guns, vests, drugs, trade goods, boats. Built FROM src/rules.js so the set can never
+// drift from the catalogs (a renamed car regenerates under its id; a deleted one just goes
+// unused). Each class shares one visual vocabulary so a grid reads as a set, and every SUBJECT
+// is hand-mapped from the item's name — an auto-derived prompt is how you get sixty identical
+// grey sedans. Same no-lettering discipline as everything above (labels, livery, banknotes and
+// certificates all invite gibberish type).
+const R = await import('../src/rules.js');
+const ITEM = '1940s American noir still life, hard chiaroscuro, one warm amber lamp against teal shadow, '
+  + 'film grain, muted desaturated palette, shallow depth of field, no hands, no people, '
+  + 'no signage, no lettering, no labels, no writing anywhere, no watermark';
+const carCondition = (v) => v < 3000 ? 'battered, rust-bitten, dented, sagging on its springs'
+  : v < 8000 ? 'honest and work-worn, faded paint' : v < 15000 ? 'well kept, chrome glinting'
+  : v < 40000 ? 'gleaming polished coachwork' : 'immaculate coach-built masterpiece, flawless deep lacquer';
+const CAR_SUBJECT = {
+  junker: 'a rusted-out farm sedan with mismatched fenders and one missing headlamp',
+  errand: 'a small light delivery coupe with a boxy rear compartment',
+  garden: 'a small battered pickup truck with wooden side rails and mud on the fenders',
+  volara: 'a stubby compact two-door economy car with a sloping rear',
+  postal: 'a boxy delivery van with plain stripped panels',
+  milk: 'a rounded milk-delivery truck with an open standing cab',
+  cabbie: 'a worn four-door taxi-style sedan, roof light removed',
+  iceman: 'a heavy ice-delivery truck with an insulated wooden box body, dripping',
+  pigeon: 'a plain grey utterly nondescript runabout',
+  offduty: 'a checker-pattern-free off-duty taxicab sedan, meter dark',
+  cannery: 'a flat-nosed stake-bed fish truck with wet boards',
+  conductor: 'a tidy modest small coupe',
+  dray: 'a bread-delivery panel van with rear barn doors ajar',
+  foreman: 'a dusty light utility coupe with a toolbox strapped to the running board',
+  rubicon: 'a long flatbed work truck with chained-down tarps',
+  ladder: 'a fire-brigade hook-and-ladder truck carrying a long wooden ladder',
+  prefect: 'a modest upright four-door saloon',
+  deuce: 'a stripped-down open-wheel hot-rod roadster',
+  notary: 'a sober black four-door saloon with drawn window shades',
+  stag: 'a plain sturdy working man\'s sedan',
+  trolley: 'a stubby high-roofed jitney coach',
+  sedanette: 'a fastback sedanette with a long sloping tail',
+  clubman: 'a two-door club coupe with a rumble seat open',
+  coupe38: 'a late-thirties business coupe with an oversized trunk',
+  boulevard: 'a stately straight-eight sedan with an endless louvered hood',
+  mercantile: 'a wood-panelled merchant\'s wagon',
+  wagoneer: 'a wood-bodied estate wagon',
+  consul: 'a long black limousine with a division window and curtains',
+  harbor: 'a broad-shouldered luxury coupe with porthole hood vents',
+  dockmaster: 'a heavy luxury cruiser sedan on wide whitewall tires',
+  brougham: 'a formal town car with an open chauffeur\'s compartment',
+  courier: 'a lowered factory-tuned coupe with faired-in headlamps',
+  regent: 'a landaulet limousine with the rear quarter roof folded',
+  touring: 'a long six-cylinder grand-touring cabriolet',
+  sable: 'a funeral-black landau sedan with a leather-covered rear roof',
+  cabaret: 'a glamorous cabriolet with the top down and champagne-cork chrome',
+  diplomat: 'a stately long-wheelbase town sedan',
+  cascade: 'a sweeping two-tone cabriolet, top folded',
+  sportsman: 'a sporting convertible with cut-down doors',
+  vesper: 'a low sleek fastback grand tourer',
+  corsair: 'a boat-tailed speedster with sweeping clamshell fenders',
+  monarch: 'a majestic twelve-cylinder saloon with an immense hood',
+  regatta: 'a nautically-trimmed convertible with varnished wood decking',
+  tempest: 'a low two-seat roadster with a raked chopped windscreen',
+  phaeton: 'an open dual-cowl four-door phaeton',
+  ambassador: 'an armored sedan with thick green-tinted glass and heavy flared fenders',
+  bullion: 'an armored bank truck with riveted steel plating and barred slit windows',
+  blackout: 'a phantom limousine murdered out in black, every piece of chrome blacked',
+  nocturne: 'a midnight-blue streamlined coupe',
+  duchess: 'a drophead coupe with coach doors, top down',
+  spectre: 'a low berlinetta with teardrop fenders',
+  leviathan: 'an enormous town car, the longest car in the city',
+  comet: 'a streamlined competition racer with a vertical tail fin',
+  warhawk: 'a one-off aircraft-inspired prototype with a polished bare-aluminum body',
+  vulcan: 'a fire chief\'s red command car with siren horn and brass bell',
+  sovereign: 'a silver state limousine with a tall chrome grille',
+  olympia: 'an open parade car with chrome grab rails behind the front seat',
+  meridian: 'a coach-built grand saloon of impossible proportions',
+  aurora: 'a land-speed record streamliner with fully enclosed wheels',
+  tsarina: 'an imperial pre-war Russian limousine with gilded coach lines and a tiny crest',
+};
+const GUN_SUBJECT = {
+  lastresort: 'a tiny rust-pitted .25 pocket pistol',
+  pocket22: 'a small nickel-plated .22 pocket pistol',
+  penny: 'a slim long-barrelled .22 target pistol',
+  alleycat: 'a snub-nosed .38 revolver',
+  badge: 'a service .38 revolver with holster-worn bluing',
+  argument: 'a heavy blued .45 semi-automatic pistol',
+  rancher: 'a lever-action carbine with a saddle-worn stock',
+  whisper: 'a .32 pistol fitted with a long cylindrical suppressor',
+  doorbell: 'a short double-barrelled 12-gauge shotgun',
+  brothers: 'a matched pair of .45 pistols laid side by side',
+  broom: 'a trench shotgun with a perforated heat shield and canvas sling',
+  orchestra: 'a drum-magazine submachine gun resting in an open violin case',
+  anniversary: 'a presentation pair of ornately engraved pistols in a velvet-lined case',
+  chorusline: 'a First World War water-cooled belt-fed machine gun with wooden grips, a coiled canvas ammunition belt beside it',
+  undertaker: 'a long scoped rifle in an open felt-lined wooden case',
+};
+const VEST_SUBJECT = {
+  woolv: 'a heavy padded wool overcoat', lightv: 'a slim fabric protective vest',
+  medv: 'a reinforced canvas vest with stitched-in plating',
+  tailorv: 'an elegant tailored waistcoat with plating hidden in the lining, one corner turned back',
+  heavyv: 'a massive riveted blued-steel trench armor vest with thick buckled leather shoulder straps, heavy dark gunmetal plates, on a wooden armory stand',
+  vaultv: 'a massive armored vest of overlapping polished steel plates',
+};
+const DRUG_SUBJECT = { // fictional substances, styled as period apothecary contraband
+  vim: 'an open apothecary tin of small bright-orange lozenges beside a wound brass alarm clock',
+  moonmilk: 'a stoppered glass bottle of faintly glowing pale-blue liquid',
+  lotus: 'dried violet flower petals in an unfolded paper bindle',
+  glass: 'jagged clear crystal shards in a cut-glass dish',
+  ambrosia: 'honey-gold syrup in an ornate apothecary vial',
+  static: 'grey powder in a torn paper fold with a faint electric-blue shimmer',
+  halo: 'plain white tablets arranged in a perfect ring on dark velvet',
+  nocturne: 'an inky black tincture bottle with a glass dropper laid beside it',
+};
+const GOOD_SUBJECT = {
+  gin: 'unlabeled clear glass bottles packed in a straw-lined wooden crate',
+  coffee: 'burlap sacks of green coffee beans, one slit open and spilling',
+  cigars: 'an open plain wooden box of unbanded cigars',
+  nylons: 'sheer nylon stockings draped from a plain cardboard box',
+  shine: 'clay jugs and mason jars of clear moonshine on a bed of straw',
+  penicillin: 'small glass medical vials nested in a partitioned carrying case',
+  silk: 'bolts of shimmering champagne silk stacked and spilling loose',
+  watches: 'gold pocket watches and loose watch movements on a jeweler\'s black cloth',
+  ice: 'loose cut diamonds glittering on black velvet beside a loupe',
+  bearer: 'a leather document case spilling ribbon-bound papers with red wax seals, papers out of focus',
+};
+const BOAT_SUBJECT = {
+  0: 'a small weathered wooden rowing dinghy',
+  1: 'a low fast wooden skiff with a small outboard motor',
+  2: 'a converted fishing trawler with boom, winch and hanging nets',
+  3: 'a fast motor cutter with a raked bow and low cabin',
+  4: 'a small coastal freighter with a single funnel and deck crates',
+  5: 'a long sleek varnished-mahogany speedboat',
+};
+for (const c of R.CARS) MANIFEST.push({
+  id: `car-${c.id}`, model: PRO, ar: '4:3', job: `garage card: ${c.name}`,
+  prompt: `${CAR_SUBJECT[c.id] || 'a 1940s sedan'}, ${carCondition(c.val)}, a single 1940s automobile in three-quarter front view parked alone on wet cobblestones at night, one amber street lamp, teal fog behind, the car filling most of the frame, ${NOIR}`,
+});
+for (const g of R.GUNS) MANIFEST.push({
+  id: `gun-${g.id}`, model: PRO, ar: '4:3', job: `armory card: ${g.name}`,
+  prompt: `${GUN_SUBJECT[g.id] || 'a 1940s revolver'}, laid flat on a dark waxed oak table, ${ITEM}`,
+});
+for (const v of R.VESTS) MANIFEST.push({
+  id: `vest-${v.id}`, model: PRO, ar: '4:3', job: `armory card: ${v.name}`,
+  prompt: `${VEST_SUBJECT[v.id] || 'a protective vest'}, fitted on a headless tailor's dress form in a dim fitting room, ${ITEM}`,
+});
+for (const d of R.DRUGS) MANIFEST.push({
+  id: `drug-${d.id}`, model: PRO, ar: '4:3', job: `kitchen card: ${d.name} (fictional substance)`,
+  prompt: `${DRUG_SUBJECT[d.id] || 'a small apothecary vial'}, on a stained wooden workbench beside brass scales, ${ITEM}`,
+});
+for (const g of R.GOODS) MANIFEST.push({
+  id: `good-${g.id}`, model: PRO, ar: '4:3', job: `trade-goods card: ${g.name}`,
+  prompt: `${GOOD_SUBJECT[g.id] || 'a wooden crate of goods'}, on a warehouse floor under one hanging bulb, ${ITEM}`,
+});
+// keyed by CATALOG id, not array index — the console looks these up as /art/boat-<id>.jpg and an
+// index key would silently re-point every image if the ladder ever gained a rung in the middle
+for (const [i, b] of R.PORT.BOATS.entries()) MANIFEST.push({
+  id: `boat-${b.id}`, model: PRO, ar: '4:3', job: `boatyard card: ${b.name}`,
+  prompt: `${BOAT_SUBJECT[i] || 'a small wooden boat'}, moored at a fog-bound wooden jetty on black water at night, one lantern on the boards, ${NOIR}`,
+});
+
 // ── plumbing ────────────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
 const force = args.includes('--force');
@@ -190,7 +347,8 @@ const ledger = fs.existsSync(LEDGER) ? JSON.parse(fs.readFileSync(LEDGER, 'utf8'
 async function generate(m) {
   const body = { prompt: m.prompt, num_images: 1, output_format: 'jpeg' };
   if (m.model === ULTRA) body.aspect_ratio = m.ar;
-  else body.image_size = m.ar === '1:1' ? 'square_hd' : m.ar === '21:9' ? { width: 2560, height: 1097 } : 'landscape_16_9';
+  else body.image_size = m.ar === '1:1' ? 'square_hd' : m.ar === '21:9' ? { width: 2560, height: 1097 }
+    : m.ar === '4:3' ? 'landscape_4_3' : 'landscape_16_9';
 
   const r = await fetch(`https://fal.run/${m.model}`, {
     method: 'POST',
