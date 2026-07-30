@@ -2349,3 +2349,15 @@ CREATE TABLE IF NOT EXISTS npc_drills (
   npc TEXT NOT NULL,
   PRIMARY KEY (character_id, day, npc)
 );
+
+-- THE HUSTLE — the daily three-stop job chain (crime-loop interactivity). One row per street per
+-- day; `step` is the NEXT stop to claim (0..2, 3 = paid); `baseline` snapshots the day's action
+-- counters when the legwork stop opens so the required action is verified as a DELTA. Dies with
+-- the street (estate wipe) — the heir draws fresh work.
+CREATE TABLE IF NOT EXISTS hustles (
+  character_id TEXT NOT NULL,
+  day INT NOT NULL,
+  step INT NOT NULL DEFAULT 0,
+  baseline TEXT NOT NULL DEFAULT '{}',
+  PRIMARY KEY (character_id, day)
+);

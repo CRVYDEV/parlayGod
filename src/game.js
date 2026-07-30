@@ -1140,6 +1140,22 @@ export function doCrime(ch, crimeId, client, h, approach) {
   return (async () => {
     // SOLDIERS: the assigned, fit second rides along (assists + takes a cut + carries the risk)
     const second = await assignedSoldier(client, ch.id);
+    // THE MARK (founder: "crimes can't just be committed against nobody") — every job names a
+    // victim drawn from the NPC RESIDENTS standing in your district (real characters, the
+    // population layer), falling back to the fictional noir pool. PRESENTATION ONLY: no value
+    // moves and nothing is written on the named resident — making the crime a real TRANSFER off
+    // the mark's pocket reclassifies the sim-signed §7.2 crime FAUCET, a founder sign-off call
+    // (flagged in BALANCE.md), never a silent change. Never names a real PLAYER (a player was not
+    // actually robbed, and saying so would be false information about them).
+    const mark = await (async () => {
+      try {
+        const r = (await client.query(
+          'SELECT name FROM characters WHERE alive AND is_npc AND loc=$1 AND id<>$2 ORDER BY id LIMIT 8',
+          [ch.loc, ch.id])).rows;
+        if (r.length) return r[Math.floor(roll * r.length) % r.length].name;
+      } catch { /* presentation only — never fail a job for it */ }
+      return `${SOLDIERS.FIRST[Math.floor(roll * 1000) % SOLDIERS.FIRST.length]} ${SOLDIERS.LAST[Math.floor(roll * 100000) % SOLDIERS.LAST.length]}`;
+    })();
     if (roll < chance) {
       // THE APPROACH pay: payMult ≈ 1/successMult keeps cash EV flat; loud may carry a founder-set
       // cash premium (default 1.0 = EV-neutral). Rides the same crime:<id> faucet (ledgered==credited).
@@ -1218,7 +1234,7 @@ export function doCrime(ch, crimeId, client, h, approach) {
         }
       } catch { /* the trail is a bonus, never a blocker */ }
       return { ok: true, success: true, approach: ap.id, take, rep, crates, makingsDrop, clue,
-        soldier: soldier ? { ...soldier, cut: soldierCut } : null };
+        victim: mark, soldier: soldier ? { ...soldier, cut: soldierCut } : null };
     }
     // GETAWAY (skills): the wheelman's stints run shorter — a new modifier, sign-off lever.
     // A WHEELMAN soldier stacks the same way (a second behind the wheel — SOLDIERS sign-off lever).
@@ -1233,7 +1249,7 @@ export function doCrime(ch, crimeId, client, h, approach) {
     await h.track(client, ch.account_id, 'crime_attempt', { id: c.id, success: false });
     // the bust is the RISKY outcome — the second can get hurt, or worse
     const soldier = second ? await soldierResult(client, h, ch, second, { success: false, cause: 'busted on a job' }) : null;
-    return { ok: true, success: false, approach: ap.id, jailSeconds: jailS, soldier };
+    return { ok: true, success: false, approach: ap.id, jailSeconds: jailS, victim: mark, soldier };
   })();
 }
 

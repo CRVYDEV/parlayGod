@@ -2609,3 +2609,23 @@ Death: `character_disciplines` + `npc_drills` DIE WITH THE STREET (estate wipe +
 no heir echo (deliberately harder than THE TRADES' 25%: disciplines are the BODY, not the craft).
 Drills draw only from self-sufficient bumpDaily kinds (crime/train/gta/goods/melt/heist), so every
 drill is doable alone on day one. Mickey the Corner trains your WEAKEST (the round-out trainer).
+
+## THE HUSTLE + THE MARK (crime-loop interactivity, 2026-07-30)
+
+Founder-directed ("crimes… have to be always PvP or send the user down a checklist of things to do
+around the town… move around the map and talk to NPCs"). Two pieces. **THE MARK** — every §7.2 job
+now NAMES a victim, drawn from the NPC residents standing in your district (real characters — the
+population layer) with a fictional noir-pool fallback; PRESENTATION ONLY, zero value moves.
+**FLAGGED FOR SIGN-OFF (not built): the "always PvP" variant** — making the crime take its cash
+FROM the named mark's pocket converts the sim-signed §7.2 crime FAUCET into a §10.4 TRANSFER
+(residents' seed pool becomes the source, `npc:seed` recycling becomes the real faucet, and every
+crime-EV number in this file changes). That is a full economy redesign of the core loop — a
+founder decision, not a patch. **THE HUSTLE** — the daily three-stop chain: meet the contact
+(travel), do the legwork (travel + a real drawn action there, verified as a counter DELTA so
+stockpiled morning work can't pre-pay it), collect the payoff (travel). The payoff is the one new
+faucet: `hustle:payoff` = max(`HUSTLE.PAY_MIN` $600, `HUSTLE.PAY_PER_LVL` $200 × level), ONCE a
+day per street (the (character, day) PK is the cap). Analytic ceiling: $6k/day at level 30,
+$12k/day at 60 — under the Daily Score at the same level and ~petty vs every measured earner
+(the clue-casket posture: the MOVEMENT is the product, the money is the excuse). Both levers
+pinned in test/levers.js; §10.4: `hustle:` joined the cash vocabulary, the payoff is
+character_id'd so check (a) reconciles.

@@ -3513,3 +3513,31 @@ export const drillOf = (npc, day = dayOf()) => {
   const n = t.n[0] + Math.floor(hash01(`drilln:${npc}:${day}`) * (t.n[1] - t.n[0] + 1));
   return { kind: t.kind, n, how: t.how };
 };
+
+// ── THE HUSTLE (crime-loop interactivity, founder-directed 2026-07-30: "send the user down a
+// checklist of things to do around the town… move around the map and talk to NPCs and move across
+// the gameboards") ── A daily seed-drawn THREE-STOP job chain that physically routes a player
+// around the city: meet the contact (travel + talk), do the legwork (travel + a REAL action at
+// that district), collect the payoff (travel + claim). Steps are server-verified (location +
+// counter deltas); the payoff is a bounded once-a-day cash faucet (BALANCE flag — the clue-casket
+// posture: petty by design, the ENGAGEMENT is the product). All numbers founder sign-off levers.
+export const HUSTLE = {
+  PAY_PER_LVL: 200,     // payoff = max(PAY_MIN, PAY_PER_LVL × level) — once a day
+  PAY_MIN: 600,
+  LEGWORK: [            // step-2 kinds — a real action done while standing AT the named district
+    { kind: 'crime', how: 'pull a job while you\'re standing there' },
+    { kind: 'goods', how: 'move trade goods there (buy or sell on the Streets)' },
+    { kind: 'train', how: 'put in a session at the gym while you\'re there' },
+  ],
+};
+// The day's chain for one street — three DISTINCT stops + a (fictional) contact + the legwork,
+// all off the §7.11 hash: deterministic and verifiable, and PER-STREET so the whole town isn't
+// standing on the same corner. The contact draws from the SOLDIERS noir name pool (fictional
+// only — the Broadcast legal posture).
+export const hustleOf = (chId, day = dayOf()) => {
+  const pick = (s, n) => Math.floor(hash01(`hustle:${chId}:${day}:${s}`) * n) % n;
+  const rest = DISTRICTS.map((d) => d.id);
+  const stops = ['a', 'b', 'c'].map((s) => rest.splice(pick(s, rest.length), 1)[0]);
+  const contact = `${SOLDIERS.FIRST[pick('f', SOLDIERS.FIRST.length)]} ${SOLDIERS.LAST[pick('l', SOLDIERS.LAST.length)]}`;
+  return { stops, contact, leg: HUSTLE.LEGWORK[pick('k', HUSTLE.LEGWORK.length)] };
+};

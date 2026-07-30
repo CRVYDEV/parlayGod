@@ -270,6 +270,10 @@ const SIGNED = [
   ['REGIMEN.CONDITIONING_BPS', 100],
   ['REGIMEN.CONDITIONING_FLOOR', 0.75],
   ['REGIMEN.DUEL_ADD', 0.6],
+  // THE HUSTLE (2026-07-30) — the daily three-stop chain's completion faucet (once a day,
+  // level-scaled; the clue-casket posture: petty by design, the MOVEMENT is the product)
+  ['HUSTLE.PAY_PER_LVL', 200],
+  ['HUSTLE.PAY_MIN', 600],
   // step three — PATHS v2 (the XP-rate axis + the switch throttle; the PATH_FX perk/handicap
   // mults live under lowercase path keys, outside the walker — the founder dials are these three)
   ['PATH_XP_HOME', 1.5],

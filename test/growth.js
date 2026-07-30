@@ -7,7 +7,7 @@ process.env.MOD_KEY = 'test-mod-key';
 
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS, CONSTANTS } from '../src/rules.js';
+import { SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS, CONSTANTS, DISTRICTS, HUSTLE } from '../src/rules.js';
 import { socialRewardsLive } from '../src/growth.js';
 import { sweepGrandReferrals } from '../src/game.js';
 
@@ -1000,5 +1000,68 @@ await pool.query(`UPDATE characters SET respec_at = now() - interval '25 hours' 
 await pool.query(`UPDATE account_persistent SET omr = 20 WHERE account_id = (SELECT account_id FROM characters WHERE id='${chef.id}')`);
 assert.equal((await call('POST', '/v1/respec', { token: chef.token, body: { muscle: 60, cunning: 20, speed: 20 } })).code, 200, 'a day later the trainer works again');
 
-console.log('✅ M4 growth test passed — paths, kitchen (makings/cook/collect/deal/crew/raid/laylow/cleanpapers), heist, missions (+$OMR faucet), dailies (+all-three bonus), First Week (+capstone), referrals (+milestones, agent exclusion), telemetry, mod tools, M8 stat respec (sum-conserving, floor-gated, ledgered burn)');
+// ── THE HUSTLE + THE MARK (crime-loop interactivity, founder-directed) ──────────────────────────
+{
+  const hus = await mk('Hustler Hank');
+  await seedCh(hus.id, "respect=2500, cash=5000, energy=200, nerve=100, loc='docks'");
+  // (1) THE MARK — every job names a victim (a fictional fallback here: no NPC residents seeded)
+  let job = null;
+  for (let i = 0; i < 30 && !job; i++) {
+    await seedCh(hus.id, 'nerve=100');
+    const r = await call('POST', '/v1/crimes/pick', { token: hus.token });
+    if (typeof r.body.success === 'boolean') job = r.body;
+  }
+  assert(job && typeof job.victim === 'string' && job.victim.length > 2,
+    'every job is against SOMEBODY — the result names the mark (fictional fallback with no residents)');
+  // …and when an NPC RESIDENT stands in the district, THEY are the mark
+  const resAcct = (await pool.query(`INSERT INTO accounts (id, auth_provider, auth_subject) VALUES ('hu-res-a','guest','hu-res') RETURNING id`)).rows[0].id;
+  await pool.query(`INSERT INTO account_persistent (account_id, npc_flag) VALUES ('${resAcct}', true)`);
+  await pool.query(`INSERT INTO characters (id, account_id, name, loc, is_npc, alive, season) VALUES ('hu-res-c','${resAcct}','Sally Two-Steps','docks', true, true, 1)`);
+  let named = null;
+  for (let i = 0; i < 30 && !named; i++) {
+    await seedCh(hus.id, 'nerve=100');
+    const r = await call('POST', '/v1/crimes/pick', { token: hus.token });
+    if (r.body.victim === 'Sally Two-Steps') named = r.body;
+  }
+  assert(named, 'a resident standing in your district becomes the named mark');
+  // (2) THE HUSTLE — the daily three-stop chain: deterministic, location-gated, legwork-verified
+  const b0 = (await call('GET', '/v1/hustle', { token: hus.token })).body;
+  assert.equal(b0.of, 3, 'three stops');
+  assert(b0.contact && b0.stops.length === 3 && new Set(b0.stops.map((s) => s.id)).size === 3, 'three DISTINCT districts + a contact');
+  assert.equal(b0.step, 0, 'the chain starts at the contact meeting');
+  // wrong district → refused with directions
+  const wrong = DISTRICTS.map((d) => d.id).find((d) => d !== b0.district);
+  await seedCh(hus.id, `loc='${wrong}'`);
+  assert.equal((await call('POST', '/v1/hustle/advance', { token: hus.token })).body.error, 'district', 'a stop must be claimed ON LOCATION');
+  // meet the contact
+  await seedCh(hus.id, `loc='${b0.district}'`);
+  let r = await call('POST', '/v1/hustle/advance', { token: hus.token });
+  assert.equal(r.body.step, 1, 'the contact meeting advances the chain');
+  // the legwork stop: standing there is NOT enough — the drawn action must be done AFTER the meeting
+  const b1 = (await call('GET', '/v1/hustle', { token: hus.token })).body;
+  await seedCh(hus.id, `loc='${b1.district}', nerve=100, energy=200, cash=100000`);
+  assert.equal((await call('POST', '/v1/hustle/advance', { token: hus.token })).body.error, 'legwork', 'no check-in before the work is done');
+  // do the drawn action (crime → pull jobs; goods → buy; train → a gym session)
+  const kind = (await pool.query(`SELECT baseline FROM hustles WHERE character_id='${hus.id}'`)).rows[0] ? b1.legwork : null;
+  assert(kind, 'the board names the legwork');
+  if (/job/.test(b1.legwork)) { for (let i = 0; i < 20; i++) { await seedCh(hus.id, 'nerve=100'); if ((await call('POST', '/v1/crimes/pick', { token: hus.token })).body.success) break; } }
+  else if (/goods/.test(b1.legwork)) await call('POST', '/v1/goods/buy', { token: hus.token, body: { goodId: 'gin', qty: 1 } });
+  else { await pool.query(`UPDATE characters SET train_at=NULL WHERE id='${hus.id}'`); await call('POST', '/v1/train/muscle', { token: hus.token }); }
+  r = await call('POST', '/v1/hustle/advance', { token: hus.token });
+  assert.equal(r.body.step, 2, `the legwork done (${b1.legwork}) advances the chain`);
+  // the payoff: on location, ledgered, level-scaled, once a day
+  const b2 = (await call('GET', '/v1/hustle', { token: hus.token })).body;
+  await seedCh(hus.id, `loc='${b2.district}'`);
+  const cashBefore = (await meOf(hus.token)).cash;
+  r = await call('POST', '/v1/hustle/advance', { token: hus.token });
+  assert(r.body.pay > 0, 'the payoff pays');
+  assert.equal(r.body.pay, Math.max(HUSTLE.PAY_MIN, HUSTLE.PAY_PER_LVL * (await meOf(hus.token)).level), 'level-scaled with a floor');
+  assert.equal((await meOf(hus.token)).cash, cashBefore + r.body.pay, 'the cash landed');
+  const led = (await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE character_id='${hus.id}' AND reason='hustle:payoff'`)).rows[0];
+  assert.equal(Number(led.s), r.body.pay, 'the payoff is a ledgered hustle:payoff faucet (§10.4 check (a) reconciles)');
+  assert.equal((await call('POST', '/v1/hustle/advance', { token: hus.token })).body.error, 'done', 'one hustle a day — the PK is the cap');
+  assert((await call('GET', '/v1/hustle', { token: hus.token })).body.done, 'the board reads done');
+}
+
+console.log('✅ M4 growth test passed — paths, kitchen (makings/cook/collect/deal/crew/raid/laylow/cleanpapers), heist, missions (+$OMR faucet), dailies (+all-three bonus), First Week (+capstone), referrals (+milestones, agent exclusion), telemetry, mod tools, M8 stat respec (sum-conserving, floor-gated, ledgered burn), THE HUSTLE (the three-stop chain: location gates, legwork delta, ledgered once-a-day payoff) + THE MARK (every job names a victim; residents in your district get named)');
 await app.close();
