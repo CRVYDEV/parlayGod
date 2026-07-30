@@ -7,8 +7,9 @@
 // pg-mem, zero infra. SQL-granting $OMR is an unledgered mint (the estate/portfolio precedent).
 process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
+import crypto from 'node:crypto';
 import { buildServer } from '../src/server.js';
-import { WIRE, intelCost, wireSubTier } from '../src/rules.js';
+import { WIRE, RIVALS, intelCost, wireSubTier } from '../src/rules.js';
 import { sweepWire, sweepWireAlerts, sweepStandingWatches } from '../src/wire.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
@@ -60,6 +61,28 @@ r = await call('POST', `/v1/wire/tap/${mark.id}`, { token: watcher.token });
 assert.equal(r.code, 200, 'the wire is live');
 assert.equal(r.body.spent, WIRE.TAP_OMR, 'the tap cost was quoted');
 assert.equal((await meOf(watcher.token)).omr, omrBefore - WIRE.TAP_OMR, 'exactly the tap price burned');
+
+// ── STREET WAR step two: tapping a RIVAL (someone who wronged you) costs half — the discounted
+// number is what's burned (the tradecraft-discount discipline); a stranger still pays full price
+// (the full-price tap above IS the control). The ledger row only ever discloses what the mark
+// already announced (the rivals ledger records named acts only).
+{
+  // (fetch the two accounts first — an INSERT…SELECT over a two-table FROM writes the WRONG pair
+  // under pg-mem, which the tap check then misses; VALUES is unambiguous on both engines)
+  const wAcct = (await pool.query(`SELECT account_id FROM characters WHERE id='${watcher.id}'`)).rows[0].account_id;
+  const mAcct = (await pool.query(`SELECT account_id FROM characters WHERE id='${mark.id}'`)).rows[0].account_id;
+  await pool.query(
+    `INSERT INTO rival_events (id, victim_account, aggressor_account, kind, detail)
+     VALUES ('${crypto.randomUUID()}','${wAcct}','${mAcct}','jump','{}'::jsonb)`);
+}
+{
+  const omrB4 = (await meOf(watcher.token)).omr;
+  const rr = await call('POST', `/v1/wire/tap/${mark.id}`, { token: watcher.token }); // refresh at the rival rate
+  assert.equal(rr.code, 200, 'the rival tap is live');
+  assert.equal(rr.body.rivalDiscount, true, 'the discount is flagged');
+  assert.equal(rr.body.spent, Math.floor(WIRE.TAP_OMR * RIVALS.WIRE_RIVAL_MULT), 'half the tap price');
+  assert.equal((await meOf(watcher.token)).omr, omrB4 - rr.body.spent, 'and the DISCOUNTED number is what burned');
+}
 
 // ── the intel: law stage, wealth band, ops counts ──
 r = await call('GET', '/v1/wire', { token: watcher.token });

@@ -2396,3 +2396,8 @@ CREATE INDEX IF NOT EXISTS ix_rival_events_victim ON rival_events (victim_accoun
 -- the victim's car-theft shield: a player loses at most ONE car per window to theft, however many
 -- thieves try (direct-SQL under the withTwoCharacters victim lock — outside persistCharacter's list)
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS car_stolen_at TIMESTAMPTZ;
+-- STREET WAR step two: the trunk-robbery + sabotage victim shields (one landed robbery / one landed
+-- sabotage per victim per window, however many attackers try — the car_stolen_at posture; direct
+-- SQL on the locked victim row, outside persistCharacter's positional list)
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS trunk_robbed_at TIMESTAMPTZ;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS sabotaged_at TIMESTAMPTZ;

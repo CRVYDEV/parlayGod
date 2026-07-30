@@ -8,7 +8,7 @@
 // goes silent, and the worker sweeps expired rows. The layered intel economy: the SUB warns you (a
 // hunter COUNT), a TAP identifies whether a SPECIFIC rival is hunting you, the peek names funders.
 import { GameError, notify, ledger } from './game.js';
-import { WIRE, wireActive, wireTierOf, wireSubTier, disinfoActive, spyRankOf, spyPerksOf, intelCost, rapStageOf, cityForecast, tickerPriceOf, PORTFOLIO, levelOf, dayOf, hash01 } from './rules.js';
+import { WIRE, wireActive, wireTierOf, wireSubTier, disinfoActive, spyRankOf, spyPerksOf, intelCost, rapStageOf, cityForecast, tickerPriceOf, PORTFOLIO, levelOf, dayOf, hash01, RIVALS } from './rules.js';
 import { spendOmr } from './vanity.js';
 
 // STEP FOUR — the account's lifetime intel-ops (the SPYMASTER rank basis) → its TRADECRAFT perks
@@ -75,7 +75,7 @@ async function tapIntel(client, watcherId, t) {
 // POST /v1/wire/tap/:targetId — place (or refresh) a wiretap. A $OMR sink, time-boxed, capped concurrent.
 export async function placeTap(ch, targetId, client, h) {
   if (targetId === ch.id) throw new GameError('self', "You don't need a wire to know your own business.");
-  const t = (await client.query('SELECT id FROM characters WHERE id=$1 AND alive', [targetId])).rows[0];
+  const t = (await client.query('SELECT id, account_id FROM characters WHERE id=$1 AND alive', [targetId])).rows[0];
   if (!t) throw new GameError('gone', 'No such mark on the street.');
   const ops = await spyOps(client, ch.account_id);            // step four: your spymaster tradecraft
   const cap = WIRE.TAP_MAX + spyPerksOf(ops).tapBonus;         // a higher rank runs more wires
@@ -83,7 +83,14 @@ export async function placeTap(ch, targetId, client, h) {
     'SELECT target_character FROM wiretaps WHERE watcher_character=$1 AND expires_at > now()', [ch.id])).rows.map((r) => r.target_character);
   if (!active.includes(targetId) && active.length >= cap)
     throw new GameError('capped', `You're already running ${cap} wires — pull one before you set another.`);
-  const cost = intelCost(WIRE.TAP_OMR, ops);                   // rank discount (the discounted amount is ledgered)
+  let cost = intelCost(WIRE.TAP_OMR, ops);                     // rank discount (the discounted amount is ledgered)
+  // STREET WAR step two (rival-aware surfaces): tapping a man who WRONGED you costs less — the
+  // rivals ledger records only acts the mark already announced to you, so this discloses nothing;
+  // the DISCOUNTED number is what's burned (the tradecraft-discount discipline). Read-only check.
+  const rival = (await client.query(
+    'SELECT 1 FROM rival_events WHERE victim_account=$1 AND aggressor_account=$2 LIMIT 1',
+    [ch.account_id, t.account_id])).rows.length > 0;
+  if (rival) cost = Math.max(1, Math.floor(cost * RIVALS.WIRE_RIVAL_MULT));
   await spendOmr(client, h, cost, 'intel:wiretap');
   const exp = new Date(Date.now() + WIRE.TAP_MS);
   // reset the watchdog alert flags on a place/refresh — a fresh surveillance gives fresh alerts
@@ -91,7 +98,7 @@ export async function placeTap(ch, targetId, client, h) {
   if (!upd.rowCount) await client.query('INSERT INTO wiretaps (watcher_character, target_character, expires_at) VALUES ($1,$2,$3)', [ch.id, targetId, exp]);
   await bumpIntelOps(client, ch.account_id);
   await h.track(client, ch.account_id, 'wiretap', { target: targetId });
-  return { ok: true, target: targetId, spent: cost, expiresSeconds: Math.ceil(WIRE.TAP_MS / 1000) };
+  return { ok: true, target: targetId, spent: cost, rivalDiscount: rival, expiresSeconds: Math.ceil(WIRE.TAP_MS / 1000) };
 }
 
 // POST /v1/wire/sweep — sweep your lines clean of bugs. A $OMR sink; FREE (uncharged) when you're clean.

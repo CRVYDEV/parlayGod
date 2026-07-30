@@ -6,7 +6,7 @@ process.env.MOD_KEY = 'test-mod-key'; // Phase 4 emission-pool ops routes are mo
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { runBuyback, mergeLegacyPools } from '../src/worker.js';
-import { CARS, carVal, carMelt, CONSTANTS, BUSINESS_EMPIRE, frontTitles, launderRankOf, businessMaxTier } from '../src/rules.js';
+import { CARS, carVal, carMelt, CONSTANTS, BUSINESS_EMPIRE, RIVALS, frontTitles, launderRankOf, businessMaxTier } from '../src/rules.js';
 
 // ── car catalog integrity (content expansion guard: no dupe ids, well-formed, on-curve) ──
 {
@@ -593,6 +593,144 @@ assert.equal(r.code, 200, 'the rivals board answers');
     "the AGGRESSOR's board is clean — being robbed is malice, robbing back is business");
 }
 
+// ══════════ THE STREET WAR step two — trunk robbery, boat theft, sabotage, revenge, the coach ══════════
+// (omerta-street-rivals-design.md §4, founder-directed). Trunk robbery is a goods OWNERSHIP MOVE,
+// boat theft a ROW move sharing the vehicle shield + GTA clock, sabotage pure injured_until pacing;
+// striking a rival you're still NET OWED against pays honor; the coach names fresh malice.
+// (A) TRUNK ROBBERY — mug the freight; capped by the robber's free trunk space; zero ledger rows
+await seed("cash=1000000, jail_until=NULL, hosp_until=NULL, respect=625000, cunning=5, speed=5, loc='docks'");
+await seed2("jail_until=NULL, hosp_until=NULL, energy=200, heat=0, cunning=2000, speed=2000, loc='docks', gta_at=NULL");
+// an empty mark refuses BEFORE any cost
+assert.equal((await call('POST', `/v1/streets/${cid}/trunk`, { token: t2 })).body.error, 'empty', 'no freight, no mugging');
+r = await call('POST', '/v1/goods/buy', { token, body: { goodId: 'gin', qty: 8 } });
+assert.equal(r.code, 200, `the mark loads freight (${JSON.stringify(r.body)})`);
+{
+  let mug = null;
+  for (let i = 0; i < 40 && !mug; i++) {
+    await seed2("energy=200, jail_until=NULL");
+    await pool.query(`UPDATE characters SET trunk_robbed_at=NULL WHERE id='${cid}'`);
+    const rb = await call('POST', `/v1/streets/${cid}/trunk`, { token: t2 });
+    assert.equal(rb.code, 200, 'the mugging resolves');
+    if (rb.body.win) mug = rb.body;
+  }
+  assert(mug && mug.trunk && mug.good === 'gin' && mug.qty >= 1, `a 2000-cunning sneak lifts the freight (${JSON.stringify(mug)})`);
+  const mine = Number((await pool.query(`SELECT COALESCE(SUM(qty),0) n FROM character_cargo WHERE character_id='${c2}' AND good_id='gin'`)).rows[0].n);
+  const theirs = Number((await pool.query(`SELECT COALESCE(SUM(qty),0) n FROM character_cargo WHERE character_id='${cid}' AND good_id='gin'`)).rows[0].n);
+  assert.equal(mine, mug.qty, 'the goods landed in the robber\'s trunk');
+  assert.equal(theirs, 8 - mug.qty, 'and left the mark\'s — an OWNERSHIP MOVE, units conserved');
+  assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM transactions WHERE reason LIKE 'trunk%'`)).rows[0].n), 0,
+    'a mugging writes ZERO ledger rows — goods are not a §10.4 currency');
+  // the victim's shield: one landed robbery per window, however many muggers try
+  await seed2("energy=200, jail_until=NULL");
+  assert.equal((await call('POST', `/v1/streets/${cid}/trunk`, { token: t2 })).body.error, 'shielded', 'the trunk shield holds');
+}
+// a FAILED mugging is jail (reload the mark's freight first — the win may have taken it all)
+await seed2("cunning=1, speed=1, energy=200, jail_until=NULL");
+await seed("cunning=2000, speed=2000, cash=1000000");
+await call('POST', '/v1/goods/buy', { token, body: { goodId: 'gin', qty: 5 } });
+await pool.query(`UPDATE characters SET trunk_robbed_at=NULL WHERE id='${cid}'`);
+{
+  let pinched = null;
+  for (let i = 0; i < 40 && !pinched; i++) {
+    await seed2("energy=200, jail_until=NULL");
+    const rb = await call('POST', `/v1/streets/${cid}/trunk`, { token: t2 });
+    if (rb.code === 200 && !rb.body.win) pinched = rb.body;
+  }
+  assert(pinched && pinched.jailedS > 0, 'pinched mid-mugging — lockup');
+}
+// (B) BOAT THEFT at the docks — a docked boat's row moves; the VEHICLE shield is SHARED with cars
+await seed("cash=1000000, cunning=5, speed=5, loc='docks'");
+r = await call('POST', '/v1/port/boat/dinghy', { token });
+assert.equal(r.code, 200, `the mark buys a dinghy (${JSON.stringify(r.body)})`);
+const boatsBefore = Number((await pool.query('SELECT COUNT(*) n FROM boats')).rows[0].n);
+await seed2("jail_until=NULL, energy=200, gta_at=NULL, cunning=50, speed=50, loc='canal'");
+await pool.query(`UPDATE characters SET car_stolen_at=NULL WHERE id='${cid}'`);
+process.env.CAR_THEFT_P = '1';
+assert.equal((await call('POST', `/v1/streets/${cid}/boat`, { token: t2 })).body.error, 'district',
+  'boats are stolen where they float — the docks');
+await seed2("loc='docks'");
+r = await call('POST', `/v1/streets/${cid}/boat`, { token: t2 });
+assert(r.code === 200 && r.body.win && r.body.boatTheft && r.body.boat, `a forced win slips her moorings (${JSON.stringify(r.body)})`);
+assert.equal(Number((await pool.query('SELECT COUNT(*) n FROM boats')).rows[0].n), boatsBefore,
+  'boat rows conserve — a theft moves one, never mints one');
+{
+  const b = (await pool.query(`SELECT character_id, rendezvous FROM boats WHERE id='${r.body.boat.id}'`)).rows[0];
+  assert.equal(b.character_id, c2, 'the boat is the thief\'s now');
+  assert.equal(b.rendezvous, false, 'the consent flag is cleared on transfer');
+}
+// the SHARED vehicle shield: the boat theft stamped car_stolen_at, so a CAR theft is refused too
+await seed2("gta_at=NULL, energy=200");
+assert.equal((await call('POST', `/v1/streets/${cid}/steal`, { token: t2 })).body.error, 'shielded',
+  'ONE vehicle a day — car or boat, the shield is shared');
+// a forced LOSS is jail
+process.env.CAR_THEFT_P = '0';
+await seed("cash=1000000"); await seed2("gta_at=NULL, energy=200, jail_until=NULL");
+await pool.query(`UPDATE characters SET car_stolen_at=NULL WHERE id='${cid}'`);
+r = await call('POST', '/v1/port/boat/dinghy', { token }); // give them another hull to fail against
+r = await call('POST', `/v1/streets/${cid}/boat`, { token: t2 });
+assert(r.code === 200 && !r.body.win && r.body.jailedS > 0, `caught on the gangway (${JSON.stringify(r.body)})`);
+delete process.env.CAR_THEFT_P;
+// (C) SABOTAGE — one random fit racer/fighter laid up; booked fighters untouchable; pure pacing
+await seed2("jail_until=NULL, energy=200, cunning=2000, speed=2000");
+await pool.query(`UPDATE characters SET sabotaged_at=NULL WHERE id='${cid}'`);
+assert.equal((await call('POST', `/v1/streets/${cid}/sabotage`, { token: t2 })).body.error, 'nothing',
+  'no stable, nothing to wreck — refused before any cost');
+await seed("cash=1000000, cunning=5, speed=5");
+r = await call('POST', '/v1/stable/buy', { token, body: { kind: 'dog', name: 'Old Bones' } });
+assert.equal(r.code, 200, `the mark buys a greyhound (${JSON.stringify(r.body)})`);
+{
+  let wrecked = null;
+  for (let i = 0; i < 40 && !wrecked; i++) {
+    await seed2("energy=200, jail_until=NULL");
+    await pool.query(`UPDATE characters SET sabotaged_at=NULL WHERE id='${cid}'`);
+    const rb = await call('POST', `/v1/streets/${cid}/sabotage`, { token: t2 });
+    if (rb.code === 200 && rb.body.win) wrecked = rb.body;
+  }
+  assert(wrecked && wrecked.what === 'racer' && wrecked.name, `the stable got wrecked (${JSON.stringify(wrecked)})`);
+  const hurt = (await pool.query(`SELECT injured_until FROM racers WHERE character_id='${cid}'`)).rows[0];
+  assert(hurt.injured_until && new Date(hurt.injured_until) > new Date(), 'the animal is laid up (injured_until — the existing lay-up mechanic)');
+  await seed2("energy=200, jail_until=NULL");
+  assert.equal((await call('POST', `/v1/streets/${cid}/sabotage`, { token: t2 })).body.error, 'shielded', 'the sabotage shield holds');
+}
+// (D) REVENGE TEETH — the wronged mark strikes back and the code respects it (+honor); the net
+// AGGRESSOR striking again earns nothing. Judged BEFORE the strike is recorded.
+await seed("energy=200, health=100, jail_until=NULL, hosp_until=NULL, muscle=2000, cunning=2000, speed=2000, heat=0");
+await seed2("jail_until=NULL, hosp_until=NULL, muscle=5, cunning=5, speed=5, health=100, respect=625000");
+{
+  const honor0 = Number((await pool.query(`SELECT honor FROM characters WHERE id='${cid}'`)).rows[0].honor || 0);
+  let jr = null;
+  for (let i = 0; i < 40 && !jr; i++) {
+    await seed("energy=200, jail_until=NULL");
+    await pool.query(`UPDATE characters SET hosp_until=NULL WHERE id='${c2}'`);
+    const rb = await call('POST', `/v1/streets/${c2}/jump`, { token });
+    if (rb.code === 200 && rb.body.win) jr = rb.body;
+  }
+  assert(jr, 'the mark lands the payback jump');
+  assert.equal(jr.revenge, true, 'the strike reads as REVENGE — they were still net owed');
+  const honor1 = Number((await pool.query(`SELECT honor FROM characters WHERE id='${cid}'`)).rows[0].honor || 0);
+  assert.equal(honor1, honor0 + RIVALS.REVENGE_HONOR, `settling your own scores pays honor (+${RIVALS.REVENGE_HONOR})`);
+  // the net AGGRESSOR robbing the same mark again is NOT revenge (they are owed nothing)
+  await seed2("cunning=2000, speed=2000, energy=200, jail_until=NULL");
+  await seed("cunning=5, speed=5");
+  await pool.query(`UPDATE businesses SET shakedown_at=NULL, last_collect_at = now() - interval '4 hours' WHERE id='${bizId}'`);
+  let rb2 = null;
+  for (let i = 0; i < 40 && !rb2; i++) {
+    await seed2("energy=200, jail_until=NULL, hosp_until=NULL"); // the payback jump put them in the hospital
+    await pool.query(`UPDATE businesses SET shakedown_at=NULL WHERE id='${bizId}'`);
+    const rb = await call('POST', `/v1/business/${bizId}/rob`, { token: t2 });
+    if (rb.code === 200 && rb.body.win) rb2 = rb.body;
+  }
+  assert(rb2 && rb2.revenge === false, 'the net aggressor\'s strike is just business — no honor');
+}
+// (E) THE COACH names fresh malice — the mark's plan leads with the someone-moved-on-you rung
+await seed("jail_until=NULL, hosp_until=NULL, health=100, welsher=false, wanted_until=NULL");
+{
+  const me2 = (await call('GET', '/v1/me', { token })).body.character;
+  const plan = [me2.coach, ...(me2.coachPlan || [])].filter(Boolean);
+  assert(plan.some((c) => /moved on you/i.test(c.label || '')),
+    'the coach names the fresh malice (48h window — self-clears as it rolls)');
+}
+
 // ══════════ RECURRING SINKS — "the pad" (business upkeep) ══════════
 await seed("cash=2000000");
 await pool.query(`UPDATE businesses SET upkeep_at=now(), last_collect_at=now(), scrutiny=0, scrutiny_at=now() WHERE id='${bizId}'`);
@@ -765,5 +903,5 @@ await pool.query(`UPDATE account_persistent SET agent_flag=false WHERE account_i
 const inv3 = await runLedgerInvariants(pool, { alert: false });
 assert(inv3.checks.find((c) => c.name === 'reason vocabulary').ok, `no unknown-reason alarm (${JSON.stringify(inv3.checks.find((c) => c.name === 'reason vocabulary').unknown || [])})`);
 
-console.log('✅ M2 economy test passed — market, garage (+car conservation), workshop, goods, rackets (+lazy income), assets, THE RETIRED AMM (both directions + the private wash rail refuse; the pool is left alone), staking (principal returns whole, yield retired to the families), gear, the 12h cash-sink tick (the whole take to the window) + the legacy-pool MERGE (idempotent), ledger invariants, Risk-to-Earn bank-interest daily cap, Business Empire (catalog, level gate, buy/collect/upgrade with income cap, §10.4 faucet/sink ledgering) + the step-two PvE risk layer LIVE AGAIN (scrutiny is income-sourced — banking the take heats the front, a hot front is raided at the collect touch with the pending seized + a ledgered business:raid fine, and the view carries the real raid line) with shakedown/takeover PvP intact + THE STREET WAR (rob-a-front on the SHARED shakedown window — 15% skim ledgered business:rob, the owner keeps ~85%, a miss is lockup; PvP car theft — a pure ownership move conserving cars by row count, consent flags cleared on transfer, the victim shield + the shared GTA clock + rookie protection; and THE RIVALS LEDGER naming the aggressor bloodline via its living street with no account UUID exposed) + RECURRING SINKS "the pad" (upkeep rate/owed in the view, paying is a ledgered business:upkeep sink resetting the clock, a front unpaid past the cold window produces nothing / no upgrades until the pad thaws it) + BALANCE sign-off (safehouse blocks deposits/collection, the >$10M bank-interest taper) + BUSINESS EMPIRE → Tier 4 (THE LAUNDERER legend now a FROZEN historical board, THE ACCOUNTANT (halves the income heat) + THE FIXER back on the shelf now the Bureau layer has a feed, THE FORTRESS unchanged, the TYCOON fold-in on collect, read-derived Front-Set titles, THE HOSTILE TAKEOVER — a taxed buyout transfer + fee burn + reset handover + level/have_kind gates, §10.4 vocabulary closed)');
+console.log('✅ M2 economy test passed — market, garage (+car conservation), workshop, goods, rackets (+lazy income), assets, THE RETIRED AMM (both directions + the private wash rail refuse; the pool is left alone), staking (principal returns whole, yield retired to the families), gear, the 12h cash-sink tick (the whole take to the window) + the legacy-pool MERGE (idempotent), ledger invariants, Risk-to-Earn bank-interest daily cap, Business Empire (catalog, level gate, buy/collect/upgrade with income cap, §10.4 faucet/sink ledgering) + the step-two PvE risk layer LIVE AGAIN (scrutiny is income-sourced — banking the take heats the front, a hot front is raided at the collect touch with the pending seized + a ledgered business:raid fine, and the view carries the real raid line) with shakedown/takeover PvP intact + THE STREET WAR (rob-a-front on the SHARED shakedown window — 15% skim ledgered business:rob, the owner keeps ~85%, a miss is lockup; PvP car theft — a pure ownership move conserving cars by row count, consent flags cleared on transfer, the victim shield + the shared GTA clock + rookie protection; and THE RIVALS LEDGER naming the aggressor bloodline via its living street with no account UUID exposed) + RECURRING SINKS "the pad" (upkeep rate/owed in the view, paying is a ledgered business:upkeep sink resetting the clock, a front unpaid past the cold window produces nothing / no upgrades until the pad thaws it) + BALANCE sign-off (safehouse blocks deposits/collection, the >$10M bank-interest taper) + BUSINESS EMPIRE → Tier 4 (THE LAUNDERER legend now a FROZEN historical board, THE ACCOUNTANT (halves the income heat) + THE FIXER back on the shelf now the Bureau layer has a feed, THE FORTRESS unchanged, the TYCOON fold-in on collect, read-derived Front-Set titles, THE HOSTILE TAKEOVER — a taxed buyout transfer + fee burn + reset handover + level/have_kind gates, §10.4 vocabulary closed) + STREET WAR step two (TRUNK ROBBERY — a goods ownership move capped by the robber\'s free trunk space, units conserved, zero ledger rows, the victim\'s own 24h shield, a miss is lockup; BOAT THEFT at the docks — a row move on the SHARED vehicle shield + GTA clock with the rendezvous consent flag cleared; SABOTAGE — a random fit racer laid up, pure pacing; REVENGE TEETH — the net-owed mark\'s payback strike pays honor while the net aggressor earns nothing; and the coach naming fresh malice inside the 48h window)');
 await app.close();

@@ -2747,3 +2747,28 @@ iron escrow-locked, hospitalized/witpro/family off-limits. **No new faucet → n
 (the sim stays drift-0 with the drop live). `CAR_THEFT_P` is a TEST-ONLY roll knob
 (preflight-classified, the BUSINESS_RAID_P precedent). Step-two roadmap (trunk goods, boat theft,
 residents as marks, revenge teeth, rival-aware coach/Wire) is founder picks — design doc §4.
+
+
+## THE STREET WAR step two — trunk robbery, boat theft, sabotage, residents-as-marks, revenge, rival-aware surfaces (founder-directed 2026-07-30)
+
+Founder: "Build step two" (design §4). Five pieces; the only NEW emission is the residents-as-marks
+set, each deliberately bounded and sized against the sim:
+
+| lever | value | note |
+|---|---|---|
+| `RIVALS.TRUNK.ENERGY/HEAT/JAIL_S/SHIELD_MS` | **8 / 5 / 300 / 24h** | trunk robbery — a goods OWNERSHIP move (zero ledger rows), capped by the robber's free trunk space; one landed robbery per victim per day |
+| `RIVALS.BOAT_THEFT.ENERGY/JAIL_S/HEAT` | **10 / 600 / 10** | at the docks only; shares the CAR_THEFT p-curve (boat cost as the alarm value), the GTA clock, AND the vehicle shield (`car_stolen_at` — ONE vehicle a day, car OR boat) |
+| `RIVALS.SABOTAGE.ENERGY/HEAT/JAIL_S/INJURY_MS/SHIELD_MS` | **8 / 5 / 300 / 4h / 12h** | lays up ONE random fit racer/fighter (pure `injured_until` pacing, zero §10.4); BOOKED fighters untouchable (a main-event card's frozen form stays honest for the crowd's money) |
+| `RIVALS.REVENGE_HONOR` | **2** | striking a recorded rival while still NET OWED (their ledger count > yours) pays honor — judged BEFORE the strike records, so a strike can't count against its own claim; kills excluded (the vendetta owns those). The residual slow pair-trade rides the accepted honor-farm posture (the loan-repay precedent) |
+| `RIVALS.WIRE_RIVAL_MULT` | **0.5** | tapping a man who wronged you costs half (the discounted number is what's burned — the tradecraft discipline); reveals nothing the mark didn't already announce |
+| `POPULATION.MARKS.FRONT_INCOME_BPS` | **500** | the sleepy-joint scale: a resident front's pending prices at 5% of the catalog curve, and only ever REALIZES through the shared-window rob/shakedown/inside redirect (residents never collect). **Sized by sim P9.25**: the first default (1000) measured a ~$683k/day shakedown-cadence ceiling — ~2× the NPC-trucking parity band — so it shipped at 500 (~$342k/day worst case across ~16 sleepy joints) |
+| `POPULATION.MARKS.CAR_P/CAR_VAL/FRONT_P/FRONTS/BOAT_P` | see rules tail | which bands own what: made/capo/boss beaters ($800–$20k), laundromat t1/t2 + restaurant t1 fronts, capo/boss dinghies. Cars ride the car-conservation invariant via `rng_audit` `npc:car` grant/retire rows; a dinghy's $24k resale × ~2.8/day turnover ≈ **$68k/day** ceiling; beaters ~11/day at a ~$4.4k mean (melt realizes well under half) |
+| `POPULATION.MARKS.GOODS_BPS/GOODS_MAX_UNITS` | **1000 / 10** | resident freight is RECYCLE-ONLY (bought with their own seed cash at the real `goods:buy` rail + take) — the robbery realizes what the resident already paid; the budget floor keeps them clear of the picked-clean turnover line |
+
+**§10.4 record:** zero new reasons anywhere — the trunk/boat/sabotage verbs move ownership or pacing
+(no currency); resident fronts realize through the EXISTING `business:rob`/`business:shakedown`/
+`heist:inside` redirects at the scaled pending; resident cars extend the car-conservation identity
+with two explicitly counted `rng_audit` terms (grants + retires); **the Sacking SKIPS npc victims**
+(a free catalog front on a kill would skip the buy sink and then earn the FULL curve — kill-farming
+residents for fronts would be a value spawn). Revenge honor is a pure status axis. Sim P9.25 prints
+all the marks ceilings every run so any retune is re-measured; drift-0 with the whole drop live.

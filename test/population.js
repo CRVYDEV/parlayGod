@@ -429,7 +429,114 @@ assert.equal(npcBandOf(0.999).id, 'boss', 'the high roll is the boss band');
   assert.equal(await jailedResidents(), POPULATION.JAILBIRDS.TARGET, `the jail refills to TARGET after a bust (tick jailed ${t3.jailed})`);
 }
 
+// ════════════ STEP TWO of THE STREET WAR — residents OWN things worth taking (MARKS) ════════════
+// Cars are counted into the car-conservation invariant via rng_audit npc:car grant/retire rows;
+// fronts realize ONLY through the rob redirect at the sleepy-joint scale; boats/goods are ownership.
+{
+  const carDrift0 = await driftOf('car conservation');
+  const cM = await pool.connect(); await cM.query('BEGIN');
+  const marked = await spawnResident(cM, {
+    band: POPULATION.BANDS.find((b) => b.id === 'boss'),
+    marks: { car: true, front: true, boat: true },   // tests pin the rolls; production rolls the band P
+  });
+  await cM.query('COMMIT'); cM.release();
+  const mCars = (await pool.query('SELECT * FROM cars WHERE character_id=$1', [marked.id])).rows;
+  assert.equal(mCars.length, 1, 'the resident spawned holding a beater');
+  assert.equal(await driftOf('car conservation'), carDrift0,
+    'the car-conservation invariant ABSORBS the granted beater (an rng_audit npc:car grant row per car)');
+  const mFront = (await pool.query('SELECT * FROM businesses WHERE character_id=$1', [marked.id])).rows[0];
+  assert(mFront && mFront.kind === 'restaurant' && Number(mFront.tier) === 1, 'the boss band runs a sleepy restaurant t1');
+  assert.equal(await one('SELECT COUNT(*) n FROM boats WHERE character_id=$1', [marked.id]), 1, 'and keeps a dinghy at the docks');
+
+  // THE SLEEPY-JOINT SCALE — robbing the resident front prices its pending at FRONT_INCOME_BPS of
+  // the catalog curve (10h × $22k/hr = $220k catalog pending → ×10% = $22k → ×15% cut ≈ $3,300).
+  // Dropping the scale pays ~$33,000 — an order of magnitude, so the band below catches the mutation.
+  await pool.query("UPDATE businesses SET last_collect_at = now() - interval '10 hours' WHERE id=$1", [mFront.id]);
+  await pool.query('UPDATE characters SET cunning=2000, speed=2000, energy=200, heat=0, jail_until=NULL, hosp_until=NULL WHERE id=$1', [player.id]);
+  let robWin = null;
+  for (let i = 0; i < 40 && !robWin; i++) {
+    await pool.query('UPDATE characters SET energy=200, jail_until=NULL WHERE id=$1', [player.id]);
+    await pool.query('UPDATE businesses SET shakedown_at=NULL WHERE id=$1', [mFront.id]);
+    const rb = await call('POST', `/v1/business/${mFront.id}/rob`, { token: player.token });
+    assert.equal(rb.code, 200, `the rob resolves (${JSON.stringify(rb.body)})`);
+    if (rb.body.win) robWin = rb.body;
+  }
+  assert(robWin, 'the player cracks the sleepy joint');
+  {
+    // expected = 15% of (FRONT_INCOME_BPS of the 10h catalog pending) — derived from the levers so
+    // a founder retune moves the expectation with it (the stale-figure class)
+    const expect = Math.floor(22000 * 10 * POPULATION.MARKS.FRONT_INCOME_BPS / 10000 * 0.15);
+    assert(Math.abs(robWin.cut - expect) <= Math.max(200, expect * 0.15),
+      `the cut prices at the SLEEPY-JOINT scale (~$${expect}; got $${robWin.cut})`);
+    assert(robWin.cut < 33000 * 0.5, 'and is nowhere near the unscaled catalog cut (the mutation band)');
+  }
+
+  // STEAL the resident's car — a pure row move, and the invariant stays exact with npc iron in play
+  process.env.CAR_THEFT_P = '1';
+  await pool.query('UPDATE characters SET gta_at=NULL, car_stolen_at=NULL, trunk_robbed_at=NULL WHERE id=$1', [player.id]);
+  let r2 = await call('POST', `/v1/streets/${marked.id}/steal`, { token: player.token });
+  assert(r2.code === 200 && r2.body.win, `the resident's beater is stealable (${JSON.stringify(r2.body)})`);
+  assert.equal(await driftOf('car conservation'), carDrift0, 'car conservation still exact after the theft (a row moved, nothing minted)');
+  // STEAL the boat too (the shared vehicle shield is a per-victim knob — clear it for the test)
+  await pool.query('UPDATE characters SET car_stolen_at=NULL WHERE id=$1', [marked.id]);
+  await pool.query("UPDATE characters SET gta_at=NULL, loc='docks', energy=200 WHERE id=$1", [player.id]);
+  r2 = await call('POST', `/v1/streets/${marked.id}/boat`, { token: player.token });
+  assert(r2.code === 200 && r2.body.win && r2.body.boatTheft, `the dinghy slips its moorings (${JSON.stringify(r2.body)})`);
+  delete process.env.CAR_THEFT_P;
+
+  // RETIREMENT squares every mark's books: cars leave with matching npc:car retire rows, and
+  // boats / fronts / cargo rows go with the resident (no orphan scenery).
+  const cM2 = await pool.connect(); await cM2.query('BEGIN');
+  const marked2 = await spawnResident(cM2, {
+    band: POPULATION.BANDS.find((b) => b.id === 'boss'),
+    marks: { car: true, front: true, boat: true },
+  });
+  await cM2.query('COMMIT'); cM2.release();
+  const cR = await pool.connect(); await cR.query('BEGIN');
+  await retireResident(cR, marked2.id);
+  await cR.query('COMMIT'); cR.release();
+  assert.equal(await one('SELECT COUNT(*) n FROM cars WHERE character_id=$1', [marked2.id]), 0, 'the retired resident took the beater with them');
+  assert.equal(await one('SELECT COUNT(*) n FROM boats WHERE character_id=$1', [marked2.id]), 0, '…and the dinghy');
+  assert.equal(await one('SELECT COUNT(*) n FROM businesses WHERE character_id=$1', [marked2.id]), 0, '…and the front');
+  assert(await one("SELECT COUNT(*) n FROM rng_audit WHERE action='npc:car' AND outcome='retire' AND character_id=$1", [marked2.id]) >= 1,
+    'the retirement wrote the matching npc:car retire row');
+  assert.equal(await driftOf('car conservation'), carDrift0, 'car conservation exact through the whole grant→steal→retire cycle');
+
+  // FREIGHT — a resident sometimes carries goods (bought with its OWN seed cash at the real market
+  // price + take: recycle-only), which makes it a trunk-robbery mark; the budget floor keeps it
+  // clear of the picked-clean line.
+  const cF = await pool.connect(); await cF.query('BEGIN');
+  const hauler = await spawnResident(cF, { band: POPULATION.BANDS.find((b) => b.id === 'boss'), marks: {} });
+  await cF.query('COMMIT'); cF.release();
+  let freighted = false;
+  for (let i = 0; i < 8 && !freighted; i++) {
+    const cA = await pool.connect(); await cA.query('BEGIN');
+    const live = (await cA.query('SELECT id, cash, loc, npc_seed, guard_price, fade_limit, duel_limit FROM characters WHERE id=$1 FOR UPDATE', [hauler.id])).rows[0];
+    const did = await residentAct(cA, live);
+    await cA.query('COMMIT'); cA.release();
+    if (did === 'freighted') freighted = true;
+  }
+  assert(freighted, 'the resident loads freight within a few turns');
+  const held = await one('SELECT COALESCE(SUM(qty),0) n FROM character_cargo WHERE character_id=$1', [hauler.id]);
+  assert(held >= 1, 'goods in the trunk');
+  assert(await one("SELECT COUNT(*) n FROM transactions WHERE character_id=$1 AND reason LIKE 'goods:buy:%'", [hauler.id]) >= 1,
+    'bought at the real market rail (goods:buy sink — recycle-only, never conjured)');
+  const hRow = (await pool.query('SELECT cash, npc_seed FROM characters WHERE id=$1', [hauler.id])).rows[0];
+  assert(Number(hRow.cash) > Number(hRow.npc_seed) * POPULATION.TURNOVER.DRAINED_BPS / 10000,
+    'the freight budget keeps the resident clear of the picked-clean line (no self-inflicted turnover)');
+  // …and the player can mug it
+  await pool.query("UPDATE characters SET energy=200, jail_until=NULL, gta_at=NULL, loc=(SELECT loc FROM characters WHERE id='" + hauler.id + "') WHERE id=$1", [player.id]);
+  let mug = null;
+  for (let i = 0; i < 40 && !mug; i++) {
+    await pool.query('UPDATE characters SET energy=200, jail_until=NULL WHERE id=$1', [player.id]);
+    await pool.query('UPDATE characters SET trunk_robbed_at=NULL WHERE id=$1', [hauler.id]);
+    const rb = await call('POST', `/v1/streets/${hauler.id}/trunk`, { token: player.token });
+    if (rb.code === 200 && rb.body.win) mug = rb.body;
+  }
+  assert(mug && mug.qty >= 1, `the resident's freight is muggable (${JSON.stringify(mug)})`);
+}
+
 console.log('✅ THE POPULATION passed — residents spawn as real flagged characters on the streets roster '
   + '(flag exposed), the npc:seed faucet + npc:retire sink keep §10.4 drift-0, the worker tops the city up '
-  + 'and retires old lines, and residents are excluded from the Street Wage, City Standing, ops and the funnel; STEP TWO: they advertise consent limits, post SECURED loan offers and standing buy orders, and retire without stranding escrow — all pure recycling, zero new faucet; JAILBIRDS: the worker keeps TARGET residents in lockup (never over-fills, refills after a bust) so the §7.8 bust verb + the bust dailies work on a solo run — the reward is the signed ledgered bust:reward faucet');
+  + 'and retires old lines, and residents are excluded from the Street Wage, City Standing, ops and the funnel; STEP TWO: they advertise consent limits, post SECURED loan offers and standing buy orders, and retire without stranding escrow — all pure recycling, zero new faucet; JAILBIRDS: the worker keeps TARGET residents in lockup (never over-fills, refills after a bust) so the §7.8 bust verb + the bust dailies work on a solo run — the reward is the signed ledgered bust:reward faucet; MARKS (Street War step two): residents spawn holding band-priced beaters (counted into car conservation via rng_audit npc:car grant/retire rows), sleepy-joint fronts whose rob cut prices at FRONT_INCOME_BPS of the catalog curve, dinghies at the docks, and self-bought freight (goods:buy, recycle-only, budget-floored above the picked-clean line) — stealable/robbable through the ordinary verbs with conservation exact through the whole grant→steal→retire cycle');
 process.exit(0);

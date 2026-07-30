@@ -3188,6 +3188,27 @@ export const POPULATION = {
   // catching one near the end). Pure jail_until pacing — zero §10.4; the bust:reward faucet it makes
   // reachable is the SIGNED §7.8 one, bounded by the refill rate (BALANCE flag).
   JAILBIRDS: { TARGET: 2, MIN_S: 240, MAX_S: 1200 },
+  // STEP TWO of THE STREET WAR (omerta-street-rivals-design.md §4): residents OWN things worth
+  // taking, so the asset-crime loop is live in an empty alpha. Every mark is a DELIBERATE, bounded
+  // faucet flagged in BALANCE.md (the npc:seed / NPC-trucking posture):
+  //  · CARS spawn as cheap band-priced beaters (steal → melt/fence is petty), counted into the car
+  //    conservation invariant via rng_audit 'npc:car' grant/retire rows (the boost precedent).
+  //  · FRONTS run at FRONT_INCOME_BPS of the catalog curve (a resident runs a SLEEPY joint) — the
+  //    only realization is a player's rob/shakedown/inside-job REDIRECT, so per-front emission is
+  //    bounded by the scaled curve; residents never collect. The Sacking SKIPS npc victims (a free
+  //    catalog front on a kill would skip the buy sink and then earn the FULL curve).
+  //  · BOATS: a dinghy at the docks for some capo/boss residents (steal → resale is the flag).
+  //  · GOODS: a resident sometimes carries freight bought with its OWN seed cash at the real
+  //    market price + take (recycle-only — the robbery realizes what the resident already paid).
+  MARKS: {
+    CAR_P:   { made: 0.6, capo: 0.8, boss: 0.9 },
+    CAR_VAL: { made: [800, 2000], capo: [2000, 8000], boss: [5000, 20000] },  // catalog value band per band
+    FRONT_P: { made: 0.4, capo: 0.6, boss: 0.8 },
+    FRONTS:  { made: ['laundromat', 1], capo: ['laundromat', 2], boss: ['restaurant', 1] },  // [kind, tier]
+    BOAT_P:  { capo: 0.35, boss: 0.6 },   // always the dinghy — the resale faucet stays petty
+    FRONT_INCOME_BPS: 500,                // the sleepy-joint scale on the catalog income curve (sim P9.25 sized 1000→500: the shakedown-cadence ceiling ran ~$683k/day at 10%, ~2× the NPC-trucking parity band — 5% lands ~$342k worst case)
+    GOODS_BPS: 1000, GOODS_MAX_UNITS: 10, // freight budget: ≤10% of cash, ≤10 units, spendable-floored
+  },
 };
 // A resident's name: noir first + last, drawn from pools. Uniqueness is enforced by the caller
 // (living names are unique game-wide), which retries on a collision.
@@ -3659,4 +3680,26 @@ export const RIVALS = {
     ENERGY: 10, JAIL_S: 600, HEAT: 10, VICTIM_SHIELD_MS: 24 * 3600 * 1000,
   },
   RETENTION_D: 90,                   // the rivals ledger's memory (worker sweep)
+
+  // ══ STEP TWO (design §4, founder-directed) — the rest of the asset-crime surface ══
+  // TRUNK ROBBERY — mug the freight off a man's back: an OWNERSHIP MOVE of trade goods (goods are
+  // not a §10.4 currency — the convoy-hijack transfer precedent), bounded by the robber's free
+  // trunk space, the stealth contest, and the victim's own 24h shield. A miss is jail.
+  TRUNK: { ENERGY: 8, HEAT: 5, JAIL_S: 300, SHIELD_MS: 24 * 3600 * 1000 },
+  // BOAT THEFT at the docks — a docked boat's ROW moves (boats have no conservation check; the
+  // resale faucet is the BALANCE flag). Shares the CAR_THEFT p-curve (boat cost as the alarm
+  // value), the GTA clock, the CAR_THEFT_P test knob, AND the victim's VEHICLE shield
+  // (car_stolen_at — one vehicle lost per day, car OR boat, however many thieves try).
+  BOAT_THEFT: { ENERGY: 10, JAIL_S: 600, HEAT: 10 },
+  // SABOTAGE — wreck a rival's stable: lays up ONE random fit racer/fighter (pacing, never
+  // ownership — injured_until, the existing lay-up mechanic). Booked fighters are untouchable
+  // (a main-event card's frozen form stays honest). A miss is jail; per-victim 12h shield.
+  SABOTAGE: { ENERGY: 8, HEAT: 5, JAIL_S: 300, INJURY_MS: 4 * 3600 * 1000, SHIELD_MS: 12 * 3600 * 1000 },
+  // REVENGE TEETH — striking a recorded rival you are still NET OWED against (their ledger count
+  // vs yours) pays honor (the code respects a man who settles his own scores). Honor is a pure
+  // status axis (zero §10.4); kills are deliberately excluded — the vendetta system owns those.
+  REVENGE_HONOR: 2,
+  // RIVAL-AWARE WIRE — tapping a man who wronged you costs less (the discounted number is what's
+  // burned/ledgered, the tradecraft-discount discipline).
+  WIRE_RIVAL_MULT: 0.5,
 };

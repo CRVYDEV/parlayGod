@@ -128,3 +128,21 @@ tests; the four lenses' findings were all absorbed into the build itself):
   existing rails), residents hold no fronts/cars yet (the asset-crime loop is player-vs-player until
   population step two), and the roster's `fronts` existence-only surface is the deliberate
   info-economy line.
+
+## 7. Step two — BUILT (2026-07-30, founder: "Build step two")
+
+All five §4 items shipped: **trunk robbery** (`POST /v1/streets/:id/trunk` — a goods ownership move
+capped by the robber's free trunk space, 24h victim shield, jail on a miss), **boat theft**
+(`POST /v1/streets/:id/boat` — docks-only, the CAR_THEFT p-curve with boat cost as the alarm value,
+the SHARED vehicle shield + GTA clock, rendezvous flag cleared on transfer), **sabotage**
+(`POST /v1/streets/:id/sabotage` — one random fit racer/fighter laid up, booked fighters untouchable,
+12h shield), **residents as marks** (band-priced beaters counted into car conservation via
+`rng_audit npc:car` grant/retire rows; sleepy-joint fronts at `FRONT_INCOME_BPS` of the catalog curve
+realizing only through the rob/shakedown/inside redirects — the Sacking skips npc victims; dinghies;
+recycle-only freight via the real `goods:buy` rail), **revenge teeth** (`RIVALS.REVENGE_HONOR` on a
+net-owed strike, judged before recording, kills excluded) and **rival-aware surfaces** (the coach's
+someone-moved-on-you rung off a 48h `loadOwned` window; the Wire's half-price rival tap). Five
+mutations verified by name; sim P9.25 measures every marks ceiling (and sized `FRONT_INCOME_BPS`
+1000→500 before ship); §10.4 drift-0. Remaining ideas (step three, founder picks): revenge teeth
+with REAL power (a rep bonus — its own sign-off), resident-owned speakeasies/racers, and the
+"always-PvP crime" variant flagged in BALANCE (converting the crime faucet into a transfer).

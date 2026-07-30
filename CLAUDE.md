@@ -6783,3 +6783,47 @@ the wrong path). All `RIVALS.*` numbers are founder sign-off levers (BALANCE.md 
 pinned in test/levers.js — whose register check also caught the BALANCE prose naming the never-pinned
 `GARAGE_CAP`). Step two (design §4, founder picks): trunk-goods robbery, boat theft, residents as
 marks, revenge teeth, rival-aware coach/Wire.
+
+**THE STREET WAR step two (founder-directed "Build step two") — BUILT** (design §4→§7;
+`src/social/combat.js` robTrunk/stealBoat/sabotage, `business.js` npcPendingScale + revenge,
+`population.js` MARKS, `wire.js` rival tap, `game.js` loadOwned rival branch + coach rung;
+`test/economy.js` STREET WAR II + `test/population.js` MARKS + `test/wire.js` blocks). Five pieces,
+zero new §10.4 reasons. **(1) TRUNK ROBBERY** (`POST /v1/streets/:id/trunk`) — mugs ONE random good
+line off a mark's back, capped by the robber's free trunk space (a goods OWNERSHIP move, zero ledger
+rows — the convoy-hijack transfer; absolute setCargo-style writes, the pg-mem INT quirk); 24h victim
+shield (`characters.trunk_robbed_at`, direct SQL), the rob-a-front stealth contest, jail on a miss.
+**(2) BOAT THEFT** (`POST /v1/streets/:id/boat`) — docks-only; a DOCKED boat's row moves (rendezvous
+consent flag cleared — the consent-transfer class; stale port_intercepts dropped); shares the
+CAR_THEFT p-curve (boat cost as the alarm value), the signed GTA clock, the CAR_THEFT_P test knob,
+AND the victim's VEHICLE shield (`car_stolen_at` — ONE vehicle a day, car OR boat, proven by a car
+theft refusing after a boat theft). **(3) SABOTAGE** (`POST /v1/streets/:id/sabotage`) — ONE random
+FIT racer/fighter laid up `INJURY_MS` (pure injured_until pacing, zero §10.4); BOOKED fighters
+untouchable (a main-event card's frozen form stays honest); 12h shield. The three share ONE gate
+helper (`assertStreetCrime` — the extortFront one-core lesson). **(4) RESIDENTS AS MARKS**
+(`POPULATION.MARKS`): residents spawn holding band-priced beaters — counted into the car-conservation
+invariant via `rng_audit` `npc:car` grant/retire rows (the boost-counting mechanism; retirement
+deletes cars/boats/fronts/cargo and writes the matching retire rows) — sleepy-joint fronts whose
+pending prices at `FRONT_INCOME_BPS` of the catalog curve via `business.js:npcPendingScale` (applied
+at extortFront + the heist inside job; residents never collect, so the redirect IS the venue's whole
+emission; **the Sacking SKIPS npc victims** — a free catalog front on a kill would skip the buy sink
+then earn the FULL curve), capo/boss dinghies, and RECYCLE-ONLY freight (`residentAct` buys goods
+with the resident's own seed cash at the real `goods:buy` rail + take, budget-floored above the
+picked-clean turnover line). **Sim P9.25 sized the default before ship**: `FRONT_INCOME_BPS` 1000
+measured ~$683k/day (2× the NPC-trucking parity band) → shipped at **500** (~$342k/day worst case);
+the probe prints every marks ceiling each run. **(5) REVENGE TEETH + RIVAL-AWARE SURFACES** —
+`rivals.js:revengeOwed` (two plain COUNTs, the pg-mem posture): a win against a rival you're still
+NET OWED against pays `REVENGE_HONOR` (+2 honor, pure status), judged BEFORE the strike records (else
+it counts against its own claim), wired at jump/rob/shakedown/car-theft/trunk/boat/sabotage wins —
+kills deliberately excluded (the vendetta owns those); alternating trades converge, the residual
+slow pair-trade rides the accepted honor-farm posture. The coach gained a self-clearing
+someone-moved-on-you rung (a 48h `rival_events` branch in loadOwned's UNION — `aggressor_account::text`
+cast, or pg-mem unifies the union key column to uuid and every text branch dies); the Wire taps a
+rival at `WIRE_RIVAL_MULT` (0.5 — the discounted number is what's burned). **Guard lessons paid:**
+the levers reader-check caught FOUR same-name `const T = RIVALS.X` aliases colliding in one file
+(the extractor is last-wins per file — renamed CT/TR/BT/SB), and whole-map pins needed a JSON deep
+comparator (bracket-accessed map leaves are invisible to the reader check, so the PARENT is the
+pin). Five mutations each fail at a named assertion (the sleepy-joint scale, the retire rng row,
+revenge honor, the shared vehicle shield, the wire discount). Suite green + sim drift-0. All
+`RIVALS.TRUNK/BOAT_THEFT/SABOTAGE/REVENGE_HONOR/WIRE_RIVAL_MULT` + `POPULATION.MARKS.*` numbers are
+founder sign-off levers (BALANCE.md § THE STREET WAR step two). Step three (founder picks):
+revenge with real power, resident speakeasies/racers, the always-PvP crime variant.

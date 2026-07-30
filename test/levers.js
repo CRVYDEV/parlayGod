@@ -323,6 +323,14 @@ const SIGNED = [
   ['POPULATION.JAILBIRDS.TARGET', 2],
   ['POPULATION.JAILBIRDS.MIN_S', 240],
   ['POPULATION.JAILBIRDS.MAX_S', 1200],
+  ['POPULATION.MARKS.CAR_P', { made: 0.6, capo: 0.8, boss: 0.9 }],
+  ['POPULATION.MARKS.CAR_VAL', { made: [800, 2000], capo: [2000, 8000], boss: [5000, 20000] }],
+  ['POPULATION.MARKS.FRONT_P', { made: 0.4, capo: 0.6, boss: 0.8 }],
+  ['POPULATION.MARKS.FRONTS', { made: ['laundromat', 1], capo: ['laundromat', 2], boss: ['restaurant', 1] }],
+  ['POPULATION.MARKS.BOAT_P', { capo: 0.35, boss: 0.6 }],
+  ['POPULATION.MARKS.FRONT_INCOME_BPS', 500],
+  ['POPULATION.MARKS.GOODS_BPS', 1000],
+  ['POPULATION.MARKS.GOODS_MAX_UNITS', 10],
   ['PORT.ESCORT_COST', 15000],
   ['PORT.FINE_RATE', 0.5],
   ['PORT.FLEET_MAX', 5],
@@ -377,6 +385,20 @@ const SIGNED = [
   ['RIVALS.CAR_THEFT.HEAT', 10],
   ['RIVALS.CAR_THEFT.VICTIM_SHIELD_MS', 86400000],
   ['RIVALS.RETENTION_D', 90],
+  ['RIVALS.TRUNK.ENERGY', 8],
+  ['RIVALS.TRUNK.HEAT', 5],
+  ['RIVALS.TRUNK.JAIL_S', 300],
+  ['RIVALS.TRUNK.SHIELD_MS', 86400000],
+  ['RIVALS.BOAT_THEFT.ENERGY', 10],
+  ['RIVALS.BOAT_THEFT.JAIL_S', 600],
+  ['RIVALS.BOAT_THEFT.HEAT', 10],
+  ['RIVALS.SABOTAGE.ENERGY', 8],
+  ['RIVALS.SABOTAGE.HEAT', 5],
+  ['RIVALS.SABOTAGE.JAIL_S', 300],
+  ['RIVALS.SABOTAGE.INJURY_MS', 14400000],
+  ['RIVALS.SABOTAGE.SHIELD_MS', 43200000],
+  ['RIVALS.REVENGE_HONOR', 2],
+  ['RIVALS.WIRE_RIVAL_MULT', 0.5],
   ['SECRETS.DIG_OMR', 10],
   ['SECRETS.MAX_HELD', 5],
   ['SKILLS.ACTIVE_CD_MS', 28800000],
@@ -489,8 +511,10 @@ for (const [path, want] of SIGNED) {
   const got = resolve(path);
   if (got === undefined) { missing.push(path); continue; }
   const same = Array.isArray(want)
-    ? Array.isArray(got) && want.length === got.length && want.every((w, i) => w === got[i])
-    : got === want;
+    ? Array.isArray(got) && want.length === got.length && JSON.stringify(want) === JSON.stringify(got)
+    : (want !== null && typeof want === 'object')
+      ? JSON.stringify(want) === JSON.stringify(got)  // whole-map pins (bracket-accessed leaves are invisible to the reader check, so the PARENT is the pin)
+      : got === want;
   if (!same) drifted.push(`${path}: signed ${JSON.stringify(want)}, code has ${JSON.stringify(got)}`);
 }
 assert.equal(missing.length, 0,

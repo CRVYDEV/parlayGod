@@ -18,7 +18,7 @@
 //
 // Nothing lower imports anything higher. The re-exports below are explicit rather than `export *`
 // so the package's private helpers stay private and the public surface is legible in one place.
-export { bust, callOffSearch, fire, huntWanted, jump, npcHit, startSearch, stealCar } from './social/combat.js';
+export { bust, callOffSearch, fire, huntWanted, jump, npcHit, startSearch, stealCar, robTrunk, stealBoat, sabotage } from './social/combat.js';
 export { cancelBounty, cancelFamilyContract, claimBounty, hitmanLeaderboard, listContracts, peekContracts, postBounty, postFamilyContract, sweepExpiredBounties } from './social/contracts.js';
 export { enterSafehouse, hireBodyguard, offerBodyguard } from './social/defense.js';
 export { acceptPeace, feudLeaderboard, proposePeace, runEstate } from './social/estate.js';

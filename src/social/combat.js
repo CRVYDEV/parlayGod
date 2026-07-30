@@ -6,11 +6,11 @@
 //
 // Split out of the 2,003-line src/social.js; every function below is byte-identical to what was
 // there. Import from '../social.js' — it re-exports this package's public surface unchanged.
-import { GameError, bumpFamilyTask, bus, ledger, notify, track, loadOwned, skillMult, npcMult, npcTier, bumpStanding, bumpMastery, masteryFx } from '../game.js';
-import { M3, CONSTANTS, LOAN, levelOf, rankIdxOf, cityEventOf, dayOf, btkOf, gunObjOf, vestMultOf, fleetValue, effStat, npcHitmanOf, VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, PORT, witproActive, penSafe, inHole, HONOR, HEIST_LOOT_RATE, BUSINESSES, seasonModOf, pathFx, RIVALS, carVal } from '../rules.js';
+import { GameError, bumpFamilyTask, bus, ledger, notify, track, loadOwned, skillMult, npcMult, npcTier, bumpStanding, bumpMastery, masteryFx, trunkCap } from '../game.js';
+import { M3, CONSTANTS, LOAN, levelOf, rankIdxOf, cityEventOf, dayOf, btkOf, gunObjOf, vestMultOf, fleetValue, effStat, npcHitmanOf, VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, PORT, witproActive, penSafe, inHole, HONOR, HEIST_LOOT_RATE, BUSINESSES, seasonModOf, pathFx, RIVALS, carVal, boatOf } from '../rules.js';
 import { activeDecree } from '../commission.js';
 import { bumpHonor } from '../honor.js';
-import { recordRival } from '../rivals.js';
+import { recordRival, revengeOwed } from '../rivals.js';
 import { logCarCollect } from '../collection.js';
 import { awardHitmanRep, claimBounty, postBounty, postFamilyContract, refundPot } from './contracts.js';
 import { bodyguardAbsorbs } from './defense.js';
@@ -114,13 +114,16 @@ export async function jump(ch, victim, client, h, intent) {
                           war_score_them = war_score_them + CASE WHEN id=$2 THEN 1 ELSE 0 END
           WHERE id IN ($1,$2)`, [h.owned.gangId, h.victimOwned.gangId]);
     }
+    // REVENGE TEETH (step two) — judged BEFORE this strike is recorded (else it counts against itself)
+    const revenge = await revengeOwed(client, ch.account_id, victim.account_id);
     await h.notify(client, victim.id, 'attack', { from: ch.name, stolen, cb: crates, dmg, hospMs });
     await recordRival(client, victim.account_id, ch, 'jump', { stolen });
+    if (revenge) await bumpHonor(client, ch, RIVALS.REVENGE_HONOR);
     await h.bumpDaily(client, ch.id, 'jump');
     await bumpFamilyTask(client, h, 'jump', 1);
     await bumpMastery(client, h, ch, 'muscle', 'jump'); // THE TRADES — a won jump works the protection racketeer's craft
     bus.emit('streets', { type: 'jump', by: ch.name, on: victim.name, war: !!war });
-    return { ok: true, win: true, intent: it.id, energy: energyCost, stolen, crates, rep, bounty, war: !!war };
+    return { ok: true, win: true, intent: it.id, energy: energyCost, stolen, crates, rep, bounty, war: !!war, revenge };
   }
   const dmg = rand(10, 25);
   ch.health = Math.max(1, Number(ch.health) - dmg);
@@ -203,6 +206,11 @@ export async function callOffSearch(ch, client) {
 // sacks — NPC/mod kills don't (the whack:loot precedent).
 async function sackEmpire(client, ch, victim, h) {
   if (!M3.SACK_ON_KILL) return null;
+  // STEP TWO (residents-as-marks): a RESIDENT's front dies with them, never seizes — a free catalog
+  // front on a kill would skip the buy sink and then earn the FULL curve in a player's hands (the
+  // resident ran it at the sleepy-joint scale). Their fronts are scenery for the ROB loop, not a
+  // kill prize; kill-farming residents for fronts would be a value spawn.
+  if (victim.is_npc) return null;
   const fronts = (await client.query('SELECT id, kind, tier FROM businesses WHERE character_id=$1', [victim.id])).rows;
   if (!fronts.length) return null;
   const killerLvl = levelOf(Number(ch.respect));
@@ -727,14 +735,184 @@ export async function stealCar(ch, victim, client, h) {
     h.owned.cars.push({ ...car, character_id: ch.id, race_limit: null, pink_slip: false });
     h.victimOwned.cars = (h.victimOwned.cars || []).filter((c) => c.id !== car.id); // keep the in-memory fleet honest
     await logCarCollect(client, ch.id, car.id); // THE COLLECTION — the sixth car-transfer site
+    const revenge = await revengeOwed(client, ch.account_id, victim.account_id);
     await h.notify(client, victim.id, 'car_stolen', { from: ch.name, model: car.model_id });
     await recordRival(client, victim.account_id, ch, 'car_theft', { model: car.model_id });
+    if (revenge) await bumpHonor(client, ch, RIVALS.REVENGE_HONOR);
     bus.emit('streets', { type: 'car_theft', by: ch.name, on: victim.name });
-    return { ok: true, win: true, theft: true, car: { id: car.id, model: car.model_id, trim: car.trim_id, dmg: Number(car.dmg) } };
+    return { ok: true, win: true, theft: true, car: { id: car.id, model: car.model_id, trim: car.trim_id, dmg: Number(car.dmg) }, revenge };
   }
   // pinched mid-hotwire
   ch.jail_until = new Date(Date.now() + T.JAIL_S * 1000);
   await h.notify(client, victim.id, 'car_theft_failed', { from: ch.name });
   await recordRival(client, victim.account_id, ch, 'car_theft', { failed: true });
   return { ok: true, win: false, theft: true, jailedS: T.JAIL_S };
+}
+
+// ══════════ THE STREET WAR step two (omerta-street-rivals-design.md §4) ══════════
+// Three more asset crimes, all REDIRECTS or OWNERSHIP MOVES (zero new emission): trunk robbery
+// moves goods (not a §10.4 currency — the convoy-hijack transfer), boat theft moves a row, and
+// sabotage moves nothing at all (pure injured_until pacing). Each records on the rivals ledger
+// (the victim's notify names the attacker either way), each pays REVENGE honor when the striker
+// is still net owed, and each shares the stealCar gate posture.
+
+// The shared actor+victim gates (the stealCar set, minus the verb-specific ones). One helper, not
+// three copies — the extortFront/resetFrontToNewOwner lesson: a copied gate block is how a later
+// fix misses one of them.
+function assertStreetCrime(ch, victim, h, energy) {
+  if (jailed(ch)) throw new GameError('jailed', 'No street work from lockup.');
+  if (safeHoused(ch)) throw new GameError('safe', "Can't work the streets while you're to ground — a safehouse is a shield, not a bunker.");
+  if (witproActive(ch)) throw new GameError('witpro', "You're in protective custody — keep your head down.");
+  if (hospitalized(ch)) throw new GameError('hosp_self', "You're laid up under the Doc's care.");
+  if (Number(ch.energy) < energy) throw new GameError('energy', `That takes ${energy} energy.`);
+  if (hospitalized(victim)) throw new GameError('hosp', "They're under the Doc's care. Even we have rules.");
+  if (witproActive(victim)) throw new GameError('witpro', 'They vanished into witness protection.');
+  if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId) throw new GameError('family', "They're family. Omertà.");
+  if (levelOf(Number(victim.respect)) < RIVALS.VICTIM_MIN_LVL)
+    throw new GameError('rookie', "Nothing worth taking off a corner kid — pick a made mark.");
+}
+
+// The sneak-thief's contest — cunning + speed/2 both sides (the rob-a-front contest verbatim;
+// deliberately NO skill/mastery stack in step two — a new perk surface is its own review).
+function stealthContest(ch, victim, h) {
+  const eff = (st) => effStat(ch[st], st, h.owned.assets, h.owned.gear);
+  const vEff = (st) => effStat(victim[st], st, h.victimOwned.assets, h.victimOwned.gear);
+  return { atk: eff('cunning') + eff('speed') * 0.5 + Math.random() * 25,
+           def: vEff('cunning') + vEff('speed') * 0.5 + Math.random() * 25 };
+}
+
+// TRUNK ROBBERY — mug the freight off a man's back. A WIN moves ONE random good line, capped at
+// the robber's free trunk space (goods are ownership, not currency — zero ledger rows; the
+// setCargo absolute-write discipline, the pg-mem INT quirk). Bounds: the victim's own 24h shield
+// (one landed robbery per day however many muggers try), the stealth contest, energy, and jail on
+// a miss. POST /v1/streets/:targetId/trunk (withTwoCharacters).
+export async function robTrunk(ch, victim, client, h) {
+  const TR = RIVALS.TRUNK;
+  assertStreetCrime(ch, victim, h, TR.ENERGY);
+  if (victim.trunk_robbed_at && Date.now() - new Date(victim.trunk_robbed_at).getTime() < TR.SHIELD_MS)
+    throw new GameError('shielded', 'They just got turned over — the freight moved to safe hands for the night.');
+  const lines = (await client.query(
+    'SELECT good_id, qty FROM character_cargo WHERE character_id=$1 AND qty > 0', [victim.id])).rows;
+  if (!lines.length) throw new GameError('empty', "They're not carrying freight.");
+  const free = trunkCap(h) - Object.values(h.owned.cargo).reduce((a, n) => a + (n || 0), 0);
+  if (free <= 0) throw new GameError('cargo', 'Your own trunk is full — where would you even put it?');
+  ch.energy = Number(ch.energy) - TR.ENERGY;
+  ch.heat = Math.min(100, Number(ch.heat || 0) + TR.HEAT);
+  const { atk, def } = stealthContest(ch, victim, h);
+  await h.rngLog(client, ch.id, `trunkrob:${victim.id}`, Math.round(atk * 100) / 100, atk > def ? 'win' : 'loss');
+  if (atk > def) {
+    const line = lines[Math.floor(Math.random() * lines.length)];
+    const take = Math.min(Number(line.qty), free);
+    // absolute writes computed in JS on BOTH sides (the setCargo discipline — the pg-mem INT quirk)
+    const vLeft = Number(line.qty) - take;
+    await client.query('DELETE FROM character_cargo WHERE character_id=$1 AND good_id=$2', [victim.id, line.good_id]);
+    if (vLeft > 0) await client.query('INSERT INTO character_cargo (character_id, good_id, qty) VALUES ($1,$2,$3)', [victim.id, line.good_id, vLeft]);
+    const mine = (h.owned.cargo[line.good_id] || 0) + take;
+    await client.query('DELETE FROM character_cargo WHERE character_id=$1 AND good_id=$2', [ch.id, line.good_id]);
+    await client.query('INSERT INTO character_cargo (character_id, good_id, qty) VALUES ($1,$2,$3)', [ch.id, line.good_id, mine]);
+    h.owned.cargo[line.good_id] = mine;
+    if (h.victimOwned?.cargo) h.victimOwned.cargo[line.good_id] = vLeft;
+    // the victim's shield — direct SQL on the LOCKED victim row (outside persist's positional list)
+    await client.query('UPDATE characters SET trunk_robbed_at=now() WHERE id=$1', [victim.id]);
+    const revenge = await revengeOwed(client, ch.account_id, victim.account_id);
+    await h.notify(client, victim.id, 'trunk_robbed', { from: ch.name, good: line.good_id, qty: take });
+    await recordRival(client, victim.account_id, ch, 'trunk_rob', { good: line.good_id, qty: take });
+    if (revenge) await bumpHonor(client, ch, RIVALS.REVENGE_HONOR);
+    bus.emit('streets', { type: 'trunk_rob', by: ch.name, on: victim.name });
+    return { ok: true, win: true, trunk: true, good: line.good_id, qty: take, revenge };
+  }
+  ch.jail_until = new Date(Date.now() + TR.JAIL_S * 1000);
+  await h.notify(client, victim.id, 'trunk_rob_failed', { from: ch.name });
+  await recordRival(client, victim.account_id, ch, 'trunk_rob', { failed: true });
+  return { ok: true, win: false, trunk: true, jailedS: TR.JAIL_S };
+}
+
+// BOAT THEFT at the docks — a DOCKED boat's row moves to the thief (boats conserve by nothing:
+// the resale faucet is the BALANCE flag; the stolen boat arrives with its rendezvous consent flag
+// cleared — the AUDIT-street-races-step-two class — and its stale intercept rows dropped). Shares
+// the CAR_THEFT p-curve (the boat's catalog cost as the alarm value), the GTA clock, the
+// CAR_THEFT_P test knob, and the victim's VEHICLE shield (car_stolen_at — one vehicle a day, car
+// OR boat). POST /v1/streets/:targetId/boat (withTwoCharacters).
+export async function stealBoat(ch, victim, client, h) {
+  const BT = RIVALS.BOAT_THEFT, C = RIVALS.CAR_THEFT;
+  assertStreetCrime(ch, victim, h, BT.ENERGY);
+  if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `Boats are stolen where they float — the ${PORT.DISTRICT}.`);
+  if (ch.gta_at && Date.now() < new Date(ch.gta_at).getTime() + CONSTANTS.GTA_CD_MS)
+    throw new GameError('cooldown', "The heat's still on from the last job — lay off a minute.");
+  const fleet = Number((await client.query('SELECT COUNT(*) n FROM boats WHERE character_id=$1', [ch.id])).rows[0].n);
+  if (fleet >= PORT.FLEET_MAX + (Number(ch.berths) || 0))
+    throw new GameError('fleet', 'Your berths are full — theft is opportunism, not a purchase.');
+  if (victim.car_stolen_at && Date.now() - new Date(victim.car_stolen_at).getTime() < C.VICTIM_SHIELD_MS)
+    throw new GameError('shielded', 'The harbor patrol is crawling over their berths after the last job.');
+  const boats = (await client.query(
+    'SELECT * FROM boats WHERE character_id=$1 AND (run_until IS NULL OR run_until < now()) ORDER BY id FOR UPDATE',
+    [victim.id])).rows;
+  if (!boats.length) throw new GameError('no_boat', 'Nothing of theirs is tied up at the docks.');
+  const boat = boats[Math.floor(Math.random() * boats.length)];
+  ch.energy = Number(ch.energy) - BT.ENERGY;
+  ch.heat = Math.min(100, Number(ch.heat || 0) + BT.HEAT);
+  ch.gta_at = new Date(); // the attempt burns the GTA window win or lose — the stealCar rule
+  const spec = boatOf(boat.kind);
+  const cun = effStat(ch.cunning, 'cunning', h.owned.assets, h.owned.gear);
+  const spd = effStat(ch.speed, 'speed', h.owned.assets, h.owned.gear);
+  const p = Number(process.env.CAR_THEFT_P
+    ?? Math.min(C.MAX_P, Math.max(C.MIN_P, C.BASE_P + (cun + spd / 2) / C.STAT_SCALE - Math.sqrt(Math.max(0, spec?.cost || 0)) / C.ALARM_DIV)));
+  const roll = Math.random();
+  await h.rngLog(client, ch.id, `boattheft:${victim.id}`, roll, roll < p ? `stole ${boat.kind} (P ${p.toFixed(3)})` : `caught (P ${p.toFixed(3)})`);
+  if (roll < p) {
+    await client.query('UPDATE boats SET character_id=$2, rendezvous=false WHERE id=$1', [boat.id, ch.id]);
+    await client.query('DELETE FROM port_intercepts WHERE boat_id=$1', [boat.id]);
+    await client.query('UPDATE characters SET car_stolen_at=now() WHERE id=$1', [victim.id]);
+    const revenge = await revengeOwed(client, ch.account_id, victim.account_id);
+    await h.notify(client, victim.id, 'boat_stolen', { from: ch.name, kind: boat.kind });
+    await recordRival(client, victim.account_id, ch, 'boat_theft', { kind: boat.kind });
+    if (revenge) await bumpHonor(client, ch, RIVALS.REVENGE_HONOR);
+    bus.emit('streets', { type: 'boat_theft', by: ch.name, on: victim.name });
+    return { ok: true, win: true, boatTheft: true, boat: { id: boat.id, kind: boat.kind, name: spec?.name || boat.kind }, revenge };
+  }
+  ch.jail_until = new Date(Date.now() + BT.JAIL_S * 1000);
+  await h.notify(client, victim.id, 'boat_theft_failed', { from: ch.name });
+  await recordRival(client, victim.account_id, ch, 'boat_theft', { failed: true });
+  return { ok: true, win: false, boatTheft: true, jailedS: BT.JAIL_S };
+}
+
+// SABOTAGE — wreck a rival's stable: ONE random FIT racer or fighter is laid up (injured_until,
+// the existing lay-up mechanic — pacing, never ownership, zero §10.4). Booked fighters are
+// untouchable (a main-event card's frozen form stays honest for the crowd's money); the victim's
+// 12h shield bounds the grief. A miss is jail. POST /v1/streets/:targetId/sabotage.
+export async function sabotage(ch, victim, client, h) {
+  const SB = RIVALS.SABOTAGE;
+  assertStreetCrime(ch, victim, h, SB.ENERGY);
+  if (victim.sabotaged_at && Date.now() - new Date(victim.sabotaged_at).getTime() < SB.SHIELD_MS)
+    throw new GameError('shielded', 'Their people are on alert after the last incident.');
+  const racers = (await client.query(
+    `SELECT id, name FROM racers WHERE character_id=$1
+       AND (injured_until IS NULL OR injured_until < now()) ORDER BY id FOR UPDATE`, [victim.id])).rows;
+  const fighters = (await client.query(
+    `SELECT id, name FROM fighters WHERE character_id=$1
+       AND (injured_until IS NULL OR injured_until < now())
+       AND (booked_until IS NULL OR booked_until < now()) ORDER BY id FOR UPDATE`, [victim.id])).rows;
+  const targets = [...racers.map((r) => ({ ...r, what: 'racer' })), ...fighters.map((f) => ({ ...f, what: 'fighter' }))];
+  if (!targets.length) throw new GameError('nothing', 'They keep no stable worth wrecking.');
+  ch.energy = Number(ch.energy) - SB.ENERGY;
+  ch.heat = Math.min(100, Number(ch.heat || 0) + SB.HEAT);
+  const { atk, def } = stealthContest(ch, victim, h);
+  await h.rngLog(client, ch.id, `sabotage:${victim.id}`, Math.round(atk * 100) / 100, atk > def ? 'win' : 'loss');
+  if (atk > def) {
+    const t = targets[Math.floor(Math.random() * targets.length)];
+    // absolute timestamp computed in JS (the pg-mem discipline)
+    await client.query(`UPDATE ${t.what === 'racer' ? 'racers' : 'fighters'} SET injured_until=$2 WHERE id=$1`,
+      [t.id, new Date(Date.now() + SB.INJURY_MS)]);
+    await client.query('UPDATE characters SET sabotaged_at=now() WHERE id=$1', [victim.id]);
+    const revenge = await revengeOwed(client, ch.account_id, victim.account_id);
+    await h.notify(client, victim.id, 'sabotaged', { from: ch.name, name: t.name, what: t.what });
+    await recordRival(client, victim.account_id, ch, 'sabotage', { name: t.name, what: t.what });
+    if (revenge) await bumpHonor(client, ch, RIVALS.REVENGE_HONOR);
+    bus.emit('streets', { type: 'sabotage', by: ch.name, on: victim.name });
+    return { ok: true, win: true, sabotage: true, what: t.what, name: t.name, revenge };
+  }
+  ch.jail_until = new Date(Date.now() + SB.JAIL_S * 1000);
+  await h.notify(client, victim.id, 'sabotage_failed', { from: ch.name });
+  await recordRival(client, victim.account_id, ch, 'sabotage', { failed: true });
+  return { ok: true, win: false, sabotage: true, jailedS: SB.JAIL_S };
 }
