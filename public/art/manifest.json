@@ -1,5 +1,5 @@
 {
-  "spent": 10.48,
+  "spent": 10.52,
   "images": {
     "card-legend": {
       "model": "fal-ai/flux-pro/v1.1",
@@ -2530,6 +2530,17 @@
       "job": "speakeasy tier: The Cathedral",
       "prompt": "a cathedral-scaled grand club, vaulted ceiling, tiered balconies, a sea of candlelit tables, 1940s American noir, hard chiaroscuro, deep shadow, teal and amber light, film grain, muted desaturated palette, cinematic, unpeopled, no signage, no lettering, no writing anywhere, no watermark",
       "at": "2026-07-30T04:16:46.207Z"
+    },
+    "interior-trade": {
+      "model": "fal-ai/flux-pro/v1.1",
+      "ar": "16:9",
+      "seed": 1339752625,
+      "w": 1024,
+      "h": 576,
+      "bytes": 178034,
+      "job": "the Trade Goods section — the freight game",
+      "prompt": "a dockside freight warehouse at night, tall stacks of wooden crates and burlap sacks on a loading platform, a hand truck loaded with cases, a clipboard manifest nailed to a post, a truck backed up to the dock with its doors open, one amber loading lamp over black water beyond, warm amber key light against cold teal shadow, the amber dominant, 1940s American noir, hard chiaroscuro, deep shadow, teal and amber light on wet asphalt, film grain, anamorphic haze, muted desaturated palette, cinematic wide lens, unpeopled, no signage, no lettering, no writing anywhere, no watermark",
+      "at": "2026-07-30T08:14:34.134Z"
     }
   }
 }

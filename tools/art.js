@@ -94,6 +94,11 @@ const MANIFEST = [
   { id: 'district-brick', model: PRO, ar: '16:9', job: 'the Brick — residential, the on-ramp district',
     prompt: `a tight residential street of brick walk-ups at night, iron fire escapes zigzagging up the facades, wet stoops, washing lines strung overhead, warm window light, ${WARM}, ${NOIR}` },
 
+  // THE FREIGHT GAME (task #309, founder: trade goods as a core theme) — the hero for the Streets
+  // trade section + the tour/primer card: the whole loop in one frame (buy low, haul, sell high)
+  { id: 'interior-trade', model: PRO, ar: '16:9', job: 'the Trade Goods section — the freight game',
+    prompt: `a dockside freight warehouse at night, tall stacks of wooden crates and burlap sacks on a loading platform, a hand truck loaded with cases, a clipboard manifest nailed to a post, a truck backed up to the dock with its doors open, one amber loading lamp over black water beyond, ${WARM}, ${NOIR}` },
+
   // ═══ INTERIORS — one per major system ═══
   { id: 'interior-kitchen', model: PRO, ar: '16:9', job: 'the Kitchen (drug lab)',
     prompt: `a cramped backroom laboratory at night, brass scales and glass flasks on a stained wooden table, one bare hanging bulb, steam curling, a cigarette burning in a tin ashtray, peeling walls, ${WARM}, ${NOIR}` },
