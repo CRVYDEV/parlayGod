@@ -33,6 +33,21 @@ back. For current architecture, the invariants, and the open technical-debt regi
 5. **Lazy accrual, no global ticks** (§7.1). Any new time-based mechanic extends `src/accrual.js` inside the same pattern.
 6. **One DB transaction per action**, row-locked via `withCharacter` (extend it for two-party actions in M3: lock both rows in a stable order to avoid deadlock).
 7. Run `npm test` after every change; extend `test/smoke.js` (or add files) for every new endpoint — both success and gate-rejection paths.
+8. **A GREEN `npm test` IS NOT A GREEN BUILD. After every push, check CI before doing anything else.**
+   The suites run on pg-mem, which is a different database engine from production and disagrees with
+   it in ways no suite can see. On 2026-07-30 a `uuid = text` comparison made `loadOwned` fail to
+   PARSE — every authed request 500'd for hours — while all 61 suites stayed green. CI's real-Postgres
+   job caught it *on the exact commit that broke it*, and seven more commits were pushed on top of a
+   red build because only the pg-mem result was read. The guard worked; nobody looked.
+   **`npm test` green means the pg-mem half passed and nothing more.** Before pushing anything that
+   touches SQL, run the real-Postgres gates locally — they need a throwaway database and nothing else:
+   ```
+   su postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D /tmp/pg -o '-p 5433 -k /tmp' -l /tmp/pg.log start"
+   DATABASE_URL='postgres://postgres@/db?host=/tmp&port=5433' npm run pgquery   # every SQL string parses
+   DATABASE_URL='postgres://postgres@/db?host=/tmp&port=5433' npm run pgcheck   # the loop, locks, ledger
+   ```
+   (`initdb`/`pg_ctl` refuse to run as root — hence `su postgres`.) After pushing, confirm the run
+   went green. A red CI that nobody reads is worse than no CI, because it manufactures confidence.
 
 ## Where things stand
 M1–M4 complete and tested (`npm test` runs all four journeys). M2 shipped the
@@ -7097,3 +7112,42 @@ scaling the ask, and the jobs bump dropped. The second of those was VACUOUS on i
 the test rolled the clock between steps and never made two claims on one day; it now DRIVES a
 same-day second claim and asserts the chain did not move. All numbers are founder sign-off levers
 (BALANCE.md; pinned in test/levers.js).
+
+**THE OUTAGE — `uuid = text`, and the red build nobody read (2026-07-30).** The founder reported THE
+LINE'S DEAD on web and mobile. That screen is the `boot()` guard from the 2026-07-25 incident doing
+its job over a genuine server-side 500: production was up, the database was up, and `/v1/me` was
+returning `internal` for every character that existed. **`loadOwned`'s UNION takes `$1` and `$2`, and
+Postgres resolves a parameter's type ONCE per statement from how it is used.** `$2` is first compared
+to `account_gear.account_id`, which this schema declares TEXT, so `$2` was text everywhere — and the
+rivals branch added in Street War step two compares it to `rival_events.victim_account`, which is
+UUID. `uuid = text` has no operator. The statement did not degrade, it failed to **PARSE**, so every
+branch of the union died with it; `loadOwned` runs on every authed request, read or write, so that
+was the whole game. Fixed by giving the uuid-typed branch its OWN parameter carrying the same value
+(`$3` infers uuid from its only use, `$2` stays text, `ix_rival_events_victim` still usable — casting
+the column would parse too but throws the index away). The underlying defect is that the schema's
+account ids are mixed (28 text columns against 12 uuid); changing a live column's type is not an
+outage fix, so the query carries the cast and the inconsistency is documented at the site.
+
+**The part worth remembering is not the bug.** All 61 suites were green — they run on pg-mem, which
+compares uuid to text happily. But `tools/pgcheck.js` **caught it, correctly, on the exact commit
+that broke it**, naming `/v1/me → 500`, and **seven more commits were pushed on top of a red CI**
+because only the pg-mem job's green was read. A guard that fires into an unread log is worse than no
+guard: it manufactures confidence. Ground rule 8 now states the rule plainly and gives the two
+local commands. Two structural fixes went with it: **(1)** because pgcheck failed, every LATER step
+in that job was SKIPPED — the backup self-test, chaos and loadtest silently stopped running for eight
+commits too — so each harness now runs on `!cancelled()`, since one failing check must not blind the
+rest; **(2)** `tools/pgquery.js` (the 9th harness) closes the coverage gap pgcheck structurally has:
+it `PREPARE`s **every static SQL string in `src/`** against real Postgres — full parse and type
+resolution, no rows read, ~1s for 2254 statements — so the class is caught wherever it lives rather
+than only on the endpoints a harness happens to call. **It found two more live 500s on its first
+run**, neither reachable from any suite: `GET /v1/rivals` (`rival_events.aggressor_account` uuid
+joined to `characters.account_id` text — broken since the Rivals ledger shipped, and guarded by "do
+you have any rivals", so it worked right up until it mattered) and `GET /v1/commission`
+(`commission_proposals.gang_id` is the ONE gang_id declared uuid; all ten siblings and `gangs.id`
+itself are text — broken since proposals shipped, long enough that nobody connected it to anything).
+Both fixed by casting the already-narrowed side so the index doing the lookup survives. The 34
+interpolated and 14 non-literal queries pgquery cannot prepare are counted, listed and ceiling-bounded
+rather than skipped (the honesty rule) and were swept by hand for the same class — no `character_id`
+in this schema is uuid, so the estate wipe is safe, and `commission_proposals` was the only outlier
+left. Mutation-verified: restore the outage and pgquery names `src/game.js:166` and the exact operator
+that does not exist.
