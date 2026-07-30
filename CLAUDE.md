@@ -6827,3 +6827,46 @@ revenge honor, the shared vehicle shield, the wire discount). Suite green + sim 
 `RIVALS.TRUNK/BOAT_THEFT/SABOTAGE/REVENGE_HONOR/WIRE_RIVAL_MULT` + `POPULATION.MARKS.*` numbers are
 founder sign-off levers (BALANCE.md § THE STREET WAR step two). Step three (founder picks):
 revenge with real power, resident speakeasies/racers, the always-PvP crime variant.
+
+**STREET LIFE — the corner, the black book, the call (task #318, founder-directed 2026-07-30) — BUILT**
+(design `omerta-streetlife-design.md`; `src/corner.js` + `src/contacts.js` — the 108th/109th modules;
+`contacts`/`corner_jobs`/`contact_calls` tables; the `CORNER`/`cornerTasksOf`/`CONTACTS` rules tail;
+tests across hardening/growth/wire/client). Founder: "more tasks located in each area… push you into
+conflict or meet other players… phone numbers discoverable via meeting or intel… contacts give you
+quests / requests… the broadcast button doesn't fit — repurpose or remove." **(1) WORD ON THE STREET**
+(`GET /v1/corner`, `POST /v1/corner/:slot/accept|claim`) — every district posts `CORNER.PER_DAY` (3)
+seed-drawn daily tasks (§7.11 hash, town-wide per district) from per-district pools of EXISTING
+bumpDaily kinds (zero new counting surface — the drill rule), one CONFLICT kind (`jump`/`bust`)
+GUARANTEED per draw; accept at the district SNAPSHOTS the daily counters (the hustle baseline rule),
+the claim proves work by counter DELTA and pays `CORNER.CASH` ($400, ledgered **`corner:job`** — a
+character_id'd §10.4 faucet) + `CORNER.RESPECT` (15), HARD-bounded `CORNER.MAX_DAY` (5) claims/day →
+a $2k + 75-respect/day ceiling (sim P9.26 prints it; petty by design — the pointer is the product).
+**(2) THE BLACK BOOK** (`contacts` — account-keyed BOTH sides, the dm_blocks posture: numbers follow
+the bloodline, survive death by construction) — `sendDm` now gates **`no_number`** (after blocks,
+before the flood brake); a line is EARNED: **met** (ONE hook in `withTwoCharacters` after fn succeeds
+— any completed two-party action is a MUTUAL meeting; a refused approach is not), **intel**
+(`placeTap`/`pullDossier` record it ONE-WAY — the watched never gets the watcher's line), **called**
+(a landed DM reveals the sender's number to the recipient). `GET /v1/contacts` is the book (living-
+street JOIN, no account UUIDs); the phone's compose picker IS the book; the roster 📱 gates to 📵 for
+strangers. **(3) THE CALL** (`contact_calls` character-PK — one open call; worker
+`generateContactCalls`/`sweepCalls`, `GEN_PER_TICK` 4, TTL 24h) — an NPC-resident contact rings with
+a request: **freight** (bring qty×good to their district, pays base×1.15) or **visit** (a $750 tip) —
+**paid from THE CONTACT'S OWN pocket** (the population recycle-only rule: unaffordable demotes at
+generation, robbed-blind VOIDS at fulfilment); `POST /v1/call/fulfill` is two-party
+(withTwoCharacters, sorted locks vs residentAct), goods move by absolute writes, both legs ledgered
+`contact:freight`/`contact:visit` with counterparty — a pure transfer netting ZERO (test-pinned).
+§10.4: `corner:` (bounded faucet) + `contact:` (transfers) joined the cash vocabulary; the book moves
+no value. **(4) THE 📣 BROADCAST BUTTON — REMOVED** (founder option "or remove"): the share loop lives
+in the brag prompts + My Profile (both `?ref`-carrying, §7.13 untouched); shareDossier deleted, CSS +
+handler cleaned. `corner_jobs`/`contact_calls` die with the street (estate wipe + DISPOSITION);
+`contacts` survives by construction. Console: a WORD ON THE STREET card on Streets (accept/claim, 🗡
+CONFLICT chips), the phone leads with the open-call card + THE BLACK BOOK + book-sourced compose,
+describe()/feedText/ERRMAP branches (`taken`/`capped`/`short` kept GENERIC — gangs/wires/exchange
+reuse the codes). Mutation-verified ×4 by name (meeting hook dropped, no_number dropped, a ledger leg
+dropped → net≠0, the delta gate dropped). pg-mem lessons re-hit: correlated NOT EXISTS rewritten as
+flat queries + a JS filter (the /v1/gangs precedent); the client fixture's contacts seed uses VALUES
+with prefetched accounts (the two-table INSERT…SELECT trap); `districtName` is module-local (rules.js
+doesn't export it — the hustle.js pattern). All `CORNER.*`/`CONTACTS.*` numbers are founder sign-off
+levers (BALANCE.md § STREET LIFE; pinned in test/levers.js — POOLS/CONFLICT as parent-object pins).
+Deferred (step two, founder picks): player-posted calls (needs an escrow surface), corner CHAINS
+(multi-day district storylines), a contact-count status ladder, standing-scaled resident requests.

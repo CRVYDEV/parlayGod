@@ -32,6 +32,7 @@ import { sweepDiplomacy } from './diplomacy.js';
 import { settleProposals, activeDecree, seatedGangs } from './commission.js';
 import { sweepSecrets } from './secrets.js';
 import { sweepRivals } from './rivals.js';
+import { generateContactCalls, sweepCalls } from './contacts.js';
 import { spawnNpcConvoys, despawnArrivedNpc, sweepConvoyHauls } from './convoy.js';
 import { runPopulation, runResidentBehaviour } from './population.js';
 import { sweepLaw } from './law.js';
@@ -273,6 +274,12 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     await safe('diplomacy sweep', () => sweepDiplomacy(pool));
     await safe('secrets sweep', () => sweepSecrets(pool)); // unpaid demands blow at the deadline; stale dirt reaped
     await safe('rivals sweep', () => sweepRivals(pool)); // grudges older than RETENTION_D fade off the ledger
+    // THE CALL (STREET LIFE): NPC contacts ring the players who know them with paid requests —
+    // paid from the CONTACT'S OWN pocket at fulfilment (recycle-only, zero new faucet); lapsed
+    // requests fade. Bounded GEN_PER_TICK placements a tick, one open call per street (the PK).
+    await safe('contact calls sweep', () => sweepCalls(pool));
+    const cc = await safe('contact calls', () => generateContactCalls(pool));
+    if (cc?.placed > 0) console.log(`📞 contacts: ${cc.placed} call(s) placed`);
     const hs = await safe('heist sweep', () => sweepStaleHeists(pool));
     if (hs?.swept > 0) console.log(`🗺  heists: swept ${hs.swept} stale plan(s), stakes refunded to living leaders`);
     // THE PEN co-op breakout: stale break plans abandoned, a living leader's staked cutkit refunded

@@ -1,5 +1,6 @@
 // M1 core + shared transaction machinery. Every formula cites spec §7 / prototype v24.
 import crypto from 'node:crypto';
+import { recordMeeting } from './contacts.js';
 import { EventEmitter } from 'node:events';
 import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          levelOf, rankIdxOf, cityEventOf, dayOf,
@@ -805,6 +806,12 @@ export async function withTwoCharacters(pool, accountId, targetCharacterId, fn) 
     const h = { ledger, rngLog, notify, track, bumpDaily, events: [], acct, owned, accountId,
                 victimAcct, victimOwned };
     const result = await fn(ch, victim, client, h);
+
+    // STREET LIFE (the black book): any COMPLETED two-party action is a MEETING — both sides walk
+    // away with the other's number (the founder's discoverability rule: numbers come from meeting
+    // or intel, never free). Best-effort leaf insert; a gate refusal (a thrown GameError) never
+    // reaches here, so a refused approach is not a meeting.
+    await recordMeeting(client, ch.account_id, victim.account_id);
 
     await persistCharacter(client, ch);
     await persistKitchen(client, ch, owned);

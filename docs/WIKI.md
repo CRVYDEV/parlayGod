@@ -934,6 +934,24 @@ cell stop with an unread badge on the mobile thumb bar.
 **The Troll Box** (`/v1/chat`, `/v1/gangs/chat`) — public city chat plus a family-only room (you only see
 family chat from AFTER you joined — no back-reading a family you infiltrate).
 
+## 30c. Street Life — the corner, the black book, the call
+
+**Word on the Street** (`GET /v1/corner`, `POST /v1/corner/:slot/accept|claim`) — every district posts
+3 daily tasks (the same board for everyone standing there, one CONFLICT job — a jump or a bust —
+guaranteed). Take a job WHERE it's posted, do the work anywhere it happens, collect the envelope back
+at the district: $400 + 15 respect each, at most 5 envelopes a day across the whole city. Only work
+done AFTER you take a job counts.
+
+**The Black Book** (`GET /v1/contacts`) — phone numbers are EARNED, never free. You get a line three
+ways: **meet them** (any completed face-to-face — a jump, a hire, a fade, a duel — hands BOTH sides
+the other's number), **tap them** (a wiretap or dossier earns it one-way; they never get yours), or
+**answer** (whoever rings you reveals their own number). The phone's compose list IS your book — a
+stranger's 📱 reads 📵 until you earn the line.
+
+**The Call** (`POST /v1/call/fulfill`) — contacts you've met ring you with paid requests: bring N
+units of freight to their district (base × 1.15), or just come see them (a tip). The pay comes from
+THE CONTACT'S OWN pocket — a real transfer, never minted — and an unanswered request lapses in a day.
+
 ## 31. Reference
 
 ### Districts

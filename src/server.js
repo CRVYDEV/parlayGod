@@ -13,6 +13,8 @@ import * as W from './growth.js';
 import * as RG from './regimen.js';
 import * as Hustle from './hustle.js';
 import * as Career from './career.js';
+import * as Corner from './corner.js';
+import * as Contacts from './contacts.js';
 import * as A from './auth.js';
 import * as Chain from './chain.js';
 import * as Fees from './fees.js';
@@ -98,7 +100,8 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE, NOTORIETY,
          EMISSION, emissionEpochOf, epochBudget, wageRequireMinted, TAX, withdrawTaxBps,
          HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, BUSINESS_EMPIRE, PACING, MASTERY,
-         PATH_FX, PATH_XP_HOME, PATH_XP_RIVAL, PATH_SWITCH_CD_MS, REGIMEN, HUSTLE, CAREER, RIVALS } from './rules.js';
+         PATH_FX, PATH_XP_HOME, PATH_XP_RIVAL, PATH_SWITCH_CD_MS, REGIMEN, HUSTLE, CAREER, RIVALS,
+         CORNER, CONTACTS } from './rules.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -645,6 +648,14 @@ export async function buildServer() {
     G.readCharacter(pool, req.user.sub, (ch, client) => Hustle.hustleBoard(ch, client)));
   app.post('/v1/hustle/advance', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Hustle.advanceHustle(ch, client, h)));
+  // WORD ON THE STREET — each district's seed-drawn daily quest board (accept where you stand,
+  // do the work, claim the envelope; the counter DELTA proves it — the hustle rule)
+  app.get('/v1/corner', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client) => Corner.cornerBoard(ch, client)));
+  app.post('/v1/corner/:slot/accept', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Corner.acceptCorner(ch, req.params.slot, client, h)));
+  app.post('/v1/corner/:slot/claim', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Corner.claimCorner(ch, req.params.slot, client, h)));
   app.post('/v1/heal', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => G.heal(ch, client, h)));
   app.post('/v1/checkin', { preHandler: auth }, async (req) =>
@@ -810,6 +821,12 @@ export async function buildServer() {
       drillXp: REGIMEN.DRILL_XP, trainers: REGIMEN.TRAINERS, energy: REGIMEN.ENERGY },
     // THE HUSTLE — the daily three-stop chain's config (the live chain is GET /v1/hustle)
     hustle: { payPerLvl: HUSTLE.PAY_PER_LVL, payMin: HUSTLE.PAY_MIN },
+    // WORD ON THE STREET — the district quest boards' config (the live board is GET /v1/corner)
+    corner: { perDay: CORNER.PER_DAY, maxDay: CORNER.MAX_DAY, cash: CORNER.CASH, respect: CORNER.RESPECT },
+    // THE BLACK BOOK + THE CALL — numbers are earned (meet / tap / be called), requests pay from
+    // the contact's own pocket (the live book is GET /v1/contacts)
+    contacts: { callTtlHours: Math.round(CONTACTS.CALL_TTL_MS / 3600000), visitTip: CONTACTS.VISIT_TIP,
+      freightPremiumBps: CONTACTS.CALL_FREIGHT_PREMIUM_BPS },
     // THE STREET WAR + RIVALS (discoverability — costs and bounds only; the odds stay server-side)
     rivals: { robRateBps: RIVALS.ROB_RATE_BPS, robEnergy: RIVALS.ROB_ENERGY, robJailS: RIVALS.ROB_JAIL_S,
       trunkEnergy: RIVALS.TRUNK.ENERGY, trunkJailS: RIVALS.TRUNK.JAIL_S,
@@ -1615,6 +1632,18 @@ export async function buildServer() {
     Phone.blockLine(pool, req.user.sub, req.params.characterId));
   app.delete('/v1/phone/block/:characterId', { preHandler: auth }, async (req) =>
     Phone.unblockLine(pool, req.user.sub, req.params.characterId));
+  // THE BLACK BOOK — every number you hold (met / tapped / they called you) + your open contact call
+  app.get('/v1/contacts', { preHandler: auth }, async (req) => Contacts.contactsBoard(pool, req.user.sub));
+  // THE CALL — fulfil the open request. Two-party: the caller's NPC is looked up first, then both
+  // rows lock in sorted order (the shakedown-route pattern — the pay can't clobber a residentAct).
+  app.post('/v1/call/fulfill', { preHandler: auth }, async (req) => {
+    const me = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0];
+    if (!me) throw new G.GameError('no_character', 'No living street.');
+    const call = (await pool.query('SELECT npc_character FROM contact_calls WHERE character_id=$1', [me.id])).rows[0];
+    if (!call) throw new G.GameError('no_call', 'Nobody is waiting on you.');
+    return G.withTwoCharacters(pool, req.user.sub, call.npc_character, (ch, npc, client, h) =>
+      Contacts.fulfillCall(ch, npc, client, h));
+  });
 
   registerKitchen(app, { pool, auth });
 

@@ -246,6 +246,8 @@ const NOT_API = new Set([
   'id',         // the milestone-TIPS registry key (localStorage suffix, client-internal)
   'tab',        // TIPS jump targets — setTab() destinations, never sent to the server
   'type',       // THE SOUNDTRACK's WebAudio oscillator type ('sine'/'triangle'/…) — synth-internal, never sent
+  'met',        // the black book's HOW_CHIP display map ({met:'met', …}) — render labels, never sent
+  'intel',      // ditto ({intel:'tapped'})
 ]);
 // `field: 'value'` (deck bodies, JS objects) and `"field":"value"` (data-body attributes).
 const literals = [];
@@ -818,11 +820,18 @@ const PARAM_FIXTURES = new Map([
     { name: 'Mirror Family ' + Math.random().toString(36).slice(2, 6), tag: 'MR' + Math.floor(Math.random() * 90 + 10) })).body?.gangId],
   ['/v1/feud/:p', async () => charId],
   ['/v1/casino/ring/:p', async () => (await inject('POST', '/v1/casino/ring/open', token, { bb: 100, buyin: 20000 })).body?.tableId],
-  // a DM thread needs a counterpart WITH a message on the line — make both here (memoized)
+  // a DM thread needs a counterpart WITH a message on the line — make both here (memoized).
+  // STREET LIFE: numbers are earned, so the fixture seeds the contacts row (a meeting) first —
+  // the no_number gate itself is covered in test/hardening.js.
   ['/v1/phone/thread/:p', async () => {
     const t = (await inject('POST', '/v1/auth/guest')).body.token;
     await inject('POST', '/v1/character', t, { name: 'Mirror Caller ' + Math.random().toString(36).slice(2, 6) });
     const cid = (await inject('GET', '/v1/me', t)).body.character.id;
+    // VALUES with prefetched accounts — a two-table INSERT…SELECT writes the WRONG pair under
+    // pg-mem (the wire-test lesson from #317)
+    const [aA, aB] = await Promise.all([charId, cid].map(async (id) =>
+      (await app.pool.query('SELECT account_id FROM characters WHERE id=$1', [id])).rows[0].account_id));
+    await app.pool.query("INSERT INTO contacts (owner_account, contact_account, how) VALUES ($1,$2,'met') ON CONFLICT DO NOTHING", [aA, aB]);
     await inject('POST', '/v1/phone/dm/' + cid, token, { text: 'you there?' });
     await inject('POST', '/v1/phone/dm/' + charId, t, { text: 'always.' });
     return cid;

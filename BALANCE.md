@@ -2772,3 +2772,31 @@ with two explicitly counted `rng_audit` terms (grants + retires); **the Sacking 
 (a free catalog front on a kill would skip the buy sink and then earn the FULL curve — kill-farming
 residents for fronts would be a value spawn). Revenge honor is a pure status axis. Sim P9.25 prints
 all the marks ceilings every run so any retune is re-measured; drift-0 with the whole drop live.
+
+## STREET LIFE — the corner boards, the black book, the call (founder-directed 2026-07-30, task #318)
+
+Founder: "more tasks located in each area… push you into conflict or meet other players… phone
+numbers discoverable via meeting or intel… contacts give you quests / requests… the broadcast
+button doesn't fit — repurpose or remove." Design: `omerta-streetlife-design.md`. One new petty
+faucet, one recycle-only transfer pair, one zero-§10.4 discoverability layer, one chrome removal.
+
+| lever | value | why |
+|---|---|---|
+| `CORNER.PER_DAY` | **3** | tasks each district posts a day (seed-drawn, town-wide per district) |
+| `CORNER.MAX_DAY` | **5** | claims per street per day ACROSS districts — **the hard faucet bound** |
+| `CORNER.CASH` | **400** | per envelope → ceiling **MAX_DAY × CASH = $2,000/day/street** (sim P9.26) |
+| `CORNER.RESPECT` | **15** | the XP per envelope (75/day ceiling — level 5 ≈ 160 respect, so meaningful early, garnish later) |
+| `CORNER.POOLS` / `CONFLICT` | per-district maps | bumpDaily kinds ONLY (zero new counting surface); one `jump`/`bust` conflict pick GUARANTEED per draw |
+| `CONTACTS.CALL_FREIGHT_PREMIUM_BPS` | **11500** | a contact pays base × 1.15 for delivered goods — FROM THEIR OWN POCKET (recycle-only, the npc:seed stock) |
+| `CONTACTS.CALL_FREIGHT_MAX_QTY` | **8** | request size cap |
+| `CONTACTS.VISIT_TIP` | **750** | the "come see me" tip (clamped to the contact's pocket) |
+| `CONTACTS.CALL_TTL_MS` | **24h** | an unanswered request lapses (worker sweep) |
+| `CONTACTS.GEN_PER_TICK` | **4** | worker placement bound; ONE open call per street (the PK) |
+
+§10.4: `corner:job` is a character_id'd cash FAUCET (check (a) reconciles, hard-bounded above);
+`contact:freight`/`contact:visit` are pure two-leg TRANSFERS with counterparty (test-pinned to net
+zero — a request never conjures value at fulfilment; an unaffordable freight demotes to a visit at
+generation, a robbed-blind contact VOIDS the request at fulfilment). The black book (`contacts`,
+account-keyed both sides) and the `no_number` DM gate move no value. The 📣 broadcast button was
+REMOVED (founder option) — the share loop lives in the brag prompts + My Profile, both `?ref`-carrying,
+so §7.13 attribution is untouched.

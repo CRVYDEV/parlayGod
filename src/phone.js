@@ -18,6 +18,7 @@
 // mute a man's mouth, never the city.
 import crypto from 'crypto';
 import { GameError, cleanText, notify } from './game.js';
+import { hasContact, recordContact } from './contacts.js';
 
 const DM_MAX_LEN = 240;
 const DM_BRAKE_MS = 2000;
@@ -46,6 +47,11 @@ export async function sendDm(pool, fromAccountId, targetCharacterId, text) {
     throw new GameError('blocked', "The line is dead — they're not taking your calls.");
   if (blocks.some((b) => b.blocker_account === fromAccountId))
     throw new GameError('you_blocked', 'You blocked this line — unblock it to talk.');
+  // STREET LIFE (the black book): numbers are DISCOVERABLE, never free — you can only dial a line
+  // you HOLD (met them on the street, tapped them, or they called you first). After the blocks
+  // gate (a block is a harder truth than a missing number), before the brake (a gate, not a line).
+  if (!(await hasContact(pool, fromAccountId, target.account_id)))
+    throw new GameError('no_number', "You don't have their number — meet them on the street, or put a wire on them.");
   // the flood brake LAST — semantic errors surface first, and only a landed line arms it
   const last = lastDmAt.get(fromAccountId) || 0;
   if (Date.now() - last < DM_BRAKE_MS) throw new GameError('slow_down', 'Easy — one message at a time.');
@@ -59,6 +65,8 @@ export async function sendDm(pool, fromAccountId, targetCharacterId, text) {
   const id = crypto.randomUUID();
   await pool.query('INSERT INTO dm_messages (id, from_account, to_account, from_name, to_name, body) VALUES ($1,$2,$3,$4,$5,$6)',
     [id, fromAccountId, target.account_id, me.name, toName, body]);
+  // ringing someone reveals YOUR number to them — the recipient can now call back (best-effort)
+  await recordContact(pool, target.account_id, fromAccountId, 'called');
   // ring the recipient's LIVING street: a normal notification (inbox row + live WS push).
   // notify() only needs a query()-capable handle — the pool works outside a txn (best-effort:
   // the DM row is already committed; a dead line just waits for the heir).

@@ -25,7 +25,8 @@ import { deadlockToRetry as G_deadlockToRetry, withCharacterRead } from '../src/
   const wh = readFileSync(new URL('../public/wiki.html', import.meta.url), 'utf8').toLowerCase();
   for (const term of ['spread the word', 'family tree', 'opportunity', '/agents',
     'dueling circuit', 'clue scrolls', 'megaproject', 'cellphone',
-    'ring poker', 'house window', 'gala', 'the family yield', 'the trades', 'my profile']) {
+    'ring poker', 'house window', 'gala', 'the family yield', 'the trades', 'my profile',
+    'the black book', 'word on the street']) {
     assert(wm.includes(term), `docs/WIKI.md must document "${term}" (codex drift)`);
     assert(wh.includes(term), `public/wiki.html must document "${term}" (codex drift)`);
   }
@@ -451,9 +452,17 @@ if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actual
 {
   const caller = await mk('Louie the Line');
   const callee = await mk('Frankie Dial');
+  // STREET LIFE (the black book): numbers are DISCOVERABLE — a stranger's line refuses the dial
+  let r = await call('POST', `/v1/phone/dm/${callee.id}`, { token: caller.token, body: { text: 'cold call' } });
+  assert.equal(r.body.error, 'no_number', "you can't dial a number you don't hold");
+  // seed the line ONE WAY (the real earn paths — a meeting / a wiretap — are covered in the
+  // STREET LIFE block below; this block is about the phone itself)
+  const acctOf = async (cid) => (await pool.query('SELECT account_id FROM characters WHERE id=$1', [cid])).rows[0].account_id;
+  await pool.query("INSERT INTO contacts (owner_account, contact_account, how) VALUES ($1,$2,'met')",
+    [await acctOf(caller.id), await acctOf(callee.id)]);
   // send: sanitized, lands, rings the recipient's inbox
-  let r = await call('POST', `/v1/phone/dm/${callee.id}`, { token: caller.token, body: { text: '  <b>meet me</b> at the docks at nine ' } });
-  assert.equal(r.code, 200, 'a DM sends');
+  r = await call('POST', `/v1/phone/dm/${callee.id}`, { token: caller.token, body: { text: '  <b>meet me</b> at the docks at nine ' } });
+  assert.equal(r.code, 200, 'a DM sends once you hold the number');
   // gates: self / empty / unknown number / flood brake
   r = await call('POST', `/v1/phone/dm/${caller.id}`, { token: caller.token, body: { text: 'hello me' } });
   assert.equal(r.body.error, 'self', 'no messaging your own line');
@@ -496,6 +505,8 @@ if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actual
   // ── STEP TWO: BLOCKED LINES (a fresh pair — the flood brake stays clean) ──
   const pest = await mk('Petey Pest');
   const mark = await mk('Marie the Mark');
+  await pool.query("INSERT INTO contacts (owner_account, contact_account, how) VALUES ($1,$2,'met')",
+    [await acctOf(pest.id), await acctOf(mark.id)]);
   r = await call('POST', `/v1/phone/dm/${mark.id}`, { token: pest.token, body: { text: 'hey. hey. answer me' } });
   assert.equal(r.code, 200, 'the pest gets one message in');
   r = await call('POST', `/v1/phone/block/${pest.id}`, { token: mark.token });
@@ -526,6 +537,102 @@ if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actual
   await new Promise((res) => setTimeout(res, 2100));
   r = await call('POST', `/v1/phone/dm/${mark.id}`, { token: pest.token, body: { text: 'thank you' } });
   assert.equal(r.code, 200, 'an unblocked line takes calls again');
+}
+
+// ── STREET LIFE (task #318): THE BLACK BOOK (numbers are DISCOVERABLE — a meeting hands both
+// sides the other's number; intel earns it one-way) + THE CALL (an NPC contact rings with a paid
+// request settled from THEIR OWN pocket — a pure two-leg ledgered transfer, zero new faucet). ──
+{
+  const A = await mk('Book Keeper');
+  const B = await mk('Face Unknown');
+  const acctOf2 = async (cid) => (await pool.query('SELECT account_id FROM characters WHERE id=$1', [cid])).rows[0].account_id;
+  // strangers hold nothing
+  let r = await call('GET', '/v1/contacts', { token: A.token });
+  assert.equal(r.code, 200, 'the black book reads');
+  assert.equal(r.body.contacts.length, 0, 'a fresh book is empty');
+  // A MEETING — any COMPLETED two-party action (a jump, win or lose) — is MUTUAL: both walk away
+  // with the other's number (the ONE hook in withTwoCharacters)
+  await seedCh(A.id, "energy=200, nerve=60, loc='docks'");
+  await seedCh(B.id, "loc='docks'");
+  r = await call('POST', `/v1/streets/${B.id}/jump`, { token: A.token, body: {} });
+  assert.equal(r.code, 200, 'the jump completes (either outcome is a meeting)');
+  r = await call('GET', '/v1/contacts', { token: A.token });
+  const lineB = r.body.contacts.find((c) => c.street && c.street.id === B.id);
+  assert(lineB && lineB.how === 'met', "the jumper holds the mark's number (how: met)");
+  r = await call('GET', '/v1/contacts', { token: B.token });
+  assert(r.body.contacts.some((c) => c.street && c.street.id === A.id),
+    "the MARK holds the jumper's number too — a meeting is mutual");
+  r = await call('POST', `/v1/phone/dm/${B.id}`, { token: A.token, body: { text: 'nothing personal' } });
+  assert.equal(r.code, 200, 'met → the line dials');
+  // blocks precede the number gate: a blocked STRANGER hears the dead tone, not "no number"
+  const S = await mk('Total Stranger');
+  r = await call('POST', `/v1/phone/block/${S.id}`, { token: B.token });
+  assert.equal(r.code, 200, 'B blocks the stranger');
+  r = await call('POST', `/v1/phone/dm/${B.id}`, { token: S.token, body: { text: 'let me in' } });
+  assert.equal(r.body.error, 'blocked', 'a block is a harder truth than a missing number');
+
+  // ── THE CALL — seed an NPC resident contact (the population INSERT shape) ──
+  const npcAcct = crypto.randomUUID(), npcId = crypto.randomUUID();
+  await pool.query("INSERT INTO accounts (id, auth_provider, auth_subject) VALUES ($1,'npc',$2)", [npcAcct, `npc:${npcAcct}`]);
+  await pool.query('INSERT INTO account_persistent (account_id, npc_flag) VALUES ($1,true)', [npcAcct]);
+  await pool.query(
+    `INSERT INTO characters (id, account_id, name, is_npc, season, respect, cash, muscle, cunning, speed, loc, health, energy, nerve)
+     VALUES ($1,$2,'Old Mo the Grocer',true,0,1000,40000,10,10,10,'canal',100,50,10)`, [npcId, npcAcct]);
+  const { generateContactCalls, sweepCalls } = await import('../src/contacts.js');
+  // no contact → no call (a stranger's grocer never rings you)
+  r = await generateContactCalls(pool, { characterId: A.id, npcCharacterId: npcId, kind: 'freight', goodId: 'gin', qty: 2 });
+  assert.equal(r.placed, 0, 'a contact you have not met never calls');
+  await pool.query("INSERT INTO contacts (owner_account, contact_account, how) VALUES ($1,$2,'met')", [await acctOf2(A.id), npcAcct]);
+  r = await generateContactCalls(pool, { characterId: A.id, npcCharacterId: npcId, kind: 'freight', goodId: 'gin', qty: 2 });
+  assert.equal(r.placed, 1, 'a met NPC contact places a call');
+  // one open call per street — the PK refuses a second
+  r = await generateContactCalls(pool, { characterId: A.id, npcCharacterId: npcId, kind: 'visit' });
+  assert.equal(r.placed, 0, 'one open call per street (the PK is the cap)');
+  // the board carries it, addressed to where the CONTACT stands
+  r = await call('GET', '/v1/contacts', { token: A.token });
+  const cc = r.body.call;
+  assert(cc && cc.from === 'Old Mo the Grocer' && cc.kind === 'freight' && cc.qty === 2 && cc.district === 'canal', 'the open call rides the board');
+  assert(cc.pay > 0 && cc.expiresSeconds > 0, 'priced + clocked');
+  // fulfil gates: wrong district → travel; empty trunk → short
+  await seedCh(A.id, "loc='docks', cash=200000");
+  r = await call('POST', '/v1/call/fulfill', { token: A.token });
+  assert.equal(r.body.error, 'district', 'the errand is LOCATED — travel to them first');
+  await seedCh(A.id, "loc='canal'");
+  r = await call('POST', '/v1/call/fulfill', { token: A.token });
+  assert.equal(r.body.error, 'short', 'you must be carrying what they asked for');
+  r = await call('POST', '/v1/goods/buy', { token: A.token, body: { goodId: 'gin', qty: 2 } });
+  assert.equal(r.code, 200, 'stock the trunk');
+  const cashBefore = (await meOf(A.token)).cash;
+  const npcCashBefore = Number((await pool.query('SELECT cash FROM characters WHERE id=$1', [npcId])).rows[0].cash);
+  r = await call('POST', '/v1/call/fulfill', { token: A.token });
+  assert.equal(r.code, 200, 'the freight settles');
+  assert.equal(r.body.kind, 'freight');
+  assert.equal(r.body.pay, cc.pay, 'paid what was quoted');
+  assert.equal((await meOf(A.token)).cash, cashBefore + cc.pay, 'the cash landed');
+  // the goods changed hands + the pay came from the CONTACT's own pocket (recycle-only)
+  const npcCargo = Number((await pool.query("SELECT COALESCE(SUM(qty),0) n FROM character_cargo WHERE character_id=$1 AND good_id='gin'", [npcId])).rows[0].n);
+  assert.equal(npcCargo, 2, 'the freight reached the contact');
+  const npcCashAfter = Number((await pool.query('SELECT cash FROM characters WHERE id=$1', [npcId])).rows[0].cash);
+  assert.equal(npcCashAfter, npcCashBefore - cc.pay, "paid from the contact's own pocket");
+  // §10.4: the two legs are a PURE TRANSFER — they net to zero
+  const net = await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason LIKE 'contact:%'");
+  assert.equal(Number(net.rows[0].s), 0, 'contact:* legs net to zero — a transfer, never a faucet');
+  r = await call('POST', '/v1/call/fulfill', { token: A.token });
+  assert.equal(r.body.error, 'no_call', 'the settled call is gone');
+  // a VISIT call + the broke-void (robbed blind since they rang → the job is off, nothing moves)
+  r = await generateContactCalls(pool, { characterId: A.id, npcCharacterId: npcId, kind: 'visit' });
+  assert.equal(r.placed, 1, 'a visit call places');
+  await pool.query('UPDATE characters SET cash=0 WHERE id=$1', [npcId]);
+  r = await call('POST', '/v1/call/fulfill', { token: A.token });
+  assert.equal(r.body.error, 'broke', 'a turned-over contact voids the request');
+  // expiry: a lapsed request fades (the sweep) and cannot be settled
+  await pool.query('UPDATE characters SET cash=40000 WHERE id=$1', [npcId]);
+  await generateContactCalls(pool, { characterId: A.id, npcCharacterId: npcId, kind: 'visit' });
+  await pool.query('UPDATE contact_calls SET expires_at=now() - interval \'1 hour\' WHERE character_id=$1', [A.id]);
+  r = await call('POST', '/v1/call/fulfill', { token: A.token });
+  assert.equal(r.body.error, 'no_call', 'a lapsed request cannot be settled');
+  r = await sweepCalls(pool);
+  assert(r.swept >= 1, 'the sweep reaps lapsed requests');
 }
 
 // ── ONE-CLICK X SIGN-IN (OAuth2 PKCE redirect) — dormant without env; configured: /start mints a
@@ -1070,5 +1177,5 @@ if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actual
     'the drill is a mod tool — an unauthenticated caller cannot make the founder\'s phone buzz');
 }
 
-console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), catalog item art (${artCount} icons — ${photoCount} generated photos, SVG emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks), PRESENCE + THE TROLL BOX (online counter, city + family-gated chat, sanitized + flood-braked), ONE-CLICK X SIGN-IN (PKCE start/state/callback surface, dormant without env), THE CELLPHONE (DM send/gates/flood brake, threads + unread + seen, inbox peek without flipping delivered, zero ledger rows) + STEP TWO BLOCKED LINES (block/unblock, dead tone both directions, board + thread surfacing, history stands, self/double gates), DB-DOWN LEGIBILITY (503 db_down not 500 internal, GET /health up+down+recovery, real bugs still report as bugs), THE LOCK-FREE READ PATH (D1: a clean read is served without FOR UPDATE, a read with real accrual behind it declines and the route re-runs under the lock so the banked state and the rendered view agree, a read still CHECKPOINTS accrual while a read with nothing to bank leaves the clock alone, and the write guard refuses ten write/lock forms including MERGE, COPY, SELECT-INTO, setval and FOR UPDATE without refusing three legitimate reads), BACKUP HEALTH (pg_stat_archiver: shipping/failing/healed-not-realarming/quiet/unsupported, surfaced on the ops dashboard, and archive_mode=off reads as NOT RUNNING rather than healthy — the worker alerts on both)`);
+console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), catalog item art (${artCount} icons — ${photoCount} generated photos, SVG emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks), PRESENCE + THE TROLL BOX (online counter, city + family-gated chat, sanitized + flood-braked), ONE-CLICK X SIGN-IN (PKCE start/state/callback surface, dormant without env), THE CELLPHONE (DM send/gates/flood brake, threads + unread + seen, inbox peek without flipping delivered, zero ledger rows) + STEP TWO BLOCKED LINES (block/unblock, dead tone both directions, board + thread surfacing, history stands, self/double gates), DB-DOWN LEGIBILITY (503 db_down not 500 internal, GET /health up+down+recovery, real bugs still report as bugs), THE LOCK-FREE READ PATH (D1: a clean read is served without FOR UPDATE, a read with real accrual behind it declines and the route re-runs under the lock so the banked state and the rendered view agree, a read still CHECKPOINTS accrual while a read with nothing to bank leaves the clock alone, and the write guard refuses ten write/lock forms including MERGE, COPY, SELECT-INTO, setval and FOR UPDATE without refusing three legitimate reads), BACKUP HEALTH (pg_stat_archiver: shipping/failing/healed-not-realarming/quiet/unsupported, surfaced on the ops dashboard, and archive_mode=off reads as NOT RUNNING rather than healthy — the worker alerts on both), STREET LIFE (the black book: no_number gate, a jump-meeting is mutual, blocks precede the number gate; THE CALL: contact-only generation, one-open-call PK, located freight fulfilment paid from the contact's own pocket — contact:* legs net to zero, broke-void, expiry sweep)`);
 await app.close();

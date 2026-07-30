@@ -19,7 +19,7 @@ import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
          WORLD_NPCS, WORLD, BOXING, TERRITORY_RACKETS, TERRITORY_TYPES, territoryBuildCost,
          frontierTributePerHr, liberationCost, worldNpcOf, SPEAKEASY, PEN, RACES,
          PORT, boatOf, portRouteOf, interdictChance,
-         CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES, BUSINESSES, PACING, POPULATION, boatResale,
+         CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES, BUSINESSES, PACING, POPULATION, boatResale, CORNER, CONTACTS,
          EXCHANGE, EMISSION, ESTATE, WIRE, GANG_SEALS, FOUNDATION } from '../src/rules.js';
 
 const app = await buildServer();
@@ -943,6 +943,20 @@ phase('P9.25 residents-as-marks — the step-two faucet ceilings');
   // FREIGHT is recycle-only (bought with seed cash at the real market rail) — a redistribution of
   // the already-measured npc:seed stock, not a new faucet; printed for the record, not summed.
   note('marks', 'resident FREIGHT', 'recycle-only (goods:buy from their own seed cash)', 'the robbery realizes what the resident already paid — rides the P9.21 npc:seed measurement, no new emission');
+}
+
+// ════════ P9.26 STREET LIFE — the corner faucet ceiling + the recycle-only call (analytic) ════════
+// WORD ON THE STREET (task #318) pays CORNER.CASH + CORNER.RESPECT per envelope, hard-bounded at
+// CORNER.MAX_DAY claims a day per street (the claimed-count gate at claim time). THE CALL moves
+// only the NPC contact's OWN cash (both legs ledgered contact:* with counterparty) — a recycle of
+// the P9.21 npc:seed stock, not emission. Printed from the constants so a retune is re-measured.
+phase('P9.26 street life — the corner ceiling + the call');
+{
+  const cornerDay = CORNER.MAX_DAY * CORNER.CASH;
+  note('street life', 'THE CORNER (per-street daily ceiling)', `$${fmt(cornerDay)}/day + ${CORNER.MAX_DAY * CORNER.RESPECT} respect/day`,
+    `MAX_DAY (${CORNER.MAX_DAY}) × CASH ($${CORNER.CASH}) — petty by design (the social-tasks posture: the POINTER + the respect drip are the product); every claim needs REAL counted work after accepting. Dials: MAX_DAY, CASH, RESPECT`);
+  note('street life', 'THE CALL', 'recycle-only (paid from the contact\'s own pocket)',
+    `freight pays base × ${CONTACTS.CALL_FREIGHT_PREMIUM_BPS / 10000} of goods the player really hauls; visit tips $${CONTACTS.VISIT_TIP} — both legs contact:* transfers netting zero, bounded by the P9.21 npc:seed stock`);
 }
 
 // ════════════════ P10: THE §10.4 SWEEP — the whole point ════════════════

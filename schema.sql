@@ -2401,3 +2401,45 @@ ALTER TABLE characters ADD COLUMN IF NOT EXISTS car_stolen_at TIMESTAMPTZ;
 -- SQL on the locked victim row, outside persistCharacter's positional list)
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS trunk_robbed_at TIMESTAMPTZ;
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS sabotaged_at TIMESTAMPTZ;
+
+-- ═══ STREET LIFE (task #318) — the black book, the corner, the call ═══
+-- THE BLACK BOOK: phone numbers are DISCOVERABLE, never free. ACCOUNT-keyed both sides (the
+-- dm_blocks/rival_events posture): a number follows the bloodline — the heir keeps the line and
+-- your book survives death by construction (no character_id column → outside the estate wipe).
+-- how: 'met' (any completed two-party action), 'intel' (a tap/dossier), 'called' (they rang you
+-- first — a caller reveals their own number).
+CREATE TABLE IF NOT EXISTS contacts (
+  owner_account TEXT NOT NULL,
+  contact_account TEXT NOT NULL,
+  how TEXT NOT NULL,
+  met_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (owner_account, contact_account)
+);
+-- migration seed: pre-gate DM threads mean both parties already have each other's line
+INSERT INTO contacts (owner_account, contact_account, how)
+  SELECT DISTINCT from_account::text, to_account::text, 'called' FROM dm_messages ON CONFLICT DO NOTHING;
+INSERT INTO contacts (owner_account, contact_account, how)
+  SELECT DISTINCT to_account::text, from_account::text, 'called' FROM dm_messages ON CONFLICT DO NOTHING;
+-- WORD ON THE STREET: per-district daily tasks; accept snapshots the daily counters (the hustle
+-- baseline rule — stockpiled morning work can't pre-pay a task). Dies with the street.
+CREATE TABLE IF NOT EXISTS corner_jobs (
+  character_id TEXT NOT NULL,
+  day INT NOT NULL,
+  district TEXT NOT NULL,
+  slot INT NOT NULL,
+  baseline TEXT NOT NULL,
+  claimed BOOLEAN NOT NULL DEFAULT false,
+  PRIMARY KEY (character_id, day, district, slot)
+);
+-- THE CALL: one open request per street from an NPC contact (freight run / come-see-me), paid from
+-- the CONTACT'S OWN cash (recycle-only — the population step-two rule). Dies with the street.
+CREATE TABLE IF NOT EXISTS contact_calls (
+  character_id TEXT PRIMARY KEY,
+  npc_character TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  good_id TEXT,
+  qty INT,
+  district TEXT NOT NULL,
+  pay NUMERIC NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL
+);

@@ -71,6 +71,7 @@ export const SYSTEMS = {
   'going legit (rwa)': ['rwa_invest', 'rwa_family_invest', 'rwa_family_dividend',
     'rwa_vault_claim', 'dynasty_name'],
   'the megaproject': ['megaproject_give'],
+  'street life': ['corner', 'contact_call'], // #318: corner-board claims + settled contact calls
   'landmarks': ['landmark'],
   'vanity': ['vanity_name', 'vanity_gang_name'],
   'the store / pass': ['plex', 'plex_package', 'pass_claim'],
