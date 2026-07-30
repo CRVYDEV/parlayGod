@@ -132,7 +132,10 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
       const rng = await pool.query('SELECT * FROM rng_audit WHERE ($1::text IS NULL OR character_id=$1) ORDER BY at DESC LIMIT 100', [cid || null]);
       return { transactions: tx.rows, rng: rng.rows };
     });
-    app.get('/v1/mod/bonds', { preHandler: modAuth }, async () => Bonds.bondStatus(pool)); // the ops/invariant view
+    // the ops/invariant view + the oracle keeper watchdog's live verdict (the /admin surface —
+    // a silent keeper halt must read as a state on the founder's screen, not just a webhook)
+    app.get('/v1/mod/bonds', { preHandler: modAuth }, async () =>
+      ({ ...(await Bonds.bondStatus(pool)), oracle: await Chain.bondOracleHealth() }));
     // THE FLOAT — the RWA buy-bot seat (mod-driven until the mainnet Uniswap bot; the runVigBuyback
     // twin: spend ≤ rwa_revenue, priceEth = the oracle param, txHash marks a REAL swap) + the
     // real-value invariant view (allocated ≤ held — the anti-Ponzi check — spend ≤ revenue, unit sums)

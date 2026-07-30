@@ -123,11 +123,11 @@
   }
 
   async function refreshAll() {
-    const [ov, inv, fn, res, vig, em, act, rev, eng] = await Promise.all([
+    const [ov, inv, fn, res, vig, em, act, rev, eng, bnd] = await Promise.all([
       j('GET', '/v1/mod/overview'), j('GET', '/v1/mod/invariants'), j('GET', '/v1/mod/funnel'),
       j('GET', '/v1/mod/reserve'), j('GET', '/v1/mod/vig'), j('GET', '/v1/mod/emission'),
       j('GET', '/v1/mod/activity?limit=60'), j('GET', '/v1/mod/revenue'),
-      j('GET', '/v1/mod/engagement'),
+      j('GET', '/v1/mod/engagement'), j('GET', '/v1/mod/bonds'),
     ]);
     if (ov.code === 401) return $('#logout').onclick();
 
@@ -154,7 +154,7 @@
 
     $('#stamp').textContent = 'as of ' + new Date().toLocaleTimeString();
     renderIntegrity(inv.body); renderEconomy(ov.body, em.body); renderPlayers(ov.body); renderEngagement(eng.body);
-    renderFunnel(fn.body); renderTop(ov.body); renderChain(res.body, vig.body, em.body, rev.body);
+    renderFunnel(fn.body); renderTop(ov.body); renderChain(res.body, vig.body, em.body, rev.body, bnd.body);
     renderBackups(ov.body); renderSocial(ov.body);
     renderActivity(act.body); renderMod();
   }
@@ -349,7 +349,7 @@
       + (t.gangs || []).slice(0, 6).map((g, i) => rowHtml(`${i + 1}. ${esc(g.name)} [${esc(g.tag)}]`, `$${fmt(g.treasury)}${g.warsWon ? ` · ${g.warsWon}W` : ''}`)).join('');
   }
 
-  function renderChain(res, vig, em, rev) {
+  function renderChain(res, vig, em, rev, bnd) {
     const v = vig?.invariants || {}, vs = vig?.status || {};
     const extractOk = v.ok !== false;
     $('#p-chain').querySelector('.body').innerHTML =
@@ -366,7 +366,13 @@
         + rowHtml('gross ETH', `Ξ${fmt(rev.grossEth)}`)
         + rowHtml('founder / buyback / rwa', `Ξ${fmt(rev.founderEth)} · Ξ${fmt(rev.buybackEth)} · Ξ${fmt(rev.rwaEth)}`)
         + rowHtml('rwa reserve', `Ξ${fmt(rev.rwaEth)} <span class="note">${rev.rwaDormant ? 'dormant (R2)' : '⚠ spent'}</span>`)
-        + (rev.pendingLinks ? rowHtml('pending links', `${rev.pendingLinks} unclaimed purchase(s)`) : '') : '');
+        + (rev.pendingLinks ? rowHtml('pending links', `${rev.pendingLinks} unclaimed purchase(s)`) : '') : '')
+      + (bnd && bnd.oracle && bnd.oracle.state !== 'dormant'
+        ? `<div class="note" style="margin-top:8px">the bond oracle keeper</div>`
+          + rowHtml('keeper', bnd.oracle.state === 'ok'
+            ? `<span style="color:var(--ok)">✓ alive</span> <span class="note">poked ${fmt(bnd.oracle.ageS)}s ago (period ${fmt(bnd.oracle.periodS)}s)</span>`
+            : `<span style="color:var(--bad)">⚠ ${bnd.oracle.state.toUpperCase()}</span> <span class="note">${bnd.oracle.note || ''}</span>`)
+        : '');
   }
 
   function renderActivity(act) {

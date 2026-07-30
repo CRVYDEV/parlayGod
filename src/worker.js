@@ -26,7 +26,7 @@ import { sweepStaleHeists } from './heists.js';
 import { sweepStaleBreaks } from './pen.js';
 import { sweepStaleRaids, sweepUprisings } from './world.js';
 import { sweepWire, sweepWireAlerts, sweepStandingWatches } from './wire.js';
-import { reclaimExpiredVouchers, assertChainId } from './chain.js';
+import { reclaimExpiredVouchers, assertChainId, bondOracleHealth } from './chain.js';
 import { sweepMarket } from './market.js';
 import { sweepDiplomacy } from './diplomacy.js';
 import { settleProposals, activeDecree, seatedGangs } from './commission.js';
@@ -211,6 +211,7 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
   // latched so a still-broken archive doesn't re-alert every hour; cleared on recovery so the NEXT
   // episode alerts again (two separate outages in one day is exactly the pattern that matters).
   let archiverAlerted = false;
+  let oracleKeeperAlerted = false; // the bond-oracle keeper watchdog, same latch discipline
   const tick = async () => {
     // A tick fans out to ~60 independent jobs. `safe()` isolates them so one poison row cannot starve
     // the §10.4 drift monitor — but when the DATABASE is what is unreachable, every one of those 60
@@ -388,6 +389,28 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
       } else if (!archBad && archiverAlerted) {
         archiverAlerted = false;
         console.log(`✅ WAL archiving recovered — last shipped ${arch.lastArchivedWal} (${arch.secondsSinceArchived}s ago)`);
+      }
+    }
+    // IS THE ORACLE KEEPER ALIVE? (AUDIT-oracle.md's one open flag — the archiver watchdog's
+    // chain-side twin.) The TWAP only moves when someone pokes update(), and a silent keeper halt
+    // is indistinguishable from low demand right up until bonds start refusing — which is also
+    // exactly the F2 attack window. Checked hourly, dormant without a bond chain, latched per
+    // episode; 'unreachable' never alarms (not knowing is not the same as broken — a dead RPC
+    // already fails the chain sync loudly).
+    const oh = await safe('oracle keeper health', () => bondOracleHealth());
+    if (oh && oh.state !== 'dormant' && oh.state !== 'unreachable') {
+      const ohBad = oh.state !== 'ok';
+      if (ohBad && !oracleKeeperAlerted) {
+        oracleKeeperAlerted = true;
+        console.error(`🚨 BOND ORACLE ${oh.state.toUpperCase()} — ${oh.note || ''} (age ${oh.ageS ?? '?'}s, period ${oh.periodS ?? '?'}s). Poke the keeper; bonding degrades from here.`);
+        await safe('oracle alert', () => alertDrift(pool, [{
+          name: `bond oracle ${oh.state}`, oracle: oh.oracleAddr, ageSeconds: oh.ageS,
+          periodSeconds: oh.periodS, lateAfterSeconds: oh.lateAfterS,
+          note: oh.note || 'The TWAP keeper looks halted. Bonding will refuse quotes when staleness bites.',
+        }], 'oracle'));
+      } else if (!ohBad && oracleKeeperAlerted) {
+        oracleKeeperAlerted = false;
+        console.log(`✅ bond oracle recovered — keeper poked ${oh.ageS}s ago (period ${oh.periodS}s)`);
       }
     }
     if (dayOf() !== lastInvariantDay) {

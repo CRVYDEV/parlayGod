@@ -87,7 +87,11 @@ PHASE 1 for the exact calls/args.
 - [ ] **Start the oracle keeper.** `OmrTwapOracle.update()` is permissionless and must be poked at least
       once per `maxOracleAge`, or the feed goes stale and bonding halts. That failure direction is
       deliberate — a dead keeper must stop the mint, never leave it running on an unmaintained price —
-      but it does mean **the keeper is a production dependency, not a nice-to-have**.
+      but it does mean **the keeper is a production dependency, not a nice-to-have**. The backend
+      WATCHES it: the worker's `bondOracleHealth` check (hourly, dormant without a bond chain) flags
+      `keeper-late` at 2× PERIOD — while bonding still works, so there is lead time — and `down` when
+      `priceCeiling()` starts reverting, alerting through the same latched channel as a §10.4 drift
+      and surfacing on `/admin` (Chain panel) + `GET /v1/mod/bonds`.
 - [ ] **Arm the mint — the step that turns issuance on.** `OMR.setMinter(omertaBond)`. Do this LAST, and
       only after `dailyCapOMR`, `maxOmrPerEth` AND the oracle are all set to real values: those, plus the
       compile-time `MAX_DISCOUNT_BPS`, are the entire wall between a leaked quote-signer and unbounded

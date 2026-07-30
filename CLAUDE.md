@@ -6711,3 +6711,23 @@ to the point, the fixer takes the retainer again — mutation-verified BOTH ways
 BALANCE section NAMED two never-pinned levers (`BUSINESS_SCRUTINY_DECAY_HR`, `BUSINESS_RAID_FINE_RATE`)
 and refused the build until they were pinned. All numbers founder sign-off levers
 (`PER_INCOME_DAY: 0` restores the dormant state); BALANCE.md § THE BUREAU RETURNS is the record.
+
+**THE ORACLE KEEPER WATCHDOG — AUDIT-oracle.md's one open flag, closed (2026-07-30).** The TWAP only
+moves when someone pokes `update()`, and the keeper doing the poking was an operational dependency with
+NO in-repo monitor — a silent halt reads exactly like low demand right up until bonds start refusing,
+which is also the F2 attack window. Built as the backup watchdog's chain-side twin, split like
+`dbhealth.js`: **`chain.js:classifyOracleHealth`** (a PURE classifier the suite exercises exhaustively —
+states `dormant`/`unset`/`ok`/`keeper-late`/`down`/`unreachable`, each earning its place: `keeper-late`
+fires at `ORACLE_LATE_MULT` (2) × PERIOD **while bonding still works** — lead time, not a post-mortem,
+since the oracle discards at 4× and `maxOracleAge` sits near 2×; `down` = `priceCeiling()` reverting,
+bonding refusing RIGHT NOW; `unreachable` never alarms — not knowing is not broken, and a dead RPC
+already fails the chain sync loudly) + **`bondOracleHealth`** (thin RPC plumbing that resolves the
+oracle address FROM the bond contract's own `oracle()` getter — no new env to drift — with the
+wrong-chain guard). The worker checks it HOURLY next to the archiver block, latched per episode
+(`oracleKeeperAlerted`), alerting through the same `alertDrift` channel as a §10.4 drift;
+`GET /v1/mod/bonds` carries the live verdict and the /admin Chain panel renders it (✓ alive / ⚠ state).
+`test/chain.js` covers unset/ok/the exact boundary/keeper-late/down/clock-skew-clamp + `dormant`
+end-to-end + the mod view — mutation-verified (the late line broken → fails by name); honest scope
+stated in the block: the classifier is proven exhaustively, the RPC plumbing runs only against a
+configured chain (tools/chain-e2e.js is where real-RPC behaviour is proven). CHAIN-DEPLOY.md's
+"start the keeper" step + the audit's flag both record the resolution.

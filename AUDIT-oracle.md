@@ -222,7 +222,11 @@ later counts it as one.** Recorded in `CHAIN-DEPLOY.md` next to the dial recomme
   least once per `maxOracleAge` or bonding halts. That failure direction is right, but a silent halt
   is indistinguishable from low demand. The backup watchdog is the precedent for how this should
   eventually be watched (`archiverHealth` → `alertDrift`); worth doing before mainnet, not before
-  the third-party audit.
+  the third-party audit. **BUILT 2026-07-30** — `chain.js:bondOracleHealth` (a pure classifier +
+  RPC plumbing that resolves the oracle off the bond's own `oracle()` getter, no new env), checked
+  hourly by the worker with the latched-per-episode alert discipline, flagging `keeper-late` at
+  2× PERIOD (lead time — bonding still works) and `down` when `priceCeiling()` reverts; surfaced
+  on `GET /v1/mod/bonds` + the /admin Chain panel.
 - **`MAX_WINDOW_MULT` is a compile-time constant, not a Safe-set dial.** Deliberate — it is a wall,
   and a settable wall is a wall an attacker with the owner key can move. But it does mean an
   operator running a deliberately slow keeper cadence must set `PERIOD` accordingly rather than
