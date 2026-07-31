@@ -1754,27 +1754,22 @@ export const dynastyTierOf = (invested = 0) => {
   for (const t of PORTFOLIO.DYNASTY_TIERS) if (n >= t.min) cur = t;
   return cur;
 };
-// ── THE FLOAT (omerta-rwa-float-design.md) — the full-reserve RWA layer. The founder-approved
-// redesign of R2: OMR never CONVERTS to stock (a burn funds nothing); ETH tax slices fund a buy-bot
-// reserve of REAL tokenized stocks (units held in the Safe on mainnet; chain-dormant here), and
-// players burn earned $OMR to CLAIM allocation from that float at the REAL oracle price —
-// $OMR is the rationing ticket, ETH the funding. allocated ≤ held BY CONSTRUCTION (the bond
-// anti-Ponzi cap / full-reserve-queue discipline, in UNITS so price moves can't create shortfall).
-// The legacy hash-priced book stays as the PAPER tier (pure status). ALL numbers sign-off levers.
-export const RWA_FLOAT = {
-  FEE_RWA_BPS: () => Number(process.env.FEE_RWA_BPS ?? 1000), // 10% of gameplay fees → rwa_revenue (carved from the founder share; Vig 60% untouched). Read per-call (the RATE_LIMIT precedent).
-  CLAIM_MIN_OMR: 5,              // smallest vault claim
-  CLAIM_DAILY_OMR: 500,          // per-account rolling-24h claim cap (the D3 wash-bucket pattern) — no float-sweeping
-  CLAIM_WINDOW_MS: 24 * 3600 * 1000,
+// ── THE TREASURY (omerta-stock-layer-retirement.md) ────────────────────────────────────────────
+// Was RWA_FLOAT. The founder retired the stock layer on 2026-07-31: the treasury holds ETH, so
+// nothing buys stock, nothing owes stock, and the claim levers (CLAIM_MIN/DAILY/WINDOW) are gone
+// with the rail they metered. What is left is the gameplay-fee slice — the treasury's share of each
+// real fee, still carved from the founder share with the Vig's 60% untouched.
+export const TREASURY = {
+  FEE_TREASURY_BPS: () => Number(process.env.FEE_RWA_BPS ?? 1000), // 10% of gameplay fees → the treasury ledger. Env name kept: renaming it would silently reset a configured deploy to the default.
 };
 // AUDIT F5 — fail fast on a misconfigured fee split: the Vig slice (vig.js, env VIG_BPS default
-// 6000) + the RWA slice book each real fee into TWO independently-capped revenue buckets; if they
-// summed past 100%, combined ETH spend could exceed ETH received while BOTH per-bucket
-// `spend ≤ revenue` invariants stayed green (the BONDS/STORE load-time sum-validation precedent).
+// 6000) + the treasury slice book each real fee into two independently-recorded buckets; if they
+// summed past 100% the books would claim more than the payment (the BONDS/STORE load-time
+// sum-validation precedent).
 {
-  const vig = Number(process.env.VIG_BPS || 6000), rwa = RWA_FLOAT.FEE_RWA_BPS();
-  if (vig + rwa > 10000)
-    throw new Error(`VIG_BPS (${vig}) + FEE_RWA_BPS (${rwa}) exceed 10000 — the fee split would book >100% of each real payment as spendable revenue.`);
+  const vig = Number(process.env.VIG_BPS || 6000), tre = TREASURY.FEE_TREASURY_BPS();
+  if (vig + tre > 10000)
+    throw new Error(`VIG_BPS (${vig}) + FEE_RWA_BPS (${tre}) exceed 10000 — the fee split would book >100% of each real payment as revenue.`);
 }
 // ── THE WIRE — the intelligence terminal (design omerta-the-wire-and-revenue-design.md) ──
 // Information as a spendable resource. WIRETAPS (a $OMR sink, intel:wiretap) surveil a rival for a
@@ -1925,7 +1920,9 @@ export const BONDS = {
   // is one env var (BOND_POL_BPS=6000 BOND_VIG_BPS=0), and the load-time sum check keeps it honest.
   POL_BPS: Number(process.env.BOND_POL_BPS || 3750),           // 37.5% of bonded ETH → Protocol-Owned Liquidity
   VIG_BPS: Number(process.env.BOND_VIG_BPS || 2250),           // 22.5% → the Vig buyback (reserve + prizes)
-  RWA_BPS: Number(process.env.BOND_RWA_BPS || 2500),           // 25% → the stock float (v2 §6 — primary inflow)
+  RWA_BPS: Number(process.env.BOND_RWA_BPS || 2500),           // 25% → the treasury (v2 §6 — primary inflow;
+                                                               // the stock float it once funded was retired 2026-07-31,
+                                                               // env name kept to avoid a config migration)
   DEV_BPS: Number(process.env.BOND_DEV_BPS || 1500),           // 15% → the dev wallet (founder revenue). sum 10000
   MIN_PRINCIPAL_ETH: 0.01,
 };
@@ -1951,7 +1948,7 @@ export const bondPayout = (principalEth, price, discountBps) =>
 export const SELL_TAX = {
   BPS: Number(process.env.SELL_TAX_BPS || 900),                // 9% on a sell (contract cap: 1000)
   DEV_BPS: Number(process.env.SELL_TAX_DEV_BPS || 200),        // 2% of the trade → founder revenue
-  RWA_BPS: Number(process.env.SELL_TAX_RWA_BPS || 400),        // 4% → the stock float
+  RWA_BPS: Number(process.env.SELL_TAX_RWA_BPS || 400),        // 4% → the treasury (was the stock float)
   LP_BPS: Number(process.env.SELL_TAX_LP_BPS || 300),          // 3% → LP depth / buybacks. the three sum to BPS
   MAX_BPS: 1000,                                               // OMR.sol's MAX_SELL_TAX_BPS — kept in lockstep
 };

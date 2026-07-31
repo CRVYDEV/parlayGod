@@ -846,7 +846,7 @@ not a lever.
 |---|---|---|---|
 | founder | 40% | Profit — the ETH already hit the dev wallet on-chain; recorded as the earmark. | KEEP (raise for more near-term profit) |
 | buyback | 40% | → the EXISTING Vig flywheel (`vig_revenue`): buys $OMR → reserve + season prize pool. This is "spenders fund earners" + the token support; `extraction ≤ inflow` still holds by construction. | KEEP (raise for a hotter token + happier earners) |
-| rwa | 20% | → `rwa_revenue`, **R2 DORMANT** (recorded, never spent until the legal-gated real-RWA reserve ships). | KEEP (raise as you build toward a backed Dynasty Fund) |
+| rwa | 20% | → `rwa_revenue` — **the TREASURY's inflow ledger.** Was earmarked for a real-stock float; that layer was retired 2026-07-31 (see § THE STOCK LAYER RETIRED). Bps and plumbing unchanged, destination is now a treasury Safe. | KEEP |
 
 **The packages** (`STORE.PACKAGES` — priced as consumables / access / status, never power):
 
@@ -1946,7 +1946,8 @@ what the economy actually runs on. Suite green + sim drift-0 after the package.
 
 **Gates added (no numbers, closing parity holes):** `fenceLoot` and `buyPaper` are safehouse-blocked;
 `upgradeRacket` resolves a pending Bureau raid before banking the pending take; the megaproject goods rail
-carries the cash rail's `$MIN_CASH` floor; `claimVaulted` (the RWA float) is minted-only; `duel_wins`
+carries the cash rail's `$MIN_CASH` floor; `claimVaulted` (the RWA float) was minted-only — the whole
+claim rail is now RETIRED (see § THE STOCK LAYER RETIRED); `duel_wins`
 credits only the first duel against a bloodline each day.
 
 **All of the above are still founder sign-off levers** — every one is a single constant or a one-line gate,
@@ -2910,3 +2911,49 @@ better, but generation still skips a request the contact cannot cover and fulfil
 re-clamps to their live pocket — so recycle-only holds at every tier, and the resident-extraction
 ceiling is unchanged (it is bounded by the seed pool, not by how well they know you).
 
+
+
+---
+
+## THE STOCK LAYER RETIRED — the treasury holds ETH (founder-directed 2026-07-31)
+
+Design: `omerta-stock-layer-retirement.md`. **No lever moved.** This is recorded here because it changes
+what four signed bps are FOR, and a reader of this file should not have to find that out from a diff.
+
+> "Instead of buying back RWA stock the treasury can hold ETH instead." → **the stock layer goes away.**
+
+The game will not acquire, hold, allocate or deliver real tokenized equities. The float's wall was
+`allocated ≤ held` — the game only ever owes stock it already owns, in UNITS — which works only while both
+sides of the ledger are the same asset. Backing a stock-denominated claim with ETH was rejected on
+substance: legally it turns handing over an asset you own into a cash-settled payout on one you do not,
+and mechanically the treasury goes short exactly when players claim. So the cut was **remove the promise,
+keep the accounting.**
+
+| Slice | bps | Was | Now |
+|---|---|---|---|
+| `STORE.SPLIT_BPS.rwa` | 2000 | buy real stock | the treasury |
+| `TREASURY.FEE_TREASURY_BPS` (env `FEE_RWA_BPS`) | 1000 | " | " |
+| `SELL_TAX.RWA_BPS` | 400 | " | " |
+| `BONDS.RWA_BPS` | 2500 | " | " |
+
+**Every bps is unchanged** — only the destination is. Changing them is a separate balance decision, and
+folding them into POL/Dev/Vig would silently move real money between destinations.
+
+**What went:** `claimVaulted` + `GET`/`POST /v1/vault*`, `runRwaBuyback` + `POST /v1/mod/rwa/buy`, the
+`rwa_vault`/`rwa_reserve`/`rwa_buys` tables, the unit invariants, the `RWA_FLOAT.CLAIM_*` levers, and the
+console Float card. `src/rwa.js` became `src/treasury.js`; `GET /v1/mod/rwa` → `/v1/mod/treasury`.
+
+**What stayed:** `rwa_revenue` (the treasury's inflow ledger — the table name is historical; renaming it is
+migration risk for no benefit), `recordSellTax` + `sell_tax_events`, and the anti-fabrication `txHash` gate
+(a comp/QA call still books ZERO, because "the treasury received this much ETH" must never be assertable
+by a mod route).
+
+**R1, the in-game Portfolio, is UNTOUCHED** — `invest`, the deterministic §7.11 hash price, the dividend
+pools (`rwa_dividend_pool` / `rwa_family_dividend_pool` are **in-game $OMR**, not the float), dynasty
+naming, tiers, landmarks, leaderboards. It was always pure status with no sell and no cash-out. §10.4 is
+untouched on that side (`rwa:invest` / `rwa:dynasty` burns and `dividend:` transfers all unchanged).
+
+**Open founder question, flagged not decided:** the Portfolio uses REAL ticker symbols (AAPL, TSLA, GLD,
+HOOD, NVDA, SPCX, AMZN, GME) for a purely fictional collectible with a made-up price. That was defensible
+while a real-stock rail existed behind it. Keep them as flavour, or move to fictional tickers so nothing
+implies a player owns something.

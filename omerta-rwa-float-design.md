@@ -1,5 +1,12 @@
 # THE FLOAT — the RWA reserve rebuild (R2, redesigned)
 
+> ## ⛔ RETIRED 2026-07-31 — SUPERSEDED BY `omerta-stock-layer-retirement.md`
+> The founder removed the stock layer: **the treasury holds ETH; nothing buys, holds, allocates or
+> delivers real shares.** There is no vault, no reserve, no buy bot and no `allocated ≤ held`. The four
+> ETH slices this doc created **survive at their bps** — only the destination changed, from a buy bot to
+> a treasury Safe (`src/treasury.js`, formerly `src/rwa.js`). Everything below is HISTORY: read it for
+> why the design was shaped this way, not for what the code does.
+
 **Founder-directed 2026-07-23.** Supersedes the R2 sketch in `omerta-rwa-portfolio-design.md`.
 The founder's diagnosis — "the OMR → tokenized-stocks conversion doesn't really work" — is correct,
 and this doc records why, and the redesign that replaces it. Founder approved all three forks:

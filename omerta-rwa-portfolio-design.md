@@ -1,6 +1,11 @@
 # OMERTÀ — The Portfolio ("Going Legit"): RWA / blue-chip holdings
 
-**Status: R1 (off-chain, no securities) — SPEC + BUILD.** R2/R3 legal-gated (below).
+**Status: R1 (off-chain, no securities) — SPEC + BUILD. R2/R3 are RETIRED, not gated** — the founder
+removed the stock layer on 2026-07-31 (`omerta-stock-layer-retirement.md`): the treasury holds ETH and
+the game never acquires or owes a real share. **R1 below is current and unchanged**; every R2/R3 passage
+is history. One open founder question the retirement raises: R1 uses real ticker symbols for a purely
+fictional collectible, which was defensible while a real rail existed behind it — keep them as flavour,
+or move to fictional tickers.
 
 The narrative apex of the game's own laundering arc. Every mob story ends the same way: the
 crook who goes legit — dirty street cash washed up the ladder into legitimate, untouchable, real

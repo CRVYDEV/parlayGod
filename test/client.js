@@ -1040,12 +1040,12 @@ async function seedLists() {
     await si('POST', `/v1/dynasty/consigliere/${charId}`, t3, {});   // an offer left STANDING, unaccepted
   });
 
-  // ── going legit: the vault, the bonds, the block ──
-  await trySeed('vault', async () => {
+  // ── going legit: the treasury ledger, the bonds, the block ──
+  // (the VAULT seed retired 2026-07-31 with the stock layer — omerta-stock-layer-retirement.md.
+  // Nothing owes stock, so there is no claim rail to exercise; the ETH ledger it fed remains.)
+  await trySeed('treasury', async () => {
     await q("INSERT INTO rwa_revenue (source, ref, rwa_eth) VALUES ('seed', 'mirror-rev', 5)");
-    await modInject('POST', '/v1/mod/rwa/buy', { ticker: 'GLD', eth: 1, priceEth: 0.001 });
     await q('UPDATE account_persistent SET minted=true, omr=5000 WHERE account_id=$1', [acct]);
-    await si('POST', '/v1/vault/claim', token, { ticker: 'GLD', omr: 100 });
   });
   await trySeed('bonds', async () => {
     await modInject('POST', '/v1/mod/bond/fund', { omr: 100000 });

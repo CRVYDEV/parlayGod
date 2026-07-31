@@ -50,10 +50,14 @@ Solidity suite for OMERTÀ on Robinhood Chain. Rules for future sessions:
    raise `MAX_DISCOUNT_BPS`, remove the daily cap or the mint-rate ceiling, add a second mint path, or
    make `polBps`/`devBps`/`rwaBps` mutable (on-chain/off-chain drift) — audit-surface decisions for
    humans; keep `polBps`/`devBps`/`rwaBps`/`MAX_DISCOUNT_BPS` in lockstep with the backend `BONDS.*`.
-   OmertaBond's ETH split is FOUR-way (POL / dev / RWA-float / Vig-as-remainder) as of 2026-07-31: it
-   was three-way with the backend booking four, so the float's slice was zero on every real bond and
-   BOTH bond invariants stayed green (the Vig remainder absorbed it exactly). Do not collapse it back;
-   `rwaRecipient` is a SEPARATE key from `vigRecipient` by founder ruling. The remainder rule sits on
+   OmertaBond's ETH split is FOUR-way (POL / dev / treasury / Vig-as-remainder) as of 2026-07-31: it
+   was three-way with the backend booking four, so the fourth slice was zero on every real bond and
+   BOTH bond invariants stayed green (the Vig remainder absorbed it exactly). The `rwaBps`/`rwaRecipient`
+   names are historical — that slice funded a stock float until the founder retired the layer the same
+   day (`omerta-stock-layer-retirement.md`); the bps and the split are unchanged, only the destination
+   (a cold treasury Safe, not a stock-buy bot). Do not collapse it back;
+   `rwaRecipient` is a SEPARATE key from `vigRecipient` by founder ruling — and the argument is stronger
+   now, since a treasury that only ever receives has no reason to share a key with anything that spends. The remainder rule sits on
    the Vig so the four shares sum to the principal EXACTLY — do not "naturalise" it into four
    independent bps divisions or a wei goes unowned (the OMR sell-tax LP-slice precedent).
 3. No hardcoded chainIds/addresses — env-driven; Arbitrum One/Base are fallback targets.
@@ -64,7 +68,8 @@ Solidity suite for OMERTÀ on Robinhood Chain. Rules for future sessions:
    sanctioned exception and it goes through `minter`, never through `onlyOwner`.
 6. OMR carries a founder-directed DEX SELL TAX: flat, owner-armed, applies ONLY to transfers into
    registered `ammPairs`, default 0, split **three ways in-transfer — dev / rwa / lp** (founder revenue,
-   the stock float, liquidity depth), which must stay in lockstep with the backend's `SELL_TAX`
+   the treasury — historically the stock float, retired 2026-07-31 — and liquidity depth), which must
+   stay in lockstep with the backend's `SELL_TAX`
    constants (`src/rules.tail.js`) so the two layers can never disagree about where the money went. The
    remainder rule sits on the LP slice so the three shares sum to the tax EXACTLY — do not "naturalise"
    it into three independent bps divisions or a wei goes unowned. Do NOT raise `MAX_SELL_TAX_BPS` (10%

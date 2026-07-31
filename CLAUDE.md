@@ -2733,10 +2733,57 @@ All numbers (`DIVIDEND_BPS`, `DIVIDEND_DAILY_BPS`, `DIVIDEND_MS`, the tier floor
 levers. Deferred (Dynasty step two): the FAMILY dividend (the gang book earns too), dividend compounding/
 auto-reinvest, a dynasty crest cosmetic.
 
+**THE STOCK LAYER RETIRED — the treasury holds ETH (founder-directed 2026-07-31) — DONE**
+(`omerta-stock-layer-retirement.md`; `src/rwa.js` → `src/treasury.js`; supersedes
+`omerta-rwa-float-design.md` and the R2/R3 half of `omerta-rwa-portfolio-design.md`). The founder's
+"instead of buying back RWA stock the treasury can hold ETH instead" resolved to **the stock layer goes
+away**: the game will not acquire, hold, allocate or deliver real tokenized equities. **The wall that made
+the float safe was `allocated ≤ held`** — the game only ever owes stock it already owns, in UNITS — and
+that works ONLY while both sides of the ledger are the same asset. So "the treasury holds ETH" is coherent
+only if nothing owes stock: backing a stock-denominated claim with ETH was rejected on SUBSTANCE, twice
+over — legally it turns handing over an asset you own into a cash-settled payout on one you do not (a
+derivative, a worse posture than the thing it replaces), and mechanically the treasury goes short exactly
+when players claim. The surgical line is **remove the promise, keep the accounting**. **REMOVED:**
+`claimVaulted` + `GET`/`POST /v1/vault*` (the obligation itself), `runRwaBuyback` + `POST /v1/mod/rwa/buy`
+(the buy bot's seat), the `rwa_vault`/`rwa_reserve`/`rwa_buys` tables, the unit invariants
+(`allocated ≤ held`, `held == Σ buys`, cost basis — **nothing is allocated, so that absence is the design,
+not a gap**), the `RWA_FLOAT.CLAIM_*` levers, and the console Float card. **KEPT, REPOINTED:** all four ETH
+slices **at their signed bps** (Store 2000 / gameplay-fee 1000 / sell-tax 400 / bond 2500 — changing them
+is a separate balance decision, and folding them into POL/Dev/Vig would silently move real money between
+destinations), `recordSellTax` + `sell_tax_events`, and `rwa_revenue` as **the treasury's inflow ledger**
+(the table keeps its historical name — renaming it is migration risk for no benefit). `runTreasuryInvariants`
+(`GET /v1/mod/treasury`) keeps the two checks that still mean something (each episode's slices sum to its
+gross; the treasury slice reached the ledger) and **the anti-fabrication `txHash` gate** — a comp/QA call
+books ZERO across all three slices, because "the treasury received this much ETH" must never be assertable
+by a mod route. **R1, the Portfolio, is UNTOUCHED** (invest, the deterministic §7.11 hash price, the
+dividend pools — `rwa_dividend_pool`/`rwa_family_dividend_pool` are **in-game $OMR**, not the float —
+dynasty naming, tiers, landmarks, leaderboards); it was always pure status with no sell and no cash-out and
+stays exactly that, so §10.4 is untouched on that side. **What A buys:** it deletes the only securities
+event in the project — no buy bot, no per-ticker reserve, no stock oracle, no KYC gate, no geofencing, and
+R2/R3 stop being carried milestones (CHAIN-DEPLOY gate 3 rewritten: counsel now reviews the $OMR side
+only). It also resolves a problem that predated any player — Robinhood's tokenized stocks are EU-facing and
+not for US persons, so a US-controlled treasury holding them was its own question. **What it costs,
+accepted deliberately:** "the mob goes legit and retires into blue chips" loses its real-world anchor; ETH
+is not going legit. **What it does NOT cost:** nothing was ever delivered to a player — the claim rail,
+though built and callable, was INERT (`claimVaulted` clamps to units available and the reserve is empty
+until a buy bot runs, which needs mainnet). This retires a promise, not a working feature. Wiring: the
+console Float card removed and the Going Legit copy corrected (both codices said "a real KYC extraction is
+a future phase behind legal approval" — now false, and a promise to players, so fixed in `docs/WIKI.md` AND
+`public/wiki.html`); `src/bonds.js`'s fourth-slice comments + the `every real bond funded the treasury`
+check renamed; the Solidity comments in `OmertaBond.sol`/`OMR.sol` say treasury (the `rwaBps`/
+`rwaRecipient`/`taxRwaRecipient` NAMES stay — renaming a deployed field is churn, and CHAIN-DEPLOY §0.5 now
+says the destination is the **treasury Safe**, still a SEPARATE key from `vigRecipient`, an argument that
+gets STRONGER since a treasury that only ever receives has no reason to share a key with anything that
+spends). **Open founder question, flagged not decided:** the Portfolio uses REAL ticker symbols (AAPL,
+TSLA, GLD, HOOD, NVDA, SPCX, AMZN, GME) for a purely fictional collectible with a made-up price —
+defensible while a real rail existed behind it; keep them as flavour, or move to fictional tickers so
+nothing implies a player owns something. Suite green + sim drift-0.
+
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
-`payPlex` pattern); named landmarks / Founder's charter numbers; R2 (the `rwa_revenue` → real-RWA-buy bot
-+ the reserve backing Dynasty shares — legal-gated); and the Dynasty Fund's family-book dividend + crest.
+`payPlex` pattern); named landmarks / Founder's charter numbers; ~~R2 (the `rwa_revenue` → real-RWA-buy
+bot + the reserve backing Dynasty shares)~~ **RETIRED 2026-07-31 — not deferred; see THE STOCK LAYER
+RETIRED below**; and the Dynasty Fund's family-book dividend + crest.
 
 **NIGHT-SESSION FEATURES F1–F4 — BUILT** (`src/portfolio.js`, `src/store.js`, `src/landmarks.js` — the
 27th suite `test/landmarks.js`; all off-chain, §10.4-clean, numbers are founder sign-off levers). Clears

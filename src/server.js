@@ -55,7 +55,6 @@ import * as Pen from './pen.js';
 import * as Loans from './loans.js';
 import * as Portfolio from './portfolio.js';
 import * as Emission from './emission.js';
-import * as Rwa from './rwa.js';
 import * as Exchange from './exchange.js';
 import { register as registerCasino } from './routes/casino.js';
 import { register as registerPen } from './routes/pen.js';
@@ -95,7 +94,7 @@ import { rateLimitsEnabled, initRateLimiter, checkRateLimit, checkAuthRateLimit,
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, CARS, KITCHENS, TRADE_RANKS, M3, M4, PATHS,
-         cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, RWA_FLOAT, ESTATE, AUCTION, MEGAPROJECT, CLUES, DUELS, DUEL_TITLE_RANKS, SEASON_MODS, seasonModOf, seasonIdxOf, seasonDaysLeft,
+         cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, ESTATE, AUCTION, MEGAPROJECT, CLUES, DUELS, DUEL_TITLE_RANKS, SEASON_MODS, seasonModOf, seasonIdxOf, seasonDaysLeft,
          foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, PATRON, BONDS, SPEAKEASY, BOXING,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf, syndicateOf, TERRITORY_TYPES, TERRITORY_RACKETS,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE, NOTORIETY,
@@ -923,8 +922,6 @@ export async function buildServer() {
     crew: { costStep: M4.CREW_COST_STEP, max: M4.CREW_MAX },
     portfolio: { minInvest: PORTFOLIO.MIN_INVEST_OMR, scrutinyMin: PORTFOLIO.SCRUTINY_MIN_OMR,
       tickers: PORTFOLIO.TICKERS.map((t) => ({ id: t.id, name: t.name, blurb: t.blurb })) },
-    vault: { claimMin: RWA_FLOAT.CLAIM_MIN_OMR, claimDailyOmr: RWA_FLOAT.CLAIM_DAILY_OMR,
-      note: 'the backed tier — claims allocate real treasury-held stock units; the paper book above is status' },
     estate: { nameOmr: ESTATE.NAME_OMR, tiers: ESTATE.TIERS, features: ESTATE.FEATURES, staff: ESTATE.STAFF },
     seasonMods: { pool: SEASON_MODS, note: 'one seed-drawn twist per 28-day season — the touchpoints compose on existing modifier sites' },
     clues: { dropP: CLUES.DROP_P, digEnergy: CLUES.DIG_ENERGY, casket: [CLUES.CASKET_MIN, CLUES.CASKET_MAX],
@@ -1123,12 +1120,10 @@ export async function buildServer() {
   // the FAMILY dividend — the gang book's yield, drawn to the reserve by the boss/underboss
   app.post('/v1/gangs/portfolio/dividend', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Portfolio.claimFamilyDividend(ch, client, h)));
-  // THE FLOAT (omerta-rwa-float-design.md) — the full-reserve VAULTED book: ETH taxes fund a real
-  // tokenized-stock reserve; players burn earned $OMR to claim allocation from it at the real oracle
-  // price (allocated ≤ held BY CONSTRUCTION). The legacy book above stays the PAPER (status) tier.
-  app.get('/v1/vault', { preHandler: auth }, async (req) => Rwa.vaultBoard(pool, req.user.sub));
-  app.post('/v1/vault/claim', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Rwa.claimVaulted(ch, req.body?.ticker, req.body?.omr, client, h)));
+  // (THE FLOAT — `GET /v1/vault` + `POST /v1/vault/claim` — was retired 2026-07-31 with the stock
+  // layer: the treasury holds ETH, so nothing owes stock and there is no allocation to claim. See
+  // omerta-stock-layer-retirement.md. The book above is the whole Portfolio now, and always was
+  // pure in-game status — deterministic §7.11 price, no sell, no cash-out.)
   // name the FAMILY fund (a reserve $OMR sink) + the family-legit leaderboard (biggest family books)
   app.post('/v1/gangs/portfolio/name', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Portfolio.nameFamilyDynasty(ch, req.body?.name, client, h)));

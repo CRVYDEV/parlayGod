@@ -33,7 +33,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 ///
 ///         THE DEX SELL TAX (founder-directed): transfers INTO a registered AMM pair
 ///         (a sell, or a non-exempt LP add) pay `sellTaxBps`, split THREE ways — dev
-///         (founder revenue), rwa (the stock float) and lp (depth/buybacks) — IN THE
+///         (founder revenue), rwa (the treasury — a stock float until 2026-07-31) and lp (depth/buybacks) — IN THE
 ///         SAME TRANSFER, in lockstep with the backend's `SELL_TAX` constants so the two
 ///         layers can never disagree about where the money went. Everything else is clean:
 ///         buys (pair -> wallet), wallet -> wallet transfers, and every protocol flow
@@ -73,7 +73,7 @@ contract OMR is ERC20Permit, Ownable {
 
     uint256 public sellTaxBps;                    // 0 = off (the deploy default). the TOTAL rate
     address public taxDevRecipient;               // founder revenue
-    address public taxRwaRecipient;               // the stock float (v2 §6)
+    address public taxRwaRecipient;               // the treasury (v2 §6; was the stock float)
     address public taxLpRecipient;                // LP depth / buybacks
     /// @notice How the total rate splits. dev + rwa must be <= sellTaxBps; LP takes the remainder,
     ///         so the three shares always sum to the tax EXACTLY and no dust is stranded.

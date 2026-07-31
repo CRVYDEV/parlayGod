@@ -87,9 +87,10 @@ export async function recordBond(pool, { nonce, accountId = null, payer = null, 
     // so the backend can't drift from the contract even if BONDS.POL_BPS ever diverges); the mod/simulate
     // path derives it from BONDS.POL_BPS, and books ZERO real-ETH accounting without a txHash (the audit
     // MED — a comp with no real ETH must not fabricate Vig revenue runVigBuyback would spend unbacked).
-    // v2 step 3: a FOURTH slice — the stock float. On the on-chain path every slice comes from the
-    // event (the contract is the source of truth); off-chain the remainder rule sits on the VIG slice
-    // so the four always sum to the principal exactly with no rounding dust.
+    // v2 step 3: a FOURTH slice — the TREASURY (earmarked for the stock float until that layer was
+    // retired 2026-07-31; the bps and the plumbing are unchanged, only the destination). On the
+    // on-chain path every slice comes from the event (the contract is the source of truth); off-chain
+    // the remainder rule sits on the VIG slice so the four sum to the principal exactly, no dust.
     const real = !!txHash;
     const polEth = onchain ? round6(num(onchainPol)) : (real ? round6(eth * BONDS.POL_BPS / 10000) : 0);
     const devEth = onchain ? round6(num(onchainDev) || 0) : (real ? round6(eth * BONDS.DEV_BPS / 10000) : 0);
@@ -115,8 +116,9 @@ export async function recordBond(pool, { nonce, accountId = null, payer = null, 
     await client.query('UPDATE bond_reserve SET committed_omr = committed_omr + $1, pol_eth = pol_eth + $2, dev_eth = dev_eth + $3, rwa_eth = rwa_eth + $4 WHERE id=1', [payout, polEth, devEth, rwaEth]);
     if (real && !(await client.query("SELECT 1 FROM vig_revenue WHERE source='bond' AND ref=$1", [String(n)])).rows[0])
       await client.query("INSERT INTO vig_revenue (source, ref, kind, gross_eth, vig_eth) VALUES ('bond',$1,'bond',$2,$2)", [String(n), vigEth]);
-    // v2 step 3: the float's PRIMARY-INFLOW source. Same real-ETH gate as the Vig — a comp/QA bond
-    // books zero, so a simulate can never fabricate float backing the buy bot would then spend.
+    // v2 step 3: the treasury's PRIMARY-INFLOW source (bond ETH arrives whether or not anyone is
+    // trading). Same real-ETH gate as the Vig — a comp/QA bond books zero, so a simulate can never
+    // assert the treasury received ETH that never moved.
     if (real && rwaEth > 0 && !(await client.query("SELECT 1 FROM rwa_revenue WHERE source='bond' AND ref=$1", [String(n)])).rows[0])
       await client.query("INSERT INTO rwa_revenue (source, ref, rwa_eth) VALUES ('bond',$1,$2)", [String(n), rwaEth]);
     await client.query('COMMIT');
@@ -324,8 +326,9 @@ export async function runBondInvariants(pool) {
   const vigEth = Number((await pool.query("SELECT COALESCE(SUM(vig_eth),0) s FROM vig_revenue WHERE source='bond'")).rows[0].s);
   const committed = Number(r.committed_omr), capacity = Number(r.capacity_omr), polEth = Number(r.pol_eth), devEth = Number(r.dev_eth || 0);
   const rwaEth = Number(r.rwa_eth || 0);
-  // v2 step 3: the float slice is mirrored into rwa_revenue, which is what the buy bot spends — so
-  // the accumulator and the mirror must agree, or the float could be funded twice or not at all.
+  // v2 step 3: the treasury slice is mirrored into rwa_revenue (the treasury's inflow ledger — the
+  // table keeps its historical name) — so the accumulator and the mirror must agree, or the slice
+  // could be booked twice or not at all.
   const rwaMirror = Number((await pool.query("SELECT COALESCE(SUM(rwa_eth),0) s FROM rwa_revenue WHERE source='bond'")).rows[0].s);
   // (1) committed matches the rows
   push('bond committed == Σ payout', committed, sumPayout);
@@ -335,30 +338,31 @@ export async function runBondInvariants(pool) {
   checks.push({ name: 'bond claimed ≤ committed', lhs: round6(sumClaimed), rhs: round6(committed), ok: sumClaimed <= committed + 0.01 });
   // (4) the ETH split reconciles (POL + Dev + Vig + RWA == principal — nothing skimmed, nothing hidden)
   push('bond ETH split == principal', polEth + devEth + vigEth + rwaEth, sumEth);
-  // (4b) the float slice reached the bucket the buy bot draws on
+  // (4b) the treasury slice reached the inflow ledger, not just the accumulator
   push('bond RWA slice == rwa_revenue', rwaEth, rwaMirror);
-  // (4c) THE FLOAT ACTUALLY GOT PAID. (4) and (4b) are both satisfiable by rwaEth == 0 — (4) because the
+  // (4c) THE TREASURY ACTUALLY GOT PAID. (4) and (4b) are both satisfiable by rwaEth == 0 — (4) because the
   // Vig remainder absorbs the missing slice EXACTLY, (4b) because 0 == 0 — so between them they cannot
-  // see a total failure of the RWA leg. That is not hypothetical: the deployed `OmertaBond` splits ETH
-  // three ways (toPol/toDev/toVig) and emits no `toRwa`, so `recordBond`'s on-chain branch books
-  // rwa_eth = 0 on every REAL bond while both checks stay green (CHAIN-DEPLOY.md §0.5). This check is
-  // deliberately PER-BOND and RATE-INDEPENDENT: "every real bond that moved ETH left a float row". An
+  // see a total failure of the RWA leg. That is not hypothetical: `OmertaBond` shipped splitting ETH
+  // three ways (toPol/toDev/toVig) with no `toRwa`, so `recordBond`'s on-chain branch booked
+  // rwa_eth = 0 on every REAL bond while both checks stayed green (CHAIN-DEPLOY.md §0.5, since fixed —
+  // the contract now emits a fourth slice). This check is
+  // deliberately PER-BOND and RATE-INDEPENDENT: "every real bond that moved ETH left a treasury row". An
   // aggregate `rwaEth ≈ sumEth × RWA_BPS` would false-alarm the moment the founder retunes the lever
   // (historical bonds were booked at the old rate) and a check that cries wolf gets deleted; a merely
-  // structural "rwaEth > 0" would go quiet as soon as ONE bond funded the float, which is exactly the
+  // structural "rwaEth > 0" would go quiet as soon as ONE bond funded the treasury, which is exactly the
   // mixed history a real deployment has. Counting bonds with no row survives both.
-  //   Skipped when RWA_BPS is 0 (no float share signed → no row expected), and the principal guard
+  //   Skipped when RWA_BPS is 0 (no treasury share signed → no row expected), and the principal guard
   // excludes a bond so small its slice rounds below 6dp, where `recordBond` legitimately writes nothing.
   //   Two flat queries + a JS filter rather than a correlated NOT EXISTS — pg-mem cannot parse one
   // (the /v1/gangs precedent), and an invariant that only runs in production is not an invariant.
-  let floatless = 0;
+  let unfunded = 0;
   if (BONDS.RWA_BPS > 0) {
     const realRows = (await pool.query('SELECT nonce, principal_eth FROM bonds WHERE tx_hash IS NOT NULL')).rows;
     const funded = new Set((await pool.query("SELECT ref FROM rwa_revenue WHERE source='bond'")).rows.map((x) => String(x.ref)));
-    floatless = realRows.filter((b) => Number(b.principal_eth) * BONDS.RWA_BPS / 10000 >= 0.000001
+    unfunded = realRows.filter((b) => Number(b.principal_eth) * BONDS.RWA_BPS / 10000 >= 0.000001
       && !funded.has(String(b.nonce))).length;
   }
-  checks.push({ name: 'every real bond funded the float', lhs: floatless, rhs: 0, ok: floatless === 0 });
+  checks.push({ name: 'every real bond funded the treasury', lhs: unfunded, rhs: 0, ok: unfunded === 0 });
   // (5) discounts capped
   const badDisc = Number((await pool.query('SELECT COUNT(*) n FROM bonds WHERE discount_bps > $1', [BONDS.MAX_DISCOUNT_BPS])).rows[0].n);
   checks.push({ name: 'bond discounts ≤ MAX', lhs: badDisc, rhs: 0, ok: badDisc === 0 });

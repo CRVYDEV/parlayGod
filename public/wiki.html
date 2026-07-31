@@ -438,7 +438,9 @@ const SECTIONS = [
   { id: 'legit', group: 'Endgame & Going Legit', title: 'Going Legit — the Portfolio & Dynasty', tag: 'the death-proof endgame',
     html: `<p>Turn earned $OMR into a <b>legal, death-proof stock book</b>. The tickers are real Robinhood
       tokenized stocks (GLD, AAPL, AMZN, TSLA, HOOD, NVDA, SPCX, GME) — in the game a <b>status collectible</b> with a set
-      price; <b>no sell, no cash-out</b> (a real KYC extraction is a future phase behind legal approval).</p>
+      price; <b>no sell, no cash-out, and no phase where there will be</b> — the game does not acquire, hold or
+      deliver real shares (2026-07-31: the stock layer was retired). What you own here is a number the game keeps
+      for you and shows off.</p>
       <p><b>Invest</b> burns earned $OMR for shares; a large action draws heat and is blocked from a safehouse.
       <b>Dividend</b> — the personal daily dividend is retired; the fund pays THE FAMILIES now (a boss draws the
       family dividend into the gang reserve, limited by a funded pool).
@@ -459,11 +461,10 @@ const SECTIONS = [
       pot is fed by <b>the family's cut of every redemption at the Window</b> — a small share of what a player burns goes
       to the families instead of leaving supply. It is what staking rewards and personal dividends become: standing stops
       being only a badge and starts paying, so tribute, wars and the Commission are worth real money to a family.</p>
-      <p><b>What backs the stock float</b> — the float buys real tokenized shares with real ETH, and the board now names
-      where that ETH came from: the DEX sell tax, treasury bonds, the store, game fees. Two of those matter at scale and
-      they are deliberately different — the tax only earns when people are trading, and bonds earn whether or not anyone
-      is. The game never owes a share it has not already bought, so you can read the funding and the holdings and check
-      the claim yourself.</p>
+      <p><b>Where the real money goes</b> — four streams of real ETH (the DEX sell tax, treasury bonds, the store, game
+      fees) fund the protocol: liquidity, the withdrawal reserve, the founder, and a treasury. Until 2026-07-31 the last
+      of those was earmarked to buy real tokenized shares players could one day claim; that layer is <b>retired</b>, and
+      the treasury simply holds ETH. Nothing in the game owes anybody a share.</p>
       <h3>Why it is built this way</h3>
       <p>Almost every game with a token has the same pipe: farm the game's currency, convert it to the token, sell.
       It is one pipe and everything bad runs through it — farming is unbounded so the token is unbounded, the people
@@ -493,7 +494,7 @@ const SECTIONS = [
       teaches players to hold nothing — but it <i>is</i> a hedge, and it costs something real: unstaking exposes the
       principal for six hours, staking pays no personal yield (that goes to families), and every route out passes an
       early-exit toll starting at 50% and decaying over 48 hours. The harbour costs time and optionality, not nothing.</p>
-      ${R(`GET /v1/window · POST /v1/window/redeem · GET /v1/yield [public] · GET /v1/vault`)}` },
+      ${R(`GET /v1/window · POST /v1/window/redeem · GET /v1/yield [public]`)}` },
 
   { id: 'estate', group: 'Endgame & Going Legit', title: 'The Estate & Auction House', tag: 'status sinks',
     html: `<p><b>The Estate</b> — a deep, account-level (death-proof) $OMR cost and a home: buy levels (Safe House 40 to The

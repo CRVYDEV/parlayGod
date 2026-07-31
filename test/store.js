@@ -71,7 +71,7 @@ assert.equal(rev.grossEth, 0.01, 'gross recorded');
 assert.equal(rev.buybackEth, 0.004, 'buyback share = 40%');
 assert.equal(rev.rwaEth, 0.002, 'rwa share = 20%');
 assert.equal(rev.founderEth, 0.004, 'founder share = gross − buyback − rwa = 40%');
-assert.equal(rev.rwaDormant, true, 'the rwa share is recorded but unspent (R2 dormant)');
+assert.equal(rev.treasuryHolds, 'eth', 'the treasury slice is recorded and HELD AS ETH — the stock layer it once funded is retired');
 
 // ── idempotency: re-delivering the SAME nonce is a no-op (no double-grant) ──
 r = await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: n1, sku: 'made_man', payer: W1, amountWei: ethWei(0.01) } });
@@ -150,7 +150,7 @@ const vig = await runVigInvariants(pool);
 assert(vig.checks.find((c) => c.name === 'spend ≤ revenue').ok, 'spend ≤ revenue holds with Store revenue in the pool');
 rev = await revenueStatus(pool);
 assert(rev.buybackEth > 0, 'the buyback flywheel is funded by Store revenue');
-assert.equal(rev.rwaSpent, 0, 'the RWA reserve is recorded-only (R2 dormant)');
+assert.equal(rev.treasuryEth, rev.rwaEth, 'the treasury slice is the same number under its honest name — nothing is spent on units any more');
 assert(rev.bySku.find((s) => s.sku === 'made_man'), 'the ops view tallies sales by SKU');
 
 // ── PLEX-for-packages: pay a SKU with EARNED $OMR (a plex:* BURN) for the same entitlement ──

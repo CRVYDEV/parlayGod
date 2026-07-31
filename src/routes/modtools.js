@@ -12,7 +12,7 @@ import * as G from '../game.js';
 import * as Loans from '../loans.js';
 import * as Ops from '../ops.js';
 import { opsEngagement } from '../engagement.js';
-import * as Rwa from '../rwa.js';
+import * as Treasury from '../treasury.js';
 import * as S from '../social.js';
 import * as Store from '../store.js';
 import * as Vig from '../vig.js';
@@ -136,20 +136,15 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
     // a silent keeper halt must read as a state on the founder's screen, not just a webhook)
     app.get('/v1/mod/bonds', { preHandler: modAuth }, async () =>
       ({ ...(await Bonds.bondStatus(pool)), oracle: await Chain.bondOracleHealth() }));
-    // THE FLOAT — the RWA buy-bot seat (mod-driven until the mainnet Uniswap bot; the runVigBuyback
-    // twin: spend ≤ rwa_revenue, priceEth = the oracle param, txHash marks a REAL swap) + the
-    // real-value invariant view (allocated ≤ held — the anti-Ponzi check — spend ≤ revenue, unit sums)
-    app.get('/v1/mod/rwa', { preHandler: modAuth }, async () => Rwa.runRwaInvariants(pool));
-    app.post('/v1/mod/rwa/buy', { preHandler: modAuth }, async (req) =>
-      // AUDIT F1: txHash rides the modRealTxHash gate (route parity with mod/fees/record +
-      // mod/bond/simulate) — a mod comp can't stamp a simulated buy real=true and poison the
-      // real-vs-simulated unit ledger R3 extraction reconciles against
-      Rwa.runRwaBuyback(pool, { ticker: req.body?.ticker, eth: req.body?.eth, priceEth: req.body?.priceEth, txHash: modRealTxHash(req) }));
-    // v2 step 3: ingest a DEX sell-tax episode (a `SellTaxTaken` log on mainnet). Same modRealTxHash
-    // gate — a simulate records the episode for QA but books ZERO float revenue, so a comp can never
-    // fund the float with tax that was never taken.
-    app.post('/v1/mod/rwa/tax', { preHandler: modAuth }, async (req) =>
-      Rwa.recordSellTax(pool, { ref: req.body?.ref, omrTaxed: req.body?.omrTaxed, priceOmrPerEth: req.body?.price, txHash: modRealTxHash(req) }));
+    // THE TREASURY (omerta-stock-layer-retirement.md). The float's buy-bot seat is GONE with the
+    // stock layer — nothing buys units, so there is nothing to spend and no `allocated <= held` to
+    // reconcile. What is left is the ETH inflow ledger and the sell-tax ingest that feeds it.
+    app.get('/v1/mod/treasury', { preHandler: modAuth }, async () => Treasury.runTreasuryInvariants(pool));
+    // ingest a DEX sell-tax episode (a `SellTaxTaken` log on mainnet). The modRealTxHash gate stands:
+    // a simulate records the episode for QA but books ZERO revenue, so a comp can never assert the
+    // treasury received ETH it did not.
+    app.post('/v1/mod/treasury/tax', { preHandler: modAuth }, async (req) =>
+      Treasury.recordSellTax(pool, { ref: req.body?.ref, omrTaxed: req.body?.omrTaxed, priceOmrPerEth: req.body?.price, txHash: modRealTxHash(req) }));
     app.post('/v1/mod/bond/fund', { preHandler: modAuth }, async (req) => Bonds.fundBondTranche(pool, req.body?.omr)); // top up the tranche
     app.post('/v1/mod/bond/simulate', { preHandler: modAuth }, async (req) => // QA/comp until the paywall (the Store precedent)
       // No txHash = a pure comp: books the bond + OMR tranche but NO real-ETH Vig/POL accounting (audit

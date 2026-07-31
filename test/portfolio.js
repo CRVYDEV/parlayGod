@@ -227,103 +227,18 @@ assert(Number((await pool.query('SELECT balance FROM family_yield_pool WHERE id=
 assert.equal(Number((await pool.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0].pool), 0,
   'and the retired personal pool stays empty — nothing feeds it and nothing pays from it');
 
-// ═══ THE FLOAT (omerta-rwa-float-design.md) — the full-reserve VAULTED book ═══
-// ETH tax revenue → buyback → real units held → players burn $OMR to claim allocation.
-// allocated ≤ held BY CONSTRUCTION; spend ≤ revenue; the burn rides rwa:% (§10.4 clean).
+// ═══ THE FLOAT — RETIRED 2026-07-31 (omerta-stock-layer-retirement.md) ═══
+// The vaulted book, the buy bot and `allocated <= held` went with the stock layer: the treasury
+// holds ETH, so nothing owes stock and there is no allocation to claim. What that block proved now
+// lives in test/tokenomics.js as the TREASURY ledger (every episode reconciles, the anti-fabrication
+// gate holds, zero §10.4 rows). Asserted here: the rail is GONE, not merely empty — an endpoint that
+// still answers with nothing behind it is how a retired promise quietly comes back.
 {
-  const modCall = (method, url, payload) => app.inject({ method, url, payload, headers: { 'x-mod-key': 'test-mod-key' } });
-  // no revenue yet → the buy bot has no budget (the anti-Ponzi root cap)
-  let b = await modCall('POST', '/v1/mod/rwa/buy', { ticker: 'AAPL', eth: 0.5, priceEth: 0.001 });
-  assert.equal(b.json().error, 'over_budget', 'the float can only spend what the taxes brought in');
-  // 1.0 ETH of tax revenue lands (out-of-band real-value accounting — the vig/bond test precedent)
-  await pool.query("INSERT INTO rwa_revenue (source, ref, rwa_eth) VALUES ('store','float-test-1',1.0)");
-  b = await modCall('POST', '/v1/mod/rwa/buy', { ticker: 'AAPL', eth: 0.5, priceEth: 0.001 });
-  assert.equal(b.statusCode, 200, `the buyback lands: ${b.body}`);
-  assert.equal(b.json().units, 500, 'eth / price = units into the reserve');
-  assert.equal(b.json().real, false, 'no txHash → a SIMULATED buy (flagged, never claimed as real)');
-  b = await modCall('POST', '/v1/mod/rwa/buy', { ticker: 'AAPL', eth: 0.6, priceEth: 0.001 });
-  assert.equal(b.json().error, 'over_budget', 'spend ≤ revenue holds on the margin (0.5 left, 0.6 refused)');
-  // the board shows the float
-  const claimer = await mk('Vault Vinny');
-  await acctOmr(claimer.id, 2000); grantDrift += 2000;
-  // MINTED-ONLY (AUDIT-rwa-float #2): the float is the on-ramp to the KYC-gated extraction, so a
-  // claiming identity must have paid the mint fee — the Street Wage D1 anti-Sybil precedent.
-  r = await call('POST', '/v1/vault/claim', { token: claimer.token, body: { ticker: 'AAPL', omr: 50 } });
-  assert.equal(r.body.error, 'mint', 'a free-trial character cannot claim from the float');
-  await pool.query(`UPDATE account_persistent SET minted=true WHERE account_id=(SELECT account_id FROM characters WHERE id='${claimer.id}')`);
-  let vb = (await call('GET', '/v1/vault', { token: claimer.token })).body;
-  const aapl = vb.float.find((f) => f.ticker === 'AAPL');
-  assert.equal(aapl.held, 500, 'the float shows held units');
-  assert.equal(aapl.available, 500, 'nothing allocated yet');
-  assert.equal(aapl.omrPerUnit, 5, 'price = priceEth × the OMR/ETH floor oracle (0.001 × 5000)');
-  // the claim: burn $OMR at the real price → allocated units
-  r = await call('POST', '/v1/vault/claim', { token: claimer.token, body: { ticker: 'AAPL', omr: 50 } });
-  assert.equal(r.code, 200, `claimed: ${JSON.stringify(r.body)}`);
-  assert.equal(r.body.units, 10, '50 $OMR at 5/unit = 10 units');
-  assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='rwa:vault'")).rows[0].s), -50, 'the claim is a ledgered rwa:vault burn');
-  // the rolling-24h per-account cap (anti-float-sweep)
-  r = await call('POST', '/v1/vault/claim', { token: claimer.token, body: { ticker: 'AAPL', omr: 460 } });
-  assert.equal(r.body.error, 'daily_cap', 'the daily bucket refuses a sweep (50 + 460 > 500)');
-  r = await call('POST', '/v1/vault/claim', { token: claimer.token, body: { ticker: 'AAPL', omr: 450 } });
-  assert.equal(r.code, 200, 'a claim inside the bucket lands');
-  // clamp-to-available: a thin TSLA float (10 units = 50 $OMR worth)
-  await modCall('POST', '/v1/mod/rwa/buy', { ticker: 'TSLA', eth: 0.01, priceEth: 0.001 });
-  const clamper = await mk('Clamp Carl');
-  await acctOmr(clamper.id, 500); grantDrift += 500;
-  await pool.query(`UPDATE account_persistent SET minted=true WHERE account_id=(SELECT account_id FROM characters WHERE id='${clamper.id}')`);
-  r = await call('POST', '/v1/vault/claim', { token: clamper.token, body: { ticker: 'TSLA', omr: 100 } });
-  assert.equal(r.code, 200, 'the clamped claim lands');
-  assert.equal(r.body.clamped, true, 'the float ran short of the ask');
-  assert.equal(r.body.units, 10, 'clamped to the 10 available units');
-  assert.equal(r.body.spent, 50, 'and charged only for what was got (never an IOU, never overpaid)');
-  r = await call('POST', '/v1/vault/claim', { token: clamper.token, body: { ticker: 'TSLA', omr: 50 } });
-  assert.equal(r.body.error, 'float_dry', 'a fully-claimed float refuses cleanly');
-  // the RICO graduation SHARES the paper window: paper 990 then a vault 50 crosses 1000 → safehouse-blocked
-  const launderer = await mk('Sly Sal');
-  await acctOmr(launderer.id, 2000); grantDrift += 2000;
-  await pool.query(`UPDATE account_persistent SET minted=true WHERE account_id=(SELECT account_id FROM characters WHERE id='${launderer.id}')`);
-  await pool.query(`UPDATE characters SET safe_until = now() + interval '1 hour' WHERE id='${launderer.id}'`);
-  r = await call('POST', '/v1/portfolio/invest', { token: launderer.token, body: { ticker: 'GLD', omr: 990 } });
-  assert.equal(r.code, 200, 'a sub-threshold paper buy flies from a safehouse');
-  r = await call('POST', '/v1/vault/claim', { token: launderer.token, body: { ticker: 'AAPL', omr: 50 } });
-  assert.equal(r.body.error, 'safe', 'the vault claim that crosses the SHARED window is blocked from a safehouse (structuring-proof across both books)');
-  // AUDIT F1: a mod buy carrying a txHash is STRIPPED (ALLOW_MOD_REAL_REVENUE off) — real=false,
-  // so a comp can never poison the real-vs-simulated unit ledger R3 reconciles against
-  b = await modCall('POST', '/v1/mod/rwa/buy', { ticker: 'GLD', eth: 0.001, priceEth: 0.001, txHash: '0xfaked' });
-  assert.equal(b.json().real, false, 'the modRealTxHash gate strips a caller-supplied txHash');
-  // AUDIT F3: price continuity — a dust buy can't reprice the whole float (>10× off the last refused)
-  b = await modCall('POST', '/v1/mod/rwa/buy', { ticker: 'AAPL', eth: 0.000001, priceEth: 0.000000001 });
-  assert.equal(b.json().error, 'price_sanity', 'a typo/fat-finger price is refused (the vig VIG_MAX_PRICE_JUMP twin)');
-  // AUDIT B-F1: a claim whose ask rounds to ZERO units is refused BEFORE the burn — never pay for nothing
-  b = await modCall('POST', '/v1/mod/rwa/buy', { ticker: 'HOOD', eth: 0.4, priceEth: 100000 }); // absurdly expensive unit (first buy = no continuity ref)
-  assert.equal(b.statusCode, 200, 'the expensive-ticker buy lands');
-  const tiny = await mk('Tiny Tim');
-  await acctOmr(tiny.id, 100); grantDrift += 100;
-  await pool.query(`UPDATE account_persistent SET minted=true WHERE account_id=(SELECT account_id FROM characters WHERE id='${tiny.id}')`);
-  r = await call('POST', '/v1/vault/claim', { token: tiny.token, body: { ticker: 'HOOD', omr: 5 } });
-  assert.equal(r.body.error, 'amount', 'a zero-unit ask is refused (no burn-for-nothing)');
-  assert.equal((await meOf(tiny.token)).omr, 100, 'and not a single $OMR moved');
-  // the fee slice end-to-end: a REAL gameplay fee routes FEE_RWA_BPS into rwa_revenue (source=fee)
-  const { recordFeePayment } = await import('../src/fees.js');
-  await recordFeePayment(pool, { nonce: 991001, kind: 'mint', payer: '0x' + '11'.repeat(20),
-    amountWei: (10n ** 18n).toString(), txHash: '0x' + 'ab'.repeat(32) }); // 1 ETH real fee
-  const feeRwa = Number((await pool.query("SELECT COALESCE(SUM(rwa_eth),0) s FROM rwa_revenue WHERE source='fee'")).rows[0].s);
-  assert.equal(feeRwa, 0.1, 'FEE_RWA_BPS (10%) of a real 1-ETH fee funds the float budget');
-  await recordFeePayment(pool, { nonce: 991001, kind: 'mint', payer: '0x' + '11'.repeat(20),
-    amountWei: (10n ** 18n).toString(), txHash: '0x' + 'ab'.repeat(32) }); // re-delivered event
-  assert.equal(Number((await pool.query("SELECT COALESCE(SUM(rwa_eth),0) s FROM rwa_revenue WHERE source='fee'")).rows[0].s), 0.1,
-    'a re-delivered fee event books the slice exactly once');
-  // the real-value invariant: allocated ≤ held, spend ≤ revenue, unit sums exact
-  const inv2 = (await modCall('GET', '/v1/mod/rwa')).json();
-  assert.equal(inv2.ok, true, `the RWA invariants hold: ${JSON.stringify(inv2.checks.filter((c) => !c.ok))}`);
-  assert(inv2.checks.find((c) => c.name === 'allocated <= held (AAPL)')?.ok, 'THE anti-Ponzi check present + green');
-  assert.equal(inv2.simulatedUnits, 511.000004, 'the real-vs-simulated gap is visible (all pre-mainnet buys are simulated)');
-  // DEATH SURVIVAL: the vaulted book is account-level — the heir keeps it
-  const vaultedBefore = (await call('GET', '/v1/vault', { token: claimer.token })).body.mine;
-  await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: claimer.id }, headers: { 'x-mod-key': 'test-mod-key' } });
-  const vaultedAfter = (await call('GET', '/v1/vault', { token: claimer.token })).body.mine;
-  assert.deepEqual(vaultedAfter, vaultedBefore, 'the VAULTED book survives death — the heir inherits the backed units');
-  console.log('✓ THE FLOAT: tax-funded buyback (spend ≤ revenue), the $OMR claim rail (ledgered rwa:vault burn), the daily bucket, clamp-to-available + float_dry, the shared RICO window, allocated ≤ held, death survival');
+  const ghost = await mk('Vault Ghost');
+  assert.equal((await call('GET', '/v1/vault', { token: ghost.token })).code, 404, 'GET /v1/vault is retired');
+  assert.equal((await call('POST', '/v1/vault/claim', { token: ghost.token, body: { ticker: 'AAPL', omr: 50 } })).code, 404,
+    'POST /v1/vault/claim is retired — the stock layer is gone, and with it the obligation');
+  console.log('✓ THE FLOAT is retired — the claim rail 404s; the Portfolio below is the whole book, and always was pure status');
 }
 
 // ── §10.4: rwa:invest is a recognized burn; dividend:* are TRANSFERS (pool ↔ account, both inside

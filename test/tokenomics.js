@@ -15,7 +15,7 @@ import { runLedgerInvariants } from '../src/invariants.js';
 import { fundExchange, payFamilyYield, fundFamilyYield, exchangePool, familyYieldPool,
   runExchangeInvariants } from '../src/exchange.js';
 import { EXCHANGE, FAMILY_YIELD } from '../src/rules.js';
-import * as Rwa from '../src/rwa.js';
+import * as Treasury from '../src/treasury.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -333,11 +333,11 @@ await pool.query('UPDATE gangs SET season_tribute=5000000 WHERE id=$1', [gid]);
 
   // (1) a REAL tax episode: 900 OMR taken at 5000 OMR/ETH = 0.18 ETH gross, split 200/400/300 of 900
   process.env.ALLOW_MOD_REAL_REVENUE = 'on'; // the QA escape hatch; production strips caller txHashes
-  const tax = await modCall('/v1/mod/rwa/tax', { ref: '0xsell01:3', omrTaxed: 900, price: 5000, txHash: '0xsell01' });
+  const tax = await modCall('/v1/mod/treasury/tax', { ref: '0xsell01:3', omrTaxed: 900, price: 5000, txHash: '0xsell01' });
   assert.equal(tax.code, 200);
   assert.equal(tax.body.grossEth, 0.18, '900 OMR at 5000/ETH is 0.18 ETH of tax');
   assert.equal(tax.body.devEth, 0.04, '2 of the 9 points → founder');
-  assert.equal(tax.body.rwaEth, 0.08, '4 of the 9 points → the stock float');
+  assert.equal(tax.body.rwaEth, 0.08, '4 of the 9 points → the treasury');
   assert.equal(tax.body.lpEth, 0.06, '3 of the 9 points → LP depth');
   assert.equal(tax.body.devEth + tax.body.rwaEth + tax.body.lpEth, tax.body.grossEth,
     'and the three slices sum to the gross exactly');
@@ -346,54 +346,48 @@ await pool.query('UPDATE gangs SET season_tribute=5000000 WHERE id=$1', [gid]);
   // splits into exact sixth-decimals, so it proves nothing about dust; 0.1 does not (200/900 and
   // 400/900 of it both round DOWN, and three natural slices would sum to 0.099999 — a wei of ETH
   // that belongs to nobody). Every real trade is this case, not the tidy one.
-  const dusty = await modCall('/v1/mod/rwa/tax', { ref: '0xsell02:0', omrTaxed: 500, price: 5000, txHash: '0xsell02' });
+  const dusty = await modCall('/v1/mod/treasury/tax', { ref: '0xsell02:0', omrTaxed: 500, price: 5000, txHash: '0xsell02' });
   assert.equal(dusty.body.grossEth, 0.1);
   assert.equal(dusty.body.devEth + dusty.body.rwaEth + dusty.body.lpEth, 0.1,
     'the remainder rule absorbs the rounding into the LP slice so nothing is lost or invented');
 
   // (2) a re-delivered log is a clean no-op, not a second helping of revenue
-  const dup = await modCall('/v1/mod/rwa/tax', { ref: '0xsell01:3', omrTaxed: 900, price: 5000, txHash: '0xsell01' });
+  const dup = await modCall('/v1/mod/treasury/tax', { ref: '0xsell01:3', omrTaxed: 900, price: 5000, txHash: '0xsell01' });
   assert.equal(dup.body.duplicate, true, 'a re-delivered SellTaxTaken log books nothing twice');
 
   // (3) THE ANTI-FABRICATION GATE: a comp with no real tx books the episode but ZERO revenue
-  const comp = await modCall('/v1/mod/rwa/tax', { ref: 'qa-episode-1', omrTaxed: 5000, price: 5000 });
-  assert.equal(comp.body.rwaEth, 0, 'a simulate funds the float with NOTHING');
+  const comp = await modCall('/v1/mod/treasury/tax', { ref: 'qa-episode-1', omrTaxed: 5000, price: 5000 });
+  assert.equal(comp.body.rwaEth, 0, 'a simulate books the treasury NOTHING');
   assert.equal((await pool.query("SELECT 1 FROM rwa_revenue WHERE ref='qa-episode-1'")).rows.length, 0,
-    'and leaves no revenue row at all — a comp can never back stock the treasury did not buy');
+    'and leaves no revenue row at all — a comp can never assert ETH the treasury never received');
 
-  // (4) a REAL bond's float slice (the second source) lands alongside the tax's
+  // (4) a REAL bond's treasury slice (the second source) lands alongside the tax's
   const bond = await modCall('/v1/mod/bond/fund', { omr: 100000 });
   assert.equal(bond.code, 200);
   const b = await modCall('/v1/mod/bond/simulate',
     { nonce: 901, principalEth: 4, price: 5000, discountBps: 800, txHash: '0xbondfloat01' });
-  assert.equal(b.body.rwaEth, 1, '25% of a 4-ETH bond → the float');
+  assert.equal(b.body.rwaEth, 1, '25% of a 4-ETH bond → the treasury');
   delete process.env.ALLOW_MOD_REAL_REVENUE;
 
-  // (5) BOTH sources are now spendable by the buy bot, and the anti-Ponzi wall still holds
-  const inv0 = await Rwa.runRwaInvariants(pool);
-  assert.equal(inv0.revenueBySource.tax, 0.124444, 'the float knows the tax funded 0.124444 ETH of it (0.08 + the dusty episode)');
-  assert.equal(inv0.revenueBySource.bond, 1, '…and bonds funded 1 ETH');
+  // (5) BOTH sources land in the treasury's ledger, and each episode reconciles.
+  // (The buy bot, the reserve and `allocated <= held` went with the stock layer on 2026-07-31 —
+  // omerta-stock-layer-retirement.md. Nothing is allocated now, so there is nothing to reconcile
+  // units against; what must still hold is that the ETH the books claim is the ETH that arrived.)
+  const inv0 = await Treasury.runTreasuryInvariants(pool);
+  assert.equal(inv0.holds, 'eth', 'the treasury holds ETH — it does not buy stock');
+  assert.equal(inv0.bySource.tax, 0.124444, 'the tax brought in 0.124444 ETH (0.08 + the dusty episode)');
+  assert.equal(inv0.bySource.bond, 1, '…and bonds brought in 1 ETH');
+  assert.equal(inv0.totalEth, 1.124444, 'and the total is what the two sources add up to');
   assert.ok(inv0.checks.find((c) => c.name === 'sell-tax split == gross').ok);
-  assert.ok(inv0.checks.find((c) => c.name === 'sell-tax RWA slice == rwa_revenue').ok);
-  const buy = await modCall('/v1/mod/rwa/buy', { ticker: 'AAPL', eth: 1.124444, priceEth: 0.01 });
-  assert.equal(buy.code, 200, 'the bot can spend exactly what the two sources brought in');
-  assert.equal(buy.body.budgetLeft, 0);
-  const over = await modCall('/v1/mod/rwa/buy', { ticker: 'AAPL', eth: 0.01, priceEth: 0.01 });
-  assert.equal(over.body.error, 'over_budget', 'and not a wei more');
-  const inv1 = await Rwa.runRwaInvariants(pool);
-  assert.ok(inv1.ok, `the float invariant holds with both sources live: ${JSON.stringify(inv1.checks.filter((c) => !c.ok))}`);
-  assert.ok(inv1.checks.find((c) => c.name === 'allocated <= held (AAPL)').ok,
-    'THE anti-Ponzi wall: never promise a unit that is not already bought and sitting in the reserve');
+  assert.ok(inv0.checks.find((c) => c.name === 'sell-tax treasury slice == recorded').ok);
+  assert.ok(inv0.ok, `the treasury invariant holds: ${JSON.stringify(inv0.checks.filter((c) => !c.ok))}`);
 
-  // (6) the board publishes what backs the float — "backed" is a claim, and a player may audit it
-  const vb = (await call('GET', '/v1/vault', a.token)).body;
-  assert.equal(vb.funding.bySource.tax, 0.124444);
-  assert.equal(vb.funding.bySource.bond, 1);
-  assert.equal(vb.funding.unspentEth, 0, 'and how much of it the bot has yet to deploy');
+  // (6) the vault is GONE — a player can no longer claim stock, because nothing owes it
+  assert.equal((await call('GET', '/v1/vault', a.token)).code, 404, 'the claim rail is retired, not merely empty');
 
   // (7) ZERO §10.4 rows — the whole re-sourcing is out-of-band real value
   assert.equal(Number((await pool.query('SELECT COUNT(*) n FROM transactions')).rows[0].n), before,
-    're-sourcing the float writes no ledger rows at all — it moves real ETH, not game currency');
+    'the treasury\'s inflows write no ledger rows at all — real ETH, not game currency');
 }
 
 // ── §10.4 ────────────────────────────────────────────────────────────────────────────────────────
