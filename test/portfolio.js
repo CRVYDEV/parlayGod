@@ -10,6 +10,7 @@ process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { PORTFOLIO, tickerPriceOf, dayOf } from '../src/rules.js';
+import * as Treasury from '../src/treasury.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { runSeasonRollover } from '../src/worker.js';
 
@@ -227,18 +228,88 @@ assert(Number((await pool.query('SELECT balance FROM family_yield_pool WHERE id=
 assert.equal(Number((await pool.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0].pool), 0,
   'and the retired personal pool stays empty — nothing feeds it and nothing pays from it');
 
-// ═══ THE FLOAT — RETIRED 2026-07-31 (omerta-stock-layer-retirement.md) ═══
-// The vaulted book, the buy bot and `allocated <= held` went with the stock layer: the treasury
-// holds ETH, so nothing owes stock and there is no allocation to claim. What that block proved now
-// lives in test/tokenomics.js as the TREASURY ledger (every episode reconciles, the anti-fabrication
-// gate holds, zero §10.4 rows). Asserted here: the rail is GONE, not merely empty — an endpoint that
-// still answers with nothing behind it is how a retired promise quietly comes back.
+// ═══ THE VAULT — BACKED WITH ETH (omerta-stock-layer-retirement.md) ═══
+// The founder retired the STOCK layer on 2026-07-31 and kept the vault, backed with ETH. What that
+// buys is not a smaller wall but a stronger one: `allocated <= held` protects a claim only while both
+// sides are the SAME asset, so ETH-for-ETH restores the float's original property exactly and there is
+// no second asset whose price can put the treasury short. Proved here: the anti-Ponzi wall holds at
+// the margin, the claim is a ledgered rwa:vault burn, the daily bucket bounds a sweep, the clamp never
+// overcharges, and the RICO graduation still shares the paper window.
 {
-  const ghost = await mk('Vault Ghost');
-  assert.equal((await call('GET', '/v1/vault', { token: ghost.token })).code, 404, 'GET /v1/vault is retired');
-  assert.equal((await call('POST', '/v1/vault/claim', { token: ghost.token, body: { ticker: 'AAPL', omr: 50 } })).code, 404,
-    'POST /v1/vault/claim is retired — the stock layer is gone, and with it the obligation');
-  console.log('✓ THE FLOAT is retired — the claim rail 404s; the Portfolio below is the whole book, and always was pure status');
+  // no revenue → nothing to claim (the wall at zero: the treasury cannot owe what it does not hold)
+  const early = await mk('Vault Vinny');
+  await acctOmr(early.id, 3000); grantDrift += 3000;
+  await pool.query(`UPDATE account_persistent SET minted=true WHERE account_id=(SELECT account_id FROM characters WHERE id='${early.id}')`);
+  r = await call('POST', '/v1/vault/claim', { token: early.token, body: { omr: 50 } });
+  assert.equal(r.body.error, 'vault_dry', 'an empty treasury has nothing to allocate');
+  // 1.0 ETH of real revenue lands (out-of-band real-value accounting — the vig/bond test precedent)
+  await pool.query("INSERT INTO rwa_revenue (source, ref, rwa_eth) VALUES ('store','vault-test-1',1.0)");
+  // …and it STILL refuses, because no ETH price has printed. This is the guard that matters most now
+  // that the vault owes real ETH: with no oracle the old code fell back to a FIXED floor, which turns
+  // "we don't know what ETH costs" into "sell it at the default" — a standing free option on the
+  // treasury. Fail-closed, no fallback.
+  r = await call('POST', '/v1/vault/claim', { token: early.token, body: { omr: 50 } });
+  assert.equal(r.body.error, 'no_price', 'a funded vault with no ETH price REFUSES rather than guessing one');
+  let vb = (await call('GET', '/v1/vault', { token: early.token })).body;
+  assert.equal(vb.open, false, 'and the board says closed rather than advertising a price the claim would refuse');
+  // a buyback prints the OMR/ETH oracle (mainnet: the DEX TWAP)
+  await pool.query("INSERT INTO vig_buyback (id, eth_spent, omr_bought, price_omr_per_eth, to_reserve, to_prize) VALUES ('bb-vault', 1, 5000, 5000, 0, 0)");
+  // …and a STALE print is refused too — the same hole with a timestamp on it
+  await pool.query("UPDATE vig_buyback SET created_at = now() - interval '5 days' WHERE id='bb-vault'");
+  r = await call('POST', '/v1/vault/claim', { token: early.token, body: { omr: 50 } });
+  assert.equal(r.body.error, 'stale_price', 'a stale ETH price is refused, not used');
+  await pool.query("UPDATE vig_buyback SET created_at = now() WHERE id='bb-vault'");
+  vb = (await call('GET', '/v1/vault', { token: early.token })).body;
+  assert.equal(vb.heldEth, 1, 'the board shows what the treasury holds');
+  assert.equal(vb.availableEth, 1, 'nothing allocated yet');
+  assert.equal(vb.spotOmrPerEth, 5000, 'spot is the oracle print');
+  assert.equal(vb.omrPerEth, 5250, 'a claim pays spot + the 5% premium — the vault is not a market maker');
+  assert.equal(vb.open, true, 'and now it is open');
+  // MINTED-ONLY: a claiming identity pays the mint fee first, so the per-account cap is a real bound
+  const free = await mk('Free Freddie');
+  await acctOmr(free.id, 500); grantDrift += 500;
+  r = await call('POST', '/v1/vault/claim', { token: free.token, body: { omr: 50 } });
+  assert.equal(r.body.error, 'mint', 'a free-trial character cannot claim from the vault');
+  // the claim: burn $OMR at the oracle → allocated ETH
+  r = await call('POST', '/v1/vault/claim', { token: early.token, body: { omr: 525 } });
+  assert.equal(r.code, 200, `claimed: ${JSON.stringify(r.body)}`);
+  assert.equal(r.body.eth, 0.1, '525 $OMR at 5250/ETH (spot + premium) = 0.1 ETH');
+  assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='rwa:vault'")).rows[0].s),
+    -525, 'the claim is a ledgered rwa:vault burn — $OMR is the rationing ticket, the ETH was already paid for');
+  // the rolling-24h per-account cap (anti-sweep)
+  r = await call('POST', '/v1/vault/claim', { token: early.token, body: { omr: 1600 } });
+  assert.equal(r.body.error, 'daily_cap', 'the daily bucket refuses a sweep (525 + 1600 > 2000)');
+  // THE WALL, at the margin: a second house claims and the vault clamps to what is left rather than
+  // promising ETH the treasury does not hold. 0.9 ETH remain = 4500 $OMR worth; ask for more.
+  const whale = await mk('Clamp Carl');
+  await acctOmr(whale.id, 3000); grantDrift += 3000;
+  await pool.query(`UPDATE account_persistent SET minted=true WHERE account_id=(SELECT account_id FROM characters WHERE id='${whale.id}')`);
+  await pool.query("UPDATE rwa_revenue SET rwa_eth=0.12 WHERE ref='vault-test-1'"); // held 0.12, 0.1 already owed
+  r = await call('POST', '/v1/vault/claim', { token: whale.token, body: { omr: 2000 } });
+  assert.equal(r.code, 200, 'the clamped claim lands');
+  assert.equal(r.body.clamped, true, 'the treasury ran short of the ask');
+  assert.equal(r.body.eth, 0.02, 'clamped to the 0.02 ETH that was unallocated');
+  assert.equal(r.body.spent, 105, 'and charged only for what was got (never an IOU, never overpaid)');
+  r = await call('POST', '/v1/vault/claim', { token: whale.token, body: { omr: 50 } });
+  assert.equal(r.body.error, 'vault_dry', 'a fully-allocated vault refuses cleanly');
+  // THE ANTI-PONZI CHECK, in ETH on both sides
+  const ti = await Treasury.runTreasuryInvariants(pool);
+  const wall = ti.checks.find((c) => c.name === 'allocated <= held (ETH)');
+  assert(wall && wall.ok, 'allocated <= held holds');
+  assert.equal(wall.lhs, 0.12, 'and it is watching the real allocation');
+  assert.equal(wall.rhs, 0.12, 'against the real holding');
+  // the RICO graduation SHARES the paper window: paper 990 then a vault claim crosses 1000 → blocked
+  const launderer = await mk('Sly Sal');
+  await acctOmr(launderer.id, 2000); grantDrift += 2000;
+  await pool.query(`UPDATE account_persistent SET minted=true WHERE account_id=(SELECT account_id FROM characters WHERE id='${launderer.id}')`);
+  await pool.query(`UPDATE characters SET safe_until = now() + interval '1 hour' WHERE id='${launderer.id}'`);
+  await pool.query("INSERT INTO rwa_revenue (source, ref, rwa_eth) VALUES ('bond','vault-test-2',1.0)");
+  r = await call('POST', '/v1/portfolio/invest', { token: launderer.token, body: { ticker: 'GLD', omr: 990 } });
+  assert.equal(r.code, 200, 'a sub-threshold paper buy flies from a safehouse');
+  r = await call('POST', '/v1/vault/claim', { token: launderer.token, body: { omr: 50 } });
+  assert.equal(r.body.error, 'safe',
+    'the vault claim that crosses the SHARED window is blocked from a safehouse (structuring-proof across both books)');
+  console.log('✓ THE VAULT — backed with ETH: allocated <= held on both sides, the ledgered burn, the daily cap, the honest clamp, the shared RICO window');
 }
 
 // ── §10.4: rwa:invest is a recognized burn; dividend:* are TRANSFERS (pool ↔ account, both inside

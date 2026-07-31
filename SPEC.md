@@ -13,7 +13,7 @@ Written 2026-07-25. Every number below was measured from the tree, not recalled.
 | Backend modules | **110** files, **34703** lines (`src/`, incl. `src/routes/` and `src/social/`) |
 | Test suites | **61** files, **21563** lines (`test/`) — ratio 0.61 test:src |
 | HTTP routes | **528** registrations |
-| Database tables | **180** (`schema.sql`, 2486 lines) |
+| Database tables | **178** (`schema.sql`, 2476 lines) |
 | Client | **6,652** lines (`public/index.html`, single file, zero dependencies) |
 | Ops dashboard + wiki | `public/admin.html`, `public/wiki.html` |
 | Smart contracts | **1276** lines Solidity, 8 contracts, 107 Foundry tests passing |
@@ -96,8 +96,9 @@ surcharge.
 Loot the living · located laundering · shield-not-bunker · the bank daily cap · THE VIG (real revenue →
 buyback → reserve + prize pool) · the PLEX bridge · backed emission (staking paid from a funded pool) ·
 THE STREET WAGE (a fixed, halving, endowment-capped daily emission to minted accounts) · THE RESERVE
-BOND (protocol-owned liquidity, no reflexive mint) · THE TREASURY (four ETH slices accumulate; the
-stock-float layer they once funded was retired 2026-07-31 — `omerta-stock-layer-retirement.md`).
+BOND (protocol-owned liquidity, no reflexive mint) · THE VAULT (four ETH slices accumulate; burn $OMR
+to claim allocation, `allocated <= held` in ETH on both sides — the stock denomination was retired
+2026-07-31, `omerta-stock-layer-retirement.md`).
 
 ### 3.8 The pillars
 **Territory** — rackets with scale tiers and business types, the Bureau crackdown, fortification, rival

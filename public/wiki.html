@@ -461,10 +461,13 @@ const SECTIONS = [
       pot is fed by <b>the family's cut of every redemption at the Window</b> — a small share of what a player burns goes
       to the families instead of leaving supply. It is what staking rewards and personal dividends become: standing stops
       being only a badge and starts paying, so tribute, wars and the Commission are worth real money to a family.</p>
-      <p><b>Where the real money goes</b> — four streams of real ETH (the DEX sell tax, treasury bonds, the store, game
-      fees) fund the protocol: liquidity, the withdrawal reserve, the founder, and a treasury. Until 2026-07-31 the last
-      of those was earmarked to buy real tokenized shares players could one day claim; that layer is <b>retired</b>, and
-      the treasury simply holds ETH. Nothing in the game owes anybody a share.</p>
+      <p><b>The Vault</b> — four streams of real ETH (the DEX sell tax, treasury bonds, the store, game fees) fund the
+      protocol: liquidity, the withdrawal reserve, the founder, and a treasury. Burn earned $OMR and you claim a share of
+      what that treasury actually holds. It is <b>backed by ETH, not by stock</b> — until 2026-07-31 the vault was
+      denominated in real tokenized shares; that layer is retired. The rule is the same one it always had and is now
+      unbreakable: <b>the house never owes more than it holds</b>, and with ETH on both sides no price move can change
+      that. The board publishes what came in and from where. Allocation only — nothing is delivered, no sell, no
+      cash-out.</p>
       <h3>Why it is built this way</h3>
       <p>Almost every game with a token has the same pipe: farm the game's currency, convert it to the token, sell.
       It is one pipe and everything bad runs through it — farming is unbounded so the token is unbounded, the people
@@ -494,7 +497,7 @@ const SECTIONS = [
       teaches players to hold nothing — but it <i>is</i> a hedge, and it costs something real: unstaking exposes the
       principal for six hours, staking pays no personal yield (that goes to families), and every route out passes an
       early-exit toll starting at 50% and decaying over 48 hours. The harbour costs time and optionality, not nothing.</p>
-      ${R(`GET /v1/window · POST /v1/window/redeem · GET /v1/yield [public]`)}` },
+      ${R(`GET /v1/window · POST /v1/window/redeem · GET /v1/yield [public] · GET /v1/vault · POST /v1/vault/claim`)}` },
 
   { id: 'estate', group: 'Endgame & Going Legit', title: 'The Estate & Auction House', tag: 'status sinks',
     html: `<p><b>The Estate</b> — a deep, account-level (death-proof) $OMR cost and a home: buy levels (Safe House 40 to The

@@ -1852,35 +1852,26 @@ CREATE TABLE IF NOT EXISTS collection_log (
   PRIMARY KEY (account_id, category, item_id)
 );
 
--- ═══ THE FLOAT (omerta-rwa-float-design.md) — the full-reserve RWA layer. Out-of-band REAL value
--- (the vig/bond/fees precedent): these tables move no §10.4 currency except the rwa:vault $OMR burn,
--- which rides the existing rwa:% vocabulary. Everything is denominated in token UNITS so price
--- movement can never create a shortfall; allocated ≤ held is the anti-Ponzi invariant.
-CREATE TABLE IF NOT EXISTS rwa_reserve (
-  ticker TEXT PRIMARY KEY,            -- PORTFOLIO.TICKERS id
-  units NUMERIC NOT NULL DEFAULT 0,   -- tokenized-stock units the treasury holds (the float)
-  eth_spent NUMERIC NOT NULL DEFAULT 0, -- cost basis
-  last_price_eth NUMERIC NOT NULL DEFAULT 0, -- the oracle at the last buy (ETH per unit)
+-- ═══ THE VAULT (omerta-stock-layer-retirement.md) — the full-reserve ETH layer. Out-of-band REAL
+-- value (the vig/bond/fees precedent): these tables move no §10.4 currency except the rwa:vault $OMR
+-- burn, which rides the existing rwa:% vocabulary.
+--   This was a STOCK float until 2026-07-31, when the founder retired the stock layer and directed
+-- that the vault be BACKED WITH ETH instead. The change is what makes the wall hold rather than
+-- weakening it: `allocated <= held` only protects a claim while BOTH SIDES ARE THE SAME ASSET. A
+-- stock-denominated claim backed by ETH would be a cash-settled payout on an asset the game does not
+-- own, and the treasury would go short exactly when players claim. ETH on both sides restores the
+-- original property EXACTLY — the game only ever owes ETH it already holds.
+--   HELD is not a table: it is Σ rwa_revenue.rwa_eth, the treasury's real inflow ledger (four ETH
+-- slices — Store / gameplay fees / DEX sell tax / bond ETH). There is no buy bot and no reserve
+-- table, because nothing needs buying: the backing asset arrives directly. `rwa_reserve` and
+-- `rwa_buys` are therefore gone.
+CREATE TABLE IF NOT EXISTS eth_vault (
+  account_id UUID PRIMARY KEY,
+  eth NUMERIC NOT NULL DEFAULT 0,      -- ETH allocated to this bloodline out of what the treasury holds
+  cost_omr NUMERIC NOT NULL DEFAULT 0, -- lifetime $OMR burned for it (display)
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE TABLE IF NOT EXISTS rwa_buys (
-  id TEXT PRIMARY KEY,
-  ticker TEXT NOT NULL,
-  eth NUMERIC NOT NULL,               -- ETH spent (≤ unspent rwa_revenue at buy time)
-  units NUMERIC NOT NULL,             -- units bought = eth / price_eth
-  price_eth NUMERIC NOT NULL,         -- oracle price (mainnet: the Uniswap TWAP)
-  tx_hash TEXT,                       -- the real swap tx; NULL = simulated (QA / pre-mainnet)
-  real BOOLEAN NOT NULL DEFAULT false,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
--- the VAULTED book — account-level (SURVIVES DEATH, the portfolios precedent; never estate-wiped)
-CREATE TABLE IF NOT EXISTS rwa_vault (
-  account_id UUID NOT NULL,
-  ticker TEXT NOT NULL,
-  units NUMERIC NOT NULL DEFAULT 0,
-  cost_omr NUMERIC NOT NULL DEFAULT 0, -- lifetime $OMR burned into this line (display)
-  PRIMARY KEY (account_id, ticker)
-);
+-- account-level, so the vault SURVIVES DEATH (the portfolios precedent; never estate-wiped)
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS vault_used NUMERIC NOT NULL DEFAULT 0; -- rolling-24h claim bucket
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS vault_at TIMESTAMPTZ;
 

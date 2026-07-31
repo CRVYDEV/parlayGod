@@ -123,11 +123,11 @@
   }
 
   async function refreshAll() {
-    const [ov, inv, fn, res, vig, em, act, rev, eng, bnd] = await Promise.all([
+    const [ov, inv, fn, res, vig, em, act, rev, eng, bnd, tre] = await Promise.all([
       j('GET', '/v1/mod/overview'), j('GET', '/v1/mod/invariants'), j('GET', '/v1/mod/funnel'),
       j('GET', '/v1/mod/reserve'), j('GET', '/v1/mod/vig'), j('GET', '/v1/mod/emission'),
       j('GET', '/v1/mod/activity?limit=60'), j('GET', '/v1/mod/revenue'),
-      j('GET', '/v1/mod/engagement'), j('GET', '/v1/mod/bonds'),
+      j('GET', '/v1/mod/engagement'), j('GET', '/v1/mod/bonds'), j('GET', '/v1/mod/treasury'),
     ]);
     if (ov.code === 401) return $('#logout').onclick();
 
@@ -367,6 +367,14 @@
         + rowHtml('founder / buyback / rwa', `Ξ${fmt(rev.founderEth)} · Ξ${fmt(rev.buybackEth)} · Ξ${fmt(rev.rwaEth)}`)
         + rowHtml('treasury', `Ξ${fmt(rev.rwaEth)} <span class="note">held as ETH</span>`)
         + (rev.pendingLinks ? rowHtml('pending links', `${rev.pendingLinks} unclaimed purchase(s)`) : '') : '')
+      + (tre && tre.code !== 401 ? `<div class="note" style="margin-top:8px">THE VAULT — what the treasury owes players</div>`
+        + rowHtml('held / owed', `Ξ${fmt(tre.body?.totalEth)} held · Ξ${fmt(tre.body?.allocatedEth)} allocated`)
+        // The one number a human has to reconcile by hand. The ledger proves the vault never owes
+        // more than the books say arrived; only a look at the real Safe proves the ETH is still there.
+        + rowHtml('the Safe must hold', `<b>Ξ${fmt(tre.body?.safeMustHold)}</b> <span class="note">reconcile against the real balance</span>`)
+        + rowHtml('the wall', (tre.body?.checks || []).find((c) => c.name === 'allocated <= held (ETH)')?.ok
+          ? '<span style="color:var(--ok)">✓ allocated ≤ held</span>'
+          : '<span style="color:var(--bad)">⚠ THE VAULT OWES MORE THAN IT HOLDS</span>') : '')
       + (bnd && bnd.oracle && bnd.oracle.state !== 'dormant'
         ? `<div class="note" style="margin-top:8px">the bond oracle keeper</div>`
           + rowHtml('keeper', bnd.oracle.state === 'ok'

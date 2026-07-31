@@ -810,10 +810,14 @@ are shut, laundering at your own front is gone, and the swap says so plainly if 
   share of what a player burns goes to the families instead of leaving supply, so the yield scales with
   real redemption volume. It is what staking rewards and personal dividends become: standing stops being
   only a badge and starts paying, so tribute, wars and the Commission are worth real money to a family.
-- **Where the real money goes** — four streams of real ETH (the DEX sell tax, treasury bonds, the store,
-  game fees) fund the protocol: liquidity, the withdrawal reserve, the founder, and a treasury. Until
-  2026-07-31 the last of those was earmarked to buy real tokenized shares players could one day claim;
-  that layer is **retired**, and the treasury simply holds ETH. Nothing in the game owes anybody a share.
+- **The Vault** (`GET /v1/vault`) — four streams of real ETH (the DEX sell tax, treasury bonds, the
+  store, game fees) fund the protocol: liquidity, the withdrawal reserve, the founder, and a treasury.
+  Burn earned $OMR and you claim a share of what that treasury actually holds. It is **backed by ETH,
+  not by stock** — until 2026-07-31 the vault was denominated in real tokenized shares; that layer is
+  retired. The rule is the same one it always had and is now unbreakable: **the house never owes more
+  than it holds**, and with ETH on both sides no price move can change that. The board publishes what
+  came in and from where, so you can check the claim yourself. Allocation only — nothing is delivered,
+  no sell, no cash-out.
 
 ---
 
