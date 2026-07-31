@@ -48,8 +48,14 @@ Solidity suite for OMERTÀ on Robinhood Chain. Rules for future sessions:
    to the dev wallet in the same tx and emits a nonce'd event; OmertaBond forwards each bond's ETH
    split in-tx and custodies no ETH. Preserve these invariants and their fuzz/regression tests. Do NOT
    raise `MAX_DISCOUNT_BPS`, remove the daily cap or the mint-rate ceiling, add a second mint path, or
-   make `polBps`/`devBps` mutable (on-chain/off-chain drift) — audit-surface decisions for humans; keep
-   `polBps`/`devBps`/`MAX_DISCOUNT_BPS` in lockstep with the backend `BONDS.*`.
+   make `polBps`/`devBps`/`rwaBps` mutable (on-chain/off-chain drift) — audit-surface decisions for
+   humans; keep `polBps`/`devBps`/`rwaBps`/`MAX_DISCOUNT_BPS` in lockstep with the backend `BONDS.*`.
+   OmertaBond's ETH split is FOUR-way (POL / dev / RWA-float / Vig-as-remainder) as of 2026-07-31: it
+   was three-way with the backend booking four, so the float's slice was zero on every real bond and
+   BOTH bond invariants stayed green (the Vig remainder absorbed it exactly). Do not collapse it back;
+   `rwaRecipient` is a SEPARATE key from `vigRecipient` by founder ruling. The remainder rule sits on
+   the Vig so the four shares sum to the principal EXACTLY — do not "naturalise" it into four
+   independent bps divisions or a wei goes unowned (the OMR sell-tax LP-slice precedent).
 3. No hardcoded chainIds/addresses — env-driven; Arbitrum One/Base are fallback targets.
 4. M6-B lives in the backend at the repo root (src/, test/…) — the chain service on viem. The signing snippet in README here must stay in exact parity with VOUCHER_TYPEHASH.
 5. Do not raise MAX_APY_BPS, remove either daily cap (VoucherClaim's or OmertaBond's), remove the
