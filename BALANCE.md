@@ -2034,7 +2034,7 @@ corrected upward — recorded here as the measured number.
 > **⚠ SUPERSEDED 2026-07-31 — every figure in the table above is too high.** Re-running the harness
 > at THIS commit's own `src/`, with the harness's measurement code confirmed unchanged and the same
 > config defaults, gives **2h → 12 · 5h → ~19 · 10.5h → level 33**, not 14–16 / 26 / 44. Nine
-> measurements (three at HEAD, one each at the two harness revisions, four across `MARKET_SEED`s)
+> measurements (three at HEAD, one each at the two harness revisions, four across market seeds)
 > all land at 33–34, so the row is not variance and not a later regression — the numbers here were
 > never reproducible. See **§ THE 7-DAY SOLO CEILING** at the end of this file for the bisect.
 > The findings drawn from this run (energy is vestigial; the gym/mission cooldowns are the throttle)
@@ -3059,7 +3059,7 @@ measurement code confirmed unchanged across its three revisions (only reporting 
 | HEAD, three runs | 33 · 34 · 33 |
 | `src/` at `c013494` (the second harness revision) | **33** |
 | `src/` at `2c60c06` — the commit where 44 was RECORDED | **33** |
-| four different `MARKET_SEED`s at HEAD (city-event luck) | 34 · 33 · 33 · 33 |
+| four different market seeds at HEAD (city-event luck) | 34 · 33 · 33 · 33 |
 
 Nine measurements, all 33–34, including at the exact commit the 44 was written down at, with identical
 config defaults (7 days × 2 sittings × 45 min, unchanged since the harness was built). **The game never
@@ -3078,3 +3078,48 @@ the claim outright.
 `tools/scale.js` was re-run in the same pass: 36 players / 5 days, **§10.4 held across all 24 checks
 with zero movement**, every one of the 9 driven markets reachable, and the census reconciles with the
 flow. The one market that ended empty (black-market goods lots) CLEARED — everything posted was taken.
+
+---
+
+## THE JAILBIRD FAUCET — measured, flagged, NOT retuned (2026-07-31)
+
+**What this is.** The onboarding batch's JAILBIRDS drop (task #308) added no reason and no formula.
+It keeps `POPULATION.JAILBIRDS.TARGET` (2) residents serving a sentence so the §7.8 bust verb and its
+dailies are completable on a solo run — the founder-reported dead end. What it *did* do is make the
+pre-existing **`bust:reward` faucet reachable on demand**, and that faucet had never been sized against
+a manufactured supply of prisoners. The drop's own note estimated "a few $k/hour shared."
+
+**Measured (`tools/sim.js` P9.28, printed every run, computed from the live constants):**
+
+| | |
+|---|---|
+| reward line (signed, §7.8) | `500 + remaining × 15` — **linear** in the sentence |
+| success chance | `clamp(0.7 − remaining/400 + busts×0.03, 0.10, 0.90)` — **floors at 10%** |
+| ⇒ best sentence to camp | **1200s** (`MAX_S`) → **$18,500** at 10%, EV **$1,850/attempt** |
+| attempts before it walks | 7 (a failed bust jails you `BUST_FAIL_JAIL_S` 180s, and a jailed player can't bust) |
+| ⇒ expected per bird | ~$9,652 (52% land) |
+| **city-wide ceiling** | **~$463k/day** (TARGET 2 × 24 hourly worker ticks) |
+
+**Why the estimate was an order of magnitude low:** it did not carry the reward's linear term in
+`MAX_S`. The reward keeps growing with the sentence while the chance *floors*, so the two never
+offset — the longest spawn is always the most profitable, and the clamp makes that strictly true.
+
+**The other thing that makes it unusual:** the loop spends **no signed resource**. No energy, no
+nerve, no ammo — only the 180s fail-jail. Every other faucet at this scale is resource-metered; this
+one is only time-metered.
+
+**NOT retuned (ground rule #1).** Both numbers that set it are the founder's: the `500 + r×15` line is
+the SIGNED §7.8 faucet, and `JAILBIRDS.MAX_S` is a sign-off lever. Three dials, in increasing
+invasiveness:
+
+1. **`JAILBIRDS.MAX_S` 1200 → ~400.** Cheapest, touches nothing signed. Caps the top reward at $6,500
+   and lands the chance near the un-clamped part of the curve, so skill starts mattering again.
+2. **`JAILBIRDS.TARGET` 2 → 1.** Halves the ceiling; also halves how reliably the daily is completable,
+   which is the thing the drop exists to fix.
+3. **A jailbird-specific reward scale** — the `MARKS.FRONT_INCOME_BPS` precedent, where resident-owned
+   fronts pay a *fraction* of the catalog curve precisely because the NPC never collects. Most
+   faithful to intent (a manufactured prisoner is worth less than a real one), most work.
+
+Shared city-wide and first-come, so it is one player's income only in a thin alpha — **which is
+exactly the condition it was built for**. `M3.BUST_FAIL_JAIL_S` (180) is now pinned in
+`test/levers.js`, since it alone sets the attempt count the ceiling is computed from.

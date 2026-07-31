@@ -988,6 +988,45 @@ phase('P9.27 street war step three — the take (crime re-sourced off the marks)
     `rob-only (a boosted shakedown would breach its signed ${RIVALS.SHAKEDOWN_RATE_BPS ? RIVALS.SHAKEDOWN_RATE_BPS / 100 : 30}% ceiling) and on the SAME shared per-venue window, so the signed per-venue extraction bound is untouched; the venue clock advances by the same boosted rate, so the redirect stays emission-neutral. Self-limiting: landing the strike records it, settling the debt`);
 }
 
+// ════════ P9.28 JAILBIRDS × bust:reward — the faucet the onboarding fix made REACHABLE ════════
+// JAILBIRDS (task #308) added no reason and no new formula: it keeps POPULATION.JAILBIRDS.TARGET
+// residents serving a sentence so the §7.8 bust verb and its dailies are completable solo. What it
+// DID do is make the pre-existing `bust:reward` faucet reachable on demand, and that faucet is
+// `500 + remaining×15` — LINEAR in the sentence — while the success chance is CLAMPED at 0.10. So
+// the two do not offset: EV rises without bound in `remaining` until the clamp binds and then keeps
+// rising. The commit note estimated "a few $k/hour shared"; this measures it from the real
+// constants so a retune of MIN_S/MAX_S/TARGET (or of the reward line) is re-measured every run.
+phase('P9.28 jailbirds × bust:reward — the reachable §7.8 faucet');
+{
+  const jb = POPULATION.JAILBIRDS;
+  // the live bust() line, restated: chance = clamp(0.7 − r/400 + busts×0.03 + event, .10, .90)
+  const chanceAt = (r, busts) => Math.max(0.10, Math.min(0.90, 0.7 - r / 400 + busts * 0.03));
+  const rewardAt = (r) => Math.floor(500 + r * 15);
+  // Which sentence length does a rational camper WANT? Sweep the spawn band.
+  let best = { ev: -1 };
+  for (let r = jb.MIN_S; r <= jb.MAX_S; r += 10) {
+    const ev = chanceAt(r, 0) * rewardAt(r);
+    if (ev > best.ev) best = { ev, r, p: chanceAt(r, 0), reward: rewardAt(r) };
+  }
+  note('jailbirds', 'best sentence to camp', `${best.r}s → $${fmt(best.reward)} at ${(best.p * 100).toFixed(0)}%`,
+    `EV $${fmt(Math.round(best.ev))}/attempt. The reward is LINEAR in the sentence while the chance FLOORS at 10%, so the longest spawn is always the most profitable — the two terms do not offset. Dials: the reward line (500 + r×15) or JAILBIRDS.MAX_S`);
+  // The real bound is SUPPLY, not attempts: the worker tops up to TARGET once an HOUR, and a failed
+  // attempt jails the buster for M3.BUST_FAIL_JAIL_S so they cannot spam either. A bird also WALKS
+  // after its own sentence, so a camper gets floor(sentence / fail-jail) tries at it.
+  // A failed bust jails the buster for BUST_FAIL_JAIL_S and a jailed player cannot bust ("You're in
+  // the same cage"), so attempts are exactly that far apart. Best case the camper is there when the
+  // bird lands, giving one attempt at t=0 and one per fail-jail after — `floor(r/fail) + 1`. This is
+  // a CEILING, so it takes the best case rather than a conservative average.
+  const tries = Math.floor(best.r / M3.BUST_FAIL_JAIL_S) + 1;
+  const landP = 1 - (1 - best.p) ** tries;              // at least one success before it walks
+  const perBird = landP * best.reward;
+  const perDay = jb.TARGET * 24 * perBird;               // hourly worker tick, TARGET birds a tick
+  note('jailbirds', 'city-wide ceiling', `~$${fmt(Math.round(perDay))}/day`,
+    `TARGET ${jb.TARGET} birds × 24 hourly ticks × $${fmt(Math.round(perBird))} expected each (${tries} attempts before it walks at ${(best.p * 100).toFixed(0)}% ⇒ ${(landP * 100).toFixed(0)}% land). SHARED city-wide and first-come, so it is one player's income only in a thin alpha — which is exactly when it is live. That is an order of magnitude above the "a few $k/hour" the drop estimated, because the estimate did not carry the reward's linear term in MAX_S`);
+  note('jailbirds', 'cost side', 'no energy, no nerve, no ammo — only the fail-jail',
+    `a failed bust costs ${M3.BUST_FAIL_JAIL_S}s of lockup and nothing else, so the loop is time-metered rather than resource-metered; unlike every other faucet at this scale it spends no signed resource. Founder call — flagged, NOT retuned (ground rule #1)`);
+}
+
 // ════════════════ P10: THE §10.4 SWEEP — the whole point ════════════════
 phase('P10 §10.4 ledger invariants over the ENTIRE sim (nothing was seeded)');
 const inv = await runLedgerInvariants(pool);
