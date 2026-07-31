@@ -1754,13 +1754,27 @@ export const dynastyTierOf = (invested = 0) => {
   for (const t of PORTFOLIO.DYNASTY_TIERS) if (n >= t.min) cur = t;
   return cur;
 };
-// ── THE TREASURY (omerta-stock-layer-retirement.md) ────────────────────────────────────────────
-// Was RWA_FLOAT. The founder retired the stock layer on 2026-07-31: the treasury holds ETH, so
-// nothing buys stock, nothing owes stock, and the claim levers (CLAIM_MIN/DAILY/WINDOW) are gone
-// with the rail they metered. What is left is the gameplay-fee slice — the treasury's share of each
-// real fee, still carved from the founder share with the Vig's 60% untouched.
+// ── THE TREASURY & THE VAULT (omerta-stock-layer-retirement.md) ────────────────────────────────
+// Was RWA_FLOAT. The founder retired the STOCK layer on 2026-07-31 and kept the vault, BACKED WITH
+// ETH: nothing buys stock and nothing owes stock, but a player can still burn earned $OMR to claim
+// allocation out of what the treasury actually holds — now ETH on both sides of `allocated <= held`,
+// which is what makes that wall unbreakable rather than merely stated. The claim levers survive the
+// re-denomination unchanged (they meter $OMR, not the backing asset).
 export const TREASURY = {
   FEE_TREASURY_BPS: () => Number(process.env.FEE_RWA_BPS ?? 1000), // 10% of gameplay fees → the treasury ledger. Env name kept: renaming it would silently reset a configured deploy to the default.
+  CLAIM_MIN_OMR: 25,          // floor on a claim — below this the round6 grid and the ledger row cost more than the claim is worth
+  CLAIM_DAILY_OMR: 2000,      // per-ACCOUNT rolling-window cap: one house cannot sweep the vault in a day
+  CLAIM_WINDOW_MS: 86400000,  // the bucket refills continuously over 24h (the D3 wash-cap shape)
+  // THE PRICE IS NOW THE PRICE OF REAL ETH, so it gets the OmrTwapOracle treatment. Once the vault
+  // owes ETH, a stale or absent OMR/ETH price is a FREE OPTION on the treasury: claim at yesterday's
+  // rate, keep the difference. Two guards, both fail-closed:
+  ORACLE_MAX_AGE_MS: 172800000, // 48h. Older than this and the vault REFUSES rather than guessing.
+                                // There is deliberately no fallback price: pre-market, before any
+                                // buyback has printed, the vault does not open. "We do not know what
+                                // ETH costs" must never resolve to "sell it at the default".
+  CLAIM_PREMIUM_BPS: 500,     // +5% over spot. The vault is not a market maker: it should never hand
+                              // out ETH at exactly the price a player could get elsewhere, or every
+                              // claim is a risk-free skim on whichever side the oracle lags.
 };
 // AUDIT F5 — fail fast on a misconfigured fee split: the Vig slice (vig.js, env VIG_BPS default
 // 6000) + the treasury slice book each real fee into two independently-recorded buckets; if they

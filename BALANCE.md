@@ -2915,7 +2915,7 @@ ceiling is unchanged (it is bounded by the seed pool, not by how well they know 
 
 ---
 
-## THE STOCK LAYER RETIRED — the treasury holds ETH (founder-directed 2026-07-31)
+## THE STOCK LAYER RETIRED — the vault is backed with ETH (founder-directed 2026-07-31)
 
 Design: `omerta-stock-layer-retirement.md`. **No lever moved.** This is recorded here because it changes
 what four signed bps are FOR, and a reader of this file should not have to find that out from a diff.
@@ -2939,11 +2939,32 @@ keep the accounting.**
 **Every bps is unchanged** — only the destination is. Changing them is a separate balance decision, and
 folding them into POL/Dev/Vig would silently move real money between destinations.
 
-**What went:** `claimVaulted` + `GET`/`POST /v1/vault*`, `runRwaBuyback` + `POST /v1/mod/rwa/buy`, the
-`rwa_vault`/`rwa_reserve`/`rwa_buys` tables, the unit invariants, the `RWA_FLOAT.CLAIM_*` levers, and the
-console Float card. `src/rwa.js` became `src/treasury.js`; `GET /v1/mod/rwa` → `/v1/mod/treasury`.
+**The founder amended it the same day: "keep the vault and back it with ETH."** That is not a weaker
+version — `allocated ≤ held` never depended on the asset being stock, it depended on the asset being the
+SAME on both sides. ETH-for-ETH restores the property exactly and deletes the only thing that could ever
+break it. Nothing acquires or owes stock either way.
 
-**What stayed:** `rwa_revenue` (the treasury's inflow ledger — the table name is historical; renaming it is
+**What went:** `runRwaBuyback` + `POST /v1/mod/rwa/buy` (nothing needs buying — ETH arrives directly),
+the `rwa_reserve`/`rwa_buys` tables, the per-ticker stock oracle + `RWA_MAX_PRICE_JUMP` + the
+cross-ticker budget lock (all of them guarded the bot's price input), and the bot invariants
+(`held == Σ buys`, cost basis). `src/rwa.js` became `src/treasury.js`; `GET /v1/mod/rwa` →
+`/v1/mod/treasury`.
+
+**What stayed, re-denominated:** the vault (`GET`/`POST /v1/vault*`, `claimVaulted`, the console card),
+`allocated ≤ held` **in ETH on both sides**, and the claim levers — which meter $OMR, not the backing
+asset, so the re-denomination did not touch them:
+
+| Lever | Value | What it does |
+|---|---|---|
+| `TREASURY.CLAIM_MIN_OMR` | 25 | claim floor — below it the 6dp grid and the ledger row cost more than the claim |
+| `TREASURY.CLAIM_DAILY_OMR` | 2000 | per-ACCOUNT rolling cap: one house cannot sweep the vault in a day |
+| `TREASURY.CLAIM_WINDOW_MS` | 86400000 | the bucket refills continuously over 24h (the D3 wash-cap shape) |
+
+`rwa_vault (account_id, ticker, units)` became `eth_vault (account_id PK, eth, cost_omr)`; still
+account-level, so it still survives death. **Allocation only — nothing is delivered**, and delivery is a
+separate decision (unlike the stock version, it would be a transfer of an asset the treasury owns).
+
+**Also stayed:** `rwa_revenue` (the treasury's inflow ledger — the table name is historical; renaming it is
 migration risk for no benefit), `recordSellTax` + `sell_tax_events`, and the anti-fabrication `txHash` gate
 (a comp/QA call still books ZERO, because "the treasury received this much ETH" must never be assertable
 by a mod route).

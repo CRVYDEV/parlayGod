@@ -46,7 +46,7 @@ const SIGNED = [
   ['BONDS.DEV_BPS', 1500],   // v2 step 3: 2000 -> 1500, the design's own number (BALANCE.md)
   ['BONDS.MAX_DISCOUNT_BPS', 2000],
   ['BONDS.POL_BPS', 3750],   // 5000 -> 3750: the remainder after the float slice, at the signed 5:3 POL:VIG
-  ['BONDS.RWA_BPS', 2500],   // NEW: bond ETH's stock-float slice (design 4)
+  ['BONDS.RWA_BPS', 2500],   // bond ETH's TREASURY slice (design 4; the stock float it once funded was retired 2026-07-31)
   ['BONDS.VIG_BPS', 2250],   // 3000 -> 2250: same remainder, ratio preserved rather than zeroed
   ['BOXING.BET_MAX', 250000],
   ['BOXING.BET_RAKE_BPS', 800],
@@ -501,6 +501,11 @@ const SIGNED = [
   ['STORE.PLEX_PREMIUM_BPS', 12000],
   ['TAX.DEV_BPS', 5000],
   ['TERRITORY_SYNDICATE_MIN', 3],
+  // THE VAULT — the founder kept the vault and backed it with ETH (2026-07-31). These meter the
+  // $OMR claim rail, not the backing asset, so they survived the re-denomination unchanged.
+  ['TREASURY.CLAIM_MIN_OMR', 25],
+  ['TREASURY.CLAIM_DAILY_OMR', 2000],
+  ['TREASURY.CLAIM_WINDOW_MS', 86400000],
   ['UNDERWORLD.DISCHARGE_PER_MIN', 150],
   ['UNDERWORLD.FX.DOC_MULT', 0.9],
   ['UNDERWORLD.FX.GUN_MULT', 0.9],

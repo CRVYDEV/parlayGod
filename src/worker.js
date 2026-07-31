@@ -15,6 +15,7 @@ import { runLedgerInvariants, alertDrift } from './invariants.js';
 import { runVigInvariants } from './vig.js';
 import { carveExchange, mergeLegacyYieldPools, payFamilyYield } from './exchange.js';
 import { runBondInvariants } from './bonds.js';
+import { runTreasuryInvariants } from './treasury.js';
 import { sweepExpiredBounties, huntWanted } from './social.js';
 import { sweepUncreditedFees } from './fees.js';
 import { runWageEpoch } from './emission.js';
@@ -447,6 +448,11 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
       if (vinv && !vinv.ok) await safe('vig alert', () => alertDrift(pool, vinv.checks.filter((c) => !c.ok), 'vig'));
       const binv = await safe('bond invariants', () => runBondInvariants(pool));
       if (binv && !binv.ok) await safe('bond alert', () => alertDrift(pool, binv.checks.filter((c) => !c.ok), 'bond'));
+      // THE VAULT's wall — `allocated <= held`, in ETH on both sides. It was stated in code from the
+      // day the vault was backed with ETH but watched by nobody, which is the same failure mode as a
+      // §10.4 drift alarm firing into an unread log: the check exists and the breach still ships.
+      const tinv = await safe('treasury invariants', () => runTreasuryInvariants(pool));
+      if (tinv && !tinv.ok) await safe('treasury alert', () => alertDrift(pool, tinv.checks.filter((c) => !c.ok), 'treasury'));
       if (vinv && binv) console.log((vinv.ok && binv.ok) ? '✅ vig + bond (real-value) invariants hold' : '🚨 VIG/BOND DRIFT — see alert above');
     }
   };

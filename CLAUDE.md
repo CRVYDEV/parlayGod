@@ -2733,27 +2733,53 @@ All numbers (`DIVIDEND_BPS`, `DIVIDEND_DAILY_BPS`, `DIVIDEND_MS`, the tier floor
 levers. Deferred (Dynasty step two): the FAMILY dividend (the gang book earns too), dividend compounding/
 auto-reinvest, a dynasty crest cosmetic.
 
-**THE STOCK LAYER RETIRED — the treasury holds ETH (founder-directed 2026-07-31) — DONE**
+**THE STOCK LAYER RETIRED — THE VAULT IS BACKED WITH ETH (founder-directed 2026-07-31) — DONE**
 (`omerta-stock-layer-retirement.md`; `src/rwa.js` → `src/treasury.js`; supersedes
 `omerta-rwa-float-design.md` and the R2/R3 half of `omerta-rwa-portfolio-design.md`). The founder's
 "instead of buying back RWA stock the treasury can hold ETH instead" resolved to **the stock layer goes
-away**: the game will not acquire, hold, allocate or deliver real tokenized equities. **The wall that made
+away** — then, the same day, **"keep the vault and back it with ETH"**: the game will not acquire, hold, allocate or deliver real tokenized equities. **The wall that made
 the float safe was `allocated ≤ held`** — the game only ever owes stock it already owns, in UNITS — and
 that works ONLY while both sides of the ledger are the same asset. So "the treasury holds ETH" is coherent
 only if nothing owes stock: backing a stock-denominated claim with ETH was rejected on SUBSTANCE, twice
 over — legally it turns handing over an asset you own into a cash-settled payout on one you do not (a
 derivative, a worse posture than the thing it replaces), and mechanically the treasury goes short exactly
-when players claim. The surgical line is **remove the promise, keep the accounting**. **REMOVED:**
-`claimVaulted` + `GET`/`POST /v1/vault*` (the obligation itself), `runRwaBuyback` + `POST /v1/mod/rwa/buy`
-(the buy bot's seat), the `rwa_vault`/`rwa_reserve`/`rwa_buys` tables, the unit invariants
-(`allocated ≤ held`, `held == Σ buys`, cost basis — **nothing is allocated, so that absence is the design,
-not a gap**), the `RWA_FLOAT.CLAIM_*` levers, and the console Float card. **KEPT, REPOINTED:** all four ETH
+when players claim. **The founder's amendment is the stronger version, not a softer one**, and for the
+same reason the objection was right: `allocated ≤ held` never depended on the asset being STOCK — it
+depended on the asset being **the same on both sides**. ETH-for-ETH restores the float's original
+property exactly and deletes the only thing that could ever have broken it. Nothing acquires stock,
+nothing owes stock, and the securities surface is gone just as completely. **REMOVED:** `runRwaBuyback`
++ `POST /v1/mod/rwa/buy` (the buy bot's seat — **nothing needs buying**: the backing asset arrives
+directly from the four revenue slices), the `rwa_reserve`/`rwa_buys` tables, the per-ticker stock oracle
++ `RWA_MAX_PRICE_JUMP` + the cross-ticker budget lock (all three guarded the bot's price input), the bot
+invariants (`held == Σ buys`, cost basis — nothing is bought, and `held` IS the revenue ledger), and the
+console Float card. **KEPT AND RE-DENOMINATED:** the vault (`claimVaulted`, `GET`/`POST /v1/vault*`, the
+console card), **`allocated ≤ held` in ETH on both sides**, `rwa_vault (account_id, ticker, units)` →
+`eth_vault (account_id PK, eth, cost_omr)` (still account-level, so it still SURVIVES DEATH), and the
+`TREASURY.CLAIM_*` levers — which meter **$OMR**, not the backing asset, so the re-denomination did not
+touch them. **ALLOCATION ONLY**: a claim moves ETH from the treasury's unallocated pool into a player's
+line; nothing is delivered and there is no route that delivers it (delivery is its own decision — and,
+unlike the stock version, it would be a transfer of an asset the treasury actually owns).
+**SECURING IT, because the vault now owes REAL ETH:** (1) the OMR/ETH price gets the `OmrTwapOracle`
+treatment — **fail-closed**, `TREASURY.ORACLE_MAX_AGE_MS` (48h), and **no fallback price**: the old code
+fell back to the fixed `PLEX_FLOOR`, which turns "we don't know what ETH costs" into "sell it at the
+default" — a standing free option on the treasury; now no print (or a stale one) means the vault refuses
+and the BOARD says closed, off the same read the claim uses, so it can never advertise a price the claim
+would reject; (2) `TREASURY.CLAIM_PREMIUM_BPS` (+5%) — the vault is not a market maker, and handing ETH
+out at exactly spot makes every claim a risk-free skim on whichever side the oracle lags; (3) the wall is
+**watched, not merely stated** — `runTreasuryInvariants` joined the worker's nightly `alertDrift` beside
+vig/bond, because a check nobody reads is the §10.4-alarm-into-an-unread-log failure mode; (4) a txn-scoped
+advisory lock over the shared pool serializes concurrent claims in real Postgres (the `runWageEpoch`
+pattern; pg-mem is single-caller, so the suite exercises the arithmetic and Postgres the serialization);
+(5) **the attestation line** — the ledger can prove the vault never OWES more than the books say arrived,
+but not that the Safe still HOLDS it, so `safeMustHold` is published on `GET /v1/mod/treasury` and
+rendered on /admin as the floor a human reconciles against the real balance. **KEPT, REPOINTED:** all four ETH
 slices **at their signed bps** (Store 2000 / gameplay-fee 1000 / sell-tax 400 / bond 2500 — changing them
 is a separate balance decision, and folding them into POL/Dev/Vig would silently move real money between
 destinations), `recordSellTax` + `sell_tax_events`, and `rwa_revenue` as **the treasury's inflow ledger**
 (the table keeps its historical name — renaming it is migration risk for no benefit). `runTreasuryInvariants`
-(`GET /v1/mod/treasury`) keeps the two checks that still mean something (each episode's slices sum to its
-gross; the treasury slice reached the ledger) and **the anti-fabrication `txHash` gate** — a comp/QA call
+(`GET /v1/mod/treasury`) keeps **`allocated ≤ held (ETH)`** plus the sell-tax reconciliation (each
+episode's slices sum to its gross; the treasury slice reached the ledger) and **the anti-fabrication
+`txHash` gate** — a comp/QA call
 books ZERO across all three slices, because "the treasury received this much ETH" must never be assertable
 by a mod route. **R1, the Portfolio, is UNTOUCHED** (invest, the deterministic §7.11 hash price, the
 dividend pools — `rwa_dividend_pool`/`rwa_family_dividend_pool` are **in-game $OMR**, not the float —

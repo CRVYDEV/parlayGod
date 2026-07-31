@@ -247,6 +247,24 @@ The backend keeps its own reserve records; they must track the on-chain balances
   founder removed the stock layer 2026-07-31 (`omerta-stock-layer-retirement.md`); the treasury holds ETH
   and nothing in the game owes anybody a share.
 
+## 7b. Standing duty — reconcile the treasury Safe against what the vault owes
+
+The vault (`omerta-stock-layer-retirement.md`) lets a player burn earned $OMR to claim allocation of
+**ETH the treasury holds**. `allocated ≤ held` is enforced in code and alarmed nightly, and it proves the
+vault never owes more than the books say **arrived**. It cannot prove the ETH is **still there** — the
+treasury Safe is a wallet a human controls, and ETH spent out of it writes no row in this database.
+
+So this is an operational duty, not a code guarantee:
+
+- `GET /v1/mod/treasury` publishes **`safeMustHold`** — the ETH currently allocated to players. The
+  /admin dashboard renders it beside the wall's ✓/⚠.
+- **The treasury Safe's real balance must never fall below `safeMustHold`.** Spending down to it is
+  spending players' allocation.
+- Reconcile on the same cadence as any other treasury movement, and before any withdrawal from the Safe.
+
+The vault is allocation-only today (nothing is delivered), so a shortfall is a broken promise rather than
+a failed payment — which is exactly the window in which it is cheap to fix.
+
 ## 8. Rollback / kill switches
 - Every contract is **pausable** by the Safe (`pause()`), stopping claims/bonds/fees without touching balances.
 - The rails are **dormant-by-unsetting**: remove `CHAIN_RPC_URL` (or a specific address var) and that rail goes

@@ -54,6 +54,7 @@ import * as Standing from './standing.js';
 import * as Pen from './pen.js';
 import * as Loans from './loans.js';
 import * as Portfolio from './portfolio.js';
+import * as Treasury from './treasury.js';
 import * as Emission from './emission.js';
 import * as Exchange from './exchange.js';
 import { register as registerCasino } from './routes/casino.js';
@@ -1120,10 +1121,17 @@ export async function buildServer() {
   // the FAMILY dividend — the gang book's yield, drawn to the reserve by the boss/underboss
   app.post('/v1/gangs/portfolio/dividend', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Portfolio.claimFamilyDividend(ch, client, h)));
-  // (THE FLOAT — `GET /v1/vault` + `POST /v1/vault/claim` — was retired 2026-07-31 with the stock
-  // layer: the treasury holds ETH, so nothing owes stock and there is no allocation to claim. See
-  // omerta-stock-layer-retirement.md. The book above is the whole Portfolio now, and always was
-  // pure in-game status — deterministic §7.11 price, no sell, no cash-out.)
+  // THE VAULT — burn earned $OMR to claim allocation out of the ETH the treasury actually holds
+  // (omerta-stock-layer-retirement.md). The STOCK layer was retired 2026-07-31; the founder kept the
+  // vault and backed it with ETH, which is what makes `allocated <= held` unbreakable — both sides
+  // are now the same asset, so no price movement can put the treasury short. ALLOCATION ONLY:
+  // nothing is delivered here and there is no route that delivers it.
+  //   The board is a READ (readCharacter, no write lock — the D1 tripwire); the claim takes the
+  // write path because it burns $OMR and touches the account's rolling cap.
+  app.get('/v1/vault', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client) => Treasury.vaultBoard(client, ch.account_id)));
+  app.post('/v1/vault/claim', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Treasury.claimVaulted(ch, req.body?.omr, client, h)));
   // name the FAMILY fund (a reserve $OMR sink) + the family-legit leaderboard (biggest family books)
   app.post('/v1/gangs/portfolio/name', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Portfolio.nameFamilyDynasty(ch, req.body?.name, client, h)));

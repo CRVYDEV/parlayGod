@@ -370,9 +370,10 @@ await pool.query('UPDATE gangs SET season_tribute=5000000 WHERE id=$1', [gid]);
   delete process.env.ALLOW_MOD_REAL_REVENUE;
 
   // (5) BOTH sources land in the treasury's ledger, and each episode reconciles.
-  // (The buy bot, the reserve and `allocated <= held` went with the stock layer on 2026-07-31 —
-  // omerta-stock-layer-retirement.md. Nothing is allocated now, so there is nothing to reconcile
-  // units against; what must still hold is that the ETH the books claim is the ETH that arrived.)
+  // (The buy bot and the per-ticker stock reserve went on 2026-07-31 — omerta-stock-layer-retirement.md.
+  // `allocated <= held` did NOT: the founder kept the vault and backed it with ETH, so the wall is
+  // still here and is now ETH-on-both-sides. What must hold is that the ETH the books claim is the
+  // ETH that arrived, and that the vault never owes more of it than the treasury holds.)
   const inv0 = await Treasury.runTreasuryInvariants(pool);
   assert.equal(inv0.holds, 'eth', 'the treasury holds ETH — it does not buy stock');
   assert.equal(inv0.bySource.tax, 0.124444, 'the tax brought in 0.124444 ETH (0.08 + the dusty episode)');
@@ -382,8 +383,15 @@ await pool.query('UPDATE gangs SET season_tribute=5000000 WHERE id=$1', [gid]);
   assert.ok(inv0.checks.find((c) => c.name === 'sell-tax treasury slice == recorded').ok);
   assert.ok(inv0.ok, `the treasury invariant holds: ${JSON.stringify(inv0.checks.filter((c) => !c.ok))}`);
 
-  // (6) the vault is GONE — a player can no longer claim stock, because nothing owes it
-  assert.equal((await call('GET', '/v1/vault', a.token)).code, 404, 'the claim rail is retired, not merely empty');
+  assert.ok(inv0.checks.find((c) => c.name === 'allocated <= held (ETH)').ok,
+    'the anti-Ponzi wall is live and holding — in ETH on both sides, so no price move can breach it');
+
+  // (6) the vault is BACKED, not gone: the rail answers, and it answers in ETH. What is gone is the
+  // stock — no ticker, no units, nothing owed in an asset the treasury does not hold.
+  const vb = (await call('GET', '/v1/vault', a.token)).body;
+  assert.equal(vb.heldEth, 1.124444, 'the vault board holds exactly what the four ETH streams brought in');
+  assert.equal(vb.allocatedEth, 0, 'nothing owed yet');
+  assert(!('float' in vb) && !('units' in vb), 'and nothing on the board is denominated in stock');
 
   // (7) ZERO §10.4 rows — the whole re-sourcing is out-of-band real value
   assert.equal(Number((await pool.query('SELECT COUNT(*) n FROM transactions')).rows[0].n), before,
