@@ -11,7 +11,8 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          cityHourOf, cityLawEventOf, tickerPriceOf, estateTierOf, foundationOf, campaignOf, honorTierOf,
          SOLDIERS, soldierFxOf, CLUES, clueStepOf, rollClueTier, kingpinRankOf, tycoonRankOf, racketIncomeLeveled, empireTitles, launderRankOf, frontTitles, statesmanRankOf, seasonModOf, PACING,
          carCollateralValue, MASTERY, masteryLvlOf, masteryRankOf, pathFx, pathXpMult,
-         REGIMEN, disciplineLvlOf, energyCapOf, nerveCapOf, BUSINESSES, WIRE, RIVALS } from './rules.js';
+         REGIMEN, disciplineLvlOf, energyCapOf, nerveCapOf, BUSINESSES, WIRE, RIVALS,
+         KITCHENS, labModuleCost } from './rules.js';
 import { dbCaps } from './db.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
@@ -1161,8 +1162,14 @@ export function view(ch, acct = {}, owned = {}) {
       treasury: Math.floor(Number(owned.gang.treasury)), ammoBank: Number(owned.gang.ammo_bank),
       held: owned.held } : null,
     lab: ch.lab || null, crew: Number(ch.crew || 0),
-    // LAB MODULES (Tier-4) — the purity/yield/stealth upgrade axis
+    // LAB MODULES (Tier-4) — the purity/yield/stealth upgrade axis.
+    // The NEXT price rides along, because the cost is a function of the module's own level AND the
+    // lab tier (labModuleCost), so the client cannot derive it — and a tester who could not see it
+    // upgraded blind and asked "doesn't say price / 100k I just spent?". The lab-tier button two
+    // lines above in the same card has always priced itself; this makes the pair honest.
     labModules: { purity: Number(ch.lab_purity || 0), yield: Number(ch.lab_yield || 0), stealth: Number(ch.lab_stealth || 0) },
+    labModuleNext: Object.fromEntries(['purity', 'yield', 'stealth'].map((id) =>
+      [id, labModuleCost(id, Number(ch[`lab_${id}`] || 0), KITCHENS.findIndex((k) => k.id === ch.lab))])),
     // THE KINGPIN LEGEND (Tier-4) — lifetime product moved (account-level, survives death)
     kingpin: { moved: Number(acct?.product_moved || 0), rank: kingpinRankOf(acct?.product_moved).name },
     // recurring sinks — the crew's nut: what's owed, the hourly rate, and whether they've downed tools
