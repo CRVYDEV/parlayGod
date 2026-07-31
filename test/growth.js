@@ -1254,6 +1254,18 @@ assert.equal((await call('POST', '/v1/respec', { token: chef.token, body: { musc
     'the completing row carries the bonus, so the faucet stays inside the MAX_DAY bound');
   // and the chain resets — the block has another job for you
   assert.equal((await call('GET', '/v1/corner', { token: ch.token })).body.chain.step, 0, 'a finished chain starts over');
+  // (audit F5) it resets IN PLACE, stamped with today. Deleting the row instead let a second claim
+  // here the same day find nothing, skip the once-a-day check and take step 1 immediately — so after
+  // the first chain the bonus arrived every TWO days, not the three the design states.
+  {
+    const row = (await pool.query(
+      'SELECT step, last_day FROM corner_chains WHERE character_id=$1 AND district=$2', [ch.id, pick.district])).rows[0];
+    assert(row, 'the finished chain leaves a fresh row behind, not a hole a same-day claim can start in');
+    assert.equal(Number(row.step), 0, 'the fresh chain is at step 0');
+    assert.equal(Number(row.last_day), day, "and stamped with today — you already showed up on this block");
+    assert.equal((await call('GET', '/v1/corner', { token: ch.token })).body.chain.advancedToday, true,
+      'which the board reports honestly');
+  }
 }
 
 // ── (AUDIT-street-life, lenses A+D) ONE ENVELOPE PER KIND PER DAY: the same kind sits in several

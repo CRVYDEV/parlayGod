@@ -7227,3 +7227,39 @@ the recorded growth.js kitchen-raid one: a deterministic assertion resting on a 
 precondition. The day's counters are now cleared so the precondition is GUARANTEED whatever the draw, and
 the fix was mutation-verified not to have gone vacuous (dropping the server's `not_done` gate still fails
 it). Suite green + sim drift-0.
+
+**RED-TEAM over THE FAVOR + Street Life step two (`AUDIT-favor-street-life-two.md`, task #326).** The
+step-one pass predates both drops (`grep -ci favor` against it returns 0), so this closes the gap. Four
+lenses (§10.4/escrow, locks/persist-clobber, death/completeness, exploit/cross-system). **No CRITICAL, no
+HIGH, no §10.4 drift** — the `favor escrow` identity matches the code term for term, the 2% take is carved
+FROM the pay (so alt-posting is strictly lossy), the loot surface and safehouse block are the audited
+market-order shape, and the deliberately SINGLE-PARTY lock posture is correct (the pay leaves the poster's
+pocket at post, so there is no second character to lock and no AB-BA). Fixed, regression + named-assertion
+mutation each: **F1 (MED) the freight teleported** — `runFavor` gated the RUNNER's location and never the
+POSTER's, and cargo travels with the player, so goods crossed the city with neither party moving (past the
+convoy game and past the market's district-pinned pickup, which exists for exactly that reason); the handoff
+is now face to face, and the suite's own happy path had been demonstrating the bug. **F2 (MED) the trunk cap
+was bypassed** — `trunkCap` was imported into favors.js and used nowhere, with `MAX_QTY` 20 against a base
+trunk of 10 and `MAX_OPEN` 3; now checked at POST (counting the OUTSTANDING book, so three favors that each
+fit an empty trunk can't all be posted) and again at DELIVERY, the poster's capacity computed by the
+canonical `trunkCap` rather than restated. **F3 (MED) a lost update on the poster's cargo** — the
+read-modify-write was lifted from `fulfillCall`, where `withTwoCharacters` holds the second party's row and
+makes it safe; two runners filling two favors from the same poster could both read the old total and one
+delivery would vanish SILENTLY (goods aren't a §10.4 currency, so no check moves); now an atomic
+`qty = qty + $n` with an INSERT fallback, regression-pinned on the accumulation end-state plus an honestly-
+labelled source tripwire for the race pg-mem cannot exercise. **F4 (LOW-MED) the death-disposition guard
+could not see sixteen character-scoped tables** — `test/migrate.js` matched `character_id` only, so
+`favors.poster_character`, `crew_heists.leader_character`, `convoys.owner_character`, `loans`,
+`market_listings`, `secrets`, the wire trio and eight more were invisible to the guard whose entire job is
+to fail CI closed on an unclassified table; all sixteen ARE handled, which is the point (nothing was
+ENFORCING it, and the summary line claimed completeness). Any `%_character` column now counts (61 → 77
+tables), and widening it exposed that check (c) recognised only a `DELETE FROM` when death cleanup takes
+THREE shapes here — a resolving status UPDATE (`'lost'`/`'abandoned'`/`'cancelled'`) is one, and the four
+tables already using it passed on an accident of string matching. **F5 (LOW-MED) a finished corner chain
+restarted the same day** — `advanceChain` DELETEd the row, so a second claim that day found no row, skipped
+the once-a-day check and took step 1 immediately; the bonus arrived every TWO days rather than the three the
+design states (the hard `MAX_DAY` ceiling was unaffected — the bonus is folded into the claim's own ledger
+row). The chain now resets IN PLACE stamped with today, which is also what the board should say. Flagged,
+not changed: the post-time `room` gate can still go stale (deliberate — reserving trunk space against an
+open book would let a favor block a convoy load), and `MAX_QTY` 20 now needs a built trunk to reach. Suite
+green + sim drift-0.

@@ -2899,7 +2899,11 @@ completions/day ≤ 5 ÷ `CHAIN_STEPS` = 1.67 — **~$2,500/day + ~67 respect/da
 $2,000 + 75**, and only for a street that keeps five separate corners running. (The naive
 `MAX_DAY × CHAIN_BONUS` bound is unreachable: a chain cannot complete twice at one district in a
 day.) A second envelope in the same district on the same day pays as an envelope and does NOT
-advance the chain.
+advance the chain. *(Corrected 2026-07-31, `AUDIT-favor-street-life-two.md` F5: the
+`÷ CHAIN_STEPS` above was optimistic while a completing chain DELETEd its row — a second claim that
+day then found no row, skipped the once-a-day check and took step 1 immediately, so at steady state a
+district completed every TWO days and the real bound was 5 ÷ 2 = 2.5. The chain now resets IN PLACE
+stamped with today, which makes the code match the figure rather than the figure match the code.)*
 
 **The standing scales the ASK, never the source.** A regular is asked for a bigger load and tipped
 better, but generation still skips a request the contact cannot cover and fulfilment still

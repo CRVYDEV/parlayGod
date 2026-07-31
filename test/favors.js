@@ -71,6 +71,14 @@ assert.equal((await call('POST', '/v1/favors', { token: poster.token, body: { go
 assert.equal((await call('POST', '/v1/favors', { token: poster.token, body: { goodId: 'gin', qty: 0, pay: 9000 } })).body.error, 'qty', 'qty floor');
 assert.equal((await call('POST', '/v1/favors', { token: poster.token, body: { goodId: 'gin', qty: 1, pay: 1 } })).body.error, 'pay', 'pay floor');
 assert.equal((await call('POST', '/v1/favors', { token: poster.token, body: { goodId: 'gin', qty: 1, pay: FAVOR.MAX_PAY + 1 } })).body.error, 'pay', 'pay ceiling');
+{ // (audit F2) MAX_QTY is 20 against a base trunk of 10 — ask only for what you could carry, counting
+  // the OUTSTANDING book (3 units are already spoken for by the favor above), not just the trunk now.
+  const me = (await call('GET', '/v1/me', { token: poster.token })).body.character;
+  assert.equal((await call('POST', '/v1/favors', { token: poster.token, body: { goodId: 'gin', qty: FAVOR.MAX_QTY, pay: 9000 } })).body.error, 'room',
+    `no asking for ${FAVOR.MAX_QTY} into a ${me.cargoCap}-unit trunk`);
+  assert.equal((await call('POST', '/v1/favors', { token: poster.token, body: { goodId: 'gin', qty: me.cargoCap, pay: 9000 } })).body.error, 'room',
+    'and the 3 units already on the book count against the room');
+}
 { // the loot-proof-vault rule: escrow is cash you can't be robbed of, so it can't be posted from cover
   await seed(poster.id, "safe_until = now() + interval '1 hour'");
   assert.equal((await call('POST', '/v1/favors', { token: poster.token, body: { goodId: 'gin', qty: 1, pay: 9000 } })).body.error, 'safe',
@@ -104,6 +112,20 @@ assert.equal((await call('POST', `/v1/favors/${favorId}/run`, { token: runner.to
 assert.equal((await call('POST', `/v1/favors/${favorId}/run`, { token: poster.token })).body.error, 'own', "you can't run your own");
 r = await call('POST', '/v1/goods/buy', { token: runner.token, body: { goodId: 'gin', qty: 3 } });
 assert.equal(r.code, 200, `the runner stocks up (${JSON.stringify(r.body)})`);
+// (audit F1) THE HANDOFF IS FACE TO FACE. Cargo travels with the player, so without this gate the
+// poster could stand at the docks and have the freight appear in their trunk at the canal — past the
+// convoy game and past the market's district-pinned pickup, which exists for exactly that reason.
+assert.equal((await call('POST', `/v1/favors/${favorId}/run`, { token: runner.token })).body.error, 'poster_away',
+  'the poster must be THERE to take it — no teleporting freight across the city');
+await seed(poster.id, "loc='canal'");
+// (audit F2) and they must be able to CARRY it — the bound the whole freight game rests on.
+{
+  const cap = (await call('GET', '/v1/me', { token: poster.token })).body.character.cargoCap;
+  await pool.query("INSERT INTO character_cargo (character_id, good_id, qty) VALUES ($1,'rum',$2)", [poster.id, cap]);
+  assert.equal((await call('POST', `/v1/favors/${favorId}/run`, { token: runner.token })).body.error, 'poster_full',
+    "a full trunk can't take delivery — the cap is checked at the handoff, not just at the post");
+  await pool.query("DELETE FROM character_cargo WHERE character_id=$1 AND good_id='rum'", [poster.id]);
+}
 const cash0 = await cashDrift();   // every favor leg from here is ledgered — the drift must not move
 const runnerBefore = await cashOf(runner.token);
 const poolBefore = await one('SELECT pool n FROM street_tax WHERE id=1');
@@ -123,6 +145,28 @@ assert.equal(await one("SELECT COALESCE(SUM(qty),0) n FROM character_cargo WHERE
 assert.equal((await call('POST', `/v1/favors/${favorId}/run`, { token: runner.token })).body.error, 'gone',
   'a filled favor cannot be run twice');
 assert.equal(await escrowDrift(), 0, 'the escrow identity holds after a fill');
+
+// ════════════ A SECOND DELIVERY OF THE SAME GOOD — it ACCUMULATES ════════════
+// (audit F3) the poster's side of the handoff was a read-modify-write lifted from `fulfillCall`,
+// where `withTwoCharacters` holds the second party's row and makes it safe. THE FAVOR deliberately
+// drops that lock, so two runners filling two favors from the SAME poster could both read the old
+// total and one delivery would vanish. The fix is an atomic `qty = qty + $n`. pg-mem has no MVCC, so
+// the race itself is unreachable here — what IS pinned is the end state the fix must preserve: a
+// delivery into a trunk that already holds that good ADDS to it. A source tripwire below covers the
+// shape the race needs (the db.js `pool.on('error')` precedent — honestly labelled as one).
+{
+  r = await call('POST', '/v1/favors', { token: poster.token, body: { goodId: 'gin', qty: 2, pay: 700, district: 'canal' } });
+  assert.equal(r.code, 200, `a second gin favor (${JSON.stringify(r.body)})`);
+  assert.equal((await call('POST', '/v1/goods/buy', { token: runner.token, body: { goodId: 'gin', qty: 2 } })).code, 200, 'the runner restocks');
+  assert.equal((await call('POST', `/v1/favors/${r.body.id}/run`, { token: runner.token })).code, 200, 'and runs it');
+  assert.equal(await one("SELECT COALESCE(SUM(qty),0) n FROM character_cargo WHERE character_id=$1 AND good_id='gin'", [poster.id]),
+    5, 'the second delivery ADDED to the three already in the trunk — never clobbered them');
+}
+{
+  const src = await (await import('node:fs/promises')).readFile(new URL('../src/favors.js', import.meta.url), 'utf8');
+  assert(/UPDATE character_cargo SET qty = qty \+ \$3/.test(src),
+    "the poster's cargo is written by an atomic increment, not a read-modify-write (pg-mem cannot exercise the race)");
+}
 
 // ════════════ CANCEL — the poster takes the word back ════════════
 const mine = (await call('GET', '/v1/favors', { token: poster.token })).body.mine;
