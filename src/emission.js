@@ -49,6 +49,36 @@ export async function emittedThisEpoch(pool, epoch) {
 // never collide with the single-arg schema boot lock (db.js SCHEMA_LOCK_KEY). 0x5741 = "WA".
 const WAGE_LOCK_CLASS = 0x5741;
 
+// ── ONE eligibility predicate, read by BOTH the payer and the board ──
+// The vig-anchor rule: a surface that TELLS a player they qualify must be derived from the same
+// thing that DECIDES whether they get paid. These drifted — the board said `enrolled: !!snap`
+// (any snapshot at all) while the payer requires the snapshot be stamped EXACTLY `epoch-1`. The
+// gap is not hypothetical: `runWageEpoch` re-stamps every living character each run, so a stale
+// baseline means the worker MISSED a day — an outage — and on the next run the board told the
+// ENTIRE base "on the payroll" while the epoch correctly re-enrolled them and paid nothing. On
+// the one faucet that pays real value, with no explanation on screen.
+//
+// The payer's rule is the correct one and is load-bearing: scoring a stale baseline would pay for
+// days of play outside this epoch's window, and since a share is `payable × gain/total`, banking
+// gain across skipped days would buy a bigger slice of one day's budget at everyone else's
+// expense. So the board moved to the payer, not the other way round.
+//
+// `reason` is why NOT (null when eligible) so the console can say it instead of going quiet.
+export function wageEligibility(r, epoch) {
+  const snapEpoch = r.snap_epoch == null ? null : Number(r.snap_epoch);
+  const gain = snapEpoch == null ? 0 : Math.max(0, Number(r.respect) - Number(r.snap_respect));
+  const out = (reason) => ({ eligible: !reason, reason: reason || null, gain, snapEpoch });
+  if (snapEpoch == null) return out('enrolling');            // fresh street / heir — earns from the next epoch
+  if (snapEpoch !== epoch - 1) return out('re_enrolling');   // baseline is not yesterday's (a missed epoch)
+  if (r.agent_flag) return out('agent');
+  if (r.npc_flag) return out('resident');                    // a resident drawing the wage is theft from the endowment
+  if (r.status === 'banned') return out('banned');
+  if (wageRequireMinted() && !r.minted) return out('mint');  // the D1 Sybil wall
+  if (levelOf(Number(r.respect)) < EMISSION.WAGE_MIN_LVL) return out('level');
+  if (gain < EMISSION.WAGE_MIN_SCORE) return out('score');
+  return out(null);
+}
+
 export async function runWageEpoch(pool, opts = {}) {
   const epoch = opts.epoch ?? emissionEpochOf();
   const budget = opts.budget ?? epochBudget(epoch);
@@ -93,20 +123,15 @@ async function runWageEpochInner(pool, opts, epoch, budget) {
       LEFT JOIN wage_snapshots s ON s.character_id = c.id
      WHERE c.alive ORDER BY c.id`)).rows;
 
-  // score the candidates (baseline = last epoch's stamp; everyone else just [re-]enrolls)
-  const needMinted = wageRequireMinted();
+  // score the candidates (baseline = last epoch's stamp; everyone else just [re-]enrolls).
+  // THE POPULATION exclusion lives in `wageEligibility` and is the single most important NPC
+  // exclusion in the codebase: a resident drawing the Street Wage would be theft from the
+  // endowment. (Residents are never `minted`, so the D1 wall already stops them whenever
+  // WAGE_REQUIRE_MINTED is on; the explicit npc_flag check holds when it isn't.)
   const scored = [];
   for (const r of rows) {
-    if (Number(r.snap_epoch) !== epoch - 1) continue;
-    // THE POPULATION: a resident drawing the Street Wage would be theft from the endowment — the
-    // single most important NPC exclusion in the codebase. (Residents are never `minted`, so the D1
-    // wall already stops them whenever WAGE_REQUIRE_MINTED is on; this holds when it isn't.)
-    if (r.agent_flag || r.npc_flag || r.status === 'banned') continue;
-    if (needMinted && !r.minted) continue; // the D1 Sybil wall: only paid (minted) identities draw
-    const gain = Math.max(0, Number(r.respect) - Number(r.snap_respect));
-    if (levelOf(Number(r.respect)) < EMISSION.WAGE_MIN_LVL) continue;
-    if (gain < EMISSION.WAGE_MIN_SCORE) continue;
-    scored.push({ id: r.id, account: r.account_id, gain });
+    const { eligible, gain } = wageEligibility(r, epoch);
+    if (eligible) scored.push({ id: r.id, account: r.account_id, gain });
   }
   const total = scored.reduce((a, b) => a + b.gain, 0);
   // pre-compute every share (stable across a crash-resume; Σ shares ≤ payable by construction)
@@ -152,7 +177,11 @@ export async function wageBoard(pool, ch, acct) {
   const epoch = emissionEpochOf();
   const emitted = await emittedTotal(pool);
   const snap = (await pool.query('SELECT epoch, respect FROM wage_snapshots WHERE character_id=$1', [ch.id])).rows[0];
-  const gain = snap ? Math.max(0, Number(ch.respect) - Number(snap.respect)) : 0;
+  // the SAME predicate the payer scores with — see wageEligibility. Shaped like a payer row.
+  const { eligible, reason, gain } = wageEligibility({
+    respect: ch.respect, snap_epoch: snap ? snap.epoch : null, snap_respect: snap ? snap.respect : null,
+    agent_flag: !!acct?.agent_flag, npc_flag: !!acct?.npc_flag, minted: !!acct?.minted, status: acct?.status,
+  }, epoch);
   const lastWage = (await pool.query(
     "SELECT amount, at FROM transactions WHERE account_id=$1 AND reason='emission:wage' ORDER BY at DESC LIMIT 1",
     [ch.account_id])).rows[0];
@@ -162,7 +191,11 @@ export async function wageBoard(pool, ch, acct) {
     endowment: { total: EMISSION.ENDOWMENT_OMR, emitted, remaining: Math.max(0, EMISSION.ENDOWMENT_OMR - emitted) },
     schedule: { epochOmr: EMISSION.EPOCH_OMR, decay: EMISSION.DECAY, decayEvery: EMISSION.DECAY_EVERY },
     you: {
-      enrolled: !!snap,
+      // `enrolled` means enrolled FOR THIS EPOCH — a baseline stamped yesterday, which is exactly
+      // what the payer scores on. A stale stamp (the worker missed a day) re-enrols you today and
+      // pays from the next epoch; saying "enrolled" for it would be the board promising a wage the
+      // payer will not hand over.
+      enrolled: !!snap && Number(snap.epoch) === epoch - 1,
       baselineEpoch: snap ? Number(snap.epoch) : null,
       gainThisEpoch: gain,
       minScore: EMISSION.WAGE_MIN_SCORE,
@@ -170,8 +203,8 @@ export async function wageBoard(pool, ch, acct) {
       capOmr: EMISSION.WAGE_CAP_OMR,
       mintedRequired: wageRequireMinted(),
       minted: !!acct?.minted,
-      eligible: !!snap && !acct?.agent_flag && (!wageRequireMinted() || !!acct?.minted)
-        && levelOf(Number(ch.respect)) >= EMISSION.WAGE_MIN_LVL && gain >= EMISSION.WAGE_MIN_SCORE,
+      eligible,
+      reason,          // why not (null when eligible) — so the console can say it
       agentExcluded: !!acct?.agent_flag,
       lastWage: lastWage ? { omr: Number(lastWage.amount), at: lastWage.at } : null,
     },

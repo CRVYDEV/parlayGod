@@ -38,6 +38,15 @@ import { activeDecree, seatedGangs } from './commission.js'; // THE LEVY redirec
 
 const num = (v) => Number(v || 0);
 const round2 = (n) => Math.round(n * 100) / 100;
+
+// The rolling-24h per-account bucket (D3 wash-cap shape) — ONE implementation, read by the till
+// (`redeem`) and by the board's `yourHeadroomOmr`. It lived as two copies of the same expression:
+// identical today, but a headroom a player is shown must be derived from the thing that refuses
+// them, or the two drift the first time either is touched (the vig-anchor rule).
+function spentToday(acct, now) {
+  const at = acct?.exchange_at ? new Date(acct.exchange_at).getTime() : 0;
+  return Math.max(0, num(acct?.exchange_used) - EXCHANGE.DAILY_CAP_OMR * (Math.max(0, now - at) / 864e5));
+}
 const round6 = (n) => Math.round(n * 1e6) / 1e6;   // $OMR is 6dp, same as the NUMERIC column
 
 // ── the pool ─────────────────────────────────────────────────────────────────────────────────────
@@ -91,9 +100,7 @@ export async function redeem(ch, amount, client, h) {
   }
   // the rolling-24h per-account cap (the D3 wash-cap token bucket, on the account this time)
   const now = Date.now();
-  const at = h.acct.exchange_at ? new Date(h.acct.exchange_at).getTime() : 0;
-  const elapsed = Math.max(0, now - at);
-  const decayed = Math.max(0, num(h.acct.exchange_used) - EXCHANGE.DAILY_CAP_OMR * (elapsed / 864e5));
+  const decayed = spentToday(h.acct, now);
   if (decayed + omr > EXCHANGE.DAILY_CAP_OMR) {
     throw new GameError('cap', `The window moves ${EXCHANGE.DAILY_CAP_OMR} $OMR a day. Come back tomorrow.`);
   }
@@ -146,9 +153,7 @@ export async function redeem(ch, amount, client, h) {
 // The public window: the rate, what the till holds, and your own headroom.
 export async function exchangeBoard(db, h) {
   const p = await exchangePool(db);
-  const now = Date.now();
-  const at = h?.acct?.exchange_at ? new Date(h.acct.exchange_at).getTime() : 0;
-  const decayed = Math.max(0, num(h?.acct?.exchange_used) - EXCHANGE.DAILY_CAP_OMR * (Math.max(0, now - at) / 864e5));
+  const decayed = spentToday(h?.acct, Date.now());
   return {
     rate: EXCHANGE.RATE, minOmr: EXCHANGE.MIN_OMR, dailyCapOmr: EXCHANGE.DAILY_CAP_OMR,
     pool: Math.floor(p.balance),

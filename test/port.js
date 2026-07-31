@@ -98,14 +98,19 @@ assert.equal(r.body.interdicted, true, 'the Coast Guard was waiting'); assert.eq
 assert.equal(r.body.fine, Math.floor(coastalCost * PORT.FINE_RATE), 'a fine of FINE_RATE × the cargo cost (port:fine sink)');
 assert.equal(await cashOf(cap.token), cashB - r.body.fine, 'the fine came off the top');
 // STEP FIVE — the Coast Guard bust builds a FEDERAL case: it feeds the RICO investigation meter.
-// READ THIS BEFORE ANY FURTHER AUTHED REQUEST. The bust spikes heat, and every subsequent request
-// runs the captain's accrual — which, with heat now HIGH, adds `(heat − WATCH) × dtMin × …` to the
-// meter. dtMin is real elapsed milliseconds, so on a fast machine it rounds to nothing and the
-// exact-equality below holds, while under a loaded full-suite run it becomes a small positive
-// fraction and the assertion fails. That is a wall-clock race in the test, not a defect in the
-// meter: within the collect's own transaction accrual ran with heat still zeroed, so immediately
-// after the bust the meter has moved by exactly BUST_EXPOSURE and nothing else.
-assert.equal(Number((await pool.query(`SELECT heat_exposure e FROM characters WHERE id='${cap.id}'`)).rows[0].e), expBefore + PORT.STEP5.BUST_EXPOSURE, 'the bust fed the Law meter (heat_exposure) — repeat smuggling draws the Bureau');
+// READ THIS BEFORE ANY FURTHER AUTHED REQUEST. The meter is a CONTINUOUS quantity — it gains from
+// high heat and BLEEDS passively, both scaled by real elapsed milliseconds — so no exact-equality
+// against it can be stable, in either direction. (This assertion used to be an equality with a
+// comment anticipating a small positive GAIN under load; what actually fired in a full-suite run
+// was the passive BLEED, landing at 24.9983 against an expected 25. The comment had the mechanism
+// half right and the sign wrong, which is worse than not reasoning about it — a tolerance is the
+// honest shape.) The property under test is that the bust moved the meter by BUST_EXPOSURE; ±0.5
+// is far tighter than the 25 a dropped bump would miss by, so the check still fails loudly.
+{
+  const meter = Number((await pool.query(`SELECT heat_exposure e FROM characters WHERE id='${cap.id}'`)).rows[0].e);
+  assert.ok(Math.abs(meter - (expBefore + PORT.STEP5.BUST_EXPOSURE)) < 0.5,
+    `the bust fed the Law meter (heat_exposure) — repeat smuggling draws the Bureau (got ${meter}, want ~${expBefore + PORT.STEP5.BUST_EXPOSURE})`);
+}
 assert((await meOf(cap.token)).heat > heatBefore, 'the bust spiked the heat');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) c FROM boats WHERE id='${cutter}'`)).rows[0].c), 1, 'the surviving boat is back in the fleet');
 

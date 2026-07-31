@@ -3071,7 +3071,10 @@
     if (!w?.you) return 'enrolling…';
     if (w.you.agentExcluded) return 'agents run their own economy — no wage';
     if (w.you.mintedRequired && !w.you.minted) return 'made men only — mint your account (the Store\'s Made Man package, or PLEX it with earned $OMR) to qualify for the daily emission share';
-    if (!w.you.enrolled) return 'enrolling — your first full day starts the count';
+    // `reason` comes from the SAME predicate the payer scores with, so the line can never promise
+    // a wage the epoch will not hand over (the wage-board anchor fix)
+    if (w.you.reason === 'enrolling') return 'enrolling — your first full day starts the count';
+    if (w.you.reason === 're_enrolling') return 're-enrolling — the last payroll run missed a day, so today re-starts your count; you earn from the next one';
     const base = '+' + fmt(w.you.gainThisEpoch) + ' respect this epoch ' +
       (w.you.eligible ? '— <b style="color:var(--ok)">on the payroll</b>'
         : '(need ' + w.you.minScore + '+ and level ' + w.you.minLevel + '+)');

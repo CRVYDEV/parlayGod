@@ -329,6 +329,11 @@ const SIGNED = [
   ['POPULATION.JAILBIRDS.TARGET', 2],
   ['POPULATION.JAILBIRDS.MIN_S', 240],
   ['POPULATION.JAILBIRDS.MAX_S', 1200],
+  // …and the throttle on the other side of it. A failed bust is the ONLY cost of the loop (no
+  // energy, no nerve, no ammo), so this number alone sets how many attempts a camper gets at a
+  // bird before it walks — which is what P9.28 measures the faucet ceiling from. Pinned when that
+  // probe was written, so the ceiling can't move by a quiet edit to the jail stretch.
+  ['M3.BUST_FAIL_JAIL_S', 180],
   // STREET LIFE (#318) — WORD ON THE STREET (the corner faucet is HARD-bounded MAX_DAY × CASH =
   // $2k/day + 75 respect/day; POOLS/CONFLICT are parent-object pins — the draw indexes them)
   ['CORNER.PER_DAY', 3],

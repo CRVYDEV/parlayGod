@@ -8,7 +8,7 @@
 process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { EMISSION, epochBudget } from '../src/rules.js';
+import { EMISSION, epochBudget, emissionEpochOf } from '../src/rules.js';
 import { runWageEpoch } from '../src/emission.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
@@ -93,10 +93,43 @@ r = await runWageEpoch(pool, { epoch: E + 4 });
 assert.equal(await omrOf(p1.id), before1, 'under the minimum score draws nothing');
 
 // ── the board ──
+// The board reads the LIVE epoch (emissionEpochOf), while the payroll runs above use a synthetic
+// epoch line, so a board assertion has to stamp the baseline on the live line to mean anything.
+const NOW = emissionEpochOf();
+const stamp = (id, ep, respect) => pool.query(
+  'UPDATE wage_snapshots SET epoch=$2, respect=$3 WHERE character_id=$1', [id, ep, respect]);
+await stamp(p1.id, NOW - 1, 100);                       // baselined yesterday, +respect since
 const board = (await call('GET', '/v1/wage', { token: p1.token })).body;
 assert.equal(board.endowment.total, EMISSION.ENDOWMENT_OMR, 'the board publishes the endowment');
 assert.ok(board.you.enrolled, 'the board shows enrollment');
+assert.equal(board.you.eligible, true, 'a yesterday baseline + a day of play reads as on the payroll');
+assert.equal(board.you.reason, null, 'no refusal reason when eligible');
 assert.ok(board.endowment.emitted > 0 && board.endowment.remaining < EMISSION.ENDOWMENT_OMR, 'emitted tracks');
+
+// ── REGRESSION (the vig-anchor class): the board's eligibility must be the PAYER's own predicate.
+// It wasn't: the board said `enrolled: !!snap` — ANY baseline — while runWageEpoch scores only a
+// baseline stamped EXACTLY `epoch-1`. Since the payer re-stamps every living character each run, a
+// stale baseline means the WORKER MISSED A DAY, and on the next run the board told the whole base
+// "on the payroll" while the epoch correctly re-enrolled them and paid nothing. On the one faucet
+// that pays real value, with nothing on screen saying why. The payer's rule is the correct one —
+// scoring a stale baseline would pay for play outside this epoch's window, and since a share is
+// `payable × gain/total`, banking gain across skipped days buys a bigger slice of one day's budget
+// at everyone else's expense. So the board moved to the payer. ──
+{
+  await stamp(p1.id, NOW - 3, 100);                     // the baseline the missed day left behind
+  const stale = (await call('GET', '/v1/wage', { token: p1.token })).body;
+  assert.equal(stale.you.eligible, false, 'a stale baseline is NOT on the payroll — the payer will skip it');
+  assert.equal(stale.you.reason, 're_enrolling', 'and the board says why, instead of going quiet');
+  assert.equal(stale.you.enrolled, false, '"enrolled" means enrolled for THIS epoch — the payer\'s own test');
+  assert.equal(stale.you.baselineEpoch, NOW - 3, 'the stale baseline is still published honestly');
+  // and the payer really does skip it — the two now agree by construction (one predicate)
+  const before = await omrOf(p1.id);
+  await runWageEpoch(pool, { epoch: NOW });
+  assert.equal(await omrOf(p1.id), before, 'the payer skips the stale baseline the board refused');
+  await stamp(p1.id, NOW - 1, 100);                     // back on the line for the checks below
+  assert.equal((await call('GET', '/v1/wage', { token: p1.token })).body.you.eligible, true,
+    'and a fresh baseline puts them back on the payroll');
+}
 
 // ── §10.4: EXACT conservation (no SQL $OMR grants in this test) + the endowment ceiling check ──
 const inv = await runLedgerInvariants(pool, { alert: false });
@@ -162,10 +195,15 @@ assert.ok(!vocab || vocab.ok, 'emission:wage is in the reason vocabulary');
   await setRespect(alt.id, 260);               // +60 clears MIN_SCORE — real play, no papers
   let rd = await runWageEpoch(pool, { epoch: ED });
   assert.equal(await omrOf(alt.id), 0, 'an unminted account draws NO wage despite clearing every play gate');
+  // stamp the LIVE epoch line so the board's refusal is the MINT gate and not merely a stale
+  // baseline — an `eligible === false` that could come from either reason tests neither
+  await pool.query('UPDATE wage_snapshots SET epoch=$2 WHERE character_id=$1', [alt.id, emissionEpochOf() - 1]);
   const boardAlt = (await call('GET', '/v1/wage', { token: alt.token })).body;
   assert.equal(boardAlt.you.mintedRequired, true, 'the board says papers are required');
   assert.equal(boardAlt.you.minted, false, 'the board shows the account unminted');
   assert.equal(boardAlt.you.eligible, false, 'unminted → not eligible');
+  assert.equal(boardAlt.you.reason, 'mint', 'and the board names the mint wall as the reason');
+  await pool.query('UPDATE wage_snapshots SET epoch=$2 WHERE character_id=$1', [alt.id, ED]); // back on the synthetic line
   await setMinted(alt.id);                     // pay the piper (the mint fee entitlement)
   await setRespect(alt.id, 320);               // another +60 the next epoch
   rd = await runWageEpoch(pool, { epoch: ED + 1 });
