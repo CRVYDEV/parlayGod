@@ -3123,3 +3123,43 @@ invasiveness:
 Shared city-wide and first-come, so it is one player's income only in a thin alpha — **which is
 exactly the condition it was built for**. `M3.BUST_FAIL_JAIL_S` (180) is now pinned in
 `test/levers.js`, since it alone sets the attempt count the ceiling is computed from.
+
+## THE COACH'S SOCIAL BAND — two rungs a solo player can never clear (2026-07-31)
+
+`M3.COACH_SOCIAL_BAND_LVLS = 8` — **new founder sign-off lever**, pinned in `test/levers.js`.
+
+Wiring `tools/playthrough.js` to actually OBEY the coach (rather than only record it) made this
+visible in one run. With the Kitchen rung cleared, **"Pull a crew score" took 77% of a seven-day
+solo run** and masked eight downstream rungs — the Den, the fights, the races, the first front, the
+Port, the Wire, going legit — every one of which the same player could have acted on that minute.
+
+It is **not** the F1 defect. The rung is honest advice, and it clears the moment there is a crew.
+But a crew heist needs a second body, and a duel needs somebody listed on the ladder, so on a thin
+server neither can ever clear — and a thin server is exactly the population THE POPULATION was built
+for. "Wait for company" outranking every solo system is the wrong ladder for an alpha.
+
+Fix follows the existing `COACH_FAMILY_BAND_LVL` precedent: a multiplayer-only milestone LEADS for
+`COACH_SOCIAL_BAND_LVLS` levels after it first applies, then drops to the recurring tail, where it
+is still said and still clears for good when done.
+
+| Rung | Leads | Then |
+|---|---|---|
+| Pull a crew score | lvl 9 – 17 | tail: "Find a crew" |
+| Blood on the ledger | lvl 22 – 30 | tail: "No blood on your ledger" |
+
+**Measured after** (same 7-day solo run): 17 distinct rungs walked, 13 obeyed, **no rung above 21%**,
+no pin, no warning. Set the lever to `0` to restore the old behaviour (they lead forever).
+
+### The Kitchen on-ramp — measured, and it is a non-issue
+
+The question this pass was meant to answer was whether a level-8 player told to "Cook up real money"
+can afford a $20,000 lab. They are never told at level 8: "Money while you sleep" holds the top slot
+until a racket is bought, so the Kitchen rung is first SAID at **level 13 with ~$118,000 in hand** —
+5.9× the price, zero wait. The 70% it held before was the harness ignoring it, nothing more.
+
+The two rungs that DO cost a real wait, and both look healthy:
+
+| Rung | Told at | Done at | Waited |
+|---|---|---|---|
+| Open your first front ($250k Laundromat) | lvl 18, worth $187k | lvl 19, worth $251k | ~37 min |
+| Take it to the water (boat + sail + land it) | lvl 19, worth $2k | lvl 22, worth $77k | ~1h11m |

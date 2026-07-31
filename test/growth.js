@@ -7,7 +7,7 @@ process.env.MOD_KEY = 'test-mod-key';
 
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS, CONSTANTS, DISTRICTS, HUSTLE, CORNER, cornerTasksOf, dayOf, M4, levelOf } from '../src/rules.js';
+import { SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS, CONSTANTS, DISTRICTS, HUSTLE, CORNER, cornerTasksOf, dayOf, M4, levelOf, PACING } from '../src/rules.js';
 import { socialRewardsLive } from '../src/growth.js';
 import { sweepGrandReferrals } from '../src/game.js';
 
@@ -399,12 +399,23 @@ await pool.query(`INSERT INTO character_guns (character_id, gun_id) VALUES ('${r
 assert.equal(await coachOf(), 'Learn the trade winds', 'lvl 7+ never traded goods → the arbitrage on-ramp');
 await pool.query(`INSERT INTO masteries (character_id, track_id, xp) VALUES ('${rook.id}', 'commerce', 2)`);
 // the kitchen rung is already cleared (the lab was seeded above) — the ladder skips straight past it
-assert.equal(await coachOf(), 'Pull a crew score', 'lvl 9+ never heisted → Big Scores');
+// THE SOCIAL BAND (progression harness, second run). A crew score cannot be pulled alone, so the rung
+// LEADS only inside its band and drops to the tail after — otherwise it sits on top of every solo
+// system for a player who has nobody, which is exactly the alpha's population. Inside the band first:
+await seedCh(rook.id, `respect=${PACING.LEVEL_DIVISOR * 12 * 12}`);   // level 13 — inside 9..9+8, and PAST the family band (≤12)
+assert.equal(await coachOf(), 'Pull a crew score', 'lvl 9+ never heisted → Big Scores, INSIDE the band');
+// …and OUTSIDE it the same unpulled score must not lead. This is the assertion that makes the band
+// real: without it, banding the rung would silently do nothing and the walk would still pass.
+await seedCh(rook.id, `respect=${PACING.LEVEL_DIVISOR * 19 * 19}`);   // level 20 — past 9 + 8
+assert.notEqual(await coachOf(), 'Pull a crew score',
+  'past the band a multiplayer-only rung stops leading — it cannot mask the solo ladder');
+await seedCh(rook.id, `respect=${PACING.LEVEL_DIVISOR * 12 * 12}`);
 await pool.query(`UPDATE account_persistent SET heists_pulled=1 WHERE account_id='${rookAid}'`);
 assert.equal(await coachOf(), 'A night at the Den', 'lvl 10+ never gambled a real stake → the Den');
 await pool.query(`INSERT INTO masteries (character_id, track_id, xp) VALUES ('${rook.id}', 'gambling', 1)`);
 assert.equal(await coachOf(), 'Get into the fight game', 'lvl 12+ no stable, no wins → The Fights');
 await pool.query(`UPDATE account_persistent SET boxing_wins=1 WHERE account_id='${rookAid}'`);
+await seedCh(rook.id, `respect=${PACING.LEVEL_DIVISOR * 19 * 19}`);   // back to 20 for the rest
 assert.equal(await coachOf(), 'Run the streets', 'lvl 14+ never raced → Street Races');
 await pool.query(`UPDATE account_persistent SET race_wins=1 WHERE account_id='${rookAid}'`);
 // (founder: "not obvious… the steps to buy your first business") — concrete, priced off the catalog
