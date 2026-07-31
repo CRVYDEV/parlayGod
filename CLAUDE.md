@@ -7187,3 +7187,43 @@ clear `DUELS.STAKE_MIN`, so the precondition cannot silently rot if a lever move
 untouched — `residentAct` still has to notice them and list them — and every other resident still
 arrives by the real draw. Mutation-verified: point the guaranteed spawn at `corner` and the
 precondition guard fires by name rather than the test passing on luck.
+
+**RED-TEAM over Street War step three (`AUDIT-street-war-step-three.md`, task #323).** Steps one and
+two had their own passes; step three (THE TAKE, revenge teeth, resident stables) shipped without one,
+and it is the most invasive of the three — the first time the core §7.2 crime faucet is partly sourced
+from ANOTHER character's row, from inside `withCharacter`. Four lenses (§10.4/emission, locks/persist-
+clobber, death/estate/retirement, exploit/grief/Sybil). **No CRITICAL, no HIGH, no §10.4 drift** — the
+TAKE's two legs net zero and reconcile per character, the SKIP LOCKED debit never waits (so no AB-BA
+against the sorted two-party paths), the revenge redirect stays emission-neutral because the venue
+clock advances by the SAME boosted rate the cut used, residents can never be revenge-farmed (they never
+initiate, so `revengeOwed` against one is always false), and a retired resident's booked main event does
+NOT strand escrow (`resolveMainEvent` already cancels-and-refunds on a missing fighter — checked, not
+assumed). Fixed, regression + named-assertion mutation each: **F1 (MED)** — `contenderOf` had no
+`is_npc` filter, and since step three a resident fields fighters, so ONE lost bout gave scenery the
+`wins >= 1` the #1-contender slot needs; `callOutChamp` requires `top.character_id === ch.id` and a
+resident never calls anybody out, so **the whole step-five callout mechanic went dead for every player**
+until a human out-won the NPC (the leaderboards' own argument, applied to a privilege instead of a
+board). **F2 (LOW)** — `retireResident` deleted fighters with a bare DELETE, but a resident's fighter can
+hold the BELT and retirement is not a death, so `boxing_title` was left pointing at a deleted row and a
+dead character (a phantom champion until the 7-day clock stripped it — the step-two stranded-loan class);
+now routed through `wipeFighterAtDeath`. **F3 (LOW-MED)** — the step-two fix ("a drained resident's stake
+must not stand on the board answering only `their_cash`") covered the three CHARACTER columns; step three
+added two MORE consent listings on the fighters/racers rows and nothing re-checked them, so THE TAKE's own
+draining left dead listings on the circuit and the strip; `residentAct` now rewrites any listing bigger
+than the pocket. **F4 (LOW-MED)** — the mark index was drawn from `roll`, the SUCCESS die, so on a win it
+could only land in `[0, chance×8)` of a stable `ORDER BY id` prefix: the same two or three residents in a
+district funded every job forever while the rest were never touched (mutation printed the signature
+exactly — `[true,true,true,true,false,false,false,false]`); the mark now gets its own draw. **F5
+(accepted, claim corrected)** — `takeFromMark`'s catch cannot deliver "the mark is never allowed to fail
+the job", because in real Postgres a failed statement aborts the enclosing txn; a SAVEPOINT would ship a
+path pg-mem cannot reach (the recordRival lesson), so the comment now states what the catch actually
+buys. Flagged (ground rule #1): resident fighters as an uncooldowned legend route (the exhibition purse
+already banks wins off NPCs, but behind a 6h clock), the per-fighter leaderboard halves still listing
+resident animals where the LEGEND halves exclude them, and the drain-reroll (already accepted for cars
+and boats). **Also fixed: a PRE-EXISTING date-dependent flake** — the Doc's drill is a per-day seed draw,
+and on any day it draws `train`, `test/regimen.js` had already met it before asserting the pre-work
+refusal; surfaced when the UTC day rolled mid-audit. Same class as the population duel-ladder flake and
+the recorded growth.js kitchen-raid one: a deterministic assertion resting on a probabilistic
+precondition. The day's counters are now cleared so the precondition is GUARANTEED whatever the draw, and
+the fix was mutation-verified not to have gone vacuous (dropping the server's `not_done` gate still fails
+it). Suite green + sim drift-0.

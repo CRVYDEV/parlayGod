@@ -47,8 +47,15 @@ async function applyBeltResult(client, winnerF, winnerChar, loserF) {
 
 // the #1 CONTENDER — the top-ranked non-champ fighter (living manager) with a real record. Earns the
 // callout privilege. `rows` is the pre-fetched living-manager fighter set (board reuse) or fetched here.
+//
+// (audit F1) RESIDENTS ARE EXCLUDED, and this is a gate, not a cosmetic. Since Street War step three a
+// resident fields fighters, and one lost bout gives their fighter the `wins >= 1` this needs — so
+// scenery could take the #1 slot, and `callOutChamp` requires `top.character_id === ch.id`. A resident
+// never calls anybody out, so the whole step-five callout mechanic went dead for EVERY player until a
+// human out-won the NPC. The exclusion is the same argument the step-three leaderboards use: beating
+// scenery must not hand it a human status privilege. Requires `is_npc` on the fetched rows.
 function contenderOf(rows, beltFighterId) {
-  return rows.filter((f) => f.id !== beltFighterId && Number(f.wins) >= 1)
+  return rows.filter((f) => f.id !== beltFighterId && !f.is_npc && Number(f.wins) >= 1)
     .sort((a, b) => Number(b.wins) - Number(a.wins) || form(b) - form(a))[0] || null;
 }
 
@@ -109,7 +116,7 @@ export async function callOutChamp(ch, fighterId, client, h) {
   if (title.callout_fighter) throw new GameError('callout_exists', "The champ's already been called out.");
   // the challenger must own the #1 CONTENDER (top living non-champ fighter with a record)
   const rows = (await client.query(
-    'SELECT f.* FROM fighters f JOIN characters c ON c.id=f.character_id AND c.alive')).rows;
+    'SELECT f.*, c.is_npc FROM fighters f JOIN characters c ON c.id=f.character_id AND c.alive')).rows;
   const top = contenderOf(rows, title.holder_fighter);
   if (!top || top.character_id !== ch.id || top.id !== String(fighterId)) throw new GameError('not_contender', 'Only the #1 contender can call out the champ.');
   const f = (await client.query('SELECT * FROM fighters WHERE id=$1 FOR UPDATE', [top.id])).rows[0];
@@ -580,7 +587,7 @@ export async function boxingBoard(pool, characterId) {
   const title = (await pool.query('SELECT * FROM boxing_title WHERE id=1')).rows[0] || {};
   const beltId = title.holder_fighter || null;
   const rows = (await pool.query(
-    `SELECT f.*, c.name AS manager FROM fighters f JOIN characters c ON c.id = f.character_id AND c.alive`)).rows;
+    `SELECT f.*, c.name AS manager, c.is_npc FROM fighters f JOIN characters c ON c.id = f.character_id AND c.alive`)).rows;
   const circuit = rows.map((f) => ({
     fighterId: f.id, managerId: f.character_id, manager: f.manager, name: f.name, form: form(f),
     record: `${Number(f.wins)}-${Number(f.losses)}`, wins: Number(f.wins), rank: boxerRankOf(f.wins).name,

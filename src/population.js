@@ -24,6 +24,7 @@
 // self-heals. The worker only tops up headcount and retires old bloodlines.
 import crypto from 'node:crypto';
 import { notify } from './game.js';
+import { wipeFighterAtDeath } from './boxing.js';
 import { POPULATION, NPC_FIRST, NPC_LAST, npcBandOf, DISTRICTS, PACING, dayOf,
          LOAN, loanOwed, GOODS, BLACK_MARKET, M3, DUELS, CASINO, CARS, goodPriceOf,
          BOXING, STABLE, stableKindOf, FIGHTER_MONIKERS, RACER_NAMES } from './rules.js';
@@ -243,8 +244,16 @@ export async function retireResident(client, charId) {
   await client.query('DELETE FROM boats WHERE character_id=$1', [charId]);
   await client.query('DELETE FROM businesses WHERE character_id=$1', [charId]);
   // the stable leaves with them (step three) — a retired resident's fighter must not linger on the
-  // circuit board taking bouts nobody can collect, the same reason their loan escrow is reclaimed
-  await client.query('DELETE FROM fighters WHERE character_id=$1', [charId]);
+  // circuit board taking bouts nobody can collect, the same reason their loan escrow is reclaimed.
+  //
+  // (audit F2) Through `wipeFighterAtDeath`, NOT a bare DELETE: retirement is not a death, so the
+  // estate hooks never run — and a resident's fighter CAN hold the belt (applyBeltResult keys on the
+  // fighter, not on who manages it). A bare delete left `boxing_title` pointing at a row that no
+  // longer exists and a character who is no longer alive: a phantom champion on every board until the
+  // 7-day mandatory-defense clock stripped it. The estate hook already vacates the belt and any
+  // pending callout, in the canonical fighter→title lock order. The same retirement-is-not-a-death
+  // class as the step-two stranded-loan finding.
+  await wipeFighterAtDeath(client, charId);
   await client.query('DELETE FROM racers WHERE character_id=$1', [charId]);
   await client.query('DELETE FROM character_cargo WHERE character_id=$1', [charId]);
   await client.query('UPDATE characters SET alive=false, cash=0, bank=0 WHERE id=$1', [charId]);
@@ -420,6 +429,22 @@ export async function residentAct(client, r) {
   // unstamped resident is simply never eligible for the drained-retire until we've seen them once.
   if (Number(r.npc_seed || 0) <= 0 && cash > 0)
     await client.query('UPDATE characters SET npc_seed=$2 WHERE id=$1', [r.id, cash]);
+
+  // (audit F3) STALE STABLE LISTINGS — maintenance, not the turn. The step-two fix ("a drained
+  // resident's advertised stake must trigger a relist instead of standing on the board answering only
+  // `their_cash`") covered the three CHARACTER columns; step three added two MORE consent listings, on
+  // the fighters/racers rows, and nothing ever re-checked them. A resident drained by THE TAKE — or by
+  // losing the very bouts they advertise — kept a limit sized to the cash they used to have, so the
+  // circuit and the strip advertised purses they cannot cover: the exact dead board that fix exists to
+  // kill. Same `uncoverable` predicate as the three columns below, so a healthy listing never churns;
+  // a resident who can no longer reach the system's own floor is DELISTED (NULL) rather than left in
+  // an unchallengeable window.
+  const MK = POPULATION.MARKS;
+  const stakeNow = bps(cash, MK.STAKE_BPS);
+  await client.query('UPDATE fighters SET bout_limit=$2 WHERE character_id=$1 AND bout_limit > $3',
+    [r.id, stakeNow >= BOXING.MIN_STAKE ? Math.min(stakeNow, BOXING.MAX_STAKE) : null, cash]);
+  await client.query('UPDATE racers SET race_limit=$2 WHERE character_id=$1 AND race_limit > $3',
+    [r.id, stakeNow >= STABLE.MIN_STAKE ? Math.min(stakeNow, STABLE.MAX_STAKE) : null, cash]);
 
   // 1. CONSENT LIMITS — what they're willing to be challenged for. Pure column writes, zero value.
   //    This is what lights up the bodyguard market, the back-room fade board and the duel ladder:
