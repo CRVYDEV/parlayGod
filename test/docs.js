@@ -87,9 +87,17 @@ assert.equal(tableCount, tables, `SPEC says ${tableCount} tables; schema.sql cre
 // `git ls-files` is the fix and the lesson: any guard that asserts a number about "the project" has
 // to ask git what the project is. Falls back to the walk when git is unavailable (a tarball, a
 // vendored copy), which is the only case where the disk is the best answer available.
+//
+// `--cached --others --exclude-standard`, and that is the SAME lesson in a second costume. Plain
+// `git ls-files` lists only TRACKED files, so a brand-new doc does not count until it is `git add`ed
+// — which means running this guard before committing and running it after committing give DIFFERENT
+// answers, and the pre-commit one is the one a person actually runs. It bit on 2026-07-31: a new
+// audit report passed locally at 142 and failed CI at 143, in a file whose whole purpose is catching
+// claims that are true in one environment and false in another. The flags add untracked-but-not-
+// ignored files, so the count is what the NEXT COMMIT will contain rather than what the last one did.
 let mdFiles;
 try {
-  mdFiles = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' })
+  mdFiles = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { encoding: 'utf8' })
     .split('\0').filter((f) => f.endsWith('.md'));
 } catch {
   mdFiles = [];
