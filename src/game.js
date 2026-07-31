@@ -9,7 +9,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf, SKILLS, skillOf, UNDERWORLD, leadTaskOf, ONBOARD_TASKS,
          crewWageOwed, crewCold, LAW, rapStageOf, bribeCostOf, retainerActive, witproActive,
          cityHourOf, cityLawEventOf, tickerPriceOf, estateTierOf, foundationOf, campaignOf, honorTierOf,
-         SOLDIERS, soldierFxOf, CLUES, clueStepOf, rollClueTier, kingpinRankOf, tycoonRankOf, empireTitles, launderRankOf, frontTitles, statesmanRankOf, seasonModOf, PACING,
+         SOLDIERS, soldierFxOf, CLUES, clueStepOf, rollClueTier, kingpinRankOf, tycoonRankOf, racketIncomeLeveled, empireTitles, launderRankOf, frontTitles, statesmanRankOf, seasonModOf, PACING,
          carCollateralValue, MASTERY, masteryLvlOf, masteryRankOf, pathFx, pathXpMult,
          REGIMEN, disciplineLvlOf, energyCapOf, nerveCapOf, BUSINESSES, WIRE, RIVALS } from './rules.js';
 import { dbCaps } from './db.js';
@@ -1124,6 +1124,13 @@ export function view(ch, acct = {}, owned = {}) {
     rackets: owned.rackets || [], assets, businesses: owned.businesses || [], speakeasy: owned.speakeasy || null, fighters: owned.fighters || [], cargo: owned.cargo || {}, items: owned.items || {}, gear,
     // ASSETS & RACKETS → Tier 4 — per-racket upgrade levels, THE TYCOON legend, the EMPIRE-SET titles
     racketLevels: owned.racketLevels || {},
+    // …and what each owned racket actually EARNS at its level, computed HERE off the same
+    // `racketIncomeLeveled` the accrual pays from. The console used to derive this itself —
+    // `income × (1 + lvl × (rules.empire.upStep || 0.12))`, rounded, with a hardcoded fallback for
+    // a lever the founder can retune. The client never re-derives game math is a rule this file
+    // states and nothing enforced; this is the number the Empire card wants, so send it.
+    racketIncomePerHr: Object.fromEntries((owned.rackets || []).map((id) =>
+      [id, Math.floor(racketIncomeLeveled(id, owned.racketLevels?.[id]) * 60)])),
     tycoon: { earned: Number(acct?.tycoon_earned || 0), rank: tycoonRankOf(acct?.tycoon_earned).name },
     empireTitles: empireTitles(owned.rackets || [], assets),
     // BUSINESS EMPIRE → Tier 4 — THE LAUNDERER legend (lifetime washed, survives death) + the fronts set titles
