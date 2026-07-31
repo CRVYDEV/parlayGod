@@ -35,12 +35,16 @@ touches mainnet** until §0 is satisfied.
    never raise it. Also review `OmrTwapOracle` (a Uniswap V2 cumulative-price TWAP) and the keeper
    dependency it creates.
 3. **Legal counsel sign-off** on the Risk-to-Earn line (see the "Sensitive design notes" in `CLAUDE.md`).
-   **The securities surface is GONE as of 2026-07-31** — the founder retired the stock layer
-   (`omerta-stock-layer-retirement.md`), so there is no stock acquisition, no vault, no claim, and no
-   KYC/geofence question to answer. What counsel still reviews is the $OMR side: the withdrawal rail, the
-   Street Wage, bonds and the Store. The in-game Portfolio remains a status collectible with no sell and
-   no cash-out, and it uses real ticker SYMBOLS for flavour (a flagged, undecided founder question — see
-   the retirement doc).
+   **The SECURITIES surface is GONE as of 2026-07-31** — the founder retired the stock layer
+   (`omerta-stock-layer-retirement.md`): nothing acquires, holds, allocates or delivers real equities, so
+   there is no stock oracle, no KYC gate and no geofence question. **The VAULT remains, denominated in
+   ETH**: a player burns earned $OMR and is allocated a share of ETH the treasury already holds
+   (`allocated ≤ held`, same asset both sides). Point counsel at it as an ETH question, not a securities
+   one, and at the fact that it is **allocation-only today — nothing is delivered** (a delivery rail would
+   be a separate decision, and a transfer of an asset the treasury owns). Otherwise counsel reviews the
+   $OMR side: the withdrawal rail, the Street Wage, bonds and the Store. The in-game Portfolio remains a
+   status collectible with no sell and no cash-out, and it uses real ticker SYMBOLS for flavour (a flagged,
+   undecided founder question — see the retirement doc).
 
 Devnet + testnet rehearsal may proceed now. **Mainnet is blocked on 1 + 2 + 3.**
 
@@ -52,9 +56,10 @@ Found 2026-07-30 while scoping the v4 hook work; **fixed 2026-07-31** before the
 it costs nothing extra (the audit clock was already reset by tokenomics v2 step 4 — changing the
 contract AFTER an audit would mean paying to re-audit it).
 
-> **Note (2026-07-31, later the same day):** the founder retired the stock layer. The fourth slice, its
-> bps and this whole fix are unchanged — only the DESTINATION is now a treasury Safe rather than a
-> stock-buy bot. The `rwaBps`/`rwaRecipient`/`rwa_eth` names are historical.
+> **Note (2026-07-31, later the same day):** the founder retired the stock layer and kept the vault,
+> backed with ETH. The fourth slice, its bps and this whole fix are unchanged — only the DESTINATION is
+> now a treasury Safe rather than a stock-buy bot, and that Safe is what the vault's `allocated ≤ held`
+> is measured against (see §7b). The `rwaBps`/`rwaRecipient`/`rwa_eth` names are historical.
 
 **What was wrong.** `OmertaBond` split ETH three ways (`toPol`/`toDev`/`toVig` = remainder) and had no
 RWA recipient. The backend booked four. On the on-chain path `recordBond` read an `onchainRwa` the
@@ -80,9 +85,9 @@ and the suite fails by name.
 **Deploy requirement:** `rwaRecipient` MUST be the **treasury Safe's** own address, distinct from
 `vigRecipient`. Setting them to the same address re-creates the defect silently — the split would be
 correct on-chain and the books would still be right, but the founder's custody separation is gone.
-It should be the coldest key in the system: since the stock layer was retired (2026-07-31,
-`omerta-stock-layer-retirement.md`) this destination only ever RECEIVES, so it has no reason to share a
-key with anything that spends.
+It should be the coldest key in the system: this destination only ever RECEIVES, so it has no reason to
+share a key with anything that spends — and it is now the Safe whose balance backs the vault (§7b), which
+makes co-mingling it with a spending key strictly worse than before.
 
 ## 1. Build + test the contracts
 - [ ] `cd omerta-contracts && ./run-forge-test.sh` → all `[PASS]` (Gate 0.1). Suite: OMR, VoucherClaim,
