@@ -3736,10 +3736,11 @@
         <div class="msp-box" style="padding:0"><table class="msp-tbl">
           <tr><td>Brought in</td><td>${p.recruitsTotal} (${p.recruitsQualified} made, ${p.recruitsSparked} coming up)</td></tr>
           <tr><td>Cash earned</td><td style="color:var(--neon)">$${fmt(p.earnedCash)}</td></tr>
-          <tr><td>$OMR earned</td><td style="color:var(--neon)">${fmt(p.earnedOmr)} $OMR</td></tr>
+          <tr><td>Crew bonus</td><td style="color:var(--neon)"><b>+${p.crewBonusPct}%</b> respect on everything you do</td></tr>
+          ${p.earnedOmr > 0 ? `<tr><td>$OMR earned</td><td class="d">${fmt(p.earnedOmr)} $OMR <span style="font-size:11px">(historic — referrals no longer pay $OMR)</span></td></tr>` : ''}
           <tr><td>Recruiter rank</td><td>${esc(p.recruitRank || 'unranked')} (${p.recruitsLifetime} made ${p.recruitsLifetime === 1 ? 'man' : 'men'})</td></tr>
         </table></div>
-        <div class="d" style="font-size:11.5px;color:var(--dim)">A recruit pays out as they come up — an early cut when they find their feet, the full reward when they're made. Milestone bonuses stack on top.</div>
+        <div class="d" style="font-size:11.5px;color:var(--dim)">A recruit pays out as they come up — an early cut when they find their feet, the full reward when they're made. But the real prize is <b>the crew bonus</b>: every recruit makes you earn respect faster, and the further THEY get, the more it's worth (level 5 → +5%, level 10 → +10%, and up). It's live — it rises as they do, and it goes when they do.</div>
       </div>
       </div>`;
     const cp = t.querySelector('#prof-copy');

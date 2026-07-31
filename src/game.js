@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { recordMeeting } from './contacts.js';
 import { EventEmitter } from 'node:events';
 import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
-         levelOf, rankIdxOf, cityEventOf, dayOf,
+         levelOf, rankIdxOf, cityEventOf, dayOf, referralXpBonus,
          assetEnergyCap, effStat, assetsValue, cargoCapacity, tradeRankIdx,
          gangLevelOf, roleMultOf, weekOf, familyTaskOf, M3, M4,
          gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf, SKILLS, skillOf, UNDERWORLD, leadTaskOf, ONBOARD_TASKS,
@@ -182,7 +182,16 @@ export async function loadOwned(client, ch) {
     UNION ALL SELECT 'pf', ticker, NULL::text, shares::numeric, cost_omr::numeric, NULL::timestamptz FROM portfolios WHERE account_id=$2 AND shares>0
     UNION ALL SELECT 'est', name, NULL::text, tier::numeric, spent_omr::numeric, NULL::timestamptz FROM estates WHERE account_id=$2
     UNION ALL SELECT 'disc', discipline, NULL::text, xp::numeric, NULL::numeric, NULL::timestamptz FROM character_disciplines WHERE character_id=$1
-    UNION ALL SELECT 'rival', aggressor_account::text, NULL::text, NULL::numeric, NULL::numeric, at FROM rival_events WHERE victim_account=$3 AND at > now() - interval '48 hours'`,
+    UNION ALL SELECT 'rival', aggressor_account::text, NULL::text, NULL::numeric, NULL::numeric, at FROM rival_events WHERE victim_account=$3 AND at > now() - interval '48 hours'
+    -- THE CREW BONUS (M4.REF_XP): the CURRENT respect of every qualified recruit this account brought
+    -- in. Read live rather than banked, so the bonus tracks how far the crew has actually got — a
+    -- recruit who dies drops to their heir's level and the bonus falls with them. Agents and NPC
+    -- residents are excluded here, at the source, so no caller can forget to.
+    UNION ALL SELECT 'refx', NULL::text, NULL::text, rc.respect::numeric, NULL::numeric, NULL::timestamptz
+      FROM referrals rf JOIN characters rc ON rc.account_id = rf.recruit_account AND rc.alive
+      JOIN account_persistent rap ON rap.account_id = rf.recruit_account
+      WHERE rf.recruiter_account = $2 AND rf.qualified_at IS NOT NULL
+        AND NOT rap.agent_flag AND NOT rap.npc_flag`,
   [ch.id, ch.account_id, ch.account_id]);
   // demultiplex — one entry per original query, in its original column names/types. Kept as
   // `{ rows: [...] }` so every reference below (`rk.rows`, `st.rows`, …) reads exactly as it did.
@@ -214,6 +223,7 @@ export async function loadOwned(client, ch) {
   // someone-moved-on-you rung reads the COUNT (self-clears as the window rolls — the harness-F1
   // rule; a bounded read: shields/cooldowns bound how often anyone can be wronged in 48h)
   const rival = of('rival', (r) => ({ at: r.ts }));
+  const refx = of('refx', (r) => ({ respect: Number(r.n) }));
   const cars = await client.query('SELECT * FROM cars WHERE character_id=$1 ORDER BY created_at', [ch.id]);
   const batch = await client.query('SELECT * FROM batches WHERE character_id=$1', [ch.id]);
   const gangId = gm.rows[0]?.gang_id || null;
@@ -264,6 +274,8 @@ export async function loadOwned(client, ch) {
     portfolio: pf.rows.map((r) => ({ ticker: r.ticker, shares: Number(r.shares), cost_omr: Number(r.cost_omr) })),
     estate: est.rows[0] || null, // account-level compound (survives death) — a summary; the board is the full view
     recentRivals: rival.rows.length, // STREET WAR step two — fresh malice in the last 48h (the coach rung)
+    // THE CREW BONUS: computed once here, read synchronously by gainRespect at ~a dozen sites.
+    refBonus: referralXpBonus(refx.rows.map((r) => levelOf(r.respect))),
   };
 }
 
@@ -646,6 +658,25 @@ export async function bumpDaily(client, characterId, kind) {
 // Load-and-lock the living character + its account, accrue both, hand to fn, persist.
 // One DB transaction per action (spec §10.1). Child tables are loaded for the action
 // to read; the action mutates them via `client` and updates h.owned so the view is fresh.
+// ── THE CREW BONUS applied (M4.REF_XP, founder-directed 2026-07-31) ──────────────────────────────
+// Every respect gain in the game goes through here. A recruiter earns faster in proportion to how far
+// the crew they brought in has got — the replacement for the retired referral $OMR.
+//
+// ONE helper rather than the multiplier inlined at a dozen sites: the sites are spread over six
+// modules, and a bonus that some of them apply and others quietly do not is worse than no bonus at
+// all (it makes the number on the board a lie). `h` is optional so the headless paths — a duel
+// opponent, a heist crew member written under their own lock — degrade to the plain amount rather
+// than throwing; they have no loaded context to read a bonus from, and inventing one would be worse
+// than paying the base.
+//
+// Zero §10.4: respect is not a currency and writes no ledger row.
+export function gainRespect(h, ch, rep) {
+  const bonus = Number(h?.owned?.refBonus) || 0;
+  const gained = bonus > 0 ? Math.round(Number(rep) * (1 + bonus)) : Number(rep);
+  ch.respect = Number(ch.respect) + gained;
+  return gained;
+}
+
 export async function withCharacter(pool, accountId, fn) {
   const client = await pool.connect();
   try {
@@ -1070,6 +1101,9 @@ export function view(ch, acct = {}, owned = {}) {
       [d.id, disciplineLvlOf(Number(owned.disciplines?.[d.id] || 0))])),
     // (red-team R5) mirror the canonical trunkCap() exactly — the display had omitted the road_boss
     // capstone's +trunk, showing a maxed Wheelman a smaller trunk than the enforcement actually gives.
+    // THE CREW BONUS — the respect multiplier every recruit you brought in is currently worth.
+    // Shown as a percentage so the sheet can say "+15% respect" rather than a bare float.
+    crewBonusPct: Math.round((Number(owned.refBonus) || 0) * 100),
     cargoCap: cargoCapacity(assets)
       + (owned.skills?.has('pack_mule') ? SKILLS.FX.TRUNK_BONUS : 0)
       + (owned.skills?.has('road_boss') ? SKILLS.FX.ROAD_BOSS_TRUNK : 0),
@@ -1261,7 +1295,7 @@ export function doCrime(ch, crimeId, client, h, approach) {
       let soldierCut = 0;
       if (second) { soldierCut = Math.floor(take * SOLDIERS.CUT_BPS / 10000); take -= soldierCut; }
       const rep = Math.round(c.respect * (ev.crimeRep || 1) * ap.repMult);
-      ch.cash = Number(ch.cash) + take; ch.respect = Number(ch.respect) + rep; ch.lc_crime += 1;
+      ch.cash = Number(ch.cash) + take; gainRespect(h, ch, rep); ch.lc_crime += 1;
       // THE TAKE (step three) — the mark funds what their pocket covers; the §7.2 faucet pays only
       // the REMAINDER. The player's payout is IDENTICAL either way, so this re-SOURCES crime rather
       // than retuning it — and it strictly REDUCES emission, because the funded share is a TRANSFER
@@ -1492,42 +1526,32 @@ export async function maybeQualifyReferral(pool, recruitAccountId) {
       && netWorth >= M4.REF_GATES.netWorth;
     if (!qualified) { await client.query('ROLLBACK'); return null; }
 
-    // $OMR side only if the event fund covers the full 4 (3 recruiter + 1 recruit, v24)
-    const fund = (await client.query('SELECT * FROM street_tax WHERE id=1 FOR UPDATE')).rows[0];
-    const funded = Number(fund.fund) >= M4.REF_FUND_OMR;
-    if (funded) await client.query('UPDATE street_tax SET fund = fund - $1 WHERE id=1', [M4.REF_FUND_OMR]);
-
-    const mult = await referralPushMult(client); // recruitment-drive CASH multiplier (1 when no push); $OMR untouched
+    // THE $OMR IS RETIRED (founder-directed 2026-07-31: "no longer promise to give away $OMR").
+    // What a referral pays now is cash + THE CREW BONUS — a respect multiplier that scales with how
+    // far the recruit has got (M4.REF_XP, applied at every respect grant via gainRespect). The bonus
+    // needs nothing here: it is derived live in loadOwned from `referrals.qualified_at`, which the
+    // line below is what sets. So qualifying a recruit turns the bonus on and this function does not
+    // have to hand anything over for it.
+    const mult = await referralPushMult(client); // recruitment-drive CASH multiplier (1 when no push)
     const recruitCash = Math.round(M4.REF_RECRUIT_CASH * mult), recruiterCash = Math.round(M4.REF_RECRUITER_CASH * mult);
     recruit.cash = Number(recruit.cash) + recruitCash;
     recruiter.cash = Number(recruiter.cash) + recruiterCash;
     await ledger(client, { characterId: recruit.id, currency: 'cash', amount: recruitCash, reason: 'referral:recruit' });
     await ledger(client, { characterId: recruiter.id, currency: 'cash', amount: recruiterCash, reason: 'referral:recruiter', counterparty: recruit.id });
-    if (funded) {
-      await client.query('UPDATE account_persistent SET omr = omr + $2 WHERE account_id=$1', [recruitAccountId, M4.REF_RECRUIT_OMR]);
-      await client.query('UPDATE account_persistent SET omr = omr + $2 WHERE account_id=$1', [acct.referred_by, M4.REF_RECRUITER_OMR]);
-      await ledger(client, { accountId: recruitAccountId, currency: 'omr', amount: M4.REF_RECRUIT_OMR, reason: 'referral:fund' });
-      await ledger(client, { accountId: acct.referred_by, currency: 'omr', amount: M4.REF_RECRUITER_OMR, reason: 'referral:fund' });
-    }
 
-    // recruiter ladder: recruits++ and any milestones crossed (cash faucet;
-    // milestone $OMR pays only what the event fund still covers)
+    // recruiter ladder: recruits++ and any milestones crossed (cash faucet).
+    // `m.omr` is deliberately NOT read: RECRUIT_MILESTONES is MACHINE-OWNED (ground rule #2), so the
+    // field stays in the generated table and this simply stops paying it. Deleting it would mean
+    // editing the prototype and re-extracting for no behavioural gain.
     const before = Number(recruiterAcct.recruits), after = before + 1;
-    let milestoneCash = 0, milestoneOmr = 0, title = null;
-    let fundLeft = Number(fund.fund) - (funded ? M4.REF_FUND_OMR : 0);
+    let milestoneCash = 0, title = null;
     for (const m of RECRUIT_MILESTONES.filter((m) => m.n > before && m.n <= after)) {
-      milestoneCash += Math.round((m.cash || 0) * mult); // the drive multiplies milestone cash too; $OMR stays fund-bounded
-      if (m.omr && fundLeft >= m.omr) { milestoneOmr += m.omr; fundLeft -= m.omr; }
+      milestoneCash += Math.round((m.cash || 0) * mult); // the drive multiplies milestone cash too
       if (m.title) title = m.title;
     }
     if (milestoneCash > 0) {
       recruiter.cash = Number(recruiter.cash) + milestoneCash;
       await ledger(client, { characterId: recruiter.id, currency: 'cash', amount: milestoneCash, reason: 'referral:milestone' });
-    }
-    if (milestoneOmr > 0) {
-      await client.query('UPDATE street_tax SET fund = fund - $1 WHERE id=1', [milestoneOmr]);
-      await client.query('UPDATE account_persistent SET omr = omr + $2 WHERE account_id=$1', [acct.referred_by, milestoneOmr]);
-      await ledger(client, { accountId: acct.referred_by, currency: 'omr', amount: milestoneOmr, reason: 'referral:milestone' });
     }
     if (title) recruiter.title = title;
     await client.query('UPDATE account_persistent SET recruits=$2 WHERE account_id=$1', [acct.referred_by, after]);
@@ -1549,11 +1573,11 @@ export async function maybeQualifyReferral(pool, recruitAccountId) {
     await client.query(
       `UPDATE characters SET cash=$2, title=COALESCE($3, title) WHERE id=$1`, [recruiter.id, recruiter.cash, title]);
     await client.query('UPDATE characters SET cash=$2 WHERE id=$1', [recruit.id, recruit.cash]);
-    await notify(client, recruiter.id, 'ref', { from: recruit.name, amt: recruiterCash + milestoneCash, omr: (funded ? M4.REF_RECRUITER_OMR : 0) + milestoneOmr, recruits: after });
-    await notify(client, recruit.id, 'ref', { made: true, amt: recruitCash, omr: funded ? M4.REF_RECRUIT_OMR : 0 });
-    await track(client, recruitAccountId, 'referral_qualified', { recruiter: acct.referred_by, funded, mult });
+    await notify(client, recruiter.id, 'ref', { from: recruit.name, amt: recruiterCash + milestoneCash, recruits: after });
+    await notify(client, recruit.id, 'ref', { made: true, amt: recruitCash });
+    await track(client, recruitAccountId, 'referral_qualified', { recruiter: acct.referred_by, mult });
     await client.query('COMMIT');
-    return { qualified: true, funded };
+    return { qualified: true };
   } catch (e) { await client.query('ROLLBACK'); throw e; }
   finally { client.release(); }
 }

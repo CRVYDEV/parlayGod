@@ -2978,3 +2978,50 @@ untouched on that side (`rwa:invest` / `rwa:dynasty` burns and `dividend:` trans
 HOOD, NVDA, SPCX, AMZN, GME) for a purely fictional collectible with a made-up price. That was defensible
 while a real-stock rail existed behind it. Keep them as flavour, or move to fictional tickers so nothing
 implies a player owns something.
+
+---
+
+## THE CREW BONUS — referrals stop paying $OMR (founder-directed 2026-07-31)
+
+> "In the referral system no longer promise to give away $OMR but instead each referral becomes like an
+> XP multiplier depending on what level they are and it scales."
+
+**Retired:** `M4.REF_FUND_OMR` (4) / `REF_RECRUITER_OMR` (3) / `REF_RECRUIT_OMR` (1), and the milestone
+ladder's `omr` field (the constants are deleted; the field stays in the MACHINE-OWNED
+`RECRUIT_MILESTONES` table per ground rule #2 and is simply no longer read). Cash payouts — the spark,
+the full recruiter/recruit cash, milestone cash, the tier-2 finder's fee — are **unchanged**; the
+founder named $OMR, and cash is a separate decision.
+
+**What replaces it:** every QUALIFIED recruit makes their recruiter earn respect faster, scaled by the
+recruit's CURRENT level.
+
+| Lever | Value | What it does |
+|---|---|---|
+| `M4.REF_XP.STEP_LEVELS` | 5 | a recruit's level counts in whole steps of this |
+| `M4.REF_XP.PER_STEP` | 0.05 | each step is worth this much multiplier (level 5 → +5%, 10 → +10%, 15 → +15%) |
+| `M4.REF_XP.MAX_BONUS` | 1.0 | **hard ceiling on the SUM across the whole crew** (+100%) |
+
+**Why the cap is not optional.** Respect drives level, level gates content, and the PACING pass
+deliberately slowed levelling. An uncapped bonus across a large crew would walk straight through that
+work. At the cap a recruiter earns at most double — a real edge, not a different game.
+
+**Why this is safer than the $OMR it replaces:**
+
+- **Not a currency.** Respect writes no ledger row, so this has **zero §10.4 surface** — the referral
+  system stops touching the token economy altogether.
+- **Live, never banked.** Recomputed from the crew's current levels on every read (`loadOwned` →
+  `gainRespect`). A recruit who dies drops to their heir's level and the bonus falls with them; a
+  recruit who quits stops paying. It rewards recruiting people who actually play, which is the whole
+  point of a referral programme.
+- **Unsellable.** It cannot be gifted, traded or laundered — which is exactly what made a $OMR payout
+  worth farming.
+- Every existing anti-Sybil gate still applies: qualification (L8 / 40 jobs / 3 check-ins / $25k net
+  worth), agents and NPC residents excluded at the source in the loadOwned query, once ever per recruit.
+
+**Applied through ONE helper** (`game.js:gainRespect`), used at all 12 respect-granting sites across six
+modules. A bonus some sites apply and others quietly do not would make the number on the sheet a lie.
+Headless paths (a duel opponent, a heist crew member written under their own lock) have no loaded
+context and correctly degrade to the base amount.
+
+Surfaced as `crewBonusPct` on the character sheet and in My Profile's take box. All three numbers are
+founder sign-off levers.

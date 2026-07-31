@@ -7,7 +7,7 @@ process.env.MOD_KEY = 'test-mod-key';
 
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS, CONSTANTS, DISTRICTS, HUSTLE, CORNER, cornerTasksOf, dayOf } from '../src/rules.js';
+import { SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS, CONSTANTS, DISTRICTS, HUSTLE, CORNER, cornerTasksOf, dayOf, M4, levelOf } from '../src/rules.js';
 import { socialRewardsLive } from '../src/growth.js';
 import { sweepGrandReferrals } from '../src/game.js';
 
@@ -486,11 +486,57 @@ for (let i = 0; i < 20; i++) { // the 40th CLEAN job crosses the last gate — r
 }
 assert(r.body.success, 'the recruit landed the qualifying job');
 me = await meOf(recruit.token);
-assert.equal(me.omr, 1, 'recruit +1 $OMR from the fund');
+// THE $OMR IS RETIRED (founder-directed 2026-07-31). A referral pays cash and THE CREW BONUS now,
+// and this asserts the retirement rather than merely not checking for it — an endpoint that still
+// pays is exactly what a dropped assertion would hide.
+assert.equal(me.omr, 0, 'the recruit gets NO $OMR — referrals no longer pay any');
 const mentorMe = await meOf(mentor.token);
 assert.equal(mentorMe.cash, mentorCashBefore + 2500 + 10000 + 5000, 'recruiter: the spark ($2500) + full recruiter ($10k) + first-blood milestone ($5k) — a fast-forward recruit crosses both gates at once');
-assert.equal(mentorMe.omr, 3, 'recruiter +3 $OMR from the fund');
+assert.equal(mentorMe.omr, 0, 'and neither does the recruiter');
+assert.equal(Number((await pool.query("SELECT COUNT(*) n FROM transactions WHERE currency='omr' AND reason LIKE 'referral:%'")).rows[0].n),
+  0, 'not one $OMR ledger row anywhere in the referral machinery');
 assert.equal(mentorMe.recruits, 1, 'ladder advanced');
+
+// ── THE CREW BONUS: what replaces the $OMR ─────────────────────────────────────────────────────
+// A qualified recruit makes their recruiter earn respect faster, scaled by how far the recruit has
+// got: level 5 → +5%, level 10 → +10%, and so on in whole steps of REF_XP.STEP_LEVELS.
+{
+  // Push the recruit up the ladder first. This is not decoration: `pick` pays 2 respect, and at a
+  // small bonus `Math.round(2 * 1.1)` is still 2 — the comparison below would pass whether or not
+  // the multiplier were applied at all. (It did: the first cut of this block survived a mutation
+  // that deleted the multiplier outright.) A bonus big enough to move a 2-rep job is what makes the
+  // assertion capable of failing. It also proves the bonus is LIVE — the recruit levelling up is
+  // what raised it, with nothing re-qualified.
+  await seedCh(recruit.id, `respect=${10 * (50 - 1) ** 2}`); // level 50 → 10 steps → +50%
+  const lvl = levelOf(Number((await pool.query(`SELECT respect FROM characters WHERE id='${recruit.id}'`)).rows[0].respect));
+  const expect = Math.floor(lvl / M4.REF_XP.STEP_LEVELS) * M4.REF_XP.PER_STEP;
+  assert(expect > 0, `the seeded recruit is past the first step (level ${lvl})`);
+  assert.equal((await meOf(mentor.token)).crewBonusPct, Math.round(expect * 100),
+    'the sheet shows the bonus their crew is currently worth — recomputed live, so levelling the recruit moved it');
+
+  // and it is APPLIED, not merely displayed: the same job pays the mentor more than a stranger.
+  const loner = await mk('Solo Sal');
+  const jobRep = async (t, id) => {
+    await seedCh(id, 'nerve=50, energy=200, jail_until=NULL, heat=0');
+    const before = Number((await pool.query(`SELECT respect FROM characters WHERE id='${id}'`)).rows[0].respect);
+    let res; for (let i = 0; i < 20; i++) { // retry the odd fumble — a bust pays no respect
+      await seedCh(id, 'nerve=50, energy=200, jail_until=NULL');
+      res = await call('POST', '/v1/crimes/pick', { token: t });
+      if (res.body.success) break;
+    }
+    assert(res.body.success, 'landed a clean job to measure respect on');
+    return Number((await pool.query(`SELECT respect FROM characters WHERE id='${id}'`)).rows[0].respect) - before;
+  };
+  await seedCh(mentor.id, 'respect=1000');
+  const mentorGain = await jobRep(mentor.token, mentor.id);
+  const lonerGain = await jobRep(loner.token, loner.id);
+  // `pick` pays a fixed rep, so the only difference is the multiplier.
+  assert.equal(mentorGain, Math.round(lonerGain * (1 + expect)),
+    `the recruiter earns ${Math.round(expect * 100)}% more respect for the same job (${mentorGain} vs ${lonerGain})`);
+  // …and they are genuinely different numbers. Without this the equality above can be satisfied by a
+  // bonus small enough to round away, which is how the first version of this block went vacuous.
+  assert(mentorGain > lonerGain, `the bonus has to be visible in the number (${mentorGain} vs ${lonerGain})`);
+}
 assert((await call('GET', '/v1/notifications', { token: mentor.token })).body.notifications.some((n) => n.type === 'ref'), 'recruiter notified');
 assert(Number((await pool.query('SELECT COUNT(*) n FROM referrals WHERE qualified_at IS NOT NULL')).rows[0].n) >= 1, 'qualification recorded');
 // once ever: further actions pay nothing more
@@ -569,7 +615,7 @@ for (let i = 0; i < 20; i++) { await seedCh(dRecruit.id, 'nerve=50, energy=200, 
 const dMentorMe = await meOf(dMentor.token);
 assert.equal(dMentorMe.cash, dMentorBefore + (2500 + 10000 + 5000) * 2, 'the drive DOUBLES the recruiter cash (spark + full + milestone)');
 assert.equal(Number((await pool.query(`SELECT amount FROM transactions WHERE character_id='${dRecruit.id}' AND reason='referral:recruit'`)).rows[0].amount), 10000, 'the recruit side is doubled too ($5k → $10k) — and ledgered');
-assert.equal(dMentorMe.omr, 3, 'the drive leaves $OMR untouched (fund-bounded)');
+assert.equal(dMentorMe.omr, 0, 'the drive multiplies CASH and nothing else — there is no $OMR left to multiply');
 await pool.query('UPDATE referral_push SET until=NULL, mult=1 WHERE id=1'); // end the drive — later payouts back to base
 
 // ── TIER-2 "the family tree": a BOUNDED one-time finder's fee to the grandrecruiter (anti-MLM: flat, not %) ──
@@ -619,7 +665,10 @@ assert.equal((await meOf(gTony.token)).cash, tonyBefore + 5000, 'the tier-2 fee 
   assert.equal(p.recruitRank, 'First Blood Brought In', 'the milestone rank');
   // THE TAKE — ledger-exact: spark $2500 + recruiter $10k + first-blood milestone $5k
   assert.equal(p.earnedCash, 17500, 'earned cash reads the ledger back exactly');
-  assert.equal(p.earnedOmr, 3, 'earned $OMR = the recruiter fund share (no welcome bonus to exclude — Max was never recruited)');
+  assert.equal(p.earnedOmr, 0, 'earned $OMR is 0 — referrals pay none since the 2026-07-31 retirement (the sum stays for databases holding pre-retirement rows)');
+  // THE CREW BONUS is what the take box shows instead: a live percentage off the recruits' levels.
+  assert(p.crewBonusPct > 0, 'the profile shows the respect bonus the crew is currently worth');
+  assert.equal(p.crewBonusPct, (await meOf(mentor.token)).crewBonusPct, 'and it agrees with the sheet — one helper, one number');
   const fb = p.recruits.find((x) => x.name === 'Fresh Blood');
   assert(fb && fb.qualified && fb.sparked && fb.alive, 'the qualified recruit is fully flagged');
   assert.equal(fb.earnedCash, 12500, 'per-recruit attribution via counterparty (spark + recruiter; milestones are ladder-level)');

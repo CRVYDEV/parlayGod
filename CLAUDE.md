@@ -2805,6 +2805,37 @@ TSLA, GLD, HOOD, NVDA, SPCX, AMZN, GME) for a purely fictional collectible with 
 defensible while a real rail existed behind it; keep them as flavour, or move to fictional tickers so
 nothing implies a player owns something. Suite green + sim drift-0.
 
+**THE CREW BONUS — referrals stop paying $OMR (founder-directed 2026-07-31) — BUILT** (`src/rules.tail.js`
+`M4.REF_XP` + `referralXpBonus`, `src/game.js` `gainRespect` + the loadOwned `refx` branch, `src/growth.js`,
+`test/growth.js`; BALANCE.md § THE CREW BONUS). The founder: *"no longer promise to give away $OMR but
+instead each referral becomes like an XP multiplier depending on what level they are and it scales."*
+**RETIRED:** `M4.REF_FUND_OMR`/`REF_RECRUITER_OMR`/`REF_RECRUIT_OMR` and the milestone ladder's `omr`
+payout (the constants are DELETED so nothing can quietly re-enable them; the `omr` FIELD stays in
+`RECRUIT_MILESTONES` because that table is MACHINE-OWNED per ground rule #2 — game.js simply stops reading
+it). Cash is untouched (the spark, recruiter/recruit cash, milestone cash, the tier-2 finder's fee): the
+founder named $OMR, and cash is a separate call — flagged, not inferred. **WHAT REPLACES IT:** every
+QUALIFIED recruit makes their recruiter earn respect faster, scaled by the recruit's CURRENT level —
+`floor(lvl / STEP_LEVELS 5) × PER_STEP 0.05` (level 5 → +5%, 10 → +10%, 15 → +15%), summed across the crew
+and capped at `MAX_BONUS` (1.0). **The cap is load-bearing**: respect drives level, level gates everything,
+and the PACING pass deliberately slowed levelling — an uncapped crew would walk straight through that work.
+**Why it is safer than the payout it replaces:** it is NOT a currency (respect writes no ledger row → **zero
+§10.4 surface**; the referral system stops touching the token economy at all), it is LIVE rather than banked
+(recomputed from the crew's current levels in `loadOwned`, so a recruit who dies drops to their heir's level
+and the bonus falls with them, and one who quits stops paying — it rewards recruiting people who actually
+PLAY), and it is unsellable/ungiftable/unlaunderable, which is exactly what made a $OMR payout worth
+farming. Every existing anti-Sybil gate stands (qualification L8/40 jobs/3 check-ins/$25k, agents AND NPC
+residents excluded **at the source** in the loadOwned query, once ever per recruit). **ONE helper**
+(`gainRespect(h, ch, rep)`) applied at all 12 respect-granting sites across six modules — a bonus some sites
+apply and others quietly do not would make the number on the sheet a lie; headless paths (a duel opponent, a
+heist crew member written under their own lock) have no loaded context and correctly degrade to the base
+amount. Surfaced as `crewBonusPct` on the sheet + My Profile's take box (which now shows historic $OMR only
+when non-zero, since a live database still holds pre-retirement rows — `M4.REF_LEGACY_RECRUIT_OMR` exists
+solely to keep that figure honest). **A mutation lesson worth keeping:** the first cut of the "earns more
+respect for the same job" assertion was VACUOUS — `pick` pays 2 respect and `Math.round(2 × 1.1)` is still
+2, so deleting the multiplier outright left the test green; it now seeds the recruit to level 50 (+50%) and
+additionally asserts the two numbers genuinely DIFFER, and the mutation fails by name. Suite green + sim
+drift-0. All three `REF_XP` numbers are founder sign-off levers.
+
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
 `payPlex` pattern); named landmarks / Founder's charter numbers; ~~R2 (the `rwa_revenue` → real-RWA-buy

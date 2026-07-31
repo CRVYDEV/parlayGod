@@ -351,6 +351,20 @@ export const familyTaskOf=(wk=weekOf())=>FAMILY_TASKS[((wk%FAMILY_TASKS.length)+
 export const gunsValue=(ids=[])=>ids.reduce((a,id)=>a+(GUNS.find(g=>g.id===id)?.cash||0),0);
 export const racketsValue=(ids=[])=>ids.reduce((a,id)=>a+(RACKETS.find(r=>r.id===id)?.cost||0),0);
 export const dailyJobsOf=(day=dayOf())=>[0,1,2].map(i=>DAILY_POOL[(day+i*2)%DAILY_POOL.length]);
+// THE CREW BONUS (M4.REF_XP) — a recruiter's respect multiplier, derived from the CURRENT levels of
+// the recruits they brought in. Pure function of the levels, so the caller decides what counts as a
+// recruit (qualified only, agents excluded) and this cannot drift from the gate that produced it.
+// Returns the BONUS (0 = none), not the multiplier; callers apply `1 + bonus`.
+export function referralXpBonus(recruitLevels = []) {
+  const { STEP_LEVELS, PER_STEP, MAX_BONUS } = M4.REF_XP;
+  let bonus = 0;
+  for (const lvl of recruitLevels) {
+    const steps = Math.floor(Math.max(0, Number(lvl) || 0) / STEP_LEVELS);
+    bonus += steps * PER_STEP;
+  }
+  return Math.min(MAX_BONUS, Math.round(bonus * 1e6) / 1e6);
+}
+
 export const M4 = {
   CREW_MAX: 5, CREW_COST_STEP: 50000,          // $50k × (crew+1)
   // D6a step two — THE PLAY (the corner's decision axis). Dealing was the third shallow entry verb:
@@ -381,8 +395,37 @@ export const M4 = {
   BATCH_CRATE_UNITS: 20,                        // 1 📦 per 20 units cooked
   DAILY_ALL_OMR: 0.5,                           // all-three bonus from the event fund
   REF_RECRUITER_CASH: 10000, REF_RECRUIT_CASH: 5000,
-  REF_FUND_OMR: 4, REF_RECRUITER_OMR: 3, REF_RECRUIT_OMR: 1,  // fund ≥4 → 3 + 1 split (v24)
+  // Retained ONLY to keep a historical figure honest: a database that predates the retirement has
+  // real `referral:fund` rows on it, and My Profile subtracts the player's own welcome bonus so it
+  // is not misread as recruiting income. Nothing pays it any more.
+  REF_LEGACY_RECRUIT_OMR: 1,
+  // (REF_FUND_OMR / REF_RECRUITER_OMR / REF_RECRUIT_OMR — RETIRED 2026-07-31, founder-directed:
+  // "no longer promise to give away $OMR". A referral pays cash and THE CREW BONUS below instead.
+  // The constants are gone rather than zeroed so nothing can quietly re-enable them; the milestone
+  // ladder's `omr` field is still in RECRUIT_MILESTONES because that table is MACHINE-OWNED
+  // (ground rule #2) — game.js simply stops reading it.)
   REF_GATES: { level: 8, jobs: 40, checkins: 3, netWorth: 25000 },
+  // ── THE CREW BONUS (founder-directed 2026-07-31) ───────────────────────────────────────────────
+  // What replaces the $OMR. Every QUALIFIED recruit makes their recruiter earn respect faster, and
+  // by how much depends on HOW FAR THAT RECRUIT HAS GOT: level 5 → +5%, level 10 → +10%, level 15 →
+  // +15%, and so on in steps.
+  //
+  // Why this shape rather than a payout:
+  //   - It is NOT a currency. Respect has no ledger row, so this adds ZERO §10.4 surface — the
+  //     referral system stops touching the token economy entirely.
+  //   - It is LIVE, never banked. The bonus is recomputed from the recruits' CURRENT levels every
+  //     time it is read, so a recruiter is rewarded for people who keep playing, not for a signup
+  //     that happened once. A recruit who dies drops to their heir's level and the bonus falls with
+  //     them; a recruit who quits stops paying.
+  //   - It cannot be sold, gifted or laundered, which is exactly what made the $OMR version a
+  //     Sybil target.
+  // CAP is load-bearing: respect drives level, level gates everything, and the PACING pass
+  // deliberately slowed levelling. Without a ceiling a large crew would blow straight through it.
+  REF_XP: {
+    STEP_LEVELS: 5,   // a recruit's level is counted in whole steps of this
+    PER_STEP: 0.05,   // …and each step is worth this much of a multiplier
+    MAX_BONUS: 1.0,   // hard ceiling on the SUM across every recruit (+100% at most, i.e. x2)
+  },
   // STEPPED PAYOUT — "the spark": a small, EARLY cash payout the moment a recruit shows real early
   // engagement (level 3 + 10 jobs), so the referrer gets fast feedback long before the full
   // qualification (L8/40 jobs/3 check-ins/$25k). Cash only (never $OMR — that stays on the full

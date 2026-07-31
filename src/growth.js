@@ -1,7 +1,7 @@
 // M4 — growth systems: paths, the Daily Score, missions, daily contracts, and
 // the First Week (GRASSROOTS). Every formula cites spec §5.1/§7.3–7.4 / v24.
-import { GameError, cleanText, assignedSoldier, soldierResult, bumpMastery, masteryFx } from './game.js';
-import { soldierFxOf, SOLDIERS, PATH_SWITCH_CD_MS } from './rules.js';
+import { GameError, cleanText, assignedSoldier, soldierResult, bumpMastery, masteryFx, gainRespect } from './game.js';
+import { soldierFxOf, SOLDIERS, PATH_SWITCH_CD_MS, referralXpBonus } from './rules.js';
 import {
   PATHS, MISSIONS, ONBOARD_TASKS, CONSTANTS, M4, M8, SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS,
   levelOf, dayOf, dailyJobsOf, effStat, gunObjOf, assetEnergyCap, recruitRankOf, PACING,
@@ -82,7 +82,7 @@ export async function heist(ch, client, h) {
   let soldierCut = 0;
   if (second) { soldierCut = Math.floor(take * SOLDIERS.CUT_BPS / 10000); take -= soldierCut; }
   ch.cash = Number(ch.cash) + take;
-  ch.respect = Number(ch.respect) + rep;
+  gainRespect(h, ch, rep);
   const cdMs = Math.round(M4.HEIST_CD_MS
     * masteryFx(h, 'scores') // TRADES perk — pacing (the safecracker axis, unpaid)
     * (second?.trait === 'safecracker' ? Math.max(0, 1 - soldierFxOf(second)) : 1));
@@ -126,7 +126,7 @@ export async function doMission(ch, missionId, client, h) {
   // path to a level. (At MISSION_RESPECT_MULT 0.25 the full ladder is worth a level ~78 character.)
   const missionRep = Math.round((m.reward.respect || 0) * PACING.MISSION_RESPECT_MULT);
   ch.cash = Number(ch.cash) + (m.reward.cash || 0);
-  ch.respect = Number(ch.respect) + missionRep;
+  gainRespect(h, ch, missionRep);
   if (m.title) ch.title = m.title;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: m.reward.cash || 0, reason: `mission:${missionId}` });
   // $OMR pays ONCE PER ACCOUNT (it survives death; missions_done is per-character, so a
@@ -172,7 +172,7 @@ export async function claimDaily(ch, jobId, client, h) {
   const payout = 200 * lvl + (all ? 500 * lvl : 0);
   const rep = 5 * lvl + (all ? 15 * lvl : 0);
   ch.cash = Number(ch.cash) + payout;
-  ch.respect = Number(ch.respect) + rep;
+  gainRespect(h, ch, rep);
   let omrBonus = 0;
   if (all) { // full envelope: energy refill + a little extra if the event fund covers it
     ch.energy = 50 + 2 * lvl + assetEnergyCap(h.owned.assets);
@@ -315,9 +315,12 @@ export async function recruitingFamilyLeaderboard(pool, limit = 20) {
 //    bonuses `referral:milestone` / `referral:tier2`. The recruit's OWN welcome money
 //    (`referral:recruit`, and the NULL-counterparty `referral:spark` twin) is never counted —
 //    that was earned by being recruited, not by recruiting.
-//  • $OMR is account-keyed and BOTH sides share the `referral:fund` reason — so the player's own
-//    welcome bonus (exactly M4.REF_RECRUIT_OMR, paid iff ref_paid && referred_by) is subtracted
-//    rather than misread as recruiting income. `referral:milestone` $OMR is recruiter-only.
+//  • $OMR is HISTORICAL as of 2026-07-31 — referrals no longer pay any (founder-directed; what a
+//    recruit pays now is THE CREW BONUS, a respect multiplier, which is not a currency and writes no
+//    ledger row). The sum stays because a live database still holds real pre-retirement rows: both
+//    sides shared the `referral:fund` reason, so the player's own welcome bonus (exactly
+//    M4.REF_LEGACY_RECRUIT_OMR, paid iff ref_paid && referred_by) is subtracted rather than misread
+//    as recruiting income. On a fresh database this is simply 0.
 // pg-mem: recruit lookups JOIN `referrals` directly — NEVER ANY($1)-of-array (pg-mem returns zero
 // rows for it; the same-IP flag in game.js documents the class). Flat queries + JS aggregation.
 const SPIN_TRACKS = [ // the "now spinning" record — seeded per (account, day); FICTIONAL tracks only (the Broadcast legal posture)
@@ -401,8 +404,14 @@ export async function myProfile(ch, client, h) {
       WHERE account_id = $1 AND currency = 'omr' AND reason LIKE 'referral:%'`, [h.accountId])).rows;
   let earnedOmr = 0;
   for (const t of omrRows) earnedOmr += Number(t.amount);
-  if (acct.ref_paid && acct.referred_by) earnedOmr = Math.max(0, earnedOmr - M4.REF_RECRUIT_OMR);
+  if (acct.ref_paid && acct.referred_by) earnedOmr = Math.max(0, earnedOmr - M4.REF_LEGACY_RECRUIT_OMR);
   earnedOmr = Math.round(earnedOmr * 1e6) / 1e6;
+  // THE CREW BONUS — what a referral pays NOW. Derived from the recruits' current levels (the same
+  // helper the live multiplier uses), so the number shown here is the number being applied.
+  const crewBonus = referralXpBonus(refs.map((r) => {
+    const d = display.get(r.recruit_account);
+    return d?.alive && r.qualified_at ? levelOf(Number(d.respect)) : 0;
+  }));
 
   const recruits = refs.map((r) => {
     const d = display.get(r.recruit_account);
@@ -432,7 +441,7 @@ export async function myProfile(ch, client, h) {
     recruitsTotal: refs.length,
     recruitsSparked: [...sparked.values()].filter(Boolean).length,
     recruitsQualified: refs.filter((r) => r.qualified_at).length,
-    earnedCash, earnedOmr,
+    earnedCash, earnedOmr, crewBonus, crewBonusPct: Math.round(crewBonus * 100),
     recruits,
   };
 }
