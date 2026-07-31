@@ -9,7 +9,7 @@ process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { EMISSION, epochBudget, emissionEpochOf } from '../src/rules.js';
-import { runWageEpoch } from '../src/emission.js';
+import { runWageEpoch, wageBoard } from '../src/emission.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -129,6 +129,43 @@ assert.ok(board.endowment.emitted > 0 && board.endowment.remaining < EMISSION.EN
   await stamp(p1.id, NOW - 1, 100);                     // back on the line for the checks below
   assert.equal((await call('GET', '/v1/wage', { token: p1.token })).body.you.eligible, true,
     'and a fresh baseline puts them back on the payroll');
+}
+
+// ── REGRESSION (the SAME fix's own second bug, found by red-teaming it rather than re-reading it).
+// The payer runs at the CURRENT epoch and stamps THAT epoch. So for the rest of the day AFTER it
+// pays you, your baseline is `epoch` — and against the payer's `epoch-1` rule that reads as a MISSED
+// DAY. Measured before the fix: a player who had just been paid was told "the last payroll run
+// missed a day", on every read until midnight, on the faucet that pays real value. That is the
+// STEADY STATE, not an edge case — every paid player, most of the time.
+// The board now asks about the run that hasn't happened yet (`scoringEpoch`), which is the question
+// a player is actually asking, and keeps ONE predicate instead of growing an "except after the run"
+// arm. `enrolled` comes from the predicate too, so the rule is stated in exactly one place. ──
+{
+  // stamped at the player's CURRENT respect, which is exactly what a real run writes — so the gain
+  // toward the NEXT run is 0, the state every paid player is in the moment the worker finishes
+  const nowRespect = Number((await pool.query('SELECT respect FROM characters WHERE id=$1', [p1.id])).rows[0].respect);
+  await stamp(p1.id, NOW, nowRespect);                  // stamped by TODAY's completed run
+  const paid = (await call('GET', '/v1/wage', { token: p1.token })).body;
+  assert.notEqual(paid.you.reason, 're_enrolling',
+    'a baseline stamped by the run that JUST PAID is not a missed day');
+  assert.equal(paid.you.enrolled, true, 'you are on the payroll — for the NEXT run');
+  assert.equal(paid.you.scoringEpoch, NOW + 1, 'and the board says which run it is answering about');
+  assert.equal(paid.you.reason, 'score', 'with the honest reason: nothing earned toward it yet');
+  await stamp(p1.id, NOW - 1, 100);
+}
+
+// ── REGRESSION (same fix, third defect): `status` lives on `accounts`, and wageBoard is handed
+// `account_persistent`, so `acct.status` was `undefined` and the banned branch could never fire on
+// the board. Unreachable today (auth 403s a banned account at the door) — but it made the
+// predicate's two callers quietly DIFFERENT, which is the one property this shape exists to give.
+{
+  const aid = (await pool.query(`SELECT account_id a FROM characters WHERE id=$1`, [p1.id])).rows[0].a;
+  await pool.query(`UPDATE accounts SET status='banned' WHERE id=$1`, [aid]);
+  const banned = await wageBoard(pool, (await pool.query('SELECT * FROM characters WHERE id=$1', [p1.id])).rows[0],
+    (await pool.query('SELECT * FROM account_persistent WHERE account_id=$1', [aid])).rows[0]);
+  assert.equal(banned.you.eligible, false, 'a banned account is not on the payroll');
+  assert.equal(banned.you.reason, 'banned', 'and the board reads the REAL status column, not a field its source lacks');
+  await pool.query(`UPDATE accounts SET status='active' WHERE id=$1`, [aid]);
 }
 
 // ── §10.4: EXACT conservation (no SQL $OMR grants in this test) + the endowment ceiling check ──
