@@ -120,7 +120,14 @@
      collapsed into run-on inline text. The label/value pair is the shape; the sheet keeps its own
      type sizes below. */
   .row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
-    margin: 4px 0; font-variant-numeric: tabular-nums; }
+    margin: 4px 0; font-variant-numeric: tabular-nums;
+    /* WRAP, don't overflow. A tester reported the Port tab as "buggy can't click on it": the fleet
+       card sits in a `.grid` auto-fill column ~240px wide, its control rows need 321-342px, and
+       with nowrap the surplus 113-134px — including the "run it" and "+knots" buttons — was drawn
+       OUTSIDE the card, underneath the next grid column. Not clipped, so nothing scrolled and no
+       page-level overflow check could see it; the buttons were simply somewhere else. Keyboard tab
+       order still reached them, which is why the report was "focus moves to the second column". */
+    flex-wrap: wrap; }
   .row .k { color: var(--dim); }
   #sheet .row { font-size: 14px; }
   #sheet .row .k { font-size: 13.5px; }
@@ -334,6 +341,13 @@
 
   /* ── cards ── */
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(235px, 1fr)); gap: 10px; }
+  /* .grid is sized for small uniform cards (a catalog of guns, a row of drugs). A card holding a
+     FORM — a route select, a checkbox, two upgrade buttons — does not fit in 235px, and auto-fill
+     will happily give it 240. `.grid.wide` is for those.
+     `min(340px, 100%)`, not a bare 340px: a fixed minimum larger than the container forces the track
+     wider than the screen, and the first cut of this rule made the Port tab scroll sideways by 6px on
+     a 360px phone. The harness caught it; the idiom means the track never demands more than it has. */
+  .grid.wide { grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); }
   .card { background: linear-gradient(180deg, var(--panel2), #14141b); border: 1px solid var(--line);
     border-radius: var(--r-md); padding: 14px 15px; font-size: 13.5px;
     box-shadow: inset 0 1px 0 rgba(255,255,255,.035), 0 1px 2px rgba(0,0,0,.4);
@@ -1689,7 +1703,10 @@
     if (body.fortitude !== undefined && body.cost !== undefined) bits.push(`dug in — defense at level ${body.fortitude} ($${fmt(body.cost)})`);
     if (body.taken !== undefined) bits.push(`hijacked the load — took ${fmt(body.taken)} unit${body.taken === 1 ? '' : 's'}${body.trunkFull ? ' (trunk full — the rest rolled on)' : ''}`);
     if (body.casket) bits.push(`⛏ THE CASKET — $${fmt(body.take)} dug up${body.relic ? ` + ${body.relic.name}!` : ''} (${body.caskets} lifetime — ${body.rank})`);
-    else if (body.cold) bits.push(body.hint || 'cold ground');
+    // `riddle`, not bare `cold`: the clue dig owns this phrasing but not the field name, and a cold
+    // business front (`{cold: 1}`) was announcing itself as a failed excavation — live since the
+    // Empire's pad shipped. The clue dig always carries its riddle back; nothing else does.
+    else if (body.cold && body.riddle) bits.push(body.hint || 'cold ground');
     else if (body.riddle && body.step) bits.push(`the trail continues — “${body.riddle}” (step ${body.step} of ${body.of})`);
     if (body.clue) bits.push(`🗺 a CLUE SCROLL fell out of the job — “${body.clue.riddle}”`);
     // THE REGIMEN — a discipline session (levelUp marker) vs a claimed trainer drill (npc marker).
@@ -1736,6 +1753,20 @@
     if (body.gain) bits.push(`+${body.gain} ${body.stat || ''}`);
     if (body.earned) bits.push(`${body.play === 'flood' ? '🔥 moved WEIGHT' : body.play === 'careful' ? '🤫 worked the regulars' : 'moved product'} — +$${fmt(body.earned)}${body.cornerPremium ? ' (corner premium)' : ''}${body.heat ? ` · +${body.heat} heat` : ''}`);
     if (body.collected) bits.push(`collected $${fmt(body.collected)}${body.rakeback ? ` + $${fmt(body.rakeback)} rakeback` : ''}`);
+    // A NO-OP MUST NOT READ AS A SUCCESS. The server has always answered honestly here — a COLD
+    // front is skipped and reported as `cold`, an unaffordable pad pays nothing and reports
+    // `stillOwed` — but describe() read neither, so both landed as a bare "ok". A tester hit exactly
+    // that: "can't claim the cash either. When I click pay or claim, I get an 'ok' msg though."
+    // Being unable to tell "the game did nothing" from "the game is broken" is the worst feedback
+    // there is, because the player cannot tell whether the fault is theirs.
+    // gated on `businesses`, which ONLY the business collect sends: `cold` is already spoken for by
+    // the clue-scroll dig ("cold ground"), and an unscoped read made a cold front announce itself as
+    // a failed excavation. Two systems, one generic field name — scope to something unambiguous.
+    if (body.businesses !== undefined && body.cold) bits.push(`${body.cold} front${body.cold > 1 ? 's are' : ' is'} COLD — it pays nothing until you pay the pad (The Empire → pay the pad)`);
+    if (body.paid !== undefined && body.stillOwed) bits.push(body.paid > 0
+      ? `paid $${fmt(body.paid)} of the pad — still $${fmt(body.stillOwed)} owed, so those fronts stay cold`
+      : `couldn't cover the pad — $${fmt(body.stillOwed)} owed and you don't have it. Earn it elsewhere; the fronts stay cold until it's square.`);
+    else if (body.paid > 0) bits.push(`paid $${fmt(body.paid)} — the pad is square`);
     // the circuit already sends YOUR power and the FIELD's; printing neither made a $25k tune a
     // coin-flip purchase — you could not tell whether one more level would have taken it.
     if (typeof body.win === 'boolean' && (body.field !== undefined || body.wager !== undefined)) {
@@ -3127,7 +3158,8 @@
         const lvl = me.labModules?.[mod.id] || 0; const maxed = lvl >= (rules?.kitchen?.moduleMax || 5);
         return `<div class="card"><span class="t">${mod.name}</span> <span class="chip">lvl ${lvl}/${rules?.kitchen?.moduleMax || 5}</span>
           <div class="d">${mod.desc}</div>
-          ${maxed ? '<span class="chip">maxed</span>' : `<button class="act" data-modup="${mod.id}">upgrade</button>`}</div>`; }).join('')}</div>`,
+          ${maxed ? '<span class="chip">maxed</span>' : (() => { const c = me.labModuleNext?.[mod.id] || {};
+            return `<button class="act" data-modup="${mod.id}">upgrade${c.cash ? ` ($${fmt(c.cash)}${c.omr ? ` + ${c.omr} $OMR` : ''})` : ''}</button>`; })()}</div>`; }).join('')}</div>`,
         Object.values(me.labModules || {}).some((n) => n > 0)) : ''}
 
       ${sect('kitchen-supplier', 'The Supplier', 'makings — today\'s prices', `<div class="grid">${unlocked.map((d) => `
@@ -5138,7 +5170,10 @@
         <div class="card">${aart('business', b.kind)}<span class="t">${b.name} · tier ${b.tier}</span>
           ${b.cold ? '<span class="chip bad">COLD — pay the pad</span>' : ''}${b.raidRisk ? '<span class="chip bad">FEDS WATCHING</span>' : ''}
           <div class="d">$${fmt(b.incomePerHr)}/hr · pending $${fmt(b.pending)} · pad owed $${fmt(b.upkeepOwed)}</div>
-          <div class="d">${b.kind === 'casino' ? 'den rakeback at collect' : 'earns while you are away'}</div>
+          ${b.upkeepOwed > b.pending ? `<div class="d" style="color:var(--warn)">the pad has outrun the till — squaring it costs
+            $${fmt(b.upkeepOwed - b.pending)} more than this front can hand you right now. Income stops banking after a day away;
+            the pad keeps running for a week. Pay it and it earns again, or leave it cold until you can.</div>` : ''}
+          <div class="d">${b.kind === 'casino' ? 'den rakeback at collect' : 'earns while you are away — collect at least every couple of days, or the pad gets ahead of it'}</div>
           ${b.scrutiny > 0 ? `<div class="d" style="color:var(--dim)">Bureau heat ${b.scrutiny}/${b.raidThreshold} — earning draws the eye; a raid seizes the pending + a fine. Collect often and it catches less.</div>` : ''}
           ${b.specName ? `<span class="chip good">✦ ${b.specName}</span>` : ''}
           ${b.nextTier ? `<button class="act" data-bizup="${b.id}">upgrade → tier ${b.tier + 1} ($${fmt(b.nextTier.cost)})</button>` : ''}
@@ -5529,7 +5564,7 @@
         ${routes.map((r) => `${r.name}: ~${r.interdictPct}% caught ${r.notoriety > 0 ? `<span class="chip ${r.hot ? 'bad' : ''}">heat ${r.notoriety}/${r.notorietyMax}${r.hot ? ' 🔥' : ''}</span>` : '<span class="chip good">cold</span>'}`).join(' · ')}<br>${repLine}</div></div>` : ''}
       ${b.contraband ? `<div class="card"><span class="t">The Warehouse & Fence</span><div class="d">Warehoused contraband: <b>$${fmt(b.contraband.book)}</b> book value · today's fence rate <b>${b.contraband.fenceRate}×</b> → ~$${fmt(b.contraband.estimate)} <span class="chip">time the market — warehouse a landing, fence high</span>${b.contraband.book > 0 ? ' <span class="chip bad">at risk — a killer loots half your stash, so don\'t sit on it marked</span>' : ''}
         ${b.contraband.book > 0 ? `<button class="act" data-fence="1"${b.atDocks ? '' : ' disabled'}>fence it all</button>` : ''}</div></div>` : ''}
-      <div class="grid">
+      <div class="grid wide">
         <div class="card"><span class="t">Your Fleet <span class="chip">${fleet.length}/${b.fleetMax || 5}</span></span>
           ${fleet.length ? fleet.map((f) => `<div class="row" style="margin-top:4px"><span><img class="ico row" alt="" src="/v1/art/boat/${f.kind || ''}">${f.name} — hold ${f.hold} · ${f.speed} kn ${f.status === 'at_sea' ? `<span class="chip">at sea · ${mins(f.etaSeconds)}</span>` : f.status === 'arrived' ? '<span class="chip good">home — collect</span>' : '<span class="chip">docked</span>'}</span>
             <span>${f.status === 'arrived' ? `<label style="font-size:.8em"><input type="checkbox" class="pt-wh" data-for="${f.id}"> warehouse</label> <button class="act" data-collect="${f.id}"${b.atDocks ? '' : ' disabled'}>collect</button>` : f.status === 'docked' ? `<button class="act" data-sell="${f.id}"${b.atDocks ? '' : ' disabled'}>sell</button>` : ''}</span></div>

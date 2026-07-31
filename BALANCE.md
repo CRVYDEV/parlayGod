@@ -3163,3 +3163,35 @@ The two rungs that DO cost a real wait, and both look healthy:
 |---|---|---|---|
 | Open your first front ($250k Laundromat) | lvl 18, worth $187k | lvl 19, worth $251k | ~37 min |
 | Take it to the water (boat + sail + land it) | lvl 19, worth $2k | lvl 22, worth $77k | ~1h11m |
+
+## THE PAD OUTRUNS THE TILL — the absent front owner (tester-reported, FOUNDER CALL, not retuned)
+
+A tester asked "how can it be that I owe more in wages than my laundromat brings in?" and their
+numbers were exactly right. Measured from the signed constants:
+
+| away | pad owed | collectable | net if you square it |
+|---|---|---|---|
+| 1d | $57,600 | $288,000 | +$230,400 |
+| 3d | $172,800 | $288,000 | +$115,200 — the front goes COLD here |
+| **5d** | $288,000 | $288,000 | **$0 — break-even** |
+| 7d | $403,200 | $288,000 | **−$115,200** |
+
+The cause is the deliberate asymmetry `BUSINESS_CAP_MS` 24h vs `BUSINESS_UPKEEP_CAP_MS` 7d — the
+documented "an ABSENT owner earns ≤24h but owes ≤7d (neglect bleeds)". The bleed works. What was
+probably not intended is the CROSSOVER: past five days away, squaring the pad costs more than the
+front can ever hand back, so the rational move is to abandon it. There is no sell-a-front path, so
+an entry-tier asset sold to a level-15 player as "earns while you are away" becomes a dead $75k
+purchase the first time they take a week off — and a week off is a normal thing for a player to do.
+
+NOT RETUNED (ground rule #1 — `BUSINESS_UPKEEP_BPS` / `_CAP_MS` / `_COLD_MS` are all signed). What
+shipped instead is legibility: the front card now states the gap in dollars when the pad has outrun
+the till, and the collect/pay toasts say what happened instead of "ok".
+
+The levers, cheapest first:
+- **`BUSINESS_UPKEEP_CAP_MS` 7d → 2d.** Caps the pad at $115,200 against a $288,000 till, so the
+  front is always worth reviving. Smallest change, keeps the bleed, removes the trap.
+- **Cap the pad at the pending take.** The pad can never exceed what the front holds for you; neglect
+  costs you the income, not a debt. Strongest guarantee, biggest departure from the current model.
+- **Let a cold front be sold** (say `BUSINESS_RESALE_BPS` of tier cost) so a bad week has an exit.
+- **Leave it.** Defensible if the intent is that fronts demand attendance — but then the catalog copy
+  should say so before the purchase, not after the week.
