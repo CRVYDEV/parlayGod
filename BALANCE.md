@@ -2031,6 +2031,15 @@ The earlier BALANCE estimate of *"2 hours → level ~11"* was analytic; the simu
 **14–16** (the estimate omitted the Score, the mission ladder and the checklist). Same order,
 corrected upward — recorded here as the measured number.
 
+> **⚠ SUPERSEDED 2026-07-31 — every figure in the table above is too high.** Re-running the harness
+> at THIS commit's own `src/`, with the harness's measurement code confirmed unchanged and the same
+> config defaults, gives **2h → 12 · 5h → ~19 · 10.5h → level 33**, not 14–16 / 26 / 44. Nine
+> measurements (three at HEAD, one each at the two harness revisions, four across `MARKET_SEED`s)
+> all land at 33–34, so the row is not variance and not a later regression — the numbers here were
+> never reproducible. See **§ THE 7-DAY SOLO CEILING** at the end of this file for the bisect.
+> The findings drawn from this run (energy is vestigial; the gym/mission cooldowns are the throttle)
+> are unaffected — those are *shapes*, and they reproduce.
+
 ### What actually throttles a sitting (measured over 10h30m of play)
 
 | Resource | Reading | Verdict |
@@ -2044,8 +2053,10 @@ corrected upward — recorded here as the measured number.
 ### The solo ceiling
 
 Using **only** crime, the gym, the garage, the Score, the mission ladder and the checklist — with
-zero contact with another player — a 45-min-twice-a-day player reaches **level 44, $1.9M, 14/28 of
-the story in 7 days.**
+zero contact with another player — a 45-min-twice-a-day player reaches ~~level 44, $1.9M, 14/28 of
+the story in 7 days~~ → **corrected 2026-07-31 to level 33, $1.39M, 13/28** (see the ⚠ note above
+and § THE 7-DAY SOLO CEILING). The *shape* of the finding is unchanged: a solo player gets a long
+way alone and never meets anybody.
 
 ### Finding 1 — energy is vestigial for a street player → FIXED (legibility, not a retune)
 
@@ -3026,33 +3037,43 @@ context and correctly degrade to the base amount.
 Surfaced as `crewBonusPct` on the character sheet and in My Profile's take box. All three numbers are
 founder sign-off levers.
 
-## THE PROGRESSION DRIFT — the 7-day solo ceiling fell 44 → 33 (measured 2026-07-31)
+## THE 7-DAY SOLO CEILING — level 33, and there is NO drift (bisected 2026-07-31)
 
 `tools/playthrough.js` was re-run after the onboarding/progression batch (#304 REGIMEN, #305 the coach
-road to 30, #306 Pen step six, #308 CAREER, #310 HUSTLE, jailbirds). **THREE samples, same config**
-(2 sittings/day × 45 min × 7 days = 10h30m at the keyboard):
+road to 30, #306 Pen step six, #308 CAREER, #310 HUSTLE, jailbirds). Three samples, same config
+(2 sittings/day × 45 min × 7 days = 10h30m at the keyboard): **level 33 / 34 / 33**, $1.39–1.42M,
+13 of 28 missions.
 
-| sample | 2h | 5h | 10h | 7-day ceiling | net worth | missions |
-|---|---|---|---|---|---|---|
-| 1 | 12 | 19 | 33 | **level 33** | $1,388,585 | 13/28 |
-| 2 | 12 | 20 | 33 | **level 34** | $1,423,312 | 13/28 |
-| 3 | 12 | 20 | 33 | **level 33** | $1,395,904 | 13/28 |
+That is ~25% below the **level 44 / $1.9M / 14 missions** this file and the codex had recorded, and my
+first reading of it — written into this section earlier the same day — called it a real regression that
+"moved 25% without anyone deciding to move it". **That was wrong, and the bisect is what proved it.**
 
-The figure recorded when the harness was built was **level 44 / $1.9M / 14 of 28 missions**, and 2h was
-14–16. The spread across three runs is one level, so this is **not variance** — the solo curve is
-genuinely ~25% slower in respect and ~26% lower in cash than the number the PACING pass signed off on.
+The method matters, because the first attempt at it was itself broken. Holding the *harness* constant
+and varying only `src/` requires wiping `src/` first: `git checkout <C> -- src` LEAVES files added
+after C, which produced a hybrid tree (old `schema.sql`, new `engagement.js`) that failed on a missing
+column — a failure that looks like a finding and is not one. With that fixed, and the harness's own
+measurement code confirmed unchanged across its three revisions (only reporting was added):
 
-**The cause is not identified and I did not guess at one.** It is not the batch under test: the harness
-touches 2 of 36 systems and never opens the corner, the hustle, the regimen or the career, so none of
-those one-time bonuses are being collected. Crimes/hour is unchanged (62.5 vs ~60), the nerve pool sits
-at the same fraction of cap, lockup is still 0% of played minutes, and the mission ladder still advances
-once per sitting — so the drift is in respect PER action, not in action volume. Finding it wants a git
-bisect of the harness against the commits since it was built, which is its own task.
+| what was varied | result |
+|---|---|
+| HEAD, three runs | 33 · 34 · 33 |
+| `src/` at `c013494` (the second harness revision) | **33** |
+| `src/` at `2c60c06` — the commit where 44 was RECORDED | **33** |
+| four different `MARKET_SEED`s at HEAD (city-event luck) | 34 · 33 · 33 · 33 |
 
-**Direction is a founder call.** 33 at a week of real play may well be the better curve — the pacing
-pass existed to slow a 240-in-two-hours speedrun, and this is slower still. What is not acceptable is
-that it moved 25% without anyone deciding to move it. `PACING.LEVEL_DIVISOR` is the single dial if the
-signed curve is the intent.
+Nine measurements, all 33–34, including at the exact commit the 44 was written down at, with identical
+config defaults (7 days × 2 sittings × 45 min, unchanged since the harness was built). **The game never
+produced 44 with this harness.** The recorded figure is not reproducible under any variation available —
+neither code age nor seed draw — so it was a transcription or a differently-configured one-off written
+down as the default.
+
+**Nothing is wrong with the curve, and no lever should move on account of this.** 33 at a week of
+plausible solo play is the actual shape, and it has been the shape since the pacing pass.
+
+**The lesson is the reusable part: a number in a doc is not a measurement.** I compared today's run
+against an unverified historical figure and reported a regression off it. Before calling anything a
+drift, re-measure the baseline at the old commit — it costs ~80 seconds per run here and it falsified
+the claim outright.
 
 `tools/scale.js` was re-run in the same pass: 36 players / 5 days, **§10.4 held across all 24 checks
 with zero movement**, every one of the 9 driven markets reachable, and the census reconciles with the

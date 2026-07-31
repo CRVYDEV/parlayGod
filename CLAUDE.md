@@ -5688,9 +5688,16 @@ ladder (checklist → Path → bank → boost+melt → the Score → the mission
 when an `fp` gate blocks → the gym, training the biggest deficit on the mission being chased → grind
 the best crime the nerve pool covers → claim dailies). Built because the level-240 alpha speedrun was
 a **progression** bug that the §10.4 sweep was structurally blind to (drift-0 throughout). **Measured
-result: the speedrun is closed** — 3 hours straight in ONE sitting now reaches **level 17** (was 240);
-2h ≈ level 14–16, 10.5h ≈ 44 (the earlier analytic "~11 at 2h" is corrected upward by the sim — it had
-omitted the Score + mission ladder + checklist). **What throttles a sitting, measured:** NERVE is the
+result: the speedrun is closed** — ~~3 hours in ONE sitting reaches level 17; 2h ≈ 14–16, 10.5h ≈ 44~~
+**(CORRECTED 2026-07-31 by bisect: 2h → 12, 5h → ~19, 10.5h → level 33.** Nine measurements — three at
+HEAD, one each at BOTH harness revisions incl. the very commit these figures were recorded at, and four
+across `MARKET_SEED`s — all land at 33–34 with the harness's measurement code and config defaults
+unchanged. So the original row was never reproducible: not a later regression, not variance, just wrong.
+The method matters — `git checkout <C> -- src` LEAVES files added after C, so the tree must be WIPED
+first or the run fails on a hybrid old-schema/new-module tree, which reads like a finding and is not
+one. **A number in a doc is not a measurement: re-measure the baseline at the old commit before calling
+anything a drift.** Full record in BALANCE.md § THE 7-DAY SOLO CEILING.) **What throttles a sitting,
+measured (these SHAPES reproduce and are unaffected):** NERVE is the
 real limiter (pool at 21% of cap on average, full only 3% of minutes, funding ~60 crimes/hr — a
 continuous drip, never burst-then-wait); the GYM is hard-capped at 15 sessions/sitting by the 3-min
 cooldown; the MISSION ladder's 4h cooldown is LONGER than a sitting so it advances ~once per session
@@ -5698,11 +5705,11 @@ no matter how long you play (the cascade is now structurally impossible); lockup
 minutes. Two founder calls flagged (NOT patched, ground rule #1, in BALANCE.md): **(1)** ENERGY is
 vestigial for a street player — full 94% of minutes, since only the gym and the garage spend it
 against 12/min regen (a resource bar with no bite on the core loop); **(2)** CASH OUTRUNS PROGRESSION
-— a solo grinder nets $11k in session 1 and $360k in session 14 (30× in a week), holding $1.9M by day
-7 at level 44, far past the level-15 business-front entry, so the passive stack is affordable long
+— a solo grinder nets $11k in session 1 and $360k in session 14 (30× in a week), holding ~$1.4M by day
+7 at level 33, far past the level-15 business-front entry, so the passive stack is affordable long
 before the content gating it (couples to the L1a/L1b front-curve levers). The **solo ceiling** (crime
-+ gym + garage + Score + missions ONLY, zero contact with another player) is level 44 / $1.9M / 14 of
-28 missions in 7 days. **Re-run it after ANY pacing, cooldown, regen, mission or level-curve change** —
++ gym + garage + Score + missions ONLY, zero contact with another player) is **level 33 / ~$1.4M / 13 of
+28 missions in 7 days** (corrected — see above). **Re-run it after ANY pacing, cooldown, regen, mission or level-curve change** —
 it's the only tool that measures what a player feels rather than what the ledger conserves.
 
 **THE TWO HARNESS FINDINGS — APPLIED (founder-directed 2026-07-25).** The progression harness's two
