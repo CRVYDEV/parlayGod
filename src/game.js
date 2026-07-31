@@ -934,6 +934,10 @@ function coachLadder(ch, acct, owned) {
   // collects a rung; returns TRUE when the plan is full so the caller can stop evaluating
   const add = (label, hint, tab) => { rungs.push({ label, hint, tab }); return rungs.length >= 5; };
   const lvl = levelOf(Number(ch.respect));
+  // A MULTIPLAYER-ONLY milestone leads only for a window after it first applies (COACH_SOCIAL_BAND_LVLS);
+  // past it, it moves to the recurring tail. Nothing here decides whether the advice is GOOD — it is —
+  // only whether it may sit on top of rungs the same player could act on alone.
+  const inSocialBand = (l, from) => !M3.COACH_SOCIAL_BAND_LVLS || l <= from + M3.COACH_SOCIAL_BAND_LVLS;
   const maxEnergy = energyCapOf(lvl, assetEnergyCap(owned.assets || []), owned.disciplines);
   const now = Date.now();
   const future = (t) => t && new Date(t) > new Date(now);
@@ -1013,7 +1017,10 @@ function coachLadder(ch, acct, owned) {
   if (lvl >= 6 && !(owned.guns || []).length && add('Get strapped', 'The Garage ▸ Armory: buy a pistol and CARRY it. A gun backs every fight in this city — jumps, hits, standing over rivals.', 'garage')) return rungs;
   if (lvl >= 7 && !Number(owned.mastery?.commerce || 0) && add('Learn the trade winds', 'Streets ▸ Trade Goods: buy something cheap where you stand, haul it where it\'s rich (The City ▸ Trade Winds shows the spread), sell high. This is the on-ramp to convoys and the Black Market.', 'streets')) return rungs;
   if (!ch.lab && lvl >= 8 && !(owned.businesses || []).length && add('Cook up real money', 'Set up a Kitchen — the drug trade is the deepest earner in the game.', 'kitchen')) return rungs;
-  if (lvl >= 9 && !Number(acct.heists_pulled || 0) && add('Pull a crew score', 'Big Scores ▸ Crew Heists: plan a job or join one off the open board. One roll pays the whole crew — bigger than anything you can pull alone.', 'scores')) return rungs;
+  // MULTIPLAYER-ONLY, so BANDED (COACH_SOCIAL_BAND_LVLS): a crew score cannot be pulled alone, and on
+  // a thin server this rung otherwise leads forever and masks every solo system under it.
+  if (lvl >= 9 && !Number(acct.heists_pulled || 0) && inSocialBand(lvl, 9)
+    && add('Pull a crew score', 'Big Scores ▸ Crew Heists: plan a job or join one off the open board. One roll pays the whole crew — bigger than anything you can pull alone.', 'scores')) return rungs;
   if (lvl >= 10 && !Number(owned.mastery?.gambling || 0) && add('A night at the Den', 'The Den at the Neon Mile — craps, blackjack, the numbers. Bring a real stake ($1,000+): the table doesn\'t respect small money.', 'den')) return rungs;
   if (lvl >= 12 && !(owned.fighters || []).length && !Number(acct.boxing_wins || 0) && add('Get into the fight game', 'The Fights: sign a contender, train them up, stake them against other managers\' fighters. The crowd bets your main events.', 'boxing')) return rungs;
   if (lvl >= 14 && !Number(acct.race_wins || 0) && !Number(owned.mastery?.wheels || 0) && add('Run the streets', 'Street Races: tune a car from your garage and run the PvE circuit — fee up front, purse on a win. Fast iron finally earns.', 'races')) return rungs;
@@ -1025,7 +1032,8 @@ function coachLadder(ch, acct, owned) {
   if (lvl >= 15 && Number(acct.omr || 0) > 0 && !(owned.portfolio || []).length && add('Time to go legit', 'Wash $OMR into a real blue-chip book — it survives your death and pays a dividend. Going Legit.', 'portfolio')) return rungs;
   if (lvl >= 16 && !Number(acct.smuggled || 0) && add('Take it to the water', 'The Port at the docks: buy a boat and run contraband in from offshore. The margins beat the streets — the Coast Guard is the risk.', 'port')) return rungs;
   if (lvl >= 18 && !Number(acct.intel_ops || 0) && Number(acct.omr || 0) >= WIRE.TAP_OMR && add('Work the wires', 'The Wire: burn a little $OMR to tap a rival — their heat, their wealth band, whether they\'re hunting YOU. Information is the sharpest weapon in the city.', 'wire')) return rungs;
-  if (lvl >= 22 && !Number(owned.mastery?.wetwork || 0) && add('Blood on the ledger', 'Wet Work: the contract board pays real pots for real bodies. Start on the Dueling Circuit — challenge a listed duelist, win the stake, build the name.', 'pvp')) return rungs;
+  if (lvl >= 22 && !Number(owned.mastery?.wetwork || 0) && inSocialBand(lvl, 22)
+    && add('Blood on the ledger', 'Wet Work: the contract board pays real pots for real bodies. Start on the Dueling Circuit — challenge a listed duelist, win the stake, build the name.', 'pvp')) return rungs;
   // ── THE RECURRING NUDGES ── (COACH_NUDGES) Everything above is a ONE-TIME milestone that clears
   // for good once done. These three never clear, so they live down here where they fill the quiet
   // moments instead of masking the ladder. The SAME rule orders the tail itself: most-clearable
@@ -1037,6 +1045,12 @@ function coachLadder(ch, acct, owned) {
   // a full tank isn't idle capacity, it's UNSPENT ACCESS to the physical content. Name what spends
   // it, or the bar reads as broken.
   if (Number(ch.energy) >= maxEnergy * 0.75 && add('Full tank', 'Crime runs on nerve — energy is what the PHYSICAL work costs: the gym, boosting cars, heist crews, cartel raids, convoy ambushes, shakedowns. You\'ve got a full tank going unspent.', 'streets')) return rungs;
+  // The two BANDED multiplayer milestones, demoted here rather than dropped: still worth saying, but
+  // below every rung a player can act on by themselves. They clear for good the moment they're done.
+  if (lvl > 9 + M3.COACH_SOCIAL_BAND_LVLS && !Number(acct.heists_pulled || 0)
+    && add('Find a crew', 'You still haven\'t pulled a crew score. Big Scores ▸ Crew Heists — the pot beats anything you can take alone, but it takes a second body.', 'scores')) return rungs;
+  if (lvl > 22 + M3.COACH_SOCIAL_BAND_LVLS && !Number(owned.mastery?.wetwork || 0)
+    && add('No blood on your ledger', 'You\'ve never taken a contract. Wet Work — the Dueling Circuit is the way in, when somebody\'s listed.', 'pvp')) return rungs;
   // the one a player can decline forever — so it sits at the very bottom, never masking anything
   if (!owned.gangId && lvl >= 3 && add('Still running solo', 'You can play the whole game alone, but a family is turf, tribute, wars and backup — worth a look.', 'family')) return rungs;
   return rungs; // possibly empty — an established player who knows the ropes gets no nag

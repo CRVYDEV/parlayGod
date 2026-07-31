@@ -19,7 +19,7 @@
 //      node tools/playthrough.js --days 14  (longer horizon)
 import { buildServer } from '../src/server.js';
 import { opsEngagement } from '../src/engagement.js';
-import { CRIMES, MISSIONS, GUNS, BUSINESSES, CONSTANTS, PACING, RACKETS } from '../src/rules.js';
+import { CRIMES, MISSIONS, GUNS, BUSINESSES, CONSTANTS, PACING, RACKETS, PORT } from '../src/rules.js';
 
 const argOf = (name, dflt) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -50,11 +50,21 @@ const CLOCK_COLS = [
   'pen_safe_until', 'hole_until', 'shank_at', 'train_at', 'mission_at', 'wanted_until',
   'envelope_until', 'wire_until', 'disinfo_until', 'active_at', 'race_at', 'port_at',
 ];
+// …and the clocks that DON'T live on the character row. A sea run's arrival is on `boats.run_until`,
+// so with only the character warped the Port loop could never land: the harness bought a boat, sailed
+// it, and waited five hours of simulated play for a ship that would arrive on the real wall clock.
+// That read as "the coach is stuck on the Port" when it was the harness holding its own watch. Scoped
+// to THIS character's boats — residents own boats too, and warping theirs would move the world.
+const OWNED_CLOCKS = [['boats', 'character_id', ['run_until']]];
 let simMinutes = 0; // wall-clock minutes elapsed since the character was born
 const advance = async (id, minutes) => {
   simMinutes += minutes;
   const sets = CLOCK_COLS.map((c) => `${c} = ${c} - interval '${minutes} minutes'`).join(', ');
   await pool.query(`UPDATE characters SET ${sets} WHERE id='${id}'`);
+  for (const [table, key, cols] of OWNED_CLOCKS) {
+    const s = cols.map((c) => `${c} = ${c} - interval '${minutes} minutes'`).join(', ');
+    await pool.query(`UPDATE ${table} SET ${s} WHERE ${key}=$1`, [id]);
+  }
 };
 
 // ── THE PLAYER ──────────────────────────────────────────────────────────────────────────────────
@@ -112,10 +122,18 @@ const coachPlanDepth = [];        // how many steps the plan box offered, per ti
 let coachSilent = 0;              // minutes with no advice at all (a vet, correctly)
 const coachObeyed = new Set();    // rungs the harness successfully DID what was asked
 const coachCantAct = new Map();   // rung -> why this harness can't act on it (counted, not skipped)
+// THE ON-RAMP. A rung is advice with a PRICE — "Cook up real money" wants $20,000 from a player the
+// game first says it to at level 8. Recording when a rung is first ADVISED and when it is first
+// CARRIED OUT (with the player's net worth at both moments) turns "the coach nags about the Kitchen"
+// into the question that actually matters: how long does a player following the advice sit there
+// unable to take it, and can they afford it at all when they're first told?
+const rungFirst = new Map();      // label -> { at, worth, level } the first minute it was advised
+const rungDone = new Map();       // label -> { at, worth, level } the first minute it was obeyed
 function traceCoach(m) {
   const label = m.coach?.label;
   if (!label) { coachSilent++; return; }
   coachMin.set(label, (coachMin.get(label) || 0) + 1);
+  if (!rungFirst.has(label)) rungFirst.set(label, { at: playedMin, worth: m.cash + m.bank, level: m.level });
   if (Array.isArray(m.coachPlan)) coachPlanDepth.push(m.coachPlan.length);
 }
 
@@ -130,6 +148,8 @@ function traceCoach(m) {
 // dropping it (the honesty rule). Only the acted-on rungs are held to the anti-masking bound.
 async function obeyCoach(m) {
   const label = m.coach?.label;
+  // one place to record obedience, so a new branch can't forget the on-ramp half of it
+  const obeyed = () => { coachObeyed.add(label); if (!rungDone.has(label)) rungDone.set(label, { at: playedMin, worth: m.cash + m.bank, level: m.level }); return true; };
   // Deliberately NOT once-per-label. A player following the coach keeps following it: some rungs
   // clear on one action ("buy a racket"), others need several ("you've earned skill points" recurs
   // every few levels as new points land, and one purchase does not spend three). Obeying once and
@@ -141,7 +161,7 @@ async function obeyCoach(m) {
     const buyable = RACKETS.filter((r) => r.lvl <= m.level && m.cash >= r.cost).sort((a, b) => a.cost - b.cost)[0];
     if (!buyable) return false;                       // not yet affordable — the advice is early, not stuck
     const r = await call('POST', `/v1/rackets/${buyable.id}/buy`, { token });
-    if (r.code === 200) { did('coach:racket'); first('coach:racket'); coachObeyed.add(label); return true; }
+    if (r.code === 200) { did('coach:racket'); first('coach:racket'); return obeyed(); }
     hit('coach:racket', r.body?.error || r.code);
     return false;
   }
@@ -157,7 +177,7 @@ async function obeyCoach(m) {
     const buyable = (board.body?.tree || []).filter((s) => !s.known).sort((a, b) => a.cost - b.cost)[0];
     if (!buyable) { coachCantAct.set(label, 'the skills board offered nothing unknown to buy'); return false; }
     const r = await call('POST', `/v1/skills/${buyable.id}`, { token });
-    if (r.code === 200) { did('coach:skill'); first('coach:skill'); coachObeyed.add(label); return true; }
+    if (r.code === 200) { did('coach:skill'); first('coach:skill'); return obeyed(); }
     hit('coach:skill', r.body?.error || r.code);
     // a refusal is itself information — record WHY rather than falling through in silence, which is
     // how the first cut of this branch hid the fact that it was reading a field that doesn't exist
@@ -179,7 +199,7 @@ async function obeyCoach(m) {
     const cargo = Object.entries(m.cargo || {}).filter(([, q]) => q > 0)[0];
     if (cargo) {
       const r = await call('POST', '/v1/goods/sell', { token, body: { goodId: cargo[0], qty: cargo[1] } });
-      if (r.code === 200) { did('coach:goods'); first('coach:goods'); coachObeyed.add(label); return true; }
+      if (r.code === 200) { did('coach:goods'); first('coach:goods'); return obeyed(); }
       hit('coach:goods', r.body?.error || r.code);
       coachCantAct.set(label, `held ${cargo[0]}, sell refused: "${r.body?.error || r.code}"`);
       return false;
@@ -193,10 +213,128 @@ async function obeyCoach(m) {
     hit('coach:goods', r.body?.error || r.code);
     return false;
   }
+  // "Get strapped" — buy the cheapest gun in reach and CARRY it. The mission ladder already buys
+  // guns to clear fp gates, which is why this rung self-cleared before it was wired; obeying it
+  // explicitly is what lets the anti-masking bound see it at all (an unobeyed rung is excluded).
+  if (label.startsWith('Get strapped')) {
+    const g = GUNS.filter((x) => x.cash <= m.cash && x.crates <= m.cb).sort((a, b) => a.cash - b.cash)[0];
+    if (!g) return false;                              // can't cover it yet — early, not stuck
+    const buy = await call('POST', `/v1/armory/gun/${g.id}/buy`, { token });
+    if (buy.code !== 200) { hit('coach:gun', buy.body?.error || buy.code); return false; }
+    await call('POST', `/v1/armory/gun/${g.id}/equip`, { token });
+    did('coach:gun'); first('coach:gun'); return obeyed();
+  }
+  // "Cook up real money" — THE dominant rung: it held 70% of a seven-day run before this branch
+  // existed, because the harness simply never bought a lab. That is the (b) case (advice ignored),
+  // not the (a) case (advice uncompletable) — but nobody had checked which, and the two look
+  // identical from outside. Buying the Bathtub Rig is one call once you can cover $20,000.
+  if (label.startsWith('Cook up real money')) {
+    const r = await call('POST', '/v1/kitchen/lab/upgrade', { token });
+    if (r.code === 200) { did('coach:lab'); first('coach:lab'); return obeyed(); }
+    // 'cash' is the honest EARLY answer — the rung is affordable-later, so it is not recorded as
+    // untestable. Anything else is a real refusal worth naming in the report.
+    if (r.body?.error !== 'cash') coachCantAct.set(label, `lab refused: "${r.body?.error || r.code}"`);
+    hit('coach:lab', r.body?.error || r.code);
+    return false;
+  }
+  // "A night at the Den" — clears on gambling mastery, which the den only stamps at or above
+  // CASINO.GAMBLER_MIN_STAKE ($1,000). The rung's own copy says "bring a real stake ($1,000+)", so
+  // obeying it means betting that much, at the Neon Mile, which is a district move first.
+  if (label.startsWith('A night at the Den')) {
+    if (m.cash < 1000) return false;
+    if (m.loc !== 'neon') {
+      const t = await call('POST', '/v1/travel/neon', { token });
+      if (t.code !== 200) { coachCantAct.set(label, `travel to neon refused: "${t.body?.error || t.code}"`); return false; }
+    }
+    const r = await call('POST', '/v1/casino/dice', { token, body: { amount: 1000 } });
+    if (r.code === 200) { did('coach:dice'); first('coach:dice'); return obeyed(); }
+    hit('coach:dice', r.body?.error || r.code);
+    coachCantAct.set(label, `dice refused: "${r.body?.error || r.code}"`);
+    return false;
+  }
+  // "Get into the fight game" — sign a contender (BOXING.RECRUIT_COST). One call.
+  if (label.startsWith('Get into the fight game')) {
+    const r = await call('POST', '/v1/boxing/recruit', { token, body: { name: 'Kid Malone' } });
+    if (r.code === 200) { did('coach:fighter'); first('coach:fighter'); return obeyed(); }
+    if (r.body?.error !== 'cash') coachCantAct.set(label, `recruit refused: "${r.body?.error || r.code}"`);
+    hit('coach:fighter', r.body?.error || r.code);
+    return false;
+  }
+  // "Run the streets" — the PvE circuit needs a car, and the melt loop below now KEEPS the first one
+  // for exactly this reason (a player following the coach would not scrap their only ride).
+  if (label.startsWith('Run the streets')) {
+    const car = (m.cars || []).find((c) => !c.listed && !c.pledged);
+    if (!car) { coachCantAct.set(label, 'no car in the garage this tick — the boost loop had nothing to keep'); return false; }
+    const r = await call('POST', '/v1/races/npc', { token, body: { car: car.id, tier: 'backalley' } });
+    if (r.code === 200) { did('coach:race'); first('coach:race'); return obeyed(); }
+    if (!['cash', 'cooldown'].includes(r.body?.error)) coachCantAct.set(label, `race refused: "${r.body?.error || r.code}"`);
+    hit('coach:race', r.body?.error || r.code);
+    return false;
+  }
+  // "Open your first front" — the rung names the Laundromat and its live price; buy exactly that.
+  if (label.startsWith('Open your first front')) {
+    const front = BUSINESSES.find((b) => b.kind === 'laundromat');
+    if (!front || m.cash < front.tiers[0].cost) return false;   // early, not stuck
+    const r = await call('POST', `/v1/business/${front.kind}/buy`, { token });
+    if (r.code === 200) { did('coach:front'); first('coach:front'); return obeyed(); }
+    hit('coach:front', r.body?.error || r.code);
+    coachCantAct.set(label, `front refused: "${r.body?.error || r.code}"`);
+    return false;
+  }
+  // "Time to go legit" — the rung only fires when the player already HOLDS $OMR (missions pay it),
+  // so obedience is one buy. Wired because it inherited the top of the ladder the moment the fights
+  // rung cleared: half a seven-day run, with the Port and the Wire behind it.
+  if (label.startsWith('Time to go legit')) {
+    if (Number(m.omr || 0) < 1) return false;
+    const r = await call('POST', '/v1/portfolio/invest', { token, body: { ticker: 'GLD', omr: 1 } });
+    if (r.code === 200) { did('coach:legit'); first('coach:legit'); return obeyed(); }
+    hit('coach:legit', r.body?.error || r.code);
+    coachCantAct.set(label, `invest refused: "${r.body?.error || r.code}"`);
+    return false;
+  }
+  // "Take it to the water" — the only multi-stage rung: it clears on lifetime SMUGGLED value, which
+  // is stamped by a clean COLLECT, so obedience is buy-a-boat → sail → land it. Each tick advances
+  // one stage; only the landing counts as obeyed.
+  if (label.startsWith('Take it to the water')) {
+    const board = await call('GET', '/v1/port', { token });
+    const fleet = board.body?.fleet || [];
+    const arrived = fleet.find((b) => b.status === 'arrived');
+    if (arrived) {
+      const r = await call('POST', `/v1/port/collect/${arrived.id}`, { token });
+      if (r.code === 200) { did('coach:port'); first('coach:port'); return obeyed(); }
+      hit('coach:port', r.body?.error || r.code);
+      return false;
+    }
+    if (fleet.some((b) => b.status === 'at_sea')) return false;   // en route — waiting is the action
+    const docked = fleet.find((b) => b.status === 'docked');
+    if (docked) {
+      if (m.loc !== 'docks') { const t = await call('POST', '/v1/travel/docks', { token }); if (t.code !== 200) return false; }
+      const route = (board.body?.routes || [])
+        .filter((r2) => r2.minLvl <= m.level && r2.minSpeed <= docked.speed).sort((a, b) => b.margin - a.margin)[0];
+      if (!route) { coachCantAct.set(label, 'no sea route this boat + level can attempt'); return false; }
+      const r = await call('POST', `/v1/port/run/${docked.id}`, { token, body: { route: route.id } });
+      if (r.code === 200) { did('coach:port:run'); return false; }   // a step toward it, not obedience
+      if (r.body?.error !== 'cash') coachCantAct.set(label, `run refused: "${r.body?.error || r.code}"`);
+      hit('coach:port', r.body?.error || r.code);
+      return false;
+    }
+    const boat = PORT.BOATS.slice().sort((x, y) => x.cost - y.cost)[0];   // the cheapest hull — the Harbor Dinghy
+    if (m.cash < boat.cost) return false;                          // early, not stuck
+    if (m.loc !== 'docks') { const t = await call('POST', '/v1/travel/docks', { token }); if (t.code !== 200) return false; }
+    const r = await call('POST', `/v1/port/boat/${boat.id}`, { token });   // the catalog key is `id`, not `kind`
+    if (r.code === 200) { did('coach:port:boat'); return false; }
+    if (r.body?.error !== 'cash') coachCantAct.set(label, `boat refused: "${r.body?.error || r.code}"`);
+    hit('coach:port', r.body?.error || r.code);
+    return false;
+  }
   // Rungs a SOLO harness structurally cannot do: there is one character on this server, so there is
   // no family to join and nobody to fight. Recorded with the reason so the report is honest about
   // what it did not test rather than silently passing over it.
   if (label.startsWith('Nobody survives alone')) coachCantAct.set(label, 'solo run — no other players exist to found or join a family with');
+  else if (label.startsWith('Pull a crew score') || label.startsWith('Find a crew')) coachCantAct.set(label, 'solo run — a crew heist needs at least one other player to fill a role');
+  else if (label.startsWith('Blood on the ledger') || label.startsWith('No blood on your ledger')) coachCantAct.set(label, 'solo run — there is nobody else on the duelling ladder');
+  else if (label.startsWith('Still running solo')) coachCantAct.set(label, 'solo run — the permanent tail nudge, correctly last');
+  else if (label.startsWith('Work the wires')) coachCantAct.set(label, 'solo run — a wiretap needs somebody to tap');
   else if (!coachCantAct.has(label)) coachCantAct.set(label, 'no action wired in this harness');
   return false;
 }
@@ -214,6 +352,7 @@ async function tick(dayIdx) {
   if (m.energy >= m.maxEnergy) pool_.enAtCap++;
   if (m.jailSeconds > 0) { jailMin++; return false; }
 
+  const winsBefore = acted['crime:win'] || 0;   // for 8b, below
   let didSomething = false;
 
   // 0. FOLLOW THE ADVICE — before the hand-written ladder gets a turn. The whole point of the
@@ -248,7 +387,11 @@ async function tick(dayIdx) {
     const r = await call('POST', '/v1/garage/boost', { token });
     if (r.code === 200) {
       did(r.body.car ? 'boost' : 'boost:miss'); first('boost'); didSomething = true;
-      if (r.body.car?.id) {
+      // KEEP THE FIRST RIDE. Melting everything is what a cash-maximiser does; a player following
+      // the coach keeps one car, because the coach tells them at level 14 to go race it. Scrapping
+      // the only ride made the races rung structurally unobeyable and it would have read as
+      // "the harness can't act on it" forever — a limit of the script masquerading as a measurement.
+      if (r.body.car?.id && (m.cars || []).length >= 1) {
         const melt = await call('POST', `/v1/garage/${r.body.car.id}/melt`, { token });
         if (melt.code === 200) did('melt'); else hit('melt', melt.body?.error || melt.code);
       }
@@ -312,6 +455,24 @@ async function tick(dayIdx) {
     didSomething = true;
     if (r.body.success) did('crime:win');
     else { did('crime:bust'); if (r.body.jailSeconds > 0) jailedNow = true; }
+  }
+
+  // 8b. THE RUNGS THE ORDINARY LADDER OBEYS. Three early rungs ask for exactly what steps 2 and 8
+  //     already do — "pull a job", "keep pulling jobs", "declare a Path". They cleared fine, but
+  //     they were being reported as untested, which understates the trace: the anti-masking bound
+  //     only looks at obeyed rungs, so an early rung that DID stick would have been invisible.
+  //     Marked here rather than in obeyCoach because obedience happens after it runs.
+  const grindLabel = m.coach?.label;
+  if (grindLabel && (acted['crime:win'] || 0) > winsBefore) {
+    if (grindLabel.startsWith('Pull your first job') || grindLabel.startsWith('Get to level 5')
+      || grindLabel.startsWith('Out of nerve')) {
+      coachObeyed.add(grindLabel);
+      if (!rungDone.has(grindLabel)) rungDone.set(grindLabel, { at: playedMin, worth: m.cash + m.bank, level: m.level });
+    }
+  }
+  if (grindLabel?.startsWith('You\'ve made rank') && pathDeclared) {
+    coachObeyed.add(grindLabel);
+    if (!rungDone.has(grindLabel)) rungDone.set(grindLabel, { at: playedMin, worth: m.cash + m.bank, level: m.level });
   }
 
   // 9. daily contracts — claim anything the day's play has already finished
@@ -479,7 +640,34 @@ let coachVerdict = 'ok';
   // What the player was TOLD vs what they could act on. Stated plainly rather than folded into a
   // pass/fail, because a rung this harness can't reach is a limit of the harness, not of the game.
   console.log(`  obeyed: ${coachObeyed.size ? [...coachObeyed].join(' · ') : 'none'}`);
-  for (const [label, why] of coachCantAct) console.log(`  not tested: "${label}" — ${why}`);
+  // a label that was later obeyed is NOT untested — obeyCoach records a reason before the ordinary
+  // ladder gets its turn (8b), so without this the same rung prints in both lists and reads as a bug
+  for (const [label, why] of coachCantAct) {
+    if (!coachObeyed.has(label)) console.log(`  not tested: "${label}" — ${why}`);
+  }
+  // the honesty rule, applied to the trace itself: a rung that is in neither list is a rung the
+  // harness started and never finished (the Port is multi-stage), and must not vanish from the report
+  for (const [label] of advised) {
+    if (!coachObeyed.has(label) && !coachCantAct.has(label)) console.log(`  in progress when the run ended: "${label}"`);
+  }
+
+  // THE ON-RAMP. Every rung the harness obeyed, with the WAIT between being told and being able to
+  // act. This is the question the percentages can't answer: a rung at 70% might be a defect, or it
+  // might be an honest "you cannot afford this yet" — and the difference is whether the price is
+  // reachable from where the game first says it. Reported, never judged: how long a player should
+  // save for their first Kitchen is the founder's call.
+  const ramp = [...rungDone.entries()].sort((a, b) => a[1].at - b[1].at);
+  if (ramp.length) {
+    console.log('\n  THE ON-RAMP  (told → done, and what it cost to get there)');
+    for (const [label, done] of ramp) {
+      const told = rungFirst.get(label) || done;
+      const wait = Math.max(0, done.at - told.at);
+      console.log(`    ${label}`);
+      console.log(`      told at ${hhmm(told.at).padStart(7)} played (lvl ${told.level}, worth $${fmt(told.worth)})`
+        + `  →  done ${hhmm(done.at).padStart(7)} (lvl ${done.level}, worth $${fmt(done.worth)})`
+        + `  ·  waited ${hhmm(wait)}`);
+    }
+  }
 
   // THE ANTI-MASKING BOUND, applied ONLY to rungs the player actually obeyed. That scoping is the
   // whole correctness of this check. A rung can hold the top spot for two very different reasons:
@@ -504,6 +692,20 @@ let coachVerdict = 'ok';
     console.log(`\n  ❌ ${coachVerdict}`);
   } else {
     console.log(`\n  ✓ the coach walked: ${advised.length} rungs; every rung the player obeyed cleared`);
+  }
+
+  // …and the case the bound deliberately cannot fail on: a rung this harness could NOT act on that
+  // still dominated the run. That is not proof of a defect — a solo harness on a solo server is a
+  // narrow population — but it IS the shape of one, and it is the population an alpha actually has.
+  // Reported loudly, never failed on, because whether "wait for company" should outrank every solo
+  // system is a design call and not this script's to make.
+  const stuck = advised.filter(([label, mins]) =>
+    !coachObeyed.has(label) && coachCantAct.has(label) && totalAdvised && (mins / totalAdvised) * 100 > PIN_PCT);
+  for (const [label, mins] of stuck) {
+    console.log(`\n  ⚠ "${label}" held ${Math.round(mins / totalAdvised * 100)}% of advised play and this`);
+    console.log(`     player could never act on it — ${coachCantAct.get(label)}.`);
+    console.log('     Every rung below it went unseen for that whole stretch. On a populated server it');
+    console.log('     clears; on a thin one it is a wall. Band it or demote it if that is not intended.');
   }
 }
 

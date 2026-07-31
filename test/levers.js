@@ -221,6 +221,10 @@ const SIGNED = [
   ['LOAN.WANTED_MIN_LVL', 20],
   ['M3.BODYGUARD_MIN_PRICE', 10000],
   ['M3.CASH_LOOT_RATE', 0.25],
+  ['M3.COACH_FAMILY_BAND_LVL', 12],   // the early band the 'join a family' rung leads inside
+  // the window a MULTIPLAYER-ONLY rung (crew score, duel) leads for before it drops to the
+  // recurring tail — measured at 77% of a solo run when it led forever (BALANCE: the social band)
+  ['M3.COACH_SOCIAL_BAND_LVLS', 8],
   ['M3.CONTRACT_AMMO_REBATE', 0.5],
   ['M3.CRIME_LOUD_CASH_PREMIUM', 1],
   ['M3.DEATH_DUTY_RATE', 0.25],

@@ -644,6 +644,17 @@ export const M3 = {
   // one-time milestone rungs: a rung a player can decline forever masks every rung below it forever
   // (the harness pinned a 7-day solo player on it, hiding the earner/skills/Kitchen/legit/energy rungs).
   COACH_FAMILY_BAND_LVL: 12,
+  // COACH_SOCIAL_BAND_LVLS (progression harness, second run) — the same class one rung down. Two
+  // milestones are MULTIPLAYER-ONLY: a crew score needs another player to fill a role, and the
+  // duelling ladder needs somebody listed on it. Wiring the harness to obey the solo rungs made this
+  // visible immediately — with the Kitchen rung cleared, "Pull a crew score" took 77% of a seven-day
+  // run and masked EIGHT downstream rungs (the Den, the fights, the races, the first front, the Port,
+  // the Wire, going legit) that the same player could have acted on that minute. It is not the F1
+  // defect — the rung is honest advice and clears the moment there is a crew — but on a thin alpha,
+  // which is exactly what THE POPULATION exists for, "wait for company" outranking every solo system
+  // is the wrong ladder. So each leads for this many levels after it first applies, then drops to the
+  // recurring tail where it still gets said. 0 disables the demotion (they lead forever).
+  COACH_SOCIAL_BAND_LVLS: 8,
   // D6a — THE APPROACH (stakes/spine review #6: deepen the core crime verb). Every job now takes a
   // risk/reward CHOICE — Case It (quiet), Standard, or Go Loud — a real per-job decision instead of a
   // single click + RNG. The design constraint: the CASH faucet stays EV-NEUTRAL by construction
