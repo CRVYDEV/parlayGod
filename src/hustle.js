@@ -1,8 +1,10 @@
 // THE HUSTLE — the daily three-stop job chain (founder-directed 2026-07-30: the crime loop must
 // route the player AROUND the town — travel, talk to somebody, do the work, collect). The chain is
 // seed-drawn per street per day (rules.js `hustleOf` — deterministic + verifiable), every stop is
-// SERVER-VERIFIED (you must be standing in the named district; the legwork stop additionally
-// requires a REAL action done there, proven by a daily-counter DELTA against a baseline snapshot),
+// SERVER-VERIFIED (you must be standing in the named district to CHECK IN; the legwork stop
+// additionally requires a REAL action done since you met the contact, proven by a daily-counter
+// DELTA against a baseline snapshot — the counter is global, so where the work happened is not
+// knowable and the copy does not claim it is; the routing comes from the three check-ins),
 // and the payoff is a bounded once-a-day cash faucet (`hustle:payoff` — the clue-casket posture:
 // petty by design, the movement is the product). §10.4: `hustle:` joins the cash vocabulary; the
 // payoff is character_id'd so the per-character cash check reconciles. Dies with the street.
@@ -27,7 +29,7 @@ function stepOf(h, row) {
   const step = row ? Number(row.step) : 0;
   const [a, b, c] = h.stops;
   if (step === 0) return { step, district: a, what: `Meet the contact — ${h.contact} is waiting at ${districtName(a)}. Travel there and check in.` };
-  if (step === 1) return { step, district: b, what: `Do the legwork at ${districtName(b)} — ${h.leg.how}, then check in.` };
+  if (step === 1) return { step, district: b, what: `The legwork — ${h.leg.how}, then check in at ${districtName(b)}.` };
   if (step === 2) return { step, district: c, what: `The payoff — bring it home at ${districtName(c)}.` };
   return { step: 3, district: null, what: 'Done for the day — fresh work tomorrow.' };
 }
