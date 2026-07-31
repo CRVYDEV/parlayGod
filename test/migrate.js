@@ -101,6 +101,20 @@ const DISPOSITION = {
   route_notoriety: 'wiped', // TIER C: per-lane heat is the street's own reputation — dies with them (the heir runs clean lanes)
   poker_ring_seats: 'special', // RING POKER: wipeRingAtDeath folds the seat + BURNS the stack (casino:ring:death) under the table lock — never a bare DELETE (the stack is escrowed cash)
   chat_messages: 'log', // troll-box lines keep their name snapshot — a dead man's words stand (7d worker retention)
+  // ── the `%_character` half (audit F4): sixteen tables that scope themselves by a named role rather
+  // than by `character_id`, and were invisible to this guard until it learned the suffix. Every one is
+  // handled today — that is precisely why the blind spot mattered: nothing was ENFORCING it.
+  wiretaps: 'wiped', wire_informants: 'wiped', wire_watches: 'wiped', // die with EITHER party (estate)
+  secrets: 'wiped', informants: 'wiped',                             // dirt dies both ways; the flip collapses
+  bounties: 'special', bounty_contributors: 'special', // escrow SUMmed under lock then burned death:bounty
+  listings: 'special',        // M3 exchange: cb/ammo escrow forfeited (death:escrow) before the DELETE
+  market_listings: 'special', // voidListingsAtDeath — bids refunded, a dead poster's own escrow burns
+  favors: 'special',          // voidFavorsAtDeath — the loot surface, then whatever's left burns
+  loans: 'special',           // voidLoansAtDeath — a dead LENDER's claim passes to the heir, not the void
+  convoys: 'special',         // freight scatters (status='lost'), cargo deleted — never a bare row DELETE
+  speakeasies: 'special',     // wipeSpeakeasyAtDeath — the club goes dark and the district reopens
+  crew_heists: 'special', pen_breaks: 'special', world_raids: 'special', // a dead leader's plan is ABANDONED
+
   // SIGN-OFF 2.4: the funding family's roster snapshot, keyed to the POT rather than to the listed
   // member — so it is torn down with the pot (claim / the family cancelling its share / the expiry
   // sweep / the target's estate), not with the member. A listed member's own death leaves a row that
@@ -124,7 +138,13 @@ const charTables = new Set();
     let depth = 1, body = '', i = head.lastIndex;
     for (; i < clean.length && depth > 0; i++) { const ch = clean[i]; if (ch === '(') depth++; else if (ch === ')') { depth--; if (depth === 0) break; } body += ch; }
     head.lastIndex = i;
-    if (/^\s*character_id\b/m.test(body)) charTables.add(mm[1]);
+    // (audit F4) `character_id` is the COMMON name for a character FK, not the only one. Sixteen
+    // tables scope themselves with `poster_character` / `leader_character` / `owner_character` and
+    // friends, and every one of them was INVISIBLE to a guard whose stated job is to fail CI closed
+    // on an unclassified character-scoped table. All sixteen happen to be handled today, which is
+    // exactly the problem: a guard that cannot see the class it guards reads as a clean bill of
+    // health. Any `%_character` column counts.
+    if (/^\s*(character_id|[a-z0-9_]+_character)\b/m.test(body)) charTables.add(mm[1]);
   }
 }
 // (a) every character_id table is classified; no stale classifications
@@ -140,7 +160,14 @@ for (const [t, kind] of Object.entries(DISPOSITION)) {
   // appears as a quoted name in the runEstate wipe-loop array (`for (const t of ['businesses', …])` →
   // `DELETE FROM ${t}`). Either proves the death path references it; a NEW wiped table someone forgets to
   // wire in matches neither → this fails.
-  if (kind === 'wiped' || kind === 'special') assert(new RegExp(`DELETE FROM ${t}\\b|['"]${t}['"]`).test(allSrc), `${t} is classified '${kind}' but is not referenced by any death-cleanup DELETE in src/ — the estate wipe is missing`);
+  // Death cleanup takes THREE shapes in this tree, and only the first was recognised: a DELETE, a
+  // resolving status UPDATE (a convoy is 'lost', a plan 'abandoned', a favor 'cancelled' — the row
+  // stays as the record of what happened), or the table's name listed in the estate's own wipe loop.
+  // `favors` is handled by an UPDATE and tripped this; the four tables already relying on a status
+  // UPDATE passed only because their names happened to appear quoted somewhere else in src/.
+  if (kind === 'wiped' || kind === 'special') assert(
+    new RegExp(`DELETE FROM ${t}\\b|UPDATE ${t} SET status=|['"]${t}['"]`).test(allSrc),
+    `${t} is classified '${kind}' but no death-cleanup DELETE / resolving status UPDATE for it exists in src/ — the estate wipe is missing`);
 }
 
 // ── (c) DISTRICT → GANG lock order (full-sweep red-team, lens B) ──────────────────────────────
@@ -193,5 +220,5 @@ for (const [t, kind] of Object.entries(DISPOSITION)) {
   assert.equal(offenders.length, 0, `districts→gangs lock-order inversion (AB-BA deadlock vs seizeDistrict/establishRacket): ${offenders.join('; ')}`);
 }
 
-console.log(`✅ Schema-integrity test passed — MED-1: ${stmts.length} idempotent ADD COLUMN IF NOT EXISTS statements derived from schema.sql (no leakage, clean no-op on a fresh DB, a dropped later-added column is RE-ADDED). MED-2: all ${charTables.size} character_id tables have a documented death disposition (${Object.values(DISPOSITION).filter((v) => v === 'wiped').length} wiped / ${Object.values(DISPOSITION).filter((v) => v === 'special').length} special / ${Object.values(DISPOSITION).filter((v) => v === 'escrow').length} escrow / ${Object.values(DISPOSITION).filter((v) => v === 'ledger' || v === 'log').length} ledger — a new unclassified table fails CI closed, and every wiped/special table has a DELETE FROM in src).`);
+console.log(`✅ Schema-integrity test passed — MED-1: ${stmts.length} idempotent ADD COLUMN IF NOT EXISTS statements derived from schema.sql (no leakage, clean no-op on a fresh DB, a dropped later-added column is RE-ADDED). MED-2: all ${charTables.size} character-scoped tables (character_id OR a named %_character role) have a documented death disposition (${Object.values(DISPOSITION).filter((v) => v === 'wiped').length} wiped / ${Object.values(DISPOSITION).filter((v) => v === 'special').length} special / ${Object.values(DISPOSITION).filter((v) => v === 'escrow').length} escrow / ${Object.values(DISPOSITION).filter((v) => v === 'ledger' || v === 'log').length} ledger — a new unclassified table fails CI closed, and every wiped/special table has a DELETE or a resolving status UPDATE in src).`);
 process.exit(0);

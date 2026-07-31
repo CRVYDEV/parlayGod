@@ -33,6 +33,17 @@ const districtName = (id) => (DISTRICTS.find((d) => d.id === id) || {}).name || 
 const uid = () => crypto.randomUUID();
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
+const cargoCount = (cargo) => Object.values(cargo).reduce((a, n) => a + (n || 0), 0);
+
+// (audit F2) the POSTER's trunk capacity, computed by the CANONICAL `trunkCap` rather than restated
+// here — a hand-rolled mirror is how the character view once lost the road_boss bonus. Two unlocked
+// reads assembling the minimal `h` it expects; assets and skills change rarely, and a stale read can
+// only ever be off by one asset, which the delivery gate then rounds against the poster.
+async function posterTrunkCap(client, charId) {
+  const assets = (await client.query('SELECT asset_id FROM character_assets WHERE character_id=$1', [charId])).rows.map((r) => r.asset_id);
+  const skills = new Set((await client.query('SELECT skill_id FROM character_skills WHERE character_id=$1', [charId])).rows.map((r) => r.skill_id));
+  return trunkCap({ owned: { assets, skills } });
+}
 
 // the house cut, carved FROM the pay (the market paySeller shape): half to the street tax that
 // funds the buyback, half burns. One NULL-character row is what closes the escrow identity.
@@ -62,9 +73,20 @@ export async function postFavor(ch, opts, client, h) {
     throw new GameError('pay', `The pay runs $${FAVOR.MIN_PAY}–$${FAVOR.MAX_PAY}.`);
   const district = DISTRICTS.find((d) => d.id === (opts.district || ch.loc))?.id;
   if (!district) throw new GameError('bad_district', 'No such district.');
-  const open = Number((await client.query(
-    "SELECT COUNT(*) n FROM favors WHERE poster_character=$1 AND status='open'", [ch.id])).rows[0].n);
-  if (open >= FAVOR.MAX_OPEN) throw new GameError('max_open', `You've got ${FAVOR.MAX_OPEN} favors out already.`);
+  // (audit F2) ask only for what you could actually CARRY. Every other path that puts goods in a
+  // player's trunk checks `trunkCap` — the market claim, the convoy collect, the goods buy — because
+  // the cap is the bound the whole freight game rests on: bulk needs a convoy. FAVOR.MAX_QTY is 20
+  // against a base trunk of 10, and MAX_OPEN is 3, so before this an unspent favor book could put six
+  // trunkfuls into a trunk. Checked again at delivery, since this can go stale.
+  const book = (await client.query(
+    "SELECT COUNT(*) n, COALESCE(SUM(qty),0) q FROM favors WHERE poster_character=$1 AND status='open'", [ch.id])).rows[0];
+  if (Number(book.n) >= FAVOR.MAX_OPEN) throw new GameError('max_open', `You've got ${FAVOR.MAX_OPEN} favors out already.`);
+  // counting the OUTSTANDING book, not just what's in the trunk right now: three favors that each
+  // fit an empty trunk cannot all be delivered into it, and the poster would eat two TTLs of parked
+  // escrow to find that out. The delivery gate is still the authority — this one can go stale.
+  const space = Math.max(0, trunkCap(h) - cargoCount(h.owned.cargo) - Number(book.q));
+  if (qty > space)
+    throw new GameError('room', `You've room for ${space} more in the trunk — ask for that or less.`);
   if (Number(ch.cash) < pay) throw new GameError('cash', `You need $${pay} in your pocket to put it up front.`);
 
   ch.cash = Number(ch.cash) - pay;
@@ -130,15 +152,42 @@ export async function runFavor(ch, favorId, client, h) {
   const have = Number(h.owned.cargo[f.good_id] || 0);
   if (have < qty) throw new GameError('short', `They want ${qty} ${f.good_id} — you're carrying ${have}.`);
 
-  // the goods change hands — absolute writes both sides (the setCargo discipline, pg-mem INT quirk)
+  // (audit F1) THE HANDOFF IS FACE TO FACE. The runner has always had to be at the district; the
+  // POSTER did not, and a player's cargo travels with them — so the goods appeared wherever the poster
+  // was standing. Neither party had to move: post from Neon for the docks, let somebody who is already
+  // at the docks buy cheap and hand over, and the freight crosses the city instantly, past the convoy
+  // and past the market's district-pinned pickup, which exists for exactly this reason ("the market
+  // must NOT teleport freight past the convoy game"). Now they meet.
+  const poster = (await client.query(
+    'SELECT id, name, loc FROM characters WHERE id=$1 AND alive', [f.poster_character])).rows[0];
+  if (!poster) throw new GameError('gone', 'Whoever put that word out is no longer on the street.');
+  if (poster.loc !== f.district)
+    throw new GameError('poster_away', `${poster.name} isn't at ${districtName(f.district)} to take it — the handoff is face to face.`);
+  // (audit F2) and they must be able to CARRY it — the same bound the market claim and the convoy
+  // collect enforce. Re-checked here because the post-time check goes stale.
+  const theirCap = await posterTrunkCap(client, poster.id);
+  const theirLoad = Number((await client.query(
+    'SELECT COALESCE(SUM(qty),0) n FROM character_cargo WHERE character_id=$1', [poster.id])).rows[0].n);
+  if (theirLoad + qty > theirCap)
+    throw new GameError('poster_full', `${poster.name} has no room for ${qty} more — their trunk is full.`);
+
+  // the goods change hands. The RUNNER's side is an absolute write under their own row lock (the
+  // setCargo discipline, pg-mem INT quirk); the POSTER's side must not be, and that is audit F3:
+  // this read-modify-write was lifted from `fulfillCall`, where `withTwoCharacters` holds the second
+  // party's row and makes it safe. THE FAVOR deliberately drops that lock — the money is already out
+  // of the poster's pocket — but kept the pattern, so two runners filling two favors from the SAME
+  // poster could both read the old total and one delivery would vanish. An UPDATE with `qty + $n` is
+  // atomic and row-locked (addition with a bound parameter is the pg-mem-safe direction); a first
+  // delivery has no row to update, and two racing INSERTs resolve through the 23505 → `contention`
+  // retry the auction materialize race already established.
   const mineLeft = have - qty;
   await client.query('DELETE FROM character_cargo WHERE character_id=$1 AND good_id=$2', [ch.id, f.good_id]);
   if (mineLeft > 0) await client.query('INSERT INTO character_cargo (character_id, good_id, qty) VALUES ($1,$2,$3)', [ch.id, f.good_id, mineLeft]);
   h.owned.cargo[f.good_id] = mineLeft;
-  const theirs = Number((await client.query(
-    'SELECT COALESCE(SUM(qty),0) n FROM character_cargo WHERE character_id=$1 AND good_id=$2', [f.poster_character, f.good_id])).rows[0].n);
-  await client.query('DELETE FROM character_cargo WHERE character_id=$1 AND good_id=$2', [f.poster_character, f.good_id]);
-  await client.query('INSERT INTO character_cargo (character_id, good_id, qty) VALUES ($1,$2,$3)', [f.poster_character, f.good_id, theirs + qty]);
+  const bumped = await client.query(
+    'UPDATE character_cargo SET qty = qty + $3 WHERE character_id=$1 AND good_id=$2', [f.poster_character, f.good_id, qty]);
+  if (!bumped.rowCount) await client.query(
+    'INSERT INTO character_cargo (character_id, good_id, qty) VALUES ($1,$2,$3)', [f.poster_character, f.good_id, qty]);
 
   const { net, take } = await payRunner(client, h, ch, Number(f.pay));
   await client.query("UPDATE favors SET status='filled', runner_character=$2 WHERE id=$1", [f.id, ch.id]);

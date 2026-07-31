@@ -59,9 +59,17 @@ async function advanceChain(client, ch, day) {
   if (row && Number(row.last_day) === day) return null;   // already showed up here today
   const step = Number(row?.step || 0) + 1;
   if (step >= CORNER.CHAIN_STEPS) {
-    // the block pays. Delete rather than reset-to-zero so a fresh chain starts on the next claim —
-    // the row's existence IS "a chain is running", which keeps the board honest with no extra flag.
-    await client.query('DELETE FROM corner_chains WHERE character_id=$1 AND district=$2', [ch.id, ch.loc]);
+    // the block pays, and the chain RESETS in place — stamped with today. (audit F5) Deleting the row
+    // instead let a second claim here the same day find no row, skip the once-a-day check and take
+    // step 1 immediately, so after the first chain the bonus arrived every TWO days rather than the
+    // three the design states. step=0 reads on the board exactly as a fresh chain does, and
+    // `advancedToday` stays true, which is also the honest answer: you did show up here today.
+    if (row) await client.query(
+      'UPDATE corner_chains SET step=0, last_day=$3, started_day=$3 WHERE character_id=$1 AND district=$2',
+      [ch.id, ch.loc, day]);
+    else await client.query(   // only reachable if CHAIN_STEPS is ever tuned to 1 — the lever is a lever
+      'INSERT INTO corner_chains (character_id, district, step, last_day, started_day) VALUES ($1,$2,0,$3,$3)',
+      [ch.id, ch.loc, day]);
     return { done: true, step: CORNER.CHAIN_STEPS, cash: CORNER.CHAIN_BONUS, respect: CORNER.CHAIN_RESPECT };
   }
   if (row) await client.query(
