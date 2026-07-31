@@ -5792,12 +5792,12 @@
     // AUTHED ones concurrent (api() queues those on purpose — same-account calls serialize on the
     // character row at the database anyway), but it removes the client-side turnaround between each
     // response and the next request, and the keyless boards genuinely do run in parallel.
-    const [pfR, vaultR, wageR, bdR, lbR, flbR, winR, yldR] = await Promise.all([
-      api('GET', '/v1/portfolio'), api('GET', '/v1/vault'), api('GET', '/v1/wage'), api('GET', '/v1/bonds'),
+    const [pfR, wageR, bdR, lbR, flbR, winR, yldR] = await Promise.all([
+      api('GET', '/v1/portfolio'), api('GET', '/v1/wage'), api('GET', '/v1/bonds'),
       api('GET', '/v1/leaderboard/portfolio'), api('GET', '/v1/leaderboard/family-portfolio'),
       api('GET', '/v1/window'), api('GET', '/v1/yield'),
     ]);
-    const pf = pfR.body || {}, vault = vaultR.body || {}, wage = wageR.body || {}, bd = bdR.body || {};
+    const pf = pfR.body || {}, wage = wageR.body || {}, bd = bdR.body || {};
     const lb = lbR.body || {}, flb = flbR.body || {}, win = winR.body || {}, yld = yldR.body || {};
     const mkt = pf.market || [];
     const sign = (n) => (n > 0 ? '+' : '') + n.toFixed(2) + '%';
@@ -5897,23 +5897,7 @@
         <div id="uw-lbout"></div></div>`,
         bd.yourStanding.score > 0) : ''}
 
-      <h2 style="margin-top:12px">The Float <span class="d" style="font-size:11px">(BACKED stock — real tokenized shares the treasury holds, funded by the city's ETH taxes; burn earned $OMR to claim your allocation at the real market price)</span></h2>
-      <div class="card">
-        <div class="d">the house never owes a unit it doesn't own · claims ${vault.claimMin ?? 5}–${fmt(vault.claimDailyOmr ?? 500)} $OMR/day per house · big moves draw the Bureau's eye</div>
-        ${(vault.float || []).some((f) => f.available > 0) ? `
-        <div style="margin-top:6px">${(vault.float || []).filter((f) => f.omrPerUnit).map((f) => `
-          <div class="d"><b>${f.ticker}</b> ${f.name} — float ${f.available} of ${f.held} units open · ${fmt(f.omrPerUnit)} $OMR/unit
-            <input data-vaultamt="${f.ticker}" placeholder="$OMR" size="7"> <button class="act" data-vaultbuy="${f.ticker}">claim</button></div>`).join('')}</div>`
-        : '<div class="d" style="color:var(--dim)">the float is empty — the next treasury buyback stocks it (the taxes are accumulating)</div>'}
-        ${(vault.mine || []).length ? `<div class="d" style="margin-top:6px">your vaulted book: ${vault.mine.map((m) => `<b>${m.ticker}</b> ${m.units}u`).join(' · ')} <span class="chip good">BACKED</span></div>` : ''}
-        ${vault.funding ? `<div class="d" style="font-size:11px;margin-top:6px">WHAT'S BEHIND IT — ${
-          Object.entries(vault.funding.bySource || {}).map(([k, v]) =>
-            `${({ tax: 'the DEX sell tax', bond: 'treasury bonds', store: 'the store', fee: 'game fees' })[k] || k} ${v} ETH`).join(' · ')
-            || 'nothing yet'}${vault.funding.unspentEth > 0
-            ? ` · <b>${vault.funding.unspentEth} ETH</b> waiting on the buy bot` : ''}</div>` : ''}
-        <div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">${vault.note || ''}</div></div>
-
-      ${sect('legit-paper', 'The Paper Book', `the status collection — buy with earned $OMR at the house price; big moves ≥ ${fmt(rules?.portfolio?.scrutinyMin ?? 1000)} $OMR draw heat`, `
+            ${sect('legit-paper', 'The Portfolio', `the status collection — buy with earned $OMR at the house price; big moves ≥ ${fmt(rules?.portfolio?.scrutinyMin ?? 1000)} $OMR draw heat`, `
       <div class="grid">${mkt.map((m) => { const h = holdMap[m.ticker]; return `
         <div class="card"><span class="t">${m.ticker} · ${m.name}</span>
           <span class="chip ${m.dayChange >= 0 ? 'good' : 'bad'}">$${fmt(m.price)} ${sign(m.dayChange)}</span>
@@ -5949,8 +5933,6 @@
 
     wireSects(t);
     { const wl = $('#wallet-link'); if (wl) wl.onclick = () => linkWallet(); }
-    t.querySelectorAll('[data-vaultbuy]').forEach((b) => b.onclick = () =>
-      act('POST', '/v1/vault/claim', { ticker: b.dataset.vaultbuy, omr: Number(t.querySelector(`[data-vaultamt="${b.dataset.vaultbuy}"]`).value) }).then(() => renderPortfolio()));
     { const mg = $('#mint-go'); if (mg) mg.onclick = () => act('POST', '/v1/character/mint').then(() => renderPortfolio()); }
     { const wd = $('#withdraw-go'); if (wd) wd.onclick = () =>
         act('POST', '/v1/withdraw', { amount: Number($('#wd-amt').value), address: me.wallet }).then(() => renderPortfolio()); }

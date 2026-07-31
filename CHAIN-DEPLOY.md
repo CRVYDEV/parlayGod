@@ -34,18 +34,27 @@ touches mainnet** until §0 is satisfied.
    that `maxOmrPerEth` is checked independently, so a manipulated oracle can only ever TIGHTEN the ceiling,
    never raise it. Also review `OmrTwapOracle` (a Uniswap V2 cumulative-price TWAP) and the keeper
    dependency it creates.
-3. **Legal counsel sign-off** on the Risk-to-Earn / RWA line (see the "Sensitive design notes" in `CLAUDE.md`
-   and the R2/R3 gating in `omerta-rwa-portfolio-design.md`). Jurisdiction/KYC/geofence for any RWA extraction.
+3. **Legal counsel sign-off** on the Risk-to-Earn line (see the "Sensitive design notes" in `CLAUDE.md`).
+   **The securities surface is GONE as of 2026-07-31** — the founder retired the stock layer
+   (`omerta-stock-layer-retirement.md`), so there is no stock acquisition, no vault, no claim, and no
+   KYC/geofence question to answer. What counsel still reviews is the $OMR side: the withdrawal rail, the
+   Street Wage, bonds and the Store. The in-game Portfolio remains a status collectible with no sell and
+   no cash-out, and it uses real ticker SYMBOLS for flavour (a flagged, undecided founder question — see
+   the retirement doc).
 
 Devnet + testnet rehearsal may proceed now. **Mainnet is blocked on 1 + 2 + 3.**
 
 ---
 
-## 0.5 RESOLVED — the bond's fourth slice (the stock float) now leaves on-chain
+## 0.5 RESOLVED — the bond's fourth slice (now the treasury's) leaves on-chain
 
 Found 2026-07-30 while scoping the v4 hook work; **fixed 2026-07-31** before the third-party audit, so
 it costs nothing extra (the audit clock was already reset by tokenomics v2 step 4 — changing the
 contract AFTER an audit would mean paying to re-audit it).
+
+> **Note (2026-07-31, later the same day):** the founder retired the stock layer. The fourth slice, its
+> bps and this whole fix are unchanged — only the DESTINATION is now a treasury Safe rather than a
+> stock-buy bot. The `rwaBps`/`rwaRecipient`/`rwa_eth` names are historical.
 
 **What was wrong.** `OmertaBond` split ETH three ways (`toPol`/`toDev`/`toVig` = remainder) and had no
 RWA recipient. The backend booked four. On the on-chain path `recordBond` read an `onchainRwa` the
@@ -59,18 +68,21 @@ absorbs the missing slice exactly, and the mirror check compared 0 to 0.
 `rwaBps` + `rwaRecipient`, `Bonded` emits `toRwa`, the watcher reads it, `recordBond` books it. The
 cheaper alternative (split the event's `toVig` backend-side) was **ruled out by a founder decision that
 the Vig wallet and the stock-buy bot are SEPARATE keys** — the bot trades, so it is hot; the Vig funds
-the withdrawal reserve and can be colder. With separate custody, booking the float's ETH against the
-Vig's wallet claims backing the float does not hold, which is the exact class `allocated <= held` and
-the `txHash` gate exist to prevent.
+the withdrawal reserve and can be colder. With separate custody, booking the fourth slice's ETH against
+the Vig's wallet claims a position the destination does not hold, which is the exact class
+`allocated <= held` and the `txHash` gate exist to prevent.
 
 Regressions: `test_the_float_gets_its_own_wallet_not_the_vigs` + `test_four_way_split_leaves_no_dust`
 (Foundry), and `test/watcher.js` asserts a real on-chain bond funds BOTH `bond_reserve.rwa_eth` and
-`rwa_revenue` (the bucket the buy bot draws on). Mutation-verified: drop `onchainRwa` from the watcher
+`rwa_revenue` (the treasury's inflow ledger). Mutation-verified: drop `onchainRwa` from the watcher
 and the suite fails by name.
 
-**Deploy requirement:** `rwaRecipient` MUST be the stock-buy bot's own wallet, distinct from
+**Deploy requirement:** `rwaRecipient` MUST be the **treasury Safe's** own address, distinct from
 `vigRecipient`. Setting them to the same address re-creates the defect silently — the split would be
 correct on-chain and the books would still be right, but the founder's custody separation is gone.
+It should be the coldest key in the system: since the stock layer was retired (2026-07-31,
+`omerta-stock-layer-retirement.md`) this destination only ever RECEIVES, so it has no reason to share a
+key with anything that spends.
 
 ## 1. Build + test the contracts
 - [ ] `cd omerta-contracts && ./run-forge-test.sh` → all `[PASS]` (Gate 0.1). Suite: OMR, VoucherClaim,
@@ -95,9 +107,10 @@ PHASE 1 for the exact calls/args.
       the dev wallet in-tx; custodies nothing.
 - [ ] **`OmertaBond(safe, signer, omr, polBps=3750, devBps=1500, rwaBps=2500, polRecipient, devRecipient,
       rwaRecipient, vigRecipient, dailyCapOMR, maxOmrPerEth)`** — POL bonding with the four-way ETH split
-      (37.5% POL / 15% dev wallet / 25% RWA-float / the REMAINDER, 22.5%, to Vig). All four leave the
-      contract in the same tx; it custodies no ETH. **`rwaRecipient` must be the stock-buy bot's own
-      wallet, distinct from `vigRecipient`** (founder ruling on key separation — §0.5). **This contract
+      (37.5% POL / 15% dev wallet / 25% treasury / the REMAINDER, 22.5%, to Vig). All four leave the
+      contract in the same tx; it custodies no ETH. **`rwaRecipient` must be the TREASURY Safe's own
+      address, distinct from `vigRecipient`** (founder ruling on key separation — §0.5; the `rwa` name is
+      historical, see `omerta-stock-layer-retirement.md`). **This contract
       MINTS** — see below. Keep `polBps`/`devBps`/`rwaBps`/`maxDiscountBps` in lockstep with the backend
       `BONDS.*` in `src/rules.js`.
       **Operating rule (`omerta-v4-hook-design.md` §9.6): keep `BONDS.DISCOUNT_BPS` strictly BELOW
@@ -229,8 +242,10 @@ The backend keeps its own reserve records; they must track the on-chain balances
   TWAP source that replaces the manual `mod/vig/buyback` price).
 - **The on-chain Store** — `OmertaFees.payForPackage` + a `StorePaid` watcher. The Store is off-chain/mod-driven
   today; the on-chain paywall is the mainnet Store milestone.
-- **Liquidity bonds** (LP-token deposits), **R2** (real-RWA buy bot + reserve backing Dynasty shares), **R3**
-  (KYC'd on-chain RWA extraction) — all legal-gated (§0.3).
+- **Liquidity bonds** (LP-token deposits) — legal-gated (§0.3). **R2/R3 (the real-stock buy bot, the
+  reserve backing Dynasty shares, and the KYC'd on-chain extraction) are RETIRED, not deferred** — the
+  founder removed the stock layer 2026-07-31 (`omerta-stock-layer-retirement.md`); the treasury holds ETH
+  and nothing in the game owes anybody a share.
 
 ## 8. Rollback / kill switches
 - Every contract is **pausable** by the Safe (`pause()`), stopping claims/bonds/fees without touching balances.

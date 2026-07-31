@@ -42,14 +42,14 @@ const expectPayout = bondPayout(2, 5000, 800); // 2 ETH × 5000 / 0.92 = 10,869.
 const rec = await call('POST', '/v1/mod/bond/simulate', { modkey: mod, body: { nonce: 1, account: bonder.aid, principalEth: 2, price: 5000, discountBps: 800, txHash: '0xrealbond01' } });
 assert.equal(rec.code, 200, 'the bond is recorded');
 assert.equal(rec.body.payoutOmr, expectPayout, 'the discounted payout is right (2 ETH @5000, 8% discount)');
-// the FOUR-WAY split (tokenomics v2 step 3 gave bond ETH a stock-float destination)
+// the FOUR-WAY split (v2 step 3 gave bond ETH a fourth destination — the treasury)
 assert.equal(rec.body.polEth, 0.75, '37.5% of the ETH → Protocol-Owned Liquidity');
 assert.equal(rec.body.devEth, 0.3, '15% → the dev wallet (founder revenue)');
-assert.equal(rec.body.rwaEth, 0.5, '25% → the stock float (v2 §6 — primary inflow, independent of DEX volume)');
+assert.equal(rec.body.rwaEth, 0.5, '25% → the treasury (v2 §6 — primary inflow, independent of DEX volume)');
 assert.equal(rec.body.vigEth, 0.45, '22.5% → the Vig buyback (reserve + prizes)');
 assert.equal(rec.body.polEth + rec.body.devEth + rec.body.rwaEth + rec.body.vigEth, 2,
   'and the four slices sum to the principal exactly — no dust, nothing skimmed');
-// the float slice reached the bucket the buy bot actually draws on, not just the accumulator
+// the treasury slice reached the inflow ledger, not just the accumulator
 const mirrored = (await pool.query("SELECT rwa_eth FROM rwa_revenue WHERE source='bond' AND ref='1'")).rows[0];
 assert.equal(Number(mirrored?.rwa_eth ?? 0), 0.5,
   'the bond RWA slice is mirrored into rwa_revenue (source=bond) — the accumulator alone is not what the buy bot spends');
@@ -66,7 +66,7 @@ let bi = await runBondInvariants(pool);
 assert(bi.ok, `bond invariant holds: ${JSON.stringify(bi.checks.filter((c) => !c.ok))}`);
 assert.equal(bi.checks.find((c) => c.name === 'bond committed == Σ payout').ok, true, 'committed matches the rows');
 assert.equal(bi.checks.find((c) => c.name === 'bond ETH split == principal').ok, true, 'POL + Dev + Vig + RWA == principal (nothing skimmed)');
-assert.equal(bi.checks.find((c) => c.name === 'bond RWA slice == rwa_revenue').ok, true, 'and the float slice reached the buy bot\'s bucket');
+assert.equal(bi.checks.find((c) => c.name === 'bond RWA slice == rwa_revenue').ok, true, 'and the treasury slice reached its inflow ledger');
 
 // ── §10.4 IN-GAME IS UNTOUCHED — bonds wrote zero `transactions` rows (the fees.js precedent) ──
 assert(await inGameOk(), 'in-game §10.4 STILL clean after a bond (bonds are out-of-band, zero transactions rows)');
@@ -81,7 +81,7 @@ assert.equal(board.reserve.committedOmr, expectPayout, 'the board shows the comm
 assert.equal(board.reserve.remainingOmr, 100000 - expectPayout, 'and the remaining capacity');
 assert.equal(board.reserve.polEth, 0.75, 'and the POL acquired');
 assert.equal(board.reserve.devEth, 0.3, 'and the dev share recorded');
-assert.equal(board.reserve.rwaEth, 0.5, 'and the stock-float share recorded');
+assert.equal(board.reserve.rwaEth, 0.5, 'and the treasury share recorded');
 assert(board.isBacker, 'the bonder is a Treasury Backer (pure status)');
 assert.equal(board.yours.length, 1, 'their bond is on the board');
 const bondId = board.yours[0].id;
@@ -118,7 +118,7 @@ assert.equal(comp.body.real, false, 'the comp bond is not real-ETH-backed');
 assert.equal(comp.body.vigEth, 0, 'the comp injects ZERO Vig buyback basis');
 assert.equal(comp.body.polEth, 0, 'the comp injects ZERO POL');
 assert.equal(comp.body.devEth, 0, 'the comp injects ZERO dev revenue');
-assert.equal(comp.body.rwaEth, 0, 'and ZERO float backing — a comp can never fund stock the treasury did not buy');
+assert.equal(comp.body.rwaEth, 0, 'and ZERO treasury ETH — a comp can never assert the treasury received ETH that never moved');
 assert.equal((await pool.query("SELECT 1 FROM rwa_revenue WHERE source='bond' AND ref='3'")).rows.length, 0,
   'so no rwa_revenue row exists for it at all');
 assert.equal(Number((await pool.query("SELECT COALESCE(SUM(vig_eth),0) s FROM vig_revenue WHERE source='bond'")).rows[0].s), vigBefore, 'the vig_revenue basis is UNMOVED by a comp — the reserve can never be unbacked by a comp');
@@ -235,10 +235,10 @@ assert((await runBondInvariants(pool)).ok, 'the bond invariant still holds throu
 // ── (I) THE FLOAT CANNOT BE SILENTLY STARVED (CHAIN-DEPLOY.md §0.5) ──────────────────────────────────
 // This reproduces the REAL on-chain shape, which is the point: the deployed `OmertaBond` splits ETH
 // three ways and emits `Bonded(… toPol, toDev, toVig)` with NO `toRwa`, so `syncBondEvents` cannot pass
-// an `onchainRwa` and `recordBond` books the float's 25% as ZERO on every real bond. Before this check
+// an `onchainRwa` and `recordBond` books the treasury's 25% as ZERO on every real bond. Before this check
 // existed, that failure was INVISIBLE: check (4) is pol+dev+vig+rwa == principal and the contract's Vig
 // remainder absorbs the missing slice EXACTLY, so it summed; check (4b) compared 0 to 0. Two green
-// checks over a totally unfunded float — the shape the harnesses keep teaching, where a check that
+// checks over a totally unfunded treasury slice — the shape the harnesses keep teaching, where a check that
 // cannot fail reads exactly like a clean bill of health.
 await pool.query('UPDATE bond_reserve SET capacity_omr = capacity_omr + 10000 WHERE id=1');
 const onchainShape = await recordBond(pool, {
@@ -248,12 +248,12 @@ const onchainShape = await recordBond(pool, {
   onchainPayout: 100, onchainPol: 0.75, onchainDev: 0.3, onchainVig: 0.95,
 });
 assert.equal(onchainShape.recorded, true, 'the on-chain-shaped bond records');
-assert.equal(onchainShape.rwaEth, 0, 'and books ZERO to the float — the defect, reproduced from the real event shape');
+assert.equal(onchainShape.rwaEth, 0, 'and books ZERO to the treasury — the defect, reproduced from the real event shape');
 const starved = await runBondInvariants(pool);
-const floatChk = starved.checks.find((c) => c.name === 'every real bond funded the float');
-assert(floatChk, 'the float-funding check exists');
-assert.equal(floatChk.ok, false, 'THE FLOAT-STARVING BOND IS NOW VISIBLE — a real bond that funded no rwa_revenue fails the invariant');
-assert.equal(floatChk.lhs, 1, 'and it names how many real bonds left the float unfunded');
+const trChk = starved.checks.find((c) => c.name === 'every real bond funded the treasury');
+assert(trChk, 'the treasury-funding check exists');
+assert.equal(trChk.ok, false, 'THE FLOAT-STARVING BOND IS NOW VISIBLE — a real bond that funded no rwa_revenue fails the invariant');
+assert.equal(trChk.lhs, 1, 'and it names how many real bonds left the treasury unfunded');
 // the two checks it hid behind are still green, which is exactly why (4c) had to exist
 assert.equal(starved.checks.find((c) => c.name === 'bond ETH split == principal').ok, true,
   'check (4) STILL passes — the Vig remainder absorbs the missing slice exactly, so it can never see this');
@@ -267,5 +267,5 @@ assert((await runBondInvariants(pool)).ok, 'and with the float-starving bond rem
 
 console.log('✅ THE UNDERWRITER (Reserve Bond Tier-4) test passed — THE PLEDGE (min gate, ledgered bond:pledge burn, over-pledge → omr), THE CHARTER (sequential Bronze→Silver seals, not_backer gate, ledgered bond:charter), backer-tier derivation (pledge + bondedEth×ETH_SCORE_OMR → Financier), THE UNDERWRITERS LEAGUE + the read-derived Financier crown (agent excluded, the crown flips on a bigger pledge), THE FAMILY SYNDICATE (summed roster score), §10.4 (bond: enumerated + every burn reconciles + the only drift is the SQL seed), and DEATH SURVIVAL (pledged_omr/bond_charter/bonded_eth all survive the estate)');
 
-console.log('✅ The Reserve Bond test passed — fund the tranche, record a bond (the discounted payout + the 37.5/15/25/22.5 POL/Dev/RWA/Vig ETH split, the float slice mirrored into rwa_revenue), the ANTI-PONZI cap (committed ≤ capacity → over_capacity), idempotency (duplicate nonce = no-op), the bond invariant (committed==Σpayout, ≤capacity, claimed≤committed, ETH-split==principal, discounts capped), the Vig integration (bond ETH feeds the buyback → reserve+prizes), CLAIM (linear vesting → full claim → nothing left), the Treasury Backer status, and §10.4 IN-GAME UNTOUCHED (bonds are out-of-band real value — zero transactions rows — so the sweep stays drift-free through the whole lifecycle)');
+console.log('✅ The Reserve Bond test passed — fund the tranche, record a bond (the discounted payout + the 37.5/15/25/22.5 POL/Dev/RWA/Vig ETH split, the treasury slice mirrored into rwa_revenue), the ANTI-PONZI cap (committed ≤ capacity → over_capacity), idempotency (duplicate nonce = no-op), the bond invariant (committed==Σpayout, ≤capacity, claimed≤committed, ETH-split==principal, discounts capped), the Vig integration (bond ETH feeds the buyback → reserve+prizes), CLAIM (linear vesting → full claim → nothing left), the Treasury Backer status, and §10.4 IN-GAME UNTOUCHED (bonds are out-of-band real value — zero transactions rows — so the sweep stays drift-free through the whole lifecycle)');
 await app.close();

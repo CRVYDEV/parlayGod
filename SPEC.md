@@ -18,7 +18,7 @@ Written 2026-07-25. Every number below was measured from the tree, not recalled.
 | Ops dashboard + wiki | `public/admin.html`, `public/wiki.html` |
 | Smart contracts | **1276** lines Solidity, 8 contracts, 107 Foundry tests passing |
 | Harnesses | `tools/sim.js` (economy), `tools/playthrough.js` (player experience), `tools/pgcheck.js` (real Postgres), `tools/loadtest.js` (concurrency), `tools/chaos.js` (interruption), `tools/mobile.js` (the screens, at phone size), `tools/scale.js` (market liquidity at population scale), `tools/bond-dials.js` (sizing the on-chain mint walls), `tools/pgquery.js` (every SQL string parses on real Postgres) |
-| Design + audit docs | **144** markdown files, **33834** lines — indexed in `docs/AUDITS.md`, which states they are point-in-time |
+| Design + audit docs | **145** markdown files, **33993** lines — indexed in `docs/AUDITS.md`, which states they are point-in-time |
 | Ledger invariants | 18 named escrow/identity checks + per-currency conservation, **drift-0** |
 
 Roughly **55,000 lines** of code, tests, schema and contracts.
@@ -96,7 +96,8 @@ surcharge.
 Loot the living · located laundering · shield-not-bunker · the bank daily cap · THE VIG (real revenue →
 buyback → reserve + prize pool) · the PLEX bridge · backed emission (staking paid from a funded pool) ·
 THE STREET WAGE (a fixed, halving, endowment-capped daily emission to minted accounts) · THE RESERVE
-BOND (protocol-owned liquidity, no reflexive mint) · THE FLOAT (RWA reserve — off-chain core, legal-gated).
+BOND (protocol-owned liquidity, no reflexive mint) · THE TREASURY (four ETH slices accumulate; the
+stock-float layer they once funded was retired 2026-07-31 — `omerta-stock-layer-retirement.md`).
 
 ### 3.8 The pillars
 **Territory** — rackets with scale tiers and business types, the Bureau crackdown, fortification, rival
@@ -392,7 +393,7 @@ looks superlinear and produces deadlocks). So capacity here is bought with CPU, 
 rewrite. D6 stays accepted-as-is; the convention is now known to hold under load, not just under review.
 
 ### D7 — Documentation mass **(LOW-MEDIUM, partly addressed)**
-144 markdown files, 34k lines, with CLAUDE.md alone 7265 lines of dense prose. Two codices already
+145 markdown files, 34k lines, with CLAUDE.md alone 7265 lines of dense prose. Two codices already
 drifted once (a test now guards it). Onboarding a second developer means reading a novel.
 
 **Addressed: the prose that a reader could ACT on is now machine-checked.** Stale prose does not fail

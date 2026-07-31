@@ -68,8 +68,9 @@ export const SYSTEMS = {
     'estate_staff_dismiss', 'estate_wages'],
   'the auction house': ['auction_bid', 'auction_consign', 'auction_consign_bid'],
   // ('rwa_dividend' retired with the personal dividend — tokenomics v2 step 2; the family one stays)
-  'going legit (rwa)': ['rwa_invest', 'rwa_family_invest', 'rwa_family_dividend',
-    'rwa_vault_claim', 'dynasty_name'],
+  // ('rwa_vault_claim' retired with the STOCK LAYER — omerta-stock-layer-retirement.md. The
+  // Portfolio below it is untouched: it was always pure in-game status.)
+  'going legit (rwa)': ['rwa_invest', 'rwa_family_invest', 'rwa_family_dividend', 'dynasty_name'],
   'the megaproject': ['megaproject_give'],
   // #318 corner-board claims + settled contact calls; #320 the player-posted favour, run by someone
   // else — a `favor_run` is the clearest possible signal that the black book reached a real player.

@@ -114,15 +114,19 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     ///         lockstep with the backend's BONDS.POL_BPS so on-chain and off-chain never drift.
     uint256 public immutable polBps;
     uint256 public immutable devBps;   // the founder-revenue share of every bond's ETH
-    /// @notice The STOCK FLOAT's share of every bond's ETH (tokenomics v2 §6). Bond ETH is PRIMARY
-    ///         inflow — it arrives whether or not anyone is trading — so it is what keeps the float
+    /// @notice The TREASURY's share of every bond's ETH (tokenomics v2 §6). Bond ETH is PRIMARY
+    ///         inflow — it arrives whether or not anyone is trading — so it is what keeps the treasury
     ///         growing when DEX volume is thin, which is exactly what a one-way conversion produces.
-    ///         The Vig takes whatever remains after POL + Dev + RWA.
+    ///         The Vig takes whatever remains after POL + Dev + RWA. (This slice was earmarked to buy
+    ///         real tokenized stock until that layer was retired 2026-07-31; the bps and the split are
+    ///         unchanged, only the destination — `rwaRecipient` is now a treasury Safe, not a buy bot.)
     uint256 public immutable rwaBps;
     address public signer;              // the game server's quote signer (rotatable by the Safe)
     address payable public polRecipient; // where the POL ETH share is forwarded (the pairing manager)
     address payable public devRecipient; // where the dev ETH share is forwarded (founder revenue — the OmertaFees dev-wallet pattern)
-    address payable public rwaRecipient; // where the float's ETH share is forwarded (the stock-buy bot)
+    address payable public rwaRecipient; // where the treasury's ETH share is forwarded (a cold Safe; this
+                                         // slice funded a stock float until that layer was retired 2026-07-31 —
+                                         // the bps and the plumbing are unchanged, only the destination)
     address payable public vigRecipient; // where the Vig ETH share is forwarded (the Vig wallet)
 
     /// @notice OMR promised to outstanding (unclaimed) bonds. INVARIANT: <= omr.balanceOf(this).

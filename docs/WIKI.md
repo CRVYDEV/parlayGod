@@ -15,7 +15,7 @@ CODEX button in the top bar).
 ## Table of contents
 1. [The core loop](#1-the-core-loop) · 2. [Your character, death & the heir](#2-your-character-death--the-heir) ·
 3. [Cars, guns & gear](#3-cars-guns--gear) · 4. [The city & the living world](#4-the-city--the-living-world) ·
-5. [The economy — $OMR, cash, the window, the vault](#5-the-economy) · 6. [The Kitchen](#6-the-kitchen) ·
+5. [The economy — $OMR, cash, the window](#5-the-economy) · 6. [The Kitchen](#6-the-kitchen) ·
 7. [Businesses & fronts](#7-businesses--fronts) · 8. [Territory rackets](#8-territory-rackets) ·
 9. [Families](#9-families) · 10. [The Commission](#10-the-commission) · 11. [The Den (casino)](#11-the-den) ·
 12. [The Speakeasy](#12-the-speakeasy) · 13. [The Fights (boxing)](#13-the-fights) ·
@@ -777,8 +777,10 @@ funded prize pool (never created). This is account-level, so it survives death.
 
 The last stop for earned $OMR: turn it into a **legal, death-proof stock
 book**. The tickers are **real Robinhood tokenized stocks** (GLD, AAPL, AMZN, TSLA, HOOD, NVDA, SPCX, GME). In
-the game, they are a **status collectible** with a set price. There is **no cash-out and no sell** (this is a
-legal rule; a real KYC extraction is a future phase behind legal approval). `GET /v1/portfolio` [public].
+the game, they are a **status collectible** with a set price. There is **no cash-out and no sell, and no
+phase where there will be** — the game does not acquire, hold or deliver real shares (2026-07-31: the
+stock layer was retired; the ETH that would have bought stock is simply held by the treasury). What you
+own here is a number the game keeps for you and shows off. `GET /v1/portfolio` [public].
 
 - **Invest** (`/v1/portfolio/invest`) burns earned $OMR for fractional shares. A large action (1000 $OMR or
   more in a day) draws the Bureau's eye (heat) and is blocked from a safehouse.
@@ -808,11 +810,10 @@ are shut, laundering at your own front is gone, and the swap says so plainly if 
   share of what a player burns goes to the families instead of leaving supply, so the yield scales with
   real redemption volume. It is what staking rewards and personal dividends become: standing stops being
   only a badge and starts paying, so tribute, wars and the Commission are worth real money to a family.
-- **What backs the stock float** (`GET /v1/vault`) — the float buys real tokenized shares with real ETH,
-  and the board now names where that ETH came from: the DEX sell tax, treasury bonds, the store, game
-  fees. Two of those matter at scale and they are deliberately different — the tax only earns when people
-  are trading, and bonds earn whether or not anyone is. The game never owes a share it has not already
-  bought, so you can read the funding and the holdings and check the claim yourself.
+- **Where the real money goes** — four streams of real ETH (the DEX sell tax, treasury bonds, the store,
+  game fees) fund the protocol: liquidity, the withdrawal reserve, the founder, and a treasury. Until
+  2026-07-31 the last of those was earmarked to buy real tokenized shares players could one day claim;
+  that layer is **retired**, and the treasury simply holds ETH. Nothing in the game owes anybody a share.
 
 ---
 

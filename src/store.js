@@ -347,17 +347,18 @@ export async function benefactorLeaderboard(pool, limit = 25) {
 export async function revenueStatus(pool) {
   const grossEth = round6(Number((await pool.query("SELECT COALESCE(SUM(gross_eth),0) s FROM vig_revenue WHERE source='store'")).rows[0].s));
   const buybackEth = round6(Number((await pool.query("SELECT COALESCE(SUM(vig_eth),0) s FROM vig_revenue WHERE source='store'")).rows[0].s));
+  // the TREASURY's share. Named `rwa*` throughout because the table and the split key are — the
+  // stock layer it funded was retired 2026-07-31 (omerta-stock-layer-retirement.md) and the ETH now
+  // simply accumulates. There is no spend seat any more, so nothing reads a buyback log.
   const rwaEth = round6(Number((await pool.query("SELECT COALESCE(SUM(rwa_eth),0) s FROM rwa_revenue WHERE source='store'")).rows[0].s));
-  // THE FLOAT is live: rwaSpent now reads the buyback log (rwa_buys), the real spend seat
-  const rwaSpent = round6(Number((await pool.query('SELECT COALESCE(SUM(eth),0) s FROM rwa_buys')).rows[0].s));
   const founderEth = round6(grossEth - buybackEth - rwaEth);
   const bySku = (await pool.query(
     'SELECT sku, COUNT(*) n FROM store_payments WHERE granted GROUP BY sku')).rows.map((r) => ({ sku: r.sku, sold: Number(r.n) }));
   const pending = Number((await pool.query('SELECT COUNT(*) n FROM store_payments WHERE NOT granted')).rows[0].n);
   return {
     split: STORE.SPLIT_BPS,
-    grossEth, founderEth, buybackEth, rwaEth, rwaSpent,
-    rwaDormant: rwaSpent === 0, // R2 not yet built — the rwa share is recorded, never spent
+    grossEth, founderEth, buybackEth, rwaEth, treasuryEth: rwaEth,
+    treasuryHolds: 'eth', // the stock layer is retired — this slice accumulates as ETH, it is not spent on units
     bySku, pendingLinks: pending,
   };
 }
