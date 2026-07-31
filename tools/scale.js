@@ -35,6 +35,13 @@
 process.env.MOD_KEY = process.env.MOD_KEY || 'scale-mod-key';
 process.env.MARKET_SEED = process.env.MARKET_SEED || 'scale-harness-seed-000000000000';
 process.env.SOCIAL_VERIFY_MODE = 'off';
+// A scripted town issues requests far faster than the human it is standing in for, and the §10.2
+// bucket is sized for a human. Setting DATABASE_URL turns the limiter ON (ratelimit.js reads it as
+// "this is a real deployment"), so without this a real-Postgres run measures the LIMITER instead of
+// the economy — 208 refusals, every market empty, and a §10.4 pass that means nothing because
+// nothing happened. Every sibling harness that touches a real database does the same (chaos,
+// loadtest, pgcheck).
+process.env.RATE_LIMIT = 'off';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { runLedgerInvariants } from '../src/invariants.js';
@@ -51,6 +58,7 @@ const pct = (num, den) => (den ? Math.round((num / den) * 100) : null);
 
 // One whole run of the town, start to finish, on its own database. Returns the numbers rather than
 // printing them, so the sweep can run it at several populations and compare.
+const REAL_PG = !!process.env.DATABASE_URL;   // a database that honours ROLLBACK — see the banking note in act()
 async function runTown({ players: PLAYERS, days: DAYS, verbose = true }) {
 const app = await buildServer();
 const pool = app.pool;
@@ -154,19 +162,66 @@ async function act(p) {
   // the ladder working as designed; it just means a scripted population has to be plausible in the
   // early game too, not only in the markets.
   note(await call('POST', '/v1/crimes/pick', p.token));
-  // BANKING IS OFF BY DEFAULT, and that is a FINDING, not a preference. Driving one $1,000 deposit
-  // per player makes the §10.4 delta assertion below FAIL, reproducibly, at the CI config:
-  //     SCALE_BANK=on SCALE_PLAYERS=18 SCALE_DAYS=2 node tools/scale.js
-  //     → character cash: 71991000 → 71990999.83   (drift −0.17; at 3 days, −107)
-  // The drifting players are the busiest ones, and their own reconcile shows WEALTH falling further
-  // than the LEDGER recorded. It is NOT bank interest (200 accruals on a lone banked player reconcile
-  // to 0.00000000) and NOT bank+jump (six jumps against a freshly-banked mark reconcile exactly), so
-  // it lives in some interaction the whole town reaches and neither probe does. It deserves its own
-  // investigation with a fresh head, not a guess at the end of a session — so it is written down here,
-  // WITH the switch that reproduces it, rather than deleted and forgotten. The gate stays honest: the
-  // assertion is untouched, and turning this on turns the finding back into a failing build.
-  if (process.env.SCALE_BANK === 'on' && !p.banked) {
-    if ((await call('POST', '/v1/bank/deposit', p.token, { amount: 1000 })).code === 200) p.banked = true;
+  // AN EARNER. Not for the income — for the coach. "Money while you sleep" is a one-time rung at
+  // level 8, and a town that never buys one sits on it forever, which masks every rung below it
+  // including the four social ones this trace exists to reach. The first two runs on real Postgres
+  // reported all five as "never reached" for exactly this reason and NOTHING about the game.
+  // A scripted population has to clear the one-time milestones a real player would, or the trace
+  // measures the diet instead of the ladder.
+  // `laundro` is the cheapest entry in the RACKETS catalog ($12.5k, level 3) — a seeded player
+  // affords it many times over. It goes through note() so a refusal lands in the REFUSALS table:
+  // the first cut bought `numbers`, which is a TERRITORY racket type and not in this catalog at
+  // all, and because it skipped note() the branch did nothing for two whole runs in silence while
+  // the coach report faithfully reported the consequence and not the cause.
+  // Behind the same gate as banking, and for the same reason widened: an OWNING player accrues
+  // `racket:income` on every touch, so on pg-mem a refused call after that accrual leaves the
+  // faucet's ledger row behind with no balance to match it. Measured: buying these two on pg-mem
+  // moved `character cash` by -87 with banking already off — the identical artifact through a
+  // different faucet, an order of magnitude larger because income beats interest on $1,000.
+  // The general rule this run established: on pg-mem ANY accrual faucet plus ANY refusal
+  // manufactures drift. So the economically-deep town only runs where ROLLBACK is real.
+  if (REAL_PG && !p.earner && note(await call('POST', '/v1/rackets/laundro/buy', p.token)).code === 200) p.earner = true;
+  // SPEND THE POINTS. Same reason as the earner: a seeded level-51 player carries ~12 unspent skill
+  // points and the ladder rightly tells them to spend them, which masks everything below. The rung
+  // re-fires while 5+ sit idle, so one skill is not enough — this walks a whole branch (1+2+3+4 = 10
+  // points, prereq-ordered). It is the honest shape of the finding: a scripted town seeded straight
+  // to the markets carries a stack of one-time milestones a real player of that level would have
+  // cleared on the way up, and every one of them sits above the tail where the social rungs live.
+  if (!p.skilled) {
+    for (const id of ['bruiser', 'doctors_friend', 'executioner', 'made_man'])
+      note(await call('POST', `/v1/skills/${id}`, p.token));
+    p.skilled = true;
+  }
+  // A GUN and a FRONT — the next two one-time milestones down the road-to-30. Everything BELOW these
+  // on the ladder needs either $OMR (the wire, going legit) or standing in a specific district (the
+  // den at neon, a boat at the docks), which this diet does not do; those are named in the coach
+  // report as still-masked rather than pretended away.
+  if (!p.armed && note(await call('POST', '/v1/armory/gun/lastresort/buy', p.token)).code === 200) p.armed = true;
+  if (REAL_PG && !p.front && note(await call('POST', '/v1/business/laundromat/buy', p.token)).code === 200) p.front = true;
+  // BANKING runs whenever the database can honour a ROLLBACK, and that qualifier is the finding.
+  // Driving one deposit per player made this harness's §10.4 delta assertion FAIL reproducibly on
+  // pg-mem, and it took an A/B on the identical scenario to see that the game was innocent:
+  //
+  //     same probe, same refusal (`not_listed`), $50k banked, clock warped 3h
+  //       real Postgres : 0 stray rows, drift  0.00000000
+  //       pg-mem        : 1 stray row,  drift -250.00108796   (= 50000 × 0.02 × 3h/12h — the interest)
+  //
+  // The wrapper accrues BEFORE it hands to fn, so a refused action has already written its
+  // `bank:interest` row when the gate throws. Real Postgres undoes that row on ROLLBACK, and
+  // persistCharacter never ran, so neither side moved. pg-mem's ROLLBACK IS A NO-OP: the row
+  // survives, the balance never moved, and the ledger outgrows the wealth. Negative drift, entirely
+  // manufactured by the test database — and it needs bank interest to exist, which is why it only
+  // ever showed up with banking on.
+  //
+  // That cuts BOTH ways and is worth saying plainly: on pg-mem a §10.4 assertion can report drift
+  // production does not have, and can equally miss drift it does. So this follows the pgcheck
+  // precedent — the real-engine gate runs on the real engine:
+  //     DATABASE_URL=postgres://... node tools/scale.js
+  // On pg-mem banking stays off (SCALE_BANK=on forces it, and turns the artifact back on with it),
+  // which costs the town its ob_bank claim and leaves the First Week rung masking the social rungs
+  // this trace exists to reach. That limitation is printed with the coach report rather than hidden.
+  if (REAL_PG || process.env.SCALE_BANK === 'on') {
+    if (!p.banked && (await call('POST', '/v1/bank/deposit', p.token, { amount: 1000 })).code === 200) p.banked = true;
   }
   if (!p.boosted) { if ((await call('POST', '/v1/garage/boost', p.token)).body?.car) p.boosted = true; }
   for (const t of ((await call('GET', '/v1/onboard', p.token)).body?.tasks || [])) {
@@ -485,9 +540,26 @@ if (verbose) {
     console.log(`    ${label.padEnd(22)} ${!ever ? 'never reached — masked by a rung above it, so this run says nothing about it'
       : hit ? `still showing (${ever[1]} players saw it)` : `reached by ${ever[1]} and cleared`}`);
   }
-  console.log('  (a REPORT, not a bound: these players are seeded to level ~51 to reach the markets, so');
-  console.log('   they skip the early ladder entirely. The anti-masking bound lives in the solo harness,');
-  console.log('   where the player is plausible — what this adds is whether the SOCIAL rungs clear at all.)\n');
+  console.log('  (a REPORT, not a bound. What this run MEASURED, walking the town down the ladder one');
+  console.log('   milestone at a time — earner, skill points, gun, front — is that each one cleared and');
+  console.log('   the NEXT unfinished milestone immediately took its place at the top. That is the');
+  console.log('   ladder working exactly as designed: it is a strict priority chain of one-time');
+  console.log('   milestones, and the social rungs sit BELOW all of them (banded, then demoted to the');
+  console.log('   tail). So a level-51 player who skipped the mid-game walks a dozen rungs before the');
+  console.log('   coach ever mentions their family, their crew or the wire — worth a founder\'s eye,');
+  console.log('   because that is precisely the returning veteran. The rungs still masked here need');
+  console.log('   $OMR or a specific district, which this diet does not do; the solo harness is where');
+  console.log('   a plausible player walks the whole road.)');
+  // Say which engine this ran on, because it changes what the lines above are worth. On pg-mem the
+  // town cannot bank (the ROLLBACK artifact — see act()), so it cannot finish the First Week, so the
+  // First Week rung sits on top of every social rung. Reporting "never reached" without that
+  // sentence would read as a fact about the GAME when it is a fact about the DATABASE.
+  console.log(REAL_PG
+    ? '  engine: real Postgres — the town banks and owns earners, so it walks the milestone chain and the\n'
+      + '  lines above are about the LADDER.\n'
+    : '  engine: pg-mem — banking and earners are off here (pg-mem cannot roll back an accrual, so an\n'
+      + '  accruing player who is then refused manufactures §10.4 drift), which leaves the town on the\n'
+      + '  First Week rung. The lines above are about THE DIET, not the ladder. Re-run with DATABASE_URL.\n');
 }
 
 // ── the assertions ────────────────────────────────────────────────────────────────────────────

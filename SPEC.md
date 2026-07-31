@@ -291,6 +291,25 @@ crash and the run exits non-zero; removing the connection `options` fails the th
 The blocked-lock probe refuses to run at all when `lock_timeout` is 0 rather than queue forever — a
 hung CI job is a worse signal than a failed one.
 
+**One divergence deserves naming on its own, because it cuts at §10.4 itself: pg-mem's ROLLBACK is a
+no-op.** Every wrapped action ACCRUES before it hands to `fn`, so a refused action has already written
+its `bank:interest` / `racket:income` row when the gate throws. Real Postgres undoes that row, and
+`persistCharacter` never ran, so neither side moved. On pg-mem the row survives while the balance
+never moved — the ledger outgrows the wealth. Measured A/B on the identical scenario and the identical
+refusal (`not_listed`, $50k banked, clock warped 3h):
+
+| | rows left by the refusal | §10.4 drift |
+|---|---|---|
+| real Postgres | 0 | `0.00000000` |
+| pg-mem | 1 | `−250.00108796` (= 50000 × 0.02 × 3h/12h — the interest) |
+
+**It cuts both ways: on pg-mem a §10.4 assertion can report drift production does not have, and can
+equally miss drift it does.** It stayed invisible for so long because it needs an accruing player AND
+a refusal AND enough elapsed time to produce a non-zero faucet — a combination the suites rarely hit
+and `tools/scale.js` hits constantly. That harness therefore drives banking and earners only when
+`DATABASE_URL` is set (the pgcheck precedent), and says which engine it ran on so a shallow town is
+never read as a finding about the game.
+
 Residual: the divergence itself remains (the suites are still pg-mem, and that is the right trade for
 their speed). CI narrows the blast radius; it does not close the gap.
 
