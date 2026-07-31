@@ -7263,3 +7263,35 @@ row). The chain now resets IN PLACE stamped with today, which is also what the b
 not changed: the post-time `room` gate can still go stale (deliberate — reserving trunk space against an
 open book would let a favor block a convoy load), and `MAX_QTY` 20 now needs a built trunk to reach. Suite
 green + sim drift-0.
+
+**THE BOND'S FOURTH SLICE — `OmertaBond` splits ETH FOUR ways (founder-directed 2026-07-31; closes
+CHAIN-DEPLOY §0.5).** The contract split ETH three ways (`toPol`/`toDev`/`toVig` = remainder) and had no
+RWA recipient, while the backend booked FOUR — so on the on-chain path `recordBond` read an `onchainRwa`
+the `Bonded` event could not carry, `rwa_eth` was **0 on every real bond**, and the contract's whole 4750
+bps remainder landed as **Vig** (signed split: 2250 Vig / 2500 RWA). The ETH was not lost (it reached
+`vigRecipient`) but the slice that went missing is the stock float's PRIMARY INFLOW — the thing v2 §6
+built to keep the float growing when DEX volume is thin — and **neither bond invariant could see it**:
+check (4) sums because the Vig remainder absorbs the missing slice EXACTLY, and the mirror check compared
+0 to 0. It would have surfaced months after mainnet as "why is the float empty?" with everything green
+(check 4c, the per-bond "every real bond left a float row" counter, was added when the defect was found —
+it is what fails today's code). **The founder ruled the Vig wallet and the stock-buy bot are SEPARATE
+keys** (the bot trades, so it is hot; the Vig funds the withdrawal reserve and can be colder), which
+RULED OUT the cheap backend-side interim: with separate custody, splitting the event's `toVig`
+2250:2500 in code books float backing against ETH the float does not hold — the exact class
+`allocated ≤ held` and the `txHash` gate exist to prevent. Built: `rwaBps` (immutable) + `rwaRecipient`
+(Safe-settable), the forward mirroring the existing three, `Bonded` emits `toRwa`, `RecipientsSet` and
+`setRecipients` are four-way, constructor + setter zero-address guards extended, and **the REMAINDER
+rule sits on the Vig** so the four shares sum to the principal exactly (three of four round down; a
+"natural" fourth division strands wei belonging to nobody — the OMR sell-tax LP-slice precedent).
+`src/watcher.js` reads `toRwa` off the log and threads `onchainRwa`; `recordBond` already had the field.
+**Timing was the decisive argument**: the third-party contract audit has not run and v2 step 4 already
+reset its clock, so changing the contract now costs nothing — after the audit it would mean paying to
+re-audit. Foundry 109/109 (two new: `test_the_float_gets_its_own_wallet_not_the_vigs` — the float's ETH
+reaches the float's wallet AND the Vig gets only its own share, and `test_four_way_split_leaves_no_dust`
+on a principal not divisible by 10000); `test/watcher.js` asserts a real on-chain bond funds BOTH
+`bond_reserve.rwa_eth` and `rwa_revenue` (mutation-verified: drop `onchainRwa` and it fails by name).
+CHAIN-DEPLOY §0.5 is now RESOLVED with a deploy requirement — `rwaRecipient` must be distinct from
+`vigRecipient`, since setting them equal silently re-creates the custody defect while the books stay
+correct. Process note: reverting the mutation with `git checkout src/watcher.js` **wiped the session's
+other edits to that file** — the recorded trap, hit again; mutate on a scratchpad copy, never restore
+from git while uncommitted work exists.

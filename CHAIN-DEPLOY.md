@@ -41,34 +41,36 @@ Devnet + testnet rehearsal may proceed now. **Mainnet is blocked on 1 + 2 + 3.**
 
 ---
 
-## 0.5 KNOWN DEFECT — the bond's RWA slice never arrives on-chain (fix before mainnet)
+## 0.5 RESOLVED — the bond's fourth slice (the stock float) now leaves on-chain
 
-Found 2026-07-30 while scoping the v4 hook work (`omerta-v4-hook-design.md` §9.7). Chain-dormant, so
-nothing is wrong in production today — but it fires the moment a real bond lands, on ANY chain, and it
-is invisible to both bond invariants.
+Found 2026-07-30 while scoping the v4 hook work; **fixed 2026-07-31** before the third-party audit, so
+it costs nothing extra (the audit clock was already reset by tokenomics v2 step 4 — changing the
+contract AFTER an audit would mean paying to re-audit it).
 
-`OmertaBond` splits ETH **three** ways on-chain (`toPol`, `toDev`, `toVig` = the remainder) and has no
-RWA recipient at all. The backend books **four** (`BONDS.RWA_BPS` 2500 → `rwa_revenue`, the stock
-float's primary-inflow source). On the on-chain path `recordBond` reads an `onchainRwa` the watcher
-cannot supply — the `Bonded` event has no such field — so:
+**What was wrong.** `OmertaBond` split ETH three ways (`toPol`/`toDev`/`toVig` = remainder) and had no
+RWA recipient. The backend booked four. On the on-chain path `recordBond` read an `onchainRwa` the
+watcher could not supply, so `rwa_eth` was **0 on every real bond** and the contract's whole 4750 bps
+remainder landed as Vig (signed split: 2250 Vig / 2500 RWA). The ETH was not lost — it reached
+`vigRecipient` — but the slice that went missing is the one that keeps the stock float growing when DEX
+volume is thin, and **neither bond invariant could see it**: check (4) sums because the Vig remainder
+absorbs the missing slice exactly, and the mirror check compared 0 to 0.
 
-- `rwa_eth` = **0** on every real bond,
-- the contract's whole 4750 bps remainder is booked as **Vig** revenue (signed split: 2250 Vig / 2500 RWA).
+**The fix, and why this one and not the cheaper one.** The contract now splits FOUR ways —
+`rwaBps` + `rwaRecipient`, `Bonded` emits `toRwa`, the watcher reads it, `recordBond` books it. The
+cheaper alternative (split the event's `toVig` backend-side) was **ruled out by a founder decision that
+the Vig wallet and the stock-buy bot are SEPARATE keys** — the bot trades, so it is hot; the Vig funds
+the withdrawal reserve and can be colder. With separate custody, booking the float's ETH against the
+Vig's wallet claims backing the float does not hold, which is the exact class `allocated <= held` and
+the `txHash` gate exist to prevent.
 
-The ETH is not lost (it reaches `vigRecipient`), but it reaches the wrong destination, and the slice
-that goes missing is the one that keeps the stock float growing when DEX volume is thin.
+Regressions: `test_the_float_gets_its_own_wallet_not_the_vigs` + `test_four_way_split_leaves_no_dust`
+(Foundry), and `test/watcher.js` asserts a real on-chain bond funds BOTH `bond_reserve.rwa_eth` and
+`rwa_revenue` (the bucket the buy bot draws on). Mutation-verified: drop `onchainRwa` from the watcher
+and the suite fails by name.
 
-**Why neither check catches it:** `runBondInvariants` check (4) is `pol + dev + vig + rwa == principal`
-— Vig absorbs the missing slice exactly, so it sums. `bond RWA slice == rwa_revenue` compares 0 to 0.
-It would surface months later as "why is the float empty?", with everything green.
-
-- [ ] **Fix (recommended): four-way split in the contract** — `rwaBps` + `rwaRecipient`, emit `toRwa`,
-      watcher + `recordBond` read it. Mirrors the existing three-way code; makes the contract the source
-      of truth for all four slices, which is what `recordBond`'s own comment already claims. Regression
-      must assert a real on-chain bond funds `rwa_revenue` (today's code fails it).
-- [ ] Interim alternative (**only** if `vigRecipient` and the RWA buy bot share one custody): split the
-      event's `toVig` 2250:2500 backend-side. If the wallets differ this books float backing against ETH
-      the float does not hold — the exact class `allocated ≤ held` and the `txHash` gate exist to prevent.
+**Deploy requirement:** `rwaRecipient` MUST be the stock-buy bot's own wallet, distinct from
+`vigRecipient`. Setting them to the same address re-creates the defect silently — the split would be
+correct on-chain and the books would still be right, but the founder's custody separation is gone.
 
 ## 1. Build + test the contracts
 - [ ] `cd omerta-contracts && ./run-forge-test.sh` → all `[PASS]` (Gate 0.1). Suite: OMR, VoucherClaim,
@@ -91,12 +93,13 @@ PHASE 1 for the exact calls/args.
 - [ ] **`OmertaFees(devWallet, safe, mintFeeWei, respawnFeeWei)`** — the ETH tollbooth. Fees:
       `MINT = 0.01 ETH`, `RESPAWN = 0.10 ETH`, `reroll` defaults to `mintFee` (owner-settable). Forwards ETH to
       the dev wallet in-tx; custodies nothing.
-- [ ] **`OmertaBond(safe, signer, omr, polBps=3750, devBps=1500, polRecipient, devRecipient, vigRecipient,
-      dailyCapOMR, maxOmrPerEth)`** — POL bonding with the four-way ETH split (37.5% POL / 15% dev wallet /
-      22.5% Vig / 25% RWA-float) — **but see §0.5: the on-chain forward is only POL + dev + Vig, the event
-      carries no `toRwa`, and the backend therefore books the float's slice as ZERO on every real bond.
-      Fix that before this contract is deployed.** **This contract MINTS** — see below. Keep
-      `polBps`/`devBps`/`maxDiscountBps` in lockstep with the backend `BONDS.*` in `src/rules.js`.
+- [ ] **`OmertaBond(safe, signer, omr, polBps=3750, devBps=1500, rwaBps=2500, polRecipient, devRecipient,
+      rwaRecipient, vigRecipient, dailyCapOMR, maxOmrPerEth)`** — POL bonding with the four-way ETH split
+      (37.5% POL / 15% dev wallet / 25% RWA-float / the REMAINDER, 22.5%, to Vig). All four leave the
+      contract in the same tx; it custodies no ETH. **`rwaRecipient` must be the stock-buy bot's own
+      wallet, distinct from `vigRecipient`** (founder ruling on key separation — §0.5). **This contract
+      MINTS** — see below. Keep `polBps`/`devBps`/`rwaBps`/`maxDiscountBps` in lockstep with the backend
+      `BONDS.*` in `src/rules.js`.
       **Operating rule (`omerta-v4-hook-design.md` §9.6): keep `BONDS.DISCOUNT_BPS` strictly BELOW
       `SELL_TAX.BPS`.** At today's 800 vs 900 an immediate bond-and-flip nets `1.08 × 0.91 = 0.983` — a
       ~1.7% loss, which is what makes a bond a hold rather than an arbitrage. Invert the two and every
