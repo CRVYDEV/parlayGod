@@ -5155,9 +5155,19 @@
       <h2 style="margin-top:14px">Rackets <span class="d" style="font-size:11px">— buy once, drip cash forever (banks to the treasury via the tithe on melt)</span></h2>
       <div class="grid">${(rules?.rackets || []).map((r) => { const owned = (me.rackets || []).includes(r.id), locked = me.level < r.lvl;
         const lvl = Number(me.racketLevels?.[r.id] || 0); const upMax = emp.upMax || 5;
-        const effIncome = owned ? Math.round(r.income * (1 + lvl * (emp.upStep || 0.12))) : r.income;
+        // the SERVER's number, off the same helper accrual pays from — this used to be
+        // `Math.round(r.income * (1 + lvl * (emp.upStep || 0.12)))`, a third copy of a formula that
+        // also lived in the accrual and in rules.js, complete with a hardcoded fallback for a
+        // founder-signed lever. The client never re-derives game math.
+        //
+        // AND the units were wrong. The catalog's `income` is PER MINUTE — accrual multiplies it by
+        // elapsed minutes, and the server's own upgrade response returns `× 60` as `incomePerHr` —
+        // but this card has rendered the raw figure labelled "/hr" since it shipped. A laundromat
+        // showed "$30/hr" while paying $1,800/hr, on the screen a player uses to decide what to buy.
+        const perHr = (x) => Math.floor(Number(x || 0) * 60);
+        const effIncome = owned ? (me.racketIncomePerHr?.[r.id] ?? perHr(r.income)) : perHr(r.income);
         return `<div class="card"><span class="t">${r.name}</span>${owned ? `<span class="chip good">owned${lvl ? ` · lvl ${lvl}` : ''}</span>` : locked ? `<span class="chip">lvl ${r.lvl}+</span>` : ''}
-          <div class="d">$${fmt(effIncome)}/hr${owned && lvl ? ` <span style="color:var(--dim)">(base $${fmt(r.income)})</span>` : ''} · $${fmt(r.cost)} · ${r.desc}</div>
+          <div class="d">$${fmt(effIncome)}/hr${owned && lvl ? ` <span style="color:var(--dim)">(base $${fmt(perHr(r.income))})</span>` : ''} · $${fmt(r.cost)} · ${r.desc}</div>
           ${owned ? (lvl < upMax ? `<button class="act" data-rkup="${r.id}">muscle it up → lvl ${lvl + 1}</button>` : '<span class="chip">maxed</span>') : locked ? '' : `<button class="act" data-rkbuy="${r.id}">buy</button>`}</div>`; }).join('')}</div>
 
       <h2 style="margin-top:14px">Assets <span class="d" style="font-size:11px">— wheels (cargo/speed), property (energy cap) & legit fronts (income)</span></h2>

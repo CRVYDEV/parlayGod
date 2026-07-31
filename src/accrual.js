@@ -1,11 +1,10 @@
 // §7.1 of the spec — lazy accrual. Runs inside the caller's transaction,
 // BEFORE any ⏱ action. M1: regen + bank interest. M2: racket/asset income,
 // staking rewards, heat decay. M4: crew sales and Bureau raids.
-import { CONSTANTS, RACKETS, LAW, levelOf, rankIdxOf, cityEventOf, dayOf,
-         assetIncome, assetEnergyCap, drugOf, crewCold, envelopeActive, foundationBleedMult , seasonModOf, KITCHEN, RACKET_EMPIRE, PACING, pathFx,
+import { CONSTANTS, LAW, levelOf, rankIdxOf, cityEventOf, dayOf,
+         assetIncome, assetEnergyCap, drugOf, crewCold, envelopeActive, foundationBleedMult , seasonModOf, KITCHEN, PACING, pathFx, racketIncomeLeveled,
          energyCapOf, nerveCapOf } from './rules.js';
 
-const racketIncome = (id) => RACKETS.find((r) => r.id === id)?.income || 0;
 
 // ch is the character row (mutated in place); acct is account_persistent (mutated);
 // ctx carries the owned racket/asset id lists (income) and ctx.held — the district
@@ -83,9 +82,13 @@ export function accrue(ch, acct = null, ctx = {}, now = new Date()) {
   const eligibleMs = Math.min(capped, credit); // income-eligible time this accrual
   credit -= eligibleMs;
   ch.racket_credit_ms = Math.round(credit);
-  // Tier-4 — a racket's accrual income is multiplied by its upgrade level (RACKET_EMPIRE.UP_STEP)
+  // Tier-4 — a racket's accrual income is multiplied by its upgrade level. Through the SHARED
+  // `racketIncomeLeveled` helper, not a restatement of it: the same expression used to live here
+  // inline, in the helper, AND in the console's Empire card — three copies of one formula, where
+  // one of them PAYS, one CLAIMS to be the truth, and one is what the player is SHOWN. They agreed
+  // numerically, but that is how the sackEmpire rake-cursor drifted too (copied instead of called).
   const rlv = ctx.racketLevels || {};
-  const incPerMin = (rackets.reduce((a, id) => a + racketIncome(id) * (1 + Math.max(0, Number(rlv[id] || 0)) * RACKET_EMPIRE.UP_STEP), 0) + assetIncome(assets))
+  const incPerMin = (rackets.reduce((a, id) => a + racketIncomeLeveled(id, rlv[id]), 0) + assetIncome(assets))
     * (ev.racketMult || 1) * (held.includes('neon') ? 1.15 : 1)   // Neon Mile turf
     * pathFx(ch, 'racketIncome') * (rIdx >= 7 ? 1.1 : 1); // PATHS v2 — the ternary → the matrix (ledger keeps its exact 1.1)
   const income = Math.floor(incPerMin * (eligibleMs / 60000));
