@@ -1179,8 +1179,16 @@ async function takeFromMark(client, h, ch, markRow, take) {
        ) RETURNING id`
     : 'UPDATE characters SET cash = cash - $2 WHERE id=$1 AND alive AND is_npc AND cash >= $2 RETURNING id';
   let hit = 0;
+  // (audit F5) HONEST about what this catch buys. It stops a client-side throw escaping, and that is
+  // ALL: in real Postgres a failed statement aborts the ENCLOSING transaction (25P02), so if the
+  // server ever rejects this one, swallowing it does not keep the job alive — the next `h.ledger` dies
+  // too and withCharacter rolls the action back. Making the claim literally true needs a SAVEPOINT,
+  // which pg-mem cannot parse, so it would ship a path no suite can reach (the recordRival lesson).
+  // Left as-is deliberately: with SKIP LOCKED this statement does not wait, so it has no deadlock and
+  // no lock_timeout to hit, and the only realistic error is a statement_timeout on a request that was
+  // already 15s deep and failing anyway. Do NOT copy this catch to a path that can genuinely error.
   try { hit = (await client.query(sql, [markRow.id, want])).rowCount; }
-  catch { return 0; } // the mark is never allowed to fail the job
+  catch { return 0; }
   if (!hit) return 0;
   await h.ledger(client, { characterId: markRow.id, currency: 'cash', amount: -want, reason: 'crime:take', counterparty: ch.id });
   return want;
@@ -1227,7 +1235,14 @@ export function doCrime(ch, crimeId, client, h, approach) {
         const r = (await client.query(
           'SELECT id, name, cash FROM characters WHERE alive AND is_npc AND loc=$1 AND id<>$2 ORDER BY id LIMIT 8',
           [ch.loc, ch.id])).rows;
-        if (r.length) return r[Math.floor(roll * r.length) % r.length];
+        // (audit F4) its OWN draw, NOT `roll`. `roll` is the success die and the branch below reads
+        // `roll < chance`, so reusing it CONDITIONS the victim on the outcome: on a SUCCESS the index
+        // can only ever land in [0, chance × 8), i.e. the first few residents by id — and `ORDER BY id`
+        // is stable, so THE TAKE debited the same two or three residents in a district forever while
+        // the rest were never touched. Harmless to §10.4 (the unfunded remainder is just paid by the
+        // faucet), but it concentrated the drain onto a handful of marks, picked them clean, and left
+        // the measured emission reduction well below what P9.27 models across the whole district.
+        if (r.length) return r[Math.floor(Math.random() * r.length) % r.length];
       } catch { /* the mark is never allowed to fail a job */ }
       return null;
     })();

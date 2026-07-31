@@ -11,7 +11,9 @@
 // only meaningful because nothing here writes cash behind the ledger's back.
 process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
+import crypto from 'node:crypto';
 import { buildServer } from '../src/server.js';
+import { boxingBoard } from '../src/boxing.js';
 import { spawnResident, retireResident, runPopulation, population, runResidentBehaviour, residentAct, seededToday } from '../src/population.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { cityStanding } from '../src/standing.js';
@@ -634,6 +636,75 @@ assert.equal(npcBandOf(0.999).id, 'boss', 'the high roll is the boss band');
       'nor a racer');
     await cS.query('ROLLBACK');
   } finally { cS.release(); }
+}
+
+// ════════════ AUDIT (Street War step three) — scenery must not take a human's PRIVILEGE ════════════
+// Step three put fighters and racers in resident hands so the PvP boards are live in an empty alpha.
+// Two consequences nobody had traced: a derived STATUS PRIVILEGE that keys on "top fighter" can be
+// held by an NPC, and RETIREMENT is not a death, so the estate hooks that clean up after a fighter
+// never run for a resident.
+{
+  const fighter = async (charId, name, wins) => {
+    const id = crypto.randomUUID();
+    await pool.query('INSERT INTO fighters (id, character_id, name, power, chin, speed, wins) VALUES ($1,$2,$3,20,20,20,$4)',
+      [id, charId, name, wins]);
+    return id;
+  };
+  await pool.query('DELETE FROM fighters');
+
+  // (F1) THE #1 CONTENDER. One lost bout gives a resident's fighter the `wins >= 1` the slot needs, and
+  // `callOutChamp` demands `top.character_id === ch.id` — so while scenery held the slot NO player
+  // could call out the champion, and a resident never calls anybody out. Pinned with the NPC ahead on
+  // wins, which is exactly how it would happen: the same argument as the step-three leaderboards.
+  const holder = await mk('Reigning Champ');
+  const npcMgr = await spawnResident(pool, { band: POPULATION.BANDS.find((b) => b.id === 'boss'), marks: { fighter: true } });
+  const npcF = (await pool.query('SELECT id FROM fighters WHERE character_id=$1', [npcMgr.id])).rows[0];
+  assert(npcF, 'the resident fields a fighter');
+  await pool.query('UPDATE fighters SET wins=9 WHERE id=$1', [npcF.id]);   // scenery, ahead on record
+  const humanF = await fighter(player.id, 'Kid Marciano', 3);              // a real contender, behind it
+  const beltF = await fighter(holder.id, 'The Champion', 20);
+  await pool.query('UPDATE boxing_title SET holder_fighter=$1, holder_char=$2, holder_name=$3, since=now(), last_defense=now() WHERE id=1',
+    [beltF, holder.id, 'The Champion']);
+  const board = await boxingBoard(pool, player.id);
+  assert(board.champion, 'there is a champion to challenge');
+  assert.equal(board.champion.contender.fighterId, humanF,
+    'the #1 contender is the top HUMAN fighter — a resident with a better record cannot hold the slot that gates the callout');
+  assert.equal(board.champion.contender.mine, true, 'and the human who owns them is told they can call the champ out');
+
+  // (F2) RETIREMENT IS NOT A DEATH. applyBeltResult keys the belt on the FIGHTER, so a resident's
+  // fighter can win it. A bare `DELETE FROM fighters` on retirement left boxing_title pointing at a
+  // row that no longer exists and a character no longer alive — a phantom champion on every board
+  // until the 7-day mandatory-defense clock stripped it. The same class as the step-two stranded loan.
+  await pool.query('UPDATE boxing_title SET holder_fighter=$1, holder_char=$2, holder_name=$3, since=now(), last_defense=now() WHERE id=1',
+    [npcF.id, npcMgr.id, 'The Scenery']);
+  const cR = await pool.connect();
+  try { await cR.query('BEGIN'); await retireResident(cR, npcMgr.id); await cR.query('COMMIT'); }
+  catch (e) { await cR.query('ROLLBACK'); throw e; } finally { cR.release(); }
+  const t = (await pool.query('SELECT holder_fighter, holder_char FROM boxing_title WHERE id=1')).rows[0];
+  assert.equal(t.holder_fighter, null, 'retiring the champion vacates the belt — no phantom holder left on the board');
+  assert.equal(t.holder_char, null, 'and no phantom holder character either');
+
+  // (F3) STALE STABLE LISTINGS. The step-two fix ("a drained resident's advertised stake must not stand
+  // on the board answering only `their_cash`") covered the three CHARACTER columns; step three added two
+  // more consent listings, on the fighters/racers rows, and nothing re-checked them. THE TAKE drains
+  // residents by design, so this is the ordinary case, not a corner.
+  const shopworn = await spawnResident(pool, { band: POPULATION.BANDS.find((b) => b.id === 'boss'), marks: { fighter: true, racer: true } });
+  await pool.query('UPDATE characters SET cash=500 WHERE id=$1', [shopworn.id]);
+  await pool.query('UPDATE fighters SET bout_limit=90000 WHERE character_id=$1', [shopworn.id]);
+  await pool.query('UPDATE racers SET race_limit=90000 WHERE character_id=$1', [shopworn.id]);
+  const cS2 = await pool.connect();
+  try {
+    await cS2.query('BEGIN');
+    await residentAct(cS2, (await cS2.query(
+      'SELECT id, cash, loc, npc_seed, guard_price, fade_limit, duel_limit FROM characters WHERE id=$1', [shopworn.id])).rows[0]);
+    await cS2.query('COMMIT');
+  } catch (e) { await cS2.query('ROLLBACK'); throw e; } finally { cS2.release(); }
+  const bl = (await pool.query('SELECT bout_limit FROM fighters WHERE character_id=$1', [shopworn.id])).rows[0].bout_limit;
+  const rl = (await pool.query('SELECT race_limit FROM racers WHERE character_id=$1', [shopworn.id])).rows[0].race_limit;
+  assert(bl == null || Number(bl) <= 500, `a drained resident's fighter is off the circuit, not advertising a purse they can't cover (got ${bl})`);
+  assert(rl == null || Number(rl) <= 500, `and their racer is off the strip too (got ${rl})`);
+  await pool.query('DELETE FROM fighters');
+  await pool.query('UPDATE boxing_title SET holder_fighter=NULL, holder_char=NULL, holder_name=NULL, since=NULL, last_defense=NULL WHERE id=1');
 }
 
 console.log('✅ THE POPULATION passed — residents spawn as real flagged characters on the streets roster '

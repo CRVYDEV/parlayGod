@@ -124,6 +124,14 @@ assert.equal(await gainedOf(roomB.id), UNDERWORLD.STANDING_DAILY_CAP + 6, 'Work 
 const txDrill = await txCount(); // the heals above ledgered (they're heals) — drills must add nothing
 const board = (await call('GET', '/v1/regimen', { token: al.token })).body;
 const doc = board.drills.find((d) => d.npc === 'doc');
+// DATE-FLAKE FIX: the Doc's drill is a per-day SEED DRAW, and this block asserts the refusal you get
+// BEFORE the work. On any day the draw lands on `train`, the sessions above have already met it and the
+// claim succeeds — so the precondition for a deterministic assertion was itself a lottery (the same
+// class as the population duel-ladder flake and the growth.js kitchen-raid one). Caught on 2026-07-31
+// when the UTC day rolled mid-session and the draw became `train`. Clearing the day's counters
+// GUARANTEES the precondition whatever the draw, and changes nothing about what is asserted — the
+// block goes on to seed exactly the counters the drawn drill needs and claim it.
+await pool.query(`UPDATE daily_progress SET counters='{}' WHERE character_id='${al.id}'`);
 r = await call('POST', '/v1/regimen/drill/doc', { token: al.token });
 assert.equal(r.body.error, 'not_done', 'no schooling before the work');
 assert(r.body.message.includes(doc.how), 'the refusal tells you HOW');

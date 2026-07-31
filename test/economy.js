@@ -965,6 +965,38 @@ await pool.query(`UPDATE account_persistent SET agent_flag=false WHERE account_i
   assert.equal(alone.markTook, 0, 'an empty street funds nothing');
   assert(alone.take > 0, 'but the job still pays its signed §7.2 band');
   await pool.query('DELETE FROM characters WHERE id=$1', [res.id]);
+
+  // (E) (audit F4) WHO gets taken from must not be decided by the SUCCESS die. The mark index used to
+  // be drawn from `roll`, and the pay branch is `roll < chance` — so on a success the index could only
+  // land in [0, chance × 8), and with `ORDER BY id LIMIT 8` that is a STABLE prefix: the same two or
+  // three residents in a district funded every job forever while the rest were never touched once.
+  //
+  // Pinned with a crime whose chance is comfortably under 0.5 (torch, base 0.40, at low stats), so the
+  // OLD code could reach index 3 at most: an upper-half debit is flat-out IMPOSSIBLE under the bug and
+  // ~1 − 0.5^N under the fix. Both halves are asserted, so this also fails if the draw breaks entirely.
+  await pool.query("DELETE FROM characters WHERE is_npc AND loc='cathedral'");
+  const ring = [];
+  for (let i = 0; i < 8; i++) {
+    const m = await spawnResident(pool, { band: POPULATION.BANDS.find((b) => b.id === 'boss'), level: 20 });
+    await pool.query("UPDATE characters SET loc='cathedral', cash=1000000 WHERE id=$1", [m.id]);
+    ring.push(m.id);
+  }
+  // the server's own draw order — `ORDER BY id LIMIT 8` — is what the halves are defined against
+  const inOrder = (await pool.query(
+    "SELECT id FROM characters WHERE alive AND is_npc AND loc='cathedral' ORDER BY id LIMIT 8")).rows.map((r) => r.id);
+  assert.equal(inOrder.length, 8, 'eight marks stand in the district');
+  await seed("cash=0, jail_until=NULL, hosp_until=NULL, nerve=200, energy=200, muscle=5, cunning=5, speed=5, loc='cathedral', respect=3610");
+  for (let i = 0; i < 90; i++) {
+    await seed('nerve=200, jail_until=NULL, hosp_until=NULL');
+    const rr = await call('POST', '/v1/crimes/torch', { token, body: { approach: 'standard' } });
+    assert.equal(rr.code, 200, `the job resolves (${JSON.stringify(rr.body)})`);
+  }
+  const debited = await Promise.all(inOrder.map(async (id) => Number((await pool.query(
+    "SELECT COUNT(*) n FROM transactions WHERE character_id=$1 AND reason='crime:take'", [id])).rows[0].n) > 0));
+  assert(debited.slice(0, 4).some(Boolean), 'the near half of the district funds jobs');
+  assert(debited.slice(4).some(Boolean),
+    `the FAR half funds them too — the mark is drawn independently of the success die (${JSON.stringify(debited)})`);
+  await pool.query("DELETE FROM characters WHERE is_npc AND loc='cathedral'");
 }
 
 // REVENGE, WITH TEETH — a strike settling a debt you are still NET OWED takes a bigger bite. The
