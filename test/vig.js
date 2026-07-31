@@ -59,6 +59,23 @@ assert(near(r.body.toReserve, 66) && near(r.body.toPrize, 66), 'split 50/50 to r
 // real ETH inflow, invisible to BOTH the §10.4 sweep and runVigInvariants (neither price-checks omrBought).
 r = await call('POST', '/v1/mod/vig/buyback', { headers: modH, body: { priceOmrPerEth: 400000 } });
 assert.equal(r.body.error, 'price_sanity', 'a 200x price jump off the last buyback is refused (the leaked-key mint guard)');
+// …and the wall must anchor on the LATEST price, not an arbitrary one. `vig_buyback.id` is a random
+// UUID, so the original `ORDER BY id DESC LIMIT 1` read a RANDOM historical row — measured: after 12
+// buybacks it anchored on the 7th, and a 50x call sailed through by latching onto a stale high print.
+// Every consumer of this price (the ETH vault, bond quotes, PLEX, the exit toll) reads created_at DESC.
+// One buyback in history makes the two orderings agree, which is why this hid: build a REAL history
+// where they disagree — an OLD high print whose UUID sorts LAST, and a newer low one.
+await pool.query(`INSERT INTO vig_buyback (id, eth_spent, omr_bought, price_omr_per_eth, to_reserve, to_prize, created_at)
+  VALUES ('ffffffff-ffff-4fff-8fff-ffffffffffff', 0, 0, 100000, 0, 0, now() - interval '2 days')`);
+await pool.query(`INSERT INTO vig_buyback (id, eth_spent, omr_bought, price_omr_per_eth, to_reserve, to_prize, created_at)
+  VALUES ('00000000-0000-4000-8000-000000000000', 0, 0, 200, 0, 0, now() + interval '1 minute')`);
+await pool.query("INSERT INTO vig_revenue (source, ref, gross_eth, vig_eth) VALUES ('fee','anchor-probe',1,1)");
+r = await call('POST', '/v1/mod/vig/buyback', { headers: modH, body: { priceOmrPerEth: 50000 } });
+assert.equal(r.body.error, 'price_sanity',
+  '250x off the LATEST print (200) is refused — the wall reads created_at, not a random UUID '
+  + `(got ${JSON.stringify(r.body)})`);
+await pool.query("DELETE FROM vig_buyback WHERE eth_spent = 0"); // clear the synthetic prints
+await pool.query("DELETE FROM vig_revenue WHERE ref='anchor-probe'");
 // the anti-death-spiral cap: a second buyback with no new revenue spends NOTHING
 r = await call('POST', '/v1/mod/vig/buyback', { headers: modH, body: { priceOmrPerEth: 2000 } });
 assert(near((await vigOf()).status.omrBought, 132), 'the bot never spends more ETH than came in (no-op when nothing unspent)');

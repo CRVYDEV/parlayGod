@@ -455,7 +455,46 @@ console.log('\n8. A READ DOES NOT WAIT FOR THE WRITE LOCK (D1)');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-console.log('\n9. NO node-pg DEPRECATIONS');
+// THE VAULT (src/treasury.js) is the only rail that allocates REAL ETH, and its wall —
+// `allocated <= held` — rests on a txn-scoped advisory lock, because two claims must not both read
+// the same `available` and together allocate past what the treasury holds. pg-mem is single-caller,
+// so the suite can only exercise the arithmetic; this is the serialization half.
+//
+// It is tested by HOLDING the lock, not by racing two requests. A first attempt did fire two
+// concurrent claims and assert the wall held — and it passed with the lock DELETED, because two
+// in-process injects simply never overlapped in the tiny read→write window. Timing luck reads
+// exactly like a proof. Holding the lock from outside tests the actual claim, on demand.
+console.log('\n9. THE VAULT SERIALIZES ON ITS ADVISORY LOCK');
+{
+  const { body: { token } } = await call('POST', '/v1/auth/guest');
+  await call('POST', '/v1/character', { token, body: { name: `Vault ${Date.now() % 100000}` } });
+  const me = (await call('GET', '/v1/me', { token })).body.character;
+  const acct = (await pool.query('SELECT account_id a FROM characters WHERE id=$1', [me.id])).rows[0].a;
+  await pool.query('UPDATE account_persistent SET minted=true, omr=100000 WHERE account_id=$1', [acct]);
+  await pool.query("INSERT INTO rwa_revenue (source, ref, rwa_eth) VALUES ('tax',$1,1.0)", [`pgcheck-${Date.now()}`]);
+  await pool.query(`INSERT INTO vig_buyback (id, eth_spent, omr_bought, price_omr_per_eth, to_reserve, to_prize)
+    VALUES ($1, 0, 0, 5000, 0, 0)`, [`pgcheck-price-${Date.now()}`]);
+  const lockMs = Number((await pool.query("SELECT setting FROM pg_settings WHERE name='lock_timeout'")).rows[0].setting);
+  const holder = await pool.connect();
+  try {
+    await holder.query('BEGIN');
+    await holder.query('SELECT pg_advisory_xact_lock($1)', [0x45544856]); // 'ETHV' — the vault's key
+    const t0 = Date.now();
+    const blocked = await call('POST', '/v1/vault/claim', { token, body: { omr: 100 } });
+    const ms = Date.now() - t0;
+    check(blocked.code !== 200, 'a claim is NOT served while another holds the vault lock', `got ${blocked.code}`);
+    check(ms >= lockMs * 0.5, 'and it waited on the lock rather than failing instantly', `waited ${ms}ms`);
+  } finally { await holder.query('ROLLBACK').catch(() => {}); holder.release(); }
+  const served = await call('POST', '/v1/vault/claim', { token, body: { omr: 100 } });
+  check(served.code === 200, 'and the claim goes through once the lock is released', `got ${served.code} ${served.body?.error || ''}`);
+  const held = Number((await pool.query('SELECT COALESCE(SUM(rwa_eth),0) s FROM rwa_revenue')).rows[0].s);
+  const alloc = Number((await pool.query('SELECT COALESCE(SUM(eth),0) s FROM eth_vault')).rows[0].s);
+  check(alloc <= held + 1e-9, 'allocated <= held (ETH) — the vault never owes what it does not hold',
+    `allocated ${alloc} vs held ${held}`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+console.log('\n10. NO node-pg DEPRECATIONS');
 await app.close();
 await new Promise((r) => setTimeout(r, 200));                // let any late warning land
 check(deprecations.length === 0, 'no deprecated driver usage',

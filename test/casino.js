@@ -334,9 +334,16 @@ const dvRes = (await pool.query('SELECT profit, distributed FROM den_volume WHER
 // tickets, fight bets) only makes the real reserve larger, so this over-states what's available and
 // the assertion stays sound either way.
 const reservedRes = 2 * CASINO.HIGH_MAX;
-const availRes = Math.max(0, Math.floor(Number(dvRes.profit) - Number(dvRes.distributed) - reservedRes));
 const taxBeforeRes = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
-assert.equal((await call('POST', '/v1/casino/dice', { token, body: { amount: 1000 } })).code, 200, 'a dice round while a big hand is live');
+const diceRes = await call('POST', '/v1/casino/dice', { token, body: { amount: 1000 } });
+assert.equal(diceRes.code, 200, 'a dice round while a big hand is live');
+// …and the round's OWN book movement is part of what's available when it tips: playDice books the
+// stake into profit and (on a win) the payout back out BEFORE takeHouse, so the pre-round snapshot
+// is not the book the tip is measured against. A losing round leaves the house $1000 richer than the
+// snapshot — which is exactly the ~6% of runs that reddened CI at "tipped 10, available 0", a TEST
+// bug, not a leak. The response says which way it went, so the expectation is exact.
+const diceDelta = diceRes.body.win ? -1000 : 1000; // stake in, payout (2×) back out on a win
+const availRes = Math.max(0, Math.floor(Number(dvRes.profit) + diceDelta - Number(dvRes.distributed) - reservedRes));
 const taxAfterRes = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
 assert(taxAfterRes - taxBeforeRes <= availRes,
   `the live blackjack hand's payout is RESERVED — the street tip never exceeds uncommitted profit `
