@@ -3667,10 +3667,16 @@ export const drillOf = (npc, day = dayOf()) => {
 export const HUSTLE = {
   PAY_PER_LVL: 200,     // payoff = max(PAY_MIN, PAY_PER_LVL × level) — once a day
   PAY_MIN: 600,
-  LEGWORK: [            // step-2 kinds — a real action done while standing AT the named district
-    { kind: 'crime', how: 'pull a job while you\'re standing there' },
-    { kind: 'goods', how: 'move trade goods there (buy or sell on the Streets)' },
-    { kind: 'train', how: 'put in a session at the gym while you\'re there' },
+  // step-2 kinds — a real action done AFTER meeting the contact, then checked in at the named
+  // district. The WORK itself is not location-gated and the copy must not claim it is: the proof is
+  // a delta on the DAILY counter, which is global, so there is no way to tell where the job was
+  // pulled. Enforcing it would need per-district counters (a schema change) and would buy nothing —
+  // the routing this mechanic exists for is already forced by the check-in, which IS location-gated
+  // at all three stops. The old copy said "while you're standing there", which was simply untrue.
+  LEGWORK: [
+    { kind: 'crime', how: 'pull a job' },
+    { kind: 'goods', how: 'move trade goods (buy or sell on the Streets)' },
+    { kind: 'train', how: 'put in a session at the gym' },
   ],
 };
 // The day's chain for one street — three DISTINCT stops + a (fictional) contact + the legwork,

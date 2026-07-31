@@ -1116,9 +1116,19 @@ assert.equal((await call('POST', '/v1/respec', { token: chef.token, body: { musc
   // do the drawn action (crime → pull jobs; goods → buy; train → a gym session)
   const kind = (await pool.query(`SELECT baseline FROM hustles WHERE character_id='${hus.id}'`)).rows[0] ? b1.legwork : null;
   assert(kind, 'the board names the legwork');
+  // …and the work is done SOMEWHERE ELSE, on purpose. The proof is a delta on the DAILY counter,
+  // which is global — there is no way to know where the job was pulled — so the copy must not claim
+  // the work happens at the stop, and this asserts the contract the code actually has: do the work
+  // wherever, CHECK IN at the named district. (The routing this mechanic exists for comes from the
+  // three check-ins, all of which are location-gated, as the refusal above just showed.)
+  const elsewhere = DISTRICTS.map((d) => d.id).find((d) => d !== b1.district);
+  await seedCh(hus.id, `loc='${elsewhere}'`);
   if (/job/.test(b1.legwork)) { for (let i = 0; i < 20; i++) { await seedCh(hus.id, 'nerve=100'); if ((await call('POST', '/v1/crimes/pick', { token: hus.token })).body.success) break; } }
   else if (/goods/.test(b1.legwork)) await call('POST', '/v1/goods/buy', { token: hus.token, body: { goodId: 'gin', qty: 1 } });
   else { await pool.query(`UPDATE characters SET train_at=NULL WHERE id='${hus.id}'`); await call('POST', '/v1/train/muscle', { token: hus.token }); }
+  assert.equal((await call('POST', '/v1/hustle/advance', { token: hus.token })).body.error, 'district',
+    'the work counts, but the CHECK-IN is still location-gated — you have to bring it to the stop');
+  await seedCh(hus.id, `loc='${b1.district}'`);
   r = await call('POST', '/v1/hustle/advance', { token: hus.token });
   assert.equal(r.body.step, 2, `the legwork done (${b1.legwork}) advances the chain`);
   // the payoff: on location, ledgered, level-scaled, once a day
