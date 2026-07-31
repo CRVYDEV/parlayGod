@@ -19,7 +19,7 @@
 //      node tools/playthrough.js --days 14  (longer horizon)
 import { buildServer } from '../src/server.js';
 import { opsEngagement } from '../src/engagement.js';
-import { CRIMES, MISSIONS, GUNS, BUSINESSES, CONSTANTS, PACING } from '../src/rules.js';
+import { CRIMES, MISSIONS, GUNS, BUSINESSES, CONSTANTS, PACING, RACKETS } from '../src/rules.js';
 
 const argOf = (name, dflt) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -96,6 +96,111 @@ const doneMissions = new Set();
 let claimedOnboard = new Set();
 let pathDeclared = false;
 
+// ── THE COACH TRACE ─────────────────────────────────────────────────────────────────────────────
+// `view.coach` is the game's own advice — the ▸ line the console renders and the plan box expands.
+// The ladder below is a plausible player; this records what the COACH told them while they played,
+// which measures the thing the ladder can't: does following the advice lead anywhere?
+//
+// The class this exists to catch has fired twice. A rung that cannot CLEAR sits at the top forever
+// and MASKS every rung under it, so the coach becomes a single frozen sentence — measured once at
+// level 128 after thirty days ("Finish your First Week", uncompletable because it counted socials
+// that a default server refuses). The suite cannot see it: `coachOf` returns a string either way,
+// and there is nothing to assert against without playing. So: count the minutes each distinct rung
+// holds, and fail if any one of them holds most of the run.
+const coachMin = new Map();       // label -> minutes it was the top rung
+const coachPlanDepth = [];        // how many steps the plan box offered, per tick
+let coachSilent = 0;              // minutes with no advice at all (a vet, correctly)
+const coachObeyed = new Set();    // rungs the harness successfully DID what was asked
+const coachCantAct = new Map();   // rung -> why this harness can't act on it (counted, not skipped)
+function traceCoach(m) {
+  const label = m.coach?.label;
+  if (!label) { coachSilent++; return; }
+  coachMin.set(label, (coachMin.get(label) || 0) + 1);
+  if (Array.isArray(m.coachPlan)) coachPlanDepth.push(m.coachPlan.length);
+}
+
+// FOLLOWING the advice, not just recording it. This is what makes the trace mean anything: a rung
+// that persists AFTER the player did what it says is genuinely pinned; a rung that persists because
+// this script ignores it is just a script that ignores it. The first cut of this harness conflated
+// the two and reported a healthy rung ("Money while you sleep" — clearable by buying any racket) as
+// a defect, which is the same false-alarm class the guards keep teaching: a false positive costs as
+// much trust as a false pass.
+//
+// So: act on what is actionable through one route call, and COUNT what isn't rather than quietly
+// dropping it (the honesty rule). Only the acted-on rungs are held to the anti-masking bound.
+async function obeyCoach(m) {
+  const label = m.coach?.label;
+  // Deliberately NOT once-per-label. A player following the coach keeps following it: some rungs
+  // clear on one action ("buy a racket"), others need several ("you've earned skill points" recurs
+  // every few levels as new points land, and one purchase does not spend three). Obeying once and
+  // stopping made the skills rung LOOK pinned at 39% when it was simply being ignored after the
+  // first buy — the same conflation this whole function exists to avoid, one level down.
+  if (!label) return false;
+  // "Money while you sleep" — buy the cheapest racket in reach. One call, and it flips `hasEarner`.
+  if (label.startsWith('Money while you sleep')) {
+    const buyable = RACKETS.filter((r) => r.lvl <= m.level && m.cash >= r.cost).sort((a, b) => a.cost - b.cost)[0];
+    if (!buyable) return false;                       // not yet affordable — the advice is early, not stuck
+    const r = await call('POST', `/v1/rackets/${buyable.id}/buy`, { token });
+    if (r.code === 200) { did('coach:racket'); first('coach:racket'); coachObeyed.add(label); return true; }
+    hit('coach:racket', r.body?.error || r.code);
+    return false;
+  }
+  // "You've earned skill points" — spend one. This rung is worth obeying specifically because it is
+  // where the F1 bug LIVED: `owned.skills` is a Set, so the old `!owned.skills.length` was
+  // `!undefined` — always true — and the rung fired forever no matter how many skills you had
+  // bought, masking the two rungs below it. Buying one here regression-tests that fix through PLAY,
+  // which is the only way it was ever going to be caught.
+  if (label.startsWith('You\'ve earned skill points')) {
+    const board = await call('GET', '/v1/skills', { token });
+    // the board's own field is `tree`, each entry carrying `known` — cheapest unknown first, so the
+    // harness always buys something a real player could afford with the points the rung is about
+    const buyable = (board.body?.tree || []).filter((s) => !s.known).sort((a, b) => a.cost - b.cost)[0];
+    if (!buyable) { coachCantAct.set(label, 'the skills board offered nothing unknown to buy'); return false; }
+    const r = await call('POST', `/v1/skills/${buyable.id}`, { token });
+    if (r.code === 200) { did('coach:skill'); first('coach:skill'); coachObeyed.add(label); return true; }
+    hit('coach:skill', r.body?.error || r.code);
+    // a refusal is itself information — record WHY rather than falling through in silence, which is
+    // how the first cut of this branch hid the fact that it was reading a field that doesn't exist
+    coachCantAct.set(label, `tried ${buyable.id}, server said "${r.body?.error || r.code}"`);
+    return false;
+  }
+  // "Learn the trade winds" — buy a trade good. The rung clears on ANY commerce mastery XP, so one
+  // purchase is the whole instruction. Worth wiring because it is the rung that dominates the run
+  // once the earlier ones clear, and an untested dominant rung is exactly the blind spot this
+  // report exists to remove.
+  if (label.startsWith('Learn the trade winds')) {
+    // The rung's own copy is "buy something cheap where you stand, haul it where it's rich, sell
+    // high", and it clears on COMMERCE mastery — which `economy.js` bumps on the SELL, not the buy.
+    // So obedience is the whole round trip. Marking the rung obeyed after only BUYING made this
+    // report fire a pin at 71% on a perfectly healthy rung: the player had done half the
+    // instruction and the coach was right to keep asking. Sell first if we're holding, else buy.
+    // (The board keys by DISTRICT then good under `goods` — the first cut guessed a flatter shape
+    // and got a recorded "no price board for docks", which is the honesty rule paying for itself.)
+    const cargo = Object.entries(m.cargo || {}).filter(([, q]) => q > 0)[0];
+    if (cargo) {
+      const r = await call('POST', '/v1/goods/sell', { token, body: { goodId: cargo[0], qty: cargo[1] } });
+      if (r.code === 200) { did('coach:goods'); first('coach:goods'); coachObeyed.add(label); return true; }
+      hit('coach:goods', r.body?.error || r.code);
+      coachCantAct.set(label, `held ${cargo[0]}, sell refused: "${r.body?.error || r.code}"`);
+      return false;
+    }
+    const prices = await call('GET', '/v1/market/prices', { token });
+    const here = prices.body?.goods?.[m.loc] || null;
+    const good = here && Object.entries(here).sort((a, b) => a[1] - b[1])[0];
+    if (!good) { coachCantAct.set(label, `no price board for ${m.loc}`); return false; }
+    const r = await call('POST', '/v1/goods/buy', { token, body: { goodId: good[0], qty: 1 } });
+    if (r.code === 200) { did('coach:goods:buy'); return true; }  // a step toward it, not obedience yet
+    hit('coach:goods', r.body?.error || r.code);
+    return false;
+  }
+  // Rungs a SOLO harness structurally cannot do: there is one character on this server, so there is
+  // no family to join and nobody to fight. Recorded with the reason so the report is honest about
+  // what it did not test rather than silently passing over it.
+  if (label.startsWith('Nobody survives alone')) coachCantAct.set(label, 'solo run — no other players exist to found or join a family with');
+  else if (!coachCantAct.has(label)) coachCantAct.set(label, 'no action wired in this harness');
+  return false;
+}
+
 // ── ONE MINUTE OF PLAY ──────────────────────────────────────────────────────────────────────────
 // A plausible ladder: free rewards first, then the big-ticket cooldown jobs, then train toward the
 // gate you're chasing, then grind the best crime you can afford. Returns true if anything happened.
@@ -103,12 +208,17 @@ async function tick(dayIdx) {
   const m = await me();
   const lvl = m.level;
   if (levelAt[lvl] == null) levelAt[lvl] = { world: simMinutes, played: playedMin, worth: m.cash + m.bank };
+  traceCoach(m);
   pool_.ticks++; pool_.nerveSum += m.nerve; pool_.nerveCapSum += m.maxNerve;
   if (m.nerve >= m.maxNerve) pool_.nerveAtCap++;
   if (m.energy >= m.maxEnergy) pool_.enAtCap++;
   if (m.jailSeconds > 0) { jailMin++; return false; }
 
   let didSomething = false;
+
+  // 0. FOLLOW THE ADVICE — before the hand-written ladder gets a turn. The whole point of the
+  // harness is a PLAUSIBLE player, and a plausible player does what the game tells them to do.
+  if (await obeyCoach(m)) didSomething = true;
 
   // 1. the First Week checklist — free money sitting on the table
   const ob = await call('GET', '/v1/onboard', { token });
@@ -348,6 +458,55 @@ console.log(`  level ${end.level} · $${fmt(end.cash + end.bank)} · ${doneMissi
   console.log('   following the coach and the checklist, actually arrives at.)');
 }
 
+// ── WHAT THE COACH SAID, AND WHETHER IT MOVED ───────────────────────────────────────────────────
+// The ladder above is what the player DID; this is what the game TOLD them to do while they did it.
+// A healthy coach walks: each rung is cleared by doing the thing, then the next one appears. A sick
+// coach pins — one rung the player cannot clear sits on top and hides the rest.
+let coachVerdict = 'ok';
+{
+  const advised = [...coachMin.entries()].sort((a, b) => b[1] - a[1]);
+  const totalAdvised = advised.reduce((a, [, v]) => a + v, 0);
+  console.log(`\nTHE COACH  (${advised.length} distinct rungs across ${hhmm(totalAdvised)} of advised play,`
+    + ` ${hhmm(coachSilent)} silent)`);
+  for (const [label, mins] of advised) {
+    const pct = totalAdvised ? Math.round(mins / totalAdvised * 100) : 0;
+    console.log(`  ${String(pct + '%').padStart(4)}  ${hhmm(mins).padStart(7)}  ${label}`);
+  }
+  if (coachPlanDepth.length) {
+    const avg = coachPlanDepth.reduce((a, b) => a + b, 0) / coachPlanDepth.length;
+    console.log(`  the plan box offered ${avg.toFixed(1)} steps on average (max ${Math.max(...coachPlanDepth)})`);
+  }
+  // What the player was TOLD vs what they could act on. Stated plainly rather than folded into a
+  // pass/fail, because a rung this harness can't reach is a limit of the harness, not of the game.
+  console.log(`  obeyed: ${coachObeyed.size ? [...coachObeyed].join(' · ') : 'none'}`);
+  for (const [label, why] of coachCantAct) console.log(`  not tested: "${label}" — ${why}`);
+
+  // THE ANTI-MASKING BOUND, applied ONLY to rungs the player actually obeyed. That scoping is the
+  // whole correctness of this check. A rung can hold the top spot for two very different reasons:
+  //   (a) the player did what it says and it STILL didn't clear  → the F1 defect, uncompletable,
+  //       masking every rung below it (measured once at level 128 after thirty days);
+  //   (b) the player never did what it says                      → the coach working exactly right,
+  //       patiently repeating the highest-value thing left undone.
+  // Only (a) is a bug. The first cut of this check didn't distinguish them and duly reported a
+  // perfectly healthy rung as a defect on its first run.
+  const PIN_PCT = 40;   // an obeyed rung should clear within a few ticks; 40% of a multi-day run is
+                        // far past "the player is on their way there" and squarely at "it never went away"
+  const pinned = advised.filter(([label, mins]) =>
+    coachObeyed.has(label) && totalAdvised && (mins / totalAdvised) * 100 > PIN_PCT);
+  if (pinned.length) {
+    coachVerdict = `PINNED — "${pinned[0][0]}" held ${Math.round(pinned[0][1] / totalAdvised * 100)}%`
+      + ' of advised play AFTER the player did what it says';
+    console.log(`\n  ❌ ${coachVerdict}`);
+    console.log('     The rung did not clear when its own instruction was carried out, so it masks');
+    console.log('     every rung below it. Check that the condition goes FALSE once the thing is done.');
+  } else if (advised.length <= 1 && totalAdvised > 60) {
+    coachVerdict = 'ONE RUNG — the coach never advanced across the whole run';
+    console.log(`\n  ❌ ${coachVerdict}`);
+  } else {
+    console.log(`\n  ✓ the coach walked: ${advised.length} rungs; every rung the player obeyed cleared`);
+  }
+}
+
 // the headline: the alpha speedrun metric, measured
 const atPlayed = (mins) => {
   const hits = Object.entries(levelAt).filter(([, at]) => at.played <= mins).map(([L]) => Number(L));
@@ -355,4 +514,8 @@ const atPlayed = (mins) => {
 };
 console.log(`\n  ▸ AFTER 2 HOURS AT THE KEYBOARD: level ${atPlayed(120)}   (the alpha speedrun reached 240)`);
 console.log(`  ▸ after 5 hours: level ${atPlayed(300)}   ·   after 10 hours: level ${atPlayed(600)}`);
+// Everything above is a MEASUREMENT and reports rather than judges — pacing is the founder's call.
+// The coach trace is the exception: a pinned rung is a defect with a right answer, not a dial, so it
+// is the one thing this harness fails on.
+if (coachVerdict !== 'ok') { console.error(`\nplaythrough FAILED: ${coachVerdict}`); process.exit(1); }
 process.exit(0);
