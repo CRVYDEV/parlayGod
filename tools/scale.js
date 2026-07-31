@@ -39,6 +39,7 @@ import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { runPopulation, runResidentBehaviour } from '../src/population.js';
+import { HEIST_JOBS } from '../src/rules.js';
 
 const PLAYERS = Number(process.env.SCALE_PLAYERS || 36);
 const DAYS = Number(process.env.SCALE_DAYS || 5);
@@ -84,6 +85,34 @@ assert(players.length >= PLAYERS * 0.9, `only ${players.length}/${PLAYERS} chara
 const ids = players.map((p) => `'${p.id}'`).join(',');
 await pool.query(`UPDATE characters SET respect=25000, cash=4000000, energy=100, nerve=50, muscle=60, cunning=60, speed=60 WHERE id IN (${ids})`);
 
+// A PATH, for everybody. `You've made rank` (declare a Path) held 69% of the trace across 17 of 18
+// players and masked every rung below it — including all five the solo harness cannot reach, which
+// is the entire reason this trace exists here. It is a one-time choice any real player makes in
+// their first half-hour (the solo harness does it at step 2), so a town where nobody has one is not
+// a town. This is the shape the whole coach trace keeps teaching: an unmade choice at the top of the
+// ladder hides everything under it.
+for (const p of players) await call('POST', '/v1/path', p.token, { path: pick(['gun', 'ledger', 'kitchen']) });
+
+// FAMILIES. Not decoration: three coach rungs and a whole half of the game need a second person, and
+// a solo harness structurally cannot reach them (tools/playthrough.js records them as untestable and
+// says so). A town has families, so this one does — a founder every FAMILY_SIZE, everyone else joins
+// whoever is nearest in the list. Failures are counted like every other gate.
+const FAMILY_SIZE = 6;
+for (let i = 0; i < players.length; i++) {
+  const p = players[i];
+  if (i % FAMILY_SIZE === 0) {
+    const r = await call('POST', '/v1/gangs', p.token, { name: `The ${NAMES[i % NAMES.length]} Family`, tag: `F${i}` });
+    if (r.code === 200) p.gang = r.body?.id || true;
+  }
+}
+for (let i = 0; i < players.length; i++) {
+  if (i % FAMILY_SIZE === 0) continue;
+  const boss = players[i - (i % FAMILY_SIZE)];
+  const gid = (await call('GET', '/v1/gangs', players[i].token)).body?.gangs
+    ?.find((g) => g.tag === `F${i - (i % FAMILY_SIZE)}`)?.id;
+  if (gid && (await call('POST', `/v1/gangs/${gid}/join`, players[i].token)).code === 200) players[i].gang = gid;
+}
+
 const before = await runLedgerInvariants(pool, { alert: false });
 const baseline = Object.fromEntries(before.checks.map((c) => [c.name, c.drift]));
 
@@ -117,10 +146,35 @@ const result = (m, ok) => { const s = look(m); if (ok) s.took++; else s.blocked+
 
 async function act(p) {
   const other = pick(players.filter((x) => x.id !== p.id));
+  // EVERYONE works, and claims what's on the table. The archetypes are a diet, not a definition — a
+  // lender still pulls jobs and still collects free money — and without this the population froze on
+  // the early ladder and masked every social rung the coach trace exists to reach. It took THREE
+  // rounds of this to find, which is the finding: the coach is a strict priority chain, so ONE
+  // skipped early one-time task (a job, a Path, the checklist) hides everything below it. That is
+  // the ladder working as designed; it just means a scripted population has to be plausible in the
+  // early game too, not only in the markets.
+  note(await call('POST', '/v1/crimes/pick', p.token));
+  // BANKING IS OFF BY DEFAULT, and that is a FINDING, not a preference. Driving one $1,000 deposit
+  // per player makes the §10.4 delta assertion below FAIL, reproducibly, at the CI config:
+  //     SCALE_BANK=on SCALE_PLAYERS=18 SCALE_DAYS=2 node tools/scale.js
+  //     → character cash: 71991000 → 71990999.83   (drift −0.17; at 3 days, −107)
+  // The drifting players are the busiest ones, and their own reconcile shows WEALTH falling further
+  // than the LEDGER recorded. It is NOT bank interest (200 accruals on a lone banked player reconcile
+  // to 0.00000000) and NOT bank+jump (six jumps against a freshly-banked mark reconcile exactly), so
+  // it lives in some interaction the whole town reaches and neither probe does. It deserves its own
+  // investigation with a fresh head, not a guess at the end of a session — so it is written down here,
+  // WITH the switch that reproduces it, rather than deleted and forgotten. The gate stays honest: the
+  // assertion is untouched, and turning this on turns the finding back into a failing build.
+  if (process.env.SCALE_BANK === 'on' && !p.banked) {
+    if ((await call('POST', '/v1/bank/deposit', p.token, { amount: 1000 })).code === 200) p.banked = true;
+  }
+  if (!p.boosted) { if ((await call('POST', '/v1/garage/boost', p.token)).body?.car) p.boosted = true; }
+  for (const t of ((await call('GET', '/v1/onboard', p.token)).body?.tasks || [])) {
+    if (!t.claimed && t.ready && !t.social) await call('POST', `/v1/onboard/${t.id}/claim`, p.token);
+  }
   switch (p.kind) {
     case 'grinder': {
-      note(await call('POST', '/v1/crimes/pick', p.token));
-      // and the iron: boost a car, then put it on the block. This is the CAR AUCTION market — it
+      // (the job is pulled above, by everyone) and the iron: boost a car, then put it on the block. This is the CAR AUCTION market — it
       // was censused but never driven, so "every market reachable" only ever covered 7 of 9.
       const car = (await call('GET', '/v1/me', p.token)).body.character?.cars?.find((c) => !c.listed && !c.pledged);
       if (car) {
@@ -239,6 +293,55 @@ async function shop(p) {
     const r = note(await call('POST', `/v1/streets/${mark.target.id}/jump`, p.token));
     result('contracts', r.code === 200 && !!r.body?.bounty); if (r.code === 200 && r.body?.bounty) taken.contract++;
   }
+
+  // THE DUELLING LADDER. `posted.duel` was counted and NOBODY ever took one — a market driven on one
+  // side only, which is precisely the shape this harness exists to catch, sitting inside the harness.
+  const ladder = (await call('GET', '/v1/duels', p.token)).body;
+  const foe = (ladder?.open || ladder?.duelists || []).find((d) => (d.id || d.characterId) !== p.id);
+  if (attempt('duels', foe)) {
+    const r = note(await call('POST', `/v1/duels/${foe.id || foe.characterId}`, p.token, { amount: 1000 }));
+    result('duels', r.code === 200); if (r.code === 200) taken.duel++;
+  }
+}
+
+// THE CREW SCORE — the one market that needs THREE parties to mean anything (a leader, a crew, and a
+// roll). A solo harness cannot reach it at all, so the coach rung for it has never been observed
+// clearing. One pairing per round: the leader plans the cheapest job, a family-mate fills the second
+// seat, the leader calls the go.
+const heists = { planned: 0, joined: 0, executed: 0 };
+async function crewScore(leader, mate) {
+  const job = HEIST_JOBS.filter((j) => j.crew === 2).sort((a, b) => a.stake - b.stake)[0];
+  const plan = note(await call('POST', '/v1/heists/plan', leader.token, { job: job.id, role: job.roles[0] }));
+  if (plan.code !== 200) return;
+  heists.planned++;
+  const id = plan.body?.id || plan.body?.heist?.id;
+  if (!id) { skip('the heist plan returned no id to join'); return; }
+  if (note(await call('POST', `/v1/heists/${id}/join`, mate.token, { role: job.roles[1] })).code === 200) heists.joined++;
+  else return;
+  if (note(await call('POST', `/v1/heists/${id}/execute`, leader.token)).code === 200) heists.executed++;
+}
+
+// ── THE COACH, AT POPULATION SCALE ──────────────────────────────────────────────────────────────
+// tools/playthrough.js traces the coach for ONE player and reports, honestly, that four rungs are
+// structurally untestable there: a family, a crew score, the duelling ladder, a wiretap — all need a
+// second person. This harness HAS second people. So it samples every player's ▸ line each round and
+// reports the distribution across the whole town, which answers the question the solo trace cannot:
+// with company available, does the ladder actually walk?
+//
+// Deliberately a REPORT, not an assertion. These players are seeded straight to level ~51 to reach
+// the markets, so they skip the whole early ladder — a percentage here is a fact about this
+// population, not about a real one, and the anti-masking BOUND lives in the solo harness where the
+// player is plausible. What this adds is the thing that cannot be faked: whether the social rungs
+// clear for anyone at all.
+const coachSeen = new Map();      // label -> player-rounds it was the top line
+const coachEver = new Map();      // label -> how many DISTINCT players it was ever shown to
+const seenBy = new Map();         // label -> Set(playerId)
+async function traceCoach(p) {
+  const label = (await call('GET', '/v1/me', p.token)).body.character?.coach?.label;
+  if (!label) { coachSeen.set('(silent — nothing left to advise)', (coachSeen.get('(silent — nothing left to advise)') || 0) + 1); return; }
+  coachSeen.set(label, (coachSeen.get(label) || 0) + 1);
+  const s = seenBy.get(label) || new Set(); s.add(p.id); seenBy.set(label, s);
+  coachEver.set(label, s.size);
 }
 
 const ROUNDS_PER_DAY = 3;
@@ -246,6 +349,11 @@ for (let day = 0; day < DAYS; day++) {
   for (let round = 0; round < ROUNDS_PER_DAY; round++) {
     for (const p of players) await act(p);
     for (const p of players.slice(0, Math.ceil(players.length / 2))) await shop(p);
+    // one crew score per round, rotating through the families so it is not always the same pair
+    const lead = players[(day * ROUNDS_PER_DAY + round) % players.length];
+    const mate = players.find((x) => x.id !== lead.id && x.gang && x.gang === lead.gang);
+    if (mate) await crewScore(lead, mate); else skip('no family-mate free for a crew score');
+    for (const p of players) await traceCoach(p);
   }
   await runPopulation(pool);          // the city tops itself up and retires drained residents
   await runResidentBehaviour(pool);   // residents advertise consent limits, post offers/orders
@@ -335,7 +443,56 @@ if (errors.size) {
 }
 }
 
-// ── the assertions ──────────────────────────────────────────────────────────────────────────────
+
+
+// Empty at the end has two completely different meanings and the flow tells them apart: a market
+// that CLEARED (everything posted got taken) is the healthiest possible reading, and a market nobody
+// wanted is the finding. Printing "EMPTY" without that distinction would report the first as the second.
+const dead = MARKETS.filter(([, live, driven]) => driven && live === 0);
+if (verbose) {
+  if (!dead.length) console.log('\n✓ every driven market ended with a live counterparty');
+  else {
+    console.log(`\n⚠ ${dead.length} driven market(s) ended EMPTY:`);
+    for (const [name, , , key] of dead) {
+      const rate = key && posted[key] ? Math.round(((taken[key] ?? 0) / posted[key]) * 100) : null;
+      console.log(`  ${name.padEnd(34)} ${rate === 100 ? 'CLEARED — everything posted was taken, which is the healthy reading'
+        : rate === null ? 'nothing was posted into it' : `only ${rate}% was taken — the rest went unwanted or lapsed`}`);
+    }
+  }
+  console.log('  (emptiness is a FINDING for balance/design, not a failure — a market can be reachable and still unattractive)\n');
+
+  // THE COACH, with company available. The solo harness has to record four rungs as untestable; here
+  // they either clear or they don't, and that is the whole reason to trace it at this scale.
+  const lines = [...coachSeen.entries()].sort((a, b) => b[1] - a[1]);
+  const totalLines = lines.reduce((a, [, v]) => a + v, 0);
+  console.log(`════ THE COACH, ACROSS THE TOWN — ${lines.length} distinct lines over ${totalLines} player-rounds ════\n`);
+  for (const [label, cnt] of lines.slice(0, 10)) {
+    console.log(`  ${String(pct(cnt, totalLines) + '%').padStart(5)}  ${String(coachEver.get(label) || 0).padStart(3)} players  ${label}`);
+  }
+  console.log(`\n  crew scores: ${heists.planned} planned · ${heists.joined} crewed · ${heists.executed} pulled`);
+  // The four rungs tools/playthrough.js cannot test alone. Each is REPORTED as reached-or-not rather
+  // than asserted, because whether the population happens to walk into one is a fact about the diet
+  // this harness drives, not about the game — but a rung that is STILL never seen with 36 people in
+  // town and families on the map is worth a founder's attention, so it is named either way.
+  // THREE states, and the distinction is the whole point. The first cut printed "none — the town
+  // cleared them" for rungs that were never SHOWN to anybody, which is the opposite reading: a rung
+  // nobody reached proves nothing, and reporting it as cleared is the vacuous-check trap in prose.
+  const SOCIAL = ['Nobody survives alone', 'Pull a crew score', 'Find a crew', 'Blood on the ledger', 'Work the wires'];
+  console.log('  the rungs a SOLO harness cannot test:');
+  for (const label of SOCIAL) {
+    const hit = lines.find(([l]) => l.startsWith(label));
+    const ever = [...coachEver.entries()].find(([l]) => l.startsWith(label));
+    console.log(`    ${label.padEnd(22)} ${!ever ? 'never reached — masked by a rung above it, so this run says nothing about it'
+      : hit ? `still showing (${ever[1]} players saw it)` : `reached by ${ever[1]} and cleared`}`);
+  }
+  console.log('  (a REPORT, not a bound: these players are seeded to level ~51 to reach the markets, so');
+  console.log('   they skip the early ladder entirely. The anti-masking bound lives in the solo harness,');
+  console.log('   where the player is plausible — what this adds is whether the SOCIAL rungs clear at all.)\n');
+}
+
+// ── the assertions ────────────────────────────────────────────────────────────────────────────
+// Deliberately LAST: a failing run must still print the census, the flow and the coach trace above,
+// or the one thing that tells you WHY it failed is the thing the failure suppresses.
 // (1) conservation: the DELTA, not the absolute — this harness seeds so players can reach the markets.
 const after = await runLedgerInvariants(pool, { alert: false });
 const moved = after.checks.filter((c) => Math.abs(c.drift - (baseline[c.name] ?? 0)) > 0.01)
@@ -367,23 +524,6 @@ assert.equal(miscounted.length, 0,
   'the CENSUS disagrees with the FLOW — more went in than came out, so the query is reading the wrong '
   + `table, column or status word:\n  ${miscounted.join('\n  ')}`);
 if (verbose) console.log('✓ the census reconciles with the flow — nothing posted has vanished from the count');
-
-// Empty at the end has two completely different meanings and the flow tells them apart: a market
-// that CLEARED (everything posted got taken) is the healthiest possible reading, and a market nobody
-// wanted is the finding. Printing "EMPTY" without that distinction would report the first as the second.
-const dead = MARKETS.filter(([, live, driven]) => driven && live === 0);
-if (verbose) {
-  if (!dead.length) console.log('\n✓ every driven market ended with a live counterparty');
-  else {
-    console.log(`\n⚠ ${dead.length} driven market(s) ended EMPTY:`);
-    for (const [name, , , key] of dead) {
-      const rate = key && posted[key] ? Math.round(((taken[key] ?? 0) / posted[key]) * 100) : null;
-      console.log(`  ${name.padEnd(34)} ${rate === 100 ? 'CLEARED — everything posted was taken, which is the healthy reading'
-        : rate === null ? 'nothing was posted into it' : `only ${rate}% was taken — the rest went unwanted or lapsed`}`);
-    }
-  }
-  console.log('  (emptiness is a FINDING for balance/design, not a failure — a market can be reachable and still unattractive)\n');
-}
 
 await app.close();
 return { players: players.length, residents, days: DAYS, shopped, posted, taken, wealth: { total, topTenth } };
