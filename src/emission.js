@@ -64,10 +64,18 @@ const WAGE_LOCK_CLASS = 0x5741;
 // expense. So the board moved to the payer, not the other way round.
 //
 // `reason` is why NOT (null when eligible) so the console can say it instead of going quiet.
+//
+// `epoch` is THE RUN BEING SCORED, not "now" — the distinction is load-bearing and the first cut of
+// this got it wrong. The payer scores the run it is executing. The BOARD must score the run that
+// hasn't happened yet: once today's run has stamped you at `epoch`, you are enrolled for `epoch+1`,
+// and asking about `epoch` would report the completed run as a missed one. See wageBoard.
 export function wageEligibility(r, epoch) {
   const snapEpoch = r.snap_epoch == null ? null : Number(r.snap_epoch);
   const gain = snapEpoch == null ? 0 : Math.max(0, Number(r.respect) - Number(r.snap_respect));
-  const out = (reason) => ({ eligible: !reason, reason: reason || null, gain, snapEpoch });
+  // enrolment is the predicate's own answer, not a rule the board restates — a second copy of it in
+  // the caller is the exact duplication this function exists to remove, one line lower down
+  const out = (reason) => ({ eligible: !reason, reason: reason || null, gain, snapEpoch,
+    enrolled: snapEpoch === epoch - 1 });
   if (snapEpoch == null) return out('enrolling');            // fresh street / heir — earns from the next epoch
   if (snapEpoch !== epoch - 1) return out('re_enrolling');   // baseline is not yesterday's (a missed epoch)
   if (r.agent_flag) return out('agent');
@@ -177,11 +185,23 @@ export async function wageBoard(pool, ch, acct) {
   const epoch = emissionEpochOf();
   const emitted = await emittedTotal(pool);
   const snap = (await pool.query('SELECT epoch, respect FROM wage_snapshots WHERE character_id=$1', [ch.id])).rows[0];
+  // `status` lives on `accounts`, and this board is handed `account_persistent` — passing `acct.status`
+  // read `undefined`, so the banned branch could never fire here. Unreachable today (auth 403s a banned
+  // account at the door), but it made the predicate's two callers quietly DIFFERENT, which is the one
+  // property this whole shape exists to guarantee. Read the real column.
+  const status = (await pool.query('SELECT status FROM accounts WHERE id=$1', [ch.account_id])).rows[0]?.status;
+  // WHICH RUN to score. The worker runs at the CURRENT epoch and stamps THAT epoch, so for the rest of
+  // the day after it pays you, your baseline is `epoch` — which against the payer's `epoch-1` rule
+  // reads as a MISSED DAY. Measured: a player who had just been paid $5 was told the payroll had
+  // missed a day, for every read until midnight, on the one faucet that pays real value. So the board
+  // asks about the NEXT run when this one is already done — the answer a player actually wants, and
+  // it keeps ONE predicate rather than a second copy of the rule with an "except after the run" arm.
+  const scoreEpoch = snap && Number(snap.epoch) >= epoch ? Number(snap.epoch) + 1 : epoch;
   // the SAME predicate the payer scores with — see wageEligibility. Shaped like a payer row.
-  const { eligible, reason, gain } = wageEligibility({
+  const { eligible, reason, gain, enrolled } = wageEligibility({
     respect: ch.respect, snap_epoch: snap ? snap.epoch : null, snap_respect: snap ? snap.respect : null,
-    agent_flag: !!acct?.agent_flag, npc_flag: !!acct?.npc_flag, minted: !!acct?.minted, status: acct?.status,
-  }, epoch);
+    agent_flag: !!acct?.agent_flag, npc_flag: !!acct?.npc_flag, minted: !!acct?.minted, status,
+  }, scoreEpoch);
   const lastWage = (await pool.query(
     "SELECT amount, at FROM transactions WHERE account_id=$1 AND reason='emission:wage' ORDER BY at DESC LIMIT 1",
     [ch.account_id])).rows[0];
@@ -191,11 +211,11 @@ export async function wageBoard(pool, ch, acct) {
     endowment: { total: EMISSION.ENDOWMENT_OMR, emitted, remaining: Math.max(0, EMISSION.ENDOWMENT_OMR - emitted) },
     schedule: { epochOmr: EMISSION.EPOCH_OMR, decay: EMISSION.DECAY, decayEvery: EMISSION.DECAY_EVERY },
     you: {
-      // `enrolled` means enrolled FOR THIS EPOCH — a baseline stamped yesterday, which is exactly
-      // what the payer scores on. A stale stamp (the worker missed a day) re-enrols you today and
-      // pays from the next epoch; saying "enrolled" for it would be the board promising a wage the
-      // payer will not hand over.
-      enrolled: !!snap && Number(snap.epoch) === epoch - 1,
+      // enrolled FOR THE RUN BEING SCORED — the predicate's own answer (see `scoreEpoch`), not a
+      // rule restated here. A stale stamp (the worker really did miss a day) re-enrols you and pays
+      // from the next run; saying "enrolled" for that would promise a wage the payer won't hand over.
+      enrolled,
+      scoringEpoch: scoreEpoch,   // which run this answer is about — `epoch`, or the next one if today's already paid
       baselineEpoch: snap ? Number(snap.epoch) : null,
       gainThisEpoch: gain,
       minScore: EMISSION.WAGE_MIN_SCORE,
