@@ -3025,3 +3025,35 @@ context and correctly degrade to the base amount.
 
 Surfaced as `crewBonusPct` on the character sheet and in My Profile's take box. All three numbers are
 founder sign-off levers.
+
+## THE PROGRESSION DRIFT — the 7-day solo ceiling fell 44 → 33 (measured 2026-07-31)
+
+`tools/playthrough.js` was re-run after the onboarding/progression batch (#304 REGIMEN, #305 the coach
+road to 30, #306 Pen step six, #308 CAREER, #310 HUSTLE, jailbirds). **THREE samples, same config**
+(2 sittings/day × 45 min × 7 days = 10h30m at the keyboard):
+
+| sample | 2h | 5h | 10h | 7-day ceiling | net worth | missions |
+|---|---|---|---|---|---|---|
+| 1 | 12 | 19 | 33 | **level 33** | $1,388,585 | 13/28 |
+| 2 | 12 | 20 | 33 | **level 34** | $1,423,312 | 13/28 |
+| 3 | 12 | 20 | 33 | **level 33** | $1,395,904 | 13/28 |
+
+The figure recorded when the harness was built was **level 44 / $1.9M / 14 of 28 missions**, and 2h was
+14–16. The spread across three runs is one level, so this is **not variance** — the solo curve is
+genuinely ~25% slower in respect and ~26% lower in cash than the number the PACING pass signed off on.
+
+**The cause is not identified and I did not guess at one.** It is not the batch under test: the harness
+touches 2 of 36 systems and never opens the corner, the hustle, the regimen or the career, so none of
+those one-time bonuses are being collected. Crimes/hour is unchanged (62.5 vs ~60), the nerve pool sits
+at the same fraction of cap, lockup is still 0% of played minutes, and the mission ladder still advances
+once per sitting — so the drift is in respect PER action, not in action volume. Finding it wants a git
+bisect of the harness against the commits since it was built, which is its own task.
+
+**Direction is a founder call.** 33 at a week of real play may well be the better curve — the pacing
+pass existed to slow a 240-in-two-hours speedrun, and this is slower still. What is not acceptable is
+that it moved 25% without anyone deciding to move it. `PACING.LEVEL_DIVISOR` is the single dial if the
+signed curve is the intent.
+
+`tools/scale.js` was re-run in the same pass: 36 players / 5 days, **§10.4 held across all 24 checks
+with zero movement**, every one of the 9 driven markets reachable, and the census reconciles with the
+flow. The one market that ended empty (black-market goods lots) CLEARED — everything posted was taken.

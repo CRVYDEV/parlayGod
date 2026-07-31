@@ -112,7 +112,12 @@ export async function runVigBuyback(pool, { priceOmrPerEth, maxEth } = {}) {
     // sanity bound on the mod parameter, not a game-balance lever (env-configurable ops dial); the very
     // first buyback is the unavoidable bootstrap (Safe = root of trust). A real TWAP never trips 10×.
     const jump = Number(process.env.VIG_MAX_PRICE_JUMP) || 10;
-    const last = Number((await client.query('SELECT price_omr_per_eth FROM vig_buyback ORDER BY id DESC LIMIT 1')).rows[0]?.price_omr_per_eth || 0);
+    // ORDER BY created_at, NOT by id: `vig_buyback.id` is a random UUID, so `ORDER BY id DESC` reads
+    // an ARBITRARY historical row rather than the last one — the wall would anchor on a random old
+    // price (measured: after 12 buybacks it read the 7th, and a 50× call sailed through by anchoring
+    // on a stale high print). Every CONSUMER of this price — the ETH vault, bond quotes, PLEX, the
+    // exit toll — reads `created_at DESC`, so the wall must guard the same number they read.
+    const last = Number((await client.query('SELECT price_omr_per_eth FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0]?.price_omr_per_eth || 0);
     if (last > 0 && (price > last * jump || price < last / jump))
       throw new GameError('price_sanity', `Buyback price ${price} is more than ${jump}× off the last (${last}) — refusing (set VIG_MAX_PRICE_JUMP to override).`);
     const revenueIn = await sumEth(client, 'vig_revenue', 'vig_eth');

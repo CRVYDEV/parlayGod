@@ -113,6 +113,52 @@ assert.equal(b.tiers[0].complete, true, 'the heir inherits the completed tier');
 assert.equal(b.tiers[1].open, true, 'and the opened tier stays open');
 assert.equal((await call('POST', '/v1/career/ca_strap', { token: cli.token })).body.error, 'claimed', 'a claimed rung stays claimed across death — the faucet is bounded once per ACCOUNT');
 
+// ── EVERY RUNG IS REACHABLE — the guard that matters most on a 30-task ladder ──
+// A check reading a field the server never provides (a renamed legend column, a typo'd owned key)
+// is UNDEFINED → falsy → the task is permanently unclaimable, and because a tier only NEEDs 4 of 6
+// the ladder keeps advancing, so NOTHING FAILS and the player just never sees that rung go green.
+// Before this block, 7 of the 30 checks were exercised; the other 23 were unverified.
+//
+// The fixture is deliberately built from the SCHEMA and the real routes — never by copying field
+// names out of CHECKS — because a typo replicated into the fixture would make this pass for the
+// wrong reason. It seeds the underlying rows and then reads the REAL board through loadOwned.
+const max = await mk('Maxed Max');
+const maxAcct = await acctOf(max.id);
+await seedCh(max.id, `path='gun', bank=100000, cash=500000, respect=${10 * 39 * 39}, loc='neon'`);
+const q = (sql, args = []) => pool.query(sql, args);
+await q("INSERT INTO character_guns (character_id, gun_id) VALUES ($1,'alleycat')", [max.id]);
+await q("INSERT INTO cars (id, character_id, model_id, trim_id) VALUES ($1,$2,'vitesse','base')", [`car-${max.id}`, max.id]);
+await q("INSERT INTO character_disciplines (character_id, discipline, xp) VALUES ($1,'stamina',50)", [max.id]);
+await q('INSERT INTO hustles (character_id, day, step) VALUES ($1,$2,3)', [max.id, Math.floor(Date.now() / 86400000)]);
+await q("INSERT INTO character_rackets (character_id, racket_id) VALUES ($1,'numbers')", [max.id]);
+await q("INSERT INTO character_assets (character_id, asset_id) VALUES ($1,'lockup')", [max.id]);
+await q("INSERT INTO businesses (id, character_id, kind) VALUES ($1,$2,'laundromat')", [`biz-${max.id}`, max.id]);
+await q("INSERT INTO fighters (id, character_id, name, power, chin, speed) VALUES ($1,$2,'Palooka',10,10,10)", [`ftr-${max.id}`, max.id]);
+await q("INSERT INTO portfolios (account_id, ticker, shares) VALUES ($1,'AAPL',1)", [maxAcct]);
+await q('INSERT INTO estates (account_id, tier) VALUES ($1,1)', [maxAcct]);
+await q("INSERT INTO megaproject_contributions (project_id, account_id, contributed) VALUES ('p1',$1::uuid,1)", [maxAcct]);
+// every mastery track the ladder reads, one deep enough for dn_master (level 25)
+for (const t of ['muscle', 'chemistry', 'fists', 'commerce', 'gambling', 'wetwork'])
+  await q('INSERT INTO masteries (character_id, track_id, xp) VALUES ($1,$2,$3)', [max.id, t, t === 'muscle' ? 20000 : 100]);
+await q(`UPDATE account_persistent SET heists_pulled=1, smuggled=300000, product_moved=300000,
+  intel_ops=1, kills=1, boxing_wins=10, dynasty_name='The Maxes' WHERE account_id=$1`, [maxAcct]);
+// the two signals that must come from the REAL routes (a hand-seeded ledger row would be a lie in
+// the books, and the gang JOIN needs a real gangs row): buy a safehouse, found a family
+assert.equal((await call('POST', '/v1/safehouse', { token: max.token })).code, 200, 'max buys a safehouse');
+assert.equal((await call('POST', '/v1/gangs', { token: max.token, body: { name: 'The Maxes', tag: 'MAX' } })).code, 200, 'max founds a family');
+
+for (let i = 0; i < CAREER.TIERS.length; i++) {
+  const board = (await call('GET', '/v1/career', { token: max.token })).body;
+  const t = board.tiers[i];
+  assert.equal(t.open, true, `tier ${i + 1} (${t.name}) is open`);
+  const notReady = t.tasks.filter((k) => !k.ready && !k.claimed).map((k) => k.id);
+  assert.equal(notReady.length, 0,
+    `every rung of ${t.name} is REACHABLE — a check reading a field the server never provides is `
+    + `silently unclaimable forever (stuck: ${notReady.join(', ')})`);
+  for (const k of t.tasks)  // claim them all so the next tier opens
+    assert.equal((await call('POST', `/v1/career/${k.id}`, { token: max.token })).code, 200, `${k.id} claims`);
+}
+
 console.log('✅ THE CAREER passed — five tiers of once-ever server-verified tasks: tier 1 open / the rest '
   + `locked, not_done refusals teach their own HOW, a claim pays a ledgered career: faucet row and latches on `
   + `the account PK, ${CAREER.NEED} claims open the next tier (a declinable task never walls a solo player), `
