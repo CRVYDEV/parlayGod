@@ -6,7 +6,7 @@
 //
 // Split out of the 2,003-line src/social.js; every function below is byte-identical to what was
 // there. Import from '../social.js' — it re-exports this package's public surface unchanged.
-import { GameError, bumpFamilyTask, bus, ledger, notify, track, loadOwned, skillMult, npcMult, npcTier, bumpStanding, bumpMastery, masteryFx, trunkCap } from '../game.js';
+import { GameError, bumpFamilyTask, bus, ledger, notify, track, loadOwned, skillMult, npcMult, npcTier, bumpStanding, bumpMastery, masteryFx, trunkCap, gainRespect } from '../game.js';
 import { M3, CONSTANTS, LOAN, levelOf, rankIdxOf, cityEventOf, dayOf, btkOf, gunObjOf, vestMultOf, fleetValue, effStat, npcHitmanOf, VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, PORT, witproActive, penSafe, inHole, HONOR, HEIST_LOOT_RATE, BUSINESSES, seasonModOf, pathFx, RIVALS, carVal, boatOf } from '../rules.js';
 import { activeDecree } from '../commission.js';
 import { bumpHonor } from '../honor.js';
@@ -89,7 +89,7 @@ export async function jump(ch, victim, client, h, intent) {
     rep = Math.max(1, Math.floor(rep * (ev.jumpRep || 1) * it.repMult));
     const dmg = Math.max(1, Math.round(rand(20, 40) * it.dmgMult));
 
-    ch.cash = Number(ch.cash) + stolen; ch.cb = (Number(ch.cb) || 0) + crates; ch.respect = Number(ch.respect) + rep;
+    ch.cash = Number(ch.cash) + stolen; ch.cb = (Number(ch.cb) || 0) + crates; gainRespect(h, ch, rep);
     victim.cash = Number(victim.cash) - stolen; victim.cb = (Number(victim.cb) || 0) - crates;
     victim.health = Math.max(1, Number(victim.health) - dmg);
     // NOTE the hospital is PROTECTION in this game (a laid-up mark is untargetable), so a longer
@@ -320,7 +320,7 @@ export async function fire(ch, victim, client, h, rounds) {
     const rep = Math.max(10, vicLvl * 2);
     // AUDIT R5 — the chop comes from the victim's ACTUAL cars rows; value transfers
     const chop = Math.floor(fleetValue(h.victimOwned.cars) * M3.CHOP_RATE);
-    ch.respect = Number(ch.respect) + rep;
+    gainRespect(h, ch, rep);
     if (chop > 0) {
       ch.cash = Number(ch.cash) + chop;
       await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: chop, reason: 'whack:chop', counterparty: victim.id });
@@ -667,7 +667,7 @@ export async function bust(ch, victim, client, h) {
   if (roll < chance) {
     const reward = Math.floor(500 + remaining * 15); // §7.8 faucet
     ch.cash = Number(ch.cash) + reward;
-    ch.respect = Number(ch.respect) + 3;
+    gainRespect(h, ch, 3);
     ch.busts = (Number(ch.busts) || 0) + 1;
     victim.jail_until = null;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: reward, reason: 'bust:reward' });

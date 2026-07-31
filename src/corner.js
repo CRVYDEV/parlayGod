@@ -9,7 +9,7 @@
 // stockpiled jobs can't pre-pay a task); do the work; CLAIM at the district pays CORNER.CASH
 // (`corner:job`, a small character_id'd §10.4 faucet) + CORNER.RESPECT (the XP — respect IS
 // levels). Bounded HARD by CORNER.MAX_DAY claims per street per day across all districts.
-import { GameError } from './game.js';
+import { GameError, gainRespect } from './game.js';
 import { CORNER, DISTRICTS, cornerTasksOf, dayOf } from './rules.js';
 const districtName = (id) => (DISTRICTS.find((d) => d.id === id) || {}).name || id;
 
@@ -132,7 +132,7 @@ export async function claimCorner(ch, slot, client, h) {
   const cash = CORNER.CASH + (chain?.done ? chain.cash : 0);
   const respect = CORNER.RESPECT + (chain?.done ? chain.respect : 0);
   ch.cash = Number(ch.cash) + cash;
-  ch.respect = Number(ch.respect) + respect;
+  gainRespect(h, ch, respect);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: cash, reason: 'corner:job' });
   await h.track(client, ch.account_id, 'corner', { kind: t.kind, district: ch.loc, chain: chain?.done || false });
   return { ok: true, corner: 'claimed', kind: t.kind, cash, respect,

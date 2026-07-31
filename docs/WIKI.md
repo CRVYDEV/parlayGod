@@ -875,7 +875,14 @@ bonus. **The Daily Score** (`/v1/heist`) is the best repeatable income at a low 
 in** each day for a streak bonus.
 
 **Referrals** (section 7.13) — your referral code is your character **name**. A recruit qualifies after 4
-conditions (L8, 40 jobs, 3 check-ins, $25k net worth). Milestones pay the recruiter cash, $OMR, and titles.
+conditions (L8, 40 jobs, 3 check-ins, $25k net worth). Milestones pay the recruiter cash and titles.
+- **THE CREW BONUS** — the real reward, and the reason to recruit people who actually play. Every
+  qualified recruit makes you earn **respect faster**, scaled by how far *they* have got: a recruit at
+  level 5 is worth +5%, at level 10 +10%, at level 15 +15%, and so on in steps. It applies to every
+  respect you earn, anywhere in the game. It is **live** — recomputed from your crew's current levels,
+  so it rises as they rise, falls when one of them dies back to an heir, and stops when they stop.
+  It is capped, and it is not a currency: it cannot be sold, given away or laundered.
+  **Referrals no longer pay $OMR** (retired 2026-07-31).
 - **Naming your referrer** — a recruit can type the sharer's street name in the **"who sent you?"
   field when they create their character** (a shared `?ref=` link pre-fills it), or — if they missed
   it — from the **"Did someone send you?" card on Start Here within their first 3 days**. Spelling is
@@ -886,7 +893,7 @@ conditions (L8, 40 jobs, 3 check-ins, $25k net worth). Milestones pay the recrui
   recruit, you earn a single $5k finder's fee (cash only, depth 2 only). This is a referral bonus, not a
   percentage.
 - **The recruitment drive** — a time-limited event (a "🔥 RECRUITMENT DRIVE" banner) where every referral CASH
-  payment multiplies; $OMR does not change. **The Recruiters** boards
+  payment multiplies. **The Recruiters** boards
   (`GET /v1/leaderboard/recruiters`) rank the top recruiters and families by recruits.
 - **My Profile** (`GET /v1/profile`, the "My Profile" screen) — your personal page: who you are (mood,
   member-since, generation, family, honor, kills), your **Top 8** (every recruit you brought in, with

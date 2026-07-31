@@ -237,6 +237,12 @@ const SIGNED = [
   ['M3.TERRITORY_SEIZE_BPS', 5000],
   ['M3.WAR_COST', 10000],
   ['M3.WAR_KILL_POINTS', 3],
+  // THE CREW BONUS — what replaced the referral $OMR (founder-directed 2026-07-31). MAX_BONUS is
+  // load-bearing: respect drives level, level gates everything, and the PACING pass deliberately
+  // slowed levelling — an uncapped crew would walk straight through it.
+  ['M4.REF_XP.STEP_LEVELS', 5],
+  ['M4.REF_XP.PER_STEP', 0.05],
+  ['M4.REF_XP.MAX_BONUS', 1.0],
   ['M4.CREW_WAGE_CAP_MS', 604800000],
   ['M4.CREW_WAGE_COLD_MS', 259200000],
   ['M4.CREW_WAGE_PER_HR', 1200],

@@ -14,7 +14,7 @@
 // Members are paid/jailed by direct row updates under lock (they are never in-memory in the
 // leader's transaction — no persistCharacter clobber).
 import crypto from 'node:crypto';
-import { GameError, bus, bumpMastery } from './game.js';
+import { GameError, bus, bumpMastery, gainRespect } from './game.js';
 import { HEIST_JOBS, HEIST_ROLES, heistJobOf, HEIST_PLAN_TTL_MS, HEIST_RAT_BPS, HEIST_LEADER_WEIGHT,
          HEIST_INSIDE_CD_MS, HEIST_CASE_ENERGY, HEIST_CASE_STEP, HEIST_CASE_MAX, heistFenceMultOf,
          HEIST_FENCE_HEAT, HEIST_RANKS, heistRankOf, CONSTANTS, M4, levelOf, PORTFOLIO } from './rules.js';
@@ -316,11 +316,11 @@ export async function executeHeist(ch, heistId, client, h) {
       if (hot) {
         // hot loot is a direct-SQL column (not in the positional persist) → write it for EVERYONE incl. the leader
         await client.query('UPDATE characters SET heist_loot = heist_loot + $2 WHERE id=$1', [m.id, shares[m.id]]);
-        if (m.id === ch.id) { ch.respect = Number(ch.respect) + rep; ch.heist_at = doneAt; }
+        if (m.id === ch.id) { gainRespect(h, ch, rep); ch.heist_at = doneAt; }
         else { await setMember(m.id, 'respect=$2, heist_at=$3', [Number(m.respect) + rep, doneAt]);
           await h.notify(client, m.id, 'heist_score', { job: job.name, hot: shares[m.id], rwaCut: cutOmr || undefined }); }
       } else {
-        if (m.id === ch.id) { ch.cash = Number(ch.cash) + shares[m.id]; ch.respect = Number(ch.respect) + rep; ch.heist_at = doneAt; }
+        if (m.id === ch.id) { ch.cash = Number(ch.cash) + shares[m.id]; gainRespect(h, ch, rep); ch.heist_at = doneAt; }
         else {
           // absolute writes off the locked row (the pg-mem arithmetic discipline)
           await setMember(m.id, 'cash=$2, respect=$3, heist_at=$4',
