@@ -7431,3 +7431,43 @@ CHAIN-DEPLOY §0.5 is now RESOLVED with a deploy requirement — `rwaRecipient` 
 correct. Process note: reverting the mutation with `git checkout src/watcher.js` **wiped the session's
 other edits to that file** — the recorded trap, hit again; mutate on a scratchpad copy, never restore
 from git while uncommitted work exists.
+
+**THE FIFTH WAY A BUTTON LIES — locked controls say so, and a guard makes it stick (2026-08-01, from
+the same tester report as THE PAD: "when I tab tab tab to the run it button it says I can't till level
+6").** The console's Port picker listed every smuggling lane to every player. You chose one, pressed
+**run it**, and the server answered `route_level` — the rule existed, was enforced, and was simply not
+shown until after you acted. That is the same defect as the pad's: the game withholding its own terms.
+It is also a PATTERN rather than a button, so the fix is a guard first and edits second.
+**`test/client.js` check 5** states the narrow rule that stays true instead of becoming noise: when the
+SERVER sends a gate on a row's elements AND the client hangs a CLICK on that row, the renderer must
+READ the gate. What it does with it — disable, swap in a chip, filter the row out — is the renderer's
+business; not looking at all is the bug. A row with no action needs nothing; a board that sends no gate
+is not the check's business. The vocabulary is a short EXPLICIT list swept off the live boards
+(`minLvl`/`minLevel`/`locked`/`canRaid`/`eligible`) rather than a pattern, so a field called `level`
+(the row's OWN level, not a requirement) is never mistaken for a gate. **It found the tester's bug by
+itself**, then a second renderer under mutation (`renderRaces … never reads minLvl`), so it is not
+tied to the one site it was written for. Fixed across nine controls, all reading the same number the
+server enforces: the Port lane picker (locked lanes still LISTED — seeing what the deep runs pay is the
+reason to level toward them — just `disabled` with a 🔒 prefix, and "run it" disabled with an
+explanatory chip when no lane is open at all), the races NPC tiers, the Grand Prix card, the convoy rig
+shelf (which had FILTERED locked rigs out entirely behind a vague "level up to unlock a rig" — worse
+than refusing, since it hid what was coming), and the four single controls that stated their
+requirement in prose beside a live button (boxing sign, stable buy, speakeasy open, hostile takeover).
+**Building check 5 exposed a pre-existing hole in check 4b**: the object-alias regex CONSUMED its
+terminator, so in `const fleet = …, routes = …, cat = …` every binding after the first vanished — the
+Port's own `routes` list had never been mirror-checked either. A lookahead terminator recovered it plus
+two more boards, which then came back EMPTY and needed fixtures (the honesty rule: an empty list must
+never read as a pass). **Also fixed, the other half of the tester's sentence** — tab order is DOM order
+and the sheet's ~40 controls sit before the tab panel, so reaching a screen from the keyboard meant
+tabbing back through the whole left column to touch anything on it; `setTab` now focuses `#tabbodies`
+(NOT `#tabpanel` — the rail lives inside the panel, so focusing the panel just puts the next Tab back
+at the start of the rail you already used) and only when the rail itself had focus, so a mouse click
+never steals focus. Browser-verified at level 7: coastal open, `🔒 lvl 16+`/`🔒 lvl 32+` disabled,
+Grand Prix locked, and the first Tab after picking a screen lands on that screen's own first control —
+zero page errors. **Process note, and the more important half of this entry:** the local checkout was
+**three commits BEHIND origin** and I nearly committed on top of it, which would have reverted THE PAD,
+the tester-feedback batch and a harness drop. Caught by checking `git log` before writing the docs
+entry rather than after pushing. The recovery is the pattern worth keeping — save the working files to
+the scratchpad, `reset --hard` to origin, `git apply --3way` the saved diff (it merged cleanly since
+the remote's edits to the same file did not overlap), then re-run every guard on the CORRECT base,
+because a green suite on a stale base proves nothing about what you are about to push.
