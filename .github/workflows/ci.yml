@@ -173,16 +173,18 @@ jobs:
           "
 
       # THE CRASH TESTS. ~20 worker sweeps in this codebase claim to be idempotent; that claim only
-      # becomes true when something kills them halfway and the second run is checked. Two of these
-      # checks are mutation-verified — delete the wage-epoch resume guard and the interrupted epoch
-      # mints 5x the signed schedule; delete the src/db.js checked-out-client error handler and the
-      # whole process dies. Neither was protected by anything that runs automatically until now.
+      # becomes true when something kills them halfway and the second run is checked. Mutation-verified:
+      # delete the src/db.js checked-out-client error handler and the whole process dies on any
+      # mid-transaction connection loss — which is not exotic, it is what a failover or our own
+      # idle-in-transaction timeout does. Nothing automatic protected that until this harness.
+      # (The wage-epoch crash-resume scenario retired with the faucet — economy v3 step 1 — so there
+      # is no payer left to interrupt and no emission a crash could double.)
       #
       # Scenario 3 (stop and start Postgres entirely) needs pg_ctl on the database host, which a
       # service container does not give us. The harness SKIPS it and says so rather than faking it,
       # and its summary line stops claiming the outage path was covered. Run it by hand against a
       # local Postgres before a deploy that touches the pool or a transaction boundary.
-      - name: chaos (interrupted sweeps, killed backends, wage-epoch crash-resume)
+      - name: chaos (interrupted sweeps, killed backends, torn two-party transfers)
         if: '!cancelled()'
         env:
           DATABASE_URL: postgres://postgres:pgcheck@localhost:5432/omerta_chaos
