@@ -3318,3 +3318,44 @@ Nowhere near the alpha speedrun (level 240 in two hours) the pacing pass closed.
 (where a loaded context exists). A headless grant — a heist crew member, a duel opponent — is written
 by absolute UPDATE on named columns, so a refill of the in-memory row would be silently dropped, and
 a reward that sometimes vanishes is worse than one consistently absent.
+
+## THE BREADTH DROP — 14 crimes + 8 missions fill the silent levels (F3, 2026-08-01)
+
+Founder direction: *"More breadth inside missions and crimes."* The level-gate map found **seven
+levels between 17 and 31 that delivered nothing at all** — no job, no mission, no system — which the
+progression harness puts at hours 2.5 to 7 of play, exactly where a player commits or drifts.
+
+Both catalogs are MACHINE-OWNED, so this went through the seam: edit `reference-prototype-v24.jsx`,
+re-extract (the car-catalog precedent). The re-extract diff was **exactly 22 inserted lines and
+nothing else**, which is the seam doing its job.
+
+**CRIMES 29 → 43.** Eight fill the cliff (17, 18, 20, 21, 23, 24, 27, 29); six fill the early band's
+gaps (6, 8, 10, 12, 14, 15) so the entry loop has real variety from the first hour. Each is
+BRACKETED — pays more than the best job below it and less than the cheapest above it — which is what
+"on-curve" has to mean for a content drop, and is asserted per-id in `test/growth.js`.
+
+**Why more crimes is not more money.** NERVE is the throttle (measured: the pool sits at ~21% of cap
+and is full 3% of minutes), so the number of crimes on the board does not change how many a player
+can pull in an hour. What it changes is CHOICE — and, marginally, that a level-18 player uses a
+level-18 job instead of the level-16 one. Measured with `npm run playthrough`: **2h level 16, 5h 26,
+10h 42** against 16 / 25 / 43 before — inside run-to-run noise. Content, not a rebalance.
+
+**MISSIONS 28 → 36**, at 17, 18, 21, 23, 24, 27, 29, 31, each interpolated onto the ladder's own
+curve and bracketed by its neighbours.
+
+| | missions in the 17-31 band | one-time cash | respect (before ×0.25) |
+|---|---|---|---|
+| before | 3 | $310,000 | 3,550 |
+| added | 8 | $833,000 | 9,360 |
+
+**The honest number, flagged rather than buried:** each rung is on-curve, but the band's DENSITY
+roughly tripled, so a player walking 17→31 now collects ~$1.14M in mission cash where they collected
+$310k. That is one-time-per-street, on a 4h cooldown that is longer than a sitting, and the harness
+still shows the player short of every business-front gate (46% / 7% / 42% / 52% of the entry cost at
+the moment they unlock it) — so the gates still mean something. If it wants trimming, the dial is the
+new rungs' `reward.cash`, not the curve.
+
+**Untouched on purpose:** the $OMR ladder. The new missions pay cash + respect only, so the
+enumerated `mission:omr` faucet is exactly what it was — asserted in the test (9 rungs, unchanged).
+Respect actually paid by the eight is **2,340** after `MISSION_RESPECT_MULT`, against 228k for level
+240 — a rounding error on the level curve.

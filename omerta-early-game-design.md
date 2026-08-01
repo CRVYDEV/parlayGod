@@ -13,7 +13,8 @@ guessed it was, and it changes what is worth building.
 
 ## 1. WHAT A PLAYER ACTUALLY MEETS, LEVEL BY LEVEL
 
-Every level gate in the game, binned. `★` is a whole system opening.
+Every level gate in the game, binned. `★` is a whole system opening. **This is the BEFORE picture —
+F3 has since filled every silent rung; it is kept as the diagnosis that motivated the work.**
 
 | lvl | what opens |
 |---|---|
@@ -143,6 +144,15 @@ sitting's crime respect.
 
 ### F3 — FILL THE SEVEN DEAD LEVELS WITH MISSIONS  *(breadth, inside an existing system)*
 
+**BUILT, and wider than the heading — 14 crimes AND 8 missions** (founder: *"more breadth inside
+missions and crimes"*). CRIMES 29 → 43: eight fill the cliff (17, 18, 20, 21, 23, 24, 27, 29) and six
+fill the early band's own gaps (6, 8, 10, 12, 14, 15). MISSIONS 28 → 36, at 17, 18, 21, 23, 24, 27,
+29, 31. **Every level from 2 to 31 now delivers something**, asserted in `test/growth.js` rather than
+claimed. Both catalogs are machine-owned, so it went through the seam (prototype edit + re-extract —
+the diff was exactly 22 inserted lines). The $OMR ladder is untouched. Measured: 2h level 16, 5h 26,
+10h 42 — unchanged within noise, because NERVE is the throttle, so more jobs is CHOICE not
+throughput. Band figures + the one honest flag (mission cash density tripled in 17-31) in BALANCE.md.
+
 Missions are the game's authored narrative content and the one thing that pays cash *and* respect
 *and* a title. The ladder has 28 of them with holes at exactly 17, 18, 21, 23, 24, 27, 29, 31.
 Filling those holes means **every level from 2 to 31 has a story beat.**
@@ -197,7 +207,7 @@ the whole psychological difference between a grind and a ladder. Client + one co
 1. **F1 — the coach as a live work board.** ✅ BUILT.
 2. **F6 — Trades on the Streets screen.** ✅ BUILT.
 3. **F4 (free version) — the level-up moment.** ✅ BUILT.
-4. **F3 — seven missions in the dead levels.** Real content; prototype + re-extract; sim'd.
+4. **F3 — the dead levels filled.** ✅ BUILT (crimes too).
 5. **F2 — daily loops pay respect.** The one that most changes how the band *feels*, and the one that
    touches a signed curve — so it goes last, measured before and after, as a founder call.
 6. **F5 — the day streak.** Retention, but it does nothing for a player who is *already* in the

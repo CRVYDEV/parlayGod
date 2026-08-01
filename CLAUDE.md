@@ -7578,7 +7578,34 @@ asserts the crossing refills to the NEW (bigger) cap, that the response carries 
 later read does not, and that no `level%` reason ever reaches the ledger; mutation-verified twice by
 name. Browser-probed live (a real crossing at level 10 printed "you made HUSTLER — +5% crime payouts"
 with the tank full, zero page errors). `PACING.LEVEL_UP_REFILL` is pinned + tabled in BALANCE.md.
-**Still to build, in the doc's order:** F3 seven missions filling the dead levels (prototype + re-extract, ground rule
-#2), and LAST — because it touches the signed pacing curve and so gets measured before and after —
+**F3 — THE BREADTH DROP: 14 CRIMES + 8 MISSIONS — BUILT** (`reference-prototype-v24.jsx` +
+`node tools/extract-rules.js`, `test/growth.js`, `tools/art.js`; founder-directed *"more breadth
+inside missions and crimes"*). The level-gate map found SEVEN levels between 17 and 31 that delivered
+nothing at all — no job, no mission, no system — which the progression harness puts at hours 2.5 to 7
+of play. **CRIMES 29 → 43**: eight fill the cliff (17/18/20/21/23/24/27/29), six fill the early band's
+own gaps (6/8/10/12/14/15) so the entry loop has variety from the first hour. **MISSIONS 28 → 36** at
+17/18/21/23/24/27/29/31, each interpolated onto the ladder's own curve. Both catalogs are
+MACHINE-OWNED, so this went through the seam (ground rule #2 — edit the prototype, re-extract): the
+regenerated diff was **exactly 22 inserted lines and nothing else**, which is the seam doing its job.
+**Why more crimes is not more money:** NERVE is the throttle (the harness measures the pool at ~21%
+of cap, full 3% of minutes), so crime COUNT doesn't change how many a player can pull in an hour — it
+changes CHOICE, plus the marginal gain of a level-18 player using a level-18 job instead of the
+level-16 one. Re-measured: **2h level 16, 5h 26, 10h 42** against 16/25/43 before — inside run-to-run
+noise. Content, not a rebalance. §10.4 untouched, sim drift-0. `test/growth.js` guards the SHAPE: no
+dupe ids, well-formed, each NEW rung BRACKETED between its neighbours in cash AND respect (the whole
+legacy table is deliberately not monotone — level 3's booze is a cheaper, safer job than level 2's
+numbers, and that choice is the point), the $OMR ladder unchanged at 9 rungs, and the headline claim
+— **every level from 2 to 31 delivers something** — asserted rather than said. Three mutations, each
+caught by name (a deleted filler names the silent level; an off-curve pay names the bracket; a
+vanished id names itself). `tools/art.js` gained subjects for the 14 new jobs (the manifest iterates
+the LIVE catalog, so an expansion adds its rows automatically — but a written subject is the
+difference between a scene and the generic fallback); the plates themselves need a run with a key,
+and until then those cards fall through to the procedural emblem, which was probed and is clean.
+Browser-probed at level 24: the best-jobs grid leads with five of the new jobs and both new missions
+are offered, zero page errors. **The one honest flag (BALANCE.md):** each rung is on-curve, but the
+17-31 band's mission DENSITY roughly tripled, so walking it now pays ~$1.14M in one-time mission cash
+where it paid $310k — the harness still shows the player short of every business-front gate, so the
+gates still mean something, and the dial if it wants trimming is the new rungs' `reward.cash`.
+**Still to build:** LAST — because it touches the signed pacing curve and so gets measured before and after —
 **F2, the daily loops paying respect at all**, which is the single change that most alters how the
 band feels. F5 (a day streak) is the retention follow-up, not the opener.
