@@ -3827,3 +3827,90 @@ running both sides at once is a losing round trip wearing a flywheel costume.
 are markets that do not exist until mainnet. What CAN be said without a market: the buy side can never
 outspend the fees the pool earned, and every $OMR it mints has a hard token behind it — those are
 structural, and both are asserted.
+
+---
+
+## THE FLOAT — the tiered loot rate, THE MADE MAN, the access stake (economy v3 step 5, founder-directed 2026-08-01)
+
+Design `omerta-economy-v3-design.md` §5, §11.1, §11.2, §11.5. The step exists to answer one sentence:
+**a consumable you should never HOLD cannot be the loot that makes killing worth it.** If the rational
+play is buy-and-spend-instantly, nobody carries a balance, there is nothing on the body, and the only
+extraction path is empty. Forcing a float is therefore the central mechanic, not a detail.
+
+### THE LOOT RATE IS TIERED, and the flat rate is retired
+
+| lever | was | now | why |
+|---|---|---|---|
+| `M3.OMR_LOOT_RATE` | 0.20 | **RETIRED** | sized when the Street Wage was the main $OMR source |
+| `M3.OMR_LOOT_IDLE` | — | **0.50** | a loose balance + unbonding principal — money doing nothing |
+| `M3.OMR_LOOT_COMMITTED` | — | **0.20** | a staked balance — already working, so cheaper. **Never free.** |
+
+**Two failure modes pull in opposite directions**, which is what makes a flat rate wrong at any value.
+Too *low* and hunting is not worth the wall-clock time, so the extraction path is dead. Too *high* and
+holding is suicide, so nobody carries a float and **there is nothing to loot** — dead the other way.
+My own first instinct (a flat 0.50) fails the second test.
+
+**What changed the answer is the severance.** Cash cannot become $OMR at any price, so a hunter now
+spends a resource with no real-money value to gain one that has it. The old D1 kill-EV measurement
+(−$72k standalone) is not the right question for the $OMR side any more: the cost is nearly free in
+real terms, so the rate does not need to be high to be worth doing — it needs to leave something to hunt.
+
+**So exposure is proportional to IDLENESS, not to wealth.** Measured at P9.30 on a 200 $OMR float:
+idle pays a killer **100**, committed pays **40**, so committing saves **60 per death**. Both answers
+help the economy — committing drives velocity (the one KPI), staying liquid feeds the hunters. It also
+protects a new player with no rule at all (a fresh street holding nothing is worth nothing to hunt) and
+is self-balancing: as whales learn to commit, typical scores fall and hunters must hunt more.
+
+**THE REVERSAL, stated plainly: staked $OMR is no longer a safe harbour.** §4.1 says $OMR moves three
+ways and a protected tier would be a fourth. The player-facing promise in both codices said the
+opposite and was corrected in the same commit. Setting `OMR_LOOT_COMMITTED` to 0 restores the old
+safe harbour; setting `OMR_LOOT_IDLE` to 0.20 restores the old flat rate.
+
+Unlike the CASH rate these are clamped only at 1 (above 1 would be a mint, not a loot) — §11.1's "no
+cap, no floor" — because a 0.5 ceiling on a 0.50 base would silently swallow the season modifier.
+
+### THE MADE MAN — the recurring subscription
+
+| lever | value | note |
+|---|---|---|
+| `MADE.OMR` | **20** | the dues |
+| `MADE.MS` | **30 days** | extended from later-of(now, current end) |
+| `MADE.ESTATE_TIER` | **4** | the upper compound wants standing |
+
+≈ **243 $OMR per subscriber per year, continuous** rather than one-off — which is why §5 calls it the
+strongest of the float mechanisms. And since step 2 it is a **sink that recycles**: every dues payment
+lands on the desk's shelf to be sold again, so it is turnover, not destruction.
+
+**What it deliberately does NOT do.** The obvious version is to re-denominate operating costs —
+business upkeep, crew wages, territory upkeep — into $OMR. §11.2 rejects that and the reasoning is the
+whole design: a player would then *have* to buy real money to keep earning, which is a subscription
+wall on the core loop rather than a premium tier. **Operating costs stay in cash. All of them.**
+
+What the dues open is status, access and time: the badge, the upper compound, a house of your own, and
+**the pad pays itself** — a made man's fronts settle their own CASH upkeep when he touches them. That
+last one is the only piece that could drift into a discount, so it is asserted to the dollar: the same
+cash leaves the same pocket, writes the same `business:upkeep` ledger row, and the front earns the same
+income. What is bought is not having to remember.
+
+### THE ACCESS STAKE
+
+`ACCESS_STAKE.HIGH_OMR` = **50**. The high-stakes room now wants a seat (level, or the Madame's velvet
+rope) **and** a held stake. Held, not spent, so it earns the house nothing — its whole job is a
+permanent, visible, **lootable** float attached to exactly the players worth hunting. It rides the
+existing `staked` bucket, so no new schema and no new §10.4 surface.
+
+### OPEN — flagged for founder sign-off, NOT decided here
+
+1. **The Commission is deliberately NOT gated on being made**, though §11.2's list opens with
+   "Commission eligibility". A decree moves real gameplay surfaces (safehouse cost, war blocking,
+   laylow cost, the fire-kill loot multiplier), so gating the vote on a paid subscription would be
+   $OMR buying POWER — against §4.3, which the same section names as the binding constraint. If the
+   Commission should be a made-man table, the decree teeth want reviewing at the same time.
+2. **A speakeasy DOES earn cash**, so gating it sits at the edge of the same line. It is built as the
+   design names it (opening only — an existing owner keeps their house, and every other speakeasy verb
+   stays open to everyone); the dial is one line in `openSpeakeasy`.
+3. **The high-stakes stake changes an existing signed gate**: a level-30 player who could reach the
+   big table before now also needs 50 $OMR staked. That is the design's intent (the stake exists to
+   attach float to whales) but it is a real change to a shipped affordance.
+4. **Whether whales actually commit** is not measurable from arithmetic. Watch realised $OMR loot per
+   kill in the alpha rather than P9.30's numbers.

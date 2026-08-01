@@ -66,6 +66,9 @@ export const SYSTEMS = {
     'underworld_discharge', 'underworld_gunsale'],
   'the estate': ['estate_tier', 'estate_feature', 'estate_gala', 'estate_gala_attend', 'estate_staff_hire',
     'estate_staff_dismiss', 'estate_wages'],
+  // THE MADE MAN (economy v3 step 5) — the recurring $OMR subscription. Its own system, because
+  // "how many men are paying dues" is the single number that says whether the float mechanism works.
+  'the made man': ['made_dues'],
   'the auction house': ['auction_bid', 'auction_consign', 'auction_consign_bid'],
   // ('rwa_dividend' retired with the personal dividend — tokenomics v2 step 2; the family one stays)
   // ('rwa_vault_claim' became 'eth_vault_claim' when the STOCK LAYER was retired —

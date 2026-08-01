@@ -75,7 +75,9 @@ const KNOWN_REASONS = {
     // so it is in NEITHER the mint nor the burn term).
     // ECONOMY v3 step 2 — `desk:recycle` is the desk's side of a recycled sink (a TRANSFER: it rides
     // inside the burn term so the pair cancels, and desk_inventory holds the value).
-    'window:', 'yield:', 'desk:'],
+    // ECONOMY v3 step 5 — `made:dues` is THE MADE MAN's subscription burn (it is in DESK.SINK_REASONS,
+    // so like every sink since step 2 it recycles to the desk rather than being destroyed).
+    'window:', 'yield:', 'desk:', 'made:'],
   cb: ['crime:', 'craft:', 'gun:buy:', 'jump:', 'death:', 'exchange:', 'onboard:', 'cook:'],
   ammo: ['melt', 'melt:tithe', 'craft:ammo', 'ammo:buy', 'jump', 'fire', 'death:', 'exchange:', 'gang:dissolved', 'convoy:', 'world:', 'port:', 'contract:'],
 };

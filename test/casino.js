@@ -5,7 +5,7 @@
 // and the vocabulary knows the new reasons. Runs on pg-mem — zero infra.
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { CASINO, UNDERWORLD, numbersDrawOf, dayOf, weekOf, hash01, MARKET_SEED, PACING } from '../src/rules.js';
+import { CASINO, UNDERWORLD, ACCESS_STAKE, numbersDrawOf, dayOf, weekOf, hash01, MARKET_SEED, PACING } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { sweepTournaments, trackFieldOf, sweepTrackEntries, sweepFuturity } from '../src/casino.js';
 
@@ -314,6 +314,13 @@ const omrAfterBJ = (await meOf(token)).omr;
 // red-team regression: a LIVE blackjack hand's pending payout is RESERVED (openLiability), so the
 // street can't be tipped against an unresolved hand — parity with the numbers/fight reservation
 await seed('cash = cash + 60000000'); seededCash += 60000000; // fund up to 25× HIGH_MAX ($2M) probes on any losing streak (TRACKED bump — the §10.4 identity stays exact)
+// v3 step 5 — THE ACCESS STAKE: the high-stakes room now wants a HELD $OMR stake behind the seat
+// as well as the level. Post it directly (this suite is about the den book; the stake gate itself is
+// proven in test/made.js). The grant is an unledgered $OMR mint, which this suite does not assert
+// against (its checks are the CASH reconcile + the den book + the vocabulary), and the den's own
+// "never touches $OMR" assertions read the LIQUID balance, which a staked grant leaves alone.
+await pool.query(`UPDATE account_persistent SET staked = staked + ${ACCESS_STAKE.HIGH_OMR}
+  WHERE account_id=(SELECT account_id FROM characters WHERE id='${cid}')`);
 let bigLive = null;
 for (let i = 0; i < 25 && !bigLive; i++) { await seed('nerve=50');
   const d = await call('POST', '/v1/casino/blackjack', { token, body: { amount: CASINO.HIGH_MAX } });

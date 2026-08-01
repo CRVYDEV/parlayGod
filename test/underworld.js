@@ -8,7 +8,7 @@ process.env.SEARCH_MS = '10000';    // 10s search (TEST-ONLY knob)
 process.env.CONVOY_MS = '600000';   // 10-min road (TEST-ONLY knob)
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { UNDERWORLD, BLACK_MARKET, CONVOY, CASINO, GUNS, CONSUMABLES, NPC_HITMEN, leadTaskOf, dayOf } from '../src/rules.js';
+import { UNDERWORLD, BLACK_MARKET, CONVOY, CASINO, ACCESS_STAKE, GUNS, CONSUMABLES, NPC_HITMEN, leadTaskOf, dayOf } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -181,6 +181,12 @@ const nerve1 = (await meOf(mia.token)).nerve;
 assert.equal((await call('POST', '/v1/casino/dice', { token: mia.token, body: { amount: 100 } })).code, 200, 'another roll at T1');
 assert.equal((await meOf(mia.token)).nerve, nerve1, 'T1: the house comps the seat — no nerve');
 await seedNpc(mia.id, 'madame', 60);
+// v3 step 5 — the room now wants BOTH a seat and a HELD access stake. The velvet rope is the SEAT
+// half (that is what this assertion is about), so post the stake before checking it opens.
+assert.equal((await call('POST', '/v1/casino/dice', { token: mia.token, body: { amount: CASINO.MAX_BET + 1 } })).body.error, 'max',
+  'the rope alone is not enough — the big table also wants the access stake behind the seat');
+await pool.query(`UPDATE account_persistent SET staked = staked + ${ACCESS_STAKE.HIGH_OMR}
+  WHERE account_id=(SELECT account_id FROM characters WHERE id='${mia.id}')`);
 assert.equal((await call('POST', '/v1/casino/dice', { token: mia.token, body: { amount: CASINO.MAX_BET + 1 } })).code, 200, 'T2: the velvet rope opens the high-stakes room at any level');
 assert.equal((await standingOf(mia.token, 'madame')).standing, 61, 'the high-stakes roll still pays +1 (lead spent)');
 await seedNpc(mia.id, 'madame', 90);

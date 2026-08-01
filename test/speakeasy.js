@@ -40,6 +40,11 @@ const bruno = await mk('Bruno Tattaglia'); // the step-four standover challenger
 assert.equal((await call('POST', '/v1/speakeasy/neon/open', { token: owner.token })).body.error, 'level', 'a nobody cannot open a club');
 await seed(owner.id, `respect=${lvlRespect(20)}`); // clear the level gate
 assert.equal((await call('POST', '/v1/speakeasy/nowhere/open', { token: owner.token })).body.error, 'bad_district', 'no such district');
+// v3 step 5 — a club needs STANDING. Set the window directly: this suite is about the club, and the
+// dues path (burn → ledger → window) is proven end-to-end in test/made.js.
+assert.equal((await call('POST', '/v1/speakeasy/neon/open', { token: owner.token })).body.error, 'made', 'only a made man puts his name over a door');
+for (const c of [owner, rival, bruno]) await pool.query(
+  `UPDATE account_persistent SET made_until = now() + interval '30 days' WHERE account_id=(SELECT account_id FROM characters WHERE id='${c.id}')`);
 // not enough cash first
 assert.equal((await call('POST', '/v1/speakeasy/neon/open', { token: owner.token })).body.error, 'cash', "can't open a club broke");
 await grantCash(owner.id, 2000000);

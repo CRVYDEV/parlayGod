@@ -349,10 +349,12 @@ assert.equal(r.code, 200, 'shots fired');
 assert(r.body.kill, `level-11 target with 2200 rounds is a kill (eff vs btk: ${JSON.stringify(r.body)})`);
 assert.equal(r.body.chop, Math.floor(900 * 0.4), 'chop = 40% of the real fleet value');
 assert.equal(r.body.bounty, 5000, "the completed hit collects Mook's open kill contract");
-// Risk-to-Earn P1.1 — the killer loots 25% of the victim's POCKET cash and 20% of their LIQUID $OMR
+// Risk-to-Earn P1.1 — the killer loots 25% of the victim's POCKET cash and, since economy v3 step 5,
+// the TIERED $OMR rate: a loose balance is IDLE and is looted deepest (§11.1 — exposure is
+// proportional to idleness, not wealth).
 assert.equal(r.body.loot, Math.floor(roccoCashPreKill * 0.25), 'looted 25% of the victim pocket cash');
-assert.equal(r.body.omrLoot, Math.floor(7 * 0.20), 'looted 20% of the victim liquid $OMR (floor(7×0.2)=1)');
-assert.equal((await meOf(don.token)).omr, donOmrPreKill + 1, 'the looted $OMR landed in the killer\'s account');
+assert.equal(r.body.omrLoot, Math.floor(7 * 0.50), 'looted 50% of the victim IDLE (loose) $OMR (floor(7×0.5)=3)');
+assert.equal((await meOf(don.token)).omr, donOmrPreKill + 3, 'the looted $OMR landed in the killer\'s account');
 assert.equal((await meOf(don.token)).cash, donCashPreKill + r.body.chop + r.body.bounty + r.body.loot, 'chop + bounty + cash loot all paid to the killer');
 
 // estate: heir stands up on the same account; the street died with the man
@@ -360,7 +362,7 @@ const heir = await meOf(rocco.token);
 assert.equal(heir.generation, 2, 'heir generation');
 assert.equal(heir.name, 'Rocco Two-Knives', 'the bloodline keeps the name');
 assert.equal(heir.cash, 500 + 100 * 5, 'legacy stake: $500 + $100 × prestige (floor(11/2))');
-assert.equal(heir.omr, 5, 'liquid $OMR survives death MINUS the 20% loot (7→6) MINUS the L2a 25% death duty (floor(6×0.25)=1 → 5)');
+assert.equal(heir.omr, 3, 'liquid $OMR survives death MINUS the 50% IDLE loot (7→4) MINUS the L2a 25% death duty (floor(4×0.25)=1 → 3)');
 assert.equal(heir.cars.length, 0, 'fleet died');
 assert(!heir.gang, 'gang seat vacated');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM cars WHERE character_id='${rocco.id}'`)).rows[0].n), 0, 'victim cars wiped');
@@ -1373,15 +1375,36 @@ assert.equal(Math.floor(vm.omr), 0, 'not liquid yet — extraction crosses an ex
 const kv = await whack(vault.id);
 assert.equal(kv.kill, true, 'vinnie got clipped mid-transfer');
 assert.equal(kv.loot, Math.floor(20000 * 0.25) + Math.floor(80000 * 0.25), 'loot took 25% of pocket AND 25% of the in-transit deposit');
-assert.equal(kv.omrLoot, Math.floor(50 * 0.20), 'loot took 20% of the UNBONDING $OMR');
+// v3 step 5: unbonding principal is money on its way to doing nothing, so it is IDLE — deepest rate.
+assert.equal(kv.omrLoot, Math.floor(50 * 0.50), 'loot took 50% of the UNBONDING $OMR (idle — on its way out of the stake)');
 // the survivor's account: the rest of the unbonding releases to liquid once the window passes
 await pool.query(`UPDATE account_persistent SET unbond_at = now() - interval '1 minute' WHERE account_id = (SELECT account_id FROM characters WHERE id='${vault.id}')`);
 vm = await meOf(vault.token);
 assert.equal(vm.unbonding, 0, 'the unbond window passed — released');
-// 50 − 10 looted = 40, then the L2a death duty takes 25% of the EXTRACTABLE hoard — which now
+// 50 − 25 looted = 25, then the L2a death duty takes 25% of the EXTRACTABLE hoard — which now
 // reaches the unbond window (the red-team fix: dying mid-unbond used to shelter the whole hoard
-// from the duty), so 40 − 10 = 30 releases to the heir.
-assert.equal(Math.floor(vm.omr), 30, 'principal (50 − 10 looted − 10 death duty) is liquid on the heir\'s account');
+// from the duty), so 25 − 6 = 19 releases to the heir.
+assert.equal(Math.floor(vm.omr), 19, 'principal (50 − 25 looted − 6 death duty) is liquid on the heir\'s account');
+
+// ── ECONOMY v3 step 5 — STAKING IS NO LONGER A SAFE HARBOUR (design §11.1 / §11.5) ──
+// The reversal worth its own assertion: a STAKED balance was untouchable and is now looted at the
+// COMMITTED rate. Less exposed than idle, never safe — §4.1 admits no fourth way for $OMR to move,
+// and a protected tier would be exactly that. Defending your seat is the game.
+const seat = await mk('Sonny Seatholder');
+await seedCh(seat.id, 'respect=1000, cash=0, bank=0'); // level 11 — clears LOOT_MIN_LVL
+await pool.query(`UPDATE account_persistent SET omr = 100 WHERE account_id=(SELECT account_id FROM characters WHERE id='${seat.id}')`);
+assert.equal((await call('POST', '/v1/stake', { token: seat.token, body: { amount: 100 } })).code, 200, 'the whole float is committed to a stake');
+let sm = await meOf(seat.token);
+assert.equal(sm.staked, 100, 'staked'); assert.equal(Math.floor(sm.omr), 0, 'nothing loose');
+const donOmrPreSeat = (await meOf(don.token)).omr;
+const kSeat = await whack(seat.id);
+assert.equal(kSeat.kill, true, 'the seatholder went down');
+assert.equal(kSeat.omrLoot, Math.floor(100 * 0.20),
+  'a STAKED balance is looted at the COMMITTED rate (20%) — it is cheaper to hold, but it is NOT a safe harbour any more');
+assert.equal((await meOf(don.token)).omr, donOmrPreSeat + 20, 'and it lands LIQUID on the killer — freshly looted is idle');
+sm = await meOf(seat.token);
+// heir: 80 staked survives (the duty spares committed capital by design), nothing loose to tax
+assert.equal(Math.floor(sm.staked), 80, 'the heir inherits the remaining stake — the death duty taxes the EXTRACTABLE hoard, not the seat');
 // wealth-scaled safehouse: 1% of liquid wealth, $25k floor — priced off what it protects
 const rich = await mk('Richie Reserves');
 await seedCh(rich.id, "cash=6000000, bank=14000000");

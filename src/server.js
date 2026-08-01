@@ -104,7 +104,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          TAX, withdrawTaxBps,
          HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, BUSINESS_EMPIRE, PACING, MASTERY,
          PATH_FX, PATH_XP_HOME, PATH_XP_RIVAL, PATH_SWITCH_CD_MS, REGIMEN, HUSTLE, CAREER, RIVALS,
-         CORNER, CONTACTS, FAVOR } from './rules.js';
+         CORNER, CONTACTS, FAVOR, MADE, ACCESS_STAKE } from './rules.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -867,6 +867,15 @@ export async function buildServer() {
     // could verify the printer; there is no printer. `faucet: null` is a deliberate positive claim
     // rather than a removed key — a client that used to render the schedule can say what replaced it.
     emission: { faucet: null, note: 'No $OMR is minted in game. Every $OMR in the city was bought or taken.' },
+    // THE FLOAT (economy v3 step 5) — the dues, what they open, and the two loot rates. All published,
+    // because a player deciding whether to hold $OMR is entitled to know exactly what it costs them
+    // to be caught holding it.
+    made: { omr: MADE.OMR, days: Math.round(MADE.MS / 86400000), estateTier: MADE.ESTATE_TIER,
+      buysNoPower: true },
+    accessStake: { highOmr: ACCESS_STAKE.HIGH_OMR },
+    loot: { omrIdle: M3.OMR_LOOT_IDLE, omrCommitted: M3.OMR_LOOT_COMMITTED, cash: M3.CASH_LOOT_RATE,
+      minLevel: M3.LOOT_MIN_LVL,
+      note: 'A loose or unbonding balance is IDLE and is looted deepest. A staked balance is COMMITTED and is looted less — but nothing is safe.' },
     // THE TRADES — the mastery catalog (tracks, curve, ranks — knowable; XP is earned, never bought)
     mastery: { tracks: MASTERY.TRACKS, xpDivisor: MASTERY.XP_DIVISOR, maxLvl: MASTERY.MAX_LVL,
       xp: MASTERY.XP, ranks: MASTERY.RANKS, heirKeepBps: MASTERY.HEIR_KEEP_BPS, legendRanks: MASTERY.LEGEND_RANKS,

@@ -3175,6 +3175,64 @@ figure is claimed** — buyback volume is `fee income ÷ price` and both are mar
 until mainnet, so what is asserted is structural: it can never outspend the fees the pool earned, and
 every $OMR it mints has a hard token behind it.
 
+**ECONOMY v3 STEP 5 — THE FLOAT: the tiered loot rate, THE MADE MAN, the access stake**
+(`omerta-economy-v3-design.md` §5/§11.1/§11.2/§11.5; `src/made.js`, `test/made.js` — the 63rd suite).
+The step exists for one sentence: **a consumable you should never HOLD cannot be the loot that makes
+killing worth it.** If the rational play is buy-and-spend-instantly nobody carries a balance, there is
+nothing on the body, and the only extraction path is empty — so forcing a FLOAT is the central
+mechanic, not a detail.
+**THE LOOT RATE IS TIERED, and the flat `M3.OMR_LOOT_RATE` (0.20) is RETIRED.** Two failure modes pull
+opposite ways, which is what makes any flat rate wrong: too LOW and hunting is not worth the
+wall-clock, too HIGH and holding is suicide so there is nothing to loot. What changed the answer is
+the severance — cash cannot become $OMR, so a hunter now spends a worthless resource to gain a real
+one, and the old D1 kill-EV number is not the question any more. So **exposure is proportional to
+IDLENESS, not to wealth**: `OMR_LOOT_IDLE` **0.50** on a loose balance + unbonding principal (money
+doing nothing), `OMR_LOOT_COMMITTED` **0.20** on a staked one (already working). **This REVERSES a
+shipped promise — staked $OMR is no longer a safe harbour**; §4.1 admits no fourth way for $OMR to
+move and a protected tier would be exactly that. Both codices said the opposite and were corrected in
+the same commit. Clamped only at 1 (§11.1's "no cap, no floor") because a 0.5 ceiling on a 0.50 base
+would silently swallow the season modifier. Measured at sim **P9.30**: on a 200 $OMR float idle pays
+100, committed pays 40, so committing saves 60 per death — and BOTH answers help (committing drives
+velocity, staying liquid feeds hunters), a fresh street holding nothing is worth nothing to hunt
+(automatic new-player protection with no rule), and it is self-balancing.
+**THE CLEARING WINDOW NEEDED NO CODE**, which is the finding rather than a shortcut: §11.1 already
+prices "everything fresh from the bond" at the IDLE rate and a freshly-arrived balance IS a loose
+balance, so the tiering subsumes §5(ii)'s timer — the same shape as step 3's 48h vest, which the FIFO
+surcharge had already implemented. A separate `CLEAR_MS` would be a second mechanism doing the first
+one's job.
+**THE MADE MAN** (`MADE.OMR` 20 / 30 days, `POST /v1/made`) is the recurring subscription — the
+strongest float mechanism because it creates CONTINUOUS demand (≈243 $OMR/subscriber/year) rather than
+one-off. **What it deliberately is NOT:** §11.2 rejects re-denominating operating costs (business
+upkeep, crew wages, territory upkeep) into $OMR, because a player would then HAVE to buy real money to
+keep earning — a subscription wall on the core loop, not a premium tier. **Operating costs stay in
+cash. All of them.** So the dues buy the badge, the upper compound (`MADE.ESTATE_TIER` 4), a club of
+your own, and **the pad pays itself** — a made man's fronts settle their own CASH upkeep on a touch.
+That last one is the only piece that could drift into a discount, so it is asserted to the dollar: the
+same cash, the same `business:upkeep` ledger row, the same income. TIME, never POWER. `settlePad` is
+extracted as ONE implementation shared with the manual route (the sackEmpire rake-cursor lesson).
+§10.4: `made:dues` joined the omr vocabulary AND `DESK.SINK_REASONS`, so like every sink since step 2
+it **recycles to the desk** rather than being destroyed — conservation needs no new term and the test
+proves the drift is exactly the SQL grants.
+**THE ACCESS STAKE** (`ACCESS_STAKE.HIGH_OMR` 50) — the high-stakes room now wants a seat (level, or
+the Madame's velvet rope) AND a held stake. Held, not spent, so it earns the house nothing: its whole
+job is a permanent, visible, LOOTABLE float on exactly the players worth hunting. Rides the existing
+`staked` bucket — no new schema, no new §10.4 surface. `tableMax` is one helper, because a third
+condition duplicated across the dice and blackjack tables is a drift waiting to happen.
+**Flagged for founder sign-off, NOT decided** (BALANCE.md § THE FLOAT): the **Commission is
+deliberately NOT gated** on being made though §11.2's list opens with it — a decree moves real
+gameplay surfaces, so gating the vote on a paid subscription is $OMR buying POWER, against §4.3 which
+the same section names as binding; the **speakeasy gate IS built as written** and sits at the edge of
+that same line since a club earns cash; the **high-stakes stake changes a shipped affordance** (a
+level-30 player who could reach the big table now also needs 50 staked); and whether whales actually
+commit is not measurable from arithmetic — watch realised $OMR loot per kill in the alpha.
+Five mutations, each caught at its own named assertion (staked loot removed; the dues stop recycling;
+the pad becomes a half-price discount; the stake gate dropped; the estate gate dropped). A
+**pre-existing ~1-in-10 flake** was fixed en route: `test/growth.js`'s kingpin assertion compares a
+view rendered from the account snapshot `loadOwned` took at the START of the request against a row
+that §7.1 accrual may have bumped by DIRECT SQL AFTER it (an offline crew sale) — the clock is now
+frozen before the read so no sale can land inside the window, which guarantees the precondition rather
+than weakening what is asserted. Suite 63/63 + sim drift-0 + pgquery + pgcheck 43/43 on real Postgres.
+
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
 `payPlex` pattern); named landmarks / Founder's charter numbers; ~~R2 (the `rwa_revenue` → real-RWA-buy

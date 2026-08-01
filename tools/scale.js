@@ -92,6 +92,11 @@ assert(players.length >= PLAYERS * 0.9, `only ${players.length}/${PLAYERS} chara
 // baseline drift is whatever this SQL created, and the run must not move it.
 const ids = players.map((p) => `'${p.id}'`).join(',');
 await pool.query(`UPDATE characters SET respect=25000, cash=4000000, energy=100, nerve=50, muscle=60, cunning=60, speed=60 WHERE id IN (${ids})`);
+// MADE, all of them (economy v3 step 5): a club needs standing. Set directly rather than paying the
+// dues, because this harness measures LIQUIDITY and a granted $OMR balance plus its burn would move
+// the §10.4 baseline it asserts. The dues path itself is proven in test/made.js.
+await pool.query(`UPDATE account_persistent SET made_until = now() + interval '30 days'
+  WHERE account_id IN (SELECT account_id FROM characters WHERE id IN (${ids}))`);
 
 // A PATH, for everybody. `You've made rank` (declare a Path) held 69% of the trace across 17 of 18
 // players and masked every rung below it — including all five the solo harness cannot reach, which

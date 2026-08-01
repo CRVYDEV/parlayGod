@@ -12,7 +12,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS, RANKS,
          SOLDIERS, soldierFxOf, CLUES, clueStepOf, rollClueTier, kingpinRankOf, tycoonRankOf, racketIncomeLeveled, empireTitles, launderRankOf, frontTitles, statesmanRankOf, seasonModOf, PACING,
          carCollateralValue, MASTERY, masteryLvlOf, masteryRankOf, masteryXpFor, pathFx, pathXpMult,
          REGIMEN, disciplineLvlOf, energyCapOf, nerveCapOf, BUSINESSES, WIRE, RIVALS, CORNER, cornerTasksOf,
-         KITCHENS, labModuleCost, recyclesToDesk, DESK_RECYCLE_REASON } from './rules.js';
+         KITCHENS, labModuleCost, recyclesToDesk, DESK_RECYCLE_REASON, isMade, madeSeconds } from './rules.js';
 import { dbCaps } from './db.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
@@ -1232,6 +1232,9 @@ export function view(ch, acct = {}, owned = {}) {
     health: Math.floor(Number(ch.health)), cash: Math.floor(Number(ch.cash)), bank: Math.floor(Number(ch.bank)),
     omr: Number(acct.omr || 0), staked: Number(acct.staked || 0), rewards: Number(acct.rewards || 0),
     unbonding: Number(acct.unbonding || 0),
+    // THE MADE MAN (economy v3 §11.2) — the badge. Account-level, so it survives death; buys standing
+    // and convenience, never power.
+    made: isMade(acct), madeSeconds: madeSeconds(acct),
     unbondSeconds: (Number(acct.unbonding || 0) > 0 && acct.unbond_at) ? Math.max(0, Math.ceil((new Date(acct.unbond_at) - Date.now()) / 1000)) : 0,
     bankInTransit: Math.min(Math.floor(Number(ch.bank_intransit || 0)), Math.floor(Number(ch.bank))),
     bankClearSeconds: (Number(ch.bank_intransit || 0) > 0 && ch.bank_intransit_at)

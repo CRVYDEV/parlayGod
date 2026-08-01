@@ -283,6 +283,13 @@ assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM tra
 // (C) THE KINGPIN LEGEND — dealing bumped lifetime product moved (account-level, survives death)
 await seedCh(chef.id, 'nerve=200, jail_until=NULL, safe_until=NULL');
 await call('POST', '/v1/kitchen/deal', { token: chef.token, body: { drugId: 'vim', qty: 20 } });
+// FLAKE FIX (~1 run in 10, pre-existing): the view renders `kingpin.moved` from the account snapshot
+// loadOwned took at the START of the request, but §7.1 accrual runs AFTER that and an offline crew
+// sale bumps product_moved by DIRECT SQL — so a read whose accrual window happens to fire a sale
+// returns a view one sale behind the row, and the two assertions below disagree. Freeze the clock so
+// the read's accrual window is ~0 and no sale can land inside it (the "guarantee the precondition"
+// discipline, not a weakened assertion — what is asserted is unchanged).
+await pool.query(`UPDATE characters SET last_accrued_at = now() WHERE id='${chef.id}'`);
 me = await meOf(chef.token);
 assert(me.kingpin && me.kingpin.moved > 0, 'the kingpin ledger shows lifetime product moved');
 assert.equal(Number((await pool.query(`SELECT product_moved FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${chef.id}')`)).rows[0].product_moved), me.kingpin.moved, 'the view matches the persisted legend');

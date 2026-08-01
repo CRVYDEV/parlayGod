@@ -10,11 +10,11 @@ Written 2026-07-25. Every number below was measured from the tree, not recalled.
 
 | | |
 |---|---|
-| Backend modules | **111** files, **35961** lines (`src/`, incl. `src/routes/` and `src/social/`) |
-| Test suites | **62** files, **23021** lines (`test/`) — ratio 0.63 test:src |
-| HTTP routes | **528** registrations |
-| Database tables | **183** (`schema.sql`, 2556 lines) |
-| Client | **6,804** lines (`public/index.html`, single file, zero dependencies) |
+| Backend modules | **112** files, **36205** lines (`src/`, incl. `src/routes/` and `src/social/`) |
+| Test suites | **63** files, **23246** lines (`test/`) — ratio 0.63 test:src |
+| HTTP routes | **539** registrations |
+| Database tables | **183** (`schema.sql`, 2562 lines) |
+| Client | **6,811** lines (`public/index.html`, single file, zero dependencies) |
 | Ops dashboard + wiki | `public/admin.html`, `public/wiki.html` |
 | Smart contracts | **1276** lines Solidity, 8 contracts, 107 Foundry tests passing |
 | Harnesses | `tools/sim.js` (economy), `tools/playthrough.js` (player experience), `tools/pgcheck.js` (real Postgres), `tools/loadtest.js` (concurrency), `tools/chaos.js` (interruption), `tools/mobile.js` (the screens, at phone size), `tools/scale.js` (market liquidity at population scale), `tools/bond-dials.js` (sizing the on-chain mint walls), `tools/pgquery.js` (every SQL string parses on real Postgres) |
@@ -31,7 +31,7 @@ Everything is built on five load-bearing decisions. None has needed revision in 
 
 **`rules.js` is the constants layer, in two files.** `rules.generated.js` holds the prototype's 22 data
 tables (479 lines) and is overwritten wholesale by the extractor; `rules.tail.js` holds every helper,
-catalog, ladder and founder-signed lever (4059 lines) and the extractor never opens it. `rules.js`
+catalog, ladder and founder-signed lever (4144 lines) and the extractor never opens it. `rules.js`
 re-exports both. Nothing in `src/` hardcodes a balance number.
 
 **`withCharacter` is the transaction spine.** Every player action opens `SELECT … FOR UPDATE` on the
