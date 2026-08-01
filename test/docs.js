@@ -137,6 +137,30 @@ assert(!/RE-APPLY THIS LINE/i.test(tail),
   'the "RE-APPLY THIS LINE after any regeneration" warning was FALSE — levelOf lives in the file the '
   + 'extractor never touches. If it is back, either the seam moved (fix the seam) or the warning is '
   + 'wrong again (delete it).');
+// …and the same claim in ANY wording, in EVERY file that makes it. The first cut of this check
+// matched one exact phrase, and a red-team found the identical false claim alive in two other
+// places — including CLAUDE.md, which is loaded into every session, so every future reader was
+// being told to perform a manual step that does not exist on the most dangerous file in the tree.
+// Matching the CLAIM instead of the phrasing: the seam is settled by where `levelOf` is DEFINED,
+// so any text putting it in the generated half is wrong however it is worded. The corrective
+// wording ("lives in the HAND-WRITTEN half") is deliberately not caught — it says the opposite.
+// Note the shape this forces: prose DESCRIBING the old bug must not use the collocation either,
+// so say "the machine-owned half" when recounting it. That is the cost of matching a claim by
+// its terms rather than its phrasing, and it is cheaper than the guard that missed it twice.
+assert(/export const levelOf/.test(tail), 'levelOf is defined in the hand-written half');
+assert(!/export const levelOf/.test(read('src/rules.generated.js')),
+  'levelOf moved into the generated half — the seam changed, so every doc describing it must change too');
+for (const f of ['src/rules.tail.js', 'CLAUDE.md', 'SPEC.md']) {
+  const body = read(f);
+  for (const m of body.matchAll(/levelOf/g)) {
+    const around = body.slice(Math.max(0, m.index - 220), m.index + 220);
+    assert(!/AUTO-GENERATED/i.test(around),
+      `${f} still says levelOf lives in the AUTO-GENERATED half. It does not — it is defined in `
+      + 'src/rules.tail.js, which the extractor never opens. A reader who believes this goes looking '
+      + 'for a line to re-apply after every regeneration, finds none, and either thinks the extract '
+      + 'broke or adds one that the NEXT run silently clobbers back to the prototype\'s /4.');
+  }
+}
 
 // ── a doc must not describe its own size wrongly ─────────────────────────────────────────────────
 // CLAUDE.md is loaded into every session, so a reader who believes it is a thousand lines when it is

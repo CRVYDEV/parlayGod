@@ -531,6 +531,38 @@ await pool.query(`UPDATE hustles SET step=3 WHERE character_id='${rook.id}' AND 
 // PROVEN rather than skipped (an un-fired rung and a broken rung look identical from the outside)
 await pool.query(`INSERT INTO corner_jobs (character_id, day, district, slot, baseline, claimed) VALUES ('${rook.id}', ${cday}, 'docks', 0, '{}', false)`);
 assert.equal(await coachOf(), 'The corner has an envelope for you', 'an open corner job surfaces — the only daily work that pays respect');
+// (red-team F2) …but ONLY while it can still be collected. `claimCorner` refuses on two counts the
+// board has to know about, or the coach spends the rest of the day leading at work the server will
+// not pay: the CORNER.MAX_DAY allowance, and one envelope per KIND of work. A rung that never
+// clears must never sit above rungs that do — the tail's own rule, and the corner sits at its head.
+for (let i = 0; i < CORNER.MAX_DAY; i++) {                       // slots 90+ map to no real task, so
+  await pool.query(`INSERT INTO corner_jobs (character_id, day, district, slot, baseline, claimed)   -- only the ALLOWANCE can be
+    VALUES ('${rook.id}', ${cday}, 'canal', ${90 + i}, '{}', true)`);                              // what refuses the claim
+}
+assert.equal(await coachOf(), 'The trainers have work for you',
+  'the day\'s allowance is spent, so the open envelope is dead weight — the corner goes quiet and the next LIVE rung leads');
+await pool.query(`DELETE FROM corner_jobs WHERE character_id='${rook.id}' AND day=${cday} AND district='canal'`);
+assert.equal(await coachOf(), 'The corner has an envelope for you', 'allowance back, envelope live again');
+// …and the OTHER gate: one envelope per KIND of work per day. The open envelope on docks slot 0 is
+// dead the moment the same kind is collected somewhere else, so the coach must stop pointing at it.
+// The pair is FOUND rather than hardcoded (the draw is per-day), and asserted to exist — 18 slots
+// drawing from ~9 kinds collide by pigeonhole, so a day with no pair means the draw itself changed.
+{
+  const mine = cornerTasksOf('docks', cday).find((t) => t.slot === 0);
+  let twin = null;
+  for (const d of DISTRICTS) {
+    if (d.id === 'docks') continue;
+    const t = cornerTasksOf(d.id, cday).find((x) => x.kind === mine.kind);
+    if (t) { twin = { district: d.id, slot: t.slot }; break; }
+  }
+  assert(twin, `no other district draws '${mine.kind}' today — the corner draw changed, not this rule`);
+  await pool.query(`INSERT INTO corner_jobs (character_id, day, district, slot, baseline, claimed)
+    VALUES ('${rook.id}', ${cday}, '${twin.district}', ${twin.slot}, '{}', true)`);
+  assert.equal(await coachOf(), 'The trainers have work for you',
+    `the corner already paid for '${mine.kind}' today, so the open envelope of that kind is dead — the rung stands down`);
+  await pool.query(`DELETE FROM corner_jobs WHERE character_id='${rook.id}' AND day=${cday} AND district='${twin.district}'`);
+  assert.equal(await coachOf(), 'The corner has an envelope for you', 'and comes back when it is collectable again');
+}
 await pool.query(`UPDATE corner_jobs SET claimed=true WHERE character_id='${rook.id}' AND day=${cday}`);
 await pool.query(`INSERT INTO clue_scrolls (character_id, salt, step, steps) VALUES ('${rook.id}', 'sd', 2, 4)`);
 assert.equal(await coachOf(), 'You\'re carrying a clue scroll (step 2 of 4)', 'a live clue names where you are on the trail');
