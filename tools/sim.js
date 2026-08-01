@@ -1118,6 +1118,66 @@ phase('P9.28 jailbirds × bust:reward — the reachable §7.8 faucet');
     `a failed bust costs ${M3.BUST_FAIL_JAIL_S}s of lockup and nothing else, so the loop is time-metered rather than resource-metered; unlike every other faucet at this scale it spends no signed resource. Founder call — flagged, NOT retuned (ground rule #1)`);
 }
 
+// ════════════════ P9.29 THE FARM — what the Street Wage costs a Sybil, and what it pays ════════════════
+// The founder's open question: "the horde of low-value farmers that will play strictly to extract."
+// The wage is the ONLY real-value emission to players, so this is the one loop where that question
+// has teeth. It is answered analytically because the payout formula is closed-form
+// (emission.js:114): share = min(WAGE_CAP_OMR, budget × gain / Σgain).
+//
+// That formula has a property worth stating plainly before any number: A FARM'S SHARE OF THE BUDGET
+// IS ITS SHARE OF TOTAL RESPECT GAINED. There is no cheaper path to respect than playing, so a
+// farmer has no efficiency edge over an honest player — only parallelism. Which makes the whole
+// question turn on the per-account CAP, and the cap does something counter-intuitive.
+phase('P9.29 the farm — the wage under Sybil pressure (the founder\'s open question)');
+{
+  const budget = EMISSION.EPOCH_OMR, cap = EMISSION.WAGE_CAP_OMR;
+  const mintEth = 0.01;                          // MINT_FEE_ETH — module-private in vig.js
+  const impliedOmrPerEth = 5 / mintEth;          // PLEX_MINT_OMR / MINT_FEE_ETH — the game's own rate
+
+  // (1) THE CAP IS ONLY REACHABLE ABOVE A SHARE THRESHOLD, and that threshold sets a population
+  // number below which the wage stops being pro-rata at all.
+  const capShare = cap / budget;                 // you need this fraction of all respect to cap out
+  const flatBelow = Math.floor(1 / capShare);    // …so with fewer than this many equal players, ALL cap
+  note('the farm', 'the wage goes FLAT below a population', `${flatBelow} wage-eligible accounts`,
+    `the cap binds at ${(capShare * 100).toFixed(1)}% of total respect gained (${cap}/${budget}), so with fewer than ~${flatBelow} similar players EVERY qualifier is capped and the pro-rata weighting does nothing — the wage is a FLAT ${cap} $OMR/day per identity that clears the floors, however well or badly it is played. That regime is the ALPHA, i.e. exactly when the population is smallest and a farm is cheapest to stand up`);
+
+  // (2) …which means the cap, an ANTI-Sybil measure, is what creates the Sybil incentive: it caps
+  // the individual, and the only way around a per-individual cap is to be several individuals.
+  const maxIdentities = Math.floor(budget / cap);
+  const farmCostEth = maxIdentities * mintEth;
+  note('the farm', 'capturing the WHOLE budget', `${maxIdentities} identities · ${farmCostEth} ETH one-time`,
+    `the per-account cap is anti-CONCENTRATION, and concentration is the opposite of Sybil — a whale who would earn ${budget}×g/Σg is clipped to ${cap}, but the same play split across N accounts recovers the full pro-rata share. So the cap does not price a farm out; it prices the honest whale out and hands the remainder to whoever is willing to run more accounts. The mint fee is the ONLY thing charging for that`);
+
+  // (3) The payback, in the game's OWN implied units — the only honest denomination pre-market.
+  const dailyOmr = maxIdentities * cap;
+  const dailyEthEquiv = dailyOmr / impliedOmrPerEth;
+  const paybackDays = farmCostEth / dailyEthEquiv;
+  note('the farm', 'payback at the game\'s implied rate', `${paybackDays.toFixed(1)} day(s)`,
+    `the game prices ${5} $OMR = ${mintEth} ETH (PLEX_MINT_OMR/MINT_FEE_ETH ⇒ ${impliedOmrPerEth} $OMR/ETH), so the ${budget}/day budget is worth ~${(budget / impliedOmrPerEth).toFixed(2)} ETH/day and ${maxIdentities} identities cost ${farmCostEth} ETH. THE MINT FEE IS ONE DAY OF THE THING IT IS GATING. This is a pre-market placeholder rate, not a price — but it is the rate the game itself quotes, and nothing else is available until a buyback prints one`);
+
+  // (4) The break-even PRICE, which is the question that actually has an answer pre-market.
+  for (const days of [7, 30, 90]) {
+    const breakEven = farmCostEth / (dailyOmr * days);   // ETH per $OMR at which the farm just pays back
+    note('the farm', `break-even over ${days} days`, `${(1 / breakEven).toFixed(0)} $OMR/ETH`,
+      `farming pays if $OMR trades RICHER than this (fewer $OMR per ETH). The game's own implied rate is ${impliedOmrPerEth} — ${impliedOmrPerEth < 1 / breakEven ? 'far richer, so farming pays comfortably' : 'poorer, so farming does not pay'} on a ${days}-day horizon. The lever that moves this number is the mint fee; the levers that move the numerator are the cap and the floors`);
+  }
+
+  // (5) …and the wall that is ALREADY built, which is why this is a dilution problem and not
+  // straightforwardly an extraction one. Worth stating because it changes which fix is right.
+  note('the farm', 'what actually bounds EXTRACTION', 'the full-reserve queue, not the fee',
+    `a farm can accumulate $OMR at the rate above, but withdrawing it needs the reserve to hold it — and the reserve is fed ONLY by Vig buybacks off real revenue, so extraction ≤ inflow holds BY CONSTRUCTION however many alts exist. The damage a farm does is therefore (a) DILUTION: above ~${flatBelow} players every $OMR an alt takes is one an honest player does not, and (b) an overhang of $OMR it can sell on the DEX. The 48h early-exit surcharge (${'50%'} at age 0) taxes the fast version of (b) hard`);
+
+  // (6) Can the endowment be drained faster than it halves? The bound that makes the schedule real.
+  // A halving schedule is a geometric series, so the LIFETIME total is closed-form and finite —
+  // the first cut of this probe ran a day-by-day loop and reported its own 50-year guard as if it
+  // were a measurement, which is the shape of a bug that reads exactly like a result.
+  const lifetimeEmittable = budget * EMISSION.DECAY_EVERY / (1 - EMISSION.DECAY);
+  note('the farm', 'draining the endowment', 'impossible — the schedule converges first',
+    `${budget}/day halving every ${EMISSION.DECAY_EVERY} days is a geometric series summing to ${fmt(lifetimeEmittable)} $OMR EVER, against a ${fmt(EMISSION.ENDOWMENT_OMR)} endowment — so the schedule can only ever use ${(lifetimeEmittable / EMISSION.ENDOWMENT_OMR * 100).toFixed(0)}% of it, and the endowment ceiling is not the binding constraint. A farm cannot drain it faster than the schedule allows either, because the budget is a per-epoch CEILING: maximum farming just means the schedule runs fully subscribed instead of partly. What a farm takes is the honest players' SHARE, never extra supply`);
+  note('the farm', 'the endowment is 5.5× the schedule', `${fmt(EMISSION.ENDOWMENT_OMR - lifetimeEmittable)} $OMR unreachable`,
+    `harmless as built (a ceiling nobody reaches is just a ceiling) but worth knowing it is not doing the work it looks like it is doing: the halving is what bounds emission, and the endowment invariant would not fire until ~5.5× more had been paid than the schedule can ever pay. If the intent was for the endowment to be the real bound, either it or DECAY_EVERY is mis-sized`);
+}
+
 // ════════════════ P10: THE §10.4 SWEEP — the whole point ════════════════
 phase('P10 §10.4 ledger invariants over the ENTIRE sim (nothing was seeded)');
 const inv = await runLedgerInvariants(pool);

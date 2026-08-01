@@ -103,4 +103,30 @@ assert(warn.warnings.some((w) => /MOD_KEY is short/.test(w)), 'a weak mod key is
 assert(preflight({ ...GOOD, TRUST_PROXY: undefined }).warnings.some((w) => /shared bucket/.test(w)),
   'the collapsed per-IP throttle behind a proxy is called out');
 
+// ── THE TWO FEE RAILS AGREE ─────────────────────────────────────────────────────────────────────
+// Every fee is payable in ETH or in earned $OMR (PLEX), and pre-market the $OMR price is the STATIC
+// floor — it ignores the ETH fee entirely. So raising one without the other silently makes the other
+// rail the cheap way to buy an identity, which is the Sybil bound. The invariant is the implied
+// RATE, and today both pairs imply 500 $OMR/ETH.
+assert.deepEqual(preflight(GOOD).warnings.filter((w) => /rails disagree/.test(w)), [],
+  'the shipped defaults agree — 5/0.01 and 50/0.10 both imply 500 $OMR/ETH');
+assert(preflight({ ...GOOD, MINT_FEE_ETH: '0.025' }).warnings.some((w) => /rails disagree/.test(w)),
+  'raising the ETH mint fee alone is caught — the $OMR rail would still sell an identity at the old price');
+assert.deepEqual(
+  preflight({ ...GOOD, MINT_FEE_ETH: '0.025', PLEX_MINT_OMR: '12.5' }).warnings.filter((w) => /rails disagree/.test(w)),
+  [], 'moving both together is clean — the guard is about agreement, not about any particular price');
+assert.deepEqual(preflight({ ...GOOD, MINT_FEE_ETH: '0.025', PLEX_MINT_OMR: '12' }).warnings.filter((w) => /rails disagree/.test(w)),
+  [], 'and a rounded-off price is fine — the band is 5%, so nobody is nagged for picking 12 over 12.5');
+// The guard restates vig.js's defaults (preflight cannot import it — vig imports game.js, the
+// one-way rule). That restatement is only safe while something checks it, so: check it.
+{
+  const vig = await import('../src/vig.js');
+  const src = fs.readFileSync('src/vig.js', 'utf8');
+  const def = (k) => Number((src.match(new RegExp(`${k} \\|\\| ([0-9.]+)`)) || [])[1]);
+  assert.equal(vig.PLEX_MINT_OMR, 5, "preflight's restated PLEX_MINT_OMR default still matches vig.js");
+  assert.equal(vig.PLEX_RESPAWN_OMR, 50, "…and PLEX_RESPAWN_OMR");
+  assert.equal(def('MINT_FEE_ETH'), 0.01, '…and MINT_FEE_ETH (module-private, so read from source)');
+  assert.equal(def('RESPAWN_FEE_ETH'), 0.10, '…and RESPAWN_FEE_ETH');
+}
+
 console.log('✅ PREFLIGHT passed — every env var in src/ is classified (the drift that shipped the pacing knobs unguarded is now caught by a test), the required secrets and the public dev fallbacks fail closed, every test-only roll/timer knob refuses a production boot, and a dev-safe default that is wrong in production must be stated rather than inherited');
