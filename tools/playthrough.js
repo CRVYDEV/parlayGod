@@ -19,7 +19,8 @@
 //      node tools/playthrough.js --days 14  (longer horizon)
 import { buildServer } from '../src/server.js';
 import { opsEngagement } from '../src/engagement.js';
-import { CRIMES, MISSIONS, GUNS, BUSINESSES, CONSTANTS, PACING, RACKETS, PORT } from '../src/rules.js';
+import { CRIMES, MISSIONS, GUNS, BUSINESSES, CONSTANTS, PACING, RACKETS, PORT, POPULATION, nerveCapOf } from '../src/rules.js';
+import { runPopulation, runResidentBehaviour } from '../src/population.js';
 
 const argOf = (name, dflt) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -28,6 +29,18 @@ const argOf = (name, dflt) => {
 const DAYS = argOf('days', 7);
 const SESSIONS_PER_DAY = argOf('sessions', 2);
 const SESSION_MIN = argOf('session', 45);     // minutes of continuous play per sitting
+// --no-calendar / --no-newloops exist to SEPARATE the effects when comparing against an older run:
+// a number that moved could be the game, the calendar fix, or the wider ladder, and a single figure
+// cannot tell you which. Defaults are the honest current picture; the flags are for the A/B.
+const ROLL_DAYS = !process.argv.includes('--no-calendar');
+const NEW_LOOPS = !process.argv.includes('--no-newloops');
+// THE CITY IS INHABITED. `runPopulation` is a worker job that ships ON (dormant only under
+// POPULATION_OFF), so a server with nobody in it is the UNREALISTIC case — and this harness had
+// been measuring exactly that. It matters here specifically: the residents are what make the
+// PvP-flavoured daily contracts (jump, bust) doable by somebody playing alone, so without them the
+// coach's "today's contracts unclaimed" rung can never clear and pins the whole ladder. Whether
+// that rung is a real defect or an artifact of an empty world is not answerable without them.
+const POPULATE = !process.argv.includes('--no-population');
 
 const app = await buildServer();
 const pool = app.pool;
@@ -56,7 +69,40 @@ const CLOCK_COLS = [
 // That read as "the coach is stuck on the Port" when it was the harness holding its own watch. Scoped
 // to THIS character's boats — residents own boats too, and warping theirs would move the world.
 const OWNED_CLOCKS = [['boats', 'character_id', ['run_until']]];
+// …and THE CALENDAR, which is a different kind of clock and was missing entirely. A growing set of
+// loops is keyed on `dayOf()` rather than on a timestamp — the daily contracts, the corner and its
+// chains, the hustle, the trainer drills, the fixture leads and the standing-gain bucket. Warping
+// the character's timestamps advances the HOURS but never the DATE, so across a seven-day run the
+// player got exactly ONE day of all of it: run A claimed 2 daily contracts in a week, when three a
+// day are on offer. Every day-keyed loop was being measured at roughly a seventh of itself, which
+// would have read as "these barely move the needle" — a limit of the harness reported as a finding
+// about the game. Shifting a stored `day` DOWN is the same trick as pulling a timestamp back: to
+// this character, yesterday's row is yesterday's.
+//
+// HONEST LIMIT: the CONTENT of a day is a seed function of the real `dayOf()`, so the drawn corner
+// tasks, hustle stops and drills are the same every simulated day. That is fine for throughput and
+// pacing, which is what this harness measures; it is not a test of variety.
+// Two kinds, and the difference is the primary key. A table keyed ON the day (one row per day) is a
+// LEDGER OF DAYS: shifting every row down one stacks yesterday onto the day before and breaks the
+// key — which it did, immediately, on the third simulated day. Those tables get their spent history
+// DROPPED and only the live day moved, which is also what the player experiences: yesterday's
+// envelopes are gone, not archived. A table keyed on something else and merely CARRYING a day
+// (a chain's `last_day`) is progress that must survive, and shifts safely.
+const DAY_CYCLE = [   // PK includes the day → drop what's spent, then move today back
+  ['daily_progress', 'character_id', ['day']],
+  ['corner_jobs', 'character_id', ['day']],
+  ['hustles', 'character_id', ['day']],
+  ['npc_drills', 'character_id', ['day']],
+  ['npc_leads', 'character_id', ['day']],
+  ['npc_gain', 'character_id', ['day']],
+  ['pen_talks', 'character_id', ['day']],
+];
+const DAY_SHIFT = [   // day is a field, not a key → carry the progress backwards
+  ['corner_chains', 'character_id', ['last_day', 'started_day']],
+  ['npc_errands', 'character_id', ['started_day', 'last_day']],
+];
 let simMinutes = 0; // wall-clock minutes elapsed since the character was born
+let daysRolled = 0; // simulated calendar days already applied
 const advance = async (id, minutes) => {
   simMinutes += minutes;
   const sets = CLOCK_COLS.map((c) => `${c} = ${c} - interval '${minutes} minutes'`).join(', ');
@@ -64,6 +110,21 @@ const advance = async (id, minutes) => {
   for (const [table, key, cols] of OWNED_CLOCKS) {
     const s = cols.map((c) => `${c} = ${c} - interval '${minutes} minutes'`).join(', ');
     await pool.query(`UPDATE ${table} SET ${s} WHERE ${key}=$1`, [id]);
+  }
+  const wantDays = Math.floor(simMinutes / 1440);
+  if (ROLL_DAYS && wantDays > daysRolled) {
+    const d = wantDays - daysRolled;
+    const today = Math.floor(Date.now() / 86400000);
+    daysRolled = wantDays;
+    for (const [table, key] of DAY_CYCLE) {
+      await pool.query(`DELETE FROM ${table} WHERE ${key}=$1 AND day < $2`, [id, today]);
+      await pool.query(`UPDATE ${table} SET day = day - ${d} WHERE ${key}=$1`, [id]);
+    }
+    for (const [table, key, cols] of DAY_SHIFT) {
+      const s = cols.map((c) => `${c} = ${c} - ${d}`).join(', ');
+      await pool.query(`UPDATE ${table} SET ${s} WHERE ${key}=$1`, [id]);
+    }
+    await pool.query(`UPDATE characters SET checkin_day = checkin_day - ${d} WHERE id=$1`, [id]);
   }
 };
 
@@ -75,6 +136,20 @@ if (created.code !== 200) { console.error('character create failed', created.bod
 const charId = created.body.id;
 const me = async () => (await call('GET', '/v1/me', { token })).body.character;
 
+// Fill the city before play starts, then keep the worker's beat once a sitting: `runPopulation`
+// tops up by SPAWN_PER_TICK a call and also keeps a couple of inmates on the yard, and
+// `runResidentBehaviour` is what puts their consent limits and offers on the boards.
+const beat = async () => {
+  if (!POPULATE) return;
+  await runPopulation(pool);
+  await runResidentBehaviour(pool);
+};
+if (POPULATE) {
+  for (let i = 0; i < Math.ceil(POPULATION.TARGET / POPULATION.SPAWN_PER_TICK) + 1; i++) await beat();
+  const n = (await pool.query('SELECT count(*)::int AS n FROM characters WHERE is_npc AND alive')).rows[0].n;
+  console.log(`the city: ${n} residents on the streets before play starts`);
+}
+
 // tallies
 const acted = {};            // action -> count
 const blocked = {};          // "action:code" -> count
@@ -82,6 +157,7 @@ const firsts = {};           // milestone -> minutes
 const levelAt = {};          // level -> { world, played } at first reach
 const sessions = [];
 let stallMin = 0, jailMin = 0, playedMin = 0;
+let pvpTries = 0;   // PvP-contract attempts this sitting (a failed bust is a stretch in lockup)
 // throttle telemetry — which resource actually limits a sitting
 const pool_ = { nerveSum: 0, nerveCapSum: 0, nerveAtCap: 0, enAtCap: 0, ticks: 0 };
 const did = (a) => { acted[a] = (acted[a] || 0) + 1; };
@@ -368,6 +444,18 @@ async function tick(dayIdx) {
     else hit('onboard', r.body?.error || r.code);
   }
 
+  // 1b. THE CAREER — the post-First-Week ladder. Free money for work already done, so a plausible
+  //     player collects it the same way they collect the checklist. Latched per ACCOUNT, once ever.
+  if (NEW_LOOPS) {
+    const c = await call('GET', '/v1/career', { token });
+    for (const t of (c.body?.tiers || []).filter((x) => x.open).flatMap((x) => x.tasks)) {
+      if (t.claimed || !t.ready) continue;
+      const r = await call('POST', `/v1/career/${t.id}`, { token });
+      if (r.code === 200) { did('career'); first(`career:${t.id}`); didSomething = true; }
+      else hit('career', r.body?.error || r.code);
+    }
+  }
+
   // 2. declare a Path the moment it's affordable (level 5 + the fee)
   if (!pathDeclared && lvl >= 5 && m.cash >= CONSTANTS.PATH_FIRST_COST) {
     const r = await call('POST', '/v1/path', { token, body: { path: 'gun' } });
@@ -379,6 +467,46 @@ async function tick(dayIdx) {
   if (m.bank === 0 && m.cash > 2000) {
     const r = await call('POST', '/v1/bank/deposit', { token, body: { amount: 1000 } });
     if (r.code === 200) { did('bank'); first('bank'); didSomething = true; } else hit('bank', r.body?.error || r.code);
+  }
+
+  // 3b. WORD ON THE STREET — the block's daily envelopes. A plausible player takes the work that is
+  //     on offer where they stand and collects it when the day's play has done it. Accepting is free
+  //     and snapshots the counters, so taking everything open here is what a person does; the day's
+  //     allowance (CORNER.MAX_DAY) and the one-per-KIND rule are the server's to enforce, and this
+  //     harness deliberately does NOT restate them — that is the F2 class, and letting the refusal
+  //     come back is how the refusal itself gets measured.
+  if (NEW_LOOPS) {
+    const c = await call('GET', '/v1/corner', { token });
+    for (const t of (c.body?.tasks || [])) {
+      if (!t.accepted) {
+        const r = await call('POST', `/v1/corner/${t.slot}/accept`, { token });
+        if (r.code === 200) { did('corner:accept'); first('corner:accept'); didSomething = true; }
+        else hit('corner:accept', r.body?.error || r.code);
+      } else if (!t.claimed) {
+        const r = await call('POST', `/v1/corner/${t.slot}/claim`, { token });
+        if (r.code === 200) { did('corner:claim'); first('corner:claim'); didSomething = true; }
+        else hit('corner:claim', r.body?.error || r.code);   // `not_done` is the normal case
+      }
+    }
+  }
+
+  // 3c. TONIGHT'S HUSTLE — the three-stop chain that walks you across the map. The board says where
+  //     the next stop is and whether you're on it, so: travel there, then advance. The legwork stop
+  //     additionally wants a real action done SINCE the meeting, which the grind below supplies.
+  if (NEW_LOOPS) {
+    const hb = await call('GET', '/v1/hustle', { token });
+    const b = hb.body;
+    if (b && !b.done && b.district) {
+      if (!b.here) {
+        const t = await call('POST', `/v1/travel/${b.district}`, { token });
+        if (t.code === 200) { did('hustle:travel'); didSomething = true; }
+        else hit('hustle:travel', t.body?.error || t.code);
+      } else {
+        const r = await call('POST', '/v1/hustle/advance', { token });
+        if (r.code === 200) { did(r.body.done ? 'hustle:payoff' : 'hustle:step'); first('hustle'); didSomething = true; }
+        else hit('hustle', r.body?.error || r.code);          // `legwork` until the work is done
+      }
+    }
   }
 
   // 4. THE GARAGE — boost whenever the heat's off, then melt it down. This is the crate pipeline:
@@ -431,14 +559,43 @@ async function tick(dayIdx) {
     } else hit('gun', m.cb < 1 ? 'no_crates' : 'cash');
   }
 
-  // 7. THE GYM — train the stat with the biggest deficit on the mission you're chasing
+  // 7. THE GYM — train the stat with the biggest deficit on the mission you're chasing.
+  //    THE REGIMEN shares this one clock, which is the whole point of its design: a session spent on
+  //    a discipline is a session NOT spent on muscle. So the plausible order is the honest one — the
+  //    gate you are chasing first, and the disciplines only when there is no gate in sight (which is
+  //    also what makes the trainer's drill claimable). Modelling it the other way round would be a
+  //    harness that plays optimally for breadth, and would silently slow the mission ladder.
   if (m.trainSeconds === 0 && m.energy >= 10) {
     const gaps = chase ? ['muscle', 'cunning', 'speed']
       .map((k) => [k, (chase.req[k] || 0) - Number(m.stats[k])]).filter(([, d]) => d > 0)
       .sort((a, b) => b[1] - a[1]) : [];
-    const stat = gaps.length ? gaps[0][0] : 'muscle';   // no gate in sight → keep building anyway
-    const r = await call('POST', `/v1/train/${stat}`, { token });
-    if (r.code === 200) { did('train'); didSomething = true; } else hit('train', r.body?.error || r.code);
+    let trained = false;
+    if (!gaps.length && NEW_LOOPS) {
+      const reg = await call('GET', '/v1/regimen', { token });
+      const want = (reg.body?.drills || []).find((d) => !d.claimed && !d.done)?.discipline
+        || (reg.body?.disciplines || []).find((d) => d.level < d.cap)?.id;
+      if (want) {
+        const r = await call('POST', `/v1/regimen/${want}`, { token });
+        if (r.code === 200) { did('regimen'); first('regimen'); didSomething = true; trained = true; }
+        else hit('regimen', r.body?.error || r.code);
+      }
+    }
+    if (!trained) {
+      const stat = gaps.length ? gaps[0][0] : 'muscle';   // no gate in sight → keep building anyway
+      const r = await call('POST', `/v1/train/${stat}`, { token });
+      if (r.code === 200) { did('train'); didSomething = true; } else hit('train', r.body?.error || r.code);
+    }
+  }
+
+  // 7b. THE DRILLS — the trainer's daily job, collected once the day's play has finished it.
+  if (NEW_LOOPS) {
+    const reg = await call('GET', '/v1/regimen', { token });
+    for (const d of (reg.body?.drills || [])) {
+      if (d.claimed || !d.done) continue;
+      const r = await call('POST', `/v1/regimen/drill/${d.npc}`, { token });
+      if (r.code === 200) { did('drill'); first('drill'); didSomething = true; }
+      else hit('drill', r.body?.error || r.code);
+    }
   }
 
   // 8. THE GRIND — a real player clicks far faster than once a minute, so they BURN THE NERVE POOL
@@ -475,6 +632,44 @@ async function tick(dayIdx) {
     if (!rungDone.has(grindLabel)) rungDone.set(grindLabel, { at: playedMin, worth: m.cash + m.bank, level: m.level });
   }
 
+  // 8c. THE PvP CONTRACTS. The daily pool draws `jump` and `bust` alongside the solo kinds, and this
+  //     ladder had no way to do either — so on ~2 days in 3 the coach's "today's contracts unclaimed"
+  //     rung could never clear and held ~40% of advised play, masking everything below it. Whether
+  //     that is the coach's fault or the harness's is exactly the conflation the trace exists to
+  //     avoid, and it cannot be answered without trying. A resident is a real character, so the
+  //     ordinary verbs work on them: jump the weakest one standing here, spring the first inmate.
+  //     A CAP, because the first cut had none and it made the player WORSE: a failed bust is a
+  //     stretch in lockup, so retrying every minute put them in a cell 26% of the time and cost a
+  //     quarter of the run's crimes. A person tries a couple of times and gets on with their day.
+  if (NEW_LOOPS && POPULATE && pvpTries < 3) {
+    const d = await call('GET', '/v1/daily', { token });
+    // `kind`, not `k` — getDaily renames it on the way out, and reading the wrong field made this
+    // whole branch a silent no-op that still printed a pass. That is the client-wiring guard's
+    // check-3 class ("the route is right, the field is not real") landing in the harness itself.
+    const want = (k) => (d.body?.jobs || []).some((j) => j.kind === k && !j.claimed && j.progress < j.goal);
+    if (want('jump') && m.health > 40) {
+      const roster = (await call('GET', '/v1/streets', { token })).body?.streets || [];
+      const mark = roster.filter((s) => !s.jailed && !s.hospitalized && s.id !== charId)
+        .sort((a, b) => a.level - b.level)[0];
+      if (mark) {
+        pvpTries++;
+        const r = await call('POST', `/v1/streets/${mark.id}/jump`, { token });
+        if (r.code === 200) { did('jump'); first('jump'); didSomething = true; }
+        else hit('jump', r.body?.error || r.code);
+      } else hit('jump', 'nobody_on_the_street');
+    }
+    if (want('bust')) {
+      const roster = (await call('GET', '/v1/streets', { token })).body?.streets || [];
+      const inmate = roster.find((s) => s.jailed && s.id !== charId);
+      if (inmate) {
+        pvpTries++;
+        const r = await call('POST', `/v1/streets/${inmate.id}/bust`, { token });
+        if (r.code === 200) { did(r.body.sprung ? 'bust' : 'bust:miss'); first('bust'); didSomething = true; }
+        else hit('bust', r.body?.error || r.code);
+      } else hit('bust', 'nobody_in_lockup');
+    }
+  }
+
   // 9. daily contracts — claim anything the day's play has already finished
   if (didSomething) {
     const d = await call('GET', '/v1/daily', { token });
@@ -496,6 +691,8 @@ console.log(`pacing: level=D(L-1)² D=${PACING.LEVEL_DIVISOR} · energy ${PACING
 const gapMin = Math.max(1, Math.round((24 * 60 - SESSIONS_PER_DAY * SESSION_MIN) / SESSIONS_PER_DAY));
 for (let day = 1; day <= DAYS; day++) {
   for (let s = 0; s < SESSIONS_PER_DAY; s++) {
+    pvpTries = 0;
+    await beat();   // the world kept turning between sittings — new faces, new inmates on the yard
     const before = await me();
     const mark = { ...acted };
     let stalls = 0;
@@ -706,6 +903,38 @@ let coachVerdict = 'ok';
     console.log(`     player could never act on it — ${coachCantAct.get(label)}.`);
     console.log('     Every rung below it went unseen for that whole stretch. On a populated server it');
     console.log('     clears; on a thin one it is a wall. Band it or demote it if that is not intended.');
+  }
+}
+
+// ── THE REFILL CEILING ──────────────────────────────────────────────────────────────────────────
+// Nerve is the pacing wall: the PACING pass made it the limiter deliberately. The level-up refill
+// sets nerve to CAP on every crossing, so it is a nerve faucet whose size is the cap and whose rate
+// is how often you level. Past the point where the refill returns MORE than the next level costs,
+// the wall is gone — you level as fast as you can click, with regen irrelevant. Proven live: at
+// level 115 with trained stats and THE CLOCK FROZEN, a pool funding 3 jobs funded 3000, taking the
+// player to level 656 and ending at full nerve.
+//
+// This is arithmetic over the signed constants, so it costs nothing and runs every time. It exists
+// because the A/B taken when the refill shipped measured 2h/5h/10h — all of it under level 50, all
+// of it below where this turns. A lever measured in the wrong RANGE reads as safe.
+{
+  const worst = [];
+  for (let L = 20; L <= 1500; L += 5) {
+    const best = CRIMES.filter((c) => c.lvl <= L).sort((a, b) => b.respect / b.nerve - a.respect / a.nerve)[0];
+    if (!best) continue;
+    const needNerve = (PACING.LEVEL_DIVISOR * (2 * L - 1)) / (best.respect / best.nerve);
+    if (nerveCapOf(L) > needNerve) { worst.push({ L, best: best.id, needNerve, cap: nerveCapOf(L) }); break; }
+  }
+  console.log('\nTHE REFILL CEILING  (does levelling up hand back more nerve than the level cost?)');
+  if (!PACING.LEVEL_UP_REFILL) console.log('  refill is OFF — nerve is bounded by regen at every level.');
+  else if (!worst.length) console.log('  bounded at every level up to 1500 — the refill never outruns the curve.');
+  else {
+    const w = worst[0];
+    console.log(`  ⚠ SELF-SUSTAINING FROM LEVEL ${w.L}: the next level costs ~${w.needNerve.toFixed(0)} nerve`
+      + ` (via "${w.best}") and the crossing refills ${w.cap}.`);
+    console.log('    Past here nerve stops being a throttle: a player levels as fast as they can click,');
+    console.log('    and regen is irrelevant. Dials: PACING.LEVEL_UP_REFILL (false reverts it), the top');
+    console.log("    of the CRIMES respect/nerve curve, or refilling energy only — energy isn't a wall.");
   }
 }
 
