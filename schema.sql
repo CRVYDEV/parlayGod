@@ -1601,7 +1601,8 @@ CREATE TABLE IF NOT EXISTS desk_inventory (
   id INT PRIMARY KEY,
   balance NUMERIC NOT NULL DEFAULT 0,        -- $OMR on the shelf, waiting for the auction
   lifetime_in NUMERIC NOT NULL DEFAULT 0,    -- everything the sinks have ever handed over
-  lifetime_sold NUMERIC NOT NULL DEFAULT 0   -- everything the desk has ever sold back (step 3)
+  lifetime_sold NUMERIC NOT NULL DEFAULT 0,  -- everything the desk has ever sold back (step 3)
+  lifetime_bought NUMERIC NOT NULL DEFAULT 0 -- everything the buyback restocked off the market (step 4)
 );
 INSERT INTO desk_inventory (id, balance) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM desk_inventory);
 
@@ -1640,6 +1641,29 @@ CREATE TABLE IF NOT EXISTS desk_sales (
   at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ix_desk_sales_auction ON desk_sales(auction_id);
+
+-- ECONOMY v3 STEP 4 — THE BAND'S BUY SIDE. `pol_fees` is the budget and the ONLY budget (design
+-- §11.10): the fees protocol-owned liquidity earned, mirrored in one row per episode. `desk_buys`
+-- is what the desk did with it. Both idempotent on `ref`; `real` marks an episode backed by an
+-- actual on-chain event, and a comp books ZERO ETH — a mod call must never be able to assert that
+-- the pool earned fees it did not, because that budget is what bounds the buy side.
+CREATE TABLE IF NOT EXISTS pol_fees (
+  ref TEXT PRIMARY KEY,
+  eth NUMERIC NOT NULL,
+  tx_hash TEXT,
+  real BOOLEAN NOT NULL DEFAULT false,
+  at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS desk_buys (
+  ref TEXT PRIMARY KEY,
+  eth_spent NUMERIC NOT NULL,
+  omr_bought NUMERIC NOT NULL,            -- hard OMR acquired; the same number is credited to the shelf
+  price_eth_per_omr NUMERIC NOT NULL,
+  anchor_eth_per_omr NUMERIC NOT NULL,    -- the band anchor it was judged against, for the record
+  tx_hash TEXT,
+  real BOOLEAN NOT NULL DEFAULT false,
+  at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
 INSERT INTO rwa_dividend_pool (id, pool) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM rwa_dividend_pool);
 INSERT INTO rwa_family_dividend_pool (id, pool) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM rwa_family_dividend_pool);

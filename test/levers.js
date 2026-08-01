@@ -161,6 +161,10 @@ const SIGNED = [
   ['DESK_AUCTION.MIN_LOT', 1],
   ['DESK_AUCTION.ORACLE_MAX_AGE_MS', 172800000], // 48h, then FAIL-CLOSED — never a fallback price
   ['DESK_AUCTION.ETH_POL_BPS', 5000],       // the ETH proceeds split 50/50 POL / founder
+  // step 4, the BUY side. MIN_ETH is pacing; PRICE_FLOOR_BPS is a SAFETY bound, not a balance one —
+  // the shelf credit is eth/price, so it is what stops a mistyped decimal minting inventory.
+  ['DESK_BUYBACK.MIN_ETH', 0.001],
+  ['DESK_BUYBACK.PRICE_FLOOR_BPS', 2000],
   ['DUELS.GRUDGE_CD_MULT', 0.34],
   ['DUELS.LEGEND_MIN_LVL', 10],
   ['DUELS.MIN_LVL', 5],

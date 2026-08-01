@@ -232,6 +232,14 @@ export async function runVigInvariants(pool) {
   const extracted = round6(Number((await pool.query(
     "SELECT COALESCE(SUM(amount),0) s FROM vouchers WHERE kind='omr' AND (status='signed' OR claimed_onchain)")).rows[0].s));
 
+  // ECONOMY v3 STEP 4 — the reserve now has a SECOND legitimate source. The desk's band buyback buys
+  // hard OMR off the market with POL fees and delivers it here, in the same transaction as the soft
+  // shelf credit that pairs with it. Both checks below are EXACT (funded == the sum of its sources),
+  // so a source the sandwich does not know about trips both of them at once — which is why this term
+  // is added rather than the checks being loosened. `desk.js:runDeskInvariants` separately asserts
+  // that every one of these hard tokens corresponds to a real purchase.
+  const deskToReserve = round6(await sumEth(pool, 'desk_buys', 'omr_bought'));
+
   const eps = 1e-6;
   // (1) the bot never spends more ETH than the Vig received — the root cap
   push('spend ≤ revenue', ethSpent <= revenueIn + eps, { ethSpent, revenueIn });
@@ -239,13 +247,15 @@ export async function runVigInvariants(pool) {
   push('buyback split exact', Math.abs((toReserve + toPrize) - omrBought) <= eps, { toReserve, toPrize, omrBought });
   // (3) the reserve holds ONLY Vig-bought $OMR — the buyback's reserve share plus any prize $OMR
   // moved from the pool to back a prize withdrawal. No unbacked (team-charity) funding.
-  push('reserve fully backed', funded <= toReserve + prizePaid + eps, { funded, toReserve, prizePaid });
+  push('reserve fully backed', funded <= toReserve + prizePaid + deskToReserve + eps,
+    { funded, toReserve, prizePaid, deskToReserve });
   // (3b) …and holds ALL of it: fundReserve runs post-commit (it opens its own txn), so a crash
   // between the buyback/prize COMMIT and the reserve top-up would leave the intended funding
   // recorded but never applied — winners' withdrawals queue forever with every one-sided check
   // green. Under-funding is a LOST-FUNDING alarm (re-fund the difference); over-funding stays
   // check (3)'s charity alarm. (Audit: the invariant was one-sided.)
-  push('reserve not under-funded', funded >= toReserve + prizePaid - eps, { funded, toReserve, prizePaid });
+  push('reserve not under-funded', funded >= toReserve + prizePaid + deskToReserve - eps,
+    { funded, toReserve, prizePaid, deskToReserve });
   // (4) extraction never exceeds the funded reserve (the queue guarantees this live; assert it)
   push('extraction ≤ reserve', extracted <= funded + eps, { extracted, funded });
   // (5) prizes paid + still pooled never exceed what the Vig bought for prizes

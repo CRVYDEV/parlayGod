@@ -3137,6 +3137,44 @@ The clamp is in fact UNREACHABLE today (the lot is `min(…, shelf)` and the she
 that lot sells), so it is kept as defence in depth and tested against a labelled synthetic drain —
 an unreachable guard is worth keeping, an untested one that reads as tested is not.
 
+**ECONOMY v3 STEP 4 — THE BAND'S BUY SIDE (the POL-fee buyback)** (`src/desk.js`, `src/rules.tail.js`
+`DESK_BUYBACK`, `schema.sql` `pol_fees`/`desk_buys` + `desk_inventory.lifetime_bought`,
+`src/invariants.js`, `src/vig.js`, `src/routes/modtools.js`, `test/desk.js`; design §3.2/§3.3/§9.4/
+§11.10). Step 3 opened the sell side; this is the other edge. Below the band's `LOWER` the desk
+RESTOCKS from the open market — buying inventory back is sometimes cheaper than waiting for the sinks
+— and the bought $OMR goes to the **shelf, not the fire** (§3.3). **THE BUDGET IS POL TRADING FEES,
+EXCLUSIVELY**, and the exclusivity is the mechanism rather than a preference: not the founder half
+(not ours to spend), not the LP half (POL depth is the binding constraint), and **never by minting**
+— that last one is wall 4, the single line between this and Olympus. Fees are self-limiting (you
+cannot spend what the pool did not earn), scale with real activity rather than price, and compound
+correctly. **THE §10.4 SHAPE is the exact inverse of a withdrawal:** `withdraw:omr` is an in-game BURN
+paired with hard OMR LEAVING the reserve; `desk:buyback` is an in-game MINT paired with hard OMR
+ENTERING it. Supply exits one way and re-enters the other. **Wall 1 ("no faucet") survives because it
+credits the SHELF and never a player** — nobody is paid, and the token only reaches a player by being
+bought at the auction for ETH. It is admissible exactly to the extent the hard token arrived, which
+conservation cannot see (it counts the mint and moves on), so the backing is CHECKED from three sides:
+`runDeskInvariants` asserts soft credit == hard purchase and that the desk's books agree, and the
+Vig's two-sided `reserve fully backed`/`reserve not under-funded` pair now carries `deskToReserve` BY
+NAME (both sides are exact, so a reserve source the sandwich doesn't know about trips both at once —
+which is why the term was added rather than the checks loosened). **Both legs move in ONE transaction**,
+deliberately not through `fundReserve` (which opens its own): the Vig funds post-commit and calls that
+gap a lost-funding alarm, but here the gap's direction is worse — soft supply existing before its
+backing — so they move together or neither moves; `drainQueue` runs after, idempotent. Three gates:
+the BAND (`price > LOWER × anchor` → `band`; between the edges the desk does NOTHING, which is the
+20%-wide dead zone's whole point), the ROOT CAP (`eth > budget.left` → `budget`, read under the
+`desk_inventory` lock so two concurrent buys can't each see the whole budget — the runVigBuyback
+discipline), and a **FAT-FINGER FLOOR** (`PRICE_FLOOR_BPS` 0.20× anchor — the shelf credit is
+`eth/price`, so a price a decimal place too low mints inventory out of a typo; the RWA float shipped
+exactly that bug, and this fails closed rather than clamping). A comp books ZERO POL fees, because
+that budget is precisely what bounds the buy side. Six mutations, each caught at its own named
+assertion (the reason dropped from `omrMints`; the reserve leg removed; the budget cap removed; the
+band gate removed; a comp booking real fees; the Vig sandwich without the desk term). `test/desk.js`
+also proves the loop CLOSES — restocked $OMR goes back up at the next auction, so the two halves are
+one shelf rather than two systems sharing a table. `DESK_BUYBACK.*` pinned + tabled; **no volume
+figure is claimed** — buyback volume is `fee income ÷ price` and both are markets that don't exist
+until mainnet, so what is asserted is structural: it can never outspend the fees the pool earned, and
+every $OMR it mints has a hard token behind it.
+
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
 `payPlex` pattern); named landmarks / Founder's charter numbers; ~~R2 (the `rwa_revenue` → real-RWA-buy

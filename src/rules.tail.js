@@ -2862,6 +2862,25 @@ export const DESK_AUCTION = {
                              // at the default" is a standing free option on the desk's whole shelf.
   ETH_POL_BPS: 5000,         // the ETH proceeds split 50/50 POL / founder (design §3.1, founder spec).
 };
+// THE BUY SIDE (economy v3 step 4). The band's other edge: below `LOWER` the desk RESTOCKS from the
+// open market, because buying inventory back is sometimes cheaper than waiting for the sinks to
+// return it. Bought $OMR goes to the SHELF, not the fire (design §3.3) — the desk is a rental
+// business, and this is buying stock.
+//
+// THE BUDGET IS POL TRADING FEES, EXCLUSIVELY (design §11.10), and the exclusivity is the point:
+// not the founder half (not ours to spend), not the LP half (POL depth is the binding constraint),
+// and NEVER by minting — that last one is wall 4, the single line between this and Olympus. Fees are
+// self-limiting (you cannot spend what the pool did not earn), they scale with real activity rather
+// than with price, and they compound correctly: the sell tax grows POL, deeper POL earns more fees,
+// more fees buy back more.
+export const DESK_BUYBACK = {
+  MIN_ETH: 0.001,            // below this it is not worth a transaction
+  // FAT-FINGER FLOOR, and it is a real guard rather than paranoia: the shelf credit is
+  // `eth / price`, so a price a decimal place too low mints inventory out of a typo. The RWA float
+  // shipped exactly that bug and fixed it with a continuity bound; this is the same bound, expressed
+  // against the band's own anchor. An execution below 0.20x anchor is not a dip, it is a broken feed.
+  PRICE_FLOOR_BPS: 2000,
+};
 // The Dutch clock: linear from OPEN down to RESERVE across DURATION_MS, then flat at RESERVE.
 // Returns ETH per $OMR. Clamped at both ends so a late/early call can never quote outside the band.
 const round8 = (n) => Math.round(n * 1e8) / 1e8

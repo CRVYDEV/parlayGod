@@ -1,4 +1,4 @@
-// THE DESK (economy v3 step 2: recycle instead of burn) — the 62nd suite.
+// THE DESK (economy v3 steps 2–4: recycle, sell, restock) — the 62nd suite.
 // A $OMR sink no longer destroys the token; it hands it to the desk, which sells it back at the
 // daily auction (step 3). Design §3.3/§4.2: every sink is the house's cut, so revenue ≈ sink volume
 // × price and the KPI is RETURN VELOCITY rather than supply.
@@ -22,6 +22,7 @@ import { ledger } from '../src/game.js';
 import { earlySurcharge } from '../src/tax.js';
 import * as Desk from '../src/desk.js';
 import { runLedgerInvariants } from '../src/invariants.js';
+import { runVigInvariants } from '../src/vig.js';
 
 const round6 = (n) => Math.round(n * 1e6) / 1e6;
 const round8 = (n) => Math.round(n * 1e8) / 1e8;
@@ -39,7 +40,7 @@ const mk = async (name) => {
   return token;
 };
 const shelf = async () => Number((await pool.query('SELECT balance FROM desk_inventory WHERE id=1')).rows[0].balance);
-const books = async () => (await pool.query('SELECT balance, lifetime_in, lifetime_sold FROM desk_inventory WHERE id=1')).rows[0];
+const books = async () => (await pool.query('SELECT balance, lifetime_in, lifetime_sold, lifetime_bought FROM desk_inventory WHERE id=1')).rows[0];
 const checkOf = async (name) => {
   const r = await runLedgerInvariants(pool, { alert: false });
   const c = r.checks.find((x) => x.name === name);
@@ -356,6 +357,113 @@ assert.equal(clamped.omr, drainTo, 'the desk sells only what is on the shelf, no
 assert.equal(await shelf(), 0, 'and the shelf lands at zero, never below it');
 assert((await checkOf('$OMR conservation')).drift === consBefore, 'with conservation still exact');
 console.log(`✓ the shelf clamp binds: a ${opened2.qty} lot on a ${drainTo} shelf sells ${clamped.omr}`);
+// …and put the synthetic drain back, because it deliberately broke the shelf-vs-books identity
+// (a bucket move nothing booked) and everything after this asserts on honest books.
+await pool.query('UPDATE stake_pool SET balance = balance - $1 WHERE id=1', [drain]);
+await pool.query('UPDATE desk_inventory SET balance = balance + $1 WHERE id=1', [drain]);
+assert((await checkOf('desk inventory backed')).ok, 'the synthetic drain is undone and the books reconcile again');
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// STEP 4 — THE BAND'S BUY SIDE. Below LOWER the desk restocks from the open market.
+//
+// This is the only place in v3 where in-game $OMR supply GROWS, so it gets the most adversarial
+// treatment in the file. The claim being tested is not "the buyback works" — it is that the mint is
+// admissible: bounded by a budget nobody can fabricate, gated by the band, floored against a typo,
+// and matched one-for-one by a hard token that really arrived in the reserve.
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+const reserve = async () => Number((await pool.query('SELECT funded_omr FROM chain_reserve WHERE id=1')).rows[0].funded_omr);
+
+// ── (19) THE BUDGET — and there is no other one ────────────────────────────────────────────────
+// §11.10: POL trading fees, exclusively. Self-limiting by construction — you cannot spend fees the
+// pool did not earn — which is what makes this a buyback rather than a subsidy.
+assert.equal((await Desk.polBudget(pool)).left, 0, 'with no fees collected there is nothing to buy with');
+await assert.rejects(() => Desk.runDeskBuyback(pool, { ref: 'b-broke', ethToSpend: 1, priceEthPerOmr: 0.0005 }),
+  (e) => e.code === 'budget', 'and the desk refuses to buy on credit');
+await Desk.recordPolFees(pool, { ref: 'fees-1', eth: 2, txHash: '0xfee' });
+assert.equal((await Desk.recordPolFees(pool, { ref: 'fees-1', eth: 2, txHash: '0xfee' })).duplicate, true,
+  'a re-delivered fee collection is a clean no-op');
+const comped = await Desk.recordPolFees(pool, { ref: 'fees-comp', eth: 99 });   // no txHash
+assert.equal(comped.eth, 0,
+  'a comp books ZERO fees — the budget is what bounds the buy side, so it must not be assertable by a mod call');
+assert.equal((await Desk.polBudget(pool)).left, 2, 'so the budget is exactly the real collection');
+console.log('✓ the buyback spends POL fees and nothing else; a comp adds none to the budget');
+
+// ── (20) THE BAND — the desk does not buy and sell at the same time ────────────────────────────
+// The dead zone is the point (design §3.2): running both sides at once is a losing round trip
+// wearing a flywheel costume. The anchor here is 0.001, so the sell edge is 0.001 and the buy edge
+// is 0.0008 — and anything between is where the desk does nothing at all.
+const anchor = (await Desk.bandAnchor(pool)).anchor;
+const buyBelow = round8(anchor * BAND.LOWER_BPS / 10000);
+assert.equal(buyBelow, 0.0008, `the buy edge should be 0.80x anchor, got ${buyBelow}`);
+await assert.rejects(() => Desk.runDeskBuyback(pool, { ref: 'b-mid', ethToSpend: 0.1, priceEthPerOmr: anchor }),
+  (e) => e.code === 'band', 'at the anchor the desk does NOTHING — that is the dead zone');
+await assert.rejects(() => Desk.runDeskBuyback(pool, { ref: 'b-high', ethToSpend: 0.1, priceEthPerOmr: buyBelow * 1.01 }),
+  (e) => e.code === 'band', 'and just above the buy edge it still does nothing');
+// the fat-finger floor: the shelf credit is eth/price, so a price a decimal place too low mints
+// inventory out of a typo. Fail-closed rather than clamped — a price we do not believe is not a
+// price to trade at (the RWA float shipped this exact bug).
+await assert.rejects(() => Desk.runDeskBuyback(pool, { ref: 'b-fat', ethToSpend: 0.1, priceEthPerOmr: anchor / 1000 }),
+  (e) => e.code === 'price', 'and an absurd execution is refused rather than minting a shelf out of a typo');
+console.log(`✓ the band gates the buy side: below ${buyBelow} ETH only, and above a sanity floor`);
+
+// ── (21) THE BUY — a backed mint, and the inverse of a withdrawal ──────────────────────────────
+// `withdraw:omr` is an in-game BURN paired with hard OMR leaving the reserve. This is the mirror.
+// Both legs move together, in one transaction, or the soft supply would exist before its backing.
+const shelf0 = await shelf(), res0 = await reserve();
+const buy = await Desk.runDeskBuyback(pool, { ref: 'buy-1', ethToSpend: 1, priceEthPerOmr: 0.0005, txHash: '0xbuy' });
+assert(buy.bought, `the buy should land below the band: ${JSON.stringify(buy)}`);
+assert.equal(buy.omr, 2000, `1 ETH at 0.0005 ETH each buys 2000, got ${buy.omr}`);
+assert.equal(await shelf(), shelf0 + 2000, 'and it lands on the SHELF, not in the fire (design §3.3)');
+assert.equal(await reserve(), res0 + 2000,
+  'while the hard token lands in the reserve, where a withdrawal can actually deliver it');
+assert.equal(Number((await books()).lifetime_bought), 2000, 'the desk books what it restocked');
+// it credits the shelf and NEVER a player — that is why wall 1 ("no faucet") is untouched
+const mintRows = (await pool.query(
+  `SELECT amount, account_id FROM transactions WHERE currency='omr' AND reason='desk:buyback'`)).rows;
+assert.equal(mintRows.length, 1, 'one ledgered mint');
+assert.equal(mintRows[0].account_id, null,
+  'against NO account — the buyback credits the shelf, never a player, so it is not a faucet');
+// conservation absorbs it BECAUSE the reason is in the mint term. If it were not, this fails by
+// exactly the amount minted — which is the assertion that keeps `desk:buyback` honest.
+assert((await checkOf('$OMR conservation')).ok,
+  'conservation must hold with the buyback mint — the reason has to be in omrMints');
+assert((await checkOf('desk inventory backed')).ok, 'the shelf still matches its own books');
+console.log(`✓ 1 ETH restocked ${buy.omr} $OMR: a mint into the shelf, matched by hard OMR in the reserve`);
+
+// ── (22) THE BACKING, CHECKED ──────────────────────────────────────────────────────────────────
+// Conservation counts the mint and moves on — it cannot see whether the hard token arrived. These
+// are the checks that can, and the Vig's two-sided reserve sandwich is the third.
+const d2 = await Desk.runDeskInvariants(pool);
+assert(d2.ok, `the desk's real-value invariants must hold: ${JSON.stringify(d2.checks.filter((c) => !c.ok))}`);
+assert(d2.checks.find((c) => c.name === 'buyback backed by a real purchase'), 'and one of them is the backing');
+const vig = await runVigInvariants(pool);
+const backed = vig.checks.find((c) => c.name === 'reserve fully backed');
+const under = vig.checks.find((c) => c.name === 'reserve not under-funded');
+assert(backed.ok && under.ok,
+  `the Vig's reserve sandwich must carry the desk's contribution, else a buyback trips both: ${JSON.stringify([backed, under])}`);
+assert.equal(backed.deskToReserve, 2000, 'and it accounts for it by name rather than by loosening the check');
+console.log('✓ the backing is checked from three sides: the desk\'s books, the ledger, and the reserve sandwich');
+
+// ── (23) THE ROOT CAP — you cannot spend what the pool did not earn ────────────────────────────
+await assert.rejects(() => Desk.runDeskBuyback(pool, { ref: 'buy-over', ethToSpend: 5, priceEthPerOmr: 0.0005 }),
+  (e) => e.code === 'budget', 'the bot never spends past the fees the pool earned');
+assert.equal((await Desk.polBudget(pool)).left, 1, 'the budget is drawn down by exactly what was spent');
+assert.equal((await Desk.runDeskBuyback(pool, { ref: 'buy-1', ethToSpend: 1, priceEthPerOmr: 0.0005 })).duplicate, true,
+  'and a re-delivered swap is idempotent on its ref');
+assert.equal(await shelf(), shelf0 + 2000, 'moving nothing');
+console.log('✓ the root cap holds and the ingest is idempotent');
+
+// ── (24) THE RESTOCK IS SELLABLE — the loop closes ─────────────────────────────────────────────
+// The point of buying inventory is to sell it again. This asserts the two halves are the same shelf
+// rather than two systems that happen to share a table.
+await pool.query('UPDATE desk_auctions SET day = day - 1');
+const opened3 = await Desk.openAuction(pool);
+assert(opened3.opened, `a fresh lot opens off the restocked shelf: ${opened3.reason}`);
+const soldOn = await Desk.recordAuctionBuy(pool, { ref: 'fill-restock', accountId: buyer, omr: 10 });
+assert(soldOn.filled && soldOn.omr === 10, 'and the restocked $OMR sells like any other');
+assert((await checkOf('$OMR conservation')).ok, 'with conservation still exact around the whole cycle');
+assert((await Desk.runDeskInvariants(pool)).ok, 'and the desk still reconciles');
+console.log('✓ bought inventory goes back up for sale — the desk is a rental business, not a vault');
 
 await app.close();
 console.log('\n✅ THE DESK passed — a $OMR sink lands on the desk instead of the fire (the pair of rows '

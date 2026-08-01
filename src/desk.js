@@ -1,4 +1,4 @@
-// ── src/desk.js — THE DESK (economy v3 steps 2–3: where a spent $OMR goes, and how it comes back) ──
+// ── src/desk.js — THE DESK (economy v3 steps 2–4: where a spent $OMR goes, and how it comes back) ──
 // Design: omerta-economy-v3-design.md §3, §4.2, §11.6, §11.7. A sink used to destroy the token; now it
 // hands it to the desk, and the desk sells it back to the market. The whole economic argument in one
 // line:
@@ -40,21 +40,29 @@
 // never be assertable by a comp call. The $OMR side of a comp fill is real (it has to be, or QA is
 // testing nothing), which is safe precisely because that side is a transfer.
 //
+// ── STEP 4 IS THE OTHER EDGE OF THE BAND ───────────────────────────────────────────────────────
+// Below `LOWER` the desk RESTOCKS from the open market, funded exclusively by POL trading fees and
+// never by minting (design §11.10; that exclusion is wall 4). Its §10.4 shape is the exact inverse
+// of a withdrawal — see `runDeskBuyback` below, which is where the argument belongs.
+//
 // ── LOCK ORDER: accounts → desk_inventory → desk_auctions ──────────────────────────────────────
 // The recycle path already holds `account_persistent` (the spend) before it touches `desk_inventory`,
 // so a fill that took the shelf first and then reached for the buyer's account would be an AB-BA
-// against every sink in the game. Buyer first, shelf second, the auction row last.
+// against every sink in the game. Buyer first, shelf second, the auction row last. The buyback takes
+// only `desk_inventory` (and `chain_reserve` under it), so it sits inside that same order.
 import crypto from 'node:crypto';
 import { GameError } from './game.js';
-import { BAND, DESK, DESK_AUCTION, DESK_RECYCLE_REASON, auctionPriceAt, dayOf } from './rules.js';
+import { drainQueue } from './chain.js';
+import { BAND, DESK, DESK_AUCTION, DESK_BUYBACK, DESK_RECYCLE_REASON, auctionPriceAt, dayOf } from './rules.js';
 
 const round6 = (n) => Math.round(n * 1e6) / 1e6;
 const round8 = (n) => Math.round(n * 1e8) / 1e8;
 const DESK_SALE_REASON = 'desk:sale';
+const DESK_BUYBACK_REASON = 'desk:buyback';
 
 export async function deskInventory(client) {
-  return (await client.query('SELECT balance, lifetime_in, lifetime_sold FROM desk_inventory WHERE id=1')).rows[0]
-    || { balance: 0, lifetime_in: 0, lifetime_sold: 0 };
+  return (await client.query('SELECT balance, lifetime_in, lifetime_sold, lifetime_bought FROM desk_inventory WHERE id=1')).rows[0]
+    || { balance: 0, lifetime_in: 0, lifetime_sold: 0, lifetime_bought: 0 };
 }
 
 // ── THE ANCHOR (the band's centre, and the only oracle on the path) ──
@@ -208,6 +216,112 @@ export async function recordAuctionBuy(pool, { ref, accountId, omr, txHash = nul
   } finally { client.release(); }
 }
 
+// ══ THE BUY SIDE (economy v3 step 4) ═════════════════════════════════════════════════════════
+// Design §3.2/§3.3/§11.10. Below the band's LOWER edge the desk RESTOCKS from the open market,
+// because buying inventory back is sometimes cheaper than waiting for the sinks to return it.
+//
+// THE BUDGET, and why it is the only one. `pol_fees` — the fees protocol-owned liquidity earned.
+// Not the founder half (not ours to spend), not the LP half (POL depth is the binding constraint),
+// and NEVER by minting. That last exclusion is wall 4, and it is the single line between this design
+// and Olympus: a buyback funded by minting is a flywheel with nothing outside it.
+//
+// THE §10.4 SHAPE, which is the interesting part and the inverse of a withdrawal. `withdraw:omr` is
+// an in-game BURN paired with hard OMR leaving the reserve — supply exits the game. This is the
+// mirror: an in-game MINT (`desk:buyback`, crediting the SHELF and never a player) paired with hard
+// OMR entering the reserve — supply re-enters. It is admissible exactly to the extent that the hard
+// token really arrived, so that is CHECKED rather than claimed: `runDeskInvariants` asserts the soft
+// credit equals the hard delivery, and the Vig's two-sided `reserve fully backed` / `not
+// under-funded` pair now carries the desk's contribution so the reserve's backing sources stay
+// enumerated instead of one of them being invisible.
+//
+// The reserve is funded IN THE SAME TRANSACTION as the credit — deliberately not through
+// `fundReserve`, which opens its own. The Vig funds post-commit and its own audit note calls the gap
+// a LOST-FUNDING alarm; here the direction of that gap is worse (soft supply existing before its
+// backing does), so the two move together or neither moves. `drainQueue` runs after, and is
+// idempotent.
+export async function recordPolFees(pool, { ref, eth, txHash = null } = {}) {
+  const key = String(ref || '').trim();
+  if (!key) throw new GameError('ref', 'A fee episode needs a ref (mainnet: the collect txHash).');
+  const amt = Number(eth);
+  if (!(Number.isFinite(amt) && amt > 0)) throw new GameError('amount', 'eth must be > 0');
+  const real = !!txHash;
+  // SELECT-then-INSERT (pg-mem does not report a suppressed conflict's rowCount — the sell-tax note).
+  if ((await pool.query('SELECT 1 FROM pol_fees WHERE ref=$1', [key])).rows[0]) return { recorded: false, duplicate: true };
+  try {
+    await pool.query('INSERT INTO pol_fees (ref, eth, tx_hash, real) VALUES ($1,$2,$3,$4)',
+      [key, real ? round6(amt) : 0, txHash, real]);   // a comp books ZERO — the anti-fabrication gate
+  } catch (e) {
+    if (e.code === '23505') return { recorded: false, duplicate: true };
+    throw e;
+  }
+  return { recorded: true, eth: real ? round6(amt) : 0, real };
+}
+
+// What the bot may still spend: fees earned minus fees already spent. Self-limiting by construction —
+// there is no other term, which is the whole of §11.10.
+export async function polBudget(db) {
+  const earned = Number((await db.query('SELECT COALESCE(SUM(eth),0) s FROM pol_fees')).rows[0].s);
+  const spent = Number((await db.query('SELECT COALESCE(SUM(eth_spent),0) s FROM desk_buys')).rows[0].s);
+  return { earned: round6(earned), spent: round6(spent), left: round6(Math.max(0, earned - spent)) };
+}
+
+export async function runDeskBuyback(pool, { ref, ethToSpend, priceEthPerOmr, txHash = null, now = Date.now() } = {}) {
+  const key = String(ref || '').trim();
+  if (!key) throw new GameError('ref', 'A buyback needs a ref (mainnet: the swap txHash).');
+  const eth = Number(ethToSpend), price = Number(priceEthPerOmr);
+  if (!(Number.isFinite(eth) && eth >= DESK_BUYBACK.MIN_ETH)) throw new GameError('amount', `Spend at least ${DESK_BUYBACK.MIN_ETH} ETH.`);
+  if (!(Number.isFinite(price) && price > 0)) throw new GameError('price', 'priceEthPerOmr must be > 0 (mainnet: what the bot executed at).');
+  const band = await bandAnchor(pool, now);
+  if (band.stale) throw new GameError(band.reason, 'No usable anchor — the desk does not trade blind, in either direction.');
+  const buyBelow = round8(band.anchor * BAND.LOWER_BPS / 10000);
+  // THE BAND, on the buy side. Above this the desk does NOTHING — running both sides at once is a
+  // losing round trip wearing a flywheel costume (design §3.2), and the dead zone is what prevents it.
+  if (price > buyBelow) throw new GameError('band', `The desk buys below ${buyBelow} ETH per $OMR; the market is at ${price}.`);
+  // …and the fat-finger floor. The shelf credit is eth/price, so a price a decimal place too low
+  // mints inventory out of a typo. Fail-closed rather than clamped: a price we do not believe is not
+  // a price to trade at (the RWA float's continuity bound, against the band's own anchor).
+  const floor = round8(band.anchor * DESK_BUYBACK.PRICE_FLOOR_BPS / 10000);
+  if (price < floor) throw new GameError('price', `That execution (${price}) is below the sanity floor ${floor} — the desk refuses rather than guessing.`);
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    if ((await client.query('SELECT 1 FROM desk_buys WHERE ref=$1', [key])).rows[0]) {
+      await client.query('COMMIT');
+      return { bought: false, duplicate: true };
+    }
+    // THE ROOT CAP: never spend more than the pool earned. Read under a lock on the budget's own
+    // table so two concurrent buys cannot each see the whole of it (the runVigBuyback discipline).
+    await client.query('SELECT 1 FROM desk_inventory WHERE id=1 FOR UPDATE');
+    const budget = await polBudget(client);
+    if (eth > budget.left + 1e-9) throw new GameError('budget', `The buyback has ${budget.left} ETH of POL fees left; it never spends more than the pool earned.`);
+    const omr = round6(eth / price);
+    if (!(omr > 0)) throw new GameError('amount', 'That buys nothing at this price.');
+
+    await client.query(
+      `INSERT INTO desk_buys (ref, eth_spent, omr_bought, price_eth_per_omr, anchor_eth_per_omr, tx_hash, real)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [key, round6(eth), omr, price, band.anchor, txHash, !!txHash]);
+    await client.query('UPDATE desk_inventory SET balance = balance + $1, lifetime_bought = lifetime_bought + $1 WHERE id=1', [omr]);
+    // the hard token lands where it can actually be delivered, in the SAME txn as the soft credit
+    await client.query('UPDATE chain_reserve SET funded_omr = funded_omr + $1, last_funded_at = now() WHERE id=1', [omr]);
+    await client.query(
+      'INSERT INTO transactions (id, currency, amount, reason, counterparty) VALUES ($1,$2,$3,$4,$5)',
+      [crypto.randomUUID(), 'omr', omr, DESK_BUYBACK_REASON, 'pol_fees']);
+    await client.query('COMMIT');
+    // The reserve just grew, so a withdrawal that was queued for want of backing may now be
+    // signable. Best-effort and post-commit: draining is idempotent (it signs whatever the reserve
+    // covers, FIFO), so a failure here loses nothing a later drain will not pick up — and it must
+    // never roll back a purchase that really happened.
+    try { await drainQueue(pool); } catch { /* the next fund or withdrawal drains it */ }
+    return { bought: true, omr, eth: round6(eth), price, anchor: band.anchor, buyBelow, real: !!txHash };
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (e.code === '23505') return { bought: false, duplicate: true };
+    throw e;
+  } finally { client.release(); }
+}
+
 export async function liveAuction(db, now = Date.now()) {
   return (await db.query(
     "SELECT * FROM desk_auctions WHERE status='live' AND opens_at <= $1 AND closes_at > $1", [new Date(now)])).rows[0] || null;
@@ -238,7 +352,25 @@ export async function runDeskInvariants(pool) {
     'SELECT COALESCE(SUM(eth),0) s FROM desk_sales WHERE real = false')).rows[0].s);
   push('comps book no revenue', fake, 0, 0.000001);
 
-  return { ok: checks.every((c) => c.ok), checks, sold: round6(sold), eth: round8(eth) };
+  // ── THE BUY SIDE (step 4) ──
+  // (a) THE ROOT CAP, and it is the whole of §11.10: the bot cannot spend what the pool did not earn.
+  // This is what makes the buyback self-limiting rather than a budget somebody sets.
+  const budget = await polBudget(pool);
+  push('spend ≤ POL fees', budget.spent, Math.min(budget.spent, budget.earned), 0.000001,
+    { earned: budget.earned, spent: budget.spent });
+  // (b) THE BACKING, and it is the reason `desk:buyback` is allowed to be a mint at all. Every soft
+  // $OMR credited to the shelf must correspond to a hard OMR the bot really bought. Conservation
+  // cannot see this — it counts the mint and moves on — so if the credit were ever computed from
+  // something other than the purchase, THIS is the check that says so.
+  const buybackMinted = Number((await pool.query(
+    `SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='omr' AND reason='desk:buyback'`)).rows[0].s);
+  const hardBought = Number((await pool.query('SELECT COALESCE(SUM(omr_bought),0) s FROM desk_buys')).rows[0].s);
+  push('buyback backed by a real purchase', buybackMinted, hardBought, 0.000001, { hardBought });
+  const desk = await deskInventory(pool);
+  push('desk books the buyback', Number(desk.lifetime_bought), hardBought, 0.000001);
+
+  return { ok: checks.every((c) => c.ok), checks,
+    sold: round6(sold), eth: round8(eth), bought: round6(hardBought), budget };
 }
 
 // The public board. Published rather than hidden for the same reason the emission schedule was: a
@@ -263,12 +395,21 @@ export async function deskBoard(pool, now = Date.now()) {
     anchor: round8(Number(a.anchor_eth_per_omr)),
     closesSeconds: Math.max(0, Math.round((new Date(a.closes_at).getTime() - now) / 1000)),
   } : null;
+  const budget = await polBudget(pool);
   return {
     inventory: Number(d.balance),
     lifetimeIn: Number(d.lifetime_in),
     lifetimeSold: Number(d.lifetime_sold),
+    lifetimeBought: Number(d.lifetime_bought),
     recycledToday,
     auction,
+    // the buy side, published for the same reason the sell side is: a player told "the desk restocks
+    // from the market when that is cheaper than waiting" is entitled to see the budget it does it with.
+    buyback: {
+      budgetEth: budget.left, earnedEth: budget.earned, spentEth: budget.spent,
+      buyBelow: band.anchor === null ? null : round8(band.anchor * BAND.LOWER_BPS / 10000),
+      fundedBy: 'POL trading fees — never by minting',
+    },
     // why there ISN'T one, when there isn't — the board must never read as "broken" when it is
     // fail-closed on purpose, and must never read as "closed for price reasons" when the oracle died.
     closed: auction ? null : (band.stale ? band.reason : 'between_auctions'),
