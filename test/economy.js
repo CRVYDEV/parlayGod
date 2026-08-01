@@ -7,7 +7,7 @@ import assert from 'node:assert';
 import crypto from 'node:crypto';
 import { buildServer } from '../src/server.js';
 import { runBuyback, mergeLegacyPools } from '../src/worker.js';
-import { CARS, carVal, carMelt, CONSTANTS, BUSINESS_EMPIRE, RIVALS, frontTitles, launderRankOf, businessMaxTier, POPULATION } from '../src/rules.js';
+import { CARS, carVal, carMelt, CONSTANTS, BUSINESS_EMPIRE, BUSINESSES, RIVALS, frontTitles, launderRankOf, businessMaxTier, POPULATION } from '../src/rules.js';
 import { spawnResident } from '../src/population.js';
 
 // ── car catalog integrity (content expansion guard: no dupe ids, well-formed, on-curve) ──
@@ -840,6 +840,35 @@ assert(((await call('POST', '/v1/business/collect', { token })).body.collected) 
   bizId = rebuy.body.id;
   const fresh = (await call('GET', '/v1/business', { token })).body.businesses.find((b) => b.id === bizId);
   assert.equal(fresh.tier, 1, 'and it starts at tier 1 — you bought a business, not your old one back');
+
+  // ── THE DOOR MUST NEVER BE CHEAPER THAN THE RENT ──
+  // The pad is a designed RECURRING SINK; the shutter is a door out of a permanent slot-block. If
+  // walking away and re-buying ever costs LESS than squaring up, the door stops being an escape
+  // hatch and becomes the optimal way to never pay rent — the sink acquires an opt-out and quietly
+  // stops draining. Nothing in the code states that relation, and BUSINESS_SHUTTER_BPS ships at 0
+  // precisely so it holds — but that lever is documented as raisable, so the relation is asserted
+  // from the LIVE constants rather than trusted. Both branches end holding a warm TIER-1 front, so
+  // they are directly comparable in cash:
+  //     PAY  = collect the full till, settle the maxed arrears  →  pending − maxPad
+  //     WALK = forfeit the till, pay tier-1 again, take the refund  →  back − tier1cost
+  // Measured today the margin is wide (paying wins on every front by $115k–$5.3M), and the flip
+  // point is BUSINESS_SHUTTER_BPS ≈ 5400 on the laundromat. Raise it past there — or stretch
+  // BUSINESS_UPKEEP_CAP_MS — and this fails by name instead of unwinding the pad in silence.
+  {
+    const capH = CONSTANTS.BUSINESS_CAP_MS / 3600000;                       // the till: one day
+    const padH = CONSTANTS.BUSINESS_UPKEEP_CAP_MS / 3600000;                // the envelope: one week
+    const rate = CONSTANTS.BUSINESS_UPKEEP_BPS / 10000;
+    for (const b of BUSINESSES) {
+      const t1 = b.tiers[0];
+      const pending = t1.incomePerHr * capH;
+      const maxPad = t1.incomePerHr * padH * rate;
+      const back = t1.cost * (CONSTANTS.BUSINESS_SHUTTER_BPS / 10000);      // assessed value at tier 1 IS the build cost
+      assert(pending - maxPad > back - t1.cost,
+        `${b.kind}: walking away and re-buying is CHEAPER than paying the pad, so the recurring sink `
+        + `has an opt-out — pay nets ${Math.round(pending - maxPad)}, walk nets ${Math.round(back - t1.cost)}. `
+        + `Lower BUSINESS_SHUTTER_BPS or shorten BUSINESS_UPKEEP_CAP_MS.`);
+    }
+  }
 }
 
 // ── Risk-to-Earn B2: bank-interest daily cap (metered by a token bucket like racket income) ──

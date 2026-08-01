@@ -3210,6 +3210,34 @@ everything sunk into the front. The pad dying with the front is not a loophole: 
 COMPUTED from `upkeep_at` and never stored, so walking away leaves no debt to forgive — you forfeit
 the lot.
 
+**RED-TEAMED (2026-08-01), and the lever has a floor nobody had stated.** The shutter is a way out of
+a designed recurring SINK, so the question is whether it can become the way to never pay rent at all.
+Both branches end holding a warm tier-1 front, so they compare directly in cash:
+
+| | cash | end state |
+|---|---|---|
+| **square up** | collect the full till, settle the maxed arrears → `pending − maxPad` | warm front, tier kept |
+| **walk away** | forfeit the till, buy tier 1 again, take the refund → `back − tier1cost` | warm front, tier 1 |
+
+At the signed constants paying wins on every front by **$115k (laundromat) to $5.3M (casino)** — the
+forfeited 24h till is worth more than the arrears saved — so the door is an escape hatch and not an
+opt-out. But the margin is a function of `BUSINESS_SHUTTER_BPS`, and the flip point is **≈ 5400 on the
+laundromat**: raise the lever past roughly half and walking away becomes the correct play, at which
+point the pad stops draining. That relation is now ASSERTED from the live constants in
+`test/economy.js` (mutation-verified: setting the lever to 6000 fails by name), so a retune of the
+refund — or a stretch of `BUSINESS_UPKEEP_CAP_MS` — cannot unwind the sink in silence.
+
+Also verified clean and recorded rather than guessed at: the shutter moves no value at 0 bps and rides
+the existing `business:` cash vocabulary above it (no invariant change either way); the only row that
+references a business (`crew_heists.target_business`) is null-safe at both call sites and answers a
+crew with a clean `mark_gone`; the lock order is the sibling one (characters → the business row, and a
+heist never locks the mark's character); and `businesses.id` is TEXT, so a junk id is a clean
+`not_yours` rather than a 500. **Accepted, not patched:** a marked man can shutter his fronts to deny
+a killer the Sacking — the exact shape of the already-accepted "warehouse the fleet before the hit",
+and far more self-punishing, since he destroys them rather than parking them; and closing up does not
+resolve a pending Bureau raid, which dodges a fine worth 10% of the tier cost at the price of the
+whole front, so nobody will.
+
 The economic levers remain OPEN and unretuned if the founder wants the crossover itself gone:
 - **`BUSINESS_UPKEEP_CAP_MS` 7d → 2d.** Caps the pad at $115,200 against a $288,000 till, so the
   front is always worth reviving. Smallest change, keeps the bleed, removes the crossover.
