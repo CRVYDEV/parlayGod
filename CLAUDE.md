@@ -3060,6 +3060,45 @@ stronger thing: **nothing in the game creates $OMR — every token in the city w
 money, which is why it is worth taking off somebody.** Suite 61/61 + sim drift-0 + pgquery 2218
 statements + pgcheck 43/43 on real Postgres.
 
+**ECONOMY v3 STEP 2 — RECYCLE INSTEAD OF BURN (`omerta-economy-v3-design.md` §9.2; `src/desk.js`,
+`test/desk.js` — the 62nd suite).** A $OMR sink no longer DESTROYS the token: it hands it to THE
+DESK (`desk_inventory`), which sells it back at the daily auction (step 3). The design's argument in
+one line — every sink is the house's cut, so **revenue ≈ sink volume × price** and the KPI is
+**RETURN VELOCITY** (how many times a year one token comes home) rather than supply. You cannot burn
+AND recycle the same unit; the founder chose revenue, which is also why nothing here may be called
+deflationary (design §10 risk B).
+**THE §10.4 SHAPE, and the thing not to "simplify" later.** The obvious implementation — reclassify
+the sink reasons out of the burn term — would drift conservation on any live database by the ENTIRE
+historical burn volume, because those rows really were burns when they were written (the step-1
+lesson, in its harder form). So the sink KEEPS its reason and its place in the burn term, and a
+paired **`desk:recycle`** row rides the SAME term: the two cancel, `desk_inventory` (a new §10.4
+bucket) holds the value, and a historical row — which has no partner — still counts as the burn it
+was. Conservation therefore needs no new term at all. Two new checks reconcile the shelf from both
+directions: **`desk inventory backed`** (balance == lifetime_in − lifetime_sold, its own books) and
+**`desk inventory ledgered`** (lifetime_in == Σ `desk:recycle`, the ledger), because a bucket that
+drifts from its books and a bucket credited without a row are different failures.
+**ONE LIST.** `DESK.SINK_REASONS` (rules tail) is now the single source: `invariants.js` GENERATES
+the burn SQL from it (proven byte-identical to the hand-written string it replaced) and the ledger
+hook decides what feeds the desk from it, so "what §10.4 counts as a sink" and "what feeds the desk"
+cannot drift apart. **THE ONE EXCLUSION is the whole point of the step:** `withdraw:omr` does NOT
+recycle — that token leaves for the chain and exists in the player's own wallet, backed by the
+reserve, so recycling it would put the same unit in two places (an unbacked mint wearing a recycle
+costume, and exactly what wall 3 forbids). **WHERE IT HOOKS:** `game.js:ledger`, the one function
+every value movement passes through — NOT the ~60 sink call sites, because a recycle you have to
+remember at each site is one a new sink will forget, and forgetting it silently destroys supply the
+desk was supposed to sell (a defect with no symptom until somebody asks why the auction is empty).
+`GET /v1/desk` publishes the shelf, the sink list AND the exclusion (a claim nobody can check is not
+worth making) and says `auction: null` rather than implying a turnover that is not built yet.
+`test/desk.js` covers the classification, a real spend landing on the shelf, conservation unmoved, a
+pre-recycle burn row still reconciling, the withdrawal still burning, the board and the vocabulary —
+four mutations, each caught at its own named assertion (the bucket dropped from `omrBuckets`;
+`withdraw:omr` allowed to recycle; the bucket credited with no ledger row; the sinks pulled out of
+the burn term, which fails on the HISTORY assertion exactly as designed). En route the graph guard
+caught a real subtlety: it attributes a check's reasons to the SQL lexically ABOVE it, so the
+`desk:recycle` literal had to sit between the two pushes rather than before both — and the literal is
+written out rather than interpolated so the extractor can read it, with drift self-caught by the
+check itself. Suite 62/62 + sim drift-0 + pgquery 2222 statements + pgcheck 43/43 on real Postgres.
+
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
 `payPlex` pattern); named landmarks / Founder's charter numbers; ~~R2 (the `rwa_revenue` → real-RWA-buy

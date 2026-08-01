@@ -12,7 +12,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS, RANKS,
          SOLDIERS, soldierFxOf, CLUES, clueStepOf, rollClueTier, kingpinRankOf, tycoonRankOf, racketIncomeLeveled, empireTitles, launderRankOf, frontTitles, statesmanRankOf, seasonModOf, PACING,
          carCollateralValue, MASTERY, masteryLvlOf, masteryRankOf, masteryXpFor, pathFx, pathXpMult,
          REGIMEN, disciplineLvlOf, energyCapOf, nerveCapOf, BUSINESSES, WIRE, RIVALS, CORNER, cornerTasksOf,
-         KITCHENS, labModuleCost } from './rules.js';
+         KITCHENS, labModuleCost, recyclesToDesk, DESK_RECYCLE_REASON } from './rules.js';
 import { dbCaps } from './db.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
@@ -104,6 +104,28 @@ export async function ledger(client, { characterId = null, accountId = null, cur
   await client.query(
     'INSERT INTO transactions (id, character_id, account_id, currency, amount, reason, counterparty) VALUES ($1,$2,$3,$4,$5,$6,$7)',
     [uid(), characterId, accountId, currency, amount, reason, counterparty]);
+  // THE RECYCLE (economy v3 step 2). A $OMR sink no longer destroys the token — it hands it to the
+  // desk, which sells it back at the daily auction. Design §3.3/§4.2: every sink is the house's cut,
+  // so revenue ≈ sink volume × price and the KPI is how often a token comes home, not how few exist.
+  //
+  // It hooks HERE, at the one function every value movement passes through, and not at the ~60 sink
+  // call sites. That is deliberate: a recycle you have to remember at each site is one a new sink
+  // will forget, and forgetting it silently destroys supply the desk was supposed to sell — a defect
+  // with no symptom until somebody asks why the auction has nothing in it. `recyclesToDesk` reads
+  // the SAME `DESK.SINK_REASONS` list invariants.js builds the §10.4 burn term from, so the two can
+  // never drift apart, and `withdraw:omr` is excluded because that token leaves for the chain rather
+  // than into the house (see the rules block — it is the one exclusion that matters).
+  //
+  // §10.4: the pair (the player's −X spend, this +X) sums to ZERO inside the burn term while the
+  // bucket holds the value, so conservation holds with no new term — and a HISTORICAL burn row, which
+  // has no partner, still counts as the burn it was. That is what makes this safe on a live database.
+  if (currency === 'omr' && amount < 0 && recyclesToDesk(reason)) {
+    const back = -amount;
+    await client.query('UPDATE desk_inventory SET balance = balance + $1, lifetime_in = lifetime_in + $1 WHERE id=1', [back]);
+    await client.query(
+      'INSERT INTO transactions (id, currency, amount, reason, counterparty) VALUES ($1,$2,$3,$4,$5)',
+      [uid(), 'omr', back, DESK_RECYCLE_REASON, reason]);
+  }
 }
 export async function rngLog(client, characterId, action, roll, outcome) {
   await client.query('INSERT INTO rng_audit (id, character_id, action, roll, outcome) VALUES ($1,$2,$3,$4,$5)',

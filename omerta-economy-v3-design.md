@@ -249,8 +249,17 @@ Each step is shippable and testable alone; nothing is deleted before its replace
    asserts no NEW row appears — wall 1 made checkable rather than promised. And `omrMints` does not
    reduce "to the bond alone" yet: `mission:%` and `prize:omr` survive into steps 2–4 with their own
    systems, which the check's comment says out loud rather than letting the doc imply otherwise.
-2. **Recycle instead of burn.** Reclassify the ~25 sink reasons: destination `bond_inventory` rather
-   than the burn term. One invariant change; the conservation identity gains a bucket.
+2. **Recycle instead of burn — BUILT 2026-08-01.** A $OMR sink now hands the token to the desk
+   (`desk_inventory`) instead of destroying it. Two corrections to this line as written:
+   *(a)* the reasons are NOT reclassified — a wholesale reclassification would drift conservation on
+   any live database by the entire historical burn volume, because those rows really were burns when
+   they were written. Instead the sink keeps its reason and its place in the burn term, and a paired
+   `desk:recycle` row rides the SAME term, so the two cancel while the new bucket holds the value.
+   Historical rows have no partner and still count as the burns they were. *(b)* it is 24 reasons,
+   not ~25, and one of them — `withdraw:omr` — is deliberately EXCLUDED: that token leaves for the
+   chain rather than into the house, so recycling it would put the same unit in a player's wallet
+   and on our shelf at once. The recycle hooks `game.js:ledger` rather than the ~60 sink call sites,
+   because a recycle you have to remember is one a new sink will forget.
 3. **The daily auction.** Dutch, reserve-priced at the band floor, over the existing bond contract.
 4. **The band + buyback.** Off the existing oracle. Budgeted, never promised.
 5. **The float** (§5) — the nut, the clearing window, the stake. Re-sim the loot rate here.
