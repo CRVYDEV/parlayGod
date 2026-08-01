@@ -18,7 +18,6 @@ import { runBondInvariants } from './bonds.js';
 import { runTreasuryInvariants } from './treasury.js';
 import { sweepExpiredBounties, huntWanted } from './social.js';
 import { sweepUncreditedFees } from './fees.js';
-import { runWageEpoch } from './emission.js';
 import { sweepGrandReferrals } from './game.js';
 import { sweepSocialClaims } from './growth.js';
 import { sweepUncreditedStore } from './store.js';
@@ -242,9 +241,8 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     if (fy?.paid > 0) console.log(`👑 family yield: ${fy.paid} $OMR split across ${fy.families.length} famil${fy.families.length === 1 ? 'y' : 'ies'}`);
     const s = await safe('season rollover', () => runSeasonRollover(pool));
     if (s?.converted > 0) console.log(`📅 season ${s.season}: converted ${s.converted} characters`);
-    // THE STREET WAGE — the daily emission epoch (idempotent per epoch, safe at any tick frequency)
-    const wg = await safe('street wage epoch', () => runWageEpoch(pool));
-    if (wg?.workers > 0) console.log(`💰 street wage: epoch ${wg.epoch} paid ${wg.paid} $OMR to ${wg.workers} of ${wg.candidates} earners (budget ${wg.budget})`);
+    // (economy v3 step 1: the daily street-wage epoch ran here. The faucet is retired — the game
+    // prints no $OMR at all now, so there is nothing for a worker tick to pay. See src/emission.js.)
     const sw = await safe('bounty sweep', () => sweepExpiredBounties(pool));
     if (sw?.pots > 0) console.log(`📜 contracts: refunded ${sw.pots} expired pot(s) → $${sw.refunded}`);
     const fs = await safe('fee reconcile', () => sweepUncreditedFees(pool));

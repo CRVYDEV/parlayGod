@@ -100,7 +100,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, PATRON, BONDS, SPEAKEASY, BOXING,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf, syndicateOf, TERRITORY_TYPES, TERRITORY_RACKETS,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE, NOTORIETY,
-         EMISSION, emissionEpochOf, epochBudget, wageRequireMinted, TAX, withdrawTaxBps,
+         TAX, withdrawTaxBps,
          HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, BUSINESS_EMPIRE, PACING, MASTERY,
          PATH_FX, PATH_XP_HOME, PATH_XP_RIVAL, PATH_SWITCH_CD_MS, REGIMEN, HUSTLE, CAREER, RIVALS,
          CORNER, CONTACTS, FAVOR } from './rules.js';
@@ -861,11 +861,10 @@ export async function buildServer() {
     pathFx: { matrix: PATH_FX, xpHome: PATH_XP_HOME, xpRival: PATH_XP_RIVAL,
       switchCdSeconds: Math.round(PATH_SWITCH_CD_MS / 1000) },
     share: { gameUrl: SOCIAL_GAME_URL, xHandle: SOCIAL_X_HANDLE }, // brag-on-X: prefilled intents carry the player's name as a referral code
-    // THE STREET WAGE — the emission schedule is PUBLIC by design (anyone can verify the printer)
-    emission: { endowmentOmr: EMISSION.ENDOWMENT_OMR, epochOmr: EMISSION.EPOCH_OMR, decay: EMISSION.DECAY,
-      decayEvery: EMISSION.DECAY_EVERY, capOmr: EMISSION.WAGE_CAP_OMR, minLevel: EMISSION.WAGE_MIN_LVL,
-      minScore: EMISSION.WAGE_MIN_SCORE, mintedRequired: wageRequireMinted(),
-      epoch: emissionEpochOf(), budget: epochBudget(emissionEpochOf()) },
+    // THE PRINTER IS OFF (economy v3 step 1). The Street Wage published its schedule here so anyone
+    // could verify the printer; there is no printer. `faucet: null` is a deliberate positive claim
+    // rather than a removed key — a client that used to render the schedule can say what replaced it.
+    emission: { faucet: null, note: 'No $OMR is minted in game. Every $OMR in the city was bought or taken.' },
     // THE TRADES — the mastery catalog (tracks, curve, ranks — knowable; XP is earned, never bought)
     mastery: { tracks: MASTERY.TRACKS, xpDivisor: MASTERY.XP_DIVISOR, maxLvl: MASTERY.MAX_LVL,
       xp: MASTERY.XP, ranks: MASTERY.RANKS, heirKeepBps: MASTERY.HEIR_KEEP_BPS, legendRanks: MASTERY.LEGEND_RANKS,

@@ -169,11 +169,9 @@ const SIGNED = [
                                     // bought $OMR) was deleted by v2 step 2 and nothing ever read it.
   ['FAMILY_YIELD.SEATS', 5],
   ['FAMILY_YIELD.WEIGHTS', [5, 4, 3, 2, 1]],
-  ['EMISSION.DECAY_EVERY', 180],
-  ['EMISSION.EPOCH_OMR', 500],
-  ['EMISSION.WAGE_CAP_OMR', 5],
-  ['EMISSION.WAGE_MIN_LVL', 5],
-  ['EMISSION.WAGE_MIN_SCORE', 25],
+  // (the five EMISSION levers lived here — the Street Wage retired with economy v3 step 1, and the
+  // constants went with it rather than being zeroed, so there is nothing left to pin. See BALANCE.md
+  // § THE FARM for the measured Sybil economics that decided it.)
   ['ESTATE.GALA_MIN_TIER', 2],
   ['ESTATE.GALA_MS', 14400000],
   ['ESTATE.GALA_OMR', 15],

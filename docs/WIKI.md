@@ -172,16 +172,15 @@ with raids, a small garrison is enough.
 **Currencies:** **cash** (in your pocket and your bank), **$OMR** (the premium currency; earned by
 playing, extractable on-chain by minted accounts; held at the account level, so it survives death),
 **crates** (cb), and **ammo**. **Cash and $OMR do not trade** — cash is the city's own money and it
-stays in the city; $OMR comes in from outside (the wage, prizes, bonds) and leaves through the
-Exchange window. The
-main economic rule (section 10.4): the game records and checks every movement of value. The game also
-*creates* $OMR — but only on a fixed, public schedule called **the Street Wage**: each day, a capped pot
-splits between the players who really played that day (respect earned, level 5+, up to 5 $OMR each). Only
-a **minted** account draws the wage (mint your account with the Made Man package, or pay its PLEX price in
-earned $OMR) — one paid identity per earner keeps bot farms out of the pot. The pot comes from a hard,
-finite Emission Endowment and gets smaller on a set schedule (a halving every ~6 months). The ledger
-records every created unit, and an alarm fires if emission ever passes the endowment.
-Board: `GET /v1/wage`. Agents do not draw the wage.
+stays in the city; $OMR comes in from outside and leaves through the Exchange window. The
+main economic rule (section 10.4): the game records and checks every movement of value.
+
+**Nothing you do in the game creates $OMR.** There is no wage, no yield and no drip — the Street Wage
+was retired, and the game now has no printer at all. Every $OMR in the city was **bought with real
+money** by somebody, which is exactly why it is worth taking off them. Your three ways to get some:
+**take it** (killing a player loots their liquid $OMR — staked and committed $OMR is safer), **earn it**
+from another player who pays you in it, or **buy it**. A nightly job asserts that no new $OMR appeared,
+so this is a fact you can check rather than a promise.
 
 **The Exchange window** (`GET /v1/window`, `POST /v1/window/redeem`) — the ONE conversion in the
 game, and it runs one way: **burn $OMR, receive cash at a published rate**, from a till that real
@@ -224,12 +223,14 @@ Four things follow, and each is a mechanism rather than a policy:
 
 - **Grinding cannot inflate the token.** Grinding makes cash, and cash has nowhere to go but back into
   the city. A player who plays twenty hours a day is a rich player, not a source of new supply.
-- **Supply is enumerated.** In-game, $OMR can be created by exactly three things: mission rewards,
-  the Vig prize pool, and the Street Wage. The ledger check is `buckets == genesis + mints − burns`,
-  and a reason nobody enumerated is itself an alarm. There is no fourth tap to find.
-- **The Street Wage is a published schedule, not a yield.** A daily budget that halves on a fixed
-  interval, drawn against a lifetime endowment, capped per account, and paid only for respect
-  actually earned that day. The budget is a ceiling: unearned budget is never minted.
+- **Supply is enumerated, and the list is shrinking.** The ledger check is
+  `buckets == genesis + mints − burns`, and a reason nobody enumerated is itself an alarm. The Street
+  Wage — the one scheduled printer — is retired, and a nightly check now asserts that no new unit of it
+  appears. Two small legacy taps remain (mission rewards and the Vig prize pool) and retire with their
+  own systems. There is no fourth tap to find.
+- **No faucet is the strong version of the promise.** With nothing paying $OMR for play, in-game $OMR
+  can never exceed what was deposited — so "you can only take out what somebody put in" stops being a
+  rule the game has to enforce and becomes an arithmetic fact about the ledger.
 - **The one conversion runs the other way, and only on money that already exists.** The Window burns
   $OMR and pays cash out of a till that real cash sinks filled. A short till refuses and burns
   nothing. It is a claim on what was collected, never a promise about what will be.
