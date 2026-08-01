@@ -3099,6 +3099,44 @@ caught a real subtlety: it attributes a check's reasons to the SQL lexically ABO
 written out rather than interpolated so the extractor can read it, with drift self-caught by the
 check itself. Suite 62/62 + sim drift-0 + pgquery 2222 statements + pgcheck 43/43 on real Postgres.
 
+**ECONOMY v3 STEP 3 — THE DESK OPENS (the daily Dutch auction)** (`src/desk.js`, `src/rules.tail.js`
+`BAND`/`DESK_AUCTION`/`auctionPriceAt`, `schema.sql` `desk_auctions`/`desk_sales`, `src/invariants.js`,
+`src/worker.js`, `src/routes/modtools.js`, `test/desk.js`; design §3.1/§3.2/§11.6/§11.7). Step 2 taught
+the desk to COLLECT; this is the outbound half, and it closes the gap step 2's header named out loud —
+*a desk that accumulates and never sells is indistinguishable, from the outside, from a burn with extra
+steps.* **THE SALE IS A TRANSFER, NOT AN ISSUANCE**, and everything else follows: the desk sells $OMR it
+already HOLDS, so `desk_inventory` falls by exactly what the buyer's account rises by and both are inside
+`omrBuckets` — conservation needs no new mint or burn term and does not move. Wall 2 ("never sells
+inventory it does not hold") therefore holds BY CONSTRUCTION, as one clamped subtraction, with no path
+that credits a buyer without decrementing the shelf. Prices are **ETH per $OMR** so the Dutch clock
+descends literally (the oracle quotes the inverse; it is inverted ONCE, at the edge). **THE RESERVE IS
+THE BAND** (`BAND.UPPER_BPS` 1.00× anchor) — there is no separate "should the desk sell today?" decision,
+because an auction that will not clear under its reserve IS that decision, and unsold inventory rolls
+with nothing to unwind (the lot is a right to sell, never an escrow). **FAIL-CLOSED on the anchor**
+(the vault `ethPrice` precedent, on the other side of the trade): no print or one past
+`ORACLE_MAX_AGE_MS` and NO AUCTION OPENS, never a fallback price — the board renders the closed state
+off the SAME read the open path refuses on, so it can never advertise a price the fill would reject.
+The lot is `min(yesterday's returns, 1% of float, the shelf)` with a **bootstrap floor** under the float
+cap (`FLOAT_CAP_MIN_OMR` — float 0 → cap 0 → no auction → nobody can buy → float stays 0). It does NOT
+run over `OmertaBond` (the bond MINTS; the desk RECYCLES — routing the auction through the mint path
+would issue supply alongside inventory that already exists); the fill is an idempotent `ref` ingest
+(the Store/bond/sell-tax pattern), chain-dormant, with a mod/QA route that books **ZERO ETH** — the $OMR
+side of a comp is real, which is safe precisely because that side is a transfer. **THE 48h VEST NEEDED
+NO CODE**: a `desk:sale` credit is a positive $OMR row, and `tax.js:earlySurcharge` replays exactly those
+as FIFO lots, so bought $OMR is already priced at the full early-exit surcharge fading over
+`FRESH_WINDOW_MS` — asserted, not assumed. §10.4: `desk:sale` rides the existing `desk:` vocabulary and
+is in NEITHER term; a new `desk sales ledgered` check reconciles `lifetime_sold` against the ledger
+(conservation is structurally blind to a sale, so this is what would catch a credit with no shelf
+decrement), plus a real-value `runDeskInvariants` (auction books, the 50/50 ETH split, *comps book no
+revenue*) wired into the worker's nightly `alertDrift` beside vig/bond/treasury. Lock order **accounts →
+desk_inventory → desk_auctions** (the recycle path holds the account before the shelf, so shelf-first
+would be an AB-BA against every sink in the game). Seven mutations, each caught at its own named
+assertion — **and one SURVIVED first**: removing the shelf clamp left the suite green because the
+fixture only ever exercised the LOT bound, so "wall 2 holds" was half-tested and read as fully tested.
+The clamp is in fact UNREACHABLE today (the lot is `min(…, shelf)` and the shelf falls by exactly what
+that lot sells), so it is kept as defence in depth and tested against a labelled synthetic drain —
+an unreachable guard is worth keeping, an untested one that reads as tested is not.
+
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
 `payPlex` pattern); named landmarks / Founder's charter numbers; ~~R2 (the `rwa_revenue` → real-RWA-buy

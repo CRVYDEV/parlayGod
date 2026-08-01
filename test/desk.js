@@ -17,9 +17,14 @@ process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import crypto from 'node:crypto';
 import { buildServer } from '../src/server.js';
-import { DESK, DESK_RECYCLE_REASON, recyclesToDesk } from '../src/rules.js';
+import { BAND, DESK, DESK_RECYCLE_REASON, recyclesToDesk, auctionPriceAt, freshWindowMs } from '../src/rules.js';
 import { ledger } from '../src/game.js';
+import { earlySurcharge } from '../src/tax.js';
+import * as Desk from '../src/desk.js';
 import { runLedgerInvariants } from '../src/invariants.js';
+
+const round6 = (n) => Math.round(n * 1e6) / 1e6;
+const round8 = (n) => Math.round(n * 1e8) / 1e8;
 
 const app = await buildServer();
 const pool = app.pool;
@@ -138,7 +143,7 @@ assert(cons.ok, `an on-chain withdrawal broke conservation (drift ${cons.drift})
 console.log('✓ withdrawing to the chain still BURNS in-game supply — the desk takes no cut of it');
 
 // ── (6) THE BOARD says what feeds the shelf, and admits what is not built ──────────────────────
-const board = (await call('GET', '/v1/desk')).body;
+let board = (await call('GET', '/v1/desk')).body;
 assert.equal(board.inventory, await shelf(), 'the board publishes the real shelf');
 assert(board.sinks.includes('vanity:%'), 'and names which spends feed it');
 assert(!board.sinks.includes('withdraw:omr') && board.notRecycled.includes('withdraw:omr'),
@@ -151,10 +156,212 @@ const vocab = (await runLedgerInvariants(pool, { alert: false })).checks.find((c
 assert(vocab.ok, `desk:recycle must be an enumerated reason: ${JSON.stringify(vocab.detail)}`);
 console.log('✓ the reason vocabulary is closed with desk:recycle in it');
 
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// STEP 3 — THE DAILY DUTCH AUCTION. The outbound half: the desk sells the shelf back.
+//
+// The sale is a TRANSFER (shelf down, buyer up, both inside omrBuckets), so the interesting failures
+// are not conservation drifts — they are the ones conservation is structurally blind to:
+//   • a buyer credited without the shelf being decremented (a mint that sums to zero anyway),
+//   • the desk selling more than it holds (wall 2),
+//   • a comp booking ETH revenue that never arrived,
+//   • the fail-closed oracle quietly falling back to a default price.
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+const priced = async (omrPerEth, ageMs = 0) => pool.query(
+  'INSERT INTO vig_buyback (id, eth_spent, omr_bought, price_omr_per_eth, to_reserve, to_prize, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+  [crypto.randomUUID(), 0, 0, omrPerEth, 0, 0, new Date(Date.now() - ageMs)]);
+
+// ── (8) FAIL-CLOSED: no price, no auction — and NEVER a default one ────────────────────────────
+// The vault's `ethPrice` lesson, on the other side of the trade. A stale oracle resolving to a
+// fallback price would put the desk's ENTIRE shelf on the wrong side of a free option, so the only
+// safe behaviour is to refuse — and the board has to say WHY, off the same read, or an operator
+// cannot tell "closed on purpose" from "broken".
+let opened = await Desk.openAuction(pool);
+assert.equal(opened.opened, false, 'an auction must not open with no oracle print at all');
+assert.equal(opened.reason, 'no_price', `expected no_price, got ${opened.reason}`);
+await priced(1000, 10 * 86400000);           // a print, but ten days old
+opened = await Desk.openAuction(pool);
+assert.equal(opened.reason, 'stale_price', `a stale print must refuse too, got ${opened.reason}`);
+board = (await call('GET', '/v1/desk')).body;
+assert.equal(board.auction, null, 'and no auction is advertised');
+assert.equal(board.closed, 'stale_price', 'the board says WHY it is closed, not just that it is');
+assert.equal(board.band.anchorEthPerOmr, null,
+  'a stale band must publish no anchor — a stale number rendered as live is worse than none');
+console.log('✓ fail-closed: no print and a stale print both refuse, and the board names the reason');
+
+// ── (9) THE LOT — yesterday's returns, and three bounds that are three different claims ────────
+// Stock the shelf through the SAME hook a player's spend takes (a big sink), so the lot is a real
+// one. Deliberately more than the dump cap allows, so the cap is exercised rather than merely present
+// — a bound that never binds is a bound nobody has tested.
+await grant(3000);
+const c1 = await pool.connect();
+await c1.query('BEGIN');
+await ledger(c1, { accountId: acct, currency: 'omr', amount: -3000, reason: 'estate:tier' });
+await c1.query('UPDATE account_persistent SET omr = omr - 3000 WHERE account_id=$1', [acct]);
+await c1.query('COMMIT');
+c1.release();
+
+await priced(1000);                           // fresh: 1000 $OMR per ETH → anchor 0.001 ETH each
+const lot = await Desk.lotSize(pool);
+assert.equal(lot.returned, Number((await books()).lifetime_in),
+  'the lot starts from what the sinks returned in the last day');
+assert(lot.qty <= lot.shelf, 'and can never exceed what is actually on the shelf (wall 2)');
+assert.equal(lot.qty, lot.floatCap,
+  'here the 1%-of-float dump cap is what binds — a huge sink day must not become a dump');
+assert(lot.returned > lot.qty, 'so most of what came home is deliberately held back for later days');
+// the bootstrap floor is not decoration: with a float near zero the cap would be zero, so no auction
+// would ever open, so nobody could buy, so the float would stay near zero.
+assert.equal(lot.floatCap, 1000, 'and on a cold start the cap is its bootstrap floor, not zero');
+console.log(`✓ the lot is min(returned ${lot.returned}, floatCap ${lot.floatCap}, shelf ${lot.shelf}) = ${lot.qty}`);
+
+// ── (10) THE OPEN — and the reserve IS the band ────────────────────────────────────────────────
+// This is the design's elegant part made checkable: there is no separate "should the desk sell
+// today?" decision, because a Dutch auction that will not clear under its reserve IS that decision.
+opened = await Desk.openAuction(pool);
+assert(opened.opened, `the auction should open with a fresh price and a stocked shelf: ${opened.reason}`);
+assert.equal(opened.anchor, 0.001, `anchor should be 1/1000 ETH per $OMR, got ${opened.anchor}`);
+assert.equal(opened.reserve, Math.round(0.001 * BAND.UPPER_BPS / 10000 * 1e8) / 1e8,
+  'the reserve IS the band s upper edge — not a separate number that can drift from it');
+assert.equal(opened.open, 0.0015, `and it opens at 1.5x the anchor, got ${opened.open}`);
+assert.equal((await Desk.openAuction(pool)).reason, 'already', 'the day is the key — one lot a day');
+// the clock descends, and is clamped at both ends so a late read cannot quote under the band
+const live = await Desk.liveAuction(pool);
+const t0 = new Date(live.opens_at).getTime(), dur = new Date(live.closes_at).getTime() - t0;
+assert.equal(auctionPriceAt(live, t0), 0.0015, 'at the bell it is the open price');
+assert.equal(auctionPriceAt(live, t0 + dur / 2), 0.00125, 'halfway it is halfway down');
+assert.equal(auctionPriceAt(live, t0 + dur), opened.reserve, 'at the close it is the reserve');
+assert.equal(auctionPriceAt(live, t0 + dur * 10), opened.reserve, 'and never below it, however late');
+console.log(`✓ the clock runs ${opened.open} → ${opened.reserve} ETH, and the reserve is the band`);
+
+// ── (11) THE FILL — a transfer, one row, and conservation that never moves ─────────────────────
+const buyerT = await mk('Vito Bidder');
+const buyer = (await pool.query('SELECT account_id FROM characters WHERE name=$1', ['Vito Bidder'])).rows[0].account_id;
+const shelfBefore = await shelf(), buyerBefore = await omrOf(buyer);
+const consBefore = (await checkOf('$OMR conservation')).drift;
+const fill = await Desk.recordAuctionBuy(pool, { ref: 'fill-1', accountId: buyer, omr: 5, txHash: '0xabc' });
+assert(fill.filled, `the fill should land: ${JSON.stringify(fill)}`);
+assert.equal(fill.omr, 5, 'for what was asked');
+assert.equal(await omrOf(buyer), buyerBefore + 5, 'the buyer holds it');
+assert.equal(await shelf(), shelfBefore - 5, 'and the shelf is down by EXACTLY that — the two are one subtraction');
+const saleRows = (await pool.query(
+  `SELECT amount, account_id FROM transactions WHERE currency='omr' AND reason='desk:sale'`)).rows;
+assert.equal(saleRows.length, 1, 'exactly one desk:sale row — the buyer was credited with no ledger row otherwise');
+assert.equal(Number(saleRows[0].amount), 5, 'ledgered for what was sold');
+assert.equal(saleRows[0].account_id, buyer, 'and against the buyer, which is what makes it vest');
+// the identity is UNTOUCHED, because nothing was created or destroyed — only moved between two
+// buckets that are both already inside it. That is why a sale needs no mint or burn term.
+assert.equal((await checkOf('$OMR conservation')).drift, consBefore,
+  'a sale moved the conservation identity — it must not: both sides are inside omrBuckets');
+assert((await checkOf('desk sales ledgered')).ok, 'and lifetime_sold matches the ledger');
+assert.equal(Number((await books()).lifetime_sold), 5, 'the desk books what it sold');
+console.log(`✓ 5 $OMR sold for ${fill.eth} ETH: a transfer off the shelf, one ledgered row, identity unmoved`);
+
+// ── (12) THE ETH — the 50/50 split, and a comp that books none of it ───────────────────────────
+assert.equal(round8(fill.polEth + fill.founderEth), fill.eth, 'the two shares sum to the gross, exactly');
+assert.equal(fill.polEth, round8(fill.eth / 2), 'POL takes half (design §3.1)');
+const comp = await Desk.recordAuctionBuy(pool, { ref: 'comp-1', accountId: buyer, omr: 2 });  // no txHash
+assert(comp.filled && comp.omr === 2, 'a comp still moves the $OMR — that side is a transfer, so it safely can');
+assert.equal(comp.eth, 0, 'but books ZERO ETH: a mod call must never be able to assert the desk was paid');
+const dinv = await Desk.runDeskInvariants(pool);
+assert(dinv.ok, `the desk's real-value invariants must hold: ${JSON.stringify(dinv.checks.filter((c) => !c.ok))}`);
+assert(dinv.checks.find((c) => c.name === 'comps book no revenue'), 'and one of them is that gate, stated as a check');
+console.log('✓ ETH splits 50/50 POL/founder, and a comp books none of it');
+
+// ── (13) WALL 2 — the desk never sells inventory it does not hold ──────────────────────────────
+// Asserted at the LEDGER, not the predicate: ask for far more than the lot and the fill CLAMPS
+// rather than either overselling or 500ing on a race for the last of a lot.
+const bigAsk = await Desk.recordAuctionBuy(pool, { ref: 'fill-big', accountId: buyer, omr: 1e9 });
+assert(bigAsk.partial, 'an oversized ask fills partially rather than failing');
+assert(await shelf() > 0, 'and the shelf still holds what the lot never covered');
+const a2 = await Desk.liveAuction(pool);
+assert.equal(Number(a2.sold_omr), Number(a2.qty_omr), 'the lot is exhausted, and not one unit over');
+// The distinction this asserts is the whole point of a daily lot: the desk HAS more $OMR, and still
+// will not sell it today. Selling the shelf on demand would make the 1%/day cap decorative.
+await assert.rejects(() => Desk.recordAuctionBuy(pool, { ref: 'fill-after', accountId: buyer, omr: 1 }),
+  (e) => e.code === 'sold_out',
+  'with the lot gone the desk refuses, even though the shelf is not empty — it will not sell tomorrow s');
+assert((await checkOf('$OMR conservation')).drift === consBefore, 'still no drift after the clamp');
+console.log('✓ wall 2 holds at the ledger: the lot clamps and then refuses, with stock still on the shelf');
+
+// ── (14) IDEMPOTENCY — a re-delivered fill is a no-op ──────────────────────────────────────────
+const dupShelf = await shelf(), dupOmr = await omrOf(buyer);
+const dup = await Desk.recordAuctionBuy(pool, { ref: 'fill-1', accountId: buyer, omr: 5, txHash: '0xabc' });
+assert(dup.duplicate && !dup.filled, 'the same ref must be a clean no-op');
+assert.equal(await shelf(), dupShelf, 'and move nothing');
+assert.equal(await omrOf(buyer), dupOmr, 'on either side');
+console.log('✓ a re-delivered fill is idempotent on its ref');
+
+// ── (15) THE VEST IS ALREADY BUILT — asserted, not implemented ─────────────────────────────────
+// Design §11.7 wants a 48h vest on auction purchases. We build no timer: a `desk:sale` credit is a
+// positive $OMR row, and tax.js replays exactly those as FIFO lots — so bought $OMR is ALREADY
+// priced at the full early-exit surcharge decaying to zero over FRESH_WINDOW_MS, which is 48h. One
+// concept, one constant. This asserts it rather than assuming it, because "we get it for free" is
+// the kind of claim that stops being true silently.
+const held = await omrOf(buyer);
+const c2 = await pool.connect();
+const fresh = await earlySurcharge(c2, buyer, held, 1, Date.now());
+c2.release();
+assert(fresh.surcharge > 0,
+  'freshly-bought $OMR must price as FRESH on exit — if this is 0 the vest silently does not exist');
+assert.equal(freshWindowMs(), 48 * 3600000, 'and the window it decays over is the design s 48h');
+console.log(`✓ the vest needs no timer: $OMR bought at the desk exits at ${(fresh.surcharge * 100).toFixed(0)}% surcharge, fading over 48h`);
+
+// ── (16) THE BOARD, live ───────────────────────────────────────────────────────────────────────
+board = (await call('GET', '/v1/desk')).body;
+assert(board.auction, 'a live auction is published');
+assert.equal(board.auction.left, round6(Number(a2.qty_omr) - Number(a2.sold_omr)), 'with what is left of the lot');
+assert(board.auction.priceEthPerOmr <= board.auction.openPrice
+  && board.auction.priceEthPerOmr >= board.auction.reservePrice, 'and a price inside its own clock');
+assert.equal(board.band.sellAbove, board.auction.reservePrice,
+  'the band the board publishes and the reserve it is selling at are the same number');
+assert.equal(board.closed, null, 'nothing is closed while it is running');
+console.log('✓ GET /v1/desk publishes the live clock, the lot, and the band it is selling against');
+
+// ── (17) UNSOLD ROLLS — there is nothing to unwind ─────────────────────────────────────────────
+// The lot is a RIGHT to sell, not an escrow: it never left the shelf, so an expired auction needs no
+// refund path and whatever did not clear is simply on the shelf for tomorrow.
+await pool.query("UPDATE desk_auctions SET closes_at = now() - interval '1 minute' WHERE status='live'");
+const rolledShelf = await shelf();
+assert(rolledShelf > 0, 'there is genuinely something unsold to roll');
+assert.equal((await Desk.closeExpired(pool)).closed, 1, 'the expired auction closes');
+assert.equal(await shelf(), rolledShelf, 'and unsold inventory simply stays on the shelf');
+assert.equal(await Desk.liveAuction(pool), null, 'with nothing live');
+assert((await checkOf('$OMR conservation')).drift === consBefore, 'conservation untouched by the close');
+console.log(`✓ ${rolledShelf} unsold $OMR rolls to tomorrow — the lot was a right to sell, never an escrow`);
+
+// ── (18) THE SHELF CLAMP — defence in depth, and today unreachable ────────────────────────────
+// Wall 2 has TWO bounds in `recordAuctionBuy`, and only one of them binds in ordinary play: the lot
+// is set at `min(returned, floatCap, shelf)` and the shelf then falls by exactly what that lot sells,
+// so the remaining lot can never exceed the shelf. The third clamp is what keeps a FUTURE drain — an
+// ops correction, step 4's buy side touching the same singleton, a bug — from turning into a mint.
+//
+// This was found by mutation: removing the shelf clamp left the suite GREEN, because the fixture only
+// ever exercised the LOT bound. "Wall 2 holds" was therefore half-tested and read as fully tested,
+// which is the failure mode this project keeps paying for. So the drain is done SYNTHETICALLY here —
+// as a bucket-to-bucket move (shelf → stake_pool, both inside omrBuckets, so conservation stays exact
+// and the drain is the shape a real one would take), because nothing in the game can currently do it.
+// (the finished auction is aged into yesterday rather than the clock being pushed into tomorrow:
+//  the lot is "what came home in the last 24h", so advancing `now` past the returns would leave
+//  nothing to sell and this section would open on an empty lot and test nothing.)
+await pool.query('UPDATE desk_auctions SET day = day - 1');
+const opened2 = await Desk.openAuction(pool);
+assert(opened2.opened, `a fresh day opens a fresh lot: ${opened2.reason}`);
+const drainTo = 300;
+const drain = (await shelf()) - drainTo;
+assert(drain > 0 && drainTo < opened2.qty, 'the drain must leave the shelf BELOW the lot, or this tests nothing');
+await pool.query('UPDATE desk_inventory SET balance = balance - $1 WHERE id=1', [drain]);
+await pool.query('UPDATE stake_pool SET balance = balance + $1 WHERE id=1', [drain]);
+const clamped = await Desk.recordAuctionBuy(pool,
+  { ref: 'fill-drained', accountId: buyer, omr: opened2.qty });
+assert.equal(clamped.omr, drainTo, 'the desk sells only what is on the shelf, not what the lot promised');
+assert.equal(await shelf(), 0, 'and the shelf lands at zero, never below it');
+assert((await checkOf('$OMR conservation')).drift === consBefore, 'with conservation still exact');
+console.log(`✓ the shelf clamp binds: a ${opened2.qty} lot on a ${drainTo} shelf sells ${clamped.omr}`);
+
 await app.close();
-console.log('\n✅ THE DESK passed — a $OMR sink now lands on the desk instead of the fire: the pair of '
-  + 'rows cancels inside the burn term while desk_inventory holds the value, so conservation is '
-  + 'untouched; the shelf reconciles against both its own books and the ledger; a pre-recycle burn '
-  + 'row still counts as the burn it was, so the change is safe on a live database; and the one '
-  + 'sink that must NOT recycle — the on-chain withdrawal — still burns, because that token leaves '
-  + 'the game rather than coming to the house.');
+console.log('\n✅ THE DESK passed — a $OMR sink lands on the desk instead of the fire (the pair of rows '
+  + 'cancels inside the burn term while desk_inventory holds the value, so conservation is untouched, '
+  + 'and a pre-recycle burn row still counts as the burn it was); the one sink that must NOT recycle — '
+  + 'the on-chain withdrawal — still burns; and the desk now SELLS. The auction is fail-closed on its '
+  + 'oracle, its reserve IS the band s sell side, the sale is a transfer off a shelf we hold rather '
+  + 'than a mint, a comp books no ETH, and the 48h vest needed no timer because a sale credit is '
+  + 'already a fresh FIFO lot.');

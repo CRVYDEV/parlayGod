@@ -302,6 +302,13 @@ async function collectLedgerChecks(pool) {
   // the summed rows, which is precisely what this check reports.
   const recycled = await sum(pool, "currency='omr' AND reason='desk:recycle'");
   push('desk inventory ledgered', Number(desk.lifetime_in), recycled, 0.001, { recycled });
+  // (d1c) THE OUTBOUND HALF (economy v3 step 3). The sale is a TRANSFER — shelf down, buyer up, both
+  // inside omrBuckets — so conservation above never moves and cannot catch a sale that credited a
+  // buyer without decrementing the shelf. This does: what the desk says it has sold must equal what
+  // the ledger says it handed over. (The `desk:sale` row is also what makes a purchase VEST, since
+  // tax.js replays credits as FIFO lots — so a missing row is two defects, not one.)
+  const sold = await sum(pool, "currency='omr' AND reason='desk:sale'");
+  push('desk sales ledgered', Number(desk.lifetime_sold), sold, 0.001, { sold });
 
   // (d2) AUCTION ESCROW ($OMR): live standing bids == bid − refunded − won (the bounty-escrow twin,
   // on the $OMR side). bid rows are negative (escrowed in); refund rows positive (out); auction:win

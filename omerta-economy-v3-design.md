@@ -260,7 +260,30 @@ Each step is shippable and testable alone; nothing is deleted before its replace
    chain rather than into the house, so recycling it would put the same unit in a player's wallet
    and on our shelf at once. The recycle hooks `game.js:ledger` rather than the ~60 sink call sites,
    because a recycle you have to remember is one a new sink will forget.
-3. **The daily auction.** Dutch, reserve-priced at the band floor, over the existing bond contract.
+3. **The daily auction — BUILT 2026-08-01.** Dutch, once a day, reserve-priced at the band's SELL
+   edge (`UPPER`, not the floor — the floor is where the buyback would BUY, and the line as written
+   had the wrong edge). Four corrections/clarifications to this line as written:
+   *(a)* the sale is a **TRANSFER, not an issuance**: the desk sells $OMR it already holds, so
+   `desk_inventory` falls by exactly what the buyer's account rises by and both are inside
+   `omrBuckets`. Conservation therefore needs no new mint or burn term and does not move — wall 2
+   ("the desk never sells inventory it does not hold") holds by construction rather than assertion,
+   because it is one clamped subtraction. The `desk:sale` row is written for auditability, and for
+   the vest.
+   *(b)* it is **NOT over the bond contract** off-chain. `OmertaBond` MINTS against ETH; the desk
+   RECYCLES. Running the auction through the mint path would issue new supply alongside inventory
+   that already exists, which is exactly the double-count wall 1 forbids. The fill arrives through
+   an idempotent ingest (the Store/bond/sell-tax `ref` + `txHash` pattern), chain-dormant, with a
+   mod/QA route that books ZERO ETH.
+   *(c)* **the 48h vest needed no code.** A `desk:sale` credit is a positive $OMR row on the buyer's
+   account, and `tax.js:earlySurcharge` replays exactly those as FIFO lots — so bought $OMR is
+   already priced at the full early-exit surcharge decaying to zero over `FRESH_WINDOW_MS`, which is
+   48h. §11.7's "one concept, one constant" was more literally true than it looked; the suite asserts
+   it rather than assuming it.
+   *(d)* the 1%-of-float cap needed a **bootstrap floor** (`FLOAT_CAP_MIN_OMR`): with a float of zero
+   the cap is zero, so no auction opens, so nobody can buy, so the float stays zero. Also: the anchor
+   is fail-closed on the oracle (no print or a stale one → no auction, and never a fallback price),
+   and the shelf clamp — the third of wall 2's three bounds — is unreachable in today's code and is
+   tested against a synthetic drain rather than left as an untested claim.
 4. **The band + buyback.** Off the existing oracle. Budgeted, never promised.
 5. **The float** (§5) — the nut, the clearing window, the stake. Re-sim the loot rate here.
 6. **The v4 hook** — mainnet, asymmetric, POL-funding.

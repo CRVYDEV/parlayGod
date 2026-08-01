@@ -3703,3 +3703,71 @@ regime the wage is flat anyway and the dilution has nobody to dilute.
 **The population number is the thing to watch.** Below ~100 wage-eligible accounts none of this
 bites; above it, a farm's take comes directly out of honest players. `GET /v1/mod/overview` already
 reports active accounts — that figure crossing 100 is the trigger to decide.
+
+---
+
+## THE DESK OPENS — the daily Dutch auction (economy v3 step 3, founder-directed 2026-08-01)
+
+Step 2 taught the desk to COLLECT (a $OMR sink hands the token over instead of destroying it). This
+is the outbound half — and it closes an honest gap step 2's own header named out loud: *a desk that
+accumulates and never sells is indistinguishable, from the outside, from a burn with extra steps.*
+
+**The one fact that decides everything else: the sale is a TRANSFER, not an issuance.** The desk
+sells $OMR it already holds, so `desk_inventory` falls by exactly what the buyer's account rises by,
+and both are inside `omrBuckets`. Conservation therefore needs no new mint or burn term and does not
+move. That is wall 2 ("the desk never sells inventory it does not hold") holding **by construction**
+rather than by assertion — it is one clamped subtraction, and there is no code path that credits a
+buyer without decrementing the shelf.
+
+Three consequences worth stating, because each replaced something I expected to have to build:
+
+- **The 48h vest needed no code.** A `desk:sale` credit is a positive $OMR row on the buyer's
+  account, and `tax.js:earlySurcharge` replays exactly those rows as FIFO lots. Bought $OMR is
+  therefore *already* priced at the full early-exit surcharge decaying to zero over
+  `FRESH_WINDOW_MS` — which is 48h, the design's number. One concept, one constant: simultaneously
+  the anti-dump, the float creator, and the §5(ii) loot exposure window. The suite asserts it rather
+  than assuming it, because "we get it for free" is the kind of claim that stops being true silently.
+- **The reserve IS the band.** There is no separate "should the desk sell today?" decision, because
+  a Dutch auction that will not clear under its reserve *is* that decision. Unsold inventory rolls,
+  and there is nothing to unwind — the lot is a right to sell, never an escrow.
+- **It does NOT run over `OmertaBond`,** contrary to the migration line as written. The bond MINTS
+  against ETH; the desk RECYCLES. Running the auction through the mint path would issue new supply
+  alongside inventory that already exists.
+
+### The numbers (all founder sign-off levers, pinned in `test/levers.js`)
+
+| lever | value | why |
+|---|---|---|
+| `BAND.ANCHOR_DAYS` | 30 | manipulation cost scales with the window; shorter and a whale sets our price |
+| `BAND.UPPER_BPS` | 10000 (1.00×) | sell at or above the 30-day average — roughly half of all days |
+| `BAND.LOWER_BPS` | 8000 (0.80×) | the BUY edge (step 4). Pinned now so the pair cannot drift apart |
+| `DESK_AUCTION.DURATION_MS` | 6h | long enough for a global player base to see one |
+| `DESK_AUCTION.OPEN_BPS` | 15000 (1.5×) | high enough that a genuine squeeze can clear up there; nobody is forced to bid it |
+| `DESK_AUCTION.FLOAT_CAP_BPS` | 100 (1%/day) | a huge sink day must not become a dump |
+| `DESK_AUCTION.FLOAT_CAP_MIN_OMR` | 1000 | **the bootstrap floor, and it is not decoration** — with a float of zero the cap is zero, so no auction opens, so nobody can buy, so the float stays zero |
+| `DESK_AUCTION.ORACLE_MAX_AGE_MS` | 48h | then FAIL-CLOSED |
+| `DESK_AUCTION.ETH_POL_BPS` | 5000 | ETH proceeds split 50/50 POL / founder (design §3.1) |
+
+**Fail-closed, and why it is not optional.** No oracle print, or one older than
+`ORACLE_MAX_AGE_MS`, and **no auction opens** — it never falls back to a default price. This is the
+vault's `ethPrice` lesson on the other side of the trade: "we don't know what $OMR costs" resolving
+to "sell it at the default" is a standing free option on the desk's entire shelf. The board renders
+the closed state off the *same* read the open path refuses on, so it can never advertise a price the
+auction would reject, and it names the reason so an operator can tell "closed on purpose" from
+"broken".
+
+**What is deliberately NOT measured yet.** Revenue here is `sink volume × price`, and the price is a
+market that does not exist until mainnet. The sim can bound the *quantity* (it is the recycle volume
+step 2 already routes) but not the clearing price, so there is no honest $/day figure to publish and
+none is claimed. What can be said: the auction cannot emit — every unit it sells was already inside
+`omrBuckets` before the sale, which is the whole point.
+
+### The mutation that survived, and what it exposed
+
+Removing the shelf clamp — the third of wall 2's three bounds — left the suite **green**, because the
+fixture only ever exercised the LOT bound. "Wall 2 holds" was half-tested and read as fully tested.
+The reason is structural: the lot is set at `min(returned, floatCap, shelf)` and the shelf then falls
+by exactly what that lot sells, so in today's code the remaining lot **can never exceed the shelf** —
+the clamp is unreachable. It is kept as defence in depth (a future ops correction, step 4's buy side
+touching the same singleton, a bug) and is now tested against a *synthetic* drain, labelled as such.
+An unreachable guard is worth keeping; an untested one that reads as tested is not.

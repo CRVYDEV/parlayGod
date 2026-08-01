@@ -7,6 +7,7 @@ import { runLedgerInvariants, alertDrift } from '../invariants.js';
 import { TAX, withdrawTaxBps } from '../rules.js';
 import * as Bonds from '../bonds.js';
 import * as Chain from '../chain.js';
+import * as Desk from '../desk.js';
 import * as Fees from '../fees.js';
 import * as G from '../game.js';
 import * as Loans from '../loans.js';
@@ -145,6 +146,18 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
     // treasury received ETH it did not.
     app.post('/v1/mod/treasury/tax', { preHandler: modAuth }, async (req) =>
       Treasury.recordSellTax(pool, { ref: req.body?.ref, omrTaxed: req.body?.omrTaxed, priceOmrPerEth: req.body?.price, txHash: modRealTxHash(req) }));
+    // THE DESK (economy v3 step 3). `/desk` is the real-value invariant — the ETH side of the daily
+    // auction (the $OMR side is §10.4's `desk sales ledgered`). `/desk/open` forces today's auction
+    // rather than waiting for the worker tick, and `/desk/fill` is the QA/comp purchase path until
+    // the on-chain leg is wired (the Store's `mod/store/grant` precedent). The modRealTxHash gate
+    // stands on the fill for exactly the same reason it stands on the bond: the $OMR side of a comp
+    // is real (a transfer off a shelf we hold, so it can be), but "the desk received this much ETH"
+    // must never be assertable by a mod call.
+    app.get('/v1/mod/desk', { preHandler: modAuth }, async () => Desk.runDeskInvariants(pool));
+    app.post('/v1/mod/desk/open', { preHandler: modAuth }, async () => Desk.openAuction(pool));
+    app.post('/v1/mod/desk/fill', { preHandler: modAuth }, async (req) =>
+      Desk.recordAuctionBuy(pool, { ref: req.body?.ref, accountId: req.body?.account,
+        omr: req.body?.omr, txHash: modRealTxHash(req) }));
     app.post('/v1/mod/bond/fund', { preHandler: modAuth }, async (req) => Bonds.fundBondTranche(pool, req.body?.omr)); // top up the tranche
     app.post('/v1/mod/bond/simulate', { preHandler: modAuth }, async (req) => // QA/comp until the paywall (the Store precedent)
       // No txHash = a pure comp: books the bond + OMR tranche but NO real-ETH Vig/POL accounting (audit
