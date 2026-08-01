@@ -289,14 +289,33 @@ Businesses are premium, level-gated, **upgradeable** places that earn pocket cas
 personal-income engine, different from flat Rackets and Assets. Catalog: **Laundromat (L15) to
 Casino (L58)**. Each has 3 levels. You can own one of each kind. `GET /v1/catalog` [public] lists
 them all. *(Fronts no longer launder anything — cash can't become $OMR anywhere since the wash
-houses shut. A front's risk today is other players, not the Bureau.)*
+houses shut.)*
 
 Loop: **buy** (`/v1/business/:kind/buy`) → **collect** (income accrues, 24-hour limit,
 `/business/collect`) → **upgrade** (`/business/:id/upgrade`) → **pay the upkeep**.
 
-- **Upkeep** (also called "the pad," `/business/upkeep`) — this is 20% of the hourly income (and
-  it climbs the more fronts you run). It accrues to a 7-day limit. If you do not pay for 3 days,
-  the business becomes **cold** (no income, no upgrades) until you pay.
+### The pad, and why a front can owe you money
+
+**A front wants an owner who shows up, and the terms say so.** The till only holds a **day** of
+takings (income stops banking after 24 hours) but the pad — protection and wages, 20% of the
+hourly income — keeps running for a **week** whether you are there or not. So an absent owner can
+genuinely owe more than the place can hand back. That is the deal working as written, not a
+fault: it is what happens to an absentee owner. Collect every day or two and a front is an engine;
+buy one and forget it and it is a debt.
+
+- **Upkeep** (also called "the pad," `/business/upkeep`) — 20% of the hourly income, and it climbs
+  5% for every extra front you run, on *all* of them. It accrues to a 7-day limit. Unpaid for
+  3 days the business goes **cold** — no income, no upgrades, no specialization — until you square
+  it out of pocket.
+- **Closing up** (`DELETE /v1/business/:id`) — the way out. A cold front you cannot carry does not
+  merely sit idle: you can only own one of each kind, so it holds that slot for the rest of your
+  street's life. Close it and the pad stops and the slot frees; you can buy that kind again later
+  at level-1 prices. It is permanent — the tier, the specialization and everything sunk in go with
+  it, and you get back whatever `BUSINESS_SHUTTER_BPS` is set to (shipped at 0 — nothing).
+- **The Bureau** — a front heats up by *earning*. Every full day's income you bank adds to its
+  file; past the threshold the Bureau rolls a raid that seizes the pending take and fines you.
+  Collecting often keeps the file thin and any raid small. **The Accountant** and **The Fixer**
+  specializations halve the heat and the fine.
 - **Shakedown** (`/business/:id/shakedown`) — a rival takes 30% of the pending income in a muscle
   and cunning contest (8-hour cooldown, costs energy and heat). You cannot shake down a family
   member or a safehoused owner.

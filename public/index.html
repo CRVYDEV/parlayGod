@@ -1158,6 +1158,7 @@
     <dt>The Family / Turf / Commission</dt><dd>Join a family for backup, <b>turf</b> income, and <b>wars</b>. <b>Tribute</b> is what you kick up; the <b>Commission</b> is the five biggest families setting the week's rules.</dd>
     <dt>Vendetta</dt><dd>Kill a man and his bloodline swears a blood feud against yours. Settle it with revenge inside the window for feared respect. Kill them again and it DEEPENS (Vendetta → Blood Feud → War of Extinction — a longer window). Or hold a <b>sit-down</b> and both lines bury it in peace.</dd>
     <dt>The Underworld</dt><dd>Named fixers — the Doc, Vinnie, Bella, Big Tuna, the Madame. Earn their <b>standing</b> by working their corner of the game for discounts and favors. Cross them and they hold a grudge.</dd>
+    <dt>The Pad / Cold</dt><dd>A front's upkeep — protection and wages, owed every hour whether the place earns or not. The till only holds a <b>day's</b> take; the pad keeps running for a <b>week</b>. Stay away too long and you owe more than the front can hand you and it goes <b>cold</b> — no income until you square it out of pocket. That's the deal, not a fault: a business wants an owner who shows up. If you can't carry it, <b>close it up</b> and the pad stops.</dd>
     <dt>Renown · Notoriety · Scrutiny</dt><dd>Reputations that follow you: <b>renown</b> is your nightlife legend; <b>notoriety</b> heats a club toward a raid; <b>scrutiny</b> is the Bureau's file on you. Watched heat — you can't just wait it out.</dd>
     <dt>The Wire</dt><dd>Information you buy with $OMR: <b>tap</b> a rival to see what they're holding and whether they're hunting you; <b>sweep</b> your own lines clean; <b>subscribe</b> to the Street Wire for forecasts and threat chatter.</dd>
   </dl>
@@ -1767,6 +1768,7 @@
       ? `paid $${fmt(body.paid)} of the pad — still $${fmt(body.stillOwed)} owed, so those fronts stay cold`
       : `couldn't cover the pad — $${fmt(body.stillOwed)} owed and you don't have it. Earn it elsewhere; the fronts stay cold until it's square.`);
     else if (body.paid > 0) bits.push(`paid $${fmt(body.paid)} — the pad is square`);
+    if (body.shuttered) bits.push(`closed up the ${body.shuttered} — the pad on it stops${body.back > 0 ? `, $${fmt(body.back)} back` : ', nothing back'}`);
     // the circuit already sends YOUR power and the FIELD's; printing neither made a $25k tune a
     // coin-flip purchase — you could not tell whether one more level would have taken it.
     if (typeof body.win === 'boolean' && (body.field !== undefined || body.wager !== undefined)) {
@@ -5169,14 +5171,18 @@
       ${owned.length ? `<div class="grid">${owned.map((b) => `
         <div class="card">${aart('business', b.kind)}<span class="t">${b.name} · tier ${b.tier}</span>
           ${b.cold ? '<span class="chip bad">COLD — pay the pad</span>' : ''}${b.raidRisk ? '<span class="chip bad">FEDS WATCHING</span>' : ''}
-          <div class="d">$${fmt(b.incomePerHr)}/hr · pending $${fmt(b.pending)} · pad owed $${fmt(b.upkeepOwed)}</div>
-          ${b.upkeepOwed > b.pending ? `<div class="d" style="color:var(--warn)">the pad has outrun the till — squaring it costs
-            $${fmt(b.upkeepOwed - b.pending)} more than this front can hand you right now. Income stops banking after a day away;
-            the pad keeps running for a week. Pay it and it earns again, or leave it cold until you can.</div>` : ''}
+          <div class="d">$${fmt(b.incomePerHr)}/hr · pending $${fmt(b.pending)} · the pad $${fmt(b.upkeepPerHr)}/hr, owed $${fmt(b.upkeepOwed)}</div>
+          ${!b.cold && b.coldSeconds ? `<div class="d" style="color:${b.padOutran ? 'var(--warn)' : 'var(--dim)'}">the boys come for the envelope in ${mins(b.coldSeconds)} — miss it and the place goes cold</div>` : ''}
+          ${b.padOutran ? `<div class="d" style="color:var(--warn)">the pad has outrun the till — squaring it costs
+            $${fmt(b.upkeepOwed - b.pending)} more than this front can hand you right now. <b>That is the deal, not a fault:</b>
+            the till only holds a day's take while the envelope runs for a week whether you're here or not — a front pays
+            an owner who shows up. Pay it out of pocket and it earns again, leave it cold until you can, or close it up.</div>` : ''}
           <div class="d">${b.kind === 'casino' ? 'den rakeback at collect' : 'earns while you are away — collect at least every couple of days, or the pad gets ahead of it'}</div>
           ${b.scrutiny > 0 ? `<div class="d" style="color:var(--dim)">Bureau heat ${b.scrutiny}/${b.raidThreshold} — earning draws the eye; a raid seizes the pending + a fine. Collect often and it catches less.</div>` : ''}
           ${b.specName ? `<span class="chip good">✦ ${b.specName}</span>` : ''}
           ${b.nextTier ? `<button class="act" data-bizup="${b.id}">upgrade → tier ${b.tier + 1} ($${fmt(b.nextTier.cost)})</button>` : ''}
+          <button class="act" data-bizshut="${b.id}:${esc(b.name)}:${b.shutterValue}"
+            style="border-color:var(--bad);color:var(--bad)">close it up${b.shutterValue ? ` (+$${fmt(b.shutterValue)})` : ''}</button>
 
           ${b.maxed ? `<div class="d" style="margin-top:4px">specialize (${b.specOmr} $OMR): <button class="act" data-bizspec="${b.id}:fortress">${(rules?.empire?.specs?.fortress?.name) || 'The Fortress'}</button> <button class="act" data-bizspec="${b.id}:accountant">${(rules?.empire?.specs?.accountant?.name) || 'The Accountant'}</button> <button class="act" data-bizspec="${b.id}:fixer">${(rules?.empire?.specs?.fixer?.name) || 'The Fixer'}</button> <span style="color:var(--dim);font-size:11px">(takeover defence · half the Bureau heat · half the fine + cools 2×)</span></div>` : '<div class="d" style="font-size:11px;color:var(--dim)">max the tier to specialize</div>'}</div>`).join('')}</div>`
         : '<span class="d" style="color:var(--dim)">no fronts yet — the catalog is below</span>'}
@@ -5184,10 +5190,16 @@
         <div class="d">force a rival's front to sell to you (${fmt(rules?.empire?.takeover?.fee || 0)} fee, burns win or lose; lvl ${rules?.empire?.takeover?.minLevel || 20}+, you can't already run that kind)</div>
         <input id="biz-takeover-id" placeholder="rival front id" size="24"> <button class="act" id="biz-takeover-go">muscle in</button></div>
 
-      <h2 style="margin-top:12px">The Catalog <span class="d" style="font-size:11px">(passive income — buy once, collect forever)</span></h2>
+      <h2 style="margin-top:12px">The Catalog <span class="d" style="font-size:11px">(passive income — but a front wants an owner who shows up)</span></h2>
+      ${cat.length ? `<div class="card" style="border-color:var(--warn)"><span class="t" style="color:var(--warn)">THE TERMS, BEFORE YOU BUY</span>
+        <div class="d">A front earns while you're away — but only the first <b>${cat[0].incomeCapHours}h</b> of it banks in the till,
+        and the pad (protection, wages) is <b>${(cat[0].upkeepBps / 100).toFixed(0)}% of the take</b> and keeps running for <b>${cat[0].upkeepCapHours}h</b>
+        whether you're there or not. Stay away past <b>${Math.round(cat[0].coldHours / 24)} days</b> and you owe more than the place can hand you and it goes
+        <b>COLD</b> — no income until you square it out of pocket. Every extra front you own raises the pad on <i>all</i> of them
+        by ${(cat[0].progBps / 100).toFixed(0)}%. Collect every day or two and it's an engine; buy one and forget it and it's a debt.</div></div>` : ''}
       <div class="grid">${cat.map((c) => `
         <div class="card">${aart('business', c.kind)}<span class="t">${c.name}</span>${ownedKinds.has(c.kind) ? '<span class="chip good">owned</span>' : ''}
-          <div class="d">level ${c.lvl}+ · t1 $${fmt(c.tiers[0].cost)} → $${fmt(c.tiers[0].incomePerHr)}/hr</div>
+          <div class="d">level ${c.lvl}+ · t1 $${fmt(c.tiers[0].cost)} → $${fmt(c.tiers[0].incomePerHr)}/hr <span style="color:var(--warn)">− $${fmt(c.upkeepPerHr)}/hr pad</span></div>
           ${ownedKinds.has(c.kind) ? '' : `<button class="act" data-bizbuy="${c.kind}">buy</button>`}</div>`).join('')}</div>
 
       <h2 style="margin-top:14px">Rackets <span class="d" style="font-size:11px">— buy once, drip cash forever (banks to the treasury via the tithe on melt)</span></h2>
@@ -5219,6 +5231,15 @@
       act('POST', `/v1/business/${b.dataset.bizup}/upgrade`, {}).then(() => renderEmpire()));
     t.querySelectorAll('[data-bizspec]').forEach((b) => b.onclick = () => { const [id, spec] = b.dataset.bizspec.split(':');
       act('POST', `/v1/business/${id}/specialize`, { spec }).then(() => renderEmpire()); });
+    // WALK AWAY. Irreversible and it frees the UNIQUE(character, kind) slot, so it gets the same
+    // confirm the other one-way doors get (FIRE, the shank, the loan collect).
+    t.querySelectorAll('[data-bizshut]').forEach((b) => b.onclick = async () => {
+      const [id, name, back] = b.dataset.bizshut.split(':');
+      const ok = await ask(`Close up the ${name}?`, `It's gone for good — the tier, the specialization and every dollar sunk in.
+        You get $${fmt(Number(back) || 0)} back${Number(back) ? '' : ' — nothing'}, and the pad on it stops. You'd be free to buy that
+        kind of front again later, at t1 prices.`, { yes: 'close it up', no: 'keep it', danger: true });
+      if (ok) act('DELETE', `/v1/business/${id}`, {}).then(() => renderEmpire());
+    });
     { const g = $('#biz-takeover-go'); if (g) g.onclick = () => act('POST', `/v1/business/${$('#biz-takeover-id').value.trim()}/takeover`, {}).then(() => renderEmpire()); }
     { const lb = t.querySelector('#launderer-board'); if (lb) lb.onclick = async (e) => { e.preventDefault();
       const b = (await api('GET', '/v1/leaderboard/launderers')).body?.launderers || [];

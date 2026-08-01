@@ -598,6 +598,31 @@ to the 24h cap, not banked), `launder`/`upgrade` throw `cold`, until the pad tha
 resets `upkeep_at` (squares the books, no retroactive rate bump). View surfaces `upkeepPerHr`/
 `upkeepOwed`/`cold`. `test/economy.js`: rate+owed in the view, ledgered pay resetting the clock,
 the cold gate (no income/launder/upgrade) + thaw. All numbers founder sign-off levers.
+**THE PAD MADE LEGIBLE, AND AN EXIT (founder-directed 2026-08-01, from tester feedback: "how can I
+owe more in wages than my laundromat brings in?").** Two things were true at once. The FICTION is
+sound — the till holds a DAY's take (`BUSINESS_CAP_MS`) while the envelope runs a WEEK
+(`BUSINESS_UPKEEP_CAP_MS`), so past the ~5-day break-even an absent owner genuinely owes more than
+the place can hand back, which is exactly what happens to an absentee owner and is a better mechanic
+than a risk-free drip. But the game never SAID so before the purchase, never warned as it slid, and —
+**the actual defect** — never let you out: `businesses` is `UNIQUE(character_id, kind)`, so a cold
+front whose pad you couldn't cover didn't merely sit idle, it HELD THE SLOT and barred that business
+kind for the rest of the street's life. A permanent block on an entry-tier asset, reached by taking a
+week off. Shipped: the terms ride with the price (`catalog()` now returns `upkeepPerHr` + the
+till/envelope/cold windows + the progressive rate — the client re-derives nothing, the racket-"/hr"
+precedent), `coldSeconds` counts down to the moment it goes dark, `padOutran` names the crossover on
+the card in dollars *and says why*, a coach rung leads the tail whenever any front is cold, the
+mechanic is in the glossary + both codices — and **`DELETE /v1/business/:id`** (`shutterBusiness`,
+confirm-gated) closes a front for good: the pad stops, the slot frees, you may buy that kind again at
+tier 1. `BUSINESS_SHUTTER_BPS` (new pinned lever) ships at **0** — walking away returns nothing, the
+harshest reading, chosen because it moves no value at all (so it needs no sign-off) and because the
+door exists to stop a permanent block, not to refund a bad week. The pad dying with the front is not a
+loophole: `upkeepOwed` is COMPUTED from `upkeep_at` and never stored, so there is no debt left behind
+to forgive — you forfeit everything sunk in. §10.4 untouched (the shutter writes a ledger row only if
+the lever is raised above 0). `test/economy.js` covers the catalog terms, the countdown, the warm→cold
+slide, the crossover, `not_yours`, the close, and the freed slot (all mutation-verified); the coach
+rung is walked in `test/growth.js`; the whole flow is browser-probed through the real UI. The economic
+levers that would remove the crossover ITSELF (`BUSINESS_UPKEEP_CAP_MS` 7d→2d, capping the pad at the
+pending take) remain OPEN and unretuned — BALANCE.md § THE PAD OUTRUNS THE TILL.
 **Step two — TERRITORY-RACKET upkeep — BUILT** (`src/territory.js`): the same pattern at the GANG
 level — every operation owes `TERRITORY_UPKEEP_BPS` (20%) of its income, accrued on
 `territory_rackets.upkeep_at` up to 7d; a boss/underboss pays it from the TREASURY

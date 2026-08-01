@@ -3183,15 +3183,38 @@ front can ever hand back, so the rational move is to abandon it. There is no sel
 an entry-tier asset sold to a level-15 player as "earns while you are away" becomes a dead $75k
 purchase the first time they take a week off — and a week off is a normal thing for a player to do.
 
-NOT RETUNED (ground rule #1 — `BUSINESS_UPKEEP_BPS` / `_CAP_MS` / `_COLD_MS` are all signed). What
-shipped instead is legibility: the front card now states the gap in dollars when the pad has outrun
-the till, and the collect/pay toasts say what happened instead of "ok".
+NOT RETUNED (ground rule #1 — `BUSINESS_UPKEEP_BPS` / `_CAP_MS` / `_COLD_MS` are all signed).
 
-The levers, cheapest first:
+**RESOLVED, and the resolution was not a retune** (founder: *"how can we make it clear that this is
+part of the game to the user or expand on this"*). Two things were true at once: the FICTION is
+sound — this is exactly what happens to an absentee owner, and "a front wants an owner who shows up"
+is a better mechanic than a risk-free drip — but the game never SAID so before the purchase, never
+warned as it slid, and, the actual defect, **never let you out**. `businesses` is
+`UNIQUE(character_id, kind)`, so a cold front whose pad you could not cover did not merely sit idle:
+it held the slot, and that business kind was barred to that street forever. A permanent block on an
+entry-tier asset, reached by taking a week off. So what shipped is the terms, the warning, and a door:
+
+| shipped | where |
+|---|---|
+| The pad quoted with the price, plus the 24h-till / 7d-envelope asymmetry, the cold window and the progressive rate | `GET /v1/catalog` → the Empire catalog card |
+| `coldSeconds` — a countdown to the moment it goes dark | the front card ("the boys come for the envelope in 14h") |
+| `padOutran` — the server naming the crossover, with the gap in dollars and *why* | the front card |
+| a coach rung at the head of the tail when any front is cold | the plan box |
+| **`DELETE /v1/business/:id`** — close it up: the pad stops, the slot frees, you can buy that kind again at tier 1 | the front card, confirm-gated |
+| the mechanic named in the glossary and both codices | `?` · `docs/WIKI.md` · `/wiki` |
+
+**`BUSINESS_SHUTTER_BPS` = 0** (new lever, pinned): closing up returns nothing — the harshest reading,
+chosen because it needs no sign-off (it moves no value at all) and because the point of the door is
+to stop a permanent block, not to refund a bad week. Raise it and closing up pays back that share of
+everything sunk into the front. The pad dying with the front is not a loophole: `upkeepOwed` is
+COMPUTED from `upkeep_at` and never stored, so walking away leaves no debt to forgive — you forfeit
+the lot.
+
+The economic levers remain OPEN and unretuned if the founder wants the crossover itself gone:
 - **`BUSINESS_UPKEEP_CAP_MS` 7d → 2d.** Caps the pad at $115,200 against a $288,000 till, so the
-  front is always worth reviving. Smallest change, keeps the bleed, removes the trap.
+  front is always worth reviving. Smallest change, keeps the bleed, removes the crossover.
 - **Cap the pad at the pending take.** The pad can never exceed what the front holds for you; neglect
   costs you the income, not a debt. Strongest guarantee, biggest departure from the current model.
-- **Let a cold front be sold** (say `BUSINESS_RESALE_BPS` of tier cost) so a bad week has an exit.
-- **Leave it.** Defensible if the intent is that fronts demand attendance — but then the catalog copy
-  should say so before the purchase, not after the week.
+- **`BUSINESS_SHUTTER_BPS` > 0** so closing up returns something.
+- **Leave it.** Now defensible in a way it was not before: the terms ship with the price and there is
+  a way out.

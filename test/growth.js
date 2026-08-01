@@ -430,8 +430,14 @@ await pool.query(`UPDATE account_persistent SET smuggled=1000 WHERE account_id='
 await seedCh(rook.id, `respect=${10 * 22 * 22}`);
 assert.equal(await coachOf(), 'Blood on the ledger', 'lvl 22+ never drew blood → the Dueling Circuit');
 await pool.query(`INSERT INTO masteries (character_id, track_id, xp) VALUES ('${rook.id}', 'wetwork', 10)`);
-// the tail: most-clearable first, the permanent decline LAST, so nothing masks anything
+// the tail: most-clearable first, the permanent decline LAST, so nothing masks anything.
+// THE PAD — a cold front is the most actionable thing on the list when it happens (it earns nothing
+// while the envelope keeps running), so it leads the tail. rook already owns cb-front-1; push its pad
+// past the cold window and the rung must surface AHEAD of the bank nudge, then clear when squared.
 await seedCh(rook.id, 'cash=400000, bank=0, energy=0');
+await pool.query(`UPDATE businesses SET upkeep_at = now() - interval '5 days' WHERE id='cb-front-1'`);
+assert.equal(await coachOf(), 'A front has gone cold', 'a cold front leads the tail — it bleeds while it sits');
+await pool.query(`UPDATE businesses SET upkeep_at = now() WHERE id='cb-front-1'`);
 assert.equal(await coachOf(), 'You\'re carrying too much', 'a fat pocket surfaces the bank nudge');
 await seedCh(rook.id, 'cash=0, bank=0, energy=999');
 assert.equal(await coachOf(), 'Full tank', 'banked + rested surfaces the energy rung');

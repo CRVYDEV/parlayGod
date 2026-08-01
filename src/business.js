@@ -57,6 +57,10 @@ export function upkeepOwed(row, count = 1, now = Date.now()) {
 // a front whose pad has gone unpaid past the cold window produces nothing until squared
 export const isCold = (row, now = Date.now()) =>
   now - new Date(row.upkeep_at).getTime() >= CONSTANTS.BUSINESS_UPKEEP_COLD_MS;
+// ...and how long until it does. A player who can see "the boys walk in 14h" is making a CHOICE;
+// one who only ever meets the word COLD has been ambushed by a rule nobody told them.
+export const coldSeconds = (row, now = Date.now()) => Math.max(0,
+  Math.ceil((new Date(row.upkeep_at).getTime() + CONSTANTS.BUSINESS_UPKEEP_COLD_MS - now) / 1000));
 
 // The 1% street tax on the house-take feeds the 12h buyback (spec §7.12); mirrors economy.js.
 async function takeHouse(client, tax) {
@@ -254,6 +258,36 @@ export async function payBusinessUpkeep(ch, client, h) {
   if (paid <= 0 && stillOwed <= 0) return { ok: true, paid: 0, message: 'The pad is square.' };
   h.owned.businesses = await businessesOf(client, ch.id);
   return { ok: true, paid, fronts: settled, ...(stillOwed > 0 ? { stillOwed } : {}) };
+}
+
+// WALK AWAY — hand the keys back and close the place up.
+//
+// THE DEFECT THIS CLOSES. `businesses` is UNIQUE(character_id, kind), so a cold front was not merely
+// idle: it held the slot. A player whose pad had outrun the till could neither revive that front nor
+// ever own that KIND of front again — a permanent block, on the entry-tier asset, arrived at by
+// doing the most ordinary thing a player does, which is take a week off. The bleed is the design;
+// the dead end was not.
+//
+// §10.4: at BUSINESS_SHUTTER_BPS 0 this moves NO value — it is a pure ownership deletion, like
+// scrapping a car, and writes no ledger row. Raise the lever and it pays out `business:shutter`,
+// which rides the existing `business:` cash vocabulary (no invariant change either way).
+//
+// The pad DIES WITH THE BUSINESS, and that is not a loophole: upkeepOwed is COMPUTED from
+// upkeep_at, never stored as a debt, so there is nothing owed to forgive — walking away simply
+// stops the clock that was generating the number. You lose the front and everything you sank into
+// it, which is a real price for a real mistake.
+export async function shutterBusiness(ch, businessId, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', "You can't close up from a cell.");
+  const r = (await client.query('SELECT * FROM businesses WHERE id=$1 AND character_id=$2 FOR UPDATE', [businessId, ch.id])).rows[0];
+  if (!r) throw new GameError('not_yours', "That's not your business.");
+  const back = Math.floor(businessAssessedValue(r.kind, r.tier) * (CONSTANTS.BUSINESS_SHUTTER_BPS / 10000));
+  if (back > 0) {
+    ch.cash = Number(ch.cash) + back;
+    await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: back, reason: 'business:shutter' });
+  }
+  await client.query('DELETE FROM businesses WHERE id=$1', [r.id]);
+  h.owned.businesses = await businessesOf(client, ch.id);
+  return { ok: true, shuttered: businessOf(r.kind)?.name || r.kind, kind: r.kind, back };
 }
 
 // Upgrade a front to the next tier — collects the pending income at the OLD rate first (so an
@@ -535,7 +569,13 @@ export async function businessesOf(pool, characterId) {
       incomePerHr: tier?.incomePerHr || 0, pending: accrued(r),
       // recurring sinks ("the pad"): what's owed, the hourly rate, and whether the front's gone cold
       upkeepOwed: upkeepOwed(r, rows.length), upkeepPerHr: Math.floor((tier?.incomePerHr || 0) * (upkeepBps(rows.length) / 10000)),
-      cold: isCold(r),
+      cold: isCold(r), coldSeconds: coldSeconds(r),
+      // THE PAD, stated rather than discovered. `padOutran` is the moment the deal turns: squaring
+      // the envelope now costs more than the till can hand back, because income banks for a day and
+      // the pad runs for a week. It is the front telling you it has become a liability — which is a
+      // legitimate thing for a neglected front to be, but only if it SAYS so.
+      padOutran: upkeepOwed(r, rows.length) > accrued(r),
+      shutterValue: Math.floor(businessAssessedValue(r.kind, r.tier) * (CONSTANTS.BUSINESS_SHUTTER_BPS / 10000)),
       launderCapDay: tier?.launderCapDay || 0, launderHeadroom: Math.max(0, (tier?.launderCapDay || 0) - usedToday),
       scrutiny: Math.round(decayedScrutiny(r)), raidRisk: decayedScrutiny(r) >= CONSTANTS.BUSINESS_RAID_THRESHOLD,
       raidThreshold: CONSTANTS.BUSINESS_RAID_THRESHOLD, // the territoryOf precedent — the client renders heat against the real line, never a hardcoded 60
@@ -551,6 +591,26 @@ export async function businessesOf(pool, characterId) {
 }
 
 // The full discoverable catalog (also closes the audit's API-discoverability gap).
+//
+// THE PAD IS PART OF THE PITCH. A front's terms are asymmetric on purpose — the till holds a DAY's
+// take (BUSINESS_CAP_MS) while the envelope runs for a WEEK (BUSINESS_UPKEEP_CAP_MS) whether you
+// are there or not — so an absent owner can genuinely owe more than the place can hand back. That
+// is the fiction working (this is what happens to an absentee owner), but it reads as a bug when
+// the game only ever tells you AFTER you have bought in. So the terms ship WITH the price: the
+// upkeep rate, how long the till fills, how long the envelope keeps running, and how long you have
+// before the boys walk. Every figure is the server's own, off the same constants the till charges
+// from — the client re-derives nothing (the racket "/hr" precedent, where a third copy of a formula
+// showed $30/hr on a front paying $1,800).
 export function catalog() {
-  return BUSINESSES.map((b) => ({ kind: b.kind, name: b.name, lvl: b.lvl, tiers: b.tiers }));
+  return BUSINESSES.map((b) => ({
+    kind: b.kind, name: b.name, lvl: b.lvl, tiers: b.tiers,
+    // the pad on tier 1 at a ONE-front empire — the honest floor, since upkeepBps rises with the
+    // count (L1b) and the buyer of their first front is exactly who this number is for
+    upkeepPerHr: Math.floor(b.tiers[0].incomePerHr * (upkeepBps(1) / 10000)),
+    upkeepBps: upkeepBps(1), progBps: CONSTANTS.BUSINESS_UPKEEP_PROG_BPS,
+    incomeCapHours: Math.round(CONSTANTS.BUSINESS_CAP_MS / 3600000),
+    upkeepCapHours: Math.round(CONSTANTS.BUSINESS_UPKEEP_CAP_MS / 3600000),
+    coldHours: Math.round(CONSTANTS.BUSINESS_UPKEEP_COLD_MS / 3600000),
+    shutterBps: CONSTANTS.BUSINESS_SHUTTER_BPS,
+  }));
 }
