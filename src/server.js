@@ -924,7 +924,10 @@ export async function buildServer() {
       moduleMax: KITCHEN.MODULE_MAX, cut: { cost: KITCHEN.CUT_COST, units: KITCHEN.CUT_UNITS, qualityHit: KITCHEN.CUT_QUALITY, floor: KITCHEN.CUT_FLOOR },
       kingpinRanks: KITCHEN.KINGPIN_RANKS },
     family: { foundCost: M3.GANG_FOUND_COST, tributeMin: M3.TRIBUTE_MIN },
-    crew: { costStep: M4.CREW_COST_STEP, max: M4.CREW_MAX },
+    // the nut rides with the price: what a hand costs to keep, how long before they down tools,
+    // and the wage cap (an ABSENT owner owes up to a week while the corner only earns while stocked)
+    crew: { costStep: M4.CREW_COST_STEP, max: M4.CREW_MAX, wagePerHr: M4.CREW_WAGE_PER_HR,
+      coldHours: M4.CREW_WAGE_COLD_MS / 3600000, wageCapHours: M4.CREW_WAGE_CAP_MS / 3600000 },
     portfolio: { minInvest: PORTFOLIO.MIN_INVEST_OMR, scrutinyMin: PORTFOLIO.SCRUTINY_MIN_OMR,
       tickers: PORTFOLIO.TICKERS.map((t) => ({ id: t.id, name: t.name, blurb: t.blurb })) },
     estate: { nameOmr: ESTATE.NAME_OMR, tiers: ESTATE.TIERS, features: ESTATE.FEATURES, staff: ESTATE.STAFF },

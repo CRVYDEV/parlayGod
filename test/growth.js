@@ -185,6 +185,73 @@ assert.equal((await meOf(chef.token)).crewCold, false, 'the nut squared → the 
 await seedCh(chef.id, "last_accrued_at = now() - interval '30 minutes', heat=0");
 assert((((await meOf(chef.token)).stash.find((s) => s.drug === 'vim')?.qty) || 0) < coldStash, 'and they move product again');
 
+// ── THE DOOR OUT OF THE NUT (the pad/shutter precedent) ──────────────────────────────────────
+// A recurring sink with no exit is a trap: the wage runs on the wall clock but the crew only earn
+// while there's stash, so a player who hires ahead of their kitchen could never stop paying. The
+// terms now ride with the price, and there is a way out.
+{
+  let m = await meOf(chef.token);
+  assert.equal(m.crewWagePerHead, 1200, 'the sheet states the per-head rate BEFORE you hire');
+  assert.equal(m.crewMax, 5, 'and how many hands you may keep');
+  assert(m.crewColdSeconds > 0 && m.crewColdSeconds <= 3 * 24 * 3600,
+    `a countdown to downed tools (got ${m.crewColdSeconds})`);
+  const rules = (await call('GET', '/v1/rules')).body;
+  assert.equal(rules.crew.wagePerHr, 1200, 'the public catalog carries the wage');
+  assert.equal(rules.crew.coldHours, 72, 'and the cold window');
+  assert.equal(rules.crew.wageCapHours, 168, 'and the week the nut runs to (the till/envelope asymmetry)');
+
+  // a WORKING crew must be squared up: the nut is settled through the existing sink, then one walks
+  await pool.query(`UPDATE characters SET crew_paid_at = now() - interval '5 hours' WHERE id='${chef.id}'`);
+  await seedCh(chef.id, 'cash=2000000');
+  m = await meOf(chef.token);
+  const owedNow = m.crewWageOwed, cashNow = m.cash, crewNow = m.crew;
+  assert(owedNow > 0 && crewNow === 2, 'a warm crew with the nut running');
+  const wagesBefore = Number((await pool.query(
+    `SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='crew:wages' AND character_id='${chef.id}'`)).rows[0].s);
+  r = await call('DELETE', '/v1/kitchen/crew', { token: chef.token });
+  assert.equal(r.code, 200);
+  assert.equal(r.body.walked, false, 'a working hand does not just walk');
+  assert.equal(r.body.settled, owedNow, 'you square what they worked for');
+  assert.equal(r.body.crew, crewNow - 1, 'and one goes');
+  m = await meOf(chef.token);
+  assert.equal(m.crew, 1, 'the roster is down a hand');
+  assert.equal(m.cash, cashNow - owedNow, 'the settle came out of pocket, exactly');
+  assert.equal(m.crewWageOwed, 0, 'and the clock restarted for whoever is left');
+  assert.equal(Number((await pool.query(
+    `SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='crew:wages' AND character_id='${chef.id}'`)).rows[0].s),
+    wagesBefore - owedNow, 'settled through the EXISTING crew:wages sink — no new §10.4 reason');
+
+  // broke + warm: the door is shut, and it says why
+  await pool.query(`UPDATE characters SET crew_paid_at = now() - interval '10 hours' WHERE id='${chef.id}'`);
+  await seedCh(chef.id, 'cash=1');
+  r = await call('DELETE', '/v1/kitchen/crew', { token: chef.token });
+  assert.equal(r.code, 400); assert.equal(r.body.error, 'nut');
+
+  // COLD: men who downed tools three days ago have already gone — they walk for nothing, which is
+  // the exit a broke player needs. It is not a dodge: reaching it costs three days of sales.
+  await pool.query(`UPDATE characters SET crew_paid_at = now() - interval '4 days' WHERE id='${chef.id}'`);
+  assert.equal((await meOf(chef.token)).crewCold, true, 'downed tools');
+  const rowsBefore = Number((await pool.query(
+    `SELECT COUNT(*) n FROM transactions WHERE character_id='${chef.id}'`)).rows[0].n);
+  r = await call('DELETE', '/v1/kitchen/crew', { token: chef.token });
+  assert.equal(r.code, 200, 'a BROKE player can always let a downed crew go — that is the exit');
+  assert.equal(r.body.walked, true); assert.equal(r.body.settled, 0, 'and it costs them nothing');
+  assert.equal(r.body.crew, 0, 'the last hand is gone');
+  assert.equal(Number((await pool.query(
+    `SELECT COUNT(*) n FROM transactions WHERE character_id='${chef.id}'`)).rows[0].n), rowsBefore,
+    'a cold walk-off moves NO value — not one ledger row (the BUSINESS_SHUTTER_BPS=0 argument)');
+  m = await meOf(chef.token);
+  assert.equal(m.crewWageOwed, 0, 'with nobody left there is no nut');
+  assert.equal(m.crewCold, false, 'and nothing cold to thaw');
+  assert.equal(m.crewColdSeconds, null, 'the countdown is gone with them');
+  r = await call('DELETE', '/v1/kitchen/crew', { token: chef.token });
+  assert.equal(r.code, 400); assert.equal(r.body.error, 'none', 'and you cannot fire nobody');
+  // the buy-in is forfeit — coming back costs the step price again, from the bottom
+  await seedCh(chef.id, 'cash=2000000');
+  r = await call('POST', '/v1/kitchen/crew/hire', { token: chef.token });
+  assert.equal(r.body.cost, 50000, 'a rehire starts at the first step — what you sank is gone');
+}
+
 // ══ THE KITCHEN → Tier 4: lab modules, cutting agents, the kingpin legend ══
 await seedCh(chef.id, 'cash=5000000, jail_until=NULL');
 await pool.query(`UPDATE account_persistent SET omr=50 WHERE account_id=(SELECT account_id FROM characters WHERE id='${chef.id}')`);

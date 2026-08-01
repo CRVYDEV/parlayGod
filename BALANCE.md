@@ -3416,3 +3416,49 @@ generalised, missing the daily CONTRACTS, which are level-scaled in `claimDaily`
 The daily board pays **2.3× a sitting of crime**. **F2 is retired, not deferred** — building it would
 have roughly doubled a daily faucet that already out-pays the loop it was meant to compete with, on
 the signed pacing curve, on the strength of a number I got wrong.
+
+## THE NUT — the crew, and the door out (tester-reported; measured, made legible, not retuned)
+
+The same tester who found the pad also wrote **"same for the kitchen. it's unbalanced"** and
+**"no way a 25k runner costs 8k in 5h"**. Measured from the signed constants (sim **P9.20c**, printed
+every run):
+
+| what | number |
+|---|---|
+| the nut | **$1,200/hr per hand**, flat, on the wall clock |
+| what one hand moves while stocked | **$4,320/hr** on VIM, the cheapest line — **3.6:1** against the wage (360:1 on NOCTURNE) |
+| 1 hand, checking in every 8h | **+$24,960** per cycle — 3.60:1 |
+| 1 hand, checking in daily | **+$5,760** per cycle — **1.20:1** |
+| 1 hand, absent 3 days (the cold line) | **−$51,840** per cycle — **0.40:1** |
+| the asymmetry | sales cap at `OFFLINE_CAP_MS` **8h**; the nut runs to `CREW_WAGE_CAP_MS` **168h** — **21×** |
+
+So the tester's arithmetic was right and the mechanic is working as designed. It is the pad's fiction,
+sharper: **the corner holds a shift's take, the envelope runs a week.** A stocked, attentive crew is
+never the problem; a daily one is thin on the cheapest line; an absent one bleeds. That is attendance
+pricing, and it is a better mechanic than a risk-free drip.
+
+**The defect was never the ratio — it was that the game never SAID any of this, and never let you out.**
+`crew` only ever incremented. There was no fire button anywhere in the game, so a player who hired ahead
+of their kitchen owed $1,200/hr/head with no way to stop, forever, on a street that could live months.
+
+Shipped (no lever moved, §10.4 untouched):
+
+- **the terms ride with the price** — the sheet and `/v1/rules.crew` now carry the per-head rate, the
+  cold window, and the week the nut runs to, so the deal is visible before the hire, not after;
+- **a countdown** to downed tools on the card;
+- **`DELETE /v1/kitchen/crew`** — square up and let one go. A **cold** crew (downed tools past
+  `CREW_WAGE_COLD_MS`) walks for **nothing**: men who stopped working three days ago have already gone,
+  and that is the exit a broke player needs.
+
+**The dodge is closed on the economics, not with a special rule.** `crewWageOwed` is `crew × elapsed`
+and is never stored, so shedding heads retroactively shrinks the nut. But the free door is only open
+once you are cold, and reaching cold costs three days of sales: **~$311k of product forgone against
+~$86k of wages dodged**, on the cheapest line. Nobody takes that trade. A warm crew's only exit is
+through the till.
+
+**OPEN founder levers** (not moved, ground rule #1): `M4.CREW_WAGE_PER_HR` ($1,200),
+`M4.CREW_WAGE_CAP_MS` (7d — the week the envelope runs), `CONSTANTS.OFFLINE_CAP_MS` (8h — the shift
+the corner holds), `M4.CREW_COST_STEP` ($50k × N), `M4.CREW_MAX` (5). The single number that would
+remove the crossover itself is `OFFLINE_CAP_MS`: raise the shift the corner holds toward the week the
+envelope runs and an absent owner stops bleeding — which also changes every other offline faucet, so
+it is a whole-economy decision, not a kitchen one.
