@@ -1780,7 +1780,15 @@
     if (body.reserve !== undefined && body.fee !== undefined && body.serial) bits.push(`🔨 ${body.name} #${body.serial} on the block — reserve ${fmt(body.reserve)} $OMR (−${body.fee} fee)`);
     if (body.gain) bits.push(`+${body.gain} ${body.stat || ''}`);
     if (body.earned) bits.push(`${body.play === 'flood' ? '🔥 moved WEIGHT' : body.play === 'careful' ? '🤫 worked the regulars' : 'moved product'} — +$${fmt(body.earned)}${body.cornerPremium ? ' (corner premium)' : ''}${body.heat ? ` · +${body.heat} heat` : ''}`);
-    if (body.collected) bits.push(`collected $${fmt(body.collected)}${body.rakeback ? ` + $${fmt(body.rakeback)} rakeback` : ''}`);
+    // THE FREIGHT lands in CRATES, not dollars, and it comes off a trunk-load at a time — so the
+    // convoy's `collected` is a COUNT and must be read before the business collect's dollars below,
+    // or a three-crate landing renders as "collected $3". `remaining` is the convoy shape's tell.
+    if (body.remaining !== undefined && body.collected !== undefined) {
+      bits.push(`🚚 ${body.collected} crate${body.collected === 1 ? '' : 's'} off the truck`
+        + (body.remaining ? ` — ${body.remaining} still on it, come back with room` : ' — the load is clear'));
+      if (body.toll) bits.push(`the docks took $${fmt(body.toll)}`);
+      if (body.insurance) bits.push(`insurance paid $${fmt(body.insurance)}`);
+    } else if (body.collected) bits.push(`collected $${fmt(body.collected)}${body.rakeback ? ` + $${fmt(body.rakeback)} rakeback` : ''}`);
     // A NO-OP MUST NOT READ AS A SUCCESS. The server has always answered honestly here — a COLD
     // front is skipped and reported as `cold`, an unaffordable pad pays nothing and reports
     // `stillOwed` — but describe() read neither, so both landed as a bare "ok". A tester hit exactly

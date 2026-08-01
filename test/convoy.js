@@ -82,6 +82,15 @@ assert.equal((await call('POST', `/v1/convoy/${cid}/collect`, { token: sam.token
 await pool.query(`UPDATE convoys SET arrives_at = now() - interval '1 minute' WHERE id='${cid}'`);
 assert.equal((await call('POST', `/v1/convoy/${cid}/collect`, { token: sam.token })).body.error, 'district', 'the freight lands at neon — be there');
 await seedCh(sam.id, "loc='neon'");
+// A FULL TRUNK MUST REFUSE, NOT SILENTLY DO NOTHING (tester: "I can't collect my convoy"). Freight
+// comes off a trunk-load at a time, so a driver who turns up with no room moved zero crates — and
+// this used to answer 200 with `collected: 0`, which from the outside is a button that does nothing.
+await pool.query(`INSERT INTO character_cargo (character_id, good_id, qty) VALUES ('${sam.id}', 'silk', 99)
+  ON CONFLICT (character_id, good_id) DO UPDATE SET qty = 99`);
+r = await call('POST', `/v1/convoy/${cid}/collect`, { token: sam.token });
+assert.equal(r.body.error, 'full', 'a full trunk is told so, not answered with a silent success');
+assert.match(r.body.message, /trunk is full/i, 'and told what to do about it');
+await pool.query(`DELETE FROM character_cargo WHERE character_id='${sam.id}' AND good_id='silk'`);
 r = await call('POST', `/v1/convoy/${cid}/collect`, { token: sam.token });
 assert.equal(r.code, 200, 'collected'); assert.equal(r.body.collected, 10, 'the surviving half of the manifest landed');
 assert.equal(r.body.remaining, 0, 'nothing left on the dock');
