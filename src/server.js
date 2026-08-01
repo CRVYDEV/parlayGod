@@ -985,6 +985,11 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Business.payBusinessUpkeep(ch, client, h)));
   app.post('/v1/business/:id/upgrade', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Business.upgradeBusiness(ch, req.params.id, client, h)));
+  // WALK AWAY — close a front up for good. The way OUT of a pad you can no longer carry: without it
+  // a cold front holds its UNIQUE(character, kind) slot forever and that business kind is barred to
+  // you for the rest of the street's life.
+  app.delete('/v1/business/:id', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Business.shutterBusiness(ch, req.params.id, client, h)));
   app.post('/v1/business/:id/launder', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Business.launderAtBusiness(ch, req.params.id, req.body?.amount, client, h)));
   // step two (risk layer): a rival extorts a front for a cut of its pending income — two-party,

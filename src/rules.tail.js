@@ -122,6 +122,17 @@ export const CONSTANTS = {
   // a 5-front stack pays 20% + 4×5% = 40% pad (vs a 1-front's 20%). Bounds the measured passive stack
   // without touching the on-ramp (a 1-front owner is unaffected). Sim-re-measured; a sign-off lever.
   BUSINESS_UPKEEP_PROG_BPS: 500,
+  // WALKING AWAY. The asymmetry above is the point — a front demands attendance — but until now it
+  // had no EXIT, and that was the real defect rather than the bleed. `businesses` is UNIQUE(character,
+  // kind), so a cold front whose pad you cannot cover did not merely sit idle: it PERMANENTLY blocked
+  // you from ever owning that kind of front again. A tester found the shape of it from the inside
+  // ("how can it be that I owe more in wages than my laundromat brings in?") — measured, the pad
+  // outruns what the front can ever hand back at five days away.
+  // Shuttering hands the keys back: the row goes, the pad dies with the business, and the slot frees.
+  // BUSINESS_SHUTTER_BPS is what you salvage of everything you sank into it (buy + every upgrade).
+  // Shipped at 0 — walking away costs you the lot, which is the harshest reading and the one that
+  // needs no sign-off, since it moves no value at all. Raise it and closing up returns something.
+  BUSINESS_SHUTTER_BPS: 0,
   // Business Empire step two — the RISK layer (passive income you must protect). SCRUTINY: only
   // LAUNDERING draws the Bureau's eyes onto a front (PER_CAP points per full day-capacity washed,
   // decaying DECAY_HR/hour) — income-only fronts never get raided; their risk is rival shakedowns.

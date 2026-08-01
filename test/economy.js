@@ -366,7 +366,7 @@ await seed("respect=625000, cash=2000000, loc='docks', heat=0");
 let bizCashPre = (await meOf(token)).cash;
 r = await call('POST', '/v1/business/laundromat/buy', { token });
 assert.equal(r.code, 200, 'bought a laundromat'); assert.equal(r.body.tier, 1, 'opens at tier 1');
-const bizId = r.body.id;
+let bizId = r.body.id;
 assert(r.body.character.businesses.find((b) => b.kind === 'laundromat'), 'the front shows in the character view');
 assert(bizCashPre - (await meOf(token)).cash >= 250000 - 60, 'the $250k setup cost left the pocket');
 assert.equal((await call('POST', '/v1/business/laundromat/buy', { token })).body.error, 'exists', 'one laundromat per character');
@@ -774,6 +774,73 @@ await pool.query(`UPDATE businesses SET last_collect_at = now() - interval '2 ho
 biz = (await call('GET', '/v1/business', { token })).body.businesses.find((b) => b.id === bizId);
 assert.equal(biz.cold, false, 'the pad squared → the front is warm again');
 assert(((await call('POST', '/v1/business/collect', { token })).body.collected) > 0, 'and the take flows again');
+
+// ── THE PAD MADE LEGIBLE, AND AN EXIT ──
+// A tester reported the pad as a BUG ("how can I owe more in wages than my laundromat brings in?").
+// The mechanic is sound — the till holds a DAY's take while the envelope runs for a WEEK — but the
+// game never said so before you bought in, never warned as it slid, and (the real defect) never let
+// you out: `businesses` is UNIQUE(character_id, kind), so a cold front you can't carry BLOCKED that
+// kind for the rest of the street's life. These assert the three halves: the terms ship with the
+// price, the slide is visible before it lands, and the door exists.
+{
+  // (1) THE TERMS, AT POINT OF SALE. Every figure the catalog card quotes is the SERVER's own —
+  // the client re-derives none of it (the racket "/hr" precedent, where a client-side copy of a
+  // formula advertised $30/hr on a front paying $1,800).
+  const cat = (await call('GET', '/v1/catalog', {})).body.businesses;
+  const lm = cat.find((c) => c.kind === 'laundromat');
+  assert.equal(lm.upkeepPerHr, Math.floor(lm.tiers[0].incomePerHr * (CONSTANTS.BUSINESS_UPKEEP_BPS / 10000)),
+    'the catalog quotes the pad alongside the income — the buyer sees both halves of the deal');
+  assert.equal(lm.incomeCapHours, Math.round(CONSTANTS.BUSINESS_CAP_MS / 3600000), 'and how long the till fills');
+  assert.equal(lm.upkeepCapHours, Math.round(CONSTANTS.BUSINESS_UPKEEP_CAP_MS / 3600000), 'and how long the envelope keeps running');
+  assert(lm.upkeepCapHours > lm.incomeCapHours, 'the asymmetry IS the mechanic — the pad outruns the till by design');
+  assert.equal(lm.coldHours, Math.round(CONSTANTS.BUSINESS_UPKEEP_COLD_MS / 3600000), 'and how long before the boys walk');
+
+  // (2) THE SLIDE, VISIBLE BEFORE IT LANDS. `coldSeconds` counts down to the moment it goes dark
+  // (a player who can see "14h" is making a choice; one who only meets the word COLD was ambushed),
+  // and `padOutran` names the turn — the point where squaring it costs more than the front can hand
+  // you. Both are the server's read of the same clocks the till charges from.
+  await pool.query(`UPDATE businesses SET upkeep_at=now(), last_collect_at=now() WHERE id='${bizId}'`);
+  biz = (await call('GET', '/v1/business', { token })).body.businesses.find((b) => b.id === bizId);
+  assert(Math.abs(biz.coldSeconds - CONSTANTS.BUSINESS_UPKEEP_COLD_MS / 1000) < 60,
+    `a freshly-squared front has the full window before it goes dark (~${CONSTANTS.BUSINESS_UPKEEP_COLD_MS / 1000}s, got ${biz.coldSeconds})`);
+  assert.equal(biz.padOutran, false, 'and the pad has not outrun the till');
+  // Two days away: the countdown is visibly running but the front is still warm and still ahead —
+  // the warning arrives BEFORE the punishment, which is the whole point of surfacing the clock.
+  await pool.query(`UPDATE businesses SET upkeep_at = now() - interval '2 days', last_collect_at = now() - interval '2 days' WHERE id='${bizId}'`);
+  biz = (await call('GET', '/v1/business', { token })).body.businesses.find((b) => b.id === bizId);
+  assert.equal(biz.cold, false, '2 days unattended → still warm');
+  assert(biz.coldSeconds > 0 && biz.coldSeconds < CONSTANTS.BUSINESS_UPKEEP_COLD_MS / 1000,
+    `but the clock is visibly running down (${biz.coldSeconds}s left of the window)`);
+  assert.equal(biz.padOutran, false, 'and the till is still ahead of the pad');
+  // Six days away — the tester's exact complaint. Income stopped banking at 24h; the envelope ran the
+  // whole six days. Break-even is ~5 days (24h of take = 20% of 120h), so past it you owe more than
+  // the place can hand you. That is the deal working as written, and now the view SAYS so.
+  await pool.query(`UPDATE businesses SET upkeep_at = now() - interval '6 days', last_collect_at = now() - interval '6 days' WHERE id='${bizId}'`);
+  biz = (await call('GET', '/v1/business', { token })).body.businesses.find((b) => b.id === bizId);
+  assert.equal(biz.cold, true, '6 days unattended → cold');
+  assert.equal(biz.coldSeconds, 0, 'and the countdown is spent');
+  assert(biz.upkeepOwed > biz.pending, 'the pad HAS outrun the till (24h of take vs 6 days of envelope)');
+  assert.equal(biz.padOutran, true, 'and the view says so plainly instead of leaving the player to work it out');
+
+  // (3) THE DOOR. Closing up is permanent and frees the UNIQUE(character, kind) slot — which is the
+  // whole point: without it a front you cannot carry bars that business kind forever.
+  const before = (await call('GET', '/v1/business', { token })).body.businesses.length;
+  assert.equal((await call('DELETE', `/v1/business/${cid}`, { token })).body.error, 'not_yours', "you can't close a front that isn't yours");
+  const shut = await call('DELETE', `/v1/business/${bizId}`, { token });
+  assert.equal(shut.code, 200, 'closing up succeeds');
+  assert.equal(shut.body.kind, 'laundromat', 'and names what closed');
+  assert.equal((await call('GET', '/v1/business', { token })).body.businesses.length, before - 1, 'the front is gone');
+  // the pad DIES WITH IT, and that is not a loophole: upkeepOwed is COMPUTED from upkeep_at, never
+  // stored, so walking away leaves no debt behind to forgive — you simply forfeit everything sunk in.
+  assert.equal((await call('POST', '/v1/business/upkeep', { token })).body.error, 'none', 'and owes nothing further — there is no front to owe for');
+  // THE SLOT IS FREE — the defect this closes. Re-buying starts at tier 1, at tier-1 prices.
+  await seed("cash=2000000");
+  const rebuy = await call('POST', '/v1/business/laundromat/buy', { token });
+  assert.equal(rebuy.code, 200, 'the kind is available again — a cold front no longer bars it for life');
+  bizId = rebuy.body.id;
+  const fresh = (await call('GET', '/v1/business', { token })).body.businesses.find((b) => b.id === bizId);
+  assert.equal(fresh.tier, 1, 'and it starts at tier 1 — you bought a business, not your old one back');
+}
 
 // ── Risk-to-Earn B2: bank-interest daily cap (metered by a token bucket like racket income) ──
 // An empty bucket over a 4h gap refills only ~2h of interest-eligibility (BANK_DAILY_CAP_MS 12h/day

@@ -191,14 +191,22 @@ const SECTIONS = [
   { id: 'business', group: 'Money', title: 'Businesses & Fronts', tag: 'premium upgradeable venues',
     html: `<p>Level-gated, upgradeable places (Laundromat L15 to Casino L58) that earn pocket cash — the
       endgame personal-income engine. <code>GET /v1/catalog</code> lists them. <i>(Fronts no longer launder
-      anything — cash can't become $OMR anywhere. A front's risk today is other players, not the Bureau.)</i></p>
+      anything — cash can't become $OMR anywhere.)</i></p>
       ${L(`<b>buy</b> → <b>collect</b> (24-hour limit) → <b>upgrade</b> → <b>pay the upkeep</b>.`)}
-      <p><b>Upkeep ("the pad")</b> is 20% of hourly income (and climbs the more fronts you run); if you do not
-      pay for 3 days, the business becomes <b>cold</b> (no income, no upgrades). A rival can <b>shakedown</b>
-      30% of the pending income in a stat contest, attempt a <b>hostile takeover</b>, crew an <b>inside job</b>
-      against your pending take — and a killer who puts your street down can <b>SACK</b> your best front and
-      run it themselves. A passive empire is risk capital.</p>
-      ${R(`GET /v1/catalog [public] · POST /v1/business/:kind/buy · /business/collect · /upkeep · /:id/upgrade|shakedown`)}` },
+      <p><b>A front wants an owner who shows up, and the terms say so.</b> The till holds only a <b>day</b> of
+      takings, but <b>the pad</b> — protection and wages, 20% of hourly income, climbing 5% for every extra
+      front you run — keeps running for a <b>week</b> whether you are there or not. So an absent owner can owe
+      more than the place can hand back. That is the deal working as written, not a fault. Unpaid for 3 days it
+      goes <b>cold</b>: no income, no upgrades, until you square it out of pocket.</p>
+      <p><b>Closing up</b> (<code>DELETE /v1/business/:id</code>) is the way out. You can own one of each kind,
+      so a cold front you cannot carry holds that slot for the rest of your street's life. Close it and the pad
+      stops and the slot frees — permanently, tier and all.</p>
+      <p>A front also heats up by <b>earning</b>: bank a day's income and the Bureau's file grows; past the
+      threshold a raid seizes the pending take and fines you. Collect often and any raid catches less. A rival
+      can <b>shakedown</b> 30% of the pending income in a stat contest, <b>rob</b> 15% of it in a stealth one,
+      attempt a <b>hostile takeover</b>, crew an <b>inside job</b> — and a killer who puts your street down can
+      <b>SACK</b> your best front and run it themselves. A passive empire is risk capital.</p>
+      ${R(`GET /v1/catalog [public] · POST /v1/business/:kind/buy · /business/collect · /upkeep · /:id/upgrade|shakedown · DELETE /v1/business/:id`)}` },
 
   { id: 'territory', group: 'Money', title: 'Territory Rackets', tag: 'seizable family capital',
     html: `<p>There is one income operation in each district. The family that holds the turf owns it, so wars are about

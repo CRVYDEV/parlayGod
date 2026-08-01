@@ -1040,6 +1040,16 @@ function coachLadder(ch, acct, owned) {
   // moments instead of masking the ladder. The SAME rule orders the tail itself: most-clearable
   // first, permanent LAST — otherwise the permanent one masks the actionable ones (a solo player
   // would never be told to bank a fat pocket).
+  // A COLD FRONT is the most actionable thing on this list when it happens: the place earns NOTHING
+  // while the pad keeps running, so every hour it stays dark costs more than it did the hour before.
+  // It self-clears two ways — pay it, or close it up — which is exactly why it belongs at the head of
+  // the tail rather than in the one-time ladder above (a front can go cold again and again).
+  {
+    const cold = (owned.businesses || []).filter((b) => b.cold);
+    if (cold.length && add(`${cold.length === 1 ? 'A front has' : `${cold.length} fronts have`} gone cold`,
+      `${cold.length === 1 ? `Your ${cold[0].name} pays` : 'They pay'} nothing until the pad is square — and the pad keeps running whether ${cold.length === 1 ? 'it earns' : 'they earn'} or not. Pay it (The Empire ▸ pay the pad) or close ${cold.length === 1 ? 'it' : 'them'} up and stop the bleeding.`,
+      'empire')) return rungs;
+  }
   if (Number(ch.cash) > CONSTANTS.COACH_BANK_NUDGE && Number(ch.cash) > Number(ch.bank)
     && add('You\'re carrying too much', 'Bank your pocket cash before someone jumps you for it — the streets are watching.', 'streets')) return rungs;
   // (harness) A street player runs on NERVE, never energy — the bar sits full ~94% of the time, so
