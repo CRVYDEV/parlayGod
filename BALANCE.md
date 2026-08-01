@@ -3285,3 +3285,36 @@ The economic levers remain OPEN and unretuned if the founder wants the crossover
 - **`BUSINESS_SHUTTER_BPS` > 0** so closing up returns something.
 - **Leave it.** Now defensible in a way it was not before: the terms ship with the price and there is
   a way out.
+
+## LEVELLING UP HANDS YOU SOMETHING — energy + nerve refill on a crossing (F4, 2026-08-01)
+
+Founder direction: *"smooth out the user experience levels 1-30 to get them hooked."* Levelling up
+was a number changing on a bar — the one event the whole progression is built around handed the
+player nothing at all. Crossing a level now refills **energy and nerve to their newly-raised caps**.
+
+**Why this shape and not a payout.** Energy and nerve are pure regen resources, not currency (the
+skills `adrenaline` active is the precedent), so this moves no value, needs no faucet, writes no
+ledger row and adds nothing to the §10.4 set. A cash-per-level version was the alternative and was
+NOT built: it is a new faucet needing its own sim and sign-off, and the refill already buys the
+thing that matters — the moment you go up, you can keep playing.
+
+**It is still a pacing lever, and it was measured rather than assumed.** `npm run playthrough`, same
+seed, one run each way:
+
+| | 2 hours | 5 hours | 10 hours |
+|---|---|---|---|
+| `LEVEL_UP_REFILL: false` (before) | level 14 | level 23 | level 39 |
+| `LEVEL_UP_REFILL: true` (shipped) | **level 16** | **level 25** | **level 43** |
+
+≈10% faster, front-loaded into the 1-16 band this is meant to smooth — levels come quadratically
+slower, so the refill is frequent early and rare by 30, which is the shape the direction asked for.
+Nowhere near the alpha speedrun (level 240 in two hours) the pacing pass closed.
+
+| lever | value | note |
+|---|---|---|
+| `PACING.LEVEL_UP_REFILL` | `true` | set `false` to revert to the bare number; measured above |
+
+**Deliberately absent (stated so nobody assumes it):** the refill applies only on the ACTOR path
+(where a loaded context exists). A headless grant — a heist crew member, a duel opponent — is written
+by absolute UPDATE on named columns, so a refill of the in-memory row would be silently dropped, and
+a reward that sometimes vanishes is worse than one consistently absent.

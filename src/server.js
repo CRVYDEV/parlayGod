@@ -95,6 +95,7 @@ import { rateLimitsEnabled, initRateLimiter, checkRateLimit, checkAuthRateLimit,
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, CARS, KITCHENS, TRADE_RANKS, M3, M4, PATHS,
+         RANKS,
          cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, ESTATE, AUCTION, MEGAPROJECT, CLUES, DUELS, DUEL_TITLE_RANKS, SEASON_MODS, seasonModOf, seasonIdxOf, seasonDaysLeft,
          foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, PATRON, BONDS, SPEAKEASY, BOXING,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf, syndicateOf, TERRITORY_TYPES, TERRITORY_RACKETS,
@@ -813,7 +814,10 @@ export async function buildServer() {
       trainCooldownSeconds: Math.round(PACING.TRAIN_CD_MS / 1000),
       missionCooldownSeconds: Math.round(PACING.MISSION_CD_MS / 1000),
       // respect(L) = levelDivisor × (L−1)² — published so the client can draw a progress bar
-      respectFormula: 'levelDivisor * (level - 1)^2' },
+      respectFormula: 'levelDivisor * (level - 1)^2',
+      // F4 — the level-up moment: what crossing a level hands you, and the street-rank ladder it
+      // walks, so the client can NAME the beat instead of just noticing a number moved.
+      levelUpRefill: PACING.LEVEL_UP_REFILL, ranks: RANKS },
     crimeApproaches: Object.values(M3.CRIME_APPROACHES).map((a) => ({ id: a.id, name: a.name,
       successMult: a.successMult, payMult: a.payMult, heat: a.heat, jailMult: a.jailMult })),
     // THE REGIMEN — the expanded gym: five disciplines + the trainer-drill config (the catalog

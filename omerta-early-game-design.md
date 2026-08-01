@@ -152,6 +152,14 @@ the car-catalog precedent. Respect is a signed curve, so the added rungs get sim
 
 ### F4 — THE LEVEL-UP MOMENT  *(hook; the §10.4-free version is the one to build)*
 
+**BUILT (the §10.4-free version).** Crossing a level refills energy and nerve to their newly-raised
+caps, so the moment you go up you can keep playing; the cine names the street rank when it changes
+and otherwise what this level OPENED, read off the published catalogs rather than a hand-written map.
+Measured with `npm run playthrough`: 2h level 14 → **16**, 5h 23 → **25**, 10h 39 → **43** (≈10%
+faster, front-loaded into the band it is meant to smooth). `PACING.LEVEL_UP_REFILL` is the lever.
+The paying version was NOT built — a new faucet needs its own sim and sign-off, and the refill
+already buys the feeling.
+
 Levelling up is currently a number changing on a bar. For a game trying to hook someone, the moment
 you go up should be *an event*: the cinematic the client already has, a named street rank, and
 something in your hand.
@@ -188,7 +196,7 @@ the whole psychological difference between a grind and a ladder. Client + one co
 
 1. **F1 — the coach as a live work board.** ✅ BUILT.
 2. **F6 — Trades on the Streets screen.** ✅ BUILT.
-3. **F4 (free version) — the level-up moment.** Cheap, no economy, directly a hook.
+3. **F4 (free version) — the level-up moment.** ✅ BUILT.
 4. **F3 — seven missions in the dead levels.** Real content; prototype + re-extract; sim'd.
 5. **F2 — daily loops pay respect.** The one that most changes how the band *feels*, and the one that
    touches a signed curve — so it goes last, measured before and after, as a founder call.

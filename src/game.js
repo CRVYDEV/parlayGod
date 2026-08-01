@@ -2,7 +2,7 @@
 import crypto from 'node:crypto';
 import { recordMeeting } from './contacts.js';
 import { EventEmitter } from 'node:events';
-import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
+import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS, RANKS,
          levelOf, rankIdxOf, cityEventOf, dayOf, referralXpBonus,
          assetEnergyCap, effStat, assetsValue, cargoCapacity, tradeRankIdx,
          gangLevelOf, roleMultOf, weekOf, familyTaskOf, M3, M4,
@@ -700,7 +700,21 @@ export async function bumpDaily(client, characterId, kind) {
 export function gainRespect(h, ch, rep) {
   const bonus = Number(h?.owned?.refBonus) || 0;
   const gained = bonus > 0 ? Math.round(Number(rep) * (1 + bonus)) : Number(rep);
+  const before = levelOf(Number(ch.respect));
   ch.respect = Number(ch.respect) + gained;
+  const after = levelOf(Number(ch.respect));
+  // F4 — THE LEVEL-UP MOMENT (omerta-early-game-design.md). Crossing a level refills energy and
+  // nerve to their newly-raised caps, so the moment you go up you can keep playing rather than
+  // watch a bar. §10.4-FREE: both are pure regen resources (the skills `adrenaline` precedent) —
+  // no currency moves, no faucet, no ledger row. Only on the ACTOR path (`h` present): a headless
+  // grant — a heist crew member, a duel opponent — is written by absolute UPDATE on named columns,
+  // so a refill of the in-memory row would be silently dropped, and a reward that sometimes
+  // vanishes is worse than one that is consistently absent.
+  if (after > before && h && PACING.LEVEL_UP_REFILL) {
+    ch.energy = energyCapOf(after, assetEnergyCap(h.owned?.assets || []), h.owned?.disciplines);
+    ch.nerve = nerveCapOf(after, h.owned?.disciplines);
+  }
+  if (after > before) ch._leveled = { from: before, to: after, rank: RANKS[rankIdxOf(after)].name };
   return gained;
 }
 
@@ -1280,6 +1294,9 @@ export function view(ch, acct = {}, owned = {}) {
         // the next milestone that deepens the perk (null once every rung is behind you)
         perkNextAt: mi < MASTERY.MILESTONES.length - 1 ? MASTERY.MILESTONES[mi + 1] : null };
     }),
+    // F4 — set only on the response to the action that CROSSED a level (never on a plain read), so
+    // the client can name the rank and what just opened instead of noticing a number moved.
+    ...(ch._leveled ? { leveled: ch._leveled } : {}),
     heistSeconds: ch.heist_at ? Math.max(0, Math.ceil((new Date(ch.heist_at) - Date.now()) / 1000)) : 0,
     // PACING: the two new activity cooldowns, so the client can show a live timer instead of
     // surfacing a bare `cooldown` error when a player hits the gym or the family's next job.
