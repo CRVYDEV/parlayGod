@@ -955,7 +955,12 @@ async function seedLists() {
 
   // ── the personal empire, the vices, the crews ──
   await trySeed('business', () => si('POST', '/v1/business/laundromat/buy', token, {}));
-  await trySeed('speakeasy', () => si('POST', '/v1/speakeasy/neon/open', token, {}));
+  // a club needs standing (economy v3 step 5) — set directly; the dues path is proven in test/made.js
+  await trySeed('speakeasy', async () => {
+    await app.pool.query(`UPDATE account_persistent SET made_until = now() + interval '30 days'
+      WHERE account_id = (SELECT account_id FROM characters WHERE id=$1)`, [charId]);
+    await si('POST', '/v1/speakeasy/neon/open', token, {});
+  });
   await trySeed('soldiers', async () => {
     await si('POST', '/v1/soldiers/hire', token, {});
     await si('POST', '/v1/soldiers/hire', token, {});

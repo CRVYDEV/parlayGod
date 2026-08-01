@@ -361,15 +361,29 @@ export async function fire(ch, victim, client, h, rounds) {
       await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: loot, reason: 'whack:loot', counterparty: victim.id });
       await h.ledger(client, { characterId: victim.id, currency: 'cash', amount: -loot, reason: 'whack:loot', counterparty: ch.id });
     }
-    // …and liquid $OMR PLUS unbonding principal (the unstake exposure window). Staked stays the
-    // untouchable safe harbour; extraction is what crosses the street.
+    // …and the victim's $OMR, at the TIERED rate (economy v3 §11.1). Exposure is proportional to
+    // IDLENESS, not to wealth:
+    //   IDLE      = the loose balance + unbonding principal (money doing nothing, and money in the
+    //               unstake window on its way to doing nothing) → OMR_LOOT_IDLE.
+    //   COMMITTED = the STAKED balance — an access stake (§11.5), already working → OMR_LOOT_COMMITTED.
+    // Staking is NO LONGER A SAFE HARBOUR: it is cheaper to loot, never free. §4.1 says $OMR moves
+    // three ways and a protected tier would be a fourth.
+    // Unlike the CASH rate these are clamped only at 1 (a rate above 1 would be a mint) — §11.1's
+    // "no cap, no floor" — because a 0.5 ceiling on a 0.50 base would silently swallow the season mult.
     const liquid = Number(h.victimAcct.omr), unbonding = Number(h.victimAcct.unbonding || 0);
-    const omrLoot = lootable ? Math.floor((liquid + unbonding) * Math.min(0.5, M3.OMR_LOOT_RATE * seasonLootMult)) : 0;
+    const staked = Number(h.victimAcct.staked || 0);
+    const idleRate = Math.min(1, M3.OMR_LOOT_IDLE * seasonLootMult);
+    const commRate = Math.min(1, M3.OMR_LOOT_COMMITTED * seasonLootMult);
+    const idleLoot = lootable ? Math.floor((liquid + unbonding) * idleRate) : 0;
+    const stakeLoot = lootable ? Math.floor(staked * commRate) : 0;
+    const omrLoot = idleLoot + stakeLoot;
     if (omrLoot > 0) {
-      const fromLiquid = Math.min(omrLoot, liquid);
+      // drain the idle share liquid-first, then the unbonding remainder; the committed share off the stake
+      const fromLiquid = Math.min(idleLoot, liquid);
       h.victimAcct.omr = liquid - fromLiquid;
-      h.victimAcct.unbonding = unbonding - (omrLoot - fromLiquid);
-      h.acct.omr = Number(h.acct.omr) + omrLoot;
+      h.victimAcct.unbonding = unbonding - (idleLoot - fromLiquid);
+      h.victimAcct.staked = staked - stakeLoot;
+      h.acct.omr = Number(h.acct.omr) + omrLoot;   // it lands LIQUID on the killer — freshly looted is idle
       await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: omrLoot, reason: 'whack:loot', counterparty: victim.id });
       await h.ledger(client, { accountId: victim.account_id, currency: 'omr', amount: -omrLoot, reason: 'whack:loot', counterparty: ch.id });
     }

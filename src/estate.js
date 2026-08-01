@@ -4,7 +4,7 @@
 // the vanity `spendOmr` till (account bucket) so the burn discipline lives in one place. Account-level
 // (keyed on account_id) → SURVIVES DEATH: the heir inherits the compound (never in the runEstate wipe).
 import { GameError, cleanText, bus } from './game.js';
-import { ESTATE, AUCTION, estateTierOf, estateFeatureOf, estateStaffOf, carVal, tickerPriceOf, hitmanRankOf, sealOf,
+import { ESTATE, AUCTION, MADE, isMade, estateTierOf, estateFeatureOf, estateStaffOf, carVal, tickerPriceOf, hitmanRankOf, sealOf,
   collectorRankOf, collectionSetsOf } from './rules.js';
 import { spendOmr } from './vanity.js';
 
@@ -159,6 +159,10 @@ export async function upgradeEstate(ch, client, h) {
   const cur = await loadEstate(client, ch.account_id);
   const next = estateTierOf(Number(cur.tier || 0) + 1);
   if (!next) throw new GameError('maxed', "The Compound is the top of the world — there's nowhere higher.");
+  // THE MADE MAN (v3 §11.2): the UPPER compound wants standing. Status gating status — the estate is
+  // display-only, so this gates no earning loop; the lower tiers stay open to everyone.
+  if (next.tier >= MADE.ESTATE_TIER && !isMade(h.acct))
+    throw new GameError('made', `The ${next.name} is for made men. Pay your dues first.`);
   await spendOmr(client, h, next.omr, 'estate:tier');
   await bumpPrestige(client, ch.account_id, next.omr); // THE COLLECTOR legend
   const spent = Number(cur.spent_omr || 0) + next.omr;

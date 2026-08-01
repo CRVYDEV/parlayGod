@@ -5,7 +5,7 @@
 // list. Prestige ranks the nightlife. §10.4: `speakeasy:` is a cash SINK/FAUCET/TRANSFER vocabulary (all
 // character_id'd → the per-character cash check reconciles); bottles/naming ride `vanity:%` (no omr change).
 import { GameError, bus, skillMult, bumpMastery } from './game.js';
-import { SPEAKEASY, DISTRICTS, speakeasyTierOf, speakeasyRoundOf, speakeasyBottleOf, levelOf, renownRankOf, decorStyleOf, styleUnlockOf, assessedValueOf, effStat, SKILLS } from './rules.js';
+import { SPEAKEASY, DISTRICTS, isMade, speakeasyTierOf, speakeasyRoundOf, speakeasyBottleOf, levelOf, renownRankOf, decorStyleOf, styleUnlockOf, assessedValueOf, effStat, SKILLS } from './rules.js';
 import { spendOmr } from './vanity.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
@@ -84,6 +84,10 @@ export async function openSpeakeasy(ch, districtId, client, h) {
   if (!DISTRICTS.find((d) => d.id === districtId)) throw new GameError('bad_district', 'No such district.');
   if (levelOf(Number(ch.respect)) < SPEAKEASY.MIN_LEVEL)
     throw new GameError('level', `A club of your own opens up at level ${SPEAKEASY.MIN_LEVEL}.`);
+  // THE MADE MAN (v3 §11.2): the club is the city's social venue, and running one is standing. Gates
+  // the OPENING only — an existing owner keeps their house, and every other speakeasy verb (drink,
+  // play the table, buy it out, stand it over) stays open to everyone.
+  if (!isMade(h.acct)) throw new GameError('made', 'Only a made man puts his name over a door. Pay your dues first.');
   const mine = (await client.query('SELECT district_id FROM speakeasies WHERE owner_character=$1', [ch.id])).rows[0];
   if (mine) throw new GameError('own', 'You already run a house — a man can only be in one place at a time.');
   // lock the district's club slot (SELECT-then-INSERT; a concurrent open on the same district 23505s → contention)

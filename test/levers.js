@@ -235,6 +235,12 @@ const SIGNED = [
   ['LOAN.WANTED_BOUNTY', 25000],
   ['LOAN.WANTED_HUNT_P', 0.05],
   ['LOAN.WANTED_MIN_LVL', 20],
+  // ECONOMY v3 step 5 — THE FLOAT (design §5/§11.2/§11.5). MADE_OMR/MS are the subscription that
+  // creates CONTINUOUS $OMR demand; ACCESS_STAKE.HIGH_OMR is the held float the high-stakes seat wants.
+  ['ACCESS_STAKE.HIGH_OMR', 50],
+  ['MADE.ESTATE_TIER', 4],
+  ['MADE.MS', 2592000000],
+  ['MADE.OMR', 20],
   ['M3.BODYGUARD_MIN_PRICE', 10000],
   ['M3.CASH_LOOT_RATE', 0.25],
   ['M3.COACH_FAMILY_BAND_LVL', 12],   // the early band the 'join a family' rung leads inside
@@ -250,7 +256,8 @@ const SIGNED = [
   ['M3.GEAR_LOOT_CHANCE', 0.15],
   ['M3.JUMP_STEAL_CAP', 25000],
   ['M3.NPC_HIT_TARGET_CD_MS', 86400000],
-  ['M3.OMR_LOOT_RATE', 0.2],
+  ['M3.OMR_LOOT_IDLE', 0.5],
+  ['M3.OMR_LOOT_COMMITTED', 0.2],
   ['M3.SAFEHOUSE_COST', 25000],
   ['M3.SAFEHOUSE_MS', 14400000],
   ['M3.SEIZE_BASE', 30000],

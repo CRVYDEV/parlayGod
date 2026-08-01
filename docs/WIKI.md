@@ -208,9 +208,29 @@ family yield). **Cash can never become $OMR** — the old AMM swap and every lau
   48 hours, newest tokens priced first so old savings cannot shield a fresh dump. Hold a token for
   two days and it exits free. There are no exemptions.
 
-**The Vault (staking)** (`POST /v1/stake`, `/unstake`) — a safe harbour, not an income stream.
-**Staked $OMR cannot be looted by a killer; you always get your full principal back**, but it
-"unbonds" for 6 hours (exposed to loot during that window) before it is liquid. The old per-staker
+**THE MADE MAN** (`GET`/`POST /v1/made`) — the recurring subscription. Pay **20 $OMR every 30 days**
+and you are *made*: the badge, the upper compound (Country Estate and above), a club of your own, and
+**the pad pays itself** — your fronts settle their own cash upkeep the moment you touch them, so a
+stretch away no longer leaves them cold.
+
+**It buys standing, never power.** No earning loop is gated, no odds move, no stat changes, and the
+pad is not discounted by a cent — the same money leaves your pocket, you just stop having to remember.
+Operating costs stay in cash, all of them, which is the line that keeps the game free: a man who never
+pays a dues runs the whole city at full strength — and can hunt made men for their $OMR. Paying buys
+you a seat at tables where you can lose money. It buys no advantage at any of them.
+
+Dues are a sink like any other, so they go to **the Desk** to be sold again rather than being destroyed.
+
+**THE ACCESS STAKE** — the high-stakes room at the Den wants a seat (level 30, or the Madame's velvet
+rope) *and* **50 $OMR held in a stake**. Held, not spent: it earns nobody anything, and its whole job
+is to put a permanent, visible, lootable float on exactly the players worth hunting.
+
+**The Vault (staking)** (`POST /v1/stake`, `/unstake`) — **cheaper cover, not a safe harbour.**
+Staking used to make $OMR untouchable. It no longer does: a killer takes 50% of a loose or unbonding
+balance but only 20% of a staked one, so committing halves what a bad night costs you without ever
+making you safe. You always get your full principal back, but it "unbonds" for 6 hours (at the higher
+IDLE rate during that window) before it is liquid. **Nothing you hold is out of reach** — the whole
+point of the currency is that it can be taken off you. The old per-staker
 yield is retired (`/claim-rewards` answers `retired`): $OMR yield now pays THE FAMILIES — the top
 families by seasonal standing draw the **family yield** into their gang reserves.
 
@@ -257,11 +277,14 @@ and leave. Severing the pipe means effort converts to $OMR only by being paid fo
 $OMR converts to power only by being burned. The currency cannot be used as an exit from the risk that
 the game is about.
 
-**The honest tension.** Staked $OMR cannot be looted. That is deliberate — a game with no safe harbour
-teaches players to hold nothing — but it *is* a hedge, and the price of it is real: unstaking exposes
-the principal for six hours, staking pays no personal yield (the yield goes to families), and every
-route out of the city passes an early-exit toll that starts at 50% and decays over 48 hours. The safe
-harbour costs time and optionality rather than nothing at all.
+**And there is no hiding place, by design.** The obvious way to soften a risk economy is a vault
+nobody can reach into, and this game deliberately does not have one. What it has instead is a CHOICE
+with a real trade-off: money doing nothing is the most exposed thing you own (a killer takes half),
+money you have committed to a stake is cheaper to be caught with (a fifth) — and neither is free.
+Both answers help the city: committing keeps the currency moving, staying liquid keeps hunters in
+business. On top of that, unstaking exposes the principal for six hours, staking pays no personal
+yield (the yield goes to families), and every route out of the city passes an early-exit toll that
+starts at 50% and decays over 48 hours.
 
 **Flat passive income** (buy one time, then earn continuously — this is different from Businesses):
 **Rackets** (`/v1/rackets/:id/buy`, Laundromat L3 to The Invisible Hand L100) and **Assets**
@@ -1101,8 +1124,8 @@ can steal it) · **unbonding** ($OMR is not liquid yet — another player can st
 ### Currency quick-reference
 - **Cash** — earned everywhere. Pocket cash can be stolen. Bank cash is safe (after it clears).
 - **$OMR** — the premium currency. It is earned by playing (never converted from cash), can be staked,
-  and can be extracted (after you mint). It is account-level, so it survives death. Staked $OMR is safe. Liquid and unbonding $OMR can be
-  stolen.
+  and can be extracted (after you mint). It is account-level, so it survives death. A killer takes half a loose or
+  unbonding balance and a fifth of a staked one — cheaper, never safe.
 - **Crates (cb)** — from crimes and cooking. Use them to buy guns and make gear.
 - **Ammo** — from melting cars, or bought at $2000 for 50. Used on jumps, fires, raids, and ambushes.
 

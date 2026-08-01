@@ -70,6 +70,12 @@ CREATE TABLE IF NOT EXISTS account_persistent (
   -- currency — the Store grants only entitlements/access/status, so it writes zero `transactions` rows.
   pass_until TIMESTAMPTZ,
   patron BOOLEAN NOT NULL DEFAULT false,
+  -- THE MADE MAN (economy v3 step 5, design §5 i / §11.2): the recurring $OMR subscription that buys
+  -- STANDING, not power. Account-level and OUTSIDE the estate wipe by construction, so a paid window
+  -- carries to the heir (the patron/pass_until precedent). Written by DIRECT SQL — it is absent from
+  -- persistAccount's positional UPDATE, so the write is clobber-safe. NOT a §10.4 bucket: the dues
+  -- are an ordinary ledgered $OMR burn (`made:dues`, which recycles to the desk like every sink).
+  made_until TIMESTAMPTZ,
   wire_pending_days INT NOT NULL DEFAULT 0,  -- Store wire window bought with no living character (audit): parked here, applied at the next character's birth so a paid benefit is never dropped
 
   -- THE LEDGER (Season Pass reward track): a daily-claim track unlocked while the pass is active.

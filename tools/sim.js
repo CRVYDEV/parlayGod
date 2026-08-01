@@ -20,7 +20,8 @@ import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
          frontierTributePerHr, liberationCost, worldNpcOf, SPEAKEASY, PEN, RACES,
          PORT, boatOf, portRouteOf, interdictChance,
          CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES, BUSINESSES, PACING, POPULATION, boatResale, CORNER, CONTACTS,
-         EXCHANGE, ESTATE, WIRE, GANG_SEALS, FOUNDATION, RIVALS, RACKETS, ASSETS, M4, DRUGS } from '../src/rules.js';
+         EXCHANGE, ESTATE, WIRE, GANG_SEALS, FOUNDATION, RIVALS, RACKETS, ASSETS, M4, DRUGS,
+         MADE, ACCESS_STAKE } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -1112,6 +1113,42 @@ note('the farm', 'the Street Wage', 'retired (economy v3 step 1)',
   'the probe that measured it is retired with it — see BALANCE.md § THE FARM for the numbers, and '
   + 'omerta-economy-v3-design.md §2 wall 1 for what replaced it: no faucet at all, so in-game $OMR '
   + 'can never exceed what was deposited');
+
+// ══════ P9.30 THE FLOAT — the tiered loot rate, re-measured (economy v3 step 5, design §9.5) ══════
+// The design instructs a re-sim of the loot rate at this step, because §5's whole argument is that
+// holding $OMR must be EXPOSED rather than safe, and the old flat 0.20 was sized when the Street Wage
+// was the main source. Analytic (the P9.8/P9.20 precedent — zero value seeded, §10.4 untouched).
+//
+// THE FRAMING CHANGED, and that is what changed the answer. Before the severance a hunter spent cash
+// (convertible to $OMR, so real) to take $OMR. After it, cash CANNOT become $OMR at any price — so a
+// hunter now spends a resource with no real-money value to gain one that has it. The old "kill EV in
+// dollars" number (−$72k standalone, D1) is therefore no longer the right question for the $OMR side:
+// the cost is nearly free in real terms, so hunting does not need a high rate to be worth doing. It
+// needs a rate that leaves something to hunt.
+phase('P9.30 the float — the tiered loot rate + what the Made Man and the stake lock up');
+{
+  const idle = M3.OMR_LOOT_IDLE, comm = M3.OMR_LOOT_COMMITTED;
+  const holder = 200; // a plausible mid-whale float, in $OMR
+  note('float', 'loot rate — IDLE (loose + unbonding)', `${(idle * 100).toFixed(0)}%`,
+    `a ${holder} $OMR loose balance pays a killer ${fmt(Math.floor(holder * idle))} $OMR. Hoarding is the punished behaviour — and this is also what a bond's fresh, unvested $OMR is worth to a hunter`);
+  note('float', 'loot rate — COMMITTED (staked)', `${(comm * 100).toFixed(0)}%`,
+    `the same ${holder} $OMR STAKED pays ${fmt(Math.floor(holder * comm))} — ${(idle / comm).toFixed(1)}x less. Staking is no longer a SAFE HARBOUR, it is a cheaper one; §4.1 admits no fourth way for $OMR to move`);
+  // The commit decision, stated as the player faces it: what does committing actually save?
+  note('float', 'the commit tradeoff', `${fmt(Math.floor(holder * (idle - comm)))} $OMR saved per death`,
+    `on a ${holder} float. BOTH answers help the economy: committing drives velocity (the one KPI), staying liquid feeds the hunters — which is why the rate is tiered rather than flat`);
+  // The self-protecting new player, and the reason no rule was needed for it.
+  note('float', 'a new street holding nothing', '0 $OMR',
+    'exposure is proportional to IDLENESS, not to wealth, so a fresh character is worth nothing to hunt — automatic new-player protection with no rule, and whales become the rational prey');
+  // The float the two mechanisms actually create. This is the number the design's §5 exists to move.
+  const perSubYear = MADE.OMR * (365 * 86400000 / MADE.MS);
+  note('float', 'THE MADE MAN — recurring demand', `${MADE.OMR} $OMR / ${Math.round(MADE.MS / 86400000)}d`,
+    `≈ ${fmt(Math.round(perSubYear))} $OMR per subscriber per year, CONTINUOUS rather than one-off — and every dues payment recycles to the desk (step 2) to be sold again, so it is turnover, not destruction`);
+  note('float', 'THE ACCESS STAKE — locked, visible, lootable', `${ACCESS_STAKE.HIGH_OMR} $OMR per high-stakes seat`,
+    `held, not spent, so it earns the house nothing — its whole job is a permanent float attached to exactly the players worth hunting. A killer takes ${fmt(Math.floor(ACCESS_STAKE.HIGH_OMR * comm))} of it`);
+  // The honest limit on this probe, stated rather than left for a reader to assume.
+  note('float', 'what this probe cannot measure', 'whether whales actually commit',
+    'the rate is self-balancing BY DESIGN (as whales learn to commit, typical scores fall and hunters must hunt more) but the equilibrium depends on real player behaviour — watch realised $OMR loot per kill in the alpha, not this arithmetic');
+}
 
 phase('P10 §10.4 ledger invariants over the ENTIRE sim (nothing was seeded)');
 const inv = await runLedgerInvariants(pool);

@@ -300,7 +300,22 @@ Each step is shippable and testable alone; nothing is deleted before its replace
    *(c)* the buy side needs a **fat-finger floor** (`PRICE_FLOOR_BPS`) that §11.10 does not mention: the
    shelf credit is `eth / price`, so a price a decimal place too low mints inventory out of a typo.
    The RWA float shipped exactly that bug. Fail-closed rather than clamped.
-5. **The float** (§5) — the nut, the clearing window, the stake. Re-sim the loot rate here.
+5. ~~**The float** (§5) — the nut, the clearing window, the stake. Re-sim the loot rate here.~~
+   **BUILT** (`src/made.js`, `test/made.js`, the tiered loot in `src/social/combat.js`, sim P9.30).
+   Three corrections to what this line said. *(a)* **The clearing window needed no code**, and saying
+   so is the point rather than a shortcut: §11.1's own table already prices "everything fresh from
+   the bond" at the IDLE rate, and a freshly-arrived balance IS a loose balance, so the tiering
+   subsumes the timer — the same argument as step 3's 48h vest, which the FIFO surcharge already
+   implemented. A separate `CLEAR_MS` would have been a second mechanism doing the first one's job.
+   *(b)* **the flat `OMR_LOOT_RATE` is RETIRED, not raised** — the design's own §11.1 corrects §5's
+   "0.50 of unprotected OMR" to a two-tier rate, and the load-bearing half of that is that
+   **staked $OMR stops being a safe harbour** (0.20, cheaper but never free). That reverses a
+   player-facing promise both codices made, so they were corrected in the same commit.
+   *(c)* **the Commission is NOT gated on being made**, though §11.2's list opens with it: a decree
+   moves real gameplay surfaces, so gating the vote on a paid subscription is $OMR buying POWER —
+   against §4.3, which the same section names as binding. Flagged for the founder rather than taken
+   silently (BALANCE.md § THE FLOAT). The speakeasy gate IS built as written, and sits at the edge of
+   the same line for the same reason.
 6. **The v4 hook** — mainnet, asymmetric, POL-funding.
 7. **The rarity NFTs** — extend `GearVault`'s pattern to cars/boats/assets.
 

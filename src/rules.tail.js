@@ -606,11 +606,38 @@ export const M3 = {
   // guard's absorbed-hit cost (their hospital stay) raised so bullet-catching is a real risk.
   BODYGUARD_MIN_PRICE: 10000, BODYGUARD_MS: 24 * 3600 * 1000, BODYGUARD_HOSP_MS: 4 * 3600 * 1000,
   // Risk-to-Earn Phase 1 P1.1 — LOOT THE LIVING (new/tunable, sim + sign-off). On a PLAYER fire-kill
-  // the killer takes CASH_LOOT_RATE of the victim's POCKET cash (bank untouched) and OMR_LOOT_RATE of
-  // their LIQUID (unstaked) $OMR (staked untouched) — both TRANSFERS (whack:loot), the rest still
-  // burns/survives. Makes killing +EV, the rich into targets, and staking a real safe harbour.
-  // OMR_LOOT_RATE is the dial: set to 0 to ship a cash-only version first.
-  CASH_LOOT_RATE: 0.25, OMR_LOOT_RATE: 0.20,
+  // the killer takes CASH_LOOT_RATE of the victim's POCKET cash (bank untouched) plus a share of
+  // their $OMR — both TRANSFERS (whack:loot), the rest still burns/survives.
+  CASH_LOOT_RATE: 0.25,
+  // ECONOMY v3 §11.1 — THE LOOT RATE IS TIERED, and the flat OMR_LOOT_RATE (0.20) is RETIRED.
+  //
+  // The old rate was sized when the Street Wage was the main source of $OMR. As the ONLY source it
+  // is too low — five kills to break even on a purchase, assuming you can even find a holder. But a
+  // flat 0.50 fails the OTHER way: too high and holding is suicide, so nobody carries a float and
+  // there is nothing to loot. Both failure modes end with the extraction path dead.
+  //
+  // The move is that EXPOSURE IS PROPORTIONAL TO IDLENESS, NOT TO WEALTH. $OMR sitting doing nothing
+  // is dead capital that suppresses velocity — the one KPI. $OMR committed to a purpose is already
+  // working, and the commitment is itself a cost. So:
+  //
+  //   IDLE      (a loose balance, and everything fresh — bonded, bought at the desk, just unbonded)
+  //             → OMR_LOOT_IDLE. Hoarding is the punished behaviour.
+  //   COMMITTED (an access stake — §11.5) → OMR_LOOT_COMMITTED. Already working; less exposed, NEVER safe.
+  //
+  // Three consequences worth naming. It gives a holder a genuine choice with a real tradeoff (commit
+  // and be safer, or stay liquid and be a target) and BOTH answers help — committing drives velocity,
+  // staying liquid feeds the hunters. It makes whales the rational prey and automatically protects a
+  // new player (a fresh street holding nothing is worth nothing to hunt) with no rule required. And it
+  // is self-balancing: as whales learn to commit, typical scores fall and hunters must hunt more.
+  //
+  // NOTE WHAT THIS REVERSES. Staked $OMR was a SAFE HARBOUR and is not one any more — §4.1 says $OMR
+  // moves three ways and a protected tier would be a fourth. Defending your seat is the game. The
+  // player-facing promise in both codices was corrected in the same commit.
+  //
+  // §11.1 says "no cap, no floor, no safe harbour", so unlike the CASH rate these are NOT clamped at
+  // half — only at 1 (a rate above 1 would be a mint, not a loot). Both are sign-off dials; setting
+  // COMMITTED to 0 restores staking as a safe harbour, setting IDLE to 0.20 restores the flat rate.
+  OMR_LOOT_IDLE: 0.50, OMR_LOOT_COMMITTED: 0.20,
   // LOOT_MIN_LVL (SIGN-OFF 2.3): a fire-kill only LOOTS a mark at/above this level. Below it the kill
   // still runs the full estate (death is death) — it just pays no cash/$OMR/gear/contraband, closing
   // the "funnel value through disposable low-level alts onto one main" concentration rail. Nothing is
@@ -2799,7 +2826,7 @@ export const DESK = {
   SINK_REASONS: ['vest:%', 'cleanpapers', 'lab:%', 'gear:mint:%', 'path:%', 'gang:dissolved',
     'withdraw:omr', 'vanity:%', 'intel:%', 'respec%', 'plex:%', 'law:jury', 'law:envelope',
     'foundation:%', 'rwa:%', 'estate:%', 'auction:win', 'auction:take', 'auction:consign:fee',
-    'megaproject:omr', 'bond:%', 'business:spec%', 'death:duty', 'window:burn'],
+    'megaproject:omr', 'bond:%', 'business:spec%', 'death:duty', 'window:burn', 'made:%'],
   // THE ONE EXCLUSION, and it is the whole point of the step. `withdraw:omr` is not the house taking
   // a cut — it is the token LEAVING the game to exist on-chain in the player's own wallet, backed by
   // the reserve. Recycle it and the same unit exists twice: once as a real ERC-20 the player holds,
@@ -2890,6 +2917,64 @@ export const auctionPriceAt = (a, now) => {
   if (!(t1 > t0)) return reserve
   const frac = Math.min(1, Math.max(0, (now - t0) / (t1 - t0)))
   return round8(open - (open - reserve) * frac)
+};
+
+// ═══ THE FLOAT (economy v3 step 5) — THE MADE MAN and THE ACCESS STAKE ═══
+// Design §5 (the holding problem), §11.2, §11.5.
+//
+// THE PROBLEM THIS SOLVES, stated plainly: a consumable you should never HOLD cannot be the loot
+// that makes killing worth it. If the rational play is buy-and-spend-instantly, nobody carries a
+// balance, there is nothing on the body, and the extraction path is empty. Forcing a FLOAT is
+// therefore the central mechanic, not a detail. Two mechanisms, both reusing shipped systems.
+//
+// (1) THE MADE MAN — a recurring $OMR subscription that buys STANDING, not power. It is the
+//     strongest of the two because it creates CONTINUOUS demand rather than one-off demand.
+//
+//     WHAT THIS DELIBERATELY IS NOT, and the reasoning matters (§11.2). The obvious move is to
+//     re-denominate operating costs — business upkeep, crew wages, territory upkeep — from cash into
+//     $OMR. That is REJECTED: it would mean a player MUST buy real money to keep earning, which is a
+//     subscription wall on the core loop rather than a premium tier, and it converts a free game into
+//     a rented one. **OPERATING COSTS STAY IN CASH. ALL OF THEM.** That is the line that keeps the
+//     game free, and it is the binding constraint (§4.3: $OMR buys TIME, ACCESS and STATUS — never POWER).
+//
+//     So being made gates the SOCIAL AND PRESTIGE layer plus pure convenience, and gates no earning
+//     loop's POWER: a free player runs a complete empire — streets, crime, kitchen, family, PvP, the
+//     Law, the Pen, the market, the fronts — at full strength, and can hunt made men for their $OMR.
+//     That is RuneScape membership and EVE PLEX, and it is the honest answer to "is this pay-to-win":
+//     paying buys you a seat at tables where you can LOSE money. It buys no advantage at any of them.
+//
+//     ONE DEVIATION FROM THE DESIGN, flagged rather than taken silently. §11.2's gate list opens with
+//     "Commission eligibility" — but a Commission decree moves real gameplay surfaces (safehouse cost,
+//     war blocking, laylow cost, the fire-kill loot multiplier), so gating the VOTE on a paid
+//     subscription would be $OMR buying power, against §4.3, which the same section names as binding.
+//     Voting is therefore NOT gated here. Founder call: if the Commission should be a made-man table,
+//     it wants the decree teeth reviewed at the same time. See BALANCE.md § THE FLOAT.
+export const MADE = {
+  OMR: 20,                        // the dues
+  MS: 30 * 24 * 3600 * 1000,      // 30 days, extended from later-of(now, current end) — the retainer/wire-sub precedent
+  ESTATE_TIER: 4,                 // the UPPER estate tiers (Country Estate and above) want standing
+};
+// A made man is an ACCOUNT-level status (it is paid for with real value, so it survives death and
+// carries to the heir — the Store's `patron`/`pass_until` precedent), and this reader is a pure
+// function so every gate can import it with no module cycle.
+export const isMade = (acct, now = Date.now()) =>
+  !!(acct?.made_until && new Date(acct.made_until).getTime() > now);
+export const madeSeconds = (acct, now = Date.now()) =>
+  isMade(acct, now) ? Math.ceil((new Date(acct.made_until).getTime() - now) / 1000) : 0;
+
+// (2) THE ACCESS STAKE (§5 iii, §11.5) — access requires a HELD balance, not a spend. Hold N $OMR
+//     staked to sit at the high-stakes table. Held, not spent, so it generates no revenue — its whole
+//     job is to create permanent, VISIBLE, LOOTABLE float attached to exactly the players worth
+//     hunting. It rides the existing `account_persistent.staked` bucket, so there is no new schema
+//     and no new §10.4 surface; staking in is instant and unstaking still crosses the unbond window.
+//
+//     IN-GAME, UNAMBIGUOUSLY (§11.5). An on-chain stake would be a safe harbour, and §4.1 admits no
+//     fourth way for $OMR to move. The "on-chain is trustless" objection does not survive inspection:
+//     the in-game balance is ALREADY custodial the moment a player deposits, so an on-chain stake
+//     would not change the trust model — only add gas to the loop it exists to create. Staked $OMR is
+//     lootable at the COMMITTED rate above; defending your seat is the game.
+export const ACCESS_STAKE = {
+  HIGH_OMR: 50,   // the high-stakes room (CASINO.HIGH_MAX per roll) wants this much staked
 };
 
 // ═══ TAX — the transaction tolls on the REAL-value boundary (founder-directed 2026-07-23).

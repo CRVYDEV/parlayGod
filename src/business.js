@@ -10,7 +10,7 @@
 import crypto from 'node:crypto';
 import { GameError, bus, skillMult, trunkCap, bumpMastery, masteryFx } from './game.js';
 import { CONSTANTS, M3, CASINO, BUSINESSES, SKILLS, BUSINESS_EMPIRE, RIVALS, POPULATION, businessOf, businessTierOf, businessMaxTier,
-  businessAssessedValue, launderRankOf, levelOf, effStat, pathFx } from './rules.js';
+  businessAssessedValue, launderRankOf, levelOf, effStat, pathFx, isMade } from './rules.js';
 import { recordRival, revengeOwed } from './rivals.js';
 import { bumpHonor } from './honor.js';
 import { denAvailable, denDistribute } from './casino.js';
@@ -179,6 +179,14 @@ export async function collectBusiness(ch, client, h) {
   // own fronts). Income keeps accruing while you hide; you just can't bank it from the bunker.
   if (safeHoused(ch)) throw new GameError('safe', "Nobody hands the take to a ghost — collection waits until you surface.");
   const rows = (await client.query('SELECT * FROM businesses WHERE character_id=$1 FOR UPDATE', [ch.id])).rows;
+  // THE MADE MAN (v3 §11.2) — the pad pays itself. A made man's fronts settle their own upkeep the
+  // moment he touches them, so a stretch away no longer ends with cold venues. This is TIME, not
+  // POWER: the same cash leaves the same pocket and writes the same `business:upkeep` sink row (the
+  // pad is not discounted by a cent), and a made man who cannot AFFORD the pad still goes cold. What
+  // the dues buy is not having to remember. Runs before the loop so the cold gate below reads the
+  // squared clock.
+  let padPaid = 0;
+  if (isMade(h.acct) && rows.length) padPaid = (await settlePad(ch, rows, client, h)).paid;
   let total = 0, rakeback = 0; const raids = [];
   let cold = 0;
   for (const r of rows) {
@@ -228,11 +236,11 @@ export async function collectBusiness(ch, client, h) {
     ch.cash = Number(ch.cash) + rakeback;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: rakeback, reason: 'casino:rakeback' });
   }
-  if (total <= 0 && rakeback <= 0 && !raids.length && !cold) return { ok: true, collected: 0 };
+  if (total <= 0 && rakeback <= 0 && !raids.length && !cold && !padPaid) return { ok: true, collected: 0 };
   h.owned.businesses = await businessesOf(client, ch.id);
   return { ok: true, collected: total, businesses: rows.length,
     ...(rakeback > 0 ? { rakeback } : {}), ...(raids.length ? { raids } : {}),
-    ...(cold ? { cold } : {}) };
+    ...(cold ? { cold } : {}), ...(padPaid > 0 ? { padPaid } : {}) };
 }
 
 // PAY THE PAD (recurring sinks) — settle the upkeep owed on every front you can afford (greedy,
@@ -240,9 +248,11 @@ export async function collectBusiness(ch, client, h) {
 // `business:upkeep` per front (rides the `business:` vocabulary — no invariant change);
 // paying resets that front's upkeep clock and thaws a cold one. Blocked from a safehouse only
 // insofar as it's just spending — no gate needed (paying protection isn't extraction or offense).
-export async function payBusinessUpkeep(ch, client, h) {
-  const rows = (await client.query('SELECT * FROM businesses WHERE character_id=$1 FOR UPDATE', [ch.id])).rows;
-  if (!rows.length) throw new GameError('none', 'You run no fronts — no pad to pay.');
+// The one settle implementation, shared by the on-demand route and THE MADE MAN's auto-pay. Two
+// copies of this loop is exactly the drift that produced the sackEmpire rake-cursor bug, so there is
+// one. Caller must already hold the rows FOR UPDATE. Mutates `r.upkeep_at` in memory as well as in
+// the row, so a caller that reads isCold(r) immediately afterwards sees the squared clock.
+async function settlePad(ch, rows, client, h) {
   let paid = 0; const settled = []; let stillOwed = 0;
   for (const r of rows) {
     const owed = upkeepOwed(r, rows.length); // L1b: the pad rate scales with the empire's front count
@@ -251,10 +261,18 @@ export async function payBusinessUpkeep(ch, client, h) {
       ch.cash = Number(ch.cash) - owed;
       paid += owed;
       await client.query('UPDATE businesses SET upkeep_at=now() WHERE id=$1', [r.id]);
+      r.upkeep_at = new Date();
       await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -owed, reason: 'business:upkeep' });
       settled.push({ kind: r.kind, paid: owed });
     } else stillOwed += owed; // couldn't cover this one — it stays owed (and cold if past the window)
   }
+  return { paid, settled, stillOwed };
+}
+
+export async function payBusinessUpkeep(ch, client, h) {
+  const rows = (await client.query('SELECT * FROM businesses WHERE character_id=$1 FOR UPDATE', [ch.id])).rows;
+  if (!rows.length) throw new GameError('none', 'You run no fronts — no pad to pay.');
+  const { paid, settled, stillOwed } = await settlePad(ch, rows, client, h);
   if (paid <= 0 && stillOwed <= 0) return { ok: true, paid: 0, message: 'The pad is square.' };
   h.owned.businesses = await businessesOf(client, ch.id);
   return { ok: true, paid, fronts: settled, ...(stillOwed > 0 ? { stillOwed } : {}) };
