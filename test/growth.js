@@ -438,6 +438,39 @@ await seedCh(rook.id, 'cash=400000, bank=0, energy=0');
 await pool.query(`UPDATE businesses SET upkeep_at = now() - interval '5 days' WHERE id='cb-front-1'`);
 assert.equal(await coachOf(), 'A front has gone cold', 'a cold front leads the tail — it bleeds while it sits');
 await pool.query(`UPDATE businesses SET upkeep_at = now() WHERE id='cb-front-1'`);
+
+// ── THE WORK BOARD (omerta-early-game-design.md F1) ──
+// Everything above this point is a ONE-TIME milestone, so a player who follows the coach clears the
+// last of them around level 22 — at exactly the level the CONTENT thins out (7 of the levels from 17
+// to 31 unlock nothing at all). The coach then fell to three generic nudges and effectively stopped
+// talking. These rungs never run out because they refill daily, and every one points at work that
+// already exists and already pays. Walked in order, clearing each, so a dead rung cannot mask the
+// ones below it — the same rule the ladder above is walked by.
+const cday = dayOf();
+assert.equal(await coachOf(), 'A job came in from the family',
+  'a mission off cooldown is the biggest respect on the board, so it leads the work board');
+await pool.query(`UPDATE characters SET mission_at = now() WHERE id='${rook.id}'`);
+assert.equal(await coachOf(), '3 of today\'s contracts unclaimed', 'then the day\'s contracts, counted');
+// rook already HAS a daily row (he pulled jobs above, which bumps the counters) — upsert, don't insert
+await pool.query(`INSERT INTO daily_progress (character_id, day, counters, claimed) VALUES ('${rook.id}', ${cday}, '{}', '["a","b"]')
+  ON CONFLICT (character_id, day) DO UPDATE SET claimed = EXCLUDED.claimed`);
+assert.equal(await coachOf(), '1 of today\'s contracts unclaimed', 'and the count is REAL — two claimed leaves one');
+await pool.query(`UPDATE daily_progress SET claimed='["a","b","c"]' WHERE character_id='${rook.id}' AND day=${cday}`);
+assert.equal(await coachOf(), 'Tonight\'s hustle is waiting', 'then tonight\'s hustle, unstarted');
+await pool.query(`INSERT INTO hustles (character_id, day, step, baseline) VALUES ('${rook.id}', ${cday}, 1, '{}')`);
+assert.equal(await coachOf(), 'Your hustle is half-finished', 'a started hustle reads as half-finished, not waiting');
+await pool.query(`UPDATE hustles SET step=3 WHERE character_id='${rook.id}' AND day=${cday}`);
+// the corner and the clue only fire when the player really has one open — seeded here so both are
+// PROVEN rather than skipped (an un-fired rung and a broken rung look identical from the outside)
+await pool.query(`INSERT INTO corner_jobs (character_id, day, district, slot, baseline, claimed) VALUES ('${rook.id}', ${cday}, 'docks', 0, '{}', false)`);
+assert.equal(await coachOf(), 'The corner has an envelope for you', 'an open corner job surfaces — the only daily work that pays respect');
+await pool.query(`UPDATE corner_jobs SET claimed=true WHERE character_id='${rook.id}' AND day=${cday}`);
+await pool.query(`INSERT INTO clue_scrolls (character_id, salt, step, steps) VALUES ('${rook.id}', 'sd', 2, 4)`);
+assert.equal(await coachOf(), 'You\'re carrying a clue scroll (step 2 of 4)', 'a live clue names where you are on the trail');
+await pool.query(`DELETE FROM clue_scrolls WHERE character_id='${rook.id}'`);
+assert.equal(await coachOf(), 'The trainers have work for you', 'and the trainers\' drills close the board');
+for (const npc of ['doc', 'fixer']) await pool.query(`INSERT INTO npc_drills (character_id, day, npc) VALUES ('${rook.id}', ${cday}, '${npc}')`);
+
 assert.equal(await coachOf(), 'You\'re carrying too much', 'a fat pocket surfaces the bank nudge');
 await seedCh(rook.id, 'cash=0, bank=0, energy=999');
 assert.equal(await coachOf(), 'Full tank', 'banked + rested surfaces the energy rung');
