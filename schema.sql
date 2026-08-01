@@ -151,6 +151,12 @@ CREATE TABLE IF NOT EXISTS characters (
   -- SAFEHOUSE_DAILY_CAP_MS per day; entering a safehouse charges the granted stay against it.
   safehouse_used NUMERIC NOT NULL DEFAULT 0,
   safehouse_at TIMESTAMPTZ,
+  -- THE REFILL CEILING: a rolling-window daily count of level-up refills (the wash-bucket twin).
+  -- The refill is a nerve faucet whose rate is how often you level, and past level ~90 a crossing
+  -- returns more nerve than the next level costs — self-sustaining, and the alpha's level-240
+  -- speedrun reborn. The bucket keeps the early-game feel and bounds the late game by construction.
+  refill_used NUMERIC NOT NULL DEFAULT 0,
+  refill_at TIMESTAMPTZ,
   -- R1 audit F1: rolling-window cumulative $OMR invested into the Portfolio (the wash-bucket twin),
   -- so structuring (many sub-threshold buys) still draws RICO scrutiny once the window sum crosses.
   rwa_used NUMERIC NOT NULL DEFAULT 0,

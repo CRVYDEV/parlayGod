@@ -3566,3 +3566,63 @@ function of the real `dayOf()`, so the drawn corner tasks, hustle stops and dril
 simulated day — fine for throughput and pacing, not a test of variety, and it means whichever daily
 contracts today happens to draw are the ones exercised. The player is still solo: no family, no crew
 heist, no duel.
+
+## THE REFILL CEILING — the runaway bounded, and two dead rungs (founder-directed 2026-08-01)
+
+The founder chose **the daily bucket** over the other two dials, and it is the right one: the refill's
+benefit and its runaway are the SAME mechanism at different scales, so nothing keeps all of one and
+none of the other — but a bucket keeps the part the feature exists for (an early sitting crosses
+several levels and gets every one of them) and bounds the part that breaks the game.
+
+| lever | value | what it buys |
+|---|---|---|
+| `PACING.LEVEL_UP_REFILL_MAX_DAY` | **10** | at most 10 free top-ups a day, on a rolling 24h token bucket (`characters.refill_used`/`refill_at` — the wash-cap / safehouse-cap pattern). Above the bucket the crossing still happens; it just hands nothing back. **0 disables the refill entirely; a large value restores the runaway.** |
+
+**Why 10, and why the bound is level-independent.** The exploit is that a crossing returns
+`nerveCapOf(L)` nerve while the next level costs `LEVEL_DIVISOR × (2L−1) ÷ (best respect-per-nerve)`
+— both grow linearly in L, and past ~level 90 the first wins permanently, so the ratio is FLAT rather
+than growing: **~1 level per refill at level 90 and at every level above it**. A daily bucket
+therefore caps the refill's whole contribution at ~`MAX_DAY` levels a day — the harness prints the
+figure (**≤ 10.43 levels/day at level 90**) — instead of "as fast as you can click". 10 is above what
+a real early sitting uses (the measured 2h run crosses ~13 levels with regen doing most of the work),
+so the band the feature was built for never feels it.
+
+**Measured, 30 simulated days, solo, following the coach:**
+
+| | uncapped refill | with the bucket | pre-refill baseline (recorded) |
+|---|---|---|---|
+| level | **1,636** | **190** | 128 |
+| net worth | **$7.5B** | **$94.2M** | $51.3M |
+
+The bucket lands the 30-day figure within ~1.5× of the historical pre-refill run — i.e. the refill is
+back to being a *feel* feature with a measurable but bounded pacing cost, which is what it was
+approved as.
+
+Spending the bucket is **silent** — a gift that scolds you for taking it too often is worse than one
+that simply stops. Regen is untouched; only the free top-up is metered.
+
+**The regression is the point.** `test/growth.js` asserts a crossing on a spent bucket hands back NO
+nerve, and asserts `MAX_DAY > 0` — so removing the ceiling, or setting it to a value that turns the
+loop self-sustaining again, fails by name. `tools/playthrough.js` still prints THE REFILL CEILING
+probe every run, so any change to the refill *or* to the top of the crime respect-per-nerve curve
+re-measures the crossing point.
+
+**The two dead coach rungs, both fixed (§10.4-free — the coach reads state and moves nothing).**
+
+| rung | was | now |
+|---|---|---|
+| *"You've earned skill points"* | held **51%** of advised play after the player obeyed it — points keep accruing (`floor(level/4)`) long after the 12-skill / 30-point tree is complete, so from ~level 120 it fires forever pointing at a finished tree | goes silent when `owned.skills.size >= SKILLS.TREE.length` |
+| *"You can get made for free"* — NEW | did not exist. An alpha tester read the game as pay-to-win ("we can't earn OMR in game anymore?") when the mechanics say otherwise | fires at level 14 (when *The Dockside Heist*, the first $OMR mission, becomes claimable at exactly the PLEX mint price) and clears the moment the account is minted |
+
+That second one is a **discoverability** fix, not a mechanics change, and it is worth being precise
+about why: $OMR is still earned by playing — the mission ladder alone pays **220 across nine jobs,
+the first at level 14** — and MINTING, the gate on withdrawing and on the Street Wage, is payable in
+that earned $OMR through PLEX (`PLEX_MINT_OMR` **5**), not only in ETH. Nothing was missing but the
+sentence saying so. No number moved.
+
+**A flake fixed en route, same class as the recorded ones.** `test/growth.js`'s corner-tail walk
+asserted the trainers rung leads once the corner allowance is spent — but the clue rung sits between
+them, and every successful crime rolls `CLUES.DROP_P` (2%), so a player who had pulled a dozen jobs
+met an organic clue scroll roughly one run in ten. A deterministic assertion resting on a
+probabilistic precondition (the population duel-ladder and Doc-drill flakes). The scroll is now
+cleared before the walk; the clue rung is still proven a few lines down on a deliberately seeded one.

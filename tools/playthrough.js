@@ -930,11 +930,21 @@ let coachVerdict = 'ok';
   else if (!worst.length) console.log('  bounded at every level up to 1500 — the refill never outruns the curve.');
   else {
     const w = worst[0];
-    console.log(`  ⚠ SELF-SUSTAINING FROM LEVEL ${w.L}: the next level costs ~${w.needNerve.toFixed(0)} nerve`
-      + ` (via "${w.best}") and the crossing refills ${w.cap}.`);
-    console.log('    Past here nerve stops being a throttle: a player levels as fast as they can click,');
-    console.log('    and regen is irrelevant. Dials: PACING.LEVEL_UP_REFILL (false reverts it), the top');
-    console.log("    of the CRIMES respect/nerve curve, or refilling energy only — energy isn't a wall.");
+    const day = PACING.LEVEL_UP_REFILL_MAX_DAY;
+    console.log(`  RAW CROSSING GOES SELF-SUSTAINING AT LEVEL ${w.L}: the next level costs ~${w.needNerve.toFixed(0)} nerve`
+      + ` (via "${w.best}") and a crossing refills ${w.cap}.`);
+    // …which is why the bucket exists. Report the BOUNDED contribution, not the raw crossing, or the
+    // probe keeps printing an alarm about a hole that is closed and the reader learns to ignore it.
+    if (day > 0) {
+      console.log(`  ✔ BOUNDED: at most ${day} refills/day (PACING.LEVEL_UP_REFILL_MAX_DAY), so the refill`);
+      console.log(`    contributes ≤ ${(day * w.cap / w.needNerve).toFixed(2)} levels/day at level ${w.L}`
+        + ' — and the ratio is flat in L (both terms are linear),');
+      console.log('    so it stays that bounded at every level above. Regen does the rest, as intended.');
+    } else {
+      console.log('    ⚠ THE BUCKET IS OFF (MAX_DAY 0): past here nerve stops being a throttle — a player');
+      console.log('    levels as fast as they can click and regen is irrelevant. Dials: MAX_DAY, or');
+      console.log("    PACING.LEVEL_UP_REFILL false, or the top of the CRIMES respect/nerve curve.");
+    }
   }
 }
 

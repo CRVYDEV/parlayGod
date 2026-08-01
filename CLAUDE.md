@@ -2915,6 +2915,53 @@ Honest limit, stated in the file: a day's CONTENT is a seed function of the real
 drawn corner tasks, hustle stops and drills repeat every simulated day — fine for throughput and
 pacing, not a test of variety.
 
+**THE REFILL CEILING + two dead coach rungs (founder-directed 2026-08-01: "let's implement all your
+recommendations") — BUILT** (`src/rules.tail.js` `PACING.LEVEL_UP_REFILL_MAX_DAY`, `src/game.js`
+`gainRespect`/`coachLadder`, `schema.sql` `characters.refill_used`/`refill_at`, `test/growth.js`).
+The progression harness had proven a live runaway: the F4 level-up refill is a NERVE FAUCET whose
+size is the cap and whose rate is how often you level, and past level ~90 a crossing hands back MORE
+nerve than the next level costs (at 110, *depository* pays 950 respect for 35 nerve = 27:1, so the
+next level wants ~81 nerve and the crossing returns 120) — the wall the whole PACING block exists to
+build simply stops existing. Proven live with the clock FROZEN so regen is exactly zero: at level 115
+a pool funding 3 jobs funded 3000 and reached level 656 in ONE sitting; thirty simulated days reached
+level 1636 and $7.5B. That is the alpha's level-240 speedrun reborn. **The founder chose the daily
+bucket** over the two cheaper dials, and it is the right one — the refill's benefit and its runaway
+are the SAME mechanism at different scales, so nothing keeps all of one and none of the other, but a
+bucket keeps what the feature is FOR (an early sitting crosses several levels and gets every one) and
+bounds the late game BY CONSTRUCTION: `LEVEL_UP_REFILL_MAX_DAY` (10) free top-ups on a rolling 24h
+token bucket (the wash-cap / safehouse-cap pattern; new direct-persist columns carried at
+`persistCharacter` $64/$65). Above the bucket the crossing still HAPPENS — only the gift is metered,
+and metered SILENTLY (a gift that scolds you for taking it too often is worse than one that simply
+stops). The bound is **level-INDEPENDENT** (both the crossing's return and the level's cost grow
+linearly in L, so their ratio is flat): ~1 level per refill at level 90 and every level above, i.e.
+≤ ~`MAX_DAY` levels a day from refills instead of "as fast as you can click". **Measured over 30
+simulated days: level 1,636 / $7.5B uncapped → level 190 / $94.2M with the bucket**, against a
+recorded pre-refill baseline of 128 / $51.3M — so the refill is back to a *feel* feature with a
+bounded pacing cost, which is what it was approved as. §10.4-free (energy and nerve are pure regen
+resources — the `adrenaline` precedent — so no currency moves and no ledger row). `test/growth.js`
+asserts a crossing on a SPENT bucket hands back no nerve AND that `MAX_DAY > 0`, so removing the
+ceiling fails by name; `tools/playthrough.js` still prints THE REFILL CEILING probe every run, so a
+change to the refill *or* to the top of the crime respect-per-nerve curve re-measures the crossing.
+**Two dead coach rungs closed with it** (§10.4-untouched — the coach reads state and moves nothing):
+the skills rung held **51% of advised play AFTER the player obeyed it** (points keep accruing at
+`floor(level/4)` long after the 12-skill / 30-point tree is complete, so from ~level 120 it fires
+forever pointing at a finished tree) — it now goes silent on `skills.size >= SKILLS.TREE.length`; and
+a NEW rung, **"You can get made for free"**, answers an alpha tester reading the game as pay-to-win
+("we can't earn OMR in game anymore?") — a **discoverability** fix, not a mechanics change, because
+$OMR IS still earned by playing (the mission ladder alone pays 220 across nine jobs, the first at
+level 14) and MINTING, the gate on withdrawing and on the Street Wage, is payable in that earned $OMR
+through PLEX (`PLEX_MINT_OMR` 5, restated from vig.js since vig imports game — the one-way rule), not
+only in ETH. Fires at 14 (when *The Dockside Heist*, the first $OMR mission, becomes claimable at
+exactly the PLEX price) and self-clears on `acct.minted`. All four assertions mutation-verified by
+name. **A flake fixed en route, same class as the recorded ones:** the corner-tail coach walk asserted
+the trainers rung leads once the corner allowance is spent, but the clue rung sits between them and
+every successful crime rolls `CLUES.DROP_P` (2%) — a player who had pulled a dozen jobs met an organic
+clue roughly one run in ten. A deterministic assertion resting on a probabilistic precondition (the
+population duel-ladder and Doc-drill flakes); the scroll is now cleared before the walk and the clue
+rung is still proven a few lines down on a deliberately seeded one. `LEVEL_UP_REFILL_MAX_DAY` is a
+founder sign-off lever (BALANCE.md § THE REFILL CEILING; 0 disables the refill, a large value restores
+the runaway).
+
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
 `payPlex` pattern); named landmarks / Founder's charter numbers; ~~R2 (the `rwa_revenue` → real-RWA-buy
