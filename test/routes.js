@@ -47,6 +47,8 @@ const PUBLIC = {
   'GET /v1/u/:name': 'THE BROADCAST public profile — a share link works without an account',
   'GET /v1/ws': 'authenticates IN-BAND on connect (JWT via Sec-WebSocket-Protocol), not by preHandler',
   'GET /v1/yield': 'TOKENOMICS v2 family-yield board — a public status board (the /v1/gangs precedent)',
+  'GET /v1/desk': 'ECONOMY v3 the desk\'s shelf — published on purpose: a player told that every $OMR they '
+    + 'spend comes back to the desk to be sold again is entitled to read the shelf and the sink list',
   'POST /v1/auth/guest': 'an auth entry point — there is no token to present yet',
   'POST /v1/auth/privy': 'an auth entry point — there is no token to present yet',
   'POST /v1/auth/x': 'an auth entry point — there is no token to present yet',

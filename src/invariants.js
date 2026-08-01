@@ -3,6 +3,7 @@
 // in the transactions ledger. Any drift beyond $1 (or one unit) — or any ledger
 // row with a reason outside the known vocabulary — is an alert.
 import crypto from 'node:crypto';
+import { DESK, DESK_RECYCLE_REASON } from './rules.js';
 
 // The complete reason vocabulary, by currency. A row whose reason matches no
 // prefix here is an unenumerated faucet/sink — the loudest possible §10.4 alarm.
@@ -72,10 +73,19 @@ const KNOWN_REASONS = {
     // TOKENOMICS v2 — `window:burn` is the redemption window's $OMR burn; `yield:family` is the
     // family-yield distribution, a pool -> gangs.omr_reserve TRANSFER (both sides in omrBuckets,
     // so it is in NEITHER the mint nor the burn term).
-    'window:', 'yield:'],
+    // ECONOMY v3 step 2 — `desk:recycle` is the desk's side of a recycled sink (a TRANSFER: it rides
+    // inside the burn term so the pair cancels, and desk_inventory holds the value).
+    'window:', 'yield:', 'desk:'],
   cb: ['crime:', 'craft:', 'gun:buy:', 'jump:', 'death:', 'exchange:', 'onboard:', 'cook:'],
   ammo: ['melt', 'melt:tithe', 'craft:ammo', 'ammo:buy', 'jump', 'fire', 'death:', 'exchange:', 'gang:dissolved', 'convoy:', 'world:', 'port:', 'contract:'],
 };
+
+// The $OMR burn/sink predicate, generated from the single source in rules.js (economy v3 step 2).
+// Trailing '%' = a LIKE prefix, otherwise an exact reason — mechanically identical to the string
+// this replaced. `desk:recycle` is appended so a recycled sink's two legs cancel inside the term.
+const burnSql = () => "currency='omr' AND ("
+  + [...DESK.SINK_REASONS, DESK_RECYCLE_REASON]
+    .map((p) => (p.endsWith('%') ? `reason LIKE '${p}'` : `reason='${p}'`)).join(' OR ') + ')';
 
 const sum = async (pool, where) =>
   Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE ${where}`)).rows[0].s);
@@ -219,6 +229,11 @@ async function collectLedgerChecks(pool) {
     // Holds soft $OMR between funding and the 12h distribution, so it MUST sit inside the bucket sum
     // or `yield:family` (a pool→reserve TRANSFER) would read as a burn.
     + await one(pool, 'SELECT COALESCE(SUM(balance),0) s FROM family_yield_pool')
+    // ECONOMY v3 STEP 2 — THE DESK'S INVENTORY. A sink no longer destroys the token, it hands it here
+    // for the daily auction to sell back. This bucket is what turns the sink from a BURN into a
+    // TRANSFER without changing the identity below: the sink's own row and the paired `desk:recycle`
+    // row are BOTH inside the burn term, so they cancel, and the value shows up here instead.
+    + await one(pool, 'SELECT COALESCE(SUM(balance),0) s FROM desk_inventory')
     + auctionEscrow;
   // prize:omr is a Phase-2 mint: an in-game $OMR credit BACKED by hard $OMR the Vig moved into the
   // withdrawal reserve (src/vig.js payPrizes) — legal because real revenue backs every token.
@@ -246,7 +261,13 @@ async function collectLedgerChecks(pool) {
   // Tier-4 consignment: auction:take (the house cut) + auction:consign:fee (the listing fee) are $OMR
   // BURNS — added as EXACT matches. Do NOT widen reason='auction:win' to LIKE 'auction:%': that would
   // wrongly classify auction:bid/auction:refund/auction:consign (transfers) as burns and break conservation.
-  const omrBurns = -(await sum(pool, "currency='omr' AND (reason LIKE 'vest:%' OR reason='cleanpapers' OR reason LIKE 'lab:%' OR reason LIKE 'gear:mint:%' OR reason LIKE 'path:%' OR reason='gang:dissolved' OR reason='withdraw:omr' OR reason LIKE 'vanity:%' OR reason LIKE 'intel:%' OR reason LIKE 'respec%' OR reason LIKE 'plex:%' OR reason='law:jury' OR reason='law:envelope' OR reason LIKE 'foundation:%' OR reason LIKE 'rwa:%' OR reason LIKE 'estate:%' OR reason='auction:win' OR reason='auction:take' OR reason='auction:consign:fee' OR reason='megaproject:omr' OR reason LIKE 'bond:%' OR reason LIKE 'business:spec%' OR reason='death:duty' OR reason='window:burn')"));
+  // Built from `DESK.SINK_REASONS` — the ONE list, shared with the ledger's recycle hook (rules.js),
+  // so the set of things that are a sink and the set of things that feed the desk can never drift.
+  // `desk:recycle` rides INSIDE this same term on purpose: the sink's −X and the desk's +X then sum
+  // to zero, the value shows up in the desk_inventory bucket, and conservation holds with no new
+  // term. A HISTORICAL burn row (written before the recycle shipped) has no partner and still counts
+  // as the burn it was — which is what makes this change safe on a database that already has rows.
+  const omrBurns = -(await sum(pool, burnSql()));
   push('$OMR conservation', omrBuckets, 20000 + omrMints - omrBurns, 0.001);
 
   // THE FAUCET IS RETIRED (economy v3 wall 1, made CHECKABLE). The wage used to be bounded by an
@@ -263,6 +284,24 @@ async function collectLedgerChecks(pool) {
   const freshEmission = await sum(pool, "currency='omr' AND reason LIKE 'emission:%' AND at >= now() - interval '1 day'");
   const lifetimeEmission = await sum(pool, "currency='omr' AND reason LIKE 'emission:%'");
   push('emission faucet retired', freshEmission, 0, 0.001, { lifetimeEmission, since: 'v3 step 1' });
+
+  // (d1b) THE DESK'S INVENTORY (economy v3 step 2). The shelf must hold exactly what the sinks handed
+  // over minus what the auction has sold — the stake-pool/exchange-till shape, on the supply side.
+  // Two claims, because they fail differently: the BALANCE can drift from its own books (a write that
+  // moved the bucket without a ledger row, or the reverse), and the books can drift from the LEDGER
+  // (a recycle credited without its row, which would be a silent mint).
+  const desk = (await pool.query('SELECT balance, lifetime_in, lifetime_sold FROM desk_inventory WHERE id=1')).rows[0]
+    || { balance: 0, lifetime_in: 0, lifetime_sold: 0 };
+  push('desk inventory backed', Number(desk.balance),
+    Number(desk.lifetime_in) - Number(desk.lifetime_sold), 0.001,
+    { lifetimeIn: Number(desk.lifetime_in), lifetimeSold: Number(desk.lifetime_sold) });
+  // The reason is a LITERAL rather than interpolated from DESK_RECYCLE_REASON so the term extractor
+  // (tools/graph.js) can see which reason this check reconciles — it reads the predicates lexically
+  // above each push, which is also why this sum sits BELOW the check before it rather than with it.
+  // Drift between literal and constant is self-catching: change one and lifetime_in stops matching
+  // the summed rows, which is precisely what this check reports.
+  const recycled = await sum(pool, "currency='omr' AND reason='desk:recycle'");
+  push('desk inventory ledgered', Number(desk.lifetime_in), recycled, 0.001, { recycled });
 
   // (d2) AUCTION ESCROW ($OMR): live standing bids == bid − refunded − won (the bounty-escrow twin,
   // on the $OMR side). bid rows are negative (escrowed in); refund rows positive (out); auction:win

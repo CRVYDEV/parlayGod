@@ -33,7 +33,11 @@ const inv = checkGraph(g);
 assert(inv.ok, `graph invariants failed:\n  ${inv.problems.join('\n  ')}`);
 // Only the two genuinely computed-term checks may reconcile no literal reason. If a third appears,
 // the term extractor has regressed and the coverage query below has quietly gone blind.
-assert.deepEqual(inv.mute.sort(), ['character cash', 'reason vocabulary'],
+// `desk inventory backed` joins them for a different and honest reason: it reconciles a bucket
+// against its OWN books (balance vs lifetime_in − lifetime_sold) and names no ledger reason at all.
+// Its sibling `desk inventory ledgered` is the one that reconciles desk:recycle, and the parser can
+// read that one — which is why the literal lives in its SQL.
+assert.deepEqual(inv.mute.sort(), ['character cash', 'desk inventory backed', 'reason vocabulary'],
   `unexpected checks reconcile no reason — the SQL term parser missed a shape: ${inv.mute.join(', ')}`);
 console.log('✓ write invariants: provenance, authoring run, content hash, named rubrics, no dangling edges');
 

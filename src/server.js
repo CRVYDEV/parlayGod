@@ -56,6 +56,7 @@ import * as Loans from './loans.js';
 import * as Portfolio from './portfolio.js';
 import * as Treasury from './treasury.js';
 import * as Emission from './emission.js';
+import * as Desk from './desk.js';
 import * as Exchange from './exchange.js';
 import { register as registerCasino } from './routes/casino.js';
 import { register as registerPen } from './routes/pen.js';
@@ -722,6 +723,7 @@ export async function buildServer() {
   app.post('/v1/window/redeem', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Exchange.redeem(ch, req.body?.amount, client, h)));
   app.get('/v1/yield', async () => Exchange.yieldBoard(pool));           // public: who draws the family yield
+  app.get('/v1/desk', async () => Desk.deskBoard(pool));                 // public: the shelf a spent $OMR lands on
   app.get('/v1/mod/exchange', { preHandler: modAuth }, async () => ({
     exchange: await Exchange.exchangePool(pool), familyYield: await Exchange.familyYieldPool(pool),
     invariants: await Exchange.runExchangeInvariants(pool),

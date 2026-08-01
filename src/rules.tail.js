@@ -2782,6 +2782,41 @@ export const SOCIAL_LINKS = {
 // See src/emission.js for the tombstone and BALANCE.md § THE FARM for the measured Sybil economics
 // that made a per-account-capped wage pay a farm of cheap identities better than a real player.
 
+// ═══ THE DESK — where a spent $OMR goes (economy v3 step 2: recycle instead of burn) ═══
+// Design: omerta-economy-v3-design.md §3.3, §4.1, §4.2. A sink used to DESTROY the token. Now it
+// hands it to the desk, which sells it back to the market at the daily auction. The reasoning, in
+// the design's own words: "every OMR sink is the house's cut", so annual revenue ≈ annual sink
+// volume × price, and the KPI is RETURN VELOCITY — how many times a year one token comes home —
+// rather than supply. You cannot burn AND recycle the same unit: burning supports price, recycling
+// produces revenue. The founder chose revenue, which also means the pitch must never call this
+// deflationary (design §10 risk B).
+//
+// `SINK_REASONS` is the SINGLE list of $OMR sink reasons: `invariants.js` builds the §10.4 burn term
+// from it, and the ledger hook in game.js decides what feeds the desk from it. Two copies of this
+// list is the drift that would quietly destroy supply the desk was supposed to sell, so there is
+// one. (Trailing `%` = a LIKE prefix, otherwise an exact reason.)
+export const DESK = {
+  SINK_REASONS: ['vest:%', 'cleanpapers', 'lab:%', 'gear:mint:%', 'path:%', 'gang:dissolved',
+    'withdraw:omr', 'vanity:%', 'intel:%', 'respec%', 'plex:%', 'law:jury', 'law:envelope',
+    'foundation:%', 'rwa:%', 'estate:%', 'auction:win', 'auction:take', 'auction:consign:fee',
+    'megaproject:omr', 'bond:%', 'business:spec%', 'death:duty', 'window:burn'],
+  // THE ONE EXCLUSION, and it is the whole point of the step. `withdraw:omr` is not the house taking
+  // a cut — it is the token LEAVING the game to exist on-chain in the player's own wallet, backed by
+  // the reserve. Recycle it and the same unit exists twice: once as a real ERC-20 the player holds,
+  // once as desk inventory we sell to somebody else. That is an unbacked mint wearing a recycle
+  // costume, and it is exactly what wall 3 ("extraction ≤ deposits") forbids. Every other sink is
+  // the house's cut and feeds the desk.
+  NOT_RECYCLED: ['withdraw:omr'],
+};
+// One row per recycled sink, so the pair (the player's −X spend, this +X) nets to zero inside the
+// burn term while the bucket holds the value. A DISTINCT reason on purpose: reusing the sink's own
+// reason would silently corrupt every escrow check that sums by reason (auction:win, window:burn…).
+export const DESK_RECYCLE_REASON = 'desk:recycle'
+const deskMatch = (pat, reason) => (pat.endsWith('%') ? reason.startsWith(pat.slice(0, -1)) : reason === pat)
+export const recyclesToDesk = (reason) => !!reason
+  && DESK.SINK_REASONS.some((p) => deskMatch(p, reason))
+  && !DESK.NOT_RECYCLED.some((p) => deskMatch(p, reason))
+
 // ═══ TAX — the transaction tolls on the REAL-value boundary (founder-directed 2026-07-23).
 // Complements the existing tax map: in-game P2P takes already feed street_tax → the 12h BUYBACK;
 // ETH Store revenue already splits founder/buyback/rwa (STORE.SPLIT_BPS); bonds split POL/Vig.

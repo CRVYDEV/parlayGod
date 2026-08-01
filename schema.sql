@@ -1591,6 +1591,20 @@ INSERT INTO referral_push (id, mult) SELECT 1, 1 WHERE NOT EXISTS (SELECT 1 FROM
 INSERT INTO street_tax (id, pool, fund)
   SELECT 1, 0, 0 WHERE NOT EXISTS (SELECT 1 FROM street_tax);
 INSERT INTO stake_pool (id, balance) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM stake_pool);
+-- THE DESK'S INVENTORY (economy v3 step 2: recycle instead of burn). A $OMR sink no longer destroys
+-- the token — it lands here, and the daily auction sells it back to the market. A §10.4 $OMR bucket,
+-- so `$OMR conservation` counts it: the sink's own row (−X, still inside the burn term) and the
+-- desk:recycle row (+X, inside the same term) sum to zero while this balance holds the value.
+-- `lifetime_in` / `lifetime_sold` are the desk's books, and the `desk inventory backed` invariant
+-- reconciles the balance against them.
+CREATE TABLE IF NOT EXISTS desk_inventory (
+  id INT PRIMARY KEY,
+  balance NUMERIC NOT NULL DEFAULT 0,        -- $OMR on the shelf, waiting for the auction
+  lifetime_in NUMERIC NOT NULL DEFAULT 0,    -- everything the sinks have ever handed over
+  lifetime_sold NUMERIC NOT NULL DEFAULT 0   -- everything the desk has ever sold back (step 3)
+);
+INSERT INTO desk_inventory (id, balance) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM desk_inventory);
+
 INSERT INTO rwa_dividend_pool (id, pool) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM rwa_dividend_pool);
 INSERT INTO rwa_family_dividend_pool (id, pool) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM rwa_family_dividend_pool);
 CREATE TABLE IF NOT EXISTS transactions (
