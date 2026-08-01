@@ -7,7 +7,7 @@ process.env.MOD_KEY = 'test-mod-key';
 
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS, CONSTANTS, DISTRICTS, HUSTLE, CORNER, cornerTasksOf, dayOf, M4, levelOf, PACING, MASTERY, masteryXpFor } from '../src/rules.js';
+import { SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS, CONSTANTS, DISTRICTS, HUSTLE, CORNER, cornerTasksOf, dayOf, M4, levelOf, PACING, MASTERY, masteryXpFor, CRIMES, MISSIONS } from '../src/rules.js';
 import { socialRewardsLive } from '../src/growth.js';
 import { sweepGrandReferrals } from '../src/game.js';
 
@@ -1422,6 +1422,69 @@ assert.equal((await call('POST', '/v1/respec', { token: chef.token, body: { musc
   r = await call('POST', `/v1/corner/${b.slot}/claim`, { token: cw2.token });
   assert.equal(r.body.error, 'done_kind',
     'one envelope per KIND per day — one action can never cash two same-kind slots across the map');
+}
+
+// ══ F3 — CATALOG BREADTH: the ladder has a beat at every level (omerta-early-game-design.md) ══
+// The level-gate map found seven levels between 17 and 31 that delivered NOTHING — no job, no
+// mission, no system — which the harness puts at hours 2.5 to 7 of play. Filling them is a content
+// expansion through the machine-owned seam (edit the prototype, re-extract — the car-catalog
+// precedent), so what this guards is the SHAPE: no dupes, well-formed, on-curve, and no dead level.
+{
+  const cids = CRIMES.map((c) => c.id);
+  assert.equal(new Set(cids).size, cids.length, 'crime ids are unique (no dupes from the expansion)');
+  for (const c of CRIMES) {
+    assert(c.name && c.nerve > 0 && c.cash[1] > c.cash[0] && c.respect > 0,
+      `crime ${c.id} is well-formed`);
+    assert(c.base > 0 && c.base <= 1, `crime ${c.id} has a real success rate`);
+  }
+  // THE POINT OF THE DROP: every level from 2 to 31 delivers SOMETHING — a job, a mission, or a
+  // system. Before this there were seven silent levels in a row of the 17-31 band.
+  const beats = new Set([...CRIMES.map((c) => c.lvl), ...MISSIONS.map((m) => m.req.lvl)]);
+  const silent = [];
+  for (let l = 2; l <= 31; l++) if (!beats.has(l)) silent.push(l);
+  assert.equal(silent.length, 0, `every level 2-31 has a beat (silent: ${silent.join(', ')})`);
+  // ON-CURVE means BRACKETED, and that is asserted about the entries THIS DROP ADDED rather than
+  // about the whole legacy table — which is deliberately not monotone (level 3's booze is a cheaper,
+  // safer job than level 2's numbers, and that choice is the point). Each new rung must pay more
+  // than the best job below it and less than the cheapest above it, or it is a rebalance in content's
+  // clothing. Naming the ids is the honest form: a future expansion adds its own.
+  const NEW_CRIMES = ['pigeon', 'meter', 'laundry', 'bookie', 'pawn', 'protection', 'switchbag',
+    'ballot', 'payoff', 'nightdeposit', 'bondsman', 'cathouse', 'ticker', 'distillery'];
+  for (const id of NEW_CRIMES) {
+    const c = CRIMES.find((x) => x.id === id);
+    assert(c, `${id} survived the re-extract`);
+    const below = CRIMES.filter((x) => x.lvl < c.lvl), above = CRIMES.filter((x) => x.lvl > c.lvl);
+    const prevMax = Math.max(...below.map((x) => x.cash[1]));
+    const nextMin = Math.min(...above.map((x) => x.cash[1]));
+    assert(c.cash[1] >= prevMax && c.cash[1] <= nextMin,
+      `${id} pays between its neighbours (${prevMax} <= ${c.cash[1]} <= ${nextMin})`);
+    assert(c.respect >= Math.max(...below.map((x) => x.respect))
+      && c.respect <= Math.min(...above.map((x) => x.respect)), `${id} is on the respect curve too`);
+  }
+  const NEW_MISSIONS = ['m29', 'm30', 'm31', 'm32', 'm33', 'm34', 'm35', 'm36'];
+  // the KITCHEN missions are their own track — gated on lifetime trade volume rather than level, so
+  // they pay off a different curve (the level-15 Taste Test out-pays the level-16 Long Drive) and
+  // comparing against them would measure the wrong ladder.
+  const LADDER = MISSIONS.filter((x) => !x.req.trade);
+  for (const id of NEW_MISSIONS) {
+    const m = MISSIONS.find((x) => x.id === id);
+    assert(m, `${id} survived the re-extract`);
+    const below = LADDER.filter((x) => x.req.lvl < m.req.lvl), above = LADDER.filter((x) => x.req.lvl > m.req.lvl);
+    assert(m.reward.cash >= Math.max(...below.map((x) => x.reward.cash))
+      && m.reward.cash <= Math.min(...above.map((x) => x.reward.cash)),
+      `${id} pays between its neighbours on the ladder`);
+    assert(m.reward.respect >= Math.max(...below.map((x) => x.reward.respect))
+      && m.reward.respect <= Math.min(...above.map((x) => x.reward.respect)),
+      `${id} is on the respect curve too`);
+  }
+  const mids = MISSIONS.map((m) => m.id);
+  assert.equal(new Set(mids).size, mids.length, 'mission ids are unique');
+  for (const m of MISSIONS) assert(m.name && m.brief && m.req?.lvl >= 1 && m.reward?.cash > 0,
+    `mission ${m.id} is well-formed`);
+  // the $OMR ladder is UNTOUCHED by the expansion — the new rungs pay cash + respect only, so the
+  // enumerated mission faucet is exactly what it was
+  assert.equal(MISSIONS.filter((m) => m.reward.omr).length, 9,
+    'the expansion added no new $OMR rung (the enumerated faucet is unchanged)');
 }
 
 // ══ F4 — THE LEVEL-UP MOMENT (omerta-early-game-design.md) ══

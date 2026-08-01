@@ -344,7 +344,9 @@ const PORTRAIT = 'a 1940s American noir character portrait, head and shoulders, 
   + 'amber key light against deep teal shadow, film grain, muted desaturated palette, painterly photographic, '
   + 'fictional person, no lettering, no writing anywhere, no watermark';
 
-// 29 crimes — the core loop; every player stares at these cards from minute one.
+// 43 crimes — the core loop; every player stares at these cards from minute one. The MANIFEST is
+// built from the LIVE catalog, so an expansion adds its rows automatically — but a subject written
+// here is the difference between a scene and the generic fallback prompt, so a new job wants one.
 const CRIME_SUBJECT = {
   pick: 'a gloved hand lifting a leather wallet from an overcoat pocket on a crowded rainy street corner, seen close',
   stereo: 'a jimmied sedan door open at night, wires pulled from under a dashboard, a screwdriver on the seat',
@@ -375,6 +377,21 @@ const CRIME_SUBJECT = {
   clearing: 'a stock-exchange clearing floor after hours, ticker tape drifting across marble in half-light',
   bonds: 'a leather portfolio of engraved bearer bonds open on a mahogany boardroom table at night',
   depository: 'a federal depository corridor of barred gold cages receding into darkness, one flashlight beam',
+  // F3 — the breadth drop (levels 6-29, filling the ladder's silent rungs)
+  pigeon: 'a folded newspaper parcel and a roll of banknotes swapped over a park bench in thin morning fog',
+  meter: 'a row of parking meters on a wet kerb, one head unscrewed and lying open, coins spilled in the gutter',
+  laundry: 'a laundry van\'s open side door, canvas sacks of linen and a cash tin prised open on the running board',
+  bookie: 'a corner bookmaker\'s chalkboard of odds, a ledger slammed shut, a fist resting on the counter',
+  pawn: 'a pawnshop back room at night: violins, radios and a rifle on hooks, the safe door standing open',
+  protection: 'a fish market stall at dawn, ice and crates, an envelope pressed into a monger\'s wet apron pocket',
+  switchbag: 'two identical leather satchels on a bench in a marble station concourse, one hand on each',
+  ballot: 'a wooden ballot box tipped on a schoolroom table, printed slips fanned out under a bare bulb',
+  payoff: 'a brown pay envelope taken from beneath a squad car\'s front seat in a rain-slicked precinct yard',
+  nightdeposit: 'a bank night-deposit slot at 2am, a canvas bag half in it, a manager\'s hat on the pavement',
+  bondsman: 'a bail bondsman\'s office at night: barred window, a wall of case folders, a floor safe cracked open',
+  cathouse: 'a velvet parlour\'s back office, a cash box open on the desk, feather boa across the chair',
+  ticker: 'a racing-wire cash room: telegraph keys, result slips on spikes, banded cash in an open drawer',
+  distillery: 'a distillery office above copper stills, a week of receipts spiked on a nail, the till emptied',
 };
 for (const c of R.CRIMES) MANIFEST.push({
   id: `crime-${c.id}`, model: PRO, ar: '16:9', job: `crime card: ${c.name}`,
