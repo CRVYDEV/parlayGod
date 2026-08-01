@@ -203,7 +203,13 @@ export async function vigStatus(pool) {
     ethSpent: round6(ethSpent), unspentEth: round6(revenueIn - ethSpent),
     omrBought: round6(omrBought), toReserveTotal: round6(toReserve),
     prizePool: round6(num(pp.balance)), prizePaid: round6(num(pp.paid_total)),
-    config: { vigBps: VIG_BPS, reserveBps: RESERVE_BPS, plexMintOmr: PLEX_MINT_OMR, plexRespawnOmr: PLEX_RESPAWN_OMR },
+    config: { vigBps: VIG_BPS, reserveBps: RESERVE_BPS, plexMintOmr: PLEX_MINT_OMR, plexRespawnOmr: PLEX_RESPAWN_OMR,
+      // The IMPLIED RATE each fee pair puts on $OMR. Pre-market the PLEX price is the static floor
+      // and ignores the ETH fee, so these two must agree or whichever rail is cheap is the one a
+      // farm buys identities on — and minting is the Sybil bound. preflight warns at boot; this is
+      // the same number where an operator is already looking (the "a warning nobody reads" answer).
+      mintOmrPerEth: round6(PLEX_MINT_OMR / MINT_FEE_ETH),
+      respawnOmrPerEth: round6(PLEX_RESPAWN_OMR / RESPAWN_FEE_ETH) },
   };
 }
 

@@ -2962,6 +2962,71 @@ rung is still proven a few lines down on a deliberately seeded one. `LEVEL_UP_RE
 founder sign-off lever (BALANCE.md § THE REFILL CEILING; 0 disables the refill, a large value restores
 the runaway).
 
+**THE FARM + THE IDENTITY NFT (founder-directed 2026-08-01) — MEASURED, GUARDED, SPEC'D.** The
+founder proposed raising the identity mint to 0.025 ETH with a dynamic generative-art NFT attached,
+then **held the fee at 0.01** and asked for the rest. Three pieces. **(1) THE PLEX/ETH CONSISTENCY
+GUARD** (`src/preflight.js`, `src/vig.js`, `test/preflight.js`) — every fee is payable in ETH *or* in
+earned $OMR through PLEX, and `plexQuote` prices the $OMR rail `max(static_floor, feeEth × oracle ×
+premium)`, so **pre-market there is no oracle row and it returns the static floor, IGNORING the ETH
+fee entirely**. Raise `MINT_FEE_ETH` without raising `PLEX_MINT_OMR` and the two rails silently
+diverge — the cheapest identity becomes the PLEX one, at a price that no longer tracks what you meant
+to charge, and minting is the **Sybil bound**, so a desync quietly undoes the thing the fee exists to
+do with nothing in the game looking wrong. The invariant is the **implied rate**, not either number:
+both pairs currently imply **500 $OMR/ETH** (5/0.01 and 50/0.10), checked as a ratio so it holds at
+any fee level and needs no view on the right price. A WARNING not an error (the SOCIAL_VERIFY_MODE
+precedent: taking a live server down over a mispriced rail is worse than the mispricing), with the
+live implied rates surfaced on `GET /v1/mod/vig` — the answer to "a warning nobody reads". Three
+mutations, three named failures; a fourth assertion pins the restated defaults against vig.js's
+actual exports so the restatement (preflight cannot import vig — the one-way rule) cannot rot.
+**(2) THE FARM — the founder's open Discord question measured** (`tools/sim.js` **P9.29**,
+BALANCE.md § THE FARM). Answered analytically because the payout is closed-form
+(`emission.js:114`). The property first: **a farm's share of the budget IS its share of total respect
+gained**, and there is no cheaper path to respect than playing — so a farmer has no efficiency edge,
+only parallelism. Which makes everything turn on the cap, and the cap does the opposite of what its
+comment says. Measured: **the wage goes FLAT below ~100 wage-eligible accounts** (the cap binds at
+1.0% of total gain, so below that everyone is capped and the pro-rata weighting does nothing — the
+wage is a flat 5 $OMR/day per identity *however well or badly it is played*, and that regime is the
+ALPHA); **`WAGE_CAP_OMR` is anti-CONCENTRATION, which is the opposite of anti-Sybil** — it clips the
+honest whale and hands the remainder to whoever runs more accounts, since the only way around a
+per-individual cap is to be several individuals; **100 identities capture the whole daily budget for
+1 ETH one-time**, i.e. **the mint fee is one day of the thing it gates** at the game's own implied
+rate; break-even **3,500 / 15,000 / 45,000 $OMR/ETH** at 7/30/90 days against an implied 500. Two
+things make it less alarming and change which fix is right: **extraction is already bounded by the
+full-reserve queue** (fed only by Vig buybacks off real revenue, so extraction ≤ inflow holds however
+many alts exist — the damage is DILUTION plus a DEX overhang, and the 48h surcharge taxes the fast
+version of the second), and **the endowment cannot be drained** — 500/day halving every 180 days is a
+geometric series summing to **180,000 $OMR ever** against a 1M endowment, so the schedule can only
+ever use **18%** of it and the endowment ceiling is not the binding constraint (flagged separately:
+the `emission within endowment` invariant would not fire until ~5.5× past anything the schedule can
+do — harmless as built, but not doing the work it looks like it is doing). **A correction worth
+recording: the first cut of that drain probe ran a day-by-day loop and reported its own 50-year guard
+as though it were a measurement** — the shape of a bug that reads exactly like a result; it is
+closed-form now. Five ranked options in BALANCE with **what each costs a legitimate small player**,
+which is the real tradeoff: F1 (cap on a durable identity rather than per account) is the only one
+addressing the mechanism rather than taxing the symptom and the only one free to honest players; F2
+(raise the score floor) is the most tempting and the worst, since it prices out exactly the casual
+earner the wage was built for. **Nothing retuned** — every `EMISSION.*` is a signed lever. **(3) THE
+IDENTITY NFT DESIGN DOC** (`omerta-identity-nft-design.md`, design only). The load-bearing decision is
+**tradeable TROPHY, non-transferable ENTITLEMENT**: if a transferable token carried the entitlement,
+the real per-identity cost would stop being the mint price and become the **secondary floor**, and
+the cheap end of that order book is by construction *the dead alts of the last farm* — a self-feeding
+mechanism that decays the Sybil bound toward the floor. `account_persistent.minted` is already an
+account flag, so this is the system's default behaviour and requires us to NOT wire the entitlement
+to the token (the instinct to gate on `balanceOf` is the whole difference). "Dynamic" and
+"generative" pull against each other — generation is ~$0.05 and seconds while `tokenURI` is hammered,
+so **layered composition** (≈38 reviewed parts → ~23,000 portraits) is the only architecture that is
+both dynamic and affordable, and it is what makes the art reviewable: **review the LAYERS, not the
+composites** (147 plates were eyeballed and that caught a modern server room, a black frame and a
+designer lamp; nobody can eyeball thousands). Traits stay **banded** on wealth — a free, permanently-
+public, marketplace-indexed blob must be at most as revealing as the paid Wire dossier, preserving
+the anti-precise-kill-EV rule. Sequenced off-chain-first/chain-dormant because a new contract resets
+the third-party audit clock that v2 step 4 already reset once. **Sensitive:** selling a tradeable
+asset for real money is a different thing to sell than an in-game entitlement — the no-appreciation-
+language rule applies with more force, royalties are fine but revenue-share/floor-support framing is
+out, and counsel reviews the copy. The doc closes by stating what it does NOT do: **it does not fix
+the farm** — a collectible does not change the per-identity cost, and a liquid secondary market makes
+a farm's exit easier, which is exactly why the trophy/entitlement split is not optional.
+
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
 `payPlex` pattern); named landmarks / Founder's charter numbers; ~~R2 (the `rwa_revenue` → real-RWA-buy

@@ -3626,3 +3626,68 @@ them, and every successful crime rolls `CLUES.DROP_P` (2%), so a player who had 
 met an organic clue scroll roughly one run in ten. A deterministic assertion resting on a
 probabilistic precondition (the population duel-ladder and Doc-drill flakes). The scroll is now
 cleared before the walk; the clue rung is still proven a few lines down on a deliberately seeded one.
+
+## THE FARM — what the Street Wage costs a Sybil, and what it pays (measured 2026-08-01)
+
+The founder's open question from the alpha Discord: *"the horde of low-value farmers that will play
+strictly to exploit/extract. Open to ideas on how to reach that balance."* The wage is the only
+real-value emission to players, so it is the one loop where that question has teeth. Answered
+analytically (`tools/sim.js` **P9.29**, prints every run) because the payout is closed-form —
+`emission.js:114`: `share = min(WAGE_CAP_OMR, budget × gain / Σgain)`.
+
+**Start from the property, not the number.** A farm's share of the budget *is* its share of total
+respect gained, and there is no cheaper path to respect than playing. So a farmer has **no efficiency
+edge** over an honest player — only parallelism. Everything therefore turns on the per-account cap,
+and the cap does something counter-intuitive.
+
+| finding | measured | why it matters |
+|---|---|---|
+| **the wage goes FLAT below a population** | **100** wage-eligible accounts | the cap binds at 1.0% of total respect gained (5/500). Below ~100 similar players *every* qualifier is capped, the pro-rata weighting does nothing, and the wage is a flat 5 $OMR/day per identity that clears the floors — **however well or badly it is played.** That regime is the alpha: exactly when the population is smallest and a farm is cheapest to stand up. |
+| **the cap is what creates the Sybil incentive** | — | `WAGE_CAP_OMR` is commented "anti-concentration / anti-Sybil", but concentration is the *opposite* of Sybil. It clips the honest whale to 5 and hands the remainder to whoever runs more accounts — the only way around a per-individual cap is to be several individuals. |
+| **capturing the entire budget** | **100 identities · 1 ETH** one-time | the mint fee is the only thing charging for that. |
+| **payback at the game's own implied rate** | **1.0 day** | the game prices 5 $OMR = 0.01 ETH (`PLEX_MINT_OMR/MINT_FEE_ETH` ⇒ 500 $OMR/ETH), so the 500/day budget is worth ~1 ETH/day and 100 identities cost 1 ETH. **The mint fee is one day of the thing it gates.** |
+| **break-even price** | **3,500** (7d) / **15,000** (30d) / **45,000** (90d) $OMR/ETH | farming pays if $OMR trades richer than these. The game's own implied rate is **500** — far richer than all three, so on these assumptions farming pays comfortably. |
+
+**Two things that make this less alarming than it reads, and they change which fix is right.**
+
+**Extraction is already bounded and not by the fee.** A farm can accumulate at that rate, but
+*withdrawing* needs the reserve to hold it, and the reserve is fed only by Vig buybacks off real
+revenue — so `extraction ≤ inflow` holds by construction however many alts exist. The damage a farm
+does is **dilution** (above ~100 players, every $OMR an alt takes is one an honest player does not)
+and a **$OMR overhang** it can sell on the DEX. The 48h early-exit surcharge taxes the fast version
+of the second hard.
+
+**The endowment cannot be drained.** 500/day halving every 180 days is a geometric series summing to
+**180,000 $OMR ever**, against a 1,000,000 endowment — so the schedule can only ever use **18%** of
+it. A farm cannot beat the schedule either: the budget is a per-epoch ceiling, so maximum farming
+means it runs fully subscribed rather than partly. *(Worth knowing separately: the endowment is
+5.5× what the schedule can reach, so the `emission within endowment` invariant would not fire until
+long past anything the schedule can do. Harmless as built — a ceiling nobody reaches is a ceiling —
+but it is not doing the work it looks like it is doing. If the endowment was meant to be the real
+bound, either it or `DECAY_EVERY` is mis-sized. Founder call.)*
+
+Also corrected in the build: the first cut of the drain probe ran a day-by-day loop and reported its
+own 50-year guard as though it were a measurement — the shape of a bug that reads exactly like a
+result. It is closed-form now.
+
+### The options, ranked — with what each costs an honest small player
+
+Nothing below is applied. Every `EMISSION.*` number is a signed lever.
+
+| # | lever | effect on a farm | **cost to a legitimate small player** |
+|---|---|---|---|
+| **F1** | **make the cap sub-linear in identities** — cap on a bloodline/wallet/payment instrument rather than per account | strikes the root: splitting stops recovering the pro-rata share, so the incentive the cap creates disappears | **none** for anyone running one identity. Needs a durable identity key to cap against, which is the hard part — the wallet is the honest candidate since minting already requires one |
+| **F2** | **raise `WAGE_MIN_SCORE`** (25) so a wage requires real play, not a token session | linear cost increase per alt in *automation minutes*, which is a farm's real scaling constraint | hits the casual player hardest — someone who plays 20 minutes a day is exactly who a high floor excludes, and they are the player the wage exists for. **The worst option on this axis** |
+| **F3** | **raise the mint fee** | linear, and the founder has chosen to hold at 0.01 for now | raises the on-ramp for the small earner; minting also gates withdrawing, so it compounds |
+| **F4** | **weight by account AGE or a non-farmable axis** (tenure, verified social, prestige) | a farm can wait, but waiting is inventory cost, and cohort-based weighting makes a burst of new identities self-diluting | a genuinely new honest player earns less at first — a real cost, but a *transparent* one, and it decays |
+| **F5** | **accept it, and let the reserve be the wall** | none | none. Defensible: extraction is already bounded, the endowment cannot be drained, and the practical loss is dilution among *in-game* $OMR holders. The cost is that honest players' share is halved by a farm that costs 1 ETH to stand up |
+
+**My reading:** F1 is the only one that addresses the actual mechanism rather than taxing the
+symptom, and it is the only one with no cost to a legitimate player. F2 is the most tempting and the
+worst — it prices out precisely the small earner the wage was built for. F5 is more defensible than
+it sounds and is the right *interim* posture while the population is below 100, because in that
+regime the wage is flat anyway and the dilution has nobody to dilute.
+
+**The population number is the thing to watch.** Below ~100 wage-eligible accounts none of this
+bites; above it, a farm's take comes directly out of honest players. `GET /v1/mod/overview` already
+reports active accounts — that figure crossing 100 is the trigger to decide.
