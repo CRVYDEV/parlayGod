@@ -148,6 +148,19 @@ const SIGNED = [
   ['CONVOY.NPC.MAX_QTY', 16],
   ['CONVOY.NPC.TARGET', 2],
   ['CONVOY.TOLL_BPS', 500],
+  // ECONOMY v3 STEP 3 — THE BAND AND THE DAILY AUCTION (design §11.6/§11.7). The band's UPPER edge is
+  // pinned for a second reason beyond "it is a signed number": the auction's RESERVE is derived from
+  // it, so moving UPPER silently moves the price the desk will sell at. That is the whole mechanism.
+  ['BAND.ANCHOR_DAYS', 30],
+  ['BAND.UPPER_BPS', 10000],       // 1.00x anchor — sell at or above the 30-day average
+  ['BAND.LOWER_BPS', 8000],        // 0.80x — the BUY edge (step 4); pinned now so the pair cannot drift
+  ['DESK_AUCTION.DURATION_MS', 21600000],   // 6h
+  ['DESK_AUCTION.OPEN_BPS', 15000],         // opens at 1.5x anchor, descending linearly to the reserve
+  ['DESK_AUCTION.FLOAT_CAP_BPS', 100],      // 1% of float/day — a huge sink day must not become a dump
+  ['DESK_AUCTION.FLOAT_CAP_MIN_OMR', 1000], // the bootstrap floor under that cap (float 0 would deadlock it)
+  ['DESK_AUCTION.MIN_LOT', 1],
+  ['DESK_AUCTION.ORACLE_MAX_AGE_MS', 172800000], // 48h, then FAIL-CLOSED — never a fallback price
+  ['DESK_AUCTION.ETH_POL_BPS', 5000],       // the ETH proceeds split 50/50 POL / founder
   ['DUELS.GRUDGE_CD_MULT', 0.34],
   ['DUELS.LEGEND_MIN_LVL', 10],
   ['DUELS.MIN_LVL', 5],

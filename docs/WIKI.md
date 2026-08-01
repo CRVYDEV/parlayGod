@@ -182,6 +182,17 @@ money** by somebody, which is exactly why it is worth taking off them. Your thre
 from another player who pays you in it, or **buy it**. A nightly job asserts that no new $OMR appeared,
 so this is a fact you can check rather than a promise.
 
+**The Desk** (`GET /v1/desk`) — where you buy it, and where it goes when you spend it. Every $OMR a
+sink takes off you (a vanity burn, an estate tier, a jury, the Window) is **not destroyed** — it lands
+on the desk's shelf, and the desk puts it back up for sale. Once a day the desk runs a **descending
+auction**: it opens high and the price falls for six hours toward a **reserve**, and whatever does not
+sell simply rolls to tomorrow. The lot is what came home yesterday, capped at 1% of all the $OMR in
+player hands so a big spending day cannot become a dump. **The desk can only ever sell what is on its
+shelf** — it never issues anything, which is why buying here moves no supply at all: those are somebody
+else's spent chips changing hands. The board publishes the shelf, the clock, the price and the exact
+list of spends that feed it, so the claim is checkable. **$OMR bought at the desk is FRESH** — it pays
+the full early-exit toll for its first 48 hours, same as any other fresh token.
+
 **The Exchange window** (`GET /v1/window`, `POST /v1/window/redeem`) — the ONE conversion in the
 game, and it runs one way: **burn $OMR, receive cash at a published rate**, from a till that real
 cash sinks fill (the street take). A short till refuses cleanly and burns nothing — the window is a

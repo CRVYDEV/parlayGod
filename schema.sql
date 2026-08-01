@@ -1605,6 +1605,42 @@ CREATE TABLE IF NOT EXISTS desk_inventory (
 );
 INSERT INTO desk_inventory (id, balance) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM desk_inventory);
 
+-- ECONOMY v3 STEP 3 — THE DAILY DUTCH AUCTION. One row per day (the day IS the key, so a double
+-- open is a unique violation rather than a second lot). Prices are ETH PER $OMR so the clock
+-- descends the way a Dutch clock should; `anchor_eth_per_omr` is snapshotted at open so the whole
+-- session prices off ONE reading and a mid-auction oracle move cannot re-price a live lot.
+CREATE TABLE IF NOT EXISTS desk_auctions (
+  id TEXT PRIMARY KEY,
+  day INT NOT NULL UNIQUE,
+  qty_omr NUMERIC NOT NULL,               -- the lot: yesterday's returned inventory, capped
+  anchor_eth_per_omr NUMERIC NOT NULL,    -- the band's anchor at open (the 30-day TWAP, inverted)
+  open_price NUMERIC NOT NULL,            -- OPEN_BPS × anchor
+  reserve_price NUMERIC NOT NULL,         -- BAND.UPPER_BPS × anchor — the reserve IS the band
+  opens_at TIMESTAMPTZ NOT NULL,
+  closes_at TIMESTAMPTZ NOT NULL,
+  sold_omr NUMERIC NOT NULL DEFAULT 0,
+  eth_taken NUMERIC NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'live'     -- live | closed
+);
+-- One row per FILL. `ref` is the idempotency key (mainnet: txHash:logIndex), and `real` marks an
+-- episode backed by an actual on-chain payment — a mod/QA fill records the sale but books ZERO ETH
+-- (the store/bond/sell-tax anti-fabrication gate: "the desk received this much ETH" must never be
+-- assertable by a comp route).
+CREATE TABLE IF NOT EXISTS desk_sales (
+  ref TEXT PRIMARY KEY,
+  auction_id TEXT NOT NULL,
+  account_id TEXT,
+  omr NUMERIC NOT NULL,
+  price_eth_per_omr NUMERIC NOT NULL,
+  eth NUMERIC NOT NULL,
+  pol_eth NUMERIC NOT NULL DEFAULT 0,
+  founder_eth NUMERIC NOT NULL DEFAULT 0,
+  tx_hash TEXT,
+  real BOOLEAN NOT NULL DEFAULT false,
+  at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_desk_sales_auction ON desk_sales(auction_id);
+
 INSERT INTO rwa_dividend_pool (id, pool) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM rwa_dividend_pool);
 INSERT INTO rwa_family_dividend_pool (id, pool) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM rwa_family_dividend_pool);
 CREATE TABLE IF NOT EXISTS transactions (

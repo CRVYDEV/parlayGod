@@ -2817,6 +2817,62 @@ export const recyclesToDesk = (reason) => !!reason
   && DESK.SINK_REASONS.some((p) => deskMatch(p, reason))
   && !DESK.NOT_RECYCLED.some((p) => deskMatch(p, reason))
 
+// ═══ THE BAND AND THE AUCTION (economy v3 step 3) ═══
+// Design §3.1, §3.2, §11.6, §11.7. The desk now SELLS what step 2 taught it to collect.
+//
+// PRICES HERE ARE **ETH PER $OMR**, so "descending" is literal and a Dutch clock reads the way a
+// Dutch clock should. The oracle quotes the inverse (`price_omr_per_eth`, the same print the vault
+// reads), so the anchor is 1/that — inverted once, at the edge, and never again.
+//
+// THE ELEGANT PART, and the reason the band and the auction are ONE block: the auction's RESERVE is
+// the band's upper edge. Above `UPPER` the desk should be selling, below it should not, and a Dutch
+// auction that will not clear under its reserve enforces exactly that with no second "should we sell
+// today?" decision to write, forget, or get wrong. Unsold inventory simply rolls to tomorrow.
+export const BAND = {
+  ANCHOR_DAYS: 30,   // the TWAP window the anchor comes from. Manipulation cost scales with the
+                     // window; shorter and a whale sets our price. (Mainnet: OmrTwapOracle's own
+                     // period. Off-chain here we read the latest print, which IS that average.)
+  UPPER_BPS: 10000,  // 1.00× anchor — SELL at or above the 30-day average. Roughly half of all days,
+                     // which is the cadence of a seller who wants turnover rather than market timing.
+  LOWER_BPS: 8000,   // 0.80× anchor — BUY 20% below. The buy side is step 4; the constant lives here
+                     // because the band is one object and splitting it invites the two halves to drift.
+  // The 20%-wide dead zone is the point: narrower and the desk churns on ordinary noise, paying gas
+  // and spread to trade with itself; wider and it sits idle through conditions it should act on.
+};
+// (named DESK_AUCTION, not AUCTION — that name is the Auction House's weekly $OMR trophy lots, a
+// different market entirely, and two `AUCTION`s in one namespace is a bug waiting for a hurry.)
+export const DESK_AUCTION = {
+  DURATION_MS: 6 * 3600000,  // 6h — long enough for a global player base to see one.
+  OPEN_BPS: 15000,           // opens at 1.5× anchor and descends LINEARLY to the reserve. High enough
+                             // that a genuine squeeze can clear up there; nobody is forced to bid it.
+  FLOAT_CAP_BPS: 100,        // 1% of float per day. Yesterday's sink volume is the lot size, but a
+                             // huge sink day must not become a dump — the cap is what makes that true.
+  FLOAT_CAP_MIN_OMR: 1000,   // the BOOTSTRAP floor under that cap, and it is not decoration: with a
+                             // float of zero the 1% cap is zero, so no auction opens, so nobody can
+                             // buy, so the float stays zero. A cold start would deadlock without it.
+  MIN_LOT: 1,                // below this the desk does not bother opening; a dust auction is noise.
+  // VEST: there isn't a separate one, and that is deliberate. A `desk:sale` credit appends a FRESH
+  // FIFO lot, so `tax.js:earlySurcharge` already prices anything sold here at the full early-exit
+  // rate decaying to zero over `FRESH_WINDOW_MS` (48h) — design §11.7's vest, already implemented.
+  // One concept, one constant: simultaneously the anti-dump, the float creator, and the §5(ii) loot
+  // exposure window. Building a second timer beside it would only give the two a way to disagree.
+  ORACLE_MAX_AGE_MS: 172800000, // 48h. FAIL-CLOSED (the vault's ethPrice precedent): no print, or one
+                             // older than this, and NO AUCTION OPENS. It must never fall back to a
+                             // default price — "we don't know what $OMR costs" resolving to "sell it
+                             // at the default" is a standing free option on the desk's whole shelf.
+  ETH_POL_BPS: 5000,         // the ETH proceeds split 50/50 POL / founder (design §3.1, founder spec).
+};
+// The Dutch clock: linear from OPEN down to RESERVE across DURATION_MS, then flat at RESERVE.
+// Returns ETH per $OMR. Clamped at both ends so a late/early call can never quote outside the band.
+const round8 = (n) => Math.round(n * 1e8) / 1e8
+export const auctionPriceAt = (a, now) => {
+  const open = Number(a.open_price), reserve = Number(a.reserve_price)
+  const t0 = new Date(a.opens_at).getTime(), t1 = new Date(a.closes_at).getTime()
+  if (!(t1 > t0)) return reserve
+  const frac = Math.min(1, Math.max(0, (now - t0) / (t1 - t0)))
+  return round8(open - (open - reserve) * frac)
+};
+
 // ═══ TAX — the transaction tolls on the REAL-value boundary (founder-directed 2026-07-23).
 // Complements the existing tax map: in-game P2P takes already feed street_tax → the 12h BUYBACK;
 // ETH Store revenue already splits founder/buyback/rwa (STORE.SPLIT_BPS); bonds split POL/Vig.

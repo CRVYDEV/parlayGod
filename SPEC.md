@@ -10,10 +10,10 @@ Written 2026-07-25. Every number below was measured from the tree, not recalled.
 
 | | |
 |---|---|
-| Backend modules | **111** files, **35435** lines (`src/`, incl. `src/routes/` and `src/social/`) |
-| Test suites | **62** files, **22693** lines (`test/`) — ratio 0.63 test:src |
+| Backend modules | **111** files, **35773** lines (`src/`, incl. `src/routes/` and `src/social/`) |
+| Test suites | **62** files, **22900** lines (`test/`) — ratio 0.63 test:src |
 | HTTP routes | **528** registrations |
-| Database tables | **179** (`schema.sql`, 2496 lines) |
+| Database tables | **181** (`schema.sql`, 2532 lines) |
 | Client | **6,804** lines (`public/index.html`, single file, zero dependencies) |
 | Ops dashboard + wiki | `public/admin.html`, `public/wiki.html` |
 | Smart contracts | **1276** lines Solidity, 8 contracts, 107 Foundry tests passing |
@@ -31,7 +31,7 @@ Everything is built on five load-bearing decisions. None has needed revision in 
 
 **`rules.js` is the constants layer, in two files.** `rules.generated.js` holds the prototype's 22 data
 tables (479 lines) and is overwritten wholesale by the extractor; `rules.tail.js` holds every helper,
-catalog, ladder and founder-signed lever (3939 lines) and the extractor never opens it. `rules.js`
+catalog, ladder and founder-signed lever (4040 lines) and the extractor never opens it. `rules.js`
 re-exports both. Nothing in `src/` hardcodes a balance number.
 
 **`withCharacter` is the transaction spine.** Every player action opens `SELECT … FOR UPDATE` on the

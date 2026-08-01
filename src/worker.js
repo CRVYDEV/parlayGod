@@ -16,6 +16,7 @@ import { runVigInvariants } from './vig.js';
 import { carveExchange, mergeLegacyYieldPools, payFamilyYield } from './exchange.js';
 import { runBondInvariants } from './bonds.js';
 import { runTreasuryInvariants } from './treasury.js';
+import { openAuction, closeExpired, runDeskInvariants } from './desk.js';
 import { sweepExpiredBounties, huntWanted } from './social.js';
 import { sweepUncreditedFees } from './fees.js';
 import { sweepGrandReferrals } from './game.js';
@@ -235,6 +236,14 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     // cash pool being non-empty is how it never runs on a quiet server (red-team A1).
     const lm = await safe('legacy pools', () => mergeLegacyPools(pool));
     if (lm) console.log(`🔁 legacy yield pools merged: ${lm.merged.toFixed(3)} $OMR → the family pot`);
+    // THE DESK'S DAILY AUCTION (economy v3 step 3). Closing first is deliberate: an expired lot must
+    // stop being sellable before a fresh one opens, and both are idempotent (the day is a unique key,
+    // the close is a predicated UPDATE), so running them every hourly tick is how the auction survives
+    // worker downtime — the first tick of a new day opens it, whenever that tick happens to be.
+    await safe('desk auction close', () => closeExpired(pool));
+    const da = await safe('desk auction', () => openAuction(pool));
+    if (da?.opened) console.log(`🔨 the desk opens: ${da.qty} $OMR from ${da.open} down to ${da.reserve} ETH each`);
+    else if (da && da.reason !== 'already') console.log(`🔨 no auction today (${da.reason})`);
     // TOKENOMICS v2 — THE FAMILY YIELD. A no-op on an empty pot, so this is safe to run every tick
     // and is live the moment FAMILY_YIELD.FUND_BPS is turned up (design §3).
     const fy = await safe('family yield', () => payFamilyYield(pool));
@@ -451,6 +460,11 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
       // §10.4 drift alarm firing into an unread log: the check exists and the breach still ships.
       const tinv = await safe('treasury invariants', () => runTreasuryInvariants(pool));
       if (tinv && !tinv.ok) await safe('treasury alert', () => alertDrift(pool, tinv.checks.filter((c) => !c.ok), 'treasury'));
+      // THE DESK's ETH side (economy v3 step 3). §10.4 reconciles the $OMR the auction handed over;
+      // this reconciles the money it took for it, and asserts a comp booked none — same reason as
+      // the three above, and the same alarm channel, because a check nobody reads is not a check.
+      const dinv = await safe('desk invariants', () => runDeskInvariants(pool));
+      if (dinv && !dinv.ok) await safe('desk alert', () => alertDrift(pool, dinv.checks.filter((c) => !c.ok), 'desk'));
       if (vinv && binv) console.log((vinv.ok && binv.ok) ? '✅ vig + bond (real-value) invariants hold' : '🚨 VIG/BOND DRIFT — see alert above');
     }
   };
