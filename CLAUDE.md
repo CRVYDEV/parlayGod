@@ -2861,6 +2861,60 @@ respect for the same job" assertion was VACUOUS — `pick` pays 2 respect and `M
 additionally asserts the two numbers genuinely DIFFER, and the mutation fails by name. Suite green + sim
 drift-0. All three `REF_XP` numbers are founder sign-off levers.
 
+**THE HARNESS MEASURES THE GAME THAT SHIPPED — the calendar, the city, and the four loops
+(2026-08-01).** `tools/playthrough.js` is the only thing that measures what a PERSON experiences
+rather than what the ledger conserves, and it had drifted from the game in three ways that each made
+it UNDER-report. **(1) The calendar never turned** — the clock warped the character's timestamps,
+which advances the hours but never the DATE, and a growing set of loops is keyed on `dayOf()` (daily
+contracts, the corner + its chains, the hustle, trainer drills, fixture leads, the standing bucket).
+A seven-day run therefore delivered exactly ONE day of all of it: **2 daily contracts claimed in a
+week** against three a day on offer. Rolling the date is the same trick as pulling a timestamp back,
+with one trap that fired immediately — a table keyed ON the day is a LEDGER OF DAYS, so shifting
+every row down stacks yesterday onto the day before and breaks the key; spent history is DROPPED and
+only the live day moves, while a table merely CARRYING a day (a chain's `last_day`) shifts safely.
+**(2) The city was empty** — `runPopulation` is a worker job that ships ON, so a server with nobody
+in it is the unrealistic case; the harness now fills it (48 residents) and keeps the worker's beat
+once a sitting. **(3) The ladder had never met four loops** — the corner, the hustle, the career
+ladder and the regimen/drills (it was NOT as stale as feared: the coach, port, races, boxing, fronts,
+skills, rackets and kitchen lab were already driven). **Noise was measured before anything was read**
+— three identical runs give ±2 levels at 2h, ±1 at 5h, **±0 at 10h** — so the ten-hour figure is the
+one that means anything. Decomposed there: **41 as it stood → 44 with the calendar (+3) → 46 with the
+loops, residents and PvP contracts (+2)**; the level-up refill is worth **+4** of that 46, confirming
+the A/B taken when it shipped. The audit that prompted this pass called the refill "unmeasured" —
+that was **WRONG**, and the correction is recorded: what was unmeasured was the combined state, not
+the lever. **THE HEADLINE IS A DEFECT, found only because the harness could finally run 30 days: the level-up
+refill makes NERVE UNBOUNDED past level ~90.** Nerve is the pacing wall the PACING pass installed on
+purpose; the refill sets nerve to CAP on every crossing, so it is a faucet whose size is the cap and
+whose rate is how often you level — and past the point where a crossing hands back MORE than the next
+level costs, the wall is gone. Proven LIVE, not inferred: a level-115 character with trained stats and
+**the clock frozen so regen is exactly zero** took a nerve pool that funds **3 jobs and pulled 3000**,
+reaching **level 656 in one sitting at full nerve**; end to end, 30 simulated days (45h played) reach
+**level 1636 and $7.5 BILLION**, with crimes per sitting climbing 43 → 837. This is the level-240 alpha
+speedrun class reborn above level 90. **Why the shipping A/B missed it is the lesson**: it measured 2h/
+5h/10h — all under level 50, all below where this turns. The lever was measured in the wrong RANGE. The
+harness now prints a THE REFILL CEILING probe every run (arithmetic over the signed constants, no
+runtime cost) so a change to the refill OR to the top of the crime respect/nerve curve re-measures it.
+NOT retuned (`PACING.LEVEL_UP_REFILL` is founder-signed); three dials in BALANCE, the cheapest being
+**refill ENERGY only, not nerve** — energy is not a wall, so the "keep playing" intent survives and the
+exploit dies. **A second pinned rung, same F2 class**: the anti-masking bound fails the 30-day run on
+*"You've earned skill points"* at **51% of advised play AFTER the player did what it says** — the tree
+is 12 skills costing 30 points and points are `floor(level/4)`, so **from level 120 every skill is
+owned and the rung fires forever with nothing to buy**. Seven days solo now reaches level 47 / $2.14M / 14 of 36 missions. **Two findings were
+nearly filed and both died on checking**: a coach rung ("2 of today's contracts unclaimed") held 41%
+of advised play and never cleared — the F2 masking class exactly — and survived adding residents
+(41% → 40%), but it was THE HARNESS, which had no way to jump or bust anyone; wired up, the rung
+leaves the top line and dailies go 8 → 14 a week. The first cut of that fix read `j.k` where the
+board sends `kind`, so it was a silent no-op that still printed a pass — the client-wiring guard's
+check-3 class landing in the harness itself. Flagged, NOT changed (BALANCE § THE HARNESS MEASURES THE
+GAME THAT SHIPPED): **energy is still vestigial** (THE REGIMEN shares the gym's clock AND its energy,
+so it is a substitution — full 96% of minutes before and after), **stat training past the mission
+gates buys nothing measurable** (212 muscle vs 51 reach the same level with comparable cash), and a
+**failed bust is a stretch in lockup** (uncapped chasing put the player in a cell 26% of the time and
+cost a quarter of the run's crimes; the harness now models a person who tries a couple of times).
+Honest limit, stated in the file: a day's CONTENT is a seed function of the real `dayOf()`, so the
+drawn corner tasks, hustle stops and drills repeat every simulated day — fine for throughput and
+pacing, not a test of variety.
+
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
 `payPlex` pattern); named landmarks / Founder's charter numbers; ~~R2 (the `rwa_revenue` → real-RWA-buy

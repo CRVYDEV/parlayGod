@@ -3462,3 +3462,107 @@ the corner holds), `M4.CREW_COST_STEP` ($50k × N), `M4.CREW_MAX` (5). The singl
 remove the crossover itself is `OFFLINE_CAP_MS`: raise the shift the corner holds toward the week the
 envelope runs and an absent owner stops bleeding — which also changes every other offline faucet, so
 it is a whole-economy decision, not a kitchen one.
+
+## THE HARNESS MEASURES THE GAME THAT SHIPPED — a calendar, a city, and what moved (2026-08-01)
+
+`tools/playthrough.js` is the only thing that measures what a PERSON experiences rather than what the
+ledger conserves, and it had drifted from the game in three ways that each made it under-report. All
+three are fixed; the numbers below separate what the GAME did from what the HARNESS was failing to
+see, because a single figure cannot tell you which.
+
+**The three gaps.**
+
+1. **THE CALENDAR NEVER TURNED.** The clock warped the character's timestamps, which advances the
+   HOURS but never the DATE — and a growing set of loops is keyed on `dayOf()`: the daily contracts,
+   the corner and its chains, the hustle, the trainer drills, the fixture leads, the standing bucket.
+   Across a seven-day run the player therefore got exactly ONE day of all of it. Measured: **2 daily
+   contracts claimed in a week**, against three a day on offer. Every day-keyed loop was being read at
+   roughly a seventh of itself, which would have printed as "these barely move the needle" — a limit
+   of the harness reported as a finding about the game.
+2. **THE CITY WAS EMPTY.** `runPopulation` is a worker job that ships ON, so a server with nobody in
+   it is the unrealistic case, and that is what was being measured.
+3. **THE LADDER HAD NEVER MET FOUR LOOPS** — the corner, the hustle, the career ladder and the
+   regimen/drills. (It was NOT as stale as feared: the coach, the port, races, boxing, fronts, skills,
+   rackets and the kitchen lab were all already driven.)
+
+**Run-to-run noise, measured first, because otherwise a movement cannot be read.** Three identical
+runs: level at 2h **±2**, at 5h **±1**, at 10h **±0**. So the ten-hour figure is the one to trust and
+the two-hour one carries a couple of levels of RNG. Everything below is quoted at 10h.
+
+| configuration | 10h | vs previous |
+|---|---|---|
+| as the harness stood (no calendar, empty city, old ladder) | 41 | — |
+| + the calendar turns | **44** | **+3** — the daily contracts finally paying |
+| + the four loops, the residents, and the PvP contracts | **46** | **+2** |
+| the shipped game, refill OFF (same config) | 41 | the refill is worth **+4** here — and see the defect above |
+
+**THE HEADLINE, AND IT IS A DEFECT: the level-up refill makes nerve UNBOUNDED past level ~90.**
+Nerve is the pacing wall — the PACING pass made it the limiter on purpose. The refill sets nerve to
+CAP on every crossing, so it is a nerve faucet whose size is the cap and whose rate is how often you
+level. Past the point where a crossing hands back MORE than the next level costs, the wall is gone.
+
+| level | nerve to earn the next level | refilled on the crossing | |
+|---|---|---|---|
+| 60 | 116 (via *counting*) | 70 | bounded |
+| **90** | 96 (via *grandcasino*) | 100 | **turns here** |
+| 110 | 81 (via *depository*) | 120 | +39 |
+| 300 | 221 | 310 | +89 |
+| 1500 | 1105 | 1510 | +405 |
+
+**Proven live, not inferred.** A level-115 character with trained stats, **the clock frozen so regen
+is exactly zero**: a nerve pool that funds **3 jobs funded 3000**, taking them from level **115 → 656
+in one sitting**, ending at **full nerve**. End-to-end, 30 simulated days (45 hours played) reaches
+**level 1636 and $7.5 BILLION** — crimes per sitting climb 43 → 837 as the loop takes hold. This is
+the level-240 alpha speedrun class, reborn above level 90.
+
+**Why the shipping A/B missed it, which is the lesson worth keeping.** That A/B measured 2h, 5h and
+10h — **all of it under level 50, all of it below where this turns.** The lever was measured; it was
+measured in the wrong RANGE. The harness now prints a THE REFILL CEILING probe every run (pure
+arithmetic over the signed constants, no runtime cost) so a change to the refill *or* to the top of
+the crime respect/nerve curve re-measures it.
+
+**NOT retuned — `PACING.LEVEL_UP_REFILL` is a signed lever and this is the founder's call.** Three
+dials, cheapest first: set it `false` (the revert BALANCE already documents, costs the −4 levels at
+10h); **refill ENERGY only, not nerve** (energy is not a wall — see H1 below — so the "keep playing"
+intent survives intact and the exploit dies); or flatten the top of the CRIMES respect-per-nerve
+curve, which F3's breadth drop steepened (*depository* pays 950 respect for 35 nerve = 27:1).
+
+**A second pinned rung, same F2 class.** The harness's own anti-masking bound fails the 30-day run:
+*"You've earned skill points"* holds **51% of advised play AFTER the player did what it says**. The
+tree is 12 skills costing 30 points total and points are `floor(level/4)`, so **from level 120 a
+player owns every skill and the rung fires forever with nothing left to buy.** The guard against
+nagging a veteran banking points for a capstone (`≥5 idle`) does not cover "the tree is finished".
+Cheapest fix: the rung goes silent when nothing is learnable.
+
+**The refill's SIZE was already measured and that part confirms.** BALANCE's existing A/B (level 14→16 / 23→25
+/ 39→43) was run when the refill shipped; re-measured inside the current content it is +4 at ten
+hours, the same size. The audit that prompted this pass called it "unmeasured" — that was **wrong**,
+and the correction matters: what was unmeasured was the COMBINED state, not the lever.
+
+**Seven days, solo, following the coach:** level **47**, **$2.14M**, 14 of 36 missions, 3% of played
+minutes in lockup, 3% idle. The mission ladder is cooldown-bound — 14 jobs is what a 4h cooldown fits
+into fourteen sittings however well you play.
+
+**Two findings I nearly filed and did not, both killed by checking.**
+- The calendar fix surfaced a coach rung — *"2 of today's contracts unclaimed"* — holding **41% of
+  advised play** and never clearing, which is the exact masking class the F2 audit had just closed.
+  It survived adding 48 residents (41% → 40%). It turned out to be **the harness**: the ladder had no
+  way to jump or bust anyone, so it could not do the work the contract asked for. Wired up, the rung
+  drops out of the top line entirely and dailies go 8 → 14 a week. **Not a defect.**
+- The first cut of that fix read `j.k` where the board sends `kind`, so the branch was a silent no-op
+  that still printed a pass — the client-wiring guard's check-3 class ("the route is right, the field
+  is not real") landing in the harness itself.
+
+**Flagged, NOT changed (ground rule #1).**
+
+| # | what | measured | dial |
+|---|---|---|---|
+| H1 | **Energy is still vestigial.** THE REGIMEN shares the gym's clock AND its 10 energy, so it is a substitution, not an addition. | energy full **96%** of played minutes, before and after | give one loop its own energy cost, or leave it as headroom |
+| H2 | **Stat training past the mission gates buys nothing measurable.** The old ladder's idle-gym fallback banked 212 muscle; spending the same sessions on disciplines banks 51 — and both reach level 45+ with comparable cash in seven days. | 212 vs 51 muscle, same level | either stats should matter more to the crime roll, or the gym's idle capacity is a sink with no return |
+| H3 | **A failed bust is a stretch in lockup**, so a player who chases a `bust` contract without restraint spends a quarter of their time in a cell. Capped at 3 attempts a sitting to model a person who learns. | uncapped: 26% of play in lockup, a quarter of the run's crimes lost | the contract's odds, or a per-day attempt cap in-game |
+
+**Honest limits of the harness, stated so nobody over-reads it.** The content of a day is a seed
+function of the real `dayOf()`, so the drawn corner tasks, hustle stops and drills are identical every
+simulated day — fine for throughput and pacing, not a test of variety, and it means whichever daily
+contracts today happens to draw are the ones exercised. The player is still solo: no family, no crew
+heist, no duel.
