@@ -295,141 +295,15 @@ if (!PG_CTL) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
-console.log('\n4. THE WAGE EPOCH IS KILLED HALFWAY THROUGH PAYING');
-// The highest-stakes resume in the codebase. `runWageEpoch` MINTS $OMR — real value, on a fixed
-// schedule, against a lifetime endowment — and it pays one character per transaction in a loop. A
-// crash halfway leaves some paid and some not.
+console.log('\n4. (RETIRED) THE WAGE EPOCH');
+// This scenario killed `runWageEpoch` mid-loop and proved the crash-resume arithmetic minted exactly
+// the uninterrupted amount — the highest-stakes resume in the codebase, because it MINTED $OMR.
+// Economy v3 step 1 retired the faucet outright: there is no payer to interrupt, and the property it
+// protected (a crash cannot over-emit) is now guaranteed by there being no emission at all.
 //
-// A previous audit found that a resumed run re-granted the WHOLE epoch budget to whoever had not yet
-// been paid: endowment-bounded, so the lifetime invariant stayed quiet, but a silent breach of the
-// signed halving schedule. The fix subtracts what this epoch already minted (`emittedThisEpoch`)
-// before splitting. It has never been crash-tested — until now it was an argument, not a fact.
-//
-// The arithmetic is meant to be self-correcting: with k already paid, the survivors split
-// `budget − consumed` between them, which works out to exactly the share they would have had in an
-// uninterrupted run. So the assertion is an EQUALITY against the uninterrupted total, not merely
-// "≤ budget" — an inequality would pass even if the crash silently paid everyone half.
-{
-  const { EMISSION } = await import('../src/rules.js');
-  const { emittedThisEpoch } = await import('../src/emission.js');
-  const CREW = 24;
-  const epoch = Math.floor(Date.now() / 86400000);
-  const workers = [];
-  for (let i = 0; i < CREW; i++) workers.push(await mk(`Chaos W${RUN}${i}`));
-
-  // Make them eligible: minted (the D1 Sybil wall), past the level floor, and enrolled with a
-  // baseline stamped LAST epoch so this epoch scores a real gain. Respect is the only thing seeded —
-  // wage eligibility is derived from it, and the payout itself is what is under test.
-  const ids = workers.map((w) => w.id);
-  await pool.query(`UPDATE characters SET respect = 5000 WHERE id = ANY($1::text[])`, [ids]);
-  await pool.query(`UPDATE account_persistent SET minted = true WHERE account_id IN
-    (SELECT account_id FROM characters WHERE id = ANY($1::text[]))`, [ids]);
-  await pool.query('DELETE FROM wage_snapshots WHERE character_id = ANY($1::text[])', [ids]);
-  for (const id of ids)
-    await pool.query('INSERT INTO wage_snapshots (character_id, epoch, respect) VALUES ($1,$2,$3)',
-      [id, epoch - 1, 100]);
-
-  // THE BUDGET MUST BIND, NOT THE CAP — or this scenario tests nothing.
-  //
-  // First cut ran on the real epoch budget (500 $OMR) with 24 workers. Each share came out at
-  // 500/24 ≈ 20.8, clamped to the 5 $OMR per-account cap, so EVERY worker got exactly 5 whether or
-  // not the resume subtracted what the crash had already spent. Deleting the guard entirely from
-  // `runWageEpochInner` still passed all six checks. The scenario was measuring the cap.
-  //
-  // With the budget overridden so each share (budget/CREW) sits UNDER the cap, the arithmetic is
-  // load-bearing again: drop the guard and the survivors split the full budget a second time, which
-  // the equality below catches. The assertion right here keeps it that way — raise WAGE_CAP_OMR or
-  // change the crew and this fails loudly instead of going quietly vacuous.
-  //
-  // The budget is set RELATIVE to what this epoch has already minted, because `emittedThisEpoch`
-  // counts every wage row written today — including ones an earlier run of this harness wrote
-  // against a different crew. A flat budget looked fine on a clean database and paid absolutely
-  // nobody on the second run (`payable` went negative), which the guards above caught. Offsetting
-  // by the standing total makes the run self-contained on a shared throwaway DB, and the arithmetic
-  // is unchanged: the crew starts with exactly CREW to split, and each resume sees it shrink by
-  // precisely what the crash already paid.
-  const spentToday = await emittedThisEpoch(pool, epoch);
-  const BUDGET = spentToday + CREW; // → 1 $OMR each, comfortably under the cap
-  const share = (BUDGET - spentToday) / CREW;
-  check(share < EMISSION.WAGE_CAP_OMR,
-    `the budget binds, not the per-account cap (${share} < ${EMISSION.WAGE_CAP_OMR}) — the crash-resume arithmetic is what is under test`,
-    'shares are cap-clamped, so this scenario would pass with the resume guard deleted');
-  const expected = CREW * share; // what THIS crew should draw — not BUDGET, which carries the offset
-  const paidRows = async () => (await pool.query(
-    `SELECT character_id, count(*)::int n, sum(amount)::numeric s FROM transactions
-      WHERE reason='emission:wage' AND character_id = ANY($1::text[]) GROUP BY character_id`, [ids])).rows;
-
-  const before = await drift();
-  // Run the epoch in a CHILD process and SIGKILL it mid-loop. A child, not the worker, because the
-  // worker's schedule would make the timing a lottery — and the failure under test is the process
-  // dying, which cannot be simulated from inside the process that is dying.
-  //
-  // The child announces READY on stdout the instant its pool is up, and the kill timer starts from
-  // THERE. Timing from spawn instead was the first cut and it never once landed inside the loop:
-  // `makeDb()` applies the whole schema plus ~1,035 ADD COLUMN statements, so the child spends
-  // almost its entire short life booting, and every kill landed before the first payment. The
-  // scenario reported 0/24 paid — which the guard below caught, but only because the guard exists.
-  const runner = `import('${new URL('../src/emission.js', import.meta.url).pathname}').then(async (m) => {
-    const { makeDb } = await import('${new URL('../src/db.js', import.meta.url).pathname}');
-    const pool = await makeDb();
-    process.stdout.write('READY\\n');
-    await m.runWageEpoch(pool, { epoch: ${epoch}, budget: ${BUDGET} });
-    process.exit(0);
-  });`;
-  const runEpoch = (killAfterReadyMs) => new Promise((resolve) => {
-    const c = spawn('node', ['-e', runner], { env: process.env, stdio: ['ignore', 'pipe', 'ignore'] });
-    let timer = null;
-    c.stdout.on('data', (d) => {
-      if (killAfterReadyMs && !timer && String(d).includes('READY'))
-        timer = setTimeout(() => c.kill('SIGKILL'), killAfterReadyMs);
-    });
-    c.on('exit', () => { if (timer) clearTimeout(timer); resolve(); });
-  });
-
-  // Find kill points that actually land INSIDE the loop. A crash before the first payment or after
-  // the last one exercises nothing and would pass this scenario while proving nothing — the same
-  // trap the load harness hit twice. The sweep is fine-grained because the loop is milliseconds long,
-  // and it keeps killing while the epoch is part-paid so the RESUME path runs repeatedly rather than
-  // once: each survivor's share is computed against a different already-consumed amount.
-  // The sweep runs long at the top end deliberately. The loop walks EVERY living character in id
-  // order, doing a transaction each even for the ones earning nothing, and the crew's ids are random
-  // — so the first actual payment can be many no-op iterations in. On a slow shared runner that is
-  // hundreds of milliseconds, and a window that stopped early would fail the guard for being slow
-  // rather than for being wrong. Stopping at the first partial costs nothing when it lands early.
-  const progression = [];
-  for (const ms of [4, 8, 12, 18, 25, 35, 50, 70, 100, 150, 220, 400, 700, 1200]) {
-    await runEpoch(ms);
-    const n = (await paidRows()).length;
-    if (n > 0) progression.push(n);
-    if (n >= CREW) break; // it ran to completion; the no-double-pay checks below still apply
-  }
-  const partials = progression.filter((n) => n < CREW);
-  check(partials.length > 0,
-    `the epoch was genuinely interrupted mid-payment — resumed from ${partials.join(', ')} of ${CREW} paid`,
-    'no kill landed inside the loop — this scenario proved nothing, widen the crew or the timings');
-
-  // now let it finish
-  await runEpoch(0);
-  const rows = await paidRows();
-  const total = rows.reduce((a, r) => a + Number(r.s), 0);
-  const twice = rows.filter((r) => r.n > 1);
-
-  check(rows.length === CREW, `every worker was paid after the resume: ${rows.length}/${CREW}`);
-  check(twice.length === 0, 'nobody was paid twice across the crash', `${twice.length} double payment(s)`);
-  // THE EQUALITY. Over-payment means the resume re-granted budget the crash had already spent;
-  // under-payment means a killed run lost a share the resume never picked up.
-  check(Math.abs(total - expected) < 0.01,
-    `the crashed-then-resumed epoch minted EXACTLY the uninterrupted amount: ${total} $OMR`,
-    `expected ${expected}`);
-
-  // a third run must be a no-op — the epoch is done, and re-running the worker must not print money
-  await runEpoch(0);
-  const after3 = (await paidRows()).reduce((a, r) => a + Number(r.s), 0);
-  check(Math.abs(after3 - total) < 0.01, 're-running a finished epoch mints nothing further',
-    `${after3} vs ${total}`);
-  const moved = deltas(before, await drift());
-  check(moved.length === 0, '§10.4 holds across the whole interrupted epoch (the mint reconciles)', moved.join('; '));
-}
+// Kept as a line rather than deleted so the numbering of the scenarios below does not shift under
+// anyone reading an older run, and so the reason is visible where the test used to be.
+console.log('   ⏭  skipped — the Street Wage is retired (economy v3 step 1); nothing mints $OMR in game.');
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
 console.log('\n5. TWO-PARTY TRANSFERS, INTERRUPTED');
@@ -508,8 +382,8 @@ if (fails.length) {
 // The summary must not claim what was skipped. Without PG_CTL the outage scenario never ran, and
 // saying "the API survives a database restart" on the back of a skipped test is the same overclaim
 // this harness exists to catch — it would read as green for the exact failure that started all this.
-console.log(`\n✅ chaos passed — interrupted sweeps resume without paying twice, an interrupted wage epoch `
-  + `mints exactly the uninterrupted amount, killed backends leave no transfer half-applied, `
+console.log(`\n✅ chaos passed — interrupted sweeps resume without paying twice, killed backends leave `
+  + `no transfer half-applied, `
   + (PG_CTL
     ? 'and the API survives a database restart with a legible 503 and recovers unaided.'
     : 'and §10.4 is unmoved throughout. THE FULL-OUTAGE SCENARIO DID NOT RUN (no PG_CTL) — that path is unmeasured here.'));

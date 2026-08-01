@@ -987,7 +987,7 @@
   <div class="band">
     <h2>TWO ECONOMIES, DELIBERATELY SEVERED</h2>
     <p>Most crypto games are built as a pipe: farm the game, convert your farm to the token, sell. Then every payout the designers add is quietly a decision about the token, and the only way to keep the token steady is to make the game stingy. OMERTÀ doesn't have the pipe. <b>Street cash cannot become $OMR — at any price, through any route.</b> Cash is the game's blood: a hundred hustles, rackets, fronts, heists, the casino, the track. It buys, bribes, arms and builds — and it stops there.</p>
-    <p>What that severing buys is the rest of the design. Grinding harder can't inflate the token, so the game is free to be generous where a game should be generous. $OMR is created by exactly three enumerated faucets — no fourth exists, and a nightly job proves it. The Street Wage runs on a published halving schedule against a finite endowment, so the emission curve is a fact you can read, not a policy someone can revise. And the one conversion that exists runs the <i>other</i> way: burn $OMR at the Window for cash, out of a till that real sinks paid for — a claim on money that already exists, never a promise, refusing cleanly when it's dry.</p>
+    <p>What that severing buys is the rest of the design. Grinding harder can't inflate the token, so the game is free to be generous where a game should be generous. $OMR is not created in game <i>at all</i> — there is no wage, no yield and no drip, and a nightly job proves it. Every token in the city was bought with real money by somebody, which is exactly why it is worth taking off them. And the one conversion that exists runs the <i>other</i> way: burn $OMR at the Window for cash, out of a till that real sinks paid for — a claim on money that already exists, never a promise, refusing cleanly when it's dry.</p>
     <p>It also settles a question this particular game had to answer. OMERTÀ is about risk: your street can be killed, your empire seized, your cash looted off your body. A currency that was an exit from that risk would undo the game it lives in. Severed, $OMR isn't the escape hatch from the streets — it's the thing you take to the streets. Every dollar and every $OMR lives on a built-in ledger, honest to the cent, with a conservation sweep running against it every night. No pay-to-win: a sharp player with empty pockets can top the boards over a whale who just bought in.</p>
   </div>
 
@@ -3068,7 +3068,7 @@
     pen: 'Lockup is a place, not a timeout: work the yard, buy protection, bribe the guard, join a crew — or go over the wall and live wanted.',
     wire: 'Information is a weapon: tap rivals to see what they hold, sweep your own lines, buy the dirt. Everything here is paid in $OMR — knowing is never free.',
     family: 'Nobody survives alone: a family means turf, a shared treasury, wars, territory rackets, and a seat at the Commission. Join one, or found your own.',
-    portfolio: 'Going legit: the token exchange, staking, the Street Wage, and the RWA book that survives your death. This is where street money becomes generational.',
+    portfolio: 'Going legit: the redemption window, the vault, and the RWA book that survives your death. This is where street money becomes generational.',
     estate: 'The compound: a $OMR monument to your bloodline — tiers, wings, staff, galas, the auction block. Pure status, survives death, and status is the point.',
     store: 'Real-money support: revives, passes, cosmetics — never power. A skilled free player still tops every board; spending here funds the prize pools.',
     life: 'Who you are and who you know: skills, the Trades, your Path, and the six fixtures of the Underworld — earn their trust and the whole city gets cheaper.',
@@ -3164,23 +3164,6 @@
     : s > 3600 ? Math.floor(s / 3600) + 'h' + Math.ceil((s % 3600) / 60) + 'm' : Math.ceil(s / 60) + 'm';
   const mins = (s) => cd(s, '0:00');
   // empty-state coaching: a friendly "what this is / do this first" card instead of a blank grid
-  // the Street Wage status line (Going Legit card) — reads the /v1/wage board, never re-derives
-  const wageLine = (w) => {
-    if (!w?.you) return 'enrolling…';
-    if (w.you.agentExcluded) return 'agents run their own economy — no wage';
-    if (w.you.mintedRequired && !w.you.minted) return 'made men only — mint your account (the Store\'s Made Man package, or PLEX it with earned $OMR) to qualify for the daily emission share';
-    // `reason` comes from the SAME predicate the payer scores with, so the line can never promise
-    // a wage the epoch will not hand over (the wage-board anchor fix)
-    if (w.you.reason === 'enrolling') return 'enrolling — your first full day starts the count';
-    if (w.you.reason === 're_enrolling') return 're-enrolling — the last payroll run missed a day, so today re-starts your count; you earn from the next one';
-    const base = '+' + fmt(w.you.gainThisEpoch) + ' respect this epoch ' +
-      (w.you.eligible ? '— <b style="color:var(--ok)">on the payroll</b>'
-        // ENROLLED but short is a different sentence from not enrolled at all — and it is the state
-        // every paid player sits in for the rest of the day, since the run stamps a fresh baseline
-        : w.you.enrolled ? '— <b style="color:var(--ok)">on the payroll</b>, ' + fmt(Math.max(0, w.you.minScore - w.you.gainThisEpoch)) + ' more respect before the next run'
-        : '(need ' + w.you.minScore + '+ and level ' + w.you.minLevel + '+)');
-    return base + (w.you.lastWage ? ' · last wage: +' + w.you.lastWage.omr + ' $OMR' : '');
-  };
   const coachCard = (title, body) => `<div class="card coach-card"><span class="t" style="color:var(--neon)">${title}</span><div class="d">${body}</div></div>`;
   // collapsible screen section (the density fix): reads like an h2, folds like a drawer, and the
   // open/closed choice STICKS per browser (localStorage) so the screen stays how you arranged it
@@ -5965,25 +5948,27 @@
     // AUTHED ones concurrent (api() queues those on purpose — same-account calls serialize on the
     // character row at the database anyway), but it removes the client-side turnaround between each
     // response and the next request, and the keyless boards genuinely do run in parallel.
-    const [pfR, vaultR, wageR, bdR, lbR, flbR, winR, yldR] = await Promise.all([
-      api('GET', '/v1/portfolio'), api('GET', '/v1/vault'), api('GET', '/v1/wage'), api('GET', '/v1/bonds'),
+    const [pfR, vaultR, bdR, lbR, flbR, winR, yldR] = await Promise.all([
+      api('GET', '/v1/portfolio'), api('GET', '/v1/vault'), api('GET', '/v1/bonds'),
       api('GET', '/v1/leaderboard/portfolio'), api('GET', '/v1/leaderboard/family-portfolio'),
       api('GET', '/v1/window'), api('GET', '/v1/yield'),
     ]);
-    const pf = pfR.body || {}, vault = vaultR.body || {}, wage = wageR.body || {}, bd = bdR.body || {};
+    const pf = pfR.body || {}, vault = vaultR.body || {}, bd = bdR.body || {};
     const lb = lbR.body || {}, flb = flbR.body || {}, win = winR.body || {}, yld = yldR.body || {};
     const mkt = pf.market || [];
     const sign = (n) => (n > 0 ? '+' : '') + n.toFixed(2) + '%';
     const holdMap = Object.fromEntries((pf.portfolio?.holdings || []).map((h) => [h.ticker, h]));
     t.innerHTML = `
       <h2>Going Legit <span class="d" style="font-size:11px">(earned $OMR → legit, death-proof holdings — the book outlives your street)</span></h2>
-      <div class="card" style="border-color:var(--neon)"><span class="t" style="color:var(--neon)">The Street Wage</span>
-        <div class="d">the city pays its workers: a fixed, public $OMR schedule splits today’s pot among everyone who really played
-          (respect earned today, level ${wage.you?.minLevel ?? 5}+, up to ${wage.you?.capOmr ?? 5} $OMR/day each). No claim button — the payout finds you at the day’s end.</div>
-        <div class="d">today’s pot: <b style="color:var(--ink)">${fmt(wage.budget ?? 0)} $OMR</b> · endowment left: ${fmt(Math.round(wage.endowment?.remaining ?? 0))} $OMR</div>
-        <div class="d">you: ${wageLine(wage)}</div>
-        ${wage.you?.mintedRequired && !wage.you?.minted ? `<div class="d" style="color:var(--dim);font-size:11.5px;margin-top:4px;border-top:1px solid rgba(255,255,255,.06);padding-top:5px">
-          <b>Free trial vs Made Man — straight facts, no promises:</b> a free account plays the <b>whole</b> game — every job, family, racket, kitchen, casino, PvP, all of it. Minting (the Store’s 0.01-ETH Made Man, or PLEX it with earned $OMR) unlocks two things: the Street-Wage payroll above, and moving $OMR / gear <b>on-chain out of the game</b>. Everything you build in-game, you build free.</div>` : ''}</div>
+      <div class="card" style="border-color:var(--neon)"><span class="t" style="color:var(--neon)">Where $OMR Comes From</span>
+        <div class="d">Nowhere in the game. There is no wage, no yield, no drip — <b>nothing you do on the street prints a single $OMR</b>.
+          Every token in this city was bought with real money by somebody, which is why it is worth taking off them.</div>
+        <div class="d">Your three ways to get some: <b>take it</b> off a man who is holding (a kill loots their liquid $OMR),
+          <b>earn it</b> from a player who pays you in it, or <b>buy it</b>. That is the whole list, and a nightly job proves it.</div>
+        <div class="d" style="color:var(--dim);font-size:11.5px;margin-top:4px;border-top:1px solid rgba(255,255,255,.06);padding-top:5px">
+          A free account plays the <b>whole</b> game — every job, family, racket, kitchen, casino, PvP, all of it.
+          Minting (the Store’s Made Man, or PLEX it with earned $OMR) is what lets you move $OMR and gear
+          <b>on-chain out of the game</b>. Everything you build in-game, you build free.</div></div>
       <div class="card"><span class="t">${pf.dynasty?.name ? pf.dynasty.name : 'Your Book'} — $${fmt(pf.portfolio?.bookValue || 0)}</span>
         <div class="d">cost basis ${fmt(pf.portfolio?.costBasis || 0)} $OMR · liquid $OMR on hand: ${fmt(Math.floor(me.omr || 0))} · survives death (the heir keeps it)${pf.dynasty ? ` · generation ${pf.dynasty.generation}` : ''}</div>
         <div style="margin-top:4px"><input id="dyn-name" placeholder="${pf.dynasty?.name ? 'rename the dynasty' : 'name your dynasty'}" size="18" maxlength="24">

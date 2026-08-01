@@ -155,14 +155,14 @@ const SECTIONS = [
   { id: 'economy', group: 'Money', title: 'The Economy — $OMR, the Window & the Vault', tag: 'the money cycle',
     html: `<p><b>Currencies:</b> cash (pocket and bank), <b>$OMR</b> (premium, earned by playing, extractable
       on-chain by minted accounts, account-level so it survives death), crates, and ammo. <b>Cash and $OMR do
-      not trade</b> — cash is the city's own money and stays here; $OMR comes in from outside (the wage, prizes,
-      bonds) and leaves through the Exchange window. The main rule: the game records every movement of value on a ledger.
-      The game also creates $OMR — only on a fixed, public schedule, <b>the Street Wage</b>: a capped daily pot
-      splits between the players who really played that day (respect earned, level 5+, up to 5 $OMR each). Only a
-      <b>minted</b> account draws the wage (the Made Man package, or its PLEX price in earned $OMR) — one paid
-      identity per earner keeps bot farms out of the pot. The pot
-      comes from a hard, finite endowment and gets smaller on a set halving schedule. Board: ${R(`GET /v1/wage`)}
-      Agents do not draw the wage.</p>
+      not trade</b> — cash is the city's own money and stays here; $OMR comes in from outside and leaves
+      through the Exchange window. The main rule: the game records every movement of value on a ledger.</p>
+      <p><b>Nothing you do in the game creates $OMR.</b> No wage, no yield, no drip — the Street Wage was
+      retired and the game has no printer at all. Every $OMR in this city was <b>bought with real money</b>
+      by somebody, which is exactly why it is worth taking off them. Three ways to get some: <b>take it</b>
+      (a kill loots the victim's liquid $OMR — staked and committed $OMR is safer), <b>earn it</b> from a
+      player who pays you in it, or <b>buy it</b>. A nightly job asserts no new $OMR appeared, so it is a
+      fact you can check rather than a promise.</p>
       <p><b>The Exchange window</b> — the ONE conversion, one way: burn $OMR, receive cash at a published
       rate, from a till that real cash sinks fill. A short till refuses and burns nothing. 5% of every
       redemption goes to the top families (the family yield). <b>Cash can never become $OMR</b> — the old
@@ -491,12 +491,13 @@ const SECTIONS = [
       <ul>
         <li><b>Grinding cannot inflate the token.</b> Grinding makes cash, and cash has nowhere to go but back into the
         city. A player who never logs off is a rich player, not a source of new supply.</li>
-        <li><b>Supply is enumerated.</b> In-game, exactly three things create $OMR: mission rewards, the Vig prize pool,
-        and the Street Wage. The ledger checks <code>buckets == genesis + mints − burns</code>, and a reason nobody
-        enumerated is itself an alarm. There is no fourth tap to find.</li>
-        <li><b>The Street Wage is a published schedule, not a yield.</b> A daily budget that halves on a fixed interval
-        against a lifetime endowment, capped per account, paid only for respect actually earned that day — and the
-        budget is a ceiling: unearned budget is never minted.</li>
+        <li><b>Supply is enumerated, and the list is shrinking.</b> The ledger checks
+        <code>buckets == genesis + mints − burns</code>, and a reason nobody enumerated is itself an alarm. The Street
+        Wage — the one scheduled printer — is retired, and a nightly check asserts no new unit of it appears. Two small
+        legacy taps remain (mission rewards, the Vig prize pool) and retire with their own systems.</li>
+        <li><b>No faucet is the strong version of the promise.</b> With nothing paying $OMR for play, in-game $OMR can
+        never exceed what was deposited — so "you can only take out what somebody put in" stops being a rule the game
+        enforces and becomes an arithmetic fact about the ledger.</li>
         <li><b>The one conversion runs the other way, on money that already exists.</b> The Window burns $OMR and pays
         cash from a till real sinks filled. A short till refuses and burns nothing.</li>
       </ul>

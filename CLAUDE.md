@@ -3027,6 +3027,39 @@ out, and counsel reviews the copy. The doc closes by stating what it does NOT do
 the farm** — a collectible does not change the per-identity cost, and a liquid secondary market makes
 a farm's exit easier, which is exactly why the trophy/entitlement split is not optional.
 
+**ECONOMY v3 STEP 1 — THE FAUCET IS RETIRED (founder-directed; `omerta-economy-v3-design.md` §9.1).**
+The Street Wage is gone: `emission.js` is a tombstone whose `wageBoard` throws `retired` (the v2
+swap/launder precedent — a caller that has been polling `/v1/wage` learns what happened instead of
+404ing), the payer/eligibility/epoch-accounting exports are DELETED rather than dormant (a disabled
+faucet is one env var from a live one), the worker tick and the `EMISSION` rules block + its four
+helpers are gone, and `/v1/rules` now makes the positive claim `emission: {faucet: null}` so a client
+can render what replaced it. **Why it went:** v3's first wall is **no faucet** — zero mint reasons
+that pay a player, which makes "extraction ≤ inflow" an identity the ledger EXHIBITS rather than a
+constraint the full-reserve queue enforces; a scheduled printer is exactly what that forbids. The
+second reason is measured (BALANCE.md § THE FARM): the per-account cap is ANTI-concentration, so the
+wage paid a farm of cheap identities strictly better than one real player, and every wall added (mint
+fee, level floor, score floor) taxed the farm without making it unprofitable — payback 1.0 day.
+**The subtle half, and the thing to not "clean up" later:** `emission:%` **STAYS** in the omr
+vocabulary AND in `omrMints`. A live database holds the rows the wage already wrote and conservation
+is a claim about the WHOLE ledger — drop the reason and every server that ever paid a wage drifts by
+exactly what it paid. What is new is a check that asserts the printer is OFF: **`emission faucet
+retired`** (any `emission:%` row inside the last day ⇒ drift), which is wall 1 made CHECKABLE rather
+than promised. Honest scope, stated in the check's own comment: two mint reasons survive into later
+steps (`mission:%`, `prize:omr`), so wall 1 is not fully true until they retire with their systems.
+`test/emission.js` was rewritten from "the wage pays correctly" to "it cannot pay at all", covering
+all four ways the printer could come back (module, schedule, worker, invariant) plus BOTH §10.4
+halves — a historical row still reconciles, a fresh one trips the alarm. Three mutations, each caught
+at its own named assertion (the reason dropped from `omrMints` → conservation drift 7; the check
+pinned to 0 → "wall 1 is a promise, not a check"; the payer restored → "must be DELETED, not left
+dormant"). Also retired with it: the chaos harness's scenario 4 (it crash-tested a payer that no
+longer exists — the property it protected is now guaranteed by there being no emission), the sim's
+P9.29 farm probe, and the P9.22 severance question ("can the window clear what the wage emits?" — now
+there is no emission to clear, so the window only ever serves $OMR somebody BOUGHT). Player-facing
+copy corrected in both codices, the landing pitch and the Going Legit tab, which now say the true and
+stronger thing: **nothing in the game creates $OMR — every token in the city was bought with real
+money, which is why it is worth taking off somebody.** Suite 61/61 + sim drift-0 + pgquery 2218
+statements + pgcheck 43/43 on real Postgres.
+
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
 `payPlex` pattern); named landmarks / Founder's charter numbers; ~~R2 (the `rwa_revenue` → real-RWA-buy

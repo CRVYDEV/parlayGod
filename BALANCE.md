@@ -1572,7 +1572,15 @@ elapsed-since-collect so a raid can't hand fresh headroom. Not patched per groun
 
 ---
 
-## Addendum — THE STREET WAGE (the value-creation pivot, 2026-07-23; PROPOSED, sim + sign-off)
+## Addendum — THE STREET WAGE (**RETIRED 2026-08-01** — economy v3 step 1: kill the faucet)
+
+> **This section is HISTORY.** The wage is gone: `emission.js` is a tombstone, the rules block and its
+> five levers are deleted, and `invariants.js` now asserts that no NEW `emission:%` row appears
+> (`emission faucet retired`). It went because v3's first wall is **no faucet** — zero mint reasons
+> that pay a player, which makes "extraction ≤ inflow" an identity the ledger exhibits rather than a
+> constraint the reserve queue enforces — and because the measured Sybil economics below never came
+> good. The numbers are kept for the record; none of them is a live lever.
+
 
 | Lever | Default | Note |
 |---|---|---|
@@ -1582,9 +1590,10 @@ elapsed-since-collect so a raid can't hand fresh headroom. Not patched per groun
 | `EMISSION.WAGE_CAP_OMR` | 5 | per-account/epoch cap — spreads the pot, bounds Sybil concentration |
 | `EMISSION.WAGE_MIN_LVL` / `WAGE_MIN_SCORE` | 5 / 25 | the anti-login-bot floor (respect gain is energy-bounded) |
 
-The wage is the ONLY scheduled mint; `emission within endowment` is the hard wall. Before launch
-marketing mentions earning at all: re-derive per-region "what a day's grind pays" from the live $OMR
-price and retune EPOCH_OMR/WAGE_CAP_OMR (counsel-gated messaging — see CLAUDE.md Sensitive notes).
+*(Historical note, kept because it explains the retirement: the wage was the ONLY scheduled mint and
+`emission within endowment` was its hard wall. The launch-messaging question it raised — re-deriving
+"what a day's grind pays" in real money before any copy mentions earning — is now moot on this axis,
+since there is nothing to earn from the protocol. It still applies to anything v3 pays out.)*
 
 | `WITHDRAW_TAX_BPS` (env, per-call) | 200 (2%) | the Exit Toll on every $OMR withdrawal — gross debited, net signed |
 | `TAX.DEV_BPS` | 5000 (50%) | the dev share of the toll; the rest → stake_pool (the buyback/yield pool) |
@@ -3672,7 +3681,10 @@ result. It is closed-form now.
 
 ### The options, ranked — with what each costs an honest small player
 
-Nothing below is applied. Every `EMISSION.*` number is a signed lever.
+**SUPERSEDED 2026-08-01 — none of these options was taken; the wage itself was retired** (economy v3
+step 1). The ranking is kept because it is the reasoning that led there: every lever taxed the farm
+without making it unprofitable, which is what a faucet with a per-account cap does. `EMISSION.*` no
+longer exists.
 
 | # | lever | effect on a farm | **cost to a legitimate small player** |
 |---|---|---|---|

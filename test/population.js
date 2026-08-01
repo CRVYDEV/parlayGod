@@ -3,8 +3,8 @@
 // level/stats/cash), the §10.4 ledger discipline (npc:seed is a ledgered FAUCET so residents sit
 // inside the per-character cash check exactly like a player; npc:retire burns what they carried),
 // the worker top-up to TARGET, retirement of old bloodlines, presence on the streets roster with the
-// flag EXPOSED, and — the four that matter most — exclusion from the Street Wage (emission!), City
-// Standing, the ops overview and the onboarding funnel.
+// flag EXPOSED, and — the four that matter most — that a resident never holds $OMR (the Street Wage
+// was the sharp edge of that until the faucet retired), City Standing, ops and the onboarding funnel.
 //
 // NOTE ON SEEDING: this suite never SQL-seeds value. Resident cash arrives through the ledgered
 // `npc:seed` faucet inside spawnResident, which is the whole point — the §10.4 assertions below are
@@ -19,7 +19,6 @@ import { runLedgerInvariants } from '../src/invariants.js';
 import { cityStanding } from '../src/standing.js';
 import { funnelStats } from '../src/growth.js';
 import { opsOverview } from '../src/ops.js';
-import { runWageEpoch } from '../src/emission.js';
 import { POPULATION, levelOf, npcBandOf, M3, DUELS, CASINO, BOXING, STABLE } from '../src/rules.js';
 
 const app = await buildServer();
@@ -83,13 +82,14 @@ assert.equal(onStreet.npc, true, 'and the flag is EXPOSED, not hidden (real-mone
 assert.equal(streets.find((s) => s.id === player.id).npc, false, 'a real player is not flagged');
 
 // ════════════ THE EXCLUSIONS — the human-only surfaces ════════════
-// (1) THE STREET WAGE — the one that would be theft from the endowment
-await pool.query("UPDATE account_persistent SET minted=true WHERE account_id=$1", [row.account_id]); // even MINTED, a resident must not draw
-await pool.query('INSERT INTO wage_snapshots (character_id, epoch, respect) VALUES ($1,$2,$3)',
-  [born.id, 0, 0]);   // enrolled last epoch with a big respect gain — the perfect wage candidate
-const wage = await runWageEpoch(pool, 1);
-const paidToNpc = await one("SELECT COUNT(*) n FROM transactions WHERE character_id=$1 AND reason='emission:wage'", [born.id]);
-assert.equal(paidToNpc, 0, 'a resident draws NO Street Wage even fully enrolled + minted');
+// (1) $OMR — a resident must never hold any. The Street Wage used to be the sharp edge of this
+// (a resident drawing it was theft from the endowment) and the payer is retired with the whole
+// faucet (economy v3 step 1), so the claim is now the stronger one: NOTHING pays a resident $OMR.
+// Marked MINTED deliberately — that was the wage's own Sybil wall, so a minted resident is the
+// hardest case any future $OMR grant would face.
+await pool.query("UPDATE account_persistent SET minted=true WHERE account_id=$1", [row.account_id]);
+const npcOmrRows = await one("SELECT COUNT(*) n FROM transactions WHERE character_id=$1 AND currency='omr'", [born.id]);
+assert.equal(npcOmrRows, 0, 'a resident is never credited $OMR by anything');
 const npcOmr = await one('SELECT COALESCE(omr,0) n FROM account_persistent WHERE account_id=$1', [row.account_id]);
 assert.equal(npcOmr, 0, 'and holds no $OMR');
 
@@ -709,5 +709,5 @@ assert.equal(npcBandOf(0.999).id, 'boss', 'the high roll is the boss band');
 
 console.log('✅ THE POPULATION passed — residents spawn as real flagged characters on the streets roster '
   + '(flag exposed), the npc:seed faucet + npc:retire sink keep §10.4 drift-0, the worker tops the city up '
-  + 'and retires old lines, and residents are excluded from the Street Wage, City Standing, ops and the funnel; STEP TWO: they advertise consent limits, post SECURED loan offers and standing buy orders, and retire without stranding escrow — all pure recycling, zero new faucet; JAILBIRDS: the worker keeps TARGET residents in lockup (never over-fills, refills after a bust) so the §7.8 bust verb + the bust dailies work on a solo run — the reward is the signed ledgered bust:reward faucet; MARKS (Street War step two): residents spawn holding band-priced beaters (counted into car conservation via rng_audit npc:car grant/retire rows), sleepy-joint fronts whose rob cut prices at FRONT_INCOME_BPS of the catalog curve, dinghies at the docks, and self-bought freight (goods:buy, recycle-only, budget-floored above the picked-clean line) — stealable/robbable through the ordinary verbs with conservation exact through the whole grant→steal→retire cycle');
+  + 'and retires old lines, and residents never hold $OMR (nothing pays them any) and are excluded from City Standing, ops and the funnel; STEP TWO: they advertise consent limits, post SECURED loan offers and standing buy orders, and retire without stranding escrow — all pure recycling, zero new faucet; JAILBIRDS: the worker keeps TARGET residents in lockup (never over-fills, refills after a bust) so the §7.8 bust verb + the bust dailies work on a solo run — the reward is the signed ledgered bust:reward faucet; MARKS (Street War step two): residents spawn holding band-priced beaters (counted into car conservation via rng_audit npc:car grant/retire rows), sleepy-joint fronts whose rob cut prices at FRONT_INCOME_BPS of the catalog curve, dinghies at the docks, and self-bought freight (goods:buy, recycle-only, budget-floored above the picked-clean line) — stealable/robbable through the ordinary verbs with conservation exact through the whole grant→steal→retire cycle');
 process.exit(0);

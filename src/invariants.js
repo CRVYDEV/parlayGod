@@ -3,7 +3,6 @@
 // in the transactions ledger. Any drift beyond $1 (or one unit) — or any ledger
 // row with a reason outside the known vocabulary — is an alert.
 import crypto from 'node:crypto';
-import { EMISSION } from './rules.js';
 
 // The complete reason vocabulary, by currency. A row whose reason matches no
 // prefix here is an unenumerated faucet/sink — the loudest possible §10.4 alarm.
@@ -225,8 +224,11 @@ async function collectLedgerChecks(pool) {
   // withdrawal reserve (src/vig.js payPrizes) — legal because real revenue backs every token.
   // Phase 4: stake:reward is NO LONGER a mint — rewards are paid from stake_pool (a transfer, both
   // sides inside omrBuckets), so staking contributes zero to net supply. It's out of the mint term.
-  // THE STREET WAGE (value-creation pivot): emission:% is an enumerated, SCHEDULED mint —
-  // the epoch budget + the endowment check below bound it; it is never discretionary.
+  // THE STREET WAGE, RETIRED (economy v3 step 1 — the "no faucet" wall). `emission:%` STAYS in the
+  // mint term and STAYS in the vocabulary, and that is not an oversight: a live database holds the
+  // rows the wage already wrote, and conservation is a statement about the WHOLE ledger. Drop the
+  // reason and every server that ever paid a wage drifts by exactly what it paid. Nothing writes a
+  // new one — the `emission faucet retired` check below asserts that directly.
   const omrMints = await sum(pool, "currency='omr' AND (reason LIKE 'mission:%' OR reason='prize:omr' OR reason LIKE 'emission:%')");
   // plex:* is a Phase-2 burn: a player paid a real-money fee from earned $OMR instead of ETH (the
   // PLEX bridge), so the $OMR leaves the game (deflationary, offsets emission).
@@ -247,10 +249,20 @@ async function collectLedgerChecks(pool) {
   const omrBurns = -(await sum(pool, "currency='omr' AND (reason LIKE 'vest:%' OR reason='cleanpapers' OR reason LIKE 'lab:%' OR reason LIKE 'gear:mint:%' OR reason LIKE 'path:%' OR reason='gang:dissolved' OR reason='withdraw:omr' OR reason LIKE 'vanity:%' OR reason LIKE 'intel:%' OR reason LIKE 'respec%' OR reason LIKE 'plex:%' OR reason='law:jury' OR reason='law:envelope' OR reason LIKE 'foundation:%' OR reason LIKE 'rwa:%' OR reason LIKE 'estate:%' OR reason='auction:win' OR reason='auction:take' OR reason='auction:consign:fee' OR reason='megaproject:omr' OR reason LIKE 'bond:%' OR reason LIKE 'business:spec%' OR reason='death:duty' OR reason='window:burn')"));
   push('$OMR conservation', omrBuckets, 20000 + omrMints - omrBurns, 0.001);
 
-  // THE STREET WAGE — lifetime emission may NEVER exceed the fixed Emission Endowment
-  // (the anti-Axie wall: the printer is hard-capped; overrun == the loudest alarm).
-  const emitted = await sum(pool, "currency='omr' AND reason LIKE 'emission:%'");
-  push('emission within endowment', Math.max(0, emitted - EMISSION.ENDOWMENT_OMR), 0, 0.001, { emitted, endowment: EMISSION.ENDOWMENT_OMR });
+  // THE FAUCET IS RETIRED (economy v3 wall 1, made CHECKABLE). The wage used to be bounded by an
+  // endowment; now it is bounded by not existing, which is a much stronger claim — so assert the
+  // strong one. Any `emission:%` row dated inside the last day means somebody re-armed the printer
+  // (a reverted retirement, a stray worker still running the old build), and that is worth waking
+  // someone for: it is the difference between "$OMR is only ever bought" and "$OMR is printed".
+  // Historical rows are deliberately NOT in scope — they are real, they are in `omrMints`, and
+  // conservation depends on them staying there.
+  //
+  // HONEST SCOPE: this covers the wage. Two mint reasons survive into later migration steps —
+  // `mission:%` (the one-off mission $OMR ladder) and `prize:omr` (the Vig's backed prize credit).
+  // Wall 1 is not fully true until those retire with their own systems (design §9 steps 2–4).
+  const freshEmission = await sum(pool, "currency='omr' AND reason LIKE 'emission:%' AND at >= now() - interval '1 day'");
+  const lifetimeEmission = await sum(pool, "currency='omr' AND reason LIKE 'emission:%'");
+  push('emission faucet retired', freshEmission, 0, 0.001, { lifetimeEmission, since: 'v3 step 1' });
 
   // (d2) AUCTION ESCROW ($OMR): live standing bids == bid − refunded − won (the bounty-escrow twin,
   // on the $OMR side). bid rows are negative (escrowed in); refund rows positive (out); auction:win

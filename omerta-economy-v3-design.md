@@ -239,8 +239,16 @@ The design fails if any of the three has nothing to do.
 
 Each step is shippable and testable alone; nothing is deleted before its replacement is green.
 
-1. **Kill the faucet.** Retire `emission.js` and the wage. §10.4 gets *simpler* — `omrMints` shrinks
-   to the bond alone. Wall 1 becomes assertable immediately.
+1. **Kill the faucet — BUILT 2026-08-01.** `emission.js` is a tombstone, the rules block and its five
+   levers are deleted, the worker tick is gone, and `/v1/wage` refuses with `retired` (the v2
+   swap/launder precedent) rather than 404ing on a caller that has been polling it.
+   *Correction to this line as originally written:* §10.4 does NOT shrink — `emission:%` **stays** in
+   the vocabulary and in `omrMints`, because a live database holds the rows the wage already wrote and
+   conservation is a claim about the whole ledger; drop the reason and every server that ever paid a
+   wage drifts by exactly what it paid. What is new is the `emission faucet retired` check, which
+   asserts no NEW row appears — wall 1 made checkable rather than promised. And `omrMints` does not
+   reduce "to the bond alone" yet: `mission:%` and `prize:omr` survive into steps 2–4 with their own
+   systems, which the check's comment says out loud rather than letting the doc imply otherwise.
 2. **Recycle instead of burn.** Reclassify the ~25 sink reasons: destination `bond_inventory` rather
    than the burn term. One invariant change; the conservation identity gains a bucket.
 3. **The daily auction.** Dutch, reserve-priced at the band floor, over the existing bond contract.

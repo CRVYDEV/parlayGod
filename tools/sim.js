@@ -20,7 +20,7 @@ import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
          frontierTributePerHr, liberationCost, worldNpcOf, SPEAKEASY, PEN, RACES,
          PORT, boatOf, portRouteOf, interdictChance,
          CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES, BUSINESSES, PACING, POPULATION, boatResale, CORNER, CONTACTS,
-         EXCHANGE, EMISSION, ESTATE, WIRE, GANG_SEALS, FOUNDATION, RIVALS, RACKETS, ASSETS, M4, DRUGS } from '../src/rules.js';
+         EXCHANGE, ESTATE, WIRE, GANG_SEALS, FOUNDATION, RIVALS, RACKETS, ASSETS, M4, DRUGS } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -848,26 +848,26 @@ phase('P9.21 the population — the npc:seed faucet ceiling');
 // per-player-per-day rate (which that harness verified is population-INVARIANT: $34/player/day at
 // 12 players, $35 at 36 — so it is a real per-player rate, not an artifact of one size). It is a
 // FLOOR: scale.js players follow a fixed script, and a real player trades more than a scripted one.
-phase('P9.22 the severance — Exchange absorption vs $OMR emission (tokenomics v2, BUILT)');
+phase('P9.22 the severance — what the Exchange window can absorb (no faucet above it)');
 {
   const TAKE_PER_PLAYER_DAY = 35;   // MEASURED, tools/scale.js — see its census line
   const toWindow = TAKE_PER_PLAYER_DAY * EXCHANGE.FUND_BPS / 10000;
   const omrPerPlayerDay = toWindow / EXCHANGE.RATE;   // what one player's activity can redeem
-  const emitPerDay = EMISSION.EPOCH_OMR;              // the wage budget, base-wide
 
   note('severance', 'street take (measured floor)', `$${TAKE_PER_PLAYER_DAY}/player/day`,
     `driven population, tools/scale.js; population-invariant across 12 and 36 players. A FLOOR — scripted players trade less than real ones`);
   note('severance', 'reaches the Exchange window', `$${toWindow.toFixed(2)}/player/day`,
-    `EXCHANGE.FUND_BPS ${EXCHANGE.FUND_BPS / 100}% of the take (the rest funds the buyback, the stake pool and protocol LP)`);
+    `EXCHANGE.FUND_BPS ${EXCHANGE.FUND_BPS / 100}% of the take`);
   note('severance', 'absorbable at RATE', `${omrPerPlayerDay.toFixed(4)} $OMR/player/day`,
     `at $${EXCHANGE.RATE} cash per $OMR — this is the ONLY cash exit once cash→$OMR is severed`);
 
-  // the headline: how big must the base be for the window to clear what the wage emits?
-  const playersToClear = Math.round(emitPerDay / omrPerPlayerDay);
-  note('severance', 'EMISSION vs ABSORPTION', `${emitPerDay} emitted vs ${(omrPerPlayerDay * 1000).toFixed(1)} absorbed per 1,000 players`,
-    `the wage budget is base-wide and fixed; absorption is per-player — so the gap CLOSES with population and nothing else`);
-  note('severance', 'players needed to clear the wage', `~${playersToClear.toLocaleString()}`,
-    `at the measured floor. Even assuming a real player generates 10× a scripted one's take, ~${Math.round(playersToClear / 10).toLocaleString()}`);
+  // THE HEADLINE CHANGED WITH THE FAUCET. This probe used to ask "can the window clear what the wage
+  // emits?" and answered no until the base was in the thousands. Economy v3 step 1 retired the wage,
+  // so there is no emission to clear: the only $OMR that can ever queue at the window is $OMR
+  // somebody DEPOSITED (bought). The window stops being an outlet for printed supply and becomes
+  // what it should always have been — a cash-side relief valve on bought supply.
+  note('severance', 'EMISSION vs ABSORPTION', 'no emission to absorb (v3 step 1)',
+    `the wage is retired, so the pressure this probe was built to measure no longer exists. What can reach the window is bounded by what was bought, and that is bounded by the desk`);
 
   // the per-account cap is not the binding constraint — the pool is. Worth stating, because a cap
   // that never binds reads like a safety rail while the real limit is elsewhere.
@@ -875,8 +875,8 @@ phase('P9.22 the severance — Exchange absorption vs $OMR emission (tokenomics 
   note('severance', 'per-account daily cap', `${EXCHANGE.DAILY_CAP_OMR} $OMR = $${capCash.toLocaleString()}/day`,
     `~${Math.round(EXCHANGE.DAILY_CAP_OMR / omrPerPlayerDay).toLocaleString()}× what one player's own activity funds — so the POOL binds first and the cap is decorative at any realistic base. Players meet 'dry', never the cap`);
 
-  // THE REFRAME: the window is not where $OMR goes. The sink catalog is. Measure that side, because
-  // it decides whether a small window is a design choice or a broken promise.
+  // THE REFRAME: the window is not where $OMR goes. The sink catalog is — and with no faucet above
+  // it, the sink catalog is now the whole demand side of the token.
   const wireDay = WIRE.SUB_TIERS[0].omr / (WIRE.SUB_MS / 864e5);
   const staffDay = ESTATE.STAFF.reduce((a, x) => a + (x.wageOmrDay || 0), 0);
   const recurringDay = wireDay + staffDay;
@@ -885,29 +885,11 @@ phase('P9.22 the severance — Exchange absorption vs $OMR emission (tokenomics 
     `Street Wire ${wireDay.toFixed(1)}/day (base tier) + a full estate staff ${staffDay.toFixed(1)}/day — before auctions, portfolio, megaproject, respec or vanity, which are unbounded`);
   note('severance', 'one-off personal $OMR sinks', `${oneOff.toLocaleString()} $OMR`,
     `the estate ladder alone; family seals ${GANG_SEALS.reduce((a, t) => a + (t.omr || t.cost || 0), 0)} and the foundation ${FOUNDATION.TIERS.reduce((a, t) => a + (t.omr || t.cost || 0), 0)} sit on top, per family`);
-  const sinkAtWageBase = recurringDay * (emitPerDay / EMISSION.WAGE_CAP_OMR);
-  note('severance', 'sinks vs emission at the wage-sized base', `~${Math.round(sinkAtWageBase)} $OMR/day of sink vs ${emitPerDay} emitted`,
-    `the wage caps at ${EMISSION.WAGE_CAP_OMR}/account, so its ${emitPerDay}/day budget is sized for ~${emitPerDay / EMISSION.WAGE_CAP_OMR} max-earning players; their recurring sinks alone ${sinkAtWageBase >= emitPerDay ? 'MORE than cover' : 'do not cover'} what they earn`);
 
-  note('severance', 'THE STANDING FINDING (step 2 shipped; this still holds)', 'the window is a relief valve, not the exit',
-    `$OMR's real exit is the SINK CATALOG (which comfortably absorbs the wage) and, for real value, the reserve-backed CHAIN withdrawal. The Exchange at RATE ${EXCHANGE.RATE} × FUND_BPS ${EXCHANGE.FUND_BPS / 100}% clears a few percent of emission until the base is in the thousands — so as sized it will read as permanently 'dry' to players. Levers, in order of directness: FUND_BPS (how much take reaches it), RATE (a LOWER rate serves more $OMR per pool dollar), EPOCH_OMR (emit less). This is a founder call — none of it is retuned here`);
+  note('severance', 'THE STANDING FINDING (restated for v3)', 'the window is a relief valve, not the exit',
+    `$OMR's real exit is the SINK CATALOG and, for real value, the reserve-backed CHAIN withdrawal. With the faucet retired the window no longer has to keep up with a printer — it only has to serve holders who want out in CASH, and every $OMR it ever sees was bought. Levers: FUND_BPS (how much take reaches it) and RATE (a LOWER rate serves more $OMR per pool dollar). Founder calls — nothing is retuned here`);
 }
 
-// ════════ P9.23 THE RE-SIM — what the severance changed about every cash flag ════════
-// Design step 5. The whole cash economy was balanced against an extraction threat model that step 2
-// DELETED: cash could become $OMR (swap + laundering), so every cash faucet was secretly a
-// token-price decision and a $21.6M/day passive stack sat one swap from sell pressure. That link is
-// now cut in code -- `omrMints` is the enumerated set of everything that can create $OMR and none of
-// its members takes cash as an input.
-//
-// So the question every  cash faucet is judged by CHANGED, and the flags have to be re-read:
-//   * flagged because it fed EXTRACTION  -> MOOT. Cash is a closed loop; no cash faucet can move the
-//                                           token price, because no path exists.
-//   * flagged because of INTERNAL balance -> STILL LIVE, and now the ONLY question. Progression
-//                                           pacing, wealth concentration, whether a loop is worth
-//                                           playing. Nothing about that got easier.
-// This probe measures the second question from the ledger the sim just produced, and states plainly
-// what that does and does not prove.
 phase('P9.23 the re-sim — cash as a closed loop (tokenomics v2 step 5)');
 {
   // WHY THIS IS SPLIT BY character_id AND NOT INTO "faucets vs sinks": a naive net-per-reason
@@ -952,8 +934,8 @@ phase('P9.23 the re-sim — cash as a closed loop (tokenomics v2 step 5)');
     `pre-v2 the honest worry about any big cash faucet was that it became sell pressure through the swap. It cannot: the sell side is retired and the only cash exit is the Exchange window, which runs the OTHER way ($OMR in, cash out) and is bounded by a till that cash sinks fill. A bigger cash faucet now costs game balance, never token holders`);
   note('re-sim', 'what still needs founder sign-off', 'the internal-balance flags, unchanged',
     `the passive stack (P9.20), the apex world/boxing/racing purses, the port sale curve and the npc:seed recycle (P9.21) are all still live questions about PACING and CONCENTRATION. The severance lowered their stakes; it did not answer them`);
-  note('re-sim', 'the $OMR side, now fully separable', `${EMISSION.EPOCH_OMR}/day emitted vs a sink catalog that covers it`,
-    `see the severance block above: with cash out of the picture, $OMR supply is decided ONLY by the wage schedule (fixed, halving, endowment-capped), bonds (four walls), and the sink catalog. That is the whole token model now, and it no longer has a cash-shaped back door`);
+  note('re-sim', 'the $OMR side, now fully separable', '0/day emitted — bonds are the only mint',
+    `see the severance block above: with cash out of the picture AND the wage retired (v3 step 1), $OMR supply is decided ONLY by bonds (four walls, ETH in the same transaction) and the sink catalog. Nothing a player can DO in game creates a token, so in-game $OMR can never exceed what was deposited — the whole token model, with neither a cash-shaped back door nor a printer`);
 }
 
 // ════════ P9.24 THE BUREAU RETURNS — income-sourced front scrutiny (the dark-risk-layer fix) ════════
@@ -1118,67 +1100,19 @@ phase('P9.28 jailbirds × bust:reward — the reachable §7.8 faucet');
     `a failed bust costs ${M3.BUST_FAIL_JAIL_S}s of lockup and nothing else, so the loop is time-metered rather than resource-metered; unlike every other faucet at this scale it spends no signed resource. Founder call — flagged, NOT retuned (ground rule #1)`);
 }
 
-// ════════════════ P9.29 THE FARM — what the Street Wage costs a Sybil, and what it pays ════════════════
-// The founder's open question: "the horde of low-value farmers that will play strictly to extract."
-// The wage is the ONLY real-value emission to players, so this is the one loop where that question
-// has teeth. It is answered analytically because the payout formula is closed-form
-// (emission.js:114): share = min(WAGE_CAP_OMR, budget × gain / Σgain).
-//
-// That formula has a property worth stating plainly before any number: A FARM'S SHARE OF THE BUDGET
-// IS ITS SHARE OF TOTAL RESPECT GAINED. There is no cheaper path to respect than playing, so a
-// farmer has no efficiency edge over an honest player — only parallelism. Which makes the whole
-// question turn on the per-account CAP, and the cap does something counter-intuitive.
-phase('P9.29 the farm — the wage under Sybil pressure (the founder\'s open question)');
-{
-  const budget = EMISSION.EPOCH_OMR, cap = EMISSION.WAGE_CAP_OMR;
-  const mintEth = 0.01;                          // MINT_FEE_ETH — module-private in vig.js
-  const impliedOmrPerEth = 5 / mintEth;          // PLEX_MINT_OMR / MINT_FEE_ETH — the game's own rate
+// ════════════════ P9.29 THE FARM — RETIRED WITH THE FAUCET IT MEASURED ════════════════
+// This probe measured the Street Wage under Sybil pressure and returned the finding that killed it:
+// the per-account cap is ANTI-CONCENTRATION, so it pays a farm of 100 cheap identities strictly
+// better than one real player, and every wall we added (the mint fee, the level floor, the score
+// floor) taxed the farm without ever making it unprofitable — measured payback 1.0 day at the
+// 0.01-ETH mint price. Economy v3 step 1 retired the faucet, so there is nothing left to farm and
+// nothing left to measure. The full numbers are preserved in BALANCE.md § THE FARM.
+phase('P9.29 the farm — RETIRED (the wage it measured no longer exists)');
+note('the farm', 'the Street Wage', 'retired (economy v3 step 1)',
+  'the probe that measured it is retired with it — see BALANCE.md § THE FARM for the numbers, and '
+  + 'omerta-economy-v3-design.md §2 wall 1 for what replaced it: no faucet at all, so in-game $OMR '
+  + 'can never exceed what was deposited');
 
-  // (1) THE CAP IS ONLY REACHABLE ABOVE A SHARE THRESHOLD, and that threshold sets a population
-  // number below which the wage stops being pro-rata at all.
-  const capShare = cap / budget;                 // you need this fraction of all respect to cap out
-  const flatBelow = Math.floor(1 / capShare);    // …so with fewer than this many equal players, ALL cap
-  note('the farm', 'the wage goes FLAT below a population', `${flatBelow} wage-eligible accounts`,
-    `the cap binds at ${(capShare * 100).toFixed(1)}% of total respect gained (${cap}/${budget}), so with fewer than ~${flatBelow} similar players EVERY qualifier is capped and the pro-rata weighting does nothing — the wage is a FLAT ${cap} $OMR/day per identity that clears the floors, however well or badly it is played. That regime is the ALPHA, i.e. exactly when the population is smallest and a farm is cheapest to stand up`);
-
-  // (2) …which means the cap, an ANTI-Sybil measure, is what creates the Sybil incentive: it caps
-  // the individual, and the only way around a per-individual cap is to be several individuals.
-  const maxIdentities = Math.floor(budget / cap);
-  const farmCostEth = maxIdentities * mintEth;
-  note('the farm', 'capturing the WHOLE budget', `${maxIdentities} identities · ${farmCostEth} ETH one-time`,
-    `the per-account cap is anti-CONCENTRATION, and concentration is the opposite of Sybil — a whale who would earn ${budget}×g/Σg is clipped to ${cap}, but the same play split across N accounts recovers the full pro-rata share. So the cap does not price a farm out; it prices the honest whale out and hands the remainder to whoever is willing to run more accounts. The mint fee is the ONLY thing charging for that`);
-
-  // (3) The payback, in the game's OWN implied units — the only honest denomination pre-market.
-  const dailyOmr = maxIdentities * cap;
-  const dailyEthEquiv = dailyOmr / impliedOmrPerEth;
-  const paybackDays = farmCostEth / dailyEthEquiv;
-  note('the farm', 'payback at the game\'s implied rate', `${paybackDays.toFixed(1)} day(s)`,
-    `the game prices ${5} $OMR = ${mintEth} ETH (PLEX_MINT_OMR/MINT_FEE_ETH ⇒ ${impliedOmrPerEth} $OMR/ETH), so the ${budget}/day budget is worth ~${(budget / impliedOmrPerEth).toFixed(2)} ETH/day and ${maxIdentities} identities cost ${farmCostEth} ETH. THE MINT FEE IS ONE DAY OF THE THING IT IS GATING. This is a pre-market placeholder rate, not a price — but it is the rate the game itself quotes, and nothing else is available until a buyback prints one`);
-
-  // (4) The break-even PRICE, which is the question that actually has an answer pre-market.
-  for (const days of [7, 30, 90]) {
-    const breakEven = farmCostEth / (dailyOmr * days);   // ETH per $OMR at which the farm just pays back
-    note('the farm', `break-even over ${days} days`, `${(1 / breakEven).toFixed(0)} $OMR/ETH`,
-      `farming pays if $OMR trades RICHER than this (fewer $OMR per ETH). The game's own implied rate is ${impliedOmrPerEth} — ${impliedOmrPerEth < 1 / breakEven ? 'far richer, so farming pays comfortably' : 'poorer, so farming does not pay'} on a ${days}-day horizon. The lever that moves this number is the mint fee; the levers that move the numerator are the cap and the floors`);
-  }
-
-  // (5) …and the wall that is ALREADY built, which is why this is a dilution problem and not
-  // straightforwardly an extraction one. Worth stating because it changes which fix is right.
-  note('the farm', 'what actually bounds EXTRACTION', 'the full-reserve queue, not the fee',
-    `a farm can accumulate $OMR at the rate above, but withdrawing it needs the reserve to hold it — and the reserve is fed ONLY by Vig buybacks off real revenue, so extraction ≤ inflow holds BY CONSTRUCTION however many alts exist. The damage a farm does is therefore (a) DILUTION: above ~${flatBelow} players every $OMR an alt takes is one an honest player does not, and (b) an overhang of $OMR it can sell on the DEX. The 48h early-exit surcharge (${'50%'} at age 0) taxes the fast version of (b) hard`);
-
-  // (6) Can the endowment be drained faster than it halves? The bound that makes the schedule real.
-  // A halving schedule is a geometric series, so the LIFETIME total is closed-form and finite —
-  // the first cut of this probe ran a day-by-day loop and reported its own 50-year guard as if it
-  // were a measurement, which is the shape of a bug that reads exactly like a result.
-  const lifetimeEmittable = budget * EMISSION.DECAY_EVERY / (1 - EMISSION.DECAY);
-  note('the farm', 'draining the endowment', 'impossible — the schedule converges first',
-    `${budget}/day halving every ${EMISSION.DECAY_EVERY} days is a geometric series summing to ${fmt(lifetimeEmittable)} $OMR EVER, against a ${fmt(EMISSION.ENDOWMENT_OMR)} endowment — so the schedule can only ever use ${(lifetimeEmittable / EMISSION.ENDOWMENT_OMR * 100).toFixed(0)}% of it, and the endowment ceiling is not the binding constraint. A farm cannot drain it faster than the schedule allows either, because the budget is a per-epoch CEILING: maximum farming just means the schedule runs fully subscribed instead of partly. What a farm takes is the honest players' SHARE, never extra supply`);
-  note('the farm', 'the endowment is 5.5× the schedule', `${fmt(EMISSION.ENDOWMENT_OMR - lifetimeEmittable)} $OMR unreachable`,
-    `harmless as built (a ceiling nobody reaches is just a ceiling) but worth knowing it is not doing the work it looks like it is doing: the halving is what bounds emission, and the endowment invariant would not fire until ~5.5× more had been paid than the schedule can ever pay. If the intent was for the endowment to be the real bound, either it or DECAY_EVERY is mis-sized`);
-}
-
-// ════════════════ P10: THE §10.4 SWEEP — the whole point ════════════════
 phase('P10 §10.4 ledger invariants over the ENTIRE sim (nothing was seeded)');
 const inv = await runLedgerInvariants(pool);
 for (const c of inv.checks) console.log(`  ${c.ok ? '✅' : '🚨'} ${c.name}: drift ${c.drift}`);
