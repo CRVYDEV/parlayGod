@@ -722,9 +722,10 @@ export const M3 = {
 // roughly three days of hard grinding in one uninterrupted sitting.
 //
 // Every dial the fix uses lives here so the whole pacing curve is one block to tune. NOTE:
-// `levelOf` lives in the AUTO-GENERATED section and now reads LEVEL_DIVISOR from here — this is a
-// deliberate founder override of the prototype's `/4` (the D5 bank-taper precedent). A future
-// `tools/extract-rules.js` run must re-apply that one-line reference.
+// `levelOf` reads LEVEL_DIVISOR from here — a deliberate founder override of the prototype's `/4`
+// (the D5 bank-taper precedent). It is defined in THIS file, the half the extractor never opens, so
+// a regeneration cannot clobber it and there is nothing to re-apply by hand. (This comment used to
+// say the opposite; test/docs.js now fails if that claim returns, in either wording.)
 export const PACING = {
   // (1) THE LEVEL CURVE. respect(L) = LEVEL_DIVISOR × (L−1)². The prototype's 4 made levels far too
   // cheap at the top (L240 = 228k respect ≈ 70h of grinding even before the mission ladder short-cut

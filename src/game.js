@@ -11,7 +11,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS, RANKS,
          cityHourOf, cityLawEventOf, tickerPriceOf, estateTierOf, foundationOf, campaignOf, honorTierOf,
          SOLDIERS, soldierFxOf, CLUES, clueStepOf, rollClueTier, kingpinRankOf, tycoonRankOf, racketIncomeLeveled, empireTitles, launderRankOf, frontTitles, statesmanRankOf, seasonModOf, PACING,
          carCollateralValue, MASTERY, masteryLvlOf, masteryRankOf, masteryXpFor, pathFx, pathXpMult,
-         REGIMEN, disciplineLvlOf, energyCapOf, nerveCapOf, BUSINESSES, WIRE, RIVALS,
+         REGIMEN, disciplineLvlOf, energyCapOf, nerveCapOf, BUSINESSES, WIRE, RIVALS, CORNER, cornerTasksOf,
          KITCHENS, labModuleCost } from './rules.js';
 import { dbCaps } from './db.js';
 import { accrue } from './accrual.js';
@@ -116,6 +116,7 @@ const itemMap = (rows) => Object.fromEntries(rows.map((r) => [r.item_id, Number(
 
 // Everything a character owns or belongs to, loaded inside the caller's txn.
 export async function loadOwned(client, ch) {
+  const today = dayOf();   // bound as $4 below AND read by the work board's claimability rules
   // ONE ROUND TRIP FOR FOURTEEN LOOKUPS. This runs on EVERY authed request in the game, read or
   // write, so its round-trip count is the single largest lever on total database traffic — and
   // `tools/loadtest.js` measured the cost: `/v1/me` was ~3× a board read (15ms vs 5ms uncontended),
@@ -204,10 +205,10 @@ export async function loadOwned(client, ch) {
     -- (No backticks in here: this whole query is a JS template literal, and one would end it.)
     UNION ALL SELECT 'daily', NULL::text, claimed, NULL::numeric, NULL::numeric, NULL::timestamptz FROM daily_progress WHERE character_id=$1 AND day=$4
     UNION ALL SELECT 'hustle', NULL::text, NULL::text, step::numeric, NULL::numeric, NULL::timestamptz FROM hustles WHERE character_id=$1 AND day=$4
-    UNION ALL SELECT 'corner', district, NULL::text, slot::numeric, NULL::numeric, NULL::timestamptz FROM corner_jobs WHERE character_id=$1 AND day=$4 AND NOT claimed
+    UNION ALL SELECT 'corner', district, NULL::text, slot::numeric, CASE WHEN claimed THEN 1 ELSE 0 END::numeric, NULL::timestamptz FROM corner_jobs WHERE character_id=$1 AND day=$4
     UNION ALL SELECT 'drill', npc, NULL::text, NULL::numeric, NULL::numeric, NULL::timestamptz FROM npc_drills WHERE character_id=$1 AND day=$4
     UNION ALL SELECT 'clue', NULL::text, NULL::text, step::numeric, steps::numeric, NULL::timestamptz FROM clue_scrolls WHERE character_id=$1`,
-  [ch.id, ch.account_id, ch.account_id, dayOf()]);
+  [ch.id, ch.account_id, ch.account_id, today]);
   // demultiplex — one entry per original query, in its original column names/types. Kept as
   // `{ rows: [...] }` so every reference below (`rk.rows`, `st.rows`, …) reads exactly as it did.
   const grp = new Map();
@@ -246,7 +247,19 @@ export async function loadOwned(client, ch) {
   const work = {
     dailyClaimed: (() => { try { return JSON.parse(grp.get('daily')?.[0]?.k2 || '[]').length; } catch { return 0; } })(),
     hustleStep: grp.get('hustle')?.[0] ? Number(grp.get('hustle')[0].n) : null, // null = not started today
-    cornerOpen: of('corner', (r) => ({ district: r.k, slot: Number(r.n) })).rows,
+    // (red-team F2) OPEN is not the same as CLAIMABLE. `claimCorner` refuses on two counts, and a
+    // rung that points at work the server will not pay is worse than no rung at all — it sits at the
+    // head of the tail and masks every live rung under it for the rest of the day. Restated here
+    // rather than imported: corner.js imports game.js, so the dependency only runs one way (the
+    // advanceCampaignsInline precedent). test/growth.js pins the two against each other.
+    cornerOpen: (() => {
+      const rows = of('corner', (r) => ({ district: r.k, slot: Number(r.n), claimed: Number(r.n2) === 1 })).rows;
+      const kindOf = (c) => (cornerTasksOf(c.district, today).find((t) => t.slot === c.slot) || {}).kind;
+      const done = rows.filter((c) => c.claimed);
+      if (done.length >= CORNER.MAX_DAY) return [];            // the day's allowance is spent
+      const doneKinds = new Set(done.map(kindOf).filter(Boolean)); // one envelope per KIND of work
+      return rows.filter((c) => !c.claimed && !doneKinds.has(kindOf(c)));
+    })(),
     drillsTaken: (grp.get('drill') || []).length,
     clue: grp.get('clue')?.[0] ? { step: Number(grp.get('clue')[0].n), steps: Number(grp.get('clue')[0].n2) } : null,
   };

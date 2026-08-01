@@ -5681,8 +5681,9 @@ by 30–100 levels; **(3)** the ladder pays **239,200 respect** and `levelOf` ne
 so **the mission chain alone was levels 1→245** (the best sustained crime grind is ~3,257 respect/hr —
 the ladder handed over ~3 days of grinding in one sitting). Fixed with a single **`PACING` block**
 (`src/rules.js`) holding every dial: **`LEVEL_DIVISOR` 4→10** (respect(L)=D×(L−1)², so every level costs
-2.5× more — `levelOf` lives in the AUTO-GENERATED section and now reads it, a deliberate founder override
-of the prototype's `/4` like the D5 bank taper; **re-apply that one line after any extract-rules run**),
+2.5× more — `levelOf` reads it, a deliberate founder override of the prototype's `/4` like the D5 bank
+taper. It is defined in `src/rules.tail.js`, the HAND-WRITTEN half, so an extractor run cannot clobber
+it and there is nothing to re-apply),
 **`ENERGY_REGEN_PER_MIN` 40→12 / `_RANK_BONUS` 20→4 / `NERVE_REGEN_PER_MIN` 20→6** (the master clock — a
 tank refilled in ~75s and paced nothing; now ~15-20 min, so you play in bursts), **`MISSION_CD_MS` 4h** +
 **`MISSION_RESPECT_MULT` 0.25** (the ladder can't cascade — 28 jobs ≈ 4.7 days minimum — and is worth a
@@ -7495,6 +7496,37 @@ patched:** a marked man can shutter his fronts to deny a killer the Sacking (the
 "warehouse the fleet before the hit", and more self-punishing since he destroys them), and closing up
 does not resolve a pending Bureau raid — a dodge that costs the whole front to avoid a fine worth 10%
 of the tier cost, so nobody will take it.
+
+**RED-TEAM over the early-game batch (`AUDIT-early-game-drops.md`, 2026-08-01).** The five drops that
+shipped without an adversarial pass — the coach's WORK BOARD, the TRADES strip, the LEVEL-UP moment,
+the crimes/missions CATALOG expansion, and the CREW DOOR (with the `act()` active-board re-render).
+**No CRITICAL, no HIGH, no §10.4 drift**; two findings, each fixed with a mutation-verified
+regression. **F1 (LOW-MED)** — `CLAUDE.md` AND the `PACING` block both put `levelOf` in the
+MACHINE-OWNED half and said it must be re-applied by hand after an extractor run. **Neither is true** —
+`levelOf` is defined in `src/rules.tail.js`, which the extractor never opens — and F3 ran the
+extractor this session, so a reader would have hunted `rules.generated.js` for a line that is not
+there and either called the extract broken or ADDED one, which the next run silently clobbers back to
+the prototype's `/4`, undoing the whole pacing pass. `test/docs.js` already guarded this warning and
+matched **one exact phrase** that appears in neither copy; it now tests the CLAIM (levelOf defined in
+the tail, absent from the generated file, and no text near it in tail/CLAUDE/SPEC putting it in the
+machine-owned half) — the corrective wording is deliberately not caught. **F2 (MED)** — the work board's
+`cornerOpen` listed every UNCLAIMED corner job, but `claimCorner` refuses on two counts it knew
+nothing about (`CORNER.MAX_DAY` 5/day against up to 18 acceptable slots, and one envelope per KIND),
+so the coach said "finish it and collect", the player did the work, and the server refused — at the
+HEAD of the tail, masking every live rung under it for the rest of the day, and only for players
+engaged enough to reach the cap. The regression was written FIRST and failed against the shipped code
+with the right message; `cornerOpen` now mirrors both gates, RESTATED in `loadOwned` rather than
+imported (corner.js imports game.js — the one-way rule, the `skills.js:pointsOf` precedent) and pinned
+against the till by test. Attacked and CLEAN: §10.4 across all five (the level-up refill is energy/
+nerve — regen, the `adrenaline` precedent; the crew settle rides the EXISTING `crew:wages` sink and a
+cold walk-off writes NO ledger row), the extractor seam (added-only, no deletions), `gainRespect`'s
+ten call sites all passing the actor's own row (heists guards `m.id === ch.id`), the `act()` re-render
+(reads ride a SEPARATE rate bucket from mutations, and a brace-bounded scan of all 25 renderers found
+no render-time side effect — the two mutating calls are inside `onclick`), the work board's other four
+branches, its query cost (all five ride PKs leading with `character_id`), and catalog integrity (all 43
+crimes share ONE field-set). **Flagged, not changed:** the level-up refill converts nerve into energy
+at every boundary and has NOT been measured — `tools/playthrough.js` is the tool that settles it and
+has not been re-run since these drops, which is the largest open item on the batch.
 
 **THE NUT — the crew's terms, and the door out (tester-reported, 2026-08-01).** The same tester who
 found the pad wrote "same for the kitchen. it's unbalanced" and "no way a 25k runner costs 8k in 5h".
