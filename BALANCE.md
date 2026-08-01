@@ -3238,6 +3238,45 @@ and far more self-punishing, since he destroys them rather than parking them; an
 resolve a pending Bureau raid, which dodges a fine worth 10% of the tier cost at the price of the
 whole front, so nobody will.
 
+### HARNESS RUN — 2026-08-01, after the pad + gate-affordance drops
+
+Both measurement harnesses re-run on the shipped tree. **Nothing was retuned from them** — they are
+readings, and the two shifts below are founder calls.
+
+**`npm run playthrough`** (a plausible player: 7 days x 2 sittings x 45 min). The speedrun stays
+closed — **2h at the keyboard reaches level 14** (the alpha reached 240), 5h reaches 24, 10h reaches
+39. The solo ceiling is **level 40, $1.62M, 14 of 28 missions**, reached without meeting another
+person. Nerve is still the limiter; the gym hard-caps at 15 sessions a sitting; the mission ladder
+advances about once per session whatever the sitting length.
+
+**The coach's road to 30 verified end to end under that diet: 18 rungs walked, and every rung the
+player obeyed cleared.** Two asked for a real save — *Open your first front* (44 min) and *Take it to
+the water* (1h26m) — and neither stalled.
+
+**SHIFT 1, worth an eye: front-gate coverage fell to 40% / 6% / 36%** (laundromat / restaurant /
+nightclub) from the 70–94% the pre-coach-ladder run measured. The cause is not the economy falling
+behind — it is that the coach now sends the player SHOPPING (gun, trade goods, a lab, a boat, a den
+stake, a fighter) so they arrive at each unlock poorer. The harness labels each one "a real climb"
+rather than a wall, and the timeline bears that out: the 44-minute save for the laundromat is the
+whole of it. **The dial, if it bites: the entry cost of the front, not the income curve.**
+
+**SHIFT 2: lockup is now the single biggest blocker of actions** — 56 refusals across the run (37
+crime, 15 train, 4 score) against 1 for nerve — while jail TIME is still 0% of played minutes (a
+plausible player is jailed often and briefly). Worth watching now that THE APPROACH lets a player
+choose `go loud` at `jailMult` 1.4.
+
+**`npm run scale`** (36 players + 20 residents, 5 days): **section 10.4 moved by exactly nothing
+across all 24 checks**, every one of the 9 driven markets took real posts, and wealth stayed flat —
+the top 10% hold **9%** of $141.7M, richest/median $4.20M/$3.97M. Goods lots ended empty CLEARED
+(everything posted was taken, the healthy reading). Availability: bodyguards / duel listings /
+contracts found a counterparty on 100% of looks, loan offers 92%, goods and buy orders 42%.
+
+**A coach-ladder observation the town surfaced** (flagged, not changed): the ladder is a strict
+priority chain of one-time milestones with the social rungs banded below all of them, so **a
+high-level player who skipped the mid-game walks a dozen earner rungs before the coach ever mentions
+their family, their crew or the wire** — which is precisely the returning veteran. Deliberate today;
+worth deciding whether a veteran should be pointed at people sooner.
+
 The economic levers remain OPEN and unretuned if the founder wants the crossover itself gone:
 - **`BUSINESS_UPKEEP_CAP_MS` 7d → 2d.** Caps the pad at $115,200 against a $288,000 till, so the
   front is always worth reviving. Smallest change, keeps the bleed, removes the crossover.
