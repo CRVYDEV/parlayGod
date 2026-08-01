@@ -3078,6 +3078,18 @@
     if (bn) for (const b of bn.children) b.classList.toggle('on', groupOf(b.dataset.go) === grp);
     renderIntro(id);   // the one-time "first time here" banner (outside the tab body — re-render-proof)
     RENDERERS[id]?.();
+    // KEYBOARD: PICKING A SCREEN PUTS YOU ON IT. Tab order is DOM order, and the sheet's ~40
+    // controls sit before the tab panel — so a player who reached a screen from the keyboard then
+    // had to tab back through the whole left column to touch anything on it ("tab tab tab to the
+    // run it button"). Only when the rail itself was what had focus, so a mouse click never steals
+    // focus and a mid-typing re-render is untouched (renderActive already guards fields).
+    const ae = document.activeElement;
+    if (ae && (ae.dataset?.tab || ae.dataset?.group || ae.dataset?.go)) {
+      // #tabbodies, not #tabpanel — the rail lives INSIDE the panel, so focusing the panel just
+      // puts the next Tab back at the start of the rail you already used.
+      const body = $('#tabbodies');
+      if (body) { body.setAttribute('tabindex', '-1'); body.focus({ preventScroll: true }); }
+    }
   }
   // re-render the OPEN tab (debounced) when live state changes — so a board a player is staring at
   // (contracts, nightlife, the market) doesn't go stale under a WS event or the 30s poll.
@@ -5188,7 +5200,7 @@
         : '<span class="d" style="color:var(--dim)">no fronts yet — the catalog is below</span>'}
       <div class="card" style="margin-top:6px"><span class="t">Hostile Takeover</span>
         <div class="d">force a rival's front to sell to you (${fmt(rules?.empire?.takeover?.fee || 0)} fee, burns win or lose; lvl ${rules?.empire?.takeover?.minLevel || 20}+, you can't already run that kind)</div>
-        <input id="biz-takeover-id" placeholder="rival front id" size="24"> <button class="act" id="biz-takeover-go">muscle in</button></div>
+        <input id="biz-takeover-id" placeholder="rival front id" size="24"> <button class="act" id="biz-takeover-go"${(me.level || 0) >= (rules?.empire?.takeover?.minLevel || 20) ? '' : ' disabled'}>${(me.level || 0) >= (rules?.empire?.takeover?.minLevel || 20) ? '' : `🔒 lvl ${rules?.empire?.takeover?.minLevel || 20}+ — `}muscle in</button></div>
 
       <h2 style="margin-top:12px">The Catalog <span class="d" style="font-size:11px">(passive income — but a front wants an owner who shows up)</span></h2>
       ${cat.length ? `<div class="card" style="border-color:var(--warn)"><span class="t" style="color:var(--warn)">THE TERMS, BEFORE YOU BUY</span>
@@ -5288,7 +5300,7 @@
         <div style="margin-top:6px" class="d">${mine.salePrice ? `On the market for $${fmt(mine.salePrice)} — <button class="act" id="sp-unlist">take it off</button>` : `Sell the house: <input id="sp-sale" placeholder="ask $" size="8"> <button class="act" id="sp-list">list it</button>`}</div></div>`
       : canOpenHere ? `<div class="card"><span class="t">Open a club here</span>
           <div class="d">${distName(me.loc)} has no house yet — plant your flag ($${fmt(sp.openCost)}, level ${sp.minLevel}+).</div>
-          <button class="act" id="sp-open" style="border-color:var(--neon)">open the club ($${fmt(sp.openCost)})</button></div>`
+          <button class="act" id="sp-open" style="border-color:var(--neon)"${(me.level || 0) >= (sp.minLevel || 15) ? '' : ' disabled'}>${(me.level || 0) >= (sp.minLevel || 15) ? '' : `🔒 lvl ${sp.minLevel}+ — `}open the club ($${fmt(sp.openCost)})</button></div>`
       : ''}
 
       ${here && !here.mine ? `
@@ -5366,7 +5378,7 @@
         || '<span class="d" style="color:var(--dim)">no fighters yet</span>'}</div>
       ${stable.length < max ? `<div class="card" style="margin-top:6px"><span class="t">Sign a contender</span>
         <div class="d">$${fmt(b.recruitCost)}, level ${b.minLevel}+.</div>
-        <input id="bx-name" placeholder="fighter name" size="18" maxlength="24"> <button class="act" id="bx-sign" style="border-color:var(--neon)">sign ($${fmt(b.recruitCost)})</button></div>` : ''}
+        <input id="bx-name" placeholder="fighter name" size="18" maxlength="24"> <button class="act" id="bx-sign" style="border-color:var(--neon)"${(me.level || 0) >= (b.minLevel || 0) ? '' : ' disabled'}>${(me.level || 0) >= (b.minLevel || 0) ? '' : `🔒 lvl ${b.minLevel}+ — `}sign ($${fmt(b.recruitCost)})</button></div>` : ''}
 
       <h2 style="margin-top:12px">The Circuit <span class="d" style="font-size:11px">(other managers' fighters — belt holder first)</span></h2>
       <div class="grid">${(b.circuit || []).filter((f) => !f.mine).map((f) => `
@@ -5445,7 +5457,7 @@
       ${stable.length < max ? `<div class="card" style="margin-top:6px"><span class="t">Buy a racer</span>
         <div class="d">level ${b.minLevel}+.</div>
         <select id="st-kind">${Object.entries(kinds).map(([k, v]) => `<option value="${k}">${v.name} ($${fmt(v.cost)})</option>`).join('')}</select>
-        <input id="st-name" placeholder="racer name" size="16" maxlength="24"> <button class="act" id="st-buy" style="border-color:var(--neon)">buy</button></div>` : ''}
+        <input id="st-name" placeholder="racer name" size="16" maxlength="24"> <button class="act" id="st-buy" style="border-color:var(--neon)"${(me.level || 0) >= (b.minLevel || 0) ? '' : ' disabled'}>${(me.level || 0) >= (b.minLevel || 0) ? '' : `🔒 lvl ${b.minLevel}+ — `}buy</button></div>` : ''}
       ${stable.length >= 2 ? `<div class="card" style="margin-top:6px"><span class="t">Breed a foal <span class="d" style="font-size:11px">($${fmt(b.breedCost || 60000)} — retires both parents into a foal that inherits their form)</span></span>
         <div class="d" style="margin-top:4px">sire: <select id="st-sire">${stable.map((y) => `<option value="${y.id}" data-kind="${y.kind}">${y.name} (${y.kindName})</option>`).join('')}</select>
           dam: <select id="st-dam">${stable.map((y) => `<option value="${y.id}" data-kind="${y.kind}">${y.name} (${y.kindName})</option>`).join('')}</select>
@@ -5498,6 +5510,11 @@
     const cd = b.cooldownSeconds || 0;
     const carOpts = cars.map((c) => `<option value="${c.id}">${c.model} — power ${c.power}${c.tune ? ` (tune ${c.tune})` : ''}${c.nos ? ` · ${c.nos} NOS` : ''}${c.dmg ? ` · ${c.dmg}% dmg` : ''}</option>`).join('');
     const nosMax = b.nos?.max || 3;
+    // A LOCKED CONTROL SAYS SO BEFORE IT IS PRESSED. The tier chips and the Grand Prix card
+    // used to state their level requirement in prose beside a live button, so the refusal only
+    // arrived as a toast after the click. Both now read the same `minLvl`/`minLevel` the server
+    // enforces and disable themselves with the requirement on the face of the button.
+    const gpOk = (me.level || 0) >= ((b.grandPrix || {}).minLevel || 0);
     t.innerHTML = `
       ${!cars.length ? coachCard('Get some iron on the strip', 'Street racing turns your garage into a competitive loop. Boost or buy a car, tune it, and race the NPC circuit for a purse — or list it and take wagers off other drivers. Fast, valuable, well-tuned iron wins; the wheelman\'s speed decides close ones.') : ''}
       <h2>Street Races <span class="chip">🏁 ${b.legend?.rank || 'Sunday Driver'} · ${b.legend?.wins || 0} wins</span></h2>
@@ -5506,7 +5523,7 @@
         <div class="card"><span class="t">The Circuit (PvE)</span>
           <div class="d">Pay the buy-in (burns win or lose), beat the NPC pack for the purse. A loss dings your car.</div>
           <div class="row" style="margin-top:6px"><select id="rc-car">${carOpts}</select><button class="act nosbtn" id="rc-nos-npc" data-armed="0" title="arm the bottle for this run">NOS +${b.nos?.power || 60}</button></div>
-          ${tiers.map((ti) => `<div class="row" style="margin-top:4px"><span>${ti.name} <span class="chip">lvl ${ti.minLvl}</span></span><span>fee $${fmt(ti.fee)} · purse $${fmt(ti.purse)} <button class="act" data-npc="${ti.id}"${cd > 0 || !cars.length ? ' disabled' : ''}>race</button></span></div>`).join('')}
+          ${tiers.map((ti) => { const ok = (me.level || 0) >= ti.minLvl; return `<div class="row" style="margin-top:4px"><span>${ti.name} <span class="chip"${ok ? '' : ' style="color:var(--dim)"'}>${ok ? `lvl ${ti.minLvl}` : `🔒 lvl ${ti.minLvl}+`}</span></span><span>fee $${fmt(ti.fee)} · purse $${fmt(ti.purse)} <button class="act" data-npc="${ti.id}"${cd > 0 || !cars.length || !ok ? ' disabled' : ''}>race</button></span></div>`; }).join('')}
         </div>
         <div class="card"><span class="t">Your Garage</span>
           ${cars.length ? cars.map((c) => `<div class="row" style="margin-top:4px"><span>${c.model} — <b>power ${c.power}</b>${c.nos ? ` · <span class="chip good">💨 ${c.nos} NOS</span>` : ''}${c.dmg ? ` · <span style="color:var(--bad)">${c.dmg}% dmg</span>` : ''}${c.raceLimit ? ` · <span class="chip good">racing ≤ $${fmt(c.raceLimit)}</span>` : ''}${c.pinkSlip ? ' · <span class="chip" style="color:var(--bad)">🎀 up for pinks</span>' : ''}</span>
@@ -5526,8 +5543,8 @@
       ${b.grandPrix ? `<div class="card"><span class="t">The Grand Prix <span class="chip">the big race</span></span>
         <div class="d">A scheduled cash race — buy in with your best iron, the whole grid runs at once, the top 3 split the pot (minus a 5% cut). Pure skill + variance; no one takes your car.</div>
         ${b.grandPrix.open ? `<div class="row" style="margin-top:6px"><span>💰 pool $${fmt(b.grandPrix.pool)} · ${b.grandPrix.entrants} on the grid${b.grandPrix.closesSeconds ? ` · grid closes in ${mins(b.grandPrix.closesSeconds)}` : ' · about to run'}${b.grandPrix.entered ? ' · <span class="chip good">you\'re in</span>' : ''}</span>
-          ${!b.grandPrix.entered ? `<span><select id="rc-gp-car">${carOpts}</select><button class="act" id="rc-gp"${cd > 0 || !cars.length ? '' : ''}>enter — $${fmt(b.grandPrix.buyin)}</button></span>` : '<span class="chip">good luck out there</span>'}</div>`
-          : `<div class="row" style="margin-top:6px"><span class="d">No race on the card. Enter to open one (level ${b.grandPrix.minLevel}+, ${b.grandPrix.minEntrants}+ runners or the field is refunded).</span><span><select id="rc-gp-car">${carOpts}</select><button class="act" id="rc-gp"${!cars.length ? ' disabled' : ''}>open it — $${fmt(b.grandPrix.buyin)}</button></span></div>`}
+          ${!b.grandPrix.entered ? `<span><select id="rc-gp-car">${carOpts}</select><button class="act" id="rc-gp"${!cars.length || !gpOk ? ' disabled' : ''}>${gpOk ? '' : `🔒 lvl ${b.grandPrix.minLevel}+ — `}enter — $${fmt(b.grandPrix.buyin)}</button></span>` : '<span class="chip">good luck out there</span>'}</div>`
+          : `<div class="row" style="margin-top:6px"><span class="d">No race on the card. Enter to open one (level ${b.grandPrix.minLevel}+, ${b.grandPrix.minEntrants}+ runners or the field is refunded).</span><span><select id="rc-gp-car">${carOpts}</select><button class="act" id="rc-gp"${!cars.length || !gpOk ? ' disabled' : ''}>${gpOk ? '' : `🔒 lvl ${b.grandPrix.minLevel}+ — `}open it — $${fmt(b.grandPrix.buyin)}</button></span></div>`}
       </div>` : ''}
       <button class="act" id="rc-lb">🏁 THE WHEEL — the leaderboard</button>`;
     { const gp = $('#rc-gp'); if (gp) gp.onclick = () => act('POST', '/v1/races/gp', { car: $('#rc-gp-car').value }).then(() => renderRaces()); }
@@ -5570,7 +5587,14 @@
     await refresh();
     const b = (await api('GET', '/v1/port')).body || {};
     const fleet = b.fleet || [], routes = b.routes || [], cat = b.catalog || [];
-    const routeOpts = routes.map((r) => `<option value="${r.id}">${r.name} — buy $${fmt(r.buy)}/u · sell $${fmt(r.sell)}/u · ~${r.interdictPct}% caught${r.hot ? ' · 🔥HOT LANE' : ''}</option>`).join('');
+    // A LANE YOU CANNOT RUN SAYS SO, IN THE PICKER. The board sends `minLvl` per route and this list
+    // ignored it, so every lane looked available: you picked one, pressed "run it", and the server
+    // answered `route_level` — the tester's report, verbatim ("I tab to the run it button and it says
+    // I can't till level 6"). A locked lane is still LISTED, because seeing what the deep runs pay is
+    // the reason to level toward them; it just cannot be chosen.
+    const canRun = (r) => (me.level || 0) >= (r.minLvl || 0);
+    const routeOpts = routes.map((r) => `<option value="${r.id}"${canRun(r) ? '' : ' disabled'}>${canRun(r) ? '' : `🔒 lvl ${r.minLvl}+ — `}${r.name} — buy $${fmt(r.buy)}/u · sell $${fmt(r.sell)}/u · ~${r.interdictPct}% caught${r.hot ? ' · 🔥HOT LANE' : ''}</option>`).join('');
+    const anyRoute = routes.some(canRun);
     const rep = b.reputation || {};
     const repLine = (rep.coolsFaster || rep.tollBreak || rep.quieter)
       ? `<span class="chip" style="color:var(--gold)">reputation: ${[rep.coolsFaster && 'lanes cool 2× faster', rep.tollBreak && 'docks toll halved', rep.quieter && 'low profile — lanes heat half as fast'].filter(Boolean).join(' · ')}</span>`
@@ -5589,7 +5613,7 @@
         <div class="card"><span class="t">Your Fleet <span class="chip">${fleet.length}/${b.fleetMax || 5}</span></span>
           ${fleet.length ? fleet.map((f) => `<div class="row" style="margin-top:4px"><span><img class="ico row" alt="" src="/v1/art/boat/${f.kind || ''}">${f.name} — hold ${f.hold} · ${f.speed} kn ${f.status === 'at_sea' ? `<span class="chip">at sea · ${mins(f.etaSeconds)}</span>` : f.status === 'arrived' ? '<span class="chip good">home — collect</span>' : '<span class="chip">docked</span>'}</span>
             <span>${f.status === 'arrived' ? `<label style="font-size:.8em"><input type="checkbox" class="pt-wh" data-for="${f.id}"> warehouse</label> <button class="act" data-collect="${f.id}"${b.atDocks ? '' : ' disabled'}>collect</button>` : f.status === 'docked' ? `<button class="act" data-sell="${f.id}"${b.atDocks ? '' : ' disabled'}>sell</button>` : ''}</span></div>
-            ${f.status === 'docked' ? `<div class="row" style="margin-top:2px"><select class="pt-route" data-for="${f.id}">${routeOpts}</select><label style="font-size:.8em"><input type="checkbox" class="pt-esc" data-for="${f.id}"> escort +$${fmt((b.escort || {}).cost || 0)}</label><button class="act" data-run="${f.id}"${b.atDocks ? '' : ' disabled'}>run it</button></div>
+            ${f.status === 'docked' ? `<div class="row" style="margin-top:2px"><select class="pt-route" data-for="${f.id}">${routeOpts}</select><label style="font-size:.8em"><input type="checkbox" class="pt-esc" data-for="${f.id}"> escort +$${fmt((b.escort || {}).cost || 0)}</label><button class="act" data-run="${f.id}"${b.atDocks && anyRoute ? '' : ' disabled'}>run it</button>${anyRoute ? '' : `<span class="chip">no lane open to you yet — the first runs at lvl ${routes[0] ? routes[0].minLvl : 6}</span>`}</div>
             <div class="row" style="margin-top:2px;font-size:.85em"><span class="chip">hull ${f.hull}/${(b.upgrade||{}).max||5}</span>${f.hullCost ? `<button class="act" data-up="${f.id}" data-part="hull">+cargo $${fmt(f.hullCost)}</button>` : ''}
               <span class="chip">engine ${f.engine}/${(b.upgrade||{}).max||5}</span>${f.engineCost ? `<button class="act" data-up="${f.id}" data-part="engine">+knots $${fmt(f.engineCost)}</button>` : ''}
               <label style="font-size:.9em"><input type="checkbox" class="pt-rdv" data-for="${f.id}" ${f.rendezvous ? 'checked' : ''}> ready for a handoff</label></div>` : ''}
@@ -5680,7 +5704,7 @@
         ${cb.rig.nextArmorCost != null ? `<button class="act" data-rigup="armor">upgrade armor ($${fmt(cb.rig.nextArmorCost)})</button>` : '<span class="chip">armor maxed</span>'}
         ${cb.rig.nextEngineCost != null ? `<button class="act" data-rigup="engine">upgrade engine ($${fmt(cb.rig.nextEngineCost)})</button>` : '<span class="chip">engine maxed</span>'}</div>`
         : `<div class="card"><span class="t">THE RIG</span><div class="d">a built hauler adds armor (defense) + engine (speed) to your runs. Buy one:</div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap">${(cb.rigs || []).filter((r) => (me.level || 0) >= r.minLvl).map((r) => `<button class="act" data-rigbuy="${r.id}">${r.name} ($${fmt(r.cost)})</button>`).join('') || '<span class="d" style="color:var(--dim)">level up to unlock a rig</span>'}</div></div>`}
+          <div style="display:flex;gap:4px;flex-wrap:wrap">${(cb.rigs || []).map((r) => { const ok = (me.level || 0) >= r.minLvl; return `<button class="act" data-rigbuy="${r.id}"${ok ? '' : ' disabled'}>${ok ? '' : `🔒 lvl ${r.minLvl}+ — `}${r.name} ($${fmt(r.cost)})</button>`; }).join('')}</div></div>`}
       ${cv ? `
         <div class="card" style="border-color:var(--neon)"><span class="t">your shipment · ${cv.from} → ${cv.to || '?'}</span> <span class="chip">${cv.status.toUpperCase()}</span>${cv.notoriety > 0 ? ` <span class="chip ${cv.notoriety >= ((cb.notoriety||{}).max||40) * 0.5 ? 'bad' : ''}">lane heat ${cv.notoriety}${cv.guardCut ? ` · −${cv.guardCut} guards` : ''}${cv.notoriety >= ((cb.notoriety||{}).max||40) * 0.5 ? ' 🔥' : ''}</span>` : ''}
           <div class="d">manifest: ${cv.manifest.map((x) => `${goodName(x.good)} ×${x.qty}`).join(', ') || 'empty'}${cv.insured ? ' · INSURED' : ''}${cv.ambushes ? ` · hit ${cv.ambushes}×` : ''}${cv.insuranceDue ? ` · claim due $${fmt(cv.insuranceDue)}` : ''}</div>

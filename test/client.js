@@ -561,6 +561,8 @@ const blankShadows = (src, v) => {            // blank every region where `v` is
 //   · the binding IS the array — `const rows = (…).body.contracts; rows.map((c) => …)`
 // Anything whose lambda body cannot be delimited is COUNTED and asserted zero, same rule as above.
 const listReads = new Map(), listWhere = new Map();
+// list keys whose row renders a clickable control (check 5 — a gate only matters on an ACTION)
+const listActs = new Set();
 let listUnresolved = 0;
 const bodyAfter = (src, from) => {             // extent of a lambda body starting at `from`
   let k = from;
@@ -615,7 +617,15 @@ const collectList = (src, v, key, fn) => {
     const ext = bodyAfter(src, at);
     if (!ext) { listUnresolved++; return; }
     const k = `${key}|${listField}`;
-    for (const r of src.slice(ext[0], ext[1])
+    const region = src.slice(ext[0], ext[1]);
+    // check 5 needs to know whether this row RENDERS AN ACTION — a purely informational row has
+    // nothing to gate. `data-<x>=` / `data-do=` / an inline onclick are the three ways this client
+    // hangs a click on an element. `<option` is the fourth and it is the one that had a live defect:
+    // a list mapped into a <select>'s options carries no data- attribute of its own, but the option
+    // IS the choice — picking a locked one and pressing the neighbouring button is exactly the
+    // "looks live, refuses on press" the tester reported.
+    if (/data-[a-z]+\s*=|onclick\s*=|<option/.test(region)) listActs.add(k);
+    for (const r of region
       .matchAll(new RegExp(`(?<![\\w$.])${param.replace('$', '\\$')}\\s*\\??\\.\\s*([a-zA-Z_$][\\w$]*)`, 'g'))) {
       if (BUILTIN.has(r[1])) continue;
       if (!listReads.has(k)) { listReads.set(k, new Set()); listWhere.set(k, fn); }
@@ -801,9 +811,16 @@ for (const m of html.matchAll(/\b(?:async\s+)?function\s+([a-zA-Z_$][\w$]*)\s*\(
     // followed off a sub-less binding (the key format carries one sub level; deeper chains remain
     // the mirror's stated out-of-scope, same as nested reads everywhere). An alias that never has
     // properties read off it creates no key, so `const n = b.count` is harmless.
+    // The terminator is a LOOKAHEAD, not a consumed character, and that is load-bearing: a
+    // comma-chained declaration — `const fleet = b.fleet || [], routes = b.routes || [], cat = …` —
+    // separates each binding from the next with ONE comma, which is simultaneously the terminator of
+    // the binding before it and the lead of the binding after. Consume it and matchAll cannot start
+    // the next match there, so EVERY OTHER binding in the chain silently disappears. Found by check 5:
+    // the Port declares its three lists on one line and `routes` was the one in the middle, so its
+    // element reads had never been checked by 4b either.
     if (!b.sub) {
       for (const al of region.matchAll(new RegExp(
-        `(?:const|let|var|,)\\s*([a-zA-Z_$][\\w$]*)\\s*=\\s*${v.replace('$', '\\$')}\\s*\\??\\.\\s*([a-zA-Z_$][\\w$]*)\\s*(?:\\|\\|\\s*(?:\\{\\}|\\[\\]))?\\s*[;,\\n]`, 'g'))) {
+        `(?:const|let|var|,)\\s*([a-zA-Z_$][\\w$]*)\\s*=\\s*${v.replace('$', '\\$')}\\s*\\??\\.\\s*([a-zA-Z_$][\\w$]*)\\s*(?:\\|\\|\\s*(?:\\{\\}|\\[\\]))?\\s*(?=[;,\\n])`, 'g'))) {
         if (BUILTIN.has(al[2])) continue;
         binds.push({ v: al[1], path: b.path, sub: al[2], index: b.index + al.index + al[0].length });
       }
@@ -953,6 +970,27 @@ async function seedLists() {
     await si('POST', '/v1/boxing/list', t2, { fighter: f2, stake: 50000 });
     const f1 = (await si('GET', '/v1/boxing', token)).body?.stable?.[0]?.id;
     await si('POST', `/v1/boxing/announce/${two}`, token, { myFighter: f1, theirFighter: f2 });
+  });
+  // THE STRIP — a rival's car taking a wager. Newly reachable: the comma-chain alias fix exposed
+  // three Port/races lists that had been invisible, and an invisible list is not a covered list.
+  await trySeed('races strip', async () => {
+    for (let i = 0; i < 12; i++) {
+      await q("UPDATE characters SET energy=200, nerve=50, jail_until=NULL, gta_at=NULL WHERE id=$1", [two]);
+      const r = await si('POST', '/v1/garage/boost', t2, {});
+      if (r.code < 400 && r.body?.success !== false) break;
+    }
+    const car2 = (await si('GET', '/v1/races', t2)).body?.cars?.[0]?.id;
+    if (car2) await si('POST', `/v1/races/list/${car2}`, t2, { limit: 50000 });
+  });
+  // THE GALA — a live party in the city, so the guest-side list has a row to render. The host needs
+  // a Row House (tier 2 — two upgrades, the ladder is sequential) AND a Butler on the door, and the
+  // household must be square, which is why this is four calls rather than one.
+  await trySeed('estate gala', async () => {
+    await q("UPDATE account_persistent SET omr = omr + 4000 WHERE account_id=$1", [acct2]);
+    await si('POST', '/v1/estate/upgrade', t2, {});
+    await si('POST', '/v1/estate/upgrade', t2, {});
+    await si('POST', '/v1/estate/staff/butler', t2, {});
+    await si('POST', '/v1/estate/gala', t2, {});
   });
   await trySeed('stable', async () => {
     await si('POST', '/v1/stable/buy', t2, { kind: 'dog', name: 'Mirror Runner' });
@@ -1173,7 +1211,13 @@ const readCount = [...reads.values()].reduce((n, s) => n + s.size, 0);
 // dishonesty this file exists to prevent.
 assert.equal(listUnresolved, 0, `${listUnresolved} iterator body/bodies could not be delimited, so element reads go unchecked`);
 assert(listReads.size > 15, `only ${listReads.size} list bindings found — the element extraction broke`);
-const listMissing = [], listEmpty = [];
+const listMissing = [], listEmpty = [], listUngated = [];
+// The gate vocabulary, as the boards actually name it (swept live off every board, not guessed):
+// `minLvl`/`minLevel`/`lvl` are the level a row needs; `locked`/`canRaid`/`eligible` are the server
+// having already decided. A board that adds a new gate name has to be added here — deliberately a
+// short explicit list rather than a pattern, so a field called `level` (the row's OWN level, not a
+// requirement) is never mistaken for a gate.
+const GATE_FIELDS = new Set(['minLvl', 'minLevel', 'locked', 'canRaid', 'eligible']);
 for (const [key, fields] of listReads) {
   const [rawPath, sub, listField] = key.split('|');
   let path = rawPath;
@@ -1190,6 +1234,24 @@ for (const [key, fields] of listReads) {
   const have = new Set(arr.flatMap((e) => (e && typeof e === 'object' ? Object.keys(e) : [])));
   const gone = [...fields].filter((f) => !have.has(f));
   if (gone.length) listMissing.push(`${listWhere.get(key)} reads ${gone.join(',')} off each element of ${key} — the elements carry ${[...have].slice(0, 8).join(',')}…`);
+  // ── CHECK 5: a control the player cannot use must SAY SO ──
+  // The fourth way a button lies. Checks 1-3 cover the way out (does the route exist, is the value
+  // real, does the handler read the field) and check 4 covers the way back (is the field real). None
+  // catches a control that is perfectly wired and simply REFUSES — the tester's report was "I tab to
+  // the run it button and it says I can't till level 6", which is the same defect class as the pad:
+  // the game not telling you the rule until after you act.
+  //
+  // The rule is narrow on purpose, so it stays true rather than becoming noise: when the SERVER
+  // sends a gate on a row's elements AND the client hangs a CLICK on that row, the client must READ
+  // the gate. What it does with it — disable the button, swap in a "need lvl N" chip, filter the row
+  // out — is the renderer's business; not looking at all is the bug. A row with no action needs
+  // nothing (nothing to refuse), and a board that never sends a gate is not this check's business.
+  if (listActs.has(key)) {
+    const gates = [...have].filter((f) => GATE_FIELDS.has(f));
+    const blind = gates.filter((g) => !fields.has(g));
+    if (blind.length) listUngated.push(`${listWhere.get(key)} renders a control per row of ${key} but never reads ` +
+      `${blind.join(',')} — the row's own elements carry it, so the button looks live and refuses on press`);
+  }
 }
 assert.deepEqual(listMissing, [], `the client reads ${listMissing.length} field(s) off list elements that the ` +
   `route's elements do not carry — every row renders that as undefined`);
@@ -1203,6 +1265,8 @@ assert.deepEqual(listMissing, [], `the client reads ${listMissing.length} field(
 assert.deepEqual(seedNotes, [], `${seedNotes.length} fixture seed step(s) were REFUSED, so whatever ` +
   `they were going to create does not exist and the coverage below is quietly thinner than it reads:\n  ` +
   `${seedNotes.join('\n  ')}`);
+assert.deepEqual(listUngated, [], `${listUngated.length} clickable row(s) ignore a gate their own elements ` +
+  `carry, so the control looks usable and only refuses once pressed:\n  ${listUngated.join('\n  ')}`);
 assert.deepEqual(listEmpty, [], `${listEmpty.length} list(s) came back EMPTY, so their element fields were ` +
   `never actually compared. An empty list is not a pass — extend seedLists() so each has a row:\n  ` +
   `${listEmpty.join('\n  ')}`);
@@ -1221,9 +1285,13 @@ console.log(`✅ client wiring test passed — across the console AND /admin: of
   `boards really return, observed by fetching each one — plus the ${listCount} fields they read off ` +
   `the ELEMENTS of ${listReads.size} lists, which is where most board rendering lives and which needed ` +
   `a fixture that makes one of everything, because an empty list must never read as a pass. ` +
-  `Those are the four ways a button dies silently — this has found four dead routes, seven ` +
-  `ignored fields and two element fields the board never sent (a LEGENDARY chip that had never ` +
-  `once rendered), among them a broken action, an ammo box sold by a control that asked for a ` +
+  `And the fifth way, which is not death but a lie: of those lists, ${[...listActs].length} hang a ` +
+  `CLICK on each row, and where the server sends that row a gate the renderer has to read it — a ` +
+  `control that looks live and only refuses once pressed is the game withholding its own rule. ` +
+  `Those are the five ways a button lies — this has found four dead routes, seven ` +
+  `ignored fields, two element fields the board never sent (a LEGENDARY chip that had never ` +
+  `once rendered) and a lane picker that offered every route to a level-6 player and refused on ` +
+  `press, among them a broken action, an ammo box sold by a control that asked for a ` +
   `quantity it could not honour, and an unstake box that emptied the whole stake whatever you typed. ` +
   `${Object.keys(CATALOGS).length} fields have ` +
   `catalogs and every other literal field is either an i18n key or declared not-an-API-value, so a ` +
