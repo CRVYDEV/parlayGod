@@ -184,9 +184,13 @@ const SECTIONS = [
       <p>Your <b>trade rank</b> controls it. There are 8 drugs (unlocked by rank). Cook produces <code>demand×12</code>,
       with a fire risk. <b>Deal</b> income = demand × quality × event × trade bonus, and <b>adds heat</b> (feeds the Law).
       A rank-0 dealer gets a +50% bonus on the corner. <b>Crew</b> (up to 5) sell while you are offline but cost
-      <b>$1,200 each hour in wages ("the nut")</b> — if you do not pay for 3 days, the crew becomes <b>cold</b> and stops.
+      <b>$1,200 each hour in wages ("the nut")</b> whether the stash moves or not — if you do not pay for 3 days, the
+      crew becomes <b>cold</b> and stops. Offline sales cap at 8 hours' worth however long you are away, but the nut
+      runs up to a week, so <b>keep them stocked and check in often</b>: three visits a day earns ~3.6× the wages even
+      on the cheapest line, once a day barely clears it, three days away costs more than it makes. You can always
+      <b>let one go</b> — square up and one walks, or a cold crew walks for nothing (their buy-in is gone either way).
       <b>Lay low</b> and <b>clean papers</b> reduce heat. Above heat 60, the Bureau can raid.</p>
-      ${R(`POST /v1/kitchen/makings/:drugId · /lab/upgrade · /cook · /collect · /deal · /crew/hire · /crew/wages · /laylow · /cleanpapers`)}` },
+      ${R(`POST /v1/kitchen/makings/:drugId · /lab/upgrade · /cook · /collect · /deal · /crew/hire · /crew/wages · DELETE /v1/kitchen/crew · /laylow · /cleanpapers`)}` },
 
   { id: 'business', group: 'Money', title: 'Businesses & Fronts', tag: 'premium upgradeable venues',
     html: `<p>Level-gated, upgradeable places (Laundromat L15 to Casino L58) that earn pocket cash — the

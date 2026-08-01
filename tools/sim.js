@@ -20,7 +20,7 @@ import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
          frontierTributePerHr, liberationCost, worldNpcOf, SPEAKEASY, PEN, RACES,
          PORT, boatOf, portRouteOf, interdictChance,
          CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES, BUSINESSES, PACING, POPULATION, boatResale, CORNER, CONTACTS,
-         EXCHANGE, EMISSION, ESTATE, WIRE, GANG_SEALS, FOUNDATION, RIVALS, RACKETS, ASSETS } from '../src/rules.js';
+         EXCHANGE, EMISSION, ESTATE, WIRE, GANG_SEALS, FOUNDATION, RIVALS, RACKETS, ASSETS, M4, DRUGS } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -750,6 +750,41 @@ phase('P9.20b the asset ladder — payback, and whether the entry price is reall
     `both buy-once and permanent, so a long-lived street accumulates the WHOLE ladder; against the top-tier crime grind at $${fmt(Math.round(grindDay))}/day this is the shape of the passive-vs-active gap, and it is bigger than the front stack alone`);
   note('assets', 'VERDICT', 'affordable, and that is the finding',
     `nothing here is out of reach — the risk the founder asked about is real but inverted: every rung pays back inside three days, so the mid-game's only decision is which drip to buy next. The levers are the per-rung income (prototype tables, machine-owned) and the ${meterH}h RACKET_DAILY_CAP_MS meter; the DESIGN answer is to make the active systems pay progression, not to make the drips weaker (BALANCE.md)`);
+}
+
+// ════════ P9.20c THE NUT — what a crew costs against what a hand actually moves ════════
+// The same founder ask, on the one asset a tester called out by name ("same for the kitchen. it's
+// unbalanced"). A crew member is bought once ($50k x N) and then draws CREW_WAGE_PER_HR forever,
+// but they only EARN while there is stash to move — so the honest metric is not payback, it is the
+// ratio of what a hand moves to what a hand costs, at the cadence the owner actually plays.
+//
+// The asymmetry is the mechanic and it is sharper here than the business pad's: offline SALES are
+// capped at OFFLINE_CAP_MS while the NUT runs to CREW_WAGE_CAP_MS, so an absent owner earns a few
+// hours and owes a week. Analytic, from the signed constants — no value seeded, section 10.4 untouched.
+phase('P9.20c the nut — crew wages against crew earnings, by cadence');
+{
+  const wage = M4.CREW_WAGE_PER_HR;
+  const salesCapH = CONSTANTS.OFFLINE_CAP_MS / 3600000;
+  const nutCapH = M4.CREW_WAGE_CAP_MS / 3600000;
+  const UNITS_PER_MIN = 1;                       // accrual.js: crew x cappedMin units
+  const perHr = (d) => 60 * UNITS_PER_MIN * d.base * 0.8;   // offline sale: base x quality x 0.8, demand pinned 1.0
+  const cheapest = DRUGS.slice().sort((a, b) => a.base - b.base)[0];
+
+  note('crew', 'the nut', `$${fmt(wage)}/hr per hand`,
+    `flat, on the wall clock, whether the stash moves or not — the recurring sink`);
+  note('crew', 'what one hand moves while stocked', `$${fmt(Math.round(perHr(cheapest)))}/hr on ${cheapest.name} (the cheapest line)`,
+    `${(perHr(cheapest) / wage).toFixed(1)}:1 against the wage, rising to ${(perHr(DRUGS[DRUGS.length - 1]) / wage).toFixed(0)}:1 on ${DRUGS[DRUGS.length - 1].name} — a STOCKED crew is never the problem`);
+  // the cadence table: this is what the tester was feeling
+  for (const [label, gapH] of [['every 8h (three check-ins)', 8], ['daily', 24], ['every 3 days (the cold line)', 72]]) {
+    const soldH = Math.min(gapH, salesCapH);      // sales are capped at the offline window
+    const earn = soldH * perHr(cheapest), owe = gapH * wage;
+    note('crew', `1 hand, ${label}`, `${earn > owe ? '+' : ''}$${fmt(Math.round(earn - owe))}/cycle`,
+      `banks ${soldH}h of sales ($${fmt(Math.round(earn))}) against ${gapH}h of wages ($${fmt(Math.round(owe))}) = ${(earn / owe).toFixed(2)}:1 on the cheapest line`);
+  }
+  note('crew', 'the asymmetry', `sales cap ${salesCapH}h — the nut runs to ${nutCapH}h`,
+    `${(nutCapH / salesCapH).toFixed(0)}x, sharper than the business pad's 7x. It is the same deliberate fiction (the corner holds a shift's take, the envelope runs a week) and the same defect it had: the game never SAID so. It does now — the rate, the countdown and the door out all ride with the price`);
+  note('crew', 'VERDICT', 'attendance, not a trap — once the terms are visible',
+    `a stocked, thrice-daily crew runs ${((Math.min(8, salesCapH) * 3 * perHr(cheapest)) / (24 * wage)).toFixed(1)}:1 even on ${cheapest.name}; a daily one is ${((salesCapH * perHr(cheapest)) / (24 * wage)).toFixed(2)}:1 and an absent one bleeds. The levers are CREW_WAGE_PER_HR, CREW_WAGE_CAP_MS (the week the nut runs to) and OFFLINE_CAP_MS (the shift the corner holds) — BALANCE.md`);
 }
 
 // ════════ P9.21 THE POPULATION — the npc:seed faucet, measured analytically ════════

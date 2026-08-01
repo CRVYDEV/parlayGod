@@ -273,8 +273,15 @@ levels; the top levels cost $OMR) → **cook a batch** (`/kitchen/cook`) → **c
 - **Deal** income = demand × quality × city event × trade-rank bonus. It **adds heat** (this feeds the Law).
   A rank-0 dealer gets a **+50% bonus** on the corner. This bonus stops at rank 1.
 - **Crew** (`/kitchen/crew/hire`, up to 5) sell your cheapest drugs while you are offline. But each crew
-  member costs **$1,200 each hour in wages** (also called "the nut," `/kitchen/crew/wages`). If you do not
-  pay for 3 days, the crew becomes **cold** and stops selling.
+  member costs **$1,200 each hour in wages** (also called "the nut," `/kitchen/crew/wages`) whether the
+  stash moves or not. If you do not pay for 3 days, the crew becomes **cold** and stops selling.
+  **Keep them stocked and check in often.** Offline sales are capped at 8 hours' worth however long you
+  are away, but the nut keeps running for up to a week — so a crew you visit three times a day earns
+  about 3.6× its wages even on the cheapest line, a crew you see once a day barely clears it, and a crew
+  you leave for three days costs more than it makes. That is the trade: they are staff, not a machine.
+- **Letting one go** (`DELETE /v1/kitchen/crew`): square up what they are owed and one walks. If the crew
+  has already gone **cold**, they walk for nothing — so you can always get out from under the nut. Their
+  buy-in does not come back; hiring again starts at the first step price.
 - **Lay low** (`/kitchen/laylow`, $5k plus energy, −25 heat) and **clean papers** (`/kitchen/cleanpapers`, 10
   $OMR) reduce your heat. Above heat 60, the Bureau can **raid** your operation.
 

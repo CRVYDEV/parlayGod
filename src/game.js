@@ -1266,7 +1266,13 @@ export function view(ch, acct = {}, owned = {}) {
     // THE KINGPIN LEGEND (Tier-4) — lifetime product moved (account-level, survives death)
     kingpin: { moved: Number(acct?.product_moved || 0), rank: kingpinRankOf(acct?.product_moved).name },
     // recurring sinks — the crew's nut: what's owed, the hourly rate, and whether they've downed tools
+    // THE NUT, MADE LEGIBLE (the pad precedent, same defect class): a hand costs a flat wage on the
+    // wall clock but only EARNS while there is stash to move, so the terms have to ride with the
+    // price — the per-head rate, the countdown to downed tools, and the door out.
     crewWageOwed: crewWageOwed(ch), crewWagePerHr: Number(ch.crew || 0) * M4.CREW_WAGE_PER_HR, crewCold: crewCold(ch),
+    crewWagePerHead: M4.CREW_WAGE_PER_HR, crewMax: M4.CREW_MAX, crewCostStep: M4.CREW_COST_STEP,
+    crewColdSeconds: Number(ch.crew || 0) > 0 && ch.crew_paid_at
+      ? Math.max(0, Math.ceil((new Date(ch.crew_paid_at).getTime() + M4.CREW_WAGE_COLD_MS - Date.now()) / 1000)) : null,
     makings: owned.makings || {},
     stash: (owned.stash || []).filter((s) => Number(s.qty) > 0)
       .map((s) => ({ drug: s.drug_id, qty: Number(s.qty), quality: Math.round(Number(s.quality) * 100) / 100 })),

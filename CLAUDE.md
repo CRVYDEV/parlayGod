@@ -7496,6 +7496,31 @@ patched:** a marked man can shutter his fronts to deny a killer the Sacking (the
 does not resolve a pending Bureau raid — a dodge that costs the whole front to avoid a fine worth 10%
 of the tier cost, so nobody will take it.
 
+**THE NUT — the crew's terms, and the door out (tester-reported, 2026-08-01).** The same tester who
+found the pad wrote "same for the kitchen. it's unbalanced" and "no way a 25k runner costs 8k in 5h".
+Measured (sim **P9.20c**, printed every run): the nut is **$1,200/hr per hand** flat, on the wall clock,
+while a hand only EARNS while there is stash — **$4,320/hr on the cheapest line, 3.6:1** against the
+wage, up to 360:1 on nocturne. So a **stocked** crew is never the problem. But sales cap at
+`OFFLINE_CAP_MS` **8h** while the nut runs to `CREW_WAGE_CAP_MS` **168h** — a **21× asymmetry, sharper
+than the pad's 7×** — so per cycle a hand is **+$24,960 at three check-ins a day, +$5,760 daily, and
+−$51,840 absent three days**. The tester's arithmetic was right and the mechanic is the pad's fiction
+working as designed (the corner holds a shift's take, the envelope runs a week). **The defect was that
+the game never SAID any of it and never let you out**: `crew` only ever incremented — there was no fire
+button anywhere in the game, so hiring ahead of your kitchen meant owing $1,200/hr/head forever.
+Shipped, no lever moved: the terms ride with the price (per-head rate, cold countdown, wage cap on the
+sheet and `/v1/rules.crew`), and **`DELETE /v1/kitchen/crew`** — square up and let one go, or let a
+**cold** crew walk for **nothing** (men who downed tools three days ago have already gone), which is the
+exit a broke player needs. **The dodge is closed on the economics, not with a special rule**: owed is
+`crew × elapsed` and never stored, so shedding heads shrinks it retroactively — but reaching the free
+door costs three days of sales, ~$311k of product forgone against ~$86k of wages dodged, so a warm
+crew's only exit is through the till. §10.4 untouched (the settle rides the EXISTING `crew:wages` sink;
+a cold walk-off writes **no ledger row** — the `BUSINESS_SHUTTER_BPS=0` argument), and the buy-in is
+forfeit (a rehire starts at the first step). `test/growth.js` covers the surfaced terms, the settle to
+the dollar, the broke-and-warm refusal, the broke-and-cold exit with **zero** ledger rows, and the
+rehire price — mutation-verified twice by name. All five crew levers now pinned; BALANCE.md § THE NUT
+names `OFFLINE_CAP_MS` as the single number that would remove the crossover itself, and why that is a
+whole-economy decision rather than a kitchen one.
+
 **THE EARLY GAME — the diagnosis, and F1 THE WORK BOARD (founder-directed 2026-08-01: "smooth out the
 user experience levels 1-30… the coach has to be really guiding users through every possible next step
 quest to earn XP & cash… expand the breadth and depth of content at the early levels").** Design +

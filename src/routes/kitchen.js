@@ -22,6 +22,9 @@ export function register(app, { pool, auth }) {
     // recurring sinks: pay the crew's nut (wages) — an unpaid crew downs tools until covered
     app.post('/v1/kitchen/crew/wages', { preHandler: auth }, async (req) =>
       G.withCharacter(pool, req.user.sub, (ch, client, h) => K.payCrewWages(ch, client, h)));
+    // the door out of the nut: square up and let one go, or let a downed crew walk for nothing
+    app.delete('/v1/kitchen/crew', { preHandler: auth }, async (req) =>
+      G.withCharacter(pool, req.user.sub, (ch, client, h) => K.layOffCrew(ch, client, h)));
     app.post('/v1/kitchen/laylow', { preHandler: auth }, async (req) =>
       G.withCharacter(pool, req.user.sub, (ch, client, h) => K.layLow(ch, client, h)));
     app.post('/v1/kitchen/cleanpapers', { preHandler: auth }, async (req) =>

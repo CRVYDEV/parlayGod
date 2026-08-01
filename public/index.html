@@ -1796,6 +1796,9 @@
       : `couldn't cover the pad — $${fmt(body.stillOwed)} owed and you don't have it. Earn it elsewhere; the fronts stay cold until it's square.`);
     else if (body.paid > 0) bits.push(`paid $${fmt(body.paid)} — the pad is square`);
     if (body.shuttered) bits.push(`closed up the ${body.shuttered} — the pad on it stops${body.back > 0 ? `, $${fmt(body.back)} back` : ', nothing back'}`);
+    if (body.walked !== undefined) bits.push(body.walked
+      ? `they'd already downed tools — one hand walks, ${body.crew} left on the corner`
+      : `settled $${fmt(body.settled)} and let one go — ${body.crew} left on the corner`);
     // the circuit already sends YOUR power and the FIELD's; printing neither made a $25k tune a
     // coin-flip purchase — you could not tell whether one more level would have taken it.
     if (typeof body.win === 'boolean' && (body.field !== undefined || body.wager !== undefined)) {
@@ -2045,6 +2048,14 @@
         const bt = bragText(r.body); if (bt) { haptic('big'); showBrag(bt); }
       } else if (r.code >= 400) { shake(); sfx('bad'); }
       await refresh();
+      // …and re-render the BOARD you are looking at, not just the sheet. `refresh()` only redraws the
+      // left column, so until now the screen you just acted on kept showing the old state until a WS
+      // event or the 30s poll happened along: you paid the pad and the front still said COLD, you let
+      // a hand go and the card still said one hand. The toast said "ok" and the page said otherwise,
+      // which reads as "the button did nothing" — a tester reported exactly that. Debounced and
+      // input-safe (renderActive skips while a field has focus), so this costs one board fetch on the
+      // screen already in front of you.
+      if (r.code < 400) renderActive();
       return r;
     } finally { acting = false; document.body.style.cursor = ''; busy.classList.remove('on'); }
   }
@@ -3241,10 +3252,13 @@
           <button class="act" data-cut="${s.drug}" title="stretch the line — more units, weaker product">cut it ($${fmt(rules?.kitchen?.cut?.cost || 8000)})</button></div>`).join('')}</div>`
         : '<span class="d" style="color:var(--dim)">the stash is empty — cook something</span>'}
 
-      ${sect('kitchen-crew', 'The Crew', 'they move the cheapest lines while you sleep — mind the nut', `<div class="card"><span class="t">${me.crew || 0} hands${me.crewCold ? ' — DOWNED TOOLS' : ''}</span>
+      ${sect('kitchen-crew', 'The Crew', 'they move the cheapest lines while you sleep — mind the nut', `<div class="card"><span class="t">${me.crew || 0} hand${(me.crew || 0) === 1 ? '' : 's'}${me.crewCold ? ' — DOWNED TOOLS' : ''}</span>
         <div class="d">wages owed $${fmt(me.crewWageOwed || 0)}${me.crewCold ? ' · COLD: nothing moves until the nut is paid' : ''}</div>
+        <div class="d">the nut runs <b>$${fmt(me.crewWagePerHead || rules?.crew?.wagePerHr || 1200)}/hr each</b> — $${fmt(me.crewWagePerHr || 0)}/hr for ${me.crew || 0} — whether the stash moves or not. They only earn while you keep them stocked.</div>
+        ${!me.crewCold && me.crewColdSeconds != null ? `<div class="d" style="color:var(--warn)">they down tools in ${minsTxt(me.crewColdSeconds)} unless the nut is squared</div>` : ''}
         <button class="act" data-do="POST /v1/kitchen/crew/hire">hire (next: $${fmt((rules?.crew?.costStep || 50000) * ((me.crew || 0) + 1))})</button>
-        <button class="act" data-do="POST /v1/kitchen/crew/wages">pay the nut</button></div>`,
+        <button class="act" data-do="POST /v1/kitchen/crew/wages">pay the nut</button>
+        ${(me.crew || 0) > 0 ? `<button class="act" data-do="DELETE /v1/kitchen/crew" data-confirm="Let one hand go? ${me.crewCold ? 'They downed tools — they walk for nothing.' : `You settle the $${fmt(me.crewWageOwed || 0)} owed first. Their buy-in is gone for good.`}">let one go</button>` : ''}</div>`,
         !!me.crewCold || Number(me.crewWageOwed || 0) > 0 || (me.crew || 0) > 0)}
 
       <h2 style="margin-top:12px">Heat (${me.heat})</h2>

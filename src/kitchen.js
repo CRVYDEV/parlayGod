@@ -5,7 +5,7 @@ import { GameError, bumpFamilyTask, skillMult, trunkCap, bumpMastery, masteryFx 
 import {
   DRUGS, KITCHENS, TRADE_RANKS, CONSTANTS, M4, COMMISSION, SKILLS, KITCHEN,
   drugOf, kitchenOf, tradeRankIdx, cityEventOf, dayOf,
-  makingsPriceOf, demandOf, effStat, crewWageOwed, HONOR,
+  makingsPriceOf, demandOf, effStat, crewWageOwed, crewCold, HONOR,
   labModuleCost, kingpinRankOf, seasonModOf, pathFx, pathAdd } from './rules.js';
 import { activeDecree } from './commission.js';
 import { logCollect } from './collection.js';
@@ -200,6 +200,43 @@ export async function payCrewWages(ch, client, h) {
   ch.crew_paid_at = new Date();
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -owed, reason: 'crew:wages' });
   return { ok: true, paid: owed, crew };
+}
+
+// LET ONE GO — the door out of the nut, and it exists for the same reason the business SHUTTER
+// does: a recurring sink with no exit is not a cost, it is a trap. The crew earn only while there
+// is stash to move, but the wage runs on the wall clock either way, so a player who hires ahead of
+// their kitchen — or takes a week off — pays $1,200/hr/head for nothing and, until now, could never
+// stop paying. There was no fire button anywhere in the game.
+//
+// The rule is one line: a WORKING crew must be squared up before anyone walks; a crew that DOWNED
+// TOOLS (cold — the nut unpaid past CREW_WAGE_COLD_MS) can be let go for nothing, because men who
+// stopped working for you three days ago have already gone.
+//
+// That is also what closes the obvious dodge, and it closes it on the ECONOMICS rather than with a
+// special rule. `crewWageOwed` is crew × elapsed and is never stored, so shedding heads retroactively
+// shrinks the nut — run five for a week, lay off four, pay a fifth. But the free door is only open
+// once you have gone cold, which costs three days of sales, and one hand moves ~60 units/hr at 0.8×
+// base: even on the cheapest line that is ~$311k of product forgone against ~$86k of wages dodged.
+// Nobody takes that trade. A warm crew's only exit is through the till.
+//
+// §10.4: the settle-first path is the EXISTING `crew:wages` sink; a cold walk-off moves no value at
+// all (no ledger row) — the BUSINESS_SHUTTER_BPS=0 argument. The buy-in is forfeit: coming back
+// costs the step price again.
+export async function layOffCrew(ch, client, h) {
+  const crew = Number(ch.crew || 0);
+  if (crew <= 0) throw new GameError('none', 'You run no crew.');
+  const cold = crewCold(ch);
+  const owed = crewWageOwed(ch);
+  if (!cold && owed > 0) {
+    if (Number(ch.cash) < owed) throw new GameError('nut', `Square the nut first — $${owed} for the time they worked.`);
+    ch.cash = Number(ch.cash) - owed;
+    await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -owed, reason: 'crew:wages' });
+  }
+  ch.crew = crew - 1;
+  // the clock restarts for whoever is left (they were just paid, or they had already walked); with
+  // nobody left the marker is cleared so a future hire starts its wages from that hire.
+  ch.crew_paid_at = ch.crew > 0 ? new Date() : null;
+  return { ok: true, crew: ch.crew, settled: cold ? 0 : owed, walked: cold };
 }
 
 // ── HEAT MANAGEMENT (§5.3) ──
