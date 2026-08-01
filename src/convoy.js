@@ -283,6 +283,18 @@ export async function collectConvoy(ch, convoyId, client, h) {
   const manifest = await manifestOf(client, convoyId);
   const cap = trunkCap(h);
   let space = Math.max(0, cap - cargoCount(h.owned.cargo));
+  // A NO-OP MUST NOT READ AS A SUCCESS (the same class describe() already carries a note about, one
+  // verb over). Freight comes off a trunk-load at a time, so a driver who turns up with a full trunk
+  // moved NOTHING — and this returned `{ok:true, collected:0}`, a 200 with nothing behind it. A
+  // tester reported it as "I can't collect my convoy", which is exactly what it looks like from the
+  // outside: you press the button and the freight stays on the truck with no reason given.
+  // Refuse, and say what to do about it. Only when there is actually freight to take: a convoy
+  // whose whole manifest was hijacked still needs collecting to settle the insurance.
+  const onBoard = manifest.reduce((s, m) => s + Number(m.qty), 0);
+  if (onBoard > 0 && space <= 0) {
+    throw new GameError('full', `Your trunk is full — ${cargoCount(h.owned.cargo)}/${cap}. `
+      + `Sell or drop something and come back; the freight keeps at the dock.`);
+  }
   let taken = 0, left = 0, collectedValue = 0;
   for (const m of manifest) {
     const grab = Math.min(Number(m.qty), space);
