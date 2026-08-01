@@ -7495,3 +7495,47 @@ patched:** a marked man can shutter his fronts to deny a killer the Sacking (the
 "warehouse the fleet before the hit", and more self-punishing since he destroys them), and closing up
 does not resolve a pending Bureau raid — a dodge that costs the whole front to avoid a fine worth 10%
 of the tier cost, so nobody will take it.
+
+**THE EARLY GAME — the diagnosis, and F1 THE WORK BOARD (founder-directed 2026-08-01: "smooth out the
+user experience levels 1-30… the coach has to be really guiding users through every possible next step
+quest to earn XP & cash… expand the breadth and depth of content at the early levels").** Design +
+measurement in `omerta-early-game-design.md`. **The map first, because it disagreed with the brief.**
+Every level gate in the game, binned: **levels 1–16 are DENSE** — fifteen of sixteen levels deliver
+something and **ten whole systems open** (races 3, family/duels/wage 5, Port/Stable 6, Fights 8, Loan
+House 10, Grand Prix 12, first front/Speakeasy 15). **Levels 17–31 are the cliff: seven of fifteen
+levels unlock NOTHING** (17, 18, 21, 23, 24, 27, 29) — and by the harness that band is hours 2.5 to 7
+of play, exactly where a player commits or drifts. Three numbers name it: **(a)** the content cliff
+above; **(b)** the COACH cliff — the guiding rungs are a strict chain of ONE-TIME milestones, so a
+player who follows the coach clears the last around level 22 and it falls to four generic nudges, with
+**not one rung pointing at repeatable work**; **(c)** VERB MONOTONY — measured at level 22, one
+45-minute sitting of the best crime is ~693 respect against a 430-respect level, while **every
+repeatable daily loop in the game put together pays 75 respect, 5% of a day of clicking** (the hustle
+pays 0, the drills 0, the career ladder 0). So 17→30 is one button for ~five days through eight empty
+levels with a silent coach. **THE HONEST DISAGREEMENT, recorded rather than smoothed:** the direction
+asked for more breadth, but ten systems are open by level 16 and this project's standing audit finding
+is that breadth already exceeds depth — an eleventh system at level 18 makes it worse. What that band
+lacks is REASONS AND REWARDS INSIDE the systems the player already has; where the doc proposes breadth
+it is content INSIDE an existing system (missions, crimes), never a new pillar. **F1 — THE WORK BOARD,
+BUILT** (`src/game.js` loadOwned + `coachLadder`, `test/growth.js`): once the milestone chain is done
+the coach draws from work that ALREADY EXISTS, ALREADY PAYS and is currently invisible — a mission off
+cooldown (the biggest respect payout in the game, so it leads), today's unclaimed contracts COUNTED,
+tonight's hustle (waiting vs half-finished), an open corner envelope (the only daily work paying
+respect), a clue scroll naming where you are on the trail, the trainers' drills. Each names WHAT IT
+PAYS so a player learns what is worth their nerve; they sit above the permanent nudges by the tail's
+own most-clearable-first rule, and they never run dry because they refill daily. **ZERO §10.4 surface
+— it points at faucets, it does not create one.** Mechanically five branches on the loadOwned UNION
+(the rivals-rung precedent) reduced to counts/flags rather than re-deriving five modules' boards in the
+hot path of every authed request; `$4` is today, bound separately so its type infers from the `day`
+columns alone. `test/growth.js` walks all six rungs in order and clears each (the ladder's own rule: a
+dead rung must never mask the ones below), and the daily count is asserted REAL — two claimed leaves
+one. Mutation-verified twice by name (the count pinned to zero; the clue rung disabled). Verified on
+real Postgres per ground rule #8 (`pgquery` 2234 statements + `pgcheck` 43/43) since loadOwned runs on
+every authed request — the `uuid = text` outage class. **A trap worth keeping:** the SQL comment I
+wrote used backticks around a column name, inside a JS template literal — which ENDS the string;
+`pgquery` passed (it reads SQL as text without importing the module) and only `node --check` caught it.
+Suite green + sim drift-0. **Still to build, in the doc's order:** F6 Trades progress on the Streets
+screen (turns 200 crime clicks into visible progress toward a perk), F4 the level-up moment
+(§10.4-free version), F3 seven missions filling the dead levels (prototype + re-extract, ground rule
+#2), and LAST — because it touches the signed pacing curve and so gets measured before and after —
+**F2, the daily loops paying respect at all**, which is the single change that most alters how the
+band feels. F5 (a day streak) is the retention follow-up, not the opener.

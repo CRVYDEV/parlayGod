@@ -192,8 +192,22 @@ export async function loadOwned(client, ch) {
       FROM referrals rf JOIN characters rc ON rc.account_id = rf.recruit_account AND rc.alive
       JOIN account_persistent rap ON rap.account_id = rf.recruit_account
       WHERE rf.recruiter_account = $2 AND rf.qualified_at IS NOT NULL
-        AND NOT rap.agent_flag AND NOT rap.npc_flag`,
-  [ch.id, ch.account_id, ch.account_id]);
+        AND NOT rap.agent_flag AND NOT rap.npc_flag
+    -- THE WORK BOARD (omerta-early-game-design.md F1). The coach's guiding rungs are a chain of
+    -- ONE-TIME milestones, so a player who follows it clears the last one around level 22 and the
+    -- coach falls to four generic nudges — at exactly the level the content thins out too. These
+    -- five branches are the repeatable work that is already on the table, already pays, and is
+    -- currently invisible unless you go looking: today's daily contracts, tonight's hustle, the
+    -- corner's envelopes, the trainers' drills, a clue in your pocket. Reading them here rather
+    -- than in a second query keeps the one-round-trip property this function exists for.
+    -- $4 is TODAY (int) — bound separately so its type is inferred from the day columns alone.
+    -- (No backticks in here: this whole query is a JS template literal, and one would end it.)
+    UNION ALL SELECT 'daily', NULL::text, claimed, NULL::numeric, NULL::numeric, NULL::timestamptz FROM daily_progress WHERE character_id=$1 AND day=$4
+    UNION ALL SELECT 'hustle', NULL::text, NULL::text, step::numeric, NULL::numeric, NULL::timestamptz FROM hustles WHERE character_id=$1 AND day=$4
+    UNION ALL SELECT 'corner', district, NULL::text, slot::numeric, NULL::numeric, NULL::timestamptz FROM corner_jobs WHERE character_id=$1 AND day=$4 AND NOT claimed
+    UNION ALL SELECT 'drill', npc, NULL::text, NULL::numeric, NULL::numeric, NULL::timestamptz FROM npc_drills WHERE character_id=$1 AND day=$4
+    UNION ALL SELECT 'clue', NULL::text, NULL::text, step::numeric, steps::numeric, NULL::timestamptz FROM clue_scrolls WHERE character_id=$1`,
+  [ch.id, ch.account_id, ch.account_id, dayOf()]);
   // demultiplex — one entry per original query, in its original column names/types. Kept as
   // `{ rows: [...] }` so every reference below (`rk.rows`, `st.rows`, …) reads exactly as it did.
   const grp = new Map();
@@ -225,6 +239,17 @@ export async function loadOwned(client, ch) {
   // rule; a bounded read: shields/cooldowns bound how often anyone can be wronged in 48h)
   const rival = of('rival', (r) => ({ at: r.ts }));
   const refx = of('refx', (r) => ({ respect: Number(r.n) }));
+  // THE WORK BOARD — today's repeatable work, folded into ONE shape the coach reads. Deliberately
+  // COUNTS and FLAGS rather than the boards themselves: a rung only has to know there is unclaimed
+  // work and what it pays, and re-deriving each system's full board here would put five modules'
+  // logic in the hot path of every authed request. `claimed` is the daily-contract JSON array.
+  const work = {
+    dailyClaimed: (() => { try { return JSON.parse(grp.get('daily')?.[0]?.k2 || '[]').length; } catch { return 0; } })(),
+    hustleStep: grp.get('hustle')?.[0] ? Number(grp.get('hustle')[0].n) : null, // null = not started today
+    cornerOpen: of('corner', (r) => ({ district: r.k, slot: Number(r.n) })).rows,
+    drillsTaken: (grp.get('drill') || []).length,
+    clue: grp.get('clue')?.[0] ? { step: Number(grp.get('clue')[0].n), steps: Number(grp.get('clue')[0].n2) } : null,
+  };
   const cars = await client.query('SELECT * FROM cars WHERE character_id=$1 ORDER BY created_at', [ch.id]);
   const batch = await client.query('SELECT * FROM batches WHERE character_id=$1', [ch.id]);
   const gangId = gm.rows[0]?.gang_id || null;
@@ -273,6 +298,7 @@ export async function loadOwned(client, ch) {
     // R1 — the Portfolio: account-level legit holdings (survive death; the price values a status
     // collectible, so nothing here touches §10.4). Array of { ticker, shares, cost_omr } rows.
     portfolio: pf.rows.map((r) => ({ ticker: r.ticker, shares: Number(r.shares), cost_omr: Number(r.cost_omr) })),
+    work, // THE WORK BOARD — today's unclaimed repeatable work, for the coach's never-empty tail
     estate: est.rows[0] || null, // account-level compound (survives death) — a summary; the board is the full view
     recentRivals: rival.rows.length, // STREET WAR step two — fresh malice in the last 48h (the coach rung)
     // THE CREW BONUS: computed once here, read synchronously by gainRespect at ~a dozen sites.
@@ -1049,6 +1075,38 @@ function coachLadder(ch, acct, owned) {
     if (cold.length && add(`${cold.length === 1 ? 'A front has' : `${cold.length} fronts have`} gone cold`,
       `${cold.length === 1 ? `Your ${cold[0].name} pays` : 'They pay'} nothing until the pad is square — and the pad keeps running whether ${cold.length === 1 ? 'it earns' : 'they earn'} or not. Pay it (The Empire ▸ pay the pad) or close ${cold.length === 1 ? 'it' : 'them'} up and stop the bleeding.`,
       'empire')) return rungs;
+  }
+  // ── THE WORK BOARD (omerta-early-game-design.md F1) ──
+  // The rungs above are one-time milestones, so a player who follows the coach clears the last of
+  // them around level 22 — at exactly the level the CONTENT thins out too (7 of the levels from 17
+  // to 31 unlock nothing at all). The coach then fell to three generic nudges and effectively went
+  // quiet, which is the opposite of what it is for.
+  //
+  // These rungs never run out, because they refill every day. Every one of them points at work that
+  // ALREADY EXISTS, ALREADY PAYS, and is currently invisible unless the player goes looking for it —
+  // so this adds no faucet and no §10.4 surface; it points at faucets the game already has. Each
+  // names WHAT IT PAYS, so a player learns what is worth their nerve.
+  //
+  // Ordered by what it pays, richest first, so the plan box reads as a shift worth working. They sit
+  // above the permanent nudges (bank/tank/solo) for the tail's own rule: most-clearable first.
+  {
+    const w = owned.work || {};
+    // A MISSION is the single biggest respect payout in the game and it is on a 4h clock, so the
+    // moment it comes off cooldown it is the best thing on the board, every time.
+    const missionReady = !ch.mission_at || Date.now() - new Date(ch.mission_at).getTime() >= PACING.MISSION_CD_MS;
+    if (missionReady && lvl >= 2
+      && add('A job came in from the family', 'The story missions pay the biggest respect in the game and one just came off cooldown. Take it — it is the fastest level you will get today.', 'start')) return rungs;
+    const dailiesLeft = Math.max(0, 3 - (w.dailyClaimed || 0));
+    if (dailiesLeft && add(`${dailiesLeft} of today's contracts unclaimed`,
+      'Daily contracts pay cash for work you were going to do anyway — pull jobs, boost cars, move product. Claim them before the day rolls over and they are gone.', 'streets')) return rungs;
+    if (w.hustleStep !== 3 && add(w.hustleStep === null ? "Tonight's hustle is waiting" : 'Your hustle is half-finished',
+      'Three stops, three districts, one payoff that scales with your level — and it walks you round the map while it pays. It resets at the end of the day whether you finish it or not.', 'streets')) return rungs;
+    if ((w.cornerOpen || []).length && add(`The corner has an envelope for you`,
+      'You took work on a corner and it is still open. Finish it and collect — corner jobs are the only daily work that pays RESPECT as well as cash.', 'streets')) return rungs;
+    if (w.clue && add(`You're carrying a clue scroll (step ${w.clue.step} of ${w.clue.steps})`,
+      'Somebody left you a trail. Follow it to the end and the casket pays — and it costs nothing but the walking.', 'streets')) return rungs;
+    if ((w.drillsTaken || 0) < 2 && lvl >= 3
+      && add('The trainers have work for you', 'Every fixture in town sets a job each day. Do theirs and they school you for it — free discipline XP, and it lifts caps the rest of your game runs on.', 'life')) return rungs;
   }
   if (Number(ch.cash) > CONSTANTS.COACH_BANK_NUDGE && Number(ch.cash) > Number(ch.bank)
     && add('You\'re carrying too much', 'Bank your pocket cash before someone jumps you for it — the streets are watching.', 'streets')) return rungs;
