@@ -158,6 +158,15 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
     app.post('/v1/mod/desk/fill', { preHandler: modAuth }, async (req) =>
       Desk.recordAuctionBuy(pool, { ref: req.body?.ref, accountId: req.body?.account,
         omr: req.body?.omr, txHash: modRealTxHash(req) }));
+    // THE BUY SIDE (step 4). `/desk/fees` ingests a POL-fee collection — the buyback's ONLY budget,
+    // and a comp books ZERO, because that budget is precisely what bounds the buy side. `/desk/buy`
+    // is the bot's seat until the DEX leg is wired: it refuses above the band's LOWER edge, refuses
+    // below the fat-finger floor, and never spends more than the pool earned.
+    app.post('/v1/mod/desk/fees', { preHandler: modAuth }, async (req) =>
+      Desk.recordPolFees(pool, { ref: req.body?.ref, eth: req.body?.eth, txHash: modRealTxHash(req) }));
+    app.post('/v1/mod/desk/buy', { preHandler: modAuth }, async (req) =>
+      Desk.runDeskBuyback(pool, { ref: req.body?.ref, ethToSpend: req.body?.eth,
+        priceEthPerOmr: req.body?.price, txHash: modRealTxHash(req) }));
     app.post('/v1/mod/bond/fund', { preHandler: modAuth }, async (req) => Bonds.fundBondTranche(pool, req.body?.omr)); // top up the tranche
     app.post('/v1/mod/bond/simulate', { preHandler: modAuth }, async (req) => // QA/comp until the paywall (the Store precedent)
       // No txHash = a pure comp: books the bond + OMR tranche but NO real-ETH Vig/POL accounting (audit

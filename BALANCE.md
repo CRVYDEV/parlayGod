@@ -3771,3 +3771,59 @@ by exactly what that lot sells, so in today's code the remaining lot **can never
 the clamp is unreachable. It is kept as defence in depth (a future ops correction, step 4's buy side
 touching the same singleton, a bug) and is now tested against a *synthetic* drain, labelled as such.
 An unreachable guard is worth keeping; an untested one that reads as tested is not.
+
+---
+
+## THE BAND'S BUY SIDE — the POL-fee buyback (economy v3 step 4, founder-directed 2026-08-01)
+
+Step 3 opened the sell side. This is the other edge: below the band's `LOWER` the desk **restocks
+from the open market**, because buying inventory back is sometimes cheaper than waiting for the sinks
+to return it. Bought $OMR goes to the **shelf, not the fire** (design §3.3) — the desk is a rental
+business, and this is buying stock.
+
+**The budget is POL trading fees, exclusively** (design §11.10), and the exclusivity is the whole
+mechanism rather than a preference: not the founder half (not ours to spend), not the LP half (POL
+depth is the binding constraint), and **never by minting** — that last exclusion is wall 4, the single
+line between this design and Olympus. Fees are self-limiting (you cannot spend what the pool did not
+earn), they scale with real activity rather than with price, and they compound correctly: the sell tax
+grows POL, deeper POL earns more fees, more fees buy back more.
+
+### The §10.4 shape, which is the part worth understanding
+
+`desk:buyback` is a **mint**, and it is the **exact inverse of a withdrawal**:
+
+| | in-game | on-chain |
+|---|---|---|
+| `withdraw:omr` | BURN | hard OMR leaves the reserve |
+| `desk:buyback` | MINT (into the SHELF) | hard OMR **enters** the reserve |
+
+Supply exits the game one way and re-enters the other. Wall 1 ("no faucet") is untouched because it
+credits the **shelf and never a player** — nobody is paid, and the token only reaches a player by
+being bought at the auction for ETH.
+
+It is admissible **exactly to the extent that the hard token really arrived**, and conservation cannot
+see that — it counts the mint and moves on. So the backing is checked from three sides rather than
+claimed: `runDeskInvariants` asserts the soft credit equals the hard purchase and that the desk's own
+books agree, and the Vig's two-sided `reserve fully backed` / `reserve not under-funded` pair now
+carries the desk's contribution by name. That pair is EXACT on both sides, so a reserve source the
+sandwich does not know about trips both at once — which is why the term was added rather than the
+checks loosened. Both legs move **in one transaction**, deliberately not through `fundReserve` (which
+opens its own): the Vig funds post-commit and calls that gap a lost-funding alarm, but here the
+direction of the gap is worse — soft supply existing before its backing — so they move together or
+neither moves.
+
+### The numbers (founder sign-off levers, pinned in `test/levers.js`)
+
+| lever | value | why |
+|---|---|---|
+| `DESK_BUYBACK.MIN_ETH` | 0.001 | below this it is not worth a transaction |
+| `DESK_BUYBACK.PRICE_FLOOR_BPS` | 2000 (0.20× anchor) | **a safety bound, not a balance one.** The shelf credit is `eth / price`, so a price a decimal place too low mints inventory out of a typo. The RWA float shipped exactly that bug. Fail-closed rather than clamped: a price we do not believe is not a price to trade at |
+
+The band's own edges (`BAND.LOWER_BPS` 0.80×, `UPPER_BPS` 1.00×) were pinned with step 3 and are what
+actually decides whether the desk trades at all. The **20%-wide dead zone between them is the point**:
+running both sides at once is a losing round trip wearing a flywheel costume.
+
+**Not measured, and no figure is claimed.** Buyback volume is `POL fee income ÷ price`, and both terms
+are markets that do not exist until mainnet. What CAN be said without a market: the buy side can never
+outspend the fees the pool earned, and every $OMR it mints has a hard token behind it — those are
+structural, and both are asserted.

@@ -244,7 +244,15 @@ async function collectLedgerChecks(pool) {
   // rows the wage already wrote, and conservation is a statement about the WHOLE ledger. Drop the
   // reason and every server that ever paid a wage drifts by exactly what it paid. Nothing writes a
   // new one — the `emission faucet retired` check below asserts that directly.
-  const omrMints = await sum(pool, "currency='omr' AND (reason LIKE 'mission:%' OR reason='prize:omr' OR reason LIKE 'emission:%')");
+  // ECONOMY v3 STEP 4 — `desk:buyback` is a mint, and it is the EXACT INVERSE of `withdraw:omr`.
+  // A withdrawal is an in-game burn paired with hard OMR leaving the reserve: supply exits the game.
+  // The buyback is an in-game mint paired with hard OMR ENTERING the reserve: supply re-enters. It
+  // credits the DESK'S SHELF and never a player, so wall 1 ("no faucet") is untouched — nobody is
+  // paid, and the token only reaches a player by being bought at the auction for ETH. It is
+  // admissible exactly to the extent that the hard token really arrived, which conservation cannot
+  // see (it counts the mint and moves on) — so `runDeskInvariants` asserts the soft credit equals the
+  // hard purchase, and the Vig's two-sided reserve-backing pair carries the desk's contribution.
+  const omrMints = await sum(pool, "currency='omr' AND (reason LIKE 'mission:%' OR reason='prize:omr' OR reason LIKE 'emission:%' OR reason='desk:buyback')");
   // plex:* is a Phase-2 burn: a player paid a real-money fee from earned $OMR instead of ETH (the
   // PLEX bridge), so the $OMR leaves the game (deflationary, offsets emission).
   // law:jury is a Phase-3 burn: the war chest reaching the jury box leaves the game (deflationary).
@@ -290,11 +298,12 @@ async function collectLedgerChecks(pool) {
   // Two claims, because they fail differently: the BALANCE can drift from its own books (a write that
   // moved the bucket without a ledger row, or the reverse), and the books can drift from the LEDGER
   // (a recycle credited without its row, which would be a silent mint).
-  const desk = (await pool.query('SELECT balance, lifetime_in, lifetime_sold FROM desk_inventory WHERE id=1')).rows[0]
-    || { balance: 0, lifetime_in: 0, lifetime_sold: 0 };
+  const desk = (await pool.query('SELECT balance, lifetime_in, lifetime_sold, lifetime_bought FROM desk_inventory WHERE id=1')).rows[0]
+    || { balance: 0, lifetime_in: 0, lifetime_sold: 0, lifetime_bought: 0 };
   push('desk inventory backed', Number(desk.balance),
-    Number(desk.lifetime_in) - Number(desk.lifetime_sold), 0.001,
-    { lifetimeIn: Number(desk.lifetime_in), lifetimeSold: Number(desk.lifetime_sold) });
+    Number(desk.lifetime_in) + Number(desk.lifetime_bought) - Number(desk.lifetime_sold), 0.001,
+    { lifetimeIn: Number(desk.lifetime_in), lifetimeSold: Number(desk.lifetime_sold),
+      lifetimeBought: Number(desk.lifetime_bought) });
   // The reason is a LITERAL rather than interpolated from DESK_RECYCLE_REASON so the term extractor
   // (tools/graph.js) can see which reason this check reconciles — it reads the predicates lexically
   // above each push, which is also why this sum sits BELOW the check before it rather than with it.

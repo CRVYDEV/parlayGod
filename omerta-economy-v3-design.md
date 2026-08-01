@@ -284,7 +284,22 @@ Each step is shippable and testable alone; nothing is deleted before its replace
    is fail-closed on the oracle (no print or a stale one → no auction, and never a fallback price),
    and the shelf clamp — the third of wall 2's three bounds — is unreachable in today's code and is
    tested against a synthetic drain rather than left as an untested claim.
-4. **The band + buyback.** Off the existing oracle. Budgeted, never promised.
+4. **The band + buyback — BUILT 2026-08-01.** Off the existing oracle, budgeted by POL trading fees
+   exclusively, never promised. Three notes on this line as written:
+   *(a)* `desk:buyback` is a **MINT**, and the doc should say so plainly rather than leaving it to be
+   discovered: it is the **exact inverse of `withdraw:omr`** — an in-game mint into the SHELF paired
+   with hard OMR entering the withdrawal reserve, where a withdrawal is an in-game burn paired with
+   hard OMR leaving it. Supply exits one way and re-enters the other. Wall 1 survives because it
+   credits the shelf and NEVER a player: nobody is paid, and the token only reaches a player by being
+   bought at the auction for ETH.
+   *(b)* the mint is admissible only to the extent the hard token arrived, and conservation cannot see
+   that — so it is checked from three sides (the desk's books, the ledger, and the Vig's two-sided
+   reserve sandwich, which now carries the desk's contribution BY NAME rather than being loosened).
+   Both legs move in ONE transaction: the Vig funds the reserve post-commit and calls that gap a
+   lost-funding alarm, but here the gap's direction is worse — soft supply existing before its backing.
+   *(c)* the buy side needs a **fat-finger floor** (`PRICE_FLOOR_BPS`) that §11.10 does not mention: the
+   shelf credit is `eth / price`, so a price a decimal place too low mints inventory out of a typo.
+   The RWA float shipped exactly that bug. Fail-closed rather than clamped.
 5. **The float** (§5) — the nut, the clearing window, the stake. Re-sim the loot rate here.
 6. **The v4 hook** — mainnet, asymmetric, POL-funding.
 7. **The rarity NFTs** — extend `GearVault`'s pattern to cars/boats/assets.

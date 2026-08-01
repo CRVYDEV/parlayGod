@@ -189,7 +189,11 @@ auction**: it opens high and the price falls for six hours toward a **reserve**,
 sell simply rolls to tomorrow. The lot is what came home yesterday, capped at 1% of all the $OMR in
 player hands so a big spending day cannot become a dump. **The desk can only ever sell what is on its
 shelf** — it never issues anything, which is why buying here moves no supply at all: those are somebody
-else's spent chips changing hands. The board publishes the shelf, the clock, the price and the exact
+else's spent chips changing hands. There is a **buy side** too: if the price falls far enough below
+the 30-day average, the desk restocks off the open market instead of waiting for the sinks — paid for
+out of the trading fees the game's own liquidity earns, never by printing. Between the two edges it
+does nothing at all, which is deliberate: a desk that buys and sells at the same time is just paying
+fees to trade with itself. The board publishes the shelf, the clock, the price and the exact
 list of spends that feed it, so the claim is checkable. **$OMR bought at the desk is FRESH** — it pays
 the full early-exit toll for its first 48 hours, same as any other fresh token.
 
