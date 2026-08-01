@@ -7471,3 +7471,27 @@ entry rather than after pushing. The recovery is the pattern worth keeping — s
 the scratchpad, `reset --hard` to origin, `git apply --3way` the saved diff (it merged cleanly since
 the remote's edits to the same file did not overlap), then re-run every guard on the CORRECT base,
 because a green suite on a stale base proves nothing about what you are about to push.
+
+
+**RED-TEAM over the pad/shutter drop (2026-08-01) — one finding, and it was about a LEVER rather than
+the code.** `DELETE /v1/business/:id` is a door out of a designed recurring SINK, which makes it the
+one shape worth attacking: can walking away become the way to never pay rent? Both branches end
+holding a warm tier-1 front, so they compare directly — squaring up nets `pending − maxPad`, walking
+nets `back − tier1cost`. At the signed constants paying wins on **every** front by $115k–$5.3M (the
+forfeited 24h till is worth more than the arrears saved), so the door is an escape hatch and not an
+opt-out. **But nothing said so, and the commit that shipped it invites the founder to raise
+`BUSINESS_SHUTTER_BPS` off 0** — at ≈5400 on the laundromat the inequality flips and the pad quietly
+stops draining. The relation is now asserted from the LIVE constants in `test/economy.js`
+(mutation-verified: 6000 fails by name with both figures in the message), so a retune of the refund —
+or a stretch of `BUSINESS_UPKEEP_CAP_MS` — cannot unwind a signed sink in silence. Verified CLEAN and
+recorded rather than assumed: §10.4 (no value moves at 0 bps; above it the payout rides the existing
+`business:` vocabulary, so no invariant change either way), orphans (only `crew_heists.target_business`
+points at a business; both call sites are null-safe and a stranded crew gets a clean `mark_gone`),
+locks (characters → the business row, the sibling order, and a heist never locks the mark's character
+so there is no cycle), robustness (`businesses.id` is TEXT — a junk id is `not_yours`, not a 500), and
+the tester batch's one server change (the lab-module price uses the SAME `KITCHENS.findIndex` the till
+does, so board and till cannot disagree — which is the whole point of that fix). **Accepted, not
+patched:** a marked man can shutter his fronts to deny a killer the Sacking (the already-accepted
+"warehouse the fleet before the hit", and more self-punishing since he destroys them), and closing up
+does not resolve a pending Bureau raid — a dodge that costs the whole front to avoid a fine worth 10%
+of the tier cost, so nobody will take it.
