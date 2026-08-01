@@ -723,9 +723,29 @@ export function gainRespect(h, ch, rep) {
   // grant — a heist crew member, a duel opponent — is written by absolute UPDATE on named columns,
   // so a refill of the in-memory row would be silently dropped, and a reward that sometimes
   // vanishes is worse than one that is consistently absent.
+  //
+  // THE CEILING (see PACING (6)). The refill is a nerve FAUCET — size = the cap, rate = how often
+  // you level — and past level ~90 a crossing hands back more nerve than the next level costs, so
+  // the wall this whole block builds stops existing. A rolling daily bucket (the wash-cap /
+  // safehouse-cap pattern) bounds it by construction at MAX_DAY × cap nerve a day, which is ~1.35
+  // levels per refill AT ANY LEVEL, while leaving the early sitting — where you cross several
+  // levels an hour and the reward is the point — completely untouched. Spending the bucket is
+  // SILENT: the refill is a gift, and a gift that scolds you for taking it too often is worse than
+  // one that simply stops. Regen still runs; only the free top-up is metered.
   if (after > before && h && PACING.LEVEL_UP_REFILL) {
-    ch.energy = energyCapOf(after, assetEnergyCap(h.owned?.assets || []), h.owned?.disciplines);
-    ch.nerve = nerveCapOf(after, h.owned?.disciplines);
+    const cap = PACING.LEVEL_UP_REFILL_MAX_DAY;
+    let allow = true;
+    if (cap > 0) {
+      const refill = ch.refill_at ? (Date.now() - new Date(ch.refill_at).getTime()) / 86400000 * cap : cap;
+      const used = Math.max(0, Number(ch.refill_used || 0) - Math.max(0, refill));
+      allow = used + 1 <= cap;
+      if (allow) { ch.refill_used = used + 1; ch.refill_at = new Date(); }
+      else { ch.refill_used = used; ch.refill_at = new Date(); }
+    }
+    if (allow) {
+      ch.energy = energyCapOf(after, assetEnergyCap(h.owned?.assets || []), h.owned?.disciplines);
+      ch.nerve = nerveCapOf(after, h.owned?.disciplines);
+    }
   }
   if (after > before) ch._leveled = { from: before, to: after, rank: RANKS[rankIdxOf(after)].name };
   return gained;
@@ -961,7 +981,7 @@ async function persistCharacter(client, ch) {
       crew_paid_at=$46, heat_exposure=$47, indicted_at=$48, retainer_until=$49, jury_bought=$50, witpro_until=$51,
       world_raid_at=$52, pen_safe_until=$53, hole_until=$54, welsher=$55, wanted_until=$56,
       rwa_used=$57, rwa_at=$58, envelope_until=$59, wire_until=$60, poker_limit=$61,
-      safehouse_used=$62, safehouse_at=$63 WHERE id=$1`,
+      safehouse_used=$62, safehouse_at=$63, refill_used=$64, refill_at=$65 WHERE id=$1`,
     [ch.id, ch.respect, ch.energy, ch.nerve, ch.health, ch.cash, ch.bank,
      ch.muscle, ch.cunning, ch.speed, ch.jail_until, ch.loc, ch.streak, ch.checkin_day,
      ch.lc_crime, ch.ammo, ch.cb, ch.heat, ch.trade_rep, ch.gta_at, ch.path,
@@ -973,7 +993,8 @@ async function persistCharacter(client, ch) {
      ch.heat_exposure ?? 0, ch.indicted_at ?? null, ch.retainer_until ?? null, ch.jury_bought ?? false, ch.witpro_until ?? null,
      ch.world_raid_at ?? null, ch.pen_safe_until ?? null, ch.hole_until ?? null, ch.welsher ?? false, ch.wanted_until ?? null,
      ch.rwa_used ?? 0, ch.rwa_at ?? null, ch.envelope_until ?? null, ch.wire_until ?? null,
-     ch.poker_limit ?? null, ch.safehouse_used ?? 0, ch.safehouse_at ?? null]);
+     ch.poker_limit ?? null, ch.safehouse_used ?? 0, ch.safehouse_at ?? null,
+     ch.refill_used ?? 0, ch.refill_at ?? null]);
 }
 
 // THE COACH — the single highest-value next step for THIS player, server-authoritative so the client
@@ -1066,7 +1087,12 @@ function coachLadder(ch, acct, owned) {
   const skillPts = Math.floor(lvl / SKILLS.LVL_PER_POINT)
     + Math.min(SKILLS.PRESTIGE_POINT_MAX, Math.floor(Number(acct.prestige || 0) / SKILLS.PRESTIGE_PER_POINT))
     - skillSpent;
-  if (lvl >= 4 && skillPts >= 1 && (skillSet.size === 0 || skillPts >= 5)
+  // …and it must go SILENT when there is nothing left to buy. The tree is 12 skills for 30 points
+  // total and points are floor(level/4), so from level ~120 every skill is owned while the points
+  // keep accruing — the rung would fire forever pointing at a finished tree, which is the same
+  // never-clearing class the two fixes above closed. `SKILLS.TREE.length` is the honest gate.
+  const treeDone = skillSet.size >= SKILLS.TREE.length;
+  if (lvl >= 4 && !treeDone && skillPts >= 1 && (skillSet.size === 0 || skillPts >= 5)
     && add('You\'ve earned skill points', `You have ${skillPts} unspent point${skillPts === 1 ? '' : 's'}. The Life ▸ Skills: press LEARN on a tier-1 skill — Bruiser (hit harder), Fast Talker (lay low cheaper), Pack Mule (bigger trunk). Tier-1s cost 1 point.`, 'life')) return rungs;
   if (lvl >= 6 && !(owned.guns || []).length && add('Get strapped', 'The Garage ▸ Armory: buy a pistol and CARRY it. A gun backs every fight in this city — jumps, hits, standing over rivals.', 'garage')) return rungs;
   if (lvl >= 7 && !Number(owned.mastery?.commerce || 0) && add('Learn the trade winds', 'Streets ▸ Trade Goods: buy something cheap where you stand, haul it where it\'s rich (The City ▸ Trade Winds shows the spread), sell high. This is the on-ramp to convoys and the Black Market.', 'streets')) return rungs;
@@ -1078,6 +1104,17 @@ function coachLadder(ch, acct, owned) {
   if (lvl >= 10 && !Number(owned.mastery?.gambling || 0) && add('A night at the Den', 'The Den at the Neon Mile — craps, blackjack, the numbers. Bring a real stake ($1,000+): the table doesn\'t respect small money.', 'den')) return rungs;
   if (lvl >= 12 && !(owned.fighters || []).length && !Number(acct.boxing_wins || 0) && add('Get into the fight game', 'The Fights: sign a contender, train them up, stake them against other managers\' fighters. The crowd bets your main events.', 'boxing')) return rungs;
   if (lvl >= 14 && !Number(acct.race_wins || 0) && !Number(owned.mastery?.wheels || 0) && add('Run the streets', 'Street Races: tune a car from your garage and run the PvE circuit — fee up front, purse on a win. Fast iron finally earns.', 'races')) return rungs;
+  // ── YOU CAN GET MADE FOR FREE. An alpha tester read the game as pay-to-win ("we can't earn OMR in
+  // game anymore?"), and the mechanics say otherwise: $OMR is still earned by playing — the mission
+  // ladder alone pays 220 across nine jobs, the first at level 14 — and MINTING (the gate on
+  // withdrawing and on the Street Wage) is payable in that earned $OMR via PLEX, not only in ETH.
+  // Nothing was missing but the sentence saying so, so this is the sentence. Fires at 14 because
+  // that is when "The Dockside Heist" (m4, 5 $OMR) becomes claimable — exactly the PLEX mint price —
+  // and self-clears the moment they're minted. The price is RESTATED from vig.js:29 rather than
+  // imported: vig.js imports game.js, so the dependency only runs one way.
+  const plexMint = Number(process.env.PLEX_MINT_OMR || 5);
+  if (lvl >= 14 && !acct.minted
+    && add('You can get made for free', `Getting MADE unlocks withdrawing and the Street Wage — and you can pay for it with $OMR you earned in game (${plexMint} $OMR), not just ETH. Earn it on the mission ladder: "The Dockside Heist" pays ${plexMint} $OMR on its own. Then The Store ▸ pay with $OMR.`, 'store')) return rungs;
   // (founder: "not obvious… the steps you need to take to buy your first business") — concrete steps,
   // priced off the live catalog so the hint can never drift from what the buy button charges.
   const firstFront = BUSINESSES.find((b) => b.kind === 'laundromat');

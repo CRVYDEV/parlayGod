@@ -758,6 +758,24 @@ export const PACING = {
   // Measured with `npm run playthrough` before and after. Set false to revert to the bare number.
   LEVEL_UP_REFILL: true,
 
+  // (6) …AND ITS CEILING. The refill is a NERVE FAUCET whose size is the cap and whose rate is how
+  // often you level — and nerve is the wall this whole block exists to build. Measured: from level
+  // ~90 a crossing hands back MORE nerve than the next level costs (at 110, "depository" pays 950
+  // respect for 35 nerve = 27:1, so the next level wants ~81 nerve and the crossing returns 120).
+  // Past that point the wall is gone. PROVEN live: at level 115 with the clock FROZEN so regen is
+  // exactly zero, a pool funding 3 jobs funded 3000 and reached level 656 in one sitting; thirty
+  // simulated days reached level 1636 and $7.5B. That is the alpha's level-240 speedrun reborn.
+  //
+  // The honest part: the refill's benefit and the runaway are the SAME mechanism at different
+  // scales, so no dial keeps all of one and none of the other. A rolling daily bucket (the wash-cap
+  // / stat-use / safehouse pattern) is the shape that keeps what the feature is FOR — you level
+  // several times in an early sitting and get every one of them — while bounding the late game by
+  // construction: refills contribute at most MAX_DAY × cap nerve a day, which at the top crime's
+  // respect-per-nerve is ~1.35 levels per refill AT ANY LEVEL. Bounded and level-independent,
+  // instead of "as fast as you can click". 10/day is above what a real early sitting uses.
+  // `tools/playthrough.js` prints THE REFILL CEILING every run, so a change here re-measures it.
+  LEVEL_UP_REFILL_MAX_DAY: 10,
+
   // (4) THE GYM. A per-session cooldown on top of the energy cost, so stat gates take days rather
   // than an afternoon. 3 min → ~20 sessions/hr; the ~500 sessions the top mission tier demands is
   // now a ~25-hour investment spread over real days instead of one sitting.

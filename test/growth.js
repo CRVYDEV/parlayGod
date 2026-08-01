@@ -9,7 +9,7 @@ import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS, CONSTANTS, DISTRICTS, HUSTLE, CORNER, cornerTasksOf, dayOf, M4, levelOf, PACING, MASTERY, masteryXpFor, CRIMES, MISSIONS } from '../src/rules.js';
 import { socialRewardsLive } from '../src/growth.js';
-import { sweepGrandReferrals } from '../src/game.js';
+import { sweepGrandReferrals, gainRespect } from '../src/game.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -485,6 +485,13 @@ await pool.query(`UPDATE account_persistent SET boxing_wins=1 WHERE account_id='
 await seedCh(rook.id, `respect=${PACING.LEVEL_DIVISOR * 19 * 19}`);   // back to 20 for the rest
 assert.equal(await coachOf(), 'Run the streets', 'lvl 14+ never raced → Street Races');
 await pool.query(`UPDATE account_persistent SET race_wins=1 WHERE account_id='${rookAid}'`);
+// (founder, from an alpha tester reading the game as pay-to-win) — the free route to being MADE is
+// real and was simply never said. The rung must name the $OMR price and clear on being minted.
+const made = (await call('GET', '/v1/me', { token: rook.token })).body.character.coach;
+assert.equal(made?.label, 'You can get made for free', 'lvl 14+ unminted → the free route to being made');
+assert(/\$OMR/.test(made.hint) && /5 \$OMR/.test(made.hint), 'naming the PLEX price in earned $OMR, not ETH');
+await pool.query(`UPDATE account_persistent SET minted=true WHERE account_id='${rookAid}'`);
+assert.notEqual(await coachOf(), 'You can get made for free', 'being minted clears it — it cannot nag a made man');
 // (founder: "not obvious… the steps to buy your first business") — concrete, priced off the catalog
 let front = (await call('GET', '/v1/me', { token: rook.token })).body.character.coach;
 assert.equal(front?.label, 'Open your first front', 'lvl 15+ no front → the Empire walkthrough');
@@ -505,6 +512,19 @@ await seedCh(rook.id, 'cash=400000, bank=0, energy=0');
 await pool.query(`UPDATE businesses SET upkeep_at = now() - interval '5 days' WHERE id='cb-front-1'`);
 assert.equal(await coachOf(), 'A front has gone cold', 'a cold front leads the tail — it bleeds while it sits');
 await pool.query(`UPDATE businesses SET upkeep_at = now() WHERE id='cb-front-1'`);
+// …and the skills rung must go SILENT once there is nothing left to buy. Points keep accruing
+// (floor(level/4)) long after the 12-skill tree is complete, so without this gate the rung fires
+// forever pointing at a finished tree — the same never-clearing class as (a)/(b)/(c) above.
+{
+  const { SKILLS } = await import('../src/rules.js');
+  await seedCh(rook.id, `respect=${PACING.LEVEL_DIVISOR * 199 * 199}`);   // level 200 — 50 points, tree is 30
+  for (const s of SKILLS.TREE) await pool.query(
+    `INSERT INTO character_skills (character_id, skill_id) VALUES ('${rook.id}', '${s.id}') ON CONFLICT DO NOTHING`);
+  assert.notEqual(await coachOf(), 'You\'ve earned skill points',
+    'a finished tree stops the skills rung — 20 spare points with nothing to spend them on is not a nudge');
+  await pool.query(`DELETE FROM character_skills WHERE character_id='${rook.id}' AND skill_id <> 'bruiser'`);
+  await seedCh(rook.id, `respect=${10 * 22 * 22}`);
+}
 
 // ── THE WORK BOARD (omerta-early-game-design.md F1) ──
 // Everything above this point is a ONE-TIME milestone, so a player who follows the coach clears the
@@ -529,6 +549,13 @@ assert.equal(await coachOf(), 'Your hustle is half-finished', 'a started hustle 
 await pool.query(`UPDATE hustles SET step=3 WHERE character_id='${rook.id}' AND day=${cday}`);
 // the corner and the clue only fire when the player really has one open — seeded here so both are
 // PROVEN rather than skipped (an un-fired rung and a broken rung look identical from the outside)
+// …but first CLEAR any clue rook picked up organically. Every successful crime rolls CLUES.DROP_P
+// (2%), rook pulled a dozen jobs above, and the clue rung sits BETWEEN the corner and the trainers —
+// so roughly one run in ten the "allowance spent → the trainers lead" assertion below met a clue
+// scroll instead and failed. A deterministic assertion must never rest on a probabilistic
+// precondition (the population duel-ladder and Doc-drill flakes, same class). The clue rung is still
+// PROVEN a few lines down, on a scroll seeded deliberately.
+await pool.query(`DELETE FROM clue_scrolls WHERE character_id='${rook.id}'`);
 await pool.query(`INSERT INTO corner_jobs (character_id, day, district, slot, baseline, claimed) VALUES ('${rook.id}', ${cday}, 'docks', 0, '{}', false)`);
 assert.equal(await coachOf(), 'The corner has an envelope for you', 'an open corner job surfaces — the only daily work that pays respect');
 // (red-team F2) …but ONLY while it can still be collected. `claimCorner` refuses on two counts the
@@ -1621,6 +1648,29 @@ assert.equal((await call('POST', '/v1/respec', { token: chef.token, body: { musc
   const rows = await pool.query(
     `SELECT COUNT(*) n FROM transactions WHERE character_id='${up.id}' AND reason LIKE 'level%'`);
   assert.equal(Number(rows.rows[0].n), 0, 'no level-up reason ever touches the ledger');
+
+  // ── THE REFILL CEILING (PACING.LEVEL_UP_REFILL_MAX_DAY). The refill is a nerve FAUCET whose rate
+  // is how often you level, and past level ~90 a crossing returns MORE nerve than the next level
+  // costs — measured live at level 115 with the clock frozen: a pool funding 3 jobs funded 3000 and
+  // reached level 656 in one sitting. A rolling daily bucket bounds it. Spend the bucket and the
+  // SAME crossing must hand back nothing; this is the assertion that fails if the ceiling is ever
+  // removed or turned self-sustaining again.
+  const cap = PACING.LEVEL_UP_REFILL_MAX_DAY;
+  assert(cap > 0, 'the ceiling is armed — an unbounded refill is the alpha level-240 speedrun reborn');
+  const at4 = PACING.LEVEL_DIVISOR * 3 * 3;
+  const spend = `respect=${at4 - 1}, energy=3, nerve=9, jail_until=NULL, refill_used=${cap}, refill_at=now()`;
+  await seedCh(up.id, spend);
+  let crossed = null;
+  for (let i = 0; i < 60; i++) {
+    const c = await call('POST', '/v1/crimes/pick', { token: up.token });
+    if (c.body.success) { crossed = c.body; break; }
+    await seedCh(up.id, spend);
+  }
+  assert(crossed, 'a clean job landed on a spent bucket');
+  const dry = await meOf(up.token);
+  assert.equal(dry.level, 4, 'the job still crossed into level 4 — the bucket meters the gift, not the level');
+  assert(dry.nerve < dry.maxNerve, 'a spent bucket hands back NO nerve on the crossing');
+  assert(dry.nerve < 9, 'and the job still spent what it cost — regen is untouched, only the top-up is metered');
 }
 
 console.log('✅ M4 growth test passed — paths, kitchen (makings/cook/collect/deal/crew/raid/laylow/cleanpapers), heist, missions (+$OMR faucet), dailies (+all-three bonus), First Week (+capstone), referrals (+milestones, agent exclusion), telemetry, mod tools, M8 stat respec (sum-conserving, floor-gated, ledgered burn), THE HUSTLE (the three-stop chain: location gates, legwork delta, ledgered once-a-day payoff), WORD ON THE STREET (per-district seed boards, conflict guaranteed, accept/delta/claim, ledgered corner:job, the MAX_DAY cap) + THE MARK (every job names a victim; residents in your district get named)');
