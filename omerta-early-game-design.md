@@ -171,6 +171,12 @@ none.
 
 ### F6 — SURFACE THE TRADES ON THE STREETS SCREEN  *(depth that already exists, unadvertised)*
 
+**BUILT.** The character view carries a compact `trades` twin of the mastery board (computed off the
+same helpers, on the view because `loadOwned` already holds the XP map — so it costs zero extra
+queries and zero extra round trips), the Streets screen leads with the two tracks it feeds (larceny
+from every job, commerce from every lot of freight), and the coach names a trade the moment it is
+ONE level short of a milestone perk — rare, and it self-clears by playing that loop.
+
 Mastery XP accrues from level 1 on every action, and the perks at 10/25/40 are real. It lives on the
 Life tab and **the coach has never mentioned it**. Putting the relevant track's progress bar on the
 Streets screen turns 200 crime clicks from repetition into visible progress toward a perk — which is
@@ -180,9 +186,8 @@ the whole psychological difference between a grind and a ladder. Client + one co
 
 ## 5. WHAT I RECOMMEND, AND IN WHAT ORDER
 
-1. **F1 — the coach as a live work board.** Highest leverage, zero balance risk, and it is the
-   founder's own sentence. Build first.
-2. **F6 — Trades on the Streets screen.** Cheap, no economy, makes the grind read as progress.
+1. **F1 — the coach as a live work board.** ✅ BUILT.
+2. **F6 — Trades on the Streets screen.** ✅ BUILT.
 3. **F4 (free version) — the level-up moment.** Cheap, no economy, directly a hook.
 4. **F3 — seven missions in the dead levels.** Real content; prototype + re-extract; sim'd.
 5. **F2 — daily loops pay respect.** The one that most changes how the band *feels*, and the one that

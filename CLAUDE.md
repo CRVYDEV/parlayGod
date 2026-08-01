@@ -7533,8 +7533,29 @@ real Postgres per ground rule #8 (`pgquery` 2234 statements + `pgcheck` 43/43) s
 every authed request — the `uuid = text` outage class. **A trap worth keeping:** the SQL comment I
 wrote used backticks around a column name, inside a JS template literal — which ENDS the string;
 `pgquery` passed (it reads SQL as text without importing the module) and only `node --check` caught it.
-Suite green + sim drift-0. **Still to build, in the doc's order:** F6 Trades progress on the Streets
-screen (turns 200 crime clicks into visible progress toward a perk), F4 the level-up moment
+Suite green + sim drift-0.
+**F6 — THE TRADES, ON THE SCREEN THAT FEEDS THEM — BUILT** (`src/game.js` view + coachLadder,
+`public/index.html`, `test/mastery.js` + `test/growth.js`; the design doc's item 2). Mastery XP has
+accrued on every action since level 1 and the perks at 10/25/40 are real, but the board lives on the
+Life tab and the coach had never once mentioned it — so 200 crime clicks read as repetition rather
+than a ladder, which is the whole psychological difference between a grind and a progress bar. The
+character view now carries a compact `trades` twin of `GET /v1/mastery` — **on the view because
+`loadOwned` already holds the XP map**, so a screen showing "this job is schooling you" costs zero
+extra queries and zero extra round trips (the alternative, a 7th authed GET on the most-rendered
+screen, serializes client-side and takes the char lock) — computed from the SAME helpers as the
+board, so the two can never disagree, and SERVER-computed (the tradeRank precedent: the client never
+re-derives the curve). The Streets screen leads with the two tracks it feeds (larceny from every job,
+commerce from every lot of freight) with the bar measuring progress THROUGH the current level and the
+next milestone named in what it pays; the coach gained a rung that fires only when a trade is ONE
+level short of a milestone — rare, and it self-clears by playing that loop (the harness-F1 rule),
+placed at the end of the work board so it can mask nothing. Pure status: XP is not a currency, so
+**zero §10.4 surface**. `test/mastery.js` asserts sheet and board AGREE field for field (the property
+worth having) and pins the bar's semantics — a character seeded EXACTLY onto a level threshold must
+read 0%, or every bar in the game is wrong by a level's width; the coach rung is walked in
+`test/growth.js` where the ladder above it is cleared in order, since a rung asserted in isolation
+cannot show that it is REACHABLE. Both mutation-verified by name (pct measured from zero; the rung
+disabled). Browser-probed live (real XP, real bars, the jump landing on The Life, zero page errors);
+mobile 66/66; real-Postgres `pgquery`/`pgcheck` green. **Still to build, in the doc's order:** F4 the level-up moment
 (§10.4-free version), F3 seven missions filling the dead levels (prototype + re-extract, ground rule
 #2), and LAST — because it touches the signed pacing curve and so gets measured before and after —
 **F2, the daily loops paying respect at all**, which is the single change that most alters how the

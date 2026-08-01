@@ -10,7 +10,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          crewWageOwed, crewCold, LAW, rapStageOf, bribeCostOf, retainerActive, witproActive,
          cityHourOf, cityLawEventOf, tickerPriceOf, estateTierOf, foundationOf, campaignOf, honorTierOf,
          SOLDIERS, soldierFxOf, CLUES, clueStepOf, rollClueTier, kingpinRankOf, tycoonRankOf, racketIncomeLeveled, empireTitles, launderRankOf, frontTitles, statesmanRankOf, seasonModOf, PACING,
-         carCollateralValue, MASTERY, masteryLvlOf, masteryRankOf, pathFx, pathXpMult,
+         carCollateralValue, MASTERY, masteryLvlOf, masteryRankOf, masteryXpFor, pathFx, pathXpMult,
          REGIMEN, disciplineLvlOf, energyCapOf, nerveCapOf, BUSINESSES, WIRE, RIVALS,
          KITCHENS, labModuleCost } from './rules.js';
 import { dbCaps } from './db.js';
@@ -1107,6 +1107,17 @@ function coachLadder(ch, acct, owned) {
       'Somebody left you a trail. Follow it to the end and the casket pays — and it costs nothing but the walking.', 'streets')) return rungs;
     if ((w.drillsTaken || 0) < 2 && lvl >= 3
       && add('The trainers have work for you', 'Every fixture in town sets a job each day. Do theirs and they school you for it — free discipline XP, and it lifts caps the rest of your game runs on.', 'life')) return rungs;
+    // F6 — THE TRADES, named at the moment they pay off. Mastery XP accrues from level 1 on every
+    // action and the perks at 10/25/40 are real, but the board lives on the Life tab and the coach
+    // has never once mentioned it — so 200 crime clicks read as repetition rather than a ladder.
+    // Fires only when a trade is ONE level short of a milestone: rare, and it self-clears by
+    // playing that loop (the harness-F1 rule). Status only — no faucet, no §10.4 surface.
+    const near = MASTERY.TRACKS
+      .map((t) => { const l = masteryLvlOf(Number(owned.mastery?.[t.id] || 0));
+        return MASTERY.MILESTONES.includes(l + 1) ? { t, at: l + 1 } : null; })
+      .filter(Boolean)[0];
+    if (near && add(`One level off a ${near.t.name} perk`,
+      `Keep working that trade — at ${near.t.name} L${near.at} it starts paying you in ${MASTERY.PERKS[near.t.id]?.what || 'a standing edge'}. The Trades board on The Life tab shows every track you're building.`, 'life')) return rungs;
   }
   if (Number(ch.cash) > CONSTANTS.COACH_BANK_NUDGE && Number(ch.cash) > Number(ch.bank)
     && add('You\'re carrying too much', 'Bank your pocket cash before someone jumps you for it — the streets are watching.', 'streets')) return rungs;
@@ -1248,6 +1259,27 @@ export function view(ch, acct = {}, owned = {}) {
     batch: owned.batch ? { drug: owned.batch.drug_id, qty: Number(owned.batch.qty),
       readySeconds: Math.max(0, Math.ceil((new Date(owned.batch.done_at) - Date.now()) / 1000)) } : null,
     tradeRank: tradeRankIdx(Number(ch.trade_rep || 0)),
+    // F6 — THE TRADES, ON EVERY SCREEN THAT FEEDS THEM. The full board is GET /v1/mastery; this is
+    // the compact twin, computed off the SAME helpers (so board and sheet can never disagree) and
+    // carried on the view because loadOwned already holds the XP map — a screen showing "this job
+    // is schooling you" costs zero extra queries and zero extra round trips. Levels/ranks are
+    // SERVER-computed (the tradeRank precedent — the client never re-derives game math).
+    // Pure status: XP is not a currency and nothing here writes a ledger row.
+    trades: MASTERY.TRACKS.map((t) => {
+      const xp = Number((owned.mastery || {})[t.id] || 0);
+      const lvl = masteryLvlOf(xp);
+      let mi = -1; for (const m of MASTERY.MILESTONES) if (lvl >= m) mi++;
+      const perk = MASTERY.PERKS[t.id];
+      const capped = lvl >= MASTERY.MAX_LVL;
+      const at = lvl > 1 ? masteryXpFor(lvl) : 0, next = capped ? null : masteryXpFor(lvl + 1);
+      return { id: t.id, name: t.name, xp, lvl, rank: masteryRankOf(lvl),
+        nextAt: next,
+        // the bar the client draws — progress THROUGH the current level, not from zero
+        pct: capped ? 100 : Math.max(0, Math.min(100, Math.round((xp - at) / Math.max(1, next - at) * 100))),
+        perkWhat: perk ? perk.what : null,
+        // the next milestone that deepens the perk (null once every rung is behind you)
+        perkNextAt: mi < MASTERY.MILESTONES.length - 1 ? MASTERY.MILESTONES[mi + 1] : null };
+    }),
     heistSeconds: ch.heist_at ? Math.max(0, Math.ceil((new Date(ch.heist_at) - Date.now()) / 1000)) : 0,
     // PACING: the two new activity cooldowns, so the client can show a live timer instead of
     // surfacing a bare `cooldown` error when a player hits the gym or the family's next job.
