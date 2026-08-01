@@ -20,7 +20,7 @@ import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
          frontierTributePerHr, liberationCost, worldNpcOf, SPEAKEASY, PEN, RACES,
          PORT, boatOf, portRouteOf, interdictChance,
          CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES, BUSINESSES, PACING, POPULATION, boatResale, CORNER, CONTACTS,
-         EXCHANGE, EMISSION, ESTATE, WIRE, GANG_SEALS, FOUNDATION, RIVALS } from '../src/rules.js';
+         EXCHANGE, EMISSION, ESTATE, WIRE, GANG_SEALS, FOUNDATION, RIVALS, RACKETS, ASSETS } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -694,6 +694,62 @@ phase('P9.20 the passive stack — parallel energy-free income vs the active gri
     `the 5-front stack ($${fmt(Math.round(frontNet))}/day, energy-free) vs the top-tier crime grind ($${fmt(Math.round(grindDay))}/day, ~200 energy-bounded attempts) — before speakeasy/territory/frontier/sov add more`);
   note('stack', 'APPLIED (founder-directed L1a+L1b balance package)', 'front curve flattened + progressive pad',
     `L1a halved the apex hotel/casino incomePerHr; L1b makes a 5-front stack pay ${padBps5 / 100}% pad vs a 1-front's ${CONSTANTS.BUSINESS_UPKEEP_BPS / 100}% — the personal stack dropped ~$48.96M→$${fmt(Math.round(frontNet))}/day (ratio ~6×→${ratio.toFixed(1)}×), still passive-favoured but no longer dwarfing the active loop; §10.4 stays drift-0 (every front a ledgered faucet). Remaining dial: the full front incomePerHr curve (BALANCE.md)`);
+}
+
+// ════════ P9.20b THE ASSET LADDER — can a player GET these, and what happens when they do ════════
+// Founder-directed (2026-08-01): "run a balance check on the assets to make sure they are feasible and
+// reasonable for players to even get or they will get discouraged and the meta fails."
+//
+// The measurement answers a sharper question than affordability, because affordability turned out not
+// to be the problem. Three catalogs do the SAME thing — buy once, drip forever, cost no energy:
+// RACKETS (18, level-gated), the Legit Fronts half of ASSETS (13, gated by PRICE ONLY — buyAsset has
+// no level check), and BUSINESSES (5, level-gated, with a pad). The honest metric for all three is
+// PAYBACK: how many days of its own income the thing costs.
+//
+// The band worth stating, because without one "is this reasonable" has no answer: a passive asset
+// should pay for itself in LONGER than one sitting (or buying it is a formality) and SHORTER than a
+// street's expected life (or it is a trap you die holding). The harness reaches level 33 in 7 days of
+// play, so ~3 to ~14 days is the healthy window. Analytic, from the signed constants — no value
+// seeded, §10.4 untouched.
+phase('P9.20b the asset ladder — payback, and whether the entry price is really the gate');
+{
+  const meterH = CONSTANTS.RACKET_DAILY_CAP_MS / 3600000;   // rackets + assets accrue on this meter
+  const bizCapH = CONSTANTS.BUSINESS_CAP_MS / 3600000;
+  const BAND = [3, 14];
+  const rows = [];
+  for (const r of RACKETS) rows.push({ what: `racket ${r.id}`, lvl: r.lvl, cost: r.cost, day: r.income * 60 * meterH });
+  for (const a of ASSETS) if (a.income) rows.push({ what: `asset ${a.id}`, lvl: null, cost: a.price, day: a.income * 60 * meterH });
+  for (const b of BUSINESSES) { const t = b.tiers[0];
+    rows.push({ what: `front ${b.kind}`, lvl: b.lvl, cost: t.cost, day: t.incomePerHr * bizCapH * (1 - CONSTANTS.BUSINESS_UPKEEP_BPS / 10000) }); }
+  for (const r of rows) r.payback = r.cost / r.day;
+
+  const fast = rows.filter((r) => r.payback < BAND[0]);
+  const inBand = rows.filter((r) => r.payback >= BAND[0] && r.payback <= BAND[1]);
+  note('assets', 'income assets measured', `${rows.length}`,
+    `${RACKETS.length} rackets (level-gated) + ${ASSETS.filter((a) => a.income).length} Legit Fronts assets (PRICE-gated only) + ${BUSINESSES.length} business fronts (level-gated, net of the ${CONSTANTS.BUSINESS_UPKEEP_BPS / 100}% pad); all accrue with ZERO energy`);
+  note('assets', 'payback range', `${Math.min(...rows.map((r) => r.payback)).toFixed(2)}d — ${Math.max(...rows.map((r) => r.payback)).toFixed(2)}d`,
+    `the healthy band is ${BAND[0]}-${BAND[1]}d (longer than a sitting, shorter than a street's life)`);
+  note('assets', 'INSIDE the healthy band', `${inBand.length} of ${rows.length}`,
+    inBand.length ? inBand.map((r) => r.what).join(', ') : 'NONE — every income asset pays for itself faster than the band\'s floor');
+  note('assets', 'pay for themselves in under a day', `${rows.filter((r) => r.payback < 1).length} of ${rows.length}`,
+    `so the buy decision is not "can I afford this" but "have I clicked it yet" — which is what makes the mid-game feel like it has nothing to decide`);
+  // the cheapest rung, because that is what a new player actually meets first
+  const cheapest = rows.slice().sort((a, b) => a.cost - b.cost)[0];
+  note('assets', 'the first rung anyone can reach', `${cheapest.what} — $${fmt(cheapest.cost)} → $${fmt(Math.round(cheapest.day))}/day`,
+    `payback ${cheapest.payback.toFixed(2)}d. The harness has a session-1 player at ~$32k, so this is roughly a session away`);
+  // THE UNGATED LADDER: 13 income assets have no level requirement at all
+  const ungated = rows.filter((r) => r.lvl === null);
+  const ungatedTop = ungated.slice().sort((a, b) => b.day - a.day)[0];
+  note('assets', 'income assets with NO level gate', `${ungated.length}`,
+    `buyAsset checks cash and nothing else, so the Legit Fronts ladder is bounded only by price — the biggest, ${ungatedTop.what}, is $${fmt(ungatedTop.cost)} → $${fmt(Math.round(ungatedTop.day))}/day at ANY level. In practice cash tracks level closely enough that this is a soft gate rather than an open door, but it is a gate nobody chose`);
+  // the stack, which P9.20 measures for FRONTS only — this is the rest of it
+  const rackDay = rows.filter((r) => r.what.startsWith('racket')).reduce((a, r) => a + r.day, 0);
+  const assetDay = ungated.reduce((a, r) => a + r.day, 0);
+  note('assets', 'the rest of the passive stack (P9.20 counts fronts only)',
+    `rackets $${fmt(Math.round(rackDay))}/day + assets $${fmt(Math.round(assetDay))}/day`,
+    `both buy-once and permanent, so a long-lived street accumulates the WHOLE ladder; against the top-tier crime grind at $${fmt(Math.round(grindDay))}/day this is the shape of the passive-vs-active gap, and it is bigger than the front stack alone`);
+  note('assets', 'VERDICT', 'affordable, and that is the finding',
+    `nothing here is out of reach — the risk the founder asked about is real but inverted: every rung pays back inside three days, so the mid-game's only decision is which drip to buy next. The levers are the per-rung income (prototype tables, machine-owned) and the ${meterH}h RACKET_DAILY_CAP_MS meter; the DESIGN answer is to make the active systems pay progression, not to make the drips weaker (BALANCE.md)`);
 }
 
 // ════════ P9.21 THE POPULATION — the npc:seed faucet, measured analytically ════════

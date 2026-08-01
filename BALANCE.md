@@ -3359,3 +3359,60 @@ new rungs' `reward.cash`, not the curve.
 enumerated `mission:omr` faucet is exactly what it was — asserted in the test (9 rungs, unchanged).
 Respect actually paid by the eight is **2,340** after `MISSION_RESPECT_MULT`, against 228k for level
 240 — a rounding error on the level curve.
+
+## THE ASSET LADDER — the balance check, and what it actually found (2026-08-01)
+
+Founder direction: *"run a balance check on the assets to make sure they are feasible and reasonable
+for players to even get or they will get discouraged and the meta fails."* Measured by a new standing
+sim probe (**P9.20b**, prints every run) rather than a one-off table, because this is a question that
+wants re-asking after every economy change.
+
+**Three catalogs do the same thing** — buy once, drip forever, cost no energy: `RACKETS` (18,
+level-gated), the Legit Fronts half of `ASSETS` (13), and `BUSINESSES` (5, level-gated, net of the
+pad). Rackets and assets accrue **per minute** metered by `RACKET_DAILY_CAP_MS` (12h/day); fronts
+accrue per hour capped at 24h pending.
+
+**The finding is real but INVERTED from the worry.** Nothing is out of reach:
+
+| | payback |
+|---|---|
+| all 36 income assets | **0.58d — 2.98d** |
+| inside a healthy 3–14 day band | **0 of 36** |
+| pay for themselves in under a day | 14 of 36 |
+| cheapest rung (racket `laundro`, $12,500 → $21,600/day) | 0.58d — about one session's savings |
+
+A passive asset should pay for itself in longer than one sitting (or buying it is a formality) and
+shorter than a street's expected life (or it is a trap you die holding). **Every rung is below that
+band's floor.** So the mid-game's buy decision is not "can I afford this" but "have I clicked it
+yet" — which is the real shape of "17–30 has no reasons": there is nothing to weigh.
+
+**Two structural notes, neither a retune:**
+- **`buyAsset` has no level gate** — 13 income assets are bounded by price alone. In practice cash
+  tracks level closely enough that this is a soft gate, but it is a gate nobody chose.
+- **P9.20's "$21.6M/day passive stack" counts FRONTS ONLY.** The rest of the ladder is rackets
+  $166M/day + assets $94M/day if fully bought (both permanent, so a long-lived street accumulates
+  all of it), against a top-tier crime grind of $13.8M/day.
+
+**NOT retuned (ground rule #1).** The levers are the per-rung income (prototype tables, machine-owned
+— a re-extract), the 12h `RACKET_DAILY_CAP_MS` meter, and a level gate on the Legit Fronts ladder.
+The design answer is more likely to be *making the active systems worth doing* than making the drips
+weaker, and that is a founder call, not a patch.
+
+## THE DAILY LOOPS ALREADY OUT-PAY THE GRIND — a retracted claim (2026-08-01)
+
+The early-game design doc claimed the repeatable daily loops pay **75 respect, 5% of a day of crime
+clicking**, and proposed F2 to fix it. **That was wrong.** It measured the corner (15 × 5/day) and
+generalised, missing the daily CONTRACTS, which are level-scaled in `claimDaily` (`5×lvl` each,
+`+15×lvl` for all three) and are the biggest daily payer in the game. Re-measured at level 22:
+
+| | respect |
+|---|---|
+| one level costs | 430 |
+| 45 min of the best crime | 324 |
+| **full daily contract board** | **660** |
+| corner envelopes (5/day) | 75 |
+| a mission (after ×0.25) | 230 |
+
+The daily board pays **2.3× a sitting of crime**. **F2 is retired, not deferred** — building it would
+have roughly doubled a daily faucet that already out-pays the loop it was meant to compete with, on
+the signed pacing curve, on the strength of a number I got wrong.

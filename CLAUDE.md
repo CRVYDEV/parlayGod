@@ -7606,6 +7606,30 @@ are offered, zero page errors. **The one honest flag (BALANCE.md):** each rung i
 17-31 band's mission DENSITY roughly tripled, so walking it now pays ~$1.14M in one-time mission cash
 where it paid $310k — the harness still shows the player short of every business-front gate, so the
 gates still mean something, and the dial if it wants trimming is the new rungs' `reward.cash`.
-**Still to build:** LAST — because it touches the signed pacing curve and so gets measured before and after —
+**THE ASSET BALANCE CHECK (founder-directed 2026-08-01: *"make sure they are feasible and reasonable
+for players to even get or they will get discouraged and the meta fails"*) — MEASURED, and the finding
+is INVERTED from the worry** (`tools/sim.js` P9.20b, prints every run; BALANCE.md § THE ASSET LADDER).
+Three catalogs do the same job — buy once, drip forever, cost no energy: `RACKETS` (18, level-gated),
+the Legit Fronts half of `ASSETS` (13), `BUSINESSES` (5). **Every one of the 36 pays for itself in
+0.58–2.98 days; ZERO sit inside a healthy 3–14 day band; 14 pay back in under a day.** Nothing is out
+of reach — the cheapest rung is one session's savings — so the mid-game's buy decision is not "can I
+afford this" but "have I clicked it yet", which is the real shape of "17–30 has no reasons": there is
+nothing to weigh. Two structural notes, neither retuned: **`buyAsset` has no level gate** (13 income
+assets are bounded by price alone — a soft gate in practice, since cash tracks level, but a gate
+nobody chose), and **P9.20's "$21.6M/day passive stack" counts FRONTS ONLY** — the rest is rackets
+$166M/day + assets $94M/day if fully bought, against a $13.8M/day top-tier grind. Levers (ground rule
+#1, NOT applied): the per-rung income (machine-owned — a re-extract), the 12h `RACKET_DAILY_CAP_MS`
+meter, a level gate on the Legit Fronts ladder. **A units error nearly shipped a wrong recommendation
+here:** racket `income` is per MINUTE, not per hour, and the first table I built was 60× low and made
+rackets look 40× too WEAK — the opposite of the truth. Read the accrual, don't infer the unit.
+**F2 IS RETIRED, NOT DEFERRED — its premise was my own measurement error** (BALANCE.md § THE DAILY
+LOOPS ALREADY OUT-PAY THE GRIND). The design doc claimed the repeatable daily loops pay "75 respect,
+5% of a day of crime clicking"; that measured the CORNER (15 × 5/day) and generalised, missing the
+daily CONTRACTS, which are level-scaled in `claimDaily` (`5×lvl` each, `+15×lvl` for all three) and
+are the biggest daily payer in the game. Re-measured at level 22: a level costs 430, a 45-minute
+crime sitting pays 324, **the full daily board pays 660** (735 with the corner) — the daily loops
+already out-pay the grind **2.3×**. Building F2 would have roughly doubled a daily faucet that
+already beats the loop it was meant to compete with, on the signed pacing curve, on the strength of
+a number I got wrong. The doc now carries the retraction in place of the claim. **Still to build:** LAST — because it touches the signed pacing curve and so gets measured before and after —
 **F2, the daily loops paying respect at all**, which is the single change that most alters how the
 band feels. F5 (a day streak) is the retention follow-up, not the opener.
