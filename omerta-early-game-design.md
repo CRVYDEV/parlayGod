@@ -70,11 +70,32 @@ coach clears the last of them around level 22 and the coach falls to its tail: b
 tank, find a crew, still running solo. **Not one rung points at repeatable work.** The thing designed
 to always have a next step runs out of next steps at exactly the level the content does.
 
-**(c) Verb monotony.** Measured at level 22: one 45-minute sitting of the best crime is ~22 runs and
-**~693 respect**; a level in that band costs 430. So crime alone clears roughly a level and a half a
-sitting — and **every repeatable daily loop in the game put together pays 75 respect**, which is
-**5% of a day of crime clicking**. The hustle pays 0 respect. The trainer drills pay 0. The career
-ladder pays 0. Corner envelopes pay 15 each.
+**(c) Verb monotony.** ~~Measured at level 22: one 45-minute sitting of the best crime is ~22 runs
+and ~693 respect... and every repeatable daily loop in the game put together pays 75 respect, 5% of
+a day of crime clicking.~~
+
+**THIS CLAIM WAS WRONG AND IS RETRACTED (re-measured 2026-08-01).** I measured the CORNER (15
+respect × 5/day = 75) and generalised it to "the daily loops", missing the daily CONTRACTS — which
+are level-scaled (`5×lvl` each, `+15×lvl` for all three in `claimDaily`) and are by far the biggest
+daily payer. The real numbers at level 22:
+
+| | respect |
+|---|---|
+| one level costs | 430 |
+| 45 min of the best crime (armored, nerve-bounded) | 324 |
+| **the full daily contract board** | **660** |
+| corner envelopes (5/day) | 75 |
+| a mission (after `MISSION_RESPECT_MULT`) | 230 |
+| **daily loops total** | **735** |
+
+So the daily board pays **2.3× a sitting of crime** and 1.7× a whole level. The band is not short of
+respect, and the verb-monotony framing does not survive the correction: a player who works the daily
+board out-levels a player who only grinds.
+
+**Consequence: F2 below is RETIRED, not deferred.** Building it would have roughly doubled a daily
+faucet that already out-pays the thing it was meant to compete with — on the signed pacing curve,
+justified by a number I got wrong. The lesson is the one this project keeps relearning: a figure in
+a design document is not a measurement.
 
 So from 17 to 30 the game is, in the plainest terms: **click one crime button for about five days,
 through eight levels that hand you nothing, with a coach that has stopped talking.**
@@ -129,6 +150,10 @@ not create one.
 every possible next step quest to earn XP & cash."**
 
 ### F2 — THE DAILY LOOPS PAY RESPECT, NOT JUST CASH  *(signed-curve adjacent — sim + sign-off)*
+
+**RETIRED — the premise was a measurement error (see §2(c)).** The daily loops already pay respect,
+and already out-pay the crime grind 2.3×. Nothing to build here; building it would have been a
+significant unearned buff to a signed curve.
 
 F1 makes the daily work visible; this makes it *matter*. Today a player who does everything the game
 offers in a day — corner, hustle, drills, career, dailies — advances their level by **5% of what
@@ -208,8 +233,7 @@ the whole psychological difference between a grind and a ladder. Client + one co
 2. **F6 — Trades on the Streets screen.** ✅ BUILT.
 3. **F4 (free version) — the level-up moment.** ✅ BUILT.
 4. **F3 — the dead levels filled.** ✅ BUILT (crimes too).
-5. **F2 — daily loops pay respect.** The one that most changes how the band *feels*, and the one that
-   touches a signed curve — so it goes last, measured before and after, as a founder call.
+5. **F2 — daily loops pay respect.** ❌ RETIRED — the premise was wrong (they already do, 2.3× the grind).
 6. **F5 — the day streak.** Retention, but it does nothing for a player who is *already* in the
    session; it is the follow-up, not the opener.
 
