@@ -7555,8 +7555,30 @@ read 0%, or every bar in the game is wrong by a level's width; the coach rung is
 `test/growth.js` where the ladder above it is cleared in order, since a rung asserted in isolation
 cannot show that it is REACHABLE. Both mutation-verified by name (pct measured from zero; the rung
 disabled). Browser-probed live (real XP, real bars, the jump landing on The Life, zero page errors);
-mobile 66/66; real-Postgres `pgquery`/`pgcheck` green. **Still to build, in the doc's order:** F4 the level-up moment
-(§10.4-free version), F3 seven missions filling the dead levels (prototype + re-extract, ground rule
+mobile 66/66; real-Postgres `pgquery`/`pgcheck` green. **F4 — LEVELLING UP HANDS YOU SOMETHING — BUILT** (`src/game.js` gainRespect + view, `src/rules.tail.js`
+`PACING.LEVEL_UP_REFILL`, `src/server.js`, `public/index.html`, `test/growth.js`; the design doc's
+item 3, the §10.4-FREE version). Levelling up was a number changing on a bar — the one event the whole
+progression is built around handed the player nothing. Crossing a level now refills **energy and nerve
+to their newly-raised caps**, so the moment you go up you can keep playing, which is the hook. Energy
+and nerve are pure regen resources (the skills `adrenaline` active is the precedent), so this moves no
+value, needs no faucet and writes no ledger row; the PAYING version was deliberately not built — a
+cash-per-level faucet needs its own sim and sign-off, and the refill already buys the feeling. It is
+still a PACING lever and was measured rather than assumed (`npm run playthrough`, one run each way):
+2h **14 → 16**, 5h **23 → 25**, 10h **39 → 43** — ≈10% faster, front-loaded into the 1-16 band this is
+meant to smooth (levels come quadratically slower, so the refill is frequent early and rare by 30), and
+nowhere near the alpha speedrun the pacing pass closed. The refill applies only on the ACTOR path
+(where a loaded context exists): a headless grant — a heist crew member, a duel opponent — is written
+by absolute UPDATE on named columns, so a refill of the in-memory row would be silently dropped, and a
+reward that sometimes vanishes is worse than one consistently absent. The client's cine now NAMES the
+beat: the street rank when it changes (`/v1/rules.pacing.ranks` is published for it), else what this
+level OPENED — read off the published catalogs by three shapes (`lvl`/`minLvl`/`minLevel` on an entry,
+`req.lvl` on a mission, a scalar `minLevel` on a whole system's block) rather than a hand-written map
+that would drift the first time content moved. `test/growth.js` seeds one respect short of a level and
+asserts the crossing refills to the NEW (bigger) cap, that the response carries the level-up while a
+later read does not, and that no `level%` reason ever reaches the ledger; mutation-verified twice by
+name. Browser-probed live (a real crossing at level 10 printed "you made HUSTLER — +5% crime payouts"
+with the tank full, zero page errors). `PACING.LEVEL_UP_REFILL` is pinned + tabled in BALANCE.md.
+**Still to build, in the doc's order:** F3 seven missions filling the dead levels (prototype + re-extract, ground rule
 #2), and LAST — because it touches the signed pacing curve and so gets measured before and after —
 **F2, the daily loops paying respect at all**, which is the single change that most alters how the
 band feels. F5 (a day streak) is the retention follow-up, not the opener.

@@ -1424,5 +1424,42 @@ assert.equal((await call('POST', '/v1/respec', { token: chef.token, body: { musc
     'one envelope per KIND per day — one action can never cash two same-kind slots across the map');
 }
 
+// ══ F4 — THE LEVEL-UP MOMENT (omerta-early-game-design.md) ══
+// Crossing a level refills energy and nerve to their newly-raised caps, so the moment you go up you
+// can keep playing. §10.4-free by construction: both are regen resources, nothing is ledgered.
+{
+  const up = await mk('Level-Up Lou');
+  // sit one respect short of level 3, drained, with a bust impossible to reason about — so the
+  // ONLY thing that can refill these bars is the crossing itself.
+  const at3 = PACING.LEVEL_DIVISOR * 2 * 2;
+  await seedCh(up.id, `respect=${at3 - 1}, energy=3, nerve=9, jail_until=NULL`);
+  const before = await meOf(up.token);
+  assert.equal(before.level, 2, 'seeded one respect short of level 3');
+  // a clean job (any crime pays respect ≥ 1, so the crossing is guaranteed on the first success)
+  let res = null;
+  for (let i = 0; i < 60; i++) {
+    const c = await call('POST', '/v1/crimes/pick', { token: up.token });
+    if (c.body.success) { res = c.body; break; }
+    await seedCh(up.id, `respect=${at3 - 1}, energy=3, nerve=9, jail_until=NULL`);
+  }
+  assert(res, 'a clean job landed');
+  const after = await meOf(up.token);
+  assert.equal(after.level, 3, 'the job crossed into level 3');
+  assert.equal(after.energy, after.maxEnergy, 'levelling up refilled the tank to the NEW cap');
+  assert.equal(after.nerve, after.maxNerve, 'and nerve with it — you can keep playing');
+  assert(after.maxEnergy > before.maxEnergy, 'and the cap itself went up, so the refill is to the bigger bar');
+  // the response names the beat: which level, and the street rank it walks
+  assert(res.character && res.character.leveled, 'the response carries the level-up');
+  assert.equal(res.character.leveled.to, 3, 'it names the level reached');
+  assert(typeof res.character.leveled.rank === 'string' && res.character.leveled.rank.length,
+    'and the street rank');
+  // a plain read never claims a level-up — only the action that crossed one does
+  assert(!after.leveled, 'a later read carries no level-up (it is the moment, not a state)');
+  // §10.4: a refill is not a currency — the crossing wrote no ledger row of its own
+  const rows = await pool.query(
+    `SELECT COUNT(*) n FROM transactions WHERE character_id='${up.id}' AND reason LIKE 'level%'`);
+  assert.equal(Number(rows.rows[0].n), 0, 'no level-up reason ever touches the ledger');
+}
+
 console.log('✅ M4 growth test passed — paths, kitchen (makings/cook/collect/deal/crew/raid/laylow/cleanpapers), heist, missions (+$OMR faucet), dailies (+all-three bonus), First Week (+capstone), referrals (+milestones, agent exclusion), telemetry, mod tools, M8 stat respec (sum-conserving, floor-gated, ledgered burn), THE HUSTLE (the three-stop chain: location gates, legwork delta, ledgered once-a-day payoff), WORD ON THE STREET (per-district seed boards, conflict guaranteed, accept/delta/claim, ledgered corner:job, the MAX_DAY cap) + THE MARK (every job names a victim; residents in your district get named)');
 await app.close();

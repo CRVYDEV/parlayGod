@@ -747,6 +747,16 @@ export const PACING = {
   MISSION_CD_MS: 4 * 3600 * 1000,
   MISSION_RESPECT_MULT: 0.25,
 
+  // (5) THE LEVEL-UP MOMENT (omerta-early-game-design.md F4). Levelling up was a number changing on
+  // a bar: the one event the whole progression is built around handed you nothing. Crossing a level
+  // now refills ENERGY and NERVE to their (newly raised) caps — so the moment you level you can keep
+  // playing, which is the hook. Deliberately the §10.4-FREE version: energy and nerve are pure regen
+  // resources (the skills `adrenaline` active is the precedent), so this moves no currency and needs
+  // no faucet. It IS a pacing lever, and an honest one: levels come fast early and quadratically
+  // slower later, so the refill is frequent in the 1-16 band this is meant to smooth and rare by 30.
+  // Measured with `npm run playthrough` before and after. Set false to revert to the bare number.
+  LEVEL_UP_REFILL: true,
+
   // (4) THE GYM. A per-session cooldown on top of the energy cost, so stat gates take days rather
   // than an afternoon. 3 min → ~20 sessions/hr; the ~500 sessions the top mission tier demands is
   // now a ~25-hour investment spread over real days instead of one sitting.

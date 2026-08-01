@@ -1580,6 +1580,33 @@
   }
 
   // one place that turns a spec into sound, light and motion
+  // F4 — WHAT OPENED AT THIS LEVEL. Read off the published catalogs, never a hand-written list:
+  // three shapes cover everything the server publishes — an entry gated by `lvl`/`minLvl`/`minLevel`
+  // (crimes, rackets, race tiers, smuggling lanes), one gated by `req.lvl` (missions), and a whole
+  // SYSTEM whose block carries a scalar `minLevel` (the fights, the stable, the speakeasy). New
+  // content with a level gate appears here on its own; nothing has to be remembered.
+  const SYSTEM_NAMES = { boxing: 'The Fights', stable: 'The Stable', speakeasy: 'The Speakeasy',
+    races: 'Street Races', port: 'The Port', duels: 'The Dueling Ladder', casino: 'The Den' };
+  function unlockedAt(lvl) {
+    const out = [], seen = new Set();
+    const push = (label) => { if (label && !seen.has(label)) { seen.add(label); out.push(label); } };
+    const walk = (o, key) => {
+      if (!o || typeof o !== 'object') return;
+      if (Array.isArray(o)) {
+        for (const x of o) {
+          if (!x || typeof x !== 'object') continue;
+          const at = [x.lvl, x.minLvl, x.minLevel, x.req && x.req.lvl].find((v) => typeof v === 'number');
+          if (at === lvl) push(x.name);
+        }
+        return;
+      }
+      if (typeof o.minLevel === 'number' && o.minLevel === lvl) push(SYSTEM_NAMES[key] || key);
+      for (const [k, v] of Object.entries(o)) walk(v, k);
+    };
+    for (const [k, v] of Object.entries(rules || {})) if (k !== 'pacing') walk(v, k); // ranks live in pacing
+    return out;
+  }
+
   function playCine(spec) {
     sfx('win');
     if (!spec) return;
@@ -2737,8 +2764,15 @@
     // event the whole progression is built around passed in silence. Same pattern, bigger beat.
     { const prev = renderSheet._lvl; renderSheet._lvl = me.level;
       if (prev !== undefined && me.level > prev) {
-        playCine({ kicker: 'you moved up', title: `LEVEL ${me.level}`,
-          sub: 'the city gives you a little more room.', fx: 'payday', hold: 1900 });
+        // F4 — the moment says what it GAVE you. The rank when it changes, then what this level
+        // actually opened, read off the published catalogs rather than a hand-written map (which
+        // would drift the first time content moved): anything gated exactly here shows up.
+        const rank = (rules?.pacing?.ranks || []).filter((r) => r.lvl === me.level)[0];
+        const opened = unlockedAt(me.level);
+        const sub = rank ? `you made ${rank.name} — ${rank.perk}.`
+          : opened.length ? `${opened.slice(0, 3).join(' · ')}${opened.length > 3 ? ` · +${opened.length - 3} more` : ''}`
+          : 'the city gives you a little more room.';
+        playCine({ kicker: 'you moved up', title: `LEVEL ${me.level}`, sub, fx: 'payday', hold: 1900 });
         $('#sheet')?.classList.add('lvlup');
         setTimeout(() => $('#sheet')?.classList.remove('lvlup'), 1500);
       } }
