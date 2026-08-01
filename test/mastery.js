@@ -351,6 +351,42 @@ await pullClean(ula);
 assert.equal(await cunOf(ula.id), cunZ, 'P=0 → no gain (the drip is a chance, never a grant)');
 delete process.env.STAT_USE_P;
 
+// ══ F6 — THE TRADES ON THE SHEET (omerta-early-game-design.md) ══
+// The full board is GET /v1/mastery; the character view carries a compact twin so a screen can
+// show "this job is schooling you" without a second round trip. Both are computed from the SAME
+// helpers, so the two must AGREE — that is the whole property worth asserting.
+const board = (await call('GET', '/v1/mastery', { token: ula.token })).body;
+const sheet = await meOf(ula.token);
+assert(Array.isArray(sheet.trades) && sheet.trades.length === MASTERY.TRACKS.length,
+  'the sheet carries every track');
+for (const t of board.tracks) {
+  const s = sheet.trades.find((x) => x.id === t.id);
+  assert(s, `the sheet carries ${t.id}`);
+  assert.equal(s.xp, t.xp, `${t.id} xp agrees with the board`);
+  assert.equal(s.lvl, t.lvl, `${t.id} level agrees with the board`);
+  assert.equal(s.rank, t.rank, `${t.id} rank agrees with the board`);
+  assert.equal(s.nextAt, t.nextAt, `${t.id} next-level threshold agrees with the board`);
+}
+// the bar measures progress THROUGH the current level, not from zero — sit a character EXACTLY on
+// a level threshold and it must read 0%, or every bar in the game is wrong by a level's width
+await pool.query(`UPDATE masteries SET xp=$1 WHERE character_id=$2 AND track_id='larceny'`,
+  [masteryXpFor(5), ula.id]);
+let s5 = (await meOf(ula.token)).trades.find((x) => x.id === 'larceny');
+assert.equal(s5.lvl, 5, 'seeded exactly onto level 5');
+assert.equal(s5.pct, 0, `a fresh level reads 0% through it (got ${s5.pct})`);
+// halfway between 5 and 6 reads ~50%
+await pool.query(`UPDATE masteries SET xp=$1 WHERE character_id=$2 AND track_id='larceny'`,
+  [Math.round((masteryXpFor(5) + masteryXpFor(6)) / 2), ula.id]);
+s5 = (await meOf(ula.token)).trades.find((x) => x.id === 'larceny');
+assert(Math.abs(s5.pct - 50) <= 1, `halfway reads ~50% (got ${s5.pct})`);
+// the perk the bar is climbing toward: the NEXT milestone, and what it pays
+assert.equal(s5.perkNextAt, MASTERY.MILESTONES.find((m) => m > 5),
+  'the sheet names the next milestone that deepens the perk');
+assert.equal(s5.perkWhat, MASTERY.PERKS.larceny.what, 'and what that perk actually does');
+
+// (the coach rung this feeds is walked in test/growth.js, where the ladder above it is cleared
+// in order — a rung asserted in isolation cannot show that it is reachable.)
+
 // ── §10.4: XP is not a currency — the whole system wrote ZERO ledger rows of its own ──
 const xpRows = await pool.query(
   "SELECT COUNT(*) n FROM transactions WHERE reason LIKE 'mastery%' OR reason LIKE 'trade:%'");

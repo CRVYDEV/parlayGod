@@ -7,7 +7,7 @@ process.env.MOD_KEY = 'test-mod-key';
 
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS, CONSTANTS, DISTRICTS, HUSTLE, CORNER, cornerTasksOf, dayOf, M4, levelOf, PACING } from '../src/rules.js';
+import { SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS, CONSTANTS, DISTRICTS, HUSTLE, CORNER, cornerTasksOf, dayOf, M4, levelOf, PACING, MASTERY, masteryXpFor } from '../src/rules.js';
 import { socialRewardsLive } from '../src/growth.js';
 import { sweepGrandReferrals } from '../src/game.js';
 
@@ -470,6 +470,19 @@ assert.equal(await coachOf(), 'You\'re carrying a clue scroll (step 2 of 4)', 'a
 await pool.query(`DELETE FROM clue_scrolls WHERE character_id='${rook.id}'`);
 assert.equal(await coachOf(), 'The trainers have work for you', 'and the trainers\' drills close the board');
 for (const npc of ['doc', 'fixer']) await pool.query(`INSERT INTO npc_drills (character_id, day, npc) VALUES ('${rook.id}', ${cday}, '${npc}')`);
+
+// F6 — THE TRADES, named at the moment they pay off. Mastery XP has accrued on every action since
+// level 1 and the perks at 10/25/40 are real, but the board lives on the Life tab and the coach has
+// never once mentioned it — so 200 crime clicks read as repetition rather than a ladder. The rung
+// fires only ONE level short of a milestone: rare, and it self-clears by playing that loop.
+const m1 = MASTERY.MILESTONES[0];
+await pool.query(`INSERT INTO masteries (character_id, track_id, xp) VALUES ('${rook.id}', 'larceny', $1)
+  ON CONFLICT (character_id, track_id) DO UPDATE SET xp = EXCLUDED.xp`, [masteryXpFor(m1 - 1)]);
+assert.equal(await coachOf(), `One level off a ${MASTERY.TRACKS.find((t) => t.id === 'larceny').name} perk`,
+  'a trade one level short of a perk is the last thing on the work board');
+// two levels out it says nothing — this must not become another permanent nudge
+await pool.query(`UPDATE masteries SET xp=$1 WHERE character_id='${rook.id}' AND track_id='larceny'`,
+  [masteryXpFor(m1 - 2)]);
 
 assert.equal(await coachOf(), 'You\'re carrying too much', 'a fat pocket surfaces the bank nudge');
 await seedCh(rook.id, 'cash=0, bank=0, energy=999');
