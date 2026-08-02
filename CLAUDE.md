@@ -3536,6 +3536,60 @@ All ten `M3.ROSTER_*` numbers are founder sign-off levers (pinned, tabled in BAL
 STRATEGY PACKAGE) — `ROSTER_POWER_MAX` bounds what one great man is worth and `ROSTER_MULT_FLOOR` is
 the hard floor under both discounts.
 
+**THE STRATEGY PACKAGE — steps five to seven: THE SEASON HAS AN ENDING, THE MAP, FAMILY CHARTERS
+(founder-directed 2026-08-02: "measure the gaps then build out 1-3")** (`src/season.js` — the 115th
+src module, `src/social/gangs.js`, `src/territory.js`, `src/rules.tail.js` `SEASON_PHASES`/
+`DISTRICT_ADJ`/`MAP`/`CHARTERS`, `schema.sql` `season_records` + `gangs.charter`, `tools/sim.js`
+**P9.20d**). **THE MEASUREMENT FIRST, and it changed the builds.** P9.20d prices every recurring
+family DECISION in DAYS OF THAT FAMILY'S OWN INCOME, because a decision costing a fraction of a day
+is not a decision, it is a formality with a confirm dialog — and **4 of 4 came in under 1% of a day**
+for an established family. The finding is that a FLAT family cost becomes noise the moment a family
+is established, so raising a constant only moves which week it stops mattering. Applied as DESIGN:
+both of THE MAP's effects and all four of the CHARTERS' are MULTIPLICATIVE, indexed to the price
+rather than sitting beside it. **(5) THE SEASON HAS AN ENDING** — a season used to RESET rather than
+CONCLUDE, so nothing collected 28 days of decisions. Now three phases (`seasonPhaseOf`, keyless
+`GET /v1/seasons`) with THE RECKONING escalating the last week: turf a quarter cheaper to challenge,
+contests settling in half the time, watch windows halved — every modifier riding ON the phase object
+and read through `seasonFx(key)`, which returns 1 outside the reckoning so the sites need no branch
+(the SEASON_MODS shape). `recordReckoning` writes ONE permanent row per closed season naming who
+ended it on top + a `season_crowns` account legend that survives death. PURE STATUS — nothing is
+reset or seized, which is what keeps it shippable into a thin alpha. **(6) THE MAP** — the six core
+districts were a flat SET, so THE WATCH and THE SEALED BID were decisions about unrelated squares
+rather than moves on a board. `DISTRICT_ADJ` (hand-written half — `DISTRICTS` is machine-owned, and
+geography is an authored layout anyway) gives two ENDS and a dense middle; a holder's CONTIGUOUS
+ground stiffens their price once per neighbour (×1.10) and an attacker NEXT DOOR gets ONE foothold
+discount (×0.85), both inside the ONE `turfQuote` the outright claim and the contest floor both read
+(the extortFront one-core lesson). Symmetry is ASSERTED — a border existing on one side only would
+make the same frontier cost two prices depending which way you read it. **(7) FAMILY CHARTERS** — the
+asymmetry. **THE HANDICAP IS THE MECHANIC**: a catalog of pure upgrades is not asymmetry, it is a
+menu everybody picks the top of, so `test/social.js` WALKS the catalog and fails if any charter
+carries only multipliers that help. The Syndicate (lean operations / dear turf) and the Outfit (cheap
+turf / dear operations) are deliberate MIRRORS on the same two axes, which is what makes an alliance
+between them complementary rather than additive; the Fixers (slow Bureau / costly lost stakes) sit on
+different axes. **NO CHARTER is a legitimate fourth answer** — an unchartered family is byte-for-byte
+today's family, which is why none of this needed an economy retune. §10.4 across all three: the
+season and the map scale EXISTING sinks, the charter's two sink multipliers ledger the MODIFIED
+number (the decree/roster discipline) and its re-founding fee rides `vanity:charter` inside the
+existing `vanity:%` burn term — **zero invariants.js changes in the whole package**. Five mutations,
+each caught at its own named assertion. **THREE PRECEDENTS WORTH KEEPING.** (a) **pg-mem lies about
+`ON CONFLICT DO NOTHING`** — it reports `rowCount: 1` and returns a RETURNING row even when nothing
+was written (verified against the engine; the table was genuinely unchanged), which defeats the
+materialize-then-latch pattern used across this codebase; `recordReckoning` is built on a conditional
+`UPDATE … AND NOT crowned RETURNING` instead, and the crown is bumped FROM the stored record so the
+record and the legend can never disagree. (b) **arming `SEASON_MODS` made suites date-flaky** — a run
+inside a Blood-in-the-Streets season loots 15% deeper, so exact-number assertions pass today and fail
+in three weeks for no visible reason; the affected suites were found EMPIRICALLY by forcing the
+precondition across all 62, not by guessing, and pinned `SEASON_PHASE`/`SEASON_MOD`. (c) **a lever
+buried inside an array entry is invisible to the lever register's reader check**, so the four charter
+multipliers are named once in `FAMILY_CHARTER_FX` and referenced by the catalog — pinning the whole
+catalog would have meant pinning its prose. **Fixed while here (a pre-existing mirror gap):**
+`territoryOf` quoted the pad WITHOUT the Bagman's discount, so a family with a money man was shown a
+figure the treasury then disagreed with; adding a second modifier to a number the board already got
+wrong would have widened it, so board and till now read the same `familyMults`. Suite green + sim
+drift-0 + mobile 66/66 + pgquery + pgcheck 43/43 on real Postgres. All `SEASON_PHASES`/`MAP`/
+`DISTRICT_ADJ`/`FAMILY_CHARTER*` numbers are founder sign-off levers (pinned, tabled in BALANCE.md
+§ THE STRATEGY PACKAGE steps five/six).
+
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
 `payPlex` pattern); named landmarks / Founder's charter numbers; ~~R2 (the `rwa_revenue` → real-RWA-buy

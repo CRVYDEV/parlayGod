@@ -1699,6 +1699,9 @@
     // with what the chair is worth rather than the fact that somebody sat down in it.
     if (body && body.postName && body.who) return `\u{1F3AF} ${body.who} takes ${body.postName} — worth +${body.power}`;
     if (body && body.postName && body.vacated) return `${body.postName} stands down`;
+    // THE CHARTER — the toast says BOTH halves, because a charter announced as an upgrade is a lie
+    if (body && body.charter && body.charter.good)
+      return `\u{1F4DC} the family runs as ${body.charter.name} — ${body.charter.good}, but ${body.charter.bad}${body.free ? ' (free — the first is on the house)' : ` (${body.cost} $OMR)`}`;
     // THE SEALED BID — a stake is secret, so the toast reports YOUR number and nobody else's.
     if (body && body.staked !== undefined && body.families !== undefined)
       return `\u{1F576} $${fmt(body.staked)} on ${body.district}${body.defending ? ' \u2014 defending' : ''} \u2014 ${body.families} in, ${mins(body.resolvesSeconds)} to go`;
@@ -3491,6 +3494,19 @@
         : '<span class="d" style="color:var(--dim)">the family is the highest pillar of the community there is.</span>'}
       <div class="d" style="margin-top:4px"><a href="#" id="foundation-lb-link">the philanthropy leaderboard →</a></div>
       <div id="foundation-lb"></div>`)}
+
+      ${sect('fam-charter', 'The Charter', 'what your family is good at — and what it gives up for it', `
+      <div class="card"><span class="t">${g.charter ? g.charter.name : 'Unchartered'}</span>
+        ${g.charter ? `<div class="d" style="margin-top:3px">${g.charter.blurb || ''}</div>
+        <div style="margin-top:4px"><span class="chip good">${g.charter.good}</span> <span class="chip bad">${g.charter.bad}</span></div>`
+        : '<div class="d" style="margin-top:3px">Your family runs like every other family in the city. Pick a charter and you get one real edge and one real handicap — running neither is a legitimate answer, you just get neither side.</div>'}</div>
+      ${boss ? (g.charters || []).map((c) => (g.charter && g.charter.id === c.id) ? '' : `
+        <div class="card" style="margin-top:6px"><span class="t">${c.name}</span>
+          <div class="d" style="margin-top:3px">${c.blurb}</div>
+          <div style="margin-top:4px"><span class="chip good">${c.good}</span> <span class="chip bad">${c.bad}</span></div>
+          <button class="act" style="margin-top:5px" data-do="POST /v1/gangs/charter/${c.id}"
+            data-confirm="Run the family as ${c.name}? You take the handicap with the edge${g.charter ? `, and re-founding costs ${g.charter.changeOmr} $OMR from the reserve` : ' — free the first time'}.">${g.charter ? `re-found as ${c.name}` : `charter as ${c.name}`}</button></div>`).join('')
+        : '<div class="d" style="margin-top:4px;color:var(--dim)">the boss says what the family is</div>'}`)}
 
       ${sect('fam-regalia', 'Family Regalia', 'status badges bought from the $OMR reserve — the boss\'s call', `
       <div class="card"><span class="t">Seal: ${g.seal || 'none'}</span>

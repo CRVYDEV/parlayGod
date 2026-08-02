@@ -24,7 +24,7 @@ import { buildServer } from '../src/server.js';
 import { payFamilyYield } from '../src/exchange.js';
 import { runBuyback } from '../src/worker.js';
 import { huntWanted, sweepContests } from '../src/social.js';
-import { familyTaskOf, weekOf, M3, BLACK_MARKET, bustProbOf, TERRITORY_RACKETS, territoryRankOf, territoryBuildCost, PORT, cityHourOf, DISTRICTS, DISTRICT_ADJ, MAP } from '../src/rules.js';
+import { familyTaskOf, weekOf, M3, BLACK_MARKET, bustProbOf, TERRITORY_RACKETS, territoryRankOf, territoryBuildCost, PORT, cityHourOf, DISTRICTS, DISTRICT_ADJ, MAP, CHARTERS, FAMILY_CHARTER, FAMILY_CHARTER_FX } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -1959,6 +1959,120 @@ assert(Math.abs(escNow - rhsEsc) <= 1, `bounty/contract escrow reconciles: bucke
   assert(invR.checks.find((c) => c.name === 'reason vocabulary').ok, 'the roster adds no unknown reason');
   assert(invR.checks.find((c) => c.name === 'gang treasuries').ok,
     `treasuries reconcile with a discounted pad in the mix (${JSON.stringify(invR.checks.find((c) => c.name === 'gang treasuries'))})`);
+}
+
+// ══ FAMILY CHARTERS (the strategy package's ASYMMETRY) ══
+// Every family was mechanically IDENTICAL apart from what it happened to hold, so "who are we" had
+// no answer anybody could give differently. What has to hold: EVERY charter really does hand back a
+// handicap (a catalog of pure upgrades is not asymmetry, it is a menu everybody picks the top of),
+// the two mirrors genuinely price turf differently at the SAME board, the pad is genuinely different
+// at the REAL till with the DISCOUNTED number ledgered, the first pick is free and a re-found is not,
+// and the whole thing adds no §10.4 reason.
+{
+  // (a) THE HANDICAP IS THE MECHANIC — asserted from the catalog, not from the prose describing it.
+  // Every charter must carry at least one multiplier that HURTS. A retune that quietly softened one
+  // side would turn a charter back into a free upgrade, which is the thing this exists to prevent.
+  for (const c of CHARTERS) {
+    const mults = Object.entries(c).filter(([k]) => k.endsWith('Mult')).map(([, v]) => v);
+    assert(mults.length >= 2, `${c.id} trades on at least two axes`);
+    assert(mults.some((m) => m < 1), `${c.id} is good at something`);
+    assert(mults.some((m) => m > 1), `${c.id} GIVES SOMETHING UP — a charter with only an upside is a free upgrade`);
+    assert(c.good && c.bad, `${c.id} says both halves out loud`);
+  }
+
+  const chB = await mk('Charter Boss'); await seedCh(chB.id, 'respect=1000, cash=cash+900000');
+  const cbg = (await call('POST', '/v1/gangs', { token: chB.token, body: { name: 'The Chartered', tag: 'CHT' } })).body.gangId;
+  const chS = await mk('Charter Soldier');
+  await call('POST', `/v1/gangs/${cbg}/join`, { token: chS.token });
+
+  // (b) the gates
+  assert.equal((await call('POST', '/v1/gangs/charter/outfit', { token: chS.token })).body.error, 'rank', 'a soldier does not say what the family is');
+  assert.equal((await call('POST', '/v1/gangs/charter/nonsense', { token: chB.token })).body.error, 'bad_charter', 'no such charter');
+
+  // (c) THE FIRST PICK IS FREE — no reserve movement and no ledger row. An alpha boss should not be
+  // trapped by a decision made before they knew what the choices meant.
+  const omrBefore = Number((await pool.query(
+    "SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='omr' AND reason='vanity:charter'")).rows[0].s);
+  let r = await call('POST', '/v1/gangs/charter/outfit', { token: chB.token });
+  assert.equal(r.code, 200, `the boss charters the family (${JSON.stringify(r.body)})`);
+  assert.equal(r.body.free, true, 'the first charter is free'); assert.equal(r.body.cost, 0, 'and costs the reserve nothing');
+  assert.equal(Number((await pool.query(
+    "SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='omr' AND reason='vanity:charter'")).rows[0].s),
+    omrBefore, 'a free charter writes no ledger row at all');
+  assert.equal((await call('POST', '/v1/gangs/charter/outfit', { token: chB.token })).body.error, 'already', 'already running as that');
+  const pub = (await call('GET', `/v1/gangs/${cbg}`, {})).body.gang;
+  assert.equal(pub.charter.id, 'outfit', 'the charter is PUBLIC — a rival should be able to read what you are good at');
+  assert(pub.charter.bad, 'and the public view carries the handicap too, not just the edge');
+
+  // (d) TURF: the two mirrors price the SAME door differently. Measured against an unchartered twin
+  // at the same board, so the only difference between the three numbers is the charter.
+  const plainB = await mk('Plain Boss'); await seedCh(plainB.id, 'respect=1000, cash=cash+900000');
+  const pbg = (await call('POST', '/v1/gangs', { token: plainB.token, body: { name: 'The Unaligned', tag: 'UNA' } })).body.gangId;
+  const synB = await mk('Syndicate Boss'); await seedCh(synB.id, 'respect=1000, cash=cash+900000');
+  const sbg = (await call('POST', '/v1/gangs', { token: synB.token, body: { name: 'The Merchants', tag: 'MER' } })).body.gangId;
+  assert.equal((await call('POST', '/v1/gangs/charter/syndicate', { token: synB.token })).code, 200, 'the merchants charter up');
+  // a third family holds cathedral (an END of the map, so no contiguity noise) and nobody borders it
+  const holdB = await mk('Charter Holder'); await seedCh(holdB.id, 'respect=1000, cash=cash+900000');
+  const hbg2 = (await call('POST', '/v1/gangs', { token: holdB.token, body: { name: 'The Incumbents', tag: 'INC' } })).body.gangId;
+  await pool.query(
+    `UPDATE districts SET holder_gang=NULL, npc_holder=NULL, garrison=0, watch_hour=NULL, contest_until=NULL WHERE id IN ('cathedral','brick','neon')`);
+  await pool.query(`UPDATE districts SET holder_gang='${hbg2}', garrison=100000 WHERE id='cathedral'`);
+  // the refusal message carries the floor the server would enforce — the same one turfQuote computes
+  const floorFor = async (tok) => Number((await call('POST', '/v1/districts/cathedral/claim',
+    { token: tok, body: { amount: 1 } })).body.message.match(/\$(\d+)/)[1]);
+  const plainFloor = await floorFor(plainB.token);
+  const outfitFloor = await floorFor(chB.token);
+  const synFloor = await floorFor(synB.token);
+  assert.equal(outfitFloor, Math.floor(plainFloor * FAMILY_CHARTER_FX.EDGE),
+    `the Outfit takes ground cheaper (plain ${plainFloor} → theirs ${outfitFloor})`);
+  assert.equal(synFloor, Math.floor(plainFloor * FAMILY_CHARTER_FX.COST),
+    `and the Syndicate pays over the odds for it (plain ${plainFloor} → theirs ${synFloor})`);
+  assert(outfitFloor < plainFloor && synFloor > plainFloor, 'the mirror is real in both directions');
+
+  // (e) THE PAD: the same trade on the other axis, at the REAL till. Two identical operations, one
+  // family chartered and one not — the only difference is the charter, and the LEDGER carries the
+  // modified figure (the treasury check must reconcile the number that actually moved).
+  const padOf = async (tok, gid, dist) => {
+    await pool.query(`UPDATE districts SET holder_gang='${gid}' WHERE id='${dist}'`);
+    await pool.query(`INSERT INTO territory_rackets (district_id, owner_gang, tier, kind, last_income_at, upkeep_at, scrutiny_at)
+                      VALUES ('${dist}', '${gid}', 1, 'numbers', now(), now() - interval '5 hours', now())`);
+    const view = (await call('GET', '/v1/territory', { token: tok })).body.territory.find((t) => t.district === dist);
+    const res = await call('POST', '/v1/territory/upkeep', { token: tok });
+    return { owed: view.upkeepOwed, paid: res.body.paid, res };
+  };
+  // fund both treasuries the honest way — tribute is a ledgered transfer out of cash the boss holds,
+  // so the §10.4 check below stays exact (no SQL-seeded treasury)
+  for (const tok of [plainB.token, synB.token]) await call('POST', '/v1/gangs/tribute', { token: tok, body: { amount: 300000 } });
+  const plainPad = await padOf(plainB.token, pbg, 'brick');
+  const synPad = await padOf(synB.token, sbg, 'neon');
+  assert.equal(synPad.paid, Math.floor(plainPad.paid * FAMILY_CHARTER_FX.EDGE),
+    `the Syndicate runs lean (plain pad ${plainPad.paid} → theirs ${synPad.paid})`);
+  assert.equal(synPad.owed, synPad.paid, 'and the BOARD quoted exactly what the treasury then paid — a figure a boss is shown that the till disagrees with is worse than no figure');
+  const synLedger = Number((await pool.query(
+    `SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='territory:upkeep' AND counterparty='${sbg}'`)).rows[0].s);
+  assert.equal(synLedger, -synPad.paid, 'the LEDGER carries the modified number too, so the treasury check reconciles it exactly');
+
+  // (f) RE-FOUNDING costs the reserve and then locks. The $OMR is granted the way the seal/foundation
+  // tests grant it (the reserve is a bucket, not a faucet — the burn is what is under test).
+  await pool.query(`UPDATE gangs SET omr_reserve = omr_reserve + 100 WHERE id='${cbg}'`);
+  const resBefore = (await call('GET', `/v1/gangs/${cbg}`, {})).body.gang.omrReserve;
+  r = await call('POST', '/v1/gangs/charter/fixers', { token: chB.token });
+  assert.equal(r.code, 200, `the family re-founds itself (${JSON.stringify(r.body)})`);
+  assert.equal(r.body.cost, FAMILY_CHARTER.CHANGE_OMR, 'the second charter costs the reserve');
+  assert.equal((await call('GET', `/v1/gangs/${cbg}`, {})).body.gang.omrReserve, resBefore - FAMILY_CHARTER.CHANGE_OMR, 'and the reserve paid it exactly');
+  assert.equal(Number((await pool.query(
+    `SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='omr' AND reason='vanity:charter' AND counterparty='${cbg}'`)).rows[0].s),
+    -FAMILY_CHARTER.CHANGE_OMR, 'ledgered as a vanity:charter burn against the reserve');
+  assert.equal((await call('POST', '/v1/gangs/charter/outfit', { token: chB.token })).body.error, 'cooldown',
+    'and the family cannot re-found itself again this week');
+
+  // §10.4: `vanity:charter` rides the EXISTING vanity:% burn term and vocabulary — no invariant change
+  const invC = await runLedgerInvariants(pool, { alert: false });
+  assert(invC.checks.find((c) => c.name === 'reason vocabulary').ok, 'charters add no unknown reason');
+  assert(invC.checks.find((c) => c.name === 'gang treasuries').ok,
+    `treasuries reconcile with a chartered pad in the mix (${JSON.stringify(invC.checks.find((c) => c.name === 'gang treasuries'))})`);
+  await pool.query(`UPDATE districts SET holder_gang=NULL, garrison=0 WHERE id IN ('cathedral','brick','neon')`);
+  await pool.query(`DELETE FROM territory_rackets WHERE district_id IN ('brick','neon')`);
 }
 
 console.log('✅ M3 social test passed — gangs, tribute+weekly, turf (+perks), melt tithe, exchange, jumps, bounty, contract board, hit→death/estate, busting, notifications, websocket push, buyback family split, §10.4 invariants, M7 assassin rep + NPC hitmen + safehouse/fire-heat/war-kills + family contracts (treasury-funded, member lockout, refunds) + bodyguards (hire/absorb/betrayal, before-insurance ordering) + M8 Tailor & Engraver vanity sinks (name/title/plate/crest/rename — ledgered vanity:* burns) + M8 intel sinks (anon fee, peek pierces anon) + M8 family seals ($OMR tribute → pooled reserve → sequential ladder, ledgered burns) + THE FOUNDATION (family charity: rank gate, empty-reserve rejection, sequential tiers from the reserve, badge on all three views + philanthropy leaderboard, softens members\' RICO odds, ledgered foundation:tier burns; STEP TWO: freeload gate — the trial-soften only helps a member who joined before the case was filed) + M7-P3 territory rackets (establish/collect/upgrade, income cap, SEIZURE transfers the operation to the victor, treasury §10.4 reconcile) + VENDETTAS (heir born owing blood, feud ledger, waived directed floor, 2x settlement rep, the cycle turns, lapsed = nothing; STEP TWO: ESCALATION (a repeat kill deepens the feud — kills++ / a higher tier / a longer TTL), THE SIT-DOWN (consensual peace gates + the both-direction clear), and the blood-debt leaderboard — all pure status)');

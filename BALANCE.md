@@ -4327,3 +4327,60 @@ hard to crack once formed, which is snowball risk; lower it and geography stops 
 `ADJACENT_MULT` is how much a foothold is worth, and it is the anti-snowball counterweight: it helps
 whoever is expanding INTO a bloc, so the two levers are deliberately pulling against each other.
 Re-run `P9.20d` after moving either — the family ledger is where the effect shows up.
+
+## THE STRATEGY PACKAGE — step six: FAMILY CHARTERS (founder-directed 2026-08-02)
+
+Every family was mechanically IDENTICAL apart from what it happened to hold. A 20-man family and a
+3-man family differed in scale, never in kind, so "who are we" was not a question anybody could
+answer differently — and an alliance between two families was purely additive, because both sides
+brought the same thing in different amounts.
+
+A charter is what the family IS: one axis it is good at, one it gives up. Chosen by the boss, free
+the first time, and a real $OMR sink from the reserve to change afterwards.
+
+**THE HANDICAP IS THE MECHANIC, and it is asserted rather than described.** A catalog of pure
+upgrades is not asymmetry, it is a menu everybody picks the top of and then nothing is asymmetric
+again — so `test/social.js` walks the catalog and fails if ANY charter carries only multipliers that
+help. That is what a retune has to get past, not a comment.
+
+| charter | the edge | the handicap |
+|---|---|---|
+| **The Syndicate** | operations run 15% leaner (`upkeepMult` 0.85) | taking turf costs 15% more (`turfMult` 1.15) |
+| **The Outfit** | takes ground 15% cheaper (`turfMult` 0.85) | operations cost 15% more to run (`upkeepMult` 1.15) |
+| **The Fixers** | the Bureau heats operations 25% slower (`scrutinyMult` 0.75) | a losing contest stake forfeits 25% more (`contestLossMult` 1.25) |
+
+| lever | value | what it is |
+|---|---|---|
+| `FAMILY_CHARTER_FX.EDGE` | **0.85** | what your strong axis costs you |
+| `FAMILY_CHARTER_FX.COST` | **1.15** | …and what the axis you gave up costs you |
+| `FAMILY_CHARTER_FX.HEAT_EDGE` | **0.75** | the Fixers' Bureau pace |
+| `FAMILY_CHARTER_FX.LOSS_COST` | **1.25** | …paid for when a hedge fails |
+| `FAMILY_CHARTER.CHANGE_OMR` | **40** | re-founding, from the family reserve |
+| `FAMILY_CHARTER.CHANGE_CD_MS` | **7d** | …and how often |
+
+**NO CHARTER is a legitimate fourth answer.** An unchartered family gets neither side and is
+byte-for-byte today's family, which is what makes choosing a real bet rather than a formality — and
+it is also why this needed no economy retune and breaks no existing family.
+
+**The Syndicate and the Outfit are deliberate MIRRORS on the same two axes** — do you earn or do you
+fight — which is what makes an alliance between them complementary rather than merely additive: a
+Syndicate family funds an Outfit family's wars, and each is buying the thing it is bad at. The
+Fixers sit on different axes entirely and are the interesting third pick.
+
+**§10.4 untouched.** Two of the effects are sink multipliers (`territory:upkeep`, `turf:seize:` /
+`turf:claim`), one is Bureau pacing, one is how much of a losing stake refunds — and in every case
+the MODIFIED number is what is charged AND what is ledgered (the decree/roster discipline), so the
+gang-treasuries check reconciles the smaller — or larger — figure exactly. The re-founding fee rides
+`vanity:charter`, which is inside the existing `vanity:%` burn term and vocabulary, so the invariant
+file needed no change at all.
+
+**Fixed while here (a pre-existing mirror gap):** `territoryOf` quoted the pad WITHOUT the Bagman's
+discount, so a family with a money man on the books was shown a figure the treasury then disagreed
+with. Adding a second modifier to a number the board already got wrong would have widened that, so
+both are mirrored properly now — board and till read the same `familyMults`.
+
+**The dials.** `EDGE`/`COST` are how sharp the identity is: at 1.0 both, a charter is cosmetic; far
+apart, the pick decides the whole family's shape and a wrong pick is punishing. `CHANGE_OMR` and
+`CHANGE_CD_MS` decide whether a charter is a commitment or a costume — the cooldown is armed only by
+a PAID re-founding, never by the free first pick, because the trap the free pick exists to avoid is
+the decision made before you knew what the choices meant.

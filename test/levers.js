@@ -521,6 +521,15 @@ const SIGNED = [
       blurb: 'The last week. Turf is cheap to challenge, the windows are short and contests settle fast — whatever you are holding when the books close is what the city remembers.',
       contestMsMult: 0.5, floorMult: 0.75, watchWindowMult: 0.5 },
   ]],
+  // FAMILY CHARTERS (strategy package) — the asymmetry. Both halves of each trade are levers: the
+  // handicap IS the mechanic, so a retune that quietly softened one side would turn a charter back
+  // into a free upgrade. A whole-object pin (the multipliers are leaves on array entries).
+  ['FAMILY_CHARTER_FX.EDGE', 0.85],
+  ['FAMILY_CHARTER_FX.COST', 1.15],
+  ['FAMILY_CHARTER_FX.HEAT_EDGE', 0.75],
+  ['FAMILY_CHARTER_FX.LOSS_COST', 1.25],
+  ['FAMILY_CHARTER.CHANGE_OMR', 40],
+  ['FAMILY_CHARTER.CHANGE_CD_MS', 604800000],
   // THE OPERATION SLOTS (strategy package) — how much of the 31-entry income catalog one player runs
   ['OPERATIONS.SLOTS_BASE', 2],
   ['OPERATIONS.SLOTS_PER_LEVEL', 4],
