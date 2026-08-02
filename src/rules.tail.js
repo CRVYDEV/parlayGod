@@ -631,6 +631,23 @@ export const M3 = {
   // NULL watch_hour = no watch declared = the plain price at every hour (a family that never says
   // when it is home is never surprised, and never gets to concentrate the fight either).
   WATCH_WINDOW_H: 4, WATCH_SURPRISE_MULT: 1.5,
+  // ── THE SEALED BID (the strategy package's SIMULTANEOUS DECISION) ──
+  // Turf's price was PUBLIC and known: read `garrison` off the board, pay max(SEIZE_BASE, garrison ×
+  // SEIZE_OUTBID), done. No simultaneous decision, no bluff, no commitment — the attacker always
+  // moved last with perfect information and the holder never moved at all.
+  //
+  // A PLAYER-HELD district now changes hands ONLY through a sealed contest: every family commits a
+  // SECRET stake from the treasury, the highest commitment takes the district when the window
+  // closes, and the holder wins ties (the defender's advantage). Unheld and NPC-occupied districts
+  // still fall to an outright claim — there is nobody on the other side to contest with, and an
+  // instant buyout CANNOT coexist with a sealed contest on the same district (if the district is
+  // purchasable at price P, nobody bids above P and the contest is theatre).
+  //
+  // CONTEST_LOSS_BPS is what makes it a real sealed bid rather than "always commit everything": a
+  // loser gets the rest back but forfeits this share, so over-committing against a family that was
+  // never coming costs you money. Escrowed at stake time, so a bid is a COMMITMENT — you cannot
+  // bluff with treasury you have already spent.
+  CONTEST_MS: 30*60*1000, CONTEST_LOSS_BPS: 5000,
   WEEKLY_STANDING: 15000, WEEKLY_OMR: 5,
   // M7 Phase 2 assassin rep (a STATUS ladder — no gameplay power, so it doesn't touch
   // sim-audited balance): a kill earns vicLvl × REP_PER_LVL feared-rep, only from targets at

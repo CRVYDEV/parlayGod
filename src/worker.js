@@ -17,7 +17,7 @@ import { carveExchange, mergeLegacyYieldPools, payFamilyYield } from './exchange
 import { runBondInvariants } from './bonds.js';
 import { runTreasuryInvariants } from './treasury.js';
 import { openAuction, closeExpired, runDeskInvariants } from './desk.js';
-import { sweepExpiredBounties, huntWanted } from './social.js';
+import { sweepExpiredBounties, huntWanted, sweepContests } from './social.js';
 import { sweepUncreditedFees } from './fees.js';
 import { sweepGrandReferrals } from './game.js';
 import { sweepSocialClaims } from './growth.js';
@@ -291,6 +291,10 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     if (cc?.placed > 0) console.log(`📞 contacts: ${cc.placed} call(s) placed`);
     // THE FAVOR: nobody ran it before the TTL, so the escrowed pay goes home (per-favor txn,
     // characters-before-favors lock order — the loan/bounty sweep posture).
+    // THE SEALED BID: a closed contest is resolved by the worker — single-writer, one txn per
+    // district (districts → gangs, the seizeDistrict order), so no player action races the outcome.
+    const ct = await safe('turf contest sweep', () => sweepContests(pool));
+    if (ct?.resolved > 0) console.log(`🏙  turf: resolved ${ct.resolved} contest(s), ${ct.seized} district(s) changed hands`);
     const fv = await safe('favor sweep', () => sweepFavors(pool));
     if (fv?.refunded > 0) console.log(`🤝 favors: ${fv.refunded} expired, escrow refunded to the posters`);
     const hs = await safe('heist sweep', () => sweepStaleHeists(pool));

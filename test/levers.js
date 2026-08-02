@@ -279,8 +279,14 @@ const SIGNED = [
   ['M3.SAFEHOUSE_MS', 14400000],
   ['M3.SEIZE_BASE', 30000],
   // THE WATCH (strategy package) — the holder's declared hour, and what a surprise costs
+  ['M3.WAR_MS', 30*60*1000],
+  ['M3.SEIZE_OUTBID', 1.5],
   ['M3.WATCH_WINDOW_H', 4],
   ['M3.WATCH_SURPRISE_MULT', 1.5],
+  // THE SEALED BID (strategy step three) — the contest window, and the forfeit that stops
+  // "always commit everything" from being the only line a family can play.
+  ['M3.CONTEST_MS', 30*60*1000],
+  ['M3.CONTEST_LOSS_BPS', 5000],
   ['M3.TERRITORY_SEIZE_BPS', 5000],
   ['M3.WAR_COST', 10000],
   ['M3.WAR_KILL_POINTS', 3],

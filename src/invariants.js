@@ -10,7 +10,7 @@ import { DESK, DESK_RECYCLE_REASON } from './rules.js';
 const KNOWN_REASONS = {
   cash: ['crime:', 'racket:income', 'racket:upgrade', 'bank:interest', 'bank:', 'heal', 'checkin', 'travel', 'heist',
     'melt:tithe', 'fence', 'repair', 'craft:', 'goods:', 'racket:buy:', 'asset:', 'swap:', 'gun:buy:',
-    'ammo:buy', 'gang:found', 'gang:tribute', 'gang:war', 'gang:dissolved', 'turf:seize:', 'jump:',
+    'ammo:buy', 'gang:found', 'gang:tribute', 'gang:war', 'gang:dissolved', 'turf:seize:', 'turf:claim', 'jump:',
     'bounty:', 'bust:reward', 'whack:chop', 'whack:loot', 'death:', 'exchange:', 'crew:sales', 'deal:', 'makings:',
     'lab:', 'crew:hire', 'crew:wages', 'laylow', 'kitchen:', 'mission:', 'daily:', 'onboard:', 'social:', 'referral:', 'mod:confiscate', 'npchit:', 'safehouse',
     // TOKENOMICS v2 — THE EXCHANGE: the one-way window's cash side. An honest FAUCET, bounded by
@@ -144,6 +144,11 @@ async function collectLedgerChecks(pool) {
   const titheIn = await sum(pool, "currency='cash' AND reason='melt:tithe'");
   const warOut = -(await sum(pool, "currency='cash' AND reason='gang:war'"));
   const seizeOut = -(await sum(pool, "currency='cash' AND reason LIKE 'turf:seize:%'"));
+  // THE SEALED BID: a stake is treasury -> escrow ('turf:claim', an OUT); a loser's kept share comes
+  // home ('turf:claim:refund', an IN). The winner's stake and every forfeited share leave the escrow
+  // for good ('turf:claim:burn') and reach no treasury, so they are counted only by the escrow check.
+  const claimOut = -(await sum(pool, "currency='cash' AND reason='turf:claim'"));
+  const claimRefund = await sum(pool, "currency='cash' AND reason='turf:claim:refund'");
   const dissolvedCash = -(await sum(pool, "currency='cash' AND reason='gang:dissolved'"));
   // M7 Phase 4 family contracts: treasury → escrow ('gang:contract' + its 2% ':take') is an
   // outflow; a cancel/expiry refund comes home as a character_id-NULL 'bounty:refund' row
@@ -183,7 +188,7 @@ async function collectLedgerChecks(pool) {
   const worldInvadeOut = -(await sum(pool, "currency='cash' AND reason='world:invade'"));
   const worldReinforceOut = -(await sum(pool, "currency='cash' AND reason='world:reinforce'")); // step six: garrison-stiffen treasury SINK
   push('gang treasuries', treasuries,
-    tributeIn + titheIn + territoryIncome + territoryMuscleIn + tollIn + portTollIn + worldTributeIn + sovIncomeIn - warOut - seizeOut - dissolvedCash - contractOut - territoryOut - sovOut - fixOut - worldInvadeOut - worldReinforceOut + treasuryRefunds - proposalOut + proposalRefund);
+    tributeIn + titheIn + territoryIncome + territoryMuscleIn + tollIn + portTollIn + worldTributeIn + sovIncomeIn - warOut - seizeOut - dissolvedCash - contractOut - territoryOut - sovOut - fixOut - worldInvadeOut - worldReinforceOut + treasuryRefunds - proposalOut + proposalRefund - claimOut + claimRefund);
 
   // COMMISSION ESCROW (step three): open proposal deposits == posted − refunded − forfeited
   // (the bounty-escrow twin on the chamber's table; a dissolved family's deposit forfeits at settle).
@@ -423,6 +428,18 @@ async function collectLedgerChecks(pool) {
   const fvDeath = -(await sum(pool, "currency='cash' AND reason='favor:death'"));
   const fvLoot = -(await sum(pool, "currency='cash' AND reason='favor:loot'"));
   push('favor escrow', favorEscrow, fvPosted - fvPaid - fvTakes - fvRefunded - fvDeath - fvLoot);
+
+  // (f4c) THE TURF CONTEST ESCROW (the strategy package's sealed bid) — the market-escrow shape on
+  // the family side. Every open stake sits in district_bids, not a treasury, so the open pot must
+  // equal what was staked minus everything that has left it: the losers' kept share going home
+  // ('turf:claim:refund') and everything that burns — the winner's whole stake (it becomes the
+  // garrison) plus each loser's forfeited CONTEST_LOSS_BPS ('turf:claim:burn'). A family that
+  // dissolves mid-contest burns its whole stake, which is the same term.
+  const contestEscrow = await one(pool, 'SELECT COALESCE(SUM(amount),0) s FROM district_bids');
+  const claimStaked = -(await sum(pool, "currency='cash' AND reason='turf:claim'"));
+  const claimHome = await sum(pool, "currency='cash' AND reason='turf:claim:refund'");
+  const claimBurn = -(await sum(pool, "currency='cash' AND reason='turf:claim:burn'"));
+  push('turf contest escrow', contestEscrow, claimStaked - claimHome - claimBurn);
 
   // (f4b) THE LOAN HOUSE (step 5 — the backed NPC lender): the window's pool == funded (mod, from the
   // confiscation pool) + the vig share + repayments + seizures − principal lent. Every flow is a

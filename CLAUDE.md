@@ -3464,6 +3464,43 @@ override masking a dead production path**, the "a check that cannot fail reads e
 bill of health" class in its live form. Fixed in both places. `M3.WATCH_WINDOW_H`/`WATCH_SURPRISE_MULT`
 are founder sign-off levers (pinned, tabled in BALANCE.md § THE STRATEGY PACKAGE).
 
+**THE STRATEGY PACKAGE — step three: THE SEALED BID, turf's simultaneous decision** (`schema.sql`
+`districts.contest_until` + the new `district_bids` table, `src/rules.tail.js` `M3.CONTEST_*`,
+`src/social/gangs.js` `turfQuote`/`stakeClaim`/`resolveContest`/`sweepContests`, `src/invariants.js`,
+`src/worker.js`, `public/index.html`, `test/social.js`). Turf's price was **PUBLIC and known** — read
+`garrison` off the board, pay `max(SEIZE_BASE, garrison × SEIZE_OUTBID)`, done: the attacker always
+moved last with perfect information and the holder never moved at all. A district **a family holds**
+now changes hands only through a sealed contest (`POST /v1/districts/:id/claim`) — every family
+commits a SECRET stake from the treasury, the highest takes it when the window closes, **the holder
+wins ties** (you have to beat a family off its own turf, not merely match it), and the winning stake
+becomes the new garrison so defending is expensive and buys a dearer door next time. Unheld and
+NPC-occupied districts still fall to an outright claim; there is nobody on the other side to contest
+with. **The two CANNOT coexist on the same district, and that is the load-bearing decision rather
+than a preference** — if a buyout is available at price P, nobody bids above P and the contest is
+theatre — so `seizeDistrict` refuses a player-held district (`contested`), and a live contest also
+freezes an UNHELD one (otherwise a family that had already staked could be undercut at the base price
+the moment the incumbent dissolved mid-window). **`CONTEST_LOSS_BPS` (50%) is what makes it a sealed
+bid rather than "always commit everything"**: a loser gets the rest back but forfeits this share, so
+over-committing against a family that was never coming costs real money; stakes ESCROW at commit
+time, so a bid is a commitment you cannot bluff with or pull back (`raise` — a stake only goes up).
+THE WATCH composes underneath rather than being replaced: the surprise multiplier now scales the
+**floor** under a stake. **§10.4:** three reasons under ONE `turf:claim` vocabulary prefix —
+`turf:claim` (treasury → escrow, an OUT in the gang-treasuries check), `turf:claim:refund` (a loser's
+kept share home, an IN) and `turf:claim:burn` (the winner's whole stake plus every forfeit, leaving
+for good) — plus a new **`turf contest escrow`** check on the market/bounty/favor shape
+(`Σ open == staked − refunded − burned`); a family that dissolves mid-contest burns its whole stake
+(the dead-funder precedent — its treasury is already gone, so nothing is double-counted). The price
+itself is now ONE shared `turfQuote` the outright claim and the contest floor both read, so they can
+never drift apart (the extortFront one-core lesson). Lock order districts → gangs, matching
+`seizeDistrict`; the resolver is single-writer (the worker), one txn per district, gangs locked in id
+order. Console: the turf card renders a CONTESTED chip with the family COUNT (public — that is the
+tension) and never a number anyone staked, plus a confirm-gated stake/defend control. Three mutations,
+each caught at its own named assertion (the challenger takes a tie; the outright buy comes back; a
+forfeit goes unledgered). Suite green + sim drift-0 + pgquery 2292 statements + pgcheck 43/43 on real
+Postgres. `M3.CONTEST_MS`/`CONTEST_LOSS_BPS` are founder sign-off levers (pinned, tabled in BALANCE.md
+§ THE STRATEGY PACKAGE) — and the register-complete guard caught two levers this cited in prose
+(`M3.WAR_MS`, `M3.SEIZE_OUTBID`) that had never been pinned at all.
+
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
 `payPlex` pattern); named landmarks / Founder's charter numbers; ~~R2 (the `rwa_revenue` → real-RWA-buy

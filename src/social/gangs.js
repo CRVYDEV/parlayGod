@@ -6,7 +6,7 @@
 //
 // Split out of the 2,003-line src/social.js; every function below is byte-identical to what was
 // there. Import from '../social.js' — it re-exports this package's public surface unchanged.
-import { GameError, bumpFamilyTask, bus, ledger, cleanText } from '../game.js';
+import { GameError, bumpFamilyTask, bus, ledger, cleanText, notify } from '../game.js';
 import { DISTRICTS, M3, M8, levelOf, dayOf, territoryBuildCost, worldNpcOf, liberationCost, DIPLOMACY, cityHourOf } from '../rules.js';
 import { seizeTerritoryRackets, releaseTerritoryRackets } from '../territory.js';
 import { releaseFrontierHolds, outfitStrengthFrac } from '../world.js';
@@ -280,15 +280,20 @@ export async function setWatch(ch, districtId, hour, client, h) {
     onWatchNow: onWatch({ watch_hour: hr }), surpriseMult: M3.WATCH_SURPRISE_MULT };
 }
 
-export async function seizeDistrict(ch, districtId, client, h) {
-  if (!canCommand(h)) throw new GameError('rank', 'Only the boss or underboss seizes turf.');
-  if (!DISTRICTS.find((d) => d.id === districtId)) throw new GameError('bad_district', 'No such district.');
-  const d = (await client.query('SELECT * FROM districts WHERE id=$1 FOR UPDATE', [districtId])).rows[0];
-  if (d.holder_gang === h.owned.gangId) throw new GameError('held', 'You already hold that district.');
+// ── THE PRICE OF TURF — the ONE computation the outright claim and the sealed contest's floor
+// both read, so the two can never drift apart (the extortFront one-core lesson: a copied block is
+// how the sackEmpire rake-cursor drifted). Throws the level gate; returns every component so a
+// caller can explain the bill.
+//
+// `gangId` is the family DOING the taking. A DEFENDER (the current holder, raising their own stake
+// in a contest) is never surprised on their own turf and never coalitions against themselves, so
+// both modifiers are the attacker's alone.
+export async function turfQuote(client, ch, d, gangId) {
   // STEP FIVE — THE OCCUPATION: an NPC-garrisoned district is LIBERATED (not seized from a player). The
   // cost scales with the occupying outfit's LIVE strength (a lockless quote — beat it down first and its
   // turf goes cheap), floored at OCCUPY_MIN. No territory racket transfers (an NPC district has none).
   const occupied = !!d.npc_holder;
+  const defending = !!d.holder_gang && d.holder_gang === gangId;
   let base, premium = 0;
   if (occupied) {
     const fixture = worldNpcOf(d.npc_holder);
@@ -303,21 +308,42 @@ export async function seizeDistrict(ch, districtId, client, h) {
     // sim-audit F5: a district with a PRODUCTIVE OPERATION costs a war premium scaled to what's
     // being taken — TERRITORY_SEIZE_BPS of the operation's cumulative build cost. Seizing a maxed
     // Smuggling Front is no longer ~18× cheaper than building one; the snowball pays freight.
-    const op = (await client.query('SELECT tier FROM territory_rackets WHERE district_id=$1', [districtId])).rows[0];
+    const op = (await client.query('SELECT tier FROM territory_rackets WHERE district_id=$1', [d.id])).rows[0];
     premium = op ? Math.floor(territoryBuildCost(op.tier) * M3.TERRITORY_SEIZE_BPS / 10000) : 0;
   }
   // FIVE PILLARS #3: a standing (non-crumbling) STRONGHOLD stiffens the price of taking the district
   // — its garrison joins the outbid COST (never the stored garrison — the defense budget stays the
   // plain quote). #2: an ARMED coalition vs the holder discounts the whole bill ×COALITION_SEIZE_MULT
   // (the anti-hegemon tooth; the discounted number is what's deducted AND ledgered).
-  const sovBonus = occupied ? 0 : await sovGarrisonBonus(client, districtId);
-  const coalitionVsHolder = !occupied && d.holder_gang
-    && await coalitionDiscountActive(client, h.owned.gangId, d.holder_gang);
+  const sovBonus = occupied ? 0 : await sovGarrisonBonus(client, d.id);
+  const coalition = !occupied && !defending && !!d.holder_gang
+    && !!(await coalitionDiscountActive(client, gangId, d.holder_gang));
   // THE WATCH: a player-held district taken OUTSIDE the holder's declared window costs the surprise
   // premium. An NPC-occupied district has no watch to keep (outfits don't sleep) and an unheld one
   // has nobody to surprise, so both stay at the plain price.
-  const surprise = (!occupied && d.holder_gang) ? watchMult(d) : 1;
-  const cost = Math.floor((base + sovBonus + premium) * (coalitionVsHolder ? DIPLOMACY.COALITION_SEIZE_MULT : 1) * surprise);
+  const surprise = (!occupied && !defending && d.holder_gang) ? watchMult(d) : 1;
+  const cost = Math.floor((base + sovBonus + premium) * (coalition ? DIPLOMACY.COALITION_SEIZE_MULT : 1) * surprise);
+  return { occupied, defending, base, premium, sovBonus, coalition, surprise, cost };
+}
+
+const contestLive = (d, at = Date.now()) => !!d.contest_until && new Date(d.contest_until).getTime() > at;
+
+export async function seizeDistrict(ch, districtId, client, h) {
+  if (!canCommand(h)) throw new GameError('rank', 'Only the boss or underboss seizes turf.');
+  if (!DISTRICTS.find((d) => d.id === districtId)) throw new GameError('bad_district', 'No such district.');
+  const d = (await client.query('SELECT * FROM districts WHERE id=$1 FOR UPDATE', [districtId])).rows[0];
+  if (d.holder_gang === h.owned.gangId) throw new GameError('held', 'You already hold that district.');
+  // THE SEALED BID: turf ANOTHER FAMILY holds is no longer purchasable at a published price — it
+  // changes hands through the sealed contest (stakeClaim). The two CANNOT coexist on the same
+  // district: if a buyout is available at price P, nobody bids above P and the contest is theatre.
+  if (d.holder_gang)
+    throw new GameError('contested', 'That district belongs to a family. You take it by staking a claim — a sealed contest — not by buying it.');
+  // A live contest also freezes an UNHELD district: the incumbent can dissolve mid-window, and
+  // without this a family that had already staked could be undercut by an outright claim at the
+  // base price the moment that happened.
+  if (contestLive(d))
+    throw new GameError('contested', 'A contest is already running on that district — stake a claim.');
+  const { occupied, base, premium, cost } = await turfQuote(client, ch, d, h.owned.gangId);
   const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
   if (Number(g.treasury) < cost)
     throw new GameError('treasury', occupied
@@ -338,6 +364,159 @@ export async function seizeDistrict(ch, districtId, client, h) {
   bus.emit('streets', occupied ? { type: 'liberated', district: districtId, gang: g.name, npc: worldNpcOf(d.npc_holder)?.name }
     : { type: 'seize', district: districtId, gang: g.name });
   return { ok: true, district: districtId, garrison: base, premium, cost, liberated: occupied, razedStronghold: razed };
+}
+
+// ── THE SEALED BID (the strategy package's SIMULTANEOUS DECISION) ──
+// Commit a SECRET stake from the treasury on a district a family holds. Everyone in the contest
+// moves at once and nobody sees another number until it closes; the highest commitment takes the
+// district, the holder wins ties, and every loser forfeits CONTEST_LOSS_BPS of what they put up —
+// which is what stops "always commit everything" from being the only line.
+//
+// The holder's stake is a DEFENCE and a rival's is a CLAIM; the meaning is derived from who holds
+// the district, never passed in, so there is no way to declare yourself the defender.
+export async function stakeClaim(ch, districtId, amount, client, h) {
+  if (!canCommand(h)) throw new GameError('rank', 'Only the boss or underboss stakes a claim.');
+  if (!DISTRICTS.find((x) => x.id === districtId)) throw new GameError('bad_district', 'No such district.');
+  const total = Math.floor(Number(amount));
+  if (!Number.isFinite(total) || total <= 0) throw new GameError('amount', 'Name what you are putting up.');
+  const d = (await client.query('SELECT * FROM districts WHERE id=$1 FOR UPDATE', [districtId])).rows[0];
+  if (!d.holder_gang) throw new GameError('not_contested', d.npc_holder
+    ? 'An outfit garrisons that district — you liberate it outright, there is nobody to bargain with.'
+    : 'Nobody holds that district. Take it outright.');
+  const gangId = h.owned.gangId;
+  const q = await turfQuote(client, ch, d, gangId);
+  if (total < q.cost) throw new GameError('floor', `A stake on that district starts at $${q.cost}.`);
+  const nowMs = Date.now();
+  const open = contestLive(d, nowMs);
+  const until = open ? new Date(d.contest_until) : new Date(nowMs + M3.CONTEST_MS);
+  if (!open) {
+    // a resolved contest leaves no bids and a lapsed one is swept, but never trust the sweep to
+    // have run before the next challenger walks in — a stale row would be free money for its owner.
+    await client.query('DELETE FROM district_bids WHERE district_id=$1', [districtId]);
+    await client.query('UPDATE districts SET contest_until=$2 WHERE id=$1', [districtId, until]);
+  }
+  const prior = Number((await client.query('SELECT amount FROM district_bids WHERE district_id=$1 AND gang_id=$2',
+    [districtId, gangId])).rows[0]?.amount || 0);
+  // a stake only ever goes UP — you cannot pull money out of a contest you are losing your nerve on
+  if (total <= prior) throw new GameError('raise', `You already have $${Math.floor(prior)} on that district. A stake only goes up.`);
+  const delta = total - prior;
+  const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [gangId])).rows[0];
+  if (Number(g.treasury) < delta) throw new GameError('treasury', `Raising that stake takes $${delta} more from the treasury.`);
+  await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [gangId, delta]);
+  if (prior) await client.query('UPDATE district_bids SET amount=$3, at=$4 WHERE district_id=$1 AND gang_id=$2', [districtId, gangId, total, now()]);
+  else await client.query('INSERT INTO district_bids (district_id, gang_id, amount, at) VALUES ($1,$2,$3,$4)', [districtId, gangId, total, now()]);
+  // treasury → escrow. The row sits in district_bids until the contest resolves; the `turf contest
+  // escrow` §10.4 check reconciles the open pot against exactly this.
+  await h.ledger(client, { currency: 'cash', amount: -delta, reason: 'turf:claim', counterparty: gangId });
+  const families = Number((await client.query('SELECT COUNT(*) n FROM district_bids WHERE district_id=$1', [districtId])).rows[0].n);
+  if (!open) bus.emit('streets', { type: 'contest', district: districtId, holder: (await client.query('SELECT name FROM gangs WHERE id=$1', [d.holder_gang])).rows[0]?.name });
+  return { ok: true, district: districtId, staked: total, added: delta, floor: q.cost,
+    defending: q.defending, families,
+    resolvesSeconds: Math.max(0, Math.round((until.getTime() - nowMs) / 1000)),
+    lossBps: M3.CONTEST_LOSS_BPS };
+}
+
+// The resolver. Single-writer (the worker), one transaction per district: the district row is the
+// mutex, then every bidding gang in id order — the districts → gangs order seizeDistrict already
+// establishes, so no new cycle.
+export async function resolveContest(pool, districtId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const d = (await client.query('SELECT * FROM districts WHERE id=$1 FOR UPDATE', [districtId])).rows[0];
+    if (!d || contestLive(d)) { await client.query('ROLLBACK'); return null; }
+    const bids = (await client.query('SELECT * FROM district_bids WHERE district_id=$1 ORDER BY gang_id', [districtId])).rows;
+    if (!bids.length) {
+      await client.query('UPDATE districts SET contest_until=NULL WHERE id=$1', [districtId]);
+      await client.query('COMMIT');
+      return { district: districtId, bids: 0 };
+    }
+    const live = new Map();
+    for (const b of bids) {
+      const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [b.gang_id])).rows[0];
+      if (g) live.set(b.gang_id, g);
+    }
+    // Highest commitment wins. The DEFENDER takes a tie — you have to beat a family off its own
+    // turf, not merely match it. A family that dissolved mid-contest cannot win what it can no
+    // longer hold; its stake burns (the dead-funder precedent) and is scanned past here.
+    let win = null;
+    for (const b of bids) {
+      if (!live.has(b.gang_id)) continue;
+      if (!win) { win = b; continue; }
+      const a = Number(b.amount), w = Number(win.amount);
+      if (a > w || (a === w && b.gang_id === d.holder_gang)) win = b;
+    }
+    const keepBps = 10000 - M3.CONTEST_LOSS_BPS;
+    const results = [];
+    for (const b of bids) {
+      const amt = Number(b.amount);
+      const alive = live.get(b.gang_id);
+      if (win && b.gang_id === win.gang_id) {
+        // the winner's whole stake burns into the garrison — the seizure price, paid in advance
+        await ledger(client, { currency: 'cash', amount: -amt, reason: 'turf:claim:burn', counterparty: b.gang_id });
+        results.push({ gangId: b.gang_id, staked: amt, won: true, back: 0 });
+        continue;
+      }
+      if (!alive) {
+        await ledger(client, { currency: 'cash', amount: -amt, reason: 'turf:claim:burn', counterparty: b.gang_id });
+        results.push({ gangId: b.gang_id, staked: amt, won: false, back: 0, dissolved: true });
+        continue;
+      }
+      const back = Math.floor(amt * keepBps / 10000);
+      const burn = amt - back;
+      if (back > 0) {
+        await client.query('UPDATE gangs SET treasury = treasury + $2 WHERE id=$1', [b.gang_id, back]);
+        await ledger(client, { currency: 'cash', amount: back, reason: 'turf:claim:refund', counterparty: b.gang_id });
+      }
+      if (burn > 0) await ledger(client, { currency: 'cash', amount: -burn, reason: 'turf:claim:burn', counterparty: b.gang_id });
+      results.push({ gangId: b.gang_id, staked: amt, won: false, back });
+    }
+    const winAmt = win ? Number(win.amount) : 0;
+    const changed = !!win && win.gang_id !== d.holder_gang;
+    if (changed) {
+      // the winning stake becomes the new garrison — the next family to come for it outbids THIS.
+      // The watch is cleared with the turf: the new holder declares their own hour.
+      await client.query('UPDATE districts SET holder_gang=$2, npc_holder=NULL, garrison=$3, seized_at=$4, watch_hour=NULL, contest_until=NULL WHERE id=$1',
+        [districtId, win.gang_id, winAmt, now()]);
+      await seizeTerritoryRackets(client, districtId, win.gang_id);
+      await razeSov(client, districtId);
+    } else if (win) {
+      // the holder held it — what they put up becomes the new garrison (they reinforced)
+      await client.query('UPDATE districts SET garrison=$2, contest_until=NULL WHERE id=$1', [districtId, winAmt]);
+    } else {
+      await client.query('UPDATE districts SET contest_until=NULL WHERE id=$1', [districtId]);
+    }
+    await client.query('DELETE FROM district_bids WHERE district_id=$1', [districtId]);
+    const winner = win ? live.get(win.gang_id) : null;
+    for (const r of results) {
+      if (r.dissolved) continue;
+      const members = (await client.query('SELECT character_id FROM gang_members WHERE gang_id=$1', [r.gangId])).rows;
+      for (const m of members) {
+        await notify(client, m.character_id, 'contest_resolved',
+          { district: districtId, won: r.won, staked: r.staked, back: r.back, winner: winner?.name || null });
+      }
+    }
+    await client.query('COMMIT');
+    if (changed) bus.emit('streets', { type: 'seize', district: districtId, gang: winner?.name, contested: true });
+    else if (win) bus.emit('streets', { type: 'held', district: districtId, gang: winner?.name });
+    return { district: districtId, bids: bids.length, winner: win?.gang_id || null, amount: winAmt, changed };
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch { /* already gone */ }
+    throw e;
+  } finally { client.release(); }
+}
+
+export async function sweepContests(pool) {
+  const due = (await pool.query('SELECT id FROM districts WHERE contest_until IS NOT NULL AND contest_until <= $1', [now()])).rows;
+  let resolved = 0, seized = 0;
+  for (const r of due) {
+    // per-district transaction: one poison district must not stall the rest (the auction-sweep rule)
+    try {
+      const res = await resolveContest(pool, r.id);
+      if (res) { resolved++; if (res.changed) seized++; }
+    } catch (e) { console.error('contest sweep', r.id, e.message); }
+  }
+  return { resolved, seized };
 }
 
 // ═══════════════════ JUMPS (§7.6) ═══════════════════
