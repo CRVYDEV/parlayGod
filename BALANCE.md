@@ -4238,3 +4238,56 @@ top of each effect is +$48k on a turf floor, −24% on the pad — real, not dec
 one that composes with the sealed bid and the watch, so re-read that interaction before moving it.
 
 
+
+## THE FAMILY LEDGER — is the family treasury scarce? (measured 2026-08-02, sim P9.20d)
+
+The strategy package put every one of its tradeoffs on the FAMILY — which chairs to fill, when to
+stand watch, how much to commit blind. A tradeoff only bites if the resource behind it is scarce,
+and the family side had never been measured the way `P9.20b` measured the personal side. This is
+that measurement, and it found the **same shape one level up**.
+
+The honest metric is not what a family earns. It is what each strategic DECISION costs, priced in
+**days of that family's own income** — because a decision costing a fraction of a day is not a
+decision, it is a formality with a confirm dialog.
+
+**The climb is sound.** Taking one district from Corner to The Syndicate is a genuine **~14 days of
+daily collecting**, each rung funded out of the rung below (3.3d / 3.3d / 3.5d / 3.9d). That half of
+the ladder is a wait, not a purchase, and wants nothing.
+
+**The steady state is not.** A maxed family clears **$12.0M/day at one district, $34.4M at three,
+$64.5M at six** (Syndicate operations net of the 20% pad, plus strongholds net of overextension —
+which correctly turns NEGATIVE past a few districts — plus $157k/day of frontier tribute).
+
+| recurring decision | cost | days of a 6-district family's income |
+|---|---|---|
+| declare war | $10,000 | **<0.01** |
+| siege a rival stronghold | $50,000 | **<0.01** |
+| invade a frontier outpost | $50,000 | **<0.01** |
+| take an unheld district (floor) | $30,000 | **<0.01** |
+
+**4 of 4.** The one-time build-out — every operation maxed and fortified with a stronghold on every
+district — totals $538.8M, about **8 days** of income, after which the recurring menu above is all
+that is left to spend on. `WAR_COST` is the sharpest: **$10,000 against $64.5M/day means declaring
+war is free for anyone who has arrived.**
+
+**The one cost that scales is the contest ratchet**, and it is the model for the rest: a contest
+floor is `max(SEIZE_BASE, garrison × SEIZE_OUTBID)` and the WINNER'S WHOLE STAKE becomes the
+garrison, so contested turf gets dearer every time it changes hands — $30k → $45k → $67.5k → $101k →
+$152k → $228k over six fights, ×1.5 again off-window under THE WATCH, plus the Enforcer's premium.
+Stated honestly: even $228k is only 0.35% of a day at the top, so the ratchet needs many fights on
+one district before it bites — it is the right SHAPE at the wrong starting point.
+
+**FLAGGED, NOT APPLIED (ground rule #1 — these are signed levers).** The dial is to INDEX the flat
+costs to something the family's own success moves, not to raise them: raising a constant only moves
+which week it stops mattering. Three candidates, cheapest first —
+
+- **`M3.WAR_COST`** → a floor plus a slice of the declaring family's holdings or treasury. The
+  single highest-value change on this list, and roughly one line.
+- **`M3.SEIZE_BASE`** → index the opening floor to the target's operation tier, so a contest over a
+  Syndicate district opens dearer than one over a Corner (the ratchet then compounds from a real
+  number instead of $30k).
+- **`SOV.SIEGE_COST` / `FRONTIER.INVADE_BASE`** → the same treatment, or leave: both already gate on
+  a cooldown, so their scarcity is TIME rather than money and that is a defensible design.
+
+The verdict for the strategy package: its tradeoffs bite hardest on families too new to feel them
+and barely at all on the ones the endgame is for. Re-run `P9.20d` after any of the above moves.

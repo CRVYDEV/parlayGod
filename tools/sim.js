@@ -26,7 +26,7 @@ import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
          PORT, boatOf, portRouteOf, interdictChance,
          CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES, BUSINESSES, PACING, POPULATION, boatResale, CORNER, CONTACTS,
          EXCHANGE, ESTATE, WIRE, GANG_SEALS, FOUNDATION, RIVALS, RACKETS, ASSETS, M4, DRUGS,
-         MADE, ACCESS_STAKE, OPERATIONS, opSlotsOf } from '../src/rules.js';
+         MADE, ACCESS_STAKE, OPERATIONS, opSlotsOf, SOV } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -777,6 +777,78 @@ phase('P9.20b the asset ladder — payback, and whether the entry price is reall
     `best-affordable-at-that-level, ${opSlotsOf(1)}/${opSlotsOf(20)}/${opSlotsOf(40)} seats. The seat curve, not the price, is now the early bound — a level-1 player with unlimited cash cannot buy past ${OPERATIONS.SLOTS_BASE} operations, which is the "affordability was never the gate" finding turned into a gate. NOTE the Legit Fronts assets have NO level gate (buyAsset checks cash only), so they sit in every one of these pools`);
   note('assets', 'VERDICT', 'affordable, bounded by seats',
     `nothing here is out of reach and every rung still pays back inside three days — but the mid-game decision is no longer "have I clicked it yet", it is which ${OPERATIONS.SLOTS_MAX} of ${metered.length}. The levers are the per-rung income (prototype tables, machine-owned), the ${meterH}h RACKET_DAILY_CAP_MS meter, and now OPERATIONS.SLOTS_* (BALANCE.md)`);
+}
+
+// ════════ P9.20d THE FAMILY LEDGER — is the family treasury scarce? ════════
+// P9.20b asked "which income holding do I buy" at the PERSONAL level and found the answer was
+// "all of them, eventually" — nothing competed for a seat, so nothing was a decision. That finding
+// produced the operation slots. This probe asks the same question one level up, because the
+// strategy package (the watch, the sealed bid, the roster) put every one of its tradeoffs on the
+// FAMILY, and a tradeoff only bites if the resource behind it is scarce.
+//
+// The honest metric is not "how much does a family earn" — it is what each strategic DECISION costs
+// measured in DAYS of that family's own income. A decision priced at a fraction of a day is not a
+// decision; it is a formality with a confirm dialog. Analytic, from the signed constants — no value
+// seeded, section 10.4 untouched.
+phase('P9.20d the family ledger — what a family earns against what its decisions cost');
+{
+  const CORE = 6;                                   // the signed core-district map
+  const upkeepKeep = 1 - CONSTANTS.TERRITORY_UPKEEP_BPS / 10000;
+  const terrCapH = CONSTANTS.TERRITORY_CAP_MS / 3600000;
+  const numbers = TERRITORY_TYPES.find((t) => t.id === 'numbers');   // the signed ×1.0 baseline
+  const top = TERRITORY_RACKETS[TERRITORY_RACKETS.length - 1];
+  // one operation's NET daily take, at a tier, on the safe type (collect daily, Bureau never comes)
+  const terrDay = (tier, type = numbers) => tier.incomePerHr * type.incomeMult * terrCapH * upkeepKeep;
+
+  // ── THE CLIMB, which is the healthy half ──
+  // Each rung is funded out of the rung below, so the ladder is a real wait rather than a purchase.
+  const climb = TERRITORY_RACKETS.map((t, i) => ({ t, days: i === 0 ? null : t.cost / terrDay(TERRITORY_RACKETS[i - 1]) }));
+  note('family', 'the racket climb (one district)',
+    climb.slice(1).map((c) => `${c.t.name} ${c.days.toFixed(1)}d`).join(' · '),
+    `each tier funded out of the tier below at the safe ${numbers.name} type — ~${climb.slice(1).reduce((a, c) => a + c.days, 0).toFixed(0)}d of daily collecting to take ONE district from ${TERRITORY_RACKETS[0].name} to ${top.name}. This half is sound: the ladder is a wait, not a purchase`);
+
+  // ── STEADY STATE, which is the half worth worrying about ──
+  const sovTop = SOV.TIERS[SOV.TIERS.length - 1];
+  const sovNet = (held) => held * (sovTop.incomePerDay - sovTop.upkeepPerDay * (1 + (SOV.OVEREXT_BPS / 10000) * Math.max(0, held - 1)));
+  const frontierDay = WORLD_NPCS.reduce((a, n) => a + n.regenPerHr * (WORLD.FRONTIER.TRIBUTE_BPS / 10000) * 24, 0);
+  const famDay = (held) => held * terrDay(top) + sovNet(held) + frontierDay;
+  note('family', 'treasury income at the top', `1 district $${fmt(Math.round(famDay(1)))}/day · 3 $${fmt(Math.round(famDay(3)))}/day · ${CORE} $${fmt(Math.round(famDay(CORE)))}/day`,
+    `${top.name} operations net of the ${CONSTANTS.TERRITORY_UPKEEP_BPS / 100}% pad, plus ${SOV.TIERS.length}-tier strongholds net of overextension (which turns NEGATIVE past a few districts — that mechanic works), plus $${fmt(Math.round(frontierDay))}/day of frontier tribute. Member cash tribute and war spoils are on top and player-driven`);
+
+  // ── THE MENU: every strategic decision a family can make, priced in days of its own income ──
+  const day6 = famDay(CORE);
+  const fortAll = Array.from({ length: CONSTANTS.TERRITORY_FORT_MAX }, (_, l) => CONSTANTS.TERRITORY_FORT_COST_BASE * (l + 1) * top.tier).reduce((a, b) => a + b, 0);
+  const estabAll = TERRITORY_RACKETS.reduce((a, t) => a + t.cost, 0);
+  const sovAll = SOV.TIERS.reduce((a, t) => a + t.cost, 0);
+  const menu = [
+    { what: 'declare war', cost: M3.WAR_COST, recurring: true },
+    { what: 'siege a rival stronghold', cost: SOV.SIEGE_COST, recurring: true },
+    { what: 'invade a frontier outpost', cost: WORLD.FRONTIER.INVADE_BASE, recurring: true },
+    { what: 'take an unheld district (floor)', cost: M3.SEIZE_BASE, recurring: true },
+    { what: `fortify one operation to ${CONSTANTS.TERRITORY_FORT_MAX}`, cost: fortAll, recurring: false },
+    { what: `climb one operation to ${top.name}`, cost: estabAll, recurring: false },
+    { what: `build one ${sovTop.name}`, cost: sovAll, recurring: false },
+  ];
+  for (const m of menu) m.days = m.cost / day6;
+  note('family', 'the strategic menu, priced in days of a maxed family\'s income',
+    menu.map((m) => `${m.what} ${m.days < 0.01 ? '<0.01' : m.days.toFixed(2)}d`).join(' · '),
+    `against $${fmt(Math.round(day6))}/day. The one-time build-out (every operation maxed + fortified + a stronghold on every district) totals $${fmt(Math.round((estabAll + fortAll + sovAll) * CORE))} — about ${(((estabAll + fortAll + sovAll) * CORE) / day6).toFixed(0)} days of income, after which the recurring menu is what is left`);
+  const trivial = menu.filter((m) => m.recurring && m.days < 0.01);
+  note('family', 'RECURRING decisions costing under 1% of a day', `${trivial.length} of ${menu.filter((m) => m.recurring).length}`,
+    trivial.length ? `${trivial.map((m) => `${m.what} ($${fmt(m.cost)})`).join(', ')} — these are FLAT constants, so they become noise the moment a family is established. WAR_COST is the sharpest: $${fmt(M3.WAR_COST)} against $${fmt(Math.round(day6))}/day means declaring war is free for anyone who has arrived` : 'none');
+
+  // ── THE ONE COST THAT SCALES, and why it is the model for the rest ──
+  // A contest floor is max(SEIZE_BASE, garrison × SEIZE_OUTBID), and the garrison becomes the last
+  // WINNING stake — so the price of turf ratchets with how hard it was fought for. That is the only
+  // family cost in the game indexed to anything, and it is the shape the flat ones want.
+  const ratchet = [];
+  let garr = M3.SEIZE_BASE;
+  for (let i = 0; i < 6; i++) { ratchet.push(garr); garr = Math.round(garr * M3.SEIZE_OUTBID); }
+  note('family', 'the contest ratchet (the one cost that scales)',
+    ratchet.map((g) => `$${fmt(g)}`).join(' → '),
+    `each contest's floor is max($${fmt(M3.SEIZE_BASE)}, garrison × ${M3.SEIZE_OUTBID}) and the winner's whole stake BECOMES the garrison, so contested turf gets dearer every time it changes hands — after ${ratchet.length} fights it is ${(ratchet[ratchet.length - 1] / M3.SEIZE_BASE).toFixed(0)}× the opening price. THE WATCH multiplies it again (×${M3.WATCH_SURPRISE_MULT} off-window) and THE ROSTER's enforcer adds a flat premium on top`);
+  note('family', 'VERDICT', trivial.length ? 'the climb bites, the steady state does not' : 'priced',
+    `the ladder to the top is a genuine ~${climb.slice(1).reduce((a, c) => a + c.days, 0).toFixed(0)}-day wait per district and the sov overextension pad is a real recurring drain, but ${trivial.length} of the recurring strategic decisions are FLAT constants that a maxed family pays out of pocket change. So the strategy package's tradeoffs bite hardest on families too new to feel them and barely at all on the ones the endgame is for — the P9.20b finding, one level up. The dial is to index the flat costs to something (holdings, standing, or the contest's own ratchet) rather than to raise them, since raising a constant only moves which week it stops mattering`);
 }
 
 // ════════ P9.20c THE NUT — what a crew costs against what a hand actually moves ════════
