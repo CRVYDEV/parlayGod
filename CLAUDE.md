@@ -3343,6 +3343,21 @@ i.e. safe AND productive, exactly the dominant option the tradeoff exists to pre
 which needs its own account-level home and a decision about whether the slot frees. That is a design
 call, not a line of code. `RARITY.TIERS[].w` + `RARITY.UPGRADE_OMR` are founder sign-off levers
 (BALANCE.md § THE RARITY NFTs). **The v3 migration's seven steps are now all built.**
+**AND THE PRE-MAINNET GATE WAS RED THE WHOLE TIME — ground rule #8's lesson, second occurrence.**
+Checking CI after this push (as the rule says) showed the PREVIOUS commit's `forge test (contracts)`
+job had FAILED. Step 6 added the v4 hook, added `@uniswap/v4-core@1.0.2` to
+`omerta-contracts/run-forge-test.sh`, and did not add it to `.github/workflows/forge.yml` — whose own
+comment claims it "Mirrors run-forge-test.sh". So `forge build` failed to PARSE, and parsing is
+all-or-nothing: **every step below it was skipped, so not just the hook's tests but the OMR, bond,
+oracle, VoucherClaim and GearVault suites stopped running.** The `ci` job was green on the same
+commit, which is exactly how it went unnoticed. Verified locally that the suite is genuinely green
+(`run-forge-test-sandboxed.sh`: **128 tests, exit 0**, both 512-run fuzzes) — the code was never
+broken, only the dependency list CI reads. Fixed the workflow, and — because a note is not a guard —
+`test/docs.js` now derives the required `lib/<dep>` set from `foundry.toml`'s remappings (plus
+forge-std, which is auto-discovered rather than remapped) and asserts BOTH the local script and the
+workflow fetch every one; mutation-verified (drop the v4-core fetch and it fails by name, naming the
+skip-the-entire-suite consequence). **The general shape worth remembering: a gate that fails on its
+own dependency list is worse than no gate, because a red that is always red gets read as noise.**
 
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the

@@ -252,6 +252,37 @@ assert.deepEqual([...new Set(phantom)], [], `docs/AUDITS.md lists reports that d
       + 'does not run is not a guard, it is a file. Re-add it or delete the harness honestly.');
 }
 
+// ── and neither does a gate that fails on its own dependency list ────────────────────────────────
+// `forge test` is the pre-mainnet gate. Economy v3 step 6 added the v4 hook, added v4-core to
+// `run-forge-test.sh`, and did NOT add it to the workflow — so on GitHub `forge build` failed to
+// PARSE, and because parsing is all-or-nothing that skipped every step below it: not just the hook's
+// tests but the OMR, bond, oracle, VoucherClaim and GearVault suites that had been green for months.
+// The job went red and stayed red, which is the worst state for a gate to be in, because a red that
+// is always red is read as noise. So the two fetch lists must agree with what the compiler is
+// actually told to look for.
+{
+  const toml = read('omerta-contracts/foundry.toml');
+  const local = read('omerta-contracts/run-forge-test.sh');
+  const wf = read('.github/workflows/forge.yml');
+  // Every remapping points at lib/<dir>/… — take the first segment, since a nested one
+  // (solmate/=lib/v4-core/lib/solmate/) is shipped by its parent rather than fetched on its own.
+  const needed = new Set([...toml.matchAll(/=lib\/([\w.-]+)\//g)].map((m) => m[1]));
+  // forge-std is auto-discovered rather than remapped, but the tests import it, so it is a real
+  // dependency and belongs in the same check.
+  if (fs.readdirSync('omerta-contracts/test').some((f) => read(`omerta-contracts/test/${f}`).includes('forge-std/')))
+    needed.add('forge-std');
+  assert(needed.size >= 3, `expected the contracts to need at least 3 lib deps, found ${[...needed]}`);
+  for (const dep of needed) {
+    assert(local.includes(`lib/${dep}`),
+      `omerta-contracts/run-forge-test.sh never fetches lib/${dep}, which foundry.toml remaps — `
+      + 'the local run would fail to compile.');
+    assert(wf.includes(`lib/${dep}`),
+      `.github/workflows/forge.yml never fetches lib/${dep}, which the contracts need — forge build `
+      + 'will fail to PARSE on CI and skip the ENTIRE contract suite, not just whatever needs it. '
+      + 'Keep the workflow in lockstep with run-forge-test.sh.');
+  }
+}
+
 console.log(`✅ docs test passed — every number in SPEC.md's size table checked against the tree `
   + `(${srcFiles.length} src files / ${countLines(srcFiles)} lines, ${testFiles.length} suites, `
   + `${tables} tables, ${mdFiles.length} markdown files), the rules-seam figures are current, the false `
