@@ -3,9 +3,10 @@
 Solidity suite for OMERTÀ on Robinhood Chain. Rules for future sessions:
 1. `forge test` must pass after every change; new behavior needs new tests (happy path + every revert).
    **The suite IS runnable in the sandboxed build environment**: `./run-forge-test-sandboxed.sh`
-   (forge from the official npm dist, forge-std/OZ from npm, solc via a solc-js 0.8.26 stdio shim —
-   same compiler version+commit as native). First executed 2026-07-23 (73/73); **103/103 green** after
-   tokenomics v2 step 4 + the accretion oracle, incl. four 512-run fuzzes. On an open-internet machine prefer
+   (forge from the official npm dist, forge-std/OZ/v4-core from npm, solc native-or-shim).
+   First executed 2026-07-23 (73/73); **128/128 green** after the v4 sell-tax hook, incl. five 512-run fuzzes. The runner PREFERS the
+   NATIVE solc binary and NEEDS it — the solc-js shim (same version+commit) runs out of wasm heap
+   compiling v4's `PoolManager`, so on a shim-only box every suite runs EXCEPT `OmertaHook.t.sol`. On an open-internet machine prefer
    `./run-forge-test.sh` (native toolchain).
    Test-authoring footgun that run caught: NEVER put `_sign(...)`/any external call inline in the
    arguments of a call guarded by `vm.prank`/`vm.expectRevert` — argument evaluation makes a
@@ -75,4 +76,41 @@ Solidity suite for OMERTÀ on Robinhood Chain. Rules for future sessions:
    it into three independent bps divisions or a wei goes unowned. Do NOT raise `MAX_SELL_TAX_BPS` (10%
    hard cap — the anti-rug/anti-honeypot wall), tax buys or wallet transfers, or remove the exempt list
    (protocol flows must move 1:1). Canonical liquidity must be Uniswap V2-COMPATIBLE (V3 rejects
-   fee-on-transfer tokens) — a deploy-time requirement in CHAIN-DEPLOY.md.
+   fee-on-transfer tokens) — a deploy-time requirement in CHAIN-DEPLOY.md, and one that DIES if the
+   v4 hook (rule 7) becomes the canonical venue, since the fee then lives in the pool rather than in
+   `_update`. **Keep this path anyway, armed at ZERO.** A hook tax is a property of ONE POOL and
+   anyone may open an unhooked one; the token tax is universal by construction. It is the backstop
+   the Safe arms if a meaningful untaxed pool appears — and the trigger is not "we lost some tax", it
+   is "bonds have become an arbitrage" (design §9.6: a bonder holds known size on a known schedule
+   and is the most motivated bypass-seeker OMR will have).
+
+7. **`OmertaHook.sol` is the v4 sell tax, and it is IMMUTABLE IN BOTH SENSES** — its permissions live
+   in the low 14 bits of its ADDRESS (`HOOK_FLAGS`, re-checked in the constructor, so deployment needs
+   a real CREATE2 salt search) and its logic has no proxy. Consequences that are easy to get wrong:
+   - **Do not remove `beforeInitialize`'s pool gate.** A hook address is part of a `PoolKey`, so
+     ANYONE can create a pool naming this hook. Without the gate a stranger stands up an
+     (OMR, WORTHLESS) pool, swaps against themselves, and emits a genuine `SellTaxTaken` with a
+     genuine tx hash — fabricated revenue wearing the exact credential the backend's anti-fabrication
+     gate trusts. The gate (one side OMR, the other a Safe-approved quote) is what makes every event
+     this contract emits mean something.
+   - **The fee ACCRUES and `sweep` pushes it, deliberately** — do NOT "simplify" it into an in-tx
+     forward like `OmertaFees`. That precedent is right for a tollbooth and wrong here: three pushes
+     inside a swap means one reverting recipient BRICKS THE POOL. Pool liveness must not depend on a
+     wallet's behaviour. `sweep` is permissionless on purpose (a stalled Safe must not strand fees)
+     and can only ever pay the Safe-set recipients.
+   - **There is no pause, and there must not be.** A hook that can revert `beforeSwap` can halt a
+     public market. The off switch is `setSellTax(0,0,0)` — the fee stops, the pool keeps trading.
+   - The unused `beforeSwap` / fee-override slot and the `observer` seam are NOT dead code: with an
+     immutable permission set and immutable logic, a callback the roadmap needs later cannot be added
+     later. Removing either means the hook-native oracle (design step 3) needs a NEW HOOK and a full
+     liquidity migration. `_observe` is try/catch'd with a gas stipend so a broken observer can never
+     stop a swap; the oracle's own fail-closed rule is what keeps that honest.
+   - `MAX_SELL_TAX_BPS` (1000) and the remainder-on-LP rule mirror `OMR.sol` exactly and must stay in
+     lockstep with the backend `SELL_TAX`. **Exact-OUTPUT sells are taxed in OMR rather than the quote**
+     — v4 only lets `afterSwap` take a delta on the *unspecified* currency. That is parity with the
+     ERC-20 tax it replaces, it is documented in the contract, and it is not a bypass. Do not "fix" it
+     by moving the charge to `beforeSwap`: that breaks partially-filled swaps, which is the reason
+     `afterSwap` was chosen.
+   - `DISCOUNT_BPS` must stay strictly BELOW `sellTaxBps` or a bond becomes an arbitrage rather than a
+     hold (design §9.6). Asserted in `test/OmertaHook.t.sol` and warned about in the backend's
+     `preflight.js` — the two constants live in different layers, so nothing else relates them.

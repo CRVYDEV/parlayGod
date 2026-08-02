@@ -3233,6 +3233,66 @@ that §7.1 accrual may have bumped by DIRECT SQL AFTER it (an offline crew sale)
 frozen before the read so no sale can land inside the window, which guarantees the precondition rather
 than weakening what is asserted. Suite 63/63 + sim drift-0 + pgquery + pgcheck 43/43 on real Postgres.
 
+**ECONOMY v3 STEP 6 — THE UNISWAP v4 HOOK: the sell tax moves inside the swap**
+(`omerta-economy-v3-design.md` §9.6, spec `omerta-v4-hook-design.md` §11.2;
+`omerta-contracts/src/OmertaHook.sol` + `test/OmertaHook.t.sol`). The ERC-20 tax collects **OMR**, and
+every downstream consumer needs **ETH** — so paying the founder, funding the treasury or deepening
+liquidity all required SELLING that OMR, and each of those sales was pressure on the very pool being
+taxed. **The tax was reflexive.** A v4 hook charges inside the swap and can charge in either currency,
+so pointing it at the quote side makes the three slices arrive as ETH already and the bracketed step
+disappears. Same economics throughout — dev/rwa/lp, the shipped 900 bps, `MAX_SELL_TAX_BPS` 1000 as a
+compile-time cap, the remainder rule on LP, **buys free** — mirroring `OMR.sol` so the two layers stay
+in lockstep. **Deliberately NOT §11.8's proposed 500-all-to-POL**: retuning a rate and migrating the
+mechanism in one change makes it impossible to tell which moved anything (§2.4's own rule, applied to
+itself).
+**Four things the design sketch did not anticipate, each load-bearing.** **(1) The pool gate IS the
+security property.** A hook address is part of a `PoolKey`, so ANYONE can create a pool naming this
+hook — then swap against themselves in an (OMR, WORTHLESS) pool and emit a genuine `SellTaxTaken` with
+a genuine tx hash, i.e. **fabricated revenue wearing the exact credential the backend's
+anti-fabrication gate trusts**. `beforeInitialize` now reverts unless one side is OMR and the other is
+a Safe-approved quote; without it the whole event stream is forgeable by a stranger for the price of
+gas. **(2) The fee ACCRUES and is swept separately**, not forwarded in-tx like `OmertaFees` — that
+precedent is right for a tollbooth and wrong for a hook, because three pushes inside a swap means one
+reverting recipient **bricks the pool**. Pool liveness must not depend on a wallet's behaviour;
+`sweep` is permissionless, pays only the Safe-set recipients, and a broken one now costs a failed
+sweep instead of a market outage (regression-tested). **(3) An immutable hook must ship every seam its
+own roadmap needs** — permissions live in the address and the logic has no proxy, so step 3's oracle
+could not have been wired to this pool later at all; hence an `observer` seam (fail-safe, gas-stipended)
+and a mined `beforeSwap` + fee-override slot, both unused today. **(4) Exact-OUTPUT sells are taxed in
+OMR, not the quote**, and it is stated rather than hidden: `afterSwap` can only take a delta on the
+*unspecified* currency, which is the output for exact-input (all router volume — the upgrade) and the
+input for exact-output. Charging in `beforeSwap` would fix the denomination and break partial fills,
+which the design already warned about. That path is at **parity with the tax it replaces** — taxed, in
+the worse currency — and is not a bypass. Also decided: **there is no pause**, because a hook that can
+revert `beforeSwap` can halt a public market; the only lever is the rate, and zero stops the fee rather
+than the pool.
+**The §9.6 operating rule is now asserted in two layers** — `DISCOUNT_BPS` must stay strictly under
+`sellTaxBps` or a bond stops being capital formation and becomes a subsidy on selling (at 800/900 an
+immediate flip returns 1.08 × 0.91 = 0.983 and loses money; a bonder holds known size on a known
+schedule and is the most motivated bypass-seeker OMR will have). The two constants live in different
+places, so nothing else related them: now a Foundry test on the contract side and a **preflight
+WARNING** on the backend side (the PLEX-rail precedent — a mispriced relation must not take a live
+server down). **Toolchain:** `@uniswap/v4-core` is vendored from npm (its package ships its own `lib/`),
+so the tests run against a **REAL `PoolManager` with real liquidity and real swaps**, not a mock —
+which is why the fee is measured against what a swapper actually received. That needs **native solc**:
+the solc-js shim runs out of wasm heap on `PoolManager`, so the sandboxed runner now fetches the native
+binary and says plainly which suite it cannot run without it. **forge 128/128** (was 109/109), incl. a
+512-run dust fuzz; six mutations each caught at its own named assertion (buys taxed; the pool gate
+dropped; the remainder rule naturalised; exact-output untaxed; the observer no longer fail-safe; the
+address check removed) — **the first buys-are-free mutation failed for the WRONG reason** (a manager-
+level revert rather than the assertion), which exposed that `feeOnCurrency0` was derived from
+`zeroIsOmr` and therefore correct only *because* of a guard three lines above it; re-derived from
+`zeroForOne` and the mutation now fails by name, which is both a better test and better code.
+**Flagged for the founder, not decided (`omerta-v4-hook-design.md` §10.8): TWO HOOKS ARE PLANNED FOR
+ONE POOL.** `omerta-uniswap-hooks-design.md` §2 specifies a *different* `afterSwap` hook — a small cut
+of every swap's ETH leg funding the **Vig** — and its BACKEND IS ALREADY BUILT AND DORMANT
+(`recordTradeFee`, `syncTradeFees`, `TRADE_FEE_HOOK_ADDRESS`). A `PoolKey` holds exactly one hook
+address and the Vig is not among this hook's slices, so they cannot both serve the canonical pool.
+Fold (one hook, four destinations — but a new fee on buys is an economic surface needing sign-off),
+retire, or drop. Decide before an address is mined, since the permission set is permanent.
+Also resolved while here: design §10.2 (the cross-chain RWA bridge) is **MOOT** — the stock layer was
+retired 2026-07-31, the treasury holds ETH, and there is nothing to bridge.
+
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
 `payPlex` pattern); named landmarks / Founder's charter numbers; ~~R2 (the `rwa_revenue` → real-RWA-buy

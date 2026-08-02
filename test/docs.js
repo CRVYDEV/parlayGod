@@ -69,6 +69,18 @@ near(testLines, countLines(testFiles), 'lines in test/');
 const [clientLines] = row('Client');
 near(clientLines, lines('public/index.html'), 'lines in public/index.html');
 
+// The contracts row had drifted to "8 contracts, 107 tests" against a tree holding 9 and 128, and
+// nothing caught it because `row()` only reads BOLDED numbers and only one of the three was bold.
+// A number nobody checks is a number that will be wrong — so bold all three and check all three.
+const solFiles = fs.readdirSync('omerta-contracts/src').filter((f) => f.endsWith('.sol'))
+  .map((f) => `omerta-contracts/src/${f}`);
+const [solCount, solLines, forgeTests] = row('Smart contracts');
+assert.equal(solCount, solFiles.length, `SPEC says ${solCount} contracts; omerta-contracts/src has ${solFiles.length}`);
+near(solLines, countLines(solFiles), 'lines of Solidity');
+const forge = fs.readdirSync('omerta-contracts/test').filter((f) => f.endsWith('.sol'))
+  .reduce((n, f) => n + (read(`omerta-contracts/test/${f}`).match(/function test/g) || []).length, 0);
+assert.equal(forgeTests, forge, `SPEC says ${forgeTests} Foundry tests; the suite declares ${forge}`);
+
 const schema = read('schema.sql');
 const [tableCount] = row('Database tables');
 const tables = (schema.match(/^CREATE TABLE IF NOT EXISTS \w+/gm) || []).length;

@@ -13,16 +13,19 @@ touches mainnet** until §0 is satisfied.
 
 ## 0. The three HARD GATES (no mainnet step proceeds until all three are green)
 
-1. **`forge test` passes on a real Foundry toolchain. ✅ EXECUTED 2026-07-23 — 73/73 PASS; 77/77 after
-   tokenomics v2 step 4** (incl. both 512-run fuzzes: OMR sell-tax conservation + the OmertaBond
-   anti-Ponzi bound) via the official
+1. **`forge test` passes on a real Foundry toolchain. ✅ EXECUTED 2026-07-23 — 73/73 PASS; 128/128 after
+   the v4 sell-tax hook** (incl. five 512-run fuzzes: OMR sell-tax conservation, the OmertaBond
+   anti-Ponzi bound, the four-wall mint-rate bound, TWAP decode overflow, and the hook's fee-split
+   dust) via the official
    npm-distributed forge 1.7.1 in the sandbox (`cd omerta-contracts && ./run-forge-test-sandboxed.sh`
    — forge-std/OZ from npm, solc via a solc-js 0.8.26 stdio shim: the emscripten build of the SAME
    compiler version+commit as native). The run surfaced and fixed a latent test-harness class (inline
    `_sign(...)` staticcalls consuming `vm.prank`/`vm.expectRevert` in OmertaBond.t.sol — 14 tests +
    one silently false-passing fuzz, all now genuinely exercising the contract). BELT-AND-BRACES: the
    third-party audit should re-run `./run-forge-test.sh` on an open-internet machine with NATIVE solc
-   as part of its own verification — but the Foundry-VM gate itself is now green.
+   as part of its own verification — but the Foundry-VM gate itself is now green. NOTE: NATIVE solc is
+   no longer only belt-and-braces. The hook's suite deploys a real v4 `PoolManager` and the emscripten
+   compiler runs out of heap on it, so a shim-only box silently runs every suite EXCEPT that one.
 2. **A third-party audit of the CONTRACTS *and* the off-chain EIP-712 signer.** The signer (`src/chain.js`) is
    as security-critical as the contracts — it mints withdrawal authority. Audit both.
    ⚠ **The audit clock was RESET by tokenomics v2 step 4 (2026-07-29).** Until then OMR had no mint
@@ -34,6 +37,15 @@ touches mainnet** until §0 is satisfied.
    that `maxOmrPerEth` is checked independently, so a manipulated oracle can only ever TIGHTEN the ceiling,
    never raise it. Also review `OmrTwapOracle` (a Uniswap V2 cumulative-price TWAP) and the keeper
    dependency it creates.
+   ⚠ **The gate also WIDENED with `OmertaHook.sol` (economy v3 step 6).** v4 hook auditing is its own
+   specialty with its own attack surface, and this one holds three claims worth attacking directly:
+   (a) `beforeInitialize`'s pool gate is what makes `SellTaxTaken` unforgeable — anyone can create a
+   pool naming a hook, so without it a stranger emits real-looking revenue events from a worthless
+   pool; (b) the fee is taken as an `afterSwap` delta on the *unspecified* currency and then `take`n,
+   with the accrual written before the interaction; (c) the contract deliberately has NO pause, so the
+   claim is that no configuration can halt the pool. MEV around a fee-taking hook is worth an explicit
+   look. **Do not treat the hook as a variant of the ERC-20 tax** — it is a different mechanism at a
+   different layer, and the ERC-20 path survives armed at zero as its backstop.
 3. **Legal counsel sign-off** on the Risk-to-Earn line (see the "Sensitive design notes" in `CLAUDE.md`).
    **The SECURITIES surface is GONE as of 2026-07-31** — the founder retired the stock layer
    (`omerta-stock-layer-retirement.md`): nothing acquires, holds, allocates or delivers real equities, so
@@ -91,7 +103,10 @@ makes co-mingling it with a spending key strictly worse than before.
 
 ## 1. Build + test the contracts
 - [ ] `cd omerta-contracts && ./run-forge-test.sh` → all `[PASS]` (Gate 0.1). Suite: OMR, VoucherClaim,
-      GearVault, OMRStaking, OmertaFees, OmertaBond (incl. fuzz).
+      GearVault, OMRStaking, OmertaFees, OmertaBond, OmrTwapOracle, OmertaHook (128 tests, five fuzzes).
+      The hook's tests deploy a REAL Uniswap v4 `PoolManager`, which the emscripten solc cannot compile —
+      **use native solc** (`./run-forge-test.sh`, or the sandboxed runner, which now fetches the native
+      binary and says so if it cannot).
 - [ ] No-Foundry compile path (artifacts for the deployer/e2e): `node tools/compile-contracts.js` → writes
       `omerta-contracts/out-js/` (used by `tools/chain-e2e.js`). Artifacts are gitignored — they must never
       drift from source; recompile before every deploy.
@@ -170,6 +185,10 @@ PHASE 1 for the exact calls/args.
       CONFIRM ON-CHAIN at deploy: pull the addresses from Uniswap's deployment docs
       (developers.uniswap.org → Robinhood Chain deployments) and run `node tools/check-dex.js` against
       the live RPC (probes bytecode + the right view calls; prints a go/no-go verdict for the taxed pool).
+      **This V2 requirement dies the day the v4 hook becomes the canonical venue** (§7) — the fee then
+      lives in the pool, not in `_update`, and V3/V4 routers and every aggregator work normally. Keep the
+      `_update` path anyway, ARMED AT ZERO: a hook tax is a property of ONE pool and anyone may open an
+      unhooked one, so the token tax is the universal backstop the Safe arms if that starts to matter.
 
 ## 3. Transfer ownership to the Safe
 - [ ] Every contract is `Ownable2Step`. From the deployer: `transferOwnership(safe)`; from the Safe:
@@ -243,6 +262,26 @@ The backend keeps its own reserve records; they must track the on-chain balances
   server-encodes `bond(quote, sig)` (viem) and the connected wallet `eth_sendTransaction`s it after switching to
   the quote's chain. It is DORMANT until this rail is configured. Still deferred: the DEX-TWAP oracle below (for a
   live quote board) — today the oracle is the latest manual Vig-buyback print.
+- **The Uniswap v4 migration** (`omerta-v4-hook-design.md`) — `OmertaHook.sol` is BUILT and tested but
+  **not deployed and not deployable yet**, and the remaining work is deliberately ordered:
+  - **The address must be MINED.** v4 encodes a hook's permissions in the low 14 bits of its address, and
+    the constructor refuses to exist anywhere that does not carry exactly `HOOK_FLAGS` (`0x30CC`). So the
+    deploy is a CREATE2 salt search, and the permission set can NEVER be extended afterwards — a missing
+    flag is a new hook plus a full liquidity migration.
+  - **Wire before arming:** `setRecipients(dev, rwa, lp)` → `setAllowedQuote(quote, true)` for each quote
+    currency the Safe is willing to HOLD (the empty allow-list is the deploy default, and until it is set
+    NO pool can be created on this hook at all) → `initialize` the pool → `setSellTax(900, 200, 400)`.
+    `setObserver` once the hook-native oracle exists.
+  - **Sequencing that is not optional** (§9.2): deploy the hook-native oracle → let it accumulate a FULL
+    window → `OmertaBond.setOracle` → *then* migrate liquidity. Doing the migration first points wall 4 at
+    a pool where price is no longer discovered, which is worse than an outage because it still returns a
+    number. And re-derive `dailyCapOMR` (`npm run dials`) against the new depth afterwards.
+  - **Seed POL into the hooked pool BEFORE migrating** (§4b). Pool-local enforcement means the moat is
+    depth; it is thinnest at launch, which is exactly when a rival untaxed pool is cheapest to stand up.
+  - **Open founder call first (§10.8):** the older `omerta-uniswap-hooks-design.md` §2 specifies a
+    *different* `afterSwap` hook (the trade fee → Vig, backend already built and dormant behind
+    `TRADE_FEE_HOOK_ADDRESS`). A `PoolKey` holds ONE hook address. Decide fold / retire / drop before
+    mining an address.
 - **The POL-pairing bot** (pairs the bonded ETH into the OMR-ETH pool) and **the DEX buyback bot** (the real
   TWAP source that replaces the manual `mod/vig/buyback` price).
 - **The on-chain Store** — `OmertaFees.payForPackage` + a `StorePaid` watcher. The Store is off-chain/mod-driven

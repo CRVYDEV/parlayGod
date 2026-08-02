@@ -12,6 +12,8 @@ Contracts for Robinhood Chain (Arbitrum Orbit L2, ETH gas; testnet chainId 46630
 | `IOmrOracle.sol` / `OmrTwapOracle.sol` | WALL 4's price feed. A Uniswap V2 cumulative-price **TWAP** (never spot — spot on a mint path is flash-loanable), behind a minimal swappable interface so the mint path stays reviewable and the feed can follow the canonical pool. `PERIOD` has a compile-time floor so a 30-second "TWAP" cannot be deployed; reports **no usable reading** until a full period has closed; `update()` is permissionless and **must be poked at least once per `maxOracleAge`** or bonding halts (a deliberate failure direction, and a real operational dependency). |
 | `OmertaBond.sol` | The Reserve Bond (Protocol-Owned Liquidity; design `omerta-reserve-bond-design.md`). ETH in → DISCOUNTED OMR out, vested linearly; the ETH is split (POL + dev + Vig) and forwarded in-tx (custodies no ETH). **THE ONLY MINT IN THE SYSTEM** (tokenomics v2 §4 — the Safe-funded tranche it used to draw on is gone). FOUR walls replace the tranche and all four must survive review: `dailyCapOMR` (with no tranche, this is the entire blast radius of a leaked quote-signer, and 0 means UNLIMITED), `MAX_DISCOUNT_BPS` (2000, compile-time), `maxOmrPerEth` (an ABSOLUTE post-discount mint-RATE ceiling, **fail-closed at 0**), and the **accretion `oracle`** (a TWAP the signed quote's claimed market price must agree with, also fail-closed). **The property to review is the COMPOSITION of the last two**: the effective bound is `MIN(maxOmrPerEth, oracle x (1+tolerance) / (1-discount))`, so a manipulated oracle can only ever TIGHTEN what may be minted, never loosen it — which is what makes a price feed safe on a mint path. Setting tolerance and `MAX_DISCOUNT_BPS` to zero makes the wall the design's literal "accretive-only" rule; at non-zero values it is a bounded, market-tracking dilution ceiling, and should be described as that rather than as accretion. The payout is minted at BOND time, keeping `committedOMR <= omr.balanceOf(this)` true at every instant — so `sweep` still cannot touch OMR backing an outstanding bond and a claim can never fail for want of balance. EIP-712 server-signed quotes (the VoucherClaim signer discipline); `MAX_VEST`/`MAX_QUOTE_TTL` backstops (a leaked-then-rotated signer's far-future quotes can't stay bondable); Safe-owned, pausable; `sweepETH` rescues any stray ETH to the Safe (the OmertaFees pattern). |
 
+| `OmertaHook.sol` | The Uniswap **v4 sell tax**, charged INSIDE the swap (economy v3 step 6; design `../omerta-v4-hook-design.md`). Same economics as `OMR.sol`'s transfer tax — dev/rwa/lp, same 900 bps, same 10% compile-time cap, same remainder-on-LP rule — but taken in the **quote currency**, which removes the reflexivity: the old tax collected OMR that had to be SOLD to pay anyone, and each of those sales was pressure on the pool being taxed. **BUYS ARE FREE.** Three properties an auditor should attack first: (1) `beforeInitialize` is a **pool gate** — anyone can create a pool naming this hook, so without it a stranger could stand up an (OMR, WORTHLESS) pool and emit real `SellTaxTaken` logs with real tx hashes, i.e. fabricated revenue wearing the credential the backend's anti-fabrication gate trusts; (2) the fee **accrues and is swept separately** rather than forwarded in-tx like `OmertaFees`, deliberately — three pushes inside a swap means one reverting recipient bricks the pool; (3) **there is no pause**, because a hook that can revert `beforeSwap` can halt a public market — the only lever is the rate. Permissions are mined into the address (`HOOK_FLAGS`, checked in the constructor) and are IMMUTABLE, which is why an unused `beforeSwap`/fee-override slot and an `observer` seam ship on day one. Exact-OUTPUT sells are taxed in OMR rather than the quote (v4 only lets `afterSwap` touch the unspecified currency) — parity with the tax it replaces, documented, not a bypass. |
+
 ## Test & deploy
 ```
 ./run-forge-test.sh  # one-shot: installs Foundry + deps, builds, runs the suite (recommended)
@@ -19,15 +21,18 @@ Contracts for Robinhood Chain (Arbitrum Orbit L2, ETH gas; testnet chainId 46630
 or manually:
 ```
 forge install foundry-rs/forge-std OpenZeppelin/openzeppelin-contracts   # first run only
-forge test           # 103 tests incl. four 512-run fuzzes (anti-Ponzi, sell-tax conservation,
-                     #   the four-wall mint-rate bound, TWAP decode overflow)
+forge test           # 128 tests incl. five 512-run fuzzes (anti-Ponzi, sell-tax conservation, the
+                     #   four-wall mint-rate bound, TWAP decode overflow, hook fee-split dust)
 export SAFE=0x... SIGNER=0x... RPC=https://robinhood-testnet.g.alchemy.com/v2/KEY
 forge script script/Deploy.s.sol --rpc-url $RPC --broadcast --private-key $DEPLOYER_PK
 ```
 > The suite **also runs inside the sandboxed build environment** — `./run-forge-test-sandboxed.sh`
 > (forge from the official npm dist, forge-std/OZ from npm, solc via a solc-js 0.8.26 stdio shim:
-> the same compiler version+commit as native). First executed 2026-07-23 at 73/73; **103/103 green**
-> after tokenomics v2 step 4 + the accretion oracle. The third-party audit should still re-run `./run-forge-test.sh` on an
+> the same compiler version+commit as native, plus `@uniswap/v4-core` for the hook). First executed
+> 2026-07-23 at 73/73; **128/128 green** after the v4 hook. The runner now prefers the NATIVE solc
+> binary when `binaries.soliditylang.org` is reachable — and needs it: the emscripten build runs out
+> of heap compiling v4's `PoolManager`, so on a shim-only box every suite runs EXCEPT
+> `OmertaHook.t.sol`. The third-party audit should still re-run `./run-forge-test.sh` on an
 > open-internet machine with NATIVE solc as part of its own verification.
 
 ## Server-side signing parity (for M6-B, viem)
@@ -73,7 +78,7 @@ const signature = await account.signTypedData({
 ```
 
 ## Before mainnet (non-negotiable)
-Third-party audit of all six contracts + the signing service; counsel review of Robinhood Chain ToS re: wagering-adjacent dApps; Safe signer ceremony; VoucherClaim's daily cap + OMR tranche, OmertaBond's `dailyCapOMR` + `maxOmrPerEth`, and the **per-gearId supply caps** (gear is fail-closed — no class mints until the Safe caps it) all set deliberately small for launch.
+Third-party audit of all eight contracts + the signing service; counsel review of Robinhood Chain ToS re: wagering-adjacent dApps; Safe signer ceremony; VoucherClaim's daily cap + OMR tranche, OmertaBond's `dailyCapOMR` + `maxOmrPerEth`, and the **per-gearId supply caps** (gear is fail-closed — no class mints until the Safe caps it) all set deliberately small for launch.
 
 ⚠ **Point the auditor at tokenomics v2 step 4 explicitly.** Until 2026-07-29 this suite's headline
 property was "nothing mints", and every prior review leaned on it. OMR now has a mint path and bonds

@@ -4,6 +4,16 @@ Status: **DESIGN ONLY. Chain-dormant, mainnet-gated on legal counsel + a third-p
 + `forge test`** (the M6 posture). Nothing here is wired into the critical path. This doc is the
 plan; the hook is the one piece worth prototyping first.
 
+> ⚠ **§2's trade-fee hook now COLLIDES with a built one.** `OmertaHook.sol` (economy v3 step 6,
+> `omerta-v4-hook-design.md`) is deployed-in-repo as the OMR/ETH pool's `afterSwap` hook, and a v4
+> `PoolKey` holds **exactly one** hook address — so the `OmertaTradeFeeHook` sketched below and
+> `OmertaHook` cannot both serve the canonical pool. They are different fees, not variants: this one
+> is a small cut of *every* swap's ETH leg funding the **Vig**; that one is 900 bps on **sells only**,
+> split dev/rwa/lp, with no Vig slice. The backend half of THIS design is already built and dormant
+> (`recordTradeFee`, `syncTradeFees`, `TRADE_FEE_HOOK_ADDRESS`) and is unaffected either way — what
+> needs deciding is which contract emits into it. Tracked as the founder call at
+> `omerta-v4-hook-design.md` §10.8, where the three ways out are ranked.
+
 Companion to: `omerta-phase2-vig-design.md` (the Vig), `omerta-phase4-emission-design.md` (backed
 emission), `omerta-rwa-portfolio-design.md` (R2/R3 tokenized stocks on Uniswap), `omerta-reserve-bond-design.md`
 (POL acquisition), and the chain migration doc `omerta-chain-migration-evm.md`.

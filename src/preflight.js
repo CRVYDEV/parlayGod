@@ -214,5 +214,26 @@ export function preflight(env = process.env) {
         + 'PLEX_RESPAWN_OMR with MINT_FEE_ETH/RESPAWN_FEE_ETH so both imply the same rate.');
   }
 
+  // THE SELL TAX IS WHAT MAKES A BOND A HOLD RATHER THAN AN ARBITRAGE, and nothing else in the
+  // system relates those two numbers — the discount is signed into a bond quote, the tax is charged
+  // by a different contract at a different moment. At the shipped values a bond flipped straight back
+  // through the pool returns 1.08 x 0.91 = 0.983, so it LOSES ~1.7% before five days of vest exposes
+  // it to price risk. Let the discount reach the tax and that inverts: bonding stops being capital
+  // formation and becomes a subsidy on selling, paid to the one counterparty who holds known size on
+  // a known schedule and is therefore the most motivated bypass-seeker OMR will have.
+  //
+  // A WARNING for the same reason as the rail check above — this is an economic own-goal, not an
+  // unsafe state, and a live server should not fall over because someone lowered the tax. The Foundry
+  // suite asserts the same rule from the contract side (`test/OmertaHook.t.sol`), where the two
+  // constants genuinely live in different places.
+  {
+    const disc = Number(env.BOND_DISCOUNT_BPS ?? 800); // rules.tail.js BONDS.DISCOUNT_BPS
+    const tax = Number(env.SELL_TAX_BPS ?? 900); // rules.tail.js SELL_TAX.BPS
+    if (disc >= tax)
+      warnings.push(`BOND_DISCOUNT_BPS (${disc}) is not below SELL_TAX_BPS (${tax}) — a bond flipped `
+        + 'straight back through the pool now makes money, so bonding is a subsidy on selling rather '
+        + 'than capital formation. Keep the discount strictly under the sell tax.');
+  }
+
   return { errors, warnings };
 }
