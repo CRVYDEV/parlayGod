@@ -112,11 +112,17 @@ export const CONSTANTS = {
   BUSINESS_CAP_MS: 24*3600*1000, BUSINESS_LAUNDER_HEAT: 8,
   // RECURRING SINKS — "the pad": every front owes protection + wages proportional to its income
   // (BUSINESS_UPKEEP_BPS of incomePerHr — a ~20% recurring tax that scales with the empire).
-  // Upkeep accrues on its OWN clock up to BUSINESS_UPKEEP_CAP_MS (7d) — distinct from the 24h
-  // income cap, so an ABSENT owner earns ≤24h but owes ≤7d: neglect bleeds. A front unpaid past
-  // BUSINESS_UPKEEP_COLD_MS (3d) goes COLD (no income / no launder / no upgrade) until the pad is
-  // paid. New/tunable — sim + founder sign-off before production (ground rule #1).
-  BUSINESS_UPKEEP_BPS: 2000, BUSINESS_UPKEEP_CAP_MS: 7*24*3600*1000, BUSINESS_UPKEEP_COLD_MS: 3*24*3600*1000,
+  // Upkeep accrues on its OWN clock up to BUSINESS_UPKEEP_CAP_MS — an ABSENT owner earns ≤24h and
+  // owes ≤ the cap, so neglect still bleeds. A front unpaid past BUSINESS_UPKEEP_COLD_MS (3d) goes
+  // COLD (no income / no launder / no upgrade) until the pad is paid.
+  //
+  // D6=B (founder, 2026-08-02): the cap was 7d, which put the crossover at FIVE DAYS AWAY — past it,
+  // squaring up cost more than the front could ever hand back, so the rational move on an entry-tier
+  // asset was to abandon it, and a week off is a normal thing for a player to do. A tester found it
+  // and their arithmetic was right. At 2d the pad tops out at 2× the till: neglect costs you real
+  // income and can no longer go NEGATIVE, so the pressure survives and the trap does not.
+  // BALANCE.md § THE PAD OUTRUNS THE TILL.
+  BUSINESS_UPKEEP_BPS: 2000, BUSINESS_UPKEEP_CAP_MS: 2*24*3600*1000, BUSINESS_UPKEEP_COLD_MS: 3*24*3600*1000,
   // L1b — THE PROGRESSIVE PAD (stakes/spine review #1, founder-directed): the pad rate climbs with the
   // SIZE of the empire — each front you own adds BUSINESS_UPKEEP_PROG_BPS to EVERY front's upkeep rate, so
   // a 5-front stack pays 20% + 4×5% = 40% pad (vs a 1-front's 20%). Bounds the measured passive stack
@@ -397,9 +403,16 @@ export const M4 = {
   },
   // RECURRING SINKS — crew wages ("the nut"): each corner man draws CREW_WAGE_PER_HR whether the
   // stash moves or not (you pay them to stand the corner). Wages accrue on their own clock up to
-  // CREW_WAGE_CAP_MS (7d); unpaid past CREW_WAGE_COLD_MS (3d) the crew DOWNS TOOLS (accrual stops
-  // their offline sales) until the nut is paid. New/tunable — sim + founder sign-off (ground rule #1).
-  CREW_WAGE_PER_HR: 1200, CREW_WAGE_CAP_MS: 7*24*3600*1000, CREW_WAGE_COLD_MS: 3*24*3600*1000,
+  // CREW_WAGE_CAP_MS; unpaid past CREW_WAGE_COLD_MS (3d) the crew DOWNS TOOLS (accrual stops their
+  // offline sales) until the nut is paid.
+  //
+  // D7=C (founder, 2026-08-02): the cap was 7d against an 8h offline sales window — a 21× asymmetry,
+  // sharper than the pad's, so three days away cost 0.40:1. Capping the WAGE CLOCK at 2d was chosen
+  // over raising the sales window because the window (CONSTANTS.OFFLINE_CAP_MS) governs every offline
+  // faucet in the game, so moving it is a whole-economy decision; this one is kitchen-local and
+  // changes nothing else. An attentive owner is unaffected — they were never near the cap.
+  // BALANCE.md § THE NUT.
+  CREW_WAGE_PER_HR: 1200, CREW_WAGE_CAP_MS: 2*24*3600*1000, CREW_WAGE_COLD_MS: 3*24*3600*1000,
   LAYLOW_CASH: 5000, LAYLOW_ENERGY: 25, LAYLOW_COOL: 25,
   CLEANPAPERS_OMR: 10,
   HEIST_CD_MS: 8*3600*1000,
@@ -2947,12 +2960,20 @@ export const auctionPriceAt = (a, now) => {
 //     That is RuneScape membership and EVE PLEX, and it is the honest answer to "is this pay-to-win":
 //     paying buys you a seat at tables where you can LOSE money. It buys no advantage at any of them.
 //
-//     ONE DEVIATION FROM THE DESIGN, flagged rather than taken silently. §11.2's gate list opens with
-//     "Commission eligibility" — but a Commission decree moves real gameplay surfaces (safehouse cost,
-//     war blocking, laylow cost, the fire-kill loot multiplier), so gating the VOTE on a paid
-//     subscription would be $OMR buying power, against §4.3, which the same section names as binding.
-//     Voting is therefore NOT gated here. Founder call: if the Commission should be a made-man table,
-//     it wants the decree teeth reviewed at the same time. See BALANCE.md § THE FLOAT.
+//     THE GATE LIST IS NOW STATUS ONLY — founder decision D8=C (SIGN-OFF, 2026-08-02). §11.2 listed
+//     three gates and the founder kept ONE. What went, and why: the SPEAKEASY (a club earns cash, so
+//     gating it put the subscription in front of an earning loop) and the HIGH-STAKES ACCESS STAKE
+//     (a held balance to sit at the big table is money in front of WINNING, and it also removed a
+//     table from level-30 players who already had it). COMMISSION eligibility was never built for
+//     the same reason — a decree moves real gameplay surfaces, so gating the vote would be $OMR
+//     buying power against §4.3, which the same section names as binding.
+//
+//     What remains: the badge, the upper compound (display-only — status gating status), and the
+//     pad-pays-itself convenience (the same cash, the same ledger row, one less thing to remember).
+//     That is a thinner product than §11.2 imagined, and the cost is stated rather than dressed up:
+//     the access stake existed to attach permanent, visible, LOOTABLE float to exactly the players
+//     worth hunting, and with it gone the float has to come from the loot rates alone.
+//     See BALANCE.md § THE FLOAT.
 export const MADE = {
   OMR: 20,                        // the dues
   MS: 30 * 24 * 3600 * 1000,      // 30 days, extended from later-of(now, current end) — the retainer/wire-sub precedent
@@ -4190,6 +4211,17 @@ export const RARITY = {
   // tokenId = BASE + catalogIndex * STRIDE + rarityIndex. Gear keeps 1..N (its 1-based catalog index),
   // so the three spaces cannot collide. STRIDE 10 leaves headroom for a fifth tier without a re-map.
   TOKEN: { CAR_BASE: 100000, BOAT_BASE: 200000, STRIDE: 10 },
+  // ── D5=B (founder, 2026-08-02) — THE LIFETIME SUPPLY CAP, PER TOKEN ID ────────────────────────
+  // GearVault caps every id for life and FAILS CLOSED at 0 (an uncapped class simply cannot mint),
+  // so this table is what actually bounds scarcity — the draw weights only decide how OFTEN a
+  // rarity is earned, never how many can exist. Scaled by rarity, which is the point: a cap that
+  // is generous everywhere makes the tiers cosmetic on a secondary market.
+  //
+  // This is DEPLOY CONFIG, not runtime logic — nothing in the backend reads it to gate a mint (the
+  // contract does that). It lives here so the deploy table is generated from one source rather
+  // than hand-typed 264 times, and so a new car or boat cannot ship without a cap decision.
+  // `tools/gearcaps.js` prints the table; CHAIN-DEPLOY.md §0.6 is the runbook step.
+  SUPPLY_CAP: { common: 1000, rare: 300, legendary: 60, epic: 10 },
 };
 export const rarityIdx = (id) => Math.max(0, RARITY.TIERS.findIndex((t) => t.id === id));
 export const rarityOf = (id) => RARITY.TIERS[rarityIdx(id)];

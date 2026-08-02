@@ -198,7 +198,13 @@ assert((((await meOf(chef.token)).stash.find((s) => s.drug === 'vim')?.qty) || 0
   const rules = (await call('GET', '/v1/rules')).body;
   assert.equal(rules.crew.wagePerHr, 1200, 'the public catalog carries the wage');
   assert.equal(rules.crew.coldHours, 72, 'and the cold window');
-  assert.equal(rules.crew.wageCapHours, 168, 'and the week the nut runs to (the till/envelope asymmetry)');
+  // D7=C (founder, 2026-08-02): 168h → 48h. Stated precisely, because C SOFTENS the crossover rather
+  // than removing it — only raising OFFLINE_CAP_MS would do that, and that number governs every
+  // offline faucet in the game. What the cap buys is that the loss STOPS GROWING: a hand still earns
+  // at most 8h of sales however long you are away, but now owes at most 48h of wage instead of 168h,
+  // so three days away goes 0.40:1 → 0.60:1 and a week away no longer gets any worse than three days.
+  // Absence has a floor. Read off the constant so the published figure and the clock cannot drift.
+  assert.equal(rules.crew.wageCapHours, M4.CREW_WAGE_CAP_MS / 3600000, 'and how long the nut runs');
 
   // a WORKING crew must be squared up: the nut is settled through the existing sink, then one walks
   await pool.query(`UPDATE characters SET crew_paid_at = now() - interval '5 hours' WHERE id='${chef.id}'`);

@@ -13,6 +13,7 @@
     "preflight": "node tools/preflight.js",
     "pgcheck": "node tools/pgcheck.js",
     "pgquery": "node tools/pgquery.js",
+    "gearcaps": "node tools/gearcaps.js",
     "sim": "node tools/sim.js",
     "playthrough": "node tools/playthrough.js",
     "loadtest": "node tools/loadtest.js",

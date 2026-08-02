@@ -20,6 +20,35 @@ the ones you want to change or discuss. Technical detail for any row lives in `B
 
 ---
 
+# ✅ ANSWERED — all 15, 2026-08-02
+
+Jorge answered every fork. Recorded here as the decision; the build state of each is tracked in
+`CLAUDE.md` and `BALANCE.md`.
+
+| # | answer | what it means |
+|---|---|---|
+| D1 | **A** | Fold both fees into one hook, four destinations. **A new fee on buys** — rate proposed at 20 bps, flagged for confirmation. |
+| D2 | **A** | Accept a higher mainnet withdrawal minimum and say so plainly in the copy. |
+| D3 | **A** | The early-exit toll stays at the game boundary. No contract change — this is how it is built. |
+| D4 | **A** | Bond ETH split confirmed as built: liquidity 37.5 / treasury 25 / Vig 22.5 / dev 15. |
+| D5 | **B** | NFT supply caps scale by rarity. Taking the proposed **1000 / 300 / 60 / 10** per class unless told otherwise. |
+| D6 | **B** | `BUSINESS_UPKEEP_CAP_MS` 7d → 2d. The pad can no longer outrun the till. |
+| D7 | **C** | `CREW_WAGE_CAP_MS` 7d → 2d. Kitchen-local; the offline window is untouched. |
+| D8 | **C** | Made Man gates status only. The speakeasy and high-stakes gates come off — nothing that earns or wins sits behind the subscription. |
+| D9 | **A** | Rarity weights and upgrade prices ship as they are. |
+| D10 | **A** | *(founder deferred to the recommendation)* Income assets stay out of extraction. |
+| D11 | **beyond B** | *"remove all tickers and RWA assets"* — the whole in-game Portfolio retires, not just its symbols. **My reading, stated so it can be corrected: the ETH vault STAYS**, because it is neither a ticker nor an RWA asset — the stock-layer retirement already re-denominated it to ETH. |
+| D12 | **C** | The identity NFT is not built. |
+| D13 | **B** | Give one loop its own energy cost so the bar bites. |
+| D14 | **B** | Stats matter more to the crime roll. Touches the signed curve — measured before and after. |
+| D15 | **C** | Cap bust attempts per day in-game. |
+
+**Where a letter needed a number I have proposed one rather than block**: D1's trade-fee rate, D5's
+four caps, and the size of D13/D14. Each is called out at its build site and is a one-line change if
+the number is wrong.
+
+---
+
 # 🔴 LIVE SHEET — the 15 decisions currently open (2026-08-02)
 
 Everything below is a real fork with no default. Each one is written the same way: **the situation**,

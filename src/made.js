@@ -70,9 +70,13 @@ export function madeBoard(ch, h) {
       { id: 'badge', what: 'The badge', note: 'Your name reads MADE everywhere it is shown.' },
       { id: 'estate', what: `The upper compound (tier ${MADE.ESTATE_TIER} and above)`,
         note: 'The Country Estate and beyond are for men with standing.' },
-      { id: 'speakeasy', what: 'A house of your own', note: 'Only a made man opens a club.' },
       { id: 'upkeep', what: 'The pad pays itself', note: 'Your fronts settle their own cash upkeep when you touch them — the same money, one less thing to remember.' },
     ],
+    // D8=C (founder, 2026-08-02) retired the speakeasy gate and the high-stakes access stake. Both
+    // sat in front of something that EARNS or WINS, which is the line the design names as binding,
+    // so what is left is a badge, a display-only compound tier, and one convenience that moves the
+    // same money. That is a thinner product than the design imagined and it is stated rather than
+    // dressed up — BALANCE.md carries the consequence.
     // said plainly, because it is the thing players will want to know
     buysNoPower: 'Dues buy standing and convenience. No earning loop is gated, no odds move, no stat changes. A free man runs the whole city — and can hunt you for your $OMR.',
   };

@@ -3941,3 +3941,71 @@ clothes.
 **Not a balance flag, but the number that governs supply:** each tokenId's LIFETIME cap is set by the
 Safe on `GearVault` at deploy and is fail-closed at 0 (an un-capped class simply cannot mint). That
 cap — not the weights — is what bounds how many "1978 Sedan (Epic)" can ever exist on-chain.
+
+---
+
+## THE DECISION PACKAGE — D5 / D6 / D7 / D8 / D9 (founder-answered 2026-08-02)
+
+The A/B/C sheet in `SIGN-OFF.md` was answered in full. Five of the fifteen move a signed number or a
+gate; this is the record of what changed and what it cost. The rest are elsewhere: D11 retires the
+Portfolio, D13/D14/D15 are the progression package, D1–D4 are chain decisions, D10 and D12 changed
+nothing.
+
+### D6=B — the pad can no longer outrun the till
+
+`CONSTANTS.BUSINESS_UPKEEP_CAP_MS` **7d → 2d**.
+
+A front's till holds 24h; the protection envelope ran seven days. Past **five days away** squaring up
+cost more than the front could ever hand back, so abandoning an entry-tier asset became the rational
+move after a normal week off — a tester found it and their arithmetic was exactly right. At a 2d cap
+the pad tops out at 2× the till, so neglect still costs real income (the take stopped banking at 24h
+and the front goes COLD at 3d, both unchanged) but the loss can no longer go NEGATIVE at any absence.
+
+The disclosure work and the shutter door from the earlier pass stay — they were the fix for the
+*defect*; this is the fix for the *shape*. `test/economy.js` now asserts the crossover is gone from
+the CONSTANTS at the worst case (a five-front stack on the top progressive rate), so a future retune
+that stretches the cap or steepens the pad fails by name rather than quietly restoring the trap.
+
+### D7=C — the nut is bounded, and that is all it is
+
+`M4.CREW_WAGE_CAP_MS` **7d → 2d**.
+
+Stated precisely, because C **softens** the crossover rather than removing it. A hand draws $1,200/hr
+on the wall clock while offline sales cap at 8h, and only raising `OFFLINE_CAP_MS` would close that —
+which moves every offline faucet in the game, so it was the wrong tool for a kitchen problem. What the
+cap buys is that **the loss stops growing**: three days away goes 0.40:1 → 0.60:1, and a week away is
+no longer any worse than three days. Absence has a floor. An attentive owner is unaffected; they were
+never near the cap.
+
+### D8=C — the Made Man gates status only
+
+Two gates retired: **the speakeasy** (opening a club now needs level and cash, nothing else) and **the
+high-stakes access stake** (the big table gates on level alone; `ACCESS_STAKE.HIGH_OMR` is now dead and
+marked so in the lever register). The estate tier gate and the pad-pays-itself convenience stay —
+display-only status, and the same cash through the same ledger row.
+
+**The cost, stated rather than dressed up.** The access stake was not decoration: it existed to attach
+permanent, visible, LOOTABLE float to exactly the players worth hunting, which is the mechanism v3
+step 5 was built around. With it gone that float has to come from the loot rates alone. And the
+subscription is now a thinner product than §11.2 imagined — a badge, one compound tier, one
+convenience. Both are consequences of the line the founder drew ("nothing that earns or wins"), and
+both are worth watching in the alpha rather than assuming away.
+
+Asserted from the other side in three suites, so a re-added gate fails by name: an unmade man opens a
+club (`test/made.js`, `test/speakeasy.js`), an unstaked whale sits at the big table (`test/made.js`),
+and the Madame's velvet rope is again the whole of what a low-level player needs (`test/underworld.js`).
+
+### D5=B — NFT supply caps scale by rarity
+
+`RARITY.SUPPLY_CAP` = **1000 / 300 / 60 / 10** (common / rare / legendary / epic), per token id.
+
+Deploy config rather than runtime logic — GearVault caps each id for life and fails CLOSED at zero, so
+this table is what actually bounds scarcity while the draw weights only decide how often a rarity is
+earned. `npm run gearcaps` generates the 264-row deploy table from the live catalogs (and asserts no
+two classes share an id, which would mean sharing a lifetime cap); CHAIN-DEPLOY.md consumes it. A new
+car or boat therefore cannot ship without a cap decision.
+
+### D9=A — the rarity draw and upgrade prices ship as they are
+
+70 / 22 / 6.5 / 1.5% and 25 / 90 / 300 $OMR per step. Revisit when there is a real secondary market to
+measure — scarcity is only meaningful against demand, and there is no demand yet.

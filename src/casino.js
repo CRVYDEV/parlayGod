@@ -8,7 +8,7 @@
 // round in one call); the Numbers is a daily ticket resolved lazily against the seed-drawn number.
 import crypto from 'node:crypto';
 import { GameError, bus, npcTier, bumpStanding, bumpMastery, masteryFx, ledger, notify, rngLog } from './game.js';
-import { CASINO, UNDERWORLD, MASTERY, ACCESS_STAKE, numbersDrawOf, dayOf, weekOf, levelOf, hash01, MARKET_SEED } from './rules.js';
+import { CASINO, UNDERWORLD, MASTERY, numbersDrawOf, dayOf, weekOf, levelOf, hash01, MARKET_SEED } from './rules.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
@@ -89,18 +89,19 @@ function gateBet(ch, amount, min, max) {
 // The PvE table limit, in ONE place — two copies of this expression is how the third condition
 // would have drifted between the dice table and the blackjack table.
 //
-// The HIGH-STAKES ROOM wants two things. (1) A SEAT: HIGH_LVL+, or the MADAME T2 velvet rope at any
-// level (an ACCESS perk; the table odds are untouched). (2) THE ACCESS STAKE (economy v3 §5 iii /
-// §11.5) — hold ACCESS_STAKE.HIGH_OMR STAKED, don't spend it. That is the stake's whole job: a
-// permanent, visible, LOOTABLE float attached to exactly the players worth hunting. It rides the
-// existing `staked` bucket, so there is no new schema and no new §10.4 surface, and a fire-kill
-// takes it at the COMMITTED rate — defending your seat is the game. Without the stake the table is
-// the ordinary MAX_BET whatever your level.
+// The HIGH-STAKES ROOM wants a SEAT: HIGH_LVL+, or the MADAME T2 velvet rope at any level (an ACCESS
+// perk; the table odds are untouched).
+//
+// THE ACCESS STAKE IS RETIRED — founder decision D8=C (SIGN-OFF, 2026-08-02). It asked a player to
+// hold ACCESS_STAKE.HIGH_OMR staked to sit down, which put $OMR in front of WINNING, and the same
+// design names "$OMR must never buy power" as its binding rule. It also took something away from
+// level-30 players who already had the table. The float it was built to create — permanent, visible,
+// lootable $OMR attached to whales — now has to come from the loot rates alone, which is the honest
+// cost of the decision and is recorded in BALANCE.md.
 // TRADES perk (gambling) scales the limit on top — pure ACCESS, the odds never move.
 function tableMax(ch, h) {
   const seat = levelOf(Number(ch.respect)) >= CASINO.HIGH_LVL || npcTier(h, 'madame') >= 2;
-  const staked = Number(h?.acct?.staked || 0) >= ACCESS_STAKE.HIGH_OMR;
-  return Math.floor((seat && staked ? CASINO.HIGH_MAX : CASINO.MAX_BET) * masteryFx(h, 'gambling'));
+  return Math.floor((seat ? CASINO.HIGH_MAX : CASINO.MAX_BET) * masteryFx(h, 'gambling'));
 }
 
 export async function playDice(ch, amount, client, h) {
@@ -1249,10 +1250,8 @@ export async function sweepTournaments(pool) {
 // The den's front window: yesterday's number, your open tickets, the table limits.
 export async function denInfo(pool, characterId) {
   const today = dayOf();
-  // the access stake, read off the owning account (the board must state the terms the table enforces)
-  const myStake = Number((await pool.query(
-    `SELECT COALESCE(a.staked,0) s FROM characters c JOIN account_persistent a ON a.account_id=c.account_id WHERE c.id=$1`,
-    [characterId])).rows[0]?.s || 0);
+  // (the access-stake read went with the stake itself — D8=C. The board states only the level now,
+  // which is again the whole of what the table enforces.)
   const tickets = (await pool.query('SELECT day, pick, stake FROM numbers_tickets WHERE character_id=$1 ORDER BY day', [characterId])).rows
     .map((t) => ({ day: Number(t.day), pick: Number(t.pick), stake: Number(t.stake), matured: Number(t.day) < today }));
   const week = weekOf();
@@ -1297,9 +1296,8 @@ export async function denInfo(pool, characterId) {
   return {
     district: CASINO.DISTRICT,
     dice: { minBet: CASINO.MIN_BET, maxBet: CASINO.MAX_BET, pays: '1:1 pass line',
-      // the big table's TWO conditions, both published so the client renders terms rather than guessing
-      highStakes: { level: CASINO.HIGH_LVL, maxBet: CASINO.HIGH_MAX,
-        stakeOmr: ACCESS_STAKE.HIGH_OMR, staked: myStake, stakeMet: myStake >= ACCESS_STAKE.HIGH_OMR } },
+      // the big table's one condition, published so the client renders the term rather than guessing
+      highStakes: { level: CASINO.HIGH_LVL, maxBet: CASINO.HIGH_MAX } },
     numbers: { min: CASINO.NUMBERS_MIN, max: CASINO.NUMBERS_MAX, pays: `${CASINO.NUMBERS_PAYOUT}:1`,
       yesterday: numbersDrawOf(today - 1) },
     tickets,

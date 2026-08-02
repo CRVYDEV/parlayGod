@@ -812,15 +812,31 @@ assert(((await call('POST', '/v1/business/collect', { token })).body.collected) 
   assert(biz.coldSeconds > 0 && biz.coldSeconds < CONSTANTS.BUSINESS_UPKEEP_COLD_MS / 1000,
     `but the clock is visibly running down (${biz.coldSeconds}s left of the window)`);
   assert.equal(biz.padOutran, false, 'and the till is still ahead of the pad');
-  // Six days away — the tester's exact complaint. Income stopped banking at 24h; the envelope ran the
-  // whole six days. Break-even is ~5 days (24h of take = 20% of 120h), so past it you owe more than
-  // the place can hand you. That is the deal working as written, and now the view SAYS so.
+  // Six days away — the tester's original complaint, and the assertion is now the OPPOSITE of what it
+  // was, because D6=B removed the crossover it used to prove. The envelope stops at
+  // BUSINESS_UPKEEP_CAP_MS while the till stops at BUSINESS_CAP_MS, so neglect still costs real income
+  // — the front is cold and the take was capped days ago — but squaring up can no longer cost MORE
+  // than the place can hand back, at any absence however long.
   await pool.query(`UPDATE businesses SET upkeep_at = now() - interval '6 days', last_collect_at = now() - interval '6 days' WHERE id='${bizId}'`);
   biz = (await call('GET', '/v1/business', { token })).body.businesses.find((b) => b.id === bizId);
   assert.equal(biz.cold, true, '6 days unattended → cold');
   assert.equal(biz.coldSeconds, 0, 'and the countdown is spent');
-  assert(biz.upkeepOwed > biz.pending, 'the pad HAS outrun the till (24h of take vs 6 days of envelope)');
-  assert.equal(biz.padOutran, true, 'and the view says so plainly instead of leaving the player to work it out');
+  assert(biz.upkeepOwed < biz.pending,
+    `the pad no longer outruns the till (owed ${biz.upkeepOwed} vs pending ${biz.pending})`);
+  assert.equal(biz.padOutran, false, 'so the view says the crossover has NOT happened');
+  // ...and prove it from the CONSTANTS rather than from one fixture, at the WORST case: a five-front
+  // stack pays the top progressive rate. Owed maxes at rate × capHours; the till maxes at 24h of
+  // income. If a future retune stretches the cap (or steepens the pad) back past that line, this
+  // fails by name instead of quietly restoring the trap the tester found.
+  {
+    const worstBps = CONSTANTS.BUSINESS_UPKEEP_BPS + 4 * CONSTANTS.BUSINESS_UPKEEP_PROG_BPS;
+    const padHours = (worstBps / 10000) * (CONSTANTS.BUSINESS_UPKEEP_CAP_MS / 3600000);
+    const tillHours = CONSTANTS.BUSINESS_CAP_MS / 3600000;
+    assert(padHours <= tillHours,
+      `the pad can outrun the till again: a 5-front stack owes ${padHours.toFixed(1)}h of income at the `
+      + `cap against a ${tillHours}h till. Either lower BUSINESS_UPKEEP_CAP_MS or accept the crossover `
+      + 'deliberately — D6=B chose to remove it (BALANCE.md § THE PAD OUTRUNS THE TILL).');
+  }
 
   // (3) THE DOOR. Closing up is permanent and frees the UNIQUE(character, kind) slot — which is the
   // whole point: without it a front you cannot carry bars that business kind forever.
