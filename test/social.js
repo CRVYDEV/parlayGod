@@ -1804,6 +1804,13 @@ assert(Math.abs(escNow - rhsEsc) <= 1, `bounty/contract escrow reconciles: bucke
   assert.equal((await call('POST', '/v1/districts/foundry/claim', { token: c1.token, body: { amount: 80000 } })).body.error, 'raise',
     'you cannot pull money back out of a contest you are losing your nerve on');
 
+  // THE WATCH IS A COMMITMENT, NOT A REACTION: with a contest running, the holder cannot move the
+  // hour. A contest is public the moment the first stake lands, so a holder who could still flip it
+  // would move it away from NOW and make every later stake 1.5x dearer — free, instant, and the
+  // opposite of naming a window you will actually be online for.
+  assert.equal((await call('POST', '/v1/districts/foundry/watch', { token: hb.token, body: { hour: 4 } })).body.error, 'contested',
+    'the holder cannot move the watch with somebody already at the door');
+
   // §10.4 mid-contest: the open pot is exactly what has been staked and nothing has left it yet
   const escMid = Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM district_bids WHERE district_id='foundry'`)).rows[0].s);
   assert.equal(escMid, 200000, 'the open pot holds exactly what the two families put up');
@@ -1887,6 +1894,17 @@ assert(Math.abs(escNow - rhsEsc) <= 1, `bounty/contract escrow reconciles: bucke
   assert.equal((await call('POST', '/v1/roster/enforcer', { token: rb.token, body: { memberId: heavy.id } })).body.error, 'already', 'he already holds it');
   assert.equal((await call('POST', '/v1/roster/streetboss', { token: rb.token, body: { memberId: heavy.id } })).body.error, 'settled',
     'and you cannot shuffle one good man between posts to be everywhere at once');
+  // …nor by standing him down first. The cooldown is on the MAN's last MOVE, so the free instant
+  // vacate is not a way around it — otherwise "Bagman all week, Enforcer the moment a contest opens"
+  // costs one extra click and the whole scarcity is decorative.
+  assert.equal((await call('DELETE', '/v1/roster/enforcer', { token: rb.token })).code, 200, 'the boss stands him down');
+  assert.equal((await call('POST', '/v1/roster/streetboss', { token: rb.token, body: { memberId: heavy.id } })).body.error, 'settled',
+    'standing him down is not a way around the cooldown — it is the same shuffle');
+  assert.equal((await call('POST', '/v1/roster/enforcer', { token: rb.token, body: { memberId: heavy.id } })).body.error, 'settled',
+    'not even back into the chair he just left');
+  await pool.query(`UPDATE gang_members SET post_at = now() - interval '7 hours' WHERE character_id='${heavy.id}'`);
+  assert.equal((await call('POST', '/v1/roster/enforcer', { token: rb.token, body: { memberId: heavy.id } })).code, 200,
+    'once he has settled, he takes a post again');
   // a SECOND man is what it costs to fill a second chair
   assert.equal((await call('POST', '/v1/roster/capo', { token: rb.token, body: { memberId: brain.id } })).code, 200, 'Mo takes the operations chair');
   const board1 = await roster();
@@ -1959,6 +1977,89 @@ assert(Math.abs(escNow - rhsEsc) <= 1, `bounty/contract escrow reconciles: bucke
   assert(invR.checks.find((c) => c.name === 'reason vocabulary').ok, 'the roster adds no unknown reason');
   assert(invR.checks.find((c) => c.name === 'gang treasuries').ok,
     `treasuries reconcile with a discounted pad in the mix (${JSON.stringify(invR.checks.find((c) => c.name === 'gang treasuries'))})`);
+}
+
+// ══ A LAPSED CONTEST IS SETTLED, NEVER SWEPT OFF THE TABLE (regression) ══
+// stakeClaim opens a fresh window on a district whose contest has run out. It used to DELETE the
+// stale bids first — "never trust the sweep to have run before the next challenger walks in." But a
+// lapsed-and-unresolved contest is not stale ROWS, it is other families' ESCROW: deleting it
+// vaporized their money with no refund and no burn row, which is both a silent theft and a permanent
+// §10.4 drift in the `turf contest escrow` identity. The window is real — the contest expires on its
+// own clock and the sweep runs on the worker's — so any claim landing in between hit it.
+{
+  const lh = await mk('Lapse Holder'); await seedCh(lh.id, 'respect=1000, cash=900000');
+  const lhg = (await call('POST', '/v1/gangs', { token: lh.token, body: { name: 'The Standing Order', tag: 'STO' } })).body.gangId;
+  const lx = await mk('Lapse Bidder'); await seedCh(lx.id, 'respect=1000, cash=900000');
+  const lxg = (await call('POST', '/v1/gangs', { token: lx.token, body: { name: 'The Early Callers', tag: 'ECL' } })).body.gangId;
+  const ly = await mk('Lapse Latecomer'); await seedCh(ly.id, 'respect=1000, cash=900000');
+  await call('POST', '/v1/gangs', { token: ly.token, body: { name: 'The Late Callers', tag: 'LCL' } });
+  for (const t of [lh.token, lx.token, ly.token]) await call('POST', '/v1/gangs/tribute', { token: t, body: { amount: 800000 } });
+  const ltreas = async (g) => (await call('GET', `/v1/gangs/${g}`, {})).body.gang.treasury;
+  await pool.query(`UPDATE districts SET holder_gang='${lhg}', npc_holder=NULL, garrison=20000, watch_hour=NULL, contest_until=NULL WHERE id='brick'`);
+  await pool.query(`DELETE FROM district_bids WHERE district_id='brick'`);
+
+  const xBefore = await ltreas(lxg);
+  const xStake = 120000;
+  assert.equal((await call('POST', '/v1/districts/brick/claim', { token: lx.token, body: { amount: xStake } })).code, 200,
+    'the early caller commits');
+  assert.equal(await ltreas(lxg), xBefore - xStake, 'their money is in escrow');
+
+  // the window runs out and the worker has NOT got here yet — the whole point
+  await pool.query(`UPDATE districts SET contest_until = now() - interval '1 minute' WHERE id='brick'`);
+  const lateFloor = Math.floor(Math.max(M3.SEIZE_BASE, Math.floor(xStake * M3.SEIZE_OUTBID)) * M3.WATCH_SURPRISE_MULT);
+  const late = await call('POST', '/v1/districts/brick/claim', { token: ly.token, body: { amount: lateFloor } });
+  assert.equal(late.code, 200, `the latecomer stakes on the same ground (${JSON.stringify(late.body)})`);
+
+  // the lapsed contest was SETTLED on the way in, not swept off the table: the only bidder took the
+  // district, and every dollar that left the escrow left through a ledger row.
+  const lheld = (await call('GET', '/v1/districts', {})).body.districts.find((d) => d.id === 'brick');
+  assert.equal(lheld.holder.gangId, lxg, 'the family that actually won the lapsed contest holds the ground');
+  assert.equal(lheld.garrison, xStake, 'and their stake became the garrison');
+  assert.equal(await ltreas(lxg), xBefore - xStake, "the winner's stake is spent — but it was never simply deleted");
+  const linv = await runLedgerInvariants(pool, { alert: false });
+  assert(linv.checks.find((c) => c.name === 'turf contest escrow').ok,
+    `the escrow reconciles across a lapse (${JSON.stringify(linv.checks.find((c) => c.name === 'turf contest escrow'))})`);
+  assert(linv.checks.find((c) => c.name === 'gang treasuries').ok, 'and so do the treasuries');
+  await pool.query(`UPDATE districts SET holder_gang=NULL, garrison=0, watch_hour=NULL, contest_until=NULL WHERE id='brick'`);
+  await pool.query(`DELETE FROM district_bids WHERE district_id='brick'`);
+}
+
+// ══ THE WATCH SURVIVES ITS OWN HOLDER (regression) ══
+// resolveContest clears `watch_hour` when a district changes hands, with the rule stated in the
+// code: "the new holder declares their own hour." The other two ownership-change paths did not
+// apply it — dissolution released the district with the dead family's hour still on it, and
+// seizeDistrict handed that hour to whoever took the ground next. What that costs is the whole
+// point of the mechanic: a holder is meant to CHOOSE the window they can be online for, and the
+// hour is PUBLIC, so inheriting one means an attacker reads your cheap window off the board at a
+// time your enemy picked for you.
+{
+  const wOld = await mk('Watch Keeper A'); await seedCh(wOld.id, 'respect=1000, cash=cash+900000');
+  const wog = (await call('POST', '/v1/gangs', { token: wOld.token, body: { name: 'The Old Watch', tag: 'OWT' } })).body.gangId;
+  await pool.query(
+    `UPDATE districts SET holder_gang=NULL, npc_holder=NULL, garrison=0, watch_hour=NULL, contest_until=NULL WHERE id='foundry'`);
+  await pool.query(`UPDATE districts SET holder_gang='${wog}', garrison=1000 WHERE id='foundry'`);
+  assert.equal((await call('POST', '/v1/districts/foundry/watch', { token: wOld.token, body: { hour: 7 } })).code, 200, 'the holder declares the watch');
+  const hourOf = async () => (await pool.query("SELECT watch_hour h FROM districts WHERE id='foundry'")).rows[0].h;
+  assert.equal(Number(await hourOf()), 7, 'the hour is on the district');
+
+  // (a) the family folds — the district is released, and nobody is standing ready on ground nobody holds
+  assert.equal((await call('POST', '/v1/gangs/leave', { token: wOld.token })).code, 200, 'the last man out dissolves the family');
+  assert.equal((await pool.query("SELECT holder_gang g FROM districts WHERE id='foundry'")).rows[0].g, null, 'the turf is released');
+  assert.equal(await hourOf(), null, 'and the dead family\'s watch went with it — an unheld district has nobody on watch');
+
+  // (b) the next family takes it outright and declares its OWN hour, never inherits one
+  await pool.query(`UPDATE districts SET watch_hour=3 WHERE id='foundry'`);   // the stale hour, as it used to linger
+  const wNew = await mk('Watch Taker'); await seedCh(wNew.id, 'respect=1000, cash=cash+900000');
+  const _wg = await call('POST', '/v1/gangs', { token: wNew.token, body: { name: 'The New Watch', tag: 'WTK' } });
+  assert.equal(_wg.code, 200, `the next family is founded (${JSON.stringify(_wg.body)})`);
+  const wng = _wg.body.gangId;
+  await call('POST', '/v1/gangs/tribute', { token: wNew.token, body: { amount: 300000 } });
+  const sz = await call('POST', '/v1/districts/foundry/seize', { token: wNew.token });
+  assert.equal(sz.code, 200, `the new family takes the ground (${JSON.stringify(sz.body)})`);
+  assert.equal((await pool.query("SELECT holder_gang g FROM districts WHERE id='foundry'")).rows[0].g, wng, 'they hold it');
+  assert.equal(await hourOf(), null,
+    'and they inherit NO watch — the hour is theirs to declare, not the last holder\'s to leave behind');
+  await pool.query(`UPDATE districts SET holder_gang=NULL, garrison=0, watch_hour=NULL WHERE id='foundry'`);
 }
 
 // ══ FAMILY CHARTERS (the strategy package's ASYMMETRY) ══
