@@ -19,8 +19,8 @@
 process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { MADE, ACCESS_STAKE, CASINO, DESK, recyclesToDesk, estateTierOf, SPEAKEASY,
-  BUSINESSES, PACING, businessTierOf, isMade } from '../src/rules.js';
+import { MADE, MADE_LADDER, madeRungIdx, ACCESS_STAKE, CASINO, DESK, recyclesToDesk, estateTierOf, SPEAKEASY,
+  BUSINESSES, PACING, businessTierOf, isMade, MISSIONS, CONSTANTS, CARS, TRIMS } from '../src/rules.js';
 import { upkeepBps } from '../src/business.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
@@ -59,8 +59,13 @@ assert.equal(r.code, 200, 'the board is readable by anyone');
 assert.equal(r.body.made, false, 'a nobody is not made');
 assert.equal(r.body.dues, MADE.OMR, 'the price is published');
 assert.equal(r.body.days, Math.round(MADE.MS / 86400000), 'and the window it buys');
-assert(r.body.opens.length >= 2, 'the board states what standing opens');
-assert(/no earning loop is gated/i.test(r.body.buysNoPower), 'and says plainly that it buys no power');
+assert(r.body.opens.length >= 4, 'the board states what standing opens');
+// §4.3 is retired (founder, 2026-08-02): the claim is no longer "no advantage" but "a reachable
+// ceiling", and the copy has to say the true one. Pinned so a revert to the old wording fails here.
+assert(!('buysNoPower' in r.body), 'the retired no-power claim is GONE from the board, not left to rot');
+assert(/ceiling/i.test(r.body.buysPower), 'the board makes the CEILING claim instead');
+assert(/fight/i.test(r.body.buysPower), 'and says plainly that none of it helps you fight');
+assert.equal(r.body.ceiling.topRung, MADE_LADDER.RUNGS[MADE_LADDER.RUNGS.length - 1].min, 'the ceiling is published as a number');
 
 assert.equal((await call('POST', '/v1/made', { token: don.token })).body.error, 'omr', 'you cannot be made on credit');
 await grantOmr(don.id, 100); grantDrift += 100;
@@ -98,17 +103,20 @@ assert.equal(r.body.error, 'made', `the ${estateTierOf(MADE.ESTATE_TIER).name} n
 await pool.query(`UPDATE account_persistent SET made_until = now() + interval '30 days' WHERE account_id=(SELECT account_id FROM characters WHERE id='${nobody.id}')`);
 assert.equal((await call('POST', '/v1/estate/upgrade', { token: nobody.token })).body.tier, MADE.ESTATE_TIER, 'made — the upper compound opens');
 
-// (b) A HOUSE OF YOUR OWN — NO LONGER GATED. D8=C (founder, 2026-08-02) pulled the subscription back
-// to STATUS ONLY, and a speakeasy earns cash, so the opening gate went with it. This is the assertion
-// inverted on purpose: the property now worth guarding is that the dues buy NO earning affordance, so
-// a man who has never paid one opens a club on level and cash alone.
+// (b) A HOUSE OF YOUR OWN — GATED AGAIN. D8=C had retired this on the reasoning that a club EARNS;
+// the founder then retired §4.3 itself and answered D8=D, so the gate is back. Asserted from BOTH
+// sides, because "an unmade man is refused" and "a made man gets in" can each pass alone while the
+// gate is broken in the other direction.
 const host = await mk('Hank Hostess');
 await seed(host.id, `respect=${lvlRespect(SPEAKEASY.MIN_LEVEL + 2)}, cash=${SPEAKEASY.OPEN_COST + 1000}`);
 assert.equal(isMade((await pool.query(
   `SELECT * FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${host.id}')`)).rows[0]),
 false, 'Hank has never paid a dollar of dues');
+assert.equal((await call('POST', '/v1/speakeasy/neon/open', { token: host.token })).body.error, 'made',
+  'so the room will not hand him a house — level and cash are not enough');
+await pool.query(`UPDATE account_persistent SET made_until = now() + interval '30 days' WHERE account_id=(SELECT account_id FROM characters WHERE id='${host.id}')`);
 assert.equal((await call('POST', '/v1/speakeasy/neon/open', { token: host.token })).code, 200,
-  'and the door opens anyway — the subscription gates no earning loop');
+  'and the moment he is made, the door opens — the same level, the same cash');
 
 // ═══════════════ 4. THE PAD PAYS ITSELF — and it is TIME, not POWER ═══════════════
 // The one convenience that could quietly become a discount. A made owner's fronts settle their own
@@ -150,24 +158,109 @@ assert.equal(Number(padRows[0].amount), -owed6h, 'the same amount, NOT discounte
 assert.equal(paidCollect.body.collected, freeCollect.body.collected,
   'and the INCOME is identical: standing changes who has to remember the pad, not what a front earns');
 
-// ═══════════════ 5. THE ACCESS STAKE — RETIRED, and the retirement is what is asserted ═══════════
-// D8=C (founder, 2026-08-02). The stake asked a player to hold $OMR to SIT DOWN at the big table,
-// which is money in front of winning, and it also took a table away from level-30 players who
-// already had it. The float it existed to create now has to come from the loot rates alone — the
-// honest cost of the decision, recorded in BALANCE.md rather than papered over.
-//
-// Asserted from the other side: LEVEL ALONE opens the room. If a stake requirement is ever
-// re-introduced this fails by name here instead of surfacing as a whale who cannot sit down.
+// ═══════════════ 5. THE ACCESS STAKE — BACK, and BOTH conditions are asserted ═══════════════════
+// D8=D restored it. The table wants LEVEL **and** a HELD stake, and the AND is the point: OR would
+// let a level-30 player sit down holding nothing, so the only players who ever staked would be the
+// ones with the least $OMR and the float would be worth nothing. Both directions are asserted,
+// because either half can pass alone while the gate is broken in the other.
 const whale = await mk('Wally Whale');
 await seed(whale.id, `respect=${lvlRespect(CASINO.HIGH_LVL + 5)}, cash=5000000, nerve=50, loc='${CASINO.DISTRICT}'`);
 const overTable = CASINO.MAX_BET + 1000;
 assert.equal((await meOf(whale.token)).omr, 0, 'Wally holds no $OMR at all');
 r = await call('POST', '/v1/casino/dice', { token: whale.token, body: { amount: overTable } });
-assert.equal(r.code, 200, 'and the high-stakes room opens on LEVEL alone — no stake, no dues');
-// the board publishes the one condition that remains, rather than a stake it no longer enforces
+assert.equal(r.body.error, 'max', 'level alone does NOT open the big table — the stake is the other half');
+// stake it (an ordinary in-game move, no new schema — the stake rides the existing bucket)
+await grantOmr(whale.id, ACCESS_STAKE.HIGH_OMR); grantDrift += ACCESS_STAKE.HIGH_OMR;
+assert.equal((await call('POST', '/v1/stake', { token: whale.token, body: { amount: ACCESS_STAKE.HIGH_OMR } })).code, 200, 'he stakes the seat money');
+r = await call('POST', '/v1/casino/dice', { token: whale.token, body: { amount: overTable } });
+assert.equal(r.code, 200, 'and NOW the high-stakes room opens — level AND a held stake');
+// the board publishes BOTH conditions, so the client renders terms rather than guessing
 const den = (await call('GET', '/v1/casino', { token: whale.token })).body;
 assert.equal(den.dice.highStakes.level, CASINO.HIGH_LVL, 'the board publishes the level the table wants');
-assert.equal(den.dice.highStakes.stakeOmr, undefined, 'and no longer advertises a stake it does not ask for');
+assert.equal(den.dice.highStakes.stakeOmr, ACCESS_STAKE.HIGH_OMR, 'and the stake it wants');
+assert.equal(den.dice.highStakes.stakeMet, true, 'and whether this player meets it');
+
+// ═══════════════ 5b. THE LADDER — power for HOLDING, and a CEILING that is reachable free ════════
+// §4.3 is retired, so this is the first place $OMR buys real power. Three properties, each of which
+// could fail on its own:
+//   (i)   the perks LAND — a rung has to change the number the game actually enforces, not just a board
+//   (ii)  dues are a SHORTCUT, never a gate — the ladder keys on held $OMR, and being made climbs it
+//   (iii) THE CEILING IS REACHABLE WITHOUT PAYING — the claim the player-facing copy now makes
+const top = MADE_LADDER.RUNGS[MADE_LADDER.RUNGS.length - 1];
+
+// (iii) first, because it is the claim and it is pinned against the LIVE mission table rather than a
+// remembered figure: retune either the ladder or the $OMR missions and this fails by name.
+const freeOmrLifetime = MISSIONS.reduce((n, m) => n + Number(m.reward?.omr || 0), 0);
+assert(freeOmrLifetime >= top.min,
+  `the top rung (${top.min}) is reachable on mission $OMR alone (${freeOmrLifetime} lifetime) — the CEILING claim in the copy is TRUE`);
+
+// (ii) the shortcut: identical stakes, one made, and the made man reads exactly MADE_RUNGS higher
+const climber = await mk('Cassie Climber');
+await grantOmr(climber.id, MADE_LADDER.RUNGS[1].min); grantDrift += MADE_LADDER.RUNGS[1].min;
+await call('POST', '/v1/stake', { token: climber.token, body: { amount: MADE_LADDER.RUNGS[1].min } });
+const acctOf = async (id) => (await pool.query(
+  `SELECT * FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${id}')`)).rows[0];
+const plainIdx = madeRungIdx(await acctOf(climber.id));
+assert.equal(plainIdx, 1, 'holding the second rung reads as the second rung');
+await pool.query(`UPDATE account_persistent SET made_until = now() + interval '30 days' WHERE account_id=(SELECT account_id FROM characters WHERE id='${climber.id}')`);
+// The lever is pinned SEPARATELY from the observation, because comparing the climb to MADE_RUNGS
+// alone is vacuous — zero the lever and both sides agree. (Caught by mutation: M2 survived the first
+// cut of this assertion. Same shape as the LEVEL_UP_REFILL_MAX_DAY > 0 pin.)
+assert(MADE_LADDER.MADE_RUNGS >= 1,
+  'dues climb the ladder AT ALL — MADE_RUNGS 0 makes the subscription powerless again, which is D8=C, not D8=D');
+const madeIdx = madeRungIdx(await acctOf(climber.id));
+assert(madeIdx > plainIdx, 'being made really climbs — the SAME held stake reads higher once the dues are paid');
+assert.equal(madeIdx, plainIdx + MADE_LADDER.MADE_RUNGS, '…by exactly MADE_RUNGS — a shortcut on the same ladder');
+// the shortcut can never raise the TOP: a made man at the top rung is still at the top.
+// (staked through the REAL route, not SQL — an SQL bump would fabricate $OMR and the conservation
+// check at the end of this file catches it, which is exactly what it did the first time.)
+const need = top.min - MADE_LADDER.RUNGS[1].min;
+await grantOmr(climber.id, need); grantDrift += need;
+await call('POST', '/v1/stake', { token: climber.token, body: { amount: need } });
+assert.equal(madeRungIdx(await acctOf(climber.id)), MADE_LADDER.RUNGS.length - 1,
+  'and it clamps at the top — dues get you there sooner and for less held, NEVER higher');
+
+// (i) the perks land where the game enforces them, not merely on a board
+const holder = await mk('Holly Holder');
+const plainSheet = await meOf(holder.token);
+await grantOmr(holder.id, top.min); grantDrift += top.min;
+await call('POST', '/v1/stake', { token: holder.token, body: { amount: top.min } });
+const ladSheet = await meOf(holder.token);
+assert.equal(ladSheet.ladder.rung, MADE_LADDER.RUNGS.length, 'the sheet reads the top rung');
+assert.equal(ladSheet.ladder.name, top.name, 'by name');
+assert.equal(ladSheet.cargoCap - plainSheet.cargoCap, top.trunk, 'the trunk really grew by the rung — the sheet mirrors trunkCap()');
+assert.equal(ladSheet.maxEnergy - plainSheet.maxEnergy, top.energy, 'the energy CAP grew by the rung');
+assert.equal(ladSheet.maxNerve - plainSheet.maxNerve, top.nerve, 'and the nerve cap');
+
+// the fence edge, measured at a real till against an identical twin car (carVal is deterministic
+// per model/trim, so two identical cars price identically and the ONLY difference is the ladder)
+// a car with real value, so the fence delta is a number worth asserting rather than rounding noise
+const car = [...CARS].sort((a, b) => b.val - a.val)[Math.floor(CARS.length / 2)];
+const trim = TRIMS.find((t) => t.val === 1) || TRIMS[0];
+const twin = await mk('Terry Twin');
+const putCar = (cid) => pool.query(
+  `INSERT INTO cars (id, character_id, model_id, trim_id, dmg) VALUES ('${cid}-car','${cid}','${car.id}','${trim.id}',0)`);
+await putCar(twin.id); await putCar(holder.id);
+const twinFence = await call('POST', `/v1/garage/${twin.id}-car/fence`, { token: twin.token });
+const ladFence = await call('POST', `/v1/garage/${holder.id}-car/fence`, { token: holder.token });
+assert.equal(twinFence.code, 200, 'the unstaked man fences his car');
+assert.equal(ladFence.code, 200, 'and so does the top-rung man');
+// ±1: the server floors ONCE over the whole chain while this expectation floors the twin's gross and
+// then scales it, so a single-dollar rounding gap is arithmetic, not a mechanic. A dropped multiplier
+// is a ~5% miss, which this still catches by a wide margin.
+assert(Math.abs(ladFence.body.gross - Math.floor(twinFence.body.gross * (1 + top.fenceBps / 10000))) <= 1,
+  `the top rung really pays ${top.fenceBps}bps more on the SAME car (${twinFence.body.gross} -> ${ladFence.body.gross}) — the one economic edge, on an ACTIVE loop`);
+assert(top.fenceBps > 0, 'and the top rung HAS an economic edge (D8=D) — a capacity-only ladder is D8=C');
+
+// the garage cap: seed the plain limit and check WHO is refused
+const parked = (cid, n) => Promise.all([...Array(n)].map((_, i) => pool.query(
+  `INSERT INTO cars (id, character_id, model_id, trim_id, dmg) VALUES ('${cid}-p${i}','${cid}','${car.id}','${trim.id}',0)`)));
+await parked(twin.id, CONSTANTS.GARAGE_CAP); await parked(holder.id, CONSTANTS.GARAGE_CAP);
+await seed(twin.id, 'energy=100, gta_at=NULL'); await seed(holder.id, 'energy=100, gta_at=NULL');
+assert.equal((await call('POST', '/v1/garage/boost', { token: twin.token })).body.error, 'full',
+  'a full garage refuses the unstaked man');
+assert.notEqual((await call('POST', '/v1/garage/boost', { token: holder.token })).body.error, 'full',
+  'and the ladder really parks more iron — the same fleet is not full for him');
 
 // ═══════════════ 6. §10.4 — the vocabulary is closed and the dues reconcile ═══════════════
 const inv = await runLedgerInvariants(pool, { alert: false });
@@ -180,4 +273,4 @@ const deskBacked = inv.checks.find((c) => c.name === 'desk inventory backed');
 assert(deskBacked.ok, `the shelf still reconciles with the dues on it: ${JSON.stringify(deskBacked)}`);
 
 await app.close();
-console.log('✅ THE FLOAT (economy v3 step 5) test passed — the dues are a classified sink that RECYCLES to the desk (not a burn that destroys supply), the board publishes the price/term/gates, the burn is exact and the window extends from later-of(now, end), the ONE gate left is status gating status (the upper compound) while THE PAD PAYS ITSELF deducts the same cash and writes the same ledger row for the same income (TIME, never POWER), D8=C is asserted from the other side — an unmade man opens a club and an unstaked whale sits at the big table, so nothing that earns or wins is behind the subscription — and §10.4 holds — vocabulary closed, drift == the SQL grants only');
+console.log('✅ THE FLOAT + THE LADDER (economy v3 step 5, D8=D) test passed — the dues are a classified sink that RECYCLES to the desk, the board publishes the price/term/gates and makes the CEILING claim instead of the retired no-power one, the burn is exact and the window extends from later-of(now, end), both ACCESS gates are back and asserted from BOTH sides (an unmade man is refused a club then admitted the moment he pays; level alone will not seat a whale at the big table until he HOLDS the stake), THE PAD PAYS ITSELF still deducts the same cash for the same income (TIME, never a discount), and THE LADDER is real — the top rung grows the trunk/energy/nerve caps and the garage and pays its fence edge at a real till against an identical twin car, dues climb it by exactly MADE_RUNGS and CLAMP at the top so paying is a shortcut and never a higher ceiling, and the ceiling itself is pinned against the LIVE mission table so the copy\'s claim stays true through any retune — and §10.4 holds, vocabulary closed, drift == the SQL grants only');

@@ -221,6 +221,23 @@ needs 50 $OMR staked (a change to an already-shipped affordance), and the **Comm
 level-30 players who already had it. **C** is the cleanest line if you want zero ambiguity about
 whether money buys advantage.
 
+> **✅ ANSWERED — C, then §4.3 RETIRED and D (2026-08-02).** The founder first took **C** (status
+> only). Reviewing the consequence, they then **retired the underlying rule — "$OMR may buy power" —**
+> and answered **D**: both retired ACCESS gates are back (speakeasy, the high-stakes stake, AND'ed with
+> the seat as originally designed) plus a new **MADE_LADDER** — a capped, tiered power layer keyed on
+> **HELD** $OMR, with capacity perks up the rungs and one economic edge (the fence) at the top. Dues
+> climb it by one rung as a **shortcut, never a gate**. The Commission stays UNGATED.
+>
+> The replacement for §4.3 is a **CEILING**: the top rung is 150 staked and the mission ladder pays 220
+> $OMR lifetime, pinned by `test/made.js` against the live `MISSIONS` table. No combat power at any
+> price (a loop argument — see BALANCE.md), and operating costs stay in cash. The four surfaces that
+> promised players *"no pay-to-win"* now make the ceiling claim instead, because the old one stopped
+> being true. Full reasoning, the rung table and the open items: **BALANCE.md § D8=C, THEN D8=D**.
+>
+> **For the counsel packet:** this game has real-money extraction, so the chain is now real money →
+> in-game earning power → $OMR → the withdrawal rail. A materially different posture from "pay for
+> cosmetics," and it belongs beside the bond and the Store.
+
 ---
 
 ### D9 — The rarity draw and the price of skipping it

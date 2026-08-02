@@ -12,7 +12,8 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS, RANKS,
          SOLDIERS, soldierFxOf, CLUES, clueStepOf, rollClueTier, kingpinRankOf, tycoonRankOf, racketIncomeLeveled, empireTitles, launderRankOf, frontTitles, statesmanRankOf, seasonModOf, PACING,
          carCollateralValue, carOf, MASTERY, masteryLvlOf, masteryRankOf, masteryXpFor, pathFx, pathXpMult,
          REGIMEN, disciplineLvlOf, energyCapOf, nerveCapOf, BUSINESSES, WIRE, RIVALS, CORNER, cornerTasksOf,
-         KITCHENS, labModuleCost, recyclesToDesk, DESK_RECYCLE_REASON, isMade, madeSeconds } from './rules.js';
+         KITCHENS, labModuleCost, recyclesToDesk, DESK_RECYCLE_REASON, isMade, madeSeconds,
+         MADE_LADDER, madeRungIdx, madeRungOf, ladderFx } from './rules.js';
 import { dbCaps } from './db.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
@@ -642,7 +643,8 @@ export const skillMult = (h, id, mult) => (hasSkill(h, id) ? mult : 1);
 // trunk capacity incl. the Pack Mule bonus — use this, not cargoCapacity(), on player paths
 export const trunkCap = (h) => cargoCapacity(h.owned.assets)
   + (hasSkill(h, 'pack_mule') ? SKILLS.FX.TRUNK_BONUS : 0)
-  + (hasSkill(h, 'road_boss') ? SKILLS.FX.ROAD_BOSS_TRUNK : 0); // step-two capstone: even bigger haul
+  + (hasSkill(h, 'road_boss') ? SKILLS.FX.ROAD_BOSS_TRUNK : 0) // step-two capstone: even bigger haul
+  + ladderFx(h.acct, 'trunk');                                  // THE LADDER (D8=D) — held $OMR carries more
 
 // The IN-MEMORY half of accrual. accrue() itself is pure — accrual.js makes zero database calls, it
 // only mutates the loaded rows and leaves markers (_accruedIncome, _raid, …) for the caller to write.
@@ -776,8 +778,8 @@ export function gainRespect(h, ch, rep) {
       else { ch.refill_used = used; ch.refill_at = new Date(); }
     }
     if (allow) {
-      ch.energy = energyCapOf(after, assetEnergyCap(h.owned?.assets || []), h.owned?.disciplines);
-      ch.nerve = nerveCapOf(after, h.owned?.disciplines);
+      ch.energy = energyCapOf(after, assetEnergyCap(h.owned?.assets || []), h.owned?.disciplines, ladderFx(h?.acct, 'energy'));
+      ch.nerve = nerveCapOf(after, h.owned?.disciplines, ladderFx(h?.acct, 'nerve'));
     }
   }
   if (after > before) ch._leveled = { from: before, to: after, rank: RANKS[rankIdxOf(after)].name };
@@ -1046,7 +1048,7 @@ function coachLadder(ch, acct, owned) {
   // past it, it moves to the recurring tail. Nothing here decides whether the advice is GOOD — it is —
   // only whether it may sit on top of rungs the same player could act on alone.
   const inSocialBand = (l, from) => !M3.COACH_SOCIAL_BAND_LVLS || l <= from + M3.COACH_SOCIAL_BAND_LVLS;
-  const maxEnergy = energyCapOf(lvl, assetEnergyCap(owned.assets || []), owned.disciplines);
+  const maxEnergy = energyCapOf(lvl, assetEnergyCap(owned.assets || []), owned.disciplines, ladderFx(acct, 'energy'));
   const now = Date.now();
   const future = (t) => t && new Date(t) > new Date(now);
   const onboard = typeof acct.onboard === 'string' ? JSON.parse(acct.onboard || '{}') : (acct.onboard || {});
@@ -1290,7 +1292,19 @@ export function view(ch, acct = {}, owned = {}) {
     guardSeconds: (ch.guarded_by && ch.guarded_until) ? Math.max(0, Math.ceil((new Date(ch.guarded_until) - Date.now()) / 1000)) : 0,
     loc: ch.loc, path: ch.path, title: ch.title, streak: ch.streak,
     // THE REGIMEN — stamina/composure raise the caps; one helper pair, so view/coach/accrual agree
-    maxEnergy: energyCapOf(lvl, assetEnergyCap(assets), owned.disciplines), maxNerve: nerveCapOf(lvl, owned.disciplines),
+    maxEnergy: energyCapOf(lvl, assetEnergyCap(assets), owned.disciplines, ladderFx(acct, 'energy')),
+    maxNerve: nerveCapOf(lvl, owned.disciplines, ladderFx(acct, 'nerve')),
+    // THE LADDER (D8=D) — power for HOLDING. Server-computed (the tradeRank precedent: the client
+    // never re-derives the curve), and `next` states the exact stake the next rung wants so the
+    // board can say what it costs rather than making the player work it out.
+    ladder: (() => {
+      const idx = madeRungIdx(acct), cur = madeRungOf(acct);
+      const next = MADE_LADDER.RUNGS[idx + 1] || null;
+      return { rung: idx + 1, of: MADE_LADDER.RUNGS.length, name: cur?.name || null,
+        staked: Number(acct?.staked || 0), madeRungs: MADE_LADDER.MADE_RUNGS,
+        fx: cur ? { trunk: cur.trunk, energy: cur.energy, nerve: cur.nerve, garage: cur.garage, fenceBps: cur.fenceBps } : null,
+        next: next ? { name: next.name, min: next.min, need: Math.max(0, next.min - Number(acct?.staked || 0)) } : null };
+    })(),
     disciplines: Object.fromEntries(REGIMEN.DISCIPLINES.map((d) =>
       [d.id, disciplineLvlOf(Number(owned.disciplines?.[d.id] || 0))])),
     // (red-team R5) mirror the canonical trunkCap() exactly — the display had omitted the road_boss
@@ -1300,7 +1314,8 @@ export function view(ch, acct = {}, owned = {}) {
     crewBonusPct: Math.round((Number(owned.refBonus) || 0) * 100),
     cargoCap: cargoCapacity(assets)
       + (owned.skills?.has('pack_mule') ? SKILLS.FX.TRUNK_BONUS : 0)
-      + (owned.skills?.has('road_boss') ? SKILLS.FX.ROAD_BOSS_TRUNK : 0),
+      + (owned.skills?.has('road_boss') ? SKILLS.FX.ROAD_BOSS_TRUNK : 0)
+      + ladderFx(acct, 'trunk'),   // mirror trunkCap() exactly — the R5 lesson
     skills: [...(owned.skills || [])],
     // FIVE PILLARS #1 — the honor axis (Fable): the value + tier the world reads you by, plus the
     // Tier-4 bloodline LEGEND (the dynasty's high-water honor + deepest infamy — survives death)

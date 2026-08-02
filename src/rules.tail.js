@@ -2960,20 +2960,23 @@ export const auctionPriceAt = (a, now) => {
 //     That is RuneScape membership and EVE PLEX, and it is the honest answer to "is this pay-to-win":
 //     paying buys you a seat at tables where you can LOSE money. It buys no advantage at any of them.
 //
-//     THE GATE LIST IS NOW STATUS ONLY — founder decision D8=C (SIGN-OFF, 2026-08-02). §11.2 listed
-//     three gates and the founder kept ONE. What went, and why: the SPEAKEASY (a club earns cash, so
-//     gating it put the subscription in front of an earning loop) and the HIGH-STAKES ACCESS STAKE
-//     (a held balance to sit at the big table is money in front of WINNING, and it also removed a
-//     table from level-30 players who already had it). COMMISSION eligibility was never built for
-//     the same reason — a decree moves real gameplay surfaces, so gating the vote would be $OMR
-//     buying power against §4.3, which the same section names as binding.
+//     ── §4.3 IS RETIRED. $OMR MAY BUY POWER (founder directive, 2026-08-02). ──
+//     This paragraph and the two above are kept as the RECORD of what the rule was, because ~15 sites
+//     cite it and a reader who finds one needs to know it no longer binds. D8=C had briefly narrowed
+//     the gates to status only; the founder then retired the underlying rule outright and answered
+//     D8=D, so both retired ACCESS gates are BACK (speakeasy, the high-stakes stake) and the ladder
+//     below is the power layer. What replaces §4.3 is not "anything goes" — it is a CEILING:
 //
-//     What remains: the badge, the upper compound (display-only — status gating status), and the
-//     pad-pays-itself convenience (the same cash, the same ledger row, one less thing to remember).
-//     That is a thinner product than §11.2 imagined, and the cost is stated rather than dressed up:
-//     the access stake existed to attach permanent, visible, LOOTABLE float to exactly the players
-//     worth hunting, and with it gone the float has to come from the loot rates alone.
-//     See BALANCE.md § THE FLOAT.
+//       (a) POWER IS CAPPED, and the cap is reachable without paying. That is the whole claim the
+//           player-facing copy now makes, and it is checkable rather than rhetorical — see MADE_LADDER.
+//       (b) NO POWER IN COMBAT. Not on p2w grounds, on LOOP grounds. Offensive power makes paying
+//           players predators on free ones, which empties the free population that makes the streets
+//           worth walking. Defensive power makes made men harder to rob, which directly undercuts
+//           "a free man can hunt you for your $OMR" — the loop the whole float exists to create.
+//           Combat is the one axis where power costs you the thing power is supposed to feed.
+//       (c) OPERATING COSTS STAY IN CASH. §11.2's line survives untouched: nobody must buy real
+//           money to keep earning. A ladder you may climb is a premium tier; a bill you must pay is
+//           a rented game.
 export const MADE = {
   OMR: 20,                        // the dues
   MS: 30 * 24 * 3600 * 1000,      // 30 days, extended from later-of(now, current end) — the retainer/wire-sub precedent
@@ -3001,6 +3004,57 @@ export const madeSeconds = (acct, now = Date.now()) =>
 export const ACCESS_STAKE = {
   HIGH_OMR: 50,   // the high-stakes room (CASINO.HIGH_MAX per roll) wants this much staked
 };
+
+// ═══ THE LADDER — power for HOLDING (founder decision D8=D, 2026-08-02) ═══
+// With §4.3 retired, the question stopped being "may $OMR buy power" and became "attached to WHAT".
+// The two answers do OPPOSITE things to the float, which is the problem step 5 exists to solve:
+//   • attached to the SUBSCRIPTION (spend 20, get X) → demand to SPEND. Revenue and deflation, no float.
+//   • attached to the STAKED BALANCE (hold N, get X) → demand to HOLD. That IS the float, and it is
+//     what makes OMR_LOOT_COMMITTED mean anything and killing a made man worth the ammo.
+// So the ladder keys on `account_persistent.staked`, and being made climbs it by MADE_RUNGS.
+//
+// WHY BEING MADE IS A SHORTCUT AND NOT A GATE, which is a deliberate deviation from the shape first
+// proposed to the founder and is driven by a MEASUREMENT rather than taste. $OMR has no faucet since
+// v3 step 1; a free player's lifetime supply is the mission ladder — 9 jobs, 220 $OMR, and the last
+// two need level 100. Requiring BOTH a 20/month burn AND a held stake would put the ladder out of a
+// free player's reach entirely, which would break the one claim the new player-facing copy makes.
+// As a shortcut, dues buy a real rung AND the ceiling stays reachable without paying.
+//
+// THE CEILING IS THE CLAIM, and it is checkable rather than rhetorical: the top rung is 150 staked,
+// and a free player who works the mission ladder clears it (220 lifetime; the second-from-top rung at
+// 75 lands around level 58). Paying gets you there sooner and for less held; it does not get you
+// higher. `test/made.js` pins the relation to the live MISSIONS table so a retune of either cannot
+// quietly make the copy false.
+//
+// WHAT IS DELIBERATELY ABSENT: anything in COMBAT — see the §4.3 note above for why that is a loop
+// argument, not a p2w one. The perks are CAPACITY (carry more, hold more energy/nerve, park more) plus
+// ONE economic edge at the top rung on the FENCE — an ACTIVE loop you have to boost cars to use,
+// not a passive drip, so the ladder rewards playing rather than idling. Every number is a founder
+// sign-off lever; `fenceBps` is the only one that moves a signed faucet and is sim-measured (P9.28).
+export const MADE_LADDER = {
+  // cumulative (absolute) values per rung, the GANG_SEALS/tier-ladder shape — not additive steps
+  RUNGS: [
+    { min: 10,  name: 'Earner',    trunk: 1, energy: 5,  nerve: 1, garage: 1, fenceBps: 0 },
+    { min: 30,  name: 'Operator',  trunk: 2, energy: 10, nerve: 2, garage: 2, fenceBps: 0 },
+    { min: 75,  name: 'Capo',      trunk: 3, energy: 15, nerve: 3, garage: 3, fenceBps: 250 },
+    { min: 150, name: 'Kingmaker', trunk: 4, energy: 20, nerve: 4, garage: 4, fenceBps: 500 },
+  ],
+  MADE_RUNGS: 1,   // dues climb the ladder by this many rungs — the shortcut, never a gate
+};
+// The rung INDEX (-1 = none). Pure, account-in / number-out, so every touchpoint reads one function
+// and they cannot disagree — the energyCapOf/view/accrual discipline.
+export const madeRungIdx = (acct, now = Date.now()) => {
+  const staked = Number(acct?.staked || 0);
+  let idx = -1;
+  MADE_LADDER.RUNGS.forEach((r, i) => { if (staked >= r.min) idx = i; });
+  if (isMade(acct, now)) idx += MADE_LADDER.MADE_RUNGS;
+  return Math.min(idx, MADE_LADDER.RUNGS.length - 1);
+};
+export const madeRungOf = (acct, now = Date.now()) => MADE_LADDER.RUNGS[madeRungIdx(acct, now)] || null;
+// the one accessor every perk site calls: ladderFx(acct, 'trunk') etc. 0 when off the ladder.
+export const ladderFx = (acct, key, now = Date.now()) => Number(madeRungOf(acct, now)?.[key] || 0);
+// the fence/melt multiplier, as a multiplier so it composes with the skill chain unchanged
+export const ladderFenceMult = (acct, now = Date.now()) => 1 + ladderFx(acct, 'fenceBps', now) / 10000;
 
 // ═══ TAX — the transaction tolls on the REAL-value boundary (founder-directed 2026-07-23).
 // Complements the existing tax map: in-game P2P takes already feed street_tax → the 12h BUYBACK;
@@ -3887,10 +3941,12 @@ export const disciplineLvlOf = (xp) =>
   Math.min(REGIMEN.CAP, Math.floor(Math.sqrt(Math.max(0, Number(xp) || 0) / REGIMEN.XP_DIVISOR)) + 1);
 // THE CAP HELPERS — view, the coach and accrual all read these, so the three sites cannot disagree.
 // disc is the owned.disciplines xp map (or absent — a headless caller gets the base formula).
-export const energyCapOf = (lvl, assetCap = 0, disc = null) =>
-  50 + 2 * lvl + assetCap + (disc ? disciplineLvlOf(disc.stamina || 0) - 1 : 0);
-export const nerveCapOf = (lvl, disc = null) =>
-  10 + lvl + (disc ? Math.floor((disciplineLvlOf(disc.composure || 0) - 1) / 2) : 0);
+// `ladder` is the MADE_LADDER bonus (D8=D) — passed explicitly rather than read off an account here,
+// because these are pure functions a headless caller uses with no account in hand.
+export const energyCapOf = (lvl, assetCap = 0, disc = null, ladder = 0) =>
+  50 + 2 * lvl + assetCap + (disc ? disciplineLvlOf(disc.stamina || 0) - 1 : 0) + (Number(ladder) || 0);
+export const nerveCapOf = (lvl, disc = null, ladder = 0) =>
+  10 + lvl + (disc ? Math.floor((disciplineLvlOf(disc.composure || 0) - 1) / 2) : 0) + (Number(ladder) || 0);
 // the day's drill for one fixture — seed-drawn, town-wide, forecastable (the §7.11 machinery)
 export const drillOf = (npc, day = dayOf()) => {
   const t = REGIMEN.DRILL_TASKS[Math.floor(hash01(`drill:${npc}:${day}`) * REGIMEN.DRILL_TASKS.length) % REGIMEN.DRILL_TASKS.length];

@@ -3359,6 +3359,47 @@ workflow fetch every one; mutation-verified (drop the v4-core fetch and it fails
 skip-the-entire-suite consequence). **The general shape worth remembering: a gate that fails on its
 own dependency list is worse than no gate, because a red that is always red gets read as noise.**
 
+**§4.3 IS RETIRED — $OMR MAY BUY POWER — and D8=D built the ladder (founder-directed 2026-08-02)**
+(`src/rules.tail.js` `MADE_LADDER`, `src/game.js`/`src/accrual.js`/`src/economy.js` touchpoints,
+`src/speakeasy.js`/`src/casino.js` gate restores, `test/made.js`; BALANCE.md § D8=C, THEN D8=D;
+design doc §4.3 carries a superseded banner). D8=C had narrowed the Made Man to status only; the
+founder then retired the underlying rule ("$OMR buys TIME, ACCESS and STATUS — never POWER"), which is
+cited at ~15 sites and is kept in place as the RECORD rather than deleted. **What replaces it is a
+CEILING, not a category**, in three bounds: **(1)** power is CAPPED and the cap is reachable without
+paying — the top rung is **150 staked** and the mission ladder alone pays **220 $OMR lifetime**,
+pinned by `test/made.js` against the live `MISSIONS` table so retuning either fails by name rather than
+quietly making the player-facing copy false; **(2)** NO COMBAT POWER at any price, and that is a LOOP
+argument not a fairness one — offensive power makes payers predators on the free population that makes
+the streets worth walking, defensive power undercuts *"a free man can hunt you for your $OMR"*, so
+combat is the one axis where power costs you the thing power is supposed to feed; **(3)** operating
+costs stay in CASH (§11.2 untouched — nobody must pay to keep earning).
+**THE LADDER keys on HELD $OMR, not spend**, and that is the load-bearing choice: attached to the
+subscription, power creates demand to SPEND (no float); attached to the staked balance it creates
+demand to HOLD, which IS the float and what makes `OMR_LOOT_COMMITTED` and killing a made man mean
+anything. Four rungs (10/30/75/150 staked → trunk +1..4, energy cap +5..20, nerve +1..4, garage +1..4,
+and the FENCE +2.5%/+5% at the top two). `MADE_LADDER.MADE_RUNGS` 1 — **dues climb it, never gate it**,
+a deliberate deviation from the shape first proposed and driven by a MEASUREMENT: $OMR has had no
+faucet since v3 step 1, so requiring both a 20/month burn AND a held stake would put the ladder out of
+a free player's reach and break bound (1). The economic edge is the FENCE rather than front/racket
+income (just trimmed by L1a/L1b) or the business income cap (entangled with D6, decided the same day) —
+an ACTIVE loop, so the ladder rewards playing rather than idling, composing onto the existing
+`fence_network`/`kingpin` chain as one more multiplicative term. **Both retired ACCESS gates are back**:
+the speakeasy, and the high-stakes stake **AND'ed** with the seat as originally designed (OR was
+rejected on measurement — it would let a level-30 player sit holding nothing, so only the players with
+the least $OMR would ever stake and the float would be worthless). §10.4 UNTOUCHED — caps, carry and a
+fence multiplier move no currency and add no reason. **The player-facing copy had to change**:
+`made.js:buysNoPower`, `/v1/rules.made`, the landing page and MARKETING.md all promised *"no
+pay-to-win"* and now make the ceiling claim instead; the Store's own claim is untouched and still true
+(ETH packages still grant only cosmetics/access/consumables, never $OMR). `test/made.js` asserts both
+gates from BOTH sides and proves the ladder at real tills (trunk/energy/nerve caps off the sheet, the
+garage against a full fleet, the fence against an identical twin car) — **five mutations fail by name
+and a sixth SURVIVED first**: comparing the observed climb to `MADE_RUNGS` is vacuous since zeroing the
+lever makes both sides agree, so the lever is now pinned separately (`MADE_RUNGS >= 1`, the
+`LEVEL_UP_REFILL_MAX_DAY > 0` shape). All `MADE_LADDER` numbers are founder sign-off levers.
+**Sensitive (counsel packet):** this game has real-money extraction, so the chain is now real money →
+in-game earning power → $OMR → the withdrawal rail — a materially different posture from "pay for
+cosmetics," recorded beside the bond and the Store, with the standing no-earnings-promise rule intact.
+
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
 `payPlex` pattern); named landmarks / Founder's charter numbers; ~~R2 (the `rwa_revenue` → real-RWA-buy

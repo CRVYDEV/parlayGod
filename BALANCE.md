@@ -3977,23 +3977,76 @@ cap buys is that **the loss stops growing**: three days away goes 0.40:1 → 0.6
 no longer any worse than three days. Absence has a floor. An attentive owner is unaffected; they were
 never near the cap.
 
-### D8=C — the Made Man gates status only
+### D8=C, THEN D8=D — the gates came back, and §4.3 went (founder, 2026-08-02)
 
-Two gates retired: **the speakeasy** (opening a club now needs level and cash, nothing else) and **the
-high-stakes access stake** (the big table gates on level alone; `ACCESS_STAKE.HIGH_OMR` is now dead and
-marked so in the lever register). The estate tier gate and the pad-pays-itself convenience stay —
-display-only status, and the same cash through the same ledger row.
+D8=C briefly narrowed the subscription to status only. The founder then **retired §4.3 itself — $OMR
+may buy POWER** — and answered **D8=D**, so both retired ACCESS gates are back and there is a new
+power layer. Recorded in full because §4.3 is cited at ~15 sites and a reader who finds one needs to
+know it no longer binds.
 
-**The cost, stated rather than dressed up.** The access stake was not decoration: it existed to attach
-permanent, visible, LOOTABLE float to exactly the players worth hunting, which is the mechanism v3
-step 5 was built around. With it gone that float has to come from the loot rates alone. And the
-subscription is now a thinner product than §11.2 imagined — a badge, one compound tier, one
-convenience. Both are consequences of the line the founder drew ("nothing that earns or wins"), and
-both are worth watching in the alpha rather than assuming away.
+**What replaces §4.3 is a CEILING, not a category.** Three bounds, and the first is the whole claim:
 
-Asserted from the other side in three suites, so a re-added gate fails by name: an unmade man opens a
-club (`test/made.js`, `test/speakeasy.js`), an unstaked whale sits at the big table (`test/made.js`),
-and the Madame's velvet rope is again the whole of what a low-level player needs (`test/underworld.js`).
+1. **Power is capped, and the cap is reachable without paying.** `MADE_LADDER`'s top rung is **150
+   staked**; the mission ladder alone pays **220 $OMR lifetime**. `test/made.js` pins that relation
+   against the LIVE `MISSIONS` table, so retuning either the ladder or the missions fails by name
+   rather than quietly making the player-facing copy false.
+2. **No combat power at any price** — and that is a LOOP argument, not a fairness one. Offensive power
+   makes paying players predators on free ones, which empties the free population that makes the
+   streets worth walking; defensive power makes made men harder to rob, which directly undercuts
+   *"a free man can hunt you for your $OMR"* — the loop the float exists to create. Combat is the one
+   axis where power costs you the thing power is supposed to feed.
+3. **Operating costs stay in cash.** §11.2's line is untouched: nobody must pay to keep earning. A
+   ladder you may climb is a premium tier; a bill you must pay is a rented game.
+
+**THE LADDER keys on HELD $OMR, not spend, and that is the load-bearing choice.** Attached to the
+subscription, power creates demand to SPEND (revenue and deflation, no float). Attached to the staked
+balance it creates demand to HOLD — which is the float, and what makes `OMR_LOOT_COMMITTED` mean
+anything and killing a made man worth the ammo.
+
+| Rung | Staked | Trunk | Energy cap | Nerve cap | Garage | Fence |
+|---|---|---|---|---|---|---|
+| Earner | 10 | +1 | +5 | +1 | +1 | — |
+| Operator | 30 | +2 | +10 | +2 | +2 | — |
+| Capo | 75 | +3 | +15 | +3 | +3 | +2.5% |
+| Kingmaker | 150 | +4 | +20 | +4 | +4 | +5% |
+
+`MADE_LADDER.MADE_RUNGS` = **1** — dues climb the ladder by a rung and CLAMP at the top. **A shortcut,
+never a gate**, and that is a deliberate deviation from the shape first proposed, driven by a
+measurement: $OMR has had no faucet since v3 step 1, so a free player's lifetime supply is the mission
+ladder. Requiring both a 20/month burn AND a held stake would put the ladder out of a free player's
+reach entirely and break bound 1.
+
+**The one economic edge is the FENCE**, at the top rung. Chosen over front/racket income (just trimmed
+by L1a/L1b — reopening it undoes that work) and over the business income cap (entangled with the D6
+pad decision made the same day). The fence is an ACTIVE loop — you have to boost the car — so the
+ladder rewards playing rather than idling, and it composes onto the existing `fence_network`/`kingpin`
+skill chain as one more multiplicative term. It is the only ladder number that moves a signed faucet.
+
+**The access stake is AND'ed with the seat, not OR'd**, restoring the original §11.5 shape. OR was
+considered and rejected on measurement: it would let a level-30 player sit down holding nothing, so
+the only players who ever staked would be the ones with the least $OMR and the float would be worth
+nothing. The cost is that a level-30 player who had the table before D8 must now hold to keep it —
+pre-launch that is a design choice, not a migration.
+
+**The player-facing copy changed, and had to.** `made.js:buysNoPower`, `/v1/rules.made.buysNoPower`,
+the landing page and MARKETING.md all promised *"no pay-to-win"*, which stopped being true the moment
+this shipped. All four now make the ceiling claim instead. The Store's own claim is untouched and
+still true — ETH packages still grant only cosmetics, access windows and consumables, never $OMR.
+
+**Sensitive, and flagged for the counsel packet:** this game has real-money extraction, so the chain
+is real money → in-game earning power → $OMR → the Window / the withdrawal rail. That is a materially
+different product posture from "pay for cosmetics" and belongs in front of counsel beside the bond and
+the Store, alongside the standing no-earnings-promise rule.
+
+**Asserted from both sides in three suites** (`test/made.js`, `test/speakeasy.js`,
+`test/underworld.js`): an unmade man is refused a club then admitted the moment he pays; level alone
+will not seat a whale until he holds the stake; the velvet rope is the SEAT half only. Five mutations
+each fail at their own named assertion — and a sixth SURVIVED first: comparing the observed climb to
+`MADE_RUNGS` is vacuous, since zeroing the lever makes both sides agree. The lever is now pinned
+separately (`MADE_RUNGS >= 1`), the `LEVEL_UP_REFILL_MAX_DAY > 0` shape.
+
+**Open for the alpha:** whether the fence edge wants to be bigger (it is deliberately the smallest
+change that makes the top rung worth reaching), and whether a second economic slice belongs at Capo.
 
 ### D5=B — NFT supply caps scale by rarity
 

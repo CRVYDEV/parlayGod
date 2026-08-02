@@ -139,6 +139,28 @@ Everything a payer gets is reachable by playing. Paying skips the grind. Combine
 skilled free player accumulates OMR by *taking it from payers* — which is exactly the EVE/Albion
 loop, and the honest version of "free-to-play."
 
+> ### ⚠ SUPERSEDED — §4.3 IS RETIRED (founder directive, 2026-08-02). **$OMR MAY BUY POWER.**
+>
+> The rule above is kept as the RECORD, not as a constraint: it is cited at ~15 sites and a reader
+> who finds one needs to know it no longer binds. What replaces it is not "anything goes" — it is a
+> **ceiling**, in three bounds:
+>
+> 1. **Power is CAPPED and the cap is reachable without paying.** `MADE_LADDER`'s top rung is 150
+>    staked; the mission ladder alone pays 220 $OMR lifetime, and `test/made.js` pins that relation
+>    against the live `MISSIONS` table. This is the claim the player-facing copy now makes, in place
+>    of the "no advantage" claim that stopped being true.
+> 2. **No power in COMBAT, at any price** — a LOOP argument, not a fairness one. Offensive power
+>    empties the free population; defensive power undercuts *"a free man can hunt you for your $OMR"*,
+>    the loop this whole section exists to create.
+> 3. **Operating costs stay in cash** — §11.2 below is untouched.
+>
+> The power layer is the **LADDER**, and it keys on HELD $OMR rather than spend, because that is what
+> creates a float; being made climbs it by one rung as a SHORTCUT, never a gate. Rungs, perks and the
+> reasoning are in BALANCE.md § D8=C, THEN D8=D. §11.2's three gates are all live again.
+>
+> The tester complaint quoted above is still real, and the honest answer to it changed rather than
+> disappearing: not *"paying buys no advantage"* but *"there is a ceiling and you can reach it free."*
+
 ---
 
 ## 5. THE HOLDING PROBLEM — the crux

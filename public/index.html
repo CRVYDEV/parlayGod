@@ -988,7 +988,7 @@
     <h2>TWO ECONOMIES, DELIBERATELY SEVERED</h2>
     <p>Most crypto games are built as a pipe: farm the game, convert your farm to the token, sell. Then every payout the designers add is quietly a decision about the token, and the only way to keep the token steady is to make the game stingy. OMERTÀ doesn't have the pipe. <b>Street cash cannot become $OMR — at any price, through any route.</b> Cash is the game's blood: a hundred hustles, rackets, fronts, heists, the casino, the track. It buys, bribes, arms and builds — and it stops there.</p>
     <p>What that severing buys is the rest of the design. Grinding harder can't inflate the token, so the game is free to be generous where a game should be generous. $OMR is not created in game <i>at all</i> — there is no wage, no yield and no drip, and a nightly job proves it. Every token in the city was bought with real money by somebody, which is exactly why it is worth taking off them. And the one conversion that exists runs the <i>other</i> way: burn $OMR at the Window for cash, out of a till that real sinks paid for — a claim on money that already exists, never a promise, refusing cleanly when it's dry.</p>
-    <p>It also settles a question this particular game had to answer. OMERTÀ is about risk: your street can be killed, your empire seized, your cash looted off your body. A currency that was an exit from that risk would undo the game it lives in. Severed, $OMR isn't the escape hatch from the streets — it's the thing you take to the streets. Every dollar and every $OMR lives on a built-in ledger, honest to the cent, with a conservation sweep running against it every night. No pay-to-win: a sharp player with empty pockets can top the boards over a whale who just bought in.</p>
+    <p>It also settles a question this particular game had to answer. OMERTÀ is about risk: your street can be killed, your empire seized, your cash looted off your body. A currency that was an exit from that risk would undo the game it lives in. Severed, $OMR isn't the escape hatch from the streets — it's the thing you take to the streets. Every dollar and every $OMR lives on a built-in ledger, honest to the cent, with a conservation sweep running against it every night. $OMR buys real advantage — a ladder of carry, capacity and a better fence, climbed by HOLDING it rather than spending it. What it does not buy is a higher ceiling: the top of that ladder is reachable without paying a cent, and nothing on it helps you fight. A whale who buys in gets there sooner. A sharp player with empty pockets still gets there — and can take the whale's $OMR off his body.</p>
   </div>
 
   <div class="encore"><button class="act cta" id="btn-guest2" data-i18n="e_bones">MAKE YOUR BONES →</button></div>
@@ -6012,9 +6012,17 @@
       <div class="card" style="border-color:var(--gold)"><span class="t" style="color:var(--gold)">THE MADE MAN ${me.made ? '— YOU ARE MADE' : ''}</span>
         <div class="d">${me.made
           ? `Standing runs another <b>${Math.floor((me.madeSeconds || 0) / 86400)}d</b>. Your fronts pay their own pad when you touch them.`
-          : `Pay the dues and you're <i>made</i>: the badge, the upper compound, a club of your own, and your fronts settle their own cash upkeep the moment you touch them.`}</div>
-        <div class="d" style="color:var(--dim);font-size:11.5px;margin-top:4px">It buys <b>standing, never power</b> — no earning loop is gated, no odds move, the pad is not discounted by a cent. A free man runs the whole city, and can hunt you for your $OMR.</div>
+          : `Pay the dues and you're <i>made</i>: the badge, the upper compound, a club of your own, a seat in the high-stakes room, and a rung up the ladder.`}</div>
+        <div class="d" style="color:var(--dim);font-size:11.5px;margin-top:4px">It buys <b>real advantage</b> — but there is a <b>ceiling</b>, and holding ${rules?.made?.ceilingOmr ?? 150} $OMR reaches it without paying a subscription. Nothing dues buy helps you fight. A free man runs the whole city, and can still hunt you for your $OMR.</div>
         <div class="row" style="margin-top:6px"><button data-do="POST /v1/made">${me.made ? 'ANOTHER 30 DAYS' : 'PAY THE DUES'} — ${rules?.made?.omr ?? 20} $OMR</button></div></div>
+      <div class="card"><span class="t">THE LADDER — ${me.ladder?.name || 'off the ladder'}${me.ladder?.rung ? ` (rung ${me.ladder.rung}/${me.ladder.of})` : ''}</span>
+        <div class="d">Power runs on $OMR you <b>HOLD</b>, not what you spend — ${fmt(Math.floor(me.ladder?.staked || 0))} staked.
+          ${me.ladder?.fx ? `Carrying <b>+${me.ladder.fx.trunk}</b>, energy cap <b>+${me.ladder.fx.energy}</b>, nerve <b>+${me.ladder.fx.nerve}</b>, garage <b>+${me.ladder.fx.garage}</b>${me.ladder.fx.fenceBps ? `, the fence pays <b>+${(me.ladder.fx.fenceBps / 100).toFixed(1)}%</b>` : ''}.` : 'Stake $OMR to climb it.'}</div>
+        <div class="d" style="color:var(--dim);font-size:11.5px;margin-top:4px">${me.ladder?.next
+          ? `<b>${fmt(me.ladder.next.need)}</b> more staked reaches <b>${me.ladder.next.name}</b>.`
+          : 'Top rung — nothing above this at any price.'} Being made climbs it ${me.ladder?.madeRungs ?? 1} rung as a shortcut, never higher. Staked $OMR is looted lighter than idle — but it is never safe.</div>
+        <div class="row" style="margin-top:6px"><input id="lad-amt" type="number" min="1" placeholder="$OMR to stake" size="10">
+          <button class="act" id="lad-go">stake it</button></div></div>
       <div class="card"><span class="t">${pf.dynasty?.name ? pf.dynasty.name : 'Your Book'} — $${fmt(pf.portfolio?.bookValue || 0)}</span>
         <div class="d">cost basis ${fmt(pf.portfolio?.costBasis || 0)} $OMR · liquid $OMR on hand: ${fmt(Math.floor(me.omr || 0))} · survives death (the heir keeps it)${pf.dynasty ? ` · generation ${pf.dynasty.generation}` : ''}</div>
         <div style="margin-top:4px"><input id="dyn-name" placeholder="${pf.dynasty?.name ? 'rename the dynasty' : 'name your dynasty'}" size="18" maxlength="24">
@@ -6184,6 +6192,8 @@
     } }
     $('#dyn-go').onclick = () =>
       act('POST', '/v1/dynasty/name', { name: $('#dyn-name').value.trim() }).then(() => renderPortfolio());
+    $('#lad-go').onclick = () =>
+      act('POST', '/v1/stake', { amount: Number($('#lad-amt').value) }).then(() => renderPortfolio());
     t.querySelectorAll('[data-rwabuy]').forEach((b) => b.onclick = () =>
       act('POST', '/v1/portfolio/invest', { ticker: b.dataset.rwabuy, omr: Number(t.querySelector(`[data-rwaamt="${b.dataset.rwabuy}"]`).value) }).then(() => renderPortfolio()));
     const fb = $('#rwa-fam-buy');

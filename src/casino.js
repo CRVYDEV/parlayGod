@@ -8,7 +8,7 @@
 // round in one call); the Numbers is a daily ticket resolved lazily against the seed-drawn number.
 import crypto from 'node:crypto';
 import { GameError, bus, npcTier, bumpStanding, bumpMastery, masteryFx, ledger, notify, rngLog } from './game.js';
-import { CASINO, UNDERWORLD, MASTERY, numbersDrawOf, dayOf, weekOf, levelOf, hash01, MARKET_SEED } from './rules.js';
+import { CASINO, UNDERWORLD, MASTERY, numbersDrawOf, dayOf, weekOf, levelOf, hash01, MARKET_SEED, ACCESS_STAKE } from './rules.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
@@ -92,16 +92,23 @@ function gateBet(ch, amount, min, max) {
 // The HIGH-STAKES ROOM wants a SEAT: HIGH_LVL+, or the MADAME T2 velvet rope at any level (an ACCESS
 // perk; the table odds are untouched).
 //
-// THE ACCESS STAKE IS RETIRED — founder decision D8=C (SIGN-OFF, 2026-08-02). It asked a player to
-// hold ACCESS_STAKE.HIGH_OMR staked to sit down, which put $OMR in front of WINNING, and the same
-// design names "$OMR must never buy power" as its binding rule. It also took something away from
-// level-30 players who already had the table. The float it was built to create — permanent, visible,
-// lootable $OMR attached to whales — now has to come from the loot rates alone, which is the honest
-// cost of the decision and is recorded in BALANCE.md.
+// THE ACCESS STAKE IS BACK — founder decision D8=D (SIGN-OFF, 2026-08-02), reversing D8=C. Hold
+// ACCESS_STAKE.HIGH_OMR STAKED to sit at the big table. Note what this is and is not: the stake is
+// HELD, never spent, so it generates no revenue — its whole job is to park permanent, visible,
+// LOOTABLE float on exactly the players worth hunting. And of every place to put a paid gate this is
+// the mildest: the table is somewhere you LOSE money faster at UNCHANGED odds (the edge is the same
+// at both limits), so buying the seat buys variance, not an advantage.
+// The two conditions are AND'ed, restoring the original §11.5 shape rather than a softened one. OR
+// was considered and rejected on measurement: it would let a level-30 player sit down holding
+// nothing, so the only players who ever staked for the table would be the low-level ones — exactly
+// the players with the least $OMR — and the float would be worth nothing. AND puts the stake in
+// front of the people who have it. The cost is that a level-30 player who had the table before D8
+// must now hold to keep it; pre-launch that is a design choice, not a migration.
 // TRADES perk (gambling) scales the limit on top — pure ACCESS, the odds never move.
 function tableMax(ch, h) {
   const seat = levelOf(Number(ch.respect)) >= CASINO.HIGH_LVL || npcTier(h, 'madame') >= 2;
-  return Math.floor((seat ? CASINO.HIGH_MAX : CASINO.MAX_BET) * masteryFx(h, 'gambling'));
+  const staked = Number(h?.acct?.staked || 0) >= ACCESS_STAKE.HIGH_OMR;
+  return Math.floor((seat && staked ? CASINO.HIGH_MAX : CASINO.MAX_BET) * masteryFx(h, 'gambling'));
 }
 
 export async function playDice(ch, amount, client, h) {
@@ -1250,8 +1257,12 @@ export async function sweepTournaments(pool) {
 // The den's front window: yesterday's number, your open tickets, the table limits.
 export async function denInfo(pool, characterId) {
   const today = dayOf();
-  // (the access-stake read went with the stake itself — D8=C. The board states only the level now,
-  // which is again the whole of what the table enforces.)
+  // the access stake, read off the owning account (the board must state the terms the table enforces —
+  // a board that advertises a gate the till does not ask for, or hides one it does, is the drift the
+  // client-mirror guard exists to catch)
+  const myStake = Number((await pool.query(
+    `SELECT COALESCE(a.staked,0) s FROM characters c JOIN account_persistent a ON a.account_id=c.account_id WHERE c.id=$1`,
+    [characterId])).rows[0]?.s || 0);
   const tickets = (await pool.query('SELECT day, pick, stake FROM numbers_tickets WHERE character_id=$1 ORDER BY day', [characterId])).rows
     .map((t) => ({ day: Number(t.day), pick: Number(t.pick), stake: Number(t.stake), matured: Number(t.day) < today }));
   const week = weekOf();
@@ -1296,8 +1307,9 @@ export async function denInfo(pool, characterId) {
   return {
     district: CASINO.DISTRICT,
     dice: { minBet: CASINO.MIN_BET, maxBet: CASINO.MAX_BET, pays: '1:1 pass line',
-      // the big table's one condition, published so the client renders the term rather than guessing
-      highStakes: { level: CASINO.HIGH_LVL, maxBet: CASINO.HIGH_MAX } },
+      // the big table's TWO conditions, both published so the client renders terms rather than guessing
+      highStakes: { level: CASINO.HIGH_LVL, maxBet: CASINO.HIGH_MAX,
+        stakeOmr: ACCESS_STAKE.HIGH_OMR, staked: myStake, stakeMet: myStake >= ACCESS_STAKE.HIGH_OMR } },
     numbers: { min: CASINO.NUMBERS_MIN, max: CASINO.NUMBERS_MAX, pays: `${CASINO.NUMBERS_PAYOUT}:1`,
       yesterday: numbersDrawOf(today - 1) },
     tickets,

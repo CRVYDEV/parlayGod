@@ -10,7 +10,7 @@ import {
   CONSUMABLES, RACKETS, ASSETS, GOODS, GUNS, VESTS, CONSTANTS, SKILLS, UNDERWORLD,
   levelOf, cityEventOf, dayOf, carOf, carVal, carMelt, rollCar, rollTrim,
   effStat, cargoCapacity, goodPriceOf, gearOf, gunObjOf, RACKET_EMPIRE, racketUpgradeCost, racketIncomeLeveled, tycoonRankOf,
-  seasonModOf, pathFx, rollRarity } from './rules.js';
+  seasonModOf, pathFx, rollRarity, ladderFx, ladderFenceMult } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
@@ -39,7 +39,10 @@ export async function boostCar(ch, client, h) {
   const cd = CONSTANTS.GTA_CD_MS;
   if (ch.gta_at && Date.now() < new Date(ch.gta_at).getTime() + cd)
     throw new GameError('cooldown', `The heat's still on — wait ${Math.ceil((new Date(ch.gta_at).getTime() + cd - Date.now()) / 1000)}s.`);
-  if (h.owned.cars.length >= CONSTANTS.GARAGE_CAP) throw new GameError('full', `The garage holds ${CONSTANTS.GARAGE_CAP}. Melt or fence one first.`);
+  // THE LADDER (D8=D): held $OMR parks more iron. One expression for the bound AND the message,
+  // so the refusal can never quote a number the check does not use.
+  const garageCap = CONSTANTS.GARAGE_CAP + ladderFx(h.acct, 'garage');
+  if (h.owned.cars.length >= garageCap) throw new GameError('full', `The garage holds ${garageCap}. Melt or fence one first.`);
   if (Number(ch.energy) < 10) throw new GameError('energy', 'Boosting takes 10 energy.');
   const speed = effStat(ch.speed, 'speed', h.owned.assets, h.owned.gear);
   const cunning = effStat(ch.cunning, 'cunning', h.owned.assets, h.owned.gear);
@@ -93,8 +96,11 @@ async function removeCar(client, h, carId) {
 export async function meltCar(ch, carId, client, h) {
   const car = findCar(h, carId);
   // FENCE NETWORK (skills): the operator's contacts pay better — a new modifier, sign-off lever
+  // THE LADDER (D8=D) composes onto the existing skill chain as one more multiplicative term —
+  // the one economic edge on the ladder, and it is on an ACTIVE loop (you have to boost the car).
   const yieldRounds = Math.floor(carMelt(car.model_id, car.trim_id, car.dmg)
-    * skillMult(h, 'fence_network', SKILLS.FX.FENCE_MULT) * skillMult(h, 'kingpin', SKILLS.FX.KINGPIN_MULT));
+    * skillMult(h, 'fence_network', SKILLS.FX.FENCE_MULT) * skillMult(h, 'kingpin', SKILLS.FX.KINGPIN_MULT)
+    * ladderFenceMult(h.acct));
   // §7.5: in a family, 25% of the rounds tithe to the armory and the treasury is
   // credited $30/round — atomically, in this same transaction.
   const tithe = h.owned.gangId ? Math.floor(yieldRounds * CONSTANTS.MELT_TITHE) : 0;
@@ -138,7 +144,8 @@ export async function fenceCar(ch, carId, client, h) {
   const car = findCar(h, carId);
   // FENCE NETWORK (skills): +8% on the gross — a new modifier, sign-off lever
   const gross = Math.floor(carVal(car.model_id, car.trim_id) * 0.5 * (1 - (car.dmg || 0) / 100) * (cityEventOf(dayOf()).fenceMult || 1)
-    * skillMult(h, 'fence_network', SKILLS.FX.FENCE_MULT) * skillMult(h, 'kingpin', SKILLS.FX.KINGPIN_MULT));
+    * skillMult(h, 'fence_network', SKILLS.FX.FENCE_MULT) * skillMult(h, 'kingpin', SKILLS.FX.KINGPIN_MULT)
+    * ladderFenceMult(h.acct));   // THE LADDER (D8=D) — the top rung's edge, on the same chain
   const fee = Math.ceil(gross * 0.01), tax = Math.ceil(gross * 0.01);
   const net = gross - fee - tax;
   ch.cash = Number(ch.cash) + net;

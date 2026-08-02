@@ -243,6 +243,15 @@ const SIGNED = [
   ['MADE.ESTATE_TIER', 4],
   ['MADE.MS', 2592000000],
   ['MADE.OMR', 20],
+  // THE LADDER (D8=D) — power for HOLDING. RUNGS is pinned whole (bracket-accessed leaves are
+  // invisible to the reader check, so the PARENT is the pin — the MASTERY.PERKS precedent).
+  ['MADE_LADDER.RUNGS', [
+    { min: 10,  name: 'Earner',    trunk: 1, energy: 5,  nerve: 1, garage: 1, fenceBps: 0 },
+    { min: 30,  name: 'Operator',  trunk: 2, energy: 10, nerve: 2, garage: 2, fenceBps: 0 },
+    { min: 75,  name: 'Capo',      trunk: 3, energy: 15, nerve: 3, garage: 3, fenceBps: 250 },
+    { min: 150, name: 'Kingmaker', trunk: 4, energy: 20, nerve: 4, garage: 4, fenceBps: 500 },
+  ]],
+  ['MADE_LADDER.MADE_RUNGS', 1],
   // ECONOMY v3 step 7 — THE RARITY NFTs (design §7/§9.7). The tier weights decide how scarce a
   // legendary is (and therefore what one is worth on a secondary market); the upgrade ladder is the
   // only price money pays here, and it is DETERMINISTIC by design — see the RARITY block.
@@ -756,7 +765,6 @@ const DECORATIVE = new Map([
   ['CONSTANTS.PUBLIC_WASH_CAP_DAY',     'DEAD: v2 step 2 — it capped the AMM buy side; EXCHANGE.DAILY_CAP_OMR is the live cap.'],
   ['SKILLS.CAPSTONE_COST',              'MIRROR: the field is shorthand for the hoisted `const CAPSTONE_COST`, which the TREE entries read — editing it does change every capstone cost.'],
   ['UNDERWORLD.STEP4.FAVOR_WEEKLY',     'STRUCTURAL: one favor a week is enforced by the npc_favors week primary key, not by a read.'],
-  ['ACCESS_STAKE.HIGH_OMR',            'DEAD: D8=C retired the high-stakes access stake — the table gates on LEVEL alone, so nothing reads it.'],
 ]);
 
 const unread = [];
