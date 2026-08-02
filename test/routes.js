@@ -44,6 +44,8 @@ const PUBLIC = {
   'GET /v1/online': 'the "N in the city" presence badge on the landing page',
   'GET /v1/plex/price': 'the public PLEX quote (market-linked, moves nothing)',
   'GET /v1/rules': 'the public rulebook — server stays authoritative, odds knowledge moves no roll',
+  'GET /v1/seasons': 'THE SEASON HAS AN ENDING — the clock and the roll of past champions. A deadline '
+    + 'nobody can read is not a deadline, and the record is the whole point of the arc',
   'GET /v1/u/:name': 'THE BROADCAST public profile — a share link works without an account',
   'GET /v1/ws': 'authenticates IN-BAND on connect (JWT via Sec-WebSocket-Protocol), not by preHandler',
   'GET /v1/yield': 'TOKENOMICS v2 family-yield board — a public status board (the /v1/gangs precedent)',

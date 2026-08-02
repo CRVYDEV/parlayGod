@@ -47,6 +47,10 @@ process.env.RATE_LIMIT = 'off';
 // was run is not a measurement, so the baseline is pinned. Run with SEASON_MOD=<id> to measure
 // a specific season deliberately.
 process.env.SEASON_MOD = process.env.SEASON_MOD || 'dead_quiet';
+// …and the PHASE, for the same reason: THE SEASON HAS AN ENDING makes the last week of every
+// season discount the turf floor and shorten the windows, derived from the real calendar. A run in
+// the reckoning is measuring a different game than a run in week two.
+process.env.SEASON_PHASE = process.env.SEASON_PHASE || 'long_game';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { runLedgerInvariants } from '../src/invariants.js';

@@ -11,6 +11,7 @@ import { makeDb } from './db.js';
 import { pingDb, archiverHealth } from './dbhealth.js';
 import { levelOf, dayOf, CONSTANTS, PORTFOLIO , DUELS, COMMISSION, POPULATION, FAMILY_YIELD } from './rules.js';
 import { grantShares } from './portfolio.js';
+import { recordReckoning } from './season.js';
 import { runLedgerInvariants, alertDrift } from './invariants.js';
 import { runVigInvariants } from './vig.js';
 import { carveExchange, mergeLegacyYieldPools, payFamilyYield } from './exchange.js';
@@ -137,6 +138,15 @@ export async function runSeasonRollover(pool, opts = {}) {
     rows = (await s0.query('SELECT id FROM characters WHERE alive AND season < $1 ORDER BY id', [current])).rows;
   } finally { s0.release(); }
   const prizeByChar = new Map(leaders.map((r, i) => [r.id, { rank: i + 1, omrWorth: PORTFOLIO.SEASON_PRIZES[i] }]));
+  // THE RECKONING — close the books on the season that just ENDED (current − 1) before anything is
+  // reset, so the record reads the city as it stood. Idempotent on the season PK; run only when a
+  // population actually lived through it (a fresh boot in season 100 should not invent a record for
+  // 99). Pure status — the whole write moves no currency, so it needs no txn of the loop's.
+  let reckoning = null;
+  if (rows.length && current > 0) {
+    try { reckoning = await recordReckoning(pool, current - 1); }
+    catch (e) { console.error('reckoning:', e.message); }   // a failed record must never stall the rollover
+  }
   // THE DUELING BELT — the season CHAMPION (highest-ELO active LISTED duelist rolling over this season)
   // is crowned into the account-level `duel_titles` legend (survives death, the boxing-belt precedent).
   // Snapshot the id here (a read, order-independent); the bump runs UNDER the champ's own char lock below.
@@ -198,7 +208,7 @@ export async function runSeasonRollover(pool, opts = {}) {
     for (const { id } of gs)
       await sg.query('UPDATE gangs SET season_tribute=0, season_wars=0, season=$1 WHERE id=$2 AND season < $1', [current, id]);
   } finally { sg.release(); }
-  return { season: current, converted };
+  return { season: current, converted, reckoning };
 }
 
 if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
@@ -250,6 +260,8 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     if (fy?.paid > 0) console.log(`👑 family yield: ${fy.paid} $OMR split across ${fy.families.length} famil${fy.families.length === 1 ? 'y' : 'ies'}`);
     const s = await safe('season rollover', () => runSeasonRollover(pool));
     if (s?.converted > 0) console.log(`📅 season ${s.season}: converted ${s.converted} characters`);
+    if (s?.reckoning) console.log(`🏆 season ${s.reckoning.season} closed — ${s.reckoning.champion || 'nobody'} took the city` +
+      (s.reckoning.family ? `, ${s.reckoning.family} held ${s.reckoning.districts} district(s)` : ''));
     // (economy v3 step 1: the daily street-wage epoch ran here. The faucet is retired — the game
     // prints no $OMR at all now, so there is nothing for a worker tick to pay. See src/emission.js.)
     const sw = await safe('bounty sweep', () => sweepExpiredBounties(pool));

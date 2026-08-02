@@ -51,6 +51,7 @@ import * as Underworld from './underworld.js';
 import * as Law from './law.js';
 import * as World from './world.js';
 import * as Standing from './standing.js';
+import * as Season from './season.js';
 import * as Pen from './pen.js';
 import * as Loans from './loans.js';
 import * as Portfolio from './portfolio.js';
@@ -98,7 +99,7 @@ import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, CARS, KITCHENS, TRADE_RANKS, M3, M4, PATHS,
          RANKS,
-         cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, ESTATE, AUCTION, MEGAPROJECT, CLUES, DUELS, DUEL_TITLE_RANKS, SEASON_MODS, seasonModOf, seasonIdxOf, seasonDaysLeft,
+         cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, ESTATE, AUCTION, MEGAPROJECT, CLUES, DUELS, DUEL_TITLE_RANKS, SEASON_MODS, seasonModOf, seasonIdxOf, seasonDaysLeft, SEASON_PHASES, seasonPhaseOf, seasonPhaseLeft,
          foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, PATRON, BONDS, SPEAKEASY, BOXING, RARITY,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf, syndicateOf, TERRITORY_TYPES, TERRITORY_RACKETS,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE, NOTORIETY,
@@ -980,6 +981,13 @@ export async function buildServer() {
       tickers: PORTFOLIO.TICKERS.map((t) => ({ id: t.id, name: t.name, blurb: t.blurb })) },
     estate: { nameOmr: ESTATE.NAME_OMR, tiers: ESTATE.TIERS, features: ESTATE.FEATURES, staff: ESTATE.STAFF },
     seasonMods: { pool: SEASON_MODS, note: 'one seed-drawn twist per 28-day season — the touchpoints compose on existing modifier sites' },
+    // THE SEASON HAS AN ENDING — the phases and what the last one changes, published so a player
+    // can plan against the deadline rather than discover it
+    seasonPhases: { phases: SEASON_PHASES.map((p) => ({ id: p.id, name: p.name, fromDay: p.from + 1, blurb: p.blurb })),
+      reckoning: { contestMsMult: SEASON_PHASES.find((p) => p.id === 'reckoning')?.contestMsMult,
+        floorMult: SEASON_PHASES.find((p) => p.id === 'reckoning')?.floorMult,
+        watchWindowMult: SEASON_PHASES.find((p) => p.id === 'reckoning')?.watchWindowMult },
+      note: 'the final week makes turf cheap to challenge and fast to settle — it never pays more' },
     clues: { dropP: CLUES.DROP_P, digEnergy: CLUES.DIG_ENERGY, casket: [CLUES.CASKET_MIN, CLUES.CASKET_MAX],
       cooldownHours: Math.round(CLUES.CLUE_CD_MS / 3600000), ranks: CLUES.RANKS,
       note: 'a rare drop on any successful job — a riddle trail ending in a casket' },
@@ -1975,6 +1983,10 @@ export async function buildServer() {
     };
   });
 
+  // THE SEASON HAS AN ENDING — the clock and the roll of past seasons. Keyless like /v1/city: a
+  // deadline nobody can read is not a deadline, and the record is the whole point of the arc.
+  app.get('/v1/seasons', async () => Season.seasonBoard(pool));
+
   // THE LIVING WORLD — the city you can SEE: today's two event tracks, the intraday clock, the
   // per-district economic weather, and a 7-day forecast (all pure functions of the day, so players
   // can plan). Public, no auth.
@@ -1987,9 +1999,13 @@ export async function buildServer() {
       // each district's current goods-shock (mean-neutral daily weather) — the arbitrage map
       weather: Object.fromEntries(DISTRICTS.map((d) => [d.id, Math.round(regionShockOf(d.id, Math.floor(block / 6)) * 1000) / 1000])),
       // SEASONAL MODIFIER (slate #6): this season's league twist — public, verifiable, no state
-      season: (() => { const m = seasonModOf();
+      // THE SEASON HAS AN ENDING: the twist, plus the PHASE — the clock a player plans against. A
+      // deadline nobody can read is not a deadline, so the escalation is published too.
+      season: (() => { const m = seasonModOf(), p = seasonPhaseOf();
         return { idx: seasonIdxOf(), daysLeft: seasonDaysLeft(),
-          mod: { id: m.id, name: m.name, blurb: m.blurb } }; })(),
+          mod: { id: m.id, name: m.name, blurb: m.blurb },
+          phase: { id: p.id, name: p.name, blurb: p.blurb, daysLeft: seasonPhaseLeft() },
+          reckoning: p.id === 'reckoning' }; })(),
       // THE SKYLINE — every monument the city ever raised (permanent, public — the Megaproject).
       // Cached 30s: /v1/city is a KEYLESS route and the skyline only changes on a completion.
       skyline: await cachedSkyline(),

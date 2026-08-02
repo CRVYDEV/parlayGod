@@ -10,11 +10,11 @@ Written 2026-07-25. Every number below was measured from the tree, not recalled.
 
 | | |
 |---|---|
-| Backend modules | **114** files, **37331** lines (`src/`, incl. `src/routes/` and `src/social/`) |
-| Test suites | **64** files, **24212** lines (`test/`) — ratio 0.63 test:src |
+| Backend modules | **115** files, **37547** lines (`src/`, incl. `src/routes/` and `src/social/`) |
+| Test suites | **64** files, **24315** lines (`test/`) — ratio 0.63 test:src |
 | HTTP routes | **542** registrations |
-| Database tables | **184** (`schema.sql`, 2578 lines) |
-| Client | **6,958** lines (`public/index.html`, single file, zero dependencies) |
+| Database tables | **185** (`schema.sql`, 2602 lines) |
+| Client | **6,967** lines (`public/index.html`, single file, zero dependencies) |
 | Ops dashboard + wiki | `public/admin.html`, `public/wiki.html` |
 | Smart contracts | **9** contracts, **1716** lines Solidity, **128** Foundry tests passing |
 | Harnesses | `tools/sim.js` (economy), `tools/playthrough.js` (player experience), `tools/pgcheck.js` (real Postgres), `tools/loadtest.js` (concurrency), `tools/chaos.js` (interruption), `tools/mobile.js` (the screens, at phone size), `tools/scale.js` (market liquidity at population scale), `tools/bond-dials.js` (sizing the on-chain mint walls), `tools/pgquery.js` (every SQL string parses on real Postgres) |
@@ -31,7 +31,7 @@ Everything is built on five load-bearing decisions. None has needed revision in 
 
 **`rules.js` is the constants layer, in two files.** `rules.generated.js` holds the prototype's 22 data
 tables (479 lines) and is overwritten wholesale by the extractor; `rules.tail.js` holds every helper,
-catalog, ladder and founder-signed lever (4332 lines) and the extractor never opens it. `rules.js`
+catalog, ladder and founder-signed lever (4464 lines) and the extractor never opens it. `rules.js`
 re-exports both. Nothing in `src/` hardcodes a balance number.
 
 **`withCharacter` is the transaction spine.** Every player action opens `SELECT … FOR UPDATE` on the

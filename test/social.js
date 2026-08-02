@@ -10,6 +10,12 @@ process.env.SEARCH_MS = '0';
 // visible reason — a deterministic assertion resting on a probabilistic precondition, the
 // recorded flake class. test/seasons.js is where the armed path is exercised.
 process.env.SEASON_MOD = 'dead_quiet'; // TEST-ONLY (the boot guard rejects it in production)
+// …and the same argument for the season's PHASE, which THE SEASON HAS AN ENDING made load-bearing:
+// the reckoning discounts the turf floor ×0.75, halves the contest window and halves the watch
+// window, all derived from `dayOf() % 28`. This file pins exact turf costs, so 7 days in 28 it
+// would fail with nothing changed. Found empirically by forcing SEASON_PHASE=reckoning across every
+// suite — social.js was the only one that broke, which is what "pin the precondition" means here.
+process.env.SEASON_PHASE = 'long_game';   // TEST-ONLY (boot-guard listed)
 process.env.SHOOT_CD_MS = '1000';
 process.env.MOD_KEY = 'test-mod-key'; // for the mod-kill used in the directed-pot death regression
 

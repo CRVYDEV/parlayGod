@@ -495,6 +495,18 @@ const SIGNED = [
   ['RACES.VARIANCE', 40],
   ['RACES.WAGER_MIN', 500],
   ['RACES.WHEEL_MIN_LVL', 10],
+  // THE SEASON HAS AN ENDING (strategy package) — the phase boundaries + the reckoning's escalation.
+  // A whole-object pin: the three multipliers are leaves on an array entry, invisible to the reader
+  // check on their own, so the PARENT is what is pinned (the recorded map-lever discipline).
+  ['SEASON_PHASES', [
+    { id: 'opening', name: 'The Opening', from: 0,
+      blurb: 'A fresh season. Positions are cheap and nothing is settled — take ground while it is quiet.' },
+    { id: 'long_game', name: 'The Long Game', from: 7,
+      blurb: 'The city has found its shape. Build, hold, and watch who is climbing.' },
+    { id: 'reckoning', name: 'The Reckoning', from: 21,
+      blurb: 'The last week. Turf is cheap to challenge, the windows are short and contests settle fast — whatever you are holding when the books close is what the city remembers.',
+      contestMsMult: 0.5, floorMult: 0.75, watchWindowMult: 0.5 },
+  ]],
   // THE OPERATION SLOTS (strategy package) — how much of the 31-entry income catalog one player runs
   ['OPERATIONS.SLOTS_BASE', 2],
   ['OPERATIONS.SLOTS_PER_LEVEL', 4],
