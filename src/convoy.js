@@ -12,9 +12,10 @@
 // touched by an ambush; the manifest is the contested object, not the man. The insurance CLAIM
 // therefore settles lazily in the OWNER's own collect transaction, never the ambusher's).
 import crypto from 'node:crypto';
+import { postPower } from './roster.js';
 import { GameError, bus, skillMult, trunkCap, npcMult, bumpStanding } from './game.js';
 import { CONVOY, COMMISSION, SKILLS, UNDERWORLD, NOTORIETY, guardTierOf, DISTRICTS, GOODS, goodPriceOf,
-  levelOf, rigOf, rigUpgradeCost, haulerRankOf, banditRankOf, haulerTierOf, smuggleRepPerks, pathFx } from './rules.js';
+  levelOf, rigOf, rigUpgradeCost, haulerRankOf, banditRankOf, haulerTierOf, smuggleRepPerks, pathFx, M3 } from './rules.js';
 import { activeDecree } from './commission.js';
 import { laneHeat, heatLane } from './notoriety.js';
 
@@ -223,13 +224,17 @@ export async function ambushConvoy(ch, convoyId, client, h) {
   }
   // Commission decree: LOCKDOWN — every convoy on the road fights with extra guns this week
   const lockdown = (await activeDecree(client))?.id === 'lockdown' ? COMMISSION.LOCKDOWN_DEF : 0;
+  // THE ROSTER — THE QUARTERMASTER: a family that keeps a freight man in the chair sends its runs
+  // out better armed. Zero while the post is empty or its holder is dead/jailed/hospitalized, which
+  // is how a bandit crew softens a family's whole road without touching a single shipment.
+  const qm = c.owner_gang ? await postPower(client, c.owner_gang, 'quartermaster') * M3.ROSTER_QM_GUARD_DEF : 0;
   const wear = Math.min(1, prior * CONVOY.GUARD_WEAR_BPS / 10000);
   const guardDef = Number(c.guards) * (1 - wear);
   const atk = Number(ch.muscle) + Number(ch.speed) * 0.5 + rand(30);
-  const def = guardDef + turfDef + lockdown + rand(30);
+  const def = guardDef + turfDef + lockdown + qm + rand(30);
   await h.rngLog(client, ch.id, `convoy:ambush:${convoyId}`,
     Math.round(atk * 100) / 100,
-    `${atk > def ? 'hijacked' : 'repelled'} (def ${Math.round(def * 100) / 100}${lockdown ? ', lockdown' : ''}${prior ? `, guards worn ${prior}` : ''})`);
+    `${atk > def ? 'hijacked' : 'repelled'} (def ${Math.round(def * 100) / 100}${lockdown ? ', lockdown' : ''}${qm ? `, quartermaster +${qm}` : ''}${prior ? `, guards worn ${prior}` : ''})`);
 
   if (atk > def) {
     // the WIN consumes a convoy hijack slot and wears the guards for the next crew

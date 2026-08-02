@@ -105,7 +105,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          TAX, withdrawTaxBps,
          HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, OPERATIONS, BUSINESS_EMPIRE, PACING, MASTERY,
          PATH_FX, PATH_XP_HOME, PATH_XP_RIVAL, PATH_SWITCH_CD_MS, REGIMEN, HUSTLE, CAREER, RIVALS,
-         CORNER, CONTACTS, FAVOR, MADE, MADE_LADDER, ACCESS_STAKE } from './rules.js';
+         CORNER, CONTACTS, FAVOR, MADE, MADE_LADDER, ACCESS_STAKE, ROSTER_POSTS } from './rules.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -803,6 +803,13 @@ export async function buildServer() {
   // THE WATCH — the holder declares the hour their family stands ready. Free; the cost is being there.
   app.post('/v1/districts/:id/watch', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.setWatch(ch, req.params.id, req.body?.hour, client, h)));
+  // THE ROSTER — a family's made men are a scarce resource: one post per man, one man per post.
+  app.get('/v1/roster', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => S.rosterOf(client, h.owned.gangId)));
+  app.post('/v1/roster/:post', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.assignPost(ch, req.body?.memberId, req.params.post, client, h)));
+  app.delete('/v1/roster/:post', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.vacatePost(ch, req.params.post, client, h)));
   // THE SEALED BID — a district a family holds changes hands only through the contest. Your number
   // is secret until it closes; a stake only goes up.
   app.post('/v1/districts/:id/claim', { preHandler: auth }, async (req) =>
@@ -937,6 +944,9 @@ export async function buildServer() {
     // both the window and the contest's terms without re-deriving anything.
     turf: { watchWindowH: M3.WATCH_WINDOW_H, surpriseMult: M3.WATCH_SURPRISE_MULT,
       contestMinutes: Math.round(M3.CONTEST_MS / 60000), contestLossBps: M3.CONTEST_LOSS_BPS,
+      roster: { posts: ROSTER_POSTS, minLevel: M3.ROSTER_MIN_LEVEL,
+        reassignSeconds: Math.round(M3.ROSTER_REASSIGN_CD_MS / 1000), powerMax: M3.ROSTER_POWER_MAX,
+        note: 'One post per made man, one man per post — and a post is dead while its holder is dead, in lockup or in the hospital.' },
       note: 'A district a family holds changes hands only through a sealed contest: every stake is secret until it closes, the highest takes it, the holder wins ties, and a loser forfeits part of what they put up.' },
     // ASSETS & RACKETS → Tier 4 — the upgrade axis, the tycoon ladder, the empire-set titles
     empire: { upMax: RACKET_EMPIRE.UP_MAX, upStep: RACKET_EMPIRE.UP_STEP, tycoonRanks: RACKET_EMPIRE.TYCOON_RANKS,
@@ -1291,12 +1301,15 @@ export async function buildServer() {
         'SELECT m.character_id, m.role, c.name FROM gang_members m JOIN characters c ON c.id = m.character_id WHERE m.gang_id=$1', [req.params.id])).rows;
       const held = (await client.query('SELECT id FROM districts WHERE holder_gang=$1', [req.params.id])).rows.map((d) => d.id);
       const territory = await Territory.territoryOf(client, req.params.id); // Phase 3 productive operations
+      // THE ROSTER — who this family has in which chair, and what each is worth right now. Public:
+      // the whole point is that a rival can SEE which capability to take off the board.
+      const roster = await S.rosterOf(client, req.params.id);
       // R1 — the family's legit book: a seize-resistant status flex, valued at today's price.
       const famBook = (await client.query('SELECT ticker, shares FROM gang_portfolios WHERE gang_id=$1 AND shares>0 ORDER BY ticker', [req.params.id])).rows
         .map((r) => ({ ticker: r.ticker, shares: Math.round(Number(r.shares) * 1e6) / 1e6, price: tickerPriceOf(r.ticker),
           bookValue: Math.round(Number(r.shares) * tickerPriceOf(r.ticker) * 100) / 100 }));
       await client.query('COMMIT');
-      return { gang: { id: g.id, name: g.name, tag: g.tag, color: g.color || null,
+      return { roster, gang: { id: g.id, name: g.name, tag: g.tag, color: g.color || null,
         seal: sealOf(g.seal)?.name || null, sealTier: Number(g.seal || 0),
         nextSeal: sealOf(Number(g.seal || 0) + 1) || null,
         foundation: foundationOf(g.foundation)?.name || null, foundationTier: Number(g.foundation || 0),

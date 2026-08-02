@@ -287,6 +287,18 @@ const SIGNED = [
   // "always commit everything" from being the only line a family can play.
   ['M3.CONTEST_MS', 30*60*1000],
   ['M3.CONTEST_LOSS_BPS', 5000],
+  // THE ROSTER (strategy step four) — the family's made men as scarce posts. Every effect is
+  // ADDITIVE and single-touchpoint; the scarcity is that one man fills one chair.
+  ['M3.ROSTER_MIN_LEVEL', 5],
+  ['M3.ROSTER_REASSIGN_CD_MS', 6*60*60*1000],
+  ['M3.ROSTER_POWER_DIV', 10],
+  ['M3.ROSTER_POWER_MAX', 8],
+  ['M3.ROSTER_MULT_FLOOR', 0.7],
+  ['M3.ROSTER_ENFORCER_GARRISON', 6000],
+  ['M3.ROSTER_CAPO_SCRUTINY_PER', 0.04],
+  ['M3.ROSTER_STREETBOSS_WAR_PER', 0.03],
+  ['M3.ROSTER_QM_GUARD_DEF', 3],
+  ['M3.ROSTER_BAGMAN_UPKEEP_PER', 0.03],
   ['M3.TERRITORY_SEIZE_BPS', 5000],
   ['M3.WAR_COST', 10000],
   ['M3.WAR_KILL_POINTS', 3],

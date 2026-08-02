@@ -3501,6 +3501,41 @@ Postgres. `M3.CONTEST_MS`/`CONTEST_LOSS_BPS` are founder sign-off levers (pinned
 § THE STRATEGY PACKAGE) — and the register-complete guard caught two levers this cited in prose
 (`M3.WAR_MS`, `M3.SEIZE_OUTBID`) that had never been pinned at all.
 
+**THE STRATEGY PACKAGE — step four: THE ROSTER, made men as scarce posts** (`src/roster.js` — the
+110th src module and a deliberate READ-ONLY leaf so gangs/territory/convoy can all reach it without a
+cycle; `gang_members.post`/`post_at`, `src/rules.tail.js` `M3.ROSTER_*` + `ROSTER_POSTS`,
+`assignPost`/`vacatePost`/`rosterOf` in `src/social/gangs.js`, `test/social.js`). Steps two and three
+made turf a decision about WHEN and HOW MUCH; this one is about WHO. A family's made men were
+**interchangeable** — a 20-man family and a 3-man family differed only in raw stats, and every
+collective system (turf, war, freight, the Bureau, the pad) ran with no allocation decision at all.
+Now the family fills five POSTS — **one post per man, one man per post** — so your best cunning can
+keep the Bureau off your operations OR keep the pad cheap, never both: **The Enforcer** (a rival
+stakes `ROSTER_ENFORCER_GARRISON` per power more to contest your turf), **The Caporegime** (Bureau
+scrutiny GROWS slower), **The Streetboss** (the war chest costs less), **The Quartermaster** (your
+family's convoys ride with better guns), **The Bagman** (the operations pad comes cheaper).
+**THE TEETH ARE THE LIVE GATE, NOT THE NUMBERS**: a post counts only while its holder is alive, out
+of lockup and out of the hospital — the availability test is IN the `postPower` query, so no caller
+can forget it — and the reassign cooldown sits on the **MAN**, not the chair, so a family whose
+Enforcer is taken off the board must spend a man **off the street** rather than slide one across from
+another post. Kill or jail a family's officer and their turf gets cheaper to take without touching
+the district at all; that is what makes it strategy rather than a settings screen, since the PvP
+layer that already exists is how you contest it. Every effect is ONE touchpoint and **ADDITIVE** —
+nothing a family has today gets worse, so this needed no economy retune and breaks no existing
+player; the scarcity is that filling one chair means not filling another. **§10.4 untouched**: an
+assignment moves no currency and writes no ledger row, and the two posts that are SINK DISCOUNTS
+(`gang:war`, `territory:upkeep`) ledger the DISCOUNTED number — the decree/amnesty/coalition
+discipline — so the gang-treasuries check reconciles the smaller figure exactly (asserted to the
+dollar). The roster is PUBLIC on `GET /v1/gangs/:id` on purpose: a rival is meant to see which
+capability to take off the board. Routes `GET /v1/roster`, `POST`/`DELETE /v1/roster/:post`;
+`/v1/rules.turf.roster`; a "The Posts" section on the console Family tab (per-post cards with the
+holder, an AWAY chip naming WHY the chair is dead, and boss-only post/stand-down). Three mutations,
+each caught at its own named assertion (the live gate removed; one man allowed several posts; the
+Bagman discount never reaching the till) — and the client wiring guard caught a fourth thing on its
+own: the members list carries `id`, not `characterId`, so the post picker would have sent undefined.
+All ten `M3.ROSTER_*` numbers are founder sign-off levers (pinned, tabled in BALANCE.md § THE
+STRATEGY PACKAGE) — `ROSTER_POWER_MAX` bounds what one great man is worth and `ROSTER_MULT_FLOOR` is
+the hard floor under both discounts.
+
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
 `payPlex` pattern); named landmarks / Founder's charter numbers; ~~R2 (the `rwa_revenue` → real-RWA-buy
