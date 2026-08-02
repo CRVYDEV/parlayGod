@@ -353,7 +353,17 @@ CREATE TABLE IF NOT EXISTS districts (
   garrison NUMERIC NOT NULL DEFAULT 0,
   seized_at TIMESTAMPTZ,
   npc_holder TEXT,           -- THE OCCUPATION (World step five): an apex NPC outfit garrisons this core district; a family must LIBERATE it (seizeDistrict) — the perk is dormant until then
-  watch_hour INT             -- THE WATCH (strategy package): the UTC hour the holder declares their family stands ready. NULL = no watch declared, so every hour is a surprise
+  watch_hour INT,            -- THE WATCH (strategy package): the UTC hour the holder declares their family stands ready. NULL = no watch declared, so every hour is a surprise
+  contest_until TIMESTAMPTZ  -- THE SEALED BID (strategy package): a contest is running on this district until then. NULL = no contest open
+);
+-- THE SEALED BID: one sealed stake per family per contest. Amounts are SECRET until the contest
+-- resolves — nothing reads this table for another gang's number, only for a COUNT of who's in.
+CREATE TABLE IF NOT EXISTS district_bids (
+  district_id TEXT NOT NULL,
+  gang_id TEXT NOT NULL,
+  amount NUMERIC NOT NULL DEFAULT 0,
+  at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (district_id, gang_id)
 );
 INSERT INTO districts (id) SELECT 'docks'     WHERE NOT EXISTS (SELECT 1 FROM districts WHERE id='docks');
 INSERT INTO districts (id) SELECT 'neon'      WHERE NOT EXISTS (SELECT 1 FROM districts WHERE id='neon');

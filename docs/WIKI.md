@@ -426,6 +426,15 @@ the district is the plain price; outside it, catching them cold costs **1.5x**. 
 declares a watch is dear at every hour, so declaring is what buys you the cheap window. Every declared
 hour is public on `/districts` — you are meant to plan around it, on both sides.
 
+**The sealed bid.** A district *another family holds* cannot be bought at a published price — it goes
+to a contest (`/districts/:id/claim`). Every family puts up a SECRET stake from its treasury; when the
+window closes the highest takes the district, **the holder wins ties**, and the winning stake becomes
+the new garrison. The board tells you how many families are in and never what any of them put up. A
+loser gets half of their stake back and forfeits the rest, so committing everything against a family
+that was never coming is how you lose money without losing a fight. A stake only ever goes up, and it
+leaves the treasury the moment you make it — you cannot bluff with money you have already spent. The
+watch still applies: staking outside the holder's declared window costs more just to get in.
+
 **The reserve pays for status:** **seals** (`/gangs/vanity/seal`, Wax 25 to Obsidian 1500 $OMR, a badge) and
 the **Foundation** (`/gangs/foundation`, Community Fund 60 to The Legacy 3000 $OMR). The Foundation is real
 power: it **reduces the RICO conviction chance of every member** and speeds their case bleed (only members

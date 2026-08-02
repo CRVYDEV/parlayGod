@@ -4150,3 +4150,50 @@ PERMANENTLY SHUT since it shipped: `siegeSov` threw `window` forever, and the so
 `SOV_WINDOW_OPEN=on`, which short-circuits above the broken line — **a TEST-ONLY override masking a
 dead production path**, which is the "a check that cannot fail reads exactly like a clean bill of
 health" class in its live form. Fixed in both places.
+
+### 4. THE SEALED BID — the simultaneous decision
+
+| Lever | Value | What it does |
+|---|---|---|
+| `M3.CONTEST_MS` | 1,800,000 (30 min) | how long the contest window runs (the WAR_MS precedent) |
+| `M3.CONTEST_LOSS_BPS` | 5000 (50%) | what a LOSER forfeits of what they put up |
+
+Turf's price was **public and known**: read `garrison` off the board, pay
+`max(SEIZE_BASE, garrison × SEIZE_OUTBID)`, done. The attacker always moved last with perfect
+information and the holder never moved at all — no simultaneity, no bluff, no commitment.
+
+A district **a family holds** now changes hands only through a sealed contest
+(`POST /v1/districts/:id/claim`). Every family commits a SECRET stake from the treasury; when the
+window closes the highest commitment takes the district, **the holder wins ties** (you have to beat
+a family off its own turf, not merely match it), and the winning stake becomes the new garrison — so
+defending is expensive and buys a dearer door next time. Unheld and NPC-occupied districts still
+fall to an outright claim: there is nobody on the other side to contest with.
+
+**The two cannot coexist on the same district**, and that is the load-bearing decision rather than a
+preference: if a buyout is available at price P, nobody bids above P and the contest is theatre. So
+`seizeDistrict` now refuses a player-held district outright (`contested`), and a live contest also
+freezes an unheld one — otherwise a family that had already staked could be undercut at the base
+price the moment the incumbent dissolved mid-window.
+
+**`CONTEST_LOSS_BPS` is what makes it a sealed bid rather than "always commit everything."** A loser
+gets the rest back but forfeits this share, so over-committing against a family that was never
+coming costs real money. Stakes are ESCROWED at commit time, so a bid is a commitment and not a
+bluff — you cannot threaten with treasury you have already spent, and you cannot pull it back
+(`raise`: a stake only goes up).
+
+THE WATCH composes underneath it rather than being replaced: the surprise multiplier now scales the
+**floor** under a stake rather than an instant price. Bidding outside the declared window raises what
+it costs to get into the contest at all.
+
+§10.4: three new reasons under one `turf:claim` vocabulary prefix — `turf:claim` (treasury → escrow),
+`turf:claim:refund` (a loser's kept share home) and `turf:claim:burn` (the winner's whole stake, plus
+every forfeit, leaving for good). A new **`turf contest escrow`** check reconciles the open pot
+against the ledger the market/bounty/favor way: `Σ open == staked − refunded − burned`. A family that
+dissolves mid-contest burns its whole stake (the dead-funder precedent) — its treasury is already
+gone, so there is nothing to refund and no double-count.
+
+Both numbers are founder sign-off levers. `CONTEST_MS` is the tension dial — short enough that a
+contest is a live event somebody has to answer, long enough that a holder who is not staring at the
+screen gets a chance. `CONTEST_LOSS_BPS` at 0 would make a losing stake free and collapse the bid
+back into "everyone commits their whole treasury every time."
+

@@ -17,7 +17,7 @@ import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { payFamilyYield } from '../src/exchange.js';
 import { runBuyback } from '../src/worker.js';
-import { huntWanted } from '../src/social.js';
+import { huntWanted, sweepContests } from '../src/social.js';
 import { familyTaskOf, weekOf, M3, BLACK_MARKET, bustProbOf, TERRITORY_RACKETS, territoryRankOf, territoryBuildCost, PORT, cityHourOf } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
@@ -1180,11 +1180,28 @@ const rg = (await call('POST', '/v1/gangs', { token: raider.token, body: { name:
 // WATCH_SURPRISE_MULT premium — the war chest has to cover it (that IS the mechanic).
 const raiderChest = 600000;
 assert.equal((await call('POST', '/v1/gangs/tribute', { token: raider.token, body: { amount: raiderChest } })).code, 200, 'raider funds the war chest');
-r = await call('POST', '/v1/districts/docks/seize', { token: raider.token });
-assert.equal(r.code, 200, 'the raider seized the docks');
-// sim-audit F5: the seizure carried a war premium of 50% of the t2 operation's build cost
-assert.equal(r.body.premium, Math.floor((50000 + 250000) * 0.5), 'seizing a built district costs the operation premium');
-const raiderSeize = r.body.cost;
+// THE SEALED BID: turf a FAMILY holds is no longer purchasable at a published price — an outright
+// seize is refused and the raider has to stake a claim into a sealed contest.
+assert.equal((await call('POST', '/v1/districts/docks/seize', { token: raider.token })).body.error, 'contested',
+  'a district a family holds cannot be bought outright — it goes to a contest');
+const dkGar = Number((await pool.query(`SELECT garrison FROM districts WHERE id='docks'`)).rows[0].garrison);
+const dkPremium = Math.floor((50000 + 250000) * 0.5);
+// the FLOOR carries every component the old instant price did: the outbid, the operation's war
+// premium (sim-audit F5), and — the docks holder never declared a watch — the surprise multiplier.
+const dkFloor = Math.floor((Math.max(M3.SEIZE_BASE, Math.floor(dkGar * M3.SEIZE_OUTBID)) + dkPremium) * M3.WATCH_SURPRISE_MULT);
+const dkBoard = (await call('GET', '/v1/districts', {})).body.districts.find((d) => d.id === 'docks');
+assert.equal(dkBoard.claimFloor, dkFloor, 'the public board quotes the same floor the till enforces');
+assert.equal((await call('POST', '/v1/districts/docks/claim', { token: raider.token, body: { amount: dkFloor - 1 } })).body.error, 'floor',
+  'a stake under the floor is refused');
+r = await call('POST', '/v1/districts/docks/claim', { token: raider.token, body: { amount: dkFloor } });
+assert.equal(r.code, 200, `the raider staked a claim (${JSON.stringify(r.body)})`);
+assert.equal(r.body.floor, dkFloor, 'the stake floor still carries the operation war premium');
+assert.equal(r.body.families, 1, 'one family in the contest so far');
+// nobody contested it — the window closes and the worker resolves it
+await pool.query(`UPDATE districts SET contest_until = now() - interval '1 minute' WHERE id='docks'`);
+const dkRes = await sweepContests(pool);
+assert.equal(dkRes.seized, 1, 'the closed contest changed the district hands');
+const raiderSeize = dkFloor;
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM territory_rackets WHERE district_id='docks' AND owner_gang='${rg}'`)).rows[0].n), 1, 'the operation transferred to the victor with the turf');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM territory_rackets WHERE owner_gang='${gangA}'`)).rows[0].n), 0, 'the loser no longer owns it');
 // the victor now earns the operation's income at the tier-2 rate
@@ -1619,8 +1636,13 @@ assert(Math.abs(escNow - rhsEsc) <= 1, `bounty/contract escrow reconciles: bucke
   assert.equal(boardOn.watch.open, true, 'the board says the window is open');
   assert.equal(boardOn.watch.surpriseMult, 1, 'and that the price is plain right now');
 
-  const onCost = (await call('POST', '/v1/districts/cathedral/seize', { token: grab.token })).body.cost;
+  // the watch scales what it COSTS to come for the district — which since THE SEALED BID is the
+  // floor under a stake, not an instant price. Same number, one layer down.
+  const onCost = (await call('POST', '/v1/districts/cathedral/claim', { token: grab.token, body: { amount: 45000 } })).body.floor;
   assert.equal(onCost, 45000, `taking it ON the watch is the plain outbid price (saw ${onCost})`);
+  // nobody answered — the Cold Callers take it when the window closes
+  await pool.query(`UPDATE districts SET contest_until = now() - interval '1 minute' WHERE id='cathedral'`);
+  assert.equal((await sweepContests(pool)).seized, 1, 'the uncontested claim carried the district');
 
   // …now the same district, same garrison, OUTSIDE the declared window: the surprise premium.
   // Declaring an hour a comfortable distance from now (the window is WATCH_WINDOW_H long).
@@ -1629,7 +1651,8 @@ assert(Math.abs(escNow - rhsEsc) <= 1, `bounty/contract escrow reconciles: bucke
   await pool.query(`UPDATE districts SET holder_gang='${gg}', garrison=30000, watch_hour=${offHr} WHERE id='cathedral'`);
   const boardOff = (await call('GET', '/v1/districts', {})).body.districts.find((d) => d.id === 'cathedral');
   assert.equal(boardOff.watch.open, false, 'half a day from the declared hour, the window is shut');
-  const offCost = (await call('POST', '/v1/districts/cathedral/seize', { token: hold.token })).body.cost;
+  assert.equal(boardOff.claimFloor, Math.floor(onCost * M3.WATCH_SURPRISE_MULT), 'and the board quotes the surprise premium');
+  const offCost = (await call('POST', '/v1/districts/cathedral/claim', { token: hold.token, body: { amount: 200000 } })).body.floor;
   assert.equal(offCost, Math.floor(onCost * M3.WATCH_SURPRISE_MULT),
     `catching them cold costs WATCH_SURPRISE_MULT more (saw ${offCost}, want ${Math.floor(onCost * M3.WATCH_SURPRISE_MULT)})`);
   assert(offCost > onCost, 'and the premium is a real cost, not a rounding artefact');
@@ -1637,10 +1660,112 @@ assert(Math.abs(escNow - rhsEsc) <= 1, `bounty/contract escrow reconciles: bucke
   // §10.4: the multiplier scales the EXISTING turf:seize sink — no new reason, so the vocabulary
   // is closed and the treasury check reconciles the bigger number exactly like the smaller one.
   const seizeRows = Number((await pool.query(
-    `SELECT COUNT(*) n FROM transactions WHERE reason LIKE 'turf:seize:%' AND counterparty IN ('${hg}','${gg}')`)).rows[0].n);
-  assert.equal(seizeRows, 2, 'both takes ledgered under the existing turf:seize reason');
+    `SELECT COUNT(*) n FROM transactions WHERE reason LIKE 'turf:claim%' AND counterparty IN ('${hg}','${gg}')`)).rows[0].n);
+  assert(seizeRows >= 2, 'both takes ledgered under the turf:claim escrow reasons');
   const invW = await runLedgerInvariants(pool, { alert: false });
   assert(invW.checks.find((c) => c.name === 'reason vocabulary').ok, 'the watch adds no unknown reason');
+}
+
+
+// ══ THE SEALED BID (the strategy package's SIMULTANEOUS DECISION) ══
+// Turf's price was PUBLIC and known — read the garrison, pay the outbid, done. Nobody ever moved at
+// the same time as anybody else. A district a family holds now changes hands only through a sealed
+// contest. What has to hold: the outright buy is REFUSED on held turf (the two cannot coexist —
+// a buyout at price P means nobody bids above P), every stake is escrowed so it is a COMMITMENT and
+// not a bluff, the DEFENDER takes a tie, a loser forfeits CONTEST_LOSS_BPS of what they put up, and
+// the open pot reconciles to the ledger the whole way through.
+{
+  const hb = await mk('Foundry Boss'); await seedCh(hb.id, 'respect=1000, cash=900000');
+  const hbg = (await call('POST', '/v1/gangs', { token: hb.token, body: { name: 'The Ironmongers', tag: 'IRN' } })).body.gangId;
+  const c1 = await mk('First Caller'); await seedCh(c1.id, 'respect=1000, cash=900000');
+  const c1g = (await call('POST', '/v1/gangs', { token: c1.token, body: { name: 'The Bidders', tag: 'BID' } })).body.gangId;
+  const c2 = await mk('Second Caller'); await seedCh(c2.id, 'respect=1000, cash=900000');
+  const c2g = (await call('POST', '/v1/gangs', { token: c2.token, body: { name: 'The Undercutters', tag: 'UND' } })).body.gangId;
+  for (const t of [hb.token, c1.token, c2.token]) await call('POST', '/v1/gangs/tribute', { token: t, body: { amount: 800000 } });
+  const treas = async (g) => (await call('GET', `/v1/gangs/${g}`, {})).body.gang.treasury;
+  await pool.query(`UPDATE districts SET holder_gang='${hbg}', npc_holder=NULL, garrison=30000, watch_hour=NULL, contest_until=NULL WHERE id='foundry'`);
+  await pool.query(`DELETE FROM district_bids WHERE district_id='foundry'`);
+
+  // the outright buy is gone on held turf
+  assert.equal((await call('POST', '/v1/districts/foundry/seize', { token: c1.token })).body.error, 'contested',
+    'you cannot buy a district a family holds — the contest is the only door');
+  // …but an UNHELD district is still an outright claim: there is nobody on the other side to bid
+  await pool.query(`UPDATE districts SET holder_gang=NULL, npc_holder=NULL, garrison=0, contest_until=NULL WHERE id='brick'`);
+  assert.equal((await call('POST', '/v1/districts/brick/claim', { token: c1.token, body: { amount: 50000 } })).body.error, 'not_contested',
+    'there is nothing to contest on turf nobody holds');
+
+  // the floor is the price the instant seize used to charge — outbid × the surprise premium
+  const floor1 = Math.floor(Math.max(M3.SEIZE_BASE, Math.floor(30000 * M3.SEIZE_OUTBID)) * M3.WATCH_SURPRISE_MULT);
+  assert.equal((await call('POST', '/v1/districts/foundry/claim', { token: c1.token, body: { amount: floor1 - 1 } })).body.error, 'floor',
+    'a stake under the floor is refused');
+  assert.equal((await call('POST', '/v1/districts/foundry/claim', { token: c1.token, body: { amount: 0 } })).body.error, 'amount',
+    'and a stake of nothing is not a stake');
+
+  // ROUND ONE — a challenger and the DEFENDER commit the same number. The defender takes the tie.
+  const before = { h: await treas(hbg), a: await treas(c1g), b: await treas(c2g) };
+  let cr = await call('POST', '/v1/districts/foundry/claim', { token: c1.token, body: { amount: 100000 } });
+  assert.equal(cr.code, 200, `the challenger staked (${JSON.stringify(cr.body)})`);
+  assert.equal(cr.body.defending, false, 'a rival is claiming, not defending');
+  assert.equal(cr.body.families, 1, 'one family in so far');
+  assert(cr.body.resolvesSeconds > 0 && cr.body.resolvesSeconds <= M3.CONTEST_MS / 1000, 'the window is running');
+  assert.equal(await treas(c1g), before.a - 100000, 'the stake left the treasury the moment it was made — a bid is a commitment, not a bluff');
+  // the board publishes WHO is in, never WHAT anyone put up
+  const cb = (await call('GET', '/v1/districts', {})).body.districts.find((d) => d.id === 'foundry');
+  assert.equal(cb.contest.families, 1, 'the board counts the families in the contest');
+  assert(!JSON.stringify(cb).includes('100000'), 'and never publishes a number anyone staked');
+
+  cr = await call('POST', '/v1/districts/foundry/claim', { token: hb.token, body: { amount: 100000 } });
+  assert.equal(cr.code, 200, 'the holder answers with the same number');
+  assert.equal(cr.body.defending, true, "the holder's stake is a defence");
+  // a stake only ever goes up. (The FLOOR is checked first, so a number under the price of
+  // admission gets the more specific refusal — 80000 clears the floor but is under what they hold.)
+  assert.equal((await call('POST', '/v1/districts/foundry/claim', { token: c1.token, body: { amount: 80000 } })).body.error, 'raise',
+    'you cannot pull money back out of a contest you are losing your nerve on');
+
+  // §10.4 mid-contest: the open pot is exactly what has been staked and nothing has left it yet
+  const escMid = Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM district_bids WHERE district_id='foundry'`)).rows[0].s);
+  assert.equal(escMid, 200000, 'the open pot holds exactly what the two families put up');
+  let invC = await runLedgerInvariants(pool, { alert: false });
+  assert(invC.checks.find((c) => c.name === 'turf contest escrow').ok, 'the escrow reconciles mid-contest');
+
+  await pool.query(`UPDATE districts SET contest_until = now() - interval '1 minute' WHERE id='foundry'`);
+  const r1 = await sweepContests(pool);
+  assert.equal(r1.resolved, 1, 'the worker resolved the closed contest');
+  assert.equal(r1.changed, undefined, 'sweepContests reports counts, not the per-district shape');
+  const held1 = (await call('GET', '/v1/districts', {})).body.districts.find((d) => d.id === 'foundry');
+  assert.equal(held1.holder.gangId, hbg, 'THE DEFENDER TAKES A TIE — you have to beat a family off its own turf, not merely match it');
+  assert.equal(held1.garrison, 100000, "and what the holder put up becomes the garrison the next family has to outbid");
+  assert.equal(held1.contest, null, 'the contest is closed');
+  // the winner's stake burned into the garrison; the loser got back all but the forfeit
+  const keep = Math.floor(100000 * (10000 - M3.CONTEST_LOSS_BPS) / 10000);
+  assert.equal(await treas(hbg), before.h - 100000, "the holder's winning stake is spent — it IS the garrison");
+  assert.equal(await treas(c1g), before.a - 100000 + keep, `the loser gets back all but the forfeit (kept $${keep})`);
+  assert(keep < 100000, 'and the forfeit is real — over-committing against a family that was never coming costs money');
+
+  // ROUND TWO — the price of the district is now what the holder proved they would pay
+  const floor2 = Math.floor(Math.max(M3.SEIZE_BASE, Math.floor(100000 * M3.SEIZE_OUTBID)) * M3.WATCH_SURPRISE_MULT);
+  const c2Before = await treas(c2g);
+  assert.equal((await call('POST', '/v1/districts/foundry/claim', { token: c2.token, body: { amount: floor2 - 1 } })).body.error, 'floor',
+    'the new garrison raised the floor — defending it cost money and bought a dearer door');
+  assert.equal((await call('POST', '/v1/districts/foundry/claim', { token: c2.token, body: { amount: floor2 } })).code, 200, 'the second caller commits');
+  await pool.query(`UPDATE districts SET contest_until = now() - interval '1 minute' WHERE id='foundry'`);
+  assert.equal((await sweepContests(pool)).seized, 1, 'nobody answered, so the district changed hands');
+  const held2 = (await call('GET', '/v1/districts', {})).body.districts.find((d) => d.id === 'foundry');
+  assert.equal(held2.holder.gangId, c2g, 'the Undercutters took the foundry');
+  assert.equal(held2.garrison, floor2, 'their stake is the new garrison');
+  assert.equal(held2.watch.hour, null, 'and the watch cleared with the turf — the new holder declares their own hour');
+  assert.equal(await treas(c2g), c2Before - floor2, 'the winner pays what they staked and nothing comes back');
+  // the loser was told
+  const note = (await pool.query(`SELECT payload FROM notifications WHERE character_id='${c1.id}' AND type='contest_resolved'`)).rows[0];
+  assert(note, 'every family in the contest is told how it went');
+
+  // §10.4: the escrow closes out and the vocabulary stays shut
+  invC = await runLedgerInvariants(pool, { alert: false });
+  assert(invC.checks.find((c) => c.name === 'turf contest escrow').ok,
+    `the contest escrow reconciles after resolution (${JSON.stringify(invC.checks.find((c) => c.name === 'turf contest escrow'))})`);
+  assert(invC.checks.find((c) => c.name === 'reason vocabulary').ok, 'the sealed bid adds no unknown reason');
+  assert(invC.checks.find((c) => c.name === 'gang treasuries').ok,
+    `treasuries reconcile with stakes, refunds and forfeits in the mix (${JSON.stringify(invC.checks.find((c) => c.name === 'gang treasuries'))})`);
 }
 
 console.log('✅ M3 social test passed — gangs, tribute+weekly, turf (+perks), melt tithe, exchange, jumps, bounty, contract board, hit→death/estate, busting, notifications, websocket push, buyback family split, §10.4 invariants, M7 assassin rep + NPC hitmen + safehouse/fire-heat/war-kills + family contracts (treasury-funded, member lockout, refunds) + bodyguards (hire/absorb/betrayal, before-insurance ordering) + M8 Tailor & Engraver vanity sinks (name/title/plate/crest/rename — ledgered vanity:* burns) + M8 intel sinks (anon fee, peek pierces anon) + M8 family seals ($OMR tribute → pooled reserve → sequential ladder, ledgered burns) + THE FOUNDATION (family charity: rank gate, empty-reserve rejection, sequential tiers from the reserve, badge on all three views + philanthropy leaderboard, softens members\' RICO odds, ledgered foundation:tier burns; STEP TWO: freeload gate — the trial-soften only helps a member who joined before the case was filed) + M7-P3 territory rackets (establish/collect/upgrade, income cap, SEIZURE transfers the operation to the victor, treasury §10.4 reconcile) + VENDETTAS (heir born owing blood, feud ledger, waived directed floor, 2x settlement rep, the cycle turns, lapsed = nothing; STEP TWO: ESCALATION (a repeat kill deepens the feud — kills++ / a higher tier / a longer TTL), THE SIT-DOWN (consensual peace gates + the both-direction clear), and the blood-debt leaderboard — all pure status)');

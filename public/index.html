@@ -1630,6 +1630,11 @@
   // ── the street talks back: turn a raw response into one human line ──
   // known single-word server rejections → plain talk (the server returns codes, not sentences)
   const ERRMAP = {
+    // THE SEALED BID
+    contested: 'That belongs to a family. You take it by staking a claim, not by buying it.',
+    not_contested: "Nobody holds that — there's nothing to contest. Take it outright.",
+    floor: 'Under the price of admission. Put up at least the floor.',
+    raise: 'A stake only goes up — you cannot pull money back out of a contest.',
     // v3 step 7 — the rarity NFTs
     extracted: "That one's on-chain — a trophy now, not a working car.",
     their_extracted: "Theirs is on-chain — it isn't in the game any more.",
@@ -1685,6 +1690,9 @@
     if (body && body.tokenId && body.nonce != null)
       return `\u26D3 ${body.name || 'it'} is on-chain — token #${body.tokenId}. Safe forever, and out of the game.`;
     if (body && body.referrer && body.ok) return `on the record — ${body.referrer} gets credit as you come up`;
+    // THE SEALED BID — a stake is secret, so the toast reports YOUR number and nobody else's.
+    if (body && body.staked !== undefined && body.families !== undefined)
+      return `\u{1F576} $${fmt(body.staked)} on ${body.district}${body.defending ? ' \u2014 defending' : ''} \u2014 ${body.families} in, ${mins(body.resolvesSeconds)} to go`;
     // THE OPERATION SLOTS — retiring a racket. Leads with the freed seat, which is the whole point.
     if (body && body.slotsUsed !== undefined && body.slots !== undefined && body.racket)
       return `\u{1F91D} you're out of the ${String(body.racket).replace(/_/g, ' ')}${body.back ? ` — $${fmt(body.back)} back` : ''} — ${body.slotsUsed} of ${body.slots} seats running`;
@@ -3376,7 +3384,13 @@
               ? "they're at the mattresses right now — plain price"
               : `off-watch: catching them cold costs \u00d7${d.watch.surpriseMult}`}`}</div>` : ''}
           ${d.holder && d.holder.tag === g.tag && boss ? `<div style="margin-top:4px"><input id="wh-${d.id}" type="number" min="0" max="23" placeholder="hr UTC" size="4" style="width:78px"> <button class="act" data-watch="${d.id}">set the watch</button></div>` : ''}
-          ${boss && d.id === me.loc && (!d.holder || d.holder.tag !== g.tag) ? `<button class="act" data-do="POST /v1/districts/${d.id}/seize" style="${d.occupiedBy ? 'border-color:var(--blood)' : ''}">${d.occupiedBy ? 'liberate' : d.holder ? 'seize' : 'claim'} (stand here)</button>` : (boss && d.id !== me.loc && (!d.holder || d.holder.tag !== g.tag) ? '<span class="d" style="color:var(--dim)">travel here to take it</span>' : '')}</div>`).join('')}</div>
+          ${d.contest ? `<div class="d"><span class="chip bad">CONTESTED</span> ${d.contest.families} ${d.contest.families === 1 ? 'family has' : 'families have'} staked — closes in ${mins(d.contest.resolvesSeconds)}. Nobody sees another number until it does.</div>` : ''}
+          ${boss && d.id === me.loc && d.holder && d.holder.tag !== g.tag
+            ? `<div style="margin-top:4px"><span class="d" style="color:var(--dim)">a sealed stake starts at $${fmt(d.claimFloor)} — highest takes it, the holder wins ties, a loser forfeits half</span><br><input id="cl-${d.id}" type="number" placeholder="${d.claimFloor}" style="width:130px"> <button class="act risk" data-claim="${d.id}">stake a claim</button></div>`
+            : (boss && d.holder && d.holder.tag === g.tag && d.contest
+              ? `<div style="margin-top:4px"><span class="d" style="color:var(--bad)">somebody is coming for this. Answer it or lose it.</span><br><input id="cl-${d.id}" type="number" placeholder="${d.claimFloor}" style="width:130px"> <button class="act risk" data-claim="${d.id}">defend it</button></div>`
+              : '')}
+          ${boss && d.id === me.loc && !d.holder ? `<button class="act" data-do="POST /v1/districts/${d.id}/seize" style="${d.occupiedBy ? 'border-color:var(--blood)' : ''}">${d.occupiedBy ? 'liberate' : 'claim'} (stand here)</button>` : (boss && d.id !== me.loc && (!d.holder || d.holder.tag !== g.tag) ? '<span class="d" style="color:var(--dim)">travel here to take it</span>' : '')}</div>`).join('')}</div>
       ${boss ? `<div style="margin-top:8px">${rivalOpts ? `<select id="war-gang">${rivalOpts}</select> <button class="act risk" id="war-go">declare war ($10k)</button>` : '<span class="d" style="color:var(--dim)">no rival family to fight yet</span>'}</div>` : '<span class="d" style="color:var(--dim)">wars and turf are the boss’s to call</span>'}`, !!g.war)}
 
       ${sect('fam-diplomacy', 'Diplomacy', 'sworn PACTS block war between families; a COALITION of the small ganging up on a DOMINANT family fights it at a discount', `
@@ -3498,6 +3512,15 @@
     // THE WATCH — the boss declares the hour their family stands ready on turf they hold.
     t.querySelectorAll('[data-watch]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/districts/${b.dataset.watch}/watch`, { hour: Number(t.querySelector(`#wh-${b.dataset.watch}`).value) }).then(() => renderFamily()));
+    // THE SEALED BID — a stake is secret and irreversible, so it gets a confirm.
+    t.querySelectorAll('[data-claim]').forEach((b) => b.onclick = async () => {
+      const id = b.dataset.claim, amt = Number(t.querySelector('#cl-' + id).value);
+      if (!(amt > 0)) return toast('Name what you are putting up.');
+      if (!await ask(`Stake $${fmt(amt)} on ${id}?`,
+        'It leaves the treasury now and nobody can see it. Highest takes the district when the window closes \u2014 the holder wins ties, and a loser only gets half of it back.',
+        { yes: 'put it up', no: 'think again', danger: true })) return;
+      act('POST', `/v1/districts/${id}/claim`, { amount: amt }).then(() => renderFamily());
+    });
     const warBtn = t.querySelector('#war-go');
     if (warBtn) warBtn.onclick = () =>
       act('POST', `/v1/gangs/war/${t.querySelector('#war-gang').value.trim()}`, {}).then(() => renderFamily());
@@ -4452,7 +4475,7 @@
       ['GET', '/v1/gangs'], ['GET', '/v1/gangs/:id'], ['POST', '/v1/gangs', { name: '', tag: '' }],
       ['POST', '/v1/gangs/:id/join', {}], ['POST', '/v1/gangs/leave', {}], ['POST', '/v1/gangs/tribute', { amount: 1000 }],
       ['POST', '/v1/gangs/tribute/omr', { amount: 1 }], ['POST', '/v1/gangs/war/:targetGangId', {}],
-      ['POST', '/v1/districts/:id/seize', {}], ['POST', '/v1/districts/:id/watch', { hour: 3 }], ['GET', '/v1/territory'], ['POST', '/v1/territory/:districtId/establish', { kind: 'numbers' }],
+      ['POST', '/v1/districts/:id/seize', {}], ['POST', '/v1/districts/:id/watch', { hour: 3 }], ['POST', '/v1/districts/:id/claim', { amount: 100000 }], ['GET', '/v1/territory'], ['POST', '/v1/territory/:districtId/establish', { kind: 'numbers' }],
       ['POST', '/v1/territory/collect', {}], ['POST', '/v1/territory/upkeep', {}],
       ['POST', '/v1/gangs/contract/:targetId', { amount: 10000, kind: 'kill' }],
       ['GET', '/v1/commission'], ['POST', '/v1/commission/vote', { decree: 'pax' }], ['POST', '/v1/commission/veto', {}],
