@@ -3,6 +3,12 @@
 // safehouse), THE PAX (no new wars), AMNESTY (half laylow), LOCKDOWN (+20 convoy defense, visible
 // in the rng audit). No money moves — the §10.4 vocabulary check closes it out. pg-mem, zero infra.
 process.env.CONVOY_MS = '600000';
+// SEASON PIN — the seasonal twist is ARMED in production since 2026-08-02, and its draw moves
+// with the real calendar. This file measures SIGNED baselines (loot rate, safehouse cost), so
+// without a pin its exact-number assertions would pass today and fail in three weeks for no
+// visible reason — a deterministic assertion resting on a probabilistic precondition, the
+// recorded flake class. test/seasons.js is where the armed path is exercised.
+process.env.SEASON_MOD = 'dead_quiet'; // TEST-ONLY (the boot guard rejects it in production)
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { M3, M4, COMMISSION, FAMILY_YIELD, weekOf } from '../src/rules.js';

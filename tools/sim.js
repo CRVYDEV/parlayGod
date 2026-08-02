@@ -10,6 +10,11 @@
 process.env.MOD_KEY = 'sim-mod-key';
 process.env.ALLOW_MOD_REAL_REVENUE = 'on'; // QA harness: let the mod fee-record drive the real Vig flywheel (D-MED2 gate)
 process.env.SEARCH_MS = '0';   // §9 test knobs — the sim compresses hit timers (never in prod)
+// SEASON PIN — the seasonal twist is ARMED in production since 2026-08-02 and its draw follows
+// the real calendar. A harness whose figures mean something different depending on the week it
+// was run is not a measurement, so the baseline is pinned. Run with SEASON_MOD=<id> to measure
+// a specific season deliberately.
+process.env.SEASON_MOD = process.env.SEASON_MOD || 'dead_quiet';
 process.env.SHOOT_CD_MS = '0';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
@@ -21,7 +26,7 @@ import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
          PORT, boatOf, portRouteOf, interdictChance,
          CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES, BUSINESSES, PACING, POPULATION, boatResale, CORNER, CONTACTS,
          EXCHANGE, ESTATE, WIRE, GANG_SEALS, FOUNDATION, RIVALS, RACKETS, ASSETS, M4, DRUGS,
-         MADE, ACCESS_STAKE } from '../src/rules.js';
+         MADE, ACCESS_STAKE, OPERATIONS, opSlotsOf } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -748,9 +753,30 @@ phase('P9.20b the asset ladder — payback, and whether the entry price is reall
   const assetDay = ungated.reduce((a, r) => a + r.day, 0);
   note('assets', 'the rest of the passive stack (P9.20 counts fronts only)',
     `rackets $${fmt(Math.round(rackDay))}/day + assets $${fmt(Math.round(assetDay))}/day`,
-    `both buy-once and permanent, so a long-lived street accumulates the WHOLE ladder; against the top-tier crime grind at $${fmt(Math.round(grindDay))}/day this is the shape of the passive-vs-active gap, and it is bigger than the front stack alone`);
-  note('assets', 'VERDICT', 'affordable, and that is the finding',
-    `nothing here is out of reach — the risk the founder asked about is real but inverted: every rung pays back inside three days, so the mid-game's only decision is which drip to buy next. The levers are the per-rung income (prototype tables, machine-owned) and the ${meterH}h RACKET_DAILY_CAP_MS meter; the DESIGN answer is to make the active systems pay progression, not to make the drips weaker (BALANCE.md)`);
+    `both buy-once and permanent; against the top-tier crime grind at $${fmt(Math.round(grindDay))}/day this is the shape of the passive-vs-active gap, and it is bigger than the front stack alone. Note this is the WHOLE ladder — see the seat bound below for what one player may actually run`);
+
+  // ── THE OPERATION SLOTS (the strategy package) — the bound that makes the ladder a CHOICE ──
+  // The 31 metered holdings above no longer stack: a player runs at most opSlotsOf(level) of them.
+  // So the question this probe kept answering ("which drip do I buy next") becomes "which of the 31
+  // do I want in my ${OPERATIONS.SLOTS_MAX} seats" — the same catalog, now with an opportunity cost.
+  const metered = rows.filter((r) => r.what.startsWith('racket') || r.lvl === null);
+  const best = metered.slice().sort((a, b) => b.day - a.day);
+  const bestN = (n) => best.slice(0, n).reduce((a, r) => a + r.day, 0);
+  note('assets', 'the seat bound', `${OPERATIONS.SLOTS_BASE} seats at level 1 → ${OPERATIONS.SLOTS_MAX} at level ${(OPERATIONS.SLOTS_MAX - OPERATIONS.SLOTS_BASE) * OPERATIONS.SLOTS_PER_LEVEL}`,
+    `${metered.length} metered holdings (${RACKETS.length} rackets + ${ungated.length} ${OPERATIONS.INCOME_ASSET_CAT}) compete for ${OPERATIONS.SLOTS_MAX} seats — you run ~${Math.round((OPERATIONS.SLOTS_MAX / metered.length) * 100)}% of the catalog, ever`);
+  note('assets', 'metered passive income, capped vs uncapped',
+    `$${fmt(Math.round(bestN(OPERATIONS.SLOTS_MAX)))}/day (best ${OPERATIONS.SLOTS_MAX}) vs $${fmt(Math.round(rackDay + assetDay))}/day (all ${metered.length})`,
+    `the cap is a ${((rackDay + assetDay) / bestN(OPERATIONS.SLOTS_MAX)).toFixed(2)}x cut to the metered half of the passive stack — but it is NOT primarily a nerf: an optimal player still takes the ${OPERATIONS.SLOTS_MAX} richest, so what the cap really removes is the 19 marginal rungs nobody was choosing between. Business fronts are unmetered (capped at ${BUSINESSES.length} by UNIQUE(character,kind) already)`);
+  // …at a LEVEL, which means only what that level can actually buy. Rackets carry level gates;
+  // the Legit Fronts assets carry none (buyAsset checks cash only), so they are always in the pool.
+  // Taking the global best N here would have inflated the early figures by counting rungs a level-1
+  // player is barred from — the measurement has to match what the player is choosing between.
+  const bestAtLevel = (L) => metered.filter((r) => r.lvl === null || r.lvl <= L)
+    .sort((a, b) => b.day - a.day).slice(0, opSlotsOf(L)).reduce((a, r) => a + r.day, 0);
+  note('assets', 'the early seats', `lvl 1: $${fmt(Math.round(bestAtLevel(1)))}/day · lvl 20: $${fmt(Math.round(bestAtLevel(20)))}/day · lvl 40: $${fmt(Math.round(bestAtLevel(40)))}/day`,
+    `best-affordable-at-that-level, ${opSlotsOf(1)}/${opSlotsOf(20)}/${opSlotsOf(40)} seats. The seat curve, not the price, is now the early bound — a level-1 player with unlimited cash cannot buy past ${OPERATIONS.SLOTS_BASE} operations, which is the "affordability was never the gate" finding turned into a gate. NOTE the Legit Fronts assets have NO level gate (buyAsset checks cash only), so they sit in every one of these pools`);
+  note('assets', 'VERDICT', 'affordable, bounded by seats',
+    `nothing here is out of reach and every rung still pays back inside three days — but the mid-game decision is no longer "have I clicked it yet", it is which ${OPERATIONS.SLOTS_MAX} of ${metered.length}. The levers are the per-rung income (prototype tables, machine-owned), the ${meterH}h RACKET_DAILY_CAP_MS meter, and now OPERATIONS.SLOTS_* (BALANCE.md)`);
 }
 
 // ════════ P9.20c THE NUT — what a crew costs against what a hand actually moves ════════

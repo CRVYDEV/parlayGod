@@ -17,6 +17,12 @@
 //
 // Run: node tools/playthrough.js            (default schedule)
 //      node tools/playthrough.js --days 14  (longer horizon)
+// SEASON PIN — the seasonal twist is ARMED in production since 2026-08-02 and its draw follows the
+// real calendar (a Crackdown season changes laylow and law-gain; Blood in the Streets changes loot
+// and the safehouse). A progression figure that means something different depending on the week it
+// was run is not a measurement, so the baseline is pinned. Set SEASON_MOD=<id> to measure a season
+// deliberately. Must be set BEFORE the server imports rules.
+process.env.SEASON_MOD = process.env.SEASON_MOD || 'dead_quiet';
 import { buildServer } from '../src/server.js';
 import { opsEngagement } from '../src/engagement.js';
 import { CRIMES, MISSIONS, GUNS, BUSINESSES, CONSTANTS, PACING, RACKETS, PORT, POPULATION, nerveCapOf } from '../src/rules.js';

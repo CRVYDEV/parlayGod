@@ -103,7 +103,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf, syndicateOf, TERRITORY_TYPES, TERRITORY_RACKETS,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE, NOTORIETY,
          TAX, withdrawTaxBps,
-         HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, BUSINESS_EMPIRE, PACING, MASTERY,
+         HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, OPERATIONS, BUSINESS_EMPIRE, PACING, MASTERY,
          PATH_FX, PATH_XP_HOME, PATH_XP_RIVAL, PATH_SWITCH_CD_MS, REGIMEN, HUSTLE, CAREER, RIVALS,
          CORNER, CONTACTS, FAVOR, MADE, MADE_LADDER, ACCESS_STAKE } from './rules.js';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -710,6 +710,9 @@ export async function buildServer() {
   // ── ASSETS & RACKETS → Tier 4 ──
   app.post('/v1/rackets/:id/upgrade', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => E.upgradeRacket(ch, req.params.id, client, h)));
+  // THE OPERATION SLOTS — the door out. Frees the seat; returns RACKET_RETIRE_BPS of the buy-in (0).
+  app.delete('/v1/rackets/:id', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => E.retireRacket(ch, req.params.id, client, h)));
   registerLeaderboards(app, { pool, auth, modAuth });
 
   // ── TOKENOMICS v2 — THE EXCHANGE (the one-way window) + THE FAMILY YIELD ──
@@ -918,6 +921,11 @@ export async function buildServer() {
 
     rackets: RACKETS.map((r) => ({ id: r.id, name: r.name, lvl: r.lvl, cost: r.cost, income: r.income, desc: r.desc })),
     assets: ASSETS.map((a) => ({ id: a.id, name: a.name, cat: a.cat, price: a.price, stat: a.stat, boost: a.boost, cargo: a.cargo, desc: a.desc })),
+    // THE OPERATION SLOTS — published so the client can render "3 of 5 seats" beside the catalogs
+    // and grey what won't fit, rather than letting a player pick and then be refused (the check-5 rule).
+    operations: { base: OPERATIONS.SLOTS_BASE, perLevel: OPERATIONS.SLOTS_PER_LEVEL, max: OPERATIONS.SLOTS_MAX,
+      meteredCat: OPERATIONS.INCOME_ASSET_CAT, retireBps: OPERATIONS.RACKET_RETIRE_BPS,
+      note: 'Rackets and Legit Fronts share your operation seats — you can only run so many at once. Wheels and Property don\'t take a seat.' },
     // ASSETS & RACKETS → Tier 4 — the upgrade axis, the tycoon ladder, the empire-set titles
     empire: { upMax: RACKET_EMPIRE.UP_MAX, upStep: RACKET_EMPIRE.UP_STEP, tycoonRanks: RACKET_EMPIRE.TYCOON_RANKS,
       sets: RACKET_EMPIRE.SETS.map((s) => ({ id: s.id, name: s.name })),

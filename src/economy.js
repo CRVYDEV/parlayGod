@@ -10,7 +10,8 @@ import {
   CONSUMABLES, RACKETS, ASSETS, GOODS, GUNS, VESTS, CONSTANTS, SKILLS, UNDERWORLD,
   levelOf, cityEventOf, dayOf, carOf, carVal, carMelt, rollCar, rollTrim,
   effStat, cargoCapacity, goodPriceOf, gearOf, gunObjOf, RACKET_EMPIRE, racketUpgradeCost, racketIncomeLeveled, tycoonRankOf,
-  seasonModOf, pathFx, rollRarity, ladderFx, ladderFenceMult } from './rules.js';
+  seasonModOf, pathFx, rollRarity, ladderFx, ladderFenceMult,
+  OPERATIONS, opSlotsOf, nextOpSlotLevel } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
@@ -257,11 +258,31 @@ export async function sellGood(ch, goodId, qty, client, h) {
 }
 
 // ═══════════════════ RACKETS & ASSETS (§5.4) ═══════════════════
+// THE OPERATION SLOTS (strategy package) — rackets and income assets share ONE pool of seats, so
+// buying is a CHOICE between 31 catalog entries rather than a checklist. The two helpers below are
+// the single source for "what counts" and "how many you may run"; every gate and every board reads
+// them, so the sheet can never advertise a seat the till refuses (the coach/cornerOpen lesson).
+export const incomeAssetIds = (assets = []) =>
+  assets.filter((id) => ASSETS.find((a) => a.id === id)?.cat === OPERATIONS.INCOME_ASSET_CAT);
+export function opsUsed(h) {
+  return (h?.owned?.rackets?.length || 0) + incomeAssetIds(h?.owned?.assets || []).length;
+}
+export function opsSlots(ch) { return opSlotsOf(levelOf(Number(ch.respect))); }
+function assertSlot(ch, h) {
+  const used = opsUsed(h), slots = opsSlots(ch);
+  if (used < slots) return;
+  const next = nextOpSlotLevel(levelOf(Number(ch.respect)));
+  throw new GameError('slots', next
+    ? `You're running ${used} operations and you only have ${slots} pairs of hands. Retire one, or make level ${next}.`
+    : `You're running ${used} operations — that's every seat you'll ever have. Retire one to take on another.`);
+}
+
 export async function buyRacket(ch, racketId, client, h) {
   const r = RACKETS.find((x) => x.id === racketId);
   if (!r) throw new GameError('bad_racket', 'No such racket.');
   if (h.owned.rackets.includes(r.id)) throw new GameError('owned', 'You already run that.');
   if (levelOf(Number(ch.respect)) < r.lvl) throw new GameError('level', `Need level ${r.lvl}.`);
+  assertSlot(ch, h); // …before the cash check: a player who can't seat it shouldn't hear "not enough cash"
   if (Number(ch.cash) < r.cost) throw new GameError('cash', 'Not enough pocket cash.');
   ch.cash = Number(ch.cash) - r.cost;
   await client.query('INSERT INTO character_rackets (character_id, racket_id) VALUES ($1,$2)', [ch.id, r.id]);
@@ -269,6 +290,26 @@ export async function buyRacket(ch, racketId, client, h) {
   if (h.owned.racketLevels) h.owned.racketLevels[r.id] = 0;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -r.cost, reason: `racket:buy:${r.id}` });
   return { ok: true, racket: r.id, income: r.income };
+}
+
+// THE DOOR OUT (the OPERATION SLOTS' other half — the BUSINESS_SHUTTER_BPS precedent). A slot cap
+// without a way to free a seat is a permanent bad pick, so retiring is always available. At
+// RACKET_RETIRE_BPS 0 it returns NOTHING and writes NO ledger row — walking away moves no value, so
+// it needs no sign-off, and nothing can pay for itself by churning the catalog. Any upgrade levels
+// sunk into it go with it (the row carries the level; a rehire starts at 0 — the crew-buy-in rule).
+export async function retireRacket(ch, racketId, client, h) {
+  const r = RACKETS.find((x) => x.id === racketId);
+  if (!r) throw new GameError('bad_racket', 'No such racket.');
+  if (!h.owned.rackets.includes(r.id)) throw new GameError('none', "You don't run that racket.");
+  const back = Math.floor(r.cost * (OPERATIONS.RACKET_RETIRE_BPS / 10000));
+  await client.query('DELETE FROM character_rackets WHERE character_id=$1 AND racket_id=$2', [ch.id, r.id]);
+  h.owned.rackets = h.owned.rackets.filter((id) => id !== r.id);
+  if (h.owned.racketLevels) delete h.owned.racketLevels[r.id];
+  if (back > 0) {
+    ch.cash = Number(ch.cash) + back;
+    await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: back, reason: `racket:retire:${r.id}` });
+  }
+  return { ok: true, racket: r.id, back, slotsUsed: opsUsed(h), slots: opsSlots(ch) };
 }
 
 // ASSETS & RACKETS → Tier 4 — RACKET UPGRADES: buy the next level of a racket you run; its accrual
@@ -306,6 +347,9 @@ export async function buyAsset(ch, assetId, client, h) {
   const a = ASSETS.find((x) => x.id === assetId);
   if (!a) throw new GameError('bad_asset', 'No such asset.');
   if (h.owned.assets.includes(a.id)) throw new GameError('owned', 'You already own that.');
+  // Only the INCOME category takes a seat. Wheels and Property are stat/cargo/energy-cap progression,
+  // and metering them would be a pacing change wearing an economy change's clothes.
+  if (a.cat === OPERATIONS.INCOME_ASSET_CAT) assertSlot(ch, h);
   const fee = Math.ceil(a.price * 0.01), tax = Math.ceil(a.price * 0.01);
   if (Number(ch.cash) < a.price + fee + tax) throw new GameError('cash', 'Not enough pocket cash (price + 2% house take).');
   ch.cash = Number(ch.cash) - a.price - fee - tax;

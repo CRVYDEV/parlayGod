@@ -474,6 +474,11 @@ const SIGNED = [
   ['RACES.VARIANCE', 40],
   ['RACES.WAGER_MIN', 500],
   ['RACES.WHEEL_MIN_LVL', 10],
+  // THE OPERATION SLOTS (strategy package) — how much of the 31-entry income catalog one player runs
+  ['OPERATIONS.SLOTS_BASE', 2],
+  ['OPERATIONS.SLOTS_PER_LEVEL', 4],
+  ['OPERATIONS.SLOTS_MAX', 12],
+  ['OPERATIONS.RACKET_RETIRE_BPS', 0],
   ['RACKET_EMPIRE.UP_COST_MULT', 0.5],
   ['RACKET_EMPIRE.UP_MAX', 5],
   ['RACKET_EMPIRE.UP_STEP', 0.12],

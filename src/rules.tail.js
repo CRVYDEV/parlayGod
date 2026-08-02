@@ -518,6 +518,34 @@ export const kingpinRankOf = (moved = 0) => {
   return [...KITCHEN.KINGPIN_RANKS].reverse().find((r) => m >= r.at) || KITCHEN.KINGPIN_RANKS[0];
 };
 
+// ═══ THE OPERATION SLOTS — scarce holdings (the strategy package, 2026-08-02) ═══
+// The measured problem: 31 income holdings (18 RACKETS + the 13 'Legit Fronts' ASSETS) that every
+// player buys ALL of, because nothing competes for the seat. The buy decision was "have I clicked it
+// yet", not "which one". A shared SLOT pool makes it a CHOICE: you run at most `opSlotsOf(level)`
+// income operations at once, so picking the numbers racket means NOT running the chop shop this week.
+// Deliberately NOT metered: the Wheels and Property ASSET categories — those are stat/cargo/energy-cap
+// progression, and capping them would be a pacing change wearing an economy change's clothes.
+// Businesses are already capped at 5 by UNIQUE(character_id, kind), so they need no meter either.
+// §10.4-FREE: a slot is a COUNT of rows you already own. Nothing moves; the sinks/faucets are unchanged.
+export const OPERATIONS = {
+  SLOTS_BASE: 2,          // your first two operations
+  SLOTS_PER_LEVEL: 4,     // one more every 4 levels (the SKILLS.LVL_PER_POINT cadence)
+  SLOTS_MAX: 12,          // …to a hard 12 of the 31 available — so ~⅓ of the catalog runs at once
+  INCOME_ASSET_CAT: 'Legit Fronts',
+  // What retiring an operation returns. Ships at 0 — the door exists so a bad pick isn't permanent
+  // (the BUSINESS_SHUTTER_BPS argument: a door that refunds nothing moves no value and needs no
+  // sign-off), and because at 0 nothing can pay for itself by churning through the catalog.
+  RACKET_RETIRE_BPS: 0,
+};
+export const opSlotsOf = (lvl) =>
+  Math.min(OPERATIONS.SLOTS_MAX, OPERATIONS.SLOTS_BASE + Math.floor(Number(lvl || 0) / OPERATIONS.SLOTS_PER_LEVEL));
+// the level at which the NEXT slot opens — null once capped (the board says "that's all of them")
+export const nextOpSlotLevel = (lvl) => {
+  const cur = opSlotsOf(lvl);
+  if (cur >= OPERATIONS.SLOTS_MAX) return null;
+  return (cur - OPERATIONS.SLOTS_BASE + 1) * OPERATIONS.SLOTS_PER_LEVEL;
+};
+
 // ═══ ASSETS & RACKETS → Tier 4 (omerta-tier2-deepening-design.md §2) ═══
 // The buy-once/drip-forever personal-income layer gets: RACKET UPGRADES (a per-racket level that
 // multiplies its accrual income — the management axis; a cash sink), THE TYCOON LEGEND (account-level
@@ -3513,10 +3541,13 @@ export const seasonIdxOf = (day = dayOf()) => Math.floor(day / 28);
 export const seasonModOf = (seasonIdx = seasonIdxOf()) => {
   const ov = process.env.SEASON_MOD; // TEST-ONLY (boot-guard listed)
   if (ov != null) return SEASON_MODS.find((m) => m.id === ov) || SEASON_MODS[0];
-  // DORMANT until the founder arms it (SEASON_MODS=on, read per call — the SOCIAL_VERIFY_MODE
-  // posture): this is the one drop that twists SIGNED levers, so it ships vanilla until the
-  // pool is production-signed. Dormant == Dead Quiet everywhere.
-  if ((process.env.SEASON_MODS || 'off') !== 'on') return SEASON_MODS[0];
+  // ARMED (founder-directed 2026-08-02, the strategy package). This drop twists SIGNED levers, so
+  // it shipped dormant until the pool was production-signed; the founder signed it as the cheapest
+  // strategic lever the game has — the whole base re-plans its season around the same twist, which
+  // is exactly the "scarcity of OPTIONS" the strategy diagnosis said the game lacks, and it reuses
+  // content that already exists. Read PER CALL (the RATE_LIMIT posture), so `SEASON_MODS=off`
+  // reverts to vanilla with no deploy — the twists are additive to a season that still works.
+  if ((process.env.SEASON_MODS || 'on') !== 'on') return SEASON_MODS[0];
   return SEASON_MODS[Math.floor(hash01(`seasonmod:${seasonIdx}:${MARKET_SEED}`) * SEASON_MODS.length)];
 };
 export const seasonDaysLeft = (day = dayOf()) => 28 - (day % 28);

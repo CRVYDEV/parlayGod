@@ -42,6 +42,11 @@ process.env.SOCIAL_VERIFY_MODE = 'off';
 // nothing happened. Every sibling harness that touches a real database does the same (chaos,
 // loadtest, pgcheck).
 process.env.RATE_LIMIT = 'off';
+// SEASON PIN — the seasonal twist is ARMED in production since 2026-08-02 and its draw follows
+// the real calendar. A harness whose figures mean something different depending on the week it
+// was run is not a measurement, so the baseline is pinned. Run with SEASON_MOD=<id> to measure
+// a specific season deliberately.
+process.env.SEASON_MOD = process.env.SEASON_MOD || 'dead_quiet';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { runLedgerInvariants } from '../src/invariants.js';

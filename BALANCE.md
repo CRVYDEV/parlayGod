@@ -4062,3 +4062,60 @@ car or boat therefore cannot ship without a cap decision.
 
 70 / 22 / 6.5 / 1.5% and 25 / 90 / 300 $OMR per step. Revisit when there is a real secondary market to
 measure — scarcity is only meaningful against demand, and there is no demand yet.
+
+---
+
+## THE STRATEGY PACKAGE (founder-directed 2026-08-02: "apply all your strategy decision recommendations")
+
+The diagnosis that produced these was not "the game needs more content" — it was that the game has
+**enormous breadth of ACTIONS and almost no scarcity of OPTIONS**. Nearly every choice is *when*, not
+*instead of*. Where a decision costs you nothing you did not want anyway, it is not a decision.
+
+### 1. SEASON_MODS armed (was dormant)
+
+`seasonModOf`'s env default flipped `off` → `on`. This is the one shipped drop that twists SIGNED
+levers by design (laylow ×0.75, law-gain ×1.25, kill loot ×1.15, safehouse ×1.25, goods-sell ×1.03,
+one season in four vanilla), which is why it shipped dormant pending sign-off. It is armed now because
+it is **the cheapest strategic lever the game has**: the whole base re-plans around the same twist for
+28 days, it reuses content that already exists, and it costs nothing to build. `SEASON_MODS=off`
+reverts to vanilla with no deploy, and the pin is regression-tested in both directions.
+
+**Test discipline this forced, and it matters:** the suites measure the SIGNED baseline, so with the
+draw live they became date-flaky — a run in a Blood-in-the-Streets season loots 15% deeper and the
+exact-number assertions fail three weeks later for no reason anyone can see. That is the recorded
+class (the population duel-ladder flake, the Doc-drill flake, the kitchen-raid flake): *a
+deterministic assertion resting on a probabilistic precondition.* Affected suites now pin
+`SEASON_MOD=dead_quiet`; `test/seasons.js` is the one that exercises the armed path, including the
+kill switch.
+
+### 2. THE OPERATION SLOTS — scarce holdings
+
+| Lever | Value | What it does |
+|---|---|---|
+| `OPERATIONS.SLOTS_BASE` | 2 | operations you may run at level 1 |
+| `OPERATIONS.SLOTS_PER_LEVEL` | 4 | one more seat every 4 levels (the `SKILLS.LVL_PER_POINT` cadence) |
+| `OPERATIONS.SLOTS_MAX` | 12 | …to a hard 12 — ~39% of the 31-entry metered catalog |
+| `OPERATIONS.RACKET_RETIRE_BPS` | 0 | what retiring returns; 0 moves no value, so it needs no sign-off |
+
+The measured problem (P9.20b, since 2026-08-01): 31 income holdings — 18 `RACKETS` + the 13 Legit
+Fronts `ASSETS` — every one paying back in **0.58–2.98 days**, none in the healthy 3–14 day band, and
+**nothing competing for the seat**. So the mid-game's buy decision was *"have I clicked it yet"*.
+A shared slot pool makes it *"which 12 of 31"*.
+
+**Measured after (P9.20b, prints every run):** best-12 = **$243.9M/day** vs all-31 = **$260.3M/day** —
+a **1.07× cut**. That number is the honest headline and it cuts against reading this as a nerf: the 12
+richest rungs already carried nearly all the income, so what the cap removes is **the 19 marginal
+rungs nobody was choosing between**. The early curve is where it bites — best-affordable-at-level is
+**$64.8M/day at level 1 (2 seats)** → **$90.8M at 20 (7)** → **$98.4M at 40 (12)**; a level-1 player
+with unlimited cash cannot buy past two operations, which is the "affordability was never the gate"
+finding turned into a gate.
+
+Deliberately **not** metered: the Wheels and Property asset categories (stat/cargo/energy-cap
+progression — metering them would be a pacing change wearing an economy change's clothes) and business
+fronts (already capped at 5 by `UNIQUE(character_id, kind)`). §10.4-free by construction: a slot is a
+COUNT of rows you already own; retiring at 0 bps writes no ledger row, which the test pins.
+
+**Open for the alpha:** whether 12 is the right ceiling (the 1.07× figure says the income cost is
+small, so the ceiling is a *decision-space* dial, not an economy one), and whether
+`RACKET_RETIRE_BPS` should rise above 0 — note that raising it makes churning the catalog cheaper,
+which is the one thing that would undo the mechanic.
