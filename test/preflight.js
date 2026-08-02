@@ -129,4 +129,22 @@ assert.deepEqual(preflight({ ...GOOD, MINT_FEE_ETH: '0.025', PLEX_MINT_OMR: '12'
   assert.equal(def('RESPAWN_FEE_ETH'), 0.10, '…and RESPAWN_FEE_ETH');
 }
 
+// ── A BOND MUST STAY A HOLD, NOT AN ARBITRAGE ───────────────────────────────────────────────────
+// The bond discount and the DEX sell tax are set independently, in different layers, and their
+// RELATION is what makes a bond capital formation instead of a subsidy on selling: at 800 vs 900 an
+// immediate flip returns 1.08 x 0.91 = 0.983 and loses money. A bonder holds known size on a known
+// schedule, so if that inverts they are the most motivated bypass-seeker on the chain.
+assert.deepEqual(preflight(GOOD).warnings.filter((w) => /subsidy on selling/.test(w)), [],
+  'the shipped 800 / 900 is a losing flip, so a bond is a hold');
+assert(preflight({ ...GOOD, SELL_TAX_BPS: '700', SELL_TAX_DEV_BPS: '200', SELL_TAX_RWA_BPS: '300', SELL_TAX_LP_BPS: '200' })
+  .warnings.some((w) => /subsidy on selling/.test(w)),
+  'lowering the sell tax under the discount is caught — the relation is the invariant, not either number');
+assert(preflight({ ...GOOD, BOND_DISCOUNT_BPS: '900' }).warnings.some((w) => /subsidy on selling/.test(w)),
+  'and equality is not good enough — a break-even flip still has the vest as a free option');
+{
+  const { BONDS, SELL_TAX } = await import('../src/rules.js');
+  assert.equal(BONDS.DISCOUNT_BPS, 800, "preflight's restated BOND_DISCOUNT_BPS default still matches the rules tail");
+  assert.equal(SELL_TAX.BPS, 900, '…and SELL_TAX.BPS');
+}
+
 console.log('✅ PREFLIGHT passed — every env var in src/ is classified (the drift that shipped the pacing knobs unguarded is now caught by a test), the required secrets and the public dev fallbacks fail closed, every test-only roll/timer knob refuses a production boot, and a dev-safe default that is wrong in production must be stated rather than inherited');

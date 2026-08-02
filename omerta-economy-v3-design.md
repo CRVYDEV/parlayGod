@@ -316,7 +316,19 @@ Each step is shippable and testable alone; nothing is deleted before its replace
    against §4.3, which the same section names as binding. Flagged for the founder rather than taken
    silently (BALANCE.md § THE FLOAT). The speakeasy gate IS built as written, and sits at the edge of
    the same line for the same reason.
-6. **The v4 hook** — mainnet, asymmetric, POL-funding.
+6. **The v4 hook** — mainnet, asymmetric, POL-funding. **THE CONTRACT IS BUILT**
+   (`omerta-contracts/src/OmertaHook.sol` + 19 tests against a real `PoolManager`; the full design and
+   what turned up in the building are in `omerta-v4-hook-design.md` §11). Nothing is deployed —
+   address mining, the hook-native oracle, POL seeding and the liquidity migration are steps 3–7 there,
+   and all of it is behind the two standing gates.
+   **One thing it deliberately does NOT do: §11.8's rates.** That section proposes buy 0 / sell **500
+   bps**, all to **POL**. The hook as built charges the SHIPPED `SELL_TAX` — 900 bps split dev 200 /
+   rwa 400 / lp 300 — because those are the numbers `OMR.sol` and `rules.tail.js` already carry, and
+   because retuning a rate *and* migrating the mechanism in one change makes it impossible to tell
+   which one moved anything. Buys are free either way, so §11.8's central claim (POL growth comes only
+   from sells, so depth grows fastest when people exit) already holds for the `lp` slice. Moving to
+   500-all-to-POL is a founder balance decision with its own sim, exactly as §2.4 requires for the fee
+   curve itself.
 7. **The rarity NFTs** — extend `GearVault`'s pattern to cars/boats/assets.
 
 Steps 6 and 7 touch contracts and therefore reset the third-party audit clock. Steps 1–5 are

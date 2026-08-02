@@ -7,7 +7,7 @@ import assert from 'node:assert';
 import crypto from 'node:crypto';
 import { buildServer } from '../src/server.js';
 import { runBuyback, mergeLegacyPools } from '../src/worker.js';
-import { CARS, carVal, carMelt, CONSTANTS, BUSINESS_EMPIRE, BUSINESSES, RIVALS, frontTitles, launderRankOf, businessMaxTier, POPULATION } from '../src/rules.js';
+import { CARS, carVal, carMelt, CONSTANTS, BUSINESS_EMPIRE, BUSINESSES, RIVALS, frontTitles, launderRankOf, businessMaxTier, POPULATION, CRIMES } from '../src/rules.js';
 import { spawnResident } from '../src/population.js';
 
 // ── car catalog integrity (content expansion guard: no dupe ids, well-formed, on-curve) ──
@@ -1015,7 +1015,18 @@ await pool.query(`UPDATE account_persistent SET agent_flag=false WHERE account_i
   // one resident, standing where our man works, so the draw is deterministic
   await pool.query("DELETE FROM characters WHERE is_npc AND loc='cathedral'");
   const res = await spawnResident(pool, { band: POPULATION.BANDS.find((b) => b.id === 'boss'), level: 20 });
-  await pool.query("UPDATE characters SET loc='cathedral', cash=1000000 WHERE id=$1", [res.id]);
+  // GUARANTEE the precondition rather than hope for it. Branch (A) asserts the mark funds the WHOLE
+  // take, which is only true while POCKET_BPS of their pocket covers it — and the take is a random
+  // draw inside the crime's band, scaled by turf, trade rank, family role and THE DAY'S CITY EVENT.
+  // At a 1,000,000 pocket the cover was 250,000 against a band topping out at 130,000 before those
+  // multipliers, so on a high-jobPay day the take crossed it and the assertion failed. That is the
+  // recorded date-flaky class: a deterministic claim resting on a probabilistic precondition.
+  const customsMax = CRIMES.find((c) => c.id === 'customs').cash[1];
+  const markPocket = 20000000;
+  assert(Math.floor(markPocket * RIVALS.TAKE.POCKET_BPS / 10000) > customsMax * 10,
+    'the mark is seeded rich enough that POCKET_BPS covers the top of the band with every multiplier '
+    + '(turf, rank, role, city event) stacked — they top out well under 10x between them');
+  await pool.query("UPDATE characters SET loc='cathedral', cash=$2 WHERE id=$1", [res.id, markPocket]);
   await seed("cash=0, jail_until=NULL, hosp_until=NULL, nerve=200, energy=200, cunning=900, speed=900, loc='cathedral', respect=625000");
 
   const pullUntilWin = async () => {

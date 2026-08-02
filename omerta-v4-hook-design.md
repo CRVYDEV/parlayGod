@@ -1,8 +1,10 @@
 # OMR on Uniswap v4 hooks — Ethereum mainnet
 
-**Status: DESIGN ONLY.** Nothing here is built. It touches the mainnet contracts, so it sits behind
-the two standing gates (third-party audit of contracts + signer; legal counsel) exactly like the rest
-of the chain track — and it *enlarges* the audit gate, see §7.
+**Status: §11 steps 1 and 2 are BUILT** (`OmertaBond`'s four-way ETH split; `OmertaHook.sol` +
+`test/OmertaHook.t.sol`, 19 tests against a REAL `PoolManager`). Steps 3–8 are not. Everything here
+still sits behind the two standing gates (third-party audit of contracts + signer; legal counsel)
+exactly like the rest of the chain track — and it *enlarges* the audit gate, see §7. Nothing is
+deployed; the hook is inert code in a repo.
 
 **Founder direction (2026-07-30):** evaluate replacing the ERC-20 transfer tax with a Uniswap v4
 hook, preserving the same three-way economics (founder wallet, buyback/LP, RWA accumulation), and
@@ -523,16 +525,43 @@ and the choice is the founder's because it turns on wallet topology, not on code
 
 1. ~~**Pool-local enforcement (§4)**~~ — **DECIDED (founder, 2026-07-30): accepted**, with the
    armed-at-zero ERC-20 backstop retained. §9.6 sharpens *why* that backstop matters.
-2. **The RWA bridge (§6)** — book the RWA slice on arrival (recommended), or model in-transit? **OPEN.**
+2. ~~**The RWA bridge (§6)**~~ — **MOOT.** The founder retired the stock layer the day after this doc
+   was written (`omerta-stock-layer-retirement.md`): the game acquires no tokenized equities and the
+   treasury holds **ETH**. There is nothing to buy on Arbitrum, so there is no bridge in the
+   accounting path, and §6 is obsolete rather than answered. What survives is the four ETH slices at
+   their signed bps, with `rwa_revenue` repurposed as the treasury's inflow ledger — so the hook's
+   third slice lands as WETH in the destination currency, which is *simpler* than the case §6 feared.
 3. **Mainnet gas on withdrawals (§8)** — which mitigation, or accept a higher minimum? **OPEN.**
 4. ~~**Dynamic fees (§2.4)**~~ — **DECIDED: the capability is approved.** Ship the machinery; ship the
    *rate* flat at 900 bps. The curve itself is a new economic surface and still wants its own sim
    measurement and BALANCE sign-off — approving the mechanism is not approving a schedule.
 5. ~~**Oracle (§5)**~~ — **DECIDED: hook-native**, scoped as its own contract. See §9.2 — it sits on the
    bond mint path, so its cutover is not independent of the migration.
-6. **Age decay on-chain (§3)** — hold at the game boundary (recommended)? **OPEN.**
-7. **The bond ETH split (§9.7)** — four-way in the contract (recommended), or the custody-dependent
-   backend interim? **OPEN, and it is the only item here that is a live defect rather than a choice.**
+6. **Age decay on-chain (§3)** — hold at the game boundary (recommended)? **OPEN**, but note the hook
+   as built takes the recommendation: it has no age logic, and adding any would be new logic in an
+   immutable contract, i.e. a redeploy.
+7. ~~**The bond ETH split (§9.7)**~~ — **BUILT (2026-07-31).** Four-way in the contract: `rwaBps` +
+   `rwaRecipient`, `Bonded` emits `toRwa`, the watcher and `recordBond` read it, the remainder rule
+   moved to the Vig so the four sum to the principal exactly, and `runBondInvariants` gained a
+   per-bond "the slice reached the ledger" check — the one thing neither existing invariant could see.
+   Deploy requirement: `rwaRecipient` must be a DIFFERENT key from `vigRecipient`, or the custody
+   defect the backend interim was rejected for reappears with the books still reading correct.
+8. **TWO HOOKS ARE PLANNED FOR ONE POOL, AND A `PoolKey` HOLDS EXACTLY ONE.** **OPEN, and it is the
+   item most likely to be discovered late.** `omerta-uniswap-hooks-design.md` §2 specifies an
+   `afterSwap`→Vig **trade-fee** hook — a small cut of *every* swap's ETH leg, funding the withdrawal
+   reserve — and its BACKEND IS ALREADY BUILT AND DORMANT (`vig.js:recordTradeFee`,
+   `watcher.js:syncTradeFees`, `TRADE_FEE_HOOK_ADDRESS`, the `TradeFeePaid(nonce, amountWei)` adapter).
+   `OmertaHook` is a different fee with different economics: sells only, 900 bps, dev/rwa/lp — **the
+   Vig is not among its slices.** They are not variants of each other and they cannot both be the hook
+   for the canonical pool. Three ways out, in order of preference:
+   1. **Fold** — one hook, four destinations: keep the sell tax as-is and add the trade fee as its own
+      rate on all swaps, emitting both events so the built Vig rail needs no change. Recommended, but
+      it is a NEW FEE ON BUYS, which is an economic surface and wants its own sign-off, so it is not
+      done here.
+   2. **Retire the trade fee** and accept that the Vig is funded only by fees/store/bonds. Cheapest,
+      and it costs a revenue line that was designed to widen `extraction ≤ inflow` headroom.
+   3. Run the trade-fee hook on a second pool. Rejected for the same reason §4 rejects fragmenting
+      liquidity — that pool would be the *untaxed* one and §9.6 says who would find it first.
 
 Also decided in passing: **the cut is taken in ETH** (§2.1 — the core move), and **OMR may become an
 inert ERC-20** with its tax path armed at zero (§7.1).
@@ -541,13 +570,40 @@ inert ERC-20** with its tax path armed at zero (§7.1).
 
 Nothing below starts before the founder answers §10, and nothing deploys before the two standing gates.
 
-1. **`OmertaBond` four-way ETH split (§9.7)** — first, because it is a defect rather than a migration,
-   it is small, and it must be in the same audit package as everything else. `rwaBps` + `rwaRecipient`
-   + `toRwa`; watcher + `recordBond` read the event; regression asserts a real on-chain bond funds
-   `rwa_revenue` (the current code would fail it).
-2. `OmertaHook.sol` + Foundry suite. Re-assert `MAX_SELL_TAX_BPS`, the remainder rule, buys-are-free,
-   and fuzz the three-way split for dust. Add the §9.6 operating rule as an assertion:
-   `DISCOUNT_BPS < sellTaxBps`. Compile clean; `forge test` green (the gate-1 discipline — 77/77 today).
+1. ~~**`OmertaBond` four-way ETH split (§9.7)**~~ — **DONE (2026-07-31).** See §10.7.
+2. ~~`OmertaHook.sol` + Foundry suite~~ — **DONE.** 19 tests, `forge test` 128/128 across the suite
+   (was 109/109), incl. a 512-run dust fuzz. **They run against a real `PoolManager` with real
+   liquidity and real swaps**, not a mock, so the fee is measured against what a swapper actually
+   received. Everything §11.2 asked for is asserted, and four things the sketch did not anticipate
+   turned up in the building and are worth reading before the audit:
+
+   - **The pool gate is the security property, not the fee.** A hook address is part of a `PoolKey`,
+     so *anyone* can create a pool that uses this hook — and then swap against themselves in an
+     (OMR, WORTHLESS) pool and emit a real `SellTaxTaken` with a real transaction hash. That is
+     fabricated revenue wearing the exact credential the backend's anti-fabrication gate trusts.
+     `beforeInitialize` therefore reverts unless one side is OMR and the other is a Safe-approved
+     quote. Without it the whole event stream is forgeable by a stranger for the price of gas.
+   - **The fee ACCRUES and is swept separately**, rather than being forwarded in-tx like `OmertaFees`.
+     That precedent is right for a tollbooth and wrong for a hook: three pushes inside a swap means
+     any one recipient reverting on receipt **bricks the pool**. Pool liveness must not depend on a
+     wallet's behaviour. `sweep` is permissionless, pays only the Safe-set recipients, and a broken
+     recipient now costs a failed sweep instead of a market outage (regression-tested).
+   - **An immutable hook has to ship every seam its own roadmap needs.** Permissions live in the
+     address and the logic has no proxy, so step 3's oracle could not have been wired to this pool
+     later at all. The hook therefore ships an `observer` seam (called fail-safe, gas-stipended) and
+     a mined `beforeSwap` + fee-override slot, both unused today.
+   - **Exact-output sells are taxed in OMR, not the quote**, and this is stated rather than hidden.
+     `afterSwap` can only take a delta on the *unspecified* currency, which is the output for an
+     exact-input swap (the upgrade, and where all router volume is) and the input for an exact-output
+     one. Charging in `beforeSwap` instead would fix the denomination and break partial fills, which
+     §2.2 already warned about. The honest reading: that path is at **parity with the ERC-20 tax it
+     replaces** — taxed, in the worse currency — and it is not a bypass.
+
+   Also decided while building, and worth an auditor's eye: **there is no pause.** A hook that can
+   revert `beforeSwap` can halt a public market; the only lever is the rate, and zero stops the fee
+   rather than the pool. And the §9.6 operating rule is asserted in **two** places — the Foundry
+   suite (contract side) and `preflight.js` (a WARNING, following the PLEX-rail precedent, because a
+   mispriced relation should not take a live server down).
 3. Hook-native oracle, with the F2 both-sided window bound and fail-closed semantics carried over.
 4. Address mining for the flag set; deterministic deploy script.
 5. Backend: `watcher.js` hook-event sync; `recordSellTax` signature change; bots onto `@uniswap/v4-sdk`.
