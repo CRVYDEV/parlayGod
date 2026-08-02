@@ -7,7 +7,7 @@
 // Split out of the 2,003-line src/social.js; every function below is byte-identical to what was
 // there. Import from '../social.js' — it re-exports this package's public surface unchanged.
 import { GameError, bumpFamilyTask, bus, ledger, cleanText, notify } from '../game.js';
-import { DISTRICTS, M3, M8, MAP, districtNeighbours, ROSTER_POSTS, rosterPostOf, rosterMult, levelOf, dayOf, territoryBuildCost, worldNpcOf, liberationCost, DIPLOMACY, cityHourOf, seasonFx } from '../rules.js';
+import { DISTRICTS, M3, M8, MAP, districtNeighbours, ROSTER_POSTS, rosterPostOf, rosterMult, levelOf, dayOf, territoryBuildCost, worldNpcOf, liberationCost, DIPLOMACY, cityHourOf, seasonFx, CHARTERS, familyCharterOf, charterFx, FAMILY_CHARTER } from '../rules.js';
 import { seizeTerritoryRackets, releaseTerritoryRackets } from '../territory.js';
 import { releaseFrontierHolds, outfitStrengthFrac } from '../world.js';
 import { activeDecree } from '../commission.js';
@@ -341,6 +341,48 @@ export async function setWatch(ch, districtId, hour, client, h) {
     onWatchNow: onWatch({ watch_hour: hr }), surpriseMult: M3.WATCH_SURPRISE_MULT };
 }
 
+// ═══ FAMILY CHARTERS — what the family IS ════════════════════════════════════════════════════════
+// Every family was mechanically identical apart from what it happened to hold, so "who are we" had
+// no answer anybody could give differently. The boss picks a charter and takes its handicap with it;
+// see CHARTERS in rules.tail.js for why the handicap is the whole mechanic.
+//
+// FREE THE FIRST TIME, then a $OMR sink from the family reserve on a cooldown (the buySeal/foundation
+// precedent — `vanity:charter` rides the existing `vanity:%` burn term and vocabulary, so §10.4 needs
+// no change at all). An alpha boss should not be trapped by a decision made before they knew what the
+// choices meant; a boss who wants to re-found the family every week should pay for the privilege.
+export async function chooseCharter(ch, charterId, client, h) {
+  if (h.owned.gangRole !== 'boss') throw new GameError('rank', 'Only the boss says what the family is.');
+  const pick = familyCharterOf(charterId);
+  if (!pick) throw new GameError('bad_charter', 'No such charter.');
+  // the gang row is the source of truth for the current charter, the reserve and the cooldown, and
+  // all three are read-then-written here — so it locks first (the buySeal discipline).
+  const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
+  if (!g) throw new GameError('gang', 'No family to charter.');
+  if (g.charter === pick.id) throw new GameError('already', `The family already runs as ${pick.name}.`);
+  const first = !g.charter;
+  let cost = 0;
+  if (!first) {
+    const since = g.charter_at ? Date.now() - new Date(g.charter_at).getTime() : Infinity;
+    if (since < FAMILY_CHARTER.CHANGE_CD_MS)
+      throw new GameError('cooldown', `The family only re-founds itself so often — ${Math.ceil((FAMILY_CHARTER.CHANGE_CD_MS - since) / 3600000)}h to go.`);
+    cost = FAMILY_CHARTER.CHANGE_OMR;
+    if (Number(g.omr_reserve) < cost)
+      throw new GameError('reserve', `Re-founding the family takes ${cost} $OMR from the reserve (${Math.floor(Number(g.omr_reserve))} on hand).`);
+  }
+  // the cooldown is armed by a PAID re-founding, never by the free first pick — the trap the free
+  // pick exists to avoid is the decision made before you knew what the choices meant, and a week's
+  // lock on correcting it would put that trap straight back.
+  await client.query(`UPDATE gangs SET charter=$2, omr_reserve = omr_reserve - $3${cost > 0 ? ', charter_at=now()' : ''} WHERE id=$1`,
+    [g.id, pick.id, cost]);
+  if (cost > 0) await h.ledger(client, { currency: 'omr', amount: -cost, reason: 'vanity:charter', counterparty: g.id });
+  if (h.owned.gang) { h.owned.gang.charter = pick.id; h.owned.gang.omr_reserve = Number(g.omr_reserve) - cost; }
+  bus.emit('streets', { type: 'charter', gang: g.name, charter: pick.name });
+  await h.track(client, ch.account_id, 'gang_charter', { charter: pick.id, cost });
+  return { ok: true, charter: { id: pick.id, name: pick.name, good: pick.good, bad: pick.bad },
+    cost, free: first, reserve: Number(g.omr_reserve) - cost, changeOmr: FAMILY_CHARTER.CHANGE_OMR,
+    changeAfterH: Math.round(FAMILY_CHARTER.CHANGE_CD_MS / 3600000) };
+}
+
 // ── THE PRICE OF TURF — the ONE computation the outright claim and the sealed contest's floor
 // both read, so the two can never drift apart (the extortFront one-core lesson: a copied block is
 // how the sackEmpire rake-cursor drifted). Throws the level gate; returns every component so a
@@ -412,9 +454,18 @@ export async function turfQuote(client, ch, d, gangId) {
   // time. Applied last so it discounts everything above it, and the discounted number is what is
   // charged AND what is ledgered (the decree/amnesty discipline).
   const reckoning = seasonFx('floorMult');
+  // THE CHARTER: what the ATTACKING family is — the Outfit takes ground cheaper than anyone, the
+  // Syndicate pays over the odds for it. A lockless read (this is a quote; nothing is written here —
+  // the outfitStrengthFrac precedent), 1 for a family that hasn't chosen, and never the defender's:
+  // a charter says what YOU are good at, not what your enemy is bad at.
+  let charterMult = 1;
+  if (gangId && !defending) {
+    const me = (await client.query('SELECT charter FROM gangs WHERE id=$1', [gangId])).rows[0];
+    charterMult = charterFx(me?.charter, 'turfMult');
+  }
   const cost = Math.floor((base + sovBonus + premium + enforcer)
-    * (coalition ? DIPLOMACY.COALITION_SEIZE_MULT : 1) * surprise * contiguity * foothold * reckoning);
-  return { occupied, defending, base, premium, sovBonus, enforcer, coalition, surprise, contiguity, foothold, reckoning, cost };
+    * (coalition ? DIPLOMACY.COALITION_SEIZE_MULT : 1) * surprise * contiguity * foothold * reckoning * charterMult);
+  return { occupied, defending, base, premium, sovBonus, enforcer, coalition, surprise, contiguity, foothold, reckoning, charterMult, cost };
 }
 
 const contestLive = (d, at = Date.now()) => !!d.contest_until && new Date(d.contest_until).getTime() > at;
@@ -539,7 +590,6 @@ export async function resolveContest(pool, districtId) {
       const a = Number(b.amount), w = Number(win.amount);
       if (a > w || (a === w && b.gang_id === d.holder_gang)) win = b;
     }
-    const keepBps = 10000 - M3.CONTEST_LOSS_BPS;
     const results = [];
     for (const b of bids) {
       const amt = Number(b.amount);
@@ -555,7 +605,11 @@ export async function resolveContest(pool, districtId) {
         results.push({ gangId: b.gang_id, staked: amt, won: false, back: 0, dissolved: true });
         continue;
       }
-      const back = Math.floor(amt * keepBps / 10000);
+      // THE CHARTER: what a losing stake forfeits is the loser's OWN business — the Fixers hedge in
+      // ways that cost them more when the hedge fails. Clamped under 10000 so a stake can never
+      // forfeit more than itself, and the escrow identity holds either way (refund + burn == stake).
+      const lossBps = Math.min(9999, Math.round(M3.CONTEST_LOSS_BPS * charterFx(alive.charter, 'contestLossMult')));
+      const back = Math.floor(amt * (10000 - lossBps) / 10000);
       const burn = amt - back;
       if (back > 0) {
         await client.query('UPDATE gangs SET treasury = treasury + $2 WHERE id=$1', [b.gang_id, back]);

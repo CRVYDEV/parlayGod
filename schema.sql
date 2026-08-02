@@ -2600,3 +2600,11 @@ CREATE TABLE IF NOT EXISTS season_records (
 -- Standing, so counting it back into City Standing would be a self-reinforcing loop on the very
 -- metric that picked the winner.
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS season_crowns INT NOT NULL DEFAULT 0;
+
+-- ── FAMILY CHARTERS (the strategy package's ASYMMETRY) ─────────────────────────────────────────
+-- What the family IS, chosen by the boss: one axis it is good at, one it gives up (see CHARTERS in
+-- rules.tail.js — the handicap is the mechanic). NULL is a legitimate answer: an unchartered family
+-- gets neither side and is exactly today's family, so nothing existing breaks. charter_at stamps the
+-- last change for the cooldown; free the first time, then a $OMR sink from the family reserve.
+ALTER TABLE gangs ADD COLUMN IF NOT EXISTS charter TEXT;
+ALTER TABLE gangs ADD COLUMN IF NOT EXISTS charter_at TIMESTAMPTZ;

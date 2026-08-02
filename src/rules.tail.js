@@ -3632,6 +3632,60 @@ export const seasonModOf = (seasonIdx = seasonIdxOf()) => {
 };
 export const seasonDaysLeft = (day = dayOf()) => 28 - (day % 28);
 
+// ═══ FAMILY CHARTERS (the strategy package's ASYMMETRY) ══════════════════════════════════════════
+// Every family was mechanically IDENTICAL — a 20-man family and a 3-man family differed only in what
+// they happened to hold, so "who are we" was not a question anybody could answer differently. A
+// charter makes it one: pick what your family is GOOD at and, in the same breath, what it gives up.
+//
+// THE HANDICAP IS THE MECHANIC. A charter with only an upside is a free upgrade everybody takes, and
+// then nothing is asymmetric again — so every charter trades one axis for another, and NO CHARTER is
+// a legitimate fourth answer (a family that has not chosen gets neither, which is what makes choosing
+// a real bet rather than a formality).
+//
+// The Syndicate and the Outfit are deliberate MIRRORS on the same two axes — do you earn or do you
+// fight — which is what makes an alliance between them complementary rather than merely additive: a
+// Syndicate family funds an Outfit family's wars. The Fixers sit on different axes entirely and are
+// the interesting third pick.
+//
+// Every effect is ONE touchpoint on an EXISTING modifier site, and the modified number is what is
+// charged AND what is ledgered (the decree/roster discipline). Deliberately NO faucet is touched:
+// two are sink discounts, one is a contest-price multiplier, one is Bureau pacing, one is how much a
+// losing stake forfeits. So this needed no economy retune and breaks no existing family.
+// The four numbers are named ONCE here rather than written into each entry, so each is a scalar the
+// lever register can pin on its own — a multiplier buried inside an array entry is invisible to the
+// reader check, and pinning the whole catalog would mean pinning its prose too.
+export const FAMILY_CHARTER_FX = {
+  EDGE: 0.85,        // what your strong axis costs you
+  COST: 1.15,        // …and what the axis you gave up costs you
+  HEAT_EDGE: 0.75,   // the Fixers' Bureau pace
+  LOSS_COST: 1.25,   // …paid for when a hedge fails
+};
+export const CHARTERS = [
+  { id: 'syndicate', name: 'The Syndicate', blurb: 'Merchants first. Your operations run lean — but you buy peace rather than fight for it, and taking ground costs you more.',
+    good: 'operations cost 15% less to run', bad: 'taking turf costs you 15% more',
+    upkeepMult: FAMILY_CHARTER_FX.EDGE, turfMult: FAMILY_CHARTER_FX.COST },
+  { id: 'outfit', name: 'The Outfit', blurb: 'Soldiers first. You take ground cheaper than anyone — but nobody in this family keeps the books, and the pad runs dear.',
+    good: 'taking turf costs you 15% less', bad: 'operations cost 15% more to run',
+    turfMult: FAMILY_CHARTER_FX.EDGE, upkeepMult: FAMILY_CHARTER_FX.COST },
+  { id: 'fixers', name: 'The Fixers', blurb: 'Politicians first. The Bureau builds its file on your operations slowly — but you hedge, and a stake you lose is mostly gone.',
+    good: 'the Bureau heats your operations 25% slower', bad: 'a losing contest stake forfeits 25% more',
+    scrutinyMult: FAMILY_CHARTER_FX.HEAT_EDGE, contestLossMult: FAMILY_CHARTER_FX.LOSS_COST },
+];
+// NAMED `familyCharterOf`, not `charterOf` — the bond programme's treasury seal ladder already owns
+// that name in this same file (BONDS.CHARTER_TIERS), and two `export const charterOf` in one module
+// is a SyntaxError that takes the whole server down at import.
+export const familyCharterOf = (id) => CHARTERS.find((c) => c.id === id) || null;
+// the reader every touchpoint uses — 1 for a family that has not chosen, so an unchartered family is
+// exactly today's family and the site needs no branch
+export const charterFx = (id, key) => Number(familyCharterOf(id)?.[key]) || 1;
+export const FAMILY_CHARTER = {
+  // free the first time — an alpha family should not be trapped by a decision made before they knew
+  // what they were. Changing it is a real $OMR sink from the family reserve on a long cooldown (the
+  // seal/foundation precedent), so a charter stays a commitment without being a life sentence.
+  CHANGE_OMR: 40,
+  CHANGE_CD_MS: 7 * 24 * 60 * 60 * 1000,
+};
+
 // ═══ THE MAP (the strategy package's GEOGRAPHY) ══════════════════════════════════════════════════
 // The six core districts were a flat SET. Every strategy game's map IS its strategy, and this one
 // had none: no adjacency, no chokepoints, no "you cannot hold that because it is cut off." Holdings

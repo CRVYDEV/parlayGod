@@ -100,7 +100,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, CARS, KITCHENS, TRADE_RANKS, M3, M4, PATHS,
          RANKS,
          cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, ESTATE, AUCTION, MEGAPROJECT, CLUES, DUELS, DUEL_TITLE_RANKS, SEASON_MODS, seasonModOf, seasonIdxOf, seasonDaysLeft, SEASON_PHASES, seasonPhaseOf, seasonPhaseLeft,
-         foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, PATRON, BONDS, SPEAKEASY, BOXING, RARITY,
+         foundationOf, foundationBustMult, foundationBleedMult, CHARTERS, familyCharterOf, FAMILY_CHARTER, FOUNDATION, LAW, WIRE, STORE, PASS, PATRON, BONDS, SPEAKEASY, BOXING, RARITY,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf, syndicateOf, TERRITORY_TYPES, TERRITORY_RACKETS,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE, NOTORIETY, MAP, DISTRICT_ADJ, districtNeighbours,
          TAX, withdrawTaxBps,
@@ -948,6 +948,11 @@ export async function buildServer() {
       roster: { posts: ROSTER_POSTS, minLevel: M3.ROSTER_MIN_LEVEL,
         reassignSeconds: Math.round(M3.ROSTER_REASSIGN_CD_MS / 1000), powerMax: M3.ROSTER_POWER_MAX,
         note: 'One post per made man, one man per post — and a post is dead while its holder is dead, in lockup or in the hospital.' },
+      // FAMILY CHARTERS — the whole catalog, good and bad together. A client that showed only the
+      // upside would be selling a free upgrade, which is exactly what the handicap exists to prevent.
+      charters: { list: CHARTERS, changeOmr: FAMILY_CHARTER.CHANGE_OMR,
+        changeAfterH: Math.round(FAMILY_CHARTER.CHANGE_CD_MS / 3600000),
+        note: 'What your family is good at, and what it gives up for it. Free the first time; after that it costs the reserve. Running no charter is a real answer — you get neither side.' },
       note: 'A district a family holds changes hands only through a sealed contest: every stake is secret until it closes, the highest takes it, the holder wins ties, and a loser forfeits part of what they put up.' },
     // ASSETS & RACKETS → Tier 4 — the upgrade axis, the tycoon ladder, the empire-set titles
     empire: { upMax: RACKET_EMPIRE.UP_MAX, upStep: RACKET_EMPIRE.UP_STEP, tycoonRanks: RACKET_EMPIRE.TYCOON_RANKS,
@@ -1295,11 +1300,12 @@ export async function buildServer() {
   app.get('/v1/gangs', async () => {
     // two flat queries instead of a correlated subquery — identical response, and pg-mem
     // (the test db) can execute it, so the route is actually covered by the suite
-    const r = await pool.query('SELECT id, name, tag, seal, foundation, treasury, wars_won, lifetime_tribute FROM gangs');
+    const r = await pool.query('SELECT id, name, tag, seal, foundation, charter, treasury, wars_won, lifetime_tribute FROM gangs');
     const counts = await pool.query('SELECT gang_id, COUNT(*) n FROM gang_members GROUP BY gang_id');
     const members = Object.fromEntries(counts.rows.map((c) => [c.gang_id, Number(c.n)]));
     return { gangs: r.rows.map((g) => ({ id: g.id, name: g.name, tag: g.tag,
       seal: sealOf(g.seal)?.name || null, foundation: foundationOf(g.foundation)?.name || null,
+      charter: familyCharterOf(g.charter)?.name || null,
       members: members[g.id] || 0, warsWon: Number(g.wars_won),
       standing: Number(g.lifetime_tribute) + 10000 * Number(g.wars_won) })) };
   });
@@ -1323,6 +1329,10 @@ export async function buildServer() {
           bookValue: Math.round(Number(r.shares) * tickerPriceOf(r.ticker) * 100) / 100 }));
       await client.query('COMMIT');
       return { roster, gang: { id: g.id, name: g.name, tag: g.tag, color: g.color || null,
+        // THE CHARTER — public on purpose: what a family is good at, and what it gave up for it,
+        // is exactly the thing a rival should be able to read before deciding how to come at them.
+        charter: g.charter ? { ...familyCharterOf(g.charter), changeOmr: FAMILY_CHARTER.CHANGE_OMR } : null,
+        charters: CHARTERS,
         seal: sealOf(g.seal)?.name || null, sealTier: Number(g.seal || 0),
         nextSeal: sealOf(Number(g.seal || 0) + 1) || null,
         foundation: foundationOf(g.foundation)?.name || null, foundationTier: Number(g.foundation || 0),
@@ -1504,6 +1514,8 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => V.buySeal(ch, client, h)));
   app.post('/v1/gangs/foundation', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => V.buyFoundation(ch, client, h)));
+  app.post('/v1/gangs/charter/:id', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.chooseCharter(ch, req.params.id, client, h)));
   app.post('/v1/streets/:targetId/search', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.startSearch(ch, req.params.targetId, client, h)));
   app.delete('/v1/streets/search', { preHandler: auth }, async (req) =>

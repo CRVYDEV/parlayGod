@@ -39,7 +39,7 @@ export const SYSTEMS = {
   'the dueling ladder': ['duel'],
   'crew heists': ['heist_plan', 'heist_join', 'heist_score', 'heist_case', 'heist_fence', 'heist_rat'],
   'clue scrolls': ['clue_casket'],
-  'the family': ['gang_foundation', 'gang_seal', 'family_dynasty_name'],
+  'the family': ['gang_foundation', 'gang_seal', 'gang_charter', 'family_dynasty_name'],
   'the commission': ['commission_vote', 'commission_veto', 'commission_proposal', 'commission_override'],
   'territory': ['territory_raid', 'territory_op', 'territory_specialist', 'sov_income'],
   'the world': ['world_raid', 'world_raid_plan', 'world_raid_join'],

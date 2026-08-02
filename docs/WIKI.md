@@ -444,6 +444,17 @@ discount however many borders you share, not a bonus for encirclement. So "we ca
 we do not hold the docks" is now a real sentence, and taking the district next to your own beats taking
 the rich one across town.
 
+**The charter — what your family IS.** Every family used to be mechanically identical apart from what
+it happened to hold. Now the boss picks a charter, and every one of them trades an edge for a real
+handicap — a charter with only an upside would be a free upgrade everybody takes, and then nothing is
+asymmetric again. **The Syndicate** runs its operations 15% leaner but pays 15% over the odds for
+turf. **The Outfit** takes ground 15% cheaper and pays 15% more to run what it holds. **The Fixers**
+have the Bureau building its file 25% slower, but forfeit 25% more of a losing contest stake. Running
+NO charter is a real answer — you get neither side, which is exactly the family you have today. The
+first pick is free; re-founding costs the family reserve and locks for a week afterwards. The two
+mirrors are deliberate: a Syndicate family and an Outfit family are each good at what the other is
+bad at, so an alliance between them is complementary rather than just twice as big.
+
 **The season has an ending.** A season runs 28 days in three phases you can read on `/seasons`:
 **The Opening** (days 1–7 — cheap ground, nothing settled), **The Long Game** (8–21 — build and hold),
 and **The Reckoning** (22–28). In the last week held turf is a quarter cheaper to challenge, contests
