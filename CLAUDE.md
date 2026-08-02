@@ -3590,6 +3590,54 @@ drift-0 + mobile 66/66 + pgquery + pgcheck 43/43 on real Postgres. All `SEASON_P
 `DISTRICT_ADJ`/`FAMILY_CHARTER*` numbers are founder sign-off levers (pinned, tabled in BALANCE.md
 § THE STRATEGY PACKAGE steps five/six).
 
+**RED-TEAM over the whole strategy package (`AUDIT-strategy-package.md`).** Seven steps had shipped
+with mutation-verified tests and no adversarial pass, and step three had introduced a NEW ESCROW
+SURFACE (cash sitting in a table rather than a treasury) — the class this project keeps finding bugs
+in. Four lenses; **no CRITICAL**, and four fixes each with a regression that fails by name under
+mutation. **H1 (HIGH) — a lapsed contest's escrow was DELETED rather than settled.** `stakeClaim`
+opened a fresh window on ground whose last contest had run out by deleting the stale bids, reasoning
+that "a stale row would be free money for its owner." The first half is right and the conclusion is
+backwards: **a lapsed-and-unresolved contest is not stale ROWS, it is other families' ESCROW.**
+Deleting it vaporized their money with no refund row and no burn row — a silent theft (every loser
+lost the WHOLE stake, not the `CONTEST_LOSS_BPS` forfeit, and the family that had actually WON never
+took the ground) AND a permanent §10.4 drift, **measured on the reproduction at −120,000 with
+`turf contest escrow` reading `ok:false`**. The window is real, not theoretical: a contest expires on
+its own clock and the sweep runs on the worker's, so any claim landing between the two hit it — and
+a window closing is exactly when a rival acts. Fixed by SETTLING it through the sweep's own
+implementation: `resolveContest` split into `settleContest(client, districtId)` (the settlement
+inside whatever transaction the caller is already running) plus a thin worker wrapper — two callers,
+one implementation (the extortFront one-core lesson). The district row is already locked and the
+settle takes the same lock (re-entrant for the claim, the mutex for the sweep, districts→gangs
+unchanged); `d` is **re-read after** because the ground may have changed hands, so the floor a
+challenger then pays is the new one; and the streets event rides back as DATA so whichever caller
+COMMITS emits it. Triggering the settle buys the challenger nothing — the bids were committed before
+the window closed, and the winner's stake becomes a HIGHER garrison. **M1 (MED) — the watch could be
+moved with somebody at the door.** A contest is public the moment the first stake lands, so a holder
+could flip `watch_hour` away from NOW and make every later stake pay the 1.5× surprise premium: free,
+instant, repeatable, and the opposite of a commitment. Frozen while a contest runs (`contested`) —
+zero new levers, because a held district can only change hands through a contest. **M2 (LOW-MED) —
+the watch was INHERITED.** `resolveContest` clears it and states the rule three lines away ("the new
+holder declares their own hour"); dissolution and `seizeDistrict` did not, so a family could take
+ground and inherit a public window their ENEMY chose. Both now clear it — while dissolution
+deliberately does NOT clear `contest_until`, since a live contest may hold other families' escrow and
+only the sweep (which selects on it) can give that money back: clearing it there would have been H1
+again by another route. **M3 (LOW-MED) — the roster cooldown was one click from nothing.** It read
+`m.post && m.post_at && …` and `vacatePost` cleared `post_at` with the post, so standing a man down
+(free and instant, by design) and walking him into the next chair the same second bypassed it
+entirely — buying exactly the reactive flip it exists to price: **Bagman all week, Enforcer the
+moment a contest opens**. `post_at` is now when the man last CHANGED posting and is never cleared.
+Verified CLEAN: the escrow identity term-for-term (refund + burn == stake on every loser, the
+charter's loss multiplier clamped under 10000), the treasury side's exact-reason matching (so the
+burn is counted only by the escrow check), `vanity:charter` inside the existing `vanity:%` term, post
+assignment under concurrency without a UNIQUE constraint, and `turfQuote`'s attacker-only symmetry.
+Residual, accepted: the dissolution gangs→districts vs claim districts→gangs AB-BA **predates the
+sealed bid** and lands as the standard 40P01 → `contention` retry. Flagged for founder sign-off (NOT
+patched): **the garrison RATCHETS DOWN** — the winning stake becomes the new garrison and only had to
+clear a price multiplied by every discount that applied (coalition 0.5 × foothold 0.85 × reckoning
+0.75 × the Outfit 0.85 ≈ **0.46**), so a chain of favourable conquests walks a district's standing
+price down toward `SEIZE_BASE`; the cheapest dial is storing the UNDISCOUNTED `base` as the garrison,
+which keeps every discount the one-time reward it was written to be (BALANCE.md).
+
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
 `payPlex` pattern); named landmarks / Founder's charter numbers; ~~R2 (the `rwa_revenue` → real-RWA-buy

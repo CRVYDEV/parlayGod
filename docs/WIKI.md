@@ -421,7 +421,8 @@ family that you are at war with scores 3 points. **Turf** (`/districts/:id/seize
 benefits and its territory racket.
 
 **The watch.** A holder declares the hour their family stands ready (`/districts/:id/watch`, boss or
-underboss, free and changeable — the cost is having to BE there). Inside that four-hour window, taking
+underboss, free and changeable — the cost is having to BE there, though not once somebody is at
+the door: with a contest running you are held to the hour you committed to). Inside that four-hour window, taking
 the district is the plain price; outside it, catching them cold costs **1.5x**. A family that never
 declares a watch is dear at every hour, so declaring is what buys you the cheap window. Every declared
 hour is public on `/districts` — you are meant to plan around it, on both sides.
@@ -471,7 +472,8 @@ worth scales with the man in it. What makes this worth fighting over: **a post i
 holder is dead, in lockup or in the hospital** — put a family's Enforcer in the hospital and their
 turf gets cheaper to take without your ever going near the district. They can fill the chair again
 straight away, but only with somebody who was on the STREET; you cannot slide a man across from
-another post for six hours, so answering a hit costs the family a second made man. Every post is a
+another post for six hours — nor stand him down and walk him into the next chair, which is the same
+shuffle — so answering a hit costs the family a second made man. Every post is a
 bonus, never a requirement — the scarcity is which chairs you fill, not that the baseline moved.
 
 **The reserve pays for status:** **seals** (`/gangs/vanity/seal`, Wax 25 to Obsidian 1500 $OMR, a badge) and

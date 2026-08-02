@@ -4384,3 +4384,36 @@ apart, the pick decides the whole family's shape and a wrong pick is punishing. 
 `CHANGE_CD_MS` decide whether a charter is a commitment or a costume — the cooldown is armed only by
 a PAID re-founding, never by the free first pick, because the trap the free pick exists to avoid is
 the decision made before you knew what the choices meant.
+
+## THE STRATEGY PACKAGE — the red-team's one open item: THE GARRISON RATCHETS DOWN (2026-08-02)
+
+The package's own audit (`AUDIT-strategy-package.md`) fixed four defects and left exactly one thing
+for the founder, because it is a balance decision rather than a bug.
+
+**What happens.** A contest's winning stake becomes the district's new garrison, and a stake only
+has to clear `turfQuote`'s cost — which is the outbid price multiplied by every discount that
+applies to that attacker at that moment:
+
+| discount | value | when it applies |
+|---|---|---|
+| coalition vs a hegemon | `DIPLOMACY.COALITION_SEIZE_MULT` **0.5** | an armed coalition against the holder |
+| the foothold | `MAP.ADJACENT_MULT` **0.85** | you already hold a district next door |
+| the reckoning | `SEASON_PHASES` `floorMult` **0.75** | the season's last stretch |
+| the Outfit charter | `FAMILY_CHARTER_FX.EDGE` **0.85** | your family made turf its speciality |
+
+All four at once is **≈0.46**, so a family conquering under favourable conditions installs a
+garrison roughly half what the previous holder paid — and the NEXT attacker's floor is computed from
+THAT. A chain of favourable conquests walks a district's standing price down, bounded below only by
+`M3.SEIZE_BASE`.
+
+**Both readings are defensible, which is why it is not patched.** Every one of those discounts is a
+deliberate reward for arranging something hard, and a cheap district is a CONTESTED district, which
+is the entire aim of the package. Against that: the discount is meant to price *this* conquest, not
+to become the district's value — and as built it pays out twice, once when you take the ground and
+again for everyone who comes for you afterwards, including your enemies.
+
+**The dials, cheapest first.** (a) Store the UNDISCOUNTED `base` as the new garrison rather than the
+paid amount — one line, and it keeps every discount as the one-time reward it was written to be.
+(b) Floor the stored garrison at the previous holder's. (c) Cap the product of the discounts (e.g.
+never below 0.6× the outbid). Nothing here is a signed number moving; the change is *which* number
+gets stored.
