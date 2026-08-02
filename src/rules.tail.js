@@ -3632,6 +3632,58 @@ export const seasonModOf = (seasonIdx = seasonIdxOf()) => {
 };
 export const seasonDaysLeft = (day = dayOf()) => 28 - (day % 28);
 
+// ═══ THE SEASON HAS AN ENDING (the strategy package's ARC) ═══════════════════════════════════════
+// The diagnosis the strategy package answered was "no scarcity of OPTIONS". The next one is that
+// nothing collects them: every system ran forever at the same tempo, a season RESET rather than
+// CONCLUDED, and a clock nobody can see makes "not yet" free. Strategy gets most of its tension
+// from a deadline, so the 28 days now have a SHAPE.
+//
+// Three phases. The last one — THE RECKONING — is where the map is allowed to move: an incumbent
+// who has been sitting on turf since week one has to hold it while it is cheap to challenge, the
+// windows are short, and contests resolve fast enough that several can land in a night.
+//
+// The escalation rides ON the phase object, exactly like SEASON_MODS: each field is ONE touchpoint
+// composing multiplicatively on an EXISTING site, and the modified number is what is charged AND
+// what is ledgered (the decree/amnesty discipline). Deliberately turf-only and deliberately no
+// FAUCET — the reckoning makes turf CHEAPER to fight over and FASTER to settle; it never pays more.
+// Nothing here resets or seizes anything: a season ends with a crown and a record, not a wrecking
+// ball, which is the call that keeps this shippable into a thin alpha.
+//
+// SEASON_PHASE is a TEST-ONLY override (the SEASON_MOD precedent) — without it the reckoning is
+// reachable 7 days in 28 and no assertion about it could be deterministic.
+const SEASON_LEN = 28;   // MUST match seasonIdxOf above AND worker.js runSeasonRollover (`dayOf()/28`)
+export const SEASON_PHASES = [
+  { id: 'opening', name: 'The Opening', from: 0,
+    blurb: 'A fresh season. Positions are cheap and nothing is settled — take ground while it is quiet.' },
+  { id: 'long_game', name: 'The Long Game', from: 7,
+    blurb: 'The city has found its shape. Build, hold, and watch who is climbing.' },
+  { id: 'reckoning', name: 'The Reckoning', from: 21,
+    blurb: 'The last week. Turf is cheap to challenge, the windows are short and contests settle fast — whatever you are holding when the books close is what the city remembers.',
+    // THE ESCALATION — three touchpoints, all pacing/price, all on turf, none a faucet:
+    contestMsMult: 0.5,      // sealed contests resolve twice as fast → several can land in a night
+    floorMult: 0.75,         // the price of challenging held turf drops → incumbents get contested
+    watchWindowMult: 0.5 },  // a holder's cheap window halves → you cannot hide behind a declared hour
+];
+export const seasonDayOf = (day = dayOf()) => day % SEASON_LEN;
+export const seasonPhaseOf = (day = dayOf()) => {
+  const ov = process.env.SEASON_PHASE; // TEST-ONLY (boot-guard listed)
+  if (ov != null) return SEASON_PHASES.find((p) => p.id === ov) || SEASON_PHASES[0];
+  const d = seasonDayOf(day);
+  let p = SEASON_PHASES[0];
+  for (const x of SEASON_PHASES) if (d >= x.from) p = x;
+  return p;
+};
+// the escalation reader every touchpoint uses — 1 outside the reckoning, so the site is a no-op
+// eleven months of the year and needs no branch (the seasonModOf posture).
+export const seasonFx = (key, day = dayOf()) => Number(seasonPhaseOf(day)[key]) || 1;
+// how many days until the books close — the number the clock actually shows a player
+export const seasonPhaseLeft = (day = dayOf()) => {
+  const d = seasonDayOf(day);
+  const i = SEASON_PHASES.findIndex((p) => p.id === seasonPhaseOf(day).id);
+  const next = i + 1 < SEASON_PHASES.length ? SEASON_PHASES[i + 1].from : SEASON_LEN;
+  return next - d;
+};
+
 // ── THE POPULATION (NPC residents) ─────────────────────────────────────────────────────────────
 // Design: omerta-npc-population-design.md. OMERTÀ is a multiplayer game launching with ~zero players,
 // so every board that reads `characters` is dead in an empty alpha. A living NPC population fills all

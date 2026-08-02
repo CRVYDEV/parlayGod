@@ -23,6 +23,10 @@
 // was run is not a measurement, so the baseline is pinned. Set SEASON_MOD=<id> to measure a season
 // deliberately. Must be set BEFORE the server imports rules.
 process.env.SEASON_MOD = process.env.SEASON_MOD || 'dead_quiet';
+// …and the PHASE, for the same reason: THE SEASON HAS AN ENDING makes the last week of every
+// season discount the turf floor and shorten the windows, derived from the real calendar. A run in
+// the reckoning is measuring a different game than a run in week two.
+process.env.SEASON_PHASE = process.env.SEASON_PHASE || 'long_game';
 import { buildServer } from '../src/server.js';
 import { opsEngagement } from '../src/engagement.js';
 import { CRIMES, MISSIONS, GUNS, BUSINESSES, CONSTANTS, PACING, RACKETS, PORT, POPULATION, nerveCapOf } from '../src/rules.js';

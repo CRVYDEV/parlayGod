@@ -7,7 +7,7 @@
 // Split out of the 2,003-line src/social.js; every function below is byte-identical to what was
 // there. Import from '../social.js' — it re-exports this package's public surface unchanged.
 import { GameError, bumpFamilyTask, bus, ledger, cleanText, notify } from '../game.js';
-import { DISTRICTS, M3, M8, ROSTER_POSTS, rosterPostOf, rosterMult, levelOf, dayOf, territoryBuildCost, worldNpcOf, liberationCost, DIPLOMACY, cityHourOf } from '../rules.js';
+import { DISTRICTS, M3, M8, ROSTER_POSTS, rosterPostOf, rosterMult, levelOf, dayOf, territoryBuildCost, worldNpcOf, liberationCost, DIPLOMACY, cityHourOf, seasonFx } from '../rules.js';
 import { seizeTerritoryRackets, releaseTerritoryRackets } from '../territory.js';
 import { releaseFrontierHolds, outfitStrengthFrac } from '../world.js';
 import { activeDecree } from '../commission.js';
@@ -313,11 +313,14 @@ export async function declareWar(ch, targetGangId, client, h) {
 // Is the holder's declared window open right now? A district with no declared watch is NEVER on
 // watch, so every hour is a surprise — which is the honest reading: a family that never says when
 // it is home cannot claim to have been caught off guard, and gets no cheap hour either.
+// THE RECKONING narrows it (seasonFx is 1 outside the final week, so this is a no-op eleven months
+// of the year): in the last stretch of a season you cannot hide behind a declared hour.
+export const watchWindowH = () => Math.max(1, Math.round(M3.WATCH_WINDOW_H * seasonFx('watchWindowMult')));
 export const onWatch = (d, now = Date.now()) => {
   if (d?.watch_hour == null) return false;
   // cityHourOf returns {hour, patrol, phase} — read the FIELD. (The sov window shipped reading the
   // object as a number, which is NaN arithmetic and left that window permanently shut; fixed there too.)
-  return ((cityHourOf(now).hour - Number(d.watch_hour) + 24) % 24) < M3.WATCH_WINDOW_H;
+  return ((cityHourOf(now).hour - Number(d.watch_hour) + 24) % 24) < watchWindowH();
 };
 // The multiplier the ATTACKER pays. Off-watch is a surprise and costs more; a family that declared
 // no watch is surprised at every hour, so an undeclared district is always the dearer price — the
@@ -334,7 +337,7 @@ export async function setWatch(ch, districtId, hour, client, h) {
   if (!d) throw new GameError('bad_district', 'No such district.');
   if (d.holder_gang !== h.owned.gangId) throw new GameError('not_held', "You don't hold that district.");
   await client.query('UPDATE districts SET watch_hour=$2 WHERE id=$1', [districtId, hr]);
-  return { ok: true, district: districtId, watchHour: hr, windowH: M3.WATCH_WINDOW_H,
+  return { ok: true, district: districtId, watchHour: hr, windowH: watchWindowH(),
     onWatchNow: onWatch({ watch_hour: hr }), surpriseMult: M3.WATCH_SURPRISE_MULT };
 }
 
@@ -386,8 +389,13 @@ export async function turfQuote(client, ch, d, gangId) {
   // premium. An NPC-occupied district has no watch to keep (outfits don't sleep) and an unheld one
   // has nobody to surprise, so both stay at the plain price.
   const surprise = (!occupied && !defending && d.holder_gang) ? watchMult(d) : 1;
-  const cost = Math.floor((base + sovBonus + premium + enforcer) * (coalition ? DIPLOMACY.COALITION_SEIZE_MULT : 1) * surprise);
-  return { occupied, defending, base, premium, sovBonus, enforcer, coalition, surprise, cost };
+  // THE RECKONING: in a season's last stretch held turf is CHEAPER to come for, so an incumbent who
+  // has been sitting on it since week one has to defend it while the door is open. 1 the rest of the
+  // time. Applied last so it discounts everything above it, and the discounted number is what is
+  // charged AND what is ledgered (the decree/amnesty discipline).
+  const reckoning = seasonFx('floorMult');
+  const cost = Math.floor((base + sovBonus + premium + enforcer) * (coalition ? DIPLOMACY.COALITION_SEIZE_MULT : 1) * surprise * reckoning);
+  return { occupied, defending, base, premium, sovBonus, enforcer, coalition, surprise, reckoning, cost };
 }
 
 const contestLive = (d, at = Date.now()) => !!d.contest_until && new Date(d.contest_until).getTime() > at;
@@ -452,7 +460,9 @@ export async function stakeClaim(ch, districtId, amount, client, h) {
   if (total < q.cost) throw new GameError('floor', `A stake on that district starts at $${q.cost}.`);
   const nowMs = Date.now();
   const open = contestLive(d, nowMs);
-  const until = open ? new Date(d.contest_until) : new Date(nowMs + M3.CONTEST_MS);
+  // THE RECKONING shortens the window, so several contests can land in a night and the map genuinely
+  // turns over in the final week instead of settling in week one.
+  const until = open ? new Date(d.contest_until) : new Date(nowMs + Math.round(M3.CONTEST_MS * seasonFx('contestMsMult')));
   if (!open) {
     // a resolved contest leaves no bids and a lapsed one is swept, but never trust the sweep to
     // have run before the next challenger walks in — a stale row would be free money for its owner.

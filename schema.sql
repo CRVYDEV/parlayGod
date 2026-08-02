@@ -2578,3 +2578,25 @@ CREATE TABLE IF NOT EXISTS favors (
 );
 CREATE INDEX IF NOT EXISTS ix_favors_open ON favors (status, expires_at);
 CREATE INDEX IF NOT EXISTS ix_favors_poster ON favors (poster_character);
+
+-- ── THE SEASON HAS AN ENDING (the strategy package's ARC) ──────────────────────────────────────
+-- A season used to RESET (respect, elo, season standing) rather than CONCLUDE, so nothing collected
+-- the decisions a player made across 28 days. The reckoning is the terminus: one row per closed
+-- season naming who ended it on top, written ONCE at rollover (PK on season → idempotent across
+-- ticks and crashes, the materialize discipline). Pure STATUS — no currency moves, no §10.4 surface;
+-- nothing is reset or seized, which is the call that keeps this shippable into a thin alpha.
+CREATE TABLE IF NOT EXISTS season_records (
+  season INT PRIMARY KEY,
+  mod_id TEXT,                        -- which SEASON_MODS twist ran
+  champion_account TEXT,              -- the individual: highest City Standing when the books closed
+  champion_name TEXT, champion_standing INT,
+  family_gang TEXT,                   -- the family: most core districts held (tiebreak season standing)
+  family_name TEXT, family_tag TEXT, family_districts INT,
+  crowned BOOLEAN NOT NULL DEFAULT false,   -- the claim latch (see recordReckoning)
+  at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- season_crowns: lifetime season championships (account-level → SURVIVES DEATH, the duel_titles /
+-- boxing-belt legend). Deliberately NOT folded into STANDING_PILLARS: the crown is awarded BY City
+-- Standing, so counting it back into City Standing would be a self-reinforcing loop on the very
+-- metric that picked the winner.
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS season_crowns INT NOT NULL DEFAULT 0;

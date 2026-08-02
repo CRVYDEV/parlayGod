@@ -11,8 +11,10 @@ process.env.SEASON_MOD = 'dead_quiet'; // TEST-ONLY override (boot-guard rejects
 process.env.SEARCH_MS = '50'; process.env.SHOOT_CD_MS = '1'; // the §9 hit timers (test-only)
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { SEASON_MODS, seasonModOf, M3, M4 } from '../src/rules.js';
+import { SEASON_MODS, seasonModOf, seasonPhaseOf, seasonPhaseLeft, seasonFx, cityHourOf, M3, M4 } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
+import { onWatch } from '../src/social.js';
+import { runSeasonRollover } from '../src/worker.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -131,10 +133,116 @@ assert.equal(Number(lootRow.amount), Math.floor(markCash * Math.min(0.5, M3.CASH
   assert(Math.abs(ratio - 1.25) < 0.02, `THE CRACKDOWN builds the case ×1.25 (${ratio.toFixed(3)})`);
   process.env.SEASON_MOD = 'blood_in_the_streets'; }
 
+// ═══════════ THE SEASON HAS AN ENDING (the strategy package's ARC) ═══════════
+// The twist above says WHAT a season is. This says a season HAS A SHAPE and CONCLUDES: a published
+// phase clock, an escalation in the final week that lets the map actually move, and a permanent
+// record of who ended it on top. The phases are a pure function of the day, so every assertion here
+// pins SEASON_PHASE (test-only) — an exact-number claim resting on today's date is the recorded
+// date-flake class.
+{
+  // ── THE CLOCK: the phase derives from the day inside the 28, and the boundaries are the pins ──
+  delete process.env.SEASON_PHASE;
+  assert.equal(seasonPhaseOf(0).id, 'opening', 'day 1 of a season opens it');
+  assert.equal(seasonPhaseOf(6).id, 'opening', 'the opening runs to day 7');
+  assert.equal(seasonPhaseOf(7).id, 'long_game', 'day 8 is the long game');
+  assert.equal(seasonPhaseOf(20).id, 'long_game', 'the long game runs to day 21');
+  assert.equal(seasonPhaseOf(21).id, 'reckoning', 'the last week is the reckoning');
+  assert.equal(seasonPhaseOf(27).id, 'reckoning', 'and it runs to the close');
+  assert.equal(seasonPhaseOf(28).id, 'opening', 'then the next season opens');
+  assert.equal(seasonPhaseLeft(21), 7, 'a week to go when the reckoning opens');
+  assert.equal(seasonPhaseLeft(27), 1, 'one day left at the close');
+
+  // the escalation reader is a NO-OP outside the reckoning, which is what lets every touchpoint be
+  // an unbranched multiply
+  process.env.SEASON_PHASE = 'long_game';
+  assert.equal(seasonFx('floorMult'), 1, 'the long game changes nothing');
+  assert.equal(seasonFx('contestMsMult'), 1, 'nor the contest window');
+  process.env.SEASON_PHASE = 'reckoning';
+  assert.equal(seasonFx('floorMult'), 0.75, 'the reckoning discounts the turf floor');
+  assert.equal(seasonFx('watchWindowMult'), 0.5, 'and halves the watch window');
+
+  // ── THE ESCALATION, at the three real sites ──
+  // (a) THE WATCH narrows. Declare an hour exactly 2 back from now: inside the plain 4h window,
+  //     OUTSIDE the reckoning's halved 2h one. The holder cannot hide behind a declared hour.
+  const hr = cityHourOf().hour;
+  const twoBack = { watch_hour: (hr - 2 + 24) % 24 };
+  process.env.SEASON_PHASE = 'long_game';
+  assert.equal(onWatch(twoBack), true, 'two hours into a four-hour watch, the family is home');
+  process.env.SEASON_PHASE = 'reckoning';
+  assert.equal(onWatch(twoBack), false, 'in the reckoning that same hour is already outside the window');
+
+  // (b) THE FLOOR drops. Same district, same garrison, same everything — only the phase moves.
+  const { token: holdT } = await mk('Reckoning Holder');
+  await seedCh((await meOf(holdT)).id, 'respect=5000, cash=cash+900000');
+  const rg = (await call('POST', '/v1/gangs', { token: holdT, body: { name: 'The Bookkeepers', tag: 'BKS' } })).body.gangId;
+  await pool.query(`UPDATE districts SET holder_gang='${rg}', garrison=200000, npc_holder=NULL, watch_hour=NULL WHERE id='cathedral'`);
+  const floorNow = async () => (await call('GET', '/v1/districts', {})).body.districts.find((d) => d.id === 'cathedral').claimFloor;
+  process.env.SEASON_PHASE = 'long_game';
+  const plainFloor = await floorNow();
+  process.env.SEASON_PHASE = 'reckoning';
+  const cheapFloor = await floorNow();
+  assert(plainFloor > 0, 'the board quotes a floor for held turf');
+  assert.equal(cheapFloor, Math.floor(plainFloor * 0.75), `the reckoning discounts the floor exactly (${plainFloor} → ${cheapFloor})`);
+
+  // (c) THE CONTEST WINDOW halves, so several can settle in a night. Read the stamped deadline.
+  const { token: grabT } = await mk('Reckoning Raider');
+  await seedCh((await meOf(grabT)).id, 'respect=5000, cash=cash+900000');
+  const gg = (await call('POST', '/v1/gangs', { token: grabT, body: { name: 'The Late Callers', tag: 'LTC' } })).body.gangId;
+  await call('POST', '/v1/gangs/tribute', { token: grabT, body: { amount: 700000 } });
+  const t0 = Date.now();
+  const stake = await call('POST', '/v1/districts/cathedral/claim', { token: grabT, body: { amount: cheapFloor } });
+  assert.equal(stake.code, 200, `the raider staked at the reckoning floor (${JSON.stringify(stake.body)})`);
+  const until = new Date((await pool.query(`SELECT contest_until u FROM districts WHERE id='cathedral'`)).rows[0].u).getTime();
+  const windowMs = until - t0;
+  assert(Math.abs(windowMs - M3.CONTEST_MS * 0.5) < 5000,
+    `the reckoning's contest window is half the usual (${Math.round(windowMs / 60000)}m vs ${M3.CONTEST_MS / 60000}m)`);
+
+  // ── THE RECKONING: the books close, and the city remembers ──
+  // Drive the rollover for a season the population lived through. Everything below is pure STATUS —
+  // the whole write moves no currency, which the §10.4 sweep at the end of this file proves.
+  const cur = Number((await pool.query('SELECT MAX(season) s FROM characters')).rows[0].s) + 1;
+  await pool.query(`UPDATE districts SET holder_gang='${gg}' WHERE id IN ('docks','canal')`);
+  // seed the raider decisively across several pillars — City Standing is log-share over the whole
+  // population, and the rollover itself bumps prestige, so a one-column lead can flip under it
+  await pool.query(`UPDATE account_persistent SET kills=400, prestige=300, hitman_rep=500, tycoon_earned=9000000,
+    statecraft=400, race_wins=200 WHERE account_id=(SELECT account_id FROM characters WHERE name='Reckoning Raider')`);
+  const roll = await runSeasonRollover(pool, { season: cur });
+  assert(roll.converted > 0, 'the rollover converted the population');
+  assert(roll.reckoning, 'and closed the books on the season that ended');
+  assert.equal(roll.reckoning.season, cur - 1, 'the record names the season that CLOSED, not the one starting');
+  assert.equal(roll.reckoning.champion, 'Reckoning Raider', 'the individual with the top City Standing took the city');
+  assert.equal(roll.reckoning.family, 'The Late Callers', 'and the family holding the most core turf is on the record');
+  assert.equal(roll.reckoning.districts, 2, 'with what it held when the books closed');
+  // THE CROWN — a lifetime legend on the bloodline (survives death, the duel_titles precedent)
+  const crowns = async (n) => Number((await pool.query(
+    `SELECT season_crowns c FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE name='${n}')`)).rows[0].c);
+  assert.equal(await crowns('Reckoning Raider'), 1, 'the champion is crowned');
+  assert.equal(await crowns('Reckoning Holder'), 0, 'nobody else is');
+  // IDEMPOTENT: a second tick, a crash mid-rollover and a worker restart all land on the same row
+  await pool.query(`UPDATE characters SET season = ${cur - 1}`);
+  const again = await runSeasonRollover(pool, { season: cur });
+  assert.equal(again.reckoning, null, 'a re-run records nothing — the season PK is the latch');
+  assert.equal(await crowns('Reckoning Raider'), 1, 'and cannot double-crown');
+
+  // ── THE ROLL, published: the clock and the record are keyless, because a deadline nobody can
+  //    read is not a deadline ──
+  process.env.SEASON_PHASE = 'reckoning';
+  const sb = (await call('GET', '/v1/seasons', {})).body;
+  assert.equal(sb.of, 28, 'the board publishes the season length');
+  assert.equal(sb.phase.id, 'reckoning', 'and which phase the city is in');
+  assert(sb.reckoning && sb.reckoning.floorMult === 0.75, 'the escalation is stated, not hidden');
+  assert.equal(sb.phases.length, 3, 'the whole shape of a season is published up front');
+  const rec = sb.roll.find((r) => r.season === cur - 1);
+  assert(rec, 'the closed season is on the roll');
+  assert.equal(rec.champion.name, 'Reckoning Raider', 'with its champion');
+  assert.equal(rec.family.tag, 'LTC', 'and the family that held the ground');
+  process.env.SEASON_PHASE = 'long_game';   // leave the world neutral for the §10.4 sweep below
+}
+
 // ── §10.4: every modified number rode the normal rails — the sweep stays exact ──
 const inv = await runLedgerInvariants(pool, { alert: false });
 const cash = inv.checks.find((c) => c.name === 'character cash');
-assert.equal(cash.drift, 3_300_000, `cash drift == the SQL seeds only (modified prices ledger exactly): ${cash.drift}`);
+assert.equal(cash.drift, 5_100_000, `cash drift == the SQL seeds only (modified prices ledger exactly): ${cash.drift}`);
 
 await app.close();
 console.log('✅ SEASONAL MODIFIERS test passed — the deterministic seed draw + the SEASON_MOD test-only override, the /v1/city + /v1/rules surfaces, THE CRACKDOWN (laylow ×0.75 ledger-exact), THE GOLD RUSH (goods sell ×1.03 vs the vanilla baseline, under the 4% round-trip fee wall), BLOOD IN THE STREETS (safehouse ×1.25 ledger-exact + a real §9 kill looting at the ×1.15 rate, clamped), and §10.4 exact throughout (the modified numbers ride the normal ledger rails — drift == the SQL seeds only)');

@@ -435,6 +435,15 @@ that was never coming is how you lose money without losing a fight. A stake only
 leaves the treasury the moment you make it — you cannot bluff with money you have already spent. The
 watch still applies: staking outside the holder's declared window costs more just to get in.
 
+**The season has an ending.** A season runs 28 days in three phases you can read on `/seasons`:
+**The Opening** (days 1–7 — cheap ground, nothing settled), **The Long Game** (8–21 — build and hold),
+and **The Reckoning** (22–28). In the last week held turf is a quarter cheaper to challenge, contests
+settle in half the time and a holder's watch window is halved, so an incumbent who has been sitting on
+a district since week one has to defend it while the door is open. Nothing is reset or seized when the
+books close — instead the city REMEMBERS: the top City Standing takes the season and the family holding
+the most core turf goes on the permanent roll, and the champion's bloodline keeps the crown forever.
+That is the whole point of the arc — you are not just accumulating, you are racing a clock.
+
 **The posts.** A family fills five chairs — the Enforcer, the Caporegime, the Streetboss, the
 Quartermaster and the Bagman (`/roster`, boss or underboss). **One post per made man, one man per
 post**, so your best man can do one job and not the others; each post reads one stat, and what it is

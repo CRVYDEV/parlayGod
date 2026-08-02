@@ -4216,6 +4216,15 @@
       ${c.season && c.season.mod && c.season.mod.id !== 'dead_quiet' ? `
         <div class="card" style="border-color:var(--blood,#8a2b2b)"><span class="t" style="color:var(--bad)">THIS SEASON: ${esc(c.season.mod.name.toUpperCase())}</span>
           <div class="d">${esc(c.season.mod.blurb)} <span style="font-size:11px">(${c.season.daysLeft}d left — the rules snap back at rollover)</span></div></div>` : ''}
+      ${c.season && c.season.phase ? `
+        <div class="card" ${c.season.reckoning ? 'style="border-color:var(--bad)"' : ''}>
+          <span class="t" ${c.season.reckoning ? 'style="color:var(--bad)"' : ''}>${esc((c.season.phase.name || '').toUpperCase())}
+            <span class="chip">day ${c.season.daysLeft ? 29 - c.season.daysLeft : '?'} of 28</span></span>
+          <div class="d">${esc(c.season.phase.blurb || '')}</div>
+          <div class="d" style="font-size:12px;margin-top:4px">${c.season.phase.daysLeft}d until this phase ends · ${c.season.daysLeft}d until the books close${
+            c.season.reckoning ? ' — <b style="color:var(--bad)">held turf is cheap to challenge right now, the watch windows are short and contests settle fast.</b>' : ''}</div>
+          <div class="d" style="font-size:11.5px;color:var(--dim);margin-top:4px">Whatever you are holding when the season closes goes on the permanent record —
+            the top City Standing takes the city, the family holding the most turf goes on the roll.</div></div>` : ''}
       <h2>Today's Conditions</h2>
       <div class="card"><span class="t">${c.event?.name || c.event?.id || '—'}</span>
         <div class="d">${c.event?.desc || ''}</div>
