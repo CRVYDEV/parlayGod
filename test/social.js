@@ -4,6 +4,12 @@
 // invariants (earn-only cash ledger, car conservation across death).
 // Runs on pg-mem — zero infra. Production timers shrunk via env (§9 note in social.js).
 process.env.SEARCH_MS = '0';
+// SEASON PIN — the seasonal twist is ARMED in production since 2026-08-02, and its draw moves
+// with the real calendar. This file measures SIGNED baselines (loot rate, safehouse cost), so
+// without a pin its exact-number assertions would pass today and fail in three weeks for no
+// visible reason — a deterministic assertion resting on a probabilistic precondition, the
+// recorded flake class. test/seasons.js is where the armed path is exercised.
+process.env.SEASON_MOD = 'dead_quiet'; // TEST-ONLY (the boot guard rejects it in production)
 process.env.SHOOT_CD_MS = '1000';
 process.env.MOD_KEY = 'test-mod-key'; // for the mod-kill used in the directed-pot death regression
 

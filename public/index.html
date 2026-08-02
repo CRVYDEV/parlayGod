@@ -1685,6 +1685,9 @@
     if (body && body.tokenId && body.nonce != null)
       return `\u26D3 ${body.name || 'it'} is on-chain — token #${body.tokenId}. Safe forever, and out of the game.`;
     if (body && body.referrer && body.ok) return `on the record — ${body.referrer} gets credit as you come up`;
+    // THE OPERATION SLOTS — retiring a racket. Leads with the freed seat, which is the whole point.
+    if (body && body.slotsUsed !== undefined && body.slots !== undefined && body.racket)
+      return `\u{1F91D} you're out of the ${String(body.racket).replace(/_/g, ' ')}${body.back ? ` — $${fmt(body.back)} back` : ''} — ${body.slotsUsed} of ${body.slots} seats running`;
     if (!body || typeof body !== 'object') return code < 400 ? 'done.' : 'no dice.';
     if (code >= 400) { const e = body.error; return body.message || (e && ERRMAP[e]) || (e ? e.replace(/_/g, ' ') : `the city said no (${code})`); }
     const bits = [];
@@ -4419,7 +4422,8 @@
     'Money & $OMR': [
       ['POST', '/v1/stake', { amount: 1 }],
       ['POST', '/v1/unstake', {}],
-      ['POST', '/v1/rackets/:id/buy', {}], ['POST', '/v1/assets/:id/buy', {}], ['POST', '/v1/assets/:id/sell', {}],
+      ['POST', '/v1/rackets/:id/buy', {}], ['DELETE', '/v1/rackets/:id'], ['POST', '/v1/rackets/:id/upgrade', {}],
+      ['POST', '/v1/assets/:id/buy', {}], ['POST', '/v1/assets/:id/sell', {}],
       ['GET', '/v1/plex/price'], ['POST', '/v1/plex/mint', {}], ['POST', '/v1/plex/respawn', {}],
     ],
     'Armory & Fights': [
@@ -5313,8 +5317,18 @@
           <div class="d">level ${c.lvl}+ · t1 $${fmt(c.tiers[0].cost)} → $${fmt(c.tiers[0].incomePerHr)}/hr <span style="color:var(--warn)">− $${fmt(c.upkeepPerHr)}/hr pad</span></div>
           ${ownedKinds.has(c.kind) ? '' : `<button class="act" data-bizbuy="${c.kind}">buy</button>`}</div>`).join('')}</div>
 
+      ${(() => { const o = me.ops; if (!o) return '';
+        const full = o.free <= 0;
+        return `<div class="card" style="margin-top:14px;border-color:${full ? 'var(--warn)' : 'var(--line)'}">
+          <span class="t"${full ? ' style="color:var(--warn)"' : ''}>YOUR OPERATION SEATS — ${o.used} of ${o.slots} running</span>
+          <div class="d">Rackets and <b>${esc(o.meteredCat)}</b> share your seats: you only have so many pairs of hands.
+            ${full ? '<b>Every seat is full</b> — retire one before you take on another. ' : `You've got <b>${o.free}</b> free. `}
+            ${o.nextAt ? `The next seat opens at <b>level ${o.nextAt}</b>` : `That's all ${o.max} seats — the most anyone runs`}.
+            Wheels and Property don't take a seat.</div></div>`; })()}
+
       <h2 style="margin-top:14px">Rackets <span class="d" style="font-size:11px">— buy once, drip cash forever (banks to the treasury via the tithe on melt)</span></h2>
       <div class="grid">${(rules?.rackets || []).map((r) => { const owned = (me.rackets || []).includes(r.id), locked = me.level < r.lvl;
+        const noSeat = !owned && !locked && (me.ops?.free || 0) <= 0;
         const lvl = Number(me.racketLevels?.[r.id] || 0); const upMax = emp.upMax || 5;
         // the SERVER's number, off the same helper accrual pays from — this used to be
         // `Math.round(r.income * (1 + lvl * (emp.upStep || 0.12)))`, a third copy of a formula that
@@ -5329,13 +5343,17 @@
         const effIncome = owned ? (me.racketIncomePerHr?.[r.id] ?? perHr(r.income)) : perHr(r.income);
         return `<div class="card"><span class="t">${r.name}</span>${owned ? `<span class="chip good">owned${lvl ? ` · lvl ${lvl}` : ''}</span>` : locked ? `<span class="chip">lvl ${r.lvl}+</span>` : ''}
           <div class="d">$${fmt(effIncome)}/hr${owned && lvl ? ` <span style="color:var(--dim)">(base $${fmt(perHr(r.income))})</span>` : ''} · $${fmt(r.cost)} · ${r.desc}</div>
-          ${owned ? (lvl < upMax ? `<button class="act" data-rkup="${r.id}">muscle it up → lvl ${lvl + 1}</button>` : '<span class="chip">maxed</span>') : locked ? '' : `<button class="act" data-rkbuy="${r.id}">buy</button>`}</div>`; }).join('')}</div>
+          ${owned ? `${lvl < upMax ? `<button class="act" data-rkup="${r.id}">muscle it up → lvl ${lvl + 1}</button>` : '<span class="chip">maxed</span>'}
+              <button class="act" data-rkout="${r.id}:${esc(r.name)}" style="border-color:var(--warn);color:var(--warn)">retire</button>`
+            : locked ? '' : `<button class="act" data-rkbuy="${r.id}"${noSeat ? ' disabled' : ''}>${noSeat ? '🔒 no free seat' : 'buy'}</button>`}</div>`; }).join('')}</div>
 
       <h2 style="margin-top:14px">Assets <span class="d" style="font-size:11px">— wheels (cargo/speed), property (energy cap) & legit fronts (income)</span></h2>
       <div class="grid">${(rules?.assets || []).map((a) => { const owned = (me.assets || []).includes(a.id);
-        return `<div class="card"><span class="t">${a.name}</span>${owned ? '<span class="chip good">owned</span>' : `<span class="chip">${a.cat}</span>`}
+        // Only the metered category takes a seat — so only those buttons can be gated by one.
+        const seats = a.cat === (rules?.operations?.meteredCat || ''), noSeat = seats && !owned && (me.ops?.free || 0) <= 0;
+        return `<div class="card"><span class="t">${a.name}</span>${owned ? '<span class="chip good">owned</span>' : `<span class="chip">${a.cat}</span>`}${seats ? '<span class="chip">takes a seat</span>' : ''}
           <div class="d">$${fmt(a.price)}${a.boost ? ` · +${a.boost} ${a.stat}` : ''}${a.cargo ? ` · +${a.cargo} cargo` : ''} · ${a.desc}</div>
-          ${owned ? '' : `<button class="act" data-asbuy="${a.id}">buy</button>`}</div>`; }).join('')}</div>`;
+          ${owned ? '' : `<button class="act" data-asbuy="${a.id}"${noSeat ? ' disabled' : ''}>${noSeat ? '🔒 no free seat' : 'buy'}</button>`}</div>`; }).join('')}</div>`;
     t.querySelectorAll('[data-bizbuy]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/business/${b.dataset.bizbuy}/buy`, {}).then(() => renderEmpire()));
     t.querySelectorAll('[data-bizup]').forEach((b) => b.onclick = () =>
@@ -5357,6 +5375,15 @@
       t.querySelector('#launderer-lb').innerHTML = `<div style="margin-top:6px">${b.slice(0, 10).map((x) => `<div class="d">#${x.rank} ${esc(x.name)}${x.tag ? ` [${esc(x.tag)}]` : ''} — ${x.title} ($${fmt(x.washed)})</div>`).join('') || '<div class="d">none yet</div>'}</div>`; }; }
     t.querySelectorAll('[data-rkbuy]').forEach((b) => b.onclick = () => act('POST', `/v1/rackets/${b.dataset.rkbuy}/buy`, {}).then(() => renderEmpire()));
     t.querySelectorAll('[data-rkup]').forEach((b) => b.onclick = () => act('POST', `/v1/rackets/${b.dataset.rkup}/upgrade`, {}).then(() => renderEmpire()));
+    // RETIRE — irreversible, frees the seat, returns nothing. Same confirm the other one-way doors get.
+    t.querySelectorAll('[data-rkout]').forEach((b) => b.onclick = async () => {
+      const [id, name] = b.dataset.rkout.split(':');
+      const back = Math.floor((rules?.rackets || []).find((r) => r.id === id)?.cost * ((rules?.operations?.retireBps || 0) / 10000)) || 0;
+      const ok = await ask(`Walk away from the ${name}?`, `The seat frees up and you can take on something else.
+        You get $${fmt(back)} back${back ? '' : ' — nothing'}, and every level you muscled into it goes with it.`,
+        { yes: 'walk away', no: 'keep it', danger: true });
+      if (ok) act('DELETE', `/v1/rackets/${id}`, {}).then(() => renderEmpire());
+    });
     t.querySelectorAll('[data-asbuy]').forEach((b) => b.onclick = () => act('POST', `/v1/assets/${b.dataset.asbuy}/buy`, {}).then(() => renderEmpire()));
     const tb = t.querySelector('#tycoon-board');
     if (tb) tb.onclick = async (e) => { e.preventDefault();

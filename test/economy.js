@@ -7,7 +7,8 @@ import assert from 'node:assert';
 import crypto from 'node:crypto';
 import { buildServer } from '../src/server.js';
 import { runBuyback, mergeLegacyPools } from '../src/worker.js';
-import { CARS, carVal, carMelt, CONSTANTS, BUSINESS_EMPIRE, BUSINESSES, RIVALS, frontTitles, launderRankOf, businessMaxTier, POPULATION, CRIMES } from '../src/rules.js';
+import { CARS, carVal, carMelt, CONSTANTS, BUSINESS_EMPIRE, BUSINESSES, RIVALS, frontTitles, launderRankOf, businessMaxTier, POPULATION, CRIMES,
+         RACKETS, ASSETS, OPERATIONS, opSlotsOf } from '../src/rules.js';
 import { spawnResident } from '../src/population.js';
 
 // ── car catalog integrity (content expansion guard: no dupe ids, well-formed, on-curve) ──
@@ -1164,6 +1165,73 @@ await pool.query(`UPDATE account_persistent SET agent_flag=false WHERE account_i
   assert(Math.abs(keptMs - wantKept) / wantKept < 0.05,
     `the venue clock advanced by the SAME boosted rate — emission-neutral (kept ${Math.round(keptMs / 3600000)}h, want ${Math.round(wantKept / 3600000)}h)`);
   await pool.query('DELETE FROM rival_events');
+}
+
+// ══ THE OPERATION SLOTS (the strategy package) — the income catalog becomes a CHOICE ══
+// The measured problem was that 31 income holdings (18 rackets + the 13 Legit Fronts assets) had no
+// competition for the seat, so buying was a checklist rather than a decision. A shared slot pool is
+// the fix; what has to hold is that the SEATS bind, that only the income category is metered, that
+// the door out really frees a seat, and that none of it moves value (§10.4 untouched at 0 bps).
+{
+  await seed("respect=625000, cash=999000000, jail_until=NULL, hosp_until=NULL, safe_until=NULL");
+  const lvl = (await meOf(token)).level;
+  const want = opSlotsOf(lvl);
+  let m = await meOf(token);
+  assert(m.ops, 'the sheet carries the seat count');
+  assert.equal(m.ops.slots, want, `the view's seat count is opSlotsOf(level) — the SAME helper the till gates on (${m.ops.slots} vs ${want})`);
+  assert.equal(m.ops.used, (m.rackets || []).length + m.ops.incomeAssets.length, 'used counts rackets + income assets, and nothing else');
+
+  // FILL every seat. `laundro` is already running from the earlier block, so this tops it up.
+  const owned = new Set(m.rackets || []);
+  for (const r of RACKETS) {
+    if ((await meOf(token)).ops.free <= 0) break;
+    if (owned.has(r.id)) continue;
+    const br = await call('POST', `/v1/rackets/${r.id}/buy`, { token });
+    assert.equal(br.code, 200, `bought ${r.id} (${JSON.stringify(br.body)})`);
+  }
+  m = await meOf(token);
+  assert.equal(m.ops.free, 0, `every seat is running (${m.ops.used} of ${m.ops.slots})`);
+
+  // THE GATE — a 13th operation is refused for want of hands, not money. The character is holding
+  // ~$999M, so "cash" would be the wrong error and the assertion below is what tells them apart.
+  const spare = RACKETS.find((r) => !(m.rackets || []).includes(r.id));
+  assert(spare, 'the catalog is bigger than the seat cap — which is the whole point');
+  const denied = await call('POST', `/v1/rackets/${spare.id}/buy`, { token });
+  assert.equal(denied.code, 400, 'a full house refuses the next operation');
+  assert.equal(denied.body.error, 'slots', `refused for SEATS, not cash (got ${denied.body.error}: ${denied.body.message})`);
+  assert(/retire/i.test(denied.body.message), 'and the message names the way out');
+
+  // …and an INCOME asset is refused by the same seat, since they share the pool
+  const incomeAsset = ASSETS.find((a) => a.cat === OPERATIONS.INCOME_ASSET_CAT && !(m.assets || []).includes(a.id));
+  assert.equal((await call('POST', `/v1/assets/${incomeAsset.id}/buy`, { token })).body.error, 'slots',
+    'a Legit Front takes the same seat a racket does');
+
+  // …but WHEELS and PROPERTY are NOT metered — they're stat/cargo/energy-cap progression, and
+  // metering them would be a pacing change wearing an economy change's clothes.
+  const wheels = ASSETS.find((a) => a.cat !== OPERATIONS.INCOME_ASSET_CAT && !(m.assets || []).includes(a.id));
+  const wr = await call('POST', `/v1/assets/${wheels.id}/buy`, { token });
+  assert.equal(wr.code, 200, `${wheels.cat} buys fine with every operation seat full (${JSON.stringify(wr.body)})`);
+  assert.equal((await meOf(token)).ops.used, m.ops.used, 'and it took no seat');
+
+  // THE DOOR OUT — retiring frees the seat. At RACKET_RETIRE_BPS 0 it moves NO value, so it writes
+  // NO ledger row: walking away is a pure ownership change (the BUSINESS_SHUTTER_BPS argument).
+  const rowsPre = Number((await pool.query(`SELECT COUNT(*) n FROM transactions WHERE character_id='${cid}'`)).rows[0].n);
+  const cashPreRetire = (await meOf(token)).cash;
+  const quit = await call('DELETE', `/v1/rackets/${m.rackets[0]}`, { token });
+  assert.equal(quit.code, 200, `walked away from ${m.rackets[0]} (${JSON.stringify(quit.body)})`);
+  assert.equal(quit.body.back, 0, 'at 0 bps you get nothing back — the door exists to unblock, not to refund');
+  assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM transactions WHERE character_id='${cid}'`)).rows[0].n), rowsPre,
+    'retiring at 0 bps writes ZERO ledger rows — no value moved');
+  assert.equal((await meOf(token)).cash, cashPreRetire, 'and the pocket is untouched');
+  assert.equal((await meOf(token)).ops.free, 1, 'the seat is free');
+
+  // …and the seat is really usable — the gate was a count, not a latch
+  assert.equal((await call('POST', `/v1/rackets/${spare.id}/buy`, { token })).code, 200,
+    'the freed seat takes the operation the full house refused');
+  assert.equal((await meOf(token)).ops.free, 0, 'back to a full house');
+  // a racket you don't run can't be retired
+  assert.equal((await call('DELETE', `/v1/rackets/${m.rackets[0]}`, { token })).body.error, 'none', "can't walk away from a racket you don't run");
+  assert.equal((await call('DELETE', '/v1/rackets/nope', { token })).body.error, 'bad_racket', 'unknown racket rejected');
 }
 
 // (G) §10.4 — the vocabulary stays closed with business:spec (omr) + takeover/buyout (cash) in the mix

@@ -403,8 +403,11 @@ Mainnet / on-chain extraction — `forge test` on a real toolchain, the third-pa
 **and** the off-chain signer, and legal counsel on the Risk-to-Earn / RWA line. See CLAUDE.md + `SIGN-OFF.md`.
 Founder balance sign-offs (`BALANCE.md` / `SIGN-OFF.md`) are numbers, not blockers, for the alpha.
 
-## 3c. Seasonal League Modifiers (slate #6) — DORMANT by default
-`SEASON_MODS=on` arms the once-per-season seed-drawn rule twist (the pool in `rules.js
-SEASON_MODS` — it deliberately modifies SIGNED levers: laylow, law-gain, kill loot, safehouse,
-goods sell). Leave UNSET until the founder signs the pool in BALANCE.md; unset = every season is
-"Dead Quiet" (the signed baseline). `SEASON_MOD=<id>` is a test-only pin — never in production.
+## 3c. Seasonal League Modifiers (slate #6) — ARMED by default since 2026-08-02
+The once-per-season seed-drawn rule twist (the pool in `rules.js SEASON_MODS`) is LIVE with no env
+var set — the founder signed the pool as part of the strategy package (BALANCE.md § THE STRATEGY
+PACKAGE). It deliberately modifies SIGNED levers (laylow, law-gain, kill loot, safehouse, goods
+sell) for a 28-day season at a time; one season in four is vanilla so the baseline stays felt.
+**`SEASON_MODS=off` is the kill switch** — it reverts every season to "Dead Quiet" (the signed
+baseline) with no code change, and it is regression-tested. `SEASON_MOD=<id>` is a test-only pin
+that forces one season — never in production (the boot guard rejects it).

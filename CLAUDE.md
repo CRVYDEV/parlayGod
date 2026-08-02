@@ -3400,6 +3400,45 @@ lever makes both sides agree, so the lever is now pinned separately (`MADE_RUNGS
 in-game earning power → $OMR → the withdrawal rail — a materially different posture from "pay for
 cosmetics," recorded beside the bond and the Store, with the standing no-earnings-promise rule intact.
 
+**THE STRATEGY PACKAGE — step one: SCARCE HOLDINGS + the season armed (founder-directed
+2026-08-02: "apply all your strategy decision recommendations")** (`src/rules.tail.js` `OPERATIONS`,
+`src/economy.js`, `src/game.js`, `src/server.js`, `public/index.html`, `tools/sim.js` P9.20b,
+`test/economy.js`, `test/seasons.js`). The diagnosis behind it was not "the game needs more content"
+— it was that the game has **enormous breadth of ACTIONS and almost no scarcity of OPTIONS**: nearly
+every choice is *when*, not *instead of*, and where a decision costs you nothing you did not want
+anyway it is not a decision. **(1) THE OPERATION SLOTS.** P9.20b had already measured the problem:
+31 income holdings (18 `RACKETS` + the 13 Legit Fronts `ASSETS`), every one paying back in 0.58-2.98
+days, **nothing competing for the seat** — so the mid-game buy decision was "have I clicked it yet".
+Rackets and income assets now share ONE pool of seats (`opSlotsOf` = `SLOTS_BASE` 2 + one every
+`SLOTS_PER_LEVEL` 4 levels, capped `SLOTS_MAX` 12 — ~39% of the catalog, ever), gated at both tills
+by one `assertSlot` helper the view reads too, so the Empire card can never advertise a seat
+`buyRacket` refuses (the coach/`cornerOpen` lesson). **`DELETE /v1/rackets/:id`** is the door out —
+without it a slot cap is a permanent bad pick — returning `RACKET_RETIRE_BPS` (**0**), which moves no
+value, writes no ledger row and needs no sign-off (the `BUSINESS_SHUTTER_BPS` argument); any upgrade
+levels go with it. Deliberately NOT metered: Wheels and Property (stat/cargo/energy-cap progression —
+metering them would be a pacing change wearing an economy change's clothes) and business fronts
+(already capped at 5 by `UNIQUE(character_id, kind)`). §10.4-free by construction — a slot is a COUNT
+of rows you already own. **Measured (P9.20b, prints every run): best-12 $243.9M/day vs all-31
+$260.3M/day — a 1.07x cut**, which is the honest headline and cuts against reading this as a nerf:
+the 12 richest rungs already carried nearly all the income, so what the cap removes is the 19
+marginal rungs nobody was choosing between. The bite is early — best-affordable-at-level is
+**$64.8M/day at 1 (2 seats) → $90.8M at 20 (7) → $98.4M at 40 (12)**. *A units trap caught in the
+probe itself:* the first cut took the global best-N at every level, which counts rungs a level-1
+player is barred from and inflated the early figures; it now filters by the gate the player actually
+faces. Three mutations, each caught at its own named assertion (the racket gate removed; every asset
+category metered; retire paying a refund). **(2) SEASON_MODS ARMED** (`off` → `on`) — the one shipped
+drop that twists SIGNED levers, armed because it is the cheapest strategic lever the game has: the
+whole base re-plans around the same twist for 28 days and it reuses content that already exists.
+`SEASON_MODS=off` is a tested kill switch. **The test discipline it forced is the durable part:** with
+the draw live the suites became DATE-FLAKY — a run inside a Blood-in-the-Streets season loots 15%
+deeper, so exact-number assertions pass today and fail in three weeks for no visible reason. That is
+the recorded class (the population duel-ladder, Doc-drill and kitchen-raid flakes): *a deterministic
+assertion resting on a probabilistic precondition.* Found empirically by running all 62 suites rather
+than by guessing which were affected — exactly two (`social.js` loot, `commission.js` safehouse) plus
+the three measurement harnesses, all now pinned `SEASON_MOD=dead_quiet`; `test/seasons.js` exercises
+the armed path and the kill switch. All `OPERATIONS.*` numbers are founder sign-off levers (pinned in
+`test/levers.js`, tabled in BALANCE.md § THE STRATEGY PACKAGE).
+
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
 `payPlex` pattern); named landmarks / Founder's charter numbers; ~~R2 (the `rwa_revenue` → real-RWA-buy

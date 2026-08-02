@@ -31,15 +31,17 @@ const seedCh = (id, set) => pool.query(`UPDATE characters SET ${set} WHERE id='$
 const cashRow = async (id, reason) => (await pool.query(
   `SELECT amount FROM transactions WHERE character_id='${id}' AND reason='${reason}' ORDER BY at DESC LIMIT 1`)).rows[0];
 
-// ── the draw: DORMANT by default (ships vanilla until the founder arms SEASON_MODS=on);
-// armed, the seed draw is deterministic per season index; the test-only override pins it ──
+// ── the draw: ARMED by default since 2026-08-02 (the strategy package — the founder signed the
+// pool). The seed draw is deterministic per season index; SEASON_MODS=off still reverts to vanilla
+// with no deploy, and the test-only SEASON_MOD override pins one season for a measurement ──
 assert.equal(seasonModOf().id, 'dead_quiet', 'the test-only override pins the season');
 { delete process.env.SEASON_MOD;
-  assert.equal(seasonModOf(7).id, 'dead_quiet', 'unarmed, every season is Dead Quiet (the signed baseline)');
-  process.env.SEASON_MODS = 'on';
   const drawn = seasonModOf(7);
-  assert(SEASON_MODS.some((m) => m.id === drawn.id), 'armed, the seed draw lands in the pool');
+  assert(SEASON_MODS.some((m) => m.id === drawn.id), 'armed by default, the seed draw lands in the pool');
   assert.equal(seasonModOf(7).id, drawn.id, 'the draw is deterministic per season index');
+  // …and the kill switch still works, so a bad season is one env var away from vanilla
+  process.env.SEASON_MODS = 'off';
+  assert.equal(seasonModOf(7).id, 'dead_quiet', 'SEASON_MODS=off reverts to the signed baseline');
   delete process.env.SEASON_MODS;
   process.env.SEASON_MOD = 'dead_quiet'; }
 

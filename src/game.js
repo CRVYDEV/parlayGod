@@ -13,7 +13,8 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS, RANKS,
          carCollateralValue, carOf, MASTERY, masteryLvlOf, masteryRankOf, masteryXpFor, pathFx, pathXpMult,
          REGIMEN, disciplineLvlOf, energyCapOf, nerveCapOf, BUSINESSES, WIRE, RIVALS, CORNER, cornerTasksOf,
          KITCHENS, labModuleCost, recyclesToDesk, DESK_RECYCLE_REASON, isMade, madeSeconds,
-         MADE_LADDER, madeRungIdx, madeRungOf, ladderFx } from './rules.js';
+         MADE_LADDER, madeRungIdx, madeRungOf, ladderFx,
+         ASSETS, OPERATIONS, opSlotsOf, nextOpSlotLevel } from './rules.js';
 import { dbCaps } from './db.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
@@ -1342,6 +1343,16 @@ export function view(ch, acct = {}, owned = {}) {
       [id, Math.floor(racketIncomeLeveled(id, owned.racketLevels?.[id]) * 60)])),
     tycoon: { earned: Number(acct?.tycoon_earned || 0), rank: tycoonRankOf(acct?.tycoon_earned).name },
     empireTitles: empireTitles(owned.rackets || [], assets),
+    // THE OPERATION SLOTS — how many income operations you may run at once, and how many you're
+    // running. Computed HERE from the same helpers the tills gate on (rules-level `opSlotsOf` +
+    // the income-asset category), so the Empire card can never advertise a seat buyRacket refuses.
+    ops: (() => {
+      const incomeAssets = assets.filter((id) => ASSETS.find((a) => a.id === id)?.cat === OPERATIONS.INCOME_ASSET_CAT);
+      const slots = opSlotsOf(lvl);
+      const used = (owned.rackets || []).length + incomeAssets.length;
+      return { used, slots, free: Math.max(0, slots - used), nextAt: nextOpSlotLevel(lvl),
+        max: OPERATIONS.SLOTS_MAX, incomeAssets, meteredCat: OPERATIONS.INCOME_ASSET_CAT };
+    })(),
     // BUSINESS EMPIRE → Tier 4 — THE LAUNDERER legend (lifetime washed, survives death) + the fronts set titles
     launderer: { washed: Number(acct?.laundered_lifetime || 0), rank: launderRankOf(acct?.laundered_lifetime).name },
     frontTitles: frontTitles(owned.businesses || []),
