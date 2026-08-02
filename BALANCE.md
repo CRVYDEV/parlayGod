@@ -4197,3 +4197,44 @@ contest is a live event somebody has to answer, long enough that a holder who is
 screen gets a chance. `CONTEST_LOSS_BPS` at 0 would make a losing stake free and collapse the bid
 back into "everyone commits their whole treasury every time."
 
+### 5. THE ROSTER — the family's made men as scarce posts
+
+| Lever | Value | What it does |
+|---|---|---|
+| `M3.ROSTER_MIN_LEVEL` | 5 | a man has to be somebody before he holds a post |
+| `M3.ROSTER_REASSIGN_CD_MS` | 21,600,000 (6h) | how long before you can move the SAME man to a different post |
+| `M3.ROSTER_POWER_DIV` / `_POWER_MAX` | 10 / 8 | power = min(8, floor(stat ÷ 10)) — the man matters, bounded |
+| `M3.ROSTER_MULT_FLOOR` | 0.7 | no discount goes below this however good the man is |
+| `M3.ROSTER_ENFORCER_GARRISON` | 6,000 | + per power onto what a RIVAL must stake to contest your turf |
+| `M3.ROSTER_CAPO_SCRUTINY_PER` | 0.04 | Bureau scrutiny GROWTH on your operations, per power |
+| `M3.ROSTER_STREETBOSS_WAR_PER` | 0.03 | the war chest, per power |
+| `M3.ROSTER_QM_GUARD_DEF` | 3 | + per power onto your family's convoy guards |
+| `M3.ROSTER_BAGMAN_UPKEEP_PER` | 0.03 | the operations pad, per power |
+
+Steps two and three made turf a decision about WHEN and HOW MUCH. This one is about WHO. A family's
+made men were interchangeable — a 20-man family and a 3-man family differed only in raw stats, and
+every collective system (turf, war, freight, the Bureau, the pad) ran with no allocation decision at
+all. Now the family fills five POSTS: **one post per man, one man per post**, so your best cunning
+can keep the Bureau off your operations OR keep the pad cheap, never both.
+
+**The teeth are the LIVE gate, not the numbers.** A post counts only while its holder is alive, out
+of lockup and out of the hospital. Kill or jail a family's Enforcer and their turf gets cheaper to
+take until they put somebody else in the chair — and the reassign cooldown is on the MAN, so the
+replacement has to come off the STREET rather than out of another post. That is what makes this
+strategy rather than a settings screen: the PvP layer that already exists is how you contest it.
+
+Every effect is ONE touchpoint and **ADDITIVE** — nothing a family has today gets worse, so this
+needed no economy retune and breaks no existing player. The scarcity is that filling one chair means
+not filling another, not that the baseline moved.
+
+§10.4 is untouched: an assignment moves no currency and writes no ledger row. Two of the five posts
+are SINK DISCOUNTS (`gang:war`, `territory:upkeep`) and in both the DISCOUNTED number is what leaves
+the treasury AND what is ledgered — the decree/amnesty/coalition discipline — so the gang-treasuries
+check reconciles the smaller figure exactly like the larger one (asserted to the dollar).
+
+The two dials that matter: **`ROSTER_POWER_MAX`** bounds what one great man can be worth (at 8 the
+top of each effect is +$48k on a turf floor, −24% on the pad — real, not decisive), and
+**`ROSTER_MULT_FLOOR`** is the hard floor under both discounts. `ROSTER_ENFORCER_GARRISON` is the
+one that composes with the sealed bid and the watch, so re-read that interaction before moving it.
+
+

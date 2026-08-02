@@ -648,6 +648,31 @@ export const M3 = {
   // never coming costs you money. Escrowed at stake time, so a bid is a COMMITMENT — you cannot
   // bluff with treasury you have already spent.
   CONTEST_MS: 30*60*1000, CONTEST_LOSS_BPS: 5000,
+  // ── THE ROSTER (the strategy package's SCARCE PEOPLE) ──
+  // Steps two and three made turf a decision about WHEN and HOW MUCH. This one is about WHO.
+  //
+  // A family's made men were interchangeable: a 20-man family and a 3-man family differed only in
+  // raw stats, and every collective system (turf, war, freight, the Bureau, the pad) ran with no
+  // allocation decision at all. Now the family fills POSTS — one post per man, one man per post —
+  // so your best cunning can keep the Bureau off your operations OR keep the pad cheap, never both.
+  //
+  // The teeth are the LIVE gate, not the numbers: a post only counts while its holder is alive,
+  // out of lockup and out of the hospital. Kill or jail a family's Enforcer and their turf gets
+  // cheaper to take until they put somebody else in the chair — which costs them that man's post
+  // elsewhere. That is what makes this strategy rather than a settings screen: the existing PvP
+  // layer is how you contest it.
+  //
+  // Every effect is ONE touchpoint and is ADDITIVE — nothing a family has today gets worse. The
+  // scarcity is that filling one post means not filling another, not that the baseline moved.
+  ROSTER_MIN_LEVEL: 5,                 // a made man has to be somebody before he holds a post
+  ROSTER_REASSIGN_CD_MS: 6*60*60*1000, // …and you cannot shuffle the SAME man between posts on a whim
+  ROSTER_POWER_DIV: 10, ROSTER_POWER_MAX: 8,  // power = min(MAX, floor(stat / DIV)) — the man matters, but bounded
+  ROSTER_MULT_FLOOR: 0.7,              // no discount goes below this however good the man is
+  ROSTER_ENFORCER_GARRISON: 6000,      // + per power onto what a RIVAL must stake to contest your turf
+  ROSTER_CAPO_SCRUTINY_PER: 0.04,      // Bureau scrutiny on your operations grows slower, per power
+  ROSTER_STREETBOSS_WAR_PER: 0.03,     // the war chest costs less, per power (the discounted number is ledgered)
+  ROSTER_QM_GUARD_DEF: 3,              // + per power onto your family's convoy guards
+  ROSTER_BAGMAN_UPKEEP_PER: 0.03,      // the operations pad comes cheaper, per power (discounted number ledgered)
   WEEKLY_STANDING: 15000, WEEKLY_OMR: 5,
   // M7 Phase 2 assassin rep (a STATUS ladder — no gameplay power, so it doesn't touch
   // sim-audited balance): a kill earns vicLvl × REP_PER_LVL feared-rep, only from targets at
@@ -807,6 +832,29 @@ export const M3 = {
     message:  { id: 'message',  name: 'Send a Message', stealMult: 0.4,  repMult: 1.5, dmgMult: 1.4, hospMult: 1.5, heat: 5, energyMult: 1.5 },
   },
 };
+
+// ── THE ROSTER — the five posts a family can fill (the strategy package's SCARCE PEOPLE) ──
+// The catalog is deliberately SHORT: five posts against a 20-man cap means the decision is which
+// FIVE of your men are worth taking off the street, not a spreadsheet. Each post reads ONE stat, so
+// a family with one great all-rounder still has to choose what he does with himself.
+export const ROSTER_POSTS = [
+  { id: 'enforcer', name: 'The Enforcer', stat: 'muscle',
+    what: 'a rival stakes more to come for your turf' },
+  { id: 'capo', name: 'The Caporegime', stat: 'cunning',
+    what: 'the Bureau builds its file on your operations more slowly' },
+  { id: 'streetboss', name: 'The Streetboss', stat: 'muscle',
+    what: 'declaring war costs the treasury less' },
+  { id: 'quartermaster', name: 'The Quartermaster', stat: 'speed',
+    what: "the family's freight rides with better guns" },
+  { id: 'bagman', name: 'The Bagman', stat: 'cunning',
+    what: 'the pad on your operations comes cheaper' },
+];
+export const rosterPostOf = (id) => ROSTER_POSTS.find((p) => p.id === id) || null;
+// what one man is worth in a post — bounded, so a maxed officer is a real edge and never a wall
+export const rosterPower = (stat) => Math.min(M3.ROSTER_POWER_MAX, Math.floor(Math.max(0, Number(stat) || 0) / M3.ROSTER_POWER_DIV));
+// the discount shape every "costs less" post shares: 1 − power×per, never under the floor
+export const rosterMult = (power, per) => Math.max(M3.ROSTER_MULT_FLOOR, 1 - Math.max(0, Number(power) || 0) * per);
+
 // ── THE PACING BLOCK (founder-directed 2026-07-24, from live alpha) ────────────────────────────
 // An alpha tester reached LEVEL 240 in a couple of hours. The diagnosis (measured, not guessed):
 //

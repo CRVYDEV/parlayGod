@@ -435,6 +435,16 @@ that was never coming is how you lose money without losing a fight. A stake only
 leaves the treasury the moment you make it — you cannot bluff with money you have already spent. The
 watch still applies: staking outside the holder's declared window costs more just to get in.
 
+**The posts.** A family fills five chairs — the Enforcer, the Caporegime, the Streetboss, the
+Quartermaster and the Bagman (`/roster`, boss or underboss). **One post per made man, one man per
+post**, so your best man can do one job and not the others; each post reads one stat, and what it is
+worth scales with the man in it. What makes this worth fighting over: **a post is dead while its
+holder is dead, in lockup or in the hospital** — put a family's Enforcer in the hospital and their
+turf gets cheaper to take without your ever going near the district. They can fill the chair again
+straight away, but only with somebody who was on the STREET; you cannot slide a man across from
+another post for six hours, so answering a hit costs the family a second made man. Every post is a
+bonus, never a requirement — the scarcity is which chairs you fill, not that the baseline moved.
+
 **The reserve pays for status:** **seals** (`/gangs/vanity/seal`, Wax 25 to Obsidian 1500 $OMR, a badge) and
 the **Foundation** (`/gangs/foundation`, Community Fund 60 to The Legacy 3000 $OMR). The Foundation is real
 power: it **reduces the RICO conviction chance of every member** and speeds their case bleed (only members

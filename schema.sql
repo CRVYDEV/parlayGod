@@ -345,8 +345,11 @@ CREATE TABLE IF NOT EXISTS gang_members (
   character_id TEXT NOT NULL UNIQUE,
   role TEXT NOT NULL DEFAULT 'soldier',
   joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),   -- THE FOUNDATION step two: the bust-soften only helps members who joined BEFORE their indictment (freeload gate)
+  post TEXT,                                      -- THE ROSTER (strategy package): the post this made man holds. One post per man, one man per post per family. NULL = on the street
+  post_at TIMESTAMPTZ,                            -- when he took it — the reassign cooldown reads this
   PRIMARY KEY (gang_id, character_id)
 );
+CREATE INDEX IF NOT EXISTS ix_gang_members_post ON gang_members(gang_id, post);
 CREATE TABLE IF NOT EXISTS districts (
   id TEXT PRIMARY KEY,
   holder_gang TEXT,

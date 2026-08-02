@@ -6,9 +6,10 @@
 // `territory:income` a treasury cash FAUCET — both character_id NULL (gang-level, like gang:war), so
 // the character-cash check is untouched and the treasury check reconciles them. The on-chain
 // tradeable-NFT layer (minted_onchain) is dormant/deferred, the M6 pattern.
+import { postPower } from './roster.js';
 import { GameError, bus } from './game.js';
 import { DISTRICTS, TERRITORY_RACKETS, TERRITORY_TYPES, territoryTierOf, territoryTypeOf, territoryBuildCost,
-         territoryFortCost, territoryRankOf, syndicateOf, TERRITORY_SYNDICATE_MIN, levelOf, CONSTANTS } from './rules.js';
+         territoryFortCost, territoryRankOf, syndicateOf, TERRITORY_SYNDICATE_MIN, levelOf, CONSTANTS, rosterMult, M3 } from './rules.js';
 
 const canCommand = (h) => h.owned.gangRole === 'boss' || h.owned.gangRole === 'underboss';
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
@@ -21,9 +22,12 @@ const ratePerHr = (racket) => (territoryTierOf(racket.tier)?.incomePerHr || 0) *
 // STEP FIVE — a specialist's passive fortitude bonus (from the effStat snapshot at assign), and the
 // net scrutiny growth-rate net of a specialist's resistance. All defensive/risk — no §10.4.
 const specFort = (r) => r.specialist ? Math.floor(Number(r.spec_power || 0) / CONSTANTS.SPECIALIST_FORT_DIV) : 0;
-const scrutinyNet = (r) => {
+// `capoMult` is THE ROSTER's Caporegime: a family with an operations man in the chair has the Bureau
+// building its file more slowly. It scales the GROWTH only — the decay is the family's own patience
+// and is not his to speed up — and it is 1 whenever the post is empty or its holder is off the board.
+const scrutinyNet = (r, capoMult = 1) => {
   const mult = r.specialist ? CONSTANTS.SPECIALIST_SCRUTINY_MULT : 1;
-  return territoryTypeOf(r.kind).scrutinyPerHr * mult - CONSTANTS.TERRITORY_SCRUTINY_DECAY_HR;
+  return territoryTypeOf(r.kind).scrutinyPerHr * mult * capoMult - CONSTANTS.TERRITORY_SCRUTINY_DECAY_HR;
 };
 // the effective START of the scrutiny accrual clock — the LATER of the stored `scrutiny_at` and any
 // "Ghost the Route" window end. RED-TEAM FIX: suppressing accrual by returning net=0 during the window
@@ -46,10 +50,13 @@ function accrued(racket) {
 // operation's income per hour — so a hotter/bigger op owes more), accrued on its OWN clock up to
 // TERRITORY_UPKEEP_CAP_MS — distinct from the 24h income cap, so a neglected operation owes more than
 // it earns. Paid from the treasury.
-function upkeepOwed(racket, now = Date.now()) {
+// `bagmanMult` is THE ROSTER's Bagman — a family with a money man keeping the books pays a cheaper
+// pad. The DISCOUNTED number is what the treasury pays AND what is ledgered `territory:upkeep`, so
+// the §10.4 treasury check reconciles the smaller figure exactly like the larger one.
+function upkeepOwed(racket, now = Date.now(), bagmanMult = 1) {
   if (!territoryTierOf(racket.tier)) return 0;
   const elapsed = Math.min(now - new Date(racket.upkeep_at).getTime(), CONSTANTS.TERRITORY_UPKEEP_CAP_MS);
-  return Math.floor(ratePerHr(racket) * (CONSTANTS.TERRITORY_UPKEEP_BPS / 10000) * Math.max(0, elapsed) / 3600000);
+  return Math.floor(ratePerHr(racket) * (CONSTANTS.TERRITORY_UPKEEP_BPS / 10000) * Math.max(0, elapsed) / 3600000 * bagmanMult);
 }
 const isCold = (racket, now = Date.now()) =>
   now - new Date(racket.upkeep_at).getTime() >= CONSTANTS.TERRITORY_UPKEEP_COLD_MS;
@@ -57,8 +64,8 @@ const isCold = (racket, now = Date.now()) =>
 // STEP THREE — the BUREAU CRACKDOWN (the business-scrutiny pattern for a GANG operation). Scrutiny
 // GROWS from operating a hot type (net of the decay) — a `numbers` op (scrutinyPerHr 0 < decay) never
 // heats up, `smuggling` climbs fast. Effective (current) scrutiny, clamped:
-function decayedScrutiny(r, now = Date.now()) {
-  const net = scrutinyNet(r); // step five: a specialist's resistance folds into the rate
+function decayedScrutiny(r, now = Date.now(), capoMult = 1) {
+  const net = scrutinyNet(r, capoMult); // step five: a specialist's resistance folds into the rate
   const hrs = Math.max(0, now - scrutinyStartMs(r)) / 3600000; // …and a ghost window skips its hours entirely
   return Math.max(0, Math.min(CONSTANTS.TERRITORY_SCRUTINY_CAP, Number(r.scrutiny) + net * hrs));
 }
@@ -69,9 +76,9 @@ function decayedScrutiny(r, now = Date.now()) {
 // caller subtracts from the treasury (ledgered `territory:raid`, a §10.4 treasury sink). No treasury
 // write here — the caller applies the net delta in one UPDATE. `treasury` is the running balance (for
 // the fine clamp). TERRITORY_RAID_P pins the roll for tests (the BUSINESS_RAID_P precedent).
-async function resolveTerritoryRaid(r, treasury, client, h, gangId, actorId) {
+async function resolveTerritoryRaid(r, treasury, client, h, gangId, actorId, capoMult = 1) {
   const now = Date.now();
-  const net = scrutinyNet(r); // step five: a specialist dropping net ≤ 0 means no crackdown
+  const net = scrutinyNet(r, capoMult); // step five: a specialist dropping net ≤ 0 means no crackdown
   const stored = Number(r.scrutiny);
   // …and a ghost window contributes zero hours (start clock at max(scrutiny_at, op_ghost_until)), so
   // during it hrs=0 → no above-threshold time → the roll below can't fire; after it, only post-window time counts
@@ -143,7 +150,8 @@ export async function upgradeRacket(ch, districtId, client, h) {
   // pending income, so without this a boss watching the Bureau heat climb could bank the take through an
   // upgrade and never face the crackdown roll that `collectTerritory` runs. Resolve it here on the same
   // terms — a raid SEIZES the pending (so `accrued` is read after) and fines the treasury.
-  const raid = await resolveTerritoryRaid(r, Number(g.treasury), client, h, h.owned.gangId, ch.id);
+  const capoMult = rosterMult(await postPower(client, h.owned.gangId, 'capo'), M3.ROSTER_CAPO_SCRUTINY_PER);
+  const raid = await resolveTerritoryRaid(r, Number(g.treasury), client, h, h.owned.gangId, ch.id, capoMult);
   let raidFine = 0;
   if (raid.raided) {
     // the crackdown SEIZED the pending take and ledgered the fine (the caller applies it, as in
@@ -176,13 +184,14 @@ export async function collectTerritory(ch, client, h) {
   const rackets = (await client.query('SELECT * FROM territory_rackets WHERE owner_gang=$1 FOR UPDATE', [h.owned.gangId])).rows;
   let total = 0, cold = 0, fines = 0; const raids = [];
   let running = Number(g.treasury);   // the running treasury (for each raid's fine clamp)
+  const capoMult = rosterMult(await postPower(client, h.owned.gangId, 'capo'), M3.ROSTER_CAPO_SCRUTINY_PER);
   for (const r of rackets) {
     // recurring sinks: an operation whose pad went unpaid past the cold window produces nothing
     // until squared — the withheld take is lost to the 24h cap, not banked to the treasury.
     if (isCold(r)) { cold++; continue; }
     // STEP THREE — the Bureau crackdown resolves at the collect touch FIRST: a raid seizes the pending
     // income (never banked) + fines the treasury, before any income lands (the business-raid precedent).
-    const raid = await resolveTerritoryRaid(r, running, client, h, h.owned.gangId, ch.id);
+    const raid = await resolveTerritoryRaid(r, running, client, h, h.owned.gangId, ch.id, capoMult);
     if (raid.raided) { fines += raid.fine; running -= raid.fine; raids.push({ district: raid.district, seized: raid.seized, fine: raid.fine }); continue; }
     const inc = accrued(r);
     if (inc > 0) { total += inc; running += inc; await client.query('UPDATE territory_rackets SET last_income_at=now() WHERE district_id=$1', [r.district_id]); }
@@ -205,9 +214,12 @@ export async function payTerritoryUpkeep(ch, client, h) {
   const g = (await client.query('SELECT treasury FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
   const rackets = (await client.query('SELECT * FROM territory_rackets WHERE owner_gang=$1 FOR UPDATE', [h.owned.gangId])).rows;
   if (!rackets.length) throw new GameError('none', 'Your family runs no operations — no pad to pay.');
+  // THE ROSTER — THE BAGMAN: the pad comes cheaper with a money man on the books. One lookup for the
+  // whole greedy pass; the discounted figure is what leaves the treasury AND what is ledgered.
+  const bagmanMult = rosterMult(await postPower(client, h.owned.gangId, 'bagman'), M3.ROSTER_BAGMAN_UPKEEP_PER);
   let treasury = Number(g.treasury), paid = 0, stillOwed = 0; const settled = [];
   for (const r of rackets) {
-    const owed = upkeepOwed(r);
+    const owed = upkeepOwed(r, Date.now(), bagmanMult);
     if (owed <= 0) continue;
     if (treasury >= owed) {
       treasury -= owed; paid += owed;

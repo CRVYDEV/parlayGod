@@ -1630,6 +1630,11 @@
   // ── the street talks back: turn a raw response into one human line ──
   // known single-word server rejections → plain talk (the server returns codes, not sentences)
   const ERRMAP = {
+    // THE ROSTER
+    bad_post: 'No such post.',
+    already: 'He already holds that one.',
+    settled: 'He only just took up his post — a man cannot be everywhere at once.',
+    empty: 'Nobody holds that post.',
     // THE SEALED BID
     contested: 'That belongs to a family. You take it by staking a claim, not by buying it.',
     not_contested: "Nobody holds that — there's nothing to contest. Take it outright.",
@@ -1690,6 +1695,10 @@
     if (body && body.tokenId && body.nonce != null)
       return `\u26D3 ${body.name || 'it'} is on-chain — token #${body.tokenId}. Safe forever, and out of the game.`;
     if (body && body.referrer && body.ok) return `on the record — ${body.referrer} gets credit as you come up`;
+    // THE ROSTER — a post is only worth something while the man is on his feet, so the toast leads
+    // with what the chair is worth rather than the fact that somebody sat down in it.
+    if (body && body.postName && body.who) return `\u{1F3AF} ${body.who} takes ${body.postName} — worth +${body.power}`;
+    if (body && body.postName && body.vacated) return `${body.postName} stands down`;
     // THE SEALED BID — a stake is secret, so the toast reports YOUR number and nobody else's.
     if (body && body.staked !== undefined && body.families !== undefined)
       return `\u{1F576} $${fmt(body.staked)} on ${body.district}${body.defending ? ' \u2014 defending' : ''} \u2014 ${body.families} in, ${mins(body.resolvesSeconds)} to go`;
@@ -3317,6 +3326,7 @@
       return;
     }
     const g = (await api('GET', `/v1/gangs/${me.gang.id}`)).body?.gang;
+    const rost = (await api('GET', '/v1/roster')).body;
     if (!g) { t.innerHTML = '<span class="d">the family is gone.</span>'; return; }
     const com = (await api('GET', '/v1/commission')).body || {};
     const mySeat = (com.seats || []).find((s) => s.name === g.name);
@@ -3342,7 +3352,22 @@
         <div class="d">score us ${g.war.us} — them ${g.war.them}</div></div>` : ''}
 
       ${sect('fam-members', `Made Men (${g.members.length})`, 'the roster', `<div class="grid">${g.members.map((m) => `
-        <div class="card"><span class="t">${m.name}</span><div class="d">${m.role}</div></div>`).join('')}</div>`)}
+        <div class="card"><span class="t">${m.name}</span><div class="d">${m.role}${(rost.posts || []).find((p) => p.holder && p.holder.characterId === m.id) ? ` · ${(rost.posts || []).find((p) => p.holder && p.holder.characterId === m.id).name}` : ''}</div></div>`).join('')}</div>`)}
+
+      ${sect('fam-roster', 'The Posts', 'one post per made man, one man per post — and a post is DEAD while its holder is dead, in lockup or in the hospital', `
+      <div class="grid">${(rost.posts || []).map((p) => `
+        <div class="card"${p.holder && !p.holder.away ? ' style="border-color:var(--neon)"' : ''}><span class="t">${p.name}</span>
+          ${p.holder ? (p.holder.away
+            ? `<span class="chip bad">${p.holder.away}</span>`
+            : `<span class="chip good">+${p.power}</span>`) : '<span class="chip">empty</span>'}
+          <div class="d">${p.what} <span style="color:var(--dim)">(reads ${p.stat})</span></div>
+          <div class="d">${p.holder
+            ? `${esc(p.holder.name)}${p.holder.away ? ` — ${p.holder.away}, so this chair is worth nothing right now` : ''}`
+            : 'nobody in the chair'}</div>
+          ${boss ? `<div style="margin-top:4px"><select id="rp-${p.id}"><option value="">— put a man in —</option>${g.members.map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select>
+            <button class="act" data-post="${p.id}">post him</button>${p.holder ? ` <button class="act" data-unpost="${p.id}">stand down</button>` : ''}</div>` : ''}
+        </div>`).join('')}</div>
+      <div class="d" style="color:var(--dim);margin-top:6px">A man has to make level ${rost.minLevel} to hold a post, and once he takes one you cannot move HIM for ${mins(rost.reassignSeconds)} — so answering a hit on your Enforcer costs another man off the street, not a reshuffle.</div>`)}
 
       <h2 style="margin-top:12px">Territory Operations</h2>
       ${g.empire ? `<div class="card" style="border-color:var(--neon)"><span class="t">🏙️ ${g.empire.rank}</span> <span class="d">$${fmt(g.empire.earned)} lifetime territory income — <a href="#" id="terr-lb">the Empire board →</a></span>${g.syndicate ? `<div style="margin-top:4px">🃏 <b>${esc(g.syndicate.name)}</b> <span class="d">— ${g.syndicate.count} ${esc(g.syndicate.kind)} operations. Specialization pays in prestige.</span></div>` : ''}</div>` : ''}
@@ -3521,6 +3546,13 @@
         { yes: 'put it up', no: 'think again', danger: true })) return;
       act('POST', `/v1/districts/${id}/claim`, { amount: amt }).then(() => renderFamily());
     });
+    t.querySelectorAll('[data-post]').forEach((b) => b.onclick = () => {
+      const id = t.querySelector('#rp-' + b.dataset.post).value;
+      if (!id) return toast('Pick the man first.');
+      act('POST', `/v1/roster/${b.dataset.post}`, { memberId: id }).then(() => renderFamily());
+    });
+    t.querySelectorAll('[data-unpost]').forEach((b) => b.onclick = () =>
+      act('DELETE', `/v1/roster/${b.dataset.unpost}`, {}).then(() => renderFamily()));
     const warBtn = t.querySelector('#war-go');
     if (warBtn) warBtn.onclick = () =>
       act('POST', `/v1/gangs/war/${t.querySelector('#war-gang').value.trim()}`, {}).then(() => renderFamily());
@@ -4475,7 +4507,7 @@
       ['GET', '/v1/gangs'], ['GET', '/v1/gangs/:id'], ['POST', '/v1/gangs', { name: '', tag: '' }],
       ['POST', '/v1/gangs/:id/join', {}], ['POST', '/v1/gangs/leave', {}], ['POST', '/v1/gangs/tribute', { amount: 1000 }],
       ['POST', '/v1/gangs/tribute/omr', { amount: 1 }], ['POST', '/v1/gangs/war/:targetGangId', {}],
-      ['POST', '/v1/districts/:id/seize', {}], ['POST', '/v1/districts/:id/watch', { hour: 3 }], ['POST', '/v1/districts/:id/claim', { amount: 100000 }], ['GET', '/v1/territory'], ['POST', '/v1/territory/:districtId/establish', { kind: 'numbers' }],
+      ['POST', '/v1/districts/:id/seize', {}], ['POST', '/v1/districts/:id/watch', { hour: 3 }], ['POST', '/v1/districts/:id/claim', { amount: 100000 }], ['GET', '/v1/roster'], ['POST', '/v1/roster/:post', { memberId: '' }], ['DELETE', '/v1/roster/:post'], ['GET', '/v1/territory'], ['POST', '/v1/territory/:districtId/establish', { kind: 'numbers' }],
       ['POST', '/v1/territory/collect', {}], ['POST', '/v1/territory/upkeep', {}],
       ['POST', '/v1/gangs/contract/:targetId', { amount: 10000, kind: 'kill' }],
       ['GET', '/v1/commission'], ['POST', '/v1/commission/vote', { decree: 'pax' }], ['POST', '/v1/commission/veto', {}],

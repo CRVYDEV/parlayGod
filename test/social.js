@@ -1768,5 +1768,116 @@ assert(Math.abs(escNow - rhsEsc) <= 1, `bounty/contract escrow reconciles: bucke
     `treasuries reconcile with stakes, refunds and forfeits in the mix (${JSON.stringify(invC.checks.find((c) => c.name === 'gang treasuries'))})`);
 }
 
+
+// ══ THE ROSTER (the strategy package's SCARCE PEOPLE) ══
+// A family's made men were interchangeable — a 20-man family and a 3-man family differed only in raw
+// stats, and every collective system ran with no allocation decision at all. Now the family fills
+// POSTS: one post per man, one man per post. What has to hold: the assignment is boss-only and
+// scarce, each post really moves its OWN till, and — the whole mechanic — a post goes DEAD the
+// moment its holder is off the board, so a rival takes a family's capability with the PvP layer that
+// already exists rather than with a new one.
+{
+  const rb = await mk('Roster Boss'); await seedCh(rb.id, 'respect=1000, cash=900000');
+  const rbg = (await call('POST', '/v1/gangs', { token: rb.token, body: { name: 'The Organised', tag: 'ORG' } })).body.gangId;
+  const heavy = await mk('Big Sal'); await seedCh(heavy.id, 'respect=1000, muscle=60, cunning=10, speed=10');
+  const brain = await mk('Quiet Mo'); await seedCh(brain.id, 'respect=1000, muscle=10, cunning=70, speed=10');
+  const kid = await mk('The Kid'); await seedCh(kid.id, 'respect=1');
+  for (const t of [heavy, brain, kid]) await call('POST', `/v1/gangs/${rbg}/join`, { token: t.token });
+  const roster = async () => (await call('GET', '/v1/roster', { token: rb.token })).body;
+
+  // the catalog is short on purpose, and the gates are the family's
+  const board0 = await roster();
+  assert.equal(board0.posts.length, 5, 'five posts — the decision is which of your men come off the street, not a spreadsheet');
+  assert.equal(board0.posts.every((p) => p.holder === null), true, 'every chair starts empty');
+  assert.equal((await call('POST', '/v1/roster/enforcer', { token: heavy.token, body: { memberId: heavy.id } })).body.error, 'rank',
+    'a soldier does not hand out posts');
+  assert.equal((await call('POST', '/v1/roster/bagholder', { token: rb.token, body: { memberId: heavy.id } })).body.error, 'bad_post', 'no such post');
+  assert.equal((await call('POST', '/v1/roster/enforcer', { token: rb.token, body: { memberId: don.id } })).body.error, 'no_member', 'not one of yours');
+  assert.equal((await call('POST', '/v1/roster/enforcer', { token: rb.token, body: { memberId: kid.id } })).body.error, 'level',
+    `a man has to make level ${M3.ROSTER_MIN_LEVEL} before he holds a post`);
+
+  // ONE MAN, ONE POST — the scarcity. Sal's muscle is worth the same in either chair; he can only
+  // sit in one, so a family with one great all-rounder still has to decide what he does with himself.
+  let rr = await call('POST', '/v1/roster/enforcer', { token: rb.token, body: { memberId: heavy.id } });
+  assert.equal(rr.code, 200, `Sal takes the door (${JSON.stringify(rr.body)})`);
+  const salPower = Math.min(M3.ROSTER_POWER_MAX, Math.floor(60 / M3.ROSTER_POWER_DIV));
+  assert.equal(rr.body.power, salPower, 'the man in the chair is what the post is worth');
+  assert.equal((await call('POST', '/v1/roster/enforcer', { token: rb.token, body: { memberId: heavy.id } })).body.error, 'already', 'he already holds it');
+  assert.equal((await call('POST', '/v1/roster/streetboss', { token: rb.token, body: { memberId: heavy.id } })).body.error, 'settled',
+    'and you cannot shuffle one good man between posts to be everywhere at once');
+  // a SECOND man is what it costs to fill a second chair
+  assert.equal((await call('POST', '/v1/roster/capo', { token: rb.token, body: { memberId: brain.id } })).code, 200, 'Mo takes the operations chair');
+  const board1 = await roster();
+  assert.equal(board1.posts.find((p) => p.id === 'enforcer').holder.name, 'Big Sal', 'the board names who is in which chair');
+  assert.equal(board1.posts.find((p) => p.id === 'capo').holder.name, 'Quiet Mo', 'both chairs filled — by two different men');
+  assert.equal(board1.posts.find((p) => p.id === 'streetboss').holder, null, 'and the ones you did not fill are empty');
+
+  // THE ENFORCER really moves his own till: a rival's stake on this family's turf gets dearer.
+  await pool.query(`UPDATE districts SET holder_gang='${rbg}', npc_holder=NULL, garrison=30000, watch_hour=NULL, contest_until=NULL WHERE id='brick'`);
+  await pool.query(`DELETE FROM district_bids WHERE district_id='brick'`);
+  const plain = Math.floor(Math.max(M3.SEIZE_BASE, Math.floor(30000 * M3.SEIZE_OUTBID)) * M3.WATCH_SURPRISE_MULT);
+  const withSal = Math.floor((Math.max(M3.SEIZE_BASE, Math.floor(30000 * M3.SEIZE_OUTBID)) + salPower * M3.ROSTER_ENFORCER_GARRISON) * M3.WATCH_SURPRISE_MULT);
+  const bd = (await call('GET', '/v1/districts', {})).body.districts.find((d) => d.id === 'brick');
+  assert.equal(bd.claimFloor, withSal, `a man on the door costs a rival ${salPower} x $${M3.ROSTER_ENFORCER_GARRISON} more (saw ${bd.claimFloor}, plain would be ${plain})`);
+  assert(withSal > plain, 'and that is a real premium, not a rounding artefact');
+
+  // ── THE LIVE GATE: the whole mechanic ──
+  // Put Sal in the hospital and the door is unmanned. The rival did not touch the district.
+  await pool.query(`UPDATE characters SET hosp_until = now() + interval '1 hour' WHERE id='${heavy.id}'`);
+  const bdHurt = (await call('GET', '/v1/districts', {})).body.districts.find((d) => d.id === 'brick');
+  assert.equal(bdHurt.claimFloor, plain, 'an Enforcer in the hospital is an EMPTY chair — the turf is cheap again');
+  const boardHurt = await roster();
+  assert.equal(boardHurt.posts.find((p) => p.id === 'enforcer').holder.away, 'in the hospital',
+    'and the family is TOLD why their post is dead rather than left to work it out');
+  assert.equal(boardHurt.posts.find((p) => p.id === 'enforcer').power, 0, 'a man who is away is worth nothing in the chair');
+  // …and filling the chair again costs a man OFF THE STREET, never a reshuffle. Moving Mo across
+  // from the operations chair is exactly the "be everywhere at once" the cooldown exists to stop.
+  assert.equal((await call('POST', '/v1/roster/enforcer', { token: rb.token, body: { memberId: brain.id } })).body.error, 'settled',
+    'you cannot answer a hit by sliding your one good man into the chair he just vacated');
+  const spare = await mk('Fresh Tony'); await seedCh(spare.id, 'respect=1000, muscle=40, cunning=10, speed=10');
+  await call('POST', `/v1/gangs/${rbg}/join`, { token: spare.token });
+  assert.equal((await call('POST', '/v1/roster/enforcer', { token: rb.token, body: { memberId: spare.id } })).code, 200,
+    'a man who was ON THE STREET can take the chair immediately — which is what the hit really cost them');
+  const boardSwap = await roster();
+  assert.equal(boardSwap.posts.find((p) => p.id === 'enforcer').holder.name, 'Fresh Tony', 'Tony has the door now');
+  assert.equal(boardSwap.posts.find((p) => p.id === 'capo').holder.name, 'Quiet Mo', 'and Mo is still on operations — nothing was reshuffled');
+  await pool.query(`UPDATE characters SET hosp_until=NULL WHERE id='${heavy.id}'`);
+  // Sal is back on his feet, but Tony has the chair — a post is held by ONE man, and the last one in wins it
+  assert.equal((await roster()).posts.find((p) => p.id === 'enforcer').holder.name, 'Fresh Tony', 'the chair did not go back to him on its own');
+
+  // THE BAGMAN moves the pad, and the DISCOUNTED number is what the treasury pays AND what is ledgered
+  await pool.query(`UPDATE districts SET holder_gang='${rbg}', npc_holder=NULL WHERE id='cathedral'`);
+  await call('POST', '/v1/gangs/tribute', { token: rb.token, body: { amount: 500000 } });
+  assert.equal((await call('POST', '/v1/territory/cathedral/establish', { token: rb.token, body: { kind: 'numbers' } })).code, 200, 'the family opens an operation');
+  await pool.query(`UPDATE territory_rackets SET upkeep_at = now() - interval '10 hours' WHERE district_id='cathedral'`);
+  const owedPlain = (await call('GET', '/v1/territory', { token: rb.token })).body.territory.find((r) => r.district === 'cathedral').upkeepOwed;
+  // free Mo from operations, then put him on the books (backdating his post clock past the cooldown —
+  // the mechanic is under test above, not here)
+  await call('DELETE', '/v1/roster/capo', { token: rb.token });
+  await pool.query(`UPDATE gang_members SET post_at = now() - interval '2 days' WHERE character_id='${brain.id}'`);
+  assert.equal((await call('POST', '/v1/roster/bagman', { token: rb.token, body: { memberId: brain.id } })).code, 200, 'Mo goes on the books');
+  const moPower = Math.min(M3.ROSTER_POWER_MAX, Math.floor(70 / M3.ROSTER_POWER_DIV));
+  const treasBefore = (await call('GET', `/v1/gangs/${rbg}`, {})).body.gang.treasury;
+  const upk = await call('POST', '/v1/territory/upkeep', { token: rb.token });
+  assert.equal(upk.code, 200, `the pad is squared (${JSON.stringify(upk.body)})`);
+  const expected = Math.floor(owedPlain * Math.max(M3.ROSTER_MULT_FLOOR, 1 - moPower * M3.ROSTER_BAGMAN_UPKEEP_PER));
+  assert.equal(upk.body.paid, expected, `a money man on the books cuts the pad (saw ${upk.body.paid}, plain was ${owedPlain})`);
+  assert(upk.body.paid < owedPlain, 'and the discount is real');
+  assert.equal((await call('GET', `/v1/gangs/${rbg}`, {})).body.gang.treasury, treasBefore - upk.body.paid, 'the treasury paid exactly the discounted figure');
+  const upkRow = Number((await pool.query(
+    `SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='territory:upkeep' AND counterparty='${rbg}'`)).rows[0].s);
+  assert.equal(upkRow, -upk.body.paid, 'and the LEDGER carries the discounted number too — the treasury check reconciles it exactly');
+
+  // vacating is free and instant; standing a post down is never the thing you have to be talked out of
+  assert.equal((await call('DELETE', '/v1/roster/bagman', { token: rb.token })).body.vacated, true, 'the boss stands a post down');
+  assert.equal((await call('DELETE', '/v1/roster/bagman', { token: rb.token })).body.error, 'empty', 'nobody holds it now');
+
+  // §10.4: the whole mechanic moves no currency and adds no reason
+  const invR = await runLedgerInvariants(pool, { alert: false });
+  assert(invR.checks.find((c) => c.name === 'reason vocabulary').ok, 'the roster adds no unknown reason');
+  assert(invR.checks.find((c) => c.name === 'gang treasuries').ok,
+    `treasuries reconcile with a discounted pad in the mix (${JSON.stringify(invR.checks.find((c) => c.name === 'gang treasuries'))})`);
+}
+
 console.log('✅ M3 social test passed — gangs, tribute+weekly, turf (+perks), melt tithe, exchange, jumps, bounty, contract board, hit→death/estate, busting, notifications, websocket push, buyback family split, §10.4 invariants, M7 assassin rep + NPC hitmen + safehouse/fire-heat/war-kills + family contracts (treasury-funded, member lockout, refunds) + bodyguards (hire/absorb/betrayal, before-insurance ordering) + M8 Tailor & Engraver vanity sinks (name/title/plate/crest/rename — ledgered vanity:* burns) + M8 intel sinks (anon fee, peek pierces anon) + M8 family seals ($OMR tribute → pooled reserve → sequential ladder, ledgered burns) + THE FOUNDATION (family charity: rank gate, empty-reserve rejection, sequential tiers from the reserve, badge on all three views + philanthropy leaderboard, softens members\' RICO odds, ledgered foundation:tier burns; STEP TWO: freeload gate — the trial-soften only helps a member who joined before the case was filed) + M7-P3 territory rackets (establish/collect/upgrade, income cap, SEIZURE transfers the operation to the victor, treasury §10.4 reconcile) + VENDETTAS (heir born owing blood, feud ledger, waived directed floor, 2x settlement rep, the cycle turns, lapsed = nothing; STEP TWO: ESCALATION (a repeat kill deepens the feud — kills++ / a higher tier / a longer TTL), THE SIT-DOWN (consensual peace gates + the both-direction clear), and the blood-debt leaderboard — all pure status)');
 await app.close();

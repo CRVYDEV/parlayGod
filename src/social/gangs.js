@@ -7,7 +7,7 @@
 // Split out of the 2,003-line src/social.js; every function below is byte-identical to what was
 // there. Import from '../social.js' — it re-exports this package's public surface unchanged.
 import { GameError, bumpFamilyTask, bus, ledger, cleanText, notify } from '../game.js';
-import { DISTRICTS, M3, M8, levelOf, dayOf, territoryBuildCost, worldNpcOf, liberationCost, DIPLOMACY, cityHourOf } from '../rules.js';
+import { DISTRICTS, M3, M8, ROSTER_POSTS, rosterPostOf, rosterMult, levelOf, dayOf, territoryBuildCost, worldNpcOf, liberationCost, DIPLOMACY, cityHourOf } from '../rules.js';
 import { seizeTerritoryRackets, releaseTerritoryRackets } from '../territory.js';
 import { releaseFrontierHolds, outfitStrengthFrac } from '../world.js';
 import { activeDecree } from '../commission.js';
@@ -15,6 +15,7 @@ import { pactActive, coalitionDiscountActive, dissolveDiplomacy } from '../diplo
 import { sovGarrisonBonus, razeSov, dissolveSov } from '../sov.js';
 import { runEstate } from './estate.js';
 import { canCommand, now, uid, warActive } from './shared.js';
+import { postPower, rosterBoard, rosterEffects } from '../roster.js';
 
 // ═══════════════════ GANGS (§5.5) ═══════════════════
 export async function createGang(ch, name, tag, client, h) {
@@ -144,6 +145,59 @@ export async function promoteMember(ch, targetCharacterId, role, client, h) {
   return { ok: true, role };
 }
 
+// ── THE ROSTER (the strategy package's SCARCE PEOPLE) ──
+// Put a made man in a post. ONE post per man and ONE man per post, so a family with one great
+// all-rounder still has to decide what he does with himself — that is the whole mechanic, and the
+// numbers underneath are deliberately small.
+//
+// Zero §10.4: an assignment moves no currency and writes no ledger row. The gang row is locked so
+// two officers cannot fill the same chair at once; the post is then cleared from whoever held it,
+// which makes the whole thing idempotent.
+export async function assignPost(ch, targetCharacterId, postId, client, h) {
+  if (!canCommand(h)) throw new GameError('rank', 'Only the boss or underboss hands out posts.');
+  const post = rosterPostOf(postId);
+  if (!post) throw new GameError('bad_post', `Posts: ${ROSTER_POSTS.map((p) => p.id).join(', ')}.`);
+  // gang row first — the family is the thing two officers race over (the joinGang precedent)
+  const g = (await client.query('SELECT id FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
+  if (!g) throw new GameError('no_gang', 'That family no longer exists.');
+  const m = (await client.query(
+    `SELECT m.post, m.post_at, c.name, c.respect, c.alive FROM gang_members m JOIN characters c ON c.id = m.character_id
+     WHERE m.gang_id=$1 AND m.character_id=$2`, [h.owned.gangId, targetCharacterId])).rows[0];
+  if (!m || !m.alive) throw new GameError('no_member', 'Not one of yours.');
+  if (levelOf(Number(m.respect)) < M3.ROSTER_MIN_LEVEL)
+    throw new GameError('level', `A man has to make level ${M3.ROSTER_MIN_LEVEL} before he holds a post.`);
+  if (m.post === postId) throw new GameError('already', `${m.name} already holds that post.`);
+  // the cooldown is on the MAN, not the chair. A family whose officer is taken off the board can
+  // put somebody else in immediately — and that costs them a SECOND made man, which is the point.
+  // What it stops is shuffling one good man between posts to be everywhere at once.
+  if (m.post && m.post_at && Date.now() - new Date(m.post_at).getTime() < M3.ROSTER_REASSIGN_CD_MS)
+    throw new GameError('settled', `${m.name} only just took up his post — give him time before you move him.`);
+  await client.query('UPDATE gang_members SET post=NULL, post_at=NULL WHERE gang_id=$1 AND post=$2', [h.owned.gangId, postId]);
+  await client.query('UPDATE gang_members SET post=$3, post_at=$4 WHERE gang_id=$1 AND character_id=$2',
+    [h.owned.gangId, targetCharacterId, postId, now()]);
+  await notify(client, targetCharacterId, 'post_given', { post: postId, name: post.name });
+  bus.emit('streets', { type: 'post', gang: h.owned.gang?.name, post: post.name, who: m.name });
+  return { ok: true, post: postId, postName: post.name, who: m.name,
+    power: await postPower(client, h.owned.gangId, postId) };
+}
+
+// Take a man off a post — free and instant. Standing a post down is never the thing you have to be
+// talked out of; putting a man IN one is.
+export async function vacatePost(ch, postId, client, h) {
+  if (!canCommand(h)) throw new GameError('rank', 'Only the boss or underboss hands out posts.');
+  const post = rosterPostOf(postId);
+  if (!post) throw new GameError('bad_post', `Posts: ${ROSTER_POSTS.map((p) => p.id).join(', ')}.`);
+  const r = await client.query('UPDATE gang_members SET post=NULL, post_at=NULL WHERE gang_id=$1 AND post=$2', [h.owned.gangId, postId]);
+  if (!r.rowCount) throw new GameError('empty', 'Nobody holds that post.');
+  return { ok: true, post: postId, postName: post.name, vacated: true };
+}
+
+// The family's table of posts + what each is worth right now (one round trip each).
+export async function rosterOf(client, gangId) {
+  return { posts: await rosterBoard(client, gangId), effects: await rosterEffects(client, gangId),
+    minLevel: M3.ROSTER_MIN_LEVEL, reassignSeconds: Math.round(M3.ROSTER_REASSIGN_CD_MS / 1000) };
+}
+
 
 export async function tribute(ch, amount, client, h) {
   if (!h.owned.gangId) throw new GameError('no_gang', "You're not in a family.");
@@ -236,7 +290,11 @@ export async function declareWar(ch, targetGangId, client, h) {
   // FIVE PILLARS #2: an ARMED coalition against the target halves a member's war chest — the EU4
   // anti-hegemon tooth. The DISCOUNTED number is what's deducted AND ledgered (the decree precedent).
   const coalition = await coalitionDiscountActive(client, us.id, them.id);
-  const warCost = coalition ? Math.floor(M3.WAR_COST * DIPLOMACY.COALITION_WAR_MULT) : M3.WAR_COST;
+  // THE ROSTER — THE STREETBOSS: a family with a war man in the chair declares cheaper. Composes
+  // multiplicatively with the coalition discount, and the DISCOUNTED number is what is deducted AND
+  // ledgered (the decree/amnesty discipline) — so `gang:war` still reconciles to the dollar.
+  const warMult = rosterMult(await postPower(client, h.owned.gangId, 'streetboss'), M3.ROSTER_STREETBOSS_WAR_PER);
+  const warCost = Math.floor((coalition ? M3.WAR_COST * DIPLOMACY.COALITION_WAR_MULT : M3.WAR_COST) * warMult);
   if (Number(us.treasury) < warCost) throw new GameError('treasury', `War takes a $${warCost} war chest in the treasury.`);
   const until = new Date(Date.now() + M3.WAR_MS);
   // the war chest burns — a §10.4 cash sink out of the treasury bucket
@@ -316,14 +374,20 @@ export async function turfQuote(client, ch, d, gangId) {
   // plain quote). #2: an ARMED coalition vs the holder discounts the whole bill ×COALITION_SEIZE_MULT
   // (the anti-hegemon tooth; the discounted number is what's deducted AND ledgered).
   const sovBonus = occupied ? 0 : await sovGarrisonBonus(client, d.id);
+  // THE ROSTER — THE ENFORCER: a family with a man posted on the door is dearer to come for. The
+  // bonus is the ATTACKER's price only; it never enters the stored garrison (the sovBonus rule), and
+  // it is zero the moment the Enforcer is dead, in lockup or in the hospital — which is how a rival
+  // takes it off the board without touching the district at all.
+  const enforcer = (!occupied && !defending && d.holder_gang)
+    ? await postPower(client, d.holder_gang, 'enforcer') * M3.ROSTER_ENFORCER_GARRISON : 0;
   const coalition = !occupied && !defending && !!d.holder_gang
     && !!(await coalitionDiscountActive(client, gangId, d.holder_gang));
   // THE WATCH: a player-held district taken OUTSIDE the holder's declared window costs the surprise
   // premium. An NPC-occupied district has no watch to keep (outfits don't sleep) and an unheld one
   // has nobody to surprise, so both stay at the plain price.
   const surprise = (!occupied && !defending && d.holder_gang) ? watchMult(d) : 1;
-  const cost = Math.floor((base + sovBonus + premium) * (coalition ? DIPLOMACY.COALITION_SEIZE_MULT : 1) * surprise);
-  return { occupied, defending, base, premium, sovBonus, coalition, surprise, cost };
+  const cost = Math.floor((base + sovBonus + premium + enforcer) * (coalition ? DIPLOMACY.COALITION_SEIZE_MULT : 1) * surprise);
+  return { occupied, defending, base, premium, sovBonus, enforcer, coalition, surprise, cost };
 }
 
 const contestLive = (d, at = Date.now()) => !!d.contest_until && new Date(d.contest_until).getTime() > at;
