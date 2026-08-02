@@ -352,7 +352,8 @@ CREATE TABLE IF NOT EXISTS districts (
   holder_gang TEXT,
   garrison NUMERIC NOT NULL DEFAULT 0,
   seized_at TIMESTAMPTZ,
-  npc_holder TEXT            -- THE OCCUPATION (World step five): an apex NPC outfit garrisons this core district; a family must LIBERATE it (seizeDistrict) — the perk is dormant until then
+  npc_holder TEXT,           -- THE OCCUPATION (World step five): an apex NPC outfit garrisons this core district; a family must LIBERATE it (seizeDistrict) — the perk is dormant until then
+  watch_hour INT             -- THE WATCH (strategy package): the UTC hour the holder declares their family stands ready. NULL = no watch declared, so every hour is a surprise
 );
 INSERT INTO districts (id) SELECT 'docks'     WHERE NOT EXISTS (SELECT 1 FROM districts WHERE id='docks');
 INSERT INTO districts (id) SELECT 'neon'      WHERE NOT EXISTS (SELECT 1 FROM districts WHERE id='neon');

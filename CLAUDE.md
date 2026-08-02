@@ -3439,6 +3439,31 @@ the three measurement harnesses, all now pinned `SEASON_MOD=dead_quiet`; `test/s
 the armed path and the kill switch. All `OPERATIONS.*` numbers are founder sign-off levers (pinned in
 `test/levers.js`, tabled in BALANCE.md § THE STRATEGY PACKAGE).
 
+**THE STRATEGY PACKAGE — step two: THE WATCH, a time window on turf** (`schema.sql`
+`districts.watch_hour`, `src/rules.tail.js` `M3.WATCH_*`, `src/social/gangs.js` `setWatch`/`onWatch`/
+`watchMult`, `src/sov.js`, `public/index.html`, `test/social.js`). Turf changed hands as a **one-sided
+instant purchase** — the holder had no move and no reason to be anywhere in particular, which is the
+"no scarcity of OPTIONS" shape at its plainest. A holder now DECLARES the UTC hour their family stands
+ready (`POST /v1/districts/:id/watch`, boss-only, on turf they hold, free and changeable — the cost of
+the decision is having to BE there), and taking the district OUTSIDE that window costs
+`WATCH_SURPRISE_MULT` (1.5) more. Deliberately a **PREMIUM, not a LOCKOUT**: a hard EVE window would
+make turf untakeable 20 hours a day and stall the war loop in a thin alpha, while a premium keeps every
+hour playable and makes WHEN a real decision on both sides — the holder picks a window they will
+actually be online for so attacks concentrate where they can answer, and the attacker chooses between
+the plain price and paying to catch them cold. An UNDECLARED district is dear at EVERY hour, so
+declaring is what BUYS the cheap window rather than being a free shield. The declared hour is PUBLIC on
+`GET /v1/districts` (an EVE window is content precisely because everyone can read it). §10.4: it scales
+the EXISTING `turf:seize:` treasury sink — no new reason, no new faucet, vocabulary unmoved (asserted).
+Two mutations, each caught at its own named assertion. **A LIVE BUG this found:** `sov.js:windowOpen`
+read `cityHourOf(now)` as a NUMBER, but it returns `{hour, patrol, phase}` — so `hr - start` was NaN
+and the comparison was **false for every start hour at every clock time**. The sovereignty
+vulnerability window has been **PERMANENTLY SHUT since it shipped**: `siegeSov` threw `window` forever
+and the sov map published `vulnerable: false` on every stronghold. The siege test never caught it
+because it sets `SOV_WINDOW_OPEN=on`, which short-circuits above the broken line — **a TEST-ONLY
+override masking a dead production path**, the "a check that cannot fail reads exactly like a clean
+bill of health" class in its live form. Fixed in both places. `M3.WATCH_WINDOW_H`/`WATCH_SURPRISE_MULT`
+are founder sign-off levers (pinned, tabled in BALANCE.md § THE STRATEGY PACKAGE).
+
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
 `payPlex` pattern); named landmarks / Founder's charter numbers; ~~R2 (the `rwa_revenue` → real-RWA-buy

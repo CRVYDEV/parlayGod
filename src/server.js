@@ -800,6 +800,9 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.declareWar(ch, req.params.targetGangId, client, h)));
   app.post('/v1/districts/:id/seize', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.seizeDistrict(ch, req.params.id, client, h)));
+  // THE WATCH — the holder declares the hour their family stands ready. Free; the cost is being there.
+  app.post('/v1/districts/:id/watch', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.setWatch(ch, req.params.id, req.body?.hour, client, h)));
   registerTerritory(app, { pool, auth });
 
   // Business Empire — the premium, acquired-later personal front layer: buy/upgrade venues that
@@ -1303,7 +1306,7 @@ export async function buildServer() {
     finally { client.release(); }
   });
   app.get('/v1/districts', async () => {
-    const r = await pool.query('SELECT d.id, d.holder_gang, d.garrison, d.npc_holder, g.name AS gang_name, g.tag FROM districts d LEFT JOIN gangs g ON g.id = d.holder_gang');
+    const r = await pool.query('SELECT d.id, d.holder_gang, d.garrison, d.npc_holder, d.watch_hour, g.name AS gang_name, g.tag FROM districts d LEFT JOIN gangs g ON g.id = d.holder_gang');
     // step five — THE OCCUPATION: quote the LIVE liberation cost for each NPC-garrisoned district (scales
     // with the occupying outfit's current strength, so the raid loop cheapens turf).
     const out = [];
@@ -1311,6 +1314,10 @@ export async function buildServer() {
       const base = { id: d.id, perk: DISTRICTS.find((x) => x.id === d.id)?.perk,
         holder: d.holder_gang ? { gangId: d.holder_gang, name: d.gang_name, tag: d.tag } : null,
         garrison: Math.floor(Number(d.garrison)) };
+      // THE WATCH — public by design (an EVE window is content precisely because everyone can read
+      // it). The holder's declared hour, whether it is open right now, and what a surprise costs.
+      if (d.holder_gang) base.watch = { hour: d.watch_hour == null ? null : Number(d.watch_hour),
+        windowH: M3.WATCH_WINDOW_H, open: S.onWatch(d), surpriseMult: S.watchMult(d) };
       if (d.npc_holder) {
         const fx = worldNpcOf(d.npc_holder);
         const frac = await World.outfitStrengthFrac(pool, fx);

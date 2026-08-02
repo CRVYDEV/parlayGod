@@ -616,6 +616,21 @@ export const M3 = {
   // premium scaled to what's being taken — TERRITORY_SEIZE_BPS of the operation's cumulative
   // build cost (seizing a maxed racket is no longer ~18× cheaper than building one).
   TERRITORY_SEIZE_BPS: 5000,
+  // ── THE WATCH (the strategy package's TIME WINDOW) ──
+  // Turf changed hands as a one-sided instant purchase: the holder had no move and no reason to be
+  // anywhere in particular. A holder now DECLARES the UTC hour their family stands ready
+  // (`districts.watch_hour`), and taking the district OUTSIDE that window costs SURPRISE_MULT more
+  // — you are dragging a family out of bed, and that takes more muscle than a fight they came to.
+  //
+  // Deliberately a PREMIUM, not a LOCKOUT (the EVE window, softened for a small alpha). A hard
+  // window would make turf untakeable 20 hours a day and stall the whole war loop in a thin
+  // population; a premium keeps every hour playable while making WHEN a real decision on both
+  // sides — the holder picks a window they will actually be online for (attacks concentrate where
+  // they can answer), the attacker chooses between the plain price and paying to catch them cold.
+  // §10.4: it scales the EXISTING `turf:seize:` treasury sink — no new reason, no new faucet.
+  // NULL watch_hour = no watch declared = the plain price at every hour (a family that never says
+  // when it is home is never surprised, and never gets to concentrate the fight either).
+  WATCH_WINDOW_H: 4, WATCH_SURPRISE_MULT: 1.5,
   WEEKLY_STANDING: 15000, WEEKLY_OMR: 5,
   // M7 Phase 2 assassin rep (a STATUS ladder — no gameplay power, so it doesn't touch
   // sim-audited balance): a kill earns vicLvl × REP_PER_LVL feared-rep, only from targets at

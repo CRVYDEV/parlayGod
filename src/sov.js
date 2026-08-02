@@ -26,7 +26,14 @@ const tierOf = (s) => SOV.TIERS[Number(s.tier) - 1];
 const crumbling = (s, now = Date.now()) => now - new Date(s.upkeep_at).getTime() > SOV.CRUMBLE_MS;
 export const windowOpen = (s, now = Date.now()) => {
   if (process.env.SOV_WINDOW_OPEN === 'on') return true;   // TEST-ONLY (the SEARCH_MS knob precedent)
-  const hr = cityHourOf(now);
+  // cityHourOf returns an OBJECT ({hour, patrol, phase}), not a number. Reading it as a number made
+  // `hr - start` NaN, so this returned false for EVERY start hour and EVERY clock time — the
+  // vulnerability window was PERMANENTLY SHUT in production and `siegeSov` threw `window` forever.
+  // The siege test never caught it because it sets SOV_WINDOW_OPEN=on, which short-circuits above:
+  // a TEST-ONLY override masking a dead production path is the "a check that cannot fail reads like
+  // a clean bill of health" class in its live form. The sov map was also publishing
+  // `vulnerable: false` on every stronghold, telling holders they could never be attacked.
+  const hr = cityHourOf(now).hour;
   const start = Number(s.window_hour);
   return ((hr - start + 24) % 24) < SOV.WINDOW_H;
 };
