@@ -20,6 +20,313 @@ the ones you want to change or discuss. Technical detail for any row lives in `B
 
 ---
 
+# 🔴 LIVE SHEET — the 15 decisions currently open (2026-08-02)
+
+Everything below is a real fork with no default. Each one is written the same way: **the situation**,
+**why it is yours and not mine**, three options **A / B / C**, and my recommendation. Answer with the
+letter — *"D1: A. D2: C."* is a complete reply. Where a letter needs a number I say so.
+
+Ordered by **deadline, not importance**: D1–D5 block a mainnet deploy and some of them become
+expensive or impossible to change afterwards. D6–D10 are live in the game today. D11–D15 can wait.
+
+---
+
+## PART I — decide before anything deploys to mainnet (D1–D5)
+
+### D1 — Two hooks are planned for one Uniswap pool, and a pool can only have one
+
+**The situation.** A v4 pool's hook address is baked into its identity, so a pool has exactly one hook
+forever. Two are designed. `OmertaHook` (built, 128 tests green) takes **9% on sells only**, split
+dev/treasury/liquidity. A second **trade-fee hook** takes a small cut of **every** swap and funds the
+Vig — the pot that backs $OMR withdrawals — and its entire backend is already built and sitting
+dormant. The Vig is not one of `OmertaHook`'s three slices. They are not versions of each other.
+
+**Why it is yours.** Option A adds a fee to **buying**, which no design has ever charged. That is an
+economic surface, not an implementation detail.
+
+- **A. Fold them into one hook, four destinations.** Keep the 9% sell tax exactly as built, add the
+  trade fee as its own rate on all swaps, emit both events so the dormant Vig rail needs no changes.
+  *Cost: buying OMR now carries a fee. You would need to name that rate.*
+- **B. Retire the trade fee.** The Vig is funded by gameplay fees, the Store and bonds only.
+  *Cost: a revenue line that existed specifically to widen the room between what players extract and
+  what actually comes in. Cheapest to do, and reversible only by a new pool.*
+- **C. Two pools, one taxed and one not.** *Rejected on analysis: the untaxed pool becomes the real
+  market within a day. Listed so it is on the record as considered.*
+
+**My recommendation: A**, at a small rate (10–30 bps). It is the only option that keeps both revenue
+lines, and the built-and-dormant backend means it costs almost nothing to wire. **Decide before an
+address is mined** — the permission set is permanent.
+
+---
+
+### D2 — On Ethereum mainnet, a small withdrawal can cost more in gas than it is worth
+
+**The situation.** The withdrawal rail was designed against cheap L2 gas. On mainnet the *logic* is
+unaffected — the reserve and the exit toll work identically — but the smallest withdrawal that makes
+economic sense rises roughly tenfold. Gear claims are worse, because they are claimed one at a time.
+
+**Why it is yours.** Every option trades a cost you pay against a promise you make to players, and
+one of them re-introduces a bridge into the extraction path.
+
+- **A. Accept a higher minimum, and say so plainly in the copy.** Free to build. *Cost: small holders
+  effectively cannot extract, and the copy has to be honest about that up front.*
+- **B. Sponsor the gas (a paymaster).** The player sees a clean withdrawal. *Cost: a real, recurring
+  bill that scales with withdrawals, and a new piece of infrastructure to run.*
+- **C. Keep the game's rails on an L2 and the token on mainnet.** Best of both on cost. *Cost: a
+  bridge sits inside the extraction path — the exact structure the treasury design worked to remove.*
+
+**My recommendation: A for launch, B once withdrawal volume is known.** C buys convenience at the price
+of the one property that makes the extraction story simple to explain.
+
+---
+
+### D3 — Should the 48-hour early-exit toll follow the token onto the exchange?
+
+**The situation.** Freshly-acquired $OMR pays a decaying surcharge when it leaves — at the game's own
+boundary. On a public exchange, a hook cannot reliably tell *who* is selling (a router stands in the
+middle), so an on-chain version of the same rule stops working exactly when someone attacks it.
+
+- **A. Hold it at the game boundary** — the hook has no age logic, which is how it is built today.
+- **B. Add age logic on-chain anyway**, accepting that a determined seller routes around it.
+- **C. Drop the age rule entirely** and let the flat 9% sell tax be the whole anti-dump story.
+
+**My recommendation: A.** It is already built that way, and the contract is immutable — adding it later
+means a redeploy.
+
+---
+
+### D4 — Is the bond's Vig slice supposed to exist at all?
+
+**The situation.** Bonded ETH splits four ways: **liquidity 37.5% / treasury 25% / Vig 22.5% / dev 15%**.
+The treasury and dev numbers come straight from the design. The design's own table then puts the whole
+remaining 60% into liquidity and shows **no Vig slice** — but the sentence directly beneath that table
+names the Vig by variable. I read the omission as an oversight and kept the Vig, because zeroing it
+would defund the pot that backs withdrawals.
+
+**Why it is yours.** I made a judgement call on ambiguous source material and want it confirmed rather
+than inherited.
+
+- **A. Confirm the split as built** (37.5 / 25 / 22.5 / 15).
+- **B. Take the design literally** — liquidity 60%, Vig 0. *One environment variable.*
+- **C. A different split.** Name four numbers that sum to 100%.
+
+**My recommendation: A.** Deeper liquidity is good, but not at the price of the withdrawal reserve.
+
+---
+
+### D5 — How many of each NFT car and boat may ever exist?
+
+**The situation.** Step 7 shipped extraction. Every token type has a **lifetime supply cap set once by
+the Safe at deploy**, and it fails closed — a type with no cap simply cannot be minted. There are 60
+cars and 6 boats, each with 4 rarity tiers, so this is roughly 264 numbers, and the cap — not the drop
+rate — is what actually bounds scarcity.
+
+- **A. One blanket rule** — e.g. every type capped at 500. Simple, defensible, one number to give me.
+- **B. Scale by rarity** — common generous, epic tight (say 1000 / 300 / 60 / 10). *My lean: this is
+  what makes rarity mean something on a secondary market.*
+- **C. Cap only the top tiers and leave common effectively uncapped.**
+
+**My recommendation: B.** Give me the four numbers and I will generate the deploy table.
+
+---
+
+## PART II — live in the game right now (D6–D10)
+
+### D6 — A business front you neglect for a week costs more than it can pay back
+
+**The situation.** A front's till holds **24 hours** of income; the protection envelope runs **7 days**.
+Past **five days away**, squaring up costs more than the front can ever hand back. A tester found this
+and their arithmetic was exactly right. This is intended pressure — an absent owner should bleed — but
+the crossover itself was probably not intended. It is now fully disclosed before purchase, warned about
+as it slides, and there is a door out (close the front, free the slot, forfeit everything sunk in).
+
+**Why it is yours.** The disclosure fixed the *defect*. Whether the crossover should exist at all is a
+design taste question about how punishing absence is.
+
+- **A. Leave it.** Disclosure was the fix; the mechanic stands. *Cost: a player who takes a week off
+  loses an entry-tier asset, and that is a normal thing for a player to do.*
+- **B. Cap the envelope at what the till holds** (`BUSINESS_UPKEEP_CAP_MS` 7d → 2d). The crossover
+  disappears; neglect still costs you income, it just cannot go negative.
+- **C. Refund part of the sunk cost on closing** (`BUSINESS_SHUTTER_BPS` above 0). *Careful — past
+  roughly 5400 bps walking away becomes the correct play and the sink stops draining. A guard now
+  fails the build if that line is crossed, so this cannot go wrong silently.*
+
+**My recommendation: B.** It keeps the pressure and removes the trap. A is defensible if you want
+absence to be genuinely punishing.
+
+---
+
+### D7 — The same thing, one step sharper, in the kitchen
+
+**The situation.** Each crew member draws **$1,200/hr** on the wall clock. Offline sales cap at **8
+hours**; the wage runs to **168**. A **21×** asymmetry. Stocked and attended, a hand returns 3.6:1 —
+so an attentive owner is never the problem. Absent three days, it is 0.40:1. You can now fire crew
+(free once they have already downed tools), and the terms are quoted before the hire.
+
+- **A. Leave it.** Attendance pricing, now disclosed.
+- **B. Raise the offline sales window** (`OFFLINE_CAP_MS` 8h → 24h+). *This is the single number that
+  removes the crossover — and it moves every other offline earning in the game, so it is a
+  whole-economy decision, not a kitchen one. I would re-measure everything.*
+- **C. Cap the wage clock instead** (`CREW_WAGE_CAP_MS` 7d → 2d). Kitchen-local, no side effects.
+
+**My recommendation: C** if you want it softened — it does the same job as B without touching the rest
+of the economy. **A** is genuinely fine now that the deal is visible before the hire.
+
+---
+
+### D8 — Should being a Made Man gate things that earn money, or only status?
+
+**The situation.** The Made Man is the recurring $OMR subscription (20 per 30 days). The design's list
+of what it should unlock opens with **Commission eligibility**, and a Commission decree moves real
+gameplay surfaces — safehouse cost, war blocking, the kill-loot multiplier. The same design names
+"$OMR must never buy power" as its binding rule. Those two sentences pull against each other. As
+shipped: opening a **speakeasy** requires it (a speakeasy earns cash), the **high-stakes table** now
+needs 50 $OMR staked (a change to an already-shipped affordance), and the **Commission is not gated**.
+
+- **A. Ship as built.** Speakeasy and high-stakes gated, Commission open.
+- **B. Gate the Commission too**, and review the decree teeth at the same time so a paid seat is not
+  buying gameplay power.
+- **C. Pull the gates back to status only** — no gate on anything that earns or wins.
+
+**My recommendation: A**, with the high-stakes stake watched, because it took something away from
+level-30 players who already had it. **C** is the cleanest line if you want zero ambiguity about
+whether money buys advantage.
+
+---
+
+### D9 — The rarity draw and the price of skipping it
+
+**The situation.** Cars and boats roll a rarity when earned: **70% common / 22% rare / 6.5% legendary /
+1.5% epic**. Buying your way up costs **25 / 90 / 300 $OMR** per step — 415 to take a common all the
+way to epic, deliberately steeper than the odds, so grinding stays the cheap path and paying is the
+impatient one.
+
+- **A. Ship both as they are.**
+- **B. Make legendaries rarer** (say 3%) so the top of the secondary market is thinner.
+- **C. Change the upgrade prices.** Name three numbers.
+
+**My recommendation: A**, and revisit once there is a real secondary market to look at — scarcity is
+only meaningful relative to demand, and there is no demand to measure yet.
+
+**One thing here is not a balance lever and I want it on the record:** the upgrade must stay
+**deterministic** — pay the price, get exactly that tier. Making it a random roll turns it into a loot
+box bought with a token people reach through real money, which is a legal decision wearing a balance
+decision's clothes.
+
+---
+
+### D10 — Extraction for income-producing assets (rackets, legit fronts)
+
+**The situation.** Cars and boats can be taken on-chain; the deliberate trade is that an extracted item
+is **safe but inert** — it cannot be raced, stolen, or used, and in exchange it stops dying with your
+street. Income assets do not fit that shape. They are stored as "you own one of these", with no
+individual record, so extracting one either leaves it **earning while safe** — which is strictly the
+best option and would make the trade meaningless — or removes it and needs a new home built for it.
+
+**Why it is yours.** This is a design call about what an extracted asset *is*, not a missing feature.
+
+- **A. Leave assets out.** Only things you can drive or sail are extractable.
+- **B. Extract them as inert trophies** — the income stops, the slot frees, you keep a token. Needs a
+  new storage design.
+- **C. Extract them still earning.** *I would push back hard: nothing would ever be left in play.*
+
+**My recommendation: A.** Cars and boats are the natural collectibles; income assets are the thing you
+are supposed to be risking.
+
+---
+
+## PART III — can wait, but should not be forgotten (D11–D15)
+
+### D11 — Real ticker symbols in the Portfolio
+
+**The situation.** The "going legit" Portfolio uses **AAPL, TSLA, GLD, HOOD, NVDA, SPCX, AMZN, GME**
+with an entirely made-up in-game price. That was defensible when a real stock rail sat behind it. The
+stock layer was retired on 31 July — the treasury holds ETH now — so nothing real backs those symbols.
+
+- **A. Keep them.** Recognisable, and the fantasy of going legit reads instantly.
+- **B. Move to fictional tickers**, so nothing implies a player owns anything real.
+- **C. Keep them but label the screen explicitly as a fictional in-game collectible.**
+
+**My recommendation: B.** It costs one afternoon and removes a question entirely rather than answering
+it. C is the compromise if the real names are doing real work for the fantasy.
+
+---
+
+### D12 — The identity NFT (spec'd, not built)
+
+**The situation.** A generative portrait attached to the 0.01 ETH identity mint. You considered raising
+the fee and declined, which is recorded. The load-bearing decision in the spec: the portrait is a
+**tradeable trophy**, and the thing it commemorates — the right to withdraw — is **not transferable
+with it**. If the entitlement travelled with the token, the real cost of an identity would stop being
+the mint price and become the cheapest listing on a marketplace, which by construction is the dead alts
+of the last farm.
+
+- **A. Build it as spec'd** — trophy tradeable, entitlement fixed to the account; silhouette-forward
+  art (sidesteps likeness questions and composites far better); the portrait persists across death and
+  shows the generation; everyone who already minted gets one retroactively.
+- **B. Build it with faces** rather than silhouettes. Stronger art, more identity, more questions.
+- **C. Do not build it.** *It does not fix anything structural — it is a collectible, and it is worth
+  being clear that it is only that.*
+
+**My recommendation: A.** It needs a new contract, which restarts the third-party audit clock — so it
+belongs in the same batch as any other contract work, not on its own.
+
+---
+
+### D13 — Energy does almost nothing
+
+**The situation.** Crime runs on **nerve**. Energy is spent only by the gym, the garage and a few crew
+actions, and the harness measures it **full 96% of played minutes**. It is a bar on the screen that
+mostly does not constrain anything. The labels were corrected so it no longer *lies*, but it still is
+not a resource.
+
+- **A. Leave it as headroom** for the physical loops.
+- **B. Give one existing loop its own energy cost** so the bar starts to bite.
+- **C. Remove it from the sheet** and stop presenting it as a core resource.
+
+**My recommendation: A for now.** Adding a second throttle to a loop that already has nerve is the
+kind of change that quietly makes the game worse, and it would need re-measuring end to end.
+
+---
+
+### D14 — Training stats past the mission gates buys nothing measurable
+
+**The situation.** Two simulated players, seven days: one banked **212 muscle**, the other **51** while
+spending the same sessions elsewhere. They reached the same level with comparable cash. Once your stats
+clear the mission requirements, more of them does not show up anywhere you can feel.
+
+- **A. Leave it.** The gym is a gate you clear, not a curve you climb.
+- **B. Make stats matter more to the crime roll** so training keeps paying. *Touches the signed crime
+  curve — I would re-measure everything before and after.*
+- **C. Cap the gym once gates are cleared** and be honest that it is finished.
+
+**My recommendation: B eventually, A for now.** It is the most interesting of the three progression
+flags, and the most invasive.
+
+---
+
+### D15 — Chasing a "bust someone out" contract puts you in a cell
+
+**The situation.** A failed jailbreak is a stretch in lockup. Simulated with no restraint, a player
+chasing that daily contract spent **26% of their time in a cell** and lost a quarter of their crimes.
+A person learns after two tries; the harness now models that. So this bites new players hardest.
+
+- **A. Leave it.** The lesson is cheap and learning it is the game working.
+- **B. Improve the odds** on the bust roll.
+- **C. Cap attempts per day in-game**, so the game teaches the restraint instead of the cell.
+
+**My recommendation: A.** It self-corrects after two attempts and the failure is legible.
+
+---
+
+## What is NOT on this sheet
+
+Two things gate mainnet and neither is yours to tune: a **third-party audit** of the contracts and the
+off-chain signer, and **legal counsel** on the extraction line. The contract test suite is green
+(128 tests). Nothing above unblocks those, and they do not block anything above.
+
+---
+
 ## ✅ RESOLUTION — founder shipped all recommendations (2026-07-21)
 
 Jorge: *"Ship all your recommendations."* Applied + tested (suite 30/30, sim drift-0):
