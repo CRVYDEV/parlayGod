@@ -18,7 +18,7 @@ Written 2026-07-25. Every number below was measured from the tree, not recalled.
 | Ops dashboard + wiki | `public/admin.html`, `public/wiki.html` |
 | Smart contracts | **9** contracts, **1716** lines Solidity, **128** Foundry tests passing |
 | Harnesses | `tools/sim.js` (economy), `tools/playthrough.js` (player experience), `tools/pgcheck.js` (real Postgres), `tools/loadtest.js` (concurrency), `tools/chaos.js` (interruption), `tools/mobile.js` (the screens, at phone size), `tools/scale.js` (market liquidity at population scale), `tools/bond-dials.js` (sizing the on-chain mint walls), `tools/pgquery.js` (every SQL string parses on real Postgres) |
-| Design + audit docs | **150** markdown files, **38271** lines — indexed in `docs/AUDITS.md`, which states they are point-in-time |
+| Design + audit docs | **150** markdown files, **39058** lines — indexed in `docs/AUDITS.md`, which states they are point-in-time |
 | Ledger invariants | 18 named escrow/identity checks + per-currency conservation, **drift-0** |
 
 Roughly **55,000 lines** of code, tests, schema and contracts.
@@ -626,8 +626,21 @@ onboarding docs — not for retyping 55,000 lines.
    machine-checked by `test/docs.js` + `test/routes.js` — five stale claims found and fixed, nine
    tripwires mutation-tested. See D7.
 
+### D13 — One unidentified suite flake **(LOW, open)**
+On 2026-08-02 a full `npm test` failed once with `AssertionError … operator: '==' … expected: 984924900`
+and no other detail captured. It did not reproduce across **nine** subsequent full runs, nor across
+repeated standalone runs of the two suites whose fixtures reach that magnitude, and the number does not
+appear as a literal anywhere in the tree — so it is computed, and the failing suite was never named.
+
+Recorded rather than dismissed because this repo's flakes have all been the same class — *a deterministic
+assertion resting on a probabilistic precondition* (the population duel-ladder, the Doc drill, the kitchen
+raid, the ring-poker turn clock) — and each was found by making the precondition GUARANTEED rather than
+likely. **If a red run appears with that number, capture the whole log before re-running**: the failing
+assertion's message is what identifies it, and a re-run destroys the evidence. Everything else in the gate
+(sim, mobile, wiring, mirror, docs, pgquery, pgcheck) has been green throughout.
+
 **What is left. Nothing on this list.** Every numbered item is struck through. D6 (lock discipline by
 convention) is measured and accepted; D8–D10 are accepted as-is with guards; D11 is addressed and now
-runs in CI. What remains is not architecture: the founder's operational steps (the alert webhook, one
+runs in CI; D13 is an open, unidentified test flake rather than a defect in the system. What remains is not architecture: the founder's operational steps (the alert webhook, one
 production backup, the X token), the balance levers tracked in `SIGN-OFF.md`, and the chain track, which
 is gated on a third-party audit and legal counsel rather than on any work in this repo.
