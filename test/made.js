@@ -20,7 +20,7 @@ process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { MADE, ACCESS_STAKE, CASINO, DESK, recyclesToDesk, estateTierOf, SPEAKEASY,
-  BUSINESSES, PACING, businessTierOf } from '../src/rules.js';
+  BUSINESSES, PACING, businessTierOf, isMade } from '../src/rules.js';
 import { upkeepBps } from '../src/business.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
@@ -59,7 +59,7 @@ assert.equal(r.code, 200, 'the board is readable by anyone');
 assert.equal(r.body.made, false, 'a nobody is not made');
 assert.equal(r.body.dues, MADE.OMR, 'the price is published');
 assert.equal(r.body.days, Math.round(MADE.MS / 86400000), 'and the window it buys');
-assert(r.body.opens.length >= 4, 'the board states what standing opens');
+assert(r.body.opens.length >= 2, 'the board states what standing opens');
 assert(/no earning loop is gated/i.test(r.body.buysNoPower), 'and says plainly that it buys no power');
 
 assert.equal((await call('POST', '/v1/made', { token: don.token })).body.error, 'omr', 'you cannot be made on credit');
@@ -98,13 +98,17 @@ assert.equal(r.body.error, 'made', `the ${estateTierOf(MADE.ESTATE_TIER).name} n
 await pool.query(`UPDATE account_persistent SET made_until = now() + interval '30 days' WHERE account_id=(SELECT account_id FROM characters WHERE id='${nobody.id}')`);
 assert.equal((await call('POST', '/v1/estate/upgrade', { token: nobody.token })).body.tier, MADE.ESTATE_TIER, 'made — the upper compound opens');
 
-// (b) A HOUSE OF YOUR OWN. Gated at the OPENING only.
+// (b) A HOUSE OF YOUR OWN — NO LONGER GATED. D8=C (founder, 2026-08-02) pulled the subscription back
+// to STATUS ONLY, and a speakeasy earns cash, so the opening gate went with it. This is the assertion
+// inverted on purpose: the property now worth guarding is that the dues buy NO earning affordance, so
+// a man who has never paid one opens a club on level and cash alone.
 const host = await mk('Hank Hostess');
 await seed(host.id, `respect=${lvlRespect(SPEAKEASY.MIN_LEVEL + 2)}, cash=${SPEAKEASY.OPEN_COST + 1000}`);
-assert.equal((await call('POST', '/v1/speakeasy/neon/open', { token: host.token })).body.error, 'made',
-  'a club is standing — the level and the cash are not enough');
-await pool.query(`UPDATE account_persistent SET made_until = now() + interval '30 days' WHERE account_id=(SELECT account_id FROM characters WHERE id='${host.id}')`);
-assert.equal((await call('POST', '/v1/speakeasy/neon/open', { token: host.token })).code, 200, 'made — the door opens');
+assert.equal(isMade((await pool.query(
+  `SELECT * FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${host.id}')`)).rows[0]),
+false, 'Hank has never paid a dollar of dues');
+assert.equal((await call('POST', '/v1/speakeasy/neon/open', { token: host.token })).code, 200,
+  'and the door opens anyway — the subscription gates no earning loop');
 
 // ═══════════════ 4. THE PAD PAYS ITSELF — and it is TIME, not POWER ═══════════════
 // The one convenience that could quietly become a discount. A made owner's fronts settle their own
@@ -146,21 +150,24 @@ assert.equal(Number(padRows[0].amount), -owed6h, 'the same amount, NOT discounte
 assert.equal(paidCollect.body.collected, freeCollect.body.collected,
   'and the INCOME is identical: standing changes who has to remember the pad, not what a front earns');
 
-// ═══════════════ 5. THE ACCESS STAKE — the high-stakes room wants a HELD balance ═══════════════
+// ═══════════════ 5. THE ACCESS STAKE — RETIRED, and the retirement is what is asserted ═══════════
+// D8=C (founder, 2026-08-02). The stake asked a player to hold $OMR to SIT DOWN at the big table,
+// which is money in front of winning, and it also took a table away from level-30 players who
+// already had it. The float it existed to create now has to come from the loot rates alone — the
+// honest cost of the decision, recorded in BALANCE.md rather than papered over.
+//
+// Asserted from the other side: LEVEL ALONE opens the room. If a stake requirement is ever
+// re-introduced this fails by name here instead of surfacing as a whale who cannot sit down.
 const whale = await mk('Wally Whale');
 await seed(whale.id, `respect=${lvlRespect(CASINO.HIGH_LVL + 5)}, cash=5000000, nerve=50, loc='${CASINO.DISTRICT}'`);
 const overTable = CASINO.MAX_BET + 1000;
+assert.equal((await meOf(whale.token)).omr, 0, 'Wally holds no $OMR at all');
 r = await call('POST', '/v1/casino/dice', { token: whale.token, body: { amount: overTable } });
-assert.equal(r.body.error, 'max', 'level alone does not open the big table — the seat wants a stake behind it');
-await grantOmr(whale.id, ACCESS_STAKE.HIGH_OMR); grantDrift += ACCESS_STAKE.HIGH_OMR;
-assert.equal((await call('POST', '/v1/stake', { token: whale.token, body: { amount: ACCESS_STAKE.HIGH_OMR } })).code, 200, 'the stake is posted');
-r = await call('POST', '/v1/casino/dice', { token: whale.token, body: { amount: overTable } });
-assert.equal(r.code, 200, 'with the stake HELD, the high-stakes room opens');
-// and the board states both conditions rather than making the player discover them
+assert.equal(r.code, 200, 'and the high-stakes room opens on LEVEL alone — no stake, no dues');
+// the board publishes the one condition that remains, rather than a stake it no longer enforces
 const den = (await call('GET', '/v1/casino', { token: whale.token })).body;
-assert.equal(den.dice.highStakes.stakeOmr, ACCESS_STAKE.HIGH_OMR, 'the board publishes the stake the table wants');
-assert.equal(den.dice.highStakes.staked, ACCESS_STAKE.HIGH_OMR, 'and what this player is holding');
-assert.equal(den.dice.highStakes.stakeMet, true, 'and whether it clears');
+assert.equal(den.dice.highStakes.level, CASINO.HIGH_LVL, 'the board publishes the level the table wants');
+assert.equal(den.dice.highStakes.stakeOmr, undefined, 'and no longer advertises a stake it does not ask for');
 
 // ═══════════════ 6. §10.4 — the vocabulary is closed and the dues reconcile ═══════════════
 const inv = await runLedgerInvariants(pool, { alert: false });
@@ -173,4 +180,4 @@ const deskBacked = inv.checks.find((c) => c.name === 'desk inventory backed');
 assert(deskBacked.ok, `the shelf still reconciles with the dues on it: ${JSON.stringify(deskBacked)}`);
 
 await app.close();
-console.log('✅ THE FLOAT (economy v3 step 5) test passed — the dues are a classified sink that RECYCLES to the desk (not a burn that destroys supply), the board publishes the price/term/gates, the burn is exact and the window extends from later-of(now, end), the gates open only status and access (the upper compound, a house of your own) while THE PAD PAYS ITSELF deducts the same cash and writes the same ledger row for the same income (TIME, never POWER), the access stake gates the high-stakes table on a HELD balance with both conditions on the board, and §10.4 holds — vocabulary closed, drift == the SQL grants only');
+console.log('✅ THE FLOAT (economy v3 step 5) test passed — the dues are a classified sink that RECYCLES to the desk (not a burn that destroys supply), the board publishes the price/term/gates, the burn is exact and the window extends from later-of(now, end), the ONE gate left is status gating status (the upper compound) while THE PAD PAYS ITSELF deducts the same cash and writes the same ledger row for the same income (TIME, never POWER), D8=C is asserted from the other side — an unmade man opens a club and an unstaked whale sits at the big table, so nothing that earns or wins is behind the subscription — and §10.4 holds — vocabulary closed, drift == the SQL grants only');

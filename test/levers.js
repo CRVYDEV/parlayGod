@@ -117,7 +117,9 @@ const SIGNED = [
   ['CONSTANTS.BUSINESS_SCRUTINY_DECAY_HR', 1],
   ['CONSTANTS.BUSINESS_RAID_FINE_RATE', 0.10],
   ['CONSTANTS.BUSINESS_UPKEEP_BPS', 2000],
-  ['CONSTANTS.BUSINESS_UPKEEP_CAP_MS', 604800000],
+  // D6=B (founder, 2026-08-02): 7d → 2d. At 7d the pad crossed over the till at five days away,
+  // so abandoning an entry-tier front became the rational move after a normal week off.
+  ['CONSTANTS.BUSINESS_UPKEEP_CAP_MS', 172800000],
   ['CONSTANTS.BUSINESS_UPKEEP_COLD_MS', 259200000],
   ['CONSTANTS.BUSINESS_UPKEEP_PROG_BPS', 500],
   ['CONSTANTS.BUSINESS_SHUTTER_BPS', 0],
@@ -276,7 +278,9 @@ const SIGNED = [
   ['M4.REF_XP.STEP_LEVELS', 5],
   ['M4.REF_XP.PER_STEP', 0.05],
   ['M4.REF_XP.MAX_BONUS', 1.0],
-  ['M4.CREW_WAGE_CAP_MS', 604800000],
+  // D7=C (founder, 2026-08-02): 7d → 2d. Chosen over raising OFFLINE_CAP_MS, which would have moved
+  // every offline faucet in the game rather than just the kitchen's.
+  ['M4.CREW_WAGE_CAP_MS', 172800000],
   ['M4.CREW_COST_STEP', 50000],
   ['M4.CREW_MAX', 5],
   ['CONSTANTS.OFFLINE_CAP_MS', 28800000],
@@ -752,6 +756,7 @@ const DECORATIVE = new Map([
   ['CONSTANTS.PUBLIC_WASH_CAP_DAY',     'DEAD: v2 step 2 — it capped the AMM buy side; EXCHANGE.DAILY_CAP_OMR is the live cap.'],
   ['SKILLS.CAPSTONE_COST',              'MIRROR: the field is shorthand for the hoisted `const CAPSTONE_COST`, which the TREE entries read — editing it does change every capstone cost.'],
   ['UNDERWORLD.STEP4.FAVOR_WEEKLY',     'STRUCTURAL: one favor a week is enforced by the npc_favors week primary key, not by a read.'],
+  ['ACCESS_STAKE.HIGH_OMR',            'DEAD: D8=C retired the high-stakes access stake — the table gates on LEVEL alone, so nothing reads it.'],
 ]);
 
 const unread = [];

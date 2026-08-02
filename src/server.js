@@ -105,7 +105,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          TAX, withdrawTaxBps,
          HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, BUSINESS_EMPIRE, PACING, MASTERY,
          PATH_FX, PATH_XP_HOME, PATH_XP_RIVAL, PATH_SWITCH_CD_MS, REGIMEN, HUSTLE, CAREER, RIVALS,
-         CORNER, CONTACTS, FAVOR, MADE, ACCESS_STAKE } from './rules.js';
+         CORNER, CONTACTS, FAVOR, MADE } from './rules.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -873,7 +873,8 @@ export async function buildServer() {
     // to be caught holding it.
     made: { omr: MADE.OMR, days: Math.round(MADE.MS / 86400000), estateTier: MADE.ESTATE_TIER,
       buysNoPower: true },
-    accessStake: { highOmr: ACCESS_STAKE.HIGH_OMR },
+    // (the access stake is retired — D8=C. A board that advertises a gate the till does not
+    // enforce is the exact drift the client-mirror guard exists to catch.)
     loot: { omrIdle: M3.OMR_LOOT_IDLE, omrCommitted: M3.OMR_LOOT_COMMITTED, cash: M3.CASH_LOOT_RATE,
       minLevel: M3.LOOT_MIN_LVL,
       note: 'A loose or unbonding balance is IDLE and is looted deepest. A staked balance is COMMITTED and is looted less — but nothing is safe.' },
