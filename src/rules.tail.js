@@ -3632,6 +3632,45 @@ export const seasonModOf = (seasonIdx = seasonIdxOf()) => {
 };
 export const seasonDaysLeft = (day = dayOf()) => 28 - (day % 28);
 
+// ═══ THE MAP (the strategy package's GEOGRAPHY) ══════════════════════════════════════════════════
+// The six core districts were a flat SET. Every strategy game's map IS its strategy, and this one
+// had none: no adjacency, no chokepoints, no "you cannot hold that because it is cut off." Holdings
+// were interchangeable, so THE WATCH and THE SEALED BID were independent decisions about unrelated
+// squares rather than moves on a board.
+//
+// DISTRICTS is MACHINE-OWNED (rules.generated.js — edit the prototype and re-extract), so the edge
+// list lives HERE, in the hand-written half, keyed by district id. That is the right seam anyway:
+// geography is a hand-authored layout, not a table the prototype has an opinion about.
+//
+// The layout, read as a city: the waterfront (docks) runs past the yards and up the canal; the canal
+// feeds the foundry and the strip; the foundry backs onto the yards and the strip; the yards climb to
+// the hill; the strip runs up to the hill. Two ENDS (docks, cathedral, degree 2) which are the
+// natural on-ramps, and a dense middle. Symmetry is asserted in test/social.js — an edge list that
+// disagrees with itself would make the same border cost two different prices depending on which side
+// you read it from.
+export const DISTRICT_ADJ = {
+  docks:     ['canal', 'brick'],
+  canal:     ['docks', 'foundry', 'neon'],
+  foundry:   ['canal', 'brick', 'neon'],
+  brick:     ['docks', 'foundry', 'cathedral'],
+  neon:      ['canal', 'foundry', 'cathedral'],
+  cathedral: ['brick', 'neon'],
+};
+export const districtNeighbours = (id) => DISTRICT_ADJ[id] || [];
+// Both effects are MULTIPLICATIVE on purpose. The family-ledger measurement (sim P9.20d) found that
+// every FLAT family cost becomes noise the moment a family is established — raising a constant only
+// moves which week it stops mattering — so anything added to the turf price from here indexes to the
+// price rather than sitting beside it.
+export const MAP = {
+  // a held district is dearer to come for once per FRIENDLY district bordering it: the holder can
+  // reinforce across their own ground, so contiguous turf genuinely defends itself
+  NEIGHBOUR_PREMIUM_MULT: 1.10,
+  // …and cheaper to take when the ATTACKER already holds something next door — your men are already
+  // on that side of the river. One discount however many borders you share: this is a foothold, not
+  // a stacking bonus for encirclement.
+  ADJACENT_MULT: 0.85,
+};
+
 // ═══ THE SEASON HAS AN ENDING (the strategy package's ARC) ═══════════════════════════════════════
 // The diagnosis the strategy package answered was "no scarcity of OPTIONS". The next one is that
 // nothing collects them: every system ran forever at the same tempo, a season RESET rather than

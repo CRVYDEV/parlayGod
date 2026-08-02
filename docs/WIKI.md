@@ -435,6 +435,15 @@ that was never coming is how you lose money without losing a fight. A stake only
 leaves the treasury the moment you make it — you cannot bluff with money you have already spent. The
 watch still applies: staking outside the holder's declared window costs more just to get in.
 
+**The map.** The six core districts are not a flat set — they border each other, and `/v1/districts`
+publishes which. Geography prices the door from both sides. A district a family holds is **dearer to
+come for once per bordering district that family also holds**, because they can reinforce across their
+own ground: contiguous turf genuinely defends itself. And a district **next to ground you already
+hold** is **cheaper for you** — your men are already on that side of the river. That is one foothold
+discount however many borders you share, not a bonus for encirclement. So "we cannot defend the canal,
+we do not hold the docks" is now a real sentence, and taking the district next to your own beats taking
+the rich one across town.
+
 **The season has an ending.** A season runs 28 days in three phases you can read on `/seasons`:
 **The Opening** (days 1–7 — cheap ground, nothing settled), **The Long Game** (8–21 — build and hold),
 and **The Reckoning** (22–28). In the last week held turf is a quarter cheaper to challenge, contests

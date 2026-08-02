@@ -24,7 +24,7 @@ import { buildServer } from '../src/server.js';
 import { payFamilyYield } from '../src/exchange.js';
 import { runBuyback } from '../src/worker.js';
 import { huntWanted, sweepContests } from '../src/social.js';
-import { familyTaskOf, weekOf, M3, BLACK_MARKET, bustProbOf, TERRITORY_RACKETS, territoryRankOf, territoryBuildCost, PORT, cityHourOf } from '../src/rules.js';
+import { familyTaskOf, weekOf, M3, BLACK_MARKET, bustProbOf, TERRITORY_RACKETS, territoryRankOf, territoryBuildCost, PORT, cityHourOf, DISTRICTS, DISTRICT_ADJ, MAP } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -1190,6 +1190,11 @@ assert.equal((await call('POST', '/v1/gangs/tribute', { token: raider.token, bod
 // seize is refused and the raider has to stake a claim into a sealed contest.
 assert.equal((await call('POST', '/v1/districts/docks/seize', { token: raider.token })).body.error, 'contested',
   'a district a family holds cannot be bought outright — it goes to a contest');
+// THE MAP: docks borders canal and brick. This assertion measures the OUTBID + the operation
+// premium + the surprise multiplier exactly, so the two borders are cleared first — geography gets
+// its own block below, and a figure that silently folded in a contiguity multiplier would stop
+// telling you which of the four things it is checking.
+await pool.query(`UPDATE districts SET holder_gang=NULL, npc_holder=NULL WHERE id IN ('canal','brick')`);
 const dkGar = Number((await pool.query(`SELECT garrison FROM districts WHERE id='docks'`)).rows[0].garrison);
 const dkPremium = Math.floor((50000 + 250000) * 0.5);
 // the FLOOR carries every component the old instant price did: the outbid, the operation's war
@@ -1672,6 +1677,77 @@ assert(Math.abs(escNow - rhsEsc) <= 1, `bounty/contract escrow reconciles: bucke
   assert(invW.checks.find((c) => c.name === 'reason vocabulary').ok, 'the watch adds no unknown reason');
 }
 
+
+// ══ THE MAP (the strategy package's GEOGRAPHY) ══
+// The six core districts were a flat SET — every holding interchangeable, so THE WATCH and THE SEALED
+// BID were decisions about unrelated squares rather than moves on a board. Now geography prices the
+// door from both sides. What has to hold: the edge list agrees with itself (a border that exists on
+// one side only would make the same frontier cost two prices depending which way you read it), a
+// holder's CONTIGUOUS ground makes their district dearer once per neighbour, and an attacker holding
+// something NEXT DOOR gets ONE foothold discount however many borders they share.
+{
+  // (a) the edge list is symmetric and covers every district — asserted, not assumed
+  for (const d of DISTRICTS) {
+    const nb = DISTRICT_ADJ[d.id];
+    assert(Array.isArray(nb) && nb.length, `${d.id} is on the map`);
+    for (const n of nb) {
+      assert(DISTRICTS.some((x) => x.id === n), `${d.id} borders a real district (${n})`);
+      assert((DISTRICT_ADJ[n] || []).includes(d.id), `the ${d.id}–${n} border exists from BOTH sides`);
+    }
+    assert(!nb.includes(d.id), `${d.id} does not border itself`);
+  }
+
+  const mapH = await mk('Map Holder'); await seedCh(mapH.id, 'respect=1000, cash=900000');
+  const mhg = (await call('POST', '/v1/gangs', { token: mapH.token, body: { name: 'The Cartographers', tag: 'CTG' } })).body.gangId;
+  const mapR = await mk('Map Raider'); await seedCh(mapR.id, 'respect=1000, cash=900000');
+  const mrg = (await call('POST', '/v1/gangs', { token: mapR.token, body: { name: 'The Surveyors', tag: 'SVY' } })).body.gangId;
+  // canal borders docks, foundry and neon — three levers on one district, which is what makes it
+  // the right one to measure on
+  const isolate = async () => pool.query(
+    `UPDATE districts SET holder_gang=NULL, npc_holder=NULL, garrison=0, watch_hour=NULL, contest_until=NULL
+      WHERE id IN ('canal','docks','foundry','neon')`);
+  const floorOf = async () => (await call('GET', '/v1/districts', {})).body.districts.find((d) => d.id === 'canal').claimFloor;
+  const quoteFor = async (tok) => (await call('POST', '/v1/districts/canal/claim', { token: tok, body: { amount: 1 } })).body.error === 'floor'
+    ? Number((await call('POST', '/v1/districts/canal/claim', { token: tok, body: { amount: 1 } })).body.message.match(/\$(\d+)/)[1])
+    : null;
+
+  // BASELINE: canal held, nothing around it
+  await isolate();
+  await pool.query(`UPDATE districts SET holder_gang='${mhg}', garrison=200000 WHERE id='canal'`);
+  const flat = await floorOf();
+  assert(flat > 0, 'the board quotes a floor for the isolated district');
+  const board = (await call('GET', '/v1/districts', {})).body.districts.find((d) => d.id === 'canal');
+  assert.deepEqual(board.neighbours.slice().sort(), ['docks', 'foundry', 'neon'], 'the board publishes the borders — a map you cannot read is not a map');
+
+  // (b) CONTIGUITY: the holder takes the docks next door. Same garrison, same everything — the
+  // district is dearer because they can reinforce across their own ground.
+  await pool.query(`UPDATE districts SET holder_gang='${mhg}' WHERE id='docks'`);
+  const one = await floorOf();
+  assert.equal(one, Math.floor(flat * MAP.NEIGHBOUR_PREMIUM_MULT), `one bordering friendly district raises the price (${flat} → ${one})`);
+  await pool.query(`UPDATE districts SET holder_gang='${mhg}' WHERE id='foundry'`);
+  const two = await floorOf();
+  assert.equal(two, Math.floor(flat * MAP.NEIGHBOUR_PREMIUM_MULT ** 2), `and it compounds per neighbour (${two})`);
+  assert(two > one, 'contiguous turf genuinely defends itself');
+
+  // (c) THE FOOTHOLD: a RIVAL holding the third border pays less — their men are already on that
+  // side of the river. Measured against the SAME board price the public quote shows.
+  await pool.query(`UPDATE districts SET holder_gang='${mrg}' WHERE id='neon'`);
+  const withRival = await floorOf();             // public quote: no gang of your own
+  const raiderQuote = await quoteFor(mapR.token);
+  assert.equal(raiderQuote, Math.floor(withRival * MAP.ADJACENT_MULT),
+    `an attacker next door gets the foothold discount (public ${withRival} → theirs ${raiderQuote})`);
+  assert(raiderQuote < withRival, 'and it is a real discount');
+  // ONE discount however many borders you share — a foothold, not a bonus for encirclement
+  await pool.query(`UPDATE districts SET holder_gang='${mrg}' WHERE id='docks'`);
+  const twoBorders = await floorOf();
+  assert.equal(await quoteFor(mapR.token), Math.floor(twoBorders * MAP.ADJACENT_MULT),
+    'a second shared border does not stack a second discount');
+
+  // §10.4: geography scales the EXISTING turf sinks — no new reason, so the vocabulary stays closed
+  const invM = await runLedgerInvariants(pool, { alert: false });
+  assert(invM.checks.find((c) => c.name === 'reason vocabulary').ok, 'the map adds no unknown reason');
+  await isolate();
+}
 
 // ══ THE SEALED BID (the strategy package's SIMULTANEOUS DECISION) ══
 // Turf's price was PUBLIC and known — read the garrison, pay the outbid, done. Nobody ever moved at

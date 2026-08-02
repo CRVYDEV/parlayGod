@@ -3409,6 +3409,12 @@
               ? "they're at the mattresses right now — plain price"
               : `off-watch: catching them cold costs \u00d7${d.watch.surpriseMult}`}`}</div>` : ''}
           ${d.holder && d.holder.tag === g.tag && boss ? `<div style="margin-top:4px"><input id="wh-${d.id}" type="number" min="0" max="23" placeholder="hr UTC" size="4" style="width:78px"> <button class="act" data-watch="${d.id}">set the watch</button></div>` : ''}
+          ${(d.neighbours || []).length ? `<div class="d" style="font-size:11.5px;color:var(--dim)">borders ${(d.neighbours || []).map((n) => {
+            const nb = distr.find((x) => x.id === n);
+            const mine = nb && nb.holder && nb.holder.tag === g.tag;
+            const theirs = nb && nb.holder && d.holder && nb.holder.tag === d.holder.tag;
+            return `<span class="chip"${theirs ? ' style="color:var(--bad)"' : mine ? ' style="color:var(--good,#6a9)"' : ''}>${esc(n)}${theirs ? ' ✦' : mine ? ' ✓' : ''}</span>`;
+          }).join(' ')}${d.holder ? ' — <b>✦</b> the holder\'s own ground makes it dearer; <b>✓</b> yours makes it cheaper' : ''}</div>` : ''}
           ${d.contest ? `<div class="d"><span class="chip bad">CONTESTED</span> ${d.contest.families} ${d.contest.families === 1 ? 'family has' : 'families have'} staked — closes in ${mins(d.contest.resolvesSeconds)}. Nobody sees another number until it does.</div>` : ''}
           ${boss && d.id === me.loc && d.holder && d.holder.tag !== g.tag
             ? `<div style="margin-top:4px"><span class="d" style="color:var(--dim)">a sealed stake starts at $${fmt(d.claimFloor)} — highest takes it, the holder wins ties, a loser forfeits half</span><br><input id="cl-${d.id}" type="number" placeholder="${d.claimFloor}" style="width:130px"> <button class="act risk" data-claim="${d.id}">stake a claim</button></div>`

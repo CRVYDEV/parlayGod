@@ -102,7 +102,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, ESTATE, AUCTION, MEGAPROJECT, CLUES, DUELS, DUEL_TITLE_RANKS, SEASON_MODS, seasonModOf, seasonIdxOf, seasonDaysLeft, SEASON_PHASES, seasonPhaseOf, seasonPhaseLeft,
          foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, PATRON, BONDS, SPEAKEASY, BOXING, RARITY,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf, syndicateOf, TERRITORY_TYPES, TERRITORY_RACKETS,
-         worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE, NOTORIETY,
+         worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE, NOTORIETY, MAP, DISTRICT_ADJ, districtNeighbours,
          TAX, withdrawTaxBps,
          HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, OPERATIONS, BUSINESS_EMPIRE, PACING, MASTERY,
          PATH_FX, PATH_XP_HOME, PATH_XP_RIVAL, PATH_SWITCH_CD_MS, REGIMEN, HUSTLE, CAREER, RIVALS,
@@ -981,6 +981,11 @@ export async function buildServer() {
       tickers: PORTFOLIO.TICKERS.map((t) => ({ id: t.id, name: t.name, blurb: t.blurb })) },
     estate: { nameOmr: ESTATE.NAME_OMR, tiers: ESTATE.TIERS, features: ESTATE.FEATURES, staff: ESTATE.STAFF },
     seasonMods: { pool: SEASON_MODS, note: 'one seed-drawn twist per 28-day season — the touchpoints compose on existing modifier sites' },
+    // THE MAP — the edge list, published: which districts border which, and what geography does to
+    // the price of turf. The board on /v1/districts carries each district's own neighbours.
+    map: { adjacency: DISTRICT_ADJ, neighbourPremiumMult: MAP.NEIGHBOUR_PREMIUM_MULT, adjacentMult: MAP.ADJACENT_MULT,
+      note: "contiguous turf defends itself (the holder's bordering districts raise the price once each); "
+        + 'a district next to ground you already hold is cheaper to come for' },
     // THE SEASON HAS AN ENDING — the phases and what the last one changes, published so a player
     // can plan against the deadline rather than discover it
     seasonPhases: { phases: SEASON_PHASES.map((p) => ({ id: p.id, name: p.name, fromDay: p.from + 1, blurb: p.blurb })),
@@ -1348,7 +1353,10 @@ export async function buildServer() {
     for (const d of r.rows) {
       const base = { id: d.id, perk: DISTRICTS.find((x) => x.id === d.id)?.perk,
         holder: d.holder_gang ? { gangId: d.holder_gang, name: d.gang_name, tag: d.tag } : null,
-        garrison: Math.floor(Number(d.garrison)) };
+        garrison: Math.floor(Number(d.garrison)),
+        // THE MAP: which districts border this one. Public — geography is the board everyone plays
+        // on, and a map you cannot read is not a map.
+        neighbours: districtNeighbours(d.id) };
       // THE WATCH — public by design (an EVE window is content precisely because everyone can read
       // it). The holder's declared hour, whether it is open right now, and what a surprise costs.
       if (d.holder_gang) {
