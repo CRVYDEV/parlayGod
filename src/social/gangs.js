@@ -7,7 +7,7 @@
 // Split out of the 2,003-line src/social.js; every function below is byte-identical to what was
 // there. Import from '../social.js' — it re-exports this package's public surface unchanged.
 import { GameError, bumpFamilyTask, bus, ledger, cleanText, notify } from '../game.js';
-import { DISTRICTS, M3, M8, ROSTER_POSTS, rosterPostOf, rosterMult, levelOf, dayOf, territoryBuildCost, worldNpcOf, liberationCost, DIPLOMACY, cityHourOf, seasonFx } from '../rules.js';
+import { DISTRICTS, M3, M8, MAP, districtNeighbours, ROSTER_POSTS, rosterPostOf, rosterMult, levelOf, dayOf, territoryBuildCost, worldNpcOf, liberationCost, DIPLOMACY, cityHourOf, seasonFx } from '../rules.js';
 import { seizeTerritoryRackets, releaseTerritoryRackets } from '../territory.js';
 import { releaseFrontierHolds, outfitStrengthFrac } from '../world.js';
 import { activeDecree } from '../commission.js';
@@ -389,13 +389,32 @@ export async function turfQuote(client, ch, d, gangId) {
   // premium. An NPC-occupied district has no watch to keep (outfits don't sleep) and an unheld one
   // has nobody to surprise, so both stay at the plain price.
   const surprise = (!occupied && !defending && d.holder_gang) ? watchMult(d) : 1;
+  // THE MAP: turf is no longer a flat set of squares. One query reads who holds what, and geography
+  // prices the door from both sides — the holder's CONTIGUOUS ground stiffens it (they can reinforce
+  // across their own turf), and an attacker with a district NEXT DOOR gets a foothold discount. Both
+  // are the attacker's price only, and both are zero on an unheld or NPC-occupied district — there is
+  // no line to hold and nobody to reinforce. Multiplicative by the P9.20d finding (a flat add becomes
+  // noise the moment a family is established).
+  let contiguity = 1, foothold = 1;
+  if (!occupied && !defending && d.holder_gang) {
+    const nb = districtNeighbours(d.id);
+    // One flat read + a JS filter, NOT `WHERE id = ANY($1)` — pg-mem returns ZERO ROWS for that
+    // form (the recorded MY PROFILE quirk), which would silently make geography a no-op in every
+    // suite while parsing fine on real Postgres. The whole table is six rows.
+    const all = (await client.query('SELECT id, holder_gang FROM districts')).rows;
+    const held = all.filter((x) => nb.includes(x.id) && x.holder_gang);
+    contiguity = MAP.NEIGHBOUR_PREMIUM_MULT ** held.filter((x) => x.holder_gang === d.holder_gang).length;
+    // ONE discount however many borders you share — a foothold, not a bonus for encirclement
+    if (gangId && held.some((x) => x.holder_gang === gangId)) foothold = MAP.ADJACENT_MULT;
+  }
   // THE RECKONING: in a season's last stretch held turf is CHEAPER to come for, so an incumbent who
   // has been sitting on it since week one has to defend it while the door is open. 1 the rest of the
   // time. Applied last so it discounts everything above it, and the discounted number is what is
   // charged AND what is ledgered (the decree/amnesty discipline).
   const reckoning = seasonFx('floorMult');
-  const cost = Math.floor((base + sovBonus + premium + enforcer) * (coalition ? DIPLOMACY.COALITION_SEIZE_MULT : 1) * surprise * reckoning);
-  return { occupied, defending, base, premium, sovBonus, enforcer, coalition, surprise, reckoning, cost };
+  const cost = Math.floor((base + sovBonus + premium + enforcer)
+    * (coalition ? DIPLOMACY.COALITION_SEIZE_MULT : 1) * surprise * contiguity * foothold * reckoning);
+  return { occupied, defending, base, premium, sovBonus, enforcer, coalition, surprise, contiguity, foothold, reckoning, cost };
 }
 
 const contestLive = (d, at = Date.now()) => !!d.contest_until && new Date(d.contest_until).getTime() > at;

@@ -495,6 +495,20 @@ const SIGNED = [
   ['RACES.VARIANCE', 40],
   ['RACES.WAGER_MIN', 500],
   ['RACES.WHEEL_MIN_LVL', 10],
+  // THE MAP (strategy package) — geography's two effects on the price of turf. Multiplicative by the
+  // P9.20d finding: a FLAT family cost becomes noise the moment a family is established.
+  ['MAP.NEIGHBOUR_PREMIUM_MULT', 1.10],
+  ['MAP.ADJACENT_MULT', 0.85],
+  // the edge list itself is a lever — the layout decides which districts are chokepoints and which
+  // are ends. A whole-object pin: the arrays are leaves, invisible to the reader check on their own.
+  ['DISTRICT_ADJ', {
+    docks: ['canal', 'brick'],
+    canal: ['docks', 'foundry', 'neon'],
+    foundry: ['canal', 'brick', 'neon'],
+    brick: ['docks', 'foundry', 'cathedral'],
+    neon: ['canal', 'foundry', 'cathedral'],
+    cathedral: ['brick', 'neon'],
+  }],
   // THE SEASON HAS AN ENDING (strategy package) — the phase boundaries + the reckoning's escalation.
   // A whole-object pin: the three multipliers are leaves on an array entry, invisible to the reader
   // check on their own, so the PARENT is what is pinned (the recorded map-lever discipline).

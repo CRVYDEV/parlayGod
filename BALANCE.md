@@ -4291,3 +4291,39 @@ which week it stops mattering. Three candidates, cheapest first —
 
 The verdict for the strategy package: its tradeoffs bite hardest on families too new to feel them
 and barely at all on the ones the endgame is for. Re-run `P9.20d` after any of the above moves.
+
+## THE STRATEGY PACKAGE — step five: THE MAP (founder-directed 2026-08-02)
+
+The six core districts were a flat SET: every holding interchangeable, so THE WATCH and THE SEALED
+BID were decisions about unrelated squares rather than moves on a board. Every strategy game's map
+IS its strategy, and this one had none — no adjacency, no chokepoints, no "you cannot hold that
+because it is cut off."
+
+`DISTRICTS` is MACHINE-OWNED, so the edge list lives in the hand-written tail (`DISTRICT_ADJ`),
+which is the right seam anyway: geography is an authored layout, not a table the prototype has an
+opinion about. The layout gives two ENDS (docks, cathedral — degree 2, the natural on-ramps) and a
+dense middle; symmetry is asserted, because a border that exists on one side only would make the
+same frontier cost two prices depending which way you read it.
+
+Two effects, both inside the ONE `turfQuote` the outright claim and the contest floor both read:
+
+| lever | value | what it does |
+|---|---|---|
+| `MAP.NEIGHBOUR_PREMIUM_MULT` | **1.10** | a held district is dearer ONCE PER bordering district the same family holds — contiguous turf defends itself |
+| `MAP.ADJACENT_MULT` | **0.85** | an attacker holding something next door pays less — ONE foothold discount however many borders they share |
+| `DISTRICT_ADJ` | the edge list | which districts are chokepoints and which are ends |
+
+**Both are MULTIPLICATIVE on purpose, and that is the family-ledger finding applied.** P9.20d found
+every FLAT family cost becomes noise the moment a family is established — raising a constant only
+moves which week it stops mattering — so anything added to the turf price from here indexes to the
+price rather than sitting beside it. At three neighbours the contiguity premium is ×1.331, which is
+a real number against a $450k floor where a flat $24k would not have been.
+
+§10.4 untouched: geography scales the EXISTING `turf:seize:` / `turf:claim` sinks. No new reason, no
+new faucet, and the vocabulary check is asserted closed in the same block.
+
+**The dials.** `NEIGHBOUR_PREMIUM_MULT` is how much a wall is worth — raise it and empires become
+hard to crack once formed, which is snowball risk; lower it and geography stops mattering.
+`ADJACENT_MULT` is how much a foothold is worth, and it is the anti-snowball counterweight: it helps
+whoever is expanding INTO a bloc, so the two levers are deliberately pulling against each other.
+Re-run `P9.20d` after moving either — the family ledger is where the effect shows up.
