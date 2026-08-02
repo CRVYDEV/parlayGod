@@ -1630,6 +1630,10 @@
   // ── the street talks back: turn a raw response into one human line ──
   // known single-word server rejections → plain talk (the server returns codes, not sentences)
   const ERRMAP = {
+    // v3 step 7 — the rarity NFTs
+    extracted: "That one's on-chain — a trophy now, not a working car.",
+    their_extracted: "Theirs is on-chain — it isn't in the game any more.",
+    maxed: "There's nothing above that tier.",
     no_code: "type their street name first",
     already_referred: "your referrer is already on record",
     unknown_code: "nobody goes by that name — check the spelling with them",
@@ -1675,6 +1679,11 @@
     internal: "something broke on our end — that's a bug, not you. Try again; if it keeps happening, say so.",
   };
   function describe(body, code) {
+    // v3 step 7 — the rarity NFTs. The extraction line says the tradeoff out loud, because it is the
+    // one action in the game with no way back.
+    if (body && body.rarityName && body.was) return `\u2728 ${body.name} is ${body.rarityName} now — ${body.spent} $OMR`;
+    if (body && body.tokenId && body.nonce != null)
+      return `\u26D3 ${body.name || 'it'} is on-chain — token #${body.tokenId}. Safe forever, and out of the game.`;
     if (body && body.referrer && body.ok) return `on the record — ${body.referrer} gets credit as you come up`;
     if (!body || typeof body !== 'object') return code < 400 ? 'done.' : 'no dice.';
     if (code >= 400) { const e = body.error; return body.message || (e && ERRMAP[e]) || (e ? e.replace(/_/g, ' ') : `the city said no (${code})`); }
@@ -5175,17 +5184,40 @@
     const t = $('#tab-garage');
     await refresh();
     const ownedGuns = new Set(me.guns || []);
+    // THE COLLECTION (v3 step 7) — rarity + the on-chain rail. Bound the covered way (GETBIND) so the
+    // mirror guard actually checks these reads.
+    const nft = (await api('GET', '/v1/nft')).body || {};
     t.innerHTML = `
       ${!(me.cars || []).length && !(me.guns || []).length ? coachCard('Your garage &amp; armory', 'Boost cars for cash (fence them) or to melt into ammo. Down below, buy a gun and a vest — you can\'t win a fight, or take a contract, unarmed.') : ''}
       <h2>The Fleet (${(me.cars || []).length}) <button class="act" data-do="POST /v1/garage/boost" style="margin-left:8px">boost a car (GTA)</button></h2>
       ${(me.cars || []).length ? `<div class="grid">${me.cars.map((c) => `
         <div class="card">${ico('car', c.model)}<span class="t">${c.model}${c.trim ? ' · ' + c.trim : ''}</span>
+          ${c.rarity && c.rarity !== 'common' ? `<span class="chip good">${esc(c.rarity.toUpperCase())}</span>` : ''}
           ${c.plate ? `<span class="chip">[${c.plate}]</span>` : ''}${c.listed ? '<span class="chip cold">ON THE BLOCK</span>' : ''}${c.pledged ? '<span class="chip cold">PLEDGED</span>' : ''}
           <div class="d">damage ${c.dmg}%</div>
           ${c.listed || c.pledged ? '' : `<button class="act" data-cardo="repair:${c.id}" title="a repair can botch on badly-damaged iron — you pay either way">repair${c.dmg > 50 ? ' ⚠' : ''}</button>
           <button class="act" data-cardo="fence:${c.id}">fence</button>
           <button class="act" data-cardo="melt:${c.id}">melt</button>`}</div>`).join('')}</div>`
         : '<span class="d" style="color:var(--dim)">no iron — boost something</span>'}
+
+      <h2 style="margin-top:12px">The Collection <span class="d" style="font-size:11px">(rarity — and the way off the board)</span></h2>
+      <div class="d" style="margin-bottom:6px">Every car and boat carries a rarity, rolled when you EARN it. Pay $OMR to buy
+        exactly the next tier — a known item at a known price, never a gamble. Take one ON-CHAIN and it becomes an NFT in your
+        own wallet: <b>safe</b> (it survives your death, nobody can steal or win it) but <b>inert</b> (it never races, hauls,
+        melts or fences again). Use it or own it.
+        ${nft.minted ? '' : ' <span class="chip cold">you must be MADE to take anything on-chain</span>'}</div>
+      ${(nft.items || []).length ? `<div class="grid">${nft.items.map((i) => `
+        <div class="card"><span class="t">${esc(i.name)}</span>
+          <span class="chip${i.rarity === 'common' ? '' : ' good'}">${esc(i.rarityName)}</span>
+          <div class="d">${esc(i.kind)} · token #${i.tokenId}</div>
+          ${i.blocked ? `<div class="d" style="color:var(--dim)">${esc(i.blocked)}</div>` : ''}
+          ${i.upgrade ? `<button class="act" data-rup="${i.kind}:${i.id}">upgrade to ${esc(i.upgrade.toName)} — ${i.upgrade.omr} $OMR</button>`
+            : '<div class="d">top of the ladder</div>'}
+          ${nft.minted && !i.blocked ? `<button class="act" data-rnft="${i.kind}:${i.id}"
+            data-confirm="Take it on-chain? It becomes a tradeable NFT in your wallet — safe from death and theft forever, but it will never race, haul or melt again. There is no way back.">take it on-chain</button>` : ''}</div>`).join('')}</div>`
+        : '<span class="d" style="color:var(--dim)">nothing to collect yet — boost a car or buy a boat</span>'}
+      ${(nft.onChain || []).length ? `<div class="d" style="margin-top:6px">ON-CHAIN: ${nft.onChain.map((i) =>
+        `${esc(i.name)} <span class="chip good">${esc(i.rarityName)}</span> <span class="d">#${i.tokenId}</span>`).join(' · ')}</div>` : ''}
 
       <h2 style="margin-top:12px">The Armory <span class="d" style="font-size:11px">(carrying: ${me.gun || 'nothing'} · vest: ${me.vest || 'none'} · ammo ${fmt(me.ammo)})</span></h2>
       <div class="grid">${(rules?.guns || []).map((g) => `
@@ -5205,6 +5237,14 @@
     t.querySelectorAll('[data-cardo]').forEach((b) => b.onclick = () => {
       const [what, id] = b.dataset.cardo.split(':');
       act('POST', `/v1/garage/${id}/${what}`, {}).then(() => renderGarage());
+    });
+    t.querySelectorAll('[data-rup]').forEach((b) => b.onclick = () => {
+      const [kind, id] = b.dataset.rup.split(':');
+      act('POST', `/v1/nft/${kind}/${id}/upgrade`, {}).then(() => renderGarage());
+    });
+    t.querySelectorAll('[data-rnft]').forEach((b) => b.onclick = () => {
+      const [kind, id] = b.dataset.rnft.split(':');
+      act('POST', `/v1/nft/${kind}/${id}/withdraw`, {}).then(() => renderGarage());
     });
     t.querySelectorAll('[data-gundo]').forEach((b) => b.onclick = () => {
       const [what, id] = b.dataset.gundo.split(':');

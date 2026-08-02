@@ -10,7 +10,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS, RANKS,
          crewWageOwed, crewCold, LAW, rapStageOf, bribeCostOf, retainerActive, witproActive,
          cityHourOf, cityLawEventOf, tickerPriceOf, estateTierOf, foundationOf, campaignOf, honorTierOf,
          SOLDIERS, soldierFxOf, CLUES, clueStepOf, rollClueTier, kingpinRankOf, tycoonRankOf, racketIncomeLeveled, empireTitles, launderRankOf, frontTitles, statesmanRankOf, seasonModOf, PACING,
-         carCollateralValue, MASTERY, masteryLvlOf, masteryRankOf, masteryXpFor, pathFx, pathXpMult,
+         carCollateralValue, carOf, MASTERY, masteryLvlOf, masteryRankOf, masteryXpFor, pathFx, pathXpMult,
          REGIMEN, disciplineLvlOf, energyCapOf, nerveCapOf, BUSINESSES, WIRE, RIVALS, CORNER, cornerTasksOf,
          KITCHENS, labModuleCost, recyclesToDesk, DESK_RECYCLE_REASON, isMade, madeSeconds } from './rules.js';
 import { dbCaps } from './db.js';
@@ -309,7 +309,18 @@ export async function loadOwned(client, ch) {
     rackets: idList(rk.rows, 'racket_id'), assets: idList(as.rows, 'asset_id'),
     // ASSETS & RACKETS → Tier 4 — per-racket upgrade levels (folded into accrual income)
     racketLevels: Object.fromEntries(rk.rows.map((r) => [r.racket_id, Number(r.level || 0)])),
-    cars: cars.rows, cargo: cargoMap(cargo.rows), items: itemMap(items.rows),
+    // THE RARITY NFTs (v3 step 7) — THE ONE PLACE "extracted is inert" is enforced, and deliberately
+    // so. An extracted car is an ERC-1155 in the player's own wallet; keeping it in `owned.cars`
+    // would mean remembering a guard at melt, fence, repair, the garage cap, the vanity plate, the
+    // strip, tuning, a pink-slip race, a loan pledge, a market listing, a chop and the net-worth
+    // roll-up — and one forgotten site is a car that is safe AND still earning, which collapses the
+    // choice the whole mechanic is. Filtering here makes every one of those refuse it by default
+    // (`no_car`), including the ones written after this line. `victimOwned` is the same function, so
+    // the chop and the death report inherit it: an extracted car is not in the fleet a killer values,
+    // and not in the count the car-conservation invariant reads out of death telemetry.
+    cars: cars.rows.filter((c) => !c.minted_onchain),
+    nftCars: cars.rows.filter((c) => c.minted_onchain), // out of play: the board renders them, nothing else may touch them
+    cargo: cargoMap(cargo.rows), items: itemMap(items.rows),
     gear: idList(gear.rows, 'gear_id'), guns: idList(guns.rows, 'gun_id'),
     gangId, gangRole: gm.rows[0]?.role || null, gangJoinedAt: gm.rows[0]?.joined_at || null, gang, held,
     makings: Object.fromEntries(mk.rows.map((r) => [r.drug_id, Number(r.qty)])),
@@ -1323,7 +1334,10 @@ export function view(ch, acct = {}, owned = {}) {
     statesman: { statecraft: Number(acct?.statecraft || 0), rank: statesmanRankOf(acct?.statecraft).name },
     // `value` is the SAME damage-adjusted book figure loans.js checks a pledge against, so the
     // client's collateral picker and the server's floor can never disagree about what a car is worth.
-    cars: (owned.cars || []).map((c) => ({ id: c.id, model: c.model_id, trim: c.trim_id, dmg: c.dmg, plate: c.plate || null, listed: !!c.listed, pledged: !!c.pledged, tune: Number(c.tune || 0), raceLimit: c.race_limit != null ? Math.floor(Number(c.race_limit)) : null, value: carCollateralValue(c.model_id, c.trim_id, c.dmg) })),
+    cars: (owned.cars || []).map((c) => ({ id: c.id, model: c.model_id, trim: c.trim_id, dmg: c.dmg, plate: c.plate || null, listed: !!c.listed, pledged: !!c.pledged, tune: Number(c.tune || 0), raceLimit: c.race_limit != null ? Math.floor(Number(c.race_limit)) : null, value: carCollateralValue(c.model_id, c.trim_id, c.dmg), rarity: String(c.rarity || 'common') })),
+    // v3 step 7: extracted cars are NOT in `cars` (loadOwned filters them so they are inert) — the
+    // sheet still names them, because a player who paid to take one on-chain should see it.
+    nftCars: (owned.nftCars || []).map((c) => ({ id: c.id, model: c.model_id, name: carOf(c.model_id)?.name || c.model_id, rarity: String(c.rarity || 'common') })),
     gang: owned.gang ? { id: owned.gang.id, name: owned.gang.name, tag: owned.gang.tag, role: owned.gangRole,
       color: owned.gang.color || null, seal: sealOf(owned.gang.seal)?.name || null,
       foundation: foundationOf(owned.gang.foundation)?.name || null, foundationTier: Number(owned.gang.foundation || 0),

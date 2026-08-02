@@ -3293,6 +3293,57 @@ retire, or drop. Decide before an address is mined, since the permission set is 
 Also resolved while here: design §10.2 (the cross-chain RWA bridge) is **MOOT** — the stock layer was
 retired 2026-07-31, the treasury holds ETH, and there is nothing to bridge.
 
+**ECONOMY v3 STEP 7 — THE RARITY NFTs** (`omerta-economy-v3-design.md` §7/§9.7; `src/nft.js`,
+`test/nft.js` — the 64th suite, the extraction half in `chain.js:requestItemWithdraw`). Cars and
+boats carry a **rarity** rolled when they are EARNED (a boost, the boatyard, a resident's ride you
+steal — all rng_audit'd), and an owned one can be **extracted on-chain** as a tradeable ERC-1155.
+**IT NEEDED NO CONTRACT CHANGE, and the design said it would.** `GearVault.mint(to, gearId, amount)`
+takes a bare uint256 with a per-id lifetime cap, so "extend GearVault's pattern to cars/boats" turned
+out to be a token-ID SPACE decision off-chain (gear 1..N, cars 100000+, boats 200000+ via
+`RARITY.TOKEN`) rather than a new contract — to `VoucherClaim` a car is a kind-1 NFT voucher like any
+other, and the DB kind rides in `vouchers.gear_id` as a self-describing compound key
+`<kind>:<catalogId>:<rarity>:<itemId>` whose tokenId is DERIVED, never stored as a number (a stored
+number could drift from the rarity the row actually has and mint the wrong token). **So step 7 does
+NOT reset the third-party audit clock** — the design's §9 line said steps 6 AND 7 would, and that is
+corrected in place. What it does need is deploy config: each new tokenId wants its Safe-set `cap`,
+fail-closed at 0.
+**THE TWO RULES, both enforced rather than remembered.** *(1) SELL DETERMINISTIC, DROP RANDOM.*
+Rarity is rolled ONLY on acquisition; the one thing money buys is `rarity:upgrade` — pay the tier's
+price, get **exactly** that tier, never a roll. A random paid upgrade would be a loot box bought with
+a token people reach through ETH, which is the question §7's own rule exists to avoid; the test
+mutation-fails by name if it ever becomes a draw. It is a §10.4 SINK in `DESK.SINK_REASONS`, so since
+step 2 it recycles to the shelf — which is also §7's "bridge between the two markets", built without
+ever selling a random outcome for money. *(2) IN-GAME ITEMS ARE LOOTABLE; EXTRACTED NFTs ARE SAFE BUT
+INERT.* An extracted car stops racing, melting, fencing, being stolen and being chopped — and in
+exchange stops dying with the street (the estate wipe skips it and re-points it at the heir). Both
+halves are asserted, in both directions, against a control car that is NOT extracted: a safe item
+that still earns is strictly dominant and nobody would leave one in play, an inert item that still
+dies is a purchase of nothing.
+**"Inert" needed ONE enforcement point, not a guard per site.** `loadOwned` filters extracted cars out
+of `owned.cars`, so melt/fence/repair, the garage cap, the vanity plate, the strip, tuning, pinks, a
+loan pledge, a market listing, the chop and the net-worth roll-up all refuse it by default —
+**including sites written after that line** — and `victimOwned` is the same function, so the chop and
+the death telemetry inherit it (which is why `car conservation` needs no formula change: the row never
+leaves the world). Boats have no such cache, so port.js carries an explicit `assertAfloat` at each use
+plus SQL filters on the berth count, the piracy fleet and boat theft; races.js guards both sides of a
+wager/pinks race because those rows are read by id. Reclaim: an expired unclaimed voucher restores the
+item BY ID (a death may have re-pointed it at the heir since), and with no on-chain reader the sweep
+SKIPS rather than refunding blind — the existing fail-safe.
+**§10.4: exactly one new reason, and it is a sink.** `rarity:` joined the omr vocabulary + the desk's
+sink list; rarity is status and extraction is an ownership move, so neither writes a row (asserted by
+counting, not assumed). Console: a **THE COLLECTION** section on the Garage tab (rarity chips, the
+upgrade ladder, a confirm-gated take-it-on-chain) + `describe()`/ERRMAP lines; `/v1/rules.rarity`
+publishes the ladder and states `sellDeterministic` in the API, because a claim nobody can check is
+not worth making. Four mutations each fail at their own named assertion (the estate stops sparing it;
+loadOwned stops filtering; the upgrade becomes a roll; the sink stops recycling).
+**DEFERRED, and the reason is structural rather than scope: ASSETS.** A car and a boat are INSTANCE
+rows; `character_assets` is set membership `(character_id, asset_id)` with no instance and a PK that
+already forbids a second one. Extracting one either leaves the row — where it keeps paying income,
+i.e. safe AND productive, exactly the dominant option the tradeoff exists to prevent — or removes it,
+which needs its own account-level home and a decision about whether the slot frees. That is a design
+call, not a line of code. `RARITY.TIERS[].w` + `RARITY.UPGRADE_OMR` are founder sign-off levers
+(BALANCE.md § THE RARITY NFTs). **The v3 migration's seven steps are now all built.**
+
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
 `payPlex` pattern); named landmarks / Founder's charter numbers; ~~R2 (the `rwa_revenue` → real-RWA-buy

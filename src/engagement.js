@@ -70,6 +70,11 @@ export const SYSTEMS = {
   // "how many men are paying dues" is the single number that says whether the float mechanism works.
   'the made man': ['made_dues'],
   'the auction house': ['auction_bid', 'auction_consign', 'auction_consign_bid'],
+  // THE RARITY NFTs (economy v3 step 7). Only the UPGRADE emits: extraction is signed in chain.js,
+  // which writes no telemetry at all — its write list is deliberately four tables wide, and the
+  // existing gear rail beside it has never emitted either. So this reads as "is anyone paying to
+  // move a car up the ladder", not "is anyone extracting"; the vouchers table answers the second.
+  'the collection': ['rarity_upgrade'],
   // ('rwa_dividend' retired with the personal dividend — tokenomics v2 step 2; the family one stays)
   // ('rwa_vault_claim' became 'eth_vault_claim' when the STOCK LAYER was retired —
   // omerta-stock-layer-retirement.md. The vault stayed; what it owes is ETH now. The Portfolio

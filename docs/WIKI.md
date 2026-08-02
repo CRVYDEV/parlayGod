@@ -114,6 +114,27 @@ book value. A **trim** (Rusted to Coachbuilt) increases all three values.
 - **Boost** (`POST /v1/garage/boost`) — steal a random car. This has a 5-minute cooldown.
 - **Melt** (`POST /v1/garage/:carId/melt`) — scrap a car for ammo. 25% of the ammo goes to your family.
 - **Fence** (`/fence`) and **Repair** (`/repair`) — sell a car for cash, or repair its damage.
+
+**RARITY, AND THE WAY OFF THE BOARD (the rarity NFTs).** Every car and boat carries a rarity —
+Common, Rare, Legendary, Epic — rolled by the server the moment you EARN it, and logged so the draw
+can be checked. It is pure status: it changes no speed, no value, no race, nothing. What it changes is
+scarcity, and scarcity is what a collector pays for.
+
+You can buy your way up the ladder with $OMR (`POST /v1/nft/:kind/:id/upgrade`), and the price buys
+exactly the next tier — a known item for a known price, never a roll. **Nothing in this game sells a
+random outcome for money**, and that is a rule rather than a habit.
+
+You can also take one **ON-CHAIN** (`POST /v1/nft/:kind/:id/withdraw`, on the same rail gear uses),
+and this is the real decision:
+
+> **In-game items are lootable. Extracted NFTs are safe, and inert.**
+
+An extracted car is an ERC-1155 in your own wallet. Nobody can steal it, win it in a pink-slip race,
+chop it off your corpse or take it in a war — and it **survives your death**, passing down the
+bloodline. In exchange it never races, hauls, melts, fences or earns again. It is a trophy, not iron.
+Use it or own it; you cannot do both, and there is no way back. You must be MADE to take anything
+on-chain (the same gate as a $OMR withdrawal); a free-trial street plays the whole game and extracts
+nothing.
 - You cannot melt, fence, or repair a car that is **listed** on the market or **pledged** as loan collateral.
 
 **Guns and the Armory.** There are 15 guns. The cheapest is a Rusty .25 ($800, fp3). The most powerful is the

@@ -329,10 +329,40 @@ Each step is shippable and testable alone; nothing is deleted before its replace
    from sells, so depth grows fastest when people exit) already holds for the `lp` slice. Moving to
    500-all-to-POL is a founder balance decision with its own sim, exactly as §2.4 requires for the fee
    curve itself.
-7. **The rarity NFTs** — extend `GearVault`'s pattern to cars/boats/assets.
+7. **The rarity NFTs — BUILT 2026-08-02** (`src/nft.js`, `test/nft.js`, the extraction half in
+   `chain.js:requestItemWithdraw`). Cars and boats carry a rarity rolled when they are EARNED, and an
+   owned one extracts on-chain through the existing gear rail. Four corrections to this line as
+   written:
+   *(a)* **it does NOT touch contracts, so it does not reset the audit clock** — the sentence below
+   was wrong about step 7. `GearVault.mint(to, gearId, amount)` takes a bare uint256 with a per-id
+   lifetime cap, so "extend GearVault's pattern" turned out to be a token-ID SPACE decision off-chain
+   (gear 1..N, cars 100000+, boats 200000+ via `RARITY.TOKEN`) rather than a new contract. To
+   `VoucherClaim` a car is a kind-1 NFT voucher like any other. What it does need is deploy config:
+   each new tokenId wants its Safe-set `cap`, which is fail-closed at 0, so an un-capped class simply
+   cannot mint.
+   *(b)* **assets are NOT included, and the reason is structural rather than scope.** A car and a boat
+   are INSTANCE rows; `character_assets` is set membership `(character_id, asset_id)` with no instance
+   and a PK that already forbids a second one. Extracting one either leaves the row in place — where
+   it would keep paying income, i.e. safe AND productive, which is exactly the dominant option the
+   design's "use it or own it" tradeoff exists to prevent — or removes it, which needs its own
+   account-level home and a decision about whether the slot frees. That is a design call, not a line
+   of code, and it is deferred rather than guessed.
+   *(c)* the design's §7 says rarity is rolled "when an item is earned in play", and the ONE thing
+   money buys had to be built to match: `rarity:upgrade` is DETERMINISTIC (pay the tier's price, get
+   exactly that tier). A random paid upgrade would be a loot box bought with a token people reach
+   through ETH, which is the question §7's own rule exists to avoid. It is a §10.4 SINK, so since step
+   2 it recycles to the desk — which is also §7's "bridge between the two markets", built without ever
+   selling a random outcome for money.
+   *(d)* "safe but inert" needed ONE enforcement point, not a guard at every site. `loadOwned` filters
+   an extracted car out of `owned.cars`, so melt, fence, repair, the garage cap, the vanity plate, the
+   strip, tuning, pinks, a loan pledge, a market listing, the chop and the net-worth roll-up all refuse
+   it by default — including sites written after that line. Boats have no such cache, so they carry an
+   explicit `assertAfloat` at each use. Death is the other half: the estate wipe skips extracted rows
+   and re-points them at the heir, and `car conservation` needs no formula change because the row never
+   left the world.
 
-Steps 6 and 7 touch contracts and therefore reset the third-party audit clock. Steps 1–5 are
-off-chain and gated on nothing.
+Step 6 touches contracts and therefore reset the third-party audit clock; step 7, as it turned out,
+does not. Steps 1–5 are off-chain and gated on nothing.
 
 ---
 

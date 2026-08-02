@@ -9,7 +9,7 @@
 // the offshore RENDEZVOUS (a consensual mid-sea handoff of an active run to a partner's boat — §10.4-neutral).
 import crypto from 'node:crypto';
 import { GameError, bus, bumpMastery, masteryFx } from './game.js';
-import { PORT, COMMISSION, NOTORIETY, boatOf, portRouteOf, boatResale, interdictChance, effHold, effSpeed, boatUpgradeCost, portRankOf, fenceMultOf, levelOf, cityHourOf, smugglerTierOf, smuggleRepPerks, notorietyNow } from './rules.js';
+import { PORT, COMMISSION, NOTORIETY, boatOf, portRouteOf, boatResale, interdictChance, effHold, effSpeed, boatUpgradeCost, portRankOf, fenceMultOf, levelOf, cityHourOf, smugglerTierOf, smuggleRepPerks, notorietyNow, rollRarity } from './rules.js';
 import { logCollect } from './collection.js';
 import { activeDecree } from './commission.js';
 import { laneHeat, heatLane } from './notoriety.js';
@@ -57,6 +57,13 @@ const rand = (n) => Math.floor(Math.random() * n);
 const clearIntercepts = (client, boatId) => client.query('DELETE FROM port_intercepts WHERE boat_id=$1', [boatId]);
 
 // the continuous 24h supply bucket (the wash-cap pattern): how much contraband COST is still sourceable
+// THE RARITY NFTs (v3 step 7) — an EXTRACTED boat is an ERC-1155 in the owner's wallet: safe from
+// the Coast Guard, from piracy and from the estate, and in exchange it does nothing. Cars get this
+// for free from the loadOwned filter; boats are read ad hoc by id, so every USE site says so itself.
+const assertAfloat = (boat) => {
+  if (boat?.minted_onchain) throw new GameError('extracted', "She's on-chain — a trophy now, not a working boat.");
+  return boat;
+};
 function supplyState(ch) {
   const now = Date.now();
   const refill = ch.port_at ? (now - new Date(ch.port_at).getTime()) / 86400000 * PORT.SUPPLY_CAP_DAY : PORT.SUPPLY_CAP_DAY;
@@ -71,22 +78,29 @@ export async function buyBoat(ch, kind, client, h) {
   if (levelOf(Number(ch.respect)) < PORT.MIN_LEVEL) throw new GameError('level', `The harbormaster deals with level ${PORT.MIN_LEVEL}+.`);
   const spec = boatOf(kind);
   if (!spec) throw new GameError('bad_boat', 'No such vessel at the yard.');
-  const n = Number((await client.query('SELECT COUNT(*) c FROM boats WHERE character_id=$1', [ch.id])).rows[0].c);
+  const n = Number((await client.query('SELECT COUNT(*) c FROM boats WHERE character_id=$1 AND NOT minted_onchain', [ch.id])).rows[0].c);
   if (n >= fleetCapOf(ch)) throw new GameError('fleet', `Your berths are full (${fleetCapOf(ch)}). Sell a boat or rent a slip.`);
   if (Number(ch.cash) < spec.cost) throw new GameError('cash', `The ${spec.name} runs $${spec.cost}.`);
   ch.cash = Number(ch.cash) - spec.cost;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -spec.cost, reason: 'port:boat' });
   const id = crypto.randomUUID();
-  await client.query('INSERT INTO boats (id, character_id, kind) VALUES ($1,$2,$3)', [id, ch.id, kind]);
+  // THE RARITY NFTs (v3 step 7): rolled + audited when the vessel is EARNED (bought with in-game
+  // cash off a sim-signed price — no ETH path anywhere grants or re-rolls a rarity). Pure status:
+  // hold and speed come from the catalog, so the Port's interdiction curve never reads this.
+  const rrRoll = Math.random();
+  const rarity = rollRarity(rrRoll);
+  await client.query('INSERT INTO boats (id, character_id, kind, rarity) VALUES ($1,$2,$3,$4)', [id, ch.id, kind, rarity]);
+  await h.rngLog(client, ch.id, 'rarity:boat', rrRoll, rarity);
   await h.track(client, ch.account_id, 'port', { act: 'buy', kind });
   await logCollect(client, ch.account_id, 'boats', kind); // THE COLLECTION
-  return { ok: true, boat: { id, kind, name: spec.name, hold: spec.hold, speed: spec.speed }, spent: spec.cost };
+  return { ok: true, boat: { id, kind, name: spec.name, hold: spec.hold, speed: spec.speed, rarity }, spent: spec.cost };
 }
 
 // POST /v1/port/boat/:boatId/sell — sell a docked boat back to the yard (a fraction of cost)
 export async function sellBoat(ch, boatId, client, h) {
   const boat = (await client.query('SELECT * FROM boats WHERE id=$1 AND character_id=$2 FOR UPDATE', [boatId, ch.id])).rows[0];
   if (!boat) throw new GameError('no_boat', 'No such boat in your fleet.');
+  assertAfloat(boat);
   if (atSea(boat)) throw new GameError('at_sea', "She's out on a run — bring her in first.");
   const back = boatResale(boat.kind);
   ch.cash = Number(ch.cash) + back;
@@ -104,6 +118,7 @@ export async function upgradeBoat(ch, boatId, part, client, h) {
   if (part !== 'hull' && part !== 'engine') throw new GameError('bad_part', 'Upgrade the hull or the engine.');
   const boat = (await client.query('SELECT * FROM boats WHERE id=$1 AND character_id=$2 FOR UPDATE', [boatId, ch.id])).rows[0];
   if (!boat) throw new GameError('no_boat', 'No such boat in your fleet.');
+  assertAfloat(boat);
   if (atSea(boat)) throw new GameError('at_sea', "She's out — refit her when she's docked.");
   const lvl = Number(part === 'hull' ? boat.hull : boat.engine) || 0;
   if (lvl >= PORT.STEP2.UPGRADE_MAX) throw new GameError('maxed', `The ${part} is already at the max (${PORT.STEP2.UPGRADE_MAX}).`);
@@ -127,6 +142,7 @@ export async function launchRun(ch, boatId, routeId, escort, client, h) {
   if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `Load a run at the ${PORT.DISTRICT}.`);
   const boat = (await client.query('SELECT * FROM boats WHERE id=$1 AND character_id=$2 FOR UPDATE', [boatId, ch.id])).rows[0];
   if (!boat) throw new GameError('no_boat', 'No such boat in your fleet.');
+  assertAfloat(boat);
   if (atSea(boat)) throw new GameError('busy', "She's already out — she can only run one at a time.");
   const route = portRouteOf(routeId);
   if (!route) throw new GameError('bad_route', 'No such route on the charts.');
@@ -290,7 +306,7 @@ export async function interceptRun(ch, targetBoatId, client, h) {
   if (Number(ch.energy) < S.PIRATE_ENERGY) throw new GameError('energy', `Running one down takes ${S.PIRATE_ENERGY} energy.`);
   if ((Number(ch.ammo) || 0) < S.PIRATE_AMMO) throw new GameError('ammo', `Boarding takes ${S.PIRATE_AMMO} rounds.`);
   // the pirate needs their OWN fast boat, docked, to give chase — their fastest is the pursuit vessel
-  const mine = (await client.query('SELECT * FROM boats WHERE character_id=$1', [ch.id])).rows;
+  const mine = (await client.query('SELECT * FROM boats WHERE character_id=$1 AND NOT minted_onchain', [ch.id])).rows;
   const docked = mine.filter((b) => !atSea(b));
   if (!docked.length) throw new GameError('no_boat', 'You need a boat at the dock to give chase.');
   const pursuit = Math.max(...docked.map((b) => effSpeed(b, boatOf(b.kind))));
@@ -344,6 +360,7 @@ export async function interceptRun(ch, targetBoatId, client, h) {
 export async function setRendezvous(ch, boatId, open, client, h) {
   const boat = (await client.query('SELECT * FROM boats WHERE id=$1 AND character_id=$2 FOR UPDATE', [boatId, ch.id])).rows[0];
   if (!boat) throw new GameError('no_boat', 'No such boat in your fleet.');
+  assertAfloat(boat);
   if (atSea(boat)) throw new GameError('at_sea', 'She has to be docked to take a handoff.');
   await client.query('UPDATE boats SET rendezvous=$2 WHERE id=$1', [boatId, !!open]);
   return { ok: true, rendezvous: !!open };
@@ -361,6 +378,8 @@ export async function rendezvous(ch, myBoatId, partnerBoatId, client, h) {
   const mine = rows.find((r) => r.id === String(myBoatId));
   const partner = rows.find((r) => r.id === String(partnerBoatId));
   if (!mine || mine.character_id !== ch.id) throw new GameError('no_boat', 'No such boat in your fleet.');
+  assertAfloat(mine);
+  if (partner?.minted_onchain) throw new GameError('their_extracted', "Their boat is on-chain — she takes no cargo.");
   if (!atSea(mine)) throw new GameError('not_out', "That boat isn't carrying a run.");
   if (!partner) throw new GameError('no_partner', 'No such boat to hand off to.');
   if (partner.character_id === ch.id) throw new GameError('own', 'Hand off to a partner, not yourself.');

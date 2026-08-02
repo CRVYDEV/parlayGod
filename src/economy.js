@@ -10,7 +10,7 @@ import {
   CONSUMABLES, RACKETS, ASSETS, GOODS, GUNS, VESTS, CONSTANTS, SKILLS, UNDERWORLD,
   levelOf, cityEventOf, dayOf, carOf, carVal, carMelt, rollCar, rollTrim,
   effStat, cargoCapacity, goodPriceOf, gearOf, gunObjOf, RACKET_EMPIRE, racketUpgradeCost, racketIncomeLeveled, tycoonRankOf,
-  seasonModOf, pathFx } from './rules.js';
+  seasonModOf, pathFx, rollRarity } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
@@ -50,15 +50,21 @@ export async function boostCar(ch, client, h) {
   if (roll < chance) {
     const model = rollCar(), trim = rollTrim(), dmg = Math.floor(Math.random() * 61);
     const carId = uid();
-    await client.query('INSERT INTO cars (id, character_id, model_id, trim_id, dmg) VALUES ($1,$2,$3,$4,$5)',
-      [carId, ch.id, model.id, trim.id, dmg]);
-    h.owned.cars.push({ id: carId, model_id: model.id, trim_id: trim.id, dmg });
+    // THE RARITY NFTs (v3 step 7) — the car is EARNED here, so this is where the rarity is DROPPED.
+    // Its own roll, rng_audit'd separately from the success roll so the draw is replayable (the
+    // audit's Street-War lesson: reusing one die for two decisions correlates them silently).
+    const rrRoll = Math.random();
+    const rarity = rollRarity(rrRoll);
+    await client.query('INSERT INTO cars (id, character_id, model_id, trim_id, dmg, rarity) VALUES ($1,$2,$3,$4,$5,$6)',
+      [carId, ch.id, model.id, trim.id, dmg, rarity]);
+    await h.rngLog(client, ch.id, 'rarity:car', rrRoll, rarity);
+    h.owned.cars.push({ id: carId, model_id: model.id, trim_id: trim.id, dmg, rarity });
     await logCollect(client, ch.account_id, 'cars', model.id); // THE COLLECTION
     await h.rngLog(client, ch.id, 'gta', roll, 'success');
     await h.bumpDaily(client, ch.id, 'gta');
     await bumpFamilyTask(client, h, 'gta', 1);
     await bumpMastery(client, h, ch, 'wheels', 'boost'); // THE TRADES — a clean boost is the wheelman's craft
-    return { ok: true, success: true, car: { id: carId, model: model.id, trim: trim.id, dmg, rare: !!model.rare } };
+    return { ok: true, success: true, car: { id: carId, model: model.id, trim: trim.id, dmg, rare: !!model.rare, rarity } };
   }
   const stint = 15 + Math.floor(Math.random() * 16); // 15–30s
   ch.jail_until = new Date(Date.now() + stint * 1000);

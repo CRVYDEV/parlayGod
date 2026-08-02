@@ -3914,3 +3914,30 @@ existing `staked` bucket, so no new schema and no new §10.4 surface.
    attach float to whales) but it is a real change to a shipped affordance.
 4. **Whether whales actually commit** is not measurable from arithmetic. Watch realised $OMR loot per
    kill in the alpha rather than P9.30's numbers.
+
+---
+
+## THE RARITY NFTs (economy v3 step 7, 2026-08-02) — SIGN-OFF LEVERS
+
+Cars and boats carry a rarity rolled when they are EARNED, and an owned one can be extracted on-chain
+as a tradeable ERC-1155. Two levers, both new, both founder sign-off (pinned in `test/levers.js`).
+
+| lever | ships at | what it decides |
+|---|---|---|
+| `RARITY.TIERS[].w` | 700 / 220 / 65 / 15 | the draw. A legendary lands on ~6.5% of earned items and an epic on ~1.5%, which is what a secondary buyer is actually pricing — scarcity is the only thing rarity does. |
+| `RARITY.UPGRADE_OMR` | 0 / 25 / 90 / 300 | the one price money pays. Buying common → epic outright costs 415 $OMR, deliberately steeper than the drop is rare, so grinding for the roll stays the cheap path and paying is the impatient one. |
+
+**§10.4: one reason, and it is a sink.** `rarity:upgrade` is a $OMR burn in `DESK.SINK_REASONS`, so
+like every sink since step 2 it recycles to the desk's shelf rather than being destroyed. Rarity
+itself is status and extraction is an ownership move, so neither writes a ledger row — asserted in
+`test/nft.js` rather than assumed. Nothing here is a faucet.
+
+**The one thing NOT to retune without reading §7 first: the upgrade must stay DETERMINISTIC.** Pay
+the tier's price, get exactly that tier. A random paid upgrade would be a loot box bought with a
+token people reach through ETH, which is the question the design's "sell deterministic, drop random"
+rule exists to avoid entirely. Making it a roll is a legal decision wearing a balance decision's
+clothes.
+
+**Not a balance flag, but the number that governs supply:** each tokenId's LIFETIME cap is set by the
+Safe on `GearVault` at deploy and is fail-closed at 0 (an un-capped class simply cannot mint). That
+cap — not the weights — is what bounds how many "1978 Sedan (Epic)" can ever exist on-chain.

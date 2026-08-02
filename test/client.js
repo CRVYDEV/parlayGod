@@ -1136,6 +1136,12 @@ async function seedLists() {
     await q("UPDATE characters SET loc='docks' WHERE id=$1", [charId]);
     await si('POST', '/v1/port/boat/dinghy', token, {});
   });
+  // v3 step 7 — an EXTRACTED item, so the Collection's on-chain list has a row to check. Flagged
+  // directly rather than driven through the withdrawal, which needs a minted account, a linked
+  // wallet and a configured signing chain — none of which this fixture has and none of which the
+  // mirror is checking. What has to be non-empty is the LIST.
+  await trySeed('an on-chain trophy', () => q(
+    "UPDATE boats SET minted_onchain=true WHERE character_id=$1", [charId]));
   await trySeed('estate staff', async () => {
     const cat = (await si('GET', '/v1/estate', token)).body?.household?.catalog || [];
     const s = cat.find((x) => !x.locked);
