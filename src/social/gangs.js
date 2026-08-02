@@ -7,7 +7,7 @@
 // Split out of the 2,003-line src/social.js; every function below is byte-identical to what was
 // there. Import from '../social.js' — it re-exports this package's public surface unchanged.
 import { GameError, bumpFamilyTask, bus, ledger, cleanText } from '../game.js';
-import { DISTRICTS, M3, M8, levelOf, dayOf, territoryBuildCost, worldNpcOf, liberationCost, DIPLOMACY } from '../rules.js';
+import { DISTRICTS, M3, M8, levelOf, dayOf, territoryBuildCost, worldNpcOf, liberationCost, DIPLOMACY, cityHourOf } from '../rules.js';
 import { seizeTerritoryRackets, releaseTerritoryRackets } from '../territory.js';
 import { releaseFrontierHolds, outfitStrengthFrac } from '../world.js';
 import { activeDecree } from '../commission.js';
@@ -251,6 +251,35 @@ export async function declareWar(ch, targetGangId, client, h) {
 // ═══════════════════ TURF (§5.5) ═══════════════════
 
 // ═══════════════════ TURF (§5.5) ═══════════════════
+// ── THE WATCH (the strategy package's TIME WINDOW) ──
+// Is the holder's declared window open right now? A district with no declared watch is NEVER on
+// watch, so every hour is a surprise — which is the honest reading: a family that never says when
+// it is home cannot claim to have been caught off guard, and gets no cheap hour either.
+export const onWatch = (d, now = Date.now()) => {
+  if (d?.watch_hour == null) return false;
+  // cityHourOf returns {hour, patrol, phase} — read the FIELD. (The sov window shipped reading the
+  // object as a number, which is NaN arithmetic and left that window permanently shut; fixed there too.)
+  return ((cityHourOf(now).hour - Number(d.watch_hour) + 24) % 24) < M3.WATCH_WINDOW_H;
+};
+// The multiplier the ATTACKER pays. Off-watch is a surprise and costs more; a family that declared
+// no watch is surprised at every hour, so an undeclared district is always the dearer price — the
+// declaration is what BUYS you a cheap window, and it costs you having to be there for it.
+export const watchMult = (d, now = Date.now()) => (onWatch(d, now) ? 1 : M3.WATCH_SURPRISE_MULT);
+
+// A boss/underboss sets the hour their family stands ready on turf they hold. Free, changeable —
+// the cost of the decision is having to BE there, not a fee. Zero §10.4 surface.
+export async function setWatch(ch, districtId, hour, client, h) {
+  if (!canCommand(h)) throw new GameError('rank', 'Only the boss or underboss sets the watch.');
+  const hr = Number(hour);
+  if (!Number.isInteger(hr) || hr < 0 || hr > 23) throw new GameError('bad_hour', 'Pick the hour your family stands ready (0–23 UTC).');
+  const d = (await client.query('SELECT * FROM districts WHERE id=$1 FOR UPDATE', [districtId])).rows[0];
+  if (!d) throw new GameError('bad_district', 'No such district.');
+  if (d.holder_gang !== h.owned.gangId) throw new GameError('not_held', "You don't hold that district.");
+  await client.query('UPDATE districts SET watch_hour=$2 WHERE id=$1', [districtId, hr]);
+  return { ok: true, district: districtId, watchHour: hr, windowH: M3.WATCH_WINDOW_H,
+    onWatchNow: onWatch({ watch_hour: hr }), surpriseMult: M3.WATCH_SURPRISE_MULT };
+}
+
 export async function seizeDistrict(ch, districtId, client, h) {
   if (!canCommand(h)) throw new GameError('rank', 'Only the boss or underboss seizes turf.');
   if (!DISTRICTS.find((d) => d.id === districtId)) throw new GameError('bad_district', 'No such district.');
@@ -284,7 +313,11 @@ export async function seizeDistrict(ch, districtId, client, h) {
   const sovBonus = occupied ? 0 : await sovGarrisonBonus(client, districtId);
   const coalitionVsHolder = !occupied && d.holder_gang
     && await coalitionDiscountActive(client, h.owned.gangId, d.holder_gang);
-  const cost = Math.floor((base + sovBonus + premium) * (coalitionVsHolder ? DIPLOMACY.COALITION_SEIZE_MULT : 1));
+  // THE WATCH: a player-held district taken OUTSIDE the holder's declared window costs the surprise
+  // premium. An NPC-occupied district has no watch to keep (outfits don't sleep) and an unheld one
+  // has nobody to surprise, so both stay at the plain price.
+  const surprise = (!occupied && d.holder_gang) ? watchMult(d) : 1;
+  const cost = Math.floor((base + sovBonus + premium) * (coalitionVsHolder ? DIPLOMACY.COALITION_SEIZE_MULT : 1) * surprise);
   const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
   if (Number(g.treasury) < cost)
     throw new GameError('treasury', occupied

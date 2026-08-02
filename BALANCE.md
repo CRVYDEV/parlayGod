@@ -4119,3 +4119,34 @@ COUNT of rows you already own; retiring at 0 bps writes no ledger row, which the
 small, so the ceiling is a *decision-space* dial, not an economy one), and whether
 `RACKET_RETIRE_BPS` should rise above 0 — note that raising it makes churning the catalog cheaper,
 which is the one thing that would undo the mechanic.
+
+### 3. THE WATCH — a time window on turf
+
+| Lever | Value | What it does |
+|---|---|---|
+| `M3.WATCH_WINDOW_H` | 4 | how long the declared window stays open |
+| `M3.WATCH_SURPRISE_MULT` | 1.5 | what taking the district OUTSIDE that window costs |
+
+Turf changed hands as a **one-sided instant purchase**: the holder had no move, and no reason to be
+anywhere in particular. A holder now DECLARES the UTC hour their family stands ready
+(`POST /v1/districts/:id/watch`, free, boss-only, changeable — the cost of the decision is having to
+BE there); taking the district outside that window costs the surprise premium.
+
+Deliberately a **PREMIUM, not a LOCKOUT**. A hard EVE-style window would make turf untakeable 20
+hours a day and stall the whole war loop in a thin alpha population. A premium keeps every hour
+playable while making WHEN a real decision on both sides — the holder picks a window they will
+actually be online for, so attacks concentrate where they can answer; the attacker chooses between
+the plain price and paying to catch them cold. An UNDECLARED district is dear at every hour, so the
+declaration is what *buys* the cheap window rather than being a free shield.
+
+§10.4: it scales the EXISTING `turf:seize:` treasury sink — no new reason, no new faucet, and the
+vocabulary check is unmoved (asserted).
+
+**A live bug this found.** The sovereignty vulnerability window (`sov.js:windowOpen`) read
+`cityHourOf(now)` as a NUMBER, but it returns `{hour, patrol, phase}` — so `hr - start` was NaN and
+the comparison was **false for every start hour at every clock time**. The window has been
+PERMANENTLY SHUT since it shipped: `siegeSov` threw `window` forever, and the sov map published
+`vulnerable: false` on every stronghold. The siege test never caught it because it sets
+`SOV_WINDOW_OPEN=on`, which short-circuits above the broken line — **a TEST-ONLY override masking a
+dead production path**, which is the "a check that cannot fail reads exactly like a clean bill of
+health" class in its live form. Fixed in both places.

@@ -23,4 +23,4 @@ export { cancelBounty, cancelFamilyContract, claimBounty, hitmanLeaderboard, lis
 export { enterSafehouse, hireBodyguard, offerBodyguard } from './social/defense.js';
 export { acceptPeace, feudLeaderboard, proposePeace, runEstate } from './social/estate.js';
 export { buyListing, cancelListing, listItem } from './social/exchange.js';
-export { createGang, declareWar, joinGang, kickMember, leaveGang, promoteMember, removeMember, resolveWarIfDue, seizeDistrict, tribute, tributeOmr } from './social/gangs.js';
+export { createGang, declareWar, joinGang, kickMember, leaveGang, promoteMember, removeMember, resolveWarIfDue, seizeDistrict, setWatch, onWatch, watchMult, tribute, tributeOmr } from './social/gangs.js';

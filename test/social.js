@@ -18,7 +18,7 @@ import { buildServer } from '../src/server.js';
 import { payFamilyYield } from '../src/exchange.js';
 import { runBuyback } from '../src/worker.js';
 import { huntWanted } from '../src/social.js';
-import { familyTaskOf, weekOf, M3, BLACK_MARKET, bustProbOf, TERRITORY_RACKETS, territoryRankOf, territoryBuildCost, PORT } from '../src/rules.js';
+import { familyTaskOf, weekOf, M3, BLACK_MARKET, bustProbOf, TERRITORY_RACKETS, territoryRankOf, territoryBuildCost, PORT, cityHourOf } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -1174,9 +1174,12 @@ assert(ghScr >= 15 && ghScr <= 25, `only the post-ghost hours accrue (saw ${ghSc
 // reset the operation to a clean tier-2 numbers op for the seizure test below
 await pool.query(`UPDATE territory_rackets SET kind='numbers', fortitude=0, scrutiny=0, op_ghost_until=NULL WHERE district_id='docks'`);
 // ── SEIZURE: a rival takes the turf → the operation transfers with it (wars fight over income) ──
-const raider = await mk('Turf Raider'); await seedCh(raider.id, 'respect=1000, cash=500000');
+const raider = await mk('Turf Raider'); await seedCh(raider.id, 'respect=1000, cash=800000');
 const rg = (await call('POST', '/v1/gangs', { token: raider.token, body: { name: 'The Claimants', tag: 'CLM' } })).body.gangId;
-assert.equal((await call('POST', '/v1/gangs/tribute', { token: raider.token, body: { amount: 300000 } })).code, 200, 'raider funds the war chest');
+// THE WATCH: the docks holder never declared an hour, so this take is a surprise and carries the
+// WATCH_SURPRISE_MULT premium — the war chest has to cover it (that IS the mechanic).
+const raiderChest = 600000;
+assert.equal((await call('POST', '/v1/gangs/tribute', { token: raider.token, body: { amount: raiderChest } })).code, 200, 'raider funds the war chest');
 r = await call('POST', '/v1/districts/docks/seize', { token: raider.token });
 assert.equal(r.code, 200, 'the raider seized the docks');
 // sim-audit F5: the seizure carried a war premium of 50% of the t2 operation's build cost
@@ -1188,7 +1191,7 @@ assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM territory_rackets 
 await pool.query(`UPDATE territory_rackets SET last_income_at = now() - interval '1 hour' WHERE district_id='docks'`);
 assert.equal((await call('POST', '/v1/territory/collect', { token: raider.token })).body.collected, 16000, 'the new owner earns the tier-2 rate ($16k/hr)');
 // §10.4: the raider's treasury reconciles to its ledger (tribute in − seize out + territory income in)
-assert.equal((await call('GET', `/v1/gangs/${rg}`, {})).body.gang.treasury, 300000 - raiderSeize + 16000, 'territory income + seizure reconcile in the treasury');
+assert.equal((await call('GET', `/v1/gangs/${rg}`, {})).body.gang.treasury, raiderChest - raiderSeize + 16000, 'territory income + seizure reconcile in the treasury');
 
 // ══ TIER-4 §B (the type catalog 3→6) + §D (THE SYNDICATE — the specialization meta) ══
 {
@@ -1576,6 +1579,69 @@ const tsum = async (w) => Number((await pool.query(`SELECT COALESCE(SUM(amount),
 const rhsEsc = -(await tsum("reason='bounty:post'")) - (await tsum("reason='gang:contract'")) - (await tsum("reason='bounty:wanted'"))
   - (await tsum("reason='bounty:claim'")) - (await tsum("reason='bounty:refund'")) + (await tsum("reason='death:bounty'"));
 assert(Math.abs(escNow - rhsEsc) <= 1, `bounty/contract escrow reconciles: bucket ${escNow} vs ledger ${rhsEsc}`);
+
+
+// ══ THE WATCH (the strategy package's TIME WINDOW) ══
+// Turf changed hands as a one-sided instant purchase: the holder had no move and no reason to be
+// anywhere in particular. A holder now DECLARES the hour their family stands ready, and taking the
+// district OUTSIDE that window costs the surprise premium. What has to hold: the declaration is
+// boss-only and only on turf you hold, the window really is the cheap hour, an UNDECLARED district
+// is dear at every hour (so declaring is what BUYS the cheap window), and it is §10.4-clean —
+// the multiplier scales the EXISTING turf:seize sink, so no new reason enters the vocabulary.
+{
+  const hold = await mk('Watch Keeper'); await seedCh(hold.id, 'respect=1000, cash=500000');
+  const hg = (await call('POST', '/v1/gangs', { token: hold.token, body: { name: 'The Nightwatch', tag: 'NWT' } })).body.gangId;
+  const grab = await mk('Watch Breaker'); await seedCh(grab.id, 'respect=1000, cash=500000');
+  const gg = (await call('POST', '/v1/gangs', { token: grab.token, body: { name: 'The Cold Callers', tag: 'CLD' } })).body.gangId;
+  // a clean district nobody has fought over, held by the Nightwatch with a plain garrison
+  await pool.query(`UPDATE districts SET holder_gang='${hg}', npc_holder=NULL, garrison=30000, watch_hour=NULL WHERE id='cathedral'`);
+
+  // the declaration is boss-only and only on turf you hold
+  assert.equal((await call('POST', '/v1/districts/cathedral/watch', { token: grab.token, body: { hour: 3 } })).body.error, 'not_held',
+    "you can't set the watch on someone else's turf");
+  assert.equal((await call('POST', '/v1/districts/cathedral/watch', { token: hold.token, body: { hour: 99 } })).body.error, 'bad_hour', 'the hour is 0–23 UTC');
+
+  // UNDECLARED: no watch means no cheap hour — a family that never says when it is home is
+  // surprised at every hour. This is the baseline the declared window is measured against.
+  await call('POST', '/v1/gangs/tribute', { token: grab.token, body: { amount: 400000 } });
+  const board0 = (await call('GET', '/v1/districts', {})).body.districts.find((d) => d.id === 'cathedral');
+  assert.equal(board0.watch.hour, null, 'the board shows no watch declared');
+  assert.equal(board0.watch.open, false, 'an undeclared district is never on watch');
+  assert.equal(board0.watch.surpriseMult, M3.WATCH_SURPRISE_MULT, 'so the surprise premium is live at every hour');
+
+  // DECLARE the CURRENT hour → the window is open right now, so the price is plain
+  const nowHr = cityHourOf().hour;
+  r = await call('POST', '/v1/districts/cathedral/watch', { token: hold.token, body: { hour: nowHr } });
+  assert.equal(r.code, 200, `the watch is set (${JSON.stringify(r.body)})`);
+  assert.equal(r.body.onWatchNow, true, 'declaring the current hour opens the window immediately');
+  const boardOn = (await call('GET', '/v1/districts', {})).body.districts.find((d) => d.id === 'cathedral');
+  assert.equal(boardOn.watch.hour, nowHr, 'the declared hour is PUBLIC — an EVE window is content because everyone can read it');
+  assert.equal(boardOn.watch.open, true, 'the board says the window is open');
+  assert.equal(boardOn.watch.surpriseMult, 1, 'and that the price is plain right now');
+
+  const onCost = (await call('POST', '/v1/districts/cathedral/seize', { token: grab.token })).body.cost;
+  assert.equal(onCost, 45000, `taking it ON the watch is the plain outbid price (saw ${onCost})`);
+
+  // …now the same district, same garrison, OUTSIDE the declared window: the surprise premium.
+  // Declaring an hour a comfortable distance from now (the window is WATCH_WINDOW_H long).
+  await call('POST', '/v1/gangs/tribute', { token: hold.token, body: { amount: 400000 } });
+  const offHr = (nowHr + 12) % 24;
+  await pool.query(`UPDATE districts SET holder_gang='${gg}', garrison=30000, watch_hour=${offHr} WHERE id='cathedral'`);
+  const boardOff = (await call('GET', '/v1/districts', {})).body.districts.find((d) => d.id === 'cathedral');
+  assert.equal(boardOff.watch.open, false, 'half a day from the declared hour, the window is shut');
+  const offCost = (await call('POST', '/v1/districts/cathedral/seize', { token: hold.token })).body.cost;
+  assert.equal(offCost, Math.floor(onCost * M3.WATCH_SURPRISE_MULT),
+    `catching them cold costs WATCH_SURPRISE_MULT more (saw ${offCost}, want ${Math.floor(onCost * M3.WATCH_SURPRISE_MULT)})`);
+  assert(offCost > onCost, 'and the premium is a real cost, not a rounding artefact');
+
+  // §10.4: the multiplier scales the EXISTING turf:seize sink — no new reason, so the vocabulary
+  // is closed and the treasury check reconciles the bigger number exactly like the smaller one.
+  const seizeRows = Number((await pool.query(
+    `SELECT COUNT(*) n FROM transactions WHERE reason LIKE 'turf:seize:%' AND counterparty IN ('${hg}','${gg}')`)).rows[0].n);
+  assert.equal(seizeRows, 2, 'both takes ledgered under the existing turf:seize reason');
+  const invW = await runLedgerInvariants(pool, { alert: false });
+  assert(invW.checks.find((c) => c.name === 'reason vocabulary').ok, 'the watch adds no unknown reason');
+}
 
 console.log('✅ M3 social test passed — gangs, tribute+weekly, turf (+perks), melt tithe, exchange, jumps, bounty, contract board, hit→death/estate, busting, notifications, websocket push, buyback family split, §10.4 invariants, M7 assassin rep + NPC hitmen + safehouse/fire-heat/war-kills + family contracts (treasury-funded, member lockout, refunds) + bodyguards (hire/absorb/betrayal, before-insurance ordering) + M8 Tailor & Engraver vanity sinks (name/title/plate/crest/rename — ledgered vanity:* burns) + M8 intel sinks (anon fee, peek pierces anon) + M8 family seals ($OMR tribute → pooled reserve → sequential ladder, ledgered burns) + THE FOUNDATION (family charity: rank gate, empty-reserve rejection, sequential tiers from the reserve, badge on all three views + philanthropy leaderboard, softens members\' RICO odds, ledgered foundation:tier burns; STEP TWO: freeload gate — the trial-soften only helps a member who joined before the case was filed) + M7-P3 territory rackets (establish/collect/upgrade, income cap, SEIZURE transfers the operation to the victor, treasury §10.4 reconcile) + VENDETTAS (heir born owing blood, feud ledger, waived directed floor, 2x settlement rep, the cycle turns, lapsed = nothing; STEP TWO: ESCALATION (a repeat kill deepens the feud — kills++ / a higher tier / a longer TTL), THE SIT-DOWN (consensual peace gates + the both-direction clear), and the blood-debt leaderboard — all pure status)');
 await app.close();

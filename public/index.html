@@ -3370,6 +3370,12 @@
         <div class="card"><span class="t">${d.id}${d.perk ? '' : ''}</span> ${d.occupiedBy ? `<span class="chip bad">occupied — ${d.occupiedBy.name} @ ${d.occupiedBy.strengthPct}%</span>` : d.holder ? `<span class="chip ${d.holder.tag === g.tag ? 'good' : ''}">[${d.holder.tag}]</span>` : '<span class="chip">open</span>'}
           <div class="d">${d.perk || ''}</div>
           ${d.occupiedBy ? `<div class="d" style="color:var(--dim)">liberate for $${fmt(d.liberationCost)} (rout ${d.occupiedBy.name} to cheapen it)</div>` : d.holder ? `<div class="d" style="color:var(--dim)">garrison $${fmt(d.garrison)}</div>` : ''}
+          ${d.watch ? `<div class="d">${d.watch.hour == null
+            ? `<span class="chip bad">no watch</span> nobody says when they're home — taking it costs \u00d7${d.watch.surpriseMult} at every hour`
+            : `<span class="chip ${d.watch.open ? 'good' : ''}">watch ${String(d.watch.hour).padStart(2, '0')}:00 UTC +${d.watch.windowH}h</span> ${d.watch.open
+              ? "they're at the mattresses right now — plain price"
+              : `off-watch: catching them cold costs \u00d7${d.watch.surpriseMult}`}`}</div>` : ''}
+          ${d.holder && d.holder.tag === g.tag && boss ? `<div style="margin-top:4px"><input id="wh-${d.id}" type="number" min="0" max="23" placeholder="hr UTC" size="4" style="width:78px"> <button class="act" data-watch="${d.id}">set the watch</button></div>` : ''}
           ${boss && d.id === me.loc && (!d.holder || d.holder.tag !== g.tag) ? `<button class="act" data-do="POST /v1/districts/${d.id}/seize" style="${d.occupiedBy ? 'border-color:var(--blood)' : ''}">${d.occupiedBy ? 'liberate' : d.holder ? 'seize' : 'claim'} (stand here)</button>` : (boss && d.id !== me.loc && (!d.holder || d.holder.tag !== g.tag) ? '<span class="d" style="color:var(--dim)">travel here to take it</span>' : '')}</div>`).join('')}</div>
       ${boss ? `<div style="margin-top:8px">${rivalOpts ? `<select id="war-gang">${rivalOpts}</select> <button class="act risk" id="war-go">declare war ($10k)</button>` : '<span class="d" style="color:var(--dim)">no rival family to fight yet</span>'}</div>` : '<span class="d" style="color:var(--dim)">wars and turf are the boss’s to call</span>'}`, !!g.war)}
 
@@ -3489,6 +3495,9 @@
       act('POST', '/v1/gangs/tribute', { amount: Number(t.querySelector('#trib-amt').value) }).then(() => renderFamily());
     t.querySelector('#tribo-go').onclick = () =>
       act('POST', '/v1/gangs/tribute/omr', { amount: Number(t.querySelector('#tribo-amt').value) }).then(() => renderFamily());
+    // THE WATCH — the boss declares the hour their family stands ready on turf they hold.
+    t.querySelectorAll('[data-watch]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/districts/${b.dataset.watch}/watch`, { hour: Number(t.querySelector(`#wh-${b.dataset.watch}`).value) }).then(() => renderFamily()));
     const warBtn = t.querySelector('#war-go');
     if (warBtn) warBtn.onclick = () =>
       act('POST', `/v1/gangs/war/${t.querySelector('#war-gang').value.trim()}`, {}).then(() => renderFamily());
@@ -4443,7 +4452,7 @@
       ['GET', '/v1/gangs'], ['GET', '/v1/gangs/:id'], ['POST', '/v1/gangs', { name: '', tag: '' }],
       ['POST', '/v1/gangs/:id/join', {}], ['POST', '/v1/gangs/leave', {}], ['POST', '/v1/gangs/tribute', { amount: 1000 }],
       ['POST', '/v1/gangs/tribute/omr', { amount: 1 }], ['POST', '/v1/gangs/war/:targetGangId', {}],
-      ['POST', '/v1/districts/:id/seize', {}], ['GET', '/v1/territory'], ['POST', '/v1/territory/:districtId/establish', { kind: 'numbers' }],
+      ['POST', '/v1/districts/:id/seize', {}], ['POST', '/v1/districts/:id/watch', { hour: 3 }], ['GET', '/v1/territory'], ['POST', '/v1/territory/:districtId/establish', { kind: 'numbers' }],
       ['POST', '/v1/territory/collect', {}], ['POST', '/v1/territory/upkeep', {}],
       ['POST', '/v1/gangs/contract/:targetId', { amount: 10000, kind: 'kill' }],
       ['GET', '/v1/commission'], ['POST', '/v1/commission/vote', { decree: 'pax' }], ['POST', '/v1/commission/veto', {}],

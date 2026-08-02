@@ -420,6 +420,12 @@ The winner takes 20% of the loser's treasury and standing. A jump-kill scores 1 
 family that you are at war with scores 3 points. **Turf** (`/districts/:id/seize`) — seize a district for its
 benefits and its territory racket.
 
+**The watch.** A holder declares the hour their family stands ready (`/districts/:id/watch`, boss or
+underboss, free and changeable — the cost is having to BE there). Inside that four-hour window, taking
+the district is the plain price; outside it, catching them cold costs **1.5x**. A family that never
+declares a watch is dear at every hour, so declaring is what buys you the cheap window. Every declared
+hour is public on `/districts` — you are meant to plan around it, on both sides.
+
 **The reserve pays for status:** **seals** (`/gangs/vanity/seal`, Wax 25 to Obsidian 1500 $OMR, a badge) and
 the **Foundation** (`/gangs/foundation`, Community Fund 60 to The Legacy 3000 $OMR). The Foundation is real
 power: it **reduces the RICO conviction chance of every member** and speeds their case bleed (only members
