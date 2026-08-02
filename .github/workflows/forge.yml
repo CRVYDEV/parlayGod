@@ -28,12 +28,25 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
-      # Deps aren't committed as submodules — clone them into lib/ at the pinned tags the contracts
-      # target (deterministic, avoids forge-install/submodule friction inside the parent git repo).
+      # Deps aren't committed as submodules — fetch them into lib/ at the pinned versions the
+      # contracts target (deterministic, avoids forge-install/submodule friction inside the parent
+      # git repo). KEEP THIS IN LOCKSTEP WITH omerta-contracts/run-forge-test.sh — when v3 step 6
+      # added the v4 hook it added v4-core to that script and not to this one, so `forge build`
+      # failed to PARSE and every step below was skipped: not just the hook's tests but the OMR,
+      # bond, oracle, VoucherClaim and GearVault suites that had been green for months. A red
+      # contracts job is the pre-mainnet gate, so it must fail on a real regression, never on a
+      # dependency this file forgot about.
       - name: Fetch dependencies
         run: |
           git clone --depth 1 --branch v1.9.6 https://github.com/foundry-rs/forge-std lib/forge-std
           git clone --depth 1 --branch v5.6.1 https://github.com/OpenZeppelin/openzeppelin-contracts lib/openzeppelin-contracts
+          # Uniswap v4 core, for OmertaHook and its suite. From npm rather than git because the npm
+          # package ships its own lib/ (forge-std, solmate, OZ) already populated, which is what
+          # lets the hook tests deploy a REAL PoolManager and route REAL swaps instead of a mock.
+          npm pack @uniswap/v4-core@1.0.2 >/dev/null
+          mkdir -p lib/v4-core
+          tar xzf uniswap-v4-core-1.0.2.tgz -C lib/v4-core --strip-components=1
+          rm -f uniswap-v4-core-1.0.2.tgz
 
       - name: forge build
         run: forge build --sizes
