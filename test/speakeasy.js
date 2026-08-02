@@ -40,11 +40,14 @@ const bruno = await mk('Bruno Tattaglia'); // the step-four standover challenger
 assert.equal((await call('POST', '/v1/speakeasy/neon/open', { token: owner.token })).body.error, 'level', 'a nobody cannot open a club');
 await seed(owner.id, `respect=${lvlRespect(20)}`); // clear the level gate
 assert.equal((await call('POST', '/v1/speakeasy/nowhere/open', { token: owner.token })).body.error, 'bad_district', 'no such district');
-// D8=C (founder, 2026-08-02): the made-man gate on OPENING is RETIRED. A speakeasy earns cash, so
-// requiring the $OMR subscription to run one put money in front of an earning loop — the line v3 §4.3
-// names as binding. Asserted from the other side now: a man who has never paid a dollar of dues opens
-// a club on level and cash alone, so a re-added gate fails here by name rather than being noticed by a
-// player who cannot afford one.
+// D8=D (founder, 2026-08-02) restored the made-man gate on OPENING, which D8=C had briefly retired:
+// §4.3 ("$OMR never buys power") is itself retired, so the club is once again the most legible thing
+// dues buy. The gate sits ABOVE the cash check, so it is cleared here before the cash gate can be
+// asserted at all — and that ORDER is the assertion: a broke unmade man is told he is not made, which
+// is the more useful refusal.
+assert.equal((await call('POST', '/v1/speakeasy/neon/open', { token: owner.token })).body.error, 'made',
+  'an unmade man is turned away before the money is even counted');
+await pool.query(`UPDATE account_persistent SET made_until = now() + interval '30 days' WHERE account_id=(SELECT account_id FROM characters WHERE id='${owner.id}')`);
 // not enough cash first
 assert.equal((await call('POST', '/v1/speakeasy/neon/open', { token: owner.token })).body.error, 'cash', "can't open a club broke");
 await grantCash(owner.id, 2000000);
@@ -52,8 +55,10 @@ const open = await call('POST', '/v1/speakeasy/neon/open', { token: owner.token 
 assert.equal(open.code, 200, 'the boss opens the Neon Mile club');
 assert.equal(open.body.tier, 0, 'opens at tier 0 (The Backroom)');
 assert.equal((await meOf(owner.token)).cash, 2000500 - SPEAKEASY.OPEN_COST, 'the open cost left the pocket (ledgered speakeasy:open)');
-// one per district
+// one per district (the rival is made too, so the refusal he gets is about the DISTRICT — a test that
+// stops at the made gate would prove nothing about one-club-per-district)
 await seed(rival.id, `respect=${lvlRespect(20)}`); await grantCash(rival.id, 2000000);
+await pool.query(`UPDATE account_persistent SET made_until = now() + interval '30 days' WHERE account_id=(SELECT account_id FROM characters WHERE id='${rival.id}')`);
 assert.equal((await call('POST', '/v1/speakeasy/neon/open', { token: rival.token })).body.error, 'taken', 'only one club per district');
 // one per man
 assert.equal((await call('POST', '/v1/speakeasy/docks/open', { token: owner.token })).body.error, 'own', 'a man runs one house');

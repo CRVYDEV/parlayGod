@@ -5,7 +5,7 @@
 // list. Prestige ranks the nightlife. §10.4: `speakeasy:` is a cash SINK/FAUCET/TRANSFER vocabulary (all
 // character_id'd → the per-character cash check reconciles); bottles/naming ride `vanity:%` (no omr change).
 import { GameError, bus, skillMult, bumpMastery } from './game.js';
-import { SPEAKEASY, DISTRICTS, speakeasyTierOf, speakeasyRoundOf, speakeasyBottleOf, levelOf, renownRankOf, decorStyleOf, styleUnlockOf, assessedValueOf, effStat, SKILLS } from './rules.js';
+import { SPEAKEASY, DISTRICTS, speakeasyTierOf, speakeasyRoundOf, speakeasyBottleOf, levelOf, renownRankOf, decorStyleOf, styleUnlockOf, assessedValueOf, effStat, SKILLS, isMade } from './rules.js';
 import { spendOmr } from './vanity.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
@@ -84,10 +84,12 @@ export async function openSpeakeasy(ch, districtId, client, h) {
   if (!DISTRICTS.find((d) => d.id === districtId)) throw new GameError('bad_district', 'No such district.');
   if (levelOf(Number(ch.respect)) < SPEAKEASY.MIN_LEVEL)
     throw new GameError('level', `A club of your own opens up at level ${SPEAKEASY.MIN_LEVEL}.`);
-  // NO MADE-MAN GATE HERE — retired by founder decision D8=C (SIGN-OFF, 2026-08-02): the
-  // subscription gates STATUS ONLY, and a speakeasy earns cash, so gating it put $OMR in front of an
-  // earning loop. That is the line v3 §4.3 names as binding, and the design's own §11.2 sat on both
-  // sides of it. Opening a club is now level + cash like every other front.
+  if (!isMade(h.acct)) throw new GameError('made', 'The room only hands a house to a made man. Pay your dues first.');
+  // THE MADE-MAN GATE IS BACK (founder decision D8=D, SIGN-OFF 2026-08-02). D8=C had retired it on
+  // the reasoning that a club EARNS, so gating it put $OMR in front of an earning loop — the line
+  // §4.3 named as binding. The founder then retired §4.3 itself: $OMR may buy power, bounded by a
+  // reachable CEILING rather than by a category. A house of your own is the design's original §11.2
+  // gate and the most legible thing dues buy — you are not renting a perk, you are taking a room.
   const mine = (await client.query('SELECT district_id FROM speakeasies WHERE owner_character=$1', [ch.id])).rows[0];
   if (mine) throw new GameError('own', 'You already run a house — a man can only be in one place at a time.');
   // lock the district's club slot (SELECT-then-INSERT; a concurrent open on the same district 23505s → contention)

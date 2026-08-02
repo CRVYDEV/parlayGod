@@ -105,7 +105,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          TAX, withdrawTaxBps,
          HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, BUSINESS_EMPIRE, PACING, MASTERY,
          PATH_FX, PATH_XP_HOME, PATH_XP_RIVAL, PATH_SWITCH_CD_MS, REGIMEN, HUSTLE, CAREER, RIVALS,
-         CORNER, CONTACTS, FAVOR, MADE } from './rules.js';
+         CORNER, CONTACTS, FAVOR, MADE, MADE_LADDER, ACCESS_STAKE } from './rules.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -872,9 +872,15 @@ export async function buildServer() {
     // because a player deciding whether to hold $OMR is entitled to know exactly what it costs them
     // to be caught holding it.
     made: { omr: MADE.OMR, days: Math.round(MADE.MS / 86400000), estateTier: MADE.ESTATE_TIER,
-      buysNoPower: true },
-    // (the access stake is retired — D8=C. A board that advertises a gate the till does not
-    // enforce is the exact drift the client-mirror guard exists to catch.)
+      // §4.3 is retired (founder, 2026-08-02) — dues DO buy power now, bounded by a reachable ceiling
+      // rather than by a category. Both facts are published because a player is entitled to both.
+      buysPower: true, ceilingOmr: MADE_LADDER.RUNGS[MADE_LADDER.RUNGS.length - 1].min,
+      noCombatPower: true },
+    accessStake: { highOmr: ACCESS_STAKE.HIGH_OMR },
+    // THE LADDER (D8=D) — power for HOLDING. Published in full: the rungs, what each gives, and the
+    // shortcut dues buy, so the client renders terms rather than restating them (the catalog precedent).
+    ladder: { rungs: MADE_LADDER.RUNGS, madeRungs: MADE_LADDER.MADE_RUNGS,
+      note: 'The ladder runs on $OMR you HOLD (staked), not what you spend. Being made climbs it — it never raises the top.' },
     loot: { omrIdle: M3.OMR_LOOT_IDLE, omrCommitted: M3.OMR_LOOT_COMMITTED, cash: M3.CASH_LOOT_RATE,
       minLevel: M3.LOOT_MIN_LVL,
       note: 'A loose or unbonding balance is IDLE and is looted deepest. A staked balance is COMMITTED and is looted less — but nothing is safe.' },

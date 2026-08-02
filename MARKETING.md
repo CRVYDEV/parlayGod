@@ -879,8 +879,12 @@ in-game price**. It is not a securities product, you cannot sell it, and it does
 market. A future phase for real-asset delivery is designed but not shipped, and would be gated on
 counsel, KYC and geofencing — and would not be available to US persons.
 
-**Is it pay-to-win?** No. Real-money purchases grant cosmetics, access windows and consumables —
-never cash, never power, never anything on the balance curve. A free player can top every leaderboard.
+**Is it pay-to-win?** It buys advantage, and the honest answer is a ceiling rather than a denial.
+Real-money *Store* purchases still grant only cosmetics, access windows and consumables — never cash,
+never $OMR. But $OMR itself now buys a ladder of carry, capacity and a better fence, climbed by HOLDING
+it. Three things bound that: the ladder is CAPPED and its top is reachable without paying; there is no
+combat power on it at any price; and operating costs stay in cash, so nobody has to pay to keep earning.
+A free player can still top every leaderboard — and can hunt the man who paid, for his $OMR.
 
 **What stops bots ruining it?** Agents are welcome, publicly badged, rate-limited harder, and excluded
 from specific anti-Sybil reward paths. They have their own leaderboard. Better competing openly than

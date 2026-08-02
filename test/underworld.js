@@ -8,7 +8,7 @@ process.env.SEARCH_MS = '10000';    // 10s search (TEST-ONLY knob)
 process.env.CONVOY_MS = '600000';   // 10-min road (TEST-ONLY knob)
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { UNDERWORLD, BLACK_MARKET, CONVOY, CASINO, GUNS, CONSUMABLES, NPC_HITMEN, leadTaskOf, dayOf } from '../src/rules.js';
+import { UNDERWORLD, BLACK_MARKET, CONVOY, CASINO, ACCESS_STAKE, GUNS, CONSUMABLES, NPC_HITMEN, leadTaskOf, dayOf } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -183,8 +183,13 @@ assert.equal((await meOf(mia.token)).nerve, nerve1, 'T1: the house comps the sea
 assert.equal((await call('POST', '/v1/casino/dice', { token: mia.token, body: { amount: CASINO.MAX_BET + 1 } })).body.error, 'max',
   'below the rope, a low-level player is held to the ordinary table');
 await seedNpc(mia.id, 'madame', 60);
-// D8=C (founder, 2026-08-02) retired the access stake, so the rope is once again the WHOLE of what
-// the room asks of a low-level player — which is what this assertion was always about.
+// D8=D (founder, 2026-08-02) restored the access stake, so the room wants BOTH a seat and a HELD
+// stake again. The velvet rope is the SEAT half — which is what this assertion is about — so the
+// stake goes down before checking that the rope opens the room at any level.
+assert.equal((await call('POST', '/v1/casino/dice', { token: mia.token, body: { amount: CASINO.MAX_BET + 1 } })).body.error, 'max',
+  'the rope alone is not enough — the big table also wants the access stake behind the seat');
+await pool.query(`UPDATE account_persistent SET staked = staked + ${ACCESS_STAKE.HIGH_OMR}
+  WHERE account_id=(SELECT account_id FROM characters WHERE id='${mia.id}')`);
 assert.equal((await call('POST', '/v1/casino/dice', { token: mia.token, body: { amount: CASINO.MAX_BET + 1 } })).code, 200, 'T2: the velvet rope opens the high-stakes room at any level');
 assert.equal((await standingOf(mia.token, 'madame')).standing, 61, 'the high-stakes roll still pays +1 (lead spent)');
 await seedNpc(mia.id, 'madame', 90);

@@ -3,7 +3,7 @@
 // staking rewards, heat decay. M4: crew sales and Bureau raids.
 import { CONSTANTS, LAW, levelOf, rankIdxOf, cityEventOf, dayOf,
          assetIncome, assetEnergyCap, drugOf, crewCold, envelopeActive, foundationBleedMult , seasonModOf, KITCHEN, PACING, pathFx, racketIncomeLeveled,
-         energyCapOf, nerveCapOf } from './rules.js';
+         energyCapOf, nerveCapOf, ladderFx } from './rules.js';
 
 
 // ch is the character row (mutated in place); acct is account_persistent (mutated);
@@ -37,8 +37,10 @@ export function accrue(ch, acct = null, ctx = {}, now = new Date()) {
   const held = ctx.held || [];
   // THE REGIMEN — stamina/composure raise the CAPS (pool, not rate: the pacing pass's regen
   // numbers are untouched). Same helpers as view/coachOf, so the three sites cannot disagree.
-  const maxEnergy = energyCapOf(lvl, assetEnergyCap(assets), ctx.disciplines);
-  const maxNerve = nerveCapOf(lvl, ctx.disciplines);
+  // THE LADDER (D8=D) raises the caps too — `acct` is already this function's second parameter, so
+  // the same rung the view shows is the one regen actually fills to.
+  const maxEnergy = energyCapOf(lvl, assetEnergyCap(assets), ctx.disciplines, ladderFx(acct, 'energy'));
+  const maxNerve = nerveCapOf(lvl, ctx.disciplines, ladderFx(acct, 'nerve'));
   // PACING (founder-directed): energy/nerve regen is the game's master clock — at the prototype's
   // 40/min a full tank refilled in ~75 seconds, so it paced nothing and the whole progression ran
   // as fast as a player could click. Both rates now live in PACING.

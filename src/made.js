@@ -9,25 +9,33 @@
 // keep earning, which is a subscription wall on the core loop rather than a premium tier, and it turns
 // a free game into a rented one. **Operating costs stay in cash. All of them.**
 //
-// So what the dues buy is the SOCIAL AND PRESTIGE layer plus pure convenience, and no power anywhere:
+// §4.3 IS RETIRED — $OMR MAY BUY POWER (founder directive, 2026-08-02), and D8=D restored the two
+// ACCESS gates D8=C had briefly removed. So what the dues buy is:
 //   • the BADGE                — pure status, on the sheet and the public dossier
 //   • the UPPER ESTATE tiers   — the estate is display-only, so this is status gating status
 //   • a HOUSE OF YOUR OWN      — a speakeasy is the game's social venue; running one is standing
-//   • the PAD PAID WHILE AWAY  — your fronts settle their own CASH upkeep when you touch them, so
-//                                absence stops being punishing. The same cash still leaves your pocket
-//                                and the same ledger row is written; what you buy is not having to
-//                                remember. That is TIME, which §4.3 permits, not POWER, which it does not.
+//   • the HIGH-STAKES TABLE    — with ACCESS_STAKE held. A place to LOSE money faster at unchanged
+//                                odds: the seat is the product, never an edge
+//   • the PAD PAID WHILE AWAY  — your fronts settle their own CASH upkeep when you touch them. The
+//                                same cash, the same ledger row; what you buy is not having to remember
+//   • ONE RUNG ON THE LADDER   — MADE_LADDER.MADE_RUNGS. Real power (carry, capacity, the fence), and
+//                                a SHORTCUT rather than a gate: the ladder itself keys on held $OMR,
+//                                so dues get you there sooner and for less held — never higher
 //
-// A free player runs a complete empire — streets, crime, kitchen, family, PvP, the Law, the Pen, the
-// market, the fronts — at full strength, and can hunt made men for their $OMR. That is RuneScape
-// membership and EVE PLEX, and it is the honest answer to "is this pay-to-win": paying buys you a seat
-// at tables where you can LOSE money. It buys no advantage at any of them.
+// THE HONEST ANSWER TO "IS THIS PAY-TO-WIN" HAS CHANGED, and the copy below says so rather than
+// repeating a claim that stopped being true. It is no longer "paying buys no advantage." It is:
+// **there is a ceiling, and it is reachable without paying.** That is checkable, not rhetorical —
+// the top rung is 150 staked and the mission ladder alone pays 220 lifetime, which `test/made.js`
+// pins against the live MISSIONS table. Paying is a shortcut up a ladder that ends in the same place.
+// What stays true untouched: OPERATING COSTS ARE CASH (§11.2), so nobody must pay to keep earning,
+// and there is no combat power on the ladder at any price — see the rules-tail note for why that is
+// a loop argument rather than a fairness one.
 //
 // §10.4: the dues are an ordinary ledgered $OMR BURN through the vanity `spendOmr` till (`made:dues`),
 // and `made:%` is in `DESK.SINK_REASONS`, so — like every sink since step 2 — the value goes to THE
 // DESK to be sold again rather than being destroyed. `made_until` is not a bucket and holds no value.
 import { GameError, bus } from './game.js';
-import { MADE, isMade, madeSeconds } from './rules.js';
+import { MADE, MADE_LADDER, ACCESS_STAKE, isMade, madeSeconds } from './rules.js';
 import { spendOmr } from './vanity.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
@@ -71,13 +79,17 @@ export function madeBoard(ch, h) {
       { id: 'estate', what: `The upper compound (tier ${MADE.ESTATE_TIER} and above)`,
         note: 'The Country Estate and beyond are for men with standing.' },
       { id: 'upkeep', what: 'The pad pays itself', note: 'Your fronts settle their own cash upkeep when you touch them — the same money, one less thing to remember.' },
+      { id: 'speakeasy', what: 'A house of your own', note: 'Only a made man opens a club.' },
+      { id: 'table', what: 'The high-stakes room',
+        note: `With ${ACCESS_STAKE.HIGH_OMR} $OMR staked. Bigger limits at the same odds — a faster way to lose it, not a better one.` },
+      { id: 'ladder', what: `${MADE_LADDER.MADE_RUNGS} rung up the ladder`,
+        note: 'The ladder runs on $OMR you HOLD. Dues climb it — they never raise its ceiling.' },
     ],
-    // D8=C (founder, 2026-08-02) retired the speakeasy gate and the high-stakes access stake. Both
-    // sat in front of something that EARNS or WINS, which is the line the design names as binding,
-    // so what is left is a badge, a display-only compound tier, and one convenience that moves the
-    // same money. That is a thinner product than the design imagined and it is stated rather than
-    // dressed up — BALANCE.md carries the consequence.
-    // said plainly, because it is the thing players will want to know
-    buysNoPower: 'Dues buy standing and convenience. No earning loop is gated, no odds move, no stat changes. A free man runs the whole city — and can hunt you for your $OMR.',
+    // THE CEILING, stated where a player will read it. Dues are a shortcut, so the top of the ladder
+    // is reachable by holding alone — which is what makes this claim true rather than marketing.
+    ceiling: { topRung: MADE_LADDER.RUNGS[MADE_LADDER.RUNGS.length - 1].min,
+      note: `Everything dues unlock has a ceiling, and holding ${MADE_LADDER.RUNGS[MADE_LADDER.RUNGS.length - 1].min} $OMR reaches it without paying a subscription.` },
+    // said plainly, because it is the thing players will want to know — and it is no longer "no advantage"
+    buysPower: 'Dues buy standing, access and a rung on the ladder. There IS a ceiling and it is reachable without paying — and nothing on the ladder helps you fight. A free man runs the whole city, and can still hunt you for your $OMR.',
   };
 }
