@@ -728,7 +728,7 @@ export async function stealCar(ch, victim, client, h) {
     throw new GameError('rookie', "A corner kid's beater isn't worth the heat — pick a made mark.");
   if (victim.car_stolen_at && Date.now() - new Date(victim.car_stolen_at).getTime() < T.VICTIM_SHIELD_MS)
     throw new GameError('shielded', 'Their block is crawling with cops after the last job — come back another night.');
-  const cars = (await client.query('SELECT * FROM cars WHERE character_id=$1 AND NOT listed AND NOT pledged ORDER BY id FOR UPDATE', [victim.id])).rows;
+  const cars = (await client.query('SELECT * FROM cars WHERE character_id=$1 AND NOT listed AND NOT pledged AND NOT minted_onchain ORDER BY id FOR UPDATE', [victim.id])).rows;
   if (!cars.length) throw new GameError('no_car', 'They keep nothing on the street worth taking.');
   const car = cars[Math.floor(Math.random() * cars.length)];
   ch.energy = Number(ch.energy) - T.ENERGY;
@@ -868,13 +868,13 @@ export async function stealBoat(ch, victim, client, h) {
   if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `Boats are stolen where they float — the ${PORT.DISTRICT}.`);
   if (ch.gta_at && Date.now() < new Date(ch.gta_at).getTime() + CONSTANTS.GTA_CD_MS)
     throw new GameError('cooldown', "The heat's still on from the last job — lay off a minute.");
-  const fleet = Number((await client.query('SELECT COUNT(*) n FROM boats WHERE character_id=$1', [ch.id])).rows[0].n);
+  const fleet = Number((await client.query('SELECT COUNT(*) n FROM boats WHERE character_id=$1 AND NOT minted_onchain', [ch.id])).rows[0].n);
   if (fleet >= PORT.FLEET_MAX + (Number(ch.berths) || 0))
     throw new GameError('fleet', 'Your berths are full — theft is opportunism, not a purchase.');
   if (victim.car_stolen_at && Date.now() - new Date(victim.car_stolen_at).getTime() < C.VICTIM_SHIELD_MS)
     throw new GameError('shielded', 'The harbor patrol is crawling over their berths after the last job.');
   const boats = (await client.query(
-    'SELECT * FROM boats WHERE character_id=$1 AND (run_until IS NULL OR run_until < now()) ORDER BY id FOR UPDATE',
+    'SELECT * FROM boats WHERE character_id=$1 AND (run_until IS NULL OR run_until < now()) AND NOT minted_onchain ORDER BY id FOR UPDATE',
     [victim.id])).rows;
   if (!boats.length) throw new GameError('no_boat', 'Nothing of theirs is tied up at the docks.');
   const boat = boats[Math.floor(Math.random() * boats.length)];

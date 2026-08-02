@@ -27,7 +27,7 @@ import { notify } from './game.js';
 import { wipeFighterAtDeath } from './boxing.js';
 import { POPULATION, NPC_FIRST, NPC_LAST, npcBandOf, DISTRICTS, PACING, dayOf,
          LOAN, loanOwed, GOODS, BLACK_MARKET, M3, DUELS, CASINO, CARS, goodPriceOf,
-         BOXING, STABLE, stableKindOf, FIGHTER_MONIKERS, RACER_NAMES } from './rules.js';
+         BOXING, STABLE, stableKindOf, FIGHTER_MONIKERS, RACER_NAMES, rollRarity } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const rnd = (lo, hi) => lo + Math.random() * (hi - lo);
@@ -124,10 +124,17 @@ export async function spawnResident(client, opts = {}) {
     if (models.length) {
       const model = pick(models);
       const carId = uid();
-      await client.query('INSERT INTO cars (id, character_id, model_id, trim_id, dmg) VALUES ($1,$2,$3,$4,$5)',
-        [carId, charId, model.id, 'stock', rndInt(0, 20)]);
+      // v3 step 7: a resident's ride carries a rolled rarity like anyone's — stealing one is EARNING
+      // it in play, which is exactly the acquisition the design's "drop random" rule is about. Rolled
+      // through the same helper and audited the same way (direct SQL: the worker has no `h`).
+      const rrRoll = Math.random();
+      const rarity = rollRarity(rrRoll);
+      await client.query('INSERT INTO cars (id, character_id, model_id, trim_id, dmg, rarity) VALUES ($1,$2,$3,$4,$5,$6)',
+        [carId, charId, model.id, 'stock', rndInt(0, 20), rarity]);
       await client.query('INSERT INTO rng_audit (id, character_id, action, roll, outcome) VALUES ($1,$2,$3,0,$4)',
         [uid(), charId, 'npc:car', 'grant']);
+      await client.query('INSERT INTO rng_audit (id, character_id, action, roll, outcome) VALUES ($1,$2,$3,$4,$5)',
+        [uid(), charId, 'rarity:car', rrRoll, rarity]);
     }
   }
   if (wants('front') && M.FRONTS[band.id]) {
@@ -136,8 +143,9 @@ export async function spawnResident(client, opts = {}) {
       [uid(), charId, kind, tier]);
   }
   if (wants('boat')) {
-    await client.query('INSERT INTO boats (id, character_id, kind) VALUES ($1,$2,$3)',
-      [uid(), charId, 'dinghy']);
+    const rrRoll = Math.random();
+    await client.query('INSERT INTO boats (id, character_id, kind, rarity) VALUES ($1,$2,$3,$4)',
+      [uid(), charId, 'dinghy', rollRarity(rrRoll)]);
   }
   // ═══ STEP THREE — the resident's STABLE, so the PvP boards are LIVE in an empty alpha ═══
   // A fighter/racer is an ownership row with no conservation check. The listing is what makes the

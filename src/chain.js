@@ -135,15 +135,35 @@ function toVoucherMessage(row) {
     to: getAddress(row.to_address),
     amount: row.kind === 'omr' ? parseUnits(String(row.amount), 18) : BigInt(row.amount),
     kind: row.kind === 'omr' ? KIND_OMR : KIND_GEAR,
-    gearId: row.kind === 'gear' ? BigInt(gearNumId(row.gear_id)) : 0n,
+    // v3 step 7: a car/boat voucher is an NFT voucher like gear's — only the tokenId space differs.
+    // `gear_id` stores the compound key `<kind>:<catalogId>:<rarity>` so the row is self-describing
+    // and the id is DERIVED here rather than trusted from the DB (a stored number could drift from
+    // the rarity the row actually has, and would then mint the wrong token).
+    gearId: row.kind === 'gear' ? BigInt(gearNumId(row.gear_id))
+      : (row.kind === 'car' || row.kind === 'boat') ? BigInt(itemTokenId(row.gear_id)) : 0n,
     nonce: BigInt(row.nonce),
     deadline: BigInt(row.deadline),
   };
 }
 // Gear class id → on-chain uint256. The game's gear are string ids (MARKET table); the
 // on-chain tokenId is their 1-based index (matches "one tokenId per gear class").
-import { MARKET, BONDS, bondPayout, TAX, withdrawTaxBps } from './rules.js';
+import { MARKET, BONDS, bondPayout, TAX, withdrawTaxBps, nftTokenId } from './rules.js';
 import { earlySurcharge, creditTollBuckets, splitToll } from './tax.js';
+import { nftKind } from './nft.js';
+// A car/boat voucher stores `<kind>:<catalogId>:<rarity>:<itemId>` in `gear_id` (no schema change).
+// The tokenId is DERIVED from the first three — never stored as a number, which would let a row
+// drift from the rarity it claims and mint the wrong token. The fourth field is what the reclaim
+// needs to find the exact row again, and it must be last: an item id is a UUID, so anything that
+// split on ':' from the right would still work, but reading left-to-right keeps the id opaque.
+export function itemKeyParts(key) {
+  const [kind, catalogId, rarity, itemId] = String(key || '').split(':');
+  if (!kind || !catalogId || !rarity) throw new GameError('bad_item', 'Malformed item key.');
+  return { kind, catalogId, rarity, itemId };
+}
+export function itemTokenId(key) {
+  const { kind, catalogId, rarity } = itemKeyParts(key);
+  return nftTokenId(kind, catalogId, rarity);
+}
 export function gearNumId(gearId) {
   const i = MARKET.findIndex((m) => m.id === gearId);
   if (i < 0) throw new GameError('bad_gear', 'No such gear class.');
@@ -303,6 +323,60 @@ export async function requestGearWithdraw(pool, accountId, gearId, toAddress) {
   finally { client.release(); }
 }
 
+// ── THE RARITY NFTs (v3 step 7): extracting a car or a boat ──────────────────────────────────
+// The gear rail, applied to property. Not reserve-bounded for the same reason gear isn't: supply is
+// capped ON-CHAIN per tokenId, so the wall is GearVault's `cap` rather than a funded tranche.
+//
+// The trade, stated once because it is the mechanic: the item LEAVES PLAY. It stops racing, hauling,
+// melting and being stolen, and in exchange it stops dying with the street. Nothing here reverses
+// that — there is no un-extract route, exactly as there is none for gear, because the token exists
+// in the player's own wallet the moment they claim it and the game cannot take it back.
+export async function requestItemWithdraw(pool, accountId, kind, itemId, toAddress) {
+  const k = nftKind(kind);
+  if (!k) throw new GameError('bad_kind', 'Nothing of that sort to take on-chain.');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const acct = (await client.query('SELECT * FROM account_persistent WHERE account_id=$1 FOR UPDATE', [accountId])).rows[0];
+    if (!acct?.minted) throw new GameError('not_minted', 'Only a made account can take property on-chain — pay the 0.01 ETH mint fee first.');
+    const to = toAddress || acct?.wallet_address;
+    if (!to || !isAddress(to)) throw new GameError('wallet', 'Link a wallet (SIWE) or pass a valid address first.');
+    // Two flat queries rather than a locking JOIN: `FOR UPDATE OF` is not parseable by pg-mem (the
+    // /v1/gangs precedent), and the lock we need is on the ITEM row anyway. Order is
+    // account_persistent (held above) -> the leaf item row, so nothing new enters the lock graph.
+    const row = (await client.query(`SELECT * FROM ${k.table} WHERE id=$1 FOR UPDATE`, [String(itemId || '')])).rows[0];
+    const holder = row && (await client.query(
+      'SELECT 1 FROM characters WHERE id=$1 AND account_id=$2 AND alive', [row.character_id, accountId])).rows[0];
+    // Ownership is checked through the account's LIVING character, so an heir cannot extract the
+    // property of a street that is already dead (those rows were either destroyed by the estate or
+    // re-pointed at the heir, in which case this finds them under the heir's own id).
+    if (!row || !holder) throw new GameError('not_yours', "That isn't yours.");
+    if (row.minted_onchain) throw new GameError('already', "It's already on-chain.");
+    // an escrowed/at-sea item still has an obligation attached — extracting would strand a live bid,
+    // a lender's collateral or a cargo run.
+    const blocked = k.esc(row);
+    if (blocked) throw new GameError('busy', blocked);
+    const tokenKey = `${kind}:${k.catalog(row)}:${String(row.rarity || 'common')}:${row.id}`;
+    itemTokenId(tokenKey); // fail closed BEFORE anything is written if the class is unknown
+    await client.query(`UPDATE ${k.table} SET minted_onchain=true, ${k.clear} WHERE id=$1`, [row.id]);
+
+    const res = (await client.query('SELECT * FROM chain_reserve WHERE id=1 FOR UPDATE')).rows[0];
+    const nonce = Number(res.next_nonce);
+    await client.query('UPDATE chain_reserve SET next_nonce = next_nonce + 1 WHERE id=1');
+    const deadline = Math.floor(Date.now() / 1000) + WITHDRAW_TTL_SEC;
+    const id = uid();
+    const vrow = { id, account_id: accountId, kind, amount: 1, gear_id: tokenKey, nonce, to_address: getAddress(to), deadline };
+    const payload = JSON.stringify(await signVoucher(vrow)); // signs immediately — the contract caps supply
+    await client.query(
+      'INSERT INTO vouchers (id, account_id, kind, amount, gear_id, nonce, to_address, deadline, status, signed_payload) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+      [id, accountId, kind, 1, tokenKey, nonce, getAddress(to), deadline, 'signed', payload]);
+    await client.query('COMMIT');
+    return { id, nonce, status: 'signed', kind, itemId: row.id, name: k.label(row),
+      rarity: String(row.rarity || 'common'), tokenId: itemTokenId(tokenKey), ...JSON.parse(payload) };
+  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  finally { client.release(); }
+}
+
 // Drain the queue FIFO after the Safe funds more reserve (or on a timer). Signs
 // queued OMR vouchers oldest-first while the funded tranche still covers them.
 export async function drainQueue(pool) {
@@ -432,6 +506,12 @@ export async function reclaimExpiredVouchers(pool, reader = undefined) {
           await client.query('UPDATE account_persistent SET omr = omr + $2 WHERE account_id=$1', [v.account_id, Number(v.amount)]);
           await ledger(client, { accountId: v.account_id, currency: 'omr', amount: Number(v.amount), reason: 'withdraw:omr' }); // reverses the burn (net 0)
           omrReclaimed += Number(v.amount);
+        } else if (v.kind === 'car' || v.kind === 'boat') {
+          const { itemId } = itemKeyParts(v.gear_id);
+          // by ID, not by owner: the street that extracted it may have died since, in which case the
+          // row is the heir's now (extracted property follows the bloodline — runEstate).
+          await client.query(`UPDATE ${v.kind === 'car' ? 'cars' : 'boats'} SET minted_onchain=false WHERE id=$1`, [itemId]);
+          gearRestored++;
         } else {
           await client.query('UPDATE account_gear SET minted_onchain=false WHERE account_id=$1 AND gear_id=$2', [v.account_id, v.gear_id]);
           gearRestored++;

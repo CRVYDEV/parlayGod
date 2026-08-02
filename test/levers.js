@@ -241,6 +241,12 @@ const SIGNED = [
   ['MADE.ESTATE_TIER', 4],
   ['MADE.MS', 2592000000],
   ['MADE.OMR', 20],
+  // ECONOMY v3 step 7 — THE RARITY NFTs (design §7/§9.7). The tier weights decide how scarce a
+  // legendary is (and therefore what one is worth on a secondary market); the upgrade ladder is the
+  // only price money pays here, and it is DETERMINISTIC by design — see the RARITY block.
+  ['RARITY.TIERS', [{ id: 'common', name: 'Common', w: 700 }, { id: 'rare', name: 'Rare', w: 220 },
+    { id: 'legendary', name: 'Legendary', w: 65 }, { id: 'epic', name: 'Epic', w: 15 }]],
+  ['RARITY.UPGRADE_OMR', [0, 25, 90, 300]],
   ['M3.BODYGUARD_MIN_PRICE', 10000],
   ['M3.CASH_LOOT_RATE', 0.25],
   ['M3.COACH_FAMILY_BAND_LVL', 12],   // the early band the 'join a family' rung leads inside

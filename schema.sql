@@ -231,6 +231,8 @@ CREATE TABLE IF NOT EXISTS cars (
   race_limit INT,                                 -- STREET RACES: listed to race for a wager up to this (consent-by-listing, the fade/bout pattern); NULL = not on the strip
   pink_slip BOOLEAN NOT NULL DEFAULT false,       -- STREET RACES step 2: offered for PINKS — the winner of a pink-slip race TAKES this car (ownership transfer, §10.4-neutral, cars conserve by row count). Cleared on a race/transfer.
   nos INT NOT NULL DEFAULT 0,                      -- STREET RACES step 2: nitrous charges (a per-car consumable — buy at a cash sink, spend one for a one-race power bump; absolute writes, pg-mem-safe)
+  rarity TEXT NOT NULL DEFAULT 'common',           -- THE RARITY NFTs (v3 step 7): rolled + rng_audit'd when the car is EARNED (boosted / spawned), never bought with ETH. Pure status — no power curve reads it.
+  minted_onchain BOOLEAN NOT NULL DEFAULT false,   -- EXTRACTED: the car is an ERC-1155 in the player's wallet. Out of play (loadOwned filters it out of owned.cars, so every in-game site stops seeing it) and therefore SAFE — carried to the heir instead of dying with the street.
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 -- THE PORT — maritime smuggling. A boat is an ownable vessel (bought like a car): a hold (cargo scale) +
@@ -248,6 +250,8 @@ CREATE TABLE IF NOT EXISTS boats (
   hull INT NOT NULL DEFAULT 0,                    -- step two: naval upgrade — +cargo hold per level
   engine INT NOT NULL DEFAULT 0,                  -- step two: naval upgrade — +knots per level
   rendezvous BOOLEAN NOT NULL DEFAULT false,      -- step two: docked + open to receive a mid-sea handoff (consent-by-listing)
+  rarity TEXT NOT NULL DEFAULT 'common',          -- v3 step 7: rolled at the boatyard (earned in play), pure status
+  minted_onchain BOOLEAN NOT NULL DEFAULT false,  -- v3 step 7: EXTRACTED — safe but inert (no runs, no piracy, no sale; survives the street)
   -- NOTE: step four warehouse (characters.contraband) + berths (characters.berths) are on the characters table below
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

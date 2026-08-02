@@ -77,7 +77,10 @@ const KNOWN_REASONS = {
     // inside the burn term so the pair cancels, and desk_inventory holds the value).
     // ECONOMY v3 step 5 — `made:dues` is THE MADE MAN's subscription burn (it is in DESK.SINK_REASONS,
     // so like every sink since step 2 it recycles to the desk rather than being destroyed).
-    'window:', 'yield:', 'desk:', 'made:'],
+    // ECONOMY v3 step 7 — `rarity:upgrade` is the deterministic one-tier NFT upgrade: a $OMR SINK
+    // in DESK.SINK_REASONS, so it recycles to the shelf. No new bucket and no faucet — the item's
+    // rarity is status, not currency.
+    'window:', 'yield:', 'desk:', 'made:', 'rarity:'],
   cb: ['crime:', 'craft:', 'gun:buy:', 'jump:', 'death:', 'exchange:', 'onboard:', 'cook:'],
   ammo: ['melt', 'melt:tithe', 'craft:ammo', 'ammo:buy', 'jump', 'fire', 'death:', 'exchange:', 'gang:dissolved', 'convoy:', 'world:', 'port:', 'contract:'],
 };

@@ -157,7 +157,12 @@ export async function raceChallenge(ch, opponent, body, client, h) {
   if (!my || my.character_id !== ch.id) throw new GameError('no_car', 'Pick one of your own cars.');
   if (!their || their.character_id !== opponent.id) throw new GameError('no_opponent_car', "That car isn't in their garage.");
   if (my.listed || my.pledged) throw new GameError('unavailable', "Your car is on the block or pledged.");
+  // v3 step 7: an EXTRACTED car is out of play — it is an NFT in a wallet, not iron on the strip.
+  // (Both sides guarded explicitly: these two rows are read by id, so they never pass through the
+  // loadOwned filter that makes extraction inert everywhere else.)
+  if (my.minted_onchain) throw new GameError('extracted', "That one's on-chain — it doesn't race.");
   if (their.listed || their.pledged) throw new GameError('their_unavailable', 'Their car is on the block or pledged.');
+  if (their.minted_onchain) throw new GameError('their_extracted', "Their car is on-chain — it doesn't race.");
   const limit = their.race_limit != null ? Math.floor(Number(their.race_limit)) : 0;
   if (!(limit > 0)) throw new GameError('not_listed', "Their car isn't taking races.");
   if (amt > limit) throw new GameError('limit', `They race that car up to $${limit}.`);
@@ -223,7 +228,11 @@ export async function pinkSlipRace(ch, opponent, body, client, h) {
   if (!my || my.character_id !== ch.id) throw new GameError('no_car', 'Pink-slip one of your own cars.');
   if (!their || their.character_id !== opponent.id) throw new GameError('no_opponent_car', "That car isn't in their garage.");
   if (my.listed || my.pledged) throw new GameError('unavailable', "Your car is on the block or pledged — can't put it up for pinks.");
+  // v3 step 7 (same rule as the wager race, and it matters more here): an extracted car cannot be
+  // WON either, so the title can never leave the wallet it was minted into by losing a street race.
+  if (my.minted_onchain) throw new GameError('extracted', "That one's on-chain — the title isn't yours to bet.");
   if (their.listed || their.pledged) throw new GameError('their_unavailable', 'Their car is on the block or pledged.');
+  if (their.minted_onchain) throw new GameError('their_extracted', "Their car is on-chain — the title isn't on the table.");
   if (!their.pink_slip) throw new GameError('not_offered', "That car isn't up for pinks.");
   let mine, theirs;
   const nos = await spendNos(client, my, body?.nos); // the challenger may burn one nitrous charge on their own car
@@ -273,7 +282,7 @@ export async function raceBoard(ch, client, h) {
   const strip = (await client.query(
     `SELECT c.id, c.model_id, c.trim_id, c.tune, c.dmg, c.race_limit, c.pink_slip, c.character_id, o.name owner, o.speed
        FROM cars c JOIN characters o ON o.id = c.character_id AND o.alive
-      WHERE (c.race_limit IS NOT NULL OR c.pink_slip) AND c.character_id <> $1 AND NOT c.listed AND NOT c.pledged
+      WHERE (c.race_limit IS NOT NULL OR c.pink_slip) AND c.character_id <> $1 AND NOT c.listed AND NOT c.pledged AND NOT c.minted_onchain
       ORDER BY c.race_limit DESC NULLS LAST LIMIT 30`, [ch.id])).rows.map((r) => {
     const p = carPower(r.model_id, r.trim_id, r.tune, r.speed, r.dmg);
     return { ownerId: r.character_id, owner: r.owner, carId: r.id, model: r.model_id,

@@ -116,7 +116,15 @@ const mkOwner = async (name) => {
   await seed(c.id, `respect=${lvlRespect(BUSINESSES[0].lvl + 2)}, cash=${tier1.cost * 3}`);
   assert.equal((await call('POST', `/v1/business/${kind}/buy`, { token: c.token })).code, 200, `${name} bought a front`);
   // run the clocks back so there is real income AND a real pad owed
-  await pool.query(`UPDATE businesses SET last_collect_at = now() - interval '6 hours', upkeep_at = now() - interval '6 hours' WHERE character_id='${c.id}'`);
+  // The income clock is backdated PAST `BUSINESS_CAP_MS` (24h) on purpose: `collectBusiness` takes
+  // `min(elapsed, CAP)`, so both owners bank exactly the capped 24h and the comparison below is
+  // deterministic BY CONSTRUCTION. Backdating both to 6h looked equivalent and was not — each front's
+  // elapsed runs to the moment of ITS OWN collect, so the two windows differ by the wall-clock gap
+  // between the two owners being created and the two calls landing, and under load (the full suite,
+  // not a lone file) that gap crosses a whole-dollar boundary and the incomes differ by $1. The
+  // assertion is untouched; what changed is that its precondition is now guaranteed rather than
+  // usually true. The PAD clock stays at 6h — it is a separate column, and `owed6h` is what it prices.
+  await pool.query(`UPDATE businesses SET last_collect_at = now() - interval '48 hours', upkeep_at = now() - interval '6 hours' WHERE character_id='${c.id}'`);
   return c;
 };
 const owed6h = Math.floor(tier1.incomePerHr * (upkeepBps(1) / 10000) * 6);

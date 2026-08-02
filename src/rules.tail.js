@@ -2826,7 +2826,11 @@ export const DESK = {
   SINK_REASONS: ['vest:%', 'cleanpapers', 'lab:%', 'gear:mint:%', 'path:%', 'gang:dissolved',
     'withdraw:omr', 'vanity:%', 'intel:%', 'respec%', 'plex:%', 'law:jury', 'law:envelope',
     'foundation:%', 'rwa:%', 'estate:%', 'auction:win', 'auction:take', 'auction:consign:fee',
-    'megaproject:omr', 'bond:%', 'business:spec%', 'death:duty', 'window:burn', 'made:%'],
+    'megaproject:omr', 'bond:%', 'business:spec%', 'death:duty', 'window:burn', 'made:%',
+    // ECONOMY v3 step 7 — the DETERMINISTIC rarity upgrade. A sink like any other, so it recycles
+    // to the shelf rather than burning; that is the design's "bridge between the two markets",
+    // since ETH-priced NFT demand pulls on OMR without the game ever selling a random outcome.
+    'rarity:%'],
   // THE ONE EXCLUSION, and it is the whole point of the step. `withdraw:omr` is not the house taking
   // a cut — it is the token LEAVING the game to exist on-chain in the player's own wallet, backed by
   // the reserve. Recycle it and the same unit exists twice: once as a real ERC-20 the player holds,
@@ -4141,4 +4145,69 @@ export const FAVOR = {
   TTL_MS: 24 * 3600 * 1000,
   TAKE_BPS: 200,           // 2% off the pay — half to the street tax, half burns (the market:take shape)
   NOTE_MAX: 90,
+};
+
+// ═══ THE RARITY NFTs (economy v3 step 7) ═══
+// Design §7 + §9.7. Cars and boats carry a rarity, and an owned one can be EXTRACTED on-chain as a
+// tradeable ERC-1155 through the EXISTING GearVault rail. Two rules from the design are load-bearing
+// and both are enforced here rather than remembered:
+//
+//   1. SELL DETERMINISTIC, DROP RANDOM. Rarity is rolled server-side and rng_audit'd when an item is
+//      EARNED IN PLAY — a boosted car, a bought boat, a resident's ride you steal. **No ETH path
+//      anywhere in this game grants or re-rolls a rarity**, because selling random traits for real
+//      money is a loot box and is genuinely contested in the EU/UK. The `rarity:upgrade` sink below
+//      is the reason that line survives contact with the OMR bridge: it is a KNOWN outcome for a
+//      KNOWN price (pay, get exactly the next tier), never a roll. Do not make it random "for
+//      excitement" — that one change converts a cosmetic into a gambling product.
+//   2. IN-GAME ITEMS ARE LOOTABLE; EXTRACTED NFTs ARE SAFE BUT INERT. Extraction takes the item OUT
+//      OF PLAY: it stops racing, melting, fencing, hauling and being stolen, and in exchange it stops
+//      dying with the street. That is the existing gear precedent applied to property, and it is what
+//      preserves EVE's destruction engine while still giving a real NFT market — the choice is the
+//      product, so neither half may be softened (a safe item that still earns is a strictly-dominant
+//      option and the tradeoff disappears).
+//
+// RARITY IS PURE STATUS. It touches no power curve — not `carPower`, not `carVal`, not a boat's hold
+// or speed — because the races/port curves are sim-signed and a rarity multiplier on them would be an
+// unsigned balance change wearing a cosmetic's clothes. What it buys is scarcity, which is the whole
+// basis of a collectible market.
+export const RARITY = {
+  // Weights are a draw, not a ladder — `w` is relative, so the four need not sum to anything.
+  // The design names four tiers in this order (epic above legendary), and that ordering IS the
+  // upgrade path, so the array order is authoritative.
+  TIERS: [
+    { id: 'common',    name: 'Common',    w: 700 },
+    { id: 'rare',      name: 'Rare',      w: 220 },
+    { id: 'legendary', name: 'Legendary', w: 65 },
+    { id: 'epic',      name: 'Epic',      w: 15 },
+  ],
+  // $OMR to buy the NEXT tier, indexed by the tier you are buying INTO (so [0] is unused — nothing
+  // upgrades into common). Deterministic: this price, that tier, no roll. A §10.4 SINK that recycles
+  // to the desk like every other, which is the design's "bridge between the two markets" — ETH-priced
+  // NFT demand pulls on OMR without the game ever selling a random outcome for money.
+  UPGRADE_OMR: [0, 25, 90, 300],
+  // On-chain tokenId spaces. GearVault's id is just a uint256 with a per-id lifetime cap, so cars and
+  // boats need no contract change at all — only disjoint ranges and a Safe-set cap per id at deploy.
+  // tokenId = BASE + catalogIndex * STRIDE + rarityIndex. Gear keeps 1..N (its 1-based catalog index),
+  // so the three spaces cannot collide. STRIDE 10 leaves headroom for a fifth tier without a re-map.
+  TOKEN: { CAR_BASE: 100000, BOAT_BASE: 200000, STRIDE: 10 },
+};
+export const rarityIdx = (id) => Math.max(0, RARITY.TIERS.findIndex((t) => t.id === id));
+export const rarityOf = (id) => RARITY.TIERS[rarityIdx(id)];
+// Roll a rarity from a [0,1) roll. Passed the roll (never rolling itself) so every caller can
+// rng_audit the exact number — server-authoritative and replayable, the §7.11/den discipline.
+export const rollRarity = (roll) => {
+  const total = RARITY.TIERS.reduce((a, t) => a + t.w, 0);
+  let x = Math.max(0, Math.min(0.999999, Number(roll))) * total;
+  for (const t of RARITY.TIERS) { x -= t.w; if (x < 0) return t.id; }
+  return RARITY.TIERS[0].id;
+};
+// The on-chain tokenId for an extractable item. Throws on an unknown catalog id rather than
+// returning a plausible number — a wrong id here mints the wrong NFT, and the fail-closed rule that
+// governs every other chain surface applies with more force to something a player then sells.
+export const nftTokenId = (kind, catalogId, rarity) => {
+  const { CAR_BASE, BOAT_BASE, STRIDE } = RARITY.TOKEN;
+  const idx = kind === 'car' ? CARS.findIndex((c) => c.id === catalogId)
+    : kind === 'boat' ? PORT.BOATS.findIndex((b) => b.id === catalogId) : -1;
+  if (idx < 0) throw new Error(`nftTokenId: no such ${kind} class ${catalogId}`);
+  return (kind === 'car' ? CAR_BASE : BOAT_BASE) + idx * STRIDE + rarityIdx(rarity);
 };

@@ -161,7 +161,16 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // so the family's rackets don't keep his (snapshot) fortitude/scrutiny bonus after he's gone (RED-TEAM
   // fix: the passive bonus is a snapshot, so a dead specialist would otherwise buff forever).
   await client.query('UPDATE territory_rackets SET specialist=NULL, spec_power=0 WHERE specialist=$1', [victim.id]);
-  for (const table of ['cars', 'boats', 'rigs', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'track_bets', 'racers', 'blackjack_hands', 'crew_heist_members', 'pen_break_members', 'world_raid_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands', 'npc_gain', 'pen_contraband', 'convoy_ambushes', 'port_intercepts', 'route_notoriety', 'daily_progress', 'missions_done', 'wage_snapshots', 'campaign_progress', 'soldiers', 'digs', 'clue_scrolls', 'masteries', 'character_traits', 'character_disciplines', 'npc_drills', 'hustles', 'pen_talks', 'corner_jobs', 'corner_chains', 'contact_calls'])
+  // THE RARITY NFTs (v3 step 7) — cars and boats are pulled OUT of the blanket wipe: an EXTRACTED
+  // one is an ERC-1155 the player already holds in their own wallet, so destroying the row would
+  // leave the token pointing at nothing and break the half of the bargain they paid for ("safe but
+  // inert"). Everything still in play dies exactly as before; the survivors are re-pointed at the
+  // heir after the INSERT below. The invariant needs no change either way — the rows persist, so
+  // `car conservation` still counts them, and `lost.cars` reads the loadOwned-FILTERED fleet, which
+  // is the same set this DELETE takes.
+  for (const t of ['cars', 'boats'])
+    await client.query(`DELETE FROM ${t} WHERE character_id=$1 AND NOT minted_onchain`, [victim.id]);
+  for (const table of ['rigs', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'track_bets', 'racers', 'blackjack_hands', 'crew_heist_members', 'pen_break_members', 'world_raid_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands', 'npc_gain', 'pen_contraband', 'convoy_ambushes', 'port_intercepts', 'route_notoriety', 'daily_progress', 'missions_done', 'wage_snapshots', 'campaign_progress', 'soldiers', 'digs', 'clue_scrolls', 'masteries', 'character_traits', 'character_disciplines', 'npc_drills', 'hustles', 'pen_talks', 'corner_jobs', 'corner_chains', 'contact_calls'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
   // npc_hits keys on (payer, target) not character_id — wipe the dead street's per-pair NPC-hit
   // cooldown rows both ways (AUDIT-full-system-v2 C-LOW-2; harmless row-hygiene, the heir's fresh id
@@ -358,6 +367,11 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   for (const m of echoedMastery)
     await client.query('INSERT INTO masteries (character_id, track_id, xp) VALUES ($1,$2,$3)', [heirId, m.t, m.xp]);
   report.kept.masteries = echoedMastery.length;
+  // …and the extracted property follows the name. Not a mercy — it is what extraction BOUGHT, and
+  // the reason a player would give up a car that races for one that only sits in a wallet.
+  const keptCars = (await client.query('UPDATE cars SET character_id=$2 WHERE character_id=$1 AND minted_onchain', [victim.id, heirId])).rowCount;
+  const keptBoats = (await client.query('UPDATE boats SET character_id=$2 WHERE character_id=$1 AND minted_onchain', [victim.id, heirId])).rowCount;
+  report.kept.nft = Number(keptCars || 0) + Number(keptBoats || 0);
   await h.notify(client, heirId, 'estate', report);
   // VENDETTA — a player fire-kill swears the bloodline against the killer's (NPC/mod deaths
   // don't: no street to swear against). One active vendetta per account pair; a repeat kill

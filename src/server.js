@@ -81,6 +81,7 @@ import * as Mega from './megaproject.js';
 import * as Duels from './duels.js';
 import * as Clues from './clues.js';
 import * as Estate from './estate.js';
+import { nftBoard, upgradeRarity } from './nft.js';
 import * as Auction from './auction.js';
 import * as Wire from './wire.js';
 import * as Store from './store.js';
@@ -98,7 +99,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, CARS, KITCHENS, TRADE_RANKS, M3, M4, PATHS,
          RANKS,
          cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, ESTATE, AUCTION, MEGAPROJECT, CLUES, DUELS, DUEL_TITLE_RANKS, SEASON_MODS, seasonModOf, seasonIdxOf, seasonDaysLeft,
-         foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, PATRON, BONDS, SPEAKEASY, BOXING,
+         foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, PATRON, BONDS, SPEAKEASY, BOXING, RARITY,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf, syndicateOf, TERRITORY_TYPES, TERRITORY_RACKETS,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE, NOTORIETY,
          TAX, withdrawTaxBps,
@@ -976,6 +977,12 @@ export async function buildServer() {
       informantOmr: WIRE.INFORMANT_OMR, informantDays: Math.round(WIRE.INFORMANT_MS / 86400000), informantMax: WIRE.INFORMANT_MAX,
       spyRanks: WIRE.SPY_RANKS.map((r) => ({ min: r.min, name: r.name, tapBonus: r.tapBonus || 0, discountBps: r.discountBps || 0 })), // step four tradecraft
       subTiers: WIRE.SUB_TIERS.map((t) => ({ tier: t.tier, name: t.name, omr: t.omr, days: Math.round(t.ms / 86400000), watchSlots: t.watchSlots, warRoom: t.warRoom })) }, // step five ladder + standing watch
+    // THE RARITY NFTs (v3 step 7) — public so a client can render the ladder and the tokenId space
+    // without re-deriving either. `sellDeterministic` is stated in the API on purpose: it is the
+    // line the loot-box question turns on, and a claim nobody can check is not worth making.
+    rarity: { tiers: RARITY.TIERS.map((t) => ({ id: t.id, name: t.name, weight: t.w })),
+      upgradeOmr: RARITY.UPGRADE_OMR, kinds: ['car', 'boat'], token: RARITY.TOKEN,
+      sellDeterministic: true, rolledOn: 'earned-in-play' },
     store: STORE.PACKAGES.map((p) => ({ sku: p.sku, name: p.name, priceEth: p.priceEth, grant: p.grant, blurb: p.blurb })),
     pass: { tiers: PASS.TRACK.map((t) => ({ tier: t.tier, reward: t.reward })), prestigeRanks: PASS.PRESTIGE_RANKS },
     patron: { tiers: PATRON.TIERS.map((t) => ({ name: t.name, minEth: t.minEth })), prestigeRanks: PASS.PRESTIGE_RANKS },
@@ -1836,6 +1843,12 @@ export async function buildServer() {
     Chain.cancelQueuedWithdraw(pool, req.user.sub, req.params.id));
   app.post('/v1/gear/:id/withdraw', { preHandler: auth }, async (req) =>
     Chain.requestGearWithdraw(pool, req.user.sub, req.params.id, req.body?.address));
+  // THE RARITY NFTs (v3 step 7) — the collection, the deterministic upgrade, and the extraction.
+  app.get('/v1/nft', { preHandler: auth }, async (req) => G.readCharacter(pool, req.user.sub, (ch, client, h) => nftBoard(ch, client, h)));
+  app.post('/v1/nft/:kind/:id/upgrade', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => upgradeRarity(ch, req.params.kind, req.params.id, client, h), req));
+  app.post('/v1/nft/:kind/:id/withdraw', { preHandler: auth }, async (req) =>
+    Chain.requestItemWithdraw(pool, req.user.sub, req.params.kind, req.params.id, req.body?.address));
   app.get('/v1/withdraw/status', { preHandler: auth }, async (req) => {
     const mine = (await pool.query(
       'SELECT id, kind, amount, gear_id, nonce, status, claimed_onchain, signed_payload FROM vouchers WHERE account_id=$1 ORDER BY created_at DESC LIMIT 50',
