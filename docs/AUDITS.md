@@ -77,6 +77,7 @@ record of what was decided, not this file.
 | `AUDIT-tokenomics-v2-steps-2-3.md` | 2026-07-28 | 150 | RED-TEAM — Tokenomics v2 steps 2+3 (the retirements, the rewritten buyback, the re-sourced float) |
 | `AUDIT-full-sweep.md` | 2026-07-27 | 205 | AUDIT — the full line-by-line sweep (7 mechanical lenses over the whole tree) |
 | `AUDIT-world-uprising.md` | 2026-07-22 | 79 | AUDIT — World step six (THE UPRISING) |
+| `AUDIT-desk.md` | 2026-08-03 | 108 | AUDIT — THE DESK (economy v3 steps 2–4: the recycle, the daily Dutch auction, the POL-fee buyback) |
 | `AUDIT-oracle.md` | 2026-07-29 | 240 | AUDIT — the accretion oracle (OmrTwapOracle + OmertaBond wall 4 + the backend clamp) |
 | `AUDIT-trades.md` | 2026-07-30 | 85 | AUDIT — THE TRADES pillar (steps 1-4), combined red-team |
 | `AUDIT-street-life.md` | 2026-07-30 | 137 | AUDIT — STREET WAR step two + STREET LIFE (task #319) |

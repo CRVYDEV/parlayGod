@@ -16,6 +16,7 @@
 process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import crypto from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { buildServer } from '../src/server.js';
 import { BAND, DESK, DESK_RECYCLE_REASON, recyclesToDesk, auctionPriceAt, freshWindowMs } from '../src/rules.js';
 import { ledger } from '../src/game.js';
@@ -187,7 +188,20 @@ assert.equal(board.auction, null, 'and no auction is advertised');
 assert.equal(board.closed, 'stale_price', 'the board says WHY it is closed, not just that it is');
 assert.equal(board.band.anchorEthPerOmr, null,
   'a stale band must publish no anchor — a stale number rendered as live is worse than none');
-console.log('✓ fail-closed: no print and a stale print both refuse, and the board names the reason');
+// …AND SOMEBODY IS TOLD (AUDIT-desk F1). Fail-closed is correct, and it is also the desk's whole
+// revenue mechanism stopping with every §10.4 check green — nothing is wrong with conservation when
+// nothing trades. It reached an hourly log line and nowhere else; the worker now routes it through
+// `alertDrift`, latched, like the WAL archiver and the bond-oracle keeper. A source tripwire rather
+// than a driven tick (the worker's loop is not unit-drivable), labelled as one — and it catches the
+// realistic regression, which is renaming a reason here and orphaning the watchdog silently.
+const workerSrc = await readFile(new URL('../src/worker.js', import.meta.url), 'utf8');
+for (const reason of ['no_price', 'stale_price']) {
+  assert(workerSrc.includes(`'${reason}'`),
+    `the worker must alarm on ${reason} — a dark desk that only logs is the failure the archiver watchdog exists for`);
+}
+assert(/deskDarkAlerted/.test(workerSrc) && /alertDrift\(pool, \[\{\s*name: `desk anchor/.test(workerSrc),
+  'and it must be LATCHED through alertDrift, not just console.error on every hourly tick');
+console.log('✓ fail-closed: no print and a stale print both refuse, the board names the reason, and the worker raises it');
 
 // ── (9) THE LOT — yesterday's returns, and three bounds that are three different claims ────────
 // Stock the shelf through the SAME hook a player's spend takes (a big sink), so the lot is a real

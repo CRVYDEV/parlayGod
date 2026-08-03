@@ -226,6 +226,7 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
   // episode alerts again (two separate outages in one day is exactly the pattern that matters).
   let archiverAlerted = false;
   let oracleKeeperAlerted = false; // the bond-oracle keeper watchdog, same latch discipline
+  let deskDarkAlerted = false;     // the desk's anchor went stale — same latch, same reason
   const tick = async () => {
     // A tick fans out to ~60 independent jobs. `safe()` isolates them so one poison row cannot starve
     // the §10.4 drift monitor — but when the DATABASE is what is unreachable, every one of those 60
@@ -254,6 +255,26 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     const da = await safe('desk auction', () => openAuction(pool));
     if (da?.opened) console.log(`🔨 the desk opens: ${da.qty} $OMR from ${da.open} down to ${da.reserve} ETH each`);
     else if (da && da.reason !== 'already') console.log(`🔨 no auction today (${da.reason})`);
+    // THE DESK GOING DARK IS A REVENUE OUTAGE, and it must reach a human (AUDIT-desk F1 — the
+    // archiver/oracle-keeper watchdogs' third sibling). The anchor is fail-closed on purpose: no
+    // price print, or one past ORACLE_MAX_AGE_MS, and no auction opens, in EITHER direction. That is
+    // correct, and it is also the desk's entire revenue mechanism stopping — "revenue ≈ sink volume
+    // × price" goes to zero — while every §10.4 check stays green, because nothing is wrong with
+    // conservation when nothing trades. It reached an hourly log line and nowhere else, and a line
+    // repeated every hour forever fails the same way silence does: nobody reads it. `no_lot` and
+    // `already` are NORMAL (a quiet sink day, a second tick inside the day) and never alarm.
+    const deskDark = da && !da.opened && (da.reason === 'stale_price' || da.reason === 'no_price');
+    if (deskDark && !deskDarkAlerted) {
+      deskDarkAlerted = true;
+      console.error(`🚨 THE DESK IS DARK (${da.reason}) — no usable $OMR anchor, so it can neither sell nor buy back. Check that the Vig buyback is still printing a price.`);
+      await safe('desk dark alert', () => alertDrift(pool, [{
+        name: `desk anchor ${da.reason}`, reason: da.reason,
+        note: 'The daily auction cannot open and the band buyback refuses: no fresh price print to anchor on. Revenue is stopped until it returns.',
+      }], 'desk'));
+    } else if (da?.opened && deskDarkAlerted) {
+      deskDarkAlerted = false;
+      console.log('✅ the desk is trading again — the anchor is fresh');
+    }
     // TOKENOMICS v2 — THE FAMILY YIELD. A no-op on an empty pot, so this is safe to run every tick
     // and is live the moment FAMILY_YIELD.FUND_BPS is turned up (design §3).
     const fy = await safe('family yield', () => payFamilyYield(pool));
