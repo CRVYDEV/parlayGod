@@ -112,15 +112,19 @@ export async function removeMember(client, gangId, characterId) {
   const hasBoss = left.some((m) => m.role === 'boss');
   if (!hasBoss)
     await client.query('UPDATE gang_members SET role=$3 WHERE gang_id=$1 AND character_id=$2', [gangId, left[0].character_id, 'boss']);
-  // NPC FAMILIES: the flag is about who RUNS it. Succession can hand the chair to a PLAYER who
-  // joined as a soldier, and a player-run family carrying the flag would be barred from the
-  // Commission and the family yield — a penalty applied to a player by a flag that was never about
-  // them. So it clears here, the one place succession happens. (A player joining as a soldier
-  // changes nothing: the house still runs the family.)
+  // NPC FAMILIES: the flag is about who RUNS it, so it is re-DERIVED from the new chair rather than
+  // cleared one way. Succession can hand the chair to a PLAYER who joined as a soldier, and a
+  // player-run family carrying the flag would be barred from the Commission and the family yield —
+  // a penalty applied to a player by a flag that was never about them. But the reverse matters just
+  // as much: clearing only would leave a family that briefly had a player boss permanently
+  // unflagged, and then a RESIDENT inherits it back and it is a resident-run family that CAN be
+  // declared war on — the fixed-price standing farm the war block exists to stop. Symmetric closes
+  // that. (A player joining as a soldier changes nothing: the house still runs the family. And a
+  // real player family can never hand the chair to a resident, since residents only ever join
+  // flagged ones, so this is a no-op there.)
   if (!hasBoss) await client.query(
-    `UPDATE gangs SET npc_flag=false WHERE id=$1 AND npc_flag
-       AND EXISTS (SELECT 1 FROM characters c WHERE c.id=$2 AND NOT c.is_npc)`,
-    [gangId, left[0].character_id]);
+    `UPDATE gangs SET npc_flag = COALESCE((SELECT c.is_npc FROM characters c WHERE c.id=$2), npc_flag)
+       WHERE id=$1`, [gangId, left[0].character_id]);
   return { dissolved: false, newBoss: hasBoss ? null : left[0].character_id };
 }
 

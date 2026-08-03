@@ -12,12 +12,14 @@
 process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import { buildServer } from '../src/server.js';
 import { boxingBoard } from '../src/boxing.js';
-import { spawnResident, retireResident, runPopulation, population, runResidentBehaviour, residentAct, seededToday } from '../src/population.js';
+import { spawnResident, retireResident, runPopulation, population, runResidentBehaviour, residentAct, seededToday, runFamilies } from '../src/population.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { cityStanding } from '../src/standing.js';
 import { funnelStats } from '../src/growth.js';
+import { joinGang, removeMember } from '../src/social/gangs.js';
 import { opsOverview } from '../src/ops.js';
 import { POPULATION, levelOf, npcBandOf, M3, DUELS, CASINO, BOXING, STABLE } from '../src/rules.js';
 
@@ -833,6 +835,73 @@ assert.equal(npcBandOf(0.999).id, 'boss', 'the high roll is the boss band');
   } catch (e) { await cSucc.query('ROLLBACK'); throw e; } finally { cSucc.release(); }
   assert.equal((await pool.query('SELECT npc_flag FROM gangs WHERE id=$1', [target])).rows[0].npc_flag, false,
     'but when the chair passes to the PLAYER, the family is theirs — the flag clears');
+
+  // …and BACK, which is the half that matters for the war block. Clearing one-way would leave a
+  // family that briefly had a player boss permanently unflagged; a resident then inherits it and it
+  // is a resident-run family anyone can declare war on, over and over, for the season_wars standing
+  // the block exists to stop paying out.
+  const cBack = await pool.connect();
+  let backBoss = null;
+  try {
+    await cBack.query('BEGIN');
+    const rejoin = await spawnResident(cBack, { band: POPULATION.BANDS.find((b) => b.id === 'made'), marks: {} });
+    backBoss = rejoin.id;
+    await joinGang({ id: rejoin.id }, target, cBack, { owned: {} });
+    await removeMember(cBack, target, heir.id);          // the player walks; the chair goes back
+    await cBack.query('COMMIT');
+  } catch (e) { await cBack.query('ROLLBACK'); throw e; } finally { cBack.release(); }
+  assert.equal((await pool.query(
+    'SELECT role FROM gang_members WHERE gang_id=$1 AND character_id=$2', [target, backBoss])).rows[0].role, 'boss',
+    'the resident really did inherit the chair (or the next assertion proves nothing)');
+  assert.equal((await pool.query('SELECT npc_flag FROM gangs WHERE id=$1', [target])).rows[0].npc_flag, true,
+    'and when a RESIDENT takes it back the flag returns — no unflagged, unretaliating war target');
+}
+
+// A CITY THAT CANNOT AFFORD A NEW FAMILY MUST STILL FILL THE ONES IT HAS. The tick makes one
+// structural change, and founding is checked first — so returning unconditionally after a FAILED
+// founding starves the recruit pass forever whenever nobody can cover the fee, and thin families
+// never fill. That is the JAILBIRDS-vs-turnover starvation (T1) in a second costume: two passes,
+// one budget, the first taking priority whether or not it can use it.
+{
+  const F = POPULATION.FAMILIES;
+  // fixture: below TARGET (so the founding branch runs), nobody can pay the fee (so it FAILS),
+  // and one live family sits under MIN_MEMBERS
+  const flagged = (await pool.query('SELECT id FROM gangs WHERE npc_flag ORDER BY id')).rows;
+  assert(flagged.length, 'the city has NPC families to work with');
+  for (const g of flagged.slice(F.TARGET - 1)) await pool.query('UPDATE gangs SET npc_flag=false WHERE id=$1', [g.id]);
+  await pool.query('UPDATE characters SET cash=100 WHERE is_npc AND alive');
+  const thin = (await pool.query('SELECT id FROM gangs WHERE npc_flag ORDER BY id LIMIT 1')).rows[0].id;
+  const roster = (await pool.query('SELECT character_id FROM gang_members WHERE gang_id=$1', [thin])).rows;
+  for (const m of roster.slice(1)) await pool.query('DELETE FROM gang_members WHERE gang_id=$1 AND character_id=$2', [thin, m.character_id]);
+  const before = Number((await pool.query('SELECT COUNT(*) n FROM gang_members WHERE gang_id=$1', [thin])).rows[0].n);
+  assert(before < F.MIN_MEMBERS, `the fixture really is thin (${before} < ${F.MIN_MEMBERS})`);
+
+  const r = await runFamilies(pool);
+  assert.equal(r.familiesFounded, 0, 'nobody could cover the founding fee — the precondition holds');
+  assert.equal(r.familiesJoined, 1, 'so the tick spends itself RECRUITING instead of doing nothing');
+  assert.equal(Number((await pool.query('SELECT COUNT(*) n FROM gang_members WHERE gang_id=$1', [thin])).rows[0].n), before + 1,
+    'and the thin family really gained a made man');
+}
+
+// THE FOUNDER IS READ UNDER A ROW LOCK. `createGang` deducts the fee IN MEMORY and leaves the caller
+// to write the resulting cash back ABSOLUTELY, so a candidate picked from an unlocked shortlist and
+// written back later CLOBBERS anything that debited them in between — and the highest-frequency
+// writer against exactly these residents is the ordinary crime TAKE. Reproduced at the seam before
+// the fix: the take's $5,000 came back and the per-character cash check moved by exactly that,
+// because `gang:found` books −25,000 while the row only falls 25,000 from a stale figure.
+//
+// This is a SOURCE-LEVEL TRIPWIRE and is labelled as one: pg-mem is a single caller, so no test here
+// can make two writers race. What it pins is the discipline every other resident writer in the file
+// already follows (retireResident, residentAct) — re-read FOR UPDATE, re-verify, then write.
+{
+  const src = fs.readFileSync(new URL('../src/population.js', import.meta.url), 'utf8');
+  const fn = src.slice(src.indexOf('async function foundNpcFamily'), src.indexOf('async function recruitIntoFamily'));
+  assert(/FROM characters WHERE id=\$1 AND alive AND is_npc FOR UPDATE/.test(fn),
+    'foundNpcFamily re-reads the chosen founder FOR UPDATE before the absolute cash writeback');
+  assert(fn.indexOf('FOR UPDATE') < fn.indexOf('createGang('),
+    'and it takes that lock BEFORE createGang deducts the fee, not after');
+  assert(/spendable\(ch\.cash\) < M3\.GANG_FOUND_COST/.test(fn),
+    'and re-verifies affordability under the lock — they may have been drained since the shortlist');
 }
 
 console.log('✅ THE POPULATION passed — residents spawn as real flagged characters on the streets roster '

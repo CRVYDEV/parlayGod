@@ -8685,3 +8685,34 @@ solo per member, so making it solo-reachable on demand is an emission change), N
 OCCUPATION model, and residents paying tribute — which would give them standing and therefore re-open
 the two exclusions above. Suite 64/64 · sim drift-0 · mobile 66/66 · pgquery 2327 statements ·
 pgcheck 43/43 on real Postgres.
+
+**RED-TEAM over NPC families (`AUDIT-npc-families.md`, same day).** Four lenses — §10.4/lost updates,
+locks + lifecycle, the exclusions as exploit surface, the worker's own scheduling. **No CRITICAL; one
+HIGH reproduced at the seam, two LOW-MED; all three fixed in-commit, four mutations each caught at its
+own named assertion.** **F1 (HIGH) — the founder's cash writeback drifted §10.4.** `createGang` deducts
+the fee IN MEMORY and leaves the caller to persist, which is safe on the player path only because
+`withCharacter` already holds the row lock. `foundNpcFamily` had none: it picked a founder from a plain
+`SELECT … ORDER BY cash DESC LIMIT 32` and later wrote an ABSOLUTE cash value computed from that read —
+so anything debiting the founder in between was CLOBBERED, and **the highest-frequency writer against
+exactly these residents is the crime TAKE**, which targets NPC residents in the district by design.
+The damage is not a lost dollar but a drift: `gang:found` books −25,000 while the row falls 25,000 from
+a STALE figure, leaving the take's own ledger row with no matching movement. Reproduced by driving the
+exact interleave — the $5,000 take came back and `character cash` moved by exactly that (63584 →
+68584). Fixed by re-reading the chosen founder `FOR UPDATE` and using the LOCKED row, re-verifying
+affordability and still-ungangged under it — the discipline `retireResident` and `residentAct` already
+follow. Regression is a source-level tripwire, LABELLED as one, because pg-mem is a single caller and
+no test here can make two writers race. **F2 (LOW-MED) — the flag cleared one way**, so a family that
+briefly had a player boss stayed unflagged forever; a resident then inherits it back and it is a
+resident-run family anyone can declare war on repeatedly for `season_wars` standing — the exact
+fixed-price farm the war block exists to stop. Now RE-DERIVED from the new chair
+(`npc_flag = COALESCE((SELECT c.is_npc …), npc_flag)`), symmetric, and a no-op on real player families
+since residents only ever join flagged ones. **F3 (LOW-MED) — a city that could not afford a new family
+stopped filling the ones it had**: the tick checks founding first and returned UNCONDITIONALLY, so with
+nobody able to cover the fee the recruit pass never ran and thin families stayed thin forever — the
+JAILBIRDS-vs-turnover starvation (T1) in a second costume, two passes sharing one budget with the first
+taking priority whether or not it can use it. Now it returns early only when a founding actually
+happened. Verified CLEAN: `joinGang` writes no character row (no second lost-update surface), the
+retirement lock order (characters → gangs → singletons), zero emission through the family (they never
+tribute, never win wars, hold a treasury of 0), both exclusions enforced at the query, and the pact /
+coalition angles as dead ends. Flagged: `recruitIntoFamily` shortlists `LIMIT 64`, which covers a
+48-resident city but would stall if `POPULATION.TARGET` were raised past it.
