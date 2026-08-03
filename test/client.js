@@ -45,8 +45,21 @@ import { buildServer } from '../src/server.js';
 import { M3, M4, PATHS, NPC_HITMEN, HEIST_ROLES, HEIST_JOBS, DRUGS, GOODS, DISTRICTS,
   COMMISSION, CONVOY, DUELS, TERRITORY_TYPES } from '../src/rules.js';
 
-const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
-const admin = readFileSync(new URL('../public/admin.html', import.meta.url), 'utf8');
+// A COMMENT IS NOT CODE, and this guard used to read it as if it were. The mirror resolves a field
+// access as `<binding>.<name>`, and this file's comments are dense and name source files constantly
+// — so `duels.js` inside a comment, in a renderer that binds `const duels = …` off /v1/duels, was
+// reported as "renderPvp reads js off /v1/duels", a phantom field that does not exist. It bit on the
+// first comment written after the check shipped. A guard's FALSE POSITIVE is as corrosive as a false
+// pass: both teach the reader to stop believing it.
+//
+// Only WHOLE-LINE comments are blanked, deliberately. A trailing `// …` after code would need real
+// quote tracking to strip safely (`https://`, and `//` inside the template literals this client is
+// made of), and stripping one wrongly would delete code the checks must see. Conservative in the
+// safe direction: every comment in this tree sits on its own line, so this catches them all, and
+// anything it misses stays checked rather than silently dropped.
+const decomment = (s) => s.replace(/^[ \t]*\/\/.*$/gm, '');
+const html = decomment(readFileSync(new URL('../public/index.html', import.meta.url), 'utf8'));
+const admin = decomment(readFileSync(new URL('../public/admin.html', import.meta.url), 'utf8'));
 const app = await buildServer();
 
 // ── 1. every route the client can call must be mounted ──────────────────────────────────────────
