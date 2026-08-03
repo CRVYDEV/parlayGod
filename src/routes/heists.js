@@ -19,6 +19,8 @@ export function register(app, { pool, auth }) {
       G.withCharacter(pool, req.user.sub, (ch, client, h) => Heists.joinHeist(ch, req.params.id, req.body?.role, client, h)));
     app.post('/v1/heists/:id/leave', { preHandler: auth }, async (req) =>
       G.withCharacter(pool, req.user.sub, (ch, client, h) => Heists.leaveHeist(ch, req.params.id, client, h)));
+    app.post('/v1/heists/:id/fill', { preHandler: auth }, async (req) =>
+      G.withCharacter(pool, req.user.sub, (ch, client, h) => Heists.fillHeist(ch, req.params.id, req.body?.role, client, h)));
     app.post('/v1/heists/:id/case', { preHandler: auth }, async (req) =>
       G.withCharacter(pool, req.user.sub, (ch, client, h) => Heists.caseJob(ch, req.params.id, client, h)));
     app.post('/v1/heists/:id/rat', { preHandler: auth }, async (req) =>

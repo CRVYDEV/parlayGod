@@ -90,6 +90,60 @@ assert(scored && busted, `both outcomes over ${guard} jobs`);
 const sum = async (reason, cid) => Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='${reason}' AND character_id='${cid}'`)).rows[0].s);
 assert(Number((await pool.query("SELECT COUNT(*) n FROM rng_audit WHERE action LIKE 'heist:%'")).rows[0].n) >= 2, 'every roll rng-audited');
 
+// ── THE HIRED HAND (residents-in-crews): a solo leader fills a seat with an NPC body. The hand's
+//    cut is FORFEITED (never minted → the faucet only shrinks), so co-op is reachable without a
+//    real crewmate but the emission is bounded; HEIST_FILL_MAX keeps the marquee jobs multiplayer. ──
+const hand = await mk('Hired Hand');
+await pool.query(`UPDATE characters SET is_npc=true, loc=(SELECT loc FROM characters WHERE id='${hank.id}') WHERE id='${hand.id}'`);
+const handAcct = (await pool.query(`SELECT account_id FROM characters WHERE id='${hand.id}'`)).rows[0].account_id;
+await seedCh(hank.id, 'cash=100000, heist_at=NULL, jail_until=NULL, hosp_until=NULL, safe_until=NULL');
+let hp = await call('POST', '/v1/heists/plan', { token: hank.token, body: { job: 'payroll' } });
+const hh = hp.body.id;
+assert.equal((await call('POST', `/v1/heists/${hh}/fill`, { token: cara.token })).body.error, 'not_leader', 'only the leader hires the crew');
+const hankPreFill = (await meOf(hank.token)).cash;
+let fr = await call('POST', `/v1/heists/${hh}/fill`, { token: hank.token });
+assert.equal(fr.code, 200, `the hand is hired (${JSON.stringify(fr.body)})`);
+assert.equal(fr.body.hired, true, 'a hired hand'); assert.equal(fr.body.fee, 5000, 'the hire fee');
+assert.equal((await meOf(hank.token)).cash, hankPreFill - 5000, 'the fee left the pocket');
+let mb = (await call('GET', '/v1/heists', { token: hank.token })).body.mine;
+assert.equal(mb.crew.length, 2, 'the crew is full with a body');
+assert(mb.crew.some((c) => c.hired), 'the board flags the hand as hired');
+assert.equal(mb.canHire, false, 'no room for another hand on a full 2-man job');
+// run until a score lands, then verify the hand was NEVER paid and the leader still scored
+const handCashPre = Number((await pool.query(`SELECT cash FROM characters WHERE id='${hand.id}'`)).rows[0].cash);
+const handPulledPre = Number((await pool.query(`SELECT heists_pulled FROM account_persistent WHERE account_id='${handAcct}'`)).rows[0].heists_pulled);
+let hScored = false, hg = 0, hid2 = hh;
+while (!hScored && hg++ < 80) {
+  const ex = await call('POST', `/v1/heists/${hid2}/execute`, { token: hank.token });
+  assert.equal(ex.code, 200, `hired execute resolves (${JSON.stringify(ex.body)})`);
+  if (ex.body.score) {
+    hScored = true;
+    assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='heist:crew' AND character_id='${hand.id}'`)).rows[0].s), 0, 'THE EMISSION CLAIM: the hand takes no cut — its slice is never minted');
+    assert.equal(Number((await pool.query(`SELECT cash FROM characters WHERE id='${hand.id}'`)).rows[0].cash), handCashPre, "the hand's pocket is untouched");
+    assert.equal(Number((await pool.query(`SELECT heists_pulled FROM account_persistent WHERE account_id='${handAcct}'`)).rows[0].heists_pulled), handPulledPre, 'the hand earns no legend');
+    assert(ex.body.share > 0, 'the leader still scores — co-op is reachable');
+    assert(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='heist:crew' AND character_id='${hank.id}'`)).rows[0].s) > 0, "the leader's cut is ledgered heist:crew");
+    assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='heist:hire' AND character_id='${hank.id}'`)).rows[0].s), -5000, 'the hire fee is a ledgered heist:hire sink');
+  } else { // busted/blown — the hand shares the crew's fate; clear it and go again
+    await seedCh(hank.id, 'cash=100000, heist_at=NULL, jail_until=NULL, hosp_until=NULL, safe_until=NULL');
+    await pool.query(`UPDATE characters SET jail_until=NULL, heist_at=NULL WHERE id='${hand.id}'`);
+    const rp = await call('POST', '/v1/heists/plan', { token: hank.token, body: { job: 'payroll' } });
+    hid2 = rp.body.id;
+    await call('POST', `/v1/heists/${hid2}/fill`, { token: hank.token });
+  }
+}
+assert(hScored, `the solo-NPC crew landed a score within ${hg} tries`);
+
+// ── THE CAP: the marquee jobs stay multiplayer — at most HEIST_FILL_MAX hands, the rest real bodies ──
+await seedCh(hank.id, 'cash=100000, heist_at=NULL, jail_until=NULL, hosp_until=NULL, safe_until=NULL');
+await pool.query(`UPDATE characters SET jail_until=NULL, heist_at=NULL WHERE id='${hand.id}'`);
+const vp = await call('POST', '/v1/heists/plan', { token: hank.token, body: { job: 'vault' } });
+const vh = vp.body.id;
+assert.equal((await call('POST', `/v1/heists/${vh}/fill`, { token: hank.token })).code, 200, 'one hand on the vault');
+assert.equal((await call('POST', `/v1/heists/${vh}/fill`, { token: hank.token })).body.error, 'fill_capped', 'a 3-man job needs real bodies past the cap');
+await call('POST', `/v1/heists/${vh}/leave`, { token: hank.token }); // disband + refund, drop the hand's row
+await seedCh(hank.id, 'heist_at=NULL, jail_until=NULL');
+
 // ── THE RAT: the job never fires, the informer walks paid, the street hears only "somebody talked" ──
 await seedCh(hank.id, 'cash=100000, heist_at=NULL, jail_until=NULL');
 await seedCh(cara.id, 'heist_at=NULL, jail_until=NULL');

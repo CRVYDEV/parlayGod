@@ -17,7 +17,8 @@ import crypto from 'node:crypto';
 import { GameError, bus, bumpMastery, gainRespect } from './game.js';
 import { HEIST_JOBS, HEIST_ROLES, heistJobOf, HEIST_PLAN_TTL_MS, HEIST_RAT_BPS, HEIST_LEADER_WEIGHT,
          HEIST_INSIDE_CD_MS, HEIST_CASE_ENERGY, HEIST_CASE_STEP, HEIST_CASE_MAX, heistFenceMultOf,
-         HEIST_FENCE_HEAT, HEIST_RANKS, heistRankOf, CONSTANTS, M4, levelOf, PORTFOLIO , jailed, hospitalized, safeHoused } from './rules.js';
+         HEIST_FENCE_HEAT, HEIST_RANKS, heistRankOf, HEIST_FILL_MAX, HEIST_FILL_FEE,
+         CONSTANTS, M4, levelOf, PORTFOLIO , jailed, hospitalized, safeHoused } from './rules.js';
 import { accrued, decayedScrutiny, npcPendingScale } from './business.js';
 import { grantShares } from './portfolio.js';
 
@@ -105,6 +106,47 @@ export async function joinHeist(ch, heistId, wantRole, client, h) {
   await client.query('INSERT INTO crew_heist_members (heist_id, character_id, role) VALUES ($1,$2,$3)', [heistId, ch.id, role]);
   await h.track(client, ch.account_id, 'heist_join', { job: job.id });
   return { ok: true, id: heistId, job: job.id, role, crew: taken.length + 1, crewNeeded: job.crew - taken.length - 1 };
+}
+
+// FILL — the leader hires an NPC RESIDENT into an open seat (residents-in-crews). A hired hand is a
+// real is_npc character (so executeHeist's per-member lock/roll/gates are unchanged), but its pot
+// share is FORFEITED at execute — never minted, so the co-op faucet only shrinks and §10.4 is
+// untouched. HEIST_FILL_MAX caps fillers so the marquee jobs stay multiplayer; a HEIST_FILL_FEE cash
+// sink makes hiring a real decision. A hand never rats and earns no legend/xp/rwa/respect.
+export async function fillHeist(ch, heistId, wantRole, client, h) {
+  if (HEIST_FILL_MAX <= 0) throw new GameError('no_fill', 'The crews want real bodies.');
+  const row = (await client.query("SELECT * FROM crew_heists WHERE id=$1 AND status='planning' FOR UPDATE", [heistId])).rows[0];
+  if (!row) throw new GameError('no_heist', 'That job is gone.');
+  if (row.leader_character !== ch.id) throw new GameError('not_leader', 'Only the leader hires the crew.');
+  if (stale(row)) throw new GameError('stale', 'That plan went cold.');
+  const job = heistJobOf(row.job);
+  const members = (await client.query('SELECT role, hired FROM crew_heist_members WHERE heist_id=$1', [heistId])).rows;
+  if (members.length >= job.crew) throw new GameError('full', 'The crew is set.');
+  const hiredCount = members.filter((m) => m.hired).length;
+  if (hiredCount >= HEIST_FILL_MAX)
+    throw new GameError('fill_capped', `${job.name} takes at most ${HEIST_FILL_MAX} hired hand${HEIST_FILL_MAX === 1 ? '' : 's'} — the rest are real bodies.`);
+  if (Number(ch.cash) < HEIST_FILL_FEE) throw new GameError('cash', `A hand wants $${HEIST_FILL_FEE} up front — tools and their cut.`);
+  const role = pickRole(job, wantRole, members.map((m) => m.role));
+  // pick a FREE resident — same readiness a real crewman needs at execute, so a hand can never be the
+  // reason a go fails; and NOT already on a live plan (residentAct/retire skip committed residents).
+  // prefer a resident standing in the leader's district (flavour), else any free body. Two flat
+  // queries — pg-mem can't parse a CASE-in-ORDER-BY over an alias (the /v1/gangs precedent).
+  const freeQ = (extra, params) => client.query(
+    `SELECT id FROM characters WHERE is_npc AND alive
+       AND (jail_until IS NULL OR jail_until < now())
+       AND (hosp_until IS NULL OR hosp_until < now())
+       AND (safe_until IS NULL OR safe_until < now())
+       AND id NOT IN (SELECT m.character_id FROM crew_heist_members m
+                        JOIN crew_heists ch2 ON ch2.id = m.heist_id WHERE ch2.status='planning')
+       ${extra} ORDER BY id LIMIT 1`, params);
+  const free = (await freeQ('AND loc = $1', [ch.loc])).rows[0] || (await freeQ('', [])).rows[0];
+  if (!free) throw new GameError('no_hand', 'Nobody on the street will take the job right now.');
+  ch.cash = Number(ch.cash) - HEIST_FILL_FEE;
+  await client.query('INSERT INTO crew_heist_members (heist_id, character_id, role, hired) VALUES ($1,$2,$3,true)', [heistId, free.id, role]);
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -HEIST_FILL_FEE, reason: 'heist:hire' });
+  await h.track(client, ch.account_id, 'heist_fill', { job: job.id, role });
+  return { ok: true, id: heistId, job: job.id, role, hired: true, fee: HEIST_FILL_FEE,
+           crew: members.length + 1, crewNeeded: job.crew - members.length - 1 };
 }
 
 // LEAVE — a member walks; the LEADER walking disbands the job and takes the stake back whole.
@@ -196,7 +238,8 @@ export async function executeHeist(ch, heistId, client, h) {
   // NOW the heist row — and verify the crew we locked is still the crew
   const row = (await client.query("SELECT * FROM crew_heists WHERE id=$1 AND status='planning' FOR UPDATE", [heistId])).rows[0];
   if (!row) throw new GameError('no_heist', 'That job is gone.');
-  const members = (await client.query('SELECT character_id, ratted, role, cased FROM crew_heist_members WHERE heist_id=$1', [heistId])).rows;
+  const members = (await client.query('SELECT character_id, ratted, role, cased, hired FROM crew_heist_members WHERE heist_id=$1', [heistId])).rows;
+  const hiredIds = new Set(members.filter((m) => m.hired).map((m) => m.character_id)); // hired hands: forfeit their cut, no legend/xp/rwa/respect (residents-in-crews)
   if (members.map((m) => m.character_id).sort().join() !== [...preIds].sort().join())
     throw new GameError('crew_changed', 'The crew shifted under you — call the go again.');
   if (members.length < job.crew) throw new GameError('crew_short', `${job.name} needs ${job.crew} — you have ${members.length}.`);
@@ -265,7 +308,11 @@ export async function executeHeist(ch, heistId, client, h) {
   // the roll — the job sets the floor; step two reads each member's stat FOR THEIR ROLE (x3, so
   // a crew of true specialists matches a crew of all-rounders — they just got there cheaper)
   const roleOf = Object.fromEntries(members.map((m) => [m.character_id, m.role]));
-  const avgRoleStat = crewRows.reduce((a, m) => a + Number(m[HEIST_ROLES[roleOf[m.id]] || 'muscle']), 0) / crewRows.length;
+  // a hired hand is stat-NEUTRAL: excluded from the average so a resident's real stats never leak
+  // into the roll (hiring a body is not a free success bonus). The leader is never hired, so the
+  // real-crew list is always non-empty.
+  const realCrew = crewRows.filter((m) => !hiredIds.has(m.id));
+  const avgRoleStat = realCrew.reduce((a, m) => a + Number(m[HEIST_ROLES[roleOf[m.id]] || 'muscle']), 0) / realCrew.length;
   // Tier-4 §B: every cased member raises the roll a notch, capped (casing never guarantees a score)
   const caseBonus = Math.min(HEIST_CASE_MAX, members.filter((m) => m.cased).length * HEIST_CASE_STEP);
   const p = Math.min(0.92, Math.max(0.15, job.base + (avgRoleStat * 3 - 30) / 1000 + caseBonus));
@@ -288,7 +335,7 @@ export async function executeHeist(ch, heistId, client, h) {
         [biz.id, new Date(Date.now() - Math.floor(Math.max(0, elapsed) * (1 - job.rateBps / 10000)))]);
       await h.notify(client, biz.character_id, 'inside_job', { kind: biz.kind, pot });
     } else {
-      const avgLvl = crewRows.reduce((a, m) => a + levelOf(Number(m.respect)), 0) / crewRows.length;
+      const avgLvl = realCrew.reduce((a, m) => a + levelOf(Number(m.respect)), 0) / realCrew.length; // hired hands don't set the pot's caliber (roll-neutral)
       pot = Math.floor(rand(job.takePerLvl[0], job.takePerLvl[1]) * avgLvl);
     }
     const unit = pot / (HEIST_LEADER_WEIGHT + (crewRows.length - 1));
@@ -310,6 +357,10 @@ export async function executeHeist(ch, heistId, client, h) {
     const hot = row.fenced && !biz;
     let leaderCut = 0;
     for (const m of crewRows) {
+      // A HIRED HAND takes no cut and earns nothing — its share is FORFEITED (never minted, so the
+      // faucet only shrinks), and no legend/xp/rwa/respect (a body, not a made man). The denominator
+      // still counted it above, so the real crew's slices already shrank around it.
+      if (hiredIds.has(m.id)) continue;
       if (hot) {
         // hot loot is a direct-SQL column (not in the positional persist) → write it for EVERYONE incl. the leader
         await client.query('UPDATE characters SET heist_loot = heist_loot + $2 WHERE id=$1', [m.id, shares[m.id]]);
@@ -383,11 +434,17 @@ export async function heistBoard(pool, characterId) {
   let my = null;
   if (mine) {
     const crew = (await pool.query(
-      'SELECT c.name, m.role, m.cased FROM crew_heist_members m JOIN characters c ON c.id = m.character_id WHERE m.heist_id=$1', [mine.id])).rows;
+      'SELECT c.name, m.role, m.cased, m.hired FROM crew_heist_members m JOIN characters c ON c.id = m.character_id WHERE m.heist_id=$1', [mine.id])).rows;
     const j = heistJobOf(mine.job);
     const row = (await pool.query('SELECT fenced FROM crew_heists WHERE id=$1', [mine.id])).rows[0];
-    my = { id: mine.id, job: mine.job, name: j.name, leader: mine.leader_character === characterId, fenced: !!row?.fenced,
-      crew: crew.map((c) => ({ name: c.name, role: c.role, cased: !!c.cased })), crewNeeded: j.crew - crew.length };
+    const isLeader = mine.leader_character === characterId;
+    const hiredNow = crew.filter((c) => c.hired).length;
+    // THE HIRED HAND: the leader can fill an open seat with an NPC body (a hand takes a cut but earns
+    // you nothing extra), capped at HEIST_FILL_MAX so the marquee jobs stay multiplayer.
+    my = { id: mine.id, job: mine.job, name: j.name, leader: isLeader, fenced: !!row?.fenced,
+      crew: crew.map((c) => ({ name: c.name, role: c.role, cased: !!c.cased, hired: !!c.hired })), crewNeeded: j.crew - crew.length,
+      canHire: isLeader && crew.length < j.crew && hiredNow < HEIST_FILL_MAX, fillFee: HEIST_FILL_FEE, fillMax: HEIST_FILL_MAX,
+      rolesOpen: j.roles.filter((x) => !crew.map((c) => c.role).includes(x)) };
   }
   // Tier-4: the actor's hot loot + lifetime notoriety (account-level, survives death)
   const meRow = (await pool.query(
