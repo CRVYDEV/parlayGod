@@ -8725,15 +8725,25 @@ booted server, the full §10.4 sweep re-run after every call so any drift that M
 fractions, `Infinity`, `NaN`, `1e308`, `'1e999'`, `'1,000'`, `{}`, `[]`, `null`, `true`), **goods
 conservation**, **concurrent double-claim** on every once-ever latch, **IDOR** across every
 owned-object route, **shared-object races**, and **structural integrity** after 6,464 concurrent
-operations. **No exploitable defect found** — no 500s, no drift, no unlatched claim, no cross-owner
-write. Full report: `AUDIT-exploit-hunt.md`. **Three things looked like findings and all three
+operations, plus a **rounding** pass asking whether a house cut can ever round to zero so a wash cycle
+between two colluding accounts is free. **No exploitable defect found** — no 500s, no drift, no
+unlatched claim, no cross-owner write. Rounding is dead by construction: player-to-player takes use
+`Math.ceil` (always house-favourable, with minimums keeping the cut ≥ 1 — verified live, a $10,000
+bodyguard hire moves the pair's combined cash by exactly −200), the `Math.floor` cuts are all on
+POOLED ESCROW where flooring can at worst zero the rake and winners still only receive what was
+escrowed, and no payout anywhere rounds UP against a floored debit. Full report:
+`AUDIT-exploit-hunt.md`. **Four things looked like findings and all four
 dissolved**, which is worth recording because each is a way to manufacture one: (a) "§10.4 drift on
 every call including the 400s" was a **pg-mem artifact** — `ROLLBACK` is a no-op there, so accrual's
 `bank:interest` row survives a REFUSED action; clean on real Postgres, my own measurement error;
 (b) "the ambush cap is breached" (four 200s against `MAX_AMBUSHES` 3) died on measuring
 `convoys.ambushes` directly — 3, 2, 2 across three runs, because **a repelled ambush also returns
-200** and only a WIN consumes a slot (the documented step-two rule); (c) three gate-matrix false
-positives, which became the drop. **`test/gates.js` — THE GATE MATRIX (the 65th suite)** turns the
+200** and only a WIN consumes a slot (the documented step-two rule); (c) "the 2% bodyguard take does
+not land" was **my own helper** summing with `= ANY($1::text[])`, which **pg-mem returns zero rows
+for** — the same recorded limitation, hit again; an `IN` list reads 400,000 → 399,800, so the house
+took exactly 200 (a probe whose other legs all refuse and whose one working leg reports a finding is
+the exact shape of a manufactured result); (d) three gate-matrix false positives, which became the
+drop. **`test/gates.js` — THE GATE MATRIX (the 65th suite)** turns the
 extractor work into a permanent guard over **this project's most productive bug class**: a verb that
 forgets a gate its sibling enforces (`jump` vs `fire`; `collectFrontier` vs `collectTerritory`;
 `npcHit` blind to the Pen shields; `payProtection` letting a protected inmate shank). Every one of
