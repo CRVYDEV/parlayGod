@@ -3713,6 +3713,41 @@ over 240s, and the two dials both cost more than they buy (the reward line is sp
 change — the fix there is to INDEX them (the contest ratchet is the model), which is a new formula
 rather than a number, so it stays a founder call.
 
+**THE DESK RED-TEAMED — a comp could fund the withdrawal reserve (the same audit pass, code half;
+`AUDIT-economy-and-code.md`).** `src/desk.js` (economy v3 steps 2–4) is the newest real-value
+surface in the tree and had shipped with mutation-verified tests but no adversarial pass.
+**`runDeskBuyback` credited `chain_reserve.funded_omr` UNCONDITIONALLY**, whether or not the buy
+carried a `txHash` — and that column is what `signVoucher` checks before signing a REAL on-chain
+withdrawal, so crediting it is the assertion *"hard OMR arrived"*, which is exactly the assertion a
+mod call must never be able to make. Same class as two findings already fixed here
+(`mod/bond/simulate` fabricating Vig revenue, `mod/rwa/buy` stamping `real=true`), one step further
+along, because the fabrication would let the server sign against backing that does not exist.
+**Every check was blind to it**: `runDeskInvariants`' *"buyback backed by a real purchase"* compares
+the soft mint to `desk_buys.omr_bought` and both include the comp; the Vig's two-sided `reserve
+fully backed` / `not under-funded` pair summed the same column with no `WHERE real`, so a comp
+appeared on both sides and cancelled. **It was not exploitable today, and that is not a defence** —
+`runDeskBuyback` requires `eth ≤ polBudget.left` and a comp books ZERO POL fees, so with
+`ALLOW_MOD_REAL_REVENUE` off the budget is 0 and a pure comp buyback cannot execute; a defence BY
+ACCIDENT, from an unrelated constant, that evaporates the moment the QA flag turns the budget on.
+Fixed on BOTH halves, which is what turns the sandwich from an absorber into a check: the reserve
+credit is gated on `real` (the SHELF credit stays unconditional — soft supply inside `omrBuckets`
+that can only reach a player through a fill, and QA needs inventory to test the sell side, the
+`mod/desk/fill` precedent), and `vig.js` counts `desk_buys WHERE real`. Both must move together or
+the sandwich fires spuriously — with both gated a comp-funded reserve now trips it. Regression in
+`test/desk.js`; mutation-verified twice, each caught at its own named assertion. **Verified CLEAN in
+the same read** (stated rather than assumed): the Dutch clock cannot descend below the reserve
+(`auctionPriceAt` clamps `frac` to [0,1], so the reserve IS the floor — the suspicion that raised
+this read died on checking); the fill's three clamps make wall 2 hold by construction and the shelf
+can only shrink through a clamped fill; the lock order (accounts → `desk_inventory` →
+`desk_auctions`) matches the recycle path so there is no AB-BA against any sink; `polBudget` is read
+under the `desk_inventory` lock so two concurrent buys cannot each see the whole of it; and the
+fat-finger price floor is fail-closed rather than clamped. The report also records what the
+machine-checkable half of *"every function, every button & task"* already proves (nine standing
+guards, all green at HEAD: 550 routes wired, 571 board fields mirrored, 544 levers pinned AND read,
+2234 SQL statements parsed on real Postgres, 66 mobile checks) so the reading effort went where
+those structurally cannot see — whether a NUMBER is sensible, and whether an undriven code path is
+sound.
+
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
 `payPlex` pattern); named landmarks / Founder's charter numbers; ~~R2 (the `rwa_revenue` → real-RWA-buy
