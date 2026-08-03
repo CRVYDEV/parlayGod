@@ -181,7 +181,7 @@ inverts against `seizeDistrict` — a worse cycle for a rarer one. Left as-is, r
 
 ---
 
-## FLAGGED FOR FOUNDER SIGN-OFF (not patched, ground rule #1)
+## FLAGGED FOR FOUNDER SIGN-OFF — **RESOLVED 2026-08-03, founder-directed**
 
 **The garrison ratchets DOWN under favourable conquest.** The winning stake becomes the new garrison,
 and a stake only has to clear `turfQuote`'s cost — which is the outbid price multiplied by every
@@ -200,9 +200,19 @@ Arguments both ways, which is why it is a founder call rather than a fix:
   value. It also means the discounts apply twice — once when you take it, and again to everyone who
   comes for you afterwards, including your enemies.
 
-Dials, cheapest first: store the UNDISCOUNTED `base` as the garrison rather than the paid amount
-(one line, keeps every discount as a one-time reward); floor the stored garrison at the previous
-one; or cap the product of the discounts. Recorded in BALANCE.md.
+**Fixed:** the stored garrison is floored at what the ground was worth before —
+`max(winAmt, previous garrison)`. A discount prices the CONQUEST, not the district.
+
+Two numbers in the paragraph above are corrected by the regression that was then built for it, and
+both errors were in the direction of overstating the problem. **The 0.46 is the discount PRODUCT**,
+but `SEIZE_OUTBID` (1.5) applies first, so the fully-stacked floor is `1.5 × 0.4607 = 0.69×` the
+previous garrison — a ~31% fall, not ~54%. And the ×1.5 surprise premium on an undeclared or
+off-hours watch **cancels the ratchet by itself**, so it only bites on an attack landing inside the
+holder's declared window. Measured at three of the four discounts with the watch open: **$162,562
+against a $200,000 garrison**, −19% per conquest, compounding. The other two dials were rejected on
+inspection — storing the undiscounted `base` discards the winner's over-commitment and forces
+monotone inflation; capping the discount product weakens the rewards, which would be a balance
+change rather than a fix. Full record in BALANCE.md.
 
 ---
 

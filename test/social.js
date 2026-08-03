@@ -1979,6 +1979,53 @@ assert(Math.abs(escNow - rhsEsc) <= 1, `bounty/contract escrow reconciles: bucke
     `treasuries reconcile with a discounted pad in the mix (${JSON.stringify(invR.checks.find((c) => c.name === 'gang treasuries'))})`);
 }
 
+// ══ A DISCOUNT PRICES THE CONQUEST, NOT THE DISTRICT (regression) ══
+// The winning stake becomes the new garrison, and a stake only has to clear turfQuote's cost — which
+// is the outbid price times every discount that applied to that attacker at that moment. Stored raw,
+// those discounts stopped pricing the conquest and became the DISTRICT's standing value: the next
+// attacker's floor is computed from the garrison, so a chain of favourable conquests walked the price
+// down. The floor is now the ground's previous worth — you paid less for the same turf and your
+// enemies do not inherit your bargain.
+{
+  process.env.SEASON_PHASE = 'reckoning';   // floorMult 0.75 — the season's own discount, pinned
+  const rHold = await mk('Ratchet Holder'); await seedCh(rHold.id, 'respect=1000, cash=cash+900000');
+  const rhg = (await call('POST', '/v1/gangs', { token: rHold.token, body: { name: 'The Standing Stones', tag: 'SSN' } })).body.gangId;
+  const rTake = await mk('Ratchet Taker'); await seedCh(rTake.id, 'respect=1000, cash=cash+900000');
+  const rtg = (await call('POST', '/v1/gangs', { token: rTake.token, body: { name: 'The Bargain Hunters', tag: 'BGH' } })).body.gangId;
+  for (const t of [rHold.token, rTake.token]) await call('POST', '/v1/gangs/tribute', { token: t, body: { amount: 800000 } });
+  // the taker's family runs as The Outfit (turf ×0.85) and already holds canal, which borders foundry
+  // (the foothold, ×0.85) — two real discounts on top of the reckoning's 0.75
+  assert.equal((await call('POST', '/v1/gangs/charter/outfit', { token: rTake.token })).code, 200, 'the taker re-founds as The Outfit');
+  await pool.query(`UPDATE districts SET holder_gang='${rtg}', npc_holder=NULL, garrison=1000, watch_hour=NULL, contest_until=NULL WHERE id='canal'`);
+  const WAS = 200000;
+  await pool.query(`UPDATE districts SET holder_gang='${rhg}', npc_holder=NULL, garrison=${WAS}, contest_until=NULL WHERE id='foundry'`);
+  await pool.query(`DELETE FROM district_bids WHERE district_id='foundry'`);
+  // …and they come for it INSIDE the holder's declared window, so no surprise premium pushes back up
+  assert.equal((await call('POST', '/v1/districts/foundry/watch', { token: rHold.token, body: { hour: new Date().getUTCHours() } })).code, 200,
+    'the holder declares the watch at this hour');
+
+  const quoted = await call('POST', '/v1/districts/foundry/claim', { token: rTake.token, body: { amount: 1 } });
+  assert.equal(quoted.body.error, 'floor', 'the floor is quoted');
+  const floor = Number(String(quoted.body.message).match(/\$(\d+)/)[1]);
+  // THE PRECONDITION, asserted rather than assumed: without a floor genuinely BELOW what the ground
+  // was worth there is no ratchet to fix, and this whole block would pass on a no-op.
+  assert(floor < WAS, `the stacked discounts really do price the door under the old garrison ($${floor} vs $${WAS})`);
+
+  assert.equal((await call('POST', '/v1/districts/foundry/claim', { token: rTake.token, body: { amount: floor } })).code, 200,
+    'they stake exactly the discounted floor');
+  await pool.query(`UPDATE districts SET contest_until = now() - interval '1 minute' WHERE id='foundry'`);
+  assert.equal((await sweepContests(pool)).seized, 1, 'and take the ground');
+  const rd = (await pool.query("SELECT holder_gang g, garrison FROM districts WHERE id='foundry'")).rows[0];
+  assert.equal(rd.g, rtg, 'the bargain hunters hold it');
+  assert.equal(Number(rd.garrison), WAS,
+    'and the district is still worth what it was worth — the discount was theirs, not the next attacker\'s');
+  // the reward is real and still one-time: they paid the discounted price for it
+  assert(floor < WAS, 'they paid less than the ground was worth — that is the discount, kept');
+  await pool.query(`UPDATE districts SET holder_gang=NULL, garrison=0, watch_hour=NULL, contest_until=NULL WHERE id IN ('foundry','canal')`);
+  await pool.query(`DELETE FROM district_bids WHERE district_id='foundry'`);
+  delete process.env.SEASON_PHASE;
+}
+
 // ══ A LAPSED CONTEST IS SETTLED, NEVER SWEPT OFF THE TABLE (regression) ══
 // stakeClaim opens a fresh window on a district whose contest has run out. It used to DELETE the
 // stale bids first — "never trust the sweep to have run before the next challenger walks in." But a
