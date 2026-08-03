@@ -672,6 +672,32 @@ export async function buildServer() {
     await G.track(pool, req.user.sub, 'broadcast_share', { kind });
     return { ok: true };
   });
+  // SCREEN REACH — which of the console's screens a player ever actually opens. The game has 25 of
+  // them behind a two-tier nav, and until this existed nothing measured whether a mid-game player
+  // uses six or twenty, so any restructure would have been guesswork against a nav that tested well.
+  //
+  // BATCHED and FIRST-OPEN-ONLY: the client sends each screen once per session, flushed in one call,
+  // so a session that walks eight screens makes ~one request rather than eight. That measures REACH
+  // (did they ever find it) rather than frequency, which is the question that decides whether to cut,
+  // merge or leave the nav alone.
+  //
+  // Shape-validated rather than allowlisted, deliberately: the tab list is CLIENT presentation and
+  // the server has no business owning it — a screen the client renames would silently stop being
+  // counted, which is a measurement that lies. Bounded instead (count, length), authed, and rate
+  // limited like any other route, so the worst a bad caller achieves is junk rows in an ops view.
+  app.post('/v1/screens', { preHandler: auth }, async (req) => {
+    const raw = Array.isArray(req.body?.screens) ? req.body.screens : [];
+    const seen = new Set();
+    for (const s of raw) {
+      if (typeof s !== 'string') continue;
+      const id = s.trim().slice(0, 24);
+      if (id) seen.add(id);
+      if (seen.size >= 40) break;                       // more than the console has; a cap, not a filter
+    }
+    if (!seen.size) return { ok: true, counted: 0 };
+    await G.track(pool, req.user.sub, 'screen_open', { screens: [...seen] });
+    return { ok: true, counted: seen.size };
+  });
   app.post('/v1/bank/:dir', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => G.bank(ch, req.params.dir, req.body?.amount, client, h)));
   app.post('/v1/travel/:district', { preHandler: auth }, async (req) =>

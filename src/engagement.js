@@ -95,7 +95,11 @@ export const SYSTEMS = {
 // Events that exist but are NOT player engagement — moderator actions and anti-abuse flags. Declared
 // so the catalog test can demand total coverage: every event is either a system's or explicitly not
 // one. Silence is never allowed to be the answer.
-export const NON_ENGAGEMENT = ['mod_kill_reason'];
+// `screen_open` is a UI INSTRUMENT, not a system: it records which console screens a player ever
+// opens (the reach block on the ops funnel). Counting it as engagement would double-count — every
+// screen visit already shows up as whatever ACTION the player took there, and a screen opened and
+// abandoned is precisely what the reach number exists to separate from a system being used.
+export const NON_ENGAGEMENT = ['mod_kill_reason', 'screen_open'];
 
 const EVENT_TO_SYSTEM = (() => {
   const m = new Map();

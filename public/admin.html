@@ -292,6 +292,7 @@
       + `<div class="note">first-week capstones: ${fmt(fw.capstone)}</div>`
       + renderCareer(fn.career)
       + renderBroadcast(fn.broadcast)
+      + renderScreens(fn.screens)
       + renderReferral(fn.referral);
   }
 
@@ -308,6 +309,24 @@
     return `<div class="note" style="margin-top:8px;color:var(--neon)">THE CAREER — ${fmt(cr.started)} account(s) on the ladder · $${fmt(cr.cashPaid)} paid out</div>`
       + rows
       + (cold.length ? `<div class="note" style="color:var(--dim)">never claimed by anyone (${cold.length}): ${cold.join(' · ')}</div>` : '');
+  }
+
+  // SCREEN REACH — the share of reporting players who ever OPENED each screen, worst first, because
+  // the bottom of this list is the decision: a screen nobody reaches is a candidate to merge, move
+  // up the nav, or cut. Reported separately from the engagement panel below: that one measures
+  // whether a SYSTEM is used (server actions), this measures whether the SCREEN is found at all —
+  // and "nobody opens it" and "they open it and do nothing" want different fixes.
+  function renderScreens(sr) {
+    if (!sr || !sr.reporters) {
+      return `<div class="note" style="margin-top:8px;color:var(--dim)">SCREEN REACH — no reports yet `
+        + `<span>(players on a client older than the beacon send nothing)</span></div>`;
+    }
+    const rows = Object.entries(sr.reach || {}).sort((a, b) => a[1] - b[1]);
+    const cold = rows.filter(([, p]) => p < 25).map(([s]) => s);
+    return `<div class="note" style="margin-top:8px;color:var(--neon)">SCREEN REACH — of ${fmt(sr.reporters)} reporting players</div>`
+      + rows.map(([s, pct]) =>
+        `<div class="row"><span class="k">${s}</span><span class="v">${pct}%</span></div><div class="bar"><i style="width:${pct}%"></i></div>`).join('')
+      + (cold.length ? `<div class="note" style="color:var(--bad)">under 25%: ${cold.join(', ')}</div>` : '');
   }
 
   // ENGAGEMENT — which systems anyone actually uses, and whether players come back. The DEAD list is

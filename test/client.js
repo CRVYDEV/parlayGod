@@ -613,11 +613,36 @@ const collectList = (src, v, key, fn) => {
   const SELF = new RegExp(
     `(?<![\\w$.])${V}\\s*\\.\\s*(?:map|forEach|flatMap|filter|find|some|every|sort)\\s*\\(\\s*\\(?\\s*([a-zA-Z_$][\\w$]*)\\s*\\)?\\s*=>`, 'g');
   const FOROF = new RegExp(`for\\s*\\(\\s*(?:const|let|var)\\s+([a-zA-Z_$][\\w$]*)\\s+of\\s+\\(?\\s*${V}\\s*\\??\\.\\s*([a-zA-Z_$][\\w$]*)`, 'g');
+  // THE CHAINED ITERATOR. `(sov.structures || []).filter((s) => s.mine).map((s) => …)` matches ITER
+  // at the FILTER — and the `.map` hangs off the filter's RESULT, not off `sov.structures`, so the
+  // regex never reaches it and the whole rendered body goes unread. Measured on that exact line: the
+  // extractor collected `mine,incomeOwed,vulnerable,district` (the short predicate bodies) and none
+  // of the eight fields the card actually renders, which made check 4b silently thinner AND produced
+  // a FALSE POSITIVE in check 6 against a screen that discloses correctly. 14 lists use the shape.
+  //
+  // So after a body is delimited, follow any iterator chained onto it and collect that body under
+  // the SAME key — a loop, so `.filter().filter().map()` resolves too. The param is re-read each
+  // hop because each callback binds its own.
+  const CHAIN = /^\s*\)\s*\.\s*(?:map|forEach|flatMap|filter|find|some|every|sort|reduce)\s*\(\s*\(?\s*([a-zA-Z_$][\w$]*)\s*\)?\s*=>/;
   const add = (listField, param, at) => {
     const ext = bodyAfter(src, at);
     if (!ext) { listUnresolved++; return; }
     const k = `${key}|${listField}`;
-    const region = src.slice(ext[0], ext[1]);
+    let region = src.slice(ext[0], ext[1]);
+    for (let end = ext[1], hops = 0; hops < 6; hops++) {
+      const m2 = CHAIN.exec(src.slice(end, end + 200));
+      if (!m2) break;
+      const next = bodyAfter(src, end + m2[0].length);
+      if (!next) { listUnresolved++; break; }
+      // the chained callback's param may differ (`(s) => …).map((r) => …`), so normalise by
+      // collecting that body against ITS OWN param and appending the matches to this region
+      for (const r of src.slice(next[0], next[1])
+        .matchAll(new RegExp(`(?<![\\w$.])${m2[1].replace('$', '\\$')}\\s*\\??\\.\\s*([a-zA-Z_$][\\w$]*)`, 'g'))) {
+        if (!BUILTIN.has(r[1])) region += `\n${param}.${r[1]}`;   // re-expressed in this hop's param
+      }
+      region += src.slice(next[0], next[1]).replace(/[^]*/, (t) => (/data-[a-z]+\s*=|onclick\s*=|<option/.test(t) ? ' data-x=' : ''));
+      end = next[1];
+    }
     // check 5 needs to know whether this row RENDERS AN ACTION — a purely informational row has
     // nothing to gate. `data-<x>=` / `data-do=` / an inline onclick are the three ways this client
     // hangs a click on an element. `<option` is the fourth and it is the one that had a live defect:
@@ -1032,6 +1057,12 @@ async function seedLists() {
     await si('POST', `/v1/port/run/${b}`, t2, { route: 'coastal' });
   });
   await trySeed('heists', () => si('POST', '/v1/heists/plan', token, { job: 'payroll', role: 'muscle' }));
+  // an OPEN crew raid, so the City board's raids list has a row. Needed only once the chained-
+  // iterator fix taught 4b to read that renderer's map body — before it, the list registered no
+  // fields and its emptiness went unnoticed, which is the coverage this seeds back.
+  // `t2` plans it: the fixture character already has an active heist and one crew op is the cap.
+  // `two` is already seeded to respect 500000, comfortably past kryl's level-20 floor
+  await trySeed('world raid', () => si('POST', '/v1/world/kryl/plan', t2, {}));
   await trySeed('convoy', async () => {
     await q("UPDATE characters SET loc='docks' WHERE id=$1", [charId]);
     await si('POST', '/v1/goods/buy', token, { goodId: 'gin', qty: 8 });
@@ -1202,6 +1233,37 @@ assert.deepEqual(unlistedParam, [], `${unlistedParam.length} route(s) the client
 // wire's subscriber-only premium block). The renderers read the LIVE fields, so the fixture must
 // make one of everything or those reads fail as "not returned" against the dormant shape.
 await seedLists();
+// ── CHECK 6 vocabulary: THE TERMS RIDE WITH THE PRICE ───────────────────────────────────────────
+// The fifth way is a control that refuses on press. The SIXTH is a screen that takes your money and
+// does not mention what it will keep costing — which is the class every tester report so far has
+// belonged to. "How can I owe more in wages than my laundromat brings in?" and "no way a 25k runner
+// costs 8k in 5h" are the same defect twice: the pad and the nut were both DISCLOSED nowhere and
+// EXITED nowhere, and each got fixed only because somebody complained. Nothing stops the next
+// recurring cost shipping the same way.
+//
+// So: when a board sends a field that names an ONGOING OBLIGATION, the screen rendering that board
+// must read it. Not "display it prettily" — that is the renderer's business, and unenforceable — but
+// LOOK AT IT, which is the difference between a card that can tell you and one that structurally
+// cannot.
+//
+// Explicit vocabulary, swept off the tree rather than pattern-matched, for exactly the reason
+// GATE_FIELDS is: `cold` is an obligation state, `coldSeconds` is the countdown to it, and a
+// pattern like /cost|owed/ would drag in every one-off price in the game and make the check noise.
+// A new recurring cost has to be added here — which is the point: that is the moment somebody
+// decides whether it needs disclosing.
+const OBLIGATION_FIELDS = new Set([
+  'upkeepPerHr', 'upkeepOwed',        // the pad — a front's protection + wages
+  'crewWagePerHr', 'crewWageOwed',    // the nut — the kitchen crew, paid whether the stash moves or not
+  'cold', 'crewCold', 'coldSeconds',  // the shut-off, and the countdown to it
+  'padOutran',                        // the crossover: the envelope now exceeds what the till can hand back
+]);
+const undisclosed = [];
+const noteObligations = (where, key, have, fields) => {
+  const owed = [...have].filter((f) => OBLIGATION_FIELDS.has(f));
+  const blind = owed.filter((f) => !fields.has(f));
+  if (blind.length) undisclosed.push(`${where} renders ${key} but never reads ${blind.join(',')} — the board `
+    + `states an ongoing cost the screen does not, which is how the pad and the nut both reached a tester`);
+};
 const notReturned = [], unobservable = [];
 for (const [key, fields] of reads) {
   const [rawPath, sub] = key.split('|');
@@ -1219,6 +1281,7 @@ for (const [key, fields] of reads) {
   const have = new Set(Object.keys(target));
   const gone = [...fields].filter((f) => !have.has(f));
   if (gone.length) notReturned.push(`${readWhere.get(key)} reads ${gone.join(',')} off ${key} — the route returns ${[...have].slice(0, 8).join(',')}…`);
+  noteObligations(readWhere.get(key), key, have, fields);
 }
 assert.deepEqual(notReturned, [], `the client reads ${notReturned.length} field(s) its route does not return — ` +
   `those render as undefined, or silently take a fallback, with no error anywhere`);
@@ -1256,6 +1319,7 @@ for (const [key, fields] of listReads) {
   const have = new Set(arr.flatMap((e) => (e && typeof e === 'object' ? Object.keys(e) : [])));
   const gone = [...fields].filter((f) => !have.has(f));
   if (gone.length) listMissing.push(`${listWhere.get(key)} reads ${gone.join(',')} off each element of ${key} — the elements carry ${[...have].slice(0, 8).join(',')}…`);
+  noteObligations(listWhere.get(key), `each element of ${key}`, have, fields);
   // ── CHECK 5: a control the player cannot use must SAY SO ──
   // The fourth way a button lies. Checks 1-3 cover the way out (does the route exist, is the value
   // real, does the handler read the field) and check 4 covers the way back (is the field real). None
@@ -1289,6 +1353,10 @@ assert.deepEqual(seedNotes, [], `${seedNotes.length} fixture seed step(s) were R
   `${seedNotes.join('\n  ')}`);
 assert.deepEqual(listUngated, [], `${listUngated.length} clickable row(s) ignore a gate their own elements ` +
   `carry, so the control looks usable and only refuses once pressed:\n  ${listUngated.join('\n  ')}`);
+// CHECK 6 — the terms ride with the price (see OBLIGATION_FIELDS above)
+assert.deepEqual(undisclosed, [], `${undisclosed.length} screen(s) render a board that states an ONGOING COST ` +
+  `without reading it, so the player learns the terms from their balance instead of the card:\n  ` +
+  `${undisclosed.join('\n  ')}`);
 assert.deepEqual(listEmpty, [], `${listEmpty.length} list(s) came back EMPTY, so their element fields were ` +
   `never actually compared. An empty list is not a pass — extend seedLists() so each has a row:\n  ` +
   `${listEmpty.join('\n  ')}`);
@@ -1310,7 +1378,7 @@ console.log(`✅ client wiring test passed — across the console AND /admin: of
   `And the fifth way, which is not death but a lie: of those lists, ${[...listActs].length} hang a ` +
   `CLICK on each row, and where the server sends that row a gate the renderer has to read it — a ` +
   `control that looks live and only refuses once pressed is the game withholding its own rule. ` +
-  `Those are the five ways a button lies — this has found four dead routes, seven ` +
+  `And the SIXTH, which is not a lie but a silence: where a board states an ONGOING cost — the pad, the nut, the cold clock — the screen rendering it has to read that too, because a card that takes your money without mentioning what it keeps costing is how both of those reached a tester. Those are the ways a button lies — this has found four dead routes, seven ` +
   `ignored fields, two element fields the board never sent (a LEGENDARY chip that had never ` +
   `once rendered) and a lane picker that offered every route to a level-6 player and refused on ` +
   `press, among them a broken action, an ammo box sold by a control that asked for a ` +
