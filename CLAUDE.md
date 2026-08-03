@@ -8754,15 +8754,20 @@ that delegates (`robBusiness` → `extortFront`, the one-core discipline working
 refusing to follow it would report the RIGHT structure as a defect). **It checks its own
 completeness**: every street crime (routed through `assertStreetCrime`) and every `collect*` action
 must be in a family or exempted WITH a stated reason, so a new verb cannot slip past unclassified.
-73 requirements over 5 families; three mutations each caught at its own named assertion. **TWO BUGS IN
-THE GUARD ITSELF, found by reading its output rather than trusting its pass, and they had been
-CANCELLING:** slicing a body "to the next export" made `referralXpBonus` — the last `export function`
+73 requirements over 5 families; three mutations each caught at its own named assertion. **THREE BUGS IN THE GUARD ITSELF, found by reading its output rather than trusting its pass, all three the same failure DIRECTION, and the first two had been CANCELLING:** slicing a body "to the next export" made `referralXpBonus` — the last `export function`
 in a 4,606-line `rules.tail.js` — swallow every gate helper's own DEFINITION and be credited with all
 six (an over-read makes the requirement check MORE PERMISSIVE, the direction that turns a green run
 into a false clean bill); replacing it with brace matching then truncated `npcHit`'s body to two
 characters, because `opts = {}` is a DEFAULT PARAMETER and the first `{` after the paren is not the
 body — the over-read had been masking the truncation. Fixed by paren-matching the parameter list
-first. **The advisory line was narrowed twice for the same reason** — it first named ~24 "hand-rolled
+first. And the THIRD was found by ASKING rather than by a failure: having been caught twice by
+fixed-size slicing, I measured the last place it was used — a shared `assert*` helper was pulled in
+as a flat 2,000-char window while `assertStreetCrime` is 1,072 chars, so **928 characters of the NEXT
+function** counted as part of the helper; nothing is mis-credited today (that spill holds no extra
+gate) but declare a gating function after a helper and every caller silently inherits it. Helpers and
+thin wrappers are brace-matched now, mutation-verified THROUGH the helper (drop `safeHoused` from
+`assertStreetCrime` → the run fails naming `stealBoat`, proving the shared-helper path is
+load-bearing rather than decorative). **The advisory line was narrowed twice for the same reason** — it first named ~24 "hand-rolled
 gates", most of them `WHERE jail_until IS NULL` in ordinary SQL or `bribeGuard` pricing a remaining
 sentence; **an advisory that is mostly wrong gets ignored, which the file's own header calls worse
 than no check.** It now matches the gate's SHAPE (a date COMPARISON on a property access, not
