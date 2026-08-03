@@ -8894,3 +8894,58 @@ SURVIVED because it was incomplete**: removing the argument while leaving the pa
 merely `undefined` rather than unbound, so nothing throws. The real bug needs the parameter gone
 too, and that near-miss is the recurring lesson in its newest costume — *a bad mutation reads
 exactly like a clean bill of health*.
+
+**RED-TEAM over THE DESK (`AUDIT-desk.md`, economy v3 steps 2–4, 2026-08-03).** The recycle hook, the
+daily Dutch auction and the POL-fee buyback are the newest real-value surface in the project — a mint
+reason, a withdrawal-reserve credit, an oracle on the path, and a shelf that sells $OMR to players for
+ETH — and they shipped with mutation-verified tests but no adversarial pass. Four lenses (§10.4 and the
+desk identities; locks/concurrency/persist-clobber; the ETH accounting, the comp gates and the four
+walls; exploit and grief). **No CRITICAL, no HIGH. One finding.**
+
+**F1 (LOW) — the desk going dark reached a log line and nothing else.** The anchor is fail-closed on
+purpose: no price print, or one past `ORACLE_MAX_AGE_MS`, and no auction opens in EITHER direction.
+That is correct — and it is also the desk's entire revenue mechanism stopping ("revenue ≈ sink volume ×
+price" goes to zero) while **every §10.4 check stays green, because nothing is wrong with conservation
+when nothing trades**. `openAuction`'s `stale_price`/`no_price` result was logged hourly and routed
+nowhere, and a line repeated every hour forever fails the same way silence does. This project has built
+the watchdog twice already — the WAL archiver and the bond-oracle keeper — and both route to
+`alertDrift` latched per episode; this is the third sibling on the same discipline, with `no_lot` and
+`already` (a quiet sink day; a second tick inside the same day) never alarming. The regression is a
+labelled source tripwire, since the worker's loop is not unit-drivable, and it catches the realistic
+regression: renaming a reason in `desk.js` and orphaning the watchdog silently. Mutation-verified —
+downgrading the alert to a no-op fails by name.
+
+**Verified clean** (recorded rather than assumed): §10.4 across all three flows — a recycle nets zero
+(the sink's −X and `desk:recycle`'s +X both ride the burn term, the value landing in the
+`desk_inventory` bucket), a sale nets zero (shelf and account both inside `omrBuckets`, `desk:sale` in
+neither term), a buyback moves bucket and mint together, and neither `desk:sale` nor `desk:buyback`
+matches a `SINK_REASONS` pattern so neither leaks into the burn term; the recycle's POSITIVE sign
+convention (`back = -amount`), which is what makes `lotSize`'s `returned` sum and the board read
+correctly — a negative convention cancels in the burn term just as well and makes the auction never
+open, a plausible wrong turn that was not taken; wall 2 as one clamped subtraction under the shelf
+lock, with nothing else in the tree decrementing `desk_inventory.balance`; wall 4's budget read under
+that same lock so two concurrent buys cannot each see the whole of it; the Dutch clock clamped at both
+ends, so "will not clear below the band" is enforced by the clamp rather than by a second decision
+somebody could forget; the 48h vest needing no timer (a `desk:sale` credit is a positive $OMR row and
+`tax.js`'s FIFO replay already prices it); the lock order accounts → `desk_inventory` → `desk_auctions`
+with no AB-BA against the ~60 sinks that feed it; and no player reach at all (every mutating desk route
+is mod-gated).
+
+**THE PASS'S OWN HEADLINE IS A PROCESS FAILURE, and the report leads with it.** Most of this ran
+against a checkout **four commits stale**, which I did not check before starting. I found, reproduced
+live and fixed what looked like a MED — a mod comp buyback with no `txHash` crediting
+`chain_reserve.funded_omr`, minting `desk:buyback`, and passing every check because
+`runDeskInvariants` compared the mint against the `desk_buys` row the comp had just written and the
+Vig's `deskToReserve` counted that same row as its own backing. **All of it was already fixed at
+`origin`, and the shipped fix is better than mine**: mine refused the whole call without a `txHash`;
+the shipped one gates only the reserve credit, so a comp can still stock the shelf (soft supply inside
+`omrBuckets`, and QA needs inventory to test the sell side) while never crediting the number
+`signVoucher` reads before signing a real withdrawal — crediting THAT asserts hard OMR arrived, and it
+is the line a comp must never cross. My version was discarded, along with a `comps buy nothing` check
+that would have been *wrong* on the real HEAD. **A stale checkout does not fail loudly; it produces a
+confident, reproducible, well-evidenced finding about code nobody runs** — detected only because the
+docs guard reported 111 src files against the tree's 115. Third time this session, and now the first
+line of the report. **Flagged, not changed:** the desk's anchor is the Vig buyback's price print, so
+two revenue systems share one heartbeat (deliberate, and F1 now makes a halt audible), and the shelf
+clamp is currently unreachable — worth keeping as defence in depth, worth knowing the happy path does
+not exercise it.
