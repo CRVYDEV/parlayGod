@@ -4485,3 +4485,50 @@ garrison and hard-won ground would be cheap again immediately. It also forces a 
 change of hands, which is monotone inflation rather than a fix. (c) capping the discount product
 weakens the rewards themselves, which is a balance change; this is not. Nothing signed moved — the
 change is *which* number gets stored.
+
+## NPC FAMILIES — somewhere to join (founder-directed 2026-08-03)
+
+Design + the decisions behind each exclusion: `omerta-npc-families-design.md`.
+
+The coach's first social rung — *"Nobody survives alone"*, banded to levels 3–12 — held **43% of
+advised play** across a 7-day solo harness run and could never be acted on: `GET /v1/gangs` is empty
+on a thin server, so the only actionable half is FOUNDING one, at level 5 and $25,000, which a
+level-3 player does not have and which gives them a family of one. Residents now found and fill
+families, so there is somewhere to walk in.
+
+**This adds no faucet, and that is structural rather than incidental.** The founding cost is paid by
+a resident out of its own `npc:seed` cash through the audited `createGang`, so the only §10.4 rows
+step one can write are `gang:found` (a SINK) and `gang:dissolved` (the existing dissolution burn).
+The resident economy can only get *smaller* from it, and the extraction ceiling measured under THE
+STREET WAR step two is unchanged.
+
+| lever | ships at | what it does |
+|---|---|---|
+| `POPULATION.FAMILIES.TARGET` | 3 | families the worker keeps alive. **0 disables the whole feature.** |
+| `POPULATION.FAMILIES.MIN_MEMBERS` | 2 | below this the worker recruits |
+| `POPULATION.FAMILIES.MAX_MEMBERS` | 5 | far below `M3.GANG_MAX_MEMBERS` (20), so a player always fits |
+| `POPULATION.FAMILIES.FOUND_BANDS` | capo, boss | the bands that can cover `M3.GANG_FOUND_COST` |
+
+**What they deliberately cannot do, each decided rather than defaulted.** No Commission seat (a
+decree moves signed surfaces — safehouse cost, war cost, laylow, convoy defence, the loot rate — and
+a family that cannot vote does not merely abstain, it shrinks the electorate and makes deadlock more
+likely). No family yield (that is a real §10.4 $OMR transfer into a reserve nobody can ever spend
+from — a permanent sink wearing a payout's clothes, and a smaller pot for every real family). No
+wars against them (an opponent that never retaliates makes war a fixed-price purchase of standing,
+repeatable, with the treasury spoils on top). No turf, no territory, no strongholds.
+
+Both exclusions are **true by construction today** — the queries require `standing > 0`, and a family
+that neither pays tribute nor wins a war has none — but that is an accident of two other decisions,
+not a promise. The explicit flag is what a test can pin, and what stops a later step (residents
+paying tribute) from re-opening it silently.
+
+**`invariants.js` must NOT exclude them**, and it does not: an NPC family's treasury is a real bucket
+holding real ledgered value, so filtering it out would manufacture exactly the drift the check exists
+to catch. Noted at both exclusion sites so the next reader does not "finish the job".
+
+**Step two candidates, each wanting its own sizing pass:** NPC families that DEFEND (a war score, a
+garrison, spoils worth taking — the cartel-outfit shape, which re-opens the standing faucet);
+residents filling crew-heist roles (the co-op faucet measures 1.46× solo per member, so making it
+solo-reachable on demand is an emission change); NPC-held turf on the OCCUPATION model rather than the
+free-seize one; and residents paying tribute — which would give them standing, and therefore re-open
+the two exclusions above.

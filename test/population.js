@@ -707,6 +707,134 @@ assert.equal(npcBandOf(0.999).id, 'boss', 'the high roll is the boss band');
   await pool.query('UPDATE boxing_title SET holder_fighter=NULL, holder_char=NULL, holder_name=NULL, since=NULL, last_defense=NULL WHERE id=1');
 }
 
+// ══════════════ NPC FAMILIES (omerta-npc-families-design.md) ══════════════
+// The coach's first social rung held 43% of a measured 7-day solo run and could never be acted on:
+// nothing to JOIN, and founding costs level 5 + $25,000. Residents found and fill families through
+// the AUDITED createGang/joinGang so a real player can walk into one. The load-bearing claims are
+// the three EXCLUSIONS (a silent Commission ballot, real $OMR into an unspendable reserve, a family
+// that cannot fight back being a standing farm) and the retirement hole this opens.
+{
+  const { runFamilies } = await import('../src/population.js');
+  const { seatedGangs } = await import('../src/commission.js');
+  const { POPULATION, M3 } = await import('../src/rules.js');
+  const F = POPULATION.FAMILIES;
+  assert(F.TARGET > 0, 'the feature ships ON — TARGET 0 disables it entirely');
+  assert(F.MAX_MEMBERS < M3.GANG_MAX_MEMBERS,
+    `an NPC family never fills up (${F.MAX_MEMBERS} of ${M3.GANG_MAX_MEMBERS}), so a player always has room to walk in`);
+
+  // the city has to be able to AFFORD a founder: capo/boss residents carry the $25,000 fee
+  for (let i = 0; i < 3; i++) await spawnResident(pool, { band: POPULATION.BANDS.find((b) => b.id === 'boss') });
+  // BASELINES, not absolutes: earlier blocks call runPopulation, which now founds families too, and
+  // retirements there dissolve them — so the lifetime `gang:found` total is not this block's.
+  const cashBefore = Number((await pool.query('SELECT COALESCE(SUM(cash),0) s FROM characters WHERE is_npc')).rows[0].s);
+  const foundBefore = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='gang:found'")).rows[0].s);
+
+  let founded = 0;
+  for (let i = 0; i < F.TARGET + 4; i++) founded += (await runFamilies(pool)).familiesFounded;
+  const fams = (await pool.query('SELECT id, name, tag, npc_flag FROM gangs WHERE npc_flag')).rows;
+  assert.equal(fams.length, F.TARGET, `the worker keeps ${F.TARGET} families on the board (got ${fams.length})`);
+  for (let i = 0; i < 4; i++) await runFamilies(pool);
+  assert.equal(Number((await pool.query('SELECT COUNT(*) n FROM gangs WHERE npc_flag')).rows[0].n), F.TARGET,
+    'and stops at TARGET — it does not found one a tick forever');
+
+  // it is a SINK, not a faucet: the fee comes out of the founder's own npc:seed cash and is ledgered
+  // `gang:found` by the audited path, so the resident pool can only get SMALLER
+  const foundDelta = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='gang:found'")).rows[0].s) - foundBefore;
+  assert.equal(foundDelta, -M3.GANG_FOUND_COST * founded, `every founding is a ledgered gang:found SINK at the real price (${founded} of them)`);
+  const cashAfter = Number((await pool.query('SELECT COALESCE(SUM(cash),0) s FROM characters WHERE is_npc')).rows[0].s);
+  assert.equal(cashAfter, cashBefore + foundDelta, 'and the founders really paid it out of their own seed cash — no faucet anywhere in this');
+
+  // …and they get filled, so a player joining does not join a family of one
+  for (let i = 0; i < F.TARGET * F.MIN_MEMBERS + 4; i++) await runFamilies(pool);
+  for (const g of fams) {
+    const n = Number((await pool.query('SELECT COUNT(*) n FROM gang_members WHERE gang_id=$1', [g.id])).rows[0].n);
+    assert(n >= F.MIN_MEMBERS, `${g.name} has a roster (${n} of ${F.MIN_MEMBERS})`);
+    assert(n <= F.MAX_MEMBERS, `${g.name} does not fill up (${n})`);
+  }
+
+  // THE JOIN BOARD shows them, flagged. Hidden scenery is not a call to make silently.
+  const board = (await call('GET', '/v1/gangs')).body.gangs;
+  const shown = board.filter((g) => g.npc);
+  assert.equal(shown.length, F.TARGET, 'every NPC family is on the join board');
+  assert(shown.every((g) => g.members >= F.MIN_MEMBERS), 'with a real roster count');
+
+  // ── EXCLUSION 1: THE COMMISSION. An NPC family cannot vote, and a silent ballot shrinks the
+  // electorate and deadlocks decrees that move signed surfaces. Seeded with standing that would
+  // otherwise seat it FIRST — the `standing > 0` filter is not what is being tested here.
+  await pool.query('UPDATE gangs SET season_tribute=9999999 WHERE npc_flag');
+  const seats = await seatedGangs(pool);
+  assert.equal(seats.filter((g) => fams.some((f) => f.id === g.id)).length, 0,
+    'an NPC family never holds a Commission seat, even out-standing every real family');
+
+  // ── EXCLUSION 2: THE FAMILY YIELD. Real player-funded $OMR into a reserve nobody can spend from.
+  // Matched by NAME, not id: `yieldBoard` does not expose ids, so the obvious id filter here is
+  // ALWAYS false and the assertion passes with the exclusion removed — which is exactly what the
+  // mutation run showed. The PAYER is asserted too, because the board is display and the payer is
+  // where the value actually moves.
+  const { yieldBoard, payFamilyYield } = await import('../src/exchange.js');
+  const npcNames = new Set(fams.map((f) => f.name));
+  const yb = await yieldBoard(pool);
+  assert.equal((yb.families || []).filter((g) => npcNames.has(g.name)).length, 0,
+    'an NPC family never appears on the family-yield board, out-standing everyone');
+  await pool.query('UPDATE family_yield_pool SET balance = 500 WHERE id=1');
+  const paid = await payFamilyYield(pool);
+  assert.equal((paid.families || []).filter((g) => npcNames.has(g.name)).length, 0,
+    'and never draws a cent of it');
+  assert.equal(Number((await pool.query('SELECT COALESCE(SUM(omr_reserve),0) s FROM gangs WHERE npc_flag')).rows[0].s), 0,
+    'their reserves are untouched — the $OMR stayed where a real family can still win it');
+  await pool.query('UPDATE gangs SET season_tribute=0 WHERE npc_flag');
+
+  // ── EXCLUSION 3: WAR. A family that never retaliates is a fixed-price standing farm.
+  const boss = await mk('War Hungry');
+  await pool.query("UPDATE characters SET respect=250000, cash=9000000 WHERE id=$1", [boss.id]);
+  assert.equal((await call('POST', '/v1/gangs', { token: boss.token, body: { name: 'Real Outfit', tag: 'REAL' } })).code, 200, 'a player founds their own');
+  await pool.query('UPDATE gangs SET treasury=5000000 WHERE id=(SELECT gang_id FROM gang_members WHERE character_id=$1)', [boss.id]);
+  const war = await call('POST', `/v1/gangs/war/${fams[0].id}`, { token: boss.token });
+  assert.equal(war.code, 400, 'declaring war on an NPC family is refused');
+  assert.equal(war.body.error, 'npc', 'and says why');
+
+  // ── THE RETIREMENT HOLE this opens. Retirement is NOT a death — runEstate never sees it — so a
+  // kept membership row is a phantom made man; and if they were the LAST member, a family that
+  // never dissolves and never ledgers gang:dissolved, which is permanent §10.4 treasury drift.
+  const solo = (await pool.query('SELECT id FROM gangs WHERE npc_flag ORDER BY id LIMIT 1')).rows[0].id;
+  const roster = (await pool.query('SELECT character_id FROM gang_members WHERE gang_id=$1 ORDER BY character_id', [solo])).rows;
+  await pool.query('UPDATE gangs SET treasury=4000 WHERE id=$1', [solo]);
+  const cRet = await pool.connect();
+  try {
+    await cRet.query('BEGIN');
+    for (const m of roster) await retireResident(cRet, m.character_id);
+    await cRet.query('COMMIT');
+  } catch (e) { await cRet.query('ROLLBACK'); throw e; } finally { cRet.release(); }
+  assert.equal(Number((await pool.query('SELECT COUNT(*) n FROM gang_members WHERE gang_id=$1', [solo])).rows[0].n), 0,
+    'a retiring resident leaves the family — no phantom made man on the roster');
+  assert.equal(Number((await pool.query('SELECT COUNT(*) n FROM gangs WHERE id=$1', [solo])).rows[0].n), 0,
+    'and the last one out dissolves it, through the audited path');
+  assert.equal(Number((await pool.query(
+    "SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='gang:dissolved' AND counterparty=$1", [solo])).rows[0].s), -4000,
+    'with the treasury BURNED and ledgered — the drift the §10.4 job exists to catch');
+
+  // ── THE FLAG IS ABOUT WHO RUNS IT. Succession can hand the chair to a player who joined as a
+  // soldier, and a player-run family carrying the flag would be barred from the Commission and the
+  // yield — a penalty applied to a player by a flag that was never about them.
+  const heir = await mk('Made Man Marco');
+  await pool.query('UPDATE characters SET respect=5000 WHERE id=$1', [heir.id]);
+  const target = (await pool.query('SELECT id FROM gangs WHERE npc_flag ORDER BY id LIMIT 1')).rows[0].id;
+  assert.equal((await call('POST', `/v1/gangs/${target}/join`, { token: heir.token })).code, 200, 'a player walks into a local outfit');
+  assert.equal((await pool.query('SELECT npc_flag FROM gangs WHERE id=$1', [target])).rows[0].npc_flag, true,
+    'joining as a soldier changes nothing — the house still runs it');
+  const npcMembers = (await pool.query(
+    `SELECT m.character_id FROM gang_members m JOIN characters c ON c.id=m.character_id
+      WHERE m.gang_id=$1 AND c.is_npc ORDER BY m.character_id`, [target])).rows;
+  const cSucc = await pool.connect();
+  try {
+    await cSucc.query('BEGIN');
+    for (const m of npcMembers) await retireResident(cSucc, m.character_id);
+    await cSucc.query('COMMIT');
+  } catch (e) { await cSucc.query('ROLLBACK'); throw e; } finally { cSucc.release(); }
+  assert.equal((await pool.query('SELECT npc_flag FROM gangs WHERE id=$1', [target])).rows[0].npc_flag, false,
+    'but when the chair passes to the PLAYER, the family is theirs — the flag clears');
+}
+
 console.log('✅ THE POPULATION passed — residents spawn as real flagged characters on the streets roster '
   + '(flag exposed), the npc:seed faucet + npc:retire sink keep §10.4 drift-0, the worker tops the city up '
   + 'and retires old lines, and residents never hold $OMR (nothing pays them any) and are excluded from City Standing, ops and the funnel; STEP TWO: they advertise consent limits, post SECURED loan offers and standing buy orders, and retire without stranding escrow — all pure recycling, zero new faucet; JAILBIRDS: the worker keeps TARGET residents in lockup (never over-fills, refills after a bust) so the §7.8 bust verb + the bust dailies work on a solo run — the reward is the signed ledgered bust:reward faucet; MARKS (Street War step two): residents spawn holding band-priced beaters (counted into car conservation via rng_audit npc:car grant/retire rows), sleepy-joint fronts whose rob cut prices at FRONT_INCOME_BPS of the catalog curve, dinghies at the docks, and self-bought freight (goods:buy, recycle-only, budget-floored above the picked-clean line) — stealable/robbable through the ordinary verbs with conservation exact through the whole grant→steal→retire cycle');

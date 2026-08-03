@@ -400,6 +400,14 @@ const SIGNED = [
   ['POPULATION.SPAWN_PER_TICK', 4],
   ['POPULATION.TARGET', 48],
   ['POPULATION.TURNOVER.PER_DAY', 24],
+  // NPC FAMILIES — the "Nobody survives alone" rung is uncompletable solo without somewhere to
+  // join. §10.4-free by construction (a resident founder pays the SIGNED gang:found sink out of
+  // its own seed cash), and deliberately powerless: excluded from the Commission and the family
+  // yield, unwarrable, holds no turf. TARGET 0 turns the whole thing off.
+  ['POPULATION.FAMILIES.TARGET', 3],
+  ['POPULATION.FAMILIES.MIN_MEMBERS', 2],
+  ['POPULATION.FAMILIES.MAX_MEMBERS', 5],
+  ['POPULATION.FAMILIES.FOUND_BANDS', ['capo', 'boss']],
   // JAILBIRDS — makes the SIGNED §7.8 bust:reward faucet reachable solo (bounded by the refill)
   ['POPULATION.JAILBIRDS.TARGET', 2],
   ['POPULATION.JAILBIRDS.MIN_S', 240],

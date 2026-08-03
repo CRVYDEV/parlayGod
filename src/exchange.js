@@ -234,9 +234,15 @@ export async function payFamilyYield(pool) {
     const chamber = levy ? await seatedGangs(client) : [];
     const ranked = (levy && chamber.length
       ? chamber.slice(0, FAMILY_YIELD.SEATS).map((g) => ({ id: g.id, name: g.name, standing: 1 }))
+      // NPC FAMILIES excluded, explicitly: this is a §10.4 $OMR TRANSFER into `gangs.omr_reserve`,
+      // and a resident-run family drawing it would move real player-funded value into a reserve
+      // nobody can ever spend from — not a leak (the bucket is inside omrBuckets, so conservation
+      // still holds) but a permanent sink wearing a payout's clothes, and a smaller pot for every
+      // real family. The `standing > 0` filter below already excludes them today; the flag is what
+      // survives a later step that gives them standing.
       : (await client.query(
         `SELECT id, name, (COALESCE(season_tribute,0) + 10000 * COALESCE(season_wars,0)) AS standing
-           FROM gangs ORDER BY standing DESC, id ASC LIMIT $1`, [FAMILY_YIELD.SEATS])).rows)
+           FROM gangs WHERE NOT npc_flag ORDER BY standing DESC, id ASC LIMIT $1`, [FAMILY_YIELD.SEATS])).rows)
       .filter((g) => num(g.standing) > 0);
     if (!ranked.length) { await client.query('ROLLBACK'); return { paid: 0, families: [] }; }
 
@@ -292,7 +298,7 @@ export async function yieldBoard(db) {
   const p = await familyYieldPool(db);
   const top = (await db.query(
     `SELECT id, name, tag, omr_reserve, (COALESCE(season_tribute,0) + 10000 * COALESCE(season_wars,0)) AS standing
-       FROM gangs ORDER BY standing DESC, id ASC LIMIT $1`, [FAMILY_YIELD.SEATS])).rows;
+       FROM gangs WHERE NOT npc_flag ORDER BY standing DESC, id ASC LIMIT $1`, [FAMILY_YIELD.SEATS])).rows;
   const weights = top.map((_, i) => FAMILY_YIELD.WEIGHTS[i] ?? 1);
   const total = weights.reduce((a, b) => a + b, 0) || 1;
   return {

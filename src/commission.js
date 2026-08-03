@@ -39,8 +39,16 @@ async function overrideWeightOf(db, week) {
 // Deterministic tiebreak on id: tied families must not flap seats (or the head chair) per read.
 export async function seatedGangs(db) {
   return (await db.query(
+    // NPC FAMILIES: never seated, EXPLICITLY. A resident-run family cannot vote, and a silent
+    // ballot is not neutral — it shrinks the effective electorate and makes deadlock likelier, on a
+    // chamber whose decrees modify signed surfaces (safehouse cost, war cost, laylow, convoy
+    // defence, the loot rate). Today it is also true by accident, since the `standing > 0` filter
+    // below excludes a family that neither pays tribute nor wins a war; the flag is what makes it a
+    // promise a test can pin, and what stops a later step (residents paying tribute) re-opening it
+    // in silence. NOTE the invariants deliberately do NOT exclude them — their treasuries are real
+    // §10.4 buckets, and filtering there would manufacture the drift the check exists to catch.
     `SELECT id, name, tag, season_tribute + 10000 * season_wars AS standing FROM gangs
-      WHERE season_tribute + 10000 * season_wars > 0
+      WHERE NOT npc_flag AND season_tribute + 10000 * season_wars > 0
       ORDER BY season_tribute + 10000 * season_wars DESC, id ASC LIMIT ${COMMISSION.SEATS}`)).rows;
 }
 

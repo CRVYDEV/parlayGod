@@ -3315,8 +3315,9 @@
       t.innerHTML = `
         <h2>The Families</h2>
         ${gl.length ? `<div class="grid">${gl.sort((a, b) => b.standing - a.standing).map((g) => `
-          <div class="card"><span class="t">[${g.tag}] ${g.name}</span>${g.seal ? ` <span class="chip">${g.seal}</span>` : ''}
+          <div class="card"><span class="t">[${g.tag}] ${g.name}</span>${g.seal ? ` <span class="chip">${g.seal}</span>` : ''}${g.npc ? ' <span class="chip">LOCAL OUTFIT</span>' : ''}
             <div class="d">${g.members} made · ${g.warsWon} wars won · standing ${fmt(g.standing)}</div>
+            ${g.npc ? '<div class="d" style="color:var(--dim);font-size:12px">a neighbourhood crew — they take anyone, but they hold no seat at the Commission</div>' : ''}
             <button class="act" data-join="${g.id}">kiss the ring</button></div>`).join('')}</div>`
           : '<span class="d" style="color:var(--dim)">no families yet — the city is waiting for a boss</span>'}
         <h2 style="margin-top:14px">Found Your Own <span class="d" style="font-size:11px">($${fmt(rules?.family?.foundCost || 25000)} — level-gated)</span></h2>
