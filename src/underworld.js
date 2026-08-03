@@ -13,9 +13,8 @@
 // anchor), heat deterrents, loot-exposure windows, extraction caps, income curves. All
 // numbers are founder sign-off levers.
 import { GameError, npcTier, bumpStanding, bestNpc } from './game.js';
-import { UNDERWORLD, npcOf, GUNS, dayOf, weekOf, leadTaskOf, levelOf, assetEnergyCap } from './rules.js';
+import { UNDERWORLD, npcOf, GUNS, dayOf, weekOf, leadTaskOf, levelOf, assetEnergyCap , jailed } from './rules.js';
 
-const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 
 // The board — the cast, your standing with each, what the next tier buys, plus step two:
 // today's LEAD (your best fixture, and whether its bonus is already claimed) and — Madame T3

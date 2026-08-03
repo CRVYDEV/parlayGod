@@ -14,13 +14,14 @@ export const uid = () => crypto.randomUUID();
 
 export const now = () => new Date();
 
-export const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
-
-export const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
+// jailed / safeHoused / hospitalized MOVED to rules.tail.js — the universal leaf, beside their five
+// siblings (penSafe, inHole, witproActive, crewCold, isMade). They were defined here, which reads
+// wrong from outside the social package, so sixteen modules hand-rolled the date comparison instead
+// of importing across; the gate matrix named every copy. Re-exported so this package's ~100 call
+// sites are untouched — `import { jailed } from './shared.js'` still resolves.
+export { jailed, safeHoused, hospitalized } from '../rules.js';
 
 export const isWanted = (ch) => ch && ch.wanted_until && new Date(ch.wanted_until) > new Date(); // LOAN step 4: a WANTED defaulter forfeits omertà (the rat precedent)
-
-export const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
 
 export const rand = (a, b) => Math.floor(Math.random() * (b - a + 1)) + a;
 

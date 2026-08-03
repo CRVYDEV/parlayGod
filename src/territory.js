@@ -9,12 +9,9 @@
 import { postPower } from './roster.js';
 import { GameError, bus } from './game.js';
 import { DISTRICTS, TERRITORY_RACKETS, TERRITORY_TYPES, territoryTierOf, territoryTypeOf, territoryBuildCost,
-         territoryFortCost, territoryRankOf, syndicateOf, TERRITORY_SYNDICATE_MIN, levelOf, CONSTANTS, rosterMult, charterFx, M3 } from './rules.js';
+         territoryFortCost, territoryRankOf, syndicateOf, TERRITORY_SYNDICATE_MIN, levelOf, CONSTANTS, rosterMult, charterFx, M3, jailed, hospitalized, safeHoused } from './rules.js';
 
 const canCommand = (h) => h.owned.gangRole === 'boss' || h.owned.gangRole === 'underboss';
-const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
-const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
-const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
 
 // the operation's hourly rate = the tier's base × the TYPE's income tilt (step three)
 const ratePerHr = (racket) => (territoryTierOf(racket.tier)?.incomePerHr || 0) * territoryTypeOf(racket.kind).incomeMult;
@@ -189,7 +186,7 @@ export async function upgradeRacket(ch, districtId, client, h) {
 export async function collectTerritory(ch, client, h) {
   if (!h.owned.gangId) throw new GameError('no_gang', "You're not in a family.");
   // BALANCE D2 — shield, not bunker: walking the district to collect is an exposed act
-  if (ch.safe_until && new Date(ch.safe_until) > new Date())
+  if (safeHoused(ch))
     throw new GameError('safe', 'The runners report to a man on the street, not a ghost — collection waits until you surface.');
   const g = (await client.query('SELECT treasury, charter FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
   const rackets = (await client.query('SELECT * FROM territory_rackets WHERE owner_gang=$1 FOR UPDATE', [h.owned.gangId])).rows;

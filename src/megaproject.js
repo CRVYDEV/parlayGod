@@ -29,9 +29,8 @@
 // singleton-class row, locked LAST — the canonical characters → … → singletons order).
 import { GameError, bus, notify } from './game.js';
 import { spendOmr } from './vanity.js';
-import { MEGAPROJECT, megaMonumentAt, megaTierOf, builderRankOf, GOODS } from './rules.js';
+import { MEGAPROJECT, megaMonumentAt, megaTierOf, builderRankOf, GOODS , jailed } from './rules.js';
 
-const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const round6 = (x) => Math.round(Number(x) * 1e6) / 1e6;
 
 async function completedCount(client) {

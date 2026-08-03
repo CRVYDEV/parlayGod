@@ -8,12 +8,10 @@
 // account-level LEGEND (survives death, the boxing-legend/hitman-rep precedent). CASH ONLY (the Den's rule).
 import crypto from 'node:crypto';
 import { GameError, bus, ledger, notify, rngLog, bumpStanding, npcMult, npcTier } from './game.js';
-import { STABLE, UNDERWORLD, stableKindOf, stableMeetOf, racerRankOf, racerLegendOf, levelOf } from './rules.js';
+import { STABLE, UNDERWORLD, stableKindOf, stableMeetOf, racerRankOf, racerLegendOf, levelOf , jailed, hospitalized } from './rules.js';
 
 const stakesMs = () => Number(process.env.STAKES_MS) || STABLE.STAKES.REGISTER_MS; // TEST-ONLY env (SEARCH_MS pattern)
 
-const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
-const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
 const injured = (r) => r.injured_until && new Date(r.injured_until) > new Date();
 const onCooldown = (r) => r.circuit_at && new Date(r.circuit_at) > new Date();
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));

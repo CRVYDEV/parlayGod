@@ -8,7 +8,7 @@
 // extraction — both legal-gated. Holdings live at the ACCOUNT level (survive death → the heir keeps
 // the book, the retirement fantasy); the family book lives on the gang and dies with the family.
 import { GameError } from './game.js';
-import { PORTFOLIO, tickerOf, tickerPriceOf, dayOf, dynastyTierOf } from './rules.js';
+import { PORTFOLIO, tickerOf, tickerPriceOf, dayOf, dynastyTierOf, jailed, safeHoused } from './rules.js';
 import { spendOmr } from './vanity.js';
 
 // name your DYNASTY (the account-level book survives death → a generational fund). A $OMR vanity sink
@@ -106,7 +106,7 @@ export async function grantShares(client, accountId, ticker, omrWorth) {
 export async function invest(ch, ticker, omr, client, h) {
   const t = tickerOf(ticker);
   if (!t) throw new GameError('ticker', 'No such stock on the board.');
-  if (ch.jail_until && new Date(ch.jail_until) > new Date())
+  if (jailed(ch))
     throw new GameError('jailed', "You can't move money into legit fronts from a cell."); // F4: consistency with other extraction-adjacent acts
   const amt = validAmount(omr);
   // the classic laundering red flag: moving a big sum into legit fronts gets noticed (the launder
@@ -119,7 +119,7 @@ export async function invest(ch, ticker, omr, client, h) {
   const windowUsed = Math.max(0, Number(ch.rwa_used || 0) - Math.max(0, refill));
   const cumulative = windowUsed + amt;
   const scrutiny = cumulative >= PORTFOLIO.SCRUTINY_MIN_OMR;
-  if (scrutiny && ch.safe_until && new Date(ch.safe_until) > new Date())
+  if (scrutiny && safeHoused(ch))
     throw new GameError('safe', "You can't move big money into legit fronts while you're to ground.");
   const price = tickerPriceOf(ticker);
   const bought = round6(amt / price);
@@ -212,7 +212,7 @@ export async function familyInvest(ch, ticker, omr, client, h) {
     throw new GameError('rank', 'Only the boss or underboss invests the family money.');
   const t = tickerOf(ticker);
   if (!t) throw new GameError('ticker', 'No such stock on the board.');
-  if (ch.jail_until && new Date(ch.jail_until) > new Date())
+  if (jailed(ch))
     throw new GameError('jailed', "You can't move the family money into legit fronts from a cell."); // parity with personal invest
   const amt = validAmount(omr);
   const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];

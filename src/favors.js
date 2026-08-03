@@ -27,12 +27,10 @@
 // the pot: FOR UPDATE on it serializes two runners racing the same request.
 import crypto from 'node:crypto';
 import { GameError, bus, notify, trunkCap } from './game.js';
-import { FAVOR, GOODS, DISTRICTS, M3 } from './rules.js';
+import { FAVOR, GOODS, DISTRICTS, M3 , jailed, safeHoused } from './rules.js';
 const districtName = (id) => (DISTRICTS.find((d) => d.id === id) || {}).name || id;
 
 const uid = () => crypto.randomUUID();
-const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
-const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
 const cargoCount = (cargo) => Object.values(cargo).reduce((a, n) => a + (n || 0), 0);
 
 // (audit F2) the POSTER's trunk capacity, computed by the CANONICAL `trunkCap` rather than restated

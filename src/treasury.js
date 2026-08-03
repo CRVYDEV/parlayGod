@@ -32,7 +32,7 @@
 import crypto from 'node:crypto';
 import { GameError } from './game.js';
 import { spendOmr } from './vanity.js';
-import { BONDS, PORTFOLIO, SELL_TAX, TREASURY } from './rules.js';
+import { BONDS, PORTFOLIO, SELL_TAX, TREASURY, jailed, safeHoused } from './rules.js';
 
 const round6 = (n) => Math.round(n * 1e6) / 1e6;
 
@@ -159,7 +159,7 @@ export async function treasuryStatus(pool) {
 // SAME cumulative rwa_used window as a paper invest (structuring-proof across both books) with its
 // SCRUTINY_HEAT and safehouse block.
 export async function claimVaulted(ch, omr, client, h) {
-  if (ch.jail_until && new Date(ch.jail_until) > new Date())
+  if (jailed(ch))
     throw new GameError('jailed', "You can't move money into the vault from a cell.");
   if (!h.acct.minted)
     throw new GameError('mint', 'The vault only opens to a made man — mint your character first.');
@@ -181,7 +181,7 @@ export async function claimVaulted(ch, omr, client, h) {
     : PORTFOLIO.SCRUTINY_MIN_OMR;
   const windowUsed = Math.max(0, Number(ch.rwa_used || 0) - Math.max(0, refill));
   const scrutiny = windowUsed + amt >= PORTFOLIO.SCRUTINY_MIN_OMR;
-  if (scrutiny && ch.safe_until && new Date(ch.safe_until) > new Date())
+  if (scrutiny && safeHoused(ch))
     throw new GameError('safe', "You can't move big money into the vault while you're to ground.");
   // LOCK THE POOL. There is no reserve row to lock now, so the serialization point is the claimer's
   // own line plus an advisory lock over the shared pool: two claims must not both read the same

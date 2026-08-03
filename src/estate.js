@@ -5,7 +5,7 @@
 // (keyed on account_id) → SURVIVES DEATH: the heir inherits the compound (never in the runEstate wipe).
 import { GameError, cleanText, bus } from './game.js';
 import { ESTATE, AUCTION, MADE, isMade, estateTierOf, estateFeatureOf, estateStaffOf, carVal, tickerPriceOf, hitmanRankOf, sealOf,
-  collectorRankOf, collectionSetsOf } from './rules.js';
+  collectorRankOf, collectionSetsOf, jailed } from './rules.js';
 import { spendOmr } from './vanity.js';
 
 const featureSet = (features) => new Set(String(features || '').split(',').filter(Boolean));
@@ -315,7 +315,7 @@ export async function throwGala(ch, client, h) {
 // (the actor only); the host's estate row is written monotonically (gala_best converges under race).
 export async function attendGala(ch, hostCharacterId, client, h) {
   if (hostCharacterId === ch.id) throw new GameError('self', "You can't be a guest at your own party.");
-  if (ch.jail_until && new Date(ch.jail_until) > new Date())
+  if (jailed(ch))
     throw new GameError('jailed', 'No parties from a cell.'); // (red-team LOW) the design's 'not in lockup' gate
   const host = (await client.query('SELECT id, name, account_id, alive FROM characters WHERE id=$1', [hostCharacterId])).rows[0];
   if (!host || !host.alive) throw new GameError('gone', 'That host is gone.');

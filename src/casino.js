@@ -8,10 +8,8 @@
 // round in one call); the Numbers is a daily ticket resolved lazily against the seed-drawn number.
 import crypto from 'node:crypto';
 import { GameError, bus, npcTier, bumpStanding, bumpMastery, masteryFx, ledger, notify, rngLog } from './game.js';
-import { CASINO, UNDERWORLD, MASTERY, numbersDrawOf, dayOf, weekOf, levelOf, hash01, MARKET_SEED, ACCESS_STAKE } from './rules.js';
+import { CASINO, UNDERWORLD, MASTERY, numbersDrawOf, dayOf, weekOf, levelOf, hash01, MARKET_SEED, ACCESS_STAKE , jailed, hospitalized } from './rules.js';
 
-const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
-const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
 const d6 = () => 1 + Math.floor(Math.random() * 6);
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1)); // inclusive (the stable.js form-roll)
 // blackjack: an infinite deck (each draw independent, unpredictable — the same server RNG as dice).

@@ -17,12 +17,10 @@
 // races fall back to the 40P01→contention mapping.
 import crypto from 'node:crypto';
 import { GameError, bus, ledger, notify, skillMult, trunkCap, npcTier, bumpStanding, bumpMastery, masteryFx } from './game.js';
-import { BLACK_MARKET as MARKET, GOODS, SKILLS, UNDERWORLD } from './rules.js';
+import { BLACK_MARKET as MARKET, GOODS, SKILLS, UNDERWORLD , jailed, safeHoused } from './rules.js';
 import { logCarCollect } from './collection.js';
 
 const uid = () => crypto.randomUUID();
-const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
-const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
 const expired = (l) => new Date(l.expires_at) <= new Date();
 const cargoCount = (cargo) => Object.values(cargo).reduce((a, n) => a + (n || 0), 0);
 

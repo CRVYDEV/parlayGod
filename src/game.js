@@ -14,7 +14,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS, RANKS,
          REGIMEN, disciplineLvlOf, energyCapOf, nerveCapOf, BUSINESSES, WIRE, RIVALS, CORNER, cornerTasksOf,
          KITCHENS, labModuleCost, recyclesToDesk, DESK_RECYCLE_REASON, isMade, madeSeconds,
          MADE_LADDER, madeRungIdx, madeRungOf, ladderFx,
-         ASSETS, OPERATIONS, opSlotsOf, nextOpSlotLevel, MISSIONS, dailyLiveFor } from './rules.js';
+         ASSETS, OPERATIONS, opSlotsOf, nextOpSlotLevel, MISSIONS, dailyLiveFor, jailed, safeHoused } from './rules.js';
 import { dbCaps } from './db.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
@@ -1514,7 +1514,7 @@ export function doCrime(ch, crimeId, client, h, approach) {
   const c = CRIMES.find((x) => x.id === crimeId);
   if (!c) throw new GameError('bad_crime', 'No such job.');
   const lvl = levelOf(Number(ch.respect));
-  if (ch.jail_until && new Date(ch.jail_until) > new Date()) throw new GameError('jailed', 'You are in lockup.');
+  if (jailed(ch)) throw new GameError('jailed', 'You are in lockup.');
   if (lvl < c.lvl) throw new GameError('level', `That job needs level ${c.lvl}.`);
   if (Number(ch.nerve) < c.nerve) throw new GameError('nerve', `Takes ${c.nerve} nerve.`);
   // D6a — THE APPROACH: the per-job risk/reward choice. An unknown/omitted approach falls back to
@@ -1671,7 +1671,7 @@ export function doCrime(ch, crimeId, client, h, approach) {
 // ── §7.3 TRAIN ──
 export async function train(ch, stat, client, h) {
   if (!['muscle', 'cunning', 'speed'].includes(stat)) throw new GameError('bad_stat', 'No such stat.');
-  if (ch.jail_until && new Date(ch.jail_until) > new Date()) throw new GameError('jailed', 'No gym in lockup.');
+  if (jailed(ch)) throw new GameError('jailed', 'No gym in lockup.');
   if (Number(ch.energy) < 10) throw new GameError('energy', 'Too tired to train.');
   // PACING (founder-directed, from live alpha): the gym had NO cooldown and no cash cost, so at the
   // old 40/min energy regen it ran ~240 sessions an hour — which is how a tester cleared every
@@ -1734,7 +1734,7 @@ export async function bank(ch, dir, amount, client, h) {
   if (dir === 'deposit') {
     // BALANCE D2 — shield, not bunker: banking is an EXPOSED act (the courier walks). You can't
     // move money into the vault from inside a safehouse; withdrawing (bringing cash to hand) is fine.
-    if (ch.safe_until && new Date(ch.safe_until) > new Date())
+    if (safeHoused(ch))
       throw new GameError('safe', "The courier won't come to a safehouse — banking waits until you surface.");
     if (Number(ch.cash) < amount) throw new GameError('cash', 'Not that much in pocket.');
     ch.cash = Number(ch.cash) - amount; ch.bank = Number(ch.bank) + amount;
@@ -1755,7 +1755,7 @@ export async function bank(ch, dir, amount, client, h) {
 export async function travel(ch, district, client, h) {
   if (!DISTRICTS.find((d) => d.id === district)) throw new GameError('bad_district', 'No such district.');
   if (ch.loc === district) throw new GameError('there', 'You are already there.');
-  if (ch.jail_until && new Date(ch.jail_until) > new Date()) throw new GameError('jailed', 'No travel from lockup.');
+  if (jailed(ch)) throw new GameError('jailed', 'No travel from lockup.');
   if (Number(ch.cash) < CONSTANTS.TRAVEL_COST) throw new GameError('cash', `A ride costs $${CONSTANTS.TRAVEL_COST}.`);
   ch.cash = Number(ch.cash) - CONSTANTS.TRAVEL_COST; ch.loc = district;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -CONSTANTS.TRAVEL_COST, reason: 'travel' });

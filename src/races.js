@@ -9,11 +9,9 @@
 // Lifetime wins are THE WHEEL — an account-level legend that SURVIVES DEATH (the boxing-legend precedent).
 import crypto from 'node:crypto';
 import { GameError, bus, ledger, notify, rngLog, bumpMastery, masteryFx } from './game.js';
-import { RACES, raceTierOf, raceRankOf, carPower, carVal, levelOf } from './rules.js';
+import { RACES, raceTierOf, raceRankOf, carPower, carVal, levelOf , jailed, hospitalized } from './rules.js';
 import { logCarCollect } from './collection.js';
 
-const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
-const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 const raceCdMs = () => (process.env.RACE_CD_MS != null ? Number(process.env.RACE_CD_MS) : RACES.CD_MS); // TEST-ONLY knob (SEARCH_MS precedent)
 const bumpWheel = (client, accountId) => // lifetime race wins (status, survives death — literal +1 is pg-mem-safe)

@@ -14,14 +14,11 @@
 // (the territory convention — the DEFENDER's gang is never locked; the structure row is the
 // contested object, exactly the convoy-manifest discipline).
 import { GameError, bus } from './game.js';
-import { SOV, sovRankOf, cityHourOf, DISTRICTS } from './rules.js';
+import { SOV, sovRankOf, cityHourOf, DISTRICTS , jailed, hospitalized, safeHoused } from './rules.js';
 
 const canCommand = (h) => h.owned.gangRole === 'boss' || h.owned.gangRole === 'underboss';
 // actor-state gates (the raidRivalRacket/P1.3 set — you can't run a siege from lockup, a hospital
 // bed, or a safehouse). Local copies of the social.js one-liners (not exported there).
-const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
-const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
-const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
 const tierOf = (s) => SOV.TIERS[Number(s.tier) - 1];
 const crumbling = (s, now = Date.now()) => now - new Date(s.upkeep_at).getTime() > SOV.CRUMBLE_MS;
 export const windowOpen = (s, now = Date.now()) => {

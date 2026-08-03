@@ -19,11 +19,9 @@ import crypto from 'node:crypto';
 import { GameError, ledger, rngLog, notify, track, bus } from './game.js';
 import { bumpHonor } from './honor.js';
 import { LAW, rapStageOf, bribeCostOf, retainerActive, witproActive, envelopeActive, bustProbOf,
-         cityEventOf, dayOf, cityHourOf , HONOR } from './rules.js';
+         cityEventOf, dayOf, cityHourOf , HONOR , jailed, safeHoused } from './rules.js';
 import { spendOmr } from './vanity.js';
 
-const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
-const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
 
 // THE FOUNDATION: the character's family charity tier (softens their conviction odds). One small
 // lookup on the (rare) bust path — covers the OFFLINE whale the worker force-busts (no h.owned there).

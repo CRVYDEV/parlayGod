@@ -10,7 +10,7 @@
 import crypto from 'node:crypto';
 import { GameError, bus, skillMult, trunkCap, bumpMastery, masteryFx } from './game.js';
 import { CONSTANTS, M3, CASINO, BUSINESSES, SKILLS, BUSINESS_EMPIRE, RIVALS, POPULATION, businessOf, businessTierOf, businessMaxTier,
-  businessAssessedValue, launderRankOf, levelOf, effStat, pathFx, isMade } from './rules.js';
+  businessAssessedValue, launderRankOf, levelOf, effStat, pathFx, isMade , jailed, hospitalized, safeHoused } from './rules.js';
 import { recordRival, revengeOwed } from './rivals.js';
 import { bumpHonor } from './honor.js';
 import { denAvailable, denDistribute } from './casino.js';
@@ -18,9 +18,6 @@ import { spendOmr } from './vanity.js';
 
 const uid = () => crypto.randomUUID();
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
-const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
-const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
-const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
 
 // accrued income for one business up to the cap, in whole dollars (exported for the heist
 // INSIDE JOB, which redirects the same bounded pending-income bucket — the shakedown argument)

@@ -10,7 +10,7 @@
 // §10.4: ZERO surface. Training costs energy + the shared clock, never cash; XP and levels are not
 // currencies; nothing here writes a transactions row (the regimen test proves it). Discipline state
 // DIES WITH THE STREET (runEstate wipes character_disciplines + npc_drills).
-import { REGIMEN, UNDERWORLD, PACING, disciplineLvlOf, drillOf, dayOf } from './rules.js';
+import { REGIMEN, UNDERWORLD, PACING, disciplineLvlOf, drillOf, dayOf, jailed } from './rules.js';
 import { GameError } from './game.js';
 
 const DISC_IDS = REGIMEN.DISCIPLINES.map((d) => d.id);
@@ -32,7 +32,7 @@ export async function addXp(client, characterId, discipline, xp) {
 // stands, so jail never trains faster than the street.
 export async function trainDiscipline(ch, id, client, h, { fromYard = false } = {}) {
   if (!DISC_IDS.includes(id)) throw new GameError('bad_discipline', 'No such discipline.');
-  if (!fromYard && ch.jail_until && new Date(ch.jail_until) > new Date()) throw new GameError('jailed', 'No gym in lockup — but there\'s an iron pile in the yard.');
+  if (!fromYard && jailed(ch)) throw new GameError('jailed', 'No gym in lockup — but there\'s an iron pile in the yard.');
   if (Number(ch.energy) < REGIMEN.ENERGY) throw new GameError('energy', 'Too tired to train.');
   const trainCd = Number(process.env.TRAIN_CD_MS ?? PACING.TRAIN_CD_MS);
   if (trainCd > 0 && ch.train_at && new Date(ch.train_at) > new Date())

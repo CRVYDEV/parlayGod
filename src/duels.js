@@ -19,10 +19,8 @@
 // the ELO_FLOOR, and every feed paying the 5% rake. Flagged in BALANCE.md.
 import crypto from 'crypto';
 import { GameError, notify, bumpMastery } from './game.js';
-import { DUELS, duelRankOf, duelDivisionOf, duelStyleOf, duelTitleRankOf, levelOf, dayOf, effStat, pathFx, REGIMEN, disciplineLvlOf } from './rules.js';
+import { DUELS, duelRankOf, duelDivisionOf, duelStyleOf, duelTitleRankOf, levelOf, dayOf, effStat, pathFx, REGIMEN, disciplineLvlOf , jailed, hospitalized } from './rules.js';
 
-const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
-const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
 const rand = (lo, hi) => lo + Math.random() * (hi - lo);
 
 // TIER-4: pick your weapon stance (direct-SQL — clobber-safe, off the positional persist)

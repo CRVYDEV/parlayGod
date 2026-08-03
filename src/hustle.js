@@ -8,7 +8,7 @@
 // and the payoff is a bounded once-a-day cash faucet (`hustle:payoff` — the clue-casket posture:
 // petty by design, the movement is the product). §10.4: `hustle:` joins the cash vocabulary; the
 // payoff is character_id'd so the per-character cash check reconciles. Dies with the street.
-import { HUSTLE, hustleOf, dayOf, levelOf, DISTRICTS } from './rules.js';
+import { HUSTLE, hustleOf, dayOf, levelOf, DISTRICTS, jailed } from './rules.js';
 import { GameError } from './game.js';
 
 const districtName = (id) => (DISTRICTS.find((d) => d.id === id) || {}).name || id;
@@ -59,7 +59,7 @@ export async function hustleBoard(ch, client) {
 // ── advance the chain: claim the CURRENT stop (location-gated; the legwork stop also needs the
 // drawn action done SINCE the contact meeting — a counter delta, never a re-countable total) ──
 export async function advanceHustle(ch, client, h2) {
-  if (ch.jail_until && new Date(ch.jail_until) > new Date()) throw new GameError('jailed', 'No working the streets from lockup.');
+  if (jailed(ch)) throw new GameError('jailed', 'No working the streets from lockup.');
   const day = dayOf();
   const h = hustleOf(ch.id, day);
   const row = await rowOf(client, ch.id, day);

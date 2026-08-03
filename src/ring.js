@@ -26,11 +26,10 @@
 // precedent, in runEstate). All CASINO.RING numbers are founder sign-off levers.
 import crypto from 'node:crypto';
 import { GameError, ledger, notify } from './game.js';
-import { CASINO, levelOf } from './rules.js';
+import { CASINO, levelOf , jailed } from './rules.js';
 import { best7, cmpHand, handName } from './casino.js';
 
 const uid = () => crypto.randomUUID();
-const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const turnMs = () => (process.env.RING_TURN_MS != null ? Number(process.env.RING_TURN_MS) : CASINO.RING.TURN_MS); // TEST-ONLY env
 const J = (x) => JSON.stringify(x);
 const P = (x) => (x ? JSON.parse(x) : null);

@@ -15,7 +15,7 @@ import crypto from 'node:crypto';
 import { postPower } from './roster.js';
 import { GameError, bus, skillMult, trunkCap, npcMult, bumpStanding } from './game.js';
 import { CONVOY, COMMISSION, SKILLS, UNDERWORLD, NOTORIETY, guardTierOf, DISTRICTS, GOODS, goodPriceOf,
-  levelOf, rigOf, rigUpgradeCost, haulerRankOf, banditRankOf, haulerTierOf, smuggleRepPerks, pathFx, M3 } from './rules.js';
+  levelOf, rigOf, rigUpgradeCost, haulerRankOf, banditRankOf, haulerTierOf, smuggleRepPerks, pathFx, M3 , jailed, hospitalized, safeHoused } from './rules.js';
 import { activeDecree } from './commission.js';
 import { laneHeat, heatLane } from './notoriety.js';
 
@@ -42,9 +42,6 @@ async function bumpFreight(client, ch, kind, value) {
   await client.query('INSERT INTO convoy_hauls (id, account_id, kind, value) VALUES ($1,$2,$3,$4)', [uid(), ch.account_id, kind, v]);
 }
 const rand = (n) => Math.random() * n;
-const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
-const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
-const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
 const convoyMs = () => Number(process.env.CONVOY_MS || CONVOY.MS); // TEST-ONLY override (SEARCH_MS pattern)
 const cargoCount = (cargo) => Object.values(cargo).reduce((a, n) => a + (n || 0), 0);
 

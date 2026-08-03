@@ -6,13 +6,11 @@ import {
   DRUGS, KITCHENS, TRADE_RANKS, CONSTANTS, M4, COMMISSION, SKILLS, KITCHEN,
   drugOf, kitchenOf, tradeRankIdx, cityEventOf, dayOf,
   makingsPriceOf, demandOf, effStat, crewWageOwed, crewCold, HONOR,
-  labModuleCost, kingpinRankOf, seasonModOf, pathFx, pathAdd } from './rules.js';
+  labModuleCost, kingpinRankOf, seasonModOf, pathFx, pathAdd , jailed, safeHoused } from './rules.js';
 import { activeDecree } from './commission.js';
 import { logCollect } from './collection.js';
 
 const uid = () => crypto.randomUUID();
-const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
-const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date(); // Risk-to-Earn P1.3
 
 async function takeHouse(client, tax) {
   if (tax > 0) await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [tax]);

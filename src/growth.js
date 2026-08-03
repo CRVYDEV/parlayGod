@@ -5,12 +5,10 @@ import { soldierFxOf, SOLDIERS, PATH_SWITCH_CD_MS, referralXpBonus } from './rul
 import {
   PATHS, MISSIONS, ONBOARD_TASKS, CAREER, CONSTANTS, M4, M8, SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS,
   levelOf, dayOf, dailyJobsOf, dailyBlockedFor, effStat, gunObjOf, assetEnergyCap, recruitRankOf, PACING,
-  hash01, hitmanRankOf, honorTierOf,
-} from './rules.js';
+  hash01, hitmanRankOf, honorTierOf, jailed } from './rules.js';
 import { verifySocial, verifyPostUp, socialProviders, socialTaskAvailable, throttleXCheck } from './verify.js';
 import { spendOmr } from './vanity.js';
 
-const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 
 // ── PATHS (§5.1): first pick $10,000 at level ≥5; switching burns 25 $OMR ──
 export async function choosePath(ch, pathId, client, h) {

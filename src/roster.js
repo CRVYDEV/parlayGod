@@ -9,7 +9,7 @@
 // and out of the hospital — so a rival takes a family's Enforcer off the board with the PvP layer
 // that already exists, and the family either gets him out or spends a SECOND made man on the chair.
 // That is the interlock; the numbers underneath are small on purpose.
-import { M3, ROSTER_POSTS, rosterPostOf, rosterPower, rosterMult } from './rules.js';
+import { M3, ROSTER_POSTS, rosterPostOf, rosterPower, rosterMult, jailed, hospitalized } from './rules.js';
 
 // The power of the man holding one post for one family, or 0 if the post is empty OR its holder is
 // dead / jailed / hospitalized. One indexed query; the availability test is IN the query, so no
@@ -37,9 +37,10 @@ export async function rosterBoard(client, gangId) {
   const now = Date.now();
   const held = new Map();
   for (const r of rows) {
-    const jailed = r.jail_until && new Date(r.jail_until).getTime() > now;
-    const hurt = r.hosp_until && new Date(r.hosp_until).getTime() > now;
-    const away = !r.alive ? 'gone' : jailed ? 'in lockup' : hurt ? 'in the hospital' : null;
+    // one clock for the whole roster (`now`), so two rows can never disagree about the same instant
+    const inCell = jailed(r, now);
+    const hurt = hospitalized(r, now);
+    const away = !r.alive ? 'gone' : inCell ? 'in lockup' : hurt ? 'in the hospital' : null;
     held.set(r.post, { characterId: r.character_id, name: r.name, away,
       power: away ? 0 : rosterPower(r[rosterPostOf(r.post)?.stat]),
       sinceSeconds: r.post_at ? Math.max(0, Math.round((now - new Date(r.post_at).getTime()) / 1000)) : null });
