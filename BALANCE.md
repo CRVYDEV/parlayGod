@@ -4609,3 +4609,28 @@ prefix — zero invariants change).
 **Founder sign-off flag:** raising `HEIST_FILL_MAX` past 1 makes the marquee co-op jobs solo-reachable,
 which re-opens the trivialization concern the deferral raised — the forfeited-cut design keeps the
 emission bounded (a soloist's own share shrinks with every hand), but the cap is the real dial.
+
+## THE HIRED HAND — measurement loop closed + red-team (2026-08-03)
+
+Follow-up to the drop above. **Measurement:** `tools/playthrough.js` now hires a hand to complete the
+crew-score rung (plan → fill → execute), so *"pull a crew score"* — the top masking rung a solo run had
+named — CLEARS in a solo run (moved from `not tested` to the obeyed list; bands 2h/12, 5h/21, 10h/34,
+inside the recorded noise). **Red-team** (`AUDIT-hired-hand.md`): no CRITICAL/HIGH, no §10.4 drift — the
+emission forfeit, the roll neutrality, the lock order (fillHeist and executeHeist on one heist serialize
+under the leader's `withCharacter`), and the population inert-guard are all clean (the guard is now pinned
+by a direct SQL assertion in `test/heists.js`). One LOW flagged, NOT patched: a resident can be hired into
+two concurrent plans (a benign, §10.4-neutral, pre-existing TOCTOU class — the same race two real
+`joinHeist` calls have; the fix is `FOR UPDATE SKIP LOCKED` on the resident pick, which wants the `dbCaps`
+pattern and isn't worth the machinery for a benign race).
+
+## NPC FAMILIES step two — the DEFEND variant SCOPED (2026-08-03)
+
+The next step-two candidate is scoped in `omerta-npc-families-defend-design.md`: NPC families become a PvE
+antagonist (a garrison to grind, bounded loot from their own `npc:seed`-fed treasury, and — the "defend"
+part — they retaliate via a worker-scheduled hospitalization, so war isn't a one-way purchase). **The
+flagged risk (re-opening the standing faucet) is solved by construction:** the war score is a SEPARATE
+account-level "blood war" legend (the `war_effort`/hitman-rep twin), NEVER `season_wars`/`lifetime_tribute`,
+so beating NPC families buys a feared-warlord status but **zero Commission seats** — modelled on the WORLD
+outfit (`WORLD_NPCS`), not the player-gang `declareWar`. No turf (avoids the World-OCCUPATION overlap), no
+Commission seat, no yield (the step-one exclusions stand). Needs a sim sizing pass (the garrison/RAID_BPS/
+regen/retaliation numbers, benchmarked below the weakest World outfit) before build — hence SCOPED.
