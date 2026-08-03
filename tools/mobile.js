@@ -89,6 +89,8 @@ if (!exe) {
 
 // ── the server ──────────────────────────────────────────────────────────────────────────────────
 // A real socket, not app.inject(): a browser has to actually fetch the page and its API calls.
+const MOD_KEY = process.env.MOD_KEY || 'mobile-harness-mod-key';
+process.env.MOD_KEY = MOD_KEY;   // check F opens /admin, which is mod-key gated client-side
 const app = await buildServer();
 await app.listen({ port: 0, host: '127.0.0.1' });
 const BASE = `http://127.0.0.1:${app.server.address().port}`;
@@ -180,6 +182,8 @@ for (const vp of VIEWPORTS) {
   // A 4xx from the API is normal here (/v1/me before a character exists); a JS error is not.
   page.on('console', (m) => { if (m.type() === 'error' && !/status of 4\d\d/.test(m.text())) pageErrors.push(m.text()); });
 
+  const walked = [];   // check G: what the screen-reach beacon should have recorded
+
   console.log(`\n── ${vp.w}x${vp.h}  (${vp.name})`);
 
   await page.goto(BASE, { waitUntil: 'networkidle' });
@@ -227,6 +231,7 @@ for (const vp of VIEWPORTS) {
     for (const t of subs) {
       const id = await t.getAttribute('data-tab');
       await t.click();
+      walked.push(id);
       await page.evaluate(() => window.scrollTo(0, 0));   // judge the fold from the top, as a player arrives
       await check(page, id, vp, { contentMustShow: true });
     }
@@ -236,6 +241,35 @@ for (const vp of VIEWPORTS) {
   await page.click('#btn-help'); await check(page, 'glossary', vp);
   await page.click('#glossary-close'); await page.waitForTimeout(200);
   await page.click('#btn-phone'); await check(page, 'cellphone', vp);
+
+  // ── G — THE SCREEN-REACH BEACON ACTUALLY SENDS ────────────────────────────────────────────────
+  // Not layout, and it earns its place here anyway: this is the only harness with a real browser
+  // walking real screens as a logged-in player, which is exactly what the beacon measures. It
+  // shipped with its auth guard reading `session?.token` — `session` is the /v1/session PROBE body
+  // and has never carried a token — so every batch was dropped and reach measured NOTHING, while
+  // the route, the funnel and the /admin panel all tested green. Optional chaining made it silent,
+  // and an analytics number that is quietly always zero is worse than no number, because a founder
+  // reads it as "nobody opens the Kitchen" and restructures a nav on it.
+  //
+  // Uses the client's OWN flush path (the tab going to the background), so it proves the wiring a
+  // player actually exercises rather than a hand-rolled fetch.
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await page.waitForTimeout(1200);
+  const reach = await page.evaluate(async (k) => {
+    const r = await fetch('/v1/mod/funnel', { headers: { 'x-mod-key': k } });
+    return (await r.json())?.screens || null;
+  }, MOD_KEY);
+  if (!reach || !reach.reporters) {
+    fail('(screen reach)', vp, `the beacon recorded nothing after walking ${walked.length} screens `
+      + `— ${JSON.stringify(reach)} (a silent analytics zero reads as "nobody goes there")`);
+  } else {
+    const missed = walked.filter((id) => !reach.opens?.[id]);
+    if (missed.length) fail('(screen reach)', vp, `${missed.length} walked screen(s) were never reported: ${missed.join(', ')}`);
+  }
+  screensChecked++;
 
   if (pageErrors.length) fail('(any screen)', vp, `${pageErrors.length} page error(s): ${pageErrors.slice(0, 3).join(' | ')}`);
   console.log(`   ${screensChecked} screens checked so far, ${failures.length} failure(s)`);
@@ -300,6 +334,51 @@ for (const vp of VIEWPORTS) {
     screensChecked++;
   }
   console.log(`   restart-window check done, ${failures.length} failure(s)`);
+  await browser.close();
+}
+
+// ── F — /admin RENDERS AT ALL ───────────────────────────────────────────────────────────────────
+// The founder's incident screen had NO harness at all, and on 2026-08-03 a probe found the whole
+// chain panel had been dark for three days: renderChain() referenced `tre`, a local of its CALLER,
+// so it threw ReferenceError on every refresh and the withdrawal reserve, extraction-≤-inflow, the
+// staking pool, the Store split, the vault's allocated-≤-held wall and the oracle keeper watchdog
+// all rendered as nothing. Valid syntax, so `node --check` cannot see it; a static pass cannot
+// either; and a panel that renders nothing looks exactly like a quiet night — which is the worst
+// thing to show someone at 2am, the same argument the dashboard's own db-down banner makes.
+//
+// So: load it the way a founder does, with a key, and require it to draw its panels and throw
+// nothing. Deliberately NOT a layout check (this is a desktop screen, and nobody triages an
+// outage on a phone) — just "does it come up, and does it come up whole".
+{
+  const browser = await chromium.launch({ executablePath: exe });
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'en-US' });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', (e) => errs.push(String(e).split('\n')[0]));
+  const vp = { w: 1280, h: 900 };
+
+  await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
+  await page.evaluate((k) => sessionStorage.setItem('omerta_mod_key', k), MOD_KEY);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(2500);   // one refreshAll() round trip
+
+  // The signal is "did the renderer RUN", not "is there data" — a genuinely quiet night is a real
+  // answer and a check that calls it a defect gets deleted. Every panel ships holding the boot
+  // placeholder `…`; a renderer that ran overwrites it (renderActivity writes "quiet on the wire…"
+  // for an empty feed), and a renderer that THREW leaves the placeholder exactly where it was.
+  const panels = await page.evaluate(() => [...document.querySelectorAll('.panel')].map((p) => ({
+    id: p.id, body: (p.querySelector('.body')?.textContent || '').trim(),
+  })));
+  const stuck = panels.filter((p) => p.body === '' || p.body === '…');
+  if (!panels.length) fail('/admin', vp, 'the dashboard drew no panels at all — did the mod key take?');
+  if (stuck.length) {
+    fail('/admin', vp, `${stuck.length} panel(s) never rendered — ${stuck.map((p) => p.id).join(', ')}`
+      + ' (still holding the boot placeholder, which is what a renderer that threw leaves behind —'
+      + ' and a blank panel reads exactly like a quiet night)');
+  }
+  if (errs.length) fail('/admin', vp, `${errs.length} page error(s): ${errs.slice(0, 3).join(' | ')}`);
+  screensChecked++;
+  console.log(`   /admin check done (${panels.length} panels), ${failures.length} failure(s)`);
   await browser.close();
 }
 

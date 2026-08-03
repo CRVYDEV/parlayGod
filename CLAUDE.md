@@ -8822,3 +8822,75 @@ session at an older schema, and `pgquery` failed on `column "post" does not exis
 DATABASE reading exactly like a code defect. Create a fresh database per run.)* Still flagged, still
 unbuilt: routing the other 11 street crimes through `assertStreetCrime` so completeness covers 14
 instead of 3.
+
+**WHICH SCREENS PEOPLE FIND, AND MAKING THE TERMS RIDE WITH THE PRICE (2026-08-03).** Two UX
+changes aimed at the same evidence: **every tester report so far has been the game withholding
+something it knew** — the pad, the nut, the Port lane that refuses on press. **(1) SCREEN REACH.**
+The console has 25 screens behind a two-tier nav and nothing measured which ones a player ever
+opens, so "does the mid-game player use six of them or twenty" was unanswerable and any restructure
+would have been a guess against a nav that had tested well in a probe. `POST /v1/screens` is a
+batched, first-open-per-session beacon (the broadcast-share pattern — authed, bounded, no character
+lock), so a session that walks eight screens costs about ONE request rather than eight. It measures
+**REACH, not frequency**, which is the question a nav decision needs; how often someone returns is a
+different instrument. `funnelStats` turns it into a reach PERCENTAGE against **reporting players,
+not total accounts** — someone on a stale client sends nothing, and counting them as "never opened
+the Kitchen" understates every screen at once — and /admin renders it **worst-first**, because the
+bottom of that list is the decision. Shape-validated rather than allowlisted, deliberately: the tab
+list is client presentation, and a screen the client renamed would silently stop being counted,
+which is a measurement that lies. `screen_open` is declared `NON_ENGAGEMENT` (it is a UI instrument;
+counting it as engagement would double-count every visit against whatever the player actually did
+there). **ZERO §10.4** — it moves nothing. **(2) THE TERMS RIDE WITH THE PRICE — `test/client.js`
+check 6.** Check 5 catches a control that REFUSES on press; this catches a card that **takes your
+money without mentioning what it keeps costing** — the class behind *"how can I owe more in wages
+than my laundromat brings in?"* and *"no way a 25k runner costs 8k in 5h"*. Both were fixed only
+because somebody complained, and nothing stopped the next one shipping the same way. The rule is
+narrow so it stays true rather than becoming noise: when a board sends a field naming an ONGOING
+obligation and the client hangs a buy/upgrade click on that row, the screen must READ that field.
+**It found a real defect on its first run, exactly as check 5 did** — the Empire screen states the
+pad's RATE, the Family tab's territory operations stated only the current bill, so a boss could see
+what was owed but not how fast it accrues and therefore not how long before the operation goes COLD
+(the pad complaint, one system over, waiting to be reported). **It also produced a FALSE POSITIVE,
+and instrumenting rather than "fixing" it found the third mirror blind spot**: `(sov.structures ||
+[]).filter((s) => s.mine).map((s) => …)` chains the map onto the FILTER's result, so the extractor
+never reached the map body — it collected four fields off the short predicates and none of the eight
+the card renders. 14 lists use that shape. Following the chain recovered 55 element fields and 11
+more clickable rows into check 5's coverage (656 → 711), and immediately demanded a fixture for a
+raids list whose emptiness had gone unnoticed — the honesty rule working. Five mutations, each
+failing at its own named assertion; **one SURVIVED first and the COMMENT was wrong rather than the
+code** — per-batch dedupe is not what makes reach ≠ frequency (the per-ACCOUNT aggregation is), so
+the assertion now tests the property it claims and a separate one covers what the server dedupe
+really guards. Suite 65/65, sim drift-0, `pgquery` 2329 statements and `pgcheck` 43/43 on real
+Postgres.
+
+**THEN THE LIVE PROBE FOUND TWO THINGS THE STATIC PASS COULD NOT (same day) — and one of them was
+in the drop above.** The project's own discipline is that a green static run is not proof the button
+works, so the beacon and the /admin panel were driven in a real browser. **(1) THE BEACON NEVER
+SENT.** `flushScreens` gated on `session?.token` — but `session` is the `GET /v1/session` PROBE body
+(provider, flags) and has never carried a token; the bearer is the module-level `token`. So the
+guard was always false, **every batch was dropped, and screen reach measured NOTHING** while the
+route, the funnel and the /admin panel all tested green — the optional chaining made it silent, and
+an analytics number that is quietly always zero is worse than none, because it reads as "nobody
+opens the Kitchen" and a nav gets restructured on it. Found by instrumenting rather than guessing
+(`DBG flush 5 tok= false` located it in one run). **(2) THE FOUNDER'S INCIDENT SCREEN HAD A DARK
+PANEL, and it predates this session by three days** (`d3b3e18`, the treasury drop): `renderChain`
+referenced `tre`, a local of its CALLER `refreshAll`, so it threw `ReferenceError` on every refresh
+— valid syntax, invisible to `node --check` and to any static pass. The blast radius is bigger than
+the panel, because a throw mid-`refreshAll` takes down everything AFTER it: the withdrawal reserve,
+extraction-≤-inflow, the staking pool, the Store split, the vault's `allocated ≤ held` wall, the
+oracle keeper watchdog (built two days earlier and never once rendered), **plus backups, the growth
+loop, live activity and every mod action button**. A panel that renders nothing looks exactly like a
+quiet night — the same argument the dashboard's own db-down banner makes.
+
+**Two guards so neither can be silent again**, both in `tools/mobile.js` (the only harness with a
+real browser driving real screens as a logged-in player). **Check F — /admin renders at all**: load
+it with a key and require every panel to have overwritten its boot placeholder. The signal is
+deliberately "did the renderer RUN", not "is there data" — a genuinely quiet night is a real answer,
+and a check that calls it a defect gets deleted (`renderActivity` writes "quiet on the wire…" for an
+empty feed and correctly passes). **Check G — the beacon actually sends**: after walking every
+screen, trigger the client's OWN flush path (the tab going to the background) and require the funnel
+to report every screen walked. Not layout, and it earns its place there anyway, because that walk is
+exactly what the beacon measures. Both mutation-verified by name — and **the first F mutation
+SURVIVED because it was incomplete**: removing the argument while leaving the parameter makes `tre`
+merely `undefined` rather than unbound, so nothing throws. The real bug needs the parameter gone
+too, and that near-miss is the recurring lesson in its newest costume — *a bad mutation reads
+exactly like a clean bill of health*.

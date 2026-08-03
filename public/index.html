@@ -3150,7 +3150,11 @@
   let pendingScreens = new Set(), flushTimer = null;
   function flushScreens() {
     clearTimeout(flushTimer); flushTimer = null;
-    if (!pendingScreens.size || !session?.token) return;
+    // `token` is the bearer — NOT `session`, which is the /v1/session PROBE body (provider, flags)
+    // and has never carried a token. Written as `session?.token` when this shipped, which is always
+    // undefined, so every batch was dropped and screen reach measured NOTHING while the route, the
+    // funnel and the /admin panel all tested green. Optional chaining made it silent.
+    if (!pendingScreens.size || !token) return;
     const batch = [...pendingScreens]; pendingScreens = new Set();
     try { api('POST', '/v1/screens', { screens: batch }); } catch {}
   }
