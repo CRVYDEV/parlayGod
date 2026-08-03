@@ -556,10 +556,34 @@ async function obeyCoach(m) {
     hit('coach:wire', r.body?.error || r.code);
     return false;
   }
-  // Still genuinely out of reach for a solo run: a crew heist needs a SECOND PLAYER to fill a role,
-  // and residents filling heist roles is explicitly deferred (see the NPC-families entry).
-  if (label.startsWith('Pull a crew score') || label.startsWith('Find a crew')) coachCantAct.set(label, 'solo run — a crew heist needs another player to fill a role (residents in crews is deferred)');
-  else if (label.startsWith('Still running solo')) coachCantAct.set(label, 'solo run — the permanent tail nudge, correctly last');
+  // PULL A CREW SCORE — no longer untestable solo. The hired hand (residents-in-crews) fills the
+  // entry 2-man job with an NPC body, so a solo player can plan → hire → execute. This is the
+  // measurement half of that drop: the rung the harness named as the top masking friction now clears.
+  if (label.startsWith('Pull a crew score') || label.startsWith('Find a crew')) {
+    let hb = (await call('GET', '/v1/heists', { token })).body;
+    let hid = hb?.mine?.leader ? hb.mine.id : null;
+    if (!hid) {
+      const fee = hb?.mine?.fillFee || 5000;
+      const job = (hb?.jobs || []).filter((j) => j.crew === 2 && !j.locked && m.level >= j.lvl && m.cash >= j.stake + fee)
+        .sort((a, b) => a.stake - b.stake)[0];              // cheapest entry co-op we can stake + hire for
+      if (!job) { coachCantAct.set(label, m.level < 8 ? 'level too low for the entry crew job' : 'not enough cash for the stake + a hired hand'); return false; }
+      const pr = await call('POST', '/v1/heists/plan', { token, body: { job: job.id } });
+      if (pr.code !== 200) { coachCantAct.set(label, `plan refused: "${pr.body?.error || pr.code}"`); hit('heist', pr.body?.error || pr.code); return false; }
+      hid = pr.body.id; hb = (await call('GET', '/v1/heists', { token })).body;
+    }
+    while (hb.mine && hb.mine.canHire) {                    // fill open seats with hired hands
+      const fr = await call('POST', `/v1/heists/${hid}/fill`, { token });
+      if (fr.code !== 200) { coachCantAct.set(label, `hire refused: "${fr.body?.error || fr.code}"`); hit('heist', fr.body?.error || fr.code); break; }
+      did('heist:fill'); first('heist'); hb = (await call('GET', '/v1/heists', { token })).body;
+    }
+    if (hb.mine && hb.mine.crewNeeded > 0) { coachCantAct.set(label, 'still short a body after hiring (HEIST_FILL_MAX)'); return false; }
+    const ex = await call('POST', `/v1/heists/${hid}/execute`, { token });
+    if (ex.code === 200) { did(ex.body?.score ? 'heist:score' : 'heist:bust'); first('heist'); return obeyed(); }
+    coachCantAct.set(label, `execute refused: "${ex.body?.error || ex.code}"`);
+    hit('heist', ex.body?.error || ex.code);
+    return false;
+  }
+  if (label.startsWith('Still running solo')) coachCantAct.set(label, 'solo run — the permanent tail nudge, correctly last');
   else if (!coachCantAct.has(label)) coachCantAct.set(label, 'no action wired in this harness');
   return false;
 }

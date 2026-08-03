@@ -105,6 +105,11 @@ let fr = await call('POST', `/v1/heists/${hh}/fill`, { token: hank.token });
 assert.equal(fr.code, 200, `the hand is hired (${JSON.stringify(fr.body)})`);
 assert.equal(fr.body.hired, true, 'a hired hand'); assert.equal(fr.body.fee, 5000, 'the hire fee');
 assert.equal((await meOf(hank.token)).cash, hankPreFill - 5000, 'the fee left the pocket');
+// the committed hand is INERT — the eligible/retire pickers (the population-side change) skip anyone
+// on a live plan, so a hired resident can't be retired out from under the job. Assert the exact guard.
+const inert = (await pool.query(`SELECT id FROM characters WHERE is_npc AND alive AND id='${hand.id}'
+  AND id NOT IN (SELECT m.character_id FROM crew_heist_members m JOIN crew_heists ch2 ON ch2.id=m.heist_id WHERE ch2.status='planning')`)).rows;
+assert.equal(inert.length, 0, 'a committed hand is excluded from the free/retire pool');
 let mb = (await call('GET', '/v1/heists', { token: hank.token })).body.mine;
 assert.equal(mb.crew.length, 2, 'the crew is full with a body');
 assert(mb.crew.some((c) => c.hired), 'the board flags the hand as hired');
