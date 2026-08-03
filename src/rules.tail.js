@@ -3855,6 +3855,35 @@ export const POPULATION = {
     RACER_P:   { capo: 0.4, boss: 0.6 },
     STAKE_BPS: 1500,                      // what a resident will put on one bout/match: 15% of pocket
   },
+  // ── NPC FAMILIES (omerta-npc-families-design.md). The coach's first social rung — "Nobody
+  // survives alone" — held 43% of a 7-day solo run and could never be acted on, because on a thin
+  // server there is nothing to JOIN: the only actionable half is founding one, at level 5 and
+  // $25,000, which a level-3 player does not have. Residents found and fill families through the
+  // AUDITED createGang/joinGang, so a real player can walk into one.
+  //
+  // The founding cost comes out of the founder's own npc:seed cash, so this is a SINK — the feature
+  // adds no faucet at all. §10.4 surface is exactly two already-audited reasons: `gang:found` and
+  // (on the last member leaving) the existing `gang:dissolved` burn.
+  //
+  // What an NPC family may NEVER do, each decided in the design doc rather than left to an accident:
+  // hold a COMMISSION seat (it cannot vote, and a silent ballot shrinks the electorate and deadlocks
+  // decrees that modify signed surfaces), draw the FAMILY YIELD (real player-funded $OMR into a
+  // reserve nobody can spend from), be DECLARED WAR on (a family that never retaliates is a
+  // fixed-price standing farm with treasury spoils on top), or hold TURF. The invariants
+  // deliberately still count their treasuries — those are real §10.4 buckets.
+  FAMILIES: {
+    TARGET: 3,          // families the worker keeps alive. 0 disables the feature entirely.
+    MIN_MEMBERS: 2,     // below this the worker recruits another resident into it
+    MAX_MEMBERS: 5,     // far below M3.GANG_MAX_MEMBERS (20), so a player always has room to walk in
+    FOUND_BANDS: ['capo', 'boss'],   // the bands that can carry the $25,000 founding cost
+    // Fictional only (the Broadcast posture). Must clear createGang's own validation: 3-24 chars,
+    // ASCII `[\w .,'&-]`, and a 2-4 character A-Z0-9 tag.
+    NAMES: [
+      ['The Calabrese Ring', 'CAL'], ['Sorrento Social Club', 'SORR'], ['The Ardizzone Crew', 'ARDZ'],
+      ['Pellegrino Brothers', 'PELL'], ['The Anselmi Outfit', 'ANSL'], ['Ferrante Trading Co', 'FERR'],
+      ['The Vaccaro Family', 'VACC'], ['Lombardo Associates', 'LOMB'],
+    ],
+  },
 };
 // A resident's name: noir first + last, drawn from pools. Uniqueness is enforced by the caller
 // (living names are unique game-wide), which retries on a collision.

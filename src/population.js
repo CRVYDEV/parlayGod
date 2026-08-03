@@ -23,8 +23,13 @@
 // same name, generation+1 — IS the respawn. social.js needs zero changes and the population
 // self-heals. The worker only tops up headcount and retires old bloodlines.
 import crypto from 'node:crypto';
-import { notify } from './game.js';
+import { ledger, notify } from './game.js';
 import { wipeFighterAtDeath } from './boxing.js';
+// NPC FAMILIES: founding and joining run through the AUDITED player path, not a copy of it — the
+// name/tag validation, the uniqueness clash check, the ledgered `gang:found` sink, the FOR UPDATE
+// on the gang row and the GANG_MAX_MEMBERS count invariant are all the same code a player runs.
+// (A parallel implementation is how the sackEmpire rake-cursor drifted; there is one founding path.)
+import { createGang, joinGang, removeMember } from './social/gangs.js';
 import { POPULATION, NPC_FIRST, NPC_LAST, npcBandOf, DISTRICTS, PACING, dayOf,
          LOAN, loanOwed, GOODS, BLACK_MARKET, M3, DUELS, CASINO, CARS, goodPriceOf,
          BOXING, STABLE, stableKindOf, FIGHTER_MONIKERS, RACER_NAMES, rollRarity } from './rules.js';
@@ -264,6 +269,15 @@ export async function retireResident(client, charId) {
   await wipeFighterAtDeath(client, charId);
   await client.query('DELETE FROM racers WHERE character_id=$1', [charId]);
   await client.query('DELETE FROM character_cargo WHERE character_id=$1', [charId]);
+  // NPC FAMILIES: a retiring resident LEAVES their family, through the audited removeMember. This
+  // is retirement-is-not-a-death again (the stranded-loan and phantom-champion findings): runEstate
+  // never sees this character, so a kept membership row would be a phantom made man on the roster,
+  // counting against GANG_MAX_MEMBERS — and if they were the LAST member, a family that never
+  // dissolves and never ledgers `gang:dissolved`, which is a permanent §10.4 treasury drift.
+  // removeMember handles succession, dissolution and the ledger; it takes the gang lock itself, and
+  // this txn already holds the character lock, so gangs-after-characters order is kept.
+  const mem = (await client.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [charId])).rows[0];
+  if (mem) await removeMember(client, mem.gang_id, charId);
   await client.query('UPDATE characters SET alive=false, cash=0, bank=0 WHERE id=$1', [charId]);
   return { id: charId, burned: held };
 }
@@ -402,8 +416,117 @@ async function runPopulationInner(pool) {
       [pick.id, new Date(Date.now() + sentenceS * 1000)]);
     out.jailed++;
   }
+  // 4. NPC FAMILIES — somewhere to belong. See runFamilies for why this is one step and not three.
+  try { Object.assign(out, await runFamilies(pool)); }
+  catch (e) { console.error('[population] families failed', e.message); }
+
   out.population = await population(pool);
   return out;
+}
+
+// ════════════════════ NPC FAMILIES (omerta-npc-families-design.md) ════════════════════
+//
+// The coach's first social rung — "Nobody survives alone" — held 43% of a measured 7-day solo run
+// and could never be acted on: on a thin server `GET /v1/gangs` is empty, so the only actionable
+// half is FOUNDING one, at level 5 and $25,000. Residents found and fill families so there is
+// something to walk into, exactly as the population lit up every other board that reads
+// `characters`.
+//
+// The founding cost comes out of the founder's own `npc:seed` cash, so this adds NO faucet — the
+// resident economy can only get smaller from it. §10.4 surface is two already-audited reasons:
+// `gang:found` (the sink) and, when the last member goes, the existing `gang:dissolved` burn.
+
+/**
+ * The headless context the audited gang functions want. They take an `h` for the ledger and for the
+ * caller's loaded state; a resident has neither, so this supplies the ledger and an empty `owned`
+ * for them to write into. `createGang` deducts `ch.cash` IN MEMORY and leaves persistence to the
+ * caller (the player path's persistCharacter), so writing that back is the one thing owned here.
+ */
+const stubH = () => ({ owned: {}, ledger: (client, row) => ledger(client, row) });
+
+/** Keep POPULATION.FAMILIES.TARGET families alive and populated. One family founded/filled per tick. */
+export async function runFamilies(pool) {
+  const F = POPULATION.FAMILIES;
+  const out = { familiesFounded: 0, familiesJoined: 0 };
+  if (!F || F.TARGET <= 0) return out;                        // TARGET 0 disables the feature entirely
+
+  const live = (await pool.query('SELECT id, name FROM gangs WHERE npc_flag')).rows;
+  if (live.length < F.TARGET) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      if (await foundNpcFamily(client)) out.familiesFounded++;
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      console.error('[population] found family failed', e.message);
+    } finally { client.release(); }
+    return out;   // one structural change per tick — the city fills in visibly (the SPAWN_PER_TICK rule)
+  }
+
+  // recruit into the thinnest family under MIN_MEMBERS. Counting MEMBERS, not residents: a player
+  // who joined counts, which is the point — a family a player is already in does not need padding.
+  for (const g of live) {
+    const n = Number((await pool.query('SELECT COUNT(*) n FROM gang_members WHERE gang_id=$1', [g.id])).rows[0].n);
+    if (n >= F.MIN_MEMBERS) continue;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      if (await recruitIntoFamily(client, g.id)) out.familiesJoined++;
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      console.error('[population] recruit failed', g.id, e.message);
+    } finally { client.release(); }
+    break;
+  }
+  return out;
+}
+
+/** A capo/boss-band resident with the founding fee to spare puts a name up. */
+async function foundNpcFamily(client) {
+  const F = POPULATION.FAMILIES;
+  // a name nobody has taken — createGang's clash check would refuse it anyway, but picking a free
+  // one first means a full pool reads as "no room" rather than as a failed transaction every tick
+  const taken = new Set((await client.query('SELECT name FROM gangs')).rows.map((r) => r.name));
+  const free = F.NAMES.filter(([name]) => !taken.has(name));
+  if (!free.length) return false;
+  const [name, tag] = pick(free);
+
+  // the founder: unaffiliated, in a band that can carry the fee, and left holding enough afterwards
+  // to stay worth robbing (the KEEP_FLOOR rule — a resident is scenery with a wallet)
+  const lvls = F.FOUND_BANDS.map((id) => POPULATION.BANDS.find((b) => b.id === id)).filter(Boolean);
+  if (!lvls.length) return false;
+  const minLvl = Math.min(...lvls.map((b) => b.lvl[0]));
+  // two flat queries + a JS filter, never a correlated NOT EXISTS — pg-mem cannot parse one, so the
+  // whole path would be untestable and (worse) fail silently inside the worker's per-job catch,
+  // producing zero families forever with nothing on screen saying why. The /v1/gangs precedent.
+  const inGang = new Set((await client.query('SELECT character_id FROM gang_members')).rows.map((r) => r.character_id));
+  const cand = (await client.query(
+    'SELECT * FROM characters WHERE alive AND is_npc AND respect >= $1 ORDER BY cash DESC LIMIT 32',
+    [respectFor(minLvl)])).rows
+    .filter((c) => !inGang.has(c.id) && spendable(c.cash) >= M3.GANG_FOUND_COST);
+  if (!cand.length) return false;
+  const ch = cand[0];
+
+  const h = stubH();
+  await createGang(ch, name, tag, client, h);          // validates, clash-checks, ledgers `gang:found`
+  await client.query('UPDATE characters SET cash=$2 WHERE id=$1', [ch.id, ch.cash]);   // createGang deducts in memory
+  await client.query('UPDATE gangs SET npc_flag=true WHERE id=$1', [h.owned.gangId]);
+  return true;
+}
+
+/** Put one more resident on a thin family's roster. */
+async function recruitIntoFamily(client, gangId) {
+  const F = POPULATION.FAMILIES;
+  const n = Number((await client.query('SELECT COUNT(*) n FROM gang_members WHERE gang_id=$1', [gangId])).rows[0].n);
+  if (n >= F.MAX_MEMBERS) return false;   // never near GANG_MAX_MEMBERS, so a player always has room
+  const inGang = new Set((await client.query('SELECT character_id FROM gang_members')).rows.map((r) => r.character_id));
+  const cand = (await client.query(
+    'SELECT * FROM characters WHERE alive AND is_npc ORDER BY id LIMIT 64')).rows.find((c) => !inGang.has(c.id));
+  if (!cand) return false;
+  await joinGang(cand, gangId, client, stubH());       // locks the gang row; enforces the count invariant
+  return true;
 }
 
 // ════════════════════ STEP TWO — THE CITY ACTS ════════════════════

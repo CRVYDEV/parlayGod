@@ -1300,13 +1300,18 @@ export async function buildServer() {
   app.get('/v1/gangs', async () => {
     // two flat queries instead of a correlated subquery — identical response, and pg-mem
     // (the test db) can execute it, so the route is actually covered by the suite
-    const r = await pool.query('SELECT id, name, tag, seal, foundation, charter, treasury, wars_won, lifetime_tribute FROM gangs');
+    const r = await pool.query('SELECT id, name, tag, seal, foundation, charter, treasury, wars_won, lifetime_tribute, npc_flag FROM gangs');
     const counts = await pool.query('SELECT gang_id, COUNT(*) n FROM gang_members GROUP BY gang_id');
     const members = Object.fromEntries(counts.rows.map((c) => [c.gang_id, Number(c.n)]));
     return { gangs: r.rows.map((g) => ({ id: g.id, name: g.name, tag: g.tag,
       seal: sealOf(g.seal)?.name || null, foundation: foundationOf(g.foundation)?.name || null,
       charter: familyCharterOf(g.charter)?.name || null,
       members: members[g.id] || 0, warsWon: Number(g.wars_won),
+      // NPC FAMILIES surfaced, not hidden — the streets roster's RESIDENT chip, one level up. In a
+      // game with real-money extraction, passing scenery off as people is not a call to make
+      // silently. They are joinable and mechanically ordinary; they just cannot sit on the
+      // Commission, draw the family yield, or be declared war on.
+      npc: !!g.npc_flag,
       standing: Number(g.lifetime_tribute) + 10000 * Number(g.wars_won) })) };
   });
   app.get('/v1/gangs/:id', async (req) => {

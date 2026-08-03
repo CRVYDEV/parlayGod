@@ -8628,3 +8628,60 @@ the one under test. Backdating `last_accrued_at` two minutes reproduces it EXACT
 fix freezes the clock so no accrual can land AND scopes the count to `racket:retire%`, so the
 assertion now measures its own claim. Suite 64/64 · sim drift-0 · mobile 66/66 · pgquery 2315
 statements · pgcheck 43/43 on real Postgres.
+
+**NPC FAMILIES — somewhere to join (founder-directed 2026-08-03, reversing the deferral one entry
+above).** The coach's first social rung — *"Nobody survives alone"*, banded to levels 3–12 — held
+**43% of advised play** across a 7-day solo harness run and could never be acted on: on a thin
+server `GET /v1/gangs` is empty, so the only actionable half is FOUNDING one at level 5 and $25,000,
+which a level-3 player does not have and which gives them a family of one. The population layer had
+already solved the identical problem for eight other boards with ONE mechanism — **a resident is a
+real character** — and a family is that shape one level up: **a real `gangs` row**, so one NPC family
+lights up the join board, the roster, omertà and the war map at once. Design +
+every decision behind it: `omerta-npc-families-design.md`. **The worker keeps
+`POPULATION.FAMILIES.TARGET` (3) families of `MIN`..`MAX_MEMBERS` (2–5) residents**, one structural
+change per tick, `MAX_MEMBERS` far below `M3.GANG_MAX_MEMBERS` (20) so a player always fits.
+**Founding and joining run through the AUDITED `createGang`/`joinGang`, never a copy** — the
+name/tag validation, the uniqueness clash, the `FOR UPDATE` on the gang row, the member-count
+invariant and the ledgered `gang:found` sink are all the same code a player's founding runs, with a
+headless stub supplying `h.ledger` (a parallel implementation is how the `sackEmpire` rake-cursor
+drifted). **§10.4 adds no faucet by construction:** the founding cost comes out of the founder's own
+`npc:seed` cash, so the only rows step one can write are `gang:found` (a SINK) and `gang:dissolved`
+(the existing dissolution burn) — the resident economy can only get *smaller*, and the extraction
+ceiling measured under THE STREET WAR step two is unchanged. **Each previously-deferred surface is
+DECIDED rather than defaulted**, all on one `gangs.npc_flag`: no **Commission** seat (a decree moves
+signed surfaces, and a family that cannot vote does not abstain — it shrinks the electorate and makes
+deadlock likelier), no **family yield** (a real §10.4 $OMR transfer into a reserve nobody can ever
+spend from — a permanent sink wearing a payout's clothes, and a smaller pot for every real family),
+no **wars** against them (an opponent that never retaliates makes war a fixed-price purchase of
+standing, repeatable, with treasury spoils on top), no **turf/territory/strongholds**. Both
+exclusions are true by construction TODAY — the queries require `standing > 0` — but that is an
+accident of two other decisions, not a promise; the explicit flag is what a test can pin and what
+stops a later step (residents paying tribute) from re-opening it silently. **`invariants.js` must NOT
+exclude them** and does not: an NPC family's treasury is a real bucket holding real ledgered value,
+so filtering it out would MANUFACTURE the drift the check exists to catch — noted at both exclusion
+sites so the next reader does not "finish the job". **Two lifecycle holes the feature opens, both
+closed:** a **retiring resident must LEAVE** — retirement is not a death, so `runEstate` never sees
+it and a `gang_members` row would point at a dead character (a phantom made man counting against
+`GANG_MAX_MEMBERS`, and if they were the last member a family that never dissolves and never ledgers
+`gang:dissolved`, i.e. a permanent §10.4 treasury drift — the step-two stranded-loan and
+phantom-champion class exactly); routed through the audited `removeMember`, which handles succession,
+dissolution and the ledger. And **a player who inherits the boss chair is running a REAL family**, so
+the flag CLEARS at the one place succession happens — otherwise a flag that was never about them
+would bar them from the Commission and the yield. pg-mem note: the candidate queries are two flat
+queries + a JS filter, never a correlated `NOT EXISTS` (which pg-mem cannot parse, and whose error
+the worker's per-job `catch` swallowed into a silent zero — the `/v1/gangs` precedent). The join
+board flags them (`npc: true`, a **LOCAL OUTFIT** chip), the same way the streets roster flags a
+resident. `test/population.js` covers the TARGET/MAX invariants, founding (delta-measured `gang:found`
+sink, since earlier blocks in the suite now found families too), filling, the join board, all three
+exclusions, the retirement hole (roster empty + gang dissolved + the `gang:dissolved` ledger row) and
+the flag transition — **five mutations, each caught at its own named assertion**, and one of them
+SURVIVED first: `yieldBoard` returns families with `name`/`tag` and no `id`, so an `f.id === g.id`
+match was always false and the assertion was vacuous (matched by NAME now, plus a `payFamilyYield`
+call and an `omr_reserve == 0` check). All `POPULATION.FAMILIES.*` numbers are founder sign-off levers
+— pinned in `test/levers.js`, tabled in BALANCE.md § NPC FAMILIES, `TARGET: 0` disables the feature.
+Deferred (each wanting its own sizing pass): NPC families that DEFEND (the cartel-outfit shape — it
+re-opens the standing faucet), residents filling crew-heist roles (the co-op faucet measures 1.46×
+solo per member, so making it solo-reachable on demand is an emission change), NPC-held turf on the
+OCCUPATION model, and residents paying tribute — which would give them standing and therefore re-open
+the two exclusions above. Suite 64/64 · sim drift-0 · mobile 66/66 · pgquery 2327 statements ·
+pgcheck 43/43 on real Postgres.

@@ -303,6 +303,14 @@ CREATE TABLE IF NOT EXISTS gangs (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL UNIQUE,
   tag TEXT NOT NULL UNIQUE,
+  -- NPC FAMILIES (omerta-npc-families-design.md): founded by a RESIDENT so a solo player has
+  -- somewhere to belong. The flag bars exactly two things — a COMMISSION seat (it cannot vote, and a
+  -- silent ballot deadlocks decrees that move signed surfaces) and the FAMILY YIELD (real
+  -- player-funded $OMR into a reserve nobody can spend from) — plus being declared war on (a family
+  -- that never retaliates is a fixed-price standing farm). §10.4 deliberately still counts its
+  -- treasury: that is a real bucket holding real ledgered value. Clears the moment a PLAYER takes
+  -- the boss chair — the flag is about who RUNS it, and a player-run family must not be penalised.
+  npc_flag BOOLEAN NOT NULL DEFAULT false,
   color TEXT,                                    -- M8 crest color, '#rrggbb' (display only, $OMR sink)
   seal INT NOT NULL DEFAULT 0,                   -- M8 family seal tier (display only; bought from omr_reserve)
   foundation INT NOT NULL DEFAULT 0,             -- THE FOUNDATION: family charity tier (bought from omr_reserve; public status + softens members' RICO conviction odds)

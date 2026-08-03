@@ -112,6 +112,15 @@ export async function removeMember(client, gangId, characterId) {
   const hasBoss = left.some((m) => m.role === 'boss');
   if (!hasBoss)
     await client.query('UPDATE gang_members SET role=$3 WHERE gang_id=$1 AND character_id=$2', [gangId, left[0].character_id, 'boss']);
+  // NPC FAMILIES: the flag is about who RUNS it. Succession can hand the chair to a PLAYER who
+  // joined as a soldier, and a player-run family carrying the flag would be barred from the
+  // Commission and the family yield — a penalty applied to a player by a flag that was never about
+  // them. So it clears here, the one place succession happens. (A player joining as a soldier
+  // changes nothing: the house still runs the family.)
+  if (!hasBoss) await client.query(
+    `UPDATE gangs SET npc_flag=false WHERE id=$1 AND npc_flag
+       AND EXISTS (SELECT 1 FROM characters c WHERE c.id=$2 AND NOT c.is_npc)`,
+    [gangId, left[0].character_id]);
   return { dissolved: false, newBoss: hasBoss ? null : left[0].character_id };
 }
 
@@ -299,6 +308,12 @@ export async function declareWar(ch, targetGangId, client, h) {
   const g2 = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [id2])).rows[0];
   const us = g1?.id === h.owned.gangId ? g1 : g2, them = g1?.id === h.owned.gangId ? g2 : g1;
   if (!them) throw new GameError('no_gang', 'That family no longer exists.');
+  // NPC FAMILIES: not a war target. A resident-run family never declares, never scores and never
+  // retaliates, so a war against one is a fixed-price purchase of standing — `season_wars` is half
+  // the Commission ladder — with 20% of their treasury as spoils on top, repeatable. The same
+  // argument that stops a corpse being farmed. (Deferred to a step two with its own sizing: an NPC
+  // family that DEFENDS is real content — the World's cartel outfits are the precedent.)
+  if (them.npc_flag) throw new GameError('npc', "They're nobody's rivals — that outfit won't put up a fight worth having.");
   if (warActive(us) || warActive(them)) throw new GameError('at_war', 'One of you is already at war.');
   // FIVE PILLARS #2: an ARMED coalition against the target halves a member's war chest — the EU4
   // anti-hegemon tooth. The DISCOUNTED number is what's deducted AND ledgered (the decree precedent).
