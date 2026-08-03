@@ -4795,6 +4795,13 @@
       </div>
 
       ${(() => { const d = duels; if (!d) return '';
+        // OMERTA IS A GATE, SO SAY SO BEFORE THE PRESS. duels.js refuses a matchup inside your own
+        // family ("No family matchups — spar off the books"), and the board sends every duelist's
+        // tag, so there is no reason to leave a live button that can only fail. Found by
+        // tools/playthrough.js: a run that obeyed the coach's OWN "join a family" rung then spent
+        // hours being refused by its own blood. This is the check-5 class the wiring guard cannot
+        // see, because `tag` is an identity field rather than one of its declared gate fields.
+        const kinTag = me?.gang?.tag || null;
         const styleName = (id) => (d.styles.find((s) => s.id === id) || {}).name || null;
         const beats = (id) => { const s = d.styles.find((x) => x.id === id); return s ? styleName(s.beats) : null; };
         return `<h2 style="margin-top:12px">⚔ The Dueling Circuit <span class="d" style="font-size:11px">— ranked. Seasonal. The number follows you.</span></h2>
@@ -4821,9 +4828,10 @@
             <div class="card"><span class="t">${esc(x.name)}</span> <span class="d">lvl ${x.level}${x.tag ? ' · ' + esc(x.tag) : ''}</span>
               <div class="d"><b>${x.elo}</b> ${esc(x.rank)} <span class="chip">${esc(x.division.name)}</span> · takes up to $${fmt(x.limit)}</div>
               <div class="d" style="font-size:11px">${x.style ? `stance: ${esc(styleName(x.style) || x.style)} — counter with ${esc(d.styles.find((s) => s.beats === x.style)?.name || '—')}` : 'no stance declared'}</div>
+              ${x.tag && x.tag === kinTag ? '<div class="d" style="font-size:11px;color:var(--warn)">your own family — no matchups inside the house</div>' : ''}
               <div style="display:flex;gap:6px;margin-top:6px">
-                <input data-duamt="${x.id}" type="number" placeholder="stake $" style="width:100px">
-                <button class="act" data-duel="${x.id}">DUEL</button>
+                <input data-duamt="${x.id}" type="number" placeholder="stake $" style="width:100px"${x.tag && x.tag === kinTag ? ' disabled' : ''}>
+                <button class="act" data-duel="${x.id}"${x.tag && x.tag === kinTag ? ' disabled' : ''}>DUEL</button>
               </div></div>`).join('') || '<div class="card"><div class="d">the circuit is empty — list yourself and start the ladder</div></div>'}
         </div>`; })()}
       <h2 style="margin-top:12px">The Hitmen for Hire <span class="d" style="font-size:11px">(pay a fixed fee — the house rolls the hit; pick the tier on any mark below)</span></h2>

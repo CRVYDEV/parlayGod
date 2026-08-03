@@ -29,7 +29,7 @@ process.env.SEASON_MOD = process.env.SEASON_MOD || 'dead_quiet';
 process.env.SEASON_PHASE = process.env.SEASON_PHASE || 'long_game';
 import { buildServer } from '../src/server.js';
 import { opsEngagement } from '../src/engagement.js';
-import { CRIMES, MISSIONS, GUNS, BUSINESSES, CONSTANTS, PACING, RACKETS, PORT, POPULATION, nerveCapOf } from '../src/rules.js';
+import { CRIMES, MISSIONS, GUNS, BUSINESSES, CONSTANTS, M3, PACING, RACKETS, PORT, POPULATION, nerveCapOf } from '../src/rules.js';
 import { runPopulation, runResidentBehaviour } from '../src/population.js';
 
 const argOf = (name, dflt) => {
@@ -406,6 +406,11 @@ async function obeyCoach(m) {
     const fleet = board.body?.fleet || [];
     const arrived = fleet.find((b) => b.status === 'arrived');
     if (arrived) {
+      // COLLECT IS DISTRICT-PINNED TOO (port.js:183), and the hustle walks this player all over the
+      // map between sittings — so without this the freight sat on the dock forever and the rung
+      // held the top line while `district` piled up in the blocked table. A harness gap that reads
+      // exactly like a stuck rung, which is why the blocked table is worth reading every run.
+      if (m.loc !== 'docks') { const t = await call('POST', '/v1/travel/docks', { token }); if (t.code !== 200) return false; }
       const r = await call('POST', `/v1/port/collect/${arrived.id}`, { token });
       if (r.code === 200) { did('coach:port'); first('coach:port'); return obeyed(); }
       hit('coach:port', r.body?.error || r.code);
@@ -492,14 +497,69 @@ async function obeyCoach(m) {
     }
     return took ? obeyed() : false;
   }
-  // Rungs a SOLO harness structurally cannot do: there is one character on this server, so there is
-  // no family to join and nobody to fight. Recorded with the reason so the report is honest about
-  // what it did not test rather than silently passing over it.
-  if (label.startsWith('Nobody survives alone')) coachCantAct.set(label, 'solo run — no other players exist to found or join a family with');
-  else if (label.startsWith('Pull a crew score') || label.startsWith('Find a crew')) coachCantAct.set(label, 'solo run — a crew heist needs at least one other player to fill a role');
-  else if (label.startsWith('Blood on the ledger') || label.startsWith('No blood on your ledger')) coachCantAct.set(label, 'solo run — there is nobody else on the duelling ladder');
+  // ── THE CITY IS NOT EMPTY ANY MORE. These three used to be recorded as "solo run — nobody else
+  // exists", which was true when it was written and is now FALSE: NPC families found and recruit
+  // (POPULATION.FAMILIES), residents list duel limits (POPULATION.BEHAVIOUR), and every resident is
+  // a real character a wire can tap. Between them they held 44% of advised play in the run that
+  // caught this — so the harness was declaring untestable the two things the coach spends most of
+  // its breath on, which is the F2 masking class living in the INSTRUMENT rather than the game.
+  // An untested rung and a permanently-stuck rung look identical from the outside; that is the
+  // whole reason this function acts where it can and names what it cannot.
+  if (label.startsWith('Nobody survives alone')) {
+    const board = await call('GET', '/v1/gangs', { token });
+    const open = (board.body?.gangs || board.body || [])
+      .filter((g) => g.members < M3.GANG_MAX_MEMBERS)
+      .sort((a, b) => a.members - b.members)[0];          // the thinnest crew has the most room
+    if (!open) { coachCantAct.set(label, 'no family on the board has room'); return false; }
+    const r = await call('POST', `/v1/gangs/${open.id}/join`, { token });
+    if (r.code === 200) { did('coach:family'); first('coach:family'); return obeyed(); }
+    coachCantAct.set(label, `join refused: "${r.body?.error || r.code}"`);
+    hit('coach:family', r.body?.error || r.code);
+    return false;
+  }
+  if (label.startsWith('Blood on the ledger') || label.startsWith('No blood on your ledger')) {
+    const b = (await call('GET', '/v1/duels', { token })).body;
+    const stake = b?.stakeMin || 0;
+    // Cheapest live opponent whose posted limit clears the floor and whose stake we can cover. A
+    // limit UNDER stakeMin sits in an empty window (the population step-two F2 finding), so those
+    // rows are correctly skipped rather than attempted.
+    const foes = (b?.duelists || []).filter((d) => !d.me && d.limit >= stake)
+      .sort((x, y) => x.limit - y.limit);
+    if (!foes.length) { coachCantAct.set(label, 'nobody on the ladder is listed above the stake floor'); return false; }
+    // WALK the board rather than trying only the cheapest. Obeying the coach's OWN earlier rung puts
+    // you in a family, and omertà then refuses a duel against your own people — so a single-candidate
+    // handler retried the same blood relative forever and reported the ladder as untestable. The
+    // board does not say who is off-limits (see the finding), so the only honest way to find out is
+    // to ask, skip the refusal, and move down the list.
+    let last = null;
+    for (const foe of foes) {
+      const amount = Math.min(foe.limit, Math.max(stake, Math.floor(m.cash * 0.02)));
+      if (m.cash < amount) return false;                   // broke, not stuck — the grind funds it
+      const r = await call('POST', `/v1/duels/${foe.id}`, { token, body: { amount } });
+      if (r.code === 200) { did(r.body?.won ? 'duel:win' : 'duel:loss'); first('duel'); return obeyed(); }
+      last = r.body?.error || r.code;
+      hit('duel', last);
+      if (last === 'cooldown' || last === 'level' || last === 'cash') break;   // about ME, not this foe
+    }
+    if (last && last !== 'cooldown') coachCantAct.set(label, `duel refused: "${last}"`);
+    return false;
+  }
+  if (label.startsWith('Work the wires')) {
+    const roster = (await call('GET', '/v1/streets', { token })).body?.streets || [];
+    const mark = roster.filter((p) => !p.me)[0];
+    if (!mark) { coachCantAct.set(label, 'nobody on the streets to tap'); return false; }
+    const r = await call('POST', `/v1/wire/tap/${mark.id}`, { token });
+    if (r.code === 200) { did('coach:wire'); first('coach:wire'); return obeyed(); }
+    // `omr` is the honest answer for a solo grinder — the wire is a $OMR sink and nothing in this
+    // ladder earns $OMR except the mission rewards. Recorded as the gate it is, not as "untestable".
+    coachCantAct.set(label, `tap refused: "${r.body?.error || r.code}"`);
+    hit('coach:wire', r.body?.error || r.code);
+    return false;
+  }
+  // Still genuinely out of reach for a solo run: a crew heist needs a SECOND PLAYER to fill a role,
+  // and residents filling heist roles is explicitly deferred (see the NPC-families entry).
+  if (label.startsWith('Pull a crew score') || label.startsWith('Find a crew')) coachCantAct.set(label, 'solo run — a crew heist needs another player to fill a role (residents in crews is deferred)');
   else if (label.startsWith('Still running solo')) coachCantAct.set(label, 'solo run — the permanent tail nudge, correctly last');
-  else if (label.startsWith('Work the wires')) coachCantAct.set(label, 'solo run — a wiretap needs somebody to tap');
   else if (!coachCantAct.has(label)) coachCantAct.set(label, 'no action wired in this harness');
   return false;
 }
