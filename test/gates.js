@@ -121,9 +121,15 @@ for (const f of files) {
     const code = body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
     let scope = code;
     const helpers = [];
+    // Helpers are brace-matched too, for the same reason the caller is: a fixed-size window spills
+    // past the helper's end into whatever function is declared next, and if THAT one gates something
+    // the helper does not, every caller silently inherits credit for a gate it never reaches.
+    // Measured on `assertStreetCrime`: a 2,000-char window over a 1,072-char helper carried 928
+    // characters of a neighbouring function. Nothing is mis-credited today — the spill happens to
+    // hold no extra gate — which is exactly why it had to be checked rather than assumed.
     for (const hm of code.matchAll(/(?<![\w$])(assert\w+|require\w+)\s*\(/g)) {
       const hi = src.search(new RegExp(`function\\s+${hm[1]}\\s*\\(`));
-      if (hi >= 0) { scope += src.slice(hi, hi + 2000); helpers.push(hm[1]); }
+      if (hi >= 0) { scope += bodyOf(src, hi); helpers.push(hm[1]); }
     }
     // A THIN WRAPPER delegates its gates to the one function it returns — `robBusiness` and
     // `shakedownBusiness` are both a single `return extortFront(...)`, which is the one-core
@@ -134,7 +140,7 @@ for (const f of files) {
     const thin = code.match(/\{\s*return\s+(\w+)\s*\([^;]*\);?\s*\}\s*$/);
     if (thin) {
       const ti = src.search(new RegExp(`function\\s+${thin[1]}\\s*\\(`));
-      if (ti >= 0) { scope += src.slice(ti, ti + 4000); helpers.push(thin[1]); }
+      if (ti >= 0) { scope += bodyOf(src, ti); helpers.push(thin[1]); }
     }
     const has = (g) => new RegExp(`(?<![\\w$])${g}\\s*\\(`).test(scope) || (INLINE[g] && INLINE[g].test(scope));
     fns.set(marks[i].name, { file: path.basename(f), gates: new Set(GATES.filter(has)), helpers,
