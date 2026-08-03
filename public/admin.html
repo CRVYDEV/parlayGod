@@ -290,8 +290,24 @@
       + barRow('linked a wallet', pr.linked_wallet || 0)
       + `<div class="note" style="margin-top:6px">levels — 1–4: ${fmt(lv.lvl_1_4)} · 5–9: ${fmt(lv.lvl_5_9)} · 10–19: ${fmt(lv.lvl_10_19)} · 20+: ${fmt(lv.lvl_20_plus)}</div>`
       + `<div class="note">first-week capstones: ${fmt(fw.capstone)}</div>`
+      + renderCareer(fn.career)
       + renderBroadcast(fn.broadcast)
       + renderReferral(fn.referral);
+  }
+
+  // THE CAREER — where the drop-off moves AFTER the first week. `reached` is how many accounts had
+  // each tier's gate open; the fall between two rows is the wall. The task list under it names WHICH
+  // task in the deepest reached tier is being skipped, so a task nobody can do reads as a zero.
+  function renderCareer(cr) {
+    if (!cr) return '';
+    const tiers = Object.keys(cr.reached || {});
+    if (!tiers.length) return '';
+    const rows = tiers.map((t) =>
+      `<div class="row"><span class="k">${t}</span><span class="v">${fmt(cr.reached[t])} reached · ${fmt(cr.completed[t])} finished</span></div>`).join('');
+    const cold = Object.entries(cr.tasks || {}).filter(([, n]) => !n).map(([k]) => k);
+    return `<div class="note" style="margin-top:8px;color:var(--neon)">THE CAREER — ${fmt(cr.started)} account(s) on the ladder · $${fmt(cr.cashPaid)} paid out</div>`
+      + rows
+      + (cold.length ? `<div class="note" style="color:var(--dim)">never claimed by anyone (${cold.length}): ${cold.join(' · ')}</div>` : '');
   }
 
   // ENGAGEMENT — which systems anyone actually uses, and whether players come back. The DEAD list is

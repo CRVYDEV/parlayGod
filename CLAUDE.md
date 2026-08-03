@@ -8585,3 +8585,46 @@ already beats the loop it was meant to compete with, on the signed pacing curve,
 a number I got wrong. The doc now carries the retraction in place of the claim. **Still to build:** LAST — because it touches the signed pacing curve and so gets measured before and after —
 **F2, the daily loops paying respect at all**, which is the single change that most alters how the
 band feels. F5 (a day streak) is the retention follow-up, not the opener.
+
+**THE UNCOMPLETABLE DAILY, THE CAREER FUNNEL, AND THE HARNESS'S BLIND RUNGS (2026-08-03).** Three
+onboarding/coaching gaps, each the same shape as findings this project keeps re-learning. **(1) A
+daily contract a family-less street CANNOT FINISH.** `DAILY_POOL` has one gang-gated kind
+(`tribute`), and NPC residents deliberately never found families — so on the 6 days in 31 the draw
+lands one, a solo player got a card whose bar can never move AND the work-board coach rung sat on
+*"N of today's contracts unclaimed"* all day pointing at it. That is the **F2 masking class** (a rung
+that cannot clear sits at the head and hides every live rung under it) in the one place the pool can
+still produce it. Fixed with ONE helper both halves read — `dailyBlockedFor` names the reason, the
+board puts it on the card ("out of reach today — you need a family to pay tribute") and `dailyLiveFor`
+subtracts it from the coach's count, so the number in the rung and the cards on the screen can never
+disagree (the extortFront one-core lesson). `claimDaily` needed no gate: the counter can't reach the
+goal anyway, and a player who paid tribute and then LEFT the family has genuinely done the work — which
+is why `loadOwned` now carries the claimed IDs rather than a count. `getDaily` gained a `day`
+parameter **for the test only**, because a tribute lands on 6 days in 31 and an assertion that waits
+for the draw is vacuous on the other 25 — the recorded flake class, inverted. **A pre-existing hole
+the change exposed:** the work-board walk seeded `claimed='["a","b"]'` — placeholder ids that the new
+filter correctly ignores — so it had been asserting `3 − 2 = 1` against a subtraction that never
+matched a real contract; it uses the day's real drawn ids now. **(2) THE CAREER had no funnel.** The
+post-First-Week ladder shipped with a board, a test and no way for the founder to see whether anybody
+climbs it — and the first-week funnel stops at day seven, which is exactly where the drop-off MOVES.
+`funnelStats` gained a `career` block: accounts started, per-tier `reached`/`completed` (mirroring
+`career.js:tierStates` exactly, so the analytics and the ladder cannot disagree about which tier a
+player is on), the per-task tally that names WHICH rung is being skipped, and `cashPaid` read off the
+LEDGER rather than assumed. Rendered on /admin between the first-week line and the referral block,
+with a "never claimed by anyone" list — a task nobody can do reads as a zero. **(3) THE HARNESS WAS
+BLIND TO THE WORK BOARD.** `tools/playthrough.js` already drove missions, dailies, the hustle, the
+corner and the drills in `tick`, but `obeyCoach` knew none of them — so a run that genuinely followed
+the advice still reported them as *"no action wired in this harness"*, and an untested rung looks
+exactly like a broken one. Five handlers wired; re-measured over 7 days: **19 rungs walked, every
+rung the player obeyed cleared, and the anti-masking warning is GONE** (2h → level 13, 5h → 22,
+10h → 35, inside the recorded noise). **NOT built, and it is the founder's call:** the two rungs the
+harness still cannot act on (*"Nobody survives alone"*, *"Pull a crew score"*) are structurally
+multiplayer, and the fix is NPC families — residents that found and recruit — which touches the
+Commission, turf and the war loop, so it is a design decision rather than a patch. **A flake fixed en
+route, reproduced before it was fixed:** `npm test` failed `test/economy.js` on *"retiring at 0 bps
+writes ZERO ledger rows"* (169 vs 167) while the file passed standalone five times on both the new
+and the clean tree. The retire is innocent — the character owns rackets, so §7.1 accrual writes
+`racket:income` on any touch, and a raw row COUNT across the window measured ANY event rather than
+the one under test. Backdating `last_accrued_at` two minutes reproduces it EXACTLY (two rows); the
+fix freezes the clock so no accrual can land AND scopes the count to `racket:retire%`, so the
+assertion now measures its own claim. Suite 64/64 · sim drift-0 · mobile 66/66 · pgquery 2315
+statements · pgcheck 43/43 on real Postgres.

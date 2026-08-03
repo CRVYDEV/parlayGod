@@ -1246,13 +1246,24 @@ await pool.query(`UPDATE account_persistent SET agent_flag=false WHERE account_i
 
   // THE DOOR OUT — retiring frees the seat. At RACKET_RETIRE_BPS 0 it moves NO value, so it writes
   // NO ledger row: walking away is a pure ownership change (the BUSINESS_SHUTTER_BPS argument).
+  // The clock is frozen first, and that is load-bearing rather than tidy: this character owns
+  // rackets, so §7.1 accrual writes `racket:income` on the next touch, and a raw row COUNT across
+  // the window measured ANY event rather than the retire. Backdating `last_accrued_at` two minutes
+  // reproduces it exactly (two rows) — the recorded flake class, where a deterministic assertion
+  // rests on a merely-likely precondition. Stamping the clock to now() makes dtMin ~0 so no income
+  // can land, and the count below is scoped to the retire's OWN reason so it measures the claim.
+  await pool.query(`UPDATE characters SET last_accrued_at = now() WHERE id='${cid}'`);
+  const retireRows = async () => Number((await pool.query(
+    `SELECT COUNT(*) n FROM transactions WHERE character_id='${cid}' AND reason LIKE 'racket:retire%'`)).rows[0].n);
   const rowsPre = Number((await pool.query(`SELECT COUNT(*) n FROM transactions WHERE character_id='${cid}'`)).rows[0].n);
+  assert.equal(await retireRows(), 0, 'nobody has walked away yet');
   const cashPreRetire = (await meOf(token)).cash;
   const quit = await call('DELETE', `/v1/rackets/${m.rackets[0]}`, { token });
   assert.equal(quit.code, 200, `walked away from ${m.rackets[0]} (${JSON.stringify(quit.body)})`);
   assert.equal(quit.body.back, 0, 'at 0 bps you get nothing back — the door exists to unblock, not to refund');
+  assert.equal(await retireRows(), 0, 'retiring at 0 bps writes ZERO ledger rows — no value moved');
   assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM transactions WHERE character_id='${cid}'`)).rows[0].n), rowsPre,
-    'retiring at 0 bps writes ZERO ledger rows — no value moved');
+    'and nothing else moved either — the frozen clock means no accrual can be mistaken for the retire');
   assert.equal((await meOf(token)).cash, cashPreRetire, 'and the pocket is untouched');
   assert.equal((await meOf(token)).ops.free, 1, 'the seat is free');
 

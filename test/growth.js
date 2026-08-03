@@ -387,6 +387,47 @@ for (let i = 0; i < 3; i++) {
   assert.equal((await call('POST', `/v1/daily/${job.id}/claim`, { token: chef.token })).code, 400, 'no double claim');
 }
 
+// ── a drawn contract the player STRUCTURALLY cannot finish says so, and the coach stops counting it ──
+// `tribute` needs a FAMILY, and the NPC residents deliberately never found one — so on the 6 days in
+// 31 the pool draws a tribute job, a family-less street has a card whose bar can never move, and the
+// coach's work-board rung sat on "N of today's contracts unclaimed" all day pointing at it (the F2
+// masking class: a rung that cannot clear masks every live rung under it). The day is FORCED here
+// because waiting for the draw would leave this vacuous on 25 days in 31 — a deterministic assertion
+// must never rest on a probabilistic precondition.
+{
+  const { getDaily } = await import('../src/growth.js');
+  const { dailyJobsOf, dailyBlockedFor, dailyLiveFor } = await import('../src/rules.js');
+  let tributeDay = null;
+  for (let d = dayOf(); d < dayOf() + 31 && tributeDay === null; d++) if (dailyJobsOf(d).some((j) => j.k === 'tribute')) tributeDay = d;
+  assert(tributeDay !== null, 'the pool draws a tribute contract within a 31-day cycle');
+  const trib = dailyJobsOf(tributeDay).find((j) => j.k === 'tribute');
+
+  // the helper itself — the one core the board's copy and the coach's count both read
+  assert.equal(dailyBlockedFor(trib, { gangId: null }), 'you need a family to pay tribute', 'no family, no tribute');
+  assert.equal(dailyBlockedFor(trib, { gangId: 'g1' }), null, 'a made man can pay it');
+  assert.equal(dailyBlockedFor(dailyJobsOf(tributeDay).find((j) => j.k !== 'tribute'), { gangId: null }), null,
+    'nothing else in the pool needs a family');
+
+  // the BOARD: the card says why it is out of reach, and only that card
+  let board = await getDaily(pool, chef.id, tributeDay);
+  assert.equal(board.jobs.find((j) => j.id === trib.id).blocked, 'you need a family to pay tribute',
+    'the tribute card carries the reason instead of a bar that never moves');
+  assert.equal(board.jobs.filter((j) => j.blocked).length, 1, 'and nothing else on the board is blocked');
+  // the COACH counts only what is live: two of three, not three
+  assert.equal(dailyLiveFor([], { gangId: null }, tributeDay).length, 2, 'a family-less street has two live contracts that day');
+  assert.equal(dailyLiveFor([trib.id], { gangId: null }, tributeDay).length, 2, 'and a blocked one is never double-subtracted');
+  assert.equal(dailyLiveFor([], { gangId: 'g1' }, tributeDay).length, 3, 'in a family all three count');
+  // honest scope: `coachLadder` calls dailyLiveFor with the claimed ids and the gang, and THAT call
+  // is exercised on the live day by the work-board walk below (where the count tracks real claims).
+  // The blocked half is proven here on the forced day, since the coach's own day cannot be moved.
+
+  // in a family the same day reads clean — proves the board really looks the membership up
+  await pool.query(`INSERT INTO gang_members (gang_id, character_id) VALUES ('g-daily-probe', '${chef.id}')`);
+  board = await getDaily(pool, chef.id, tributeDay);
+  assert.equal(board.jobs.filter((j) => j.blocked).length, 0, 'a made man sees no blocked contract');
+  await pool.query(`DELETE FROM gang_members WHERE character_id='${chef.id}'`);
+}
+
 // ── First Week (§5.1): server-checked claims, capstone, cash-only rewards ──
 await seedCh(chef.id, 'cash=500000, energy=50, jail_until=NULL');
 // the guided board (the client's Start Here funnel): eight tasks, none claimed, crime not yet ready
@@ -551,11 +592,14 @@ assert.equal(await coachOf(), 'A job came in from the family',
   'a mission off cooldown is the biggest respect on the board, so it leads the work board');
 await pool.query(`UPDATE characters SET mission_at = now() WHERE id='${rook.id}'`);
 assert.equal(await coachOf(), '3 of today\'s contracts unclaimed', 'then the day\'s contracts, counted');
+// the REAL drawn ids — the count subtracts what this player has actually claimed, so a placeholder
+// id would be silently ignored and the assertion below would pass for the wrong reason
+const cjobs = (await import('../src/rules.js')).dailyJobsOf(cday).map((j) => j.id);
 // rook already HAS a daily row (he pulled jobs above, which bumps the counters) — upsert, don't insert
-await pool.query(`INSERT INTO daily_progress (character_id, day, counters, claimed) VALUES ('${rook.id}', ${cday}, '{}', '["a","b"]')
+await pool.query(`INSERT INTO daily_progress (character_id, day, counters, claimed) VALUES ('${rook.id}', ${cday}, '{}', '${JSON.stringify(cjobs.slice(0, 2))}')
   ON CONFLICT (character_id, day) DO UPDATE SET claimed = EXCLUDED.claimed`);
 assert.equal(await coachOf(), '1 of today\'s contracts unclaimed', 'and the count is REAL — two claimed leaves one');
-await pool.query(`UPDATE daily_progress SET claimed='["a","b","c"]' WHERE character_id='${rook.id}' AND day=${cday}`);
+await pool.query(`UPDATE daily_progress SET claimed='${JSON.stringify(cjobs)}' WHERE character_id='${rook.id}' AND day=${cday}`);
 assert.equal(await coachOf(), 'Tonight\'s hustle is waiting', 'then tonight\'s hustle, unstarted');
 await pool.query(`INSERT INTO hustles (character_id, day, step, baseline) VALUES ('${rook.id}', ${cday}, 1, '{}')`);
 assert.equal(await coachOf(), 'Your hustle is half-finished', 'a started hustle reads as half-finished, not waiting');
@@ -651,6 +695,22 @@ const funnel2 = (await app.inject({ method: 'GET', url: '/v1/mod/funnel', header
 assert(funnel2.broadcast && funnel2.broadcast.shares >= 2, 'funnel counts broadcast share intents');
 assert(funnel2.broadcast.byKind.dossier >= 1 && funnel2.broadcast.byKind.win >= 1, 'funnel breaks shares down by kind');
 assert(funnel2.broadcast.sharers >= 1 && typeof funnel2.broadcast.referredPerShare === 'number', 'funnel carries distinct sharers + reach→conversion');
+// THE CAREER block — the ladder shipped with a board and a test and NO way for the founder to see
+// whether anybody climbs it. The funnel above stops at day seven; this is where the drop-off moves.
+{
+  const { CAREER } = await import('../src/rules.js');
+  const before = (await app.inject({ method: 'GET', url: '/v1/mod/funnel', headers: { 'x-mod-key': 'test-mod-key' } })).json().career;
+  assert(before && before.reached.associate !== undefined, 'the funnel carries a career block, tier by tier');
+  assert.equal(before.reached.soldier, 0, 'and nobody has opened the second tier yet');
+  await seedCh(rook.id, 'bank=30000, jail_until=NULL');
+  assert.equal((await call('POST', '/v1/career/ca_bank', { token: rook.token })).code, 200, 'a real career claim through the real route');
+  const after = (await app.inject({ method: 'GET', url: '/v1/mod/funnel', headers: { 'x-mod-key': 'test-mod-key' } })).json().career;
+  assert.equal(after.started, before.started + 1, 'the ladder counts the account that started climbing');
+  assert.equal(after.tasks.ca_bank, before.tasks.ca_bank + 1, 'and the task tally names WHICH rung');
+  assert.equal(after.cashPaid, before.cashPaid + CAREER.TIERS[0].tasks.find((t) => t.id === 'ca_bank').cash,
+    'cashPaid is read off the ledger, so the faucet is measured not assumed');
+  assert.equal(after.reached.soldier, 0, 'one claim is not four — the second tier stays shut (the NEED gate, mirrored)');
+}
 
 // ── STEPPED PAYOUT — "the spark": a small EARLY cash payout the moment a recruit shows real
 // engagement (level 3 + 10 jobs), long before full qualification. Fast feedback for the referrer. ──
