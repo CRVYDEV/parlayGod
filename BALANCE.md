@@ -4532,3 +4532,57 @@ residents filling crew-heist roles (the co-op faucet measures 1.46× solo per me
 solo-reachable on demand is an emission change); NPC-held turf on the OCCUPATION model rather than the
 free-seize one; and residents paying tribute — which would give them standing, and therefore re-open
 the two exclusions above.
+
+## RE-SIM + EARLY-GAME HARNESS PASS (2026-08-03) — tokenomics-v2 severance measured, early game re-measured
+
+Two harnesses run against HEAD (`af04b7f`) after the tokenomics-v2 migration and the early-game
+content drops, since neither had been re-measured against the current tree. Both green; no lever
+retuned (ground rule #1) — this is measurement, not a change.
+
+### The re-sim (`npm run sim`) — §10.4 drift-0, and the v2 properties hold analytically
+
+The sim carries dedicated `re-sim` probe rows that assert the severance directly, and they held:
+
+| property | measured | note |
+|---|---|---|
+| §10.4 conservation | drift-0 over an entirely earned economy | the full P10 sweep passes; the run exits non-zero on any drift |
+| a cash faucet can no longer move the token price | confirmed | the AMM sell side is retired; the only cash exit is the Exchange window ($OMR in, cash out, bounded by a sink-filled till). A bigger cash faucet now costs game balance, never token holders |
+| $OMR emission | 0/day — bonds are the only mint | with cash severed AND the wage retired (v3 step 1), in-game $OMR can never exceed what was deposited. No cash back-door, no printer |
+
+**Verdict: the largest open item is CLEAN.** The severance lowered the stakes on the internal-balance
+flags (the passive stack at 2.3× the active grind, the apex world/boxing/racing purses, the port sale
+curve, the npc:seed recycle at ~$499k/day) but did not answer them — those remain founder
+PACING/CONCENTRATION calls, unchanged. The per-faucet $/day ceilings in P9.8–P9.22 are still the
+numbers to tune against; the token model is no longer entangled with any of them.
+
+### The early-game harness (`npm run playthrough`) — the coach walks, the cliff is traversable
+
+A plausible solo player, no contact with another human. Result: **the coach walked 20 rungs and every
+rung the player obeyed cleared — no masking defect.** The 17→30 content cliff is now traversable (the
+crimes/missions expansion, the work board, the level-up refill, and the trades strip all landed):
+
+| played | level | note |
+|---|---|---|
+| 2h | 13 | |
+| 5h | 22 | |
+| 10h | 35 | inside the recorded ±1 noise; the alpha speedrun reached 240 |
+
+**THE REFILL CEILING probe: BOUNDED.** A raw crossing goes self-sustaining at level 90 (the next level
+costs ~96 nerve, a crossing refills 100), but `PACING.LEVEL_UP_REFILL_MAX_DAY` (10) caps it at
+≤10.43 levels/day at level 90 — flat in level (both terms are linear), so it stays that bounded at
+every level above. The fix holds; the speedrun class is dead.
+
+**The two rungs still at the top of the held-%-of-advised-play table are both STRUCTURAL, not defects:**
+
+1. **"Pull a crew score" — 22%, never cleared.** A crew heist needs another player to fill a role, and
+   a solo player has nobody. This is the single biggest remaining early-game friction, and it is
+   exactly the **residents-in-crews** gap deferred under NPC families step two. See
+   `omerta-residents-in-crews-design.md` (scoped this session).
+2. **"You can get made for free" — 20%, a 2h03m wait.** Not masking — the player is grinding to afford
+   the PLEX mint (payable in earned $OMR). Working as designed.
+
+**Recommendation, backed by measurement:** the highest-leverage early-game build is now
+**residents filling crew-heist roles** — it is the top masking rung and the only one uncompletable
+solo. Scoped below-referenced; the emission concern the deferral flagged is answered by forfeiting the
+NPC filler's cut (a resident seat conjures nothing, and a solo leader gets a *smaller* share than a
+full human crew, so co-op stays a reason to find real people).
