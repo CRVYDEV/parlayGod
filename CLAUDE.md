@@ -3636,7 +3636,22 @@ patched): **the garrison RATCHETS DOWN** — the winning stake becomes the new g
 clear a price multiplied by every discount that applied (coalition 0.5 × foothold 0.85 × reckoning
 0.75 × the Outfit 0.85 ≈ **0.46**), so a chain of favourable conquests walks a district's standing
 price down toward `SEIZE_BASE`; the cheapest dial is storing the UNDISCOUNTED `base` as the garrison,
-which keeps every discount the one-time reward it was written to be (BALANCE.md).
+which keeps every discount the one-time reward it was written to be (BALANCE.md). **FIXED the next
+day (founder-directed), and NOT with that dial:** the stored garrison is floored at what the ground
+was worth before (`max(winAmt, previous garrison)` in `settleContest`) — *a discount prices the
+CONQUEST, not the district*, so you pay less for the same turf and your enemies do not inherit your
+bargain, while a stake ABOVE the old garrison still counts in full so hard-fought ground keeps what
+it took to win it. Storing the undiscounted `base` was rejected on inspection: it DISCARDS the
+winner's over-commitment (a $10M stake on a $200k district would install a $300k garrison) and
+forces a ×1.5 rise on every change of hands, which is monotone inflation rather than a fix.
+**Building the regression corrected two numbers in the audit's own write-up, both overstating the
+problem:** the 0.46 is the discount PRODUCT and `SEIZE_OUTBID` (1.5) applies first, so the
+fully-stacked floor is 0.69× the previous garrison (~31% fall, not ~54%); and the ×1.5 surprise
+premium on an undeclared or off-hours watch CANCELS the ratchet by itself, so it only bites inside
+the holder's declared window. Measured in the regression at three of four discounts with the watch
+open: **$162,562 against a $200,000 garrison, −19% per conquest, compounding.** The test asserts
+that precondition (`floor < WAS`) explicitly, because without a floor genuinely below the old
+garrison the whole block would pass on a no-op.
 
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the

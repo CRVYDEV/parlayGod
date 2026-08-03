@@ -654,16 +654,26 @@ export async function settleContest(client, districtId) {
   }
   const winAmt = win ? Number(win.amount) : 0;
   const changed = !!win && win.gang_id !== d.holder_gang;
+  // WHAT THE GROUND IS WORTH TO HOLD, not a receipt. The winning stake becomes the garrison, and a
+  // stake only has to clear turfQuote's cost — which is the outbid price times every discount that
+  // happened to apply to that attacker at that moment (a coalition against a hegemon, a foothold next
+  // door, the reckoning, an Outfit charter). Stored raw, those discounts stopped pricing the CONQUEST
+  // and became the DISTRICT's standing value: the next attacker's floor is computed from this number,
+  // so a chain of favourable conquests walked the price down. Floored at what it was worth before, so
+  // a discount stays the one-time reward it was written to be — you paid less for the same ground, and
+  // your enemies do not inherit your bargain. A stake ABOVE the old garrison still counts in full, so
+  // a hard-fought district keeps every dollar of what it took to win it.
+  const heldGarrison = Math.max(winAmt, Number(d.garrison) || 0);
   if (changed) {
-    // the winning stake becomes the new garrison — the next family to come for it outbids THIS.
     // The watch is cleared with the turf: the new holder declares their own hour.
     await client.query('UPDATE districts SET holder_gang=$2, npc_holder=NULL, garrison=$3, seized_at=$4, watch_hour=NULL, contest_until=NULL WHERE id=$1',
-      [districtId, win.gang_id, winAmt, now()]);
+      [districtId, win.gang_id, heldGarrison, now()]);
     await seizeTerritoryRackets(client, districtId, win.gang_id);
     await razeSov(client, districtId);
   } else if (win) {
-    // the holder held it — what they put up becomes the new garrison (they reinforced)
-    await client.query('UPDATE districts SET garrison=$2, contest_until=NULL WHERE id=$1', [districtId, winAmt]);
+    // the holder held it — what they put up becomes the new garrison (they reinforced). A defender is
+    // never discounted, so their stake always clears the old garrison and the floor is a no-op here.
+    await client.query('UPDATE districts SET garrison=$2, contest_until=NULL WHERE id=$1', [districtId, heldGarrison]);
   } else {
     await client.query('UPDATE districts SET contest_until=NULL WHERE id=$1', [districtId]);
   }

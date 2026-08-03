@@ -4385,7 +4385,7 @@ apart, the pick decides the whole family's shape and a wrong pick is punishing. 
 a PAID re-founding, never by the free first pick, because the trap the free pick exists to avoid is
 the decision made before you knew what the choices meant.
 
-## THE STRATEGY PACKAGE — the red-team's one open item: THE GARRISON RATCHETS DOWN (2026-08-02)
+## THE STRATEGY PACKAGE — THE GARRISON RATCHETED DOWN (2026-08-02, FIXED 2026-08-03)
 
 The package's own audit (`AUDIT-strategy-package.md`) fixed four defects and left exactly one thing
 for the founder, because it is a balance decision rather than a bug.
@@ -4412,8 +4412,25 @@ is the entire aim of the package. Against that: the discount is meant to price *
 to become the district's value — and as built it pays out twice, once when you take the ground and
 again for everyone who comes for you afterwards, including your enemies.
 
-**The dials, cheapest first.** (a) Store the UNDISCOUNTED `base` as the new garrison rather than the
-paid amount — one line, and it keeps every discount as the one-time reward it was written to be.
-(b) Floor the stored garrison at the previous holder's. (c) Cap the product of the discounts (e.g.
-never below 0.6× the outbid). Nothing here is a signed number moving; the change is *which* number
-gets stored.
+**APPLIED (founder-directed): the stored garrison is floored at what the ground was worth before** —
+`max(winAmt, previous garrison)` in `settleContest`. A discount prices your CONQUEST, not the
+district: you paid less for the same turf, and your enemies do not inherit your bargain. A stake
+ABOVE the old garrison still counts in full, so a hard-fought district keeps every dollar of what it
+took to win it, and a defender's stake (never discounted) clears the old value anyway, making the
+floor a no-op on that branch.
+
+**Two corrections to the numbers above, both found by building the regression rather than reasoning
+about it.** First, the fall is **not** "roughly half": the 0.46 is the discount PRODUCT, but
+`SEIZE_OUTBID` (1.5) is applied first, so the fully-stacked floor is `1.5 × 0.4607 = 0.69×` the
+previous garrison — a ~31% fall per conquest, not ~54%. Second, the condition for any fall at all is
+`OUTBID × surprise × discounts < 1`, so the ×1.5 surprise premium on an undeclared or off-hours watch
+**cancels the ratchet on its own** — it only bites on an attack landing inside the holder's declared
+window. Measured in the regression at three of the four discounts (reckoning + Outfit + foothold,
+watch open): a floor of **$162,562 against a $200,000 garrison**, i.e. −19% per conquest, compounding.
+
+**Why not the other two dials.** (a) as first written — store the undiscounted `base` — throws away
+the winner's over-commitment: a family that staked $10M on a $200k district would install a $300k
+garrison and hard-won ground would be cheap again immediately. It also forces a ×1.5 rise on *every*
+change of hands, which is monotone inflation rather than a fix. (c) capping the discount product
+weakens the rewards themselves, which is a balance change; this is not. Nothing signed moved — the
+change is *which* number gets stored.
