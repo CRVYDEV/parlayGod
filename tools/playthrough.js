@@ -433,6 +433,65 @@ async function obeyCoach(m) {
     hit('coach:port', r.body?.error || r.code);
     return false;
   }
+  // ── THE WORK BOARD. These are the rungs that never run out (they refill daily), so they are what
+  // the coach says for most of a long run — and they were the largest unwired block here: `tick`
+  // already drives every one of these loops, but obeyCoach knew nothing about them, so a run that
+  // genuinely followed the advice still reported them as "no action wired in this harness". An
+  // untested rung and a broken rung look identical from the outside, which is the whole reason this
+  // function counts what it cannot do rather than skipping it.
+  if (label.startsWith('A job came in from the family')) {
+    const ready = MISSIONS.filter((x) => !doneMissions.has(x.id) && missionReady(x, m))
+      .sort((a, b) => b.reward.respect - a.reward.respect)[0];
+    if (!ready) { coachCantAct.set(label, 'a mission is off cooldown but this player meets no remaining job\'s reqs'); return false; }
+    const r = await call('POST', `/v1/missions/${ready.id}`, { token });
+    if (r.code === 200) { doneMissions.add(ready.id); did('mission'); first(`mission:${ready.id}`); return obeyed(); }
+    if (r.body?.error === 'done') doneMissions.add(ready.id);
+    hit('mission', r.body?.error || r.code);
+    return false;
+  }
+  if (label.endsWith("of today's contracts unclaimed")) {
+    const d = await call('GET', '/v1/daily', { token });
+    let took = false;
+    for (const j of (d.body?.jobs || [])) {
+      if (j.claimed || j.blocked || j.progress < j.goal) continue;   // `blocked` = the server says this street can't finish it
+      const r = await call('POST', `/v1/daily/${j.id}/claim`, { token });
+      if (r.code === 200) { did('coach:daily'); took = true; } else hit('coach:daily', r.body?.error || r.code);
+    }
+    return took ? obeyed() : false;   // nothing finished YET is early, not stuck — the grind does the work
+  }
+  if (label.startsWith("Tonight's hustle") || label.startsWith('Your hustle')) {
+    const b = (await call('GET', '/v1/hustle', { token })).body;
+    if (!b || b.done || !b.district) return false;
+    if (!b.here) {
+      const t = await call('POST', `/v1/travel/${b.district}`, { token });
+      if (t.code !== 200) { coachCantAct.set(label, `travel to ${b.district} refused: "${t.body?.error || t.code}"`); return false; }
+      did('hustle:travel'); return false;                            // a step toward it, not obedience yet
+    }
+    const r = await call('POST', '/v1/hustle/advance', { token });
+    if (r.code === 200) { did(r.body.done ? 'hustle:payoff' : 'hustle:step'); first('hustle'); return r.body.done ? obeyed() : false; }
+    hit('hustle', r.body?.error || r.code);                          // `legwork` until the work is done
+    return false;
+  }
+  if (label.startsWith('The corner has an envelope')) {
+    const c = await call('GET', '/v1/corner', { token });
+    let took = false;
+    for (const t of (c.body?.tasks || [])) {
+      if (!t.accepted || t.claimed) continue;
+      const r = await call('POST', `/v1/corner/${t.slot}/claim`, { token });
+      if (r.code === 200) { did('corner:claim'); first('corner:claim'); took = true; } else hit('corner:claim', r.body?.error || r.code);
+    }
+    return took ? obeyed() : false;   // `not_done` is the normal case — the grind finishes it
+  }
+  if (label.startsWith('The trainers have work for you')) {
+    const board = (await call('GET', '/v1/regimen', { token })).body;
+    let took = false;
+    for (const d of (board?.drills || [])) {
+      if (d.claimed || !d.done) continue;
+      const r = await call('POST', `/v1/regimen/drill/${d.npc}`, { token });
+      if (r.code === 200) { did('drill'); first('drill'); took = true; } else hit('drill', r.body?.error || r.code);
+    }
+    return took ? obeyed() : false;
+  }
   // Rungs a SOLO harness structurally cannot do: there is one character on this server, so there is
   // no family to join and nobody to fight. Recorded with the reason so the report is honest about
   // what it did not test rather than silently passing over it.

@@ -14,7 +14,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS, RANKS,
          REGIMEN, disciplineLvlOf, energyCapOf, nerveCapOf, BUSINESSES, WIRE, RIVALS, CORNER, cornerTasksOf,
          KITCHENS, labModuleCost, recyclesToDesk, DESK_RECYCLE_REASON, isMade, madeSeconds,
          MADE_LADDER, madeRungIdx, madeRungOf, ladderFx,
-         ASSETS, OPERATIONS, opSlotsOf, nextOpSlotLevel, MISSIONS } from './rules.js';
+         ASSETS, OPERATIONS, opSlotsOf, nextOpSlotLevel, MISSIONS, dailyLiveFor } from './rules.js';
 import { dbCaps } from './db.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
@@ -269,7 +269,11 @@ export async function loadOwned(client, ch) {
   // work and what it pays, and re-deriving each system's full board here would put five modules'
   // logic in the hot path of every authed request. `claimed` is the daily-contract JSON array.
   const work = {
-    dailyClaimed: (() => { try { return JSON.parse(grp.get('daily')?.[0]?.k2 || '[]').length; } catch { return 0; } })(),
+    // the claimed IDs, not just the count: the rung has to subtract contracts this player
+    // STRUCTURALLY cannot clear (dailyBlockedFor), and doing that exactly needs to know WHICH of
+    // the three are already done — a player who paid tribute and then left the family would
+    // otherwise be double-counted against themselves.
+    dailyClaimedIds: (() => { try { return JSON.parse(grp.get('daily')?.[0]?.k2 || '[]'); } catch { return []; } })(),
     hustleStep: grp.get('hustle')?.[0] ? Number(grp.get('hustle')[0].n) : null, // null = not started today
     // (red-team F2) OPEN is not the same as CLAIMABLE. `claimCorner` refuses on two counts, and a
     // rung that points at work the server will not pay is worse than no rung at all — it sits at the
@@ -1202,7 +1206,12 @@ function coachLadder(ch, acct, owned) {
     const missionReady = !ch.mission_at || Date.now() - new Date(ch.mission_at).getTime() >= PACING.MISSION_CD_MS;
     if (missionReady && lvl >= 2
       && add('A job came in from the family', 'The story missions pay the biggest respect in the game and one just came off cooldown. Take it — it is the fastest level you will get today.', 'start')) return rungs;
-    const dailiesLeft = Math.max(0, 3 - (w.dailyClaimed || 0));
+    // Count only what this player can actually FINISH. A drawn `tribute` contract is dead to a
+    // family-less street (dailyBlockedFor), and a rung that says "1 of today's contracts unclaimed"
+    // while pointing at a card they can never clear sits at the head of the tail all day and masks
+    // every live rung under it — the F2 masking class, in the one place the pool can still produce
+    // it. The same helper marks the card on the board, so the count and the copy cannot disagree.
+    const dailiesLeft = dailyLiveFor(w.dailyClaimedIds || [], { gangId: owned.gangId }).length;
     if (dailiesLeft && add(`${dailiesLeft} of today's contracts unclaimed`,
       'Daily contracts pay cash for work you were going to do anyway — pull jobs, boost cars, move product. Claim them before the day rolls over and they are gone.', 'streets')) return rungs;
     if (w.hustleStep !== 3 && add(w.hustleStep === null ? "Tonight's hustle is waiting" : 'Your hustle is half-finished',

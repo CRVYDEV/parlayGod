@@ -3,8 +3,8 @@
 import { GameError, cleanText, assignedSoldier, soldierResult, bumpMastery, masteryFx, gainRespect } from './game.js';
 import { soldierFxOf, SOLDIERS, PATH_SWITCH_CD_MS, referralXpBonus } from './rules.js';
 import {
-  PATHS, MISSIONS, ONBOARD_TASKS, CONSTANTS, M4, M8, SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS,
-  levelOf, dayOf, dailyJobsOf, effStat, gunObjOf, assetEnergyCap, recruitRankOf, PACING,
+  PATHS, MISSIONS, ONBOARD_TASKS, CAREER, CONSTANTS, M4, M8, SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS,
+  levelOf, dayOf, dailyJobsOf, dailyBlockedFor, effStat, gunObjOf, assetEnergyCap, recruitRankOf, PACING,
   hash01, hitmanRankOf, honorTierOf,
 } from './rules.js';
 import { verifySocial, verifyPostUp, socialProviders, socialTaskAvailable, throttleXCheck } from './verify.js';
@@ -147,14 +147,22 @@ export async function doMission(ch, missionId, client, h) {
 }
 
 // ── DAILY CONTRACTS (§7.4): 3 drawn by (day + 2i) mod pool — no draw storage ──
-export async function getDaily(pool, characterId) {
-  const day = dayOf();
+// `day` is a parameter only so the suite can force a draw it cannot otherwise reach: a `tribute`
+// contract lands on 6 days in 31, so a test that waits for one would be vacuous on the other 25.
+// The route never passes it.
+export async function getDaily(pool, characterId, day = dayOf()) {
   const jobs = dailyJobsOf(day);
   const row = (await pool.query('SELECT * FROM daily_progress WHERE character_id=$1 AND day=$2', [characterId, day])).rows[0];
   const counters = row ? JSON.parse(row.counters) : {};
   const claimed = row ? JSON.parse(row.claimed) : [];
+  // A drawn contract this player structurally cannot finish says so on its own card, from the SAME
+  // helper the coach's count subtracts by — so the board and the coach can never disagree about
+  // which of the three are live (the extortFront one-core lesson). One extra query on a board read,
+  // not on loadOwned's hot path.
+  const gangId = (await pool.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [characterId])).rows[0]?.gang_id || null;
   return { day, jobs: jobs.map((j) => ({ id: j.id, name: j.name, kind: j.k, goal: j.n,
-    progress: Math.min(counters[j.k] || 0, j.n), claimed: claimed.includes(j.id) })) };
+    progress: Math.min(counters[j.k] || 0, j.n), claimed: claimed.includes(j.id),
+    blocked: dailyBlockedFor(j, { gangId }) })) };
 }
 
 export async function claimDaily(ch, jobId, client, h) {
@@ -265,7 +273,32 @@ export async function funnelStats(pool) {
   }
   broadcast.sharers = await one("SELECT COUNT(DISTINCT account_id) n FROM telemetry WHERE event='broadcast_share'");
   broadcast.referredPerShare = broadcast.shares ? Math.round((referral.referred / broadcast.shares) * 100) / 100 : 0;
-  return { characters, levels, progression, firstWeek: { ...firstWeek, capstone }, referral, broadcast };
+  // THE CAREER — the post-First-Week ladder. The funnel above stops at day seven, which is exactly
+  // where the drop-off MOVES to, and nothing measured it: the ladder shipped with a board, a test
+  // and no way for the founder to see whether anybody climbs it or where they stall. Read flat and
+  // aggregated in JS (the firstWeek/broadcast telemetry pattern above — pg-mem's GROUP BY is dicey,
+  // and a mod-gated read can afford the scan). `reached` mirrors career.js:tierStates exactly, so
+  // this and the ladder can never disagree about which tier a player is on.
+  const career = { started: 0, reached: {}, completed: {}, tasks: {}, cashPaid: 0 };
+  for (const t of CAREER.TIERS) { career.reached[t.id] = 0; career.completed[t.id] = 0; for (const k of t.tasks) career.tasks[k.id] = 0; }
+  const byAccount = new Map();
+  for (const r of (await pool.query('SELECT account_id, task_id FROM career_claims')).rows) {
+    if (career.tasks[r.task_id] !== undefined) career.tasks[r.task_id]++;
+    if (!byAccount.has(r.account_id)) byAccount.set(r.account_id, new Set());
+    byAccount.get(r.account_id).add(r.task_id);
+  }
+  career.started = byAccount.size;
+  for (const claimed of byAccount.values()) {
+    let prevDone = null;
+    for (const t of CAREER.TIERS) {
+      const done = t.tasks.filter((k) => claimed.has(k.id)).length;
+      if (prevDone === null || prevDone >= CAREER.NEED) career.reached[t.id]++;   // the tier's gate opened
+      if (done === t.tasks.length) career.completed[t.id]++;                      // and every task in it is claimed
+      prevDone = done;
+    }
+  }
+  career.cashPaid = Number((await pool.query("SELECT COALESCE(SUM(amount),0) n FROM transactions WHERE reason LIKE 'career:%'")).rows[0].n);
+  return { characters, levels, progression, firstWeek: { ...firstWeek, capstone }, referral, broadcast, career };
 }
 
 // ── THE RECRUITERS (§7.13 status boards — organic-growth hall of fame) ──

@@ -368,6 +368,26 @@ export const familyTaskOf=(wk=weekOf())=>FAMILY_TASKS[((wk%FAMILY_TASKS.length)+
 export const gunsValue=(ids=[])=>ids.reduce((a,id)=>a+(GUNS.find(g=>g.id===id)?.cash||0),0);
 export const racketsValue=(ids=[])=>ids.reduce((a,id)=>a+(RACKETS.find(r=>r.id===id)?.cost||0),0);
 export const dailyJobsOf=(day=dayOf())=>[0,1,2].map(i=>DAILY_POOL[(day+i*2)%DAILY_POOL.length]);
+// A drawn contract the player STRUCTURALLY cannot complete, and why. `DAILY_POOL` is machine-owned
+// and every kind but one is doable alone — the NPC residents supply the counterparty for `jump`
+// (they walk the streets), `bust` (JAILBIRDS keeps some inside) and `dice` (they set a fade limit).
+// `tribute` is the exception: it needs a FAMILY, and residents deliberately never found or join one
+// (deferred when the population shipped, so the Commission and turf stay untouched). So on the ~2
+// days in 31 that the draw lands a tribute contract, a family-less player has a card they cannot
+// clear — and the work-board coach rung would sit on "N of today's contracts unclaimed" all day
+// pointing at it. ONE helper so the coach's count and the card's copy can never disagree (the
+// extortFront one-core lesson); a second gang-gated kind is a line here rather than a rediscovery.
+//
+// Deliberately NOT covered: `trade` needs a live Exchange listing, which is a LIQUIDITY condition
+// that changes by the hour rather than a structural one — a static check would either lie when the
+// book fills or need a query on the coach's hot path. That one is flagged, not faked.
+export const dailyBlockedFor = (job, { gangId } = {}) =>
+  (job?.k === 'tribute' && !gangId) ? 'you need a family to pay tribute' : null;
+// The contracts still LIVE for this player today — what the coach's work-board rung counts. Shares
+// dailyBlockedFor with the board that draws the cards, so the number in the rung and the cards on
+// the screen can never disagree about which of the three are worth chasing.
+export const dailyLiveFor = (claimedIds = [], ctx = {}, day = dayOf()) =>
+  dailyJobsOf(day).filter((j) => !claimedIds.includes(j.id) && !dailyBlockedFor(j, ctx));
 // THE CREW BONUS (M4.REF_XP) — a recruiter's respect multiplier, derived from the CURRENT levels of
 // the recruits they brought in. Pure function of the levels, so the caller decides what counts as a
 // recruit (qualified only, agents excluded) and this cannot drift from the gate that produced it.
