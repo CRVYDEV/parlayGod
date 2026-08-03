@@ -268,6 +268,7 @@ export async function polBudget(db) {
 export async function runDeskBuyback(pool, { ref, ethToSpend, priceEthPerOmr, txHash = null, now = Date.now() } = {}) {
   const key = String(ref || '').trim();
   if (!key) throw new GameError('ref', 'A buyback needs a ref (mainnet: the swap txHash).');
+  const real = !!txHash;   // marks a genuine on-chain swap — see the reserve gate below
   const eth = Number(ethToSpend), price = Number(priceEthPerOmr);
   if (!(Number.isFinite(eth) && eth >= DESK_BUYBACK.MIN_ETH)) throw new GameError('amount', `Spend at least ${DESK_BUYBACK.MIN_ETH} ETH.`);
   if (!(Number.isFinite(price) && price > 0)) throw new GameError('price', 'priceEthPerOmr must be > 0 (mainnet: what the bot executed at).');
@@ -301,10 +302,23 @@ export async function runDeskBuyback(pool, { ref, ethToSpend, priceEthPerOmr, tx
     await client.query(
       `INSERT INTO desk_buys (ref, eth_spent, omr_bought, price_eth_per_omr, anchor_eth_per_omr, tx_hash, real)
        VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [key, round6(eth), omr, price, band.anchor, txHash, !!txHash]);
+      [key, round6(eth), omr, price, band.anchor, txHash, real]);
     await client.query('UPDATE desk_inventory SET balance = balance + $1, lifetime_bought = lifetime_bought + $1 WHERE id=1', [omr]);
-    // the hard token lands where it can actually be delivered, in the SAME txn as the soft credit
-    await client.query('UPDATE chain_reserve SET funded_omr = funded_omr + $1, last_funded_at = now() WHERE id=1', [omr]);
+    // THE ANTI-FABRICATION GATE, and it belongs on THIS line more than on any other in the file.
+    // The shelf credit above is soft supply sitting inside `omrBuckets`, so a comp may have it (QA
+    // needs inventory to test the sell side, and the shelf can only reach a player through a fill).
+    // `chain_reserve.funded_omr` is a different kind of thing entirely: it is what `signVoucher`
+    // checks before signing a REAL on-chain withdrawal, so crediting it asserts "hard OMR arrived".
+    // A comp must never be able to assert that — it is the store/bond/sell-tax discipline, one step
+    // further along, because here the fabrication would let the server sign against backing that
+    // does not exist. Until this gate the credit was unconditional and the only thing stopping a
+    // comp was that `polBudget` is zero without real fees — a defence by accident, and one that
+    // evaporates the moment `ALLOW_MOD_REAL_REVENUE=on` for QA. `runVigInvariants` counts only
+    // `desk_buys WHERE real` for the same reason: with both halves gated its two-sided sandwich
+    // CATCHES a mismatch, where before it absorbed one.
+    if (real) {
+      await client.query('UPDATE chain_reserve SET funded_omr = funded_omr + $1, last_funded_at = now() WHERE id=1', [omr]);
+    }
     await client.query(
       'INSERT INTO transactions (id, currency, amount, reason, counterparty) VALUES ($1,$2,$3,$4,$5)',
       [crypto.randomUUID(), 'omr', omr, DESK_BUYBACK_REASON, 'pol_fees']);
@@ -314,7 +328,7 @@ export async function runDeskBuyback(pool, { ref, ethToSpend, priceEthPerOmr, tx
     // covers, FIFO), so a failure here loses nothing a later drain will not pick up — and it must
     // never roll back a purchase that really happened.
     try { await drainQueue(pool); } catch { /* the next fund or withdrawal drains it */ }
-    return { bought: true, omr, eth: round6(eth), price, anchor: band.anchor, buyBelow, real: !!txHash };
+    return { bought: true, omr, eth: round6(eth), price, anchor: band.anchor, buyBelow, real };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     if (e.code === '23505') return { bought: false, duplicate: true };

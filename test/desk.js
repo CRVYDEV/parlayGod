@@ -453,6 +453,34 @@ assert.equal((await Desk.runDeskBuyback(pool, { ref: 'buy-1', ethToSpend: 1, pri
 assert.equal(await shelf(), shelf0 + 2000, 'moving nothing');
 console.log('✓ the root cap holds and the ingest is idempotent');
 
+// ── (23b) A COMP MAY RESTOCK THE SHELF; IT MAY NOT FUND THE RESERVE ────────────────────────────
+// The store/bond/sell-tax gate, one step further along. `chain_reserve.funded_omr` is what
+// `signVoucher` checks before signing a REAL on-chain withdrawal, so crediting it is the assertion
+// "hard OMR arrived" — and a mod call must never be able to make it. The SHELF is a different
+// thing: soft supply inside omrBuckets that can only reach a player through a fill, so QA is
+// welcome to it. Before the gate the reserve credit was unconditional and the only thing standing
+// in the way was an empty POL budget — a defence by accident, which evaporates the moment the QA
+// flag turns the budget on. Driven directly (the route strips txHash unless ALLOW_MOD_REAL_REVENUE,
+// so a comp here is exactly what a mod call produces).
+{
+  await Desk.recordPolFees(pool, { ref: 'fees-2', eth: 1, txHash: '0xfee2' });
+  const shelfB = await shelf(), resB = await reserve();
+  const comp = await Desk.runDeskBuyback(pool, { ref: 'buy-comp', ethToSpend: 1, priceEthPerOmr: 0.0005 });
+  assert(comp.bought && comp.real === false, `a comp buy still lands for QA: ${JSON.stringify(comp)}`);
+  assert.equal(await shelf(), shelfB + 2000, 'and it restocks the shelf — QA needs inventory to test the sell side');
+  assert.equal(await reserve(), resB,
+    'but it funds NO reserve: a comp cannot assert that hard OMR arrived, because that is what a real voucher signs against');
+  // and the checks can now SEE the difference, which is the half that makes the gate a guard
+  // rather than a convention: both sides count real buys only, so a comp-funded reserve trips them.
+  const v2 = await runVigInvariants(pool);
+  assert.equal(v2.checks.find((c) => c.name === 'reserve fully backed').deskToReserve, 2000,
+    'the reserve sandwich counts only the REAL buy, so the comp is invisible to it on both sides');
+  assert(v2.checks.find((c) => c.name === 'reserve fully backed').ok
+    && v2.checks.find((c) => c.name === 'reserve not under-funded').ok,
+    'and both halves still hold, which is what proves the two gates agree');
+  console.log('✓ a comp restocks the shelf and funds no reserve — the anti-fabrication gate, checked from both sides');
+}
+
 // ── (24) THE RESTOCK IS SELLABLE — the loop closes ─────────────────────────────────────────────
 // The point of buying inventory is to sell it again. This asserts the two halves are the same shelf
 // rather than two systems that happen to share a table.

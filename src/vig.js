@@ -238,7 +238,10 @@ export async function runVigInvariants(pool) {
   // so a source the sandwich does not know about trips both of them at once — which is why this term
   // is added rather than the checks being loosened. `desk.js:runDeskInvariants` separately asserts
   // that every one of these hard tokens corresponds to a real purchase.
-  const deskToReserve = round6(await sumEth(pool, 'desk_buys', 'omr_bought'));
+  // `WHERE real` matches the gate on the credit itself (desk.js: only a REAL buy funds the reserve).
+  // The two must agree or the sandwich fires spuriously — which is the point: with both halves gated
+  // this pair now CATCHES a comp-funded reserve instead of silently absorbing it.
+  const deskToReserve = round6(await sumEth(pool, 'desk_buys', 'omr_bought', 'WHERE real'));
 
   const eps = 1e-6;
   // (1) the bot never spends more ETH than the Vig received — the root cap
