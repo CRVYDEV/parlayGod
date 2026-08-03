@@ -857,7 +857,18 @@ const PARAM_FIXTURES = new Map([
   ['/v1/gangs/:p', async () => (await inject('POST', '/v1/gangs', token,
     { name: 'Mirror Family ' + Math.random().toString(36).slice(2, 6), tag: 'MR' + Math.floor(Math.random() * 90 + 10) })).body?.gangId],
   ['/v1/feud/:p', async () => charId],
-  ['/v1/casino/ring/:p', async () => (await inject('POST', '/v1/casino/ring/open', token, { bb: 100, buyin: 20000 })).body?.tableId],
+  // The den's gates are covered in test/casino.js; here they are only a PRECONDITION, so they are
+  // GUARANTEED rather than left likely — CI caught this failing once (`produced no id`) against ten
+  // clean local runs, which is the recorded flake shape: a deterministic assertion resting on a
+  // probabilistic precondition (the seed above ends with a boost loop that leaves the fixture JAILED
+  // if every attempt busts, and a long seed can leave it short of the buy-in). The refusal is also
+  // PRINTED now, so a future failure names the server's reason instead of leaving it to be guessed.
+  ['/v1/casino/ring/:p', async () => {
+    await app.pool.query("UPDATE characters SET jail_until=NULL, hosp_until=NULL, loc='neon', cash=GREATEST(cash, 1000000) WHERE id=$1", [charId]);
+    const r = await inject('POST', '/v1/casino/ring/open', token, { bb: 100, buyin: 20000 });
+    if (!r.body?.tableId) console.log(`  the ring fixture was refused: ${r.code} ${JSON.stringify(r.body)}`);
+    return r.body?.tableId;
+  }],
   // a DM thread needs a counterpart WITH a message on the line — make both here (memoized).
   // STREET LIFE: numbers are earned, so the fixture seeds the contacts row (a meeting) first —
   // the no_number gate itself is covered in test/hardening.js.
