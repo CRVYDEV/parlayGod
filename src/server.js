@@ -106,7 +106,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          TAX, withdrawTaxBps,
          HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, OPERATIONS, BUSINESS_EMPIRE, PACING, MASTERY,
          PATH_FX, PATH_XP_HOME, PATH_XP_RIVAL, PATH_SWITCH_CD_MS, REGIMEN, HUSTLE, CAREER, RIVALS,
-         CORNER, CONTACTS, FAVOR, MADE, MADE_LADDER, ACCESS_STAKE, ROSTER_POSTS } from './rules.js';
+         CORNER, CONTACTS, FAVOR, MADE, MADE_LADDER, ACCESS_STAKE, ROSTER_POSTS, jailed, hospitalized } from './rules.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -1422,8 +1422,8 @@ export async function buildServer() {
       // consent-by-listing; without this the whole earnable-defense feature is unreachable)
       guardPrice: c.guard_price != null ? Math.floor(Number(c.guard_price)) : null,
       fronts: frontsBy.get(c.id) || [],
-      jailed: !!(c.jail_until && new Date(c.jail_until) > new Date()),
-      hospitalized: !!(c.hosp_until && new Date(c.hosp_until) > new Date()) })) };
+      jailed: jailed(c),
+      hospitalized: hospitalized(c) })) };
   });
   app.post('/v1/streets/:targetId/jump', { preHandler: auth }, async (req) =>
     G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => S.jump(ch, victim, client, h, req.body?.intent)));

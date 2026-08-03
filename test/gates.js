@@ -235,8 +235,45 @@ console.log(inlineSites.length
   ? `⚠ ${inlineSites.length} site(s) hand-roll a gate instead of calling the helper (equivalent today, a drift hazard):\n   - ${inlineSites.join('\n   - ')}`
   : '✓ no site hand-rolls a gate');
 
+// ── THE PRIVATE COPY — the blind spot the inline advisory could not see ──────────────────────────
+// The advisory above finds a date comparison written AT THE CALL SITE. It cannot find the far more
+// common shape: a module that opens with its own `const jailed = (ch) => ...` and then calls it.
+// To the extractor that is indistinguishable from calling the shared helper — `has()` sees
+// `jailed(` and credits the gate — so twenty-six modules carried fifty-three private copies while
+// this file reported sixteen problems and passed. That is the over-read direction, which is the
+// dangerous one: it makes a requirement check MORE permissive and turns a green run into a false
+// clean bill.
+//
+// So the three canonical names are RESERVED. Only their definition site may bind them; every other
+// module imports. This is a hard assertion rather than an advisory because the tree is clean now,
+// and because the whole point of collapsing the copies is that the next one must not be quiet.
+const CANON = ['jailed', 'hospitalized', 'safeHoused'];
+const DEFINES_CANON = {                                 // file → why it may bind the name
+  'src/rules.tail.js': 'the definition site (the universal leaf, beside penSafe/inHole/witproActive)',
+};
+const copies = [];
+for (const f of files) {
+  const rel = path.relative(process.cwd(), f);
+  if (DEFINES_CANON[rel]) continue;
+  const src = fs.readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  for (const g of CANON) {
+    // any binding of the name — `const jailed =`, `function jailed(`, `let jailed =`. A re-export
+    // (`export { jailed } from ...`) binds nothing locally and is how social/shared.js keeps its
+    // ~100 call sites working, so it is correctly not matched here.
+    if (new RegExp(`(?:const|let|var)\\s+${g}\\s*=|function\\s+${g}\\s*\\(`).test(src)) {
+      copies.push(`${rel} defines its own ${g}`);
+    }
+  }
+}
+assert.equal(copies.length, 0,
+  'a canonical status predicate must be IMPORTED, never re-defined — a private copy is invisible to '
+  + `the inline check above and cannot be fixed by fixing the helper:\n   - ${copies.join('\n   - ')}`);
+console.log(`✓ no module re-defines ${CANON.join('/')} — every gate resolves to the one definition`);
+
 console.log('✅ THE GATE MATRIX passed — every verb in a family enforces the gates its siblings do, '
   + 'checked through direct calls, shared assert helpers and inline column comparisons alike; the '
   + 'membership is derived from the code rather than trusted, so a new street crime or collect action '
-  + 'cannot slip past unclassified; and the sites that hand-roll a gate instead of calling the helper '
-  + 'are named rather than quietly accepted. Scope: it proves a gate is REACHED, not that it is correct.');
+  + 'cannot slip past unclassified; the sites that hand-roll a gate instead of calling the helper '
+  + 'are named rather than quietly accepted; and no module may re-define a canonical predicate, which '
+  + 'is the shape the inline check structurally cannot see. Scope: it proves a gate is REACHED, not '
+  + 'that it is correct.');

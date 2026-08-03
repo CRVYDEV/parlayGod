@@ -14,11 +14,9 @@
 // account-level lifetime legend (survives death, the boxing_wins precedent). `clue_at` (the
 // post-casket cooldown) is a DIRECT-SQL column — never in the positional persist.
 import { GameError, notify } from './game.js';
-import { CLUES, clueStepOf, clueRankOf, clueTierOf, cityHourOf } from './rules.js';
+import { CLUES, clueStepOf, clueRankOf, clueTierOf, cityHourOf , jailed, safeHoused } from './rules.js';
 import { logCollect } from './collection.js';
 
-const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
-const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
 
 // ── the board: your scroll + the riddle + the legend ──
 export async function clueBoard(pool, ch, acct) {

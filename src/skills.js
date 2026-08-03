@@ -10,7 +10,7 @@
 // Every effect is a NEW single-touchpoint modifier read via game.js `hasSkill`/`skillMult`/
 // `trunkCap` — deliberately OFF the audit-locked surfaces. All numbers are sign-off levers.
 import { GameError } from './game.js';
-import { SKILLS, skillOf, activeOf, ultimateOf, grandmasteriesFor, activeCdFor, levelOf, assetEnergyCap, M8 } from './rules.js';
+import { SKILLS, skillOf, activeOf, ultimateOf, grandmasteriesFor, activeCdFor, levelOf, assetEnergyCap, M8, jailed } from './rules.js';
 import { spendOmr } from './vanity.js';
 
 // STEP THREE — PRESTIGE POINTS: a long-lived bloodline gets a small bonus point budget on top of the
@@ -55,7 +55,7 @@ export async function useActive(ch, abilityId, client, h) {
   if (a && !h.owned.skills.has(a.req)) throw new GameError('locked', `${a.name} is unlocked by ${skillOf(a.req)?.name}.`);
   if (ult && !ult.reqs.every((r) => h.owned.skills.has(r)))
     throw new GameError('locked', `${ult.active.name} needs ${ult.reqs.map((r) => skillOf(r)?.name).join(' + ')}.`);
-  if (ch.jail_until && new Date(ch.jail_until) > new Date()) throw new GameError('jailed', "You can't pull that off from a cell.");
+  if (jailed(ch)) throw new GameError('jailed', "You can't pull that off from a cell.");
   // a GRANDMASTER (owns any grandmastery pair) cycles the shared active cooldown faster
   const cd = activeCdFor(h.owned.skills);
   if (ch.active_at && Date.now() - new Date(ch.active_at).getTime() < cd)

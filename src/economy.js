@@ -11,10 +11,9 @@ import {
   levelOf, cityEventOf, dayOf, carOf, carVal, carMelt, rollCar, rollTrim,
   effStat, cargoCapacity, goodPriceOf, gearOf, gunObjOf, RACKET_EMPIRE, racketUpgradeCost, racketIncomeLeveled, tycoonRankOf,
   seasonModOf, pathFx, rollRarity, ladderFx, ladderFenceMult,
-  OPERATIONS, opSlotsOf, nextOpSlotLevel } from './rules.js';
+  OPERATIONS, opSlotsOf, nextOpSlotLevel , jailed } from './rules.js';
 
 const uid = () => crypto.randomUUID();
-const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const cargoCount = (cargo) => Object.values(cargo).reduce((a, n) => a + (n || 0), 0);
 // Family turf (§5.4): holding the district you're standing in gets better prices both ways.
 const turfMult = (held, loc, side) => (held.includes(loc) ? (side === 'buy' ? 0.95 : 1.05) : 1);

@@ -9,7 +9,7 @@
 // worker (`sweepAuctions`) once their week is over — the loser was already refunded on every outbid.
 import crypto from 'node:crypto';
 import { GameError, ledger, notify } from './game.js';
-import { AUCTION, auctionLotsOf, weekOf, collectionSetsOf, collectorRankOf } from './rules.js';
+import { AUCTION, auctionLotsOf, weekOf, collectionSetsOf, collectorRankOf, jailed } from './rules.js';
 import { spendOmr } from './vanity.js';
 import { bumpPrestige, patronOfSeason } from './estate.js';
 
@@ -130,7 +130,7 @@ export async function sweepAuctions(pool) {
 
 // List a won trophy for resale. A §10.4 `auction:consign:fee` $OMR burn (anti-spam), no escrow yet.
 export async function consignTrophy(ch, lotId, reserve, client, h) {
-  if (ch.jail_until && new Date(ch.jail_until) > new Date()) throw new GameError('jailed', "No dealing from a cell.");
+  if (jailed(ch)) throw new GameError('jailed', "No dealing from a cell.");
   const res = Math.floor(Number(reserve));
   if (!Number.isFinite(res) || res < AUCTION.CONSIGN.MIN_RESERVE || res > AUCTION.CONSIGN.MAX_RESERVE)
     throw new GameError('reserve', `Set a reserve between ${AUCTION.CONSIGN.MIN_RESERVE} and ${AUCTION.CONSIGN.MAX_RESERVE} $OMR.`);

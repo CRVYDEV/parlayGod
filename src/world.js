@@ -8,7 +8,7 @@
 // in this pillar — numbers are founder SIM sign-off levers (ground rule #1).
 import crypto from 'node:crypto';
 import { GameError, bus, assignedSoldier, soldierResult } from './game.js';
-import { WORLD_NPCS, worldNpcOf, worldRankOf, WORLD, LIVING, levelOf, effStat, cityHourOf, frontierTributePerHr, cartelUprisingOf, dayOf, soldierFxOf } from './rules.js';
+import { WORLD_NPCS, worldNpcOf, worldRankOf, WORLD, LIVING, levelOf, effStat, cityHourOf, frontierTributePerHr, cartelUprisingOf, dayOf, soldierFxOf , jailed, hospitalized, safeHoused } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 // `!!` matters: without it an outfit that has never been enraged yields `undefined`, JSON.stringify
@@ -27,9 +27,6 @@ function frontierTribute(fixture, tributeAt, now = Date.now()) {
 // step four: the treasury cost to invade a held outpost — outbid the incumbent's garrison (the SEIZE twin).
 const invadeCost = (garrison) => Math.max(WORLD.FRONTIER.INVADE_BASE, Math.floor(Number(garrison || 0) * WORLD.FRONTIER.INVADE_OUTBID));
 
-const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
-const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
-const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
 const cooling = (ch) => ch.world_raid_at && new Date(ch.world_raid_at) > new Date();
 
 // Lazy §7.1 strength regen toward the fixture max. Seeds the row (at max) on first touch. Returns

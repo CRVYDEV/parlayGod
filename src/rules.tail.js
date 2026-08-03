@@ -1362,6 +1362,26 @@ export const jailSecondsLeft = (ch, now = Date.now()) =>
 export const penSafe = (ch, now = Date.now()) => !!ch.pen_safe_until && new Date(ch.pen_safe_until).getTime() > now;
 export const inHole = (ch, now = Date.now()) => !!ch.hole_until && new Date(ch.hole_until).getTime() > now;
 
+// THE THREE UNIVERSAL STATUS PREDICATES — and why they live HERE rather than in the social package.
+//
+// `jailed` / `hospitalized` / `safeHoused` are the gates almost every verb in the game consults, and
+// they were defined in `src/social/shared.js` — the SOCIAL package's leaf. That reads fine from inside
+// social/, and wrong from `portfolio.js` or `estate.js`, so sixteen sites outside that package wrote
+// the date comparison INLINE instead of reaching across. Each copy was correct; the hazard is that a
+// copy cannot be updated by fixing the helper, and the forgotten-gate class is this project's most
+// productive bug family (jump vs fire, collectFrontier vs collectTerritory, npcHit blind to the Pen
+// shields). So the definitions move to the universal leaf beside their five siblings — `penSafe`,
+// `inHole`, `witproActive`, `crewCold`, `isMade` — which every module already imports, and
+// `social/shared.js` re-exports them so its ~100 existing call sites are untouched.
+//
+// Behaviour is byte-identical: `ch.jail_until && new Date(ch.jail_until) > new Date()` and
+// `!!ch.jail_until && new Date(ch.jail_until).getTime() > now` agree on every input, since Date
+// comparison with `>` coerces through valueOf() — the same number getTime() returns. The `now`
+// parameter is new and defaulted, matching the siblings, so a caller that passes nothing is unchanged.
+export const jailed = (ch, now = Date.now()) => !!ch?.jail_until && new Date(ch.jail_until).getTime() > now;
+export const hospitalized = (ch, now = Date.now()) => !!ch?.hosp_until && new Date(ch.hosp_until).getTime() > now;
+export const safeHoused = (ch, now = Date.now()) => !!ch?.safe_until && new Date(ch.safe_until).getTime() > now;
+
 // LOAN SHARKING — the Shylock (design omerta-loan-sharking-design.md). The game's first player-to-
 // player CASH primitive: a lender escrows capital at usurious interest (the bounty-escrow pattern), a
 // borrower takes it and must repay by a deadline, and a DEFAULT is enforced (the seizure + the beating

@@ -13,7 +13,7 @@
 // pure transfer). Zero new faucet.
 import crypto from 'node:crypto';
 import { GameError, notify } from './game.js';
-import { CONTACTS, GOODS, DISTRICTS, goodPriceOf, levelOf, contactRankOf, contactNextRank, contactStandingOf } from './rules.js';
+import { CONTACTS, GOODS, DISTRICTS, goodPriceOf, levelOf, contactRankOf, contactNextRank, contactStandingOf, jailed } from './rules.js';
 const districtName = (id) => (DISTRICTS.find((d) => d.id === id) || {}).name || id;
 
 const uid = () => crypto.randomUUID();
@@ -181,7 +181,7 @@ export async function generateContactCalls(pool, opts = {}) {
 // matches every other PvP pair). The pay is a pure ledgered TRANSFER from the contact's pocket
 // (`contact:freight` / `contact:visit`, both character_id'd with counterparty — §10.4 exact). ──
 export async function fulfillCall(ch, npc, client, h) {
-  if (ch.jail_until && new Date(ch.jail_until) > new Date()) throw new GameError('jailed', 'No errands from lockup.');
+  if (jailed(ch)) throw new GameError('jailed', 'No errands from lockup.');
   const call = (await client.query(
     'SELECT * FROM contact_calls WHERE character_id=$1 FOR UPDATE', [ch.id])).rows[0];
   if (!call || new Date(call.expires_at) < new Date()) throw new GameError('no_call', 'Nobody is waiting on you.');

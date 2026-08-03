@@ -17,15 +17,12 @@ import crypto from 'node:crypto';
 import { GameError, bus, bumpMastery, gainRespect } from './game.js';
 import { HEIST_JOBS, HEIST_ROLES, heistJobOf, HEIST_PLAN_TTL_MS, HEIST_RAT_BPS, HEIST_LEADER_WEIGHT,
          HEIST_INSIDE_CD_MS, HEIST_CASE_ENERGY, HEIST_CASE_STEP, HEIST_CASE_MAX, heistFenceMultOf,
-         HEIST_FENCE_HEAT, HEIST_RANKS, heistRankOf, CONSTANTS, M4, levelOf, PORTFOLIO } from './rules.js';
+         HEIST_FENCE_HEAT, HEIST_RANKS, heistRankOf, CONSTANTS, M4, levelOf, PORTFOLIO , jailed, hospitalized, safeHoused } from './rules.js';
 import { accrued, decayedScrutiny, npcPendingScale } from './business.js';
 import { grantShares } from './portfolio.js';
 
 const uid = () => crypto.randomUUID();
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
-const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
-const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
-const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
 const cooling = (ch) => ch.heist_at && new Date(ch.heist_at) > new Date();
 const stale = (row) => Date.now() - new Date(row.created_at).getTime() > HEIST_PLAN_TTL_MS;
 

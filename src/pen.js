@@ -11,11 +11,9 @@ import { PEN, penContrabandOf, penFactionOf, jailSecondsLeft, penSafe, inHole, l
 import { trainDiscipline, addXp } from './regimen.js';
 import { runEstate, claimBounty, npcHit } from './social.js';
 import { bumpHonor } from './honor.js';
-import { HONOR } from './rules.js';
+import { HONOR , jailed, hospitalized } from './rules.js';
 
 const uid = () => crypto.randomUUID();
-const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
-const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 const insideOnly = (ch) => {
   if (!jailed(ch)) throw new GameError('free', "You're on the outside — the Pen is closed to you.");

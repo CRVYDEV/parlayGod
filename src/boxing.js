@@ -7,10 +7,8 @@
 // hitman-rep precedent). Fighters die with the street (the fighters rows join the runEstate wipe).
 import crypto from 'node:crypto';
 import { GameError, bus, ledger, notify, rngLog, bumpStanding, bumpMastery, masteryFx, npcMult, npcTier } from './game.js';
-import { BOXING, UNDERWORLD, boxerRankOf, boxerLegendOf, npcBoxerOf, levelOf, pathFx } from './rules.js';
+import { BOXING, UNDERWORLD, boxerRankOf, boxerLegendOf, npcBoxerOf, levelOf, pathFx , jailed, hospitalized } from './rules.js';
 
-const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
-const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
 const injured = (f) => f.injured_until && new Date(f.injured_until) > new Date();
 const onCooldown = (f) => f.exhib_at && new Date(f.exhib_at) > new Date();
 const booked = (f) => f.booked_until && new Date(f.booked_until) > new Date(); // (step three) on a MAIN EVENT card

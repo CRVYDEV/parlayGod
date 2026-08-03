@@ -9,7 +9,7 @@
 // the offshore RENDEZVOUS (a consensual mid-sea handoff of an active run to a partner's boat — §10.4-neutral).
 import crypto from 'node:crypto';
 import { GameError, bus, bumpMastery, masteryFx } from './game.js';
-import { PORT, COMMISSION, NOTORIETY, boatOf, portRouteOf, boatResale, interdictChance, effHold, effSpeed, boatUpgradeCost, portRankOf, fenceMultOf, levelOf, cityHourOf, smugglerTierOf, smuggleRepPerks, notorietyNow, rollRarity } from './rules.js';
+import { PORT, COMMISSION, NOTORIETY, boatOf, portRouteOf, boatResale, interdictChance, effHold, effSpeed, boatUpgradeCost, portRankOf, fenceMultOf, levelOf, cityHourOf, smugglerTierOf, smuggleRepPerks, notorietyNow, rollRarity , jailed, hospitalized, safeHoused } from './rules.js';
 import { logCollect } from './collection.js';
 import { activeDecree } from './commission.js';
 import { laneHeat, heatLane } from './notoriety.js';
@@ -47,9 +47,6 @@ async function harborToll(client, h, ch, sale, tollMult = 1) {
   return toll;
 }
 
-const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
-const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
-const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
 const runMsOf = (route) => (process.env.PORT_RUN_MS != null ? Number(process.env.PORT_RUN_MS) : route.ms); // TEST-ONLY knob (CONVOY_MS precedent)
 const atSea = (boat) => !!boat.run_until;                              // a run in progress OR an uncollected arrival
 const outAtSea = (boat) => boat.run_until && new Date(boat.run_until) > new Date(); // genuinely sailing — piratable

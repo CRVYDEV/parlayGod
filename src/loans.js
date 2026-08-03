@@ -4,14 +4,11 @@
 // is a §10.4-ledgered transfer; only the house vig leaves the economy (a sink → the buyback pool).
 import crypto from 'node:crypto';
 import { GameError, ledger, notify, bus, track } from './game.js';
-import { LOAN, loanVig, loanOwed, paperTake, M3, carCollateralValue, levelOf, HONOR } from './rules.js';
+import { LOAN, loanVig, loanOwed, paperTake, M3, carCollateralValue, levelOf, HONOR , jailed, hospitalized, safeHoused } from './rules.js';
 import { logCarCollect } from './collection.js';
 import { bumpHonor, sqlHonorDelta } from './honor.js';
 
 const uid = () => crypto.randomUUID();
-const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
-const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
-const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
 const isWanted = (ch) => ch.wanted_until && new Date(ch.wanted_until) > new Date();
 
 // LOAN step 4 (WANTED): the underworld posts a WANTED_BOUNTY on a defaulter's head, funded from the

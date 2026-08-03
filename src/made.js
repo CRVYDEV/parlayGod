@@ -35,10 +35,9 @@
 // and `made:%` is in `DESK.SINK_REASONS`, so — like every sink since step 2 — the value goes to THE
 // DESK to be sold again rather than being destroyed. `made_until` is not a bucket and holds no value.
 import { GameError, bus } from './game.js';
-import { MADE, MADE_LADDER, ACCESS_STAKE, isMade, madeSeconds } from './rules.js';
+import { MADE, MADE_LADDER, ACCESS_STAKE, isMade, madeSeconds , jailed } from './rules.js';
 import { spendOmr } from './vanity.js';
 
-const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 
 // Written by DIRECT SQL: `made_until` is absent from persistAccount's positional UPDATE, so this is
 // clobber-safe (the wire_until / disinfo_until precedent). The in-memory account is mirrored so the
