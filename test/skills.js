@@ -5,6 +5,12 @@
 process.env.MOD_KEY = 'test-mod-key';
 process.env.CONVOY_MS = '600000';   // 10-min road (TEST-ONLY knob)
 process.env.SEARCH_MS = '10000';    // 10s search (TEST-ONLY knob)
+// TEST-ONLY (the boot guard rejects it in production). The FAST TALKER laylow assertion below is a
+// deterministic cost that rests on a probabilistic-by-DATE precondition: with SEASON_MODS armed, a
+// day drawing The Crackdown stacks laylow ×0.75 on top of fast_talker ×0.8 and the exact-cost check
+// fails for no visible reason (4000 → 3000). The recorded flake class (social.js loot, commission.js
+// safehouse) — pin the season so the precondition is guaranteed rather than left to the calendar.
+process.env.SEASON_MOD = 'dead_quiet';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { SKILLS, M4, COMMISSION } from '../src/rules.js';
