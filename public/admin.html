@@ -154,7 +154,7 @@
 
     $('#stamp').textContent = 'as of ' + new Date().toLocaleTimeString();
     renderIntegrity(inv.body); renderEconomy(ov.body, em.body); renderPlayers(ov.body); renderEngagement(eng.body);
-    renderFunnel(fn.body); renderTop(ov.body); renderChain(res.body, vig.body, em.body, rev.body, bnd.body);
+    renderFunnel(fn.body); renderTop(ov.body); renderChain(res.body, vig.body, em.body, rev.body, bnd.body, tre);
     renderBackups(ov.body); renderSocial(ov.body);
     renderActivity(act.body); renderMod();
   }
@@ -384,7 +384,13 @@
       + (t.gangs || []).slice(0, 6).map((g, i) => rowHtml(`${i + 1}. ${esc(g.name)} [${esc(g.tag)}]`, `$${fmt(g.treasury)}${g.warsWon ? ` · ${g.warsWon}W` : ''}`)).join('');
   }
 
-  function renderChain(res, vig, em, rev, bnd) {
+  // `tre` is the WHOLE response, not `.body`, because the vault block reads `tre.code` to tell a
+  // 401 (the treasury route is mod-gated separately) from a real answer. It has to be PASSED —
+  // it was referenced here for three days while being a local of refreshAll(), which threw
+  // ReferenceError and took the entire chain panel down with it: the reserve, extraction-≤-inflow,
+  // the staking pool, the Store split, the vault's allocated-≤-held wall and the oracle keeper
+  // all rendered as nothing, on the screen a founder opens when something is wrong.
+  function renderChain(res, vig, em, rev, bnd, tre) {
     const v = vig?.invariants || {}, vs = vig?.status || {};
     const extractOk = v.ok !== false;
     $('#p-chain').querySelector('.body').innerHTML =
