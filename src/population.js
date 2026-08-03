@@ -461,7 +461,13 @@ export async function runFamilies(pool) {
       await client.query('ROLLBACK').catch(() => {});
       console.error('[population] found family failed', e.message);
     } finally { client.release(); }
-    return out;   // one structural change per tick — the city fills in visibly (the SPAWN_PER_TICK rule)
+    // one structural change per tick — the city fills in visibly (the SPAWN_PER_TICK rule). But
+    // only if founding ACTUALLY happened: returning unconditionally would let a city where nobody
+    // can cover the fee starve the recruit pass FOREVER, so families under MIN_MEMBERS would never
+    // be filled. That is the shared-budget starvation the JAILBIRDS-vs-turnover finding (T1) named,
+    // in a second costume — two passes, one budget, the first taking priority whether or not it can
+    // use it. If it could not found, fall through and spend the tick on recruiting instead.
+    if (out.familiesFounded) return out;
   }
 
   // recruit into the thinnest family under MIN_MEMBERS. Counting MEMBERS, not residents: a player
@@ -507,7 +513,22 @@ async function foundNpcFamily(client) {
     [respectFor(minLvl)])).rows
     .filter((c) => !inGang.has(c.id) && spendable(c.cash) >= M3.GANG_FOUND_COST);
   if (!cand.length) return false;
-  const ch = cand[0];
+
+  // RE-READ THE CHOSEN FOUNDER UNDER A ROW LOCK, and use the LOCKED row from here on. The shortlist
+  // above is an unlocked read, and `createGang` deducts the fee IN MEMORY, leaving the caller to
+  // write the resulting cash back ABSOLUTELY — so without this, anything that debits this resident
+  // between the two (the ordinary crime TAKE, which targets exactly these residents; a `residentAct`
+  // escrow; a player robbing them) is CLOBBERED by the writeback. That is a §10.4 drift the ledger
+  // check sees but nothing else does: `gang:found` books −25,000 while the row only falls 25,000
+  // from a stale figure, so the take's own ledger row is left with no matching movement. Measured on
+  // the seam at exactly the clobbered amount. Every other resident writer here already re-reads FOR
+  // UPDATE first (retireResident, residentAct) — this is that rule, applied.
+  const ch = (await client.query(
+    'SELECT * FROM characters WHERE id=$1 AND alive AND is_npc FOR UPDATE', [cand[0].id])).rows[0];
+  if (!ch) return false;
+  // and re-verify under the lock: they may have been drained, or joined a family, since the shortlist
+  if (spendable(ch.cash) < M3.GANG_FOUND_COST) return false;
+  if ((await client.query('SELECT 1 FROM gang_members WHERE character_id=$1', [ch.id])).rows.length) return false;
 
   const h = stubH();
   await createGang(ch, name, tag, client, h);          // validates, clash-checks, ledgers `gang:found`
