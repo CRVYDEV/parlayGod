@@ -357,6 +357,26 @@ async function obeyCoach(m) {
     hit('coach:race', r.body?.error || r.code);
     return false;
   }
+  // "You can get made for free" — the rung clears on acct.minted, and the free path is two calls:
+  // burn earned $OMR for a mint credit (PLEX), then spend the credit. The price is the LIVE quote
+  // (max(PLEX_MINT_OMR, feeEth × the latest buyback oracle × premium)), so this reads it rather than
+  // assuming the pre-market floor — the same reason the rung's own copy stopped quoting a number.
+  if (label.startsWith('You can get made for free')) {
+    const q = await call('GET', '/v1/plex/price', { token });
+    const price = Number(q.body?.mint?.price || 0);
+    if (!price || Number(m.omr || 0) < price) return false;   // still earning it — not stuck
+    const p = await call('POST', '/v1/plex/mint', { token });
+    if (p.code !== 200) {
+      hit('coach:plex', p.body?.error || p.code);
+      coachCantAct.set(label, `plex mint refused: "${p.body?.error || p.code}"`);
+      return false;
+    }
+    const r = await call('POST', '/v1/character/mint', { token });
+    if (r.code === 200) { did('coach:made'); first('coach:made'); return obeyed(); }
+    hit('coach:made', r.body?.error || r.code);
+    coachCantAct.set(label, `mint refused: "${r.body?.error || r.code}"`);
+    return false;
+  }
   // "Open your first front" — the rung names the Laundromat and its live price; buy exactly that.
   if (label.startsWith('Open your first front')) {
     const front = BUSINESSES.find((b) => b.kind === 'laundromat');
