@@ -3134,9 +3134,38 @@
     }, 700);
   }
   let currentTab = 'streets';
+  // ── SCREEN REACH ────────────────────────────────────────────────────────────────────────────────
+  // Which screens a player ever finds. 25 of them behind a two-tier nav, and nothing measured it, so
+  // "does the mid-game player use six or twenty" was unanswerable — and restructuring a nav that
+  // tested well, on a guess, is how you break it.
+  //
+  // FIRST-OPEN-PER-SESSION and BATCHED, deliberately. `reported` makes each screen count once, and
+  // the flush sends the accumulated set in ONE request, so a session that walks eight screens costs
+  // about one call instead of eight — it stays out of the way of the authed-call queue and the rate
+  // bucket. That measures REACH, which is the question; frequency is a different instrument.
+  //
+  // Best-effort throughout: a failed beacon is silently dropped rather than retried. This is
+  // analytics, and analytics that can interrupt play is worse than analytics you do not have.
+  const reported = new Set();
+  let pendingScreens = new Set(), flushTimer = null;
+  function flushScreens() {
+    clearTimeout(flushTimer); flushTimer = null;
+    if (!pendingScreens.size || !session?.token) return;
+    const batch = [...pendingScreens]; pendingScreens = new Set();
+    try { api('POST', '/v1/screens', { screens: batch }); } catch {}
+  }
+  function noteScreen(id) {
+    if (!id || reported.has(id)) return;
+    reported.add(id); pendingScreens.add(id);
+    if (!flushTimer) flushTimer = setTimeout(flushScreens, 15000);
+  }
+  // a tab going to the background is the last reliable moment to send — fetch on unload is not
+  document.addEventListener('visibilitychange', () => { if (document.hidden) flushScreens(); });
+
   function setTab(id) {
     // a deliberate jump to a screen simple mode hides (a coach hint, a checklist task) opens the whole city
     if (simpleMode() && !SIMPLE_TABS.includes(id)) unlockAllTabs(false);
+    noteScreen(id);
     currentTab = id;
     activeGroup = groupOf(id);
     lastTabIn[activeGroup] = id;
@@ -3377,7 +3406,7 @@
       ${g.empire ? `<div class="card" style="border-color:var(--neon)"><span class="t">🏙️ ${g.empire.rank}</span> <span class="d">$${fmt(g.empire.earned)} lifetime territory income — <a href="#" id="terr-lb">the Empire board →</a></span>${g.syndicate ? `<div style="margin-top:4px">🃏 <b>${esc(g.syndicate.name)}</b> <span class="d">— ${g.syndicate.count} ${esc(g.syndicate.kind)} operations. Specialization pays in prestige.</span></div>` : ''}</div>` : ''}
       ${(g.territory || []).length ? `<div class="grid">${g.territory.map((op) => `
         <div class="card"><span class="t">${op.district}: ${op.name || op.tier}</span>${op.raidRisk ? ' <span class="chip bad">FEDS WATCHING</span>' : ''}${op.fortitude ? ` <span class="chip">🛡️ ${op.fortitude}/${op.fortMax}</span>` : ''}${op.specialist ? ` <span class="chip good">specialist +${op.specFortBonus}🛡️</span>` : ''}${op.ghostSeconds > 0 ? ' <span class="chip">👻 ghosted</span>' : ''}
-          <div class="d">$${fmt(op.incomePerHr || 0)}/hr · pending $${fmt(op.pending || 0)}${op.cold ? ' · COLD (pay the upkeep)' : ''}${op.upkeepOwed ? ` · upkeep owed $${fmt(op.upkeepOwed)}` : ''}</div>
+          <div class="d">$${fmt(op.incomePerHr || 0)}/hr · pending $${fmt(op.pending || 0)} · <span style="color:var(--warn)">the pad $${fmt(op.upkeepPerHr || 0)}/hr</span>${op.upkeepOwed ? `, owed $${fmt(op.upkeepOwed)}` : ''}${op.cold ? ' · COLD (pay the upkeep)' : ''}</div>
           ${op.scrutiny > 0 ? `<div class="d" style="color:var(--dim)">Bureau heat ${op.scrutiny}/${op.raidThreshold} — a crackdown seizes the pending + fines the treasury</div>` : ''}
           ${boss && op.fortCost != null ? `<button class="act" data-do="POST /v1/territory/${op.district}/fortify">fortify → lvl ${op.fortitude + 1} ($${fmt(op.fortCost)})</button>` : ''}
           ${boss ? `<div style="margin-top:4px">

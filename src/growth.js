@@ -296,7 +296,35 @@ export async function funnelStats(pool) {
     }
   }
   career.cashPaid = Number((await pool.query("SELECT COALESCE(SUM(amount),0) n FROM transactions WHERE reason LIKE 'career:%'")).rows[0].n);
-  return { characters, levels, progression, firstWeek: { ...firstWeek, capstone }, referral, broadcast, career };
+  // SCREEN REACH — of the players who reported at all, what share ever OPENED each screen. The
+  // console has 25 of them behind a two-tier nav and nothing measured this, so "does the mid-game
+  // player use six screens or twenty" was unanswerable and any restructure would have been a guess.
+  //
+  // Denominator is `reporters` (accounts that sent at least one screen), NOT total accounts: a
+  // player on a stale client sends nothing, and counting them as "never opened the Kitchen" would
+  // understate every screen by however many have not reloaded. Reach is only meaningful against
+  // people the instrument can see.
+  //
+  // Aggregated in JS over the rows rather than in SQL — props is TEXT holding JSON and the
+  // first-week/broadcast blocks above already read it this way (the pg-mem posture).
+  const screens = { reporters: 0, opens: {} };
+  const byScreenAccount = new Map();
+  const sc = (await pool.query("SELECT account_id, props FROM telemetry WHERE event='screen_open'")).rows;
+  for (const r of sc) {
+    const p = typeof r.props === 'string' ? JSON.parse(r.props) : (r.props || {});
+    if (!Array.isArray(p.screens)) continue;
+    let set = byScreenAccount.get(r.account_id);
+    if (!set) { set = new Set(); byScreenAccount.set(r.account_id, set); }
+    for (const s of p.screens) set.add(s);
+  }
+  screens.reporters = byScreenAccount.size;
+  for (const set of byScreenAccount.values()) for (const s of set) screens.opens[s] = (screens.opens[s] || 0) + 1;
+  // reach% per screen, so a founder reads "38% ever opened the Kitchen" rather than a raw count
+  screens.reach = {};
+  for (const [s, n] of Object.entries(screens.opens)) {
+    screens.reach[s] = screens.reporters ? Math.round((n / screens.reporters) * 100) : 0;
+  }
+  return { characters, levels, progression, firstWeek: { ...firstWeek, capstone }, referral, broadcast, career, screens };
 }
 
 // ── THE RECRUITERS (§7.13 status boards — organic-growth hall of fame) ──

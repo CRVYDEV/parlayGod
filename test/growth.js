@@ -712,6 +712,42 @@ assert(funnel2.broadcast.sharers >= 1 && typeof funnel2.broadcast.referredPerSha
   assert.equal(after.reached.soldier, 0, 'one claim is not four — the second tier stays shut (the NEED gate, mirrored)');
 }
 
+// ── SCREEN REACH — which of the console's 25 screens a player ever OPENS ─────────────────────────
+// The measurement that decides whether the nav wants cutting, merging or leaving alone. Asserted on
+// the REACH PERCENTAGE rather than the raw count, because the percentage is what a founder reads and
+// it is the half that can silently go wrong (a wrong denominator still produces plausible numbers).
+assert.equal((await call('POST', '/v1/screens', { token: rook.token, body: { screens: ['streets', 'kitchen', 'streets'] } })).code,
+  200, 'the screen beacon accepts an authed batch');
+const fun3 = (await app.inject({ method: 'GET', url: '/v1/mod/funnel', headers: { 'x-mod-key': 'test-mod-key' } })).json();
+assert.equal(fun3.screens.reporters, 1, 'one reporting player');
+// the server dedupes WITHIN a batch — that is what `counted` reports, and all it guards
+assert.equal((await call('POST', '/v1/screens', { token: rook.token, body: { screens: ['den', 'den', 'den'] } })).body.counted,
+  1, 'a repeated screen in one batch is counted once');
+// but the property that makes this REACH rather than frequency is the per-account aggregation, which
+// has to hold ACROSS batches too — a client that re-sends after a reload must not inflate the number
+await call('POST', '/v1/screens', { token: rook.token, body: { screens: ['streets'] } });
+const funDup = (await app.inject({ method: 'GET', url: '/v1/mod/funnel', headers: { 'x-mod-key': 'test-mod-key' } })).json();
+assert.equal(funDup.screens.opens.streets, 1, 'the same player re-reporting a screen still counts ONCE — reach, not frequency');
+assert.equal(fun3.screens.reach.streets, 100, 'the only reporter opened streets → 100% reach');
+assert.equal(fun3.screens.reach.kitchen, 100, 'and the kitchen');
+assert.equal(fun3.screens.reach.pen, undefined, 'a screen nobody opened is absent, never a phantom 0%');
+// a SECOND player who never finds the kitchen must halve its reach — the denominator is the thing
+// most likely to be wrong, and a single reporter can never show that it is
+const rook2 = await mk('Reach Two');
+await call('POST', '/v1/screens', { token: rook2.token, body: { screens: ['streets'] } });
+const fun4 = (await app.inject({ method: 'GET', url: '/v1/mod/funnel', headers: { 'x-mod-key': 'test-mod-key' } })).json();
+assert.equal(fun4.screens.reporters, 2, 'two reporting players');
+assert.equal(fun4.screens.reach.streets, 100, 'both found the streets');
+assert.equal(fun4.screens.reach.kitchen, 50, 'only one found the kitchen — the cold screen the founder acts on');
+// bounds: junk is dropped, the batch is capped, and an empty post is a clean no-op rather than a row
+const many = Array.from({ length: 60 }, (_, i) => 'scr' + i);
+assert.equal((await call('POST', '/v1/screens', { token: rook.token, body: { screens: many } })).body.counted, 40,
+  'the batch is capped rather than trusted');
+assert.equal((await call('POST', '/v1/screens', { token: rook.token, body: { screens: [] } })).body.counted, 0,
+  'an empty batch writes nothing');
+assert.equal((await call('POST', '/v1/screens', { token: rook.token, body: { screens: [1, null, {}] } })).body.counted, 0,
+  'non-string entries are dropped, not stringified');
+
 // ── STEPPED PAYOUT — "the spark": a small EARLY cash payout the moment a recruit shows real
 // engagement (level 3 + 10 jobs), long before full qualification. Fast feedback for the referrer. ──
 const sponsor = await mk('Sponsor Sal');
