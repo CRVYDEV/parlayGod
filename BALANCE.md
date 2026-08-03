@@ -3402,10 +3402,61 @@ yet" — which is the real shape of "17–30 has no reasons": there is nothing t
   $166M/day + assets $94M/day if fully bought (both permanent, so a long-lived street accumulates
   all of it), against a top-tier crime grind of $13.8M/day.
 
-**NOT retuned (ground rule #1).** The levers are the per-rung income (prototype tables, machine-owned
-— a re-extract), the 12h `RACKET_DAILY_CAP_MS` meter, and a level gate on the Legit Fronts ladder.
-The design answer is more likely to be *making the active systems worth doing* than making the drips
-weaker, and that is a founder call, not a patch.
+**NOT retuned at the time (ground rule #1).** The levers are the per-rung income (prototype tables,
+machine-owned — a re-extract), the 12h `RACKET_DAILY_CAP_MS` meter, and a level gate on the Legit
+Fronts ladder. **Retuned 2026-08-03 — see the next section.**
+
+## THE ASSET LADDER RE-CURVED — the ROI now tapers (founder-directed 2026-08-03)
+
+Founder direction: *"Run a full economic balance & code audit of every function, every button & task.
+Apply your recommended fixes."* — which is the sign-off for the levers above (the L1/L2 precedent,
+where *"Balance the economy"* carried the same weight).
+
+**What was wrong was the SCALE, not the shape.** The original curve already tapered slightly (payback
+0.58d at the bottom → 1.81d at the apex) — it was simply four to seven times too generous end to end,
+so the taper never became a decision. A permanent, energy-free income asset that pays for itself in
+under a day is not a purchase, it is a formality.
+
+**The fix went through the machine-owned seam** (ground rule #2 — edit `reference-prototype-v24.jsx`,
+run `node tools/extract-rules.js`; the car-catalog / PATHS v2 precedent). The regenerated diff was
+**exactly 62 lines — 31 income values across two files and nothing else**, which is the seam doing its
+job. Each rung's income is now derived from a target payback that rises with the rung:
+
+    income/min = cost ÷ (paybackDays × 720)      # 720 = the RACKET_DAILY_CAP_MS metered minutes/day
+
+with payback swept linearly **2.0d at the on-ramp → 12.0d at the apex**, on each ladder independently
+(18 rackets, 13 Legit Fronts). The bottom is deliberately left generous: a first passive purchase
+should still feel like a win, and the entry rungs are cheap enough that their absolute income is petty.
+The two ladders now sit on ONE consistent ROI curve, which they did not before (`laundro` at 0.58d
+beat `grocery` at 0.69d for no stated reason).
+
+| measured (sim P9.20b) | before | after |
+|---|---|---|
+| payback range | 0.58d — 2.98d | **1.09d — 12.00d** |
+| inside the healthy 3–14d band | 0 of 36 | **27 of 36** |
+| pay for themselves in under a day | 14 of 36 | **0 of 36** |
+| whole racket ladder | $166,039,200/day | **$24,953,760/day** |
+| whole Legit Fronts ladder | $94,262,400/day | **$10,854,000/day** |
+| the 12 metered seats a player actually runs | $243,864,000/day | **$33,178,320/day** |
+| that against the top-tier crime grind | ~19× | **~2.6–4.4×** (the grind figure moves with the day's city event) |
+
+**The 9 rungs still outside the band are deliberate and named:** the four on-ramp rungs (1.9–2.7d, the
+generous first purchase) and the five `BUSINESSES` fronts, whose curve the L1a/L1b package measured and
+signed separately on 2026-07-24 — re-cutting a signed number twice within days, unasked, is not an
+audit finding. Their shape is also now RIGHT relative to each other: fronts are the premium layer
+(level-gated, pad-paying, Bureau-raidable, PvP-losable via the Sacking), so they *should* out-earn the
+safe drip per slot, and after this retune they do.
+
+**Progression is unaffected; only the passive cash moved.** `tools/playthrough.js`, same day, both
+sides: **level 35 → 34** (inside the recorded ±1 noise at 10h) and **$1,551,736 → $1,065,464** (−31%)
+over the 7-day solo run. The business-front gates got *harder* to reach (55/72/80% covered → 62/14/55%),
+which is the direction a gate is supposed to point. §10.4 drift-0 throughout — every rung is still an
+ordinary ledgered `racket:income` / `business:income` faucet; nothing about conservation changed.
+
+**Still flagged, NOT changed:** `buyAsset` has no level gate, so the 13 Legit Fronts are bounded by
+price alone. With payback now stretched to 12 days the price genuinely *is* the gate (the harness has a
+solo player at ~$1M by day 7 against a $60M apex), so this is a consistency wart rather than an open
+door — but it remains a gate nobody chose, and the founder's dial is a `lvl` field on those entries.
 
 ## THE DAILY LOOPS ALREADY OUT-PAY THE GRIND — a retracted claim (2026-08-01)
 

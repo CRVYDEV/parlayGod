@@ -741,8 +741,16 @@ phase('P9.20b the asset ladder — payback, and whether the entry price is reall
     `the healthy band is ${BAND[0]}-${BAND[1]}d (longer than a sitting, shorter than a street's life)`);
   note('assets', 'INSIDE the healthy band', `${inBand.length} of ${rows.length}`,
     inBand.length ? inBand.map((r) => r.what).join(', ') : 'NONE — every income asset pays for itself faster than the band\'s floor');
-  note('assets', 'pay for themselves in under a day', `${rows.filter((r) => r.payback < 1).length} of ${rows.length}`,
-    `so the buy decision is not "can I afford this" but "have I clicked it yet" — which is what makes the mid-game feel like it has nothing to decide`);
+  // The DETAIL has to follow the number, not restate a conclusion the number may since have
+  // outgrown: this line read "so the buy decision is not 'can I afford this' but 'have I clicked
+  // it yet'" for a run that measured ZERO such rungs. A stale conclusion beside a live figure is
+  // the class of defect the retired `laundering.ammSpot` assertion was (a shape that stays true
+  // after the thing it described is gone), so both halves are derived now.
+  const sameDay = rows.filter((r) => r.payback < 1);
+  note('assets', 'pay for themselves in under a day', `${sameDay.length} of ${rows.length}`,
+    sameDay.length
+      ? `${sameDay.map((r) => r.what).join(', ')} — for these the buy decision is not "can I afford this" but "have I clicked it yet", which is what makes the mid-game feel like it has nothing to decide`
+      : 'no rung pays for itself in a sitting, so every purchase is a bet on staying alive long enough to collect on it — which is what makes it a decision');
   // the cheapest rung, because that is what a new player actually meets first
   const cheapest = rows.slice().sort((a, b) => a.cost - b.cost)[0];
   note('assets', 'the first rung anyone can reach', `${cheapest.what} — $${fmt(cheapest.cost)} → $${fmt(Math.round(cheapest.day))}/day`,
@@ -779,8 +787,9 @@ phase('P9.20b the asset ladder — payback, and whether the entry price is reall
     .sort((a, b) => b.day - a.day).slice(0, opSlotsOf(L)).reduce((a, r) => a + r.day, 0);
   note('assets', 'the early seats', `lvl 1: $${fmt(Math.round(bestAtLevel(1)))}/day · lvl 20: $${fmt(Math.round(bestAtLevel(20)))}/day · lvl 40: $${fmt(Math.round(bestAtLevel(40)))}/day`,
     `best-affordable-at-that-level, ${opSlotsOf(1)}/${opSlotsOf(20)}/${opSlotsOf(40)} seats. The seat curve, not the price, is now the early bound — a level-1 player with unlimited cash cannot buy past ${OPERATIONS.SLOTS_BASE} operations, which is the "affordability was never the gate" finding turned into a gate. NOTE the Legit Fronts assets have NO level gate (buyAsset checks cash only), so they sit in every one of these pools`);
-  note('assets', 'VERDICT', 'affordable, bounded by seats',
-    `nothing here is out of reach and every rung still pays back inside three days — but the mid-game decision is no longer "have I clicked it yet", it is which ${OPERATIONS.SLOTS_MAX} of ${metered.length}. The levers are the per-rung income (prototype tables, machine-owned), the ${meterH}h RACKET_DAILY_CAP_MS meter, and now OPERATIONS.SLOTS_* (BALANCE.md)`);
+  const passiveRatio = (bestN(OPERATIONS.SLOTS_MAX) / grindDay).toFixed(1);
+  note('assets', 'VERDICT', `${inBand.length} of ${rows.length} in the healthy band, bounded by seats`,
+    `nothing here is out of reach; the ladder's ROI now TAPERS (${Math.min(...rows.map((r) => r.payback)).toFixed(2)}d at the on-ramp → ${Math.max(...rows.map((r) => r.payback)).toFixed(2)}d at the apex) instead of paying back inside a sitting at every rung, so a big rung is a commitment rather than a click. The best ${OPERATIONS.SLOTS_MAX} seats run ${passiveRatio}x the top-tier grind — passive still beats active, as capital should, without dwarfing it. The remaining outliers are the ${rows.filter((r) => r.payback < BAND[0]).length} under the band's floor (${rows.filter((r) => r.payback < BAND[0]).map((r) => r.what).join(', ') || 'none'} — the deliberately generous first rungs, plus the business fronts, whose curve the L1a/L1b package already signed separately). The levers are the per-rung income (prototype tables, machine-owned), the ${meterH}h RACKET_DAILY_CAP_MS meter, and OPERATIONS.SLOTS_* (BALANCE.md)`);
 }
 
 // ════════ P9.20d THE FAMILY LEDGER — is the family treasury scarce? ════════

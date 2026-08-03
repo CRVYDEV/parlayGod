@@ -24,6 +24,37 @@ import { spawnResident } from '../src/population.js';
   for (let i = 1; i < CARS.length; i++) assert(CARS[i].val > CARS[i - 1].val, `cars ordered by value at ${CARS[i].id}`);
 }
 
+// ── THE INCOME LADDERS — the ROI TAPER (BALANCE.md § THE ASSET LADDER RE-CURVED) ──
+// RACKETS and the Legit Fronts half of ASSETS are both MACHINE-OWNED (rules.generated.js, rewritten
+// wholesale by the extractor), so the shape that makes them a decision has nothing else holding it:
+// a prototype edit or a bad re-extract could silently put the whole ladder back inside a day's
+// payback and no guard in the tree would notice — the sim MEASURES it but the sim is not the build.
+// The property is the TAPER: a bigger rung must pay back SLOWER, so buying up the ladder is a
+// commitment rather than a formality. Asserted as a relation over the live tables, not pinned
+// numbers, so content can be added freely as long as it lands on the curve.
+{
+  const meteredMinPerDay = CONSTANTS.RACKET_DAILY_CAP_MS / 60000;   // the accrual meter, not 1440
+  assert(meteredMinPerDay > 0, 'the racket meter is the day the payback is measured against');
+  const payback = (cost, incomePerMin) => cost / (incomePerMin * meteredMinPerDay);
+  for (const [what, rows] of [['racket', RACKETS.map((r) => ({ id: r.id, cost: r.cost, income: r.income }))],
+    ['front', ASSETS.filter((a) => a.income).map((a) => ({ id: a.id, cost: a.price, income: a.income }))]]) {
+    assert(rows.length >= 13, `${what} income ladder is the full catalog (${rows.length})`);
+    let prevCost = 0, prevIncome = 0, prevPay = 0;
+    for (const r of rows) {
+      assert(r.cost > prevCost, `${what} ${r.id} costs more than the rung below it`);
+      assert(r.income > prevIncome, `${what} ${r.id} out-earns the rung below it (a dearer rung must never earn less)`);
+      const p = payback(r.cost, r.income);
+      // The taper, and the envelope it sweeps. 1.5d floors the on-ramp (a first purchase should
+      // still feel like a win); 14d is the top of the healthy band (longer than a sitting, shorter
+      // than a street's life). A rung under the floor is the "have I clicked it yet" defect.
+      assert(p >= 1.5 && p <= 14, `${what} ${r.id} pays back in ${p.toFixed(2)}d — inside the 1.5-14d envelope`);
+      assert(p >= prevPay - 0.01, `${what} ${r.id} pays back no FASTER than the rung below it (${p.toFixed(2)}d vs ${prevPay.toFixed(2)}d) — the ROI must taper up the ladder`);
+      prevCost = r.cost; prevIncome = r.income; prevPay = p;
+    }
+    assert(prevPay >= 8, `the ${what} apex pays back in ${prevPay.toFixed(2)}d — the top of the ladder is a real commitment, not a click`);
+  }
+}
+
 const app = await buildServer();
 const pool = app.pool;
 const call = async (method, url, { token, body, headers } = {}) => {

@@ -3653,6 +3653,66 @@ open: **$162,562 against a $200,000 garrison, −19% per conquest, compounding.*
 that precondition (`floor < WAS`) explicitly, because without a floor genuinely below the old
 garrison the whole block would pass on a no-op.
 
+**THE ASSET LADDER RE-CURVED — the ROI now tapers (founder-directed 2026-08-03: "Run a full
+economic balance & code audit of every function, every button & task. Apply your recommended
+fixes.").** The audit's headline economic finding was the one the sim had been printing every run
+and nobody had acted on: **36 buy-once, energy-free income holdings, and NOT ONE of them inside a
+healthy payback band** — 0.58d–2.98d end to end, 14 of them paying for themselves in under a day.
+A permanent asset that pays back in a sitting is not a purchase, it is a formality, which is the
+real shape of "the mid-game has nothing to decide". **What was wrong was the SCALE, not the shape**
+— the original curve already tapered (0.58d → 1.81d), it was simply 4–7× too generous end to end,
+so the taper never became a decision. Fixed through the MACHINE-OWNED seam (ground rule #2 — edit
+`reference-prototype-v24.jsx`, `node tools/extract-rules.js`; the car-catalog / PATHS v2
+precedent), and the regenerated diff was **exactly 62 lines — 31 income values across two files and
+nothing else**, which is the seam doing its job. Each rung is now derived from a target payback
+`income/min = cost ÷ (paybackDays × 720)` (720 = the `RACKET_DAILY_CAP_MS` metered minutes/day),
+swept **2.0d at the on-ramp → 12.0d at the apex** on each ladder independently. The bottom stays
+deliberately generous (a first passive purchase should feel like a win, and the entry rungs are
+cheap enough that their absolute income is petty), and the two ladders now sit on ONE consistent
+curve, which they did not before (`laundro` beat `grocery` for no stated reason). **Measured (sim
+P9.20b): payback 0.58–2.98d → 1.09–12.00d; inside the healthy 3–14d band 0 of 36 → 27 of 36; under
+a day 14 → 0; the 12 metered seats a player actually runs $243.9M/day → $33.2M/day, i.e. ~19× the
+top-tier grind → ~2.6–4.4×.** The 9 rungs still outside the band are named rather than glossed: the
+four on-ramp rungs, and the five `BUSINESSES` fronts whose curve the L1a/L1b package measured and
+signed separately eight days earlier — re-cutting a signed number twice within a week, unasked, is
+not an audit finding. The shape between the layers is now right too: fronts are the premium tier
+(level-gated, pad-paying, Bureau-raidable, Sacking-losable) and *should* out-earn the safe drip per
+slot, and after this they do. **Progression is unaffected; only the passive cash moved** —
+`tools/playthrough.js` both sides the same day: level 35 → 34 (inside the recorded ±1 noise at 10h)
+and $1,551,736 → $1,065,464 (−31%) over the 7-day solo run, with the business-front gates getting
+*harder* to reach (55/72/80% covered → 62/14/55%), which is the direction a gate is supposed to
+point. §10.4 drift-0 throughout — every rung is still an ordinary ledgered faucet. **Guarded, since
+both catalogs are machine-owned and a bad re-extract would silently undo it:** `test/economy.js`
+asserts the TAPER as a relation over the live tables (a dearer rung must cost more, earn more, and
+pay back no faster; every rung inside a 1.5–14d envelope; the apex ≥ 8d), so content can be added
+freely as long as it lands on the curve — mutation-verified both ways (restore the old on-ramp
+income → "racket laundro pays back in 0.58d"; make the apex earn less than the rung below → "front
+airline out-earns the rung below it"). **Two other findings from the same pass.** (1) The coach's
+"You can get made for free" rung **quoted a price it could not verify** — `PLEX_MINT_OMR` (5) is
+only the PRE-MARKET floor, since `plexQuote` is `max(floor, feeEth × the latest buyback oracle ×
+premium)`, so the moment a buyback prints above ~417 $OMR/ETH the real price moves and the hint
+becomes a lie the player discovers at the till (the first-front hint's lesson: price off the live
+surface or don't state a price). vig.js imports game.js, so the quote can be neither imported nor
+read without a query on the hot path — the rung now points at the Store, which quotes it, and reads
+the MISSION's own $OMR reward from the catalog so a re-extract cannot leave it firing before the
+job it names exists. (2) The harness's `⚠ "You can get made for free" held 60% of advised play`
+was **a harness gap, not a defect** — checked FIRST, per the recorded corner-rung false-alarm
+lesson: the rung clears on `acct.minted`, reachable by any player through `POST /v1/plex/mint` →
+`/v1/character/mint`, which `tools/playthrough.js` simply never called. Wired (reading the LIVE
+quote, not the floor); the warning is gone and the rung is in the obeyed list. Also fixed in the
+sim itself: P9.20b's verdict hardcoded *"every rung still pays back inside three days"* and its
+under-a-day note carried a conclusion beside a figure that had since outgrown it — both are derived
+from the measurement now (the retired-`laundering.ammSpot` class: a claim that stays true-looking
+after the thing it described is gone). Suite green + sim drift-0 + mobile 66/66. **Flagged, NOT
+changed:** `buyAsset` still has no level gate (13 Legit Fronts bounded by price alone — with
+payback at 12d the price genuinely is the gate, but it is a gate nobody chose); the JAILBIRDS bust
+EV rises monotonically with the sentence because the §7.8 chance curve FLOORS at 10% for anything
+over 240s, and the two dials both cost more than they buy (the reward line is spec, and shortening
+`MAX_S` under 240 would gut the availability the birds exist to provide); and P9.20d's finding that
+4 of 4 recurring family strategic costs are FLAT constants a maxed treasury pays out of pocket
+change — the fix there is to INDEX them (the contest ratchet is the model), which is a new formula
+rather than a number, so it stays a founder call.
+
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
 `payPlex` pattern); named landmarks / Founder's charter numbers; ~~R2 (the `rwa_revenue` → real-RWA-buy

@@ -14,7 +14,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS, RANKS,
          REGIMEN, disciplineLvlOf, energyCapOf, nerveCapOf, BUSINESSES, WIRE, RIVALS, CORNER, cornerTasksOf,
          KITCHENS, labModuleCost, recyclesToDesk, DESK_RECYCLE_REASON, isMade, madeSeconds,
          MADE_LADDER, madeRungIdx, madeRungOf, ladderFx,
-         ASSETS, OPERATIONS, opSlotsOf, nextOpSlotLevel } from './rules.js';
+         ASSETS, OPERATIONS, opSlotsOf, nextOpSlotLevel, MISSIONS } from './rules.js';
 import { dbCaps } from './db.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
@@ -1144,13 +1144,19 @@ function coachLadder(ch, acct, owned) {
   // game anymore?"), and the mechanics say otherwise: $OMR is still earned by playing — the mission
   // ladder alone pays 220 across nine jobs, the first at level 14 — and MINTING (the gate on
   // withdrawing and on the Street Wage) is payable in that earned $OMR via PLEX, not only in ETH.
-  // Nothing was missing but the sentence saying so, so this is the sentence. Fires at 14 because
-  // that is when "The Dockside Heist" (m4, 5 $OMR) becomes claimable — exactly the PLEX mint price —
-  // and self-clears the moment they're minted. The price is RESTATED from vig.js:29 rather than
-  // imported: vig.js imports game.js, so the dependency only runs one way.
-  const plexMint = Number(process.env.PLEX_MINT_OMR || 5);
-  if (lvl >= 14 && !acct.minted
-    && add('You can get made for free', `Getting MADE unlocks withdrawing and the Street Wage — and you can pay for it with $OMR you earned in game (${plexMint} $OMR), not just ETH. Earn it on the mission ladder: "The Dockside Heist" pays ${plexMint} $OMR on its own. Then The Store ▸ pay with $OMR.`, 'store')) return rungs;
+  // Nothing was missing but the sentence saying so, so this is the sentence. Fires at the level of
+  // the first mission that pays $OMR (read from the catalog, so a re-extract can never leave the
+  // rung firing before the job it points at exists) and self-clears the moment they're minted.
+  // The MINT PRICE is deliberately NOT quoted: `plexQuote` is `max(PLEX_MINT_OMR, feeEth × the
+  // latest buyback oracle × premium)`, so the static 5 is only a PRE-MARKET floor — the moment a
+  // buyback prints above ~417 $OMR/ETH the real price moves and a hardcoded figure here would be
+  // a lie the player only discovers at the till (the first-front hint's lesson: price off the live
+  // surface or don't state a price). vig.js imports game.js, so the quote cannot be imported here
+  // and cannot be read without a query on the hot path — so the rung points at the Store, which
+  // quotes it, instead of asserting it.
+  const firstOmrMission = MISSIONS.find((m) => Number(m.reward?.omr) > 0);
+  if (firstOmrMission && lvl >= (firstOmrMission.req?.lvl || 14) && !acct.minted
+    && add('You can get made for free', `Getting MADE unlocks withdrawing and the Street Wage — and you can pay for it with $OMR you earned in game, not just ETH. Earn it on the mission ladder: "${firstOmrMission.name}" pays ${firstOmrMission.reward.omr} $OMR on its own. Then The Store ▸ pay with $OMR, which quotes the live price.`, 'store')) return rungs;
   // (founder: "not obvious… the steps you need to take to buy your first business") — concrete steps,
   // priced off the live catalog so the hint can never drift from what the buy button charges.
   const firstFront = BUSINESSES.find((b) => b.kind === 'laundromat');
