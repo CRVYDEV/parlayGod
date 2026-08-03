@@ -11,6 +11,12 @@
 //       the witness's death.
 // pg-mem, zero infra. §10.4 vocabulary stays closed.
 process.env.MOD_KEY = 'test-mod-key';
+// TEST-ONLY (the boot guard rejects it in production). The heat_exposure / laylow assertions here are
+// deterministic values that rest on a probabilistic-by-DATE precondition: with SEASON_MODS armed, a
+// day drawing The Crackdown scales lawGain ×1.25 (and laylow ×0.75) and an exact-value check fails for
+// no visible reason (e.g. "a 30-day gap bleeds the case to nothing" reads 360, not 0). The recorded
+// flake class — pin the season so the precondition is guaranteed rather than left to the calendar.
+process.env.SEASON_MOD = 'dead_quiet';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { LAW } from '../src/rules.js';
