@@ -8716,3 +8716,49 @@ retirement lock order (characters → gangs → singletons), zero emission throu
 tribute, never win wars, hold a treasury of 0), both exclusions enforced at the query, and the pact /
 coalition angles as dead ends. Flagged: `recruitIntoFamily` shortlists `LIMIT 64`, which covers a
 48-resident city but would stall if `POPULATION.TARGET` were raised past it.
+
+**THE EXPLOIT HUNT — six attack classes, no defect, and a permanent guard for the class that keeps
+producing them (founder-directed 2026-08-03: "Do your best to exploit the game and patch any bugs").**
+Not a code review — an attempt to actually break the running game from outside. Six classes against a
+booted server, the full §10.4 sweep re-run after every call so any drift that MOVED was reported:
+**hostile input** (504 calls over 28 money routes × 18 values a client should never send — negatives,
+fractions, `Infinity`, `NaN`, `1e308`, `'1e999'`, `'1,000'`, `{}`, `[]`, `null`, `true`), **goods
+conservation**, **concurrent double-claim** on every once-ever latch, **IDOR** across every
+owned-object route, **shared-object races**, and **structural integrity** after 6,464 concurrent
+operations. **No exploitable defect found** — no 500s, no drift, no unlatched claim, no cross-owner
+write. Full report: `AUDIT-exploit-hunt.md`. **Three things looked like findings and all three
+dissolved**, which is worth recording because each is a way to manufacture one: (a) "§10.4 drift on
+every call including the 400s" was a **pg-mem artifact** — `ROLLBACK` is a no-op there, so accrual's
+`bank:interest` row survives a REFUSED action; clean on real Postgres, my own measurement error;
+(b) "the ambush cap is breached" (four 200s against `MAX_AMBUSHES` 3) died on measuring
+`convoys.ambushes` directly — 3, 2, 2 across three runs, because **a repelled ambush also returns
+200** and only a WIN consumes a slot (the documented step-two rule); (c) three gate-matrix false
+positives, which became the drop. **`test/gates.js` — THE GATE MATRIX (the 65th suite)** turns the
+extractor work into a permanent guard over **this project's most productive bug class**: a verb that
+forgets a gate its sibling enforces (`jump` vs `fire`; `collectFrontier` vs `collectTerritory`;
+`npcHit` blind to the Pen shields; `payProtection` letting a protected inmate shank). Every one of
+those was found by a person noticing an asymmetry; this asserts the asymmetry away. Each FAMILY
+declares the gates its members must all enforce **and why**, credited through four forms all live in
+the tree — a direct call, a shared `assert*` helper, an inline column comparison, or a thin wrapper
+that delegates (`robBusiness` → `extortFront`, the one-core discipline working as intended, so
+refusing to follow it would report the RIGHT structure as a defect). **It checks its own
+completeness**: every street crime (routed through `assertStreetCrime`) and every `collect*` action
+must be in a family or exempted WITH a stated reason, so a new verb cannot slip past unclassified.
+73 requirements over 5 families; three mutations each caught at its own named assertion. **TWO BUGS IN
+THE GUARD ITSELF, found by reading its output rather than trusting its pass, and they had been
+CANCELLING:** slicing a body "to the next export" made `referralXpBonus` — the last `export function`
+in a 4,606-line `rules.tail.js` — swallow every gate helper's own DEFINITION and be credited with all
+six (an over-read makes the requirement check MORE PERMISSIVE, the direction that turns a green run
+into a false clean bill); replacing it with brace matching then truncated `npcHit`'s body to two
+characters, because `opts = {}` is a DEFAULT PARAMETER and the first `{` after the paren is not the
+body — the over-read had been masking the truncation. Fixed by paren-matching the parameter list
+first. **The advisory line was narrowed twice for the same reason** — it first named ~24 "hand-rolled
+gates", most of them `WHERE jail_until IS NULL` in ordinary SQL or `bribeGuard` pricing a remaining
+sentence; **an advisory that is mostly wrong gets ignored, which the file's own header calls worse
+than no check.** It now matches the gate's SHAPE (a date COMPARISON on a property access, not
+arithmetic) and names **16 real sites**, including three in `game.js` (`doCrime`, `train`, `travel`)
+that never import `jailed` at all. Scope, stated in the file: **it proves a gate is REACHED, not that
+it is correct.** Flagged, not changed: collapsing the 16 inline copies onto the helpers, and routing
+the other 11 street crimes through `assertStreetCrime` so completeness covers 14 instead of 3 — both
+the one-core lesson applied, both touching many call sites for no behavioural gain today. Suite 65/65
+· sim drift-0.
