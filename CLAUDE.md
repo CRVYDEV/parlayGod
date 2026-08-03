@@ -3746,7 +3746,15 @@ machine-checkable half of *"every function, every button & task"* already proves
 guards, all green at HEAD: 550 routes wired, 571 board fields mirrored, 544 levers pinned AND read,
 2234 SQL statements parsed on real Postgres, 66 mobile checks) so the reading effort went where
 those structurally cannot see — whether a NUMBER is sensible, and whether an undriven code path is
-sound.
+sound. **And one the guards found on the way out, ground rule #8 working as written:** `npm test`
+was green locally on the desk commit and CI still failed `test/client.js` on *"the PARAM_FIXTURES
+entry for `/v1/casino/ring/:p` produced no id"* — the recorded flake shape for the THIRD time (a
+deterministic assertion resting on a merely-likely precondition). The ring fixture needs the
+character un-jailed, at the Neon Mile and holding the buy-in; only the location was guaranteed, and
+the seed just before it ends with a boost loop that resets `jail_until` per attempt and breaks on
+success, so a run whose last attempt busts leaves the fixture JAILED. Reproduced by forcing it,
+fixed by GUARANTEEING the precondition rather than making it likelier, and the refusal is now
+PRINTED so the next occurrence names the server's own reason instead of leaving it to be guessed.
 
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the

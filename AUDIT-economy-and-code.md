@@ -178,6 +178,22 @@ Bureau-raidable, Sacking-losable) and should out-earn the safe drip per slot.
 
 ---
 
+## 5. AND ONE THE GUARDS FOUND ON THE WAY OUT
+
+CI failed `test/client.js` on *"the PARAM_FIXTURES entry for `/v1/casino/ring/:p` produced no id"*
+against ten clean local runs, one of them inside a full `npm test` on the same commit. **The
+recorded flake shape, for the third time**: a deterministic assertion resting on a precondition
+that is merely likely. The ring fixture needs the character out of lockup, at the Neon Mile, and
+holding the buy-in, and only the location was guaranteed — the seed immediately before it ends
+with a boost loop that resets `jail_until` per attempt and breaks on success, so a run whose last
+attempt busts leaves the fixture JAILED. Reproduced exactly by forcing it. Fixed by GUARANTEEING
+the precondition (the den's own gates are what `test/casino.js` exists to check; here they are only
+a precondition for reaching a board), and the refusal is now PRINTED, so the next occurrence names
+the server's reason instead of leaving it to be guessed. Verified both ways.
+
+This is also ground rule #8 working as written: `npm test` was green locally on that commit, and
+the only reason the defect was seen at all is that CI was read after the push.
+
 ## Result
 
 Suite 64/64 · sim §10.4 drift-0 · mobile 66/66 · every standing guard green · two fixes with
