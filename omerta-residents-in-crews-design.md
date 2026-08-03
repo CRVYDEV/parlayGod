@@ -1,6 +1,6 @@
 # Residents in crews — the hired hand (NPC families step two, the crew-heist leg)
 
-**Status:** SCOPED, not built (2026-08-03). Motivated by measurement: the progression harness
+**Status:** BUILT (2026-08-03). Motivated by measurement: the progression harness
 (`npm run playthrough`) reports *"Pull a crew score"* as the single largest masking rung in a solo
 run — **22% of advised play, never cleared** — because a crew heist needs another player to fill a
 role and a solo player has nobody. It is the top early-game friction and the only coach rung a solo

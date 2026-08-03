@@ -37,7 +37,7 @@ export const SYSTEMS = {
   'wet work': ['kill', 'npchit', 'shank', 'respawn', 'safehouse', 'bodyguard_hire', 'bodyguard_absorb'],
   'contracts': ['family_contract'],
   'the dueling ladder': ['duel'],
-  'crew heists': ['heist_plan', 'heist_join', 'heist_score', 'heist_case', 'heist_fence', 'heist_rat'],
+  'crew heists': ['heist_plan', 'heist_join', 'heist_fill', 'heist_score', 'heist_case', 'heist_fence', 'heist_rat'],
   'clue scrolls': ['clue_casket'],
   'the family': ['gang_foundation', 'gang_seal', 'gang_charter', 'family_dynasty_name'],
   'the commission': ['commission_vote', 'commission_veto', 'commission_proposal', 'commission_override'],

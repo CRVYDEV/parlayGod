@@ -4586,3 +4586,26 @@ every level above. The fix holds; the speedrun class is dead.
 solo. Scoped below-referenced; the emission concern the deferral flagged is answered by forfeiting the
 NPC filler's cut (a resident seat conjures nothing, and a solo leader gets a *smaller* share than a
 full human crew, so co-op stays a reason to find real people).
+
+## THE HIRED HAND — residents fill crew-heist seats (BUILT 2026-08-03)
+
+The re-sim/harness pass above named *"pull a crew score"* as the top masking rung in a solo run (22%,
+uncompletable alone). Built per `omerta-residents-in-crews-design.md`: a leader with no real crewmate
+hires an NPC resident into an open seat (`POST /v1/heists/:id/fill {role}`, leader-only during
+planning). The hand is a real `is_npc` character (so `executeHeist`'s per-member lock/roll/gates are
+unchanged), but at execute its pot share is **forfeited — never minted**, so the co-op faucet only
+SHRINKS and §10.4 stays drift-0 (the hand earns no cash, no `heists_pulled`, no mastery, no RWA cut,
+no respect; verified by a zero-`heist:crew`-rows-for-the-hand assertion + a full-suite reconcile). The
+hand is stat-NEUTRAL (excluded from the roll average) so hiring a body is not a free success bonus.
+A committed resident is made inert (the `eligible`/retire pickers skip anyone on a live plan — the one
+population-side change). §10.4: one new reason, `heist:hire` (a cash SINK riding the existing `heist`
+prefix — zero invariants change).
+
+| lever | ships at | what it does |
+|---|---|---|
+| `HEIST_FILL_MAX` | 1 | fillers per heist. `0` disables; **1** makes only the 2-man entry job solo-reachable, keeping the marquee 3–5-man jobs (vault → Federal Reserve) genuinely multiplayer. The dial between "solo-reachable co-op" and "the marquee stays multiplayer" |
+| `HEIST_FILL_FEE` | 5000 | cash sink to hire a hand — a small real cost on top of the forfeited share, so a hand is the fallback, never the optimum |
+
+**Founder sign-off flag:** raising `HEIST_FILL_MAX` past 1 makes the marquee co-op jobs solo-reachable,
+which re-opens the trivialization concern the deferral raised — the forfeited-cut design keeps the
+emission bounded (a soloist's own share shrinks with every hand), but the cap is the real dial.

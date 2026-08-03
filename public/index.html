@@ -1926,6 +1926,7 @@
     // two-party handoffs that otherwise fell through to a bare "done."
     if (body.principal !== undefined && body.owed !== undefined) bits.push(`took the loan — $${fmt(body.principal)} now, owe $${fmt(body.owed)}${body.collateral ? ' (car pledged)' : ''}`);
     if (body.guard !== undefined && body.price !== undefined) bits.push(`hired protection — $${fmt(body.price)} up front`);
+    if (body.hired === true && body.fee !== undefined) bits.push(`hired a hand for the ${body.role} seat — $${fmt(body.fee)}. A body fills the crew, but takes a cut and earns you nothing extra.`);
     if (body.bid !== undefined && body.id !== undefined && body.name === undefined && !body.youLead) bits.push(`bid $${fmt(body.bid)} placed${body.extended ? ' (clock reset)' : ''}`);
     // the repair is a GAMBLE (a botched roll charges you and doesn't fix it) — say so plainly so a
     // failed repair reads as "the shop botched it," never as a silent charge that looks like fraud
@@ -4600,7 +4601,7 @@
       ['POST', '/v1/convoy/depart', { guards: 'none' }], ['POST', '/v1/convoy/:id/ambush', {}], ['POST', '/v1/convoy/:id/collect', {}],
       ['GET', '/v1/heists'], ['POST', '/v1/heists/plan', { job: 'payroll', role: 'brains', fence: false }],
       ['POST', '/v1/heists/:id/join', { role: 'muscle' }], ['POST', '/v1/heists/:id/case', {}], ['POST', '/v1/heists/:id/execute', {}],
-      ['POST', '/v1/heists/:id/leave', {}], ['POST', '/v1/heists/:id/rat', {}], ['POST', '/v1/heists/fence', {}],
+      ['POST', '/v1/heists/:id/leave', {}], ['POST', '/v1/heists/:id/fill', { role: 'muscle' }], ['POST', '/v1/heists/:id/rat', {}], ['POST', '/v1/heists/fence', {}],
       ['GET', '/v1/leaderboard/heists'], ['POST', '/v1/heist', {}],
     ],
     'Business Empire': [
@@ -5941,7 +5942,10 @@
           <button class="act" data-do="POST /v1/heists/fence">fence it</button></div>` : ''}</div>` : ''}
       ${my ? `
         <div class="card" style="border-color:var(--neon)">${aart('heist', (hb.jobs || []).find((jj) => jj.name === my.name)?.id)}<span class="t">${my.name}</span> <span class="chip">${my.leader ? 'YOUR JOB' : 'crewed up'}</span>${my.fenced ? ' <span class="chip" style="color:var(--warn)">🔥 HOT</span>' : ''}
-          <div class="d">crew: ${my.crew.map((c) => `${c.name} (${c.role})${c.cased ? ' ✓cased' : ''}`).join(', ')}${my.crewNeeded > 0 ? ` · ${my.crewNeeded} seat${my.crewNeeded > 1 ? 's' : ''} open` : ' · READY'}</div>
+          <div class="d">crew: ${my.crew.map((c) => `${c.name} (${c.role})${c.cased ? ' ✓cased' : ''}${c.hired ? ' 🤝hired' : ''}`).join(', ')}${my.crewNeeded > 0 ? ` · ${my.crewNeeded} seat${my.crewNeeded > 1 ? 's' : ''} open` : ' · READY'}</div>
+          ${my.leader && my.canHire ? `<div class="d" style="font-size:12px;color:var(--dim)">no crew? hire a hand — $${fmt(my.fillFee)} up front. A hand fills a seat but takes a cut and earns you nothing extra.</div>
+            <select data-hirerole="${my.id}">${(my.rolesOpen || []).map((ro) => `<option>${ro}</option>`).join('')}</select>
+            <button class="act" data-hireheist="${my.id}">🤝 hire a hand ($${fmt(my.fillFee)})</button>` : ''}
           <button class="act" data-heistdo="case:${my.id}">case the joint (${hb.caseEnergy} energy — raises the odds)</button>
           ${my.leader ? `<button class="act" data-heistdo="execute:${my.id}" ${my.crewNeeded > 0 ? 'disabled' : ''}>EXECUTE</button>
             <button class="act" data-heistdo="leave:${my.id}">disband</button>` : `<button class="act" data-heistdo="leave:${my.id}">walk away</button>`}
@@ -6023,6 +6027,8 @@
     });
     t.querySelectorAll('[data-joinheist]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/heists/${b.dataset.joinheist}/join`, { role: t.querySelector(`[data-joinrole="${b.dataset.joinheist}"]`).value }).then(() => renderScores()));
+    t.querySelectorAll('[data-hireheist]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/heists/${b.dataset.hireheist}/fill`, { role: t.querySelector(`[data-hirerole="${b.dataset.hireheist}"]`).value }).then(() => renderScores()));
     const cvOpen = t.querySelector('#cv-open');
     if (cvOpen) cvOpen.onclick = () =>
       act('POST', '/v1/convoy', { to: t.querySelector('#cv-to').value, goodId: t.querySelector('#cv-good0').value,

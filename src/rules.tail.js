@@ -1483,6 +1483,12 @@ export const HEIST_PLAN_TTL_MS = 6 * 3600 * 1000;  // a plan goes stale after 6h
 export const HEIST_RAT_BPS = 5000;                  // the informant's payout: 50% of the stake (self-rat is -EV)
 export const HEIST_LEADER_WEIGHT = 1.2;             // the leader's split weight (fronted the stake)
 export const HEIST_INSIDE_CD_MS = 24 * 3600 * 1000; // per-VENUE inside-job cooldown (win or lose)
+// THE HIRED HAND (residents-in-crews, omerta-residents-in-crews-design.md): a leader with no real
+// crewmate hires an NPC resident into an open seat. The hand's pot share is FORFEITED (never minted →
+// the co-op faucet only shrinks, §10.4-neutral), so a solo-NPC crew nets less than a full human crew.
+// HEIST_FILL_MAX caps fillers per heist so the marquee 4-5-man jobs stay genuinely multiplayer.
+export const HEIST_FILL_MAX = 1;                    // fillers per heist (0 disables; 1 = only the 2-man entry job is solo-reachable)
+export const HEIST_FILL_FEE = 5000;                 // cash SINK to hire a hand (tools + the hand's cut up front) — heist:hire
 // TIER-4 §B — THE CASING PHASE: a crew member spends energy to case the job (once each), each casing
 // adds a bounded bump to the success roll — prep rewards patience, capped so it never guarantees a score.
 export const HEIST_CASE_ENERGY = 10;

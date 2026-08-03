@@ -336,8 +336,12 @@ async function runPopulationInner(pool) {
   //    through the same retire path, and both consume the day's allowance: either way the city is
   //    buying a fresh face with a fresh seed.
   const room = Math.min(POPULATION.SPAWN_PER_TICK, allowance);
+  // a resident committed to a live heist plan (a hired hand) is INERT — never retired out from under
+  // the job (residents-in-crews). The eligible/act picker carries the same NOT EXISTS.
+  const notOnHeist = `AND id NOT IN (SELECT m.character_id FROM crew_heist_members m
+                        JOIN crew_heists ch2 ON ch2.id = m.heist_id WHERE ch2.status='planning')`;
   const oldAll = room <= 0 ? [] : (await pool.query(
-    'SELECT id FROM characters WHERE alive AND is_npc AND generation > $1 ORDER BY id LIMIT $2',
+    `SELECT id FROM characters WHERE alive AND is_npc AND generation > $1 ${notOnHeist} ORDER BY id LIMIT $2`,
     [POPULATION.RETIRE_GENERATIONS, room])).rows;
   // "picked clean" is measured against what they ARRIVED with (npc_seed), never a flat cash floor —
   // a flat floor can't tell a drained boss from a corner kid born with $200, and would recycle the
@@ -346,7 +350,7 @@ async function runPopulationInner(pool) {
   const oldIds = new Set(oldAll.map((r) => r.id));
   const drainedAll = room <= 0 ? [] : (await pool.query(
     `SELECT id FROM characters WHERE alive AND is_npc AND npc_seed > 0
-       AND cash < npc_seed * $1 / 10000.0 ORDER BY id LIMIT $2`,
+       AND cash < npc_seed * $1 / 10000.0 ${notOnHeist} ORDER BY id LIMIT $2`,
     [POPULATION.TURNOVER.DRAINED_BPS, room])).rows.filter((r) => !oldIds.has(r.id));
 
   // (red-team F1) Retiring old bloodlines is bounded MAINTENANCE; retiring the picked-clean is the
@@ -735,6 +739,8 @@ export async function runResidentBehaviour(pool) {
         AND (jail_until IS NULL OR jail_until < now())
         AND (hosp_until IS NULL OR hosp_until < now())
         AND (safe_until IS NULL OR safe_until < now())
+        AND id NOT IN (SELECT m.character_id FROM crew_heist_members m
+                        JOIN crew_heists ch2 ON ch2.id = m.heist_id WHERE ch2.status='planning')
       ORDER BY id`)).rows;
   const pick_ = eligible
     .map((r) => ({ r, k: Math.random() })).sort((a, b) => a.k - b.k)
