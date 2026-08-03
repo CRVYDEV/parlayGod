@@ -636,7 +636,14 @@ const collectList = (src, v, key, fn) => {
   // So after a body is delimited, follow any iterator chained onto it and collect that body under
   // the SAME key — a loop, so `.filter().filter().map()` resolves too. The param is re-read each
   // hop because each callback binds its own.
-  const CHAIN = /^\s*\)\s*\.\s*(?:map|forEach|flatMap|filter|find|some|every|sort|reduce)\s*\(\s*\(?\s*([a-zA-Z_$][\w$]*)\s*\)?\s*=>/;
+  // …and the chain may pass through a NON-CALLBACK transform on the way. `.filter((x) => !x.me)
+  // .slice(0, 8).map((x) => …)` is the commonest list idiom in this client, and `.slice` takes no
+  // lambda — so the follow stopped dead at it and the `.map` body, which is the entire rendered
+  // row, went unread. The list still LOOKED covered because the filter's one-token predicate had
+  // been collected. Proven by mutation: a bogus field on a duelist row passed green even after the
+  // list was made visible and non-empty. Transforms that return the same element type are skipped
+  // over rather than treated as the end of the chain.
+  const CHAIN = /^\s*\)(?:\s*\.\s*(?:slice|reverse|flat|concat)\s*\([^)]*\))*\s*\.\s*(?:map|forEach|flatMap|filter|find|some|every|sort|reduce)\s*\(\s*\(?\s*([a-zA-Z_$][\w$]*)\s*\)?\s*=>/;
   const add = (listField, param, at) => {
     const ext = bodyAfter(src, at);
     if (!ext) { listUnresolved++; return; }
@@ -844,6 +851,17 @@ for (const m of html.matchAll(/\b(?:async\s+)?function\s+([a-zA-Z_$][\w$]*)\s*\(
       `(?:const|let|var)\\s+([a-zA-Z_$][\\w$]*)\\s*=\\s*${v.replace('$', '\\$')}\\s*(?:\\??\\.\\s*([a-zA-Z_$][\\w$]*)\\s*(?:\\|\\|\\s*\\[\\]\\s*)?)?\\.\\s*(?:filter|slice|sort|concat)\\s*\\(`, 'g'))) {
       collectList(region, d[1], d[2] ? `${key}|${d[2]}`.replace(/\|\|/, '|') : key, m[1]);
     }
+    // A BARE RE-BIND OF THE BOARD ITSELF — `${(() => { const d = duels; if (!d) return ''; …})()}`,
+    // which is how a screen guards a whole section behind one null check. `d` IS the board, but the
+    // two loops above only follow a re-bind that derives an ARRAY (`.filter`) or a SUB-OBJECT
+    // (`.property`), so a plain one matched neither and every list hanging off it vanished — not
+    // checked, and not counted as an empty list either, so it did not even reach the honesty rule
+    // that says an empty list must never read as a pass. Found by mutation: a bogus field planted on
+    // a duelist row passed green. The alias inherits the SAME key, because it is the same board.
+    for (const re of region.matchAll(new RegExp(
+      `(?:const|let|var)\\s+([a-zA-Z_$][\\w$]*)\\s*=\\s*${v.replace('$', '\\$')}\\s*(?:\\|\\|\\s*\\{\\}\\s*)?(?=[;,\\n])`, 'g'))) {
+      collectList(region, re[1], key, m[1]);
+    }
     // ONE level of object alias — `const S = r.body, o = S.owned;` / `const id = b.identity;` —
     // the alias holds a sub-object of the board, so its reads are that sub-object's fields. Only
     // followed off a sub-less binding (the key format carries one sub level; deeper chains remain
@@ -972,6 +990,11 @@ async function seedLists() {
              race_wins=5
            WHERE account_id IN ($1,$2)`, [acct, acct2]);
   await q(`UPDATE characters SET honor=70 WHERE id=$1`, [charId]);
+  // A LISTED DUELIST, so /v1/duels.duelists has a row. That list was invisible to 4b until the
+  // bare-rebind alias was followed (the screen guards the whole section behind `const d = duels`),
+  // so it never even reached the empty-list rule — it was neither checked nor counted. Through the
+  // real route rather than SQL, so the stake floor and the consent listing are the game's own.
+  await si('POST', '/v1/duels/list', t2, { limit: 25000 });
   // THE TRADES legend board ranks lifetime mastery XP per account
   await q(`INSERT INTO mastery_legend (account_id, track_id, xp) VALUES ($1, 'larceny', 5000)`, [acct]);
 
