@@ -8777,3 +8777,48 @@ it is correct.** Flagged, not changed: collapsing the 16 inline copies onto the 
 the other 11 street crimes through `assertStreetCrime` so completeness covers 14 instead of 3 — both
 the one-core lesson applied, both touching many call sites for no behavioural gain today. Suite 65/65
 · sim drift-0.
+
+**SIXTY-NINE COPIES OF THREE GATES, AND THE GUARD THAT ONLY SAW SIXTEEN (2026-08-03).** The entry
+directly above flagged "collapsing the 16 inline copies onto the helpers" as a no-behavioural-gain
+cleanup. Doing it turned up that **16 was not the number** — twenty-six MORE modules each opened
+with its own `const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();` and
+then called it, fifty-three further copies the matrix could not see. To the extractor a private copy
+and the shared helper are identical: it sees `jailed(` and credits the gate. **That is the over-read
+direction, which is the dangerous one** — it makes a requirement check MORE permissive, so the guard
+reported sixteen problems and passed over sixty-nine. The fourth-plus instance of *a check that
+cannot fail reads exactly like a clean bill of health*, in a new costume: here the check CAN fail,
+it just cannot see most of its own subject.
+
+**The root cause was structural, not sloppiness, and that is why the fix is a move rather than 69
+edits.** Five sibling status predicates — `penSafe`, `inHole`, `witproActive`, `crewCold`, `isMade` —
+live in `rules.tail.js`, the universal leaf every module already imports. These three lived in
+`src/social/shared.js`, the SOCIAL package's leaf: fine from inside `social/`, wrong-looking from
+`portfolio.js` or `estate.js`. Writing the comparison locally was the reasonable response to that,
+and it produced sixty-nine places a fix to the helper cannot reach — in the **forgotten-gate class**,
+this project's most productive bug family (jump vs fire, collectFrontier vs collectTerritory, npcHit
+blind to the Pen shields, payProtection letting a protected inmate shank; every one a gate that
+existed in a sibling and was missed). So the definitions move to the universal leaf and
+`social/shared.js` RE-EXPORTS them, leaving that package's ~100 call sites untouched. Behaviour is
+byte-identical (`x && new Date(x) > new Date()` and `!!x && new Date(x).getTime() > now` agree on
+every input — `>` on a Date coerces through valueOf(), the same number getTime() returns); the `now`
+parameter is new, defaulted, and matches the siblings. `territory.js` had the full private set of
+three; `roster.js`'s two were LOCALS shadowing the helper names, and routing them through
+`jailed(r, now)` is a real improvement — one clock for the whole roster, so two rows can no longer
+disagree about the same instant.
+
+`test/gates.js` gains a hard check for exactly what its advisory structurally cannot reach: the
+three names are **RESERVED**, and only their definition site may bind them (a re-export binds
+nothing locally, which is how `social/shared.js` keeps working and why it is correctly not matched).
+Hard rather than advisory because the tree is clean now, and because the whole point of collapsing
+the copies is that the next one must not be quiet. Both advisories now read zero.
+
+Mutation-verified in both directions — re-introducing a private copy fails by name
+(`src/pen.js defines its own jailed`), and breaking the moved predicate fails a REAL gate assertion
+(`F4: a jailed mark cannot be trunk-mugged`) rather than passing as cosmetic, which is what proves
+the collapse is load-bearing and not a tidy-up. Forty modules changed, so **ground rule 8 was run in
+full**: suite 65/65, sim drift-0, `pgquery` 2329 statements and `pgcheck` 43/43 on real Postgres.
+*(A process note worth keeping: the local `/tmp/pg` cluster still held a database from an earlier
+session at an older schema, and `pgquery` failed on `column "post" does not exist` — a DIRTY
+DATABASE reading exactly like a code defect. Create a fresh database per run.)* Still flagged, still
+unbuilt: routing the other 11 street crimes through `assertStreetCrime` so completeness covers 14
+instead of 3.
