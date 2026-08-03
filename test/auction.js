@@ -67,11 +67,15 @@ assert.equal(r.body.youLead, true, 'and leads');
 assert.equal(await omrOf(a.token), 5000 - lot.minBid, 'the bid is escrowed out of Al\'s $OMR');
 
 // ── the min-raise: a raise must clear +5% ──
-const tooLow = lot.minBid + 1;
+// One $OMR UNDER the computed +5% raise — always a refused bid, whatever the floor. `lot.minBid + 1`
+// was a latent date-flake: the week's lots[0] is drawn per-week (auctionLotsOf), and on a low-floor
+// archetype (e.g. the min-20 Vanity Plate) ceil(20×1.05)=21 == minBid+1, so minBid+1 is a VALID raise
+// and the assertion failed for no visible reason. Derive `too low` from the raise the server enforces.
+const raise = Math.ceil(lot.minBid * (1 + AUCTION.MIN_RAISE_BPS / 10000));
+const tooLow = raise - 1;
 assert.equal((await call('POST', `/v1/auction/${lot.id}/bid`, { token: b.token, body: { amount: tooLow } })).body.error, 'low', 'a raise under +5% is refused');
 
 // ── OUTBID: Bob takes the lead; Al is refunded his bid EXACTLY ──
-const raise = Math.ceil(lot.minBid * (1 + AUCTION.MIN_RAISE_BPS / 10000));
 r = await call('POST', `/v1/auction/${lot.id}/bid`, { token: b.token, body: { amount: raise } });
 assert.equal(r.code, 200, 'Bob outbids');
 assert.equal(await omrOf(a.token), 5000, 'Al got his whole bid back — outbid is refunded exactly');
