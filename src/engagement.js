@@ -42,7 +42,7 @@ export const SYSTEMS = {
   'the family': ['gang_foundation', 'gang_seal', 'gang_charter', 'family_dynasty_name'],
   'the commission': ['commission_vote', 'commission_veto', 'commission_proposal', 'commission_override'],
   'territory': ['territory_raid', 'territory_op', 'territory_specialist', 'sov_income'],
-  'the world': ['world_raid', 'world_raid_plan', 'world_raid_join'],
+  'the world': ['world_raid', 'world_raid_plan', 'world_raid_join', 'world_raid_hire'],
   'the blood war': ['family_raid'],
   'business empire': ['business_raid'],
   'convoys': ['convoy_depart', 'convoy_ambush'],
