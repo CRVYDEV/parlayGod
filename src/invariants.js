@@ -18,7 +18,7 @@ const KNOWN_REASONS = {
     // `window:` not `exchange:` — the M3 cb/ammo barter board already owns that prefix.
     'window:',
     'gang:contract', 'bodyguard:', 'territory:', 'business:', 'path:', 'casino:', 'convoy:', 'market:', 'underworld:',
-    'law:', 'world:', 'pen:', 'loan:', 'speakeasy:', 'boxing:', 'race:', 'port:', 'stable:',
+    'law:', 'world:', 'pen:', 'loan:', 'speakeasy:', 'boxing:', 'race:', 'port:', 'stable:', 'family:',
     // FIVE PILLARS: `sov:` — pure treasury sinks (build/upgrade/upkeep/siege, gang-level, no faucet);
     // `campaign:` — the authored-chain reward, a once-per-street-per-chain character_id'd faucet
     // (the missions precedent — check (a) reconciles it per character).
@@ -82,7 +82,7 @@ const KNOWN_REASONS = {
     // rarity is status, not currency.
     'window:', 'yield:', 'desk:', 'made:', 'rarity:'],
   cb: ['crime:', 'craft:', 'gun:buy:', 'jump:', 'death:', 'exchange:', 'onboard:', 'cook:'],
-  ammo: ['melt', 'melt:tithe', 'craft:ammo', 'ammo:buy', 'jump', 'fire', 'death:', 'exchange:', 'gang:dissolved', 'convoy:', 'world:', 'port:', 'contract:'],
+  ammo: ['melt', 'melt:tithe', 'craft:ammo', 'ammo:buy', 'jump', 'fire', 'death:', 'exchange:', 'gang:dissolved', 'convoy:', 'world:', 'port:', 'contract:', 'family:'],
 };
 
 // The $OMR burn/sink predicate, generated from the single source in rules.js (economy v3 step 2).

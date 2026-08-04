@@ -1927,6 +1927,10 @@
     if (body.principal !== undefined && body.owed !== undefined) bits.push(`took the loan — $${fmt(body.principal)} now, owe $${fmt(body.owed)}${body.collateral ? ' (car pledged)' : ''}`);
     if (body.guard !== undefined && body.price !== undefined) bits.push(`hired protection — $${fmt(body.price)} up front`);
     if (body.hired === true && body.fee !== undefined) bits.push(`hired a hand for the ${body.role} seat — $${fmt(body.fee)}. A body fills the crew, but takes a cut and earns you nothing extra.`);
+    if (body.family !== undefined && body.success !== undefined && body.loot !== undefined) {
+      if (body.success) bits.push(`hit ${body.family} — took $${fmt(body.loot)} off their war chest${body.countered ? '. Their guns caught you leaving — you\'re in the hospital.' : '.'}`);
+      else bits.push(`${body.family} repelled the raid — their guns put you in the hospital.`);
+    }
     if (body.bid !== undefined && body.id !== undefined && body.name === undefined && !body.youLead) bits.push(`bid $${fmt(body.bid)} placed${body.extended ? ' (clock reset)' : ''}`);
     // the repair is a GAMBLE (a botched roll charges you and doesn't fix it) — say so plainly so a
     // failed repair reads as "the shop botched it," never as a silent charge that looks like fraud
@@ -4263,6 +4267,7 @@
     const c = r.body;
     const w = (await api('GET', '/v1/world')).body || {};
     const rd = (await api('GET', '/v1/world/raids')).body || { raids: [] };
+    const bw = (await api('GET', '/v1/npcfamily')).body || { families: [] };
     const mega = (await api('GET', '/v1/megaproject')).body || {};
     // the trade-winds read: turn raw shock multipliers into the one actionable sentence
     const shocks = Object.entries(c.weather || {}).map(([d, x]) => [d, Number(x)]).sort((a, b) => a[1] - b[1]);
@@ -4345,6 +4350,12 @@
         <div class="card"><span class="t">${x.name}</span> <span class="chip">crew ${x.crew}/${x.crewMax}</span>
           <div class="d">led by ${x.leader} · lvl ${x.minLvl}+</div>
           <button class="act" data-joinraid="${x.id}">join the crew</button></div>`).join('') || (w.myRaid ? '' : '<span class="d" style="color:var(--dim)">no crew raids forming — plan one on an apex outfit above</span>')}</div>
+      <h2 style="margin-top:12px">The Blood War <span class="d" style="font-size:11px">(rival NPC families — raid them for a cut of their war chest; they hit back)</span></h2>
+      ${bw.you ? `<div class="card" style="border-color:var(--blood)"><span class="t">🩸 ${bw.you.rank}</span> <span class="d">$${fmt(bw.you.war)} lifetime taken off rival families — <a href="#" id="bw-lb">the blood-war board →</a>${bw.you.raidCdSeconds > 0 ? ` · next raid in ${mins(bw.you.raidCdSeconds)}` : ''}</span></div>` : ''}
+      <div class="grid">${(bw.families || []).map((f) => `
+        <div class="card"><span class="t">${esc(f.name)}</span> <span class="chip">[${esc(f.tag)}]</span>
+          <div class="d">strength ${f.strengthPct}% · ${f.members} made · a raid takes ~$${fmt(f.loot)} off their chest</div>
+          ${f.canRaid ? `<button class="act" data-familyraid="${f.id}" style="border-color:var(--blood)">raid them (energy + ammo — they hit back)</button>` : `<span class="chip">need lvl ${bw.you?.minLvl || 8}</span>`}</div>`).join('') || '<span class="d" style="color:var(--dim)">no rival families on the map yet</span>'}</div>
       <h2 style="margin-top:12px">Landmarks <span class="d" style="font-size:11px">(one dedicable plaque per district — the biggest $OMR flex holds it)</span></h2>
       <div id="landmark-slot"></div>`;
     { const gc = t.querySelector('#mg-give-cash');
@@ -4362,6 +4373,10 @@
         const r = (await api('GET', '/v1/leaderboard/family-build')).body?.families || [];
         t.querySelector('#builder-lb').innerHTML = `<div class="grid" style="margin-top:4px">${r.map((k) => `<div class="card"><span class="t">#${k.pos} [${esc(k.tag)}] ${esc(k.name)}</span><div class="d">$${fmt(k.built)} for the city</div></div>`).join('') || '<span class="d">no families ranked yet</span>'}</div>`; }; }
     t.querySelectorAll('[data-raid]').forEach((b) => b.onclick = () => act('POST', `/v1/world/${b.dataset.raid}/raid`, {}).then(() => renderCity()));
+    t.querySelectorAll('[data-familyraid]').forEach((b) => b.onclick = () => act('POST', `/v1/npcfamily/${b.dataset.familyraid}/raid`, {}).then(() => renderCity()));
+    const bwlb = $('#bw-lb'); if (bwlb) bwlb.onclick = async (e) => { e.preventDefault();
+      const d = (await api('GET', '/v1/leaderboard/blood-wars')).body?.warmakers || [];
+      alert('THE BLOOD WAR\n\n' + (d.map((k, i) => `${i + 1}. ${k.name} — ${k.rank} ($${fmt(k.war)})`).join('\n') || 'nobody has drawn blood yet')); };
     t.querySelectorAll('[data-plan]').forEach((b) => b.onclick = () => act('POST', `/v1/world/${b.dataset.plan}/plan`, {}).then(() => renderCity()));
     t.querySelectorAll('[data-joinraid]').forEach((b) => b.onclick = () => act('POST', `/v1/world/raids/${b.dataset.joinraid}/join`, {}).then(() => renderCity()));
     t.querySelectorAll('[data-leaveraid]').forEach((b) => b.onclick = () => act('POST', `/v1/world/raids/${b.dataset.leaveraid}/leave`, {}).then(() => renderCity()));

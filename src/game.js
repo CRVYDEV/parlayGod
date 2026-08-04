@@ -1021,7 +1021,7 @@ async function persistCharacter(client, ch) {
       crew_paid_at=$46, heat_exposure=$47, indicted_at=$48, retainer_until=$49, jury_bought=$50, witpro_until=$51,
       world_raid_at=$52, pen_safe_until=$53, hole_until=$54, welsher=$55, wanted_until=$56,
       rwa_used=$57, rwa_at=$58, envelope_until=$59, wire_until=$60, poker_limit=$61,
-      safehouse_used=$62, safehouse_at=$63, refill_used=$64, refill_at=$65 WHERE id=$1`,
+      safehouse_used=$62, safehouse_at=$63, refill_used=$64, refill_at=$65, family_raid_at=$66 WHERE id=$1`,
     [ch.id, ch.respect, ch.energy, ch.nerve, ch.health, ch.cash, ch.bank,
      ch.muscle, ch.cunning, ch.speed, ch.jail_until, ch.loc, ch.streak, ch.checkin_day,
      ch.lc_crime, ch.ammo, ch.cb, ch.heat, ch.trade_rep, ch.gta_at, ch.path,
@@ -1034,7 +1034,7 @@ async function persistCharacter(client, ch) {
      ch.world_raid_at ?? null, ch.pen_safe_until ?? null, ch.hole_until ?? null, ch.welsher ?? false, ch.wanted_until ?? null,
      ch.rwa_used ?? 0, ch.rwa_at ?? null, ch.envelope_until ?? null, ch.wire_until ?? null,
      ch.poker_limit ?? null, ch.safehouse_used ?? 0, ch.safehouse_at ?? null,
-     ch.refill_used ?? 0, ch.refill_at ?? null]);
+     ch.refill_used ?? 0, ch.refill_at ?? null, ch.family_raid_at ?? null]);
 }
 
 // THE COACH — the single highest-value next step for THIS player, server-authoritative so the client

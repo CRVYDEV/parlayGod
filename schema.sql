@@ -2184,6 +2184,13 @@ ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS duel_titles INT NOT NULL
 -- fire-kill). heists_pulled: lifetime successful heists (account-level → survives death, the crew legend).
 ALTER TABLE crew_heist_members ADD COLUMN IF NOT EXISTS cased BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE crew_heist_members ADD COLUMN IF NOT EXISTS hired BOOLEAN NOT NULL DEFAULT false; -- a hired NPC hand: pot share forfeited, no legend/xp/rwa (residents-in-crews)
+-- NPC FAMILIES step two — the DEFEND antagonist (omerta-npc-families-defend-design.md): an NPC family
+-- is an attackable outfit. war_pool is a strength/loot reservoir (NPC gangs only, regen-bounded — NOT a
+-- §10.4 bucket, the world strength precedent); family_war is the account-level blood-war status legend.
+ALTER TABLE gangs ADD COLUMN IF NOT EXISTS war_pool NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE gangs ADD COLUMN IF NOT EXISTS war_pool_at TIMESTAMPTZ;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS family_raid_at TIMESTAMPTZ; -- per-attacker blood-war raid cooldown
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS family_war NUMERIC NOT NULL DEFAULT 0; -- lifetime loot from NPC families (status, survives death)
 ALTER TABLE crew_heists ADD COLUMN IF NOT EXISTS fenced BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS heist_loot NUMERIC NOT NULL DEFAULT 0;
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS heists_pulled INT NOT NULL DEFAULT 0;

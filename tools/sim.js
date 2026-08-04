@@ -28,7 +28,7 @@ import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
          WORLD_NPCS, WORLD, BOXING, TERRITORY_RACKETS, TERRITORY_TYPES, territoryBuildCost,
          frontierTributePerHr, liberationCost, worldNpcOf, SPEAKEASY, PEN, RACES,
          PORT, boatOf, portRouteOf, interdictChance,
-         CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES, BUSINESSES, PACING, POPULATION, boatResale, CORNER, CONTACTS,
+         CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES, BUSINESSES, PACING, POPULATION, boatResale, CORNER, CONTACTS, FAMILY_WAR,
          EXCHANGE, ESTATE, WIRE, GANG_SEALS, FOUNDATION, RIVALS, RACKETS, ASSETS, M4, DRUGS,
          MADE, ACCESS_STAKE, OPERATIONS, opSlotsOf, SOV } from '../src/rules.js';
 
@@ -437,6 +437,18 @@ for (const f of WORLD_NPCS.filter((n) => n.coop)) {
 }
 note('world', 'co-op = ACCESS not ceiling', `crew splits ONE grab (leader ${WORLD.COOP_LEADER_WEIGHT}×)`,
   'total emission stays ≤ regen; co-op just makes a heavy apex def beatable — B1 solo-floor is the dial');
+
+// ════════ THE BLOOD WAR — NPC-family raid faucet ceiling (analytic, the world-raid twin) ════════
+// A family:raid loots a bounded slice of a regen-bounded war_pool, so base-wide emission ≤ regen per
+// family × the number of NPC families. Below the weakest World outfit by design (turnover-seeded).
+{
+  const regenDayFam = FAMILY_WAR.POOL_REGEN_HR * 24;            // steady-state emission ≤ regen, per family
+  const fams = POPULATION.FAMILIES.TARGET;
+  const raidsDay = 24 / (FAMILY_WAR.RAID_CD_MS / 3600000);       // one raider's cadence (4h cd → 6/day)
+  const perRaid = Math.min(Math.floor(FAMILY_WAR.POOL_MAX * FAMILY_WAR.RAID_BPS / 10000), FAMILY_WAR.RAID_MAX);
+  note('blood war', `per-family ceiling (${fams} NPC families)`, `≤ $${fmt(regenDayFam)}/day/family → ≤ $${fmt(regenDayFam * fams)}/day base-wide`,
+    `regen-bounded (POOL_MAX $${fmt(FAMILY_WAR.POOL_MAX)} < the weakest World outfit $150k); a raider caps at ${raidsDay}/day × $${fmt(perRaid)} = $${fmt(raidsDay * perRaid)}/day per family before regen bites; the DEFENCE (COUNTER_P ${FAMILY_WAR.COUNTER_P}) hospitalizes ~${Math.round(FAMILY_WAR.COUNTER_P * 100)}% of landed raids — a real risk, not a fixed-price standing buy. §10.4: a bounded family:raid faucet, NO season_wars (the severance)`);
+}
 
 // ════════════════ P9.9 boxing — exhibition purse EV (the new PvE faucet) ════════════════
 // EV = −fee + P(win)×purse, per the exact form model (form=Σstats, +rand(0,VARIANCE) each, ties reroll).

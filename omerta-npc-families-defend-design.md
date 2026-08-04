@@ -1,6 +1,8 @@
 # NPC families that DEFEND (NPC families step two, the antagonist leg)
 
-**Status:** SCOPED, not built (2026-08-03). The founder's step-two candidate list
+**Status:** BUILT (2026-08-04) — the offensive loop + inline retaliation + the severed legend.
+`src/npcwar.js`, `test/npcwar.js`, `sim.js` P-probe. The scheduled/deferred retaliation and NPC-family
+turf remain step-three candidates (see the end). The founder's step-two candidate list
 (`omerta-npc-families-design.md`, BALANCE.md § NPC FAMILIES) names *"NPC families that DEFEND (a war
 score, a garrison, spoils worth taking — the cartel-outfit shape, which re-opens the standing faucet)."*
 Step one made NPC families joinable shells (real `gangs` rows, deliberately inert: no Commission seat,

@@ -982,6 +982,18 @@ async function seedLists() {
   const acct2 = (await q('SELECT account_id FROM characters WHERE id=$1', [two])).rows[0].account_id;
   await q('UPDATE characters SET cash=50000000, respect=500000, loc=$2 WHERE id=$1', [two, 'neon']);
 
+  // an NPC family for THE BLOOD WAR board (npc_flag + a war_pool to raid) — a third street founds it so
+  // `two` stays gangless for the two-party board seeds below
+  const t3 = (await si('POST', '/v1/auth/guest')).body.token;
+  await si('POST', '/v1/character', t3, { name: 'Mirror Mob ' + Math.random().toString(36).slice(2, 6) });
+  const three = (await si('GET', '/v1/me', t3)).body.character.id;
+  await q('UPDATE characters SET cash=100000, respect=500000 WHERE id=$1', [three]);
+  const fg = await si('POST', '/v1/gangs', t3, { name: 'The Mirror Mob ' + Math.random().toString(36).slice(2, 5), tag: 'MOB' });
+  if (fg.body?.ok !== false) {
+    const mgid = (await q('SELECT gang_id FROM gang_members WHERE character_id=$1', [three])).rows[0]?.gang_id;
+    if (mgid) await q('UPDATE gangs SET npc_flag=true, war_pool=120000, war_pool_at=now() WHERE id=$1', [mgid]);
+  }
+
   // the LEGEND columns every "biggest ever" board ranks by — status counters, never currency
   await q(`UPDATE account_persistent SET product_moved=5000000, tycoon_earned=4000000, monument_built=900000,
              freight_delivered=800000, freight_hijacked=700000, prestige_sunk=600, season_sunk=300,
