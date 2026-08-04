@@ -2117,6 +2117,8 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => World.planRaid(ch, req.params.npcId, client, h)));
   app.post('/v1/world/raids/:id/join', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => World.joinRaid(ch, req.params.id, client, h)));
+  app.post('/v1/world/raids/:id/hire', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => World.hireRaid(ch, req.params.id, client, h)));
   app.post('/v1/world/raids/:id/leave', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => World.leaveRaid(ch, req.params.id, client, h)));
   app.post('/v1/world/raids/:id/go', { preHandler: auth }, async (req) =>

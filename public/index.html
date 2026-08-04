@@ -1695,6 +1695,8 @@
     if (body && body.tokenId && body.nonce != null)
       return `\u26D3 ${body.name || 'it'} is on-chain — token #${body.tokenId}. Safe forever, and out of the game.`;
     if (body && body.referrer && body.ok) return `on the record — ${body.referrer} gets credit as you come up`;
+    // THE HIRED GUNS — a merc's firepower counts, but takes no cut. The toast says the crew grew.
+    if (body && body.hired && body.fee != null) return `\u{1F52B} a gun's on the crew — $${fmt(body.fee)} up front, no cut of the score. crew ${body.crew}/${body.crewMax}`;
     // THE ROSTER — a post is only worth something while the man is on his feet, so the toast leads
     // with what the chair is worth rather than the fact that somebody sat down in it.
     if (body && body.postName && body.who) return `\u{1F3AF} ${body.who} takes ${body.postName} — worth +${body.power}`;
@@ -4346,8 +4348,8 @@
           ${n.heldBy?.mine && w.frontier?.canCommand ? `<button class="act" data-reinforce="${n.id}" style="border-color:var(--gold)">reinforce garrison (min $${fmt(n.reinforceMin)})</button>` : ''}
           ${n.invadeCost != null && w.frontier?.canCommand ? `<button class="act" data-invade="${n.id}" style="border-color:var(--blood)">invade ($${fmt(n.invadeCost)} from treasury)</button>` : ''}</div>`).join('') || '<span class="d" style="color:var(--dim)">the streets are quiet</span>'}</div>
       <h2 style="margin-top:12px">Crew Raids <span class="d" style="font-size:11px">(the apex outfits take a crew of ${w.coop?.min || 2}–${w.coop?.max || 4} — combined firepower cracks their defense; rout one to seize its frontier)</span></h2>
-      ${w.myRaid ? `<div class="card" style="border-color:var(--neon)"><span class="t">your raid on ${w.myRaid.npc}</span> <span class="chip">crew ${w.myRaid.crew}</span>${w.myRaid.leader ? ' <span class="chip good">you lead</span>' : ''}
-        <div style="margin-top:4px">${w.myRaid.leader ? `<button class="act" data-go="${w.myRaid.id}">call the go</button>` : ''}<button class="act" data-leaveraid="${w.myRaid.id}">${w.myRaid.leader ? 'disband' : 'walk away'}</button></div></div>` : ''}
+      ${w.myRaid ? `<div class="card" style="border-color:var(--neon)"><span class="t">your raid on ${w.myRaid.npc}</span> <span class="chip">crew ${w.myRaid.crew}</span>${w.myRaid.hired ? ` <span class="chip">${w.myRaid.hired} hired</span>` : ''}${w.myRaid.leader ? ' <span class="chip good">you lead</span>' : ''}
+        <div style="margin-top:4px">${w.myRaid.leader ? `<button class="act" data-go="${w.myRaid.id}">call the go</button>` : ''}${w.myRaid.canHire ? `<button class="act" data-hireraid="${w.myRaid.id}" title="a merc's firepower helps crack the outfit, but takes no cut of the pot">hire a gun ($${fmt(w.myRaid.hireFee)})</button>` : ''}<button class="act" data-leaveraid="${w.myRaid.id}">${w.myRaid.leader ? 'disband' : 'walk away'}</button></div></div>` : ''}
       <div class="grid">${(rd.raids || []).filter((x) => !w.myRaid).map((x) => `
         <div class="card"><span class="t">${x.name}</span> <span class="chip">crew ${x.crew}/${x.crewMax}</span>
           <div class="d">led by ${x.leader} · lvl ${x.minLvl}+</div>
@@ -4388,6 +4390,7 @@
     t.querySelectorAll('[data-plan]').forEach((b) => b.onclick = () => act('POST', `/v1/world/${b.dataset.plan}/plan`, {}).then(() => renderCity()));
     t.querySelectorAll('[data-joinraid]').forEach((b) => b.onclick = () => act('POST', `/v1/world/raids/${b.dataset.joinraid}/join`, {}).then(() => renderCity()));
     t.querySelectorAll('[data-leaveraid]').forEach((b) => b.onclick = () => act('POST', `/v1/world/raids/${b.dataset.leaveraid}/leave`, {}).then(() => renderCity()));
+    t.querySelectorAll('[data-hireraid]').forEach((b) => b.onclick = () => act('POST', `/v1/world/raids/${b.dataset.hireraid}/hire`, {}).then(() => renderCity()));
     t.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => act('POST', `/v1/world/raids/${b.dataset.go}/go`, {}).then(() => renderCity()));
     const wcol = $('#w-collect'); if (wcol) wcol.onclick = () => act('POST', '/v1/world/collect', {}).then(() => renderCity());
     t.querySelectorAll('[data-invade]').forEach((b) => b.onclick = () => act('POST', `/v1/world/${b.dataset.invade}/invade`, {}).then(() => renderCity()));

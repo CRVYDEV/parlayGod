@@ -1213,6 +1213,7 @@ CREATE TABLE IF NOT EXISTS world_raids (
 CREATE TABLE IF NOT EXISTS world_raid_members (
   raid_id TEXT NOT NULL,
   character_id TEXT NOT NULL,
+  hired BOOLEAN NOT NULL DEFAULT false,   -- THE HIRED GUNS: an NPC resident merc — firepower counts, cut forfeited
   PRIMARY KEY (raid_id, character_id)
 );
 CREATE INDEX IF NOT EXISTS ix_world_raid_members_char ON world_raid_members (character_id);

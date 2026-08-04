@@ -249,6 +249,63 @@ const flb = (await call('GET', '/v1/leaderboard/frontier', { token: boss.token }
 assert(flb.families.find((f) => f.tag === 'FRM' && f.held === 1 && f.outfits.includes('The Kryl Syndicate')), 'the family tops the Frontier leaderboard holding Kryl');
 delete process.env.WORLD_RAID_P;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// THE HIRED GUNS — a soloist hires an NPC merc to crack an apex outfit (the fillHeist twin).
+// The gun's firepower COUNTS in the roll (the production unblock), but it forfeits its cut and pays no
+// energy/ammo — so a solo takes the whole pot. Here WORLD_RAID_P pins the roll, so this tests the crew
+// COMPOSITION unblock (solo+hired reaches COOP_MIN) + the forfeit + the world:hire cash sink.
+// ─────────────────────────────────────────────────────────────────────────────
+const merc = await mk('Merc Boss');
+await seedCh(merc.id, 'respect=5000, muscle=200, speed=100, energy=200, ammo=100, cash=1000000');
+// two free NPC residents above the outfit's level floor — the hirable guns (HIRE_MAX=2)
+const gun = await mk('Hired Gun');
+await seedCh(gun.id, "is_npc=true, respect=5000, muscle=60, speed=40, energy=0, ammo=0, cash=0, loc='cathedral'");
+const gun2 = await mk('Second Gun');
+await seedCh(gun2.id, "is_npc=true, respect=5000, muscle=55, speed=35, energy=0, ammo=0, cash=0, loc='cathedral'");
+// the merc opens a co-op raid on the Kryl Syndicate but has no crew
+const mplan = await call('POST', '/v1/world/kryl/plan', { token: merc.token });
+assert.equal(mplan.code, 200, 'the merc plans a co-op raid');
+const mRaid = mplan.body.id;
+assert.equal((await call('POST', `/v1/world/raids/${mRaid}/go`, { token: merc.token })).body.error, 'crew_short', 'a soloist alone is short of an apex crew');
+// hire a gun off the street — a world:hire cash sink, capped at HIRE_MAX
+const mcashBefore = Number((await rawCh(merc.id)).cash);
+const hire = await call('POST', `/v1/world/raids/${mRaid}/hire`, { token: merc.token });
+assert.equal(hire.code, 200, 'the merc hires a gun');
+assert.equal(hire.body.hired, true, 'the response says a gun was hired');
+assert.equal(hire.body.crew, 2, 'the crew is now the merc + the gun');
+assert.equal(await ledgerOf(merc.id, 'cash', 'world:hire'), -WORLD.HIRE_FEE, 'the hire fee is a ledgered world:hire cash sink');
+assert.equal(Number((await rawCh(merc.id)).cash), mcashBefore - WORLD.HIRE_FEE, 'the merc paid exactly the hire fee');
+// the raid board shows the hired-gun count + the cap
+const mboard = (await call('GET', '/v1/world/raids', { token: merc.token })).body;
+const mine = mboard.raids.find((x) => x.id === mRaid);
+assert(mine && mine.hired === 1 && mine.crew === 2, 'the board shows one hired gun on a crew of two');
+// non-leader can't hire
+assert.equal((await call('POST', `/v1/world/raids/${mRaid}/hire`, { token: soldier.token })).body.error, 'not_leader', 'only the leader hires the guns');
+// HIRE_MAX cap: a second hire is allowed (HIRE_MAX=2), a third is not
+assert.equal((await call('POST', `/v1/world/raids/${mRaid}/hire`, { token: merc.token })).code, 200, 'a second gun fills the crew to three');
+assert.equal((await call('POST', `/v1/world/raids/${mRaid}/hire`, { token: merc.token })).body.error, 'hire_capped', 'no more than HIRE_MAX hired guns');
+// now the go runs — the hired guns count toward the crew, so the solo leader can crack the apex
+process.env.WORLD_RAID_P = '1';
+const gunIds = (await pool.query(`SELECT character_id FROM world_raid_members WHERE raid_id='${mRaid}' AND hired`)).rows.map((r) => r.character_id);
+const mBefore = Number((await rawCh(merc.id)).cash);
+const mgo = await call('POST', `/v1/world/raids/${mRaid}/go`, { token: merc.token });
+assert.equal(mgo.code, 200, 'the go runs with a bought crew');
+assert.equal(mgo.body.success, true, 'the solo-with-guns lands the hit');
+// the merc takes the WHOLE pot — the hired guns forfeit their cut
+const mShare = await ledgerOf(merc.id, 'cash', 'world:raid');
+assert(mShare > 0 && Number((await rawCh(merc.id)).cash) - mBefore === mShare, 'the leader banks the whole pot');
+for (const gid of gunIds) {
+  assert.equal(await ledgerOf(gid, 'cash', 'world:raid'), 0, 'a hired gun forfeits its cut — no world:raid faucet row');
+  assert.equal(await ledgerOf(gid, 'ammo', 'world:raid'), 0, 'a hired gun brought its own tools — no ammo sink');
+}
+// the leader still paid his own ammo (a real raider's §10.4 sink)
+assert.equal(await ledgerOf(merc.id, 'ammo', 'world:raid'), -WORLD.RAID_AMMO, 'the leader paid his own rounds');
+delete process.env.WORLD_RAID_P;
+// §10.4 — world:hire rides the known cash vocabulary (an unknown reason is itself an alert); the per-reason
+// ledger sums above ARE the reconciliation (cash moved by exactly the sink + the pot faucet, both character_id'd)
+const hgVocab = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'reason vocabulary');
+assert(hgVocab.ok, `world:hire rides the §10.4 cash vocabulary (${JSON.stringify(hgVocab.unknown || [])})`);
+
 // AUDIT LOW-1 regression — a dead co-op raid LEADER's plan is abandoned AND the stranded crew's member
 // rows are cleared (no orphan bloat the sweep never reaps; the pen-break death precedent)
 const doomed = await mk('Doomed Leader');

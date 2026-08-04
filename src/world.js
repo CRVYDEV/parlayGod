@@ -8,7 +8,8 @@
 // in this pillar — numbers are founder SIM sign-off levers (ground rule #1).
 import crypto from 'node:crypto';
 import { GameError, bus, assignedSoldier, soldierResult } from './game.js';
-import { WORLD_NPCS, worldNpcOf, worldRankOf, WORLD, LIVING, levelOf, effStat, cityHourOf, frontierTributePerHr, cartelUprisingOf, dayOf, soldierFxOf , jailed, hospitalized, safeHoused } from './rules.js';
+import { WORLD_NPCS, worldNpcOf, worldRankOf, WORLD, LIVING, PACING, levelOf, effStat, cityHourOf, frontierTributePerHr, cartelUprisingOf, dayOf, soldierFxOf , jailed, hospitalized, safeHoused } from './rules.js';
+import { dbCaps } from './db.js';
 
 const uid = () => crypto.randomUUID();
 // `!!` matters: without it an outfit that has never been enraged yields `undefined`, JSON.stringify
@@ -92,7 +93,10 @@ export async function worldBoard(pool, ch = null, h = null) {
         WHERE m.character_id=$1 AND r.status='planning'`, [ch.id])).rows[0];
     if (r) {
       const crew = Number((await pool.query('SELECT COUNT(*) n FROM world_raid_members WHERE raid_id=$1', [r.id])).rows[0].n);
-      myRaid = { id: r.id, npc: r.npc_id, leader: r.leader_character === ch.id, crew };
+      const hired = Number((await pool.query('SELECT COUNT(*) n FROM world_raid_members WHERE raid_id=$1 AND hired', [r.id])).rows[0].n);
+      const leader = r.leader_character === ch.id;
+      myRaid = { id: r.id, npc: r.npc_id, leader, crew, hired,
+        canHire: leader && crew < WORLD.COOP_MAX_CREW && hired < WORLD.HIRE_MAX, hireFee: WORLD.HIRE_FEE };
     }
   }
   return {
@@ -155,14 +159,19 @@ export async function raidBoard(pool, characterId = null) {
     [new Date(Date.now() - WORLD.COOP_TTL_MS)])).rows;
   if (!raids.length) return { raids: [] };
   const ph = raids.map((_, i) => `$${i + 1}`).join(',');
-  const counts = {};
+  const counts = {}, hiredCounts = {};
   for (const m of (await pool.query(`SELECT raid_id, COUNT(*) n FROM world_raid_members WHERE raid_id IN (${ph}) GROUP BY raid_id`,
     raids.map((r) => r.id))).rows) counts[m.raid_id] = Number(m.n);
+  for (const m of (await pool.query(`SELECT raid_id, COUNT(*) n FROM world_raid_members WHERE hired AND raid_id IN (${ph}) GROUP BY raid_id`,
+    raids.map((r) => r.id))).rows) hiredCounts[m.raid_id] = Number(m.n);
   return {
     raids: raids.map((r) => {
       const f = worldNpcOf(r.npc_id);
+      const crew = counts[r.id] || 0, hired = hiredCounts[r.id] || 0;
+      const mine = characterId === r.leader_character;
       return { id: r.id, npc: r.npc_id, name: f?.name, minLvl: f?.minLvl, leader: r.leader_name,
-        mine: characterId === r.leader_character, crew: counts[r.id] || 0, crewMax: WORLD.COOP_MAX_CREW };
+        mine, crew, hired, crewMax: WORLD.COOP_MAX_CREW,
+        canHire: mine && crew < WORLD.COOP_MAX_CREW && hired < WORLD.HIRE_MAX, hireFee: WORLD.HIRE_FEE, hireMax: WORLD.HIRE_MAX };
     }),
   };
 }
@@ -353,6 +362,51 @@ export async function joinRaid(ch, raidId, client, h) {
   return { ok: true, id: raidId, npc: fixture.id, crew: crew + 1, crewMax: WORLD.COOP_MAX_CREW };
 }
 
+// POST /v1/world/raids/:id/hire — THE HIRED GUNS (the fillHeist twin). The leader hires an NPC resident
+// merc into an open seat: its firepower COUNTS in the combined roll (the unblock — a soloist cracks an
+// apex outfit), but its pot share is FORFEITED at execute and it pays no energy/ammo. HIRE_FEE is a
+// `world:hire` cash SINK (rides the existing `world:` prefix — zero invariants change); HIRE_MAX caps
+// fillers so a real crew still beats a bought one. FOUNDER SIGN-OFF: makes apex reservoirs solo-realizable.
+export async function hireRaid(ch, raidId, client, h) {
+  if (WORLD.HIRE_MAX <= 0) throw new GameError('no_hire', 'The outfits want real crews.');
+  const row = (await client.query("SELECT * FROM world_raids WHERE id=$1 AND status='planning' FOR UPDATE", [raidId])).rows[0];
+  if (!row) throw new GameError('no_raid', 'That raid is gone.');
+  if (row.leader_character !== ch.id) throw new GameError('not_leader', 'Only the leader hires the guns.');
+  if (staleRaid(row)) throw new GameError('stale', 'That plan went cold.');
+  const fixture = worldNpcOf(row.npc_id);
+  const members = (await client.query('SELECT hired FROM world_raid_members WHERE raid_id=$1', [raidId])).rows;
+  if (members.length >= WORLD.COOP_MAX_CREW) throw new GameError('full', 'The crew is set.');
+  const hiredCount = members.filter((m) => m.hired).length;
+  if (hiredCount >= WORLD.HIRE_MAX)
+    throw new GameError('hire_capped', `${fixture.name} takes at most ${WORLD.HIRE_MAX} hired gun${WORLD.HIRE_MAX === 1 ? '' : 's'} — the rest are real bodies.`);
+  if (Number(ch.cash) < WORLD.HIRE_FEE) throw new GameError('cash', `A gun wants $${WORLD.HIRE_FEE} up front — tools and their silence.`);
+  // pick a FREE resident meeting the outfit's LEVEL floor (a hired gun really is one of the crew for the
+  // roll, so it can't be a rookie), NOT already on a live raid. Prefer the leader's district, else any.
+  // Two flat queries (pg-mem can't parse a CASE-in-ORDER-BY). FOR UPDATE SKIP LOCKED so two concurrent
+  // hires take different bodies; the chosen resident is locked LAST (leader + raid row already held) and
+  // is by definition NOT in any planning raid, so executeRaid never holds it — acyclic (the fillHeist note).
+  const lock = dbCaps.skipLocked ? 'FOR UPDATE SKIP LOCKED' : '';
+  // level floor as a respect threshold (levelOf(r) >= L ⟺ r >= LEVEL_DIVISOR×(L−1)²) — no sqrt in SQL,
+  // and it mirrors executeRaid's own readiness gate so a hired gun is never the reason a go fails.
+  const minRespect = PACING.LEVEL_DIVISOR * (fixture.minLvl - 1) ** 2;
+  const freeQ = (extra, params) => client.query(
+    `SELECT id FROM characters WHERE is_npc AND alive
+       AND (jail_until IS NULL OR jail_until < now())
+       AND (hosp_until IS NULL OR hosp_until < now())
+       AND (safe_until IS NULL OR safe_until < now())
+       AND respect >= $${params.length + 1}
+       AND id NOT IN (SELECT m.character_id FROM world_raid_members m
+                        JOIN world_raids r2 ON r2.id = m.raid_id WHERE r2.status='planning')
+       ${extra} ORDER BY id LIMIT 1 ${lock}`, [...params, minRespect]);
+  const free = (await freeQ('AND loc = $1', [ch.loc])).rows[0] || (await freeQ('', [])).rows[0];
+  if (!free) throw new GameError('no_gun', 'Nobody on the street will take a run at that outfit right now.');
+  ch.cash = Number(ch.cash) - WORLD.HIRE_FEE;
+  await client.query('INSERT INTO world_raid_members (raid_id, character_id, hired) VALUES ($1,$2,true)', [raidId, free.id]);
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -WORLD.HIRE_FEE, reason: 'world:hire' });
+  await h.track(client, ch.account_id, 'world_raid_hire', { npc: fixture.id });
+  return { ok: true, id: raidId, npc: fixture.id, hired: true, fee: WORLD.HIRE_FEE, crew: members.length + 1, crewMax: WORLD.COOP_MAX_CREW };
+}
+
 // POST /v1/world/raids/:id/leave — a raider walks; the LEADER walking disbands the op (no stake to refund).
 export async function leaveRaid(ch, raidId, client, h) {
   const row = (await client.query("SELECT * FROM world_raids WHERE id=$1 AND status='planning' FOR UPDATE", [raidId])).rows[0];
@@ -389,7 +443,11 @@ export async function executeRaid(ch, raidId, client, h) {
   // NOW the raid row — verify the crew we locked is still the crew
   const row = (await client.query("SELECT * FROM world_raids WHERE id=$1 AND status='planning' FOR UPDATE", [raidId])).rows[0];
   if (!row) throw new GameError('no_raid', 'That raid is gone.');
-  const members = (await client.query('SELECT character_id FROM world_raid_members WHERE raid_id=$1', [raidId])).rows.map((r) => r.character_id);
+  const memberRows = (await client.query('SELECT character_id, hired FROM world_raid_members WHERE raid_id=$1', [raidId])).rows;
+  const members = memberRows.map((r) => r.character_id);
+  // THE HIRED GUNS: a hired merc's firepower COUNTS in the roll but it forfeits its cut, pays no
+  // energy/ammo, and isn't hospitalized on a repel — so the co-op faucet only shrinks per real head.
+  const hiredIds = new Set(memberRows.filter((r) => r.hired).map((r) => r.character_id));
   if (members.slice().sort().join() !== [...preIds].sort().join()) throw new GameError('crew_changed', 'The crew shifted under you — call the go again.');
   if (members.length < WORLD.COOP_MIN) throw new GameError('crew_short', `A raid on ${fixture.name} needs at least ${WORLD.COOP_MIN} — you have ${members.length}.`);
   const crewRows = [ch, ...Object.values(others)];
@@ -397,7 +455,8 @@ export async function executeRaid(ch, raidId, client, h) {
     if (jailed(m) || hospitalized(m) || safeHoused(m) || (m.id !== ch.id && cooling(m)))
       throw new GameError('crew_not_ready', 'The whole crew shows up clean, healthy, rested, and OUT of hiding — or nobody goes.');
     if (levelOf(Number(m.respect)) < fixture.minLvl) throw new GameError('crew_not_ready', `Every raider needs level ${fixture.minLvl} for ${fixture.name}.`);
-    if (Number(m.energy) < WORLD.RAID_ENERGY || Number(m.ammo) < WORLD.RAID_AMMO)
+    // a hired gun brought its own tools — only REAL raiders must carry the energy and the rounds
+    if (!hiredIds.has(m.id) && (Number(m.energy) < WORLD.RAID_ENERGY || Number(m.ammo) < WORLD.RAID_AMMO))
       throw new GameError('crew_not_ready', 'Every raider brings the energy and the rounds.');
   }
   if (cooling(ch)) throw new GameError('cooldown', 'Your next raid lines up later.');
@@ -412,6 +471,7 @@ export async function executeRaid(ch, raidId, client, h) {
   const cd = new Date(now.getTime() + WORLD.RAID_CD_MS);
   const setMember = async (id, cols, params) => client.query(`UPDATE characters SET ${cols} WHERE id=$1`, [id, ...params]);
   for (const m of crewRows) {
+    if (hiredIds.has(m.id)) continue; // a hired gun paid up front (the HIRE_FEE) — no energy/ammo/heat/cooldown
     if (m.id === ch.id) { ch.energy = Number(ch.energy) - WORLD.RAID_ENERGY; ch.ammo = Number(ch.ammo) - WORLD.RAID_AMMO; ch.heat = Math.min(100, Number(ch.heat || 0) + WORLD.RAID_HEAT); ch.world_raid_at = cd; }
     else await setMember(m.id, 'energy=$2, ammo=$3, heat=$4, world_raid_at=$5',
       [Number(m.energy) - WORLD.RAID_ENERGY, Number(m.ammo) - WORLD.RAID_AMMO, Math.min(100, Number(m.heat || 0) + WORLD.RAID_HEAT), cd]);
@@ -430,9 +490,11 @@ export async function executeRaid(ch, raidId, client, h) {
   await h.rngLog(client, ch.id, `world:coop:${fixture.id}`, roll, `${roll < p ? 'raid' : 'repelled'} (crew ${crewRows.length})`);
 
   if (roll >= p) {
-    // repelled — the WHOLE crew is hospitalized together; the reservoir is untouched (regen stamped)
+    // repelled — the REAL crew is hospitalized together (a hired gun is a merc, not your crew to punish);
+    // the reservoir is untouched (regen stamped)
     const hospTo = new Date(now.getTime() + WORLD.FAIL_HOSP_MS);
     for (const m of crewRows) {
+      if (hiredIds.has(m.id)) continue;
       if (m.id === ch.id) ch.hosp_until = hospTo;
       else { await setMember(m.id, 'hosp_until=$2', [hospTo]); await h.notify(client, m.id, 'world_raid_fail', { npc: fixture.id }); }
     }
@@ -448,11 +510,14 @@ export async function executeRaid(ch, raidId, client, h) {
   let routed = false, newEnraged = enragedUntil;
   if (strength > floorVal && after <= floorVal) { routed = true; pot += fixture.routBonus; newEnraged = new Date(now.getTime() + WORLD.ENRAGE_MS); }
 
-  // split like a heist pot (leader weight); each share a world:raid faucet + a cartel_damage bump (war effort)
-  const unit = pot / (WORLD.COOP_LEADER_WEIGHT + (crewRows.length - 1));
+  // split like a heist pot (leader weight) among the REAL crew ONLY — a hired gun forfeits its cut, so
+  // a soloist with hired guns takes the whole pot (the emission the fee prices). Leader is never hired,
+  // so realCrew is non-empty. Each share a world:raid faucet + a cartel_damage bump (war effort).
+  const realCrew = crewRows.filter((m) => !hiredIds.has(m.id));
+  const unit = pot / (WORLD.COOP_LEADER_WEIGHT + (realCrew.length - 1));
   const shares = {};
-  for (const m of crewRows) shares[m.id] = Math.floor(unit * (m.id === ch.id ? WORLD.COOP_LEADER_WEIGHT : 1));
-  for (const m of crewRows) {
+  for (const m of realCrew) shares[m.id] = Math.floor(unit * (m.id === ch.id ? WORLD.COOP_LEADER_WEIGHT : 1));
+  for (const m of realCrew) {
     const share = shares[m.id];
     if (m.id === ch.id) ch.cash = Number(ch.cash) + share;
     else { await setMember(m.id, 'cash=$2', [Number(m.cash) + share]); await h.notify(client, m.id, 'world_raid_score', { npc: fixture.id, share, routed }); }

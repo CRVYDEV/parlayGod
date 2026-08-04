@@ -1231,6 +1231,15 @@ export const WORLD = {
   COOP_MAX_P: 0.85,                       // even a full crew is never certain
   COOP_LEADER_WEIGHT: 1.2,                // the leader who fronts the op takes a bigger cut (the heist precedent)
   COOP_TTL_MS: 60 * 60 * 1000,            // a stale plan is swept (nothing staked → nothing to refund)
+  // THE HIRED GUNS (residents-in-crews, the fillHeist twin): a leader hires an NPC resident merc into an
+  // open raid seat. A hired gun's FIREPOWER COUNTS in the combined roll (this is the unblock — a soloist in
+  // a thin alpha can crack an apex outfit), but its pot share is FORFEITED and it pays no energy/ammo — so
+  // the co-op faucet only SHRINKS per real head and §10.4 is untouched (`world:hire` is a cash SINK riding
+  // the existing `world:` prefix). HIRE_MAX bounds it so a real crew still beats a bought one; HIRE_FEE
+  // makes hiring a real decision against the apex pot it unlocks. FOUNDER SIGN-OFF: this makes the apex
+  // reservoirs SOLO-realizable (previously coop-only → untappable in a thin alpha) — a new emission surface,
+  // measured in sim P9.31 and bounded by REGEN (the base-wide ceiling is unchanged; only WHO can tap it).
+  HIRE_MAX: 2, HIRE_FEE: 75000,
   // THE FRONTIER (family conquest): whoever lands the ROUT (solo or co-op) plants their FAMILY'S flag on
   // the outfit's turf; the next rout topples it. A dominance leaderboard (families ranked by outfits held,
   // weighted by the outfit's scale). Dies with the family.
