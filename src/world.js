@@ -407,6 +407,23 @@ export async function hireRaid(ch, raidId, client, h) {
   return { ok: true, id: raidId, npc: fixture.id, hired: true, fee: WORLD.HIRE_FEE, crew: members.length + 1, crewMax: WORLD.COOP_MAX_CREW };
 }
 
+// POST /v1/world/raids/:id/dismiss — the leader sends a hired gun home (real crew is preferred over paid
+// mercs): a leader who hired guns as a fallback, then finds real friends to bring, can free a merc's slot.
+// leaveRaid is self-only, so without this a leader is stuck with the mercs or must disband. NO refund —
+// the merc was paid up front and showed up, so the HIRE_FEE stays a committed §10.4 sink (a refund would
+// make the fee free-until-execute, defeating it). Only a HIRED member can be sent home (a real crewman
+// walks on their own — no kicking). §10.4-neutral (an ownership DELETE, no currency moves).
+export async function dismissGun(ch, raidId, client, h) {
+  const row = (await client.query("SELECT * FROM world_raids WHERE id=$1 AND status='planning' FOR UPDATE", [raidId])).rows[0];
+  if (!row) throw new GameError('no_raid', 'That raid is gone.');
+  if (row.leader_character !== ch.id) throw new GameError('not_leader', 'Only the leader sends the crew home.');
+  const gun = (await client.query('SELECT character_id FROM world_raid_members WHERE raid_id=$1 AND hired LIMIT 1', [raidId])).rows[0];
+  if (!gun) throw new GameError('no_gun', 'No hired guns on this crew to send home.');
+  await client.query('DELETE FROM world_raid_members WHERE raid_id=$1 AND character_id=$2', [raidId, gun.character_id]);
+  const crew = Number((await client.query('SELECT COUNT(*) n FROM world_raid_members WHERE raid_id=$1', [raidId])).rows[0].n);
+  return { ok: true, id: raidId, dismissed: true, crew, crewMax: WORLD.COOP_MAX_CREW };
+}
+
 // POST /v1/world/raids/:id/leave — a raider walks; the LEADER walking disbands the op (no stake to refund).
 export async function leaveRaid(ch, raidId, client, h) {
   const row = (await client.query("SELECT * FROM world_raids WHERE id=$1 AND status='planning' FOR UPDATE", [raidId])).rows[0];

@@ -306,6 +306,25 @@ delete process.env.WORLD_RAID_P;
 const hgVocab = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'reason vocabulary');
 assert(hgVocab.ok, `world:hire rides the §10.4 cash vocabulary (${JSON.stringify(hgVocab.unknown || [])})`);
 
+// SEND A GUN HOME — the leader dismisses a hired gun to free a slot for a real crewman (leaveRaid is
+// self-only; without this a leader is stuck with mercs or must disband). No refund — the fee stays a sink.
+const merc2 = await mk('Merc Two');
+await seedCh(merc2.id, 'respect=5000, muscle=200, speed=100, energy=200, ammo=100, cash=1000000');
+const gun3 = await mk('Third Gun');
+await seedCh(gun3.id, "is_npc=true, respect=5000, muscle=60, speed=40, energy=0, ammo=0, cash=0, loc='cathedral'");
+const dPlan = await call('POST', '/v1/world/kryl/plan', { token: merc2.token });
+const dRaid = dPlan.body.id;
+assert.equal((await call('POST', `/v1/world/raids/${dRaid}/dismiss`, { token: merc2.token })).body.error, 'no_gun', 'nothing to send home before you hire');
+await call('POST', `/v1/world/raids/${dRaid}/hire`, { token: merc2.token });
+const cashAfterHire = Number((await rawCh(merc2.id)).cash);
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM world_raid_members WHERE raid_id='${dRaid}'`)).rows[0].n), 2, 'crew is leader + the gun');
+assert.equal((await call('POST', `/v1/world/raids/${dRaid}/dismiss`, { token: gun3.token })).body.error, 'not_leader', 'only the leader sends a gun home');
+const dis = await call('POST', `/v1/world/raids/${dRaid}/dismiss`, { token: merc2.token });
+assert.equal(dis.code, 200, 'the leader sends the gun home');
+assert.equal(dis.body.crew, 1, 'the slot is freed — crew back to just the leader');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM world_raid_members WHERE raid_id='${dRaid}' AND hired`)).rows[0].n), 0, 'the hired gun is gone');
+assert.equal(Number((await rawCh(merc2.id)).cash), cashAfterHire, 'NO refund — the fee stays a committed sink');
+
 // AUDIT LOW-1 regression — a dead co-op raid LEADER's plan is abandoned AND the stranded crew's member
 // rows are cleared (no orphan bloat the sweep never reaps; the pen-break death precedent)
 const doomed = await mk('Doomed Leader');

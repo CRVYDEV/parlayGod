@@ -10,8 +10,10 @@
 // regen-bounded pool — the world:raid twin) + an ammo SINK. `war_pool` is a strength reservoir, NOT a
 // §10.4 bucket (the world strength precedent), so the only invariant surface is the vocabulary.
 //
-// THE DEFENCE: a landed raid rolls a counter (COUNTER_P) that hospitalizes the raider — the family hits
-// back, so a raid is a real risk decision. (Deferred step two: a scheduled, shield-honouring retaliation.)
+// THE DEFENCE (both paths built): a landed raid fires EXACTLY ONE retaliation — either the guns catch you
+// AT THE SCENE now (COUNTER_P, an immediate hospitalization) OR you escape and the family REMEMBERS,
+// sending someone after you later (THE MANHUNT — sweepFamilyAggro, a worker-resolved, shield-honouring
+// strike; one pending per family). Chained so you're never double-punished. A raid is a real risk decision.
 import { GameError, bus, notify } from './game.js';
 import { FAMILY_WAR, familyWarRankOf, levelOf, jailed, hospitalized, safeHoused, witproActive, penSafe, inHole } from './rules.js';
 
