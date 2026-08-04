@@ -117,7 +117,10 @@ assert.equal(mb.canHire, false, 'no room for another hand on a full 2-man job');
 // run until a score lands, then verify the hand was NEVER paid and the leader still scored
 const handCashPre = Number((await pool.query(`SELECT cash FROM characters WHERE id='${hand.id}'`)).rows[0].cash);
 const handPulledPre = Number((await pool.query(`SELECT heists_pulled FROM account_persistent WHERE account_id='${handAcct}'`)).rows[0].heists_pulled);
-let hScored = false, hg = 0, hid2 = hh;
+// FLAKE FIX: the loop re-fills on every bust (another -5000 heist:hire), so the fee sum is
+// -5000 × fills, not a flat -5000 (which only held when the heist scored first-try — a
+// deterministic assertion resting on a probabilistic precondition, the recorded flake class).
+let hScored = false, hg = 0, hid2 = hh, fills = 1;   // fills starts at 1: the initial fill above
 while (!hScored && hg++ < 80) {
   const ex = await call('POST', `/v1/heists/${hid2}/execute`, { token: hank.token });
   assert.equal(ex.code, 200, `hired execute resolves (${JSON.stringify(ex.body)})`);
@@ -128,13 +131,14 @@ while (!hScored && hg++ < 80) {
     assert.equal(Number((await pool.query(`SELECT heists_pulled FROM account_persistent WHERE account_id='${handAcct}'`)).rows[0].heists_pulled), handPulledPre, 'the hand earns no legend');
     assert(ex.body.share > 0, 'the leader still scores — co-op is reachable');
     assert(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='heist:crew' AND character_id='${hank.id}'`)).rows[0].s) > 0, "the leader's cut is ledgered heist:crew");
-    assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='heist:hire' AND character_id='${hank.id}'`)).rows[0].s), -5000, 'the hire fee is a ledgered heist:hire sink');
+    assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='heist:hire' AND character_id='${hank.id}'`)).rows[0].s), -5000 * fills, 'the hire fee is a ledgered heist:hire sink (once per fill)');
   } else { // busted/blown — the hand shares the crew's fate; clear it and go again
     await seedCh(hank.id, 'cash=100000, heist_at=NULL, jail_until=NULL, hosp_until=NULL, safe_until=NULL');
     await pool.query(`UPDATE characters SET jail_until=NULL, heist_at=NULL WHERE id='${hand.id}'`);
     const rp = await call('POST', '/v1/heists/plan', { token: hank.token, body: { job: 'payroll' } });
     hid2 = rp.body.id;
     await call('POST', `/v1/heists/${hid2}/fill`, { token: hank.token });
+    fills++;
   }
 }
 assert(hScored, `the solo-NPC crew landed a score within ${hg} tries`);
