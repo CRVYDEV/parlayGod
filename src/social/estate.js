@@ -63,6 +63,35 @@ export async function bearGrudges(client, h, killerCh, victimNpc) {
 // bounty cleared. The account survives: $OMR, staked, rewards, wallet, gear,
 // prestige (+floor(level/2)), recruits, onboard, checkins, deaths+1. The heir
 // row starts at generation+1 with the legacy stake.
+
+// Rows OTHER players/families created ABOUT this character — pointers that must die when the
+// character LEAVES PLAY, whether by DEATH (runEstate) or RETIREMENT (a walked NPC resident, which
+// runEstate never sees). The two paths used to diverge here (retireResident cleaned up only the rows
+// the resident OWNED), stranding a hired bodyguard's principal, a watcher's tap slot, and more — one
+// shared helper so the retirement path can't drift from the death path again (AUDIT-street-war-street-
+// life F1/F2/F4). Deliberately NOT bounty escrow: a gone target's pots resolve via the expiry sweep
+// (a refund), which is fairer than a death-burn for a retirement, and stays §10.4-exact either way.
+export async function clearInboundPointers(client, charId, accountId) {
+  // a paid bodyguard whose principal is this character: released — and the stale pointer no longer
+  // BLOCKS the principal hiring a replacement for the rest of the window (paid, unprotected, locked
+  // out — the audit-F8 class). A killer who hired their own victim as guard is mirrored in memory by
+  // the CALLER (persistCharacter would clobber a direct SQL update to the killer's own row).
+  await client.query('UPDATE characters SET guarded_by=NULL, guarded_until=NULL WHERE guarded_by=$1', [charId]);
+  // wire surveillance pointed at this character: a dead/gone TARGET frees the watcher's concurrency
+  // slot (with no untap route otherwise); a dead WATCHER's rows are dead-code hygiene.
+  await client.query('DELETE FROM wiretaps WHERE watcher_character=$1 OR target_character=$1', [charId]);
+  await client.query('DELETE FROM wire_watches WHERE watcher_character=$1 OR target_character=$1', [charId]);
+  await client.query('DELETE FROM wire_informants WHERE watcher_character=$1 OR target_character=$1', [charId]);
+  // a pending family retaliation on a gone raider (THE MANHUNT); a hunter's search on a gone target
+  await client.query('DELETE FROM family_aggro WHERE target_character=$1', [charId]);
+  await client.query('DELETE FROM searches WHERE hunter=$1 OR target=$1', [charId]);
+  // secrets die with the spy (holder) AND with the mark (dirt on the gone is worthless); digs
+  // TARGETING the account persist as a bloodline throttle (the 7-day hygiene sweep reaps them).
+  await client.query('DELETE FROM secrets WHERE holder_character=$1 OR target_account=$2', [charId, accountId]);
+  // per-(payer,target) NPC-hit cooldown rows both ways — harmless hygiene, no orphans left behind
+  await client.query('DELETE FROM npc_hits WHERE payer=$1 OR target=$1', [charId]);
+}
+
 export async function runEstate(client, h, victim, killerName, opts = {}) {
   const acct = h.victimAcct;
   const lvl = levelOf(Number(victim.respect));
@@ -172,10 +201,8 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
     await client.query(`DELETE FROM ${t} WHERE character_id=$1 AND NOT minted_onchain`, [victim.id]);
   for (const table of ['rigs', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'track_bets', 'racers', 'blackjack_hands', 'crew_heist_members', 'pen_break_members', 'world_raid_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands', 'npc_gain', 'pen_contraband', 'convoy_ambushes', 'port_intercepts', 'route_notoriety', 'daily_progress', 'missions_done', 'wage_snapshots', 'campaign_progress', 'soldiers', 'digs', 'clue_scrolls', 'masteries', 'character_traits', 'character_disciplines', 'npc_drills', 'hustles', 'pen_talks', 'corner_jobs', 'corner_chains', 'contact_calls'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
-  // npc_hits keys on (payer, target) not character_id — wipe the dead street's per-pair NPC-hit
-  // cooldown rows both ways (AUDIT-full-system-v2 C-LOW-2; harmless row-hygiene, the heir's fresh id
-  // never inherits them, but no orphans left behind).
-  await client.query('DELETE FROM npc_hits WHERE payer=$1 OR target=$1', [victim.id]);
+  // (npc_hits, wiretaps, family_aggro, searches, secrets, the bodyguard pointer — all rows OTHERS
+  // pointed at this street — are cleared by clearInboundPointers below, shared with retireResident.)
   // (AUDIT-street-life F5) a pending contact call FROM the dead street (npc_character side — the
   // loop above wipes only the character_id side) dies with them: the caller is gone, so the call
   // would only jam the other player's one-open-call slot until the TTL sweep.
@@ -208,20 +235,11 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   await client.query(
     "DELETE FROM pen_break_members WHERE break_id IN (SELECT id FROM pen_breaks WHERE leader_character=$1 AND status='abandoned')", [victim.id]);
   for (const o of brOrphans) await h.notify(client, o.character_id, 'break_abandoned', { reason: 'leader_dead' });
-  // wiretaps die with either party (audit: a dead WATCHER's taps are dead-code row-leak; a dead TARGET's
-  // taps wasted a live watcher's concurrency slot with no untap route — deleting the target's frees it)
-  await client.query('DELETE FROM wiretaps WHERE watcher_character=$1 OR target_character=$1', [victim.id]);
-  // THE MANHUNT (blood war): a dead raider isn't hunted — clear any pending family retaliation on them
-  await client.query('DELETE FROM family_aggro WHERE target_character=$1', [victim.id]);
-  // step three: a dead party's informant retainers die too (disinfo_until rides the character row → gone with it)
-  await client.query('DELETE FROM wire_informants WHERE watcher_character=$1 OR target_character=$1', [victim.id]);
-  // step five: a dead party's standing watches die too (the wiretap precedent — a dead watcher stops watching, a dead target frees the slot)
-  await client.query('DELETE FROM wire_watches WHERE watcher_character=$1 OR target_character=$1', [victim.id]);
-  // SECRETS die with the SPY's street (holder) AND with the MARK's street (dirt on the dead is
-  // worthless — the heir starts clean). Digs TARGETING the account deliberately persist: the
-  // per-(digger, house) cooldown is a bloodline-level throttle, so a fresh heir isn't instantly
-  // re-diggable by everyone who just dug the dead street (the 7-day hygiene sweep reaps them).
-  await client.query('DELETE FROM secrets WHERE holder_character=$1 OR target_account=$2', [victim.id, victim.account_id]);
+  // rows OTHERS pointed at this street — the bodyguard principal, wire taps/watches/informants,
+  // family aggro, hunter searches, secrets, npc-hit cooldowns — all die with the man, through the
+  // helper shared with retireResident (so the retirement path can't drift). The killer-as-principal
+  // in-memory mirror follows the loot block below.
+  await clearInboundPointers(client, victim.id, victim.account_id);
   // a dead proprietor's club goes dark (+ its guest list); the man's patronage at other clubs clears too
   await wipeSpeakeasyAtDeath(client, victim.id);
   // RING POKER: fold the dead player's seat + BURN their stack (casino:ring:death — the dead-funder
@@ -234,16 +252,12 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // a dead shipper's freight is scattered on the highway — goods die with the street
   await client.query("DELETE FROM convoy_cargo WHERE convoy_id IN (SELECT id FROM convoys WHERE owner_character=$1)", [victim.id]);
   await client.query("UPDATE convoys SET status='lost' WHERE owner_character=$1 AND status IN ('loading','transit')", [victim.id]);
-  // a dead guard's principals are released: bodyguardAbsorbs already refuses a dead guard, but the
-  // stale pointer also BLOCKED hiring a replacement for the rest of the window (paid, unprotected,
-  // locked out — audit F8). One principal row may be IN-MEMORY in this very transaction: the
-  // killer, if they'd hired their own victim as guard (betrayal beats protection) — mirror the
-  // clear on that object or persistCharacter clobbers the SQL update back to the dead guard.
-  await client.query('UPDATE characters SET guarded_by=NULL, guarded_until=NULL WHERE guarded_by=$1', [victim.id]);
+  // clearInboundPointers (above) released the dead guard's principals in SQL; one principal may be
+  // IN-MEMORY in THIS txn — the killer, if they'd hired their own victim as guard (betrayal beats
+  // protection) — mirror the clear or persistCharacter clobbers the SQL update back to the dead guard.
   if (opts.killerCh && opts.killerCh.guarded_by === victim.id) {
     opts.killerCh.guarded_by = null; opts.killerCh.guarded_until = null;
   }
-  await client.query('DELETE FROM searches WHERE hunter=$1 OR target=$1', [victim.id]);
   // THE LAW Phase 4 — THE WITNESS IS DOWN. If the dead man was an informant, the cases his
   // testimony built collapse: each target he named has the seed exposure lifted back off (a
   // bounded NUMERIC update — no INT-arithmetic quirk; the target row isn't locked, but a single

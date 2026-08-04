@@ -101,6 +101,15 @@ let spy, mark, secretId;
   assert.equal((await meOf(mark.token)).cash, 100000, 'the mark paid the demand');
   const fee = Math.ceil(100000 * 0.01), tax = Math.ceil(100000 * 0.01);
   assert.equal((await meOf(spy.token)).cash, spyCash0 + 100000 - fee - tax, 'the holder nets 98%');
+  // AUDIT-street-war-street-life D1: paying the hush must NOT hand the mark the anonymous extorter's
+  // number in the black book (the sibling exposeSecret already carries meet:false). The extorter dug
+  // + demanded via the wire with no name attached; the mark must not learn the source from PAYING.
+  const bookLeak = Number((await pool.query(
+    `SELECT COUNT(*) n FROM contacts c
+       JOIN characters m ON m.account_id = c.owner_account
+       JOIN characters h ON h.account_id = c.contact_account
+      WHERE m.id='${mark.id}' AND h.id='${spy.id}'`)).rows[0].n);
+  assert.equal(bookLeak, 0, "paying the hush does NOT put the anonymous extorter in the mark's black book");
   const after = await runLedgerInvariants(pool, { alert: false });
   assert.equal(driftOf(after) - cash0, 0, 'the hush transfer is §10.4-exact (delta-0)');
   assert.ok(after.checks.find((c) => c.name === 'reason vocabulary')?.ok, 'secret: is vocabularied');
