@@ -1283,6 +1283,28 @@ phase('P9.30 the float — the tiered loot rate + what the Made Man and the stak
     'the rate is self-balancing BY DESIGN (as whales learn to commit, typical scores fall and hunters must hunt more) but the equilibrium depends on real player behaviour — watch realised $OMR loot per kill in the alpha, not this arithmetic');
 }
 
+// ════════ P9.31 THE HIRED GUNS — apex raids made SOLO-realizable (the fillHeist twin) ════════
+// A leader hires up to HIRE_MAX NPC merc(s) into a co-op raid: their firepower COUNTS in the roll (the
+// unblock — a soloist cracks an apex outfit a thin alpha has no crew for) but they forfeit their cut and
+// pay no energy/ammo, so a solo takes the WHOLE pot. The HIRE_FEE is a `world:hire` cash SINK against it.
+// EMISSION-SAFE by construction: the base-wide ceiling is still REGEN (P9.8) — hired guns change only
+// WHO can tap it (solo vs 2 coordinated players), not the metered quantity. The fee nets the solo faucet.
+phase('P9.31 the hired guns — apex raids made solo-realizable (founder SIGN-OFF, a new emission surface)');
+{
+  // the MINIMUM unblock is (COOP_MIN − 1) guns (a soloist with no real teammates); more guns buy only odds.
+  const minGuns = Math.min(WORLD.HIRE_MAX, Math.max(0, WORLD.COOP_MIN - 1));
+  const minCost = minGuns * WORLD.HIRE_FEE, maxCost = WORLD.HIRE_MAX * WORLD.HIRE_FEE;
+  for (const f of WORLD_NPCS.filter((n) => n.coop)) {
+    const grab = Math.min(Math.floor(f.max * WORLD.GRAB_BPS / 10000), WORLD.GRAB_MAX);
+    const netMin = grab - minCost; // a solo takes the WHOLE grab; the cheapest crew is minGuns hired
+    const ceilDay = f.regenPerHr * 24;  // UNCHANGED — the base-wide ceiling is still regen (shared)
+    note('hired-guns', `${f.name} (lvl ${f.minLvl})`, `net $${fmt(netMin)}/landed solo raid (min crew)`,
+      `grab $${fmt(grab)} − $${fmt(minCost)} (${minGuns}×$${fmt(WORLD.HIRE_FEE)}, the cheapest crew); the entry apex's grab is under the fee, so a solo needs a real teammate — apex reservoirs go +EV. Base-wide ceiling still ≤ $${fmt(ceilDay)}/day (regen), so only WHO taps it changed`);
+  }
+  note('hired-guns', 'the fee is the dial', `$${fmt(minCost)}–$${fmt(maxCost)} to field a bought crew`,
+    `HIRE_FEE/HIRE_MAX are founder sign-off levers — a real cash sink pricing solo access to a coop-only reservoir; extra guns above the min buy only ODDS (their firepower counts). A hired gun forfeits its cut so the co-op faucet only SHRINKS per real head, §10.4-neutral vs a real crew`);
+}
+
 phase('P10 §10.4 ledger invariants over the ENTIRE sim (nothing was seeded)');
 const inv = await runLedgerInvariants(pool);
 for (const c of inv.checks) console.log(`  ${c.ok ? '✅' : '🚨'} ${c.name}: drift ${c.drift}`);
