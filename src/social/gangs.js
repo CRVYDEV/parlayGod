@@ -328,7 +328,12 @@ export async function declareWar(ch, targetGangId, client, h) {
   // multiplicatively with the coalition discount, and the DISCOUNTED number is what is deducted AND
   // ledgered (the decree/amnesty discipline) — so `gang:war` still reconciles to the dollar.
   const warMult = rosterMult(await postPower(client, h.owned.gangId, 'streetboss'), M3.ROSTER_STREETBOSS_WAR_PER);
-  const warCost = Math.floor((coalition ? M3.WAR_COST * DIPLOMACY.COALITION_WAR_MULT : M3.WAR_COST) * warMult);
+  // VALUE-AT-STAKE: the war chest scales with what you stand to WIN — WAR_SPOILS (20%) of the target's
+  // treasury — floored at WAR_COST so a broke target is unchanged. `them` is FOR UPDATE-locked above, so
+  // the treasury read is consistent. The coalition/streetboss discounts multiply the scaled base (the
+  // discounted number is what burns AND is ledgered — the decree/amnesty discipline, so gang:war reconciles).
+  const warBase = Math.max(M3.WAR_COST, Math.floor(Number(them.treasury) * M3.WAR_COST_BPS / 10000));
+  const warCost = Math.floor((coalition ? warBase * DIPLOMACY.COALITION_WAR_MULT : warBase) * warMult);
   if (Number(us.treasury) < warCost) throw new GameError('treasury', `War takes a $${warCost} war chest in the treasury.`);
   const until = new Date(Date.now() + M3.WAR_MS);
   // the war chest burns — a §10.4 cash sink out of the treasury bucket

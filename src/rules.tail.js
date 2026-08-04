@@ -622,6 +622,12 @@ export const labModuleCost = (modId, curLevel, labIdx) => {
 export const M3 = {
   GANG_FOUND_COST: 25000, GANG_FOUND_LEVEL: 5, GANG_MAX_MEMBERS: 20, TRIBUTE_MIN: 100,
   WAR_COST: 10000, WAR_MS: 30*60*1000, WAR_SPOILS: 0.20,      // §5.5 (30 min pending design call, spec §9)
+  // VALUE-AT-STAKE indexing (RE-SIM PASS 2 / P9.20d): a flat $10k war chest is pocket change for a
+  // maxed family, so the declaration is not a decision. The chest now scales with the TARGET's
+  // treasury — spoils are WAR_SPOILS (20%) of it, so you ante a fraction of what you stand to win.
+  // Floored at WAR_COST so a broke target is unchanged; the coalition/streetboss discounts apply on
+  // top (the discounted number is what burns, so `gang:war` still reconciles). Founder sign-off lever.
+  WAR_COST_BPS: 200,                                          // 2% of the target family's treasury, floored at WAR_COST
   SEIZE_BASE: 30000, SEIZE_OUTBID: 1.5,
   JUMP_ENERGY: 25, JUMP_AMMO: 5, JUMP_MIN_HEALTH: 20, JUMP_HOSP_MS: 3*60*1000, JUMP_STEAL_CAP: 25000,
   FIRE_ENERGY: 40, KILL_HOSP_MS: 5*60*1000, CHOP_RATE: 0.40,
@@ -3313,6 +3319,11 @@ export const SOV = {
            { name: 'The Iron Capital', cost: 40000000, garrison: 5000000, upkeepPerDay: 450000, incomePerDay: 780000 } ],
   WINDOW_H: 2,                      // the daily vulnerability window (UTC, chosen at build)
   SIEGE_COST: 50000,                // the assault chest — burns win or lose (the npchit-fee posture)
+  // VALUE-AT-STAKE indexing (RE-SIM PASS 2 / P9.20d): the chest scales with the TARGET stronghold's
+  // build cost (TIERS[tier-1].cost) — tearing down The Iron Capital ($40M built) is a war, not a $50k
+  // errand — floored at SIEGE_COST so the low-tier on-ramp is unchanged (3% only clears the floor at
+  // Bastion tier 4 and above). Burns win or lose. Founder sign-off lever.
+  SIEGE_COST_BPS: 300,              // 3% of the target stronghold's build cost, floored at SIEGE_COST
   SIEGE_CD_MS: 24 * 3600000,        // per-structure, win or lose (the owner isn't ground down)
   SIEGE_BASE_P: 0.35, SIEGE_STAT_SCALE: 400, SIEGE_TIER_P: 0.08, // p = BASE + atk/SCALE − (tier−1)×TIER_P
   SIEGE_MIN_P: 0.10, SIEGE_MAX_P: 0.75,

@@ -3466,7 +3466,7 @@
               ? `<div style="margin-top:4px"><span class="d" style="color:var(--bad)">somebody is coming for this. Answer it or lose it.</span><br><input id="cl-${d.id}" type="number" placeholder="${d.claimFloor}" style="width:130px"> <button class="act risk" data-claim="${d.id}">defend it</button></div>`
               : '')}
           ${boss && d.id === me.loc && !d.holder ? `<button class="act" data-do="POST /v1/districts/${d.id}/seize" style="${d.occupiedBy ? 'border-color:var(--blood)' : ''}">${d.occupiedBy ? 'liberate' : 'claim'} (stand here)</button>` : (boss && d.id !== me.loc && (!d.holder || d.holder.tag !== g.tag) ? '<span class="d" style="color:var(--dim)">travel here to take it</span>' : '')}</div>`).join('')}</div>
-      ${boss ? `<div style="margin-top:8px">${rivalOpts ? `<select id="war-gang">${rivalOpts}</select> <button class="act risk" id="war-go">declare war ($10k)</button>` : '<span class="d" style="color:var(--dim)">no rival family to fight yet</span>'}</div>` : '<span class="d" style="color:var(--dim)">wars and turf are the boss’s to call</span>'}`, !!g.war)}
+      ${boss ? `<div style="margin-top:8px">${rivalOpts ? `<select id="war-gang">${rivalOpts}</select> <button class="act risk" id="war-go">declare war</button> <span class="d" style="color:var(--dim)">the war chest scales with their treasury — you ante a cut of the spoils</span>` : '<span class="d" style="color:var(--dim)">no rival family to fight yet</span>'}</div>` : '<span class="d" style="color:var(--dim)">wars and turf are the boss’s to call</span>'}`, !!g.war)}
 
       ${sect('fam-diplomacy', 'Diplomacy', 'sworn PACTS block war between families; a COALITION of the small ganging up on a DOMINANT family fights it at a discount', `
       ${dip.oathbreaker ? `<div class="card" style="border-color:var(--blood)"><span class="t" style="color:var(--bad)">OATHBREAKER</span> <span class="d">you broke a sworn treaty — marked for ${mins(dip.oathbreaker.seconds)}</span></div>` : ''}
@@ -3499,7 +3499,7 @@
       ${(sov.structures || []).some((s) => s.mine && s.incomeOwed) ? `<button class="act" data-do="POST /v1/sov/collect" style="margin-top:4px">collect tribute → treasury</button>` : ''}
       ${(sov.structures || []).some((s) => !s.mine && s.vulnerable) ? `<div class="grid" style="margin-top:4px">${(sov.structures || []).filter((s) => !s.mine && s.vulnerable).map((s) => `
         <div class="card" style="border-color:var(--blood)"><span class="t">${s.district} — ${s.holderTag ? `[${s.holderTag}]` : 'a rival'}'s ${s.tierName} <span class="chip bad">VULNERABLE</span></span>
-          <div class="d">stand at ${s.district} and lay siege ($${fmt(sov.siegeCost || 50000)}) — a win knocks a tier off</div>
+          <div class="d">stand at ${s.district} and lay siege ($${fmt(s.siegeCost || sov.siegeCost || 50000)}) — a win knocks a tier off</div>
           ${boss ? `<button class="act" data-sovsiege="${s.district}" style="border-color:var(--blood)">lay siege</button>` : ''}</div>`).join('')}</div>` : ''}
       ${boss && (g.held || []).length ? `<div style="margin-top:6px">
         <select id="sov-dist">${(g.held || []).filter((d) => !(sov.structures || []).some((s) => s.district === d && s.mine)).map((d) => `<option value="${d}">${d}</option>`).join('')}</select>

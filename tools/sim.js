@@ -850,10 +850,15 @@ phase('P9.20d the family ledger — what a family earns against what its decisio
   const fortAll = Array.from({ length: CONSTANTS.TERRITORY_FORT_MAX }, (_, l) => CONSTANTS.TERRITORY_FORT_COST_BASE * (l + 1) * top.tier).reduce((a, b) => a + b, 0);
   const estabAll = TERRITORY_RACKETS.reduce((a, t) => a + t.cost, 0);
   const sovAll = SOV.TIERS.reduce((a, t) => a + t.cost, 0);
+  // VALUE-AT-STAKE (RE-SIM PASS 2, APPLIED): war + siege now index to what's at stake. War scales with
+  // the TARGET's treasury (spoils are WAR_SPOILS of it) — a maxed rival's parked cash is at least a
+  // day's income, so day6 is a conservative proxy. Siege scales with the top stronghold's build cost.
+  const warScaled = Math.max(M3.WAR_COST, Math.floor(day6 * M3.WAR_COST_BPS / 10000));
+  const siegeScaled = Math.max(SOV.SIEGE_COST, Math.floor(SOV.TIERS.at(-1).cost * SOV.SIEGE_COST_BPS / 10000));
   const menu = [
-    { what: 'declare war', cost: M3.WAR_COST, recurring: true },
-    { what: 'siege a rival stronghold', cost: SOV.SIEGE_COST, recurring: true },
-    { what: 'invade a frontier outpost', cost: WORLD.FRONTIER.INVADE_BASE, recurring: true },
+    { what: 'declare war (on a rich rival)', cost: warScaled, recurring: true },
+    { what: 'siege a Bastion+ stronghold', cost: siegeScaled, recurring: true },
+    { what: 'invade a frontier outpost (floor)', cost: WORLD.FRONTIER.INVADE_BASE, recurring: true },
     { what: 'take an unheld district (floor)', cost: M3.SEIZE_BASE, recurring: true },
     { what: `fortify one operation to ${CONSTANTS.TERRITORY_FORT_MAX}`, cost: fortAll, recurring: false },
     { what: `climb one operation to ${top.name}`, cost: estabAll, recurring: false },
@@ -865,7 +870,7 @@ phase('P9.20d the family ledger — what a family earns against what its decisio
     `against $${fmt(Math.round(day6))}/day. The one-time build-out (every operation maxed + fortified + a stronghold on every district) totals $${fmt(Math.round((estabAll + fortAll + sovAll) * CORE))} — about ${(((estabAll + fortAll + sovAll) * CORE) / day6).toFixed(0)} days of income, after which the recurring menu is what is left`);
   const trivial = menu.filter((m) => m.recurring && m.days < 0.01);
   note('family', 'RECURRING decisions costing under 1% of a day', `${trivial.length} of ${menu.filter((m) => m.recurring).length}`,
-    trivial.length ? `${trivial.map((m) => `${m.what} ($${fmt(m.cost)})`).join(', ')} — these are FLAT constants, so they become noise the moment a family is established. WAR_COST is the sharpest: $${fmt(M3.WAR_COST)} against $${fmt(Math.round(day6))}/day means declaring war is free for anyone who has arrived` : 'none');
+    trivial.length ? `${trivial.map((m) => `${m.what} ($${fmt(m.cost)})`).join(', ')} — the remaining flat ones are the two the founder deliberately left on the garrison ratchet (invade + take-unheld already scale with the incumbent's garrison, the value at stake). War ($${fmt(warScaled)}) and siege ($${fmt(siegeScaled)}) were INDEXED this pass — war to 2% of the target's treasury, siege to 3% of the stronghold's build cost — so declaring on a rich family is no longer free` : 'none — war + siege are now indexed to the value at stake (RE-SIM PASS 2), and invade/take-unheld ride the garrison ratchet');
 
   // ── THE ONE COST THAT SCALES, and why it is the model for the rest ──
   // A contest floor is max(SEIZE_BASE, garrison × SEIZE_OUTBID), and the garrison becomes the last
@@ -877,8 +882,8 @@ phase('P9.20d the family ledger — what a family earns against what its decisio
   note('family', 'the contest ratchet (the one cost that scales)',
     ratchet.map((g) => `$${fmt(g)}`).join(' → '),
     `each contest's floor is max($${fmt(M3.SEIZE_BASE)}, garrison × ${M3.SEIZE_OUTBID}) and the winner's whole stake BECOMES the garrison, so contested turf gets dearer every time it changes hands — after ${ratchet.length} fights it is ${(ratchet[ratchet.length - 1] / M3.SEIZE_BASE).toFixed(0)}× the opening price. THE WATCH multiplies it again (×${M3.WATCH_SURPRISE_MULT} off-window) and THE ROSTER's enforcer adds a flat premium on top`);
-  note('family', 'VERDICT', trivial.length ? 'the climb bites, the steady state does not' : 'priced',
-    `the ladder to the top is a genuine ~${climb.slice(1).reduce((a, c) => a + c.days, 0).toFixed(0)}-day wait per district and the sov overextension pad is a real recurring drain, but ${trivial.length} of the recurring strategic decisions are FLAT constants that a maxed family pays out of pocket change. So the strategy package's tradeoffs bite hardest on families too new to feel them and barely at all on the ones the endgame is for — the P9.20b finding, one level up. The dial is to index the flat costs to something (holdings, standing, or the contest's own ratchet) rather than to raise them, since raising a constant only moves which week it stops mattering`);
+  note('family', 'VERDICT', 'war + siege now bite the endgame; the two floors stay on the garrison ratchet',
+    `the ladder to the top is a genuine ~${climb.slice(1).reduce((a, c) => a + c.days, 0).toFixed(0)}-day wait per district and the sov overextension pad is a real recurring drain. The P9.20d flat-cost finding (declaring war / sieging cost pocket change for a maxed family) is now RESOLVED for the two fully-flat costs: war indexes to the target's treasury ($${fmt(warScaled)} against a rich rival) and siege to the stronghold's build cost ($${fmt(siegeScaled)} for a Bastion+). Both are founder sign-off levers (M3.WAR_COST_BPS 2% / SOV.SIEGE_COST_BPS 3%, floored at the old constants so the on-ramp is unchanged). The two remaining flat entries (invade + take-unheld) are FLOORS the founder deliberately kept on the garrison ratchet — the incumbent's garrison IS the value at stake there, and a fresh/unheld target being cheap is the turf on-ramp`);
 }
 
 // ════════ P9.20c THE NUT — what a crew costs against what a hand actually moves ════════

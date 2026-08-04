@@ -303,7 +303,9 @@ const SIGNED = [
   ['M3.ROSTER_BAGMAN_UPKEEP_PER', 0.03],
   ['M3.TERRITORY_SEIZE_BPS', 5000],
   ['M3.WAR_COST', 10000],
+  ['M3.WAR_COST_BPS', 200],
   ['M3.WAR_KILL_POINTS', 3],
+  ['M3.WAR_SPOILS', 0.20],
   // THE CREW BONUS — what replaced the referral $OMR (founder-directed 2026-07-31). MAX_BONUS is
   // load-bearing: respect drives level, level gates everything, and the PACING pass deliberately
   // slowed levelling — an uncapped crew would walk straight through it.
@@ -632,6 +634,8 @@ const SIGNED = [
   ['SOLDIERS.FIRST', ["Sal","Vinny","Rocco","Lefty","Knuckles","Ade","Paulie","Frankie","Mo","Curly","Big Tony","Little Tony","Jimmy","Sticks","Doc","Ice","Roxie","Vera","Dot","Mabel"]],
   ['SOLDIERS.INJURY_MS', 14400000],
   ['SOV.INCOME_CAP_MS', 86400000],
+  ['SOV.SIEGE_COST', 50000],
+  ['SOV.SIEGE_COST_BPS', 300],
   ['SOV.SOV_POINTS', [0,10,25,60,120,220,400]],
   ['SPEAKEASY.INCOME_CAP_MS', 86400000],
   ['SPEAKEASY.MIN_LEVEL', 15],
