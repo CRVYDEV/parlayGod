@@ -4687,6 +4687,58 @@ raider isn't hunted). `FAMILY_RETAL_P` is a TEST-ONLY roll knob. Mutation-verifi
 
 Deferred (final step): NPC families holding contestable turf — BUILT below.
 
+## RE-SIM PASS 2 (2026-08-04) — the DEFEND pillar folded in, the cash curve re-measured against its gates
+
+The 2026-08-03 re-sim (above) ran before THE HIRED HAND, THE BLOOD WAR, THE MANHUNT and THE CONQUEST.
+This pass re-runs both harnesses against HEAD (`6eb8459`) — the first time the full DEFEND pillar and
+the resident economy have been measured *together* against the severed model. Both green; no lever
+retuned (ground rule #1).
+
+### The re-sim — §10.4 exact across every check, the new faucets fold in clean
+
+| check | measured | note |
+|---|---|---|
+| the full P10 sweep | drift-0 across all ~30 checks | incl. the surfaces added since the last pass: `turf contest escrow`, `favor escrow`, `loan house pool`, `ring poker escrow`, and `family:tribute` reconciled INSIDE the gang-treasuries check |
+| `family:raid` (Blood War loot) | ≤ $288,000/day base-wide (3 NPC families) | regen-bounded (POOL_MAX $120k < the weakest World outfit); a raider caps at $36k/day/family before regen bites; COUNTER_P 0.35 hospitalizes ~35% of landed raids. NO `season_wars` — the severance holds |
+| `family:tribute` (Conquest) | ≤ $5,760/day base-wide | 2% of a held vassal's regen, 24h-capped — the World-frontier twin; a small ADDITIVE faucet where the value is the turf goal, not the income |
+| the severance | intact | `omrMints` = {mission:%, prize:omr, emission:%}, none takes cash; every cash faucet is MOOT on the extraction axis; only PACING/CONCENTRATION survive, unchanged |
+
+### The playthrough — the top masking rung is now GONE, and the cash curve moved the SAFE way
+
+**The coach walked 19 rungs; every rung the player obeyed cleared.** The prior pass's #1 flag —
+"Pull a crew score", 22% and never cleared solo — is **resolved**: the hired hand ships, so the harness
+now fills the crew and the rung clears at level 10. No masking rung survives.
+
+**The gate coverage moved in the intended direction — the cash economy is now on the CONSERVATIVE side
+of its own gates**, the opposite of the pre-package worry that "cash outruns progression":
+
+| front | gate | net worth at the gate | covers | vs the pre-package pass |
+|---|---|---|---|---|
+| laundromat | lvl 15 | $98,956 | **40%** | was 70% |
+| restaurant | lvl 22 | $137,554 | **28%** | was 94% |
+| nightclub | lvl 30 | $676,277 | **56%** | was 85% |
+
+Every gate is now a real climb (none over 100%). The drop is the L1a/L1b front-curve flatten + the
+Bureau's income-sourced scrutiny (~11.8% of gross off the passive stack) + THE TAKE re-sourcing crime
+cash as a transfer — all landing together. The 7-day solo ceiling came in at **level 34 / $1,078,939 /
+14 of 36 missions**, below the pre-package ~$1.4M — cash is genuinely scarcer relative to progression
+now, so the fronts gate on affordability again rather than being a formality.
+
+The two structural throttles are unchanged founder calls: **nerve is the loop's real limiter** (26% of
+cap on average, full 5% of minutes, ~61 crimes/hr), and **energy is vestigial for a street player**
+(full 93% of minutes — only the gym and garage spend it). Idle 5%, lockup 5%; the refill ceiling stays
+BOUNDED (≤10.43 levels/day at level 90 and flat above).
+
+**VERDICT: the migration is measured complete.** §10.4 is exact including the newest faucets, the
+severance is structurally airtight, the early-game cliff is traversable with no masking rung, and the
+big founder-directed balance package (L1a/L1b + Bureau + TAKE) verifiably tightened the cash curve
+without touching conservation. **The internal PACING/CONCENTRATION flags survive unchanged** — the
+passive stack still runs ~3.1–3.3× the active grind (P9.20), the apex world/boxing/racing purses, the
+port sale curve, `jailbirds` at ~$463k/day (the one loop that spends no signed resource), and the
+`npc:seed` recycle at ~$499k/day are all still live founder calls. The severance lowered their stakes;
+it did not answer them, and the recommendation remains to INDEX the flat family strategic costs to
+holdings rather than raise a constant.
+
 ## THE CONQUEST — NPC families as seizable turf (BUILT 2026-08-04)
 
 DEFEND step four, the deferred final step. Grinding an NPC family's `war_pool` below `ROUT_FLOOR_BPS`
