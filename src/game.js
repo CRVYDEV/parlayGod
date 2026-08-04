@@ -1291,6 +1291,11 @@ export function view(ch, acct = {}, owned = {}) {
     jailSeconds: ch.jail_until ? Math.max(0, Math.ceil((new Date(ch.jail_until) - Date.now()) / 1000)) : 0,
     hospSeconds: ch.hosp_until ? Math.max(0, Math.ceil((new Date(ch.hosp_until) - Date.now()) / 1000)) : 0,
     shootCdSeconds: ch.shoot_cd_until ? Math.max(0, Math.ceil((new Date(ch.shoot_cd_until) - Date.now()) / 1000)) : 0,
+    // the GTA/theft window — ONE clock shared by a garage boost, a car theft and a boat theft (an
+    // attempt burns it win or lose). Surfaced so the client can DISABLE those controls while it cools
+    // instead of letting a tester eat a refuse-on-press (test/client.js check 5).
+    gtaSeconds: ch.gta_at && Date.now() < new Date(ch.gta_at).getTime() + CONSTANTS.GTA_CD_MS
+      ? Math.ceil((new Date(ch.gta_at).getTime() + CONSTANTS.GTA_CD_MS - Date.now()) / 1000) : 0,
     safeSeconds: ch.safe_until ? Math.max(0, Math.ceil((new Date(ch.safe_until) - Date.now()) / 1000)) : 0,
     // L3b — the safehouse daily-cap bucket remaining (seconds of off-grid time left today; the wash-cap twin)
     safeCapSeconds: (() => { const cap = M3.SAFEHOUSE_DAILY_CAP_MS; if (!cap) return null;

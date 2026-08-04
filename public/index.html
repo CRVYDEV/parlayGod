@@ -4883,10 +4883,16 @@
           <button class="act prime" data-jump="${s.id}" data-intent="standard">jump</button>
           <button class="act risk" data-jump="${s.id}" data-intent="message" title="you're there to be SEEN — big respect + a real beating, but you're not there to rob them, it costs half again the energy, and it draws the Law">send a message</button>
           <button class="act" data-search="${s.id}" data-name="${esc(s.name)}">search</button>
-          <button class="act risk" data-psteal="${s.id}" data-confirm="Boost one of their cars? A win takes the car for keeps — a miss is a stretch in lockup, and either way it burns your boost window." title="grand theft, PvP — the server picks a random car off their street; expensive iron has alarms. A miss is lockup.">steal their ride</button>
+          ${me.gtaSeconds > 0
+            ? `<button class="act risk" disabled title="the heat's still on from your last job — the boost/theft window is shared">steal their ride 🔥 ${minsTxt(me.gtaSeconds)}</button>`
+            : `<button class="act risk" data-psteal="${s.id}" data-confirm="Boost one of their cars? A win takes the car for keeps — a miss is a stretch in lockup, and either way it burns your boost window." title="grand theft, PvP — the server picks a random car off their street; expensive iron has alarms. A miss is lockup.">steal their ride</button>`}
           ${(s.fronts || []).map((f) => `<button class="act risk" data-prob="${f.id}" data-confirm="Hit the register at their ${f.kind}? A win skims the take — a miss is a short stretch in lockup." title="rob their ${f.kind} — a cut of its uncollected take; stealth (cunning + speed). A miss is lockup.">rob ${f.kind}</button>`).join('')}
           <button class="act risk" data-ptrunk="${s.id}" title="mug the freight off their back — one crate of trade goods, capped by your own trunk space; stealth. A miss is lockup.">rob trunk</button>
-          <button class="act risk" data-pboat="${s.id}" data-confirm="Steal a boat off their berth? Only works standing at the docks — a win takes the boat, a miss is a stretch in lockup, and it burns your boost window." title="boat theft at the docks — the server picks a docked boat; a big hull has watchmen. A miss is lockup.">steal boat</button>
+          ${me.gtaSeconds > 0
+            ? `<button class="act risk" disabled title="the heat's still on — the boost/theft window is shared">steal boat 🔥 ${minsTxt(me.gtaSeconds)}</button>`
+            : me.loc !== 'docks'
+            ? `<button class="act risk" disabled title="boats are stolen where they float — travel to the docks first">steal boat ⚓ docks only</button>`
+            : `<button class="act risk" data-pboat="${s.id}" data-confirm="Steal a boat off their berth? A win takes the boat, a miss is a stretch in lockup, and it burns your boost window." title="boat theft at the docks — the server picks a docked boat; a big hull has watchmen. A miss is lockup.">steal boat</button>`}
           <button class="act risk" data-psab="${s.id}" title="wreck their stable — one random racer or fighter laid up for hours; stealth. A miss is lockup.">sabotage</button>
           <select data-npctier="${s.id}" style="font-size:11px">${npcs.map(([id, n]) => `<option value="${id}">${n}</option>`).join('')}</select>
           <button class="act risk" data-npchit="${s.id}">NPC hit</button>
@@ -5458,7 +5464,7 @@
             the till only holds a day's take while the envelope runs for a week whether you're here or not — a front pays
             an owner who shows up. Pay it out of pocket and it earns again, leave it cold until you can, or close it up.</div>` : ''}
           <div class="d">${b.kind === 'casino' ? 'den rakeback at collect' : 'earns while you are away — collect at least every couple of days, or the pad gets ahead of it'}</div>
-          ${b.scrutiny > 0 ? `<div class="d" style="color:var(--dim)">Bureau heat ${b.scrutiny}/${b.raidThreshold} — earning draws the eye; a raid seizes the pending + a fine. Collect often and it catches less.</div>` : ''}
+          ${b.raidThreshold != null ? `<div class="d" style="color:var(--dim)">Bureau heat ${b.scrutiny || 0}/${b.raidThreshold} — earning draws the eye; a raid seizes the pending + a fine. Collect often and it catches less.</div>` : ''}
           ${b.specName ? `<span class="chip good">✦ ${b.specName}</span>` : ''}
           ${b.nextTier ? `<button class="act" data-bizup="${b.id}">upgrade → tier ${b.tier + 1} ($${fmt(b.nextTier.cost)})</button>` : ''}
           <button class="act" data-bizshut="${b.id}:${esc(b.name)}:${b.shutterValue}"
