@@ -1170,8 +1170,14 @@ export const FAMILY_WAR = {
   BASE_P: 0.55,                   // base raid success…
   DEF_MAX: 60, DEF_SCALE: 300,    // …def scales with the pool fraction (a full family defends harder + pays more); p = clamp(BASE_P + (power − def)/DEF_SCALE, MIN_P, MAX_P)
   MIN_P: 0.1, MAX_P: 0.9,
-  COUNTER_P: 0.35,                // THE DEFENCE: chance the family's guns hospitalize the raider on a LANDED raid (they fight back)
+  COUNTER_P: 0.35,                // THE DEFENCE (immediate): chance the family's guns catch the raider AT THE SCENE on a landed raid
   COUNTER_HOSP_MS: 30 * 60 * 1000,
+  // THE MANHUNT (step three — deferred, shield-honouring): a raider who ESCAPED the scene counter is
+  // remembered, and the family sends someone after them later. Chained, so exactly one retaliation path
+  // fires per raid (caught now OR hunted later — never both). Honours the earned shields at resolve time.
+  AGGRO_DELAY_MS: 45 * 60 * 1000, // they come for you ~45 min after the raid…
+  RETAL_P: 0.5,                   // …and find you half the time (a clean miss if you were hiding, or you dodged)
+  RETAL_HOSP_MS: 30 * 60 * 1000,
   FAIL_HOSP_MS: 30 * 60 * 1000,   // a repelled raid hospitalizes the raider (the world FAIL_HOSP_MS twin)
   RANKS: [
     [0, 'Unblooded'], [25000, 'Button Man'], [150000, 'Warmaker'],

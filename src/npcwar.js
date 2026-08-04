@@ -12,8 +12,8 @@
 //
 // THE DEFENCE: a landed raid rolls a counter (COUNTER_P) that hospitalizes the raider — the family hits
 // back, so a raid is a real risk decision. (Deferred step two: a scheduled, shield-honouring retaliation.)
-import { GameError, bus } from './game.js';
-import { FAMILY_WAR, familyWarRankOf, levelOf, jailed, hospitalized, safeHoused } from './rules.js';
+import { GameError, bus, notify } from './game.js';
+import { FAMILY_WAR, familyWarRankOf, levelOf, jailed, hospitalized, safeHoused, witproActive, penSafe, inHole } from './rules.js';
 
 const cooling = (ch) => ch.family_raid_at && new Date(ch.family_raid_at) > new Date();
 
@@ -112,20 +112,57 @@ export async function raidFamily(ch, gangId, client, h) {
     await client.query('UPDATE account_persistent SET family_war = family_war + $2 WHERE account_id=$1', [ch.account_id, loot]);
   }
 
-  // THE DEFENCE — the family fights back: a counter roll can hospitalize the raider even on a landed hit.
-  // A hospitalization, never a kill (no chop/loot/rep — the npcHit/huntWanted precedent); the safehouse
-  // already blocked the raid, so no shield ordering to thread here.
+  // THE DEFENCE — the family fights back. Exactly ONE retaliation path fires: either the guns catch you
+  // AT THE SCENE now (COUNTER_P, an immediate hospitalization — never a kill, the npcHit precedent), OR
+  // you escape and the family REMEMBERS, sending someone after you later (THE MANHUNT — a worker-resolved,
+  // shield-honouring strike; one pending per family, the latest raider). Chained, so never double-punished.
   let countered = false;
   const cRoll = process.env.FAMILY_RAID_P != null ? (process.env.FAMILY_COUNTER === 'on' ? 0 : 1) : Math.random();
   if (cRoll < FAMILY_WAR.COUNTER_P) {
     countered = true;
     ch.hosp_until = new Date(now.getTime() + FAMILY_WAR.COUNTER_HOSP_MS);
     bus.emit('streets', { type: 'family_counter', who: ch.name, family: g.name });
+  } else {
+    // escaped the scene — schedule the manhunt (one pending per family; a manual upsert since pg-mem
+    // misreports ON CONFLICT). The raider is remembered as the latest threat.
+    await client.query('DELETE FROM family_aggro WHERE gang_id=$1', [gangId]);
+    await client.query('INSERT INTO family_aggro (gang_id, target_character, scheduled_at) VALUES ($1,$2,$3)',
+      [gangId, ch.id, new Date(now.getTime() + FAMILY_WAR.AGGRO_DELAY_MS)]);
   }
   await h.track(client, ch.account_id, 'family_raid', { gang: gangId, success: true, loot, countered });
   bus.emit('streets', { type: 'family_raided', who: ch.name, family: g.name, loot });
   return { ok: true, success: true, family: g.name, loot, countered,
     hospSeconds: countered ? Math.round(FAMILY_WAR.COUNTER_HOSP_MS / 1000) : 0 };
+}
+
+// THE MANHUNT — the worker resolves scheduled retaliations: a family sends someone after a raider who
+// escaped the scene. Shield-honouring (safehouse/witpro/pen/hospital/jail make you unreachable → a clean
+// miss), one shot per raid (the row is deleted win OR miss), rolls RETAL_P. §10.4: zero — a hospitalization
+// moves no currency. The uprising/huntWanted worker precedent: per-row txn isolation, direct-SQL headless.
+export async function sweepFamilyAggro(pool) {
+  const due = (await pool.query('SELECT gang_id, target_character FROM family_aggro WHERE scheduled_at <= now()')).rows;
+  let struck = 0;
+  for (const a of due) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const g = (await client.query('SELECT name FROM gangs WHERE id=$1 AND npc_flag', [a.gang_id])).rows[0];
+      const t = (await client.query('SELECT * FROM characters WHERE id=$1 AND alive FOR UPDATE', [a.target_character])).rows[0];
+      await client.query('DELETE FROM family_aggro WHERE gang_id=$1', [a.gang_id]); // one shot — hit or lost trail
+      if (g && t) {
+        const reachable = !jailed(t) && !hospitalized(t) && !safeHoused(t) && !witproActive(t) && !penSafe(t) && !inHole(t);
+        const hit = reachable && (process.env.FAMILY_RETAL_P != null ? Number(process.env.FAMILY_RETAL_P) >= 1 : Math.random() < FAMILY_WAR.RETAL_P);
+        if (hit) {
+          await client.query('UPDATE characters SET hosp_until=$2 WHERE id=$1', [t.id, new Date(Date.now() + FAMILY_WAR.RETAL_HOSP_MS)]);
+          await notify(client, t.id, 'family_retaliation', { family: g.name });
+          bus.emit('streets', { type: 'family_retaliation', who: t.name, family: g.name });
+          struck++;
+        }
+      }
+      await client.query('COMMIT');
+    } catch (e) { await client.query('ROLLBACK'); console.error('[sweepFamilyAggro]', a.gang_id, e?.message || e); }
+  }
+  return { struck, due: due.length };
 }
 
 // THE BLOOD-WAR LEADERBOARD — the most feared family-killers by lifetime loot (agents excluded, the

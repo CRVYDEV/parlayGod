@@ -560,6 +560,9 @@ const SIGNED = [
   ['FAMILY_WAR.MAX_P', 0.9],
   ['FAMILY_WAR.COUNTER_P', 0.35],
   ['FAMILY_WAR.COUNTER_HOSP_MS', 1800000],
+  ['FAMILY_WAR.AGGRO_DELAY_MS', 2700000],
+  ['FAMILY_WAR.RETAL_P', 0.5],
+  ['FAMILY_WAR.RETAL_HOSP_MS', 1800000],
   ['FAMILY_WAR.FAIL_HOSP_MS', 1800000],
   ['FAMILY_WAR.RANKS', [[0, 'Unblooded'], [25000, 'Button Man'], [150000, 'Warmaker'], [500000, 'Family Killer'], [2000000, 'The Exterminator']]],
   // THE OPERATION SLOTS (strategy package) — how much of the 31-entry income catalog one player runs

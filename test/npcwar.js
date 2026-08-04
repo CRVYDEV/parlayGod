@@ -11,6 +11,7 @@ import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { FAMILY_WAR, familyWarRankOf } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
+import { sweepFamilyAggro } from '../src/npcwar.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -98,6 +99,33 @@ const poolAfterRepel = Number((await pool.query(`SELECT war_pool FROM gangs WHER
 assert(poolAfterRepel >= poolBeforeRepel, 'a repelled raid does not loot the pool');
 delete process.env.FAMILY_RAID_P;
 
+// ── THE MANHUNT (step three): a raider who ESCAPED the scene counter is hunted down later ──
+await pool.query('DELETE FROM family_aggro');   // start clean
+await seedCh(raider.id, 'family_raid_at=NULL, energy=100, ammo=100, hosp_until=NULL, safe_until=NULL');
+process.env.FAMILY_RAID_P = '1';                // FAMILY_COUNTER unset → cRoll=1 ≥ COUNTER_P → escaped → aggro scheduled
+r = await call('POST', `/v1/npcfamily/${gid}/raid`, { token: raider.token });
+assert.equal(r.body.countered, false, 'escaped the scene → a manhunt is scheduled');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM family_aggro WHERE gang_id='${gid}'`)).rows[0].n), 1, 'the family remembers the raider');
+// warp it due + force the strike → the raider is hunted down
+await pool.query(`UPDATE family_aggro SET scheduled_at = now() - interval '1 minute' WHERE gang_id='${gid}'`);
+await seedCh(raider.id, 'hosp_until=NULL');
+process.env.FAMILY_RETAL_P = '1';
+let mh = await sweepFamilyAggro(pool);
+assert.equal(mh.struck, 1, 'THE MANHUNT — the family hunted the raider down');
+assert((await meOf(raider.token)).hospSeconds > 0, 'the manhunt put the raider in the hospital');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM family_aggro WHERE gang_id='${gid}'`)).rows[0].n), 0, 'the manhunt is one-shot (row cleared)');
+// SHIELD-HONOURING: a raider who hides during the delay dodges the manhunt
+await seedCh(raider.id, 'family_raid_at=NULL, energy=100, ammo=100, hosp_until=NULL');
+r = await call('POST', `/v1/npcfamily/${gid}/raid`, { token: raider.token });
+assert.equal(r.body.countered, false, 'escaped again');
+await pool.query(`UPDATE family_aggro SET scheduled_at = now() - interval '1 minute' WHERE gang_id='${gid}'`);
+await seedCh(raider.id, `safe_until = now() + interval '1 hour', hosp_until=NULL`); // gone to ground
+mh = await sweepFamilyAggro(pool);
+assert.equal(mh.struck, 0, 'a hidden raider dodges the manhunt (shield-honouring)');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM family_aggro WHERE gang_id='${gid}'`)).rows[0].n), 0, 'a missed manhunt still clears the aggro (one shot)');
+delete process.env.FAMILY_RETAL_P; delete process.env.FAMILY_RAID_P;
+await seedCh(raider.id, 'safe_until=NULL, family_raid_at=NULL, hosp_until=NULL');
+
 // ── own_family: a member of the family can't raid it ──
 await seedCh(raider.id, 'family_raid_at=NULL, hosp_until=NULL');
 const member = await mk('Turncoat Tony');
@@ -113,5 +141,5 @@ assert(lb.warmakers.some((w) => w.name === 'War Wolf' && w.war > 0), 'the family
 const vocab = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `family:raid rides the 'family' prefix (${JSON.stringify(vocab.unknown || [])})`);
 
-console.log('✅ THE BLOOD WAR test passed — the board (strength/defense/loot, player family excluded), a landed raid (bounded family:raid loot + legend + pool drain + ammo sink + cooldown), THE SEVERANCE (no season_wars → no Commission seat), the interlock (a beaten family reads weaker), THE DEFENCE (a counter hospitalizes the raider), a repel (hospitalized, pool untouched), the gates (level/own_family/cooldown/bad_target), the leaderboard, and §10.4 (family: vocabulary closed)');
+console.log('✅ THE BLOOD WAR test passed — the board (strength/defense/loot, player family excluded), a landed raid (bounded family:raid loot + legend + pool drain + ammo sink + cooldown), THE SEVERANCE (no season_wars → no Commission seat), the interlock (a beaten family reads weaker), THE DEFENCE (a counter hospitalizes the raider), THE MANHUNT (an escaped raider is hunted down later, shield-honouring, one-shot), a repel (hospitalized, pool untouched), the gates (level/own_family/cooldown/bad_target), the leaderboard, and §10.4 (family: vocabulary closed)');
 await app.close();
