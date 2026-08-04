@@ -165,6 +165,27 @@ assert.equal(await one('SELECT COUNT(*) n FROM characters WHERE id=$1 AND guarde
 assert.equal(await one('SELECT COUNT(*) n FROM wiretaps WHERE target_character=$1', [guardRes.id]), 0,
   "retiring a tapped resident frees the watcher's slot (F2)");
 
+// ════════════ RETIREMENT clears a hired resident's own CO-OP membership (AUDIT-hired-guns) ════════════
+// A resident hired into a crew heist (fillHeist) or a World raid (THE HIRED GUNS) leaves a member row.
+// The DEATH wipe deletes it; retirement (not a death) did not — a stale alive=false row bricks the
+// leader's op on crew_not_ready ("in the ground") until they disband. Retire now removes it, so the
+// leader hires a replacement instead — the graceful death-path outcome.
+const cH = await pool.connect(); await cH.query('BEGIN');
+const hiredGun = await spawnResident(cH, { band: POPULATION.BANDS.find((b) => b.id === 'boss') });
+const pLeader = await spawnResident(cH, { band: POPULATION.BANDS.find((b) => b.id === 'boss') }); // stand-in leader
+await cH.query('COMMIT'); cH.release();
+await pool.query("INSERT INTO world_raids (id, npc_id, leader_character, status) VALUES ('wr-hg', 'kryl', $1, 'planning')", [pLeader.id]);
+await pool.query("INSERT INTO world_raid_members (raid_id, character_id, hired) VALUES ('wr-hg', $1, true)", [hiredGun.id]);
+await pool.query("INSERT INTO crew_heists (id, job, leader_character, status) VALUES ('ch-hg', 'payroll', $1, 'planning')", [pLeader.id]);
+await pool.query("INSERT INTO crew_heist_members (heist_id, character_id, role, hired) VALUES ('ch-hg', $1, 'muscle', true)", [hiredGun.id]);
+const cHr = await pool.connect(); await cHr.query('BEGIN');
+await retireResident(cHr, hiredGun.id);
+await cHr.query('COMMIT'); cHr.release();
+assert.equal(await one('SELECT COUNT(*) n FROM world_raid_members WHERE character_id=$1', [hiredGun.id]), 0,
+  'retiring a hired World-raid gun removes its member row (no stale alive=false crew that bricks the go)');
+assert.equal(await one('SELECT COUNT(*) n FROM crew_heist_members WHERE character_id=$1', [hiredGun.id]), 0,
+  'retiring a hired heist hand removes its member row too (fillHeist parity)');
+
 // ════════════ THE WORKER — keep the city topped up ════════════
 const head0 = await population(pool);   // the killed resident's HEIR is alive and still a resident
 const tick1 = await runPopulation(pool);

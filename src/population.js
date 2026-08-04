@@ -279,6 +279,16 @@ export async function retireResident(client, charId) {
   // this txn already holds the character lock, so gangs-after-characters order is kept.
   const mem = (await client.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [charId])).rows[0];
   if (mem) await removeMember(client, mem.gang_id, charId);
+  // AUDIT-hired-guns (retirement-is-not-a-death, again): a resident hired into a co-op op — a crew
+  // heist (fillHeist) or a World raid (THE HIRED GUNS) — leaves a member row the DEATH wipe (runEstate
+  // line ~202) deletes but retirement did not. A stale alive=false row makes executeHeist/executeRaid
+  // lock the member `AND alive FOR UPDATE`, get nothing, and throw crew_not_ready ("in the ground") —
+  // bricking the leader's op until they disband (self-heals, no §10.4: no stake on the member, the
+  // heist stake sits on the LEADER and refunds whole on disband). Removing the row instead lets the
+  // leader HIRE A REPLACEMENT — the graceful death-path outcome. A resident is never a leader (planning
+  // is a player route), so a bare DELETE of its own membership never abandons a plan.
+  await client.query('DELETE FROM crew_heist_members WHERE character_id=$1', [charId]);
+  await client.query('DELETE FROM world_raid_members WHERE character_id=$1', [charId]);
   // AUDIT-street-war-street-life F1/F2/F4: retirement is not a death, so runEstate never sees this
   // resident — but OTHER players may have pointed rows at it (hired it as a bodyguard, tapped it,
   // put a search/secret/npc-hit on it, a family aggro'd it). runEstate clears those; retire must too,
