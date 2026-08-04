@@ -4365,8 +4365,20 @@ label noting the chest scales with the target's treasury). `test/expansion.js` p
 **2 flat**). **The two remaining flat entries — invade a frontier outpost, take an unheld district —
 were DELIBERATELY LEFT** on the garrison ratchet (`max(BASE, garrison × OUTBID)`): the incumbent's
 garrison IS the value at stake there, and a fresh/unheld target being cheap is the intended turf
-on-ramp. `M3.SEIZE_BASE` opening-floor indexing (to the target's operation tier) remains an OPEN dial
-if the founder wants the ratchet to compound from a bigger opening number.
+on-ramp.
+
+**`M3.SEIZE_BASE` opening-floor indexing — CLOSED, would DOUBLE-COUNT (verified 2026-08-04).** The
+follow-on flagged here (index the seize floor to the district's operation tier so the ratchet
+compounds from a bigger number) is **redundant** — `turfQuote` already prices the operation value at
+stake through the **F5 seizure premium** (`territoryBuildCost(tier) × TERRITORY_SEIZE_BPS` 50%), ADDED
+on top of the garrison-ratchet base, exactly the way war/siege now index. A district running The
+Syndicate ($20.3M cumulative build) already costs a **$10,150,000 premium** to seize; indexing the
+$30k floor to the same tier would price the operation TWICE. So turf is already value-at-stake-priced
+(garrison ratchet + operation premium), and the **value-at-stake thread is COMPLETE** across all four
+strategic costs: war → target treasury, siege → stronghold build cost, turf → garrison ratchet + the
+F5 operation premium, and frontier invade → garrison ratchet ALONE, correctly (an outpost's intrinsic
+value is a small tribute stream ~$50k/day, so no meaningful value premium is warranted — the founder's
+"keep the ratchet" is right there). Nothing further to index.
 
 ## THE STRATEGY PACKAGE — step five: THE MAP (founder-directed 2026-08-02)
 
