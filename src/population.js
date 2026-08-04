@@ -30,6 +30,7 @@ import { wipeFighterAtDeath } from './boxing.js';
 // on the gang row and the GANG_MAX_MEMBERS count invariant are all the same code a player runs.
 // (A parallel implementation is how the sackEmpire rake-cursor drifted; there is one founding path.)
 import { createGang, joinGang, removeMember } from './social/gangs.js';
+import { clearInboundPointers } from './social/estate.js';
 import { POPULATION, NPC_FIRST, NPC_LAST, npcBandOf, DISTRICTS, PACING, dayOf,
          LOAN, loanOwed, GOODS, BLACK_MARKET, M3, DUELS, CASINO, CARS, goodPriceOf,
          BOXING, STABLE, stableKindOf, FIGHTER_MONIKERS, RACER_NAMES, rollRarity, FAMILY_WAR } from './rules.js';
@@ -278,6 +279,13 @@ export async function retireResident(client, charId) {
   // this txn already holds the character lock, so gangs-after-characters order is kept.
   const mem = (await client.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [charId])).rows[0];
   if (mem) await removeMember(client, mem.gang_id, charId);
+  // AUDIT-street-war-street-life F1/F2/F4: retirement is not a death, so runEstate never sees this
+  // resident — but OTHER players may have pointed rows at it (hired it as a bodyguard, tapped it,
+  // put a search/secret/npc-hit on it, a family aggro'd it). runEstate clears those; retire must too,
+  // or a player is left paid+unprotected+locked-out (the guard pointer) or a tap slot burns. Shared
+  // helper so this can't drift from the death path. (Bounty pots on the resident resolve via the
+  // expiry sweep's refund — deliberately not death-burned here.)
+  await clearInboundPointers(client, charId, c.account_id);
   await client.query('UPDATE characters SET alive=false, cash=0, bank=0 WHERE id=$1', [charId]);
   return { id: charId, burned: held };
 }

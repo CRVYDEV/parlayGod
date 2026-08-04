@@ -147,6 +147,24 @@ assert.equal(await one('SELECT COUNT(*) n FROM characters WHERE id=$1 AND alive'
 assert.equal(await one('SELECT COUNT(*) n FROM characters WHERE account_id=$1 AND alive', [born2Acct]), 0,
   'and leaves NO heir — retirement makes room, unlike a killing');
 
+// ════════════ RETIREMENT clears the rows OTHERS pointed at the resident (F1/F2) ════════════
+// runEstate never sees a retiring resident, so retire must clear the inbound pointers itself — else a
+// player who hired it as a bodyguard is paid+unprotected+LOCKED OUT of a replacement, and a watcher's
+// tap slot burns. Both residents here are real character rows standing in for the players.
+const cA = await pool.connect(); await cA.query('BEGIN');
+const guardRes = await spawnResident(cA, { band: POPULATION.BANDS.find((b) => b.id === 'made') });
+const principal = await spawnResident(cA, { band: POPULATION.BANDS.find((b) => b.id === 'made') });
+await cA.query('COMMIT'); cA.release();
+await pool.query("UPDATE characters SET guarded_by=$1, guarded_until=now()+interval '1 hour' WHERE id=$2", [guardRes.id, principal.id]);
+await pool.query("INSERT INTO wiretaps (watcher_character, target_character, expires_at) VALUES ($1,$2, now()+interval '1 hour')", [principal.id, guardRes.id]);
+const cB = await pool.connect(); await cB.query('BEGIN');
+await retireResident(cB, guardRes.id);
+await cB.query('COMMIT'); cB.release();
+assert.equal(await one('SELECT COUNT(*) n FROM characters WHERE id=$1 AND guarded_by IS NOT NULL', [principal.id]), 0,
+  'retiring a hired bodyguard RELEASES the principal (F1 — paid+unprotected+locked-out otherwise)');
+assert.equal(await one('SELECT COUNT(*) n FROM wiretaps WHERE target_character=$1', [guardRes.id]), 0,
+  "retiring a tapped resident frees the watcher's slot (F2)");
+
 // ════════════ THE WORKER — keep the city topped up ════════════
 const head0 = await population(pool);   // the killed resident's HEIR is alive and still a resident
 const tick1 = await runPopulation(pool);

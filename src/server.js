@@ -1901,8 +1901,12 @@ export async function buildServer() {
   app.post('/v1/secrets/:id/pay', { preHandler: auth }, async (req) => {
     const s = (await pool.query('SELECT holder_character FROM secrets WHERE id=$1', [req.params.id])).rows[0];
     if (!s) return { error: 'no_secret', message: 'That page has already turned.' };
+    // COVERT (meet:false) — the extorter reached the mark anonymously (dig via the wire, extort with
+    // no name attached); PAYING the hush must not hand the mark the extorter's number in the black
+    // book, or the mark can identify and retaliate against a source whose anonymity was the whole
+    // mechanic. The sibling exposeSecret already carries this flag (AUDIT-street-war-street-life D1).
     return G.withTwoCharacters(pool, req.user.sub, s.holder_character,
-      (ch, holder, client, h) => Secrets.payHush(ch, holder, req.params.id, client, h));
+      (ch, holder, client, h) => Secrets.payHush(ch, holder, req.params.id, client, h), { meet: false });
   });
   // expose — two-party (the holder + the mark's living street; both rows held so the meter bump
   // rides the mark's positional persist)
