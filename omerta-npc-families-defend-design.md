@@ -1,8 +1,20 @@
 # NPC families that DEFEND (NPC families step two, the antagonist leg)
 
-**Status:** BUILT (2026-08-04) — the offensive loop + inline retaliation + the severed legend.
-`src/npcwar.js`, `test/npcwar.js`, `sim.js` P-probe. The scheduled/deferred retaliation and NPC-family
-turf remain step-three candidates (see the end). The founder's step-two candidate list
+**Status:** BUILT (2026-08-04) — the offensive loop + the severed legend + BOTH retaliation layers:
+the inline scene-counter AND **THE MANHUNT** (the scheduled, shield-honouring worker retaliation,
+chained so a raider is caught now OR hunted later, never both). `src/npcwar.js`, `test/npcwar.js`,
+`sim.js` P-probe. Only NPC-family contestable turf remains a step-three candidate (see the end).
+
+**AS BUILT (deviation from the scoping body below):** the loot is a bounded cash FAUCET off a
+regen-bounded `war_pool` strength reservoir (the `world:raid` model exactly), NOT a transfer out of the
+NPC family's treasury. This is cleaner and more faithful to "borrow the World outfit" — an NPC family's
+treasury is $0 at founding (the `gang:found` cost is a sink), so there was nothing to transfer; the
+reservoir gives a bounded, regen-metered faucet with the same interlock. §10.4: `family:raid` is a
+bounded cash faucet + ammo sink under the `family:` prefix; `war_pool` is a strength reservoir, not a
+§10.4 bucket (the World precedent). The §2/§10.4 sections below describe the original treasury-transfer
+idea and are superseded by this.
+
+The founder's step-two candidate list
 (`omerta-npc-families-design.md`, BALANCE.md § NPC FAMILIES) names *"NPC families that DEFEND (a war
 score, a garrison, spoils worth taking — the cartel-outfit shape, which re-opens the standing faucet)."*
 Step one made NPC families joinable shells (real `gangs` rows, deliberately inert: no Commission seat,

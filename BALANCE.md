@@ -4667,3 +4667,23 @@ before regen bites. Petty vs the passive stack; §10.4 drift-0.
 `POOL_MAX`/`POOL_REGEN_HR` are the magnitude dials if the base-wide ceiling wants trimming. Deferred
 (step three): scheduled/shield-honouring retaliation (a worker sweep vs the current inline counter),
 and NPC families holding contestable turf (currently excluded to avoid the World-OCCUPATION overlap).
+
+## THE MANHUNT — blood-war scheduled retaliation (BUILT 2026-08-04)
+
+DEFEND step three, the retaliation deepening. The inline scene-counter (step two) is now CHAINED to a
+deferred manhunt: a raider who ESCAPES the scene counter (the `COUNTER_P` roll misses) is remembered by
+the family (`family_aggro`, one pending per family — the latest raider), and the worker
+(`sweepFamilyAggro`) sends someone after them ~45 min later. Exactly ONE retaliation path fires per raid
+(caught now OR hunted later, never both). The manhunt is **shield-honouring** — a raider in a safehouse /
+witpro / the Pen / hospital / lockup is unreachable → a clean miss — and one-shot (the row clears on hit
+OR miss). §10.4: zero (a hospitalization moves no currency); `family_aggro` is estate-wiped (a dead
+raider isn't hunted). `FAMILY_RETAL_P` is a TEST-ONLY roll knob. Mutation-verified.
+
+| lever | ships at | what it does |
+|---|---|---|
+| `FAMILY_WAR.AGGRO_DELAY_MS` | 45 min | how long before the family comes for an escaped raider |
+| `FAMILY_WAR.RETAL_P` | 0.5 | chance the manhunt finds them (a miss if they were hiding/dodged) |
+| `FAMILY_WAR.RETAL_HOSP_MS` | 30 min | the manhunt hospitalization |
+
+Deferred (final step): NPC families holding contestable turf (excluded to avoid the World-OCCUPATION
+overlap). The retaliation layer is now complete.

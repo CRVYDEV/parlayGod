@@ -2191,6 +2191,13 @@ ALTER TABLE gangs ADD COLUMN IF NOT EXISTS war_pool NUMERIC NOT NULL DEFAULT 0;
 ALTER TABLE gangs ADD COLUMN IF NOT EXISTS war_pool_at TIMESTAMPTZ;
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS family_raid_at TIMESTAMPTZ; -- per-attacker blood-war raid cooldown
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS family_war NUMERIC NOT NULL DEFAULT 0; -- lifetime loot from NPC families (status, survives death)
+-- THE MANHUNT (blood war step three): an NPC family remembers a raider who escaped the scene counter and
+-- sends someone after them later (a worker-resolved, shield-honouring hospitalization). One pending per family.
+CREATE TABLE IF NOT EXISTS family_aggro (
+  gang_id TEXT PRIMARY KEY,
+  target_character TEXT NOT NULL,
+  scheduled_at TIMESTAMPTZ NOT NULL
+);
 ALTER TABLE crew_heists ADD COLUMN IF NOT EXISTS fenced BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS heist_loot NUMERIC NOT NULL DEFAULT 0;
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS heists_pulled INT NOT NULL DEFAULT 0;
