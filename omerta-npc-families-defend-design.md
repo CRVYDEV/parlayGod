@@ -76,10 +76,13 @@ family is a real risk decision, not a fixed-price standing buy — which is the 
 
 - **No Commission seat, no family yield** — unchanged (§10.4 $OMR into an unspendable reserve; a decree
   moving signed surfaces). The war score is a status axis, outside both.
-- **No turf.** NPC families do NOT hold core districts — that overlaps the World OCCUPATION model (5/6
-  core districts already start NPC-outfit-held) and the player turf/perk map. Family conflict is the
-  garrison/loot/retaliation loop, not a turf grab. (Deferred: an NPC family holding a *frontier-style*
-  outpost, if the World and family antagonists are ever unified.)
+- **No CORE turf.** NPC families do NOT hold core districts — that overlaps the World OCCUPATION model
+  (5/6 core districts already start NPC-outfit-held) and the player turf/perk map. Family conflict is the
+  garrison/loot/retaliation loop, not a core-turf grab. **(BUILT — THE CONQUEST, step four:** a routed
+  NPC family becomes a *frontier-style* VASSAL — `held_by_gang` + a bounded `family:tribute` treasury
+  faucet, contestable by a re-rout, released on dissolution. It sits on the family's own reservoir, never
+  a core district, so the World-OCCUPATION overlap the deferral guarded against is avoided. See BALANCE.md
+  § THE CONQUEST.)
 - **Still un-declarable via `declareWar`.** The formal war system with its Commission implications stays
   player-vs-player; `raidFamily` is the NPC-family path and carries none of it.
 

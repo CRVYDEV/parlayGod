@@ -38,24 +38,35 @@ export async function warBoard(db, ch = null) {
   // two flat queries + a JS join — pg-mem drops non-grouped columns to null under GROUP BY (so a
   // war_pool_at read as null makes regen see a full pool), the /v1/gangs precedent.
   const rows = (await db.query(
-    'SELECT id, name, tag, war_pool, war_pool_at FROM gangs WHERE npc_flag ORDER BY name')).rows;
+    'SELECT id, name, tag, war_pool, war_pool_at, held_by_gang, tribute_at FROM gangs WHERE npc_flag ORDER BY name')).rows;
   const counts = {};
   for (const m of (await db.query('SELECT gang_id, COUNT(*) n FROM gang_members GROUP BY gang_id')).rows) counts[m.gang_id] = Number(m.n);
+  // holder family names (a flat lookup — no correlated subquery)
+  const holderIds = [...new Set(rows.map((r) => r.held_by_gang).filter(Boolean))];
+  const holders = {};
+  if (holderIds.length) for (const hg of (await db.query('SELECT id, name, tag FROM gangs')).rows) if (holderIds.includes(hg.id)) holders[hg.id] = hg;
   const now = new Date();
   const myGang = ch ? (await db.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [ch.id])).rows[0]?.gang_id : null;
   const lvl = ch ? levelOf(Number(ch.respect)) : 0;
   const board = rows.filter((r) => r.id !== myGang).map((r) => {
     const p = regenPool(r, now);
+    const holder = r.held_by_gang && holders[r.held_by_gang];
+    const mine = !!(myGang && r.held_by_gang === myGang);
     return { id: r.id, name: r.name, tag: r.tag, members: counts[r.id] || 0,
       strengthPct: Math.round((p / FAMILY_WAR.POOL_MAX) * 100), defense: defenseOf(p),
       loot: Math.min(Math.floor(p * FAMILY_WAR.RAID_BPS / 10000), FAMILY_WAR.RAID_MAX, Math.floor(p)),
-      canRaid: !!ch && lvl >= FAMILY_WAR.RAID_MIN_LVL };
+      canRaid: !!ch && lvl >= FAMILY_WAR.RAID_MIN_LVL,
+      heldBy: holder ? { name: holder.name, tag: holder.tag, mine } : null,
+      tributePending: mine ? familyTribute(r.tribute_at, now.getTime()) : null };
   });
   let you = null;
   if (ch) {
     const dmg = Number((await db.query('SELECT family_war FROM account_persistent WHERE account_id=$1', [ch.account_id])).rows[0]?.family_war || 0);
+    let held = 0, pending = 0;
+    if (myGang) for (const r of rows) if (r.held_by_gang === myGang) { held++; pending += familyTribute(r.tribute_at, now.getTime()); }
     you = { war: dmg, rank: familyWarRankOf(dmg).name, minLvl: FAMILY_WAR.RAID_MIN_LVL,
-      raidCdSeconds: cooling(ch) ? Math.ceil((new Date(ch.family_raid_at).getTime() - Date.now()) / 1000) : 0 };
+      raidCdSeconds: cooling(ch) ? Math.ceil((new Date(ch.family_raid_at).getTime() - Date.now()) / 1000) : 0,
+      vassals: held, tributePending: pending, tributePerHr: familyTributePerHr() };
   }
   return { families: board, you };
 }
@@ -103,13 +114,25 @@ export async function raidFamily(ch, gangId, client, h) {
 
   // landed — loot a bounded slice, draining the pool by exactly the loot (a §10.4-clean bounded faucet)
   const loot = Math.min(Math.floor(poolNow * FAMILY_WAR.RAID_BPS / 10000), FAMILY_WAR.RAID_MAX, Math.floor(poolNow));
-  await client.query('UPDATE gangs SET war_pool=$2, war_pool_at=$3 WHERE id=$1', [gangId, poolNow - loot, now]);
+  const poolAfter = poolNow - loot;
+  await client.query('UPDATE gangs SET war_pool=$2, war_pool_at=$3 WHERE id=$1', [gangId, poolAfter, now]);
   if (loot > 0) {
     ch.cash = Number(ch.cash) + loot;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: loot, reason: 'family:raid', counterparty: gangId });
     // THE BLOOD-WAR LEGEND — lifetime loot, account-level (survives death; direct SQL, off the positional
     // persist — the cartel_damage/kills precedent). NEVER season_wars: this buys no Commission seat.
     await client.query('UPDATE account_persistent SET family_war = family_war + $2 WHERE account_id=$1', [ch.account_id, loot]);
+  }
+
+  // THE CONQUEST — a raid that ROUTS the family (war_pool crosses below the floor) lets the raider's
+  // FAMILY claim it as a vassal (the World-frontier pattern; only on the CROSSING — the routBonus re-farm
+  // fix). The flag/tribute clock transfer; the incumbent's uncollected tribute forfeits (the clock reset).
+  let conquered = false;
+  const floor = FAMILY_WAR.POOL_MAX * FAMILY_WAR.ROUT_FLOOR_BPS / 10000;
+  if (myGang && poolNow > floor && poolAfter <= floor && g.held_by_gang !== myGang) {
+    conquered = true;
+    await client.query('UPDATE gangs SET held_by_gang=$2, held_since=$3, tribute_at=$3 WHERE id=$1', [gangId, myGang, now]);
+    bus.emit('streets', { type: 'family_conquered', who: ch.name, family: g.name });
   }
 
   // THE DEFENCE — the family fights back. Exactly ONE retaliation path fires: either the guns catch you
@@ -129,10 +152,50 @@ export async function raidFamily(ch, gangId, client, h) {
     await client.query('INSERT INTO family_aggro (gang_id, target_character, scheduled_at) VALUES ($1,$2,$3)',
       [gangId, ch.id, new Date(now.getTime() + FAMILY_WAR.AGGRO_DELAY_MS)]);
   }
-  await h.track(client, ch.account_id, 'family_raid', { gang: gangId, success: true, loot, countered });
+  await h.track(client, ch.account_id, 'family_raid', { gang: gangId, success: true, loot, countered, conquered });
   bus.emit('streets', { type: 'family_raided', who: ch.name, family: g.name, loot });
-  return { ok: true, success: true, family: g.name, loot, countered,
+  return { ok: true, success: true, family: g.name, loot, countered, conquered,
     hospSeconds: countered ? Math.round(FAMILY_WAR.COUNTER_HOSP_MS / 1000) : 0 };
+}
+
+// tribute owed by a held NPC family, lazy-accrued on its tribute_at (the world frontier twin). A small
+// bounded faucet (TRIBUTE_BPS of the regen rate, capped) — the point is turf worth HOLDING, not the money.
+const familyTributePerHr = () => Math.floor(FAMILY_WAR.POOL_REGEN_HR * FAMILY_WAR.TRIBUTE_BPS / 10000);
+function familyTribute(tributeAt, now = Date.now()) {
+  if (tributeAt == null) return 0;
+  const hrs = Math.min(FAMILY_WAR.TRIBUTE_CAP_MS, Math.max(0, now - new Date(tributeAt).getTime())) / 3600000;
+  return Math.floor(familyTributePerHr() * hrs);
+}
+
+// COLLECT the conquest tribute from every NPC family your family holds → the treasury. Any member can
+// collect (the collectFrontier precedent); D2 safehouse-blocked (banking a productive stream is exposed).
+// §10.4: a treasury FAUCET `family:tribute` (character_id NULL, counterparty=gang) reconciled in the
+// gang-treasuries check. Lock: own gang → the held NPC family rows (the collectFrontier posture).
+export async function collectFamilyTribute(ch, client, h) {
+  if (!h.owned.gangId) throw new GameError('no_gang', "You're not in a family.");
+  if (safeHoused(ch)) throw new GameError('safe', 'The runners report to a man on the street, not a ghost — collection waits until you surface.');
+  const now = new Date();
+  const g = (await client.query('SELECT treasury FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
+  const held = (await client.query('SELECT id, name, tribute_at FROM gangs WHERE held_by_gang=$1 AND npc_flag FOR UPDATE', [h.owned.gangId])).rows;
+  let total = 0; const collected = [];
+  for (const r of held) {
+    const owed = familyTribute(r.tribute_at, now.getTime());
+    if (owed > 0) {
+      total += owed; collected.push({ name: r.name, tribute: owed });
+      await client.query('UPDATE gangs SET tribute_at=$2 WHERE id=$1', [r.id, now]);
+    }
+  }
+  if (total <= 0) return { ok: true, collected: 0, vassals: held.length };
+  await client.query('UPDATE gangs SET treasury = treasury + $2 WHERE id=$1', [h.owned.gangId, total]);
+  await h.ledger(client, { currency: 'cash', amount: total, reason: 'family:tribute', counterparty: h.owned.gangId });
+  if (h.owned.gang) h.owned.gang.treasury = Number(g.treasury) + total;
+  return { ok: true, collected: total, tributes: collected };
+}
+
+// a dissolved family drops its conquests — the NPC vassals go unheld (the releaseFrontierHolds twin).
+// Called from gang dissolution under the gang lock; gangs is a leaf here (no cycle).
+export async function releaseFamilyHolds(client, gangId) {
+  await client.query('UPDATE gangs SET held_by_gang=NULL, held_since=NULL, tribute_at=NULL WHERE held_by_gang=$1', [gangId]);
 }
 
 // THE MANHUNT — the worker resolves scheduled retaliations: a family sends someone after a raider who
@@ -172,4 +235,17 @@ export async function bloodWarLeaderboard(pool) {
     `SELECT a.family_war, c.name FROM account_persistent a JOIN characters c ON c.account_id=a.account_id AND c.alive
       WHERE a.family_war > 0 AND NOT a.agent_flag AND NOT a.npc_flag ORDER BY a.family_war DESC LIMIT 15`)).rows;
   return { warmakers: rows.map((r) => ({ name: r.name, war: Number(r.family_war), rank: familyWarRankOf(r.family_war).name })) };
+}
+
+// THE CONQUEST BOARD — families ranked by NPC vassals held (two flat queries + a JS aggregate, the
+// /v1/gangs precedent). Pure status.
+export async function conquestLeaderboard(pool) {
+  const held = (await pool.query('SELECT held_by_gang FROM gangs WHERE npc_flag AND held_by_gang IS NOT NULL')).rows;
+  if (!held.length) return { families: [] };
+  const by = {};
+  for (const r of held) by[r.held_by_gang] = (by[r.held_by_gang] || 0) + 1;
+  const names = {};
+  for (const g of (await pool.query('SELECT id, name, tag FROM gangs')).rows) if (by[g.id]) names[g.id] = g;
+  return { families: Object.entries(by).map(([id, n]) => ({ name: names[id]?.name, tag: names[id]?.tag, vassals: n }))
+    .filter((f) => f.name).sort((a, b) => b.vassals - a.vassals).slice(0, 15) };
 }

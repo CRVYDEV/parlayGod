@@ -2105,6 +2105,8 @@ export async function buildServer() {
     G.readCharacter(pool, req.user.sub, (ch, client) => NpcWar.warBoard(client, ch)));
   app.post('/v1/npcfamily/:gangId/raid', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => NpcWar.raidFamily(ch, req.params.gangId, client, h)));
+  app.post('/v1/npcfamily/collect', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => NpcWar.collectFamilyTribute(ch, client, h)));
   app.get('/v1/world/raids', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client) => World.raidBoard(client, ch.id)));
   app.post('/v1/world/:npcId/plan', { preHandler: auth }, async (req) =>

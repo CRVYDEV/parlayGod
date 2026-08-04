@@ -133,6 +133,34 @@ await seedCh(member.id, 'respect=5760, energy=100, ammo=100');
 assert.equal((await call('POST', `/v1/gangs/${gid}/join`, { token: member.token })).code, 200, 'joined the NPC family (step one)');
 assert.equal((await call('POST', `/v1/npcfamily/${gid}/raid`, { token: member.token })).body.error, 'own_family', "you don't raid your own people");
 
+// ── THE CONQUEST (step three): routing an NPC family lets the raider's FAMILY hold it as a vassal ──
+// the raider founds a family, then routs the NPC family (war_pool crosses the floor) → conquest.
+await seedCh(raider.id, 'family_raid_at=NULL, energy=100, ammo=100, hosp_until=NULL, safe_until=NULL');
+assert.equal((await call('POST', '/v1/gangs', { token: raider.token, body: { name: 'The Wolf Pack', tag: 'WLF' } })).code, 200, 'the raider founds a family');
+const wolfGang = (await pool.query(`SELECT gang_id FROM gang_members WHERE character_id='${raider.id}'`)).rows[0].gang_id;
+const floor = FAMILY_WAR.POOL_MAX * FAMILY_WAR.ROUT_FLOOR_BPS / 10000;
+await pool.query(`UPDATE gangs SET war_pool=${floor + 500}, war_pool_at=now() WHERE id='${gid}'`); // just above the rout floor
+process.env.FAMILY_RAID_P = '1';
+r = await call('POST', `/v1/npcfamily/${gid}/raid`, { token: raider.token });
+assert.equal(r.body.conquered, true, `THE CONQUEST — routing the family claims it (${JSON.stringify(r.body)})`);
+assert.equal((await pool.query(`SELECT held_by_gang FROM gangs WHERE id='${gid}'`)).rows[0].held_by_gang, wolfGang, 'the NPC family flies the raider family\'s flag');
+delete process.env.FAMILY_RAID_P;
+// the board shows the vassal as mine
+b = (await call('GET', '/v1/npcfamily', { token: raider.token })).body;
+assert.equal(b.you.vassals, 1, 'the board counts my vassal');
+assert(b.families.find((f) => f.id === gid)?.heldBy?.mine, 'the conquered family is flagged as mine');
+// tribute accrues → collect to the treasury (a ledgered family:tribute faucet)
+await pool.query(`UPDATE gangs SET tribute_at = now() - interval '10 hours' WHERE id='${gid}'`);
+const col = await call('POST', '/v1/npcfamily/collect', { token: raider.token });
+assert.equal(col.code, 200, `collected tribute (${JSON.stringify(col.body)})`);
+assert(col.body.collected > 0, 'the vassal paid tribute to the treasury');
+assert.equal(await sum('family:tribute'), col.body.collected, 'the tribute is a ledgered family:tribute faucet');
+const gtCheck = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'gang treasuries');
+assert(gtCheck.ok, `family:tribute reconciles the gang-treasuries check (${JSON.stringify(gtCheck)})`);
+// the conquest leaderboard
+const clb = (await call('GET', '/v1/leaderboard/conquest', { token: raider.token })).body;
+assert(clb.families.some((f) => f.name === 'The Wolf Pack' && f.vassals === 1), 'the conqueror tops the conquest board');
+
 // ── THE LEADERBOARD ──
 const lb = (await call('GET', '/v1/leaderboard/blood-wars', { token: raider.token })).body;
 assert(lb.warmakers.some((w) => w.name === 'War Wolf' && w.war > 0), 'the family-killer is on the blood-war board');
@@ -141,5 +169,5 @@ assert(lb.warmakers.some((w) => w.name === 'War Wolf' && w.war > 0), 'the family
 const vocab = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `family:raid rides the 'family' prefix (${JSON.stringify(vocab.unknown || [])})`);
 
-console.log('✅ THE BLOOD WAR test passed — the board (strength/defense/loot, player family excluded), a landed raid (bounded family:raid loot + legend + pool drain + ammo sink + cooldown), THE SEVERANCE (no season_wars → no Commission seat), the interlock (a beaten family reads weaker), THE DEFENCE (a counter hospitalizes the raider), THE MANHUNT (an escaped raider is hunted down later, shield-honouring, one-shot), a repel (hospitalized, pool untouched), the gates (level/own_family/cooldown/bad_target), the leaderboard, and §10.4 (family: vocabulary closed)');
+console.log('✅ THE BLOOD WAR test passed — the board (strength/defense/loot, player family excluded), a landed raid (bounded family:raid loot + legend + pool drain + ammo sink + cooldown), THE SEVERANCE (no season_wars → no Commission seat), the interlock (a beaten family reads weaker), THE DEFENCE (a counter hospitalizes the raider), THE MANHUNT (an escaped raider is hunted down later, shield-honouring, one-shot), a repel (hospitalized, pool untouched), THE CONQUEST (routing claims the family as a vassal → bounded family:tribute to the treasury, gang-treasuries reconciled, the conquest board), the gates (level/own_family/cooldown/bad_target), the leaderboard, and §10.4 (family: vocabulary closed)');
 await app.close();

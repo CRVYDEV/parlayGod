@@ -1178,6 +1178,12 @@ export const FAMILY_WAR = {
   AGGRO_DELAY_MS: 45 * 60 * 1000, // they come for you ~45 min after the raid…
   RETAL_P: 0.5,                   // …and find you half the time (a clean miss if you were hiding, or you dodged)
   RETAL_HOSP_MS: 30 * 60 * 1000,
+  // THE CONQUEST (step three): routing an NPC family (war_pool below the floor) on a raid lets the
+  // raider's FAMILY hold it as a vassal — a bounded tribute to the treasury, contestable by re-routing
+  // (the World-frontier pattern). NO core-district turf (avoids the OCCUPATION overlap).
+  ROUT_FLOOR_BPS: 1000,           // routed when war_pool drops below 10% of POOL_MAX
+  TRIBUTE_BPS: 200,               // tribute/hr = POOL_REGEN_HR × this/10000 (2% — a small vassal cut, the world FRONTIER twin)
+  TRIBUTE_CAP_MS: 24 * 3600 * 1000,
   FAIL_HOSP_MS: 30 * 60 * 1000,   // a repelled raid hospitalizes the raider (the world FAIL_HOSP_MS twin)
   RANKS: [
     [0, 'Unblooded'], [25000, 'Button Man'], [150000, 'Warmaker'],

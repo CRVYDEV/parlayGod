@@ -4685,5 +4685,31 @@ raider isn't hunted). `FAMILY_RETAL_P` is a TEST-ONLY roll knob. Mutation-verifi
 | `FAMILY_WAR.RETAL_P` | 0.5 | chance the manhunt finds them (a miss if they were hiding/dodged) |
 | `FAMILY_WAR.RETAL_HOSP_MS` | 30 min | the manhunt hospitalization |
 
-Deferred (final step): NPC families holding contestable turf (excluded to avoid the World-OCCUPATION
-overlap). The retaliation layer is now complete.
+Deferred (final step): NPC families holding contestable turf — BUILT below.
+
+## THE CONQUEST — NPC families as seizable turf (BUILT 2026-08-04)
+
+DEFEND step four, the deferred final step. Grinding an NPC family's `war_pool` below `ROUT_FLOOR_BPS`
+(the rout crossing — the World-frontier precedent, fired only on the CROSSING so it can't re-fire while
+the reservoir sits pinned) makes the router's family the VASSAL's overlord: `gangs.held_by_gang` is set,
+the tribute clock starts. A held NPC family pays a bounded, lazy-accrued **`family:tribute`** to the
+overlord treasury (`familyTribute(tribute_at)` = `POOL_REGEN_HR × TRIBUTE_BPS/10000`, capped at
+`TRIBUTE_CAP_MS` 24h — NOT drawn from `war_pool`, the vassal's protection money), banked by any member via
+`collectFamilyTribute` (`POST /v1/npcfamily/collect`; the collectTerritory precedent — jailed + D2
+safehouse gated). A rival routs the family again to take the hold; a dissolved overlord drops it
+(`releaseFamilyHolds`, under the gang lock in dissolution). §10.4: `family:tribute` is a treasury cash
+FAUCET (character_id NULL, counterparty=gang; added to the `gang treasuries` check's IN terms alongside
+`family:raid`) — the whole DEFEND pillar rides the `family:` cash+ammo vocabulary, zero new reason since
+the Blood War. `GET /v1/leaderboard/conquest` ranks families by held NPC outfits. Measured (sim, prints
+every run): base-wide **~$5,760/day** at `TARGET` 3 families (regen-metered + 24h-capped + requires a full
+rout to hold) — a small additive faucet at frontier-tribute parity.
+
+| lever | ships at | what it does |
+|---|---|---|
+| `FAMILY_WAR.ROUT_FLOOR_BPS` | 500 | the rout line — pool below 5% of max claims the family |
+| `FAMILY_WAR.TRIBUTE_BPS` | 2000 | vassal tribute = 20% of the family's regen/hr |
+| `FAMILY_WAR.TRIBUTE_CAP_MS` | 24h | the lazy tribute accrual cap |
+
+**Founder SIM sign-off flag:** `family:tribute` is a NEW (small, bounded, regen-metered) emission surface
+at frontier-tribute parity — sim before production; `TRIBUTE_BPS`/`ROUT_FLOOR_BPS` are the dials. The
+DEFEND pillar (Blood War → Manhunt → Conquest) is now feature-complete.

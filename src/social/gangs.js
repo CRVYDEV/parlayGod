@@ -10,6 +10,7 @@ import { GameError, bumpFamilyTask, bus, ledger, cleanText, notify } from '../ga
 import { DISTRICTS, M3, M8, MAP, districtNeighbours, ROSTER_POSTS, rosterPostOf, rosterMult, levelOf, dayOf, territoryBuildCost, worldNpcOf, liberationCost, DIPLOMACY, cityHourOf, seasonFx, CHARTERS, familyCharterOf, charterFx, FAMILY_CHARTER } from '../rules.js';
 import { seizeTerritoryRackets, releaseTerritoryRackets } from '../territory.js';
 import { releaseFrontierHolds, outfitStrengthFrac } from '../world.js';
+import { releaseFamilyHolds } from '../npcwar.js';
 import { activeDecree } from '../commission.js';
 import { pactActive, coalitionDiscountActive, dissolveDiplomacy } from '../diplomacy.js';
 import { sovGarrisonBonus, razeSov, dissolveSov } from '../sov.js';
@@ -93,6 +94,7 @@ export async function removeMember(client, gangId, characterId) {
     await client.query('UPDATE districts SET holder_gang=NULL, garrison=0, watch_hour=NULL WHERE holder_gang=$1', [gangId]);
     await releaseTerritoryRackets(client, gangId); // Phase 3: the operations die with the family (turf released)
     await releaseFrontierHolds(client, gangId);    // World step three: the frontier flags drop (the house takes its turf back)
+    await releaseFamilyHolds(client, gangId);       // BLOOD WAR conquest: a dead family's NPC vassals go unheld
     await dissolveDiplomacy(client, gangId);       // FIVE PILLARS #2: a dead family's treaties + coalition seats go with it
     await dissolveSov(client, gangId);             // FIVE PILLARS #3: its strongholds are razed (nobody inherits walls)
     await client.query('UPDATE gangs SET war_with=NULL, war_until=NULL WHERE war_with=$1', [gangId]);
