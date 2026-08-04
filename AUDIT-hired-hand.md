@@ -53,9 +53,9 @@ the free/retire pool. The filter keys on `status='planning'`, so a resident whos
 - **The fee is a real cost** on top of the forfeited slice, so a hand is the fallback, never the optimum —
   a real crewmate is always at least as good for the leader and better for the crew.
 
-## LOW (flagged, NOT patched — a pre-existing class, benign)
+## LOW — FIXED 2026-08-04 (was: flagged, a pre-existing benign class)
 
-**A resident can be hired into two concurrent plans.** `fillHeist`'s free-resident SELECT reads the
+**A resident could be hired into two concurrent plans.** `fillHeist`'s free-resident SELECT reads the
 NOT-IN pool and INSERTs without locking the chosen resident, so two leaders filling in the same instant can
 both pick the same lowest-id free resident (the PK is `heist_id+character_id`, so two different heists are
 allowed). Consequence is **benign and §10.4-neutral**: the hand is never paid on either job, both resolve
@@ -64,9 +64,13 @@ jails the shared resident, so the other job's `execute` fails `crew_not_ready` u
 annoyance, not a leak. This is the **same TOCTOU class real players already have** (two concurrent
 `joinHeist` calls both pass the `activeMembership` check), so it is not new surface. The clean fix is a
 `FOR UPDATE SKIP LOCKED` on the resident pick (so concurrent fills take different bodies), which wants the
-`dbCaps` pattern (pg-mem parses neither SKIP LOCKED nor the correlated guard) — deferred as not worth the
-machinery for a benign, bounded, pre-existing race. `HEIST_FILL_MAX`/`HEIST_FILL_FEE` remain founder
-sign-off levers (BALANCE.md § THE HIRED HAND).
+`dbCaps` pattern. **FIXED 2026-08-04**: `fillHeist`'s resident pick now appends `FOR UPDATE SKIP LOCKED`
+(gated on `dbCaps.skipLocked`, the THE TAKE pattern) — the chosen resident is locked until the fill txn
+commits, so a concurrent fill skips it and takes a different body. pg-mem's fallback picks correctly and
+just doesn't prevent the race (which a single-caller engine cannot exercise); the SKIP LOCKED form was
+verified to parse + execute on real Postgres. Locking the resident LAST cannot cycle: a candidate is by
+definition not in any planning heist, so `executeHeist` never holds it. `HEIST_FILL_MAX`/`HEIST_FILL_FEE`
+remain founder sign-off levers (BALANCE.md § THE HIRED HAND).
 
 ## Measurement loop closed
 

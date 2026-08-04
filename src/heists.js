@@ -21,6 +21,7 @@ import { HEIST_JOBS, HEIST_ROLES, heistJobOf, HEIST_PLAN_TTL_MS, HEIST_RAT_BPS, 
          CONSTANTS, M4, levelOf, PORTFOLIO , jailed, hospitalized, safeHoused } from './rules.js';
 import { accrued, decayedScrutiny, npcPendingScale } from './business.js';
 import { grantShares } from './portfolio.js';
+import { dbCaps } from './db.js';
 
 const uid = () => crypto.randomUUID();
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
@@ -131,6 +132,12 @@ export async function fillHeist(ch, heistId, wantRole, client, h) {
   // reason a go fails; and NOT already on a live plan (residentAct/retire skip committed residents).
   // prefer a resident standing in the leader's district (flavour), else any free body. Two flat
   // queries — pg-mem can't parse a CASE-in-ORDER-BY over an alias (the /v1/gangs precedent).
+  // AUDIT-hired-hand LOW: FOR UPDATE SKIP LOCKED so two concurrent fills take DIFFERENT bodies (the
+  // chosen resident is locked until this txn commits; a racing fill skips it — the THE TAKE / dbCaps
+  // pattern). pg-mem parses neither, so its fallback picks correctly and just doesn't prevent the race
+  // (which pg-mem, single-caller, cannot exercise). Locking the resident LAST (after leader + heist row)
+  // can't cycle: a candidate is by definition NOT in any planning heist, so executeHeist never holds it.
+  const lock = dbCaps.skipLocked ? 'FOR UPDATE SKIP LOCKED' : '';
   const freeQ = (extra, params) => client.query(
     `SELECT id FROM characters WHERE is_npc AND alive
        AND (jail_until IS NULL OR jail_until < now())
@@ -138,7 +145,7 @@ export async function fillHeist(ch, heistId, wantRole, client, h) {
        AND (safe_until IS NULL OR safe_until < now())
        AND id NOT IN (SELECT m.character_id FROM crew_heist_members m
                         JOIN crew_heists ch2 ON ch2.id = m.heist_id WHERE ch2.status='planning')
-       ${extra} ORDER BY id LIMIT 1`, params);
+       ${extra} ORDER BY id LIMIT 1 ${lock}`, params);
   const free = (await freeQ('AND loc = $1', [ch.loc])).rows[0] || (await freeQ('', [])).rows[0];
   if (!free) throw new GameError('no_hand', 'Nobody on the street will take the job right now.');
   ch.cash = Number(ch.cash) - HEIST_FILL_FEE;

@@ -2198,6 +2198,12 @@ CREATE TABLE IF NOT EXISTS family_aggro (
   target_character TEXT NOT NULL,
   scheduled_at TIMESTAMPTZ NOT NULL
 );
+-- THE CONQUEST (blood war step three): routing an NPC family (war_pool below the floor) lets the victor's
+-- family HOLD it as a vassal paying bounded tribute to the treasury (the World-frontier pattern on families).
+-- held_by_gang is the CONQUEROR's gang id on the NPC family row; contestable by re-routing.
+ALTER TABLE gangs ADD COLUMN IF NOT EXISTS held_by_gang TEXT;        -- which player family holds this NPC family (NULL = unheld)
+ALTER TABLE gangs ADD COLUMN IF NOT EXISTS held_since TIMESTAMPTZ;
+ALTER TABLE gangs ADD COLUMN IF NOT EXISTS tribute_at TIMESTAMPTZ;   -- lazy conquest-tribute clock
 ALTER TABLE crew_heists ADD COLUMN IF NOT EXISTS fenced BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS heist_loot NUMERIC NOT NULL DEFAULT 0;
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS heists_pulled INT NOT NULL DEFAULT 0;

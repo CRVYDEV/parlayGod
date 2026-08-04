@@ -1928,8 +1928,10 @@
     if (body.guard !== undefined && body.price !== undefined) bits.push(`hired protection — $${fmt(body.price)} up front`);
     if (body.hired === true && body.fee !== undefined) bits.push(`hired a hand for the ${body.role} seat — $${fmt(body.fee)}. A body fills the crew, but takes a cut and earns you nothing extra.`);
     if (body.family !== undefined && body.success !== undefined && body.loot !== undefined) {
-      if (body.success) bits.push(`hit ${body.family} — took $${fmt(body.loot)} off their war chest${body.countered ? '. Their guns caught you leaving — you\'re in the hospital.' : '.'}`);
+      if (body.success) bits.push(`hit ${body.family} — took $${fmt(body.loot)} off their war chest${body.conquered ? '. ROUTED — your family now holds them as a vassal.' : ''}${body.countered ? ' Their guns caught you leaving — you\'re in the hospital.' : ''}`);
       else bits.push(`${body.family} repelled the raid — their guns put you in the hospital.`);
+    }
+    if (body.tributes !== undefined && body.collected !== undefined) { if (body.collected > 0) bits.push(`collected $${fmt(body.collected)} in vassal tribute → the treasury.`);
     }
     if (body.bid !== undefined && body.id !== undefined && body.name === undefined && !body.youLead) bits.push(`bid $${fmt(body.bid)} placed${body.extended ? ' (clock reset)' : ''}`);
     // the repair is a GAMBLE (a botched roll charges you and doesn't fix it) — say so plainly so a
@@ -4350,11 +4352,14 @@
         <div class="card"><span class="t">${x.name}</span> <span class="chip">crew ${x.crew}/${x.crewMax}</span>
           <div class="d">led by ${x.leader} · lvl ${x.minLvl}+</div>
           <button class="act" data-joinraid="${x.id}">join the crew</button></div>`).join('') || (w.myRaid ? '' : '<span class="d" style="color:var(--dim)">no crew raids forming — plan one on an apex outfit above</span>')}</div>
-      <h2 style="margin-top:12px">The Blood War <span class="d" style="font-size:11px">(rival NPC families — raid them for a cut of their war chest; they hit back)</span></h2>
-      ${bw.you ? `<div class="card" style="border-color:var(--blood)"><span class="t">🩸 ${bw.you.rank}</span> <span class="d">$${fmt(bw.you.war)} lifetime taken off rival families — <a href="#" id="bw-lb">the blood-war board →</a>${bw.you.raidCdSeconds > 0 ? ` · next raid in ${mins(bw.you.raidCdSeconds)}` : ''}</span></div>` : ''}
+      <h2 style="margin-top:12px">The Blood War <span class="d" style="font-size:11px">(rival NPC families — raid them for a cut of their war chest; ROUT one to hold it as a vassal; they hit back)</span></h2>
+      ${bw.you ? `<div class="card" style="border-color:var(--blood)"><span class="t">🩸 ${bw.you.rank}</span> <span class="d">$${fmt(bw.you.war)} lifetime taken off rival families — <a href="#" id="bw-lb">the blood-war board →</a> · <a href="#" id="bw-clb">the conquest board →</a>${bw.you.raidCdSeconds > 0 ? ` · next raid in ${mins(bw.you.raidCdSeconds)}` : ''}</span></div>` : ''}
+      ${bw.you && bw.you.vassals > 0 ? `<div class="card"><span class="t">🏴 Your family holds ${bw.you.vassals} vassal${bw.you.vassals === 1 ? '' : 's'}</span>
+        <div class="d">a conquered family pays tribute to the treasury ($${fmt(bw.you.tributePerHr)}/hr each) · pending: <b>$${fmt(bw.you.tributePending)}</b></div>
+        ${bw.you.tributePending > 0 ? '<button class="act" data-do="POST /v1/npcfamily/collect">collect the tribute → treasury</button>' : '<span class="d" style="color:var(--dim)">nothing to collect yet</span>'}</div>` : ''}
       <div class="grid">${(bw.families || []).map((f) => `
-        <div class="card"><span class="t">${esc(f.name)}</span> <span class="chip">[${esc(f.tag)}]</span>
-          <div class="d">strength ${f.strengthPct}% · ${f.members} made · a raid takes ~$${fmt(f.loot)} off their chest</div>
+        <div class="card"><span class="t">${esc(f.name)}</span> <span class="chip">[${esc(f.tag)}]</span>${f.heldBy ? (f.heldBy.mine ? ' <span class="chip good">your vassal</span>' : ` <span class="chip">held by ${esc(f.heldBy.name)}</span>`) : ''}
+          <div class="d">strength ${f.strengthPct}% · ${f.members} made · a raid takes ~$${fmt(f.loot)} off their chest${f.strengthPct <= 10 ? ' · <span style="color:var(--warn)">routed — rout it to take the turf</span>' : ''}</div>
           ${f.canRaid ? `<button class="act" data-familyraid="${f.id}" style="border-color:var(--blood)">raid them (energy + ammo — they hit back)</button>` : `<span class="chip">need lvl ${bw.you?.minLvl || 8}</span>`}</div>`).join('') || '<span class="d" style="color:var(--dim)">no rival families on the map yet</span>'}</div>
       <h2 style="margin-top:12px">Landmarks <span class="d" style="font-size:11px">(one dedicable plaque per district — the biggest $OMR flex holds it)</span></h2>
       <div id="landmark-slot"></div>`;
@@ -4377,6 +4382,9 @@
     const bwlb = $('#bw-lb'); if (bwlb) bwlb.onclick = async (e) => { e.preventDefault();
       const d = (await api('GET', '/v1/leaderboard/blood-wars')).body?.warmakers || [];
       alert('THE BLOOD WAR\n\n' + (d.map((k, i) => `${i + 1}. ${k.name} — ${k.rank} ($${fmt(k.war)})`).join('\n') || 'nobody has drawn blood yet')); };
+    const bwclb = $('#bw-clb'); if (bwclb) bwclb.onclick = async (e) => { e.preventDefault();
+      const d = (await api('GET', '/v1/leaderboard/conquest')).body?.families || [];
+      alert('THE CONQUEST\n\n' + (d.map((k, i) => `${i + 1}. [${k.tag}] ${k.name} — ${k.vassals} vassal${k.vassals === 1 ? '' : 's'}`).join('\n') || 'no families hold a vassal yet')); };
     t.querySelectorAll('[data-plan]').forEach((b) => b.onclick = () => act('POST', `/v1/world/${b.dataset.plan}/plan`, {}).then(() => renderCity()));
     t.querySelectorAll('[data-joinraid]').forEach((b) => b.onclick = () => act('POST', `/v1/world/raids/${b.dataset.joinraid}/join`, {}).then(() => renderCity()));
     t.querySelectorAll('[data-leaveraid]').forEach((b) => b.onclick = () => act('POST', `/v1/world/raids/${b.dataset.leaveraid}/leave`, {}).then(() => renderCity()));

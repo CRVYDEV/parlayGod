@@ -187,8 +187,12 @@ async function collectLedgerChecks(pool) {
   const worldTributeIn = await sum(pool, "currency='cash' AND reason='world:tribute'");
   const worldInvadeOut = -(await sum(pool, "currency='cash' AND reason='world:invade'"));
   const worldReinforceOut = -(await sum(pool, "currency='cash' AND reason='world:reinforce'")); // step six: garrison-stiffen treasury SINK
+  // BLOOD WAR conquest: a routed NPC family held as a vassal pays a bounded tribute to the holder's
+  // treasury (a FAUCET, character_id NULL, counterparty=gang — the world:tribute twin; family:raid loot
+  // is character_id'd and rides the per-character cash check, so it is NOT double-counted here).
+  const familyTributeIn = await sum(pool, "currency='cash' AND reason='family:tribute'");
   push('gang treasuries', treasuries,
-    tributeIn + titheIn + territoryIncome + territoryMuscleIn + tollIn + portTollIn + worldTributeIn + sovIncomeIn - warOut - seizeOut - dissolvedCash - contractOut - territoryOut - sovOut - fixOut - worldInvadeOut - worldReinforceOut + treasuryRefunds - proposalOut + proposalRefund - claimOut + claimRefund);
+    tributeIn + titheIn + territoryIncome + territoryMuscleIn + tollIn + portTollIn + worldTributeIn + sovIncomeIn + familyTributeIn - warOut - seizeOut - dissolvedCash - contractOut - territoryOut - sovOut - fixOut - worldInvadeOut - worldReinforceOut + treasuryRefunds - proposalOut + proposalRefund - claimOut + claimRefund);
 
   // COMMISSION ESCROW (step three): open proposal deposits == posted − refunded − forfeited
   // (the bounty-escrow twin on the chamber's table; a dissolved family's deposit forfeits at settle).

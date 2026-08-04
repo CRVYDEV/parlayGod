@@ -448,6 +448,11 @@ note('world', 'co-op = ACCESS not ceiling', `crew splits ONE grab (leader ${WORL
   const perRaid = Math.min(Math.floor(FAMILY_WAR.POOL_MAX * FAMILY_WAR.RAID_BPS / 10000), FAMILY_WAR.RAID_MAX);
   note('blood war', `per-family ceiling (${fams} NPC families)`, `≤ $${fmt(regenDayFam)}/day/family → ≤ $${fmt(regenDayFam * fams)}/day base-wide`,
     `regen-bounded (POOL_MAX $${fmt(FAMILY_WAR.POOL_MAX)} < the weakest World outfit $150k); a raider caps at ${raidsDay}/day × $${fmt(perRaid)} = $${fmt(raidsDay * perRaid)}/day per family before regen bites; the DEFENCE (COUNTER_P ${FAMILY_WAR.COUNTER_P}) hospitalizes ~${Math.round(FAMILY_WAR.COUNTER_P * 100)}% of landed raids — a real risk, not a fixed-price standing buy. §10.4: a bounded family:raid faucet, NO season_wars (the severance)`);
+  // THE CONQUEST tribute — a small ADDITIVE faucet (TRIBUTE_BPS of the regen rate, capped 24h) to the
+  // holder's treasury. The point is turf worth HOLDING, not the money.
+  const tribPerHr = Math.floor(FAMILY_WAR.POOL_REGEN_HR * FAMILY_WAR.TRIBUTE_BPS / 10000);
+  note('blood war', 'conquest tribute (held vassal)', `$${fmt(tribPerHr * 24)}/day/family → ≤ $${fmt(tribPerHr * 24 * fams)}/day base-wide`,
+    `a routed NPC family held as a vassal pays ${FAMILY_WAR.TRIBUTE_BPS / 100}% of its regen rate to the treasury (the World-frontier twin, capped 24h) — a small ADDITIVE faucet on top of loot; the value is the conquest/turf goal, not the income. §10.4: family:tribute reconciles the gang-treasuries check`);
 }
 
 // ════════════════ P9.9 boxing — exhibition purse EV (the new PvE faucet) ════════════════

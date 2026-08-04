@@ -100,6 +100,7 @@ export function register(app, { pool, auth, modAuth }) {
     // NPC RIVAL FAMILIES — the server-wide common enemy. GET is the board (odds tonight); raid is co-op.
     app.get('/v1/leaderboard/world', { preHandler: auth }, async () => World.worldLeaderboard(pool)); // THE WAR EFFORT board
     app.get('/v1/leaderboard/blood-wars', { preHandler: auth }, async () => NpcWar.bloodWarLeaderboard(pool)); // THE BLOOD WAR — family-killers
+    app.get('/v1/leaderboard/conquest', { preHandler: auth }, async () => NpcWar.conquestLeaderboard(pool)); // THE CONQUEST — NPC vassals held
     // step three — CO-OP CREW RAIDS on the apex outfits + THE FRONTIER (family conquest leaderboard)
     app.get('/v1/leaderboard/frontier', { preHandler: auth }, async () => World.frontierLeaderboard(pool)); // THE FRONTIER board
     // step four — THE FRONTIER MADE REAL: collect a held outpost's tribute + invade a rival-held outpost
