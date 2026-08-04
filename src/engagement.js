@@ -43,6 +43,7 @@ export const SYSTEMS = {
   'the commission': ['commission_vote', 'commission_veto', 'commission_proposal', 'commission_override'],
   'territory': ['territory_raid', 'territory_op', 'territory_specialist', 'sov_income'],
   'the world': ['world_raid', 'world_raid_plan', 'world_raid_join'],
+  'the blood war': ['family_raid'],
   'business empire': ['business_raid'],
   'convoys': ['convoy_depart', 'convoy_ambush'],
   'the port': ['port'],

@@ -50,6 +50,7 @@ import * as Mastery from './mastery.js';
 import * as Underworld from './underworld.js';
 import * as Law from './law.js';
 import * as World from './world.js';
+import * as NpcWar from './npcwar.js';
 import * as Standing from './standing.js';
 import * as Season from './season.js';
 import * as Pen from './pen.js';
@@ -2099,6 +2100,11 @@ export async function buildServer() {
     G.readCharacter(pool, req.user.sub, (ch, client, h) => World.worldBoard(client, ch, h)));
   app.post('/v1/world/:npcId/raid', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => World.raidNpc(ch, req.params.npcId, client, h)));
+  // THE BLOOD WAR — NPC families as a PvE antagonist (omerta-npc-families-defend-design.md)
+  app.get('/v1/npcfamily', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client) => NpcWar.warBoard(client, ch)));
+  app.post('/v1/npcfamily/:gangId/raid', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => NpcWar.raidFamily(ch, req.params.gangId, client, h)));
   app.get('/v1/world/raids', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client) => World.raidBoard(client, ch.id)));
   app.post('/v1/world/:npcId/plan', { preHandler: auth }, async (req) =>

@@ -4634,3 +4634,36 @@ so beating NPC families buys a feared-warlord status but **zero Commission seats
 outfit (`WORLD_NPCS`), not the player-gang `declareWar`. No turf (avoids the World-OCCUPATION overlap), no
 Commission seat, no yield (the step-one exclusions stand). Needs a sim sizing pass (the garrison/RAID_BPS/
 regen/retaliation numbers, benchmarked below the weakest World outfit) before build — hence SCOPED.
+
+## THE BLOOD WAR — NPC families as a PvE antagonist (BUILT 2026-08-04)
+
+NPC families step two, the DEFEND leg (`omerta-npc-families-defend-design.md`, `src/npcwar.js`). NPC
+families become attackable outfits on the WORLD-raid pattern: `raidFamily` (`POST /v1/npcfamily/:id/raid`)
+loots a bounded slice of a regen-bounded `war_pool` (energy + ammo + heat + a per-attacker cooldown; a
+muscle+cunning/2 contest vs a pool-scaled garrison, so grinding a family down makes it both easier and
+lower-loot — the World interlock). **THE DEFENCE:** a landed raid rolls a counter (`COUNTER_P` 0.35) that
+hospitalizes the raider — they hit back, so a raid is a real risk, not a fixed-price buy. **THE
+SEVERANCE (the whole design):** the war score is a SEPARATE account-level `family_war` legend
+(`FAMILY_WAR.RANKS`, `GET /v1/leaderboard/blood-wars`) that NEVER touches `season_wars`/Commission
+standing — mutation-verified. §10.4: `family:raid` is a bounded cash FAUCET + ammo SINK (the `family:`
+prefix joined both vocabularies; `war_pool` is a strength reservoir, not a §10.4 bucket — the World
+precedent); the step-one exclusions (no Commission seat, no yield, no turf, un-declarable) stand.
+
+**Measured (sim, the blood-war probe, prints every run):** ≤ **$96,000/day/family → ≤ $288,000/day
+base-wide** across the 3 NPC families — regen-bounded, below the weakest World outfit (Dock Rats $150k)
+by design since the pool is turnover-adjacent. A raider caps at 6/day × $6,000 = $36k/day per family
+before regen bites. Petty vs the passive stack; §10.4 drift-0.
+
+| lever | ships at | what it does |
+|---|---|---|
+| `FAMILY_WAR.POOL_MAX` | 120000 | the loot reservoir at full strength (< Dock Rats 150k). The faucet-size dial |
+| `FAMILY_WAR.POOL_REGEN_HR` | 4000 | regen → the base-wide ceiling is `TARGET × this × 24` |
+| `FAMILY_WAR.RAID_BPS` / `RAID_MAX` | 500 / 20000 | the bounded per-raid loot |
+| `FAMILY_WAR.RAID_CD_MS` | 4h | per-attacker cooldown — bounds farming across all families |
+| `FAMILY_WAR.COUNTER_P` | 0.35 | THE DEFENCE — chance a landed raid hospitalizes the raider |
+| `FAMILY_WAR.BASE_P`/`DEF_MAX`/`DEF_SCALE`/`MIN_P`/`MAX_P` | 0.55/60/300/.1/.9 | the contest curve |
+
+**Founder SIM sign-off flags:** the `family:raid` faucet is a NEW (small, bounded) emission surface —
+`POOL_MAX`/`POOL_REGEN_HR` are the magnitude dials if the base-wide ceiling wants trimming. Deferred
+(step three): scheduled/shield-honouring retaliation (a worker sweep vs the current inline counter),
+and NPC families holding contestable turf (currently excluded to avoid the World-OCCUPATION overlap).

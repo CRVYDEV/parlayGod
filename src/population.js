@@ -32,7 +32,7 @@ import { wipeFighterAtDeath } from './boxing.js';
 import { createGang, joinGang, removeMember } from './social/gangs.js';
 import { POPULATION, NPC_FIRST, NPC_LAST, npcBandOf, DISTRICTS, PACING, dayOf,
          LOAN, loanOwed, GOODS, BLACK_MARKET, M3, DUELS, CASINO, CARS, goodPriceOf,
-         BOXING, STABLE, stableKindOf, FIGHTER_MONIKERS, RACER_NAMES, rollRarity } from './rules.js';
+         BOXING, STABLE, stableKindOf, FIGHTER_MONIKERS, RACER_NAMES, rollRarity, FAMILY_WAR } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const rnd = (lo, hi) => lo + Math.random() * (hi - lo);
@@ -537,7 +537,9 @@ async function foundNpcFamily(client) {
   const h = stubH();
   await createGang(ch, name, tag, client, h);          // validates, clash-checks, ledgers `gang:found`
   await client.query('UPDATE characters SET cash=$2 WHERE id=$1', [ch.id, ch.cash]);   // createGang deducts in memory
-  await client.query('UPDATE gangs SET npc_flag=true WHERE id=$1', [h.owned.gangId]);
+  // THE BLOOD WAR (step two): seed the family's war_pool at full strength — a fresh outfit defends hard
+  // and pays well (regen-bounded thereafter). NOT a §10.4 bucket (a strength reservoir, the world precedent).
+  await client.query('UPDATE gangs SET npc_flag=true, war_pool=$2, war_pool_at=now() WHERE id=$1', [h.owned.gangId, FAMILY_WAR.POOL_MAX]);
   return true;
 }
 

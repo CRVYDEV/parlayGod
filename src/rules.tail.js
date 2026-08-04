@@ -1151,6 +1151,38 @@ export const WORLD_NPCS = [
   { id: 'volkov',   name: 'The Volkov Bratva',  minLvl: 55, max: 12000000, regenPerHr: 180000, base: 0.30, def: 220, routBonus: 500000, coop: true },
 ];
 export const worldNpcOf = (id) => WORLD_NPCS.find((n) => n.id === id) || null;
+
+// NPC FAMILIES step two — THE BLOOD WAR (omerta-npc-families-defend-design.md). An NPC family is an
+// attackable outfit on the WORLD-raid pattern: a `war_pool` strength/loot reservoir (regen-bounded, a
+// bounded cash faucet — NOT the player-gang war system, so NO season_wars/Commission standing). The war
+// score is a SEPARATE account-level legend, severing the flagged standing faucet by construction. THE
+// DEFENCE: a landed raid rolls a counter (COUNTER_P) that hospitalizes the raider — they hit back, so a
+// raid is a real risk, not a fixed-price standing buy. All numbers are founder SIM sign-off levers; the
+// pool sits BELOW the weakest World outfit (Dock Rats, max 150k) since it is turnover-seeded, not designed.
+export const FAMILY_WAR = {
+  POOL_MAX: 120000,               // an NPC family's loot reservoir at full strength (< Dock Rats 150k)
+  POOL_REGEN_HR: 4000,            // lazy regen toward POOL_MAX (the world regenPerHr twin)
+  RAID_BPS: 500,                  // a landed raid loots 5% of the current pool (the GRAB_BPS twin)…
+  RAID_MAX: 20000,                // …capped
+  RAID_MIN_LVL: 8,                // a made man's op (the world/heist floor)
+  RAID_ENERGY: 18, RAID_AMMO: 8, RAID_HEAT: 8,
+  RAID_CD_MS: 4 * 3600 * 1000,    // per-ATTACKER cooldown (characters.family_raid_at) — bounds farming across all families
+  BASE_P: 0.55,                   // base raid success…
+  DEF_MAX: 60, DEF_SCALE: 300,    // …def scales with the pool fraction (a full family defends harder + pays more); p = clamp(BASE_P + (power − def)/DEF_SCALE, MIN_P, MAX_P)
+  MIN_P: 0.1, MAX_P: 0.9,
+  COUNTER_P: 0.35,                // THE DEFENCE: chance the family's guns hospitalize the raider on a LANDED raid (they fight back)
+  COUNTER_HOSP_MS: 30 * 60 * 1000,
+  FAIL_HOSP_MS: 30 * 60 * 1000,   // a repelled raid hospitalizes the raider (the world FAIL_HOSP_MS twin)
+  RANKS: [
+    [0, 'Unblooded'], [25000, 'Button Man'], [150000, 'Warmaker'],
+    [500000, 'Family Killer'], [2000000, 'The Exterminator'],
+  ],
+};
+export const familyWarRankOf = (dmg) => {
+  const d = Number(dmg) || 0; let r = FAMILY_WAR.RANKS[0];
+  for (const t of FAMILY_WAR.RANKS) if (d >= t[0]) r = t;
+  return { name: r[1] };
+};
 export const WORLD = {
   RAID_ENERGY: 30, RAID_AMMO: 15, RAID_HEAT: 12,   // a raid costs energy + ammo (a §10.4 ammo sink) + heat
   RAID_CD_MS: 2 * 3600 * 1000,                     // per-character cooldown between raids

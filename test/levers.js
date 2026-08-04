@@ -540,6 +540,28 @@ const SIGNED = [
   ['FAMILY_CHARTER_FX.LOSS_COST', 1.25],
   ['FAMILY_CHARTER.CHANGE_OMR', 40],
   ['FAMILY_CHARTER.CHANGE_CD_MS', 604800000],
+  // THE BLOOD WAR (NPC families step two) — NPC families as a PvE antagonist. A bounded family:raid
+  // faucet on a regen pool that sits BELOW the weakest World outfit; the war score never touches
+  // Commission standing (the severance). All SIM sign-off levers. RANKS pinned whole (array leaves are
+  // invisible to the reader check).
+  ['FAMILY_WAR.POOL_MAX', 120000],
+  ['FAMILY_WAR.POOL_REGEN_HR', 4000],
+  ['FAMILY_WAR.RAID_BPS', 500],
+  ['FAMILY_WAR.RAID_MAX', 20000],
+  ['FAMILY_WAR.RAID_MIN_LVL', 8],
+  ['FAMILY_WAR.RAID_ENERGY', 18],
+  ['FAMILY_WAR.RAID_AMMO', 8],
+  ['FAMILY_WAR.RAID_HEAT', 8],
+  ['FAMILY_WAR.RAID_CD_MS', 14400000],
+  ['FAMILY_WAR.BASE_P', 0.55],
+  ['FAMILY_WAR.DEF_MAX', 60],
+  ['FAMILY_WAR.DEF_SCALE', 300],
+  ['FAMILY_WAR.MIN_P', 0.1],
+  ['FAMILY_WAR.MAX_P', 0.9],
+  ['FAMILY_WAR.COUNTER_P', 0.35],
+  ['FAMILY_WAR.COUNTER_HOSP_MS', 1800000],
+  ['FAMILY_WAR.FAIL_HOSP_MS', 1800000],
+  ['FAMILY_WAR.RANKS', [[0, 'Unblooded'], [25000, 'Button Man'], [150000, 'Warmaker'], [500000, 'Family Killer'], [2000000, 'The Exterminator']]],
   // THE OPERATION SLOTS (strategy package) — how much of the 31-entry income catalog one player runs
   ['OPERATIONS.SLOTS_BASE', 2],
   ['OPERATIONS.SLOTS_PER_LEVEL', 4],
