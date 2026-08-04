@@ -4343,6 +4343,31 @@ which week it stops mattering. Three candidates, cheapest first —
 The verdict for the strategy package: its tradeoffs bite hardest on families too new to feel them
 and barely at all on the ones the endgame is for. Re-run `P9.20d` after any of the above moves.
 
+### VALUE-AT-STAKE INDEXING — APPLIED (founder-directed 2026-08-04, base = "value at stake", "bite hard")
+
+The founder chose to index the two FULLY-FLAT costs to **what's at stake** (not the attacker's
+holdings or standing), biting at a real fraction of income. Built:
+
+| cost | was | now | base = the value at stake |
+|---|---|---|---|
+| `declareWar` | flat `M3.WAR_COST` $10k | `max(WAR_COST, targetTreasury × M3.WAR_COST_BPS)` | the TARGET's treasury — spoils are `WAR_SPOILS` (20%) of it, so you ante a cut of what you'd win. A $5M-treasury rival costs $100k to declare on; a maxed rival ~$1.29M (0.02d, out of the "pocket change" bucket) |
+| `siegeSov` | flat `SOV.SIEGE_COST` $50k | `max(SIEGE_COST, tierCost × SOV.SIEGE_COST_BPS)` | the target stronghold's BUILD COST — tearing down The Iron Capital ($40M built) costs $1.2M, a Bastion $150k; the $50k floor binds through Citadel, so the low-tier on-ramp is unchanged |
+
+`M3.WAR_COST_BPS` (200 = 2%) and `SOV.SIEGE_COST_BPS` (300 = 3%) are **founder sign-off levers**
+(pinned in `test/levers.js`). Both keep the floor at the old constant, so a fresh/broke target is
+unchanged (which is why the `social.js` war flow and the low-tier siege tests are untouched). The
+coalition/streetboss war discounts still multiply the scaled base (the discounted number burns AND is
+ledgered — the decree discipline), so `gang:war`/`sov:siege` remain treasury cash SINKS and §10.4 is
+**untouched** (no new reason, no new bucket — only the amount scales; the P10 sweep stays drift-0).
+The console surfaces the price before committing (per-structure `siegeCost` on the sov board; a war
+label noting the chest scales with the target's treasury). `test/expansion.js` proves both scalings
+(mutation-verified by name); `sim P9.20d` now prints war/siege out of the trivial bucket (4 flat →
+**2 flat**). **The two remaining flat entries — invade a frontier outpost, take an unheld district —
+were DELIBERATELY LEFT** on the garrison ratchet (`max(BASE, garrison × OUTBID)`): the incumbent's
+garrison IS the value at stake there, and a fresh/unheld target being cheap is the intended turf
+on-ramp. `M3.SEIZE_BASE` opening-floor indexing (to the target's operation tier) remains an OPEN dial
+if the founder wants the ratchet to compound from a bigger opening number.
+
 ## THE STRATEGY PACKAGE — step five: THE MAP (founder-directed 2026-08-02)
 
 The six core districts were a flat SET: every holding interchangeable, so THE WATCH and THE SEALED
@@ -4736,8 +4761,9 @@ without touching conservation. **The internal PACING/CONCENTRATION flags survive
 passive stack still runs ~3.1–3.3× the active grind (P9.20), the apex world/boxing/racing purses, the
 port sale curve, `jailbirds` at ~$463k/day (the one loop that spends no signed resource), and the
 `npc:seed` recycle at ~$499k/day are all still live founder calls. The severance lowered their stakes;
-it did not answer them, and the recommendation remains to INDEX the flat family strategic costs to
-holdings rather than raise a constant.
+it did not answer them. **The one recommendation this pass surfaced — indexing the flat family
+strategic costs — is now APPLIED for war + siege** (founder-directed, base = the value at stake; see
+§ THE FAMILY LEDGER → VALUE-AT-STAKE INDEXING). The remaining concentration flags stay open dials.
 
 ## THE CONQUEST — NPC families as seizable turf (BUILT 2026-08-04)
 

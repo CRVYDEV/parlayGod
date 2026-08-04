@@ -190,12 +190,16 @@ export async function siegeSov(ch, districtId, client, h) {
   const cd = (await client.query(
     'SELECT cd_until FROM sov_siege_cooldowns WHERE district_id=$1 AND gang_id=$2 FOR UPDATE', [districtId, g.id])).rows[0];
   if (cd && new Date(cd.cd_until) > new Date()) throw new GameError('cooldown', 'Your family already moved on those walls today.');
-  if (Number(g.treasury) < SOV.SIEGE_COST) throw new GameError('treasury', `A siege takes a $${SOV.SIEGE_COST} war chest.`);
-  // the chest burns WIN OR LOSE (the npchit-fee posture — aggression is never free)
-  await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [g.id, SOV.SIEGE_COST]);
-  await h.ledger(client, { currency: 'cash', amount: -SOV.SIEGE_COST, reason: 'sov:siege', counterparty: g.id });
-  if (h.owned.gang) h.owned.gang.treasury = Number(g.treasury) - SOV.SIEGE_COST;
   const tier = Number(s.tier);
+  // VALUE-AT-STAKE: the assault chest scales with the target stronghold's BUILD COST (what you tear
+  // down), floored at SIEGE_COST so the low-tier on-ramp is unchanged. `s` is FOR UPDATE-locked above.
+  const tierCost = Number((SOV.TIERS[tier - 1] || SOV.TIERS[0]).cost);
+  const siegeCost = Math.max(SOV.SIEGE_COST, Math.floor(tierCost * SOV.SIEGE_COST_BPS / 10000));
+  if (Number(g.treasury) < siegeCost) throw new GameError('treasury', `A siege on those walls takes a $${siegeCost} war chest.`);
+  // the chest burns WIN OR LOSE (the npchit-fee posture — aggression is never free)
+  await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [g.id, siegeCost]);
+  await h.ledger(client, { currency: 'cash', amount: -siegeCost, reason: 'sov:siege', counterparty: g.id });
+  if (h.owned.gang) h.owned.gang.treasury = Number(g.treasury) - siegeCost;
   const atk = Number(ch.muscle) + Number(ch.cunning) / 2;
   let p = Math.max(SOV.SIEGE_MIN_P, Math.min(SOV.SIEGE_MAX_P,
     SOV.SIEGE_BASE_P + atk / SOV.SIEGE_STAT_SCALE - (tier - 1) * SOV.SIEGE_TIER_P));
@@ -250,6 +254,8 @@ export async function sovBoard(client, h) {
         upkeepOwed: s.gang_id === h.owned.gangId ? upkeepOwed(s, mult) : undefined,
         incomePerDay: t.incomePerDay,   // TIER-4 §C
         incomeOwed: s.gang_id === h.owned.gangId ? incomeOwed(s) : undefined,
+        // VALUE-AT-STAKE: the siege chest for THIS stronghold scales with its build cost (see siegeSov)
+        siegeCost: Math.max(SOV.SIEGE_COST, Math.floor(Number(t.cost) * SOV.SIEGE_COST_BPS / 10000)),
         siegeCdSeconds: cd && new Date(cd) > new Date() ? Math.floor((new Date(cd) - Date.now()) / 1000) : 0,
       };
     }),

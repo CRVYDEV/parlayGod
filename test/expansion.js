@@ -217,7 +217,41 @@ let gA, gB, bossA, bossB;
   // a crumbling stronghold earns nothing (pay the pad first)
   await pool.query(`UPDATE sov_structures SET income_at = now() - interval '1 day', upkeep_at = now() - interval '5 days' WHERE district_id='canal'`);
   assert.equal((await call('POST', '/v1/sov/collect', { token: boss.token })).body.income, 0, 'a crumbling stronghold draws no tribute');
-  console.log('✓ sovereignty: build/upgrade/siege + sov points + per-attacker cooldown + safehouse gate + TIER-4 (6-tier ladder, sov income faucet, crumbling earns nothing, §10.4 reconcile)');
+
+  // ── VALUE-AT-STAKE (RE-SIM PASS 2 / P9.20d): the siege chest scales with the target stronghold's
+  // BUILD COST, not a flat $50k — so tearing down a Bastion is a war, not an errand. Floored at the
+  // low tiers (the on-ramp is unchanged; the tests above all sieged at the floor). The chest burns win
+  // or lose, so pin a LOSS and the treasury delta IS the cost.
+  process.env.SOV_SIEGE_P = '0';
+  await pool.query(`UPDATE sov_structures SET tier=4, income_at=now(), upkeep_at=now() WHERE district_id='canal'`); // a Bastion ($5M built)
+  const bastionCost = Math.max(50000, Math.floor(5000000 * 300 / 10000)); // = $150k, well clear of the $50k floor
+  const sgr = await mk('Sgr'); const gsr = await found(sgr.token, 'SGR');
+  await pool.query(`UPDATE gangs SET treasury=${bastionCost} WHERE id='${gsr}'`);
+  await pool.query(`UPDATE characters SET loc='canal', muscle=30, cunning=20 WHERE id='${sgr.id}'`);
+  r = await call('POST', '/v1/sov/canal/siege', { token: sgr.token });
+  assert.equal(r.code, 200, `siege a Bastion at the scaled chest: ${JSON.stringify(r.body)}`);
+  assert.equal(Number((await pool.query(`SELECT treasury FROM gangs WHERE id='${gsr}'`)).rows[0].treasury), 0,
+    `the siege chest scaled to the Bastion's build cost ($${bastionCost}), not the $50k floor`);
+  const sgBoard = (await call('GET', '/v1/sov', { token: sgr.token })).body;
+  assert.equal(sgBoard.structures.find((s) => s.district === 'canal').siegeCost, bastionCost,
+    'the board surfaces the per-structure scaled siege cost so the price is visible before committing');
+  delete process.env.SOV_SIEGE_P;
+
+  // ── VALUE-AT-STAKE: the WAR chest scales with the TARGET family's treasury (spoils are 20% of it,
+  // so you ante a fraction of what you stand to win), floored at WAR_COST. A fresh target = the floor
+  // (which is why the social.js war flow is unchanged); a rich target = the scaled ante. ──
+  const wa = await mk('WrA'); const gwa = await found(wa.token, 'WRA');
+  const wb = await mk('WrB'); const gwb = await found(wb.token, 'WRB');
+  const richTreasury = 5000000;
+  const scaledWar = Math.max(10000, Math.floor(richTreasury * 200 / 10000)); // = $100k, 10× the $10k floor
+  await pool.query(`UPDATE gangs SET treasury=${richTreasury} WHERE id='${gwb}'`);
+  await pool.query(`UPDATE gangs SET treasury=${scaledWar} WHERE id='${gwa}'`);
+  r = await call('POST', `/v1/gangs/war/${gwb}`, { token: wa.token });
+  assert.equal(r.code, 200, `war on a rich family costs the scaled chest: ${JSON.stringify(r.body)}`);
+  assert.equal(Number((await pool.query(`SELECT treasury FROM gangs WHERE id='${gwa}'`)).rows[0].treasury), 0,
+    `the war chest scaled to 2% of the target's $${richTreasury} treasury ($${scaledWar}), not the $10k floor`);
+
+  console.log('✓ sovereignty: build/upgrade/siege + sov points + per-attacker cooldown + safehouse gate + TIER-4 (6-tier ladder, sov income faucet, crumbling earns nothing, §10.4 reconcile) + VALUE-AT-STAKE (siege scales with the stronghold build cost, war with the target treasury; floored at the low end)');
 }
 
 // ═══ #4 CAMPAIGNS ═══
