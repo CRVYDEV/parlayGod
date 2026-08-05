@@ -3091,6 +3091,29 @@ the claim outright.
 with zero movement**, every one of the 9 driven markets reachable, and the census reconciles with the
 flow. The one market that ended empty (black-market goods lots) CLEARED — everything posted was taken.
 
+### RE-MEASURED after the street-war / resident / hired-gun drops (2026-08-05) — still no drift
+
+`tools/playthrough.js` had not been re-run since THE STREET WAR (steps one–three), the resident economy
+(marks, turnover, NPC families), and THE HIRED GUNS landed — the changes that most plausibly touch the
+solo player's cash (THE TAKE re-sources crime off marks; residents own fronts/cars/boats). Re-run at the
+default config: **level 34 · $1,012,746 · 14 of 36 missions**, zero contact with another player. That is
+the expected shape, not a regression:
+
+- **Level 34** is inside the recorded ±1 noise band (33–34 across nine prior samples).
+- **$1.01M** matches the POST-`§ THE ASSET LADDER RE-CURVE` figure (~$1.06M), not the pre-recurve $1.4M
+  this section records — the −31% was that re-curve's INTENDED effect, already signed and measured; the
+  small residual is run-to-run variance. THE TAKE is a §10.4 TRANSFER, so it re-sources crime cash off a
+  mark without changing the player's payout — the solo wealth curve is untouched by construction.
+- **14 of 36** — the mission catalog grew 28→36 in the F3 breadth drop, so the same ~one-mission-per-
+  session cadence now reads 14/36 where it read 13/28; the absolute pace is unchanged.
+- **The coach walked 19 rungs, every obeyed rung cleared, 0h00m silent, no masking warning** — the
+  dead-rung / masking class the earlier batches fixed stays fixed across the new content.
+- **The refill ceiling holds BOUNDED** (≤ 10.43 levels/day at level 90) — the level-90 nerve-refill
+  runaway stays capped.
+
+So the resident/street-war content added no solo-progression drift: the ceiling is the same shape it has
+been since the pacing pass + the asset re-curve. No lever should move on account of this run.
+
 ---
 
 ## THE JAILBIRD FAUCET — measured, flagged, NOT retuned (2026-07-31)
