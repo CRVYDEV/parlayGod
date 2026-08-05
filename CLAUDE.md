@@ -9056,3 +9056,24 @@ is byte-identical), regression-pinned in test/pen.js and mutation-verified. Zero
 the log, nothing moves); zero new levers. test/social.js proves the killer response and the heir's
 modal read the SAME ledger (blood 2/0 on a repeat-bloodline kill, both surfaces) and that the hired
 kill stays anonymous.
+
+**COHESION STEP THREE — THE HEIR'S ARRIVAL (the founder's death→heir question, answered in code).**
+The transition's MECHANICS are among the strongest in the tree (one estate transaction, the 77-table
+DISPOSITION guard, the test-pinned survives-death set, four red-teamed shield orderings) — the gap was
+the heir's first ten minutes: the death modal closed and the game went silent about what just
+happened. Two coach rungs in `coachLadder` carry the arc: **(1) "Blood is owed"** — the sworn vendetta
+finally has a voice on the ladder (runEstate swears it and notifies ONCE; the game's sharpest revenge
+hook then sat silent in a view field) — names who fell, who walks, and what settling PAYS (double
+feared-rep + the waived directed floor); window-bound, so it self-clears by settling or lapsing (the
+wanted/indicted class). **(2) "You rise again"** — generation > 1 under level 3: names the generation
+and what the ACCOUNT kept (staked/liquid $OMR, the book, the compound, prestige — derived live from
+acct/owned, never restated), self-clears at level 3 (the road-to-5 shape). **The ordering is the
+load-bearing part:** both sit ABOVE the generic "someone moved on you" rung ON PURPOSE — a murdered
+heir's kill IS a recorded rival event, so the generic rung would mask exactly these two for its 48h
+window, for exactly the audience they exist for (the F2 masking class, headed off at design time).
+Mutation-verified BOTH ways: the rung disabled fails by name, and the OLD ordering restored fails by
+the masking itself ('Someone moved on you' leads where the vendetta must). test/social.js walks the
+real thing — a twice-killed bloodline's generation-3 heir: vendetta leads → settles → rise-again leads
+(naming Generation 3 + the banked prestige) → level 3 stands it down → the generic rival rung takes
+over unmasked. Harness: 'You rise again' clears by ordinary play; 'Blood is owed' is recorded as the
+gate it is (a solo run is never murdered). Zero §10.4, zero levers, zero new SQL.

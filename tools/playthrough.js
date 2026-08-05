@@ -610,6 +610,14 @@ async function obeyCoach(m) {
     coachCantAct.set(label, `upgrade refused: "${r.body?.error || r.code}"`); hit('estate', r.body?.error || r.code);
     return false;
   }
+  // THE HEIR'S ARRIVAL — 'You rise again' clears by ordinary play (level 3 in one sitting), so the
+  // grind is the action; the vendetta rung wants a revenge kill on a named killer, which a solo
+  // harness that is never murdered cannot stage — recorded as the gate it is, not as untestable.
+  if (label.startsWith('You rise again')) return false;
+  if (label.startsWith('Blood is owed')) {
+    coachCantAct.set(label, 'a revenge kill needs a killer — this solo run is never murdered');
+    return false;
+  }
   if (label.startsWith('The Bureau is building a case')) {
     const r = await call('POST', '/v1/law/bribe', { token });
     if (r.code === 200) { did('law:bribe'); first('law:bribe'); return obeyed(); }
