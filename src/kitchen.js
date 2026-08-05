@@ -131,6 +131,12 @@ export async function deal(ch, drugId, qty, client, h, play) {
   const pl = M4.DEAL_PLAYS[play] || M4.DEAL_PLAYS.standard;
   const nerveCost = Math.max(1, Math.ceil(n / 10 * pl.nerveMult));
   if (Number(ch.nerve) < nerveCost) throw new GameError('nerve', `Moving ${n} units ${pl.id === 'careful' ? 'quietly ' : ''}takes ${nerveCost} nerve.`);
+  // D13 (SIGNED 2026-08-05): dealing is PHYSICAL work — moving weight costs energy, flat per deal
+  // (the play axis stays on nerve/heat). The point is a substitution decision energy never had: a
+  // tank funds ~17 deals OR a gym block OR a crew score, not all three. Crime stays pure-nerve
+  // (the signed pacing wall untouched); energy is regen, so zero §10.4 surface.
+  if (Number(ch.energy) < M4.DEAL_ENERGY)
+    throw new GameError('energy', `Working the corner takes ${M4.DEAL_ENERGY} energy — it comes back on its own.`);
   const ev = cityEventOf(dayOf());
   // sim-audit KITCHEN ON-RAMP: rank-0 dealers earn the CORNER PREMIUM on gross (+50%) — small
   // quantities move at street prices, so the first risky loop beats petty crime. Phases out
@@ -144,6 +150,7 @@ export async function deal(ch, drugId, qty, client, h, play) {
   const net = gross - fee - tax;
   const heatGain = d.heat * n * 0.1 * (ev.drugHeat || 1) * pathFx(ch, 'dealHeat') * pl.heatMult; // PATHS v2 (kitchen keeps its exact 0.75)
   ch.nerve = Number(ch.nerve) - nerveCost;
+  ch.energy = Number(ch.energy) - M4.DEAL_ENERGY;
   ch.cash = Number(ch.cash) + net;
   // rank climbs on GROSS — the PLAY tilts it (regulars build a book, churn burns your name). The
   // fast play can only SLOW rank progression, so it never accelerates access to the rank price bonus.

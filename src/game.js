@@ -1369,6 +1369,11 @@ export function view(ch, acct = {}, owned = {}) {
       const refill = ch.safehouse_at ? (Date.now() - new Date(ch.safehouse_at).getTime()) / 86400000 * cap : cap;
       const used = Math.max(0, Number(ch.safehouse_used || 0) - Math.max(0, refill));
       return Math.max(0, Math.floor((cap - used) / 1000)); })(),
+    // D15 — bust attempts left today (the rolling-24h bucket; same math the till charges)
+    bustAttemptsLeft: (() => { const cap = M3.BUST_ATTEMPTS_DAY || 0; if (!cap) return null;
+      const refill = ch.bust_at ? (Date.now() - new Date(ch.bust_at).getTime()) / 86400000 * cap : cap;
+      const used = Math.max(0, Number(ch.bust_used || 0) - Math.max(0, refill));
+      return Math.max(0, Math.floor(cap - used)); })(),
     guardPrice: ch.guard_price != null ? Math.floor(Number(ch.guard_price)) : null,
     fadeLimit: ch.fade_limit != null ? Math.floor(Number(ch.fade_limit)) : null,
     pokerLimit: ch.poker_limit != null ? Math.floor(Number(ch.poker_limit)) : null,

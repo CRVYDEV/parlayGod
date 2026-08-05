@@ -76,9 +76,17 @@ assert(stash.quality >= 0.75, 'kitchen path (+0.15) shows in quality floor');
 
 // ── deal (§7.10): demand × quality × rank bonus; heat; nerve; trade_rep on gross ──
 let me = await meOf(chef.token);
-const repBefore = me.tradeRep, heatBefore = me.heat;
+const repBefore = me.tradeRep, heatBefore = me.heat, energyBefore = me.energy;
+// D13 (SIGNED 2026-08-05): the corner costs ENERGY now — an empty tank is refused with the teaching
+// message, and a landed deal spends exactly DEAL_ENERGY (the clock is frozen so regen can't refill
+// the gap between the two reads — the recorded flake class, headed off)
+await seedCh(chef.id, 'energy=2, last_accrued_at = now()');
+assert.equal((await call('POST', '/v1/kitchen/deal', { token: chef.token, body: { drugId: 'vim', qty: 10 } })).body.error, 'energy',
+  'a drained tank cannot work the corner (D13)');
+await seedCh(chef.id, `energy=${energyBefore}, last_accrued_at = now()`);
 r = await call('POST', '/v1/kitchen/deal', { token: chef.token, body: { drugId: 'vim', qty: 10 } });
 assert.equal(r.code, 200, 'deal closed');
+assert.equal((await meOf(chef.token)).energy, energyBefore - M4.DEAL_ENERGY, 'the deal spent exactly DEAL_ENERGY');
 assert(r.body.earned > 0, 'the street pays');
 // sim-audit kitchen on-ramp: a rank-0 dealer earns the +50% corner premium (phases out at rank 1)
 assert.equal(r.body.cornerPremium, true, 'the corner premium applied to the entry-rank deal');

@@ -309,6 +309,7 @@ const SIGNED = [
   // THE CREW BONUS — what replaced the referral $OMR (founder-directed 2026-07-31). MAX_BONUS is
   // load-bearing: respect drives level, level gates everything, and the PACING pass deliberately
   // slowed levelling — an uncapped crew would walk straight through it.
+  ['M4.DEAL_ENERGY', 4], // D13 (SIGNED 2026-08-05): the corner's energy cost
   ['M4.REF_XP.STEP_LEVELS', 5],
   ['M4.REF_XP.PER_STEP', 0.05],
   ['M4.REF_XP.MAX_BONUS', 1.0],
@@ -422,6 +423,10 @@ const SIGNED = [
   // bird before it walks — which is what P9.28 measures the faucet ceiling from. Pinned when that
   // probe was written, so the ceiling can't move by a quiet edit to the jail stretch.
   ['M3.BUST_FAIL_JAIL_S', 180],
+  ['M3.BUST_ATTEMPTS_DAY', 5], // D15 (SIGNED 2026-08-05): the rolling-24h bust-attempt cap
+  ['TRADE_FEE.BPS', 30],        // D1 (RATE SIGNED 2026-08-05): the buy-side trade fee → the Vig
+  ['TRADE_FEE.VIG_BPS', 10000],
+  ['TRADE_FEE.MAX_BPS', 100],
   // STREET LIFE (#318) — WORD ON THE STREET (the corner faucet is HARD-bounded MAX_DAY × CASH =
   // $2k/day + 75 respect/day; POOLS/CONFLICT are parent-object pins — the draw indexes them)
   ['CORNER.PER_DAY', 3],

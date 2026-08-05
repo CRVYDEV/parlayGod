@@ -392,7 +392,8 @@ assert.equal((await call('GET', '/v1/notifications', { token: mook.token })).bod
 let busted = null;
 for (let i = 0; i < 200 && !busted; i++) {
   await seedCh(mook.id, "jail_until = now() + interval '20 seconds'");
-  await seedCh(don.id, 'jail_until=NULL');
+  // (D15: the loop drives the ROLL, not the daily cap — refill the attempt bucket each try)
+  await seedCh(don.id, 'jail_until=NULL, bust_used=0, bust_at=NULL');
   const b = await call('POST', `/v1/streets/${mook.id}/bust`, { token: don.token });
   assert.equal(b.code, 200, 'bust resolves');
   if (b.body.success) busted = b.body;
@@ -401,6 +402,25 @@ assert(busted, 'eventually a clean bust');
 assert(busted.reward >= 500, 'bust reward paid');
 assert.equal((await meOf(mook.token)).jailSeconds, 0, 'mook walked');
 assert.equal((await call('POST', `/v1/streets/${don.id}/bust`, { token: don.token })).code, 400, 'no self-busts');
+
+// ── D15 — the bust-attempt bucket (SIGNED 2026-08-05): 5 attempts a rolling day, charged win or lose ──
+await seedCh(mook.id, "jail_until = now() + interval '20 seconds'");
+await seedCh(don.id, 'jail_until=NULL, bust_used=0, bust_at=NULL');
+await call('POST', `/v1/streets/${mook.id}/bust`, { token: don.token });
+assert.equal(Number((await pool.query(`SELECT bust_used FROM characters WHERE id='${don.id}'`)).rows[0].bust_used), 1,
+  'an ATTEMPT charges the bucket — win or lose, a failed try is not a free retry');
+// a spent bucket refuses cleanly, whatever the target's sentence looks like (clear the don's own
+// jail too — a failed first attempt above may have put HIM inside, and the jailed gate fires first)
+await seedCh(don.id, `bust_used=${M3.BUST_ATTEMPTS_DAY}, bust_at=now(), jail_until=NULL`);
+await seedCh(mook.id, "jail_until = now() + interval '20 seconds'");
+let capR = await call('POST', `/v1/streets/${mook.id}/bust`, { token: don.token });
+assert.equal(capR.body.error, 'bust_cap', "the day's allowance spent → the jailhouse knows your face");
+// …and the bucket ROLLS: a day-old stamp refills the whole allowance
+await seedCh(don.id, `bust_used=${M3.BUST_ATTEMPTS_DAY}, bust_at=now() - interval '25 hours', jail_until=NULL`);
+capR = await call('POST', `/v1/streets/${mook.id}/bust`, { token: don.token });
+assert.equal(capR.code, 200, 'a day later the allowance is back');
+assert((await meOf(don.token)).bustAttemptsLeft <= M3.BUST_ATTEMPTS_DAY - 1, 'the sheet carries the live allowance');
+await seedCh(don.id, 'bust_used=0, bust_at=NULL'); // leave the fixture clean for later blocks
 
 // ── §10.4 invariants ──
 // Mook's cash was NEVER seeded: cash + bank − 500 must equal his ledger exactly

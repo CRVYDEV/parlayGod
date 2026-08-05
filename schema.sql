@@ -157,6 +157,10 @@ CREATE TABLE IF NOT EXISTS characters (
   -- SAFEHOUSE_DAILY_CAP_MS per day; entering a safehouse charges the granted stay against it.
   safehouse_used NUMERIC NOT NULL DEFAULT 0,
   safehouse_at TIMESTAMPTZ,
+  -- D15: bust attempts on a rolling-24h token bucket (the wash/safehouse-bucket twin) — charged on
+  -- the ATTEMPT, win or lose. Direct-SQL columns (outside persistCharacter's positional UPDATE).
+  bust_used NUMERIC NOT NULL DEFAULT 0,
+  bust_at TIMESTAMPTZ,
   -- THE REFILL CEILING: a rolling-window daily count of level-up refills (the wash-bucket twin).
   -- The refill is a nerve faucet whose rate is how often you level, and past level ~90 a crossing
   -- returns more nerve than the next level costs — self-sustaining, and the alpha's level-240
