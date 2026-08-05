@@ -590,6 +590,20 @@ async function obeyCoach(m) {
     coachCantAct.set(label, `brick refused: "${r.body?.error || r.code}"`); hit('mega', r.body?.error || r.code);
     return false;
   }
+  // the earn→spend arc's two rungs — both fire only while HOLDING the price, so a refusal here is news
+  if (label.startsWith('You can afford your dues')) {
+    const r = await call('POST', '/v1/made', { token });
+    if (r.code === 200) { did('made:dues'); first('made'); return obeyed(); }
+    coachCantAct.set(label, `dues refused: "${r.body?.error || r.code}"`); hit('made', r.body?.error || r.code);
+    return false;
+  }
+  if (label.startsWith('Put your $OMR to work')) {
+    const amount = Math.floor(Number(m.omr) * 1e6) / 1e6;
+    const r = await call('POST', '/v1/stake', { token, body: { amount } });
+    if (r.code === 200) { did('stake'); first('stake'); return obeyed(); }
+    coachCantAct.set(label, `stake refused: "${r.body?.error || r.code}"`); hit('stake', r.body?.error || r.code);
+    return false;
+  }
   if (label.startsWith('Buy the compound')) {
     const r = await call('POST', '/v1/estate/upgrade', { token });
     if (r.code === 200) { did('estate:tier'); first('estate'); return obeyed(); }
