@@ -149,6 +149,9 @@ delete process.env.FAMILY_RAID_P;
 b = (await call('GET', '/v1/npcfamily', { token: raider.token })).body;
 assert.equal(b.you.vassals, 1, 'the board counts my vassal');
 assert(b.families.find((f) => f.id === gid)?.heldBy?.mine, 'the conquered family is flagged as mine');
+// own_vassal (red-team AUDIT-blood-war): you don't raid an outfit your own family already holds
+await seedCh(raider.id, 'family_raid_at=NULL, energy=100, ammo=100, hosp_until=NULL');
+assert.equal((await call('POST', `/v1/npcfamily/${gid}/raid`, { token: raider.token })).body.error, 'own_vassal', "you don't raid your own vassal");
 // tribute accrues → collect to the treasury (a ledgered family:tribute faucet)
 await pool.query(`UPDATE gangs SET tribute_at = now() - interval '10 hours' WHERE id='${gid}'`);
 const col = await call('POST', '/v1/npcfamily/collect', { token: raider.token });

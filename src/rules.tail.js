@@ -1178,9 +1178,9 @@ export const FAMILY_WAR = {
   MIN_P: 0.1, MAX_P: 0.9,
   COUNTER_P: 0.35,                // THE DEFENCE (immediate): chance the family's guns catch the raider AT THE SCENE on a landed raid
   COUNTER_HOSP_MS: 30 * 60 * 1000,
-  // THE MANHUNT (step three — deferred, shield-honouring): a raider who ESCAPED the scene counter is
-  // remembered, and the family sends someone after them later. Chained, so exactly one retaliation path
-  // fires per raid (caught now OR hunted later — never both). Honours the earned shields at resolve time.
+  // THE MANHUNT (built — shield-honouring): a raider who ESCAPED the scene counter is remembered, and the
+  // family sends someone after them later (npcwar.js sweepFamilyAggro). Chained, so exactly one retaliation
+  // path fires per raid (caught now OR hunted later — never both). Honours the earned shields at resolve time.
   AGGRO_DELAY_MS: 45 * 60 * 1000, // they come for you ~45 min after the raid…
   RETAL_P: 0.5,                   // …and find you half the time (a clean miss if you were hiding, or you dodged)
   RETAL_HOSP_MS: 30 * 60 * 1000,
