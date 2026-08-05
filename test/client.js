@@ -40,6 +40,7 @@
 // misnamed, or whether the action then behaves correctly. Those need the gameplay suites, which exist.
 process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
+import vm from 'node:vm';
 import { readFileSync, readdirSync } from 'node:fs';
 import { buildServer } from '../src/server.js';
 import { M3, M4, PATHS, NPC_HITMEN, HEIST_ROLES, HEIST_JOBS, DRUGS, GOODS, DISTRICTS,
@@ -60,6 +61,34 @@ import { M3, M4, PATHS, NPC_HITMEN, HEIST_ROLES, HEIST_JOBS, DRUGS, GOODS, DISTR
 const decomment = (s) => s.replace(/^[ \t]*\/\/.*$/gm, '');
 const html = decomment(readFileSync(new URL('../public/index.html', import.meta.url), 'utf8'));
 const admin = decomment(readFileSync(new URL('../public/admin.html', import.meta.url), 'utf8'));
+
+// ── 0. THE CLIENT SCRIPT MUST PARSE ─────────────────────────────────────────────────────────────
+// A syntax error in a client <script> — an apostrophe inside a single-quoted string, an unbalanced
+// brace — breaks the ENTIRE console in a browser and takes every screen down with it. It has bitten
+// twice (renderBoxing `managers\'`, `crew's ready`), and the checks BELOW read the script as TEXT, so
+// they structurally cannot see it — only a real parse can. `vm.Script` COMPILES without running, so a
+// browser global (document/window/fetch) is just an unresolved identifier (fine); an unterminated
+// string or a stray brace is a SyntaxError at compile (caught). Checked on the RAW file (not the
+// decommented copy the wiring checks use) so it's exactly what the browser parses. Runs FIRST, because
+// a dead script makes every check below meaningless. The mobile harness catches this too — but only in
+// CI's Chromium job, and this is a one-line, browser-free tripwire that names the file and the error.
+{
+  let checked = 0;
+  for (const path of ['public/index.html', 'public/admin.html']) {
+    const raw = readFileSync(new URL('../' + path, import.meta.url), 'utf8');
+    const blocks = [...raw.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)];
+    assert(blocks.length, `${path}: no <script> block found — did the file move?`);
+    for (const [, attrs, code] of blocks) {
+      if (/\bsrc\s*=/.test(attrs)) continue;                                                    // external script, no inline body
+      if (/type\s*=\s*["'](?:application\/(?:ld\+)?json|importmap)["']/.test(attrs)) continue;  // data, not JS
+      if (/type\s*=\s*["']module["']/.test(attrs)) continue;                                    // ESM — vm.Script is classic-only (none today; revisit if one is added)
+      try { new vm.Script(code); checked++; }
+      catch (e) { assert.fail(`${path}: the <script> has a SYNTAX ERROR — the whole page is DEAD in a browser: ${e.message}`); }
+    }
+  }
+  assert(checked >= 2, `expected to parse-check both client scripts (console + admin), only checked ${checked} — a real script block was skipped`);
+}
+
 const app = await buildServer();
 
 // ── 1. every route the client can call must be mounted ──────────────────────────────────────────
