@@ -10,11 +10,11 @@ Written 2026-07-25. Every number below was measured from the tree, not recalled.
 
 | | |
 |---|---|
-| Backend modules | **116** files, **38547** lines (`src/`, incl. `src/routes/` and `src/social/`) |
-| Test suites | **66** files, **25755** lines (`test/`) — ratio 0.67 test:src |
-| HTTP routes | **555** registrations |
+| Backend modules | **117** files, **39102** lines (`src/`, incl. `src/routes/` and `src/social/`) |
+| Test suites | **67** files, **26327** lines (`test/`) — ratio 0.67 test:src |
+| HTTP routes | **557** registrations |
 | Database tables | **187** (`schema.sql`, 2655 lines) |
-| Client | **6,967** lines (`public/index.html`, single file, zero dependencies) |
+| Client | **7,156** lines (`public/index.html`, single file, zero dependencies) |
 | Ops dashboard + wiki | `public/admin.html`, `public/wiki.html` |
 | Smart contracts | **9** contracts, **1716** lines Solidity, **128** Foundry tests passing |
 | Harnesses | `tools/sim.js` (economy), `tools/playthrough.js` (player experience), `tools/pgcheck.js` (real Postgres), `tools/loadtest.js` (concurrency), `tools/chaos.js` (interruption), `tools/mobile.js` (the screens, at phone size), `tools/scale.js` (market liquidity at population scale), `tools/bond-dials.js` (sizing the on-chain mint walls), `tools/pgquery.js` (every SQL string parses on real Postgres) |

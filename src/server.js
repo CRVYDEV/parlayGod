@@ -25,6 +25,7 @@ import * as Territory from './territory.js';
 import * as Diplomacy from './diplomacy.js';
 import * as Sov from './sov.js';
 import * as Rivals from './rivals.js';
+import * as People from './people.js';
 import * as Campaigns from './campaigns.js';
 import * as Bloodline from './bloodline.js';
 import * as Honor from './honor.js';
@@ -1467,6 +1468,12 @@ export async function buildServer() {
     G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => S.sabotage(ch, victim, client, h)));
   app.get('/v1/rivals', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client) => Rivals.rivalsBoard(client, ch.account_id)));
+  // THE CAST & THE STORY — the interpersonal cohesion layer (src/people.js): every relationship
+  // the game remembers, read together; pure reads, zero §10.4
+  app.get('/v1/people', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client) => People.peopleBoard(client, ch)));
+  app.get('/v1/people/history/:characterId', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client) => People.pairHistory(client, ch, req.params.characterId)));
   app.post('/v1/streets/:targetId/bounty', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.postBounty(ch, req.params.targetId, req.body?.amount, client, h,
       { kind: req.body?.kind, reason: req.body?.reason, hours: req.body?.hours, anon: req.body?.anon,
