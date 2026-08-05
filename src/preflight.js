@@ -31,7 +31,7 @@ export const TEST_ONLY_ENV = [
   'PEN_YARD_EVENT', 'SEASON_MOD', 'SEASON_PHASE', 'SOV_WINDOW_OPEN', 'WORLD_UPRISING', 'WORLD_UPRISING_FORCE',
   // collapsed timers — cooldowns and windows that exist to PACE the game
   'BRACKET_ROUND_MS', 'CALLOUT_MS', 'CONVOY_MS', 'DUEL_CD_MS', 'FUTURITY_MS', 'GRAND_PRIX_MS',
-  'MAIN_EVENT_MS', 'MISSION_CD_MS', 'PASS_CLAIM_MS', 'PEN_SHANK_CD_MS', 'PORT_RUN_MS', 'RACE_CD_MS',
+  'MAIN_EVENT_MS', 'MISSION_CD_MS', 'NPC_WAR_MS', 'PASS_CLAIM_MS', 'PEN_SHANK_CD_MS', 'PORT_RUN_MS', 'RACE_CD_MS',
   'RING_TURN_MS', 'SEARCH_MS', 'SHOOT_CD_MS', 'SOCIAL_MATURE_MS', 'STAKES_MS', 'TOURNEY_MS',
   'TRAIN_CD_MS',
   // QA escape hatches — these let a mod route fabricate value or bypass an auth check

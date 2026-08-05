@@ -1195,10 +1195,35 @@ export const FAMILY_WAR = {
     [0, 'Unblooded'], [25000, 'Button Man'], [150000, 'Warmaker'],
     [500000, 'Family Killer'], [2000000, 'The Exterminator'],
   ],
+  // THE FAMILY WAR (formal declaration — omerta-npc-family-wars-design.md). A meta-layer over the
+  // Blood War raid loop: a boss/underboss DECLARES war on an NPC family for a treasury cash sink, opens
+  // a time-boxed SCORED campaign (each landed raid on that family scores), and WINS by reaching the
+  // score before the window closes. The reward is STATUS ONLY — an account-level `family_wars_won`
+  // trophy + a leaderboard, the belt to the Blood War's bouts — plus the existing raid loot faucet
+  // during the war. §10.4-NEUTRAL by construction: the ONLY value flow is the EXISTING `gang:war`
+  // treasury sink (no spoils, no NPC-treasury seed, no new faucet); the score/win are status, NEVER
+  // season_wars (severing the Commission-standing faucet the design's constraint #1 names). The family
+  // already RETALIATES (the shipped DEFENCE), so a war is not a free repeatable standing buy.
+  // All numbers PROPOSED DEFAULTS — founder SIM + sign-off before production (BALANCE.md).
+  WAR: {
+    COST: 25000,                  // the declaration war-chest sink from the treasury (a real commitment; the WAR_COST twin)
+    MS: 24 * 3600 * 1000,         // the campaign window (test-only override NPC_WAR_MS)
+    RAID_POINTS: 1,               // score per landed raid on the family you're at war with
+    WIN_SCORE: 5,                 // land this many raids inside the window to WIN (≈5 raids × 4h cd ≈ a real campaign)
+    MAX_PER_FAMILY: 1,            // one active NPC war per attacker family (bounds farming)
+    WIN_RANKS: [
+      [0, 'No Campaigns'], [1, 'Campaigner'], [5, 'War Chief'], [15, 'Warlord'], [40, 'The Scourge of Families'],
+    ],
+  },
 };
 export const familyWarRankOf = (dmg) => {
   const d = Number(dmg) || 0; let r = FAMILY_WAR.RANKS[0];
   for (const t of FAMILY_WAR.RANKS) if (d >= t[0]) r = t;
+  return { name: r[1] };
+};
+export const familyWarWinRankOf = (wins) => {
+  const w = Number(wins) || 0; let r = FAMILY_WAR.WAR.WIN_RANKS[0];
+  for (const t of FAMILY_WAR.WAR.WIN_RANKS) if (w >= t[0]) r = t;
   return { name: r[1] };
 };
 export const WORLD = {

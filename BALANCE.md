@@ -4858,3 +4858,32 @@ NO $OMR withdrawal rail so the extraction-≤-inflow bound is orthogonal and unt
 above; the dials if the headline wants trimming are `POPULATION.TURNOVER.PER_DAY` (the recurring seed
 faucet) and `POPULATION.MARKS.FRONT_INCOME_BPS` (the sleepy-joint scale). P9.32 prints all three
 categories every sim run, so any resident retune is re-measured against this consolidated ceiling.
+
+## THE FAMILY WAR — a formal declaration on an NPC family (BUILT 2026-08-05, founder-directed)
+
+Design + the four §10.4-safe constraints: `omerta-npc-family-wars-design.md`. A meta-layer over the
+Blood War raid loop — the "belt" to its bouts: a boss/underboss DECLARES a time-boxed, SCORED campaign
+against an NPC family (`POST /v1/npcfamily/:gangId/war`), lands `WIN_SCORE` raids on it inside the
+window to WIN, and banks a STATUS trophy (account-level `family_wars_won`, survives death) +
+`GET /v1/leaderboard/family-wars`. The reward is status only, plus the EXISTING raid loot during the war.
+
+**§10.4-NEUTRAL by construction.** The only value flow is the EXISTING `gang:war` treasury sink at
+declaration (the player-war `WAR_COST` twin — no spoils, no NPC-treasury seed, no new faucet). The
+score and the win are STATUS, NEVER `season_wars`, so the Commission-standing faucet the player-war
+system feeds is severed by construction (the same argument the Blood War's `family_war` legend makes).
+The test proves `season_wars` stays 0 on a declaration and that the gang-treasuries check reconciles
+the `gang:war` sink; the sim stays drift-0 (no new reason, no new bucket).
+
+| lever | ships at | what it does |
+|---|---|---|
+| `FAMILY_WAR.WAR.COST` | $25,000 | the declaration war-chest sink from the treasury (the WAR_COST twin) |
+| `FAMILY_WAR.WAR.MS` | 24h | the campaign window (`NPC_WAR_MS` is a TEST-ONLY override) |
+| `FAMILY_WAR.WAR.RAID_POINTS` | 1 | score per landed raid on the family you're at war with |
+| `FAMILY_WAR.WAR.WIN_SCORE` | 5 | landed raids to win — ≈5 × the 4h raid cooldown ≈ a real ~10h+ campaign |
+| `FAMILY_WAR.WAR.MAX_PER_FAMILY` | 1 | one active NPC war per attacker family (bounds farming) |
+
+**Founder sign-off flag:** all `FAMILY_WAR.WAR.*` numbers are PROPOSED DEFAULTS. The feature is
+§10.4-neutral (status/pacing over the audited raid loop), so nothing here widens a faucet — but the
+COST and the WIN_SCORE×cooldown campaign length are the pacing dials, and the win trophy is a
+Sybil-farmable status axis with no payout (the hitman-rep posture — no cash/standing attaches).
+`WAR.MAX_PER_FAMILY: 0` would disable the mechanic. Sim + sign-off before production.

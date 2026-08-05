@@ -1,10 +1,20 @@
 # NPC FAMILY WARS — scope + sizing (a founder decision artifact, 2026-08-05)
 
-This resolves the last "deferred content step" from the resident-economy arc. It is deliberately a
-SCOPE note, not a build: the one genuinely-unbuilt item touches SIGNED surfaces (the standing faucet,
-turf, war spoils), so ground rule #1 wants the numbers signed off before the code exists. It also
-corrects the deferred list, because two of the three items I had been carrying as "gaps" are in fact
-already shipped.
+> **BUILT 2026-08-05 (founder-directed "build it").** This note originally recommended HOLD (below).
+> The founder directed the build, so it shipped under the FOUR §10.4-safe constraints spelled out here,
+> exactly the way every Blood War / Conquest drop shipped: **§10.4-NEUTRAL by construction** (the only
+> value flow is the EXISTING `gang:war` treasury sink at declaration — no spoils, no NPC-treasury seed,
+> no new faucet; the score and the win trophy are STATUS, never `season_wars`), with the numbers as
+> PROPOSED DEFAULTS flagged for sim + sign-off (BALANCE.md § THE FAMILY WAR). Implementation:
+> `declareNpcWar` / the raid-scoring hook / `sweepNpcWars` / `familyWarWinsLeaderboard` in
+> `src/npcwar.js`, the `npc_wars` table, `FAMILY_WAR.WAR` in the rules tail, routes
+> `POST /v1/npcfamily/:gangId/war` + `GET /v1/leaderboard/family-wars`, and a Blood-War-tab UI. The
+> analysis below stands as the record of WHY it takes this exact shape.
+
+This resolves the last "deferred content step" from the resident-economy arc. The one genuinely-unbuilt
+item touches SIGNED surfaces (the standing faucet, turf, war spoils), so the build stays inside the
+four constraints below to keep them severed. It also corrects the deferred list, because two of the
+three items I had been carrying as "gaps" are in fact already shipped.
 
 ## What is ALREADY BUILT (correcting the deferred list)
 

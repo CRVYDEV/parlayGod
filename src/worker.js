@@ -27,7 +27,7 @@ import { sweepPassStipends } from './pass.js';
 import { sweepStaleHeists } from './heists.js';
 import { sweepStaleBreaks } from './pen.js';
 import { sweepStaleRaids, sweepUprisings } from './world.js';
-import { sweepFamilyAggro } from './npcwar.js';
+import { sweepFamilyAggro, sweepNpcWars } from './npcwar.js';
 import { sweepWire, sweepWireAlerts, sweepStandingWatches } from './wire.js';
 import { reclaimExpiredVouchers, assertChainId, bondOracleHealth } from './chain.js';
 import { sweepMarket } from './market.js';
@@ -345,6 +345,9 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     // THE MANHUNT (blood war step three): NPC families hunt down raiders who escaped the scene counter
     const bwh = await safe('blood war manhunt', () => sweepFamilyAggro(pool));
     if (bwh?.struck > 0) console.log(`🩸 blood war: ${bwh.struck} raider(s) hunted down`);
+    // THE FAMILY WAR (formal): close expired campaigns (a win was granted on the crossing; this lapses the rest)
+    const fw = await safe('family war sweep', () => sweepNpcWars(pool));
+    if (fw?.lapsed > 0) console.log(`⚔️ family war: ${fw.lapsed} campaign(s) lapsed`);
     const mk = await safe('market sweep', () => sweepMarket(pool));
     if (mk && (mk.settled > 0 || mk.lapsed > 0)) console.log(`🔨 market: hammered ${mk.settled} auction(s), lapsed ${mk.lapsed}`);
     // CONVOY step three: NPC TRUCKING — despawn arrived NPC trucks, then top the road back up to TARGET

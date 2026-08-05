@@ -1931,9 +1931,10 @@
     if (body.guard !== undefined && body.price !== undefined) bits.push(`hired protection — $${fmt(body.price)} up front`);
     if (body.hired === true && body.fee !== undefined) bits.push(`hired a hand for the ${body.role} seat — $${fmt(body.fee)}. A body fills the crew, but takes a cut and earns you nothing extra.`);
     if (body.family !== undefined && body.success !== undefined && body.loot !== undefined) {
-      if (body.success) bits.push(`hit ${body.family} — took $${fmt(body.loot)} off their war chest${body.conquered ? '. ROUTED — your family now holds them as a vassal.' : ''}${body.countered ? ' Their guns caught you leaving — you\'re in the hospital.' : ''}`);
+      if (body.success) bits.push(`hit ${body.family} — took $${fmt(body.loot)} off their war chest${body.conquered ? '. ROUTED — your family now holds them as a vassal.' : ''}${body.warWon ? ' \u{2694}\u{FE0F} CAMPAIGN WON — a war-chief trophy for the family.' : ''}${body.countered ? ' Their guns caught you leaving — you\'re in the hospital.' : ''}`);
       else bits.push(`${body.family} repelled the raid — their guns put you in the hospital.`);
     }
+    if (body.winScore !== undefined && body.endsSeconds !== undefined) bits.push(`\u{2694}\u{FE0F} war declared on ${body.family} — land ${body.winScore} raids inside ${mins(body.endsSeconds)} to win the campaign`);
     if (body.tributes !== undefined && body.collected !== undefined) { if (body.collected > 0) bits.push(`collected $${fmt(body.collected)} in vassal tribute → the treasury.`);
     }
     if (body.bid !== undefined && body.id !== undefined && body.name === undefined && !body.youLead) bits.push(`bid $${fmt(body.bid)} placed${body.extended ? ' (clock reset)' : ''}`);
@@ -4359,13 +4360,16 @@
           <button class="act" data-joinraid="${x.id}">join the crew</button></div>`).join('') || (w.myRaid ? '' : '<span class="d" style="color:var(--dim)">no crew raids forming — plan one on an apex outfit above</span>')}</div>
       <h2 style="margin-top:12px">The Blood War <span class="d" style="font-size:11px">(rival NPC families — raid them for a cut of their war chest; ROUT one to hold it as a vassal; they hit back)</span></h2>
       ${bw.you ? `<div class="card" style="border-color:var(--blood)"><span class="t">🩸 ${bw.you.rank}</span> <span class="d">$${fmt(bw.you.war)} lifetime taken off rival families — <a href="#" id="bw-lb">the blood-war board →</a> · <a href="#" id="bw-clb">the conquest board →</a>${bw.you.raidCdSeconds > 0 ? ` · next raid in ${mins(bw.you.raidCdSeconds)}` : ''}</span></div>` : ''}
+      ${bw.you ? `<div class="card"><span class="t">⚔️ ${bw.you.warChief}</span> <span class="d">${bw.you.warsWon} family war${bw.you.warsWon === 1 ? '' : 's'} won — <a href="#" id="fw-lb">the war-chief board →</a>. Declare a campaign ($${fmt(bw.you.warCost)} war chest) and land ${bw.you.warWinScore} raids inside a day to win a trophy. ${bw.you.activeWars > 0 ? '<b>A campaign is running.</b>' : ''}</span></div>` : ''}
       ${bw.you && bw.you.vassals > 0 ? `<div class="card"><span class="t">🏴 Your family holds ${bw.you.vassals} vassal${bw.you.vassals === 1 ? '' : 's'}</span>
         <div class="d">a conquered family pays tribute to the treasury ($${fmt(bw.you.tributePerHr)}/hr each) · pending: <b>$${fmt(bw.you.tributePending)}</b></div>
         ${bw.you.tributePending > 0 ? '<button class="act" data-do="POST /v1/npcfamily/collect">collect the tribute → treasury</button>' : '<span class="d" style="color:var(--dim)">nothing to collect yet</span>'}</div>` : ''}
       <div class="grid">${(bw.families || []).map((f) => `
         <div class="card"><span class="t">${esc(f.name)}</span> <span class="chip">[${esc(f.tag)}]</span>${f.heldBy ? (f.heldBy.mine ? ' <span class="chip good">your vassal</span>' : ` <span class="chip">held by ${esc(f.heldBy.name)}</span>`) : ''}
           <div class="d">strength ${f.strengthPct}% · ${f.members} made · a raid takes ~$${fmt(f.loot)} off their chest${f.strengthPct <= 10 ? ' · <span style="color:var(--warn)">routed — rout it to take the turf</span>' : ''}</div>
-          ${f.canRaid ? `<button class="act" data-familyraid="${f.id}" style="border-color:var(--blood)">raid them (energy + ammo — they hit back)</button>` : `<span class="chip">need lvl ${bw.you?.minLvl || 8}</span>`}</div>`).join('') || '<span class="d" style="color:var(--dim)">no rival families on the map yet</span>'}</div>
+          ${f.atWar ? `<div class="d" style="color:var(--warn)">⚔️ AT WAR — ${f.atWar.score}/${f.atWar.winScore} raids · ${mins(f.atWar.endsSeconds)} left</div>` : ''}
+          ${f.canRaid ? `<button class="act" data-familyraid="${f.id}" style="border-color:var(--blood)">raid them (energy + ammo — they hit back)</button>` : `<span class="chip">need lvl ${bw.you?.minLvl || 8}</span>`}
+          ${!f.atWar && !f.heldBy?.mine && bw.you && bw.you.activeWars === 0 ? `<button class="act" data-do="POST /v1/npcfamily/${f.id}/war" data-confirm="A war chest of $${fmt(bw.you.warCost)} comes out of the family treasury. Land ${bw.you.warWinScore} raids on them inside a day to win a campaign trophy. Boss or underboss only.">declare a family war ($${fmt(bw.you.warCost)} — boss only)</button>` : ''}</div>`).join('') || '<span class="d" style="color:var(--dim)">no rival families on the map yet</span>'}</div>
       <h2 style="margin-top:12px">Landmarks <span class="d" style="font-size:11px">(one dedicable plaque per district — the biggest $OMR flex holds it)</span></h2>
       <div id="landmark-slot"></div>`;
     { const gc = t.querySelector('#mg-give-cash');
@@ -4384,6 +4388,9 @@
         t.querySelector('#builder-lb').innerHTML = `<div class="grid" style="margin-top:4px">${r.map((k) => `<div class="card"><span class="t">#${k.pos} [${esc(k.tag)}] ${esc(k.name)}</span><div class="d">$${fmt(k.built)} for the city</div></div>`).join('') || '<span class="d">no families ranked yet</span>'}</div>`; }; }
     t.querySelectorAll('[data-raid]').forEach((b) => b.onclick = () => act('POST', `/v1/world/${b.dataset.raid}/raid`, {}).then(() => renderCity()));
     t.querySelectorAll('[data-familyraid]').forEach((b) => b.onclick = () => act('POST', `/v1/npcfamily/${b.dataset.familyraid}/raid`, {}).then(() => renderCity()));
+    const fwlb = $('#fw-lb'); if (fwlb) fwlb.onclick = async (e) => { e.preventDefault();
+      const d = (await api('GET', '/v1/leaderboard/family-wars')).body?.chiefs || [];
+      alert('THE WAR CHIEFS\n\n' + (d.map((k, i) => `${i + 1}. ${k.name} — ${k.rank} (${k.wins} won)`).join('\n') || 'no campaigns won yet')); };
     const bwlb = $('#bw-lb'); if (bwlb) bwlb.onclick = async (e) => { e.preventDefault();
       const d = (await api('GET', '/v1/leaderboard/blood-wars')).body?.warmakers || [];
       alert('THE BLOOD WAR\n\n' + (d.map((k, i) => `${i + 1}. ${k.name} — ${k.rank} ($${fmt(k.war)})`).join('\n') || 'nobody has drawn blood yet')); };
