@@ -8975,3 +8975,37 @@ rung disabled, the made gate dropped). `tools/playthrough.js` wired all six hand
 shipped (the obeyCoach rule: an untested rung reads exactly like a broken one) + two `OWNED_CLOCKS` rows
 (`convoys.arrives_at`, `racers.injured_until/circuit_at` — the boats lesson: without them the harness
 ships a convoy that arrives on the wall clock and calls the coach stuck).
+
+**THE CAST & THE STORY + THE SITUATION (founder-directed 2026-08-05: "interpersonal/multiplayer
+cohesion next and all the UX/UI recommendations") — BUILT** (`src/people.js` — the 117th src module,
+`test/people.js` — the 67th suite; `GET /v1/people` + `GET /v1/people/history/:characterId`;
+`public/index.html` renderStart/renderPvp). The cohesion diagnosis: the game already REMEMBERS every
+relationship (rival_events, kill_log, dynasty_marriages, consiglieri, contacts, vendettas, the
+bodyguard pair, gang_members) but remembered them into eight separate boards, so a rivalry never read
+as a RELATIONSHIP. **THE CAST** (`peopleBoard`) reads them together: the NEMESIS (top recorded malice,
+re-aggregated as a top-1 because the enrichment needs the aggressor ACCOUNT internally, which
+rivalsBoard rightly never returns) enriched with the blood ledger (kill_log both ways, bloodOwed) and
+the vendetta state both directions; the spouse/consigliere/advising; the family+role; **the bodyguard
+pair by NAME in BOTH directions** (the view carried a raw id one way and nothing the other — a gap the
+scout confirmed); the worked-for bonds (contacts with jobs>0); open vendettas. **THE STORY**
+(`pairHistory`) is one merged newest-first timeline of everything recorded between two bloodlines —
+strikes both directions, kills with the fallen street's NAME, marriage/divorce/peace offers, the first
+meeting — keyed by a character id living OR dead (a story outlives a street). Two rules are
+load-bearing and test-pinned: account UUIDs never leave either board, and **the info-economy rule** —
+the story only surfaces what the game already told BOTH parties, so the `rival_events.detail` JSONB
+(which can carry amounts) is deliberately withheld (mutation-verified: surfacing it fails by name).
+PURE READS — zero §10.4 (the suite pins zero ledger rows through the whole layer), zero levers.
+**THE SITUATION** is the UX half — the dashboard the 24-tab wall never had, leading Start Here (top
+for a first-week-done veteran, after the checklist for a fresh player, per the recorded
+City-Standing-first lesson): the nemesis threat card (with "the story of you two" opening the pair
+dossier + a settle-it jump), YOUR PEOPLE (family/spouse/adviser/guard/bonds in one line), and READY
+NOW — the cooldown-checklist recommendation as an at-a-glance strip (mission/gym/boost off cooldown,
+full nerve/tank) with jumps, composed from /v1/me fields the view already carries (the client
+re-derives nothing). "The story" also rides every rivals-board row on Wet Work. Guard fallout worth
+keeping: the mirror's Promise.all alias hunt only recognizes `NAME = xR.body` unwrap shapes, so the
+first cut's `ppR.code < 400 ? ppR.body : {}` read as UNSCOPED and failed the run — conformed to the
+covered `|| {}` idiom rather than widening the guard mid-drop. Fixtures: seedLists gained a
+nemesis/bond/guarding row set and PARAM_FIXTURES a history counterpart WITH events (the empty-list
+rule). Chromium-probed live end-to-end (nemesis card copy, the story modal with the fallen named, the
+ready strip — zero page errors); pgquery 2404 + pgcheck 43/43 on real Postgres (new SQL); routes
+guard 563; mobile 69/69.

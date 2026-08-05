@@ -3724,10 +3724,42 @@
   async function renderStart() {
     const t = $('#tab-start');
     // two serial round trips before a single pixel painted — the tab showed nothing for both
-    const [obR, swR, crR] = await Promise.all([api('GET', '/v1/onboard'), api('GET', '/v1/social'), api('GET', '/v1/career')]);
+    const [obR, swR, crR, ppR] = await Promise.all([api('GET', '/v1/onboard'), api('GET', '/v1/social'), api('GET', '/v1/career'), api('GET', '/v1/people')]);
     const ob = obR.body || { tasks: [], total: 0, claimed: 0 };
     const sw = swR.body || { tasks: [] };
     const cr = crR.body || { tiers: [] };
+    const pp = ppR.body || {};   // a failed fetch renders no cards (every read below is guarded)
+    // ── THE SITUATION — the dashboard the 24-tab wall never had: your threats, your people, and
+    // what's READY right now, in one glance. Composed from /v1/me (already in hand) + /v1/people
+    // (the cohesion layer) — the client re-derives nothing.
+    const ready = [];
+    if (me) {
+      if (!me.missionSeconds) ready.push(['start', 'a family job is waiting']);
+      if (!me.trainSeconds) ready.push(['streets', 'the gym is open']);
+      if (!me.gtaSeconds) ready.push(['garage', 'the boost window is open']);
+      if (me.nerve >= (me.maxNerve || 1)) ready.push(['streets', 'full nerve — jobs are burning']);
+      if (me.energy >= (me.maxEnergy || 1) * 0.75) ready.push(['streets', 'a full tank going unspent']);
+    }
+    const nem = pp.nemesis;
+    const situation = `
+      <h2>The Situation <span class="d" style="font-size:11.5px">— your threats, your people, and what's ready right now</span></h2>
+      <div class="grid">
+        ${nem ? `<div class="card" style="border-color:var(--bad)"><span class="t" style="color:var(--bad)">YOUR NEMESIS${nem.street?.alive === false ? ' — LINE FALLEN' : ''}</span>
+          <div class="d"><b>${esc(nem.street?.name || 'a fallen line')}</b> has moved on you <b>${nem.total}</b> time${nem.total === 1 ? '' : 's'}${nem.bloodOwed > 0 ? ` — and their line owes yours <b>${nem.bloodOwed} bod${nem.bloodOwed === 1 ? 'y' : 'ies'}</b>` : nem.bloodOwed < 0 ? ` — your line owes theirs ${-nem.bloodOwed}` : ''}.${nem.vendetta?.mine ? ' A vendetta is SWORN.' : ''}${nem.vendetta?.theirs ? ' Their line has sworn one on YOU.' : ''}</div>
+          <div class="row">${nem.street?.id ? `<button class="act" data-story="${nem.street.id}" data-story-name="${esc(nem.street.name)}">the story of you two</button><button class="act" data-go-tab="pvp">settle it →</button>` : `<button class="act" ${''}disabled>their line is dead — for now</button>`}</div></div>` : ''}
+        ${(pp.family || pp.spouse || pp.consigliere || pp.guardedBy || (pp.guarding || []).length || (pp.bonds || []).length) ? `<div class="card" style="border-color:var(--gold)"><span class="t" style="color:var(--gold)">YOUR PEOPLE</span>
+          <div class="d">${[
+            pp.family ? `<b>${esc(pp.family.name)}</b> [${esc(pp.family.tag || '')}] — your family (${esc(pp.family.role)})` : null,
+            pp.spouse ? `married into <b>${esc(pp.spouse.dynasty || pp.spouse.street?.name || 'a house')}</b>${pp.spouse.street?.name ? ` (${esc(pp.spouse.street.name)})` : ''}` : null,
+            pp.consigliere ? `<b>${esc(pp.consigliere.street?.name || 'a counselor')}</b> advises your house` : null,
+            pp.advising ? `you counsel ${pp.advising} house${pp.advising === 1 ? '' : 's'}` : null,
+            pp.guardedBy ? `<b>${esc(pp.guardedBy.name)}</b> is watching your back` : null,
+            (pp.guarding || []).length ? `you stand over ${pp.guarding.map((g) => `<b>${esc(g.name)}</b>`).join(', ')}` : null,
+            (pp.bonds || []).length ? `${pp.bonds.map((b) => `<b>${esc(b.name)}</b> (${b.jobs} job${b.jobs === 1 ? '' : 's'})`).join(', ')} owe you a hearing` : null,
+          ].filter(Boolean).join(' · ')}</div></div>` : ''}
+        ${ready.length ? `<div class="card"><span class="t">READY NOW</span>
+          <div class="d">${ready.map(([tab, line]) => `<button class="act" data-go-tab="${tab}" style="margin:2px 4px 2px 0">${line} →</button>`).join('')}</div></div>` : ''}
+      </div>`;
     // task → [tab to jump to, the coaching line] for the not-yet-done "do it" button
     const go = {
       ob_crime: ['streets', 'Pull any job on the Streets'],
@@ -3745,6 +3777,7 @@
     // rebuilt card would wipe the half-typed name. Carry the draft across the rebuild.
     const refDraft = t.querySelector('#ref-claim-name')?.value || '';
     t.innerHTML = `
+      ${ob.allDone ? situation : ''}
       <!-- The City Standing led this screen — so the FIRST thing a brand-new player saw was six bars
            at 0% and a leaderboard of strangers, with the checklist (the actual point) pushed below.
            It leads only once the checklist is behind you; before that it's one honest line. -->
@@ -3767,6 +3800,7 @@
             : `<button class="act" data-obgo="${x.id}">${(go[x.id] || [, 'do it'])[1]} →</button>`}
         </div>`).join('')}</div>
       <div class="d" style="color:var(--dim);font-size:12.5px;margin-top:10px">Finish all of it for a capstone bonus (${reward(ob.capstone || {})}). Stuck? The other tabs across the top are the whole city — Streets is your bread and butter.</div>
+      ${!ob.allDone ? situation : ''}
       ${(() => { // THE CAREER (founder: another list of tasks in progression after the First Week,
         // with bonuses, that takes you throughout the game). Open tiers render their task cards;
         // the next locked tier is a one-line teaser; deeper tiers stay a count so the screen
@@ -3902,6 +3936,42 @@
       const proof = inp ? inp.value.trim() : '';
       act('POST', `/v1/social/${b.dataset.swclaim}/claim`, proof ? { proof } : {}).then(() => renderStart());
     });
+    wireStory(t); // THE SITUATION's nemesis card
+    t.querySelectorAll('[data-go-tab]').forEach((b) => b.onclick = () => setTab(b.dataset.goTab));
+  }
+
+  // ── THE STORY OF YOU AND THEM — the pair's whole recorded history in one dossier, shared by the
+  // Situation's nemesis card and Wet Work's rivals board. Pure read; the server withholds the
+  // detail JSONB (the info-economy rule), so this renders only kind + when + which way.
+  const STORY_LINES = {
+    jump: 'a jumping', shakedown: 'a shakedown', rob: 'a front robbed', car_theft: 'a car stolen',
+    trunk: 'a trunk mugged', boat_theft: 'a boat stolen', sabotage: 'a stable sabotaged',
+    takeover: 'a hostile takeover', kill: 'a killing', married: '💍 the houses married',
+    proposed: 'a marriage proposed', divorced: 'the houses split', peace_offer: '🕊 a sit-down offered',
+    met: 'the first meeting',
+  };
+  async function showStory(charId, name) {
+    const r = await api('GET', '/v1/people/history/' + charId);
+    if (r.code >= 400) return toast(describe(r.body) || 'no story to tell', true);
+    const h = r.body;
+    const lines = (h.events || []).map((e) => {
+      const when = e.at ? new Date(e.at).toLocaleDateString() : '';
+      const who = e.who === 'me' ? 'you' : e.who === 'them' ? esc(h.them?.name || 'them') : 'the two of you';
+      const what = STORY_LINES[e.kind] || e.kind;
+      return `<div class="d" style="border-bottom:1px solid rgba(255,255,255,.05);padding:3px 0">
+        <span style="color:var(--dim);font-size:11px">${when}</span> · ${e.kind === 'kill'
+          ? `☠ <b>${who}</b> put <b>${esc(e.fell || 'somebody')}</b> in the ground`
+          : `${what} — <b>${who}</b>`}</div>`;
+    }).join('');
+    const blood = h.bloodOwed > 0 ? `their line owes yours <b>${h.bloodOwed}</b> bod${h.bloodOwed === 1 ? 'y' : 'ies'}`
+      : h.bloodOwed < 0 ? `your line owes theirs <b>${-h.bloodOwed}</b>` : 'the blood is even';
+    sheetModal(`YOU & ${esc(name || h.them?.name || 'THEM')}`, `
+      <div class="d" style="margin-bottom:6px">kills — yours ${h.kills?.ours ?? 0} · theirs ${h.kills?.theirs ?? 0} · ${blood}</div>
+      ${lines || '<div class="d" style="color:var(--dim)">no history between your bloodlines — yet.</div>'}`);
+  }
+  function wireStory(scope) {
+    scope.querySelectorAll('[data-story]').forEach((b) => b.onclick = () =>
+      showStory(b.dataset.story, b.dataset.storyName));
   }
 
   // Streets: crimes, train, path, bank, trade goods, travel
@@ -4885,6 +4955,7 @@
           ${r.street ? `<div class="d">lvl ${r.street.level} · ${r.street.loc}</div>
           <button class="act prime" data-jump="${r.street.id}" data-intent="standard">jump</button>
           <button class="act" data-search="${r.street.id}" data-name="${esc(r.street.name)}">search</button>
+          <button class="act" data-story="${r.street.id}" data-story-name="${esc(r.street.name)}" title="everything recorded between your bloodlines">the story</button>
           ${dmBtn(r.street.id)}` : ''}</div>`).join('')}</div>` : ''}
       <h2 style="margin-top:12px">The Streets (${streets.length})</h2>
       <div class="grid">${streets.map((s) => `
@@ -4950,6 +5021,7 @@
       toast("no number — meet them face to face (a jump counts), or put a wire on them", true));
     t.querySelectorAll('[data-jump]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/streets/${b.dataset.jump}/jump`, { intent: b.dataset.intent || 'standard' }).then(() => renderPvp()));
+    wireStory(t); // the rivals board's "the story" dossiers
     // the §7.8 bust — until now this verb lived ONLY in the raw deck, so the daily "bust a player
     // out of lockup" contract pointed at a control that did not exist
     t.querySelectorAll('[data-pbust]').forEach((b) => b.onclick = () =>

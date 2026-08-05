@@ -970,6 +970,20 @@ const PARAM_FIXTURES = new Map([
     await inject('POST', '/v1/phone/dm/' + charId, t, { text: 'always.' });
     return cid;
   }],
+  // THE STORY needs a counterpart WITH history — a strike and a kill seed the events list, so the
+  // dossier's element fields are compared against rows rather than passing on emptiness
+  ['/v1/people/history/:p', async () => {
+    const t = (await inject('POST', '/v1/auth/guest')).body.token;
+    await inject('POST', '/v1/character', t, { name: 'Mirror Nemesis ' + Math.random().toString(36).slice(2, 6) });
+    const cid = (await inject('GET', '/v1/me', t)).body.character.id;
+    const [aA, aB] = await Promise.all([charId, cid].map(async (id) =>
+      (await app.pool.query('SELECT account_id FROM characters WHERE id=$1', [id])).rows[0].account_id));
+    await app.pool.query("INSERT INTO rival_events (id, victim_account, aggressor_account, kind, detail) VALUES ($1,$2,$3,'jump','{}')",
+      [crypto.randomUUID(), aA, aB]);
+    await app.pool.query("INSERT INTO kill_log (id, killer_account, victim_account, victim_name) VALUES ($1,$2,$3,'Mirror Fallen')",
+      [crypto.randomUUID(), aB, aA]);
+    return cid;
+  }],
 ]);
 // Check 4b needs every list to HAVE a row, or its fields are never compared. This is the price of
 // that check being honest — each entry exists because a list came back empty and the run said so.
@@ -1038,6 +1052,16 @@ async function seedLists() {
   await si('POST', '/v1/duels/list', t2, { limit: 25000 });
   // THE TRADES legend board ranks lifetime mastery XP per account
   await q(`INSERT INTO mastery_legend (account_id, track_id, xp) VALUES ($1, 'larceny', 5000)`, [acct]);
+
+  // ── THE CAST (/v1/people): a nemesis (recorded malice + a kill), a worked-for bond, and a
+  // guarded principal, so the Situation card's lists and the nemesis fields all have rows
+  await q("INSERT INTO rival_events (id, victim_account, aggressor_account, kind, detail) VALUES ($1,$2,$3,'jump','{}')",
+    [crypto.randomUUID(), acct, acct2]);
+  await q("INSERT INTO kill_log (id, killer_account, victim_account, victim_name) VALUES ($1,$2,$3,'Mirror Fallen')",
+    [crypto.randomUUID(), acct2, acct]);
+  await q("INSERT INTO contacts (owner_account, contact_account, how, jobs) VALUES ($1,$2,'met',2) ON CONFLICT (owner_account, contact_account) DO UPDATE SET jobs=2",
+    [acct, acct2]);
+  await q("UPDATE characters SET guarded_by=$1, guarded_until = now() + interval '2 hours' WHERE id=$2", [charId, two]);
 
   // ── the family, and everything that hangs off holding turf ──
   const gid = await paramId('/v1/gangs/:p');
