@@ -4957,3 +4957,27 @@ directly raises withdrawal headroom ("traders fund earners too"). Chain-dormant:
 `OmertaHook` is the remaining mainnet-milestone build (an ETH-on-buys fee needs the input-side
 `beforeSwap` path, which the subtree's rule 7 flags as partial-fill-risky — its own focused,
 forge-verified contract session). The rate landing first is the design's required sequencing.
+
+## D14 — stats matter more to the crime roll (SIGNED 2026-08-05, founder chose OPTION A)
+
+`M3.CRIME_STAT` lifts the crime-roll stat coefficients into a lever and steepens them, EV-neutral at
+a mid build. OLD (signed): cunning ×0.004, speed ×0.002, muscle ×0 — a barely-felt +12-point success
+swing across the WHOLE trainable range. NEW: cunning ×0.008, speed ×0.004, `OFFSET` 0.072 (cancels
+only the EXTRA the doubled coefficients add at the REF=12 build, so a mid street is unchanged to the
+dollar). Muscle stays 0 by design (the jump/shakedown/PvP axis — adding it homogenizes builds).
+
+**Measured (exact over the 61-crime catalog, level-gated builds):**
+| build | $/nerve delta |
+|---|---|
+| fresh 5/5 (lvl 3) | **−4.9%** (an untrained crook fumbles the hard score — the intended cost) |
+| mid 12/12 (lvl 25) | **0.0%** (the anchor — exactly unchanged) |
+| maxed 25/25 (lvl 50) | **+22.3%** (the investment reward) |
+| **base-wide (20/60/20 pop)** | **+10.4%** |
+
+Felt spread on a mid crime: fresh 35% → maxed 59% success (a +24-point decision, doubled from the
+old +12). §10.4 UNTOUCHED (success rate only — crime:take/crime:<id> ledgering unchanged; sim
+drift-0). The +10.4% base-wide is the maxed tail earning more on hard jobs — bounded by NERVE (the
+real throttle), small against the passive stack. **FOUNDER FLAG:** option A holds the median flat but
+rewarding investment necessarily lifts the aggregate ~10%; reverting `CRIME_STAT` to
+`{CUN:0.004, SPD:0.002, OFFSET:0}` restores the pre-D14 signed curve byte-for-byte. Re-anchoring the
+OFFSET at a higher build would trade the maxed-tail faucet for a bigger fresh/mid hit (no free lunch).

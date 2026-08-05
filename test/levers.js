@@ -268,6 +268,10 @@ const SIGNED = [
   ['M3.COACH_SOCIAL_BAND_LVLS', 8],
   ['M3.CONTRACT_AMMO_REBATE', 0.5],
   ['M3.CRIME_LOUD_CASH_PREMIUM', 1],
+  // D14 option A (SIGNED 2026-08-05) — the crime-roll stat coefficients, steepened EV-neutral at REF
+  ['M3.CRIME_STAT.CUN', 0.008],
+  ['M3.CRIME_STAT.SPD', 0.004],
+  ['M3.CRIME_STAT.OFFSET', 0.072],
   ['M3.DEATH_DUTY_RATE', 0.25],
   ['M3.DIRECTED_MAX_H', 24],
   ['M3.DIRECTED_MIN', 10000],
