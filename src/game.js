@@ -15,7 +15,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS, RANKS,
          KITCHENS, labModuleCost, recyclesToDesk, DESK_RECYCLE_REASON, isMade, madeSeconds,
          MADE_LADDER, madeRungIdx, madeRungOf, ladderFx,
          ASSETS, OPERATIONS, opSlotsOf, nextOpSlotLevel, MISSIONS, dailyLiveFor, jailed, safeHoused,
-         STABLE, SPEAKEASY, ESTATE } from './rules.js';
+         STABLE, SPEAKEASY, ESTATE, MADE } from './rules.js';
 import { dbCaps } from './db.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
@@ -1187,12 +1187,26 @@ function coachLadder(ch, acct, owned) {
   // price off the live surface or don't state a price), so a retune can never make the copy a lie.
   if (lvl >= 25 && !Number(acct.racer_wins || 0) && Number(ch.cash) + Number(ch.bank) >= STABLE.KINDS.dog.cost
     && add('Own the animals', `The Stable: buy a ${STABLE.KINDS.dog.name} ($${STABLE.KINDS.dog.cost.toLocaleString()}), train its legs, and run the circuit until it takes a purse. A racer you own can even run in the town's daily card — the whole city bets on your animal.`, 'stable')) return rungs;
+  // ── THE EARN→SPEND ARC (founder-directed pairing: "so the earn to spend arc closes"). $OMR's
+  // sinks are all built — but a player was never routed from HOLDING $OMR to SPENDING it on
+  // something they want, so the token read as a number with nowhere to go. Two rungs close it:
+  // DUES (the Made Man — which is also what the club rung below gates on, so without this a funded
+  // unmade player would simply never see the club) and the STAKE (the D8=D ladder pays power for
+  // HOLDING). Both $OMR-gated on holding the price (the work-the-wires rule); both self-clear on
+  // an account-level signal (made_until / staked — both survive death).
+  if (lvl >= 26 && !isMade(acct) && Number(acct.omr || 0) >= MADE.OMR
+    && add('You can afford your dues', `${MADE.OMR} $OMR a month makes you a MADE MAN: the badge, the upper compound, a club of your own, a seat in the high-stakes room, and your fronts pay their own pad. You're holding the price — Going Legit ▸ THE MADE MAN.`, 'portfolio')) return rungs;
   // one club per district, so on a full map this could linger — acceptable on a thin alpha (six
   // districts, and residents never open clubs); the cash gate keeps it off a broke street's plan,
   // and the MADE gate mirrors openSpeakeasy's own D8=D door — without it an unmade funded player
   // would be pinned on a rung the server refuses forever (the refuse-on-press class, as a mask).
   if (lvl >= 26 && !owned.speakeasy && isMade(acct) && Number(ch.cash) + Number(ch.bank) >= SPEAKEASY.OPEN_COST
     && add('Open a club of your own', `The Speakeasy: as a made man, $${SPEAKEASY.OPEN_COST.toLocaleString()} opens a nightclub in any free district. The bar take drips around the clock, and every round a patron buys is buying YOUR prestige — the nightlife board ranks the city's clubs.`, 'speakeasy')) return rungs;
+  // the other half of the arc: $OMR you HOLD is power (the D8=D ladder — trunk, energy, nerve,
+  // garage, the fence at the top) and a staked balance is looted at the COMMITTED rate rather than
+  // the idle one when you die. Gated on holding the first rung's stake; clears on staking anything.
+  if (lvl >= 27 && !Number(acct.staked || 0) && Number(acct.omr || 0) >= (MADE_LADDER.RUNGS[0]?.min || 10)
+    && add('Put your $OMR to work', `$OMR you STAKE is power for holding it — ${MADE_LADDER.RUNGS[0]?.min || 10} staked reaches the ladder's first rung (a bigger trunk, deeper tanks, a bigger garage) — and a committed balance is a harder thing to loot off your body than a loose one. Going Legit ▸ THE LADDER.`, 'portfolio')) return rungs;
   if (lvl >= 28 && !Number(acct.monument_built || 0)
     && add('Put your name on the skyline', 'The City is raising a monument, and every dollar you brick in goes on the plaque FOREVER — it survives your death, your heir\'s death, everything. The cheapest immortality in town, and the whole base builds it together.', 'city')) return rungs;
   // the $OMR-sink arc (estate → auction block) — gated on HOLDING tier 1's price, read live off the

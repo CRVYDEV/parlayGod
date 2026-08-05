@@ -578,24 +578,38 @@ const stableRung = (await call('GET', '/v1/me', { token: rook.token })).body.cha
 assert.equal(stableRung?.label, 'Own the animals', 'lvl 25+ funded, never won a race → The Stable');
 assert(/30,000/.test(stableRung.hint), 'the hint quotes the live catalog price');
 await pool.query(`UPDATE account_persistent SET racer_wins=1 WHERE account_id='${rookAid}'`);
-// the club rung: cash-gated AND made-gated — it mirrors openSpeakeasy's own D8=D door, or an
-// unmade funded player is pinned on a rung the server refuses forever
+// ── THE EARN→SPEND ARC (founder-directed pairing) — dues then the stake, walked as the arc reads:
+// hold $OMR → become made → open the club → put the rest to work. Granting $OMR re-arms the two
+// EARLIER $OMR-gated rungs (legit at 15, the wire at 18), so their clearing signals go in first.
 await seedCh(rook.id, `respect=${10 * 26 * 26}, cash=800000, bank=0`);
+assert.notEqual(await coachOf(), 'You can afford your dues', 'holding no $OMR → the dues rung stands down');
 assert.notEqual(await coachOf(), 'Open a club of your own', 'funded but UNMADE → the club rung stands down');
-await pool.query(`UPDATE account_persistent SET made_until = now() + interval '30 days' WHERE account_id='${rookAid}'`);
-assert.equal(await coachOf(), 'Open a club of your own', 'lvl 26+ made and funded, no club → The Speakeasy');
+await pool.query(`INSERT INTO portfolios (account_id, ticker, shares) VALUES ('${rookAid}', 'GLD', 1)`);
+await pool.query(`UPDATE account_persistent SET omr=20, intel_ops=1 WHERE account_id='${rookAid}'`);
+assert.equal(await coachOf(), 'You can afford your dues', 'lvl 26+ unmade, holding the dues → become a Made Man');
+// pay through the REAL till — the burn + made_until land exactly as a player's would
+assert.equal((await call('POST', '/v1/made', { token: rook.token })).code, 200, 'the dues go through');
+assert.equal(await coachOf(), 'Open a club of your own', 'made and funded, no club → The Speakeasy — the arc\'s next step');
 await pool.query(`INSERT INTO speakeasies (district_id, owner_character) VALUES ('brick', '${rook.id}')`);
 assert.notEqual(await coachOf(), 'Open a club of your own', 'owning a club clears it for good');
+// the stake rung — the arc's other half: $OMR you HOLD is power. The dues burned rook's balance
+// to 0, so the rung correctly stands down broke, then leads once he holds the first rung's stake,
+// then clears through the REAL till
+await seedCh(rook.id, `respect=${10 * 27 * 27}`);
+assert.notEqual(await coachOf(), 'Put your $OMR to work', 'holding nothing → the stake rung stands down');
+await pool.query(`UPDATE account_persistent SET omr=10 WHERE account_id='${rookAid}'`);
+assert.equal(await coachOf(), 'Put your $OMR to work', 'lvl 27+ nothing staked, holding the first rung → the ladder');
+assert.equal((await call('POST', '/v1/stake', { token: rook.token, body: { amount: 10 } })).code, 200, 'the stake goes through');
+assert.notEqual(await coachOf(), 'Put your $OMR to work', 'a staked balance clears it');
 await seedCh(rook.id, `respect=${10 * 28 * 28}`);
 assert.equal(await coachOf(), 'Put your name on the skyline', 'lvl 28+ never bricked in → the monument');
 await pool.query(`UPDATE account_persistent SET monument_built=500 WHERE account_id='${rookAid}'`);
 // the estate rung gates on HOLDING tier 1's $OMR (rook has none yet)
 await seedCh(rook.id, `respect=${10 * 30 * 30}`);
 assert.notEqual(await coachOf(), 'Buy the compound', 'no $OMR → the estate rung stands down');
-// granting $OMR re-arms the two earlier $OMR-gated rungs (legit at 15, the wire at 18) — clear
-// their signals first so the walk stays a strict ladder rather than jumping back down it
-await pool.query(`INSERT INTO portfolios (account_id, ticker, shares) VALUES ('${rookAid}', 'GLD', 1)`);
-await pool.query(`UPDATE account_persistent SET omr=50, intel_ops=1 WHERE account_id='${rookAid}'`);
+// (the legit/wire re-arm signals were cleared back at the dues step; rook is staked so the stake
+// rung stays quiet too — this grant only opens the compound's own gate)
+await pool.query(`UPDATE account_persistent SET omr=50 WHERE account_id='${rookAid}'`);
 const compound = (await call('GET', '/v1/me', { token: rook.token })).body.character.coach;
 assert.equal(compound?.label, 'Buy the compound', 'lvl 30+ holding the price, no estate → The Estate');
 assert(/Safe House/.test(compound.hint), 'naming tier 1 off the live catalog');
