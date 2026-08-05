@@ -9,7 +9,8 @@
 //   · gates: self / gone; account UUIDs never leave either board
 //   · pure reads: the whole suite writes ZERO transactions rows through these routes
 import assert from 'node:assert';
-import { buildServer } from '../src/server.js';
+process.env.MOD_KEY = 'test-mod-key';
+const { buildServer } = await import('../src/server.js');
 
 const app = await buildServer();
 const pool = app.pool;
@@ -145,13 +146,65 @@ const C = await mk('Quiet Carmela');
   assert.equal(r.nemesis.street?.name, 'Two-Gun Tessio', 'but the ledger keeps the name');
 }
 
-// ── pure reads — the whole suite moved NOTHING through these routes ──
+// ── THE MORNING PAPER — the while-you-were-gone digest ──
 {
-  const n = Number((await pool.query(
-    `SELECT COUNT(*) n FROM transactions WHERE character_id IN ('${A.id}','${B.id}','${C.id}') AND reason NOT LIKE 'gang:%'`)).rows[0].n);
-  assert.equal(n, 0, 'the cast and the story are reads — zero ledger rows beyond the family founding');
+  // C came home to: two attacks announced, a front's take and a pad bill on the books — all 2h old
+  for (let i = 0; i < 2; i++) await pool.query(
+    "INSERT INTO notifications (id, character_id, type, payload, created_at) VALUES ($1,$2,'attack','{}', now() - interval '2 hours')",
+    [uid(), C.id]);
+  await pool.query(
+    "INSERT INTO transactions (id, character_id, currency, amount, reason, at) VALUES ($1,$2,'cash',5000,'business:income', now() - interval '2 hours')",
+    [uid(), C.id]);
+  await pool.query(
+    "INSERT INTO transactions (id, character_id, currency, amount, reason, at) VALUES ($1,$2,'cash',-1200,'business:upkeep', now() - interval '2 hours')",
+    [uid(), C.id]);
+  const before = Number((await pool.query('SELECT COUNT(*) n FROM transactions')).rows[0].n);
+  let r = await call('GET', '/v1/paper', { token: C.token });
+  assert.equal(r.code, 200, 'the paper prints');
+  assert.equal(r.body.fresh, true, 'a real absence with news in it is a fresh paper');
+  const hl = r.body.headlines.find((h) => h.type === 'attack');
+  assert.equal(hl?.n, 2, 'headlines are the street\'s own notifications, grouped');
+  assert.equal(r.body.earned.find((e) => e.what === 'business')?.total, 5000, 'the take folds by reason prefix');
+  assert.equal(r.body.spent.find((e) => e.what === 'business')?.total, 1200, 'and the bleed');
+  assert.equal(r.body.totalIn, 5000, 'the books total in');
+  assert.equal(r.body.totalOut, 1200, 'and out');
+  // the GET does NOT consume its own window (the notifications-peek rule) — two reads agree
+  const again = await call('GET', '/v1/paper', { token: C.token });
+  assert.equal(again.body.fresh, true, 'reading the paper does not fold it');
+  // folding is the explicit act — after it the window is minutes wide and the paper goes quiet
+  assert.equal((await call('POST', '/v1/paper/read', { token: C.token })).code, 200, 'the fold goes through');
+  r = await call('GET', '/v1/paper', { token: C.token });
+  assert.equal(r.body.fresh, false, 'a folded paper stays folded until real time passes');
+  assert(r.body.awaySeconds < 3600, 'the window now starts at the fold');
+  const after = Number((await pool.query('SELECT COUNT(*) n FROM transactions')).rows[0].n);
+  assert.equal(after, before, 'the paper is a READ — printing and folding write zero ledger rows');
 }
 
-console.log('✅ people test passed — the cast reads every relationship the game remembers (nemesis enriched with the blood ledger + vendetta state, spouse/consigliere both directions, the family, the bodyguard pair by NAME both ways, worked-for bonds), the story merges both bloodlines\' record newest-first with the fallen named and the detail JSONB withheld (the info-economy rule), a dead line keeps its name, self/gone refuse cleanly, account UUIDs never leave, and the whole layer moves zero value.');
+// ── THE COACH CENSUS — the live drop-off read over real players ──
+{
+  const r = await call('GET', '/v1/mod/coach');
+  assert.equal(r.code, 401, 'the census is mod-gated');
+  const res = await app.inject({ method: 'GET', url: '/v1/mod/coach', headers: { 'x-mod-key': 'test-mod-key' } });
+  assert.equal(res.statusCode, 200, 'the census reads');
+  const c = res.json();
+  assert(c.surveyed >= 2, `the active players are surveyed (got ${c.surveyed})`);
+  assert(Array.isArray(c.rungs) && c.rungs.length >= 1, 'and aggregate onto rungs');
+  const top = c.rungs[0];
+  assert(top.label && typeof top.count === 'number' && top.tab, 'each rung carries label/count/tab');
+  assert(top.players.length <= 5, 'the sample names are capped');
+  assert(!c.rungs.some((x) => x.players.includes('Two-Gun Tessio')), 'a dead street is not surveyed');
+}
+
+// ── pure reads — the whole suite moved NOTHING through these routes ──
+// (the two exclusions are this suite's own deliberate seeds: the family founding, and the
+// backdated business rows the paper block printed a digest OF)
+{
+  const n = Number((await pool.query(
+    `SELECT COUNT(*) n FROM transactions WHERE character_id IN ('${A.id}','${B.id}','${C.id}')
+       AND reason NOT LIKE 'gang:%' AND reason NOT LIKE 'business:%'`)).rows[0].n);
+  assert.equal(n, 0, 'the cast, the story and the paper are reads — zero ledger rows of their own');
+}
+
+console.log('✅ people test passed — the cast reads every relationship the game remembers (nemesis enriched with the blood ledger + vendetta state, spouse/consigliere both directions, the family, the bodyguard pair by NAME both ways, worked-for bonds), the story merges both bloodlines\' record newest-first with the fallen named and the detail JSONB withheld (the info-economy rule), THE MORNING PAPER digests an absence (headlines grouped, the take and the bleed folded separately so the pad is never netted away, a read never consumes its own window, folding is explicit), the mod-only coach census aggregates the live population onto rungs with dead streets excluded, a dead line keeps its name, self/gone refuse cleanly, account UUIDs never leave, and the whole layer moves zero value.');
 await app.close();
 process.exit(0);
