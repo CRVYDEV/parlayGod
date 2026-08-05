@@ -571,6 +571,13 @@ const SIGNED = [
   ['FAMILY_WAR.TRIBUTE_CAP_MS', 86400000],
   ['FAMILY_WAR.FAIL_HOSP_MS', 1800000],
   ['FAMILY_WAR.RANKS', [[0, 'Unblooded'], [25000, 'Button Man'], [150000, 'Warmaker'], [500000, 'Family Killer'], [2000000, 'The Exterminator']]],
+  // THE FAMILY WAR (formal declaration) — status/pacing over the raid loop; §10.4-neutral (gang:war sink only)
+  ['FAMILY_WAR.WAR.COST', 25000],
+  ['FAMILY_WAR.WAR.MS', 86400000],
+  ['FAMILY_WAR.WAR.RAID_POINTS', 1],
+  ['FAMILY_WAR.WAR.WIN_SCORE', 5],
+  ['FAMILY_WAR.WAR.MAX_PER_FAMILY', 1],
+  ['FAMILY_WAR.WAR.WIN_RANKS', [[0, 'No Campaigns'], [1, 'Campaigner'], [5, 'War Chief'], [15, 'Warlord'], [40, 'The Scourge of Families']]],
   // THE OPERATION SLOTS (strategy package) — how much of the 31-entry income catalog one player runs
   ['OPERATIONS.SLOTS_BASE', 2],
   ['OPERATIONS.SLOTS_PER_LEVEL', 4],

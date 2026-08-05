@@ -11,7 +11,7 @@ import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { FAMILY_WAR, familyWarRankOf } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
-import { sweepFamilyAggro } from '../src/npcwar.js';
+import { sweepFamilyAggro, sweepNpcWars } from '../src/npcwar.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -168,9 +168,80 @@ assert(clb.families.some((f) => f.name === 'The Wolf Pack' && f.vassals === 1), 
 const lb = (await call('GET', '/v1/leaderboard/blood-wars', { token: raider.token })).body;
 assert(lb.warmakers.some((w) => w.name === 'War Wolf' && w.war > 0), 'the family-killer is on the blood-war board');
 
+// ══════════ THE FAMILY WAR (formal declaration) ══════════
+// A SEPARATE NPC family to war on (gid is now the raider's vassal). Fund the raider's family war chest
+// through the LEDGERED tribute route (not a direct treasury seed) so the gang-treasuries §10.4 check
+// stays exact — then it can prove the gang:war sink reconciles for an NPC-family war too.
+const W = FAMILY_WAR.WAR;
+const sf = await mk('Don Second');
+await seedCh(sf.id, 'cash=100000, respect=5760');
+const fg2 = await call('POST', '/v1/gangs', { token: sf.token, body: { name: 'The Second Family', tag: 'SEC' } });
+assert.equal(fg2.code, 200, `founded the second family (${JSON.stringify(fg2.body)})`);
+const gid2 = (await pool.query(`SELECT gang_id FROM gang_members WHERE character_id='${sf.id}'`)).rows[0].gang_id;
+await pool.query(`UPDATE gangs SET npc_flag=true, war_pool=${FAMILY_WAR.POOL_MAX}, war_pool_at=now() WHERE id='${gid2}'`);
+// the raider (boss of The Wolf Pack) tributes cash into the treasury — ledgered gang:tribute
+await seedCh(raider.id, `cash=${W.COST * 3}, family_raid_at=NULL, energy=100, ammo=100, hosp_until=NULL`);
+assert.equal((await call('POST', '/v1/gangs/tribute', { token: raider.token, body: { amount: W.COST * 2 } })).code, 200, 'funded the war chest via ledgered tribute');
+
+// the rank gate: a soldier of a family can't declare
+assert.equal((await call('POST', `/v1/npcfamily/${gid2}/war`, { token: member.token })).body.error, 'rank', 'only the boss/underboss declares a family war');
+// the boss declares — the EXISTING gang:war treasury sink, and NO season_wars (the severance)
+const treasPre = Number((await pool.query(`SELECT treasury FROM gangs WHERE id='${wolfGang}'`)).rows[0].treasury);
+const dw = await call('POST', `/v1/npcfamily/${gid2}/war`, { token: raider.token });
+assert.equal(dw.code, 200, `war declared (${JSON.stringify(dw.body)})`);
+assert.equal(dw.body.winScore, W.WIN_SCORE, 'the win score is surfaced');
+assert.equal(Number((await pool.query(`SELECT treasury FROM gangs WHERE id='${wolfGang}'`)).rows[0].treasury), treasPre - W.COST, 'the war chest burned from the treasury');
+assert.equal(Number((await pool.query(`SELECT season_wars FROM gangs WHERE id='${wolfGang}'`)).rows[0].season_wars || 0), 0, 'a family war grants NO season_wars — the Commission-standing faucet stays severed by construction');
+// one campaign at a time (MAX_PER_FAMILY) — a SECOND front on a different, unheld NPC family is blocked
+const tf = await mk('Don Third');
+await seedCh(tf.id, 'cash=100000, respect=5760');
+await call('POST', '/v1/gangs', { token: tf.token, body: { name: 'The Third Family', tag: 'THR' } });
+const gid3 = (await pool.query(`SELECT gang_id FROM gang_members WHERE character_id='${tf.id}'`)).rows[0].gang_id;
+await pool.query(`UPDATE gangs SET npc_flag=true, war_pool=${FAMILY_WAR.POOL_MAX}, war_pool_at=now() WHERE id='${gid3}'`);
+assert.equal((await call('POST', `/v1/npcfamily/${gid3}/war`, { token: raider.token })).body.error, 'at_war', 'one active campaign per family (no second front)');
+// the board decorates the family with the live campaign
+b = (await call('GET', '/v1/npcfamily', { token: raider.token })).body;
+assert(b.families.find((f) => f.id === gid2)?.atWar?.score === 0, 'the board shows the live campaign at score 0');
+assert.equal(b.you.activeWars, 1, 'the board counts my active war');
+assert.equal(b.you.warsWon, 0, 'no campaigns won yet');
+
+// SCORE the campaign: WIN_SCORE landed raids on the family win it (keep the pool topped so it stays a
+// WAR, not a rout/conquest). The trophy → the DECLARER's account (survives death, never season_wars).
+process.env.FAMILY_RAID_P = '1';
+let last;
+for (let i = 0; i < W.WIN_SCORE; i++) {
+  await seedCh(raider.id, 'family_raid_at=NULL, energy=100, ammo=100, hosp_until=NULL');
+  await pool.query(`UPDATE gangs SET war_pool=${FAMILY_WAR.POOL_MAX}, war_pool_at=now() WHERE id='${gid2}'`);
+  last = await call('POST', `/v1/npcfamily/${gid2}/raid`, { token: raider.token });
+  assert.equal(last.code, 200, `war raid ${i + 1} landed (${JSON.stringify(last.body)})`);
+}
+assert.equal(last.body.warWon, true, 'the WIN_SCORE-th landed raid wins the campaign');
+const winsA = Number((await pool.query(`SELECT family_wars_won FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${raider.id}')`)).rows[0].family_wars_won);
+assert.equal(winsA, 1, "the declarer's war-chief trophy banked the win");
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM npc_wars WHERE attacker_gang='${wolfGang}' AND npc_gang='${gid2}' AND NOT resolved`)).rows[0].n), 0, 'the won campaign is resolved');
+// the war-chief leaderboard
+const wlb = (await call('GET', '/v1/leaderboard/family-wars', { token: raider.token })).body;
+assert(wlb.chiefs.some((c) => c.name === 'War Wolf' && c.wins === 1), 'the war chief tops the family-war board');
+
+// THE LAPSE — a campaign that expires below the score just closes: no trophy, no penalty. A win freed
+// the slot, so a fresh (1ms) campaign can be declared; the worker lapses it.
+await seedCh(raider.id, `cash=${W.COST * 2}`);
+assert.equal((await call('POST', '/v1/gangs/tribute', { token: raider.token, body: { amount: W.COST } })).code, 200, 're-funded the treasury');
+process.env.NPC_WAR_MS = '1';
+assert.equal((await call('POST', `/v1/npcfamily/${gid2}/war`, { token: raider.token })).code, 200, 'declared a short campaign');
+delete process.env.NPC_WAR_MS; delete process.env.FAMILY_RAID_P;
+await new Promise((r) => setTimeout(r, 8));
+const swept = await sweepNpcWars(pool);
+assert(swept.lapsed >= 1, 'the worker lapses an expired campaign');
+assert.equal(Number((await pool.query(`SELECT family_wars_won FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${raider.id}')`)).rows[0].family_wars_won), 1, 'a lapsed campaign grants NO trophy (still 1 from the win)');
+
+// §10.4: the gang:war war-chest sink reconciles the gang-treasuries check (funded by ledgered tribute)
+const gt2 = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'gang treasuries');
+assert(gt2.ok, `the family-war gang:war sink reconciles the gang-treasuries check (${JSON.stringify(gt2)})`);
+
 // ── §10.4: the vocabulary knows family:raid (cash faucet + ammo sink) ──
 const vocab = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `family:raid rides the 'family' prefix (${JSON.stringify(vocab.unknown || [])})`);
 
-console.log('✅ THE BLOOD WAR test passed — the board (strength/defense/loot, player family excluded), a landed raid (bounded family:raid loot + legend + pool drain + ammo sink + cooldown), THE SEVERANCE (no season_wars → no Commission seat), the interlock (a beaten family reads weaker), THE DEFENCE (a counter hospitalizes the raider), THE MANHUNT (an escaped raider is hunted down later, shield-honouring, one-shot), a repel (hospitalized, pool untouched), THE CONQUEST (routing claims the family as a vassal → bounded family:tribute to the treasury, gang-treasuries reconciled, the conquest board), the gates (level/own_family/cooldown/bad_target), the leaderboard, and §10.4 (family: vocabulary closed)');
+console.log('✅ THE BLOOD WAR test passed — the board (strength/defense/loot, player family excluded), a landed raid (bounded family:raid loot + legend + pool drain + ammo sink + cooldown), THE SEVERANCE (no season_wars → no Commission seat), the interlock (a beaten family reads weaker), THE DEFENCE (a counter hospitalizes the raider), THE MANHUNT (an escaped raider is hunted down later, shield-honouring, one-shot), a repel (hospitalized, pool untouched), THE CONQUEST (routing claims the family as a vassal → bounded family:tribute to the treasury, gang-treasuries reconciled, the conquest board), the gates (level/own_family/cooldown/bad_target), the leaderboard, THE FAMILY WAR (formal: the rank gate, the gang:war war-chest sink with NO season_wars, one campaign per family, the board decoration, scoring WIN_SCORE raids to WIN a status trophy for the declarer, the war-chief leaderboard, the worker lapse of an expired campaign, and the gang-treasuries reconcile), and §10.4 (family: vocabulary closed)');
 await app.close();

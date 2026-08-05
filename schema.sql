@@ -2199,6 +2199,21 @@ CREATE TABLE IF NOT EXISTS family_aggro (
   target_character TEXT NOT NULL,
   scheduled_at TIMESTAMPTZ NOT NULL
 );
+-- THE FAMILY WAR (formal declaration — omerta-npc-family-wars-design.md): a boss declares a time-boxed,
+-- SCORED campaign against an NPC family. One active war per (attacker family, NPC family) pair. score
+-- accrues on landed raids during the window; a win is STATUS ONLY (account_persistent.family_wars_won).
+-- §10.4: the only value flow is the EXISTING gang:war treasury sink at declaration — no spoils, no faucet.
+CREATE TABLE IF NOT EXISTS npc_wars (
+  attacker_gang TEXT NOT NULL,
+  npc_gang TEXT NOT NULL,
+  score INT NOT NULL DEFAULT 0,
+  ends_at TIMESTAMPTZ NOT NULL,
+  declared_by TEXT NOT NULL,        -- the character who declared (resolves to the account for the win trophy)
+  resolved BOOLEAN NOT NULL DEFAULT false,
+  PRIMARY KEY (attacker_gang, npc_gang)
+);
+CREATE INDEX IF NOT EXISTS ix_npc_wars_ends ON npc_wars (ends_at) WHERE NOT resolved;
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS family_wars_won INT NOT NULL DEFAULT 0; -- formal NPC-family war wins (status, survives death)
 -- THE CONQUEST (blood war step three): routing an NPC family (war_pool below the floor) lets the victor's
 -- family HOLD it as a vassal paying bounded tribute to the treasury (the World-frontier pattern on families).
 -- held_by_gang is the CONQUEROR's gang id on the NPC family row; contestable by re-routing.

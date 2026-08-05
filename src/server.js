@@ -2111,6 +2111,9 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => NpcWar.raidFamily(ch, req.params.gangId, client, h)));
   app.post('/v1/npcfamily/collect', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => NpcWar.collectFamilyTribute(ch, client, h)));
+  // THE FAMILY WAR (formal declaration) — a boss opens a time-boxed scored campaign against an NPC family
+  app.post('/v1/npcfamily/:gangId/war', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => NpcWar.declareNpcWar(ch, req.params.gangId, client, h)));
   app.get('/v1/world/raids', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client) => World.raidBoard(client, ch.id)));
   app.post('/v1/world/:npcId/plan', { preHandler: auth }, async (req) =>
