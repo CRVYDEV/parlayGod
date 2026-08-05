@@ -1023,7 +1023,7 @@ phase('P9.22 the severance — what the Exchange window can absorb (no faucet ab
   const recurringDay = wireDay + staffDay;
   const oneOff = ESTATE.TIERS.reduce((a, t) => a + (t.omr || t.cost || 0), 0);
   note('severance', 'RECURRING $OMR sinks per heavy player', `~${recurringDay.toFixed(1)} $OMR/day`,
-    `Street Wire ${wireDay.toFixed(1)}/day (base tier) + a full estate staff ${staffDay.toFixed(1)}/day — before auctions, portfolio, megaproject, respec or vanity, which are unbounded`);
+    `Street Wire ${wireDay.toFixed(1)}/day (base tier) + a full estate staff ${staffDay.toFixed(1)}/day — before auctions, megaproject, respec or vanity, which are unbounded`);
   note('severance', 'one-off personal $OMR sinks', `${oneOff.toLocaleString()} $OMR`,
     `the estate ladder alone; family seals ${GANG_SEALS.reduce((a, t) => a + (t.omr || t.cost || 0), 0)} and the foundation ${FOUNDATION.TIERS.reduce((a, t) => a + (t.omr || t.cost || 0), 0)} sit on top, per family`);
 

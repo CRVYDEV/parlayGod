@@ -395,17 +395,8 @@ async function obeyCoach(m) {
     coachCantAct.set(label, `front refused: "${r.body?.error || r.code}"`);
     return false;
   }
-  // "Time to go legit" — the rung only fires when the player already HOLDS $OMR (missions pay it),
-  // so obedience is one buy. Wired because it inherited the top of the ladder the moment the fights
-  // rung cleared: half a seven-day run, with the Port and the Wire behind it.
-  if (label.startsWith('Time to go legit')) {
-    if (Number(m.omr || 0) < 1) return false;
-    const r = await call('POST', '/v1/portfolio/invest', { token, body: { ticker: 'GLD', omr: 1 } });
-    if (r.code === 200) { did('coach:legit'); first('coach:legit'); return obeyed(); }
-    hit('coach:legit', r.body?.error || r.code);
-    coachCantAct.set(label, `invest refused: "${r.body?.error || r.code}"`);
-    return false;
-  }
+  // (D11 2026-08-05: 'Time to go legit' retired with the Portfolio — the lvl-15 anchor is the
+  // stake rung now, whose handler already exists below.)
   // "Take it to the water" — the only multi-stage rung: it clears on lifetime SMUGGLED value, which
   // is stamped by a clean COLLECT, so obedience is buy-a-boat → sail → land it. Each tick advances
   // one stage; only the landing counts as obeyed.

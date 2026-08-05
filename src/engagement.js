@@ -39,7 +39,7 @@ export const SYSTEMS = {
   'the dueling ladder': ['duel'],
   'crew heists': ['heist_plan', 'heist_join', 'heist_fill', 'heist_score', 'heist_case', 'heist_fence', 'heist_rat'],
   'clue scrolls': ['clue_casket'],
-  'the family': ['gang_foundation', 'gang_seal', 'gang_charter', 'family_dynasty_name'],
+  'the family': ['gang_foundation', 'gang_seal', 'gang_charter'],
   'the commission': ['commission_vote', 'commission_veto', 'commission_proposal', 'commission_override'],
   'territory': ['territory_raid', 'territory_op', 'territory_specialist', 'sov_income'],
   'the world': ['world_raid', 'world_raid_plan', 'world_raid_join', 'world_raid_hire'],
@@ -76,12 +76,10 @@ export const SYSTEMS = {
   // existing gear rail beside it has never emitted either. So this reads as "is anyone paying to
   // move a car up the ladder", not "is anyone extracting"; the vouchers table answers the second.
   'the collection': ['rarity_upgrade'],
-  // ('rwa_dividend' retired with the personal dividend — tokenomics v2 step 2; the family one stays)
-  // ('rwa_vault_claim' became 'eth_vault_claim' when the STOCK LAYER was retired —
-  // omerta-stock-layer-retirement.md. The vault stayed; what it owes is ETH now. The Portfolio
-  // beside it is untouched: it was always pure in-game status.)
-  'going legit (rwa)': ['rwa_invest', 'rwa_family_invest', 'rwa_family_dividend', 'dynasty_name',
-    'eth_vault_claim'],
+  // (D11 2026-08-05: the Portfolio's five actions left the catalog with their emitters — the
+  // engagement guard demands every catalogued event be emitted SOMEWHERE in src/, and a catalog
+  // pointing at nothing reads as a dead system forever. The vault's claim is the bucket now.)
+  'going legit': ['eth_vault_claim'],
   'the megaproject': ['megaproject_give'],
   // #318 corner-board claims + settled contact calls; #320 the player-posted favour, run by someone
   // else — a `favor_run` is the clearest possible signal that the black book reached a real player.

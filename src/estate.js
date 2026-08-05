@@ -4,7 +4,7 @@
 // the vanity `spendOmr` till (account bucket) so the burn discipline lives in one place. Account-level
 // (keyed on account_id) → SURVIVES DEATH: the heir inherits the compound (never in the runEstate wipe).
 import { GameError, cleanText, bus } from './game.js';
-import { ESTATE, AUCTION, MADE, isMade, estateTierOf, estateFeatureOf, estateStaffOf, carVal, tickerPriceOf, hitmanRankOf, sealOf,
+import { ESTATE, AUCTION, MADE, isMade, estateTierOf, estateFeatureOf, estateStaffOf, carVal, hitmanRankOf, sealOf,
   collectorRankOf, collectionSetsOf, jailed } from './rules.js';
 import { spendOmr } from './vanity.js';
 
@@ -60,13 +60,11 @@ function trophies(h) {
   const cars = owned.cars || [];
   let rarest = null, best = -1;
   for (const c of cars) { const v = carVal(c.model_id, c.trim_id); if (v > best) { best = v; rarest = c; } }
-  const book = (owned.portfolio || []).reduce((a, r) => a + Number(r.shares) * tickerPriceOf(r.ticker), 0);
   return {
     fleet: cars.length,
     rarestCar: rarest ? rarest.model_id : null,
     rarestCarValue: rarest ? best : 0,
     arsenal: (owned.guns || []).length,
-    portfolioValue: Math.round(book * 100) / 100,
     kills: Number(acct.kills || 0),
     hitmanTitle: hitmanRankOf(Number(acct.hitman_rep || 0)).title,
     crest: owned.gang ? (sealOf(owned.gang.seal)?.name || null) : null,

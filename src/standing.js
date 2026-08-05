@@ -19,7 +19,7 @@ export const STANDING_PILLARS = [
   { key: 'blood',  name: 'Blood',   cols: ['kills', 'hitman_rep', 'boxing_wins', 'duel_wins', 'cartel_damage', 'soldiers_led'] },
   { key: 'empire', name: 'Empire',  cols: ['tycoon_earned', 'laundered_lifetime', 'smuggled', 'product_moved', 'freight_delivered', 'heists_pulled'] },
   { key: 'power',  name: 'Power',   cols: ['statecraft', 'recruits', 'prestige'] },
-  { key: 'legit',  name: 'Legit',   cols: ['rwa_invested', 'monument_built', 'prestige_sunk'] },
+  { key: 'legit',  name: 'Legit',   cols: ['monument_built', 'prestige_sunk'] }, // (D11: rwa_invested dropped — the column froze with the Portfolio, and a frozen legend grandfathers old accounts against new ones)
   { key: 'hustle', name: 'Hustle',  cols: ['race_wins', 'racer_wins', 'caskets', 'intel_ops'] },
   { key: 'honor',  name: 'Honor',   cols: ['honor_peak'] },
 ];

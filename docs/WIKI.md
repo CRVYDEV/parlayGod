@@ -24,7 +24,7 @@ CODEX button in the top bar).
 18. [Loan sharking](#18-loan-sharking) · 19. [Convoys](#19-convoys) · 20. [Crew heists](#20-crew-heists) ·
 21. [The Black Market](#21-the-black-market) · 22. [Vendettas](#22-vendettas) · 23. [Skills](#23-skills) ·
 24. [The Underworld (fixers)](#24-the-underworld) · 25. [The Wire](#25-the-wire) ·
-26. [The Store, PLEX & Season Pass](#26-the-store-plex--the-ledger) · 27. [Going Legit — the Portfolio & Dynasty](#27-going-legit) ·
+26. [The Store, PLEX & Season Pass](#26-the-store-plex--the-ledger) · 27. [Going Legit — what your $OMR does](#27-going-legit) ·
 28. [The Estate & Auction House](#28-the-estate--auction-house) · 29. [The chain — withdrawal & bonds](#29-the-chain) ·
 30. [Growth — paths, missions, first week](#30-growth) · 31. [Reference — districts, gotchas, glossary](#31-reference)
 
@@ -92,8 +92,8 @@ the gun you carry. You need 50 fp or more to make a lethal attack.
 character dies, but your account does not die.** An heir is born. The heir is a new character (generation
 +1). The heir inherits everything at the account level. **These are lost when the character dies:** stats,
 skills, businesses, the speakeasy, the Kitchen crew, the boxing fighter, control of territory operations, and
-this season's kills. **These pass to the heir:** prestige, the legal **portfolio/Dynasty** book, the
-**Estate**, the Store **patron/pass** benefit, the dynasty name, **hitman reputation and lifetime kills**,
+this season's kills. **These pass to the heir:** prestige, the
+**Estate**, the Store **patron/pass** benefit, **hitman reputation and lifetime kills**,
 minted status, revive tokens, and 25% of your **Underworld** standings.
 
 **Prestige and seasons.** A season is 28 days. At the end of a season, your level converts to **prestige**
@@ -881,7 +881,7 @@ Information as a $OMR resource that you can spend. `GET /v1/wire`.
   peek space).
 - **Sweep** (`/wire/sweep`, 5 $OMR) — removes every tap on you (free when you are clean).
 - **The Street Wire subscription** (`/wire/subscribe {tier}`) — a **tiered ladder**: Street Wire (12 $OMR for
-  7 days — the ticker tape, Law forecasts, and threat data: a *count* of hunters and contracts on you, never a
+  7 days — Law forecasts and threat data: a *count* of hunters and contracts on you, never a
   name; the layered intel economy — the subscription warns you, a tap identifies a rival, and the $OMR peek
   names funders), The Wire Room (30 — plus your family war room and 2 standing watches), The Switchboard (60 —
   plus 5 standing watches).
@@ -917,25 +917,19 @@ funded prize pool (never created). This is account-level, so it survives death.
 
 ## 27. Going Legit
 
-The last stop for earned $OMR: turn it into a **legal, death-proof stock
-book**. The tickers are **real Robinhood tokenized stocks** (GLD, AAPL, AMZN, TSLA, HOOD, NVDA, SPCX, GME). In
-the game, they are a **status collectible** with a set price. There is **no cash-out and no sell, and no
-phase where there will be** — the game does not acquire, hold or deliver real shares (2026-07-31: the
-stock layer was retired; the ETH that would have bought stock is simply held by the treasury). What you
-own here is a number the game keeps for you and shows off. `GET /v1/portfolio` [public].
+**The stock book is retired** (D11, 2026-08-05): the game sells no shares, real or fictional — the
+tickers, the invests, the Dynasty Fund and its leaderboards are gone, and their routes answer
+`retired` rather than 404 so nothing has to guess. Going legit now means what your **earned $OMR**
+actually does:
 
-- **Invest** (`/v1/portfolio/invest`) burns earned $OMR for fractional shares. A large action (1000 $OMR or
-  more in a day) draws the Bureau's eye (heat) and is blocked from a safehouse.
-- **Dividend** — the personal daily dividend is retired; the fund pays THE FAMILIES now. A boss or
-  underboss draws the **family dividend** into the gang reserve (`/gangs/portfolio/dividend`),
-  limited by a funded pool, never created.
-- **The Dynasty** — the book is account-level, so it is a **generational fund**: name it (`/dynasty/name`,
-  `/gangs/portfolio/name`). The book and a crest level pass to your heir.
-- **Landmarks** (`/v1/landmarks/:districtId`) — one plaque in each district. The largest $OMR investor holds
-  it. It shows your dynasty name — a monument that survives death.
-- Earned (never by chance): a heist AAPL share, and the season-prize SPCX grant.
-
-Leaderboards: `/v1/leaderboard/portfolio`, `/family-portfolio`, `/foundation`.
+- **Stake it** (`/v1/stake`) — a held balance climbs the ladder (trunk, energy, nerve, garage, the
+  fence at the top), and a committed balance is looted lighter than an idle one when you die.
+- **Redeem it** at the Window for cash (below).
+- **Claim backed ETH** at the Vault (`GET /v1/vault`) — real ETH the treasury holds, never more than
+  it holds; big moves draw the Bureau's eye and are blocked from a safehouse.
+- **Get Made** (`/v1/made`) and take your $OMR out on-chain (`/v1/withdraw`).
+- **Landmarks** (`/v1/landmarks/:districtId`) — one plaque in each district still bears a name that
+  survives death.
 
 ### The Window and the Family Yield (tokenomics v2)
 
@@ -1189,7 +1183,7 @@ safehouse, and a killer takes a quarter of every open favor you were holding.
 | Cathedral Hill | Nerve increases two times faster |
 
 ### The three "safe from looting" places
-Cleared **bank** cash · **staked** $OMR · **minted (on-chain)** gear · your account-level **portfolio, estate,
+Cleared **bank** cash · **staked** $OMR · **minted (on-chain)** gear · your account-level **estate,
 and prestige**. Everything else in your pocket is at risk when you die.
 
 ### Status marks on your sheet

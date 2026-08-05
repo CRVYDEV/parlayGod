@@ -9,8 +9,7 @@
 import crypto from 'node:crypto';
 import { makeDb } from './db.js';
 import { pingDb, archiverHealth } from './dbhealth.js';
-import { levelOf, dayOf, CONSTANTS, PORTFOLIO , DUELS, COMMISSION, POPULATION, FAMILY_YIELD } from './rules.js';
-import { grantShares } from './portfolio.js';
+import { levelOf, dayOf, CONSTANTS, DUELS, COMMISSION, POPULATION, FAMILY_YIELD } from './rules.js';
 import { recordReckoning } from './season.js';
 import { runLedgerInvariants, alertDrift } from './invariants.js';
 import { runVigInvariants } from './vig.js';
@@ -124,21 +123,13 @@ export async function mergeLegacyPools(pool) {
 export async function runSeasonRollover(pool, opts = {}) {
   const current = opts.season ?? Math.floor(dayOf() / 28); // MUST match rules.js seasonIdxOf (the same 28-day clock)
   let converted = 0;
-  // R1 step-two — THE SEASON PRIZE: the top season grinders (by respect, snapshotted BEFORE the reset
-  // below zeroes it) earn the champion's moonshot (SPCX) — a skill-ranked STATUS grant, so no §10.4
-  // currency moves and no chance is involved (rank is earned). Account-level → survives death. Only
-  // characters rolling over this season (season < current) with respect are eligible. The snapshot is
-  // a read (order-independent); the GRANT is deferred into each winner's own locked per-char txn below
-  // so it runs UNDER the winner's `char FOR UPDATE` (F3/F4 char→portfolios order).
+  // (D11 2026-08-05: the SPCX season prize retired with the Portfolio — the rollover keeps
+  // converting level → prestige; the dueling belt below is the season's surviving crown.)
   const s0 = await pool.connect();
-  let leaders, rows;
+  let rows;
   try {
-    leaders = (await s0.query(
-      'SELECT id FROM characters WHERE alive AND season < $1 AND respect > 0 ORDER BY respect DESC, id LIMIT $2',
-      [current, PORTFOLIO.SEASON_PRIZES.length])).rows;
     rows = (await s0.query('SELECT id FROM characters WHERE alive AND season < $1 ORDER BY id', [current])).rows;
   } finally { s0.release(); }
-  const prizeByChar = new Map(leaders.map((r, i) => [r.id, { rank: i + 1, omrWorth: PORTFOLIO.SEASON_PRIZES[i] }]));
   // THE RECKONING — close the books on the season that just ENDED (current − 1) before anything is
   // reset, so the record reads the city as it stood. Idempotent on the season PK; run only when a
   // population actually lived through it (a fresh boot in season 100 should not invent a record for
@@ -166,12 +157,6 @@ export async function runSeasonRollover(pool, opts = {}) {
       await client.query('BEGIN');
       const ch = (await client.query('SELECT * FROM characters WHERE id=$1 AND alive FOR UPDATE', [id])).rows[0];
       if (!ch || ch.season >= current) { await client.query('ROLLBACK'); continue; }
-      const prize = prizeByChar.get(id); // grant the season prize while THIS char row is locked (F3/F4)
-      if (prize) {
-        const g = await grantShares(client, ch.account_id, PORTFOLIO.SEASON_TICKER, prize.omrWorth);
-        if (g) await client.query('INSERT INTO notifications (id, character_id, type, payload) VALUES ($1,$2,$3,$4)',
-          [crypto.randomUUID(), id, 'season_prize', JSON.stringify({ rank: prize.rank, ticker: PORTFOLIO.SEASON_TICKER, shares: g.granted })]);
-      }
       const legacy = Math.floor(levelOf(Number(ch.respect)) / 2);
       // THE DUELING BELT: crown the season champion into their lifetime titles BEFORE the elo reset
       if (id === champId) {

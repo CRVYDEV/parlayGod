@@ -36,7 +36,7 @@ const CHECKS = {
   md_family:  (ch, h) => !!h.owned.gang,
   md_freight: (ch, h) => n(h.acct?.smuggled) > 0 || n(h.acct?.freight_delivered) > 0,
   md_stable:  (ch, h, x) => (h.owned.fighters || []).length >= 1 || x.hasRacer,
-  md_legit:   (ch, h) => (h.owned.portfolio || []).length >= 1,   // an ARRAY of holdings rows
+  md_legit:   (ch, h) => n(h.acct?.staked) > 0,                   // D11: the paper book retired — staking IS going legit
   md_shield:  (ch, h, x) => x.boughtShield,
   // Capo
   cp_vice:    (ch, h) => n(h.owned.mastery?.gambling) > 0 || n(h.acct?.race_wins) >= 1 || n(h.acct?.boxing_wins) >= 1,
@@ -48,7 +48,7 @@ const CHECKS = {
   // The Don
   dn_legend:  (ch, h) => n(h.acct?.smuggled) >= 250000 || n(h.acct?.product_moved) >= 250000 || n(h.acct?.tycoon_earned) >= 250000,
   dn_master:  (ch, h) => Object.values(h.owned.mastery || {}).some((xp) => masteryLvlOf(n(xp)) >= 25),
-  dn_dynasty: (ch, h) => !!h.acct?.dynasty_name,
+  dn_dynasty: (ch, h) => !!h.acct?.minted,                        // D11: dynasty naming retired — a minted identity is the bloodline made permanent
   dn_monument:(ch, h, x) => x.builtMonument,
   dn_champ:   (ch, h) => n(h.acct?.boxing_wins) >= 10 || n(h.acct?.race_wins) >= 10 || n(h.acct?.duel_wins) >= 5,
   dn_name:    (ch) => levelOf(n(ch.respect)) >= 40,

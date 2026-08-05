@@ -8,7 +8,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS, RANKS,
          gangLevelOf, roleMultOf, weekOf, familyTaskOf, M3, M4,
          gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf, SKILLS, skillOf, UNDERWORLD, leadTaskOf, ONBOARD_TASKS,
          crewWageOwed, crewCold, LAW, rapStageOf, bribeCostOf, retainerActive, witproActive,
-         cityHourOf, cityLawEventOf, tickerPriceOf, estateTierOf, foundationOf, campaignOf, honorTierOf,
+         cityHourOf, cityLawEventOf, estateTierOf, foundationOf, campaignOf, honorTierOf,
          SOLDIERS, soldierFxOf, CLUES, clueStepOf, rollClueTier, kingpinRankOf, tycoonRankOf, racketIncomeLeveled, empireTitles, launderRankOf, frontTitles, statesmanRankOf, seasonModOf, PACING,
          carCollateralValue, carOf, MASTERY, masteryLvlOf, masteryRankOf, masteryXpFor, pathFx, pathXpMult,
          REGIMEN, disciplineLvlOf, energyCapOf, nerveCapOf, BUSINESSES, WIRE, RIVALS, CORNER, cornerTasksOf,
@@ -206,7 +206,6 @@ export async function loadOwned(client, ch) {
     UNION ALL SELECT 'grudge', npc_id, NULL::text, count::numeric, NULL::numeric, since FROM npc_grudges WHERE character_id=$1 AND count > 0
     UNION ALL SELECT 'my', track_id, NULL::text, xp::numeric, NULL::numeric, NULL::timestamptz FROM masteries WHERE character_id=$1
     UNION ALL SELECT 'trait', track_id, trait_id, NULL::numeric, NULL::numeric, NULL::timestamptz FROM character_traits WHERE character_id=$1
-    UNION ALL SELECT 'pf', ticker, NULL::text, shares::numeric, cost_omr::numeric, NULL::timestamptz FROM portfolios WHERE account_id=$2 AND shares>0
     UNION ALL SELECT 'est', name, NULL::text, tier::numeric, spent_omr::numeric, NULL::timestamptz FROM estates WHERE account_id=$2
     UNION ALL SELECT 'disc', discipline, NULL::text, xp::numeric, NULL::numeric, NULL::timestamptz FROM character_disciplines WHERE character_id=$1
     UNION ALL SELECT 'rival', aggressor_account::text, NULL::text, NULL::numeric, NULL::numeric, at FROM rival_events WHERE victim_account=$3 AND at > now() - interval '48 hours'
@@ -252,10 +251,8 @@ export async function loadOwned(client, ch) {
   const sk = of('sk', (r) => ({ skill_id: r.k }));
   const npc = of('npc', (r) => ({ npc_id: r.k, standing: n(r.n), touched_at: r.ts }));
   const grudge = of('grudge', (r) => ({ npc_id: r.k, count: n(r.n), since: r.ts }));
-  // R1 — the Portfolio: account-level (survives death), so keyed on account_id not character_id
   const my = of('my', (r) => ({ track_id: r.k, xp: n(r.n) }));
   const trait = of('trait', (r) => ({ track_id: r.k, trait_id: r.k2 }));
-  const pf = of('pf', (r) => ({ ticker: r.k, shares: n(r.n), cost_omr: n(r.n2) }));
   // THE ESTATE — account-level too (survives death; the heir inherits the compound)
   const est = of('est', (r) => ({ name: r.k, tier: n(r.n), spent_omr: n(r.n2) }));
   // THE REGIMEN — discipline xp per id (dies with the street; levels derived, never stored)
@@ -348,9 +345,6 @@ export async function loadOwned(client, ch) {
     grudges: Object.fromEntries(grudge.rows
       .map((r) => [r.npc_id, decayedGrudges(Number(r.count), r.since)])
       .filter(([, c]) => c > 0)),
-    // R1 — the Portfolio: account-level legit holdings (survive death; the price values a status
-    // collectible, so nothing here touches §10.4). Array of { ticker, shares, cost_omr } rows.
-    portfolio: pf.rows.map((r) => ({ ticker: r.ticker, shares: Number(r.shares), cost_omr: Number(r.cost_omr) })),
     work, // THE WORK BOARD — today's unclaimed repeatable work, for the coach's never-empty tail
     estate: est.rows[0] || null, // account-level compound (survives death) — a summary; the board is the full view
     recentRivals: rival.rows.length, // STREET WAR step two — fresh malice in the last 48h (the coach rung)
@@ -1087,7 +1081,6 @@ function coachLadder(ch, acct, owned) {
     const kept = [
       Number(acct.staked || 0) > 0 ? `${Math.floor(Number(acct.staked))} $OMR staked` : null,
       Number(acct.omr || 0) > 0 ? `${Math.floor(Number(acct.omr))} $OMR liquid` : null,
-      (owned.portfolio || []).length ? 'the legit book' : null,
       owned.estate ? 'the compound' : null,
       Number(acct.prestige || 0) > 0 ? `prestige ${acct.prestige}` : null,
     ].filter(Boolean);
@@ -1192,7 +1185,10 @@ function coachLadder(ch, acct, owned) {
   const firstFront = BUSINESSES.find((b) => b.kind === 'laundromat');
   if (lvl >= 15 && !(owned.businesses || []).length
     && add('Open your first front', `The Empire ▸ The Catalog: hit BUY on the ${firstFront?.name || 'Laundromat'} ($${firstFront?.tiers?.[0]?.cost?.toLocaleString?.() || '250,000'}). It farms cash around the clock — come back daily to COLLECT, and pay the pad (upkeep) or it goes cold. Your first real empire piece.`, 'empire')) return rungs;
-  if (lvl >= 15 && Number(acct.omr || 0) > 0 && !(owned.portfolio || []).length && add('Time to go legit', 'Wash $OMR into a real blue-chip book — it survives your death and pays a dividend. Going Legit.', 'portfolio')) return rungs;
+  // D11 (2026-08-05): the paper book is retired — going legit IS the stake ladder now. Moved down
+  // from 27 so the earn→spend arc keeps its lvl-15 anchor; clears on staking anything.
+  if (lvl >= 15 && !Number(acct.staked || 0) && Number(acct.omr || 0) >= (MADE_LADDER.RUNGS[0]?.min || 10)
+    && add('Put your $OMR to work', `$OMR you STAKE is power for holding it — ${MADE_LADDER.RUNGS[0]?.min || 10} staked reaches the ladder's first rung (a bigger trunk, deeper tanks, a bigger garage) — and a committed balance is looted at the COMMITTED rate, not the idle one, when you die. Going Legit ▸ THE LADDER.`, 'portfolio')) return rungs;
   if (lvl >= 16 && !Number(acct.smuggled || 0) && add('Take it to the water', 'The Port at the docks: buy a boat and run contraband in from offshore. The margins beat the streets — the Coast Guard is the risk.', 'port')) return rungs;
   if (lvl >= 18 && !Number(acct.intel_ops || 0) && Number(acct.omr || 0) >= WIRE.TAP_OMR && add('Work the wires', 'The Wire: burn a little $OMR to tap a rival — their heat, their wealth band, whether they\'re hunting YOU. Information is the sharpest weapon in the city.', 'wire')) return rungs;
   if (lvl >= 22 && !Number(owned.mastery?.wetwork || 0) && inSocialBand(lvl, 22)
@@ -1227,11 +1223,6 @@ function coachLadder(ch, acct, owned) {
   // would be pinned on a rung the server refuses forever (the refuse-on-press class, as a mask).
   if (lvl >= 26 && !owned.speakeasy && isMade(acct) && Number(ch.cash) + Number(ch.bank) >= SPEAKEASY.OPEN_COST
     && add('Open a club of your own', `The Speakeasy: as a made man, $${SPEAKEASY.OPEN_COST.toLocaleString()} opens a nightclub in any free district. The bar take drips around the clock, and every round a patron buys is buying YOUR prestige — the nightlife board ranks the city's clubs.`, 'speakeasy')) return rungs;
-  // the other half of the arc: $OMR you HOLD is power (the D8=D ladder — trunk, energy, nerve,
-  // garage, the fence at the top) and a staked balance is looted at the COMMITTED rate rather than
-  // the idle one when you die. Gated on holding the first rung's stake; clears on staking anything.
-  if (lvl >= 27 && !Number(acct.staked || 0) && Number(acct.omr || 0) >= (MADE_LADDER.RUNGS[0]?.min || 10)
-    && add('Put your $OMR to work', `$OMR you STAKE is power for holding it — ${MADE_LADDER.RUNGS[0]?.min || 10} staked reaches the ladder's first rung (a bigger trunk, deeper tanks, a bigger garage) — and a committed balance is a harder thing to loot off your body than a loose one. Going Legit ▸ THE LADDER.`, 'portfolio')) return rungs;
   if (lvl >= 28 && !Number(acct.monument_built || 0)
     && add('Put your name on the skyline', 'The City is raising a monument, and every dollar you brick in goes on the plaque FOREVER — it survives your death, your heir\'s death, everything. The cheapest immortality in town, and the whole base builds it together.', 'city')) return rungs;
   // the $OMR-sink arc (estate → auction block) — gated on HOLDING tier 1's price, read live off the
@@ -1520,13 +1511,6 @@ export function view(ch, acct = {}, owned = {}) {
     trainSeconds: ch.train_at ? Math.max(0, Math.ceil((new Date(ch.train_at) - Date.now()) / 1000)) : 0,
     missionSeconds: ch.mission_at ? Math.max(0, Math.ceil((new Date(ch.mission_at) - Date.now()) / 1000)) : 0,
     prestige: Number(acct.prestige || 0), recruits: Number(acct.recruits || 0),
-    // R1 — THE PORTFOLIO: your legit book at a glance (GET /v1/portfolio is the full board). Pure
-    // status — the price values a collectible; it survives death (account-level), so it's the one
-    // wealth line an heir keeps. Book value at today's deterministic price.
-    portfolio: (() => { const pf = owned.portfolio || [];
-      const holdings = pf.map((r) => { const price = tickerPriceOf(r.ticker);
-        return { ticker: r.ticker, shares: Number(r.shares), price, bookValue: Math.round(Number(r.shares) * price * 100) / 100 }; });
-      return { holdings, bookValue: Math.round(holdings.reduce((a, r) => a + r.bookValue, 0) * 100) / 100 }; })(),
     // THE ESTATE — your compound at a glance (GET /v1/estate is the full house). Account-level status,
     // survives death (the heir inherits it). Null until you buy your first place.
     estate: owned.estate ? { name: owned.estate.name || null, tier: Number(owned.estate.tier || 0),

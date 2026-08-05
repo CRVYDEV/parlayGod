@@ -30,7 +30,7 @@ const nobody = await mk('Guido Nobody');     // no legends at all
 const agent = await mk('Bot Runner');        // agent — excluded
 
 await seed(blood.aid, 'kills=100, hitman_rep=5000, boxing_wins=80');                  // Blood only
-await seed(spanner.aid, 'tycoon_earned=2000000, rwa_invested=3000, monument_built=1000000'); // Empire + Legit
+await seed(spanner.aid, 'tycoon_earned=2000000, prestige_sunk=3000, monument_built=1000000'); // Empire + Legit (D11: rwa_invested left the pillar)
 await seed(agent.aid, 'agent_flag=true, kills=999999, tycoon_earned=999999999');       // huge but excluded
 
 // ── the board ──

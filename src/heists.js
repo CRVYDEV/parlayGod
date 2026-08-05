@@ -18,9 +18,8 @@ import { GameError, bus, bumpMastery, gainRespect } from './game.js';
 import { HEIST_JOBS, HEIST_ROLES, heistJobOf, HEIST_PLAN_TTL_MS, HEIST_RAT_BPS, HEIST_LEADER_WEIGHT,
          HEIST_INSIDE_CD_MS, HEIST_CASE_ENERGY, HEIST_CASE_STEP, HEIST_CASE_MAX, heistFenceMultOf,
          HEIST_FENCE_HEAT, HEIST_RANKS, heistRankOf, HEIST_FILL_MAX, HEIST_FILL_FEE,
-         CONSTANTS, M4, levelOf, PORTFOLIO , jailed, hospitalized, safeHoused } from './rules.js';
+         CONSTANTS, M4, levelOf, jailed, hospitalized, safeHoused } from './rules.js';
 import { accrued, decayedScrutiny, npcPendingScale } from './business.js';
-import { grantShares } from './portfolio.js';
 import { dbCaps } from './db.js';
 
 const uid = () => crypto.randomUUID();
@@ -352,17 +351,10 @@ export async function executeHeist(ch, heistId, client, h) {
     // an inside job that cracked an EMPTY till earns nothing to brag about (audit L4 —
     // zero-pot rep farming); standard jobs always carry a pot
     const rep = biz && pot === 0 ? 0 : job.rep;
-    // R1 step-two — THE BIG-SCORE CUT: a completed STANDARD heist (not a shakedown-style inside job)
-    // parks a LEGIT sliver in AAPL for every crewman, scaled by the crew's standing — granted ON TOP
-    // of the cash (a pure status kickback, so the sim-audited pot isn't touched). Deterministic: a
-    // fixed cut of an earned, skill-influenced win, never a random draw for stock (the R3 rule).
-    const cutOmr = biz ? 0 : Math.round(PORTFOLIO.SCORE_CUT_PER_LVL *
-      (crewRows.reduce((a, m) => a + levelOf(Number(m.respect)), 0) / crewRows.length));
     // Tier-4 §C: a standard score flagged HOT banks each share as fenceable loot (book value, NOT
     // a §10.4 currency — no ledger row; the Port contraband twin) instead of cash. The clock/rep still
     // apply; the crew fences it later at the drifting rate (a market-timing gamble, loot-able if marked).
     const hot = row.fenced && !biz;
-    let leaderCut = 0;
     for (const m of crewRows) {
       // A HIRED HAND takes no cut and earns nothing — its share is FORFEITED (never minted, so the
       // faucet only shrinks), and no legend/xp/rwa/respect (a body, not a made man). The denominator
@@ -373,14 +365,14 @@ export async function executeHeist(ch, heistId, client, h) {
         await client.query('UPDATE characters SET heist_loot = heist_loot + $2 WHERE id=$1', [m.id, shares[m.id]]);
         if (m.id === ch.id) { gainRespect(h, ch, rep); ch.heist_at = doneAt; }
         else { await setMember(m.id, 'respect=$2, heist_at=$3', [Number(m.respect) + rep, doneAt]);
-          await h.notify(client, m.id, 'heist_score', { job: job.name, hot: shares[m.id], rwaCut: cutOmr || undefined }); }
+          await h.notify(client, m.id, 'heist_score', { job: job.name, hot: shares[m.id] }); }
       } else {
         if (m.id === ch.id) { ch.cash = Number(ch.cash) + shares[m.id]; gainRespect(h, ch, rep); ch.heist_at = doneAt; }
         else {
           // absolute writes off the locked row (the pg-mem arithmetic discipline)
           await setMember(m.id, 'cash=$2, respect=$3, heist_at=$4',
             [Number(m.cash) + shares[m.id], Number(m.respect) + rep, doneAt]);
-          await h.notify(client, m.id, 'heist_score', { job: job.name, share: shares[m.id], rwaCut: cutOmr || undefined });
+          await h.notify(client, m.id, 'heist_score', { job: job.name, share: shares[m.id] });
         }
         await h.ledger(client, { characterId: m.id, currency: 'cash', amount: shares[m.id], reason });
       }
@@ -391,20 +383,10 @@ export async function executeHeist(ch, heistId, client, h) {
       // mirror), members HEADLESS (h=null → bumpMastery reads/writes their rows directly under the
       // crew lock already held above; the heists_pulled twin, but per-character so it dies with them)
       await bumpMastery(client, m.id === ch.id ? h : null, m, 'scores', 'heist');
-      if (cutOmr > 0) { // the legit cut — a status grant (no §10.4 currency), account-level so it survives death
-        const g = await grantShares(client, m.account_id, PORTFOLIO.SCORE_TICKER, cutOmr);
-        if (m.id === ch.id && g) { // keep the leader's own returned view fresh (portfolio isn't persist-clobbered)
-          leaderCut = g.granted;
-          const pf = (h.owned.portfolio || []).filter((r) => r.ticker !== PORTFOLIO.SCORE_TICKER);
-          pf.push({ ticker: PORTFOLIO.SCORE_TICKER, shares: g.shares, cost_omr: g.cost_omr });
-          h.owned.portfolio = pf;
-        }
-      }
     }
-    await h.track(client, ch.account_id, 'heist_score', { job: job.id, pot, crew: crewRows.length, rwaCut: cutOmr, hot });
+    await h.track(client, ch.account_id, 'heist_score', { job: job.id, pot, crew: crewRows.length, hot });
     bus.emit('streets', { type: 'heist_score', job: job.name, pot, crew: crewRows.length });
-    return { ok: true, score: true, job: job.id, pot, share: hot ? 0 : shares[ch.id], hot: hot ? shares[ch.id] : 0, rep: job.rep,
-      ...(cutOmr > 0 ? { rwaCut: { ticker: PORTFOLIO.SCORE_TICKER, shares: leaderCut } } : {}) };
+    return { ok: true, score: true, job: job.id, pot, share: hot ? 0 : shares[ch.id], hot: hot ? shares[ch.id] : 0, rep: job.rep };
   }
 
   // the bust — the whole crew goes down together (an inside-job mark hears about the attempt)

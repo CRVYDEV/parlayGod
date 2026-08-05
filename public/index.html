@@ -975,10 +975,10 @@
 
   <div class="pill-grid">
     <div class="pill" style="--art:url(/art/district-cathedral.jpg)"><h3>A city that breathes</h3><p>Daily events, economic weather, a day/night beat. The Law builds real RICO cases against you; rival cartels raid back. Nothing here sits still.</p></div>
-    <div class="pill" style="--art:url(/art/pill-legacy.jpg)"><h3>Play for keeps</h3><p>Die and your street dies with you — but the bloodline goes on. Prestige, gear, and your legit portfolio pass to your heir. Every choice is a debt.</p></div>
+    <div class="pill" style="--art:url(/art/pill-legacy.jpg)"><h3>Play for keeps</h3><p>Die and your street dies with you — but the bloodline goes on. Prestige, gear, and your $OMR pass to your heir. Every choice is a debt.</p></div>
     <div class="pill" style="--art:url(/art/district-foundry.jpg)"><h3>Blood &amp; family</h3><p>Found a family, take turf, declare war, and climb to a seat on the Commission. Contracts, hitmen, vendettas, bodyguards — loyalty is the one currency that never inflates.</p></div>
     <div class="pill" style="--art:url(/art/interior-kitchen.jpg)"><h3>A hundred hustles</h3><p>Street crime, the Kitchen, heists, smuggling convoys and boats, loan-sharking, the casino, boxing, the track. Find your angle; run it till someone stops you.</p></div>
-    <div class="pill" style="--art:url(/art/interior-estate.jpg)"><h3>Go legit</h3><p>Stack $OMR, buy into a death-proof portfolio, dedicate a landmark, name a dynasty. The oldest mob dream: get out clean, and get out alive.</p></div>
+    <div class="pill" style="--art:url(/art/interior-estate.jpg)"><h3>Go legit</h3><p>Stake $OMR for real power, buy the compound, dedicate a landmark — and take your $OMR out on-chain. The oldest mob dream: get out clean, and get out alive.</p></div>
     <div class="pill" style="--art:url(/art/pill-agents.jpg)"><h3>Agents welcome</h3><p>The whole game is a clean JSON API — autonomous agents are first-class players with their own leaderboard. <a href="/agents">Play as an agent →</a></p></div>
   </div>
 
@@ -1147,8 +1147,8 @@
     <dt>Cash vs. the Bank vs. $OMR</dt><dd>Pocket cash can be looted when you're killed. Banked cash is safer (but takes time to clear). $OMR is the premium, extractable currency — redeemed for cash at the Exchange window, one way.</dd>
     <dt>Omertà</dt><dd>The code of silence — your family won't hunt you, and you can't contract a made brother… unless they turn rat.</dd>
     <dt>The Kitchen / Deal</dt><dd>Cook product, hire a crew, and move weight — the deepest cash engine. Watch the heat and the nut (crew wages).</dd>
-    <dt>Going Legit</dt><dd>Turn the $OMR you've earned into a real blue-chip portfolio that survives your death — and redeem $OMR for cash at the Exchange window. The endgame.</dd>
-    <dt>Prestige / The Heir</dt><dd>Death isn't the end of your account — your heir inherits prestige, $OMR, your legit book, your estate, and your standing with the fixers. Only the street resets: stats, skills, businesses, crew.</dd>
+    <dt>Going Legit</dt><dd>What your earned $OMR does: stake it for real power (the ladder), redeem it for cash at the Window, claim backed ETH at the Vault — or get Made and take it out on-chain. The endgame.</dd>
+    <dt>Prestige / The Heir</dt><dd>Death isn't the end of your account — your heir inherits prestige, $OMR, your estate, and your standing with the fixers. Only the street resets: stats, skills, businesses, crew.</dd>
     <dt>Safehouse</dt><dd>Pay to go to ground — untouchable by hits for a few hours. A shield, not a bunker: you can't run offense or move money from inside. Cost scales with your wealth.</dd>
     <dt>Wanted / Welsher</dt><dd>Stiff a loan and you're a <b>welsher</b> — nobody lends to you again (square your name at the Shylock). Default under pursuit and you're <b>wanted</b>: even your own family can hunt you, and NPC guns come looking.</dd>
     <dt>The Law / Indicted</dt><dd>Heat builds a case. Cross the line and the Bureau <b>indicts</b> you — a RICO trial that can seize your pocket and bank (staked $OMR and minted gear are safe). Bribe, retain a lawyer, pay the envelope, or lay low before it files.</dd>
@@ -1417,7 +1417,7 @@
     const take = Number(b.earned ?? b.payout ?? b.take ?? b.won ?? b.purse ?? b.share ?? 0);
     if (take >= 25000) {
       return { kicker: 'the score', title: $c(take), sub: 'clean, and yours.',
-        lines: b.rwaCut ? ['a legit sliver, parked'] : [], accent: 'var(--ok)', glow: 'rgba(99,179,113,.45)', fx: 'payday' };
+        lines: [], accent: 'var(--ok)', glow: 'rgba(99,179,113,.45)', fx: 'payday' };
     }
     // ── the first week, done
     if (b.capstone) return { kicker: 'made your bones', title: 'First week', sub: 'the city knows your name now.', fx: 'payday' };
@@ -1876,8 +1876,6 @@
     if (body.spent !== undefined && body.tier && body.name) bits.push(`moved up to the ${body.name}`);
     if (body.feature && body.name) bits.push(`built the ${body.name}`);
     if (body.bid !== undefined && body.name && body.youLead) bits.push(`bid ${fmt(body.bid)} $OMR on ${body.name} — you lead`);
-    if (body.bought !== undefined && body.ticker) bits.push(`bought ${body.bought} ${body.ticker} — clean money${body.scrutiny ? ' (a big move — drew heat)' : ''}`);
-    if (body.dividendPaid !== undefined) bits.push(`the Dynasty Fund paid out ${fmt(body.dividendPaid)} $OMR`);
     if (body.omrSpent !== undefined && body.sku) bits.push(`bought ${body.name} with ${fmt(body.omrSpent)} earned $OMR (PLEX)`);
     if (body.place && body.amount !== undefined) bits.push(`dedicated ${body.place} to ${body.name} (${fmt(body.amount)} $OMR)`);
     if (body.toOwner !== undefined && body.round) bits.push(`bought ${body.round} — $${fmt(body.toOwner)} to the house${body.regular ? ' (you\'re a regular now)' : ''}`);
@@ -1911,7 +1909,6 @@
       bits.push(body.win ? `${body.you.name} WINS at the wire${body.game === 'circuit' ? ` — +$${fmt(Math.abs(body.net))} purse` : ` — took $${fmt(Math.abs(body.net))}`}${rec ? ` (${rec})` : ''}` : `${body.you.name} got beat — −$${fmt(Math.abs(body.net))}${rec ? ` (${rec})` : ''}`); }
     if (body.decor !== undefined && body.district) bits.push(body.decor ? `re-decorated in ${body.decorName}` : 'stripped the club back to stock');
     if (body.salePrice !== undefined && body.district) bits.push(`listed the club for $${fmt(body.salePrice)}`);
-    if (body.rwaCut) bits.push(`legit cut: +${body.rwaCut.shares} ${body.rwaCut.ticker}`);
     if (body.escaped === true) bits.push("OVER THE WALL — you're out, but WANTED now (no family cover, hunters coming)");
     if (body.escaped === false) bits.push('caught at the fence — the hole, a longer stretch, and a beating');
     if (body.interdicted === false && body.landed !== undefined) bits.push(`⚓ slipped the Coast Guard — landed the haul, +$${fmt(body.landed)} (net $${fmt(body.net)})`);
@@ -2013,7 +2010,6 @@
     if (!body || typeof body !== 'object') return null;
     if (body.kill) return 'just put a rival in the river';
     if (body.escaped === true) return 'went over the wall — broke out of the pen';
-    if (body.rwaCut) return 'pulled a big score with my crew';
     if (body.won === true && body.purse !== undefined) return 'my fighter took the purse';
     if (body.won === true && body.feePaid !== undefined) return "stood over a rival's whole operation";
     if (body.capstone) return 'made my bones — first week done';
@@ -2450,7 +2446,7 @@
       `<p><b>Trade goods are the city's oldest hustle</b> — every district posts its own prices, fresh each day. Buy gin where it's cheap, drive across town, sell it where it's rich. The spread is your margin.</p>
        <p class="dim">Start small on the Streets (the Trade Goods drawer shows each good's cheapest and richest district). Scale up later: <b>convoys</b> haul in bulk, <b>boats</b> run contraband, and the <b>Trade Winds</b> board on The City maps the whole day's spread.</p>` },
     { art: 'card-whacked', title: 'DEATH IS REAL', body:
-      `<p>Another player can end your street — for good. But your <b style="color:var(--neon)">account</b> survives: prestige, $OMR, your legit portfolio and estate pass to your <b>heir</b>, who rises with the family name.</p>
+      `<p>Another player can end your street — for good. But your <b style="color:var(--neon)">account</b> survives: prestige, $OMR and your estate pass to your <b>heir</b>, who rises with the family name.</p>
        <p class="dim">Shields exist — the safehouse, a bodyguard, revive insurance. None are forever. Play like it counts.</p>` },
     { art: 'interior-family', title: 'THE FAMILY & THE PEOPLE', body:
       `<p>Nobody survives alone. A <b>family</b> means turf, a treasury, wars and a seat at the Commission. The city's <b>fixtures</b> — the Doc, the Madame, the rest — remember who's good to them.</p>
@@ -2694,7 +2690,7 @@
       ${rep.blood ? `<p class="dim" style="color:var(--bad)">That's ${nth(rep.blood.theirs)} body their line has taken from yours${rep.blood.ours ? ` — yours has taken ${rep.blood.ours} of theirs` : ''}. The ledger remembers, and so can you: their story is on Wet Work ▸ Your Rivals.</p>` : ''}
       <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px">
         <div style="flex:1;min-width:150px"><div class="t" style="color:var(--ok)">the heir KEEPS</div>
-          <div class="dim" style="font-size:13px">${line(k.omr, `${fmt(Math.floor(k.omr || 0))} $OMR liquid`)}${line(k.staked, `${fmt(Math.floor(k.staked || 0))} staked`)}${line(k.gear, `${k.gear} on-chain gear`)}${line(k.prestige, `prestige ${k.prestige}`)}${line(k.portfolio, `$${fmt(k.portfolio)} legit book`)}${line(k.estate, `the ${esc(String(k.estate))}`)}the account, always</div></div>
+          <div class="dim" style="font-size:13px">${line(k.omr, `${fmt(Math.floor(k.omr || 0))} $OMR liquid`)}${line(k.staked, `${fmt(Math.floor(k.staked || 0))} staked`)}${line(k.gear, `${k.gear} on-chain gear`)}${line(k.prestige, `prestige ${k.prestige}`)}${line(k.estate, `the ${esc(String(k.estate))}`)}the account, always</div></div>
         <div style="flex:1;min-width:150px"><div class="t" style="color:var(--blood)">the street LOST</div>
           <div class="dim" style="font-size:13px">${line(l.cash, `$${fmt(l.cash || 0)} pocket cash`)}${line(l.cars, `${l.cars} car(s)`)}${line(l.guns, `${l.guns} gun(s)`)}${line(l.rackets, `${l.rackets} racket(s)`)}${line(l.assets, `${l.assets} asset(s)`)}level ${l.lvl || '?'} — you start again at 1</div></div>
       </div>
@@ -3114,7 +3110,7 @@
     pen: 'Lockup is a place, not a timeout: work the yard, buy protection, bribe the guard, join a crew — or go over the wall and live wanted.',
     wire: 'Information is a weapon: tap rivals to see what they hold, sweep your own lines, buy the dirt. Everything here is paid in $OMR — knowing is never free.',
     family: 'Nobody survives alone: a family means turf, a shared treasury, wars, territory rackets, and a seat at the Commission. Join one, or found your own.',
-    portfolio: 'Going legit: the redemption window, the vault, and the RWA book that survives your death. This is where street money becomes generational.',
+    portfolio: 'Going legit: the stake ladder, the redemption window, the backed vault — and the on-chain way out. This is where street money becomes real.',
     estate: 'The compound: a $OMR monument to your bloodline — tiers, wings, staff, galas, the auction block. Pure status, survives death, and status is the point.',
     store: 'Real-money support: revives, passes, cosmetics — never power. A skilled free player still tops every board; spending here funds the prize pools.',
     life: 'Who you are and who you know: skills, the Trades, your Path, and the six fixtures of the Underworld — earn their trust and the whole city gets cheaper.',
@@ -3850,7 +3846,7 @@
           <div class="card"><img class="ico wide" loading="lazy" alt="" src="/art/interior-trade.jpg"><span class="t">The Freight Game</span>
             <div class="d">Every district posts its own goods prices daily. <b>Buy cheap, haul, sell rich</b> — the Trade Goods drawer on the Streets shows each good's spread; convoys and boats move it in bulk.</div></div>
           <div class="card"><img class="ico wide" loading="lazy" alt="" src="/art/card-whacked.jpg"><span class="t">Death Is Real</span>
-            <div class="d">Your street can be killed for good. Your <b>account</b> — prestige, $OMR, portfolio, estate — survives to your heir.</div></div>
+            <div class="d">Your street can be killed for good. Your <b>account</b> — prestige, $OMR, the estate — survives to your heir.</div></div>
           <div class="card"><img class="ico wide" loading="lazy" alt="" src="/art/interior-family.jpg"><span class="t">The Family</span>
             <div class="d">Turf, treasury, wars, the Commission. Nobody survives alone — and enemies' bloodlines swear vendettas.</div></div>
           <div class="card"><img class="ico wide" loading="lazy" alt="" src="/art/interior-law.jpg"><span class="t">The Law</span>
@@ -5197,12 +5193,7 @@
     const SEC = (await api('GET', '/v1/secrets')).body || {};
     const bandColor = (s) => ({ 'red hot': 'var(--bad)', hot: 'var(--blood)', warm: 'var(--neon)', cold: 'var(--dim)' })[s] || 'var(--dim)';
     const stageColor = { clean: 'var(--ok)', watched: 'var(--neon)', investigation: 'var(--neon)', indicted: 'var(--bad)' };
-    // the ticker tape — a scrolling row of RWA prices, the day's biggest mover flagged
-    const tape = (W.tape || []).map((k) => {
-      const up = k.dayChange >= 0;
-      const hot = W.mover && k.ticker === W.mover.ticker;
-      return `<span class="chip" style="${hot ? 'border-color:var(--neon);' : ''}">${k.ticker} $${fmt(k.price)} <span style="color:${up ? 'var(--ok)' : 'var(--bad)'}">${up ? '▲' : '▼'}${Math.abs(k.dayChange)}%</span>${hot ? ' ◂ HOT' : ''}</span>`;
-    }).join(' ');
+    // (D11 2026-08-05: the ticker tape retired with the Portfolio)
     // your live wires — the intel on each tapped mark
     const wires = (W.taps || []).map((i) => `
       <div class="card">
@@ -5227,7 +5218,7 @@
         </div>
         <div class="d" style="font-size:11px;margin-top:4px">retainer runs ${mins(i.paidSeconds)} · a human source can't be fed lies</div>
       </div>`).join('');
-    // SOMEONE IS SQUEEZING YOU — this was the TENTH section, under the ticker tape and a subscribe
+    // SOMEONE IS SQUEEZING YOU — this was the TENTH section, buried under a subscribe
     // card. It is a countdown with your money on it; it leads.
     const squeeze = (SEC.onMe || []).length ? `<div class="grid" style="margin-bottom:12px">${SEC.onMe.map((s) => `
         <div class="card threat" style="border-color:var(--bad)"><span class="t" style="color:var(--bad)">\u26a0 THEY HAVE ${esc(s.kindName.toUpperCase())}</span>
@@ -5241,7 +5232,7 @@
       <div class="card" style="${W.subscribed ? 'border-color:var(--neon)' : ''}">
         <span class="t">${W.subscribed ? `SUBSCRIBED · ${W.subTierName || 'Street Wire'}` : 'The Premium Feed'}</span>
         ${W.subscribed ? `<span class="chip cold">${mins(W.subSeconds)} left</span>` : ''}
-        <div class="d">${W.subscribed ? 'the intelligence service is live — forecasts, threat chatter, and (tier 2+) the war room + standing watches below.' : 'Law forecasts, threat chatter, the ticker tape — and higher tiers unlock the war room + STANDING WATCHES (auto-renewed taps). Pick a tier:'}</div>
+        <div class="d">${W.subscribed ? 'the intelligence service is live — forecasts, threat chatter, and (tier 2+) the war room + standing watches below.' : 'Law forecasts, threat chatter — and higher tiers unlock the war room + STANDING WATCHES (auto-renewed taps). Pick a tier:'}</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${(W.subTiers || []).map((t) => `<button class="act" data-do="POST /v1/wire/subscribe" data-body='${JSON.stringify({ tier: t.tier })}'>${W.subTier === t.tier ? 'renew ' : ''}${t.name} · ${t.omr} $OMR${t.watchSlots ? ` · ${t.watchSlots} watch${t.watchSlots > 1 ? 'es' : ''}` : ''}${t.warRoom ? ' · war room' : ''}</button>`).join('')}</div>
       </div>
 
@@ -5253,9 +5244,6 @@
         <button class="act" id="wire-watch-go">stand a watch</button>
         ${(W.watches || []).length ? `<div class="grid" style="margin-top:8px">${(W.watches || []).map((w) => `<div class="card"><span class="t">${esc(w.name)}</span> <span class="chip ${w.live ? 'good' : 'cold'}">${w.live ? 'wire live' : 'lapsed'}</span><button class="act" data-do="DELETE /v1/wire/watch/${w.target}">drop the watch</button></div>`).join('')}</div>` : ''}
       </div>` : ''}
-
-      <h2 style="margin-top:12px">The Ticker Tape</h2>
-      <div class="card"><div style="display:flex;flex-wrap:wrap;gap:4px">${tape || '<span class="d">quiet market.</span>'}</div></div>
 
       <h2 style="margin-top:12px">Run a Wire (${(W.taps || []).length}/${W.tapMax})</h2>
       <div class="card">
@@ -6294,18 +6282,16 @@
     // AUTHED ones concurrent (api() queues those on purpose — same-account calls serialize on the
     // character row at the database anyway), but it removes the client-side turnaround between each
     // response and the next request, and the keyless boards genuinely do run in parallel.
-    const [pfR, vaultR, bdR, lbR, flbR, winR, yldR] = await Promise.all([
-      api('GET', '/v1/portfolio'), api('GET', '/v1/vault'), api('GET', '/v1/bonds'),
-      api('GET', '/v1/leaderboard/portfolio'), api('GET', '/v1/leaderboard/family-portfolio'),
+    // (D11 2026-08-05: the stock book retired — /v1/portfolio and its boards are tombstones now;
+    // this screen is the REAL money arc: made → ladder → wallet → extraction → window → vault → bonds)
+    const [vaultR, bdR, winR, yldR] = await Promise.all([
+      api('GET', '/v1/vault'), api('GET', '/v1/bonds'),
       api('GET', '/v1/window'), api('GET', '/v1/yield'),
     ]);
-    const pf = pfR.body || {}, vault = vaultR.body || {}, bd = bdR.body || {};
-    const lb = lbR.body || {}, flb = flbR.body || {}, win = winR.body || {}, yld = yldR.body || {};
-    const mkt = pf.market || [];
-    const sign = (n) => (n > 0 ? '+' : '') + n.toFixed(2) + '%';
-    const holdMap = Object.fromEntries((pf.portfolio?.holdings || []).map((h) => [h.ticker, h]));
+    const vault = vaultR.body || {}, bd = bdR.body || {};
+    const win = winR.body || {}, yld = yldR.body || {};
     t.innerHTML = `
-      <h2>Going Legit <span class="d" style="font-size:11px">(earned $OMR → legit, death-proof holdings — the book outlives your street)</span></h2>
+      <h2>Going Legit <span class="d" style="font-size:11px">(what your $OMR does: the ladder, the vault, the window — and the on-chain way out)</span></h2>
       <div class="card" style="border-color:var(--neon)"><span class="t" style="color:var(--neon)">Where $OMR Comes From</span>
         <div class="d">Nowhere in the game. There is no wage, no yield, no drip — <b>nothing you do on the street prints a single $OMR</b>.
           Every token in this city was bought with real money by somebody, which is why it is worth taking off them.</div>
@@ -6329,19 +6315,6 @@
           : 'Top rung — nothing above this at any price.'} Being made climbs it ${me.ladder?.madeRungs ?? 1} rung as a shortcut, never higher. Staked $OMR is looted lighter than idle — but it is never safe.</div>
         <div class="row" style="margin-top:6px"><input id="lad-amt" type="number" min="1" placeholder="$OMR to stake" size="10">
           <button class="act" id="lad-go">stake it</button></div></div>
-      <div class="card"><span class="t">${pf.dynasty?.name ? pf.dynasty.name : 'Your Book'} — $${fmt(pf.portfolio?.bookValue || 0)}</span>
-        <div class="d">cost basis ${fmt(pf.portfolio?.costBasis || 0)} $OMR · liquid $OMR on hand: ${fmt(Math.floor(me.omr || 0))} · survives death (the heir keeps it)${pf.dynasty ? ` · generation ${pf.dynasty.generation}` : ''}</div>
-        <div style="margin-top:4px"><input id="dyn-name" placeholder="${pf.dynasty?.name ? 'rename the dynasty' : 'name your dynasty'}" size="18" maxlength="24">
-          <button class="act" id="dyn-go">${pf.dynasty?.name ? 'rename' : 'name it'} (${pf.dynasty?.nameCost ?? 5} $OMR)</button>
-          <span class="d" style="font-size:11px;color:var(--dim)">the name outlives every character & heads the legit board</span></div></div>
-
-      <div class="card" style="border-color:var(--neon)">
-        <span class="t">The Dynasty Fund</span>
-        ${pf.dynasty?.tier ? `<span class="chip">★ ${pf.dynasty.tier.name}</span>` : ''}
-        <div class="d">${pf.dynasty?.tier ? `you're <b>${pf.dynasty.tier.name}</b> (invested ${fmt(pf.dynasty.invested)} $OMR)` : `invest ${fmt(pf.dynasty?.nextTier?.min || 100)} $OMR lifetime to make ${pf.dynasty?.nextTier?.name || 'the first tier'}`}${pf.dynasty?.nextTier ? ` · next: ${pf.dynasty.nextTier.name} at ${fmt(pf.dynasty.nextTier.min)}` : ' · top tier'}</div>
-        <div class="d" style="margin-top:4px">The fund pays the FAMILY now, not the man — a slice of every investment feeds the family yield, and the top families by standing draw it into their reserve. Your book, your tier and your dynasty name are untouched, and they outlive you.</div>
-      </div>
-
       <h2 style="margin-top:12px">Your Wallet <span class="d" style="font-size:11px">(the proven 0x address gates every $OMR / gear extraction — and survives your death)</span></h2>
       <div class="card">${me.wallet
         ? `<span class="t">Linked <span class="chip good">${me.wallet.slice(0, 6)}…${me.wallet.slice(-4)}</span></span><div class="d">on-chain extraction is unlocked (mainnet rail is dormant until launch)</div>`
@@ -6429,39 +6402,7 @@
             || 'nothing yet'}</div>` : ''}
         <div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">${vault.note || ''}</div></div>
 
-            ${sect('legit-paper', 'The Portfolio', `the status collection — buy with earned $OMR at the house price; big moves ≥ ${fmt(rules?.portfolio?.scrutinyMin ?? 1000)} $OMR draw heat`, `
-      <div class="grid">${mkt.map((m) => { const h = holdMap[m.ticker]; return `
-        <div class="card"><span class="t">${m.ticker} · ${m.name}</span>
-          <span class="chip ${m.dayChange >= 0 ? 'good' : 'bad'}">$${fmt(m.price)} ${sign(m.dayChange)}</span>
-          <div class="d">${m.blurb}</div>
-          ${h ? `<div class="d">you hold <b>${h.shares}</b> · book $${fmt(h.bookValue)}</div>` : ''}
-          <input data-rwaamt="${m.ticker}" placeholder="$OMR" size="7"> <button class="act" data-rwabuy="${m.ticker}">invest</button></div>`; }).join('')}</div>`, true)}
-
-      ${pf.family ? `
-      <h2 style="margin-top:12px">${pf.family.fundName ? pf.family.fundName : 'The Family Book'} <span class="d" style="font-size:11px">(${pf.family.name} — a seize-resistant flex, bought from the reserve)</span>
-        ${pf.family.crest ? `<span class="chip good">★ ${pf.family.crest.name}</span>` : ''}</h2>
-      <div class="card"><span class="t">$${fmt(pf.family.bookValue || 0)}</span>
-        <div class="d">reserve ${fmt(pf.family.reserve)} $OMR${pf.family.holdings.length ? ' · ' + pf.family.holdings.map((h) => `${h.ticker} ${h.shares}`).join(' · ') : ' · nothing yet'}${pf.family.invested ? ` · ${fmt(pf.family.invested)} $OMR lifetime into the fund` : ''}</div>
-        ${pf.family.canInvest ? `<select id="rwa-fam-t">${mkt.map((m) => `<option value="${m.ticker}">${m.ticker} — $${fmt(m.price)}</option>`).join('')}</select>
-          <input id="rwa-fam-amt" placeholder="$OMR from reserve" size="14"> <button class="act" id="rwa-fam-buy">invest the family money</button>
-          <div style="margin-top:6px"><input id="fam-fund-name" placeholder="${pf.family.fundName ? 'rename the fund' : 'name the family fund'}" size="18" maxlength="24">
-            <button class="act" id="fam-fund-go">${pf.family.fundName ? 'rename' : 'name it'} (${pf.family.nameCost} $OMR)</button>
-            <span class="d" style="font-size:11px;color:var(--dim)">the fund name heads the family-legit board · crest tier climbs with cumulative family investing</span></div>`
-        : '<div class="d" style="color:var(--dim)">only the boss or underboss invests the family money or names the fund</div>'}
-        ${pf.family.dividend ? `<div class="d" style="margin-top:6px">family dividend: a daily yield to the reserve (funded by family investing).${pf.family.dividend.claimable ? '' : pf.family.dividend.cooldownSeconds ? ` next in ${mins(pf.family.dividend.cooldownSeconds)}` : ''}</div>
-          ${pf.family.dividend.claimable ? `<button class="act" id="fam-div" style="border-color:var(--neon)">draw the family dividend (~${fmt(pf.family.dividend.estimate)} $OMR)</button>` : ''}` : ''}</div>` : ''}
-
-      ${sect('legit-boards', 'The Boards', 'the biggest personal books + family funds in the city', `
-      <h2 style="font-size:14px">Biggest Books</h2>
-      <div class="grid">${(lb.board || []).slice(0, 8).map((row, i) => `
-        <div class="card"><span class="t">#${i + 1} ${row.name || 'a ghost'}</span> <span class="d">$${fmt(row.bookValue)}</span></div>`).join('') || '<span class="d" style="color:var(--dim)">no books yet — be the first to go legit</span>'}</div>
-      <h2 style="margin-top:10px;font-size:14px">Biggest Family Funds <span class="d" style="font-size:11px">(a dynasty's collective book — war-proof, boss-built)</span></h2>
-      <div class="grid">${(flb.board || []).slice(0, 8).map((row, i) => `
-        <div class="card"><span class="t">#${i + 1} ${row.name || 'a family'}</span> ${row.crest ? `<span class="chip good">★ ${row.crest}</span>` : ''}
-          <span class="d">$${fmt(row.bookValue)}${row.dynasty && row.family !== row.name ? ` · ${row.family}` : ''}</span></div>`).join('') || '<span class="d" style="color:var(--dim)">no family funds yet</span>'}</div>`)}
-
-      <div class="d" style="color:var(--dim);font-size:12.5px;margin-top:10px">Earned exposure (never bought a spin): a completed crew score parks a legit AAPL cut · the season's top grinder wins SPCX at rollover.
-        Cash-out to a real on-chain token is a later phase (gated on legal review).</div>`;
+`;
 
     wireSects(t);
     { const vb = $('#vault-claim'); if (vb) vb.onclick = () =>
@@ -6496,19 +6437,8 @@
       };
       const bs = $('#bond-submit'); if (bs) bs.onclick = () => { if (lastNonce != null) submitBondOnChain(lastNonce); else toast('request a quote first', true); };
     } }
-    $('#dyn-go').onclick = () =>
-      act('POST', '/v1/dynasty/name', { name: $('#dyn-name').value.trim() }).then(() => renderPortfolio());
     $('#lad-go').onclick = () =>
       act('POST', '/v1/stake', { amount: Number($('#lad-amt').value) }).then(() => renderPortfolio());
-    t.querySelectorAll('[data-rwabuy]').forEach((b) => b.onclick = () =>
-      act('POST', '/v1/portfolio/invest', { ticker: b.dataset.rwabuy, omr: Number(t.querySelector(`[data-rwaamt="${b.dataset.rwabuy}"]`).value) }).then(() => renderPortfolio()));
-    const fb = $('#rwa-fam-buy');
-    if (fb) fb.onclick = () => act('POST', '/v1/gangs/portfolio/invest',
-      { ticker: $('#rwa-fam-t').value, omr: Number($('#rwa-fam-amt').value) }).then(() => renderPortfolio());
-    const fd = $('#fam-div');
-    if (fd) fd.onclick = () => act('POST', '/v1/gangs/portfolio/dividend', {}).then(() => renderPortfolio());
-    const ffg = $('#fam-fund-go');
-    if (ffg) ffg.onclick = () => act('POST', '/v1/gangs/portfolio/name', { name: $('#fam-fund-name').value.trim() }).then(() => renderPortfolio());
   }
 
   // ── THE ESTATE: the compound — a tiered, furnishable home that displays your legend ──
@@ -6556,7 +6486,7 @@
       <h2 style="margin-top:12px">The Legend <span class="d" style="font-size:11px">(what the place shows off)</span></h2>
       <div class="card">
         <div class="d">fleet: ${tr.fleet || 0}${tr.rarestCar ? ` · finest: ${tr.rarestCar}` : ''}</div>
-        <div class="d">arsenal: ${tr.arsenal || 0} gun${tr.arsenal === 1 ? '' : 's'} · legit book: $${fmt(tr.portfolioValue || 0)}</div>
+        <div class="d">arsenal: ${tr.arsenal || 0} gun${tr.arsenal === 1 ? '' : 's'}</div>
         <div class="d">bodies: ${tr.kills || 0} · ${tr.hitmanTitle || 'Associate'}${tr.crest ? ` · ${tr.crest}` : ''}</div>
       </div>
 

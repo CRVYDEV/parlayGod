@@ -2057,79 +2057,14 @@ export const NPC_HITMEN = [
 ];
 export const npcHitmanOf = (id) => NPC_HITMEN.find((n) => n.id === id);
 
-// ── R1 — THE PORTFOLIO ("going legit"): the RWA / blue-chip holdings layer ──
-// The narrative apex of the laundering arc — clean $OMR → legitimate, death-proof equity. PURE
-// STATUS in R1 (no sell, no cash-out): a ticker-denominated collectible that survives the street
-// (account-level, like prestige), OUTSIDE §10.4 on the reward side and outside the sim-audited
-// balance (the hitman-rep / family-seal precedent — shares are not currency; their $ display is
-// cosmetic; the price moves no value). The ONLY §10.4 flow is the enumerated 'rwa:invest' $OMR BURN
-// (the vanity/cleanpapers till). R2 backs the shares with a real RWA reserve; R3 opens the KYC'd
-// on-chain extraction — both legal-gated (Robinhood partnership + securities counsel). R1 touches
-// NO securities. Tickers are flavored to districts (fiction only). base = the day-0 display floor;
-// drift = the ± band the daily seed hash swings it. ALL numbers are founder sign-off levers.
+// ── THE PORTFOLIO — RETIRED (D11, founder-directed 2026-08-05; src/portfolio.js is the record) ──
+// The tickers, the invests, the Dynasty Fund and its dividends are gone — the city sells no shares.
+// What survives is the RICO-graduation window THE VAULT (treasury.js) shares with the old paper
+// book: a BIG legit move — CUMULATIVE over a rolling window (the D3 wash-bucket precedent, so
+// structuring still trips it) — draws heat and can't be done from a safehouse (P1.3). Historical
+// ledger rows keep their reasons in invariants.js; nothing writes a new one.
 export const PORTFOLIO = {
-  MIN_INVEST_OMR: 1, // no dust buys
-  // The board — a spread from a safe store of value (GLD, drift .05) to a volatile meme-stock (GME,
-  // drift .30). Every ticker id is a REAL Robinhood tokenized stock trading on Uniswap (Robinhood
-  // Chain / Arbitrum) — so R2/R3 map each 1:1 to an actual on-chain token (see the RWA design doc).
-  // BTC was dropped (crypto, not a tokenized STOCK); SPCX (SpaceX private-co token) + GLD (an ETF) are
-  // the two to VERIFY against the live catalog — private-company tokens + ETFs are the uncertain edge.
-  // All DISPLAY-ONLY status collectibles (deterministic seed price, no sell, no cash-out — the R1
-  // regulatory line). Names are lightly fictionalised (the AAPL→"Atlas Apple" house style). New
-  // tickers are drop-in — the board/leaderboard/view iterate TICKERS generically. Sign-off levers.
-  TICKERS: [
-    { id: 'GLD',  name: 'The Vault',           base: 190, drift: 0.05, blurb: 'Bricks of gold in a hole in the ground. When the city burns, this holds.' },
-    { id: 'AAPL', name: 'Atlas Apple',         base: 220, drift: 0.06, blurb: 'Old money. The tech district washes clean here.' },
-    { id: 'AMZN', name: 'The Everything Store', base: 175, drift: 0.10, blurb: 'They deliver. Everything. Everywhere. Nobody asks what.' },
-    { id: 'TSLA', name: 'Tesla Motors',        base: 250, drift: 0.14, blurb: 'The docks and the wheelmen buy the cars.' },
-    { id: 'HOOD', name: 'The Green House',     base: 90,  drift: 0.16, blurb: 'The house that lets everybody play. You take a piece of the action.' },
-    { id: 'NVDA', name: 'Nero Graphics',       base: 300, drift: 0.18, blurb: 'The chip runners. The whole city wants what they make.' },
-    { id: 'SPCX', name: 'SpaceX',              base: 180, drift: 0.22, blurb: 'The moonshot. High risk, high status.' },
-    { id: 'GME',  name: 'The Arcade',          base: 25,  drift: 0.30, blurb: 'The people’s revolt — squeeze the shorts, crown the degens.' },
-  ],
-  // THE DYNASTY — your account-level book survives death (the heir inherits), so it IS a generational
-  // fund. Name it (a $OMR vanity sink, ledgered under the existing rwa:% burn term — zero invariant
-  // changes): the name outlives every character and heads the legit-legend leaderboard.
-  DYNASTY_NAME_OMR: 5,
-  // R1 STEP TWO — EARNED exposure (never by chance; each is a deterministic cut of a realized win,
-  // a skill-ranked season prize, or a purchase that draws heat — so the R3 "never distribute
-  // securities by chance" rule is respected by construction). Grants are $OMR-WORTH denominated
-  // (shares = omrWorth / price, the invest formula) with cost basis 0 — a free legit kickback.
-  // (1) the BIG-SCORE CUT: a completed standard heist parks a legit sliver for every crewman,
-  // scaled by the crew's standing (avg level) — the family accountant washes a cut of the score.
-  SCORE_CUT_PER_LVL: 2, SCORE_TICKER: 'AAPL',
-  // (2) the SEASON PRIZE: at rollover the top season grinders (by respect, before the reset) earn
-  // the champion's moonshot — a skill-ranked status prize (omrWorth by rank 1..N).
-  SEASON_PRIZES: [500, 250, 100], SEASON_TICKER: 'SPCX',
-  // (3) the RICO GRADUATION: a BIG legit move is the classic laundering red flag — it draws heat
-  // (the launder-heat precedent) and can't be done from a safehouse (P1.3 — hiding, not moving
-  // money). "Big" is CUMULATIVE over a rolling window (the D3 wash-bucket precedent), so STRUCTURING
-  // — many sub-threshold buys — still trips it once the window sum crosses SCRUTINY_MIN_OMR. Ties RWA
-  // to the Law. (audit F1: a per-call-only threshold was trivially dodged by investing 999 on repeat.)
   SCRUTINY_MIN_OMR: 1000, SCRUTINY_HEAT: 12, SCRUTINY_WINDOW_MS: 24 * 3600 * 1000,
-  // ── THE DYNASTY FUND (dividends + tiers) — RWA becomes a PRODUCTIVE, generational asset. A slice of
-  // every personal invest (DIVIDEND_BPS) feeds the rwa_dividend_pool (a §10.4 transfer, not a burn);
-  // holders claim a ~daily dividend = DIVIDEND_DAILY_BPS of their book value, POOL-BOUNDED (the
-  // stake-pool "backed emission" rule — never mints, so the fund pays only what investment funds it).
-  // So spenders (investors) fund holders' yield: new capital pays the dividend, like a real fund. TIERS
-  // are pure STATUS on cumulative $OMR invested (the estate/seal precedent — outside §10.4). All levers.
-  FAMILY_DYNASTY_NAME_OMR: 15,   // name the FAMILY fund from the reserve (boss/underboss; rwa:dynasty burn)
-  DIVIDEND_BPS: 1500,            // 15% of each personal invest → the dividend pool (85% still burns)
-  DIVIDEND_DAILY_BPS: 30,        // a claim pays 0.30% of book value, capped by the pool
-  DIVIDEND_MS: 20 * 3600 * 1000, // the ~daily claim cooldown (DIVIDEND_MS test knob? no — fixed lever)
-  DYNASTY_TIERS: [
-    { tier: 1, name: 'Nest Egg', min: 100 },
-    { tier: 2, name: 'Trust Fund', min: 500 },
-    { tier: 3, name: 'Blue Blood', min: 2500 },
-    { tier: 4, name: 'Old Money', min: 10000 },
-    { tier: 5, name: 'The Dynasty', min: 50000 },
-  ],
-};
-// the status tier for a given cumulative $OMR invested (highest tier whose floor you've crossed)
-export const dynastyTierOf = (invested = 0) => {
-  const n = Number(invested || 0); let cur = null;
-  for (const t of PORTFOLIO.DYNASTY_TIERS) if (n >= t.min) cur = t;
-  return cur;
 };
 // ── THE TREASURY & THE VAULT (omerta-stock-layer-retirement.md) ────────────────────────────────
 // Was RWA_FLOAT. The founder retired the STOCK layer on 2026-07-31 and kept the vault, BACKED WITH
@@ -2849,16 +2784,6 @@ export const smuggleRepPerks = (tier) => ({
   tollMult:  (Number(tier) || 0) >= NOTORIETY.REP_TOLL_TIER  ? NOTORIETY.REP_TOLL_MULT  : 1,
   gainMult:  (Number(tier) || 0) >= NOTORIETY.REP_GAIN_TIER  ? NOTORIETY.REP_GAIN_MULT  : 1,
 });
-
-export const tickerOf = (id) => PORTFOLIO.TICKERS.find((t) => t.id === id) || null;
-// The day's price: base × (1 ± drift·hash), deterministic per UTC day off the server-secret market
-// seed (§7.11 machinery — unpredictable without the seed, verifiable after). DISPLAY-ONLY — it
-// values a status collectible and moves no §10.4 currency, so R1 stays fully outside the ledger.
-export const tickerPriceOf = (id, day = dayOf()) => {
-  const t = tickerOf(id); if (!t) return 0;
-  const swing = (hash01(`rwa:${id}:${day}:${MARKET_SEED}`) * 2 - 1) * t.drift;
-  return Math.max(1, Math.round(t.base * (1 + swing) * 100) / 100);
-};
 
 // ── THE ESTATE ("the compound"): the deep PERSONAL $OMR sink + a new "home" surface ──
 // The don's mansion — a tiered, furnishable home that DISPLAYS your legend. Pure STATUS (display-only,
@@ -4453,7 +4378,7 @@ export const CAREER = {
       { id: 'md_family',  name: 'Join a family',            cash: 5000, how: 'The Family — join one off the board, or found your own.', tab: 'family' },
       { id: 'md_freight', name: 'Land a shipment',          cash: 5000, how: 'A Port run (The Port) or a convoy delivered (Big Scores).', tab: 'port' },
       { id: 'md_stable',  name: 'Sign a fighter or racer',  cash: 5000, how: 'The Fights (a boxer) or The Stable (a dog or a horse).', tab: 'boxing' },
-      { id: 'md_legit',   name: 'Buy your first stock',     cash: 5000, how: 'Going Legit — the paper book survives death.', tab: 'portfolio' },
+      { id: 'md_legit',   name: 'Put $OMR to work',         cash: 5000, how: 'Going Legit — stake any amount; a committed balance climbs the ladder.', tab: 'portfolio' },
       { id: 'md_shield',  name: 'Buy protection',           cash: 5000, how: 'A safehouse stay or a bodyguard — Wet Work → Your Defenses.', tab: 'pvp' },
     ] },
     { id: 'capo', name: 'Capo', capstone: 30000, tasks: [
@@ -4467,7 +4392,7 @@ export const CAREER = {
     { id: 'don', name: 'The Don', capstone: 60000, tasks: [
       { id: 'dn_legend',  name: 'Build a legend',           cash: 20000, how: 'Any lifetime legend past $250,000 — smuggled, product moved, or racket income.', tab: 'city' },
       { id: 'dn_master',  name: 'Master a trade',           cash: 20000, how: 'Any trade to level 25 — The Trades on The Life.', tab: 'life' },
-      { id: 'dn_dynasty', name: 'Name your dynasty',        cash: 20000, how: 'Going Legit — the name your heirs carry.', tab: 'portfolio' },
+      { id: 'dn_dynasty', name: 'Get made for good',        cash: 20000, how: 'Mint the identity — the bloodline made permanent (ETH, or earned $OMR via PLEX).', tab: 'portfolio' },
       { id: 'dn_monument',name: 'Put your name in stone',   cash: 20000, how: 'Contribute to the Megaproject — The City. The plaque is forever.', tab: 'city' },
       { id: 'dn_champ',   name: 'Take a crown',             cash: 20000, how: '10 boxing wins, 10 race wins, or 5 duel wins — any champion’s record.', tab: 'boxing' },
       { id: 'dn_name',    name: 'Become a level-40 name',   cash: 20000, how: 'Level 40. The city knows who you are.', tab: 'streets' },

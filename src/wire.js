@@ -1,14 +1,14 @@
 // THE WIRE — the intelligence terminal (design omerta-the-wire-and-revenue-design.md). Information as
 // a spendable resource. WIRETAPS surveil a rival for a window (a $OMR sink); SWEEP clears bugs on you;
 // the STREET WIRE is a recurring $OMR subscription that upgrades the feed into an intelligence service
-// (forecasts, threat chatter, the ticker tape, the war room). Off-chain, §10.4-clean — every burn is an
+// (forecasts, threat chatter, the war room). Off-chain, §10.4-clean — every burn is an
 // intel:* $OMR sink through the vanity spendOmr till (rides the existing intel: vocabulary, so ZERO
 // invariant changes). A tap READ is an UNLOCKED point-in-time lookup (surveillance, not a two-party
 // action) — no lock complexity; reads filter expires_at and JOIN to `alive`, so a dead party's wire
 // goes silent, and the worker sweeps expired rows. The layered intel economy: the SUB warns you (a
 // hunter COUNT), a TAP identifies whether a SPECIFIC rival is hunting you, the peek names funders.
 import { GameError, notify, ledger } from './game.js';
-import { WIRE, wireActive, wireTierOf, wireSubTier, disinfoActive, spyRankOf, spyPerksOf, intelCost, rapStageOf, cityForecast, tickerPriceOf, PORTFOLIO, levelOf, dayOf, hash01, RIVALS } from './rules.js';
+import { WIRE, wireActive, wireTierOf, wireSubTier, disinfoActive, spyRankOf, spyPerksOf, intelCost, rapStageOf, cityForecast, levelOf, dayOf, hash01, RIVALS } from './rules.js';
 import { spendOmr } from './vanity.js';
 import { recordContact } from './contacts.js';
 
@@ -264,7 +264,7 @@ export async function cancelWatch(ch, targetId, client, h) {
   return { ok: true, target: targetId, standing: false };
 }
 
-// GET /v1/wire — the terminal: your live taps + intel, the ticker tape, and (if subscribed) the
+// GET /v1/wire — the terminal: your live taps + intel, and (if subscribed) the
 // intelligence service (forecasts, threat chatter, the war room). Runs under withCharacter.
 export async function wireBoard(ch, client, h) {
   const sub = wireActive(ch);
@@ -290,12 +290,8 @@ export async function wireBoard(ch, client, h) {
     i.paidSeconds = Math.max(0, Math.ceil((new Date(t.paid_until) - Date.now()) / 1000));
     informants.push(i);
   }
-  const day = dayOf();
-  const tape = PORTFOLIO.TICKERS.map((tk) => {
-    const price = tickerPriceOf(tk.id, day), prev = tickerPriceOf(tk.id, day - 1);
-    return { ticker: tk.id, name: tk.name, price, dayChange: prev ? Math.round(((price - prev) / prev) * 10000) / 100 : 0 };
-  });
-  const mover = tape.slice().sort((a, b) => Math.abs(b.dayChange) - Math.abs(a.dayChange))[0] || null;
+  // (D11 2026-08-05: the ticker tape retired with the Portfolio — the tape priced a stock
+  // book that no longer exists; the wire's intel is the product.)
   const bugsOnYou = Number((await client.query(
     `SELECT COUNT(*) n FROM wiretaps w JOIN characters c ON c.id = w.watcher_character AND c.alive
        WHERE w.target_character=$1 AND w.expires_at > now()`, [ch.id])).rows[0].n);
@@ -322,7 +318,7 @@ export async function wireBoard(ch, client, h) {
     spymaster: { ops, rank: spyRankOf(ops).name, tapBonus: perks.tapBonus, discountBps: perks.discountBps },
     // step four THE WATCHDOG: a subscriber gets pushed 'wire_alert' notifications when a tapped mark turns hot
     watchdog: sub && intel.length > 0,
-    taps: intel, informants, bugsOnYou, tape, mover,
+    taps: intel, informants, bugsOnYou,
     // step three: your own disinformation window (you feed anyone tapping you cooked private signals)
     disinfo: { active: disinfo, seconds: disinfo ? Math.max(0, Math.ceil((new Date(ch.disinfo_until) - Date.now()) / 1000)) : 0 },
   };
@@ -337,7 +333,7 @@ export async function wireBoard(ch, client, h) {
     board.premium = {
       forecast: cityForecast(),
       threats: { huntersCount, contracts },
-      // the war room is a TIER-2+ perk (the Wire Room / Switchboard) — tier 1 gets forecast + threats + tape
+      // the war room is a TIER-2+ perk (the Wire Room / Switchboard) — tier 1 gets forecast + threats
       warRoom: (tierCfg && tierCfg.warRoom && h.owned.gang)
         ? { name: h.owned.gang.name, held: h.owned.held || [],
             war: h.owned.gang.war_with ? { with: h.owned.gang.war_with, us: h.owned.gang.war_score_us, them: h.owned.gang.war_score_them } : null }

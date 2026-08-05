@@ -143,7 +143,7 @@ const MANIFEST = [
     prompt: `a dim surveillance back-room at night, reel-to-reel tape machines and a patch panel of cables, headphones on a hook, small glowing valve lamps, cigarette smoke, ${COLD}, ${NOIR}` },
   { id: 'interior-family', model: PRO, ar: '16:9', job: 'the Family — gangs, turf, the Commission',
     prompt: `a long dining table in a dim private back room at night, empty chairs down both sides, wine glasses and an ashtray left behind, one low pendant lamp over the centre of the table, heavy drapes, ${WARM}, ${NOIR}` },
-  { id: 'interior-legit', model: PRO, ar: '16:9', job: 'Going Legit — the portfolio, the dynasty, the way out',
+  { id: 'interior-legit', model: PRO, ar: '16:9', job: 'Going Legit — the ladder, the vault, the way out',
     prompt: `the marble banking hall of a 1930s financial building at night, tall fluted columns, brass teller cages, a polished stone floor reflecting one distant amber lamp, everything else in shadow, ${WARM}, ${NOIR}` },
   { id: 'interior-races', model: PRO, ar: '16:9', job: 'Street Races',
     prompt: `a black 1940s coupe idling on a rain-flooded street at night seen from low and behind, tail lights burning red on the wet asphalt, headlights cutting into fog ahead, brick warehouses either side, ${WARM}, ${NOIR}` },
