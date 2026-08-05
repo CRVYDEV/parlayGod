@@ -578,6 +578,12 @@ export async function shank(ch, victim, client, h) {
   // contracts on the mark (audit: else a random shiv burned the funder's escrow for free). Paid
   // BEFORE the estate vacates the bounties. Cash only (still no loot, no chop, no feared-rep).
   const { total: bounty } = await claimBounty(client, h, ch, victim.id, ['hospitalize', 'kill']);
+  // (cohesion step two) the RECORD, not the rep: a shank paid zero feared-rep AND wrote no kill_log
+  // row, so a yard kill was invisible to the feud ledger, the nemesis card and the pair story — the
+  // relationship layer undercounted real bodies. rep=0 keeps every rep surface exactly as it was
+  // (the bloodline-diminishing prior count filters rep>0); the ledger just stops forgetting.
+  await client.query('INSERT INTO kill_log (id, killer_account, victim_account, victim_name, rep) VALUES ($1,$2,$3,$4,0)',
+    [crypto.randomUUID(), ch.account_id, victim.account_id, victim.name]);
   const estate = await runEstate(client, h, victim, ch.name, { killerCh: ch, vendetta: true });
   await bumpMastery(client, h, ch, 'wetwork', 'shank'); // THE TRADES — a yard kill is still the lethal art
   await bumpHonor(client, ch, HONOR.SHANK); // #1: a shiv in the yard is a coward's kill — the street remembers

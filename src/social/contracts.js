@@ -553,7 +553,15 @@ export async function awardHitmanRep(client, h, ch, victim, vicLvl, directed, ve
   // every kill is logged for the feed; rep>0 marks the ones that count for bloodline diminishing
   await client.query('INSERT INTO kill_log (id, killer_account, victim_account, victim_name, rep) VALUES ($1,$2,$3,$4,$5)',
     [uid(), ch.account_id, victim.account_id, victim.name, repGain]);
-  return { repGain, qualified: qualifies, kills: Number(h.acct.kills || 0), title: hitmanRankOf(h.acct.hitman_rep).title };
+  // (cohesion step two) the BLOOD between the two bloodlines, counted AFTER this kill is logged, so
+  // the killer's toast can say "the third body between your lines" — the narrative beat at the
+  // moment the history is made. Both directions, no rep filter: a body is a body.
+  const bloodOurs = Number((await client.query(
+    'SELECT COUNT(*) n FROM kill_log WHERE killer_account=$1 AND victim_account=$2', [ch.account_id, victim.account_id])).rows[0].n);
+  const bloodTheirs = Number((await client.query(
+    'SELECT COUNT(*) n FROM kill_log WHERE killer_account=$1 AND victim_account=$2', [victim.account_id, ch.account_id])).rows[0].n);
+  return { repGain, qualified: qualifies, kills: Number(h.acct.kills || 0), title: hitmanRankOf(h.acct.hitman_rep).title,
+    blood: { ours: bloodOurs, theirs: bloodTheirs } };
 }
 
 // The feared-assassin leaderboard: the lifetime LEGEND (accounts by hitman_rep, with rank/title)

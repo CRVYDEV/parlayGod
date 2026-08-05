@@ -516,6 +516,18 @@ const heir2 = await meOf(marked.token); await seedCh(heir2.id, 'respect=1000'); 
 k = await whack(heir2.id);
 assert(k.kill, 'the heir is whacked too');
 assert.equal(k.hitman.repGain, 16, 'a repeat kill of the same bloodline is diminished: floor(11×3 / 2)');
+// (cohesion step two) THE BLOOD rides both kill moments. The killer's response carries the pair's
+// running count (this is Don's SECOND body from Marked's line), and the heir's death report — the
+// modal's source — reads the same ledger, so the two surfaces can never disagree.
+assert.equal(k.hitman.blood.ours, 2, "the killer's toast: 'the 2nd body between your bloodlines'");
+assert.equal(k.hitman.blood.theirs, 0, 'and no bodies the other way');
+{
+  const ests = (await call('GET', '/v1/notifications', { token: marked.token })).body.notifications
+    .filter((n) => n.type === 'estate');
+  const last = ests[ests.length - 1];
+  assert.equal(last?.payload?.blood?.theirs, 2, "the heir's death modal reads the same blood count");
+  assert.equal(last?.payload?.blood?.ours, 0, 'their line has taken none of the killer\'s');
+}
 donMe = await meOf(don.token);
 assert.equal(donMe.hitmanRep, 98, 'rep 82 + 16');
 assert.equal(donMe.kills, 3, 'three QUALIFYING lifetime kills (Rocco, Marked, heir — rookie excluded)');
@@ -717,6 +729,15 @@ for (let i = 0; i < 40 && !refundOk; i++) {
   }
 }
 assert(refundOk, 'the NPC landed the kill and the payer-funded escrow was verifiably refunded');
+// (cohesion step two, the info-economy rule) an ANONYMOUS kill carries NO blood count — the report
+// says 'A HIRED GUN', and a count keyed to a bloodline would out the payer. The gate is the name.
+{
+  const ests = (await call('GET', '/v1/notifications', { token: rival.token })).body.notifications
+    .filter((n) => n.type === 'estate');
+  const last = ests[ests.length - 1];
+  assert.equal(last?.payload?.by, 'A HIRED GUN', 'the hired kill stays anonymous on the report');
+  assert.equal(last?.payload?.blood, undefined, 'and carries no blood count that would out the payer');
+}
 
 // ── M7 Phase 4: earnable defense (safehouse) + interlocks (fire-heat, war-kill scoring) ──
 // safehouse: pay cash to go to ground → untargetable by fire AND NPC-hit for a window

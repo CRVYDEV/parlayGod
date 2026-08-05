@@ -138,6 +138,21 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
     lost: { cash: lostCash, cars: h.victimOwned.cars.length, guns: h.victimOwned.guns.length,
             rackets: h.victimOwned.rackets.length, assets: h.victimOwned.assets.length, lvl },
   };
+  // (cohesion step two) THE BLOOD on the death report — the heir's modal can say "the third body
+  // their line has taken from yours". ONLY when the report already NAMES the killer (fire/shank pass
+  // killerName === killerCh.name): an anonymous npcHit says 'A HIRED GUN', and a blood count keyed
+  // to a bloodline would out the payer — the info-economy rule. Counted from kill_log AFTER the
+  // kill's own row landed (fire logs in awardHitmanRep, the shank logs inline), so the modal and the
+  // feud ledger read the same numbers.
+  if (opts.killerCh && killerName === opts.killerCh.name) {
+    const theirs = Number((await client.query(
+      'SELECT COUNT(*) n FROM kill_log WHERE killer_account=$1 AND victim_account=$2',
+      [opts.killerCh.account_id, victim.account_id])).rows[0].n);
+    const ours = Number((await client.query(
+      'SELECT COUNT(*) n FROM kill_log WHERE killer_account=$1 AND victim_account=$2',
+      [victim.account_id, opts.killerCh.account_id])).rows[0].n);
+    report.blood = { theirs, ours };
+  }
 
   // FIVE PILLARS #5 — THE BLOODLINE: every generation gets its line in the family book (account-level,
   // written BEFORE the wipe, idempotent per generation — the ancestral hall + dynasty score read it).
