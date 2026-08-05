@@ -385,6 +385,29 @@ assert(contended.drained > 0,
 assert(contended.retired <= POPULATION.SPAWN_PER_TICK, 'and the per-tick cap still holds');
 await pool.query('UPDATE characters SET generation=1 WHERE is_npc AND alive');
 
+// (cross-system red-team, 2026-08-05) A resident hired into a PLANNING world raid is INERT — the
+// retirement picker must skip it, exactly as it skips a crew-heist hand. Without the world-raid half
+// of NOT_ON_A_JOB the worker could retire a merc the leader paid HIRE_FEE for out from under the raid,
+// forcing a re-hire and a DOUBLE fee (retireResident deletes the member row → the raid comes up
+// short). Age ONE resident past RETIRE_GENERATIONS (pure status, no §10.4) and put it on a planning
+// raid; the old-line picker must leave it be. Reset the day's allowance so the picker actually runs.
+await pool.query('UPDATE population_state SET retired=0 WHERE id=1');
+const merc = (await pool.query('SELECT id FROM characters WHERE is_npc AND alive ORDER BY id LIMIT 1')).rows[0];
+await pool.query('UPDATE characters SET generation=$1 WHERE id=$2', [POPULATION.RETIRE_GENERATIONS + 1, merc.id]);
+await pool.query("INSERT INTO world_raids (id, npc_id, leader_character, status) VALUES ('wr-inert','kryl',$1,'planning')", [pLeader.id]);
+await pool.query("INSERT INTO world_raid_members (raid_id, character_id, hired) VALUES ('wr-inert',$1,true)", [merc.id]);
+await runPopulation(pool);
+assert.equal(await one(`SELECT COUNT(*) n FROM characters WHERE id='${merc.id}' AND alive`), 1,
+  'a hired gun on a planning world raid is INERT — never retired out from under the job it was paid for');
+// control: take it off the raid and the SAME old line is culled — the exclusion was what spared it
+await pool.query("UPDATE world_raids SET status='done' WHERE id='wr-inert'");
+await pool.query('UPDATE population_state SET retired=0 WHERE id=1');
+await pool.query('UPDATE characters SET generation=$1 WHERE id=$2', [POPULATION.RETIRE_GENERATIONS + 1, merc.id]);
+await runPopulation(pool);
+assert.equal(await one(`SELECT COUNT(*) n FROM characters WHERE id='${merc.id}' AND alive`), 0,
+  'off the job, the same old line is retired — the world-raid exclusion is what protected it');
+await pool.query('UPDATE characters SET generation=1 WHERE is_npc AND alive');
+
 // (red-team F2) An HEIR records its arrival stake AT BIRTH. Backfilling it on the heir's first
 // worker turn left a window — up to a full sweep of the city — in which a player could drain them
 // first, so the backfill would record the DRAINED cash as their stake and that resident could never
