@@ -92,10 +92,16 @@ export async function worldBoard(pool, ch = null, h = null) {
       `SELECT r.id, r.npc_id, r.leader_character FROM world_raid_members m JOIN world_raids r ON r.id=m.raid_id
         WHERE m.character_id=$1 AND r.status='planning'`, [ch.id])).rows[0];
     if (r) {
-      const crew = Number((await pool.query('SELECT COUNT(*) n FROM world_raid_members WHERE raid_id=$1', [r.id])).rows[0].n);
-      const hired = Number((await pool.query('SELECT COUNT(*) n FROM world_raid_members WHERE raid_id=$1 AND hired', [r.id])).rows[0].n);
+      // the roster — who's a real crewman vs a hired gun (so the hire/dismiss decision is legible).
+      // Two flat queries + a JS join (the /v1/gangs precedent); the leader is flagged.
+      const mrows = (await pool.query(
+        `SELECT m.character_id, m.hired, c.name FROM world_raid_members m JOIN characters c ON c.id=m.character_id
+          WHERE m.raid_id=$1 ORDER BY (m.character_id=$2) DESC, m.hired ASC, c.name`, [r.id, r.leader_character])).rows;
+      const members = mrows.map((m) => ({ name: m.name, hired: !!m.hired, leader: m.character_id === r.leader_character }));
+      const crew = members.length, hired = members.filter((m) => m.hired).length;
       const leader = r.leader_character === ch.id;
-      myRaid = { id: r.id, npc: r.npc_id, leader, crew, hired,
+      myRaid = { id: r.id, npc: r.npc_id, leader, crew, hired, members, crewMax: WORLD.COOP_MAX_CREW,
+        needMore: Math.max(0, WORLD.COOP_MIN - crew),   // how many more bodies before the go is legal
         canHire: leader && crew < WORLD.COOP_MAX_CREW && hired < WORLD.HIRE_MAX, hireFee: WORLD.HIRE_FEE };
     }
   }

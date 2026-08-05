@@ -89,6 +89,10 @@ export async function raidFamily(ch, gangId, client, h) {
   if (!g || !g.npc_flag) throw new GameError('bad_target', 'No outfit by that name to hit.');
   const myGang = (await client.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [ch.id])).rows[0]?.gang_id;
   if (myGang && myGang === gangId) throw new GameError('own_family', "That's your own family.");
+  // own_vassal (the own_family sibling): you don't raid an outfit your OWN family already holds — the
+  // loot is a bounded faucet either way (no §10.4/exploit), but self-raiding a vassal is a pointless,
+  // confusing no-value action (and the board flags it heldBy.mine, so it's reachable). Gate it clean.
+  if (myGang && g.held_by_gang === myGang) throw new GameError('own_vassal', "You already hold that outfit — you don't raid your own vassal.");
 
   const now = new Date();
   const poolNow = regenPool(g, now);

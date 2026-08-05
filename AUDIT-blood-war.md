@@ -72,3 +72,23 @@ against source. **No CRITICAL, no HIGH, no MED — CLEAN.** The feature closely 
 
 The Blood War and the Manhunt are a faithful application of the audited `world:raid`/`huntWanted`/frontier
 patterns, and inherit their safety. No changes required.
+
+## SECOND PASS (2026-08-04, independent re-review)
+
+A second four-lens pass re-verified every section above and reached the same conclusion — sound, no
+CRITICAL/HIGH/MED, no §10.4 drift — and confirmed the `family:tribute` treasury reconcile (`familyTributeIn`,
+invariants.js:193), the TEST_ONLY classification of `FAMILY_RAID_P`/`FAMILY_COUNTER`/`FAMILY_RETAL_P`, and the
+retaliation chaining (exactly one path per landed raid). It found **one** item the first pass missed, fixed
+in commit:
+
+- **`own_vassal` gate (LOW, clarity/sibling-parity).** `raidFamily` gated `own_family` but NOT an NPC family
+  your own family already HOLDS as a vassal — and the board flags such a family `heldBy.mine` while still
+  listing it `canRaid`, so it was reachable. Self-raiding a vassal is harmless (the same bounded `family:raid`
+  faucet, no §10.4, no exploit — the pool level doesn't affect the fixed-rate tribute) but a pointless,
+  confusing no-value action. Gated as the `own_family` sibling; mutation-verified regression in `test/npcwar.js`.
+- **Stale comment fixed**: `rules.tail.js`'s `FAMILY_WAR` block still called THE MANHUNT "(step three —
+  deferred)"; it is BUILT (`sweepFamilyAggro`), matching the `npcwar.js` header fixed the prior commit.
+
+Also re-affirmed the first pass's flags as design, not defects: THE CONQUEST is community-gated (near a full
+pool the loot ~6k < the 16k/4h regen, so routing needs the whole base grinding within a regen window — the
+world-raid property), and the `war_pool_at`-NULL → `POOL_MAX` regen is a bounded, desirable migration edge.
