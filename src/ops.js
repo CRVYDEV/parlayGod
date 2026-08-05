@@ -102,3 +102,37 @@ export async function opsActivity(pool, limit = 50) {
   const rows = (await pool.query('SELECT event, props, at FROM telemetry ORDER BY at DESC LIMIT $1', [n])).rows;
   return { events: rows.map((r) => ({ event: r.event, at: r.at, props: safeParse(r.props) })) };
 }
+
+// ── THE COACH CENSUS — where the coach has every ACTIVE player standing, live ────────────────────
+// The progression harness measures where a SIMULATED player sits on the ladder; this is the same
+// reading over the real population: for every living human character active inside the window, the
+// coach's current top rung, aggregated. A rung that half the base is sitting on IS the measured
+// drop-off — the live counterpart of the harness's anti-masking bound, and the first thing to read
+// once testers touch the game. Pure read (view() computes, nothing persists), mod-only, bounded to
+// 200 characters so the census can never become a load problem.
+export async function opsCoach(pool) {
+  const { loadOwned, view } = await import('./game.js');
+  const chars = (await pool.query(
+    `SELECT * FROM characters
+      WHERE alive AND NOT is_npc AND last_accrued_at > now() - interval '7 days'
+      ORDER BY last_accrued_at DESC LIMIT 200`)).rows;
+  const rungs = new Map();
+  let surveyed = 0, silent = 0;
+  for (const ch of chars) {
+    try {
+      const acct = (await pool.query('SELECT * FROM account_persistent WHERE account_id=$1', [ch.account_id])).rows[0] || {};
+      const owned = await loadOwned(pool, ch);
+      const coach = view(ch, acct, owned).coach;
+      surveyed++;
+      if (!coach) { silent++; continue; }
+      let r = rungs.get(coach.label);
+      if (!r) { r = { label: coach.label, tab: coach.tab, count: 0, players: [] }; rungs.set(coach.label, r); }
+      r.count++;
+      if (r.players.length < 5) r.players.push(ch.name);
+    } catch { /* one broken row must not blind the census — the worker safe() posture */ }
+  }
+  return {
+    surveyed, silent, activeWindowDays: 7,
+    rungs: [...rungs.values()].sort((a, b) => b.count - a.count),
+  };
+}

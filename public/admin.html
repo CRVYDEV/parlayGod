@@ -73,6 +73,7 @@
     <div class="panel" id="p-economy"><h2>The Economy</h2><div class="body">…</div></div>
     <div class="panel" id="p-players"><h2>Players</h2><div class="body">…</div></div>
     <div class="panel" id="p-funnel"><h2>Onboarding Funnel</h2><div class="body">…</div></div>
+    <div class="panel" id="p-coach"><h2>Where the Coach Has Them</h2><div class="body">…</div></div>
     <div class="panel" id="p-engage"><h2>Engagement &amp; Retention</h2><div class="body">…</div></div>
     <div class="panel" id="p-top"><h2>The Powerful</h2><div class="body">…</div></div>
     <div class="panel" id="p-chain"><h2>Chain · Reserve · Vig</h2><div class="body">…</div></div>
@@ -123,11 +124,12 @@
   }
 
   async function refreshAll() {
-    const [ov, inv, fn, res, vig, em, act, rev, eng, bnd, tre] = await Promise.all([
+    const [ov, inv, fn, res, vig, em, act, rev, eng, bnd, tre, coa] = await Promise.all([
       j('GET', '/v1/mod/overview'), j('GET', '/v1/mod/invariants'), j('GET', '/v1/mod/funnel'),
       j('GET', '/v1/mod/reserve'), j('GET', '/v1/mod/vig'), j('GET', '/v1/mod/emission'),
       j('GET', '/v1/mod/activity?limit=60'), j('GET', '/v1/mod/revenue'),
       j('GET', '/v1/mod/engagement'), j('GET', '/v1/mod/bonds'), j('GET', '/v1/mod/treasury'),
+      j('GET', '/v1/mod/coach'),
     ]);
     if (ov.code === 401) return $('#logout').onclick();
 
@@ -155,7 +157,7 @@
     $('#stamp').textContent = 'as of ' + new Date().toLocaleTimeString();
     renderIntegrity(inv.body); renderEconomy(ov.body, em.body); renderPlayers(ov.body); renderEngagement(eng.body);
     renderFunnel(fn.body); renderTop(ov.body); renderChain(res.body, vig.body, em.body, rev.body, bnd.body, tre);
-    renderBackups(ov.body); renderSocial(ov.body);
+    renderBackups(ov.body); renderSocial(ov.body); renderCoach(coa.body);
     renderActivity(act.body); renderMod();
   }
 
@@ -276,6 +278,21 @@
       + rowHtml('under indictment', fmt(p.indicted));
   }
 
+  // THE COACH CENSUS — the live drop-off read: which rung every active player's coach is showing
+  // RIGHT NOW, worst-first. A rung half the base sits on IS the measured wall (the harness's
+  // anti-masking bound, over real players). "quiet" = the coach has nothing to say (a veteran).
+  function renderCoach(c) {
+    if (!c || !c.rungs) return;
+    const total = Math.max(1, c.surveyed || 1);
+    const rows = (c.rungs || []).slice(0, 10).map((r) => {
+      const pct = Math.round(100 * r.count / total);
+      return `<div class="row"><span class="k">${r.label}</span><span class="v">${fmt(r.count)} (${pct}%)</span></div><div class="bar"><i style="width:${pct}%"></i></div>`
+        + (r.players && r.players.length ? `<div class="note">${r.players.join(', ')}</div>` : '');
+    }).join('');
+    $('#p-coach').querySelector('.body').innerHTML =
+      `<div class="note">${fmt(c.surveyed)} active players surveyed (last ${c.activeWindowDays}d) · ${fmt(c.silent)} with a quiet coach</div>`
+      + (rows || '<div class="note">nobody active in the window yet — this fills the moment testers play</div>');
+  }
   function renderFunnel(fn) {
     if (!fn) return;
     const lv = fn.levels || {}, pr = fn.progression || {}, fw = fn.firstWeek || {};

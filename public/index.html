@@ -3724,11 +3724,12 @@
   async function renderStart() {
     const t = $('#tab-start');
     // two serial round trips before a single pixel painted — the tab showed nothing for both
-    const [obR, swR, crR, ppR] = await Promise.all([api('GET', '/v1/onboard'), api('GET', '/v1/social'), api('GET', '/v1/career'), api('GET', '/v1/people')]);
+    const [obR, swR, crR, ppR, prR] = await Promise.all([api('GET', '/v1/onboard'), api('GET', '/v1/social'), api('GET', '/v1/career'), api('GET', '/v1/people'), api('GET', '/v1/paper')]);
     const ob = obR.body || { tasks: [], total: 0, claimed: 0 };
     const sw = swR.body || { tasks: [] };
     const cr = crR.body || { tiers: [] };
     const pp = ppR.body || {};   // a failed fetch renders no cards (every read below is guarded)
+    const pr = prR.body || {};   // THE MORNING PAPER — the while-you-were-gone digest
     // ── THE SITUATION — the dashboard the 24-tab wall never had: your threats, your people, and
     // what's READY right now, in one glance. Composed from /v1/me (already in hand) + /v1/people
     // (the cohesion layer) — the client re-derives nothing.
@@ -3741,9 +3742,20 @@
       if (me.energy >= (me.maxEnergy || 1) * 0.75) ready.push(['streets', 'a full tank going unspent']);
     }
     const nem = pp.nemesis;
+    // headline types → plain English (fallback: the type with its underscores spaced)
+    const PAPER_LINES = { attack: 'you were attacked', attempt: 'somebody tried you', whacked: 'a killing touched you',
+      busted: 'a bust', sale: 'product moved', estate: 'an estate settled', war: 'war news', dm: 'calls on the cell',
+      fee_credited: 'a fee credited', contract: 'contract news', sacked: 'a front changed hands' };
+    const away = (s) => s >= 86400 ? `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h` : `${Math.floor(s / 3600)}h`;
+    const paperCard = pr.fresh ? `
+      <div class="card" style="border-color:var(--gold)"><span class="t" style="color:var(--gold)">📰 WHILE YOU WERE GONE <span class="d" style="font-size:11px">(${away(pr.awaySeconds)})</span></span>
+        ${pr.totalIn || pr.totalOut ? `<div class="d">the books: <b style="color:var(--neon)">+$${fmt(pr.totalIn)}</b> in${pr.totalOut ? ` · <b style="color:var(--bad)">−$${fmt(pr.totalOut)}</b> out` : ''}${(pr.earned || []).length ? ` — mostly ${pr.earned.slice(0, 3).map((e) => `${esc(e.what)} $${fmt(e.total)}`).join(', ')}` : ''}</div>` : ''}
+        ${(pr.headlines || []).length ? `<div class="d">${pr.headlines.slice(0, 6).map((h) => `${PAPER_LINES[h.type] || esc(String(h.type).replace(/_/g, ' '))} ×${h.n}`).join(' · ')}</div>` : ''}
+        <div class="row"><button class="act" id="paper-fold">read — fold the paper</button></div></div>` : '';
     const situation = `
       <h2>The Situation <span class="d" style="font-size:11.5px">— your threats, your people, and what's ready right now</span></h2>
       <div class="grid">
+        ${paperCard}
         ${nem ? `<div class="card" style="border-color:var(--bad)"><span class="t" style="color:var(--bad)">YOUR NEMESIS${nem.street?.alive === false ? ' — LINE FALLEN' : ''}</span>
           <div class="d"><b>${esc(nem.street?.name || 'a fallen line')}</b> has moved on you <b>${nem.total}</b> time${nem.total === 1 ? '' : 's'}${nem.bloodOwed > 0 ? ` — and their line owes yours <b>${nem.bloodOwed} bod${nem.bloodOwed === 1 ? 'y' : 'ies'}</b>` : nem.bloodOwed < 0 ? ` — your line owes theirs ${-nem.bloodOwed}` : ''}.${nem.vendetta?.mine ? ' A vendetta is SWORN.' : ''}${nem.vendetta?.theirs ? ' Their line has sworn one on YOU.' : ''}</div>
           <div class="row">${nem.street?.id ? `<button class="act" data-story="${nem.street.id}" data-story-name="${esc(nem.street.name)}">the story of you two</button><button class="act" data-go-tab="pvp">settle it →</button>` : `<button class="act" ${''}disabled>their line is dead — for now</button>`}</div></div>` : ''}
@@ -3938,6 +3950,8 @@
     });
     wireStory(t); // THE SITUATION's nemesis card
     t.querySelectorAll('[data-go-tab]').forEach((b) => b.onclick = () => setTab(b.dataset.goTab));
+    const pf = t.querySelector('#paper-fold');
+    if (pf) pf.onclick = () => act('POST', '/v1/paper/read', {}).then(() => renderStart());
   }
 
   // ── THE STORY OF YOU AND THEM — the pair's whole recorded history in one dossier, shared by the

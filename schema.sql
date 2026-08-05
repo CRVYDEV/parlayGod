@@ -2653,3 +2653,8 @@ ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS season_crowns INT NOT NU
 -- last change for the cooldown; free the first time, then a $OMR sink from the family reserve.
 ALTER TABLE gangs ADD COLUMN IF NOT EXISTS charter TEXT;
 ALTER TABLE gangs ADD COLUMN IF NOT EXISTS charter_at TIMESTAMPTZ;
+
+-- THE MORNING PAPER: when this street last FOLDED the while-you-were-gone digest (the paper reads
+-- everything since this mark; a fresh street reads the last day). Stamped by direct SQL under the
+-- character lock — outside persistCharacter's positional list (the active_at posture).
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS paper_at TIMESTAMPTZ;

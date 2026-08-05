@@ -9009,3 +9009,31 @@ nemesis/bond/guarding row set and PARAM_FIXTURES a history counterpart WITH even
 rule). Chromium-probed live end-to-end (nemesis card copy, the story modal with the fallen named, the
 ready strip — zero page errors); pgquery 2404 + pgcheck 43/43 on real Postgres (new SQL); routes
 guard 563; mobile 69/69.
+
+**THE MORNING PAPER + THE COACH CENSUS (founder-directed 2026-08-05: "work on 1 & 2") — BUILT**
+(`src/people.js` paperBoard/foldPaper + `characters.paper_at`, `src/ops.js` opsCoach,
+`GET /v1/paper` + `POST /v1/paper/read` + `GET /v1/mod/coach`, THE SITUATION's 📰 card,
+/admin "Where the Coach Has Them"; `test/people.js`). **(1) THE PAPER** — the retention gap named in
+the recommendations: a lazy-accrual game means things HAPPEN to an absent player, and a returning one
+reconstructed them from a raw 20-item notification backfill. The digest reads everything since the
+paper was last FOLDED (`paper_at`, direct-SQL off the persist positional list; a fresh street reads
+the last day; the window caps at 7d and a sub-4h absence prints nothing): headlines = the street's OWN
+notifications grouped by type (only what the city already told them — the info-economy rule needs no
+new thought here), and the books = the character's own cash ledger folded to reason PREFIXES in JS
+(GROUP BY reason in SQL, no split_part — the pg-mem posture), **the take and the bleed folded
+SEPARATELY** — the first cut netted them and a front that earned $5,000 against $1,200 of pad read as
++$3,800 with the pad invisible, the exact number the pad complaints were about not seeing (caught by
+the suite's own to-the-dollar assertion). **The GET never consumes its own window** (the
+notifications-peek rule — a read that stamps the mark zeroes itself on every render); folding is an
+explicit POST. Pure read, zero §10.4 (test-pinned: printing and folding write zero ledger rows).
+**(2) THE COACH CENSUS** — the live half of "read the instruments": `GET /v1/mod/coach` computes the
+coach's CURRENT top rung for every living human character active in the last 7 days (bounded 200,
+per-row try/catch — the worker safe() posture) and aggregates rung → count + sample names; /admin
+renders it worst-first between the funnel and the top boards. A rung half the base sits on IS the
+measured drop-off — the harness's anti-masking bound over real players instead of a simulated one.
+**A mutation lesson re-learned in a new costume:** the census's dead-street exclusion mutation
+SURVIVED its first run — `perl s///` without /g replaced the FIRST "WHERE alive AND NOT is_npc" in
+the file, which is opsOverview's player count, not the census — a bad mutation reads exactly like a
+clean bill of health; re-targeted on the query's unique interval and it fails by name. Suite green +
+sim drift-0 + pgquery/pgcheck on real Postgres (new SQL) + client mirror + mobile incl. the /admin
+render check.

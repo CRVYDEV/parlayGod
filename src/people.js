@@ -162,3 +162,56 @@ export async function pairHistory(client, ch, targetCharacterId) {
     events: ev.slice(0, 60),
   };
 }
+
+// ── THE MORNING PAPER — the while-you-were-gone digest ───────────────────────────────────────────
+// A lazy-accrual game means things HAPPEN to an absent player — fronts earn, rivals rob, contracts
+// land — and a returning player used to reconstruct it from a raw 20-item notification backfill.
+// This is the digest: everything since the paper was last FOLDED (characters.paper_at), capped at a
+// week back, defaulting to the last day for a street that has never read one. PURE READ — the GET
+// deliberately does NOT stamp the mark (the notifications-peek rule: a read that consumes its own
+// window would zero itself on every render); folding is an explicit POST. §10.4 untouched — the
+// take/bleed sums READ the ledger, they never write it.
+const PAPER_MAX_MS = 7 * 24 * 3600 * 1000;      // the digest window never reaches back past a week
+const PAPER_FRESH_MS = 4 * 3600 * 1000;         // under ~a sitting away there is no paper to print
+export async function paperBoard(client, ch) {
+  const now = Date.now();
+  const marked = ch.paper_at ? new Date(ch.paper_at).getTime() : now - 24 * 3600 * 1000;
+  const since = new Date(Math.max(marked, now - PAPER_MAX_MS));
+  // the headlines: what the city already TOLD this street (its own notifications), grouped
+  const headlines = (await client.query(
+    `SELECT type, COUNT(*) n, MAX(created_at) latest FROM notifications
+      WHERE character_id=$1 AND created_at > $2 GROUP BY type ORDER BY COUNT(*) DESC LIMIT 12`,
+    [ch.id, since])).rows.map((r) => ({ type: r.type, n: Number(r.n), latest: r.latest }));
+  // the take and the bleed: this street's OWN ledger over the window, folded to reason PREFIXES in
+  // JS (GROUP BY reason in SQL, no split_part — the pg-mem posture)
+  const rows = (await client.query(
+    `SELECT reason, SUM(amount) s FROM transactions
+      WHERE character_id=$1 AND at > $2 AND currency='cash' GROUP BY reason`, [ch.id, since])).rows;
+  // the take and the bleed fold SEPARATELY — a front that earned $5,000 and billed $1,200 of pad
+  // reads as both, not as a net $3,800 that hides the pad (the very number the pad complaints were
+  // about not seeing)
+  const inFold = new Map(), outFold = new Map();
+  for (const r of rows) {
+    const k = String(r.reason).split(':')[0], s = Number(r.s);
+    if (s > 0) inFold.set(k, (inFold.get(k) || 0) + s);
+    else if (s < 0) outFold.set(k, (outFold.get(k) || 0) - s);
+  }
+  const earned = [...inFold].sort((a, b) => b[1] - a[1]).slice(0, 6)
+    .map(([what, total]) => ({ what, total: Math.floor(total) }));
+  const spent = [...outFold].sort((a, b) => b[1] - a[1]).slice(0, 6)
+    .map(([what, total]) => ({ what, total: Math.floor(total) }));
+  const totalIn = earned.reduce((a, e) => a + e.total, 0);
+  const totalOut = spent.reduce((a, e) => a + e.total, 0);
+  const awaySeconds = Math.floor((now - since.getTime()) / 1000);
+  return {
+    awaySeconds,
+    // fresh = there is a paper worth printing: a real absence AND something in it
+    fresh: (now - since.getTime()) >= PAPER_FRESH_MS && (headlines.length > 0 || totalIn > 0 || totalOut > 0),
+    headlines, earned, spent, totalIn, totalOut,
+  };
+}
+// folding the paper stamps the mark — an explicit act, never a side effect of reading
+export async function foldPaper(client, ch) {
+  await client.query('UPDATE characters SET paper_at = now() WHERE id=$1', [ch.id]);
+  return { ok: true, folded: true };
+}

@@ -1474,6 +1474,12 @@ export async function buildServer() {
     G.readCharacter(pool, req.user.sub, (ch, client) => People.peopleBoard(client, ch)));
   app.get('/v1/people/history/:characterId', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client) => People.pairHistory(client, ch, req.params.characterId)));
+  // THE MORNING PAPER — the while-you-were-gone digest; folding is an explicit POST (a GET that
+  // consumed its own window would zero itself on every render — the notifications-peek rule)
+  app.get('/v1/paper', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client) => People.paperBoard(client, ch)));
+  app.post('/v1/paper/read', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client) => People.foldPaper(client, ch)));
   app.post('/v1/streets/:targetId/bounty', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.postBounty(ch, req.params.targetId, req.body?.amount, client, h,
       { kind: req.body?.kind, reason: req.body?.reason, hours: req.body?.hours, anon: req.body?.anon,
