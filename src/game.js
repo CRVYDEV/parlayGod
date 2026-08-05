@@ -14,7 +14,8 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS, RANKS,
          REGIMEN, disciplineLvlOf, energyCapOf, nerveCapOf, BUSINESSES, WIRE, RIVALS, CORNER, cornerTasksOf,
          KITCHENS, labModuleCost, recyclesToDesk, DESK_RECYCLE_REASON, isMade, madeSeconds,
          MADE_LADDER, madeRungIdx, madeRungOf, ladderFx,
-         ASSETS, OPERATIONS, opSlotsOf, nextOpSlotLevel, MISSIONS, dailyLiveFor, jailed, safeHoused } from './rules.js';
+         ASSETS, OPERATIONS, opSlotsOf, nextOpSlotLevel, MISSIONS, dailyLiveFor, jailed, safeHoused,
+         STABLE, SPEAKEASY, ESTATE } from './rules.js';
 import { dbCaps } from './db.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
@@ -1171,6 +1172,34 @@ function coachLadder(ch, acct, owned) {
   if (lvl >= 18 && !Number(acct.intel_ops || 0) && Number(acct.omr || 0) >= WIRE.TAP_OMR && add('Work the wires', 'The Wire: burn a little $OMR to tap a rival — their heat, their wealth band, whether they\'re hunting YOU. Information is the sharpest weapon in the city.', 'wire')) return rungs;
   if (lvl >= 22 && !Number(owned.mastery?.wetwork || 0) && inSocialBand(lvl, 22)
     && add('Blood on the ledger', 'Wet Work: the contract board pays real pots for real bodies. Start on the Dueling Circuit — challenge a listed duelist, win the stake, build the name.', 'pvp')) return rungs;
+  // ── THE DEEP CITY (founder-directed: "extend the coach past ~24 into the mid-game systems it
+  // currently never names"). The 7-day progression harness measured a plausible solo player touching
+  // 10 of 39 systems, with the milestone ladder above ending at level 22 — from there the coach fell
+  // to the daily work board and the permanent nudges, and the convoy/stable/nightlife/monument/estate
+  // layers were never once named. Same discipline as the band above: every rung is ONE-TIME and
+  // SELF-CLEARS on a signal that cannot regress — an account legend that survives death
+  // (freight_delivered/racer_wins/monument_built) or ownership (speakeasy/estate) — and any rung
+  // whose action costs money gates on HOLDING the price (the work-the-wires rule), so a broke street
+  // is never pinned on advice it cannot act on (the harness-F1 masking rule).
+  if (lvl >= 24 && !Number(acct.freight_delivered || 0)
+    && add('Put a truck on the road', 'Big Scores ▸ Convoys: load trade goods, hire guards, send the shipment across the map. Bulk freight beats anything your trunk can carry — and collecting at the far end starts the Teamster legend. Bandits are the risk; guards are the answer.', 'scores')) return rungs;
+  // gate on the CHEAP animal's price — the hint quotes the live catalog (the first-front rule:
+  // price off the live surface or don't state a price), so a retune can never make the copy a lie.
+  if (lvl >= 25 && !Number(acct.racer_wins || 0) && Number(ch.cash) + Number(ch.bank) >= STABLE.KINDS.dog.cost
+    && add('Own the animals', `The Stable: buy a ${STABLE.KINDS.dog.name} ($${STABLE.KINDS.dog.cost.toLocaleString()}), train its legs, and run the circuit until it takes a purse. A racer you own can even run in the town's daily card — the whole city bets on your animal.`, 'stable')) return rungs;
+  // one club per district, so on a full map this could linger — acceptable on a thin alpha (six
+  // districts, and residents never open clubs); the cash gate keeps it off a broke street's plan,
+  // and the MADE gate mirrors openSpeakeasy's own D8=D door — without it an unmade funded player
+  // would be pinned on a rung the server refuses forever (the refuse-on-press class, as a mask).
+  if (lvl >= 26 && !owned.speakeasy && isMade(acct) && Number(ch.cash) + Number(ch.bank) >= SPEAKEASY.OPEN_COST
+    && add('Open a club of your own', `The Speakeasy: as a made man, $${SPEAKEASY.OPEN_COST.toLocaleString()} opens a nightclub in any free district. The bar take drips around the clock, and every round a patron buys is buying YOUR prestige — the nightlife board ranks the city's clubs.`, 'speakeasy')) return rungs;
+  if (lvl >= 28 && !Number(acct.monument_built || 0)
+    && add('Put your name on the skyline', 'The City is raising a monument, and every dollar you brick in goes on the plaque FOREVER — it survives your death, your heir\'s death, everything. The cheapest immortality in town, and the whole base builds it together.', 'city')) return rungs;
+  // the $OMR-sink arc (estate → auction block) — gated on HOLDING tier 1's price, read live off the
+  // catalog. Clears by buying the first place; the estate row is account-level so an heir who
+  // inherits the compound is never re-schooled.
+  if (lvl >= 30 && !owned.estate && Number(acct.omr || 0) >= (ESTATE.TIERS[0]?.omr || 40)
+    && add('Buy the compound', `The Estate: ${ESTATE.TIERS[0]?.omr || 40} $OMR buys the ${ESTATE.TIERS[0]?.name || 'Safe House'} — a home that survives death, mounts your trophies, and gives your $OMR something permanent to become. The Auction Block next door sells one-of-a-kind pieces weekly.`, 'estate')) return rungs;
   // ── THE RECURRING NUDGES ── (COACH_NUDGES) Everything above is a ONE-TIME milestone that clears
   // for good once done. These three never clear, so they live down here where they fill the quiet
   // moments instead of masking the ladder. The SAME rule orders the tail itself: most-clearable
@@ -1186,6 +1215,14 @@ function coachLadder(ch, acct, owned) {
       `${cold.length === 1 ? `Your ${cold[0].name} pays` : 'They pay'} nothing until the pad is square — and the pad keeps running whether ${cold.length === 1 ? 'it earns' : 'they earn'} or not. Pay it (The Empire ▸ pay the pad) or close ${cold.length === 1 ? 'it' : 'them'} up and stop the bleeding.`,
       'empire')) return rungs;
   }
+  // THE BUREAU, before the indictment. The urgent rung at the top of the ladder fires only once a
+  // case is FILED — by which point the cheap outs (the bribe, laying low early) are mostly gone.
+  // This one fires while the meter is still climbable-down (stage 'investigation', pre-indictment)
+  // and SELF-CLEARS as the exposure bleeds, gets bribed off, or crosses into the indictment rung —
+  // the cold-front class exactly: reactive, actionable, recurring by nature, so it lives in the
+  // tail where it can fill a quiet moment without masking a milestone.
+  if (!ch.indicted_at && rapStageOf(ch.heat_exposure, null) === 'investigation'
+    && add('The Bureau is building a case', 'Your file is thick and getting thicker — cross the line and they indict. The Law: pay a bribe to thin the file, put a lawyer on retainer, or run quiet until it cools. Once a case is FILED the price goes way up.', 'law')) return rungs;
   // ── THE WORK BOARD (omerta-early-game-design.md F1) ──
   // The rungs above are one-time milestones, so a player who follows the coach clears the last of
   // them around level 22 — at exactly the level the CONTENT thins out too (7 of the levels from 17

@@ -558,6 +558,57 @@ await pool.query(`UPDATE account_persistent SET smuggled=1000 WHERE account_id='
 await seedCh(rook.id, `respect=${10 * 22 * 22}`);
 assert.equal(await coachOf(), 'Blood on the ledger', 'lvl 22+ never drew blood → the Dueling Circuit');
 await pool.query(`INSERT INTO masteries (character_id, track_id, xp) VALUES ('${rook.id}', 'wetwork', 10)`);
+// ── THE DEEP CITY (founder: "extend the coach past ~24 into the mid-game systems it never names").
+// The 7-day harness measured a solo player touching 10 of 39 systems with the ladder ending at 22 —
+// these five rungs walk the convoy/stable/nightlife/monument/estate layers, each clearing on a
+// signal that cannot regress. Walked in order, clearing each, same rule as the road to 30 above.
+// levels 24-30 accrue 6-7 skill points against rook's single bought skill, which re-arms the ≥5-idle
+// skills nag above this band — spend two more tier-1s so the walk stays a strict ladder
+for (const s of ['fast_talker', 'pack_mule']) await pool.query(
+  `INSERT INTO character_skills (character_id, skill_id) VALUES ('${rook.id}', '${s}') ON CONFLICT DO NOTHING`);
+await seedCh(rook.id, `respect=${10 * 24 * 24}, cash=10000, bank=0`);
+assert.equal(await coachOf(), 'Put a truck on the road', 'lvl 24+ never hauled freight → Convoys');
+await pool.query(`UPDATE account_persistent SET freight_delivered=1000 WHERE account_id='${rookAid}'`);
+// the stable rung gates on HOLDING the cheap animal's price (the work-the-wires rule) — a broke
+// street skips it rather than being pinned on advice it cannot act on
+await seedCh(rook.id, `respect=${10 * 25 * 25}, cash=10000, bank=0`);
+assert.notEqual(await coachOf(), 'Own the animals', 'broke → the stable rung stands down (the $ gate)');
+await seedCh(rook.id, 'cash=50000');
+const stableRung = (await call('GET', '/v1/me', { token: rook.token })).body.character.coach;
+assert.equal(stableRung?.label, 'Own the animals', 'lvl 25+ funded, never won a race → The Stable');
+assert(/30,000/.test(stableRung.hint), 'the hint quotes the live catalog price');
+await pool.query(`UPDATE account_persistent SET racer_wins=1 WHERE account_id='${rookAid}'`);
+// the club rung: cash-gated AND made-gated — it mirrors openSpeakeasy's own D8=D door, or an
+// unmade funded player is pinned on a rung the server refuses forever
+await seedCh(rook.id, `respect=${10 * 26 * 26}, cash=800000, bank=0`);
+assert.notEqual(await coachOf(), 'Open a club of your own', 'funded but UNMADE → the club rung stands down');
+await pool.query(`UPDATE account_persistent SET made_until = now() + interval '30 days' WHERE account_id='${rookAid}'`);
+assert.equal(await coachOf(), 'Open a club of your own', 'lvl 26+ made and funded, no club → The Speakeasy');
+await pool.query(`INSERT INTO speakeasies (district_id, owner_character) VALUES ('brick', '${rook.id}')`);
+assert.notEqual(await coachOf(), 'Open a club of your own', 'owning a club clears it for good');
+await seedCh(rook.id, `respect=${10 * 28 * 28}`);
+assert.equal(await coachOf(), 'Put your name on the skyline', 'lvl 28+ never bricked in → the monument');
+await pool.query(`UPDATE account_persistent SET monument_built=500 WHERE account_id='${rookAid}'`);
+// the estate rung gates on HOLDING tier 1's $OMR (rook has none yet)
+await seedCh(rook.id, `respect=${10 * 30 * 30}`);
+assert.notEqual(await coachOf(), 'Buy the compound', 'no $OMR → the estate rung stands down');
+// granting $OMR re-arms the two earlier $OMR-gated rungs (legit at 15, the wire at 18) — clear
+// their signals first so the walk stays a strict ladder rather than jumping back down it
+await pool.query(`INSERT INTO portfolios (account_id, ticker, shares) VALUES ('${rookAid}', 'GLD', 1)`);
+await pool.query(`UPDATE account_persistent SET omr=50, intel_ops=1 WHERE account_id='${rookAid}'`);
+const compound = (await call('GET', '/v1/me', { token: rook.token })).body.character.coach;
+assert.equal(compound?.label, 'Buy the compound', 'lvl 30+ holding the price, no estate → The Estate');
+assert(/Safe House/.test(compound.hint), 'naming tier 1 off the live catalog');
+await pool.query(`INSERT INTO estates (account_id, tier) VALUES ('${rookAid}', 1)`);
+assert.notEqual(await coachOf(), 'Buy the compound', 'the heir who inherits a compound is never re-schooled');
+await pool.query(`UPDATE account_persistent SET omr=0 WHERE account_id='${rookAid}'`);
+// THE BUREAU tail rung — reactive, the cold-front class: fires at stage 'investigation'
+// (pre-indictment) and self-clears as the exposure bleeds or gets bribed off
+await seedCh(rook.id, 'heat_exposure=1500');
+assert.equal(await coachOf(), 'The Bureau is building a case', 'a thick file pre-indictment → The Law, while the cheap outs still exist');
+await seedCh(rook.id, 'heat_exposure=0');
+assert.notEqual(await coachOf(), 'The Bureau is building a case', 'a cooled file stands the rung down');
+await seedCh(rook.id, `respect=${10 * 22 * 22}`);   // back to 22 for the tail walk
 // the tail: most-clearable first, the permanent decline LAST, so nothing masks anything.
 // THE PAD — a cold front is the most actionable thing on the list when it happens (it earns nothing
 // while the envelope keeps running), so it leads the tail. rook already owns cb-front-1; push its pad
