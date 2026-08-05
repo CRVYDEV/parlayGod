@@ -4806,3 +4806,32 @@ rout to hold) — a small additive faucet at frontier-tribute parity.
 **Founder SIM sign-off flag:** `family:tribute` is a NEW (small, bounded, regen-metered) emission surface
 at frontier-tribute parity — sim before production; `TRIBUTE_BPS`/`ROUT_FLOOR_BPS` are the dials. The
 DEFEND pillar (Blood War → Manhunt → Conquest) is now feature-complete.
+
+## THE RESIDENT ECONOMY — one consolidated emission ceiling (sim P9.32, 2026-08-05)
+
+The NPC-population faucets grew one drop at a time — each measured in isolation (P9.21 seed turnover,
+P9.25 residents-as-marks, P9.26 the corner, P9.28 jailbirds, the Blood War, THE HIRED GUNS) and each
+flagged for sign-off on its own line above. This is the CONSOLIDATION the founder asked for: **P9.32**
+sums the resident-facing faucets into ONE base-wide $/day ceiling and states its ratio to the passive
+stack (P9.20, the $21.6M/day anchor), so the whole NPC layer reads as a single number rather than a
+scattered set of flags. The probe re-uses each individual probe's OWN computed total (a shared
+`RESIDENT` accumulator), so there is **one formula per faucet** — a retune of any resident lever moves
+this ceiling automatically, with no copy to drift. Nothing is seeded; §10.4 stays drift-0.
+
+**Three categories, kept apart on purpose:**
+
+| category | base-wide ceiling | what it is |
+|---|---|---|
+| **(A) NEW EMISSION** — cash faucets | **~$841k/day** | `npc:seed` turnover (~$499k, P9.21) + marks fronts (~$342k, P9.25) — the two unambiguous cash faucets the NPC population MINTS |
+| **(A) NEW EMISSION** — vehicle addendum | **~$87k/day** | stolen resident cars (~11/day × ~$4.4k book × **0.4 melt/fence realize**, a labelled discount not a lever) + boats (dinghy resale ~$68k) |
+| **(A) HEADLINE — total new emission** | **~$928k/day** | **4.3% of the $21.6M/day passive stack** — the entire NPC population mints roughly ONE small territory racket's worth of new cash a day, a rounding error against the passive economy |
+| **(B) resident-ENABLED, regen-bounded** (NOT summed) | jailbirds ~$463k · blood war ≤$288k · hired-gun apex ≤$7.44M /day | each rides ANOTHER pillar's shared reservoir (§7.8 bust pool, family `war_pool`, world outfit regen); residents change WHO taps it, not the metered quantity, so the ceiling is that reservoir's REGEN with or without them — excluded from (A) to avoid double-counting the World/Pen/blood-war ceilings already flagged above |
+| **(C) TRANSFERS** (net-zero) | $0 new supply | THE TAKE (P9.27, which strictly SHRINKS crime emission), the contact call, THE FAVOR, freight robbery — each moves value that already exists, both legs ledger and net zero |
+
+**Verdict:** the resident population is a small, bounded emission surface — under 5% of the passive
+economy in genuinely-new cash, dwarfed by the regen-bounded pillars it makes reachable, and it touches
+NO $OMR withdrawal rail so the extraction-≤-inflow bound is orthogonal and untouched. Every input is a
+`POPULATION.*` / `FAMILY_WAR.*` / `WORLD.HIRE_*` founder sign-off lever already tabled in its own section
+above; the dials if the headline wants trimming are `POPULATION.TURNOVER.PER_DAY` (the recurring seed
+faucet) and `POPULATION.MARKS.FRONT_INCOME_BPS` (the sleepy-joint scale). P9.32 prints all three
+categories every sim run, so any resident retune is re-measured against this consolidated ceiling.

@@ -603,8 +603,23 @@ if (verbose) console.log(`✓ every driven market is reachable — all ${Object.
 // Size matters here: below ~18 players every loan offer gets taken, posted == taken, and the check
 // is vacuous — the first mutation run passed for exactly that reason and read like a clean bill of
 // health. CI runs 18×2, which is the smallest size where it actually bites.
+//
+// THE THIRD EXIT — and why this is an INEQUALITY with a margin, not `posted - taken == live`.
+// The flow tracks two ways out of a market: a post and a take. Every market here has a THIRD:
+// a bounty pot expires and refunds on the worker sweep, its target dies, or a resident funder
+// retires — and the town runs a live worker, kills residents and warps the clock, so over 2 days a
+// handful of posts leave without ever being "taken". That is CORRECT accounting the flow cannot see,
+// so `posted - taken` overstates what is still standing by that untracked attrition, and a strict
+// equality flakes the moment one pot expires (posted 10, taken 9, live 0 — the 10th refunded). The
+// typo this check exists to catch has a DIFFERENT signature: a census blind to a whole market reads 0
+// against an ILLIQUID board (posted 20, taken 2 → residual 18), never against a liquid one with a
+// residual of one. So a small documented margin absorbs the untracked third exit while a systematic
+// undercount — always many multiples of it — still trips. CENSUS_ATTRITION is deliberately well below
+// any residual a real typo produces; a residual at or under it on a market reading 0 is attrition,
+// not a bug.
+const CENSUS_ATTRITION = 3;
 const miscounted = MARKETS.filter(([, live, driven, key]) =>
-  driven && key && posted[key] > (taken[key] ?? 0) && live === 0)
+  driven && key && (posted[key] - (taken[key] ?? 0)) > CENSUS_ATTRITION && live === 0)
   .map(([name, , , key]) => `${name}: posted ${posted[key]}, taken ${taken[key] ?? 0}, yet the census sees 0 live`);
 assert.equal(miscounted.length, 0,
   'the CENSUS disagrees with the FLOW — more went in than came out, so the query is reading the wrong '
