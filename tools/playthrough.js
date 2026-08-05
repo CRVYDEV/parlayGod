@@ -29,7 +29,7 @@ process.env.SEASON_MOD = process.env.SEASON_MOD || 'dead_quiet';
 process.env.SEASON_PHASE = process.env.SEASON_PHASE || 'long_game';
 import { buildServer } from '../src/server.js';
 import { opsEngagement } from '../src/engagement.js';
-import { CRIMES, MISSIONS, GUNS, BUSINESSES, CONSTANTS, M3, PACING, RACKETS, PORT, POPULATION, nerveCapOf } from '../src/rules.js';
+import { CRIMES, MISSIONS, GUNS, BUSINESSES, CONSTANTS, M3, PACING, RACKETS, PORT, POPULATION, nerveCapOf, DISTRICTS, STABLE } from '../src/rules.js';
 import { runPopulation, runResidentBehaviour } from '../src/population.js';
 
 const argOf = (name, dflt) => {
@@ -78,7 +78,15 @@ const CLOCK_COLS = [
 // it, and waited five hours of simulated play for a ship that would arrive on the real wall clock.
 // That read as "the coach is stuck on the Port" when it was the harness holding its own watch. Scoped
 // to THIS character's boats — residents own boats too, and warping theirs would move the world.
-const OWNED_CLOCKS = [['boats', 'character_id', ['run_until']]];
+const OWNED_CLOCKS = [
+  ['boats', 'character_id', ['run_until']],
+  // THE DEEP CITY coach rungs (past ~24) put this player on the road and at the track, and both
+  // loops keep their clocks on their own rows — without these the harness ships a convoy that
+  // arrives on the wall clock and rests a racer on real hours, which reads as "the coach is stuck"
+  // when it is the harness holding its own watch (the boats lesson, two more rows).
+  ['convoys', 'owner_character', ['arrives_at']],
+  ['racers', 'character_id', ['injured_until', 'circuit_at']],
+];
 // …and THE CALENDAR, which is a different kind of clock and was missing entirely. A growing set of
 // loops is keyed on `dayOf()` rather than on a timestamp — the daily contracts, the corner and its
 // chains, the hustle, the trainer drills, the fixture leads and the standing-gain bucket. Warping
@@ -496,6 +504,104 @@ async function obeyCoach(m) {
       if (r.code === 200) { did('drill'); first('drill'); took = true; } else hit('drill', r.body?.error || r.code);
     }
     return took ? obeyed() : false;
+  }
+  // ── THE DEEP CITY (the coach extension past ~24) — the five one-time rungs plus the Bureau tail
+  // rung, wired the day they shipped: an untested rung and a broken rung look identical from the
+  // outside, and the whole point of the extension is to measure whether a coached player now
+  // REACHES these systems.
+  if (label.startsWith('Put a truck on the road')) {
+    const b = (await call('GET', '/v1/convoys', { token })).body;
+    if (b?.mine) {
+      if (b.mine.status !== 'arrived') return false;            // on the road — the clock warp lands it
+      if (m.loc !== b.mine.to) {
+        const t = await call('POST', `/v1/travel/${b.mine.to}`, { token });
+        if (t.code !== 200) { coachCantAct.set(label, `travel to ${b.mine.to} refused: "${t.body?.error || t.code}"`); return false; }
+        did('convoy:travel'); return false;                     // a step toward it, not obedience yet
+      }
+      const r = await call('POST', `/v1/convoy/${b.mine.id}/collect`, { token });
+      if (r.code === 200) { did('convoy:collect'); first('convoy'); return obeyed(); }
+      coachCantAct.set(label, `collect refused: "${r.body?.error || r.code}"`); hit('convoy', r.body?.error || r.code);
+      return false;
+    }
+    // nothing on the road yet: a convoy is for BULK (CONVOY.MIN_QTY 5), so top the trunk up to five
+    // units of the cheapest good here, send it one district over, ride cheap — the rung is about
+    // REACHING the loop, not optimizing it
+    const NEED = 5;
+    let cargo = Object.entries(m.cargo || {}).find(([, q]) => Number(q) >= NEED);
+    if (!cargo) {
+      const prices = (await call('GET', '/v1/market/prices', { token })).body?.goods?.[m.loc] || {};
+      const good = Object.entries(prices).sort((a, z) => Number(a[1]) - Number(z[1]))[0];
+      const short = NEED - Number(m.cargo?.[good?.[0]] || 0);
+      if (!good || m.cash < Number(good[1]) * short) { coachCantAct.set(label, 'no affordable bulk to load'); return false; }
+      const br = await call('POST', '/v1/goods/buy', { token, body: { goodId: good[0], qty: short } });
+      if (br.code !== 200) { hit('convoy', br.body?.error || br.code); return false; }
+      cargo = [good[0], NEED];
+    }
+    const to = DISTRICTS.find((d) => d.id !== m.loc)?.id;
+    const o = await call('POST', '/v1/convoy', { token, body: { to, goodId: cargo[0], qty: NEED } });
+    if (o.code !== 200) { coachCantAct.set(label, `open refused: "${o.body?.error || o.code}"`); hit('convoy', o.body?.error || o.code); return false; }
+    const dep = await call('POST', '/v1/convoy/depart', { token, body: { guards: 'none' } });
+    if (dep.code === 200) { did('convoy:depart'); first('convoy'); return false; }   // it collects on a later tick
+    coachCantAct.set(label, `depart refused: "${dep.body?.error || dep.code}"`); hit('convoy', dep.body?.error || dep.code);
+    return false;
+  }
+  if (label.startsWith('Own the animals')) {
+    const b = (await call('GET', '/v1/stable', { token })).body;
+    let racer = (b?.stable || [])[0];
+    if (!racer) {
+      const r = await call('POST', '/v1/stable/buy', { token, body: { kind: 'dog', name: 'Harness Rocket' } });
+      if (r.code !== 200) { coachCantAct.set(label, `buy refused: "${r.body?.error || r.code}"`); hit('stable', r.body?.error || r.code); return false; }
+      did('stable:buy'); first('stable');
+      racer = (await call('GET', '/v1/stable', { token })).body?.stable?.[0];
+    }
+    if (!racer) return false;
+    if (racer.injured || racer.cooldownSeconds > 0) return false;   // the clock warp clears both
+    const meet = (b?.meets?.dog || STABLE.MEETS.dog)[0];
+    // train toward the maiden's form first — running a hopeless animal just burns the fee
+    if (racer.form < meet.form && m.energy >= (b?.trainEnergy || STABLE.TRAIN_ENERGY)
+        && m.cash >= (b?.trainCost || STABLE.TRAIN_COST) + meet.fee) {
+      const t = await call('POST', `/v1/stable/train/${racer.id}`, { token, body: { stat: 'speed' } });
+      if (t.code === 200) { did('stable:train'); return false; }
+      hit('stable', t.body?.error || t.code);
+    }
+    if (m.cash < meet.fee) return false;                           // broke, not stuck — the grind funds it
+    const r = await call('POST', `/v1/stable/circuit/${racer.id}`, { token, body: { meet: meet.id } });
+    if (r.code === 200) { did(r.body?.won ? 'stable:win' : 'stable:loss'); first('stable:circuit'); return r.body?.won ? obeyed() : false; }
+    hit('stable', r.body?.error || r.code);
+    return false;
+  }
+  if (label.startsWith('Open a club of your own')) {
+    // the rung only fires MADE and funded, so the one live question is a free district; try where
+    // we stand first (no travel), then the first free district on the board
+    const board = (await call('GET', '/v1/speakeasy', { token })).body;
+    const open = board?.open || [];                              // the board names the free districts
+    const target = open.includes(m.loc) ? m.loc : open[0];
+    if (!target) { coachCantAct.set(label, 'every district already has a club'); return false; }
+    const r = await call('POST', `/v1/speakeasy/${target}/open`, { token });
+    if (r.code === 200) { did('speakeasy:open'); first('speakeasy'); return obeyed(); }
+    coachCantAct.set(label, `open refused: "${r.body?.error || r.code}"`); hit('speakeasy', r.body?.error || r.code);
+    return false;
+  }
+  if (label.startsWith('Put your name on the skyline')) {
+    const amount = Math.max(100, Math.min(5000, Math.floor(m.cash * 0.05)));   // MEGAPROJECT.MIN_CASH floor
+    if (m.cash < amount) return false;                             // broke, not stuck
+    const r = await call('POST', '/v1/megaproject/cash', { token, body: { amount } });
+    if (r.code === 200) { did('mega:brick'); first('mega'); return obeyed(); }
+    coachCantAct.set(label, `brick refused: "${r.body?.error || r.code}"`); hit('mega', r.body?.error || r.code);
+    return false;
+  }
+  if (label.startsWith('Buy the compound')) {
+    const r = await call('POST', '/v1/estate/upgrade', { token });
+    if (r.code === 200) { did('estate:tier'); first('estate'); return obeyed(); }
+    coachCantAct.set(label, `upgrade refused: "${r.body?.error || r.code}"`); hit('estate', r.body?.error || r.code);
+    return false;
+  }
+  if (label.startsWith('The Bureau is building a case')) {
+    const r = await call('POST', '/v1/law/bribe', { token });
+    if (r.code === 200) { did('law:bribe'); first('law:bribe'); return obeyed(); }
+    // `cash` is the honest answer for a hot broke street — the exposure bleeds on its own
+    coachCantAct.set(label, `bribe refused: "${r.body?.error || r.code}"`); hit('law:bribe', r.body?.error || r.code);
+    return false;
   }
   // ── THE CITY IS NOT EMPTY ANY MORE. These three used to be recorded as "solo run — nobody else
   // exists", which was true when it was written and is now FALSE: NPC families found and recruit

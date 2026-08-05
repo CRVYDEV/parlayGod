@@ -8949,3 +8949,29 @@ line of the report. **Flagged, not changed:** the desk's anchor is the Vig buyba
 two revenue systems share one heartbeat (deliberate, and F1 now makes a halt audible), and the shelf
 clamp is currently unreachable — worth keeping as defence in depth, worth knowing the happy path does
 not exercise it.
+
+**THE DEEP CITY — the coach past level ~24 (founder-directed 2026-08-05: "extend/cycle the coach past
+level ~24 into the mid-game systems it currently never names").** The 7-day progression harness measured
+a plausible solo player touching **10 of 39 systems**, with the one-time coach ladder ending at level 22
+("Blood on the ledger") — from there the coach fell to the daily work board and the permanent nudges, and
+the convoy / stable / nightlife / monument / estate layers were never once named. Five new ONE-TIME rungs
+in `coachLadder` (`src/game.js`), same discipline as the road-to-30 band: each SELF-CLEARS on a signal
+that cannot regress — an account legend that survives death (`freight_delivered` lvl 24 → Convoys,
+`racer_wins` 25 → The Stable, `monument_built` 28 → the skyline) or ownership (`owned.speakeasy` 26,
+`owned.estate` 30) — and each rung whose action costs money gates on HOLDING the price (the
+work-the-wires rule): the stable on the dog's live catalog cost, the club on `SPEAKEASY.OPEN_COST` **AND
+`isMade(acct)`** (mirroring `openSpeakeasy`'s own D8=D door — without it an unmade funded player is
+pinned on a rung the server refuses forever, the refuse-on-press class as a mask), the compound on tier
+1's $OMR read live off `ESTATE.TIERS`. Plus ONE reactive tail rung, the cold-front class: **"The Bureau
+is building a case"** fires at rap stage `investigation` pre-indictment (the urgent top rung only fires
+once a case is FILED, by which point the cheap outs are gone) and self-clears as the exposure bleeds or
+gets bribed off. ZERO §10.4 surface (the coach reads state and moves nothing), zero new levers (every
+price is read from the live catalogs). `test/growth.js` walks the new band in order clearing each rung —
+including both negative gates (broke → the stable/compound rungs stand down; funded-but-unmade → the
+club rung stands down) — with a state note worth keeping: granting the walk $OMR re-arms the two EARLIER
+$OMR-gated rungs (legit 15, wire 18), so their signals are cleared first or the ladder jumps back down
+itself. Three mutations, each caught at its own named assertion (the convoy rung disabled, the Bureau
+rung disabled, the made gate dropped). `tools/playthrough.js` wired all six handlers the day they
+shipped (the obeyCoach rule: an untested rung reads exactly like a broken one) + two `OWNED_CLOCKS` rows
+(`convoys.arrives_at`, `racers.injured_until/circuit_at` — the boats lesson: without them the harness
+ships a convoy that arrives on the wall clock and calls the coach stuck).
