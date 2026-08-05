@@ -61,17 +61,24 @@ assert.equal(lot.minBid, lots[0].min, 'the opening bid is the archetype floor');
 
 // ── first bid: below the floor rejected; a valid bid escrows exactly ──
 assert.equal((await call('POST', `/v1/auction/${lot.id}/bid`, { token: a.token, body: { amount: lot.minBid - 1 } })).body.error, 'low', 'you can\'t open below the floor');
-let r = await call('POST', `/v1/auction/${lot.id}/bid`, { token: a.token, body: { amount: lot.minBid } });
+// Al opens ABOVE the floor deliberately: the +5% min-raise test below needs a bid whose 5% band is
+// wider than a single unit, and the cheapest archetype (the $20 plate) rounds `ceil(min × 1.05)` to
+// exactly `min + 1`, so `minBid + 1` would CLEAR the raise on any week that lot is drawn — a
+// seed-dependent flake (a deterministic assertion resting on which lot the week's seed drew). Opening
+// at ≥100 guarantees the band is ≥5 wide for every archetype (floors run 20–150), so `openBid + 1` is
+// always under the raise, and `self ≈ openBid × 1.1 ≤ ~166` stays well under the 5000 $OMR each holds.
+const openBid = Math.max(lot.minBid, 100);
+let r = await call('POST', `/v1/auction/${lot.id}/bid`, { token: a.token, body: { amount: openBid } });
 assert.equal(r.code, 200, 'Al opens the bidding');
 assert.equal(r.body.youLead, true, 'and leads');
-assert.equal(await omrOf(a.token), 5000 - lot.minBid, 'the bid is escrowed out of Al\'s $OMR');
+assert.equal(await omrOf(a.token), 5000 - openBid, 'the bid is escrowed out of Al\'s $OMR');
 
 // ── the min-raise: a raise must clear +5% ──
-const tooLow = lot.minBid + 1;
+const tooLow = openBid + 1;
 assert.equal((await call('POST', `/v1/auction/${lot.id}/bid`, { token: b.token, body: { amount: tooLow } })).body.error, 'low', 'a raise under +5% is refused');
 
 // ── OUTBID: Bob takes the lead; Al is refunded his bid EXACTLY ──
-const raise = Math.ceil(lot.minBid * (1 + AUCTION.MIN_RAISE_BPS / 10000));
+const raise = Math.ceil(openBid * (1 + AUCTION.MIN_RAISE_BPS / 10000));
 r = await call('POST', `/v1/auction/${lot.id}/bid`, { token: b.token, body: { amount: raise } });
 assert.equal(r.code, 200, 'Bob outbids');
 assert.equal(await omrOf(a.token), 5000, 'Al got his whole bid back — outbid is refunded exactly');
