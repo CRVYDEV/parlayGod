@@ -197,10 +197,15 @@ export async function fundFamilyYield(client, omr) {
 export async function mergeLegacyYieldPools(client) {
   const sp = (await client.query('SELECT balance FROM stake_pool WHERE id=1 FOR UPDATE')).rows[0];
   const dp = (await client.query('SELECT pool FROM rwa_dividend_pool WHERE id=1 FOR UPDATE')).rows[0];
-  const moved = num(sp?.balance) + num(dp?.pool);
+  // D11 (2026-08-05): the FAMILY dividend pool joined the drain when its claim route retired with
+  // the Portfolio — money parked behind a route that only ever throws `retired` is stranded escrow
+  // (the A1 class). Family money → the family yield is the right home, same transfer, same buckets.
+  const fp = (await client.query('SELECT pool FROM rwa_family_dividend_pool WHERE id=1 FOR UPDATE')).rows[0];
+  const moved = num(sp?.balance) + num(dp?.pool) + num(fp?.pool);
   if (!(moved > 0)) return 0;
   if (num(sp?.balance) > 0) await client.query('UPDATE stake_pool SET balance = 0 WHERE id=1');
   if (num(dp?.pool) > 0) await client.query('UPDATE rwa_dividend_pool SET pool = 0 WHERE id=1');
+  if (num(fp?.pool) > 0) await client.query('UPDATE rwa_family_dividend_pool SET pool = 0 WHERE id=1');
   await fundFamilyYield(client, moved);
   return moved;
 }

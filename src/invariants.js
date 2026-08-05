@@ -270,9 +270,9 @@ async function collectLedgerChecks(pool) {
   // plex:* is a Phase-2 burn: a player paid a real-money fee from earned $OMR instead of ETH (the
   // PLEX bridge), so the $OMR leaves the game (deflationary, offsets emission).
   // law:jury is a Phase-3 burn: the war chest reaching the jury box leaves the game (deflationary).
-  // rwa:invest (R1 — the Portfolio) is a $OMR BURN: clean $OMR washed into legit, death-proof
-  // status holdings (personal → account bucket; family → gang omr_reserve). The shares are not a
-  // §10.4 currency (a status collectible, the hitman-rep/seal precedent), so only the burn is here.
+  // rwa:* is a $OMR BURN. Live: rwa:vault (THE VAULT — treasury.js). HISTORICAL: rwa:invest /
+  // rwa:dynasty (the retired Portfolio, D11 2026-08-05) — the rows are real, so the reason stays in
+  // the burn term forever; only new writes stopped ('portfolio retired' below asserts that).
   // estate:* (THE ESTATE) is a $OMR BURN — the deep personal compound sink, account bucket, pure
   // status (like rwa:/vanity:); no new §10.4 bucket, only the burn term.
   // auction:win (THE AUCTION HOUSE) is a $OMR BURN — the winning bid leaves escrow and the game
@@ -306,6 +306,14 @@ async function collectLedgerChecks(pool) {
   const freshEmission = await sum(pool, "currency='omr' AND reason LIKE 'emission:%' AND at >= now() - interval '1 day'");
   const lifetimeEmission = await sum(pool, "currency='omr' AND reason LIKE 'emission:%'");
   push('emission faucet retired', freshEmission, 0, 0.001, { lifetimeEmission, since: 'v3 step 1' });
+
+  // (d1a2) THE PORTFOLIO IS RETIRED (D11, 2026-08-05). The in-game stock book — invests, dynasty
+  // naming, the Dynasty Fund dividends — writes nothing new. EXACT reasons, not `rwa:%`, because
+  // `rwa:vault` (THE VAULT) is live and must never trip this. Historical rows stay in the
+  // vocabulary + terms above; a fresh row here means somebody re-opened a retired till.
+  const freshPortfolio = await sum(pool,
+    "currency='omr' AND reason IN ('rwa:invest','rwa:dynasty','dividend:fund','dividend:omr') AND at >= now() - interval '1 day'");
+  push('portfolio retired', freshPortfolio, 0, 0.001, { since: 'D11 2026-08-05' });
 
   // (d1b) THE DESK'S INVENTORY (economy v3 step 2). The shelf must hold exactly what the sinks handed
   // over minus what the auction has sold — the stake-pool/exchange-till shape, on the supply side.

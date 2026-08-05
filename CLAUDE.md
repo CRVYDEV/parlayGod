@@ -5089,6 +5089,46 @@ rare moments. **A probe catch worth keeping:** Start Here's DO-THIS-NEXT card ha
 stat-help, plan-jump, bank-first order all screenshot-verified), guards green (wiring/mirror, mobile
 64/64, docs), growth-test coach-walk extended + mutation-verified, suite green + sim drift-0.
 
+**THE PORTFOLIO IS RETIRED — D11 (founder-directed 2026-08-05: "D11 retire portfolio") — BUILT**
+(`src/portfolio.js` is now a tombstone module; `test/portfolio.js` rewritten to the emission.js
+"cannot pay at all" shape; BALANCE.md § THE PORTFOLIO IS RETIRED; SIGN-OFF D11 → BUILT). "Remove all
+tickers and RWA assets": the 8-ticker paper book, personal + family invests, the Dynasty Fund
+dividends, dynasty naming, the crest tiers and both legit leaderboards are gone. **THE ETH VAULT
+(`src/treasury.js`) STAYS** — it is neither a ticker nor an RWA asset (the stock-layer retirement
+already re-denominated it to ETH), and it SHARES the old system's RICO-graduation window
+(`PORTFOLIO.SCRUTINY_*`, `ch.rwa_used/rwa_at`) and the `rwa:` reason prefix (`rwa:vault` is live) —
+which is exactly why the slimmed PORTFOLIO block and the vocabulary survive the cull. **The
+retirement pattern, applied in full:** 9 routes stay MOUNTED as tombstones throwing `retired` (the
+/v1/wage precedent — a polling client learns what happened instead of 404-guessing); the PAYERS are
+DELETED, not dormant (`grantShares` gone, and with it the heist big-score AAPL cut and the season
+SPCX prize — worker.js/heists.js call sites removed); `/v1/rules` makes the positive claim
+(`portfolio: null`); and the §10.4 half is the subtle one — `rwa:`/`dividend:` STAY in the
+vocabulary, `rwa:invest`/`rwa:dynasty` stay burns, `dividend:*` stay transfers, and BOTH dividend
+pools stay in `omrBuckets`, because a live database holds the rows this system wrote and
+conservation is a claim about the WHOLE ledger. What is new is **`portfolio retired`** — a freshness
+check on the EXACT four reasons (never `rwa:%`, or the live vault burn would trip it) that fires on
+any new row. **The stranded-pool class (A1) headed off:** `claimFamilyDividend` retiring would have
+parked the `rwa_family_dividend_pool` balance behind a route that only ever throws, so
+`mergeLegacyYieldPools` gained it as a third drain into the family yield (a bucket-to-bucket
+transfer, §10.4-neutral, idempotent by construction). **Downstream retargets, each the same shape —
+a dead signal replaced, never merely deleted:** the coach's lvl-15 'Time to go legit' rung became
+the stake rung moved down from 27 (going legit IS the D8=D ladder now, and the earn→spend arc keeps
+its anchor); career `md_legit` reads `staked` and `dn_dynasty` reads `minted` (with catalog copy to
+match); the City-Standing Legit pillar dropped the frozen `rwa_invested` column (a frozen legend
+grandfathers old accounts against new ones forever) and reads monument_built + prestige_sunk; the
+Wire lost its ticker tape; cards.js lost the "gone legit" variant; the death report / estate
+trophies / character view lost their book fields; the client's Going Legit tab is now the REAL money
+arc (made → ladder → wallet → extraction → window → vault → bonds). Historical DATA
+(portfolios/gang_portfolios rows, dynasty_name, rwa_invested) is kept — retirement never rewrites
+history — and pure-display readers of `dynasty_name` (profile, bloodline, landmarks plaques) keep
+showing what was earned; `test/landmarks.js` seeds the name by SQL now (frozen data, not a live
+till). `test/portfolio.js` proves all four ways it could come back: routes (9 tombstones), direct
+calls (every payer throws; `grantShares === undefined`), the ledger (a fresh `dividend:fund` row
+trips the alarm, a fresh `rwa:vault` row never does), and history (a 2-day-old `rwa:invest` row
+still reconciles §10.4 to the grant). The VAULT block is kept whole, with its one retired-route leg
+(the shared-window structuring proof) re-proved against the vault's own till. Suite green + sim
+drift-0.
+
 ## Sensitive design notes
 - **The Street Wage pays players on a schedule — legal surface (counsel-gated messaging).** Paying
   players real-value $OMR at scale can trigger money-transmission / employment / securities questions

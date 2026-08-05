@@ -134,14 +134,14 @@ await q("INSERT INTO character_rackets (character_id, racket_id) VALUES ($1,'num
 await q("INSERT INTO character_assets (character_id, asset_id) VALUES ($1,'lockup')", [max.id]);
 await q("INSERT INTO businesses (id, character_id, kind) VALUES ($1,$2,'laundromat')", [`biz-${max.id}`, max.id]);
 await q("INSERT INTO fighters (id, character_id, name, power, chin, speed) VALUES ($1,$2,'Palooka',10,10,10)", [`ftr-${max.id}`, max.id]);
-await q("INSERT INTO portfolios (account_id, ticker, shares) VALUES ($1,'AAPL',1)", [maxAcct]);
 await q('INSERT INTO estates (account_id, tier) VALUES ($1,1)', [maxAcct]);
 await q("INSERT INTO megaproject_contributions (project_id, account_id, contributed) VALUES ('p1',$1::uuid,1)", [maxAcct]);
 // every mastery track the ladder reads, one deep enough for dn_master (level 25)
 for (const t of ['muscle', 'chemistry', 'fists', 'commerce', 'gambling', 'wetwork'])
   await q('INSERT INTO masteries (character_id, track_id, xp) VALUES ($1,$2,$3)', [max.id, t, t === 'muscle' ? 20000 : 100]);
+// (D11: md_legit reads `staked` and dn_dynasty reads `minted` now — the book + the naming retired)
 await q(`UPDATE account_persistent SET heists_pulled=1, smuggled=300000, product_moved=300000,
-  intel_ops=1, kills=1, boxing_wins=10, dynasty_name='The Maxes' WHERE account_id=$1`, [maxAcct]);
+  intel_ops=1, kills=1, boxing_wins=10, staked=5, minted=true WHERE account_id=$1`, [maxAcct]);
 // the two signals that must come from the REAL routes (a hand-seeded ledger row would be a lie in
 // the books, and the gang JOIN needs a real gangs row): buy a safehouse, found a family
 assert.equal((await call('POST', '/v1/safehouse', { token: max.token })).code, 200, 'max buys a safehouse');

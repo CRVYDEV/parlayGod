@@ -8,7 +8,7 @@
 // PUBLIC + keyless + read-only; ZERO §10.4 surface (status/marketing only). Wealth is never exact
 // (the anti-precise-kill-EV rule) — a card flexes rank/level/kills/family, never a dollar figure.
 import { readFileSync } from 'node:fs';
-import { levelOf, hitmanRankOf, dynastyTierOf, SOCIAL_X_HANDLE } from './rules.js';
+import { levelOf, hitmanRankOf, SOCIAL_X_HANDLE } from './rules.js';
 
 const GOLD = '#c9a24b', DIM = '#8f7433', TEAL = '#4fd6c2', BLOOD = '#9b2f2f', INK = '#e8e2d4', BG = '#0c0d11';
 const esc = (s) => String(s == null ? '' : s).replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -17,7 +17,7 @@ const esc = (s) => String(s == null ? '' : s).replace(/[<>&"']/g, (c) => ({ '<':
 export async function publicDossier(pool, name) {
   const row = (await pool.query(
     `SELECT c.id, c.name, c.respect, c.alive, c.wanted_until, c.welsher, c.season_kills,
-            ap.hitman_rep, ap.kills, ap.dynasty_name, ap.rwa_invested,
+            ap.hitman_rep, ap.kills, ap.dynasty_name,
             g.name AS gang, g.tag AS tag
        FROM characters c
        LEFT JOIN account_persistent ap ON ap.account_id = c.account_id
@@ -30,13 +30,12 @@ export async function publicDossier(pool, name) {
   try { bounty = Number((await pool.query(
     `SELECT COALESCE(SUM(amount),0) AS s FROM bounty_contributors WHERE target_character=$1 AND kind='kill'`, [row.id])).rows[0].s) || 0; } catch { /* pre-schema */ }
   const wanted = row.wanted_until && new Date(row.wanted_until) > new Date();
-  const dyn = Number(row.rwa_invested || 0) > 0 ? dynastyTierOf(Number(row.rwa_invested)) : null;
   return {
     found: true, name: row.name, level: levelOf(Number(row.respect) || 0), alive: !!row.alive,
     gang: row.gang || null, tag: row.tag || null,
     kills: Number(row.kills) || 0, hitmanRank: hitmanRankOf(Number(row.hitman_rep) || 0).title,
     wanted: !!wanted, welsher: !!row.welsher, bounty,
-    dynasty: row.dynasty_name || null, dynastyTier: dyn ? dyn.name : null,
+    dynasty: row.dynasty_name || null,
   };
 }
 
@@ -120,8 +119,8 @@ export function card(type, d, ref) {
       { cta, plate: 'join' });
   }
   // legend (default) — the proud-player flex + the profile's unfurl image
-  const accent = d.dynastyTier ? TEAL : GOLD;
-  const title = d.dynastyTier ? `${esc(d.dynastyTier)} — gone legit` : `${esc(d.hitmanRank)}${d.gang ? ` of ${esc(d.gang)}` : ''}`;
+  const accent = GOLD;
+  const title = `${esc(d.hitmanRank)}${d.gang ? ` of ${esc(d.gang)}` : ''}`;
   const stat = (x, big, lab) => `<text x="${x}" y="430" text-anchor="middle" fill="${accent}" font-size="58">${esc(big)}</text>
     <text x="${x}" y="470" text-anchor="middle" fill="${DIM}" font-size="20" letter-spacing="3">${esc(lab)}</text>`;
   return frame(`
@@ -140,7 +139,7 @@ export function profilePage(d, baseUrl, ref) {
   // falling back to SVG bytes if no rasterizer is installed).
   const cardUrl = `${baseUrl}/card/legend/${encodeURIComponent(d.name)}.png`;
   const enter = `${baseUrl}/?ref=${encodeURIComponent(ref || d.name)}`;
-  const title = d.found ? `${d.name} — ${d.dynastyTier ? d.dynastyTier + ', gone legit' : d.hitmanRank}` : 'OMERTÀ — the city';
+  const title = d.found ? `${d.name} — ${d.hitmanRank}` : 'OMERTÀ — the city';
   const desc = d.found
     ? `Level ${d.level} · ${d.kills} ${d.kills === 1 ? 'kill' : 'kills'} · ${d.gang ? d.gang : 'a lone wolf'}${d.wanted ? ' · WANTED' : ''}. Come take the city.`
     : 'A noir mob RPG. Build a family, run the rackets, and try to survive the street.';

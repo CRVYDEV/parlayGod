@@ -9,7 +9,7 @@
 // there. Import from '../social.js' — it re-exports this package's public surface unchanged.
 import { GameError, bus, ledger, notify, npcTier, bumpStanding } from '../game.js';
 import { rememberedSkills } from '../skills.js';
-import { M3, LOAN, levelOf, dayOf, VENDETTA, feudTierOf, UNDERWORLD, LAW, MASTERY, tickerPriceOf, estateTierOf, HONOR, seasonModOf } from '../rules.js';
+import { M3, LOAN, levelOf, dayOf, VENDETTA, feudTierOf, UNDERWORLD, LAW, MASTERY, estateTierOf, HONOR, seasonModOf } from '../rules.js';
 import { abandonRaidsAtDeath } from '../world.js';
 import { voidListingsAtDeath, burnBidsAtDeath } from '../market.js';
 import { voidLoansAtDeath } from '../loans.js';
@@ -103,7 +103,7 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // the established dynasty almost nothing. A succession tax burns DEATH_DUTY_RATE of the heir's inherited
   // EXTRACTABLE $OMR — liquid PLUS unbonding principal, the exact base the sibling P1.1 whack:loot
   // takes (a red-team flag: taxing liquid only let a dynasty shelter its hoard from the duty by dying
-  // inside the 6h unbond window). Staked $OMR / the RWA portfolio / the estate stay safe harbours —
+  // inside the 6h unbond window). Staked $OMR / the estate stay safe harbours —
   // untouched — so death costs the bloodline its extractable hoard, never what it committed. A §10.4
   // $OMR BURN (`death:duty`); runs on EVERY death path (a respawn-token save skips the estate entirely
   // → no duty). Liquid is drained first (the loot ordering). acct.omr/unbonding are persisted by
@@ -128,10 +128,6 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
     by: killerName, legacy,
     kept: { omr: Number(acct.omr), staked: Number(acct.staked), rewards: Number(acct.rewards),
             gear: h.victimOwned.gear.length, prestige: acct.prestige,
-            // R1 — the Portfolio is LEGIT money: account-level, never in the wipe below, so the heir
-            // keeps the book (the retirement fantasy, made legible at the moment of death). Its value
-            // at today's price — a status figure, no §10.4 currency moves.
-            portfolio: Math.round(((h.victimOwned.portfolio || []).reduce((a, r) => a + Number(r.shares) * tickerPriceOf(r.ticker), 0)) * 100) / 100,
             // THE ESTATE — account-level (keyed on account_id), never in the wipe: the heir inherits the
             // compound. Report the tier name the bloodline keeps.
             estate: h.victimOwned.estate ? (estateTierOf(Number(h.victimOwned.estate.tier || 0))?.name || null) : null },

@@ -278,6 +278,10 @@ assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM tra
 await pool.query(`DELETE FROM stash WHERE character_id='${chef.id}'`);
 await pool.query(`INSERT INTO stash (character_id, drug_id, qty, quality) VALUES ('${chef.id}','vim',100,1.0)`);
 assert.equal((await call('POST', '/v1/kitchen/cut/nope', { token: chef.token })).body.error, 'bad_drug', 'no such line to cut');
+// freeze the accrual clock — chef holds a CREW and the line above just stocked 100 units, so a
+// minute boundary between the two cash reads lets a §7.1 crew sale land in the pocket mid-assert
+// (the recorded kingpin-flake class: a deterministic assertion on a probabilistic precondition)
+await seedCh(chef.id, 'last_accrued_at = now()');
 const cutCashPre = (await meOf(chef.token)).cash;
 r = await call('POST', '/v1/kitchen/cut/vim', { token: chef.token });
 assert.equal(r.code, 200, 'cut the line'); assert(r.body.added >= 40, `+~40% units (got +${r.body.added})`);
@@ -551,7 +555,13 @@ let front = (await call('GET', '/v1/me', { token: rook.token })).body.character.
 assert.equal(front?.label, 'Open your first front', 'lvl 15+ no front → the Empire walkthrough');
 assert(/Laundromat/.test(front.hint) && /250,000/.test(front.hint), 'the hint names the front AND its live catalog price');
 await pool.query(`INSERT INTO businesses (id, character_id, kind, tier) VALUES ('cb-front-1', '${rook.id}', 'laundromat', 1)`);
-// the legit rung needs $OMR in hand (rook has none) and the wire rung needs a tap's worth — both skip
+// D11: the stake rung moved to 15 (going legit IS the ladder now) — it gates on HOLDING the first
+// rung's $OMR, so a broke rook skips it; then it fires funded and clears through the REAL till
+assert.notEqual(await coachOf(), 'Put your $OMR to work', "holding nothing → the stake rung stands down");
+await pool.query(`UPDATE account_persistent SET omr=10 WHERE account_id='${rookAid}'`);
+assert.equal(await coachOf(), 'Put your $OMR to work', 'lvl 15+ nothing staked, holding the first rung → the ladder');
+assert.equal((await call('POST', '/v1/stake', { token: rook.token, body: { amount: 10 } })).code, 200, 'the stake goes through');
+// staking spent the balance to 0, so the wire rung (18, needs a tap's worth) skips too
 assert.equal(await coachOf(), 'Take it to the water', 'lvl 16+ never smuggled → the Port');
 await pool.query(`UPDATE account_persistent SET smuggled=1000 WHERE account_id='${rookAid}'`);
 // lvl 22 band: raise the level and the wetwork rung surfaces; a first duel win clears it
@@ -584,7 +594,8 @@ await pool.query(`UPDATE account_persistent SET racer_wins=1 WHERE account_id='$
 await seedCh(rook.id, `respect=${10 * 26 * 26}, cash=800000, bank=0`);
 assert.notEqual(await coachOf(), 'You can afford your dues', 'holding no $OMR → the dues rung stands down');
 assert.notEqual(await coachOf(), 'Open a club of your own', 'funded but UNMADE → the club rung stands down');
-await pool.query(`INSERT INTO portfolios (account_id, ticker, shares) VALUES ('${rookAid}', 'GLD', 1)`);
+// (D11: the old lvl-15 legit rung's GLD clearing-signal is gone with the Portfolio; rook is already
+// STAKED from the 15-rung above, so granting $OMR re-arms only the wire rung — intel_ops clears it)
 await pool.query(`UPDATE account_persistent SET omr=20, intel_ops=1 WHERE account_id='${rookAid}'`);
 assert.equal(await coachOf(), 'You can afford your dues', 'lvl 26+ unmade, holding the dues → become a Made Man');
 // pay through the REAL till — the burn + made_until land exactly as a player's would
@@ -592,23 +603,15 @@ assert.equal((await call('POST', '/v1/made', { token: rook.token })).code, 200, 
 assert.equal(await coachOf(), 'Open a club of your own', 'made and funded, no club → The Speakeasy — the arc\'s next step');
 await pool.query(`INSERT INTO speakeasies (district_id, owner_character) VALUES ('brick', '${rook.id}')`);
 assert.notEqual(await coachOf(), 'Open a club of your own', 'owning a club clears it for good');
-// the stake rung — the arc's other half: $OMR you HOLD is power. The dues burned rook's balance
-// to 0, so the rung correctly stands down broke, then leads once he holds the first rung's stake,
-// then clears through the REAL till
-await seedCh(rook.id, `respect=${10 * 27 * 27}`);
-assert.notEqual(await coachOf(), 'Put your $OMR to work', 'holding nothing → the stake rung stands down');
-await pool.query(`UPDATE account_persistent SET omr=10 WHERE account_id='${rookAid}'`);
-assert.equal(await coachOf(), 'Put your $OMR to work', 'lvl 27+ nothing staked, holding the first rung → the ladder');
-assert.equal((await call('POST', '/v1/stake', { token: rook.token, body: { amount: 10 } })).code, 200, 'the stake goes through');
-assert.notEqual(await coachOf(), 'Put your $OMR to work', 'a staked balance clears it');
+// (D11: the stake rung now lives at 15 and was walked + cleared up there — rook stays staked)
 await seedCh(rook.id, `respect=${10 * 28 * 28}`);
 assert.equal(await coachOf(), 'Put your name on the skyline', 'lvl 28+ never bricked in → the monument');
 await pool.query(`UPDATE account_persistent SET monument_built=500 WHERE account_id='${rookAid}'`);
 // the estate rung gates on HOLDING tier 1's $OMR (rook has none yet)
 await seedCh(rook.id, `respect=${10 * 30 * 30}`);
 assert.notEqual(await coachOf(), 'Buy the compound', 'no $OMR → the estate rung stands down');
-// (the legit/wire re-arm signals were cleared back at the dues step; rook is staked so the stake
-// rung stays quiet too — this grant only opens the compound's own gate)
+// (the wire re-arm signal was cleared back at the dues step; rook is staked so the stake rung
+// stays quiet too — this grant only opens the compound's own gate)
 await pool.query(`UPDATE account_persistent SET omr=50 WHERE account_id='${rookAid}'`);
 const compound = (await call('GET', '/v1/me', { token: rook.token })).body.character.coach;
 assert.equal(compound?.label, 'Buy the compound', 'lvl 30+ holding the price, no estate → The Estate');

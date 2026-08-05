@@ -180,7 +180,9 @@ const FAMILIES = [
     why: 'the loot-proof-vault rule: escrow a stranger cannot reach must not be openable from inside a '
        + 'safehouse, or wealth shelters itself and Make-Risk-Pay stops meaning anything',
     require: ['jailed', 'safeHoused'],
-    members: ['offerLoan', 'postOrder', 'invest', 'claimVaulted', 'buyPaper'] },
+    // (D11 2026-08-05: `invest` left the family with the Portfolio — its tombstone throws
+    //  before any gate could run, so there is no gate left to require of it)
+    members: ['offerLoan', 'postOrder', 'claimVaulted', 'buyPaper'] },
 ];
 
 let checked = 0;

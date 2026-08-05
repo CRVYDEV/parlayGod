@@ -48,7 +48,9 @@ assert.equal((await call('POST', '/v1/landmarks/constructor', { token: don.token
 assert.equal((await call('POST', '/v1/landmarks/neon', { token: don.token, body: { amount: LANDMARKS.MIN_DEDICATE - 1 } })).body.error, 'amount', 'below the floor is refused');
 
 // ── name your dynasty, then dedicate — a ledgered vanity:landmark BURN ──
-await call('POST', '/v1/dynasty/name', { token: don.token, body: { name: 'The Corleones' } }); // 5 $OMR
+// D11 (2026-08-05): dynasty naming retired with the Portfolio — an EXISTING name is frozen data a
+// plaque still bears, so the fixture seeds it directly (the historical-rows posture)
+await pool.query(`UPDATE account_persistent SET dynasty_name='The Corleones' WHERE account_id=(SELECT account_id FROM characters WHERE id='${don.id}')`);
 const omrPre = (await meOf(don.token)).omr;
 r = await call('POST', '/v1/landmarks/neon', { token: don.token, body: { amount: 100 } });
 assert.equal(r.code, 200, 'dedicated the Neon Arch');

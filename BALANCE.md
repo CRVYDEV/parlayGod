@@ -4907,3 +4907,27 @@ the `gang:war` sink; the sim stays drift-0 (no new reason, no new bucket).
 COST and the WIN_SCORE×cooldown campaign length are the pacing dials, and the win trophy is a
 Sybil-farmable status axis with no payout (the hitman-rep posture — no cash/standing attaches).
 `WAR.MAX_PER_FAMILY: 0` would disable the mechanic. Sim + sign-off before production.
+
+## THE PORTFOLIO IS RETIRED (D11, founder-directed 2026-08-05)
+
+Not a lever move — a system removal, recorded here because it deletes lever surface. Retired: the
+8-ticker paper book, personal + family invests (`rwa:invest` / `dividend:fund`), the family dividend
+(`dividend:omr`), dynasty naming (`rwa:dynasty`), the DYNASTY_TIERS crest ladder, both legit
+leaderboards, the heist AAPL cut (`SCORE_CUT_PER_LVL`) and the season SPCX prize (`SEASON_PRIZES`).
+Their pins left `test/levers.js` with the levers. What this does to the economy, stated honestly:
+
+- **A deep $OMR sink is gone.** `rwa:invest` was an uncapped deflationary burn (85% of every invest)
+  plus a family-yield feed (15%). The desk-era sinks (dues, rarity upgrades, the vanity till, the
+  estate/auction pair) are the burn surface now, and every one recycles to the desk rather than
+  destroying supply — so this removal is consistent with v3's "revenue over deflation" choice, not a
+  quiet loosening.
+- **The family yield loses its per-invest feed.** It keeps the Window's 5% cut (`yield:window`) and
+  the legacy-pool drain; the retired `rwa_family_dividend_pool` was drained into it at cutover so
+  nothing sits stranded behind a tombstone route.
+- **The Legit standing pillar** dropped `rwa_invested` (a frozen column would grandfather old
+  accounts against new ones forever) — it reads `monument_built` + `prestige_sunk` now.
+- **Kept, and load-bearing:** `PORTFOLIO.SCRUTINY_MIN_OMR/HEAT/WINDOW_MS` — the RICO-graduation
+  window is THE VAULT's (treasury.js shares `rwa_used`/`rwa_at`), and the `rwa:`/`dividend:`
+  vocabulary + both dividend pools stay in `invariants.js` for the historical rows. The new
+  `portfolio retired` check (exact reasons, never `rwa:%` — `rwa:vault` is live) is the alarm if a
+  retired till ever re-opens.

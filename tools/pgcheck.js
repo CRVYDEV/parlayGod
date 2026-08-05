@@ -309,8 +309,8 @@ console.log("\n6b. loadOwned's UNION returns what the fourteen queries did");
     ["INSERT INTO npc_standing (character_id, npc_id, standing) VALUES ($1,'doc',44)", [A.id]],
     ["INSERT INTO npc_standing (character_id, npc_id, standing) VALUES ($1,'armorer',61)", [A.id]],
     ["INSERT INTO npc_grudges (character_id, npc_id, count) VALUES ($1,'doc',2)", [A.id]],
-    ["INSERT INTO portfolios (account_id, ticker, shares, cost_omr) VALUES ($1,'AAPL',1.234567,25)", [accOf]],
-    ["INSERT INTO estates (account_id, name, tier, spent_omr) VALUES ($1,'The Villa',3,915)", [accOf]],
+    // (D11 2026-08-05: the 'pf' UNION branch left loadOwned with the Portfolio — no seed, no count)
+    ["INSERT INTO estates (account_id, name, tier, spent_omr) VALUES ($1,'The Villa',3,915.234567)", [accOf]],
   ]) await pool.query(sql, params);
 
   // the ORIGINAL per-branch queries, kept here deliberately: this section is a DIFFERENTIAL test,
@@ -329,7 +329,6 @@ console.log("\n6b. loadOwned's UNION returns what the fourteen queries did");
     sk: ['SELECT skill_id FROM character_skills WHERE character_id=$1', A.id],
     npc: ['SELECT npc_id, standing, touched_at FROM npc_standing WHERE character_id=$1', A.id],
     grudge: ['SELECT npc_id, count, since FROM npc_grudges WHERE character_id=$1 AND count > 0', A.id],
-    pf: ['SELECT ticker, shares, cost_omr FROM portfolios WHERE account_id=$1 AND shares>0', accOf],
     est: ['SELECT name, tier, spent_omr FROM estates WHERE account_id=$1', accOf],
   };
 
@@ -348,7 +347,7 @@ console.log("\n6b. loadOwned's UNION returns what the fourteen queries did");
       gear: owned.gear.length, guns: owned.guns.length, gm: owned.gangId ? 1 : 0,
       mk: Object.keys(owned.makings).length, st: owned.stash.length, sk: owned.skills.size,
       npc: Object.keys(owned.npc).length, grudge: Object.keys(owned.grudges).length,
-      pf: owned.portfolio.length, est: owned.estate ? 1 : 0,
+      est: owned.estate ? 1 : 0,
     };
     const wrong = [];
     for (const [g, [sql, param]] of Object.entries(originals)) {
@@ -372,8 +371,10 @@ console.log("\n6b. loadOwned's UNION returns what the fourteen queries did");
     ];
     const wrongSlot = slots.filter(([, v, want]) => v !== want).map(([k, v, want]) => `${k}=${v} (want ${want})`);
     check(wrongSlot.length === 0, 'every populated branch demultiplexes from the right slot', wrongSlot.join(', '));
-    check(Math.abs(owned.portfolio[0]?.shares - 1.234567) < 1e-9,
-      'a fractional numeric keeps its precision through numeric→Number', `${owned.portfolio[0]?.shares}`);
+    // (D11: the fractional-precision probe rode the retired 'pf' branch — the estate's spent_omr
+    // is the same numeric slot through the same union, so the property is still exercised)
+    check(Math.abs(Number(owned.estate?.spent_omr) - 915.234567) < 1e-9,
+      'a fractional numeric keeps its precision through numeric→Number', `${owned.estate?.spent_omr}`);
 
     // THE FIELDS NOTHING DOWNSTREAM RE-WRAPS. Worth being precise about what this proves: node-pg
     // returns `numeric` as a STRING and pg-mem returns a number, so the union coerces — but every

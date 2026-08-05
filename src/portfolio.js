@@ -1,334 +1,51 @@
-// R1 — THE PORTFOLIO ("going legit"): the RWA / blue-chip holdings layer. The narrative apex of the
-// laundering arc — clean $OMR washed into legitimate, DEATH-PROOF equity. In R1 this is PURE STATUS:
-// a ticker-denominated collectible with a deterministic display price (§7.11 seed machinery), no
-// sell and no cash-out, so it touches NO securities/derivative law (the hitman-rep / family-seal
-// precedent — a status axis outside §10.4 and outside the sim-audited balance). The ONLY §10.4 flow
-// is the 'rwa:invest' $OMR BURN, paid through the vanity `spendOmr` till so the burn discipline
-// lives in one place. R2 will back the shares with a real RWA reserve; R3 opens the KYC'd on-chain
-// extraction — both legal-gated. Holdings live at the ACCOUNT level (survive death → the heir keeps
-// the book, the retirement fantasy); the family book lives on the gang and dies with the family.
-import { GameError } from './game.js';
-import { PORTFOLIO, tickerOf, tickerPriceOf, dayOf, dynastyTierOf, jailed, safeHoused } from './rules.js';
-import { spendOmr } from './vanity.js';
-
-// name your DYNASTY (the account-level book survives death → a generational fund). A $OMR vanity sink
-// ledgered under the existing rwa:% burn term (zero invariant changes). 3–24 chars, printable.
-export async function nameDynasty(ch, name, client, h) {
-  const n = String(name || '').trim();
-  if (n.length < 3 || n.length > 24) throw new GameError('name', 'A dynasty name runs 3–24 characters.');
-  if (!/^[\w .,'&-]+$/.test(n)) throw new GameError('name', 'Letters, numbers and simple punctuation only.');
-  if (n === (h.acct?.dynasty_name || null)) throw new GameError('same', 'The dynasty already carries that name.'); // no-op re-burn guard (changeName precedent)
-  await spendOmr(client, h, PORTFOLIO.DYNASTY_NAME_OMR, 'rwa:dynasty'); // gates on h.acct.omr, debits, ledgers the burn
-  await client.query('UPDATE account_persistent SET dynasty_name=$2 WHERE account_id=$1', [ch.account_id, n]);
-  if (h.acct) h.acct.dynasty_name = n;
-  await h.track(client, ch.account_id, 'dynasty_name', {});
-  return { ok: true, dynasty: n, spent: PORTFOLIO.DYNASTY_NAME_OMR };
-}
-
-// name the FAMILY fund — a $OMR sink from the gang RESERVE (boss/underboss, the buySeal precedent).
-// The name heads the family-legit leaderboard; the crest is the tier on cumulative family invested.
-export async function nameFamilyDynasty(ch, name, client, h) {
-  if (h.owned.gangRole !== 'boss' && h.owned.gangRole !== 'underboss')
-    throw new GameError('rank', 'Only the boss or underboss names the family fund.');
-  const n = String(name || '').trim();
-  if (n.length < 3 || n.length > 24) throw new GameError('name', 'A fund name runs 3–24 characters.');
-  if (!/^[\w .,'&-]+$/.test(n)) throw new GameError('name', 'Letters, numbers and simple punctuation only.');
-  const cost = PORTFOLIO.FAMILY_DYNASTY_NAME_OMR;
-  const g = (await client.query('SELECT omr_reserve, dynasty_name FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
-  if (!g) throw new GameError('gang', 'No family.');
-  if (n === (g.dynasty_name || null)) throw new GameError('same', 'The fund already carries that name.'); // no-op re-burn guard — protects the shared reserve (MED-1)
-  if (Number(g.omr_reserve) < cost) throw new GameError('reserve', `The reserve holds ${Math.floor(Number(g.omr_reserve))} $OMR — naming the fund runs ${cost}.`);
-  await client.query('UPDATE gangs SET omr_reserve = omr_reserve - $2, dynasty_name=$3 WHERE id=$1', [h.owned.gangId, cost, n]);
-  await h.ledger(client, { currency: 'omr', amount: -cost, reason: 'rwa:dynasty', counterparty: h.owned.gangId }); // burn (rwa:% term), reserve bucket
-  if (h.owned.gang) { h.owned.gang.omr_reserve = Number(g.omr_reserve) - cost; h.owned.gang.dynasty_name = n; }
-  await h.track(client, ch.account_id, 'family_dynasty_name', {});
-  return { ok: true, dynasty: n, spent: cost, reserve: Math.floor(Number(g.omr_reserve) - cost) };
-}
-
-// The biggest FAMILY legit books — a status leaderboard (the portfolioLeaderboard twin, gang side).
-export async function familyPortfolioLeaderboard(pool) {
-  const day = dayOf();
-  const priceMap = Object.fromEntries(PORTFOLIO.TICKERS.map((t) => [t.id, tickerPriceOf(t.id, day)]));
-  const rows = (await pool.query(
-    `SELECT gp.gang_id, gp.ticker, gp.shares, g.name, g.dynasty_name, g.rwa_invested
-       FROM gang_portfolios gp JOIN gangs g ON g.id = gp.gang_id WHERE gp.shares > 0`)).rows;
-  const byGang = new Map();
-  for (const r of rows) {
-    const e = byGang.get(r.gang_id) || { name: r.name, dynasty: r.dynasty_name || null, invested: Math.floor(Number(r.rwa_invested || 0)), bookValue: 0 };
-    e.bookValue += Number(r.shares) * (priceMap[r.ticker] || 0);
-    byGang.set(r.gang_id, e);
-  }
-  const board = [...byGang.values()]
-    .map((e) => ({ name: e.dynasty || e.name, family: e.name, dynasty: e.dynasty || null,
-      crest: dynastyTierOf(e.invested)?.name || null, bookValue: round2(e.bookValue) }))
-    .filter((e) => e.bookValue > 0).sort((a, b) => b.bookValue - a.bookValue).slice(0, 25);
-  return { day, board };
-}
-
-const round2 = (n) => Math.round(n * 100) / 100;
-const round6 = (n) => Math.round(n * 1e6) / 1e6; // fractional shares to 6 places
-
-function validAmount(omr) {
-  const amt = Math.floor(Number(omr));
-  if (!Number.isFinite(amt) || amt < PORTFOLIO.MIN_INVEST_OMR)
-    throw new GameError('amount', `Invest at least ${PORTFOLIO.MIN_INVEST_OMR} $OMR.`);
-  return amt;
-}
-
-// One book row valued at the current display price (holdings summary shape, reused across the board,
-// the leaderboard and the character view).
-function bookRow(row, priceMap) {
-  const shares = Number(row.shares);
-  const price = priceMap[row.ticker];
-  return { ticker: row.ticker, name: tickerOf(row.ticker)?.name || row.ticker,
-    shares: round6(shares), price, bookValue: round2(shares * price), costBasis: Math.floor(Number(row.cost_omr)) };
-}
-
-// A STATUS GRANT of shares (step two — earned exposure): shares = omrWorth / price, cost basis 0
-// (a free legit kickback — season prizes, the big-score cut). Not a §10.4 currency, so no ledger.
-// A plain DB helper (no `h`) so headless callers (the season worker) and under-lock member payouts
-// (the heist crew) can grant directly. Returns the updated { ticker, shares, cost_omr } row.
-export async function grantShares(client, accountId, ticker, omrWorth) {
-  if (!tickerOf(ticker) || !(Number(omrWorth) > 0)) return null;
-  const granted = round6(Number(omrWorth) / tickerPriceOf(ticker));
-  if (!(granted > 0)) return null;
-  const cur = (await client.query('SELECT shares, cost_omr FROM portfolios WHERE account_id=$1 AND ticker=$2', [accountId, ticker])).rows[0];
-  const shares = round6(Number(cur?.shares || 0) + granted);
-  const cost = Number(cur?.cost_omr || 0); // a grant costs nothing — cost basis unchanged (pure gain)
-  if (cur) await client.query('UPDATE portfolios SET shares=$3 WHERE account_id=$1 AND ticker=$2', [accountId, ticker, shares]);
-  else await client.query('INSERT INTO portfolios (account_id, ticker, shares, cost_omr) VALUES ($1,$2,$3,0)', [accountId, ticker, shares]);
-  return { ticker, shares, cost_omr: cost, granted };
-}
-
-// PERSONAL invest: burn clean $OMR → fractional shares at today's price. A §10.4 $OMR burn
-// ('rwa:invest', account bucket) — the shares are pure status, so nothing else moves value.
-// Step two — the RICO GRADUATION: a BIG legit move draws heat and can't be done from a safehouse.
-export async function invest(ch, ticker, omr, client, h) {
-  const t = tickerOf(ticker);
-  if (!t) throw new GameError('ticker', 'No such stock on the board.');
-  if (jailed(ch))
-    throw new GameError('jailed', "You can't move money into legit fronts from a cell."); // F4: consistency with other extraction-adjacent acts
-  const amt = validAmount(omr);
-  // the classic laundering red flag: moving a big sum into legit fronts gets noticed (the launder
-  // precedent). "Big" is CUMULATIVE over a rolling window (the D3 wash-bucket twin), so structuring —
-  // repeated sub-threshold buys — still trips it (audit F1). Checked BEFORE the burn so a blocked
-  // move is clean (the txn rolls back on throw, discarding the rwa_used mutation below).
-  const refill = ch.rwa_at
-    ? (Date.now() - new Date(ch.rwa_at).getTime()) / PORTFOLIO.SCRUTINY_WINDOW_MS * PORTFOLIO.SCRUTINY_MIN_OMR
-    : PORTFOLIO.SCRUTINY_MIN_OMR;
-  const windowUsed = Math.max(0, Number(ch.rwa_used || 0) - Math.max(0, refill));
-  const cumulative = windowUsed + amt;
-  const scrutiny = cumulative >= PORTFOLIO.SCRUTINY_MIN_OMR;
-  if (scrutiny && safeHoused(ch))
-    throw new GameError('safe', "You can't move big money into legit fronts while you're to ground.");
-  const price = tickerPriceOf(ticker);
-  const bought = round6(amt / price);
-  // THE DYNASTY FUND split: DIVIDEND_BPS of every invest funds the dividend pool (a §10.4 TRANSFER —
-  // new capital pays holders' yield, like a real fund), the rest BURNS (deflationary). Manual debit
-  // (not spendOmr) so the account pays the full amt split across the burn + transfer reasons. §10.4:
-  // account −amt, pool +toPool; rwa:invest burns toBurn, dividend:fund is a transfer → drift 0.
-  const toPool = Math.floor(amt * PORTFOLIO.DIVIDEND_BPS / 10000);
-  const toBurn = amt - toPool;
-  if (Number(h.acct.omr) < amt) throw new GameError('omr', `That costs ${amt} $OMR — earn it in the game first.`);
-  h.acct.omr = Number(h.acct.omr) - amt;
-  await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -toBurn, reason: 'rwa:invest' });
-  // (tokenomics v2 step 2) this slice used to fill `rwa_dividend_pool`, which paid the investor a
-  // personal ~daily dividend. Personal yield is retired — it is the FAMILY yield now (design §3) —
-  // so the same $OMR goes to `family_yield_pool`. Still a bucket-to-bucket TRANSFER between two
-  // members of `omrBuckets` (reason `dividend:fund` is unchanged and stays in neither the mint nor
-  // the burn term), so conservation is untouched; only the destination moved.
-  if (toPool > 0) {
-    await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -toPool, reason: 'dividend:fund' });
-    await client.query('UPDATE family_yield_pool SET balance = balance + $1, lifetime_funded = lifetime_funded + $1 WHERE id=1', [toPool]);
-  }
-  await client.query('UPDATE account_persistent SET rwa_invested = rwa_invested + $2 WHERE account_id=$1', [ch.account_id, amt]); // monotonic tier metric
-  ch.rwa_used = cumulative; ch.rwa_at = new Date(); // record the windowed spend (persistCharacter commits it)
-  if (scrutiny) ch.heat = Math.min(100, Number(ch.heat || 0) + PORTFOLIO.SCRUTINY_HEAT); // F7: clamp like business raids
-  const cur = (await client.query('SELECT shares, cost_omr FROM portfolios WHERE account_id=$1 AND ticker=$2', [ch.account_id, ticker])).rows[0];
-  const shares = round6(Number(cur?.shares || 0) + bought);
-  const cost = Number(cur?.cost_omr || 0) + amt;
-  if (cur) await client.query('UPDATE portfolios SET shares=$3, cost_omr=$4 WHERE account_id=$1 AND ticker=$2', [ch.account_id, ticker, shares, cost]);
-  else await client.query('INSERT INTO portfolios (account_id, ticker, shares, cost_omr) VALUES ($1,$2,$3,$4)', [ch.account_id, ticker, shares, cost]);
-  // keep this txn's account-level view fresh (loadOwned loads owned.portfolio as an array of rows)
-  const pf = (h.owned.portfolio || []).filter((r) => r.ticker !== ticker);
-  pf.push({ ticker, shares, cost_omr: cost });
-  h.owned.portfolio = pf;
-  await h.track(client, ch.account_id, 'rwa_invest', { ticker, omr: amt, shares: bought });
-  return { ok: true, ticker, name: t.name, price, bought, shares,
-    bookValue: round2(shares * price), costBasis: cost, scrutiny, dividendFunded: toPool };
-}
-
-// CLAIM the Dynasty dividend — a ~daily $OMR yield on your book value, POOL-BOUNDED (the stake-pool
-// rule: never mints, so the fund pays only what investment funded it). A §10.4 TRANSFER (pool→account,
-// reason dividend:omr, both inside omrBuckets). Runs under withCharacter (h.acct is the account); locks
-// the pool singleton (canonical: account is already held, singletons last) so concurrent claims
-// serialize on it. The book value is the deterministic display price × shares (no sell, no cash-out —
-// R1 stays status; only the yield is $OMR).
-// (tokenomics v2 step 2) THE PERSONAL DIVIDEND — RETIRED. Repurposed into the FAMILY yield
-// (design §3): the slice of every invest that used to fill `rwa_dividend_pool` now fills
-// `family_yield_pool`, which pays the top families by standing into their `omr_reserve`. So the
-// Dynasty Fund keeps everything that made it an endgame — the book, the tier ladder, the crest,
-// the leaderboard, and the fact that it survives death and the heir inherits it. It loses the
-// personal payout, and that is the whole change.
+// ── src/portfolio.js — THE PORTFOLIO, RETIRED (D11, founder-directed 2026-08-05) ──
+// "Remove all tickers and RWA assets." The in-game stock book — tickers, personal + family invests,
+// the Dynasty Fund dividends, the dynasty naming sinks, the legit-book leaderboards — is gone. The
+// reasons, in order of weight:
 //
-// Why the family, not the man: standing already bought Commission seats, which are status. Now it
-// pays, so tribute, wars and the seasonal standing reset carry a real economic prize — and $OMR
-// gains a reason to be HELD by an organisation rather than sold by an individual.
-export async function claimDividend() {
+//   1. The real rail behind it was already retired (omerta-stock-layer-retirement.md, 2026-07-31):
+//      nothing buys stock, nothing owes stock, the treasury holds ETH. What remained here was a
+//      fictional collectible wearing REAL ticker symbols (AAPL, TSLA, GLD…) with a made-up price —
+//      defensible while a real rail existed behind it, a standing question once it didn't. The
+//      founder answered the question by removing the surface.
+//   2. Economy v3's walls made its money flows anachronisms: the personal dividend was retired in
+//      v2 step 2, the invest was a burn feeding a family-yield slice — a sink the desk now serves
+//      better, without implying anybody owns a security.
+//
+// WHAT STAYS: THE ETH VAULT (`src/treasury.js`) — it is neither a ticker nor an RWA asset; the
+// stock-layer retirement already re-denominated it to ETH on both sides of `allocated <= held`.
+// It shares this system's old RICO-graduation window (`PORTFOLIO.SCRUTINY_*`, `ch.rwa_used/rwa_at`)
+// and the `rwa:` reason prefix (`rwa:vault` is LIVE) — which is why the slimmed PORTFOLIO block and
+// the `rwa:` vocabulary entry survive the cull.
+//
+// §10.4 — READ THIS BEFORE "CLEANING UP" THE REASONS: `rwa:` and `dividend:` stay in the omr
+// vocabulary; `rwa:invest`/`rwa:dynasty` stay burns; `dividend:fund`/`dividend:omr` stay transfers;
+// `rwa_dividend_pool` + `rwa_family_dividend_pool` stay in `omrBuckets`. A live database holds the
+// rows this system already wrote, and conservation is a claim about the WHOLE ledger — drop any of
+// them and every server that ever ran the Portfolio drifts by exactly what it moved. What changes is
+// that nothing writes a NEW one, and `invariants.js` asserts that directly ('portfolio retired' —
+// the emission-faucet-retired shape). The stranded family dividend pool is DRAINED into the family
+// yield by `exchange.js:mergeLegacyYieldPools` (a bucket-to-bucket transfer, the stake-pool
+// precedent), so no value is orphaned behind a retired claim route.
+//
+// Historical DATA (portfolios / gang_portfolios rows, dynasty_name, rwa_invested) is kept, not
+// deleted — retirement never rewrites history. Nothing reads it into gameplay any more.
+import { GameError } from './game.js';
+
+const gone = () => {
   throw new GameError('retired',
-    'The fund pays the families now, not the man — standing earns it into the family reserve. Your book, your tier and your dynasty are untouched.');
-}
+    'The stock book is closed — the city sells no shares. Your $OMR works at the Window, the Vault, '
+    + 'the stake ladder and the Made Man now; what the old book held is history, not a holding.');
+};
 
-export async function claimFamilyDividend(ch, client, h) {
-  if (h.owned.gangRole !== 'boss' && h.owned.gangRole !== 'underboss')
-    throw new GameError('rank', 'Only the boss or underboss draws the family dividend.');
-  const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
-  if (!g) throw new GameError('gang', 'No family.');
-  const rows = (await client.query('SELECT ticker, shares, cost_omr FROM gang_portfolios WHERE gang_id=$1 AND shares>0', [g.id])).rows;
-  const book = round2(rows.reduce((a, r) => a + Number(r.shares) * tickerPriceOf(r.ticker), 0)); // market book (display)
-  const basis = round2(rows.reduce((a, r) => a + Number(r.cost_omr || 0), 0)); // yield on invested principal (audit HIGH — parity with the personal claim; the family book has no free grants today, kept consistent + price-drift-proof)
-  if (!(basis > 0)) throw new GameError('nothing', 'The family has no invested book to draw from.');
-  const now = Date.now();
-  if (g.dividend_at && new Date(g.dividend_at).getTime() + PORTFOLIO.DIVIDEND_MS > now)
-    throw new GameError('cooldown', 'The family dividend pays about once a day.');
-  const gross = round6(basis * PORTFOLIO.DIVIDEND_DAILY_BPS / 10000);
-  const pp = (await client.query('SELECT pool FROM rwa_family_dividend_pool WHERE id=1 FOR UPDATE')).rows[0];
-  const pay = round6(Math.min(gross, round6(Number(pp?.pool || 0))));
-  if (!(pay > 0)) throw new GameError('dry', 'The family dividend pool is dry — it fills as the family invests. Try again later.');
-  await client.query('UPDATE gangs SET omr_reserve = omr_reserve + $2, dividend_at=$3 WHERE id=$1', [g.id, pay, new Date(now)]);
-  await h.ledger(client, { currency: 'omr', amount: pay, reason: 'dividend:omr', counterparty: g.id }); // transfer (family-pool→reserve), not a mint
-  await client.query('UPDATE rwa_family_dividend_pool SET pool = pool - $1, lifetime_paid = lifetime_paid + $1 WHERE id=1', [pay]);
-  if (h.owned.gang) h.owned.gang.omr_reserve = Number(g.omr_reserve) + pay;
-  await h.track(client, ch.account_id, 'rwa_family_dividend', { omr: pay, book });
-  return { ok: true, paid: pay, gross, bookValue: book, reserve: Math.floor(Number(g.omr_reserve) + pay), dividendPaid: pay };
-}
-
-// FAMILY invest: the boss/underboss commissions the family's legit holdings from the $OMR RESERVE
-// (the seal precedent — the reserve is its own §10.4 bucket, so the burn is ledgered directly
-// against it with counterparty = the gang id, no account_id). Gang row LOCKED: reserve read-and-spend
-// must be atomic under concurrent buys.
-export async function familyInvest(ch, ticker, omr, client, h) {
-  if (h.owned.gangRole !== 'boss' && h.owned.gangRole !== 'underboss')
-    throw new GameError('rank', 'Only the boss or underboss invests the family money.');
-  const t = tickerOf(ticker);
-  if (!t) throw new GameError('ticker', 'No such stock on the board.');
-  if (jailed(ch))
-    throw new GameError('jailed', "You can't move the family money into legit fronts from a cell."); // parity with personal invest
-  const amt = validAmount(omr);
-  const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
-  if (!g) throw new GameError('gang', 'No family to invest for.'); // F2: defensive (unreachable via loadOwned, but every sibling guards it)
-  if (Number(g.omr_reserve) < amt)
-    throw new GameError('reserve', `The family reserve holds ${Math.floor(Number(g.omr_reserve))} $OMR. Tribute $OMR to fill it.`);
-  const price = tickerPriceOf(ticker);
-  const bought = round6(amt / price);
-  // the Dynasty Fund split (the personal-invest twin, gang side): DIVIDEND_BPS of the family invest
-  // funds the FAMILY dividend pool (a §10.4 transfer, reserve→family-pool), the rest burns. The family
-  // pool is SEPARATE from the personal one (audit MED) so reserve $OMR can never reach a personal
-  // account through the dividend — the family's own investing pays the family dividend. counterparty=g.id.
-  const toPool = Math.floor(amt * PORTFOLIO.DIVIDEND_BPS / 10000);
-  const toBurn = amt - toPool;
-  await client.query('UPDATE gangs SET omr_reserve = omr_reserve - $2, rwa_invested = rwa_invested + $2 WHERE id=$1', [g.id, amt]);
-  await h.ledger(client, { currency: 'omr', amount: -toBurn, reason: 'rwa:invest', counterparty: g.id });
-  if (toPool > 0) {
-    await h.ledger(client, { currency: 'omr', amount: -toPool, reason: 'dividend:fund', counterparty: g.id });
-    await client.query('UPDATE rwa_family_dividend_pool SET pool = pool + $1, lifetime_funded = lifetime_funded + $1 WHERE id=1', [toPool]);
-  }
-  const cur = (await client.query('SELECT shares, cost_omr FROM gang_portfolios WHERE gang_id=$1 AND ticker=$2', [g.id, ticker])).rows[0];
-  const shares = round6(Number(cur?.shares || 0) + bought);
-  const cost = Number(cur?.cost_omr || 0) + amt;
-  if (cur) await client.query('UPDATE gang_portfolios SET shares=$3, cost_omr=$4 WHERE gang_id=$1 AND ticker=$2', [g.id, ticker, shares, cost]);
-  else await client.query('INSERT INTO gang_portfolios (gang_id, ticker, shares, cost_omr) VALUES ($1,$2,$3,$4)', [g.id, ticker, shares, cost]);
-  if (h.owned.gang) h.owned.gang.omr_reserve = Number(g.omr_reserve) - amt;
-  await h.track(client, ch.account_id, 'rwa_family_invest', { ticker, omr: amt, shares: bought });
-  return { ok: true, ticker, name: t.name, price, bought, shares,
-    bookValue: round2(shares * price), reserve: Math.floor(Number(g.omr_reserve) - amt) };
-}
-
-// The board: today's market (price + day-over-day change), your book, and the family book if you're
-// in a gang. Prices are deterministic (the daily seed hash) — the client never computes game math.
-export async function portfolioBoard(ch, client, h) {
-  const day = dayOf();
-  const market = PORTFOLIO.TICKERS.map((t) => {
-    const price = tickerPriceOf(t.id, day);
-    const prev = tickerPriceOf(t.id, day - 1);
-    return { ticker: t.id, name: t.name, blurb: t.blurb, price,
-      dayChange: prev ? Math.round(((price - prev) / prev) * 10000) / 100 : 0 };
-  });
-  const priceMap = Object.fromEntries(market.map((m) => [m.ticker, m.price]));
-  const mine = (await client.query('SELECT ticker, shares, cost_omr FROM portfolios WHERE account_id=$1 AND shares>0 ORDER BY ticker', [ch.account_id])).rows;
-  const holdings = mine.map((r) => bookRow(r, priceMap));
-  const portfolio = { holdings, bookValue: round2(holdings.reduce((a, r) => a + r.bookValue, 0)),
-    costBasis: holdings.reduce((a, r) => a + r.costBasis, 0) };
-  let family = null;
-  if (h.owned.gangId) {
-    const fam = (await client.query('SELECT ticker, shares, cost_omr FROM gang_portfolios WHERE gang_id=$1 AND shares>0 ORDER BY ticker', [h.owned.gangId])).rows;
-    const fh = fam.map((r) => bookRow(r, priceMap));
-    const famBook = round2(fh.reduce((a, r) => a + r.bookValue, 0));
-    const famBasis = round2(fam.reduce((a, r) => a + Number(r.cost_omr || 0), 0)); // yield on invested principal (parity w/ the personal claim)
-    const gd = h.owned.gang?.dividend_at;
-    const now2 = Date.now();
-    const gcd = gd ? Math.max(0, Math.ceil((new Date(gd).getTime() + PORTFOLIO.DIVIDEND_MS - now2) / 1000)) : 0;
-    const poolNow = round2(Number((await client.query('SELECT pool FROM rwa_family_dividend_pool WHERE id=1')).rows[0]?.pool || 0));
-    const canManage = h.owned.gangRole === 'boss' || h.owned.gangRole === 'underboss';
-    const famInvested = Math.floor(Number(h.owned.gang?.rwa_invested || 0));
-    const famCrest = dynastyTierOf(famInvested);
-    family = { name: h.owned.gang?.name || null,
-      fundName: h.owned.gang?.dynasty_name || null, nameCost: PORTFOLIO.FAMILY_DYNASTY_NAME_OMR,
-      invested: famInvested, crest: famCrest ? { tier: famCrest.tier, name: famCrest.name } : null,
-      canInvest: canManage,
-      reserve: Math.floor(Number(h.owned.gang?.omr_reserve || 0)),
-      holdings: fh, bookValue: famBook,
-      dividend: { claimable: canManage && famBasis > 0 && gcd === 0 && poolNow > 0, cooldownSeconds: gcd, pool: poolNow,
-        estimate: round2(Math.min(famBasis * PORTFOLIO.DIVIDEND_DAILY_BPS / 10000, poolNow)) } };
-  }
-  // THE DYNASTY — the account-level book is generational (survives death). Surface its name + how many
-  // generations the bloodline has weathered (deaths + 1) + the cost to name it + the status TIER.
-  const acct = (await client.query('SELECT dynasty_name, deaths, rwa_invested, dividend_at FROM account_persistent WHERE account_id=$1', [ch.account_id])).rows[0] || {};
-  const invested = Math.floor(Number(acct.rwa_invested || 0));
-  const tier = dynastyTierOf(invested);
-  const nextTier = PORTFOLIO.DYNASTY_TIERS.find((t) => invested < t.min) || null;
-  const dynasty = { name: acct.dynasty_name || null, generation: Number(acct.deaths || 0) + 1,
-    nameCost: PORTFOLIO.DYNASTY_NAME_OMR, invested,
-    tier: tier ? { tier: tier.tier, name: tier.name } : null,
-    nextTier: nextTier ? { tier: nextTier.tier, name: nextTier.name, min: nextTier.min } : null };
-  // THE PERSONAL DIVIDEND — RETIRED (tokenomics v2 step 2, design §3). The board deliberately no
-  // longer carries a `dividend` block: advertising a yield that cannot be claimed is worse than
-  // removing it, because a player reads the number and plans around it. The slice of every invest
-  // that used to fill this pool now fills `family_yield_pool`, which pays the top families by
-  // standing into their reserve — so the yield still exists, it just belongs to the organisation.
-  return { market, portfolio, family, dynasty };
-}
-
-// The biggest legit books (a STATUS leaderboard — the hitmen-board precedent). Book value is the
-// deterministic display price × shares, summed per account in JS across the 3 tickers, joined to the
-// account's CURRENT living street. Full-scan, fine for alpha (the hitman/portfolio boards are small).
-export async function portfolioLeaderboard(pool) {
-  const day = dayOf();
-  const priceMap = Object.fromEntries(PORTFOLIO.TICKERS.map((t) => [t.id, tickerPriceOf(t.id, day)]));
-  const rows = (await pool.query(
-    `SELECT p.account_id, p.ticker, p.shares, c.name, a.dynasty_name
-       FROM portfolios p
-       LEFT JOIN characters c ON c.account_id = p.account_id AND c.alive
-       LEFT JOIN account_persistent a ON a.account_id = p.account_id
-      WHERE p.shares > 0`)).rows;
-  const byAccount = new Map();
-  for (const r of rows) {
-    const e = byAccount.get(r.account_id) || { name: r.name || null, dynasty: r.dynasty_name || null, bookValue: 0 };
-    if (r.name && !e.name) e.name = r.name;
-    if (r.dynasty_name && !e.dynasty) e.dynasty = r.dynasty_name;
-    e.bookValue += Number(r.shares) * (priceMap[r.ticker] || 0);
-    byAccount.set(r.account_id, e);
-  }
-  const board = [...byAccount.values()]
-    .map((e) => ({ name: e.dynasty || e.name, steward: e.name, dynasty: e.dynasty || null, bookValue: round2(e.bookValue) }))
-    .filter((e) => e.bookValue > 0)
-    .sort((a, b) => b.bookValue - a.bookValue)
-    .slice(0, 25);
-  return { day, prices: priceMap, board };
-}
-
-// Book value of a loaded portfolio array (loadOwned shape) at today's price — used by the character
-// view and the estate `kept.portfolio` report (the moment the heir sees the book that survived).
-export function portfolioValue(portfolio = []) {
-  return round2((portfolio || []).reduce((a, r) => a + Number(r.shares) * tickerPriceOf(r.ticker), 0));
-}
+// Tombstones, not 404s (the emission.js / v2 swap-launder precedent): a client or agent that has
+// been polling these learns what happened instead of guessing.
+export async function nameDynasty() { gone(); }
+export async function nameFamilyDynasty() { gone(); }
+export async function invest() { gone(); }
+export async function familyInvest() { gone(); }
+export async function claimDividend() { gone(); }        // retired earlier (tokenomics v2 step 2)
+export async function claimFamilyDividend() { gone(); }
+export async function portfolioBoard() { gone(); }
+export async function portfolioLeaderboard() { gone(); }
+export async function familyPortfolioLeaderboard() { gone(); }

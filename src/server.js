@@ -101,7 +101,7 @@ import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, CARS, KITCHENS, TRADE_RANKS, M3, M4, PATHS,
          RANKS,
-         cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, ESTATE, AUCTION, MEGAPROJECT, CLUES, DUELS, DUEL_TITLE_RANKS, SEASON_MODS, seasonModOf, seasonIdxOf, seasonDaysLeft, SEASON_PHASES, seasonPhaseOf, seasonPhaseLeft,
+         cityLawEventOf, cityForecast, regionShockOf, cityHourOf, ESTATE, AUCTION, MEGAPROJECT, CLUES, DUELS, DUEL_TITLE_RANKS, SEASON_MODS, seasonModOf, seasonIdxOf, seasonDaysLeft, SEASON_PHASES, seasonPhaseOf, seasonPhaseLeft,
          foundationOf, foundationBustMult, foundationBleedMult, CHARTERS, familyCharterOf, FAMILY_CHARTER, FOUNDATION, LAW, WIRE, STORE, PASS, PATRON, BONDS, SPEAKEASY, BOXING, RARITY,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf, syndicateOf, TERRITORY_TYPES, TERRITORY_RACKETS,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE, NOTORIETY, MAP, DISTRICT_ADJ, districtNeighbours,
@@ -1010,8 +1010,9 @@ export async function buildServer() {
     // and the wage cap (an ABSENT owner owes up to a week while the corner only earns while stocked)
     crew: { costStep: M4.CREW_COST_STEP, max: M4.CREW_MAX, wagePerHr: M4.CREW_WAGE_PER_HR,
       coldHours: M4.CREW_WAGE_COLD_MS / 3600000, wageCapHours: M4.CREW_WAGE_CAP_MS / 3600000 },
-    portfolio: { minInvest: PORTFOLIO.MIN_INVEST_OMR, scrutinyMin: PORTFOLIO.SCRUTINY_MIN_OMR,
-      tickers: PORTFOLIO.TICKERS.map((t) => ({ id: t.id, name: t.name, blurb: t.blurb })) },
+    // D11 (2026-08-05): the in-game stock book is retired — the positive claim, so a client can
+    // render what replaced it (the v3 `emission: {faucet: null}` precedent).
+    portfolio: null,
     estate: { nameOmr: ESTATE.NAME_OMR, tiers: ESTATE.TIERS, features: ESTATE.FEATURES, staff: ESTATE.STAFF },
     seasonMods: { pool: SEASON_MODS, note: 'one seed-drawn twist per 28-day season — the touchpoints compose on existing modifier sites' },
     // THE MAP — the edge list, published: which districts border which, and what geography does to
@@ -1219,8 +1220,9 @@ export async function buildServer() {
 
   registerUnderworld(app, { pool, auth });
 
-  // R1 — THE PORTFOLIO ("going legit"): burn clean $OMR into legit, death-proof RWA/blue-chip
-  // holdings (pure STATUS in R1 — no sell, no cash-out; the only §10.4 flow is the 'rwa:invest' burn).
+  // THE PORTFOLIO — RETIRED (D11, 2026-08-05). The routes stay MOUNTED as tombstones (the /v1/wage
+  // precedent): every handler throws a clean `retired`, so a client or agent that has been polling
+  // them learns what happened instead of 404-guessing. src/portfolio.js is the record.
   app.get('/v1/portfolio', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client, h) => Portfolio.portfolioBoard(ch, client, h)));
   app.post('/v1/portfolio/invest', { preHandler: auth }, async (req) =>
@@ -1356,10 +1358,6 @@ export async function buildServer() {
       // THE ROSTER — who this family has in which chair, and what each is worth right now. Public:
       // the whole point is that a rival can SEE which capability to take off the board.
       const roster = await S.rosterOf(client, req.params.id);
-      // R1 — the family's legit book: a seize-resistant status flex, valued at today's price.
-      const famBook = (await client.query('SELECT ticker, shares FROM gang_portfolios WHERE gang_id=$1 AND shares>0 ORDER BY ticker', [req.params.id])).rows
-        .map((r) => ({ ticker: r.ticker, shares: Math.round(Number(r.shares) * 1e6) / 1e6, price: tickerPriceOf(r.ticker),
-          bookValue: Math.round(Number(r.shares) * tickerPriceOf(r.ticker) * 100) / 100 }));
       await client.query('COMMIT');
       return { roster, gang: { id: g.id, name: g.name, tag: g.tag, color: g.color || null,
         // THE CHARTER — public on purpose: what a family is good at, and what it gave up for it,
@@ -1378,8 +1376,7 @@ export async function buildServer() {
         weekly: { week: g.weekly_week, progress: Number(g.weekly_progress), done: g.weekly_done },
         members: members.map((m) => ({ id: m.character_id, name: m.name, role: m.role })), held, territory,
         empire: { earned: Math.floor(Number(g.territory_earned || 0)), rank: territoryRankOf(g.territory_earned || 0).name }, // THE EMPIRE (territory step two)
-        syndicate: syndicateOf(territory), // TIER-4 §D — the specialization meta (same-type holding)
-        portfolio: { holdings: famBook, bookValue: Math.round(famBook.reduce((a, r) => a + r.bookValue, 0) * 100) / 100 } } };
+        syndicate: syndicateOf(territory) } };
     } catch (e) { await client.query('ROLLBACK'); throw e; }
     finally { client.release(); }
   });

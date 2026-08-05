@@ -110,7 +110,7 @@ const SECTIONS = [
       account level.`)}
       <p><b>Lost when the character dies:</b> stats, skills, businesses, the speakeasy, the Kitchen crew, the boxing
       fighter, territory operation control, and this season's kills. <b>Passes to the heir:</b> prestige, the legal
-      Portfolio/Dynasty book, the Estate, the Store patron/pass benefit, the dynasty name, hitman reputation and lifetime
+      the Estate, the Store patron/pass benefit, hitman reputation and lifetime
       kills, minted status, revive tokens, and 25% of your Underworld standings.</p>
       <p><b>Seasons</b> last 28 days. At the end, your level converts to prestige (<code>floor(level/2)</code>) and your
       respect returns to 0. <b>Respec</b> your stats for 15 $OMR (24-hour cooldown).</p>
@@ -470,7 +470,7 @@ const SECTIONS = [
   { id: 'wire', group: 'The Underworld', title: 'The Wire', tag: 'information you buy',
     html: `<p><b>Wiretap</b> (8 $OMR, 12 hours, up to 5) — shows a rival's Law stage and heat, wealth band, operations,
       WANTED status, and <b>if they are hunting you</b>. <b>Sweep</b> (5 $OMR) removes taps on you (free when clean). The
-      <b>Street Wire subscription</b> is a <b>tiered ladder</b> — Street Wire (12 $OMR/7 days: the ticker tape, Law
+      <b>Street Wire subscription</b> is a <b>tiered ladder</b> — Street Wire (12 $OMR/7 days: Law
       forecasts, threat data — a count of hunters on you, never a name), The Wire Room (30: plus the war room and 2
       standing watches), The Switchboard (60: plus 5 standing watches). A <b>standing watch</b> (tier 2 or higher) renews a
       tap from your $OMR, so the surveillance runs while you are offline. There are also <b>tradecraft</b> ranks (more
@@ -489,19 +489,15 @@ const SECTIONS = [
       account-level and survives death.</p>
       ${R(`GET /v1/store [public] · POST /v1/store/plex/:sku · GET /v1/pass · /pass/claim · GET /v1/plex/price [public]`)}` },
 
-  { id: 'legit', group: 'Endgame & Going Legit', title: 'Going Legit — the Portfolio & Dynasty', tag: 'the death-proof endgame',
-    html: `<p>Turn earned $OMR into a <b>legal, death-proof stock book</b>. The tickers are real Robinhood
-      tokenized stocks (GLD, AAPL, AMZN, TSLA, HOOD, NVDA, SPCX, GME) — in the game a <b>status collectible</b> with a set
-      price; <b>no sell, no cash-out, and no phase where there will be</b> — the game does not acquire, hold or
-      deliver real shares (2026-07-31: the stock layer was retired). What you own here is a number the game keeps
-      for you and shows off.</p>
-      <p><b>Invest</b> burns earned $OMR for shares; a large action draws heat and is blocked from a safehouse.
-      <b>Dividend</b> — the personal daily dividend is retired; the fund pays THE FAMILIES now (a boss draws the
-      family dividend into the gang reserve, limited by a funded pool).
-      <b>The Dynasty</b> — name your account-level book, and it passes to your heir (a generational fund plus a crest
-      level). <b>Landmarks</b> — hold a district plaque with your dynasty name. Earned (never by chance): a heist AAPL
-      share, a season SPCX prize.</p>
-      ${R(`GET /v1/portfolio [public] · POST /v1/portfolio/invest · /gangs/portfolio/dividend · /dynasty/name · /landmarks/:id · GET /v1/leaderboard/portfolio`)}` },
+  { id: 'legit', group: 'Endgame & Going Legit', title: 'Going Legit — what your $OMR does', tag: 'the endgame',
+    html: `<p><b>The stock book is retired</b> (D11, 2026-08-05): the game sells no shares, real or fictional —
+      the tickers, the invests and the Dynasty Fund are gone, and their routes say so plainly if you try them.
+      Going legit now means what your <b>earned $OMR</b> actually does:</p>
+      <p><b>Stake it</b> — a held balance climbs the ladder (trunk, energy, nerve, garage, the fence at the top),
+      and a committed balance is looted lighter than an idle one when you die. <b>Redeem it</b> at the Window for
+      cash. <b>Claim backed ETH</b> at the Vault — real ETH the treasury holds, never more than it holds.
+      <b>Get Made</b> and take your $OMR out on-chain. <b>Landmarks</b> — a district plaque still bears your name.</p>
+      ${R(`POST /v1/stake · /v1/made · GET /v1/vault · /v1/window · POST /v1/landmarks/:id`)}` },
 
   { id: 'window', group: 'Endgame & Going Legit', title: 'The Window & the Family Yield', tag: 'tokenomics v2',
     html: `<p>How $OMR works changed. <b>Cash no longer buys $OMR</b> — the wash houses are shut, laundering at your own
@@ -675,7 +671,7 @@ const SECTIONS = [
     NOT a hiding place: no posting from a safehouse, and a killer takes a quarter of every open favor.</p>` },
   { id: 'reference', group: 'Reference', title: 'Quick Reference', tag: 'the things to remember',
     html: `<h3>What is safe from looting</h3><p>Cleared <b>bank</b> cash · <b>staked</b> $OMR · <b>minted (on-chain)</b>
-      gear · your account-level <b>portfolio / estate / prestige</b>. Everything in your pocket is at risk when you die.</p>
+      gear · your account-level <b>estate / prestige</b>. Everything in your pocket is at risk when you die.</p>
       <h3>Status marks on your sheet</h3><p><b>wanted</b> (hunted, even by family — square it) · <b>welsher</b>
       (defaulted, cannot borrow — square it) · <b>indicted</b> (a RICO case — go to The Law) · <b>in transit</b> (a deposit
       is not cleared — another player can steal it) · <b>unbonding</b> ($OMR is not liquid — another player can steal it) ·
