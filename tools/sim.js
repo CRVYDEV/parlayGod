@@ -1339,6 +1339,21 @@ phase('P9.31 the hired guns — apex raids made solo-realizable (founder SIGN-OF
 //      re-sourced off a mark, P9.27), the contact call / THE FAVOR / freight robbery. Zero new supply.
 phase('P9.32 the resident economy — the consolidated base-wide ceiling');
 {
+  // GUARD the accumulator against silent drift: this probe SUMS values assigned by earlier probe
+  // blocks (P9.21/P9.25/P9.28/blood-war/hired-guns). If any of those is removed or its assignment
+  // renamed, its key is `undefined`, `Math.round(undefined)` is NaN, and the headline prints NaN with
+  // nothing failing — the exact "a check that can't see its own subject" class. So assert every key is
+  // populated and finite BEFORE summing, naming any that a probe dropped. (marksCars is an object.)
+  const need = { seedTurnover: RESIDENT.seedTurnover, marksFronts: RESIDENT.marksFronts,
+    marksCarsPerDay: RESIDENT.marksCars?.perDay, marksCarsEv: RESIDENT.marksCars?.ev,
+    marksBoats: RESIDENT.marksBoats, jailbirds: RESIDENT.jailbirds,
+    familyRaidCeil: RESIDENT.familyRaidCeil, apexWorldCeil: RESIDENT.apexWorldCeil };
+  const missing = Object.entries(need).filter(([, v]) => !Number.isFinite(Number(v))).map(([k]) => k);
+  if (missing.length) {
+    console.error(`\n🚨 P9.32: the RESIDENT accumulator is missing ${missing.join(', ')} — a resident probe `
+      + 'was removed or its assignment renamed, so the consolidated ceiling would print NaN. Re-wire it.');
+    await app.close(); process.exit(1);
+  }
   const PASSIVE_STACK = 21_600_000;   // P9.20, post-severance net (the anchor; see the note at P9.21)
   // (A) new emission. Cars/boats are a bounded ADDENDUM: a stolen beater is realized by melt→ammo or
   // fence→cash, so its CASH-equivalent is a fraction of book value; CAR_REALIZE is a conservative,
