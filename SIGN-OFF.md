@@ -31,7 +31,7 @@ done. **Part B is everything new since 2026-08-02** that wants a verdict. Answer
 
 | # | your answer | build state | what I need from you |
 |---|---|---|---|
-| D1 | fold both fees into ONE hook (a new ~20 bps fee on buys) | **NOT BUILT** — the hook is still sells-only 900 bps | **Confirm the buy-fee rate (proposed 20 bps, sane band 10–30).** Then I build it — it's a contract change on the audit-gated track, so it should land BEFORE the address is mined and the third-party audit runs, not after. |
+| D1 | fold both fees into ONE hook (a new fee on buys) | **RATE SIGNED 2026-08-05** (founder: *"Max fee for D1"*) — **30 bps**, 100% → the Vig, armed-at-zero, contract cap 100 (1%). Constants locked (`TRADE_FEE` in rules.tail.js). The CONTRACT fold is the remaining mainnet-milestone build: an ETH-denominated fee on buys needs the input-side `beforeSwap` path, which the subtree's audited rule 7 warns breaks partial fills — so it's its own focused, forge-verified contract session, not a bolt-on. Gated on the third-party audit anyway; the rate landing first is exactly the design's sequencing. |
 | D2 | higher mainnet withdrawal minimum, said plainly | copy/deploy-time | nothing — lands with mainnet config |
 | D3 | early-exit toll stays at the game boundary | **BUILT** (it always was) | nothing |
 | D4 | bond split confirmed as built (37.5/25/22.5/15) | **BUILT** | nothing |

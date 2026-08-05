@@ -278,10 +278,12 @@ The backend keeps its own reserve records; they must track the on-chain balances
     number. And re-derive `dailyCapOMR` (`npm run dials`) against the new depth afterwards.
   - **Seed POL into the hooked pool BEFORE migrating** (§4b). Pool-local enforcement means the moat is
     depth; it is thinnest at launch, which is exactly when a rival untaxed pool is cheapest to stand up.
-  - **Open founder call first (§10.8):** the older `omerta-uniswap-hooks-design.md` §2 specifies a
-    *different* `afterSwap` hook (the trade fee → Vig, backend already built and dormant behind
-    `TRADE_FEE_HOOK_ADDRESS`). A `PoolKey` holds ONE hook address. Decide fold / retire / drop before
-    mining an address.
+  - **DECIDED (SIGN-OFF D1 = fold; RATE SIGNED 2026-08-05):** the trade fee → Vig (backend already
+    built and dormant behind `TRADE_FEE_HOOK_ADDRESS`) folds INTO `OmertaHook` as a fourth destination
+    — `TRADE_FEE.BPS = 30`, 100% to the Vig, armed at zero, contract cap 100. The rate is locked; the
+    CONTRACT change is the remaining build and MUST land before an address is mined. It is not trivial:
+    an ETH-denominated fee on BUYS needs the input-side `beforeSwap` delta, which rule 7 warns breaks
+    partial fills — so it is a focused contract session with full `forge test`, not a bolt-on.
 - **The POL-pairing bot** (pairs the bonded ETH into the OMR-ETH pool) and **the DEX buyback bot** (the real
   TWAP source that replaces the manual `mod/vig/buyback` price).
 - **The on-chain Store** — `OmertaFees.payForPackage` + a `StorePaid` watcher. The Store is off-chain/mod-driven

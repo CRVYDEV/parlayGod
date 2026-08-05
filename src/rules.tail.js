@@ -437,6 +437,10 @@ export const M4 = {
   CLEANPAPERS_OMR: 10,
   HEIST_CD_MS: 8*3600*1000,
   BATCH_CRATE_UNITS: 20,                        // 1 📦 per 20 units cooked
+  // D13 (SIGNED 2026-08-05, founder: "let's go with your recommendation"): the deal's ENERGY cost —
+  // dealing is physical work, so the corner finally competes with the gym/crews/raids for the tank.
+  // Flat per deal (nerve carries the play/throughput axis); energy is regen → zero §10.4 surface.
+  DEAL_ENERGY: 4,
   DAILY_ALL_OMR: 0.5,                           // all-three bonus from the event fund
   REF_RECRUITER_CASH: 10000, REF_RECRUIT_CASH: 5000,
   // Retained ONLY to keep a historical figure honest: a database that predates the retirement has
@@ -632,6 +636,11 @@ export const M3 = {
   JUMP_ENERGY: 25, JUMP_AMMO: 5, JUMP_MIN_HEALTH: 20, JUMP_HOSP_MS: 3*60*1000, JUMP_STEAL_CAP: 25000,
   FIRE_ENERGY: 40, KILL_HOSP_MS: 5*60*1000, CHOP_RATE: 0.40,
   BOUNTY_MIN: 500, BUST_FAIL_JAIL_S: 180,
+  // D15 (SIGNED 2026-08-05, founder: "implement your recommendation"): the jailhouse only tolerates
+  // so much — a rolling-24h cap on bust ATTEMPTS (win or lose, so a failed try is not a free retry).
+  // The harness measured uncapped chasing at 26% of played minutes in lockup; the honest player
+  // (the dailies want ≤2 busts) never feels 5. A gate on the signed §7.8 faucet — no §10.4 change.
+  BUST_ATTEMPTS_DAY: 5,
   BOUNTY_DEFAULT_TTL_H: 72, BOUNTY_MAX_TTL_H: 168, // contract board: default 3d, max 7d
   // sim-audit F1 (directed squatting): exclusivity is a PREMIUM product — a directed pot takes a
   // real stake (DIRECTED_MIN, 20× the open-pot minimum) and the window caps at DIRECTED_MAX_H
@@ -2271,6 +2280,23 @@ export const bondPayout = (principalEth, price, discountBps) =>
 //
 // DORMANT until step 4 arms the contract and a `SellTaxTaken` watcher records episodes; the ingest
 // (`recordSellTax`) and the mod/QA seat exist now so the accounting is testable ahead of the chain.
+// ── D1 (SIGNED 2026-08-05, founder: "Max fee for D1") — THE TRADE FEE, folded into OmertaHook ──
+// A small fee on EVERY swap (buys INCLUDED), taken in ETH, funding the VIG — the pot that backs $OMR
+// withdrawals (recordTradeFee → recordVigRevenue → the buyback → the full-reserve queue). So spenders
+// fund earners AND traders fund earners: a busy market directly raises how much players can withdraw.
+// A trade has no founder/business counterparty, so 100% goes to the Vig (TRADE_VIG_BPS 10000). MAX of
+// the confirmed 10–30 bps band = 30. Armed-at-zero (the sell-tax posture) with a compile-time cap in
+// the contract; the on-chain OmertaHook.tradeFeeBps mirrors this. §9.6 operating rule holds: this is a
+// FLAT fee, unrelated to the bond discount. Chain-dormant — the backend (recordTradeFee/syncTradeFees)
+// is built; the contract fold is the mainnet milestone (third-party audit + legal gated).
+export const TRADE_FEE = {
+  BPS: Number(process.env.TRADE_FEE_BPS || 30),                // 0.30% on every swap (contract MAX 100 = 1%)
+  VIG_BPS: Number(process.env.TRADE_VIG_BPS || 10000),         // 100% → the Vig (no business counterparty on a trade)
+  MAX_BPS: 100,                                                // OmertaHook.MAX_TRADE_FEE_BPS — kept in lockstep
+};
+(() => { if (TRADE_FEE.BPS > TRADE_FEE.MAX_BPS) throw new Error(`TRADE_FEE.BPS ${TRADE_FEE.BPS} exceeds the contract cap ${TRADE_FEE.MAX_BPS}`);
+  if (TRADE_FEE.VIG_BPS > 10000) throw new Error(`TRADE_FEE.VIG_BPS ${TRADE_FEE.VIG_BPS} exceeds 100%`); })();
+
 export const SELL_TAX = {
   BPS: Number(process.env.SELL_TAX_BPS || 900),                // 9% on a sell (contract cap: 1000)
   DEV_BPS: Number(process.env.SELL_TAX_DEV_BPS || 200),        // 2% of the trade → founder revenue

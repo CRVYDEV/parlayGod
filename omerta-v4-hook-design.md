@@ -547,10 +547,18 @@ and the choice is the founder's because it turns on wallet topology, not on code
    Deploy requirement: `rwaRecipient` must be a DIFFERENT key from `vigRecipient`, or the custody
    defect the backend interim was rejected for reappears with the books still reading correct.
 8. **TWO HOOKS ARE PLANNED FOR ONE POOL, AND A `PoolKey` HOLDS EXACTLY ONE.** **ANSWERED 2026-08-02
-   (SIGN-OFF D1 = A, the fold): one hook, four destinations — a new buy-side trade fee joins the sell
-   tax in `OmertaHook`. NOT YET BUILT: the buy-fee RATE (proposed 20 bps) awaits founder confirmation
-   (SIGN-OFF.md, THE SHEET REFRESHED Part A), and the contract change must land before an address is
-   mined and the third-party audit runs.** The original fork, kept as the record: `omerta-uniswap-hooks-design.md` §2 specifies an
+   (SIGN-OFF D1 = A, the fold: one hook, four destinations). RATE SIGNED 2026-08-05 (founder: "Max fee
+   for D1") — the buy-side trade fee is `TRADE_FEE.BPS = 30` (the MAX of the confirmed 10–30 band),
+   `TRADE_VIG_BPS = 10000` (100% → the Vig, since a trade has no founder/business counterparty), armed
+   at zero with a compile-time cap of 100 (1%); the constants are locked in `rules.tail.js:TRADE_FEE`.
+   THE CONTRACT FOLD IS THE REMAINING MAINNET-MILESTONE BUILD, and it is deliberately its own focused
+   session rather than a bolt-on: the fee is taken in ETH so the Vig can book it, and ETH is the
+   SPECIFIED (input) currency on an exact-input BUY — the dominant router shape — so charging it there
+   needs the input-side `beforeSwap` delta path. The subtree's audited rule 7 warns that moving a
+   charge to `beforeSwap` breaks partially-filled swaps (the exact reason the sell tax lives in
+   `afterSwap`). Reconciling an ETH-always buy fee with partial fills is a real contract-design problem
+   that belongs in a session with full `forge test` iteration, not smuggled in with a rate confirmation.
+   The rate landing FIRST is the point — the design required it before an address is mined; it now has.** The original fork, kept as the record: `omerta-uniswap-hooks-design.md` §2 specifies an
    `afterSwap`→Vig **trade-fee** hook — a small cut of *every* swap's ETH leg, funding the withdrawal
    reserve — and its BACKEND IS ALREADY BUILT AND DORMANT (`vig.js:recordTradeFee`,
    `watcher.js:syncTradeFees`, `TRADE_FEE_HOOK_ADDRESS`, the `TradeFeePaid(nonce, amountWei)` adapter).

@@ -674,6 +674,18 @@ export async function bust(ch, victim, client, h) {
   if (jailed(ch)) throw new GameError('jailed', "You're in the same cage.");
   const remaining = victim.jail_until ? Math.max(0, (new Date(victim.jail_until) - Date.now()) / 1000) : 0;
   if (remaining <= 0) throw new GameError('free', 'They already walked.');
+  // D15 — the rolling-24h attempt bucket (the safehouse-cap shape): charged BEFORE the roll, win or
+  // lose, so a failed try is not a free retry and camping the jailbirds has a hard daily ceiling.
+  // Direct SQL under the held char lock (the columns are off the positional persist — clobber-safe).
+  const bustCap = M3.BUST_ATTEMPTS_DAY || 0;
+  if (bustCap > 0) {
+    const refill = ch.bust_at ? (Date.now() - new Date(ch.bust_at).getTime()) / 86400000 * bustCap : bustCap;
+    const used = Math.max(0, Number(ch.bust_used || 0) - Math.max(0, refill));
+    if (used + 1 > bustCap)
+      throw new GameError('bust_cap', "You've pushed your luck at the jailhouse today — the guards know your face. Come back tomorrow.");
+    await client.query('UPDATE characters SET bust_used=$2, bust_at=now() WHERE id=$1', [ch.id, used + 1]);
+    ch.bust_used = used + 1; ch.bust_at = new Date();
+  }
   const ev = cityEventOf(dayOf());
   const chance = Math.max(0.10, Math.min(0.90, 0.7 - remaining / 400 + (Number(ch.busts) || 0) * 0.03 + (ev.bustAdd || 0)));
   const roll = Math.random();

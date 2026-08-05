@@ -4931,3 +4931,29 @@ Their pins left `test/levers.js` with the levers. What this does to the economy,
   vocabulary + both dividend pools stay in `invariants.js` for the historical rows. The new
   `portfolio retired` check (exact reasons, never `rwa:%` — `rwa:vault` is live) is the alarm if a
   retired till ever re-opens.
+
+## D13 + D15 (SIGNED 2026-08-05 — founder: "d13 let's go with your recommendation / D15 implement your recommendation")
+
+- **D13 — `M4.DEAL_ENERGY` 4**: the Kitchen deal costs 4 energy, flat per deal. Energy measured
+  full 93–96% of played minutes (vestigial for a street player); this gives the tank its first real
+  substitution decision (~17 deals OR a gym block OR a crew score per burst) without touching the
+  signed §7.10 cash curve or crime's pure-nerve throttle. Energy is regen → zero §10.4 surface.
+  Re-measured with `tools/playthrough.js` (see the harness note below); the dial comes DOWN if the
+  corner ever reads double-throttled below the signed curve's intent.
+- **D15 — `M3.BUST_ATTEMPTS_DAY` 5**: bust attempts on a rolling-24h token bucket (the wash/safehouse
+  shape, direct-SQL `bust_used/bust_at`), charged on the ATTEMPT win or lose. Uncapped chasing
+  measured at 26% of played minutes in lockup; the dailies want ≤2 busts so the honest player never
+  feels 5; the §7.8 faucet ceiling falls to ~5 × $6.5k ≈ $32.5k/day/player at the jailbird cap.
+  A gate on a signed faucet — no §10.4 change. `bustAttemptsLeft` rides the sheet.
+
+## D1 — THE TRADE FEE (RATE SIGNED 2026-08-05, founder: "Max fee for D1")
+
+`TRADE_FEE.BPS` **30** (the MAX of the confirmed 10–30 band), `TRADE_VIG_BPS` **10000** (100% → the
+Vig — a trade has no founder/business counterparty), `MAX_BPS` **100** (contract cap, 1%). Armed at
+zero (the sell-tax posture). What it funds: the Vig — the ETH pot that backs $OMR withdrawals
+(`recordTradeFee` → `recordVigRevenue` → the buyback → the full-reserve queue), so a busy market
+directly raises withdrawal headroom ("traders fund earners too"). Chain-dormant: the backend
+(`recordTradeFee`/`syncTradeFees`/the `TradeFeePaid` adapter) is built; the CONTRACT fold into
+`OmertaHook` is the remaining mainnet-milestone build (an ETH-on-buys fee needs the input-side
+`beforeSwap` path, which the subtree's rule 7 flags as partial-fill-risky — its own focused,
+forge-verified contract session). The rate landing first is the design's required sequencing.
