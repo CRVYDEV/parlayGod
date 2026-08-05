@@ -416,7 +416,7 @@ const SIGNED = [
   // JAILBIRDS — makes the SIGNED §7.8 bust:reward faucet reachable solo (bounded by the refill)
   ['POPULATION.JAILBIRDS.TARGET', 2],
   ['POPULATION.JAILBIRDS.MIN_S', 240],
-  ['POPULATION.JAILBIRDS.MAX_S', 1200],
+  ['POPULATION.JAILBIRDS.MAX_S', 400],   // 1200 → 400 SIGNED 2026-08-05 (Part B A5 — the camp-the-long-sentence EV cap)
   // …and the throttle on the other side of it. A failed bust is the ONLY cost of the loop (no
   // energy, no nerve, no ammo), so this number alone sets how many attempts a camper gets at a
   // bird before it walks — which is what P9.28 measures the faucet ceiling from. Pinned when that
@@ -719,6 +719,7 @@ const SIGNED = [
   ['WORLD.COOP_MIN', 2],
   ['WORLD.ENRAGE_DEF', 60],
   ['WORLD.FRONTIER.INVADE_BASE', 50000],
+  ['WORLD.FRONTIER.INVADE_BASE_BPS', 200],   // SIGNED 2026-08-05 (Part B A12 — value-at-stake indexing, the WAR_COST_BPS twin)
   ['WORLD.FRONTIER.INVADE_OUTBID', 1.5],
   ['WORLD.FRONTIER.ROUT_GARRISON', 25000],
   ['WORLD.FRONTIER.TRIBUTE_CAP_MS', 86400000],

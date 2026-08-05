@@ -1282,6 +1282,11 @@ export const WORLD = {
     ROUT_GARRISON: 25000,             // the base defense installed when a family takes an outpost by routing it
     INVADE_BASE: 50000,               // the floor treasury cost to invade a held outpost…
     INVADE_OUTBID: 1.5,               // …or 1.5× the incumbent's garrison, whichever is higher (the SEIZE_OUTBID twin)
+    // SIGN-OFF 2026-08-05 (Part B row A12) — VALUE-AT-STAKE INDEXING, the WAR_COST_BPS twin at the
+    // same 200 bps: the flat $50k floor was noise to a maxed family (0.08% of a day), so the floor
+    // now also scales with the OUTFIT'S SIZE (outfit.max × this/10000 — volkov $240k, moreau $100k;
+    // the small outfits stay on the $50k on-ramp floor, which is the point of leaving it flat).
+    INVADE_BASE_BPS: 200,
   },
   // ── STEP SIX — THE UPRISING (the cartels PUSH BACK — the world's first proactive threat) ──
   // A seed-drawn, forecast-able event: on some days ONE outfit RISES UP. While rising it defends
@@ -3938,7 +3943,12 @@ export const POPULATION = {
   // path (its curve makes long sentences near-impossible and short tails worthwhile, so the play is
   // catching one near the end). Pure jail_until pacing — zero §10.4; the bust:reward faucet it makes
   // reachable is the SIGNED §7.8 one, bounded by the refill rate (BALANCE flag).
-  JAILBIRDS: { TARGET: 2, MIN_S: 240, MAX_S: 1200 },
+  // MAX_S 1200 → 400 (SIGN-OFF 2026-08-05, Part B row A5): the bust reward is LINEAR in the
+  // sentence while the §7.8 chance FLOORS at 10% above 240s, so camping the longest spawn was
+  // always strictly best — a ~$463k/day city ceiling on the ONE loop that spends no signed
+  // resource. Capping the spawn at 400s caps the camp reward at ~$6.5k and cuts the ceiling ~⅔;
+  // availability (the daily contract's completability) is untouched.
+  JAILBIRDS: { TARGET: 2, MIN_S: 240, MAX_S: 400 },
   // STEP TWO of THE STREET WAR (omerta-street-rivals-design.md §4): residents OWN things worth
   // taking, so the asset-crime loop is live in an empty alpha. Every mark is a DELIBERATE, bounded
   // faucet flagged in BALANCE.md (the npc:seed / NPC-trucking posture):

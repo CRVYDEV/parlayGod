@@ -393,11 +393,29 @@ assert.equal((await call('POST', '/v1/gangs', { token: rboss.token, body: { name
 const rivalGang = (await meOf(rboss.token)).gang.id;
 const RIVAL_SEED = 500000;
 await pool.query(`UPDATE gangs SET treasury=${RIVAL_SEED} WHERE id='${rivalGang}'`);
-const expectCost = Math.max(WORLD.FRONTIER.INVADE_BASE, Math.floor(WORLD.FRONTIER.ROUT_GARRISON * WORLD.FRONTIER.INVADE_OUTBID));
+const KRYL_MAX = 1500000; // kryl's reservoir — its 2% index ($30k) sits UNDER the $50k floor, so kryl's price is unchanged
+const expectCost = Math.max(WORLD.FRONTIER.INVADE_BASE, Math.floor(KRYL_MAX * WORLD.FRONTIER.INVADE_BASE_BPS / 10000),
+  Math.floor(WORLD.FRONTIER.ROUT_GARRISON * WORLD.FRONTIER.INVADE_OUTBID));
 const inv = await call('POST', '/v1/world/kryl/invade', { token: rboss.token });
 assert.equal(inv.code, 200, 'the rival marches on the outpost');
 assert.equal(inv.body.cost, expectCost, 'the cost outbids the incumbent garrison (max of base, 1.5× garrison)');
 assert.equal(Number((await pool.query(`SELECT treasury FROM gangs WHERE id='${rivalGang}'`)).rows[0].treasury), RIVAL_SEED - expectCost, 'the treasury pays the war chest');
+// (A12, SIGNED 2026-08-05) VALUE-AT-STAKE INDEXING must actually BITE somewhere, or the kryl
+// expectation above passes with the term deleted (a vacuous guard): volkov's floor is its size —
+// 12M × 200bps = $240k — not the flat $50k, read off the board's own quote (garrison 0, so the
+// index IS the binding term)
+{ // volkov's row may not exist yet (world_npcs materializes on first touch) — seed it plainly
+  const upd = await pool.query(`UPDATE world_npcs SET held_by_gang='${rivalGang}', garrison=0 WHERE npc_id='volkov'`);
+  if (!upd.rowCount) await pool.query(
+    `INSERT INTO world_npcs (npc_id, strength, held_by_gang, garrison) VALUES ('volkov', 12000000, '${rivalGang}', 0)`);
+}
+{
+  const wb = (await call('GET', '/v1/world', { token: boss.token })).body;
+  const volkov = wb.npcs.find((o) => o.id === 'volkov');
+  assert.equal(volkov.invadeCost, Math.floor(12000000 * WORLD.FRONTIER.INVADE_BASE_BPS / 10000),
+    'an apex outpost\'s invade floor is indexed to the outfit\'s size (the WAR_COST_BPS twin), not the flat on-ramp price');
+  await pool.query(`UPDATE world_npcs SET held_by_gang=NULL WHERE npc_id='volkov'`);
+}
 assert.equal(await ledgerOf(rboss.id, 'cash', 'world:invade'), 0, 'the invade cost is character_id NULL (gang-level)');
 const invadeLedgered = Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='cash' AND reason='world:invade'`)).rows[0].s);
 assert.equal(invadeLedgered, -expectCost, 'the invade cost is a ledgered treasury SINK');

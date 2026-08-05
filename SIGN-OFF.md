@@ -22,7 +22,7 @@ the ones you want to change or discuss. Technical detail for any row lives in `B
 
 # 📋 THE SHEET, REFRESHED — 2026-08-05
 
-Two parts. **Part A is the honest ledger of your LAST answers** — five of the fifteen were never
+Two parts. **Part A is the honest ledger of your last answers** — five of the fifteen were never
 built, and a signed decision that never shipped is worse than an open one, because you think it's
 done. **Part B is everything new since 2026-08-02** that wants a verdict. Answer the same way:
 *"A3: SHIP. B6: CHANGE."* is a complete reply.
@@ -47,7 +47,15 @@ done. **Part B is everything new since 2026-08-02** that wants a verdict. Answer
 | D14 | stats matter more to the crime roll | **NOT BUILT** — touches the SIGNED §7.2 curve | I'll propose the exact weighting + harness measurement as its own one-pager before touching it (your answer authorised the direction, not a number) |
 | D15 | cap bust attempts per day | **NOT BUILT** | one number: proposed **5 attempts/day** (the harness showed uncapped chasing = 26% of play in lockup) |
 
-## PART B — new since 2026-08-02, wants a verdict
+## PART B — ✅ SIGNED 2026-08-05 (founder: *"Part B: SHIP"*)
+
+Every row below is now **production balance** at my recommendation. The two CHANGE rows were applied
+and re-measured the same day: **A5** `JAILBIRDS.MAX_S` 1200 → 400 (city ceiling ~$463k/day →
+**~$84,552/day**, an 82% cut — deeper than the sheet's ~⅔ estimate; sim P9.28 re-prints it every
+run) and **A12** `FRONTIER.INVADE_BASE_BPS` 200 (an apex outpost's invade floor is now indexed to
+the outfit's size — volkov $240k — while the $30k unheld-district on-ramp stays flat on purpose).
+The WATCH rows (A4 hired guns at apex cadence; the Float's whales-actually-commit question) are the
+alpha watch-list. Part A's five unbuilt answers remain the open items on this sheet.
 
 Everything here shipped as PROPOSED DEFAULTS under your standing direction and is safe as-is for the
 alpha; a verdict makes it production balance. Measurements are the sim's, cited in BALANCE.md.

@@ -3118,6 +3118,16 @@ been since the pacing pass + the asset re-curve. No lever should move on account
 
 ## THE JAILBIRD FAUCET — measured, flagged, NOT retuned (2026-07-31)
 
+**RETUNED 2026-08-05 (founder: "Part B: SHIP" — sheet row A5, the recommended CHANGE).**
+`POPULATION.JAILBIRDS.MAX_S` 1200 → **400**. The reward is linear in the sentence while the §7.8
+chance floors at 10% above 240s, so camping the longest spawn was always strictly best on the ONE
+loop that spends no signed resource. Re-measured (sim P9.28, prints every run): best camp
+$18,500 → **$6,500** at 10%, EV $1,850 → **$650/attempt**, city-wide ceiling ~$463k/day →
+**~$84,552/day** — an 82% cut, deeper than the ~⅔ the sheet estimated because the estimate did not
+carry the attempts-before-walk compounding. Availability (the daily bust contract's completability)
+is untouched: TARGET 2 birds still stand, only the LONG sentence — and with it the fat reward — is gone.
+The section below is the original measurement, kept as the record.
+
 **What this is.** The onboarding batch's JAILBIRDS drop (task #308) added no reason and no formula.
 It keeps `POPULATION.JAILBIRDS.TARGET` (2) residents serving a sentence so the §7.8 bust verb and its
 dailies are completable on a solo run — the founder-reported dead end. What it *did* do is make the
@@ -4392,6 +4402,16 @@ label noting the chest scales with the target's treasury). `test/expansion.js` p
 were DELIBERATELY LEFT** on the garrison ratchet (`max(BASE, garrison × OUTBID)`): the incumbent's
 garrison IS the value at stake there, and a fresh/unheld target being cheap is the intended turf
 on-ramp.
+
+**RESOLVED 2026-08-05 (founder: "Part B: SHIP" — sheet row A12).** `FRONTIER.INVADE_BASE_BPS`
+(**200** — deliberately the `WAR_COST_BPS` number) joins the invade floor: the cost is now
+`max($50k, outfit.max × 200bps, garrison × 1.5)`, so an apex outpost is never a flat-$50k purchase
+for a maxed family — volkov's floor is **$240k**, moreau's $100k — while every outfit from kryl down
+stays on the $50k on-ramp floor (kryl's index is $30k, under it, which is the point of a floor).
+The **$30k unheld-district price stays FLAT on purpose**: it is the new-family on-ramp, and the
+contest ratchet already prices contested ground. §10.4 untouched (only the `world:invade` amount
+scales); `test/world.js` proves the index BITES at volkov off the board's own quote
+(mutation-verified — dropping the term fails 50,000-vs-240,000 by name); pinned in `test/levers.js`.
 
 **`M3.SEIZE_BASE` opening-floor indexing — CLOSED, would DOUBLE-COUNT (verified 2026-08-04).** The
 follow-on flagged here (index the seize floor to the district's operation tier so the ratchet
