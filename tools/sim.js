@@ -438,12 +438,18 @@ for (const f of WORLD_NPCS.filter((n) => n.coop)) {
 note('world', 'co-op = ACCESS not ceiling', `crew splits ONE grab (leader ${WORLD.COOP_LEADER_WEIGHT}×)`,
   'total emission stays ≤ regen; co-op just makes a heavy apex def beatable — B1 solo-floor is the dial');
 
+// THE RESIDENT-ECONOMY ACCUMULATOR — each resident-facing probe below assigns its computed daily total
+// here, and P9.32 SUMS them (never re-derives): one formula per faucet, so a retune of any single lever
+// is re-measured in both the individual probe AND the consolidated ceiling with no copy to drift.
+const RESIDENT = {};
+
 // ════════ THE BLOOD WAR — NPC-family raid faucet ceiling (analytic, the world-raid twin) ════════
 // A family:raid loots a bounded slice of a regen-bounded war_pool, so base-wide emission ≤ regen per
 // family × the number of NPC families. Below the weakest World outfit by design (turnover-seeded).
 {
   const regenDayFam = FAMILY_WAR.POOL_REGEN_HR * 24;            // steady-state emission ≤ regen, per family
   const fams = POPULATION.FAMILIES.TARGET;
+  RESIDENT.familyRaidCeil = regenDayFam * fams;                 // resident-ENABLED, regen-bounded (not summed into the population total)
   const raidsDay = 24 / (FAMILY_WAR.RAID_CD_MS / 3600000);       // one raider's cadence (4h cd → 6/day)
   const perRaid = Math.min(Math.floor(FAMILY_WAR.POOL_MAX * FAMILY_WAR.RAID_BPS / 10000), FAMILY_WAR.RAID_MAX);
   note('blood war', `per-family ceiling (${fams} NPC families)`, `≤ $${fmt(regenDayFam)}/day/family → ≤ $${fmt(regenDayFam * fams)}/day base-wide`,
@@ -962,6 +968,7 @@ phase('P9.21 the population — the npc:seed faucet ceiling');
   // fresh seed pays for (metering dollars would let the day-one fill of an empty city eat the whole
   // allowance before anyone had been robbed).
   const perDay = POPULATION.TURNOVER.PER_DAY * expSeed;
+  RESIDENT.seedTurnover = perDay;
   note('population', 'standing pool', `~$${fmt(standing)}`,
     'what is on the street at any instant — step two made ~100% of it realizable (was ~25%: only a kill burns the remainder)');
   note('population', 'RECURRING ceiling', `${POPULATION.TURNOVER.PER_DAY} replacements/day ≈ $${fmt(perDay)}/day`,
@@ -1134,6 +1141,7 @@ phase('P9.25 residents-as-marks — the step-two faucet ceilings');
     frontDay += expected * scaledDay * 0.9;  // ≤90%/day realizable (3 shakedown visits × 30% of a 24h pending)
     frontCount += expected;
   }
+  RESIDENT.marksFronts = frontDay;
   note('marks', 'resident FRONTS (rob/shakedown ceiling)', `~$${fmt(Math.round(frontDay))}/day base-wide across ~${frontCount.toFixed(1)} sleepy joints`,
     `each front runs at FRONT_INCOME_BPS (${Mk.FRONT_INCOME_BPS / 100}%) of the catalog curve and only ever REALIZES through the shared-window rob/shakedown/inside redirect — residents never collect. Dials: FRONT_INCOME_BPS, FRONT_P, the band FRONTS map`);
   // CARS: standing stock ≈ one beater per marked resident, replenished only by TURNOVER — the
@@ -1141,10 +1149,12 @@ phase('P9.25 residents-as-marks — the step-two faucet ceilings');
   const carEV = Object.entries(Mk.CAR_VAL).reduce((a, [band, [lo, hi]]) => a + (bandW[band] || 0) * (Mk.CAR_P[band] || 0) * (lo + hi) / 2, 0)
     / Object.keys(Mk.CAR_VAL).reduce((a, band) => a + (bandW[band] || 0) * (Mk.CAR_P[band] || 0), 0);
   const carsPerDay = POPULATION.TURNOVER.PER_DAY * Object.entries(Mk.CAR_P).reduce((a, [band, pp]) => a + (bandW[band] || 0) * pp, 0);
+  RESIDENT.marksCars = { perDay: carsPerDay, ev: carEV };
   note('marks', 'resident CARS (steal→melt ceiling)', `~${carsPerDay.toFixed(1)} beaters/day replenished (mean value ~$${fmt(Math.round(carEV))}; melt realizes well under half)`,
     `bounded by the turnover cap × band P × the victim shield (one vehicle/day per resident) — petty by design; conservation holds via rng_audit npc:car grant/retire rows`);
   // BOATS: dinghy resale is the realized faucet, same turnover bound.
   const boatPerDay = POPULATION.TURNOVER.PER_DAY * Object.entries(Mk.BOAT_P).reduce((a, [band, pp]) => a + (bandW[band] || 0) * pp, 0);
+  RESIDENT.marksBoats = boatPerDay * boatResale('dinghy');
   note('marks', 'resident BOATS (steal→resale ceiling)', `~${boatPerDay.toFixed(1)} dinghies/day × $${fmt(boatResale('dinghy'))} resale ≈ $${fmt(Math.round(boatPerDay * boatResale('dinghy')))}/day`,
     `always the cheapest hull; bounded by turnover + the SHARED vehicle shield. Dial: BOAT_P`);
   // FREIGHT is recycle-only (bought with seed cash at the real market rail) — a redistribution of
@@ -1228,6 +1238,7 @@ phase('P9.28 jailbirds × bust:reward — the reachable §7.8 faucet');
   const landP = 1 - (1 - best.p) ** tries;              // at least one success before it walks
   const perBird = landP * best.reward;
   const perDay = jb.TARGET * 24 * perBird;               // hourly worker tick, TARGET birds a tick
+  RESIDENT.jailbirds = perDay;
   note('jailbirds', 'city-wide ceiling', `~$${fmt(Math.round(perDay))}/day`,
     `TARGET ${jb.TARGET} birds × 24 hourly ticks × $${fmt(Math.round(perBird))} expected each (${tries} attempts before it walks at ${(best.p * 100).toFixed(0)}% ⇒ ${(landP * 100).toFixed(0)}% land). SHARED city-wide and first-come, so it is one player's income only in a thin alpha — which is exactly when it is live. That is an order of magnitude above the "a few $k/hour" the drop estimated, because the estimate did not carry the reward's linear term in MAX_S`);
   note('jailbirds', 'cost side', 'no energy, no nerve, no ammo — only the fail-jail',
@@ -1294,6 +1305,9 @@ phase('P9.31 the hired guns — apex raids made solo-realizable (founder SIGN-OF
   // the MINIMUM unblock is (COOP_MIN − 1) guns (a soloist with no real teammates); more guns buy only odds.
   const minGuns = Math.min(WORLD.HIRE_MAX, Math.max(0, WORLD.COOP_MIN - 1));
   const minCost = minGuns * WORLD.HIRE_FEE, maxCost = WORLD.HIRE_MAX * WORLD.HIRE_FEE;
+  // resident-ENABLED, regen-bounded: hired guns don't widen the world:raid faucet (still ≤ regen), they
+  // only make the coop-only apex reservoirs SOLO-realizable. Summed as an adjacent, not a population faucet.
+  RESIDENT.apexWorldCeil = WORLD_NPCS.filter((n) => n.coop).reduce((a, f) => a + f.regenPerHr * 24, 0);
   for (const f of WORLD_NPCS.filter((n) => n.coop)) {
     const grab = Math.min(Math.floor(f.max * WORLD.GRAB_BPS / 10000), WORLD.GRAB_MAX);
     const netMin = grab - minCost; // a solo takes the WHOLE grab; the cheapest crew is minGuns hired
@@ -1303,6 +1317,50 @@ phase('P9.31 the hired guns — apex raids made solo-realizable (founder SIGN-OF
   }
   note('hired-guns', 'the fee is the dial', `$${fmt(minCost)}–$${fmt(maxCost)} to field a bought crew`,
     `HIRE_FEE/HIRE_MAX are founder sign-off levers — a real cash sink pricing solo access to a coop-only reservoir; extra guns above the min buy only ODDS (their firepower counts). A hired gun forfeits its cut so the co-op faucet only SHRINKS per real head, §10.4-neutral vs a real crew`);
+}
+
+// ════════ P9.32 THE RESIDENT ECONOMY — one consolidated base-wide emission ceiling ════════
+// The resident-facing faucets grew one drop at a time (P9.21 seed turnover, P9.25 marks, P9.26 corner,
+// P9.28 jailbirds, the blood war, the hired guns), each measured in isolation. This SUMS them so the
+// founder reads ONE number for "how much can the NPC layer put into the economy per day", and its ratio
+// to the passive stack (P9.20) — the anchor that says whether a faucet is a rounding error or a rival.
+// It re-uses each probe's OWN computed total (the RESIDENT accumulator above), so there is no second
+// formula to drift; a retune of any resident lever moves this ceiling automatically. Nothing is seeded.
+//
+// THREE CATEGORIES, kept apart on purpose:
+//  (A) NEW EMISSION the resident population itself creates — cash minted into the game that would not
+//      exist without residents: the seed pool players loot (turnover-metered) + the sleepy-joint fronts
+//      they rob. These are the honest headline.
+//  (B) resident-ENABLED but REGEN-bounded — faucets that ride ANOTHER pillar's shared reservoir, which
+//      residents make reachable but do not enlarge: jailbirds (§7.8 bust:reward), the blood war
+//      (family:raid), and the hired-gun apex world raids. Their ceiling is the reservoir's regen, the
+//      same with or without residents, so they are listed but NOT summed into (A).
+//  (C) TRANSFERS — resident interactions that move existing value and net zero: THE TAKE (crime
+//      re-sourced off a mark, P9.27), the contact call / THE FAVOR / freight robbery. Zero new supply.
+phase('P9.32 the resident economy — the consolidated base-wide ceiling');
+{
+  const PASSIVE_STACK = 21_600_000;   // P9.20, post-severance net (the anchor; see the note at P9.21)
+  // (A) new emission. Cars/boats are a bounded ADDENDUM: a stolen beater is realized by melt→ammo or
+  // fence→cash, so its CASH-equivalent is a fraction of book value; CAR_REALIZE is a conservative,
+  // clearly-labelled discount (fence/melt-to-ammo well under half), not a signed lever.
+  const CAR_REALIZE = 0.4;
+  const carsDay = RESIDENT.marksCars.perDay * RESIDENT.marksCars.ev * CAR_REALIZE;
+  const cashFaucets = RESIDENT.seedTurnover + RESIDENT.marksFronts;   // unambiguous cash
+  const vehicleAddendum = carsDay + RESIDENT.marksBoats;              // realization-discounted
+  const newEmission = cashFaucets + vehicleAddendum;
+  note('resident economy', '(A) NEW EMISSION — cash faucets', `~$${fmt(Math.round(cashFaucets))}/day`,
+    `npc:seed turnover $${fmt(Math.round(RESIDENT.seedTurnover))}/day (P9.21) + marks fronts $${fmt(Math.round(RESIDENT.marksFronts))}/day (P9.25) — the two unambiguous cash faucets the NPC population mints`);
+  note('resident economy', '(A) NEW EMISSION — vehicle addendum', `~$${fmt(Math.round(vehicleAddendum))}/day`,
+    `stolen resident cars (${RESIDENT.marksCars.perDay.toFixed(1)}/day × ~$${fmt(Math.round(RESIDENT.marksCars.ev))} book × ${CAR_REALIZE} realize = $${fmt(Math.round(carsDay))}) + boats (resale $${fmt(Math.round(RESIDENT.marksBoats))}); CAR_REALIZE ${CAR_REALIZE} is a labelled melt/fence discount, not a lever`);
+  note('resident economy', '(A) HEADLINE — total new emission', `~$${fmt(Math.round(newEmission))}/day base-wide`,
+    `${(newEmission / PASSIVE_STACK * 100).toFixed(1)}% of the $${fmt(PASSIVE_STACK)}/day passive stack (P9.20). The entire NPC population mints roughly ONE small territory racket's worth of new cash a day — a rounding error against the passive economy, bounded by POPULATION.TURNOVER.PER_DAY × band seed and the marks front redirect`);
+  // (B) resident-ENABLED, regen-bounded — the reservoir's regen is the ceiling, residents change only reach.
+  note('resident economy', '(B) regen-bounded (NOT summed)', `jailbirds ~$${fmt(Math.round(RESIDENT.jailbirds))}/day · blood war ≤ $${fmt(Math.round(RESIDENT.familyRaidCeil))}/day · hired-gun apex ≤ $${fmt(Math.round(RESIDENT.apexWorldCeil))}/day`,
+    `each rides another pillar's shared reservoir (§7.8 bust pool, family war_pool, world outfit regen) — the ceiling is that reservoir's REGEN with or without residents, so residents change WHO taps it, not the metered quantity. Excluded from the headline to avoid double-counting the World/Pen/blood-war ceilings`);
+  // (C) transfers — existing value moved, net zero.
+  note('resident economy', '(C) transfers (net-zero)', 'THE TAKE (P9.27) · the call · THE FAVOR · freight robbery',
+    'each moves value that already exists (a mark funds a crime, a contact pays from their own seed, a robbery realizes goods the resident already bought) — both legs ledger, netting zero. THE TAKE strictly SHRINKS crime emission by re-sourcing it off the marks. No new supply');
+  note('resident economy', 'extraction ≤ inflow', 'unaffected', 'every faucet here is in-game cash/goods, none touches the $OMR withdrawal rail; the full-reserve queue bound is orthogonal and untouched');
 }
 
 phase('P10 §10.4 ledger invariants over the ENTIRE sim (nothing was seeded)');
