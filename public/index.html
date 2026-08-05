@@ -1230,6 +1230,8 @@
   }
   const el = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d.firstElementChild; };
   const fmt = (n) => Number(n).toLocaleString('en-US');
+  // ordinals for the blood count ("the 3rd body between your bloodlines")
+  const nth = (n) => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return `the ${n}${s[(v - 20) % 10] || s[v] || s[0]}`; };
   // ── polish layer: haptics + tactile feedback (progressive enhancement — silent no-ops where unsupported;
   // iOS Safari has no Vibration API, Android/Chrome does; reduced-motion users get none by choice) ──
   const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1809,7 +1811,7 @@
       ? `🏛 YOUR BRICK FINISHED IT — ${body.monument} STANDS. The city will remember.`
       : `laid $${fmt(body.credited)} into ${body.monument} (your total: $${fmt(body.yourTotal)})`);
     if (body.win === false && body.hospSeconds !== undefined) bits.push(`the guards drove you off — ${Math.ceil(body.hospSeconds / 60)}m in the hospital`);
-    if (body.kill) bits.push(`THEY'RE DONE.${body.loot ? ` looted $${fmt(body.loot)}` : ''}${body.contraLoot ? ` · seized $${fmt(body.contraLoot)} in contraband` : ''}${body.empireLoot ? ` · 🏢 TOOK OVER their ${body.empireLoot.name}` : ''}${body.bounty ? ` · contract paid $${fmt(body.bounty)}` : ''}${body.ammoBack ? ` · the contract covered ${fmt(body.ammoBack)} rounds` : ''}`);
+    if (body.kill) bits.push(`THEY'RE DONE.${body.loot ? ` looted $${fmt(body.loot)}` : ''}${body.contraLoot ? ` · seized $${fmt(body.contraLoot)} in contraband` : ''}${body.empireLoot ? ` · 🏢 TOOK OVER their ${body.empireLoot.name}` : ''}${body.bounty ? ` · contract paid $${fmt(body.bounty)}` : ''}${body.ammoBack ? ` · the contract covered ${fmt(body.ammoBack)} rounds` : ''}${body.hitman?.blood?.ours > 1 ? ` · that's ${nth(body.hitman.blood.ours)} body between your bloodlines` : ''}`);
     if (body.hospitalized && !body.kill) bits.push('they went down — hospital job');
     if (body.absorbed) bits.push('their cover took the hit');
     if (body.reserve !== undefined && body.fee !== undefined && body.serial) bits.push(`🔨 ${body.name} #${body.serial} on the block — reserve ${fmt(body.reserve)} $OMR (−${body.fee} fee)`);
@@ -2689,6 +2691,7 @@
     body.innerHTML = `
       <h2 style="color:var(--blood)">YOUR STREET IS DEAD</h2>
       <p class="dim">${rep.by ? `Put in the ground by <b>${esc(rep.by)}</b>.` : 'The city took its due.'} But the name lives on — your bloodline rises again as <b>${esc(me.name)}</b>, generation ${me.generation}.</p>
+      ${rep.blood ? `<p class="dim" style="color:var(--bad)">That's ${nth(rep.blood.theirs)} body their line has taken from yours${rep.blood.ours ? ` — yours has taken ${rep.blood.ours} of theirs` : ''}. The ledger remembers, and so can you: their story is on Wet Work ▸ Your Rivals.</p>` : ''}
       <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px">
         <div style="flex:1;min-width:150px"><div class="t" style="color:var(--ok)">the heir KEEPS</div>
           <div class="dim" style="font-size:13px">${line(k.omr, `${fmt(Math.floor(k.omr || 0))} $OMR liquid`)}${line(k.staked, `${fmt(Math.floor(k.staked || 0))} staked`)}${line(k.gear, `${k.gear} on-chain gear`)}${line(k.prestige, `prestige ${k.prestige}`)}${line(k.portfolio, `$${fmt(k.portfolio)} legit book`)}${line(k.estate, `the ${esc(String(k.estate))}`)}the account, always</div></div>

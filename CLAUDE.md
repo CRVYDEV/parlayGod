@@ -9037,3 +9037,22 @@ the file, which is opsOverview's player count, not the census — a bad mutation
 clean bill of health; re-targeted on the query's unique interval and it fails by name. Suite green +
 sim drift-0 + pgquery/pgcheck on real Postgres (new SQL) + client mirror + mobile incl. the /admin
 render check.
+
+**COHESION STEP TWO — THE BLOOD AT THE MOMENTS THAT MAKE IT (founder-directed 2026-08-05).** The
+Cast/Story layer is read-only; this puts the narrative beat at the two moments the history is CREATED.
+**(1) The killer's toast** — `awardHitmanRep` counts the pair's kill_log both ways AFTER logging this
+kill and returns `blood {ours, theirs}` on the fire response; `describe()` appends "· that's the 3rd
+body between your bloodlines" (a new `nth()` ordinal helper) from the second body on. **(2) The heir's
+death modal** — `runEstate` puts `report.blood {theirs, ours}` on the estate report **ONLY when the
+report already NAMES the killer** (`killerName === opts.killerCh.name` — fire and the shank; an
+anonymous npcHit says 'A HIRED GUN' and a blood count keyed to a bloodline would OUT the payer — the
+info-economy rule, mutation-verified: dropping the name gate fails the npcHit-anonymity assertion by
+name). showDeath renders "That's the 3rd body their line has taken from yours — the ledger remembers,
+and so can you." **(3) A pre-existing record hole closed en route:** a SHANK kill paid zero rep AND
+wrote no kill_log row, so a yard body was invisible to the feud ledger, the nemesis card and the pair
+story — the relationship layer undercounted real kills. The shank now writes kill_log at **rep=0**
+(the record, never the rep — the bloodline-diminishing prior count filters rep>0, so every rep surface
+is byte-identical), regression-pinned in test/pen.js and mutation-verified. Zero §10.4 (counts read
+the log, nothing moves); zero new levers. test/social.js proves the killer response and the heir's
+modal read the SAME ledger (blood 2/0 on a repeat-bloodline kill, both surfaces) and that the hired
+kill stays anonymous.

@@ -131,6 +131,16 @@ assert(r.body.estate && r.body.estate.heirId, 'the estate runs — an heir is bo
 assert.equal((await rawCh(mark.id)).alive, false, 'the mark’s street is dead');
 assert.equal(Number((await rawCh(killer.id)).cash), killerCash0, 'a shank loots nothing — you can’t strip a man from a cell');
 assert(r.body.sentenceSeconds >= killerSentence0 + PEN.KILL_ADD_S - 3, 'a body means more time for the killer');
+// (cohesion step two) the RECORD, not the rep: a yard kill now reaches kill_log (rep=0, so every
+// rep surface is untouched) — without it the feud ledger, the nemesis card and the pair story were
+// blind to shank bodies, and the heir's modal counted fewer kills than the yard had seen
+{
+  const row = (await pool.query(
+    `SELECT rep FROM kill_log WHERE killer_account=(SELECT account_id FROM characters WHERE id='${killer.id}')
+        AND victim_account=(SELECT account_id FROM characters WHERE id='${mark.id}')`)).rows;
+  assert.equal(row.length, 1, 'the shank writes the kill_log record');
+  assert.equal(Number(row[0].rep), 0, 'at rep 0 — the record, never the rep (bloodline diminishing filters rep>0)');
+}
 
 // the caught miss: the shiv is spent, the killer eats damage + more time, the mark walks
 const killer2 = await mk('Clumsy Cliff');
