@@ -528,6 +528,29 @@ assert.equal(k.hitman.blood.theirs, 0, 'and no bodies the other way');
   assert.equal(last?.payload?.blood?.theirs, 2, "the heir's death modal reads the same blood count");
   assert.equal(last?.payload?.blood?.ours, 0, 'their line has taken none of the killer\'s');
 }
+// ── THE HEIR'S ARRIVAL (cohesion step three) — the coach carries the arc after the modal closes ──
+// The sworn vendetta finally has a voice on the ladder, and it OUTRANKS the generic "someone moved
+// on you" (the kill IS a recorded rival event, which would otherwise mask exactly this for 48h).
+{
+  const heir3 = await meOf(marked.token);   // generation 3, fresh, with a live vendetta against Don
+  assert(heir3.generation >= 3, 'the bloodline is on its third street');
+  assert.equal(heir3.coach?.label, 'Blood is owed', "the murdered heir's coach leads with the vendetta");
+  assert(/put in the ground/.test(heir3.coach.hint) && /DOUBLE/.test(heir3.coach.hint),
+    'naming who fell and what settling pays');
+  assert.equal(heir3.coach.tab, 'pvp', 'pointing at Wet Work');
+  // the vendetta settles/lapses → the heir's OWN rung leads: what the account kept, what's next
+  await pool.query(`DELETE FROM vendettas WHERE avenger_account=(SELECT account_id FROM characters WHERE id='${heir3.id}')`);
+  const rise = (await meOf(marked.token)).coach;
+  assert.equal(rise?.label, 'You rise again', 'then the rise-again rung — the heir\'s first minutes');
+  assert(/Generation 3/.test(rise.hint) && /prestige/.test(rise.hint),
+    'naming the generation and what the account kept (two deaths banked prestige)');
+  assert.equal(rise.tab, 'start', 'pointing at the Situation');
+  // …and it SELF-CLEARS at level 3 (the road-to-5 shape) — the generic rival rung is next in line
+  await seedCh(heir3.id, `respect=${10 * 3 * 3}`);
+  const after = (await meOf(marked.token)).coach;
+  assert.notEqual(after?.label, 'You rise again', 'a level-3 heir has arrived — the rung stands down');
+  assert.equal(after?.label, 'Someone moved on you', 'and the generic rival rung takes over, no longer masked');
+}
 donMe = await meOf(don.token);
 assert.equal(donMe.hitmanRep, 98, 'rep 82 + 16');
 assert.equal(donMe.kills, 3, 'three QUALIFYING lifetime kills (Rocco, Marked, heir — rookie excluded)');

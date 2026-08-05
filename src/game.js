@@ -1068,6 +1068,31 @@ function coachLadder(ch, acct, owned) {
   if (ch.welsher && add('Your name is mud', 'You welshed on a debt — nobody lends to you. Square it at the Shylock to borrow again.', 'loans')) return rungs;
   // STREET WAR step two — the city remembers who moved on you. Self-clears as the 48h window
   // rolls (the harness-F1 rule); under constant predation it stays lit, which is the news.
+  // THE HEIR'S ARRIVAL (cohesion step three) — the two beats after the death modal closes. Both sit
+  // ABOVE the generic "someone moved on you" rung ON PURPOSE: a murdered heir's kill IS a recorded
+  // rival event, so the generic rung would mask exactly these two for the 48h window — and for that
+  // player, these ARE the specific version of it.
+  // (1) THE SWORN VENDETTA finally gets a voice on the ladder: runEstate swears it and notifies
+  // ONCE, then nothing ever mentioned it again — the game's sharpest revenge hook sat silent in a
+  // view field. Window-bound, so it self-clears by settling OR lapsing (the wanted/indicted class),
+  // and it names what settling PAYS. Fires for any vendetta holder, not just a fresh heir.
+  {
+    const v = (owned.vendettas || [])[0];
+    if (v && add('Blood is owed', `${v.sworn ? `${v.sworn} was put in the ground` : 'Your blood was spilled'}${v.target_name ? ` — ${v.target_name} walks the streets` : ''}. The bloodline swore vengeance: a revenge kill inside the window pays DOUBLE feared-rep, and naming a gun on their head waives the directed floor. Wet Work — before it lapses.`, 'pvp')) return rungs;
+  }
+  // (2) YOU RISE AGAIN — the heir's first minutes. The modal said what carried; this rung makes it
+  // the NEXT STEP: the account survived, the street starts over, the coach picks up from here.
+  // Self-clears at level 3 (the road-to-5 shape — a fresh heir crosses it in one short sitting).
+  if (Number(ch.generation) > 1 && lvl < 3) {
+    const kept = [
+      Number(acct.staked || 0) > 0 ? `${Math.floor(Number(acct.staked))} $OMR staked` : null,
+      Number(acct.omr || 0) > 0 ? `${Math.floor(Number(acct.omr))} $OMR liquid` : null,
+      (owned.portfolio || []).length ? 'the legit book' : null,
+      owned.estate ? 'the compound' : null,
+      Number(acct.prestige || 0) > 0 ? `prestige ${acct.prestige}` : null,
+    ].filter(Boolean);
+    if (add('You rise again', `Generation ${ch.generation}. The street died; the BLOODLINE didn't — ${kept.length ? `the account kept ${kept.join(', ')}` : 'the account, the name and the ledger all carried'}. The street starts at level 1: pull jobs, and everything you built at the account level is still working for you.`, 'start')) return rungs;
+  }
   if ((owned.recentRivals || 0) > 0 && add('Someone moved on you', 'You were robbed, jumped or hit inside the last two days. Check YOUR RIVALS on Wet Work — the city remembers who, and settling your own scores pays honor.', 'pvp')) return rungs;
   if (Number(ch.lc_crime || 0) < 1 && add('Pull your first job', 'Head to the Streets. Pick any crime and press DO IT. That\'s the whole move — it pays cash and respect.', 'streets')) return rungs;
   // ── THE ROAD TO LEVEL 5 (founder-directed: walk a brand-new player there, no exploring needed).
