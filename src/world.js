@@ -26,7 +26,12 @@ function frontierTribute(fixture, tributeAt, now = Date.now()) {
   return Math.floor(frontierTributePerHr(fixture) * hrs);
 }
 // step four: the treasury cost to invade a held outpost — outbid the incumbent's garrison (the SEIZE twin).
-const invadeCost = (garrison) => Math.max(WORLD.FRONTIER.INVADE_BASE, Math.floor(Number(garrison || 0) * WORLD.FRONTIER.INVADE_OUTBID));
+// SIGN-OFF 2026-08-05 (A12): the floor is VALUE-AT-STAKE indexed (outfit.max × INVADE_BASE_BPS —
+// the WAR_COST_BPS twin), so an apex outpost is never a flat-$50k purchase for a maxed family while
+// the small outfits keep the flat on-ramp floor. Still outbid by 1.5× the incumbent's garrison.
+const invadeCost = (garrison, fixtureMax) => Math.max(WORLD.FRONTIER.INVADE_BASE,
+  Math.floor(Number(fixtureMax || 0) * (WORLD.FRONTIER.INVADE_BASE_BPS || 0) / 10000),
+  Math.floor(Number(garrison || 0) * WORLD.FRONTIER.INVADE_OUTBID));
 
 const cooling = (ch) => ch.world_raid_at && new Date(ch.world_raid_at) > new Date();
 
@@ -139,7 +144,7 @@ export async function worldBoard(pool, ch = null, h = null) {
         // so this is the conservative safe target, never an under-statement that traps the defender.
         upriseNeed: mine && isRising ? Math.floor(f.max * WORLD.UPRISING.THRESHOLD_BPS / 10000) : null,
         reinforceMin: mine ? WORLD.UPRISING.REINFORCE_MIN : null, // the floor to stiffen your garrison
-        invadeCost: holder && !mine ? invadeCost(row.garrison) : null, // what it'd cost your family to take it
+        invadeCost: holder && !mine ? invadeCost(row.garrison, f.max) : null, // what it'd cost your family to take it
         canRaid: !!ch && lvl >= f.minLvl && !f.coop, // SIGN-OFF (1.3): apex (coop) outfits need a crew, not a solo hit
         odds: ch && lvl >= f.minLvl ? Math.round(raidChance(f, power, patrol, enraged, isRising) * 100) : null,
       };
@@ -644,7 +649,7 @@ export async function invadeOutpost(ch, npcId, client, h) {
   const row = (await client.query('SELECT held_by_gang, garrison FROM world_npcs WHERE npc_id=$1 FOR UPDATE', [npcId])).rows[0];
   if (!row || !row.held_by_gang) throw new GameError('unheld', `Nobody holds ${fixture.name} — rout it to take the turf.`);
   if (row.held_by_gang === h.owned.gangId) throw new GameError('held', 'Your family already holds that outpost.');
-  const cost = invadeCost(row.garrison);
+  const cost = invadeCost(row.garrison, fixture.max);
   if (Number(g.treasury) < cost) throw new GameError('treasury', `Marching on ${fixture.name} takes $${cost} from the treasury.`);
   const now = new Date();
   await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [h.owned.gangId, cost]);

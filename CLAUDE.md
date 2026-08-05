@@ -9077,3 +9077,28 @@ real thing — a twice-killed bloodline's generation-3 heir: vendetta leads → 
 (naming Generation 3 + the banked prestige) → level 3 stands it down → the generic rival rung takes
 over unmasked. Harness: 'You rise again' clears by ordinary play; 'Blood is owed' is recorded as the
 gate it is (a solo run is never murdered). Zero §10.4, zero levers, zero new SQL.
+
+**PART B SIGNED (founder 2026-08-05: "Part B: SHIP") — the sheet's whole B-side is production
+balance, and the two CHANGE rows shipped the same day.** **(A5)** `POPULATION.JAILBIRDS.MAX_S`
+1200 → **400** — the bust reward is linear in the sentence while the §7.8 chance floors at 10% above
+240s, so camping the longest spawn was strictly best on the ONE loop that spends no signed resource;
+re-measured at sim P9.28: best camp $18,500 → $6,500, EV $1,850 → $650/attempt, city ceiling
+~$463k/day → **~$84,552/day** (an 82% cut — deeper than the sheet's ~⅔ estimate, which had not
+carried the attempts-before-walk compounding). Availability untouched (TARGET 2 birds still stand).
+**(A12)** `FRONTIER.INVADE_BASE_BPS` **200** (deliberately the `WAR_COST_BPS` number) joins the
+invade floor — `max($50k, outfit.max × 200bps, garrison × 1.5)` — so an apex outpost is never a
+flat-$50k purchase for a maxed family (volkov $240k, moreau $100k) while kryl-down stays on the $50k
+on-ramp floor; the **$30k unheld-district price stays FLAT on purpose** (the new-family on-ramp).
+§10.4 untouched in both (only amounts scale on existing sinks; jailbirds is a spawn cap).
+`test/world.js` proves the index BITES at volkov off the board's own quote (mutation-verified —
+dropping the term fails 50,000-vs-240,000 by name; the kryl expectation alone was VACUOUS since
+kryl's $30k index sits under the floor — the recorded a-guard-that-cannot-fail class, headed off);
+volkov's row is seeded UPDATE-then-INSERT because `world_npcs` materializes on first touch (a raw
+UPDATE matched zero rows and the board quoted null). Two guard catches en route: the levers
+register-complete check flagged the sheet's own prose — "your LAST answers" matched the
+`SOLDIERS.LAST` name-pool leaf (an all-caps token in BALANCE/SIGN-OFF is a lever reference by
+definition; lowercased); and a stray CJK char in a BALANCE edit. Pins updated in the same commit
+(the drift rule); BALANCE § THE JAILBIRD FAUCET + § THE FAMILY LEDGER carry the retune records;
+SIGN-OFF Part B header now reads ✅ SIGNED with the two applied rows and the alpha WATCH list
+(hired guns at apex cadence; whales-actually-commit). Part A's five unbuilt answers (D1 rate, D11
+confirmation, D13/D14/D15) remain the sheet's open items.
