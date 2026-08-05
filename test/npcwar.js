@@ -235,6 +235,22 @@ const swept = await sweepNpcWars(pool);
 assert(swept.lapsed >= 1, 'the worker lapses an expired campaign');
 assert.equal(Number((await pool.query(`SELECT family_wars_won FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${raider.id}')`)).rows[0].family_wars_won), 1, 'a lapsed campaign grants NO trophy (still 1 from the win)');
 
+// (red-team) CONQUERING an outfit you're at war with WINS the campaign. Routing it makes it your vassal,
+// which would otherwise throw own_vassal on every future raid and strand the war unwon (chest wasted).
+// Declare on the third family, seed its pool just above the rout floor, and one raid routs+conquers → won.
+await seedCh(raider.id, `cash=${W.COST * 2}, family_raid_at=NULL, energy=100, ammo=100, hosp_until=NULL, safe_until=NULL`);
+assert.equal((await call('POST', '/v1/gangs/tribute', { token: raider.token, body: { amount: W.COST } })).code, 200, 're-funded the treasury');
+assert.equal((await call('POST', `/v1/npcfamily/${gid3}/war`, { token: raider.token })).code, 200, 'declared war on the third family');
+const routFloor = FAMILY_WAR.POOL_MAX * FAMILY_WAR.ROUT_FLOOR_BPS / 10000;
+await pool.query(`UPDATE gangs SET war_pool=${routFloor + 500}, war_pool_at=now() WHERE id='${gid3}'`);
+process.env.FAMILY_RAID_P = '1';
+const cr = await call('POST', `/v1/npcfamily/${gid3}/raid`, { token: raider.token });
+delete process.env.FAMILY_RAID_P;
+assert.equal(cr.body.conquered, true, `the raid routs and conquers the third family (${JSON.stringify(cr.body)})`);
+assert.equal(cr.body.warWon, true, 'conquering an outfit you are at war with WINS the campaign, even below WIN_SCORE');
+assert.equal(Number((await pool.query(`SELECT family_wars_won FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${raider.id}')`)).rows[0].family_wars_won), 2, 'the conquest-win banked a second trophy');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM npc_wars WHERE attacker_gang='${wolfGang}' AND npc_gang='${gid3}' AND NOT resolved`)).rows[0].n), 0, 'the conquest-won campaign is resolved');
+
 // §10.4: the gang:war war-chest sink reconciles the gang-treasuries check (funded by ledgered tribute)
 const gt2 = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'gang treasuries');
 assert(gt2.ok, `the family-war gang:war sink reconciles the gang-treasuries check (${JSON.stringify(gt2)})`);

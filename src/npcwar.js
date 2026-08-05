@@ -147,27 +147,21 @@ export async function raidFamily(ch, gangId, client, h) {
   }
 
   // THE FAMILY WAR (formal) — if the raider's family has an ACTIVE declared campaign against this outfit,
-  // this landed raid SCORES. Crossing WIN_SCORE wins the war: a STATUS trophy to the DECLARER's account
-  // (they committed the war chest and led it; survives death — the family_war/kills legend precedent),
-  // NEVER season_wars. §10.4: zero — the score and the trophy move no currency. Lock the war row FOR
-  // UPDATE so concurrent raids scoring the same war serialize and exactly one crosses the line.
-  let warWon = false;
+  // this landed raid SCORES. Crossing WIN_SCORE wins the war (resolved + a STATUS trophy in the unified
+  // block below). §10.4: zero — the score and the trophy move no currency. Lock the war row FOR UPDATE so
+  // concurrent raids scoring the same war serialize and exactly one crosses the line. Only a member of the
+  // ATTACKER family scores (myGang == attacker_gang); a family raids in force, so a big family wins faster.
+  let warWon = false, warRow = null;
   if (myGang) {
-    const w = (await client.query(
-      'SELECT score, ends_at, declared_by FROM npc_wars WHERE attacker_gang=$1 AND npc_gang=$2 AND NOT resolved FOR UPDATE',
-      [myGang, gangId])).rows[0];
-    if (w && new Date(w.ends_at) > now) {
-      const newScore = Number(w.score) + FAMILY_WAR.WAR.RAID_POINTS;
-      if (newScore >= FAMILY_WAR.WAR.WIN_SCORE) {
-        await client.query('UPDATE npc_wars SET score=$3, resolved=true WHERE attacker_gang=$1 AND npc_gang=$2', [myGang, gangId, newScore]);
-        const dec = (await client.query('SELECT account_id FROM characters WHERE id=$1', [w.declared_by])).rows[0];
-        if (dec) await client.query('UPDATE account_persistent SET family_wars_won = family_wars_won + 1 WHERE account_id=$1', [dec.account_id]);
-        warWon = true;
-        bus.emit('streets', { type: 'family_war_won', who: ch.name, family: g.name });
-      } else {
-        await client.query('UPDATE npc_wars SET score=$3 WHERE attacker_gang=$1 AND npc_gang=$2', [myGang, gangId, newScore]);
-      }
-    }
+    warRow = (await client.query(
+      'SELECT ends_at, declared_by FROM npc_wars WHERE attacker_gang=$1 AND npc_gang=$2 AND NOT resolved FOR UPDATE',
+      [myGang, gangId])).rows[0] || null;
+    if (warRow && new Date(warRow.ends_at) > now) {
+      const newScore = Number((await client.query(
+        'UPDATE npc_wars SET score = score + $3 WHERE attacker_gang=$1 AND npc_gang=$2 RETURNING score',
+        [myGang, gangId, FAMILY_WAR.WAR.RAID_POINTS])).rows[0].score);
+      if (newScore >= FAMILY_WAR.WAR.WIN_SCORE) warWon = true;
+    } else warRow = null;   // an expired war doesn't score — the worker sweep lapses it
   }
 
   // THE CONQUEST — a raid that ROUTS the family (war_pool crosses below the floor) lets the raider's
@@ -179,6 +173,20 @@ export async function raidFamily(ch, gangId, client, h) {
     conquered = true;
     await client.query('UPDATE gangs SET held_by_gang=$2, held_since=$3, tribute_at=$3 WHERE id=$1', [gangId, myGang, now]);
     bus.emit('streets', { type: 'family_conquered', who: ch.name, family: g.name });
+    // (red-team) CONQUERING an outfit you're at war with WINS the campaign — total domination supersedes
+    // the score. Without this, routing the family (a raid drains its pool toward the rout floor) makes it
+    // your vassal, which then throws own_vassal on every FUTURE raid, so the war could never reach
+    // WIN_SCORE and the $25k war chest was silently wasted. The bigger prize IS the win.
+    if (warRow) warWon = true;
+  }
+
+  // resolve + grant the trophy for EITHER win path (the score crossing OR the conquest), exactly once —
+  // to the DECLARER's account (they committed the chest and led it; survives death, NEVER season_wars).
+  if (warWon && warRow) {
+    await client.query('UPDATE npc_wars SET resolved=true WHERE attacker_gang=$1 AND npc_gang=$2 AND NOT resolved', [myGang, gangId]);
+    const dec = (await client.query('SELECT account_id FROM characters WHERE id=$1', [warRow.declared_by])).rows[0];
+    if (dec) await client.query('UPDATE account_persistent SET family_wars_won = family_wars_won + 1 WHERE account_id=$1', [dec.account_id]);
+    bus.emit('streets', { type: 'family_war_won', who: ch.name, family: g.name });
   }
 
   // THE DEFENCE — the family fights back. Exactly ONE retaliation path fires: either the guns catch you
