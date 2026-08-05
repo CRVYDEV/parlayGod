@@ -546,8 +546,11 @@ and the choice is the founder's because it turns on wallet topology, not on code
    per-bond "the slice reached the ledger" check — the one thing neither existing invariant could see.
    Deploy requirement: `rwaRecipient` must be a DIFFERENT key from `vigRecipient`, or the custody
    defect the backend interim was rejected for reappears with the books still reading correct.
-8. **TWO HOOKS ARE PLANNED FOR ONE POOL, AND A `PoolKey` HOLDS EXACTLY ONE.** **OPEN, and it is the
-   item most likely to be discovered late.** `omerta-uniswap-hooks-design.md` §2 specifies an
+8. **TWO HOOKS ARE PLANNED FOR ONE POOL, AND A `PoolKey` HOLDS EXACTLY ONE.** **ANSWERED 2026-08-02
+   (SIGN-OFF D1 = A, the fold): one hook, four destinations — a new buy-side trade fee joins the sell
+   tax in `OmertaHook`. NOT YET BUILT: the buy-fee RATE (proposed 20 bps) awaits founder confirmation
+   (SIGN-OFF.md, THE SHEET REFRESHED Part A), and the contract change must land before an address is
+   mined and the third-party audit runs.** The original fork, kept as the record: `omerta-uniswap-hooks-design.md` §2 specifies an
    `afterSwap`→Vig **trade-fee** hook — a small cut of *every* swap's ETH leg, funding the withdrawal
    reserve — and its BACKEND IS ALREADY BUILT AND DORMANT (`vig.js:recordTradeFee`,
    `watcher.js:syncTradeFees`, `TRADE_FEE_HOOK_ADDRESS`, the `TradeFeePaid(nonce, amountWei)` adapter).

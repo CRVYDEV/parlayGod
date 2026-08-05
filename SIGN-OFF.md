@@ -20,6 +20,84 @@ the ones you want to change or discuss. Technical detail for any row lives in `B
 
 ---
 
+# 📋 THE SHEET, REFRESHED — 2026-08-05
+
+Two parts. **Part A is the honest ledger of your LAST answers** — five of the fifteen were never
+built, and a signed decision that never shipped is worse than an open one, because you think it's
+done. **Part B is everything new since 2026-08-02** that wants a verdict. Answer the same way:
+*"A3: SHIP. B6: CHANGE."* is a complete reply.
+
+## PART A — your 2026-08-02 answers: what actually shipped
+
+| # | your answer | build state | what I need from you |
+|---|---|---|---|
+| D1 | fold both fees into ONE hook (a new ~20 bps fee on buys) | **NOT BUILT** — the hook is still sells-only 900 bps | **Confirm the buy-fee rate (proposed 20 bps, sane band 10–30).** Then I build it — it's a contract change on the audit-gated track, so it should land BEFORE the address is mined and the third-party audit runs, not after. |
+| D2 | higher mainnet withdrawal minimum, said plainly | copy/deploy-time | nothing — lands with mainnet config |
+| D3 | early-exit toll stays at the game boundary | **BUILT** (it always was) | nothing |
+| D4 | bond split confirmed as built (37.5/25/22.5/15) | **BUILT** | nothing |
+| D5 | NFT caps scale by rarity (1000/300/60/10) | **BUILT** (`RARITY.SUPPLY_CAP`, deploy config) | nothing |
+| D6 | pad envelope 7d → 2d | **BUILT** | nothing |
+| D7 | crew nut cap 7d → 2d | **BUILT** (asymmetry 21× → 6×) | nothing |
+| D8 | C, then **superseded by your own D8=D the same day** — the gates came back, §4.3 retired | **BUILT as D8=D** (speakeasy + high-stakes gates live, MADE_LADDER live) | confirm D8=D is the standing answer (it's what's live) |
+| D9 | rarity weights/prices ship as-is | **BUILT** | revisit only when a real secondary market exists |
+| D10 | income assets stay out of extraction | **BUILT** (nothing to build — the exclusion holds) | nothing |
+| D11 | *"remove all tickers and RWA assets"* — the whole in-game Portfolio retires | **NOT BUILT** | **Confirm before I swing the axe.** This is the biggest destructive change on the sheet: it takes out invest, the dividend pools, dynasty naming/tiers, the family book, two leaderboards, the heist AAPL cut, the season SPCX prize and the Going Legit tab's centrepiece — all built, tested, §10.4-clean systems. My earlier reading stands: the ETH vault STAYS (it is neither a ticker nor an RWA asset). One word — *"D11 confirmed"* — and it happens; *"D11: keep, fictional tickers"* is the cheaper alternative that kills the real-symbol problem and keeps the sink. |
+| D12 | identity NFT not built | **HONOURED** (nothing built) | nothing |
+| D13 | one loop gets its own energy cost | **NOT BUILT** | tell me the loop, or take my pick: **the Kitchen deal** (it's the deepest earner with no physical cost, and it keeps crime pure-nerve). Measured before/after with the harness. |
+| D14 | stats matter more to the crime roll | **NOT BUILT** — touches the SIGNED §7.2 curve | I'll propose the exact weighting + harness measurement as its own one-pager before touching it (your answer authorised the direction, not a number) |
+| D15 | cap bust attempts per day | **NOT BUILT** | one number: proposed **5 attempts/day** (the harness showed uncapped chasing = 26% of play in lockup) |
+
+## PART B — new since 2026-08-02, wants a verdict
+
+Everything here shipped as PROPOSED DEFAULTS under your standing direction and is safe as-is for the
+alpha; a verdict makes it production balance. Measurements are the sim's, cited in BALANCE.md.
+
+### B-I · the new emission surfaces (the only rows that touch money supply)
+
+| # | Lever | The number | What it means (plain) | Rec |
+|---|---|---|---|---|
+| A1 | THE RESIDENT ECONOMY (consolidated, sim P9.32) | **~$928k/day base-wide** | ALL resident-sourced new cash — seeds, mark fronts, vehicles — is 4.3% of the $21.6M/day passive stack. Bounded by construction. Dials: `TURNOVER.PER_DAY`, `MARKS.FRONT_INCOME_BPS`. | **SHIP** |
+| A2 | THE BLOOD WAR (`FAMILY_WAR.POOL_*`) | ≤ **$288k/day** base-wide | Raiding NPC families pays from a regen-metered pool; a raider caps at ~$36k/day. | **SHIP** |
+| A3 | THE CONQUEST (`ROUT_FLOOR_BPS` 500, `TRIBUTE_BPS` 2000) | ≤ **$5.8k/day** base-wide | Vassal tribute is pocket change; the status is the product. | **SHIP** |
+| A4 | THE HIRED GUNS (`WORLD.HIRE_MAX` 2, `HIRE_FEE` $75k) | apex net **+$175k/raid**; a min-lvl whale + 2 guns ≈ 22% odds at volkov | Makes the apex reservoirs solo-reachable for a fee. The old B1 residual (the 0.1 odds floor) rides along. | **WATCH** in alpha; the dial is `HIRE_FEE` toward the grab if apex extraction runs hot |
+| A5 | THE JAILBIRDS (`JAILBIRDS.MAX_S` 1200) | city ceiling **~$463k/day**, spends NO signed resource | The one loop with no nerve/energy/cash cost. EV rises with sentence length (the 10% floor). | **CHANGE (recommended): `MAX_S` 1200 → 400** — caps the camp reward at ~$6.5k and cuts the ceiling ~⅔, availability untouched |
+| A6 | THE HIRED HAND (`HEIST_FILL_MAX` 1, fee $5k) | entry co-op solo-reachable; marquee jobs still need bodies | **SHIP — and never raise FILL_MAX past 1 without a sim** (the co-op faucet is 1.46× solo per member) |
+| A7 | THE FAMILY WAR (`WAR.COST` $25k, `WIN_SCORE` 5) | ~10h+ solo campaign; a 5-man family wins in one salvo | §10.4-neutral (status + an existing sink). | **SHIP**; if one-salvo wins feel cheap the dial is `WIN_SCORE` |
+
+### B-II · strategy + pacing (signed-surface adjacent)
+
+| # | Lever | The number | What it means | Rec |
+|---|---|---|---|---|
+| A8 | SEASON_MODS **armed** | 4 seasons, one twists signed levers ±15–25% for 28d | The one drop that deliberately moves SIGNED numbers. Kill switch: `SEASON_MODS=off`. | **SHIP** (it's the cheapest strategic content in the game) |
+| A9 | OPERATION SLOTS (`SLOTS_MAX` 12) | best-12 vs all-31 = a 1.07× cut | The cap creates the mid-game choice; 12 is the generosity dial. | **SHIP**; revisit with alpha data |
+| A10 | THE SEALED BID (`CONTEST_LOSS_BPS` 5000) | losers forfeit half their sealed stake | What makes it a bid, not "always all-in". | **SHIP** |
+| A11 | THE ROSTER / MAP / CHARTERS (multiplier sets) | e.g. a maxed Enforcer = +$48k on a turf floor; 3 neighbours = ×1.33 | All additive/multiplicative on existing sinks. | **SHIP** |
+| A12 | Flat frontier costs (`FRONTIER.INVADE_BASE` $50k; unheld district $30k) | 0.08% of a maxed family's day | The last two FLAT strategic prices after the war/siege indexing. | **CHANGE (recommended): index `INVADE_BASE` like `WAR_COST_BPS`; LEAVE the $30k unheld price** — it's the new-family on-ramp |
+| A13 | `M3.COACH_SOCIAL_BAND_LVLS` 8 + the deep-city/heir coach bands | 23 rungs walked, no rung holds >21% of advised play | Zero economy surface — listed for completeness. | **SHIP** |
+
+### B-III · resolved-by-your-own-later-calls (recorded so nothing haunts us)
+
+- **THE FLOAT's four opens** — three of four are closed by D8=D (the speakeasy + high-stakes gates
+  are back and signed); the Commission stays deliberately UNGATED on being made (a decree moves real
+  surfaces — $OMR buying POWER there crosses even the new ceiling rule). Remaining: **watch realised
+  $OMR loot per kill in the alpha** to see if whales actually commit.
+- **THE FARM rows** — superseded whole: the Street Wage (and its endowment schedule) was retired by
+  economy v3 step 1. There is no wage to farm.
+- **Real ticker symbols** — superseded by whatever D11 resolves to (retire = moot; keep = go fictional).
+- **`BUSINESS_SHUTTER_BPS` 0** — stays 0; the suite now pins the walk-away-vs-pay relation, so a
+  future raise that flips it fails CI by name.
+- **THE NUT** — D7's 2d cap took the asymmetry 21× → 6×. `OFFLINE_CAP_MS` 8h stays the one lever that
+  would remove the crossover entirely; my rec is leave it (it's a whole-economy decision).
+
+## The bottom line, 2026-08-05
+
+Three things actually need words from you: **D1's rate** (a number), **D11's confirmation** (the axe
+or the fictional-ticker alternative), **D13's loop + D15's number** (or take my picks). Everything in
+Part B ships as-is on a one-word "Part B: SHIP"; the two CHANGE rows (A5 jailbirds, A12 invade
+indexing) I build the day you nod.
+
+---
+
 # ✅ ANSWERED — all 15, 2026-08-02
 
 Jorge answered every fork. Recorded here as the decision; the build state of each is tracked in
