@@ -96,6 +96,42 @@ assert(me.heat >= heatBefore, 'heat follows product');
 const dealLedger = await pool.query(`SELECT COUNT(*) n FROM transactions WHERE reason='deal:vim' AND character_id='${chef.id}'`);
 assert(Number(dealLedger.rows[0].n) >= 1, 'deal ledgered');
 
+// ── D14 — stats matter more to the crime roll (SIGNED, option A) ──
+// Two streets, same LEVEL and same mid-base crime, differing ONLY in cunning: the high-cunning one
+// must land materially more jobs. Sampled (the roll is Math.random), but the +24-point spread over
+// 300 attempts separates ~90 vs ~175 successes — never overlaps, so it is not flaky. Also proves the
+// design guarantee: MUSCLE does nothing for crime (a muscle build ≈ a min build).
+{
+  const CRIME = 'poker'; // base 0.46, lvl 11
+  const N = 300;
+  const respect11 = PACING.LEVEL_DIVISOR * (11 - 1) ** 2;
+  const runs = async (tok, id, cols) => {
+    let wins = 0;
+    for (let i = 0; i < N; i++) {
+      // refill nerve + freeze the clock each attempt so no accrual or nerve wall interferes
+      await seedCh(id, `${cols}, respect=${respect11}, nerve=50, jail_until=NULL, last_accrued_at=now()`);
+      const r = await call('POST', `/v1/crimes/${CRIME}`, { token: tok });
+      if (r.body.success) wins++;
+    }
+    return wins;
+  };
+  const hi = await mk('Sharp Sammy');   // maxed cunning/speed
+  const lo = await mk('Dull Dan');       // min cunning/speed
+  const hiWins = await runs(hi.token, hi.id, 'cunning=25, speed=25, muscle=3');
+  const loWins = await runs(lo.token, lo.id, 'cunning=3, speed=3, muscle=3');
+  assert(hiWins > loWins + 40,
+    `D14: the high-cunning build lands materially more jobs (${hiWins}/${N} vs ${loWins}/${N}) — stats now MOVE the roll`);
+  // MUSCLE stays out of crime (the PvP axis): two builds with IDENTICAL cunning/speed differing ONLY
+  // in muscle must succeed EQUALLY (within sampling noise). If muscle ever leaks into the crime roll,
+  // the maxed-muscle build pulls ahead and this separation blows past the noise band.
+  const musHi = await mk('Bruiser Bo'), musLo = await mk('Scrawny Sid');
+  const musHiWins = await runs(musHi.token, musHi.id, 'cunning=3, speed=3, muscle=25');
+  const musLoWins = await runs(musLo.token, musLo.id, 'cunning=3, speed=3, muscle=3');
+  assert(Math.abs(musHiWins - musLoWins) < 35,
+    `D14: MUSCLE is inert for crime — same cunning/speed → same success (${musHiWins}/${N} vs ${musLoWins}/${N}, within noise)`);
+}
+
+
 // ── D6a step two — THE PLAY (the corner's decision axis: throughput vs the Law) ──
 // The deal above carried no play → 'standard', the identity (all mults 1.0), so the assertions
 // above ARE the regression that the pre-choice behaviour is byte-identical. The axis is deliberately

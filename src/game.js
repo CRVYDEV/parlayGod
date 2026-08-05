@@ -1603,7 +1603,14 @@ export function doCrime(ch, crimeId, client, h, approach) {
   // §7.2 full chance: stats + gang level (treasury tiers) + Brick Yards turf + rank, then the approach
   // (quiet safer / loud riskier), all under the same 0.97 ceiling so quiet's edge tapers for a maxed street.
   const gangLevel = h.owned?.gang ? gangLevelOf(h.owned.gang.treasury) : 0;
-  const chance = Math.min(0.97, (c.base + eff('cunning') * 0.004 + eff('speed') * 0.002
+  // D14 (SIGNED — option A): the stat contribution is a lever (M3.CRIME_STAT), steepened + offset so
+  // a mid build is unchanged and the investment is felt. MUSCLE stays out of crime by design. The
+  // OFFSET can push the pre-mult sum below 0 for an untrained street on a hard job — that is the
+  // intended "an unskilled crook fumbles the hard score"; the final chance is a probability, and
+  // Math.random() < (negative) is simply never true, so it needs no extra clamp.
+  const cs = M3.CRIME_STAT;
+  const statEdge = eff('cunning') * cs.CUN + eff('speed') * cs.SPD - cs.OFFSET;
+  const chance = Math.min(0.97, (c.base + statEdge
     + gangLevel * 0.02 + (held.includes('brick') ? 0.02 : 0) + (rIdx >= 9 ? 0.02 : 0)) * ap.successMult);
   const roll = Math.random();
   return (async () => {

@@ -843,6 +843,17 @@ export const M3 = {
     loud:     { id: 'loud',     name: 'Go Loud',  successMult: 0.82, payMult: 1.22, crateMult: 1.6, makingsMult: 1.5, repMult: 1.15, heat: 6,  jailMult: 1.4 },
   },
   CRIME_LOUD_CASH_PREMIUM: 1.0, // multiplies loud's payMult; >1 makes Go Loud pay a genuine cash premium (a faucet change → sign-off)
+  // D14 (SIGNED 2026-08-05, founder chose OPTION A — steepen, EV-NEUTRAL at the mid build): how much
+  // a stat investment moves the §7.2 crime roll. The OLD signed coefficients (cunning 0.004 / speed
+  // 0.002) gave a barely-felt +12-point swing across the WHOLE trainable range (fresh 5/5 → maxed
+  // 25/25). Doubling them widens the felt spread to +24, and the OFFSET keeps a reference MID build
+  // (cunning=speed=REF) unchanged so the signed faucet stays ~neutral at the median: a maxed street
+  // gains success, an UNtrained one on a HARD job loses a little — a pure redistribution ALONG the
+  // investment axis, which is what "builds matter" means. MUSCLE stays 0 (the jump/shakedown/PvP
+  // axis — adding it to crime would homogenize builds). chance contribution =
+  //   cunning×CUN + speed×SPD − OFFSET   (OFFSET = REF×(CUN+SPD), so the REF/REF build is unchanged).
+  // Reverting to {CUN:0.004, SPD:0.002, OFFSET:0} restores the pre-D14 signed curve byte-for-byte.
+  CRIME_STAT: { CUN: 0.008, SPD: 0.004, OFFSET: 0.072 }, // OFFSET cancels only the EXTRA the doubled coefficients add at a REF=12 mid build (12×((0.008−0.004)+(0.004−0.002)) = 0.072), so the mid build's success is unchanged to the dollar
   // D6a step two — THE MESSAGE (the jump's decision axis). A mugging is the game's second entry verb and
   // was one click + a stat roll. Now you choose WHAT YOU CAME FOR: money or reputation. Deliberately NOT a
   // copy of the crime picker — each shallow verb gets its own thematic axis.

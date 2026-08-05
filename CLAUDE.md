@@ -5129,6 +5129,31 @@ still reconciles §10.4 to the grant). The VAULT block is kept whole, with its o
 (the shared-window structuring proof) re-proved against the vault's own till. Suite green + sim
 drift-0.
 
+**D14 — STATS MATTER MORE TO THE CRIME ROLL (founder chose OPTION A, SIGNED 2026-08-05) — BUILT**
+(`src/rules.tail.js` `M3.CRIME_STAT`, `src/game.js` `doCrime`, `test/growth.js`; BALANCE.md § D14).
+The signed §7.2 crime roll read cunning ×0.004 + speed ×0.002 + muscle ×0 — a barely-felt +12-point
+success swing across the WHOLE trainable range (fresh 5/5 → maxed 25/25), which the progression
+harness had flagged as "stat training buys nothing measurable". The founder picked option A of the
+measured one-pager (of two: A steepen EV-neutral-at-the-median, B buff-investment). The magic
+coefficients are lifted into a lever and DOUBLED (`CUN` 0.008 / `SPD` 0.004), with an `OFFSET` (0.072)
+that cancels ONLY the EXTRA the doubled coefficients add at a REF=12 mid build — so the mid street's
+success is unchanged TO THE DOLLAR and the felt spread on a mid crime goes fresh 35% → maxed 59%
+(a +24-point decision, doubled from +12). **MUSCLE stays 0 by design** — it is the jump/shakedown/PvP
+axis, and adding it to crime would homogenize builds (the opposite of "builds matter"); the test
+isolates this (two builds with identical cunning/speed differing only in muscle must succeed EQUALLY).
+**Measured (exact over the 61-crime catalog, level-gated builds):** fresh (lvl 3) −4.9%, mid (lvl 25)
+0.0%, maxed (lvl 50) +22.3%, base-wide 20/60/20 population **+10.4%** — the maxed tail earning more on
+the hard low-base jobs, bounded by NERVE (the real throttle, ~21% of cap) and small against the
+passive stack. **§10.4 UNTOUCHED** — success rate only; crime:take/crime:<id> ledgering is unchanged
+(sim drift-0). The playthrough shows the 7-day SOLO grind unmoved (2h/5h/10h = 12/21/35, within the
+recorded noise band) — D14 rewards DELIBERATE investment, not the default path the harness already
+trains. Reverting `CRIME_STAT` to `{CUN:0.004, SPD:0.002, OFFSET:0}` restores the pre-D14 signed curve
+byte-for-byte. **Founder flag (BALANCE.md):** option A holds the median flat but rewarding investment
+necessarily lifts the aggregate ~10%; the OFFSET is the dial (re-anchoring higher trades the maxed-tail
+faucet for a bigger fresh/mid hit — no free lunch). All `CRIME_STAT` numbers are founder sign-off
+levers, pinned in `test/levers.js`. Two mutations (old coefficients restored; muscle leaked into the
+roll) each fail by name.
+
 ## Sensitive design notes
 - **The Street Wage pays players on a schedule — legal surface (counsel-gated messaging).** Paying
   players real-value $OMR at scale can trigger money-transmission / employment / securities questions
