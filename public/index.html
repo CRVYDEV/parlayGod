@@ -381,6 +381,18 @@
   /* THE URGENT TIER — a threat or money-at-risk on YOUR line reads differently from ambient news */
   .wpane .ev.urgent { border-left-color: var(--bad); background: linear-gradient(90deg, rgba(255,45,85,.12), transparent 60%); font-weight: 600; }
   .ph-msg.urgent { border-left: 2px solid var(--bad); padding-left: 7px; }
+  /* FEED FILTER — mute a category so the wire is signal, not noise (state remembered in localStorage) */
+  #feedfilter { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+  .ffchip { background: transparent; border: 1px solid var(--line); border-radius: 999px; color: var(--dim);
+    font-size: 10.5px; letter-spacing: .3px; padding: 2px 8px; cursor: pointer; opacity: .95; transition: opacity .15s, border-color .15s; }
+  .ffchip:hover { border-color: var(--line2); }
+  .ffchip.muted { opacity: .4; text-decoration: line-through; }
+  #feed.hide-combat .ev[data-cat="combat"] { display: none; }
+  #feed.hide-law .ev[data-cat="law"] { display: none; }
+  #feed.hide-money .ev[data-cat="market"], #feed.hide-money .ev[data-cat="den"],
+  #feed.hide-money .ev[data-cat="race"], #feed.hide-money .ev[data-cat="crime"] { display: none; }
+  #feed.hide-family .ev[data-cat="family"] { display: none; }
+  #feed.hide-world .ev[data-cat="world"] { display: none; }
   #wiretabs { display: flex; gap: 4px; margin-bottom: 8px; }
   .wtab { flex: 1; background: transparent; border: 1px solid var(--line); border-radius: var(--r-sm);
     color: var(--dim); font: inherit; font-size: 11px; letter-spacing: 1.2px; padding: 6px 4px; cursor: pointer; }
@@ -1106,6 +1118,13 @@
         <button class="wtab on" data-wtab="feed" data-i18n="w_feed">LIVE FEED</button>
         <button class="wtab" data-wtab="city" data-i18n="w_city">CITY CHAT</button>
         <button class="wtab" id="wtab-family" data-wtab="family" data-i18n="w_family">FAMILY</button>
+      </div>
+      <div id="feedfilter" title="mute a category — the wire remembers">
+        <button class="ffchip" data-fgroup="combat">⚔ combat</button>
+        <button class="ffchip" data-fgroup="law">⚖ law</button>
+        <button class="ffchip" data-fgroup="money">💰 money</button>
+        <button class="ffchip" data-fgroup="family">👑 family</button>
+        <button class="ffchip" data-fgroup="world">🌐 world</button>
       </div>
       <div id="feed" class="wpane"></div>
       <div id="chat-city" class="wpane hidden"></div>
@@ -2334,7 +2353,7 @@
     // the sheet must never be able to take NAVIGATION down with it — a player with a stale field
     // and a working tab rail can still play; a player with neither can only reload and hope.
     try { renderSheet(); } catch (e) { console.error('renderSheet failed', e); }
-    buildTabs(); connectWs(); backfillFeed();
+    buildTabs(); connectWs(); backfillFeed(); wireFeedFilter(); cityPulse();
     // first session: the illustrated tour. Keyed on its own flag (not omerta_welcomed) ON PURPOSE —
     // existing testers who saw the old one-wall-of-text welcome get the expanded tour exactly once too.
     if (!localStorage.getItem('omerta_tour2')) openTour();
@@ -2968,6 +2987,10 @@
       title: 'THE DOC\'S CARE', body: 'You\'re healing — and that\'s PROTECTION, not prison. Nobody can touch you in here, and you can still pull jobs, trade and bank. Only fighting is off until you\'re back on your feet.' },
     { id: 'heat', when: (m) => Number(m.heat) >= 30, art: 'interior-law', tab: 'law',
       title: 'THE BUREAU IS WATCHING', body: 'Heat feeds a federal case: past 60 they raid, and a long file becomes a RICO indictment. Lay low at the Kitchen when it climbs — and check The Law screen to read your rap sheet before it reads you.' },
+    { id: 'investigation', when: (m) => m.law?.stage === 'investigation' && !m.law?.indicted, art: 'interior-law', tab: 'law',
+      title: 'THE CASE IS BUILDING', body: 'The Bureau has moved from watching to INVESTIGATING — one more push and it becomes a RICO indictment. This is the window to act: lay low to cool the heat, pay a lawyer\'s retainer to soften the odds, or keep an envelope current so the file builds slower. The Law screen shows exactly how close the line is.' },
+    { id: 'indicted', when: (m) => !!m.law?.indicted, art: 'interior-law', tab: 'law',
+      title: 'YOU\'VE BEEN INDICTED', body: 'The federal case is FILED. There\'s a grace window before it goes to trial — use it. You can take a plea for a smaller, certain loss, buy the jury to cut the odds, or demand trial and roll the dice. Staked $OMR and extracted gear are SAFE; it\'s your pocket and bank that a conviction seizes. The Law screen is your courtroom.' },
     { id: 'wanted', when: (m) => !!m.wanted, art: 'card-wanted', tab: 'loans',
       title: 'YOU\'RE WANTED', body: 'Your name is on a poster: family protection is void and bounty hunters roll for you every hour. Go to ground until it lapses — or square your name at the Shylock and walk clean.' },
     { id: 'bank', when: (m) => m.cash >= 10000 && !m.bank, art: 'interior-streets', tab: null,
@@ -7114,11 +7137,54 @@
     const color = FEED_COLOR[cat] || 'var(--dim)';
     const mine = channel === 'me';
     const urgent = mine && URGENT_TYPES.has(ev.type);
-    const line = el(`<div class="ev fresh ${mine ? 'me' : ''}${urgent ? ' urgent' : ''}"><span class="dot" style="color:${urgent ? 'var(--bad)' : color}">●</span> ` +
+    const line = el(`<div class="ev fresh ${mine ? 'me' : ''}${urgent ? ' urgent' : ''}" data-cat="${cat}"><span class="dot" style="color:${urgent ? 'var(--bad)' : color}">●</span> ` +
       `<span style="color:${mine ? 'var(--fg)' : color}">${esc(feedText(ev))}</span></div>`);
     f.prepend(line);
     setTimeout(() => line.classList.remove('fresh'), 1600); // the neon wash is one-shot; drop it so re-renders don't re-flash
     while (f.childElementCount > 120) f.lastElementChild.remove();
+  }
+  // THE FEED FILTER — mute a category so the wire reads as signal, not noise. A muted group hangs a
+  // hide-<group> class on #feed (CSS hides its data-cat lines); the muted set persists in localStorage.
+  const FEED_GROUPS = ['combat', 'law', 'money', 'family', 'world'];
+  function applyFeedFilter() {
+    const muted = new Set((localStorage.getItem('omerta_feedmute') || '').split(',').filter(Boolean));
+    const f = $('#feed');
+    if (f) for (const g of FEED_GROUPS) f.classList.toggle('hide-' + g, muted.has(g));
+    document.querySelectorAll('#feedfilter .ffchip').forEach((c) => c.classList.toggle('muted', muted.has(c.dataset.fgroup)));
+  }
+  function wireFeedFilter() {
+    document.querySelectorAll('#feedfilter .ffchip').forEach((c) => c.onclick = () => {
+      const muted = new Set((localStorage.getItem('omerta_feedmute') || '').split(',').filter(Boolean));
+      if (muted.has(c.dataset.fgroup)) muted.delete(c.dataset.fgroup); else muted.add(c.dataset.fgroup);
+      localStorage.setItem('omerta_feedmute', [...muted].join(','));
+      applyFeedFilter();
+    });
+    applyFeedFilter();
+  }
+  // THE CITY PULSE — one honest, world-flagged line about today's REAL deterministic conditions (the
+  // season twist, the trade-winds spread) so a low-population wire still feels like an inhabited city.
+  // Once per day, filterable under 'world' — never a fabricated player or event (the population rule).
+  async function cityPulse() {
+    const dayKey = 'omerta_pulse_' + Math.floor(Date.now() / 86400000);
+    if (localStorage.getItem(dayKey)) return;                 // once a day, not every load
+    let c; try { c = (await api('GET', '/v1/city')).body; } catch { return; }
+    if (!c) return;
+    const bits = [];
+    if (c.season?.mod && c.season.mod.id !== 'dead_quiet' && c.season.mod.name)
+      bits.push(`the season turns — ${c.season.mod.name}`);
+    const shocks = Object.entries(c.weather || {}).map(([d, x]) => [d, Number(x)]).sort((a, b) => a[1] - b[1]);
+    if (shocks.length >= 2) {
+      const cheap = shocks[0], rich = shocks[shocks.length - 1];
+      const pct = Math.round((rich[1] / cheap[1] - 1) * 100);
+      if (pct >= 4) bits.push(`word is goods run ~${pct}% cheaper in ${cheap[0]} than ${rich[0]} today`);
+    }
+    if (!bits.length) return;
+    localStorage.setItem(dayKey, '1');
+    const f = $('#feed'); if (!f) return;
+    const line = el(`<div class="ev fresh" data-cat="world"><span class="dot" style="color:${FEED_COLOR.world}">●</span> <span style="color:${FEED_COLOR.world}">🌐 ${esc(bits.join(' · '))}</span></div>`);
+    f.prepend(line);
+    setTimeout(() => line.classList.remove('fresh'), 1600);
+    applyFeedFilter();
   }
   function statusLine(text) {
     const f = $('#feed');
