@@ -1084,18 +1084,24 @@ async function seedLists() {
     [acct, acct2]);
   await q("UPDATE characters SET guarded_by=$1, guarded_until = now() + interval '2 hours' WHERE id=$2", [charId, two]);
 
-  // ── THE CREW (/v1/crew): the probe LEADS a crew (so crew.members[] is observable) AND holds a
-  // pending invite to another (so invites[] is observable). Account-keyed rows, seeded directly.
+  // ── THE CREW (/v1/crew): the probe LEADS a crew (so crew.members[] is observable) with a
+  // snapshot-only second member (NOT acct2 — the contracts fixture puts a bounty on acct2, which the
+  // step-two non-aggression would block), holds a pending invite (invites[]), and has a CREW HIT
+  // called on acct2 (a rival — crew.target). Account-keyed rows, seeded directly.
   {
     const acct3 = (await q('SELECT account_id FROM characters WHERE id=$1', [three])).rows[0].account_id;
-    const c1 = crypto.randomUUID(), c2 = crypto.randomUUID();
+    const c1 = crypto.randomUUID(), c2 = crypto.randomUUID(), ghost = crypto.randomUUID();
     await q("INSERT INTO crews (id, name, leader_account) VALUES ($1,'The Mirror Crew',$2),($3,'The Rival Crew',$4) ON CONFLICT DO NOTHING",
       [c1, acct, c2, acct3]);
     await q(`INSERT INTO crew_members (crew_id, account_id, name) VALUES
-             ($1,$2,'Mirror One'),($1,$3,'Mirror Two'),($4,$5,'Mirror Mob') ON CONFLICT DO NOTHING`,
-      [c1, acct, acct2, c2, acct3]);
+             ($1,$2,'Mirror One'),($1,$3,'Mirror Ghost'),($4,$5,'Mirror Mob') ON CONFLICT DO NOTHING`,
+      [c1, acct, ghost, c2, acct3]);
     await q("INSERT INTO crew_invites (crew_id, account_id, from_name) VALUES ($1,$2,'Mirror Mob') ON CONFLICT DO NOTHING",
       [c2, acct]);
+    // THE CREW HIT — a shared target on acct2 (a rival, not a crewmate), so crew.target is observable
+    const twoName = (await q('SELECT name FROM characters WHERE id=$1', [two])).rows[0].name;
+    await q("INSERT INTO crew_targets (crew_id, target_account, target_name, kind, set_by) VALUES ($1,$2,$3,'kill',$4) ON CONFLICT DO NOTHING",
+      [c1, acct2, twoName, acct]);
     // a line in the crew room, and backdate the join so the read floor (messages after you joined) lets it through
     await q("UPDATE crew_members SET joined_at = now() - interval '1 hour' WHERE crew_id=$1", [c1]);
     await q("INSERT INTO chat_messages (id, channel, character_id, name, body) VALUES ($1,$2,$3,'Mirror One','meet at the docks')",

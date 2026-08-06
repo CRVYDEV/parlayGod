@@ -9340,3 +9340,28 @@ field is checked at all — mutation-verified live by the crew/chat route. Guard
 drift-0, mobile 71/71, client wiring + mirror (110 boards / 601 fields / 774 element fields), routes
 576, levers 615 pinned, pgquery + pgcheck 43/43 on real Postgres. All `CREW.*` are founder sign-off
 levers (pure scope, no faucet).
+
+**THE CREW — step two (THE CREW HIT + non-aggression on the board + the deadliest-crews leaderboard,
+2026-08-06)** — the collective-action half of the lightweight social unit. **THE CREW HIT** (the "crew
+pot" the design doc flagged): a boss `setCrewTarget`s a shared mark by name (`crew_targets`, one per
+crew, account-keyed so it survives the mark's death; `POST /v1/crew/target {name,kind}` / `DELETE
+/v1/crew/target`) and the whole crew rallies a contract behind them — but it sets a **POINTER only**;
+the funding rides the **EXISTING contract board** (`POST /v1/streets/:id/bounty` → the audited
+`bounty_contributors` escrow), so THE CREW HIT adds **ZERO new §10.4 surface** (the "co-funded
+contracts" idea landed on the audited rail, exactly as the design doc reasoned). The board resolves the
+mark to their CURRENT street + the standing pot on their head + a one-tap chip-in; the target dies with
+the crew (cleared on dissolve). **Non-aggression extended to the contract board** — a one-line gate in
+`contracts.js:postBounty` (the omertà twin, same rat/WANTED exception): you can't put a price on your
+own crew's head, so a crew HIT is always on an outsider. **THE CREW LEADERBOARD** (`GET
+/v1/leaderboard/crews`, `crewLeaderboard`) — the deadliest crews by combined lifetime member kills
+(account-level, survives death), agents excluded, flat-query + JS fold (the /v1/gangs pg-mem
+precedent). Pure STATUS. Console: a "THE CREW HIT" card on the crew screen (call-a-hit for the boss,
+chip-in for everyone, the pot + call-it-off) + a "deadliest crews" leaderboard modal; `describe()`
+gained the target/target-cleared toasts. §10.4-clean by construction (the whole step is a pointer +
+status + a gate; the funding is the audited bounty escrow) — `test/crew.js` proves it (the `crew%%`
+zero-ledger assertion still holds, and the chip-in writes `bounty:` rows, not `crew:`). Tests cover the
+target (leader-only, no-self, no-crewmate, board surface + chip-in growing the pot, clear), the
+postBounty non-aggression, and the leaderboard (summed kills + size). Guards: full suite green, sim
+drift-0, mobile 71/71, client wiring+mirror, routes 579, levers 615, pgquery + pgcheck 43/43 on real
+Postgres. Deferred (step three): the crew activity feed, property-crime non-aggression, deeper crew
+perks. All CREW additions are pure scope/status — no faucet, no lever.

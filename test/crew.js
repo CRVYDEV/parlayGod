@@ -126,6 +126,39 @@ const room = (await call('GET', '/v1/crew/chat', { token: vito.token })).body.me
 assert.equal(room.some((m) => m.text === 'meet at the docks'), true, 'and the crew reads it');
 assert.deepEqual((await call('GET', '/v1/crew/chat', { token: nick.token })).body.messages, [], 'an outsider reads nothing');
 
+// ════════════ C2 · THE CREW HIT (step two) — the shared target ════════════
+// tony now leads The Dockside Boys (tony + vito). nick is solo again (cut loose).
+await seed(tony.id, 'cash=200000');   // to fund the standing contract
+assert.equal((await call('POST', '/v1/crew/target', { token: vito.token, body: { name: 'Fresh Meat' } })).body.error, 'not_leader',
+  'only the boss calls the target');
+assert.equal((await call('POST', '/v1/crew/target', { token: tony.token, body: { name: 'Vito Rags' } })).body.error, 'crew',
+  'the crew never calls a hit on its own');
+assert.equal((await call('POST', '/v1/crew/target', { token: tony.token, body: { name: 'Fresh Meat', kind: 'kill' } })).code, 200,
+  'the boss calls a hit on a rival');
+let db = (await call('GET', '/v1/crew', { token: vito.token })).body.crew;
+assert.equal(db.target && db.target.name, 'Fresh Meat', 'the whole crew sees the mark');
+assert.equal(db.target.kind, 'kill', 'and the kind of hit');
+assert.equal(typeof db.target.pot, 'number', 'with the standing pot on their head');
+// the crew CHIPS IN via the EXISTING contract board (postBounty) — the audited escrow, not a new one
+assert.equal((await call('POST', `/v1/streets/${db.target.characterId}/bounty`, { token: tony.token, body: { amount: 6000, kind: 'kill' } })).code, 200,
+  'a crewmate funds the standing contract');
+assert(Number((await call('GET', '/v1/crew', { token: tony.token })).body.crew.target.pot) >= 6000, 'the pot on the mark grows');
+assert.equal((await call('DELETE', '/v1/crew/target', { token: tony.token })).code, 200, 'the boss calls it off');
+assert.equal((await call('GET', '/v1/crew', { token: tony.token })).body.crew.target, null, 'and the board clears');
+
+// non-aggression extends to the contract board — no putting a price on your own crew's head
+assert.equal((await call('POST', `/v1/streets/${vito.id}/bounty`, { token: tony.token, body: { amount: 6000, kind: 'kill' } })).body.error, 'crew',
+  'you do not post a contract on your own crew');
+
+// ════════════ C3 · THE CREW LEADERBOARD — the deadliest crews (pure status) ════════════
+await pool.query('UPDATE account_persistent SET kills=5 WHERE account_id=$1', [await acctOf(tony.id)]);
+await pool.query('UPDATE account_persistent SET kills=3 WHERE account_id=$1', [await acctOf(vito.id)]);
+const board = (await call('GET', '/v1/leaderboard/crews', { token: tony.token })).body.crews;
+const dockside = board.find((c) => c.name === 'The Dockside Boys');
+assert(dockside, 'the crew is on the leaderboard');
+assert.equal(dockside.kills, 8, 'ranked by combined lifetime kills');
+assert.equal(dockside.members, 2, 'and its size');
+
 // ════════════ D · §10.4 — the whole thing moves no value ════════════
 assert.equal(await one("SELECT COUNT(*) n FROM transactions WHERE reason LIKE 'crew%'"), 0,
   'THE CREW writes no ledger rows — there is no crew: vocabulary');

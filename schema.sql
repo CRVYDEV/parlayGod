@@ -2723,3 +2723,17 @@ CREATE TABLE IF NOT EXISTS season_recaps (
   at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (account_id, season)
 );
+
+-- ── THE CREW HIT (omerta-crew-design.md step two) — the crew's shared target ─────────────────────
+-- A pointer the leader sets so the whole crew rallies a contract behind ONE mark. It moves NO value:
+-- the actual funding rides the AUDITED bounty escrow (POST /v1/streets/:id/bounty → bounty_contributors),
+-- so this table adds ZERO §10.4 surface. Account-keyed target (survives their death; the pot is on
+-- their CURRENT street, resolved at read). Dies with the crew.
+CREATE TABLE IF NOT EXISTS crew_targets (
+  crew_id TEXT PRIMARY KEY,
+  target_account TEXT NOT NULL,
+  target_name TEXT NOT NULL,        -- snapshot for display
+  kind TEXT NOT NULL DEFAULT 'kill',
+  set_by TEXT NOT NULL,             -- the leader account who called it
+  at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

@@ -60,11 +60,24 @@ in no ledger vocabulary. Proven by a zero-ledger-rows assertion across the lifec
 `CREW.MAX_MEMBERS` (4), `MIN_LEVEL` (3), `NAME_MAX` (24), `INVITE_TTL_MS` (72h). All pure pacing/scope —
 no faucet, so nothing to sim. Pinned in `test/levers.js`, tabled in BALANCE.md.
 
-## Deferred (step two)
+## Step two (BUILT)
 
-- **The crew pot** — a convenience for co-funding a contract as `bounty_contributors` (already possible today
-  via the open contract board; the crew makes it one action). This is where the "co-funded contracts" idea
-  lands, on the AUDITED bounty-escrow rail — its own §10.4 reasoning, so its own drop.
-- **A crew activity feed** — routing crewmates' `ACTIVITY_WIRE` acts to the crew channel.
-- Extending non-aggression to `postBounty` / property crimes if the alpha shows crews want it.
-- A crew status leaderboard (the hitman-rep posture — pure status, agents excluded).
+- **THE CREW HIT** (the "crew pot") — the leader calls a shared target (`crew_targets`, one per crew,
+  account-keyed so it survives the mark's death; `setCrewTarget`/`clearCrewTarget`,
+  `POST /v1/crew/target {name,kind}` / `DELETE /v1/crew/target`). It sets a POINTER only — the whole crew
+  rallies a contract behind that mark by **chipping in through the EXISTING contract board**
+  (`POST /v1/streets/:id/bounty` → `bounty_contributors`), so the funding rides the **audited bounty
+  escrow** and this adds **ZERO new §10.4 surface**. The board surfaces the mark + the standing pot on
+  their head (resolved to their current street) + a one-tap chip-in. Dies with the crew.
+- **postBounty non-aggression** — the pact extended to the contract board: you can't put a price on your
+  own crew's head (same rat/WANTED exception). A one-line gate in `contracts.js`.
+- **THE CREW LEADERBOARD** — the deadliest crews, by combined lifetime member kills (account-level,
+  survives death), agents excluded. Pure STATUS, `GET /v1/leaderboard/crews`.
+
+## Deferred (step three)
+
+- **A crew activity feed** — routing crewmates' `ACTIVITY_WIRE` acts to the crew channel (a per-act crew
+  lookup on the hot wire path; the crew room already gives a live channel, so marginal).
+- Extending non-aggression to the property crimes (rob/steal/trunk/boat/sabotage) if the alpha shows
+  crews want it — a crewmate robbing your front is currently a betrayal you can answer.
+- Directed / trust-line crew perks if the alpha shows the small group wants more teeth.

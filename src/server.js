@@ -1860,6 +1860,13 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Crew.leaveCrew(ch, client, h)));
   app.delete('/v1/crew/member/:characterId', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Crew.kickMember(ch, req.params.characterId, client, h)));
+  // THE CREW HIT (step two) — the leader calls a shared target; the crew chips in via the EXISTING
+  // contract board (POST /v1/streets/:id/bounty), so this sets a pointer and moves no value.
+  app.post('/v1/crew/target', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Crew.setCrewTarget(ch, req.body?.name, req.body?.kind, client, h)));
+  app.delete('/v1/crew/target', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Crew.clearCrewTarget(ch, client, h)));
+  app.get('/v1/leaderboard/crews', { preHandler: auth }, async () => Crew.crewLeaderboard(pool));
 
   registerKitchen(app, { pool, auth });
 
