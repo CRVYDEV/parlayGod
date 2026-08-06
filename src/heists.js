@@ -321,7 +321,11 @@ export async function executeHeist(ch, heistId, client, h) {
   const avgRoleStat = realCrew.reduce((a, m) => a + Number(m[HEIST_ROLES[roleOf[m.id]] || 'muscle']), 0) / realCrew.length;
   // Tier-4 §B: every cased member raises the roll a notch, capped (casing never guarantees a score)
   const caseBonus = Math.min(HEIST_CASE_MAX, members.filter((m) => m.cased).length * HEIST_CASE_STEP);
-  const p = Math.min(0.92, Math.max(0.15, job.base + (avgRoleStat * 3 - 30) / 1000 + caseBonus));
+  // HEIST_P is a TEST-ONLY roll knob (the SHANK_P / BUSINESS_RAID_P precedent — never set in production):
+  // it pins the success probability so a suite can force a score or a bust deterministically instead of
+  // looping on the RNG, which flakes at the .92 clamp (P(no bust over 60 tries) ≈ 0.7%).
+  const p = process.env.HEIST_P != null ? Number(process.env.HEIST_P)
+    : Math.min(0.92, Math.max(0.15, job.base + (avgRoleStat * 3 - 30) / 1000 + caseBonus));
   const roll = Math.random();
   await h.rngLog(client, ch.id, `heist:${job.id}`, roll, `${roll < p ? 'score' : 'bust'} (P ${p.toFixed(3)}, crew ${crewRows.length}${caseBonus ? `, cased +${caseBonus.toFixed(2)}` : ''})`);
   // an INSIDE JOB marks the venue win or lose — the attempt is what locks the books down

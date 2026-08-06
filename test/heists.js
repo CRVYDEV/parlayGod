@@ -52,38 +52,40 @@ await seedCh(cara.id, "jail_until = now() + interval '1 minute'");
 assert.equal((await call('POST', `/v1/heists/${h1}/execute`, { token: hank.token })).body.error, 'crew_not_ready', 'nobody goes with a man inside');
 await seedCh(cara.id, 'jail_until=NULL');
 
-// ── run jobs until BOTH outcomes land; verify the money on each ──
-let scored = false, busted = false, guard = 0;
-let activeId = h1;
-while ((!scored || !busted) && guard++ < 60) {
-  if (!activeId) {
-    await seedCh(hank.id, 'cash=100000, heist_at=NULL, jail_until=NULL, hosp_until=NULL');
-    await seedCh(cara.id, 'heist_at=NULL, jail_until=NULL, hosp_until=NULL');
-    const p = await call('POST', '/v1/heists/plan', { token: hank.token, body: { job: 'payroll' } });
-    assert.equal(p.code, 200, `replan (${JSON.stringify(p.body)})`);
-    activeId = p.body.id;
-    assert.equal((await call('POST', `/v1/heists/${activeId}/join`, { token: cara.token })).code, 200, 'recrew');
-  }
-  const hankPre = (await meOf(hank.token)).cash, caraPre = (await meOf(cara.token)).cash;
-  const ex = await call('POST', `/v1/heists/${activeId}/execute`, { token: hank.token });
-  assert.equal(ex.code, 200, `execute resolves (${JSON.stringify(ex.body)})`);
-  if (ex.body.score && !scored) {
-    scored = true;
-    const unit = ex.body.pot / 2.2; // leader 1.2 + 1 crew
-    assert.equal(ex.body.share, Math.floor(unit * 1.2), 'the leader takes the weighted share');
-    assert.equal((await meOf(hank.token)).cash, hankPre + Math.floor(unit * 1.2), "the leader's cut landed");
-    assert.equal((await meOf(cara.token)).cash, caraPre + Math.floor(unit), "cara's cut landed");
-    // (D11 2026-08-05: the big-score AAPL cut retired with the Portfolio — the response must no
-    // longer advertise a grant nothing delivers)
-    assert.equal(ex.body.rwaCut, undefined, 'no retired rwaCut on the score response');
-    assert.equal((await call('POST', '/v1/heists/plan', { token: hank.token, body: { job: 'payroll' } })).body.error, 'cooldown', 'one Score per window');
-  } else if (!ex.body.score && !ex.body.blown && !busted) {
-    busted = true;
-    assert((await meOf(hank.token)).jailSeconds > 0 && (await meOf(cara.token)).jailSeconds > 0, 'the whole crew goes down together');
-  }
-  activeId = null;
-}
-assert(scored && busted, `both outcomes over ${guard} jobs`);
+// ── force BOTH outcomes with the HEIST_P roll knob (deterministic — the old loop-until-the-RNG-
+//    obliges shape flaked at the .92 clamp, P(no bust over 60 tries) ≈ 0.7%); verify the money on each ──
+const replan = async () => {
+  await seedCh(hank.id, 'cash=100000, heist_at=NULL, jail_until=NULL, hosp_until=NULL');
+  await seedCh(cara.id, 'heist_at=NULL, jail_until=NULL, hosp_until=NULL');
+  const p = await call('POST', '/v1/heists/plan', { token: hank.token, body: { job: 'payroll' } });
+  assert.equal(p.code, 200, `replan (${JSON.stringify(p.body)})`);
+  assert.equal((await call('POST', `/v1/heists/${p.body.id}/join`, { token: cara.token })).code, 200, 'recrew');
+  return p.body.id;
+};
+
+// THE SCORE — HEIST_P=1 pins a guaranteed success
+process.env.HEIST_P = '1';
+let hankPre = (await meOf(hank.token)).cash, caraPre = (await meOf(cara.token)).cash;
+let ex = await call('POST', `/v1/heists/${h1}/execute`, { token: hank.token });
+assert.equal(ex.code, 200, `execute resolves (${JSON.stringify(ex.body)})`);
+assert(ex.body.score, 'HEIST_P=1 forces the score');
+const unit = ex.body.pot / 2.2; // leader 1.2 + 1 crew
+assert.equal(ex.body.share, Math.floor(unit * 1.2), 'the leader takes the weighted share');
+assert.equal((await meOf(hank.token)).cash, hankPre + Math.floor(unit * 1.2), "the leader's cut landed");
+assert.equal((await meOf(cara.token)).cash, caraPre + Math.floor(unit), "cara's cut landed");
+// (D11 2026-08-05: the big-score AAPL cut retired with the Portfolio — the response must no
+// longer advertise a grant nothing delivers)
+assert.equal(ex.body.rwaCut, undefined, 'no retired rwaCut on the score response');
+assert.equal((await call('POST', '/v1/heists/plan', { token: hank.token, body: { job: 'payroll' } })).body.error, 'cooldown', 'one Score per window');
+
+// THE BUST — HEIST_P=0 pins a guaranteed failure; the whole crew goes down together
+process.env.HEIST_P = '0';
+const bustId = await replan();
+ex = await call('POST', `/v1/heists/${bustId}/execute`, { token: hank.token });
+assert.equal(ex.code, 200, `execute resolves (${JSON.stringify(ex.body)})`);
+assert(!ex.body.score && !ex.body.blown, 'HEIST_P=0 forces the bust');
+assert((await meOf(hank.token)).jailSeconds > 0 && (await meOf(cara.token)).jailSeconds > 0, 'the whole crew goes down together');
+delete process.env.HEIST_P;
 // every dollar of it is ledgered: shares == heist:crew rows, stakes/refunds == heist:crew:stake rows
 const sum = async (reason, cid) => Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='${reason}' AND character_id='${cid}'`)).rows[0].s);
 assert(Number((await pool.query("SELECT COUNT(*) n FROM rng_audit WHERE action LIKE 'heist:%'")).rows[0].n) >= 2, 'every roll rng-audited');
@@ -112,34 +114,20 @@ let mb = (await call('GET', '/v1/heists', { token: hank.token })).body.mine;
 assert.equal(mb.crew.length, 2, 'the crew is full with a body');
 assert(mb.crew.some((c) => c.hired), 'the board flags the hand as hired');
 assert.equal(mb.canHire, false, 'no room for another hand on a full 2-man job');
-// run until a score lands, then verify the hand was NEVER paid and the leader still scored
+// force a score (HEIST_P=1), then verify the hand was NEVER paid and the leader still scored
 const handCashPre = Number((await pool.query(`SELECT cash FROM characters WHERE id='${hand.id}'`)).rows[0].cash);
 const handPulledPre = Number((await pool.query(`SELECT heists_pulled FROM account_persistent WHERE account_id='${handAcct}'`)).rows[0].heists_pulled);
-// FLAKE FIX: the loop re-fills on every bust (another -5000 heist:hire), so the fee sum is
-// -5000 × fills, not a flat -5000 (which only held when the heist scored first-try — a
-// deterministic assertion resting on a probabilistic precondition, the recorded flake class).
-let hScored = false, hg = 0, hid2 = hh, fills = 1;   // fills starts at 1: the initial fill above
-while (!hScored && hg++ < 80) {
-  const ex = await call('POST', `/v1/heists/${hid2}/execute`, { token: hank.token });
-  assert.equal(ex.code, 200, `hired execute resolves (${JSON.stringify(ex.body)})`);
-  if (ex.body.score) {
-    hScored = true;
-    assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='heist:crew' AND character_id='${hand.id}'`)).rows[0].s), 0, 'THE EMISSION CLAIM: the hand takes no cut — its slice is never minted');
-    assert.equal(Number((await pool.query(`SELECT cash FROM characters WHERE id='${hand.id}'`)).rows[0].cash), handCashPre, "the hand's pocket is untouched");
-    assert.equal(Number((await pool.query(`SELECT heists_pulled FROM account_persistent WHERE account_id='${handAcct}'`)).rows[0].heists_pulled), handPulledPre, 'the hand earns no legend');
-    assert(ex.body.share > 0, 'the leader still scores — co-op is reachable');
-    assert(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='heist:crew' AND character_id='${hank.id}'`)).rows[0].s) > 0, "the leader's cut is ledgered heist:crew");
-    assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='heist:hire' AND character_id='${hank.id}'`)).rows[0].s), -5000 * fills, 'the hire fee is a ledgered heist:hire sink (once per fill)');
-  } else { // busted/blown — the hand shares the crew's fate; clear it and go again
-    await seedCh(hank.id, 'cash=100000, heist_at=NULL, jail_until=NULL, hosp_until=NULL, safe_until=NULL');
-    await pool.query(`UPDATE characters SET jail_until=NULL, heist_at=NULL WHERE id='${hand.id}'`);
-    const rp = await call('POST', '/v1/heists/plan', { token: hank.token, body: { job: 'payroll' } });
-    hid2 = rp.body.id;
-    await call('POST', `/v1/heists/${hid2}/fill`, { token: hank.token });
-    fills++;
-  }
-}
-assert(hScored, `the solo-NPC crew landed a score within ${hg} tries`);
+process.env.HEIST_P = '1';
+const hex = await call('POST', `/v1/heists/${hh}/execute`, { token: hank.token });
+delete process.env.HEIST_P;
+assert.equal(hex.code, 200, `hired execute resolves (${JSON.stringify(hex.body)})`);
+assert(hex.body.score, 'HEIST_P=1 forces the solo-NPC crew to land a score');
+assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='heist:crew' AND character_id='${hand.id}'`)).rows[0].s), 0, 'THE EMISSION CLAIM: the hand takes no cut — its slice is never minted');
+assert.equal(Number((await pool.query(`SELECT cash FROM characters WHERE id='${hand.id}'`)).rows[0].cash), handCashPre, "the hand's pocket is untouched");
+assert.equal(Number((await pool.query(`SELECT heists_pulled FROM account_persistent WHERE account_id='${handAcct}'`)).rows[0].heists_pulled), handPulledPre, 'the hand earns no legend');
+assert(hex.body.share > 0, 'the leader still scores — co-op is reachable');
+assert(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='heist:crew' AND character_id='${hank.id}'`)).rows[0].s) > 0, "the leader's cut is ledgered heist:crew");
+assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='heist:hire' AND character_id='${hank.id}'`)).rows[0].s), -5000, 'the hire fee is a ledgered heist:hire sink (one fill)');
 
 // ── THE CAP: the marquee jobs stay multiplayer — at most HEIST_FILL_MAX hands, the rest real bodies ──
 await seedCh(hank.id, 'cash=100000, heist_at=NULL, jail_until=NULL, hosp_until=NULL, safe_until=NULL');
@@ -229,35 +217,25 @@ assert(r.body.open.every((o) => Array.isArray(o.rolesOpen)), 'the board lists op
 const laund = HEIST_JOBS.find((j) => j.id === 'inside');
 const tier1 = 12000; // laundromat t1 incomePerHr
 const pendingFull = Math.floor(tier1 * 24); // capped at BUSINESS_CAP_MS (24h)
-let insideScored = false, g2 = 0, hid = h5;
-while (!insideScored && g2++ < 60) {
-  const hankPre = (await meOf(hank.token)).cash;
-  const ex = await call('POST', `/v1/heists/${hid}/execute`, { token: hank.token });
-  assert.equal(ex.code, 200, `inside execute resolves (${JSON.stringify(ex.body)})`);
-  if (ex.body.score) {
-    insideScored = true;
-    const pot = Math.floor(pendingFull * laund.rateBps / 10000);
-    assert.equal(ex.body.pot, pot, `the pot is ${laund.rateBps / 100}% of the front's pending income ($${pot})`);
-    assert.equal(ex.body.share, Math.floor((pot / 2.2) * 1.2), 'split by the crew rules');
-    assert.equal((await meOf(hank.token)).cash, hankPre + ex.body.share, "the leader's cut landed");
-    const ledgered = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='heist:inside'")).rows[0].s);
-    assert.equal(ledgered, Math.floor((pot / 2.2) * 1.2) + Math.floor(pot / 2.2), 'every dollar of it ledgered heist:inside');
-    // the owner keeps the REST pending — the clock advanced by only the stolen share
-    const owned = (await call('GET', '/v1/business', { token: marco.token })).body.businesses.find((b) => b.id === frontId);
-    const kept = pendingFull - pot;
-    assert(Math.abs(owned.pending - kept) <= Math.ceil(tier1 / 60), `the owner keeps ~$${kept} pending (saw $${owned.pending})`);
-    assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM notifications WHERE character_id='${marco.id}' AND type='inside_job'`)).rows[0].n), 1, 'the mark heard');
-  } else {
-    // a bust still locks the venue down — clear it (and the crew) to try again
-    await seedCh(hank.id, 'cash=200000, heist_at=NULL, jail_until=NULL');
-    await seedCh(cara.id, 'heist_at=NULL, jail_until=NULL');
-    await pool.query(`UPDATE businesses SET inside_at=NULL, last_collect_at = now() - interval '25 hours' WHERE id='${frontId}'`);
-    const p2 = await call('POST', '/v1/heists/plan', { token: hank.token, body: { job: 'inside', businessId: frontId, role: 'brains' } });
-    assert.equal(p2.code, 200, `replan (${JSON.stringify(p2.body)})`); hid = p2.body.id;
-    assert.equal((await call('POST', `/v1/heists/${hid}/join`, { token: cara.token, body: { role: 'muscle' } })).code, 200, 'recrew');
-  }
-}
-assert(insideScored, `the inside job landed within ${g2} tries`);
+// HEIST_P=1 forces the inside job to land (win or lose it locks the venue, so a deterministic
+// score is the only way to verify the pot/share/ledger without looping on the RNG)
+process.env.HEIST_P = '1';
+const insidePre = (await meOf(hank.token)).cash;
+const iex = await call('POST', `/v1/heists/${h5}/execute`, { token: hank.token });
+delete process.env.HEIST_P;
+assert.equal(iex.code, 200, `inside execute resolves (${JSON.stringify(iex.body)})`);
+assert(iex.body.score, 'HEIST_P=1 forces the inside job to land');
+const pot = Math.floor(pendingFull * laund.rateBps / 10000);
+assert.equal(iex.body.pot, pot, `the pot is ${laund.rateBps / 100}% of the front's pending income ($${pot})`);
+assert.equal(iex.body.share, Math.floor((pot / 2.2) * 1.2), 'split by the crew rules');
+assert.equal((await meOf(hank.token)).cash, insidePre + iex.body.share, "the leader's cut landed");
+const ledgered = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='heist:inside'")).rows[0].s);
+assert.equal(ledgered, Math.floor((pot / 2.2) * 1.2) + Math.floor(pot / 2.2), 'every dollar of it ledgered heist:inside');
+// the owner keeps the REST pending — the clock advanced by only the stolen share
+const owned = (await call('GET', '/v1/business', { token: marco.token })).body.businesses.find((b) => b.id === frontId);
+const kept = pendingFull - pot;
+assert(Math.abs(owned.pending - kept) <= Math.ceil(tier1 / 60), `the owner keeps ~$${kept} pending (saw $${owned.pending})`);
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM notifications WHERE character_id='${marco.id}' AND type='inside_job'`)).rows[0].n), 1, 'the mark heard');
 // the venue is HOT for a day — a fresh crew bounces off the lockdown
 await seedCh(hank.id, 'cash=200000, heist_at=NULL, jail_until=NULL');
 await seedCh(cara.id, 'heist_at=NULL, jail_until=NULL');
