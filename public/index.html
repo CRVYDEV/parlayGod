@@ -1744,7 +1744,8 @@
     if (body && typeof body.crew === 'string') {
       const m = { formed: 'the crew is yours — put some names in', joined: `you're in — ${esc(body.name || 'the crew')}`,
         left: 'you walked — the pact\'s off', invited: `word put in for ${esc(body.to || 'them')}`,
-        kicked: `${esc(body.who || 'he')}'s out of the crew`, declined: 'passed on it', pulled: '' };
+        kicked: `${esc(body.who || 'he')}'s out of the crew`, declined: 'passed on it', pulled: '',
+        target: `the crew's after ${esc(body.target || 'the mark')} — chip in on the hit`, target_cleared: 'the hit is called off' };
       if (m[body.crew] !== undefined && m[body.crew] !== '') return `\u{1F465} ${m[body.crew]}`;
     }
     // THE ROSTER — a post is only worth something while the man is on his feet, so the toast leads
@@ -3756,7 +3757,7 @@
 
     const mem = crew.members || [];
     t.innerHTML = `${inviteCards}
-      <div class="card"><span class="t">${esc(crew.name)}</span> <span class="chip">${mem.length}/${b.maxMembers}</span>${crew.leader ? ' <span class="chip good">you run it</span>' : ''}
+      <div class="card"><span class="t">${esc(crew.name)}</span> <span class="chip">${mem.length}/${b.maxMembers}</span>${crew.leader ? ' <span class="chip good">you run it</span>' : ''} <a href="#" id="crew-lb" style="font-size:11px">the deadliest crews →</a>
         <div class="grid" style="margin-top:6px">${mem.map((m) => `
           <div class="card"><span class="t">${esc(m.name)}${m.leader ? ' <span class="chip good">boss</span>' : ''}${m.isMe ? ' <span class="chip">you</span>' : ''}</span>
             <div class="d">${m.level != null ? 'level ' + m.level : ''}${m.districtName ? ' · ' + esc(m.districtName) : ''}${m.family ? ' · ' + esc(m.family) : ''}</div>
@@ -3764,6 +3765,14 @@
         <div style="margin-top:8px" class="d">
           ${mem.length < b.maxMembers ? `<input id="crew-invite" placeholder="invite by name" size="16"> <button class="act" id="crew-invite-btn">put a word in</button> &nbsp;` : `<span style="color:var(--dim)">crew is full</span> &nbsp;`}
           <button class="act" data-do="POST /v1/crew/leave" data-confirm="Walk away?|You leave the crew — the pact ends and you're fair game to them again.">leave the crew</button></div></div>
+
+      ${(() => { const tg = crew.target;
+        if (tg) return `<div class="card" style="margin-top:8px;border-color:var(--bad)"><span class="t" style="color:var(--bad)">THE CREW HIT — ${esc(tg.name)}</span> <span class="chip">${tg.kind === 'kill' ? 'kill' : 'hospitalize'}</span>${tg.pot ? ` <span class="chip good">$${fmt(tg.pot)} on their head</span>` : ''}
+          <div class="d" style="margin-top:4px">${tg.alive && tg.characterId ? `Chip in on the contract: <input id="crew-hit-amt" placeholder="$" size="8"> <button class="act" id="crew-hit-fund" style="border-color:var(--bad)">put money on it</button>`
+            : '<span style="color:var(--dim)">the mark is off the streets — the hit is settled</span>'}
+            ${crew.leader ? ` &nbsp;<button class="act" data-do="DELETE /v1/crew/target">call it off</button>` : ''}</div></div>`;
+        return crew.leader ? `<div class="card" style="margin-top:8px"><span class="t">Call a hit</span> <span class="d" style="font-size:11px">— the crew rallies a contract on one mark</span>
+          <div class="d" style="margin-top:4px"><input id="crew-hit-name" placeholder="mark's name" size="16"> <select id="crew-hit-kind"><option value="kill">kill</option><option value="hospitalize">hospitalize</option></select> <button class="act" id="crew-hit-set">call the target</button></div></div>` : ''; })()}
 
       <div class="card" style="margin-top:8px"><span class="t">The Crew Room</span> <span class="d" style="font-size:11px">— just your crew, live</span>
         <div id="crew-room" style="max-height:180px;overflow:auto;margin:6px 0;font-size:12.5px">…</div>
@@ -3774,6 +3783,20 @@
       const name = (t.querySelector('#crew-invite').value || '').trim();
       if (!name) return;
       act('POST', '/v1/crew/invite', { name }).then(() => renderCrew());
+    };
+    // THE CREW HIT — the leader calls a shared mark; anyone chips in on the standing contract
+    const hs = t.querySelector('#crew-hit-set');
+    if (hs) hs.onclick = () => {
+      const name = (t.querySelector('#crew-hit-name').value || '').trim();
+      if (!name) return;
+      act('POST', '/v1/crew/target', { name, kind: t.querySelector('#crew-hit-kind').value }).then(() => renderCrew());
+    };
+    const hf = t.querySelector('#crew-hit-fund');
+    if (hf) hf.onclick = () => {
+      const amt = Math.floor(Number(t.querySelector('#crew-hit-amt').value) || 0);
+      const tg = crew.target;
+      if (!amt || !tg || !tg.characterId) return;
+      act('POST', `/v1/streets/${tg.characterId}/bounty`, { amount: amt, kind: tg.kind }).then(() => renderCrew());
     };
     // the crew room — the two-step board idiom (`.body || {}` then `.messages`)
     const room = t.querySelector('#crew-room');
@@ -3786,6 +3809,12 @@
     await load();
     const sb = t.querySelector('#crew-send');
     if (sb) sb.onclick = async () => { const v = t.querySelector('#crew-say').value; if (!v) return; await api('POST', '/v1/crew/chat', { text: v }); t.querySelector('#crew-say').value = ''; load(); };
+    const lb = t.querySelector('#crew-lb');
+    if (lb) lb.onclick = async (e) => { e.preventDefault();
+      const crews = ((await api('GET', '/v1/leaderboard/crews')).body || {}).crews || [];
+      sheetModal('The Deadliest Crews', crews.length
+        ? crews.map((c, i) => `<div class="d">${i + 1}. <b>${esc(c.name)}</b> — ${c.kills} kill${c.kills === 1 ? '' : 's'} <span class="chip">${c.members} strong</span></div>`).join('')
+        : '<div class="d" style="color:var(--dim)">no crews have drawn blood yet</div>'); };
   }
 
   // ── BLACK MARKET: the board (auctions / goods / buy orders) + your sell side ──

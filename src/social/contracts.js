@@ -34,6 +34,12 @@ export async function postBounty(ch, targetCharacterId, amount, client, h, opts 
   // WANTED welsher (a defaulter under pursuit is fair game even to their own family, step 4).
   const tg = (await client.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [targetCharacterId])).rows[0];
   if (tg?.gang_id && tg.gang_id === h.owned.gangId && !targetRat && !isWanted(t)) throw new GameError('family', "They're family. Omertà.");
+  // THE CREW (step two) — no putting a contract on your own crew (the non-aggression pact extended to
+  // the contract board; same rat/WANTED exception). Account-keyed, so read the target's crew by account.
+  if (h.owned.crewId) {
+    const tcrew = (await client.query('SELECT crew_id FROM crew_members WHERE account_id=$1', [t.account_id])).rows[0]?.crew_id;
+    if (tcrew === h.owned.crewId && !targetRat && !isWanted(t)) throw new GameError('crew', "They run with your crew — no contracts on your own.");
+  }
   const amt = Math.floor(Number(amount) || 0);
   if (amt < M3.BOUNTY_MIN) throw new GameError('min', `Minimum contract is $${M3.BOUNTY_MIN}.`);
   // VINNIE T2 (underworld): the Match waives HIS 1% posting fee for friends — the street
