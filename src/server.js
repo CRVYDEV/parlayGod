@@ -110,7 +110,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          TAX, withdrawTaxBps,
          HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, OPERATIONS, BUSINESS_EMPIRE, PACING, MASTERY,
          PATH_FX, PATH_XP_HOME, PATH_XP_RIVAL, PATH_SWITCH_CD_MS, REGIMEN, HUSTLE, CAREER, RIVALS,
-         CORNER, CONTACTS, FAVOR, CREW, DISCOVERY, MADE, MADE_LADDER, ACCESS_STAKE, ROSTER_POSTS, jailed, hospitalized } from './rules.js';
+         CORNER, CONTACTS, FAVOR, DISCOVERY, MADE, MADE_LADDER, ACCESS_STAKE, ROSTER_POSTS, jailed, hospitalized } from './rules.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -887,9 +887,9 @@ export async function buildServer() {
       ranks: CONTACTS.RANKS, standingTiers: CONTACTS.STANDING_TIERS },
     favors: { maxOpen: FAVOR.MAX_OPEN, minPay: FAVOR.MIN_PAY, maxPay: FAVOR.MAX_PAY, maxQty: FAVOR.MAX_QTY,
       takeBps: FAVOR.TAKE_BPS, ttlHours: Math.round(FAVOR.TTL_MS / 3600000) },
-    // THE CREW — the lightweight social unit (omerta-crew-design.md). Scope only; no odds, no money.
-    crew: { maxMembers: CREW.MAX_MEMBERS, minLevel: CREW.MIN_LEVEL, nameMax: CREW.NAME_MAX },
     // THE ROLODEX — player discovery (omerta-discovery-design.md). §10.4-free; just the level band.
+    // (THE CREW's own limits are on the /v1/crew board, not here — a `crew` key already belongs to the
+    // M4 KITCHEN crew below, and a duplicate key would silently shadow one of them.)
     discovery: { band: DISCOVERY.BAND },
     // THE STREET WAR + RIVALS (discoverability — costs and bounds only; the odds stay server-side)
     rivals: { robRateBps: RIVALS.ROB_RATE_BPS, robEnergy: RIVALS.ROB_ENERGY, robJailS: RIVALS.ROB_JAIL_S,
