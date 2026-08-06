@@ -106,10 +106,11 @@ export async function warBoard(db, ch = null) {
     // hit back; routing them ends it). A flat read joined to the outfit's name — the raid board decorates.
     let underFire = [];
     if (myGang) {
-      const nameOf = {}; for (const r of rows) nameOf[r.id] = { name: r.name, tag: r.tag };
       underFire = (await db.query('SELECT npc_gang, ends_at FROM npc_aggression WHERE target_gang=$1 AND ends_at > now()', [myGang])).rows
         .map((a) => ({ id: a.npc_gang, name: nameOf[a.npc_gang]?.name, tag: nameOf[a.npc_gang]?.tag,
-          endsSeconds: Math.max(0, Math.ceil((new Date(a.ends_at).getTime() - Date.now()) / 1000)) }));
+          endsSeconds: Math.max(0, Math.ceil((new Date(a.ends_at).getTime() - Date.now()) / 1000)),
+          // the aggressor's NPC allies may send guns too (they join the OFFENSIVE) — sue them for peace to keep them out
+          allies: allies[a.npc_gang] || [] }));
     }
     you = { war: dmg, rank: familyWarRankOf(dmg).name, minLvl: FAMILY_WAR.RAID_MIN_LVL, underFire,
       raidCdSeconds: cooling(ch) ? Math.ceil((new Date(ch.family_raid_at).getTime() - Date.now()) / 1000) : 0,
@@ -436,6 +437,27 @@ export async function sweepNpcAggression(pool) {
       if (mark && !pending) {
         await c.query('INSERT INTO family_aggro (gang_id, target_character, scheduled_at) VALUES ($1,$2,now())', [ag.npc_gang, mark.id]);
         struck++;
+      }
+      // ALLIES JOIN THE OFFENSIVE — the aggressor's NPC allies send guns at the SAME target on this cycle
+      // (each its own family_aggro slot → the target loses more made men when the aggressor has friends),
+      // up to ALLY_JOIN_MAX. An ally at PEACE with the target (a player↔NPC pact) stays out, and an ally
+      // already hunting elsewhere (a pending strike) sits the cycle out. §10.4-neutral (the same primitive).
+      if (A.ALLY_JOIN_MAX > 0 && live.length) {
+        const allyIds = (await c.query(
+          "SELECT gang_a, gang_b FROM gang_relations WHERE kind='pact' AND accepted AND until > now() AND (gang_a=$1 OR gang_b=$1)", [ag.npc_gang])).rows
+          .map((r) => (r.gang_a === ag.npc_gang ? r.gang_b : r.gang_a));
+        const npc = new Set((await c.query('SELECT id FROM gangs WHERE npc_flag')).rows.map((r) => r.id));
+        let joined = 0;
+        for (const allyId of shuffle(allyIds)) {
+          if (joined >= A.ALLY_JOIN_MAX) break;
+          if (!npc.has(allyId) || allyId === ag.npc_gang) continue;     // only NPC-family allies (skip player↔NPC peace pacts)
+          if (await pactBetween(c, allyId, ag.target_gang)) continue;   // an ally at peace with the target stays out
+          if (Number((await c.query('SELECT COUNT(*) n FROM family_aggro WHERE gang_id=$1', [allyId])).rows[0].n) > 0) continue; // busy hunting elsewhere
+          const mk = shuffle(live.slice())[0];
+          if (!mk) break;
+          await c.query('INSERT INTO family_aggro (gang_id, target_character, scheduled_at) VALUES ($1,$2,now())', [allyId, mk.id]);
+          joined++; struck++;
+        }
       }
       // advance the clock whether or not a mark was found (a family with nobody home this tick tries next).
       // JS-computed timestamp — pg-mem doesn't do string-interval arithmetic (the file's own convention).

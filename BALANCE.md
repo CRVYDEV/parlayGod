@@ -4930,6 +4930,7 @@ it is pure pacing over an already-audited primitive.
 | `FAMILY_WAR.AGGRESSION.COOLDOWN_MS` | 24h | a harassed family's peace window (`gangs.npc_aggro_until`) before it can be re-targeted |
 | `FAMILY_WAR.AGGRESSION.MIN_MEMBERS` | 2 | only opens on a REAL family (≥ this many living made men — off solo alts) |
 | `FAMILY_WAR.AGGRESSION.MIN_LVL` | 5 | only strikes a member at/above this level (off fresh rookies) |
+| `FAMILY_WAR.AGGRESSION.ALLY_JOIN_MAX` | 2 | the aggressor's NPC allies that join the OFFENSIVE per strike cycle (an ally you've sued for peace stays out; `0` disables the alliance teeth) |
 
 **Founder sign-off flag:** all `FAMILY_WAR.AGGRESSION.*` are PROPOSED DEFAULTS. The knobs that decide how
 GRIEFY it feels are `TARGET` (world-wide pressure), `STRIKE_EVERY_MS` (how often you're hit) and the

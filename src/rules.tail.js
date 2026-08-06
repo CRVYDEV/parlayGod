@@ -1251,6 +1251,11 @@ export const FAMILY_WAR = {
     COOLDOWN_MS: 24 * 3600 * 1000,  // a harassed family's peace window before it can be targeted anew
     MIN_MEMBERS: 2,                 // only open on a REAL player family (≥ this many living made men — not a solo alt)
     MIN_LVL: 5,                     // only strike a member at/above this level (don't hunt fresh rookies)
+    // ALLIES JOIN (2026-08-06): the aggressor's NPC allies send guns at the same target on each strike
+    // cycle (each its own family_aggro slot) — up to this many. An ally at PEACE with the target (a
+    // player↔NPC pact) stays out, and one already hunting elsewhere sits the cycle out. Still §10.4-neutral
+    // (pacing over the shield-honouring family_aggro primitive). 0 disables the alliance teeth.
+    ALLY_JOIN_MAX: 2,
   },
 };
 export const familyWarRankOf = (dmg) => {
