@@ -11,7 +11,7 @@ import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { FAMILY_WAR, familyWarRankOf } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
-import { sweepFamilyAggro, sweepNpcWars } from '../src/npcwar.js';
+import { sweepFamilyAggro, sweepNpcWars, sweepNpcAggression } from '../src/npcwar.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -255,9 +255,90 @@ assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM npc_wars WHERE att
 const gt2 = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'gang treasuries');
 assert(gt2.ok, `the family-war gang:war sink reconciles the gang-treasuries check (${JSON.stringify(gt2)})`);
 
+// ══════════════════ THE OFFENSIVE — NPC families that DECLARE FIRST (step four) ══════════════════
+// A worker opens a hostility from an NPC family onto a real player family unprompted; while live it strikes
+// on cadence via the SHIPPED shield-honouring family_aggro primitive. §10.4-NEUTRAL (a strike is pure
+// pacing). Counterplay: routing the outfit (conquest) ends its aggression.
+const A = FAMILY_WAR.AGGRESSION;
+// build a REAL player family with MIN_MEMBERS living made men (the only ≥2-member player gang — wolfGang
+// has one, so the picker will target THIS one deterministically).
+const capo = await mk('Vito Target'); await seedCh(capo.id, 'cash=100000, respect=5760'); // lvl 25, past the found gate
+const tg = await call('POST', '/v1/gangs', { token: capo.token, body: { name: 'The Targets', tag: 'TGT' } });
+assert.equal(tg.code, 200, `founded the target family (${JSON.stringify(tg.body)})`);
+const targetGid = (await pool.query(`SELECT gang_id FROM gang_members WHERE character_id='${capo.id}'`)).rows[0].gang_id;
+const soldier = await mk('Sal Soldier'); await seedCh(soldier.id, 'respect=5760'); // lvl 25
+assert.equal((await call('POST', `/v1/gangs/${targetGid}/join`, { token: soldier.token })).code, 200, 'the soldier joins the family');
+
+// no aggressions live yet → PASS 3 opens exactly one onto the only ≥2-member player family. Ensure at
+// least one UNHELD NPC family is an eligible aggressor (earlier blocks conquered gid/gid2/gid3).
+await pool.query(`UPDATE gangs SET held_by_gang=NULL, war_pool=${FAMILY_WAR.POOL_MAX}, war_pool_at=now() WHERE id='${gid}'`);
+await pool.query('DELETE FROM npc_aggression');
+await pool.query(`UPDATE gangs SET npc_aggro_until=NULL WHERE id='${targetGid}'`);
+const txPre = Number((await pool.query('SELECT COUNT(*) n FROM transactions')).rows[0].n);
+let off = await sweepNpcAggression(pool);
+assert(off.opened >= 1, `an NPC family opened a hostility (${JSON.stringify(off)})`);
+const ag = (await pool.query(`SELECT npc_gang, target_gang FROM npc_aggression WHERE target_gang='${targetGid}'`)).rows[0];
+assert(ag, 'the hostility targets the real player family');
+const openedNpc = ag.npc_gang;
+assert((await pool.query(`SELECT npc_flag FROM gangs WHERE id='${openedNpc}'`)).rows[0].npc_flag, 'the aggressor is an NPC family');
+// every member SEES it (agency — hit them back), and the harassed family gets a post-lapse peace window
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM notifications WHERE type='npc_aggression' AND character_id IN ('${capo.id}','${soldier.id}')`)).rows[0].n), 2, 'both members are told the family opened hostilities');
+assert((await pool.query(`SELECT npc_aggro_until FROM gangs WHERE id='${targetGid}'`)).rows[0].npc_aggro_until, 'the peace/cooldown window is set');
+// the board surfaces it on the harassed family's side
+const capoBoard = (await call('GET', '/v1/npcfamily', { token: capo.token })).body;
+assert.equal(capoBoard.you.underFire.length, 1, 'the board shows the family who to hit back');
+assert.equal(capoBoard.you.underFire[0].id, openedNpc, 'it names the aggressor');
+// under fire, the picker does NOT pile a second NPC family on the same target (one at a time)
+off = await sweepNpcAggression(pool);
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM npc_aggression WHERE target_gang='${targetGid}'`)).rows[0].n), 1, 'a family under fire is not piled on by a second');
+
+// ── THE STRIKE — a due aggression enqueues a family_aggro hit on a member (shield-honouring at resolve) ──
+await pool.query(`UPDATE npc_aggression SET next_strike_at=now() WHERE npc_gang='${openedNpc}'`);
+await pool.query(`DELETE FROM family_aggro WHERE gang_id='${openedNpc}'`);
+off = await sweepNpcAggression(pool);
+assert.equal(off.struck, 1, `the aggression enqueued a strike (${JSON.stringify(off)})`);
+const strike = (await pool.query(`SELECT target_character FROM family_aggro WHERE gang_id='${openedNpc}'`)).rows[0];
+assert([capo.id, soldier.id].includes(strike.target_character), 'the strike marks a member of the family');
+
+const hospOf = async (id) => (await pool.query(`SELECT hosp_until FROM characters WHERE id='${id}'`)).rows[0].hosp_until;
+// SHIELD-HONOURING: a safe-housed mark takes no hit even with the retaliation roll forced
+await seedCh(strike.target_character, `safe_until = now() + interval '1 hour', hosp_until=NULL`);
+process.env.FAMILY_RETAL_P = '1';
+await sweepFamilyAggro(pool);
+assert(!(await hospOf(strike.target_character)), 'the earned shield turns the strike into a clean miss');
+// unshielded, the same forced roll lands the hospitalization (both members are reachable now)
+await seedCh(capo.id, 'safe_until=NULL, hosp_until=NULL, safehouse_used=0');
+await seedCh(soldier.id, 'safe_until=NULL, hosp_until=NULL, safehouse_used=0');
+await pool.query(`UPDATE npc_aggression SET next_strike_at=now() WHERE npc_gang='${openedNpc}'`);
+await pool.query(`DELETE FROM family_aggro WHERE gang_id='${openedNpc}'`);
+await sweepNpcAggression(pool);
+const strike2 = (await pool.query(`SELECT target_character FROM family_aggro WHERE gang_id='${openedNpc}'`)).rows[0].target_character;
+await sweepFamilyAggro(pool);
+delete process.env.FAMILY_RETAL_P;
+assert(await hospOf(strike2), 'an unshielded member is hospitalized — the world hit back');
+
+// §10.4-NEUTRAL: opening + striking + lapsing moved ZERO value
+assert.equal(Number((await pool.query('SELECT COUNT(*) n FROM transactions')).rows[0].n), txPre, 'the whole offensive wrote no ledger rows');
+
+// ── COUNTERPLAY: routing the aggressor (conquest) ends its hostility ──
+await seedCh(raider.id, 'family_raid_at=NULL, energy=100, ammo=100, hosp_until=NULL');
+await pool.query(`UPDATE gangs SET war_pool=${routFloor + 500}, war_pool_at=now(), held_by_gang=NULL WHERE id='${openedNpc}'`);
+process.env.FAMILY_RAID_P = '1';
+const conq = await call('POST', `/v1/npcfamily/${openedNpc}/raid`, { token: raider.token });
+delete process.env.FAMILY_RAID_P;
+assert.equal(conq.body.conquered, true, `the raider routs and conquers the aggressor (${JSON.stringify(conq.body)})`);
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM npc_aggression WHERE npc_gang='${openedNpc}'`)).rows[0].n), 0, 'conquering the outfit ended its hostility — a vassal does not war its overlord');
+
+// ── LAPSE: an expired hostility is reaped ──
+await pool.query('DELETE FROM npc_aggression');
+await pool.query(`INSERT INTO npc_aggression (npc_gang, target_gang, ends_at, next_strike_at) VALUES ('${gid}','${targetGid}', now() - interval '1 minute', now())`);
+off = await sweepNpcAggression(pool);
+assert.equal(off.lapsed, 1, 'the expired hostility lapsed');
+await pool.query('DELETE FROM npc_aggression');
+
 // ── §10.4: the vocabulary knows family:raid (cash faucet + ammo sink) ──
 const vocab = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `family:raid rides the 'family' prefix (${JSON.stringify(vocab.unknown || [])})`);
 
-console.log('✅ THE BLOOD WAR test passed — the board (strength/defense/loot, player family excluded), a landed raid (bounded family:raid loot + legend + pool drain + ammo sink + cooldown), THE SEVERANCE (no season_wars → no Commission seat), the interlock (a beaten family reads weaker), THE DEFENCE (a counter hospitalizes the raider), THE MANHUNT (an escaped raider is hunted down later, shield-honouring, one-shot), a repel (hospitalized, pool untouched), THE CONQUEST (routing claims the family as a vassal → bounded family:tribute to the treasury, gang-treasuries reconciled, the conquest board), the gates (level/own_family/cooldown/bad_target), the leaderboard, THE FAMILY WAR (formal: the rank gate, the gang:war war-chest sink with NO season_wars, one campaign per family, the board decoration, scoring WIN_SCORE raids to WIN a status trophy for the declarer, the war-chief leaderboard, the worker lapse of an expired campaign, and the gang-treasuries reconcile), and §10.4 (family: vocabulary closed)');
+console.log('✅ THE BLOOD WAR test passed — the board (strength/defense/loot, player family excluded), a landed raid (bounded family:raid loot + legend + pool drain + ammo sink + cooldown), THE SEVERANCE (no season_wars → no Commission seat), the interlock (a beaten family reads weaker), THE DEFENCE (a counter hospitalizes the raider), THE MANHUNT (an escaped raider is hunted down later, shield-honouring, one-shot), a repel (hospitalized, pool untouched), THE CONQUEST (routing claims the family as a vassal → bounded family:tribute to the treasury, gang-treasuries reconciled, the conquest board), the gates (level/own_family/cooldown/bad_target), the leaderboard, THE FAMILY WAR (formal: the rank gate, the gang:war war-chest sink with NO season_wars, one campaign per family, the board decoration, scoring WIN_SCORE raids to WIN a status trophy for the declarer, the war-chief leaderboard, the worker lapse of an expired campaign, and the gang-treasuries reconcile), THE OFFENSIVE (step four: an NPC family opens hostilities on a real player family unprompted → members notified + a peace/cooldown window + the board surfaces who to hit back, not piled on by a second, a due strike enqueues a shield-honouring family_aggro hit — a safe-housed mark is a clean miss, an unshielded one is hospitalized — §10.4-NEUTRAL (zero ledger rows), counterplay: routing the outfit ends its aggression, and an expired hostility lapses), and §10.4 (family: vocabulary closed)');
 await app.close();

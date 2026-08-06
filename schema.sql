@@ -2218,6 +2218,21 @@ CREATE TABLE IF NOT EXISTS npc_wars (
 );
 CREATE INDEX IF NOT EXISTS ix_npc_wars_ends ON npc_wars (ends_at) WHERE NOT resolved;
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS family_wars_won INT NOT NULL DEFAULT 0; -- formal NPC-family war wins (status, survives death)
+-- THE OFFENSIVE (npc families that DECLARE first — omerta-npc-families-defend-design.md step four): a
+-- worker opens a time-boxed hostility from an NPC family onto a real player family unprompted, so the
+-- low-population world moves on its own. While live it periodically enqueues a family_aggro strike (the
+-- shipped, shield-honouring hospitalization primitive). §10.4: ZERO — a strike is pure pacing, no faucet.
+-- Counterplay is the EXISTING raid loop (rout the outfit → conquest ends its aggression). One row per NPC
+-- family (it runs one campaign at a time); a target can't be piled on by two at once (picker excludes a
+-- live incoming aggression) and gets gangs.npc_aggro_until peace after one lapses (the per-target cooldown).
+CREATE TABLE IF NOT EXISTS npc_aggression (
+  npc_gang TEXT PRIMARY KEY,
+  target_gang TEXT NOT NULL,
+  ends_at TIMESTAMPTZ NOT NULL,
+  next_strike_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_npc_aggression_target ON npc_aggression (target_gang);
+ALTER TABLE gangs ADD COLUMN IF NOT EXISTS npc_aggro_until TIMESTAMPTZ; -- a player family's peace window from a NEW npc aggression (post-harassment cooldown)
 -- THE CONQUEST (blood war step three): routing an NPC family (war_pool below the floor) lets the victor's
 -- family HOLD it as a vassal paying bounded tribute to the treasury (the World-frontier pattern on families).
 -- held_by_gang is the CONQUEROR's gang id on the NPC family row; contestable by re-routing.

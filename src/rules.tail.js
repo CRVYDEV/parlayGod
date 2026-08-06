@@ -1235,6 +1235,23 @@ export const FAMILY_WAR = {
       [0, 'No Campaigns'], [1, 'Campaigner'], [5, 'War Chief'], [15, 'Warlord'], [40, 'The Scourge of Families'],
     ],
   },
+  // THE OFFENSIVE (step four) — NPC families that DECLARE FIRST. A worker opens a time-boxed HOSTILITY
+  // from an NPC family onto a real player family with nobody having poked them, so the low-population
+  // world feels alive. While live it enqueues a family_aggro strike on the strike cadence — the SHIPPED,
+  // shield-honouring hospitalization primitive (sweepFamilyAggro re-checks jailed/hosp/safehouse/witpro/
+  // pen/hole + RETAL_P at resolve). §10.4-NEUTRAL: a strike is pure pacing, no currency, no new reason.
+  // Counterplay is the EXISTING loop — rout the outfit (its war_pool below the rout floor) and the CONQUEST
+  // ends its aggression (a vassal doesn't war its overlord). Anti-grief: one campaign per NPC family, a
+  // target can't be piled on by two at once, MIN_MEMBERS keeps it off solo alts, MIN_LVL keeps it off fresh
+  // rookies, and COOLDOWN_MS buys a harassed family peace. All numbers PROPOSED DEFAULTS — sim + sign-off.
+  AGGRESSION: {
+    TARGET: 2,                      // NPC families on the warpath at once (worker tops up to this)
+    MS: 12 * 3600 * 1000,           // how long a hostility runs before it lapses on its own (test-only NPC_AGGRO_MS)
+    STRIKE_EVERY_MS: 3 * 3600 * 1000, // a strike is enqueued on this cadence (each a shield-honouring family_aggro hit)
+    COOLDOWN_MS: 24 * 3600 * 1000,  // a harassed family's peace window before it can be targeted anew
+    MIN_MEMBERS: 2,                 // only open on a REAL player family (≥ this many living made men — not a solo alt)
+    MIN_LVL: 5,                     // only strike a member at/above this level (don't hunt fresh rookies)
+  },
 };
 export const familyWarRankOf = (dmg) => {
   const d = Number(dmg) || 0; let r = FAMILY_WAR.RANKS[0];

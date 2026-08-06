@@ -5,6 +5,27 @@ the inline scene-counter AND **THE MANHUNT** (the scheduled, shield-honouring wo
 chained so a raider is caught now OR hunted later, never both). `src/npcwar.js`, `test/npcwar.js`,
 `sim.js` P-probe. Only NPC-family contestable turf remains a step-three candidate (see the end).
 
+**Step four — THE OFFENSIVE (NPC families that DECLARE FIRST) — BUILT (2026-08-06, founder-directed).**
+Until now an NPC family only ever REACTED (it retaliates when you raid it). This makes the low-population
+world move on its own: the worker (`sweepNpcAggression`, wired in `worker.js`) opens a time-boxed
+HOSTILITY from an NPC family onto a real player family unprompted, and while it runs it enqueues a strike
+on a cadence — reusing the SHIPPED `family_aggro` → `sweepFamilyAggro` primitive, so every earned shield
+(jailed/hospitalized/safehouse/witpro/pen/hole + `RETAL_P`) is honoured at resolve and the strike is a
+30-minute hospitalization, never a kill, never currency. **§10.4-NEUTRAL by construction:** an open, a
+strike, and a lapse move ZERO value and add no reason (the test asserts the whole offensive writes no
+ledger rows). **Counterplay is the EXISTING loop** — the family SEES it (every member is notified +
+`npc_aggression` on the streets + a `you.underFire` board banner naming who to hit back), and ROUTING the
+outfit (the raid → conquest) ENDS its aggression (a vassal doesn't war its overlord;
+`releaseFamilyHolds` clears it on dissolution too). **Anti-grief:** one campaign per NPC family
+(`npc_aggression` PK), a target can't be piled on by two at once (the picker excludes a live incoming
+aggression), `MIN_MEMBERS` 2 keeps it off solo alts, `MIN_LVL` 5 keeps it off fresh rookies, and
+`COOLDOWN_MS` (`gangs.npc_aggro_until`) buys a harassed family peace after one lapses. New table
+`npc_aggression` + `gangs.npc_aggro_until`; `FAMILY_WAR.AGGRESSION` in the rules tail (all PROPOSED
+DEFAULTS — sim + sign-off, BALANCE.md § THE OFFENSIVE); `NPC_AGGRO_MS` is the test-only window override
+(preflight-classified). `test/npcwar.js` covers the open (target/notify/peace-window/board/not-piled),
+the strike (enqueue + shield miss vs unshielded hit), §10.4-neutrality, the conquest counterplay, and
+the lapse — three mutations each caught by name.
+
 **AS BUILT (deviation from the scoping body below):** the loot is a bounded cash FAUCET off a
 regen-bounded `war_pool` strength reservoir (the `world:raid` model exactly), NOT a transfer out of the
 NPC family's treasury. This is cleaner and more faithful to "borrow the World outfit" — an NPC family's
