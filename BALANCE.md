@@ -5071,3 +5071,19 @@ to the buyback (the human path's `casino:futurity:nom` fee), so residents just f
 without touching the bet escrow. All reuse the module's own `ledger` + the exact entry INSERTs (one core),
 all reactive (a resident enters only an event a human already opened), all retirement-safe by the resolver's
 LEFT-JOIN dead path (no `retireResident` change). The four scheduled-field co-op games are now live solo.
+
+**Red-team correction (`AUDIT-resident-event-fills.md`, 2026-08-06) — the "no faucet, a redistribution"
+line above UNDERSTATES the GP/Stakes case.** The tournament deals RANDOM hands, so it is a genuinely fair
+redistribution (a player's win chance is `1/field`); the GP and Stakes are SKILL-DOMINATED (`power/form +
+rand(±40/±22)`), so a player who brings a dominant car/racer wins ~always against resident BEATERS and
+takes the pool — i.e. **the GP/Stakes resident-fill is a bounded, §10.4-clean EXTRACTION of the resident
+seed pool by an invested player**, not a redistribution among equals. Measured: a field of 1 human + 5
+residents pays the winner ~$85.5k on a $25k GP buy-in → **~+$60.5k/race (GP), ~+$48k (Stakes)** for a
+dominant entrant. It is §10.4-exact (a transfer, both legs ledgered — no drift) and hard-bounded by (a) the
+resident seed pool — drained residents don't fill — and (b) the ~24h event cadence (one GP/Stakes window a
+day, one entry each), so ~$108k/day for a whale farming both. This is CONSISTENT with the designed
+"residents are a value source" dynamic (the marks, THE TAKE, robbing a resident front all do the same), and
+it rewards car/racer investment — so it is flagged for AWARENESS, not retuned (ground rule #1). The dials if
+the founder wants it curbed: a resident car/racer QUALITY floor (so a resident fields a real contender, not
+a beater), a lower `GP_FIELD`/`STAKES_FIELD`, or a per-window entry cap. The random-hand tournament and the
+Futurity (nominator isn't paid) are NOT farmable and need no flag.

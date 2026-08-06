@@ -1106,6 +1106,30 @@ assert.equal(npcBandOf(0.999).id, 'boss', 'the high roll is the boss band');
       await pool.query("INSERT INTO futurities (id, status, resolves_at, pool) VALUES ($1,'open',now()+interval '1 hour',0)", [id]);
       await pool.query('UPDATE futurity_state SET current=$1 WHERE id=1', [id]); return id; },
     residentNominateFuturity, null, 'SELECT COUNT(*) n FROM futurity_runners WHERE futurity_id=$1', CASINO.FUTURITY.NOMINATE_FEE);
+
+  // RETIREMENT-SAFETY for an escrow-buy-in twin (verify, don't assume the tournament's proof carries): a
+  // resident that RETIRES mid-Grand-Prix has its buy-in auto-burned as race:gp:death at resolve (the
+  // LEFT-JOIN dead path) while retireResident burns only its REMAINING cash — so `grand prix escrow` stays
+  // exact with NO retireResident change. Retiring one of three drops the live field below MIN_ENTRANTS, so
+  // resolve takes the refund path (refund the 2 live, burn the 1 dead) — both reconcile.
+  {
+    const e0 = await driftOf('grand prix escrow');
+    const gid = crypto.randomUUID();
+    await pool.query("INSERT INTO grand_prix (id, status, resolves_at, pool) VALUES ($1,'open',now()+interval '1 hour',0)", [gid]);
+    await pool.query('UPDATE grand_prix_state SET current=$1 WHERE id=1', [gid]);
+    const rs = [];
+    for (let i = 0; i < 3; i++) {
+      const rr = await spawnResident(pool, { band: POPULATION.BANDS.find((b) => b.id === 'boss'), marks: { car: true } });
+      await pool.query('UPDATE characters SET cash=$2 WHERE id=$1', [rr.id, RACES.GP.BUYIN * 6]);
+      const c = await pool.connect(); await c.query('BEGIN');
+      const lr = (await c.query('SELECT id, cash, loc FROM characters WHERE id=$1 FOR UPDATE', [rr.id])).rows[0];
+      await residentEnterGrandPrix(c, lr); await c.query('COMMIT'); c.release(); rs.push(rr.id);
+    }
+    { const c = await pool.connect(); await c.query('BEGIN'); await retireResident(c, rs[0]); await c.query('COMMIT'); c.release(); }
+    { const c = await pool.connect(); await c.query('BEGIN'); await resolveGrandPrix(c, gid); await c.query('COMMIT'); c.release(); }
+    assert.equal(await driftOf('grand prix escrow'), e0,
+      'a resident retiring mid-Grand-Prix keeps the escrow identity exact (buy-in burns at resolve, remaining cash at retire)');
+  }
 }
 
 console.log('✅ THE POPULATION passed — residents spawn as real flagged characters on the streets roster '
