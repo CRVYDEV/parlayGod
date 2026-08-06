@@ -9301,3 +9301,42 @@ identity is UNTOUCHED` fails by name). `GP_FIELD`/`STAKES_FIELD`/`FUTURITY_FIELD
 levers (no faucet — redistribution/sink; `0` reverts each to human-only). **The four scheduled-field co-op
 games are now live solo.** Guards: suite, sim drift-0, pgquery (new SQL on real Postgres), pgcheck 43/43,
 levers 611 pinned.
+
+**THE CREW + THE SEASON RECAP — the lightweight social unit and the individual's season keepsake
+(2026-08-06, from a thinnest-gaps assessment)** — the game was rich at two social SCALES (the 20-man
+FAMILY; one-to-one marriage/consigliere/bodyguard/rivals) and empty BETWEEN them (verified: no
+squad/crew/friend tie exists), which is exactly the void the progression harness lands in (a plausible
+solo player reaches level 33 having never met another human) and the two "social" coach rungs point
+either at the heavyweight family or a one-shot crew heist. Chat had the same hole — only city/family/DM.
+**THE CREW** (`src/crew.js` — the 118th module, `omerta-crew-design.md`; `crews`/`crew_members`/
+`crew_invites`, ACCOUNT-keyed so it SURVIVES DEATH like contacts/marriages, outside the estate wipe by
+construction) is the 2-4 player mutual-aid pact between solo and a family — **status + coordination
+only, NO treasury/turf/escrow → ZERO §10.4 surface** (the test proves it with a zero-`crew%`-rows +
+cash-drift-unchanged assertion; the `crew:` word is in no ledger vocabulary). Lifecycle (create/
+invite-by-name/accept/decline/leave/kick, cap `CREW.MAX_MEMBERS` 4, level `MIN_LEVEL` 3, leader
+succession = oldest member, empty crew deleted — the removeMember shape); **THE CREW ROOM** (a
+`chat_messages` channel `crew:<id>` + a `crew:<id>` WS subscription — the missing tier between DM and
+family, with the same post-join read floor a spy can't slip); **THE BOARD** (`crewBoard` — members'
+live level/district/family, invites both directions); and **BREAKABLE NON-AGGRESSION** — a one-line
+gate `h.owned.crewId && h.victimOwned.crewId === h.owned.crewId && !rat && !isWanted` at the four direct
+player-attack paths that already carry family omertà (`fire`/`jump`/`npcHit` in combat.js, `shank` in
+pen.js — reading the new `crewId` off loadOwned), with the SAME rat/WANTED exceptions (a fugitive is
+fair game everywhere). It is RESTRAINT, never immunity — a contract on a crewmate's head is still
+collectable by everyone else, and leaving breaks the pact. Console: "The Crew" screen folded **under
+the existing Family group** (no 26th top-level tab — the conservative nav call while the screen-reach
+beacon gathers data) + a crew card on THE SITUATION. Deferred (step two, in the design doc): the crew
+pot (co-funding a contract via the audited `bounty_contributors` rail — already possible today off the
+open board), a crew activity feed, extending non-aggression to postBounty/property crimes, a crew
+leaderboard. **THE SEASON RECAP** (`season_recaps` account-keyed, `season.js:seasonRecaps`,
+`GET /v1/season/recap`, `SEASON_RECAP.TITLES`/`recapTitleOf`): an individual's season had no
+ceremony — it just RESET (the FAMILY gets THE RECKONING + a crown). Now `runSeasonRollover` writes each
+converted player a keepsake at rollover (the level reached, kills, prestige banked, a status title),
+BEFORE the reset zeroes respect/season_kills, under the char lock, idempotent on the PK — SURVIVES
+DEATH (the heir keeps the bloodline's seasons). Pure status, ZERO §10.4. Surfaced as a "YOUR SEASONS"
+card on The Life tab. **The client wiring guard was STRENGTHENED** en route (`followLocal`): it now
+follows a route that delegates to a LOCAL same-file helper taking `req` (`postChat(req, 'crew')` — the
+chat rooms all route through one `postChat(req, room)`), so the crew/family/city chat routes' `text`
+field is checked at all — mutation-verified live by the crew/chat route. Guards: full suite green, sim
+drift-0, mobile 71/71, client wiring + mirror (110 boards / 601 fields / 774 element fields), routes
+576, levers 615 pinned, pgquery + pgcheck 43/43 on real Postgres. All `CREW.*` are founder sign-off
+levers (pure scope, no faucet).

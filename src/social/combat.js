@@ -51,6 +51,10 @@ export async function jump(ch, victim, client, h, intent) {
   // matching fire/npcHit/postBounty/startSearch so a fugitive forfeits protection on EVERY PvP path (the
   // non-lethal jump was the one gap; a hunted man's own family can lay hands on him too).
   if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId && !h.victimAcct.rat && !isWanted(victim)) throw new GameError('family', "They're family. Omertà.");
+  // THE CREW — breakable mutual non-aggression, the omertà twin (same rat/WANTED exceptions: a
+  // fugitive is fair game on every path). Not immunity — a contract on their head is still collectable
+  // by everyone else. Break it by leaving the crew.
+  if (h.owned.crewId && h.victimOwned.crewId === h.owned.crewId && !h.victimAcct.rat && !isWanted(victim)) throw new GameError('crew', "They run with your crew. Not you.");
   ch.energy = Number(ch.energy) - energyCost;
   ch.ammo = Number(ch.ammo) - M3.JUMP_AMMO;
   // a public beating is noisy whether you win or lose — the Law hears about it either way (the
@@ -275,6 +279,12 @@ export async function fire(ch, victim, client, h, rounds) {
   if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId && !h.victimAcct.rat && !isWanted(victim)) {
     await client.query('DELETE FROM searches WHERE hunter=$1', [ch.id]);
     throw new GameError('family', "They've been made family since you took the contract. It's off.");
+  }
+  // THE CREW — you don't put a body on your own crew (the omertà twin; rat/WANTED forfeit it). Clear
+  // the search like the family branch, so a crewmate you searched before crewing up doesn't stick.
+  if (h.owned.crewId && h.victimOwned.crewId === h.owned.crewId && !h.victimAcct.rat && !isWanted(victim)) {
+    await client.query('DELETE FROM searches WHERE hunter=$1', [ch.id]);
+    throw new GameError('crew', "They run with your crew now. The hit's off.");
   }
   if (victim.loc !== ch.loc) throw new GameError('district', `They were placed in ${victim.loc} — you're in ${ch.loc}. Travel there, then fire.`);
 
@@ -534,6 +544,8 @@ export async function npcHit(ch, victim, client, h, tierId, opts = {}) {
   if (witproActive(ch)) throw new GameError('witpro', "You can't run contractors from witness protection — untargetable is a shield, not a licence to kill.");
   if (hospitalized(ch)) throw new GameError('hosp_self', "You're laid up under the Doc's care — no arranging wet work from a hospital bed. (R40: the offense action-lock, symmetric with the victim gate.)");
   if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId && !h.victimAcct.rat && !isWanted(victim)) throw new GameError('family', "They're family. Omertà."); // a rat OR a WANTED welsher forfeits family protection
+  // THE CREW — no hiring a gun on your own crew (the omertà twin; rat/WANTED forfeit it)
+  if (h.owned.crewId && h.victimOwned.crewId === h.owned.crewId && !h.victimAcct.rat && !isWanted(victim)) throw new GameError('crew', "They run with your crew — call it off.");
   const vicLvl = levelOf(Number(victim.respect));
   if (vicLvl < M3.NPC_MIN_TARGET_LVL) throw new GameError('newbie', "The Commission doesn't sanction hits on nobodies.");
   if (hospitalized(victim)) throw new GameError('hosp', "They're under the Doc's care. Even we have rules.");

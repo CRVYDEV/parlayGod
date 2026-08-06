@@ -395,6 +395,24 @@ cache.set('src/_loop.js', "export function f(ch, a) { for (const s of ['x', 'y']
 assert.deepEqual([...(paramFields(cache.get('src/_loop.js'), 'f', 1, 'src/_loop.js') || [])].sort(), ['x', 'y'],
   'the computed-read resolver stopped reading fields indexed by a literal list');
 
+// THE THIRD HOP — a route that delegates to a LOCAL helper taking `req`: `postChat(req, 'crew')`
+// (the chat rooms all route through one `postChat(req, room)` in server.js). followBody only chases
+// `Module.method(req.body, …)`; here `req` (not `req.body`) is handed to a same-file function that
+// reads `req.body?.text` itself. Resolve it by scanning that local function's body for the field
+// reads. Bounded window (the helper is a handful of lines) — approximate but it recovers `text`,
+// which is exactly what the crew/family/city chat routes need to be checked at all.
+const followLocal = (routeBody, src) => {
+  // a CALL is `name(req` with NO space (the arrow param `async (req)` has one — and `async`/`await`
+  // must never be mistaken for the delegate). Match the name tight against its paren.
+  const call = /\b([a-z][a-zA-Z0-9_]*)\(\s*req\s*[,)]/.exec(routeBody.replace(/\basync\b|\bawait\b/g, ''));
+  if (!call) return null;
+  const def = new RegExp(`(?:const\\s+${call[1]}\\s*=|function\\s+${call[1]}\\b)`).exec(src);
+  if (!def) return null;
+  const win = src.slice(def.index, def.index + 1500);
+  const fields = new Set();
+  for (const f of win.matchAll(/req\.body\s*\??\.\s*([a-zA-Z_][a-zA-Z0-9_]*)/g)) fields.add(f[1]);
+  return fields.size ? fields : null;
+};
 const handlerFields = new Map();              // "METHOD /path" → Set(field) | null when unresolvable
 for (const rel of srcFiles) {
   const src = read(rel);
@@ -407,7 +425,10 @@ for (const rel of srcFiles) {
       for (const name of d[1].split(',')) { const n = name.split(':')[0].trim(); if (n) fields.add(n); }
     }
     const wholeBody = /req\.body\s*(?:\|\|\s*\{\})?\s*[,)]/.test(body);
-    handlerFields.set(`${m[1].toUpperCase()} ${m[2]}`, wholeBody && !fields.size ? followBody(body) : fields);
+    const resolved = fields.size ? fields
+      : wholeBody ? followBody(body)
+      : (followLocal(body, src) ?? fields);   // a local req-delegating helper (the chat rooms) — else the empty set
+    handlerFields.set(`${m[1].toUpperCase()} ${m[2]}`, resolved);
   });
 }
 
@@ -1062,6 +1083,28 @@ async function seedLists() {
   await q("INSERT INTO contacts (owner_account, contact_account, how, jobs) VALUES ($1,$2,'met',2) ON CONFLICT (owner_account, contact_account) DO UPDATE SET jobs=2",
     [acct, acct2]);
   await q("UPDATE characters SET guarded_by=$1, guarded_until = now() + interval '2 hours' WHERE id=$2", [charId, two]);
+
+  // ── THE CREW (/v1/crew): the probe LEADS a crew (so crew.members[] is observable) AND holds a
+  // pending invite to another (so invites[] is observable). Account-keyed rows, seeded directly.
+  {
+    const acct3 = (await q('SELECT account_id FROM characters WHERE id=$1', [three])).rows[0].account_id;
+    const c1 = crypto.randomUUID(), c2 = crypto.randomUUID();
+    await q("INSERT INTO crews (id, name, leader_account) VALUES ($1,'The Mirror Crew',$2),($3,'The Rival Crew',$4) ON CONFLICT DO NOTHING",
+      [c1, acct, c2, acct3]);
+    await q(`INSERT INTO crew_members (crew_id, account_id, name) VALUES
+             ($1,$2,'Mirror One'),($1,$3,'Mirror Two'),($4,$5,'Mirror Mob') ON CONFLICT DO NOTHING`,
+      [c1, acct, acct2, c2, acct3]);
+    await q("INSERT INTO crew_invites (crew_id, account_id, from_name) VALUES ($1,$2,'Mirror Mob') ON CONFLICT DO NOTHING",
+      [c2, acct]);
+    // a line in the crew room, and backdate the join so the read floor (messages after you joined) lets it through
+    await q("UPDATE crew_members SET joined_at = now() - interval '1 hour' WHERE crew_id=$1", [c1]);
+    await q("INSERT INTO chat_messages (id, channel, character_id, name, body) VALUES ($1,$2,$3,'Mirror One','meet at the docks')",
+      [crypto.randomUUID(), 'crew:' + c1, charId]);
+  }
+
+  // ── THE SEASON RECAP (/v1/season/recap): a closed-season keepsake so recaps[] element fields render
+  await q("INSERT INTO season_recaps (account_id, season, level, kills, prestige_gained, title) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING",
+    [acct, 0, 22, 3, 11, 'A Made Man']);
 
   // ── the family, and everything that hangs off holding turf ──
   const gid = await paramId('/v1/gangs/:p');

@@ -513,6 +513,10 @@ export async function shank(ch, victim, client, h) {
   // family omertà holds inside too — VOID for a rat (the audit precedent)
   if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId && !h.victimAcct.rat)
     throw new GameError('family', "They're family. Even in here.");
+  // THE CREW (the account-level mutual-aid pact — distinct from the prison faction "yard crew" below):
+  // you don't put a shiv in your own crew either. The omertà twin; a rat forfeits it.
+  if (h.owned.crewId && h.victimOwned.crewId === h.owned.crewId && !h.victimAcct.rat)
+    throw new GameError('crew', "They run with your crew. Not in here either.");
   // step five — yard omertà: you don't move on your own crew (a rat forfeits it, like family)
   if (ch.pen_faction && ch.pen_faction === victim.pen_faction && !h.victimAcct.rat)
     throw new GameError('crew', "They run with your crew. You don't move on your own.");

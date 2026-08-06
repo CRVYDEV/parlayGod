@@ -4666,6 +4666,30 @@ export const FAVOR = {
   NOTE_MAX: 90,
 };
 
+// ═══ THE CREW (omerta-crew-design.md) ═══
+// The lightweight 2-4 player mutual-aid pact — the social scale between solo and a 20-person family.
+// Status + coordination only (chat, a board, breakable non-aggression): NO treasury/turf/escrow, so
+// ZERO §10.4 surface. Account-keyed → survives death. All numbers pure pacing/scope (no faucet).
+export const CREW = {
+  MAX_MEMBERS: 4,          // the cap — deliberately tiny vs a family's 20; a crew, not an outfit
+  MIN_LEVEL: 3,            // low bar: this IS the early-game social on-ramp
+  NAME_MAX: 24,            // the createGang name bound, so a crew reads like a family
+  INVITE_TTL_MS: 72 * 3600 * 1000,   // a pending invite the worker sweeps if never answered
+};
+
+// ═══ THE SEASON RECAP ═══ (the individual "your season" wrap — pure status, no faucet)
+// A keepsake title by the level a street reached that season, written at rollover into season_recaps
+// (account-level → survives death). The bands are cosmetic (a status axis, the hitman-rep argument),
+// not a signed economy lever — but pinned like everything named in a ladder.
+export const SEASON_RECAP = {
+  TITLES: [[0, 'Nobody'], [8, 'An Earner'], [16, 'A Made Man'], [28, 'A Capo'], [42, 'A Boss'], [60, 'A Legend']],
+};
+export const recapTitleOf = (level) => {
+  let t = SEASON_RECAP.TITLES[0][1];
+  for (const [min, name] of SEASON_RECAP.TITLES) if (level >= min) t = name;
+  return t;
+};
+
 // ═══ THE RARITY NFTs (economy v3 step 7) ═══
 // Design §7 + §9.7. Cars and boats carry a rarity, and an owned one can be EXTRACTED on-chain as a
 // tradeable ERC-1155 through the EXISTING GearVault rail. Two rules from the design are load-bearing

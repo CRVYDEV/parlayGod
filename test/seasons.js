@@ -224,6 +224,17 @@ assert.equal(Number(lootRow.amount), Math.floor(markCash * Math.min(0.5, M3.CASH
   assert.equal(again.reckoning, null, 'a re-run records nothing — the season PK is the latch');
   assert.equal(await crowns('Reckoning Raider'), 1, 'and cannot double-crown');
 
+  // ── THE SEASON RECAP — every converted player gets a personal "your season" keepsake (not just the
+  //    one champion). Account-level → survives death; pure status, no §10.4. ──
+  const raiderAcct = (await pool.query("SELECT account_id a FROM characters WHERE name='Reckoning Raider'")).rows[0].a;
+  const srec = (await pool.query('SELECT * FROM season_recaps WHERE account_id=$1 AND season=$2', [raiderAcct, cur - 1])).rows[0];
+  assert(srec, 'the rollover wrote the individual a season recap');
+  assert.equal(srec.season, cur - 1, 'for the season that CLOSED');
+  assert(srec.level >= 1 && srec.title, 'with the level they reached and a keepsake title');
+  // the read endpoint surfaces the player their own seasons
+  const myRecap = (await call('GET', '/v1/season/recap', { token: grabT })).body;
+  assert(myRecap.recaps.some((x) => x.season === cur - 1 && x.title), "and /v1/season/recap serves the player their season");
+
   // ── THE ROLL, published: the clock and the record are keyless, because a deadline nobody can
   //    read is not a deadline ──
   process.env.SEASON_PHASE = 'reckoning';

@@ -2677,3 +2677,49 @@ ALTER TABLE gangs ADD COLUMN IF NOT EXISTS charter_at TIMESTAMPTZ;
 -- everything since this mark; a fresh street reads the last day). Stamped by direct SQL under the
 -- character lock — outside persistCharacter's positional list (the active_at posture).
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS paper_at TIMESTAMPTZ;
+
+-- ── THE CREW (omerta-crew-design.md) — the lightweight 2-4 player mutual-aid pact ─────────────
+-- The social scale BETWEEN solo and a 20-person family, and the piece that gives the Cast/Story/
+-- Situation cohesion layer something COLLECTIVE to do. ACCOUNT-keyed on every table, because a crew
+-- is between PEOPLE not streets, so it SURVIVES DEATH (the heir stays in the crew) — like contacts /
+-- dynasty_marriages / dm_blocks, and outside the estate wipe + the migrate DISPOSITION guard by
+-- construction. Status + coordination only: NO treasury, NO turf, NO escrow → zero §10.4 surface.
+CREATE TABLE IF NOT EXISTS crews (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  leader_account TEXT NOT NULL,             -- the boss; on leave the oldest member succeeds (removeMember shape)
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS crew_members (
+  crew_id TEXT NOT NULL,
+  account_id TEXT PRIMARY KEY,              -- one crew per account (the PK is the cap enforcement)
+  name TEXT NOT NULL,                       -- snapshot for display (survives rename/death, the chat/gang pattern)
+  joined_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_crew_members_crew ON crew_members (crew_id);
+-- pending invites: a leader/member offers, the named account accepts. TTL-swept by the worker.
+CREATE TABLE IF NOT EXISTS crew_invites (
+  crew_id TEXT NOT NULL,
+  account_id TEXT NOT NULL,                 -- the invited player's account
+  from_name TEXT NOT NULL,                  -- who sent it (display)
+  at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (crew_id, account_id)
+);
+CREATE INDEX IF NOT EXISTS ix_crew_invites_acct ON crew_invites (account_id);
+
+-- ── THE SEASON RECAP (omerta-crew-design session — the individual "your season" wrap) ──────────
+-- The family gets THE RECKONING (season_records) and a crown; an individual player's season just
+-- RESET, with no keepsake. This records one row per account per closed season at rollover — the
+-- level reached, kills, prestige banked, and a status title. Account-keyed → SURVIVES DEATH (the
+-- heir keeps the family's seasons); pure STATUS, zero §10.4. Written under the char lock in
+-- runSeasonRollover, idempotent on the PK.
+CREATE TABLE IF NOT EXISTS season_recaps (
+  account_id TEXT NOT NULL,
+  season INT NOT NULL,
+  level INT NOT NULL,
+  kills INT NOT NULL DEFAULT 0,
+  prestige_gained INT NOT NULL DEFAULT 0,
+  title TEXT,
+  at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (account_id, season)
+);

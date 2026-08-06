@@ -16,6 +16,7 @@ import * as Career from './career.js';
 import * as Corner from './corner.js';
 import * as Contacts from './contacts.js';
 import * as Favors from './favors.js';
+import * as Crew from './crew.js';
 import * as A from './auth.js';
 import * as Chain from './chain.js';
 import * as Fees from './fees.js';
@@ -108,7 +109,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          TAX, withdrawTaxBps,
          HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, OPERATIONS, BUSINESS_EMPIRE, PACING, MASTERY,
          PATH_FX, PATH_XP_HOME, PATH_XP_RIVAL, PATH_SWITCH_CD_MS, REGIMEN, HUSTLE, CAREER, RIVALS,
-         CORNER, CONTACTS, FAVOR, MADE, MADE_LADDER, ACCESS_STAKE, ROSTER_POSTS, jailed, hospitalized } from './rules.js';
+         CORNER, CONTACTS, FAVOR, CREW, MADE, MADE_LADDER, ACCESS_STAKE, ROSTER_POSTS, jailed, hospitalized } from './rules.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -885,6 +886,8 @@ export async function buildServer() {
       ranks: CONTACTS.RANKS, standingTiers: CONTACTS.STANDING_TIERS },
     favors: { maxOpen: FAVOR.MAX_OPEN, minPay: FAVOR.MIN_PAY, maxPay: FAVOR.MAX_PAY, maxQty: FAVOR.MAX_QTY,
       takeBps: FAVOR.TAKE_BPS, ttlHours: Math.round(FAVOR.TTL_MS / 3600000) },
+    // THE CREW — the lightweight social unit (omerta-crew-design.md). Scope only; no odds, no money.
+    crew: { maxMembers: CREW.MAX_MEMBERS, minLevel: CREW.MIN_LEVEL, nameMax: CREW.NAME_MAX },
     // THE STREET WAR + RIVALS (discoverability — costs and bounds only; the odds stay server-side)
     rivals: { robRateBps: RIVALS.ROB_RATE_BPS, robEnergy: RIVALS.ROB_ENERGY, robJailS: RIVALS.ROB_JAIL_S,
       trunkEnergy: RIVALS.TRUNK.ENERGY, trunkJailS: RIVALS.TRUNK.JAIL_S,
@@ -1640,10 +1643,12 @@ export async function buildServer() {
       const me = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [accountId])).rows[0];
       if (!me) { socket.close(4004, 'no_character'); return; }
       const gm = (await pool.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [me.id])).rows[0];
+      const cm = (await pool.query('SELECT crew_id FROM crew_members WHERE account_id=$1', [accountId])).rows[0];
       const send = (channel) => (event) => { try { socket.send(JSON.stringify({ channel, ...event })); } catch { /* gone */ } };
       const subs = [[`me:${me.id}`, send('me')], ['streets', send('streets')],
         ['activity', send('activity')], ['chat', send('chat')]]; // the public wire: town-wide action ticker + the troll box
       if (gm?.gang_id) subs.push([`gang:${gm.gang_id}`, send('gang')]);
+      if (cm?.crew_id) subs.push([`crew:${cm.crew_id}`, send('crew')]); // THE CREW ROOM — the small-group live feed
       for (const [ev, fn] of subs) G.bus.on(ev, fn);
       let set = wsClients.get(accountId); if (!set) wsClients.set(accountId, set = new Set()); set.add(socket);
       // (red-team R9 WS) `app.register(websocket)` sets no keepalive, so half-open/dead sockets never get
@@ -1749,45 +1754,57 @@ export async function buildServer() {
   // a 240-char clamp + a 2s per-account cooldown on top of the global rate buckets. Retention is
   // the worker's 7-day sweep. Family room = the sender's CURRENT gang; reads are member-gated. ──
   const lastChatAt = new Map(); // accountId -> ms (in-process flood brake)
+  // chatChar now also carries the CREW tie (account-keyed, so joined by account) — THE CREW ROOM is
+  // the small-group tier between DM and family (omerta-crew-design.md).
   const chatChar = async (accountId) => (await pool.query(
-    `SELECT c.id, c.name, gm.gang_id, gm.joined_at FROM characters c
+    `SELECT c.id, c.name, gm.gang_id, gm.joined_at, cm.crew_id, cm.joined_at AS crew_joined FROM characters c
        LEFT JOIN gang_members gm ON gm.character_id = c.id
+       LEFT JOIN crew_members cm ON cm.account_id = c.account_id
       WHERE c.account_id=$1 AND c.alive`, [accountId])).rows[0];
-  const postChat = async (req, family) => {
+  // room ∈ 'city' | 'family' | 'crew'. The channel + emit target + read floor all key off it.
+  const chatChannel = (ch, room) => room === 'family' ? ch.gang_id : room === 'crew' ? `crew:${ch.crew_id}` : 'city';
+  const postChat = async (req, room = 'city') => {
     const body = G.cleanText(req.body?.text ?? '').trim().slice(0, 240);
     if (!body) throw new G.GameError('empty', 'say something');
     const ch = await chatChar(req.user.sub);
     if (!ch) throw new G.GameError('no_character', 'no living street');
-    if (family && !ch.gang_id) throw new G.GameError('no_gang', 'you need a family for the family room');
+    if (room === 'family' && !ch.gang_id) throw new G.GameError('no_gang', 'you need a family for the family room');
+    if (room === 'crew' && !ch.crew_id) throw new G.GameError('no_crew', 'you need a crew for the crew room');
     // the flood brake LAST — semantic errors surface first, and only a landed line arms it
     const last = lastChatAt.get(req.user.sub) || 0;
     if (Date.now() - last < 2000) throw new G.GameError('slow_down', 'easy — one line at a time');
     lastChatAt.set(req.user.sub, Date.now()); capMap(lastChatAt);
-    const channel = family ? ch.gang_id : 'city';
+    const channel = chatChannel(ch, room);
     const id = crypto.randomUUID();
     await pool.query('INSERT INTO chat_messages (id, channel, character_id, name, body) VALUES ($1,$2,$3,$4,$5)',
       [id, channel, ch.id, ch.name, body]);
     const ev = { type: 'chat', who: ch.name, text: body, at: Date.now() };
-    if (family) G.bus.emit(`gang:${ch.gang_id}`, ev); else G.bus.emit('chat', ev);
+    if (room === 'family') G.bus.emit(`gang:${ch.gang_id}`, ev);
+    else if (room === 'crew') G.bus.emit(`crew:${ch.crew_id}`, ev);
+    else G.bus.emit('chat', ev);
     return { ok: true };
   };
-  const readChat = async (req, family) => {
+  const readChat = async (req, room = 'city') => {
     const ch = await chatChar(req.user.sub);
     if (!ch) throw new G.GameError('no_character', 'no living street');
-    if (family && !ch.gang_id) return { messages: [] };
-    const channel = family ? ch.gang_id : 'city';
-    // the family room shows only messages from AFTER you joined — a spy who slips into a family
-    // can't read its back-chat (war planning, contracts). City chat has no floor.
-    const since = family ? (ch.joined_at || new Date(0)) : new Date(0);
+    if (room === 'family' && !ch.gang_id) return { messages: [] };
+    if (room === 'crew' && !ch.crew_id) return { messages: [] };
+    const channel = chatChannel(ch, room);
+    // the family/crew room shows only messages from AFTER you joined — a spy who slips in can't read
+    // the back-chat (war planning, a hit). City chat has no floor.
+    const since = room === 'family' ? (ch.joined_at || new Date(0))
+      : room === 'crew' ? (ch.crew_joined || new Date(0)) : new Date(0);
     const rows = (await pool.query(
       'SELECT name, body, at FROM chat_messages WHERE channel=$1 AND at >= $2 ORDER BY at DESC LIMIT 50',
       [channel, since])).rows;
     return { messages: rows.reverse().map((r) => ({ who: r.name, text: r.body, at: r.at })) };
   };
-  app.post('/v1/chat', { preHandler: auth }, async (req) => postChat(req, false));
-  app.get('/v1/chat', { preHandler: auth }, async (req) => readChat(req, false));
-  app.post('/v1/gangs/chat', { preHandler: auth }, async (req) => postChat(req, true));
-  app.get('/v1/gangs/chat', { preHandler: auth }, async (req) => readChat(req, true));
+  app.post('/v1/chat', { preHandler: auth }, async (req) => postChat(req, 'city'));
+  app.get('/v1/chat', { preHandler: auth }, async (req) => readChat(req, 'city'));
+  app.post('/v1/gangs/chat', { preHandler: auth }, async (req) => postChat(req, 'family'));
+  app.get('/v1/gangs/chat', { preHandler: auth }, async (req) => readChat(req, 'family'));
+  app.post('/v1/crew/chat', { preHandler: auth }, async (req) => postChat(req, 'crew'));
+  app.get('/v1/crew/chat', { preHandler: auth }, async (req) => readChat(req, 'crew'));
 
   // ── THE CELLPHONE (founder request) — inbox + player-to-player DMs. Pure talk, zero §10.4;
   // account-keyed threads survive death (the heir inherits the phone). src/phone.js. ──
@@ -1825,6 +1842,24 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Favors.runFavor(ch, req.params.id, client, h)));
   app.delete('/v1/favors/:id', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Favors.cancelFavor(ch, req.params.id, client, h)));
+
+  // ── THE CREW (omerta-crew-design.md) — the lightweight 2-4 player mutual-aid pact. Status +
+  // coordination only, zero §10.4. Single-party lifecycle (an invite is a pending row; nothing moves
+  // until accepted, so the target is never locked). ──
+  app.get('/v1/crew', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client) => Crew.crewBoard(ch, client)));
+  app.post('/v1/crew', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Crew.createCrew(ch, req.body?.name, client, h)));
+  app.post('/v1/crew/invite', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Crew.inviteToCrew(ch, req.body?.name, client, h)));
+  app.post('/v1/crew/accept/:crewId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Crew.acceptInvite(ch, req.params.crewId, client, h)));
+  app.post('/v1/crew/decline/:crewId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Crew.declineInvite(ch, req.params.crewId, client)));
+  app.post('/v1/crew/leave', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Crew.leaveCrew(ch, client, h)));
+  app.delete('/v1/crew/member/:characterId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Crew.kickMember(ch, req.params.characterId, client, h)));
 
   registerKitchen(app, { pool, auth });
 
@@ -2052,6 +2087,8 @@ export async function buildServer() {
   // THE SEASON HAS AN ENDING — the clock and the roll of past seasons. Keyless like /v1/city: a
   // deadline nobody can read is not a deadline, and the record is the whole point of the arc.
   app.get('/v1/seasons', async () => Season.seasonBoard(pool));
+  // THE SEASON RECAP — your own "your season" keepsakes (account-level, survives death)
+  app.get('/v1/season/recap', { preHandler: auth }, async (req) => Season.seasonRecaps(pool, req.user.sub));
 
   // THE LIVING WORLD — the city you can SEE: today's two event tracks, the intraday clock, the
   // per-district economic weather, and a 7-day forecast (all pure functions of the day, so players
