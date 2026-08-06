@@ -2707,6 +2707,20 @@ CREATE TABLE IF NOT EXISTS crew_invites (
 );
 CREATE INDEX IF NOT EXISTS ix_crew_invites_acct ON crew_invites (account_id);
 
+-- THE ROLODEX step two — the crew RECRUITING flag (the push half: a crew advertises on the discovery
+-- board) + join REQUESTS (the invite twin: a solo player asks, the leader accepts). Account-keyed →
+-- survives death, outside the estate wipe by construction. Status/coordination only, zero §10.4.
+ALTER TABLE crews ADD COLUMN IF NOT EXISTS recruiting BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE crews ADD COLUMN IF NOT EXISTS recruiting_at TIMESTAMPTZ;
+CREATE TABLE IF NOT EXISTS crew_requests (
+  crew_id TEXT NOT NULL,
+  account_id TEXT NOT NULL,                  -- the player asking to join
+  from_name TEXT NOT NULL,                   -- who asked (display snapshot)
+  at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (crew_id, account_id)
+);
+CREATE INDEX IF NOT EXISTS ix_crew_requests_crew ON crew_requests (crew_id);
+
 -- ── THE SEASON RECAP (omerta-crew-design session — the individual "your season" wrap) ──────────
 -- The family gets THE RECKONING (season_records) and a crown; an individual player's season just
 -- RESET, with no keepsake. This records one row per account per closed season at rollover — the

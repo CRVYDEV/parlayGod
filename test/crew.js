@@ -159,6 +159,31 @@ assert(dockside, 'the crew is on the leaderboard');
 assert.equal(dockside.kills, 8, 'ranked by combined lifetime kills');
 assert.equal(dockside.members, 2, 'and its size');
 
+// ════════════ C4 · RECRUITING + JOIN REQUESTS (step two) — the push half ════════════
+// tony leads The Dockside Boys (tony + vito, room for 2). rookie is solo. rookie asks to join.
+const dockId = (await call('GET', '/v1/crew', { token: tony.token })).body.crew.id;
+// a CLOSED crew refuses requests
+assert.equal((await call('POST', `/v1/crew/request/${dockId}`, { token: rookie.token })).body.error, 'closed', "a closed crew won't take requests");
+// only the boss opens the doors
+assert.equal((await call('POST', '/v1/crew/recruiting', { token: vito.token, body: { on: true } })).body.error, 'not_leader', 'only the boss recruits');
+assert.equal((await call('POST', '/v1/crew/recruiting', { token: tony.token, body: { on: true } })).body.crew, 'recruiting', 'the boss opens the doors');
+// rookie asks, once
+assert.equal((await call('POST', `/v1/crew/request/${dockId}`, { token: rookie.token })).code, 200, 'rookie asks to join');
+assert.equal((await call('POST', `/v1/crew/request/${dockId}`, { token: rookie.token })).body.error, 'already', 'no double-asking');
+// the request is on tony's plate (keyed by the requester's living character, no account uuid)
+const tbd = (await call('GET', '/v1/crew', { token: tony.token })).body.crew;
+assert.equal(tbd.recruiting, true, 'the board shows the crew is recruiting');
+assert.equal((tbd.requests || []).some((r) => r.name === 'Fresh Meat'), true, 'the leader sees the join request');
+assert.equal(tbd.requests.every((r) => r.accountId === undefined), true, 'and never a raw account id');
+// a non-leader cannot accept; the boss can
+assert.equal((await call('POST', `/v1/crew/request/${rookie.id}/accept`, { token: vito.token })).body.error, 'not_leader', 'only the boss lets a man in');
+assert.equal((await call('POST', `/v1/crew/request/${rookie.id}/accept`, { token: tony.token })).code, 200, 'the boss takes rookie in');
+assert.equal((await call('GET', '/v1/crew', { token: rookie.token })).body.crew.name, 'The Dockside Boys', 'rookie is in');
+// decline: nick asks, tony turns him away
+await call('POST', '/v1/crew/request/' + dockId, { token: nick.token });
+assert.equal((await call('DELETE', `/v1/crew/request/${nick.id}`, { token: tony.token })).body.crew, 'turned_away', 'the boss can turn a man away');
+assert.equal((await call('GET', '/v1/crew', { token: nick.token })).body.crew, null, 'and he stays out');
+
 // ════════════ D · §10.4 — the whole thing moves no value ════════════
 assert.equal(await one("SELECT COUNT(*) n FROM transactions WHERE reason LIKE 'crew%'"), 0,
   'THE CREW writes no ledger rows — there is no crew: vocabulary');
@@ -174,10 +199,14 @@ assert.equal(await one("SELECT COUNT(*) n FROM transactions WHERE reason LIKE 'c
   assert.equal(await driftOf('character cash'), before, 'the cash identity did not move across the crew flow');
 }
 
-// the worker invite sweep — a stale invite is tidied (row hygiene)
-await invite(tony, rookie);
+// the worker sweep — a stale invite AND a stale join request are tidied (row hygiene). nick is solo
+// (declined above), so both an invite to him and a request from him are live to sweep.
+await invite(tony, nick);
+await call('POST', '/v1/crew/recruiting', { token: tony.token, body: { on: true } });
+await call('POST', '/v1/crew/request/' + dockId, { token: nick.token });
 await pool.query("UPDATE crew_invites SET at = now() - interval '10 days'");
-assert.equal((await sweepCrewInvites(pool)).swept >= 1, true, 'the worker sweeps stale invites');
+await pool.query("UPDATE crew_requests SET at = now() - interval '10 days'");
+assert.equal((await sweepCrewInvites(pool)).swept >= 2, true, 'the worker sweeps stale invites AND requests');
 
 console.log('crew: PASS');
 await app.close();

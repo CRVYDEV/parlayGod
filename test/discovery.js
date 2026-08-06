@@ -91,6 +91,41 @@ assert.equal(has(b.newcomers, 'Johnny Front'), false, 'never yourself');
 assert.equal(has(b.newcomers, 'Bot Nine'), false, 'agents excluded here too');
 assert.equal(has(b.newcomers, 'Ghost Res'), false, 'residents excluded here too');
 
+// ════════════ STEP TWO — online presence + recruiting crews ════════════
+// `discoveryBoard` takes an onlineIds set from the route (the WS registry). The suite drives the
+// board directly through the module to exercise presence + the crews list.
+import { discoveryBoard } from '../src/discovery.js';
+const readCh = async (id) => (await pool.query('SELECT * FROM characters WHERE id=$1', [id])).rows[0];
+const acctOfId = async (id) => (await pool.query('SELECT account_id a FROM characters WHERE id=$1', [id])).rows[0].a;
+
+// presence: with the peer's account marked online, their card reads online; nobody online → all false
+{
+  const meCh = await readCh(me.id);
+  const peerAcct = await acctOfId(peer.id);
+  const on = await discoveryBoard(meCh, pool, [peerAcct]);
+  const pc = [...on.looking, ...on.peers, ...on.newcomers].find((r) => r.name === 'Sally Near');
+  assert.equal(pc && pc.online, true, 'a connected account reads ONLINE on the board');
+  const off = await discoveryBoard(meCh, pool, []);
+  assert.equal([...off.looking, ...off.peers, ...off.newcomers].every((r) => r.online === false), true, 'nobody online → every card offline');
+  assert.equal([...off.looking, ...off.peers, ...off.newcomers].every((r) => r.accountId === undefined && r.account_id === undefined), true,
+    'the account id never leaks even though online is derived from it');
+}
+
+// recruiting crews: the peer opens a crew to new blood → it shows on the viewer's board near their level
+{
+  await pool.query(`UPDATE characters SET respect=5000 WHERE id='${peer.id}'`);
+  await call('POST', '/v1/crew', { token: peer.token, body: { name: 'The Open Door' } });   // peer leads a crew
+  let mc = await discoveryBoard(await readCh(me.id), pool, []);
+  assert.equal((mc.crews || []).some((c) => c.name === 'The Open Door'), false, 'a CLOSED crew is not advertised');
+  assert.equal((await call('POST', '/v1/crew/recruiting', { token: me.token, body: { on: true } })).body.error, 'no_crew', 'you need a crew to open it');
+  assert.equal((await call('POST', '/v1/crew/recruiting', { token: peer.token, body: { on: true } })).body.crew, 'recruiting', 'the boss opens the doors');
+  mc = await discoveryBoard(await readCh(me.id), pool, []);
+  const openCrew = (mc.crews || []).find((c) => c.name === 'The Open Door');
+  assert(openCrew, 'a RECRUITING crew near your level is advertised on the board');
+  assert.equal(openCrew.members, 1, 'with its size');
+  assert.equal(openCrew.maxLevel >= 20, true, 'and a level hint');
+}
+
 // ════════════ §10.4 — the whole thing moves no value ════════════
 assert.equal(Number((await pool.query("SELECT COUNT(*) n FROM transactions WHERE reason LIKE 'discovery%'")).rows[0].n), 0,
   'discovery writes no ledger rows — there is no discovery: vocabulary');

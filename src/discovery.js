@@ -15,7 +15,7 @@
 // social front door (`NOT c.is_npc AND NOT a.agent_flag`); residents are already findable on the
 // streets roster. If you are genuinely alone the lists are empty, which is the TRUE state and the
 // empty-state honesty rule (never dress an empty board as full).
-import { DISCOVERY, DISTRICTS, levelOf, PACING } from './rules.js';
+import { DISCOVERY, CREW, DISTRICTS, levelOf, PACING } from './rules.js';
 
 const districtName = (id) => (DISTRICTS.find((d) => d.id === id) || {}).name || id;
 // the respect a level costs, from the signed pacing curve (respect(L) = D·(L−1)²) — used to turn a
@@ -24,16 +24,25 @@ const districtName = (id) => (DISTRICTS.find((d) => d.id === id) || {}).name || 
 const respectAtLevel = (lvl) => PACING.LEVEL_DIVISOR * Math.max(0, lvl - 1) ** 2;
 
 // map a raw characters row (joined to account_persistent + crew_members) to a public discovery card.
-// NO account UUID ever leaves (the rivals/cast discipline — the client keys off the living characterId).
-const card = (r) => ({
+// NO account UUID ever leaves (the rivals/cast discipline — the client keys off the living characterId);
+// `online` is derived from the account_id internally, then account_id is dropped from the output.
+const card = (r, online) => ({
   id: r.id, name: r.name, level: levelOf(Number(r.respect)),
   district: r.loc || null, districtName: r.loc ? districtName(r.loc) : null,
-  gangTag: r.tag || null, lfg: !!r.lfg, hasCrew: r.has_crew,
+  gangTag: r.tag || null, lfg: !!r.lfg, hasCrew: r.has_crew, online: online.has(r.account_id),
 });
+// the human list SELECT — shared by all three lists (only the WHERE/ORDER differ). Selects account_id
+// for the `online` derivation, never surfaced.
+const HUMAN_COLS = `SELECT c.id, c.name, c.account_id, c.respect, c.loc, c.lfg, g.tag, (cm.crew_id IS NOT NULL) AS has_crew
+   FROM characters c JOIN account_persistent a ON a.account_id = c.account_id
+   LEFT JOIN gang_members m ON m.character_id=c.id LEFT JOIN gangs g ON g.id=m.gang_id
+   LEFT JOIN crew_members cm ON cm.account_id = c.account_id`;
 
-// ── THE BOARD — three lists, all humans, so a player who wants to team up can find someone.
-// A read; single-party (readCharacter). ──
-export async function discoveryBoard(ch, client) {
+// ── THE BOARD — three lists of humans + recruiting crews, so a player who wants to team up can find
+// someone AND someone can find them. A read; single-party (readCharacter). `onlineIds` is the set of
+// currently-connected accounts (the WS registry, passed in by the route — the board has no socket access). ──
+export async function discoveryBoard(ch, client, onlineIds = []) {
+  const online = new Set(onlineIds);
   const myLevel = levelOf(Number(ch.respect));
   const myCrew = (await client.query('SELECT crew_id FROM crew_members WHERE account_id=$1', [ch.account_id])).rows[0]?.crew_id || null;
   const lo = respectAtLevel(Math.max(1, myLevel - DISCOVERY.BAND));
@@ -43,45 +52,58 @@ export async function discoveryBoard(ch, client) {
   // LOOKING FOR A CREW — the recruit list: humans who flagged LFG (within the freshness window),
   // crewless, near your level. Ordered by closeness. This is the highlight the console leads with.
   const looking = (await client.query(
-    `SELECT c.id, c.name, c.respect, c.loc, c.lfg, g.tag, (cm.crew_id IS NOT NULL) AS has_crew
-       FROM characters c JOIN account_persistent a ON a.account_id = c.account_id
-       LEFT JOIN gang_members m ON m.character_id=c.id LEFT JOIN gangs g ON g.id=m.gang_id
-       LEFT JOIN crew_members cm ON cm.account_id = c.account_id
+    `${HUMAN_COLS}
       WHERE c.alive AND NOT c.is_npc AND NOT a.agent_flag AND c.id <> $1
         AND c.lfg AND c.lfg_at > $2 AND cm.crew_id IS NULL
         AND c.respect BETWEEN $3 AND $4
       ORDER BY (c.respect - $5) * (c.respect - $5) LIMIT $6`,
-    [ch.id, fresh, lo, hi, Number(ch.respect), DISCOVERY.LIMIT])).rows.map(card);
+    [ch.id, fresh, lo, hi, Number(ch.respect), DISCOVERY.LIMIT])).rows.map((r) => card(r, online));
   const lookingIds = new Set(looking.map((r) => r.id));
 
   // PEERS — everyone near your level (whether or not they're looking), so you can reach out to anyone;
   // the looking-ones are excluded here so the two lists don't duplicate.
   const peers = (await client.query(
-    `SELECT c.id, c.name, c.respect, c.loc, c.lfg, g.tag, (cm.crew_id IS NOT NULL) AS has_crew
-       FROM characters c JOIN account_persistent a ON a.account_id = c.account_id
-       LEFT JOIN gang_members m ON m.character_id=c.id LEFT JOIN gangs g ON g.id=m.gang_id
-       LEFT JOIN crew_members cm ON cm.account_id = c.account_id
+    `${HUMAN_COLS}
       WHERE c.alive AND NOT c.is_npc AND NOT a.agent_flag AND c.id <> $1
         AND c.respect BETWEEN $2 AND $3
       ORDER BY (c.respect - $4) * (c.respect - $4) LIMIT $5`,
     [ch.id, lo, hi, Number(ch.respect), DISCOVERY.LIMIT + looking.length])).rows
-      .map(card).filter((r) => !lookingIds.has(r.id)).slice(0, DISCOVERY.LIMIT);
+      .map((r) => card(r, online)).filter((r) => !lookingIds.has(r.id)).slice(0, DISCOVERY.LIMIT);
 
   // FRESH BLOOD — the newest humans, ANY level, so a veteran can welcome a newcomer and a new player
   // sees other new players even when nobody's in their band. The front door that's never empty while
   // anyone at all has joined.
   const newcomers = (await client.query(
-    `SELECT c.id, c.name, c.respect, c.loc, c.lfg, g.tag, (cm.crew_id IS NOT NULL) AS has_crew
-       FROM characters c JOIN account_persistent a ON a.account_id = c.account_id
-       LEFT JOIN gang_members m ON m.character_id=c.id LEFT JOIN gangs g ON g.id=m.gang_id
-       LEFT JOIN crew_members cm ON cm.account_id = c.account_id
+    `${HUMAN_COLS}
       WHERE c.alive AND NOT c.is_npc AND NOT a.agent_flag AND c.id <> $1
       ORDER BY c.created_at DESC LIMIT $2`,
-    [ch.id, DISCOVERY.LIMIT])).rows.map(card);
+    [ch.id, DISCOVERY.LIMIT])).rows.map((r) => card(r, online));
+
+  // CREWS RECRUITING — the push half: crews that opened their doors, near your level, with room. A flat
+  // query + a JS fold (pg-mem can't run the correlated aggregate — the /v1/gangs precedent). A crew is
+  // "near you" if its member level RANGE overlaps your band; your own crew is never listed.
+  const crewRows = (await client.query(
+    `SELECT cr.id, cr.name, cm.account_id, c.respect
+       FROM crews cr JOIN crew_members cm ON cm.crew_id = cr.id
+       LEFT JOIN characters c ON c.account_id = cm.account_id AND c.alive
+      WHERE cr.recruiting`)).rows;
+  const byCrew = new Map();
+  for (const r of crewRows) {
+    if (r.id === myCrew) continue;
+    const lvl = r.respect != null ? levelOf(Number(r.respect)) : null;
+    const e = byCrew.get(r.id) || { id: r.id, name: r.name, members: 0, min: null, max: null };
+    e.members += 1;
+    if (lvl != null) { e.min = e.min == null ? lvl : Math.min(e.min, lvl); e.max = e.max == null ? lvl : Math.max(e.max, lvl); }
+    byCrew.set(r.id, e);
+  }
+  const crews = [...byCrew.values()]
+    .filter((e) => e.members < CREW.MAX_MEMBERS && (e.max == null || (e.max >= myLevel - DISCOVERY.BAND && e.min <= myLevel + DISCOVERY.BAND)))
+    .map((e) => ({ id: e.id, name: e.name, members: e.members, minLevel: e.min, maxLevel: e.max }))
+    .sort((a, b) => b.members - a.members).slice(0, DISCOVERY.LIMIT);
 
   return {
-    me: { level: myLevel, lfg: !!ch.lfg, inCrew: !!myCrew, band: DISCOVERY.BAND },
-    looking, peers, newcomers,
+    me: { level: myLevel, lfg: !!ch.lfg, inCrew: !!myCrew, band: DISCOVERY.BAND, crewMax: CREW.MAX_MEMBERS },
+    looking, peers, newcomers, crews,
   };
 }
 

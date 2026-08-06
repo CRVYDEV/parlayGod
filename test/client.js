@@ -1106,6 +1106,11 @@ async function seedLists() {
     await q("UPDATE crew_members SET joined_at = now() - interval '1 hour' WHERE crew_id=$1", [c1]);
     await q("INSERT INTO chat_messages (id, channel, character_id, name, body) VALUES ($1,$2,$3,'Mirror One','meet at the docks')",
       [crypto.randomUUID(), 'crew:' + c1, charId]);
+    // THE ROLODEX step two — the Rival Crew is RECRUITING (so it shows on the probe's discovery `crews`
+    // list — near-level, not full, not the probe's own crew), and a join REQUEST sits on the probe's own
+    // crew (so the crewBoard `requests` list is observable by the mirror).
+    await q("UPDATE crews SET recruiting=true WHERE id=$1", [c2]);
+    await q("INSERT INTO crew_requests (crew_id, account_id, from_name) VALUES ($1,$2,'Mirror Two') ON CONFLICT DO NOTHING", [c1, acct2]);
   }
 
   // ── THE SEASON RECAP (/v1/season/recap): a closed-season keepsake so recaps[] element fields render

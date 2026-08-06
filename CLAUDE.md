@@ -9403,3 +9403,35 @@ client wiring+mirror, routes 581, levers 618, pgquery + pgcheck 43/43 on real Po
 numbers are founder sign-off levers (pure pacing/scope — no faucet; BALANCE.md § THE ROLODEX). Deferred
 (step two): online-now presence (per-player, not just a count), a crew recruit BROADCAST (push vs the
 current LFG pull), and filters (district / no-family / level sub-band).
+**Step two — ONLINE PRESENCE + CREW RECRUITING/REQUESTS — BUILT** (`src/discovery.js`, `src/crew.js`,
+`schema.sql` `crews.recruiting`/`crew_requests` — the two-sided market half). **(1) ONLINE-NOW** — each
+discovery card carries `online`, derived from the WS registry (`wsClients`, a Map of connected account →
+sockets): the route passes `[...wsClients.keys()]` into `discoveryBoard` (the board has no socket
+access), the human-list SELECT pulls `account_id` INTERNALLY to derive `online`, and the `card` mapper
+DROPS it — so presence surfaces but the account UUID never does (the no-UUID discipline holds; the test
+asserts no card carries `account_id`). "Who can I reach right now" is the strongest teaming signal.
+**(2) CREW RECRUITING + JOIN REQUESTS** — the push half completes the market: a leader flags the crew
+`recruiting` (`POST /v1/crew/recruiting {on}`), and the discovery board gains a **`crews`** list
+(recruiting, non-full crews whose member level RANGE overlaps your band; your own crew excluded; a flat
+query + JS fold — the /v1/gangs pg-mem precedent since a correlated aggregate won't parse). A solo player
+**asks to join** (`requestJoin`, `POST /v1/crew/request/:crewId` — the invite twin, `crew_requests`,
+account-keyed → survives death); the leader sees pending requests on the crew board (`crewBoard.requests`,
+keyed on the requester's CURRENT living character — no account UUID) and **accepts** (`acceptRequest`,
+`POST /v1/crew/request/:characterId/accept` — the acceptInvite discipline: lock the crew row, re-check
+the cap, resolve character→account the kickMember way) or **declines**
+(`DELETE /v1/crew/request/:characterId`). So the market is two-sided (solo flags LFG for invites; crews
+flag recruiting for requests; either side initiates); the worker sweep tidies stale invites AND requests
+on the shared `INVITE_TTL_MS`. **§10.4-FREE** — status/coordination only, no ledger vocabulary (the test
+still counts zero `crew%`/`discovery%`/`transactions` rows). Console: an `online` chip on every discovery
+card, a **"Crews recruiting — near you"** section with a one-tap "ask to join" (shown only when you're
+crewless — `requestJoin` gates `in_crew`), and on the crew screen a recruiting toggle + a pending-requests
+list with let-them-in / turn-away (leader-only). `describe()` gained recruiting/requested/took_in/
+turned_away branches. `test/discovery.js` proves online presence (a connected account reads online,
+nobody online → all offline, the UUID never leaks) + the recruiting crews list (a closed crew isn't
+advertised, an open near-level crew is, with size + level hint); `test/crew.js` proves the request flow
+(closed-crew refusal, boss-only recruiting, ask-once, the leader seeing the request without a raw account
+id, non-leader-can't-accept, accept adds the member, decline, and the sweep tidying stale requests). The
+client fixture flags the Rival Crew recruiting + seeds a request so the mirror covers the new `crews`
+(137 lists) + `requests` element fields. Guards: full suite 61-green, sim drift-0, mobile 73/73, client
+wiring+mirror (585 routes / 137 lists), routes 585, levers 618, docs (194 tables), pgquery + pgcheck
+43/43 on real Postgres. Deferred (step three): filters (district / no-family / level sub-band).
