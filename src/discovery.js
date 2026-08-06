@@ -40,44 +40,60 @@ const HUMAN_COLS = `SELECT c.id, c.name, c.account_id, c.respect, c.loc, c.lfg, 
 
 // ── THE BOARD — three lists of humans + recruiting crews, so a player who wants to team up can find
 // someone AND someone can find them. A read; single-party (readCharacter). `onlineIds` is the set of
-// currently-connected accounts (the WS registry, passed in by the route — the board has no socket access). ──
-export async function discoveryBoard(ch, client, onlineIds = []) {
+// currently-connected accounts (the WS registry, passed in by the route — the board has no socket
+// access). `filters` (step three) narrows the human lists: {district, nofam, online}. district + nofam
+// filter in SQL (pre-LIMIT, correct — a fixed `($n::text IS NULL OR …)` clause so param positions never
+// shift); online is a post-filter (it's derived from the socket set, not a column). Crews are unfiltered
+// (a group isn't in one district and isn't online/offline). ──
+export async function discoveryBoard(ch, client, onlineIds = [], filters = {}) {
   const online = new Set(onlineIds);
+  const district = filters.district || null;   // null = every district
+  const nofam = !!filters.nofam;               // true = unaffiliated only
+  const onlineOnly = !!filters.online;
+  const applyOnline = (arr) => onlineOnly ? arr.filter((r) => r.online) : arr;
   const myLevel = levelOf(Number(ch.respect));
   const myCrew = (await client.query('SELECT crew_id FROM crew_members WHERE account_id=$1', [ch.account_id])).rows[0]?.crew_id || null;
   const lo = respectAtLevel(Math.max(1, myLevel - DISCOVERY.BAND));
   const hi = respectAtLevel(myLevel + DISCOVERY.BAND + 1);   // +1 so the top of the band is inclusive
   const fresh = new Date(Date.now() - DISCOVERY.LFG_TTL_MS);
+  // the district/nofam filter is built DYNAMICALLY — the clause + its params are appended only when the
+  // filter is active, so there is never a null/unused param (pg-mem's type inference breaks on a bound
+  // NULL, which mis-typed the neighbouring numeric params). `nofam` needs no param (a literal predicate).
+  const filt = (params) => {
+    let sql = nofam ? ' AND m.gang_id IS NULL' : '';
+    if (district) { params.push(district); sql += ` AND c.loc = $${params.length}`; }
+    return sql;
+  };
 
   // LOOKING FOR A CREW — the recruit list: humans who flagged LFG (within the freshness window),
   // crewless, near your level. Ordered by closeness. This is the highlight the console leads with.
-  const looking = (await client.query(
+  const lp = [ch.id, fresh, lo, hi, Number(ch.respect), DISCOVERY.LIMIT];
+  const looking = applyOnline((await client.query(
     `${HUMAN_COLS}
       WHERE c.alive AND NOT c.is_npc AND NOT a.agent_flag AND c.id <> $1
         AND c.lfg AND c.lfg_at > $2 AND cm.crew_id IS NULL
-        AND c.respect BETWEEN $3 AND $4
-      ORDER BY (c.respect - $5) * (c.respect - $5) LIMIT $6`,
-    [ch.id, fresh, lo, hi, Number(ch.respect), DISCOVERY.LIMIT])).rows.map((r) => card(r, online));
+        AND c.respect BETWEEN $3 AND $4${filt(lp)}
+      ORDER BY (c.respect - $5) * (c.respect - $5) LIMIT $6`, lp)).rows.map((r) => card(r, online)));
   const lookingIds = new Set(looking.map((r) => r.id));
 
   // PEERS — everyone near your level (whether or not they're looking), so you can reach out to anyone;
   // the looking-ones are excluded here so the two lists don't duplicate.
-  const peers = (await client.query(
+  const pp = [ch.id, lo, hi, Number(ch.respect), DISCOVERY.LIMIT + looking.length];
+  const peers = applyOnline((await client.query(
     `${HUMAN_COLS}
       WHERE c.alive AND NOT c.is_npc AND NOT a.agent_flag AND c.id <> $1
-        AND c.respect BETWEEN $2 AND $3
-      ORDER BY (c.respect - $4) * (c.respect - $4) LIMIT $5`,
-    [ch.id, lo, hi, Number(ch.respect), DISCOVERY.LIMIT + looking.length])).rows
-      .map((r) => card(r, online)).filter((r) => !lookingIds.has(r.id)).slice(0, DISCOVERY.LIMIT);
+        AND c.respect BETWEEN $2 AND $3${filt(pp)}
+      ORDER BY (c.respect - $4) * (c.respect - $4) LIMIT $5`, pp)).rows
+      .map((r) => card(r, online))).filter((r) => !lookingIds.has(r.id)).slice(0, DISCOVERY.LIMIT);
 
   // FRESH BLOOD — the newest humans, ANY level, so a veteran can welcome a newcomer and a new player
   // sees other new players even when nobody's in their band. The front door that's never empty while
   // anyone at all has joined.
-  const newcomers = (await client.query(
+  const np = [ch.id, DISCOVERY.LIMIT];
+  const newcomers = applyOnline((await client.query(
     `${HUMAN_COLS}
-      WHERE c.alive AND NOT c.is_npc AND NOT a.agent_flag AND c.id <> $1
-      ORDER BY c.created_at DESC LIMIT $2`,
-    [ch.id, DISCOVERY.LIMIT])).rows.map((r) => card(r, online));
+      WHERE c.alive AND NOT c.is_npc AND NOT a.agent_flag AND c.id <> $1${filt(np)}
+      ORDER BY c.created_at DESC LIMIT $2`, np)).rows.map((r) => card(r, online)));
 
   // CREWS RECRUITING — the push half: crews that opened their doors, near your level, with room. A flat
   // query + a JS fold (pg-mem can't run the correlated aggregate — the /v1/gangs precedent). A crew is
@@ -103,6 +119,7 @@ export async function discoveryBoard(ch, client, onlineIds = []) {
 
   return {
     me: { level: myLevel, lfg: !!ch.lfg, inCrew: !!myCrew, band: DISCOVERY.BAND, crewMax: CREW.MAX_MEMBERS },
+    filters: { district, nofam, online: onlineOnly },   // echo the applied filters so the client shows active state
     looking, peers, newcomers, crews,
   };
 }
