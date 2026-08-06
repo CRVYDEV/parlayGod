@@ -95,7 +95,22 @@ peers, and fresh blood.
   invites), crews flag recruiting (pull for requests), either side can initiate. Account-keyed →
   survives death; the worker sweep tidies stale invites AND requests on the shared TTL. Zero §10.4.
 
-## Deferred (step three)
+## Step three (BUILT)
 
-- **Filters** — by district, by family/no-family, by level sub-band (a client-side nicety over the
-  returned lists, or server query params).
+- **FILTERS** — `GET /v1/discovery?district=X&nofam=1&online=1` narrows the three human lists.
+  **district** ("who's near me AND where I can reach them") and **nofam** (unaffiliated players — better
+  crew recruits than someone already in a 20-man family) filter in SQL, PRE-LIMIT (correct — a match
+  beyond the cap is still found); **online** ("who can I reach right now", pairs with the presence chip)
+  is a post-filter, since `online` is derived from the socket set, not a column. The SQL filter is built
+  **dynamically** (the clause + its params appended only when active) rather than a fixed
+  `($n::text IS NULL OR …)` — pg-mem's type inference breaks on a bound NULL and mis-typed the
+  neighbouring numeric params. The applied filters are echoed back (`filters`) so the console shows the
+  active state; crews are unfiltered (a group isn't in one district and isn't online/offline). Console:
+  a filter row (district dropdown from `rules.districts`, "no family" + "online now" checkboxes, a clear
+  button) that re-fetches; the filter state is module-scoped so it survives a background re-render.
+
+## Deferred
+
+The two-sided market + presence + filters cover the discovery surface. Further ideas if the alpha shows
+demand: a level sub-band slider (finer than the fixed ±10), and a "saved search" that pings you when a
+new player matches.

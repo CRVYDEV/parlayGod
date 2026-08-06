@@ -3835,11 +3835,17 @@
   // ── THE ROLODEX (Find People) — player discovery. Humans near your level, who's looking for a crew,
   // and the newest faces. The front door to THE CREW: flag yourself "looking", or invite someone you
   // find. No money, no odds — reads + a toggle. ──
+  let discFilters = { district: '', nofam: false, online: false };   // persists across re-renders (module-scoped)
   async function renderDiscover() {
     const t = $('#tab-discover');
     await refresh();
-    const b = (await api('GET', '/v1/discovery')).body || {};
+    const qp = [];
+    if (discFilters.district) qp.push('district=' + encodeURIComponent(discFilters.district));
+    if (discFilters.nofam) qp.push('nofam=1');
+    if (discFilters.online) qp.push('online=1');
+    const b = (await api('GET', '/v1/discovery' + (qp.length ? '?' + qp.join('&') : ''))).body || {};
     const dm = b.me || {}, looking = b.looking || [], peers = b.peers || [], newcomers = b.newcomers || [], crews = b.crews || [];
+    const districts = (rules && rules.districts) || [];
     const canInvite = dm.inCrew;   // any crew member can put a word in (by name)
     // the row template, kept inline at each map site so the mirror guard sees every field read
     // (a `.map(namedFn)` is a documented mirror blind spot). All three lists share the same server
@@ -3854,6 +3860,13 @@
           : "Put the word out and let someone find YOU."}
           <button class="act" id="lfg-toggle" style="border-color:${dm.lfg ? 'var(--bad)' : 'var(--neon)'}">${dm.lfg ? 'stop looking' : "I'm looking for a crew"}</button></div>
         ${!dm.inCrew ? '<div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">Find someone below, then <a href="#" data-dgo="crew">start a crew</a> to bring them in.</div>' : ''}</div>
+
+      <div class="card" style="margin-top:8px"><span class="t">Filter</span>
+        <div class="d" style="margin-top:4px">
+          <select id="disc-district"><option value="">any district</option>${districts.map((d) => `<option value="${esc(d.id)}"${discFilters.district === d.id ? ' selected' : ''}>${esc(d.name)}</option>`).join('')}</select>
+          <label style="margin-left:8px"><input type="checkbox" id="disc-nofam"${discFilters.nofam ? ' checked' : ''}> no family</label>
+          <label style="margin-left:8px"><input type="checkbox" id="disc-online"${discFilters.online ? ' checked' : ''}> online now</label>
+          ${discFilters.district || discFilters.nofam || discFilters.online ? '<button class="act" id="disc-clear" style="margin-left:8px">clear</button>' : ''}</div></div>
 
       ${!dm.inCrew && crews.length ? `<div class="card" style="margin-top:8px;border-color:var(--gold)"><span class="t" style="color:var(--gold)">Crews recruiting — near you</span>
         <span class="d" style="font-size:11px">open crews looking for members</span>
@@ -3875,6 +3888,11 @@
 
     const lt = t.querySelector('#lfg-toggle');
     if (lt) lt.onclick = () => act('POST', '/v1/discovery/lfg', { on: !dm.lfg }).then(() => renderDiscover());
+    // filters — re-fetch the board with the chosen filters (no money, just a narrower read)
+    const dd = t.querySelector('#disc-district'); if (dd) dd.onchange = () => { discFilters.district = dd.value; renderDiscover(); };
+    const nf = t.querySelector('#disc-nofam'); if (nf) nf.onchange = () => { discFilters.nofam = nf.checked; renderDiscover(); };
+    const on = t.querySelector('#disc-online'); if (on) on.onchange = () => { discFilters.online = on.checked; renderDiscover(); };
+    const dc = t.querySelector('#disc-clear'); if (dc) dc.onclick = () => { discFilters = { district: '', nofam: false, online: false }; renderDiscover(); };
     t.querySelectorAll('[data-inv]').forEach((btn) => btn.onclick = () =>
       act('POST', '/v1/crew/invite', { name: btn.dataset.inv }).then(() => renderDiscover()));
     t.querySelectorAll('[data-ask]').forEach((btn) => btn.onclick = () =>

@@ -126,6 +126,33 @@ const acctOfId = async (id) => (await pool.query('SELECT account_id a FROM chara
   assert.equal(openCrew.maxLevel >= 20, true, 'and a level hint');
 }
 
+// ════════════ STEP THREE — filters (district / no-family / online) ════════════
+{
+  const fa = await mk('Filter Docks');   // docks, in a family
+  const fb = await mk('Filter Neon');    // neon, unaffiliated
+  await pool.query(`UPDATE characters SET respect=5000, loc='docks', cash=100000 WHERE id='${fa.id}'`);
+  await pool.query(`UPDATE characters SET respect=5000, loc='neon' WHERE id='${fb.id}'`);
+  await call('POST', '/v1/gangs', { token: fa.token, body: { name: 'Filter Mob', tag: 'FLT' } });   // fa joins a family
+  const meCh = await readCh(me.id);
+  const names = (bd) => [...bd.looking, ...bd.peers, ...bd.newcomers].map((r) => r.name);
+
+  const dk = await discoveryBoard(meCh, pool, [], { district: 'docks' });
+  assert.equal(names(dk).includes('Filter Docks'), true, 'the district filter keeps a docks player');
+  assert.equal(names(dk).includes('Filter Neon'), false, 'and drops a neon player');
+  assert.deepEqual(dk.filters, { district: 'docks', nofam: false, online: false }, 'the applied filters are echoed back');
+
+  const nf = await discoveryBoard(meCh, pool, [], { nofam: true });
+  assert.equal(names(nf).includes('Filter Neon'), true, 'the no-family filter keeps the unaffiliated');
+  assert.equal(names(nf).includes('Filter Docks'), false, 'and drops a family man');
+
+  const onl = await discoveryBoard(meCh, pool, [await acctOfId(fb.id)], { online: true });
+  assert.equal(names(onl).includes('Filter Neon'), true, 'the online filter keeps the connected');
+  assert.equal(names(onl).includes('Filter Docks'), false, 'and drops the offline');
+
+  const none = await discoveryBoard(meCh, pool, [], {});
+  assert.equal(names(none).includes('Filter Docks') && names(none).includes('Filter Neon'), true, 'no filter → both present');
+}
+
 // ════════════ §10.4 — the whole thing moves no value ════════════
 assert.equal(Number((await pool.query("SELECT COUNT(*) n FROM transactions WHERE reason LIKE 'discovery%'")).rows[0].n), 0,
   'discovery writes no ledger rows — there is no discovery: vocabulary');

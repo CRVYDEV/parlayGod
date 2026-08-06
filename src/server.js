@@ -1883,8 +1883,11 @@ export async function buildServer() {
 
   // ── THE ROLODEX (omerta-discovery-design.md) — player discovery: humans near your level + a
   // "looking for a crew" flag, so THE CREW is reachable by strangers. §10.4-free (reads + a toggle).
-  app.get('/v1/discovery', { preHandler: auth }, async (req) =>
-    G.readCharacter(pool, req.user.sub, (ch, client) => Discovery.discoveryBoard(ch, client, [...wsClients.keys()])));
+  app.get('/v1/discovery', { preHandler: auth }, async (req) => {
+    const q = req.query || {};
+    const filters = { district: q.district || null, nofam: q.nofam === '1' || q.nofam === 'true', online: q.online === '1' || q.online === 'true' };
+    return G.readCharacter(pool, req.user.sub, (ch, client) => Discovery.discoveryBoard(ch, client, [...wsClients.keys()], filters));
+  });
   app.post('/v1/discovery/lfg', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Discovery.setLfg(ch, req.body?.on, client, h)));
 

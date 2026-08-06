@@ -9435,3 +9435,23 @@ client fixture flags the Rival Crew recruiting + seeds a request so the mirror c
 (137 lists) + `requests` element fields. Guards: full suite 61-green, sim drift-0, mobile 73/73, client
 wiring+mirror (585 routes / 137 lists), routes 585, levers 618, docs (194 tables), pgquery + pgcheck
 43/43 on real Postgres. Deferred (step three): filters (district / no-family / level sub-band).
+**Step three — FILTERS — BUILT** (`src/discovery.js`, `src/server.js`, `public/index.html`,
+`test/discovery.js`). `GET /v1/discovery?district=X&nofam=1&online=1` narrows the three human lists:
+**district** (near you AND reachable) + **nofam** (unaffiliated — better crew recruits than someone in a
+20-man family) filter in SQL PRE-LIMIT (correct — a match beyond the cap is still found); **online**
+(pairs with the presence chip) is a post-filter since `online` is derived from the socket set, not a
+column. The SQL filter is built **DYNAMICALLY** (clause + params appended only when active) rather than a
+fixed `($n::text IS NULL OR …)` — **pg-mem's type inference breaks on a bound NULL and mis-typed the
+neighbouring numeric params** (the `(respect−$5)²` order-by threw "unary − on non-numeric"); the dynamic
+build has no null/unused param and was verified on real Postgres across all filter combinations. The
+applied filters are echoed (`filters`) so the console shows active state; crews stay unfiltered (a group
+isn't in one district or online/offline). The client route is `'/v1/discovery' + (qp ? '?'+qs : '')` — a
+STRING CONCAT, not a template literal, because the wiring guard reads `` `/v1/discovery${x}` `` as
+`/v1/discovery:p` (a phantom param segment → "not mounted"), while the concat's literal prefix resolves to
+`/v1/discovery`. Console: a filter row (district dropdown from `rules.districts`, "no family" + "online
+now" checkboxes, a clear button) that re-fetches; filter state is module-scoped so it survives a
+background re-render. `test/discovery.js` proves each filter narrows correctly (a docks/neon + family/
+unaffiliated + online/offline pair) and the echo. Guards: full suite green, sim drift-0, mobile 73/73,
+client wiring+mirror, routes/levers/docs unchanged (no new lever/table/faucet), pgquery + pgcheck 43/43 +
+the dynamic filtered query verified on real Postgres. The ROLODEX is feature-complete (three human lists
++ recruiting crews → online presence + the two-sided recruiting/request market → filters).
