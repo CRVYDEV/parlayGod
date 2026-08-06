@@ -9455,3 +9455,32 @@ unaffiliated + online/offline pair) and the echo. Guards: full suite green, sim 
 client wiring+mirror, routes/levers/docs unchanged (no new lever/table/faucet), pgquery + pgcheck 43/43 +
 the dynamic filtered query verified on real Postgres. The ROLODEX is feature-complete (three human lists
 + recruiting crews → online presence + the two-sided recruiting/request market → filters).
+
+**PRODUCTION OUTAGE — the roster columns crashed every deploy at boot, and the whole backlog was frozen
+behind it (2026-08-06).** The founder switched Render's deploy branch to `main`, the deploy fired, and the
+container **crash-looped at boot**: `error: column "post" does not exist` (SQLSTATE 42703,
+`ComputeIndexAttrs`), thrown from `makeDb`'s `CREATE INDEX ix_gang_members_post ON gang_members(gang_id,
+post)`. THE STRATEGY PACKAGE step four (THE ROSTER) had added `gang_members.joined_at`/`post`/`post_at`
+**inline in the `CREATE TABLE` body** with **no `ALTER TABLE ... ADD COLUMN` migration** — and
+`gang_members` is an OLD table, so on a live database the `CREATE TABLE IF NOT EXISTS` is a no-op, the
+columns are never added, and the index build crashes the process. On a fresh DB (CI, pg-mem, and my own
+`pgcheck`/`pgquery` cluster) the columns are created inline with the table, so **no suite could ever see
+it** — and I had in fact hit this exact error locally weeks earlier and wrongly filed it as a dirty-cluster
+artifact (the recorded "create a fresh database per run" note). Production IS that dirty database,
+permanently. The deploy applies schema.sql top-to-bottom and stops at the first error, so the crash at this
+one index proves prod's schema was frozen at the pre-roster state — meaning **every push since THE ROSTER
+(the whole strategy package, tokenomics v2, the crew, the ROLODEX) had been silently failing to deploy**
+while the old process kept serving; the "latest commits aren't live" the founder kept hitting was this one
+line. **THE FIX** is the codebase's own established discipline — new columns on an existing table go through
+`ALTER TABLE ... ADD COLUMN IF NOT EXISTS` (THE FOUNDATION step two even DOCUMENTED this exact `joined_at`
+migration as needed on a live DB; it was just never written into schema.sql): three ALTERs added before the
+index, idempotent for both fresh and existing databases, `joined_at NOT NULL DEFAULT now()` backfilling
+existing members with the migration timestamp. **Verified by REPRODUCING prod's condition** rather than
+reasoning about it — created an old (pre-roster) `gang_members` on a real Postgres, then applied the full
+new schema.sql on top: exit 0, zero errors, all three columns present via the ALTERs, so the fix unblocks
+the entire frozen backlog, not just the boot line. §10.4 untouched (schema-only). pgquery + pgcheck 43/43 on
+a fresh real-Postgres cluster; pg-mem parses the ALTERs (smoke + social green). **The class worth
+remembering: a `CREATE TABLE IF NOT EXISTS` is a no-op on a live DB, so any column it adds inline never
+lands on an existing table — every column added to a pre-existing table MUST have an `ALTER TABLE ... ADD
+COLUMN IF NOT EXISTS`, and an index over it must come after that ALTER; a fresh-DB test suite is
+structurally blind to the whole class.**

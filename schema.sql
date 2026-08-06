@@ -361,6 +361,13 @@ CREATE TABLE IF NOT EXISTS gang_members (
   post_at TIMESTAMPTZ,                            -- when he took it — the reassign cooldown reads this
   PRIMARY KEY (gang_id, character_id)
 );
+-- Migrations for EXISTING gang_members tables — the inline columns above are added by the CREATE TABLE
+-- only on a FRESH database; on a live DB the CREATE TABLE IF NOT EXISTS is a no-op, so these columns
+-- (and the index below) must be added explicitly or the index build crashes at boot with
+-- `column "post" does not exist`. joined_at backfills existing members with the migration timestamp.
+ALTER TABLE gang_members ADD COLUMN IF NOT EXISTS joined_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE gang_members ADD COLUMN IF NOT EXISTS post TEXT;
+ALTER TABLE gang_members ADD COLUMN IF NOT EXISTS post_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS ix_gang_members_post ON gang_members(gang_id, post);
 CREATE TABLE IF NOT EXISTS districts (
   id TEXT PRIMARY KEY,
