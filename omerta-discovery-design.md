@@ -76,10 +76,26 @@ call while the screen-reach beacon gathers data), plus a nudge on THE SITUATION 
 for a crew"). The LFG toggle, the recruit list with one-tap invite (when you lead/belong to a crew),
 peers, and fresh blood.
 
-## Deferred (step two)
+## Step two (BUILT)
 
-- **Online-now** — a per-player presence flag (the socket registry gives a count today, not per-player);
-  a "who's actually online near me" list is the strongest signal but needs the presence plumbing.
-- **A recruit BROADCAST** — a crew leader posting "we're recruiting, ~level N" to the discovery board (vs
-  the current pull model where a solo player advertises LFG).
-- **Filters** — by district, by family/no-family, by level sub-band.
+- **ONLINE-NOW presence** — each discovery card carries `online`, derived from the WS registry
+  (`wsClients`, a Map of connected account → sockets). The route passes `[...wsClients.keys()]` into
+  `discoveryBoard` (the board has no socket access); the human-list query selects `account_id` INTERNALLY
+  to derive `online`, and the `card` mapper drops it — so presence surfaces but the account UUID never
+  does. "Who can I actually reach right now" is the strongest teaming signal.
+- **CREW RECRUITING + JOIN REQUESTS** — the push half. A crew leader flags the crew `recruiting`
+  (`POST /v1/crew/recruiting {on}`), and the discovery board gains a **`crews`** list (recruiting,
+  non-full crews whose member level RANGE overlaps your band; your own crew excluded; a flat query + JS
+  fold, the /v1/gangs pg-mem precedent). A solo player **asks to join** (`POST /v1/crew/request/:crewId`
+  — the invite twin, `crew_requests`); the leader sees pending requests on the crew board and
+  **accepts** (`POST /v1/crew/request/:characterId/accept`) or **declines**
+  (`DELETE /v1/crew/request/:characterId`), keyed on the requester's CURRENT living character (resolved
+  to their account — the kickMember shape; no account UUID leaves). Accept is the acceptInvite discipline
+  (lock the crew row, re-check the cap). So the market is two-sided: solo players flag LFG (pull for
+  invites), crews flag recruiting (pull for requests), either side can initiate. Account-keyed →
+  survives death; the worker sweep tidies stale invites AND requests on the shared TTL. Zero §10.4.
+
+## Deferred (step three)
+
+- **Filters** — by district, by family/no-family, by level sub-band (a client-side nicety over the
+  returned lists, or server query params).

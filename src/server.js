@@ -1869,12 +1869,22 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Crew.setCrewTarget(ch, req.body?.name, req.body?.kind, client, h)));
   app.delete('/v1/crew/target', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Crew.clearCrewTarget(ch, client, h)));
+  // THE ROLODEX step two — RECRUITING (the crew advertises) + join REQUESTS (a solo player asks, the
+  // leader accepts). The push half of discovery; status/coordination only, zero §10.4.
+  app.post('/v1/crew/recruiting', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Crew.setRecruiting(ch, req.body?.on, client, h)));
+  app.post('/v1/crew/request/:crewId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Crew.requestJoin(ch, req.params.crewId, client, h)));
+  app.post('/v1/crew/request/:characterId/accept', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Crew.acceptRequest(ch, req.params.characterId, client, h)));
+  app.delete('/v1/crew/request/:characterId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Crew.declineRequest(ch, req.params.characterId, client, h)));
   app.get('/v1/leaderboard/crews', { preHandler: auth }, async () => Crew.crewLeaderboard(pool));
 
   // ── THE ROLODEX (omerta-discovery-design.md) — player discovery: humans near your level + a
   // "looking for a crew" flag, so THE CREW is reachable by strangers. §10.4-free (reads + a toggle).
   app.get('/v1/discovery', { preHandler: auth }, async (req) =>
-    G.readCharacter(pool, req.user.sub, (ch, client) => Discovery.discoveryBoard(ch, client)));
+    G.readCharacter(pool, req.user.sub, (ch, client) => Discovery.discoveryBoard(ch, client, [...wsClients.keys()])));
   app.post('/v1/discovery/lfg', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Discovery.setLfg(ch, req.body?.on, client, h)));
 

@@ -1745,6 +1745,9 @@
       const m = { formed: 'the crew is yours — put some names in', joined: `you're in — ${esc(body.name || 'the crew')}`,
         left: 'you walked — the pact\'s off', invited: `word put in for ${esc(body.to || 'them')}`,
         kicked: `${esc(body.who || 'he')}'s out of the crew`, declined: 'passed on it', pulled: '',
+        recruiting: 'the doors are open — players can ask to join', closed: 'recruiting closed',
+        requested: `you asked to join ${esc(body.to || 'the crew')} — the boss decides`,
+        took_in: `${esc(body.who || 'they')} joined the crew`, turned_away: 'you turned them away',
         target: `the crew's after ${esc(body.target || 'the mark')} — chip in on the hit`, target_cleared: 'the hit is called off' };
       if (m[body.crew] !== undefined && m[body.crew] !== '') return `\u{1F465} ${m[body.crew]}`;
     }
@@ -3770,6 +3773,11 @@
           ${mem.length < b.maxMembers ? `<input id="crew-invite" placeholder="invite by name" size="16"> <button class="act" id="crew-invite-btn">put a word in</button> &nbsp;` : `<span style="color:var(--dim)">crew is full</span> &nbsp;`}
           <button class="act" data-do="POST /v1/crew/leave" data-confirm="Walk away?|You leave the crew — the pact ends and you're fair game to them again.">leave the crew</button></div></div>
 
+      ${crew.leader && mem.length < b.maxMembers ? `<div class="card" style="margin-top:8px${crew.recruiting ? ';border-color:var(--gold)' : ''}"><span class="t"${crew.recruiting ? ' style="color:var(--gold)"' : ''}>${crew.recruiting ? 'Recruiting — the doors are open' : 'Open the crew to new blood'}</span> <span class="d" style="font-size:11px">— players near your level can ask to join</span>
+        <div class="row"><button class="act" id="crew-recruit" style="border-color:${crew.recruiting ? 'var(--bad)' : 'var(--gold)'}">${crew.recruiting ? 'close recruiting' : 'start recruiting'}</button></div>
+        ${(crew.requests || []).length ? `<div class="d" style="margin-top:6px"><b>Asking to join:</b></div><div class="grid" style="margin-top:4px">${crew.requests.map((rq) => `<div class="card"><span class="t">${esc(rq.name)}</span>${rq.level != null ? ` <span class="chip">lvl ${rq.level}</span>` : ''}
+          <div class="row">${rq.characterId ? `<button class="act" data-do="POST /v1/crew/request/${rq.characterId}/accept" style="border-color:var(--neon)">let them in</button><button class="act" data-do="DELETE /v1/crew/request/${rq.characterId}">turn away</button>` : '<span class="d" style="color:var(--dim)">line dead</span>'}</div></div>`).join('')}</div>` : '<div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">No requests yet.</div>'}</div>` : ''}
+
       ${(() => { const tg = crew.target;
         if (tg) return `<div class="card" style="margin-top:8px;border-color:var(--bad)"><span class="t" style="color:var(--bad)">THE CREW HIT — ${esc(tg.name)}</span> <span class="chip">${tg.kind === 'kill' ? 'kill' : 'hospitalize'}</span>${tg.pot ? ` <span class="chip good">$${fmt(tg.pot)} on their head</span>` : ''}
           <div class="d" style="margin-top:4px">${tg.alive && tg.characterId ? `Chip in on the contract: <input id="crew-hit-amt" placeholder="$" size="8"> <button class="act" id="crew-hit-fund" style="border-color:var(--bad)">put money on it</button>`
@@ -3788,6 +3796,9 @@
       if (!name) return;
       act('POST', '/v1/crew/invite', { name }).then(() => renderCrew());
     };
+    // THE ROLODEX step two — the recruiting toggle (state-dependent, so wired by hand)
+    const rc = t.querySelector('#crew-recruit');
+    if (rc) rc.onclick = () => act('POST', '/v1/crew/recruiting', { on: !crew.recruiting }).then(() => renderCrew());
     // THE CREW HIT — the leader calls a shared mark; anyone chips in on the standing contract
     const hs = t.querySelector('#crew-hit-set');
     if (hs) hs.onclick = () => {
@@ -3828,12 +3839,12 @@
     const t = $('#tab-discover');
     await refresh();
     const b = (await api('GET', '/v1/discovery')).body || {};
-    const dm = b.me || {}, looking = b.looking || [], peers = b.peers || [], newcomers = b.newcomers || [];
+    const dm = b.me || {}, looking = b.looking || [], peers = b.peers || [], newcomers = b.newcomers || [], crews = b.crews || [];
     const canInvite = dm.inCrew;   // any crew member can put a word in (by name)
     // the row template, kept inline at each map site so the mirror guard sees every field read
     // (a `.map(namedFn)` is a documented mirror blind spot). All three lists share the same server
     // card shape, so peers — reliably non-empty in the fixture — carries the coverage.
-    const row = (r) => `<div class="card"><span class="t">${esc(r.name)}</span> <span class="chip">lvl ${r.level}</span>${r.hasCrew ? ' <span class="chip">in a crew</span>' : ''}${r.lfg ? ' <span class="chip good">looking</span>' : ''}
+    const row = (r) => `<div class="card"><span class="t">${esc(r.name)}</span> <span class="chip">lvl ${r.level}</span>${r.online ? ' <span class="chip good">online</span>' : ''}${r.hasCrew ? ' <span class="chip">in a crew</span>' : ''}${r.lfg ? ' <span class="chip good">looking</span>' : ''}
         <div class="d">${r.districtName ? esc(r.districtName) : ''}${r.gangTag ? ' · [' + esc(r.gangTag) + ']' : ''}</div>
         ${canInvite && !r.hasCrew ? `<button class="act" data-inv="${esc(r.name)}" style="border-color:var(--neon)">invite to my crew</button>` : ''}</div>`;
 
@@ -3844,12 +3855,17 @@
           <button class="act" id="lfg-toggle" style="border-color:${dm.lfg ? 'var(--bad)' : 'var(--neon)'}">${dm.lfg ? 'stop looking' : "I'm looking for a crew"}</button></div>
         ${!dm.inCrew ? '<div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">Find someone below, then <a href="#" data-dgo="crew">start a crew</a> to bring them in.</div>' : ''}</div>
 
+      ${!dm.inCrew && crews.length ? `<div class="card" style="margin-top:8px;border-color:var(--gold)"><span class="t" style="color:var(--gold)">Crews recruiting — near you</span>
+        <span class="d" style="font-size:11px">open crews looking for members</span>
+        <div class="grid" style="margin-top:6px">${crews.map((c) => `<div class="card"><span class="t">${esc(c.name)}</span> <span class="chip">${c.members}/${dm.crewMax || 4}</span>${c.maxLevel != null ? ` <span class="chip">lvl ${c.minLevel === c.maxLevel ? c.minLevel : c.minLevel + '–' + c.maxLevel}</span>` : ''}
+          <div class="row"><button class="act" data-ask="${c.id}" style="border-color:var(--gold)">ask to join</button></div></div>`).join('')}</div></div>` : ''}
+
       ${looking.length ? `<div class="card" style="margin-top:8px;border-color:var(--neon)"><span class="t" style="color:var(--neon)">Looking for a crew — near you</span>
         <span class="d" style="font-size:11px">these players want in</span>
         <div class="grid" style="margin-top:6px">${looking.map(row).join('')}</div></div>` : ''}
 
       <div class="card" style="margin-top:8px"><span class="t">Players near your level</span> <span class="d" style="font-size:11px">± ${dm.band} levels</span>
-        ${peers.length ? `<div class="grid" style="margin-top:6px">${peers.map((r) => `<div class="card"><span class="t">${esc(r.name)}</span> <span class="chip">lvl ${r.level}</span>${r.hasCrew ? ' <span class="chip">in a crew</span>' : ''}${r.lfg ? ' <span class="chip good">looking</span>' : ''}
+        ${peers.length ? `<div class="grid" style="margin-top:6px">${peers.map((r) => `<div class="card"><span class="t">${esc(r.name)}</span> <span class="chip">lvl ${r.level}</span>${r.online ? ' <span class="chip good">online</span>' : ''}${r.hasCrew ? ' <span class="chip">in a crew</span>' : ''}${r.lfg ? ' <span class="chip good">looking</span>' : ''}
           <div class="d">${r.districtName ? esc(r.districtName) : ''}${r.gangTag ? ' · [' + esc(r.gangTag) + ']' : ''}</div>
           ${canInvite && !r.hasCrew ? `<button class="act" data-inv="${esc(r.name)}" style="border-color:var(--neon)">invite to my crew</button>` : ''}</div>`).join('')}</div>`
           : '<div class="d" style="color:var(--dim);margin-top:4px">Nobody around your level yet — check Fresh Blood below, or come back once the city fills up.</div>'}</div>
@@ -3861,6 +3877,8 @@
     if (lt) lt.onclick = () => act('POST', '/v1/discovery/lfg', { on: !dm.lfg }).then(() => renderDiscover());
     t.querySelectorAll('[data-inv]').forEach((btn) => btn.onclick = () =>
       act('POST', '/v1/crew/invite', { name: btn.dataset.inv }).then(() => renderDiscover()));
+    t.querySelectorAll('[data-ask]').forEach((btn) => btn.onclick = () =>
+      act('POST', '/v1/crew/request/' + btn.dataset.ask, {}).then(() => renderDiscover()));
     t.querySelectorAll('[data-dgo]').forEach((a) => a.onclick = (e) => { e.preventDefault(); setTab(a.dataset.dgo); });
   }
 

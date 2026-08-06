@@ -119,12 +119,77 @@ export async function kickMember(ch, targetCharacterId, client, h) {
   return { ok: true, crew: 'kicked', who: t.name };
 }
 
+// ── THE ROLODEX step two — RECRUITING + JOIN REQUESTS. The push half of discovery: a crew advertises
+// (`recruiting`), and a solo player ASKS to join (the invite twin, `crew_requests`) rather than waiting
+// to be named. Status/coordination only — zero §10.4. ──
+export async function setRecruiting(ch, on, client, h) {
+  const crewId = await crewIdOf(client, ch.account_id);
+  if (!crewId) throw new GameError('no_crew', "You're not in a crew.");
+  const crew = (await client.query('SELECT leader_account FROM crews WHERE id=$1', [crewId])).rows[0];
+  if (crew.leader_account !== ch.account_id) throw new GameError('not_leader', 'Only the boss opens the crew to new blood.');
+  const flag = !!on;
+  await client.query('UPDATE crews SET recruiting=$2, recruiting_at = CASE WHEN $2 THEN now() ELSE recruiting_at END WHERE id=$1', [crewId, flag]);
+  return { ok: true, crew: flag ? 'recruiting' : 'closed' };
+}
+
+// a solo player asks to join a recruiting, non-full crew. A pending row (nothing moves until the leader
+// accepts), so single-party. Gates mirror inviteToCrew from the other side.
+export async function requestJoin(ch, crewId, client, h) {
+  if (await crewIdOf(client, ch.account_id)) throw new GameError('in_crew', 'Leave your current crew first.');
+  const crew = (await client.query('SELECT id, name, leader_account, recruiting FROM crews WHERE id=$1', [crewId])).rows[0];
+  if (!crew) throw new GameError('gone', 'That crew no longer exists.');
+  if (!crew.recruiting) throw new GameError('closed', "That crew isn't taking requests.");
+  const n = Number((await client.query('SELECT COUNT(*) n FROM crew_members WHERE crew_id=$1', [crewId])).rows[0].n);
+  if (n >= CREW.MAX_MEMBERS) throw new GameError('full', 'That crew is full.');
+  const dup = (await client.query('SELECT 1 FROM crew_requests WHERE crew_id=$1 AND account_id=$2', [crewId, ch.account_id])).rows[0];
+  if (dup) throw new GameError('already', "You've already asked to join.");
+  await client.query('INSERT INTO crew_requests (crew_id, account_id, from_name) VALUES ($1,$2,$3)', [crewId, ch.account_id, ch.name]);
+  const boss = (await client.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [crew.leader_account])).rows[0];
+  if (boss) await notify(client, boss.id, 'crew_request', { from: ch.name, crewId }).catch(() => {});
+  return { ok: true, crew: 'requested', to: crew.name };
+}
+
+// the leader accepts a pending request — the acceptInvite discipline (lock the crew row, re-check the
+// cap), then add the requester and clear all their requests (one crew). Keyed on the requester's CURRENT
+// living character (resolved to their account — the kickMember shape; no account UUID leaves the board).
+export async function acceptRequest(ch, targetCharacterId, client, h) {
+  const crewId = await crewIdOf(client, ch.account_id);
+  if (!crewId) throw new GameError('no_crew', "You're not in a crew.");
+  const crew = (await client.query('SELECT * FROM crews WHERE id=$1 FOR UPDATE', [crewId])).rows[0];
+  if (crew.leader_account !== ch.account_id) throw new GameError('not_leader', 'Only the boss lets a man in.');
+  const t = (await client.query('SELECT id, name, account_id FROM characters WHERE id=$1', [targetCharacterId])).rows[0];
+  if (!t) throw new GameError('no_request', 'No such player.');
+  const req = (await client.query('SELECT from_name FROM crew_requests WHERE crew_id=$1 AND account_id=$2', [crewId, t.account_id])).rows[0];
+  if (!req) throw new GameError('no_request', 'No such request.');
+  if (await crewIdOf(client, t.account_id)) { await client.query('DELETE FROM crew_requests WHERE account_id=$1', [t.account_id]); throw new GameError('has_crew', `${t.name} already found a crew.`); }
+  const n = Number((await client.query('SELECT COUNT(*) n FROM crew_members WHERE crew_id=$1', [crewId])).rows[0].n);
+  if (n >= CREW.MAX_MEMBERS) throw new GameError('full', 'Your crew is full.');
+  await client.query('INSERT INTO crew_members (crew_id, account_id, name) VALUES ($1,$2,$3)', [crewId, t.account_id, t.name]);
+  await client.query('DELETE FROM crew_requests WHERE account_id=$1', [t.account_id]);   // one crew — drop all their asks
+  await notify(client, t.id, 'crew_accepted', { crew: crew.name }).catch(() => {});
+  bus.emit(`crew:${crewId}`, { type: 'crew_joined', who: t.name });
+  return { ok: true, crew: 'took_in', who: t.name };
+}
+
+export async function declineRequest(ch, targetCharacterId, client, h) {
+  const crewId = await crewIdOf(client, ch.account_id);
+  if (!crewId) throw new GameError('no_crew', "You're not in a crew.");
+  const crew = (await client.query('SELECT leader_account FROM crews WHERE id=$1', [crewId])).rows[0];
+  if (crew.leader_account !== ch.account_id) throw new GameError('not_leader', 'Only the boss turns a man away.');
+  const t = (await client.query('SELECT account_id FROM characters WHERE id=$1', [targetCharacterId])).rows[0];
+  if (!t) throw new GameError('no_request', 'No such player.');
+  const r = await client.query('DELETE FROM crew_requests WHERE crew_id=$1 AND account_id=$2', [crewId, t.account_id]);
+  if (!r.rowCount) throw new GameError('no_request', 'No such request.');
+  return { ok: true, crew: 'turned_away' };
+}
+
 // succession + dissolution after a departure (leaver's account passed so we never re-pick them).
 async function settleCrew(client, crewId, leftAccount) {
   const rest = (await client.query(
     'SELECT account_id FROM crew_members WHERE crew_id=$1 ORDER BY joined_at, account_id', [crewId])).rows;
   if (!rest.length) { await client.query('DELETE FROM crews WHERE id=$1', [crewId]);
     await client.query('DELETE FROM crew_invites WHERE crew_id=$1', [crewId]);
+    await client.query('DELETE FROM crew_requests WHERE crew_id=$1', [crewId]);
     await client.query('DELETE FROM crew_targets WHERE crew_id=$1', [crewId]); return; }
   const crew = (await client.query('SELECT leader_account FROM crews WHERE id=$1', [crewId])).rows[0];
   if (crew && crew.leader_account === leftAccount)
@@ -171,9 +236,17 @@ export async function crewBoard(ch, client) {
   // pending offers OUT of my crew (so the crew can see who's been asked)
   const pending = (await client.query(
     'SELECT account_id, from_name FROM crew_invites WHERE crew_id=$1 ORDER BY at DESC', [crewId])).rows.length;
+  // THE ROLODEX step two — join REQUESTS on the crew's plate (the leader accepts/declines), keyed on the
+  // requester's CURRENT living character (a flat JOIN, no account UUID leaves — the /v1/gangs precedent).
+  const requests = (await client.query(
+    `SELECT c.id AS char_id, COALESCE(c.name, cr.from_name) AS name, c.respect
+       FROM crew_requests cr LEFT JOIN characters c ON c.account_id=cr.account_id AND c.alive
+      WHERE cr.crew_id=$1 ORDER BY cr.at DESC`, [crewId])).rows
+    .map((r) => ({ characterId: r.char_id || null, name: r.name, level: r.respect != null ? levelOf(Number(r.respect)) : null }));
   const target = await crewTargetOf(client, crewId);   // THE CREW HIT — the shared mark, if the leader called one
   return {
-    crew: { id: crewId, name: crew.name, leader: crew.leader_account === ch.account_id, members, pending, target },
+    crew: { id: crewId, name: crew.name, leader: crew.leader_account === ch.account_id, members, pending,
+      recruiting: !!crew.recruiting, requests, target },
     invites, maxMembers: CREW.MAX_MEMBERS, minLevel: CREW.MIN_LEVEL, nameMax: CREW.NAME_MAX,
   };
 }
@@ -248,6 +321,8 @@ export async function crewLeaderboard(pool, limit = 20) {
 // ── the worker sweep — a pending invite nobody answered goes stale. Row hygiene only (the board reads
 // filter on nothing here, but an unbounded invite table is untidy). ──
 export async function sweepCrewInvites(pool) {
-  const r = await pool.query('DELETE FROM crew_invites WHERE at < $1', [new Date(Date.now() - CREW.INVITE_TTL_MS)]);
-  return { swept: r.rowCount || 0 };
+  const cut = new Date(Date.now() - CREW.INVITE_TTL_MS);
+  const r = await pool.query('DELETE FROM crew_invites WHERE at < $1', [cut]);
+  const q = await pool.query('DELETE FROM crew_requests WHERE at < $1', [cut]);   // join requests share the TTL
+  return { swept: (r.rowCount || 0) + (q.rowCount || 0) };
 }
