@@ -1378,6 +1378,46 @@ phase('P9.32 the resident economy — the consolidated base-wide ceiling');
   note('resident economy', 'extraction ≤ inflow', 'unaffected', 'every faucet here is in-game cash/goods, none touches the $OMR withdrawal rail; the full-reserve queue bound is orthogonal and untouched');
 }
 
+// ════════ P9.33 D14 — the crime-stat faucet, tracked (SIGNED as-is; re-measured every run) ════════
+// D14 steepened the crime-roll stat coefficients (M3.CRIME_STAT), EV-neutral at a mid build but lifting
+// the maxed tail — so base-wide crime cash rises. The founder SIGNED it as-is (2026-08-06); this probe
+// prints the delta every run so any later crime/stat/OFFSET change re-measures the faucet analytically
+// (the den/kill-EV precedent — no value seeded, §10.4 untouched). The chance formula mirrors doCrime's
+// STANDARD approach (successMult 1): chance = min(0.97, base + cun×CUN + spd×SPD − OFFSET); E[$]/nerve =
+// chance × avg(cash) / nerve, averaged over the crimes a build's level can attempt.
+phase('P9.33 D14 the crime-stat faucet — base-wide lift, signed as-is (re-measured every run)');
+{
+  const cs = M3.CRIME_STAT;
+  const OLD = { CUN: 0.004, SPD: 0.002, OFFSET: 0 };           // the pre-D14 signed curve
+  // a rational player at a given build picks the BEST $/nerve crime they can attempt — that is what the
+  // faucet actually realizes (a mean over every crime dilutes it with trivially-capped low jobs).
+  const dollarsPerNerve = (coef, cun, spd, lvl) => {
+    let best = 0;
+    for (const c of CRIMES) {
+      if (c.lvl > lvl) continue;
+      const chance = Math.min(0.97, Math.max(0, c.base + cun * coef.CUN + spd * coef.SPD - coef.OFFSET));
+      best = Math.max(best, chance * ((c.cash[0] + c.cash[1]) / 2) / c.nerve);
+    }
+    return best;
+  };
+  const builds = [
+    { name: 'fresh 5/5 (lvl 3)', cun: 5, spd: 5, lvl: 3, w: 0.2 },
+    { name: 'mid 12/12 (lvl 25)', cun: 12, spd: 12, lvl: 25, w: 0.6 },
+    { name: 'maxed 25/25 (lvl 50)', cun: 25, spd: 25, lvl: 50, w: 0.2 },
+  ];
+  let num = 0, den = 0;   // cash-weighted: total EXTRA dollars / total dollars = the true faucet lift
+  for (const b of builds) {
+    const nw = dollarsPerNerve(cs, b.cun, b.spd, b.lvl);
+    const old = dollarsPerNerve(OLD, b.cun, b.spd, b.lvl);
+    const delta = old > 0 ? (nw / old - 1) : 0;
+    num += b.w * old * delta; den += b.w * old;   // weight each build by its cash throughput, not its head count
+    note('D14 crime-stat', b.name, `${(delta * 100 >= 0 ? '+' : '') + (delta * 100).toFixed(1)}%`, `$/nerve new $${(nw).toFixed(2)} vs old $${(old).toFixed(2)}`);
+  }
+  const baseWide = den > 0 ? num / den : 0;
+  note('D14 crime-stat', 'base-wide (cash-weighted, 20/60/20 pop)', `${(baseWide * 100 >= 0 ? '+' : '') + (baseWide * 100).toFixed(1)}%`,
+    `SIGNED as-is 2026-08-06 — the maxed tail earning more on hard jobs, bounded by NERVE, small vs the passive stack. §10.4 untouched (success-rate only). Re-anchoring CRIME_STAT.OFFSET (${cs.OFFSET}) higher trades this for a fresh/mid hit — no free lunch. Reverting to {CUN:0.004,SPD:0.002,OFFSET:0} restores the pre-D14 curve`);
+}
+
 phase('P10 §10.4 ledger invariants over the ENTIRE sim (nothing was seeded)');
 const inv = await runLedgerInvariants(pool);
 for (const c of inv.checks) console.log(`  ${c.ok ? '✅' : '🚨'} ${c.name}: drift ${c.drift}`);

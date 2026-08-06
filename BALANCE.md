@@ -5031,7 +5031,17 @@ dollar). Muscle stays 0 by design (the jump/shakedown/PvP axis — adding it hom
 Felt spread on a mid crime: fresh 35% → maxed 59% success (a +24-point decision, doubled from the
 old +12). §10.4 UNTOUCHED (success rate only — crime:take/crime:<id> ledgering unchanged; sim
 drift-0). The +10.4% base-wide is the maxed tail earning more on hard jobs — bounded by NERVE (the
-real throttle), small against the passive stack. **FOUNDER FLAG:** option A holds the median flat but
-rewarding investment necessarily lifts the aggregate ~10%; reverting `CRIME_STAT` to
-`{CUN:0.004, SPD:0.002, OFFSET:0}` restores the pre-D14 signed curve byte-for-byte. Re-anchoring the
-OFFSET at a higher build would trade the maxed-tail faucet for a bigger fresh/mid hit (no free lunch).
+real throttle), small against the passive stack.
+
+**THE +10% FAUCET — SIGNED AS-IS 2026-08-06 (founder-directed, of three offered options).** Option A
+holds the median flat but rewarding investment necessarily lifts the aggregate ~10%; the founder
+accepted that as the cost of "builds matter," over the two alternatives — neutralizing the aggregate
+(re-anchoring `OFFSET` higher makes fresh/mid players earn LESS: no free lunch, and it undoes the
+median-neutral promise while cutting exactly the onboarding earnings the recent pushes protect) or
+reverting D14 whole (stats barely matter to crime again). The lift is bounded by NERVE and small
+against the passive stack, and it moves no §10.4 surface (success-rate only). Now **tracked by
+`tools/sim.js` P9.33**, which re-measures the per-build deltas (fresh −4.9% / mid +0.0% / maxed +22.3%)
+and the cash-weighted base-wide (+10.4%) analytically every run — so any later change to `CRIME_STAT`,
+the crime catalog, or the approach mults re-measures the faucet. The dials remain: reverting to
+`{CUN:0.004, SPD:0.002, OFFSET:0}` restores the pre-D14 curve byte-for-byte; re-anchoring `OFFSET`
+higher trades the maxed tail for a fresh/mid hit.
