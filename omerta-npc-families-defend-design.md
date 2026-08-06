@@ -146,3 +146,23 @@ gang-level makes it a family project but dies with the family and needs a dissol
 chose account-level (`cartel_damage`) for the loot and gang-level (`held_by_gang`) for the frontier — a
 split this could mirror (personal legend for the loot, a family blood-war record for the vendetta). Decide
 before the schema is written.
+
+**Step five — NPC-FAMILY DIPLOMACY (sue for peace + NPC alliances) — BUILT (2026-08-06, founder-directed).**
+The diplomacy board stops being all-human. Two pieces, both §10.4-neutral (status rows over the audited
+`gang_relations` + `pact` touchpoint — the test asserts the whole layer writes no ledger rows; sim drift-0).
+**(1) PEACE (player↔NPC):** a boss/underboss sues an NPC family for peace through the EXISTING pact route
+(`POST /v1/diplomacy/pact/:gangId`); the worker (`sweepNpcDiplomacy` PASS 1) signs the NPC's side, and
+signing ENDS that outfit's live OFFENSIVE on you (making peace stops the guns — the counterplay-to-war made
+concrete). While the pact stands the OFFENSIVE picker skips the pair AND `raidFamily` throws `pact` (the
+declareWar touchpoint extended to the raid loop); break it (the oathbreak — a family honor cost) to resume
+the war. **(2) NPC↔NPC ALLIANCES (flavor):** `sweepNpcDiplomacy` PASS 2 maintains up to
+`DIPLOMACY.NPC.ALLY_TARGET` (2) alliances between NPC families, surfaced on the war board (`allies`) so the
+landscape isn't all-human — pure status, no gameplay effect (a future deepening could make an ally join the
+OFFENSIVE). Console: a "sue for peace" / "break the peace" control + a ☮ peace chip + a 🤝 allies line on
+each Blood War card, and `npc_pact_signed`/`npc_alliance` feed lines. `test/npcwar.js` covers the sign (+
+OFFENSIVE cleared + board surface), the raid pact-gate, the alliance flavor + board, the picker exclusion
+(pacted pair stays quiet, reopens once peace is gone), and §10.4-neutrality — three interlock mutations each
+caught by name. All numbers are founder sign-off levers (`ALLY_TARGET` cosmetic; the peace reuses
+`DIPLOMACY.PACT_MS`). The NPC-families antagonist arc is now feature-complete: join (step one) → defend
+(step two) → the legend/manhunt/conquest (step three) → the formal war (the belt) → THE OFFENSIVE
+(they declare first) → diplomacy (sue for peace / NPC alliances).

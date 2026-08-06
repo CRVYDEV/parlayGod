@@ -231,3 +231,89 @@ export async function sweepDiplomacy(pool) {
   await pool.query('DELETE FROM coalition_members WHERE coalition_id IN (SELECT id FROM coalitions WHERE expires_at <= now())');
   await pool.query('DELETE FROM coalitions WHERE expires_at <= now()');
 }
+
+// ═══ NPC-FAMILY DIPLOMACY (2026-08-06) — the board stops being all-human ═══
+// The NPC families accept a player's PEACE offer and form alliances among themselves. §10.4-NEUTRAL:
+// a pact is a status row; nothing here moves currency. Flat queries + JS (pg-mem — the /v1/gangs
+// precedent); per-item txns (the sweep precedent). Expired pacts already lapse via the reads' `active`
+// filter, but the accepted rows persist harmlessly — the sweepDiplomacy hygiene doesn't touch pacts.
+const npcPairKey = (a, b) => [a, b].sort().join('|');
+
+// every NPC family's live allies (other NPC families it holds an accepted, unexpired pact with) — a flat
+// read for the war board (pure status). Returns { npcGangId: [{name, tag}] }.
+export async function npcAlliesOf(client) {
+  const npc = {};
+  for (const g of (await client.query('SELECT id, name, tag FROM gangs WHERE npc_flag')).rows) npc[g.id] = g;
+  const out = {};
+  const rels = (await client.query(
+    "SELECT gang_a, gang_b FROM gang_relations WHERE kind='pact' AND accepted AND until > now()")).rows;
+  for (const r of rels) {
+    if (npc[r.gang_a] && npc[r.gang_b]) { // both sides NPC → an alliance
+      (out[r.gang_a] ||= []).push({ name: npc[r.gang_b].name, tag: npc[r.gang_b].tag });
+      (out[r.gang_b] ||= []).push({ name: npc[r.gang_a].name, tag: npc[r.gang_a].tag });
+    }
+  }
+  return out;
+}
+
+export async function sweepNpcDiplomacy(pool) {
+  let signed = 0, allied = 0;
+  const npcRows = (await pool.query('SELECT id, name FROM gangs WHERE npc_flag')).rows;
+  const npc = new Set(npcRows.map((g) => g.id));
+
+  // ── PASS 1: an NPC family accepts a player's pending PEACE offer. Signing ENDS the NPC's live OFFENSIVE
+  //    on the proposer (making peace stops the guns) — the counterplay-to-war made concrete. Only a
+  //    player→NPC offer auto-signs (an NPC never proposes to a player; NPC↔NPC is pass 2). §10.4-neutral.
+  const pending = (await pool.query(
+    "SELECT gang_a, gang_b, proposed_by FROM gang_relations WHERE kind='pact' AND NOT accepted")).rows;
+  for (const r of pending) {
+    const other = r.proposed_by === r.gang_a ? r.gang_b : r.gang_a; // the side that must accept
+    if (!npc.has(other) || npc.has(r.proposed_by)) continue;        // only a player→NPC offer signs here
+    const c = await pool.connect();
+    try {
+      await c.query('BEGIN');
+      const until = new Date(Date.now() + DIPLOMACY.PACT_MS);
+      const up = await c.query(
+        'UPDATE gang_relations SET accepted=true, until=$3 WHERE gang_a=$1 AND gang_b=$2 AND NOT accepted',
+        [r.gang_a, r.gang_b, until]);
+      if (up.rowCount) {
+        // peace stops the guns — end any live hostility from this NPC family onto the proposer
+        await c.query('DELETE FROM npc_aggression WHERE npc_gang=$1 AND target_gang=$2', [other, r.proposed_by]);
+        bus.emit('streets', { type: 'npc_pact_signed', npc: (npcRows.find((g) => g.id === other) || {}).name, family: r.proposed_by });
+        for (const mem of (await c.query(
+          'SELECT c.id FROM gang_members m JOIN characters c ON c.id=m.character_id AND c.alive AND NOT c.is_npc WHERE m.gang_id=$1', [r.proposed_by])).rows)
+          await notify(c, mem.id, 'npc_pact_signed', { family: (npcRows.find((g) => g.id === other) || {}).name });
+        signed++;
+      }
+      await c.query('COMMIT');
+    } catch (e) { await c.query('ROLLBACK'); console.error('[sweepNpcDiplomacy sign]', e?.message || e); } finally { c.release(); }
+  }
+
+  // ── PASS 2: FLAVOR — maintain a few NPC↔NPC alliances (pure status, surfaced on the war board) so the
+  //    landscape isn't all-human. One new alliance per tick, up to ALLY_TARGET live, between two unallied
+  //    NPC families. No gameplay effect (a future deepening could make an ally join the OFFENSIVE).
+  const allies = await npcAlliesOf(pool);
+  const liveAlliances = Object.values(allies).reduce((a, l) => a + l.length, 0) / 2; // each counted twice
+  if (npcRows.length >= 2 && liveAlliances < DIPLOMACY.NPC.ALLY_TARGET) {
+    const c = await pool.connect();
+    try {
+      await c.query('BEGIN');
+      // find a pair of NPC families with NO relation between them
+      const rel = new Set((await c.query('SELECT gang_a, gang_b FROM gang_relations')).rows.map((x) => npcPairKey(x.gang_a, x.gang_b)));
+      const pool2 = shuffleD(npcRows.slice());
+      let a = null, b = null;
+      outer: for (let i = 0; i < pool2.length; i++) for (let j = i + 1; j < pool2.length; j++)
+        if (!rel.has(npcPairKey(pool2[i].id, pool2[j].id))) { a = pool2[i]; b = pool2[j]; break outer; }
+      if (a && b) {
+        const [id1, id2] = [a.id, b.id].sort();
+        await c.query('INSERT INTO gang_relations (gang_a, gang_b, kind, proposed_by, accepted, until) VALUES ($1,$2,$3,$4,true,$5)',
+          [id1, id2, 'pact', a.id, new Date(Date.now() + DIPLOMACY.PACT_MS)]);
+        bus.emit('streets', { type: 'npc_alliance', a: a.name, b: b.name });
+        allied++;
+      }
+      await c.query('COMMIT');
+    } catch (e) { await c.query('ROLLBACK'); console.error('[sweepNpcDiplomacy ally]', e?.message || e); } finally { c.release(); }
+  }
+  return { signed, allied };
+}
+function shuffleD(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }

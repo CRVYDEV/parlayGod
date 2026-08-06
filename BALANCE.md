@@ -4937,6 +4937,30 @@ GRIEFY it feels are `TARGET` (world-wide pressure), `STRIKE_EVERY_MS` (how often
 lay-up every ~3h for up to 12h, then gets ≥24h of quiet. `TARGET: 0` reverts to react-only. §10.4-neutral,
 so no sim faucet to re-measure — but sim/watch the felt cadence before production.
 
+## NPC-FAMILY DIPLOMACY — sue for peace + NPC alliances (BUILT 2026-08-06, founder-directed)
+
+Design: `omerta-npc-families-defend-design.md` § step five. The diplomacy board stops being all-human. A
+player boss/underboss can sue an NPC family for PEACE through the EXISTING pact route
+(`POST /v1/diplomacy/pact/:gangId`); the worker (`sweepNpcDiplomacy`) signs the NPC's side, and **signing
+ENDS that outfit's live OFFENSIVE on you** (making peace stops the guns — the counterplay-to-war made
+concrete). While the pact stands the OFFENSIVE won't target you AND you can't raid them (the existing
+`pact` touchpoint, extended to the raid loop); break it (the oathbreak — a family honor cost) to resume the
+war. Plus FLAVOR: the worker maintains a few NPC↔NPC alliances (surfaced on the war board) so the landscape
+isn't all-human.
+
+**§10.4-NEUTRAL by construction** — a pact is a status row; peace/alliances move ZERO value and add no
+reason (the test asserts the whole layer writes no ledger rows; sim drift-0). It reuses the audited
+`gang_relations` table + the `pact` touchpoint.
+
+| lever | ships at | what it does |
+|---|---|---|
+| `DIPLOMACY.NPC.ALLY_TARGET` | 2 | live NPC↔NPC alliances the worker maintains (flavor — war-board only, no gameplay effect) |
+| (reused) `DIPLOMACY.PACT_MS` | 7d | a sworn peace runs a week (the player-pact duration) |
+
+**Founder sign-off flag:** `ALLY_TARGET` is pure cosmetic status (a future deepening could make an ally
+join the OFFENSIVE — flagged, not built). The peace mechanic is §10.4-neutral pacing over the audited pact
+system; the only lever with teeth is `PACT_MS` — how long peace buys you before you must re-sue or fight.
+
 ## THE PORTFOLIO IS RETIRED (D11, founder-directed 2026-08-05)
 
 Not a lever move — a system removal, recorded here because it deletes lever surface. Retired: the
