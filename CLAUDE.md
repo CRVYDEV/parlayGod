@@ -9279,6 +9279,25 @@ buy-in ledgered `casino:tourney:buyin`), the worker settling the mixed field (no
 retirement-safety case — mutation-verified (drop the pool bump → the escrow assertion fails by name). Guards
 green: suite (incl. population step four), sim drift-0, pgquery (new SQL parses on real Postgres), pgcheck
 43/43, levers 606 pinned. `POPULATION.EVENTS.TOURNEY_FIELD` (6) is a founder sign-off lever (no faucet — a
-redistribution; `0` reverts to human-only). Deferred (the same proven pattern): the Grand Prix, The Stakes,
-and the Futurity — each a worker-resolved escrow field with a short-field refund, and residents own cars/
-racers since Street War step three, so the resident-entrant helper extends to them.
+redistribution; `0` reverts to human-only).
+
+**THE OTHER THREE SCHEDULED FIELDS — the same proven pattern (founder-directed "build out the other 7
+things", 2026-08-06)** (`src/races.js` `residentEnterGrandPrix`, `src/stable.js` `residentEnterStakes`,
+`src/casino.js` `residentNominateFuturity`; `POPULATION.EVENTS.{GP,STAKES,FUTURITY}_FIELD` levers;
+`test/population.js`). The tournament fill extended to the remaining worker-resolved fields, each a
+byte-faithful twin: **GP** (residents race their MARKS beaters — no district gate, so the most reliable
+fill; level ≥ `GP.MIN_LEVEL`) and **THE STAKES** (residents with a stable racer, `MARKS.RACER_P`) are
+escrow buy-ins, so the `grand prix escrow` / `stakes escrow` identities hold with a resident in the field;
+**THE FUTURITY** is different — the nomination is a NON-refundable SINK to the buyback (`casino:futurity:nom`
+→ `street_tax`, the human path's fee), so residents nominating just fill the RUNNER field so the card isn't
+scrapped (< `FUTURITY.MIN_RUNNERS`) and the futurity BET escrow is untouched. Each reuses its module's own
+`ledger` + the exact entry INSERTs (one core, not a parallel copy), each REACTIVE (a resident enters only
+an event a human already materialized) and recycle-only (own cash + own car/racer), and each retirement-
+safe by the resolver's LEFT-JOIN dead path (a gone entrant's stake burns/refunds at resolve, so
+`retireResident` needs no change). `test/population.js` proves all three: the reactive gate (a resident
+opens nothing), three residents filling to a real field, the escrow identity unchanged, and the worker
+settling the mixed field for GP/Stakes — mutation-verified (drop the GP pool bump → `grand prix: the escrow
+identity is UNTOUCHED` fails by name). `GP_FIELD`/`STAKES_FIELD`/`FUTURITY_FIELD` (6) are founder sign-off
+levers (no faucet — redistribution/sink; `0` reverts each to human-only). **The four scheduled-field co-op
+games are now live solo.** Guards: suite, sim drift-0, pgquery (new SQL on real Postgres), pgcheck 43/43,
+levers 611 pinned.

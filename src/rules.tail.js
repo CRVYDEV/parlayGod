@@ -4100,7 +4100,10 @@ POPULATION.TURNOVER = {
 // cleanup is needed on retirement. Bounded so a solo human always gets a playable field but residents
 // don't flood it. Founder sign-off lever.
 POPULATION.EVENTS = {
-  TOURNEY_FIELD: 6,   // residents fill an open tournament up to this many entrants (PAYOUTS is 3 places)
+  TOURNEY_FIELD: 6,   // residents fill an open poker tournament up to this many entrants (PAYOUTS is 3 places)
+  GP_FIELD: 6,        // …an open Grand Prix (residents race their beaters; PAYOUTS is 3 places)
+  STAKES_FIELD: 6,    // …an open Stakes (residents with a stable racer; PAYOUTS is 3 places)
+  FUTURITY_FIELD: 6,  // …nominate into an open Futurity up to this many RUNNERS (FIELD_MAX is 8 — room for humans)
 };
 
 // ── TOKENOMICS v2 (founder-directed 2026-07-27) ──────────────────────────────────────────────────

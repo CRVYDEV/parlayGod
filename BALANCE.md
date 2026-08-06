@@ -5060,10 +5060,14 @@ at resolve via the LEFT-JOIN dead path, its remaining cash at retire, so `retire
 **REACTIVE ONLY**: a resident enters a tournament a HUMAN already materialized and never spins one up itself,
 so the city never manufactures fake events and `/v1/online` stays an honest human count.
 
-Lever: **`POPULATION.EVENTS.TOURNEY_FIELD` (6)** — residents fill an open tournament up to this many
-entrants (`TOURNEY.PAYOUTS` is 3 places), so a solo human always gets a playable field but residents don't
-flood it. `0` reverts to human-only (refund-on-short-field). Founder sign-off lever (no faucet — a
-redistribution; the rake is a net sink). Deferred (the same proven pattern extends to): the Grand Prix,
-The Stakes, and the Futurity — each a worker-resolved escrow field with a `MIN_ENTRANTS`/`MIN_RUNNERS`
-refund, so a resident-entrant helper (residents have cars/racers since Street War step three) makes them
-live solo too.
+Levers (all `POPULATION.EVENTS`, all `6`, all founder sign-off — no faucet, a redistribution; `0` reverts
+each to human-only): **`TOURNEY_FIELD`** (the poker tournament), **`GP_FIELD`** (the Grand Prix — residents
+race their beaters), **`STAKES_FIELD`** (The Stakes — residents with a stable racer), **`FUTURITY_FIELD`**
+(nominations into the Futurity, under `FUTURITY.FIELD_MAX` 8 so humans keep room). Each caps how many
+entrants/runners residents fill an OPEN human-started event to, so a solo player always gets a playable
+field but residents don't flood it. The GP and Stakes are escrow buy-ins (the tournament's twins — the
+grand-prix/stakes escrow identities hold with a resident in the field); the Futurity nomination is a SINK
+to the buyback (the human path's `casino:futurity:nom` fee), so residents just fill the RUNNER field
+without touching the bet escrow. All reuse the module's own `ledger` + the exact entry INSERTs (one core),
+all reactive (a resident enters only an event a human already opened), all retirement-safe by the resolver's
+LEFT-JOIN dead path (no `retireResident` change). The four scheduled-field co-op games are now live solo.

@@ -75,6 +75,7 @@ const SIGNED = [
   ['CASINO.DICE_NERVE', 1],
   ['CASINO.FIGHT_BET_MIN_LVL', 5],
   ['CASINO.FIGHT_MAX', 5000],
+  ['CASINO.FUTURITY.FIELD_MAX', 8],
   ['CASINO.FUTURITY.MAX_BET', 25000],
   ['CASINO.FUTURITY.MIN_RUNNERS', 3],
   ['CASINO.FUTURITY.RAKE_BPS', 500],
@@ -412,6 +413,9 @@ const SIGNED = [
   ['POPULATION.TARGET', 48],
   ['POPULATION.TURNOVER.PER_DAY', 24],
   ['POPULATION.EVENTS.TOURNEY_FIELD', 6],
+  ['POPULATION.EVENTS.GP_FIELD', 6],
+  ['POPULATION.EVENTS.STAKES_FIELD', 6],
+  ['POPULATION.EVENTS.FUTURITY_FIELD', 6],
   // NPC FAMILIES — the "Nobody survives alone" rung is uncompletable solo without somewhere to
   // join. §10.4-free by construction (a resident founder pays the SIGNED gang:found sink out of
   // its own seed cash), and deliberately powerless: excluded from the Commission and the family

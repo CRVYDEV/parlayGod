@@ -8,7 +8,7 @@
 // account-level LEGEND (survives death, the boxing-legend/hitman-rep precedent). CASH ONLY (the Den's rule).
 import crypto from 'node:crypto';
 import { GameError, bus, ledger, notify, rngLog, bumpStanding, npcMult, npcTier } from './game.js';
-import { STABLE, UNDERWORLD, stableKindOf, stableMeetOf, racerRankOf, racerLegendOf, levelOf , jailed, hospitalized } from './rules.js';
+import { STABLE, UNDERWORLD, POPULATION, stableKindOf, stableMeetOf, racerRankOf, racerLegendOf, levelOf , jailed, hospitalized } from './rules.js';
 
 const stakesMs = () => Number(process.env.STAKES_MS) || STABLE.STAKES.REGISTER_MS; // TEST-ONLY env (SEARCH_MS pattern)
 
@@ -256,6 +256,34 @@ export async function enterStakes(ch, racerId, client, h) {
   bus.emit('streets', { type: 'stakes_entry', who: ch.name, racer: r.name, entrants });
   return { ok: true, stakes: g.id, racer: r.name, form: f, buyin, pool: Number(g.pool) + buyin, entrants,
     closesSeconds: Math.max(0, Math.ceil((new Date(g.resolves_at) - Date.now()) / 1000)) };
+}
+
+// NPC RESIDENTS FILL A HUMAN-STARTED STAKES (THE POPULATION step four — the residentEnterTournament twin).
+// A resident with a stable racer enters it, paying its OWN buy-in into the SAME escrow (recycle-only), so
+// the 'stakes escrow' §10.4 identity is untouched and a solo owner gets a real field instead of a refund.
+// REACTIVE ONLY (an open stakes a human already materialized). A retired/killed resident's entry auto-burns
+// at resolve (the LEFT-JOIN dead path in resolveStakes), so retireResident needs no change. No track/emit
+// (residents emit nothing to the wire); only residents that own a racer (Street War step three) qualify.
+export async function residentEnterStakes(client, r) {
+  const buyin = STABLE.STAKES.BUYIN;
+  if (Number(r.cash) < buyin) return null;
+  const st = (await client.query('SELECT current FROM stakes_state WHERE id=1 FOR UPDATE')).rows[0];
+  if (!st?.current) return null;                         // REACTIVE: only a stakes a human already opened
+  const g = (await client.query("SELECT id, resolves_at FROM stakes_races WHERE id=$1 AND status='open' FOR UPDATE", [st.current])).rows[0];
+  if (!g || new Date(g.resolves_at) <= new Date()) return null;
+  const entrants = Number((await client.query('SELECT COUNT(*) n FROM stakes_entries WHERE race_id=$1', [g.id])).rows[0].n);
+  if (entrants >= POPULATION.EVENTS.STAKES_FIELD) return null;
+  if ((await client.query('SELECT 1 FROM stakes_entries WHERE race_id=$1 AND character_id=$2', [g.id, r.id])).rows[0]) return null;
+  const racer = (await client.query(
+    'SELECT id, name, kind, speed, stamina, heart FROM racers WHERE character_id=$1 AND (injured_until IS NULL OR injured_until < now()) ORDER BY id LIMIT 1', [r.id])).rows[0];
+  if (!racer) return null;                               // only a resident who owns a fit racer
+  const f = Number(racer.speed) + Number(racer.stamina) + Number(racer.heart);
+  await client.query('UPDATE characters SET cash = cash - $2 WHERE id=$1', [r.id, buyin]);
+  await client.query('INSERT INTO stakes_entries (race_id, character_id, buyin, racer_name, kind, form) VALUES ($1,$2,$3,$4,$5,$6)',
+    [g.id, r.id, buyin, racer.name, racer.kind, f]);
+  await client.query('UPDATE stakes_races SET pool = pool + $2 WHERE id=$1', [g.id, buyin]);
+  await ledger(client, { characterId: r.id, currency: 'cash', amount: -buyin, reason: 'stable:stakes:buyin', counterparty: g.id });
+  return 'joined_stakes';
 }
 
 // Worker settle: race every LIVE entrant (snapshotted form + rand(VARIANCE)), rank, pay the top places a
