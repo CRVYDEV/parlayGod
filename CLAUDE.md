@@ -9238,3 +9238,16 @@ prompt. `test/npcwar.js` proves both the aggressor AND its ally strike a member,
 and a pacted ally stays out — two mutations each caught by name. Suite 67/67 + sim drift-0 + pgquery +
 pgcheck 43/43 on real Postgres. `FAMILY_WAR.AGGRESSION.ALLY_JOIN_MAX` is a founder sign-off lever
 (§10.4-neutral pacing; `0` reverts to the aggressor-only OFFENSIVE).
+
+**D14 — THE +10% CRIME FAUCET SIGNED AS-IS + TRACKED (founder-directed 2026-08-06)** (`tools/sim.js`
+P9.33, `BALANCE.md` § D14, `SIGN-OFF.md`). The D14 flag ("stats matter more to the crime roll" lifts
+base-wide crime cash ~+10.4% — the maxed tail earning more on hard jobs) was resolved: offered three
+options (sign as-is / neutralize via OFFSET re-anchor / revert D14), the founder **signed it as-is**. The
++10% is the accepted cost of "builds matter" — bounded by NERVE, small vs the passive stack, §10.4-untouched
+(success-rate only). The two alternatives were worse: neutralizing makes fresh/mid players earn LESS (no
+free lunch — it cuts exactly the onboarding earnings the recent pushes protect and breaks the median-neutral
+promise), reverting undoes the signed "builds matter" change. New **sim probe P9.33** re-measures it
+analytically every run — per-build deltas (fresh −4.9% / mid +0.0% / maxed +22.3%, exactly reproducing the
+BALANCE table) + the cash-weighted base-wide (+10.4%) — so any later change to `CRIME_STAT`, the crime
+catalog, or the approach mults re-measures the faucet (the den/kill-EV tracking precedent; no value seeded,
+sim drift-0). No code retune — the resolution is the sign-off + the standing measurement.
