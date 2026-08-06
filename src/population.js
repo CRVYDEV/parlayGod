@@ -25,7 +25,9 @@
 import crypto from 'node:crypto';
 import { ledger, notify } from './game.js';
 import { wipeFighterAtDeath } from './boxing.js';
-import { residentEnterTournament } from './casino.js';
+import { residentEnterTournament, residentNominateFuturity } from './casino.js';
+import { residentEnterGrandPrix } from './races.js';
+import { residentEnterStakes } from './stable.js';
 // NPC FAMILIES: founding and joining run through the AUDITED player path, not a copy of it — the
 // name/tag validation, the uniqueness clash check, the ledgered `gang:found` sink, the FOR UPDATE
 // on the gang row and the GANG_MAX_MEMBERS count invariant are all the same code a player runs.
@@ -672,10 +674,14 @@ export async function residentAct(client, r) {
   // 1.5 FILL A SCHEDULED FIELD (step four) — a resident standing at the Neon Mile joins a human-started
   //     poker tournament so a solo player gets a real field instead of a refund. Reactive + recycle-only
   //     (the resident's own buy-in into the same escrow; §10.4 untouched), so most turns it's a no-op and
-  //     the resident falls through to the boards below. See casino.js:residentEnterTournament (it gates
-  //     on the district itself, so it's a cheap no-op for a resident who isn't at the Neon Mile).
-  const joined = await residentEnterTournament(client, r);
-  if (joined) return joined;
+  //     the resident falls through to the boards below. Each helper is REACTIVE (a no-op unless a human has
+  //     already opened that event) and gates on its own prereqs (district / a car / a racer), so most turns
+  //     these are cheap no-ops. See casino.js:residentEnterTournament & residentNominateFuturity,
+  //     races.js:residentEnterGrandPrix, stable.js:residentEnterStakes.
+  for (const fill of [residentEnterTournament, residentEnterGrandPrix, residentEnterStakes, residentNominateFuturity]) {
+    const joined = await fill(client, r);
+    if (joined) return joined;
+  }
 
   // 2. THE SHYLOCK — a SECURED offer. Residents never call collectLoan, so an unsecured NPC loan
   //    would be free money for a defaulter; requiring collateral worth MORE than the debt means the

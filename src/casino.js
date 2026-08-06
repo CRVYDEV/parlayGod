@@ -565,6 +565,36 @@ export async function nominateFuturity(ch, racerId, client, h) {
     closesSeconds: Math.max(0, Math.ceil((new Date(g.resolves_at) - Date.now()) / 1000)) };
 }
 
+// NPC RESIDENTS NOMINATE INTO A HUMAN-STARTED FUTURITY (THE POPULATION step four). A resident with a stable
+// racer at the Neon Mile nominates it — paying the NON-refundable nomination FEE from its OWN cash (a §10.4
+// SINK straight to the buyback pool, exactly like the human path — recycle-only), so a solo card gets enough
+// RUNNERS to not be scrapped (< MIN_RUNNERS). The nomination touches the FUTURITY ESCROW not at all (that's
+// the BETS); it only adds a runner + pays the sink, so §10.4 is untouched. REACTIVE ONLY (an open futurity a
+// human already materialized). A retired/killed runner scratches at resolve (the LEFT-JOIN dead path), so
+// retireResident needs no change. No track/emit (residents emit nothing to the wire).
+export async function residentNominateFuturity(client, r) {
+  if (r.loc !== CASINO.DISTRICT) return null;            // nominations are at the Neon Mile, like a human's
+  const fee = CASINO.FUTURITY.NOMINATE_FEE;
+  if (Number(r.cash) < fee) return null;
+  const st = (await client.query('SELECT current FROM futurity_state WHERE id=1 FOR UPDATE')).rows[0];
+  if (!st?.current) return null;                         // REACTIVE: only a futurity a human already opened
+  const g = (await client.query("SELECT id, resolves_at FROM futurities WHERE id=$1 AND status='open' FOR UPDATE", [st.current])).rows[0];
+  if (!g || new Date(g.resolves_at) <= new Date()) return null;
+  const n = Number((await client.query('SELECT COUNT(*) n FROM futurity_runners WHERE futurity_id=$1', [g.id])).rows[0].n);
+  if (n >= POPULATION.EVENTS.FUTURITY_FIELD) return null; // leave room for humans (FIELD_MAX is 8)
+  if ((await client.query('SELECT 1 FROM futurity_runners WHERE futurity_id=$1 AND character_id=$2', [g.id, r.id])).rows[0]) return null;
+  const racer = (await client.query(
+    'SELECT id, name, kind, speed, stamina, heart FROM racers WHERE character_id=$1 AND (injured_until IS NULL OR injured_until < now()) ORDER BY id LIMIT 1', [r.id])).rows[0];
+  if (!racer) return null;                               // only a resident who owns a fit racer
+  const f = Number(racer.speed) + Number(racer.stamina) + Number(racer.heart);
+  await client.query('UPDATE characters SET cash = cash - $2 WHERE id=$1', [r.id, fee]);
+  await ledger(client, { characterId: r.id, currency: 'cash', amount: -fee, reason: 'casino:futurity:nom', counterparty: g.id });
+  await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [fee]); // the human path's sink — non-refundable to the buyback
+  await client.query('INSERT INTO futurity_runners (futurity_id, racer_id, character_id, racer_name, kind, form) VALUES ($1,$2,$3,$4,$5,$6)',
+    [g.id, racer.id, r.id, racer.name, racer.kind, f]);
+  return 'nominated_futurity';
+}
+
 // ── bet CASH (parimutuel) on a nominated racer in the open futurity. One bet per bettor; an owner with
 // a runner in the field can't bet (inside stake — the boxing own_event rule). Escrows into the pool. ──
 export async function betFuturity(ch, racerId, amount, client, h) {

@@ -9,7 +9,7 @@
 // Lifetime wins are THE WHEEL — an account-level legend that SURVIVES DEATH (the boxing-legend precedent).
 import crypto from 'node:crypto';
 import { GameError, bus, ledger, notify, rngLog, bumpMastery, masteryFx } from './game.js';
-import { RACES, raceTierOf, raceRankOf, carPower, carVal, levelOf , jailed, hospitalized } from './rules.js';
+import { RACES, POPULATION, raceTierOf, raceRankOf, carPower, carVal, levelOf , jailed, hospitalized } from './rules.js';
 import { logCarCollect } from './collection.js';
 
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
@@ -337,6 +337,35 @@ export async function enterGrandPrix(ch, carId, client, h) {
   bus.emit('streets', { type: 'gp_entry', who: ch.name, entrants });
   return { ok: true, grandPrix: g.id, buyin, power, pool: Number(g.pool) + buyin, entrants,
     closesSeconds: Math.max(0, Math.ceil((new Date(g.resolves_at) - Date.now()) / 1000)) };
+}
+
+// NPC RESIDENTS FILL A HUMAN-STARTED GRAND PRIX (THE POPULATION step four — the residentEnterTournament
+// twin). A resident races its OWN beater, paying its OWN buy-in into the SAME escrow (recycle-only), so the
+// 'grand prix escrow' §10.4 identity is untouched and a solo player gets a real grid instead of a refund.
+// REACTIVE ONLY (an open GP a human already materialized). A retired/killed resident's entry auto-burns at
+// resolve (the LEFT-JOIN dead path in resolveGrandPrix), so retireResident needs no change. No district
+// gate (enterGrandPrix has none); no track/emit (residents emit nothing to the wire).
+export async function residentEnterGrandPrix(client, r) {
+  const buyin = RACES.GP.BUYIN;
+  if (Number(r.cash) < buyin) return null;
+  const st = (await client.query('SELECT current FROM grand_prix_state WHERE id=1 FOR UPDATE')).rows[0];
+  if (!st?.current) return null;                         // REACTIVE: only a GP a human already opened
+  const g = (await client.query("SELECT id, resolves_at FROM grand_prix WHERE id=$1 AND status='open' FOR UPDATE", [st.current])).rows[0];
+  if (!g || new Date(g.resolves_at) <= new Date()) return null; // gone / closed → about to run
+  const entrants = Number((await client.query('SELECT COUNT(*) n FROM grand_prix_entries WHERE gp_id=$1', [g.id])).rows[0].n);
+  if (entrants >= POPULATION.EVENTS.GP_FIELD) return null; // leave room for humans
+  if ((await client.query('SELECT 1 FROM grand_prix_entries WHERE gp_id=$1 AND character_id=$2', [g.id, r.id])).rows[0]) return null;
+  // needs the level + a raceable car it OWNS (not on the block / pledged) + its own speed stat
+  const full = (await client.query('SELECT respect, speed FROM characters WHERE id=$1', [r.id])).rows[0];
+  if (!full || levelOf(Number(full.respect)) < RACES.GP.MIN_LEVEL) return null;
+  const car = (await client.query('SELECT model_id, trim_id, tune, dmg FROM cars WHERE character_id=$1 AND NOT listed AND NOT pledged ORDER BY id LIMIT 1', [r.id])).rows[0];
+  if (!car) return null;
+  const power = carPower(car.model_id, car.trim_id, car.tune, Number(full.speed), car.dmg);
+  await client.query('UPDATE characters SET cash = cash - $2 WHERE id=$1', [r.id, buyin]);
+  await client.query('INSERT INTO grand_prix_entries (gp_id, character_id, buyin, power) VALUES ($1,$2,$3,$4)', [g.id, r.id, buyin, power]);
+  await client.query('UPDATE grand_prix SET pool = pool + $2 WHERE id=$1', [g.id, buyin]);
+  await ledger(client, { characterId: r.id, currency: 'cash', amount: -buyin, reason: 'race:gp:buyin', counterparty: g.id });
+  return 'joined_gp';
 }
 
 // Worker settle: race every LIVE entrant (snapshotted power + rand(VARIANCE)), rank, pay the top places a
