@@ -79,7 +79,16 @@ export async function warBoard(db, ch = null) {
     const dmg = Number(acct.family_war || 0), wins = Number(acct.family_wars_won || 0);
     let held = 0, pending = 0;
     if (myGang) for (const r of rows) if (r.held_by_gang === myGang) { held++; pending += familyTribute(r.tribute_at, now.getTime()); }
-    you = { war: dmg, rank: familyWarRankOf(dmg).name, minLvl: FAMILY_WAR.RAID_MIN_LVL,
+    // THE OFFENSIVE — NPC families that have opened hostilities on YOUR family (so the player knows who to
+    // hit back; routing them ends it). A flat read joined to the outfit's name — the raid board decorates.
+    let underFire = [];
+    if (myGang) {
+      const nameOf = {}; for (const r of rows) nameOf[r.id] = { name: r.name, tag: r.tag };
+      underFire = (await db.query('SELECT npc_gang, ends_at FROM npc_aggression WHERE target_gang=$1 AND ends_at > now()', [myGang])).rows
+        .map((a) => ({ id: a.npc_gang, name: nameOf[a.npc_gang]?.name, tag: nameOf[a.npc_gang]?.tag,
+          endsSeconds: Math.max(0, Math.ceil((new Date(a.ends_at).getTime() - Date.now()) / 1000)) }));
+    }
+    you = { war: dmg, rank: familyWarRankOf(dmg).name, minLvl: FAMILY_WAR.RAID_MIN_LVL, underFire,
       raidCdSeconds: cooling(ch) ? Math.ceil((new Date(ch.family_raid_at).getTime() - Date.now()) / 1000) : 0,
       vassals: held, tributePending: pending, tributePerHr: familyTributePerHr(),
       // THE FAMILY WAR (formal): the war-chief legend + the active-campaign count + the declaration terms
@@ -172,6 +181,9 @@ export async function raidFamily(ch, gangId, client, h) {
   if (myGang && poolNow > floor && poolAfter <= floor && g.held_by_gang !== myGang) {
     conquered = true;
     await client.query('UPDATE gangs SET held_by_gang=$2, held_since=$3, tribute_at=$3 WHERE id=$1', [gangId, myGang, now]);
+    // THE OFFENSIVE counterplay: routing the outfit ENDS any hostility it had opened — a conquered vassal
+    // doesn't war its overlord (the aggression's own picker also excludes held outfits from re-opening).
+    await client.query('DELETE FROM npc_aggression WHERE npc_gang=$1', [gangId]);
     bus.emit('streets', { type: 'family_conquered', who: ch.name, family: g.name });
     // (red-team) CONQUERING an outfit you're at war with WINS the campaign — total domination supersedes
     // the score. Without this, routing the family (a raid drains its pool toward the rout floor) makes it
@@ -325,6 +337,9 @@ export async function collectFamilyTribute(ch, client, h) {
 export async function releaseFamilyHolds(client, gangId) {
   await client.query('UPDATE gangs SET held_by_gang=NULL, held_since=NULL, tribute_at=NULL WHERE held_by_gang=$1', [gangId]);
   await client.query('DELETE FROM npc_wars WHERE attacker_gang=$1 OR npc_gang=$1', [gangId]);
+  // THE OFFENSIVE: a dissolving family drops any hostility it opened AND any incoming one against it (a
+  // dead player family can't be struck, a dead NPC family can't strike — the row would only lapse late).
+  await client.query('DELETE FROM npc_aggression WHERE npc_gang=$1 OR target_gang=$1', [gangId]);
 }
 
 // THE MANHUNT — the worker resolves scheduled retaliations: a family sends someone after a raider who
@@ -355,6 +370,96 @@ export async function sweepFamilyAggro(pool) {
     } catch (e) { await client.query('ROLLBACK'); console.error('[sweepFamilyAggro]', a.gang_id, e?.message || e); }
   }
   return { struck, due: due.length };
+}
+
+// ══════════════════ THE OFFENSIVE — NPC families that DECLARE FIRST (step four) ══════════════════
+// A worker opens a time-boxed HOSTILITY from an NPC family onto a real player family unprompted, so the
+// low-population world moves on its own instead of only ever reacting to a raid. While live it enqueues a
+// strike on the cadence — reusing the SHIPPED family_aggro → sweepFamilyAggro primitive, so every earned
+// shield is honoured at resolve and the strike is pure pacing (a 30-min hospitalization, never a kill,
+// never currency). §10.4-NEUTRAL by construction: opens/strikes/lapses move ZERO value, add no reason.
+// Counterplay is the EXISTING loop — rout the outfit (CONQUEST clears its aggression, below). Three passes,
+// per-item txn isolation (the population/sweep precedent). pg-mem has no random() → JS shuffle.
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+export async function sweepNpcAggression(pool) {
+  const A = FAMILY_WAR.AGGRESSION;
+  const ms = process.env.NPC_AGGRO_MS != null ? Number(process.env.NPC_AGGRO_MS) : A.MS;
+  let opened = 0, struck = 0, lapsed = 0;
+
+  // ── PASS 1: lapse expired hostilities (a lingering row does no harm — no §10.4, no strike fires past
+  //    ends_at — but reap it so the OPEN pass sees the slot free and the picker's per-target peace holds).
+  { const c = await pool.connect();
+    try { await c.query('BEGIN'); const r = await c.query('DELETE FROM npc_aggression WHERE ends_at <= now()'); lapsed = r.rowCount || 0; await c.query('COMMIT'); }
+    catch (e) { await c.query('ROLLBACK'); console.error('[sweepNpcAggression lapse]', e?.message || e); } finally { c.release(); } }
+
+  // ── PASS 2: strike — each live aggression whose next_strike_at is due enqueues ONE family_aggro hit on a
+  //    random living member of the target family (≥ MIN_LVL, not a resident/agent). Skip if a strike is
+  //    already pending for that NPC family (never clobber a raid-manhunt — one pending per family). The
+  //    shields + RETAL_P are re-checked at resolve by sweepFamilyAggro; here we only pick a plausible mark.
+  const due = (await pool.query('SELECT npc_gang, target_gang FROM npc_aggression WHERE next_strike_at <= now() AND ends_at > now()')).rows;
+  for (const ag of due) {
+    const c = await pool.connect();
+    try {
+      await c.query('BEGIN');
+      const live = (await c.query(
+        `SELECT c.id, c.respect FROM gang_members m JOIN characters c ON c.id=m.character_id AND c.alive AND NOT c.is_npc
+           WHERE m.gang_id=$1`, [ag.target_gang])).rows.filter((r) => levelOf(Number(r.respect)) >= A.MIN_LVL);
+      const pending = Number((await c.query('SELECT COUNT(*) n FROM family_aggro WHERE gang_id=$1', [ag.npc_gang])).rows[0].n) > 0;
+      const mark = shuffle(live)[0];
+      if (mark && !pending) {
+        await c.query('INSERT INTO family_aggro (gang_id, target_character, scheduled_at) VALUES ($1,$2,now())', [ag.npc_gang, mark.id]);
+        struck++;
+      }
+      // advance the clock whether or not a mark was found (a family with nobody home this tick tries next).
+      // JS-computed timestamp — pg-mem doesn't do string-interval arithmetic (the file's own convention).
+      await c.query('UPDATE npc_aggression SET next_strike_at=$2 WHERE npc_gang=$1',
+        [ag.npc_gang, new Date(Date.now() + A.STRIKE_EVERY_MS)]);
+      await c.query('COMMIT');
+    } catch (e) { await c.query('ROLLBACK'); console.error('[sweepNpcAggression strike]', ag.npc_gang, e?.message || e); } finally { c.release(); }
+  }
+
+  // ── PASS 3: open new hostilities up to TARGET. Pick an NPC family with no live campaign and a real
+  //    player family (≥ MIN_MEMBERS living non-resident made men) that isn't already under fire and isn't
+  //    inside its post-harassment peace window (gangs.npc_aggro_until). One open per tick keeps it gradual.
+  // flat queries + a JS filter — pg-mem can't run correlated NOT EXISTS/subqueries (the /v1/gangs precedent)
+  const liveAg = (await pool.query('SELECT npc_gang, target_gang FROM npc_aggression WHERE ends_at > now()')).rows;
+  if (liveAg.length < A.TARGET) {
+    const c = await pool.connect();
+    try {
+      await c.query('BEGIN');
+      const busyNpc = new Set(liveAg.map((a) => a.npc_gang));       // NPC families already running a campaign
+      const underFire = new Set(liveAg.map((a) => a.target_gang));  // player families already targeted
+      const allGangs = (await c.query('SELECT id, name, npc_flag, held_by_gang, npc_aggro_until FROM gangs')).rows;
+      const memberN = {};
+      for (const m of (await c.query(
+        'SELECT m.gang_id, COUNT(*) n FROM gang_members m JOIN characters ch ON ch.id=m.character_id AND ch.alive AND NOT ch.is_npc GROUP BY m.gang_id')).rows)
+        memberN[m.gang_id] = Number(m.n);
+      const nowMs = Date.now();
+      // eligible NPC aggressors: npc, not a held vassal, not already running a campaign
+      const aggressors = shuffle(allGangs.filter((g) => g.npc_flag && !g.held_by_gang && !busyNpc.has(g.id)));
+      // eligible targets: real (non-npc) with ≥ MIN_MEMBERS living made men, not under fire, out of the peace window
+      const targets = shuffle(allGangs.filter((g) => !g.npc_flag && !underFire.has(g.id)
+        && (g.npc_aggro_until == null || new Date(g.npc_aggro_until).getTime() <= nowMs)
+        && (memberN[g.id] || 0) >= A.MIN_MEMBERS));
+      const npc = aggressors[0], tgt = targets[0];
+      if (npc && tgt) {
+        const now = Date.now();
+        await c.query('INSERT INTO npc_aggression (npc_gang, target_gang, ends_at, next_strike_at) VALUES ($1,$2,$3,$4)',
+          [npc.id, tgt.id, new Date(now + ms), new Date(now + A.STRIKE_EVERY_MS)]);
+        // the harassed family gets a peace window AFTER this lapses, so it isn't re-targeted back to back
+        await c.query('UPDATE gangs SET npc_aggro_until=$2 WHERE id=$1', [tgt.id, new Date(now + ms + A.COOLDOWN_MS)]);
+        // the family SEES it — every member is told, and the streets carry it (agency: hit them back)
+        for (const mem of (await c.query(
+          `SELECT c.id FROM gang_members m JOIN characters c ON c.id=m.character_id AND c.alive AND NOT c.is_npc WHERE m.gang_id=$1`, [tgt.id])).rows)
+          await notify(c, mem.id, 'npc_aggression', { family: npc.name });
+        bus.emit('streets', { type: 'npc_aggression', family: npc.name, target: tgt.name });
+        opened++;
+      }
+      await c.query('COMMIT');
+    } catch (e) { await c.query('ROLLBACK'); console.error('[sweepNpcAggression open]', e?.message || e); } finally { c.release(); }
+  }
+  return { opened, struck, lapsed };
 }
 
 // THE BLOOD-WAR LEADERBOARD — the most feared family-killers by lifetime loot (agents excluded, the

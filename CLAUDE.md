@@ -9167,3 +9167,31 @@ definition; lowercased); and a stray CJK char in a BALANCE edit. Pins updated in
 SIGN-OFF Part B header now reads ✅ SIGNED with the two applied rows and the alpha WATCH list
 (hired guns at apex cadence; whales-actually-commit). Part A's five unbuilt answers (D1 rate, D11
 confirmation, D13/D14/D15) remain the sheet's open items.
+
+**THE OFFENSIVE — NPC families that DECLARE FIRST (founder-directed 2026-08-06) — BUILT** (`src/npcwar.js`
+`sweepNpcAggression`, `npc_aggression` table + `gangs.npc_aggro_until`, `FAMILY_WAR.AGGRESSION` rules tail,
+`src/worker.js` wiring, `test/npcwar.js`; design `omerta-npc-families-defend-design.md` § step four,
+BALANCE.md § THE OFFENSIVE). The user picked this off the NPC-family-wars follow-up list — the one gap the
+shipped Blood War left: NPC families only ever REACTED (retaliate when raided). Now the low-population world
+MOVES on its own: the worker opens a time-boxed HOSTILITY from an NPC family onto a real player family
+unprompted (up to `TARGET` 2 at once), and while live it enqueues a strike on the `STRIKE_EVERY_MS` (3h)
+cadence — reusing the SHIPPED `family_aggro` → `sweepFamilyAggro` primitive, so every earned shield
+(jailed/hosp/safehouse/witpro/pen/hole + `RETAL_P`) is honoured at resolve and the strike is a 30-min
+hospitalization, never a kill. **§10.4-NEUTRAL by construction** — an open/strike/lapse moves ZERO value and
+adds no reason (the test asserts the whole offensive writes no ledger rows; sim drift-0); it is pure pacing
+over an already-audited primitive, NOT a faucet. **Counterplay is the EXISTING loop** — the family SEES it
+(every member notified + `npc_aggression` on the streets + a `you.underFire` board banner naming who to hit
+back), and ROUTING the outfit (the raid → conquest) ENDS its aggression (a vassal doesn't war its overlord;
+`releaseFamilyHolds` clears it both directions on dissolution too). **Anti-grief:** one campaign per NPC
+family (`npc_aggression` PK), a target can't be piled on by two at once (the picker excludes a live incoming
+aggression — flat queries + a JS filter, the /v1/gangs precedent since pg-mem can't run correlated NOT
+EXISTS), `MIN_MEMBERS` 2 keeps it off solo alts, `MIN_LVL` 5 off fresh rookies, and `COOLDOWN_MS` 24h
+(`gangs.npc_aggro_until`) buys a harassed family peace after one lapses. `NPC_AGGRO_MS` is the test-only
+window override (preflight-classified TEST_ONLY). Console: a 🎯 UNDER FIRE banner on the Blood War tab +
+an `npc_aggression` Live-Feed line. `test/npcwar.js` covers the open (target/notify/peace-window/board/
+not-piled-on), the strike (enqueue + shield miss vs unshielded hit), §10.4-neutrality, the conquest
+counterplay, and the lapse — three mutations each caught by name (strike enqueue disabled; conquest not
+clearing; shields not honoured). Suite 67/67 + sim drift-0 + pgquery + pgcheck 43/43 on real Postgres. All
+`FAMILY_WAR.AGGRESSION.*` numbers are founder sim sign-off levers — §10.4-neutral, so no faucet to
+re-measure, but the `TARGET`/`STRIKE_EVERY_MS`/`MS`-vs-`COOLDOWN_MS` felt cadence wants a watch;
+`TARGET: 0` reverts to react-only.

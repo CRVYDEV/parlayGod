@@ -4908,6 +4908,35 @@ COST and the WIN_SCORE×cooldown campaign length are the pacing dials, and the w
 Sybil-farmable status axis with no payout (the hitman-rep posture — no cash/standing attaches).
 `WAR.MAX_PER_FAMILY: 0` would disable the mechanic. Sim + sign-off before production.
 
+## THE OFFENSIVE — NPC families that DECLARE FIRST (BUILT 2026-08-06, founder-directed)
+
+Design: `omerta-npc-families-defend-design.md` § step four. The Blood War made an NPC family a *defended*
+antagonist; this makes it a *proactive* one so the low-population world moves without a human poking it.
+The worker (`sweepNpcAggression`) opens a time-boxed HOSTILITY from an NPC family onto a real player
+family unprompted, and while live it enqueues a strike on a cadence — the SHIPPED, shield-honouring
+`family_aggro` → `sweepFamilyAggro` primitive (a 30-min hospitalization, never a kill). Counterplay is the
+EXISTING loop (rout the outfit → the conquest ends its aggression); the family sees it (notify + streets +
+a `you.underFire` board banner).
+
+**§10.4-NEUTRAL by construction** — an open, a strike, and a lapse move ZERO value and add no reason (the
+test asserts the whole offensive writes no ledger rows; the sim stays drift-0). Nothing here is a faucet:
+it is pure pacing over an already-audited primitive.
+
+| lever | ships at | what it does |
+|---|---|---|
+| `FAMILY_WAR.AGGRESSION.TARGET` | 2 | NPC families on the warpath at once (worker tops up to this; `0` disables) |
+| `FAMILY_WAR.AGGRESSION.MS` | 12h | how long a hostility runs before it lapses (`NPC_AGGRO_MS` is a TEST-ONLY override) |
+| `FAMILY_WAR.AGGRESSION.STRIKE_EVERY_MS` | 3h | the strike cadence (each a shield-honouring hospitalization roll) |
+| `FAMILY_WAR.AGGRESSION.COOLDOWN_MS` | 24h | a harassed family's peace window (`gangs.npc_aggro_until`) before it can be re-targeted |
+| `FAMILY_WAR.AGGRESSION.MIN_MEMBERS` | 2 | only opens on a REAL family (≥ this many living made men — off solo alts) |
+| `FAMILY_WAR.AGGRESSION.MIN_LVL` | 5 | only strikes a member at/above this level (off fresh rookies) |
+
+**Founder sign-off flag:** all `FAMILY_WAR.AGGRESSION.*` are PROPOSED DEFAULTS. The knobs that decide how
+GRIEFY it feels are `TARGET` (world-wide pressure), `STRIKE_EVERY_MS` (how often you're hit) and the
+`MS`/`COOLDOWN_MS` ratio (harassment vs peace) — a family under fire loses ~one made man to a 30-min
+lay-up every ~3h for up to 12h, then gets ≥24h of quiet. `TARGET: 0` reverts to react-only. §10.4-neutral,
+so no sim faucet to re-measure — but sim/watch the felt cadence before production.
+
 ## THE PORTFOLIO IS RETIRED (D11, founder-directed 2026-08-05)
 
 Not a lever move — a system removal, recorded here because it deletes lever surface. Retired: the

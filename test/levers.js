@@ -588,6 +588,13 @@ const SIGNED = [
   ['FAMILY_WAR.WAR.WIN_SCORE', 5],
   ['FAMILY_WAR.WAR.MAX_PER_FAMILY', 1],
   ['FAMILY_WAR.WAR.WIN_RANKS', [[0, 'No Campaigns'], [1, 'Campaigner'], [5, 'War Chief'], [15, 'Warlord'], [40, 'The Scourge of Families']]],
+  // THE OFFENSIVE (step four) — NPC families that declare first (§10.4-neutral pacing; sim sign-off levers)
+  ['FAMILY_WAR.AGGRESSION.TARGET', 2],
+  ['FAMILY_WAR.AGGRESSION.MS', 43200000],
+  ['FAMILY_WAR.AGGRESSION.STRIKE_EVERY_MS', 10800000],
+  ['FAMILY_WAR.AGGRESSION.COOLDOWN_MS', 86400000],
+  ['FAMILY_WAR.AGGRESSION.MIN_MEMBERS', 2],
+  ['FAMILY_WAR.AGGRESSION.MIN_LVL', 5],
   // THE OPERATION SLOTS (strategy package) — how much of the 31-entry income catalog one player runs
   ['OPERATIONS.SLOTS_BASE', 2],
   ['OPERATIONS.SLOTS_PER_LEVEL', 4],
