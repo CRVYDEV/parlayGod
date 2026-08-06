@@ -4088,6 +4088,21 @@ POPULATION.TURNOVER = {
   PER_DAY: 24,        // residents replaced per day — half the city, ≈$500k/day of npc:seed at the mean
 };
 
+// ── THE POPULATION step four — RESIDENTS FILL THE SCHEDULED FIELDS ──────────────────────────────
+// The crew co-op loops (heists → fillHeist, world raids → hireRaid) already let a solo player hire NPC
+// bodies. The SCHEDULED-FIELD co-op games did not: a solo player who entered the poker tournament waited
+// out the window and got REFUNDED for lack of a field (< MIN_ENTRANTS). Now residents standing at the
+// Neon Mile fill a human-started tournament — a warm body paying its OWN buy-in into the SAME escrow the
+// human path uses (recycle-only; §10.4 untouched, the 'poker tourney escrow' identity holds). REACTIVE
+// ONLY: a resident enters a tournament a HUMAN already materialized and never spins one up itself, so the
+// city never manufactures fake events and /v1/online stays an honest human count. A retired/killed
+// resident's entry auto-burns as casino:tourney:death at resolve (the LEFT-JOIN dead path), so no escrow
+// cleanup is needed on retirement. Bounded so a solo human always gets a playable field but residents
+// don't flood it. Founder sign-off lever.
+POPULATION.EVENTS = {
+  TOURNEY_FIELD: 6,   // residents fill an open tournament up to this many entrants (PAYOUTS is 3 places)
+};
+
 // ── TOKENOMICS v2 (founder-directed 2026-07-27) ──────────────────────────────────────────────────
 // The thesis: cash → OMR is severed, so in-game cash inflation stops being a token-price decision.
 // Design: omerta-tokenomics-v2-design.md. Every number here is a founder sign-off lever.

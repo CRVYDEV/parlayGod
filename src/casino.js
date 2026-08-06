@@ -8,7 +8,7 @@
 // round in one call); the Numbers is a daily ticket resolved lazily against the seed-drawn number.
 import crypto from 'node:crypto';
 import { GameError, bus, npcTier, bumpStanding, bumpMastery, masteryFx, ledger, notify, rngLog } from './game.js';
-import { CASINO, UNDERWORLD, MASTERY, numbersDrawOf, dayOf, weekOf, levelOf, hash01, MARKET_SEED, ACCESS_STAKE , jailed, hospitalized } from './rules.js';
+import { CASINO, UNDERWORLD, MASTERY, POPULATION, numbersDrawOf, dayOf, weekOf, levelOf, hash01, MARKET_SEED, ACCESS_STAKE , jailed, hospitalized } from './rules.js';
 
 const d6 = () => 1 + Math.floor(Math.random() * 6);
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1)); // inclusive (the stable.js form-roll)
@@ -1042,6 +1042,37 @@ export async function enterTournament(ch, client, h, opts = {}) {
   return { ok: true, game: 'tourney', tournament: t.id, buyin, pool: Number(t.pool) + buyin, entrants,
     format: t.format || 'showdown',
     closesSeconds: Math.max(0, Math.ceil((new Date(t.resolves_at) - Date.now()) / 1000)) };
+}
+
+// NPC RESIDENTS FILL A HUMAN-STARTED TOURNAMENT (THE POPULATION step four — the fillHeist/hireRaid twin
+// for the scheduled fields). A resident is a warm body paying its OWN buy-in into the SAME escrow the
+// human path uses (recycle-only — never conjured, so §10.4 holds and the 'poker tourney escrow' identity
+// is untouched); the worker deals it an independent 7-card hand like everyone else, so no AI is needed.
+// REACTIVE ONLY: it enters an ALREADY-OPEN tournament a human materialized (st.current set) and NEVER
+// creates one, so the city never spins up fake events among itself and /v1/online stays an honest human
+// count. Bounded by TOURNEY_FIELD so a solo human always gets a playable field but residents don't flood
+// it. No bumpStanding / track / streets-emit (residents emit nothing to the wire — the population rule).
+// A retired/killed resident's entry auto-burns as casino:tourney:death at resolve (the LEFT-JOIN dead
+// path in resolveTournament), and retireResident burns only the resident's REMAINING cash (the buy-in
+// already left into the pool) — so §10.4 stays exact with NO change to retireResident. LOCK ORDER: the
+// resident char row is already held FOR UPDATE by runResidentBehaviour → poker_state → tournament, so
+// char-before-poker_state matches resolveTournament (entrant chars sorted → poker_state) — acyclic.
+export async function residentEnterTournament(client, r) {
+  if (r.loc !== CASINO.DISTRICT) return null;            // must be at the Neon Mile, like a human
+  const buyin = CASINO.TOURNEY.BUYIN;
+  if (Number(r.cash) < buyin) return null;
+  const st = (await client.query('SELECT current FROM poker_state WHERE id=1 FOR UPDATE')).rows[0];
+  if (!st?.current) return null;                         // REACTIVE: only a tournament a human already opened
+  const t = (await client.query("SELECT id, resolves_at FROM poker_tournaments WHERE id=$1 AND status='open' FOR UPDATE", [st.current])).rows[0];
+  if (!t || new Date(t.resolves_at) <= new Date()) return null; // gone / closed → about to run
+  const entrants = Number((await client.query('SELECT COUNT(*) n FROM poker_entries WHERE tournament_id=$1', [t.id])).rows[0].n);
+  if (entrants >= POPULATION.EVENTS.TOURNEY_FIELD) return null;  // field is full — leave room for humans
+  if ((await client.query('SELECT 1 FROM poker_entries WHERE tournament_id=$1 AND character_id=$2', [t.id, r.id])).rows[0]) return null;
+  await client.query('UPDATE characters SET cash = cash - $2 WHERE id=$1', [r.id, buyin]);
+  await client.query('INSERT INTO poker_entries (tournament_id, character_id, buyin) VALUES ($1,$2,$3)', [t.id, r.id, buyin]);
+  await client.query('UPDATE poker_tournaments SET pool = pool + $2 WHERE id=$1', [t.id, buyin]);
+  await ledger(client, { characterId: r.id, currency: 'cash', amount: -buyin, reason: 'casino:tourney:buyin', counterparty: t.id });
+  return 'joined_tourney';
 }
 
 // Worker settle: deal every LIVE entrant an independent 7-card hand, rank them, pay the top places a

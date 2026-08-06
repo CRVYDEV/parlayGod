@@ -9251,3 +9251,34 @@ analytically every run — per-build deltas (fresh −4.9% / mid +0.0% / maxed +
 BALANCE table) + the cash-weighted base-wide (+10.4%) — so any later change to `CRIME_STAT`, the crime
 catalog, or the approach mults re-measures the faucet (the den/kill-EV tracking precedent; no value seeded,
 sim drift-0). No code retune — the resolution is the sign-off + the standing measurement.
+
+**RESIDENTS FILL THE POKER TOURNAMENT — THE POPULATION step four (founder-directed "build the NPC co-op
+fill", 2026-08-06)** (`src/casino.js` `residentEnterTournament`, `src/population.js` `residentAct`,
+`POPULATION.EVENTS.TOURNEY_FIELD` rules tail, `test/population.js`; BALANCE.md § RESIDENTS FILL THE POKER
+TOURNAMENT). The ask was "NPC fill for dead co-op content" — and the honest finding is that the CREW co-op
+loops it named were **already built and surfaced**: a solo player can hire NPC hands into crew heists
+(`fillHeist` → the `🤝 hire a hand` button) and world raids (`hireRaid` → `hire a gun`) since those drops;
+the CLAUDE.md note calling them deferred was stale. The GENUINELY dead co-op is the **scheduled-field
+games** — a solo player who entered the poker tournament waited out the window and got REFUNDED for lack of
+a field (< `TOURNEY.MIN_ENTRANTS` 2). Now residents at the Neon Mile fill a human-started tournament — a
+warm body paying its OWN buy-in into the SAME escrow the human path uses (`residentEnterTournament` reuses
+casino.js's `ledger` + the exact entry INSERTs — one core, not a parallel copy), and the worker deals it an
+independent 7-card hand like everyone else, so **no AI is needed**. **§10.4-untouched by construction** —
+the buy-in is the resident's own cash (recycle-only), so the `poker tourney escrow` identity holds; the
+sharp case is a resident that RETIRES mid-tournament, and it needs NO `retireResident` change because the
+resolver LEFT-JOINs `characters` so a gone entrant's buy-in auto-burns as `casino:tourney:death` (reducing
+the pool) while `retireResident` burns only the resident's REMAINING cash (the buy-in already left the
+pool) — total conserved, drift-0. **REACTIVE ONLY**: a resident enters a tournament a HUMAN already
+materialized (`poker_state.current` set) and NEVER spins one up itself, so the city never manufactures fake
+events and `/v1/online` stays an honest human count; no `bumpStanding`/`track`/streets-emit (residents emit
+nothing to the wire). Lock order is the resolver's twin — the resident char is already held FOR UPDATE by
+`runResidentBehaviour` → `poker_state` → tournament (char-before-poker_state, acyclic vs the resolver's
+entrant-chars-sorted → poker_state). `test/population.js` proves the reactive gate (a resident opens
+nothing), the fill (field of 1 → 2, pool grows by exactly one buy-in, the escrow identity unchanged, the
+buy-in ledgered `casino:tourney:buyin`), the worker settling the mixed field (not refunded), and the
+retirement-safety case — mutation-verified (drop the pool bump → the escrow assertion fails by name). Guards
+green: suite (incl. population step four), sim drift-0, pgquery (new SQL parses on real Postgres), pgcheck
+43/43, levers 606 pinned. `POPULATION.EVENTS.TOURNEY_FIELD` (6) is a founder sign-off lever (no faucet — a
+redistribution; `0` reverts to human-only). Deferred (the same proven pattern): the Grand Prix, The Stakes,
+and the Futurity — each a worker-resolved escrow field with a short-field refund, and residents own cars/
+racers since Street War step three, so the resident-entrant helper extends to them.

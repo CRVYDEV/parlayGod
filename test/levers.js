@@ -410,6 +410,7 @@ const SIGNED = [
   ['POPULATION.SPAWN_PER_TICK', 4],
   ['POPULATION.TARGET', 48],
   ['POPULATION.TURNOVER.PER_DAY', 24],
+  ['POPULATION.EVENTS.TOURNEY_FIELD', 6],
   // NPC FAMILIES — the "Nobody survives alone" rung is uncompletable solo without somewhere to
   // join. §10.4-free by construction (a resident founder pays the SIGNED gang:found sink out of
   // its own seed cash), and deliberately powerless: excluded from the Commission and the family
