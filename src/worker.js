@@ -9,7 +9,7 @@
 import crypto from 'node:crypto';
 import { makeDb } from './db.js';
 import { pingDb, archiverHealth } from './dbhealth.js';
-import { levelOf, dayOf, CONSTANTS, DUELS, COMMISSION, POPULATION, FAMILY_YIELD } from './rules.js';
+import { levelOf, dayOf, CONSTANTS, DUELS, COMMISSION, POPULATION, FAMILY_YIELD, recapTitleOf } from './rules.js';
 import { recordReckoning } from './season.js';
 import { runLedgerInvariants, alertDrift } from './invariants.js';
 import { runVigInvariants } from './vig.js';
@@ -36,6 +36,7 @@ import { sweepSecrets } from './secrets.js';
 import { sweepRivals } from './rivals.js';
 import { generateContactCalls, sweepCalls } from './contacts.js';
 import { sweepFavors } from './favors.js';
+import { sweepCrewInvites } from './crew.js';
 import { spawnNpcConvoys, despawnArrivedNpc, sweepConvoyHauls } from './convoy.js';
 import { runPopulation, runResidentBehaviour } from './population.js';
 import { sweepLaw } from './law.js';
@@ -157,7 +158,15 @@ export async function runSeasonRollover(pool, opts = {}) {
       await client.query('BEGIN');
       const ch = (await client.query('SELECT * FROM characters WHERE id=$1 AND alive FOR UPDATE', [id])).rows[0];
       if (!ch || ch.season >= current) { await client.query('ROLLBACK'); continue; }
-      const legacy = Math.floor(levelOf(Number(ch.respect)) / 2);
+      const seasonLevel = levelOf(Number(ch.respect));
+      const legacy = Math.floor(seasonLevel / 2);
+      // THE SEASON RECAP — the individual's "your season" keepsake, captured BEFORE the reset zeroes
+      // respect/season_kills. Account-keyed (survives death), idempotent on the PK. Pure status, no
+      // §10.4. Records the just-CLOSED season (current − 1), matching the reckoning.
+      await client.query(
+        `INSERT INTO season_recaps (account_id, season, level, kills, prestige_gained, title)
+         VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (account_id, season) DO NOTHING`,
+        [ch.account_id, current - 1, seasonLevel, Number(ch.season_kills || 0), legacy, recapTitleOf(seasonLevel)]);
       // THE DUELING BELT: crown the season champion into their lifetime titles BEFORE the elo reset
       if (id === champId) {
         await client.query('UPDATE account_persistent SET duel_titles = duel_titles + 1 WHERE account_id=$1', [ch.account_id]);
@@ -320,6 +329,8 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     if (ct?.resolved > 0) console.log(`🏙  turf: resolved ${ct.resolved} contest(s), ${ct.seized} district(s) changed hands`);
     const fv = await safe('favor sweep', () => sweepFavors(pool));
     if (fv?.refunded > 0) console.log(`🤝 favors: ${fv.refunded} expired, escrow refunded to the posters`);
+    const cw = await safe('crew invite sweep', () => sweepCrewInvites(pool));
+    if (cw?.swept > 0) console.log(`👥 crew: swept ${cw.swept} stale invite(s)`);
     const hs = await safe('heist sweep', () => sweepStaleHeists(pool));
     if (hs?.swept > 0) console.log(`🗺  heists: swept ${hs.swept} stale plan(s), stakes refunded to living leaders`);
     // THE PEN co-op breakout: stale break plans abandoned, a living leader's staked cutkit refunded

@@ -52,6 +52,20 @@ export async function seasonBoard(pool, limit = 12) {
   };
 }
 
+// ── THE SEASON RECAP (per-account) ──────────────────────────────────────────────────────────────
+// GET /v1/season/recap (authed). The individual's "your season" keepsake — one row per closed season,
+// account-keyed so it survives death (the heir keeps the bloodline's seasons). Pure status.
+export async function seasonRecaps(pool, accountId, limit = 8) {
+  const rows = (await pool.query(
+    'SELECT season, level, kills, prestige_gained, title, at FROM season_recaps WHERE account_id=$1 ORDER BY season DESC LIMIT $2',
+    [accountId, limit])).rows;
+  return {
+    season: seasonIdxOf(),
+    recaps: rows.map((r) => ({ season: r.season, level: r.level, kills: r.kills,
+      prestigeGained: r.prestige_gained, title: r.title, at: r.at })),
+  };
+}
+
 // ── THE RECKONING ─────────────────────────────────────────────────────────────────────────────
 // Called from runSeasonRollover for the season that just CLOSED (current − 1). Writes one row and
 // crowns the champion's bloodline. Idempotent by the season PK: a second tick, a crash mid-rollover

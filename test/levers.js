@@ -476,6 +476,11 @@ const SIGNED = [
   ['FAVOR.MAX_QTY', 20],
   ['FAVOR.TTL_MS', 24 * 3600 * 1000],
   ['FAVOR.TAKE_BPS', 200],
+  // THE CREW (omerta-crew-design.md) — pure scope/pacing, no faucet
+  ['CREW.MAX_MEMBERS', 4],
+  ['CREW.MIN_LEVEL', 3],
+  ['CREW.NAME_MAX', 24],
+  ['CREW.INVITE_TTL_MS', 72 * 3600 * 1000],
   ['POPULATION.MARKS.CAR_P', { made: 0.6, capo: 0.8, boss: 0.9 }],
   ['POPULATION.MARKS.CAR_VAL', { made: [800, 2000], capo: [2000, 8000], boss: [5000, 20000] }],
   ['POPULATION.MARKS.FRONT_P', { made: 0.4, capo: 0.6, boss: 0.8 }],

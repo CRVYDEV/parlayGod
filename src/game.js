@@ -292,6 +292,11 @@ export async function loadOwned(client, ch) {
   const cars = await client.query('SELECT * FROM cars WHERE character_id=$1 ORDER BY created_at', [ch.id]);
   const batch = await client.query('SELECT * FROM batches WHERE character_id=$1', [ch.id]);
   const gangId = gm.rows[0]?.gang_id || null;
+  // THE CREW — the lightweight social tie (account-keyed, so read by account not character). One
+  // indexed lookup; its only consumer is the crew non-aggression gate in combat (h.owned.crewId /
+  // h.victimOwned.crewId) + the board. Loaded here so victimOwned carries it wherever a PvP verb
+  // already reads victimOwned for family omertà.
+  const crewId = (await client.query('SELECT crew_id FROM crew_members WHERE account_id=$1', [ch.account_id])).rows[0]?.crew_id || null;
   let gang = null, held = [];
   if (gangId) {
     gang = (await client.query('SELECT * FROM gangs WHERE id=$1', [gangId])).rows[0] || null;
@@ -327,6 +332,7 @@ export async function loadOwned(client, ch) {
     cargo: cargoMap(cargo.rows), items: itemMap(items.rows),
     gear: idList(gear.rows, 'gear_id'), guns: idList(guns.rows, 'gun_id'),
     gangId, gangRole: gm.rows[0]?.role || null, gangJoinedAt: gm.rows[0]?.joined_at || null, gang, held,
+    crewId,   // THE CREW — the non-aggression gate reads this off owned/victimOwned (combat.js)
     makings: Object.fromEntries(mk.rows.map((r) => [r.drug_id, Number(r.qty)])),
     stash: st.rows.map((r) => ({ drug_id: r.drug_id, qty: Number(r.qty), quality: Number(r.quality) })),
     batch: batch.rows[0] || null,
