@@ -4690,6 +4690,16 @@ export const recapTitleOf = (level) => {
   return t;
 };
 
+// ═══ THE ROLODEX ═══ (player discovery — the front door the social layer lacked; §10.4-free)
+// A new/mid player has no way to FIND peers to crew with: invites are by exact name, the streets
+// roster is the top-100 whales, contacts are earned. This surfaces humans near your level + a
+// "looking for a crew" flag so THE CREW is reachable by strangers. Pure pacing/scope — no faucet.
+export const DISCOVERY = {
+  BAND: 10,                          // ± levels: a fresh player sees PEERS, not the whales the streets roster shows
+  LIMIT: 24,                         // rows per list
+  LFG_TTL_MS: 7 * 24 * 3600 * 1000,  // a "looking for a crew" flag older than a week is stale — dropped from the recruit list
+};
+
 // ═══ THE RARITY NFTs (economy v3 step 7) ═══
 // Design §7 + §9.7. Cars and boats carry a rarity, and an owned one can be EXTRACTED on-chain as a
 // tradeable ERC-1155 through the EXISTING GearVault rail. Two rules from the design are load-bearing

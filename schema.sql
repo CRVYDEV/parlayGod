@@ -2737,3 +2737,11 @@ CREATE TABLE IF NOT EXISTS crew_targets (
   set_by TEXT NOT NULL,             -- the leader account who called it
   at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- THE ROLODEX (discovery) — "looking for a crew" is a character flag: a boolean + a freshness stamp,
+-- written by direct SQL (outside persistCharacter's positional UPDATE — the active_at pattern). Dies
+-- with the street; a fresh heir isn't looking until they say so. No new table — discovery is READS
+-- over characters + a toggle, §10.4-free.
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS lfg BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS lfg_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS ix_characters_lfg ON characters (lfg) WHERE lfg;
