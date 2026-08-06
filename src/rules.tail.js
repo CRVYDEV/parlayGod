@@ -3322,6 +3322,16 @@ export const DIPLOMACY = {
   COALITION_MIN: 2,                 // the teeth switch on at 2+ member families
   COALITION_WAR_MULT: 0.5,          // members' war chest vs the target (discounted number ledgered)
   COALITION_SEIZE_MULT: 0.85,       // members' garrison outbid vs the target's districts
+  // NPC-FAMILY DIPLOMACY (2026-08-06) — the diplomacy board stops being all-human. A player can sue an
+  // NPC family for PEACE (propose a pact through the existing route); the worker signs the NPC's side and
+  // signing ENDS its live OFFENSIVE on you (making peace stops the guns). While the pact stands the
+  // OFFENSIVE won't target you AND you can't raid them (the existing `pact` touchpoint) — break it (the
+  // oathbreak) to resume the war. §10.4-NEUTRAL: a pact is a status row, the peace is pure pacing. Plus
+  // FLAVOR: the worker maintains a few NPC↔NPC alliances (pure status, surfaced on the war board) so the
+  // landscape isn't all-human. All sign-off levers.
+  NPC: {
+    ALLY_TARGET: 2,                 // live NPC↔NPC alliances the worker maintains (flavor — war-board only)
+  },
 }
 
 export const SOV = {

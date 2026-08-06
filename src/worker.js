@@ -30,7 +30,7 @@ import { sweepFamilyAggro, sweepNpcWars, sweepNpcAggression } from './npcwar.js'
 import { sweepWire, sweepWireAlerts, sweepStandingWatches } from './wire.js';
 import { reclaimExpiredVouchers, assertChainId, bondOracleHealth } from './chain.js';
 import { sweepMarket } from './market.js';
-import { sweepDiplomacy } from './diplomacy.js';
+import { sweepDiplomacy, sweepNpcDiplomacy } from './diplomacy.js';
 import { settleProposals, activeDecree, seatedGangs } from './commission.js';
 import { sweepSecrets } from './secrets.js';
 import { sweepRivals } from './rivals.js';
@@ -300,6 +300,10 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     await safe('social claims sweep', () => sweepSocialClaims(pool)); // drop spent Spread-the-Word rows (housekeeping)
     // FIVE PILLARS #2: lapsed coalitions dissolve (reads filter on expires_at — row hygiene)
     await safe('diplomacy sweep', () => sweepDiplomacy(pool));
+    // NPC-FAMILY DIPLOMACY: NPC families accept a player's peace offer (ending their OFFENSIVE) + form
+    // alliances among themselves (flavor). §10.4-neutral — status rows only.
+    const nd = await safe('npc diplomacy', () => sweepNpcDiplomacy(pool));
+    if (nd && (nd.signed > 0 || nd.allied > 0)) console.log(`🕊️ npc diplomacy: signed ${nd.signed} peace, ${nd.allied} alliance(s)`);
     await safe('secrets sweep', () => sweepSecrets(pool)); // unpaid demands blow at the deadline; stale dirt reaped
     await safe('rivals sweep', () => sweepRivals(pool)); // grudges older than RETENTION_D fade off the ledger
     // THE CALL (STREET LIFE): NPC contacts ring the players who know them with paid requests —

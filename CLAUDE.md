@@ -9195,3 +9195,30 @@ clearing; shields not honoured). Suite 67/67 + sim drift-0 + pgquery + pgcheck 4
 `FAMILY_WAR.AGGRESSION.*` numbers are founder sim sign-off levers — §10.4-neutral, so no faucet to
 re-measure, but the `TARGET`/`STRIKE_EVERY_MS`/`MS`-vs-`COOLDOWN_MS` felt cadence wants a watch;
 `TARGET: 0` reverts to react-only.
+
+**NPC-FAMILY DIPLOMACY — sue for peace + NPC alliances (founder-directed 2026-08-06) — BUILT**
+(`src/diplomacy.js` `sweepNpcDiplomacy`/`npcAlliesOf`, `src/npcwar.js` (the `pactBetween` raid gate + the
+OFFENSIVE picker pact-exclusion + `warBoard` pact/allies), `DIPLOMACY.NPC.ALLY_TARGET` rules tail,
+`src/worker.js` wiring, `public/index.html`, `test/npcwar.js`; design `omerta-npc-families-defend-design.md`
+§ step five, BALANCE.md § NPC-FAMILY DIPLOMACY). The follow-up to THE OFFENSIVE — the diplomacy board stops
+being all-human. **(1) PEACE (player↔NPC):** a boss/underboss sues an NPC family for peace through the
+EXISTING pact route (`POST /v1/diplomacy/pact/:gangId`); the worker `sweepNpcDiplomacy` PASS 1 signs the
+NPC's side, and **signing ENDS that outfit's live OFFENSIVE on you** (making peace stops the guns — the
+counterplay-to-war made concrete). While the pact stands the OFFENSIVE picker skips the pair AND
+`raidFamily` throws `pact` (the declareWar touchpoint extended to the raid loop — an inline `pactBetween`
+read dodges the diplomacy import, the canCommand precedent); break it (the oathbreak — a family honor cost)
+to resume the war. **(2) NPC↔NPC ALLIANCES (flavor):** PASS 2 maintains up to `DIPLOMACY.NPC.ALLY_TARGET`
+(2) alliances between NPC families, surfaced on the war board (`allies`) so the landscape isn't all-human —
+PURE STATUS, no gameplay effect (a future deepening could make an ally join the OFFENSIVE). **§10.4-NEUTRAL
+by construction** — a pact is a status row over the audited `gang_relations` table + the `pact` touchpoint;
+peace/alliances move ZERO value and add no reason (the test asserts the whole layer writes no ledger rows;
+sim drift-0). Flat queries + JS (pg-mem can't run correlated subqueries — the /v1/gangs precedent). Console:
+a "sue for peace" / "break the peace" control + a ☮ peace chip + a 🤝 allies line on each Blood War card,
+and `npc_pact_signed`/`npc_alliance` feed lines. `test/npcwar.js` covers the sign (+ OFFENSIVE cleared +
+board surface), the raid pact-gate, the alliance flavor + board, the picker exclusion (pacted pair stays
+quiet, reopens once peace is gone), and §10.4-neutrality — three interlock mutations each caught by name
+(raid gate; picker exclusion; signing clears the OFFENSIVE). Suite 67/67 + sim drift-0 + pgquery + pgcheck
+43/43 on real Postgres. `DIPLOMACY.NPC.ALLY_TARGET` is a founder sign-off lever (cosmetic; the peace reuses
+`DIPLOMACY.PACT_MS`). The NPC-families antagonist arc is now feature-complete: join → defend → legend/
+manhunt/conquest → the formal war → THE OFFENSIVE (they declare first) → diplomacy (sue for peace / NPC
+alliances).

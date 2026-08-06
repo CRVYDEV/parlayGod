@@ -336,9 +336,67 @@ off = await sweepNpcAggression(pool);
 assert.equal(off.lapsed, 1, 'the expired hostility lapsed');
 await pool.query('DELETE FROM npc_aggression');
 
+// ══════════════════ NPC-FAMILY DIPLOMACY — sue for peace + NPC alliances (2026-08-06) ══════════════════
+// A player can sue an NPC family for PEACE (the existing pact route); the worker signs the NPC's side,
+// signing ENDS its live OFFENSIVE on you, and while the pact stands the OFFENSIVE won't target you AND you
+// can't raid them. §10.4-NEUTRAL (a pact is a status row). Plus NPC↔NPC alliance flavor on the board.
+const { sweepNpcDiplomacy } = await import('../src/diplomacy.js');
+// a fresh unheld NPC family to sue for peace (the founding is SETUP — the §10.4 snapshot is taken after it)
+const pfounder = await mk('Don Peace'); await seedCh(pfounder.id, 'cash=100000, respect=5760');
+const pfg = await call('POST', '/v1/gangs', { token: pfounder.token, body: { name: 'The Peaceables', tag: 'PAX' } });
+assert.equal(pfg.code, 200, `founded the peace NPC family (${JSON.stringify(pfg.body)})`);
+const peaceNpc = (await pool.query(`SELECT gang_id FROM gang_members WHERE character_id='${pfounder.id}'`)).rows[0].gang_id;
+await pool.query(`UPDATE gangs SET npc_flag=true, war_pool=${FAMILY_WAR.POOL_MAX}, war_pool_at=now(), held_by_gang=NULL WHERE id='${peaceNpc}'`);
+const dipTxPre = Number((await pool.query('SELECT COUNT(*) n FROM transactions')).rows[0].n);
+
+// capo (boss of The Targets) sues the outfit for peace → a pending offer
+const prop = await call('POST', `/v1/diplomacy/pact/${peaceNpc}`, { token: capo.token });
+assert.equal(prop.code, 200, `sued for peace (${JSON.stringify(prop.body)})`);
+assert(prop.body.pending, 'the offer is on the table');
+// seed a live hostility from that outfit onto the family — signing peace must END it
+await pool.query(`INSERT INTO npc_aggression (npc_gang, target_gang, ends_at, next_strike_at) VALUES ('${peaceNpc}','${targetGid}', now() + interval '1 hour', now() + interval '1 hour')`);
+const nd = await sweepNpcDiplomacy(pool);
+assert(nd.signed >= 1, `the outfit came to the table and signed (${JSON.stringify(nd)})`);
+const pactRow = (await pool.query(`SELECT accepted, until FROM gang_relations WHERE kind='pact' AND ((gang_a='${targetGid}' AND gang_b='${peaceNpc}') OR (gang_a='${peaceNpc}' AND gang_b='${targetGid}'))`)).rows[0];
+assert(pactRow && pactRow.accepted && new Date(pactRow.until) > new Date(), 'the peace pact is sworn');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM npc_aggression WHERE npc_gang='${peaceNpc}' AND target_gang='${targetGid}'`)).rows[0].n), 0, 'making peace ended their live hostility');
+// the board surfaces the peace on the harassed family's side
+const capoBw = (await call('GET', '/v1/npcfamily', { token: capo.token })).body;
+const peaceFam = capoBw.families.find((f) => f.id === peaceNpc);
+assert(peaceFam && peaceFam.pact && peaceFam.pact.active, 'the war board shows the family at peace');
+
+// THE RAID GATE — you can't raid an outfit you've sworn peace with
+await seedCh(capo.id, 'energy=100, ammo=100, family_raid_at=NULL, hosp_until=NULL, jail_until=NULL, safe_until=NULL');
+assert.equal((await call('POST', `/v1/npcfamily/${peaceNpc}/raid`, { token: capo.token })).body.error, 'pact', 'a sworn peace blocks the raid — break it first');
+
+// NPC↔NPC ALLIANCES — the worker forms them among NPC families (flavor, pure status)
+for (let i = 0; i < 4; i++) await sweepNpcDiplomacy(pool);
+const npcIdRows = (await pool.query('SELECT id FROM gangs WHERE npc_flag')).rows.map((r) => `'${r.id}'`).join(',');
+const alliances = Number((await pool.query(`SELECT COUNT(*) n FROM gang_relations WHERE kind='pact' AND accepted AND until > now() AND gang_a IN (${npcIdRows}) AND gang_b IN (${npcIdRows})`)).rows[0].n);
+assert(alliances >= 1, 'the NPC families have formed at least one alliance among themselves');
+const anyAllied = (await call('GET', '/v1/npcfamily', { token: capo.token })).body.families.some((f) => (f.allies || []).length > 0);
+assert(anyAllied, 'the war board surfaces an NPC family\'s allies — the landscape is not all-human');
+
+// THE PICKER EXCLUSION — a pact severs the pair, so the OFFENSIVE won't open on a family at peace. Make
+// peaceNpc the only eligible aggressor and targetGid the only ≥2-member target: with the pact, no pair.
+await pool.query(`UPDATE gangs SET held_by_gang='${wolfGang}' WHERE npc_flag AND id != '${peaceNpc}'`);
+await pool.query('DELETE FROM npc_aggression');
+await pool.query(`UPDATE gangs SET npc_aggro_until=NULL WHERE id='${targetGid}'`);
+assert.equal((await sweepNpcAggression(pool)).opened, 0, 'a sworn peace keeps the OFFENSIVE off the pair');
+// tear the pact down directly → the only pair is open again
+await pool.query(`DELETE FROM gang_relations WHERE (gang_a='${targetGid}' AND gang_b='${peaceNpc}') OR (gang_a='${peaceNpc}' AND gang_b='${targetGid}')`);
+await pool.query(`UPDATE gangs SET npc_aggro_until=NULL WHERE id='${targetGid}'`);
+const reopened = await sweepNpcAggression(pool);
+assert.equal(reopened.opened, 1, 'with the peace gone the outfit opens hostilities again');
+assert.equal((await pool.query(`SELECT target_gang FROM npc_aggression WHERE npc_gang='${peaceNpc}'`)).rows[0].target_gang, targetGid, 'and it targets the family it was at peace with');
+await pool.query('DELETE FROM npc_aggression');
+
+// §10.4-NEUTRAL: the whole diplomacy layer moved ZERO value
+assert.equal(Number((await pool.query('SELECT COUNT(*) n FROM transactions')).rows[0].n), dipTxPre, 'NPC diplomacy wrote no ledger rows');
+
 // ── §10.4: the vocabulary knows family:raid (cash faucet + ammo sink) ──
 const vocab = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `family:raid rides the 'family' prefix (${JSON.stringify(vocab.unknown || [])})`);
 
-console.log('✅ THE BLOOD WAR test passed — the board (strength/defense/loot, player family excluded), a landed raid (bounded family:raid loot + legend + pool drain + ammo sink + cooldown), THE SEVERANCE (no season_wars → no Commission seat), the interlock (a beaten family reads weaker), THE DEFENCE (a counter hospitalizes the raider), THE MANHUNT (an escaped raider is hunted down later, shield-honouring, one-shot), a repel (hospitalized, pool untouched), THE CONQUEST (routing claims the family as a vassal → bounded family:tribute to the treasury, gang-treasuries reconciled, the conquest board), the gates (level/own_family/cooldown/bad_target), the leaderboard, THE FAMILY WAR (formal: the rank gate, the gang:war war-chest sink with NO season_wars, one campaign per family, the board decoration, scoring WIN_SCORE raids to WIN a status trophy for the declarer, the war-chief leaderboard, the worker lapse of an expired campaign, and the gang-treasuries reconcile), THE OFFENSIVE (step four: an NPC family opens hostilities on a real player family unprompted → members notified + a peace/cooldown window + the board surfaces who to hit back, not piled on by a second, a due strike enqueues a shield-honouring family_aggro hit — a safe-housed mark is a clean miss, an unshielded one is hospitalized — §10.4-NEUTRAL (zero ledger rows), counterplay: routing the outfit ends its aggression, and an expired hostility lapses), and §10.4 (family: vocabulary closed)');
+console.log('✅ THE BLOOD WAR test passed — the board (strength/defense/loot, player family excluded), a landed raid (bounded family:raid loot + legend + pool drain + ammo sink + cooldown), THE SEVERANCE (no season_wars → no Commission seat), the interlock (a beaten family reads weaker), THE DEFENCE (a counter hospitalizes the raider), THE MANHUNT (an escaped raider is hunted down later, shield-honouring, one-shot), a repel (hospitalized, pool untouched), THE CONQUEST (routing claims the family as a vassal → bounded family:tribute to the treasury, gang-treasuries reconciled, the conquest board), the gates (level/own_family/cooldown/bad_target), the leaderboard, THE FAMILY WAR (formal: the rank gate, the gang:war war-chest sink with NO season_wars, one campaign per family, the board decoration, scoring WIN_SCORE raids to WIN a status trophy for the declarer, the war-chief leaderboard, the worker lapse of an expired campaign, and the gang-treasuries reconcile), THE OFFENSIVE (step four: an NPC family opens hostilities on a real player family unprompted → members notified + a peace/cooldown window + the board surfaces who to hit back, not piled on by a second, a due strike enqueues a shield-honouring family_aggro hit — a safe-housed mark is a clean miss, an unshielded one is hospitalized — §10.4-NEUTRAL (zero ledger rows), counterplay: routing the outfit ends its aggression, and an expired hostility lapses), NPC-FAMILY DIPLOMACY (sue an NPC family for peace → the worker signs it, signing ENDS its live OFFENSIVE, the board shows the peace, the raid is blocked by the pact, NPC↔NPC alliances form + surface on the board, the picker keeps the OFFENSIVE off a pacted pair and reopens once the peace is gone — all §10.4-neutral), and §10.4 (family: vocabulary closed)');
 await app.close();

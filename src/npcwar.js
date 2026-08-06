@@ -18,6 +18,14 @@ import { GameError, bus, notify } from './game.js';
 import { FAMILY_WAR, familyWarRankOf, familyWarWinRankOf, levelOf, jailed, hospitalized, safeHoused, witproActive, penSafe, inHole } from './rules.js';
 
 const cooling = (ch) => ch.family_raid_at && new Date(ch.family_raid_at) > new Date();
+// an ACTIVE peace pact between two families (inline read — a local one-liner dodges the diplomacy.js
+// import so there's no cycle risk, the canCommand precedent; the pactActive shape verbatim). §10.4-none.
+const pactBetween = async (client, a, b) => {
+  if (!a || !b) return false;
+  const [x, y] = [a, b].sort();
+  const r = (await client.query("SELECT accepted, until FROM gang_relations WHERE gang_a=$1 AND gang_b=$2 AND kind='pact'", [x, y])).rows[0];
+  return !!(r && r.accepted && r.until && new Date(r.until) > new Date());
+};
 // boss/underboss gate (the world/sov/territory convention — gangs.js imports THIS module, so a local
 // one-liner avoids the import cycle rather than reaching into social/gangs.js).
 const canCommand = (h) => h.owned.gangRole === 'boss' || h.owned.gangRole === 'underboss';
@@ -59,6 +67,20 @@ export async function warBoard(db, ch = null) {
   if (myGang) for (const w of (await db.query(
     'SELECT npc_gang, score, ends_at FROM npc_wars WHERE attacker_gang=$1 AND NOT resolved AND ends_at > now()', [myGang])).rows)
     wars[w.npc_gang] = w;
+  // NPC-FAMILY DIPLOMACY: your peace pact with each NPC family + each family's NPC↔NPC alliances (a flat
+  // read of gang_relations — the /v1/gangs precedent; pure status). A pact you hold buys peace from the
+  // OFFENSIVE and blocks your own raid; the alliances just decorate the landscape so it isn't all-human.
+  const nameOf = {}; for (const r of rows) nameOf[r.id] = { name: r.name, tag: r.tag };
+  const myPact = {}, allies = {};
+  for (const rel of (await db.query("SELECT gang_a, gang_b, proposed_by, accepted, until FROM gang_relations WHERE kind='pact'")).rows) {
+    const isActive = rel.accepted && rel.until && new Date(rel.until) > now;
+    if (nameOf[rel.gang_a] && nameOf[rel.gang_b]) { // both NPC → an alliance (each way)
+      if (isActive) { (allies[rel.gang_a] ||= []).push(nameOf[rel.gang_b].name); (allies[rel.gang_b] ||= []).push(nameOf[rel.gang_a].name); }
+    } else if (myGang && (rel.gang_a === myGang || rel.gang_b === myGang)) {
+      const npcSide = rel.gang_a === myGang ? rel.gang_b : rel.gang_a;
+      if (nameOf[npcSide]) myPact[npcSide] = { active: isActive, pending: !rel.accepted, mine: rel.proposed_by === myGang };
+    }
+  }
   const board = rows.filter((r) => r.id !== myGang).map((r) => {
     const p = regenPool(r, now);
     const holder = r.held_by_gang && holders[r.held_by_gang];
@@ -70,6 +92,7 @@ export async function warBoard(db, ch = null) {
       canRaid: !!ch && lvl >= FAMILY_WAR.RAID_MIN_LVL,
       heldBy: holder ? { name: holder.name, tag: holder.tag, mine } : null,
       tributePending: mine ? familyTribute(r.tribute_at, now.getTime()) : null,
+      pact: myPact[r.id] || null, allies: allies[r.id] || [],
       atWar: w ? { score: Number(w.score), winScore: FAMILY_WAR.WAR.WIN_SCORE,
         endsSeconds: Math.max(0, Math.ceil((new Date(w.ends_at).getTime() - Date.now()) / 1000)) } : null };
   });
@@ -118,6 +141,9 @@ export async function raidFamily(ch, gangId, client, h) {
   // loot is a bounded faucet either way (no §10.4/exploit), but self-raiding a vassal is a pointless,
   // confusing no-value action (and the board flags it heldBy.mine, so it's reachable). Gate it clean.
   if (myGang && g.held_by_gang === myGang) throw new GameError('own_vassal', "You already hold that outfit — you don't raid your own vassal.");
+  // NPC-FAMILY DIPLOMACY: you can't raid an outfit you've sworn PEACE with — break the pact first (and
+  // wear the oathbreaker mark). The declareWar `pact` touchpoint, extended to the raid loop.
+  if (myGang && await pactBetween(client, myGang, gangId)) throw new GameError('pact', "You've a sworn peace with them — break the pact first (and wear the mark).");
 
   const now = new Date();
   const poolNow = regenPool(g, now);
@@ -436,13 +462,21 @@ export async function sweepNpcAggression(pool) {
         'SELECT m.gang_id, COUNT(*) n FROM gang_members m JOIN characters ch ON ch.id=m.character_id AND ch.alive AND NOT ch.is_npc GROUP BY m.gang_id')).rows)
         memberN[m.gang_id] = Number(m.n);
       const nowMs = Date.now();
+      // active peace pacts — a set of sorted-pair keys, so the picker never opens hostilities on a family
+      // the aggressor has sworn peace with (NPC-family diplomacy: a pact BUYS peace from the OFFENSIVE).
+      const pactSet = new Set((await c.query(
+        "SELECT gang_a, gang_b FROM gang_relations WHERE kind='pact' AND accepted AND until > now()")).rows
+        .map((r) => [r.gang_a, r.gang_b].sort().join('|')));
+      const atPeace = (npcId, tgtId) => pactSet.has([npcId, tgtId].sort().join('|'));
       // eligible NPC aggressors: npc, not a held vassal, not already running a campaign
       const aggressors = shuffle(allGangs.filter((g) => g.npc_flag && !g.held_by_gang && !busyNpc.has(g.id)));
       // eligible targets: real (non-npc) with ≥ MIN_MEMBERS living made men, not under fire, out of the peace window
-      const targets = shuffle(allGangs.filter((g) => !g.npc_flag && !underFire.has(g.id)
+      const eligibleTargets = allGangs.filter((g) => !g.npc_flag && !underFire.has(g.id)
         && (g.npc_aggro_until == null || new Date(g.npc_aggro_until).getTime() <= nowMs)
-        && (memberN[g.id] || 0) >= A.MIN_MEMBERS));
-      const npc = aggressors[0], tgt = targets[0];
+        && (memberN[g.id] || 0) >= A.MIN_MEMBERS);
+      const npc = aggressors[0];
+      // pick a target the chosen aggressor is NOT at peace with (a pact severs the pair)
+      const tgt = npc ? shuffle(eligibleTargets.filter((g) => !atPeace(npc.id, g.id)))[0] : null;
       if (npc && tgt) {
         const now = Date.now();
         await c.query('INSERT INTO npc_aggression (npc_gang, target_gang, ends_at, next_strike_at) VALUES ($1,$2,$3,$4)',
