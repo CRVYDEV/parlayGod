@@ -16,6 +16,7 @@ import fs from 'node:fs';
 import { buildServer } from '../src/server.js';
 import { boxingBoard } from '../src/boxing.js';
 import { spawnResident, retireResident, runPopulation, population, runResidentBehaviour, residentAct, seededToday, runFamilies } from '../src/population.js';
+import { residentEnterTournament, resolveTournament } from '../src/casino.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { cityStanding } from '../src/standing.js';
 import { funnelStats } from '../src/growth.js';
@@ -966,7 +967,85 @@ assert.equal(npcBandOf(0.999).id, 'boss', 'the high roll is the boss band');
     'and re-verifies affordability under the lock — they may have been drained since the shortlist');
 }
 
+// ════════════ STEP FOUR — RESIDENTS FILL A HUMAN-STARTED TOURNAMENT ════════════
+// A solo player who enters the poker tournament used to wait out the window and get REFUNDED for lack of a
+// field (< MIN_ENTRANTS). Now residents at the Neon Mile fill it — a warm body paying its OWN buy-in into
+// the SAME escrow (recycle-only), so the 'poker tourney escrow' §10.4 identity is untouched and the worker
+// resolves a real field. REACTIVE ONLY: a resident never opens one itself.
+{
+  const BUY = CASINO.TOURNEY.BUYIN;
+  // The ESCROW identity is the meaningful §10.4 check for this feature (open pool == Σ buyin − win −
+  // refund − take − death). A LOCAL baseline: earlier blocks spawn/kill/retire many residents, so the
+  // global drift has long since moved; what this proves is that the tournament cycle nets to ZERO.
+  // (The per-character `character cash` check is deliberately NOT asserted here — the direct cash
+  // UPDATEs below are unledgered test seeding, which is exactly the drift that check exists to catch;
+  // recycle-only is proven instead by the resident's own casino:tourney:buyin ledger row.)
+  const esc0 = await driftOf('poker tourney escrow');
+
+  // a resident at the Neon Mile with cash, but NO open tournament yet — reactive: it must not seed one
+  const solo = await spawnResident(pool, { band: POPULATION.BANDS.find((b) => b.id === 'boss') });
+  await pool.query('UPDATE characters SET loc=$2, cash=$3 WHERE id=$1', [solo.id, CASINO.DISTRICT, BUY * 4]);
+  {
+    const c = await pool.connect(); await c.query('BEGIN');
+    const lr = (await c.query('SELECT id, cash, loc FROM characters WHERE id=$1 FOR UPDATE', [solo.id])).rows[0];
+    const got = await residentEnterTournament(c, lr);
+    await c.query('COMMIT'); c.release();
+    assert.equal(got, null, 'a resident NEVER opens a tournament — reactive only (no current open one)');
+  }
+  assert.equal(await one("SELECT COUNT(*) n FROM poker_tournaments WHERE status='open'"), 0,
+    'and no tournament was materialized by the resident');
+
+  // the HUMAN opens it (materializes the open tournament, 1 entrant)
+  await pool.query('UPDATE characters SET loc=$2, cash=$3 WHERE id=$1', [player.id, CASINO.DISTRICT, BUY * 10]);
+  const opened = await call('POST', '/v1/casino/tournament', { token: player.token });
+  assert.equal(opened.code, 200, 'the human opens the tournament');
+  const tid = opened.body.tournament;
+  assert.equal(opened.body.entrants, 1, 'a field of one — it would refund solo');
+  const poolAfterHuman = Number((await pool.query('SELECT pool FROM poker_tournaments WHERE id=$1', [tid])).rows[0].pool);
+  assert.equal(poolAfterHuman, BUY, 'the pool holds the human buy-in');
+
+  // NOW the resident fills it — same escrow, its own money
+  {
+    const c = await pool.connect(); await c.query('BEGIN');
+    const lr = (await c.query('SELECT id, cash, loc FROM characters WHERE id=$1 FOR UPDATE', [solo.id])).rows[0];
+    const got = await residentEnterTournament(c, lr);
+    await c.query('COMMIT'); c.release();
+    assert.equal(got, 'joined_tourney', 'the resident joins the open tournament');
+  }
+  assert.equal(await one('SELECT COUNT(*) n FROM poker_entries WHERE tournament_id=$1', [tid]), 2,
+    'the field is now TWO — a solo player got a real tournament');
+  assert.equal(Number((await pool.query('SELECT pool FROM poker_tournaments WHERE id=$1', [tid])).rows[0].pool), BUY * 2,
+    'the pool grew by exactly one buy-in — recycle-only, nothing conjured');
+  assert.equal(await driftOf('poker tourney escrow'), esc0,
+    'the escrow identity is UNTOUCHED with a resident in the field (open pool == Σ buyin)');
+  assert.equal(Number((await pool.query('SELECT cash FROM characters WHERE id=$1', [solo.id])).rows[0].cash), BUY * 3,
+    'the resident paid its own buy-in out of its own cash');
+  assert.equal(await one("SELECT COUNT(*) n FROM transactions WHERE character_id=$1 AND reason='casino:tourney:buyin' AND amount=$2", [solo.id, -BUY]), 1,
+    'and the buy-in is ledgered casino:tourney:buyin (recycle-only — the escrow identity holds around it)');
+
+  // a resident is a warm body — the worker deals it a hand and resolves the field
+  { const c = await pool.connect(); await c.query('BEGIN'); await resolveTournament(c, tid); await c.query('COMMIT'); c.release(); }
+  assert.equal(await one("SELECT COUNT(*) n FROM poker_tournaments WHERE id=$1 AND status='resolved'", [tid]), 1,
+    'the worker settled the mixed field (not refunded)');
+  assert.equal(await driftOf('poker tourney escrow'), esc0, 'and §10.4 stays exact after the settle');
+
+  // RETIREMENT SAFETY: a resident that retires mid-tournament has its buy-in auto-burned as
+  // casino:tourney:death at resolve (the LEFT-JOIN dead path), and retireResident burns only its
+  // REMAINING cash (the buy-in already left the pool) — so §10.4 stays exact with NO retireResident change.
+  await pool.query('UPDATE characters SET loc=$2, cash=$3 WHERE id=$1', [player.id, CASINO.DISTRICT, BUY * 10]);
+  const t2 = (await call('POST', '/v1/casino/tournament', { token: player.token })).body.tournament;
+  const solo2 = await spawnResident(pool, { band: POPULATION.BANDS.find((b) => b.id === 'boss') });
+  await pool.query('UPDATE characters SET loc=$2, cash=$3 WHERE id=$1', [solo2.id, CASINO.DISTRICT, BUY * 4]);
+  { const c = await pool.connect(); await c.query('BEGIN');
+    const lr = (await c.query('SELECT id, cash, loc FROM characters WHERE id=$1 FOR UPDATE', [solo2.id])).rows[0];
+    await residentEnterTournament(c, lr); await c.query('COMMIT'); c.release(); }
+  { const c = await pool.connect(); await c.query('BEGIN'); await retireResident(c, solo2.id); await c.query('COMMIT'); c.release(); }
+  { const c = await pool.connect(); await c.query('BEGIN'); await resolveTournament(c, t2); await c.query('COMMIT'); c.release(); }
+  assert.equal(await driftOf('poker tourney escrow'), esc0,
+    'a resident retiring mid-tournament keeps the escrow identity exact (buy-in burns at resolve, remaining cash at retire)');
+}
+
 console.log('✅ THE POPULATION passed — residents spawn as real flagged characters on the streets roster '
   + '(flag exposed), the npc:seed faucet + npc:retire sink keep §10.4 drift-0, the worker tops the city up '
-  + 'and retires old lines, and residents never hold $OMR (nothing pays them any) and are excluded from City Standing, ops and the funnel; STEP TWO: they advertise consent limits, post SECURED loan offers and standing buy orders, and retire without stranding escrow — all pure recycling, zero new faucet; JAILBIRDS: the worker keeps TARGET residents in lockup (never over-fills, refills after a bust) so the §7.8 bust verb + the bust dailies work on a solo run — the reward is the signed ledgered bust:reward faucet; MARKS (Street War step two): residents spawn holding band-priced beaters (counted into car conservation via rng_audit npc:car grant/retire rows), sleepy-joint fronts whose rob cut prices at FRONT_INCOME_BPS of the catalog curve, dinghies at the docks, and self-bought freight (goods:buy, recycle-only, budget-floored above the picked-clean line) — stealable/robbable through the ordinary verbs with conservation exact through the whole grant→steal→retire cycle');
+  + 'and retires old lines, and residents never hold $OMR (nothing pays them any) and are excluded from City Standing, ops and the funnel; STEP TWO: they advertise consent limits, post SECURED loan offers and standing buy orders, and retire without stranding escrow — all pure recycling, zero new faucet; JAILBIRDS: the worker keeps TARGET residents in lockup (never over-fills, refills after a bust) so the §7.8 bust verb + the bust dailies work on a solo run — the reward is the signed ledgered bust:reward faucet; MARKS (Street War step two): residents spawn holding band-priced beaters (counted into car conservation via rng_audit npc:car grant/retire rows), sleepy-joint fronts whose rob cut prices at FRONT_INCOME_BPS of the catalog curve, dinghies at the docks, and self-bought freight (goods:buy, recycle-only, budget-floored above the picked-clean line) — stealable/robbable through the ordinary verbs with conservation exact through the whole grant→steal→retire cycle; STEP FOUR: residents at the Neon Mile FILL a human-started poker tournament (reactive — they never open one, so /v1/online stays honest), paying their OWN buy-in into the same escrow so a solo player gets a real field instead of a refund and the poker-tourney-escrow §10.4 identity is untouched — even when a resident retires mid-tournament (its buy-in burns at resolve, its remaining cash at retire)');
 process.exit(0);

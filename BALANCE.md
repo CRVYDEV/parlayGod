@@ -5045,3 +5045,25 @@ and the cash-weighted base-wide (+10.4%) analytically every run — so any later
 the crime catalog, or the approach mults re-measures the faucet. The dials remain: reverting to
 `{CUN:0.004, SPD:0.002, OFFSET:0}` restores the pre-D14 curve byte-for-byte; re-anchoring `OFFSET`
 higher trades the maxed tail for a fresh/mid hit.
+
+## RESIDENTS FILL THE POKER TOURNAMENT (THE POPULATION step four, 2026-08-06)
+
+The crew co-op loops (heists → `fillHeist`, world raids → `hireRaid`) already let a solo player hire NPC
+bodies, but the SCHEDULED-FIELD co-op games did not: a solo player who entered the poker tournament waited
+out the window and got REFUNDED for lack of a field (< `TOURNEY.MIN_ENTRANTS`). Now residents standing at
+the Neon Mile FILL a human-started tournament — a warm body paying its OWN buy-in into the SAME escrow the
+human path uses (`casino:tourney:buyin`), and the worker deals it an independent 7-card hand like everyone
+else, so no AI is needed. **§10.4-untouched by construction**: the resident's buy-in is its own cash
+(recycle-only, never conjured), so the `poker tourney escrow` identity holds — proven in `test/population.js`
+with a resident in the field and, the sharp case, a resident that RETIRES mid-tournament (its buy-in burns
+at resolve via the LEFT-JOIN dead path, its remaining cash at retire, so `retireResident` needs no change).
+**REACTIVE ONLY**: a resident enters a tournament a HUMAN already materialized and never spins one up itself,
+so the city never manufactures fake events and `/v1/online` stays an honest human count.
+
+Lever: **`POPULATION.EVENTS.TOURNEY_FIELD` (6)** — residents fill an open tournament up to this many
+entrants (`TOURNEY.PAYOUTS` is 3 places), so a solo human always gets a playable field but residents don't
+flood it. `0` reverts to human-only (refund-on-short-field). Founder sign-off lever (no faucet — a
+redistribution; the rake is a net sink). Deferred (the same proven pattern extends to): the Grand Prix,
+The Stakes, and the Futurity — each a worker-resolved escrow field with a `MIN_ENTRANTS`/`MIN_RUNNERS`
+refund, so a resident-entrant helper (residents have cars/racers since Street War step three) makes them
+live solo too.
