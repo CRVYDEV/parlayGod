@@ -166,3 +166,17 @@ caught by name. All numbers are founder sign-off levers (`ALLY_TARGET` cosmetic;
 `DIPLOMACY.PACT_MS`). The NPC-families antagonist arc is now feature-complete: join (step one) → defend
 (step two) → the legend/manhunt/conquest (step three) → the formal war (the belt) → THE OFFENSIVE
 (they declare first) → diplomacy (sue for peace / NPC alliances).
+
+**Step six — ALLIES JOIN THE OFFENSIVE — BUILT (2026-08-06, founder-directed "make an ally join the
+OFFENSIVE").** The deepening flagged when the NPC↔NPC alliances shipped as flavor: they now have teeth. On
+each OFFENSIVE strike cycle (`sweepNpcAggression` PASS 2), after the aggressor enqueues its own strike, each
+of its NPC allies (an accepted npc↔npc pact) ALSO sends guns at the SAME target family — each its own
+`family_aggro` slot, up to `FAMILY_WAR.AGGRESSION.ALLY_JOIN_MAX` (2). So an aggressor with friends costs the
+target more made men per cycle. **§10.4-NEUTRAL** — the same shield-honouring `family_aggro` primitive
+(sweepFamilyAggro re-checks every shield + `RETAL_P` at resolve; a strike is a 30-min hospitalization, no
+currency). **Two exclusions keep it fair and give the peace mechanic reach:** an ally you've SUED FOR PEACE
+(a player↔NPC pact) stays out (`pactBetween(ally, target)`), so suing the aggressor's allies for peace one by
+one thins the guns coming for you; and an ally already hunting elsewhere (a pending `family_aggro`) sits the
+cycle out. The war-board `underFire` entry names the aggressor's allies. `test/npcwar.js` proves both the
+aggressor and its ally strike a member, the board names the joiner, and a pacted ally stays out — two
+mutations each caught by name. `ALLY_JOIN_MAX: 0` reverts to the aggressor-only OFFENSIVE.

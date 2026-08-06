@@ -9222,3 +9222,19 @@ quiet, reopens once peace is gone), and §10.4-neutrality — three interlock mu
 `DIPLOMACY.PACT_MS`). The NPC-families antagonist arc is now feature-complete: join → defend → legend/
 manhunt/conquest → the formal war → THE OFFENSIVE (they declare first) → diplomacy (sue for peace / NPC
 alliances).
+
+**ALLIES JOIN THE OFFENSIVE (founder-directed 2026-08-06 "make an ally join the OFFENSIVE") — BUILT**
+(`src/npcwar.js` `sweepNpcAggression` PASS 2 + `warBoard` underFire, `FAMILY_WAR.AGGRESSION.ALLY_JOIN_MAX`
+rules tail, `public/index.html`, `test/npcwar.js`). The deepening flagged when the NPC↔NPC alliances shipped
+as flavor: they now have teeth. On each OFFENSIVE strike cycle, after the aggressor enqueues its own strike,
+each of its NPC allies (an accepted npc↔npc pact) ALSO sends guns at the SAME target family — each its own
+`family_aggro` slot, up to `ALLY_JOIN_MAX` (2) — so an aggressor with friends costs the target more made men
+per cycle. **§10.4-NEUTRAL** (the same shield-honouring `family_aggro` → `sweepFamilyAggro` primitive; a
+strike is a 30-min hospitalization, no currency). **Two exclusions give the peace mechanic reach:** an ally
+you've SUED FOR PEACE (a player↔NPC pact) stays out (`pactBetween(ally, target)`), so suing the aggressor's
+allies for peace one by one thins the guns; and an ally already hunting elsewhere (a pending `family_aggro`)
+sits the cycle out. The war-board `underFire` entry names the aggressor's allies + a "sue them for peace"
+prompt. `test/npcwar.js` proves both the aggressor AND its ally strike a member, the board names the joiner,
+and a pacted ally stays out — two mutations each caught by name. Suite 67/67 + sim drift-0 + pgquery +
+pgcheck 43/43 on real Postgres. `FAMILY_WAR.AGGRESSION.ALLY_JOIN_MAX` is a founder sign-off lever
+(§10.4-neutral pacing; `0` reverts to the aggressor-only OFFENSIVE).

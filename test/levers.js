@@ -595,6 +595,7 @@ const SIGNED = [
   ['FAMILY_WAR.AGGRESSION.COOLDOWN_MS', 86400000],
   ['FAMILY_WAR.AGGRESSION.MIN_MEMBERS', 2],
   ['FAMILY_WAR.AGGRESSION.MIN_LVL', 5],
+  ['FAMILY_WAR.AGGRESSION.ALLY_JOIN_MAX', 2],   // the aggressor's NPC allies that join the OFFENSIVE per cycle
   // NPC-FAMILY DIPLOMACY — the worker maintains this many NPC↔NPC alliances (flavor, §10.4-neutral status)
   ['DIPLOMACY.NPC.ALLY_TARGET', 2],
   ['DIPLOMACY.PACT_MS', 7 * 86400000],   // a sworn peace runs a week (the player↔NPC peace duration)
