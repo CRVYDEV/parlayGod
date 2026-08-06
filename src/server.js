@@ -17,6 +17,7 @@ import * as Corner from './corner.js';
 import * as Contacts from './contacts.js';
 import * as Favors from './favors.js';
 import * as Crew from './crew.js';
+import * as Discovery from './discovery.js';
 import * as A from './auth.js';
 import * as Chain from './chain.js';
 import * as Fees from './fees.js';
@@ -109,7 +110,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          TAX, withdrawTaxBps,
          HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, OPERATIONS, BUSINESS_EMPIRE, PACING, MASTERY,
          PATH_FX, PATH_XP_HOME, PATH_XP_RIVAL, PATH_SWITCH_CD_MS, REGIMEN, HUSTLE, CAREER, RIVALS,
-         CORNER, CONTACTS, FAVOR, CREW, MADE, MADE_LADDER, ACCESS_STAKE, ROSTER_POSTS, jailed, hospitalized } from './rules.js';
+         CORNER, CONTACTS, FAVOR, CREW, DISCOVERY, MADE, MADE_LADDER, ACCESS_STAKE, ROSTER_POSTS, jailed, hospitalized } from './rules.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -888,6 +889,8 @@ export async function buildServer() {
       takeBps: FAVOR.TAKE_BPS, ttlHours: Math.round(FAVOR.TTL_MS / 3600000) },
     // THE CREW — the lightweight social unit (omerta-crew-design.md). Scope only; no odds, no money.
     crew: { maxMembers: CREW.MAX_MEMBERS, minLevel: CREW.MIN_LEVEL, nameMax: CREW.NAME_MAX },
+    // THE ROLODEX — player discovery (omerta-discovery-design.md). §10.4-free; just the level band.
+    discovery: { band: DISCOVERY.BAND },
     // THE STREET WAR + RIVALS (discoverability — costs and bounds only; the odds stay server-side)
     rivals: { robRateBps: RIVALS.ROB_RATE_BPS, robEnergy: RIVALS.ROB_ENERGY, robJailS: RIVALS.ROB_JAIL_S,
       trunkEnergy: RIVALS.TRUNK.ENERGY, trunkJailS: RIVALS.TRUNK.JAIL_S,
@@ -1867,6 +1870,13 @@ export async function buildServer() {
   app.delete('/v1/crew/target', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Crew.clearCrewTarget(ch, client, h)));
   app.get('/v1/leaderboard/crews', { preHandler: auth }, async () => Crew.crewLeaderboard(pool));
+
+  // ── THE ROLODEX (omerta-discovery-design.md) — player discovery: humans near your level + a
+  // "looking for a crew" flag, so THE CREW is reachable by strangers. §10.4-free (reads + a toggle).
+  app.get('/v1/discovery', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client) => Discovery.discoveryBoard(ch, client)));
+  app.post('/v1/discovery/lfg', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Discovery.setLfg(ch, req.body?.on, client, h)));
 
   registerKitchen(app, { pool, auth });
 

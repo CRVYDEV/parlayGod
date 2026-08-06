@@ -9365,3 +9365,41 @@ postBounty non-aggression, and the leaderboard (summed kills + size). Guards: fu
 drift-0, mobile 71/71, client wiring+mirror, routes 579, levers 615, pgquery + pgcheck 43/43 on real
 Postgres. Deferred (step three): the crew activity feed, property-crime non-aggression, deeper crew
 perks. All CREW additions are pure scope/status — no faucet, no lever.
+
+**THE ROLODEX — player discovery, the front door the social layer lacked (founder-directed
+2026-08-06)** (`src/discovery.js` — the 119th module, `test/discovery.js` — the 69th suite; design
+`omerta-discovery-design.md`). The thinnest gap the assessment named: every social system now EXISTS —
+crew, family, contacts, rivals, marriage, bodyguard, the read-only Cast/Story/Situation cohesion layer —
+but they all assume you already KNOW who to talk to. A crew invite is by EXACT NAME, the Wet Work roster
+is the top-100 by respect (whales, not peers), and the contact book is EARNED. So a new/mid player who
+wants to team up had no way to FIND anyone — the connective tissue was built with no entry point, and THE
+CREW (just shipped) is the sharpest example (it exists, but nobody can form one without already knowing a
+name). This is that surface: `GET /v1/discovery` returns three lists of HUMANS (`NOT c.is_npc AND NOT
+a.agent_flag` — a crew can't include a resident and an agent is off the social door; residents are
+already on the streets roster) — **`looking`** (the recruit list: LFG-flagged, crewless, near your level,
+within a freshness window), **`peers`** (everyone near your level, the looking-ones de-duped out), and
+**`newcomers`** (newest humans, ANY level — the front door that's never empty while anyone at all has
+joined). `POST /v1/discovery/lfg {on}` toggles `characters.lfg` (+ `lfg_at`), a boolean written by
+DIRECT SQL (outside persistCharacter's positional list — the active_at pattern; dies with the street, a
+fresh heir isn't looking until they say so). **§10.4-FREE by construction** — reads + a boolean, no
+ledger vocabulary; the test proves it by counting zero `discovery%`/`transactions` rows across the flow.
+The **connect action reuses THE CREW** (a crewless discovery row gets a one-tap `POST /v1/crew/invite
+{name}` when you're in a crew; else a "start a crew" pointer) — no new mechanic, discovery is the missing
+FRONT DOOR to machinery that already works. A LEVEL band (`DISCOVERY.BAND` ±10) is turned into a respect
+band via the inverse of the signed pacing curve (`respectAtLevel`, local — rules.js doesn't export it),
+ordered by **squared distance** not `ABS` (pg-mem implements no `abs()`; squared distance is monotonic in
+|distance| so it orders identically in both engines — the recorded pg-mem posture). Console: a **"Find
+People"** screen folded under the Family group (next to The Crew — the conservative-nav call while the
+screen-reach beacon gathers data) with the LFG toggle, the recruit list with one-tap invite, peers, and
+fresh blood; a **FIND YOUR PEOPLE** nudge on THE SITUATION ("N near you are looking for a crew"); a
+`describe()` branch for the toggle. The peers-list map is written INLINE (not `.map(namedFn)`, a
+documented mirror blind spot) so its element fields get real coverage — the fixture's near-level humans
+make it non-empty (135 lists / 780 element fields, up from 134/774). `test/discovery.js` proves the three
+lists surface the right humans, every exclusion (self / resident / agent / out-of-band whale), the LFG
+flag driving the recruit list + going stale past the TTL, a crewed player dropping off it, and the
+zero-ledger §10.4 proof — three assertions each caught by their own path. Guards: full suite 61-green,
+sim drift-0, mobile 73/73 (the new screen opens above the fold, no page error, real Chromium ×2 sizes),
+client wiring+mirror, routes 581, levers 618, pgquery + pgcheck 43/43 on real Postgres. All `DISCOVERY.*`
+numbers are founder sign-off levers (pure pacing/scope — no faucet; BALANCE.md § THE ROLODEX). Deferred
+(step two): online-now presence (per-player, not just a count), a crew recruit BROADCAST (push vs the
+current LFG pull), and filters (district / no-family / level sub-band).

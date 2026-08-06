@@ -10,15 +10,15 @@ Written 2026-07-25. Every number below was measured from the tree, not recalled.
 
 | | |
 |---|---|
-| Backend modules | **118** files, **39102** lines (`src/`, incl. `src/routes/` and `src/social/`) |
-| Test suites | **68** files, **26922** lines (`test/`) — ratio 0.67 test:src |
+| Backend modules | **119** files, **39856** lines (`src/`, incl. `src/routes/` and `src/social/`) |
+| Test suites | **69** files, **27126** lines (`test/`) — ratio 0.67 test:src |
 | HTTP routes | **575** registrations |
 | Database tables | **193** (`schema.sql`, 2679 lines) |
 | Client | **7,365** lines (`public/index.html`, single file, zero dependencies) |
 | Ops dashboard + wiki | `public/admin.html`, `public/wiki.html` |
 | Smart contracts | **9** contracts, **1716** lines Solidity, **128** Foundry tests passing |
 | Harnesses | `tools/sim.js` (economy), `tools/playthrough.js` (player experience), `tools/pgcheck.js` (real Postgres), `tools/loadtest.js` (concurrency), `tools/chaos.js` (interruption), `tools/mobile.js` (the screens, at phone size), `tools/scale.js` (market liquidity at population scale), `tools/bond-dials.js` (sizing the on-chain mint walls), `tools/pgquery.js` (every SQL string parses on real Postgres) |
-| Design + audit docs | **165** markdown files, **42487** lines — indexed in `docs/AUDITS.md`, which states they are point-in-time |
+| Design + audit docs | **166** markdown files, **42487** lines — indexed in `docs/AUDITS.md`, which states they are point-in-time |
 | Ledger invariants | 18 named escrow/identity checks + per-currency conservation, **drift-0** |
 
 Roughly **55,000 lines** of code, tests, schema and contracts.
@@ -31,7 +31,7 @@ Everything is built on five load-bearing decisions. None has needed revision in 
 
 **`rules.js` is the constants layer, in two files.** `rules.generated.js` holds the prototype's 22 data
 tables (479 lines) and is overwritten wholesale by the extractor; `rules.tail.js` holds every helper,
-catalog, ladder and founder-signed lever (4676 lines) and the extractor never opens it. `rules.js`
+catalog, ladder and founder-signed lever (4777 lines) and the extractor never opens it. `rules.js`
 re-exports both. Nothing in `src/` hardcodes a balance number.
 
 **`withCharacter` is the transaction spine.** Every player action opens `SELECT … FOR UPDATE` on the

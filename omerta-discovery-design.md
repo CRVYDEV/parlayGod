@@ -1,0 +1,85 @@
+# THE ROLODEX — player discovery (design)
+
+## The gap
+
+Every social system now EXISTS — crew, family, contacts, rivals, marriage, bodyguard, and the read-only
+Cast/Story/Situation cohesion layer — but **they all assume you already know who to talk to.** Verified
+in the tree:
+
+- A **crew invite is by exact name** (`inviteToCrew` resolves `WHERE name=$1`) — you must already know it.
+- The **Wet Work roster (`/v1/streets`)** is the top 100 living characters **by respect** — whales, not
+  your peers.
+- The **contact book** is EARNED through interacting — a bootstrap you can't use before you've met anyone.
+
+So a new or mid player who wants to team up has **no front door**: no "who's around my level," no
+"looking for a crew" flag, no fresh-blood board. In a game launching near-empty — where the progression
+harness lands a plausible solo player at level 33 having never met another human — the connective tissue
+is all built but there's no way to FIND people. THE CREW (the 2–4 player unit) is the sharpest example:
+it exists, but nobody can form one unless they already know a name.
+
+## What THE ROLODEX is (and is NOT)
+
+A **§10.4-free read layer + one LFG toggle.** It is NOT a new pillar and it moves no value: three lists of
+HUMANS and a "looking for a crew" flag. It makes the just-built social machinery **reachable by
+strangers**, which is the whole point in a low-population game.
+
+- **NO ledger surface** — the whole drop is READS + a boolean. The `discovery:` word appears in no
+  vocabulary; the test proves it by counting rows.
+- **HUMANS ONLY** — a crew cannot include an NPC resident and an agent is excluded from the social front
+  door (`NOT c.is_npc AND NOT a.agent_flag`). Residents are already findable on the streets roster; this
+  surface is for people you can actually team with. If you are genuinely alone the lists are empty — the
+  TRUE state, and the empty-state honesty rule.
+
+## The surface
+
+`GET /v1/discovery` (`discoveryBoard`) returns three lists, each a public card
+(`{id, name, level, district, gangTag, lfg, hasCrew}` — **no account UUID**, the rivals/cast discipline):
+
+1. **`looking`** — the recruit list: humans who flagged LFG (within a freshness window), **crewless**, near
+   your level, ordered by closeness. The highlight the console leads with.
+2. **`peers`** — everyone near your level (whether or not they're looking; the looking-ones are de-duped
+   out), so you can reach out to anyone. Surfaces `lfg` / `hasCrew` chips.
+3. **`newcomers`** — the newest humans, ANY level, ordered by `created_at DESC`. The front door that's
+   never empty while anyone at all has joined — a veteran welcomes a newbie, a new player sees other new
+   players even when nobody's in their band.
+
+Plus `me: { level, lfg, inCrew, band }`.
+
+`POST /v1/discovery/lfg {on}` (`setLfg`) — advertise you're open to a crew, or take the flag down. A
+`characters.lfg` boolean + a `lfg_at` freshness stamp, written by **direct SQL** (outside
+persistCharacter's positional UPDATE — the `active_at` pattern, clobber-safe). Dies with the street: a
+fresh heir is not looking until they say so, which is correct. No new table — discovery is reads over
+`characters` + a toggle.
+
+The **connect action reuses THE CREW**: if you're in a crew, a crewless discovery row gets a one-tap
+"invite" (the existing `POST /v1/crew/invite {name}`); if you're not, the surface points you at the Crew
+screen to start one. No new mechanic — discovery is the missing FRONT DOOR to machinery that already
+works.
+
+## Level band → respect band
+
+Discovery filters by a LEVEL band (`DISCOVERY.BAND` ±10) so a fresh player sees PEERS, not the top-100
+whales the streets roster shows. The SQL filters on respect, so the band is turned into a respect band via
+the inverse of the signed pacing curve (`respect(L) = D·(L−1)²`, `respectAtLevel` local to the module).
+Ordering by closeness uses **squared distance** (`(respect − mine)²`), not `ABS` — pg-mem implements no
+`abs()`, and squared distance is monotonic in |distance| so it orders identically in both engines.
+
+## Levers (founder sign-off)
+
+`DISCOVERY.BAND` (10), `LIMIT` (24), `LFG_TTL_MS` (7d). All pure pacing/scope — no faucet, nothing to
+sim. Pinned in `test/levers.js`, tabled in BALANCE.md.
+
+## Console
+
+A **"Find People"** screen folded under the existing Family group (next to The Crew — the conservative nav
+call while the screen-reach beacon gathers data), plus a nudge on THE SITUATION ("N near you are looking
+for a crew"). The LFG toggle, the recruit list with one-tap invite (when you lead/belong to a crew),
+peers, and fresh blood.
+
+## Deferred (step two)
+
+- **Online-now** — a per-player presence flag (the socket registry gives a count today, not per-player);
+  a "who's actually online near me" list is the strongest signal but needs the presence plumbing.
+- **A recruit BROADCAST** — a crew leader posting "we're recruiting, ~level N" to the discovery board (vs
+  the current pull model where a solo player advertises LFG).
+- **Filters** — by district, by family/no-family, by level sub-band.

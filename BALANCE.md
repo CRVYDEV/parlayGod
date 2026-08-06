@@ -5087,3 +5087,12 @@ it rewards car/racer investment — so it is flagged for AWARENESS, not retuned 
 the founder wants it curbed: a resident car/racer QUALITY floor (so a resident fields a real contender, not
 a beater), a lower `GP_FIELD`/`STAKES_FIELD`, or a per-window entry cap. The random-hand tournament and the
 Futurity (nominator isn't paid) are NOT farmable and need no flag.
+
+## THE ROLODEX — player discovery (founder-directed 2026-08-06)
+
+`DISCOVERY.BAND` (10), `LIMIT` (24), `LFG_TTL_MS` (7d). Pure pacing/scope — a §10.4-FREE read layer
+plus a `characters.lfg` boolean toggle. No faucet, no ledger vocabulary, nothing to sim (the suite
+proves it writes zero `transactions` rows). The one player-facing choice is the ± level BAND: too wide
+and a fresh player sees whales, too narrow and an empty alpha reads as a dead board — 10 keeps the
+recruit/peers lists to genuine peers while `newcomers` (any level, newest-first) is the never-empty
+front door. All three are founder sign-off levers, pinned in `test/levers.js`.
