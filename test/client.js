@@ -1302,6 +1302,16 @@ async function seedLists() {
     [charId, two]));
   await trySeed('favor (theirs)', () => si('POST', '/v1/favors', t2, { goodId: 'gin', qty: 3, pay: 9000, district: 'neon', note: 'quietly' }));
   await trySeed('favor (mine)', () => si('POST', '/v1/favors', token, { goodId: 'gin', qty: 2, pay: 4000, district: 'docks' }));
+  // THE EXCHANGE (M3 cb/ammo order book, promoted out of the raw deck) — a listing through the real
+  // route so the Garage card's list has a row; the fixture needs the ammo it escrows.
+  await q('UPDATE characters SET ammo=200 WHERE id=$1', [charId]);
+  await trySeed('exchange listing', () => si('POST', '/v1/exchange/list', token, { kind: 'ammo', qty: 20, unitPrice: 45 }));
+  // A QUEUED VOUCHER at the window (the Extraction card's cancel list) — SQL, since a real withdrawal
+  // needs the chain signer configured; the row is what the screen reads, not the rail.
+  await trySeed('queued voucher', () => q(
+    `INSERT INTO vouchers (id, account_id, kind, amount, nonce, to_address, deadline, status)
+     VALUES ($1,$2,'omr',12,990001,'0x00000000000000000000000000000000000000aa',9999999999,'queued') ON CONFLICT DO NOTHING`,
+    [crypto.randomUUID(), acct]));
   // Warm the LAZY single-use param fixtures before the jail below — they memoize at first use,
   // which is now after seedLists, and a jailed fixture can't open a ring table or place a call.
   // (Back to neon first: the boat seed above left the fixture at the docks, and the ring is a den game.)

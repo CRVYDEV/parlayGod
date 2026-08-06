@@ -378,6 +378,9 @@
   @keyframes evIn { from { opacity: 0; transform: translateX(6px); } to { opacity: 1; transform: none; } }
   .wpane .ev .dot { font-size: 10px; vertical-align: 1px; margin-right: 2px; }
   .wpane .ev.me { border-left-color: var(--neon); background: linear-gradient(90deg, var(--neon-soft), transparent 55%); }
+  /* THE URGENT TIER — a threat or money-at-risk on YOUR line reads differently from ambient news */
+  .wpane .ev.urgent { border-left-color: var(--bad); background: linear-gradient(90deg, rgba(255,45,85,.12), transparent 60%); font-weight: 600; }
+  .ph-msg.urgent { border-left: 2px solid var(--bad); padding-left: 7px; }
   #wiretabs { display: flex; gap: 4px; margin-bottom: 8px; }
   .wtab { flex: 1; background: transparent; border: 1px solid var(--line); border-radius: var(--r-sm);
     color: var(--dim); font: inherit; font-size: 11px; letter-spacing: 1.2px; padding: 6px 4px; cursor: pointer; }
@@ -420,6 +423,7 @@
     animation: bragIn .35s var(--ease); }
   @keyframes bragIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
   #brag .bt { color: var(--neon); } #brag button { white-space: nowrap; }
+  #sheet-more { display: none; } /* the fold toggle is a phone control — desktop always shows the full sheet */
   @media (max-width: 760px) {
     /* ── phone chrome diet ─────────────────────────────────────────────────────
        The language picker is a <select> wide enough to force the masthead onto a
@@ -427,6 +431,12 @@
        on the landing and in the help panel; it does not deserve a permanent row
        on a 390px screen. The tagline goes for the same reason. */
     #top .langpick, #top .langglobe, #top .sub { display: none; }
+    /* THE PHONE SHEET FOLDS — the sticky #vitals strip already carries cash/health/energy/nerve/heat,
+       so the sheet's gauges + stats + gear rows are a second copy costing a screen of scroll. Folded
+       by default behind #sheet-more; body.sheetopen (remembered) unfolds. Desktop never folds. */
+    #sheet-detail { display: none; }
+    body.sheetopen #sheet-detail { display: block; }
+    #sheet-more { display: block; }
     /* Measured: the wordmark + CODEX + broadcast + phone + ? + "sign out" total ~420px against a
        390px screen, so SOMETHING wraps no matter which one label you shorten — collapsing only the
        sign-out just left a lone tiny button stranded on row two, which looks worse than the wrap did.
@@ -1049,6 +1059,7 @@
     <h1>OMERTÀ</h1><span class="sub">the city breathes</span>
     <span id="whoami"></span>
     <a href="/wiki" target="_blank" class="act" style="text-decoration:none" title="the codex — every system explained">CODEX</a>
+    <button class="act" id="btn-jump" title="jump to any screen (press /)">🔍</button>
     <button class="act" id="btn-phone" title="the cell — your inbox + messages" style="position:relative">📱<span id="phone-badge" class="hidden"></span></button>
     <button class="act" id="btn-sfx" title="the soundtrack — clicks, the register, the stings. Tap to mute."></button>
     <span class="help" id="btn-help" title="what does all this mean?">?</span>
@@ -1136,6 +1147,14 @@
 </div></div>
 
 <!-- the glossary (? button) -->
+<!-- THE QUICK-JUMP — type a screen's name, go there. Solves the 24-screen wall's cost without
+     restructuring the nav (that decision waits on the screen-reach data). -->
+<div id="jumpmodal" class="modal-bg hidden"><div class="modal" style="max-width:340px">
+  <h2 style="margin-bottom:8px">GO SOMEWHERE</h2>
+  <input id="jump-q" placeholder="type a screen… (Enter takes the top hit)" style="width:100%;box-sizing:border-box" autocomplete="off">
+  <div id="jump-list" style="max-height:46vh;overflow:auto;margin-top:8px"></div>
+</div></div>
+
 <div id="glossary" class="modal-bg hidden"><div class="modal">
   <h2>THE LAY OF THE LAND <button class="act" id="glossary-tour" style="float:right;font-size:12px;padding:5px 10px;letter-spacing:normal">▶ replay the tour</button></h2>
   <dl>
@@ -2430,6 +2449,38 @@
   $('#glossary-close').onclick = () => $('#glossary').classList.add('hidden');
   $('#glossary-tour').onclick = () => { $('#glossary').classList.add('hidden'); openTour(); };
   $('#glossary').onclick = (e) => { if (e.target.id === 'glossary') $('#glossary').classList.add('hidden'); };
+
+  // ── THE QUICK-JUMP (🔍 / the "/" key) — go anywhere without touching the 24-screen wall.
+  // Deliberately NOT a nav restructure: the screen-reach beacon exists so the grouping decision waits
+  // for real players; this solves the wall's COST (finding a screen) without guessing at its SHAPE.
+  // Jumping to a hidden screen opens full mode (setTab already handles the sticky unlock).
+  function openJump() {
+    const jm = $('#jumpmodal'); if (!jm) return;
+    jm.classList.remove('hidden');
+    const inp = $('#jump-q'); inp.value = ''; paintJump(''); inp.focus();
+  }
+  function paintJump(q) {
+    const list = $('#jump-list'); if (!list) return;
+    const needle = q.trim().toLowerCase();
+    const ids = Object.keys(TABS).filter((id) => !needle || (TABS[id] || id).toLowerCase().includes(needle) || id.includes(needle));
+    list.innerHTML = ids.map((id, i) => `<button class="act jump-row${i === 0 ? ' first' : ''}" data-jump="${id}" style="display:block;width:100%;text-align:left;margin:3px 0">${esc(TABS[id] || id)}</button>`).join('')
+      || '<div class="d" style="color:var(--dim)">no screen by that name</div>';
+    list.querySelectorAll('[data-jump]').forEach((b) => b.onclick = () => { $('#jumpmodal').classList.add('hidden'); setTab(b.dataset.jump); });
+  }
+  { const jb = $('#btn-jump'); if (jb) jb.onclick = openJump; }
+  $('#jumpmodal')?.addEventListener('click', (e) => { if (e.target.id === 'jumpmodal') $('#jumpmodal').classList.add('hidden'); });
+  $('#jump-q')?.addEventListener('input', (e) => paintJump(e.target.value));
+  $('#jump-q')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') $('#jumpmodal').classList.add('hidden');
+    if (e.key === 'Enter') { const first = $('#jump-list .first'); if (first) { $('#jumpmodal').classList.add('hidden'); setTab(first.dataset.jump); } }
+  });
+  document.addEventListener('keydown', (e) => {
+    // "/" opens the jump — but never steal the key from a field the player is typing in
+    if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+    const t = e.target; if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    if (document.querySelector('.modal-bg:not(.hidden)')) return; // an open dialog keeps its keys
+    e.preventDefault(); openJump();
+  });
   // ── THE TOUR — the illustrated multi-step welcome. Content matches the glossary/codex register
   // (English prose, like all game prose); each step is one idea + one plate, because the old
   // single-modal welcome was five paragraphs nobody read (tester feedback).
@@ -2583,7 +2634,7 @@
       </div>` : ''}
       <div class="card" style="margin-top:8px"><span class="t">THE INBOX — what happened to you</span>
         ${b.inbox.length ? b.inbox.slice(0, 15).map((n) => `
-          <div class="ph-msg"${n.unread ? '' : ' style="opacity:.65"'}><span class="who">${new Date(n.at).toLocaleString()}</span><br>${esc(feedText({ type: n.type, payload: n.payload }))}</div>`).join('')
+          <div class="ph-msg${URGENT_TYPES.has(n.type) ? ' urgent' : ''}"${n.unread ? '' : ' style="opacity:.65"'}><span class="who">${new Date(n.at).toLocaleString()}${URGENT_TYPES.has(n.type) ? ' <span class="chip bad" style="font-size:9px;padding:0 5px">URGENT</span>' : ''}</span><br>${esc(feedText({ type: n.type, payload: n.payload }))}</div>`).join('')
           : '<div class="d">a quiet week. It will not last.</div>'}
       </div>`;
     $('#ph-send').onclick = () => sendPhoneDm($('#ph-to').value, $('#ph-text').value);
@@ -2805,6 +2856,8 @@
           <div class="d" style="margin:-7px 0 9px;font-size:11.5px;text-align:right">${fmt(nextR - me.respect)} to lvl ${me.level + 1}</div>`;
       })()}
       <div class="chips">${chips.map(([c, t]) => `<span class="chip ${c}">${t}</span>`).join('')}</div>
+      <button class="act" id="sheet-more" style="width:100%;margin:2px 0 6px">${localStorage.getItem('omerta_sheet_open') === '1' ? 'less ▴' : 'the full sheet ▾'}</button>
+      <div id="sheet-detail">
       <div class="row stathelp" data-stathelp="energy" title="Energy is the PHYSICAL work: the gym, boosting cars, heist crews, cartel raids, convoy ambushes, shakedowns, races. Crime doesn't touch it. Tap for how to refill it."><span class="k">${T('k_energy')} <span class="d" style="font-size:10px">(gym · garage · crews)</span> <i class="ihint">ⓘ</i></span><span>${me.energy}/${me.maxEnergy}</span></div>${bar('', me.energy, me.maxEnergy)}
       <div class="row stathelp" data-stathelp="nerve" title="Nerve is what crime costs — the clock on the street loop. Tap for how to refill it."><span class="k">${T('k_nerve')} <span class="d" style="font-size:10px">(crime)</span> <i class="ihint">ⓘ</i></span><span>${me.nerve}/${me.maxNerve}</span></div>${bar('', me.nerve, me.maxNerve)}
       <div class="row stathelp" data-stathelp="health" title="Tap for how to heal up."><span class="k">${T('k_health')} <i class="ihint">ⓘ</i></span><span>${me.health}/100</span></div>${bar('health', me.health, 100)}
@@ -2814,7 +2867,18 @@
         ${me.rerollCredits > 0 ? `<button class="act" id="reroll-go" style="font-size:10px;padding:1px 5px">re-roll (${me.rerollCredits})</button>` : ''}</span></div>
       <div class="row"><span class="k">${T('k_gun')}</span><span>${me.gun || '—'}</span></div>
       <div class="row"><span class="k">${T('k_ammo')}</span><span>${fmt(me.ammo)} / ${fmt(me.cb)}</span></div>
-      <div class="row"><span class="k">${T('k_cars')}</span><span>${(me.cars || []).length}</span></div>`;
+      <div class="row"><span class="k">${T('k_cars')}</span><span>${(me.cars || []).length}</span></div>
+      </div>`;
+    // THE PHONE SHEET FOLDS — on a phone the sticky #vitals strip already shows cash/health/energy/
+    // nerve/heat, so the sheet's gauge/stat block is redundant scroll; collapse it behind the toggle,
+    // remembered across renders + sessions. CSS-ONLY hiding (everything still renders), so the mirror
+    // guard's field coverage is untouched and desktop never sees the toggle.
+    { const sm = $('#sheet-more'); if (sm) sm.onclick = () => {
+        const open = localStorage.getItem('omerta_sheet_open') === '1' ? '0' : '1';
+        localStorage.setItem('omerta_sheet_open', open);
+        document.body.classList.toggle('sheetopen', open === '1');
+        sm.textContent = open === '1' ? 'less ▴' : 'the full sheet ▾'; }; }
+    document.body.classList.toggle('sheetopen', localStorage.getItem('omerta_sheet_open') === '1');
     // money tick — a brief up/down flash + a smooth count-up when the pocket changes (with the toast haptic)
     { const prev = renderSheet._cash; renderSheet._cash = me.cash;
       if (prev !== undefined && prev !== me.cash) { const m = $('#sheet .money');
@@ -5459,6 +5523,10 @@
     // THE COLLECTION (v3 step 7) — rarity + the on-chain rail. Bound the covered way (GETBIND) so the
     // mirror guard actually checks these reads.
     const nft = (await api('GET', '/v1/nft')).body || {};
+    // THE EXCHANGE (M3 §5.4) — the escrowed cb/ammo order book, promoted out of the raw deck (it was
+    // the last whole player MARKET reachable only through "Everything Else"). GETBIND so the mirror
+    // guard checks every read.
+    const exch = (await api('GET', '/v1/exchange')).body || {};
     t.innerHTML = `
       ${!(me.cars || []).length && !(me.guns || []).length ? coachCard('Your garage &amp; armory', 'Boost cars for cash (fence them) or to melt into ammo. Down below, buy a gun and a vest — you can\'t win a fight, or take a contract, unarmed.') : ''}
       <h2>The Fleet (${(me.cars || []).length}) <button class="act" data-do="POST /v1/garage/boost" style="margin-left:8px">boost a car (GTA)</button></h2>
@@ -5501,6 +5569,19 @@
             : `<button class="act" data-gundo="buy:${g.id}">buy</button>`}</div>`).join('')}</div>
       <div style="margin-top:8px">
         <button class="act" id="ammo-buy">buy a box of ammo (50 rounds — $2,000)</button></div>
+
+      <h2 style="margin-top:12px">The Exchange <span class="d" style="font-size:11px">(player-to-player crates &amp; ammo — escrowed, first come first served)</span></h2>
+      ${(exch.listings || []).length ? `<div class="grid">${exch.listings.map((l) => `
+        <div class="card"><span class="t">${fmt(l.qty)} ${esc(l.kind)}</span> <span class="chip">${esc(l.seller)}</span>
+          <div class="d">$${fmt(l.unitPrice)}/unit · $${fmt(l.qty * l.unitPrice)} the lot</div>
+          ${l.seller === me.name ? `<button class="act" data-exdel="${l.id}">pull it</button>`
+            : `<button class="act" data-exbuy="${l.id}">buy the lot</button>`}</div>`).join('')}</div>`
+        : '<span class="d" style="color:var(--dim)">nothing on the board — list yours below</span>'}
+      <div class="row" style="margin-top:6px;gap:6px;flex-wrap:wrap">
+        <select id="ex-kind"><option value="ammo">ammo (rounds)</option><option value="cb">crates (cb)</option></select>
+        <input id="ex-qty" placeholder="qty" size="5"> <input id="ex-price" placeholder="$/unit" size="7">
+        <button class="act" id="ex-list">list it (escrowed)</button></div>
+
       <h2 style="margin-top:12px">The Tailor's Back Room <span class="d" style="font-size:11px">(vests — paid in $OMR)</span></h2>
       <div class="grid">${(rules?.vests || []).map((v) => `
         <div class="card">${ico('vest', v.id)}<span class="t">${v.name}</span>${me.vest === v.id ? '<span class="chip good">WEARING</span>' : ''}
@@ -5524,6 +5605,13 @@
     });
     t.querySelector('#ammo-buy').onclick = () =>
       act('POST', '/v1/armory/ammo', {}).then(() => renderGarage());   // a fixed box — the armory sells no other size
+    t.querySelectorAll('[data-exbuy]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/exchange/${b.dataset.exbuy}/buy`, {}).then(() => renderGarage()));
+    t.querySelectorAll('[data-exdel]').forEach((b) => b.onclick = () =>
+      act('DELETE', `/v1/exchange/${b.dataset.exdel}`, {}).then(() => renderGarage()));
+    { const ex = t.querySelector('#ex-list'); if (ex) ex.onclick = () =>
+      act('POST', '/v1/exchange/list', { kind: $('#ex-kind').value, qty: Number($('#ex-qty').value), unitPrice: Number($('#ex-price').value) })
+        .then(() => renderGarage()); }
     t.querySelectorAll('[data-vestdo]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/armory/vest/${b.dataset.vestdo}`, {}).then(() => renderGarage()));
   }
@@ -6290,12 +6378,14 @@
     // response and the next request, and the keyless boards genuinely do run in parallel.
     // (D11 2026-08-05: the stock book retired — /v1/portfolio and its boards are tombstones now;
     // this screen is the REAL money arc: made → ladder → wallet → extraction → window → vault → bonds)
-    const [vaultR, bdR, winR, yldR] = await Promise.all([
+    const [vaultR, bdR, winR, yldR, wdR] = await Promise.all([
       api('GET', '/v1/vault'), api('GET', '/v1/bonds'),
       api('GET', '/v1/window'), api('GET', '/v1/yield'),
+      api('GET', '/v1/withdraw/status'),
     ]);
     const vault = vaultR.body || {}, bd = bdR.body || {};
     const win = winR.body || {}, yld = yldR.body || {};
+    const wd = wdR.body || {};
     t.innerHTML = `
       <h2>Going Legit <span class="d" style="font-size:11px">(what your $OMR does: the ladder, the vault, the window — and the on-chain way out)</span></h2>
       <div class="card" style="border-color:var(--neon)"><span class="t" style="color:var(--neon)">Where $OMR Comes From</span>
@@ -6341,6 +6431,13 @@
           ? `<input id="wd-amt" placeholder="$OMR amount" size="10"> <button class="act" id="withdraw-go">extract to my wallet →</button>
              <div class="d" style="font-size:11px;color:var(--dim)">the on-chain rail is dormant until launch — a withdrawal debits + signs a voucher that queues until the reserve is funded.</div>`
           : '<div class="d">link your wallet above first (the proven 0x address is where $OMR lands).</div>'}` : ''}
+        ${(wd.vouchers || []).length ? `
+        <div class="d" style="margin-top:8px;border-top:1px solid rgba(255,255,255,.06);padding-top:6px"><b>Your vouchers at the window</b>
+          — a QUEUED one is debited but unsigned (the reserve hasn't funded it yet); cancel it and the $OMR comes straight back.</div>
+        ${wd.vouchers.slice(0, 8).map((v) => `
+          <div class="row"><span class="k">${v.kind === 'gear' ? `gear #${esc(String(v.gearId || ''))}` : `${fmt(v.amount)} $OMR`} · nonce ${v.nonce}</span>
+            <span><span class="chip${v.status === 'queued' ? ' cold' : v.claimed ? ' good' : ''}">${esc(v.status)}${v.claimed ? ' · claimed' : ''}</span>
+            ${v.status === 'queued' ? `<button class="act" data-wdcancel="${v.id}" style="padding:2px 8px;font-size:11px">cancel — take it back</button>` : ''}</span></div>`).join('')}` : ''}
       </div>
 
       <h2 style="margin-top:12px">The Exchange <span class="d" style="font-size:11px">(closed for good)</span></h2>
@@ -6417,6 +6514,9 @@
     { const mg = $('#mint-go'); if (mg) mg.onclick = () => act('POST', '/v1/character/mint').then(() => renderPortfolio()); }
     { const wd = $('#withdraw-go'); if (wd) wd.onclick = () =>
         act('POST', '/v1/withdraw', { amount: Number($('#wd-amt').value), address: me.wallet }).then(() => renderPortfolio()); }
+    // cancel a QUEUED voucher — debited-but-unsigned only; the reversal is the audited net-0 reclaim
+    t.querySelectorAll('[data-wdcancel]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/withdraw/${b.dataset.wdcancel}/cancel`, {}).then(() => renderPortfolio()));
     // the one-way window (TOKENOMICS v2) — only rendered when it is open, hence the guard
     { const w = $('#win-go'); if (w) w.onclick = () =>
         act('POST', '/v1/window/redeem', { amount: Number($('#win-amt').value) }).then(() => renderPortfolio()); }
@@ -6996,6 +7096,12 @@
     const tgt = d.on || d.victim || d.target || '';
     return [who, t.replace(/_/g, ' '), tgt].filter(Boolean).join(' ') || t.replace(/_/g, ' ');
   }
+  // THE URGENT TIER — threats and money-at-risk get a distinct rendering so the one channel a player
+  // actually watches means something (a kill order and a tribute tick used to arrive at equal volume).
+  // Curated VICTIM-side types only (things happening TO you that want a response), never ambient news.
+  const URGENT_TYPES = new Set(['bounty_on_you', 'indicted', 'extortion', 'npc_aggression',
+    'family_retaliation', 'sacked', 'robbed', 'car_stolen', 'trunk_robbed', 'boat_stolen', 'sabotaged',
+    'inside_job', 'loan_defaulted', 'loan_forfeited', 'vendetta', 'exposed', 'whacked', 'pact_broken']);
   function feedLine(channel, ev) {
     if (channel === 'hello') { statusLine('— you are on the wire —'); return; }
     // (F2) the estate report flows through here on death (backfill on load, or the gen-bump re-backfill)
@@ -7007,7 +7113,8 @@
     const cat = channel === 'gang' ? 'family' : catOf(ev);
     const color = FEED_COLOR[cat] || 'var(--dim)';
     const mine = channel === 'me';
-    const line = el(`<div class="ev fresh ${mine ? 'me' : ''}"><span class="dot" style="color:${color}">●</span> ` +
+    const urgent = mine && URGENT_TYPES.has(ev.type);
+    const line = el(`<div class="ev fresh ${mine ? 'me' : ''}${urgent ? ' urgent' : ''}"><span class="dot" style="color:${urgent ? 'var(--bad)' : color}">●</span> ` +
       `<span style="color:${mine ? 'var(--fg)' : color}">${esc(feedText(ev))}</span></div>`);
     f.prepend(line);
     setTimeout(() => line.classList.remove('fresh'), 1600); // the neon wash is one-shot; drop it so re-renders don't re-flash
