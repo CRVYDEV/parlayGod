@@ -121,6 +121,13 @@ collapses a pacing timer server-wide; `TRAIN_CD_MS`/`MISSION_CD_MS` in particula
       channel within seconds. `/admin`'s Backups panel also carries an *alerts reach you* line, so an
       unset webhook is visible rather than discovered the night the ledger drifts. Treat the URL as a
       password — anyone who has it can post into that channel.
+- [ ] `CITY_WIRE_WEBHOOK_URL=<url>` — **THE CITY WIRE** (optional, organic marketing): a SEPARATE Discord
+      channel webhook that posts a curated, public-safe subset of the streets feed (kills, wars declared/won,
+      empire sackings, monument completions, prison breaks, title fights) so the city's own drama becomes
+      reach. **Set it on the API process** (the streets bus lives there, not the worker — the mirror of the
+      alert webhook). Dormant unless set; posts names + the event only, NEVER a dollar figure; throttled to
+      20 posts / 10 min. Make it a PUBLIC community channel (this is marketing, not ops) — keep it distinct
+      from `INVARIANT_WEBHOOK_URL`, which is a private ops alarm.
 
 ## 3. The X integrations — the full checklist (one-click sign-in + social verification)
 All from https://developer.x.com (create a Project + App once). Every X surface degrades cleanly
