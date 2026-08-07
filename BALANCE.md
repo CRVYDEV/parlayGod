@@ -5177,3 +5177,16 @@ bulletin — a fresh goal from the moment they check in each week. **`BULLETIN.T
 sign-off dials (how hard each week's badge is) — status-difficulty only, no faucet; a lower target makes
 the title easier, a higher one rarer. `BULLETIN_THEME` is a TEST-ONLY override (the SEASON_MOD precedent).
 Pinned as the whole `BULLETIN.THEMES` array in test/levers.js.
+## STILL ON THE TABLE — the cross-system pull board (founder-directed 2026-08-07)
+STILL ON THE TABLE is the complement to the coach: `coachLadder` names the SINGLE next step, priority-ordered
+five deep, and its cross-system rungs stop at level 30 — so for a mid/late player five more urgent rungs fill
+the queue and a whole system they've never touched (the Den, the Wire, the Stable) never surfaces. This board
+(`src/explore.js`, `GET /v1/explore`, a card on Home) shows EVERY system the player has UNLOCKED by level and
+never engaged with, all at once, most-overdue first, plus an explorer tally ("you've tried X of the N systems
+open to you"). **PURE READ — ZERO §10.4 surface and NO lever**: no ledger row, no faucet, no new table; the
+engagement signal for each system is ownership (`owned.businesses/fighters/speakeasy/…`), a mastery TRACK (any
+single action stamps it), or an account-level LEGEND that survives death (so a veteran heir is never told to
+"try" a system their bloodline mastered — the coach's self-clear rule). The `SYSTEMS` catalog (unlock level +
+display copy) lives in the MODULE, not a rules const — it is display/gate copy mirrored from the coach's own
+rung copy (which is not lever-pinned either), not a signed economy number, so there is nothing to pin. Gated to
+veterans on the client (`ob.allDone`) and hidden when nothing's untapped (the empty-state rule).

@@ -21,6 +21,7 @@ import * as Discovery from './discovery.js';
 import * as Mentor from './mentor.js';
 import * as Streak from './streak.js';
 import * as Circle from './circle.js';
+import * as Explore from './explore.js';
 import * as Vouch from './vouch.js';
 import * as Push from './push.js';
 import { cityEventBoard, resultsBoard } from './events.js';
@@ -1970,6 +1971,10 @@ export async function buildServer() {
   // ── THE CIRCLE — the ambient stream of the people you know (crew/mentor/protégés/spouse). §10.4-free. ──
   app.get('/v1/circle', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client) => Circle.circleBoard(client, ch, [...wsClients.keys()])));
+  // ── STILL ON THE TABLE — the cross-system pull the coach's queue-of-5 can't carry: every system this
+  // player has UNLOCKED by level and never touched, plus an explorer tally. Pure read, §10.4-free. ──
+  app.get('/v1/explore', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Explore.exploreBoard(ch, h.acct, h.owned)));
   // ── THE VOUCH — the symmetric peer bond. Stake your name on someone (scarce, capped); if they vouch
   // back it's mutual. Pure status, §10.4-free. ──
   app.get('/v1/vouches', { preHandler: auth }, async (req) =>
