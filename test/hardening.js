@@ -349,6 +349,12 @@ if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actual
   await call('POST', '/v1/character', { token: bGuest, body: { name: 'Broadcast Bruno' } });
   const me = await meOf(bGuest);
   await seedCh(me.id, "respect=1700, season_kills=3, wanted_until=NOW()+interval '1 day'");
+  // enrich the bloodline so the RICHER dossier/profile has a specific person to show a visitor: a
+  // crew, a dynasty, a generation, a kill count (all banded status — never a dollar figure)
+  const bAcct = (await pool.query('SELECT account_id a FROM characters WHERE id=$1', [me.id])).rows[0].a;
+  await pool.query("UPDATE account_persistent SET kills=7, dynasty_name='The Bruno Line', deaths=2 WHERE account_id=$1", [bAcct]);
+  await pool.query("INSERT INTO crews (id, name, leader_account) VALUES ('cbru','Bruno Crew',$1)", [bAcct]);
+  await pool.query("INSERT INTO crew_members (crew_id, account_id, name) VALUES ('cbru',$1,'Broadcast Bruno')", [bAcct]);
   // (1) the safe public dossier — real fields, NEVER an exact wealth number
   const dj = await call('GET', '/v1/u/Broadcast%20Bruno');
   assert.equal(dj.code, 200, 'dossier → 200');
@@ -356,6 +362,11 @@ if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actual
   assert.equal(dj.body.name, 'Broadcast Bruno', 'dossier carries the name');
   assert(typeof dj.body.level === 'number' && dj.body.wanted === true, 'dossier bands rank/level + flags');
   assert(typeof dj.body.hitmanRank === 'string' && dj.body.hitmanRank.length > 0, 'dossier resolves the assassin rank title (not undefined)');
+  // (1b) the RICHER dossier — the specific status a visitor lands on (crew, dynasty, generation, kills)
+  assert.equal(dj.body.crew, 'Bruno Crew', 'dossier surfaces the crew');
+  assert.equal(dj.body.dynasty, 'The Bruno Line', 'dossier surfaces the dynasty');
+  assert.equal(dj.body.generation, 3, 'dossier surfaces the bloodline generation (deaths+1)');
+  assert.equal(dj.body.kills, 7, 'dossier surfaces the lifetime kills');
   assert(dj.body.cash === undefined && dj.body.bank === undefined && dj.body.omr === undefined, 'dossier NEVER leaks an exact wealth figure (anti precise-kill-EV)');
   // (2) the cards — every type is well-formed SVG with no undefined/NaN
   for (const t of ['legend', 'wanted', 'whacked', 'join']) {
@@ -388,6 +399,10 @@ if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actual
   assert(/text\/html/.test(p.headers['content-type']), 'profile served as HTML');
   assert(p.body.includes('og:image') && p.body.includes('/card/legend/') && p.body.includes('.png'), 'profile declares the OG unfurl image (PNG variant)');
   assert(p.body.includes('ENTER THE CITY') && p.body.includes('?ref=Broadcast%20Bruno'), 'profile CTA carries the sharer as referral');
+  // (3b) the RICHER profile — a visitor sees a specific person (the dossier strip: crew, dynasty, rank)
+  assert(p.body.includes('class="dossier"'), 'profile renders the dossier stat strip');
+  assert(p.body.includes('Bruno Crew') && p.body.includes('The Bruno Line'), 'the strip shows the crew + dynasty');
+  assert(!/\$[0-9]/.test(p.body), 'the public profile NEVER prints a dollar figure (the banded rule holds on the indexed page)');
   // (4) an unknown name falls back cleanly — never a 500 (a bad share link is harmless)
   const uk = await call('GET', '/v1/u/Nobody%20Here');
   assert.equal(uk.code, 200, 'unknown dossier → 200');

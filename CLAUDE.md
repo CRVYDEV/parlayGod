@@ -9843,3 +9843,30 @@ mutation-verified twice (no-award → the crossing assertion fails; re-grant →
 Suite green + sim drift-0 + pgquery/pgcheck 43/43 on real Postgres. All `STREAK.MILESTONES` numbers are
 founder sign-off levers (BALANCE.md § THE STREAK MILESTONES; pinned as the whole array — `MILESTONES: []`
 reverts to the daily-cash-only streak).
+
+**MANUFACTURED SHARE MOMENTS + THE RICHER FRONT DOOR (founder-directed 2026-08-07: "build out all
+recommendations") — BUILT** (`src/cards.js` `publicDossier`/`profilePage`, `public/index.html` `bragText`,
+`test/hardening.js`). The organic funnel's two gaps: it was entirely PULL (a player must CHOOSE to share,
+and the moments that manufacture a shareable win were rare — kills/breakouts/purses), and the `/u/:name`
+profile the whole loop points at was thin (a card + a generic pitch). Both closed, both §10.4-free (status/
+marketing only, zero ledger, no new table/lever/route). **(1) MANUFACTURED SHARE MOMENTS** — `bragText`
+gained the big STATUS wins, each keyed on a clean unambiguous field in that win's own act-response, each
+carrying the existing `?ref` referral deep link: a STREAK MILESTONE (`body.milestone.day` — the build-#2
+signal → "hit a N-day streak, they call me {title}"), GETTING MADE (`body.made && body.omr` → "got made —
+a Made Man now"), RAISING A MEGAPROJECT (`body.completed && body.monument` → "helped raise {monument} — it
+stands over the city forever"), a CAREER RANK (`body.capstone && body.tier` — ordered before the generic
+first-week capstone so they don't collide → "cleared the rank of {tier}"), and the CREW OBJECTIVE
+(`body.crew==='objective_claimed'`). So the genuinely braggable achievements now auto-offer a one-tap X
+share with a bespoke line, not just a kill. **(2) THE RICHER FRONT DOOR** — `publicDossier` gained the
+CREW (a LEFT JOIN on crew_members/crews) + the bloodline GENERATION (`deaths+1`); `profilePage` renders a
+**dossier stat strip** below the card (LEVEL · KILLS · REPUTATION rank · FAMILY · CREW · DYNASTY·GEN ·
+WANTED/WELSHER) so a visitor lands on a SPECIFIC, impressive person ("The Undertaker · The Night Crew · The
+Corvino Empire · Gen 4"), and the og:description unfurl gained the rank/crew/dynasty. **The banded-wealth
+rule holds on the public, marketplace-indexed page exactly as on the paid Wire dossier** — NEVER a dollar
+figure (the anti-precise-kill-EV rule; the test asserts `!/\$[0-9]/` on the whole profile HTML). `test/
+hardening.js` (THE BROADCAST block) seeds a crew/dynasty/bloodline and asserts the richer dossier fields +
+the profile strip renders the crew+dynasty + no exact wealth — mutation-verified (drop `crew` → the strip
+assertion fails). Browser-probed live (the `/u/:name` page renders "Level 67 · 41 Kills · The Undertaker ·
+The Night Crew · The Corvino Empire · Gen 4 · WANTED" with the ENTER THE CITY CTA, zero page errors, no
+dollar figure). Suite green + sim drift-0 + pgquery/pgcheck 43/43 on real Postgres. No new lever (cards.js
+is pure read; the brag triggers are client presentation).
