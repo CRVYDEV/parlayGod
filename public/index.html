@@ -3065,12 +3065,11 @@
   // grouped + journey-ordered so the 22 screens read as clusters, not a flat wall
   const TAB_GROUPS = [
     ['', ['start']],
-    ['', ['profile']],
     ['Streets', ['streets', 'garage', 'life', 'city']],
     ['Earners', ['kitchen', 'empire', 'scores', 'market', 'port']],
     ['Vice', ['den', 'speakeasy', 'boxing', 'races', 'stable']],
     ['Blood', ['pvp', 'loans', 'law', 'pen', 'wire']],
-    ['Family', ['family', 'crew', 'discover']],
+    ['Family', ['family', 'crew', 'discover', 'profile']],
     ['Legit', ['portfolio', 'estate', 'store']],
     ['', ['deck']],
   ];
@@ -3182,8 +3181,16 @@
     applyTabVisibility();
     renderStreets(); renderCity(); renderDen(); renderDeck();
     setTab('streets');
-    // new players land on the guided funnel; veterans (all-done) stay on the Streets
-    api('GET', '/v1/onboard').then((r) => { if (r.body && !r.body.allDone) setTab('start'); });
+    // THE LOGIN HOOK — where a returning player lands. The Morning Paper (while-you-were-gone) and
+    // THE SITUATION (your people/threats) are the returning-player hook, and they live on Home — so a
+    // player with anything to see there should LAND there, not a tab away:
+    //   • new players (first week unfinished) → the guided funnel on Home
+    //   • a returning veteran with a fresh Morning Paper (away ≥4h) → Home, so the digest + situation
+    //     land in one place instead of three
+    //   • an active same-session player with nothing new → Streets (their bread and butter)
+    Promise.all([api('GET', '/v1/onboard'), api('GET', '/v1/paper')]).then(([o, p]) => {
+      if ((o.body && !o.body.allDone) || (p.body && p.body.fresh)) setTab('start');
+    });
   }
   // one renderer per tab (deck/city/den built once at boot; the rest re-render on entry). Function
   // declarations are hoisted, so this map can name them here.
@@ -4075,12 +4082,11 @@
            It leads only once the checklist is behind you; before that it's one honest line. -->
       ${ob.allDone ? `<h2>The City Standing <span class="d" style="font-size:11px">— one score across everything you do. Blood, Empire, Power, Legit, Hustle, Honor. This is who's actually winning.</span></h2>
       <div id="city-standing" class="d" style="color:var(--dim);font-size:12.5px;margin-bottom:12px">loading…</div>` : ''}
+      ${ob.allDone ? '' : `
       <h2>Make Your Bones <span class="d" style="font-size:12.5px">(${ob.claimed}/${ob.total} done — the first week pays cash to learn the ropes)</span></h2>
-      ${!ob.allDone && next ? `<div class="coachbox"><div class="cl">▸ DO THIS NEXT: ${next.name}</div><div class="ch">${next.ready ? 'The reward\'s waiting — claim it below.' : next.desc}</div>
+      ${next ? `<div class="coachbox"><div class="cl">▸ DO THIS NEXT: ${next.name}</div><div class="ch">${next.ready ? 'The reward\'s waiting — claim it below.' : next.desc}</div>
         ${next.ready ? `<button class="act prime" data-obclaim="${next.id}" style="padding:5px 12px;font-size:12.5px">claim ${reward(next.reward)}</button>` : `<button class="act" data-obgo="${next.id}" style="padding:5px 12px;font-size:12.5px">${(go[next.id] || [, 'go do it'])[1]} →</button>`}</div>` : ''}
-      ${ob.allDone ? `<div class="card" style="border-color:var(--neon)"><span class="t">✓ THE FIRST WEEK IS DONE</span>
-        <div class="d">you've made your bones — the city's yours to take. this list is behind you now.</div></div>` : `
-        <div class="d" style="color:var(--dim);font-size:13.5px;margin-bottom:6px">Work down the list. Green means the reward is waiting — claim it. Grey means do the thing first; tap it to jump there.</div>`}
+      <div class="d" style="color:var(--dim);font-size:13.5px;margin-bottom:6px">Work down the list. Green means the reward is waiting — claim it. Grey means do the thing first; tap it to jump there.</div>
       <div class="grid">${ob.tasks.map((x) => `
         <div class="card" ${!x.claimed && x.ready ? 'style="border-color:var(--neon)"' : ''}>
           <span class="t">${x.claimed ? '✓ ' : ''}${x.name}</span>
@@ -4091,7 +4097,7 @@
             : x.ready ? `<button class="act prime" data-obclaim="${x.id}">claim reward</button>`
             : `<button class="act" data-obgo="${x.id}">${(go[x.id] || [, 'do it'])[1]} →</button>`}
         </div>`).join('')}</div>
-      <div class="d" style="color:var(--dim);font-size:12.5px;margin-top:10px">Finish all of it for a capstone bonus (${reward(ob.capstone || {})}). Stuck? The other tabs across the top are the whole city — Streets is your bread and butter.</div>
+      <div class="d" style="color:var(--dim);font-size:12.5px;margin-top:10px">Finish all of it for a capstone bonus (${reward(ob.capstone || {})}). Stuck? The other tabs across the top are the whole city — Streets is your bread and butter.</div>`}
       ${!ob.allDone ? situation : ''}
       ${(() => { // THE CAREER (founder: another list of tasks in progression after the First Week,
         // with bonuses, that takes you throughout the game). Open tiers render their task cards;
