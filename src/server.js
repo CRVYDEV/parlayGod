@@ -21,6 +21,7 @@ import * as Discovery from './discovery.js';
 import * as Mentor from './mentor.js';
 import * as Streak from './streak.js';
 import * as Circle from './circle.js';
+import * as Vouch from './vouch.js';
 import * as Push from './push.js';
 import { cityEventBoard, resultsBoard } from './events.js';
 import * as A from './auth.js';
@@ -1947,6 +1948,15 @@ export async function buildServer() {
   // ── THE CIRCLE — the ambient stream of the people you know (crew/mentor/protégés/spouse). §10.4-free. ──
   app.get('/v1/circle', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client) => Circle.circleBoard(client, ch, [...wsClients.keys()])));
+  // ── THE VOUCH — the symmetric peer bond. Stake your name on someone (scarce, capped); if they vouch
+  // back it's mutual. Pure status, §10.4-free. ──
+  app.get('/v1/vouches', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client) => Vouch.vouchBoard(client, ch)));
+  app.post('/v1/vouch/:characterId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Vouch.giveVouch(ch, req.params.characterId, client, h)));
+  app.delete('/v1/vouch/:characterId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client) => Vouch.revokeVouch(ch, req.params.characterId, client)));
+  app.get('/v1/leaderboard/vouches', { preHandler: auth }, async () => Vouch.vouchLeaderboard(pool));
   // ── WEB PUSH — learn while away. Subscribe the browser's PushSubscription; the worker pushes URGENT
   // undelivered notifications. Dormant unless VAPID_* configured (the client hides the button then). ──
   app.post('/v1/push/subscribe', { preHandler: auth }, async (req) =>

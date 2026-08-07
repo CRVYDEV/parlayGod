@@ -4750,6 +4750,16 @@ export const STREAK = {
 export const streakReward = (day) => STREAK.REWARDS[Math.min(Math.max(1, day), STREAK.MAX_DAY) - 1];
 export const streakRankOf = (n) => STREAK.RANKS.reduce((a, r) => (Number(n) >= r.at ? r : a), STREAK.RANKS[0]);
 
+// ═══ THE VOUCH — the symmetric peer bond ═══
+// Pure status (no payout, §10.4-free). MAX_OUT is the whole balance: a vouch is scarce, so it means
+// something. Raising it makes vouches cheaper (more noise); lowering it makes them a rarer endorsement.
+export const VOUCH = { MAX_OUT: 12 };
+export const VOUCH_RANKS = [ // by inbound vouch count — the "trusted" status axis
+  { at: 0, name: 'Unknown' }, { at: 1, name: 'Vouched For' }, { at: 5, name: 'Well Regarded' },
+  { at: 15, name: 'Respected' }, { at: 40, name: 'A Name You Trust' }, { at: 100, name: 'The Word on the Street' },
+];
+export const vouchRankOf = (n) => VOUCH_RANKS.reduce((a, r) => (Number(n) >= r.at ? r : a), VOUCH_RANKS[0]);
+
 // ═══ THE RARITY NFTs (economy v3 step 7) ═══
 // Design §7 + §9.7. Cars and boats carry a rarity, and an owned one can be EXTRACTED on-chain as a
 // tradeable ERC-1155 through the EXISTING GearVault rail. Two rules from the design are load-bearing

@@ -2829,6 +2829,18 @@ CREATE TABLE IF NOT EXISTS mentor_offers (
 CREATE INDEX IF NOT EXISTS ix_mentor_offers_protege ON mentor_offers (protege_account);
 CREATE INDEX IF NOT EXISTS ix_characters_seeking ON characters (seeking_mentor) WHERE seeking_mentor;
 
+-- THE VOUCH — the symmetric peer bond (you stake your name on someone; if they vouch back it's mutual).
+-- ACCOUNT-keyed both sides → SURVIVES DEATH (outside the estate wipe by construction, no character_id). A
+-- LOG of endorsements; pure status, no ledger. Fresh CREATE TABLE IF NOT EXISTS → live-DB-safe.
+CREATE TABLE IF NOT EXISTS vouches (
+  voucher_account TEXT NOT NULL,
+  target_account TEXT NOT NULL,
+  from_name TEXT NOT NULL,
+  at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (voucher_account, target_account)
+);
+CREATE INDEX IF NOT EXISTS ix_vouches_target ON vouches (target_account);
+
 -- THE STREAK — the daily-login habit loop. Account-level (SURVIVES DEATH — the heir keeps the streak,
 -- the referral/mentor posture); new columns on an EXISTING table → ALTER ... ADD COLUMN IF NOT EXISTS
 -- (the outage lesson). `login_day` is the day-number (dayOf) of the last claim; `login_streak` the run;

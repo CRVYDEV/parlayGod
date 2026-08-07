@@ -16,6 +16,7 @@
 // streets roster. If you are genuinely alone the lists are empty, which is the TRUE state and the
 // empty-state honesty rule (never dress an empty board as full).
 import { DISCOVERY, CREW, DISTRICTS, levelOf, PACING } from './rules.js';
+import { vouchCounts } from './vouch.js';
 
 const districtName = (id) => (DISTRICTS.find((d) => d.id === id) || {}).name || id;
 // the respect a level costs, from the signed pacing curve (respect(L) = D·(L−1)²) — used to turn a
@@ -118,6 +119,11 @@ export async function discoveryBoard(ch, client, onlineIds = [], filters = {}) {
     .map((e) => ({ id: e.id, name: e.name, members: e.members, minLevel: e.min, maxLevel: e.max }))
     .sort((a, b) => b.members - a.members).slice(0, DISCOVERY.LIMIT);
 
+  // THE VOUCH — stamp each card with how many players vouch for that bloodline (the "trusted" signal), so
+  // a stranger's card carries a reputation and a vouch button. One batched query across all three lists.
+  const allIds = [...looking, ...peers, ...newcomers].map((r) => r.id);
+  const vc = await vouchCounts(client, allIds);
+  for (const list of [looking, peers, newcomers]) for (const r of list) r.vouches = vc.get(r.id) || 0;
   return {
     me: { level: myLevel, lfg: !!ch.lfg, inCrew: !!myCrew, band: DISCOVERY.BAND, crewMax: CREW.MAX_MEMBERS },
     filters: { district, nofam, online: onlineOnly },   // echo the applied filters so the client shows active state

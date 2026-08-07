@@ -9722,3 +9722,38 @@ object keys) → declared NOT_API with a reason. Browser-probed: the Kitchen her
 MOVED · Wholesaler` + `72/100 · HEAT · the Bureau is watching`, zero page errors, below the screen's art
 plate (art → hero → content). Mobile 73/73 + client wiring/mirror green. Deferred: extend the band to more
 screens once the screen-reach beacon shows which screens players actually open (the data-gated nav decision).
+
+**THE VOUCH — the symmetric peer bond (founder-directed 2026-08-07, gap #3 of the three-part drop) —
+BUILT** (`src/vouch.js` — the 126th module, `test/vouch.js` — the 77th suite; `vouches` table, the
+`VOUCH`/`VOUCH_RANKS`/`vouchRankOf` rules tail). Discovery finds people and THE CREW binds them, but between
+"just met" and "crewed up" there was NOTHING — no lightweight mutual act (confirmed: no vouch/trade-window/
+handshake existed), and THE MENTOR is the only positive first-contact and it's ASYMMETRIC (veteran→newbie).
+A vouch is the SYMMETRIC peer act: you publicly stake your name on someone ("I know this one — they're
+solid"), which gives THEM a reputation and costs YOU one of a scarce set of slots, so a vouch is a considered
+endorsement, not noise. If they vouch back it's a MUTUAL bond — the thing the whole cohesion layer (the Cast,
+the Situation) reads from. **PURE STATUS — a vouch moves no value and writes no ledger row (§10.4-FREE by
+construction, the test pins ZERO transactions rows across the whole flow).** ACCOUNT-keyed both sides → the
+bond SURVIVES DEATH (the heir keeps who they vouched and who vouched them — the crew/marriage/contacts
+posture; `vouches` is outside the estate wipe by construction, no character_id). Anti-Sybil the hitmen-board
+way: no payout attaches so a ring gains nothing tangible, both sides must be a real HUMAN (an NPC resident or
+an agent is neither voucher nor target — `not_human`), and the outbound CAP (`VOUCH.MAX_OUT` 12) makes each
+vouch scarce so spending one means something. Lifecycle: `giveVouch` (self/gone/not_human/already/maxed
+gates, single-party — a vouch touches no second character row, so no lock complexity; a mutual-back fires a
+`vouch_mutual` notify), `revokeVouch` (frees a slot — a bond isn't a life sentence), `vouchBoard` (given/
+received/mutuals/vouchedBy/rank/slots, keyed by the living characterId — no account UUID leaves, the
+people.js rule), `vouchCounts` (batched per-card counts for the discovery chip), `vouchLeaderboard` (the
+most-trusted, agents + residents excluded). Routes `POST`/`DELETE /v1/vouch/:characterId`, `GET /v1/vouches`,
+`GET /v1/leaderboard/vouches`. The discovery board (`discovery.js`) stamps each card with its vouch count so a
+stranger's card carries a reputation + a vouch button; the console "Find People" screen gained a **Your
+Reputation** card (rank + vouchedBy + slots + mutuals + a leaderboard link) and a vouch/pull button + a 🤝
+count chip on every peer/newcomer card; `feedText`/`describe()` humanize both directions. **pg-mem lessons
+re-hit:** `= ANY($1::text[])` AND correlated subqueries AND derived-table joins all fail — `vouchCounts` and
+`vouchLeaderboard` are two flat queries + a JS join (the /v1/gangs posture). `test/vouch.js` proves the
+lifecycle, every gate, the MUTUAL detection + notify, the board, the leaderboard (residents excluded),
+SURVIVES-DEATH (a vouch you earned stands after your street falls — account-keyed), and §10.4-neutrality —
+three assertions each mutation-caught. Browser-probed end-to-end (A vouches B → B's vouchedBy 0→1, the
+reputation card + button render, zero page errors). Full suite green + sim drift-0 + mobile 73/73 +
+pgquery/pgcheck 43/43 on real Postgres + client wiring/mirror (a seeded mutual vouch keeps the given/mutuals/
+vouchers/leaderboard lists non-empty). `VOUCH.MAX_OUT` is a founder sign-off lever (pure scope — no faucet).
+Deferred: a `vouchedBy` chip on the Cast/Situation people cards + `/u/:name` profile, and a peer trade
+window (the other stranger-interaction idea).

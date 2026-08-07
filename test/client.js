@@ -1047,6 +1047,9 @@ async function seedLists() {
   const two = (await si('GET', '/v1/me', t2)).body.character.id;
   const acct2 = (await q('SELECT account_id FROM characters WHERE id=$1', [two])).rows[0].account_id;
   await q('UPDATE characters SET cash=50000000, respect=500000, loc=$2 WHERE id=$1', [two, 'neon']);
+  // THE VOUCH — a MUTUAL vouch between the two streets, so /v1/vouches (given/mutuals/vouchers) and the
+  // vouches leaderboard all come back non-empty (an empty list is never a pass — the mirror rule).
+  await q(`INSERT INTO vouches (voucher_account, target_account, from_name) VALUES ($1,$2,'Me'),($2,$1,'Mirror Two') ON CONFLICT DO NOTHING`, [acct, acct2]);
 
   // an NPC family for THE BLOOD WAR board (npc_flag + a war_pool to raid) — a third street founds it so
   // `two` stays gangless for the two-party board seeds below
