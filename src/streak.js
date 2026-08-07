@@ -24,7 +24,10 @@ import { STREAK, streakReward, streakRankOf, dayOf } from './rules.js';
 export async function claimStreak(ch, client, h) {
   const acct = ch.account_id;
   const row = (await client.query(
-    'SELECT login_streak, login_day, streak_best FROM account_persistent WHERE account_id=$1 FOR UPDATE', [acct])).rows[0];
+    'SELECT login_streak, login_day, streak_best, agent_flag FROM account_persistent WHERE account_id=$1 FOR UPDATE', [acct])).rows[0];
+  // (red-team F5) agents don't draw the daily cash faucet — consistent with the Street Wage / referral /
+  // most faucets excluding agent accounts. They still play; they just don't farm the check-in reward.
+  if (row.agent_flag) throw new GameError('agent', 'Agent accounts do not draw the daily check-in.');
   const today = dayOf();
   const lastDay = Number(row.login_day || 0);
   if (lastDay === today) throw new GameError('claimed', 'You already checked in today — come back tomorrow.');

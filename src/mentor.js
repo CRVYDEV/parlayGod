@@ -122,6 +122,10 @@ export async function mentorGift(ch, protege, client, h) {
   const ms = (await client.query('SELECT * FROM mentorships WHERE mentor_account=$1 AND protege_account=$2 FOR UPDATE',
     [ch.account_id, protege.account_id])).rows[0];
   if (!ms) throw new GameError('not_mentor', "They're not your protégé.");
+  // (red-team F1) the care package is an ONBOARDING aid, not a permanent transfer channel. Once the
+  // protégé GRADUATES (level 20 — they've made it), the $5k/day rail closes; otherwise a maxed alt could
+  // pull it forever, an untaxed unlimited-duration transfer inconsistent with every other P2P cash rail.
+  if (ms.graduated) throw new GameError('graduated', `${protege.name} has graduated — they're on their own now.`);
   if (ms.gift_at && Date.now() - new Date(ms.gift_at).getTime() < MENTOR.GIFT_CD_MS) throw new GameError('cooldown', 'You sent a care package recently — one a day.');
   const amt = MENTOR.GIFT_CASH;
   if (Number(ch.cash) < amt) throw new GameError('cash', `A care package is $${amt.toLocaleString()}.`);

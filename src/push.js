@@ -110,12 +110,21 @@ export async function sweepPush(pool) {
       WHERE NOT n.pushed AND NOT n.delivered AND n.type IN (${inList})
         AND n.created_at > now() - interval '1 hour'
       ORDER BY n.created_at LIMIT 100`, types)).rows;
+  let pushed = 0;
   for (const n of rows) {
+    // CLAIM-then-notify (the Wire-watchdog / fees discipline, C1). The `pushed` flag must guard the send,
+    // not follow it: a plain SELECT takes no row lock and there's no advisory lock, so two overlapping
+    // workers (a deploy overlap — the runWageEpoch threat model) would BOTH select this row and BOTH
+    // buzz the phone. The atomic `AND NOT pushed RETURNING` means exactly one pass wins the claim; only
+    // the winner sends. The tradeoff — a lost push if the process dies AFTER the claim but BEFORE the
+    // send — is deliberately chosen over a storm of duplicate buzzes (the watchdog made the same call).
+    const claim = await pool.query('UPDATE notifications SET pushed=true WHERE id=$1 AND NOT pushed RETURNING id', [n.id]);
+    if (!claim.rowCount) continue;   // another worker already claimed it
     let p = {}; try { p = JSON.parse(n.payload); } catch { /* keep {} */ }
     try {
       await pushToAccount(pool, n.account_id, PUSH_TITLES[n.type] || 'OMERTÀ', bodyFor(n.type, p), '/');
-    } catch { /* a bad account/sub never stalls the sweep */ }
-    await pool.query('UPDATE notifications SET pushed=true WHERE id=$1', [n.id]).catch(() => {});
+      pushed++;
+    } catch { /* a bad account/sub never stalls the sweep (the claim stands — no re-buzz) */ }
   }
-  return rows.length;
+  return pushed;
 }

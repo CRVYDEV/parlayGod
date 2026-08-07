@@ -76,6 +76,25 @@ await addNote(p.id, 'sacked', { by: 'A Rival' });
 sent.length = 0; await Push.sweepPush(pool);
 assert.equal(sent.length, 0, 'no subscription → nothing sent, no crash');
 
+// ════════════ (red-team C1) CLAIM-then-notify — no duplicate buzz under concurrent workers ════════════
+// The dedup property (two overlapping workers must not both push the same row) needs true concurrency,
+// which pg-mem can't exercise. But the ORDERING that guarantees it — the row must be marked `pushed`
+// BEFORE the send, not after (claim-then-notify, the Wire-watchdog / fees discipline) — IS observable:
+// the deliver seam looks at the row's `pushed` flag AT SEND TIME. Claim-then-notify → it is already
+// true when we send; a mutation back to notify-then-flag → it is still false, and this fails by name.
+{
+  await addNote(p.id, 'robbed', { from: 'A Rival', kind: 'laundromat' });   // a fresh urgent row to sweep
+  // re-subscribe (the unsubscribe block above cleared it) so pushToAccount actually reaches the seam
+  await call('POST', '/v1/push/subscribe', { token: p.token, body: { subscription: sub } });
+  let pushedAtSend = null;
+  Push.__setDeliver(async (_pool, _s, _payload) => {
+    const r = await pool.query("SELECT pushed FROM notifications WHERE character_id=$1 AND type='robbed'", [p.id]);
+    pushedAtSend = r.rows[0]?.pushed;   // claim-then-notify → true here; notify-then-flag → false
+  });
+  await Push.sweepPush(pool);
+  assert.strictEqual(pushedAtSend, true, 'the row is claimed (pushed=true) BEFORE the send — claim-then-notify (C1); a mutation to notify-then-flag makes this false');
+}
+
 // ════════════ §10.4 — push moves no value ════════════
 assert.equal(Number((await pool.query('SELECT COUNT(*) n FROM transactions')).rows[0].n), 0, 'web push writes no ledger rows — it is pure notification');
 

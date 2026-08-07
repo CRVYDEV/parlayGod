@@ -9757,3 +9757,34 @@ pgquery/pgcheck 43/43 on real Postgres + client wiring/mirror (a seeded mutual v
 vouchers/leaderboard lists non-empty). `VOUCH.MAX_OUT` is a founder sign-off lever (pure scope — no faucet).
 Deferred: a `vouchedBy` chip on the Cast/Situation people cards + `/u/:name` profile, and a peer trade
 window (the other stranger-interaction idea).
+
+**RED-TEAM over the three-part UX/gameplay drop (RESULTS SHOW, HERO BAND, THE VOUCH; 2026-08-07).** Four
+independent lenses (§10.4/faucets, concurrency/locks/persist-clobber, death/estate/info-leak, exploit/
+grief/Sybil) over everything shipped in the drop plus the systems it touches (push, mentor, streak, crew,
+events). **No CRITICAL, no HIGH.** Four LOW/LOW-MED findings, each fixed with a mutation-verified regression;
+the rest accepted with reasons. **C1 — the push sweep buzzed twice under overlapping workers.** `sweepPush`
+selected urgent+undelivered+unpushed rows and marked `pushed` AFTER the send, so two workers on a deploy
+overlap (the runWageEpoch threat model) both selected the same row and both buzzed the phone — the
+duplicate-notify class the Wire watchdog already closed. Now CLAIM-then-notify: an atomic
+`UPDATE … SET pushed=true WHERE id=$1 AND NOT pushed RETURNING id` guards the send, so exactly one pass wins
+the claim and only the winner pushes (the accepted tradeoff — a lost push if the process dies between claim
+and send — is the same call the watchdog made). **The regression was VACUOUS on its first cut and that is
+the lesson:** it string-matched `AND NOT pushed RETURNING` in the function body, but the design COMMENT three
+lines up contains the same phrase, so a mutation on the CODE line left the assertion passing (a check that
+cannot fail reads exactly like a clean bill of health, in its newest costume). Rewritten as a BEHAVIORAL
+test pg-mem CAN run — the deliver seam reads the row's `pushed` flag AT SEND TIME: claim-then-notify → it is
+already `true`; a mutation back to notify-then-flag → still `false`, and it fails by name. **F1 — a mentor
+could send a graduated protégé a $5k care package forever.** `mentorGift` gated `not_mentor` but not
+graduation, so the once-per-24h transfer kept flowing after the tie's purpose ended; now throws `graduated`.
+§10.4-neutral either way (the gift is a two-party `mentor:gift` transfer that nets zero), so this is a scope
+bound, not a leak. **F5 — an agent account drew the daily streak faucet.** `claimStreak` excluded nobody,
+against the Street-Wage/referral posture that agents don't farm cash faucets; now the FOR-UPDATE read carries
+`agent_flag` and throws `agent`. **F3 — crew invites had no pending cap.** `inviteToCrew` checked only for a
+duplicate, so a boss could queue unbounded pending invites (a spam/grief surface and a stale-row accumulator);
+now capped at `CREW.MAX_MEMBERS` pending (`too_many_pending`). Accepted, not patched (recorded with reasons):
+the RESULTS SHOW board is a public LOG with no private field (a payout rides the per-player notification
+stream, never the board — the info-economy rule holds by construction); the sibling `*_result` field-entrant
+notifies are bare `.catch`-less emits (pre-existing codebase norm, best-effort post-commit); the HERO BAND is
+pure client layout (zero §10.4, zero server); and THE VOUCH's status leaderboard is Sybil-inflatable with no
+payout attached (the hitman-rep posture — farming alts buys the voucher nothing). Suite green + sim drift-0 +
+pgquery/pgcheck 43/43 on real Postgres.
