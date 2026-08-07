@@ -353,6 +353,20 @@
     box-shadow: inset 0 1px 0 rgba(255,255,255,.035), 0 1px 2px rgba(0,0,0,.4);
     transition: border-color .18s, transform .18s var(--ease), box-shadow .18s; }
   .card:hover { border-color: var(--line2); transform: translateY(-1px); box-shadow: var(--shadow); }
+  /* THE HERO BAND — a focal header so a screen has a headline number to rest the eye on, instead of a
+     flat grid where every row weighs the same. A row of 1–3 big stats, each a large value + a dim label.
+     (class 'hband', NOT 'hero' — '.hero' already belongs to the landing page's hero SECTION.) */
+  .hband { display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; }
+  .hband .hst { flex: 1 1 120px; min-width: 110px; background: linear-gradient(180deg, var(--panel2), #12121a);
+    border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px 14px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.03); }
+  .hband .hst .hv { font-size: 25px; font-weight: 600; color: var(--gold); letter-spacing: .3px;
+    font-variant-numeric: tabular-nums; line-height: 1.05; }
+  .hband .hst.neon .hv { color: var(--neon); text-shadow: 0 0 14px var(--neon-soft); }
+  .hband .hst.warn .hv { color: var(--warn); }
+  .hband .hst .hl { font-size: 10.5px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--dim); margin-top: 3px; }
+  .hband .hst .hsub { font-size: 11px; color: var(--dim); margin-top: 2px; }
+  @media (max-width: 760px) { .hband .hst .hv { font-size: 21px; } .hband .hst { flex-basis: 100px; padding: 10px 11px; } }
   .card .t { color: var(--ink); letter-spacing: .2px; } .card .d { color: var(--dim); font-size: 12.5px; margin: 4px 0; line-height: 1.45; }
   /* procedural item art — a framed engraved plate at the top of an item card */
   /* cover, not contain: /v1/art now serves a generated PHOTO per catalog id (SVG emblem only as the
@@ -3409,6 +3423,10 @@
   const mins = (s) => cd(s, '0:00');
   // empty-state coaching: a friendly "what this is / do this first" card instead of a blank grid
   const coachCard = (title, body) => `<div class="card coach-card"><span class="t" style="color:var(--neon)">${title}</span><div class="d">${body}</div></div>`;
+  // THE HERO BAND — a screen's headline stats, big and focal. Each stat: { v (the big value), label, sub?, cls? }.
+  // cls 'neon' for a live money figure, 'warn' for a call-to-action (e.g. money waiting to be collected).
+  const heroBand = (stats) => !stats.length ? '' : `<div class="hband">${stats.map((s) =>
+    `<div class="hst${s.cls ? ' ' + s.cls : ''}"><div class="hv">${s.v}</div><div class="hl">${s.label}</div>${s.sub ? `<div class="hsub">${s.sub}</div>` : ''}</div>`).join('')}</div>`;
   // collapsible screen section (the density fix): reads like an h2, folds like a drawer, and the
   // open/closed choice STICKS per browser (localStorage) so the screen stays how you arranged it
   const sect = (key, title, sub, inner, defaultOpen = false) => {
@@ -3435,9 +3453,15 @@
     const lab = kitchens[labIdx], nextLab = kitchens[labIdx + 1];
     const demandHere = prices.demand?.[me.loc] || {};
     const unlocked = (rules?.drugs || []).filter((d) => d.unlock <= rankIdx);
-
+    // THE HERO BAND — the trade at a glance: what you've moved, your standing, and the heat (the risk
+    // that decides whether the crew keeps selling and the Bureau stays off the corner).
+    const kHeat = Number(me.heat) || 0;
+    const kHero = heroBand([
+      { v: '$' + fmt(me.tradeRep || 0), label: 'gross moved', sub: rank.name, cls: 'neon' },
+      { v: kHeat + '/100', label: 'heat', cls: kHeat >= 60 ? 'warn' : '', sub: kHeat >= 60 ? 'the Bureau is watching — lay low' : 'under the radar' },
+    ]);
     t.innerHTML = `
-      ${!me.lab ? coachCard('The Kitchen is the deepest money in the game', 'Cook product, hire a crew, and move weight while you\'re offline. You need a lab (buy one below) and it pays to declare The Kitchen as your Path first. Mind your heat and the crew\'s wages (the nut).') : ''}
+      ${!me.lab ? coachCard('The Kitchen is the deepest money in the game', 'Cook product, hire a crew, and move weight while you\'re offline. You need a lab (buy one below) and it pays to declare The Kitchen as your Path first. Mind your heat and the crew\'s wages (the nut).') : kHero}
       <h2>The Trade</h2>
       <div class="card"><span class="t">${rank.name}</span>
         <div class="d">gross moved $${fmt(me.tradeRep || 0)} · rank bonus +${Math.round(rank.bonus * 100)}%${nextRank ? ` · next: ${nextRank.name} at $${fmt(nextRank.at)}` : ' · the top of the trade'}</div>
@@ -3558,12 +3582,12 @@
       : '';
     t.innerHTML = `
       <h2>[${g.tag}] ${g.name}${g.seal ? ` <span class="chip">${g.seal}</span>` : ''}${g.foundation ? ` <span class="chip good">${g.foundation}</span>` : ''} — you are ${me.gang.role}</h2>
-      <div class="grid">
-        <div class="card"><span class="t">$${fmt(g.treasury)}</span><div class="d">treasury</div></div>
-        <div class="card"><span class="t">${fmt(g.omrReserve)} $OMR</span><div class="d">family reserve</div></div>
-        <div class="card"><span class="t">${g.warsWon}</span><div class="d">wars won</div></div>
-        <div class="card"><span class="t">${g.held.length ? g.held.join(', ') : 'none'}</span><div class="d">turf held</div></div>
-      </div>
+      ${heroBand([
+        { v: '$' + fmt(g.treasury), label: 'treasury', cls: 'neon' },
+        { v: fmt(g.omrReserve) + ' $OMR', label: 'family reserve' },
+        { v: String(g.warsWon), label: 'wars won' },
+        { v: String(g.held.length), label: 'turf held', sub: g.held.length ? g.held.join(', ') : 'none' },
+      ])}
       ${g.war ? `<div class="card" style="border-color:var(--blood);margin-top:8px"><span class="t" style="color:var(--bad)">AT WAR</span>
         <div class="d">score us ${g.war.us} — them ${g.war.them}</div></div>` : ''}
 
@@ -6000,7 +6024,17 @@
     const cat = (await api('GET', '/v1/catalog')).body?.businesses || [];
     const ownedKinds = new Set(owned.map((b) => b.kind));
     const emp = rules?.empire || {};
+    // THE HERO BAND — the two numbers that matter on this screen: what the empire earns, and what's
+    // sitting uncollected right now (the call-to-action). Derived from the fronts already in hand.
+    const totalHr = owned.reduce((a, b) => a + (Number(b.incomePerHr) || 0), 0);
+    const totalPending = owned.reduce((a, b) => a + (Number(b.pending) || 0), 0);
+    const empHero = owned.length ? heroBand([
+      { v: '$' + fmt(totalHr), label: 'earning / hr', cls: 'neon' },
+      { v: '$' + fmt(totalPending), label: 'ready to collect', cls: totalPending > 0 ? 'warn' : '', sub: totalPending > 0 ? 'collect before the pad or a raid eats it' : 'all collected' },
+      { v: String(owned.length), label: 'fronts' },
+    ]) : '';
     t.innerHTML = `
+      ${empHero}
       ${!owned.length ? coachCard('Legit fronts — passive income', 'Buy a business (level-gated — the catalog is below) and it earns pocket cash on its own while you are away. They cost upkeep (the pad), a rival can shake one down or take it off you, and the Bureau watches what a front earns — collect often and a raid catches less. A late-game engine — come back as you level.') : ''}
       ${owned.length ? `<div class="card" style="border-color:var(--blood)"><span class="t" style="color:var(--bad)">⚠ YOUR EMPIRE IS RISK CAPITAL</span>
         <div class="d">If a rival <b>fire-kills your street</b>, the killer can <b>take over</b> your most valuable front — one they can hold. Your fronts aren't safe just because they're passive: defend yourself (a safehouse, a bodyguard), or expect to fight for them.</div></div>` : ''}

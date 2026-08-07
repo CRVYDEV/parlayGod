@@ -290,6 +290,8 @@ const NOT_API = new Set([
   'type',       // THE SOUNDTRACK's WebAudio oscillator type ('sine'/'triangle'/…) — synth-internal, never sent
   'met',        // the black book's HOW_CHIP display map ({met:'met', …}) — render labels, never sent
   'intel',      // ditto ({intel:'tapped'})
+  'cls',        // heroBand()'s stat class ('neon'/'warn') — the focal-header CSS accent, never sent
+  'label',      // heroBand()'s stat label — the render caption under the big number, never sent
 ]);
 // `field: 'value'` (deck bodies, JS objects) and `"field":"value"` (data-body attributes).
 const literals = [];
