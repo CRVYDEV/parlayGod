@@ -362,6 +362,9 @@
       repeating-linear-gradient(45deg, #101219 0 2px, transparent 2px 9px),
       radial-gradient(80% 70% at 50% 42%, #1c1f28 0%, #0e1015 100%);
     border: 1px solid var(--line); }
+  /* PROCEDURAL PORTRAIT — a small noir mugshot beside a name; rounded, gold-rimmed, vertical-aligned */
+  .avatar { display: inline-block; border-radius: 6px; border: 1px solid var(--line); vertical-align: middle;
+    margin-right: 6px; flex-shrink: 0; }
   .ico.sm { height: 52px; }
   .ico.wide { height: 96px; }
   /* phones: the art strips are the bulk of a one-column card's height — 29 crime cards at 96px of
@@ -1661,6 +1664,9 @@
   // action art — the same route, but a WIDE strip for the verb cards (crimes, den games, heist jobs,
   // outfits, fixtures). Same server fallback chain, so a missing plate degrades to an emblem, never a hole.
   const aart = (kind, id) => (id !== null && id !== undefined && id !== '') ? `<img class="ico wide" loading="lazy" alt="" src="/v1/art/${kind}/${encodeURIComponent(id)}">` : '';
+  // PROCEDURAL PORTRAIT — a deterministic noir mugshot per player (seed = their characterId), so a name
+  // reads as a PERSON on the roster/Cast/circle/leaderboards. The server route caches one face per seed.
+  const av = (seed, px = 34) => seed ? `<img class="avatar" loading="lazy" alt="" width="${px}" height="${px}" src="/v1/avatar/${encodeURIComponent(seed)}">` : '';
   let token = localStorage.getItem('omerta_token') || null;
   let me = null, rules = null, ws = null, session = null;
   // THE BROADCAST — frictionless referral attribution: a shared link (/u/<name>?ref=<name>) drops
@@ -3760,7 +3766,7 @@
     const circleSection = (cir.people && cir.people.length) ? `
       <div class="card" style="margin-top:8px"><span class="t">Your Circle</span> <span class="d" style="font-size:11px">— your people: crew, mentor, protégés, family</span>
         <div class="grid" style="margin-top:6px">${cir.people.map((cp) => `
-          <div class="card"><span class="t">${esc(cp.name)}</span> <span class="chip">${esc(cp.relation)}</span>${cp.online ? ' <span class="chip good">online</span>' : ''}
+          <div class="card">${av(cp.charId, 30)}<span class="t">${esc(cp.name)}</span> <span class="chip">${esc(cp.relation)}</span>${cp.online ? ' <span class="chip good">online</span>' : ''}
             <div class="d">lvl ${cp.level}${cp.district ? ' · ' + esc(cp.district) : ''}${cp.jailed ? ' · <span style="color:var(--bad)">in lockup</span>' : ''}${cp.hospital ? ' · <span style="color:var(--bad)">in the hospital</span>' : ''}${cp.wanted ? ' · <span style="color:var(--bad)">WANTED</span>' : ''}</div></div>`).join('')}</div>
         ${(cir.feed && cir.feed.length) ? `<div class="d" style="margin-top:8px"><b>Lately in your circle:</b></div>
           <div style="margin-top:4px;font-size:12.5px">${cir.feed.slice(0, 8).map((cf) => `<div class="ev">${esc(cf.who)} ${cf.kind === 'whacked' ? 'whacked' : 'fell to'} ${esc(cf.other)}${cf.relation ? ` <span style="color:var(--dim)">· ${esc(cf.relation)}</span>` : ''}</div>`).join('')}</div>` : ''}</div>` : '';
@@ -3787,7 +3793,7 @@
     t.innerHTML = `${inviteCards}
       <div class="card"><span class="t">${esc(crew.name)}</span> <span class="chip">${mem.length}/${b.maxMembers}</span>${crew.leader ? ' <span class="chip good">you run it</span>' : ''} <a href="#" id="crew-lb" style="font-size:11px">the deadliest crews →</a>
         <div class="grid" style="margin-top:6px">${mem.map((m) => `
-          <div class="card"><span class="t">${esc(m.name)}${m.leader ? ' <span class="chip good">boss</span>' : ''}${m.isMe ? ' <span class="chip">you</span>' : ''}</span>
+          <div class="card">${av(m.characterId, 30)}<span class="t">${esc(m.name)}${m.leader ? ' <span class="chip good">boss</span>' : ''}${m.isMe ? ' <span class="chip">you</span>' : ''}</span>
             <div class="d">${m.level != null ? 'level ' + m.level : ''}${m.districtName ? ' · ' + esc(m.districtName) : ''}${m.family ? ' · ' + esc(m.family) : ''}</div>
             ${crew.leader && !m.isMe && m.characterId ? `<button class="act" data-do="DELETE /v1/crew/member/${m.characterId}" data-confirm="Cut them loose?|${esc(m.name)} is out of the crew.">cut loose</button>` : ''}</div>`).join('')}</div>
         <div style="margin-top:8px" class="d">
@@ -3875,7 +3881,7 @@
     // the row template, kept inline at each map site so the mirror guard sees every field read
     // (a `.map(namedFn)` is a documented mirror blind spot). All three lists share the same server
     // card shape, so peers — reliably non-empty in the fixture — carries the coverage.
-    const row = (r) => `<div class="card"><span class="t">${esc(r.name)}</span> <span class="chip">lvl ${r.level}</span>${r.online ? ' <span class="chip good">online</span>' : ''}${r.hasCrew ? ' <span class="chip">in a crew</span>' : ''}${r.lfg ? ' <span class="chip good">looking</span>' : ''}${r.seekingMentor ? ' <span class="chip good">wants a mentor</span>' : ''}
+    const row = (r) => `<div class="card">${av(r.id, 30)}<span class="t">${esc(r.name)}</span> <span class="chip">lvl ${r.level}</span>${r.online ? ' <span class="chip good">online</span>' : ''}${r.hasCrew ? ' <span class="chip">in a crew</span>' : ''}${r.lfg ? ' <span class="chip good">looking</span>' : ''}${r.seekingMentor ? ' <span class="chip good">wants a mentor</span>' : ''}
         <div class="d">${r.districtName ? esc(r.districtName) : ''}${r.gangTag ? ' · [' + esc(r.gangTag) + ']' : ''}</div>
         ${canInvite && !r.hasCrew ? `<button class="act" data-inv="${esc(r.name)}" style="border-color:var(--neon)">invite to my crew</button>` : ''}
         ${canMentor && r.seekingMentor ? `<button class="act" data-mentor="${r.id}" style="border-color:var(--gold)">offer to mentor</button>` : ''}</div>`;
@@ -4119,7 +4125,7 @@
       <h2>The Situation <span class="d" style="font-size:11.5px">— your threats, your people, and what's ready right now</span></h2>
       <div class="grid">
         ${paperCard}
-        ${nem ? `<div class="card" style="border-color:var(--bad)"><span class="t" style="color:var(--bad)">YOUR NEMESIS${nem.street?.alive === false ? ' — LINE FALLEN' : ''}</span>
+        ${nem ? `<div class="card" style="border-color:var(--bad)"><span class="t" style="color:var(--bad)">${av(nem.street?.id, 30)}YOUR NEMESIS${nem.street?.alive === false ? ' — LINE FALLEN' : ''}</span>
           <div class="d"><b>${esc(nem.street?.name || 'a fallen line')}</b> has moved on you <b>${nem.total}</b> time${nem.total === 1 ? '' : 's'}${nem.bloodOwed > 0 ? ` — and their line owes yours <b>${nem.bloodOwed} bod${nem.bloodOwed === 1 ? 'y' : 'ies'}</b>` : nem.bloodOwed < 0 ? ` — your line owes theirs ${-nem.bloodOwed}` : ''}.${nem.vendetta?.mine ? ' A vendetta is SWORN.' : ''}${nem.vendetta?.theirs ? ' Their line has sworn one on YOU.' : ''}</div>
           <div class="row">${nem.street?.id ? `<button class="act" data-story="${nem.street.id}" data-story-name="${esc(nem.street.name)}">the story of you two</button><button class="act" data-go-tab="pvp">settle it →</button>` : `<button class="act" ${''}disabled>their line is dead — for now</button>`}</div></div>` : ''}
         ${(pp.family || pp.spouse || pp.consigliere || pp.guardedBy || (pp.guarding || []).length || (pp.bonds || []).length) ? `<div class="card" style="border-color:var(--gold)"><span class="t" style="color:var(--gold)">YOUR PEOPLE</span>
@@ -4389,7 +4395,7 @@
       <div>
         <div class="msp-h">${esc(p.name)}${p.title ? ` — “${esc(p.title)}”` : ''}</div>
         <div class="msp-box" style="text-align:center">
-          <div class="msp-pic">🕴️</div>
+          <div class="msp-pic">${me?.id ? `<img class="avatar" width="88" height="88" style="margin:0" src="/v1/avatar/${encodeURIComponent(me.id)}" alt="">` : '🕴️'}</div>
           <div class="msp-mood">Mood: <b>${esc(p.mood)}</b> ${p.mood === 'hunted' || p.mood === 'doing time' ? '😰' : p.mood === 'flush' ? '😎' : '🚬'}</div>
           <div class="msp-mood" style="margin-top:3px">♫ Now spinning: <i>${esc(p.spinning)}</i></div>
         </div>
@@ -5353,7 +5359,7 @@
           ${dmBtn(r.street.id)}` : ''}</div>`).join('')}</div>` : ''}
       <h2 style="margin-top:12px">The Streets (${streets.length})</h2>
       <div class="grid">${streets.map((s) => `
-        <div class="card"><span class="t">${esc(s.name)}</span> <span class="d">lvl ${s.level}${s.gangTag ? ' · ' + s.gangTag : ''}</span>
+        <div class="card">${av(s.id, 30)}<span class="t">${esc(s.name)}</span> <span class="d">lvl ${s.level}${s.gangTag ? ' · ' + s.gangTag : ''}</span>
           ${s.jailed ? '<span class="chip cold">LOCKUP</span>' : ''}${s.hospitalized ? '<span class="chip cold">HOSPITAL</span>' : ''}${s.npc ? '<span class="chip" title="a resident of the city — a real target on every board, but not another player">RESIDENT</span>' : ''}${rivalIds.has(s.id) ? '<span class="chip bad" title="this bloodline has moved against you — the rivals ledger remembers">RIVAL</span>' : ''}
           <div class="d">${s.loc}${s.guardPrice != null ? ` · guards for $${fmt(s.guardPrice)}` : ''}</div>
           ${dmBtn(s.id)}

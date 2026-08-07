@@ -9611,3 +9611,27 @@ end-to-end (the streak card claims → "1 day", the button clears, the card upda
 suite green + sim drift-0 + mobile 73/73 + pgquery/pgcheck 43/43 on real Postgres (the ALTERs apply) +
 client wiring/mirror (116 boards / 140 lists) + levers 630 pinned. All `STREAK.*` numbers are founder
 sign-off levers (BALANCE.md § THE STREAK); THE CIRCLE adds no lever (pure read).
+
+**PROCEDURAL PLAYER PORTRAITS — cheap visual identity (founder-directed 2026-08-07) — BUILT**
+(`src/avatar.js` — the 124th module + `test/avatar.js` — the 74th suite). A name was just text on the
+roster, the Cast, the leaderboards — players didn't read as PEOPLE. `avatarSvg(seed)` generates a
+deterministic noir "mugshot" (a fedora, a face, a collar+tie, all varying per seed — skin/hat/coat/bg/accent
++ brim-width + jaw-width off a stable FNV hash, the `itemArt`/seeded-"now-spinning" precedent; no
+`Math.random`, same seed → same face forever). **SAFETY: the seed is hash-ONLY — never written into the SVG
+markup — so there is no injection surface** even though the route is public + keyless (test proves a
+`<script>` seed never reaches the output). Served by `GET /v1/avatar/:seed` (public, keyless, heavily
+cacheable — one face per seed; seed clamped to 128 chars, fastify's param cap 4xx's an over-long one before
+the handler); ZERO §10.4 (art moves no value). Client: an `av(seed, px)` helper (`<img src="/v1/avatar/…">`,
+a rounded gold-rimmed `.avatar` chip) wired into the person-facing surfaces — the Wet Work roster, THE CIRCLE,
+the crew roster, the discovery/ROLODEX cards, the Situation NEMESIS card, and the player's own portrait in the
+`.msp-pic` slot on My Profile. The seed is the LIVING characterId everywhere (already public/client-keyed — no
+account UUID, the people.js rule). **The masthead `#whoami` avatar was REVERTED** — a 28px face in that
+fold-critical top line grew it and pushed every screen's content ~10px below the 667 fold (mobile harness
+caught all 20 screens); the value is seeing OTHERS as people, so the self-portrait lives on My Profile
+(non-fold-critical) instead. `test/avatar.js` proves determinism, distinctness (>180/200 seeds distinct),
+well-formed SVG, the no-injection property, the route (public + SVG + immutable-cache), and §10.4-neutrality.
+Browser-probed (5 roster faces + a profile face render, zero page errors); the noir portraits read clearly as
+distinct mob faces (verified on a rendered grid). Full suite green + sim drift-0 + mobile 73/73 +
+pgquery/pgcheck 43/43 on real Postgres + client wiring/mirror + routes 598 (the avatar route declared public
+with a reason). No levers (pure cosmetic). Deferred: embedding the portrait into the broadcast legend card /
+public profile SVG (the card already carries a strong design), and avatars on the leaderboard modals.

@@ -98,6 +98,7 @@ import * as Pass from './pass.js';
 import * as Landmarks from './landmarks.js';
 import * as Ops from './ops.js';
 import { itemArt } from './assets.js';
+import { avatarSvg } from './avatar.js';
 import * as Cards from './cards.js';
 import { renderPng } from './cardpng.js';
 import { buildOpenApi, llmsTxt } from './agentgateway.js';
@@ -218,6 +219,13 @@ export async function buildServer() {
     const item = list && list.find((x) => x.id === req.params.id);
     reply.type('image/svg+xml; charset=utf-8').header('cache-control', 'public, max-age=604800, immutable');
     return reply.send(itemArt(req.params.kind, item));
+  });
+  // ── PROCEDURAL PLAYER PORTRAITS — a deterministic noir mugshot per seed (a character id), so a name
+  // reads as a PERSON on the roster/Cast/leaderboards. PUBLIC + keyless + heavily cacheable (same seed →
+  // same face); the seed is hash-only (never rendered), so no injection surface. ZERO §10.4. ──
+  app.get('/v1/avatar/:seed', async (req, reply) => {
+    reply.type('image/svg+xml; charset=utf-8').header('cache-control', 'public, max-age=604800, immutable');
+    return reply.send(avatarSvg(String(req.params.seed || '').slice(0, 128)));
   });
   // ── THE BROADCAST: shareable noir cards + public profile + frictionless ?ref attribution (§7.13). ──
   // PUBLIC + keyless + read-only; ZERO §10.4 surface (marketing/status only). Wealth is never exact.

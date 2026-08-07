@@ -30,6 +30,7 @@ const app = await buildServer();
 // reason. Now an entry costs a sentence, so the cheapest way past this test is to add `auth`.
 const PUBLIC = {
   'GET /v1/art/:kind/:id': 'card/profile art rendered into unfurls by crawlers with no token',
+  'GET /v1/avatar/:seed': 'deterministic cosmetic portrait from a public seed (a character id); no auth, no state, cacheable',
   'GET /v1/auth/x/callback': 'the OAuth return leg — the caller has no token yet, by definition',
   'GET /v1/catalog': 'the public item catalog (agent/LLM discovery surface, AGENTS.md)',
   'GET /v1/city': 'the city board the landing page shows before sign-in',
