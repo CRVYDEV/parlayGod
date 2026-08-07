@@ -1760,6 +1760,9 @@
     // THE STREAK — the daily check-in (best/rank are unique to the claim response, not the view)
     if (body && body.ok && body.streak != null && body.best != null && body.cash != null && typeof body.rank === 'string')
       return `\u{1F525} checked in — day ${body.streak}, +$${fmt(body.cash)}${body.streak >= body.best ? ` · best yet (${esc(body.rank)})` : ''}`;
+    // THE VOUCH — you staked your name (or pulled it back)
+    if (body && body.vouched) return body.mutual ? `\u{1F91D} you vouched ${esc(body.vouched)} back — a mutual bond` : `you vouched for ${esc(body.vouched)} — your name's on them now`;
+    if (body && body.pulled) return `pulled your name back from ${esc(body.pulled)}`;
     // THE HIRED GUNS — a merc's firepower counts, but takes no cut. The toast says the crew grew.
     if (body && body.hired && body.fee != null) return `\u{1F52B} a gun's on the crew — $${fmt(body.fee)} up front, no cut of the score. crew ${body.crew}/${body.crewMax}`;
     if (body && body.dismissed) return `sent a gun home — a slot's open for a real crewman. crew ${body.crew}/${body.crewMax}`;
@@ -3946,16 +3949,25 @@
     const dm = b.me || {}, looking = b.looking || [], peers = b.peers || [], newcomers = b.newcomers || [], crews = b.crews || [];
     const mm = (await api('GET', '/v1/mentor')).body || {};
     const mme = mm.me || {}, offers = mm.offers || [], myProteges = mm.proteges || [];
+    const vch = (await api('GET', '/v1/vouches')).body || {};   // THE VOUCH — your reputation + who you vouch
+    const myVouched = new Set((vch.given || []).map((g) => g.id));   // ids you already stake your name on
+    const vchSlots = vch.slotsLeft || 0;
     const districts = (rules && rules.districts) || [];
     const canInvite = dm.inCrew;   // any crew member can put a word in (by name)
     const canMentor = !!mme.canMentor;   // THE MENTOR — a veteran with room can take a newcomer under their wing
+    // THE VOUCH — the button on a stranger's card: pull it if you already vouch, else vouch (if you have a slot).
+    const vouchBtn = (r) => myVouched.has(r.id)
+      ? `<button class="act" data-unvouch="${r.id}" style="border-color:var(--gold)">✓ you vouch — pull it</button>`
+      : (vchSlots > 0 ? `<button class="act" data-vouch="${r.id}">vouch for them</button>` : '');
+    const vouchChip = (r) => r.vouches ? ` <span class="chip">🤝 ${r.vouches} vouch${r.vouches === 1 ? '' : 'es'}</span>` : '';
     // the row template, kept inline at each map site so the mirror guard sees every field read
     // (a `.map(namedFn)` is a documented mirror blind spot). All three lists share the same server
     // card shape, so peers — reliably non-empty in the fixture — carries the coverage.
-    const row = (r) => `<div class="card">${av(r.id, 30)}<span class="t">${esc(r.name)}</span> <span class="chip">lvl ${r.level}</span>${r.online ? ' <span class="chip good">online</span>' : ''}${r.hasCrew ? ' <span class="chip">in a crew</span>' : ''}${r.lfg ? ' <span class="chip good">looking</span>' : ''}${r.seekingMentor ? ' <span class="chip good">wants a mentor</span>' : ''}
+    const row = (r) => `<div class="card">${av(r.id, 30)}<span class="t">${esc(r.name)}</span> <span class="chip">lvl ${r.level}</span>${r.online ? ' <span class="chip good">online</span>' : ''}${r.hasCrew ? ' <span class="chip">in a crew</span>' : ''}${r.lfg ? ' <span class="chip good">looking</span>' : ''}${r.seekingMentor ? ' <span class="chip good">wants a mentor</span>' : ''}${vouchChip(r)}
         <div class="d">${r.districtName ? esc(r.districtName) : ''}${r.gangTag ? ' · [' + esc(r.gangTag) + ']' : ''}</div>
         ${canInvite && !r.hasCrew ? `<button class="act" data-inv="${esc(r.name)}" style="border-color:var(--neon)">invite to my crew</button>` : ''}
-        ${canMentor && r.seekingMentor ? `<button class="act" data-mentor="${r.id}" style="border-color:var(--gold)">offer to mentor</button>` : ''}</div>`;
+        ${canMentor && r.seekingMentor ? `<button class="act" data-mentor="${r.id}" style="border-color:var(--gold)">offer to mentor</button>` : ''}
+        ${vouchBtn(r)}</div>`;
 
     t.innerHTML = `
       <div class="card"><span class="t">Looking for a crew?</span>
@@ -3963,6 +3975,13 @@
           : "Put the word out and let someone find YOU."}
           <button class="act" id="lfg-toggle" style="border-color:${dm.lfg ? 'var(--bad)' : 'var(--neon)'}">${dm.lfg ? 'stop looking' : "I'm looking for a crew"}</button></div>
         ${!dm.inCrew ? '<div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">Find someone below, then <a href="#" data-dgo="crew">start a crew</a> to bring them in.</div>' : ''}</div>
+
+      <div class="card" style="margin-top:8px"><span class="t">Your Reputation${vch.rank ? ` — ${esc(vch.rank)}` : ''}</span>
+        <div class="d" style="margin-top:4px"><b>${vch.vouchedBy || 0}</b> player${vch.vouchedBy === 1 ? '' : 's'} vouch for you ·
+          you've vouched ${(vch.given || []).length}/${vch.cap || 12} <span style="color:var(--dim)">(${vchSlots} slot${vchSlots === 1 ? '' : 's'} left)</span></div>
+        <div class="d" style="font-size:11px;color:var(--dim)">Stake your name on someone you rate — it gives them a reputation and costs you a slot. If they vouch back, it's a mutual bond.</div>
+        ${(vch.mutuals || []).length ? `<div class="d" style="margin-top:4px">🤝 mutual: ${vch.mutuals.map((m) => `<span class="chip good">${esc(m.name)}</span>`).join(' ')}</div>` : ''}
+        <div class="row" style="margin-top:4px"><a href="#" data-dgo-lb="vouches" style="font-size:11px">the most-trusted leaderboard →</a></div></div>
 
       ${mme.canSeek || mm.mentor || offers.length || myProteges.length || mme.canMentor ? `
       <div class="card" style="margin-top:8px;border-color:var(--gold)"><span class="t" style="color:var(--gold)">The Mentor <span class="d" style="font-size:11px">— a veteran takes a newcomer under their wing</span></span>
@@ -3998,9 +4017,10 @@
         <div class="grid" style="margin-top:6px">${looking.map(row).join('')}</div></div>` : ''}
 
       <div class="card" style="margin-top:8px"><span class="t">Players near your level</span> <span class="d" style="font-size:11px">± ${dm.band} levels</span>
-        ${peers.length ? `<div class="grid" style="margin-top:6px">${peers.map((r) => `<div class="card"><span class="t">${esc(r.name)}</span> <span class="chip">lvl ${r.level}</span>${r.online ? ' <span class="chip good">online</span>' : ''}${r.hasCrew ? ' <span class="chip">in a crew</span>' : ''}${r.lfg ? ' <span class="chip good">looking</span>' : ''}
+        ${peers.length ? `<div class="grid" style="margin-top:6px">${peers.map((r) => `<div class="card"><span class="t">${esc(r.name)}</span> <span class="chip">lvl ${r.level}</span>${r.online ? ' <span class="chip good">online</span>' : ''}${r.hasCrew ? ' <span class="chip">in a crew</span>' : ''}${r.lfg ? ' <span class="chip good">looking</span>' : ''}${vouchChip(r)}
           <div class="d">${r.districtName ? esc(r.districtName) : ''}${r.gangTag ? ' · [' + esc(r.gangTag) + ']' : ''}</div>
-          ${canInvite && !r.hasCrew ? `<button class="act" data-inv="${esc(r.name)}" style="border-color:var(--neon)">invite to my crew</button>` : ''}</div>`).join('')}</div>`
+          ${canInvite && !r.hasCrew ? `<button class="act" data-inv="${esc(r.name)}" style="border-color:var(--neon)">invite to my crew</button>` : ''}
+          ${vouchBtn(r)}</div>`).join('')}</div>`
           : '<div class="d" style="color:var(--dim);margin-top:4px">Nobody around your level yet — check Fresh Blood below, or come back once the city fills up.</div>'}</div>
 
       <div class="card" style="margin-top:8px"><span class="t">Fresh blood</span> <span class="d" style="font-size:11px">the newest faces in the city</span>
@@ -4029,13 +4049,25 @@
       act('POST', '/v1/mentor/accept/' + btn.dataset.maccept, {}).then(() => renderDiscover()));
     t.querySelectorAll('[data-mgift]').forEach((btn) => btn.onclick = () =>
       act('POST', '/v1/mentor/gift/' + btn.dataset.mgift, {}).then(() => renderDiscover()));
-    const mlb = t.querySelector('[data-dgo-lb]');
-    if (mlb) mlb.onclick = async (e) => { e.preventDefault();
-      const list = (await api('GET', '/v1/leaderboard/mentors')).body || [];
-      sheetModal('THE MENTORS — most protégés raised', list.length
-        ? '<div class="grid">' + list.map((m, i) => `<div class="card"><span class="t">${i + 1}. ${esc(m.name)}</span> <span class="chip">${esc(m.rank)}</span><div class="d">${m.raised} raised</div></div>`).join('') + '</div>'
-        : '<p class="dim">No mentors have raised a protégé yet — be the first.</p>');
-    };
+    // THE VOUCH wiring — stake your name (or pull it back). Pure status; re-render to reflect the new slots.
+    t.querySelectorAll('[data-vouch]').forEach((btn) => btn.onclick = () =>
+      act('POST', '/v1/vouch/' + btn.dataset.vouch, {}).then(() => renderDiscover()));
+    t.querySelectorAll('[data-unvouch]').forEach((btn) => btn.onclick = () =>
+      act('DELETE', '/v1/vouch/' + btn.dataset.unvouch, {}).then(() => renderDiscover()));
+    // leaderboards — route by which link (mentors / vouches)
+    t.querySelectorAll('[data-dgo-lb]').forEach((lb) => lb.onclick = async (e) => { e.preventDefault();
+      if (lb.dataset.dgoLb === 'vouches') {
+        const list = (await api('GET', '/v1/leaderboard/vouches')).body || [];
+        sheetModal('THE MOST TRUSTED — most vouched-for', list.length
+          ? '<div class="grid">' + list.map((v) => `<div class="card"><span class="t">${v.rank}. ${esc(v.name)}</span><div class="d">🤝 ${v.vouches} vouch${v.vouches === 1 ? '' : 'es'}</div></div>`).join('') + '</div>'
+          : '<p class="dim">Nobody has been vouched for yet — be the first to stake your name on someone.</p>');
+      } else {
+        const list = (await api('GET', '/v1/leaderboard/mentors')).body || [];
+        sheetModal('THE MENTORS — most protégés raised', list.length
+          ? '<div class="grid">' + list.map((m, i) => `<div class="card"><span class="t">${i + 1}. ${esc(m.name)}</span> <span class="chip">${esc(m.rank)}</span><div class="d">${m.raised} raised</div></div>`).join('') + '</div>'
+          : '<p class="dim">No mentors have raised a protégé yet — be the first.</p>');
+      }
+    });
   }
 
   // ── BLACK MARKET: the board (auctions / goods / buy orders) + your sell side ──
@@ -7469,6 +7501,9 @@
       protege_milestone: () => `your protégé ${d.protege} just hit level ${d.lvl}`,
       protege_graduated: () => `your protégé ${d.protege} graduated — they made it`,
       protege_attacked: () => `your protégé ${d.protege} got ${d.what} by ${d.from} — go settle it`,
+      // THE VOUCH — someone staked their name on you (or made it mutual)
+      vouched: () => `${d.by} vouched for you — someone's got your name`,
+      vouch_mutual: () => `${d.by} vouched you back — that's a mutual bond now`,
       bodyguard: () => `${d.guard} took a bullet for ${d.saved}`,
       revive: () => `${d.who || 'a made man'} got back up — paid protection`,
       convoy: () => `a convoy is rolling ${d.from || ''} → ${d.to || ''} (${d.band || 'unknown value'})`,

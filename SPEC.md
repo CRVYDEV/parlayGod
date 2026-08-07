@@ -10,11 +10,11 @@ Written 2026-07-25. Every number below was measured from the tree, not recalled.
 
 | | |
 |---|---|
-| Backend modules | **125** files, **40794** lines (`src/`, incl. `src/routes/` and `src/social/`) |
-| Test suites | **76** files, **27889** lines (`test/`) — ratio 0.68 test:src |
-| HTTP routes | **602** registrations |
-| Database tables | **198** (`schema.sql`, 2796 lines) |
-| Client | **7,658** lines (`public/index.html`, single file, zero dependencies) |
+| Backend modules | **126** files, **40938** lines (`src/`, incl. `src/routes/` and `src/social/`) |
+| Test suites | **77** files, **28009** lines (`test/`) — ratio 0.68 test:src |
+| HTTP routes | **606** registrations |
+| Database tables | **199** (`schema.sql`, 2796 lines) |
+| Client | **7727** lines (`public/index.html`, single file, zero dependencies) |
 | Ops dashboard + wiki | `public/admin.html`, `public/wiki.html` |
 | Smart contracts | **9** contracts, **1716** lines Solidity, **128** Foundry tests passing |
 | Harnesses | `tools/sim.js` (economy), `tools/playthrough.js` (player experience), `tools/pgcheck.js` (real Postgres), `tools/loadtest.js` (concurrency), `tools/chaos.js` (interruption), `tools/mobile.js` (the screens, at phone size), `tools/scale.js` (market liquidity at population scale), `tools/bond-dials.js` (sizing the on-chain mint walls), `tools/pgquery.js` (every SQL string parses on real Postgres) |
@@ -413,7 +413,7 @@ looks superlinear and produces deadlocks). So capacity here is bought with CPU, 
 rewrite. D6 stays accepted-as-is; the convention is now known to hold under load, not just under review.
 
 ### D7 — Documentation mass **(LOW-MEDIUM, partly addressed)**
-151 markdown files, 37k lines, with CLAUDE.md alone 7265 lines of dense prose. Two codices already
+151 markdown files, 37k lines, with CLAUDE.md alone 9759 lines of dense prose. Two codices already
 drifted once (a test now guards it). Onboarding a second developer means reading a novel.
 
 **Addressed: the prose that a reader could ACT on is now machine-checked.** Stale prose does not fail
