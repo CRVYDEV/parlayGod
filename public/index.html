@@ -4186,9 +4186,10 @@
   async function renderStart() {
     const t = $('#tab-start');
     // two serial round trips before a single pixel painted — the tab showed nothing for both
-    const [obR, swR, crR, ppR, prR, cwR, dwR, evR, stR, reR, blR] = await Promise.all([api('GET', '/v1/onboard'), api('GET', '/v1/social'), api('GET', '/v1/career'), api('GET', '/v1/people'), api('GET', '/v1/paper'), api('GET', '/v1/crew'), api('GET', '/v1/discovery'), api('GET', '/v1/events'), api('GET', '/v1/streak'), api('GET', '/v1/results'), api('GET', '/v1/bulletin')]);
+    const [obR, swR, crR, ppR, prR, cwR, dwR, evR, stR, reR, blR, exR] = await Promise.all([api('GET', '/v1/onboard'), api('GET', '/v1/social'), api('GET', '/v1/career'), api('GET', '/v1/people'), api('GET', '/v1/paper'), api('GET', '/v1/crew'), api('GET', '/v1/discovery'), api('GET', '/v1/events'), api('GET', '/v1/streak'), api('GET', '/v1/results'), api('GET', '/v1/bulletin'), api('GET', '/v1/explore')]);
     const bl = blR.body || {};   // THE WEEKLY BULLETIN
-    const ev = evR.body || {};   // TONIGHT IN THE CITY (hoisted here so the mirror's alias window reaches it)
+    const ex = exR.body || {};   // STILL ON THE TABLE — unlocked-but-untouched systems
+    const ev = evR.body || {};   // TONIGHT IN THE CITY (hoisted for the mirror window)
     const ob = obR.body || { tasks: [], total: 0, claimed: 0 };
     const sw = swR.body || { tasks: [] };
     const cr = crR.body || { tiers: [] };
@@ -4373,6 +4374,22 @@
                 : `<button class="act" data-crgo="${k.tab || 'streets'}">show me →</button>`}
             </div>`).join('')}</div>`;
         }).join('')}</div>`; })()}
+      ${(() => { // STILL ON THE TABLE — the cross-system pull the coach's queue-of-5 can't carry. Systems
+        // this player has UNLOCKED by level and never touched, all at once, most overdue first — the
+        // depth players don't know they have. Veterans only (the checklist + coach cover the early
+        // systems); hidden when there's nothing untapped (the empty-state rule). Pure read, no dollar.
+        if (!ob.allDone) return '';
+        const untap = ex.untapped || [];
+        const pg = ex.progress || {};
+        if (ex.allTried) return `<h2 style="margin-top:14px">Still On The Table <span class="d" style="font-size:11px">— you've worked every racket in the city.</span></h2>
+          <div class="d" style="color:var(--gold);font-size:12.5px;margin-bottom:12px">🏆 You've had a hand in all ${pg.unlocked || 0} systems open to you. There's nothing in this town you haven't tried.</div>`;
+        if (!untap.length) return '';
+        return `<h2 style="margin-top:14px">Still On The Table <span class="d" style="font-size:11px">— you've tried ${pg.tried || 0} of ${pg.unlocked || 0} systems open to you. Here's the rest of the city.</span></h2>
+          <div class="grid">${untap.map((s) => `
+            <div class="card"><span class="t">${esc(s.name)}</span>
+              <div class="d">${esc(s.hook)}</div>
+              <div class="row" style="margin-top:6px"><button class="act" data-go-tab="${s.tab}">take a look →</button></div></div>`).join('')}</div>`;
+      })()}
       ${sect('howto', 'How the city works', 'the six things worth knowing — 60 seconds', `
         <div class="grid">
           <div class="card"><img class="ico wide" loading="lazy" alt="" src="/art/interior-streets.jpg"><span class="t">The Streets</span>

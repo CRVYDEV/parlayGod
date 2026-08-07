@@ -10002,3 +10002,29 @@ lesson: 11 boards in Home's `Promise.all` sits at the mirror's 900-char alias wi
 board pushed the last alias out of scope, so `bl`/`ev` were hoisted to the top of the alias block and the
 comments trimmed to buy margin (the covered-idiom discipline, not a guard change). Suite green (79 suites) +
 sim drift-0 + mobile 73/73 + pgquery + pgcheck 43/43 on real Postgres.
+
+**STILL ON THE TABLE — the cross-system pull the coach's queue can't carry (founder-directed 2026-08-07:
+"keep going down the list"; the cross-system-incentive recommendation) — BUILT** (`src/explore.js` — the
+129th module, `test/explore.js` — the 80th suite; `GET /v1/explore`, a card on Home). The coach
+(`coachLadder`) names the SINGLE next step, priority-ordered five deep, and its cross-system rungs stop at
+level 30 — so for a mid/late player five more urgent rungs fill the queue and a whole system they've never
+touched (the Den, the Wire, the Stable) never surfaces. This board is the complement: EVERY system the
+player has UNLOCKED by level and never engaged with, all at once, most-overdue first, plus an explorer tally
+("you've tried X of the N systems open to you" — the completion-compulsion hook, pointed at depth players
+don't know they have). **PURE READ — ZERO §10.4 surface, NO new lever, NO new table**: the engagement
+signal per system is ownership (`owned.businesses/fighters/speakeasy/…`), a mastery TRACK (any single action
+stamps it), or an account-level LEGEND that survives death (so a veteran heir is never told to "try" a
+system their bloodline mastered — the coach's self-clear rule); the route hands `exploreBoard` the SAME
+`loadOwned`/`acct` state `view()` already holds, so it costs no extra query on the hot path. The `SYSTEMS`
+catalog (19 systems: unlock level + display copy, gates mirrored from the coach's own rungs) lives in the
+MODULE, not a rules const — it is display/gate copy, not a signed economy number (the coach's rung copy is
+not lever-pinned either), so there is nothing to pin. Client: a "Still On The Table" card on Home, gated to
+veterans (`ob.allDone` — the checklist + coach cover the early systems) and hidden when nothing's untapped
+(the empty-state rule); an all-clear renders a flourish. `test/explore.js` proves a level-1 street has
+unlocked nothing (empty board), a level-30 street has all 19 unlocked and untouched (the whole city on the
+table, ordered earliest-first), engaging one system (a single mastery-track XP row — the signal the board
+reads) drops it and ticks the tally, and a GET writes ZERO transactions rows — two mutations each caught at
+its own named assertion (a `seen` predicate always-false → the engaged system stays on the table; the
+untapped filter removed → the tally never ticks). The mirror guard's alias window took a 12th board, so the
+`ex`/`ev` comments were trimmed to keep every alias in scope (the covered-idiom discipline, not a guard
+change). Suite green (80 suites) + sim drift-0 + mobile 73/73.
