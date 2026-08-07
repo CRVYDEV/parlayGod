@@ -5133,3 +5133,21 @@ legend + rank + leaderboard are pure status (survives death, agents/NPC excluded
 `STREAK.REWARDS`/`MAX_DAY` are the sign-off dials; a shorter/flatter table trims the faucet, `REWARDS: [0,…]`
 disables the cash entirely (the streak + legend still work). THE CIRCLE (the ambient people-you-know feed)
 adds NO faucet — it is a pure read (a live snapshot + the kill_log-derived blood feed), §10.4-free.
+
+## THE CREW OBJECTIVE — the weekly shared goal (founder-directed 2026-08-07)
+
+The synchronous "log in because your crew is active" hook the crew lacked. A goal is drawn per crew per
+week off the §7.11 seed (`crewObjectiveOf` — deterministic, town-wide verifiable) from three kinds
+(`CREW.OBJECTIVE.KINDS`: crimes / kills / earn), and the WHOLE crew works it down together — a crewmate's
+own play advances it (hooked at `doCrime` for crimes/earn and the fire kill for kills, via
+`bumpCrewObjective`, the bumpMastery twin). The target scales with crew size (kind `base` × members at
+materialize), so a bigger crew has a bigger job. When the target is cracked, EVERY living member is pinged
+(the moment that says "your crew showed up") and each CONTRIBUTOR claims `CREW.OBJECTIVE.REWARD` cash once.
+§10.4: ONE bounded cash faucet `crew:objective` (character_id'd → the per-character cash check reconciles;
+in the vocabulary). The faucet is bounded HARD — once per week per member, only on completion, only for a
+member who actually contributed (a progress row) — so the ceiling is `REWARD × MAX_MEMBERS` per crew per
+WEEK (petty vs the passive stack; v24: social/collective rewards are cash, never $OMR). Crew-keyed
+(survives death like the crew; outside the estate wipe + migrate DISPOSITION guard by construction). The
+per-member contribution list is the "what your crew did this week" texture. `CREW.OBJECTIVE.REWARD` is the
+faucet dial (`0` disables the cash; the goal + the ping still work as a pure coordination hook); the KIND
+`base` targets tune the grind. Founder sign-off levers.

@@ -15,7 +15,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS, RANKS,
          KITCHENS, labModuleCost, recyclesToDesk, DESK_RECYCLE_REASON, isMade, madeSeconds,
          MADE_LADDER, madeRungIdx, madeRungOf, ladderFx,
          ASSETS, OPERATIONS, opSlotsOf, nextOpSlotLevel, MISSIONS, dailyLiveFor, jailed, safeHoused,
-         STABLE, SPEAKEASY, ESTATE, MADE } from './rules.js';
+         STABLE, SPEAKEASY, ESTATE, MADE, CREW, crewObjectiveOf } from './rules.js';
 import { dbCaps } from './db.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
@@ -579,6 +579,48 @@ export async function bumpMastery(client, h, ch, trackId, action) {
     }
   }
   return { track: trackId, xp, lvl: after, leveled: after > before, statGain: statGain || undefined };
+}
+
+// ═══ THE CREW OBJECTIVE — the weekly shared goal, advanced by a crewmate's own play (the bumpMastery
+// twin; lives here so the import graph stays acyclic — crew.js imports game.js one-way, and the three
+// hook sites (doCrime, the fire kill in combat.js) call this). `deltas` is a contributions map
+// {crimes?, kills?, earn?}; only the WEEK'S DRAWN kind increments, so each hook passes whatever it can
+// offer and the draw decides what counts. Reads the loaded crewId off h.owned — solo/headless is a
+// clean no-op. When the target is cracked, EVERY member is pinged (the synchronous "your crew is
+// active" moment) and the crew legend is bumped once. ═══
+export async function bumpCrewObjective(client, h, ch, deltas) {
+  const crewId = h?.owned?.crewId;
+  if (!crewId || !deltas) return null;
+  const week = weekOf();
+  // materialize this week's objective (deterministic kind+target, scaled by crew size) if absent —
+  // idempotent INSERT (a concurrent first-touch loses the race harmlessly, the world_npcs precedent).
+  let obj = (await client.query('SELECT kind, target, progress, done FROM crew_objectives WHERE crew_id=$1 AND week=$2', [crewId, week])).rows[0];
+  if (!obj) {
+    const members = Number((await client.query('SELECT COUNT(*) n FROM crew_members WHERE crew_id=$1', [crewId])).rows[0].n) || 1;
+    const drawn = crewObjectiveOf(crewId, week, members);
+    await client.query('INSERT INTO crew_objectives (crew_id, week, kind, target) VALUES ($1,$2,$3,$4) ON CONFLICT (crew_id, week) DO NOTHING', [crewId, week, drawn.kind, drawn.target]);
+    obj = (await client.query('SELECT kind, target, progress, done FROM crew_objectives WHERE crew_id=$1 AND week=$2', [crewId, week])).rows[0];
+  }
+  const add = Math.floor(Number(deltas[obj.kind] || 0));
+  if (!(add > 0)) return null;   // this hook doesn't feed the drawn kind
+  // credit the member's contribution (the texture the board shows) — absolute-safe upsert
+  const up = await client.query('UPDATE crew_objective_progress SET n = n + $4 WHERE crew_id=$1 AND week=$2 AND account_id=$3', [crewId, week, ch.account_id, add]);
+  if (!up.rowCount) await client.query('INSERT INTO crew_objective_progress (crew_id, week, account_id, n) VALUES ($1,$2,$3,$4) ON CONFLICT (crew_id, week, account_id) DO UPDATE SET n = crew_objective_progress.n + $4', [crewId, week, ch.account_id, add]);
+  // the crew total (= Σ contributions) — the authoritative progress the completion is judged on
+  const total = Number((await client.query('SELECT COALESCE(SUM(n),0) s FROM crew_objective_progress WHERE crew_id=$1 AND week=$2', [crewId, week])).rows[0].s);
+  await client.query('UPDATE crew_objectives SET progress=$3 WHERE crew_id=$1 AND week=$2', [crewId, week, total]);
+  // crossing the target — fire the completion ONCE (the `done` latch), ping every living member, and
+  // bump the crew legend. Pure notification here; the cash cut is CLAIMED per member (crew.js).
+  if (!obj.done && total >= Number(obj.target)) {
+    const claim = await client.query('UPDATE crew_objectives SET done=true WHERE crew_id=$1 AND week=$2 AND NOT done RETURNING crew_id', [crewId, week]);
+    if (claim.rowCount) {
+      await client.query('UPDATE crews SET objectives_done = objectives_done + 1 WHERE id=$1', [crewId]);
+      const mem = (await client.query("SELECT c.id FROM crew_members cm JOIN characters c ON c.account_id=cm.account_id AND c.alive WHERE cm.crew_id=$1", [crewId])).rows;
+      for (const m of mem) await notify(client, m.id, 'crew_objective_done', { reward: CREW.OBJECTIVE.REWARD }).catch(() => {});
+      bus.emit(`crew:${crewId}`, { type: 'crew_objective_done' });
+    }
+  }
+  return { kind: obj.kind, total, target: Number(obj.target) };
 }
 
 async function advanceCampaignsInline(client, ch, action) {
@@ -1693,6 +1735,7 @@ export function doCrime(ch, crimeId, client, h, approach) {
       await h.bumpDaily(client, ch.id, 'crime');
       await bumpFamilyTask(client, h, 'crime', 1);
       await bumpMastery(client, h, ch, 'larceny', 'crime'); // THE TRADES — a pulled job is the larceny grind
+      await bumpCrewObjective(client, h, ch, { crimes: 1, earn: take }); // THE CREW OBJECTIVE — a job feeds the crimes/earn goals
       await logCollect(client, ch.account_id, 'crimes', c.id); // THE COLLECTION — first pull of each job
       const soldier = second ? await soldierResult(client, h, ch, second, { success: true }) : null;
       // CLUE SCROLLS (slate #4): a rare treasure-trail drop — decorative on the crime path

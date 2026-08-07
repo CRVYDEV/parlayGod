@@ -4675,7 +4675,27 @@ export const CREW = {
   MIN_LEVEL: 3,            // low bar: this IS the early-game social on-ramp
   NAME_MAX: 24,            // the createGang name bound, so a crew reads like a family
   INVITE_TTL_MS: 72 * 3600 * 1000,   // a pending invite the worker sweeps if never answered
+  // ── THE WEEKLY OBJECTIVE — the shared goal the crew cracks together (the synchronous "log in
+  // because your crew is active" hook). A kind is drawn per crew per week off the §7.11 seed; the
+  // target scales with crew size (base × members at materialize); a completed objective pays each
+  // contributing member REWARD cash once. Founder sign-off levers (a bounded social cash faucet). ──
+  OBJECTIVE: {
+    REWARD: 5000,          // cash per member on claiming a completed objective (v24: social rewards are cash)
+    KINDS: [
+      { id: 'crimes', label: 'Pull jobs together', base: 40, unit: 'jobs' },   // combined crimes pulled
+      { id: 'kills',  label: 'Put bodies in the ground', base: 3, unit: 'kills' }, // combined player kills
+      { id: 'earn',   label: 'Bring in the score', base: 200000, unit: '$' },   // combined dirty cash from crimes
+    ],
+  },
 };
+// the deterministic weekly draw — same crew + week → the same objective, town-wide verifiable (the
+// corner/hustle §7.11 pattern). Kind off the seed; target = kind.base × crew size (min 1). `weekOf`
+// is defined earlier in this file (and imported by game.js); we reuse it here.
+export function crewObjectiveOf(crewId, week, members = 1) {
+  const kinds = CREW.OBJECTIVE.KINDS;
+  const k = kinds[Math.floor(hash01('crewobj:' + crewId + ':' + week + ':' + (process.env.MARKET_SEED || '')) * kinds.length) % kinds.length];
+  return { kind: k.id, label: k.label, unit: k.unit, base: k.base, target: k.base * Math.max(1, members) };
+}
 
 // ═══ THE SEASON RECAP ═══ (the individual "your season" wrap — pure status, no faucet)
 // A keepsake title by the level a street reached that season, written at rollover into season_recaps
