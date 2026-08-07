@@ -317,11 +317,18 @@ assert.equal((await meOf(chef.token)).labModules.purity, 1, 'the view shows the 
 // climb to level 3 — the top levels also burn $OMR (the lab-ladder precedent)
 await call('POST', '/v1/kitchen/module/purity', { token: chef.token });
 const omrPre = (await meOf(chef.token)).omr;
+// §10.4: a kitchen:module $OMR burn must reconcile — it rides DESK.SINK_REASONS (the burn term +
+// recycle to the desk), NOT a transfer. A prod incident (drift -72) proved it had been mis-classified
+// as an uncounted transfer; assert the burn leaves $OMR conservation UNCHANGED. growth.js SQL-seeds
+// omr=50 un-ledgered, so the baseline drift is non-zero → assert a DELTA (the scale/loadtest posture).
+const { runLedgerInvariants: runInv } = await import('../src/invariants.js');
+const driftOmrPre = Number((await runInv(pool, { alert: false })).checks.find((c) => c.name === '$OMR conservation').drift);
 r = await call('POST', '/v1/kitchen/module/purity', { token: chef.token });
 assert.equal(r.code, 200); assert.equal(r.body.level, 3); assert(r.body.omr > 0, 'level 3 burns $OMR');
 assert.equal((await meOf(chef.token)).omr, omrPre - r.body.omr, 'the $OMR left the account exactly');
 assert(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='kitchen:module' AND currency='cash' AND character_id='${chef.id}'`)).rows[0].s) < 0, 'module cash sink ledgered');
 assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='kitchen:module' AND currency='omr'`)).rows[0].s), -r.body.omr, 'module $OMR burn ledgered');
+assert.equal(Number((await runInv(pool, { alert: false })).checks.find((c) => c.name === '$OMR conservation').drift), driftOmrPre, 'a kitchen:module $OMR burn keeps $OMR conservation drift unchanged (it is in the burn term via DESK.SINK_REASONS, not an uncounted transfer)');
 // (B) CUTTING AGENTS — stretch a stash line: more units, weaker product; a ledgered cash sink
 await pool.query(`DELETE FROM stash WHERE character_id='${chef.id}'`);
 await pool.query(`INSERT INTO stash (character_id, drug_id, qty, quality) VALUES ('${chef.id}','vim',100,1.0)`);

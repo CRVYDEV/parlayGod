@@ -9870,3 +9870,38 @@ assertion fails). Browser-probed live (the `/u/:name` page renders "Level 67 · 
 The Night Crew · The Corvino Empire · Gen 4 · WANTED" with the ENTER THE CITY CTA, zero page errors, no
 dollar figure). Suite green + sim drift-0 + pgquery/pgcheck 43/43 on real Postgres. No new lever (cards.js
 is pure read; the brag triggers are client presentation).
+
+**PRODUCTION ALERT — the `kitchen:module` $OMR burn was a §10.4 leak, and the desk-dark alarm was noise
+(founder-reported the Discord alert bot, 2026-08-07).** Two alerts fired on the live `INVARIANT_WEBHOOK_URL`:
+`desk anchor no_price` and `$OMR conservation: drift -72 (balances 17056.71 vs ledger 17128.71)`. **(1) The
+−72 was a real leak, and the fix is one line in the SINGLE source.** `kitchen:module` (kitchen.js:301, the
+Tier-4 lab-module top-tier $OMR spend) was in the $OMR vocabulary via the `kitchen:` prefix but MISSING from
+`DESK.SINK_REASONS` — which the econ-v3 burn term is generated from — so every module burn was classified as
+a TRANSFER (in the vocabulary, in neither the mint nor the burn term) and, being a transfer that credited no
+counted bucket, went UNCOUNTED: the ledger showed $72 more burned than the balances, a STABLE drift equal to
+the lifetime lab-module $OMR spend (not an active leak — it never grew per check, it was the constant gap
+between "burned" and "counted as burned"). CLAUDE.md's Tier-4 note that `kitchen:` "joined the omr burn term"
+was FALSE at the time it was written — the burn term matched `lab:%`, never `kitchen:module` — and stayed
+false until this fix. Adding `'kitchen:module'` to `DESK.SINK_REASONS` (rules.tail.js) does two things at
+once through the one source: it enters the burn term (so historical drift resolves to 0 on the next check
+with NO migration — the ledger's −72 was already correct, the expectation just now matches it) AND makes
+future module burns RECYCLE to `desk_inventory` like every other econ-v3 sink (the recycle hook is
+`currency==='omr'`-guarded, so the paired CASH `kitchen:module` row is untouched). Audited every $OMR-debit
+reason in the tree: `kitchen:module` was the SOLE offender (`yield:window` correctly funds the family pool via
+`fundFamilyYield` — a proper transfer between two counted buckets; every other `spendOmr` reason is either a
+mint, a listed burn, or a counted transfer). `test/growth.js` gained a DELTA regression on the existing
+lab-module test — capture `$OMR conservation` drift immediately before the level-3 (omr-burning) purchase and
+assert it UNCHANGED after (growth.js SQL-seeds `omr=50` un-ledgered, so the baseline drift is non-zero → a
+delta assertion, the scale/loadtest posture); mutation-verified (remove `kitchen:module` from `SINK_REASONS`
+→ the assertion fails by name). **(2) The `desk anchor no_price` alert was benign chain-dormant noise.** The
+Dutch-auction desk is fail-closed on the OMR/ETH oracle, and pre-mainnet there is no Vig-buyback price print,
+so the desk correctly refuses to open with `no_price` on every tick — a permanent expected state, not an
+outage. Only `stale_price` (a price WAS printing and then aged out) is worth a human; `worker.js`'s desk-dark
+`alertDrift` now fires ONLY on `stale_price` and logs `no_price` quietly (the desk is dormant — expected
+pre-mainnet). The **class worth remembering**: a reason in the §10.4 vocabulary but absent from both the mint
+and the burn term is a TRANSFER by definition, and a transfer that does NOT actually move $OMR between two
+counted buckets is a silent, stable, non-growing leak — invisible to "is the drift growing?" and caught only
+by the absolute conservation check. The fix for that class is never a migration (the ledger is already right)
+— it is classifying the reason correctly (here: into the burn term via the one `SINK_REASONS` source).
+Suite green + sim drift-0 + pgquery + pgcheck 43/43 on real Postgres. §10.4-only fix — no new
+lever/table/faucet; the historical −72 clears on the first check after deploy.

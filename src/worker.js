@@ -260,7 +260,12 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     // conservation when nothing trades. It reached an hourly log line and nowhere else, and a line
     // repeated every hour forever fails the same way silence does: nobody reads it. `no_lot` and
     // `already` are NORMAL (a quiet sink day, a second tick inside the day) and never alarm.
-    const deskDark = da && !da.opened && (da.reason === 'stale_price' || da.reason === 'no_price');
+    // Only `stale_price` is an OUTAGE worth a human: a price WAS printing and then aged out. `no_price`
+    // means the Vig buyback has NEVER printed — the pre-mainnet DORMANT state, expected and permanent
+    // until the chain goes live — so it is a quiet log line, not a Discord alarm every worker restart.
+    // A watchdog that cries wolf pre-launch is the "alarm nobody reads" failure this system warns about.
+    const deskDark = da && !da.opened && da.reason === 'stale_price';
+    if (da && !da.opened && da.reason === 'no_price') console.log('the desk is dormant (no $OMR price print yet — expected pre-mainnet)');
     if (deskDark && !deskDarkAlerted) {
       deskDarkAlerted = true;
       console.error(`🚨 THE DESK IS DARK (${da.reason}) — no usable $OMR anchor, so it can neither sell nor buy back. Check that the Vig buyback is still printing a price.`);
