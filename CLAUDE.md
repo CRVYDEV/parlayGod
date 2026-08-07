@@ -9484,3 +9484,30 @@ remembering: a `CREATE TABLE IF NOT EXISTS` is a no-op on a live DB, so any colu
 lands on an existing table — every column added to a pre-existing table MUST have an `ALTER TABLE ... ADD
 COLUMN IF NOT EXISTS`, and an index over it must come after that ALTER; a fresh-DB test suite is
 structurally blind to the whole class.**
+
+**THE HOME — the returning-player command center (founder UX asks #1/#2, 2026-08-07).** Two
+recommendations, and the honest finding is that **both were ~90% already shipped** in the backlog that
+had been frozen behind the boot crash and only went live this session — the founder had been judging the
+OLD flat-24-tab deploy. #1 (collapse to journey groups, screens as a second tier) was already the
+`#grouprail`/`#tabs` two-tier nav (`applyTabVisibility`); #2's cards (Morning Paper + THE SITUATION) already
+composed onto the `start` tab, with the coach a persistent full-width banner above every screen. So the work
+was the two CONCRETE gaps that remained, both client-only (`public/index.html`), §10.4-untouched, no server
+change. **(1) THE LOGIN HOOK didn't land the home** — `buildTabs` sent veterans to `streets` and only new
+players to `start`, so a returning player's while-you-were-gone digest and their people/threats sat a tab
+away, which is exactly the "land in one place instead of three" #2 names. Now a returning player lands on
+Home whenever there's something to see there: the first-week funnel (`!allDone`) OR a fresh Morning Paper
+(`/v1/paper.fresh`, away ≥4h) → `start`; an active same-session player with nothing new stays on Streets
+(their bread and butter). **(2) THE VETERAN HOME was buried under its own done checklist** — the onboarding
+grid rendered unconditionally, so a veteran's command center showed nine ✓-claimed cards + the "Make Your
+Bones" header + the capstone note before the Situation and Standing. Gated the whole onboarding block behind
+`!ob.allDone`, so a veteran's Home is now THE SITUATION (Paper + nemesis + your people + crew + ready-now) →
+THE CITY STANDING → THE CAREER, and a newbie's funnel is byte-identical to before. **(3) the group rail is
+now exactly the founder's list** — `profile` (My Profile, an identity/social page) was a singleton rail stop
+cluttering the "~6 journey groups" vision, so it folded into the **Family** group as a second-tier screen;
+the rail reads Start + Streets/Earners/Vice/Blood/Family/Legit + the deck tool, and profile stays in
+`SIMPLE_TABS` so the referral-share loop still surfaces it for new players. Client wiring+mirror green
+(the new `/v1/paper` fetch resolves; the restructured templates parse), mobile 73/73 (no screen scrolls,
+every picked screen opens above the fold, no page threw). Deliberately NOT churned: the nav's two-tier
+machinery (it already does what #1 asks and tests well — the screen-reach beacon is gathering the data that
+would justify anything deeper), and the newbie funnel (unchanged). Whether the veteran Home reads WELL still
+needs a person opening it — the guards prove it can't break, not that it sings.
