@@ -534,6 +534,21 @@ CREATE TABLE IF NOT EXISTS notifications (
   delivered BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- WEB PUSH (learn while away) — the worker pushes URGENT undelivered notifications to a player's phone.
+-- `pushed` is a new column on the EXISTING notifications table → ALTER ... ADD COLUMN IF NOT EXISTS (the
+-- outage lesson: a CREATE TABLE IF NOT EXISTS never adds a column to a live table).
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS pushed BOOLEAN NOT NULL DEFAULT false;
+-- a player's browser push subscriptions (account-level, one per browser/device). A brand-new table, so
+-- CREATE TABLE IF NOT EXISTS is safe on a live DB. Endpoint is the unique key (the browser's push URL).
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  endpoint TEXT NOT NULL UNIQUE,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_push_subs_account ON push_subscriptions (account_id);
 
 -- ── M4 the Kitchen (spec §3.2, §7.10) ──
 CREATE TABLE IF NOT EXISTS makings (

@@ -124,10 +124,14 @@ assert(Number(dealLedger.rows[0].n) >= 1, 'deal ledgered');
   // MUSCLE stays out of crime (the PvP axis): two builds with IDENTICAL cunning/speed differing ONLY
   // in muscle must succeed EQUALLY (within sampling noise). If muscle ever leaks into the crime roll,
   // the maxed-muscle build pulls ahead and this separation blows past the noise band.
+  // The band is 50, sized off the sampling variance: two EQUAL Binomial(300, ~0.4) have a difference
+  // stddev of ~12, so 35 was only ~2.9σ and flaked ~0.4% of runs (a 42-diff tail was hit in a full-suite
+  // run); 50 is ~4σ (robust) yet well under a REAL 22-point-stat leak, which — at cunning's measured rate
+  // — would separate ~+85 (see the assert above), so it still catches any muscle bleed.
   const musHi = await mk('Bruiser Bo'), musLo = await mk('Scrawny Sid');
   const musHiWins = await runs(musHi.token, musHi.id, 'cunning=3, speed=3, muscle=25');
   const musLoWins = await runs(musLo.token, musLo.id, 'cunning=3, speed=3, muscle=3');
-  assert(Math.abs(musHiWins - musLoWins) < 35,
+  assert(Math.abs(musHiWins - musLoWins) < 50,
     `D14: MUSCLE is inert for crime — same cunning/speed → same success (${musHiWins}/${N} vs ${musLoWins}/${N}, within noise)`);
 }
 

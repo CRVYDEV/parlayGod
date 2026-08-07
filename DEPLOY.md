@@ -151,6 +151,12 @@ above is the real path and the only one the console offers).
 - `PRIVY_APP_ID` — enables Privy sign-in (else guest + X only).
 - `SOCIAL_GAME_URL` — falls back for `PUBLIC_URL` in share links, OG cards, the OpenAPI `baseUrl`.
 - `REDIS_URL` — moves the rate-limit buckets off in-memory (needed only for multi-instance).
+- **Web push (`VAPID_*`)** — optional; enables the phone-alert 🔔 (the worker pushes URGENT undelivered
+  notifications to away players). Dormant unless set; the client hides the button when absent. Generate a
+  key pair ONCE with `node -e "console.log(require('web-push').generateVAPIDKeys())"` and set
+  `VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` (+ optional `VAPID_SUBJECT`, default `mailto:ops@omerta.fun`).
+  The public key is served on `/v1/rules` by design (the client subscribes with it); keep the PRIVATE key
+  secret. Zero §10.4 surface.
 
 ## 4. Chain — LEAVE UNSET for the off-chain alpha
 The chain service is dormant unless configured. Setting `CHAIN_RPC_URL` + `CHAIN_ID` +
