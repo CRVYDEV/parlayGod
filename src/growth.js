@@ -536,6 +536,41 @@ export async function agentLeaderboard(pool, limit = 25) {
     kills: Number(r.kills || 0), extracted: Math.round((ext[r.account_id] || 0) * 100) / 100 }));
 }
 
+// THE AGENT ECONOMY — the aggregate meta behind the public Arena page. How many agents are in the
+// city, how much value they've collectively earned/extracted, the biggest single hunter. Read-only,
+// keyless-safe (banded, no exact per-account wealth), §10.4-free — every figure is a plain aggregate
+// over account_persistent + the ledger. This is the "watch the machines run the city" marketing
+// surface AND the meta an agent reads before deciding whether the game is worth its calls.
+export async function agentEconomyStats(pool) {
+  // pg-mem posture: no FILTER, no ABS, no correlated EXISTS — plain aggregates + JOINs + negation.
+  // Account-level (survives death): how many agent identities ever existed, and their kill legend.
+  const acc = (await pool.query(
+    `SELECT COUNT(*) AS total, COALESCE(SUM(kills),0) AS kills, COALESCE(MAX(kills),0) AS top_kills
+       FROM account_persistent WHERE agent_flag`)).rows[0];
+  // Living agents + their banked wealth (a plain JOIN on alive characters).
+  const liv = (await pool.query(
+    `SELECT COUNT(*) AS living, COALESCE(SUM(c.cash + c.bank),0) AS wealth
+       FROM characters c JOIN account_persistent p ON p.account_id = c.account_id
+      WHERE p.agent_flag AND c.alive`)).rows[0];
+  // Total $OMR extracted on-chain by ALL agents (withdraw:omr is the true earned-a-living signal).
+  // A JOIN, not a correlated EXISTS; currency='omr' rides ix_tx_currency_reason (the R7-DoS index
+  // discipline); the debit is a NEGATIVE amount and pg-mem lacks ABS(), so negate the sum.
+  const ex = (await pool.query(
+    `SELECT COALESCE(SUM(t.amount),0) AS s
+       FROM transactions t JOIN account_persistent p ON p.account_id = t.account_id
+      WHERE p.agent_flag AND t.currency='omr' AND t.reason='withdraw:omr'`)).rows[0];
+  // Band the collective wealth (the anti-precise-kill-EV rule applies to the aggregate too — it never
+  // resolves to a named agent's exact liquid, and the leaderboard beside it is already banded).
+  const w = Number(liv.wealth);
+  const wealthBand = w < 1e5 ? '<$100k' : w < 1e6 ? '$100k–1M' : w < 1e7 ? '$1M–10M' : w < 1e8 ? '$10M–100M' : '$100M+';
+  return {
+    agents: Number(liv.living), everRun: Number(acc.total),
+    totalKills: Number(acc.kills), topKills: Number(acc.top_kills),
+    collectiveWealthBand: wealthBand,
+    totalExtracted: Math.round(-Number(ex.s) * 100) / 100,
+  };
+}
+
 // The guided First-Week board (read-only) — the client's "Start Here" funnel. Server-authoritative
 // readiness (the same CHECKS claimOnboard enforces) so the client never re-derives game state:
 // each task carries claimed (paid already), ready (the gate passes — claim now), and the social url.

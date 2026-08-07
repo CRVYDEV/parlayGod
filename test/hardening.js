@@ -308,6 +308,29 @@ assert(Array.isArray(agLb.agents) && agLb.agents.some((a) => a.name === 'Machine
 // audit: liquid is published as a BAND, not an exact figure (so a hunter can't compute precise kill-EV)
 assert(agLb.agents.every((a) => typeof a.wealthBand === 'string' && typeof a.omrBand === 'string' && a.netWorth === undefined), 'agents carry banded wealth (no exact net worth leaked)');
 
+// ── THE ARENA — the public agent showcase (GET /arena HTML + GET /v1/arena JSON): the differentiator
+// AND a shareable marketing surface. KEYLESS by design (a public page has no token), and BANDED so a
+// public marketplace-indexed page can never be scanned for an agent's exact liquid. ──
+const arena = (await call('GET', '/v1/arena')).body; // no token — must be keyless
+assert(arena.economy && arena.leaderboard && arena.links && arena.pitch, 'the arena serves the economy meta + the hall of fame + the machine links + the pitch, keyless');
+assert(arena.economy.agents >= 1 && arena.economy.everRun >= 1, 'the agent-economy stats count the living/ever-run agents (Machine Malone is in there)');
+assert(typeof arena.economy.collectiveWealthBand === 'string' && typeof arena.economy.totalExtracted === 'number', 'the aggregate wealth is BANDED and extraction is a real number');
+// wealth is exposed ONLY as a band — the raw number is never a field, so a public marketplace-indexed
+// page can't be scanned for exact liquid (the anti-precise-kill-EV rule; kills/extraction are already
+// public on every leaderboard, so they stay exact — only wealth is sensitive).
+assert(arena.economy.wealth === undefined && arena.economy.collectiveWealth === undefined, 'the public economy meta never exposes an exact wealth number — only the band');
+assert(arena.leaderboard.some((a) => a.name === 'Machine Malone') && arena.leaderboard.every((a) => a.netWorth === undefined), 'the arena hall of fame lists agents, banded (no exact net worth)');
+assert(arena.links.quickstart.endsWith('/agents') && arena.links.openapi.endsWith('/openapi.json'), 'the arena links out to the machine-discovery surfaces');
+const arenaPage = await app.inject({ method: 'GET', url: '/arena' });
+assert(arenaPage.statusCode === 200 && /text\/html/.test(arenaPage.headers['content-type']) && /THE ARENA/.test(arenaPage.body), 'the public human-facing arena page serves at /arena');
+// the deepened opportunity board: a `best` recommended move + a scan-first summary
+assert('best' in opp && opp.summary && typeof opp.summary.bestArbitragePct === 'number' && typeof opp.summary.openActions === 'number',
+  'the opportunity board carries a single recommended move (`best`) + a summary an agent scans before committing calls');
+// openapi: /v1/arena (JSON, keyless) is in the contract; /arena (HTML) is a doc page, excluded
+assert('/v1/arena' in oa.paths && Array.isArray(oa.paths['/v1/arena'].get.security) && oa.paths['/v1/arena'].get.security.length === 0,
+  'the openapi contract carries /v1/arena as a keyless route');
+assert(!('/arena' in oa.paths), 'the /arena HTML page is a human doc, excluded from the machine contract');
+
 // ── ITEM ART route: a generated PHOTO per catalog entry when one shipped (public/art/<kind>-<id>.jpg),
 // else the procedural SVG emblem (cosmetic; keyless; must never 500). The catalog art pass covers every
 // car/boat/drug/gun/vest/good, so on a checkout with the art present nearly all of these are photos —

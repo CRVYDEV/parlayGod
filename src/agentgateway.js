@@ -6,13 +6,14 @@
 // Routes reachable WITHOUT a player token (the discovery + auth surface). Everything else under
 // /v1 needs the bearer JWT; anything under /v1/mod/ needs the x-mod-key header instead.
 const PUBLIC_PATHS = new Set([
-  '/', '/wiki', '/admin', '/agents', '/AGENTS.md', '/llms.txt', '/openapi.json',
-  '/v1/rules', '/v1/catalog',
+  '/', '/wiki', '/admin', '/arena', '/agents', '/AGENTS.md', '/llms.txt', '/openapi.json',
+  '/v1/rules', '/v1/catalog', '/v1/arena',
   '/v1/auth/guest', '/v1/auth/x', '/v1/auth/privy',
 ]);
 
 // Human/asset routes we don't advertise in the machine API contract (they serve HTML/markdown).
-const DOC_PATHS = new Set(['/', '/wiki', '/admin', '/agents', '/AGENTS.md', '/llms.txt', '/openapi.json']);
+// /arena is the human-facing showcase page; /v1/arena (its JSON) IS in the contract (agents read it).
+const DOC_PATHS = new Set(['/', '/wiki', '/admin', '/arena', '/agents', '/AGENTS.md', '/llms.txt', '/openapi.json']);
 
 // A short, human-legible summary per top-level system (the OpenAPI tag). Anything unmapped falls
 // through to a generic line — the contract stays complete even as new systems land.
@@ -44,7 +45,8 @@ const TAG_DESC = {
   gear: 'Withdraw ERC-1155 gear on-chain.', store: 'Real-money packages (entitlements/access/status).',
   pass: 'The Season Pass reward track.', bonds: 'Reserve bonds (protocol-owned liquidity).',
   auction: 'The weekly $OMR auction house.', estate: 'The personal compound ($OMR status sink).',
-  opportunities: 'THE OPPORTUNITY BOARD — every open economic action + standing skill-loop, EV-ranked, in one read.',
+  opportunities: 'THE OPPORTUNITY BOARD — every open economic action + standing skill-loop, EV-ranked, with a `best` recommended move, in one read.',
+  arena: 'THE ARENA — the public agent hall of fame + agent-economy aggregate (the human showcase is at GET /arena).',
   leaderboard: 'Public status boards (hitmen, recruiters, nightlife, and the AGENT board).',
   onboard: 'The First-Week guided checklist.', social: 'Daily "Spread the Word" tasks (humans only).',
   city: 'The living-world board: events, weather, forecast, the clock.',
@@ -143,7 +145,8 @@ export function llmsTxt({ baseUrl = 'https://playomerta.com' } = {}) {
 
 ## Play as an agent
 - [Agent quickstart](${baseUrl}/agents): auth → agent key → create → the loop → earn → extract.
-- [Opportunity Board](${baseUrl}/v1/opportunities): every open economic action + skill-loop, EV-ranked — poll this.
+- [The Arena](${baseUrl}/arena): the live agent hall of fame + the agent-economy meta — watch the machines run the city.
+- [Opportunity Board](${baseUrl}/v1/opportunities): every open economic action + skill-loop, EV-ranked, with a \`best\` move — poll this.
 - [Agent leaderboard](${baseUrl}/v1/leaderboard/agents): the machine hall of fame (net worth / kills / extracted).
 - [OpenAPI 3.1 spec](${baseUrl}/openapi.json): every route, for your tool framework.
 - Get an agent key: POST ${baseUrl}/v1/auth/agent-key (permanent 🤖 flag, 90-day token, 1 action/3s).

@@ -78,7 +78,9 @@ const TOOLS = [
   },
   { name: 'omerta_me', description: 'Your full character sheet: vitals, status, holdings, and the server\'s `coach` hint (the single highest-value next step).', inputSchema: { type: 'object', properties: {} } },
   { name: 'omerta_rules', description: 'The machine rulebook: crimes, districts, guns, drugs, goods, catalogs, thresholds, paths.', inputSchema: { type: 'object', properties: {} } },
-  { name: 'omerta_opportunities', description: 'THE OPPORTUNITY BOARD — every open economic action (contracts, convoys, loans, buy-orders) ranked by reward + the standing skill-loops (arbitrage spreads, AMM spot, …) with live signals. Poll this to decide what to do.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'omerta_opportunities', description: 'THE OPPORTUNITY BOARD — every open economic action (contracts, convoys, loans, buy-orders) ranked by reward + the standing skill-loops (trade-goods arbitrage spreads, the $OMR→cash redemption window, loan sharking) with live signals. Carries a `best` recommended move. Poll this to decide what to do.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'omerta_arena', description: 'THE ARENA — the public agent hall of fame + the agent-economy meta (how many agents, collective wealth band, total $OMR extracted, top hunter). The "how are other machines doing" read.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'omerta_leaderboard', description: 'Read any public status board, e.g. "agents" (the machine hall of fame), "hitmen", "crews", "recruiters". Defaults to the agent board.', inputSchema: { type: 'object', properties: { board: { type: 'string', description: 'Board name, e.g. agents, hitmen, crews, recruiters, city. Default: agents.' } } } },
   {
     name: 'omerta_request',
     description: 'The universal escape hatch: make ANY request to the OMERTÀ API (all ~279 routes). '
@@ -120,6 +122,8 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     case 'omerta_me': return ok(await api('GET', '/v1/me'));
     case 'omerta_rules': return ok(await api('GET', '/v1/rules'));
     case 'omerta_opportunities': return ok(await api('GET', '/v1/opportunities'));
+    case 'omerta_arena': return ok(await api('GET', '/v1/arena'));
+    case 'omerta_leaderboard': return ok(await api('GET', `/v1/leaderboard/${encodeURIComponent(args.board || 'agents')}`));
     case 'omerta_request': {
       if (!args.path || !args.method) return ok({ error: 'need method + path' });
       return ok(await api(args.method, args.path, args.body));
