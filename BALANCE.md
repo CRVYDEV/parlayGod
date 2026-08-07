@@ -5218,3 +5218,20 @@ rounds") — up to `HAPPY_ROUNDS` (3) a night — so the night FEELS different f
 `MASTERY.XP.primetime` (6) bump via bumpMastery — status/progression, ZERO §10.4). Petty vs the passive
 stack; roughly half the happy-hour nights are honor (no cash). `HAPPY_ROUNDS`/`HAPPY_CASH` are founder
 sign-off levers (pinned). `PRIME_TIME_MECH` (TEST-ONLY) pins the mechanic for tests.
+
+## PRIME TIME step three — THE SIEGE (founder-directed 2026-08-07, the 3rd rotated mechanic)
+THE SIEGE completes the rotation (`PRIME_TIME.MECHANICS: ['rally','happyhour','siege']`). It's the
+co-present mechanic in its purest form: a shared DAMAGE BAR. Everyone who storms the gates lands ONE
+strike (`SIEGE_STRIKE` 100 damage); the crowd must CRACK the target (`SIEGE_NEED` 8 × `SIEGE_STRIKE` =
+**800 damage**, i.e. 8 fighters) before the window closes — and only a cracked siege pays. So you WANT
+others online (a lone fighter can't crack it), which is the entire point of a synchronous window.
+**value** → each fighter on a cracked siege takes a flat `SIEGE_CASH` (**$3,000**) at the worker settle
+(bounded — the faucet is `primetime:siege`, character_id'd, level-floored, agent-excluded, rides the
+existing `primetime:` cash vocabulary → ZERO invariants change; a failed siege pays $0); **honor** → the
+`SIEGE_TITLE` badge on a crack (status, ZERO §10.4). No reward at join — the crack is settled at close by
+the worker (the boxing-main-event / tournament settle pattern), so nobody is punished for showing early.
+Participation rides `primetime_rally` (a night is exactly ONE mechanic — no row collision, no schema
+change). Worst-case faucet: bounded by turnout on a cracked night × `SIEGE_CASH`, petty vs the passive
+stack and gated behind co-presence (8+ real fighters). `SIEGE_STRIKE`/`SIEGE_NEED`/`SIEGE_CASH`/
+`SIEGE_TITLE` are founder sign-off levers (pinned). **The PRIME TIME rotation is now complete** — three
+mechanics × two modes, drawn deterministically per night off the §7.11 seed, forecastable a week out.

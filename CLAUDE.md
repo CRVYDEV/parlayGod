@@ -10087,3 +10087,28 @@ round schools gambling XP with zero ledger rows, and the cross-gate (answering a
 throws `not_rally`) — three mutations each caught at its own named assertion. Suite 81/81 + sim drift-0 +
 mobile 73/73 + client mirror (122 boards) + pgquery/pgcheck 43/43 on real Postgres. `HAPPY_ROUNDS`/
 `HAPPY_CASH` are founder sign-off levers (BALANCE.md); step three (THE SIEGE) adds the third mechanic.
+
+**PRIME TIME — step three: THE SIEGE joins the rotation (founder-directed 2026-08-07) — BUILT**
+(`src/primetime.js`, `test/primetime.js`; `PRIME_TIME.MECHANICS: ['rally','happyhour','siege']`). The
+third and final rotated mechanic, and the co-present mechanic in its purest form: a shared DAMAGE BAR.
+Everyone who **storms the gates** lands ONE strike (`SIEGE_STRIKE` 100); the crowd must CRACK the target
+(`SIEGE_NEED` 8 × `SIEGE_STRIKE` = 800 damage = 8 fighters) before the window closes, and ONLY a cracked
+siege pays — so a lone fighter can't crack it and you genuinely WANT others online (the whole point of a
+synchronous window). **value** → each fighter on a cracked siege takes a flat `SIEGE_CASH` ($3,000) at the
+worker settle (a bounded faucet `primetime:siege`, character_id'd, level-floored, agent-excluded — rides
+the existing `primetime:` cash prefix, ZERO invariants change; a failed siege pays $0 but settles every
+row); **honor** → the `SIEGE_TITLE` badge on a crack (status, ZERO §10.4). **No reward at join** — the
+crack is settled at CLOSE by the worker (the boxing-main-event / tournament settle pattern: nobody punished
+for showing early). Participation rides `primetime_rally` (a night is exactly ONE mechanic → no row
+collision, no schema change); the settle loop now handles rally + siege (siege pays iff
+`siegeDamage(finalTurnout) ≥ siegeTarget()`, the claim-then-pay `settled` flag idempotent, agent/dead
+marked-but-unpaid). New route `POST /v1/primetime/siege` → `joinSiege` (gates not_siege/closed/rookie,
+once/night SELECT-then-INSERT under the char lock — the answerCall latch discipline). Client: the primeCard
+gains a live damage-bar siege branch + storm-the-gates button; `describe()`/`feedText` gain
+`primetime_siege`/`primetime_siege_won`. `test/primetime.js` proves the siege board/gates, a ghost-padded
+crack paying SIEGE_CASH (per-character, §10.4-reconciled), a FAILED siege paying nobody but settling every
+row, and an honor crack granting the badge with ZERO ledger rows — three mutations each caught by name.
+Suite green + sim drift-0 + mobile 73/73 + pgquery + pgcheck 43/43 on real Postgres. `SIEGE_STRIKE`/
+`SIEGE_NEED`/`SIEGE_CASH`/`SIEGE_TITLE` are founder sign-off levers (pinned). **The PRIME TIME rotation is
+now feature-complete** — three mechanics (rally / happy hour / siege) × two modes (value / honor), drawn
+deterministically per night off the §7.11 seed, forecastable a week out.

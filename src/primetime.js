@@ -48,6 +48,11 @@ export function rallyReward(turnout) {
   return PRIME_TIME.RALLY_BASE + PRIME_TIME.RALLY_PER * Math.min(Math.max(0, turnout - 1), PRIME_TIME.RALLY_TURNOUT_CAP);
 }
 
+// THE SIEGE — the collective damage bar. target is what the crowd must crack; damage is what N fighters
+// have landed. `cracked` = the city cleared it (settled as a WIN at close).
+export const siegeTarget = () => PRIME_TIME.SIEGE_NEED * PRIME_TIME.SIEGE_STRIKE;
+export const siegeDamage = (fighters) => fighters * PRIME_TIME.SIEGE_STRIKE;
+
 // A compact summary for the TONIGHT strip on Home (events.js) — icon/title/subtitle + the countdown.
 export function primeTimeSummary(now = Date.now()) {
   const s = statusNow(now);
@@ -79,21 +84,27 @@ export async function primeTimeBoard(client, ch) {
     return { day: w.pt.day, mechanic: w.pt.mechanic, mode: w.pt.mode, hour: w.pt.hour, startMs: w.start };
   });
   const happy = s.pt.mechanic === 'happyhour';
-  // ONE shape, always — every field of both mechanics is present (the inactive one carries defaults),
+  const siege = s.pt.mechanic === 'siege';
+  // ONE shape, always — every field of all three mechanics is present (the inactive ones carry defaults),
   // so the client (which branches on `mechanic`) and the mirror-guard both see a stable board.
   const rounds = happy ? await roundsOf(client, day, ch.id) : 0;
-  const answered = !happy && !!(await client.query('SELECT 1 FROM primetime_rally WHERE day=$1 AND character_id=$2', [day, ch.id])).rows.length;
-  const turnout = happy ? 0 : await turnoutOf(client, day);
+  // rally + siege both read participation from primetime_rally (a night is ONE mechanic — no collision)
+  const partic = !happy && !!(await client.query('SELECT 1 FROM primetime_rally WHERE day=$1 AND character_id=$2', [day, ch.id])).rows.length;
+  const fighters = !happy ? await turnoutOf(client, day) : 0;   // count of rows tonight (turnout / siege fighters)
   return {
     mechanic: s.pt.mechanic, mode: s.pt.mode, hour: s.pt.hour,
     live: s.live, opensSeconds: s.secondsToStart, closesSeconds: s.secondsToEnd,
     minLevel: PRIME_TIME.RALLY_MIN_LVL, windowH: PRIME_TIME.WINDOW_H, forecast,
     // RALLY fields
-    answered, turnout, title: s.pt.title,
-    reward: (!happy && s.pt.mode === 'value') ? rallyReward(turnout) : 0,  // an ESTIMATE — grows as more show; settled at final turnout
+    answered: siege ? false : partic, turnout: siege ? 0 : fighters, title: siege ? PRIME_TIME.SIEGE_TITLE : s.pt.title,
+    reward: (!happy && !siege && s.pt.mode === 'value') ? rallyReward(fighters) : 0,  // an ESTIMATE — grows as more show; settled at final turnout
     // HAPPY HOUR fields
     rounds, roundsMax: PRIME_TIME.HAPPY_ROUNDS, roundsLeft: happy ? Math.max(0, PRIME_TIME.HAPPY_ROUNDS - rounds) : 0,
     roundCash: PRIME_TIME.HAPPY_CASH,
+    // SIEGE fields
+    joined: siege ? partic : false, fighters: siege ? fighters : 0,
+    damage: siege ? siegeDamage(fighters) : 0, target: siegeTarget(), cracked: siege ? siegeDamage(fighters) >= siegeTarget() : false,
+    siegeCash: PRIME_TIME.SIEGE_CASH,
   };
 }
 
@@ -153,6 +164,26 @@ export async function buyRound(ch, client, h) {
   return { round: next, of: PRIME_TIME.HAPPY_ROUNDS, left, mode: 'honor' };
 }
 
+// THE SIEGE — land your strike on tonight's shared target (once/night, in-window). No reward at join:
+// the siege must be CRACKED by the crowd's cumulative damage by close, and only then does the worker pay
+// every fighter (value -> flat cash / honor -> a badge). So you WANT others to join — the co-presence is
+// the whole mechanic. Participation rides primetime_rally (a night is ONE mechanic — no collision).
+export async function joinSiege(ch, client, h) {
+  const s = statusNow();
+  if (s.pt.mechanic !== 'siege') throw new GameError('not_siege', 'Tonight is not a siege — check the board for what\'s on.');
+  if (!s.live) throw new GameError('closed', 'The siege isn\'t on right now. The board shows when tonight\'s window opens.');
+  if (levelOf(Number(ch.respect)) < PRIME_TIME.RALLY_MIN_LVL) throw new GameError('rookie', `Join the siege at level ${PRIME_TIME.RALLY_MIN_LVL}.`);
+  const day = s.pt.day;
+  // once per night — SELECT-then-INSERT under the character lock (the answerCall latch discipline)
+  const seen = await client.query('SELECT 1 FROM primetime_rally WHERE day=$1 AND character_id=$2', [day, ch.id]);
+  if (seen.rows.length) throw new GameError('already', 'You\'ve already made your run on the gates tonight.');
+  await client.query('INSERT INTO primetime_rally (day, character_id, settled) VALUES ($1,$2,false)', [day, ch.id]);  // settled at close (win or lose)
+  const fighters = await turnoutOf(client, day);
+  const dmg = siegeDamage(fighters), target = siegeTarget();
+  await notify(client, ch.id, 'primetime_siege', { fighters, damage: dmg, target }).catch(() => {});
+  return { joined: true, fighters, damage: dmg, target, cracked: dmg >= target, pending: true };
+}
+
 // THE WORKER SETTLE — after a value-rally window has fully closed, pay every answerer the turnout-scaled
 // reward, once (claim-then-pay, so concurrent workers can't double-pay). Idempotent via the `settled`
 // flag; the reward is a pure function of the day's final turnout, fixed once the window closed. Also
@@ -167,26 +198,42 @@ export async function settlePrimeTime(pool) {
     const today = dayOf(now);
     for (let d = today - 1; d >= today - 3; d--) {   // look back a few closed nights (worker-downtime backfill)
       const pt = primeTimeOf(d);
-      if (pt.mechanic !== 'rally' || pt.mode !== 'value') continue;    // honor nights pay no cash
-      // eligible answerers still unsettled — exclude agents (the faucet posture) and the dead (their row is estate-wiped)
+      // Only rally + siege settle at close (happy hour pays per-round in-window; honor rally rows are born
+      // settled). Both settling mechanics ride primetime_rally, so the row set + claim discipline is shared.
+      const isRally = pt.mechanic === 'rally' && pt.mode === 'value';
+      const isSiege = pt.mechanic === 'siege';
+      if (!isRally && !isSiege) continue;
+      // eligible participants still unsettled — exclude agents (the faucet posture) and the dead (their row is estate-wiped)
       const rows = (await client.query(
         `SELECT r.character_id, ap.agent_flag, c.alive
            FROM primetime_rally r JOIN characters c ON c.id=r.character_id
            JOIN account_persistent ap ON ap.account_id=c.account_id
           WHERE r.day=$1 AND NOT r.settled`, [d])).rows;
       if (!rows.length) continue;
-      const turnout = await turnoutOf(client, d);       // final turnout — no new answers can land after close
-      const reward = rallyReward(turnout);
+      const turnout = await turnoutOf(client, d);       // final count — no new participation can land after close
+      // A siege pays ONLY if the crowd cracked the target; a value rally always pays (turnout-scaled).
+      const cracked = isSiege && siegeDamage(turnout) >= siegeTarget();
+      const reward = isSiege ? PRIME_TIME.SIEGE_CASH : rallyReward(turnout);
       for (const r of rows) {
-        // atomic claim: only the winner of this row's UPDATE pays it (concurrent-worker-safe)
+        // atomic claim: only the winner of this row's UPDATE settles it (concurrent-worker-safe)
         const claim = await client.query(
           'UPDATE primetime_rally SET settled=true WHERE day=$1 AND character_id=$2 AND NOT settled RETURNING character_id',
           [d, r.character_id]);
         if (!claim.rows.length) continue;               // another worker took this row
-        if (!r.alive || r.agent_flag) continue;         // marked settled, but no payout (dead / agent)
+        // A siege night marks EVERY fighter settled (win or lose) but pays only on a crack; a value rally
+        // always pays. Either way the dead / agents are marked-but-unpaid (the faucet posture).
+        if (isSiege && !cracked) continue;              // the gates held — this fighter's row is closed, nothing owed
+        if (!r.alive || r.agent_flag) continue;
+        if (isSiege && pt.mode === 'honor') {           // a cracked HONOR siege grants the badge — status, no §10.4
+          await client.query('UPDATE characters SET title=$2 WHERE id=$1', [r.character_id, PRIME_TIME.SIEGE_TITLE]);
+          await notify(client, r.character_id, 'primetime_siege_won', { mode: 'honor', title: PRIME_TIME.SIEGE_TITLE, fighters: turnout });
+          continue;
+        }
+        // value rally OR value siege → the cash faucet (both ride `primetime:rally`... rally, or `primetime:siege`)
+        const reason = isSiege ? 'primetime:siege' : 'primetime:rally';
         await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [r.character_id, reward]);
-        await ledger(client, { characterId: r.character_id, currency: 'cash', amount: reward, reason: 'primetime:rally', counterparty: `d${d}` });
-        await notify(client, r.character_id, 'primetime_paid', { reward, turnout });
+        await ledger(client, { characterId: r.character_id, currency: 'cash', amount: reward, reason, counterparty: `d${d}` });
+        await notify(client, r.character_id, isSiege ? 'primetime_siege_won' : 'primetime_paid', isSiege ? { mode: 'value', reward, fighters: turnout } : { reward, turnout });
         paid++;
       }
     }
