@@ -5096,3 +5096,17 @@ proves it writes zero `transactions` rows). The one player-facing choice is the 
 and a fresh player sees whales, too narrow and an empty alpha reads as a dead board — 10 keeps the
 recruit/peers lists to genuine peers while `newcomers` (any level, newest-first) is the never-empty
 front door. All three are founder sign-off levers, pinned in `test/levers.js`.
+
+## THE MENTOR — the protégé onboarding faucet (founder sign-off)
+
+THE MENTOR (`omerta-first-contact-and-events-design.md`, MOVE 1) adds ONE cash faucet: `mentor:protege`,
+the protégé's onboarding cash at level milestones (5/10/15/20 → $2k/$4k/$6k/$8k = **$20k lifetime**).
+Bounded HARD, three ways: once-ever-per-milestone (a `mentorships.claimed_mask` bitmask), level-real (the
+protégé must genuinely reach each level), and once-ever-per-account (one mentor, ever). So the total faucet
+is `≤ $20k × (new accounts that reach level 20 WITH a mentor)` — petty and self-limiting (the
+onboarding/career faucet scale; the whole First Week pays ~$5k, the Career ladder ~$346k lifetime). §10.4
+stays drift-0 (a character_id'd ledgered faucet; the sim reconciles it). The MENTOR reward is STATUS ONLY
+(`proteges_raised`), so there is NO mentor-side faucet and no farm incentive — a Sybil raising alts as
+protégés buys only status, which attaches no payout (the hitman-rep posture). `MENTOR.MILESTONES` is the
+sign-off dial; `[]` disables the faucet entirely (the tie + the status legend still work). All `MENTOR.*`
+numbers are pinned in `test/levers.js`.

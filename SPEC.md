@@ -10,15 +10,15 @@ Written 2026-07-25. Every number below was measured from the tree, not recalled.
 
 | | |
 |---|---|
-| Backend modules | **119** files, **39963** lines (`src/`, incl. `src/routes/` and `src/social/`) |
-| Test suites | **69** files, **27126** lines (`test/`) — ratio 0.67 test:src |
-| HTTP routes | **575** registrations |
-| Database tables | **194** (`schema.sql`, 2761 lines) |
-| Client | **7,365** lines (`public/index.html`, single file, zero dependencies) |
+| Backend modules | **121** files, **40276** lines (`src/`, incl. `src/routes/` and `src/social/`) |
+| Test suites | **71** files, **27425** lines (`test/`) — ratio 0.68 test:src |
+| HTTP routes | **592** registrations |
+| Database tables | **196** (`schema.sql`, 2796 lines) |
+| Client | **7,535** lines (`public/index.html`, single file, zero dependencies) |
 | Ops dashboard + wiki | `public/admin.html`, `public/wiki.html` |
 | Smart contracts | **9** contracts, **1716** lines Solidity, **128** Foundry tests passing |
 | Harnesses | `tools/sim.js` (economy), `tools/playthrough.js` (player experience), `tools/pgcheck.js` (real Postgres), `tools/loadtest.js` (concurrency), `tools/chaos.js` (interruption), `tools/mobile.js` (the screens, at phone size), `tools/scale.js` (market liquidity at population scale), `tools/bond-dials.js` (sizing the on-chain mint walls), `tools/pgquery.js` (every SQL string parses on real Postgres) |
-| Design + audit docs | **167** markdown files, **42937** lines — indexed in `docs/AUDITS.md`, which states they are point-in-time |
+| Design + audit docs | **168** markdown files, **43139** lines — indexed in `docs/AUDITS.md`, which states they are point-in-time |
 | Ledger invariants | 18 named escrow/identity checks + per-currency conservation, **drift-0** |
 
 Roughly **55,000 lines** of code, tests, schema and contracts.

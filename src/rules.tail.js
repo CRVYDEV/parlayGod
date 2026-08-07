@@ -4700,6 +4700,29 @@ export const DISCOVERY = {
   LFG_TTL_MS: 7 * 24 * 3600 * 1000,  // a "looking for a crew" flag older than a week is stale — dropped from the recruit list
 };
 
+// ═══ THE MENTOR (omerta-first-contact-and-events-design.md, MOVE 1) ═══
+// The positive first interaction: a veteran takes a newcomer under their wing. The mentor's reward is
+// STATUS ONLY (proteges_raised — Sybil-proof, no payout attaches); the protégé gets a bounded onboarding
+// cash faucet at level milestones. All numbers are founder sign-off levers; MILESTONES is the one faucet
+// to sim (bounded by real leveling × once-ever-per-account).
+export const MENTOR = {
+  MIN_LVL: 20,            // a mentor must have made their bones
+  PROTEGE_MAX_LVL: 10,    // you can only be taken under a wing while you're still new
+  ACTIVE_MAX: 3,          // a mentor's active-protégé cap (a Sybil raising 50 alts is bounded; status-only anyway)
+  OFFER_TTL_MS: 3 * 24 * 3600 * 1000,  // an unanswered offer lapses (the crew-invite TTL)
+  SEEKING_TTL_MS: 7 * 24 * 3600 * 1000, // a stale "seeking a mentor" flag drops off the board
+  // level milestone → protégé onboarding cash (once-ever per milestone, level-real). ~$20k lifetime — petty,
+  // the onboarding/career faucet scale; bounded by new accounts that reach lvl 20 WITH a mentor. The last
+  // milestone is GRADUATION: the protégé claims at level 20 and that bumps the mentor's legend +1 (a claim,
+  // so the transition is transactional). Days of real play per unit → an alt farm is deeply unprofitable.
+  MILESTONES: [{ lvl: 5, cash: 2000 }, { lvl: 10, cash: 4000 }, { lvl: 15, cash: 6000 }, { lvl: 20, cash: 8000, graduate: true }],
+  RANKS: [ // by proteges_raised — pure status, survives death (the hitman-rep board twin)
+    { at: 0, name: 'Unproven' }, { at: 1, name: 'A Made Teacher' }, { at: 3, name: 'The Counselor' },
+    { at: 7, name: 'The Godfather' }, { at: 15, name: 'The Old Don' },
+  ],
+};
+export const mentorRankOf = (n) => MENTOR.RANKS.reduce((a, r) => (Number(n) >= r.at ? r : a), MENTOR.RANKS[0]);
+
 // ═══ THE RARITY NFTs (economy v3 step 7) ═══
 // Design §7 + §9.7. Cars and boats carry a rarity, and an owned one can be EXTRACTED on-chain as a
 // tradeable ERC-1155 through the EXISTING GearVault rail. Two rules from the design are load-bearing

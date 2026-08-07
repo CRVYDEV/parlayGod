@@ -3852,14 +3852,18 @@
     if (discFilters.online) qp.push('online=1');
     const b = (await api('GET', '/v1/discovery' + (qp.length ? '?' + qp.join('&') : ''))).body || {};
     const dm = b.me || {}, looking = b.looking || [], peers = b.peers || [], newcomers = b.newcomers || [], crews = b.crews || [];
+    const mm = (await api('GET', '/v1/mentor')).body || {};
+    const mme = mm.me || {}, offers = mm.offers || [], myProteges = mm.proteges || [];
     const districts = (rules && rules.districts) || [];
     const canInvite = dm.inCrew;   // any crew member can put a word in (by name)
+    const canMentor = !!mme.canMentor;   // THE MENTOR — a veteran with room can take a newcomer under their wing
     // the row template, kept inline at each map site so the mirror guard sees every field read
     // (a `.map(namedFn)` is a documented mirror blind spot). All three lists share the same server
     // card shape, so peers — reliably non-empty in the fixture — carries the coverage.
-    const row = (r) => `<div class="card"><span class="t">${esc(r.name)}</span> <span class="chip">lvl ${r.level}</span>${r.online ? ' <span class="chip good">online</span>' : ''}${r.hasCrew ? ' <span class="chip">in a crew</span>' : ''}${r.lfg ? ' <span class="chip good">looking</span>' : ''}
+    const row = (r) => `<div class="card"><span class="t">${esc(r.name)}</span> <span class="chip">lvl ${r.level}</span>${r.online ? ' <span class="chip good">online</span>' : ''}${r.hasCrew ? ' <span class="chip">in a crew</span>' : ''}${r.lfg ? ' <span class="chip good">looking</span>' : ''}${r.seekingMentor ? ' <span class="chip good">wants a mentor</span>' : ''}
         <div class="d">${r.districtName ? esc(r.districtName) : ''}${r.gangTag ? ' · [' + esc(r.gangTag) + ']' : ''}</div>
-        ${canInvite && !r.hasCrew ? `<button class="act" data-inv="${esc(r.name)}" style="border-color:var(--neon)">invite to my crew</button>` : ''}</div>`;
+        ${canInvite && !r.hasCrew ? `<button class="act" data-inv="${esc(r.name)}" style="border-color:var(--neon)">invite to my crew</button>` : ''}
+        ${canMentor && r.seekingMentor ? `<button class="act" data-mentor="${r.id}" style="border-color:var(--gold)">offer to mentor</button>` : ''}</div>`;
 
     t.innerHTML = `
       <div class="card"><span class="t">Looking for a crew?</span>
@@ -3867,6 +3871,21 @@
           : "Put the word out and let someone find YOU."}
           <button class="act" id="lfg-toggle" style="border-color:${dm.lfg ? 'var(--bad)' : 'var(--neon)'}">${dm.lfg ? 'stop looking' : "I'm looking for a crew"}</button></div>
         ${!dm.inCrew ? '<div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">Find someone below, then <a href="#" data-dgo="crew">start a crew</a> to bring them in.</div>' : ''}</div>
+
+      ${mme.canSeek || mm.mentor || offers.length || myProteges.length || mme.canMentor ? `
+      <div class="card" style="margin-top:8px;border-color:var(--gold)"><span class="t" style="color:var(--gold)">The Mentor <span class="d" style="font-size:11px">— a veteran takes a newcomer under their wing</span></span>
+        ${mm.mentor ? `<div class="d" style="margin-top:4px">Your mentor: <b>${esc(mm.mentor.name)}</b> <span class="chip">${esc(mm.mentor.rank)}</span>${mm.mentor.graduated ? ' <span class="chip good">you graduated</span>' : ''}
+          ${mm.mentor.claimable > 0 ? ` <button class="act prime" id="mentor-claim">claim $${fmt(mm.mentor.claimable)}</button>` : ''}</div>` : ''}
+        ${offers.length ? `<div class="d" style="margin-top:6px">A veteran wants to guide you:
+          <div class="grid" style="margin-top:4px">${offers.map((o) => `<div class="card"><span class="t">${esc(o.name)}</span> <span class="chip">${esc(o.rank)}</span>
+            <div class="row">${o.charId ? `<button class="act" data-maccept="${o.charId}" style="border-color:var(--gold)">take ${esc(o.name)}'s wing</button>` : '<span class="chip cold">their line has fallen</span>'}</div></div>`).join('')}</div></div>` : ''}
+        ${mme.canSeek && !mm.mentor ? `<div class="d" style="margin-top:6px">${mme.seeking ? "You're <span class=\"chip good\">seeking a mentor</span> — a veteran can offer to guide you. You'll earn onboarding cash at levels 5/10/15/20."
+          : "New here? Flag that you want a mentor — a veteran shows you the ropes, and you earn cash as you level."}
+          <button class="act" id="seek-toggle" style="border-color:${mme.seeking ? 'var(--bad)' : 'var(--gold)'}">${mme.seeking ? 'stop seeking' : 'find me a mentor'}</button></div>` : ''}
+        ${myProteges.length ? `<div class="d" style="margin-top:6px">Your protégés: ${myProteges.map((p) => `<b>${esc(p.name)}</b> (lvl ${p.level}${p.graduated ? ', graduated' : ''})`).join(' · ')}</div>` : ''}
+        ${mme.canMentor && !myProteges.length ? `<div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">You can take up to ${mme.activeMax || 3} newcomers under your wing — look for "wants a mentor" below and offer.</div>` : ''}
+        ${mme.atCap ? '<div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">Your wing is full — a protégé graduates at level 20 to free a slot.</div>' : ''}
+        <div class="row" style="margin-top:6px"><a href="#" data-dgo-lb="mentors" style="font-size:11px">the mentors leaderboard →</a></div></div>` : ''}
 
       <div class="card" style="margin-top:8px"><span class="t">Filter</span>
         <div class="d" style="margin-top:4px">
@@ -3905,6 +3924,22 @@
     t.querySelectorAll('[data-ask]').forEach((btn) => btn.onclick = () =>
       act('POST', '/v1/crew/request/' + btn.dataset.ask, {}).then(() => renderDiscover()));
     t.querySelectorAll('[data-dgo]').forEach((a) => a.onclick = (e) => { e.preventDefault(); setTab(a.dataset.dgo); });
+    // THE MENTOR wiring
+    const seekT = t.querySelector('#seek-toggle');
+    if (seekT) seekT.onclick = () => act('POST', '/v1/mentor/seeking', { on: !mme.seeking }).then(() => renderDiscover());
+    const mclaim = t.querySelector('#mentor-claim');
+    if (mclaim) mclaim.onclick = () => act('POST', '/v1/mentor/claim', {}).then(() => renderDiscover());
+    t.querySelectorAll('[data-mentor]').forEach((btn) => btn.onclick = () =>
+      act('POST', '/v1/mentor/offer/' + btn.dataset.mentor, {}).then(() => renderDiscover()));
+    t.querySelectorAll('[data-maccept]').forEach((btn) => btn.onclick = () =>
+      act('POST', '/v1/mentor/accept/' + btn.dataset.maccept, {}).then(() => renderDiscover()));
+    const mlb = t.querySelector('[data-dgo-lb]');
+    if (mlb) mlb.onclick = async (e) => { e.preventDefault();
+      const list = (await api('GET', '/v1/leaderboard/mentors')).body || [];
+      sheetModal('THE MENTORS — most protégés raised', list.length
+        ? '<div class="grid">' + list.map((m, i) => `<div class="card"><span class="t">${i + 1}. ${esc(m.name)}</span> <span class="chip">${esc(m.rank)}</span><div class="d">${m.raised} raised</div></div>`).join('') + '</div>'
+        : '<p class="dim">No mentors have raised a protégé yet — be the first.</p>');
+    };
   }
 
   // ── BLACK MARKET: the board (auctions / goods / buy orders) + your sell side ──
@@ -4000,7 +4035,7 @@
   async function renderStart() {
     const t = $('#tab-start');
     // two serial round trips before a single pixel painted — the tab showed nothing for both
-    const [obR, swR, crR, ppR, prR, cwR, dwR] = await Promise.all([api('GET', '/v1/onboard'), api('GET', '/v1/social'), api('GET', '/v1/career'), api('GET', '/v1/people'), api('GET', '/v1/paper'), api('GET', '/v1/crew'), api('GET', '/v1/discovery')]);
+    const [obR, swR, crR, ppR, prR, cwR, dwR, evR] = await Promise.all([api('GET', '/v1/onboard'), api('GET', '/v1/social'), api('GET', '/v1/career'), api('GET', '/v1/people'), api('GET', '/v1/paper'), api('GET', '/v1/crew'), api('GET', '/v1/discovery'), api('GET', '/v1/events')]);
     const ob = obR.body || { tasks: [], total: 0, claimed: 0 };
     const sw = swR.body || { tasks: [] };
     const cr = crR.body || { tiers: [] };
@@ -4008,6 +4043,18 @@
     const pr = prR.body || {};   // THE MORNING PAPER — the while-you-were-gone digest
     const cw = cwR.body || {};   // THE CREW — the small-group tie (null crew for a solo player)
     const dw = dwR.body || {};   // THE ROLODEX — discovery: is anyone looking for a crew near you?
+    // ── TONIGHT IN THE CITY (MOVE 2) — the live scheduled events, so anticipation is something you can
+    // SEE. Each carries a live countdown (or a progress %) + a one-tap jump. Hidden when nothing's open
+    // (the empty-state honesty rule — never a dead "no events" card).
+    const ev = evR.body || {};
+    const evs = ev.events || [];
+    const eventStrip = evs.length ? `
+      <h2>Tonight in the City <span class="d" style="font-size:11.5px">— what's on right now, and closing soon</span></h2>
+      <div class="grid" style="margin-bottom:12px">${evs.map((e) => `
+        <div class="card" style="border-color:var(--gold)"><span class="t">${e.icon || '🎟'} ${esc(e.title)}</span>
+          ${e.closesSeconds != null ? `<span class="chip">closes ${mins(e.closesSeconds)}</span>` : e.pct != null ? `<span class="chip good">${e.pct}% built</span>` : ''}
+          <div class="d">${esc(e.subtitle || '')}</div>
+          <div class="row"><button class="act" data-go-tab="${e.tab}">${e.closesSeconds != null ? 'get in →' : 'chip in →'}</button></div></div>`).join('')}</div>` : '';
     // ── THE SITUATION — the dashboard the 24-tab wall never had: your threats, your people, and
     // what's READY right now, in one glance. Composed from /v1/me (already in hand) + /v1/people
     // (the cohesion layer) — the client re-derives nothing.
@@ -4076,6 +4123,7 @@
     // rebuilt card would wipe the half-typed name. Carry the draft across the rebuild.
     const refDraft = t.querySelector('#ref-claim-name')?.value || '';
     t.innerHTML = `
+      ${eventStrip}
       ${ob.allDone ? situation : ''}
       <!-- The City Standing led this screen — so the FIRST thing a brand-new player saw was six bars
            at 0% and a leaderboard of strangers, with the checklist (the actual point) pushed below.

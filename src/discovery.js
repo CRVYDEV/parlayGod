@@ -30,10 +30,11 @@ const card = (r, online) => ({
   id: r.id, name: r.name, level: levelOf(Number(r.respect)),
   district: r.loc || null, districtName: r.loc ? districtName(r.loc) : null,
   gangTag: r.tag || null, lfg: !!r.lfg, hasCrew: r.has_crew, online: online.has(r.account_id),
+  seekingMentor: !!r.seeking_mentor,   // THE MENTOR — a newcomer open to a wing (a veteran can offer)
 });
 // the human list SELECT — shared by all three lists (only the WHERE/ORDER differ). Selects account_id
 // for the `online` derivation, never surfaced.
-const HUMAN_COLS = `SELECT c.id, c.name, c.account_id, c.respect, c.loc, c.lfg, g.tag, (cm.crew_id IS NOT NULL) AS has_crew
+const HUMAN_COLS = `SELECT c.id, c.name, c.account_id, c.respect, c.loc, c.lfg, c.seeking_mentor, g.tag, (cm.crew_id IS NOT NULL) AS has_crew
    FROM characters c JOIN account_persistent a ON a.account_id = c.account_id
    LEFT JOIN gang_members m ON m.character_id=c.id LEFT JOIN gangs g ON g.id=m.gang_id
    LEFT JOIN crew_members cm ON cm.account_id = c.account_id`;

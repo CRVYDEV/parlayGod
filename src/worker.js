@@ -37,6 +37,7 @@ import { sweepRivals } from './rivals.js';
 import { generateContactCalls, sweepCalls } from './contacts.js';
 import { sweepFavors } from './favors.js';
 import { sweepCrewInvites } from './crew.js';
+import { sweepMentorOffers } from './mentor.js';
 import { spawnNpcConvoys, despawnArrivedNpc, sweepConvoyHauls } from './convoy.js';
 import { runPopulation, runResidentBehaviour } from './population.js';
 import { sweepLaw } from './law.js';
@@ -331,6 +332,7 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     if (fv?.refunded > 0) console.log(`🤝 favors: ${fv.refunded} expired, escrow refunded to the posters`);
     const cw = await safe('crew invite sweep', () => sweepCrewInvites(pool));
     if (cw?.swept > 0) console.log(`👥 crew: swept ${cw.swept} stale invite(s)`);
+    await safe('mentor offer sweep', () => sweepMentorOffers(pool));
     const hs = await safe('heist sweep', () => sweepStaleHeists(pool));
     if (hs?.swept > 0) console.log(`🗺  heists: swept ${hs.swept} stale plan(s), stakes refunded to living leaders`);
     // THE PEN co-op breakout: stale break plans abandoned, a living leader's staked cutkit refunded

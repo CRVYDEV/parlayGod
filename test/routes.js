@@ -35,6 +35,7 @@ const PUBLIC = {
   'GET /v1/city': 'the city board the landing page shows before sign-in',
   'GET /v1/commission': 'public politics: seats, votes and the decree in force are on the record',
   'GET /v1/districts': 'the map, incl. NPC occupation + liberation cost — shown pre-sign-in',
+  'GET /v1/events': 'TONIGHT IN THE CITY — the live scheduled events, shown as anticipation before sign-in (the /v1/city precedent)',
   'GET /v1/exchange': 'the M3 cb/ammo barter board — a public order book',
   'GET /v1/gangs': 'the families board the landing page shows before sign-in',
   'GET /v1/gangs/:id': 'a family page is public (the /u/:name profile precedent)',
