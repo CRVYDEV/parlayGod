@@ -4107,7 +4107,7 @@
   async function renderStart() {
     const t = $('#tab-start');
     // two serial round trips before a single pixel painted — the tab showed nothing for both
-    const [obR, swR, crR, ppR, prR, cwR, dwR, evR, stR] = await Promise.all([api('GET', '/v1/onboard'), api('GET', '/v1/social'), api('GET', '/v1/career'), api('GET', '/v1/people'), api('GET', '/v1/paper'), api('GET', '/v1/crew'), api('GET', '/v1/discovery'), api('GET', '/v1/events'), api('GET', '/v1/streak')]);
+    const [obR, swR, crR, ppR, prR, cwR, dwR, evR, stR, reR] = await Promise.all([api('GET', '/v1/onboard'), api('GET', '/v1/social'), api('GET', '/v1/career'), api('GET', '/v1/people'), api('GET', '/v1/paper'), api('GET', '/v1/crew'), api('GET', '/v1/discovery'), api('GET', '/v1/events'), api('GET', '/v1/streak'), api('GET', '/v1/results')]);
     const ob = obR.body || { tasks: [], total: 0, claimed: 0 };
     const sw = swR.body || { tasks: [] };
     const cr = crR.body || { tiers: [] };
@@ -4116,6 +4116,7 @@
     const cw = cwR.body || {};   // THE CREW — the small-group tie (null crew for a solo player)
     const dw = dwR.body || {};   // THE ROLODEX — discovery: is anyone looking for a crew near you?
     const st = stR.body || {};   // THE STREAK — the daily-login habit hook
+    const rez = reR.body || {};  // THE RESULTS SHOW — how the marquee events fell
     // ── TONIGHT IN THE CITY (MOVE 2) — the live scheduled events, so anticipation is something you can
     // SEE. Each carries a live countdown (or a progress %) + a one-tap jump. Hidden when nothing's open
     // (the empty-state honesty rule — never a dead "no events" card).
@@ -4133,6 +4134,16 @@
           ${e.closesSeconds != null ? `<span class="chip">closes ${mins(e.closesSeconds)}</span>` : e.pct != null ? `<span class="chip good">${e.pct}% built</span>` : ''}
           <div class="d">${esc(e.subtitle || '')}</div>
           <div class="row"><button class="act" data-go-tab="${e.tab}">${e.closesSeconds != null ? 'get in →' : 'chip in →'}</button></div></div>`).join('')}</div>` : '') + dailyLine;
+    // ── THE RESULTS SHOW — the payoff companion to TONIGHT: how the marquee events actually fell. The
+    // shared "did you see what happened last night" surface (a personal "your bet paid $X" beat rides the
+    // wire + a win toast). Hidden when nothing's resolved yet (the empty-state honesty rule).
+    const results = rez.results || [];
+    const resultsStrip = results.length ? `
+      <h2>How It Fell <span class="d" style="font-size:11.5px">— the marquee events, decided</span></h2>
+      <div class="grid" style="margin-bottom:12px">${results.slice(0, 6).map((r) => `
+        <div class="card"><span class="t">${r.icon || '🎟'} ${esc(r.headline)}</span>
+          ${r.pool ? `<span class="chip">$${fmt(r.pool)} pool</span>` : ''}
+          <span class="chip">${mins(r.agoSeconds)} ago</span></div>`).join('')}</div>` : '';
     // ── THE STREAK — the daily-login habit hook. A returning player sees "check in for $X" front and
     // centre; the run escalates and a gap resets it, so there's a reason to come back TOMORROW.
     const streakCard = st.rewards ? `
@@ -4216,6 +4227,7 @@
     t.innerHTML = `
       ${streakCard}
       ${eventStrip}
+      ${resultsStrip}
       ${ob.allDone ? situation : ''}
       <!-- The City Standing led this screen — so the FIRST thing a brand-new player saw was six bars
            at 0% and a leaderboard of strangers, with the checklist (the actual point) pushed below.
@@ -7414,6 +7426,8 @@
       npc_aggression: () => `${d.family || 'an outfit'} have opened hostilities${d.target ? ` on the ${d.target}` : ' on your family'} — their guns are coming`,
       npc_pact_signed: () => `${d.npc || 'an outfit'} came to the table — a peace pact is sworn`,
       npc_alliance: () => `${d.a || 'an outfit'} and ${d.b || 'another'} have sworn an alliance`,
+      // THE RESULTS SHOW — the payoff beat: a marquee event you had a stake in just resolved
+      event_result: () => `${d.icon || '🎟'} ${d.headline}${d.outcome === 'won' ? ` — your $${fmt(d.stake)} paid ${$c(d.payout)}` : d.outcome === 'lost' ? ` — your $${fmt(d.stake)} came up short` : d.outcome === 'scratched' ? ' — no contest, your stake refunded' : ''}`,
       // THE MENTOR — the veteran/rookie tie
       mentor_offer: () => `${d.from} offered to take you under their wing`,
       mentor_accepted: () => `${d.protege} took your wing — you're their mentor now`,
@@ -7482,6 +7496,13 @@
     // (F2) the estate report flows through here on death (backfill on load, or the gen-bump re-backfill)
     // — pop the death/heir modal from it (deduped per generation inside showDeath).
     if (channel === 'me' && ev && ev.type === 'estate') showDeath(ev);
+    // THE RESULTS SHOW — a marquee event you staked on resolved. A WIN gets the payoff beat (the win
+    // sting + a celebratory toast); a loss/scratch just rides the feed line below. No modal — the wire
+    // + the toast are the moment, so a backfill of several results can't stack into modal fatigue.
+    if (channel === 'me' && ev && ev.type === 'event_result') {
+      const p = ev.payload || {};
+      if (p.outcome === 'won') { haptic('big'); sfx('win'); toast(`${p.icon || '🎟'} ${p.headline} — you took $${fmt(p.payout)}`, false); }
+    }
     if (channel === 'me' && ev && ev.type === 'dm') phoneRing(ev.payload || {});
     if (channel === 'chat' || (channel === 'gang' && ev.type === 'chat')) { chatLine(channel === 'chat' ? 'city' : 'family', ev); return; }
     const f = $('#feed');

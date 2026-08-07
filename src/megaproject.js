@@ -28,6 +28,7 @@
 // Lock order: withCharacter (actor char + account) → the megaprojects row FOR UPDATE (a
 // singleton-class row, locked LAST — the canonical characters → … → singletons order).
 import { GameError, bus, notify } from './game.js';
+import { recordEventResult } from './events.js';
 import { spendOmr } from './vanity.js';
 import { MEGAPROJECT, megaMonumentAt, megaTierOf, builderRankOf, GOODS , jailed } from './rules.js';
 
@@ -95,6 +96,7 @@ async function credit(client, ch, p, value, gangId) {
     const archName = arch?.name
       || (top && (await nameAccounts(client, [top.account_id])).get(top.account_id))
       || 'an unknown hand';
+    await recordEventResult(client, { kind: 'megaproject', icon: '🏛', headline: `The city finished ${mon.name} — ${archName} laid the most`, winnerName: archName, pool: Number(p.target), detail: { monument: mon.name } });
     bus.emit('streets', { type: 'megaproject_complete', monument: mon.name, architect: archName });
   }
   return { credited: value, progress: after, target: Number(p.target), completed,

@@ -8,6 +8,7 @@
 //   • TUNING (tuneCar) — a cash sink that adds race power (the car-progression the catalog lacked).
 // Lifetime wins are THE WHEEL — an account-level legend that SURVIVES DEATH (the boxing-legend precedent).
 import crypto from 'node:crypto';
+import { recordEventResult } from './events.js';
 import { GameError, bus, ledger, notify, rngLog, bumpMastery, masteryFx } from './game.js';
 import { RACES, POPULATION, raceTierOf, raceRankOf, carPower, carVal, levelOf , jailed, hospitalized } from './rules.js';
 import { logCarCollect } from './collection.js';
@@ -437,6 +438,7 @@ export async function resolveGrandPrix(client, gpId) {
   await client.query("UPDATE grand_prix SET status='resolved' WHERE id=$1", [gpId]);
   await clearCurrent();
   await rngLog(client, ranked[0].character_id, `race:gp:${gpId}`, ranked[0].score, `winner ${ranked[0].name} · ${ranked.length} runners · pool $${pool}`);
+  await recordEventResult(client, { kind: 'grandprix', icon: '🏁', headline: `${ranked[0].name} wins the Grand Prix (${ranked.length} cars)`, winnerName: ranked[0].name, pool, detail: { runners: ranked.length } });
   bus.emit('streets', { type: 'gp_result', winner: ranked[0].name, pool, runners: ranked.length });
   return { grandPrix: gpId, runners: ranked.length, pool, winner: ranked[0].name, take: totalTake };
 }

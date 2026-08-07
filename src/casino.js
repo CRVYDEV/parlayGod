@@ -7,6 +7,7 @@
 // helpers below); whatever profit isn't tipped out burns. Dice are stateless (a full pass-line
 // round in one call); the Numbers is a daily ticket resolved lazily against the seed-drawn number.
 import crypto from 'node:crypto';
+import { recordEventResult } from './events.js';
 import { GameError, bus, npcTier, bumpStanding, bumpMastery, masteryFx, ledger, notify, rngLog } from './game.js';
 import { CASINO, UNDERWORLD, MASTERY, POPULATION, numbersDrawOf, dayOf, weekOf, levelOf, hash01, MARKET_SEED, ACCESS_STAKE , jailed, hospitalized } from './rules.js';
 
@@ -697,7 +698,9 @@ export async function resolveFuturity(client, futurityId) {
       const payout = Number(b.amount) + share;        // stake back + pro-rata cut of the losers
       await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [b.bettor_char, payout]);
       await ledger(client, { characterId: b.bettor_char, currency: 'cash', amount: payout, reason: 'casino:futurity:win', counterparty: futurityId });
+      await notify(client, b.bettor_char, 'event_result', { kind: 'futurity', icon: '🎠', headline: `${winner.racer_name} wins the Futurity`, outcome: 'won', stake: Number(b.amount), payout });
     }
+    for (const b of loseBets) await notify(client, b.bettor_char, 'event_result', { kind: 'futurity', icon: '🎠', headline: `${winner.racer_name} wins the Futurity`, outcome: 'lost', stake: Number(b.amount), payout: 0 });
     if (purse > 0) {
       await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [winner.character_id, purse]);
       await ledger(client, { characterId: winner.character_id, currency: 'cash', amount: purse, reason: 'casino:futurity:purse', counterparty: futurityId });
@@ -710,6 +713,7 @@ export async function resolveFuturity(client, futurityId) {
   await client.query("UPDATE futurities SET status='resolved', winner_racer=$2 WHERE id=$1", [futurityId, winner.racer_id]);
   await clearCurrent();
   await rngLog(client, winner.character_id, `casino:futurity:${futurityId}`, winner.score, `winner ${winner.racer_name} · ${ranked.length} runners · pool $${Number(g.pool)}`);
+  await recordEventResult(client, { kind: 'futurity', icon: '🎠', headline: `${winner.racer_name} wins the Futurity (${ranked.length} ran)`, winnerName: winner.racer_name, pool: totalWin + totalLose, detail: { runners: ranked.length } });
   bus.emit('streets', { type: 'futurity_result', winner: winner.racer_name, runners: ranked.length });
   for (const r of ranked) await notify(client, r.character_id, 'futurity_result', { racer: r.racer_name, place: ranked.indexOf(r) + 1, of: ranked.length, won: r.racer_id === winner.racer_id });
   return { futurity: futurityId, winner: winner.racer_name, runners: ranked.length, pot: totalWin + totalLose, purse, houseCut };
@@ -1194,6 +1198,7 @@ async function resolveBracketRound(client, t, entries) {
     await clearCurrent();
     await rngLog(client, ranked[0].character_id, `casino:bracket:${tid}`, ranked[0].score[0],
       `champion ${ranked[0].name} ${ranked[0].hand} · round ${t.round} final · pool $${livePool}`);
+    await recordEventResult(client, { kind: 'poker', icon: '🃏', headline: `${ranked[0].name} wins the Poker Bracket with ${ranked[0].hand}`, winnerName: ranked[0].name, pool: livePool, detail: { hand: ranked[0].hand, bracket: true } });
     bus.emit('streets', { type: 'tourney_result', winner: ranked[0].name, hand: ranked[0].hand, pool: livePool, runners: entries.length, bracket: true });
     return { tournament: tid, round: Number(t.round), finalists: ranked.length, winner: ranked[0].name, take: totalTake };
   }
@@ -1295,6 +1300,7 @@ export async function resolveTournament(client, tid) {
   await clearCurrent();
   await rngLog(client, ranked[0].character_id, `casino:tourney:${tid}`, ranked[0].score[0],
     `winner ${ranked[0].name} ${ranked[0].hand} · ${ranked.length} runners · pool $${pool}`);
+  await recordEventResult(client, { kind: 'poker', icon: '🃏', headline: `${ranked[0].name} takes the Poker Tournament with ${ranked[0].hand} (${ranked.length} runners)`, winnerName: ranked[0].name, pool, detail: { hand: ranked[0].hand, runners: ranked.length } });
   bus.emit('streets', { type: 'tourney_result', winner: ranked[0].name, hand: ranked[0].hand, pool, runners: ranked.length });
   return { tournament: tid, runners: ranked.length, pool, winner: ranked[0].name, take: totalTake };
 }

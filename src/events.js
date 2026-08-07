@@ -7,9 +7,32 @@
 // already carries an open/booked/building status + a `resolves_at` (or progress/target), so this is a
 // handful of cheap queries. §10.4-FREE by construction — reads only, no ledger vocabulary; the test
 // proves it by counting rows.
+import crypto from 'node:crypto';
 import { megaMonumentAt } from './rules.js';
 
 const secsTo = (ts) => Math.max(0, Math.floor((new Date(ts).getTime() - Date.now()) / 1000));
+
+// ── THE RESULTS SHOW — the payoff beat that TONIGHT IN THE CITY was missing. The marquee events (the
+// title fight, the tournament, the grand prix, the futurity, the stakes) all resolve SILENTLY in the
+// worker and land as a one-line feed entry; a spectator who bet gets cash with no moment. `recordEventResult`
+// writes a server-wide log row (the public "what just happened" board) — the resolvers separately notify
+// each stakeholder their personalized outcome, which is where the emotion is. A LOG, §10.4-FREE (no ledger).
+export async function recordEventResult(client, { kind, icon, headline, winnerName = null, pool = 0, detail = {} }) {
+  await client.query(
+    'INSERT INTO event_results (id, kind, icon, headline, winner_name, pool, detail) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+    [crypto.randomUUID(), kind, icon, String(headline).slice(0, 200), winnerName, Math.round(Number(pool) || 0), JSON.stringify(detail || {})]);
+}
+
+// the public spectator board — recent marquee results, newest first. No private data (a payout is per-player
+// and rides the notification stream, never this board), so it can be keyless like the events board.
+export async function resultsBoard(client, limit = 12) {
+  const rows = (await client.query(
+    'SELECT kind, icon, headline, winner_name, pool, resolved_at FROM event_results ORDER BY resolved_at DESC LIMIT $1', [limit])).rows;
+  return rows.map((r) => ({
+    kind: r.kind, icon: r.icon, headline: r.headline, winner: r.winner_name,
+    pool: Number(r.pool) || 0, agoSeconds: Math.max(0, Math.floor((Date.now() - new Date(r.resolved_at).getTime()) / 1000)),
+  }));
+}
 
 // ── THE BOARD — the open scheduled events, ranked soonest-closing first (the megaproject, which has
 // progress rather than a clock, trails). Each is a compact card the Home strip renders with a live

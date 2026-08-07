@@ -298,6 +298,8 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
       [new Date(Date.now() - 7 * 86400000)])); // 7-day chat retention — talk is ephemeral, not a ledger
     await safe('cellphone retention', () => pool.query('DELETE FROM dm_messages WHERE at < $1',
       [new Date(Date.now() - 30 * 86400000)])); // 30-day DM retention — a phone, not an archive
+    await safe('results retention', () => pool.query('DELETE FROM event_results WHERE resolved_at < $1',
+      [new Date(Date.now() - 7 * 86400000)])); // 7-day results retention — a board of last night's outcomes, not a ledger
     await safe('duel log retention', () => pool.query('DELETE FROM duels WHERE at < $1',
       [new Date(Date.now() - 60 * 86400000)])); // the pair K-decay reads only TODAY — old rows are noise
     await safe('gala guest retention', () => pool.query('DELETE FROM gala_guests WHERE at < $1',

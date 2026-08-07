@@ -7,6 +7,7 @@
 // hitman-rep precedent). Fighters die with the street (the fighters rows join the runEstate wipe).
 import crypto from 'node:crypto';
 import { GameError, bus, ledger, notify, rngLog, bumpStanding, bumpMastery, masteryFx, npcMult, npcTier } from './game.js';
+import { recordEventResult } from './events.js';
 import { BOXING, UNDERWORLD, boxerRankOf, boxerLegendOf, npcBoxerOf, levelOf, pathFx , jailed, hospitalized } from './rules.js';
 
 const injured = (f) => f.injured_until && new Date(f.injured_until) > new Date();
@@ -489,11 +490,13 @@ export async function resolveMainEvent(client, boutId) {
   const totalWin = winners.reduce((a, b) => a + Number(b.amount), 0);
   const totalLose = losers.reduce((a, b) => a + Number(b.amount), 0);
   let purse = 0, houseCut = 0;
+  const headline = `${winF.name} beat ${loseF.name}${belt ? ' for the belt' : ''}`;
   if (totalWin === 0) {
     // no action on the winner — nobody to pay out; refund every LIVE bettor their stake (the one-sided book)
     for (const b of live) {
       await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [b.bettor_char, Number(b.amount)]);
       await ledger(client, { characterId: b.bettor_char, currency: 'cash', amount: Number(b.amount), reason: 'boxing:bet:refund', counterparty: boutId });
+      await notify(client, b.bettor_char, 'event_result', { kind: 'boxing', icon: '🥊', headline, outcome: 'scratched', stake: Number(b.amount), payout: Number(b.amount) });
     }
   } else {
     const rake = Math.floor(totalLose * BOXING.BET_RAKE_BPS / 10000);
@@ -509,7 +512,9 @@ export async function resolveMainEvent(client, boutId) {
       const payout = Number(b.amount) + share;     // their stake back + their pro-rata cut of the losers
       await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [b.bettor_char, payout]);
       await ledger(client, { characterId: b.bettor_char, currency: 'cash', amount: payout, reason: 'boxing:bet:win', counterparty: boutId });
+      await notify(client, b.bettor_char, 'event_result', { kind: 'boxing', icon: '🥊', headline, outcome: 'won', stake: Number(b.amount), payout });
     }
+    for (const b of losers) await notify(client, b.bettor_char, 'event_result', { kind: 'boxing', icon: '🥊', headline, outcome: 'lost', stake: Number(b.amount), payout: 0 });
     if (purse > 0) {
       await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [winnerChar, purse]);
       await ledger(client, { characterId: winnerChar, currency: 'cash', amount: purse, reason: 'boxing:purse:main', counterparty: boutId });
@@ -521,6 +526,7 @@ export async function resolveMainEvent(client, boutId) {
   }
   await client.query("UPDATE boxing_bouts SET status='resolved', winner_fighter=$2 WHERE id=$1", [boutId, winF.id]);
   await rngLog(client, winnerChar, `boxing:main:${boutId}`, sa, `${winF.name} beat ${loseF.name} (${sa} vs ${sb})${belt ? ' — TITLE' : ''}`);
+  await recordEventResult(client, { kind: 'boxing', icon: '🥊', headline: `${headline} — ${winF.name} takes the Main Event`, winnerName: winF.name, pool: totalWin + totalLose, detail: { card: `${fa.name} v ${fb.name}`, belt } });
   bus.emit('streets', { type: 'boxing_main_result', card: `${fa.name} v ${fb.name}`, winner: winF.name, belt });
   await notify(client, bout.a_char, 'boxing_main_result', { won: aWon, card: `${fa.name} v ${fb.name}`, belt: belt && winnerChar === bout.a_char, purse: winnerChar === bout.a_char ? purse : 0 });
   await notify(client, bout.b_char, 'boxing_main_result', { won: !aWon, card: `${fa.name} v ${fb.name}`, belt: belt && winnerChar === bout.b_char, purse: winnerChar === bout.b_char ? purse : 0 });

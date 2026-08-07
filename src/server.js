@@ -22,7 +22,7 @@ import * as Mentor from './mentor.js';
 import * as Streak from './streak.js';
 import * as Circle from './circle.js';
 import * as Push from './push.js';
-import { cityEventBoard } from './events.js';
+import { cityEventBoard, resultsBoard } from './events.js';
 import * as A from './auth.js';
 import * as Chain from './chain.js';
 import * as Fees from './fees.js';
@@ -1920,6 +1920,9 @@ export async function buildServer() {
   // ── TONIGHT IN THE CITY (MOVE 2) — the live scheduled events, so anticipation is something a player
   // can SEE. A public read-only aggregator; §10.4-free.
   app.get('/v1/events', async () => cityEventBoard(pool));
+  // ── THE RESULTS SHOW — the payoff beat. The public "what just happened" board (recent marquee results);
+  // a personalized outcome ("your bet paid $X") rides the notification stream, never this board. §10.4-free. ──
+  app.get('/v1/results', async () => ({ results: await resultsBoard(pool) }));
   // ── THE MENTOR (MOVE 1) — the positive first interaction. ──
   app.get('/v1/mentor', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client) => Mentor.mentorBoard(ch, client)));
