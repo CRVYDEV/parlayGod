@@ -19,6 +19,8 @@ import * as Favors from './favors.js';
 import * as Crew from './crew.js';
 import * as Discovery from './discovery.js';
 import * as Mentor from './mentor.js';
+import * as Streak from './streak.js';
+import * as Circle from './circle.js';
 import { cityEventBoard } from './events.js';
 import * as A from './auth.js';
 import * as Chain from './chain.js';
@@ -112,7 +114,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          TAX, withdrawTaxBps,
          HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, OPERATIONS, BUSINESS_EMPIRE, PACING, MASTERY,
          PATH_FX, PATH_XP_HOME, PATH_XP_RIVAL, PATH_SWITCH_CD_MS, REGIMEN, HUSTLE, CAREER, RIVALS,
-         CORNER, CONTACTS, FAVOR, DISCOVERY, MENTOR, MADE, MADE_LADDER, ACCESS_STAKE, ROSTER_POSTS, jailed, hospitalized } from './rules.js';
+         CORNER, CONTACTS, FAVOR, DISCOVERY, MENTOR, STREAK, MADE, MADE_LADDER, ACCESS_STAKE, ROSTER_POSTS, jailed, hospitalized } from './rules.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -896,6 +898,7 @@ export async function buildServer() {
     // THE MENTOR — the positive first interaction (levels/caps/milestones; the offer flow is server-gated)
     mentor: { minLvl: MENTOR.MIN_LVL, protegeMaxLvl: MENTOR.PROTEGE_MAX_LVL, activeMax: MENTOR.ACTIVE_MAX,
       milestones: MENTOR.MILESTONES.map((m) => ({ lvl: m.lvl, cash: m.cash, graduate: !!m.graduate })) },
+    streak: { rewards: STREAK.REWARDS, maxDay: STREAK.MAX_DAY },
     // THE STREET WAR + RIVALS (discoverability — costs and bounds only; the odds stay server-side)
     rivals: { robRateBps: RIVALS.ROB_RATE_BPS, robEnergy: RIVALS.ROB_ENERGY, robJailS: RIVALS.ROB_JAIL_S,
       trunkEnergy: RIVALS.TRUNK.ENERGY, trunkJailS: RIVALS.TRUNK.JAIL_S,
@@ -1913,6 +1916,16 @@ export async function buildServer() {
   app.post('/v1/mentor/gift/:protegeCharId', { preHandler: auth }, async (req) =>
     G.withTwoCharacters(pool, req.user.sub, req.params.protegeCharId, (ch, protege, client, h) => Mentor.mentorGift(ch, protege, client, h)));
   app.get('/v1/leaderboard/mentors', { preHandler: auth }, async () => Mentor.mentorLeaderboard(pool));
+
+  // ── THE STREAK — the daily-login habit loop. Claim once a day; the cash escalates with the run. ──
+  app.get('/v1/streak', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client) => Streak.streakBoard(ch, client)));
+  app.post('/v1/streak/claim', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Streak.claimStreak(ch, client, h)));
+  app.get('/v1/leaderboard/streak', { preHandler: auth }, async () => Streak.streakLeaderboard(pool));
+  // ── THE CIRCLE — the ambient stream of the people you know (crew/mentor/protégés/spouse). §10.4-free. ──
+  app.get('/v1/circle', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client) => Circle.circleBoard(client, ch, [...wsClients.keys()])));
 
   registerKitchen(app, { pool, auth });
 

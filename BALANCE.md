@@ -5118,3 +5118,18 @@ cash to the protégé (a real onboarding subsidy) without creating any, bounded 
 mentor's own bankroll. HAD MY BACK (the `protege_attacked` alert) and the "also today" den-draw line move
 zero value (a notification + a read). `GIFT_CASH`/`GIFT_CD_MS` are founder sign-off levers; `GIFT_CASH: 0`
 disables the care package.
+
+## THE STREAK — the daily-login faucet (founder sign-off)
+
+THE STREAK (the retention cadence the game lacked) adds ONE cash faucet: `streak:daily`, the daily-login
+reward. Bounded HARD, two ways: **once per day** (the `login_day` guard — a second claim is refused) and a
+**capped escalating reward** (`STREAK.REWARDS` day 1 $500 → day 7 $4,000, FLAT past `MAX_DAY`). So a
+perfect attender's ceiling is `REWARDS[MAX_DAY-1]`/day = **$4,000/day** — petty vs the passive stack (~$21.6M/
+day) and the onboarding/career faucet scale. The run COUNT keeps climbing past MAX_DAY (a satisfying "23
+days" number, the `streak_best` legend) while the reward flattens, so the run length is NOT a faucet — only
+the daily claim is, and it's capped. A gap RESETS the run to 1 (so the escalation is earned by actually
+coming back, not banked). §10.4 stays drift-0 (a character_id'd ledgered faucet; the sim reconciles it). The
+legend + rank + leaderboard are pure status (survives death, agents/NPC excluded — the hitman-rep posture).
+`STREAK.REWARDS`/`MAX_DAY` are the sign-off dials; a shorter/flatter table trims the faucet, `REWARDS: [0,…]`
+disables the cash entirely (the streak + legend still work). THE CIRCLE (the ambient people-you-know feed)
+adds NO faucet — it is a pure read (a live snapshot + the kill_log-derived blood feed), §10.4-free.

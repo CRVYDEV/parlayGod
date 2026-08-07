@@ -2797,3 +2797,11 @@ CREATE TABLE IF NOT EXISTS mentor_offers (
 );
 CREATE INDEX IF NOT EXISTS ix_mentor_offers_protege ON mentor_offers (protege_account);
 CREATE INDEX IF NOT EXISTS ix_characters_seeking ON characters (seeking_mentor) WHERE seeking_mentor;
+
+-- THE STREAK — the daily-login habit loop. Account-level (SURVIVES DEATH — the heir keeps the streak,
+-- the referral/mentor posture); new columns on an EXISTING table → ALTER ... ADD COLUMN IF NOT EXISTS
+-- (the outage lesson). `login_day` is the day-number (dayOf) of the last claim; `login_streak` the run;
+-- `streak_best` the lifetime high-water legend.
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS login_streak INT NOT NULL DEFAULT 0;
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS login_day INT NOT NULL DEFAULT 0;
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS streak_best INT NOT NULL DEFAULT 0;

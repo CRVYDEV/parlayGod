@@ -55,6 +55,9 @@ const KNOWN_REASONS = {
     // THE MENTOR: `mentor:protege` — a protégé's onboarding cash at level milestones (character_id'd;
     // once-ever per milestone via mentorships.claimed_mask, level-real → ~$20k lifetime, petty & bounded)
     'mentor:',
+    // THE STREAK: `streak:daily` — the daily-login reward (character_id'd; once/day × a capped escalating
+    // reward → ceiling ~$4k/day for a perfect attender, petty vs the passive stack, BALANCE.md)
+    'streak:',
     // WORD ON THE STREET: `corner:job` — the district quest board's envelope (character_id'd;
     // hard-bounded CORNER.MAX_DAY claims per street per day — a petty located faucet, BALANCE.md)
     'corner:',
