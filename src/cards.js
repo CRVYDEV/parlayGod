@@ -17,12 +17,14 @@ const esc = (s) => String(s == null ? '' : s).replace(/[<>&"']/g, (c) => ({ '<':
 export async function publicDossier(pool, name) {
   const row = (await pool.query(
     `SELECT c.id, c.name, c.respect, c.alive, c.wanted_until, c.welsher, c.season_kills,
-            ap.hitman_rep, ap.kills, ap.dynasty_name,
-            g.name AS gang, g.tag AS tag
+            ap.hitman_rep, ap.kills, ap.dynasty_name, ap.deaths,
+            g.name AS gang, g.tag AS tag, cr.name AS crew
        FROM characters c
        LEFT JOIN account_persistent ap ON ap.account_id = c.account_id
        LEFT JOIN gang_members gm ON gm.character_id = c.id
        LEFT JOIN gangs g ON g.id = gm.gang_id
+       LEFT JOIN crew_members cm ON cm.account_id = c.account_id
+       LEFT JOIN crews cr ON cr.id = cm.crew_id
       WHERE lower(c.name) = lower($1)
       ORDER BY c.alive DESC LIMIT 1`, [String(name || '')])).rows[0];
   if (!row) return { found: false, name: String(name || '') };
@@ -32,10 +34,12 @@ export async function publicDossier(pool, name) {
   const wanted = row.wanted_until && new Date(row.wanted_until) > new Date();
   return {
     found: true, name: row.name, level: levelOf(Number(row.respect) || 0), alive: !!row.alive,
-    gang: row.gang || null, tag: row.tag || null,
+    gang: row.gang || null, tag: row.tag || null, crew: row.crew || null,
     kills: Number(row.kills) || 0, hitmanRank: hitmanRankOf(Number(row.hitman_rep) || 0).title,
     wanted: !!wanted, welsher: !!row.welsher, bounty,
     dynasty: row.dynasty_name || null,
+    // the bloodline's depth (generations before this street) — a status flex, never a currency
+    generation: (Number(row.deaths) || 0) + 1,
   };
 }
 
@@ -141,7 +145,7 @@ export function profilePage(d, baseUrl, ref) {
   const enter = `${baseUrl}/?ref=${encodeURIComponent(ref || d.name)}`;
   const title = d.found ? `${d.name} — ${d.hitmanRank}` : 'OMERTÀ — the city';
   const desc = d.found
-    ? `Level ${d.level} · ${d.kills} ${d.kills === 1 ? 'kill' : 'kills'} · ${d.gang ? d.gang : 'a lone wolf'}${d.wanted ? ' · WANTED' : ''}. Come take the city.`
+    ? `${d.hitmanRank} · Level ${d.level} · ${d.kills} ${d.kills === 1 ? 'kill' : 'kills'} · ${d.gang ? d.gang : (d.crew ? d.crew : 'a lone wolf')}${d.dynasty ? ` · the ${d.dynasty} dynasty` : ''}${d.wanted ? ' · WANTED' : ''}. Come take the city.`
     : 'A noir mob RPG. Build a family, run the rackets, and try to survive the street.';
   const inline = d.found ? card('legend', d, ref || d.name) : card('join', { name: 'The City', gang: null }, ref);
   return `<!doctype html><html lang="en"><head>
@@ -173,10 +177,27 @@ h1{font-family:Georgia,serif;font-size:15px;letter-spacing:.3em;color:${GOLD};te
 .enter{display:inline-block;font-family:Georgia,serif;font-size:20px;letter-spacing:.04em;color:${BG};
   background:${GOLD};padding:15px 40px;border-radius:4px;text-decoration:none;font-weight:600}
 .enter:hover{background:#dab55e}
-.sub{color:${DIM};font-size:13px;margin-top:16px;max-width:52ch;margin-left:auto;margin-right:auto;line-height:1.5}</style>
+.sub{color:${DIM};font-size:13px;margin-top:16px;max-width:52ch;margin-left:auto;margin-right:auto;line-height:1.5}
+/* THE DOSSIER STRIP — a visitor should see a SPECIFIC, impressive person, not a generic pitch. Banded
+   status only (rank/level/kills/family/crew/dynasty) — never a dollar figure (the anti-precise-kill-EV
+   rule holds on a public, marketplace-indexed page exactly as on the paid Wire dossier). */
+.dossier{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:0 0 22px}
+.dtile{border:1px solid #2a2d37;border-radius:5px;padding:9px 15px;min-width:78px;background:rgba(20,16,10,.45)}
+.dtile .v{font-family:Georgia,serif;font-size:21px;color:${GOLD};line-height:1.1}
+.dtile .l{font-size:10px;letter-spacing:.18em;color:${DIM};text-transform:uppercase;margin-top:3px}
+.dtile.warn .v{color:#d98a3a}</style>
 </head><body><div class="wrap">
 <h1>Omertà · the wire</h1>
 <div class="card">${inline}</div>
+${d.found ? `<div class="dossier">
+  <div class="dtile"><div class="v">${d.level}</div><div class="l">Level</div></div>
+  <div class="dtile"><div class="v">${d.kills}</div><div class="l">${d.kills === 1 ? 'Kill' : 'Kills'}</div></div>
+  <div class="dtile"><div class="v" style="font-size:15px">${esc(d.hitmanRank)}</div><div class="l">Reputation</div></div>
+  ${d.gang ? `<div class="dtile"><div class="v" style="font-size:15px">${esc(d.gang)}</div><div class="l">Family</div></div>` : ''}
+  ${d.crew ? `<div class="dtile"><div class="v" style="font-size:15px">${esc(d.crew)}</div><div class="l">Crew</div></div>` : ''}
+  ${d.dynasty ? `<div class="dtile"><div class="v" style="font-size:15px">${esc(d.dynasty)}</div><div class="l">Dynasty · Gen ${d.generation}</div></div>` : (d.generation > 1 ? `<div class="dtile"><div class="v">Gen ${d.generation}</div><div class="l">Bloodline</div></div>` : '')}
+  ${d.wanted ? '<div class="dtile warn"><div class="v" style="font-size:15px">WANTED</div><div class="l">Standing</div></div>' : (d.welsher ? '<div class="dtile warn"><div class="v" style="font-size:15px">WELSHER</div><div class="l">Standing</div></div>' : '')}
+</div>` : ''}
 <a class="enter" href="${esc(enter)}">ENTER THE CITY →</a>
 <p class="sub">${d.found ? `You're looking at ${esc(d.name)}'s sheet. Start your own street — free, no wallet needed${ref || d.name ? `, and ${esc(ref || d.name)} gets credit for bringing you in.` : '.'}` : 'A noir mob RPG — build a family, run the rackets, survive the street.'}</p>
 ${d.found ? `<p class="what">A noir mafia RPG. Pull jobs, run a kitchen, take turf, and put a rival in the river —

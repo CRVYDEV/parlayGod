@@ -2094,6 +2094,13 @@
     if (body.escaped === true) return 'went over the wall — broke out of the pen';
     if (body.won === true && body.purse !== undefined) return 'my fighter took the purse';
     if (body.won === true && body.feePaid !== undefined) return "stood over a rival's whole operation";
+    // MANUFACTURED SHARE MOMENTS — the big status wins auto-offer a bespoke one-tap brag (each keyed on
+    // a clean, unambiguous field in that win's own response; every one carries the ?ref referral link)
+    if (body.milestone && body.milestone.day) return `hit a ${body.milestone.day}-day streak — they call me ${body.milestone.title}`;
+    if (body.made === true && body.omr !== undefined) return "got made — I'm a Made Man now";
+    if (body.completed === true && body.monument) return `helped raise ${body.monument} — it stands over the city forever`;
+    if (body.capstone && body.tier) return `cleared the rank of ${body.tier} — moving up in the outfit`;
+    if (body.reward !== undefined && body.crew === 'objective_claimed') return "my crew cracked the week's job together";
     if (body.capstone) return 'made my bones — first week done';
     return null;
   }
