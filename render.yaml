@@ -56,6 +56,13 @@ envVarGroups:
                                  # to shout; you would only find out by reading logs. Discord: Server
                                  # Settings → Integrations → Webhooks → New Webhook → Copy URL.
                                  # It is in the SHARED group on purpose: the alarms run in the worker.
+      - key: CITY_WIRE_WEBHOOK_URL
+        sync: false              # OPTIONAL, marketing: a PUBLIC Discord channel webhook. THE CITY WIRE
+                                 # posts the city's drama (kills, wars, monuments, prison breaks) there so
+                                 # a community can watch — organic reach at ~zero cost. Public-safe (names +
+                                 # the event, never a dollar figure), throttled. Keep it DISTINCT from the
+                                 # private ops alarm above. Dormant if blank. Lives on the API (the streets
+                                 # bus is there), so set it on the web service, not just the shared group.
 
 services:
   # 1) the game server — serves the website (/), the admin dashboard (/admin), the wiki (/wiki), and the API

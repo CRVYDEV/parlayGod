@@ -105,6 +105,7 @@ import * as Cards from './cards.js';
 import { renderPng } from './cardpng.js';
 import { buildOpenApi, llmsTxt } from './agentgateway.js';
 import { opportunityBoard, arenaBoard } from './opportunities.js';
+import { postCityWire } from './citywire.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit, checkAuthRateLimit, checkReadLimit, checkPublicRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
@@ -1640,6 +1641,13 @@ export async function buildServer() {
     const rows = r.rows.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
     return { notifications: rows.map((n) => ({ id: n.id, type: n.type, payload: JSON.parse(n.payload), at: n.created_at })) };
   });
+
+  // ── THE CITY WIRE — post a curated, public-safe subset of the streets feed to a Discord channel
+  // (organic marketing: the city's own drama becomes reach). ONE listener per server process (not
+  // per-socket — the R7 fan-out lesson); dormant unless CITY_WIRE_WEBHOOK_URL is set; §10.4-free.
+  // Idempotent: G.bus is a module singleton, so a process that builds >1 server (tests) must not stack
+  // duplicate listeners (→ duplicate posts). ──
+  if (!G.bus.listeners('streets').includes(postCityWire)) G.bus.on('streets', postCityWire);
 
   // ── M3: websocket gateway (§5.6) — channels: me, streets, gang:{id} ──
   await app.register(websocket);

@@ -9946,3 +9946,31 @@ CLAUDE.md-documented way — saved the working diff to scratchpad, `reset --hard
 --3way`, resolved the two conflicting files (SPEC.md → take origin/main's newer counts; server.js → re-apply
 the 3 edits by hand), reinstalled the newer deps, and re-ran every guard on the CORRECT complete base. A
 green suite on a stale base proves nothing about what you're about to push.
+
+**THE CITY WIRE — the city's drama becomes Discord reach (founder-directed 2026-08-07: "build your
+recommendations"; the organic-funnel rec).** For a mafia game the community lives on Discord, and the
+genre audience shares CITY DRAMA — a kill, a war declared, a family's monument raised, a jailbreak. That
+drama already exists on the streets feed; it just never left the game. `src/citywire.js` posts a CURATED,
+public-safe subset of the streets bus to a Discord channel webhook, so every server war is organic reach
+at ~zero cost. **DORMANT by default** — nothing posts unless `CITY_WIRE_WEBHOOK_URL` is set (a channel
+webhook DISTINCT from the private ops `INVARIANT_WEBHOOK_URL`; the API process, since the streets bus
+lives there, the mirror of the worker-side alarm). **§10.4-FREE** — a read-only side-effect, moves no
+value, writes no ledger row. **PUBLIC-SAFE BY CONSTRUCTION** — a curated `WIRE` allowlist (~11 marquee
+types: `kill`, `sacked`, `scandal`, `vendetta_settled`, `family_war_declared`/`_won`, `frontier_seized`,
+`megaproject_complete`, `sov_built`, `breakout`, `boxing_title_fight`) whose formatters use only the same
+names + event the streets feed already shows everyone, and NEVER a dollar figure (the info-economy /
+anti-precise-kill-EV rule — a public channel can't be scanned for wealth); an anonymous hit
+(`by: 'a hired gun'`) stays anonymous. Anything outside the allowlist is silently dropped (a highlight
+reel, not the full feed), and a curated event with a missing field degrades to null (the line would
+interpolate `undefined` — dropped rather than posted). Throttled (20 posts / 10 min token bucket — Discord
+rate-limits, and a wall reads as noise). Hooked as ONE idempotent `G.bus.on('streets', postCityWire)` per
+server process (not per-socket — the R7 fan-out lesson), best-effort/non-blocking (a slow or down webhook
+can never affect the request that emitted the event — the caller doesn't await). A `__setDeliver` seam
+(the push.js discipline) lets `test/citywire.js` (the 78th suite) prove the whole thing with NO network:
+the allowlist formats the marquee drama, drops everything mundane + every malformed/missing-field event,
+carries no `$[0-9]` on any line, is dormant without the env, reaches the seam with the right content+url
+when configured, and throttles a flood to the cap — mutation-verified (leak a dollar figure → the no-$
+assertion fails by name; fire when dormant → the dormant assertion fails). `CITY_WIRE_WEBHOOK_URL` is
+classified in preflight, documented in DEPLOY.md/`.env.example`/`render.yaml` (set it on the API, keep it
+distinct from the ops alarm, make it a public community channel). Suite green + sim drift-0 + pgquery +
+pgcheck 43/43 on real Postgres.
