@@ -1982,6 +1982,8 @@ export async function buildServer() {
     G.readCharacter(pool, req.user.sub, (ch, client) => Prime.primeTimeBoard(client, ch)));
   app.post('/v1/primetime/answer', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Prime.answerCall(ch, client, h)));
+  app.post('/v1/primetime/round', { preHandler: auth }, async (req) =>   // HAPPY HOUR — buy a round (repeatable)
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Prime.buyRound(ch, client, h)));
   // ── THE VOUCH — the symmetric peer bond. Stake your name on someone (scarce, capped); if they vouch
   // back it's mutual. Pure status, §10.4-free. ──
   app.get('/v1/vouches', { preHandler: auth }, async (req) =>

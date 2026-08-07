@@ -9,6 +9,7 @@
 // The window is forced live with PRIME_TIME_LIVE=on and the mode pinned with PRIME_TIME_MODE (the
 // SEASON_MOD/BULLETIN_THEME TEST-ONLY precedent), so the test needn't warp the clock to the drawn hour.
 process.env.PRIME_TIME_LIVE = 'on';
+process.env.PRIME_TIME_MECH = 'rally';   // pin the mechanic for the rally block (the seed now draws rally OR happyhour)
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { settlePrimeTime, rallyReward } from '../src/primetime.js';
@@ -113,6 +114,47 @@ await settlePrimeTime(pool);
 assert.equal(await cashOf(h.id), hCash, 'the worker pays an honor answerer NOTHING (the badge was the whole reward)');
 assert.equal(await txnCount(), txBefore, 'and the honor settle wrote no ledger row');
 
-console.log('primetime: PRIME TIME step one (THE RALLY) ok');
+// ════════════ STEP TWO — HAPPY HOUR (a repeatable window action; value → cash/round, honor → XP) ════════════
+process.env.PRIME_TIME_MECH = 'happyhour';
+// a rally answer is refused on a happy-hour night (and vice-versa) — the mechanic gates the action
+setMode('value');
+const hh = await mk('Happy Hour Hank');
+await levelUp(hh.id);
+let hb = (await call('GET', '/v1/primetime', { token: hh.token })).body;
+assert.equal(hb.mechanic, 'happyhour', 'the night is a happy hour');
+assert.equal(hb.roundsLeft, PRIME_TIME.HAPPY_ROUNDS, 'all rounds available');
+assert.equal(hb.roundCash, PRIME_TIME.HAPPY_CASH, 'the value round pays HAPPY_CASH');
+assert.equal((await call('POST', '/v1/primetime/answer', { token: hh.token })).body.error, 'not_rally', 'you can\'t answer a call on a happy-hour night');
+
+// VALUE — each round pays HAPPY_CASH immediately, up to HAPPY_ROUNDS
+const hhStart = await cashOf(hh.id);
+const beforeHH = await driftOf('character cash');
+for (let i = 1; i <= PRIME_TIME.HAPPY_ROUNDS; i++) {
+  const rr = await call('POST', '/v1/primetime/round', { token: hh.token });
+  assert.equal(rr.body.round, i, `round ${i} recorded`);
+  assert.equal(rr.body.cash, PRIME_TIME.HAPPY_CASH, 'each round pays HAPPY_CASH immediately');
+}
+assert.equal(await cashOf(hh.id), hhStart + PRIME_TIME.HAPPY_ROUNDS * PRIME_TIME.HAPPY_CASH, 'total = ROUNDS × CASH, paid up front');
+// capped at HAPPY_ROUNDS
+assert.equal((await call('POST', '/v1/primetime/round', { token: hh.token })).body.error, 'done', 'no more than HAPPY_ROUNDS a night');
+// §10.4 — the happy-hour faucet reconciles by the per-character cash check
+assert.equal(await driftOf('character cash'), beforeHH, 'the happy-hour faucet reconciles — no §10.4 drift');
+const hled = (await pool.query("SELECT amount, character_id FROM transactions WHERE reason='primetime:happy'")).rows;
+assert.ok(hled.length === PRIME_TIME.HAPPY_ROUNDS && hled.every((x) => x.character_id && Number(x.amount) === PRIME_TIME.HAPPY_CASH), 'each round is a character_id\'d primetime:happy row');
+
+// HONOR — each round bumps gambling mastery XP, moves NO value
+setMode('honor');
+const hg = await mk('Card Sharp');
+await levelUp(hg.id);
+const hgTx = await txnCount();
+const rr2 = await call('POST', '/v1/primetime/round', { token: hg.token });
+assert.equal(rr2.body.mode, 'honor', 'honor happy hour');
+assert.equal(rr2.body.round, 1, 'a round recorded');
+assert.equal(rr2.body.cash, undefined, 'no cash on an honor round');
+assert.equal(await txnCount(), hgTx, 'an honor round writes zero transactions rows');
+const gxp = Number((await pool.query('SELECT xp FROM masteries WHERE character_id=$1 AND track_id=$2', [await idOf(hg.id), 'gambling'])).rows[0]?.xp || 0);
+assert.ok(gxp > 0, 'the honor round schooled the gambling track (mastery XP, not cash)');
+
+console.log('primetime: PRIME TIME step one (THE RALLY) + step two (HAPPY HOUR) ok');
 await app.close();
 process.exit(0);

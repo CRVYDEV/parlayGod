@@ -3816,7 +3816,7 @@ export const bulletinOf = (wk = weekOf()) => {
 // The value faucet is bounded (BASE + PER×min(turnout−1, CAP), once/day, level-floored, agent-excluded)
 // — a §10.4 cash faucet `primetime:rally`, sim-flagged; all numbers are founder sign-off levers.
 export const PRIME_TIME = {
-  MECHANICS: ['rally'],           // step 2 +'happyhour', step 3 +'siege' — the seed draws among what's BUILT
+  MECHANICS: ['rally', 'happyhour'],  // step 3 +'siege' — the seed draws among what's BUILT (never a dead night)
   WINDOW_H: 1,                    // the window is one UTC hour
   FORECAST_DAYS: 7,              // how many nights ahead the board shows (anticipation — players plan)
   RALLY_BASE: 2000,             // value-rally: cash for answering the call (the floor at turnout 1)
@@ -3824,6 +3824,12 @@ export const PRIME_TIME = {
   RALLY_TURNOUT_CAP: 20,        // turnout counted up to here (bounds the faucet: max BASE + PER×CAP)
   RALLY_MIN_LVL: 5,             // anti-Sybil floor (the WANTED_MIN_LVL/npcHit-rookie precedent)
   TITLES: ['Night Owl', 'The Faithful', 'Answered the Call', 'The Regular', 'First to the Bar', 'The Usual Suspect'],
+  // HAPPY HOUR (step two) — "the house is buying rounds": a REPEATABLE window action (up to ROUNDS a
+  // night), so the night FEELS different from the once-a-night rally. value → petty cash per round
+  // (a bounded faucet `primetime:happy`, max ROUNDS×CASH/night); honor → gambling mastery XP per round
+  // (drinking sharpens the card sense — status, zero §10.4 via bumpMastery's `primetime` action tag).
+  HAPPY_ROUNDS: 3,              // rounds you can buy per night
+  HAPPY_CASH: 800,             // value: cash per round (max HAPPY_ROUNDS×HAPPY_CASH = $2,400/night)
 };
 // The night's draw — mechanic + mode + the UTC hour + the honor title, all a pure function of the day.
 // PRIME_TIME_MECH / PRIME_TIME_MODE are TEST-ONLY overrides (the SEASON_MOD/BULLETIN_THEME precedent).
@@ -4299,6 +4305,7 @@ export const MASTERY = {
     score: 25, heist: 60,                        // scores — 8h/daily cooldown ops
     bout: 25, exhibition: 20,                    // fists — 6h exhibition cd, bouts need a willing rival
     cards: 4, yardtale: 10,                      // PEN step six — cards with the crew / a yard war story
+    primetime: 6,                                // PRIME TIME HAPPY HOUR (honor night) — a round with the crew schools the card sense (gambling)
   },
   // The den floor: a play below this stake schools nothing — without it a min-bet ($100) spammer
   // with the Madame's comped seat farms The Gambler at the rate limit for ~free; at $1,000+ the
