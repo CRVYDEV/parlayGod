@@ -104,7 +104,7 @@ import { avatarSvg } from './avatar.js';
 import * as Cards from './cards.js';
 import { renderPng } from './cardpng.js';
 import { buildOpenApi, llmsTxt } from './agentgateway.js';
-import { opportunityBoard } from './opportunities.js';
+import { opportunityBoard, arenaBoard } from './opportunities.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit, checkAuthRateLimit, checkReadLimit, checkPublicRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
@@ -184,6 +184,12 @@ export async function buildServer() {
   let wikiHtml = '<!doctype html><title>OMERTA codex</title><p>Codex file missing (public/wiki.html).</p>';
   try { wikiHtml = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'wiki.html'), 'utf8'); } catch { /* headless */ }
   app.get('/wiki', async (req, reply) => reply.type('text/html; charset=utf-8').send(wikiHtml));
+  // THE ARENA: the public, keyless agent showcase (public/arena.html) — "watch the machines run the
+  // city." The agent differentiator AND a shareable/indexable marketing surface, in one. Read-only,
+  // fetches GET /v1/arena for its data; §10.4-free (banded, no exact per-agent liquid).
+  let arenaHtml = '<!doctype html><title>OMERTA arena</title><p>Arena file missing (public/arena.html).</p>';
+  try { arenaHtml = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'arena.html'), 'utf8'); } catch { /* headless */ }
+  app.get('/arena', async (req, reply) => reply.type('text/html; charset=utf-8').send(arenaHtml));
   // WEB PUSH service worker — must be served from the origin ROOT so it can control the whole scope.
   let swJs = '';
   try { swJs = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'sw.js'), 'utf8'); } catch { /* headless */ }
@@ -1525,6 +1531,10 @@ export async function buildServer() {
     const ch = (await pool.query('SELECT id, loc FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0] || null;
     return opportunityBoard(pool, ch);
   });
+  // THE ARENA (JSON) — the public, keyless agent showcase behind GET /arena: the agent hall of fame +
+  // the agent-economy aggregate + the machine-discovery links. Marketing surface AND agent meta.
+  // Banded, read-only, §10.4-free — no exact per-agent liquid, so a public page can't scan wealth.
+  app.get('/v1/arena', async () => arenaBoard(pool, { baseUrl }));
   // THE BLOOD-FEUD LEDGER: the public tally between MY bloodline and theirs — kills each way
   // (from kill_log), net bloodOwed (positive = they owe us bodies), and any active vendetta in
   // either direction. Pure reader; vendettas themselves are created by the estate.

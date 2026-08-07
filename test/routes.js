@@ -29,6 +29,7 @@ const app = await buildServer();
 // could not tell a considered exemption from a silencing one, because a bare string carries no
 // reason. Now an entry costs a sentence, so the cheapest way past this test is to add `auth`.
 const PUBLIC = {
+  'GET /v1/arena': 'THE ARENA — the public agent showcase behind GET /arena; a shareable/indexable marketing surface + the agent-economy meta, banded so it never scans wealth',
   'GET /v1/art/:kind/:id': 'card/profile art rendered into unfurls by crawlers with no token',
   'GET /v1/avatar/:seed': 'deterministic cosmetic portrait from a public seed (a character id); no auth, no state, cacheable',
   'GET /v1/auth/x/callback': 'the OAuth return leg — the caller has no token yet, by definition',

@@ -8,6 +8,32 @@ import { loanBoard } from './loans.js';
 import { convoyBoard } from './convoy.js';
 import { marketBoard } from './market.js';
 import { exchangeBoard } from './exchange.js';
+import { agentLeaderboard, agentEconomyStats } from './growth.js';
+
+// THE ARENA — the public, keyless meta behind GET /arena. The agent hall of fame + the agent-economy
+// aggregate + the machine-discovery links, in one read. Doubles as the "watch the machines run the
+// city" marketing surface (public, indexable, shareable) AND the meta an agent reads before deciding
+// the game is worth its calls. Read-only, banded (no exact per-agent liquid), §10.4-free.
+export async function arenaBoard(pool, { baseUrl = '' } = {}) {
+  const [leaderboard, economy] = await Promise.all([agentLeaderboard(pool, 25), agentEconomyStats(pool)]);
+  return {
+    economy,
+    leaderboard,
+    links: {
+      quickstart: `${baseUrl}/agents`,
+      openapi: `${baseUrl}/openapi.json`,
+      llms: `${baseUrl}/llms.txt`,
+      opportunities: `${baseUrl}/v1/opportunities`,
+      rules: `${baseUrl}/v1/rules`,
+      agentKey: 'POST /v1/auth/agent-key',
+      mcp: 'npx omerta-mcp (the Model Context Protocol server — play natively from any MCP client)',
+    },
+    pitch: 'OMERTÀ is a noir mafia RPG built for autonomous agents as first-class players: the whole '
+      + 'game is a JSON HTTP API with an OpenAPI contract, stable error codes, a machine rulebook, and '
+      + 'an on-chain $OMR extraction rail. Agents compete on SKILL — the anti-Sybil faucets are '
+      + 'humans-only — earn real value, and climb their own leaderboard. This page is live.',
+  };
+}
 
 // The standing skill-loops (the "agent niches") — how an agent makes money by playing well, each
 // with a live, computable signal. This is the sanctioned agent income: SKILL, not faucets.
@@ -113,14 +139,42 @@ export async function opportunityBoard(pool, ch) {
     passiveIncome: { note: 'Buy-once drip: rackets, businesses (/v1/business), territory (gang). Collect on your own clock — never leave income on the table.' },
   };
 
+  // THE RECOMMENDED MOVE — the single-call answer to "what should I do right now?". An agent that
+  // wants one decision, not a board, reads this. Prefer the highest KNOWN-reward discrete action
+  // (a WTB fill is risk-free cash; a contract pot is the biggest but carries PvP risk); if nothing
+  // discrete is open, fall to the widest arbitrage spread (the standing skill income). Honest about
+  // reward vs risk — it never claims a net it can't compute.
+  const topArb = niches.arbitrage[0];
+  const topDiscrete = opportunities.find((o) => (o.reward || 0) > 0) || null;
+  let best = null;
+  if (topDiscrete) {
+    best = { kind: topDiscrete.type, reward: topDiscrete.reward, risk: topDiscrete.risk,
+      endpoint: topDiscrete.endpoint, why: topDiscrete.note };
+  } else if (topArb && topArb.spread > 0) {
+    best = { kind: 'arbitrage', reward: null, risk: 'low',
+      endpoint: `buy ${topArb.good} at ${topArb.buyIn} ($${topArb.buyPrice}/u), sell at ${topArb.sellIn} ($${topArb.sellPrice}/u)`,
+      why: `widest trade-goods spread today: ${topArb.spreadPct}% on ${topArb.name}` };
+  }
+
+  // Summary totals — the meta an agent scans before committing calls: how much KNOWN reward is on the
+  // board (open contract pots + fillable orders), and the best standing arbitrage edge.
+  const rewardOnBoard = opportunities.reduce((a, o) => a + (o.reward || 0), 0);
+
   return {
     updatedBlock: blk,
+    best,
+    summary: {
+      openActions: opportunities.length,
+      rewardOnBoard,
+      bestArbitragePct: topArb ? topArb.spreadPct : 0,
+      windowRate: window.rate, windowOpen: window.open,
+    },
     counts: { contracts: opportunities.filter((o) => o.type === 'contract').length,
       convoys: opportunities.filter((o) => o.type === 'convoy').length,
       loans: opportunities.filter((o) => o.type === 'loan').length,
       orders: opportunities.filter((o) => o.type === 'order').length },
     opportunities,
     niches,
-    note: 'Aggregated open economic actions + standing skill-loops with EV/risk signals. Read-only. See GET /agents.',
+    note: 'Aggregated open economic actions + standing skill-loops with EV/risk signals. `best` is the single recommended move. Read-only. See GET /agents and GET /arena.',
   };
 }

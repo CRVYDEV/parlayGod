@@ -9905,3 +9905,44 @@ by the absolute conservation check. The fix for that class is never a migration 
 — it is classifying the reason correctly (here: into the burn term via the one `SINK_REASONS` source).
 Suite green + sim drift-0 + pgquery + pgcheck 43/43 on real Postgres. §10.4-only fix — no new
 lever/table/faucet; the historical −72 clears on the first check after deploy.
+
+**THE AGENT ARENA — the agent/MCP angle made a public, shareable surface (founder-directed 2026-08-07:
+"expand the agent/MCP differentiator").** The agent gateway (AGENTS.md, /openapi.json, /llms.txt,
+omerta-mcp, /v1/opportunities, the auth-gated /v1/leaderboard/agents) already made agents first-class
+players, but it was all machine-facing — a human had nothing to LOOK at, so the strongest marketing angle
+nobody else has ("autonomous agents earn and extract real value in a live game") was invisible. THE ARENA
+folds the differentiator INTO the organic funnel: a public, keyless showcase that is simultaneously the
+agent meta AND a shareable/indexable page. **`GET /arena`** (public/arena.html, the /wiki/admin static-serve
+precedent — a self-contained noir page, zero deps) — "watch the machines run the city": the live agent hall
+of fame, the agent-economy aggregate, the how-agents-play pitch, and a three-line curl to a first character,
+all linking out to the machine surfaces. **`GET /v1/arena`** (keyless JSON, `opportunities.js:arenaBoard`)
+is the data behind it AND the meta an agent reads before deciding the game is worth its calls:
+`agentEconomyStats` (`growth.js` — living/ever-run agents, collective wealth BAND, total $OMR extracted,
+top hunter) + `agentLeaderboard` (the existing board) + the discovery links. **Banded by construction** —
+the aggregate wealth is a BAND and the raw number is never a field, so a public marketplace-indexed page can
+never be scanned for an agent's exact liquid (the anti-precise-kill-EV rule; kills/extraction are already
+public on every leaderboard, so they stay exact — only wealth is sensitive). **§10.4-FREE** (read-only
+aggregation over existing reads + the ledger; the whole drop moves no value, adds no reason). pg-mem
+posture in the new aggregate: no FILTER, no ABS (the withdraw debit is negated), no correlated EXISTS
+(plain JOINs) — verified on real Postgres (pgquery type-resolves the account_persistent×characters×
+transactions joins). Also **deepened `GET /v1/opportunities`** — a `best` single recommended-move surface
+(the highest known-reward action, else the widest arbitrage spread — honest about reward vs risk, never a
+faked net) + a `summary` an agent scans before committing calls (open actions, reward on board, best
+arbitrage %, the window rate). **The MCP server** gained `omerta_arena` + `omerta_leaderboard` tools and
+its stale "AMM spot" niche description was corrected (the retired-`ammSpot` class the C1 audit fixed).
+AGENTS.md + llms.txt + the landing agents-pill now surface /arena; the OpenAPI contract carries /v1/arena
+(keyless) and excludes /arena (the HTML doc page, the /wiki precedent). `test/hardening.js` proves the
+arena serves keyless with a real agent in it, is banded (no exact wealth field), lists the agent, the page
+serves HTML, the opportunity board carries `best`+`summary`, and the openapi in/exclusion — mutation-verified
+(drop `best` → fails by name; leak an exact `wealth` field → the banded assertion fails by name). One test
+false-positive fixed en route: a `/\$[0-9]/` regex flagged the band LABEL `$100k–1M` (legit `$1`) — replaced
+with a structural `economy.wealth === undefined` check (a band label is not an exact figure). Chromium-probed
+live (the page renders the stats, the board row, the pitch; zero page errors — the lone favicon 404 is the
+app-wide browser default). Suite green + sim drift-0 + pgquery + pgcheck 43/43 on real Postgres; routes 609,
+docs current. **Process note (the recurring trap, hit and recovered):** the build landed on a STALE
+feature-branch base (`80db209`, an ancestor of origin/main missing 7 src files main had added); caught before
+commit by `docs.js` reporting 119 src vs the 126 it had reported earlier this session. Recovered the
+CLAUDE.md-documented way — saved the working diff to scratchpad, `reset --hard origin/main`, `git apply
+--3way`, resolved the two conflicting files (SPEC.md → take origin/main's newer counts; server.js → re-apply
+the 3 edits by hand), reinstalled the newer deps, and re-ran every guard on the CORRECT complete base. A
+green suite on a stale base proves nothing about what you're about to push.
