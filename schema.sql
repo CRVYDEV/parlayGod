@@ -2801,6 +2801,14 @@ CREATE TABLE IF NOT EXISTS primetime_rally (
   settled BOOLEAN NOT NULL DEFAULT false,
   PRIMARY KEY (day, character_id)
 );
+-- HAPPY HOUR (step two) — rounds bought per (night, street). value pays cash per round immediately (no
+-- settle); honor bumps gambling mastery XP. Character-keyed → joined the estate wipe; the worker prunes it.
+CREATE TABLE IF NOT EXISTS primetime_happy (
+  day INT NOT NULL,
+  character_id TEXT NOT NULL,
+  rounds INT NOT NULL DEFAULT 0,
+  PRIMARY KEY (day, character_id)
+);
 
 -- ── THE CREW HIT (omerta-crew-design.md step two) — the crew's shared target ─────────────────────
 -- A pointer the leader sets so the whole crew rallies a contract behind ONE mark. It moves NO value:

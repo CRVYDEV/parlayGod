@@ -10,7 +10,7 @@
 // §10.4: only `value` nights move value — a bounded cash faucet `primetime:rally` (BASE + PER×min(turnout
 // −1, CAP), once/day per street, level-floored, agent-excluded). `honor` nights write no ledger row.
 import { PRIME_TIME, primeTimeOf, dayOf, levelOf } from './rules.js';
-import { GameError, ledger, notify } from './game.js';
+import { GameError, ledger, notify, bumpMastery } from './game.js';
 
 const HOUR = 3600000, DAY = 86400000;
 
@@ -51,34 +51,49 @@ export function rallyReward(turnout) {
 // A compact summary for the TONIGHT strip on Home (events.js) — icon/title/subtitle + the countdown.
 export function primeTimeSummary(now = Date.now()) {
   const s = statusNow(now);
-  const mode = s.pt.mode;
-  const title = 'Prime Time — Answer the Call';
-  const sub = s.live
-    ? (mode === 'value' ? 'The city\'s out. Answer the call — the more who show, the bigger the cut.' : `The city\'s out. Answer the call for tonight's badge: ${s.pt.title}.`)
-    : (mode === 'value' ? 'Tonight the whole city gathers for one hour — show up and share the take.' : 'Tonight the whole city gathers for one hour — show up for the badge.');
+  const mode = s.pt.mode, happy = s.pt.mechanic === 'happyhour';
+  const title = happy ? 'Prime Time — Happy Hour' : 'Prime Time — Answer the Call';
+  const sub = happy
+    ? (s.live
+      ? (mode === 'value' ? `The house is buying — ${PRIME_TIME.HAPPY_ROUNDS} rounds of walking-around money while the bar's open.` : 'The house is buying — a few rounds with the crew sharpen the card sense.')
+      : 'Tonight the house buys rounds for one hour — be at the bar.')
+    : (s.live
+      ? (mode === 'value' ? 'The city\'s out. Answer the call — the more who show, the bigger the cut.' : `The city\'s out. Answer the call for tonight's badge: ${s.pt.title}.`)
+      : (mode === 'value' ? 'Tonight the whole city gathers for one hour — show up and share the take.' : 'Tonight the whole city gathers for one hour — show up for the badge.'));
   return { kind: 'primetime', icon: '🌃', title, subtitle: sub, tab: 'start',
     live: s.live, closesSeconds: s.live ? s.secondsToEnd : null, opensSeconds: s.live ? null : s.secondsToStart };
 }
 
-// The board: tonight's window (mechanic/mode/hour/live/countdown), your participation, the live turnout,
-// the reward estimate on a value night, and the forecast. Pure read.
+// how many rounds you've bought tonight (HAPPY HOUR)
+async function roundsOf(client, day, cid) {
+  return Number((await client.query('SELECT rounds FROM primetime_happy WHERE day=$1 AND character_id=$2', [day, cid])).rows[0]?.rounds || 0);
+}
+
+// The board: tonight's window (mechanic/mode/hour/live/countdown), your participation, and the forecast.
+// Branches on the mechanic — RALLY carries turnout+reward+answered; HAPPY HOUR carries rounds. Pure read.
 export async function primeTimeBoard(client, ch) {
   const s = statusNow();
   const day = s.pt.day;
-  const answered = !!(await client.query('SELECT 1 FROM primetime_rally WHERE day=$1 AND character_id=$2', [day, ch.id])).rows.length;
-  const turnout = await turnoutOf(client, day);
   const forecast = Array.from({ length: PRIME_TIME.FORECAST_DAYS }, (_, i) => {
     const w = windowOf(dayOf() + i);
     return { day: w.pt.day, mechanic: w.pt.mechanic, mode: w.pt.mode, hour: w.pt.hour, startMs: w.start };
   });
+  const happy = s.pt.mechanic === 'happyhour';
+  // ONE shape, always — every field of both mechanics is present (the inactive one carries defaults),
+  // so the client (which branches on `mechanic`) and the mirror-guard both see a stable board.
+  const rounds = happy ? await roundsOf(client, day, ch.id) : 0;
+  const answered = !happy && !!(await client.query('SELECT 1 FROM primetime_rally WHERE day=$1 AND character_id=$2', [day, ch.id])).rows.length;
+  const turnout = happy ? 0 : await turnoutOf(client, day);
   return {
     mechanic: s.pt.mechanic, mode: s.pt.mode, hour: s.pt.hour,
     live: s.live, opensSeconds: s.secondsToStart, closesSeconds: s.secondsToEnd,
-    answered, turnout,
-    title: s.pt.title,                                   // the honor-night badge
-    reward: s.pt.mode === 'value' ? rallyReward(turnout) : 0,  // an ESTIMATE — grows as more show up; settled at final turnout
-    minLevel: PRIME_TIME.RALLY_MIN_LVL, windowH: PRIME_TIME.WINDOW_H,
-    forecast,
+    minLevel: PRIME_TIME.RALLY_MIN_LVL, windowH: PRIME_TIME.WINDOW_H, forecast,
+    // RALLY fields
+    answered, turnout, title: s.pt.title,
+    reward: (!happy && s.pt.mode === 'value') ? rallyReward(turnout) : 0,  // an ESTIMATE — grows as more show; settled at final turnout
+    // HAPPY HOUR fields
+    rounds, roundsMax: PRIME_TIME.HAPPY_ROUNDS, roundsLeft: happy ? Math.max(0, PRIME_TIME.HAPPY_ROUNDS - rounds) : 0,
+    roundCash: PRIME_TIME.HAPPY_CASH,
   };
 }
 
@@ -107,6 +122,35 @@ export async function answerCall(ch, client, h) {
   // value night: the cash lands at close, scaled by the FINAL turnout (so nobody is punished for coming early)
   await notify(client, ch.id, 'primetime_answered', { mode: 'value', turnout }).catch(() => {});
   return { answered: true, mode: 'value', turnout, pending: true };
+}
+
+// HAPPY HOUR — buy a round (up to HAPPY_ROUNDS a night), in-window only. value → petty cash per round
+// (paid immediately, a bounded faucet — no turnout scaling, so no worker settle); honor → gambling
+// mastery XP per round (status, zero §10.4). The counter is a SELECT-then-write under the character
+// lock (pg-mem-safe, the answerCall latch discipline; the (day, character) PK is the real-PG backstop).
+export async function buyRound(ch, client, h) {
+  const s = statusNow();
+  if (s.pt.mechanic !== 'happyhour') throw new GameError('not_happy', 'Tonight is not a happy hour — check the board for what\'s on.');
+  if (!s.live) throw new GameError('closed', 'Happy Hour isn\'t live right now. The board shows when tonight\'s window opens.');
+  if (levelOf(Number(ch.respect)) < PRIME_TIME.RALLY_MIN_LVL) throw new GameError('rookie', `Join the round at level ${PRIME_TIME.RALLY_MIN_LVL}.`);
+  const day = s.pt.day;
+  const rounds = await roundsOf(client, day, ch.id);
+  if (rounds >= PRIME_TIME.HAPPY_ROUNDS) throw new GameError('done', `You\'ve had your ${PRIME_TIME.HAPPY_ROUNDS} rounds tonight — pace yourself.`);
+  const next = rounds + 1;
+  const upd = await client.query('UPDATE primetime_happy SET rounds=$3 WHERE day=$1 AND character_id=$2', [day, ch.id, next]);
+  if (!upd.rowCount) await client.query('INSERT INTO primetime_happy (day, character_id, rounds) VALUES ($1,$2,$3)', [day, ch.id, next]);
+  const left = PRIME_TIME.HAPPY_ROUNDS - next;
+  if (s.pt.mode === 'value') {
+    const cash = PRIME_TIME.HAPPY_CASH;
+    ch.cash = Number(ch.cash) + cash;      // paid immediately (persistCharacter commits); the faucet is character_id'd
+    await ledger(client, { characterId: ch.id, currency: 'cash', amount: cash, reason: 'primetime:happy', counterparty: `d${day}` });
+    await notify(client, ch.id, 'primetime_round', { mode: 'value', cash, left }).catch(() => {});
+    return { round: next, of: PRIME_TIME.HAPPY_ROUNDS, left, mode: 'value', cash };
+  }
+  // honor night: a round with the crew schools the card sense (gambling XP — status, no §10.4)
+  await bumpMastery(client, h, ch, 'gambling', 'primetime');
+  await notify(client, ch.id, 'primetime_round', { mode: 'honor', left }).catch(() => {});
+  return { round: next, of: PRIME_TIME.HAPPY_ROUNDS, left, mode: 'honor' };
 }
 
 // THE WORKER SETTLE — after a value-rally window has fully closed, pay every answerer the turnout-scaled
@@ -146,8 +190,10 @@ export async function settlePrimeTime(pool) {
         paid++;
       }
     }
-    // prune settled rows older than the backfill window
-    await client.query('DELETE FROM primetime_rally WHERE day < $1', [dayOf(Date.now()) - 3]);
+    // prune old rows (both mechanics) past the backfill window
+    const cutoff = dayOf(Date.now()) - 3;
+    await client.query('DELETE FROM primetime_rally WHERE day < $1', [cutoff]);
+    await client.query('DELETE FROM primetime_happy WHERE day < $1', [cutoff]);
     await client.query('COMMIT');
   } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; }
   finally { client.release(); }

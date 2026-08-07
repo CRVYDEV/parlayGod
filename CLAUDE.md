@@ -10066,3 +10066,24 @@ three mutations each caught at its own named assertion (reward→0; latch remove
 All `PRIME_TIME.*` are founder sign-off levers (BALANCE.md — the co-present faucet is sim-flagged);
 `PRIME_TIME_LIVE`/`_MECH`/`_MODE` are TEST-ONLY (preflight-classified). Steps two (HAPPY HOUR) + three (THE
 SIEGE) add their mechanics to the rotation.
+
+**PRIME TIME — step two: HAPPY HOUR joins the rotation (founder-directed 2026-08-07) — BUILT**
+(`src/primetime.js` `buyRound`, `PRIME_TIME.MECHANICS: ['rally','happyhour']` + `HAPPY_ROUNDS`/`HAPPY_CASH`,
+`MASTERY.XP.primetime`, `primetime_happy` table, `POST /v1/primetime/round`). The second rotated mechanic:
+the seed now draws rally OR happy-hour per night (`PRIME_TIME.MECHANICS` grows as each is built, so there's
+never a dead night). HAPPY HOUR is a REPEATABLE window action ("the house is buying rounds") — up to
+`HAPPY_ROUNDS` (3) a night — so a happy-hour night FEELS different from the once-a-night rally. **value** →
+petty cash per round (paid IMMEDIATELY — no turnout scaling, so no worker settle — a bounded faucet
+`primetime:happy` riding the existing `primetime:` vocabulary, max `HAPPY_ROUNDS × HAPPY_CASH` = $2,400/night,
+level-floored, agent-excluded, character_id'd — ZERO invariants change); **honor** → gambling mastery XP per
+round (a new `MASTERY.XP.primetime` (6) tag via bumpMastery — status/progression, ZERO §10.4). The round
+counter is a SELECT-then-write under the character lock (the answerCall latch discipline). The board now
+returns ONE union shape (both mechanics' fields, the inactive one defaulted) so the client (branches on
+`mechanic`) and the mirror-guard both see a stable board; the client card, `describe()` + `feedText` branch
+on the mechanic. `primetime_happy` joined the estate wipe + migrate DISPOSITION + the worker prune. The
+step-one rally tests pin `PRIME_TIME_MECH='rally'` (the seed now draws two mechanics); the step-two block
+pins `'happyhour'` and proves the value rounds pay HAPPY_CASH each up front + the cap + §10.4, the honor
+round schools gambling XP with zero ledger rows, and the cross-gate (answering a call on a happy-hour night
+throws `not_rally`) — three mutations each caught at its own named assertion. Suite 81/81 + sim drift-0 +
+mobile 73/73 + client mirror (122 boards) + pgquery/pgcheck 43/43 on real Postgres. `HAPPY_ROUNDS`/
+`HAPPY_CASH` are founder sign-off levers (BALANCE.md); step three (THE SIEGE) adds the third mechanic.

@@ -5207,3 +5207,14 @@ faucet is new — sim the realistic per-night turnout × reward before productio
 (`RALLY_PER`/`RALLY_TURNOUT_CAP` size the co-presence incentive, `RALLY_BASE` the floor). All `PRIME_TIME.*`
 numbers are founder sign-off levers, pinned in test/levers.js. `PRIME_TIME_LIVE`/`PRIME_TIME_MECH`/
 `PRIME_TIME_MODE` are TEST-ONLY overrides (preflight-classified).
+
+## PRIME TIME step two — HAPPY HOUR (founder-directed 2026-08-07, the 2nd rotated mechanic)
+HAPPY HOUR joins the PRIME TIME rotation (`PRIME_TIME.MECHANICS: ['rally','happyhour']` — the seed draws
+among what's BUILT, so there's never a dead night). It's a REPEATABLE window action ("the house is buying
+rounds") — up to `HAPPY_ROUNDS` (3) a night — so the night FEELS different from the once-a-night rally.
+**value** → petty cash per round (a bounded faucet `primetime:happy`, max `HAPPY_ROUNDS × HAPPY_CASH` =
+**$2,400/night**, paid immediately, level-floored, agent-excluded, character_id'd — rides the existing
+`primetime:` cash vocabulary, ZERO invariants change); **honor** → gambling mastery XP per round (a
+`MASTERY.XP.primetime` (6) bump via bumpMastery — status/progression, ZERO §10.4). Petty vs the passive
+stack; roughly half the happy-hour nights are honor (no cash). `HAPPY_ROUNDS`/`HAPPY_CASH` are founder
+sign-off levers (pinned). `PRIME_TIME_MECH` (TEST-ONLY) pins the mechanic for tests.
