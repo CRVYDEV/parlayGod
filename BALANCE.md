@@ -5164,3 +5164,16 @@ zero invariant change). It is a FINITE ladder — Σ bonus = $560,000 over a 100
 faucet is hard-bounded (a 100-day streak is a rare achievement; petty vs the passive stack). `MILESTONES` is
 the sign-off dial: shorter/cheaper trims it, `MILESTONES: []` reverts to the daily-cash-only streak (the
 rank/best legend still works). Founder sign-off levers (pinned as the whole array in test/levers.js).
+
+## THE WEEKLY BULLETIN — the weekly spotlight challenge (founder-directed 2026-08-07)
+THE WEEKLY BULLETIN ("the word this week") is the weekly-cadence sibling of the daily city event and the
+28-day season mod: a rotating server-wide SPOTLIGHT (deterministic from the week + seed) naming a pillar to
+focus on and a CHALLENGE tied to it. The reward is a rotating weekly TITLE — **PURE STATUS**, so unlike
+SEASON_MODS (which twists the economy) this touches **NO signed lever and has ZERO §10.4 surface**: no
+currency moves, no ledger row, the title is a `characters.title` write (the streak-milestone / hitman-rep
+precedent). The challenge measures a DELTA of an account-level legend (kills, product_moved, race_wins,
+boxing_wins, smuggled, heists_pulled, cartel_damage) from a snapshot taken when the player picks up the
+bulletin — a fresh goal from the moment they check in each week. **`BULLETIN.THEMES[].target`** are the
+sign-off dials (how hard each week's badge is) — status-difficulty only, no faucet; a lower target makes
+the title easier, a higher one rarer. `BULLETIN_THEME` is a TEST-ONLY override (the SEASON_MOD precedent).
+Pinned as the whole `BULLETIN.THEMES` array in test/levers.js.

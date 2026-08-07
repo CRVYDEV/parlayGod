@@ -9974,3 +9974,31 @@ assertion fails by name; fire when dormant → the dormant assertion fails). `CI
 classified in preflight, documented in DEPLOY.md/`.env.example`/`render.yaml` (set it on the API, keep it
 distinct from the ops alarm, make it a public community channel). Suite green + sim drift-0 + pgquery +
 pgcheck 43/43 on real Postgres.
+
+**THE WEEKLY BULLETIN — "the word this week" (founder-directed 2026-08-07: "keep going down the list"; the
+retention-variety rec).** The game had three cadences of "what's happening" — daily city events, the 28-day
+season mod — but nothing WEEKLY, so a returning player met the same daily SHAPES with no fresh frame. THE
+BULLETIN (`src/bulletin.js`, `test/bulletin.js` — the 79th suite) rotates a server-wide SPOTLIGHT each week
+(`bulletinOf(week)` — deterministic from `weekOf` + `MARKET_SEED`, the SEASON_MODS pattern at weekly cadence)
+naming a pillar to focus on and a CHALLENGE tied to it. **PURE STATUS** — unlike SEASON_MODS (which twists
+the economy), the reward is a rotating weekly TITLE (`characters.title`, the streak-milestone / hitman-rep
+precedent), so it touches **NO signed lever and has ZERO §10.4 surface**: no currency, no ledger row (the
+test pins the whole flow to zero `transactions` rows). The challenge measures a **DELTA of an account-level
+LEGEND** (kills / product_moved / race_wins / boxing_wins / smuggled / heists_pulled / cartel_damage — all
+survive death) from a SNAPSHOT taken when the player first picks up the bulletin (the season-recap snapshot
+pattern via `ON CONFLICT DO NOTHING`), so prior wins never count — a fresh goal from the moment you check in
+each week. **Account-keyed** (`weekly_bulletin (account_id, week)`) → survives death, outside the estate wipe
+by construction (no character_id; a new TABLE via `CREATE TABLE IF NOT EXISTS` is live-DB-safe, unlike a new
+column). The metric is a fixed whitelist of columns SELECTed in full and indexed in JS, so the SQL is static
+(pgquery-clean, no injection surface even though `metric` is data). Claim is atomic claim-then-set (the
+push/store discipline — only the first claim wins). Surfaced KEYLESS on `GET /v1/city` (`bulletin` — the
+public theme, no per-player state) + authed `GET /v1/bulletin` (your challenge progress) + `POST
+/v1/bulletin/claim`; a prominent **📰 The Word This Week** banner LEADS Home (Start) with a progress bar +
+claim/go-to-spotlight CTA; `describe()` humanizes the claim. Mutation-verified (progress = raw legend
+instead of the delta → the "prior wins don't count" assertion fails by name). `BULLETIN.THEMES[].target` are
+the status-difficulty sign-off dials (BALANCE.md; pinned as the whole array in test/levers.js — 634 pinned);
+`BULLETIN_THEME` is a TEST-ONLY override (the SEASON_MOD precedent, preflight-classified). One client-guard
+lesson: 11 boards in Home's `Promise.all` sits at the mirror's 900-char alias window — adding the bulletin
+board pushed the last alias out of scope, so `bl`/`ev` were hoisted to the top of the alias block and the
+comments trimmed to buy margin (the covered-idiom discipline, not a guard change). Suite green (79 suites) +
+sim drift-0 + mobile 73/73 + pgquery + pgcheck 43/43 on real Postgres.

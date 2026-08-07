@@ -2776,6 +2776,20 @@ CREATE TABLE IF NOT EXISTS season_recaps (
   PRIMARY KEY (account_id, season)
 );
 
+-- ── THE WEEKLY BULLETIN (the weekly-cadence world spotlight + challenge) ──────────────────────────
+-- Per (account, week): the SNAPSHOT of the week's challenge metric (an account-level legend) taken
+-- when the player first picks up the bulletin, and whether they've CLAIMED the week's title. The
+-- challenge progress is (current legend − snapshot). Account-keyed → SURVIVES DEATH (the heir keeps
+-- the account legend, so the delta still works), and outside the estate wipe by construction (no
+-- character_id). PURE STATUS — no currency, no §10.4 surface; the reward is a rotating title only.
+CREATE TABLE IF NOT EXISTS weekly_bulletin (
+  account_id TEXT NOT NULL,
+  week INT NOT NULL,
+  snapshot NUMERIC NOT NULL DEFAULT 0,
+  claimed BOOLEAN NOT NULL DEFAULT false,
+  PRIMARY KEY (account_id, week)
+);
+
 -- ── THE CREW HIT (omerta-crew-design.md step two) — the crew's shared target ─────────────────────
 -- A pointer the leader sets so the whole crew rallies a contract behind ONE mark. It moves NO value:
 -- the actual funding rides the AUDITED bounty escrow (POST /v1/streets/:id/bounty → bounty_contributors),
