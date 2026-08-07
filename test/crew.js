@@ -245,8 +245,13 @@ assert.equal((await sweepCrewInvites(pool)).swept >= 2, true, 'the worker sweeps
   const fresh = await mk('Solo Draw'); await seed(fresh.id, 'respect=5000');
   const fid = (await call('POST', '/v1/crew', { token: fresh.token, body: { name: 'Draw Test' } })).body.id;
   const fA = await acctOf(fresh.id);
-  await bumpCrewObjective(pool, { owned: { crewId: fid } }, { id: fresh.id, account_id: fA }, { crimes: 1, kills: 1, earn: 500000 });
+  // a SMALL non-completing delta: +1 crime can never crack a 40-target crimes goal, and feeds neither
+  // the kills nor earn goals — so whatever kind this crew's (random) UUID draws, it never completes
+  // and never fires a spurious crew_objective_done ping (the recorded flake class: a deterministic
+  // count assertion must not rest on a seed-dependent precondition).
+  await bumpCrewObjective(pool, { owned: { crewId: fid } }, { id: fresh.id, account_id: fA }, { crimes: 1 });
   assert.equal(await one('SELECT COUNT(*) n FROM crew_objectives WHERE crew_id=$1 AND week=$2', [fid, wk]), 1, 'a bump materializes the week objective (the §7.11 draw)');
+  assert.equal(await one('SELECT COALESCE(done,false)::int n FROM crew_objectives WHERE crew_id=$1 AND week=$2', [fid, wk]), 0, 'the small probe never completes the fresh crew (whatever kind it drew)');
 
   // PIN a known goal on the real crew so the cycle is deterministic (kind=crimes, target=2)
   await pool.query('INSERT INTO crew_objectives (crew_id, week, kind, target) VALUES ($1,$2,$3,$4)', [cid, wk, 'crimes', 2]);
@@ -266,8 +271,9 @@ assert.equal((await sweepCrewInvites(pool)).swept >= 2, true, 'the worker sweeps
   assert.equal(obj.contributions.length, 2, 'both contributors listed');
   assert.equal(obj.mine, 1, 'the caller sees their own contribution');
   assert.equal(obj.claimable, true, 'a contributor can claim a cracked objective');
-  // everyone was pinged (the synchronous "your crew is active" moment)
-  assert.equal(await one("SELECT COUNT(*) n FROM notifications WHERE type='crew_objective_done'"), 3, 'every living member is pinged on completion');
+  // everyone was pinged (the synchronous "your crew is active" moment) — scoped to THIS crew's three
+  // members, so a completion on any OTHER crew in the DB can never perturb the count
+  assert.equal(await one("SELECT COUNT(*) n FROM notifications WHERE type='crew_objective_done' AND character_id IN ($1,$2,$3)", [cap.id, hand.id, idle.id]), 3, 'every living member of this crew is pinged on completion');
 
   // capture the pre-existing per-character cash drift (earlier blocks jump + SQL-seed) so we can
   // assert the CLAIM adds none of its own
