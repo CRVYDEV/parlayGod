@@ -2878,3 +2878,6 @@ CREATE INDEX IF NOT EXISTS ix_vouches_target ON vouches (target_account);
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS login_streak INT NOT NULL DEFAULT 0;
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS login_day INT NOT NULL DEFAULT 0;
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS streak_best INT NOT NULL DEFAULT 0;
+-- THE STREAK MILESTONES — the highest run-day milestone awarded (monotonic; once-ever per milestone,
+-- keyed off streak_best). Account-level → survives death. A bounded `streak:milestone` cash faucet.
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS streak_milestone INT NOT NULL DEFAULT 0;
