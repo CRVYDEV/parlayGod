@@ -98,6 +98,7 @@ const DISPOSITION = {
   corner_jobs: 'wiped', // STREET LIFE: the district quest board is the street's own day — dies with them
   corner_chains: 'wiped', // the block's standing job is a WEEK of showing up — a new man starts it cold
   contact_calls: 'wiped', // STREET LIFE: an open contact call dies with the street (no escrow — the pay only moves at fulfilment; `contacts` itself is account-keyed and survives by construction)
+  primetime_rally: 'wiped', // PRIME TIME: a night's answer is the street's own — a dead answerer isn't paid (no ledger row was written; the worker's JOIN skips a wiped row)
   rigs: 'wiped', // CONVOY Tier-4: the hauler dies with the street (the cars/boats precedent)
   route_notoriety: 'wiped', // TIER C: per-lane heat is the street's own reputation — dies with them (the heir runs clean lanes)
   poker_ring_seats: 'special', // RING POKER: wipeRingAtDeath folds the seat + BURNS the stack (casino:ring:death) under the table lock — never a bare DELETE (the stack is escrowed cash)

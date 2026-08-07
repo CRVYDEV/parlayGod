@@ -29,6 +29,8 @@ export const TEST_ONLY_ENV = [
   'TERRITORY_RIVAL_RAID_P', 'WANTED_HUNT_P', 'WORLD_RAID_P',
   // forced draws — a seed-drawn event pinned to a chosen outcome
   'PEN_YARD_EVENT', 'SEASON_MOD', 'SEASON_PHASE', 'BULLETIN_THEME', 'SOV_WINDOW_OPEN', 'WORLD_UPRISING', 'WORLD_UPRISING_FORCE',
+  // PRIME TIME — the nightly synchronous window: force the window live / the mechanic / the mode for tests
+  'PRIME_TIME_LIVE', 'PRIME_TIME_MECH', 'PRIME_TIME_MODE',
   // collapsed timers — cooldowns and windows that exist to PACE the game
   'BRACKET_ROUND_MS', 'CALLOUT_MS', 'CONVOY_MS', 'DUEL_CD_MS', 'FUTURITY_MS', 'GRAND_PRIX_MS',
   'MAIN_EVENT_MS', 'MISSION_CD_MS', 'NPC_AGGRO_MS', 'NPC_WAR_MS', 'PASS_CLAIM_MS', 'PEN_SHANK_CD_MS', 'PORT_RUN_MS', 'RACE_CD_MS',

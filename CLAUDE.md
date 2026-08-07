@@ -10028,3 +10028,41 @@ its own named assertion (a `seen` predicate always-false → the engaged system 
 untapped filter removed → the tally never ticks). The mirror guard's alias window took a 12th board, so the
 `ex`/`ev` comments were trimmed to keep every alias in scope (the covered-idiom discipline, not a guard
 change). Suite green (80 suites) + sim drift-0 + mobile 73/73.
+
+**PRIME TIME — the nightly synchronous window (founder-directed 2026-08-07: "#5 all 3 mechanics rotated,
+value/cosmetic rotated too") — STEP ONE BUILT** (`src/primetime.js` — the 130th module, `test/primetime.js`
+— the 81st suite; `PRIME_TIME` rules tail + `primeTimeOf`; `primetime_rally` table; `GET /v1/primetime` +
+`POST /v1/primetime/answer` + the worker `settlePrimeTime`). The answer to the assessment's #1 gap — OMERTÀ
+is a deep MULTIPLAYER built for a population it has never met (the harness lands a solo player at level 33 in
+a week with no human contact), and everything social so far is ASYNC (crew/family/mentor/discovery/vouch —
+nothing draws players online AT THE SAME TIME). PRIME TIME is one forecastable UTC hour a night (a rotating
+hour, so every timezone gets its turn over a week) that CONCENTRATES the base. Both axes rotate off the §7.11
+seed so the night is a surprise you can plan for: the **MECHANIC** (`PRIME_TIME.MECHANICS` — step one ships
+THE RALLY; steps two/three add HAPPY HOUR + THE SIEGE, so there's never a dead night) and the **MODE**
+(`value` = bounded cash / `honor` = a rotating status title). **THE RALLY** (`answerCall`, once/night,
+in-window only, `RALLY_MIN_LVL` floored) is co-present BY CONSTRUCTION: on a value night the reward SCALES
+WITH TURNOUT and the worker settles it at the window's CLOSE (the boxing-main-event/tournament settle
+pattern), so everyone gets the FINAL count — nobody is punished for coming early. **§10.4: the only faucet is
+`primetime:rally`** (joined the cash vocabulary), bounded `BASE(2000) + PER(500)×min(turnout−1, CAP=20)` =
+max $11,500/answerer/value-night, character_id'd (the per-character check reconciles), agent-excluded; an
+`honor` night writes ZERO ledger rows (the title is the whole reward, the bulletin/streak-milestone
+precedent). The window/forecast is a pure function of the clock (a 7-night forecast — anticipation); the
+worker settle is idempotent (claim-then-pay via the `settled` flag) and concurrent-worker-safe (each row's
+`UPDATE … WHERE NOT settled RETURNING` is claimed once; the reward is a pure function of final turnout, fixed
+at close). **pg-mem lesson re-hit:** the once-a-night latch is NOT `ON CONFLICT DO NOTHING RETURNING`
+(pg-mem lies — returns a row even on conflict, the recordReckoning lesson) but a SELECT-then-INSERT under the
+`answerCall` character FOR UPDATE lock (race-safe for the same street; the `(day, character)` PK is the
+real-PG backstop). `primetime_rally` joined the estate wipe + the migrate DISPOSITION (a dead answerer isn't
+paid — no ledger row was written); the FK was dropped from the table (the migrate synthesizer choked on an
+inline `REFERENCES … ON DELETE CASCADE`; the sibling character-keyed tables use a plain `character_id TEXT`).
+Surfaced: a PRIME TIME card LEADS Home (live → "answer the call" + the turnout count + a close countdown;
+else → tonight's window at a fixed UTC hour + a 3-night forecast), folded into the events board's `primetime`
+field (and unshifted into the TONIGHT strip when live), `describe()` + `feedText` humanize the answer +
+`primetime_paid`. `test/primetime.js` proves the window/level/once-a-night gates, the value settle (both
+answerers paid the SAME turnout-scaled reward at close, idempotent), the honor mode (title written, ZERO
+ledger rows, the worker pays nothing), and §10.4 (the value faucet reconciles by the per-character check) —
+three mutations each caught at its own named assertion (reward→0; latch removed; born-settled honor). Suite
+81/81 + sim drift-0 + mobile 73/73 + client mirror (122 boards) + pgquery/pgcheck 43/43 on real Postgres.
+All `PRIME_TIME.*` are founder sign-off levers (BALANCE.md — the co-present faucet is sim-flagged);
+`PRIME_TIME_LIVE`/`_MECH`/`_MODE` are TEST-ONLY (preflight-classified). Steps two (HAPPY HOUR) + three (THE
+SIEGE) add their mechanics to the rotation.

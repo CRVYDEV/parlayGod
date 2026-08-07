@@ -59,6 +59,10 @@ const KNOWN_REASONS = {
     // run-unlock ladder — once-ever per milestone, keyed off monotonic `best`, Σ bonus = 560k lifetime).
     // Both character_id'd → the per-character cash check reconciles. Petty vs the passive stack, BALANCE.md.
     'streak:',
+    // PRIME TIME: `primetime:rally` — the co-present nightly faucet (character_id'd; once/night per street
+    // on a `value` night, bounded BASE + PER×min(turnout−1, CAP), level-floored, agent-excluded; settled
+    // by the worker at final turnout — check (a) reconciles it per character). BALANCE.md, sim-flagged.
+    'primetime:',
     // WORD ON THE STREET: `corner:job` — the district quest board's envelope (character_id'd;
     // hard-bounded CORNER.MAX_DAY claims per street per day — a petty located faucet, BALANCE.md)
     'corner:',

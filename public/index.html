@@ -1762,6 +1762,11 @@
       return `\u{1F525} checked in — day ${body.streak}, +$${fmt(body.cash)}${body.milestone ? ` · 🏅 ${body.milestone.day}-DAY MILESTONE — you're ${esc(body.milestone.title)}, +$${fmt(body.milestone.bonus)}` : (body.streak >= body.best ? ` · best yet (${esc(body.rank)})` : '')}`;
     // THE WEEKLY BULLETIN — claimed the week's title
     if (body && body.title && body.theme) return `\u{1F4F0} ${esc(body.theme)} — you took the title: ${esc(body.title)}`;
+    // PRIME TIME — answered tonight's call
+    if (body && body.answered === true && (body.mode === 'value' || body.mode === 'honor'))
+      return body.mode === 'honor'
+        ? `\u{1F303} you answered the call — tonight you're ${esc(body.title || 'in')}. ${body.turnout || 1} out so far.`
+        : `\u{1F303} you answered the call — ${body.turnout || 1} out so far. Your cut lands when the window closes.`;
     // THE VOUCH — you staked your name (or pulled it back)
     if (body && body.vouched) return body.mutual ? `\u{1F91D} you vouched ${esc(body.vouched)} back — a mutual bond` : `you vouched for ${esc(body.vouched)} — your name's on them now`;
     if (body && body.pulled) return `pulled your name back from ${esc(body.pulled)}`;
@@ -4186,19 +4191,24 @@
   async function renderStart() {
     const t = $('#tab-start');
     // two serial round trips before a single pixel painted — the tab showed nothing for both
-    const [obR, swR, crR, ppR, prR, cwR, dwR, evR, stR, reR, blR, exR] = await Promise.all([api('GET', '/v1/onboard'), api('GET', '/v1/social'), api('GET', '/v1/career'), api('GET', '/v1/people'), api('GET', '/v1/paper'), api('GET', '/v1/crew'), api('GET', '/v1/discovery'), api('GET', '/v1/events'), api('GET', '/v1/streak'), api('GET', '/v1/results'), api('GET', '/v1/bulletin'), api('GET', '/v1/explore')]);
-    const bl = blR.body || {};   // THE WEEKLY BULLETIN
-    const ex = exR.body || {};   // STILL ON THE TABLE — unlocked-but-untouched systems
-    const ev = evR.body || {};   // TONIGHT IN THE CITY (hoisted for the mirror window)
+    const [obR, swR, crR, ppR, prR, cwR, dwR, evR, stR, reR, blR, exR, ptR] = await Promise.all([api('GET', '/v1/onboard'), api('GET', '/v1/social'), api('GET', '/v1/career'), api('GET', '/v1/people'), api('GET', '/v1/paper'), api('GET', '/v1/crew'), api('GET', '/v1/discovery'), api('GET', '/v1/events'), api('GET', '/v1/streak'), api('GET', '/v1/results'), api('GET', '/v1/bulletin'), api('GET', '/v1/explore'), api('GET', '/v1/primetime')]);
+    // A TIGHT alias run — one `const X = XR.body` per board, no comments — so ALL 13 stay inside the
+    // client mirror's 900-char alias window (a comment here would push the last board out of scope).
+    const bl = blR.body || {};
+    const ex = exR.body || {};
+    const ev = evR.body || {};
+    const pt = ptR.body || {};
     const ob = obR.body || { tasks: [], total: 0, claimed: 0 };
     const sw = swR.body || { tasks: [] };
     const cr = crR.body || { tiers: [] };
-    const pp = ppR.body || {};   // a failed fetch renders no cards (every read below is guarded)
-    const pr = prR.body || {};   // THE MORNING PAPER — the while-you-were-gone digest
-    const cw = cwR.body || {};   // THE CREW — the small-group tie (null crew for a solo player)
-    const dw = dwR.body || {};   // THE ROLODEX — discovery: is anyone looking for a crew near you?
-    const st = stR.body || {};   // THE STREAK — the daily-login habit hook
-    const rez = reR.body || {};  // THE RESULTS SHOW — how the marquee events fell
+    const pp = ppR.body || {};
+    const pr = prR.body || {};
+    const cw = cwR.body || {};
+    const dw = dwR.body || {};
+    const st = stR.body || {};
+    const rez = reR.body || {};
+    // bl=THE WEEKLY BULLETIN · ex=STILL ON THE TABLE · ev=TONIGHT IN THE CITY · pt=PRIME TIME ·
+    // pp=people(nemesis) · pr=THE MORNING PAPER · cw=THE CREW · dw=THE ROLODEX · st=THE STREAK · rez=THE RESULTS SHOW
     // ── THE WEEKLY BULLETIN — "the word this week": the rotating weekly spotlight + a challenge tied to
     // it. A fresh weekly FRAME so a returning player meets something new, not the same daily shapes. The
     // reward is a status title (no cash), so there's no dollar figure here. Progress is a delta from
@@ -4254,6 +4264,32 @@
         ${st.nextMilestone ? `<div class="d" style="font-size:11px;color:var(--gold);margin-top:5px">Next unlock at a ${st.nextMilestone.day}-day run: <b>${esc(st.nextMilestone.title)}</b> + $${fmt(st.nextMilestone.bonus)}${st.best ? ` — ${st.nextMilestone.day - st.best} to go` : ''}</div>` : (st.milestones && st.milestones.length ? '<div class="d" style="font-size:11px;color:var(--neon);margin-top:5px">✓ every streak milestone unlocked — you are The Immortal.</div>' : '')}
         ${st.milestones && st.milestones.length ? `<div class="d" style="font-size:10.5px;color:var(--dim);margin-top:3px">${st.milestones.map((m) => `${m.unlocked ? '✓' : '○'} ${m.day}d`).join(' · ')}</div>` : ''}
       </div>` : '';
+    // ── PRIME TIME — the nightly synchronous window. The one thing that draws the whole base online at
+    // the SAME hour. Live → a bright "answer the call" with the turnout count (the co-presence signal)
+    // and a countdown to close; else → tonight's window at a fixed UTC hour + what's on. The mechanic +
+    // mode rotate (value pays turnout-scaled cash; honor pays a rotating badge). `pt` is the board.
+    const ptHour = (h) => `${String(h).padStart(2, '0')}:00 UTC`;
+    const primeCard = pt.mechanic ? (pt.live ? `
+      <div class="card" style="border-color:var(--neon);background:linear-gradient(180deg,rgba(0,229,168,.07),transparent);margin-bottom:12px">
+        <span class="t">🌃 PRIME TIME IS LIVE</span>
+        <span class="chip good">${pt.turnout || 0} answered</span>
+        <span class="chip">closes ${mins(pt.closesSeconds)}</span>
+        <div class="d">The whole city is out for one hour. ${pt.mode === 'value'
+          ? `Answer the call — the more who show, the bigger the cut. Right now that's about <b>$${fmt(pt.reward)}</b> each, paid when the window closes.`
+          : `Answer the call for tonight's badge: <b>${esc(pt.title || '')}</b>.`}</div>
+        <div class="row" style="margin-top:6px">${pt.answered
+          ? `<span class="chip good">✓ you answered${pt.mode === 'honor' && pt.title ? ' — ' + esc(pt.title) : ''}</span>`
+          : `<button class="act prime" data-do="POST /v1/primetime/answer">answer the call →</button>`}</div>
+      </div>` : `
+      <div class="card" style="border-color:var(--gold);margin-bottom:12px">
+        <span class="t">🌃 Prime Time</span>
+        <span class="chip">tonight ${ptHour(pt.hour)}</span>
+        ${pt.opensSeconds ? `<span class="chip">opens ${mins(pt.opensSeconds)}</span>` : ''}
+        <div class="d">Once a night the whole city gathers for one hour. ${pt.mode === 'value'
+          ? 'Show up and share the take — the bigger the turnout, the bigger each cut.'
+          : `Show up for the badge: <b>${esc(pt.title || '')}</b>.`} Be here when it opens.</div>
+        ${(pt.forecast || []).length > 1 ? `<div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">Coming nights: ${pt.forecast.slice(1, 4).map((f) => `${ptHour(f.hour)} (${f.mode === 'value' ? 'cash' : 'badge'})`).join(' · ')}</div>` : ''}
+      </div>`) : '';
     // ── THE SITUATION — the dashboard the 24-tab wall never had: your threats, your people, and
     // what's READY right now, in one glance. Composed from /v1/me (already in hand) + /v1/people
     // (the cohesion layer) — the client re-derives nothing.
@@ -4323,6 +4359,7 @@
     const refDraft = t.querySelector('#ref-claim-name')?.value || '';
     t.innerHTML = `
       ${streakCard}
+      ${primeCard}
       ${bulletinBanner}
       ${eventStrip}
       ${resultsStrip}
@@ -7596,6 +7633,8 @@
       duel_result: () => `⚔ ${d.by} ${d.win ? 'lost to you' : 'beat you'} in a ranked duel — your elo is ${d.elo} (${d.delta > 0 ? '+' + d.delta : d.delta})`,
       duel_champion: () => `🏆 SEASON CHAMPION — you held THE BELT at ${d.elo}. Crowned into a lifetime title.`,
       megaproject_milestone: () => `🏗 ${d.monument} is ${d.pct}% raised — the scaffolding climbs`,
+      primetime_answered: () => d.mode === 'honor' ? `🌃 you answered Prime Time — tonight you're ${d.title}` : `🌃 you answered Prime Time — ${d.turnout || 1} out so far`,
+      primetime_paid: () => `🌃 PRIME TIME paid out — +$${fmt(d.reward)} for answering the call (${d.turnout} showed)`,
       megaproject_complete: () => `🏛 ${d.monument} STANDS — raised by the whole city. Architect: ${d.architect}`,
       megaproject_architect: () => `🏛 you are THE ARCHITECT of ${d.monument} — your name leads the plaque forever`,
       estate: () => `your street fell${d.by ? ` to ${d.by}` : ''} — the heir rises`,

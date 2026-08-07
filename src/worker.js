@@ -38,6 +38,7 @@ import { generateContactCalls, sweepCalls } from './contacts.js';
 import { sweepFavors } from './favors.js';
 import { sweepCrewInvites } from './crew.js';
 import { sweepMentorOffers } from './mentor.js';
+import { settlePrimeTime } from './primetime.js';
 import { sweepPush } from './push.js';
 import { spawnNpcConvoys, despawnArrivedNpc, sweepConvoyHauls } from './convoy.js';
 import { runPopulation, runResidentBehaviour } from './population.js';
@@ -341,6 +342,8 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     const cw = await safe('crew invite sweep', () => sweepCrewInvites(pool));
     if (cw?.swept > 0) console.log(`👥 crew: swept ${cw.swept} stale invite(s)`);
     await safe('mentor offer sweep', () => sweepMentorOffers(pool));
+    const pt = await safe('prime time settle', () => settlePrimeTime(pool));  // pay closed value-rally nights at final turnout
+    if (pt?.paid > 0) console.log(`🌃 prime time: paid ${pt.paid} answerer(s) the turnout-scaled rally reward`);
     await safe('web push sweep', () => sweepPush(pool));  // push URGENT undelivered notifications to away players (dormant unless VAPID configured)
     const hs = await safe('heist sweep', () => sweepStaleHeists(pool));
     if (hs?.swept > 0) console.log(`🗺  heists: swept ${hs.swept} stale plan(s), stakes refunded to living leaders`);

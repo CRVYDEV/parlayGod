@@ -3801,6 +3801,41 @@ export const bulletinOf = (wk = weekOf()) => {
   return BULLETIN.THEMES[Math.floor(hash01(`bulletin:${wk}:${MARKET_SEED}`) * BULLETIN.THEMES.length)];
 };
 
+// ═══ PRIME TIME — the nightly synchronous window ═════════════════════════════════════════════════
+// The game is a deep MULTIPLAYER built for a population it has never met (the harness lands a plausible
+// solo player at level 33 in a week with no human contact), and everything social so far is ASYNC —
+// nothing gives a reason to be online AT THE SAME TIME as other players. PRIME TIME is that reason: one
+// forecastable window each day (a rotating UTC hour, so every timezone gets its turn over a week) that
+// CONCENTRATES the base into one hour. Both axes rotate off the §7.11 seed, so the night is a surprise:
+//   · the MECHANIC — step one ships THE RALLY (answer the call); step two adds HAPPY HOUR, step three
+//     THE SIEGE. MECHANICS grows as each is built, so there is never a dead night.
+//   · the MODE — `value` (the reward is bounded cash) or `honor` (the reward is a rotating status title),
+//     drawn independently, so some nights pay and some nights are pure bragging rights.
+// THE RALLY is co-present by construction: the value reward SCALES WITH TURNOUT (more people answering
+// = bigger reward each, capped), settled at window close by the worker so everyone gets the FINAL count.
+// The value faucet is bounded (BASE + PER×min(turnout−1, CAP), once/day, level-floored, agent-excluded)
+// — a §10.4 cash faucet `primetime:rally`, sim-flagged; all numbers are founder sign-off levers.
+export const PRIME_TIME = {
+  MECHANICS: ['rally'],           // step 2 +'happyhour', step 3 +'siege' — the seed draws among what's BUILT
+  WINDOW_H: 1,                    // the window is one UTC hour
+  FORECAST_DAYS: 7,              // how many nights ahead the board shows (anticipation — players plan)
+  RALLY_BASE: 2000,             // value-rally: cash for answering the call (the floor at turnout 1)
+  RALLY_PER: 500,               // + per OTHER head that answered — turnout-scaled → co-present
+  RALLY_TURNOUT_CAP: 20,        // turnout counted up to here (bounds the faucet: max BASE + PER×CAP)
+  RALLY_MIN_LVL: 5,             // anti-Sybil floor (the WANTED_MIN_LVL/npcHit-rookie precedent)
+  TITLES: ['Night Owl', 'The Faithful', 'Answered the Call', 'The Regular', 'First to the Bar', 'The Usual Suspect'],
+};
+// The night's draw — mechanic + mode + the UTC hour + the honor title, all a pure function of the day.
+// PRIME_TIME_MECH / PRIME_TIME_MODE are TEST-ONLY overrides (the SEASON_MOD/BULLETIN_THEME precedent).
+export const primeTimeOf = (day = dayOf()) => {
+  const M = PRIME_TIME.MECHANICS;
+  const mech = process.env.PRIME_TIME_MECH || M[Math.floor(hash01(`pt:mech:${day}:${MARKET_SEED}`) * M.length)];
+  const mode = process.env.PRIME_TIME_MODE || (hash01(`pt:mode:${day}:${MARKET_SEED}`) < 0.5 ? 'value' : 'honor');
+  const hour = Math.floor(hash01(`pt:hour:${day}:${MARKET_SEED}`) * 24);
+  const title = PRIME_TIME.TITLES[Math.floor(hash01(`pt:title:${day}:${MARKET_SEED}`) * PRIME_TIME.TITLES.length)];
+  return { day, mechanic: mech, mode, hour, title };
+};
+
 // ═══ FAMILY CHARTERS (the strategy package's ASYMMETRY) ══════════════════════════════════════════
 // Every family was mechanically IDENTICAL — a 20-man family and a 3-man family differed only in what
 // they happened to hold, so "who are we" was not a question anybody could answer differently. A
