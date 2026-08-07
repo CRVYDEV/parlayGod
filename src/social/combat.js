@@ -11,6 +11,7 @@ import { M3, CONSTANTS, LOAN, levelOf, rankIdxOf, cityEventOf, dayOf, btkOf, gun
 import { activeDecree } from '../commission.js';
 import { bumpHonor } from '../honor.js';
 import { recordRival, revengeOwed } from '../rivals.js';
+import { alertMentor } from '../mentor.js';
 import { logCarCollect } from '../collection.js';
 import { awardHitmanRep, claimBounty, postBounty, postFamilyContract, refundPot } from './contracts.js';
 import { bodyguardAbsorbs } from './defense.js';
@@ -124,6 +125,7 @@ export async function jump(ch, victim, client, h, intent) {
     }
     await h.notify(client, victim.id, 'attack', { from: ch.name, stolen, cb: crates, dmg, hospMs });
     await recordRival(client, victim.account_id, ch, 'jump', { stolen });
+    await alertMentor(client, victim.account_id, victim.name, ch.name, 'jumped'); // THE MENTOR — tell their mentor so they can settle it
     if (revenge) await bumpHonor(client, ch, RIVALS.REVENGE_HONOR);
     await h.bumpDaily(client, ch.id, 'jump');
     await bumpFamilyTask(client, h, 'jump', 1);
@@ -511,6 +513,7 @@ export async function fire(ch, victim, client, h, rounds) {
       await h.notify(client, w.id, 'witness', { killer: ch.name, victim: victim.name });
     await h.track(client, ch.account_id, 'kill', { rounds: fired, btk, victim: victim.id, rep: hit.repGain, directed });
     const estate = await runEstate(client, h, victim, ch.name, { killerCh: ch, vendetta: true, loot: true, bloodOathMult: bloodOath });
+    await alertMentor(client, victim.account_id, victim.name, ch.name, 'killed'); // THE MENTOR — the had-my-back moment: the protégé's mentor hears of the killing
     bus.emit('streets', { type: 'kill', by: ch.name, victim: victim.name });
     return { ok: true, kill: true, rep, chop, loot, omrLoot, gearLoot, contraLoot, orderLoot: estate.orderLoot || 0, bounty, jammed, warKill, hitman: hit,
       ...(empireLoot ? { empireLoot } : {}), ...(ammoBack ? { ammoBack } : {}), vendetta: !!vend, ...(grudges.length ? { grudges } : {}), estate: { heirId: estate.heirId } };

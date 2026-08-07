@@ -1910,6 +1910,8 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Mentor.acceptMentor(ch, req.params.mentorCharId, client, h)));
   app.post('/v1/mentor/claim', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Mentor.claimMentor(ch, client, h)));
+  app.post('/v1/mentor/gift/:protegeCharId', { preHandler: auth }, async (req) =>
+    G.withTwoCharacters(pool, req.user.sub, req.params.protegeCharId, (ch, protege, client, h) => Mentor.mentorGift(ch, protege, client, h)));
   app.get('/v1/leaderboard/mentors', { preHandler: auth }, async () => Mentor.mentorLeaderboard(pool));
 
   registerKitchen(app, { pool, auth });

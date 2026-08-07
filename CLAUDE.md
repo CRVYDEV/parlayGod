@@ -9556,6 +9556,25 @@ the four milestones); `test/events.js` proves the open events surface with a clo
 NOT, the megaproject shows progress, and the aggregator moves no value. Full suite green + sim drift-0 +
 mobile 73/73 + pgquery/pgcheck 43/43 on real Postgres + client wiring/mirror (588 routes, both new boards
 covered). All `MENTOR.*` numbers are founder sign-off levers (pinned in `test/levers.js`; `MENTOR.MILESTONES`
-the one faucet, tabled in BALANCE.md § THE MENTOR). Deferred (step two): a "your protégé was attacked"
-notification (the literal "had my back" moment), a mentor gift/perk, and the daily-draw events (numbers,
-the track card, the weekly fight) as a "also today" line on the strip.
+the one faucet, tabled in BALANCE.md § THE MENTOR).
+**Step two — THE CARE PACKAGE + HAD MY BACK + also today — BUILT** (`src/mentor.js`, `src/events.js`,
+`src/social/combat.js`, `public/index.html`; the three deferred items). **(1) THE CARE PACKAGE**
+(`mentorGift`, `POST /v1/mentor/gift/:protegeCharId`, two-party): the mentor sends their protégé a
+`MENTOR.GIFT_CASH` ($5k) stake, once per `GIFT_CD_MS` (24h). A §10.4 **TRANSFER** (both legs ledgered
+`mentor:gift`, character_id'd → nets zero, the bodyguard-hire shape), NOT a faucet — the test proves the
+`mentor:gift` rows sum to 0 and the cash identity is unmoved; gated `not_mentor`/`cooldown`/`cash`.
+**(2) HAD MY BACK** (`alertMentor`, hooked into `combat.js` jump-win + fire-kill): when a protégé is
+jumped or killed by a player, their mentor is rung with a `protege_attacked` notification (named
+protégé + aggressor + what) — the literal "someone had my back" moment, so a veteran has a reason to
+answer for their rookie; fires for graduated protégés too (fatherly). Zero §10.4 (a notification).
+**(3) ALSO TODAY** (`events.js` `daily`): the always-on den draws (the numbers, the track card, the
+weekly fight) ride a separate lighter list under the clocked events, rendered as an "also today" line
+on the Home strip — so "there's always something to bet" is visible even when no big event is booked.
+The board (`mentorBoard`) surfaces `giftReady`/`giftCash` per protégé (the 24h cooldown reader);
+`protege_attacked` joined `URGENT_TYPES`; all six mentor notifications humanized in `feedText`. Console:
+protégé cards with a care-package button (shown only when `giftReady`), the "also today" den-draw line.
+`test/mentor.js` proves the gift transfer (protégé +$5k / mentor −$5k, the ledger nets 0, the cooldown,
+the not-mentor gate) and `alertMentor` ringing the mentor with the named alert; `test/events.js` proves
+the daily list carries the three den draws all jumping to the Den. Full suite green + sim drift-0 +
+mobile 73/73 + pgquery/pgcheck 43/43 on real Postgres + client wiring/mirror. `MENTOR.GIFT_CASH`/
+`GIFT_CD_MS` are founder sign-off levers (the gift is a transfer — no faucet).

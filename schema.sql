@@ -2784,6 +2784,9 @@ CREATE TABLE IF NOT EXISTS mentorships (
   claimed_mask INT NOT NULL DEFAULT 0          -- bit i set = milestone i's protégé cash already paid
 );
 CREATE INDEX IF NOT EXISTS ix_mentorships_mentor ON mentorships (mentor_account);
+-- THE MENTOR step two — the care package cooldown (per protégé). mentorships already exists in prod, so
+-- this is an ALTER ... ADD COLUMN IF NOT EXISTS (the outage lesson: never a new inline column on a live table).
+ALTER TABLE mentorships ADD COLUMN IF NOT EXISTS gift_at TIMESTAMPTZ;
 -- pending offers (the crew-invite pattern) — a veteran offers, the newcomer accepts/declines; swept on TTL.
 CREATE TABLE IF NOT EXISTS mentor_offers (
   mentor_account TEXT NOT NULL,

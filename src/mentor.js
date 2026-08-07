@@ -114,6 +114,38 @@ export async function claimMentor(ch, client, h) {
   return { ok: true, cash, milestones: hit, graduated };
 }
 
+// ── THE CARE PACKAGE (step two) — the mentor sends a protégé a bounded cash gift from their OWN pocket.
+// A ledgered TRANSFER (`mentor:gift`, both legs character_id'd → the per-character cash check reconciles;
+// §10.4-NEUTRAL, no faucet), once per protégé per GIFT_CD_MS. Two-party (it touches the protégé's cash).
+// The had-my-back ACTION from the mentor's side. ──
+export async function mentorGift(ch, protege, client, h) {
+  const ms = (await client.query('SELECT * FROM mentorships WHERE mentor_account=$1 AND protege_account=$2 FOR UPDATE',
+    [ch.account_id, protege.account_id])).rows[0];
+  if (!ms) throw new GameError('not_mentor', "They're not your protégé.");
+  if (ms.gift_at && Date.now() - new Date(ms.gift_at).getTime() < MENTOR.GIFT_CD_MS) throw new GameError('cooldown', 'You sent a care package recently — one a day.');
+  const amt = MENTOR.GIFT_CASH;
+  if (Number(ch.cash) < amt) throw new GameError('cash', `A care package is $${amt.toLocaleString()}.`);
+  ch.cash = Number(ch.cash) - amt;
+  protege.cash = Number(protege.cash) + amt;
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'mentor:gift', counterparty: protege.id });
+  await h.ledger(client, { characterId: protege.id, currency: 'cash', amount: amt, reason: 'mentor:gift', counterparty: ch.id });
+  await client.query('UPDATE mentorships SET gift_at=now() WHERE mentor_account=$1 AND protege_account=$2', [ch.account_id, protege.account_id]);
+  await notify(client, protege.id, 'mentor_gift', { from: ch.name, amount: amt }).catch(() => {});
+  return { ok: true, gifted: amt, to: protege.name };
+}
+
+// ── THE HAD-MY-BACK ALERT (step two) — when a protégé is attacked by a player, tell their MENTOR (naming
+// the aggressor) so they can go settle it. A read + a notify to the mentor's CURRENT living street;
+// §10.4-free. Called from the PvP paths (jump win, fire kill). Best-effort — never fails the action. ──
+export async function alertMentor(client, protegeAccount, protegeName, aggressorName, what) {
+  try {
+    const m = (await client.query(
+      `SELECT c.id FROM mentorships ms JOIN characters c ON c.account_id=ms.mentor_account AND c.alive
+        WHERE ms.protege_account=$1`, [protegeAccount])).rows[0];
+    if (m) await notify(client, m.id, 'protege_attacked', { protege: protegeName, from: aggressorName, what });
+  } catch { /* an alert must never break the strike */ }
+}
+
 // ── THE BOARD — your mentor (their name + rank), your protégés (level + what they can claim), pending
 // offers to accept, and your own claimable milestone cash. A read; single-party. ──
 export async function mentorBoard(ch, client) {
@@ -137,10 +169,11 @@ export async function mentorBoard(ch, client) {
   } : null;
   // your protégés (as a mentor) — each with their level + whether they've graduated
   const proteges = (await client.query(
-    `SELECT c.id AS char_id, c.name, c.respect, m.graduated
+    `SELECT c.id AS char_id, c.name, c.respect, m.graduated, m.gift_at
        FROM mentorships m JOIN characters c ON c.account_id=m.protege_account AND c.alive
       WHERE m.mentor_account=$1 ORDER BY m.started_at DESC LIMIT 24`, [acct]))
-    .rows.map((r) => ({ charId: r.char_id, name: r.name, level: lvlOf(r.respect), graduated: !!r.graduated }));
+    .rows.map((r) => ({ charId: r.char_id, name: r.name, level: lvlOf(r.respect), graduated: !!r.graduated,
+      giftReady: !r.gift_at || Date.now() - new Date(r.gift_at).getTime() >= MENTOR.GIFT_CD_MS }));
   // pending offers you (a newcomer) can accept — the mentor's current living street
   const offers = (await client.query(
     `SELECT o.from_name, o.mentor_account, c.id AS char_id, ap.proteges_raised
@@ -158,6 +191,7 @@ export async function mentorBoard(ch, client) {
       canMentor: lvl >= MENTOR.MIN_LVL && activeCount < MENTOR.ACTIVE_MAX,
       atCap: activeCount >= MENTOR.ACTIVE_MAX,
       protegeMaxLvl: MENTOR.PROTEGE_MAX_LVL, minLvl: MENTOR.MIN_LVL, activeMax: MENTOR.ACTIVE_MAX,
+      giftCash: MENTOR.GIFT_CASH,
     },
     mentor, proteges, offers,
     milestones: MENTOR.MILESTONES.map((m) => ({ lvl: m.lvl, cash: m.cash, graduate: !!m.graduate })),

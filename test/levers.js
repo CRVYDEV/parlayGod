@@ -492,6 +492,8 @@ const SIGNED = [
   ['MENTOR.SEEKING_TTL_MS', 7 * 24 * 3600 * 1000],
   ['MENTOR.MILESTONES', [{ lvl: 5, cash: 2000 }, { lvl: 10, cash: 4000 }, { lvl: 15, cash: 6000 }, { lvl: 20, cash: 8000, graduate: true }]],
   ['MENTOR.RANKS', [{ at: 0, name: 'Unproven' }, { at: 1, name: 'A Made Teacher' }, { at: 3, name: 'The Counselor' }, { at: 7, name: 'The Godfather' }, { at: 15, name: 'The Old Don' }]],
+  ['MENTOR.GIFT_CASH', 5000],
+  ['MENTOR.GIFT_CD_MS', 24 * 3600 * 1000],
   ['POPULATION.MARKS.CAR_P', { made: 0.6, capo: 0.8, boss: 0.9 }],
   ['POPULATION.MARKS.CAR_VAL', { made: [800, 2000], capo: [2000, 8000], boss: [5000, 20000] }],
   ['POPULATION.MARKS.FRONT_P', { made: 0.4, capo: 0.6, boss: 0.8 }],

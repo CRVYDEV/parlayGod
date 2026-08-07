@@ -56,5 +56,13 @@ export async function cityEventBoard(client) {
       pct: Math.round((progress / target) * 100), tab: 'city' });
   }
 
-  return { events };
+  // ALSO TODAY — the recurring den draws (always available: a daily numbers draw, today's race card, the
+  // weekly fight). Not clocked events, so they ride a separate lighter list the console shows as "also today."
+  const daily = [
+    { kind: 'numbers', icon: '🔢', title: 'The Numbers', subtitle: 'pick 0–999, pays 600:1 — one ticket a day', tab: 'den' },
+    { kind: 'track', icon: '🏇', title: 'The Track', subtitle: "today's dogs & ponies — bet the card", tab: 'den' },
+    { kind: 'fight', icon: '🥊', title: 'The Weekly Fight', subtitle: 'back a fighter before the bell', tab: 'den' },
+  ];
+
+  return { events, daily };
 }
