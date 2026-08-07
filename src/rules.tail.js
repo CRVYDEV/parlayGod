@@ -3067,6 +3067,14 @@ export const DESK = {
     'withdraw:omr', 'vanity:%', 'intel:%', 'respec%', 'plex:%', 'law:jury', 'law:envelope',
     'foundation:%', 'rwa:%', 'estate:%', 'auction:win', 'auction:take', 'auction:consign:fee',
     'megaproject:omr', 'bond:%', 'business:spec%', 'death:duty', 'window:burn', 'made:%',
+    // THE LAB MODULE (kitchen.js:301) is a $OMR sink — but it ledgers `kitchen:module`, not `lab:*`,
+    // so it was in the omr VOCABULARY yet MISSING from this burn term, and every purchase drifted the
+    // §10.4 $OMR conservation check (a stable −N = the total ever spent on modules; found live via the
+    // Discord alert 2026-08-07). Adding it here counts the burn AND (via the shared recyclesToDesk)
+    // feeds the shelf like every other sink — and because it now counts the HISTORICAL rows, the live
+    // drift resolves to 0 on the next check with no migration. The paired CASH `kitchen:module` row is
+    // untouched: burnSql is `currency='omr'` and the recycle hook guards on `currency==='omr'`.
+    'kitchen:module',
     // ECONOMY v3 step 7 — the DETERMINISTIC rarity upgrade. A sink like any other, so it recycles
     // to the shelf rather than burning; that is the design's "bridge between the two markets",
     // since ETH-priced NFT demand pulls on OMR without the game ever selling a random outcome.
