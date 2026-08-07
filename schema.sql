@@ -2766,3 +2766,31 @@ CREATE TABLE IF NOT EXISTS crew_targets (
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS lfg BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS lfg_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS ix_characters_lfg ON characters (lfg) WHERE lfg;
+
+-- THE MENTOR (omerta-first-contact-and-events-design.md, MOVE 1) — the positive first interaction: a
+-- veteran takes a newcomer under their wing, ASYNC (offer + accept, never sync matchmaking). Account-keyed
+-- so the tie SURVIVES DEATH (the referral/marriage/contacts posture; NOT estate-wiped). The mentor's reward
+-- is STATUS (proteges_raised — Sybil-proof by the game's own posture); the protégé gets a bounded onboarding
+-- cash faucet at level milestones. `seeking_mentor` is the LFG pattern (direct SQL, dies with the street).
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS seeking_mentor BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS seeking_mentor_at TIMESTAMPTZ;
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS proteges_raised INT NOT NULL DEFAULT 0;
+-- one mentor per protégé, ever (PK on protégé). claimed_mask is the once-ever milestone bitmask.
+CREATE TABLE IF NOT EXISTS mentorships (
+  protege_account TEXT PRIMARY KEY,
+  mentor_account TEXT NOT NULL,
+  started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  graduated BOOLEAN NOT NULL DEFAULT false,   -- set when the protégé reaches GRADUATE_LVL (mentor legend +1)
+  claimed_mask INT NOT NULL DEFAULT 0          -- bit i set = milestone i's protégé cash already paid
+);
+CREATE INDEX IF NOT EXISTS ix_mentorships_mentor ON mentorships (mentor_account);
+-- pending offers (the crew-invite pattern) — a veteran offers, the newcomer accepts/declines; swept on TTL.
+CREATE TABLE IF NOT EXISTS mentor_offers (
+  mentor_account TEXT NOT NULL,
+  protege_account TEXT NOT NULL,
+  from_name TEXT NOT NULL,
+  at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (mentor_account, protege_account)
+);
+CREATE INDEX IF NOT EXISTS ix_mentor_offers_protege ON mentor_offers (protege_account);
+CREATE INDEX IF NOT EXISTS ix_characters_seeking ON characters (seeking_mentor) WHERE seeking_mentor;

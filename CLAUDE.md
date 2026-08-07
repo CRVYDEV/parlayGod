@@ -9511,3 +9511,51 @@ every picked screen opens above the fold, no page threw). Deliberately NOT churn
 machinery (it already does what #1 asks and tests well — the screen-reach beacon is gathering the data that
 would justify anything deeper), and the newbie funnel (unchanged). Whether the veteran Home reads WELL still
 needs a person opening it — the guards prove it can't break, not that it sings.
+
+**FIRST CONTACT + TONIGHT IN THE CITY (founder-directed from the thin-gaps assessment, 2026-08-07) —
+BUILT** (`omerta-first-contact-and-events-design.md`; `src/mentor.js` + `test/mentor.js` — the 70th suite;
+`src/events.js` + `test/events.js` — the 71st). The assessment named the game's thinnest gap: it's a deep
+MULTIPLAYER built for a population it has never met (the progression harness lands a plausible solo player
+at level 33 in a week having never touched another human), and a newcomer's FIRST contact with a real
+player is almost always negative (jumped, robbed, contracted). Two moves. **MOVE 2 — TONIGHT IN THE CITY**
+(`src/events.js`, `GET /v1/events`): the game has genuinely anticipation-worthy SCHEDULED events (the
+boxing main event, poker tournament, grand prix, stakes, futurity, the server-wide megaproject) but every
+one was buried inside its tab, so nothing told a player "a title fight closes in 20 minutes, put money on
+it." `cityEventBoard` is a read-only aggregator — each event system already carries an open/booked/building
+status + a `resolves_at` (or progress/target), so it's a handful of cheap queries — ranked soonest-closing
+first, each `{kind, icon, title, subtitle, closesSeconds | pct, tab}`. **§10.4-FREE by construction** (reads
+only; the test counts zero rows). Surfaced as a **TONIGHT IN THE CITY** strip at the top of Home (the
+returning-player command center), each a card with a live `mins()` countdown + a one-tap jump; hidden when
+nothing's open (the empty-state honesty rule). **MOVE 1 — THE MENTOR** (`src/mentor.js`): the positive
+first interaction — a veteran takes a newcomer under their wing, **ASYNC** (an offer + an accept, never
+sync matchmaking, which a low-pop game cannot do — the very cold-start we're solving). ACCOUNT-keyed → the
+tie SURVIVES DEATH (the referral/marriage/contacts posture; `mentorships`/`mentor_offers` are outside the
+estate wipe + the migrate DISPOSITION guard by construction — the guard's 78-table pass confirmed they need
+no disposition). Flow: a newcomer (`level ≤ PROTEGE_MAX_LVL` 10) flags `seeking a mentor` (`characters.
+seeking_mentor`, the LFG pattern — direct SQL, dies with the street; surfaced on the discovery board's
+newcomer cards as "wants a mentor"); a veteran (`level ≥ MENTOR_MIN_LVL` 20) offers (the crew-invite
+pattern — a pending row, single-party); the newcomer accepts → the tie forms (PK on protégé → one mentor
+ever), both notified. **The mentor's reward is STATUS ONLY** (`account_persistent.proteges_raised`,
+survives death, ranked `MENTOR_RANKS` on `GET /v1/leaderboard/mentors`) — **Sybil-proof by the game's own
+posture** (no payout attaches, so farming alts as protégés buys the mentor nothing). The **protégé** gets a
+bounded onboarding cash faucet (`mentor:protege`, once-ever-per-milestone via a `claimed_mask` bitmask,
+level-real, ~$20k lifetime — the onboarding-faucet scale, BALANCE.md); the LAST milestone is GRADUATION
+(the protégé claims at level 20, which bumps the mentor's legend +1 — a claim, so the transition is
+transactional). Anti-Sybil the referral posture: agents excluded at both ends, same-account blocked, level
+gates, an active-protégé cap (`ACTIVE_MAX` 3). §10.4: `mentor:` joined the cash `KNOWN_REASONS` (one faucet,
+character_id'd → the per-character check reconciles); the legend/seeking/graduation move no value. **The
+schema was added the RIGHT way** — `characters.seeking_mentor` + `account_persistent.proteges_raised` are
+`ALTER TABLE ... ADD COLUMN IF NOT EXISTS` (the outage lesson: new columns on existing tables never inline),
+verified by pgcheck's migration pass on real Postgres. Console: THE MENTOR block on the discovery "Find
+People" screen (a seeking toggle for newcomers, "offer to mentor" on newcomer cards for veterans, incoming
+offers to accept, your protégés, the claim button, the mentors leaderboard); the worker sweeps stale offers
++ seeking flags. `test/mentor.js` proves the seek/offer/accept flow, the milestone + graduation claim (the
+mentor's legend +1), the anti-Sybil gates (level floors, agent exclusion, one-mentor-ever, no-double-claim),
+the leaderboard, and §10.4 (the only value that moves is the ledgered `mentor:protege` faucet, bounded to
+the four milestones); `test/events.js` proves the open events surface with a clock, a resolved event does
+NOT, the megaproject shows progress, and the aggregator moves no value. Full suite green + sim drift-0 +
+mobile 73/73 + pgquery/pgcheck 43/43 on real Postgres + client wiring/mirror (588 routes, both new boards
+covered). All `MENTOR.*` numbers are founder sign-off levers (pinned in `test/levers.js`; `MENTOR.MILESTONES`
+the one faucet, tabled in BALANCE.md § THE MENTOR). Deferred (step two): a "your protégé was attacked"
+notification (the literal "had my back" moment), a mentor gift/perk, and the daily-draw events (numbers,
+the track card, the weekly fight) as a "also today" line on the strip.

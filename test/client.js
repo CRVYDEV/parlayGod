@@ -1117,6 +1117,21 @@ async function seedLists() {
   await q("INSERT INTO season_recaps (account_id, season, level, kills, prestige_gained, title) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING",
     [acct, 0, 22, 3, 11, 'A Made Man']);
 
+  // ── TONIGHT IN THE CITY (/v1/events): an open tournament (a clocked event) + a building megaproject
+  // (the only source of `pct`), so both event shapes are observable by the mirror.
+  await q("INSERT INTO poker_tournaments (id, status, opened_at, resolves_at, pool) VALUES ('mirror-tourney','open',now(),now()+interval '1 hour',75000) ON CONFLICT DO NOTHING");
+  // a COMPLETED monument (seq 0) + a plaque row → renderCity's `skyline` list has an element to check;
+  // and a separate BUILDING monument (seq 1, target high enough the later $25M contribution won't
+  // complete it) → /v1/events keeps returning the pct-bearing megaproject element.
+  await q("INSERT INTO megaprojects (id, monument, seq, target, progress, status, completed_at) VALUES ('mirror-mp-done','cathedral',0,25000000,25000000,'complete',now()) ON CONFLICT DO NOTHING");
+  await q("INSERT INTO megaproject_contributions (project_id, account_id, contributed) VALUES ('mirror-mp-done',$1,25000000) ON CONFLICT DO NOTHING", [acct]);
+  await q("INSERT INTO megaprojects (id, monument, seq, target, progress, status) VALUES ('mirror-mp','citadel',1,100000000,300000,'building') ON CONFLICT DO NOTHING");
+  // ── THE MENTOR (/v1/mentor): the probe HAS a mentor (mm.mentor), IS a mentor (proteges[]), and has an
+  // incoming offer (offers[]) — so every mentor list element field is observable (acct2 fills all three)
+  await q("INSERT INTO mentorships (protege_account, mentor_account) VALUES ($1,$2) ON CONFLICT DO NOTHING", [acct, acct2]);
+  await q("INSERT INTO mentorships (protege_account, mentor_account) VALUES ($1,$2) ON CONFLICT DO NOTHING", [acct2, acct]);
+  await q("INSERT INTO mentor_offers (mentor_account, protege_account, from_name) VALUES ($1,$2,'Mirror Two') ON CONFLICT DO NOTHING", [acct2, acct]);
+
   // ── the family, and everything that hangs off holding turf ──
   const gid = await paramId('/v1/gangs/:p');
   await trySeed('territory', async () => {
