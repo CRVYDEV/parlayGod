@@ -9701,3 +9701,24 @@ real boxing main event delivering the board row (headline names the winner) + bo
 43/43 on real Postgres + client wiring/mirror (`/v1/results` fetch + the strip's element fields covered).
 Deferred: a richer resolution moment for the WINNER (a champion/tournament-winner cinematic), and folding
 the field-entrant `*_result` notifies into the same `event_result` type for one client render path.
+
+**THE HERO BAND — visual hierarchy (founder-directed 2026-08-07, gap #2 of the three-part drop) — BUILT**
+(`public/index.html`; client-only, §10.4-free, no server change). The game reads like a spreadsheet: the
+copy is noir-rich but the layout is a flat number-grid where every row weighs the same, so the eye has no
+focal point (the Situation dashboard + the sheet's money figure + the respect bar were the first steps).
+A reusable **focal-stat header** (`.hband` CSS + a `heroBand([{v, label, sub, cls}])` helper — `cls:'neon'`
+for a live money figure, `'warn'` for a call-to-action) gives a screen a headline number to rest on. Applied
+to the three screens with a genuine headline metric, each DERIVED from data the render already holds (no new
+endpoint, no re-derivation): **The Empire** — total $/hr earning + $ ready to collect (the warn call-to-
+action, "collect before the pad or a raid eats it") + fronts count; **The Kitchen** — gross moved (neon, with
+the trade rank as the sub) + heat/100 (warn past 60, "the Bureau is watching"); **The Family** — the weak
+4-card treasury/reserve/wars/turf grid UPGRADED into a proper hero band (big numbers, not small `.t` text).
+Deliberately NOT applied where it would be forced noise (the cinematic-rarity lesson, in layout form): Garage
+(a car count isn't focal) and Streets (the coach banner + the always-visible sheet money already lead).
+**One real catch:** the first class name `.hero` COLLIDED with the landing page's own `.hero` SECTION (turning
+it into a flex row → the mobile harness caught the landing scrolling sideways by 300px), renamed to `.hband`.
+The client guard flagged `cls`/`label` as unchecked API fields (the `field:'value'` scan caught the helper's
+object keys) → declared NOT_API with a reason. Browser-probed: the Kitchen hero renders `$4,200,000 · GROSS
+MOVED · Wholesaler` + `72/100 · HEAT · the Bureau is watching`, zero page errors, below the screen's art
+plate (art → hero → content). Mobile 73/73 + client wiring/mirror green. Deferred: extend the band to more
+screens once the screen-reach beacon shows which screens players actually open (the data-gated nav decision).
