@@ -9578,3 +9578,36 @@ the not-mentor gate) and `alertMentor` ringing the mentor with the named alert; 
 the daily list carries the three den draws all jumping to the Den. Full suite green + sim drift-0 +
 mobile 73/73 + pgquery/pgcheck 43/43 on real Postgres + client wiring/mirror. `MENTOR.GIFT_CASH`/
 `GIFT_CD_MS` are founder sign-off levers (the gift is a transfer — no faucet).
+
+**THE STREAK + THE CIRCLE — the retention cadence and the ambient social feed (founder-directed from the
+thin-gaps assessment, 2026-08-07) — BUILT** (`src/streak.js` — the 122nd module + `test/streak.js` — the
+72nd suite; `src/circle.js` — the 123rd + `test/circle.js` — the 73rd). The assessment's two
+highest-leverage gaps: the game had rich CATCH-UP (the Morning Paper) and ANTICIPATION (the events strip)
+but **no reason to come back TOMORROW specifically** (no habit loop), and the social layer was READ-rich
+but **EVENT-poor** (all pull, no ambient "your people are living in the city"). **THE STREAK** — a
+daily-login claim (`POST /v1/streak/claim`) whose CASH escalates with the consecutive-day run
+(`STREAK.REWARDS` $500 → $4k, capped at `MAX_DAY` 7), a gap RESETS the run to 1, and the lifetime longest
+run (`streak_best`) is a status legend on `GET /v1/leaderboard/streak`. ACCOUNT-level (new
+`account_persistent.login_streak/login_day/streak_best` via ALTER ... ADD COLUMN IF NOT EXISTS — the outage
+lesson; written by DIRECT SQL so off the persist positional list, clobber-safe) → SURVIVES DEATH (the heir
+keeps the run, the referral/mentor posture). §10.4: ONE cash faucet `streak:daily` (joined the cash
+`KNOWN_REASONS`), bounded HARD — once/day × capped reward → ceiling ~$4k/day for a perfect attender (petty
+vs the passive stack, BALANCE.md); the run COUNT climbs past MAX_DAY (the legend) while the reward flattens,
+so only the daily claim is a faucet. **THE CIRCLE** (`GET /v1/circle`) — the ambient stream of the people
+you KNOW (crew + mentor + protégés + spouse), two PURE-READ halves (ZERO §10.4, zero write hooks): RIGHT
+NOW (a live snapshot of each member's current living street — name/level/district + online (the wsClients
+set, the discovery precedent) + trouble flags jailed/hospital/wanted) and LATELY (recent kills involving
+the circle, derived from `kill_log` — the one timestamped public-safe activity source, framed around the
+circle member, the info-economy rule holding by construction since a kill is already public). NO account
+UUID ever leaks (keyed by the living characterId — the people.js rule); membership resolved by parameterized
+IN lists (pg-mem returns zero rows for `= ANY($1::text[])` — the MY PROFILE lesson). Console: a prominent
+🔥 Daily Streak claim card leading Home (Start), and a "Your Circle" section on the crew screen (the people-
+now grid + the blood feed); `describe()` humanizes the check-in toast. `test/streak.js` proves the
+escalating reward, the consecutive/gap logic, the reward CAP (the run climbs, the cash flattens), the
+leaderboard + agent exclusion, and §10.4 (every reward a ledgered faucet); `test/circle.js` proves the
+circle resolves the right people (not strangers), the online set drives the chip, trouble surfaces, the
+blood feed frames both directions, no UUID leaks, and the whole thing moves no value. Browser-probed
+end-to-end (the streak card claims → "1 day", the button clears, the card updates; zero page errors). Full
+suite green + sim drift-0 + mobile 73/73 + pgquery/pgcheck 43/43 on real Postgres (the ALTERs apply) +
+client wiring/mirror (116 boards / 140 lists) + levers 630 pinned. All `STREAK.*` numbers are founder
+sign-off levers (BALANCE.md § THE STREAK); THE CIRCLE adds no lever (pure read).

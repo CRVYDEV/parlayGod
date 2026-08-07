@@ -4728,6 +4728,28 @@ export const MENTOR = {
 };
 export const mentorRankOf = (n) => MENTOR.RANKS.reduce((a, r) => (Number(n) >= r.at ? r : a), MENTOR.RANKS[0]);
 
+// ═══ THE STREAK (the daily-login habit loop) ═══
+// The game had rich CATCH-UP (the Morning Paper) and rich ANTICIPATION (the events strip), but no reason
+// to come back TOMORROW specifically — no habit cadence. THE STREAK is the missing carrot: a once-a-day
+// login claim whose CASH escalates with the consecutive-day run (capped at MAX_DAY's value), a gap RESETS
+// the run to 1, and the lifetime high-water (`streak_best`) is a status legend that survives death.
+// §10.4: ONE cash faucet `streak:daily`, character_id'd, bounded HARD (once/day × capped reward). The
+// run COUNT keeps climbing past MAX_DAY (a satisfying "23 days" number) but the reward flattens, so the
+// faucet ceiling is REWARDS[last]/day for a perfect attender — petty vs the passive stack. All levers.
+export const STREAK = {
+  // consecutive-day reward curve: day 1 → $500 … day 7+ → $4,000 (flat past MAX_DAY). Escalating so the
+  // habit compounds; capped so a perfect run is ~$4k/day (onboarding-faucet scale, sign-off).
+  REWARDS: [500, 800, 1200, 1700, 2300, 3000, 4000],
+  MAX_DAY: 7,   // the reward caps at REWARDS[MAX_DAY-1]; the streak COUNT still climbs (for the legend)
+  RANKS: [ // by streak_best (lifetime longest run) — pure status, survives death
+    { at: 0, name: 'Drifter' }, { at: 3, name: 'A Regular' }, { at: 7, name: 'A Face' },
+    { at: 14, name: 'A Fixture' }, { at: 30, name: 'The Neighborhood' }, { at: 90, name: 'A Made Institution' },
+  ],
+};
+// reward for landing on day N of a run (1-based); flat at REWARDS[MAX_DAY-1] past the cap
+export const streakReward = (day) => STREAK.REWARDS[Math.min(Math.max(1, day), STREAK.MAX_DAY) - 1];
+export const streakRankOf = (n) => STREAK.RANKS.reduce((a, r) => (Number(n) >= r.at ? r : a), STREAK.RANKS[0]);
+
 // ═══ THE RARITY NFTs (economy v3 step 7) ═══
 // Design §7 + §9.7. Cars and boats carry a rarity, and an owned one can be EXTRACTED on-chain as a
 // tradeable ERC-1155 through the EXISTING GearVault rail. Two rules from the design are load-bearing

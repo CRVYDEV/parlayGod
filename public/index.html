@@ -1736,6 +1736,9 @@
     if (body && body.tokenId && body.nonce != null)
       return `\u26D3 ${body.name || 'it'} is on-chain — token #${body.tokenId}. Safe forever, and out of the game.`;
     if (body && body.referrer && body.ok) return `on the record — ${body.referrer} gets credit as you come up`;
+    // THE STREAK — the daily check-in (best/rank are unique to the claim response, not the view)
+    if (body && body.ok && body.streak != null && body.best != null && body.cash != null && typeof body.rank === 'string')
+      return `\u{1F525} checked in — day ${body.streak}, +$${fmt(body.cash)}${body.streak >= body.best ? ` · best yet (${esc(body.rank)})` : ''}`;
     // THE HIRED GUNS — a merc's firepower counts, but takes no cut. The toast says the crew grew.
     if (body && body.hired && body.fee != null) return `\u{1F52B} a gun's on the crew — $${fmt(body.fee)} up front, no cut of the score. crew ${body.crew}/${body.crewMax}`;
     if (body && body.dismissed) return `sent a gun home — a slot's open for a real crewman. crew ${body.crew}/${body.crewMax}`;
@@ -3751,6 +3754,16 @@
     await refresh();
     const b = (await api('GET', '/v1/crew')).body || {};
     const crew = b.crew, invites = b.invites || [];
+    // ── THE CIRCLE — the ambient stream of the people you know (crew + mentor + protégés + spouse). Shown
+    // on the crew screen whether or not you're in a crew (your mentor/spouse count). Pure read.
+    const cir = (await api('GET', '/v1/circle')).body || {};
+    const circleSection = (cir.people && cir.people.length) ? `
+      <div class="card" style="margin-top:8px"><span class="t">Your Circle</span> <span class="d" style="font-size:11px">— your people: crew, mentor, protégés, family</span>
+        <div class="grid" style="margin-top:6px">${cir.people.map((cp) => `
+          <div class="card"><span class="t">${esc(cp.name)}</span> <span class="chip">${esc(cp.relation)}</span>${cp.online ? ' <span class="chip good">online</span>' : ''}
+            <div class="d">lvl ${cp.level}${cp.district ? ' · ' + esc(cp.district) : ''}${cp.jailed ? ' · <span style="color:var(--bad)">in lockup</span>' : ''}${cp.hospital ? ' · <span style="color:var(--bad)">in the hospital</span>' : ''}${cp.wanted ? ' · <span style="color:var(--bad)">WANTED</span>' : ''}</div></div>`).join('')}</div>
+        ${(cir.feed && cir.feed.length) ? `<div class="d" style="margin-top:8px"><b>Lately in your circle:</b></div>
+          <div style="margin-top:4px;font-size:12.5px">${cir.feed.slice(0, 8).map((cf) => `<div class="ev">${esc(cf.who)} ${cf.kind === 'whacked' ? 'whacked' : 'fell to'} ${esc(cf.other)}${cf.relation ? ` <span style="color:var(--dim)">· ${esc(cf.relation)}</span>` : ''}</div>`).join('')}</div>` : ''}</div>` : '';
     const inviteCards = invites.length ? `<div class="card" style="margin-top:6px"><span class="t">You're wanted</span>
       ${invites.map((iv) => `<div class="d" style="margin-top:4px"><b>${esc(iv.name)}</b> <span class="chip">${iv.members}/${b.maxMembers}</span> — ${esc(iv.from)} put your name in
         <button class="act" data-do="POST /v1/crew/accept/${iv.crewId}" style="border-color:var(--neon)">join</button>
@@ -3763,7 +3776,8 @@
           <div class="d" style="margin-top:4px">level ${b.minLevel}+.
             <input id="crew-name" placeholder="crew name" size="18" maxlength="${b.nameMax || 24}">
             <button class="act" id="crew-form" style="border-color:var(--neon)"${(me.level || 0) >= (b.minLevel || 0) ? '' : ' disabled'}>${(me.level || 0) >= (b.minLevel || 0) ? '' : `🔒 lvl ${b.minLevel}+ — `}form it</button></div>
-          <div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">Then invite people you've met — from the crew screen, by name.</div></div>`;
+          <div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">Then invite people you've met — from the crew screen, by name.</div></div>
+        ${circleSection}`;
       const fb = t.querySelector('#crew-form');
       if (fb) fb.onclick = () => act('POST', '/v1/crew', { name: t.querySelector('#crew-name').value }).then(() => renderCrew());
       return;
@@ -3795,7 +3809,8 @@
 
       <div class="card" style="margin-top:8px"><span class="t">The Crew Room</span> <span class="d" style="font-size:11px">— just your crew, live</span>
         <div id="crew-room" style="max-height:180px;overflow:auto;margin:6px 0;font-size:12.5px">…</div>
-        <div class="d"><input id="crew-say" placeholder="say it to the crew…" size="26" maxlength="240"> <button class="act" id="crew-send">send</button></div></div>`;
+        <div class="d"><input id="crew-say" placeholder="say it to the crew…" size="26" maxlength="240"> <button class="act" id="crew-send">send</button></div></div>
+      ${circleSection}`;
 
     const ib = t.querySelector('#crew-invite-btn');
     if (ib) ib.onclick = () => {
@@ -4039,7 +4054,7 @@
   async function renderStart() {
     const t = $('#tab-start');
     // two serial round trips before a single pixel painted — the tab showed nothing for both
-    const [obR, swR, crR, ppR, prR, cwR, dwR, evR] = await Promise.all([api('GET', '/v1/onboard'), api('GET', '/v1/social'), api('GET', '/v1/career'), api('GET', '/v1/people'), api('GET', '/v1/paper'), api('GET', '/v1/crew'), api('GET', '/v1/discovery'), api('GET', '/v1/events')]);
+    const [obR, swR, crR, ppR, prR, cwR, dwR, evR, stR] = await Promise.all([api('GET', '/v1/onboard'), api('GET', '/v1/social'), api('GET', '/v1/career'), api('GET', '/v1/people'), api('GET', '/v1/paper'), api('GET', '/v1/crew'), api('GET', '/v1/discovery'), api('GET', '/v1/events'), api('GET', '/v1/streak')]);
     const ob = obR.body || { tasks: [], total: 0, claimed: 0 };
     const sw = swR.body || { tasks: [] };
     const cr = crR.body || { tiers: [] };
@@ -4047,6 +4062,7 @@
     const pr = prR.body || {};   // THE MORNING PAPER — the while-you-were-gone digest
     const cw = cwR.body || {};   // THE CREW — the small-group tie (null crew for a solo player)
     const dw = dwR.body || {};   // THE ROLODEX — discovery: is anyone looking for a crew near you?
+    const st = stR.body || {};   // THE STREAK — the daily-login habit hook
     // ── TONIGHT IN THE CITY (MOVE 2) — the live scheduled events, so anticipation is something you can
     // SEE. Each carries a live countdown (or a progress %) + a one-tap jump. Hidden when nothing's open
     // (the empty-state honesty rule — never a dead "no events" card).
@@ -4064,6 +4080,19 @@
           ${e.closesSeconds != null ? `<span class="chip">closes ${mins(e.closesSeconds)}</span>` : e.pct != null ? `<span class="chip good">${e.pct}% built</span>` : ''}
           <div class="d">${esc(e.subtitle || '')}</div>
           <div class="row"><button class="act" data-go-tab="${e.tab}">${e.closesSeconds != null ? 'get in →' : 'chip in →'}</button></div></div>`).join('')}</div>` : '') + dailyLine;
+    // ── THE STREAK — the daily-login habit hook. A returning player sees "check in for $X" front and
+    // centre; the run escalates and a gap resets it, so there's a reason to come back TOMORROW.
+    const streakCard = st.rewards ? `
+      <div class="card" style="border-color:${st.claimedToday ? 'var(--line)' : 'var(--gold)'};margin-bottom:12px">
+        <span class="t">🔥 Daily Streak</span>
+        <span class="chip${st.claimedToday ? '' : ' good'}">${st.streak || 0} day${st.streak === 1 ? '' : 's'}</span>
+        ${st.best ? `<span class="chip">best ${st.best} · ${esc(st.rank)}</span>` : ''}
+        ${st.atRisk ? '<span class="chip bad">run at risk — check in to keep it</span>' : ''}
+        <div class="d">${st.claimedToday
+          ? "You've checked in today — come back tomorrow to keep the run going."
+          : `Check in for <b>$${fmt(st.todayReward)}</b> (day ${st.todayDay}). Miss a day and the run resets to one.`}</div>
+        ${st.claimedToday ? '' : `<div class="row"><button class="act prime" id="streak-claim">check in — $${fmt(st.todayReward)}</button></div>`}
+      </div>` : '';
     // ── THE SITUATION — the dashboard the 24-tab wall never had: your threats, your people, and
     // what's READY right now, in one glance. Composed from /v1/me (already in hand) + /v1/people
     // (the cohesion layer) — the client re-derives nothing.
@@ -4132,6 +4161,7 @@
     // rebuilt card would wipe the half-typed name. Carry the draft across the rebuild.
     const refDraft = t.querySelector('#ref-claim-name')?.value || '';
     t.innerHTML = `
+      ${streakCard}
       ${eventStrip}
       ${ob.allDone ? situation : ''}
       <!-- The City Standing led this screen — so the FIRST thing a brand-new player saw was six bars
@@ -4272,6 +4302,8 @@
     });
     t.querySelectorAll('[data-obclaim]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/onboard/${b.dataset.obclaim}/claim`).then(() => renderStart()));
+    const streakBtn = t.querySelector('#streak-claim');
+    if (streakBtn) streakBtn.onclick = () => act('POST', '/v1/streak/claim', {}).then(() => renderStart());
     const refBtn = t.querySelector('#ref-claim-btn');
     if (refBtn) refBtn.onclick = () => {
       const nm = (t.querySelector('#ref-claim-name')?.value || '').trim();
