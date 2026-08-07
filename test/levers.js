@@ -515,6 +515,18 @@ const SIGNED = [
     { day: 60, title: 'The Institution', bonus: 150000 },
     { day: 100, title: 'The Immortal', bonus: 300000 },
   ]],
+  // THE WEEKLY BULLETIN — the weekly spotlight challenge. `target` is the status-difficulty dial per
+  // theme (no faucet — the reward is a rotating title). Whole-array pin (the bracket-accessed targets
+  // are invisible to the reader check, so the PARENT is the pin — the STREAK.MILESTONES precedent).
+  ['BULLETIN.THEMES', [
+    { id: 'wetwork',   name: 'Blood Week',  word: 'The families are restless — bodies are the currency this week.',    tab: 'pvp',     spotlight: 'Wet Work',      metric: 'kills',         target: 2,      title: "The Week's Reaper" },
+    { id: 'kitchen',   name: 'Cook Week',   word: 'The corners are hungry — product moves fast this week.',            tab: 'kitchen', spotlight: 'The Kitchen',   metric: 'product_moved', target: 250000, title: "The Week's Chemist" },
+    { id: 'racing',    name: 'Race Week',   word: 'The strip is packed — engines screaming, pink slips on the line.',  tab: 'races',   spotlight: 'Street Races',  metric: 'race_wins',     target: 3,      title: "The Week's Wheelman" },
+    { id: 'boxing',    name: 'Fight Week',  word: 'The crowd wants a show — the ring is the only place to be.',        tab: 'boxing',  spotlight: 'The Fights',    metric: 'boxing_wins',   target: 3,      title: "The Week's Contender" },
+    { id: 'smuggling', name: 'Tide Week',   word: 'The docks never sleep this week — freight by the boatload.',        tab: 'scores',  spotlight: 'The Port',      metric: 'smuggled',      target: 300000, title: "The Week's Smuggler" },
+    { id: 'heists',    name: 'Score Week',  word: 'Crews are assembling — the vaults are heavy this week.',            tab: 'scores',  spotlight: 'Crew Heists',   metric: 'heists_pulled', target: 2,      title: "The Week's Mastermind" },
+    { id: 'world',     name: 'War Week',    word: 'The cartels are exposed — the whole city hunts them this week.',    tab: 'city',    spotlight: 'The Cartels',   metric: 'cartel_damage', target: 750000, title: "The Week's Warlord" },
+  ]],
   ['POPULATION.MARKS.CAR_P', { made: 0.6, capo: 0.8, boss: 0.9 }],
   ['POPULATION.MARKS.CAR_VAL', { made: [800, 2000], capo: [2000, 8000], boss: [5000, 20000] }],
   ['POPULATION.MARKS.FRONT_P', { made: 0.4, capo: 0.6, boss: 0.8 }],

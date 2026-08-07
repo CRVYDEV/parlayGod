@@ -3774,6 +3774,33 @@ export const seasonModOf = (seasonIdx = seasonIdxOf()) => {
 };
 export const seasonDaysLeft = (day = dayOf()) => 28 - (day % 28);
 
+// ═══ THE WEEKLY BULLETIN — "the word this week" ══════════════════════════════════════════════════
+// The game has three cadences of "what's happening" — daily city events, the 28-day season mod — but
+// nothing WEEKLY, so a returning player met the same daily shapes with no fresh frame. THE BULLETIN
+// rotates a server-wide SPOTLIGHT each week (deterministic from the week + seed, like every other
+// draw), naming a pillar to focus on and a CHALLENGE tied to it. PURE STATUS: the reward is a rotating
+// weekly TITLE (the streak-milestone / hitman-rep precedent) — no currency, no §10.4 surface, no
+// signed lever (unlike SEASON_MODS, which twists the economy; this only reframes and rewards a badge).
+// The challenge METRIC is an account-level legend that SURVIVES DEATH, measured as a DELTA from a
+// snapshot taken when you pick up the bulletin — a fresh goal from the moment you check in each week.
+export const BULLETIN = {
+  THEMES: [
+    { id: 'wetwork',   name: 'Blood Week',  word: 'The families are restless — bodies are the currency this week.',    tab: 'pvp',     spotlight: 'Wet Work',      metric: 'kills',         target: 2,      title: "The Week's Reaper" },
+    { id: 'kitchen',   name: 'Cook Week',   word: 'The corners are hungry — product moves fast this week.',            tab: 'kitchen', spotlight: 'The Kitchen',   metric: 'product_moved', target: 250000, title: "The Week's Chemist" },
+    { id: 'racing',    name: 'Race Week',   word: 'The strip is packed — engines screaming, pink slips on the line.',  tab: 'races',   spotlight: 'Street Races',  metric: 'race_wins',     target: 3,      title: "The Week's Wheelman" },
+    { id: 'boxing',    name: 'Fight Week',  word: 'The crowd wants a show — the ring is the only place to be.',        tab: 'boxing',  spotlight: 'The Fights',    metric: 'boxing_wins',   target: 3,      title: "The Week's Contender" },
+    { id: 'smuggling', name: 'Tide Week',   word: 'The docks never sleep this week — freight by the boatload.',        tab: 'scores',  spotlight: 'The Port',      metric: 'smuggled',      target: 300000, title: "The Week's Smuggler" },
+    { id: 'heists',    name: 'Score Week',  word: 'Crews are assembling — the vaults are heavy this week.',            tab: 'scores',  spotlight: 'Crew Heists',   metric: 'heists_pulled', target: 2,      title: "The Week's Mastermind" },
+    { id: 'world',     name: 'War Week',    word: 'The cartels are exposed — the whole city hunts them this week.',    tab: 'city',    spotlight: 'The Cartels',   metric: 'cartel_damage', target: 750000, title: "The Week's Warlord" },
+  ],
+  // TEST-ONLY override (the SEASON_MOD precedent) — pin the week's theme so a suite is deterministic.
+};
+export const bulletinOf = (wk = weekOf()) => {
+  const ov = process.env.BULLETIN_THEME; // TEST-ONLY (boot-guard listed)
+  if (ov != null) return BULLETIN.THEMES.find((t) => t.id === ov) || BULLETIN.THEMES[0];
+  return BULLETIN.THEMES[Math.floor(hash01(`bulletin:${wk}:${MARKET_SEED}`) * BULLETIN.THEMES.length)];
+};
+
 // ═══ FAMILY CHARTERS (the strategy package's ASYMMETRY) ══════════════════════════════════════════
 // Every family was mechanically IDENTICAL — a 20-man family and a 3-man family differed only in what
 // they happened to hold, so "who are we" was not a question anybody could answer differently. A

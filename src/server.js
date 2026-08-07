@@ -106,6 +106,7 @@ import { renderPng } from './cardpng.js';
 import { buildOpenApi, llmsTxt } from './agentgateway.js';
 import { opportunityBoard, arenaBoard } from './opportunities.js';
 import { postCityWire } from './citywire.js';
+import { bulletinPublic, bulletinBoard, claimBulletin } from './bulletin.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit, checkAuthRateLimit, checkReadLimit, checkPublicRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
@@ -2236,6 +2237,10 @@ export async function buildServer() {
       // THE SKYLINE — every monument the city ever raised (permanent, public — the Megaproject).
       // Cached 30s: /v1/city is a KEYLESS route and the skyline only changes on a completion.
       skyline: await cachedSkyline(),
+      // THE WEEKLY BULLETIN — "the word this week": the rotating weekly spotlight (public, verifiable,
+      // no state — a pure function of the week + seed). The per-player challenge progress is authed at
+      // GET /v1/bulletin; this is just the theme + the challenge line everyone sees.
+      bulletin: bulletinPublic(),
     };
   });
   let skylineCache = { at: 0, v: [] };
@@ -2244,6 +2249,16 @@ export async function buildServer() {
       skylineCache = { at: Date.now(), v: await Mega.skylineOf(pool) };
     return skylineCache.v;
   };
+  // ── THE WEEKLY BULLETIN — "the word this week": the rotating weekly spotlight + a challenge tied to
+  // it (a snapshot-delta against an account legend). Reward is a rotating TITLE — PURE STATUS, §10.4-free. ──
+  app.get('/v1/bulletin', { preHandler: auth }, async (req) => {
+    const ch = (await pool.query('SELECT account_id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0];
+    if (!ch) return bulletinPublic();
+    return bulletinBoard(pool, req.user.sub);
+  });
+  app.post('/v1/bulletin/claim', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => claimBulletin(ch, client, h)));
+
   // ── THE MEGAPROJECT (founder pick #1) — the collective monument. Contributions are pure
   // §10.4 SINKS (cash burn / $OMR burn / goods deleted); completion permanently changes the city. ──
   app.get('/v1/megaproject', { preHandler: auth }, async (req) => Mega.megaBoard(pool, req.user.sub));

@@ -1760,6 +1760,8 @@
     // THE STREAK — the daily check-in (best/rank are unique to the claim response, not the view)
     if (body && body.ok && body.streak != null && body.best != null && body.cash != null && typeof body.rank === 'string')
       return `\u{1F525} checked in — day ${body.streak}, +$${fmt(body.cash)}${body.milestone ? ` · 🏅 ${body.milestone.day}-DAY MILESTONE — you're ${esc(body.milestone.title)}, +$${fmt(body.milestone.bonus)}` : (body.streak >= body.best ? ` · best yet (${esc(body.rank)})` : '')}`;
+    // THE WEEKLY BULLETIN — claimed the week's title
+    if (body && body.title && body.theme) return `\u{1F4F0} ${esc(body.theme)} — you took the title: ${esc(body.title)}`;
     // THE VOUCH — you staked your name (or pulled it back)
     if (body && body.vouched) return body.mutual ? `\u{1F91D} you vouched ${esc(body.vouched)} back — a mutual bond` : `you vouched for ${esc(body.vouched)} — your name's on them now`;
     if (body && body.pulled) return `pulled your name back from ${esc(body.pulled)}`;
@@ -4184,7 +4186,9 @@
   async function renderStart() {
     const t = $('#tab-start');
     // two serial round trips before a single pixel painted — the tab showed nothing for both
-    const [obR, swR, crR, ppR, prR, cwR, dwR, evR, stR, reR] = await Promise.all([api('GET', '/v1/onboard'), api('GET', '/v1/social'), api('GET', '/v1/career'), api('GET', '/v1/people'), api('GET', '/v1/paper'), api('GET', '/v1/crew'), api('GET', '/v1/discovery'), api('GET', '/v1/events'), api('GET', '/v1/streak'), api('GET', '/v1/results')]);
+    const [obR, swR, crR, ppR, prR, cwR, dwR, evR, stR, reR, blR] = await Promise.all([api('GET', '/v1/onboard'), api('GET', '/v1/social'), api('GET', '/v1/career'), api('GET', '/v1/people'), api('GET', '/v1/paper'), api('GET', '/v1/crew'), api('GET', '/v1/discovery'), api('GET', '/v1/events'), api('GET', '/v1/streak'), api('GET', '/v1/results'), api('GET', '/v1/bulletin')]);
+    const bl = blR.body || {};   // THE WEEKLY BULLETIN
+    const ev = evR.body || {};   // TONIGHT IN THE CITY (hoisted here so the mirror's alias window reaches it)
     const ob = obR.body || { tasks: [], total: 0, claimed: 0 };
     const sw = swR.body || { tasks: [] };
     const cr = crR.body || { tiers: [] };
@@ -4194,10 +4198,23 @@
     const dw = dwR.body || {};   // THE ROLODEX — discovery: is anyone looking for a crew near you?
     const st = stR.body || {};   // THE STREAK — the daily-login habit hook
     const rez = reR.body || {};  // THE RESULTS SHOW — how the marquee events fell
+    // ── THE WEEKLY BULLETIN — "the word this week": the rotating weekly spotlight + a challenge tied to
+    // it. A fresh weekly FRAME so a returning player meets something new, not the same daily shapes. The
+    // reward is a status title (no cash), so there's no dollar figure here. Progress is a delta from
+    // when you first checked in this week.
+    const blPct = bl.target ? Math.min(100, Math.round((bl.progress || 0) / bl.target * 100)) : 0;
+    const blBar = bl.metric ? `<div class="d" style="margin-top:6px">This week: <b>${bl.progress || 0}${bl.target > 999 ? '' : '/' + bl.target}</b> toward — ${esc(bl.title || '')}
+        <div style="height:6px;background:#1a1a22;border-radius:3px;margin-top:5px;overflow:hidden"><div style="height:100%;width:${blPct}%;background:var(--gold)"></div></div></div>` : '';
+    const blCta = bl.claimable ? `<button class="act" data-do="POST /v1/bulletin/claim">claim "${esc(bl.title || '')}" →</button>`
+      : bl.claimed ? `<span class="chip good">🏅 claimed — ${esc(bl.title || '')}</span>`
+      : `<button class="act" data-go-tab="${bl.tab || 'streets'}">go to ${esc(bl.spotlight || 'the city')} →</button>`;
+    const bulletinBanner = bl.name ? `<div class="card" style="border-color:var(--gold);background:linear-gradient(180deg,rgba(232,179,75,.06),transparent)">
+        <span class="t">📰 The Word This Week — ${esc(bl.name)}</span>
+        <div class="d" style="font-style:italic">${esc(bl.word || '')}</div>${blBar}
+        <div class="row" style="margin-top:8px">${blCta}</div></div>` : '';
     // ── TONIGHT IN THE CITY (MOVE 2) — the live scheduled events, so anticipation is something you can
     // SEE. Each carries a live countdown (or a progress %) + a one-tap jump. Hidden when nothing's open
-    // (the empty-state honesty rule — never a dead "no events" card).
-    const ev = evR.body || {};
+    // (the empty-state honesty rule — never a dead "no events" card). (`ev` is hoisted into the alias block above.)
     const evs = ev.events || [];
     const daily = ev.daily || [];
     // ALSO TODAY — the always-on den draws (numbers/track/fight). A lighter one-line list under the
@@ -4305,6 +4322,7 @@
     const refDraft = t.querySelector('#ref-claim-name')?.value || '';
     t.innerHTML = `
       ${streakCard}
+      ${bulletinBanner}
       ${eventStrip}
       ${resultsStrip}
       ${ob.allDone ? situation : ''}
