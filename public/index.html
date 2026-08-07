@@ -1772,6 +1772,11 @@
       return body.mode === 'value'
         ? `\u{1F303} on the house — +$${fmt(body.cash)} (round ${body.round}/${body.of})`
         : `\u{1F303} a round with the crew — round ${body.round}/${body.of}`;
+    // PRIME TIME THE SIEGE — landed your strike on the shared target
+    if (body && body.joined === true && body.target != null && body.damage != null)
+      return body.cracked
+        ? `\u{1F303} you stormed the gates — CRACKED! ${body.damage}/${body.target} (${body.fighters} in). Settled at close.`
+        : `\u{1F303} you stormed the gates — ${body.damage}/${body.target}, ${body.target - body.damage} to go (${body.fighters} in). Crack it before close.`;
     // THE VOUCH — you staked your name (or pulled it back)
     if (body && body.vouched) return body.mutual ? `\u{1F91D} you vouched ${esc(body.vouched)} back — a mutual bond` : `you vouched for ${esc(body.vouched)} — your name's on them now`;
     if (body && body.pulled) return `pulled your name back from ${esc(body.pulled)}`;
@@ -4274,33 +4279,43 @@
     // and a countdown to close; else → tonight's window at a fixed UTC hour + what's on. The mechanic +
     // mode rotate (value pays turnout-scaled cash; honor pays a rotating badge). `pt` is the board.
     const ptHour = (h) => `${String(h).padStart(2, '0')}:00 UTC`;
-    const ptHappy = pt.mechanic === 'happyhour';
+    const ptHappy = pt.mechanic === 'happyhour', ptSiege = pt.mechanic === 'siege';
+    const ptName = ptHappy ? 'Happy Hour' : ptSiege ? 'The Siege' : 'Prime Time';
+    const ptMechLabel = (f) => f.mechanic === 'happyhour' ? 'happy hour' : f.mechanic === 'siege' ? 'the siege' : 'the call';
     const primeCard = pt.mechanic ? (pt.live ? `
       <div class="card" style="border-color:var(--neon);background:linear-gradient(180deg,rgba(0,229,168,.07),transparent);margin-bottom:12px">
-        <span class="t">🌃 ${ptHappy ? 'HAPPY HOUR IS ON' : 'PRIME TIME IS LIVE'}</span>
-        ${ptHappy ? `<span class="chip good">${pt.roundsLeft} round${pt.roundsLeft === 1 ? '' : 's'} left</span>` : `<span class="chip good">${pt.turnout || 0} answered</span>`}
+        <span class="t">🌃 ${ptHappy ? 'HAPPY HOUR IS ON' : ptSiege ? 'THE SIEGE IS ON' : 'PRIME TIME IS LIVE'}</span>
+        ${ptHappy ? `<span class="chip good">${pt.roundsLeft} round${pt.roundsLeft === 1 ? '' : 's'} left</span>`
+          : ptSiege ? `<span class="chip ${pt.cracked ? 'good' : ''}">${pt.damage || 0} / ${pt.target} damage · ${pt.fighters || 0} in</span>`
+          : `<span class="chip good">${pt.turnout || 0} answered</span>`}
         <span class="chip">closes ${mins(pt.closesSeconds)}</span>
         <div class="d">${ptHappy
           ? (pt.mode === 'value'
             ? `The house is buying — grab a round for <b>$${fmt(pt.roundCash)}</b> of walking-around money, up to ${pt.roundsMax} a night.`
             : `The house is buying — a few rounds with the crew sharpen your card sense (${pt.roundsMax} a night).`)
+          : ptSiege
+          ? `The whole city storms the gates. Land your strike — <b>${pt.cracked ? 'the gates are cracked!' : `${pt.target - (pt.damage || 0)} to go`}</b>. Crack it before close and every fighter takes ${pt.mode === 'value' ? `<b>$${fmt(pt.siegeCash)}</b>` : `the badge <b>${esc(pt.title || '')}</b>`}. The more who join, the surer the crack.`
           : (pt.mode === 'value'
             ? `The whole city is out. Answer the call — the more who show, the bigger the cut. Right now that's about <b>$${fmt(pt.reward)}</b> each, paid when the window closes.`
             : `The whole city is out. Answer the call for tonight's badge: <b>${esc(pt.title || '')}</b>.`)}</div>
         <div class="row" style="margin-top:6px">${ptHappy
           ? (pt.roundsLeft > 0 ? `<button class="act prime" data-do="POST /v1/primetime/round">${pt.mode === 'value' ? 'grab a round →' : 'have a round →'}</button>` : '<span class="chip good">✓ you\'ve had your rounds tonight</span>')
+          : ptSiege
+          ? (pt.joined ? '<span class="chip good">✓ you made your run — settled at close</span>' : `<button class="act prime" data-do="POST /v1/primetime/siege">storm the gates →</button>`)
           : (pt.answered
             ? `<span class="chip good">✓ you answered${pt.mode === 'honor' && pt.title ? ' — ' + esc(pt.title) : ''}</span>`
             : `<button class="act prime" data-do="POST /v1/primetime/answer">answer the call →</button>`)}</div>
       </div>` : `
       <div class="card" style="border-color:var(--gold);margin-bottom:12px">
-        <span class="t">🌃 ${ptHappy ? 'Happy Hour' : 'Prime Time'}</span>
+        <span class="t">🌃 ${ptName}</span>
         <span class="chip">tonight ${ptHour(pt.hour)}</span>
         ${pt.opensSeconds ? `<span class="chip">opens ${mins(pt.opensSeconds)}</span>` : ''}
         <div class="d">${ptHappy
           ? 'Tonight the house buys rounds for one hour — be at the bar.'
+          : ptSiege
+          ? `Tonight the whole city storms the gates for one hour. ${pt.mode === 'value' ? 'Land your strike — crack it together and every fighter takes a cut.' : `Crack it for the badge: <b>${esc(pt.title || '')}</b>.`}`
           : `Once a night the whole city gathers for one hour. ${pt.mode === 'value' ? 'Show up and share the take — the bigger the turnout, the bigger each cut.' : `Show up for the badge: <b>${esc(pt.title || '')}</b>.`}`} Be here when it opens.</div>
-        ${(pt.forecast || []).length > 1 ? `<div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">Coming nights: ${pt.forecast.slice(1, 4).map((f) => `${ptHour(f.hour)} — ${f.mechanic === 'happyhour' ? 'happy hour' : 'the call'} (${f.mode === 'value' ? 'cash' : 'badge'})`).join(' · ')}</div>` : ''}
+        ${(pt.forecast || []).length > 1 ? `<div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">Coming nights: ${pt.forecast.slice(1, 4).map((f) => `${ptHour(f.hour)} — ${ptMechLabel(f)} (${f.mode === 'value' ? 'cash' : 'badge'})`).join(' · ')}</div>` : ''}
       </div>`) : '';
     // ── THE SITUATION — the dashboard the 24-tab wall never had: your threats, your people, and
     // what's READY right now, in one glance. Composed from /v1/me (already in hand) + /v1/people
@@ -7648,6 +7663,8 @@
       primetime_answered: () => d.mode === 'honor' ? `🌃 you answered Prime Time — tonight you're ${d.title}` : `🌃 you answered Prime Time — ${d.turnout || 1} out so far`,
       primetime_paid: () => `🌃 PRIME TIME paid out — +$${fmt(d.reward)} for answering the call (${d.turnout} showed)`,
       primetime_round: () => d.mode === 'value' ? `🌃 happy hour — +$${fmt(d.cash)} on the house` : `🌃 happy hour — a round with the crew`,
+      primetime_siege: () => `🌃 you stormed the gates — ${d.fighters} in, ${d.damage}/${d.target} damage`,
+      primetime_siege_won: () => d.mode === 'honor' ? `🌃 THE GATES CRACKED — you're ${d.title} (${d.fighters} stormed them)` : `🌃 THE GATES CRACKED — +$${fmt(d.reward)} for the siege (${d.fighters} fighters)`,
       megaproject_complete: () => `🏛 ${d.monument} STANDS — raised by the whole city. Architect: ${d.architect}`,
       megaproject_architect: () => `🏛 you are THE ARCHITECT of ${d.monument} — your name leads the plaque forever`,
       estate: () => `your street fell${d.by ? ` to ${d.by}` : ''} — the heir rises`,

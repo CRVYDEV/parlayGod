@@ -3816,7 +3816,7 @@ export const bulletinOf = (wk = weekOf()) => {
 // The value faucet is bounded (BASE + PER×min(turnout−1, CAP), once/day, level-floored, agent-excluded)
 // — a §10.4 cash faucet `primetime:rally`, sim-flagged; all numbers are founder sign-off levers.
 export const PRIME_TIME = {
-  MECHANICS: ['rally', 'happyhour'],  // step 3 +'siege' — the seed draws among what's BUILT (never a dead night)
+  MECHANICS: ['rally', 'happyhour', 'siege'],  // the seed draws among the BUILT mechanics (never a dead night)
   WINDOW_H: 1,                    // the window is one UTC hour
   FORECAST_DAYS: 7,              // how many nights ahead the board shows (anticipation — players plan)
   RALLY_BASE: 2000,             // value-rally: cash for answering the call (the floor at turnout 1)
@@ -3830,6 +3830,16 @@ export const PRIME_TIME = {
   // (drinking sharpens the card sense — status, zero §10.4 via bumpMastery's `primetime` action tag).
   HAPPY_ROUNDS: 3,              // rounds you can buy per night
   HAPPY_CASH: 800,             // value: cash per round (max HAPPY_ROUNDS×HAPPY_CASH = $2,400/night)
+  // THE SIEGE (step three) — the whole city rallies against a shared target for one hour. Each fighter
+  // lands ONE strike (once/night); the siege FALLS only if the crowd's cumulative damage crosses the
+  // target by close — so you NEED others there (the strongest co-presence of the three). Settled at
+  // close by the worker: on a WON siege every fighter shares the spoils (value → flat cash / honor →
+  // a badge); a siege that DIDN'T fall pays nobody (a real collective-stakes moment). Reuses the
+  // primetime_rally participation table (a night is ONE mechanic, so no row collision).
+  SIEGE_STRIKE: 100,           // damage one fighter lands
+  SIEGE_NEED: 8,               // fighters needed to crack it → target = SIEGE_NEED × SIEGE_STRIKE
+  SIEGE_CASH: 3000,            // value: the spoils each fighter takes on a WON siege (bounded, once/night)
+  SIEGE_TITLE: 'Stormed the Gates',   // honor: the badge for cracking it
 };
 // The night's draw — mechanic + mode + the UTC hour + the honor title, all a pure function of the day.
 // PRIME_TIME_MECH / PRIME_TIME_MODE are TEST-ONLY overrides (the SEASON_MOD/BULLETIN_THEME precedent).

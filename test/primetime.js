@@ -155,6 +155,85 @@ assert.equal(await txnCount(), hgTx, 'an honor round writes zero transactions ro
 const gxp = Number((await pool.query('SELECT xp FROM masteries WHERE character_id=$1 AND track_id=$2', [await idOf(hg.id), 'gambling'])).rows[0]?.xp || 0);
 assert.ok(gxp > 0, 'the honor round schooled the gambling track (mastery XP, not cash)');
 
-console.log('primetime: PRIME TIME step one (THE RALLY) + step two (HAPPY HOUR) ok');
+// ════════════ STEP THREE — THE SIEGE (co-present shared damage bar; cracked → cash/badge, else nothing) ════════════
+process.env.PRIME_TIME_MECH = 'siege';
+// pad the night to (SIEGE_NEED - 1) ghost fighters so ONE real join cracks the bar. Ghost rows aren't
+// characters (the settle JOIN excludes them), but turnoutOf counts every row — the co-present padding.
+const padSiege = async (day, n, from = 0) => {
+  for (let i = from; i < from + n; i++) await pool.query('INSERT INTO primetime_rally (day, character_id, settled) VALUES ($1,$2,false)', [day, `ghost-${day}-${i}`]);
+};
+
+// VALUE SIEGE — join in-window, worker pays SIEGE_CASH on a crack
+setMode('value');
+const sg = await mk('Siege Breaker');
+await levelUp(sg.id);
+let sb = (await call('GET', '/v1/primetime', { token: sg.token })).body;
+assert.equal(sb.mechanic, 'siege', 'the night is a siege');
+assert.equal(sb.joined, false, 'not joined yet');
+assert.equal(sb.target, PRIME_TIME.SIEGE_NEED * PRIME_TIME.SIEGE_STRIKE, 'the shared target is surfaced');
+assert.equal(sb.siegeCash, PRIME_TIME.SIEGE_CASH, 'the crack reward is surfaced');
+// a rally answer / happy round is refused on a siege night — the mechanic gates the action
+assert.equal((await call('POST', '/v1/primetime/answer', { token: sg.token })).body.error, 'not_rally', 'no rally answer on a siege night');
+assert.equal((await call('POST', '/v1/primetime/round', { token: sg.token })).body.error, 'not_happy', 'no happy round on a siege night');
+
+const sgToday = dayOf();
+const sgJoinCash = await cashOf(sg.id);
+await padSiege(sgToday, PRIME_TIME.SIEGE_NEED - 1);   // (NEED-1) ghosts + 1 real join = NEED fighters = a crack
+let sr = await call('POST', '/v1/primetime/siege', { token: sg.token });
+assert.equal(sr.body.joined, true, 'joined the siege');
+assert.equal(sr.body.fighters, PRIME_TIME.SIEGE_NEED, 'turnout counts the ghosts + you');
+assert.equal(sr.body.cracked, true, 'the bar is cracked (target met)');
+assert.equal(sr.body.pending, true, 'no cash at join — the worker settles at close');
+assert.equal(await cashOf(sg.id), sgJoinCash, 'no cash moves on a join');
+// once a night
+assert.equal((await call('POST', '/v1/primetime/siege', { token: sg.token })).body.error, 'already', 'one run on the gates a night');
+
+// close the night → the worker pays SIEGE_CASH to the cracker
+const sgBeforeDrift = await driftOf('character cash');
+const sgStart = await cashOf(sg.id);
+await pool.query('UPDATE primetime_rally SET day=$1 WHERE day=$2', [sgToday - 1, sgToday]);
+const sres = await settlePrimeTime(pool);
+assert.ok(sres.paid >= 1, 'the worker paid the cracked siege');
+assert.equal(await cashOf(sg.id), sgStart + PRIME_TIME.SIEGE_CASH, 'each fighter on a cracked siege takes SIEGE_CASH');
+// idempotent
+await settlePrimeTime(pool);
+assert.equal(await cashOf(sg.id), sgStart + PRIME_TIME.SIEGE_CASH, 'a second settle pays nothing more');
+// §10.4 — the siege faucet reconciles, the reason is character_id'd primetime:siege
+assert.equal(await driftOf('character cash'), sgBeforeDrift, 'the siege faucet reconciles — no §10.4 drift');
+const sled = (await pool.query("SELECT amount, character_id FROM transactions WHERE reason='primetime:siege'")).rows;
+assert.ok(sled.length >= 1 && sled.every((x) => x.character_id && Number(x.amount) === PRIME_TIME.SIEGE_CASH), 'each faucet row is character_id\'d primetime:siege');
+
+// FAILED SIEGE — too few fighters, nobody paid (but all settled). A DISTINCT closed day (today-2) so the
+// value-siege crowd already parked at today-1 can't pad this night's turnout into a crack.
+const sg2 = await mk('Lone Stormer');
+await levelUp(sg2.id);
+const sg2Today = dayOf();
+// only this one real fighter, no ghosts → damage 100 < target 800 → not cracked
+sr = await call('POST', '/v1/primetime/siege', { token: sg2.token });
+assert.equal(sr.body.cracked, false, 'a lone fighter can\'t crack the gates');
+const sg2Start = await cashOf(sg2.id);
+await pool.query('UPDATE primetime_rally SET day=$1 WHERE character_id=$2', [sg2Today - 2, await idOf(sg2.id)]);
+await settlePrimeTime(pool);
+assert.equal(await cashOf(sg2.id), sg2Start, 'a failed siege pays nobody');
+assert.equal(Number((await pool.query('SELECT settled FROM primetime_rally WHERE character_id=$1', [await idOf(sg2.id)])).rows[0]?.settled ?? 1), 1, 'but the row is settled (won\'t re-process)');
+
+// HONOR SIEGE — a crack grants the badge, moves NO value. Its own closed day (today-3).
+setMode('honor');
+const sgh = await mk('Badge Stormer');
+await levelUp(sgh.id);
+const sghToday = dayOf();
+await padSiege(sghToday, PRIME_TIME.SIEGE_NEED - 1, 100);   // ghosts to crack it
+sr = await call('POST', '/v1/primetime/siege', { token: sgh.token });
+assert.equal(sr.body.cracked, true, 'the honor siege cracks with the crowd');
+const sghTx = await txnCount();
+const sghCash = await cashOf(sgh.id);
+await pool.query('UPDATE primetime_rally SET day=$1 WHERE day=$2', [sghToday - 3, sghToday]);
+await settlePrimeTime(pool);
+const wornSiege = (await pool.query('SELECT title FROM characters WHERE id=$1', [await idOf(sgh.id)])).rows[0].title;
+assert.equal(wornSiege, PRIME_TIME.SIEGE_TITLE, 'a cracked honor siege writes the badge to the title slot');
+assert.equal(await cashOf(sgh.id), sghCash, 'an honor siege pays no cash');
+assert.equal(await txnCount(), sghTx, 'and the honor siege settle wrote no ledger row');
+
+console.log('primetime: PRIME TIME step one (THE RALLY) + step two (HAPPY HOUR) + step three (THE SIEGE) ok');
 await app.close();
 process.exit(0);
