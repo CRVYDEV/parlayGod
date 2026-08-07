@@ -2790,6 +2790,18 @@ CREATE TABLE IF NOT EXISTS weekly_bulletin (
   PRIMARY KEY (account_id, week)
 );
 
+-- ── PRIME TIME (omerta-prime-time-design.md) — the nightly synchronous window ────────────────────
+-- One row per (night, street) that answered the call. On a `value` night the worker settles it at the
+-- window's close, paying the turnout-scaled `primetime:rally` faucet (once, claim-then-pay via `settled`);
+-- on an `honor` night the row is born settled (the title landed at answer time — no cash). Character-keyed
+-- → joined the estate wipe (a dead answerer isn't paid). The worker prunes rows past the backfill window.
+CREATE TABLE IF NOT EXISTS primetime_rally (
+  day INT NOT NULL,
+  character_id TEXT NOT NULL,
+  settled BOOLEAN NOT NULL DEFAULT false,
+  PRIMARY KEY (day, character_id)
+);
+
 -- ── THE CREW HIT (omerta-crew-design.md step two) — the crew's shared target ─────────────────────
 -- A pointer the leader sets so the whole crew rallies a contract behind ONE mark. It moves NO value:
 -- the actual funding rides the AUDITED bounty escrow (POST /v1/streets/:id/bounty → bounty_contributors),

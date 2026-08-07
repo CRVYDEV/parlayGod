@@ -9,6 +9,7 @@
 // proves it by counting rows.
 import crypto from 'node:crypto';
 import { megaMonumentAt } from './rules.js';
+import { primeTimeSummary } from './primetime.js';   // events.js → primetime.js → game.js is acyclic (game.js imports neither)
 
 const secsTo = (ts) => Math.max(0, Math.floor((new Date(ts).getTime() - Date.now()) / 1000));
 
@@ -87,5 +88,11 @@ export async function cityEventBoard(client) {
     { kind: 'fight', icon: '🥊', title: 'The Weekly Fight', subtitle: 'back a fighter before the bell', tab: 'den' },
   ];
 
-  return { events, daily };
+  // PRIME TIME — the nightly synchronous window. Always present (a pure function of the clock, no DB
+  // row), so it rides its own `primetime` field; when it's LIVE it also leads the clocked strip (the
+  // most time-sensitive thing on the board — the whole city is out right now).
+  const pt = primeTimeSummary();
+  if (pt.live) events.unshift({ kind: pt.kind, icon: pt.icon, title: pt.title, subtitle: pt.subtitle, closesSeconds: pt.closesSeconds, tab: pt.tab });
+
+  return { events, daily, primetime: pt };
 }

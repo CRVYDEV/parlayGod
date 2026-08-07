@@ -22,6 +22,7 @@ import * as Mentor from './mentor.js';
 import * as Streak from './streak.js';
 import * as Circle from './circle.js';
 import * as Explore from './explore.js';
+import * as Prime from './primetime.js';
 import * as Vouch from './vouch.js';
 import * as Push from './push.js';
 import { cityEventBoard, resultsBoard } from './events.js';
@@ -1975,6 +1976,12 @@ export async function buildServer() {
   // player has UNLOCKED by level and never touched, plus an explorer tally. Pure read, §10.4-free. ──
   app.get('/v1/explore', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client, h) => Explore.exploreBoard(ch, h.acct, h.owned)));
+  // ── PRIME TIME — the nightly synchronous window: answer the call during tonight's hour. Co-present
+  // (the value reward scales with turnout, settled at close); the mechanic + mode rotate by the seed. ──
+  app.get('/v1/primetime', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client) => Prime.primeTimeBoard(client, ch)));
+  app.post('/v1/primetime/answer', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Prime.answerCall(ch, client, h)));
   // ── THE VOUCH — the symmetric peer bond. Stake your name on someone (scarce, capped); if they vouch
   // back it's mutual. Pure status, §10.4-free. ──
   app.get('/v1/vouches', { preHandler: auth }, async (req) =>

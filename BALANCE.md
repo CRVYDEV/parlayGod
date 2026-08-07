@@ -5190,3 +5190,20 @@ single action stamps it), or an account-level LEGEND that survives death (so a v
 display copy) lives in the MODULE, not a rules const — it is display/gate copy mirrored from the coach's own
 rung copy (which is not lever-pinned either), not a signed economy number, so there is nothing to pin. Gated to
 veterans on the client (`ob.allDone`) and hidden when nothing's untapped (the empty-state rule).
+
+## PRIME TIME — the nightly synchronous window (founder-directed 2026-08-07: all-3-mechanics-rotated, value/cosmetic rotated)
+PRIME TIME is the answer to "nothing draws players online at the SAME time" — one forecastable UTC hour a
+night that concentrates the base. Both axes rotate off the §7.11 seed: the MECHANIC (step one ships THE
+RALLY; steps two/three add HAPPY HOUR + THE SIEGE to `PRIME_TIME.MECHANICS`, so there's never a dead night)
+and the MODE (`value` pays cash / `honor` pays a rotating status title). THE RALLY is co-present BY
+CONSTRUCTION: on a value night the reward SCALES WITH TURNOUT and is settled at the window's CLOSE by the
+worker, so everyone gets the FINAL count (nobody is punished for coming early). **§10.4: the only faucet is
+`primetime:rally`** — bounded `RALLY_BASE (2000) + RALLY_PER (500) × min(turnout−1, RALLY_TURNOUT_CAP=20)`
+= max **$11,500/answerer/value-night**, once/night per street, `RALLY_MIN_LVL (5)` floor, agents excluded,
+character_id'd (the per-character cash check reconciles). Base-wide worst case ≈ turnout × 11,500 on a value
+night ≈ **$230k at a 20-turnout night** — petty vs the passive stack, and roughly half the nights are honor
+(no cash). An `honor` night moves ZERO value (the title is the whole reward). **SIM-FLAG:** the co-present
+faucet is new — sim the realistic per-night turnout × reward before production; `RALLY_*` are the dials
+(`RALLY_PER`/`RALLY_TURNOUT_CAP` size the co-presence incentive, `RALLY_BASE` the floor). All `PRIME_TIME.*`
+numbers are founder sign-off levers, pinned in test/levers.js. `PRIME_TIME_LIVE`/`PRIME_TIME_MECH`/
+`PRIME_TIME_MODE` are TEST-ONLY overrides (preflight-classified).

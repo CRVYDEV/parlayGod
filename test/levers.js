@@ -527,6 +527,18 @@ const SIGNED = [
     { id: 'heists',    name: 'Score Week',  word: 'Crews are assembling — the vaults are heavy this week.',            tab: 'scores',  spotlight: 'Crew Heists',   metric: 'heists_pulled', target: 2,      title: "The Week's Mastermind" },
     { id: 'world',     name: 'War Week',    word: 'The cartels are exposed — the whole city hunts them this week.',    tab: 'city',    spotlight: 'The Cartels',   metric: 'cartel_damage', target: 750000, title: "The Week's Warlord" },
   ]],
+  // PRIME TIME — the nightly synchronous window (THE RALLY). RALLY_* are the value faucet's dials
+  // (BASE + PER×min(turnout−1, CAP), the whole §10.4 exposure per row); the rest pace the window.
+  // MECHANICS/TITLES are pinned as whole arrays (the bracket-accessed entries are invisible to the
+  // reader check — the BULLETIN.THEMES precedent); MECHANICS grows as steps two/three land.
+  ['PRIME_TIME.WINDOW_H', 1],
+  ['PRIME_TIME.FORECAST_DAYS', 7],
+  ['PRIME_TIME.RALLY_BASE', 2000],
+  ['PRIME_TIME.RALLY_PER', 500],
+  ['PRIME_TIME.RALLY_TURNOUT_CAP', 20],
+  ['PRIME_TIME.RALLY_MIN_LVL', 5],
+  ['PRIME_TIME.MECHANICS', ['rally']],
+  ['PRIME_TIME.TITLES', ['Night Owl', 'The Faithful', 'Answered the Call', 'The Regular', 'First to the Bar', 'The Usual Suspect']],
   ['POPULATION.MARKS.CAR_P', { made: 0.6, capo: 0.8, boss: 0.9 }],
   ['POPULATION.MARKS.CAR_VAL', { made: [800, 2000], capo: [2000, 8000], boss: [5000, 20000] }],
   ['POPULATION.MARKS.FRONT_P', { made: 0.4, capo: 0.6, boss: 0.8 }],
