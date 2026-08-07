@@ -55,6 +55,15 @@ assert.equal(mp.pct, 25, 'the megaproject surfaces its progress % (250k/1M)');
 assert.equal(mp.closesSeconds, undefined, 'the megaproject has progress, not a clock');
 assert.ok(pk.subtitle.includes('50,000'), 'a pool is surfaced so a player sees what is on the line');
 
+// ════════════ ALSO TODAY — the always-on den draws ════════════
+{
+  const daily = (await call('GET', '/v1/events')).body.daily;
+  assert.equal(Array.isArray(daily), true, 'the board carries a daily list of the always-on draws');
+  const dk = daily.map((x) => x.kind);
+  assert.deepEqual(dk, ['numbers', 'track', 'fight'], 'the numbers, the track, and the weekly fight are always on');
+  assert.equal(daily.every((x) => x.tab === 'den'), true, 'every daily draw jumps to the Den');
+}
+
 // ════════════ §10.4 — the aggregator moves no value ════════════
 await events(); await events();
 assert.equal(await txCount(), before, 'reading the events board writes no ledger rows — it is a pure read');

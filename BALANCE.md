@@ -5110,3 +5110,11 @@ stays drift-0 (a character_id'd ledgered faucet; the sim reconciles it). The MEN
 protégés buys only status, which attaches no payout (the hitman-rep posture). `MENTOR.MILESTONES` is the
 sign-off dial; `[]` disables the faucet entirely (the tie + the status legend still work). All `MENTOR.*`
 numbers are pinned in `test/levers.js`.
+
+**Step two adds NO new faucet.** THE CARE PACKAGE (`mentor:gift`, `MENTOR.GIFT_CASH` $5k / `GIFT_CD_MS`
+24h) is a §10.4 **TRANSFER** — the mentor pays it out of their OWN pocket to the protégé, both legs
+character_id'd → the `mentor:gift` rows net zero (proven in `test/mentor.js`). So it moves the mentor's
+cash to the protégé (a real onboarding subsidy) without creating any, bounded by the 24h cooldown and the
+mentor's own bankroll. HAD MY BACK (the `protege_attacked` alert) and the "also today" den-draw line move
+zero value (a notification + a read). `GIFT_CASH`/`GIFT_CD_MS` are founder sign-off levers; `GIFT_CASH: 0`
+disables the care package.

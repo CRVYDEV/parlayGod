@@ -4716,6 +4716,11 @@ export const MENTOR = {
   // milestone is GRADUATION: the protégé claims at level 20 and that bumps the mentor's legend +1 (a claim,
   // so the transition is transactional). Days of real play per unit → an alt farm is deeply unprofitable.
   MILESTONES: [{ lvl: 5, cash: 2000 }, { lvl: 10, cash: 4000 }, { lvl: 15, cash: 6000 }, { lvl: 20, cash: 8000, graduate: true }],
+  // step two — THE CARE PACKAGE: the mentor sends a protégé a bounded cash gift from their OWN pocket (a
+  // ledgered TRANSFER `mentor:gift`, §10.4-neutral — the had-my-back ACTION). Once per protégé per CD; the
+  // cap + one-mentor-ever + ≤ACTIVE_MAX protégés make it petty ($15k/day max), not a laundering rail.
+  GIFT_CASH: 5000,
+  GIFT_CD_MS: 24 * 3600 * 1000,
   RANKS: [ // by proteges_raised — pure status, survives death (the hitman-rep board twin)
     { at: 0, name: 'Unproven' }, { at: 1, name: 'A Made Teacher' }, { at: 3, name: 'The Counselor' },
     { at: 7, name: 'The Godfather' }, { at: 15, name: 'The Old Don' },

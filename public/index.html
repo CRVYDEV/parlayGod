@@ -3882,7 +3882,9 @@
         ${mme.canSeek && !mm.mentor ? `<div class="d" style="margin-top:6px">${mme.seeking ? "You're <span class=\"chip good\">seeking a mentor</span> — a veteran can offer to guide you. You'll earn onboarding cash at levels 5/10/15/20."
           : "New here? Flag that you want a mentor — a veteran shows you the ropes, and you earn cash as you level."}
           <button class="act" id="seek-toggle" style="border-color:${mme.seeking ? 'var(--bad)' : 'var(--gold)'}">${mme.seeking ? 'stop seeking' : 'find me a mentor'}</button></div>` : ''}
-        ${myProteges.length ? `<div class="d" style="margin-top:6px">Your protégés: ${myProteges.map((p) => `<b>${esc(p.name)}</b> (lvl ${p.level}${p.graduated ? ', graduated' : ''})`).join(' · ')}</div>` : ''}
+        ${myProteges.length ? `<div class="d" style="margin-top:6px">Your protégés:
+          <div class="grid" style="margin-top:4px">${myProteges.map((p) => `<div class="card"><span class="t">${esc(p.name)}</span> <span class="chip">lvl ${p.level}</span>${p.graduated ? ' <span class="chip good">graduated</span>' : ''}
+            ${p.giftReady && !p.graduated ? `<div class="row"><button class="act" data-mgift="${p.charId}" style="border-color:var(--gold)">care package ($${fmt(mme.giftCash)})</button></div>` : ''}</div>`).join('')}</div></div>` : ''}
         ${mme.canMentor && !myProteges.length ? `<div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">You can take up to ${mme.activeMax || 3} newcomers under your wing — look for "wants a mentor" below and offer.</div>` : ''}
         ${mme.atCap ? '<div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">Your wing is full — a protégé graduates at level 20 to free a slot.</div>' : ''}
         <div class="row" style="margin-top:6px"><a href="#" data-dgo-lb="mentors" style="font-size:11px">the mentors leaderboard →</a></div></div>` : ''}
@@ -3933,6 +3935,8 @@
       act('POST', '/v1/mentor/offer/' + btn.dataset.mentor, {}).then(() => renderDiscover()));
     t.querySelectorAll('[data-maccept]').forEach((btn) => btn.onclick = () =>
       act('POST', '/v1/mentor/accept/' + btn.dataset.maccept, {}).then(() => renderDiscover()));
+    t.querySelectorAll('[data-mgift]').forEach((btn) => btn.onclick = () =>
+      act('POST', '/v1/mentor/gift/' + btn.dataset.mgift, {}).then(() => renderDiscover()));
     const mlb = t.querySelector('[data-dgo-lb]');
     if (mlb) mlb.onclick = async (e) => { e.preventDefault();
       const list = (await api('GET', '/v1/leaderboard/mentors')).body || [];
@@ -4048,13 +4052,18 @@
     // (the empty-state honesty rule — never a dead "no events" card).
     const ev = evR.body || {};
     const evs = ev.events || [];
-    const eventStrip = evs.length ? `
+    const daily = ev.daily || [];
+    // ALSO TODAY — the always-on den draws (numbers/track/fight). A lighter one-line list under the
+    // clocked events, so "there's always something to bet" is visible even when no big event is booked.
+    const dailyLine = daily.length ? `<div class="d" style="margin-bottom:12px">Also today: ${daily.map((d) =>
+      `<span data-go-tab="${d.tab}" style="color:var(--gold);cursor:pointer">${d.icon || '🎲'} ${esc(d.title)}</span>`).join(' · ')}</div>` : '';
+    const eventStrip = (evs.length ? `
       <h2>Tonight in the City <span class="d" style="font-size:11.5px">— what's on right now, and closing soon</span></h2>
       <div class="grid" style="margin-bottom:12px">${evs.map((e) => `
         <div class="card" style="border-color:var(--gold)"><span class="t">${e.icon || '🎟'} ${esc(e.title)}</span>
           ${e.closesSeconds != null ? `<span class="chip">closes ${mins(e.closesSeconds)}</span>` : e.pct != null ? `<span class="chip good">${e.pct}% built</span>` : ''}
           <div class="d">${esc(e.subtitle || '')}</div>
-          <div class="row"><button class="act" data-go-tab="${e.tab}">${e.closesSeconds != null ? 'get in →' : 'chip in →'}</button></div></div>`).join('')}</div>` : '';
+          <div class="row"><button class="act" data-go-tab="${e.tab}">${e.closesSeconds != null ? 'get in →' : 'chip in →'}</button></div></div>`).join('')}</div>` : '') + dailyLine;
     // ── THE SITUATION — the dashboard the 24-tab wall never had: your threats, your people, and
     // what's READY right now, in one glance. Composed from /v1/me (already in hand) + /v1/people
     // (the cohesion layer) — the client re-derives nothing.
@@ -7320,6 +7329,13 @@
       npc_aggression: () => `${d.family || 'an outfit'} have opened hostilities${d.target ? ` on the ${d.target}` : ' on your family'} — their guns are coming`,
       npc_pact_signed: () => `${d.npc || 'an outfit'} came to the table — a peace pact is sworn`,
       npc_alliance: () => `${d.a || 'an outfit'} and ${d.b || 'another'} have sworn an alliance`,
+      // THE MENTOR — the veteran/rookie tie
+      mentor_offer: () => `${d.from} offered to take you under their wing`,
+      mentor_accepted: () => `${d.protege} took your wing — you're their mentor now`,
+      mentor_gift: () => `${d.from} sent you a care package — ${$c(d.amount)}`,
+      protege_milestone: () => `your protégé ${d.protege} just hit level ${d.lvl}`,
+      protege_graduated: () => `your protégé ${d.protege} graduated — they made it`,
+      protege_attacked: () => `your protégé ${d.protege} got ${d.what} by ${d.from} — go settle it`,
       bodyguard: () => `${d.guard} took a bullet for ${d.saved}`,
       revive: () => `${d.who || 'a made man'} got back up — paid protection`,
       convoy: () => `a convoy is rolling ${d.from || ''} → ${d.to || ''} (${d.band || 'unknown value'})`,
@@ -7374,7 +7390,8 @@
   // Curated VICTIM-side types only (things happening TO you that want a response), never ambient news.
   const URGENT_TYPES = new Set(['bounty_on_you', 'indicted', 'extortion', 'npc_aggression',
     'family_retaliation', 'sacked', 'robbed', 'car_stolen', 'trunk_robbed', 'boat_stolen', 'sabotaged',
-    'inside_job', 'loan_defaulted', 'loan_forfeited', 'vendetta', 'exposed', 'whacked', 'pact_broken']);
+    'inside_job', 'loan_defaulted', 'loan_forfeited', 'vendetta', 'exposed', 'whacked', 'pact_broken',
+    'protege_attacked']);
   function feedLine(channel, ev) {
     if (channel === 'hello') { statusLine('— you are on the wire —'); return; }
     // (F2) the estate report flows through here on death (backfill on load, or the gen-bump re-backfill)
