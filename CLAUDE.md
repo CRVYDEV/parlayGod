@@ -9823,3 +9823,23 @@ dropped → the completion assertion fails). Suite green + sim drift-0 + pgquery
 Postgres. All `CREW.OBJECTIVE.*` numbers are founder sign-off levers (BALANCE.md § THE CREW OBJECTIVE;
 pinned in test/levers.js — `REWARD: 0` disables the cash and leaves the goal + ping as a pure coordination
 hook).
+
+**THE STREAK MILESTONES — the run-unlock ladder (founder-directed 2026-08-07: "build out all recommendations")
+— BUILT** (`src/streak.js`, `src/rules.tail.js` `STREAK.MILESTONES`+`streakMilestonesNew`, `schema.sql`
+`account_persistent.streak_milestone`, `public/index.html`, `test/streak.js`). THE STREAK's only reward was
+petty daily cash, so breaking a run cost ~$4k — nothing you couldn't rebuy, and the run itself wasn't worth
+protecting. The MILESTONES make it a battle-pass ladder: at run thresholds (7/14/30/60/100 days) the streak
+grants a one-time TITLE (the flex, written to the living street's title slot — `title=$30`, persisted by
+withCharacter) + a bounded cash BONUS. Keyed off `best` (lifetime longest run, MONOTONIC — so a milestone is
+awarded ONCE ever, never re-granted on a rebuilt run; tracked by `account_persistent.streak_milestone`, the
+highest day awarded, ALTER-added the outage-lesson way, survives death). §10.4: a bounded `streak:milestone`
+cash faucet (character_id'd → the per-character cash check reconciles; rides the EXISTING `streak:` vocabulary
+prefix, ZERO invariant change) — a FINITE ladder (Σ bonus = $560k over a 100-day run, once), hard-bounded and
+petty vs the passive stack. The board surfaces the ladder + the next unlock (the carrot: "N days to go"); the
+claim response + `streak_milestone` notification carry the beat (`describe()`/`feedText`). `test/streak.js`
+proves the 7-day crossing (title set on the living street, the ledgered bonus, the board pointing at the
+14-day next), and the NO-RE-GRANT (a fresh claim to run 8 grants nothing — monotonic, once-ever) —
+mutation-verified twice (no-award → the crossing assertion fails; re-grant → the once-ever assertion fails).
+Suite green + sim drift-0 + pgquery/pgcheck 43/43 on real Postgres. All `STREAK.MILESTONES` numbers are
+founder sign-off levers (BALANCE.md § THE STREAK MILESTONES; pinned as the whole array — `MILESTONES: []`
+reverts to the daily-cash-only streak).

@@ -506,6 +506,15 @@ const SIGNED = [
   ['STREAK.REWARDS', [500, 800, 1200, 1700, 2300, 3000, 4000]],
   ['STREAK.MAX_DAY', 7],
   ['STREAK.RANKS', [{ at: 0, name: 'Drifter' }, { at: 3, name: 'A Regular' }, { at: 7, name: 'A Face' }, { at: 14, name: 'A Fixture' }, { at: 30, name: 'The Neighborhood' }, { at: 90, name: 'A Made Institution' }]],
+  // THE MILESTONES — the run-unlock ladder (title + bonus). Whole-array pin (bracket-accessed bonuses
+  // are invisible to the reader check, so the PARENT is the pin — the RIVALS whole-map precedent).
+  ['STREAK.MILESTONES', [
+    { day: 7, title: 'The Regular', bonus: 10000 },
+    { day: 14, title: 'The Fixture', bonus: 25000 },
+    { day: 30, title: 'The Neighborhood', bonus: 75000 },
+    { day: 60, title: 'The Institution', bonus: 150000 },
+    { day: 100, title: 'The Immortal', bonus: 300000 },
+  ]],
   ['POPULATION.MARKS.CAR_P', { made: 0.6, capo: 0.8, boss: 0.9 }],
   ['POPULATION.MARKS.CAR_VAL', { made: [800, 2000], capo: [2000, 8000], boss: [5000, 20000] }],
   ['POPULATION.MARKS.FRONT_P', { made: 0.4, capo: 0.6, boss: 0.8 }],

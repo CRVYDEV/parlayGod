@@ -1759,7 +1759,7 @@
     if (body && body.referrer && body.ok) return `on the record — ${body.referrer} gets credit as you come up`;
     // THE STREAK — the daily check-in (best/rank are unique to the claim response, not the view)
     if (body && body.ok && body.streak != null && body.best != null && body.cash != null && typeof body.rank === 'string')
-      return `\u{1F525} checked in — day ${body.streak}, +$${fmt(body.cash)}${body.streak >= body.best ? ` · best yet (${esc(body.rank)})` : ''}`;
+      return `\u{1F525} checked in — day ${body.streak}, +$${fmt(body.cash)}${body.milestone ? ` · 🏅 ${body.milestone.day}-DAY MILESTONE — you're ${esc(body.milestone.title)}, +$${fmt(body.milestone.bonus)}` : (body.streak >= body.best ? ` · best yet (${esc(body.rank)})` : '')}`;
     // THE VOUCH — you staked your name (or pulled it back)
     if (body && body.vouched) return body.mutual ? `\u{1F91D} you vouched ${esc(body.vouched)} back — a mutual bond` : `you vouched for ${esc(body.vouched)} — your name's on them now`;
     if (body && body.pulled) return `pulled your name back from ${esc(body.pulled)}`;
@@ -4226,6 +4226,8 @@
           ? "You've checked in today — come back tomorrow to keep the run going."
           : `Check in for <b>$${fmt(st.todayReward)}</b> (day ${st.todayDay}). Miss a day and the run resets to one.`}</div>
         ${st.claimedToday ? '' : `<div class="row"><button class="act prime" id="streak-claim">check in — $${fmt(st.todayReward)}</button></div>`}
+        ${st.nextMilestone ? `<div class="d" style="font-size:11px;color:var(--gold);margin-top:5px">Next unlock at a ${st.nextMilestone.day}-day run: <b>${esc(st.nextMilestone.title)}</b> + $${fmt(st.nextMilestone.bonus)}${st.best ? ` — ${st.nextMilestone.day - st.best} to go` : ''}</div>` : (st.milestones && st.milestones.length ? '<div class="d" style="font-size:11px;color:var(--neon);margin-top:5px">✓ every streak milestone unlocked — you are The Immortal.</div>' : '')}
+        ${st.milestones && st.milestones.length ? `<div class="d" style="font-size:10.5px;color:var(--dim);margin-top:3px">${st.milestones.map((m) => `${m.unlocked ? '✓' : '○'} ${m.day}d`).join(' · ')}</div>` : ''}
       </div>` : '';
     // ── THE SITUATION — the dashboard the 24-tab wall never had: your threats, your people, and
     // what's READY right now, in one glance. Composed from /v1/me (already in hand) + /v1/people
@@ -7559,6 +7561,7 @@
       dm: () => `📱 ${d.from}: ${d.preview || 'new message'} — open the cell to reply`,
       contact_call: () => `📞 ${d.from} is asking for you — ${d.kind === 'freight' ? `bring ${d.qty} ${d.good} to ${d.district} for $${fmt(d.pay)}` : `come see them at ${d.district} ($${fmt(d.pay)})`}. Open the cell.`,
       crew_objective_done: () => `🤝 YOUR CREW CRACKED THE WEEK'S JOB — collect your cut${d.reward ? ` ($${fmt(d.reward)})` : ''} on The Crew screen`,
+      streak_milestone: () => `🏅 ${d.day}-DAY STREAK — you're now ${d.title}${d.bonus ? ` (+$${fmt(d.bonus)})` : ''}`,
       mastery_up: () => `your ${d.name || d.track} trade hit L${d.lvl}${d.rank ? ` — ${d.rank}` : ''}`,
       stat_use: () => `the work is paying off — +1 ${d.stat} (${d.value}) from your ${d.track} trade`,
       chat: () => `${d.who}: ${d.text}`,

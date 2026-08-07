@@ -5151,3 +5151,16 @@ WEEK (petty vs the passive stack; v24: social/collective rewards are cash, never
 per-member contribution list is the "what your crew did this week" texture. `CREW.OBJECTIVE.REWARD` is the
 faucet dial (`0` disables the cash; the goal + the ping still work as a pure coordination hook); the KIND
 `base` targets tune the grind. Founder sign-off levers.
+
+## THE STREAK MILESTONES — the run-unlock ladder (founder-directed 2026-08-07)
+
+THE STREAK's only reward was petty daily cash, so breaking a run cost ~$4k — nothing you couldn't rebuy.
+The MILESTONES make the run itself worth PROTECTING: at run thresholds (`STREAK.MILESTONES` 7/14/30/60/100
+days) the streak grants a one-time TITLE (the flex, written to the living street's title slot) + a bounded
+cash BONUS. Keyed off `best` (lifetime longest run, MONOTONIC — never re-granted on a rebuilt run; tracked by
+`account_persistent.streak_milestone`, the highest day awarded, survives death). §10.4: a bounded
+`streak:milestone` cash faucet (character_id'd → reconciles; rides the existing `streak:` vocabulary prefix,
+zero invariant change). It is a FINITE ladder — Σ bonus = $560,000 over a 100-day run ever, once — so the
+faucet is hard-bounded (a 100-day streak is a rare achievement; petty vs the passive stack). `MILESTONES` is
+the sign-off dial: shorter/cheaper trims it, `MILESTONES: []` reverts to the daily-cash-only streak (the
+rank/best legend still works). Founder sign-off levers (pinned as the whole array in test/levers.js).

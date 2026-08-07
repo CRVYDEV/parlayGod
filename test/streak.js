@@ -89,8 +89,34 @@ assert.equal(lb.some((x) => x.best === STREAK.MAX_DAY + 1), true, 'the player is
   assert.equal(lb2.some((x) => x.name === 'Streak Bot'), false, 'an agent is off the streak board');
 }
 
+// ════════════ THE MILESTONES — the run-unlock ladder (title + bonus, once-ever, keyed off best) ════════════
+{
+  const q = await mk('Milestone Guy'); const qA = await acctOf(q.id);
+  // stand at run 6 / best 6 / no milestone, last claim yesterday → today's claim reaches run 7
+  await pool.query('UPDATE account_persistent SET login_day=$2, login_streak=6, streak_best=6, streak_milestone=0 WHERE account_id=$1', [qA, today - 1]);
+  const r7 = (await call('POST', '/v1/streak/claim', { token: q.token })).body;
+  assert.equal(r7.streak, 7, 'the run reaches 7');
+  assert(r7.milestone && r7.milestone.day === 7, 'the 7-day milestone is awarded on crossing');
+  assert.equal(r7.milestone.title, STREAK.MILESTONES[0].title, 'the milestone title');
+  assert.equal(r7.milestone.bonus, STREAK.MILESTONES[0].bonus, 'the milestone bonus');
+  // the living street wears the milestone title (the flex)
+  assert.equal((await call('GET', '/v1/me', { token: q.token })).body.character.title, STREAK.MILESTONES[0].title, 'the milestone sets the living street title');
+  // the bonus is a ledgered `streak:milestone` faucet (a real reward, not just status)
+  assert.equal(Number((await pool.query("SELECT COUNT(*) n FROM transactions WHERE character_id=$1 AND reason='streak:milestone'", [q.id])).rows[0].n), 1, 'one ledgered streak:milestone bonus row');
+  // the board now points at the NEXT unlock (14-day) and marks the 7-day unlocked
+  const bd = (await call('GET', '/v1/streak', { token: q.token })).body;
+  assert.equal(bd.nextMilestone.day, 14, 'the board points at the next milestone');
+  assert.equal(bd.milestones.find((m) => m.day === 7).unlocked, true, 'the 7-day milestone reads unlocked');
+  // NO re-grant: at run 7 / best 7 / milestone 7 already awarded, a fresh claim to run 8 grants nothing
+  await pool.query('UPDATE account_persistent SET login_day=$2, login_streak=7, streak_best=7, streak_milestone=7 WHERE account_id=$1', [qA, today - 1]);
+  const r8 = (await call('POST', '/v1/streak/claim', { token: q.token })).body;
+  assert.equal(r8.streak, 8, 'the run climbs to 8');
+  assert.equal(r8.milestone, undefined, 'a milestone is never re-granted (monotonic best, once-ever)');
+  assert.equal(Number((await pool.query("SELECT COUNT(*) n FROM transactions WHERE character_id=$1 AND reason='streak:milestone'", [q.id])).rows[0].n), 1, 'still exactly one milestone bonus — no double-grant');
+}
+
 // ════════════ §10.4 — every reward is a ledgered faucet ════════════
-assert.equal(await driftOf('character cash'), before, 'the cash identity holds — every streak reward is a ledgered faucet');
+assert.equal(await driftOf('character cash'), before, 'the cash identity holds — every streak reward (daily + milestone) is a ledgered faucet');
 {
   const vocab = (await runLedgerInvariants(pool, { alert: false })).checks.find((x) => x.name === 'reason vocabulary');
   assert.equal(vocab.ok, true, 'streak:daily is a recognized reason — no unknown-reason alarm');

@@ -4765,10 +4765,24 @@ export const STREAK = {
     { at: 0, name: 'Drifter' }, { at: 3, name: 'A Regular' }, { at: 7, name: 'A Face' },
     { at: 14, name: 'A Fixture' }, { at: 30, name: 'The Neighborhood' }, { at: 90, name: 'A Made Institution' },
   ],
+  // MILESTONES — the run-unlock ladder (so the streak itself is worth PROTECTING, not just the petty
+  // daily cash). Keyed off `best` (lifetime longest run, monotonic — never a re-grant on a rebuilt run);
+  // each crossing grants a one-time TITLE (the flex) + a bounded cash BONUS. Total lifetime = Σ bonus
+  // (560k over a 100-day run), a finite ladder → a bounded §10.4 faucet (`streak:milestone`).
+  MILESTONES: [
+    { day: 7,   title: 'The Regular',      bonus: 10000 },
+    { day: 14,  title: 'The Fixture',      bonus: 25000 },
+    { day: 30,  title: 'The Neighborhood', bonus: 75000 },
+    { day: 60,  title: 'The Institution',  bonus: 150000 },
+    { day: 100, title: 'The Immortal',     bonus: 300000 },
+  ],
 };
 // reward for landing on day N of a run (1-based); flat at REWARDS[MAX_DAY-1] past the cap
 export const streakReward = (day) => STREAK.REWARDS[Math.min(Math.max(1, day), STREAK.MAX_DAY) - 1];
 export const streakRankOf = (n) => STREAK.RANKS.reduce((a, r) => (Number(n) >= r.at ? r : a), STREAK.RANKS[0]);
+// milestones newly crossed by a run `best` beyond the highest-`awarded` day (once-ever, monotonic)
+export const streakMilestonesNew = (best, awarded) =>
+  STREAK.MILESTONES.filter((m) => m.day <= Number(best) && m.day > Number(awarded || 0));
 
 // ═══ THE VOUCH — the symmetric peer bond ═══
 // Pure status (no payout, §10.4-free). MAX_OUT is the whole balance: a vouch is scarce, so it means
