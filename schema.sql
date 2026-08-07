@@ -1804,6 +1804,22 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 );
 CREATE INDEX IF NOT EXISTS ix_chat_channel_at ON chat_messages (channel, at);
 
+-- THE RESULTS SHOW — a server-wide log of resolved MARQUEE events (the title fight, the tournament, the
+-- grand prix, the futurity, the stakes). A LOG, account-agnostic (no character_id → outside the estate
+-- wipe by construction), swept on retention like the troll box. The personalized "your bet paid $X" beat
+-- rides the notification stream; this is the public "what just happened" board. §10.4-FREE — a log, no ledger.
+CREATE TABLE IF NOT EXISTS event_results (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  icon TEXT NOT NULL,
+  headline TEXT NOT NULL,
+  detail JSONB NOT NULL DEFAULT '{}',
+  winner_name TEXT,
+  pool NUMERIC NOT NULL DEFAULT 0,
+  resolved_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_event_results_at ON event_results (resolved_at);
+
 -- ONE-CLICK X SIGN-IN: OAuth2 PKCE state (single-use, 15-min TTL, swept by the worker). An authed
 -- start binds the state to the guest account for a claim-in-place upgrade; the bearer never rides a URL.
 CREATE TABLE IF NOT EXISTS oauth_states (

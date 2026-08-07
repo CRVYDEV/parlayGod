@@ -9671,3 +9671,33 @@ faucet (pure notification). The `fast-uri` npm-audit HIGH is a PRE-EXISTING fast
 introduced by `web-push` (the lock diff is purely additive). Deferred: skipping a push when the account has
 a live WS connection (mild redundancy — a push while you're actively looking), and a per-account digest
 (one buzz for several events).
+
+**THE RESULTS SHOW — the event payoff beat (founder-directed 2026-08-07, gap #1 of a three-part
+UX/gameplay drop) — BUILT** (`src/events.js` `recordEventResult`/`resultsBoard`, `event_results` table,
+`test/results.js` — the 76th suite). TONIGHT IN THE CITY built the ANTICIPATION (a countdown + a live
+pool) and skipped the RELEASE: the marquee events (the title fight, the poker tournament + bracket, the
+grand prix, the futurity, the stakes, the megaproject) all resolve SILENTLY in the worker and land as a
+one-line `*_result` feed entry — and a spectator who bet got cash with no moment (confirmed: the
+resolvers emit to the streets bus and nothing more; the BETTORS, the whole point of a spectator event,
+were notified of nothing). Two halves close it, both **§10.4-FREE by construction** (a result is a LOG +
+a notification, never a ledger row — the test pins it: recording a result and notifying the crowd add
+ZERO `transactions` rows, no reason mentions "result"): **(1) THE PUBLIC BOARD** — `recordEventResult`
+writes a server-wide `event_results` row at every marquee resolve (a LOG, account-agnostic → outside the
+estate wipe by construction, swept on 7-day retention like the troll box); `GET /v1/results` is the
+keyless "what just happened" spectator surface (no private data — a payout is per-player, so it rides the
+notification stream, never this board). **(2) THE PERSONAL BEAT** — the resolvers now notify each BETTING
+stakeholder an `event_result` notification carrying their real outcome (`{kind, icon, headline, outcome:
+won|lost|scratched, stake, payout}`) — the genuinely-missing moment. The field entrants (tournament/gp/
+stakes players) already got their own placement notify, so this focuses the new beat on the crowd who got
+nothing (boxing bettors, futurity bettors). Client: a **HOW IT FELL** strip on Home (the payoff companion
+to TONIGHT, hidden when nothing's resolved — the empty-state rule), the `event_result` line humanized in
+`feedText`, and a WIN drives the payoff beat (the win sting + a celebratory toast) while a loss/scratch
+just rides the wire — no modal, so a backfill of several results can't stack into modal fatigue. One core,
+not a parallel copy: `recordEventResult` lives in events.js and the six resolvers import it (events.js
+imports only rules.js → no cycle). `test/results.js` proves the helper round-trip, the keyless route, a
+real boxing main event delivering the board row (headline names the winner) + both bettors' outcome beats
+(the sharp paid MORE than their stake, the sucker paid nothing), and §10.4-neutrality — mutation-safe
+(the board/notifies are a log, not value). Suite green + sim drift-0 + mobile 73/73 + pgquery/pgcheck
+43/43 on real Postgres + client wiring/mirror (`/v1/results` fetch + the strip's element fields covered).
+Deferred: a richer resolution moment for the WINNER (a champion/tournament-winner cinematic), and folding
+the field-entrant `*_result` notifies into the same `event_result` type for one client render path.

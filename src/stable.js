@@ -7,6 +7,7 @@
 // racers rows join the runEstate wipe — the fighters precedent); the owner's lifetime wins are an
 // account-level LEGEND (survives death, the boxing-legend/hitman-rep precedent). CASH ONLY (the Den's rule).
 import crypto from 'node:crypto';
+import { recordEventResult } from './events.js';
 import { GameError, bus, ledger, notify, rngLog, bumpStanding, npcMult, npcTier } from './game.js';
 import { STABLE, UNDERWORLD, POPULATION, stableKindOf, stableMeetOf, racerRankOf, racerLegendOf, levelOf , jailed, hospitalized } from './rules.js';
 
@@ -354,6 +355,7 @@ export async function resolveStakes(client, raceId) {
   await client.query("UPDATE stakes_races SET status='resolved' WHERE id=$1", [raceId]);
   await clearCurrent();
   await rngLog(client, ranked[0].character_id, `stable:stakes:${raceId}`, ranked[0].score, `winner ${ranked[0].racer_name} · ${ranked.length} runners · pool $${pool}`);
+  await recordEventResult(client, { kind: 'stakes', icon: '🐎', headline: `${ranked[0].racer_name} wins the Stakes (${ranked.length} ran)`, winnerName: ranked[0].racer_name, pool, detail: { runners: ranked.length } });
   bus.emit('streets', { type: 'stakes_result', winner: ranked[0].racer_name, pool, runners: ranked.length });
   return { stakes: raceId, runners: ranked.length, pool, winner: ranked[0].racer_name, take: totalTake };
 }
