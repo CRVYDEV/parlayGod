@@ -481,6 +481,15 @@ const SIGNED = [
   ['CREW.MIN_LEVEL', 3],
   ['CREW.NAME_MAX', 24],
   ['CREW.INVITE_TTL_MS', 72 * 3600 * 1000],
+  // THE CREW OBJECTIVE — the weekly shared goal (a bounded social cash faucet + the goal targets).
+  // KINDS is pinned as the WHOLE array (deep-compared) — the base targets are bracket-accessed leaves
+  // invisible to the reader check, so the PARENT is the pin (the RIVALS whole-map precedent).
+  ['CREW.OBJECTIVE.REWARD', 5000],
+  ['CREW.OBJECTIVE.KINDS', [
+    { id: 'crimes', label: 'Pull jobs together', base: 40, unit: 'jobs' },
+    { id: 'kills', label: 'Put bodies in the ground', base: 3, unit: 'kills' },
+    { id: 'earn', label: 'Bring in the score', base: 200000, unit: '$' },
+  ]],
   ['DISCOVERY.BAND', 10],
   ['DISCOVERY.LIMIT', 24],
   ['DISCOVERY.LFG_TTL_MS', 7 * 24 * 3600 * 1000],

@@ -9788,3 +9788,38 @@ notifies are bare `.catch`-less emits (pre-existing codebase norm, best-effort p
 pure client layout (zero §10.4, zero server); and THE VOUCH's status leaderboard is Sybil-inflatable with no
 payout attached (the hitman-rep posture — farming alts buys the voucher nothing). Suite green + sim drift-0 +
 pgquery/pgcheck 43/43 on real Postgres.
+
+**THE CREW OBJECTIVE — the weekly shared goal (founder-directed 2026-08-07: "build out all recommendations")
+— BUILT** (`src/game.js` `bumpCrewObjective`, `src/crew.js` `claimObjective`/the board fold, `schema.sql`
+`crew_objectives`/`crew_objective_progress` + `crews.objectives_done`, `CREW.OBJECTIVE` rules tail;
+`test/crew.js`). The assessment's #1 gap: OMERTÀ is a deep multiplayer built for a population it has never
+met (the harness lands a solo player at level 33 in a week with no human contact), and the recent social arc
+(residents, families, Mentor, Crew, Vouch, Discovery) is all ASYNC — nothing gives a reason to be online
+*with* your crew. THE CREW is a status/coordination pact with no synchronous payoff; this adds one. A goal
+is drawn per crew per WEEK off the §7.11 seed (`crewObjectiveOf` — deterministic, town-wide verifiable) from
+three kinds (`CREW.OBJECTIVE.KINDS`: crimes / kills / earn), and the WHOLE crew works it down together — a
+crewmate's OWN play advances it, hooked at the two async success sites (`doCrime` for crimes/earn, the fire
+kill in `combat.js` for kills) via **`bumpCrewObjective`** (the bumpMastery twin: reads the loaded
+`h.owned.crewId`, solo/headless is a clean no-op; lives in game.js so the import graph stays acyclic —
+crew.js imports game.js one-way). `deltas` is a contributions map, and only the WEEK'S DRAWN kind
+increments, so each hook offers what it can and the draw decides what counts. The target scales with crew
+size (kind `base` × members at materialize). **The synchronous hook:** when the target is cracked, the
+`done` latch fires ONCE, EVERY living member is pinged (`crew_objective_done` — the "your crew showed up"
+moment) and the crew legend (`crews.objectives_done`) bumps; each CONTRIBUTOR then claims
+`CREW.OBJECTIVE.REWARD` ($5k) cash once. §10.4: ONE bounded cash faucet `crew:objective` (character_id'd →
+the per-character cash check reconciles; joined the cash `KNOWN_REASONS`), bounded HARD — once per week per
+member, only on completion, only for a member with a contribution row — so the ceiling is `REWARD ×
+MAX_MEMBERS` per crew per WEEK (petty vs the passive stack; v24: social/collective rewards are cash, never
+$OMR). Crew-keyed (survives death like the crew; outside the estate wipe + migrate DISPOSITION guard by
+construction — no character_id); dissolution deletes both tables. The per-member contribution list is the
+"what your crew did this week" texture. Console: a **THIS WEEK'S JOB** card LEADS the crew screen (progress
+bar + per-member contributions + claim-your-cut), `crew_objective_done` humanized in `feedText`, the claim
+in `describe()`. `test/crew.js` proves the deterministic draw + size-scaling, the materialize-on-bump path,
+a non-matching delta as a no-op, the two-member drive to completion (done latch + legend bump + every member
+pinged), the per-member contribution texture, the claim (exact REWARD, one ledgered `crew:objective` row,
+once-per-week + no-share gates), and §10.4 (the claim adds zero per-character cash drift; the reason is in
+the vocabulary) — mutation-verified (the vocabulary drop → the reason-vocab alarm fires; the legend bump
+dropped → the completion assertion fails). Suite green + sim drift-0 + pgquery/pgcheck 43/43 on real
+Postgres. All `CREW.OBJECTIVE.*` numbers are founder sign-off levers (BALANCE.md § THE CREW OBJECTIVE;
+pinned in test/levers.js — `REWARD: 0` disables the cash and leaves the goal + ping as a pure coordination
+hook).

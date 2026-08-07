@@ -23,7 +23,7 @@
 // shield exactly as they forfeit family omertà.
 import crypto from 'node:crypto';
 import { GameError, cleanText, notify, bus } from './game.js';
-import { CREW, DISTRICTS, levelOf } from './rules.js';
+import { CREW, DISTRICTS, levelOf, weekOf, crewObjectiveOf } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const districtName = (id) => (DISTRICTS.find((d) => d.id === id) || {}).name || id;
@@ -195,6 +195,8 @@ async function settleCrew(client, crewId, leftAccount) {
   if (!rest.length) { await client.query('DELETE FROM crews WHERE id=$1', [crewId]);
     await client.query('DELETE FROM crew_invites WHERE crew_id=$1', [crewId]);
     await client.query('DELETE FROM crew_requests WHERE crew_id=$1', [crewId]);
+    await client.query('DELETE FROM crew_objectives WHERE crew_id=$1', [crewId]);
+    await client.query('DELETE FROM crew_objective_progress WHERE crew_id=$1', [crewId]);
     await client.query('DELETE FROM crew_targets WHERE crew_id=$1', [crewId]); return; }
   const crew = (await client.query('SELECT leader_account FROM crews WHERE id=$1', [crewId])).rows[0];
   if (crew && crew.leader_account === leftAccount)
@@ -249,9 +251,10 @@ export async function crewBoard(ch, client) {
       WHERE cr.crew_id=$1 ORDER BY cr.at DESC`, [crewId])).rows
     .map((r) => ({ characterId: r.char_id || null, name: r.name, level: r.respect != null ? levelOf(Number(r.respect)) : null }));
   const target = await crewTargetOf(client, crewId);   // THE CREW HIT — the shared mark, if the leader called one
+  const objective = await crewObjective(client, crewId, ch.account_id);   // THE CREW OBJECTIVE — the weekly shared goal
   return {
     crew: { id: crewId, name: crew.name, leader: crew.leader_account === ch.account_id, members, pending,
-      recruiting: !!crew.recruiting, requests, target },
+      recruiting: !!crew.recruiting, requests, target, objective, objectivesDone: Number(crew.objectives_done || 0) },
     invites, maxMembers: CREW.MAX_MEMBERS, minLevel: CREW.MIN_LEVEL, nameMax: CREW.NAME_MAX,
   };
 }
@@ -321,6 +324,66 @@ export async function crewLeaderboard(pool, limit = 20) {
     crews: crews.map((c) => ({ name: c.name, kills: (agg.get(c.id) || {}).kills || 0, members: (agg.get(c.id) || {}).members || 0 }))
       .sort((a, b) => b.kills - a.kills || b.members - a.members).slice(0, limit),
   };
+}
+
+// ── THE CREW OBJECTIVE — the weekly shared goal (bumped by a crewmate's own play in game.js
+// bumpCrewObjective; completed → everyone pinged → each contributor claims a cut here). This is the
+// synchronous "log in because your crew is active" hook. ──
+
+// read the current week's objective for a crew (materialize-on-read is done by the bump; here we only
+// REPORT — if nobody's acted yet the row is absent and we show the drawn goal at 0 progress). Returns
+// the goal + this member's contribution/claim + the per-member contribution texture.
+async function crewObjective(client, crewId, accountId) {
+  const week = weekOf();
+  const row = (await client.query('SELECT kind, target, progress, done FROM crew_objectives WHERE crew_id=$1 AND week=$2', [crewId, week])).rows[0];
+  const members = Number((await client.query('SELECT COUNT(*) n FROM crew_members WHERE crew_id=$1', [crewId])).rows[0].n) || 1;
+  const drawn = crewObjectiveOf(crewId, week, members);
+  const kind = row?.kind || drawn.kind;
+  const target = row ? Number(row.target) : drawn.target;
+  const progress = row ? Number(row.progress) : 0;
+  const done = !!row?.done;
+  // per-member contributions (the "what your crew did this week" texture), joined to living names
+  const contrib = (await client.query(
+    `SELECT p.account_id, p.n, p.claimed, COALESCE(c.name, cm.name) AS name
+       FROM crew_objective_progress p
+       JOIN crew_members cm ON cm.crew_id=p.crew_id AND cm.account_id=p.account_id
+       LEFT JOIN characters c ON c.account_id=p.account_id AND c.alive
+      WHERE p.crew_id=$1 AND p.week=$2 ORDER BY p.n DESC`, [crewId, week])).rows;
+  const mine = contrib.find((r) => r.account_id === accountId);
+  const meta = CREW.OBJECTIVE.KINDS.find((k) => k.id === kind) || {};
+  return {
+    kind, label: meta.label || kind, unit: meta.unit || '', target, progress,
+    pct: target ? Math.min(100, Math.round(progress / target * 100)) : 0,
+    done, reward: CREW.OBJECTIVE.REWARD,
+    mine: mine ? Number(mine.n) : 0,
+    claimed: !!mine?.claimed,
+    claimable: done && !mine?.claimed,   // you must have contributed to claim (a progress row exists)
+    contributions: contrib.map((r) => ({ name: r.name, n: Number(r.n), claimed: !!r.claimed })),
+  };
+}
+
+// claim your cut of a COMPLETED objective — once per member per week. §10.4: a ledgered `crew:objective`
+// cash faucet (bounded: REWARD × contributing members, once per week per crew). You must have a
+// contribution row (you helped) — a member who did nothing this week has nothing to claim.
+export async function claimObjective(ch, client, h) {
+  const crewId = await crewIdOf(client, ch.account_id);
+  if (!crewId) throw new GameError('no_crew', "You're not in a crew.");
+  const week = weekOf();
+  const obj = (await client.query('SELECT done FROM crew_objectives WHERE crew_id=$1 AND week=$2 FOR UPDATE', [crewId, week])).rows[0];
+  if (!obj || !obj.done) throw new GameError('not_done', "The week's job isn't cracked yet.");
+  // atomic claim — the row must exist (you contributed) AND be unclaimed; exactly one pass credits.
+  const claim = await client.query(
+    'UPDATE crew_objective_progress SET claimed=true WHERE crew_id=$1 AND week=$2 AND account_id=$3 AND NOT claimed RETURNING n',
+    [crewId, week, ch.account_id]);
+  if (!claim.rowCount) {
+    const has = (await client.query('SELECT claimed FROM crew_objective_progress WHERE crew_id=$1 AND week=$2 AND account_id=$3', [crewId, week, ch.account_id])).rows[0];
+    if (!has) throw new GameError('no_share', "You didn't work this week's job — no cut to collect.");
+    throw new GameError('claimed', "You already collected your cut this week.");
+  }
+  const reward = CREW.OBJECTIVE.REWARD;
+  ch.cash = Number(ch.cash) + reward;
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: reward, reason: 'crew:objective' });
+  return { ok: true, crew: 'objective_claimed', reward };
 }
 
 // ── the worker sweep — a pending invite nobody answered goes stale. Row hygiene only (the board reads

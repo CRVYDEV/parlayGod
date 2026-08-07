@@ -1907,6 +1907,9 @@ export async function buildServer() {
   app.delete('/v1/crew/request/:characterId', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Crew.declineRequest(ch, req.params.characterId, client, h)));
   app.get('/v1/leaderboard/crews', { preHandler: auth }, async () => Crew.crewLeaderboard(pool));
+  // THE CREW OBJECTIVE — claim your cut of the week's cracked job (a bounded §10.4 `crew:objective` faucet)
+  app.post('/v1/crew/objective/claim', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Crew.claimObjective(ch, client, h)));
 
   // ── THE ROLODEX (omerta-discovery-design.md) — player discovery: humans near your level + a
   // "looking for a crew" flag, so THE CREW is reachable by strangers. §10.4-free (reads + a toggle).

@@ -2795,6 +2795,36 @@ CREATE TABLE IF NOT EXISTS crew_targets (
 -- with the street; a fresh heir isn't looking until they say so. No new table — discovery is READS
 -- over characters + a toggle, §10.4-free.
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS lfg BOOLEAN NOT NULL DEFAULT false;
+
+-- ── THE CREW OBJECTIVE (CLAUDE.md log 2026-08-07) — the WEEKLY SHARED GOAL ────────────────────────
+-- The synchronous/collective hook the crew lacked: a goal drawn per crew per week (deterministic off
+-- the §7.11 seed), that the WHOLE crew works down together — a crewmate's own play advances it, and
+-- when the target is cracked EVERYONE is pinged and can claim a cut. This is the "log in because your
+-- crew is active" pull. Crew-keyed (survives death like the crew; outside the estate wipe + migrate
+-- DISPOSITION guard by construction — no character_id column). One objective per (crew, week).
+-- §10.4: ONE bounded cash faucet `crew:objective` (once per week per member, only on completion).
+CREATE TABLE IF NOT EXISTS crew_objectives (
+  crew_id TEXT NOT NULL,
+  week INT NOT NULL,                        -- floor(dayOf()/7) — the week this goal belongs to
+  kind TEXT NOT NULL,                       -- crimes | kills | earn (drawn deterministically at materialize)
+  target INT NOT NULL,                      -- kind base × crew size at materialize (a bigger crew, a bigger goal)
+  progress INT NOT NULL DEFAULT 0,          -- combined crew progress (= Σ member contributions)
+  done BOOLEAN NOT NULL DEFAULT false,      -- crossed the target; the completion ping fired once
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (crew_id, week)
+);
+-- per-member contribution + claim ledger (the "what your crew did" texture + once-per-member claim gate)
+CREATE TABLE IF NOT EXISTS crew_objective_progress (
+  crew_id TEXT NOT NULL,
+  week INT NOT NULL,
+  account_id TEXT NOT NULL,
+  n INT NOT NULL DEFAULT 0,                 -- this member's contribution to the goal
+  claimed BOOLEAN NOT NULL DEFAULT false,   -- collected their cut of a completed objective
+  PRIMARY KEY (crew_id, week, account_id)
+);
+CREATE INDEX IF NOT EXISTS ix_crew_obj_prog ON crew_objective_progress (crew_id, week);
+-- a crew legend: how many weekly jobs the crew has cracked (bumped once per objective at completion).
+ALTER TABLE crews ADD COLUMN IF NOT EXISTS objectives_done INT NOT NULL DEFAULT 0;
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS lfg_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS ix_characters_lfg ON characters (lfg) WHERE lfg;
 

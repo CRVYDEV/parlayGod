@@ -1775,7 +1775,8 @@
         recruiting: 'the doors are open — players can ask to join', closed: 'recruiting closed',
         requested: `you asked to join ${esc(body.to || 'the crew')} — the boss decides`,
         took_in: `${esc(body.who || 'they')} joined the crew`, turned_away: 'you turned them away',
-        target: `the crew's after ${esc(body.target || 'the mark')} — chip in on the hit`, target_cleared: 'the hit is called off' };
+        target: `the crew's after ${esc(body.target || 'the mark')} — chip in on the hit`, target_cleared: 'the hit is called off',
+        objective_claimed: `you took your cut of the week's job — $${fmt(body.reward || 0)}` };
       if (m[body.crew] !== undefined && m[body.crew] !== '') return `\u{1F465} ${m[body.crew]}`;
     }
     // THE ROLODEX — the "looking for a crew" flag
@@ -3873,6 +3874,19 @@
         <div style="margin-top:8px" class="d">
           ${mem.length < b.maxMembers ? `<input id="crew-invite" placeholder="invite by name" size="16"> <button class="act" id="crew-invite-btn">put a word in</button> &nbsp;` : `<span style="color:var(--dim)">crew is full</span> &nbsp;`}
           <button class="act" data-do="POST /v1/crew/leave" data-confirm="Walk away?|You leave the crew — the pact ends and you're fair game to them again.">leave the crew</button></div></div>
+
+      ${(() => { const o = crew.objective; if (!o) return '';
+        const col = o.done ? 'var(--neon)' : 'var(--gold)';
+        const amt = (n) => o.unit === '$' ? '$' + fmt(n) : fmt(n) + (o.unit ? ' ' + o.unit : '');
+        return `<div class="card" style="margin-top:8px;border-color:${col}"><span class="t" style="color:${col}">THIS WEEK'S JOB — ${esc(o.label)}</span>${crew.objectivesDone ? ` <span class="chip">${crew.objectivesDone} cracked</span>` : ''}
+          <div class="d" style="margin-top:4px">${amt(o.progress)} of ${amt(o.target)} <span class="chip">${o.pct}%</span></div>
+          <div class="bar" style="margin:5px 0;height:8px;background:#20140c;border-radius:4px;overflow:hidden"><div style="height:100%;width:${o.pct}%;background:${col}"></div></div>
+          ${o.contributions && o.contributions.length ? `<div class="d" style="font-size:11px;color:var(--dim)">${o.contributions.map((c) => `${esc(c.name)} ${amt(c.n)}${c.claimed ? ' ✓' : ''}`).join(' · ')}</div>` : '<div class="d" style="font-size:11px;color:var(--dim)">Nobody has worked it yet — a crewmate\'s own play moves this.</div>'}
+          ${o.done
+            ? (o.claimable ? `<div class="row" style="margin-top:5px"><button class="act" data-do="POST /v1/crew/objective/claim" style="border-color:var(--neon)">collect your cut — $${fmt(o.reward)}</button></div>`
+              : (o.claimed ? '<div class="d" style="font-size:11px;color:var(--neon);margin-top:4px">✓ your cut is collected</div>'
+                : '<div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">Cracked — but you didn\'t work it, so there\'s no cut for you this week.</div>'))
+            : `<div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">Crack it together — every member who helped takes $${fmt(o.reward)}.</div>`}</div>`; })()}
 
       ${crew.leader && mem.length < b.maxMembers ? `<div class="card" style="margin-top:8px${crew.recruiting ? ';border-color:var(--gold)' : ''}"><span class="t"${crew.recruiting ? ' style="color:var(--gold)"' : ''}>${crew.recruiting ? 'Recruiting — the doors are open' : 'Open the crew to new blood'}</span> <span class="d" style="font-size:11px">— players near your level can ask to join</span>
         <div class="row"><button class="act" id="crew-recruit" style="border-color:${crew.recruiting ? 'var(--bad)' : 'var(--gold)'}">${crew.recruiting ? 'close recruiting' : 'start recruiting'}</button></div>
@@ -7544,6 +7558,7 @@
       vendetta: () => `blood was sworn — ${d.by ? `${d.by}'s` : 'a'} bloodline owes yours`,
       dm: () => `📱 ${d.from}: ${d.preview || 'new message'} — open the cell to reply`,
       contact_call: () => `📞 ${d.from} is asking for you — ${d.kind === 'freight' ? `bring ${d.qty} ${d.good} to ${d.district} for $${fmt(d.pay)}` : `come see them at ${d.district} ($${fmt(d.pay)})`}. Open the cell.`,
+      crew_objective_done: () => `🤝 YOUR CREW CRACKED THE WEEK'S JOB — collect your cut${d.reward ? ` ($${fmt(d.reward)})` : ''} on The Crew screen`,
       mastery_up: () => `your ${d.name || d.track} trade hit L${d.lvl}${d.rank ? ` — ${d.rank}` : ''}`,
       stat_use: () => `the work is paying off — +1 ${d.stat} (${d.value}) from your ${d.track} trade`,
       chat: () => `${d.who}: ${d.text}`,

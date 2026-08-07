@@ -222,6 +222,78 @@ assert.equal((await sweepCrewInvites(pool)).swept >= 2, true, 'the worker sweeps
   assert.equal((await invite(spamBoss, overflow)).body.error, 'too_many_pending', `outstanding invites are capped at ${CREW.MAX_MEMBERS} (F3 — no notification spam)`);
 }
 
+// ════════════ THE CREW OBJECTIVE — the weekly shared goal ════════════
+{
+  const { bumpCrewObjective } = await import('../src/game.js');
+  const { weekOf, crewObjectiveOf } = await import('../src/rules.js');
+
+  // the draw is DETERMINISTIC (same crew + week → same goal) and the target scales with crew size
+  const wk = weekOf();
+  const a = crewObjectiveOf('crewX', wk, 3), b = crewObjectiveOf('crewX', wk, 3);
+  assert.deepEqual(a, b, 'the weekly objective is deterministic per crew+week');
+  assert.equal(crewObjectiveOf('crewX', wk, 4).target, crewObjectiveOf('crewX', wk, 1).target * 4, 'the target scales with crew size');
+
+  // a fresh crew of two
+  const cap = await mk('Cap One'); const hand = await mk('Hand Two'); const idle = await mk('Idle Three');
+  for (const c of [cap, hand, idle]) await seed(c.id, 'respect=5000');
+  const cid = (await call('POST', '/v1/crew', { token: cap.token, body: { name: 'The Weekly Job' } })).body.id;
+  await invite(cap, hand); await call('POST', `/v1/crew/accept/${cid}`, { token: hand.token });
+  await invite(cap, idle); await call('POST', `/v1/crew/accept/${cid}`, { token: idle.token });
+  const capA = await acctOf(cap.id), handA = await acctOf(hand.id), idleA = await acctOf(idle.id);
+
+  // a bump on a FRESH week MATERIALIZES the drawn objective (the draw path)
+  const fresh = await mk('Solo Draw'); await seed(fresh.id, 'respect=5000');
+  const fid = (await call('POST', '/v1/crew', { token: fresh.token, body: { name: 'Draw Test' } })).body.id;
+  const fA = await acctOf(fresh.id);
+  await bumpCrewObjective(pool, { owned: { crewId: fid } }, { id: fresh.id, account_id: fA }, { crimes: 1, kills: 1, earn: 500000 });
+  assert.equal(await one('SELECT COUNT(*) n FROM crew_objectives WHERE crew_id=$1 AND week=$2', [fid, wk]), 1, 'a bump materializes the week objective (the §7.11 draw)');
+
+  // PIN a known goal on the real crew so the cycle is deterministic (kind=crimes, target=2)
+  await pool.query('INSERT INTO crew_objectives (crew_id, week, kind, target) VALUES ($1,$2,$3,$4)', [cid, wk, 'crimes', 2]);
+  // a delta for the WRONG kind is a clean no-op (an `earn` job doesn't feed a `crimes` goal)
+  await bumpCrewObjective(pool, { owned: { crewId: cid } }, { id: cap.id, account_id: capA }, { earn: 999999 });
+  assert.equal(await one('SELECT progress n FROM crew_objectives WHERE crew_id=$1 AND week=$2', [cid, wk]), 0, 'a non-matching delta does not advance the goal');
+
+  // TWO members each pull a job — the second crossing latches DONE, bumps the crew legend, pings everyone
+  await bumpCrewObjective(pool, { owned: { crewId: cid } }, { id: cap.id, account_id: capA }, { crimes: 1 });
+  let obj = (await call('GET', '/v1/crew', { token: cap.token })).body.crew.objective;
+  assert.equal(obj.progress, 1, 'the crew total is the sum of contributions'); assert.equal(obj.done, false, 'not cracked at 1 of 2');
+  await bumpCrewObjective(pool, { owned: { crewId: cid } }, { id: hand.id, account_id: handA }, { crimes: 1 });
+  obj = (await call('GET', '/v1/crew', { token: cap.token })).body.crew.objective;
+  assert.equal(obj.done, true, 'the target is cracked'); assert.equal(obj.progress, 2, 'progress at target');
+  assert.equal(await one('SELECT objectives_done n FROM crews WHERE id=$1', [cid]), 1, 'the crew legend bumped once on completion');
+  // the per-member contribution texture ("what your crew did")
+  assert.equal(obj.contributions.length, 2, 'both contributors listed');
+  assert.equal(obj.mine, 1, 'the caller sees their own contribution');
+  assert.equal(obj.claimable, true, 'a contributor can claim a cracked objective');
+  // everyone was pinged (the synchronous "your crew is active" moment)
+  assert.equal(await one("SELECT COUNT(*) n FROM notifications WHERE type='crew_objective_done'"), 3, 'every living member is pinged on completion');
+
+  // capture the pre-existing per-character cash drift (earlier blocks jump + SQL-seed) so we can
+  // assert the CLAIM adds none of its own
+  const deltaBase = await driftOf('character cash');
+  // CLAIM — a contributor collects exactly REWARD cash, ledgered `crew:objective`, once per week
+  const before = Number((await call('GET', '/v1/me', { token: cap.token })).body.character.cash);
+  const cl = await call('POST', '/v1/crew/objective/claim', { token: cap.token });
+  assert.equal(cl.body.reward, CREW.OBJECTIVE.REWARD, 'the cut is the objective reward');
+  const after = Number((await call('GET', '/v1/me', { token: cap.token })).body.character.cash);
+  assert.equal(after - before, CREW.OBJECTIVE.REWARD, 'the cash landed');
+  assert.equal(await one("SELECT COUNT(*) n FROM transactions WHERE character_id=$1 AND reason='crew:objective'", [cap.id]), 1, 'one ledgered crew:objective faucet row');
+  assert.equal((await call('POST', '/v1/crew/objective/claim', { token: cap.token })).body.error, 'claimed', 'no second claim in a week');
+  // a member who did NOTHING this week has no cut (they have no contribution row)
+  assert.equal((await call('POST', '/v1/crew/objective/claim', { token: idle.token })).body.error, 'no_share', "a member who didn't work the job gets no cut");
+
+  // §10.4 — the reward is a recognized, character_id'd faucet. Earlier blocks in this suite SQL-seed
+  // and jump (a non-zero baseline by construction — the scale/loadtest posture), so we assert the
+  // DELTA the objective adds is zero: a claim moves the crew's cash within the ledgered set, and the
+  // `crew:objective` reason is in the vocabulary so it raises no unknown-reason alarm.
+  const dBefore = deltaBase;
+  const dAfter = await driftOf('character cash');
+  assert.equal(dAfter - dBefore, 0, 'the crew:objective faucet reconciles (adds zero per-character cash drift)');
+  // the reason is recognized — no `unknown cash reason` alarm anywhere
+  assert.equal(await driftOf('reason vocabulary'), 0, 'crew:objective is a recognized cash reason');
+}
+
 console.log('crew: PASS');
 await app.close();
 process.exit(0);
