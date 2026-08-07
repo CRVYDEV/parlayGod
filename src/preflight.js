@@ -78,6 +78,8 @@ export const OPERATIONAL_ENV = [
   'RATE_READ_PER_SEC', 'WS_ALLOW_QUERY_TOKEN',
   // identity providers (dormant until configured)
   'PRIVY_APP_ID', 'X_BEARER_TOKEN', 'X_CLIENT_ID', 'X_CLIENT_SECRET', 'X_TARGET_USER_ID',
+  // web push (dormant until VAPID keys are set; the client hides the 🔔 button when absent)
+  'VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'VAPID_SUBJECT',
   // marketing / share surfaces
   'SOCIAL_GAME_URL', 'SOCIAL_X_HANDLE', 'WALLETCONNECT_PROJECT_ID', 'X_CHECK_CD_MS', 'X_FOLLOW_PAGES',
   // the chain layer — every one dormant unless set (mainnet is legal + audit gated regardless)

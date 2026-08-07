@@ -9635,3 +9635,39 @@ distinct mob faces (verified on a rendered grid). Full suite green + sim drift-0
 pgquery/pgcheck 43/43 on real Postgres + client wiring/mirror + routes 598 (the avatar route declared public
 with a reason). No levers (pure cosmetic). Deferred: embedding the portrait into the broadcast legend card /
 public profile SVG (the card already carries a strong design), and avatars on the leaderboard modals.
+
+**WEB PUSH — learn while away (founder-directed 2026-08-07) — BUILT** (`src/push.js` — the 125th module +
+`test/push.js` — the 75th suite; `public/sw.js` the service worker; the `web-push` dep). A lazy-accrual
+game means things happen TO you while you're gone — a contract on your head, a RICO indictment, your empire
+seized — and the only way to learn was to open the tab. Web push closes that: an opt-in browser subscription
++ a service worker, and the WORKER pushes URGENT, still-undelivered notifications to the phone. **DESIGN: the
+worker (not the request path) sends**, so a push is POST-COMMIT by construction (it only ever sees
+notifications that really landed — no spurious push for a rolled-back action) and naturally targets AWAY
+players (their notifications are `delivered=false` until they read them); idempotent via a new
+`notifications.pushed` flag (ALTER ADD COLUMN IF NOT EXISTS — the outage lesson). **DORMANT unless `VAPID_*`
+configured** (the chain/dormant precedent — `initPush()` arms `web-push` VAPID signing at boot; the client
+hides the 🔔 button when `/v1/rules.push.publicKey` is null). `sweepPush` (worker) selects urgent (a curated
+`PUSH_TITLES` subset of the client's URGENT_TYPES — whacked/indicted/bounty_on_you/sacked/extortion/
+protege_attacked/npc_aggression/loan_defaulted/robbed/car_stolen) + undelivered + unpushed rows from the last
+hour (parameterized IN list — the pg-mem `= ANY` lesson), builds a title/body from the payload, pushes to
+the account's subs, prunes dead endpoints (404/410), marks pushed. §10.4-FREE (a push moves no value; the
+notification row was already written by the game action — the test asserts zero ledger rows). Schema:
+`push_subscriptions` (account-keyed, endpoint-unique — a NEW table, so CREATE TABLE IF NOT EXISTS is
+live-DB-safe; account-level, not character-scoped → outside the death-disposition guard by construction).
+Routes `POST /v1/push/subscribe|/unsubscribe` (authed); `/sw.js` served from the origin root (the scope rule)
+with `Service-Worker-Allowed: /`. Client: a top-bar 🔔/🔕 toggle (shown only when configured + the browser
+supports push) that requests permission → registers `/sw.js` → `pushManager.subscribe({applicationServerKey})`
+→ POSTs the subscription; re-armed on boot if opted-in; a `b64ToU8` helper for the VAPID key. The
+`deliver` seam (`__setDeliver`) lets the test observe pushes without a real push service (production uses
+`webpush.sendNotification`). `test/push.js` proves the config surface, subscribe/unsubscribe storage (+ the
+bad-sub gate + idempotent upsert), the sweep pushing EXACTLY the urgent+undelivered+unpushed row (title/body
+from payload) + marking it (idempotent — a second sweep re-pushes nothing), non-urgent/delivered/pushed rows
+skipped, and §10.4-neutrality. Browser-probed (the 🔔 shows when configured, `/sw.js` registers, clicking it
+never crashes the page — zero errors). Full suite green + sim drift-0 + mobile 73/73 + pgquery/pgcheck 43/43
+on real Postgres (the ALTER + new table apply) + client wiring/mirror + preflight (the three `VAPID_*` vars
+classified — the dormant-until-configured posture) + routes 601 + docs. `VAPID_*` documented in DEPLOY.md
+(generate once, keep the private key secret; the public key is client-embedded by design). No levers, no
+faucet (pure notification). The `fast-uri` npm-audit HIGH is a PRE-EXISTING fastify transitive, not
+introduced by `web-push` (the lock diff is purely additive). Deferred: skipping a push when the account has
+a live WS connection (mild redundancy — a push while you're actively looking), and a per-account digest
+(one buzz for several events).

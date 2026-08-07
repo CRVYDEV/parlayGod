@@ -1076,6 +1076,7 @@
     <a href="/wiki" target="_blank" class="act" style="text-decoration:none" title="the codex — every system explained">CODEX</a>
     <button class="act" id="btn-jump" title="jump to any screen (press /)">🔍</button>
     <button class="act" id="btn-phone" title="the cell — your inbox + messages" style="position:relative">📱<span id="phone-badge" class="hidden"></span></button>
+    <button class="act hidden" id="btn-alerts" title="get a phone alert when something happens to you while you're away">🔔</button>
     <button class="act" id="btn-sfx" title="the soundtrack — clicks, the register, the stings. Tap to mute."></button>
     <span class="help" id="btn-help" title="what does all this mean?">?</span>
     <button class="act" id="btn-logout" title="sign out of this account">sign out</button>
@@ -2378,6 +2379,10 @@
     // and a working tab rail can still play; a player with neither can only reload and hope.
     try { renderSheet(); } catch (e) { console.error('renderSheet failed', e); }
     buildTabs(); connectWs(); backfillFeed(); wireFeedFilter(); cityPulse();
+    // WEB PUSH — show/hide the 🔔 button per server config + browser support; if already opted in, make
+    // sure the service worker + subscription are live (a browser can drop a subscription).
+    updateAlertsBtn();
+    if (localStorage.getItem('omerta_push') === '1' && rules?.push?.publicKey && pushSupported()) enablePush().catch(() => {});
     // first session: the illustrated tour. Keyed on its own flag (not omerta_welcomed) ON PURPOSE —
     // existing testers who saw the old one-wall-of-text welcome get the expanded tour exactly once too.
     if (!localStorage.getItem('omerta_tour2')) openTour();
@@ -2734,6 +2739,48 @@
     api('GET', '/v1/phone').then((rr) => { if (rr.code < 400) phoneBadge(rr.body.unreadDm); }).catch(() => {});
   }
   $('#btn-phone').onclick = () => { $('#phone').classList.remove('hidden'); renderPhone(); };
+  // WEB PUSH — the 🔔 button subscribes this browser so the player gets a phone alert when something
+  // happens to them while away. Shown only when the server has push configured AND the browser supports it.
+  const pushSupported = () => ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window);
+  function b64ToU8(base64) {
+    const pad = '='.repeat((4 - (base64.length % 4)) % 4);
+    const s = (base64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = atob(s); const out = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+  async function enablePush() {
+    const key = rules?.push?.publicKey;
+    if (!key || !pushSupported()) return toast('alerts aren\'t available here', true);
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') return toast('alerts need notification permission', true);
+      const reg = await navigator.serviceWorker.register('/sw.js');
+      await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToU8(key) });
+      await api('POST', '/v1/push/subscribe', { subscription: sub.toJSON ? sub.toJSON() : sub });
+      localStorage.setItem('omerta_push', '1');
+      updateAlertsBtn();
+      toast('alerts on — we\'ll buzz your phone when it matters');
+    } catch (e) { toast('couldn\'t turn on alerts', true); }
+  }
+  async function disablePush() {
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      const sub = reg && await reg.pushManager.getSubscription();
+      if (sub) { await api('POST', '/v1/push/unsubscribe', { endpoint: sub.endpoint }); await sub.unsubscribe(); }
+    } catch {}
+    localStorage.removeItem('omerta_push'); updateAlertsBtn(); toast('alerts off');
+  }
+  function updateAlertsBtn() {
+    const btn = $('#btn-alerts'); if (!btn) return;
+    const on = localStorage.getItem('omerta_push') === '1' && Notification?.permission === 'granted';
+    btn.classList.toggle('hidden', !(rules?.push?.publicKey && pushSupported()));
+    btn.textContent = on ? '🔔' : '🔕';
+    btn.title = on ? 'phone alerts are ON — tap to turn off' : 'get a phone alert when something happens to you while you\'re away';
+  }
+  $('#btn-alerts').onclick = () => (localStorage.getItem('omerta_push') === '1' ? disablePush() : enablePush());
   $('#phone-close').onclick = () => { $('#phone').classList.add('hidden'); phoneOpenThread = null; };
   $('#phone').onclick = (e) => { if (e.target.id === 'phone') { $('#phone').classList.add('hidden'); phoneOpenThread = null; } };
   $('#death-go').onclick = () => { $('#deathmodal').classList.add('hidden'); setTab('streets'); };

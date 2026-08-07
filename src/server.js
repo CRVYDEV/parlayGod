@@ -21,6 +21,7 @@ import * as Discovery from './discovery.js';
 import * as Mentor from './mentor.js';
 import * as Streak from './streak.js';
 import * as Circle from './circle.js';
+import * as Push from './push.js';
 import { cityEventBoard } from './events.js';
 import * as A from './auth.js';
 import * as Chain from './chain.js';
@@ -144,6 +145,7 @@ export async function buildServer() {
   // so req.ip reflects the real client — else the per-IP auth throttle (E-M1) collapses to one global
   // bucket at the proxy's IP. No behaviour change in the alpha (rate limits are off there anyway).
   const app = Fastify({ logger: false, trustProxy: process.env.TRUST_PROXY === 'on' });
+  Push.initPush();   // WEB PUSH — arm VAPID signing if VAPID_* is configured; dormant otherwise.
 
   // THE AGENT GATEWAY — collect every mounted route (this hook fires per registration) so the
   // OpenAPI 3.1 contract at /openapi.json is auto-derived and never drifts from what's live.
@@ -181,6 +183,11 @@ export async function buildServer() {
   let wikiHtml = '<!doctype html><title>OMERTA codex</title><p>Codex file missing (public/wiki.html).</p>';
   try { wikiHtml = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'wiki.html'), 'utf8'); } catch { /* headless */ }
   app.get('/wiki', async (req, reply) => reply.type('text/html; charset=utf-8').send(wikiHtml));
+  // WEB PUSH service worker — must be served from the origin ROOT so it can control the whole scope.
+  let swJs = '';
+  try { swJs = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'sw.js'), 'utf8'); } catch { /* headless */ }
+  app.get('/sw.js', async (req, reply) =>
+    reply.type('application/javascript; charset=utf-8').header('Service-Worker-Allowed', '/').header('cache-control', 'no-cache').send(swJs));
   // ── GENERATED ART (public/art/*.jpg): the landing hero, the district plates, the system interiors.
   // Loaded into memory ONCE at boot as an ALLOWLIST keyed by filename, and the request only ever does a
   // Map lookup — user input is never joined into a path, so there is no traversal surface by
@@ -907,6 +914,9 @@ export async function buildServer() {
     mentor: { minLvl: MENTOR.MIN_LVL, protegeMaxLvl: MENTOR.PROTEGE_MAX_LVL, activeMax: MENTOR.ACTIVE_MAX,
       milestones: MENTOR.MILESTONES.map((m) => ({ lvl: m.lvl, cash: m.cash, graduate: !!m.graduate })) },
     streak: { rewards: STREAK.REWARDS, maxDay: STREAK.MAX_DAY },
+    // WEB PUSH — the VAPID public key the client subscribes with (client-embedded by design), null when
+    // push is not configured on this server, in which case the console hides the "enable alerts" control.
+    push: { publicKey: Push.pushPublicKey() },
     // THE STREET WAR + RIVALS (discoverability — costs and bounds only; the odds stay server-side)
     rivals: { robRateBps: RIVALS.ROB_RATE_BPS, robEnergy: RIVALS.ROB_ENERGY, robJailS: RIVALS.ROB_JAIL_S,
       trunkEnergy: RIVALS.TRUNK.ENERGY, trunkJailS: RIVALS.TRUNK.JAIL_S,
@@ -1934,6 +1944,12 @@ export async function buildServer() {
   // ── THE CIRCLE — the ambient stream of the people you know (crew/mentor/protégés/spouse). §10.4-free. ──
   app.get('/v1/circle', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client) => Circle.circleBoard(client, ch, [...wsClients.keys()])));
+  // ── WEB PUSH — learn while away. Subscribe the browser's PushSubscription; the worker pushes URGENT
+  // undelivered notifications. Dormant unless VAPID_* configured (the client hides the button then). ──
+  app.post('/v1/push/subscribe', { preHandler: auth }, async (req) =>
+    Push.saveSubscription(pool, req.user.sub, req.body?.subscription || req.body));
+  app.post('/v1/push/unsubscribe', { preHandler: auth }, async (req) =>
+    Push.removeSubscription(pool, req.user.sub, req.body?.endpoint));
 
   registerKitchen(app, { pool, auth });
 
