@@ -114,19 +114,28 @@ assert.equal(total, MENTOR.MILESTONES.reduce((a, m) => a + m.cash, 0), 'the whol
 // a transfer (nets zero), so the seed here is baked into a fresh local before/after and can't disturb
 // the §10.4 delta asserted above (which already ran with `before` captured pre-seed).
 await pool.query(`UPDATE characters SET cash=cash+50000 WHERE id='${vet.id}'`);
+// (red-team F1) `kid` GRADUATED at level 20 above — the care-package rail is an ONBOARDING aid, so a
+// graduated protégé's gift is now REFUSED (else a maxed alt pulls $5k/day untaxed forever).
+assert.equal((await call('POST', `/v1/mentor/gift/${kid.id}`, { token: vet.token })).body.error, 'graduated', 'a graduated protégé gets no more care packages (F1 — the rail is onboarding-only)');
+// the happy path needs a NON-graduated protégé: vet takes a fresh newcomer (graduated kid doesn't count
+// against ACTIVE_MAX, so there's room).
+const kid3 = await mk('Fresh Recruit'); await seed(kid3.id, 'respect=160');
+await call('POST', '/v1/mentor/seeking', { token: kid3.token, body: { on: true } });
+await call('POST', `/v1/mentor/offer/${kid3.id}`, { token: vet.token });
+await call('POST', `/v1/mentor/accept/${vet.id}`, { token: kid3.token });
 const gBefore = await driftOf('character cash');   // nonzero (the seed), but constant across the gift
-const kidCash0 = Number((await pool.query(`SELECT cash FROM characters WHERE id='${kid.id}'`)).rows[0].cash);
+const kidCash0 = Number((await pool.query(`SELECT cash FROM characters WHERE id='${kid3.id}'`)).rows[0].cash);
 const vetCash0 = Number((await pool.query(`SELECT cash FROM characters WHERE id='${vet.id}'`)).rows[0].cash);
 {
-  const g = (await call('POST', `/v1/mentor/gift/${kid.id}`, { token: vet.token })).body;
-  assert.equal(g.gifted, MENTOR.GIFT_CASH, 'the care package is the gift cash');
+  const g = (await call('POST', `/v1/mentor/gift/${kid3.id}`, { token: vet.token })).body;
+  assert.equal(g.gifted, MENTOR.GIFT_CASH, 'the care package is the gift cash (a non-graduated protégé)');
 }
-const kidCash1 = Number((await pool.query(`SELECT cash FROM characters WHERE id='${kid.id}'`)).rows[0].cash);
+const kidCash1 = Number((await pool.query(`SELECT cash FROM characters WHERE id='${kid3.id}'`)).rows[0].cash);
 const vetCash1 = Number((await pool.query(`SELECT cash FROM characters WHERE id='${vet.id}'`)).rows[0].cash);
 assert.equal(kidCash1 - kidCash0, MENTOR.GIFT_CASH, 'the protégé got the stake');
 assert.equal(vetCash0 - vetCash1, MENTOR.GIFT_CASH, 'the mentor paid it out of pocket');
 // one a day
-assert.equal((await call('POST', `/v1/mentor/gift/${kid.id}`, { token: vet.token })).body.error, 'cooldown', 'one care package a day');
+assert.equal((await call('POST', `/v1/mentor/gift/${kid3.id}`, { token: vet.token })).body.error, 'cooldown', 'one care package a day');
 // the transfer nets zero (both legs ledgered mentor:gift) — the cash identity is unmoved
 assert.equal(await driftOf('character cash'), gBefore, 'the care package is a net-zero transfer — §10.4 holds');
 assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='mentor:gift'")).rows[0].s), 0, 'the gift nets zero in the ledger');

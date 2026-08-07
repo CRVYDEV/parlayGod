@@ -64,6 +64,11 @@ export async function inviteToCrew(ch, name, client, h) {
   if (await crewIdOf(client, t.account_id)) throw new GameError('has_crew', `${t.name} already runs with a crew.`);
   const dup = (await client.query('SELECT 1 FROM crew_invites WHERE crew_id=$1 AND account_id=$2', [crewId, t.account_id])).rows[0];
   if (dup) throw new GameError('already', `${t.name} has already been asked.`);
+  // (red-team F3) cap OUTSTANDING invites so a crew of one can't blast distinct-player invite spam — a
+  // crew can't have more pending invites than it could seat. The full-crew check above only counts real
+  // members, so without this a 1-man crew could notify-spam the whole city one distinct name at a time.
+  const pending = Number((await client.query('SELECT COUNT(*) n FROM crew_invites WHERE crew_id=$1', [crewId])).rows[0].n);
+  if (pending >= CREW.MAX_MEMBERS) throw new GameError('too_many_pending', 'Too many invites out — wait for some to be answered.');
   await client.query('INSERT INTO crew_invites (crew_id, account_id, from_name) VALUES ($1,$2,$3)', [crewId, t.account_id, ch.name]);
   await notify(client, t.id, 'crew_invite', { from: ch.name, crewId }).catch(() => {});
   return { ok: true, crew: 'invited', to: t.name };

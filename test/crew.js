@@ -208,6 +208,20 @@ await pool.query("UPDATE crew_invites SET at = now() - interval '10 days'");
 await pool.query("UPDATE crew_requests SET at = now() - interval '10 days'");
 assert.equal((await sweepCrewInvites(pool)).swept >= 2, true, 'the worker sweeps stale invites AND requests');
 
+// ════════════ (red-team F3) OUTSTANDING-INVITE CAP — a crew of one can't blast distinct-player spam ════════════
+{
+  const spamBoss = await mk('Spam Boss'); await seed(spamBoss.id, 'respect=500');
+  await call('POST', '/v1/crew', { token: spamBoss.token, body: { name: 'The Spammers' } });
+  // fire MAX_MEMBERS invites to distinct fresh players WITHOUT any accepting — pending piles up
+  for (let i = 0; i < CREW.MAX_MEMBERS; i++) {
+    const tgt = await mk('Spam Target ' + i);
+    assert.equal((await invite(spamBoss, tgt)).code, 200, `invite ${i} goes out`);
+  }
+  // the next one is refused — a 1-man crew can't have more pending invites than it could seat
+  const overflow = await mk('One Too Many');
+  assert.equal((await invite(spamBoss, overflow)).body.error, 'too_many_pending', `outstanding invites are capped at ${CREW.MAX_MEMBERS} (F3 — no notification spam)`);
+}
+
 console.log('crew: PASS');
 await app.close();
 process.exit(0);

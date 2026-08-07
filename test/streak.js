@@ -82,7 +82,9 @@ assert.equal(lb.some((x) => x.best === STREAK.MAX_DAY + 1), true, 'the player is
 {
   const bot = await mk('Streak Bot');
   await pool.query('UPDATE account_persistent SET agent_flag=true WHERE account_id=$1', [await acctOf(bot.id)]);
-  await call('POST', '/v1/streak/claim', { token: bot.token });
+  // (red-team F5) an agent can't DRAW the daily cash faucet — refused at the claim, consistent with the
+  // Street Wage / referral faucets excluding agents (not just off the leaderboard).
+  assert.equal((await call('POST', '/v1/streak/claim', { token: bot.token })).body.error, 'agent', 'an agent account is refused the daily check-in faucet');
   const lb2 = (await call('GET', '/v1/leaderboard/streak', { token: p.token })).body;
   assert.equal(lb2.some((x) => x.name === 'Streak Bot'), false, 'an agent is off the streak board');
 }
