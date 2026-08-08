@@ -84,6 +84,9 @@ export const OPERATIONAL_ENV = [
   // PUSH_SKIP_ACTIVE_MIN: minutes of telemetry inactivity before an account is "away" and pushable
   // (default 3; 0 disables the skip so even a live tab is buzzed — test-only).
   'VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'VAPID_SUBJECT', 'PUSH_SKIP_ACTIVE_MIN',
+  // THE DISPATCH — the opt-in email digest (dormant until EMAIL_API_KEY is set). EMAIL_FROM / EMAIL_API_URL
+  // (default Resend); DIGEST_* tune the lapse/cooldown windows. All dormant/defaulted until configured.
+  'EMAIL_API_KEY', 'EMAIL_FROM', 'EMAIL_API_URL', 'DIGEST_LAPSE_DAYS', 'DIGEST_COOLDOWN_DAYS', 'DIGEST_MAX_LAPSE_DAYS',
   // marketing / share surfaces
   'SOCIAL_GAME_URL', 'SOCIAL_X_HANDLE', 'WALLETCONNECT_PROJECT_ID', 'X_CHECK_CD_MS', 'X_FOLLOW_PAGES',
   // the chain layer — every one dormant unless set (mainnet is legal + audit gated regardless)
