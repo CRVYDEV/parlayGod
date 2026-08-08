@@ -10354,3 +10354,36 @@ is non-empty. No lever (pure read/scope). Suite green + sim drift-0 + mobile 75 
 pgquery/pgcheck 43/43 on real Postgres. Deferred: a WS "a real player just showed up in your district"
 push the instant it happens (a cross-referenced connect nudge — the strongest convergence signal, but it
 adds WS-connect coupling; the Home card + the 30s poll surface it today).
+
+**THE DISPATCH — the opt-in "while you were gone" email digest (founder-directed retention build,
+2026-08-08) — BUILT** (`src/dispatch.js`, `test/dispatch.js` — the 89th suite; `GET/POST /v1/digest` +
+`GET /v1/digest/unsubscribe`; `public/index.html` My Profile). Web push reaches players who opted in on a
+device; email reaches the ones who DIDN'T — the lapsed, the churned. The content already exists (THE
+MORNING PAPER: your take, your rival's move, the Bureau); this is the channel that carries it as a return
+nudge. **DORMANT until `EMAIL_API_KEY` is set** (the VAPID/chain precedent — nothing sends without a
+provider), **OPT-IN only** (a player enters an address + turns it on), with a **one-click unsubscribe** in
+every message (a stateless HMAC token — `unsubToken` = HMAC(account_id) with `JWT_SECRET`, so the
+unsubscribe link needs no login and can't be forged; a public keyless `/v1/digest/unsubscribe?a=&t=`).
+The game does NOT store email today (auth is X/Privy/guest), so `account_persistent.email`/`digest_optin`/
+`digest_at` were ALTER-added the outage-lesson way. The worker `sweepDispatch` finds LAPSED opted-in
+players — last telemetry between `DIGEST_LAPSE_DAYS` (3) and `DIGEST_MAX_LAPSE_DAYS` (30) ago (we stop
+nagging the long-gone), cooldown `DIGEST_COOLDOWN_DAYS` (7) — builds a digest over the away window
+(the Morning Paper's two queries, on a window WE control, not the in-app `paper_at`), and sends via a
+provider HTTP POST (Resend shape: from/to/subject/html/text + Bearer key; `EMAIL_API_URL` overridable;
+a `__setSender` test seam). **CLAIM-then-send** (the push C1 discipline — `digest_at` is stamped with a
+guard BEFORE the send, so two overlapping workers can't both email); a lapsed player with nothing in the
+window gets no empty nag (the stamp stands). §10.4-FREE (reads notifications + the cash ledger, moves no
+value, writes no `transactions` row — the test asserts zero). Careful copy: in-game figures are game
+currency, never a real-money/price/earnings claim; the unsubscribe is one click, no dark pattern. Client:
+a "Stay in the loop" card on My Profile (email field + opt-in, shown only when `rules.digest.available`),
+a `describe()` toast, an unsubscribe landing page. `EMAIL_*`/`DIGEST_*` classified in preflight (dormant/
+defaulted). `test/dispatch.js`: the availability flag, bad-email/no-email refusals, the normalized store,
+the HMAC token round-trip, the sweep emailing EXACTLY the lapsed opted-in player (active/too-long-gone/
+opted-out all skipped), the cooldown + claim-then-send idempotency, DORMANT sending nothing, the
+keyless-token unsubscribe (+ a forged token doing nothing), and §10.4-neutrality — two mutations each
+caught by name (the lapse window ignored; the unsubscribe link dropped). DEPLOY.md runbook: set
+`EMAIL_API_KEY` (+ `EMAIL_FROM`) on the worker → players opt in on My Profile → the sweep does the rest.
+Suite green + sim drift-0 + mobile 75 + pgquery/pgcheck 43/43 on real Postgres. **Legal note:** sending
+marketing/transactional email for a real-money-adjacent game carries compliance weight (consent,
+unsubscribe, jurisdiction) — the opt-in + one-click unsubscribe are built in, and exact external copy is
+a counsel item like the rest of the messaging surface. No lever, no faucet.

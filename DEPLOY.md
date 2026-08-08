@@ -172,6 +172,14 @@ above is the real path and the only one the console offers).
   not three separate buzzes. That's the whole activation: generate the pair, set it on both services,
   redeploy — no code change, and `/admin → Integrations` reads back live-vs-off.
 
+- **Email digest (`EMAIL_API_KEY`)** — the opt-in "while you were gone" re-engagement email for lapsed
+  players (the worker builds it from the Morning Paper and sends it). Dormant unless set; the client hides
+  the opt-in card when absent, and NOTHING sends until a player opts in on My Profile. Set `EMAIL_API_KEY`
+  (a Resend API key by default; `EMAIL_API_URL` overrides the endpoint for another provider) + `EMAIL_FROM`
+  (e.g. `OMERTA <noreply@yourdomain>`) on the **worker** (it does the sending), redeploy, and players can
+  opt in. Windows tune with `DIGEST_LAPSE_DAYS` (3) / `DIGEST_COOLDOWN_DAYS` (7) / `DIGEST_MAX_LAPSE_DAYS`
+  (30). Every email carries a one-click unsubscribe; keep the copy counsel-cleared. Zero §10.4 surface.
+
 ### The switchboard — `/admin` → **Integrations**
 The retention/funnel wiring all ships DORMANT and switches on by env config (no code deploy). The
 `/admin` dashboard's **Integrations** panel reads which are live vs off and prints the exact activation

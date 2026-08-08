@@ -1876,6 +1876,8 @@
     if (body.favor === 'posted') bits.push(`🤝 the word's out — ${fmt(body.qty)} ${body.good} wanted at ${body.district}, $${fmt(body.pay)} held up front`);
     if (body.favor === 'ran') bits.push(`🤝 ran the favor — ${fmt(body.qty)} ${body.good} delivered, +$${fmt(body.net)} (house took $${fmt(body.take)})`);
     if (body.favor === 'pulled') bits.push(`🤝 pulled it back — $${fmt(body.refund)} returned`);
+    // THE DISPATCH — the email digest opt-in response is {available, email, optin}
+    if ('available' in body && 'optin' in body && 'email' in body) bits.push(body.optin ? "📬 digest on — we'll email you what you missed while you're away" : '📭 digest off');
     if (body.win === true && !spec) bits.push(`WIN — +$${fmt(Math.abs(body.net ?? 0))}`);
     if (body.win === false && !spec) bits.push(`the house keeps it (−$${fmt(Math.abs(body.net ?? 0))})`);
     // street jump / extortion / convoy hijack — carry a `win` but no cash `net`, so each gets its own line
@@ -4774,6 +4776,19 @@
     const t = $('#tab-profile');
     const p = (await api('GET', '/v1/profile')).body;
     if (!p?.name) { t.innerHTML = `<div class="card"><span class="t">MY PROFILE</span><div class="d">couldn't pull your file — try again in a moment.</div></div>`; return; }
+    // THE DISPATCH — the opt-in "while you were gone" email digest (GETBIND; the card shows only when the
+    // server has an email provider configured).
+    const dg = (await api('GET', '/v1/digest')).body || {};
+    const digestBox = dg.available ? `
+        <div class="msp-h">Stay in the loop</div>
+        <div class="msp-box">
+          <div class="d" style="font-size:12.5px">The city keeps moving while you're gone. Get a <b>"while you were gone"</b> email — your take, your rivals, the heat — and nothing else.</div>
+          <div class="row" style="margin-top:6px">
+            <input id="prof-digest-email" type="email" placeholder="you@email.com" value="${esc(dg.email || '')}" style="flex:1;min-width:140px;background:#100b07;color:var(--fg);border:1px solid #3a2a1a;border-radius:4px;padding:6px;font-size:12.5px">
+            <button class="act" id="prof-digest-save" style="border-color:var(--neon)">${dg.optin ? 'update' : 'turn on'}</button>
+          </div>
+          ${dg.optin ? `<div class="d" style="font-size:11px;color:var(--neon);margin-top:4px">✓ digest ON${dg.email ? ` — to ${esc(dg.email)}` : ''} · <a id="prof-digest-off" style="color:var(--dim);cursor:pointer">turn off</a></div>` : '<div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">off · one email at most a week · unsubscribe any time</div>'}
+        </div>` : '';
     const link = location.origin + p.profilePath;
     const FACES = ['🕵️', '🎩', '🚬', '🃏', '💼', '🥃', '🔫', '🐕']; // the Top 8 gets faces, not photos
     let fi = -1; // face counter — the map below stays a ONE-parameter lambda, which is the shape
@@ -4822,6 +4837,7 @@
             <textarea id="prof-bio" placeholder="write your own — who is ${esc(p.name)}?" maxlength="${p.bioMax || 200}" style="width:100%;box-sizing:border-box;min-height:52px;background:#100b07;color:var(--fg);border:1px solid #3a2a1a;border-radius:4px;padding:6px;font-size:12.5px">${esc(p.bio || '')}</textarea>
             <div class="row" style="margin-top:4px"><button class="act" id="prof-bio-save" style="border-color:var(--neon)">save your story</button>
               <span class="d" style="font-size:11px;color:var(--dim)">free · shows on your public page · clear it to go back to the auto-blurb</span></div></div></div>
+        ${digestBox}
         <div class="msp-h">${esc(p.name)}'s Top 8 <span style="text-transform:none;font-weight:400">— the crew you brought in${p.recruitRank ? ` · ${esc(p.recruitRank)}` : ''}</span></div>
         <div class="msp-box">
           ${p.recruitsTotal === 0 ? `<div class="d" style="font-size:12.5px">Nobody yet. Eight open seats — send your link and fill the row.</div>` : ''}
@@ -4850,6 +4866,11 @@
     // IDENTITY — save your "about me" (free, status text)
     const bs = t.querySelector('#prof-bio-save');
     if (bs) bs.onclick = () => act('POST', '/v1/identity/bio', { bio: t.querySelector('#prof-bio').value }).then(() => renderProfile());
+    // THE DISPATCH — opt into / update the email digest
+    const ds = t.querySelector('#prof-digest-save');
+    if (ds) ds.onclick = () => act('POST', '/v1/digest', { email: t.querySelector('#prof-digest-email').value, optin: true }).then(() => renderProfile());
+    const doff = t.querySelector('#prof-digest-off');
+    if (doff) doff.onclick = () => act('POST', '/v1/digest', { optin: false }).then(() => renderProfile());
   }
 
   async function renderStreets() {
