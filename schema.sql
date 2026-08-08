@@ -2925,3 +2925,10 @@ ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS streak_best INT NOT NULL
 -- THE STREAK MILESTONES — the highest run-day milestone awarded (monotonic; once-ever per milestone,
 -- keyed off streak_best). Account-level → survives death. A bounded `streak:milestone` cash faucet.
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS streak_milestone INT NOT NULL DEFAULT 0;
+
+-- THE DISPATCH — the opt-in "while you were gone" email digest (dormant until an email provider key is
+-- set). Email is collected explicitly + opt-in; digest_at is the last-sent stamp (cooldown gate). All
+-- account-level, ALTER-added the outage-lesson way (a CREATE TABLE IF NOT EXISTS is a no-op on a live DB).
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS digest_optin BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS digest_at TIMESTAMPTZ;

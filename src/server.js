@@ -28,6 +28,7 @@ import * as CityMap from './citymap.js';
 import * as Day from './day.js';
 import * as Vouch from './vouch.js';
 import * as Push from './push.js';
+import * as Dispatch from './dispatch.js';
 import { cityEventBoard, resultsBoard } from './events.js';
 import * as A from './auth.js';
 import * as Chain from './chain.js';
@@ -954,6 +955,7 @@ export async function buildServer() {
     // WEB PUSH — the VAPID public key the client subscribes with (client-embedded by design), null when
     // push is not configured on this server, in which case the console hides the "enable alerts" control.
     push: { publicKey: Push.pushPublicKey() },
+    digest: { available: Dispatch.digestConfigured() },
     // THE STREET WAR + RIVALS (discoverability — costs and bounds only; the odds stay server-side)
     rivals: { robRateBps: RIVALS.ROB_RATE_BPS, robEnergy: RIVALS.ROB_ENERGY, robJailS: RIVALS.ROB_JAIL_S,
       trunkEnergy: RIVALS.TRUNK.ENERGY, trunkJailS: RIVALS.TRUNK.JAIL_S,
@@ -2041,6 +2043,20 @@ export async function buildServer() {
     Push.saveSubscription(pool, req.user.sub, req.body?.subscription || req.body));
   app.post('/v1/push/unsubscribe', { preHandler: auth }, async (req) =>
     Push.removeSubscription(pool, req.user.sub, req.body?.endpoint));
+  // ── THE DISPATCH — the opt-in "while you were gone" email digest (dormant until EMAIL_API_KEY is set).
+  // Explicit opt-in + one-click unsubscribe; §10.4-free (reads the Morning Paper, moves nothing). ──
+  app.get('/v1/digest', { preHandler: auth }, async (req) => Dispatch.getDigestPrefs(pool, req.user.sub));
+  app.post('/v1/digest', { preHandler: auth }, async (req) =>
+    Dispatch.setDigestPrefs(pool, req.user.sub, { email: req.body?.email, optin: req.body?.optin }));
+  // the unsubscribe link in every email — public + keyless (an HMAC token is the auth). Returns a tiny page.
+  app.get('/v1/digest/unsubscribe', async (req, reply) => {
+    const ok = (await Dispatch.unsubscribe(pool, req.query?.a, req.query?.t)).ok;
+    reply.type('text/html').send(`<!doctype html><meta charset="utf-8"><title>OMERTÀ</title>
+      <body style="background:#0c0b0d;color:#e9e3d6;font-family:Georgia,serif;text-align:center;padding:64px 24px">
+      <h1 style="color:${ok ? '#c9a24a' : '#b02a30'}">${ok ? "You're unsubscribed." : 'That link is no longer valid.'}</h1>
+      <p style="color:#a89e90">${ok ? "You won't get the digest again. The city will still be here." : 'You may already be unsubscribed.'}</p>
+      <p><a href="/" style="color:#c9a24a">← back to OMERTÀ</a></p></body>`);
+  });
 
   registerKitchen(app, { pool, auth });
 
