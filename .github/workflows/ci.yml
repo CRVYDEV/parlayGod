@@ -164,7 +164,7 @@ jobs:
             (async () => {
               const c = new Client({ connectionString: process.env.DATABASE_URL });
               await c.connect();
-              for (const db of ['omerta_chaos', 'omerta_load']) {
+              for (const db of ['omerta_chaos', 'omerta_load', 'omerta_conc']) {
                 await c.query('DROP DATABASE IF EXISTS ' + db);
                 await c.query('CREATE DATABASE ' + db);
               }
@@ -211,3 +211,20 @@ jobs:
           POPULATION_OFF: 'on'
           LOAD_PLAYERS: '8'
         run: npm run loadtest
+
+      # Lost-update CORRECTNESS, asserted. loadtest proves the storm doesn't deadlock and §10.4 holds
+      # in aggregate; it spreads players across their OWN rows, so it never drives many writers at ONE
+      # contended object or asserts an exactly-once property. This does: an idempotency key executes
+      # once, one escrow has one winner, a symmetric AB-BA transfer conserves value with no 500, and a
+      # two-party house take is exact — the class of bug pg-mem physically cannot exercise, which is why
+      # every recent fix in it shipped as a "source-level tripwire" that no suite could actually run.
+      - name: concurrency (idempotency exactly-once, single-winner escrow, AB-BA, exact take)
+        if: '!cancelled()'
+        env:
+          DATABASE_URL: postgres://postgres:pgcheck@localhost:5432/omerta_conc
+          JWT_SECRET: ci-jwt-secret-not-a-real-one
+          MOD_KEY: ci-mod-key-long-enough-to-pass-preflight
+          MARKET_SEED: ciMarketSeed7Qx2mVb9PwLn4RtY6hJc
+          SOCIAL_VERIFY_MODE: 'off'
+          POPULATION_OFF: 'on'
+        run: npm run concurrency
