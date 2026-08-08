@@ -1392,6 +1392,14 @@ async function seedLists() {
   await q("UPDATE characters SET loc='neon' WHERE id=$1", [charId]);
   await paramId('/v1/casino/ring/:p');
   await paramId('/v1/phone/thread/:p');
+  // THE COLLISION — /v1/live.here is "real humans in YOUR district", so a real (non-npc, non-agent)
+  // human must stand in the fixture's district (neon, its loc above) or that list comes back empty and
+  // its element field (`online`) is never compared (nearby + hotDistricts populate from the other
+  // seeded streets). A dedicated co-located street, near the fixture's level.
+  const tC = (await si('POST', '/v1/auth/guest')).body.token;
+  await si('POST', '/v1/character', tC, { name: 'Neon Neighbor ' + Math.random().toString(36).slice(2, 6) });
+  const cNbr = (await si('GET', '/v1/me', tC)).body.character.id;
+  await q("UPDATE characters SET respect=500000, loc='neon' WHERE id=$1", [cNbr]);
   // THE PEN'S YARD — must be LAST: /v1/pen only shows the yard from a cell, so the fixture ends the
   // seed JAILED (with `two` on the roster). Board fetches happen after this; jail gates ACTIONS,
   // never a board's shape, so every other read is unaffected.

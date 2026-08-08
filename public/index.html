@@ -4344,6 +4344,8 @@
     // THE DAY — the one-glance daily checklist (streak/contracts/hustle/corner/drills). A separate
     // fetch (the GETBIND idiom) so the Promise.all alias window above stays intact.
     const dy = (await api('GET', '/v1/day')).body || {};
+    // THE COLLISION — who's a REAL human, online, reachable RIGHT NOW (GETBIND, off the alias window).
+    const lv = (await api('GET', '/v1/live')).body || {};
     const DAY_ICON = { done: '<span style="color:var(--dim)">✓</span>', ready: '<span style="color:var(--neon)">●</span>', todo: '<span style="color:var(--dim)">○</span>' };
     const dayCard = (dy.items && dy.items.length) ? `
       <div class="card" style="margin-bottom:12px"><span class="t">📋 Today</span> <span class="chip ${dy.ready ? 'good' : ''}">${dy.ready} ready · ${dy.done}/${dy.total} done</span>
@@ -4474,9 +4476,29 @@
         ${pr.totalIn || pr.totalOut ? `<div class="d">the books: <b style="color:var(--neon)">+$${fmt(pr.totalIn)}</b> in${pr.totalOut ? ` · <b style="color:var(--bad)">−$${fmt(pr.totalOut)}</b> out` : ''}${(pr.earned || []).length ? ` — mostly ${pr.earned.slice(0, 3).map((e) => `${esc(e.what)} $${fmt(e.total)}`).join(', ')}` : ''}</div>` : ''}
         ${(pr.headlines || []).length ? `<div class="d">${pr.headlines.slice(0, 6).map((h) => `${PAPER_LINES[h.type] || esc(String(h.type).replace(/_/g, ' '))} ×${h.n}`).join(' · ')}</div>` : ''}
         <div class="row"><button class="act" id="paper-fold">read — fold the paper</button></div></div>` : '';
+    // ── THE COLLISION — real players, online, reachable RIGHT NOW. The city is full of NPC scenery, so a
+    // real human being around is RARE and easy to miss; this makes it VISIBLE the second it exists. HERE
+    // (your district — the live collision: go to Wet Work and act) leads; NEARBY + HOT DISTRICTS are the
+    // convergence nudge (travel to where the humans are). Hidden when nobody real is on (the empty-state
+    // rule — never a dead "0 online" card).
+    const lvHere = lv.here || [], lvNear = lv.nearby || [], lvHot = lv.hotDistricts || [];
+    const lvOn = lv.onlineNow || 0;
+    const lvRow = (p) => `<span style="display:inline-flex;align-items:center;gap:5px;margin:2px 8px 2px 0${p.online ? '' : ';opacity:.6'}">${p.online ? '<span style="color:var(--neon)">●</span>' : ''}${av(p.id, 22)}<b>${esc(p.name)}</b> <span class="d" style="font-size:11px">L${p.level}${p.gangTag ? ` [${esc(p.gangTag)}]` : ''}</span>${p.wanted ? '<span class="chip bad" style="font-size:9px;padding:0 4px">WANTED</span>' : ''}${p.sameFamily ? '<span class="chip" style="font-size:9px;padding:0 4px">family</span>' : ''}</span>`;
+    const liveCard = (lvHere.length || lvNear.length) ? `
+      <div class="card" style="border-color:var(--neon);background:linear-gradient(180deg,rgba(93,214,168,.06),transparent)">
+        <span class="t" style="color:var(--neon)">${lvOn ? '● ' : ''}REAL PLAYERS ${lvOn ? 'ON THE WIRE' : 'AROUND YOU'}</span>
+        ${lvOn ? `<span class="chip good">${lvOn} online now</span>` : ''}
+        ${lvHere.length ? `<div class="d" style="margin-top:4px"><b style="color:var(--neon)">${lvHere.length}</b> real player${lvHere.length === 1 ? '' : 's'} in ${esc(lv.you?.districtName || 'your district')} with you${lvHere.some((p) => p.online) ? ' — some ON RIGHT NOW' : ''}:</div>
+          <div style="margin:4px 0">${lvHere.map(lvRow).join('')}</div>
+          <div class="row"><button class="act prime" data-go-tab="pvp">the Wet Work roster →</button></div>` : ''}
+        ${lvNear.length ? `<div class="d" style="margin-top:6px">${lvNear.length} more near your level${lvHot.length ? ` — busiest: ${lvHot.slice(0, 3).map((h) => `${esc(h.districtName)} (${h.count})`).join(', ')}` : ''}.</div>
+          <div style="margin:2px 0">${lvNear.slice(0, 6).map(lvRow).join('')}</div>
+          ${lvHot.length ? `<div class="row">${lvHot.slice(0, 3).map((h) => `<button class="act" data-do="POST /v1/travel/${h.district}">go to ${esc(h.districtName)} →</button>`).join('')}</div>` : ''}` : ''}
+      </div>` : '';
     const situation = `
       <h2>The Situation <span class="d" style="font-size:11.5px">— your threats, your people, and what's ready right now</span></h2>
       <div class="grid">
+        ${liveCard}
         ${paperCard}
         ${nem ? `<div class="card" style="border-color:var(--bad)"><span class="t" style="color:var(--bad)">${av(nem.street?.id, 30)}YOUR NEMESIS${nem.street?.alive === false ? ' — LINE FALLEN' : ''}</span>
           <div class="d"><b>${esc(nem.street?.name || 'a fallen line')}</b> has moved on you <b>${nem.total}</b> time${nem.total === 1 ? '' : 's'}${nem.bloodOwed > 0 ? ` — and their line owes yours <b>${nem.bloodOwed} bod${nem.bloodOwed === 1 ? 'y' : 'ies'}</b>` : nem.bloodOwed < 0 ? ` — your line owes theirs ${-nem.bloodOwed}` : ''}.${nem.vendetta?.mine ? ' A vendetta is SWORN.' : ''}${nem.vendetta?.theirs ? ' Their line has sworn one on YOU.' : ''}</div>

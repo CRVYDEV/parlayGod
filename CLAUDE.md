@@ -10323,3 +10323,34 @@ DEPLOY.md: `npm run vapid` → set `VAPID_*` on the API (serves the public key o
 in preflight (0 disables the skip — test-only). `test/push.js` extended: the skip (a recently-active player
 is not buzzed; once away, the still-undelivered note is) + the digest (three notes → one buzz, whole batch
 claimed) — two mutations each caught by name. The founder's final step is the VAPID flip on Render.
+
+**THE COLLISION — real players made visible, the scenery no longer hides them (founder-directed: "real
+human collision being rare solve for it", 2026-08-08) — BUILT** (`src/collision.js` — a leaf module,
+imports only rules.js; `GET /v1/live`; `public/index.html` renderStart; `test/collision.js` — the 88th
+suite). OMERTÀ is a deep multiplayer built for a population it hasn't met: the NPC residents (the
+population layer) fill every board, so a player sees SCENERY everywhere and rarely knows when an actual
+human is around — the real-human collision the whole social layer exists for is RARE and easy to miss.
+THE ROLODEX answers "who is near my LEVEL" but it's a screen you visit, level-based, not reachable-now.
+This answers the sharper question the thin population makes rare and puts it on HOME: **who is a REAL
+human near me — in my district (reachable) or near my level (findable) — and are they on the wire RIGHT
+NOW.** `collisionBoard` returns HERE (real humans in your district — the reachable collision: the Wet
+Work verbs), NEARBY (near your level elsewhere — travel/DM), and HOT DISTRICTS (where the humans are —
+the convergence nudge, "3 in the Docks → go there"), each row carrying an `online` flag (the live ●),
+sorted ONLINE-FIRST. **RESIDENTS + AGENTS are excluded** (`NOT c.is_npc AND NOT a.agent_flag`) — this
+surface is specifically the REAL humans the scenery hides (residents stay on the streets roster). `online`
+is a FLAG, not a hard filter (the discovery/circle pattern) — a real human in your district who isn't
+socketed this second is still a collision target (they'll be back; contract/DM them) and the ● lights when
+live; a hard filter would flicker with socket state AND be un-fixturable (the mirror can't open a WS —
+that's why circle/discovery surface online as a flag too). §10.4-FREE by construction (pure reads over
+the online set + characters; no ledger vocabulary, no write — the test counts zero rows); NO account UUID
+leaves (the rivals/cast discipline — keyed on the living characterId). The route passes `[...wsClients.keys()]`
+(the WS registry — the circle/discovery precedent). Client: a prominent ● REAL PLAYERS card LEADS THE
+SITUATION on Home (a GETBIND off the alias window), hidden when nobody real is around (the empty-state
+rule); a Wet Work jump for HERE, travel buttons for the hot districts. `test/collision.js` proves the
+here/nearby split, resident+agent exclusion, hot districts (your own dropped), the online flag + online-first
+ordering, no-UUID-leak, the route, and §10.4-neutrality — two mutations each caught by name (a resident
+leaking into HERE; the online flag broken). The mirror gained a co-located neon human so `/v1/live.here`
+is non-empty. No lever (pure read/scope). Suite green + sim drift-0 + mobile 75 + client wiring/mirror +
+pgquery/pgcheck 43/43 on real Postgres. Deferred: a WS "a real player just showed up in your district"
+push the instant it happens (a cross-referenced connect nudge — the strongest convergence signal, but it
+adds WS-connect coupling; the Home card + the 30s poll surface it today).
