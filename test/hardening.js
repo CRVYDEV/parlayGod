@@ -260,6 +260,21 @@ assert(ov.players.accounts >= 1 && ov.players.alive >= 1, 'overview counts accou
 assert(ov.economy.ammPrice > 0, 'overview reads the AMM spot ($/$OMR)');
 assert(ov.economy.omrSupply >= 20000, 'overview reads the true $OMR supply (≥ the 20k genesis)');
 assert(Array.isArray(ov.top.players) && Array.isArray(ov.top.gangs), 'overview carries the leaderboards');
+
+// THE INTEGRATIONS PANEL — the dormant retention/funnel switchboard. Mod-gated, env-presence only,
+// and — the load-bearing property — it NEVER echoes a secret value (a key/webhook URL stays server-side).
+assert.equal((await call('GET', '/v1/mod/integrations')).code, 401, 'the integrations panel needs the mod key');
+process.env.VAPID_PUBLIC_KEY = 'test-pub-key-abc'; process.env.VAPID_PRIVATE_KEY = 'zzq-priv-sentinel-9x7q';
+delete process.env.CITY_WIRE_WEBHOOK_URL;
+const intg = (await call('GET', '/v1/mod/integrations', { headers: modH })).body;
+assert(Array.isArray(intg.integrations) && intg.integrations.length >= 4, 'the panel lists the integrations');
+const pushI = intg.integrations.find((x) => x.id === 'push');
+assert(pushI && pushI.live === true && typeof pushI.why === 'string' && Array.isArray(pushI.needs), 'a configured integration reads LIVE with its rationale');
+const wireI = intg.integrations.find((x) => x.id === 'city_wire');
+assert(wireI && wireI.live === false && typeof wireI.steps === 'string', 'an unconfigured integration reads OFF with activation steps');
+// the secret VALUE is never echoed anywhere in the response (only its var name / a boolean)
+assert(!JSON.stringify(intg).includes('zzq-priv-sentinel-9x7q'), 'the panel never echoes a secret value — env presence only');
+delete process.env.VAPID_PUBLIC_KEY; delete process.env.VAPID_PRIVATE_KEY;
 const act = (await call('GET', '/v1/mod/activity?limit=10', { headers: modH })).body;
 assert(Array.isArray(act.events), 'the activity feed returns events');
 assert.equal((await call('GET', '/v1/mod/activity')).code, 401, 'the activity feed needs the mod key');
