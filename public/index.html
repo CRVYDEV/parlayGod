@@ -3,8 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="google" content="notranslate">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E%F0%9F%8E%A9%3C/text%3E%3C/svg%3E">
+<!-- PWA: installable to the home screen on iOS + Android; fullscreen; the noir fedora app icon. -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0c0b0d">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="OMERTÀ">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>OMERTÀ — the city</title>
 <meta name="description" content="OMERTÀ — a multiplayer noir mafia RPG with a real, server-authoritative economy on a built-in ledger. Autonomous agents are first-class players: play the whole game over a JSON API and withdraw $OMR on-chain. See /agents to start.">
 <!-- Machine discovery: agents & LLMs. See /agents (quickstart), /openapi.json (API), /llms.txt, /v1/rules. -->
@@ -427,6 +435,17 @@
     box-shadow: inset 0 1px 3px rgba(0,0,0,.4); }
 
   /* ── feedback: toast (iconed, springs up), the busy hairline, the brag prompt ── */
+  /* PWA install bar — a dismissible bottom banner (Android prompt / iOS add-to-home-screen hint) */
+  #installbar { position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 12;  /* below the modal layer (20) — a nudge never covers a dialog */
+    display: flex; align-items: center; gap: 11px; width: min(94vw, 460px);
+    background: linear-gradient(180deg, #17131b, #0e0c11); border: 1px solid var(--gold);
+    color: var(--fg); padding: 11px 13px; border-radius: 12px;
+    box-shadow: 0 10px 34px rgba(0,0,0,.6), 0 0 22px rgba(201,162,74,.12); }
+  #installbar > div { flex: 1; min-width: 0; font-size: 13.5px; }
+  #installbar .act { padding: 6px 11px; font-size: 12.5px; }
+  #installbar #install-x { border-color: transparent; color: var(--dim); padding: 6px 8px; }
+  @media (max-width: 760px) { #installbar { bottom: calc(66px + env(safe-area-inset-bottom, 0px)); } }
   #toast { position: fixed; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); left: 50%;
     display: flex; align-items: center; gap: 9px; max-width: min(70vw, 520px); z-index: 10;
     background: linear-gradient(180deg, var(--raise), var(--panel2)); border: 1px solid var(--neon);
@@ -2450,6 +2469,7 @@
     // and a working tab rail can still play; a player with neither can only reload and hope.
     try { renderSheet(); } catch (e) { console.error('renderSheet failed', e); }
     buildTabs(); connectWs(); backfillFeed(); wireFeedFilter(); cityPulse();
+    registerPWA();   // PWA — register the app-shell service worker + offer "Install" (independent of push)
     // WEB PUSH — show/hide the 🔔 button per server config + browser support; if already opted in, make
     // sure the service worker + subscription are live (a browser can drop a subscription).
     updateAlertsBtn();
@@ -2812,6 +2832,41 @@
   $('#btn-phone').onclick = () => { $('#phone').classList.remove('hidden'); renderPhone(); };
   // WEB PUSH — the 🔔 button subscribes this browser so the player gets a phone alert when something
   // happens to them while away. Shown only when the server has push configured AND the browser supports it.
+  // ── PWA — register the app-shell service worker (independent of push) and offer to install to the
+  // home screen. The SW makes the game open instantly + survive a flaky connection; installing gives it
+  // an icon + fullscreen, and on iPhone is what makes web push work at all (installed PWAs only).
+  const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  let deferredInstall = null;
+  function registerPWA() {
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+    if (isStandalone() || localStorage.getItem('omerta_install_dismissed') === '1') return;
+    // Android / desktop Chrome: the browser hands us the prompt — stash it and offer install once engaged.
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault(); deferredInstall = e;
+      if (me) showInstallBar(false);
+    });
+    window.addEventListener('appinstalled', () => { hideInstallBar(); localStorage.setItem('omerta_install_dismissed', '1'); toast('OMERTÀ is on your home screen — welcome to the family.'); });
+    // iOS Safari has no beforeinstallprompt — a one-time hint to add via the Share sheet, once they've settled in.
+    const ua = navigator.userAgent;
+    const iOS = /iphone|ipad|ipod/i.test(ua) && !window.MSStream;
+    const iosSafari = iOS && /safari/i.test(ua) && !/crios|fxios|edgios|chrome/i.test(ua);
+    if (iosSafari) setTimeout(() => { if (me && !isStandalone()) showInstallBar(true); }, 6000);
+  }
+  function showInstallBar(ios) {
+    if ($('#installbar') || localStorage.getItem('omerta_install_dismissed') === '1') return;
+    if (document.querySelector('.modal-bg:not(.hidden)')) return;   // never over an open dialog (the tip-gating precedent)
+    const bar = document.createElement('div');
+    bar.id = 'installbar';
+    bar.innerHTML = ios
+      ? `<img src="/apple-touch-icon.png" alt="" width="34" height="34" style="border-radius:8px"><div><b>Add OMERTÀ to your home screen</b><div class="d" style="font-size:11.5px">Tap <b>Share</b> <span style="font-size:14px">&#x2191;</span> then <b>Add to Home Screen</b> — full-screen, with alerts.</div></div><button class="act" id="install-x" aria-label="dismiss">✕</button>`
+      : `<img src="/apple-touch-icon.png" alt="" width="34" height="34" style="border-radius:8px"><div><b>Install OMERTÀ</b><div class="d" style="font-size:11.5px">Put the city on your home screen — full-screen, opens instantly.</div></div><button class="act prime" id="install-go">Install</button><button class="act" id="install-x" aria-label="dismiss">✕</button>`;
+    document.body.appendChild(bar);
+    const go = $('#install-go');
+    if (go) go.onclick = async () => { if (!deferredInstall) return hideInstallBar(); deferredInstall.prompt(); try { await deferredInstall.userChoice; } catch {} deferredInstall = null; hideInstallBar(); };
+    $('#install-x').onclick = () => { hideInstallBar(); localStorage.setItem('omerta_install_dismissed', '1'); };
+  }
+  function hideInstallBar() { const b = $('#installbar'); if (b) b.remove(); }
+
   const pushSupported = () => ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window);
   function b64ToU8(base64) {
     const pad = '='.repeat((4 - (base64.length % 4)) % 4);

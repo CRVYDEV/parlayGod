@@ -1,0 +1,19 @@
+{
+  "name": "OMERTÀ — the mob city",
+  "short_name": "OMERTÀ",
+  "description": "A noir mafia RPG. Build a family, run the rackets, and never break the code. The city keeps moving while you're gone.",
+  "id": "/",
+  "start_url": "/?src=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#0c0b0d",
+  "theme_color": "#0c0b0d",
+  "categories": ["games"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

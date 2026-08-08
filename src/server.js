@@ -203,6 +203,22 @@ export async function buildServer() {
   try { swJs = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'sw.js'), 'utf8'); } catch { /* headless */ }
   app.get('/sw.js', async (req, reply) =>
     reply.type('application/javascript; charset=utf-8').header('Service-Worker-Allowed', '/').header('cache-control', 'no-cache').send(swJs));
+  // ── PWA — the web manifest + app icons, so the game INSTALLS to the home screen (iOS + Android) and
+  // runs fullscreen. Read once at boot (the sw.js/index precedent); a missing file degrades, never crashes.
+  const pub = (f) => join(dirname(fileURLToPath(import.meta.url)), '..', 'public', f);
+  let manifestJson = ''; try { manifestJson = readFileSync(pub('manifest.json'), 'utf8'); } catch { /* headless */ }
+  const serveManifest = async (req, reply) => reply.type('application/manifest+json; charset=utf-8').header('cache-control', 'public, max-age=3600').send(manifestJson);
+  app.get('/manifest.json', serveManifest);
+  app.get('/manifest.webmanifest', serveManifest);   // some platforms probe this name
+  // the app icons — binary PNGs, served from a filename allowlist Map (the /art precedent; no traversal
+  // surface by construction) with a long cache (they change only on a redeploy).
+  const PWA_ICONS = new Map();
+  for (const f of ['icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png']) {
+    try { PWA_ICONS.set(f, readFileSync(pub(f))); } catch { /* headless */ }
+  }
+  for (const [name, buf] of PWA_ICONS) {
+    app.get('/' + name, async (req, reply) => reply.type('image/png').header('cache-control', 'public, max-age=604800').send(buf));
+  }
   // ── GENERATED ART (public/art/*.jpg): the landing hero, the district plates, the system interiors.
   // Loaded into memory ONCE at boot as an ALLOWLIST keyed by filename, and the request only ever does a
   // Map lookup — user input is never joined into a path, so there is no traversal surface by
