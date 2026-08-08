@@ -43,6 +43,28 @@ export async function publicDossier(pool, name) {
   };
 }
 
+// ── THE BEEF — the rivalry dossier. The genre's viral unit is not a stat card, it's BEEF: "look what
+// this guy did to me, come help me end him." kill_log is already public (it drives the feud ledger),
+// so counting the bodies between two bloodlines is public-safe by construction — no wealth, no exact
+// figures, just who has put whom in the river and how many times. Resolves two living names.
+export async function beefDossier(pool, nameA, nameB) {
+  const one = async (n) => (await pool.query(
+    `SELECT c.account_id, c.name, c.respect, g.tag
+       FROM characters c LEFT JOIN gang_members gm ON gm.character_id = c.id
+       LEFT JOIN gangs g ON g.id = gm.gang_id
+      WHERE lower(c.name) = lower($1) ORDER BY c.alive DESC LIMIT 1`, [String(n || '')])).rows[0];
+  const a = await one(nameA), b = await one(nameB);
+  if (!a || !b || a.account_id === b.account_id) return { found: false, a: { name: String(nameA || '') }, b: { name: String(nameB || '') } };
+  const between = async (k, v) => Number((await pool.query(
+    'SELECT count(*) c FROM kill_log WHERE killer_account=$1 AND victim_account=$2', [k, v])).rows[0].c) || 0;
+  const aKills = await between(a.account_id, b.account_id);
+  const bKills = await between(b.account_id, a.account_id);
+  const info = (r) => ({ name: r.name, tag: r.tag || null, level: levelOf(Number(r.respect) || 0) });
+  return { found: true, a: info(a), b: info(b), aKills, bKills, total: aKills + bKills,
+    // who's ahead — the tension the share carries
+    leader: aKills > bKills ? 'a' : bKills > aKills ? 'b' : 'even' };
+}
+
 // ── shared poster frame (1200×630 — the OG-image ratio; unfurls in a feed) ──
 const W = 1200, H = 630;
 
@@ -137,6 +159,32 @@ export function card(type, d, ref) {
     { accent, cta, plate: 'legend' });
 }
 
+// ── THE BEEF CARD — a rivalry poster. Two mugs, the body count between them, and who's ahead.
+// The shareable "come help me end him" artifact. Public-safe: kill counts only, never wealth. ──
+export function beefCard(d, ref) {
+  const cta = ref ? `${esc(ref)} sent you  ·  pick a side at omertà` : 'pick a side  ·  omertà';
+  if (!d.found) {
+    return frame(`
+      <text x="${W / 2}" y="240" text-anchor="middle" fill="${BLOOD}" font-size="64" letter-spacing="8">NO BLOOD SPILLED</text>
+      <text x="${W / 2}" y="330" text-anchor="middle" fill="${INK}" font-size="40">${esc(d.a?.name || '?')} &amp; ${esc(d.b?.name || '?')}</text>
+      <text x="${W / 2}" y="386" text-anchor="middle" fill="${DIM}" font-size="26">— not yet, anyway.</text>`,
+      { accent: BLOOD, cta, plate: 'whacked' });
+  }
+  const nameOf = (x) => `${esc(x.name)}${x.tag ? ` [${esc(x.tag)}]` : ''}`;
+  const aWin = d.leader === 'a', bWin = d.leader === 'b';
+  return frame(`
+    <text x="${W / 2}" y="150" text-anchor="middle" fill="${BLOOD}" font-size="60" letter-spacing="8" font-weight="bold">BLOOD BETWEEN THEM</text>
+    ${mug(W * 0.26, 300)}
+    ${mug(W * 0.74, 300)}
+    <text x="${W / 2}" y="300" text-anchor="middle" fill="${GOLD}" font-size="44" letter-spacing="4">VS</text>
+    <text x="${W * 0.26}" y="410" text-anchor="middle" fill="${aWin ? INK : DIM}" font-size="34">${nameOf(d.a)}</text>
+    <text x="${W * 0.74}" y="410" text-anchor="middle" fill="${bWin ? INK : DIM}" font-size="34">${nameOf(d.b)}</text>
+    <text x="${W * 0.26}" y="474" text-anchor="middle" fill="${aWin ? BLOOD : DIM}" font-size="56" font-weight="bold">${d.aKills}</text>
+    <text x="${W * 0.74}" y="474" text-anchor="middle" fill="${bWin ? BLOOD : DIM}" font-size="56" font-weight="bold">${d.bKills}</text>
+    <text x="${W / 2}" y="520" text-anchor="middle" fill="${DIM}" font-size="24" letter-spacing="2">${d.total} ${d.total === 1 ? 'body' : 'bodies'} · ${d.leader === 'even' ? 'a dead-even feud' : `${esc((aWin ? d.a : d.b).name)} is ahead`}</text>`,
+    { accent: BLOOD, cta, plate: 'whacked' });
+}
+
 // ── the public profile page — the "champion" destination; a shared link lands here ──
 export function profilePage(d, baseUrl, ref) {
   // og:image points at the PNG variant — X/Twitter/most feeds won't unfurl an SVG (server rasterizes,
@@ -203,5 +251,40 @@ ${d.found ? `<div class="dossier">
 ${d.found ? `<p class="what">A noir mafia RPG. Pull jobs, run a kitchen, take turf, and put a rival in the river —
 or <b>go legit</b> and die in bed. <b>Death is real</b>: your street dies, but the bloodline carries on.
 Everything runs on one honest ledger, and the city never stops moving.</p>` : ''}
+</div></body></html>`;
+}
+
+// ── THE BEEF PAGE — the shareable rivalry destination. A link to /beef/A/B unfurls the beef card
+// (og:image) and lands a visitor on "pick a side". The genre's viral unit: come help me end him. ──
+export function beefPage(d, baseUrl, ref) {
+  const A = d.a?.name || '?', B = d.b?.name || '?';
+  const cardUrl = `${baseUrl}/card/beef/${encodeURIComponent(A)}/${encodeURIComponent(B)}.png`;
+  const enter = `${baseUrl}/?ref=${encodeURIComponent(ref || A)}`;
+  const title = `${A} vs ${B} — a feud in OMERTÀ`;
+  const desc = d.found
+    ? `${d.total} ${d.total === 1 ? 'body' : 'bodies'} between them${d.leader === 'even' ? ' — dead even' : ` · ${(d.leader === 'a' ? d.a : d.b).name} is ahead`}. Pick a side.`
+    : `${A} and ${B} — no blood spilled yet. Start something.`;
+  const inline = beefCard(d, ref || A);
+  return `<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(title)}</title>
+<meta property="og:title" content="${esc(title)}"><meta property="og:description" content="${esc(desc)}">
+<meta property="og:image" content="${esc(cardUrl)}"><meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:site" content="@${esc(SOCIAL_X_HANDLE)}"><meta name="twitter:title" content="${esc(title)}">
+<meta name="twitter:description" content="${esc(desc)}"><meta name="twitter:image" content="${esc(cardUrl)}">
+<style>:root{color-scheme:dark}body{margin:0;background:#0c0d11;color:${INK};font-family:'Helvetica Neue',Arial,sans-serif;min-height:100vh;display:grid;place-items:center;padding:32px;position:relative}
+body::before{content:'';position:fixed;inset:0;z-index:-2;background:url('/art/hero-poster.jpg') center 62%/cover no-repeat;opacity:.5}
+body::after{content:'';position:fixed;inset:0;z-index:-1;background:radial-gradient(120% 90% at 50% 40%,rgba(12,13,17,.70),rgba(12,13,17,.93) 62%,#0c0d11 100%)}
+.wrap{max-width:780px;width:100%;text-align:center;position:relative}
+.card{width:100%;border:1px solid #2a2d37;border-radius:6px;overflow:hidden;box-shadow:0 20px 60px #0009;margin-bottom:26px}
+.card svg{display:block;width:100%;height:auto}
+h1{font-family:Georgia,serif;font-size:15px;letter-spacing:.3em;color:${BLOOD};text-transform:uppercase;margin:0 0 18px}
+.enter{display:inline-block;font-family:Georgia,serif;font-size:20px;letter-spacing:.04em;color:${BG};background:${GOLD};padding:15px 40px;border-radius:4px;text-decoration:none;font-weight:600}
+.sub{color:${DIM};font-size:13px;margin-top:16px;max-width:52ch;margin-left:auto;margin-right:auto;line-height:1.5}</style>
+</head><body><div class="wrap">
+<h1>Omertà · blood between them</h1>
+<div class="card">${inline}</div>
+<a class="enter" href="${esc(enter)}">ENTER THE CITY →</a>
+<p class="sub">${d.found ? `${esc(A)} and ${esc(B)} have a feud in OMERTÀ — ${d.total} ${d.total === 1 ? 'body' : 'bodies'} and counting. Start your own street — free, no wallet needed${ref ? `, and ${esc(ref)} gets credit for bringing you in.` : '.'}` : 'A noir mob RPG — build a family, run the rackets, survive the street.'}</p>
 </div></body></html>`;
 }

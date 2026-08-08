@@ -448,6 +448,30 @@ if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actual
   assert.equal((await app.inject({ method: 'GET', url: '/card/legend/Nobody%20Here' })).statusCode, 200, 'unknown card → 200 (join fallback)');
   assert.equal((await app.inject({ method: 'GET', url: '/u/Nobody%20Here' })).statusCode, 200, 'unknown profile → 200 (join the city)');
   assert.equal((await app.inject({ method: 'GET', url: '/card/bogus/Broadcast%20Bruno' })).statusCode, 200, 'unknown card type → 200 (falls back to legend, never breaks a share)');
+
+  // THE BEEF — the rivalry poster (the genre's viral unit). Two names → the body count between their
+  // bloodlines (public-safe: kills only, never wealth). A shareable /beef page unfurls the card.
+  const rivalTok = (await call('POST', '/v1/auth/guest')).body.token;
+  await call('POST', '/v1/character', { token: rivalTok, body: { name: 'Beef Rival' } });
+  const rivalId = (await meOf(rivalTok)).id;
+  const rivalAcct = (await pool.query('SELECT account_id a FROM characters WHERE id=$1', [rivalId])).rows[0].a;
+  // seed two bodies Bruno→Rival and one Rival→Bruno (kill_log is already public — drives the feud ledger)
+  await pool.query("INSERT INTO kill_log (id, killer_account, victim_account, victim_name) VALUES ('kb1',$1,$2,'Beef Rival'),('kb2',$1,$2,'Beef Rival'),('kb3',$2,$1,'Broadcast Bruno')", [bAcct, rivalAcct]);
+  const beefCard = await app.inject({ method: 'GET', url: '/card/beef/Broadcast%20Bruno/Beef%20Rival' });
+  assert.equal(beefCard.statusCode, 200, 'the beef card → 200');
+  assert(beefCard.body.includes('<svg') && beefCard.body.includes('BLOOD BETWEEN THEM'), 'the beef card is a well-formed rivalry poster');
+  assert(beefCard.body.includes('>2<') && beefCard.body.includes('>1<'), 'the card shows the body count both ways (2 vs 1)');
+  // strip the base64 plate first — its alphabet contains "NaN"/"undefined" by chance (the art-pass lesson)
+  const beefMarkup = beefCard.body.replace(/data:image\/[a-z+]+;base64,[A-Za-z0-9+/=]+/g, 'data:PLATE');
+  assert(!/\$[0-9]/.test(beefMarkup) && !/undefined|NaN/.test(beefMarkup), 'no exact wealth, no undefined/NaN on the beef card');
+  const beefPage = await app.inject({ method: 'GET', url: '/beef/Broadcast%20Bruno/Beef%20Rival?ref=Broadcast%20Bruno' });
+  assert.equal(beefPage.statusCode, 200, 'the beef page → 200');
+  assert(beefPage.body.includes('og:image') && beefPage.body.includes('/card/beef/'), 'the beef page declares the OG unfurl (the beef card)');
+  assert(beefPage.body.includes('ref=Broadcast'), 'the beef page CTA carries the ?ref attribution');
+  // a pair with no history → a graceful "no blood spilled", never a broken share
+  const noBeef = await app.inject({ method: 'GET', url: '/card/beef/Broadcast%20Bruno/Nobody%20Atall' });
+  assert.equal(noBeef.statusCode, 200, 'a beef with a stranger → 200');
+  assert(noBeef.body.includes('NO BLOOD SPILLED'), 'no history falls back gracefully');
   // (5) SECURITY — these are PUBLIC keyless routes. An oversized ?ref (query, so NOT bounded by
   //     Fastify's URI cap the way a giant :name path is) is clamped before render, so it can't inflate
   //     the SVG / make resvg rasterize a giant string / poison the PNG cache. And any HTML/SVG

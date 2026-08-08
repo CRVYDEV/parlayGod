@@ -10186,3 +10186,23 @@ mutation-verified), and §10.4-neutrality. Suite green + sim drift-0 + mobile 75
 (THE DAY's item element reads covered) + pgquery + pgcheck on real Postgres (no new SQL — reuses the
 readers). No new lever (pure read). Browser-probed live (📋 Today · 3 ready · 0/5 done with the checklist,
 zero page errors). The seven scattered daily surfaces are now one glance.
+
+**THE BEEF — the shareable rivalry poster (founder-directed 2026-08-08, the strategic pass's organic-funnel
+recommendation: the genre's viral unit is BEEF, not a stat card — "look what this guy did to me, come help
+me end him" — and THE BROADCAST only did single-player cards) — BUILT** (`src/cards.js` `beefDossier` +
+`beefCard` + `beefPage`, `GET /card/beef/:a/:b` (+ `.png`) + `GET /beef/:a/:b`, a "call them out ↗" share
+button on the Home nemesis card; `test/hardening.js` THE BEEF block). Two names → the body count between
+their bloodlines, rendered as a "BLOOD BETWEEN THEM" 1200×630 noir poster (two mugs, the tally both ways,
+who's ahead) that unfurls in a feed. **PUBLIC-SAFE BY CONSTRUCTION** — `kill_log` is already public (it
+drives the feud ledger), so counting bodies between two accounts leaks nothing new; the card carries ONLY
+kill counts, never a dollar figure (the anti-precise-kill-EV rule, test-pinned with a data-URI-stripped
+`$[0-9]`/`undefined`/`NaN` scan — the art-pass base64 lesson). `/beef/:a/:b` is the shareable PAGE whose
+`og:image` is the beef card, so a shared link unfurls the rivalry (the `/u` profile precedent); the CTA
+carries `?ref=` attribution (the §7.13 loop). The client nemesis card gained a "call them out ↗" X-intent
+button (`/beef/<me>/<rival>`) with a `data-beacon="beef"` share-intent beacon into the funnel. **ZERO §10.4**
+(public keyless reads, status/marketing only — no value moves, no row written). A pair with no history falls
+back to "NO BLOOD SPILLED" (never a broken share); an unknown/self pair is handled. `test/hardening.js`
+proves the card is a well-formed rivalry poster showing the count both ways (2 vs 1, mutation-verified), the
+page declares the OG unfurl + the ref, no exact wealth leaks, and the no-history fallback. Suite green + sim
+drift-0 + mobile 75/75 + routes 621 + client wiring/mirror + pgquery + pgcheck 43/43 on real Postgres. No
+new lever. The genre's actual growth engine — beef — is now a shareable artifact.

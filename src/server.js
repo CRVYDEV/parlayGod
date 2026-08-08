@@ -270,11 +270,33 @@ export async function buildServer() {
     reply.type('image/svg+xml; charset=utf-8').header('cache-control', 'public, max-age=300');
     return reply.send(svg);
   });
+  // THE BEEF — the rivalry poster (the genre's viral unit is beef, not a stat card). Two names →
+  // the body count between their bloodlines. Public + keyless + read-only; zero §10.4.
+  app.get('/card/beef/:a/:b', async (req, reply) => {
+    const wantPng = req.params.b.endsWith('.png');
+    const nameB = clip(wantPng ? req.params.b.slice(0, -4) : req.params.b);
+    const nameA = clip(req.params.a);
+    const ref = clip(req.query.ref || nameA);
+    const d = await Cards.beefDossier(pool, nameA, nameB);
+    const svg = Cards.beefCard(d, ref);
+    if (wantPng) {
+      const png = await renderPng(svg);
+      if (png) { reply.type('image/png').header('cache-control', 'public, max-age=300'); return reply.send(png); }
+    }
+    reply.type('image/svg+xml; charset=utf-8').header('cache-control', 'public, max-age=300');
+    return reply.send(svg);
+  });
   app.get('/u/:name', async (req, reply) => {             // the public profile page (the champion destination)
     const name = clip(req.params.name);
     const d = await Cards.publicDossier(pool, name);
     reply.type('text/html; charset=utf-8');
     return reply.send(Cards.profilePage(d, baseUrl, clip(req.query.ref || name)));
+  });
+  app.get('/beef/:a/:b', async (req, reply) => {          // the shareable rivalry page (og:image = the beef card)
+    const nameA = clip(req.params.a), nameB = clip(req.params.b);
+    const d = await Cards.beefDossier(pool, nameA, nameB);
+    reply.type('text/html; charset=utf-8');
+    return reply.send(Cards.beefPage(d, baseUrl, clip(req.query.ref || nameA)));
   });
   // ── THE AGENT GATEWAY: the machine-discovery layer (agents are first-class players; see AGENTS.md) ──
   let agentsMd = '# OMERTÀ — Agent Guide\n\nGuide file missing (AGENTS.md). See GET /openapi.json and GET /v1/rules.';
@@ -425,6 +447,7 @@ export async function buildServer() {
     // each connect still does a real jwt.verify + socket churn. Bound the pre-auth upgrade per-IP too.
     if (rateLimitsEnabled() && (req.method === 'GET' || req.method === 'HEAD')
       && (req.url.startsWith('/card/') || req.url.startsWith('/u/') || req.url.startsWith('/v1/u/')
+          || req.url.startsWith('/beef/')
           || req.url.startsWith('/v1/art/') || req.url.startsWith('/v1/landmarks') || req.url.startsWith('/v1/ws')
           // (D1) the OAuth callback is a keyless GET that does real per-hit work (oauth_states DELETE +
           // an outbound X token/user fetch); the POST-only auth limiter + the token-gated read limiter

@@ -2124,6 +2124,8 @@
   // THE BROADCAST — a share links to the player's public profile (/u/<name>?ref=<name>): it unfurls
   // the noir card in a feed, and the ?ref auto-credits the sharer when a recruit signs up (§7.13).
   const shareUrl = (name) => `${(rules?.share?.gameUrl || location.origin).replace(/\/+$/, '')}/u/${encodeURIComponent(name)}?ref=${encodeURIComponent(name)}`;
+  // THE BEEF — a rivalry share link. /beef/<me>/<rival> unfurls the "blood between them" poster.
+  const beefUrl = (a, b) => `${(rules?.share?.gameUrl || location.origin).replace(/\/+$/, '')}/beef/${encodeURIComponent(a)}/${encodeURIComponent(b)}?ref=${encodeURIComponent(a)}`;
   const xIntent = (text, url) => `https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
   // fire-and-forget beacon so the founder's funnel can measure share intent → recruit (organic loop)
   const beaconShare = (kind) => { try { api('POST', '/v1/broadcast/shared', { kind }); } catch {} };
@@ -3153,6 +3155,11 @@
     if (!el) return;
     const h = STAT_HELP[el.dataset.stathelp];
     if (h) { const { title, body } = h(); sheetModal(title, body); }
+  });
+  // share-intent beacons (organic funnel: measure share intent → recruit) — the link navigates on its own
+  document.addEventListener('click', (e) => {
+    const el = e.target.closest?.('[data-beacon]');
+    if (el) beaconShare(el.dataset.beacon);
   });
 
   // ── tabs ──
@@ -4398,7 +4405,7 @@
         ${paperCard}
         ${nem ? `<div class="card" style="border-color:var(--bad)"><span class="t" style="color:var(--bad)">${av(nem.street?.id, 30)}YOUR NEMESIS${nem.street?.alive === false ? ' — LINE FALLEN' : ''}</span>
           <div class="d"><b>${esc(nem.street?.name || 'a fallen line')}</b> has moved on you <b>${nem.total}</b> time${nem.total === 1 ? '' : 's'}${nem.bloodOwed > 0 ? ` — and their line owes yours <b>${nem.bloodOwed} bod${nem.bloodOwed === 1 ? 'y' : 'ies'}</b>` : nem.bloodOwed < 0 ? ` — your line owes theirs ${-nem.bloodOwed}` : ''}.${nem.vendetta?.mine ? ' A vendetta is SWORN.' : ''}${nem.vendetta?.theirs ? ' Their line has sworn one on YOU.' : ''}</div>
-          <div class="row">${nem.street?.id ? `<button class="act" data-story="${nem.street.id}" data-story-name="${esc(nem.street.name)}">the story of you two</button><button class="act" data-go-tab="pvp">settle it →</button>` : `<button class="act" ${''}disabled>their line is dead — for now</button>`}</div></div>` : ''}
+          <div class="row">${nem.street?.id ? `<button class="act" data-story="${nem.street.id}" data-story-name="${esc(nem.street.name)}">the story of you two</button><button class="act" data-go-tab="pvp">settle it →</button>${me?.name ? `<a href="${xIntent(`Me vs ${nem.street.name} in OMERTÀ — ${nem.total} bod${nem.total === 1 ? 'y' : 'ies'} between us and counting. Come help me end them.`, beefUrl(me.name, nem.street.name))}" target="_blank" rel="noopener noreferrer"><button class="act" data-beacon="beef">call them out ↗</button></a>` : ''}` : `<button class="act" ${''}disabled>their line is dead — for now</button>`}</div></div>` : ''}
         ${(pp.family || pp.spouse || pp.consigliere || pp.guardedBy || (pp.guarding || []).length || (pp.bonds || []).length) ? `<div class="card" style="border-color:var(--gold)"><span class="t" style="color:var(--gold)">YOUR PEOPLE</span>
           <div class="d">${[
             pp.family ? `<b>${esc(pp.family.name)}</b> [${esc(pp.family.tag || '')}] — your family (${esc(pp.family.role)})` : null,
