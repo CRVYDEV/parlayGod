@@ -10271,3 +10271,33 @@ one lever (pure scope — no faucet). Deferred (step two): an avatar VARIANT re-
 board-provided-seed plumbing so a chosen look is visible to others — a broader change than "thin"), and
 the bio on the Cast/Situation people cards. **The six strategic recommendations are now all built**
 (ACTIVATION, THE MAP, THE DAY, THE BEEF, BRING ONE, IDENTITY).
+
+**THE AHA MOMENT — the guaranteed early-conflict beat (founder-directed: "do the aha moment", 2026-08-08)
+— BUILT** (`src/firstblood.js` — a leaf module, imports only rules.js + crypto; `test/firstblood.js` — the
+87th suite; `AHA` rules tail; new `characters.aha_stage`/`aha_rival`/`aha_rival_name`, ALTER-added the
+outage-lesson way). The retention diagnosis: a deep multiplayer's hook is DANGER — the first time the city
+comes for YOU — but a fresh street can grind a whole session and never feel hunted (the PvP/revenge loop is
+gated behind level and depth; real-human collision is rare in a thin population — the harness lands a
+plausible solo player at level 33 with no human contact). This ENGINEERS a first conflict. The post-commit
+hook `startFirstBlood` (the maybeQualifyReferral discipline: a cheap unlocked indexed pre-check, opens a txn
+only when it will assign, non-fatal — a throw after commit would surface non-2xx → idempotency release →
+double-spend) fires once a player is past `AHA.MIN_LVL` (3): it picks the WEAKEST nearby live resident and
+has them "make a move" — a `callout` on the rivals ledger (so it lights the nemesis card exactly like a real
+player's move — the info-economy rule holds since the streets already show who is in the district) + a
+`first_blood` notification the client plays as a violent cinematic — then flips `aha_stage` 0→1 and the coach
+rung "Settle your first score" points at the Wet Work roster. SETTLING it is a JUMP (the accessible level-1
+verb): `settleFirstBlood` (hooked into combat.js's jump win path, deps-injected ledger/notify/gainRespect so
+firstblood.js stays a leaf) pays the once-ever bonus and flips stage 1→2. A fresh city with no residents
+simply doesn't assign (the beat waits for a body — no error); a fresh heir starts at stage 0 and gets their
+own beat. **§10.4: ONE bounded faucet** `firstblood:reward` ($2,500 + 40 respect, joined the cash
+`KNOWN_REASONS`), gated by `aha_stage` so it can NEVER pay twice a street — the test asserts zero new drift
+over the SQL-seed baseline and the vocabulary closed. The `aha_*` columns are direct-SQL (off
+persistCharacter's positional list — the active_at pattern → clobber-safe; the assignment writes them in its
+own txn). Client: `showFirstBlood` (a `sessionStorage`-deduped violent cine + toast on the `first_blood` WS
+event), `first_blood`/`first_blood_settled` feed lines, and a `cineFor` payday cinematic on the settle
+response. `test/firstblood.js` proves the assignment (stage 1, the callout row, the notification, the coach
+rung), IDEMPOTENCE (a second action assigns nothing new), the settle (the response bonus, stage 2, the
+ledgered faucet), the ONCE-EVER gate (a second jump pays nothing), and §10.4 (one bounded faucet + closed
+vocabulary + no new drift) — two mutations each caught by name (settle disabled → the response assertion;
+vocab drop → the vocabulary assertion). All three `AHA.*` numbers are founder sign-off levers (pinned in
+`test/levers.js`; BALANCE.md § THE AHA MOMENT).

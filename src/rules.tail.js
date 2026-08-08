@@ -4794,6 +4794,12 @@ export function crewObjectiveOf(crewId, week, members = 1) {
   return { kind: k.id, label: k.label, unit: k.unit, base: k.base, target: k.base * Math.max(1, members) };
 }
 
+// ═══ THE AHA MOMENT — "First Blood" ═══ (the guaranteed early conflict; onboards the PvP/revenge loop)
+// A new player is handed their first rival soon after finding their feet (MIN_LVL), delivered as a
+// cinematic; settling it (a JUMP) pays a bounded ONCE-EVER bonus. The reward is gated by aha_stage, so
+// it can never pay twice on a street — a petty, bounded cash faucet (`firstblood:reward`, BALANCE.md).
+export const AHA = { MIN_LVL: 3, REWARD_CASH: 2500, REWARD_RESPECT: 40 };
+
 // ═══ IDENTITY ═══ (thin character customization — a free "about me" blurb; the MySpace-page element)
 // The expression hook the profile lacked: a player-chosen bio shown on their public page (the funnel)
 // and My Profile. Deliberately FREE and text-only — distinct from the paid vanity TITLE ($OMR sink) and
