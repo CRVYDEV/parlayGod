@@ -10459,3 +10459,28 @@ self-funded), and crew non-aggression covering only the lethal verbs not the pro
 mid-audit (the recurring env trap); caught because the lenses reported files "not present" that production
 has — always re-verify a finding against `origin/main` before acting, and never trust a green run on a base
 you haven't confirmed is current.
+
+**R28 FLAGGED ITEMS — RECOMMENDATIONS APPLIED (founder-directed, same session).** The founder directed
+"apply your recommendations as a fix" to everything R28 flagged. Re-verified each against source first —
+which correctly retired one as unreachable: **#5 (giveVouch cap TOCTOU) needs NO fix** — `giveVouch` runs
+under `withCharacter`, and one account has one living character, so two concurrent vouches from an account
+serialize on that char's `FOR UPDATE` lock; the "two concurrent vouches" scenario can't occur. Applied
+(regression each, source tripwires for the pg-mem-unexercisable worker/lock races): **#4** `bumpCrewObjective`
+now locks the `crew_objectives` row `FOR UPDATE` before the SUM+progress write (consistent char→objective
+order), so two crewmates bumping concurrently can't store a stale progress or delay completion a bump (was
+self-healing; now exact). **#3 + #6** `sweepNpcAggression` and `sweepNpcDiplomacy` are now single-writer under
+a session advisory lock (the `runPopulation`/wage-epoch discipline, distinct lock classes 'NW'/'ND', engaged
+only under real Postgres, released on session end), so two worker replicas during a deploy overlap can't
+double-enqueue a family_aggro strike (an over-hospitalization) or open a hostility/alliance past TARGET.
+**Kept by design, with reasoning** (applying my recommendation = leave as-is): **#2** (`raidFamily`
+accounts-after-gangs) — `family_wars_won` is a PLAIN atomic increment (no lost update), so the only residual
+is a retry-masked deadlock (40P01→contention) on a §10.4-neutral STATUS counter; restructuring to reorder
+the locks risks a new bug for zero functional gain, so it stays the accepted referral-class posture. **F3**
+(`streak:daily` no level floor) — the daily check-in is DELIBERATELY for all players from day one (the
+retention feature); it is agent-excluded and non-extractable, and INVITE_MODE=on is the production Sybil
+bound — a level floor would defeat the feature. **F4** (`mentor:gift` untaxed) — it is charity from a
+mentor's own already-earned cash, bounded by the graduated gate + cooldown + 3-protégé cap and
+non-extractable; taxing a kindness is the wrong change. **crew non-aggression not covering property crimes**
+— the intended "crew = restraint from KILLING" asymmetry (family omertà is heavier by design); self-remedied
+by leaving the crew, and a change here is a founder design call, not a security fix. Suite green + sim
+drift-0 + pgquery + pgcheck 43/43 on real Postgres.
