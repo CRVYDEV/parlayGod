@@ -23,6 +23,7 @@ import * as Streak from './streak.js';
 import * as Circle from './circle.js';
 import * as Explore from './explore.js';
 import * as Prime from './primetime.js';
+import * as CityMap from './citymap.js';
 import * as Vouch from './vouch.js';
 import * as Push from './push.js';
 import { cityEventBoard, resultsBoard } from './events.js';
@@ -1464,6 +1465,11 @@ export async function buildServer() {
     }
     return { districts: out };
   });
+
+  // THE MAP — the visible city: per-district control (holder / occupier / contest / watch / racket /
+  // sov) + the neighbour edges + a family power ranking, in one read. Authed so it can flag YOUR turf.
+  app.get('/v1/map', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => CityMap.cityMap(client, ch, h.owned.gangId)));
 
   // ── M3: the streets (§5.2) ──
   app.get('/v1/streets', { preHandler: auth }, async () => {
