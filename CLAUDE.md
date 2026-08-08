@@ -10354,3 +10354,65 @@ is non-empty. No lever (pure read/scope). Suite green + sim drift-0 + mobile 75 
 pgquery/pgcheck 43/43 on real Postgres. Deferred: a WS "a real player just showed up in your district"
 push the instant it happens (a cross-referenced connect nudge — the strongest convergence signal, but it
 adds WS-connect coupling; the Home card + the 30s poll surface it today).
+
+**THE DISPATCH — the opt-in "while you were gone" email digest (founder-directed retention build,
+2026-08-08) — BUILT** (`src/dispatch.js`, `test/dispatch.js` — the 89th suite; `GET/POST /v1/digest` +
+`GET /v1/digest/unsubscribe`; `public/index.html` My Profile). Web push reaches players who opted in on a
+device; email reaches the ones who DIDN'T — the lapsed, the churned. The content already exists (THE
+MORNING PAPER: your take, your rival's move, the Bureau); this is the channel that carries it as a return
+nudge. **DORMANT until `EMAIL_API_KEY` is set** (the VAPID/chain precedent — nothing sends without a
+provider), **OPT-IN only** (a player enters an address + turns it on), with a **one-click unsubscribe** in
+every message (a stateless HMAC token — `unsubToken` = HMAC(account_id) with `JWT_SECRET`, so the
+unsubscribe link needs no login and can't be forged; a public keyless `/v1/digest/unsubscribe?a=&t=`).
+The game does NOT store email today (auth is X/Privy/guest), so `account_persistent.email`/`digest_optin`/
+`digest_at` were ALTER-added the outage-lesson way. The worker `sweepDispatch` finds LAPSED opted-in
+players — last telemetry between `DIGEST_LAPSE_DAYS` (3) and `DIGEST_MAX_LAPSE_DAYS` (30) ago (we stop
+nagging the long-gone), cooldown `DIGEST_COOLDOWN_DAYS` (7) — builds a digest over the away window
+(the Morning Paper's two queries, on a window WE control, not the in-app `paper_at`), and sends via a
+provider HTTP POST (Resend shape: from/to/subject/html/text + Bearer key; `EMAIL_API_URL` overridable;
+a `__setSender` test seam). **CLAIM-then-send** (the push C1 discipline — `digest_at` is stamped with a
+guard BEFORE the send, so two overlapping workers can't both email); a lapsed player with nothing in the
+window gets no empty nag (the stamp stands). §10.4-FREE (reads notifications + the cash ledger, moves no
+value, writes no `transactions` row — the test asserts zero). Careful copy: in-game figures are game
+currency, never a real-money/price/earnings claim; the unsubscribe is one click, no dark pattern. Client:
+a "Stay in the loop" card on My Profile (email field + opt-in, shown only when `rules.digest.available`),
+a `describe()` toast, an unsubscribe landing page. `EMAIL_*`/`DIGEST_*` classified in preflight (dormant/
+defaulted). `test/dispatch.js`: the availability flag, bad-email/no-email refusals, the normalized store,
+the HMAC token round-trip, the sweep emailing EXACTLY the lapsed opted-in player (active/too-long-gone/
+opted-out all skipped), the cooldown + claim-then-send idempotency, DORMANT sending nothing, the
+keyless-token unsubscribe (+ a forged token doing nothing), and §10.4-neutrality — two mutations each
+caught by name (the lapse window ignored; the unsubscribe link dropped). DEPLOY.md runbook: set
+`EMAIL_API_KEY` (+ `EMAIL_FROM`) on the worker → players opt in on My Profile → the sweep does the rest.
+Suite green + sim drift-0 + mobile 75 + pgquery/pgcheck 43/43 on real Postgres. **Legal note:** sending
+marketing/transactional email for a real-money-adjacent game carries compliance weight (consent,
+unsubscribe, jurisdiction) — the opt-in + one-click unsubscribe are built in, and exact external copy is
+a counsel item like the rest of the messaging surface. No lever, no faucet.
+
+**THE PWA — the game installs to the home screen (iOS + Android) — BUILT** (`public/manifest.json`,
+`public/sw.js`, four noir-fedora app icons, `src/server.js` static routes, `public/index.html` install
+prompt; `test/pwa.js` — the 90th suite). Mobile is where a mafia-RPG audience lives, and a browser tab is
+easy to forget — the whole retention arc (web push, the Morning Paper, the daily streak) is worth far more
+from a home-screen icon that opens full-screen and buzzes. Zero new deps, zero build step: the console is
+still one HTML file. **The manifest** (`GET /manifest.json` + `/manifest.webmanifest`) declares
+`display: standalone`, the noir `#0c0b0d` theme, and three icons (192/512 + a maskable 512 for Android's
+safe-zone); the icons are binary PNGs served from a boot-time filename-allowlist Map (the `/art` precedent —
+no traversal surface by construction) with a week-long cache. **The service worker is now an app shell, not
+just push** — the whole game is one HTML file that changes every deploy, so navigations are **NETWORK-FIRST**
+(you always get the freshest client online; the cached `/` shell is only an offline fallback — a deploy can
+never be masked by a stale cache), static assets (icons, `/art/*`) are cache-first, and the **API (`/v1/*`,
+the websocket, `/sw.js`) is NEVER cached** (asserted by `test/pwa.js`). The push handlers are unchanged (and
+on iPhone, web push only works from an INSTALLED PWA — so this is what makes the alerts reach an iOS player
+at all). **The install prompt** (`registerPWA`/`showInstallBar`): Android/desktop Chrome stashes the
+`beforeinstallprompt` and offers a dismissible **Install** bar once the player has settled in; iOS Safari
+(no such event) gets a one-time "Add to Home Screen via Share" hint after 6s. The bar sits at **z-index 12
+(below the modal layer, 20)** and refuses to appear over any open dialog (`.modal-bg:not(.hidden)` — the
+tip-gating precedent), so a nudge can never intercept a modal click — the exact regression the mobile
+harness caught (a `#glossary-close` click endlessly intercepted by a z-index-40 bar) and now guards against.
+`viewport-fit=cover` + the safe-area insets + the apple-touch-icon/status-bar meta complete the iOS
+full-screen look. §10.4-FREE (static assets + a client nudge — moves no value, adds no reason/lever).
+`test/pwa.js` proves the manifest is valid + complete (name, standalone, 192+512+maskable, all icons
+resolve — a 404 icon breaks install), the icons are real PNGs (magic bytes), the SW is an app-shell (install/
+fetch/push handlers + never caches the API), and the client head carries the install tags. Suite green + sim
+drift-0 + mobile 75 + pgquery/pgcheck 43/43 on real Postgres. No native wrapper / app-store submission (a
+PWA installs directly from the browser with no store review, no 30% cut, and no separate binary to ship —
+the store-wrapper path is a deferred, counsel-gated decision for a real-money-adjacent game).
