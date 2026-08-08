@@ -12,6 +12,7 @@ import { buildServer } from '../src/server.js';
 import { FAMILY_WAR, familyWarRankOf } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { sweepFamilyAggro, sweepNpcWars, sweepNpcAggression } from '../src/npcwar.js';
+import { readFileSync as _readSrc } from 'node:fs';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -435,6 +436,23 @@ await pool.query('DELETE FROM npc_aggression');
 // ── §10.4: the vocabulary knows family:raid (cash faucet + ammo sink) ──
 const vocab = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `family:raid rides the 'family' prefix (${JSON.stringify(vocab.unknown || [])})`);
+
+// (red-team R28 #1) sweepFamilyAggro must CLAIM the family_aggro row before striking — the DELETE uses
+// RETURNING and the strike is guarded by the claimed rowCount, so two overlapping workers reading the
+// same due row can't both hospitalize + double-notify (the push.js C1 class). pg-mem is single-caller and
+// can't interleave two workers, so this is a labelled source tripwire on the claim discipline. The happy
+// path (struck==1, row cleared) and the shield-honouring miss (struck==0) are behaviorally covered above.
+{
+  const warSrc = _readSrc(new URL('../src/npcwar.js', import.meta.url), 'utf8');
+  assert(/DELETE FROM family_aggro WHERE gang_id=\$1 RETURNING gang_id/.test(warSrc), 'sweepFamilyAggro DELETE claims the row (RETURNING)');
+  assert(/if \(claimed\.rowCount && g && t\)/.test(warSrc), 'the strike is guarded by the claim rowCount (one worker only)');
+  // (red-team R28 #3/#6) the OFFENSIVE + NPC-diplomacy sweeps are single-writer under a deploy overlap — a
+  // session advisory lock (the runPopulation discipline) so two worker replicas can't double-enqueue a
+  // strike / over-open past TARGET. Engages only under real Postgres; pg-mem is single-process.
+  assert(/pg_try_advisory_lock/.test(warSrc), 'sweepNpcAggression takes a single-writer advisory lock');
+  const dipSrc = _readSrc(new URL('../src/diplomacy.js', import.meta.url), 'utf8');
+  assert(/pg_try_advisory_lock/.test(dipSrc), 'sweepNpcDiplomacy takes a single-writer advisory lock');
+}
 
 console.log('✅ THE BLOOD WAR test passed — the board (strength/defense/loot, player family excluded), a landed raid (bounded family:raid loot + legend + pool drain + ammo sink + cooldown), THE SEVERANCE (no season_wars → no Commission seat), the interlock (a beaten family reads weaker), THE DEFENCE (a counter hospitalizes the raider), THE MANHUNT (an escaped raider is hunted down later, shield-honouring, one-shot), a repel (hospitalized, pool untouched), THE CONQUEST (routing claims the family as a vassal → bounded family:tribute to the treasury, gang-treasuries reconciled, the conquest board), the gates (level/own_family/cooldown/bad_target), the leaderboard, THE FAMILY WAR (formal: the rank gate, the gang:war war-chest sink with NO season_wars, one campaign per family, the board decoration, scoring WIN_SCORE raids to WIN a status trophy for the declarer, the war-chief leaderboard, the worker lapse of an expired campaign, and the gang-treasuries reconcile), THE OFFENSIVE (step four: an NPC family opens hostilities on a real player family unprompted → members notified + a peace/cooldown window + the board surfaces who to hit back, not piled on by a second, a due strike enqueues a shield-honouring family_aggro hit — a safe-housed mark is a clean miss, an unshielded one is hospitalized — §10.4-NEUTRAL (zero ledger rows), counterplay: routing the outfit ends its aggression, and an expired hostility lapses), NPC-FAMILY DIPLOMACY (sue an NPC family for peace → the worker signs it, signing ENDS its live OFFENSIVE, the board shows the peace, the raid is blocked by the pact, NPC↔NPC alliances form + surface on the board, the picker keeps the OFFENSIVE off a pacted pair and reopens once the peace is gone — all §10.4-neutral), ALLIES JOIN THE OFFENSIVE (the aggressor\'s NPC ally sends guns at the same target — both strike a member — the board names the joiner, and suing that ally for peace keeps it out), and §10.4 (family: vocabulary closed)');
 await app.close();

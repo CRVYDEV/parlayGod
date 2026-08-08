@@ -12,6 +12,7 @@ import { buildServer } from '../src/server.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { sweepCrewInvites } from '../src/crew.js';
 import { CREW } from '../src/rules.js';
+import { readFileSync as _readSrc } from 'node:fs';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -270,6 +271,20 @@ assert.equal((await sweepCrewInvites(pool)).swept >= 2, true, 'the worker sweeps
   // the per-member contribution texture ("what your crew did")
   assert.equal(obj.contributions.length, 2, 'both contributors listed');
   assert.equal(obj.mine, 1, 'the caller sees their own contribution');
+  // (red-team R28 F1) agents don't draw the crew cash faucet — its siblings streak:daily / mentor:protege
+  // exclude agents, and this one didn't. A contributing agent member is refused at claim.
+  await pool.query('UPDATE account_persistent SET agent_flag=true WHERE account_id=$1', [handA]);
+  assert.equal((await call('POST', '/v1/crew/objective/claim', { token: hand.token })).body.error, 'agent', 'an agent member cannot draw the crew cut');
+  await pool.query('UPDATE account_persistent SET agent_flag=false WHERE account_id=$1', [handA]);
+  assert.equal((await call('POST', '/v1/crew/objective/claim', { token: hand.token })).body.crew, 'objective_claimed', 'a human member collects normally');
+  // (red-team R28 #4) bumpCrewObjective must lock the objective row FOR UPDATE before the SUM+progress
+  // write, so two crewmates bumping concurrently (each under its own char lock) can't store a stale
+  // progress / delay completion a bump. pg-mem is single-caller — a labelled source tripwire.
+  {
+    const gameSrc = _readSrc(new URL('../src/game.js', import.meta.url), 'utf8');
+    const bump = gameSrc.slice(gameSrc.indexOf('export async function bumpCrewObjective'), gameSrc.indexOf('export async function bumpCrewObjective') + 1600);
+    assert(/FROM crew_objectives WHERE crew_id=\$1 AND week=\$2 FOR UPDATE/.test(bump), 'bumpCrewObjective locks the objective row FOR UPDATE');
+  }
   assert.equal(obj.claimable, true, 'a contributor can claim a cracked objective');
   // everyone was pinged (the synchronous "your crew is active" moment) — scoped to THIS crew's three
   // members, so a completion on any OTHER crew in the DB can never perturb the count

@@ -595,12 +595,15 @@ export async function bumpCrewObjective(client, h, ch, deltas) {
   const week = weekOf();
   // materialize this week's objective (deterministic kind+target, scaled by crew size) if absent —
   // idempotent INSERT (a concurrent first-touch loses the race harmlessly, the world_npcs precedent).
-  let obj = (await client.query('SELECT kind, target, progress, done FROM crew_objectives WHERE crew_id=$1 AND week=$2', [crewId, week])).rows[0];
+  // (red-team R28 #4) lock the objective row FOR UPDATE so two crewmates bumping concurrently (each under
+  // its OWN char lock, so they don't otherwise serialize) can't both compute a stale SUM and store an
+  // under-counted `progress` / delay the completion a bump. Consistent order: char (held) → crew_objectives.
+  let obj = (await client.query('SELECT kind, target, progress, done FROM crew_objectives WHERE crew_id=$1 AND week=$2 FOR UPDATE', [crewId, week])).rows[0];
   if (!obj) {
     const members = Number((await client.query('SELECT COUNT(*) n FROM crew_members WHERE crew_id=$1', [crewId])).rows[0].n) || 1;
     const drawn = crewObjectiveOf(crewId, week, members);
     await client.query('INSERT INTO crew_objectives (crew_id, week, kind, target) VALUES ($1,$2,$3,$4) ON CONFLICT (crew_id, week) DO NOTHING', [crewId, week, drawn.kind, drawn.target]);
-    obj = (await client.query('SELECT kind, target, progress, done FROM crew_objectives WHERE crew_id=$1 AND week=$2', [crewId, week])).rows[0];
+    obj = (await client.query('SELECT kind, target, progress, done FROM crew_objectives WHERE crew_id=$1 AND week=$2 FOR UPDATE', [crewId, week])).rows[0];
   }
   const add = Math.floor(Number(deltas[obj.kind] || 0));
   if (!(add > 0)) return null;   // this hook doesn't feed the drawn kind

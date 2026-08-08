@@ -382,8 +382,12 @@ export async function sweepFamilyAggro(pool) {
       await client.query('BEGIN');
       const g = (await client.query('SELECT name FROM gangs WHERE id=$1 AND npc_flag', [a.gang_id])).rows[0];
       const t = (await client.query('SELECT * FROM characters WHERE id=$1 AND alive FOR UPDATE', [a.target_character])).rows[0];
-      await client.query('DELETE FROM family_aggro WHERE gang_id=$1', [a.gang_id]); // one shot — hit or lost trail
-      if (g && t) {
+      // (red-team R28 #1) the DELETE is the CLAIM — exactly one worker may fire this strike. Two overlapping
+      // workers both read the same `due` row (the top SELECT is unlocked); without RETURNING, the loser's
+      // DELETE hits 0 rows but the code struck anyway → a double hospitalization + a double notify (the
+      // push.js C1 class). Only the worker that actually removed the row proceeds. §10.4-neutral either way.
+      const claimed = await client.query('DELETE FROM family_aggro WHERE gang_id=$1 RETURNING gang_id', [a.gang_id]); // one shot — hit or lost trail
+      if (claimed.rowCount && g && t) {
         const reachable = !jailed(t) && !hospitalized(t) && !safeHoused(t) && !witproActive(t) && !penSafe(t) && !inHole(t);
         const hit = reachable && (process.env.FAMILY_RETAL_P != null ? Number(process.env.FAMILY_RETAL_P) >= 1 : Math.random() < FAMILY_WAR.RETAL_P);
         if (hit) {
@@ -409,7 +413,24 @@ export async function sweepFamilyAggro(pool) {
 // per-item txn isolation (the population/sweep precedent). pg-mem has no random() → JS shuffle.
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
+const NPCWAR_LOCK_CLASS = 0x4e57;  // 'NW' — a session advisory lock so the OFFENSIVE sweep is single-writer
+
+// (red-team R28 #3) two worker replicas (a deploy overlap) could both run this sweep: PASS 2's pending
+// COUNT and PASS 3's TARGET check are unlocked reads, so both could enqueue a second pending strike on one
+// family or open a hostility past TARGET. §10.4-neutral, but a real over-hospitalization. A SESSION advisory
+// lock serializes them (the runPopulation discipline); a crash releases it when the session ends. pg-mem
+// (no DATABASE_URL) is single-process — nothing to serialize.
 export async function sweepNpcAggression(pool) {
+  let lockConn = null;
+  if (process.env.DATABASE_URL) {
+    lockConn = await pool.connect();
+    const got = (await lockConn.query('SELECT pg_try_advisory_lock($1,$2) AS ok', [NPCWAR_LOCK_CLASS, 0])).rows[0].ok;
+    if (!got) { lockConn.release(); return { opened: 0, struck: 0, lapsed: 0, skipped: 'locked' }; }
+  }
+  try { return await sweepNpcAggressionInner(pool); }
+  finally { if (lockConn) { await lockConn.query('SELECT pg_advisory_unlock($1,$2)', [NPCWAR_LOCK_CLASS, 0]).catch(() => {}); lockConn.release(); } }
+}
+async function sweepNpcAggressionInner(pool) {
   const A = FAMILY_WAR.AGGRESSION;
   const ms = process.env.NPC_AGGRO_MS != null ? Number(process.env.NPC_AGGRO_MS) : A.MS;
   let opened = 0, struck = 0, lapsed = 0;

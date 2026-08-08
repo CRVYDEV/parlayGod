@@ -168,4 +168,19 @@ console.log(`✅ Mounted-surface test passed — ${app.routes.length} registrati
   + `every one authenticated except the ${Object.keys(PUBLIC).length} declared public, each with a stated reason, (checked BOTH ways, so neither a `
   + `dropped auth preHandler nor a stale allowlist entry can hide), every /v1/mod route behind modAuth `
   + `rather than a player token, and no route registered twice; plus every src/routes module self-contained (no identifier read that it never binds).`);
+// (red-team R28 MED-1/LOW-2) the keyless data boards behind the PUBLIC pages must be in the per-IP public
+// throttle branch — they do real per-hit DB/CPU work with no auth preHandler, so the token-gated read
+// limiter early-returns and they'd be unthrottled (an amplification/DoS vector, /v1/arena crawler-reachable
+// via the public /arena page). Source tripwire: the limiter isn't enabled in this suite, so assert the
+// branch covers them alongside the existing /v1/art and /v1/landmarks entries.
+{
+  const srvSrc = readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
+  const anchor = srvSrc.indexOf("req.url.startsWith('/card/')");   // the public-throttle branch condition
+  assert(anchor > 0, 'the public throttle branch exists');
+  const branch = srvSrc.slice(anchor, anchor + 1400);
+  for (const r of ['/v1/arena', '/v1/events', '/v1/results', '/v1/avatar/']) {
+    assert(branch.includes(`startsWith('${r}')`), `the public throttle branch covers the keyless heavy GET ${r}`);
+  }
+}
+
 await app.close();
