@@ -10164,3 +10164,25 @@ mobile 75/75 (the /admin panel renders) + browser-probed live (1/4 live, push OF
 LIVE — zero page errors). No new lever, no new env (all four integrations' vars were already
 preflight-classified). The cheapest, highest-leverage retention+funnel win — nothing new to build, just
 made legible and one command from on.
+
+**THE DAY — the returning player's one-glance daily checklist (founder-directed 2026-08-08, the
+strategic pass's retention recommendation: the game grew SEVEN daily surfaces — the login streak, daily
+contracts, the hustle, the corner, trainer drills, the daily lead, the morning paper — each on its own
+tab, so "what should I do today" meant hunting the whole console; the gap wasn't more dailies, it was
+one unified flow) — BUILT** (`src/day.js` — the 132nd module, `test/day.js` — the 83rd suite;
+`GET /v1/day`; a "📋 Today" card leading Home). One read consolidates the actionable dailies into an
+ordered checklist — each item ready / in-progress (todo) / done, with a one-tap jump to its tab — so a
+player who logs in for ten minutes sees and clears their day at once instead of hunting five tabs.
+**PURE READ** — it REUSES the existing board readers (`streakBoard` / `getDaily` / `hustleBoard` /
+`cornerBoard` / `regimenBoard`) so the number here and the number on each tab can NEVER disagree (DRY,
+the extortFront one-core discipline); **ZERO §10.4** (no value moves, no row written — the test pins
+zero transactions rows). The contracts item counts only the LIVE contracts via `dailyLiveFor` (a solo
+player's gang-gated tribute is out of reach, not "todo" — the coach work-board discipline, so the number
+never points at a dead task). The client "📋 Today" card (a separate GETBIND fetch so the renderStart
+Promise.all alias window stays intact) leads Home under the streak, each row `data-go-tab`-jumping to its
+surface. `test/day.js` proves the five surfaces are consolidated with a state each, a fresh player's
+streak + corner read READY, claiming the streak flips its item to done (state reflects real progress —
+mutation-verified), and §10.4-neutrality. Suite green + sim drift-0 + mobile 75/75 + client wiring/mirror
+(THE DAY's item element reads covered) + pgquery + pgcheck on real Postgres (no new SQL — reuses the
+readers). No new lever (pure read). Browser-probed live (📋 Today · 3 ready · 0/5 done with the checklist,
+zero page errors). The seven scattered daily surfaces are now one glance.

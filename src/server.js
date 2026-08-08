@@ -24,6 +24,7 @@ import * as Circle from './circle.js';
 import * as Explore from './explore.js';
 import * as Prime from './primetime.js';
 import * as CityMap from './citymap.js';
+import * as Day from './day.js';
 import * as Vouch from './vouch.js';
 import * as Push from './push.js';
 import { cityEventBoard, resultsBoard } from './events.js';
@@ -1470,6 +1471,10 @@ export async function buildServer() {
   // sov) + the neighbour edges + a family power ranking, in one read. Authed so it can flag YOUR turf.
   app.get('/v1/map', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client, h) => CityMap.cityMap(client, ch, h.owned.gangId)));
+  // THE DAY — the returning player's one-glance daily checklist (streak / contracts / hustle / corner /
+  // drills), each ready/todo/done with a jump. Consolidates the seven scattered daily surfaces. Pure read.
+  app.get('/v1/day', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Day.dayBoard(client, ch, h)));
 
   // ── M3: the streets (§5.2) ──
   app.get('/v1/streets', { preHandler: auth }, async () => {
