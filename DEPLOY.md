@@ -158,12 +158,21 @@ above is the real path and the only one the console offers).
 - `PRIVY_APP_ID` — enables Privy sign-in (else guest + X only).
 - `SOCIAL_GAME_URL` — falls back for `PUBLIC_URL` in share links, OG cards, the OpenAPI `baseUrl`.
 - `REDIS_URL` — moves the rate-limit buckets off in-memory (needed only for multi-instance).
-- **Web push (`VAPID_*`)** — optional; enables the phone-alert 🔔 (the worker pushes URGENT undelivered
-  notifications to away players). Dormant unless set; the client hides the button when absent. Generate a
-  key pair ONCE with `node -e "console.log(require('web-push').generateVAPIDKeys())"` and set
-  `VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` (+ optional `VAPID_SUBJECT`, default `mailto:ops@omerta.fun`).
-  The public key is served on `/v1/rules` by design (the client subscribes with it); keep the PRIVATE key
-  secret. Zero §10.4 surface.
+- **Web push (`VAPID_*`)** — optional but the **single highest-ROI retention switch** for a lazy-accrual
+  game (the worker pushes URGENT undelivered notifications to away players — a contract on their head, an
+  indictment, an empire seized). Dormant unless set; the client hides the 🔔 when absent. Generate a key
+  pair ONCE with **`npm run vapid`** and set `VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` (+ optional
+  `VAPID_SUBJECT`, default `mailto:ops@omerta.fun`). The public key is served on `/v1/rules` by design (the
+  client subscribes with it); keep the PRIVATE key secret. Zero §10.4 surface.
+
+### The switchboard — `/admin` → **Integrations**
+The retention/funnel wiring all ships DORMANT and switches on by env config (no code deploy). The
+`/admin` dashboard's **Integrations** panel reads which are live vs off and prints the exact activation
+steps for each — it reads env PRESENCE only, so no key or webhook URL ever leaves the server. Priority
+order for a fresh alpha: **(1)** Web push (`VAPID_*`) — retention; **(2)** X one-click sign-in
+(`X_CLIENT_ID` + `PUBLIC_URL`) — removes top-of-funnel friction; **(3)** the Discord city wire
+(`CITY_WIRE_WEBHOOK_URL`) — free organic reach. These three are the cheapest, highest-leverage wins
+available and are already built and tested — the panel just tells you which are on.
 
 ## 4. Chain — LEAVE UNSET for the off-chain alpha
 The chain service is dormant unless configured. Setting `CHAIN_RPC_URL` + `CHAIN_ID` +

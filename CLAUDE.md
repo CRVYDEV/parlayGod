@@ -10141,3 +10141,26 @@ Suite green + sim drift-0 + mobile 75/75 + client wiring/mirror (the map's eleme
 No new lever (pure read; every number is read from live state). Browser-probed live (the season banner,
 occupied districts, the Dock Rats + liberation cost render — zero page errors). The thinnest gameplay
 gap (turf made visible), the missing identity hook, and a native share-worthy artifact in one screen.
+
+**ACTIVATION — the dormant retention/funnel switchboard (founder-directed 2026-08-08, the strategic
+pass's #1 recommendation: the funnel is well-built and mostly switched OFF — push, X one-click sign-in
+and the Discord city wire all ship DORMANT pending deploy config, and turning them on is higher-ROI
+than any new system) — BUILT** (`src/ops.js` `integrationsStatus`, `GET /v1/mod/integrations`,
+`tools/vapid.js` + `npm run vapid`, an /admin **Integrations** panel, DEPLOY.md § the switchboard).
+The founder-facing switchboard: which retention/funnel wiring is LIVE vs OFF and the EXACT activation
+steps for each — **(1)** Web Push (`VAPID_*`, the highest-ROI retention primitive for a lazy-accrual
+game), **(2)** X one-click sign-in (`X_CLIENT_ID`+`PUBLIC_URL`, removes top-of-funnel friction),
+**(3)** the Discord city wire (`CITY_WIRE_WEBHOOK_URL`, free organic reach), **(4)** WalletConnect
+(chain, mainnet-gated). **Env PRESENCE only — it reports a boolean per integration and NEVER echoes a
+secret value** (a key or webhook URL never leaves the server; test-pinned with a sentinel value).
+`tools/vapid.js` (`npm run vapid`) prints a fresh VAPID keypair so Web Push is one command + a redeploy
+away. The /admin panel renders live/off + the rationale + the steps (mod-gated client-side like the rest
+of the dashboard). ZERO §10.4 (a read of env presence; no DB, no value moves). `test/hardening.js` proves
+the mod-gate, a configured integration reading LIVE with its rationale, an unconfigured one reading OFF
+with steps, and — the load-bearing property — that a secret VALUE is never echoed (a distinctive sentinel
+private key never appears in the response; the var NAME `X_CLIENT_SECRET` legitimately containing the
+substring is why the test asserts the value, not the word). Suite green + routes 618 + client wiring +
+mobile 75/75 (the /admin panel renders) + browser-probed live (1/4 live, push OFF with steps, city wire
+LIVE — zero page errors). No new lever, no new env (all four integrations' vars were already
+preflight-classified). The cheapest, highest-leverage retention+funnel win — nothing new to build, just
+made legible and one command from on.
