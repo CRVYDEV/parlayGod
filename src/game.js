@@ -1961,6 +1961,26 @@ export async function maybeQualifyReferral(pool, recruitAccountId) {
       await ledger(client, { characterId: recruiter.id, currency: 'cash', amount: milestoneCash, reason: 'referral:milestone' });
     }
     if (title) recruiter.title = title;
+
+    // BRING ONE — the first-crewmate incentive. A qualified recruit who runs in their recruiter's
+    // crew earns both a bonus (rewarding the recruiter who brought a friend AND ran with them).
+    // crew_members is account-keyed; a plain read — no FOR UPDATE (a leaf in this transaction, so no
+    // lock-order concern). Bounded: gated behind the entire qualification wall, so it inherits every
+    // anti-Sybil property (once ever, agent-excluded, L8/40 jobs/3 check-ins/$25k). IN($1,$2) not
+    // ANY(array) — pg-mem returns zero rows for ANY-of-array (the same-IP flag lesson below).
+    let bringOne = false;
+    const crews = (await client.query('SELECT account_id, crew_id FROM crew_members WHERE account_id IN ($1,$2)', [recruitAccountId, recruiterAccountId])).rows;
+    const rcCrew = crews.find((r) => r.account_id === recruitAccountId)?.crew_id;
+    const rrCrew = crews.find((r) => r.account_id === recruiterAccountId)?.crew_id;
+    if (rcCrew && rrCrew && rcCrew === rrCrew) {
+      const bRecruit = Math.round(CREW.BRING_ONE.RECRUIT_CASH * mult), bRecruiter = Math.round(CREW.BRING_ONE.RECRUITER_CASH * mult);
+      recruit.cash = Number(recruit.cash) + bRecruit;
+      recruiter.cash = Number(recruiter.cash) + bRecruiter;
+      await ledger(client, { characterId: recruit.id, currency: 'cash', amount: bRecruit, reason: 'crew:bringone' });
+      await ledger(client, { characterId: recruiter.id, currency: 'cash', amount: bRecruiter, reason: 'crew:bringone', counterparty: recruit.id });
+      bringOne = true;
+    }
+
     await client.query('UPDATE account_persistent SET recruits=$2 WHERE account_id=$1', [acct.referred_by, after]);
     await client.query('UPDATE account_persistent SET ref_paid=true WHERE account_id=$1', [recruitAccountId]);
     await client.query('UPDATE referrals SET qualified_at=now() WHERE recruit_account=$1', [recruitAccountId]);
@@ -1980,11 +2000,11 @@ export async function maybeQualifyReferral(pool, recruitAccountId) {
     await client.query(
       `UPDATE characters SET cash=$2, title=COALESCE($3, title) WHERE id=$1`, [recruiter.id, recruiter.cash, title]);
     await client.query('UPDATE characters SET cash=$2 WHERE id=$1', [recruit.id, recruit.cash]);
-    await notify(client, recruiter.id, 'ref', { from: recruit.name, amt: recruiterCash + milestoneCash, recruits: after });
-    await notify(client, recruit.id, 'ref', { made: true, amt: recruitCash });
-    await track(client, recruitAccountId, 'referral_qualified', { recruiter: acct.referred_by, mult });
+    await notify(client, recruiter.id, 'ref', { from: recruit.name, amt: recruiterCash + milestoneCash, recruits: after, bringOne });
+    await notify(client, recruit.id, 'ref', { made: true, amt: recruitCash, bringOne });
+    await track(client, recruitAccountId, 'referral_qualified', { recruiter: acct.referred_by, mult, bringOne });
     await client.query('COMMIT');
-    return { qualified: true };
+    return { qualified: true, bringOne };
   } catch (e) { await client.query('ROLLBACK'); throw e; }
   finally { client.release(); }
 }

@@ -5235,3 +5235,24 @@ change). Worst-case faucet: bounded by turnout on a cracked night × `SIEGE_CASH
 stack and gated behind co-presence (8+ real fighters). `SIEGE_STRIKE`/`SIEGE_NEED`/`SIEGE_CASH`/
 `SIEGE_TITLE` are founder sign-off levers (pinned). **The PRIME TIME rotation is now complete** — three
 mechanics × two modes, drawn deterministically per night off the §7.11 seed, forecastable a week out.
+
+## BRING ONE — the first-crewmate incentive faucet (founder-directed 2026-08-08)
+
+A concrete reward for founding a crew and getting a real friend to actually play — the sharpest
+first-session social hook, which until now paid nothing (THE CREW is pure status/coordination). A
+referral who QUALIFIES (the §7.13 anti-Sybil wall — L8/40 jobs/3 check-ins/$25k, once ever,
+agent-excluded) AND runs in their recruiter's crew earns BOTH a bonus, paid inside the same qualify
+transaction.
+
+| Lever | Value | Notes |
+|---|---|---|
+| `CREW.BRING_ONE.RECRUITER_CASH` | $15,000 | to the recruiter, on a qualified crewmate |
+| `CREW.BRING_ONE.RECRUIT_CASH` | $7,500 | to the recruit |
+
+**Why it is bounded:** it rides the strongest anti-Sybil gate the game has — an alt farm cannot
+collect it any faster than a real recruit who levelled to 8, pulled 40 jobs and banked $25k, and it
+fires ONCE ever per recruit (the `ref_paid` latch). Ceiling: **$22,500 per qualified crewmate** —
+petty vs the ~$21.6M/day passive stack, and on top of the crew co-membership check. §10.4:
+`crew:bringone` is a character_id'd cash faucet in the vocabulary; the per-character check reconciles
+it. v24: social rewards are cash, never $OMR. Both figures are founder sign-off levers (pinned in
+`test/levers.js`).
