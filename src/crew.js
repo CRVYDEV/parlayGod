@@ -366,6 +366,9 @@ async function crewObjective(client, crewId, accountId) {
 // cash faucet (bounded: REWARD × contributing members, once per week per crew). You must have a
 // contribution row (you helped) — a member who did nothing this week has nothing to claim.
 export async function claimObjective(ch, client, h) {
+  // (red-team R28 F1) agents don't draw the crew cash faucet — its siblings streak:daily / mentor:protege
+  // exclude agents, and this one didn't. They still play + contribute; they just don't farm the cut.
+  if (h.acct?.agent_flag) throw new GameError('agent', 'Agent accounts do not draw the crew cut.');
   const crewId = await crewIdOf(client, ch.account_id);
   if (!crewId) throw new GameError('no_crew', "You're not in a crew.");
   const week = weekOf();
