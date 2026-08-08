@@ -10301,3 +10301,25 @@ ledgered faucet), the ONCE-EVER gate (a second jump pays nothing), and §10.4 (o
 vocabulary + no new drift) — two mutations each caught by name (settle disabled → the response assertion;
 vocab drop → the vocabulary assertion). All three `AHA.*` numbers are founder sign-off levers (pinned in
 `test/levers.js`; BALANCE.md § THE AHA MOMENT).
+
+**WEB PUSH — activation-ready (founder-directed: "do the web push", 2026-08-08) — BUILT** (`src/push.js`,
+`public/index.html`, `src/preflight.js`, `DEPLOY.md`; `test/push.js`). The web-push rail was built and
+DORMANT (VAPID-gated); this closes the three deferred gaps so it's a founder-flip-and-go retention switch,
+still ZERO §10.4 (a push moves no value). **(1) SKIP-WHEN-LIVE** — the worker sweep no longer buzzes a
+player who is actively here: a live tab already saw the event on the WS `me` channel, so a phone buzz is
+redundant. The worker is a SEPARATE process with no `wsClients`, so it uses the SAME cross-process signal
+`/v1/online` uses — the `telemetry` table (`PUSH_SKIP_ACTIVE_MIN` minutes, default 3; pg-mem can't do a
+correlated NOT EXISTS, so the active set is pulled flat and filtered in JS — the /v1/gangs lesson).
+**(2) PER-ACCOUNT DIGEST** — several urgent things while away become ONE buzz ("3 things need you · You
+were killed · The Bureau indicted you"), not a storm; the whole batch is CLAIMED atomically before the
+send (claim-then-notify, the Wire-watchdog/C1 discipline — a mutation to notify-then-flag re-buzzes).
+**(3) CONTEXTUAL OPT-IN** — the passive 🔔 top-bar button is easy to miss, so the client now asks ONCE at
+the moment alerts are obviously worth it: the first time the city moves on you (a LIVE urgent WS event — a
+contract on your head, a body, an indictment — or the aha-moment call-out), gated once-ever
+(`omerta_push_asked`) + never when already on/denied; the OS permission prompt only fires inside the "yes"
+tap (a user gesture). Backfilled history never triggers it (the socket path only). Activation runbook in
+DEPLOY.md: `npm run vapid` → set `VAPID_*` on the API (serves the public key on `/v1/rules`) AND the worker
+(does the sending) → redeploy; `/admin → Integrations` reads live-vs-off. `PUSH_SKIP_ACTIVE_MIN` classified
+in preflight (0 disables the skip — test-only). `test/push.js` extended: the skip (a recently-active player
+is not buzzed; once away, the still-undelivered note is) + the digest (three notes → one buzz, whole batch
+claimed) — two mutations each caught by name. The founder's final step is the VAPID flip on Render.

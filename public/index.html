@@ -1453,6 +1453,9 @@
       glow: 'rgba(155,47,47,.5)', hold: 3200,
       lines: ['They put your name in the street.', 'Find them in Wet Work — and hit back.'] });
     toast(`${rival} put word out on you — settle it in Wet Work.`, true);
+    // the aha beat is a player's first taste of DANGER — a natural moment to offer alerts (after the
+    // cinematic clears so the two don't collide). Once-ever + gated inside maybeAskPush.
+    setTimeout(() => maybeAskPush('Someone just put your name in the street.'), 3800);
   }
 
   // WHICH moments earn one. Reads the SAME response body describe() reads, so this needs
@@ -2830,6 +2833,24 @@
       updateAlertsBtn();
       toast('alerts on — we\'ll buzz your phone when it matters');
     } catch (e) { toast('couldn\'t turn on alerts', true); }
+  }
+  // CONTEXTUAL OPT-IN — the passive 🔔 button is easy to miss, so ask ONCE at the moment alerts are most
+  // obviously worth it: right after the city first comes for you (the aha settle, a contract on your head,
+  // a body, an indictment). The browser's own permission prompt only fires inside the "yes" click (a user
+  // gesture), so this is a soft ask first, the OS ask second. Gated once-ever + never when already on / off.
+  let pushAskShown = false;
+  async function maybeAskPush(line) {
+    if (pushAskShown) return;
+    if (!rules?.push?.publicKey || !pushSupported()) return;
+    if (localStorage.getItem('omerta_push') === '1') return;      // already on
+    if (localStorage.getItem('omerta_push_asked') === '1') return; // asked once already
+    if (Notification && Notification.permission === 'denied') return; // they said no at the OS level
+    pushAskShown = true;
+    localStorage.setItem('omerta_push_asked', '1');
+    const yes = await ask('Get a heads-up?',
+      `${line}\n\nThe city keeps moving while you're gone. Turn on phone alerts and we'll buzz you when a contract lands on your head, the Bureau moves, or your empire is hit — nothing else.`,
+      { yes: 'alert me', no: 'not now' });
+    if (yes) await enablePush();
   }
   async function disablePush() {
     try {
@@ -7968,6 +7989,10 @@
         try {
           const ev = JSON.parse(m.data);
           feedLine(ev.channel || '?', ev);
+          // CONTEXTUAL PUSH OPT-IN — a LIVE urgent event (a contract on your head, a body, an
+          // indictment) is the moment alerts obviously matter. Ask once; backfilled history never
+          // triggers it (this is the socket path only). first_blood's own beat asks separately.
+          if (ev.channel === 'me' && URGENT_TYPES.has(ev.type)) maybeAskPush('The city just made a move on you.');
           // your own events refresh the sheet + re-render the open board; streets/gang events
           // (someone posted a contract, a club got raided) just re-render the open board.
           if (ev.channel === 'me') { refresh(); renderActive(); }
