@@ -10,8 +10,8 @@ Written 2026-07-25. Every number below was measured from the tree, not recalled.
 
 | | |
 |---|---|
-| Backend modules | **132** files, **42208** lines (`src/`, incl. `src/routes/` and `src/social/`) |
-| Test suites | **86** files, **29494** lines (`test/`) — ratio 0.68 test:src |
+| Backend modules | **133** files, **42364** lines (`src/`, incl. `src/routes/` and `src/social/`) |
+| Test suites | **87** files, **29636** lines (`test/`) — ratio 0.68 test:src |
 | HTTP routes | **622** registrations |
 | Database tables | **204** (`schema.sql`, 2894 lines) |
 | Client | **7917** lines (`public/index.html`, single file, zero dependencies) |
@@ -31,7 +31,7 @@ Everything is built on five load-bearing decisions. None has needed revision in 
 
 **`rules.js` is the constants layer, in two files.** `rules.generated.js` holds the prototype's 22 data
 tables (479 lines) and is overwritten wholesale by the extractor; `rules.tail.js` holds every helper,
-catalog, ladder and founder-signed lever (4879 lines) and the extractor never opens it. `rules.js`
+catalog, ladder and founder-signed lever (4980 lines) and the extractor never opens it. `rules.js`
 re-exports both. Nothing in `src/` hardcodes a balance number.
 
 **`withCharacter` is the transaction spine.** Every player action opens `SELECT … FOR UPDATE` on the

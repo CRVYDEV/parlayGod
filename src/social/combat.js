@@ -11,6 +11,7 @@ import { M3, CONSTANTS, LOAN, levelOf, rankIdxOf, cityEventOf, dayOf, btkOf, gun
 import { activeDecree } from '../commission.js';
 import { bumpHonor } from '../honor.js';
 import { recordRival, revengeOwed } from '../rivals.js';
+import { settleFirstBlood } from '../firstblood.js';   // THE AHA MOMENT — settle the scripted first rival
 import { alertMentor } from '../mentor.js';
 import { logCarCollect } from '../collection.js';
 import { awardHitmanRep, claimBounty, postBounty, postFamilyContract, refundPot } from './contracts.js';
@@ -127,11 +128,13 @@ export async function jump(ch, victim, client, h, intent) {
     await recordRival(client, victim.account_id, ch, 'jump', { stolen });
     await alertMentor(client, victim.account_id, victim.name, ch.name, 'jumped'); // THE MENTOR — tell their mentor so they can settle it
     if (revenge) await bumpHonor(client, ch, RIVALS.REVENGE_HONOR);
+    // THE AHA MOMENT — if this jump settles the player's scripted first rival, pay the once-ever bonus
+    const firstBlood = await settleFirstBlood(client, ch, victim, h, { ledger, notify, gainRespect });
     await h.bumpDaily(client, ch.id, 'jump');
     await bumpFamilyTask(client, h, 'jump', 1);
     await bumpMastery(client, h, ch, 'muscle', 'jump'); // THE TRADES — a won jump works the protection racketeer's craft
     bus.emit('streets', { type: 'jump', by: ch.name, on: victim.name, war: !!war });
-    return { ok: true, win: true, intent: it.id, energy: energyCost, stolen, crates, rep, bounty, war: !!war, revenge };
+    return { ok: true, win: true, intent: it.id, energy: energyCost, stolen, crates, rep, bounty, war: !!war, revenge, firstBlood };
   }
   const dmg = rand(10, 25);
   ch.health = Math.max(1, Number(ch.health) - dmg);

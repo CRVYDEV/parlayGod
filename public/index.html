@@ -1441,6 +1441,19 @@
     clearTimeout(cineT); cineT = setTimeout(closeCine, spec.hold || 2100);
   }
   function closeCine() { clearTimeout(cineT); cineEl?.classList.remove('on'); }
+  // THE AHA MOMENT — the scripted first rival lands as a cinematic (with a fallback toast under reduced
+  // motion), then the coach + the nemesis card carry it. Jumps the player to Wet Work so the target is
+  // one tap away. Deduped by a localStorage flag so a backfilled notification can't replay it.
+  function showFirstBlood(p = {}) {
+    if (sessionStorage.getItem('omerta_fb_seen')) return;
+    sessionStorage.setItem('omerta_fb_seen', '1');
+    const rival = p.rival || 'Somebody';
+    sfx('bad'); haptic('big');
+    playCine({ kicker: 'WORD ON THE STREET', title: `${rival} says you're nobody`, accent: 'var(--bad)',
+      glow: 'rgba(155,47,47,.5)', hold: 3200,
+      lines: ['They put your name in the street.', 'Find them in Wet Work — and hit back.'] });
+    toast(`${rival} put word out on you — settle it in Wet Work.`, true);
+  }
 
   // WHICH moments earn one. Reads the SAME response body describe() reads, so this needs
   // no new server surface — it is a second, louder reading of data the client already has.
@@ -1458,6 +1471,12 @@
       if (b.vendetta) lines.push('the vendetta is settled');
       return { kicker: 'wet work', title: "They're done", sub: 'the street remembers this one.',
         lines, accent: 'var(--blood)', glow: 'rgba(192,57,43,.55)', fx: 'violent' };
+    }
+    // ── THE AHA MOMENT — you settled your scripted first rival. The onboarding payoff beat: this is the
+    // moment a new player learns the revenge loop pays. Rides the jump response (b.firstBlood).
+    if (b.firstBlood) {
+      return { kicker: 'first blood', title: 'You made your bones', sub: `${b.firstBlood.rival || 'they'} won't look at you sideways again.`,
+        lines: [`+${$c(b.firstBlood.cash)}`, `+${b.firstBlood.rep} respect`], accent: 'var(--ok)', glow: 'rgba(99,179,113,.45)', fx: 'payday' };
     }
     // ── the Law took you. Not death, but the closest thing to it.
     if (b.convicted === true || b.busted === true) {
@@ -7722,6 +7741,9 @@
       event_result: () => `${d.icon || '🎟'} ${d.headline}${d.outcome === 'won' ? ` — your $${fmt(d.stake)} paid ${$c(d.payout)}` : d.outcome === 'lost' ? ` — your $${fmt(d.stake)} came up short` : d.outcome === 'scratched' ? ' — no contest, your stake refunded' : ''}`,
       // THE MENTOR — the veteran/rookie tie
       // §7.13 referral qualified — the recruit made it, so both sides collect (+ BRING ONE if they run together)
+      // THE AHA MOMENT — the scripted first rival
+      first_blood: () => `🩸 ${d.rival || 'somebody'} put word out that you're nobody — settle it in Wet Work`,
+      first_blood_settled: () => `🩸 you settled the score with ${d.rival || 'them'} — you've made your bones${d.cash ? ` (+$${fmt(d.cash)})` : ''}`,
       ref: () => d.made
         ? `you got established — your recruiter's cut cleared${d.amt ? `, and $${fmt(d.amt)} landed for you` : ''}${d.bringOne ? ' · you two run the same crew — the Bring One bonus paid out' : ''}`
         : `${d.from} you brought in got established — $${fmt(d.amt)}${d.bringOne ? ' · your crewmate — the Bring One bonus paid out' : ''}${d.recruits ? ` (${d.recruits} recruits)` : ''}`,
@@ -7802,6 +7824,8 @@
     // (F2) the estate report flows through here on death (backfill on load, or the gen-bump re-backfill)
     // — pop the death/heir modal from it (deduped per generation inside showDeath).
     if (channel === 'me' && ev && ev.type === 'estate') showDeath(ev);
+    // THE AHA MOMENT — the scripted first rival's move (live or backfilled) → the cinematic beat.
+    if (channel === 'me' && ev && ev.type === 'first_blood') showFirstBlood(ev.payload || {});
     // THE RESULTS SHOW — a marquee event you staked on resolved. A WIN gets the payoff beat (the win
     // sting + a celebratory toast); a loss/scratch just rides the feed line below. No modal — the wire
     // + the toast are the moment, so a backfill of several results can't stack into modal fatigue.

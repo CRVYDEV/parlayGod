@@ -24,6 +24,7 @@ import { speakeasyOwnedOf } from './speakeasy.js';
 import { fightersOf } from './boxing.js';
 
 const uid = () => crypto.randomUUID();
+import { startFirstBlood } from './firstblood.js';   // THE AHA MOMENT — assign a fresh player their first rival
 export class GameError extends Error { constructor(code, msg) { super(msg); this.code = code; } }
 
 // (red-team R6 — stored-XSS fix) Player-controlled display strings (character/gang names, custom
@@ -872,6 +873,14 @@ export async function withCharacter(pool, accountId, fn) {
       try { await maybeGrandReferral(pool, accountId); }
       catch (e) { console.error('referral tier-2 (post-commit, non-fatal)', e?.code || e); }
     }
+    // THE AHA MOMENT — assign a fresh player their first rival once they find their feet (post-commit,
+    // non-fatal — the referral-hook discipline; a cheap stage-0 pre-check makes the common case one read).
+    // Fires for EVERY player (not just referred), so it sits outside the referral block. Emits live so
+    // the cinematic lands promptly rather than on the next poll.
+    try {
+      const fb = await startFirstBlood(pool, accountId);
+      if (fb) bus.emit(`me:${fb.characterId}`, { type: 'first_blood', payload: fb.payload });
+    } catch (e) { console.error('first blood (post-commit, non-fatal)', e?.code || e); }
     // (red-team R4 idempotency finding-2) the action has COMMITTED — a post-commit RENDER failure
     // (view()/coachLadder on a corrupt column) must NOT surface a non-2xx, or the idempotency hook releases
     // the key → a retry re-executes the committed action (double-spend). Degrade the snapshot, never the
@@ -1042,6 +1051,12 @@ export async function withTwoCharacters(pool, accountId, targetCharacterId, fn, 
       try { await maybeQualifyReferral(pool, accountId); } catch (e) { console.error('referral qualification (post-commit, non-fatal)', e?.code || e); }
       try { await maybeGrandReferral(pool, accountId); } catch (e) { console.error('referral tier-2 (post-commit, non-fatal)', e?.code || e); }
     }
+    // THE AHA MOMENT — assign the acting player their first rival (post-commit, non-fatal; the referral
+    // discipline). The two-party actor is `accountId`; the cheap pre-check no-ops the common case.
+    try {
+      const fb = await startFirstBlood(pool, accountId);
+      if (fb) bus.emit(`me:${fb.characterId}`, { type: 'first_blood', payload: fb.payload });
+    } catch (e) { console.error('first blood (post-commit, non-fatal)', e?.code || e); }
     // (red-team R4 idempotency finding-2) a post-commit render failure must never surface a non-2xx —
     // the two-party action already COMMITTED; degrade the snapshot, not the success (see withCharacter).
     let character = null;
@@ -1134,6 +1149,10 @@ function coachLadder(ch, acct, owned) {
     ].filter(Boolean);
     if (add('You rise again', `Generation ${ch.generation}. The street died; the BLOODLINE didn't — ${kept.length ? `the account kept ${kept.join(', ')}` : 'the account, the name and the ledger all carried'}. The street starts at level 1: pull jobs, and everything you built at the account level is still working for you.`, 'start')) return rungs;
   }
+  // THE AHA MOMENT — the scripted first rival. Sits ABOVE the generic "someone moved on you" (the aha
+  // IS a recorded rival event, so that rung would otherwise fire) — for a fresh player this IS the
+  // specific, urgent version of it. Self-clears at stage 2 (settled): a winnable jump in Wet Work.
+  if (Number(ch.aha_stage) === 1 && add('Settle your first score', `${ch.aha_rival_name || 'Somebody'} put the word out that you're nobody — and the street is listening. Find them on the Wet Work roster and JUMP them. Hit back and you've made your bones.`, 'pvp')) return rungs;
   if ((owned.recentRivals || 0) > 0 && add('Someone moved on you', 'You were robbed, jumped or hit inside the last two days. Check YOUR RIVALS on Wet Work — the city remembers who, and settling your own scores pays honor.', 'pvp')) return rungs;
   if (Number(ch.lc_crime || 0) < 1 && add('Pull your first job', 'Head to the Streets. Pick any crime and press DO IT. That\'s the whole move — it pays cash and respect.', 'streets')) return rungs;
   // ── THE ROAD TO LEVEL 5 (founder-directed: walk a brand-new player there, no exploring needed).

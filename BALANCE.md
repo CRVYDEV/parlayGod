@@ -5256,3 +5256,23 @@ petty vs the ~$21.6M/day passive stack, and on top of the crew co-membership che
 `crew:bringone` is a character_id'd cash faucet in the vocabulary; the per-character check reconciles
 it. v24: social rewards are cash, never $OMR. Both figures are founder sign-off levers (pinned in
 `test/levers.js`).
+
+## THE AHA MOMENT (first blood) — the guaranteed early-conflict beat
+
+A deep multiplayer mob game's hook is DANGER — the first time the city comes for YOU — but a fresh
+street can grind a whole session and never feel hunted (the PvP/revenge loop is gated behind level and
+depth, and real-human collision is rare in a thin population). `src/firstblood.js` engineers a
+GUARANTEED first conflict: soon after a new player finds their feet (level ≥ `AHA.MIN_LVL` 3), the
+post-commit hook has a nearby weak resident "make a move" on them — a `callout` row on the rivals
+ledger (so it lights the nemesis card exactly like a real player's move) + a `first_blood` notification
+delivered as a violent cinematic — and the coach points them at hitting back. SETTLING it (a JUMP — the
+accessible level-1 verb) teaches the whole rivalry loop through a winnable, on-theme, ONCE-EVER beat and
+pays a bounded bonus.
+
+**The one faucet:** `firstblood:reward` — `AHA.REWARD_CASH` ($2,500) + `AHA.REWARD_RESPECT` (40),
+gated by `characters.aha_stage` (0 → assigned 1 → settled 2), so it can NEVER pay twice on a street; a
+fresh heir starts at stage 0 and gets their own beat. §10.4: a character_id'd cash faucet in the
+vocabulary — the per-character check reconciles it (the test asserts zero new drift over the SQL-seed
+baseline). The assignment moves no value. Ceiling: ONE $2,500 payout per street ever — petty by design;
+the DRAMA is the product, not the money. All three `AHA.*` numbers are founder sign-off levers (pinned
+in `test/levers.js`).
