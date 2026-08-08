@@ -10,6 +10,7 @@ import { PEN, penContrabandOf, penFactionOf, jailSecondsLeft, penSafe, inHole, l
          yardEventOf, yardEventById, dayOf, yardCharacterOf, MASTERY, disciplineLvlOf } from './rules.js';
 import { trainDiscipline, addXp } from './regimen.js';
 import { runEstate, claimBounty, npcHit } from './social.js';
+import { isWanted } from './social/shared.js';
 import { bumpHonor } from './honor.js';
 import { HONOR , jailed, hospitalized } from './rules.js';
 
@@ -510,12 +511,14 @@ export async function shank(ch, victim, client, h) {
   // under it. Mirrors the street safeHoused(ch) actor-guards on fire/jump.
   if (penSafe(ch)) throw new GameError('safe', "You're under the yard boss's protection — take it or hunt, not both.");
   if (!jailed(victim)) throw new GameError('target_free', "They've walked — you can't reach them out there.");
-  // family omertà holds inside too — VOID for a rat (the audit precedent)
-  if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId && !h.victimAcct.rat)
+  // family omertà holds inside too — VOID for a rat OR a WANTED target (the street fire/jump/npcHit
+  // precedent; red-team R28 F2 — the isWanted exception was missing here, shielding a must-kill man
+  // from his own family while both are jailed, though on the street they could freely fire on him).
+  if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId && !h.victimAcct.rat && !isWanted(victim))
     throw new GameError('family', "They're family. Even in here.");
   // THE CREW (the account-level mutual-aid pact — distinct from the prison faction "yard crew" below):
-  // you don't put a shiv in your own crew either. The omertà twin; a rat forfeits it.
-  if (h.owned.crewId && h.victimOwned.crewId === h.owned.crewId && !h.victimAcct.rat)
+  // you don't put a shiv in your own crew either. The omertà twin; a rat OR a WANTED target forfeits it.
+  if (h.owned.crewId && h.victimOwned.crewId === h.owned.crewId && !h.victimAcct.rat && !isWanted(victim))
     throw new GameError('crew', "They run with your crew. Not in here either.");
   // step five — yard omertà: you don't move on your own crew (a rat forfeits it, like family)
   if (ch.pen_faction && ch.pen_faction === victim.pen_faction && !h.victimAcct.rat)
