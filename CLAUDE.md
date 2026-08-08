@@ -10206,3 +10206,36 @@ proves the card is a well-formed rivalry poster showing the count both ways (2 v
 page declares the OG unfurl + the ref, no exact wealth leaks, and the no-history fallback. Suite green + sim
 drift-0 + mobile 75/75 + routes 621 + client wiring/mirror + pgquery + pgcheck 43/43 on real Postgres. No
 new lever. The genre's actual growth engine — beef — is now a shareable artifact.
+
+**BRING ONE — the first-crewmate incentive (founder-directed retention/funnel drop, 2026-08-08) —
+BUILT** (`src/game.js` `maybeQualifyReferral`, `src/rules.tail.js` `CREW.BRING_ONE`, `src/invariants.js`,
+`src/crew.js` `crewBoard`, `public/index.html`, `test/growth.js`). The recommendation's fifth item: the
+ROLODEX/discovery layer finds people and THE CREW binds them, but founding a crew and getting a REAL
+friend to actually PLAY had no concrete payoff — the crew is pure status/coordination, so the sharpest
+first-session social hook had nothing to reward it. THE MOVE: a referral who QUALIFIES (the audited §7.13
+anti-Sybil wall — L8/40 jobs/3 check-ins/$25k, once ever, agent-excluded) AND runs in their recruiter's
+crew earns BOTH a bonus, paid INSIDE the same qualify transaction. So the reward rides the strongest
+anti-Sybil gate the game has (an alt farm can't collect it any faster than a real recruit who levelled
+to 8, pulled 40 jobs and banked $25k — the whole wall stands in front of it), on top of a crew
+co-membership check, so it rewards the recruiter who both brought a friend AND ran with them. **§10.4:
+`crew:bringone` is ONE bounded cash FAUCET** (joined the cash `KNOWN_REASONS`, both legs character_id'd →
+the per-character check reconciles; `crew:` is not a blanket prefix in the vocabulary — the explicit
+`crew:sales`/`crew:hire`/`crew:wages`/`crew:objective` list gains `crew:bringone`), bounded HARD: gated
+behind the entire qualification wall, once ever per recruit, so the ceiling is `RECRUITER_CASH +
+RECRUIT_CASH` ($22,500) per qualified crewmate — petty vs the passive stack (v24: social rewards are cash,
+never $OMR). The crew-co-membership read is a plain `SELECT … FROM crew_members WHERE account_id IN
+($1,$2)` (IN not ANY-of-array — the pg-mem lesson; crew_members is account-keyed and a leaf in this
+transaction, so no FOR UPDATE, no lock-order concern). The `bringOne` flag rides the existing `ref`
+notification both ways (humanized in `feedText`: "you two run the same crew — the Bring One bonus paid
+out"). The reward figures ride the crew board (`crewBoard` gained `bringOne: CREW.BRING_ONE`, both return
+branches) so the CTA copy can never drift from the lever. Console: a gold **"Bring one in"** card on THE
+CREW screen (both the no-crew and the not-full in-crew branches) — it quotes the exact reward, and a
+📣 X-intent + copy-link pair on the frictionless referral share URL (`/u/<name>?ref=<name>` — the funnel's
+own attribution link, `me.name` IS the code, no code to type), each firing the `broadcast/shared` beacon
+(`bringone` kind) so the funnel measures share intent → recruit. `test/growth.js` proves a crewmate recruit
++ recruiter BOTH collect the ledgered `crew:bringone` bonus at exactly the lever figures, the CONTROL (a
+qualified recruit NOT in the recruiter's crew gets ZERO `crew:bringone` — the referral still pays, the crew
+bonus does not), and the §10.4 vocabulary stays closed — mutation-verified (disable the co-membership
+branch → "a crewmate recruit collects the Bring One bonus" fails by name). Suite green + sim drift-0 +
+mobile 75/75 + client wiring/mirror + levers (`CREW.BRING_ONE.*` pinned) + pgquery + pgcheck 43/43 on real
+Postgres. All `CREW.BRING_ONE` numbers are founder sign-off levers (BALANCE.md; the bounded cash faucet).

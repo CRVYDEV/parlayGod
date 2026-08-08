@@ -4774,6 +4774,16 @@ export const CREW = {
       { id: 'earn',   label: 'Bring in the score', base: 200000, unit: '$' },   // combined dirty cash from crimes
     ],
   },
+  // ── BRING ONE (the first-crewmate incentive; founder-directed retention/funnel drop) ───────────
+  // The friction the ROLODEX/discovery layer can't fix alone: founding a crew and getting a REAL
+  // friend to actually PLAY has no concrete payoff — the crew is all status/coordination. So a
+  // referral who QUALIFIES (the audited §7.13 anti-Sybil wall — L8/40 jobs/3 check-ins/$25k, once
+  // ever, agent-excluded) AND runs in their recruiter's crew earns BOTH a bonus, paid inside the
+  // same qualify transaction. It is a bounded cash FAUCET that inherits every anti-Sybil property of
+  // the qualification wall (an alt farm can't earn it any faster than a real recruit who levelled to
+  // 8, pulled 40 jobs and banked $25k), on top of the crew co-membership check — so it rewards the
+  // recruiter who both brought a friend AND ran with them. v24: social rewards are cash, never $OMR.
+  BRING_ONE: { RECRUITER_CASH: 15000, RECRUIT_CASH: 7500 },
 };
 // the deterministic weekly draw — same crew + week → the same objective, town-wide verifiable (the
 // corner/hustle §7.11 pattern). Kind off the seed; target = kind.base × crew size (min 1). `weekOf`

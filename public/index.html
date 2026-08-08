@@ -3867,6 +3867,23 @@
     await refresh();
     const b = (await api('GET', '/v1/crew')).body || {};
     const crew = b.crew, invites = b.invites || [];
+    // BRING ONE — wire the two share buttons (X-intent + copy). me.name is the referral code.
+    const wireBringOne = (root) => {
+      const link = me?.name ? shareUrl(me.name) : (rules?.share?.gameUrl || location.origin);
+      const xb = root.querySelector('#bring-one-x');
+      if (xb) xb.onclick = () => {
+        beaconShare('bringone');
+        const handle = (rules?.share?.xHandle || '').replace(/^@/, '');
+        const tweet = `Running a crew in OMERTÀ — a noir mob RPG. Get in the city and we'll take it together.${handle ? ` @${handle}` : ''}`;
+        window.open(xIntent(tweet, link), '_blank', 'noopener,noreferrer');
+      };
+      const cb = root.querySelector('#bring-one-copy');
+      if (cb) cb.onclick = async () => {
+        beaconShare('bringone');
+        try { await navigator.clipboard.writeText(link); toast('your link is on the clipboard — send it to your one.'); }
+        catch { toast(link); }
+      };
+    };
     // ── THE CIRCLE — the ambient stream of the people you know (crew + mentor + protégés + spouse). Shown
     // on the crew screen whether or not you're in a crew (your mentor/spouse count). Pure read.
     const cir = (await api('GET', '/v1/circle')).body || {};
@@ -3877,6 +3894,17 @@
             <div class="d">lvl ${cp.level}${cp.district ? ' · ' + esc(cp.district) : ''}${cp.jailed ? ' · <span style="color:var(--bad)">in lockup</span>' : ''}${cp.hospital ? ' · <span style="color:var(--bad)">in the hospital</span>' : ''}${cp.wanted ? ' · <span style="color:var(--bad)">WANTED</span>' : ''}</div></div>`).join('')}</div>
         ${(cir.feed && cir.feed.length) ? `<div class="d" style="margin-top:8px"><b>Lately in your circle:</b></div>
           <div style="margin-top:4px;font-size:12.5px">${cir.feed.slice(0, 8).map((cf) => `<div class="ev">${esc(cf.who)} ${cf.kind === 'whacked' ? 'whacked' : 'fell to'} ${esc(cf.other)}${cf.relation ? ` <span style="color:var(--dim)">· ${esc(cf.relation)}</span>` : ''}</div>`).join('')}</div>` : ''}</div>` : '';
+    // BRING ONE — the first-crewmate incentive. Founding a crew and getting a real friend to actually
+    // PLAY pays off: refer someone (your name IS the code), run with them, and when they qualify BOTH
+    // of you collect. The reward figures come from the crew board so the copy can never drift from the
+    // lever. Uses the frictionless referral share link (/u/<name>?ref=<name>) the funnel already runs on.
+    const bo = b.bringOne || {};
+    const bringOneCard = `<div class="card" style="margin-top:6px;border-color:var(--gold)"><span class="t" style="color:var(--gold)">Bring one in</span> <span class="d" style="font-size:11px">— the crew's first-blood bonus</span>
+      <div class="d" style="margin-top:4px">Get a real friend into the city and run with them. When they get established${bo.RECRUIT_CASH ? ` — level 8, 40 jobs, $25k to their name — <b>you both collect</b>: <span class="chip good">$${fmt(bo.RECRUITER_CASH)}</span> to you, <span class="chip good">$${fmt(bo.RECRUIT_CASH)}</span> to them` : ''}.</div>
+      <div class="row" style="margin-top:6px">
+        <button class="act" id="bring-one-x" style="border-color:var(--gold)">📣 send them the invite ↗</button>
+        <button class="act" id="bring-one-copy">copy your link</button></div>
+      <div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">Your link carries your name as the referral code — no code to type. Then invite them to the crew by name.</div></div>`;
     const inviteCards = invites.length ? `<div class="card" style="margin-top:6px"><span class="t">You're wanted</span>
       ${invites.map((iv) => `<div class="d" style="margin-top:4px"><b>${esc(iv.name)}</b> <span class="chip">${iv.members}/${b.maxMembers}</span> — ${esc(iv.from)} put your name in
         <button class="act" data-do="POST /v1/crew/accept/${iv.crewId}" style="border-color:var(--neon)">join</button>
@@ -3890,9 +3918,11 @@
             <input id="crew-name" placeholder="crew name" size="18" maxlength="${b.nameMax || 24}">
             <button class="act" id="crew-form" style="border-color:var(--neon)"${(me.level || 0) >= (b.minLevel || 0) ? '' : ' disabled'}>${(me.level || 0) >= (b.minLevel || 0) ? '' : `🔒 lvl ${b.minLevel}+ — `}form it</button></div>
           <div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">Then invite people you've met — from the crew screen, by name.</div></div>
+        ${bringOneCard}
         ${circleSection}`;
       const fb = t.querySelector('#crew-form');
       if (fb) fb.onclick = () => act('POST', '/v1/crew', { name: t.querySelector('#crew-name').value }).then(() => renderCrew());
+      wireBringOne(t);
       return;
     }
 
@@ -3936,8 +3966,10 @@
       <div class="card" style="margin-top:8px"><span class="t">The Crew Room</span> <span class="d" style="font-size:11px">— just your crew, live</span>
         <div id="crew-room" style="max-height:180px;overflow:auto;margin:6px 0;font-size:12.5px">…</div>
         <div class="d"><input id="crew-say" placeholder="say it to the crew…" size="26" maxlength="240"> <button class="act" id="crew-send">send</button></div></div>
+      ${mem.length < b.maxMembers ? bringOneCard : ''}
       ${circleSection}`;
 
+    wireBringOne(t);
     const ib = t.querySelector('#crew-invite-btn');
     if (ib) ib.onclick = () => {
       const name = (t.querySelector('#crew-invite').value || '').trim();
@@ -7678,6 +7710,10 @@
       // THE RESULTS SHOW — the payoff beat: a marquee event you had a stake in just resolved
       event_result: () => `${d.icon || '🎟'} ${d.headline}${d.outcome === 'won' ? ` — your $${fmt(d.stake)} paid ${$c(d.payout)}` : d.outcome === 'lost' ? ` — your $${fmt(d.stake)} came up short` : d.outcome === 'scratched' ? ' — no contest, your stake refunded' : ''}`,
       // THE MENTOR — the veteran/rookie tie
+      // §7.13 referral qualified — the recruit made it, so both sides collect (+ BRING ONE if they run together)
+      ref: () => d.made
+        ? `you got established — your recruiter's cut cleared${d.amt ? `, and $${fmt(d.amt)} landed for you` : ''}${d.bringOne ? ' · you two run the same crew — the Bring One bonus paid out' : ''}`
+        : `${d.from} you brought in got established — $${fmt(d.amt)}${d.bringOne ? ' · your crewmate — the Bring One bonus paid out' : ''}${d.recruits ? ` (${d.recruits} recruits)` : ''}`,
       mentor_offer: () => `${d.from} offered to take you under their wing`,
       mentor_accepted: () => `${d.protege} took your wing — you're their mentor now`,
       mentor_gift: () => `${d.from} sent you a care package — ${$c(d.amount)}`,

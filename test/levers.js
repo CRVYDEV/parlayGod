@@ -485,6 +485,9 @@ const SIGNED = [
   // KINDS is pinned as the WHOLE array (deep-compared) — the base targets are bracket-accessed leaves
   // invisible to the reader check, so the PARENT is the pin (the RIVALS whole-map precedent).
   ['CREW.OBJECTIVE.REWARD', 5000],
+  // BRING ONE — the first-crewmate incentive (a bounded cash faucet gated behind the §7.13 qualify wall)
+  ['CREW.BRING_ONE.RECRUITER_CASH', 15000],
+  ['CREW.BRING_ONE.RECRUIT_CASH', 7500],
   ['CREW.OBJECTIVE.KINDS', [
     { id: 'crimes', label: 'Pull jobs together', base: 40, unit: 'jobs' },
     { id: 'kills', label: 'Put bodies in the ground', base: 3, unit: 'kills' },

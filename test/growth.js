@@ -1061,6 +1061,41 @@ assert.equal(Number((await pool.query(`SELECT amount FROM transactions WHERE cha
 await call('POST', '/v1/crimes/pick', { token: bBenny.token });
 assert.equal((await meOf(gTony.token)).cash, tonyBefore + 5000, 'the tier-2 fee fires once, not per-action');
 
+// ── BRING ONE: a qualified recruit who runs in their recruiter's crew earns BOTH a bonus ──
+// (the first-crewmate incentive, gated behind the whole §7.13 qualification wall — so it inherits
+// every anti-Sybil property; a crewmate can't collect it any faster than a real recruit qualifies).
+const boBoss = await mk('Crew Boss Vito');
+const boFriend = await mk('Crew Friend Sal', 'Crew Boss Vito');
+// put them in the same crew — seed the rows directly (the createCrew level gate is not under test)
+const boCrewId = 'crew-bringone-test';
+await pool.query(`INSERT INTO crews (id, name, leader_account) VALUES ('${boCrewId}', 'The Test Crew', '${await acctOf(boBoss.id)}')`);
+await pool.query(`INSERT INTO crew_members (crew_id, account_id, name) VALUES ('${boCrewId}', '${await acctOf(boBoss.id)}', 'Crew Boss Vito'), ('${boCrewId}', '${await acctOf(boFriend.id)}', 'Crew Friend Sal')`);
+await seedCh(boFriend.id, 'respect=1000, lc_crime=39, cash=30000, nerve=50, energy=200');
+await pool.query(`UPDATE account_persistent SET checkins_lifetime=3 WHERE account_id='${await acctOf(boFriend.id)}'`);
+for (let i = 0; i < 20; i++) { await seedCh(boFriend.id, 'nerve=50, energy=200, jail_until=NULL'); r = await call('POST', '/v1/crimes/pick', { token: boFriend.token }); if (r.body.success) break; }
+assert.equal((await pool.query(`SELECT ref_paid FROM account_persistent WHERE account_id='${await acctOf(boFriend.id)}'`)).rows[0].ref_paid, true, 'the crewmate recruit qualified');
+const boRecruitRow = (await pool.query(`SELECT amount FROM transactions WHERE character_id='${boFriend.id}' AND reason='crew:bringone'`)).rows[0];
+const boBossRow = (await pool.query(`SELECT amount FROM transactions WHERE character_id='${boBoss.id}' AND reason='crew:bringone'`)).rows[0];
+assert(boRecruitRow, 'a crewmate recruit collects the Bring One bonus');
+assert.equal(Number(boRecruitRow.amount), 7500, 'the recruit side is BRING_ONE.RECRUIT_CASH');
+assert.equal(Number(boBossRow.amount), 15000, 'the recruiter side is BRING_ONE.RECRUITER_CASH');
+
+// control: a qualified recruit who is NOT in the recruiter's crew gets NO Bring One bonus
+const soloBoss = await mk('Solo Boss Nick');
+const soloFriend = await mk('Solo Friend Ray', 'Solo Boss Nick');
+await seedCh(soloFriend.id, 'respect=1000, lc_crime=39, cash=30000, nerve=50, energy=200');
+await pool.query(`UPDATE account_persistent SET checkins_lifetime=3 WHERE account_id='${await acctOf(soloFriend.id)}'`);
+for (let i = 0; i < 20; i++) { await seedCh(soloFriend.id, 'nerve=50, energy=200, jail_until=NULL'); r = await call('POST', '/v1/crimes/pick', { token: soloFriend.token }); if (r.body.success) break; }
+assert.equal((await pool.query(`SELECT ref_paid FROM account_persistent WHERE account_id='${await acctOf(soloFriend.id)}'`)).rows[0].ref_paid, true, 'the solo recruit still qualified (the referral pays regardless)');
+assert.equal((await pool.query(`SELECT COUNT(*) n FROM transactions WHERE character_id='${soloFriend.id}' AND reason='crew:bringone'`)).rows[0].n, '0', 'NO Bring One bonus without a shared crew — the crew bonus is the crew-run reward, not the referral');
+
+// §10.4: crew:bringone is in the cash vocabulary + the qualify txn reconciles per character
+{
+  const { runLedgerInvariants } = await import('../src/invariants.js');
+  const inv = await runLedgerInvariants(pool, { alert: false });
+  assert(inv.checks.find((c) => c.name === 'reason vocabulary').ok, 'crew:bringone must not trip the vocabulary alarm');
+}
+
 // ── MY PROFILE — the MySpace page: identity + referral tracking + LEDGER-EXACT earnings ──
 // Mentor Max's whole referral history fired above through the REAL machinery (spark + qualify +
 // milestone, plus two attribution-only recruits and one agent), so every figure here is earned,
