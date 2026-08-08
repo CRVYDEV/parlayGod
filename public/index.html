@@ -4259,6 +4259,17 @@
     const dw = dwR.body || {};
     const st = stR.body || {};
     const rez = reR.body || {};
+    // THE DAY — the one-glance daily checklist (streak/contracts/hustle/corner/drills). A separate
+    // fetch (the GETBIND idiom) so the Promise.all alias window above stays intact.
+    const dy = (await api('GET', '/v1/day')).body || {};
+    const DAY_ICON = { done: '<span style="color:var(--dim)">✓</span>', ready: '<span style="color:var(--neon)">●</span>', todo: '<span style="color:var(--dim)">○</span>' };
+    const dayCard = (dy.items && dy.items.length) ? `
+      <div class="card" style="margin-bottom:12px"><span class="t">📋 Today</span> <span class="chip ${dy.ready ? 'good' : ''}">${dy.ready} ready · ${dy.done}/${dy.total} done</span>
+        <div style="margin-top:6px">${dy.items.map((it) => `
+          <div class="row" data-go-tab="${it.tab}" style="cursor:pointer;padding:4px 0;border-bottom:1px solid #1a1a22">
+            <span>${DAY_ICON[it.state] || '○'} ${esc(it.label)}</span>
+            <span class="d" style="font-size:11.5px;color:${it.state === 'ready' ? 'var(--neon)' : 'var(--dim)'}">${esc(it.detail)} ›</span>
+          </div>`).join('')}</div></div>` : '';
     // bl=THE WEEKLY BULLETIN · ex=STILL ON THE TABLE · ev=TONIGHT IN THE CITY · pt=PRIME TIME ·
     // pp=people(nemesis) · pr=THE MORNING PAPER · cw=THE CREW · dw=THE ROLODEX · st=THE STREAK · rez=THE RESULTS SHOW
     // ── THE WEEKLY BULLETIN — "the word this week": the rotating weekly spotlight + a challenge tied to
@@ -4428,6 +4439,7 @@
     const refDraft = t.querySelector('#ref-claim-name')?.value || '';
     t.innerHTML = `
       ${streakCard}
+      ${dayCard}
       ${primeCard}
       ${bulletinBanner}
       ${eventStrip}
