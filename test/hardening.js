@@ -406,6 +406,11 @@ if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actual
   assert.equal(dj.body.generation, 3, 'dossier surfaces the bloodline generation (deaths+1)');
   assert.equal(dj.body.kills, 7, 'dossier surfaces the lifetime kills');
   assert(dj.body.cash === undefined && dj.body.bank === undefined && dj.body.omr === undefined, 'dossier NEVER leaks an exact wealth figure (anti precise-kill-EV)');
+  // (1c) IDENTITY — the free "about me" blurb surfaces on the dossier + renders ESCAPED on the public
+  // page (defense-in-depth: cards.js esc() escapes even a stored value that dodged the write-time clean)
+  await pool.query("UPDATE characters SET bio='Ran the docks <script>alert(1)</script>' WHERE id=$1", [me.id]);
+  const dj2 = await call('GET', '/v1/u/Broadcast%20Bruno');
+  assert(dj2.body.bio && dj2.body.bio.includes('Ran the docks'), 'the dossier surfaces the bio');
   // (2) the cards — every type is well-formed SVG with no undefined/NaN
   for (const t of ['legend', 'wanted', 'whacked', 'join']) {
     const c = await app.inject({ method: 'GET', url: `/card/${t}/${encodeURIComponent('Broadcast Bruno')}` });
@@ -440,6 +445,7 @@ if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actual
   // (3b) the RICHER profile — a visitor sees a specific person (the dossier strip: crew, dynasty, rank)
   assert(p.body.includes('class="dossier"'), 'profile renders the dossier stat strip');
   assert(p.body.includes('Bruno Crew') && p.body.includes('The Bruno Line'), 'the strip shows the crew + dynasty');
+  assert(p.body.includes('Ran the docks') && !p.body.includes('<script>alert(1)</script>'), 'the bio renders on the page but ESCAPED — no stored-XSS on the public, indexed profile');
   assert(!/\$[0-9]/.test(p.body), 'the public profile NEVER prints a dollar figure (the banded rule holds on the indexed page)');
   // (4) an unknown name falls back cleanly — never a 500 (a bad share link is harmless)
   const uk = await call('GET', '/v1/u/Nobody%20Here');

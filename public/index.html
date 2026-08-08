@@ -1757,6 +1757,9 @@
     if (body && body.tokenId && body.nonce != null)
       return `\u26D3 ${body.name || 'it'} is on-chain — token #${body.tokenId}. Safe forever, and out of the game.`;
     if (body && body.referrer && body.ok) return `on the record — ${body.referrer} gets credit as you come up`;
+    // IDENTITY — the "about me" blurb (the setBio response is exactly {ok, bio})
+    if (body && body.ok === true && Object.keys(body).length === 2 && 'bio' in body)
+      return body.bio ? 'your story is on the record' : 'back to the auto-blurb';
     // THE STREAK — the daily check-in (best/rank are unique to the claim response, not the view)
     if (body && body.ok && body.streak != null && body.best != null && body.cash != null && typeof body.rank === 'string')
       return `\u{1F525} checked in — day ${body.streak}, +$${fmt(body.cash)}${body.milestone ? ` · 🏅 ${body.milestone.day}-DAY MILESTONE — you're ${esc(body.milestone.title)}, +$${fmt(body.milestone.bonus)}` : (body.streak >= body.best ? ` · best yet (${esc(body.rank)})` : '')}`;
@@ -4751,7 +4754,12 @@
       </div>
       <div>
         <div class="msp-h">About Me</div>
-        <div class="msp-box"><div class="d" style="font-size:13px">${blurb}</div></div>
+        <div class="msp-box">
+          ${p.bio ? `<div class="d" style="font-size:13px;font-style:italic">“${esc(p.bio)}”</div>` : `<div class="d" style="font-size:13px">${blurb}</div>`}
+          <div class="d" style="margin-top:8px">
+            <textarea id="prof-bio" placeholder="write your own — who is ${esc(p.name)}?" maxlength="${p.bioMax || 200}" style="width:100%;box-sizing:border-box;min-height:52px;background:#100b07;color:var(--fg);border:1px solid #3a2a1a;border-radius:4px;padding:6px;font-size:12.5px">${esc(p.bio || '')}</textarea>
+            <div class="row" style="margin-top:4px"><button class="act" id="prof-bio-save" style="border-color:var(--neon)">save your story</button>
+              <span class="d" style="font-size:11px;color:var(--dim)">free · shows on your public page · clear it to go back to the auto-blurb</span></div></div></div>
         <div class="msp-h">${esc(p.name)}'s Top 8 <span style="text-transform:none;font-weight:400">— the crew you brought in${p.recruitRank ? ` · ${esc(p.recruitRank)}` : ''}</span></div>
         <div class="msp-box">
           ${p.recruitsTotal === 0 ? `<div class="d" style="font-size:12.5px">Nobody yet. Eight open seats — send your link and fill the row.</div>` : ''}
@@ -4777,6 +4785,9 @@
       try { await navigator.clipboard.writeText(link); toast('your link is on the clipboard — put it somewhere loud.'); }
       catch { toast(link); } // no clipboard permission → show it instead
     };
+    // IDENTITY — save your "about me" (free, status text)
+    const bs = t.querySelector('#prof-bio-save');
+    if (bs) bs.onclick = () => act('POST', '/v1/identity/bio', { bio: t.querySelector('#prof-bio').value }).then(() => renderProfile());
   }
 
   async function renderStreets() {

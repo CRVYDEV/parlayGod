@@ -1431,7 +1431,7 @@ export function view(ch, acct = {}, owned = {}) {
       sworn: v.sworn, expiresSeconds: Math.max(0, Math.ceil((new Date(v.expires_at) - Date.now()) / 1000)) })),
     guardedBy: (ch.guarded_by && ch.guarded_until && new Date(ch.guarded_until) > new Date()) ? ch.guarded_by : null,
     guardSeconds: (ch.guarded_by && ch.guarded_until) ? Math.max(0, Math.ceil((new Date(ch.guarded_until) - Date.now()) / 1000)) : 0,
-    loc: ch.loc, path: ch.path, title: ch.title, streak: ch.streak,
+    loc: ch.loc, path: ch.path, title: ch.title, bio: ch.bio || null, streak: ch.streak,
     // THE REGIMEN — stamina/composure raise the caps; one helper pair, so view/coach/accrual agree
     maxEnergy: energyCapOf(lvl, assetEnergyCap(assets), owned.disciplines, ladderFx(acct, 'energy')),
     maxNerve: nerveCapOf(lvl, owned.disciplines, ladderFx(acct, 'nerve')),

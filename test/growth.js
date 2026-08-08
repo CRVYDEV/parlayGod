@@ -1147,6 +1147,29 @@ assert.equal((await pool.query(`SELECT COUNT(*) n FROM transactions WHERE charac
   assert.equal(mike.earnedCash, 12500, 'per-head attribution stays spark+recruiter only');
 }
 
+// ── IDENTITY — the free "about me" blurb (status text, §10.4-free) ──
+{
+  const ida = await mk('Identity Ida');
+  const before = Number((await pool.query(`SELECT COUNT(*) n FROM transactions WHERE character_id='${ida.id}'`)).rows[0].n);
+  // set it (HTML/control chars stripped, clamped to BIO_MAX)
+  let r2 = await call('POST', '/v1/identity/bio', { token: ida.token, body: { bio: '  I ran the docks before you were <b>born</b>.  ' } });
+  assert.equal(r2.body.ok, true, 'bio set');
+  assert(!/[<>]/.test(r2.body.bio), 'HTML is stripped from the bio (stored-XSS discipline)');
+  assert.equal((await meOf(ida.token)).bio, r2.body.bio, 'the view surfaces the bio');
+  assert.equal((await call('GET', '/v1/profile', { token: ida.token })).body.bio, r2.body.bio, 'My Profile surfaces the bio');
+  // clamp
+  const longBio = 'x'.repeat(500);
+  r2 = await call('POST', '/v1/identity/bio', { token: ida.token, body: { bio: longBio } });
+  assert(r2.body.bio.length <= 200, 'the bio is clamped to BIO_MAX (200)');
+  // clearing it goes back to the auto-blurb
+  r2 = await call('POST', '/v1/identity/bio', { token: ida.token, body: { bio: '' } });
+  assert.equal(r2.body.bio, null, 'an empty bio clears it (free — back to the auto-blurb)');
+  assert.equal((await meOf(ida.token)).bio, null, 'the cleared bio is null in the view');
+  // §10.4: setting a bio moves no value — zero new ledger rows across the whole flow
+  const after = Number((await pool.query(`SELECT COUNT(*) n FROM transactions WHERE character_id='${ida.id}'`)).rows[0].n);
+  assert.equal(after, before, 'IDENTITY writes ZERO ledger rows — it is status text, not a faucet');
+}
+
 // ── DAILY SOCIAL TASKS ("Spread the Word") — the organic-growth petty-cash faucet ──
 const promoter = await mk('Promoter Pete');
 let sw = (await call('GET', '/v1/social', { token: promoter.token })).body;

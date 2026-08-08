@@ -10239,3 +10239,35 @@ bonus does not), and the §10.4 vocabulary stays closed — mutation-verified (d
 branch → "a crewmate recruit collects the Bring One bonus" fails by name). Suite green + sim drift-0 +
 mobile 75/75 + client wiring/mirror + levers (`CREW.BRING_ONE.*` pinned) + pgquery + pgcheck 43/43 on real
 Postgres. All `CREW.BRING_ONE` numbers are founder sign-off levers (BALANCE.md; the bounded cash faucet).
+
+**IDENTITY — the free "about me" blurb (founder-directed retention/funnel drop, 2026-08-08) — BUILT**
+(`src/growth.js` `setBio`, `src/rules.tail.js` `IDENTITY`, `schema.sql` `characters.bio`,
+`src/game.js` view, `src/cards.js` `publicDossier`/`profilePage`, `public/index.html`, `test/growth.js`
++ `test/hardening.js`). The recommendation's sixth item — thin character customization as an
+expression/retention hook. The profile had an "About Me" that was AUTO-written from the sheet; a player
+had no way to write their OWN story, so the strongest identity hook (the MySpace-page element players
+love) was a computed sentence, not theirs. THE MOVE: a free, player-chosen `characters.bio` — set via
+`POST /v1/identity/bio` (cleanText strips HTML/control chars — the createGang stored-XSS discipline;
+clamped to `IDENTITY.BIO_MAX` 200; an empty value clears it back to the auto-blurb). **Deliberately FREE
+and text-only** — distinct from the paid vanity TITLE ($OMR sink) and the honor-derived epithet, so it
+competes with NO sink; and **§10.4-FREE by construction** (status text, no value moves, no ledger row —
+the test pins zero `transactions` rows across the whole set/clear flow). Written by DIRECT SQL (bio is
+off `persistCharacter`'s positional list → clobber-safe, the active_at pattern) inside `withCharacter`
+for the row lock. DIES WITH THE STREET (a column on `characters`; the heir is a fresh row → a new story,
+no estate-wipe entry needed). The schema is added the RIGHT way — `ALTER TABLE characters ADD COLUMN IF
+NOT EXISTS bio` (the outage lesson: a new column on an existing table never inlines; verified by
+pgcheck's migration pass on real Postgres). **The funnel payoff:** the bio surfaces on `publicDossier`
+(the `/u/:name` page + the Cast) rendered ESCAPED via `cards.js` `esc()` (defense-in-depth — even a
+stored value that dodged the write-time clean can't XSS the public, marketplace-indexed page), so a
+shared profile lands a visitor on a specific person in their OWN words. Console: an "About Me" edit
+(a textarea + save) on My Profile that shows the player's bio (their words) when set, the auto-blurb as
+the fallback, with `describe()` humanizing the save/clear toast. `test/growth.js` proves the set (HTML
+stripped, view + My Profile surface it), the clamp, the clear-to-null, and §10.4 (ZERO ledger rows);
+`test/hardening.js` proves the public dossier + profile page carry the bio and render it ESCAPED (no
+stored-XSS) — mutation-verified (remove `esc(d.bio)` → the escape assertion fails by name). Suite green +
+sim drift-0 + mobile 75/75 + client wiring/mirror (622 routes, `bio`/`bioMax` mirrored) + levers
+(`IDENTITY.BIO_MAX` pinned) + docs + pgquery + pgcheck 43/43 on real Postgres. `IDENTITY.BIO_MAX` is the
+one lever (pure scope — no faucet). Deferred (step two): an avatar VARIANT re-roll (needs the
+board-provided-seed plumbing so a chosen look is visible to others — a broader change than "thin"), and
+the bio on the Cast/Situation people cards. **The six strategic recommendations are now all built**
+(ACTIVATION, THE MAP, THE DAY, THE BEEF, BRING ONE, IDENTITY).

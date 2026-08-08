@@ -4794,6 +4794,12 @@ export function crewObjectiveOf(crewId, week, members = 1) {
   return { kind: k.id, label: k.label, unit: k.unit, base: k.base, target: k.base * Math.max(1, members) };
 }
 
+// ═══ IDENTITY ═══ (thin character customization — a free "about me" blurb; the MySpace-page element)
+// The expression hook the profile lacked: a player-chosen bio shown on their public page (the funnel)
+// and My Profile. Deliberately FREE and text-only — distinct from the paid vanity TITLE ($OMR sink) and
+// the honor-derived epithet, so it competes with no sink. Status, ZERO §10.4. Dies with the street.
+export const IDENTITY = { BIO_MAX: 200 };
+
 // ═══ THE SEASON RECAP ═══ (the individual "your season" wrap — pure status, no faucet)
 // A keepsake title by the level a street reached that season, written at rollover into season_recaps
 // (account-level → survives death). The bands are cosmetic (a status axis, the hitman-rep argument),
