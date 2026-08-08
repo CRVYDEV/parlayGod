@@ -1441,6 +1441,22 @@
     clearTimeout(cineT); cineT = setTimeout(closeCine, spec.hold || 2100);
   }
   function closeCine() { clearTimeout(cineT); cineEl?.classList.remove('on'); }
+  // THE AHA MOMENT — the scripted first rival lands as a cinematic (with a fallback toast under reduced
+  // motion), then the coach + the nemesis card carry it. Jumps the player to Wet Work so the target is
+  // one tap away. Deduped by a localStorage flag so a backfilled notification can't replay it.
+  function showFirstBlood(p = {}) {
+    if (sessionStorage.getItem('omerta_fb_seen')) return;
+    sessionStorage.setItem('omerta_fb_seen', '1');
+    const rival = p.rival || 'Somebody';
+    sfx('bad'); haptic('big');
+    playCine({ kicker: 'WORD ON THE STREET', title: `${rival} says you're nobody`, accent: 'var(--bad)',
+      glow: 'rgba(155,47,47,.5)', hold: 3200,
+      lines: ['They put your name in the street.', 'Find them in Wet Work — and hit back.'] });
+    toast(`${rival} put word out on you — settle it in Wet Work.`, true);
+    // the aha beat is a player's first taste of DANGER — a natural moment to offer alerts (after the
+    // cinematic clears so the two don't collide). Once-ever + gated inside maybeAskPush.
+    setTimeout(() => maybeAskPush('Someone just put your name in the street.'), 3800);
+  }
 
   // WHICH moments earn one. Reads the SAME response body describe() reads, so this needs
   // no new server surface — it is a second, louder reading of data the client already has.
@@ -1458,6 +1474,12 @@
       if (b.vendetta) lines.push('the vendetta is settled');
       return { kicker: 'wet work', title: "They're done", sub: 'the street remembers this one.',
         lines, accent: 'var(--blood)', glow: 'rgba(192,57,43,.55)', fx: 'violent' };
+    }
+    // ── THE AHA MOMENT — you settled your scripted first rival. The onboarding payoff beat: this is the
+    // moment a new player learns the revenge loop pays. Rides the jump response (b.firstBlood).
+    if (b.firstBlood) {
+      return { kicker: 'first blood', title: 'You made your bones', sub: `${b.firstBlood.rival || 'they'} won't look at you sideways again.`,
+        lines: [`+${$c(b.firstBlood.cash)}`, `+${b.firstBlood.rep} respect`], accent: 'var(--ok)', glow: 'rgba(99,179,113,.45)', fx: 'payday' };
     }
     // ── the Law took you. Not death, but the closest thing to it.
     if (b.convicted === true || b.busted === true) {
@@ -2811,6 +2833,24 @@
       updateAlertsBtn();
       toast('alerts on — we\'ll buzz your phone when it matters');
     } catch (e) { toast('couldn\'t turn on alerts', true); }
+  }
+  // CONTEXTUAL OPT-IN — the passive 🔔 button is easy to miss, so ask ONCE at the moment alerts are most
+  // obviously worth it: right after the city first comes for you (the aha settle, a contract on your head,
+  // a body, an indictment). The browser's own permission prompt only fires inside the "yes" click (a user
+  // gesture), so this is a soft ask first, the OS ask second. Gated once-ever + never when already on / off.
+  let pushAskShown = false;
+  async function maybeAskPush(line) {
+    if (pushAskShown) return;
+    if (!rules?.push?.publicKey || !pushSupported()) return;
+    if (localStorage.getItem('omerta_push') === '1') return;      // already on
+    if (localStorage.getItem('omerta_push_asked') === '1') return; // asked once already
+    if (Notification && Notification.permission === 'denied') return; // they said no at the OS level
+    pushAskShown = true;
+    localStorage.setItem('omerta_push_asked', '1');
+    const yes = await ask('Get a heads-up?',
+      `${line}\n\nThe city keeps moving while you're gone. Turn on phone alerts and we'll buzz you when a contract lands on your head, the Bureau moves, or your empire is hit — nothing else.`,
+      { yes: 'alert me', no: 'not now' });
+    if (yes) await enablePush();
   }
   async function disablePush() {
     try {
@@ -4304,6 +4344,8 @@
     // THE DAY — the one-glance daily checklist (streak/contracts/hustle/corner/drills). A separate
     // fetch (the GETBIND idiom) so the Promise.all alias window above stays intact.
     const dy = (await api('GET', '/v1/day')).body || {};
+    // THE COLLISION — who's a REAL human, online, reachable RIGHT NOW (GETBIND, off the alias window).
+    const lv = (await api('GET', '/v1/live')).body || {};
     const DAY_ICON = { done: '<span style="color:var(--dim)">✓</span>', ready: '<span style="color:var(--neon)">●</span>', todo: '<span style="color:var(--dim)">○</span>' };
     const dayCard = (dy.items && dy.items.length) ? `
       <div class="card" style="margin-bottom:12px"><span class="t">📋 Today</span> <span class="chip ${dy.ready ? 'good' : ''}">${dy.ready} ready · ${dy.done}/${dy.total} done</span>
@@ -4434,9 +4476,29 @@
         ${pr.totalIn || pr.totalOut ? `<div class="d">the books: <b style="color:var(--neon)">+$${fmt(pr.totalIn)}</b> in${pr.totalOut ? ` · <b style="color:var(--bad)">−$${fmt(pr.totalOut)}</b> out` : ''}${(pr.earned || []).length ? ` — mostly ${pr.earned.slice(0, 3).map((e) => `${esc(e.what)} $${fmt(e.total)}`).join(', ')}` : ''}</div>` : ''}
         ${(pr.headlines || []).length ? `<div class="d">${pr.headlines.slice(0, 6).map((h) => `${PAPER_LINES[h.type] || esc(String(h.type).replace(/_/g, ' '))} ×${h.n}`).join(' · ')}</div>` : ''}
         <div class="row"><button class="act" id="paper-fold">read — fold the paper</button></div></div>` : '';
+    // ── THE COLLISION — real players, online, reachable RIGHT NOW. The city is full of NPC scenery, so a
+    // real human being around is RARE and easy to miss; this makes it VISIBLE the second it exists. HERE
+    // (your district — the live collision: go to Wet Work and act) leads; NEARBY + HOT DISTRICTS are the
+    // convergence nudge (travel to where the humans are). Hidden when nobody real is on (the empty-state
+    // rule — never a dead "0 online" card).
+    const lvHere = lv.here || [], lvNear = lv.nearby || [], lvHot = lv.hotDistricts || [];
+    const lvOn = lv.onlineNow || 0;
+    const lvRow = (p) => `<span style="display:inline-flex;align-items:center;gap:5px;margin:2px 8px 2px 0${p.online ? '' : ';opacity:.6'}">${p.online ? '<span style="color:var(--neon)">●</span>' : ''}${av(p.id, 22)}<b>${esc(p.name)}</b> <span class="d" style="font-size:11px">L${p.level}${p.gangTag ? ` [${esc(p.gangTag)}]` : ''}</span>${p.wanted ? '<span class="chip bad" style="font-size:9px;padding:0 4px">WANTED</span>' : ''}${p.sameFamily ? '<span class="chip" style="font-size:9px;padding:0 4px">family</span>' : ''}</span>`;
+    const liveCard = (lvHere.length || lvNear.length) ? `
+      <div class="card" style="border-color:var(--neon);background:linear-gradient(180deg,rgba(93,214,168,.06),transparent)">
+        <span class="t" style="color:var(--neon)">${lvOn ? '● ' : ''}REAL PLAYERS ${lvOn ? 'ON THE WIRE' : 'AROUND YOU'}</span>
+        ${lvOn ? `<span class="chip good">${lvOn} online now</span>` : ''}
+        ${lvHere.length ? `<div class="d" style="margin-top:4px"><b style="color:var(--neon)">${lvHere.length}</b> real player${lvHere.length === 1 ? '' : 's'} in ${esc(lv.you?.districtName || 'your district')} with you${lvHere.some((p) => p.online) ? ' — some ON RIGHT NOW' : ''}:</div>
+          <div style="margin:4px 0">${lvHere.map(lvRow).join('')}</div>
+          <div class="row"><button class="act prime" data-go-tab="pvp">the Wet Work roster →</button></div>` : ''}
+        ${lvNear.length ? `<div class="d" style="margin-top:6px">${lvNear.length} more near your level${lvHot.length ? ` — busiest: ${lvHot.slice(0, 3).map((h) => `${esc(h.districtName)} (${h.count})`).join(', ')}` : ''}.</div>
+          <div style="margin:2px 0">${lvNear.slice(0, 6).map(lvRow).join('')}</div>
+          ${lvHot.length ? `<div class="row">${lvHot.slice(0, 3).map((h) => `<button class="act" data-do="POST /v1/travel/${h.district}">go to ${esc(h.districtName)} →</button>`).join('')}</div>` : ''}` : ''}
+      </div>` : '';
     const situation = `
       <h2>The Situation <span class="d" style="font-size:11.5px">— your threats, your people, and what's ready right now</span></h2>
       <div class="grid">
+        ${liveCard}
         ${paperCard}
         ${nem ? `<div class="card" style="border-color:var(--bad)"><span class="t" style="color:var(--bad)">${av(nem.street?.id, 30)}YOUR NEMESIS${nem.street?.alive === false ? ' — LINE FALLEN' : ''}</span>
           <div class="d"><b>${esc(nem.street?.name || 'a fallen line')}</b> has moved on you <b>${nem.total}</b> time${nem.total === 1 ? '' : 's'}${nem.bloodOwed > 0 ? ` — and their line owes yours <b>${nem.bloodOwed} bod${nem.bloodOwed === 1 ? 'y' : 'ies'}</b>` : nem.bloodOwed < 0 ? ` — your line owes theirs ${-nem.bloodOwed}` : ''}.${nem.vendetta?.mine ? ' A vendetta is SWORN.' : ''}${nem.vendetta?.theirs ? ' Their line has sworn one on YOU.' : ''}</div>
@@ -7722,6 +7784,9 @@
       event_result: () => `${d.icon || '🎟'} ${d.headline}${d.outcome === 'won' ? ` — your $${fmt(d.stake)} paid ${$c(d.payout)}` : d.outcome === 'lost' ? ` — your $${fmt(d.stake)} came up short` : d.outcome === 'scratched' ? ' — no contest, your stake refunded' : ''}`,
       // THE MENTOR — the veteran/rookie tie
       // §7.13 referral qualified — the recruit made it, so both sides collect (+ BRING ONE if they run together)
+      // THE AHA MOMENT — the scripted first rival
+      first_blood: () => `🩸 ${d.rival || 'somebody'} put word out that you're nobody — settle it in Wet Work`,
+      first_blood_settled: () => `🩸 you settled the score with ${d.rival || 'them'} — you've made your bones${d.cash ? ` (+$${fmt(d.cash)})` : ''}`,
       ref: () => d.made
         ? `you got established — your recruiter's cut cleared${d.amt ? `, and $${fmt(d.amt)} landed for you` : ''}${d.bringOne ? ' · you two run the same crew — the Bring One bonus paid out' : ''}`
         : `${d.from} you brought in got established — $${fmt(d.amt)}${d.bringOne ? ' · your crewmate — the Bring One bonus paid out' : ''}${d.recruits ? ` (${d.recruits} recruits)` : ''}`,
@@ -7802,6 +7867,8 @@
     // (F2) the estate report flows through here on death (backfill on load, or the gen-bump re-backfill)
     // — pop the death/heir modal from it (deduped per generation inside showDeath).
     if (channel === 'me' && ev && ev.type === 'estate') showDeath(ev);
+    // THE AHA MOMENT — the scripted first rival's move (live or backfilled) → the cinematic beat.
+    if (channel === 'me' && ev && ev.type === 'first_blood') showFirstBlood(ev.payload || {});
     // THE RESULTS SHOW — a marquee event you staked on resolved. A WIN gets the payoff beat (the win
     // sting + a celebratory toast); a loss/scratch just rides the feed line below. No modal — the wire
     // + the toast are the moment, so a backfill of several results can't stack into modal fatigue.
@@ -7944,6 +8011,10 @@
         try {
           const ev = JSON.parse(m.data);
           feedLine(ev.channel || '?', ev);
+          // CONTEXTUAL PUSH OPT-IN — a LIVE urgent event (a contract on your head, a body, an
+          // indictment) is the moment alerts obviously matter. Ask once; backfilled history never
+          // triggers it (this is the socket path only). first_blood's own beat asks separately.
+          if (ev.channel === 'me' && URGENT_TYPES.has(ev.type)) maybeAskPush('The city just made a move on you.');
           // your own events refresh the sheet + re-render the open board; streets/gang events
           // (someone posted a contract, a club got raided) just re-render the open board.
           if (ev.channel === 'me') { refresh(); renderActive(); }

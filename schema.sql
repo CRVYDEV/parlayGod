@@ -2873,6 +2873,12 @@ ALTER TABLE characters ADD COLUMN IF NOT EXISTS seeking_mentor_at TIMESTAMPTZ;
 -- vanity title sink and the derived honor epithet). Status text, ZERO §10.4. Dies with the street (a new
 -- heir writes a new story — no estate-wipe entry needed, the heir is a fresh characters row).
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS bio TEXT;
+-- THE AHA MOMENT (First Blood) — the scripted first-rival beat. stage 0 none / 1 assigned / 2 settled;
+-- aha_rival is the assigned resident's character id, aha_rival_name a snapshot for the coach copy.
+-- Dies with the street (a fresh heir gets a fresh beat). Direct-SQL writes → off persistCharacter.
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS aha_stage INT NOT NULL DEFAULT 0;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS aha_rival TEXT;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS aha_rival_name TEXT;
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS proteges_raised INT NOT NULL DEFAULT 0;
 -- one mentor per protégé, ever (PK on protégé). claimed_mask is the once-ever milestone bitmask.
 CREATE TABLE IF NOT EXISTS mentorships (

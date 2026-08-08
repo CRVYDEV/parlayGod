@@ -96,9 +96,27 @@ async function pushToAccount(pool, accountId, title, body, url) {
   return subs.length;
 }
 
-// ── THE WORKER SWEEP — push every URGENT, still-undelivered, not-yet-pushed notification from the last
-// hour, then mark it pushed (idempotent; a failed send still marks so we don't retry-storm). Post-commit
-// by construction. Dormant unless configured. ──
+// build ONE digest push from an account's batch of claimed notifications — a per-account digest, so a
+// player who missed several things gets ONE buzz, not a storm. A single alert keeps its specific line.
+function digest(claimed) {
+  if (claimed.length === 1) {
+    const n = claimed[0]; let p = {}; try { p = JSON.parse(n.payload); } catch { /* keep {} */ }
+    return { title: PUSH_TITLES[n.type] || 'OMERTÀ', body: bodyFor(n.type, p) };
+  }
+  const heads = [];
+  for (const n of claimed) { const t = PUSH_TITLES[n.type]; if (t && !heads.includes(t)) heads.push(t); }
+  const shown = heads.slice(0, 3).join(' · ');
+  const more = heads.length > 3 ? ` +${heads.length - 3} more` : '';
+  return { title: `${claimed.length} things need you`, body: `${shown}${more}. Open OMERTÀ.` };
+}
+
+// ── THE WORKER SWEEP — push URGENT, still-undelivered, not-yet-pushed notifications from the last hour,
+// then mark them pushed (idempotent; a failed send still marks so we don't retry-storm). Post-commit by
+// construction. Dormant unless configured. Two behaviours the deferred gaps asked for:
+//   · SKIP a recently-active account — a live tab is NOT "away", and the notification already reached
+//     them on the WS `me` channel; a phone buzz would be redundant. The worker is a SEPARATE process
+//     with no `wsClients`, so it uses the SAME cross-process signal /v1/online uses: the telemetry table.
+//   · DIGEST per account — one buzz for the whole batch, not one per event. ──
 export async function sweepPush(pool) {
   if (!configured) return;
   const types = Object.keys(PUSH_TITLES);
@@ -109,22 +127,39 @@ export async function sweepPush(pool) {
        FROM notifications n JOIN characters c ON c.id=n.character_id AND c.alive
       WHERE NOT n.pushed AND NOT n.delivered AND n.type IN (${inList})
         AND n.created_at > now() - interval '1 hour'
-      ORDER BY n.created_at LIMIT 100`, types)).rows;
-  let pushed = 0;
+      ORDER BY c.account_id, n.created_at LIMIT 200`, types)).rows;
+  if (!rows.length) return 0;
+  // the recently-active set (a live/at-the-tab player). pg-mem can't do a correlated NOT EXISTS (the
+  // /v1/gangs lesson), so pull it flat and filter in JS. PUSH_SKIP_ACTIVE_MIN=0 disables the skip.
+  const activeMin = Number(process.env.PUSH_SKIP_ACTIVE_MIN ?? 3);
+  const active = new Set();
+  if (activeMin > 0) {
+    const a = await pool.query('SELECT DISTINCT account_id FROM telemetry WHERE at > $1',
+      [new Date(Date.now() - activeMin * 60000)]);
+    for (const r of a.rows) active.add(r.account_id);
+  }
+  // group the pushable rows by account (skipping the recently-active)
+  const byAcct = new Map();
   for (const n of rows) {
-    // CLAIM-then-notify (the Wire-watchdog / fees discipline, C1). The `pushed` flag must guard the send,
-    // not follow it: a plain SELECT takes no row lock and there's no advisory lock, so two overlapping
-    // workers (a deploy overlap — the runWageEpoch threat model) would BOTH select this row and BOTH
-    // buzz the phone. The atomic `AND NOT pushed RETURNING` means exactly one pass wins the claim; only
-    // the winner sends. The tradeoff — a lost push if the process dies AFTER the claim but BEFORE the
-    // send — is deliberately chosen over a storm of duplicate buzzes (the watchdog made the same call).
-    const claim = await pool.query('UPDATE notifications SET pushed=true WHERE id=$1 AND NOT pushed RETURNING id', [n.id]);
-    if (!claim.rowCount) continue;   // another worker already claimed it
-    let p = {}; try { p = JSON.parse(n.payload); } catch { /* keep {} */ }
-    try {
-      await pushToAccount(pool, n.account_id, PUSH_TITLES[n.type] || 'OMERTÀ', bodyFor(n.type, p), '/');
-      pushed++;
-    } catch { /* a bad account/sub never stalls the sweep (the claim stands — no re-buzz) */ }
+    if (active.has(n.account_id)) continue;
+    let g = byAcct.get(n.account_id); if (!g) byAcct.set(n.account_id, g = []);
+    g.push(n);
+  }
+  let pushed = 0;
+  for (const [accountId, ns] of byAcct) {
+    // CLAIM the whole batch atomically BEFORE the send (claim-then-notify, the Wire-watchdog / fees
+    // discipline, C1). A plain SELECT takes no row lock, so two overlapping workers (a deploy overlap —
+    // the runWageEpoch threat model) would BOTH buzz. The atomic `AND NOT pushed RETURNING` means each
+    // row is claimed by exactly one worker; RETURNING is the set THIS worker owns. The tradeoff — a lost
+    // push if the process dies AFTER the claim but BEFORE the send — is chosen over duplicate buzzes.
+    const ids = ns.map((n) => n.id);
+    const ph = ids.map((_, i) => `$${i + 1}`).join(',');
+    const claimed = (await pool.query(
+      `UPDATE notifications SET pushed=true WHERE id IN (${ph}) AND NOT pushed RETURNING id, type, payload`, ids)).rows;
+    if (!claimed.length) continue;   // another worker won them all
+    const { title, body } = digest(claimed);
+    try { await pushToAccount(pool, accountId, title, body, '/'); pushed++; }
+    catch { /* a bad account/sub never stalls the sweep (the claims stand — no re-buzz) */ }
   }
   return pushed;
 }

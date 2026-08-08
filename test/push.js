@@ -10,6 +10,9 @@ import webpush from 'web-push';
 const keys = webpush.generateVAPIDKeys();
 process.env.VAPID_PUBLIC_KEY = keys.publicKey;
 process.env.VAPID_PRIVATE_KEY = keys.privateKey;
+// the base assertions test the core mechanic (an AWAY player gets pushed), so disable the skip-active
+// filter for them; a dedicated block below flips it on and proves the skip + the away-player push.
+process.env.PUSH_SKIP_ACTIVE_MIN = '0';
 
 const { buildServer } = await import('../src/server.js');
 const Push = await import('../src/push.js');
@@ -93,6 +96,47 @@ assert.equal(sent.length, 0, 'no subscription → nothing sent, no crash');
   });
   await Push.sweepPush(pool);
   assert.strictEqual(pushedAtSend, true, 'the row is claimed (pushed=true) BEFORE the send — claim-then-notify (C1); a mutation to notify-then-flag makes this false');
+}
+
+// ════════════ SKIP-WHEN-LIVE — a recently-active account is NOT "away" (the telemetry signal) ════════════
+// (the claim block above swapped the deliver seam for one that only inspects the row — restore the
+// sent-recording seam so these blocks can count buzzes again)
+Push.__setDeliver(async (_pool, s, payload) => { sent.push({ endpoint: s.endpoint, payload: JSON.parse(payload) }); });
+{
+  const q = await mk('Live Guy');
+  const qAcct = await acctOf(q.id);
+  await call('POST', '/v1/push/subscribe', { token: q.token, body: { subscription: { endpoint: 'https://push.example/live', keys: { p256dh: 'k', auth: 'a' } } } });
+  await pool.query('DELETE FROM telemetry');   // start "away" — nobody recently active
+  process.env.PUSH_SKIP_ACTIVE_MIN = '3';
+  // recently active → SKIPPED even with an urgent, undelivered, unpushed note
+  await pool.query('INSERT INTO telemetry (id, account_id, event, at) VALUES ($1,$2,$3,now())', [uid(), qAcct, 'crime']);
+  await addNote(q.id, 'bounty_on_you', { amount: 10000 });
+  sent.length = 0; await Push.sweepPush(pool);
+  assert.equal(sent.length, 0, 'a recently-active (live-tab) player is NOT buzzed — the notification already reached them on the WS');
+  assert.equal((await pool.query("SELECT pushed FROM notifications WHERE character_id=$1 AND type='bounty_on_you'", [q.id])).rows[0].pushed, false, 'the row is left un-pushed so a later sweep can buzz them once they go away');
+  // gone away (no recent telemetry) → the SAME note now buzzes
+  await pool.query('DELETE FROM telemetry');
+  sent.length = 0; await Push.sweepPush(pool);
+  assert.equal(sent.length, 1, 'once away, the still-undelivered note is pushed');
+  assert.equal(sent[0].payload.title, 'A contract is out on you', 'the away push carries the urgent title');
+  process.env.PUSH_SKIP_ACTIVE_MIN = '0';
+}
+
+// ════════════ DIGEST — several things while away buzz ONCE, not N times ════════════
+{
+  const d = await mk('Digest Guy');
+  await call('POST', '/v1/push/subscribe', { token: d.token, body: { subscription: { endpoint: 'https://push.example/dg', keys: { p256dh: 'k', auth: 'a' } } } });
+  await addNote(d.id, 'whacked', { by: 'Rival A' });
+  await addNote(d.id, 'indicted', {});
+  await addNote(d.id, 'sacked', { by: 'Rival B' });
+  sent.length = 0; await Push.sweepPush(pool);
+  assert.equal(sent.length, 1, 'three urgent notes → ONE digest push (per-account digest), not three buzzes');
+  assert.ok(/3 things need you/.test(sent[0].payload.title), 'the digest titles the count');
+  assert.ok(sent[0].payload.body.includes('You were killed'), 'the digest body lists the headlines');
+  // all three are claimed (marked pushed) so the next sweep re-buzzes nothing
+  assert.equal(Number((await pool.query('SELECT COUNT(*) n FROM notifications WHERE character_id=$1 AND NOT pushed AND type IN($2,$3,$4)', [d.id, 'whacked', 'indicted', 'sacked'])).rows[0].n), 0, 'the whole batch is claimed');
+  sent.length = 0; await Push.sweepPush(pool);
+  assert.equal(sent.length, 0, 'a second sweep re-buzzes nothing');
 }
 
 // ════════════ §10.4 — push moves no value ════════════
