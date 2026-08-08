@@ -10387,3 +10387,32 @@ Suite green + sim drift-0 + mobile 75 + pgquery/pgcheck 43/43 on real Postgres. 
 marketing/transactional email for a real-money-adjacent game carries compliance weight (consent,
 unsubscribe, jurisdiction) — the opt-in + one-click unsubscribe are built in, and exact external copy is
 a counsel item like the rest of the messaging surface. No lever, no faucet.
+
+**THE PWA — the game installs to the home screen (iOS + Android) — BUILT** (`public/manifest.json`,
+`public/sw.js`, four noir-fedora app icons, `src/server.js` static routes, `public/index.html` install
+prompt; `test/pwa.js` — the 90th suite). Mobile is where a mafia-RPG audience lives, and a browser tab is
+easy to forget — the whole retention arc (web push, the Morning Paper, the daily streak) is worth far more
+from a home-screen icon that opens full-screen and buzzes. Zero new deps, zero build step: the console is
+still one HTML file. **The manifest** (`GET /manifest.json` + `/manifest.webmanifest`) declares
+`display: standalone`, the noir `#0c0b0d` theme, and three icons (192/512 + a maskable 512 for Android's
+safe-zone); the icons are binary PNGs served from a boot-time filename-allowlist Map (the `/art` precedent —
+no traversal surface by construction) with a week-long cache. **The service worker is now an app shell, not
+just push** — the whole game is one HTML file that changes every deploy, so navigations are **NETWORK-FIRST**
+(you always get the freshest client online; the cached `/` shell is only an offline fallback — a deploy can
+never be masked by a stale cache), static assets (icons, `/art/*`) are cache-first, and the **API (`/v1/*`,
+the websocket, `/sw.js`) is NEVER cached** (asserted by `test/pwa.js`). The push handlers are unchanged (and
+on iPhone, web push only works from an INSTALLED PWA — so this is what makes the alerts reach an iOS player
+at all). **The install prompt** (`registerPWA`/`showInstallBar`): Android/desktop Chrome stashes the
+`beforeinstallprompt` and offers a dismissible **Install** bar once the player has settled in; iOS Safari
+(no such event) gets a one-time "Add to Home Screen via Share" hint after 6s. The bar sits at **z-index 12
+(below the modal layer, 20)** and refuses to appear over any open dialog (`.modal-bg:not(.hidden)` — the
+tip-gating precedent), so a nudge can never intercept a modal click — the exact regression the mobile
+harness caught (a `#glossary-close` click endlessly intercepted by a z-index-40 bar) and now guards against.
+`viewport-fit=cover` + the safe-area insets + the apple-touch-icon/status-bar meta complete the iOS
+full-screen look. §10.4-FREE (static assets + a client nudge — moves no value, adds no reason/lever).
+`test/pwa.js` proves the manifest is valid + complete (name, standalone, 192+512+maskable, all icons
+resolve — a 404 icon breaks install), the icons are real PNGs (magic bytes), the SW is an app-shell (install/
+fetch/push handlers + never caches the API), and the client head carries the install tags. Suite green + sim
+drift-0 + mobile 75 + pgquery/pgcheck 43/43 on real Postgres. No native wrapper / app-store submission (a
+PWA installs directly from the browser with no store review, no 30% cut, and no separate binary to ship —
+the store-wrapper path is a deferred, counsel-gated decision for a real-money-adjacent game).
