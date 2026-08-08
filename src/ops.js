@@ -103,6 +103,39 @@ export async function opsActivity(pool, limit = 50) {
   return { events: rows.map((r) => ({ event: r.event, at: r.at, props: safeParse(r.props) })) };
 }
 
+// ── THE INTEGRATIONS PANEL — which dormant retention/funnel wiring is LIVE, and how to switch it on.
+// A returning-player game lives or dies on push + a frictionless top-of-funnel, and all of it ships
+// DORMANT (the chain/dormant precedent) — built, tested, and switched on by ONE deploy-config action.
+// This is the founder's switchboard: is it on, and if not, the exact steps. Pure env PRESENCE — it
+// reports a boolean per integration and NEVER echoes a secret value (a key or webhook URL never
+// leaves the server). No DB, no §10.4.
+export function integrationsStatus() {
+  const has = (k) => !!(process.env[k] && String(process.env[k]).trim());
+  const baseUrl = process.env.PUBLIC_URL || process.env.SOCIAL_GAME_URL;
+  return { integrations: [
+    { id: 'push', name: 'Web Push', kind: 'retention',
+      live: has('VAPID_PUBLIC_KEY') && has('VAPID_PRIVATE_KEY'),
+      why: 'Wakes returning players — for a lazy-accrual game where things happen to you while you\'re gone, this is the single highest-ROI retention primitive.',
+      needs: ['VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'VAPID_SUBJECT (optional, mailto:)'],
+      steps: 'Run `node tools/vapid.js` once, set VAPID_PUBLIC_KEY + VAPID_PRIVATE_KEY (keep the private one secret), redeploy. The 🔔 button then appears in-client.' },
+    { id: 'x_oauth', name: 'X one-click sign-in', kind: 'funnel',
+      live: has('X_CLIENT_ID') && !!baseUrl,
+      why: 'One-tap signup removes the friction at the top of the funnel — without it, X users must paste a token (developers only), which nobody does.',
+      needs: ['X_CLIENT_ID', 'X_CLIENT_SECRET', 'PUBLIC_URL'],
+      steps: 'Register an X app, set X_CLIENT_ID/X_CLIENT_SECRET + PUBLIC_URL, and register the callback URL PUBLIC_URL + /v1/auth/x/callback on the X app.' },
+    { id: 'city_wire', name: 'Discord city wire', kind: 'funnel',
+      live: has('CITY_WIRE_WEBHOOK_URL'),
+      why: 'Posts city drama (kills, wars, monuments) to your community Discord — the genre audience shares beef, so every server war becomes free organic reach.',
+      needs: ['CITY_WIRE_WEBHOOK_URL'],
+      steps: 'Create a Discord CHANNEL webhook (a PUBLIC community channel, distinct from the private INVARIANT_WEBHOOK_URL ops alarm), set CITY_WIRE_WEBHOOK_URL on the API.' },
+    { id: 'wallet_connect', name: 'WalletConnect (mobile chain)', kind: 'chain',
+      live: has('WALLETCONNECT_PROJECT_ID'),
+      why: 'Mobile wallet linking for on-chain $OMR extraction (mainnet-gated — lower priority until the chain is live).',
+      needs: ['WALLETCONNECT_PROJECT_ID'],
+      steps: 'Grab a free public project id from dashboard.reown.com, set WALLETCONNECT_PROJECT_ID (public/client-embedded by design).' },
+  ] };
+}
+
 // ── THE COACH CENSUS — where the coach has every ACTIVE player standing, live ────────────────────
 // The progression harness measures where a SIMULATED player sits on the ladder; this is the same
 // reading over the real population: for every living human character active inside the window, the

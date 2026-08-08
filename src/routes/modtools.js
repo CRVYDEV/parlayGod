@@ -125,6 +125,7 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
     app.get('/v1/mod/overview', { preHandler: modAuth }, async () => Ops.opsOverview(pool)); // live-ops economy + player snapshot
     app.get('/v1/mod/activity', { preHandler: modAuth }, async (req) => Ops.opsActivity(pool, req.query?.limit)); // the live event feed
     app.get('/v1/mod/coach', { preHandler: modAuth }, async () => Ops.opsCoach(pool)); // the live coach census — where every active player is stuck
+    app.get('/v1/mod/integrations', { preHandler: modAuth }, async () => Ops.integrationsStatus()); // the dormant retention/funnel wiring: live-vs-off + activation steps (env presence only, no secrets)
     // which systems anyone actually uses + whether players come back. Reads telemetry that was
     // already being written — the reader was the missing half, not the instrumentation.
     app.get('/v1/mod/engagement', { preHandler: modAuth }, async (req) => opsEngagement(pool, req.query?.days));

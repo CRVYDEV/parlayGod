@@ -10112,3 +10112,162 @@ Suite green + sim drift-0 + mobile 73/73 + pgquery + pgcheck 43/43 on real Postg
 `SIEGE_NEED`/`SIEGE_CASH`/`SIEGE_TITLE` are founder sign-off levers (pinned). **The PRIME TIME rotation is
 now feature-complete** — three mechanics (rally / happy hour / siege) × two modes (value / honor), drawn
 deterministically per night off the §7.11 seed, forecastable a week out.
+
+**THE MAP — the visible, shared, contested city (founder-directed 2026-08-08, the flagship of the
+"where are the thinnest gaps" strategic pass: turf is the game's core fantasy and was its LEAST
+visible system — numbers on a board, six control states each surfaced on a different route, no picture
+you could look at and read the power structure at a glance) — BUILT** (`src/citymap.js` — the 131st
+module, `test/citymap.js` — the 82nd suite; `GET /v1/map`; a new "The Map" console screen folded under
+the Family group). One read aggregates all six control states per district — the player family HOLDING
+it (+ a `mine` flag, the identity hook "my family holds the docks"), an NPC cartel OCCUPYING it (+ the
+live liberation cost, scaled by the outfit's strength — the World raid loop is the path to core turf),
+a live SEALED-BID contest (the COUNT of families bidding, never an amount — the info-economy rule), THE
+WATCH declared hour, the territory RACKET running on it (type + tier + owner tag), and a SOVEREIGNTY
+stronghold — plus the neighbour EDGES (`DISTRICT_ADJ`) so the board reads as a map, the SEASON phase
+(the reckoning changes turf tension), and a FAMILY POWER RANKING (who holds the most core districts,
+treasury the tiebreak — "who's winning" at a glance). **PURE READ, ZERO §10.4** — it aggregates state
+other systems already own (districts / gangs / territory_rackets / sov_structures / district_bids /
+world_npcs), moves no value and writes no row (the test pins zero transactions rows across the whole
+read). pg-mem posture: one flat query per control table + JS joins (no correlated subqueries, no
+`= ANY`). The client screen renders the six districts as state-coloured tiles (mine=neon / held=gold /
+contested=amber / occupied=red / open=grey) with holder-or-occupier, the contest countdown, the
+liberation cost, the watch window, the racket, the stronghold, and the border chips — plus the power
+ranking and a pointer to fight for turf from The Family tab. `test/citymap.js` proves the board shape,
+a district my family holds reading MINE + surfacing the racket, an NPC-occupied district showing its
+liberation cost, the power ranking ordering by control (a second family holding fewer districts ranks
+below — load-bearing, mutation-verified), and §10.4-neutrality — two mutations each caught by name.
+Suite green + sim drift-0 + mobile 75/75 + client wiring/mirror (the map's element reads covered, the
+`.map(namedFn)` blind spot avoided by inlining the tile) + pgquery + pgcheck 43/43 on real Postgres.
+No new lever (pure read; every number is read from live state). Browser-probed live (the season banner,
+occupied districts, the Dock Rats + liberation cost render — zero page errors). The thinnest gameplay
+gap (turf made visible), the missing identity hook, and a native share-worthy artifact in one screen.
+
+**ACTIVATION — the dormant retention/funnel switchboard (founder-directed 2026-08-08, the strategic
+pass's #1 recommendation: the funnel is well-built and mostly switched OFF — push, X one-click sign-in
+and the Discord city wire all ship DORMANT pending deploy config, and turning them on is higher-ROI
+than any new system) — BUILT** (`src/ops.js` `integrationsStatus`, `GET /v1/mod/integrations`,
+`tools/vapid.js` + `npm run vapid`, an /admin **Integrations** panel, DEPLOY.md § the switchboard).
+The founder-facing switchboard: which retention/funnel wiring is LIVE vs OFF and the EXACT activation
+steps for each — **(1)** Web Push (`VAPID_*`, the highest-ROI retention primitive for a lazy-accrual
+game), **(2)** X one-click sign-in (`X_CLIENT_ID`+`PUBLIC_URL`, removes top-of-funnel friction),
+**(3)** the Discord city wire (`CITY_WIRE_WEBHOOK_URL`, free organic reach), **(4)** WalletConnect
+(chain, mainnet-gated). **Env PRESENCE only — it reports a boolean per integration and NEVER echoes a
+secret value** (a key or webhook URL never leaves the server; test-pinned with a sentinel value).
+`tools/vapid.js` (`npm run vapid`) prints a fresh VAPID keypair so Web Push is one command + a redeploy
+away. The /admin panel renders live/off + the rationale + the steps (mod-gated client-side like the rest
+of the dashboard). ZERO §10.4 (a read of env presence; no DB, no value moves). `test/hardening.js` proves
+the mod-gate, a configured integration reading LIVE with its rationale, an unconfigured one reading OFF
+with steps, and — the load-bearing property — that a secret VALUE is never echoed (a distinctive sentinel
+private key never appears in the response; the var NAME `X_CLIENT_SECRET` legitimately containing the
+substring is why the test asserts the value, not the word). Suite green + routes 618 + client wiring +
+mobile 75/75 (the /admin panel renders) + browser-probed live (1/4 live, push OFF with steps, city wire
+LIVE — zero page errors). No new lever, no new env (all four integrations' vars were already
+preflight-classified). The cheapest, highest-leverage retention+funnel win — nothing new to build, just
+made legible and one command from on.
+
+**THE DAY — the returning player's one-glance daily checklist (founder-directed 2026-08-08, the
+strategic pass's retention recommendation: the game grew SEVEN daily surfaces — the login streak, daily
+contracts, the hustle, the corner, trainer drills, the daily lead, the morning paper — each on its own
+tab, so "what should I do today" meant hunting the whole console; the gap wasn't more dailies, it was
+one unified flow) — BUILT** (`src/day.js` — the 132nd module, `test/day.js` — the 83rd suite;
+`GET /v1/day`; a "📋 Today" card leading Home). One read consolidates the actionable dailies into an
+ordered checklist — each item ready / in-progress (todo) / done, with a one-tap jump to its tab — so a
+player who logs in for ten minutes sees and clears their day at once instead of hunting five tabs.
+**PURE READ** — it REUSES the existing board readers (`streakBoard` / `getDaily` / `hustleBoard` /
+`cornerBoard` / `regimenBoard`) so the number here and the number on each tab can NEVER disagree (DRY,
+the extortFront one-core discipline); **ZERO §10.4** (no value moves, no row written — the test pins
+zero transactions rows). The contracts item counts only the LIVE contracts via `dailyLiveFor` (a solo
+player's gang-gated tribute is out of reach, not "todo" — the coach work-board discipline, so the number
+never points at a dead task). The client "📋 Today" card (a separate GETBIND fetch so the renderStart
+Promise.all alias window stays intact) leads Home under the streak, each row `data-go-tab`-jumping to its
+surface. `test/day.js` proves the five surfaces are consolidated with a state each, a fresh player's
+streak + corner read READY, claiming the streak flips its item to done (state reflects real progress —
+mutation-verified), and §10.4-neutrality. Suite green + sim drift-0 + mobile 75/75 + client wiring/mirror
+(THE DAY's item element reads covered) + pgquery + pgcheck on real Postgres (no new SQL — reuses the
+readers). No new lever (pure read). Browser-probed live (📋 Today · 3 ready · 0/5 done with the checklist,
+zero page errors). The seven scattered daily surfaces are now one glance.
+
+**THE BEEF — the shareable rivalry poster (founder-directed 2026-08-08, the strategic pass's organic-funnel
+recommendation: the genre's viral unit is BEEF, not a stat card — "look what this guy did to me, come help
+me end him" — and THE BROADCAST only did single-player cards) — BUILT** (`src/cards.js` `beefDossier` +
+`beefCard` + `beefPage`, `GET /card/beef/:a/:b` (+ `.png`) + `GET /beef/:a/:b`, a "call them out ↗" share
+button on the Home nemesis card; `test/hardening.js` THE BEEF block). Two names → the body count between
+their bloodlines, rendered as a "BLOOD BETWEEN THEM" 1200×630 noir poster (two mugs, the tally both ways,
+who's ahead) that unfurls in a feed. **PUBLIC-SAFE BY CONSTRUCTION** — `kill_log` is already public (it
+drives the feud ledger), so counting bodies between two accounts leaks nothing new; the card carries ONLY
+kill counts, never a dollar figure (the anti-precise-kill-EV rule, test-pinned with a data-URI-stripped
+`$[0-9]`/`undefined`/`NaN` scan — the art-pass base64 lesson). `/beef/:a/:b` is the shareable PAGE whose
+`og:image` is the beef card, so a shared link unfurls the rivalry (the `/u` profile precedent); the CTA
+carries `?ref=` attribution (the §7.13 loop). The client nemesis card gained a "call them out ↗" X-intent
+button (`/beef/<me>/<rival>`) with a `data-beacon="beef"` share-intent beacon into the funnel. **ZERO §10.4**
+(public keyless reads, status/marketing only — no value moves, no row written). A pair with no history falls
+back to "NO BLOOD SPILLED" (never a broken share); an unknown/self pair is handled. `test/hardening.js`
+proves the card is a well-formed rivalry poster showing the count both ways (2 vs 1, mutation-verified), the
+page declares the OG unfurl + the ref, no exact wealth leaks, and the no-history fallback. Suite green + sim
+drift-0 + mobile 75/75 + routes 621 + client wiring/mirror + pgquery + pgcheck 43/43 on real Postgres. No
+new lever. The genre's actual growth engine — beef — is now a shareable artifact.
+
+**BRING ONE — the first-crewmate incentive (founder-directed retention/funnel drop, 2026-08-08) —
+BUILT** (`src/game.js` `maybeQualifyReferral`, `src/rules.tail.js` `CREW.BRING_ONE`, `src/invariants.js`,
+`src/crew.js` `crewBoard`, `public/index.html`, `test/growth.js`). The recommendation's fifth item: the
+ROLODEX/discovery layer finds people and THE CREW binds them, but founding a crew and getting a REAL
+friend to actually PLAY had no concrete payoff — the crew is pure status/coordination, so the sharpest
+first-session social hook had nothing to reward it. THE MOVE: a referral who QUALIFIES (the audited §7.13
+anti-Sybil wall — L8/40 jobs/3 check-ins/$25k, once ever, agent-excluded) AND runs in their recruiter's
+crew earns BOTH a bonus, paid INSIDE the same qualify transaction. So the reward rides the strongest
+anti-Sybil gate the game has (an alt farm can't collect it any faster than a real recruit who levelled
+to 8, pulled 40 jobs and banked $25k — the whole wall stands in front of it), on top of a crew
+co-membership check, so it rewards the recruiter who both brought a friend AND ran with them. **§10.4:
+`crew:bringone` is ONE bounded cash FAUCET** (joined the cash `KNOWN_REASONS`, both legs character_id'd →
+the per-character check reconciles; `crew:` is not a blanket prefix in the vocabulary — the explicit
+`crew:sales`/`crew:hire`/`crew:wages`/`crew:objective` list gains `crew:bringone`), bounded HARD: gated
+behind the entire qualification wall, once ever per recruit, so the ceiling is `RECRUITER_CASH +
+RECRUIT_CASH` ($22,500) per qualified crewmate — petty vs the passive stack (v24: social rewards are cash,
+never $OMR). The crew-co-membership read is a plain `SELECT … FROM crew_members WHERE account_id IN
+($1,$2)` (IN not ANY-of-array — the pg-mem lesson; crew_members is account-keyed and a leaf in this
+transaction, so no FOR UPDATE, no lock-order concern). The `bringOne` flag rides the existing `ref`
+notification both ways (humanized in `feedText`: "you two run the same crew — the Bring One bonus paid
+out"). The reward figures ride the crew board (`crewBoard` gained `bringOne: CREW.BRING_ONE`, both return
+branches) so the CTA copy can never drift from the lever. Console: a gold **"Bring one in"** card on THE
+CREW screen (both the no-crew and the not-full in-crew branches) — it quotes the exact reward, and a
+📣 X-intent + copy-link pair on the frictionless referral share URL (`/u/<name>?ref=<name>` — the funnel's
+own attribution link, `me.name` IS the code, no code to type), each firing the `broadcast/shared` beacon
+(`bringone` kind) so the funnel measures share intent → recruit. `test/growth.js` proves a crewmate recruit
++ recruiter BOTH collect the ledgered `crew:bringone` bonus at exactly the lever figures, the CONTROL (a
+qualified recruit NOT in the recruiter's crew gets ZERO `crew:bringone` — the referral still pays, the crew
+bonus does not), and the §10.4 vocabulary stays closed — mutation-verified (disable the co-membership
+branch → "a crewmate recruit collects the Bring One bonus" fails by name). Suite green + sim drift-0 +
+mobile 75/75 + client wiring/mirror + levers (`CREW.BRING_ONE.*` pinned) + pgquery + pgcheck 43/43 on real
+Postgres. All `CREW.BRING_ONE` numbers are founder sign-off levers (BALANCE.md; the bounded cash faucet).
+
+**IDENTITY — the free "about me" blurb (founder-directed retention/funnel drop, 2026-08-08) — BUILT**
+(`src/growth.js` `setBio`, `src/rules.tail.js` `IDENTITY`, `schema.sql` `characters.bio`,
+`src/game.js` view, `src/cards.js` `publicDossier`/`profilePage`, `public/index.html`, `test/growth.js`
++ `test/hardening.js`). The recommendation's sixth item — thin character customization as an
+expression/retention hook. The profile had an "About Me" that was AUTO-written from the sheet; a player
+had no way to write their OWN story, so the strongest identity hook (the MySpace-page element players
+love) was a computed sentence, not theirs. THE MOVE: a free, player-chosen `characters.bio` — set via
+`POST /v1/identity/bio` (cleanText strips HTML/control chars — the createGang stored-XSS discipline;
+clamped to `IDENTITY.BIO_MAX` 200; an empty value clears it back to the auto-blurb). **Deliberately FREE
+and text-only** — distinct from the paid vanity TITLE ($OMR sink) and the honor-derived epithet, so it
+competes with NO sink; and **§10.4-FREE by construction** (status text, no value moves, no ledger row —
+the test pins zero `transactions` rows across the whole set/clear flow). Written by DIRECT SQL (bio is
+off `persistCharacter`'s positional list → clobber-safe, the active_at pattern) inside `withCharacter`
+for the row lock. DIES WITH THE STREET (a column on `characters`; the heir is a fresh row → a new story,
+no estate-wipe entry needed). The schema is added the RIGHT way — `ALTER TABLE characters ADD COLUMN IF
+NOT EXISTS bio` (the outage lesson: a new column on an existing table never inlines; verified by
+pgcheck's migration pass on real Postgres). **The funnel payoff:** the bio surfaces on `publicDossier`
+(the `/u/:name` page + the Cast) rendered ESCAPED via `cards.js` `esc()` (defense-in-depth — even a
+stored value that dodged the write-time clean can't XSS the public, marketplace-indexed page), so a
+shared profile lands a visitor on a specific person in their OWN words. Console: an "About Me" edit
+(a textarea + save) on My Profile that shows the player's bio (their words) when set, the auto-blurb as
+the fallback, with `describe()` humanizing the save/clear toast. `test/growth.js` proves the set (HTML
+stripped, view + My Profile surface it), the clamp, the clear-to-null, and §10.4 (ZERO ledger rows);
+`test/hardening.js` proves the public dossier + profile page carry the bio and render it ESCAPED (no
+stored-XSS) — mutation-verified (remove `esc(d.bio)` → the escape assertion fails by name). Suite green +
+sim drift-0 + mobile 75/75 + client wiring/mirror (622 routes, `bio`/`bioMax` mirrored) + levers
+(`IDENTITY.BIO_MAX` pinned) + docs + pgquery + pgcheck 43/43 on real Postgres. `IDENTITY.BIO_MAX` is the
+one lever (pure scope — no faucet). Deferred (step two): an avatar VARIANT re-roll (needs the
+board-provided-seed plumbing so a chosen look is visible to others — a broader change than "thin"), and
+the bio on the Cast/Situation people cards. **The six strategic recommendations are now all built**
+(ACTIVATION, THE MAP, THE DAY, THE BEEF, BRING ONE, IDENTITY).

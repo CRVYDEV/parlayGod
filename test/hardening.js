@@ -260,6 +260,21 @@ assert(ov.players.accounts >= 1 && ov.players.alive >= 1, 'overview counts accou
 assert(ov.economy.ammPrice > 0, 'overview reads the AMM spot ($/$OMR)');
 assert(ov.economy.omrSupply >= 20000, 'overview reads the true $OMR supply (≥ the 20k genesis)');
 assert(Array.isArray(ov.top.players) && Array.isArray(ov.top.gangs), 'overview carries the leaderboards');
+
+// THE INTEGRATIONS PANEL — the dormant retention/funnel switchboard. Mod-gated, env-presence only,
+// and — the load-bearing property — it NEVER echoes a secret value (a key/webhook URL stays server-side).
+assert.equal((await call('GET', '/v1/mod/integrations')).code, 401, 'the integrations panel needs the mod key');
+process.env.VAPID_PUBLIC_KEY = 'test-pub-key-abc'; process.env.VAPID_PRIVATE_KEY = 'zzq-priv-sentinel-9x7q';
+delete process.env.CITY_WIRE_WEBHOOK_URL;
+const intg = (await call('GET', '/v1/mod/integrations', { headers: modH })).body;
+assert(Array.isArray(intg.integrations) && intg.integrations.length >= 4, 'the panel lists the integrations');
+const pushI = intg.integrations.find((x) => x.id === 'push');
+assert(pushI && pushI.live === true && typeof pushI.why === 'string' && Array.isArray(pushI.needs), 'a configured integration reads LIVE with its rationale');
+const wireI = intg.integrations.find((x) => x.id === 'city_wire');
+assert(wireI && wireI.live === false && typeof wireI.steps === 'string', 'an unconfigured integration reads OFF with activation steps');
+// the secret VALUE is never echoed anywhere in the response (only its var name / a boolean)
+assert(!JSON.stringify(intg).includes('zzq-priv-sentinel-9x7q'), 'the panel never echoes a secret value — env presence only');
+delete process.env.VAPID_PUBLIC_KEY; delete process.env.VAPID_PRIVATE_KEY;
 const act = (await call('GET', '/v1/mod/activity?limit=10', { headers: modH })).body;
 assert(Array.isArray(act.events), 'the activity feed returns events');
 assert.equal((await call('GET', '/v1/mod/activity')).code, 401, 'the activity feed needs the mod key');
@@ -391,6 +406,11 @@ if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actual
   assert.equal(dj.body.generation, 3, 'dossier surfaces the bloodline generation (deaths+1)');
   assert.equal(dj.body.kills, 7, 'dossier surfaces the lifetime kills');
   assert(dj.body.cash === undefined && dj.body.bank === undefined && dj.body.omr === undefined, 'dossier NEVER leaks an exact wealth figure (anti precise-kill-EV)');
+  // (1c) IDENTITY — the free "about me" blurb surfaces on the dossier + renders ESCAPED on the public
+  // page (defense-in-depth: cards.js esc() escapes even a stored value that dodged the write-time clean)
+  await pool.query("UPDATE characters SET bio='Ran the docks <script>alert(1)</script>' WHERE id=$1", [me.id]);
+  const dj2 = await call('GET', '/v1/u/Broadcast%20Bruno');
+  assert(dj2.body.bio && dj2.body.bio.includes('Ran the docks'), 'the dossier surfaces the bio');
   // (2) the cards — every type is well-formed SVG with no undefined/NaN
   for (const t of ['legend', 'wanted', 'whacked', 'join']) {
     const c = await app.inject({ method: 'GET', url: `/card/${t}/${encodeURIComponent('Broadcast Bruno')}` });
@@ -425,6 +445,7 @@ if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actual
   // (3b) the RICHER profile — a visitor sees a specific person (the dossier strip: crew, dynasty, rank)
   assert(p.body.includes('class="dossier"'), 'profile renders the dossier stat strip');
   assert(p.body.includes('Bruno Crew') && p.body.includes('The Bruno Line'), 'the strip shows the crew + dynasty');
+  assert(p.body.includes('Ran the docks') && !p.body.includes('<script>alert(1)</script>'), 'the bio renders on the page but ESCAPED — no stored-XSS on the public, indexed profile');
   assert(!/\$[0-9]/.test(p.body), 'the public profile NEVER prints a dollar figure (the banded rule holds on the indexed page)');
   // (4) an unknown name falls back cleanly — never a 500 (a bad share link is harmless)
   const uk = await call('GET', '/v1/u/Nobody%20Here');
@@ -433,6 +454,30 @@ if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actual
   assert.equal((await app.inject({ method: 'GET', url: '/card/legend/Nobody%20Here' })).statusCode, 200, 'unknown card → 200 (join fallback)');
   assert.equal((await app.inject({ method: 'GET', url: '/u/Nobody%20Here' })).statusCode, 200, 'unknown profile → 200 (join the city)');
   assert.equal((await app.inject({ method: 'GET', url: '/card/bogus/Broadcast%20Bruno' })).statusCode, 200, 'unknown card type → 200 (falls back to legend, never breaks a share)');
+
+  // THE BEEF — the rivalry poster (the genre's viral unit). Two names → the body count between their
+  // bloodlines (public-safe: kills only, never wealth). A shareable /beef page unfurls the card.
+  const rivalTok = (await call('POST', '/v1/auth/guest')).body.token;
+  await call('POST', '/v1/character', { token: rivalTok, body: { name: 'Beef Rival' } });
+  const rivalId = (await meOf(rivalTok)).id;
+  const rivalAcct = (await pool.query('SELECT account_id a FROM characters WHERE id=$1', [rivalId])).rows[0].a;
+  // seed two bodies Bruno→Rival and one Rival→Bruno (kill_log is already public — drives the feud ledger)
+  await pool.query("INSERT INTO kill_log (id, killer_account, victim_account, victim_name) VALUES ('kb1',$1,$2,'Beef Rival'),('kb2',$1,$2,'Beef Rival'),('kb3',$2,$1,'Broadcast Bruno')", [bAcct, rivalAcct]);
+  const beefCard = await app.inject({ method: 'GET', url: '/card/beef/Broadcast%20Bruno/Beef%20Rival' });
+  assert.equal(beefCard.statusCode, 200, 'the beef card → 200');
+  assert(beefCard.body.includes('<svg') && beefCard.body.includes('BLOOD BETWEEN THEM'), 'the beef card is a well-formed rivalry poster');
+  assert(beefCard.body.includes('>2<') && beefCard.body.includes('>1<'), 'the card shows the body count both ways (2 vs 1)');
+  // strip the base64 plate first — its alphabet contains "NaN"/"undefined" by chance (the art-pass lesson)
+  const beefMarkup = beefCard.body.replace(/data:image\/[a-z+]+;base64,[A-Za-z0-9+/=]+/g, 'data:PLATE');
+  assert(!/\$[0-9]/.test(beefMarkup) && !/undefined|NaN/.test(beefMarkup), 'no exact wealth, no undefined/NaN on the beef card');
+  const beefPage = await app.inject({ method: 'GET', url: '/beef/Broadcast%20Bruno/Beef%20Rival?ref=Broadcast%20Bruno' });
+  assert.equal(beefPage.statusCode, 200, 'the beef page → 200');
+  assert(beefPage.body.includes('og:image') && beefPage.body.includes('/card/beef/'), 'the beef page declares the OG unfurl (the beef card)');
+  assert(beefPage.body.includes('ref=Broadcast'), 'the beef page CTA carries the ?ref attribution');
+  // a pair with no history → a graceful "no blood spilled", never a broken share
+  const noBeef = await app.inject({ method: 'GET', url: '/card/beef/Broadcast%20Bruno/Nobody%20Atall' });
+  assert.equal(noBeef.statusCode, 200, 'a beef with a stranger → 200');
+  assert(noBeef.body.includes('NO BLOOD SPILLED'), 'no history falls back gracefully');
   // (5) SECURITY — these are PUBLIC keyless routes. An oversized ?ref (query, so NOT bounded by
   //     Fastify's URI cap the way a giant :name path is) is clamped before render, so it can't inflate
   //     the SVG / make resvg rasterize a giant string / poison the PNG cache. And any HTML/SVG

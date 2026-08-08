@@ -67,6 +67,7 @@
     <button id="logout" class="danger">lock up</button>
   </div>
   <div class="grid">
+    <div class="panel" id="p-integrations"><h2>Integrations</h2><div class="body">…</div></div>
     <div class="panel" id="p-backups"><h2>Backups</h2><div class="body">…</div></div>
     <div class="panel" id="p-social"><h2>Growth loop</h2><div class="body">…</div></div>
     <div class="panel" id="p-integrity"><h2>§10.4 Integrity</h2><div class="body">…</div></div>
@@ -124,12 +125,12 @@
   }
 
   async function refreshAll() {
-    const [ov, inv, fn, res, vig, em, act, rev, eng, bnd, tre, coa] = await Promise.all([
+    const [ov, inv, fn, res, vig, em, act, rev, eng, bnd, tre, coa, intg] = await Promise.all([
       j('GET', '/v1/mod/overview'), j('GET', '/v1/mod/invariants'), j('GET', '/v1/mod/funnel'),
       j('GET', '/v1/mod/reserve'), j('GET', '/v1/mod/vig'), j('GET', '/v1/mod/emission'),
       j('GET', '/v1/mod/activity?limit=60'), j('GET', '/v1/mod/revenue'),
       j('GET', '/v1/mod/engagement'), j('GET', '/v1/mod/bonds'), j('GET', '/v1/mod/treasury'),
-      j('GET', '/v1/mod/coach'),
+      j('GET', '/v1/mod/coach'), j('GET', '/v1/mod/integrations'),
     ]);
     if (ov.code === 401) return $('#logout').onclick();
 
@@ -158,6 +159,7 @@
     renderIntegrity(inv.body); renderEconomy(ov.body, em.body); renderPlayers(ov.body); renderEngagement(eng.body);
     renderFunnel(fn.body); renderTop(ov.body); renderChain(res.body, vig.body, em.body, rev.body, bnd.body, tre);
     renderBackups(ov.body); renderSocial(ov.body); renderCoach(coa.body);
+    renderIntegrations(intg.body);
     renderActivity(act.body); renderMod();
   }
 
@@ -171,6 +173,24 @@
   // THE GROWTH LOOP — the backups panel's twin. A server can run SOCIAL_VERIFY_MODE=live with no
   // provider token, and then the word-of-mouth cash faucet pays nobody while everything looks normal:
   // no boot error, nothing in the game, nothing here. That is how it shipped. Now it is one line.
+  // INTEGRATIONS — the dormant retention/funnel wiring. Each ships built + tested and switched on by
+  // ONE deploy-config action; this is the switchboard (env presence only — no secret ever crosses).
+  function renderIntegrations(ig) {
+    const el = $('#p-integrations').querySelector('.body');
+    const list = (ig && ig.integrations) || [];
+    if (!list.length) { el.innerHTML = '<div class="note">unavailable</div>'; return; }
+    const liveN = list.filter((x) => x.live).length;
+    el.innerHTML = `<div class="big" style="color:var(--${liveN === list.length ? 'ok' : liveN ? 'ink' : 'bad'})">${liveN} / ${list.length} live</div>`
+      + list.map((x) => `<div style="margin:8px 0;padding:8px;border:1px solid var(--line);border-radius:5px">
+          <div class="row"><span class="k"><b>${x.name}</b> <span style="opacity:.6;font-size:11px">${x.kind}</span></span>
+            <span class="v" style="color:var(--${x.live ? 'ok' : 'bad'})">${x.live ? 'LIVE' : 'OFF'}</span></div>
+          <div class="note" style="margin-top:4px">${x.why}</div>
+          ${x.live ? '' : `<div class="note" style="margin-top:4px"><b>Needs:</b> <code>${(x.needs || []).join('</code> <code>')}</code></div>
+            <div class="note" style="margin-top:3px"><b>To switch on:</b> ${x.steps}</div>`}
+        </div>`).join('')
+      + '<div class="note" style="margin-top:6px">These are env-config switches (no code deploy). Set the vars on the API and redeploy. Secrets never leave the server — this panel reads presence only.</div>';
+  }
+
   function renderSocial(ov) {
     const s = ov?.social || {};
     const el = $('#p-social').querySelector('.body');

@@ -4774,6 +4774,16 @@ export const CREW = {
       { id: 'earn',   label: 'Bring in the score', base: 200000, unit: '$' },   // combined dirty cash from crimes
     ],
   },
+  // ── BRING ONE (the first-crewmate incentive; founder-directed retention/funnel drop) ───────────
+  // The friction the ROLODEX/discovery layer can't fix alone: founding a crew and getting a REAL
+  // friend to actually PLAY has no concrete payoff — the crew is all status/coordination. So a
+  // referral who QUALIFIES (the audited §7.13 anti-Sybil wall — L8/40 jobs/3 check-ins/$25k, once
+  // ever, agent-excluded) AND runs in their recruiter's crew earns BOTH a bonus, paid inside the
+  // same qualify transaction. It is a bounded cash FAUCET that inherits every anti-Sybil property of
+  // the qualification wall (an alt farm can't earn it any faster than a real recruit who levelled to
+  // 8, pulled 40 jobs and banked $25k), on top of the crew co-membership check — so it rewards the
+  // recruiter who both brought a friend AND ran with them. v24: social rewards are cash, never $OMR.
+  BRING_ONE: { RECRUITER_CASH: 15000, RECRUIT_CASH: 7500 },
 };
 // the deterministic weekly draw — same crew + week → the same objective, town-wide verifiable (the
 // corner/hustle §7.11 pattern). Kind off the seed; target = kind.base × crew size (min 1). `weekOf`
@@ -4783,6 +4793,12 @@ export function crewObjectiveOf(crewId, week, members = 1) {
   const k = kinds[Math.floor(hash01('crewobj:' + crewId + ':' + week + ':' + (process.env.MARKET_SEED || '')) * kinds.length) % kinds.length];
   return { kind: k.id, label: k.label, unit: k.unit, base: k.base, target: k.base * Math.max(1, members) };
 }
+
+// ═══ IDENTITY ═══ (thin character customization — a free "about me" blurb; the MySpace-page element)
+// The expression hook the profile lacked: a player-chosen bio shown on their public page (the funnel)
+// and My Profile. Deliberately FREE and text-only — distinct from the paid vanity TITLE ($OMR sink) and
+// the honor-derived epithet, so it competes with no sink. Status, ZERO §10.4. Dies with the street.
+export const IDENTITY = { BIO_MAX: 200 };
 
 // ═══ THE SEASON RECAP ═══ (the individual "your season" wrap — pure status, no faucet)
 // A keepsake title by the level a street reached that season, written at rollover into season_recaps
