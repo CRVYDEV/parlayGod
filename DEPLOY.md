@@ -162,8 +162,15 @@ above is the real path and the only one the console offers).
   game (the worker pushes URGENT undelivered notifications to away players — a contract on their head, an
   indictment, an empire seized). Dormant unless set; the client hides the 🔔 when absent. Generate a key
   pair ONCE with **`npm run vapid`** and set `VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` (+ optional
-  `VAPID_SUBJECT`, default `mailto:ops@omerta.fun`). The public key is served on `/v1/rules` by design (the
-  client subscribes with it); keep the PRIVATE key secret. Zero §10.4 surface.
+  `VAPID_SUBJECT`, default `mailto:ops@omerta.fun`) on the **API** (which serves the public key on
+  `/v1/rules`) **and the worker** (which does the sending). Keep the PRIVATE key secret. Zero §10.4 surface.
+  Once set, the client stops hiding the 🔔 and adds a CONTEXTUAL opt-in — the first time the city moves on
+  a player (a contract on their head, a body, an indictment, or the aha-moment call-out), it asks once
+  whether to turn alerts on (the OS permission prompt only fires inside that user tap). The worker sweep
+  SKIPS anyone active in the last `PUSH_SKIP_ACTIVE_MIN` minutes (default **3** — a live tab already saw
+  it on the websocket) and DIGESTS a batch into one buzz, so a returning player gets "3 things need you",
+  not three separate buzzes. That's the whole activation: generate the pair, set it on both services,
+  redeploy — no code change, and `/admin → Integrations` reads back live-vs-off.
 
 ### The switchboard — `/admin` → **Integrations**
 The retention/funnel wiring all ships DORMANT and switches on by env config (no code deploy). The

@@ -10271,3 +10271,86 @@ one lever (pure scope — no faucet). Deferred (step two): an avatar VARIANT re-
 board-provided-seed plumbing so a chosen look is visible to others — a broader change than "thin"), and
 the bio on the Cast/Situation people cards. **The six strategic recommendations are now all built**
 (ACTIVATION, THE MAP, THE DAY, THE BEEF, BRING ONE, IDENTITY).
+
+**THE AHA MOMENT — the guaranteed early-conflict beat (founder-directed: "do the aha moment", 2026-08-08)
+— BUILT** (`src/firstblood.js` — a leaf module, imports only rules.js + crypto; `test/firstblood.js` — the
+87th suite; `AHA` rules tail; new `characters.aha_stage`/`aha_rival`/`aha_rival_name`, ALTER-added the
+outage-lesson way). The retention diagnosis: a deep multiplayer's hook is DANGER — the first time the city
+comes for YOU — but a fresh street can grind a whole session and never feel hunted (the PvP/revenge loop is
+gated behind level and depth; real-human collision is rare in a thin population — the harness lands a
+plausible solo player at level 33 with no human contact). This ENGINEERS a first conflict. The post-commit
+hook `startFirstBlood` (the maybeQualifyReferral discipline: a cheap unlocked indexed pre-check, opens a txn
+only when it will assign, non-fatal — a throw after commit would surface non-2xx → idempotency release →
+double-spend) fires once a player is past `AHA.MIN_LVL` (3): it picks the WEAKEST nearby live resident and
+has them "make a move" — a `callout` on the rivals ledger (so it lights the nemesis card exactly like a real
+player's move — the info-economy rule holds since the streets already show who is in the district) + a
+`first_blood` notification the client plays as a violent cinematic — then flips `aha_stage` 0→1 and the coach
+rung "Settle your first score" points at the Wet Work roster. SETTLING it is a JUMP (the accessible level-1
+verb): `settleFirstBlood` (hooked into combat.js's jump win path, deps-injected ledger/notify/gainRespect so
+firstblood.js stays a leaf) pays the once-ever bonus and flips stage 1→2. A fresh city with no residents
+simply doesn't assign (the beat waits for a body — no error); a fresh heir starts at stage 0 and gets their
+own beat. **§10.4: ONE bounded faucet** `firstblood:reward` ($2,500 + 40 respect, joined the cash
+`KNOWN_REASONS`), gated by `aha_stage` so it can NEVER pay twice a street — the test asserts zero new drift
+over the SQL-seed baseline and the vocabulary closed. The `aha_*` columns are direct-SQL (off
+persistCharacter's positional list — the active_at pattern → clobber-safe; the assignment writes them in its
+own txn). Client: `showFirstBlood` (a `sessionStorage`-deduped violent cine + toast on the `first_blood` WS
+event), `first_blood`/`first_blood_settled` feed lines, and a `cineFor` payday cinematic on the settle
+response. `test/firstblood.js` proves the assignment (stage 1, the callout row, the notification, the coach
+rung), IDEMPOTENCE (a second action assigns nothing new), the settle (the response bonus, stage 2, the
+ledgered faucet), the ONCE-EVER gate (a second jump pays nothing), and §10.4 (one bounded faucet + closed
+vocabulary + no new drift) — two mutations each caught by name (settle disabled → the response assertion;
+vocab drop → the vocabulary assertion). All three `AHA.*` numbers are founder sign-off levers (pinned in
+`test/levers.js`; BALANCE.md § THE AHA MOMENT).
+
+**WEB PUSH — activation-ready (founder-directed: "do the web push", 2026-08-08) — BUILT** (`src/push.js`,
+`public/index.html`, `src/preflight.js`, `DEPLOY.md`; `test/push.js`). The web-push rail was built and
+DORMANT (VAPID-gated); this closes the three deferred gaps so it's a founder-flip-and-go retention switch,
+still ZERO §10.4 (a push moves no value). **(1) SKIP-WHEN-LIVE** — the worker sweep no longer buzzes a
+player who is actively here: a live tab already saw the event on the WS `me` channel, so a phone buzz is
+redundant. The worker is a SEPARATE process with no `wsClients`, so it uses the SAME cross-process signal
+`/v1/online` uses — the `telemetry` table (`PUSH_SKIP_ACTIVE_MIN` minutes, default 3; pg-mem can't do a
+correlated NOT EXISTS, so the active set is pulled flat and filtered in JS — the /v1/gangs lesson).
+**(2) PER-ACCOUNT DIGEST** — several urgent things while away become ONE buzz ("3 things need you · You
+were killed · The Bureau indicted you"), not a storm; the whole batch is CLAIMED atomically before the
+send (claim-then-notify, the Wire-watchdog/C1 discipline — a mutation to notify-then-flag re-buzzes).
+**(3) CONTEXTUAL OPT-IN** — the passive 🔔 top-bar button is easy to miss, so the client now asks ONCE at
+the moment alerts are obviously worth it: the first time the city moves on you (a LIVE urgent WS event — a
+contract on your head, a body, an indictment — or the aha-moment call-out), gated once-ever
+(`omerta_push_asked`) + never when already on/denied; the OS permission prompt only fires inside the "yes"
+tap (a user gesture). Backfilled history never triggers it (the socket path only). Activation runbook in
+DEPLOY.md: `npm run vapid` → set `VAPID_*` on the API (serves the public key on `/v1/rules`) AND the worker
+(does the sending) → redeploy; `/admin → Integrations` reads live-vs-off. `PUSH_SKIP_ACTIVE_MIN` classified
+in preflight (0 disables the skip — test-only). `test/push.js` extended: the skip (a recently-active player
+is not buzzed; once away, the still-undelivered note is) + the digest (three notes → one buzz, whole batch
+claimed) — two mutations each caught by name. The founder's final step is the VAPID flip on Render.
+
+**THE COLLISION — real players made visible, the scenery no longer hides them (founder-directed: "real
+human collision being rare solve for it", 2026-08-08) — BUILT** (`src/collision.js` — a leaf module,
+imports only rules.js; `GET /v1/live`; `public/index.html` renderStart; `test/collision.js` — the 88th
+suite). OMERTÀ is a deep multiplayer built for a population it hasn't met: the NPC residents (the
+population layer) fill every board, so a player sees SCENERY everywhere and rarely knows when an actual
+human is around — the real-human collision the whole social layer exists for is RARE and easy to miss.
+THE ROLODEX answers "who is near my LEVEL" but it's a screen you visit, level-based, not reachable-now.
+This answers the sharper question the thin population makes rare and puts it on HOME: **who is a REAL
+human near me — in my district (reachable) or near my level (findable) — and are they on the wire RIGHT
+NOW.** `collisionBoard` returns HERE (real humans in your district — the reachable collision: the Wet
+Work verbs), NEARBY (near your level elsewhere — travel/DM), and HOT DISTRICTS (where the humans are —
+the convergence nudge, "3 in the Docks → go there"), each row carrying an `online` flag (the live ●),
+sorted ONLINE-FIRST. **RESIDENTS + AGENTS are excluded** (`NOT c.is_npc AND NOT a.agent_flag`) — this
+surface is specifically the REAL humans the scenery hides (residents stay on the streets roster). `online`
+is a FLAG, not a hard filter (the discovery/circle pattern) — a real human in your district who isn't
+socketed this second is still a collision target (they'll be back; contract/DM them) and the ● lights when
+live; a hard filter would flicker with socket state AND be un-fixturable (the mirror can't open a WS —
+that's why circle/discovery surface online as a flag too). §10.4-FREE by construction (pure reads over
+the online set + characters; no ledger vocabulary, no write — the test counts zero rows); NO account UUID
+leaves (the rivals/cast discipline — keyed on the living characterId). The route passes `[...wsClients.keys()]`
+(the WS registry — the circle/discovery precedent). Client: a prominent ● REAL PLAYERS card LEADS THE
+SITUATION on Home (a GETBIND off the alias window), hidden when nobody real is around (the empty-state
+rule); a Wet Work jump for HERE, travel buttons for the hot districts. `test/collision.js` proves the
+here/nearby split, resident+agent exclusion, hot districts (your own dropped), the online flag + online-first
+ordering, no-UUID-leak, the route, and §10.4-neutrality — two mutations each caught by name (a resident
+leaking into HERE; the online flag broken). The mirror gained a co-located neon human so `/v1/live.here`
+is non-empty. No lever (pure read/scope). Suite green + sim drift-0 + mobile 75 + client wiring/mirror +
+pgquery/pgcheck 43/43 on real Postgres. Deferred: a WS "a real player just showed up in your district"
+push the instant it happens (a cross-referenced connect nudge — the strongest convergence signal, but it
+adds WS-connect coupling; the Home card + the 30s poll surface it today).

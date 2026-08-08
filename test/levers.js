@@ -498,6 +498,11 @@ const SIGNED = [
   ['DISCOVERY.LFG_TTL_MS', 7 * 24 * 3600 * 1000],
   // IDENTITY — the free "about me" blurb length cap (pure scope/status, no faucet)
   ['IDENTITY.BIO_MAX', 200],
+  // THE AHA MOMENT (src/firstblood.js) — the guaranteed early conflict beat. REWARD_CASH is the one
+  // bounded once-ever faucet (gated by aha_stage → never twice a street; BALANCE.md § THE AHA MOMENT).
+  ['AHA.MIN_LVL', 3],
+  ['AHA.REWARD_CASH', 2500],
+  ['AHA.REWARD_RESPECT', 40],
   // THE MENTOR (omerta-first-contact-and-events-design.md) — MILESTONES is the one faucet (sim + BALANCE.md)
   ['MENTOR.MIN_LVL', 20],
   ['MENTOR.PROTEGE_MAX_LVL', 10],
