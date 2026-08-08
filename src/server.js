@@ -2068,6 +2068,10 @@ export async function buildServer() {
   // MY PROFILE — the MySpace-style personal page: identity + referral tracking + ledger-exact earnings
   app.get('/v1/profile', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client, h) => W.myProfile(ch, client, h)));
+  // IDENTITY — set the free "about me" blurb (status text, ZERO §10.4). withCharacter for the row
+  // lock; setBio writes bio directly (off persistCharacter's positional list → clobber-safe).
+  app.post('/v1/identity/bio', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => W.setBio(ch, req.body?.bio, client, h)));
   // THE STREET WAGE (the value-creation pivot) — the public emission board: epoch, budget, your progress
   app.get('/v1/wage', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client, h) => Emission.wageBoard(client, ch, h.acct)));

@@ -16,7 +16,7 @@ const esc = (s) => String(s == null ? '' : s).replace(/[<>&"']/g, (c) => ({ '<':
 // ── the safe public dossier (by living name; falls back to the most recent bearer) ──
 export async function publicDossier(pool, name) {
   const row = (await pool.query(
-    `SELECT c.id, c.name, c.respect, c.alive, c.wanted_until, c.welsher, c.season_kills,
+    `SELECT c.id, c.name, c.respect, c.alive, c.wanted_until, c.welsher, c.season_kills, c.bio,
             ap.hitman_rep, ap.kills, ap.dynasty_name, ap.deaths,
             g.name AS gang, g.tag AS tag, cr.name AS crew
        FROM characters c
@@ -38,6 +38,7 @@ export async function publicDossier(pool, name) {
     kills: Number(row.kills) || 0, hitmanRank: hitmanRankOf(Number(row.hitman_rep) || 0).title,
     wanted: !!wanted, welsher: !!row.welsher, bounty,
     dynasty: row.dynasty_name || null,
+    bio: row.bio || null,   // IDENTITY — the free "about me" blurb (status text; the profile funnel)
     // the bloodline's depth (generations before this street) — a status flex, never a currency
     generation: (Number(row.deaths) || 0) + 1,
   };
@@ -246,6 +247,7 @@ ${d.found ? `<div class="dossier">
   ${d.dynasty ? `<div class="dtile"><div class="v" style="font-size:15px">${esc(d.dynasty)}</div><div class="l">Dynasty · Gen ${d.generation}</div></div>` : (d.generation > 1 ? `<div class="dtile"><div class="v">Gen ${d.generation}</div><div class="l">Bloodline</div></div>` : '')}
   ${d.wanted ? '<div class="dtile warn"><div class="v" style="font-size:15px">WANTED</div><div class="l">Standing</div></div>' : (d.welsher ? '<div class="dtile warn"><div class="v" style="font-size:15px">WELSHER</div><div class="l">Standing</div></div>' : '')}
 </div>` : ''}
+${d.found && d.bio ? `<p class="what" style="font-style:italic">“${esc(d.bio)}”</p>` : ''}
 <a class="enter" href="${esc(enter)}">ENTER THE CITY →</a>
 <p class="sub">${d.found ? `You're looking at ${esc(d.name)}'s sheet. Start your own street — free, no wallet needed${ref || d.name ? `, and ${esc(ref || d.name)} gets credit for bringing you in.` : '.'}` : 'A noir mob RPG — build a family, run the rackets, survive the street.'}</p>
 ${d.found ? `<p class="what">A noir mafia RPG. Pull jobs, run a kitchen, take turf, and put a rival in the river —

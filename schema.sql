@@ -2869,6 +2869,10 @@ CREATE INDEX IF NOT EXISTS ix_characters_lfg ON characters (lfg) WHERE lfg;
 -- cash faucet at level milestones. `seeking_mentor` is the LFG pattern (direct SQL, dies with the street).
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS seeking_mentor BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS seeking_mentor_at TIMESTAMPTZ;
+-- IDENTITY — a free, player-chosen "about me" blurb (the MySpace-page element; distinct from the paid
+-- vanity title sink and the derived honor epithet). Status text, ZERO §10.4. Dies with the street (a new
+-- heir writes a new story — no estate-wipe entry needed, the heir is a fresh characters row).
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS bio TEXT;
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS proteges_raised INT NOT NULL DEFAULT 0;
 -- one mentor per protégé, ever (PK on protégé). claimed_mask is the once-ever milestone bitmask.
 CREATE TABLE IF NOT EXISTS mentorships (

@@ -496,6 +496,8 @@ const SIGNED = [
   ['DISCOVERY.BAND', 10],
   ['DISCOVERY.LIMIT', 24],
   ['DISCOVERY.LFG_TTL_MS', 7 * 24 * 3600 * 1000],
+  // IDENTITY — the free "about me" blurb length cap (pure scope/status, no faucet)
+  ['IDENTITY.BIO_MAX', 200],
   // THE MENTOR (omerta-first-contact-and-events-design.md) — MILESTONES is the one faucet (sim + BALANCE.md)
   ['MENTOR.MIN_LVL', 20],
   ['MENTOR.PROTEGE_MAX_LVL', 10],

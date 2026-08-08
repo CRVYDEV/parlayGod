@@ -5,7 +5,7 @@ import { soldierFxOf, SOLDIERS, PATH_SWITCH_CD_MS, referralXpBonus } from './rul
 import {
   PATHS, MISSIONS, ONBOARD_TASKS, CAREER, CONSTANTS, M4, M8, SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS,
   levelOf, dayOf, dailyJobsOf, dailyBlockedFor, effStat, gunObjOf, assetEnergyCap, recruitRankOf, PACING,
-  hash01, hitmanRankOf, honorTierOf, jailed } from './rules.js';
+  hash01, hitmanRankOf, honorTierOf, jailed, IDENTITY } from './rules.js';
 import { verifySocial, verifyPostUp, socialProviders, socialTaskAvailable, throttleXCheck } from './verify.js';
 import { spendOmr } from './vanity.js';
 
@@ -394,6 +394,16 @@ const SPIN_TRACKS = [ // the "now spinning" record — seeded per (account, day)
   'Whiskey for the Witness — Fingers Malone',
   'Goodnight, Wise Guy — The Midnight Commission',
 ];
+// IDENTITY — set the free "about me" blurb. cleanText strips HTML/control chars (the createGang
+// stored-XSS discipline); clamped to BIO_MAX; an empty value clears it. Written by DIRECT SQL — bio
+// is not in persistCharacter's positional list, so this is clobber-safe (the active_at pattern) and
+// there is ZERO §10.4 surface (status text, no value moves, no ledger row).
+export async function setBio(ch, bio, client) {
+  const clean = cleanText(String(bio == null ? '' : bio)).trim().slice(0, IDENTITY.BIO_MAX);
+  await client.query('UPDATE characters SET bio=$2 WHERE id=$1', [ch.id, clean || null]);
+  return { ok: true, bio: clean || null };
+}
+
 export async function myProfile(ch, client, h) {
   const acct = h.acct;
   const now = Date.now();
@@ -484,7 +494,7 @@ export async function myProfile(ch, client, h) {
   // screen unchecked (proven: mutations on a nested first cut survived a green run). Every key is
   // ALWAYS present (null over absent) so the guard can observe the full shape on any fixture.
   return {
-    name: ch.name, level: lvl, title: ch.title || null, mood, spinning,
+    name: ch.name, level: lvl, title: ch.title || null, bio: ch.bio || null, bioMax: IDENTITY.BIO_MAX, mood, spinning,
     memberSince, days: born ? Math.max(0, Math.floor((now - new Date(born.created_at).getTime()) / 86400e3)) : 0,
     generation: Number(acct.deaths || 0) + 1, prestige: Number(acct.prestige || 0),
     dynasty: acct.dynasty_name || null,
