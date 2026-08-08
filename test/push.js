@@ -48,6 +48,11 @@ assert.equal((await call('POST', '/v1/push/subscribe', { token: p.token, body: {
 assert.equal(Number((await pool.query('SELECT COUNT(*) n FROM push_subscriptions WHERE account_id=$1', [acct])).rows[0].n), 1, 'the subscription is stored');
 // a bad subscription is refused
 assert.equal((await call('POST', '/v1/push/subscribe', { token: p.token, body: { subscription: { endpoint: 'x' } } })).body.error, 'bad_sub', 'a malformed subscription is refused');
+// (red-team R28 LOW-3) the endpoint is attacker-chosen and the worker POSTs to it — a non-https or
+// internal-address endpoint is a blind SSRF vector and must be refused (a real push host is always https).
+const ssrf = (ep) => ({ endpoint: ep, keys: { p256dh: 'p', auth: 'a' } });
+assert.equal((await call('POST', '/v1/push/subscribe', { token: p.token, body: { subscription: ssrf('http://push.example/x') } })).body.error, 'bad_sub', 'a non-https endpoint is refused (SSRF guard)');
+assert.equal((await call('POST', '/v1/push/subscribe', { token: p.token, body: { subscription: ssrf('https://169.254.169.254/latest/meta-data') } })).body.error, 'bad_sub', 'an internal-IP endpoint is refused (SSRF guard)');
 // re-subscribing the same endpoint is idempotent (upsert)
 await call('POST', '/v1/push/subscribe', { token: p.token, body: { subscription: sub } });
 assert.equal(Number((await pool.query('SELECT COUNT(*) n FROM push_subscriptions WHERE account_id=$1', [acct])).rows[0].n), 1, 'one row per endpoint');

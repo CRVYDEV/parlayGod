@@ -64,6 +64,12 @@ export async function saveSubscription(pool, accountId, sub) {
   if (!sub || !sub.endpoint || !sub.keys || !sub.keys.p256dh || !sub.keys.auth) {
     throw new GameError('bad_sub', 'Invalid push subscription.');
   }
+  // (red-team R28 LOW-3) the endpoint is attacker-chosen and the worker POSTs to it — reject anything
+  // that isn't a real https push host so it can't be pointed at an internal address (a blind SSRF from
+  // the worker, e.g. http://169.254.169.254/…). A genuine Web-Push endpoint is always https.
+  let host = '';
+  try { const u = new URL(sub.endpoint); if (u.protocol !== 'https:') throw 0; host = u.hostname; } catch { throw new GameError('bad_sub', 'Invalid push subscription.'); }
+  if (host === 'localhost' || /^\d+\.\d+\.\d+\.\d+$/.test(host)) throw new GameError('bad_sub', 'Invalid push subscription.');
   await pool.query(
     `INSERT INTO push_subscriptions (id, account_id, endpoint, p256dh, auth) VALUES ($1,$2,$3,$4,$5)
        ON CONFLICT (endpoint) DO UPDATE SET account_id=$2, p256dh=$4, auth=$5`,

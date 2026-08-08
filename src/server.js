@@ -467,6 +467,13 @@ export async function buildServer() {
       && (req.url.startsWith('/card/') || req.url.startsWith('/u/') || req.url.startsWith('/v1/u/')
           || req.url.startsWith('/beef/')
           || req.url.startsWith('/v1/art/') || req.url.startsWith('/v1/landmarks') || req.url.startsWith('/v1/ws')
+          // (red-team R28 MED-1/LOW-2) the keyless data boards behind the PUBLIC pages are the same class:
+          // /v1/arena runs a leaderboard full-scan + a transactions aggregate and is CRAWLER-reachable via
+          // the public /arena page; /v1/events + /v1/results do real per-hit DB work; /v1/avatar renders an
+          // SVG per hit. All keyless (no auth preHandler) → the /v1 read limiter below early-returns →
+          // unthrottled. Bound them per-IP with the other keyless heavy GETs.
+          || req.url.startsWith('/v1/arena') || req.url.startsWith('/v1/events') || req.url.startsWith('/v1/results')
+          || req.url.startsWith('/v1/avatar/')
           // (D1) the OAuth callback is a keyless GET that does real per-hit work (oauth_states DELETE +
           // an outbound X token/user fetch); the POST-only auth limiter + the token-gated read limiter
           // both skip it, so throttle it here with the other keyless heavy GETs.

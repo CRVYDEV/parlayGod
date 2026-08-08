@@ -10416,3 +10416,46 @@ fetch/push handlers + never caches the API), and the client head carries the ins
 drift-0 + mobile 75 + pgquery/pgcheck 43/43 on real Postgres. No native wrapper / app-store submission (a
 PWA installs directly from the browser with no store review, no 30% cut, and no separate binary to ship —
 the store-wrapper path is a deferred, counsel-gated decision for a real-money-adjacent game).
+
+**FULL-SURFACE RED-TEAM over the un-audited retention/cohesion cluster (R28, 2026-08-08).** Five
+independent lenses in parallel (§10.4/faucets, concurrency/locks/persist-clobber, death/estate/info-leak,
+exploit/grief/Sybil, auth/infra/public-routes) over everything shipped after the 77 existing AUDIT reports —
+crew, discovery, vouch, mentor, streak, circle, people, avatar, push, dispatch, firstblood, collision,
+events, results, citywire, npcwar, diplomacy, opportunities/arena + the PWA — every finding re-verified
+against PRODUCTION source (the lenses first ran against a transiently-stale checkout; re-synced to
+origin/main and re-confirmed each finding on the real tree). **No CRITICAL, no HIGH, no §10.4 drift.**
+Fixed in-commit (regression each, the behavioral ones mutation-verified by name, the config/race ones as
+labelled source tripwires): **MED-1 — the keyless data boards behind the PUBLIC pages escaped BOTH rate
+limiters** (`/v1/arena`, `/v1/events`, `/v1/results`, `/v1/avatar/` — the token-gated read limiter
+early-returns for a tokenless caller and they weren't in the per-IP public branch; `/v1/arena` runs a
+leaderboard full-scan + a transactions aggregate and is CRAWLER-reachable via the public `/arena` page — an
+amplification/DoS vector) → added to the public throttle branch beside `/v1/art`/`/v1/landmarks` (the
+R19/R25/D1 precedent). **#1 (MED) — `sweepFamilyAggro` double-fire** (`npcwar.js`): two overlapping workers
+read the same unlocked `due` row and both struck (double hospitalization + double `family_retaliation`
+notify — the push.js C1 class) because the `DELETE` discarded its rowCount → the DELETE is now the atomic
+CLAIM (`RETURNING gang_id`, strike guarded by `claimed.rowCount`), so exactly one worker fires;
+§10.4-neutral either way. **LOW-3 — push `saveSubscription` accepted an attacker-chosen `endpoint`** → a
+blind SSRF POST from the worker (e.g. `http://169.254.169.254/…`); now rejects non-https, `localhost`, and
+raw-IPv4 hosts. **F1 (LOW-MED) — `crew:objective` cash faucet was NOT agent-excluded** (its siblings
+`streak:daily`/`mentor:protege` are) → `claimObjective` now throws `agent` for an agent account, matching
+the "agents don't farm cash faucets" posture. **F2 (LOW) — `shank`'s family+crew omertà gates omitted the
+`isWanted` exception** its street siblings (`fire`/`jump`/`npcHit`) enforce → a jailed crewmate/family member
+couldn't shank a WANTED must-kill man his own people are meant to be able to collect; both gates now void for
+`!isWanted(victim)`. **Verified CLEAN** (recorded, not assumed): every new cash reason is character_id'd and
+reconciles (crew/mentor/streak faucets bounded once-per-day/week + level/latch-gated; `mentor:gift` a
+net-zero two-party transfer; the "§10.4-free" modules genuinely write zero `transactions` rows;
+`firstblood:reward` correctly enumerated); no board leaks an account UUID or exact wealth (all banded — the
+avatar `:seed` is hash-only, `cards.js` `esc()`s every player string, citywire emits no `$` and preserves
+anonymity); every account-keyed relationship/legend table survives death by construction and every
+character-scoped one dies; the PWA service worker never caches the API; `/openapi.json` excludes `/v1/mod`;
+no new secret ships without a fail-closed fallback. **Flagged, NOT patched** (accepted class, ground rule #1
+— all LOW and, decisively, NON-EXTRACTABLE since tokenomics v2 severed cash→$OMR, so a cash faucet inflates
+in-game cash with zero real-money value): the concurrency #2–#6 (retry-masked accounts-after-gangs / self-
+healing denorm SUM / status-only TOCTOU / §10.4-neutral alliance over-create), the `streak:daily` no-level-
+floor and `mentor:gift` untaxed-perpetual-if-ungraduated petty faucets (design-consistent, agent-excluded/
+self-funded), and crew non-aggression covering only the lethal verbs not the property crimes (the intended
+"restraint from killing" asymmetry — self-remedied by leaving the crew). Suite green + sim drift-0 + pgquery
++ pgcheck 43/43 on real Postgres. **Process note:** the working checkout silently reverted to a stale base
+mid-audit (the recurring env trap); caught because the lenses reported files "not present" that production
+has — always re-verify a finding against `origin/main` before acting, and never trust a green run on a base
+you haven't confirmed is current.

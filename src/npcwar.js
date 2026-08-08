@@ -382,8 +382,12 @@ export async function sweepFamilyAggro(pool) {
       await client.query('BEGIN');
       const g = (await client.query('SELECT name FROM gangs WHERE id=$1 AND npc_flag', [a.gang_id])).rows[0];
       const t = (await client.query('SELECT * FROM characters WHERE id=$1 AND alive FOR UPDATE', [a.target_character])).rows[0];
-      await client.query('DELETE FROM family_aggro WHERE gang_id=$1', [a.gang_id]); // one shot — hit or lost trail
-      if (g && t) {
+      // (red-team R28 #1) the DELETE is the CLAIM — exactly one worker may fire this strike. Two overlapping
+      // workers both read the same `due` row (the top SELECT is unlocked); without RETURNING, the loser's
+      // DELETE hits 0 rows but the code struck anyway → a double hospitalization + a double notify (the
+      // push.js C1 class). Only the worker that actually removed the row proceeds. §10.4-neutral either way.
+      const claimed = await client.query('DELETE FROM family_aggro WHERE gang_id=$1 RETURNING gang_id', [a.gang_id]); // one shot — hit or lost trail
+      if (claimed.rowCount && g && t) {
         const reachable = !jailed(t) && !hospitalized(t) && !safeHoused(t) && !witproActive(t) && !penSafe(t) && !inHole(t);
         const hit = reachable && (process.env.FAMILY_RETAL_P != null ? Number(process.env.FAMILY_RETAL_P) >= 1 : Math.random() < FAMILY_WAR.RETAL_P);
         if (hit) {

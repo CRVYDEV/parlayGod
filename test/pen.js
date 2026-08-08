@@ -4,6 +4,7 @@
 // estate, no loot, sentence extended), the caught miss, and paid revive-insurance absorption. §10.4
 // vocabulary stays closed (pen:* — a bounded work faucet + commissary/protection/bribe sinks). pg-mem.
 process.env.MOD_KEY = 'test-mod-key';
+import { readFileSync as _readSrc } from 'node:fs';
 process.env.PEN_YARD_EVENT = 'quiet'; // baseline: no yard incident perturbs the step-one tests (overridden per-case below)
 process.env.PEN_SHANK_CD_MS = '1';    // TEST-ONLY: shrink the per-attacker shank cooldown (SEARCH_MS precedent) — a dedicated block below restores it to assert the gate
 import assert from 'node:assert';
@@ -565,6 +566,18 @@ let quietDays = 0, blockDays = 0;
 for (let d = 0; d < 300; d++) { const e = yardEventOf(d); if (e.id === 'quiet') quietDays++; if (e.shankBlock || e.commissaryClosed) blockDays++; }
 assert(quietDays / 300 > 0.35, `quiet days are weighted up (${quietDays}/300 ≈ ${Math.round(quietDays / 3)}%, was ~14% uniform)`);
 assert(blockDays / 300 < 0.25, `hard-block days (lockdown/toss) are diluted below a quarter (${blockDays}/300)`);
+
+// (red-team R28 F2) the shank's family + crew omertà gates must void for a WANTED target, exactly as the
+// street fire/jump/npcHit siblings do (combat.js) — else a jailed crewmate/family member can't shank a
+// must-kill man his own people are meant to be able to collect. pg-mem's setup here doesn't wire a crew
+// into the pen, so this is a labelled source tripwire: both gates carry the !isWanted(victim) exception.
+{
+  const penSrc = _readSrc(new URL('../src/pen.js', import.meta.url), 'utf8');
+  const fam = /gangId === h\.owned\.gangId && !h\.victimAcct\.rat && !isWanted\(victim\)/.test(penSrc);
+  const crew = /crewId === h\.owned\.crewId && !h\.victimAcct\.rat && !isWanted\(victim\)/.test(penSrc);
+  assert(fam, 'the shank FAMILY omertà gate voids for a WANTED target (!isWanted(victim))');
+  assert(crew, 'the shank CREW omertà gate voids for a WANTED target (!isWanted(victim))');
+}
 
 console.log('✅ test/pen.js — the prison meta-game + step two (the hole, yard incidents, the burner phone) + step three THE BREAKOUT (cutkit sink, free/no-kit/lockdown gates, forced fail → the hole + longer stretch + beating + kit spent + NOT wanted, forced win → sentence cleared + WANTED fugitive + heat spike) + step four THE CO-OP BREAKOUT (plan stakes a cutkit, crew joins, crew_short/not_leader gates, forced win → the whole crew out + WANTED, forced fail → the whole crew in the hole + longer stretch, leader-disband + stale-sweep refund the staked kit) + step five PRISON FACTIONS (join/leave, free/bad/already gates, the board cover + SHOT-CALLER derivation moving to the most-feared, yard omertà blocking a same-crew shank while a rival stays fair game) + THE BREAK RAT (a crew member tips the guards → the break blows, the honest crew eats the hole + a longer stretch, the rat cuts a deal for time OFF but is holed WITH the crew so the roster never outs them, the feed only says somebody talked) + step six THE YARD LIVES (the iron pile trains the physical disciplines on the SHARED gym clock with the street gym still jail-gated, cards with the crew pays gambling mastery XP for energy, the daily seed-drawn yard character talks once a day with the seed\'s own effect — and the whole step writes ZERO ledger rows)');
 process.exit(0);
