@@ -485,6 +485,9 @@ const SIGNED = [
   // KINDS is pinned as the WHOLE array (deep-compared) — the base targets are bracket-accessed leaves
   // invisible to the reader check, so the PARENT is the pin (the RIVALS whole-map precedent).
   ['CREW.OBJECTIVE.REWARD', 5000],
+  // BRING ONE — the first-crewmate incentive (a bounded cash faucet gated behind the §7.13 qualify wall)
+  ['CREW.BRING_ONE.RECRUITER_CASH', 15000],
+  ['CREW.BRING_ONE.RECRUIT_CASH', 7500],
   ['CREW.OBJECTIVE.KINDS', [
     { id: 'crimes', label: 'Pull jobs together', base: 40, unit: 'jobs' },
     { id: 'kills', label: 'Put bodies in the ground', base: 3, unit: 'kills' },
@@ -493,6 +496,8 @@ const SIGNED = [
   ['DISCOVERY.BAND', 10],
   ['DISCOVERY.LIMIT', 24],
   ['DISCOVERY.LFG_TTL_MS', 7 * 24 * 3600 * 1000],
+  // IDENTITY — the free "about me" blurb length cap (pure scope/status, no faucet)
+  ['IDENTITY.BIO_MAX', 200],
   // THE MENTOR (omerta-first-contact-and-events-design.md) — MILESTONES is the one faucet (sim + BALANCE.md)
   ['MENTOR.MIN_LVL', 20],
   ['MENTOR.PROTEGE_MAX_LVL', 10],

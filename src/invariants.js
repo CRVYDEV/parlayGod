@@ -12,7 +12,7 @@ const KNOWN_REASONS = {
     'melt:tithe', 'fence', 'repair', 'craft:', 'goods:', 'racket:buy:', 'asset:', 'swap:', 'gun:buy:',
     'ammo:buy', 'gang:found', 'gang:tribute', 'gang:war', 'gang:dissolved', 'turf:seize:', 'turf:claim', 'jump:',
     'bounty:', 'bust:reward', 'whack:chop', 'whack:loot', 'death:', 'exchange:', 'crew:sales', 'deal:', 'makings:',
-    'lab:', 'crew:hire', 'crew:wages', 'crew:objective', 'laylow', 'kitchen:', 'mission:', 'daily:', 'onboard:', 'social:', 'referral:', 'mod:confiscate', 'npchit:', 'safehouse',
+    'lab:', 'crew:hire', 'crew:wages', 'crew:objective', 'crew:bringone', 'laylow', 'kitchen:', 'mission:', 'daily:', 'onboard:', 'social:', 'referral:', 'mod:confiscate', 'npchit:', 'safehouse',
     // TOKENOMICS v2 — THE EXCHANGE: the one-way window's cash side. An honest FAUCET, bounded by
     // the pool and proven a redistribution by `exchange pool backed` (paid <= funded) in exchange.js.
     // `window:` not `exchange:` — the M3 cb/ammo barter board already owns that prefix.

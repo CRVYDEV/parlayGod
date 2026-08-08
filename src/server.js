@@ -23,6 +23,8 @@ import * as Streak from './streak.js';
 import * as Circle from './circle.js';
 import * as Explore from './explore.js';
 import * as Prime from './primetime.js';
+import * as CityMap from './citymap.js';
+import * as Day from './day.js';
 import * as Vouch from './vouch.js';
 import * as Push from './push.js';
 import { cityEventBoard, resultsBoard } from './events.js';
@@ -268,11 +270,33 @@ export async function buildServer() {
     reply.type('image/svg+xml; charset=utf-8').header('cache-control', 'public, max-age=300');
     return reply.send(svg);
   });
+  // THE BEEF — the rivalry poster (the genre's viral unit is beef, not a stat card). Two names →
+  // the body count between their bloodlines. Public + keyless + read-only; zero §10.4.
+  app.get('/card/beef/:a/:b', async (req, reply) => {
+    const wantPng = req.params.b.endsWith('.png');
+    const nameB = clip(wantPng ? req.params.b.slice(0, -4) : req.params.b);
+    const nameA = clip(req.params.a);
+    const ref = clip(req.query.ref || nameA);
+    const d = await Cards.beefDossier(pool, nameA, nameB);
+    const svg = Cards.beefCard(d, ref);
+    if (wantPng) {
+      const png = await renderPng(svg);
+      if (png) { reply.type('image/png').header('cache-control', 'public, max-age=300'); return reply.send(png); }
+    }
+    reply.type('image/svg+xml; charset=utf-8').header('cache-control', 'public, max-age=300');
+    return reply.send(svg);
+  });
   app.get('/u/:name', async (req, reply) => {             // the public profile page (the champion destination)
     const name = clip(req.params.name);
     const d = await Cards.publicDossier(pool, name);
     reply.type('text/html; charset=utf-8');
     return reply.send(Cards.profilePage(d, baseUrl, clip(req.query.ref || name)));
+  });
+  app.get('/beef/:a/:b', async (req, reply) => {          // the shareable rivalry page (og:image = the beef card)
+    const nameA = clip(req.params.a), nameB = clip(req.params.b);
+    const d = await Cards.beefDossier(pool, nameA, nameB);
+    reply.type('text/html; charset=utf-8');
+    return reply.send(Cards.beefPage(d, baseUrl, clip(req.query.ref || nameA)));
   });
   // ── THE AGENT GATEWAY: the machine-discovery layer (agents are first-class players; see AGENTS.md) ──
   let agentsMd = '# OMERTÀ — Agent Guide\n\nGuide file missing (AGENTS.md). See GET /openapi.json and GET /v1/rules.';
@@ -423,6 +447,7 @@ export async function buildServer() {
     // each connect still does a real jwt.verify + socket churn. Bound the pre-auth upgrade per-IP too.
     if (rateLimitsEnabled() && (req.method === 'GET' || req.method === 'HEAD')
       && (req.url.startsWith('/card/') || req.url.startsWith('/u/') || req.url.startsWith('/v1/u/')
+          || req.url.startsWith('/beef/')
           || req.url.startsWith('/v1/art/') || req.url.startsWith('/v1/landmarks') || req.url.startsWith('/v1/ws')
           // (D1) the OAuth callback is a keyless GET that does real per-hit work (oauth_states DELETE +
           // an outbound X token/user fetch); the POST-only auth limiter + the token-gated read limiter
@@ -1465,6 +1490,15 @@ export async function buildServer() {
     return { districts: out };
   });
 
+  // THE MAP — the visible city: per-district control (holder / occupier / contest / watch / racket /
+  // sov) + the neighbour edges + a family power ranking, in one read. Authed so it can flag YOUR turf.
+  app.get('/v1/map', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => CityMap.cityMap(client, ch, h.owned.gangId)));
+  // THE DAY — the returning player's one-glance daily checklist (streak / contracts / hustle / corner /
+  // drills), each ready/todo/done with a jump. Consolidates the seven scattered daily surfaces. Pure read.
+  app.get('/v1/day', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Day.dayBoard(client, ch, h)));
+
   // ── M3: the streets (§5.2) ──
   app.get('/v1/streets', { preHandler: auth }, async () => {
     const r = await pool.query(`SELECT c.id, c.name, c.respect, c.loc, c.jail_until, c.hosp_until, c.guard_price, c.is_npc, g.tag
@@ -2034,6 +2068,10 @@ export async function buildServer() {
   // MY PROFILE — the MySpace-style personal page: identity + referral tracking + ledger-exact earnings
   app.get('/v1/profile', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client, h) => W.myProfile(ch, client, h)));
+  // IDENTITY — set the free "about me" blurb (status text, ZERO §10.4). withCharacter for the row
+  // lock; setBio writes bio directly (off persistCharacter's positional list → clobber-safe).
+  app.post('/v1/identity/bio', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => W.setBio(ch, req.body?.bio, client, h)));
   // THE STREET WAGE (the value-creation pivot) — the public emission board: epoch, budget, your progress
   app.get('/v1/wage', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client, h) => Emission.wageBoard(client, ch, h.acct)));

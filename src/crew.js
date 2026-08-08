@@ -219,7 +219,7 @@ export async function crewBoard(ch, client) {
       counts.set(row.crew_id, Number(row.n));
   }
   const invites = invited.map((r) => ({ crewId: r.crew_id, name: r.crew_name, from: r.from_name, members: counts.get(r.crew_id) || 0 }));
-  if (!crewId) return { crew: null, invites, maxMembers: CREW.MAX_MEMBERS, minLevel: CREW.MIN_LEVEL, nameMax: CREW.NAME_MAX };
+  if (!crewId) return { crew: null, invites, maxMembers: CREW.MAX_MEMBERS, minLevel: CREW.MIN_LEVEL, nameMax: CREW.NAME_MAX, bringOne: CREW.BRING_ONE };
 
   const crew = (await client.query('SELECT * FROM crews WHERE id=$1', [crewId])).rows[0];
   // members' live state — flat JOIN, never `= ANY($1)` (pg-mem returns zero rows for it — the rivals lesson)
@@ -255,7 +255,7 @@ export async function crewBoard(ch, client) {
   return {
     crew: { id: crewId, name: crew.name, leader: crew.leader_account === ch.account_id, members, pending,
       recruiting: !!crew.recruiting, requests, target, objective, objectivesDone: Number(crew.objectives_done || 0) },
-    invites, maxMembers: CREW.MAX_MEMBERS, minLevel: CREW.MIN_LEVEL, nameMax: CREW.NAME_MAX,
+    invites, maxMembers: CREW.MAX_MEMBERS, minLevel: CREW.MIN_LEVEL, nameMax: CREW.NAME_MAX, bringOne: CREW.BRING_ONE,
   };
 }
 
