@@ -21,6 +21,7 @@ import * as Discovery from './discovery.js';
 import * as Mentor from './mentor.js';
 import * as Streak from './streak.js';
 import * as Circle from './circle.js';
+import * as Collision from './collision.js';
 import * as Explore from './explore.js';
 import * as Prime from './primetime.js';
 import * as CityMap from './citymap.js';
@@ -2006,6 +2007,11 @@ export async function buildServer() {
   // ── THE CIRCLE — the ambient stream of the people you know (crew/mentor/protégés/spouse). §10.4-free. ──
   app.get('/v1/circle', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client) => Circle.circleBoard(client, ch, [...wsClients.keys()])));
+  // ── THE COLLISION — who's a REAL human, online, and reachable RIGHT NOW: HERE (your district), NEARBY
+  // (elsewhere), and the HOT DISTRICTS to travel toward. Solves "real collision is rare" by making the
+  // rare moment visible the second it exists. Pure read, §10.4-free. ──
+  app.get('/v1/live', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client) => Collision.collisionBoard(client, ch, [...wsClients.keys()])));
   // ── STILL ON THE TABLE — the cross-system pull the coach's queue-of-5 can't carry: every system this
   // player has UNLOCKED by level and never touched, plus an explorer tally. Pure read, §10.4-free. ──
   app.get('/v1/explore', { preHandler: auth }, async (req) =>
