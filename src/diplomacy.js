@@ -256,7 +256,22 @@ export async function npcAlliesOf(client) {
   return out;
 }
 
+const NPCDIP_LOCK_CLASS = 0x4e44;  // 'ND' — a session advisory lock so the NPC-diplomacy sweep is single-writer
+
+// (red-team R28 #6) two worker replicas could both open an alliance past ALLY_TARGET (the liveAlliances
+// check is an unlocked read). §10.4-neutral flavor, but bound it with the runPopulation single-writer
+// advisory lock so the sweep can't over-create under a deploy overlap. pg-mem is single-process.
 export async function sweepNpcDiplomacy(pool) {
+  let lockConn = null;
+  if (process.env.DATABASE_URL) {
+    lockConn = await pool.connect();
+    const got = (await lockConn.query('SELECT pg_try_advisory_lock($1,$2) AS ok', [NPCDIP_LOCK_CLASS, 0])).rows[0].ok;
+    if (!got) { lockConn.release(); return { signed: 0, allied: 0, skipped: 'locked' }; }
+  }
+  try { return await sweepNpcDiplomacyInner(pool); }
+  finally { if (lockConn) { await lockConn.query('SELECT pg_advisory_unlock($1,$2)', [NPCDIP_LOCK_CLASS, 0]).catch(() => {}); lockConn.release(); } }
+}
+async function sweepNpcDiplomacyInner(pool) {
   let signed = 0, allied = 0;
   const npcRows = (await pool.query('SELECT id, name FROM gangs WHERE npc_flag')).rows;
   const npc = new Set(npcRows.map((g) => g.id));
