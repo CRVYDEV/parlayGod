@@ -10112,3 +10112,32 @@ Suite green + sim drift-0 + mobile 73/73 + pgquery + pgcheck 43/43 on real Postg
 `SIEGE_NEED`/`SIEGE_CASH`/`SIEGE_TITLE` are founder sign-off levers (pinned). **The PRIME TIME rotation is
 now feature-complete** — three mechanics (rally / happy hour / siege) × two modes (value / honor), drawn
 deterministically per night off the §7.11 seed, forecastable a week out.
+
+**THE MAP — the visible, shared, contested city (founder-directed 2026-08-08, the flagship of the
+"where are the thinnest gaps" strategic pass: turf is the game's core fantasy and was its LEAST
+visible system — numbers on a board, six control states each surfaced on a different route, no picture
+you could look at and read the power structure at a glance) — BUILT** (`src/citymap.js` — the 131st
+module, `test/citymap.js` — the 82nd suite; `GET /v1/map`; a new "The Map" console screen folded under
+the Family group). One read aggregates all six control states per district — the player family HOLDING
+it (+ a `mine` flag, the identity hook "my family holds the docks"), an NPC cartel OCCUPYING it (+ the
+live liberation cost, scaled by the outfit's strength — the World raid loop is the path to core turf),
+a live SEALED-BID contest (the COUNT of families bidding, never an amount — the info-economy rule), THE
+WATCH declared hour, the territory RACKET running on it (type + tier + owner tag), and a SOVEREIGNTY
+stronghold — plus the neighbour EDGES (`DISTRICT_ADJ`) so the board reads as a map, the SEASON phase
+(the reckoning changes turf tension), and a FAMILY POWER RANKING (who holds the most core districts,
+treasury the tiebreak — "who's winning" at a glance). **PURE READ, ZERO §10.4** — it aggregates state
+other systems already own (districts / gangs / territory_rackets / sov_structures / district_bids /
+world_npcs), moves no value and writes no row (the test pins zero transactions rows across the whole
+read). pg-mem posture: one flat query per control table + JS joins (no correlated subqueries, no
+`= ANY`). The client screen renders the six districts as state-coloured tiles (mine=neon / held=gold /
+contested=amber / occupied=red / open=grey) with holder-or-occupier, the contest countdown, the
+liberation cost, the watch window, the racket, the stronghold, and the border chips — plus the power
+ranking and a pointer to fight for turf from The Family tab. `test/citymap.js` proves the board shape,
+a district my family holds reading MINE + surfacing the racket, an NPC-occupied district showing its
+liberation cost, the power ranking ordering by control (a second family holding fewer districts ranks
+below — load-bearing, mutation-verified), and §10.4-neutrality — two mutations each caught by name.
+Suite green + sim drift-0 + mobile 75/75 + client wiring/mirror (the map's element reads covered, the
+`.map(namedFn)` blind spot avoided by inlining the tile) + pgquery + pgcheck 43/43 on real Postgres.
+No new lever (pure read; every number is read from live state). Browser-probed live (the season banner,
+occupied districts, the Dock Rats + liberation cost render — zero page errors). The thinnest gameplay
+gap (turf made visible), the missing identity hook, and a native share-worthy artifact in one screen.
