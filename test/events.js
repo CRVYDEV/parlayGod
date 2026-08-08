@@ -17,10 +17,15 @@ const events = async () => (await call('GET', '/v1/events')).body.events;
 const txCount = async () => Number((await pool.query('SELECT COUNT(*) n FROM transactions')).rows[0].n);
 
 // ════════════ empty city — the honest empty state ════════════
+// PRIME TIME is a pure function of the clock (no DB row) and legitimately LEADS the strip during its
+// nightly window — it has its own `primetime` board field and its own test/primetime.js. So the
+// SCHEDULED-event assertions here exclude it, or this file is a ~4%/day wall-clock flake (it fails
+// only when run inside tonight's window). We assert no *scheduled DB event* shows on an empty city.
+const scheduled = (list) => list.filter((x) => x.kind !== 'primetime');
 {
   const e = await events();
   assert.equal(Array.isArray(e), true, 'the board returns an events array');
-  assert.equal(e.length, 0, 'nothing scheduled → an empty strip (never a dead "no events" card)');
+  assert.equal(scheduled(e).length, 0, 'nothing scheduled → no DB event on the strip (never a dead "no events" card)');
 }
 
 // ════════════ open events surface with a clock ════════════
@@ -46,8 +51,8 @@ const pk = e.find((x) => x.kind === 'poker');
 assert.equal(gp.closesSeconds > 0 && gp.closesSeconds <= 1800 + 5, true, 'the grand prix carries a live countdown (~30 min)');
 assert.equal(pk.closesSeconds > 1800, true, 'the tournament carries its own (~1h) countdown');
 // the clocked events sort soonest-closing first (the megaproject, no clock, trails)
-const clocked = e.filter((x) => x.closesSeconds != null);
-assert.equal(clocked[0].kind, 'grandprix', 'the soonest-closing event leads the strip');
+const clocked = scheduled(e).filter((x) => x.closesSeconds != null);
+assert.equal(clocked[0].kind, 'grandprix', 'the soonest-closing scheduled event leads the strip');
 assert.equal(e[e.length - 1].kind, 'megaproject', 'the clockless megaproject trails');
 
 const mp = e.find((x) => x.kind === 'megaproject');
