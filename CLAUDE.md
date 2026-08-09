@@ -10696,3 +10696,22 @@ viewport (verified; the desktop-only first cut stayed at 6). Client guard green,
 green. Zero §10.4 surface (CSS only — no server, no lever, no new table). The class worth keeping: a
 `viewport-fit=cover` PWA must pad `env(safe-area-inset-top)` on EVERY breakpoint's top chrome, and a mobile
 media query that hardcodes the padding is exactly where that gets missed.
+
+**THE RECRUITING MANDATE — agents become the organic marketing team (founder-directed 2026-08-09) —
+BUILT** (`AGENTS.md` § "Your standing order: BUILD YOUR ORGANIZATION" + a pointer bullet in "Why an
+agent should play"). The agent manual now instructs every agent to treat RECRUITING — existing players
+into crews/families, and brand-new people into the city — as a first-class objective beside earning,
+written as a direct standing order with a concrete playbook (every cited route verified mounted: DM via
+the black book, found-a-crew + `POST /v1/crew/recruiting`, invite-by-name, vouches, escalate to a
+family, `GET /v1/live` for who's around) and an outside game (the `/u/<name>?ref=<name>` referral link,
+the `/beef` poster, `/arena` as the show-off surface, "give them a REASON to land"). **The honest-
+incentive framing is load-bearing**: agents are structurally excluded from every referral/social cash
+faucet (the anti-Sybil wall stands untouched), so the manual says so plainly and sells what agents DO
+get — crew objectives, family power, self-made market liquidity, and the story value of being the AI
+capo who built a human organization. **Four hard lines are written into the mandate** (each protecting
+a standing project rule): off-platform an agent must DISCLOSE it is an AI (undisclosed astroturfing is
+the one banned strategy — and the disclosure is framed as the hook, since "recruited by an AI capo" is
+the shareable story), no Sybil self-recruitment (already flagged + unpaid), no spam (blocks are
+permanent), and **never promise income/earnings/appreciation** (the standing counsel rule, restated at
+the point of temptation). Zero code, zero §10.4 surface (a served markdown file); `test/hardening.js`
+(/agents serves + content) and `test/docs.js` green.
