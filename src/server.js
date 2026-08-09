@@ -432,9 +432,15 @@ export async function buildServer() {
     await req.jwtVerify();
     // §10.3 — banned accounts are refused at the door (agent_flag rides the same query — no extra round-trip)
     const a = (await pool.query(
-      'SELECT a.status, ap.agent_flag FROM accounts a LEFT JOIN account_persistent ap ON ap.account_id=a.id WHERE a.id=$1',
+      'SELECT a.status, a.token_version, ap.agent_flag FROM accounts a LEFT JOIN account_persistent ap ON ap.account_id=a.id WHERE a.id=$1',
       [req.user.sub])).rows[0];
     if (!a || a.status === 'banned') return reply.code(403).send({ error: 'banned' });
+    // BLUE-TEAM M3: token revocation. If this token carries a `tv` claim, it must match the account's
+    // current token_version — a bump (logout-all / mod revoke) invalidates every earlier token. A token
+    // with NO `tv` claim is GRANDFATHERED (issued before this feature; those age out within their ≤30d
+    // TTL), so a deploy never mass-logs-out. Compared as Numbers so a string claim can't slip past.
+    if (req.user.tv !== undefined && Number(req.user.tv) !== Number(a.token_version))
+      return reply.code(401).send({ error: 'token_revoked' });
     // R1: authed GET reads run through withCharacter (lazy accrual + ledger/telemetry writes) too, so an
     // agent could poll a read endpoint (e.g. GET /v1/me) at unlimited rate to DODGE the §10.2 agent 1/3s
     // hard throttle — the global limiter only guards POST/DELETE. Enforce the AGENT bucket on authed GETs
@@ -457,8 +463,32 @@ export async function buildServer() {
     return a.length === b.length && crypto.timingSafeEqual(a, b);
   };
   const modAuth = async (req, reply) => {
+    // BLUE-TEAM M2: bound a flood at the god-mode perimeter. The MOD_KEY is high-entropy (generateValue),
+    // so this is not brute-force protection (a rate limit can't gate a 20+ char key) — it stops a
+    // mistyped automation or a probe from hammering the mod surface. A separate `mod:` bucket namespace so
+    // it never contends with player auth. Generous burst — the /admin dashboard fans out ~6 GETs a refresh.
+    if (rateLimitsEnabled()) {
+      const limited = await checkAuthRateLimit({ ip: 'mod:' + req.ip });
+      if (limited) return reply.code(429).header('retry-after', limited.retryAfter)
+        .send({ error: 'rate_limited', retryAfter: limited.retryAfter });
+    }
     if (!modKeyOk(req.headers['x-mod-key'])) return reply.code(401).send({ error: 'mod_auth' });
+    // BLUE-TEAM M2: audit every god-mode MUTATION (ban/mod-kill/confiscate/mint-invites/fund/revoke/comp).
+    // A leaked or misused key was otherwise unlogged. GETs are dashboard reads — not actions — so skip them
+    // (they'd bury the real actions under the /admin poll traffic). Best-effort: an audit-write failure
+    // must never block the action a real operator is running.
+    if (req.method !== 'GET' && req.method !== 'HEAD')
+      pool.query('INSERT INTO mod_actions (id, ip, method, path) VALUES ($1,$2,$3,$4)',
+        [uid(), req.ip, req.method, req.routeOptions?.url || req.url])
+        .catch((e) => console.error('mod_actions audit write failed (non-fatal)', e?.message));
   };
+  // BLUE-TEAM M2: the audit log is readable back through the mod perimeter it records (the last N actions),
+  // so the /admin dashboard can show who did what. A GET, so it doesn't log itself.
+  app.get('/v1/mod/actions', { preHandler: modAuth }, async (req) => {
+    const n = Math.min(200, Math.max(1, Number(req.query?.limit) || 100));
+    const rows = (await pool.query('SELECT id, at, ip, method, path FROM mod_actions ORDER BY at DESC LIMIT $1', [n])).rows;
+    return { actions: rows };
+  });
 
   // ── the live intel-feed socket registry ────────────────────────────────────────────────────────
   // Declared here, above the route registrations, because routes in the extracted src/routes modules
@@ -539,9 +569,13 @@ export async function buildServer() {
     // Ban + agent status come from the DB, never the token: an agent-flagged account
     // could otherwise keep using its pre-flag token to dodge the harder agent throttle.
     const acct = (await pool.query(
-      'SELECT a.status, ap.agent_flag FROM accounts a LEFT JOIN account_persistent ap ON ap.account_id=a.id WHERE a.id=$1',
+      'SELECT a.status, a.token_version, ap.agent_flag FROM accounts a LEFT JOIN account_persistent ap ON ap.account_id=a.id WHERE a.id=$1',
       [req.user.sub])).rows[0];
     if (!acct || acct.status === 'banned') return reply.code(403).send({ error: 'banned' });
+    // BLUE-TEAM M3: token revocation (mutating path — where money moves). A `tv` claim must match the
+    // account's current token_version; a missing claim is grandfathered. See the `auth` preHandler above.
+    if (req.user.tv !== undefined && Number(req.user.tv) !== Number(acct.token_version))
+      return reply.code(401).send({ error: 'token_revoked' });
     if (rateLimitsEnabled()) {
       const limited = await checkRateLimit({ accountId: req.user.sub, agent: !!acct.agent_flag,
         path: req.routeOptions?.url || req.url });
@@ -603,20 +637,27 @@ export async function buildServer() {
   });
 
   // ── auth (§4): guest, X, Privy — all behind the invite gate when INVITE_MODE=on ──
+  // BLUE-TEAM M3: every token carries `tv` = the account's current token_version, so bumping it revokes
+  // every token issued before the bump. Fetch it at sign time (login/mint are rare paths). A brand-new
+  // account is tv=0 by the column default, so a fresh guest can pass tv=0 without a round-trip.
+  const signFor = async (accountId, extra = {}, expiresIn = '30d', knownTv) => {
+    const tv = knownTv ?? ((await pool.query('SELECT token_version FROM accounts WHERE id=$1', [accountId])).rows[0]?.token_version ?? 0);
+    return app.jwt.sign({ sub: accountId, tv, ...extra }, { expiresIn });
+  };
   app.post('/v1/auth/guest', async (req) => {
     await A.consumeInvite(pool, req.body?.inviteCode);
     const id = uid();
     await pool.query('INSERT INTO accounts (id, auth_provider, auth_subject, created_ip, last_ip) VALUES ($1,$2,$3,$4,$4)',
       [id, 'guest', id, req.ip || '0.0.0.0']);
     await pool.query('INSERT INTO account_persistent (account_id) VALUES ($1)', [id]);
-    return { token: app.jwt.sign({ sub: id }, { expiresIn: '30d' }) };
+    return { token: await signFor(id, {}, '30d', 0) };
   });
   const providerLogin = (verify) => async (req) => {
     const identity = await verify(req.body?.token);
     // (B2) the invite is consumed ATOMICALLY inside accountForIdentity's create txn — one invite per
     // new account, gate held even under a concurrent same-identity race (no separate pre-consume).
     const { accountId, created } = await A.accountForIdentity(pool, identity, req.ip || '0.0.0.0', req.body?.inviteCode);
-    return { token: app.jwt.sign({ sub: accountId }, { expiresIn: '30d' }), created };
+    return { token: await signFor(accountId, {}, '30d', created ? 0 : undefined), created };
   };
   app.post('/v1/auth/x', providerLogin(A.verifyX));
   app.post('/v1/auth/privy', providerLogin(A.verifyPrivy));
@@ -654,7 +695,7 @@ export async function buildServer() {
       }
       // (B2) invite consumed atomically inside accountForIdentity's create txn — gate held under races
       const { accountId } = await A.accountForIdentity(pool, r.identity, req.ip || '0.0.0.0', r.invite);
-      return reply.redirect(`/#token=${encodeURIComponent(app.jwt.sign({ sub: accountId }, { expiresIn: '30d' }))}`);
+      return reply.redirect(`/#token=${encodeURIComponent(await signFor(accountId))}`);
     } catch (e) {
       const code = e instanceof G.GameError ? e.code : 'oauth_failed';
       if (!(e instanceof G.GameError)) console.error('x oauth callback', e);
@@ -673,7 +714,14 @@ export async function buildServer() {
   // exclusion) and mints a token the rate limiter throttles at 1 action / 3 s.
   app.post('/v1/auth/agent-key', { preHandler: auth }, async (req) => {
     await pool.query('UPDATE account_persistent SET agent_flag=true WHERE account_id=$1', [req.user.sub]);
-    return { token: app.jwt.sign({ sub: req.user.sub, agent: true }, { expiresIn: '90d' }), agent: true };
+    return { token: await signFor(req.user.sub, { agent: true }, '90d'), agent: true };
+  });
+  // BLUE-TEAM M3: self-serve "log out everywhere" — bump the account's token_version, which invalidates
+  // every token issued before now (a stolen/lost device can no longer MOVE MONEY on this account). The
+  // caller's own current token is invalidated too, so the client must sign in again; that is the point.
+  app.post('/v1/auth/logout-all', { preHandler: auth }, async (req) => {
+    await pool.query('UPDATE accounts SET token_version = token_version + 1 WHERE id=$1', [req.user.sub]);
+    return { ok: true };
   });
 
   // ── character ──

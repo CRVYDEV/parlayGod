@@ -37,6 +37,16 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
       closeAccountSockets(accountId, 4003, 'banned'); // red-team R4 F1: cut the live intel feed now, not at their leisure
       return { ok: true };
     });
+    // BLUE-TEAM M3: revoke an account's outstanding tokens WITHOUT a full ban — the lighter tool for a
+    // compromised or abusive account (bump token_version so every token issued before now is invalidated
+    // on the mutating auth path). The account can still sign in fresh; a ban is the heavier hammer.
+    app.post('/v1/mod/revoke', { preHandler: modAuth }, async (req) => {
+      const { accountId } = req.body || {};
+      if (!accountId) throw new G.GameError('args', 'accountId required.');
+      await pool.query('UPDATE accounts SET token_version = token_version + 1 WHERE id=$1', [accountId]);
+      closeAccountSockets(accountId, 4008, 'token_revoked'); // cut any live socket too
+      return { ok: true };
+    });
     app.post('/v1/mod/kill', { preHandler: modAuth }, async (req) => {
       // runs the §7.9 estate without a killer ("THE COMMISSION")
       const { characterId, reason } = req.body || {};

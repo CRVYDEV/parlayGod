@@ -8,6 +8,12 @@ CREATE TABLE IF NOT EXISTS accounts (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (auth_provider, auth_subject)   -- one account per real identity (audit: no dup-identity race)
 );
+-- BLUE-TEAM M3: token revocation. Every issued JWT carries `tv` = this counter; bumping it invalidates
+-- every token issued before the bump (self-serve "log out everywhere" + a mod revoke that neutralises a
+-- compromised/abusive account's outstanding tokens without a full ban). ALTER, never inline: a
+-- CREATE TABLE IF NOT EXISTS is a no-op on a live DB, so an inline column would never land on the
+-- existing accounts table (the 2026-08-06 boot-crash lesson).
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS token_version INT NOT NULL DEFAULT 0;
 CREATE TABLE IF NOT EXISTS account_persistent (
   account_id TEXT PRIMARY KEY,
   prestige INT NOT NULL DEFAULT 0,
@@ -1619,6 +1625,19 @@ CREATE TABLE IF NOT EXISTS worker_heartbeat (
   CONSTRAINT worker_heartbeat_one CHECK (id = 1)
 );
 INSERT INTO worker_heartbeat (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+-- BLUE-TEAM M2: an accountability log for the mod perimeter. Every god-mode MUTATION (ban, mod-kill,
+-- confiscate, mint-invites, fund-reserve, revoke, comp/QA grants) authenticated by the MOD_KEY writes a
+-- row here. A leaked or misused MOD_KEY was otherwise unlogged — this is the who/what/when a post-incident
+-- review needs. GET dashboard reads are NOT logged (they're not actions). Append-only; retained by a
+-- worker sweep like the troll box.
+CREATE TABLE IF NOT EXISTS mod_actions (
+  id     TEXT PRIMARY KEY,
+  at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  ip     TEXT,
+  method TEXT NOT NULL,
+  path   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_mod_actions_at ON mod_actions (at DESC);
 -- Risk-to-Earn Phase 4: BACKED EMISSION. The soft-$OMR pool staking rewards are paid FROM (a
 -- transfer, not a mint) — funded by a slice of the 12h buyback (cash sinks → $OMR → yield), so
 -- staking stops being an unbounded mint and becomes redistribution bounded by economic activity.
