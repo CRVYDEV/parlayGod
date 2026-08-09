@@ -10511,3 +10511,51 @@ base URL + the MCP default + the SSRF attack-example comment; the tree now has Z
 references, verified by a boot smoke (all four machine surfaces + `rules.share.gameUrl` read `www.omerta.fun`).
 §10.4-untouched (docs, a static page, and env-fallback strings — no economy surface, no lever, no new table).
 Founder's one manual step to make `npx omerta-mcp` live: `npm publish` from `omerta-mcp/`.
+
+**THE BLUE-TEAM PASS — defensive hardening, no CRITICAL (founder-directed 2026-08-09: "blue team the app"; do
+both write-it-up + apply-the-fixes) — BUILT** (`AUDIT-blue-team.md`; 6 parallel domain sweeps → 5 risk-ordered
+batches; every batch §10.4-untouched, full suite + sim drift-0 + real-Postgres pgquery/pgcheck green). Unlike
+the ~78 red-team reports (which hunt a live exploit), this asked the DEFENSIVE question — perimeter, secrets,
+detection, blast radius — so every fix is defence-in-depth, additive or fail-safe, not a patch of a live hole.
+The core the game rests on was found STRONG (§10.4 as a continuously-checked economic IDS, extraction≤inflow by
+the full-reserve queue, DB-driven ban, server-authoritative RNG, reserve-before-execute idempotency, the mature
+lock-order + contention-retry discipline, the real-Postgres CI posture, the dormant/gated chain layer, the
+already-hardened DB-outage resilience, the SSRF-safe allowlist-Map art routes) — which is why there was no
+CRITICAL. **Batch 1 — deploy pipeline:** render.yaml `autoDeploy:true` → **`autoDeployTrigger:checksPass`** (a
+red CI can no longer auto-ship to prod — C1), `npm install` → `npm ci --omit=dev` (reproducible, no dev deps on
+the box), `npm audit fix` (fast-uri transitive → 0 vulns). **Batch 2 — preflight fails the boot on a weak
+posture:** a **JWT_SECRET floor** (≥24 chars/≥8 distinct is a HARD error — HS256 over low entropy is offline-
+brute-forceable → token forgery; render.yaml generateValue keeps prod strong, the floor catches a hand-set
+one — H1), an INVARIANT_WEBHOOK_URL-unset WARNING (alarms into nothing — H5), a CITY_WIRE==INVARIANT-webhook
+HARD error (public drama on the ops-alarm channel — M8), and `testOnlyLeaks()` so the WORKER refuses a
+TEST_ONLY knob in prod like the API already does (M1). **Batch 3 — the unauthenticated edge:** a security-header
+baseline on EVERY response via a **fail-safe onSend hook** (nosniff always, HSTS in prod, XFO DENY + Referrer-
+Policy on text/html, a locked-down CSP on served SVG — the header hook skips once headers are on the wire, so a
+double-sending route can never crash the process; found + fixed one latent double-send — the digest-unsubscribe
+handler now `return`s its `reply.send()` like every other static-HTML route, the Fastify async-handler footgun —
+H2), **trustProxy 1** not trust-all (a leftmost XFF can't spoof the rate-limit/audit IP — H3), a keyless-/v1-GET
+**default-throttle** (denylist not allowlist — `GET /v1/gangs/:id` opens a WRITE txn holding a pooled connection,
+so an unauthed flood could pin the pool — H4), and a **push-subscription SSRF guard** (`isPrivateAddr` rejects a
+localhost/private/CGNAT/link-local/IPv4-mapped target, IPv4+IPv6 literals + a DNS-resolve check — the server
+POSTs to that stored URL, so it must not reach the cloud metadata endpoint or an internal service). **Batch 4 —
+detection depth:** a `worker_heartbeat` row the worker stamps each tick, surfaced on `GET /health` as
+`worker.beatAgoSeconds`/`stale` — the worker is a SEPARATE process and the sole source of every proactive alarm
++ timed settlement, so its silence took ALL detection dark AND stopped ALL settlement, indistinguishably from a
+clean night (C2); plus `runExchangeInvariants` joined the nightly worker sweep (the redemption-window "paid ≤
+funded" cash-backing is now watched, not just tested). **Batch 5 — auth depth:** a **`mod_actions` audit log** +
+per-IP throttle on the MOD_KEY god-mode perimeter (ban/mod-kill/confiscate/mint/fund were unlogged — the log
+records method/path/IP/time on every mod MUTATION, GET dashboard reads skipped; `GET /v1/mod/actions` reads it
+back; flagged: the shared key means IP-not-operator granularity — per-operator keys the next step — M2), and
+**token revocation** — every JWT now carries a `tv` (token_version) claim, `POST /v1/auth/logout-all` (self-serve)
++ `POST /v1/mod/revoke` (lighter than a ban) bump it, enforced on the `auth` preHandler + guarded-mutation path
+(covers every authed read AND write), **grandfathering** tv-less legacy tokens so a deploy is never a mass
+logout (revocation fully effective once they age out ≤30d — M3). Schema: `token_version` is an `ALTER TABLE ...
+ADD COLUMN IF NOT EXISTS` and `mod_actions`/`worker_heartbeat` new tables (the 2026-08-06 boot-crash lesson — a
+CREATE TABLE IF NOT EXISTS never adds a column to an existing table). Regressions per fix (preflight H1/H5/M8,
+routes H4 tripwire, push IPv6-SSRF, /health worker-liveness, auth M2/M3 — the M2/M3 pair mutation-verified by
+name); the H2 double-send was root-caused live (onSend fires twice for a no-return `reply.send()`) and fixed at
+BOTH the route and the hook. **Also, incidentally:** the on-ramp PR #6 was squash-merged to main mid-session, so
+this batch restarted the branch from origin/main per the merged-PR rule rather than stacking on the already-merged
+history. Deferred (in the report, not live holes): per-operator mod identity, M3 read-coverage on the fully-keyless
+boards (nothing to revoke there; not worth a DB load per keyless read — the H4 pool-protection anti-precedent),
+and the chain/real-money layer (stays gated on the third-party audit + legal counsel).
