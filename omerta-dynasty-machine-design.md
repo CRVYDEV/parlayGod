@@ -36,8 +36,9 @@ consistent) — and extends `omerta-identity-nft-design.md` (the trophy/entitlem
    implementation joins the third-party audit scope** the moment a TBA can hold stock.
 6. **The drain-before-sale fraud vector is real and explicitly out of the standard's scope**: a
    seller empties the TBA one block before accepting an offer, and the buyer receives a hollow
-   trophy. The spec names the mitigations: `state()`-bound marketplace orders, asset-commitment
-   lists, or a lock mechanism in the account implementation. §5 below picks ours.
+   trophy. The spec names four mitigations: `state()`-bound marketplace orders, asset-commitment
+   lists, an order-validating external contract, or a lock mechanism in the account
+   implementation. §5 below picks ours.
 7. **Status: the EIP is in Review, not Final.** The registry address and interface IDs
    (`IERC6551Account = 0x6faff5f1`) are de-facto stable across the ecosystem, but we pin the
    registry + implementation bytecode we deploy against at deploy time and record them in
