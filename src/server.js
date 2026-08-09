@@ -153,8 +153,41 @@ export async function buildServer() {
   // when NOT behind a trusted proxy). An operator deploying behind a load balancer sets TRUST_PROXY=on
   // so req.ip reflects the real client — else the per-IP auth throttle (E-M1) collapses to one global
   // bucket at the proxy's IP. No behaviour change in the alpha (rate limits are off there anyway).
-  const app = Fastify({ logger: false, trustProxy: process.env.TRUST_PROXY === 'on' });
+  // BLUE-TEAM H3: trust ONE proxy hop (Render's load balancer), not ALL (`true`). With trust-all,
+  // req.ip is the LEFTMOST X-Forwarded-For value — client-supplied — so an attacker rotating that
+  // header lands every request in a fresh bucket, defeating BOTH unauthenticated throttles (the
+  // guest-mint Sybil limiter and the public-route DoS limiter). A hop count of 1 takes the address
+  // the LB actually connected from (the appended real client), ignoring a spoofed leftmost entry.
+  // (If Render is ever >1 hop, this degrades to a shared-bucket — safe — never to spoofable.)
+  const app = Fastify({ logger: false, trustProxy: process.env.TRUST_PROXY === 'on' ? 1 : false });
   Push.initPush();   // WEB PUSH — arm VAPID signing if VAPID_* is configured; dormant otherwise.
+
+  // BLUE-TEAM H2: a security-header baseline on every response (only /admin had any). Set defensively
+  // so no route can ship a page without framing/sniff protection by omission, without clobbering the
+  // stricter headers /admin already sets.
+  app.addHook('onSend', async (req, reply) => {
+    // Fail-safe: a header hook must never crash the server. A route that calls reply.send() without
+    // returning it (an async-handler footgun) makes Fastify run the send lifecycle twice; on that
+    // spurious second pass the head is already flushed, so touching a header would throw
+    // ERR_HTTP_HEADERS_SENT and kill the process. Skip once headers are on the wire.
+    if (reply.raw.headersSent) return;
+    reply.header('X-Content-Type-Options', 'nosniff');
+    if (process.env.NODE_ENV === 'production')
+      reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    const ct = String(reply.getHeader('content-type') || '');
+    if (ct.startsWith('text/html')) {
+      // clickjacking: the console keeps the bearer in localStorage and is one-click money-driven
+      // (FIRE / unstake / withdraw), so a framed console is a real target. DENY on all served pages
+      // (none are meant to be framed); don't clobber /admin's own DENY + no-referrer.
+      if (!reply.getHeader('x-frame-options')) reply.header('X-Frame-Options', 'DENY');
+      if (!reply.getHeader('referrer-policy')) reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+    } else if (ct.startsWith('image/svg')) {
+      // /card, /beef, /v1/avatar, the /v1/art SVG fallback — served as navigable documents on the game
+      // origin. Make them inert if navigated to: no script/frame, only inline styles + the data: art
+      // the broadcast cards embed. (Names can't contain '<', so this is defence-in-depth.)
+      reply.header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src data:");
+    }
+  });
 
   // THE AGENT GATEWAY — collect every mounted route (this hook fires per registration) so the
   // OpenAPI 3.1 contract at /openapi.json is auto-derived and never drifts from what's live.
@@ -382,15 +415,32 @@ export async function buildServer() {
       at: new Date().toISOString(),
     };
     if (!db.ok) { body.error = db.error; reply.code(503).header('retry-after', '15'); }
+    // BLUE-TEAM C2: surface the WORKER's liveness. It is a separate process and the sole source of every
+    // proactive alarm + timed settlement, so a monitor pointed here can alarm on `worker.stale` (or a
+    // red /health) when it goes dark. Kept off the 503 (the API itself is healthy even if the worker is
+    // down); >90 min means it missed an hourly tick. Best-effort — a DB blip is already reflected above.
+    if (db.ok) try {
+      const hb = await pool.query('SELECT beat_at FROM worker_heartbeat WHERE id = 1');
+      if (hb.rows[0]) {
+        const ageSec = Math.round((Date.now() - new Date(hb.rows[0].beat_at).getTime()) / 1000);
+        body.worker = { beatAgoSeconds: ageSec, stale: ageSec > 5400 };
+      }
+    } catch { /* the worker_heartbeat read failing is itself a DB issue, already covered by body.db */ }
     return body;
   });
   const auth = async (req, reply) => {
     await req.jwtVerify();
     // §10.3 — banned accounts are refused at the door (agent_flag rides the same query — no extra round-trip)
     const a = (await pool.query(
-      'SELECT a.status, ap.agent_flag FROM accounts a LEFT JOIN account_persistent ap ON ap.account_id=a.id WHERE a.id=$1',
+      'SELECT a.status, a.token_version, ap.agent_flag FROM accounts a LEFT JOIN account_persistent ap ON ap.account_id=a.id WHERE a.id=$1',
       [req.user.sub])).rows[0];
     if (!a || a.status === 'banned') return reply.code(403).send({ error: 'banned' });
+    // BLUE-TEAM M3: token revocation. If this token carries a `tv` claim, it must match the account's
+    // current token_version — a bump (logout-all / mod revoke) invalidates every earlier token. A token
+    // with NO `tv` claim is GRANDFATHERED (issued before this feature; those age out within their ≤30d
+    // TTL), so a deploy never mass-logs-out. Compared as Numbers so a string claim can't slip past.
+    if (req.user.tv !== undefined && Number(req.user.tv) !== Number(a.token_version))
+      return reply.code(401).send({ error: 'token_revoked' });
     // R1: authed GET reads run through withCharacter (lazy accrual + ledger/telemetry writes) too, so an
     // agent could poll a read endpoint (e.g. GET /v1/me) at unlimited rate to DODGE the §10.2 agent 1/3s
     // hard throttle — the global limiter only guards POST/DELETE. Enforce the AGENT bucket on authed GETs
@@ -413,8 +463,32 @@ export async function buildServer() {
     return a.length === b.length && crypto.timingSafeEqual(a, b);
   };
   const modAuth = async (req, reply) => {
+    // BLUE-TEAM M2: bound a flood at the god-mode perimeter. The MOD_KEY is high-entropy (generateValue),
+    // so this is not brute-force protection (a rate limit can't gate a 20+ char key) — it stops a
+    // mistyped automation or a probe from hammering the mod surface. A separate `mod:` bucket namespace so
+    // it never contends with player auth. Generous burst — the /admin dashboard fans out ~6 GETs a refresh.
+    if (rateLimitsEnabled()) {
+      const limited = await checkAuthRateLimit({ ip: 'mod:' + req.ip });
+      if (limited) return reply.code(429).header('retry-after', limited.retryAfter)
+        .send({ error: 'rate_limited', retryAfter: limited.retryAfter });
+    }
     if (!modKeyOk(req.headers['x-mod-key'])) return reply.code(401).send({ error: 'mod_auth' });
+    // BLUE-TEAM M2: audit every god-mode MUTATION (ban/mod-kill/confiscate/mint-invites/fund/revoke/comp).
+    // A leaked or misused key was otherwise unlogged. GETs are dashboard reads — not actions — so skip them
+    // (they'd bury the real actions under the /admin poll traffic). Best-effort: an audit-write failure
+    // must never block the action a real operator is running.
+    if (req.method !== 'GET' && req.method !== 'HEAD')
+      pool.query('INSERT INTO mod_actions (id, ip, method, path) VALUES ($1,$2,$3,$4)',
+        [uid(), req.ip, req.method, req.routeOptions?.url || req.url])
+        .catch((e) => console.error('mod_actions audit write failed (non-fatal)', e?.message));
   };
+  // BLUE-TEAM M2: the audit log is readable back through the mod perimeter it records (the last N actions),
+  // so the /admin dashboard can show who did what. A GET, so it doesn't log itself.
+  app.get('/v1/mod/actions', { preHandler: modAuth }, async (req) => {
+    const n = Math.min(200, Math.max(1, Number(req.query?.limit) || 100));
+    const rows = (await pool.query('SELECT id, at, ip, method, path FROM mod_actions ORDER BY at DESC LIMIT $1', [n])).rows;
+    return { actions: rows };
+  });
 
   // ── the live intel-feed socket registry ────────────────────────────────────────────────────────
   // Declared here, above the route registrations, because routes in the extracted src/routes modules
@@ -458,31 +532,13 @@ export async function buildServer() {
       if (limited) return reply.code(429).header('retry-after', limited.retryAfter)
         .send({ error: 'rate_limited', retryAfter: limited.retryAfter });
     }
-    // (red-team R13 F1/F2) the keyless public render routes (/card SVG+PNG, /u profile, /v1/u dossier)
-    // do real per-hit work (an SVG→PNG raster + a DB dossier) and are NOT under the /v1 read-limiter — an
-    // unauthenticated flood from one origin could pin the server. Throttle them per-IP (generous, only
-    // bites a flood). Placed before the /v1 read branch so /v1/u (keyless) is covered too.
-    // (red-team R19 F2) also throttle the keyless HEAVY GETs — /v1/art renders an SVG per hit and
-    // /v1/landmarks does a full-table scan; both are keyless (no auth preHandler), so an unauthenticated
-    // caller sends no token → the /v1 read limiter below early-returns → they were throttled by NOTHING.
-    // (red-team R25 L1) /v1/ws is the same class — the WS upgrade carries its token in the subprotocol,
-    // NOT the Authorization header, so the /v1 read branch's jwtVerify throws → catch/return, unthrottled;
-    // each connect still does a real jwt.verify + socket churn. Bound the pre-auth upgrade per-IP too.
+    // The keyless NON-/v1 render pages (/card SVG+PNG, /u profile, /beef page) do real per-hit work
+    // (an SVG→PNG raster + a DB dossier) and are outside the /v1 read-limiter entirely, so throttle
+    // them per-IP here (generous, only bites a flood). The keyless /v1 GETs (/v1/u, /v1/art,
+    // /v1/landmarks, /v1/ws, /v1/arena, /v1/events, /v1/results, /v1/avatar, /v1/auth/x/callback and
+    // every DB-heavy board) are covered below by the BLUE-TEAM H4 default-throttle, not by name.
     if (rateLimitsEnabled() && (req.method === 'GET' || req.method === 'HEAD')
-      && (req.url.startsWith('/card/') || req.url.startsWith('/u/') || req.url.startsWith('/v1/u/')
-          || req.url.startsWith('/beef/')
-          || req.url.startsWith('/v1/art/') || req.url.startsWith('/v1/landmarks') || req.url.startsWith('/v1/ws')
-          // (red-team R28 MED-1/LOW-2) the keyless data boards behind the PUBLIC pages are the same class:
-          // /v1/arena runs a leaderboard full-scan + a transactions aggregate and is CRAWLER-reachable via
-          // the public /arena page; /v1/events + /v1/results do real per-hit DB work; /v1/avatar renders an
-          // SVG per hit. All keyless (no auth preHandler) → the /v1 read limiter below early-returns →
-          // unthrottled. Bound them per-IP with the other keyless heavy GETs.
-          || req.url.startsWith('/v1/arena') || req.url.startsWith('/v1/events') || req.url.startsWith('/v1/results')
-          || req.url.startsWith('/v1/avatar/')
-          // (D1) the OAuth callback is a keyless GET that does real per-hit work (oauth_states DELETE +
-          // an outbound X token/user fetch); the POST-only auth limiter + the token-gated read limiter
-          // both skip it, so throttle it here with the other keyless heavy GETs.
-          || req.url.startsWith('/v1/auth/x/callback'))) {
+      && (req.url.startsWith('/card/') || req.url.startsWith('/u/') || req.url.startsWith('/beef/'))) {
       const limited = await checkPublicRateLimit({ ip: req.ip });
       if (limited) return reply.code(429).header('retry-after', limited.retryAfter)
         .send({ error: 'rate_limited', retryAfter: limited.retryAfter });
@@ -491,22 +547,35 @@ export async function buildServer() {
     // pooled connection while it accrues+persists under a FOR UPDATE on the caller's own row — a
     // concurrent-GET flood from one account can pin the pool and starve everyone. Throttle authed /v1
     // GETs per-account with a GENEROUS bucket (never bites the console's debounced polling/re-render).
-    // jwtVerify is cheap + no DB; a keyless/public GET (no token) falls through unthrottled.
+    // BLUE-TEAM H4: a KEYLESS /v1 GET (no valid token) used to `catch { return }` here — UNTHROTTLED.
+    // The public limiter above was an allowlist, so any DB-heavy keyless board omitted from it (above
+    // all GET /v1/gangs/:id, which opens a WRITE txn holding a pooled connection + gang row locks, plus
+    // /v1/gangs and /v1/commission full-table scans) hit ZERO buckets — unauthenticated pool
+    // exhaustion. Route every keyless /v1 GET to the per-IP public limiter, so a new keyless route can
+    // never ship unthrottled by omission (a denylist-by-default, not an allowlist).
     if (rateLimitsEnabled() && (req.method === 'GET' || req.method === 'HEAD')
       && req.url.startsWith('/v1') && !req.url.startsWith('/v1/mod')) {
-      try { await req.jwtVerify(); } catch { return; }
-      const limited = await checkReadLimit({ accountId: req.user.sub });
+      let authed = true;
+      try { await req.jwtVerify(); } catch { authed = false; }
+      const limited = authed
+        ? await checkReadLimit({ accountId: req.user.sub })
+        : await checkPublicRateLimit({ ip: req.ip });
       if (limited) return reply.code(429).header('retry-after', limited.retryAfter)
         .send({ error: 'rate_limited', retryAfter: limited.retryAfter });
+      if (!authed) return; // keyless GET: throttled, but no account context for anything below
     }
     if (!guarded(req)) return;
     try { await req.jwtVerify(); } catch { return; } // unauthenticated → the route 401s
     // Ban + agent status come from the DB, never the token: an agent-flagged account
     // could otherwise keep using its pre-flag token to dodge the harder agent throttle.
     const acct = (await pool.query(
-      'SELECT a.status, ap.agent_flag FROM accounts a LEFT JOIN account_persistent ap ON ap.account_id=a.id WHERE a.id=$1',
+      'SELECT a.status, a.token_version, ap.agent_flag FROM accounts a LEFT JOIN account_persistent ap ON ap.account_id=a.id WHERE a.id=$1',
       [req.user.sub])).rows[0];
     if (!acct || acct.status === 'banned') return reply.code(403).send({ error: 'banned' });
+    // BLUE-TEAM M3: token revocation (mutating path — where money moves). A `tv` claim must match the
+    // account's current token_version; a missing claim is grandfathered. See the `auth` preHandler above.
+    if (req.user.tv !== undefined && Number(req.user.tv) !== Number(acct.token_version))
+      return reply.code(401).send({ error: 'token_revoked' });
     if (rateLimitsEnabled()) {
       const limited = await checkRateLimit({ accountId: req.user.sub, agent: !!acct.agent_flag,
         path: req.routeOptions?.url || req.url });
@@ -568,20 +637,27 @@ export async function buildServer() {
   });
 
   // ── auth (§4): guest, X, Privy — all behind the invite gate when INVITE_MODE=on ──
+  // BLUE-TEAM M3: every token carries `tv` = the account's current token_version, so bumping it revokes
+  // every token issued before the bump. Fetch it at sign time (login/mint are rare paths). A brand-new
+  // account is tv=0 by the column default, so a fresh guest can pass tv=0 without a round-trip.
+  const signFor = async (accountId, extra = {}, expiresIn = '30d', knownTv) => {
+    const tv = knownTv ?? ((await pool.query('SELECT token_version FROM accounts WHERE id=$1', [accountId])).rows[0]?.token_version ?? 0);
+    return app.jwt.sign({ sub: accountId, tv, ...extra }, { expiresIn });
+  };
   app.post('/v1/auth/guest', async (req) => {
     await A.consumeInvite(pool, req.body?.inviteCode);
     const id = uid();
     await pool.query('INSERT INTO accounts (id, auth_provider, auth_subject, created_ip, last_ip) VALUES ($1,$2,$3,$4,$4)',
       [id, 'guest', id, req.ip || '0.0.0.0']);
     await pool.query('INSERT INTO account_persistent (account_id) VALUES ($1)', [id]);
-    return { token: app.jwt.sign({ sub: id }, { expiresIn: '30d' }) };
+    return { token: await signFor(id, {}, '30d', 0) };
   });
   const providerLogin = (verify) => async (req) => {
     const identity = await verify(req.body?.token);
     // (B2) the invite is consumed ATOMICALLY inside accountForIdentity's create txn — one invite per
     // new account, gate held even under a concurrent same-identity race (no separate pre-consume).
     const { accountId, created } = await A.accountForIdentity(pool, identity, req.ip || '0.0.0.0', req.body?.inviteCode);
-    return { token: app.jwt.sign({ sub: accountId }, { expiresIn: '30d' }), created };
+    return { token: await signFor(accountId, {}, '30d', created ? 0 : undefined), created };
   };
   app.post('/v1/auth/x', providerLogin(A.verifyX));
   app.post('/v1/auth/privy', providerLogin(A.verifyPrivy));
@@ -619,7 +695,7 @@ export async function buildServer() {
       }
       // (B2) invite consumed atomically inside accountForIdentity's create txn — gate held under races
       const { accountId } = await A.accountForIdentity(pool, r.identity, req.ip || '0.0.0.0', r.invite);
-      return reply.redirect(`/#token=${encodeURIComponent(app.jwt.sign({ sub: accountId }, { expiresIn: '30d' }))}`);
+      return reply.redirect(`/#token=${encodeURIComponent(await signFor(accountId))}`);
     } catch (e) {
       const code = e instanceof G.GameError ? e.code : 'oauth_failed';
       if (!(e instanceof G.GameError)) console.error('x oauth callback', e);
@@ -638,7 +714,14 @@ export async function buildServer() {
   // exclusion) and mints a token the rate limiter throttles at 1 action / 3 s.
   app.post('/v1/auth/agent-key', { preHandler: auth }, async (req) => {
     await pool.query('UPDATE account_persistent SET agent_flag=true WHERE account_id=$1', [req.user.sub]);
-    return { token: app.jwt.sign({ sub: req.user.sub, agent: true }, { expiresIn: '90d' }), agent: true };
+    return { token: await signFor(req.user.sub, { agent: true }, '90d'), agent: true };
+  });
+  // BLUE-TEAM M3: self-serve "log out everywhere" — bump the account's token_version, which invalidates
+  // every token issued before now (a stolen/lost device can no longer MOVE MONEY on this account). The
+  // caller's own current token is invalidated too, so the client must sign in again; that is the point.
+  app.post('/v1/auth/logout-all', { preHandler: auth }, async (req) => {
+    await pool.query('UPDATE accounts SET token_version = token_version + 1 WHERE id=$1', [req.user.sub]);
+    return { ok: true };
   });
 
   // ── character ──
@@ -2079,7 +2162,9 @@ export async function buildServer() {
   // the unsubscribe link in every email — public + keyless (an HMAC token is the auth). Returns a tiny page.
   app.get('/v1/digest/unsubscribe', async (req, reply) => {
     const ok = (await Dispatch.unsubscribe(pool, req.query?.a, req.query?.t)).ok;
-    reply.type('text/html').send(`<!doctype html><meta charset="utf-8"><title>OMERTÀ</title>
+    // `return` the send: an async handler that calls reply.send() without returning it makes Fastify
+    // run the send lifecycle twice (the clean static routes above all `return reply.type().send()`).
+    return reply.type('text/html').send(`<!doctype html><meta charset="utf-8"><title>OMERTÀ</title>
       <body style="background:#0c0b0d;color:#e9e3d6;font-family:Georgia,serif;text-align:center;padding:64px 24px">
       <h1 style="color:${ok ? '#c9a24a' : '#b02a30'}">${ok ? "You're unsubscribed." : 'That link is no longer valid.'}</h1>
       <p style="color:#a89e90">${ok ? "You won't get the digest again. The city will still be here." : 'You may already be unsubscribed.'}</p>

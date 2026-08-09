@@ -1344,7 +1344,7 @@ assert.equal(socialRewardsLive(), true, "'trust' stays live in the alpha (non-pr
       delete process.env.PUBLIC_URL; delete process.env.SOCIAL_GAME_URL;
     }
     const { preflight: pf0 } = await import('../src/preflight.js');
-    assert(pf0({ NODE_ENV: 'production', JWT_SECRET: 'x'.repeat(20), MOD_KEY: 'y'.repeat(20),
+    assert(pf0({ NODE_ENV: 'production', JWT_SECRET: 'a-real-jwt-secret-value-long-enough', MOD_KEY: 'y'.repeat(20),
       MARKET_SEED: 'YqB7#tR2vLx9Kp4Wm6Zn8Cf3Hj5Ds1Ge', SOCIAL_VERIFY_MODE: 'off', TRUST_PROXY: 'on' })
       .warnings.some((w) => /PUBLIC_URL/.test(w) && /referral link/.test(w)),
     'and with neither set, preflight warns that shares point at somebody else\'s domain');
@@ -1352,7 +1352,7 @@ assert.equal(socialRewardsLive(), true, "'trust' stays live in the alpha (non-pr
     // preflight names the missing var rather than failing the boot (a fatal error here would take a
     // running server down to fix a dormant faucet — strictly worse than the dormant faucet)
     const { preflight } = await import('../src/preflight.js');
-    const pf = preflight({ NODE_ENV: 'production', JWT_SECRET: 'x'.repeat(20), MOD_KEY: 'y'.repeat(20),
+    const pf = preflight({ NODE_ENV: 'production', JWT_SECRET: 'a-real-jwt-secret-value-long-enough', MOD_KEY: 'y'.repeat(20),
       MARKET_SEED: 'YqB7#tR2vLx9Kp4Wm6Zn8Cf3Hj5Ds1Ge', SOCIAL_VERIFY_MODE: 'live', TRUST_PROXY: 'on' });
     assert.deepEqual(pf.errors, [], 'live-without-tokens must NOT be fatal');
     assert(pf.warnings.some((w) => /X_BEARER_TOKEN/.test(w) && /pays nobody/.test(w)),

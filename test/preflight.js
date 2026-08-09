@@ -49,7 +49,7 @@ assert.equal(isHardened({ DATABASE_URL: 'postgres://x' }), true,
 // ════════════ PRODUCTION ════════════
 const GOOD = {
   NODE_ENV: 'production',
-  JWT_SECRET: 'a-real-secret-value',
+  JWT_SECRET: 'a-real-jwt-secret-value-long-enough',   // ≥24 chars, ≥8 distinct (blue-team H1 floor)
   MARKET_SEED: 'YqB7#tR2vLx9Kp4Wm6Zn8Cf3Hj5Ds1Ge',
   MOD_KEY: 'another-real-secret-value-here',
   SOCIAL_VERIFY_MODE: 'live',
@@ -73,6 +73,29 @@ assert(preflight({ ...GOOD, MARKET_SEED: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaa' }).error
   'a long but low-entropy seed is refused — it is offline-recoverable from the public prices board');
 assert(preflight({ ...GOOD, MARKET_SEED: 'short' }).errors.some((e) => /too weak/.test(e)),
   'a short seed is refused');
+
+// BLUE-TEAM H1: the same floor on JWT_SECRET — the ONE secret that authenticates every session and
+// had no entropy check. HS256 over a weak-but-non-default secret is offline-forgeable → any account.
+assert(preflight({ ...GOOD, JWT_SECRET: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaa' }).errors.some((e) => /JWT_SECRET is too weak/.test(e)),
+  'a long but low-entropy JWT secret is refused — HS256 over it is offline-forgeable (H1)');
+assert(preflight({ ...GOOD, JWT_SECRET: 'short' }).errors.some((e) => /JWT_SECRET is too weak/.test(e)),
+  'a short JWT secret is refused (H1)');
+
+// BLUE-TEAM H5: the money-drift alarm channel, unset, is called out (not fatal — it must never take a
+// live server down, matching SOCIAL_VERIFY_MODE); set, it is silent.
+assert(preflight(GOOD).warnings.some((w) => /INVARIANT_WEBHOOK_URL is not set/.test(w)),
+  'an unset money-drift alarm channel is called out (H5)');
+assert.deepEqual(
+  preflight({ ...GOOD, INVARIANT_WEBHOOK_URL: 'https://hook' }).warnings.filter((w) => /INVARIANT_WEBHOOK_URL is not set/.test(w)),
+  [], '…and once set, the webhook warning is silent (H5)');
+
+// BLUE-TEAM M8: the private ops alarm and the public city-wire must be DISTINCT channels, or drama
+// buries a drift line. Fatal only on the exact misconfiguration (both set AND equal).
+assert(preflight({ ...GOOD, INVARIANT_WEBHOOK_URL: 'https://h', CITY_WIRE_WEBHOOK_URL: 'https://h' }).errors.some((e) => /same channel/i.test(e)),
+  'the ops alarm and the public city-wire pointing at one channel is refused (M8)');
+assert.deepEqual(
+  preflight({ ...GOOD, INVARIANT_WEBHOOK_URL: 'https://a', CITY_WIRE_WEBHOOK_URL: 'https://b' }).errors.filter((e) => /same channel/i.test(e)),
+  [], '…distinct channels boot clean (M8)');
 
 // EVERY test-only knob individually refuses the boot
 for (const knob of TEST_ONLY_ENV) {
