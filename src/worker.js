@@ -15,6 +15,7 @@ import { recordReckoning } from './season.js';
 import { runLedgerInvariants, alertDrift } from './invariants.js';
 import { runVigInvariants } from './vig.js';
 import { carveExchange, mergeLegacyYieldPools, payFamilyYield, runExchangeInvariants } from './exchange.js';
+import { runRouterInvariants } from './router.js';
 import { runBondInvariants } from './bonds.js';
 import { runTreasuryInvariants } from './treasury.js';
 import { openAuction, closeExpired, runDeskInvariants } from './desk.js';
@@ -551,6 +552,12 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
       // this is the ONLY automated check that the window can't mint cash — now on the same nightly alarm.
       const einv = await safe('exchange invariants', () => runExchangeInvariants(pool));
       if (einv && !einv.ok) await safe('exchange alert', () => alertDrift(pool, einv.checks.filter((c) => !c.ok), 'exchange'));
+      // THE MONEY ROUTER — the cross-source layer over every real-value inflow (source membership,
+      // the fee/store mirrors, the trade-fee declaration, the dev-fund identity). The five runners
+      // above each prove their OWN system; this proves the MAP is complete and nothing is routed
+      // outside it — same alarm channel, same reason as all of them.
+      const rinv = await safe('router invariants', () => runRouterInvariants(pool));
+      if (rinv && !rinv.ok) await safe('router alert', () => alertDrift(pool, rinv.checks.filter((c) => !c.ok), 'router'));
       if (vinv && binv) console.log((vinv.ok && binv.ok) ? '✅ vig + bond (real-value) invariants hold' : '🚨 VIG/BOND DRIFT — see alert above');
     }
   };

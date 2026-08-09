@@ -5289,3 +5289,35 @@ currency moves, no ledger row (test-pinned). `CAPO.TIERS` (1 → 1/2.5s · 3 →
 ANTI-ABUSE throttle, so the dial to watch in the alpha is whether a licensed agent's 2× cadence
 changes any contested surface (the swap/launder buckets are separate and unmoved); reverting is
 `TIERS: []`. Recomputed hourly by `sweepCapoLicense` (worker) onto `account_persistent.capo_recruits`.
+
+## THE MONEY ROUTER (declare / verify / display — no rates moved)
+
+`src/router.js` is the one declared waterfall over every real-value inflow, DERIVED from the live
+signed levers so declaration and code cannot drift. The CURRENT matrix (all signed elsewhere —
+restated here as the map, not retuned):
+
+| source | founder | vig | treasury | POL | community |
+|---|---|---|---|---|---|
+| gameplay fees | 30% (implicit) | 60% (`VIG_BPS`) | 10% (`FEE_RWA_BPS`) | — | — |
+| the Store | 40% (implicit) | 40% | 20% | — | — |
+| bonds | 15% | 22.5% | 25% | 37.5% | — |
+| DEX sell tax (of the 9%) | 2/9 | — | 4/9 | 3/9 (remainder) | — |
+| swap trade fee | — | 100% (`TRADE_FEE.VIG_BPS`) | — | — | — |
+| desk auction ETH | 50% (remainder) | — | — | 50% | — |
+| POL trading fees | — | — | — | 100% (desk-buyback budget) | — |
+| $OMR exit toll + surcharge | 50% (`TAX.DEV_BPS`) | — | — | — | 50% (family yield) |
+
+**F1 (fixed with the router):** `recordTradeFee` booked `VIG_BPS` (60%) while the signed D1 lever
+`TRADE_FEE.VIG_BPS` declares 100% — the constant was read nowhere on the booking path, so 40% of
+every trade-fee gross would have been booked to nobody. Chain-dormant, so zero real rows were wrong;
+the wiring was. Now the booking path reads the lever and the standing check `trade fee books its
+declared split` catches the next constant-vs-wiring drift (regression pinned at the ROW,
+non-vacuous: the two levers are asserted to differ).
+
+**THE UNIFICATION DECISION (open — founder sign-off, deliberately NOT applied):** the founder's #2
+asked for one waterfall "applied uniformly"; the router ships the DECLARE/VERIFY/DISPLAY half and
+leaves the RATES untouched, because folding percentages silently moves real money between
+destinations (the stock-layer-retirement lesson). If unification is wanted, the decision is one
+table: pick target percentages per destination (founder / vig / treasury / POL / community) and
+apply them per source in ONE signed commit — the router's declaration is then the single edit site.
+Until then, every row above stands at its signed value.

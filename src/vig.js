@@ -14,6 +14,7 @@
 // here — except the PLEX bridge, which burns IN-GAME $OMR and so is a legal §10.4 burn).
 import crypto from 'node:crypto';
 import { GameError, ledger } from './game.js';
+import { TRADE_FEE } from './rules.js'; // the trade-fee split lever — the booking path must read the DECLARED constant (F1)
 import { fundReserve } from './chain.js';
 
 const uid = () => crypto.randomUUID();
@@ -24,8 +25,8 @@ const round6 = (x) => Math.round(x * 1e6) / 1e6;
 // VIG_BPS: the Vig's share of real revenue (the rest is dev/business). RESERVE_BPS: of each
 // buyback's $OMR, how much backs withdrawals vs the season prize pool. PLEX_*: the in-game $OMR
 // price to pay a fee from earnings instead of ETH (the EVE PLEX bridge — a skilled player's rent).
-const VIG_BPS = Number(process.env.VIG_BPS || 6000);         // 60% to the Vig
-const RESERVE_BPS = Number(process.env.VIG_RESERVE_BPS || 5000); // 50% of bought $OMR to the reserve
+export const VIG_BPS = Number(process.env.VIG_BPS || 6000);         // 60% to the Vig (exported: the router derives the waterfall from the LIVE constant)
+export const RESERVE_BPS = Number(process.env.VIG_RESERVE_BPS || 5000); // 50% of bought $OMR to the reserve (exported for the router)
 export const PLEX_MINT_OMR = Number(process.env.PLEX_MINT_OMR || 5);
 export const PLEX_RESPAWN_OMR = Number(process.env.PLEX_RESPAWN_OMR || 50);
 // MARKET-LINKED PLEX (sim-audit F3): a static 5 $OMR was minutes of play vs 0.01 ETH real money —
@@ -53,11 +54,15 @@ export async function plexQuote(db, kind) {
 // Records the Vig's share of one real-ETH payment. `client` is the caller's open transaction so
 // the revenue row and the fee row commit together. Amounts arrive in wei (string) and are stored
 // in ETH units to stay inside JS-safe-integer range for the accounting math.
-export async function recordVigRevenue(client, { source, ref, kind, amountWei }) {
+export async function recordVigRevenue(client, { source, ref, kind, amountWei, bps }) {
   let grossEth = 0;
   try { grossEth = Number(BigInt(amountWei ?? '0')) / 1e18; } catch { grossEth = 0; }
   if (!(grossEth > 0)) return { recorded: false };
-  const vigEth = round6(grossEth * VIG_BPS / 10000);
+  // `bps` defaults to the gameplay-fee split; a source with its OWN declared split passes it
+  // explicitly (ROUTER F1: recordTradeFee booked 60% while TRADE_FEE.VIG_BPS declares 100% —
+  // the constant was read nowhere on the booking path, so 40% of every trade-fee gross would
+  // have been booked to nobody. Chain-dormant, so zero real rows were wrong; the wiring was.)
+  const vigEth = round6(grossEth * (bps ?? VIG_BPS) / 10000);
   // SELECT-then-INSERT (pg-mem's ON CONFLICT is unreliable) — a re-delivered fee event is a no-op
   const seen = (await client.query('SELECT 1 FROM vig_revenue WHERE source=$1 AND ref=$2', [source, String(ref)])).rows[0];
   if (seen) return { recorded: false, duplicate: true };
@@ -77,7 +82,7 @@ export async function recordTradeFee(pool, { nonce, amountWei }) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const r = await recordVigRevenue(client, { source: 'trade', ref: nonce, kind: 'trade', amountWei });
+    const r = await recordVigRevenue(client, { source: 'trade', ref: nonce, kind: 'trade', amountWei, bps: TRADE_FEE.VIG_BPS });
     await client.query('COMMIT');
     return r;
   } catch (e) { await client.query('ROLLBACK'); throw e; }

@@ -16,6 +16,7 @@ import { opsEngagement } from '../engagement.js';
 import * as Treasury from '../treasury.js';
 import * as S from '../social.js';
 import * as Store from '../store.js';
+import * as Router from '../router.js';
 import * as Vig from '../vig.js';
 import * as W from '../growth.js';
 
@@ -209,6 +210,10 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
     // path — drives recordStorePurchase with a synthetic nonce (for comps, QA, and until the paywall
     // ships). `nonce` must be unique; a duplicate is the idempotent no-op.
     app.get('/v1/mod/revenue', { preHandler: modAuth }, async () => Store.revenueStatus(pool));
+    // THE MONEY ROUTER — WHERE A DOLLAR GOES: the one declared waterfall over every real-value
+    // inflow, lifetime figures per slice, and the cross-source invariants (membership, the two
+    // orphan mirrors, the trade declaration, the dev-fund identity). Moves no money — see router.js.
+    app.get('/v1/mod/router', { preHandler: modAuth }, async () => Router.routerBoard(pool));
     app.post('/v1/mod/store/grant', { preHandler: modAuth }, async (req) =>
       Store.recordStorePurchase(pool, { nonce: req.body?.nonce, sku: req.body?.sku,
         payer: req.body?.payer, amountWei: req.body?.amountWei, txHash: modRealTxHash(req) })); // D-MED2: strip caller txHash unless the QA flag is set
