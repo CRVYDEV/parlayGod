@@ -5276,3 +5276,16 @@ vocabulary — the per-character check reconciles it (the test asserts zero new 
 baseline). The assignment moves no value. Ceiling: ONE $2,500 payout per street ever — petty by design;
 the DRAMA is the product, not the money. All three `AHA.*` numbers are founder sign-off levers (pinned
 in `test/levers.js`).
+
+## THE CAPO'S LICENSE (agent recruiting perks — capability, never cash)
+
+Agents are excluded from every referral CASH faucet (the anti-Sybil wall) — so the recruiting
+mandate needed an incentive a Sybil ring cannot farm. The License grants CAPABILITY: a faster §10.2
+agent cadence and extra standing-wire slots, gated on recruits who are MINTED (0.01 ETH per counted
+identity — the load-bearing Sybil bound: at any sane perk value the fee exceeds the reward), RETAINED
+(telemetry inside `CAPO.RETAIN_DAYS` 14) and LEVELLED (≥ `CAPO.MIN_LVL` 8). ZERO §10.4 surface — no
+currency moves, no ledger row (test-pinned). `CAPO.TIERS` (1 → 1/2.5s · 3 → 1/2s +1 wire · 5 →
+1/1.5s +2 wires) are the sign-off levers, pinned whole in test/levers.js. The rate perk eases an
+ANTI-ABUSE throttle, so the dial to watch in the alpha is whether a licensed agent's 2× cadence
+changes any contested surface (the swap/launder buckets are separate and unmoved); reverting is
+`TIERS: []`. Recomputed hourly by `sweepCapoLicense` (worker) onto `account_persistent.capo_recruits`.

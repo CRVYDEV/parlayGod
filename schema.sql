@@ -2963,3 +2963,5 @@ ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS streak_milestone INT NOT
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS email TEXT;
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS digest_optin BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS digest_at TIMESTAMPTZ;
+-- THE CAPO'S LICENSE: worker-computed count of an agent's minted+retained+levelled human recruits
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS capo_recruits INT NOT NULL DEFAULT 0;

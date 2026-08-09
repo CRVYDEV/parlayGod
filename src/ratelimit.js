@@ -1,3 +1,4 @@
+import { capoPerksOf } from './rules.js';
 // §10.2 rate limits, per account. Token buckets:
 //   human keys ~1 mutating action/s, burst 5
 //   agent keys 1 per 3 s hard (mirrors the prototype's agent cadence)
@@ -102,12 +103,16 @@ export async function checkPublicRateLimit({ ip }) {
 }
 
 // Returns null when allowed, else {retryAfter} seconds.
-export async function checkRateLimit({ accountId, agent, path }) {
+export async function checkRateLimit({ accountId, agent, path, capoRecruits = 0 }) {
   const take = redis ? takeRedis : takeMemory;
   const humanRate = Number(process.env.RATE_HUMAN_PER_SEC || 1);
   const humanBurst = Number(process.env.RATE_HUMAN_BURST || 5);
+  // THE CAPO'S LICENSE: an agent with minted+retained human recruits earns a faster cadence — the
+  // perk is capability, never cash, and the gate (0.01 ETH per counted identity) prices out a Sybil
+  // ring by construction. No license → the §10.2 hard 1/3s stands exactly as before.
+  const agentRate = agent ? (capoPerksOf(capoRecruits).rate || AGENT_RATE) : null;
   const main = agent
-    ? await take(`a:${accountId}`, AGENT_RATE, AGENT_BURST)
+    ? await take(`a:${accountId}`, agentRate, AGENT_BURST)
     : await take(`h:${accountId}`, humanRate, humanBurst);
   if (!main.ok) return { retryAfter: main.retryAfter };
   // the swap bucket covers EVERY route that drives the AMM curve — business laundering rides the
