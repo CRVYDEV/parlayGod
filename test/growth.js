@@ -1322,7 +1322,9 @@ assert.equal(socialRewardsLive(), true, "'trust' stays live in the alpha (non-pr
     // prefers the server's own origin, and preflight says so when neither is set.
     {
       const mod = await import('../src/rules.tail.js?share=' + Date.now());   // re-eval with env set
-      assert.equal(mod.SOCIAL_GAME_URL, 'https://playomerta.com', 'with neither var set, the default stands');
+      // The fallback is now the LIVE origin (playomerta.com was unreachable — the very "into thin air"
+      // failure above; the default itself was still the dead host until this was repointed).
+      assert.equal(mod.SOCIAL_GAME_URL, 'https://www.omerta.fun', 'with neither var set, the live default stands');
       process.env.PUBLIC_URL = 'https://omerta.example.com';
       const withPub = await import('../src/rules.tail.js?share=' + (Date.now() + 1));
       assert.equal(withPub.SOCIAL_GAME_URL, 'https://omerta.example.com',

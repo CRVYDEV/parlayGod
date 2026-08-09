@@ -741,7 +741,7 @@ const SIGNED = [
   ['SKILLS.PRESTIGE_POINT_MAX', 3],
   ['SKILLS.RESPEC_OMR', 10],
   ['SKILLS.RESPEC_ONE_OMR', 5],
-  ['SOCIAL_GAME_URL', "https://playomerta.com"],
+  ['SOCIAL_GAME_URL', "https://www.omerta.fun"],
   ['SOCIAL_TASKS.ALL_BONUS', 500],
   ['SOCIAL_TASKS.CASH', 300],
   ['SOCIAL_X_HANDLE', "OmertaOnRH"],

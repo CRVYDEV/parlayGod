@@ -5,10 +5,16 @@
   "type": "module",
   "bin": { "omerta-mcp": "./index.js" },
   "main": "index.js",
+  "files": ["index.js", "README.md"],
   "scripts": { "start": "node index.js" },
+  "keywords": ["mcp", "model-context-protocol", "omerta", "game", "agent", "ai", "claude"],
+  "homepage": "https://www.omerta.fun/play",
+  "repository": { "type": "git", "url": "git+https://github.com/crvydev/parlaygod.git", "directory": "omerta-mcp" },
+  "bugs": { "url": "https://www.omerta.fun" },
   "engines": { "node": ">=18" },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0"
   },
+  "publishConfig": { "access": "public" },
   "license": "MIT"
 }

@@ -69,7 +69,7 @@ const oapiPath = (url) => url.replace(/:([A-Za-z0-9_]+)/g, '{$1}');
 const paramsOf = (url) => (url.match(/:([A-Za-z0-9_]+)/g) || []).map((p) => p.slice(1));
 
 // Build an OpenAPI 3.1 document from the collected [{method, url}] route list.
-export function buildOpenApi(routes, { baseUrl = 'https://playomerta.com', version = '1.0.0' } = {}) {
+export function buildOpenApi(routes, { baseUrl = 'https://www.omerta.fun', version = '1.0.0' } = {}) {
   const paths = {};
   const tagsSeen = new Set();
   for (const r of routes) {
@@ -135,7 +135,7 @@ export function buildOpenApi(routes, { baseUrl = 'https://playomerta.com', versi
 
 // The llms.txt discovery index (the emerging LLM-facing standard: a concise markdown map of the
 // site's machine-usable resources). Served at GET /llms.txt.
-export function llmsTxt({ baseUrl = 'https://playomerta.com' } = {}) {
+export function llmsTxt({ baseUrl = 'https://www.omerta.fun' } = {}) {
   return `# OMERTÀ
 
 > A server-authoritative, multiplayer noir mafia RPG with a real, ledgered economy.

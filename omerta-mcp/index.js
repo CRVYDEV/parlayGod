@@ -6,18 +6,18 @@
 // convenience tools cover the hot path (start → look around → act). Uses the low-level Server API
 // (raw JSON Schema, no zod) so it works across SDK versions.
 //
-// Config (env): OMERTA_BASE_URL (default https://playomerta.com), OMERTA_TOKEN (optional pre-set
+// Config (env): OMERTA_BASE_URL (default https://www.omerta.fun), OMERTA_TOKEN (optional pre-set
 // token), OMERTA_INVITE (optional closed-alpha invite code used by omerta_start).
 //
-// Install:  cd omerta-mcp && npm install
-// Run:      OMERTA_BASE_URL=https://playomerta.com node index.js   (or via an MCP client config)
+// Install:  nothing — an MCP client runs it via `npx -y omerta-mcp`. (For local dev: npm install.)
+// Run:      OMERTA_BASE_URL=https://www.omerta.fun node index.js   (or via an MCP client config)
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { createHash } from 'node:crypto';
 
-const BASE = (process.env.OMERTA_BASE_URL || 'https://playomerta.com').replace(/\/$/, '');
+const BASE = (process.env.OMERTA_BASE_URL || 'https://www.omerta.fun').replace(/\/$/, '');
 let token = process.env.OMERTA_TOKEN || null;
 
 // One HTTP call to the game. Sends the bearer token if we have one + a fresh idempotency key on
@@ -27,7 +27,7 @@ async function api(method, path, body) {
   // (red-team R13 HIGH) `path` is agent-controlled and reaches this proxy via prompt-injection through the
   // attacker-controlled game content agents are told to poll (names, contract reasons, the feed). A raw
   // `BASE + path` string concat lets a crafted path steer the request OFF-ORIGIN — `@evil.com/x` →
-  // `https://playomerta.com@evil.com/x` (host evil.com), `//evil.com/x`, or a full `https://…` — and since
+  // `https://www.omerta.fun@evil.com/x` (host evil.com), `//evil.com/x`, or a full `https://…` — and since
   // we attach the PERMANENT agent bearer to every call, that exfiltrates the account key (→ takeover +
   // on-chain extraction). Resolve against BASE and HARD-ASSERT same origin: never fetch, and never attach
   // the token to, any host but ours.

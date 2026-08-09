@@ -3001,7 +3001,7 @@ export const auctionLotsOf = (week = weekOf()) => {
 // have caught it in-process: the string is well-formed, the routes all work, and only DNS disagrees.
 // PUBLIC_URL is already the server's own origin (the OAuth callback is derived from it), so
 // preferring it means the common single-domain deploy is correct with nothing extra to remember.
-export const SOCIAL_GAME_URL = process.env.SOCIAL_GAME_URL || process.env.PUBLIC_URL || 'https://playomerta.com'
+export const SOCIAL_GAME_URL = process.env.SOCIAL_GAME_URL || process.env.PUBLIC_URL || 'https://www.omerta.fun'
 export const SOCIAL_X_HANDLE = (process.env.SOCIAL_X_HANDLE || 'OmertaOnRH').replace(/^@/, '')
 export const SOCIAL_TASKS = {
   CASH: 300,       // petty cash per task
