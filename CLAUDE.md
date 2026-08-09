@@ -10658,3 +10658,22 @@ screen-reach beacon is still accumulating the data that decision needs). Also in
 the 14 F3 new-crime plates generated + contact-sheet reviewed (13 first-roll clean; `crime-meter` re-rolled
 — the heads read as camera lenses, the subject now anchors the DIAL FACE + coin slot; $11.12 lifetime of
 the $12 cap).
+
+**STAGE 3 (design review) — THE NAV ICONS: the chrome's emoji become a drawn set.** The deferred
+emoji→icon item, taken as the scoped slice its deferral reason demanded: an inventory of the client's 94
+emoji-ish glyphs found 219 uses are TYPOGRAPHIC (`→ ✓ ★ ✦` — fine in noir) and the "placeholder" read
+comes from ~25 color pictographs, of which the ones that matter are the ALWAYS-VISIBLE NAVIGATION — the
+mobile bottom nav's 9 stops, the top bar's 4 buttons, and the quick-jump feed-filter chips. Those are now
+a **16-symbol inline SVG sprite** (16×16, stroke 1.5, round caps, `currentColor` — so the existing
+dim→accent state CSS colors them for free), placed once at the top of `<body>` with a one-line `ic(name)`
+helper; **noir-native metaphors instead of literal translations** where the literal was undrawable at
+16px: streets = a LAMPPOST, family = the FEDORA the game's own avatars wear (not a handshake), city =
+a moon over three rooftops, legit = bank columns, vice = a die, blood = a blade, the cell = a 1940s
+HANDSET. **The hard constraint that scoped it**: `toast()` renders `textContent` and `<option>`/`title`/
+`placeholder` can't take markup, so describe()'s emoji correctly STAY text — the pass touches markup
+positions only, and the sprite/helper make the next surface a one-line add. Verified by LOOKING (the
+art-pass discipline): a logged-in phone-viewport probe screenshots the bottom nav + top bar — the nav
+reads as one engraved-line set (18 drawn icons in the DOM, zero page errors; the ⏻ on the logout button
+is a PRE-EXISTING mobile rule, checked rather than assumed). Client guard green, mobile 75/75, full
+suite green. Zero §10.4 surface. Remaining icon surfaces (the scattered 🔒/🔥/🏆 chip markers across 25
+renderers) can now follow incrementally on the proven sprite — each a one-line swap.
