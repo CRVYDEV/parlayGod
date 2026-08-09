@@ -8,12 +8,13 @@
 // ledger-invariant sweep. All three are exported for the tests.
 import crypto from 'node:crypto';
 import { makeDb } from './db.js';
+import { testOnlyLeaks } from './preflight.js';
 import { pingDb, archiverHealth } from './dbhealth.js';
 import { levelOf, dayOf, CONSTANTS, DUELS, COMMISSION, POPULATION, FAMILY_YIELD, recapTitleOf } from './rules.js';
 import { recordReckoning } from './season.js';
 import { runLedgerInvariants, alertDrift } from './invariants.js';
 import { runVigInvariants } from './vig.js';
-import { carveExchange, mergeLegacyYieldPools, payFamilyYield } from './exchange.js';
+import { carveExchange, mergeLegacyYieldPools, payFamilyYield, runExchangeInvariants } from './exchange.js';
 import { runBondInvariants } from './bonds.js';
 import { runTreasuryInvariants } from './treasury.js';
 import { openAuction, closeExpired, runDeskInvariants } from './desk.js';
@@ -211,6 +212,15 @@ export async function runSeasonRollover(pool, opts = {}) {
 }
 
 if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
+  // BLUE-TEAM M1: the worker never ran preflight, so a TEST_ONLY roll/timer knob set only on the
+  // worker's env would reach production unseen and drive the kill sweeps (WANTED_HUNT_P) / force-bust
+  // (LAW_BUST_P) at call time. Refuse to start if any is set in a real deployment.
+  const _leaks = testOnlyLeaks();
+  if (_leaks.length) {
+    console.error('Refusing to start worker — test-only roll/timer overrides are set in a real deployment '
+      + '(they pin money rolls to always-win and collapse pacing timers): ' + _leaks.join(', '));
+    process.exit(1);
+  }
   const pool = await makeDb();
   console.log('OMERTÀ worker up — hourly: buyback + season check; daily: §10.4 invariant sweep.');
   let lastInvariantDay = -1;
@@ -240,6 +250,9 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
       return;
     }
     if (dbDownTicks) { console.log(`worker: database back after ${dbDownTicks} skipped tick(s) — resuming`); dbDownTicks = 0; }
+    // BLUE-TEAM C2: stamp the liveness beat now that the DB is reachable this tick — /health and the ops
+    // dashboard read its age so a monitor can catch the worker going dark (it is the sole alarm source).
+    await safe('heartbeat', () => pool.query('UPDATE worker_heartbeat SET beat_at = now() WHERE id = 1'));
     const r = await safe('buyback', () => runBuyback(pool));
     if (r) console.log(`🔁 street take: window +$${Math.round(r.toWindow)}`);
     // the legacy-pool merge is its OWN step, not the buyback's: gating a $OMR migration behind the
@@ -529,6 +542,12 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
       // the three above, and the same alarm channel, because a check nobody reads is not a check.
       const dinv = await safe('desk invariants', () => runDeskInvariants(pool));
       if (dinv && !dinv.ok) await safe('desk alert', () => alertDrift(pool, dinv.checks.filter((c) => !c.ok), 'desk'));
+      // BLUE-TEAM M7: THE REDEMPTION WINDOW's backing proof (paid ≤ funded — "redistribution, not
+      // inflation"). It was reachable only via GET /v1/mod/exchange — the pre-R6-A state the vig/bond
+      // checks were pulled OUT of. The exchange_pool cash buffer is OUTSIDE §10.4's counted buckets, so
+      // this is the ONLY automated check that the window can't mint cash — now on the same nightly alarm.
+      const einv = await safe('exchange invariants', () => runExchangeInvariants(pool));
+      if (einv && !einv.ok) await safe('exchange alert', () => alertDrift(pool, einv.checks.filter((c) => !c.ok), 'exchange'));
       if (vinv && binv) console.log((vinv.ok && binv.ok) ? '✅ vig + bond (real-value) invariants hold' : '🚨 VIG/BOND DRIFT — see alert above');
     }
   };

@@ -107,6 +107,18 @@ export const OPERATIONAL_ENV = [
   'POPULATION_OFF',
 ];
 
+/**
+ * BLUE-TEAM M1: the security-critical preflight subset for a NON-API process (the worker). The worker
+ * never ran preflight, yet it CONSUMES test-only roll/timer knobs at call time — WANTED_HUNT_P drives
+ * the NPC-hunter kill sweep, LAW_BUST_P the RICO force-bust, every *_MS a sweep window. A knob set
+ * only on the worker's env (not the shared group, where the API would refuse and make it visible)
+ * would reach production unseen. The API-only checks (JWT/SOCIAL_VERIFY_MODE the worker doesn't need)
+ * don't apply, so this is the subset that does: the TEST_ONLY leak. Returns the offending keys.
+ */
+export function testOnlyLeaks(env = process.env) {
+  return isHardened(env) ? TEST_ONLY_ENV.filter((k) => env[k] != null) : [];
+}
+
 /** Every variable this file knows about — the set `test/preflight.js` checks src/ against. */
 export const CLASSIFIED = new Set([
   ...TEST_ONLY_ENV, ...Object.keys(REQUIRED_ENV), ...Object.keys(EXPLICIT_ENV), ...OPERATIONAL_ENV,
@@ -135,6 +147,17 @@ export function preflight(env = process.env) {
   // the dev JWT fallback and the public seed are worse than absent: they LOOK configured
   if (env.JWT_SECRET === 'dev-secret-change-me')
     errors.push('JWT_SECRET is still the public dev fallback — anyone could forge a token for any account.');
+  // BLUE-TEAM H1: a weak-but-non-default JWT_SECRET boots clean today — the ONE secret without an
+  // entropy floor, while MARKET_SEED below gets one. HS256 over a low-entropy secret is
+  // brute-forceable OFFLINE; once recovered, an attacker forges a token for ANY account (incl.
+  // minted accounts that withdraw $OMR on-chain) — the exact "forge a token for any account"
+  // outcome the dev-fallback names, reached through a weak secret. Mirror the MARKET_SEED rule.
+  // (Render's generateValue produces a strong value, so a real deploy passes.)
+  if (env.JWT_SECRET && env.JWT_SECRET !== 'dev-secret-change-me') {
+    const s = String(env.JWT_SECRET);
+    if (s.length < 24 || new Set(s).size < 8)
+      errors.push('JWT_SECRET is too weak — HS256 over a low-entropy secret is offline-brute-forceable, after which anyone can forge a token for any account. Use a long, high-entropy random secret (≥24 chars, ≥8 distinct).');
+  }
   if (env.MARKET_SEED === 'omerta-server-seed')
     errors.push('MARKET_SEED is the public default, which makes every seeded draw (Numbers/Track/Fight/goods) predictable.');
   if (env.MARKET_SEED) {
@@ -188,6 +211,22 @@ export function preflight(env = process.env) {
       + "server's own origin (it is also what one-click X sign-in derives its callback from).");
   if (env.WS_ALLOW_QUERY_TOKEN === 'on')
     warnings.push('WS_ALLOW_QUERY_TOKEN=on puts player tokens in URLs, where proxies and access logs keep them.');
+  // BLUE-TEAM H5: the money-drift alarm channel. Every proactive alarm (nightly §10.4 drift,
+  // backup-failure, oracle-keeper, desk-dark, and the vig/bond/treasury/desk real-value invariants)
+  // fires from the WORKER and posts here; unset, it reaches only a log line nobody reads — the
+  // "the guard worked; nobody looked" failure. A WARNING (not fatal) so it can't take a live server
+  // down, matching the SOCIAL_VERIFY_MODE reasoning; /admin also surfaces the live state.
+  if (!env.INVARIANT_WEBHOOK_URL)
+    warnings.push('INVARIANT_WEBHOOK_URL is not set — the §10.4 economy-drift, backup-failure, oracle-halt '
+      + 'and real-value-invariant alarms have nowhere to shout and reach only a log line. Set it (a Slack/'
+      + 'Discord webhook) — it must be on the WORKER process, which is where the alarms fire.');
+  // BLUE-TEAM M8: the public city-drama feed and the private ops alarm must be DISTINCT channels. If
+  // they collide, throttled marketing drama (up to 20 posts/10 min) buries a §10.4 drift line — the
+  // exact "alarm nobody reads" failure this system exists to prevent. Fires only on the real
+  // misconfiguration (both set AND equal), so it can never trip a legitimate deploy.
+  if (env.CITY_WIRE_WEBHOOK_URL && env.CITY_WIRE_WEBHOOK_URL === env.INVARIANT_WEBHOOK_URL)
+    errors.push('CITY_WIRE_WEBHOOK_URL and INVARIANT_WEBHOOK_URL point at the SAME channel — public city '
+      + 'drama would bury the private §10.4/backup/oracle alarms. Use two distinct webhooks.');
   if (!env.TRUST_PROXY && env.RATE_LIMIT !== 'off')
     warnings.push('TRUST_PROXY is off: behind a load balancer every request looks like one IP, so the per-IP auth throttle collapses to a single shared bucket.');
   if (!env.MOD_KEY || (env.MOD_KEY || '').length < 24)

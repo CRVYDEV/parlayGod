@@ -169,6 +169,61 @@ const pool = await makeDb();
   console.log('✅ X OAuth2/PKCE: dormant without config, state persists on start, an unknown state fails clean');
 }
 
+// ── BLUE-TEAM M3 (token revocation) + M2 (mod audit log) ────────────────────────────────────────
+{
+  process.env.MOD_KEY = 'test-mod-key-long-enough-to-pass';
+  const app = await buildServer();
+  const call = async (method, url, { token, body, modKey } = {}) => {
+    const headers = {};
+    if (token) headers.authorization = `Bearer ${token}`;
+    if (modKey) headers['x-mod-key'] = modKey;
+    const res = await app.inject({ method, url, headers, payload: body });
+    let b; try { b = res.json(); } catch { b = res.body; }
+    return { code: res.statusCode, body: b };
+  };
+  const decode = (t) => JSON.parse(Buffer.from(t.split('.')[1], 'base64url').toString());
+
+  // M3: a fresh guest token carries tv=0
+  const { body: { token } } = await call('POST', '/v1/auth/guest');
+  assert.equal(decode(token).tv, 0, 'M3: every issued token carries a `tv` (token_version) claim');
+  await call('POST', '/v1/character', { token, body: { name: 'Revoke Me' } });
+  assert.equal((await call('GET', '/v1/me', { token })).code, 200, 'the token works before revocation');
+  const acctId = (await app.pool.query('SELECT account_id FROM characters WHERE name=$1', ['Revoke Me'])).rows[0].account_id;
+
+  // M3: logout-all bumps token_version, invalidating the outstanding token on the (auth-preHandler) read path
+  assert.equal((await call('POST', '/v1/auth/logout-all', { token })).code, 200, 'logout-all succeeds');
+  assert.equal(Number((await app.pool.query('SELECT token_version FROM accounts WHERE id=$1', [acctId])).rows[0].token_version), 1, 'M3: logout-all bumped token_version to 1');
+  const revoked = await call('GET', '/v1/me', { token });
+  assert.equal(revoked.code, 401, 'M3: the old token (tv=0) is now rejected');
+  assert.equal(revoked.body.error, 'token_revoked', 'M3: with the token_revoked reason, not a generic 401');
+
+  // M3: a GRANDFATHERED token (no tv claim — issued before the feature) still passes — no deploy-day mass logout
+  const legacy = app.jwt.sign({ sub: acctId }, { expiresIn: '30d' });
+  assert.equal(decode(legacy).tv, undefined, 'a legacy token has no tv claim');
+  assert.equal((await call('GET', '/v1/me', { token: legacy })).code, 200, 'M3: a tv-less token is grandfathered (valid until it expires)');
+
+  // M3 (mod side): POST /v1/mod/revoke bumps token_version too, neutralising an account without a ban
+  const g2 = (await call('POST', '/v1/auth/guest')).body.token;
+  await call('POST', '/v1/character', { token: g2, body: { name: 'Mod Revoke' } });
+  const a2 = (await app.pool.query('SELECT account_id FROM characters WHERE name=$1', ['Mod Revoke'])).rows[0].account_id;
+  assert.equal((await call('POST', '/v1/mod/revoke', { modKey: 'test-mod-key-long-enough-to-pass', body: { accountId: a2 } })).code, 200, 'M2/M3: mod revoke succeeds with the key');
+  assert.equal((await call('GET', '/v1/me', { token: g2 })).body.error, 'token_revoked', 'M3: the mod revoke invalidated that account\'s token');
+  assert.equal((await call('POST', '/v1/mod/revoke', { modKey: 'wrong-key', body: { accountId: a2 } })).code, 401, 'M2: a wrong mod key is refused');
+
+  // M2: every god-mode MUTATION is audit-logged; the wrong-key attempt and GET reads are NOT
+  const audit = (await app.pool.query("SELECT method, path FROM mod_actions ORDER BY at")).rows;
+  assert(audit.some((r) => r.method === 'POST' && r.path === '/v1/mod/revoke'), 'M2: the mod mutation wrote a mod_actions row');
+  assert(!audit.some((r) => r.method === 'GET'), 'M2: GET dashboard reads are NOT logged (they are not actions)');
+  const before = audit.length;
+  const log = await call('GET', '/v1/mod/actions', { modKey: 'test-mod-key-long-enough-to-pass' });
+  assert.equal(log.code, 200, 'the mod audit log is readable through the perimeter');
+  assert(Array.isArray(log.body.actions) && log.body.actions.length >= 1, 'and returns the recorded actions');
+  assert.equal(Number((await app.pool.query('SELECT COUNT(*) n FROM mod_actions')).rows[0].n), before, 'M2: reading the log did NOT log itself');
+
+  await app.pool.end?.();
+  console.log('✅ BLUE-TEAM M3 token revocation (tv claim, logout-all, grandfather, mod revoke) + M2 mod audit log passed');
+}
+
 global.fetch = realFetch;
 console.log('✅ auth surface suite passed');
 await pool.end?.();

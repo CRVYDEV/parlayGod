@@ -53,6 +53,12 @@ assert.equal((await call('POST', '/v1/push/subscribe', { token: p.token, body: {
 const ssrf = (ep) => ({ endpoint: ep, keys: { p256dh: 'p', auth: 'a' } });
 assert.equal((await call('POST', '/v1/push/subscribe', { token: p.token, body: { subscription: ssrf('http://push.example/x') } })).body.error, 'bad_sub', 'a non-https endpoint is refused (SSRF guard)');
 assert.equal((await call('POST', '/v1/push/subscribe', { token: p.token, body: { subscription: ssrf('https://169.254.169.254/latest/meta-data') } })).body.error, 'bad_sub', 'an internal-IP endpoint is refused (SSRF guard)');
+// BLUE-TEAM M4: the old dotted-quad regex + localhost check let IPv6 LITERALS through — the demonstrated
+// bypass ([::1], ULA fd00::/8, link-local fe80::, and IPv4-mapped ::ffff:internal). Each must be refused.
+for (const ep of ['https://[::1]/x', 'https://[fd00::1]/x', 'https://[fe80::1]/x', 'https://[::ffff:169.254.169.254]/x'])
+  assert.equal((await call('POST', '/v1/push/subscribe', { token: p.token, body: { subscription: ssrf(ep) } })).body.error, 'bad_sub', `an internal IPv6 endpoint is refused: ${ep}`);
+// (a normal https push HOST — a name that doesn't resolve internal — is still accepted: proven by the
+// valid `sub` (endpoint https://push.example/…) subscribed above and the one-row assertion below.)
 // re-subscribing the same endpoint is idempotent (upsert)
 await call('POST', '/v1/push/subscribe', { token: p.token, body: { subscription: sub } });
 assert.equal(Number((await pool.query('SELECT COUNT(*) n FROM push_subscriptions WHERE account_id=$1', [acct])).rows[0].n), 1, 'one row per endpoint');

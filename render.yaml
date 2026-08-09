@@ -70,11 +70,19 @@ services:
     name: omerta-api
     runtime: node
     plan: starter                # always-on (~$7/mo). The free tier SLEEPS when idle — bad for a live game.
-    buildCommand: npm install
+    buildCommand: npm ci --omit=dev   # honour the audited lockfile exactly (npm install may re-resolve),
+                                      # and keep devDependencies (playwright-core) OUT of the prod image.
+                                      # Optional deps (@resvg/resvg-js) still install, so PNG cards work.
     startCommand: npm start
     healthCheckPath: /             # Render pings this; the homepage returns 200 when the server is healthy
                                    # (NOT /v1/session — that requires a login and returns 401, failing the check)
-    autoDeploy: true              # redeploys automatically when you push to the connected branch
+    # BLUE-TEAM C1: wait for the GitHub CI checks to pass before deploying. Previously autoDeploy:true
+    # shipped the instant a commit landed, RACING CI — so a red pgcheck (the job that catches the
+    # prod-only class: the uuid=text outage, the roster boot crash-loop) blocked nothing. This makes
+    # the deploy wait for green. A docs-only push (CI skipped via paths-ignore) has no checks and
+    # deploys normally. Verify in the Render dashboard after sync: Settings → Auto-Deploy shows
+    # "After CI Checks Pass"; if it still says "On Commit", flip it there.
+    autoDeployTrigger: checksPass
     envVars:
       - fromGroup: omerta-secrets
       - key: NODE_ENV
@@ -103,9 +111,9 @@ services:
     name: omerta-worker
     runtime: node
     plan: starter
-    buildCommand: npm install
+    buildCommand: npm ci --omit=dev   # honour the audited lockfile (blue-team M5)
     startCommand: npm run worker
-    autoDeploy: true
+    autoDeployTrigger: checksPass      # wait for CI green before deploying (blue-team C1)
     envVars:
       - fromGroup: omerta-secrets
       - key: NODE_ENV
