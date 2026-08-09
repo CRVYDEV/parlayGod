@@ -56,9 +56,15 @@ NFT stays a tradeable trophy, the game ENTITLEMENT stays account-bound, but a TB
 makes the trophy itself a container of value. Allocation weight follows the StonkBrokers
 activation model — burning earned $OMR activates a share — which is **earned/purchased, never
 chance**. *Founder assertion 2026-08-08 (after reviewing StonkBrokers): "legal council of
-Robinhood has approved." Question for counsel: does a transferable NFT whose TBA accrues
-allocations of third-party securities create an investment-contract profile (Howey) for the NFT
-itself, and if so what disclosures/structure defeat it?*
+Robinhood has approved." The standard's mechanics were verified against the EIP text 2026-08-09
+(`omerta-dynasty-machine-design.md` §1): control of a TBA derives live from the NFT's current
+holder, so contents transfer with the token by construction, and the EIP itself names — and
+declines to solve — the drain-before-sale fraud vector (a seller empties the TBA one block before
+accepting an offer); our mitigations and the residual buyer-side risk are §5 of that design.
+Question for counsel: does a transferable NFT whose TBA accrues allocations of third-party
+securities create an investment-contract profile (Howey) for the NFT itself, and if so what
+disclosures/structure defeat it — and does the drain-before-sale residual require disclosure
+language on the marketplace surface?*
 
 **A3 — Geofencing and eligibility live at the claim rail, and that is sufficient.**
 The stock tokens have no on-chain allowlist, so the game's enforcement point is

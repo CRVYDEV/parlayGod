@@ -1,0 +1,133 @@
+# THE DYNASTY MACHINE — the uncapped identity NFT, its ERC-6551 vault, and the activation model
+
+Status: **DESIGN. Chain-dormant, gated on counsel memo rows A2 + A4 (`omerta-counsel-memo.md`) and
+the standing third-party-audit gate.** Founder-directed: the identity NFT rides **ERC-6551
+token-bound accounts** (the founder pointed at the standard itself:
+https://eips.ethereum.org/EIPS/eip-6551), has **no maximum supply**, and carries the utility of the
+RWA fee slice through the **activation** model (the StonkBrokers shape). This doc grounds those
+three directives in the REAL standard — every mechanical claim below was verified against the EIP
+text on 2026-08-09 (a fan-out read + adversarial cross-check of each repo assumption; all
+consistent) — and extends `omerta-identity-nft-design.md` (the trophy/entitlement wall) and
+`omerta-rwa-stock-machine-design.md` (where the stock comes from).
+
+## 1. What ERC-6551 actually provides (verified, with the facts that decide our design)
+
+1. **A canonical, ownerless registry singleton** at `0x000000006551c19487814612e58FE06813775758`,
+   deployed to ANY EVM chain by anyone via Nick's Factory
+   (`0x4e59b44847b379578588920cA78FbF26c0B4956C`) with a published salt and raw transaction — so
+   deploying it to Robinhood Chain is permissionless deploy CONFIG, not a contract we write.
+   *Deploy-check: Nick's Factory must exist on the Orbit chain (it ships on virtually every EVM
+   chain; verify before relying on it — the CHAIN-DEPLOY checklist gains a line).*
+2. **Counterfactual accounts.** `createAccount` is CREATE2 + permissionless, and the registry
+   exposes a view computing the address BEFORE deployment — an account can HOLD assets while
+   undeployed. **This is the whole gas model**: allocations accrue to a computed address for free;
+   the player deploys their own account (or anyone does — it changes nothing) only when they want
+   to ACT, paying their own gas. The founder's claims-model, native to the standard.
+3. **The NFT contract needs zero changes.** 6551 layers onto any already-deployed NFT — the
+   Dynasty NFT can be the plainest possible ERC-721, and the TBA rail can even ship AFTER the NFT
+   does.
+4. **Control is derived live, nothing ever "moves."** The account's valid signer is whoever holds
+   the bound NFT NOW (the reference implementation reads `ownerOf(tokenId)` at call time). Selling
+   the NFT transfers control of the account and everything in it in the same instant, with no
+   per-asset transfer calls.
+5. **The account is an ERC-1167 minimal proxy** with its binding (implementation, salt, chainId,
+   tokenContract, tokenId) baked immutably into bytecode. The spec's own trust statement: *the
+   only trusted contract for any token-bound account is the implementation.* → **the account
+   implementation joins the third-party audit scope** the moment a TBA can hold stock.
+6. **The drain-before-sale fraud vector is real and explicitly out of the standard's scope**: a
+   seller empties the TBA one block before accepting an offer, and the buyer receives a hollow
+   trophy. The spec names the mitigations: `state()`-bound marketplace orders, asset-commitment
+   lists, or a lock mechanism in the account implementation. §5 below picks ours.
+7. **Status: the EIP is in Review, not Final.** The registry address and interface IDs
+   (`IERC6551Account = 0x6faff5f1`) are de-facto stable across the ecosystem, but we pin the
+   registry + implementation bytecode we deploy against at deploy time and record them in
+   CHAIN-DEPLOY.md — a Review-status spec is not a promise.
+8. **721-shaped by design.** The registry does no interface check (even fungible tokens "work,
+   although these use cases are outside the scope of the proposal") — but control derives from
+   `ownerOf`, which ERC-1155 does not have. So: **the Dynasty NFT is an ERC-721 — the suite's
+   first** (everything on GearVault stays ERC-1155: gear 1..N, cars 100000+, boats 200000+ — those
+   are ITEMS, plural by nature; an identity is singular by nature, which is exactly the 721/1155
+   split as intended).
+
+## 2. The three founder rules, restated as architecture
+
+**(1) NO MAXIMUM SUPPLY.** A supply cap on the identity would cap the player count. The Dynasty
+NFT mints uncapped at the fixed identity fee (0.01 ETH — the existing mint fee), proceeds through
+the declared money-router waterfall. No scarcity marketing, no appreciation language (counsel memo
+A4 + the standing copy rule).
+
+**(2) THE TROPHY/ENTITLEMENT WALL HOLDS — the TBA is the exception, deliberately.**
+`omerta-identity-nft-design.md`'s load-bearing rule stands: the game ENTITLEMENT
+(`account_persistent.minted`, wage/withdraw gates) stays account-bound in the database and is
+never read off `balanceOf` — otherwise the real per-identity cost decays to the secondary floor
+(the dead alts of the last farm). What the NFT + TBA adds is a **container of on-chain value**
+(the activated stock allocations) that IS transferable — knowingly, as counsel memo A2 records.
+Selling your Dynasty NFT sells your vault contents and your portrait; it never sells your ACCOUNT
+(the buyer does not get your login, your legends, or your entitlement — those live in the DB, on
+the account, where they always did).
+
+**(3) THE ACTIVATION MODEL (the StonkBrokers shape, made never-by-chance).** The treasury's stock
+(bought by the Stock Machine's keeper off the daily Ticker Ballot) is allocated to Dynasty NFTs by
+**activation weight**: burning EARNED $OMR activates a share for an allocation epoch. Earned or
+bought, never rolled — the RWA never-by-chance rule holds by construction (a ballot votes, a
+purchase buys, an activation burns). Activation is the missing $OMR demand engine: a deep,
+recurring, voluntary sink whose payout is the thing the whole machine exists to distribute. Every
+activation burn rides the audited `spendOmr` till under a new enumerated reason (its own §10.4
+vocabulary entry + `DESK.SINK_REASONS` row when built — sinks recycle to the desk since v3 step 2).
+
+## 3. The allocation rail (why counterfactual accrual is the design)
+
+- Allocation is BOOKKEEPING first: the game's vault ledger (the `allocated ≤ held, same asset both
+  sides` wall from the stock-layer retirement) assigns treasury-held stock units to a Dynasty
+  NFT's **computed TBA address** — no deploy, no gas, no on-chain writes at allocation time.
+- DELIVERY is the player's act: deploy-if-needed + a server-signed transfer through the ONE
+  extraction boundary (the voucher rail), eligibility enforced at signature time (counsel memo A3
+  — geofence/KYC depth is counsel's parameter), the claimant paying their own gas end to end.
+- Between allocation and delivery, nothing custodial changes: the treasury Safe holds the stock,
+  the ledger holds the assignment, `allocated ≤ held` is checked nightly like every other
+  real-value invariant. An unclaimed allocation is a ledger row, not a stranded on-chain balance.
+
+## 4. Contract surface (Phase B of the Stock Machine, one audit batch)
+
+New: **DynastyNFT** (minimal ERC-721 — uncapped mint at the identity fee, tokenURI to the layered
+portrait composition, zero owner-mint paths beyond the fee-gated mint, the house discipline) and
+the **TBA account implementation** we bless (prefer the ecosystem reference implementation,
+pinned by bytecode hash, over writing our own — an account that custodies securities is the last
+place for novel Solidity; if we must fork, it is for §5's lock only). The registry we do not
+write — we replay the published deploy transaction. The StockVault/claim rail is already specified
+in `omerta-rwa-stock-machine-design.md`. All of it lands in the SAME third-party audit batch
+(the audit clock is already reset; batch, don't dribble).
+
+## 5. The drain-before-sale answer (ours, since the spec declines to pick)
+
+A hollow-trophy sale is a market-integrity problem on OUR flagship asset, and with SECURITIES in
+the vault it is also an A2 disclosure item. Three layers, cheapest first:
+1. **Disclose structurally**: the public dossier/marketplace metadata for a Dynasty NFT surfaces
+   the TBA's `state()` value and its current holdings summary (banded per the info-economy rule),
+   so any marketplace or buyer CAN bind an order to state — the spec's own first mitigation.
+2. **Prefer an implementation with a holder-optional lock** (the spec's third mitigation): a
+   seller can lock the vault for N hours and point buyers at the lock — a locked listing is a
+   credible listing.
+3. **Never promise marketplace enforcement we don't control**: the buyer-side residual risk is a
+   stated caveat in A2's disclosure question for counsel, not something we paper over.
+
+## 6. What this deliberately does not do
+
+No supply cap (rule 1). No entitlement on the token (rule 2 — the wall's whole point). No RNG
+anywhere near allocation (never-by-chance). No custom account implementation beyond the lock, if
+even that (audit surface). No cross-chain execution (the spec supports it; we bind chainId =
+Robinhood Chain and stop there). No delivery outside the voucher boundary (A3). And no copy that
+promises anything about what the NFT or the stock will be worth.
+
+## 7. Order of work
+
+1. **Now (chain-dormant, no counsel dependency):** the activation-model design + sim (the burn is
+   a §10.4 sink — sizing wants the standard sim pass) and the allocation ledger schema (pure
+   bookkeeping, the vault-ledger shape that already exists for ETH).
+2. **On A2 + A4 signatures:** DynastyNFT + pinned account implementation + registry replay on a
+   devnet → the audit batch with StockVault.
+3. **On A3's parameters:** delivery live behind the voucher rail.
+
+*Maintainers: every mechanical claim in §1 cites the EIP as verified 2026-08-09; if the EIP moves
+out of Review with changes, §1 is the checklist to re-verify. The counsel memo's A2 row is the
+legal gate for everything past §7.1.*
