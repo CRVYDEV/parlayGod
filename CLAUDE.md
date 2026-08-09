@@ -10766,3 +10766,33 @@ board, and zero ledger rows — the minted-gate mutation fails by name. All `CAP
 founder sign-off levers (pinned whole in test/levers.js); the rate perk eases an anti-abuse
 throttle, so the alpha watch is whether a licensed 2× cadence moves any contested surface
 (`TIERS: []` reverts).
+
+**THE STOCK MACHINE — tax → daily Commission-voted stock buy → gas-paid claims (founder-directed
+2026-08-09, counsel approval recorded as a founder assertion) — DESIGN ONLY**
+(`omerta-rwa-stock-machine-design.md`). The founder's three-part proposal assessed FEASIBLE with two
+engineering corrections and one compliance transfer, grounded on verified 2026 facts: Robinhood Chain
+is LIVE (Arbitrum Orbit, ETH gas — the M6 rail's own chain family, no bridge anywhere), Stock Tokens
+are STANDARD ERC-20s with **no on-chain transfer allowlist** (day-one Uniswap deployment; corporate
+actions land as multipliers, so a vault's `allocated ≤ held` in TOKEN UNITS survives splits with zero
+code), and not-for-US-persons is a DISTRIBUTION-law restriction — so the compliance burden lands on
+OUR claim rail, the point of distribution. **Correction 1:** a v4 hook CAN swap ETH→ticker atomically
+inside the taxed sell (pool ops nest in the unlock callback) and MUST NOT — a third pool's revert
+would brick the OMR market (the OmertaHook accrue-don't-forward argument, with more force), every
+seller pays the shopping gas, micro-buys are sandwich food, and the Commission's cadence is daily
+anyway; so the hook ACCRUES (already designed) and a once-daily KEEPER executes THE BUY
+(slippage-bounded vs the token's Chainlink feed, fail-closed, watchdogged — the bond-keeper
+discipline). **Correction 2:** "airdrop" needs an allocation rule — recommended: the retired float's
+burn-earned-$OMR rail (`rwa:vault`, already vocabularied — purchase-shaped, never-by-chance holds
+trivially, a deep recurring sink, clamps to unallocated); pro-rata-by-play REJECTED (a dividend on
+play drags every faucet into securities analysis). **THE TICKER BALLOT** is the best leg: a daily
+seated-family vote (`commission_ticker_votes`, the audited weekly-ballot discipline at daily cadence)
+choosing WHICH ticker — never whether/how-much/to-whom, so a captured chamber can only pick a stock
+the town disagrees with, which is the Commission working; deadlock buys the DEFAULT ticker so a quiet
+chamber never stalls the beat. **Claims** = the M6 rail with a transfer instead of a mint
+(`StockVault` ≈ VoucherClaim fork, pre-funded only, EIP-712, claimant PAYS GAS — pull-never-push is
+both the cost win and the clean distribution answer), eligibility at voucher-SIGN (SIWE + minted +
+geofence/attestation; KYC depth is counsel's one open parameter). Build order: Phase A off-chain
+(ballot + board + txHash-gated bookkeeping, chain-dormant, zero new legal surface) → Phase B metal
+(vault + keeper — RESETS the third-party audit clock; verify the Uniswap version on Robinhood Chain
+here) → Phase C claims behind counsel's final word. §10.4: the ONE in-game flow is the existing
+`rwa:vault` burn; everything else is out-of-band real value (zero transactions rows).
