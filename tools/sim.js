@@ -30,7 +30,8 @@ import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
          PORT, boatOf, portRouteOf, interdictChance,
          CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES, BUSINESSES, PACING, POPULATION, boatResale, CORNER, CONTACTS, FAMILY_WAR,
          EXCHANGE, ESTATE, WIRE, GANG_SEALS, FOUNDATION, RIVALS, RACKETS, ASSETS, M4, DRUGS,
-         MADE, ACCESS_STAKE, OPERATIONS, opSlotsOf, SOV } from '../src/rules.js';
+         MADE, ACCESS_STAKE, OPERATIONS, opSlotsOf, SOV,
+         TREASURY, STORE, SELL_TAX, BONDS } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -1416,6 +1417,45 @@ phase('P9.33 D14 the crime-stat faucet — base-wide lift, signed as-is (re-meas
   const baseWide = den > 0 ? num / den : 0;
   note('D14 crime-stat', 'base-wide (cash-weighted, 20/60/20 pop)', `${(baseWide * 100 >= 0 ? '+' : '') + (baseWide * 100).toFixed(1)}%`,
     `SIGNED as-is 2026-08-06 — the maxed tail earning more on hard jobs, bounded by NERVE, small vs the passive stack. §10.4 untouched (success-rate only). Re-anchoring CRIME_STAT.OFFSET (${cs.OFFSET}) higher trades this for a fresh/mid hit — no free lunch. Reverting to {CUN:0.004,SPD:0.002,OFFSET:0} restores the pre-D14 curve`);
+}
+
+// ════════ P9.34 THE ACTIVATION MODEL — the treasury→stock rate card (design-stage sizing) ════════
+// The Dynasty Machine's activation burn (design §8; NOT built — the burn ships with Phase B/A1) is
+// sized ANALYTICALLY off the LIVE router levers so any retune of a treasury slice re-measures the
+// model before a line of it is built (the P9.29/P9.33 precedent — no value seeded, §10.4 untouched).
+// The one analytic result that matters: each activated $OMR carries T/A ETH-worth of stock
+// (T = the day's treasury buy, A = the day's total activation), so rational participation
+// self-sizes toward A* ≈ T × P (P = the oracle OMR/ETH) — the treasury inflow ITSELF, denominated
+// in $OMR, is the size of the recurring sink activation creates. INTERNAL sizing only — the
+// standing copy rule forbids publishing any value-per-$OMR figure as marketing.
+phase('P9.34 THE ACTIVATION MODEL — the treasury rate card (design-stage; re-measured every run)');
+{
+  // the four declared treasury slices, read from the LIVE levers (the money router's own sources)
+  const feeBps = TREASURY.FEE_TREASURY_BPS();                       // 10% of gameplay fees (mint/respawn/reroll)
+  const storeBps = STORE.SPLIT_BPS.rwa;                             // 20% of Store packages
+  const taxBps = SELL_TAX.RWA_BPS ?? 400;                           // 4% of DEX sell gross (4/9 of the 9%)
+  const bondBps = BONDS.RWA_BPS;                                    // 25% of bond principal
+  note('activation', 'treasury slice per source (live levers)',
+    `fee ${feeBps / 100}% · store ${storeBps / 100}% · sell-tax ${taxBps / 100}% of gross · bond ${bondBps / 100}%`,
+    'the stock budget is fed ONLY by these four — the activation burn recycles to the DESK (founder/POL), so demand cannot inflate its own payout (the anti-Ponzi shape)');
+  // an ILLUSTRATIVE inflow composition per band — adoption scenarios, not forecasts
+  const bands = [
+    { name: 'thin alpha', mints: 20, storeEth: 0.2, sellEth: 1, bondEth: 0.5 },
+    { name: 'live base', mints: 200, storeEth: 2, sellEth: 10, bondEth: 5 },
+    { name: 'busy base', mints: 2000, storeEth: 20, sellEth: 100, bondEth: 50 },
+  ];
+  const P = 2000; // oracle OMR/ETH used for the $OMR-denominated equilibrium (the test-fixture price; the live TWAP on mainnet)
+  for (const b of bands) {
+    const T = b.mints * 0.01 * feeBps / 10000 + b.storeEth * storeBps / 10000
+            + b.sellEth * taxBps / 10000 + b.bondEth * bondBps / 10000;
+    const eq = T * P;   // A* — the equilibrium daily activation ($OMR/day)
+    note('activation', `${b.name} (${b.mints} mints + Ξ${b.storeEth} store + Ξ${b.sellEth} sells + Ξ${b.bondEth} bonds /day)`,
+      `treasury buy Ξ${T.toFixed(3)}/day → equilibrium sink ≈ ${Math.round(eq).toLocaleString()} $OMR/day`,
+      `below A* early activators are over-rewarded (the bootstrap incentive); above it holding dominates — both self-correcting. At 100/1k/10k $OMR activated: ` +
+      [100, 1000, 10000].map((A) => `Ξ${(T / A).toFixed(5)}/$OMR`).join(' · '));
+  }
+  note('activation', 'the sizing answer', 'the recurring sink ≈ the treasury inflow, in $OMR at the oracle',
+    'activation converts every ETH of declared treasury revenue into that much daily $OMR demand — the demand engine the Dynasty design promised. Every ACTIVATION.* number stays a proposed default until the burn is built (post-A1)');
 }
 
 phase('P10 §10.4 ledger invariants over the ENTIRE sim (nothing was seeded)');
