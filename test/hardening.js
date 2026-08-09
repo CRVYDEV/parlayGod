@@ -970,6 +970,10 @@ if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actual
   const h = await call('GET', '/health');
   assert(h.code === 200 && h.body.ok === true && h.body.db === 'up', 'GET /health reports a reachable database');
   assert(typeof h.body.uptimeSeconds === 'number' && typeof h.body.dbLatencyMs === 'number', '/health carries uptime + latency');
+  // BLUE-TEAM C2: /health surfaces the WORKER's liveness (the sole source of every proactive alarm +
+  // timed settlement) so an external monitor can catch it going dark. The schema seeds a fresh beat.
+  assert(h.body.worker && typeof h.body.worker.beatAgoSeconds === 'number' && h.body.worker.stale === false,
+    '/health carries worker liveness (fresh heartbeat → not stale)');
 
   // and when the database is NOT reachable it reports 503 with a retry hint, not 200 and not 500
   const realQuery = pool.query.bind(pool);

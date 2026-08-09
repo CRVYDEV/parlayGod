@@ -1607,6 +1607,18 @@ CREATE TABLE IF NOT EXISTS street_tax (
   fund NUMERIC NOT NULL DEFAULT 0,
   last_buyback TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- BLUE-TEAM C2: the worker's liveness beat. The worker is a SEPARATE process and the SOLE source of
+-- every proactive alarm (§10.4 drift, backup-failure, oracle-keeper, real-value invariants) AND every
+-- timed settlement (buyback, bounty refunds, auction/tournament settles, voucher reclaim). A clean
+-- sweep wrote nothing durable, so "clean nightly" was indistinguishable from "dead for a week", and a
+-- dead/wedged worker took ALL detection dark AND stopped every settlement, silently. The worker stamps
+-- this each hourly tick; /health and the ops dashboard surface its age so a monitor can catch it.
+CREATE TABLE IF NOT EXISTS worker_heartbeat (
+  id      INT PRIMARY KEY DEFAULT 1,
+  beat_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT worker_heartbeat_one CHECK (id = 1)
+);
+INSERT INTO worker_heartbeat (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 -- Risk-to-Earn Phase 4: BACKED EMISSION. The soft-$OMR pool staking rewards are paid FROM (a
 -- transfer, not a mint) — funded by a slice of the 12h buyback (cash sinks → $OMR → yield), so
 -- staking stops being an unbounded mint and becomes redistribution bounded by economic activity.

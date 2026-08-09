@@ -153,8 +153,41 @@ export async function buildServer() {
   // when NOT behind a trusted proxy). An operator deploying behind a load balancer sets TRUST_PROXY=on
   // so req.ip reflects the real client — else the per-IP auth throttle (E-M1) collapses to one global
   // bucket at the proxy's IP. No behaviour change in the alpha (rate limits are off there anyway).
-  const app = Fastify({ logger: false, trustProxy: process.env.TRUST_PROXY === 'on' });
+  // BLUE-TEAM H3: trust ONE proxy hop (Render's load balancer), not ALL (`true`). With trust-all,
+  // req.ip is the LEFTMOST X-Forwarded-For value — client-supplied — so an attacker rotating that
+  // header lands every request in a fresh bucket, defeating BOTH unauthenticated throttles (the
+  // guest-mint Sybil limiter and the public-route DoS limiter). A hop count of 1 takes the address
+  // the LB actually connected from (the appended real client), ignoring a spoofed leftmost entry.
+  // (If Render is ever >1 hop, this degrades to a shared-bucket — safe — never to spoofable.)
+  const app = Fastify({ logger: false, trustProxy: process.env.TRUST_PROXY === 'on' ? 1 : false });
   Push.initPush();   // WEB PUSH — arm VAPID signing if VAPID_* is configured; dormant otherwise.
+
+  // BLUE-TEAM H2: a security-header baseline on every response (only /admin had any). Set defensively
+  // so no route can ship a page without framing/sniff protection by omission, without clobbering the
+  // stricter headers /admin already sets.
+  app.addHook('onSend', async (req, reply) => {
+    // Fail-safe: a header hook must never crash the server. A route that calls reply.send() without
+    // returning it (an async-handler footgun) makes Fastify run the send lifecycle twice; on that
+    // spurious second pass the head is already flushed, so touching a header would throw
+    // ERR_HTTP_HEADERS_SENT and kill the process. Skip once headers are on the wire.
+    if (reply.raw.headersSent) return;
+    reply.header('X-Content-Type-Options', 'nosniff');
+    if (process.env.NODE_ENV === 'production')
+      reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    const ct = String(reply.getHeader('content-type') || '');
+    if (ct.startsWith('text/html')) {
+      // clickjacking: the console keeps the bearer in localStorage and is one-click money-driven
+      // (FIRE / unstake / withdraw), so a framed console is a real target. DENY on all served pages
+      // (none are meant to be framed); don't clobber /admin's own DENY + no-referrer.
+      if (!reply.getHeader('x-frame-options')) reply.header('X-Frame-Options', 'DENY');
+      if (!reply.getHeader('referrer-policy')) reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+    } else if (ct.startsWith('image/svg')) {
+      // /card, /beef, /v1/avatar, the /v1/art SVG fallback — served as navigable documents on the game
+      // origin. Make them inert if navigated to: no script/frame, only inline styles + the data: art
+      // the broadcast cards embed. (Names can't contain '<', so this is defence-in-depth.)
+      reply.header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src data:");
+    }
+  });
 
   // THE AGENT GATEWAY — collect every mounted route (this hook fires per registration) so the
   // OpenAPI 3.1 contract at /openapi.json is auto-derived and never drifts from what's live.
@@ -382,6 +415,17 @@ export async function buildServer() {
       at: new Date().toISOString(),
     };
     if (!db.ok) { body.error = db.error; reply.code(503).header('retry-after', '15'); }
+    // BLUE-TEAM C2: surface the WORKER's liveness. It is a separate process and the sole source of every
+    // proactive alarm + timed settlement, so a monitor pointed here can alarm on `worker.stale` (or a
+    // red /health) when it goes dark. Kept off the 503 (the API itself is healthy even if the worker is
+    // down); >90 min means it missed an hourly tick. Best-effort — a DB blip is already reflected above.
+    if (db.ok) try {
+      const hb = await pool.query('SELECT beat_at FROM worker_heartbeat WHERE id = 1');
+      if (hb.rows[0]) {
+        const ageSec = Math.round((Date.now() - new Date(hb.rows[0].beat_at).getTime()) / 1000);
+        body.worker = { beatAgoSeconds: ageSec, stale: ageSec > 5400 };
+      }
+    } catch { /* the worker_heartbeat read failing is itself a DB issue, already covered by body.db */ }
     return body;
   });
   const auth = async (req, reply) => {
@@ -458,31 +502,13 @@ export async function buildServer() {
       if (limited) return reply.code(429).header('retry-after', limited.retryAfter)
         .send({ error: 'rate_limited', retryAfter: limited.retryAfter });
     }
-    // (red-team R13 F1/F2) the keyless public render routes (/card SVG+PNG, /u profile, /v1/u dossier)
-    // do real per-hit work (an SVG→PNG raster + a DB dossier) and are NOT under the /v1 read-limiter — an
-    // unauthenticated flood from one origin could pin the server. Throttle them per-IP (generous, only
-    // bites a flood). Placed before the /v1 read branch so /v1/u (keyless) is covered too.
-    // (red-team R19 F2) also throttle the keyless HEAVY GETs — /v1/art renders an SVG per hit and
-    // /v1/landmarks does a full-table scan; both are keyless (no auth preHandler), so an unauthenticated
-    // caller sends no token → the /v1 read limiter below early-returns → they were throttled by NOTHING.
-    // (red-team R25 L1) /v1/ws is the same class — the WS upgrade carries its token in the subprotocol,
-    // NOT the Authorization header, so the /v1 read branch's jwtVerify throws → catch/return, unthrottled;
-    // each connect still does a real jwt.verify + socket churn. Bound the pre-auth upgrade per-IP too.
+    // The keyless NON-/v1 render pages (/card SVG+PNG, /u profile, /beef page) do real per-hit work
+    // (an SVG→PNG raster + a DB dossier) and are outside the /v1 read-limiter entirely, so throttle
+    // them per-IP here (generous, only bites a flood). The keyless /v1 GETs (/v1/u, /v1/art,
+    // /v1/landmarks, /v1/ws, /v1/arena, /v1/events, /v1/results, /v1/avatar, /v1/auth/x/callback and
+    // every DB-heavy board) are covered below by the BLUE-TEAM H4 default-throttle, not by name.
     if (rateLimitsEnabled() && (req.method === 'GET' || req.method === 'HEAD')
-      && (req.url.startsWith('/card/') || req.url.startsWith('/u/') || req.url.startsWith('/v1/u/')
-          || req.url.startsWith('/beef/')
-          || req.url.startsWith('/v1/art/') || req.url.startsWith('/v1/landmarks') || req.url.startsWith('/v1/ws')
-          // (red-team R28 MED-1/LOW-2) the keyless data boards behind the PUBLIC pages are the same class:
-          // /v1/arena runs a leaderboard full-scan + a transactions aggregate and is CRAWLER-reachable via
-          // the public /arena page; /v1/events + /v1/results do real per-hit DB work; /v1/avatar renders an
-          // SVG per hit. All keyless (no auth preHandler) → the /v1 read limiter below early-returns →
-          // unthrottled. Bound them per-IP with the other keyless heavy GETs.
-          || req.url.startsWith('/v1/arena') || req.url.startsWith('/v1/events') || req.url.startsWith('/v1/results')
-          || req.url.startsWith('/v1/avatar/')
-          // (D1) the OAuth callback is a keyless GET that does real per-hit work (oauth_states DELETE +
-          // an outbound X token/user fetch); the POST-only auth limiter + the token-gated read limiter
-          // both skip it, so throttle it here with the other keyless heavy GETs.
-          || req.url.startsWith('/v1/auth/x/callback'))) {
+      && (req.url.startsWith('/card/') || req.url.startsWith('/u/') || req.url.startsWith('/beef/'))) {
       const limited = await checkPublicRateLimit({ ip: req.ip });
       if (limited) return reply.code(429).header('retry-after', limited.retryAfter)
         .send({ error: 'rate_limited', retryAfter: limited.retryAfter });
@@ -491,13 +517,22 @@ export async function buildServer() {
     // pooled connection while it accrues+persists under a FOR UPDATE on the caller's own row — a
     // concurrent-GET flood from one account can pin the pool and starve everyone. Throttle authed /v1
     // GETs per-account with a GENEROUS bucket (never bites the console's debounced polling/re-render).
-    // jwtVerify is cheap + no DB; a keyless/public GET (no token) falls through unthrottled.
+    // BLUE-TEAM H4: a KEYLESS /v1 GET (no valid token) used to `catch { return }` here — UNTHROTTLED.
+    // The public limiter above was an allowlist, so any DB-heavy keyless board omitted from it (above
+    // all GET /v1/gangs/:id, which opens a WRITE txn holding a pooled connection + gang row locks, plus
+    // /v1/gangs and /v1/commission full-table scans) hit ZERO buckets — unauthenticated pool
+    // exhaustion. Route every keyless /v1 GET to the per-IP public limiter, so a new keyless route can
+    // never ship unthrottled by omission (a denylist-by-default, not an allowlist).
     if (rateLimitsEnabled() && (req.method === 'GET' || req.method === 'HEAD')
       && req.url.startsWith('/v1') && !req.url.startsWith('/v1/mod')) {
-      try { await req.jwtVerify(); } catch { return; }
-      const limited = await checkReadLimit({ accountId: req.user.sub });
+      let authed = true;
+      try { await req.jwtVerify(); } catch { authed = false; }
+      const limited = authed
+        ? await checkReadLimit({ accountId: req.user.sub })
+        : await checkPublicRateLimit({ ip: req.ip });
       if (limited) return reply.code(429).header('retry-after', limited.retryAfter)
         .send({ error: 'rate_limited', retryAfter: limited.retryAfter });
+      if (!authed) return; // keyless GET: throttled, but no account context for anything below
     }
     if (!guarded(req)) return;
     try { await req.jwtVerify(); } catch { return; } // unauthenticated → the route 401s
@@ -2079,7 +2114,9 @@ export async function buildServer() {
   // the unsubscribe link in every email — public + keyless (an HMAC token is the auth). Returns a tiny page.
   app.get('/v1/digest/unsubscribe', async (req, reply) => {
     const ok = (await Dispatch.unsubscribe(pool, req.query?.a, req.query?.t)).ok;
-    reply.type('text/html').send(`<!doctype html><meta charset="utf-8"><title>OMERTÀ</title>
+    // `return` the send: an async handler that calls reply.send() without returning it makes Fastify
+    // run the send lifecycle twice (the clean static routes above all `return reply.type().send()`).
+    return reply.type('text/html').send(`<!doctype html><meta charset="utf-8"><title>OMERTÀ</title>
       <body style="background:#0c0b0d;color:#e9e3d6;font-family:Georgia,serif;text-align:center;padding:64px 24px">
       <h1 style="color:${ok ? '#c9a24a' : '#b02a30'}">${ok ? "You're unsubscribed." : 'That link is no longer valid.'}</h1>
       <p style="color:#a89e90">${ok ? "You won't get the digest again. The city will still be here." : 'You may already be unsubscribed.'}</p>
