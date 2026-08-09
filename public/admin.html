@@ -78,6 +78,7 @@
     <div class="panel" id="p-engage"><h2>Engagement &amp; Retention</h2><div class="body">…</div></div>
     <div class="panel" id="p-top"><h2>The Powerful</h2><div class="body">…</div></div>
     <div class="panel" id="p-chain"><h2>Chain · Reserve · Vig</h2><div class="body">…</div></div>
+    <div class="panel" id="p-router"><h2>Where a Dollar Goes</h2><div class="body">…</div></div>
     <div class="panel" id="p-activity"><h2>Live Activity</h2><div class="feed body">…</div></div>
     <div class="panel" id="p-mod"><h2>Moderation</h2><div class="body"></div></div>
   </div>
@@ -125,12 +126,12 @@
   }
 
   async function refreshAll() {
-    const [ov, inv, fn, res, vig, em, act, rev, eng, bnd, tre, coa, intg] = await Promise.all([
+    const [ov, inv, fn, res, vig, em, act, rev, eng, bnd, tre, coa, intg, rtr] = await Promise.all([
       j('GET', '/v1/mod/overview'), j('GET', '/v1/mod/invariants'), j('GET', '/v1/mod/funnel'),
       j('GET', '/v1/mod/reserve'), j('GET', '/v1/mod/vig'), j('GET', '/v1/mod/emission'),
       j('GET', '/v1/mod/activity?limit=60'), j('GET', '/v1/mod/revenue'),
       j('GET', '/v1/mod/engagement'), j('GET', '/v1/mod/bonds'), j('GET', '/v1/mod/treasury'),
-      j('GET', '/v1/mod/coach'), j('GET', '/v1/mod/integrations'),
+      j('GET', '/v1/mod/coach'), j('GET', '/v1/mod/integrations'), j('GET', '/v1/mod/router'),
     ]);
     if (ov.code === 401) return $('#logout').onclick();
 
@@ -157,7 +158,7 @@
 
     $('#stamp').textContent = 'as of ' + new Date().toLocaleTimeString();
     renderIntegrity(inv.body); renderEconomy(ov.body, em.body); renderPlayers(ov.body); renderEngagement(eng.body);
-    renderFunnel(fn.body); renderTop(ov.body); renderChain(res.body, vig.body, em.body, rev.body, bnd.body, tre);
+    renderFunnel(fn.body); renderTop(ov.body); renderChain(res.body, vig.body, em.body, rev.body, bnd.body, tre); renderRouter(rtr.body);
     renderBackups(ov.body); renderSocial(ov.body); renderCoach(coa.body);
     renderIntegrations(intg.body);
     renderActivity(act.body); renderMod();
@@ -459,6 +460,32 @@
             ? `<span style="color:var(--ok)">✓ alive</span> <span class="note">poked ${fmt(bnd.oracle.ageS)}s ago (period ${fmt(bnd.oracle.periodS)}s)</span>`
             : `<span style="color:var(--bad)">⚠ ${bnd.oracle.state.toUpperCase()}</span> <span class="note">${bnd.oracle.note || ''}</span>`)
         : '');
+  }
+
+  // THE MONEY ROUTER — WHERE A DOLLAR GOES. The whole declared waterfall (every real-value inflow
+  // and its split, derived from the live constants) with lifetime booked figures per slice, and the
+  // cross-source invariant verdict. Implicit remainders are labelled — arithmetic is not a ledger.
+  function renderRouter(rt) {
+    const el = $('#p-router').querySelector('.body');
+    if (!rt || rt.error) { el.innerHTML = `<div class="note">${esc(rt?.error || 'unreachable')}</div>`; return; }
+    const life = rt.lifetime || {}; const inv = rt.invariants || {};
+    const badChecks = (inv.checks || []).filter((c) => !c.ok);
+    el.innerHTML =
+      (inv.ok === false
+        ? `<div style="color:var(--bad);font-weight:bold">⚠ ROUTER DRIFT — ${badChecks.map((c) => esc(c.name)).join(' · ')}</div>`
+        : `<div style="color:var(--ok)">✓ every inflow routed inside the declared waterfall (${(inv.checks || []).length} checks)</div>`)
+      + (rt.waterfall || []).map((src) => {
+        const lf = life[src.id] || {};
+        const unit = src.currency === 'omr' ? '$OMR ' : 'Ξ';
+        const slices = src.splits.map((sp) =>
+          `${esc(sp.dest)} ${sp.bps / 100}%${sp.implicit ? '<span class="note">*</span>' : ''}`).join(' · ');
+        const nums = Object.entries(lf).filter(([k]) => k !== 'gross')
+          .map(([k, v]) => `${esc(k)} ${unit}${fmt(v)}`).join(' · ');
+        return `<div class="note" style="margin-top:8px">${esc(src.name)}</div>`
+          + rowHtml('split', slices)
+          + rowHtml('lifetime', `${lf.gross !== undefined ? `gross ${unit}${fmt(lf.gross)} → ` : ''}${nums || '—'}`);
+      }).join('')
+      + `<div class="note" style="margin-top:8px">* implicit remainder — computed, never stored (the on-chain wallet holds it)</div>`;
   }
 
   function renderActivity(act) {

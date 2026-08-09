@@ -130,7 +130,10 @@ if (failures.length) {
 // levelled/retained). Dynamic IN lists are the recorded pg-mem posture (`= ANY($1)` returns zero
 // rows there), so these are interpolated by necessity; each is parameterized except the IN
 // placeholders + two Number()-coerced constants.
-const CEILING = { interpolated: 63, unreadable: 40 };
+// 63 → 65 (2026-08-09): the money router's two source-membership queries — their NOT-IN lists are
+// GENERATED from the exported VIG_SOURCES/TREASURY_SOURCES sets so the check and the declaration
+// structurally cannot drift apart (the DESK.SINK_REASONS generated-SQL precedent).
+const CEILING = { interpolated: 65, unreadable: 40 };
 const overflow = [];
 if (interpolated.length > CEILING.interpolated)
   overflow.push(`interpolated queries grew to ${interpolated.length} (ceiling ${CEILING.interpolated}) — these are UNCHECKED by this guard`);

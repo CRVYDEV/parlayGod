@@ -10796,3 +10796,38 @@ geofence/attestation; KYC depth is counsel's one open parameter). Build order: P
 (vault + keeper — RESETS the third-party audit clock; verify the Uniswap version on Robinhood Chain
 here) → Phase C claims behind counsel's final word. §10.4: the ONE in-game flow is the existing
 `rwa:vault` burn; everything else is out-of-band real value (zero transactions rows).
+
+**THE MONEY ROUTER — one declared waterfall over every real-value inflow (founder-directed
+2026-08-09: "#2 begin") — BUILT** (`src/router.js` — the 136th module, `test/router.js` — the 91st
+suite; `GET /v1/mod/router`, an /admin "Where a Dollar Goes" panel, the worker's nightly alertDrift;
+BALANCE.md § THE MONEY ROUTER). The split landscape had grown a slice at a time — sell tax 3-way,
+bonds 4, Store 3, gameplay fees 3, toll 2, auction 2 — each individually checked, but nothing stated
+the WHOLE map, nothing verified it was COMPLETE, and two mirrors were reconciled nowhere. The router
+**moves NO money** — three jobs: **DECLARE** (`waterfall()` — 8 sources, every split DERIVED from
+the live signed levers so declaration and code structurally cannot drift; load-time + runtime
+sum-exact guards; implicit never-stored remainders LABELLED — arithmetic is not a ledger),
+**VERIFY** (`runRouterInvariants` — the CROSS-SOURCE layer the five per-system runners cannot see:
+source MEMBERSHIP on both revenue ledgers — an unknown `source` inflates every unfiltered SUM those
+ledgers feed, the loudest router alarm, named when it fires; the two ORPHAN mirrors ('fee'/'store',
+inserted by recordFeePayment/splitRevenue and reconciled nowhere) held to the declared splits over
+the REAL gross; the trade-fee booking held to its DECLARED lever; and the dev_fund balance==ledger
+identity on both legs — the one revenue bucket that had no such check), **DISPLAY** (`routerBoard` —
+WHERE A DOLLAR GOES, lifetime per source × destination, real-only grosses). **F1 — a live
+constant-vs-wiring drift found by the mapping pass and fixed here**: `recordTradeFee` routed through
+the generic `recordVigRevenue`, which books `VIG_BPS` (60%) — `TRADE_FEE.VIG_BPS` (the signed D1
+100%) was read NOWHERE on the booking path, so 40% of every trade-fee gross would have been booked
+to nobody (chain-dormant → zero wrong rows existed; the wiring was wrong, not the data).
+`recordVigRevenue` gained an optional `bps` override, recordTradeFee passes the lever, the F1
+mutation fails BY NAME with the exact numbers (booked 0.0006 vs declared 0.001), and the row-level
+regression is non-vacuous by construction (the two levers are asserted to differ). **THE
+UNIFICATION IS DELIBERATELY NOT DONE** — folding rates silently moves real money between
+destinations (the stock-layer-retirement lesson); BALANCE.md carries the current matrix + the
+decision table, and if the founder signs unified percentages the router's declaration is the single
+edit site. Ultracode: a 4-agent mapping workflow (splits / ingests / invariants / surfaces, 2.0M
+tokens) produced the gap report the module was built against; every mapped fact was re-verified
+first-hand before use (the stale-checkout lesson). pgquery ceiling 63→65 (the two membership
+NOT-IN lists are GENERATED from the exported source sets — the DESK.SINK_REASONS precedent).
+§10.4 untouched (declare/verify/display — zero value moves; the one behavioural change is F1, a
+chain-dormant booking fix aligning code to its signed lever). Attack tests: an unknown source on
+either ledger, a dropped mirror, an unledgered dev_fund credit — each fails at its own named check
+and restores green.
