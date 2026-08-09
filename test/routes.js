@@ -168,19 +168,19 @@ console.log(`✅ Mounted-surface test passed — ${app.routes.length} registrati
   + `every one authenticated except the ${Object.keys(PUBLIC).length} declared public, each with a stated reason, (checked BOTH ways, so neither a `
   + `dropped auth preHandler nor a stale allowlist entry can hide), every /v1/mod route behind modAuth `
   + `rather than a player token, and no route registered twice; plus every src/routes module self-contained (no identifier read that it never binds).`);
-// (red-team R28 MED-1/LOW-2) the keyless data boards behind the PUBLIC pages must be in the per-IP public
-// throttle branch — they do real per-hit DB/CPU work with no auth preHandler, so the token-gated read
-// limiter early-returns and they'd be unthrottled (an amplification/DoS vector, /v1/arena crawler-reachable
-// via the public /arena page). Source tripwire: the limiter isn't enabled in this suite, so assert the
-// branch covers them alongside the existing /v1/art and /v1/landmarks entries.
+// (blue-team H4, replacing red-team R28 MED-1/LOW-2) keyless /v1 GETs must be throttled BY DEFAULT, not
+// by an allowlist. The old branch NAMED the keyless heavy boards (/v1/arena, /v1/events, …); anything
+// omitted — above all GET /v1/gangs/:id, which opens a WRITE txn holding a pooled connection + row locks —
+// hit ZERO buckets (unauthenticated pool exhaustion). Now the authed-read branch routes ANY keyless /v1
+// GET to the per-IP public limiter, so a new keyless route can't ship unthrottled by omission. Source
+// tripwire (the limiter isn't enabled in this suite): assert that default-throttle wiring is present.
 {
   const srvSrc = readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
-  const anchor = srvSrc.indexOf("req.url.startsWith('/card/')");   // the public-throttle branch condition
-  assert(anchor > 0, 'the public throttle branch exists');
+  const anchor = srvSrc.indexOf('BLUE-TEAM H4: a KEYLESS');   // the authed-read branch itself (not the reference in the block above)
+  assert(anchor > 0, 'the keyless-GET default-throttle (H4) exists');
   const branch = srvSrc.slice(anchor, anchor + 1400);
-  for (const r of ['/v1/arena', '/v1/events', '/v1/results', '/v1/avatar/']) {
-    assert(branch.includes(`startsWith('${r}')`), `the public throttle branch covers the keyless heavy GET ${r}`);
-  }
+  assert(/authed[\s\S]*checkReadLimit[\s\S]*checkPublicRateLimit/.test(branch),
+    'an authed /v1 GET hits the account read limiter and a KEYLESS /v1 GET falls to the per-IP public limiter — every keyless /v1 GET throttled without being named');
 }
 
 await app.close();

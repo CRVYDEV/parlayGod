@@ -10,9 +10,30 @@
 // naturally targets AWAY players (their notifications are `delivered=false` until they read them). Idempotent
 // via a `pushed` flag. DORMANT unless VAPID_* is configured (the chain/dormant precedent). ZERO §10.4 — a
 // push moves no value; the notification row was already written by the game action.
+import dns from 'node:dns/promises';
 import webpush from 'web-push';
 import { GameError } from './game.js';
 import { uid } from './social/shared.js';
+
+// BLUE-TEAM M4: is this address in an internal/reserved range? Covers IPv4 (loopback/private/CGNAT/
+// link-local/multicast-reserved), IPv6 (loopback, ULA fc00::/7, link-local fe80::), and IPv4-mapped
+// IPv6 (::ffff:a.b.c.d). Used to reject a push endpoint that IS, or RESOLVES TO, an internal host.
+export function isPrivateAddr(ip) {
+  const s = String(ip).toLowerCase().replace(/^\[|\]$/g, '');
+  if (s.includes(':')) {
+    if (s === '::1' || s === '::' || s.startsWith('fe80') || s.startsWith('fc') || s.startsWith('fd')) return true;
+    let m = s.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);   // IPv4-mapped (dotted)
+    if (m) return isPrivateAddr(m[1]);
+    m = s.match(/::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);   // …and hex-compressed (Node normalizes ::ffff:169.254.169.254 → ::ffff:a9fe:a9fe)
+    if (m) { const hi = parseInt(m[1], 16), lo = parseInt(m[2], 16); return isPrivateAddr(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`); }
+    return false;
+  }
+  const o = s.split('.').map(Number);
+  if (o.length !== 4 || o.some((n) => !(Number.isInteger(n) && n >= 0 && n <= 255))) return true; // not clean IPv4 → refuse
+  return o[0] === 0 || o[0] === 127 || o[0] === 10 || o[0] >= 224
+    || (o[0] === 172 && o[1] >= 16 && o[1] <= 31) || (o[0] === 192 && o[1] === 168)
+    || (o[0] === 169 && o[1] === 254) || (o[0] === 100 && o[1] >= 64 && o[1] <= 127);
+}
 
 let configured = false;
 export function initPush() {
@@ -69,7 +90,22 @@ export async function saveSubscription(pool, accountId, sub) {
   // the worker, e.g. http://169.254.169.254/…). A genuine Web-Push endpoint is always https.
   let host = '';
   try { const u = new URL(sub.endpoint); if (u.protocol !== 'https:') throw 0; host = u.hostname; } catch { throw new GameError('bad_sub', 'Invalid push subscription.'); }
-  if (host === 'localhost' || /^\d+\.\d+\.\d+\.\d+$/.test(host)) throw new GameError('bad_sub', 'Invalid push subscription.');
+  // BLUE-TEAM M4: the old check caught IPv4 dotted-quads + localhost, but IPv6 literals ([::1],
+  // [fd00::1], [::ffff:169.254.169.254]) and internal-RESOLVING hostnames slipped through — a blind
+  // SSRF from the worker. Reject an internal IP LITERAL synchronously; for a hostname, reject if it
+  // RESOLVES to an internal address (best-effort — a lookup failure does NOT block, since the literal
+  // guard is the hard net and failing closed on a DNS blip would drop legit subscriptions).
+  const bare = host.replace(/^\[|\]$/g, '');
+  const isIpLiteral = bare.includes(':') || /^\d+\.\d+\.\d+\.\d+$/.test(bare);
+  if (host === 'localhost' || host.endsWith('.local')) throw new GameError('bad_sub', 'Invalid push subscription.');
+  if (isIpLiteral) {
+    if (isPrivateAddr(bare)) throw new GameError('bad_sub', 'Invalid push subscription.');
+  } else {
+    try {
+      const addrs = await dns.lookup(host, { all: true });
+      if (addrs.some((a) => isPrivateAddr(a.address))) throw new GameError('bad_sub', 'Invalid push subscription.');
+    } catch (e) { if (e instanceof GameError) throw e; /* DNS lookup failed — rely on the literal guard */ }
+  }
   await pool.query(
     `INSERT INTO push_subscriptions (id, account_id, endpoint, p256dh, auth) VALUES ($1,$2,$3,$4,$5)
        ON CONFLICT (endpoint) DO UPDATE SET account_id=$2, p256dh=$4, auth=$5`,
