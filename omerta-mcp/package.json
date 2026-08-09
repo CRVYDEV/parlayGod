@@ -3,18 +3,43 @@
   "version": "1.0.0",
   "description": "Model Context Protocol server for OMERTÀ — let any MCP-capable agent play the game natively.",
   "type": "module",
-  "bin": { "omerta-mcp": "./index.js" },
+  "bin": {
+    "omerta-mcp": "index.js"
+  },
   "main": "index.js",
-  "files": ["index.js", "README.md"],
-  "scripts": { "start": "node index.js" },
-  "keywords": ["mcp", "model-context-protocol", "omerta", "game", "agent", "ai", "claude"],
+  "files": [
+    "index.js",
+    "README.md"
+  ],
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "omerta",
+    "game",
+    "agent",
+    "ai",
+    "claude"
+  ],
   "homepage": "https://www.omerta.fun/play",
-  "repository": { "type": "git", "url": "git+https://github.com/crvydev/parlaygod.git", "directory": "omerta-mcp" },
-  "bugs": { "url": "https://www.omerta.fun" },
-  "engines": { "node": ">=18" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvydev/parlaygod.git",
+    "directory": "omerta-mcp"
+  },
+  "bugs": {
+    "url": "https://www.omerta.fun"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0"
   },
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "license": "MIT"
 }
