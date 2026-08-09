@@ -443,6 +443,10 @@ const SIGNED = [
   ['TRADE_FEE.BPS', 30],        // D1 (RATE SIGNED 2026-08-05): the buy-side trade fee → the Vig
   ['TRADE_FEE.VIG_BPS', 10000],
   ['TRADE_FEE.MAX_BPS', 100],
+  // THE TICKER BALLOT — the chamber's daily stock pick (§10.4-free: the ballot moves no value; the
+  // Phase-B keeper consumes the record). TICKERS is a whole-array pin (the STREAK.MILESTONES shape).
+  ['TICKER_BALLOT.TICKERS', ['SPY', 'AAPL', 'TSLA', 'NVDA', 'AMZN', 'MSFT']],
+  ['TICKER_BALLOT.DEFAULT', 'SPY'],
   // STREET LIFE (#318) — WORD ON THE STREET (the corner faucet is HARD-bounded MAX_DAY × CASH =
   // $2k/day + 75 respect/day; POOLS/CONFLICT are parent-object pins — the draw indexes them)
   ['CORNER.PER_DAY', 3],

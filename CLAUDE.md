@@ -10831,3 +10831,34 @@ NOT-IN lists are GENERATED from the exported source sets — the DESK.SINK_REASO
 chain-dormant booking fix aligning code to its signed lever). Attack tests: an unknown source on
 either ledger, a dropped mirror, an unledgered dev_fund credit — each fails at its own named check
 and restores green.
+
+**THE TICKER BALLOT — the chamber's daily stock pick (Stock Machine Phase A; founder-directed
+2026-08-09 "Do one hook four slices and yes on the counsel memo — Begin The Ticker Ballot") —
+BUILT** (`src/commission.js` castTickerVote/tallyTickerDay/sweepTickerBallot/tickerBallotBoard;
+`commission_ticker_votes` + `ticker_ballot_results` — the 207th/208th tables; the `TICKER_BALLOT`
+rules tail {TICKERS: SPY/AAPL/TSLA/NVDA/AMZN/MSFT, DEFAULT: 'SPY'}; routes GET(public)+POST(authed)
+`/v1/commission/ticker`; `/v1/city.tickerBallot` 30s-cached; the worker sweep; a citywire line;
+test block in `test/commission.js`). The Commission's in-game call-to-action from the founder's
+Stock Machine directive: each seated family's boss/underboss casts ONE pick per UTC day from the
+supported list, changeable all day, on the AUDITED weekly-decree ballot discipline at daily
+cadence — standing STAMPED at cast, electorate bounded at `COMMISSION.SEATS`, weights SEATS..1 by
+rank (a raw 1–1 is decided by the head seat's weight — the drop-the-weighting mutation fails BY
+NAME), tie → deadlock. At the roll the worker resolves YESTERDAY into `ticker_ballot_results` —
+**the permanent record the Phase-B buy keeper consumes** — idempotent on the day PK
+(SELECT-then-INSERT, the recordReckoning pg-mem lesson), deadlock/silence recorded as the DEFAULT
+broad market with `decided_by` naming chamber-vs-default (the keeper never guesses), guarded by
+`everVoted` so pre-feature days never backfill a wall of DEFAULT rows. Dissolution deletes the
+family's daily ballots beside its weekly ones (the step-two H1 no-ghost-governance rule). **ZERO
+§10.4 surface** — the whole ballot (gates, casts, changes, tally, sweeps, deadlock) writes not one
+`transactions` row (test-pinned inside a tight window — the first cut's window swallowed the
+fixture's own `gang:found`/`gang:dissolved` side rows and failed honestly), and the board says so
+(`buying: false` — nothing is bought until counsel memo A1 clears). Console: a vote picker on the
+Family tab's Commission section + a "📈 THE DAY'S BUY" card on the City tab + a feed line.
+`TICKER_BALLOT.*` pinned (levers 659) + tabled in BALANCE.md. **Shipped with it:** the §10.8
+one-hook resolution EXTENDED and recorded in all three design docs (founder: "one hook four
+slices" — dev/treasury/LP/vig on the ONE canonical-pool hook; the Stock Machine's treasury slice
+is a slice OF it, swept by a keeper, never a second hook; `OmertaTradeFeeHook` as a separate
+contract retired), and **`omerta-counsel-memo.md`** — the five standing counsel assertions (A1
+treasury stock buys / A2 transferable-TBA drops / A3 claim-rail geofence+KYC / A4 uncapped NFT
+proceeds / A5 play-pool redistribution) converted into an enumerated signature sheet with the
+six walls that hold regardless, and Phase B/C explicitly blocked on their rows.

@@ -33,7 +33,7 @@ import { sweepWire, sweepWireAlerts, sweepStandingWatches } from './wire.js';
 import { reclaimExpiredVouchers, assertChainId, bondOracleHealth } from './chain.js';
 import { sweepMarket } from './market.js';
 import { sweepDiplomacy, sweepNpcDiplomacy } from './diplomacy.js';
-import { settleProposals, activeDecree, seatedGangs } from './commission.js';
+import { settleProposals, activeDecree, seatedGangs, sweepTickerBallot } from './commission.js';
 import { sweepSecrets } from './secrets.js';
 import { sweepRivals } from './rivals.js';
 import { generateContactCalls, sweepCalls } from './contacts.js';
@@ -335,6 +335,10 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     // THE CAPO'S LICENSE — recompute each agent's minted+retained+levelled recruit count (the perk
     // gate the throttle + wire board read). Retention is a moving window, so this must re-run.
     await safe('capo license', () => sweepCapoLicense(pool));
+    // THE TICKER BALLOT — resolve yesterday's chamber vote into the permanent record the Phase-B
+    // buy keeper consumes (idempotent on the day PK; deadlock/silence records the DEFAULT ticker).
+    const tb = await safe('ticker ballot', () => sweepTickerBallot(pool));
+    if (tb?.resolved) console.log(`[worker] ticker ballot: day ${tb.day} → ${tb.ticker} (${tb.decidedBy})`);
     // FIVE PILLARS #2: lapsed coalitions dissolve (reads filter on expires_at — row hygiene)
     await safe('diplomacy sweep', () => sweepDiplomacy(pool));
     // NPC-FAMILY DIPLOMACY: NPC families accept a player's peace offer (ending their OFFENSIVE) + form

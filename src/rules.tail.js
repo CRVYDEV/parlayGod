@@ -5006,3 +5006,19 @@ export function capoPerksOf(count) {
   for (const t of CAPO.TIERS) if (Number(count || 0) >= t.n) out = { tier: t.name, rate: t.rate, tapBonus: t.tapBonus };
   return out;
 }
+
+// ── THE TICKER BALLOT — the Commission's daily stock vote (the Stock Machine, Phase A) ────────────
+// (founder-directed 2026-08-09: "Begin The Ticker Ballot"; design omerta-rwa-stock-machine-design.md
+// §3.) The seated families vote DAILY on WHICH stock token the treasury's RWA slice buys — a
+// treasury operation turned into a server-wide political event. CHAIN-DORMANT: no keeper buys yet;
+// the ballot runs, resolves and publishes NOW (the daily beat), and the buy keeper (Phase B) will
+// consume ticker_ballot_results when it ships. Manipulation-safe by construction: the vote chooses
+// WHICH ticker only — never whether, how much, or to whom (the budget is the accrued slice, the
+// destination is the vault, both outside the ballot). Deadlock or silence resolves to DEFAULT (the
+// broad-market ETF) so a quiet chamber never stalls the daily beat. TICKERS are REAL Robinhood
+// Chain stock-token symbols (the treasury would buy the actual tokens); the catalog + DEFAULT are
+// founder sign-off levers. Zero §10.4 surface — a vote moves nothing.
+export const TICKER_BALLOT = {
+  TICKERS: ['SPY', 'AAPL', 'TSLA', 'NVDA', 'AMZN', 'MSFT'],  // the supported buy list (small + liquid to start)
+  DEFAULT: 'SPY',                                             // deadlock/silence buys the broad market
+};

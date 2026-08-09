@@ -2965,3 +2965,28 @@ ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS digest_optin BOOLEAN NOT
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS digest_at TIMESTAMPTZ;
 -- THE CAPO'S LICENSE: worker-computed count of an agent's minted+retained+levelled human recruits
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS capo_recruits INT NOT NULL DEFAULT 0;
+
+-- ── THE TICKER BALLOT (the Stock Machine, Phase A — chain-dormant) ──────────────────────────────
+-- The Commission's daily stock vote: one ballot per seated family per day (the commission_votes
+-- shape at daily cadence; standing stamped at cast, the audited step-two discipline). NEW tables,
+-- so CREATE TABLE IF NOT EXISTS is live-DB-safe (the 2026-08-06 outage class is columns on
+-- EXISTING tables, not new tables).
+CREATE TABLE IF NOT EXISTS commission_ticker_votes (
+  day INT NOT NULL,
+  gang_id TEXT NOT NULL,
+  ticker TEXT NOT NULL,
+  standing NUMERIC NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (day, gang_id)
+);
+-- The resolved record the buy KEEPER (Phase B) consumes — one row per day, written once by the
+-- worker sweep after the day rolls (idempotent on the PK). `weighted` is the winning weight so the
+-- record shows HOW decisive the chamber was; a deadlocked/silent day records the DEFAULT ticker.
+CREATE TABLE IF NOT EXISTS ticker_ballot_results (
+  day INT PRIMARY KEY,
+  ticker TEXT NOT NULL,
+  votes INT NOT NULL DEFAULT 0,
+  weighted INT NOT NULL DEFAULT 0,
+  decided_by TEXT NOT NULL DEFAULT 'default',   -- 'chamber' | 'default'
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

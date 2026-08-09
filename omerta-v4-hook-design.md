@@ -574,6 +574,16 @@ and the choice is the founder's because it turns on wallet topology, not on code
    3. Run the trade-fee hook on a second pool. Rejected for the same reason §4 rejects fragmenting
       liquidity — that pool would be the *untaxed* one and §9.6 says who would find it first.
 
+   **FOUNDER-CONFIRMED 2026-08-09 ("one hook four slices"), extending the fold to the Stock
+   Machine:** the canonical pool runs ONE hook whose accrued fees route to FOUR destinations —
+   **dev / treasury / LP / vig**. The sell tax's three slices keep their signed 900 bps (dev 200 /
+   treasury 400 / lp 300 — `rwa` in the deployed field names, the treasury Safe per the stock-layer
+   retirement), the D1 buy-side trade fee (30 bps, 100% → vig) joins as its own rate, and the
+   treasury slice doubles as the Stock Machine's buy budget (`omerta-rwa-stock-machine-design.md` —
+   a KEEPER sweeps the accrual; no second hook ever serves the pool). This is the Phase-B contract
+   fold; the accrue-don't-forward discipline and the partial-fill/`beforeSwap` design problem
+   recorded above still govern how it is built.
+
 Also decided in passing: **the cut is taken in ETH** (§2.1 — the core move), and **OMR may become an
 inert ERC-20** with its tax path armed at zero (§7.1).
 

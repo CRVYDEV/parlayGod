@@ -3737,6 +3737,7 @@
     const rost = (await api('GET', '/v1/roster')).body;
     if (!g) { t.innerHTML = '<span class="d">the family is gone.</span>'; return; }
     const com = (await api('GET', '/v1/commission')).body || {};
+    const tkb = (await api('GET', '/v1/commission/ticker')).body || {};
     const mySeat = (com.seats || []).find((s) => s.name === g.name);
     const boss = me.gang.role === 'boss' || me.gang.role === 'underboss';
     const distr = (await api('GET', '/v1/districts')).body?.districts || [];
@@ -3883,6 +3884,9 @@
         <select id="com-decree">${(com.book || []).map((d) => `<option value="${d.id}">${d.id} — ${d.name || d.desc || ''}</option>`).join('')}</select>
         <button class="act" id="com-vote">cast the family's vote</button>
         <button class="act" id="com-propose">table a motion ($${fmt(com.proposalDeposit || 100000)} deposit)</button>
+        <div style="margin-top:6px"><select id="com-ticker">${((tkb && tkb.tickers) || []).map((x) => `<option value="${x}">${x}</option>`).join('')}</select>
+        <button class="act" id="com-ticker-cast">vote the day's BUY (the treasury's stock)</button>
+        <span class="d" style="color:var(--dim);font-size:12px">today's ballot${tkb && tkb.leading ? ` — leading: <b>${tkb.leading}</b>` : ' — no votes yet'}${tkb && tkb.lastResult ? ` · yesterday: ${tkb.lastResult.ticker}` : ''}</span></div>
         ${(com.seats || []).indexOf(mySeat) === 0 ? `<button class="act" data-do="POST /v1/commission/veto">VETO (head of the table)</button>` : ''}
         ${(com.seats || []).indexOf(mySeat) > 0 && com.veto ? `<button class="act" data-do="POST /v1/commission/override">move to OVERRIDE the veto</button>` : ''}</div>
         <div class="d" style="color:var(--dim);font-size:12px">a motion stakes a treasury deposit — it refunds if your decree is enacted, forfeits if the chamber goes another way. The head can VETO; a floor supermajority can OVERRIDE.</div>` : ''}
@@ -3989,6 +3993,8 @@
     const voteBtn = t.querySelector('#com-vote');
     if (voteBtn) voteBtn.onclick = () =>
       act('POST', '/v1/commission/vote', { decree: t.querySelector('#com-decree').value }).then(() => renderFamily());
+    if (t.querySelector('#com-ticker-cast')) t.querySelector('#com-ticker-cast').onclick = () =>
+      act('POST', '/v1/commission/ticker', { ticker: t.querySelector('#com-ticker').value }).then(() => renderFamily());
   }
 
   // ── THE CREW (omerta-crew-design.md) — the lightweight 2-4 player mutual-aid pact. Status +
@@ -5255,7 +5261,13 @@
     const shocks = Object.entries(c.weather || {}).map(([d, x]) => [d, Number(x)]).sort((a, b) => a[1] - b[1]);
     const cheap = shocks[0], rich = shocks[shocks.length - 1];
     const spreadPct = cheap && rich ? Math.round((rich[1] / cheap[1] - 1) * 100) : 0;
+    const tkb = c.tickerBallot;
     t.innerHTML = `
+      ${tkb ? `<div class="card"><span class="t" style="color:var(--neon)">📈 THE DAY'S BUY — the Commission's stock ballot</span>
+        <div class="d">The seated families vote daily on which stock the city treasury buys with its tax slice.
+        ${tkb.leading ? `Today's ballot leads <b>${tkb.leading}</b>` : `No family has voted yet today — silence buys <b>${tkb.defaultTicker}</b>`}${(tkb.votes || []).length ? ` · votes: ${tkb.votes.map((v) => `${v.family} → ${v.ticker}`).join(' · ')}` : ''}.
+        ${tkb.lastResult ? `Yesterday the chamber ${tkb.lastResult.decidedBy === 'chamber' ? 'set' : 'defaulted'} the buy: <b>${tkb.lastResult.ticker}</b>.` : ''}
+        ${tkb.buying === false ? `<span style="color:var(--dim)">(the buy desk opens with the chain — the record accrues now)</span>` : ''}</div></div>` : ''}
       <div class="card coach-card"><span class="t" style="color:var(--neon)">THE CITY CHANGES EVERY DAY</span>
         <div class="d">Today's conditions move goods prices, police behavior, and raid odds. Check this board before you plan
         your day: <b>buy goods where they're cheap, sell where they're rich</b> (the Streets tab trades them; convoys and
@@ -7989,6 +8001,7 @@
       frontier_seized: () => `${d.gang} planted their flag on ${d.npc}'s turf`,
       errand_done: () => `${d.who} did right by ${d.npc}`,
       vendetta_settled: () => `a vendetta was settled in blood`,
+      ticker_ballot: (e) => `📈 the Commission ${e.decidedBy === 'chamber' ? 'set' : 'defaulted'} the day's buy: ${e.ticker}`,
       vendetta_peace: () => `two bloodlines sat down and made peace`,
       wage_paid: () => `street wage: +${d.omr} $OMR`,
       clue_found: () => `🗺 a CLUE SCROLL turned up on that job — “${d.riddle}” (${d.steps} steps to a casket)`,

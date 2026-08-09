@@ -336,6 +336,105 @@ for (const id of ['smugglers_moon', 'open_roads', 'blood_oath'])
   assert.equal(inv.checks.find((c) => c.name === 'commission escrow').drift, 0, 'the commission escrow still reconciles'); }
 // reseat the chamber for the season-rollover assertion below (the ENACTED settle didn't touch season standings)
 
+// ═══ THE TICKER BALLOT — the chamber's daily stock pick (the Stock Machine's Phase-A record) ═══
+// §10.4-FREE BY CONSTRUCTION: a pick is a status row + a permanent record the Phase-B keeper will
+// consume — no value moves, no ledger row, no new reason (pinned below by a raw transactions COUNT).
+{
+  const { sweepTickerBallot } = await import('../src/commission.js');
+  const { dayOf, TICKER_BALLOT } = await import('../src/rules.js');
+  const { bus } = await import('../src/game.js');
+  const day = dayOf();
+
+  // the everVoted guard — no ballot has EVER been cast, so the sweep records NOTHING (a wall of
+  // pre-feature DEFAULT rows would teach the keeper the chamber chose SPY on days it never met)
+  assert.equal((await sweepTickerBallot(pool)).resolved, false, 'no vote ever cast → the sweep records nothing');
+  assert(!(await pool.query('SELECT 1 FROM ticker_ballot_results')).rows[0], 'the record is empty pre-feature');
+
+  // the no-seat fixture FOUNDS a family (a real gang:found ledger row), so it sits OUTSIDE the
+  // zero-ledger window below — the window must hold only the BALLOT's own operations
+  const outsider = await mk('Boss Number 7');
+  await seedCh(outsider.id, 'respect=1000, cash=60000');
+  assert((await call('POST', '/v1/gangs', { token: outsider.token, body: { name: 'Family Number 7', tag: 'F7A' } })).body.gangId,
+    'a 7th family founds (zero season standing — never seated)');
+  const txnsBefore = Number((await pool.query('SELECT COUNT(*) c FROM transactions')).rows[0].c);
+
+  // gates: rank (no family) / bad_ticker (off the list) / no_seat (a family with no standing)
+  assert.equal((await call('POST', '/v1/commission/ticker', { token: civilian.token, body: { ticker: 'AAPL' } })).body.error,
+    'rank', 'no family, no pick');
+  assert.equal((await call('POST', '/v1/commission/ticker', { token: bosses[0].token, body: { ticker: 'GME' } })).body.error,
+    'bad_ticker', 'the chamber buys from its own list');
+  assert.equal((await call('POST', '/v1/commission/ticker', { token: outsider.token, body: { ticker: 'AAPL' } })).body.error,
+    'no_seat', 'no seat, no pick');
+
+  // cast + same-day change (the upsert) + the public board
+  r = await call('POST', '/v1/commission/ticker', { token: bosses[0].token, body: { ticker: 'aapl' } });
+  assert.equal(r.code, 200, 'the head family picks');
+  assert.equal(r.body.ticker, 'AAPL', 'case-normalized');
+  assert.equal(r.body.buysOnDay, day + 1, 'the pick buys TOMORROW — cast all day, the record freezes at the roll');
+  assert.equal((await call('POST', '/v1/commission/ticker', { token: bosses[0].token, body: { ticker: 'TSLA' } })).code, 200,
+    'a pick can change all day');
+  r = await call('GET', '/v1/commission/ticker');
+  assert.equal(r.code, 200, 'the ballot is PUBLIC (keyless)');
+  assert.equal(r.body.votes.length, 1, 'one pick per family');
+  assert.equal(r.body.votes[0].ticker, 'TSLA', 'the change stuck');
+  assert.deepEqual(r.body.tickers, TICKER_BALLOT.TICKERS, 'the buy list is published');
+  assert.equal(r.body.buying, false, 'honest state: the buy keeper is Phase B — the record accrues, nothing is bought yet');
+
+  // THE WEIGHTED TALLY — raw count 1–1, the head seat's WEIGHT decides. MUTATION: drop the
+  // SEATS−rank weighting (all weights equal) and this reads a tie → leading null → fails BY NAME.
+  assert.equal((await call('POST', '/v1/commission/ticker', { token: bosses[1].token, body: { ticker: 'NVDA' } })).code, 200);
+  r = await call('GET', '/v1/commission/ticker');
+  assert.equal(r.body.leading, 'TSLA', 'raw count 1–1: the head seat outweighs the second (5 v 4) — standing-ranked weights decide');
+
+  // /v1/city carries the day's buy (keyless — the whole town sees what the chamber is doing)
+  r = await call('GET', '/v1/city');
+  assert(r.body.tickerBallot && Array.isArray(r.body.tickerBallot.tickers), 'the city board carries the ballot');
+
+  // THE SWEEP — the day rolls: yesterday's ballot resolves into the permanent record, once, and
+  // the streets hear it. (Shift today's votes back a day — the commission_votes week-shift pattern.)
+  await pool.query(`UPDATE commission_ticker_votes SET day=${day - 1} WHERE day=${day}`);
+  let wireEvt = null;
+  const onStreets = (e) => { if (e.type === 'ticker_ballot') wireEvt = e; };
+  bus.on('streets', onStreets);
+  r = await sweepTickerBallot(pool);
+  bus.off('streets', onStreets);
+  assert.equal(r.resolved, true, 'the roll resolves yesterday');
+  assert.equal(r.ticker, 'TSLA', 'the chamber pick enters the record');
+  assert.equal(r.decidedBy, 'chamber');
+  assert(wireEvt && wireEvt.ticker === 'TSLA', "the streets hear the day's buy");
+  assert.equal((await sweepTickerBallot(pool)).resolved, false, 'idempotent — one record per day');
+  const rec = (await pool.query(`SELECT * FROM ticker_ballot_results WHERE day=${day - 1}`)).rows[0];
+  assert(rec && rec.ticker === 'TSLA' && rec.decided_by === 'chamber' && Number(rec.votes) === 2,
+    'the permanent record the Phase-B keeper consumes (day, ticker, votes, decided_by)');
+  assert.equal((await call('GET', '/v1/commission/ticker')).body.lastResult.ticker, 'TSLA', 'the board shows the last resolved day');
+
+  // DEADLOCK → THE DEFAULT — a tied chamber still buys (the broad market). Ranks 0..3 carry
+  // weights 5,4,3,2: AAPL 5+2 = 7 = TSLA 4+3. MUTATION: drop the DEFAULT fallback and the sweep
+  // skips the day (or records null) — this fails BY NAME.
+  await pool.query(`DELETE FROM ticker_ballot_results WHERE day=${day - 1}`);
+  await pool.query('DELETE FROM commission_ticker_votes');
+  const tie = [[bosses[0], 'AAPL', 600], [bosses[1], 'TSLA', 500], [bosses[2], 'TSLA', 400], [bosses[3], 'AAPL', 300]];
+  for (const [b, t, s] of tie)
+    await pool.query(`INSERT INTO commission_ticker_votes (day, gang_id, ticker, standing) VALUES (${day - 1}, '${b.gang}', '${t}', ${s})`);
+  r = await sweepTickerBallot(pool);
+  assert.equal(r.resolved, true, 'a deadlocked day still resolves');
+  assert.equal(r.ticker, TICKER_BALLOT.DEFAULT, 'the deadlocked chamber buys the DEFAULT — the broad market');
+  assert.equal(r.decidedBy, 'default', 'and the record says WHO decided (the keeper can tell a chamber day from a default day)');
+
+  // §10.4 — the WHOLE ballot (gates, casts, changes, tally reads, both sweeps, the deadlock)
+  // moved ZERO value: not one transactions row was written inside the window
+  const txnsAfter = Number((await pool.query('SELECT COUNT(*) c FROM transactions')).rows[0].c);
+  assert.equal(txnsAfter, txnsBefore, 'the ticker ballot writes ZERO ledger rows — §10.4-free by construction');
+
+  // dissolution deletes the family's ballots (the step-two H1 no-ghost-governance rule, on the
+  // daily table too) — F2's boss walks, the empty house dissolves, the pick dies with it. AFTER
+  // the zero-ledger window: dissolving a funded family legitimately ledgers the treasury burn.
+  await pool.query(`INSERT INTO commission_ticker_votes (day, gang_id, ticker, standing) VALUES (${day}, '${bosses[1].gang}', 'MSFT', 500)`);
+  assert.equal((await call('POST', '/v1/gangs/leave', { token: bosses[1].token })).code, 200, 'the second family dissolves');
+  assert(!(await pool.query(`SELECT 1 FROM commission_ticker_votes WHERE gang_id='${bosses[1].gang}'`)).rows[0],
+    "a dissolved family's ticker ballots die with it — board and tally always agree");
+}
+
 // ── econ pass: the chamber re-contests every season — the rollover zeroes the ladder ──
 // (the audit's purchasable-standing fix: parked lifetime wealth no longer owns the head seat)
 const { runSeasonRollover } = await import('../src/worker.js');
@@ -346,5 +445,5 @@ assert.equal(Number((await pool.query('SELECT COALESCE(SUM(season_tribute) + SUM
 r = await call('GET', '/v1/commission');
 assert.equal(r.body.seats.length, 0, 'the chamber is empty until someone earns a seat THIS season');
 
-console.log('✅ Commission test passed — five seats by SEASON standing (the purchasable-standing fix: rollover re-contests the chamber), public cast-and-change votes, lazy majority tally + tie deadlock, real-cast lifecycle ballot, OPEN SEASON (half safehouse), THE PAX (war blocked), AMNESTY (half laylow, ledger exact), LOCKDOWN (+20 in the audit trail) + STEP TWO (audit-hardened): standing-ranked ballots (top two beat bottom three, stale head ballots outranked, electorate bounded at five, weighted ties deadlock), dissolution kills the ghost ballot, the head-of-table veto (rank/head/once gates, public record, touchpoint dead), vocabulary closed + STEP THREE: proposals with deposits (rank/no_seat/bad_decree/treasury gates, escrowed treasury deposit, one motion per family, public table, votes for unproposed decrees discarded, settle refunds the enacted motion + forfeits the rest to the pool, the commission-escrow §10.4 check exact) and THE LEVY (the buyback family split redirected to the seated chamber, head seat 5× the last) + TIER-4: THE STATESMAN (vote/veto/propose/override/enacted political-capital legend — survives death, leaderboard + view, once-per-week vote), THE OVERRIDE (the floor musters 7 seat-weight to overrule the head veto — RESTORED; head/rank/no_seat/no_veto/again gates), THE RECORD (chamber history), the 3 new decrees on the books, and §10.4 exact across it all (statecraft/override move no money)');
+console.log('✅ Commission test passed — five seats by SEASON standing (the purchasable-standing fix: rollover re-contests the chamber), public cast-and-change votes, lazy majority tally + tie deadlock, real-cast lifecycle ballot, OPEN SEASON (half safehouse), THE PAX (war blocked), AMNESTY (half laylow, ledger exact), LOCKDOWN (+20 in the audit trail) + STEP TWO (audit-hardened): standing-ranked ballots (top two beat bottom three, stale head ballots outranked, electorate bounded at five, weighted ties deadlock), dissolution kills the ghost ballot, the head-of-table veto (rank/head/once gates, public record, touchpoint dead), vocabulary closed + STEP THREE: proposals with deposits (rank/no_seat/bad_decree/treasury gates, escrowed treasury deposit, one motion per family, public table, votes for unproposed decrees discarded, settle refunds the enacted motion + forfeits the rest to the pool, the commission-escrow §10.4 check exact) and THE LEVY (the buyback family split redirected to the seated chamber, head seat 5× the last) + TIER-4: THE STATESMAN (vote/veto/propose/override/enacted political-capital legend — survives death, leaderboard + view, once-per-week vote), THE OVERRIDE (the floor musters 7 seat-weight to overrule the head veto — RESTORED; head/rank/no_seat/no_veto/again gates), THE RECORD (chamber history), the 3 new decrees on the books, and §10.4 exact across it all (statecraft/override move no money) + THE TICKER BALLOT (the Stock Machine\'s Phase-A record): rank/bad_ticker/no_seat gates, cast + same-day change on the public keyless board, the standing-ranked SEATS..1 weighted tally (head seat outweighs a raw 1–1 — non-vacuous under the drop-the-weighting mutation), the city board carrying the day\'s buy, the roll sweeping YESTERDAY into the permanent keeper record (once, idempotent, streets-announced, decided_by naming chamber vs default), the everVoted guard (no pre-feature DEFAULT backfill), DEADLOCK buying the DEFAULT broad market, dissolution killing the daily ghost ballot too, and the whole ballot writing ZERO ledger rows');
 await app.close();

@@ -11,7 +11,7 @@
 // the public record. No decree moves money: effects are bounded one-week modifiers applied at
 // exactly one touchpoint each (safehouse / declareWar / laylow / convoy defense).
 import { GameError, bus, ledger } from './game.js';
-import { COMMISSION, decreeOf, weekOf, dayOf, statesmanRankOf } from './rules.js';
+import { COMMISSION, decreeOf, weekOf, dayOf, statesmanRankOf, TICKER_BALLOT } from './rules.js';
 
 // THE STATESMAN (Tier-4) — bump the account's lifetime political-capital legend by DIRECT SQL (additive,
 // NUMERIC → pg-mem-safe; OFF persistAccount's positional list → clobber-safe, the hitman_rep precedent).
@@ -322,5 +322,99 @@ export async function commissionBoard(pool) {
     proposals, proposalDeposit: COMMISSION.PROPOSAL_DEPOSIT,
     record, statesmenTop, statesmanRanks: COMMISSION.STATESMAN_RANKS,
     book: COMMISSION.DECREES, seatsCount: COMMISSION.SEATS, week,
+  };
+}
+
+// ── THE TICKER BALLOT — the Commission's daily stock vote (the Stock Machine, Phase A) ────────────
+// The seated families vote DAILY on which stock token the treasury's RWA slice buys. Chain-dormant:
+// the ballot runs and resolves NOW (the daily beat + the public record); the Phase-B buy keeper
+// consumes ticker_ballot_results when it ships. The vote chooses WHICH — never whether/how-much/
+// to-whom — so a captured chamber can only pick a stock the town disagrees with, which is the
+// Commission working (design §3). Zero §10.4 surface: a vote moves nothing, the result is a record.
+
+// cast (or change) the family's ticker vote — boss/underboss of a SEATED family, the castVote
+// discipline verbatim: standing stamped at cast, UPDATE-then-INSERT (pg-mem), changeable all day.
+export async function castTickerVote(ch, ticker, client, h) {
+  if (h.owned.gangRole !== 'boss' && h.owned.gangRole !== 'underboss')
+    throw new GameError('rank', 'Only the boss or underboss speaks for the family.');
+  const t = String(ticker || '').toUpperCase();
+  if (!TICKER_BALLOT.TICKERS.includes(t))
+    throw new GameError('bad_ticker', `The chamber buys from its own list: ${TICKER_BALLOT.TICKERS.join(', ')}.`);
+  const seats = await seatedGangs(client);
+  const seatIdx = seats.findIndex((s) => s.id === h.owned.gangId);
+  if (seatIdx < 0)
+    throw new GameError('no_seat', `The Commission seats the top ${COMMISSION.SEATS} families. Earn the standing.`);
+  const standing = Number(seats[seatIdx].standing);
+  const day = dayOf();
+  const upd = await client.query('UPDATE commission_ticker_votes SET ticker=$3, standing=$4 WHERE day=$1 AND gang_id=$2',
+    [day, h.owned.gangId, t, standing]);
+  if (!upd.rowCount) {
+    try {
+      await client.query('INSERT INTO commission_ticker_votes (day, gang_id, ticker, standing) VALUES ($1,$2,$3,$4)',
+        [day, h.owned.gangId, t, standing]);
+    } catch { throw new GameError('again', 'The family just spoke — cast again to change the pick.'); }
+  }
+  bus.emit(`gang:${h.owned.gangId}`, { type: 'ticker_vote', ticker: t });
+  await h.track(client, ch.account_id, 'ticker_vote', { ticker: t, day, standing });
+  return { ok: true, day, ticker: t, buysOnDay: day + 1 };
+}
+
+// the day's tally — the rankedBallots discipline at daily cadence: standing-ranked, electorate
+// bounded at the seat count, weights SEATS..1 by rank. Tie → null (the sweep resolves to DEFAULT).
+export async function tallyTickerDay(db, day) {
+  const rows = (await db.query('SELECT gang_id, ticker, standing FROM commission_ticker_votes WHERE day=$1', [day])).rows;
+  const ranked = rows
+    .map((r) => ({ gang_id: r.gang_id, ticker: r.ticker, standing: Number(r.standing) }))
+    .sort((a, b) => b.standing - a.standing || (a.gang_id < b.gang_id ? -1 : 1))
+    .slice(0, COMMISSION.SEATS)
+    .map((r, i) => ({ ...r, weight: COMMISSION.SEATS - i }));
+  if (!ranked.length) return null;
+  const tally = {};
+  for (const b of ranked) tally[b.ticker] = (tally[b.ticker] || 0) + b.weight;
+  const sorted = Object.entries(tally).map(([ticker, n]) => ({ ticker, n })).sort((a, b) => b.n - a.n);
+  if (sorted.length > 1 && sorted[0].n === sorted[1].n) return null; // the chamber deadlocked
+  return { ticker: sorted[0].ticker, votes: ranked.length, weighted: sorted[0].n };
+}
+
+// the worker sweep: once the day has ROLLED, resolve YESTERDAY's ballot into the permanent record
+// the Phase-B keeper consumes — idempotent on the day PK (SELECT-then-INSERT; pg-mem's ON CONFLICT
+// is unreliable — the recordReckoning lesson), deadlock/silence recorded as the DEFAULT ticker so
+// the record has a row for every day the ballot has run and the keeper never guesses.
+export async function sweepTickerBallot(pool) {
+  const day = dayOf() - 1;
+  if (day < 0) return { resolved: false };
+  if ((await pool.query('SELECT 1 FROM ticker_ballot_results WHERE day=$1', [day])).rows[0]) return { resolved: false };
+  // only record once the ballot has ever been USED (a day with no votes before the feature shipped
+  // should not backfill a wall of DEFAULT rows) — the first vote ever starts the daily record.
+  const everVoted = (await pool.query('SELECT 1 FROM commission_ticker_votes LIMIT 1')).rows[0];
+  if (!everVoted) return { resolved: false };
+  const won = await tallyTickerDay(pool, day);
+  const ticker = won ? won.ticker : TICKER_BALLOT.DEFAULT;
+  try {
+    await pool.query('INSERT INTO ticker_ballot_results (day, ticker, votes, weighted, decided_by) VALUES ($1,$2,$3,$4,$5)',
+      [day, ticker, won ? won.votes : 0, won ? won.weighted : 0, won ? 'chamber' : 'default']);
+  } catch { return { resolved: false }; } // a concurrent worker won the PK race — theirs is the record
+  bus.emit('streets', { type: 'ticker_ballot', ticker, decidedBy: won ? 'chamber' : 'default', votes: won ? won.votes : 0 });
+  return { resolved: true, day, ticker, decidedBy: won ? 'chamber' : 'default' };
+}
+
+// the public board half — today's open ballot + the standing record (KEYLESS via /v1/city + the
+// chamber's own screen). Family names resolved for display; a dissolved family's ballots are
+// deleted with it (the removeMember cleanup), so board and tally always agree.
+export async function tickerBallotBoard(db) {
+  const day = dayOf();
+  const votes = (await db.query(
+    `SELECT v.ticker, v.standing, g.name, g.tag FROM commission_ticker_votes v
+       LEFT JOIN gangs g ON g.id = v.gang_id WHERE v.day=$1`, [day])).rows
+    .map((r) => ({ ticker: r.ticker, family: r.name || '(a family now dissolved)', tag: r.tag || null, standing: Number(r.standing) }))
+    .sort((a, b) => b.standing - a.standing);
+  const live = await tallyTickerDay(db, day);
+  const last = (await db.query('SELECT day, ticker, decided_by FROM ticker_ballot_results ORDER BY day DESC LIMIT 1')).rows[0];
+  return {
+    day, tickers: TICKER_BALLOT.TICKERS, defaultTicker: TICKER_BALLOT.DEFAULT,
+    votes, leading: live ? live.ticker : null,
+    lastResult: last ? { day: Number(last.day), ticker: last.ticker, decidedBy: last.decided_by } : null,
+    // honest state: the buy keeper is Phase B — the record accrues now, nothing is bought yet
+    buying: false,
   };
 }
