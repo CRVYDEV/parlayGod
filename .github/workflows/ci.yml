@@ -11,6 +11,7 @@ name: ci
 
 on:
   push:
+    branches: [main]               # branch pushes run once via pull_request — not twice
     paths-ignore:
       - 'omerta-contracts/**'      # covered by forge.yml
       - '**/*.md'
