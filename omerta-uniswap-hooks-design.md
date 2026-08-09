@@ -13,6 +13,14 @@ plan; the hook is the one piece worth prototyping first.
 > (`recordTradeFee`, `syncTradeFees`, `TRADE_FEE_HOOK_ADDRESS`) and is unaffected either way — what
 > needs deciding is which contract emits into it. Tracked as the founder call at
 > `omerta-v4-hook-design.md` §10.8, where the three ways out are ranked.
+>
+> **RESOLVED — the FOLD (D1 = A, 2026-08-02; rate signed 2026-08-05; founder-confirmed "one hook
+> four slices" 2026-08-09):** ONE hook serves the canonical pool with FOUR slice destinations —
+> dev / treasury / LP / **vig**. §2's trade fee becomes a rate ON that hook (30 bps buys, 100% →
+> Vig, emitting the `TradeFeePaid` shape this doc's built backend already consumes), and the
+> treasury slice doubles as the Stock Machine's buy budget
+> (`omerta-rwa-stock-machine-design.md`). `OmertaTradeFeeHook` as a separate contract is retired;
+> the fold is the Phase-B contract build.
 
 Companion to: `omerta-phase2-vig-design.md` (the Vig), `omerta-phase4-emission-design.md` (backed
 emission), `omerta-rwa-portfolio-design.md` (R2/R3 tokenized stocks on Uniswap), `omerta-reserve-bond-design.md`

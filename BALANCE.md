@@ -5321,3 +5321,19 @@ destinations (the stock-layer-retirement lesson). If unification is wanted, the 
 table: pick target percentages per destination (founder / vig / treasury / POL / community) and
 apply them per source in ONE signed commit — the router's declaration is then the single edit site.
 Until then, every row above stands at its signed value.
+
+## THE TICKER BALLOT (the Stock Machine's Phase-A record — a vote, never a value move)
+
+The Commission's daily stock pick (`omerta-rwa-stock-machine-design.md` §3): each seated family's
+boss/underboss casts ONE pick per UTC day from `TICKER_BALLOT.TICKERS` (SPY · AAPL · TSLA · NVDA ·
+AMZN · MSFT — small + liquid to start; the whole array is the pinned lever), changeable all day,
+tallied on the audited weekly-decree discipline at daily cadence (standing stamped at cast,
+electorate bounded at `COMMISSION.SEATS`, weights SEATS..1 by rank, tie → deadlock). At the day's
+roll the worker resolves YESTERDAY into `ticker_ballot_results` — the permanent record the Phase-B
+buy keeper will consume — with deadlock/silence recorded as `TICKER_BALLOT.DEFAULT` ('SPY', the
+broad market) and `decided_by` naming chamber vs default. **ZERO §10.4 surface** (test-pinned: the
+whole ballot writes no ledger row; nothing is bought until Phase B clears counsel memo A1 —
+`omerta-counsel-memo.md`). The board says so honestly (`buying: false`). Levers: `TICKER_BALLOT.
+TICKERS` (the buy list — adding a ticker is a listing decision, not a balance one) and
+`TICKER_BALLOT.DEFAULT` (what a silent/deadlocked chamber buys). Reverting is an empty record —
+the keeper simply never has a row to act on.
