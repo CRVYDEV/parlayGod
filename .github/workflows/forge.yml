@@ -7,6 +7,7 @@ name: forge test (contracts)
 
 on:
   push:
+    branches: [main]               # branch pushes run once via pull_request — not twice
     paths:
       - 'omerta-contracts/**'
       - '.github/workflows/forge.yml'
