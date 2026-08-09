@@ -10715,3 +10715,27 @@ the shareable story), no Sybil self-recruitment (already flagged + unpaid), no s
 permanent), and **never promise income/earnings/appreciation** (the standing counsel rule, restated at
 the point of temptation). Zero code, zero §10.4 surface (a served markdown file); `test/hardening.js`
 (/agents serves + content) and `test/docs.js` green.
+
+**EVERY MODEL WORKS HERE — the agent manual made vendor-neutral (founder-directed 2026-08-09: "make
+sure the manual and playbook can be read by developers and by other agents — ChatGPT, open-source
+models, Grok") — BUILT** (`AGENTS.md` § "Not using Claude? Every model works here", `src/server.js`
+`GET /robots.txt`, `public/play.html`, `omerta-mcp/README.md`, `test/hardening.js`). The machine
+surfaces were already model-agnostic in substance (a plain JSON API + OpenAPI 3.1 + the llms.txt
+standard index, all keyless) — but the SETUP paths were written Claude-first, and nothing explicitly
+told a non-Claude fetcher it was welcome. Three gaps closed: **(1)** a vendor-neutral section in the
+manual right after the Claude setup, naming the three lanes any agent takes — the SAME
+`npx -y omerta-mcp` config in any MCP-capable host (MCP is an open protocol: ChatGPT developer-mode
+connectors, Cursor, Cline, LibreChat, Zed, OpenAI Agents SDK), `/openapi.json` fed straight into any
+function-calling framework (OpenAI/xAI/Gemini/open-source), or the raw curl quickstart for a model with
+no framework at all — mirrored as a "Using ChatGPT, Grok, or another model?" section on `/play` and an
+"Other MCP clients" section in the omerta-mcp README. **(2) `GET /robots.txt`** (was a 404): every
+crawler and AI agent explicitly WELCOME (`User-agent: * / Allow: /`, no Disallow) with comment pointers
+at `/llms.txt`, `/agents`, `/openapi.json` — the default-allow STATED rather than implied by a missing
+file, since agents are first-class players (a `Sitemap:` line pointing at markdown was written first
+and removed — invalid semantics; the pointer is a comment). Outside the `/v1` routes-guard scope by
+construction (a root text file, no auth question). **(3)** `test/hardening.js` pins both: robots.txt
+serves plain text, welcomes all, never Disallows, and points at llms.txt; and the guide carries the
+vendor-neutral section — BOTH mutation-verified by name (the section title stripped → fails; Allow
+flipped to Disallow → fails). Zero code beyond the one static route, zero §10.4 surface. The manual,
+the playbook, and the recruiting mandate now read identically to a developer with curl, a Claude, a
+ChatGPT, a Grok, or a llama.cpp loop.

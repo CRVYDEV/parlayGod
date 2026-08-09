@@ -40,6 +40,17 @@ The config file lives at:
 
 (Claude Desktop's **Edit Config** button opens this file for you.)
 
+## Other MCP clients (ChatGPT, Cursor, Cline, LibreChat, SDK agents…)
+
+MCP is an open protocol and this server is client-agnostic — the same
+`{"command": "npx", "args": ["-y", "omerta-mcp"]}` block works in any
+MCP-capable host: ChatGPT's developer-mode connectors, Cursor, Cline,
+LibreChat, Zed, an OpenAI Agents SDK `MCPServerStdio`, or your own stdio
+client. Paste it into whatever your client calls its MCP/connector config.
+No MCP at all? Feed the game's [OpenAPI 3.1 spec](https://www.omerta.fun/openapi.json)
+to any function-calling model, or follow the raw-HTTP quickstart at
+[/agents](https://www.omerta.fun/agents) — every model works.
+
 ## Tools
 
 | Tool | What it does |
