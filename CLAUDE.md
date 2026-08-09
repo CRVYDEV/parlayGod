@@ -10615,3 +10615,22 @@ Stage 2 was already shipped** across prior sessions — the inbound strip (TONIG
 PAPER), the reordered Home, the grouped two-tier nav, the screen-reach beacon — so the remaining Everything
 Else work is the last slice: give the workshop (gear/ammo crafting) a curated screen, then DELETE the deck
 (or gate it behind a power-user toggle) once every orphan has a home.
+
+**STAGE 2 (design review) — THE WORKSHOP: the last orphan homed (a previously UI-less loop).** The deck's
+remaining genuine player-orphans were the workshop routes — `POST /v1/workshop/craft/:id` (craft a
+CONSUMABLE from crates + cash), `POST /v1/workshop/ammo` (1 crate + $400 → 30 rounds), and `POST
+/v1/items/:id/use` (use a crafted item). The last was **not in the client AT ALL** — not even the deck — so
+the whole consumables loop (craft → use) had no UI: you could craft via the raw deck but there was no way to
+USE what you made. This homes it: a **"The Workshop" section on The Garage** renders the `CONSUMABLES`
+catalog (newly surfaced on `/v1/rules` — the catalog-discoverability precedent) as craft cards showing the
+effect + `$cost + N crate` price, an owned-count chip + a **use it** button per item you hold (reading
+`me.items`, already on the view), and a **roll 30 rounds** button — all through the Garage's existing
+`data-*` delegation. §10.4 untouched (all three routes already existed and are ledgered `craft:*`; the
+wiring guard confirms the new `/v1/items/:id/use` resolves to a mounted route, the mirror confirms the new
+`rules.consumables` element fields are returned). Verified: client guard green (617 routes — the use route
+now client-reachable, 129 boards, checks 5/6/7), mobile 75/75, full suite green. **Every genuine player
+orphan now has a curated home** (stat respec, family contract, the workshop). The deck stays as "The
+Console" (the reframed power-user/agent raw API) — deliberately NOT deleted, since it's the only home for
+the chain/mod/leaderboard routes and the reframed header already resolves the "unfinished features"
+confusion. The Everything Else retirement is complete: home the orphans (done), reframe the drawer (done),
+keep it as an honest power-user tool rather than delete legit access.

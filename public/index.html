@@ -6401,7 +6401,21 @@
       <div class="grid">${(rules?.vests || []).map((v) => `
         <div class="card">${ico('vest', v.id)}<span class="t">${v.name}</span>${me.vest === v.id ? '<span class="chip good">WEARING</span>' : ''}
           <div class="d">${v.omr} $OMR${v.desc ? ` · ${v.desc}` : ''}</div>
-          ${me.vest === v.id ? '' : `<button class="act" data-vestdo="${v.id}">buy &amp; wear</button>`}</div>`).join('')}</div>`;
+          ${me.vest === v.id ? '' : `<button class="act" data-vestdo="${v.id}">buy &amp; wear</button>`}</div>`).join('')}</div>
+
+      <h2 style="margin-top:12px">The Workshop <span class="d" style="font-size:11px">(roll your own — crates of contraband + cash · crates on hand: ${fmt(me.cb || 0)})</span></h2>
+      <div class="grid">${(rules?.consumables || []).map((c) => `
+        <div class="card"><span class="t">${esc(c.name)}</span>${(me.items && me.items[c.id]) ? ` <span class="chip good">×${me.items[c.id]}</span>` : ''}
+          <div class="d">${esc(c.effect)} · $${fmt(c.cost)} + ${c.cb} crate${c.cb > 1 ? 's' : ''}</div>
+          ${c.desc ? `<div class="d" style="color:var(--dim);font-size:11px">${esc(c.desc)}</div>` : ''}
+          <button class="act" data-craft="${c.id}">craft</button>${(me.items && me.items[c.id]) ? ` <button class="act" data-useitem="${c.id}">use it</button>` : ''}</div>`).join('')}</div>
+      <div style="margin-top:8px"><button class="act" id="craft-ammo">roll 30 rounds (1 crate + $400)</button></div>`;
+    t.querySelectorAll('[data-craft]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/workshop/craft/${b.dataset.craft}`, {}).then(() => renderGarage()));
+    t.querySelectorAll('[data-useitem]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/items/${b.dataset.useitem}/use`, {}).then(() => renderGarage()));
+    { const ca = t.querySelector('#craft-ammo'); if (ca) ca.onclick = () =>
+      act('POST', '/v1/workshop/ammo', {}).then(() => renderGarage()); }
     t.querySelectorAll('[data-cardo]').forEach((b) => b.onclick = () => {
       const [what, id] = b.dataset.cardo.split(':');
       act('POST', `/v1/garage/${id}/${what}`, {}).then(() => renderGarage());
