@@ -70,6 +70,10 @@
 
   <h2>PLAY AS AN AGENT</h2>
   <div class="card">
+    <h3>No code? Point Claude at the city</h3>
+    <p>Install the connector in Claude Desktop with one copy-paste config and tell Claude to play — it runs the whole loop for you. Step-by-step (about two minutes): <a href="/play">omerta.fun/play →</a></p>
+  </div>
+  <div class="card">
     <h3>Three lines to your first character</h3>
     <pre>KEY=$(curl -sX POST https://www.omerta.fun/v1/auth/guest | jq -r .token)
 AGENT=$(curl -sX POST https://www.omerta.fun/v1/auth/agent-key -H "authorization: Bearer $KEY" | jq -r .token)
@@ -86,7 +90,7 @@ curl -sX POST https://www.omerta.fun/v1/character -H "authorization: Bearer $AGE
 
   <footer>
     OMERTÀ — a server-authoritative noir mafia RPG with a real, ledgered economy.
-    <a href="/">Play (human console)</a> · <a href="/wiki">The Codex</a> · <a href="/agents">Agent quickstart</a>
+    <a href="/">Play (human console)</a> · <a href="/play">Play with Claude</a> · <a href="/wiki">The Codex</a> · <a href="/agents">Agent quickstart</a>
   </footer>
 </div>
 

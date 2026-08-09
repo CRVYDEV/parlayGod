@@ -10484,3 +10484,30 @@ non-extractable; taxing a kindness is the wrong change. **crew non-aggression no
 — the intended "crew = restraint from KILLING" asymmetry (family omertà is heavier by design); self-remedied
 by leaving the crew, and a change here is a founder design call, not a security fix. Suite green + sim
 drift-0 + pgquery + pgcheck 43/43 on real Postgres.
+
+**THE NON-TECHNICAL AGENT ON-RAMP + a dead-domain fix (founder-directed 2026-08-09: "is the tutorial to
+setup agents at a level a non-technical person can do?").** It was not — the `/agents` guide and the
+`/arena` CTA both led with `curl`/`jq`/bearer tokens, and the genuinely-easier MCP path still meant clone →
+`npm install` → hand-edit a config with an ABSOLUTE filesystem path. Fixed the on-ramp to a copy-paste, and
+found a real breakage on the way in. **(1) `omerta-mcp` is publish-ready + `npx`-first** — `package.json`
+gained `files`/`repository`/`homepage`/`keywords`/`publishConfig.access:public` (the `bin`+shebang were
+already correct); the README leads with a zero-install Claude Desktop config (`"command":"npx","args":["-y",
+"omerta-mcp"]` — no clone, no install, no path), the clone/dev flow demoted to a footnote, and two STALE
+examples corrected (it advertised the retired `POST /v1/swap` + "AMM spot" — tokenomics v2 severed both).
+Publishing is the founder's one manual step (`cd omerta-mcp && npm publish` — no npm auth in-session); until
+then `npx omerta-mcp` 404s, so the docs describe the intended published state. **(2) A NEW `/play`
+walkthrough** (`public/play.html`, served like `/wiki`/`/arena` from `server.js`) — the no-code, three-step
+setup (install Claude Desktop → paste one config, with a copy button → restart + tell Claude to play), the
+config-file path for Mac/Windows, a troubleshooting FAQ, all noir-styled + responsive. Surfaced from the
+landing agent pill, both `/arena` CTA cards + footer, `/agents`, and the README. **(3) `AGENTS.md` gained a
+"Play with Claude — no code" section at the TOP** (the copy-paste config + a link to `/play`), keeping the
+curl API below for bot-builders. **(4) THE DEAD-DOMAIN FIX (the real find):** `playomerta.com` was
+UNREACHABLE (HTTP 000) while `www.omerta.fun` is live (200), yet the canonical default
+`rules.tail.js:SOCIAL_GAME_URL` fell back to the dead host — which feeds `baseUrl` for `/openapi.json` +
+`/llms.txt` AND `rules.share.gameUrl`, i.e. **the brag-on-X referral links pointed at a dead domain** when
+`PUBLIC_URL`/`SOCIAL_GAME_URL` was unset. Repointed the fallback (unchanged when the env is set, live
+instead of dead when it isn't) + the `agentgateway.js` `buildOpenApi`/`llmsTxt` defaults + `AGENTS.md`
+base URL + the MCP default + the SSRF attack-example comment; the tree now has ZERO `playomerta.com`
+references, verified by a boot smoke (all four machine surfaces + `rules.share.gameUrl` read `www.omerta.fun`).
+§10.4-untouched (docs, a static page, and env-fallback strings — no economy surface, no lever, no new table).
+Founder's one manual step to make `npx omerta-mcp` live: `npm publish` from `omerta-mcp/`.
