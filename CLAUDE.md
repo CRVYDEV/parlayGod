@@ -10862,3 +10862,23 @@ contract retired), and **`omerta-counsel-memo.md`** — the five standing counse
 treasury stock buys / A2 transferable-TBA drops / A3 claim-rail geofence+KYC / A4 uncapped NFT
 proceeds / A5 play-pool redistribution) converted into an enumerated signature sheet with the
 six walls that hold regardless, and Phase B/C explicitly blocked on their rows.
+
+**THE DAILY OFFERING — game-master-controlled bond issuance (founder-directed: "I only want to
+issue 100000 OMR to be offered to be bonded this day") — BUILT** (`src/bonds.js`
+setBondOffering/offeringOf, `src/chain.js` quoteBond gate, `bond_offerings` — the 209th table,
+`POST /v1/mod/bond/offer`, the board's `daily` + /admin line + the Going Legit card line;
+`test/chain.js`). The human throttle on the ONLY mint: the tranche (`bond_reserve.capacity_omr`)
+stays the LIFETIME budget wall and the on-chain `dailyCapOMR` stays the leaked-signer WALL — this
+is the per-day POLICY layer between them: **no offering row for the day → quoteBond signs NOTHING
+(fail-closed)**, and a signed quote CONSUMES the window at sign time (a quote is a live option for
+its TTL — counting quotes, not bonds, is the conservative side; an unexercised quote wasting
+window is the accepted cost of a bounded day). The GM posts today's window (or stages a future
+day) via the mod route; retraction FLOORS at what's already quoted (a signed quote is a
+commitment). Lock order: account → bond_reserve → bond_offerings (a new leaf). §10.4-free (bonds
+are out-of-band real-value plumbing — zero transactions rows; no new lever, the offering is a
+daily GM decision, not a signed constant). `recordBond` deliberately still bypasses backend caps
+(event-authoritative — a real Bonded always records; the offering gates QUOTES, the only path to
+bond()). Board honesty: `daily: null` renders CLOSED, never zero. `test/chain.js` proves
+fail-closed-before-open, future-day staging not serving today, the public board window, quote
+consumption (mutation-verified BY NAME — drop the consumption UPDATE and the exhaustion assertion
+fails), exhaustion (`offering_spent`), the quoted floor on retraction, re-open, and the mod gate.

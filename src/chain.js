@@ -147,7 +147,7 @@ function toVoucherMessage(row) {
 }
 // Gear class id → on-chain uint256. The game's gear are string ids (MARKET table); the
 // on-chain tokenId is their 1-based index (matches "one tokenId per gear class").
-import { MARKET, BONDS, bondPayout, TAX, withdrawTaxBps, nftTokenId } from './rules.js';
+import { MARKET, BONDS, bondPayout, TAX, withdrawTaxBps, nftTokenId, dayOf } from './rules.js';
 import { earlySurcharge, creditTollBuckets, splitToll } from './tax.js';
 import { nftKind } from './nft.js';
 // A car/boat voucher stores `<kind>:<catalogId>:<rarity>:<itemId>` in `gear_id` (no schema change).
@@ -660,6 +660,18 @@ export async function quoteBond(pool, accountId, principalEth) {
       throw new GameError('over_capacity', 'The bond tranche is exhausted — the treasury must top it up.');
     const nonce = Number(res.next_nonce);
     await client.query('UPDATE bond_reserve SET next_nonce = next_nonce + 1 WHERE id=1');
+    // THE DAILY OFFERING (founder-directed GM issuance control): the tranche above is the LIFETIME
+    // budget wall; this is the per-day POLICY throttle — no offering row for today means the desk
+    // is CLOSED (fail-closed), and a signed quote CONSUMES the window at sign time (a quote is a
+    // live option for its TTL, so counting quotes — not bonds — is the conservative side; an
+    // unexercised quote wasting window is the accepted cost of a bounded day). Lock order:
+    // account → bond_reserve → bond_offerings (a new leaf — nothing else locks it first).
+    const today = dayOf();
+    const off = (await client.query('SELECT offered_omr, quoted_omr FROM bond_offerings WHERE day=$1 FOR UPDATE', [today])).rows[0];
+    if (!off) throw new GameError('no_offering', "The bond desk is closed today — no offering has been posted. Check back when the day's window opens.");
+    if (Number(off.quoted_omr) + payout > Number(off.offered_omr) + 1e-6)
+      throw new GameError('offering_spent', "Today's offering is spoken for — what was on the desk has been quoted. Tomorrow is another day.");
+    await client.query('UPDATE bond_offerings SET quoted_omr = quoted_omr + $2 WHERE day=$1', [today, payout]);
     const deadline = Math.floor(Date.now() / 1000) + BOND_QUOTE_TTL_SEC;
     // the on-chain tuple: principal + priceOmrPerEth in wei (1e18). priceOmrPerEth = OMR wei per 1 ETH, so
     // the contract's `principal * priceOmrPerEth / 1e18` yields plain OMR wei (parity with bondPayout here).

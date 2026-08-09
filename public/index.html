@@ -7353,6 +7353,7 @@
       ${sect('legit-bonds', 'Reserve Bonds', 'deposit ETH → discounted, vested $OMR issued within hard on-chain caps — deepens the OMR-ETH pool', `
       <div class="card">
         <div class="d">${bd.offering ? `${bd.offering.discountBps / 100}% discount · vests ${bd.offering.vestHours}h · min ${bd.offering.minEth} ETH · tranche left ${fmt(bd.reserve?.remainingOmr || 0)} $OMR` : '—'}${bd.quote ? ` · ~${fmt(bd.quote.payoutOmr)} $OMR per ETH` : (bd.offering ? ' · no oracle price yet' : '')}</div>
+        ${(() => { const dl = bd.daily; return dl ? `<div class="d" style="color:var(--neon)">today's window: ${fmt(dl.offeredOmr)} $OMR on offer · ${fmt(dl.remainingOmr)} left</div>` : `<div class="d" style="color:var(--dim)">the desk is closed today — no offering posted (the house opens the window day by day)</div>`; })()}
         <div class="d" style="color:var(--dim);font-size:11px">Bonds are bought on-chain at the paywall (mainnet, dormant). Your vested bonds claim here.</div>
         <div style="margin-top:6px"><input id="bond-eth" placeholder="ETH" size="6"> <button class="act" id="bond-quote">request a signed quote</button>
           <button class="act" id="bond-submit" style="display:none;border-color:var(--neon)">submit on-chain with wallet</button>

@@ -459,7 +459,12 @@
           + rowHtml('keeper', bnd.oracle.state === 'ok'
             ? `<span style="color:var(--ok)">✓ alive</span> <span class="note">poked ${fmt(bnd.oracle.ageS)}s ago (period ${fmt(bnd.oracle.periodS)}s)</span>`
             : `<span style="color:var(--bad)">⚠ ${bnd.oracle.state.toUpperCase()}</span> <span class="note">${bnd.oracle.note || ''}</span>`)
-        : '');
+        : '')
+      // THE DAILY OFFERING — the GM's issuance window (fail-closed: closed reads CLOSED, not zero)
+      + (bnd ? (`<div class="note" style="margin-top:8px">the daily bond offering</div>`
+          + rowHtml('today', bnd.daily
+            ? `${fmt(bnd.daily.offeredOmr)} $OMR on offer · ${fmt(bnd.daily.quotedOmr)} quoted · <b>${fmt(bnd.daily.remainingOmr)} left</b>`
+            : `<span class="note">CLOSED — POST /v1/mod/bond/offer {omr} opens today's window</span>`)) : '');
   }
 
   // THE MONEY ROUTER — WHERE A DOLLAR GOES. The whole declared waterfall (every real-value inflow

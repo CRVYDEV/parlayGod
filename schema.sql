@@ -1568,6 +1568,19 @@ CREATE TABLE IF NOT EXISTS bond_reserve (
   next_nonce BIGINT NOT NULL DEFAULT 1        -- monotonic quote-nonce allocator (OmertaBond's usedNonce space; independent of chain_reserve)
 );
 INSERT INTO bond_reserve (id) SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM bond_reserve);
+-- THE DAILY OFFERING (founder-directed: "I only want to issue 100000 OMR to be offered to be
+-- bonded this day"). The GM's per-day issuance window ON TOP of the lifetime tranche: quoteBond
+-- signs nothing on a day with no offering row (FAIL-CLOSED), and a signed quote CONSUMES the
+-- window at sign time (a quote is a live option for its TTL — counting quotes, not bonds, is the
+-- conservative side; an unexercised quote wasting window is the accepted cost of a bounded day).
+-- Distinct from the on-chain dailyCapOMR (the WALL against a leaked signer) — this is the POLICY
+-- throttle on what we CHOOSE to sign. day = the UTC day index (the ticker-ballot clock).
+CREATE TABLE IF NOT EXISTS bond_offerings (
+  day INT PRIMARY KEY,
+  offered_omr NUMERIC NOT NULL DEFAULT 0,   -- what the GM put on offer for this day
+  quoted_omr NUMERIC NOT NULL DEFAULT 0,    -- Σ payout_omr of quotes signed against this day
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 -- the bond QUOTE SIGNER's ledger: each server-signed EIP-712 BondQuote (the piece the on-chain OmertaBond
 -- contract's bond() accepts). Persisting the quote lets the Bonded watcher recover the EXACT price/discount
 -- the event omits (it emits only the resolved payout + POL/Vig split). nonce is the on-chain replay key.

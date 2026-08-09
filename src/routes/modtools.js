@@ -181,6 +181,9 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
       Desk.runDeskBuyback(pool, { ref: req.body?.ref, ethToSpend: req.body?.eth,
         priceEthPerOmr: req.body?.price, txHash: modRealTxHash(req) }));
     app.post('/v1/mod/bond/fund', { preHandler: modAuth }, async (req) => Bonds.fundBondTranche(pool, req.body?.omr)); // top up the tranche
+    // THE DAILY OFFERING — the GM posts what the desk offers to bond today (or stages a future day).
+    // Fail-closed: quoteBond signs nothing on a day with no offering. Floors at what's already quoted.
+    app.post('/v1/mod/bond/offer', { preHandler: modAuth }, async (req) => Bonds.setBondOffering(pool, req.body?.omr, req.body?.day ?? null));
     app.post('/v1/mod/bond/simulate', { preHandler: modAuth }, async (req) => // QA/comp until the paywall (the Store precedent)
       // No txHash = a pure comp: books the bond + OMR tranche but NO real-ETH Vig/POL accounting (audit
       // MED — else a comp fabricates Vig revenue the buyback spends, unbacking the withdrawal reserve).
