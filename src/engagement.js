@@ -40,7 +40,7 @@ export const SYSTEMS = {
   'crew heists': ['heist_plan', 'heist_join', 'heist_fill', 'heist_score', 'heist_case', 'heist_fence', 'heist_rat'],
   'clue scrolls': ['clue_casket'],
   'the family': ['gang_foundation', 'gang_seal', 'gang_charter'],
-  'the commission': ['commission_vote', 'commission_veto', 'commission_proposal', 'commission_override'],
+  'the commission': ['commission_vote', 'commission_veto', 'commission_proposal', 'commission_override', 'ticker_vote'],
   'territory': ['territory_raid', 'territory_op', 'territory_specialist', 'sov_income'],
   'the world': ['world_raid', 'world_raid_plan', 'world_raid_join', 'world_raid_hire'],
   'the blood war': ['family_raid'],

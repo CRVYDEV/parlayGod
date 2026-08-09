@@ -1061,6 +1061,10 @@ async function seedLists() {
   if (fg.body?.ok !== false) {
     const mgid = (await q('SELECT gang_id FROM gang_members WHERE character_id=$1', [three])).rows[0]?.gang_id;
     if (mgid) await q('UPDATE gangs SET npc_flag=true, war_pool=120000, war_pool_at=now() WHERE id=$1', [mgid]);
+    // THE TICKER BALLOT — a family pick for TODAY, so /v1/city's tickerBallot.votes list has a row
+    // (the family/ticker element reads); the board's LEFT JOIN resolves the family name
+    if (mgid) await q('INSERT INTO commission_ticker_votes (day, gang_id, ticker, standing) VALUES ($1,$2,$3,600)',
+      [Math.floor(Date.now() / 86400000), mgid, 'TSLA']);
   }
 
   // the LEGEND columns every "biggest ever" board ranks by — status counters, never currency

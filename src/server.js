@@ -1347,6 +1347,12 @@ export async function buildServer() {
   // Tier-4 — a seated FLOOR family moves to override the head's veto (a floor supermajority restores the decree)
   app.post('/v1/commission/override', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Commission.overrideVeto(ch, client, h)));
+  // THE TICKER BALLOT (the Stock Machine, Phase A — chain-dormant): the seated families' DAILY vote
+  // on which stock token the treasury's RWA slice buys. The board is public (a ballot everyone can
+  // read is the call-to-action); the cast is a seated boss/underboss.
+  app.get('/v1/commission/ticker', async () => Commission.tickerBallotBoard(pool));
+  app.post('/v1/commission/ticker', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Commission.castTickerVote(ch, req.body?.ticker, client, h)));
 
   // SKILLS & SPECIALIZATIONS — the build layer: learn with level-derived points, respec for $OMR.
   app.get('/v1/skills', { preHandler: auth }, async (req) =>
@@ -2444,8 +2450,20 @@ export async function buildServer() {
       // no state — a pure function of the week + seed). The per-player challenge progress is authed at
       // GET /v1/bulletin; this is just the theme + the challenge line everyone sees.
       bulletin: bulletinPublic(),
+      // THE TICKER BALLOT (Stock Machine Phase A): today's chamber vote + the last resolved buy —
+      // public, because a ballot everyone can read IS the call-to-action. Cached with the skyline's
+      // discipline (/v1/city is keyless): 30s staleness on a daily vote costs nothing.
+      tickerBallot: await cachedTickerBallot(),
     };
   });
+  let tickerBallotCache = { at: 0, v: null };
+  const cachedTickerBallot = async () => {
+    if (Date.now() - tickerBallotCache.at > 30000) {
+      try { tickerBallotCache = { at: Date.now(), v: await Commission.tickerBallotBoard(pool) }; }
+      catch { tickerBallotCache = { at: Date.now(), v: null }; }
+    }
+    return tickerBallotCache.v;
+  };
   let skylineCache = { at: 0, v: [] };
   const cachedSkyline = async () => {
     if (Date.now() - skylineCache.at > 30_000)

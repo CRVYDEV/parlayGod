@@ -3,6 +3,13 @@
 *Founder-directed 2026-08-01. Design only; nothing here is built. The mint fee stays at **0.01 ETH**
 (founder's call — the raise was considered and declined).*
 
+> **EXTENDED 2026-08-09 by `omerta-dynasty-machine-design.md`** — founder-directed: the identity
+> NFT is an uncapped **ERC-721** carrying an **ERC-6551 token-bound account** (the standard's
+> mechanics verified against the EIP text), which holds the Stock Machine's activated allocations.
+> The trophy/entitlement wall below STANDS — the entitlement stays account-bound in the DB — with
+> one knowing, counsel-gated exception recorded there (memo row A2): the TBA makes the trophy a
+> transferable container of on-chain value.
+
 ---
 
 ## 0. What this is, in one paragraph
