@@ -116,7 +116,7 @@ import { bulletinPublic, bulletinBoard, claimBulletin } from './bulletin.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit, checkAuthRateLimit, checkReadLimit, checkPublicRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
-         levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, CARS, KITCHENS, TRADE_RANKS, M3, M4, PATHS,
+         levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, CARS, KITCHENS, TRADE_RANKS, M3, M4, M8, PATHS,
          RANKS,
          cityLawEventOf, cityForecast, regionShockOf, cityHourOf, ESTATE, AUCTION, MEGAPROJECT, CLUES, DUELS, DUEL_TITLE_RANKS, SEASON_MODS, seasonModOf, seasonIdxOf, seasonDaysLeft, SEASON_PHASES, seasonPhaseOf, seasonPhaseLeft,
          foundationOf, foundationBustMult, foundationBleedMult, CHARTERS, familyCharterOf, FAMILY_CHARTER, FOUNDATION, LAW, WIRE, STORE, PASS, PATRON, BONDS, SPEAKEASY, BOXING, RARITY,
@@ -1024,6 +1024,8 @@ export async function buildServer() {
   // authoritative — knowing the odds table doesn't move a single roll client-side.
   app.get('/v1/rules', async () => ({
     crimes: CRIMES.map((c) => ({ id: c.id, name: c.name, lvl: c.lvl, nerve: c.nerve, cash: c.cash, base: c.base, jail: c.jail })),
+    respecOmr: M8.RESPEC_OMR, // stat respec cost — so The Life tab can price the tradeoff before you commit
+    respecStatMin: M8.RESPEC_STAT_MIN,
     // D6a — THE APPROACH: the per-job risk/reward choice (Case It / Standard / Go Loud). Public so the
     // client can render the three-way picker; the server stays the referee (the roll is server-side).
     // PACING — published so a player can see the clock they're playing against (and so the console
