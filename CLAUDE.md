@@ -10677,3 +10677,22 @@ reads as one engraved-line set (18 drawn icons in the DOM, zero page errors; the
 is a PRE-EXISTING mobile rule, checked rather than assumed). Client guard green, mobile 75/75, full
 suite green. Zero §10.4 surface. Remaining icon surfaces (the scattered 🔒/🔥/🏆 chip markers across 25
 renderers) can now follow incrementally on the proven sprite — each a one-line swap.
+
+**THE PWA STATUS-BAR OVERLAP — the top buttons were unpressable on iPhone (founder-reported with a
+screenshot, 2026-08-09) — FIXED.** Installed to the home screen, the console runs `viewport-fit=cover`
++ `apple-mobile-web-app-status-bar-style: black-translucent`, which draws the app UNDER the iOS status
+bar — so the sticky top button row (jump/phone/alerts/sfx) sat behind the clock/battery and could not be
+tapped. The client padded the BOTTOM safe-area inset (the thumb bar) everywhere but never the TOP. Fixed
+by routing `env(safe-area-inset-top)` through a new `:root` token `--sat` and absorbing it into the top
+chrome — `#top` padding-top, `#busy` top, and the `.landing` hero. **The load-bearing catch:** the first
+cut padded only the DESKTOP `#top` rule; the `@media (max-width:760px)` block — the one that actually runs
+on a phone, and the exact place the PWA lives — HARDCODES `#top` padding to `6px 8px`, silently defeating
+the fix (the recurring "a mobile override shadows the base rule" class). The mobile rule now reads
+`calc(6px + var(--sat)) 8px 6px`, so the whole button row flows below the status bar (padding pushes every
+flex child down regardless of which controls are rendered). Routing the inset through `--sat` (not raw
+`env()`) makes it TESTABLE: Chromium reports `env(safe-area-inset-top)=0` (no notch), so a Playwright probe
+overrides `:root{--sat:44px}` and asserts `#top`'s computed padding-top jumps 6→50px on the 390px mobile
+viewport (verified; the desktop-only first cut stayed at 6). Client guard green, mobile 75/75, full suite
+green. Zero §10.4 surface (CSS only — no server, no lever, no new table). The class worth keeping: a
+`viewport-fit=cover` PWA must pad `env(safe-area-inset-top)` on EVERY breakpoint's top chrome, and a mobile
+media query that hardcodes the padding is exactly where that gets missed.
