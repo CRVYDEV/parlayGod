@@ -126,7 +126,11 @@ if (failures.length) {
 // The unreadable set is BOUNDED, not ignored. If a refactor pushes more queries behind variables or
 // interpolation, this fails and forces a decision — either make them readable or raise the ceiling
 // deliberately, with the reason written down.
-const CEILING = { interpolated: 60, unreadable: 40 };
+// 60 → 63 (2026-08-09): sweepCapoLicense's three dynamic-IN fan-outs (agents → recruits →
+// levelled/retained). Dynamic IN lists are the recorded pg-mem posture (`= ANY($1)` returns zero
+// rows there), so these are interpolated by necessity; each is parameterized except the IN
+// placeholders + two Number()-coerced constants.
+const CEILING = { interpolated: 63, unreadable: 40 };
 const overflow = [];
 if (interpolated.length > CEILING.interpolated)
   overflow.push(`interpolated queries grew to ${interpolated.length} (ceiling ${CEILING.interpolated}) — these are UNCHECKED by this guard`);

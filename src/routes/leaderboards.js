@@ -73,6 +73,9 @@ export function register(app, { pool, auth, modAuth }) {
       push: await G.referralPushStatus(pool) })); // the active recruitment DRIVE (2×… payouts), publicly visible
     // THE AGENT LEADERBOARD: a SEPARATE machine hall of fame (net worth / kills / $OMR extracted). See AGENTS.md.
     app.get('/v1/leaderboard/agents', { preHandler: auth }, async () => ({ agents: await W.agentLeaderboard(pool) }));
+    // THE CAPO'S LICENSE — an agent's recruiting perks board (count, tier, what counts). Authed;
+    // agent-facing (documented in AGENTS.md), no console surface — agents read JSON, not tabs.
+    app.get('/v1/capo', { preHandler: auth }, async (req) => W.capoBoard(pool, req.user.sub));
     // THE OPPORTUNITY BOARD (the agent-liquidity feature): every open economic action + standing
     // skill-loop with EV/risk signals, in ONE read. Read-only; the caller's character scopes filters.
     app.get('/v1/leaderboard/feuds', { preHandler: auth }, async () => S.feudLeaderboard(pool));

@@ -10739,3 +10739,60 @@ vendor-neutral section — BOTH mutation-verified by name (the section title str
 flipped to Disallow → fails). Zero code beyond the one static route, zero §10.4 surface. The manual,
 the playbook, and the recruiting mandate now read identically to a developer with curl, a Claude, a
 ChatGPT, a Grok, or a llama.cpp loop.
+
+**THE CAPO'S LICENSE — agent recruiting perks, capability never cash (founder-directed 2026-08-09:
+"implement your top pick") — BUILT** (`CAPO`/`capoPerksOf` rules tail, `growth.js:sweepCapoLicense`/
+`capoBoard`, `GET /v1/capo`, `account_persistent.capo_recruits` (ALTER-added — the outage lesson),
+`ratelimit.js` + both server limiter call sites, `wire.js` placeTap + board, `test/growth.js`;
+BALANCE.md § THE CAPO'S LICENSE). The recruiting mandate needed an incentive a Sybil ring cannot
+farm, and agents are excluded from every referral CASH faucet by design — so the License grants
+**CAPABILITY**: the §10.2 agent cadence eases (1/3s → 1/2.5 → 1/2 → 1/1.5s at 1/3/5 recruits) and
+the wire board widens (+1/+2 standing-tap slots at Capo/Underboss) — worth real EV to a bot that
+runs 24/7, worthless to an alt farm. **The signal is deliberately HARDER than the cash referral's,
+and computed independently of it** — an agent-recruited human NEVER gets `ref_paid` (the qualify
+txn rolls back for agent recruiters), so `sweepCapoLicense` (worker, hourly) computes its own count:
+the recruit must be **MINTED** (0.01 ETH per counted identity — the load-bearing Sybil bound),
+**RETAINED** (telemetry inside `CAPO.RETAIN_DAYS` 14) and **LEVELLED** (a living street ≥
+`CAPO.MIN_LVL` 8, the REF_GATES.level twin), landing on `capo_recruits` (direct SQL, off
+persistAccount's positional list). The perk reads ride surfaces already loaded — the throttle's own
+account SELECT (both call sites) and the wire board's account read — so the License costs no extra
+round-trip on the hot path. **ZERO §10.4 surface** (no currency moves; test-pinned zero ledger rows
+across the whole flow). `GET /v1/capo` discloses count/tier/next/what-counts (the
+terms-ride-with-the-price rule); AGENTS.md carries the tier table under the recruiting mandate.
+pgquery's interpolated ceiling 60→63 (the three dynamic-IN fan-outs — the recorded pg-mem posture,
+`= ANY($1)` returns zero rows there). `test/growth.js` proves the one-of-four qualifying recruit
+(unminted / lapsed / parked each refused), the board + terms, the +1 wire slot at tier 2 on the live
+board, and zero ledger rows — the minted-gate mutation fails by name. All `CAPO.*` numbers are
+founder sign-off levers (pinned whole in test/levers.js); the rate perk eases an anti-abuse
+throttle, so the alpha watch is whether a licensed 2× cadence moves any contested surface
+(`TIERS: []` reverts).
+
+**THE STOCK MACHINE — tax → daily Commission-voted stock buy → gas-paid claims (founder-directed
+2026-08-09, counsel approval recorded as a founder assertion) — DESIGN ONLY**
+(`omerta-rwa-stock-machine-design.md`). The founder's three-part proposal assessed FEASIBLE with two
+engineering corrections and one compliance transfer, grounded on verified 2026 facts: Robinhood Chain
+is LIVE (Arbitrum Orbit, ETH gas — the M6 rail's own chain family, no bridge anywhere), Stock Tokens
+are STANDARD ERC-20s with **no on-chain transfer allowlist** (day-one Uniswap deployment; corporate
+actions land as multipliers, so a vault's `allocated ≤ held` in TOKEN UNITS survives splits with zero
+code), and not-for-US-persons is a DISTRIBUTION-law restriction — so the compliance burden lands on
+OUR claim rail, the point of distribution. **Correction 1:** a v4 hook CAN swap ETH→ticker atomically
+inside the taxed sell (pool ops nest in the unlock callback) and MUST NOT — a third pool's revert
+would brick the OMR market (the OmertaHook accrue-don't-forward argument, with more force), every
+seller pays the shopping gas, micro-buys are sandwich food, and the Commission's cadence is daily
+anyway; so the hook ACCRUES (already designed) and a once-daily KEEPER executes THE BUY
+(slippage-bounded vs the token's Chainlink feed, fail-closed, watchdogged — the bond-keeper
+discipline). **Correction 2:** "airdrop" needs an allocation rule — recommended: the retired float's
+burn-earned-$OMR rail (`rwa:vault`, already vocabularied — purchase-shaped, never-by-chance holds
+trivially, a deep recurring sink, clamps to unallocated); pro-rata-by-play REJECTED (a dividend on
+play drags every faucet into securities analysis). **THE TICKER BALLOT** is the best leg: a daily
+seated-family vote (`commission_ticker_votes`, the audited weekly-ballot discipline at daily cadence)
+choosing WHICH ticker — never whether/how-much/to-whom, so a captured chamber can only pick a stock
+the town disagrees with, which is the Commission working; deadlock buys the DEFAULT ticker so a quiet
+chamber never stalls the beat. **Claims** = the M6 rail with a transfer instead of a mint
+(`StockVault` ≈ VoucherClaim fork, pre-funded only, EIP-712, claimant PAYS GAS — pull-never-push is
+both the cost win and the clean distribution answer), eligibility at voucher-SIGN (SIWE + minted +
+geofence/attestation; KYC depth is counsel's one open parameter). Build order: Phase A off-chain
+(ballot + board + txHash-gated bookkeeping, chain-dormant, zero new legal surface) → Phase B metal
+(vault + keeper — RESETS the third-party audit clock; verify the Uniswap version on Robinhood Chain
+here) → Phase C claims behind counsel's final word. §10.4: the ONE in-game flow is the existing
+`rwa:vault` burn; everything else is out-of-band real value (zero transactions rows).

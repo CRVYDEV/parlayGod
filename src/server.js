@@ -441,7 +441,7 @@ export async function buildServer() {
     await req.jwtVerify();
     // §10.3 — banned accounts are refused at the door (agent_flag rides the same query — no extra round-trip)
     const a = (await pool.query(
-      'SELECT a.status, a.token_version, ap.agent_flag FROM accounts a LEFT JOIN account_persistent ap ON ap.account_id=a.id WHERE a.id=$1',
+      'SELECT a.status, a.token_version, ap.agent_flag, ap.capo_recruits FROM accounts a LEFT JOIN account_persistent ap ON ap.account_id=a.id WHERE a.id=$1',
       [req.user.sub])).rows[0];
     if (!a || a.status === 'banned') return reply.code(403).send({ error: 'banned' });
     // BLUE-TEAM M3: token revocation. If this token carries a `tv` claim, it must match the account's
@@ -458,7 +458,7 @@ export async function buildServer() {
     // runs the SAME handler, but `=== 'GET'` alone let `HEAD /v1/me` dodge this agent cadence + the read
     // limiter below while still running withCharacter (FOR UPDATE + a held connection). Treat HEAD as a read.
     if (rateLimitsEnabled() && a.agent_flag && (req.method === 'GET' || req.method === 'HEAD')) {
-      const limited = await checkRateLimit({ accountId: req.user.sub, agent: true, path: req.routeOptions?.url || req.url });
+      const limited = await checkRateLimit({ accountId: req.user.sub, agent: true, path: req.routeOptions?.url || req.url, capoRecruits: Number(a.capo_recruits || 0) });
       if (limited) return reply.code(429).header('retry-after', limited.retryAfter)
         .send({ error: 'rate_limited', retryAfter: limited.retryAfter });
     }
@@ -578,7 +578,7 @@ export async function buildServer() {
     // Ban + agent status come from the DB, never the token: an agent-flagged account
     // could otherwise keep using its pre-flag token to dodge the harder agent throttle.
     const acct = (await pool.query(
-      'SELECT a.status, a.token_version, ap.agent_flag FROM accounts a LEFT JOIN account_persistent ap ON ap.account_id=a.id WHERE a.id=$1',
+      'SELECT a.status, a.token_version, ap.agent_flag, ap.capo_recruits FROM accounts a LEFT JOIN account_persistent ap ON ap.account_id=a.id WHERE a.id=$1',
       [req.user.sub])).rows[0];
     if (!acct || acct.status === 'banned') return reply.code(403).send({ error: 'banned' });
     // BLUE-TEAM M3: token revocation (mutating path — where money moves). A `tv` claim must match the
@@ -587,7 +587,7 @@ export async function buildServer() {
       return reply.code(401).send({ error: 'token_revoked' });
     if (rateLimitsEnabled()) {
       const limited = await checkRateLimit({ accountId: req.user.sub, agent: !!acct.agent_flag,
-        path: req.routeOptions?.url || req.url });
+        path: req.routeOptions?.url || req.url, capoRecruits: Number(acct.capo_recruits || 0) });
       if (limited) return reply.code(429).header('retry-after', limited.retryAfter)
         .send({ error: 'rate_limited', retryAfter: limited.retryAfter });
     }

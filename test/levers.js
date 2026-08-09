@@ -68,6 +68,12 @@ const SIGNED = [
   ['BUSINESS_EMPIRE.TAKEOVER.MIN_LEVEL', 20],
   ['BUSINESS_EMPIRE.TAKEOVER.MIN_P', 0.1],
   ['BUSINESS_EMPIRE.TAKEOVER.STAT_SCALE', 120],
+  // THE CAPO'S LICENSE — agent recruiting perks (capability, never cash; BALANCE.md § THE CAPO'S LICENSE)
+  ['CAPO.MIN_LVL', 8],
+  ['CAPO.RETAIN_DAYS', 14],
+  ['CAPO.TIERS', [{ n: 1, name: 'Street Captain', rate: 1 / 2.5, tapBonus: 0 },
+    { n: 3, name: 'Capo', rate: 1 / 2, tapBonus: 1 },
+    { n: 5, name: 'The Underboss', rate: 1 / 1.5, tapBonus: 2 }]],
   ['CASINO.BJ_DEALER_MIN', 17],
   ['CASINO.BJ_HIT_SOFT_17', true],
   ['CASINO.BRACKET.ADVANCE', 2],
