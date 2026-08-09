@@ -10587,3 +10587,31 @@ sessions — the art crop (`.ico object-fit:cover`/`.ico.wide`), the mark's name
 the sound-per-outcome map, the reordered Home, the pre-paint boot guard — so this drop is the one genuine
 remaining piece: the Refiner's thesis that the house rule must be a test the class cannot regress past. Full
 suite green.
+
+**STAGE 2 (design review) — THE CONSOLE + homing the orphans (the "Everything Else" retirement, step one).**
+The deck tab ("Everything Else") is a raw power-user/agent console — 22 groups of ~207 routes as edit-a-body
+forms — but it was presented as a peer GAME tab, so it read as unfinished features (the founder's own
+complaint: "why aren't some of those as developed as the others"). An audit of the current base found
+**195 of 207 deck routes are shadow-copies of curated screens; 12 are orphans**, of which the genuinely
+PLAYER-facing ones with no curated home were `POST /v1/respec` (stat respec), `POST /v1/gangs/contract/
+:targetId` (family contract) and the workshop pair (`/v1/workshop/craft/:id` + `/v1/workshop/ammo`) — the
+rest are chain (`plex/*`, `fees/status`) or status leaderboards that belong in a power-user area anyway.
+The correct sequence is **home the orphans first, then retire the drawer** (deleting it before homing would
+remove real features), so this step homes two and reframes the drawer: **(1) stat respec → a card on The
+Life tab** (redistribute the base build; board-read-free — reads `me.stats`/`me.statTotal` already on the
+sheet — and it PRICES THE TRADEOFF up front via a new `respecOmr`/`respecStatMin` on `/v1/rules`, the
+Stage-2 principle; local sum/floor validation, the server the referee). **(2) family contract → a card on
+Wet Work** (boss/underboss only, a treasury-funded hit reusing the roster that screen already renders — a
+targeted family hit belongs where you target people; null-guarded so a non-boss render never throws).
+**(3) the deck is reframed into "The Console"** — the tab renamed (en) and a header card that says plainly
+what it is: the raw API for power users & agents, every route the city exposes, with the curated tabs
+covering all of it (pointing at `/agents` + `/openapi.json`) — so it stops reading as broken content and
+becomes an intentional tool. §10.4 untouched (the two homes reuse already-validated routes/bodies — the
+wiring guard confirms `/v1/respec {muscle,cunning,speed}` and `/v1/gangs/contract/:id {amount,kind}` are
+read; the mirror confirms the new `rules.respecOmr`/`respecStatMin` are returned; check 7's 13 waivers
+intact). Verified: client guard green (615 routes, 195 bodies, 129 boards, checks 5/6/7), mobile 75/75 (the
+two new cards + reframed deck: no overflow, above the fold, no page error), full suite green. **The rest of
+Stage 2 was already shipped** across prior sessions — the inbound strip (TONIGHT IN THE CITY + THE MORNING
+PAPER), the reordered Home, the grouped two-tier nav, the screen-reach beacon — so the remaining Everything
+Else work is the last slice: give the workshop (gear/ammo crafting) a curated screen, then DELETE the deck
+(or gate it behind a power-user toggle) once every orphan has a home.
