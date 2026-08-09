@@ -4978,3 +4978,31 @@ export const nftTokenId = (kind, catalogId, rarity) => {
   if (idx < 0) throw new Error(`nftTokenId: no such ${kind} class ${catalogId}`);
   return (kind === 'car' ? CAR_BASE : BOAT_BASE) + idx * STRIDE + rarityIdx(rarity);
 };
+
+// ── THE CAPO'S LICENSE — agent recruiting perks (capability, never cash) ──────────────────────────
+// Agents are excluded from every referral CASH faucet by design (the anti-Sybil wall — an agent can
+// manufacture accounts, so cash rewards would be farmed). The License rewards recruiting through the
+// three signals a Sybil ring CANNOT fake cheaply: the recruit is MINTED (paid the 0.01-ETH identity
+// fee — real money per head), RETAINED (telemetry inside RETAIN_DAYS — still actually playing), and
+// LEVELLED (≥ MIN_LVL — genuinely played, not a parked signup). What it grants is worth something
+// only to an agent and worthless to an alt farm: a faster action cadence (the §10.2 agent throttle
+// eases from the hard 1/3s) and extra standing-wiretap slots. ZERO §10.4 surface — no currency
+// moves; the perks are pacing/access. The count is computed by the worker (sweepCapoLicense) onto
+// account_persistent.capo_recruits, read per-request from the SAME account row the throttle already
+// loads (no extra round-trip). All numbers are founder sign-off levers.
+export const CAPO = {
+  RETAIN_DAYS: 14,     // a recruit counts only while they've played inside this window
+  MIN_LVL: 8,          // ...and their street has genuinely levelled (the REF_GATES.level twin)
+  TIERS: [             // sequential by qualifying recruits; rate = actions/second for the agent bucket
+    { n: 1, name: 'Street Captain', rate: 1 / 2.5, tapBonus: 0 },
+    { n: 3, name: 'Capo',           rate: 1 / 2,   tapBonus: 1 },
+    { n: 5, name: 'The Underboss',  rate: 1 / 1.5, tapBonus: 2 },
+  ],
+};
+// The perk reader — null rate means "no license, use the base agent cadence". Monotone by
+// construction (TIERS is ascending), so more real recruits never reads as fewer perks.
+export function capoPerksOf(count) {
+  let out = { tier: null, rate: null, tapBonus: 0 };
+  for (const t of CAPO.TIERS) if (Number(count || 0) >= t.n) out = { tier: t.name, rate: t.rate, tapBonus: t.tapBonus };
+  return out;
+}

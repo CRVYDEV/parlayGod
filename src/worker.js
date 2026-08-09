@@ -21,7 +21,7 @@ import { openAuction, closeExpired, runDeskInvariants } from './desk.js';
 import { sweepExpiredBounties, huntWanted, sweepContests } from './social.js';
 import { sweepUncreditedFees } from './fees.js';
 import { sweepGrandReferrals } from './game.js';
-import { sweepSocialClaims } from './growth.js';
+import { sweepSocialClaims, sweepCapoLicense } from './growth.js';
 import { sweepUncreditedStore } from './store.js';
 import { sweepPassStipends } from './pass.js';
 import { sweepStaleHeists } from './heists.js';
@@ -331,6 +331,9 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     const gr = await safe('grand-referral reconcile', () => sweepGrandReferrals(pool));
     if (gr?.paid > 0) console.log(`🌳 referral: reconciled ${gr.paid} tier-2 fee(s)`);
     await safe('social claims sweep', () => sweepSocialClaims(pool)); // drop spent Spread-the-Word rows (housekeeping)
+    // THE CAPO'S LICENSE — recompute each agent's minted+retained+levelled recruit count (the perk
+    // gate the throttle + wire board read). Retention is a moving window, so this must re-run.
+    await safe('capo license', () => sweepCapoLicense(pool));
     // FIVE PILLARS #2: lapsed coalitions dissolve (reads filter on expires_at — row hygiene)
     await safe('diplomacy sweep', () => sweepDiplomacy(pool));
     // NPC-FAMILY DIPLOMACY: NPC families accept a player's peace offer (ending their OFFENSIVE) + form

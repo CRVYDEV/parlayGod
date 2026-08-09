@@ -1965,5 +1965,47 @@ assert.equal((await call('POST', '/v1/respec', { token: chef.token, body: { musc
   assert(dry.nerve < 9, 'and the job still spent what it cost — regen is untouched, only the top-up is metered');
 }
 
-console.log('✅ M4 growth test passed — paths, kitchen (makings/cook/collect/deal/crew/raid/laylow/cleanpapers), heist, missions (+$OMR faucet), dailies (+all-three bonus), First Week (+capstone), referrals (+milestones, agent exclusion), telemetry, mod tools, M8 stat respec (sum-conserving, floor-gated, ledgered burn), THE HUSTLE (the three-stop chain: location gates, legwork delta, ledgered once-a-day payoff), WORD ON THE STREET (per-district seed boards, conflict guaranteed, accept/delta/claim, ledgered corner:job, the MAX_DAY cap) + THE MARK (every job names a victim; residents in your district get named)');
+
+// ── THE CAPO'S LICENSE — agent recruiting perks, gated on signals a Sybil ring can't fake ─────────
+{
+  const { sweepCapoLicense } = await import('../src/growth.js');
+  // the agent recruiter + three referred humans, one per failed gate + one that passes all three
+  const acctOf = async (chId) => (await pool.query('SELECT account_id FROM characters WHERE id=$1', [chId])).rows[0].account_id;
+  const capo = await mk('CapoAgent'); capo.account = await acctOf(capo.id);
+  await pool.query('UPDATE account_persistent SET agent_flag=true WHERE account_id=$1', [capo.account]);
+  const mkRecruit = async (name, { minted, levelled, fresh }) => {
+    const r = await mk(name); r.account = await acctOf(r.id);
+    await pool.query('UPDATE account_persistent SET referred_by=$1, minted=$2 WHERE account_id=$3',
+      [capo.account, !!minted, r.account]);
+    if (levelled) await pool.query("UPDATE characters SET respect=600 WHERE account_id=$1", [r.account]); // lvl 8 needs 490
+    // retention = telemetry inside CAPO.RETAIN_DAYS; a stale row models a recruit who quit
+    await pool.query('INSERT INTO telemetry (id, account_id, event, at) VALUES ($1,$2,$3,$4)',
+      [globalThis.crypto.randomUUID(), r.account, 'checkin', fresh ? new Date() : new Date(Date.now() - 30 * 86400000)]);
+    return r;
+  };
+  await mkRecruit('CapoGood', { minted: true, levelled: true, fresh: true });     // counts
+  await mkRecruit('CapoUnminted', { minted: false, levelled: true, fresh: true }); // MUTATION GUARD: drop the
+  // minted gate in sweepCapoLicense and this recruit counts too — the count reads 2 and the tier
+  // assertion below fails by name. The 0.01-ETH identity fee is THE Sybil bound; it must stay load-bearing.
+  await mkRecruit('CapoLapsed', { minted: true, levelled: true, fresh: false });   // quit — retention window
+  await mkRecruit('CapoParked', { minted: true, levelled: false, fresh: true });   // a parked signup, never played
+  await sweepCapoLicense(pool);
+  const n = Number((await pool.query('SELECT capo_recruits FROM account_persistent WHERE account_id=$1', [capo.account])).rows[0].capo_recruits);
+  assert.equal(n, 1, 'exactly ONE recruit qualifies — minted AND retained AND levelled (unminted/lapsed/parked all refused)');
+  const cb = (await call('GET', '/v1/capo', { token: capo.token })).body;
+  assert(cb.agent && cb.recruits === 1 && cb.tier === 'Street Captain' && cb.next.at === 3,
+    'the license board reads tier 1 with the next rung disclosed');
+  assert(cb.counts.retainDays === 14 && cb.counts.minLevel === 8, 'the board discloses its own terms (the terms-ride-with-the-price rule)');
+  // the perks are CAPABILITY, never cash: a licensed agent runs more standing wires. Grant tier 2 by
+  // SQL (the sweep is proven above; this leg tests the READ side) and check the wire board's tapMax.
+  await pool.query('UPDATE account_persistent SET capo_recruits=3, omr=200 WHERE account_id=$1', [capo.account]);
+  const wb = (await call('GET', '/v1/wire', { token: capo.token })).body;
+  assert.equal(wb.tapMax, 6, 'Capo tier (3 recruits) adds +1 standing-wire slot on the live board (TAP_MAX 5 + 1)');
+  // and the whole license moved ZERO currency — capability perks write no ledger row
+  const capoRows = Number((await pool.query(
+    "SELECT COUNT(*) n FROM transactions t JOIN characters c ON c.id=t.character_id WHERE c.account_id=$1", [capo.account])).rows[0].n);
+  assert.equal(capoRows, 0, "the license is capability, never cash — zero ledger rows for the whole flow");
+}
+
+console.log('✅ M4 growth test passed — paths, kitchen (makings/cook/collect/deal/crew/raid/laylow/cleanpapers), heist, missions (+$OMR faucet), dailies (+all-three bonus), First Week (+capstone), referrals (+milestones, agent exclusion), telemetry, mod tools, M8 stat respec (sum-conserving, floor-gated, ledgered burn), THE HUSTLE (the three-stop chain: location gates, legwork delta, ledgered once-a-day payoff), WORD ON THE STREET (per-district seed boards, conflict guaranteed, accept/delta/claim, ledgered corner:job, the MAX_DAY cap) + THE MARK (every job names a victim; residents in your district get named) + THE CAPO\'S LICENSE (agent recruiting perks: minted+retained+levelled gates, the tier board, the wire-slot perk, zero ledger rows)');
 await app.close();

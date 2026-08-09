@@ -1,7 +1,7 @@
 // M4 — growth systems: paths, the Daily Score, missions, daily contracts, and
 // the First Week (GRASSROOTS). Every formula cites spec §5.1/§7.3–7.4 / v24.
 import { GameError, cleanText, assignedSoldier, soldierResult, bumpMastery, masteryFx, gainRespect } from './game.js';
-import { soldierFxOf, SOLDIERS, PATH_SWITCH_CD_MS, referralXpBonus } from './rules.js';
+import { soldierFxOf, SOLDIERS, PATH_SWITCH_CD_MS, referralXpBonus, CAPO, capoPerksOf } from './rules.js';
 import {
   PATHS, MISSIONS, ONBOARD_TASKS, CAREER, CONSTANTS, M4, M8, SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS,
   levelOf, dayOf, dailyJobsOf, dailyBlockedFor, effStat, gunObjOf, assetEnergyCap, recruitRankOf, PACING,
@@ -826,3 +826,68 @@ export async function sweepSocialClaims(pool) {
 // reward without proving key control, and wrote a wrong-chain address the withdraw path
 // can't use). `ob_wallet` (CHECKS above) gates on wallet_address, which now only a verified
 // 0x SIWE link sets. Nothing exported here — POST /v1/wallet returns a redirect to SIWE.
+
+// ── THE CAPO'S LICENSE — the worker computes each agent's qualifying-recruit count ────────────────
+// An agent-recruited human NEVER gets `ref_paid` (maybeQualifyReferral rolls back when the recruiter
+// is an agent — the cash wall), so the License computes its OWN signal, and deliberately a HARDER
+// one than the cash referral's: the recruit must be MINTED (0.01 ETH — real money per identity, the
+// Sybil bound), RETAINED (telemetry inside CAPO.RETAIN_DAYS — still playing), and LEVELLED (a living
+// street ≥ CAPO.MIN_LVL — genuinely played). The count lands on account_persistent.capo_recruits
+// (direct SQL, off persistAccount's positional list — clobber-safe) and is read per-request by the
+// throttle + the wire board. Flat queries + JS joins throughout (pg-mem: no correlated subqueries,
+// no = ANY($1) — the /v1/gangs posture); the recruit fan-out uses dynamic IN lists.
+export async function sweepCapoLicense(pool) {
+  const agents = (await pool.query(
+    'SELECT account_id, capo_recruits FROM account_persistent WHERE agent_flag LIMIT 500')).rows;
+  if (!agents.length) return { updated: 0 };
+  const aidList = agents.map((a) => a.account_id);
+  const inA = aidList.map((_, i) => `$${i + 1}`).join(',');
+  // every minted HUMAN recruit of any agent (minted is the load-bearing gate — see the header)
+  const recruits = (await pool.query(
+    `SELECT account_id, referred_by FROM account_persistent
+      WHERE referred_by IN (${inA}) AND NOT agent_flag AND minted`, aidList)).rows;
+  let counts = new Map(aidList.map((id) => [id, 0]));
+  if (recruits.length) {
+    const rids = recruits.map((r) => r.account_id);
+    const inR = rids.map((_, i) => `$${i + 1}`).join(',');
+    // LEVELLED: a living street at ≥ MIN_LVL (respect threshold computed here, the levelOf inverse)
+    const thr = PACING.LEVEL_DIVISOR * (CAPO.MIN_LVL - 1) ** 2;
+    const levelled = new Set((await pool.query(
+      `SELECT DISTINCT account_id FROM characters WHERE account_id IN (${inR}) AND alive AND respect >= ${Number(thr)}`,
+      rids)).rows.map((r) => r.account_id));
+    // RETAINED: any telemetry inside the window (the push-skip / active15m signal, at days scale)
+    const retained = new Set((await pool.query(
+      `SELECT DISTINCT account_id FROM telemetry WHERE account_id IN (${inR})
+         AND at > now() - interval '${Number(CAPO.RETAIN_DAYS)} days'`, rids)).rows.map((r) => r.account_id));
+    for (const r of recruits)
+      if (levelled.has(r.account_id) && retained.has(r.account_id))
+        counts.set(r.referred_by, counts.get(r.referred_by) + 1);
+  }
+  let updated = 0;
+  for (const a of agents) {
+    const n = counts.get(a.account_id);
+    if (n !== Number(a.capo_recruits)) {
+      await pool.query('UPDATE account_persistent SET capo_recruits=$1 WHERE account_id=$2', [n, a.account_id]);
+      updated++;
+    }
+  }
+  return { updated };
+}
+
+// The license board (GET /v1/capo, authed): your count, tier, perks, and exactly what counts —
+// a claim an agent can act on has to disclose its own terms (the terms-ride-with-the-price rule).
+export async function capoBoard(pool, accountId) {
+  const ap = (await pool.query(
+    'SELECT agent_flag, capo_recruits FROM account_persistent WHERE account_id=$1', [accountId])).rows[0] || {};
+  const n = Number(ap.capo_recruits || 0);
+  const perks = capoPerksOf(n);
+  const next = CAPO.TIERS.find((t) => t.n > n) || null;
+  return {
+    agent: !!ap.agent_flag, recruits: n,
+    tier: perks.tier, actionsPerSec: perks.rate, tapBonus: perks.tapBonus,
+    next: next ? { at: next.n, name: next.name } : null,
+    tiers: CAPO.TIERS.map((t) => ({ n: t.n, name: t.name, actionsPerSec: t.rate, tapBonus: t.tapBonus })),
+    counts: { minted: true, retainDays: CAPO.RETAIN_DAYS, minLevel: CAPO.MIN_LVL,
+      how: 'a recruit counts while they are minted, have played inside the window, and hold a living street at the level floor' },
+  };
+}
