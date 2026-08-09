@@ -132,3 +132,62 @@ promises anything about what the NFT or the stock will be worth.
 *Maintainers: every mechanical claim in §1 cites the EIP as verified 2026-08-09; if the EIP moves
 out of Review with changes, §1 is the checklist to re-verify. The counsel memo's A2 row is the
 legal gate for everything past §7.1.*
+
+## 8. THE ACTIVATION MECHANICS (designed 2026-08-09 — the §7.1 deliverable; build waits on A1)
+
+The §2.3 model made concrete. Every number below is a PROPOSED DEFAULT — a founder sign-off lever
+the moment it becomes a constant; none exists in code yet, deliberately (building a burn whose
+payout cannot exist until the keeper buys would sell exposure to nothing).
+
+**The epoch is the DAY — the ticker ballot's own clock.** During day D the chamber's vote is
+public and anyone MINTED may **activate**: burn $OMR (reason `activation:share`, a new omr
+vocabulary prefix joining `omrBurns` + `DESK.SINK_REASONS` — sinks recycle to the desk since v3
+step 2) to take a linear share of day D's allocation pool. At the roll, the ballot freezes and the
+keeper executes day D's buy with the treasury slice accrued through D; the units land pro-rata on
+day-D activations: `u_a = U × b_a / Σb`. So activation is an INFORMED act — you watch the ballot
+all day, then commit — and the loop reads: *the families vote the ticker, the town activates, the
+treasury buys, the vault fills.* Linear weight, a fixed public formula, no draw anywhere —
+never-by-chance holds by construction.
+
+**Design decisions, each with its reason:**
+- **Allocations book to the ACCOUNT, not the TBA address.** Pre-Phase-B there is no on-chain NFT;
+  the TBA is the DELIVERY destination, resolved at claim time (§3). The ledger stays the
+  vault-ledger shape keyed by `account_id`.
+- **A silent day still buys.** If nobody activates, the keeper buys anyway (the ballot is the
+  town's decision, not the activators') and the units sit UNALLOCATED in the treasury's general
+  holding — inside `held`, never inside `allocated`, claimable by nobody. No roll-forward: a
+  retroactive windfall for tomorrow's activators would reward waiting out the town.
+- **No per-account cap.** A whale burning more takes proportionally more — that is
+  purchase-shaped, not chance-shaped, and capping it would only fragment the burn across alts.
+  `ACTIVATION.MIN_OMR` (proposed 1) exists solely to refuse dust rows.
+- **Agents may activate** (they burn real-money-backed $OMR like anyone); the A3 claim-rail gate
+  is where delivery eligibility lives, and counsel's A3 answer governs them there.
+- **No self-reference in the money loop** (checked against the router, not assumed): the
+  activation burn recycles to THE DESK, whose auction ETH splits founder/POL — the treasury's
+  stock budget is fed ONLY by the four declared revenue slices (fee 10% · store 20% · sell-tax
+  4/9 · bond 25%). Activation demand cannot inflate its own payout. This is the anti-Ponzi shape
+  in one sentence: the payout is bought with OTHER people's spending, never with the burn itself.
+
+**The ledger (DDL sketch — built with the burn, post-A1; all NEW tables, live-DB-safe):**
+```sql
+CREATE TABLE stock_activations (day INT, account_id TEXT, omr NUMERIC,
+  PRIMARY KEY (day, account_id));                       -- day-D burns (the epoch's share register)
+CREATE TABLE stock_buys (day INT PRIMARY KEY, ticker TEXT, eth_spent NUMERIC, units NUMERIC,
+  price NUMERIC, tx_hash TEXT, real BOOLEAN);           -- txHash-gated (comps book ZERO — the anti-fabrication rule)
+CREATE TABLE stock_holdings (ticker TEXT PRIMARY KEY, units NUMERIC);        -- treasury held, per ticker
+CREATE TABLE stock_allocations (account_id TEXT, ticker TEXT, units NUMERIC,
+  PRIMARY KEY (account_id, ticker));                    -- the vault-ledger shape (account-keyed, survives death)
+```
+Invariants (the nightly runner, the treasury-wall shape): per ticker
+`Σ stock_allocations.units ≤ stock_holdings.units`; holdings grow only from a `real` buy;
+allocations grow only from a buy's pro-rata split; `Σ activation:share burns == Σ stock_activations.omr`.
+
+**The sizing (sim P9.34, printed every run).** The equilibrium is the sizing answer: each
+activated $OMR carries `T / A` ETH-worth of stock (T = the day's treasury buy, A = the day's total
+activation), so rational participation self-sizes toward `A* ≈ T × P` (P = the oracle's OMR/ETH) —
+the point where a burned $OMR buys exactly one $OMR's worth of exposure. **The recurring sink this
+creates is therefore the treasury inflow itself, denominated in $OMR** — activation converts every
+ETH of declared treasury revenue into that much daily $OMR demand, which is precisely the demand
+engine §2.3 promised. Below-equilibrium participation over-rewards early activators (the bootstrap
+incentive); above it, the burn is dominated by simply holding — both self-correcting. INTERNAL
+sizing only: the standing copy rule forbids ever publishing a value-per-$OMR figure as marketing.

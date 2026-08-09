@@ -10882,3 +10882,29 @@ bond()). Board honesty: `daily: null` renders CLOSED, never zero. `test/chain.js
 fail-closed-before-open, future-day staging not serving today, the public board window, quote
 consumption (mutation-verified BY NAME — drop the consumption UPDATE and the exhaustion assertion
 fails), exhaustion (`offering_spent`), the quoted floor on retraction, re-open, and the mod gate.
+
+**THE ACTIVATION MODEL — designed + sized, deliberately NOT built (the critical path's §7.1 item,
+founder-directed "Do the next step", 2026-08-09)** (`omerta-dynasty-machine-design.md` §8,
+`tools/sim.js` P9.34, BALANCE.md § THE ACTIVATION MODEL). The Dynasty Machine's demand engine made
+concrete: the epoch is the DAY (the ticker ballot's clock) — watch the chamber's vote all day,
+burn $OMR (`activation:share`, a future omr-vocabulary + `DESK.SINK_REASONS` entry) for a LINEAR
+share of the day's treasury stock buy, units landing pro-rata at the roll (`u_a = U × b_a / Σb` —
+a fixed public formula, never-by-chance by construction). The load-bearing design calls, each with
+its reason: allocations book to the ACCOUNT (the TBA is the DELIVERY destination, resolved at
+claim — pre-Phase-B no on-chain NFT exists); a silent day STILL BUYS (the ballot is the town's
+decision; unallocated units sit in `held`, never `allocated` — no roll-forward windfall for
+waiting out the town); NO per-account cap (proportional is purchase-shaped; a cap just fragments
+across alts); agents may activate (the A3 claim gate governs delivery); and — checked against the
+router, not assumed — NO self-reference: the burn recycles to the DESK (founder/POL), while the
+stock budget is fed ONLY by the four declared slices (fee 10% · store 20% · sell-tax 4% · bond
+25%), so activation demand cannot inflate its own payout (the anti-Ponzi shape in one sentence).
+The DDL sketch (stock_activations/stock_buys/stock_holdings/stock_allocations + the per-ticker
+`allocated ≤ held` invariant, txHash-gated buys, comps book zero) ships with the burn, post-A1 —
+**building a burn whose payout cannot exist until the keeper buys would sell exposure to
+nothing**, which is why the build waits and the sizing does not. **The sizing answer (sim P9.34,
+printed every run off the LIVE router levers):** each activated $OMR carries T/A ETH-worth, so
+rational participation self-sizes toward A* ≈ T × oracle — the recurring sink activation creates
+IS the treasury inflow, denominated in $OMR; below A* early activators are over-rewarded (the
+bootstrap incentive), above it holding dominates — both self-correcting. Internal sizing only (the
+standing copy rule: no value-per-$OMR figure ever published as marketing). Every ACTIVATION.*
+number is a proposed default that becomes a pinned founder lever the day it becomes a constant.
