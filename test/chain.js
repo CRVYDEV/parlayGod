@@ -305,6 +305,27 @@ delete process.env.DAILY_CAP_OMR;
     "INSERT INTO vig_buyback (id, eth_spent, omr_bought, price_omr_per_eth, to_reserve, to_prize) VALUES ('bb-bondtest', 1, 2000, 2000, 0, 0)");
   await call('POST', '/v1/mod/bond/fund', { headers: modH, body: { omr: 100000 } });
 
+  // ══ THE DAILY OFFERING (GM issuance control) — FAIL-CLOSED: a funded tranche + a live oracle
+  // still sign NOTHING until the GM posts today's window ══
+  {
+    const noOffer = await call('POST', '/v1/bond/quote', { token, body: { principalEth: 1 } });
+    assert.equal(noOffer.body.error, 'no_offering', 'no offering posted → the desk is closed (fail-closed, whatever the tranche holds)');
+    // staging TOMORROW does not open TODAY (the window is per-day)
+    const { dayOf } = await import('../src/rules.js');
+    const stage = await call('POST', '/v1/mod/bond/offer', { headers: modH, body: { omr: 5000, day: dayOf() + 1 } });
+    assert.equal(stage.code, 200, 'a future day can be staged');
+    assert.equal((await call('POST', '/v1/bond/quote', { token, body: { principalEth: 1 } })).body.error, 'no_offering',
+      "tomorrow's window does not serve today");
+    // the GM opens TODAY — 100,000 OMR on the desk ("I only want to issue 100000 OMR ... this day")
+    const open = await call('POST', '/v1/mod/bond/offer', { headers: modH, body: { omr: 100000 } });
+    assert.equal(open.code, 200, "today's offering posted");
+    assert.equal(open.body.offeredOmr, 100000);
+    // and it is PUBLIC on the board (the terms-ride-with-the-price rule)
+    const bb = await call('GET', '/v1/bonds', { token });
+    assert(bb.body.daily && bb.body.daily.offeredOmr === 100000 && bb.body.daily.remainingOmr === 100000,
+      "the board shows today's window before anyone quotes");
+  }
+
   // a fresh, wallet-LESS guest can't quote — a bond quote is bound to the payer wallet
   const { body: { token: noWallet } } = await call('POST', '/v1/auth/guest');
   await call('POST', '/v1/character', { token: noWallet, body: { name: 'No Wallet Nick' } });
@@ -351,6 +372,34 @@ delete process.env.DAILY_CAP_OMR;
   assert.equal(decoded.args[0].payer.toLowerCase(), player.address.toLowerCase(), 'the encoded quote is bound to the wallet');
   assert.equal(decoded.args[1], q.body.signature, 'the encoded sig is the server-signed quote signature');
   assert.equal((await call('POST', '/v1/bond/calldata', { token: noWallet, body: { nonce: bondNonce } })).body.error, 'no_quote', "another account can't fetch your quote's calldata");
+
+  // ══ THE DAILY OFFERING — consumption, exhaustion, the quoted floor ══
+  {
+    // the 1-ETH quote above CONSUMED today's window at sign time (a quote is a live option)
+    const b1 = await call('GET', '/v1/bonds', { token });
+    assert(Math.abs(b1.body.daily.quotedOmr - q.body.payoutOmr) < 1e-6,
+      "a signed quote consumes today's window (quoted == the quote's payout)");
+    assert(Math.abs(b1.body.daily.remainingOmr - (100000 - q.body.payoutOmr)) < 1e-6, 'remaining = offered − quoted');
+    // shrink the window to just under one more quote's payout: EXHAUSTION refuses the next quote.
+    // MUTATION: drop the `quoted_omr = quoted_omr + payout` consumption UPDATE in quoteBond and
+    // quoted stays 0 → the shrunken window still fits → this assertion fails BY NAME.
+    const floorAt = Math.ceil(q.body.payoutOmr); // the set floors at what's quoted, so aim just above it
+    const shrink = await call('POST', '/v1/mod/bond/offer', { headers: modH, body: { omr: floorAt } });
+    assert.equal(shrink.code, 200);
+    assert.equal((await call('POST', '/v1/bond/quote', { token, body: { principalEth: 1 } })).body.error, 'offering_spent',
+      "today's window is spoken for — the desk refuses the quote the window can't cover");
+    // the GM cannot retract below what's already signed: asking for 0 floors at quoted
+    const retract = await call('POST', '/v1/mod/bond/offer', { headers: modH, body: { omr: 0 } });
+    assert.equal(retract.code, 200);
+    assert(retract.body.flooredAtQuoted === true && retract.body.offeredOmr >= q.body.payoutOmr,
+      'an offering never retracts below the quotes already signed (a signed quote is a commitment)');
+    // re-open generously; the desk serves again
+    await call('POST', '/v1/mod/bond/offer', { headers: modH, body: { omr: 100000 } });
+    const q2 = await call('POST', '/v1/bond/quote', { token, body: { principalEth: 1 } });
+    assert.equal(q2.code, 200, 'a re-opened window serves quotes again');
+    // and the mod route is mod-gated (the modtools posture)
+    assert.equal((await call('POST', '/v1/mod/bond/offer', { token, body: { omr: 1 } })).code, 401, 'the offering is GM-only');
+  }
 
   // the Bonded watcher enriches the record from the persisted quote: the event omits price/discount, so
   // recordBond recovers the TRUE terms (2000 / 800 bps) — NOT the effective payout/eth rate (≈2173.9) or disc 0.

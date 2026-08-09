@@ -10,7 +10,7 @@
 import crypto from 'node:crypto';
 import { getAddress } from 'viem';
 import { GameError } from './game.js';
-import { BONDS, bondPayout, underwriterScore, backerTierOf, nextBackerTier, charterOf } from './rules.js';
+import { BONDS, bondPayout, underwriterScore, backerTierOf, nextBackerTier, charterOf, dayOf } from './rules.js';
 import { spendOmr } from './vanity.js';
 
 const uid = () => crypto.randomUUID();
@@ -268,17 +268,58 @@ export async function underwriterLeaderboard(pool, limit = 25) {
 
 // ── GET /v1/bonds — public: the offering + remaining capacity + the oracle + your bonds. Informational
 // (real bonds are on-chain at the mainnet paywall — the Store's on-chain-note precedent). ──
+// ── THE DAILY OFFERING — the GM's per-day issuance window (founder-directed) ─────────────────────
+// The tranche (bond_reserve.capacity_omr) is the LIFETIME budget wall; this is the daily POLICY
+// throttle on top: no offering row for the day → quoteBond signs NOTHING (fail-closed). Distinct
+// from the contract's dailyCapOMR (the wall against a leaked signer — that one caps damage, this
+// one expresses intent). Setting an offering moves no value and writes no ledger row (bonds are
+// out-of-band real-value plumbing — the §10.4 posture of the whole module).
+export async function setBondOffering(pool, omr, day = null) {
+  const amt = Math.round(Number(omr));
+  if (!Number.isFinite(amt) || amt < 0) throw new GameError('amount', 'A non-negative whole-OMR offering.');
+  const d = day == null ? dayOf() : Math.floor(Number(day));
+  if (!Number.isInteger(d) || d < dayOf()) throw new GameError('day', 'Offerings are set for today or a future day — the past is the record.');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const row = (await client.query('SELECT offered_omr, quoted_omr FROM bond_offerings WHERE day=$1 FOR UPDATE', [d])).rows[0];
+    if (row) {
+      // never retract below what's already signed — a signed quote is a live commitment
+      const floor = Math.ceil(Number(row.quoted_omr));
+      const eff = Math.max(amt, floor);
+      await client.query('UPDATE bond_offerings SET offered_omr=$2 WHERE day=$1', [d, eff]);
+      await client.query('COMMIT');
+      return { ok: true, day: d, offeredOmr: eff, quotedOmr: Number(row.quoted_omr), flooredAtQuoted: eff !== amt };
+    }
+    await client.query('INSERT INTO bond_offerings (day, offered_omr) VALUES ($1,$2)', [d, amt]);
+    await client.query('COMMIT');
+    return { ok: true, day: d, offeredOmr: amt, quotedOmr: 0, flooredAtQuoted: false };
+  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  finally { client.release(); }
+}
+
+export async function offeringOf(db, day = null) {
+  const d = day == null ? dayOf() : Math.floor(Number(day));
+  const row = (await db.query('SELECT offered_omr, quoted_omr FROM bond_offerings WHERE day=$1', [d])).rows[0];
+  if (!row) return null;
+  const offered = round6(Number(row.offered_omr)), quoted = round6(Number(row.quoted_omr));
+  return { day: d, offeredOmr: offered, quotedOmr: quoted, remainingOmr: round6(Math.max(0, offered - quoted)) };
+}
+
 export async function bondBoard(pool, accountId) {
   const r = (await pool.query('SELECT capacity_omr, committed_omr, pol_eth, dev_eth, rwa_eth FROM bond_reserve WHERE id=1')).rows[0] || {};
   const remaining = round6(Math.max(0, Number(r.capacity_omr || 0) - Number(r.committed_omr || 0)));
   const oracle = await oraclePrice(pool);
   const mine = accountId ? (await pool.query('SELECT * FROM bonds WHERE account_id=$1 ORDER BY opened_at DESC', [accountId])).rows : [];
+  const daily = await offeringOf(pool);
   const now = Date.now();
   return {
     offering: { discountBps: BONDS.DISCOUNT_BPS, vestHours: BONDS.VEST_HOURS, polBps: BONDS.POL_BPS, vigBps: BONDS.VIG_BPS, rwaBps: BONDS.RWA_BPS, devBps: BONDS.DEV_BPS, minEth: BONDS.MIN_PRINCIPAL_ETH },
     oracle, // OMR per ETH (null until a Vig buyback prints a price)
     reserve: { capacityOmr: round6(Number(r.capacity_omr || 0)), committedOmr: round6(Number(r.committed_omr || 0)), remainingOmr: remaining, polEth: round6(Number(r.pol_eth || 0)), devEth: round6(Number(r.dev_eth || 0)), rwaEth: round6(Number(r.rwa_eth || 0)) },
     // an illustrative quote for 1 ETH at the current oracle + discount (display only)
+    // THE DAILY OFFERING — null = the desk is CLOSED today (fail-closed; the GM opens it)
+    daily,
     quote: oracle ? { forEth: 1, payoutOmr: bondPayout(1, oracle, BONDS.DISCOUNT_BPS) } : null,
     yours: mine.map((b) => {
       const vested = vestedOf(b, now);
@@ -298,11 +339,13 @@ export async function bondBoard(pool, accountId) {
 // ── ops view (the founder's bond dashboard) — capacity/committed/remaining + POL + the Vig share + the invariant. ──
 export async function bondStatus(pool) {
   const r = (await pool.query('SELECT capacity_omr, committed_omr, pol_eth, dev_eth, rwa_eth FROM bond_reserve WHERE id=1')).rows[0] || {};
+  const daily = await offeringOf(pool);
   const bonds = Number((await pool.query('SELECT COUNT(*) n FROM bonds')).rows[0].n);
   const claimed = round6(Number((await pool.query('SELECT COALESCE(SUM(claimed_omr),0) s FROM bonds')).rows[0].s));
   const vigEth = round6(Number((await pool.query("SELECT COALESCE(SUM(vig_eth),0) s FROM vig_revenue WHERE source='bond'")).rows[0].s));
   const inv = await runBondInvariants(pool);
   return {
+    daily, // THE DAILY OFFERING — null = closed today (the GM opens it via POST /v1/mod/bond/offer)
     capacityOmr: round6(Number(r.capacity_omr || 0)), committedOmr: round6(Number(r.committed_omr || 0)),
     remainingOmr: round6(Math.max(0, Number(r.capacity_omr || 0) - Number(r.committed_omr || 0))),
     polEth: round6(Number(r.pol_eth || 0)), devEth: round6(Number(r.dev_eth || 0)),
