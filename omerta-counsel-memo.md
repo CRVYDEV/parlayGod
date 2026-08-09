@@ -10,7 +10,8 @@ trigger.
 
 Companion documents: `omerta-rwa-stock-machine-design.md` (the machine), `omerta-v4-hook-design.md`
 §10.8 (the one-hook-four-slices fee architecture, founder-confirmed 2026-08-09),
-`omerta-identity-nft-design.md` (the trophy/entitlement wall), `CHAIN-DEPLOY.md` (the deploy gates).
+`omerta-identity-nft-design.md` (the trophy/entitlement wall), `CHAIN-DEPLOY.md` (the deploy gates),
+`omerta-launch-sequence-design.md` (the genesis window + community drop — the source of A6).
 
 ---
 
@@ -35,7 +36,7 @@ Companion documents: `omerta-rwa-stock-machine-design.md` (the machine), `omerta
   players claim allocated stock to their own wallets, paying their own gas, through a
   server-signed voucher rail with eligibility enforced at signature time.
 
-## 2. The five assertions requiring counsel's signature
+## 2. The six assertions requiring counsel's signature
 
 Each is currently a **founder assertion of counsel approval**, recorded in the repo at the cited
 location. Counsel is asked to confirm each in writing, with any conditions.
@@ -91,6 +92,19 @@ income/earnings promises in any official copy) continues to apply to how this is
 extraction still bounded by the full-reserve queue, does not create a wagering or
 money-transmission profile.*
 
+**A6 — OMR may be distributed free to snapshotted third-party communities.**
+The launch plan (`omerta-launch-sequence-design.md` Phase G-3) reserves genesis OMR for a free,
+deterministic, snapshot-based distribution — not a sale, no investment of money — to holders of
+unaffiliated NFT/token communities on ETH mainnet and Robinhood Chain (CryptoPunks/BAYC/MAYC and
+$PEPE-class on mainnet; StonkBrokers and $CASHCAT-class on Robinhood Chain). Snapshots are taken
+at a fixed block height BEFORE any announcement; amounts are fixed per snapshotted wallet/NFT
+against a published merkle root (no draw anywhere — the never-by-chance wall holds by
+construction); claims are gas-paid by the claimant and time-boxed, with unclaimed tokens
+reverting to the treasury; claim-page copy runs under the standing no-promise rules. *Question
+for counsel: does a free token distribution at this scale carry registration or jurisdiction
+exposure (the historical airdrop-as-distribution line), and does the claim page need the same
+geofence posture as A3's rail?*
+
 ## 3. The walls that hold regardless of the answers
 
 These are load-bearing project rules counsel can rely on as constants — they do not move with
@@ -118,6 +132,8 @@ this memo's outcome:
   the third-party audit gate independently.
 - **TBA-carried allocations**: blocked on **A2**.
 - **Play-pool redistribution build**: blocked on **A5** (design + sim may proceed).
+- **Launch Phase G-3** (the community drop): blocked on **A6** — snapshots, roots, and reserve
+  sizing may be prepared, but no claim surface opens before the row is signed.
 - **Shipped and unaffected**: Phase A (the Ticker Ballot — a vote and a record; no value moves),
   the Capo's License (rate-limit/status perks only), the money router (declare/verify/display).
 
@@ -130,6 +146,7 @@ this memo's outcome:
 | A3 — claim-rail geofence/KYC | | | | |
 | A4 — uncapped NFT proceeds | | | | |
 | A5 — play-pool redistribution | | | | |
+| A6 — free community distribution (airdrop) | | | | |
 
 *Prepared 2026-08-09. Maintainers: keep this memo in lockstep with the design docs it cites; a
 design change that touches an assertion re-opens its row.*

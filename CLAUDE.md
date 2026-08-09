@@ -10908,3 +10908,43 @@ IS the treasury inflow, denominated in $OMR; below A* early activators are over-
 bootstrap incentive), above it holding dominates — both self-correcting. Internal sizing only (the
 standing copy rule: no value-per-$OMR figure ever published as marketing). Every ACTIVATION.*
 number is a proposed default that becomes a pinned founder lever the day it becomes a constant.
+
+**THE LAUNCH SEQUENCE — the genesis window, the pool, and the community drop (founder-directed
+2026-08-09: "a 1-3 day alpha/beta where users can bond and purchase OMR, then initialize an LP
+where our designed hook comes into play, plus an OMR reserve airdropped to the top NFT and coin
+communities on ETH and Robinhood Chain") — DESIGN ONLY** (`omerta-launch-sequence-design.md`;
+`omerta-counsel-memo.md` gains row **A6**). Three contract facts, verified in-tree, carry the
+whole plan: OMR constructor-mints the 100M genesis supply to the treasury Safe (the airdrop
+reserve + the pool's OMR side need no mint — none exists beyond bonds); `OmertaBond` is born
+refusing bonds until `setOracle`, which is deliberately swappable — so the window runs on a
+**GenesisOracle** (a ~20-line Safe-owned IOmrOracle returning one fixed price, joining the audit
+batch) and cuts over to the real `OmrTwapOracle` at pool init as ONE operation (a gap is a bond
+outage — the audit's own warning); and the 120h bond vest OUTLASTS the longest window (72h), so
+**nobody can dump the genesis at the bell, by construction** (the 48h surcharge + the hook's 900
+bps sell tax price the exits after it). **G-1 the window**: bonding at THE GENESIS PRICE (the one
+anchoring number — window price == LP init price means no arb gap in either direction), throttled
+per-day by THE DAILY OFFERING (live in production — exactly the control it was built for), with
+the desk as the optional in-game rail (a funnel into the city, since in-game credit only exits
+through the audited mint-gate + withdraw rail); the raise lands by the money router's own declared
+split — 0.375R POL / 0.25R treasury / 0.225R vig / 0.15R founder — **the window literally funds
+the pool it precedes** and the withdrawal reserve is backed before the first player extracts.
+**G-2 the pool**: pair the POL ETH with Safe genesis OMR at the genesis price → the canonical v4
+pool with **OmertaHook** (the founder-resolved one-hook-four-slices) → warm the TWAP one full
+PERIOD → the oracle cutover; the hook's treasury slice starts accruing → the Stock Machine keeper
+(post-A1) has a live budget → the ticker ballot's record starts mattering. **G-3 the community
+drop**: snapshot-BEFORE-announce (no Sybil exists after a block height is fixed), published merkle
+roots, fixed per-wallet/per-NFT amounts (never-by-chance holds without effort), claims-never-pushes
+(claimant pays gas, time-boxed, unclaimed reverts to the Safe); targets per the founder —
+Punks/BAYC/MAYC + $PEPE-class on mainnet, StonkBrokers + $CASHCAT-class on Robinhood Chain
+(weights/floors/caps all founder levers, tabled). **D1, the load-bearing open decision**: what the
+claim delivers — an on-chain MerkleDistributor (familiar shape, but claimable straight into the
+pool) vs **in-game $OMR credit via the live SIWE rail (recommended — it converts the drop into
+USER ACQUISITION**: every claimant is a registered account inside the game, value exits only
+through the audited rail, and "unclaimed" never left the Safe), or a hybrid for both stories; a
+claim that also MINTS the identity earns a stated funnel bonus. **A6** (the memo's sixth row —
+the header, blocked table and signature block all extended): a free deterministic snapshot-based
+distribution, with counsel asked the airdrop-as-distribution registration/jurisdiction question +
+whether the claim page needs A3's geofence posture; **Phase G-3 is blocked on it**. Zero code in
+this drop (the one new contract, GenesisOracle, is Phase-B audit-batch work); §10.4 untouched.
+Open levers tabled in the doc §6 (window length, day sizes, THE GENESIS PRICE, desk on/off,
+reserve total, community weights, flat-vs-per-NFT, D1, funnel bonus, claim window).
