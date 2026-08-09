@@ -10559,3 +10559,102 @@ this batch restarted the branch from origin/main per the merged-PR rule rather t
 history. Deferred (in the report, not live holes): per-operator mod identity, M3 read-coverage on the fully-keyless
 boards (nothing to revoke there; not worth a DB load per keyless read — the H4 pool-protection anti-precedent),
 and the chain/real-money layer (stays gated on the third-party audit + legal counsel).
+
+**THE VOCABULARY IS COMPLETE — check 7, the airtight gate/cost guard (Stage 1 of the design review).**
+`test/client.js` already enforced two of the tester's own bug classes: check 5 (a control that REFUSES on
+press — a gate the row's elements carry that the renderer ignores) and check 6 (a card that takes your money
+without naming the ONGOING cost — the pad, the nut). Both enforce a deliberately TIGHT allowlist
+(`GATE_FIELDS`/`OBLIGATION_FIELDS`), because a loose `/lock|cost/` pattern would drag in every one-off price
+and status and become noise. The hole that tight allowlist leaves is the exact one the design review named:
+a future board can ship a gate or a recurring cost under a NAME the allowlist does not yet know, and the
+enforcement silently never runs — it only starts once somebody remembers to add the name. **Check 7 closes
+that regression path without loosening 5/6**: a completeness sweep over every field on all ~129 boards flags
+any name that reads gate-shaped or cost-shaped and is neither ENFORCED (in 5/6's set) nor explicitly REVIEWED
+with a reason — the catalog-or-declare discipline `NOT_API` already uses for the way OUT, now applied to the
+gates and costs coming IN. The sweep found real work on its first run: **`unlocked`** (skills actives +
+grandmasteries gate a per-row control on it) was a genuine check-5 gate the tight list could not see →
+**ENFORCED** (added to `GATE_FIELDS`); **`blocked`** (a DM line-status, not a lock) exposed the first regex
+over-matching "b·locked" → the lock pattern tightened to `Locked$|^(un)?locked$` so non-locks drop out
+cleanly; and **13 fields waived with reasons** — pad RATE parameters whose owed figure is already enforced
+(`upkeepBps`/`upkeepCapHours`/`upkeepMult`/`coldHours`), credits owed TO the player (`incomeOwed`,
+`stipendOwed`), feud status (`bloodOwed`), a generic one-off debt (`owed`), and the top-level `canX`
+action-gate family (`canThrow`/`canSeek`/`canMentor`/`canHire`/`canChooseTrait` — the SINGLETON analogue of
+check 5's per-row gate, each verified READ and each disclosing its reason when false). So a new gate or cost
+under an unknown name is now a decision on the record, not a silent regression. Mutation-verified BOTH ways
+(drop a waiver, or un-enforce `unlocked`, and the sweep fails by name); the seventh check is in the guard's
+own success message. **The rest of the review's Stage 1 was already shipped and tested** across prior
+sessions — the art crop (`.ico object-fit:cover`/`.ico.wide`), the mark's name on every crime/death result,
+the sound-per-outcome map, the reordered Home, the pre-paint boot guard — so this drop is the one genuine
+remaining piece: the Refiner's thesis that the house rule must be a test the class cannot regress past. Full
+suite green.
+
+**STAGE 2 (design review) — THE CONSOLE + homing the orphans (the "Everything Else" retirement, step one).**
+The deck tab ("Everything Else") is a raw power-user/agent console — 22 groups of ~207 routes as edit-a-body
+forms — but it was presented as a peer GAME tab, so it read as unfinished features (the founder's own
+complaint: "why aren't some of those as developed as the others"). An audit of the current base found
+**195 of 207 deck routes are shadow-copies of curated screens; 12 are orphans**, of which the genuinely
+PLAYER-facing ones with no curated home were `POST /v1/respec` (stat respec), `POST /v1/gangs/contract/
+:targetId` (family contract) and the workshop pair (`/v1/workshop/craft/:id` + `/v1/workshop/ammo`) — the
+rest are chain (`plex/*`, `fees/status`) or status leaderboards that belong in a power-user area anyway.
+The correct sequence is **home the orphans first, then retire the drawer** (deleting it before homing would
+remove real features), so this step homes two and reframes the drawer: **(1) stat respec → a card on The
+Life tab** (redistribute the base build; board-read-free — reads `me.stats`/`me.statTotal` already on the
+sheet — and it PRICES THE TRADEOFF up front via a new `respecOmr`/`respecStatMin` on `/v1/rules`, the
+Stage-2 principle; local sum/floor validation, the server the referee). **(2) family contract → a card on
+Wet Work** (boss/underboss only, a treasury-funded hit reusing the roster that screen already renders — a
+targeted family hit belongs where you target people; null-guarded so a non-boss render never throws).
+**(3) the deck is reframed into "The Console"** — the tab renamed (en) and a header card that says plainly
+what it is: the raw API for power users & agents, every route the city exposes, with the curated tabs
+covering all of it (pointing at `/agents` + `/openapi.json`) — so it stops reading as broken content and
+becomes an intentional tool. §10.4 untouched (the two homes reuse already-validated routes/bodies — the
+wiring guard confirms `/v1/respec {muscle,cunning,speed}` and `/v1/gangs/contract/:id {amount,kind}` are
+read; the mirror confirms the new `rules.respecOmr`/`respecStatMin` are returned; check 7's 13 waivers
+intact). Verified: client guard green (615 routes, 195 bodies, 129 boards, checks 5/6/7), mobile 75/75 (the
+two new cards + reframed deck: no overflow, above the fold, no page error), full suite green. **The rest of
+Stage 2 was already shipped** across prior sessions — the inbound strip (TONIGHT IN THE CITY + THE MORNING
+PAPER), the reordered Home, the grouped two-tier nav, the screen-reach beacon — so the remaining Everything
+Else work is the last slice: give the workshop (gear/ammo crafting) a curated screen, then DELETE the deck
+(or gate it behind a power-user toggle) once every orphan has a home.
+
+**STAGE 2 (design review) — THE WORKSHOP: the last orphan homed (a previously UI-less loop).** The deck's
+remaining genuine player-orphans were the workshop routes — `POST /v1/workshop/craft/:id` (craft a
+CONSUMABLE from crates + cash), `POST /v1/workshop/ammo` (1 crate + $400 → 30 rounds), and `POST
+/v1/items/:id/use` (use a crafted item). The last was **not in the client AT ALL** — not even the deck — so
+the whole consumables loop (craft → use) had no UI: you could craft via the raw deck but there was no way to
+USE what you made. This homes it: a **"The Workshop" section on The Garage** renders the `CONSUMABLES`
+catalog (newly surfaced on `/v1/rules` — the catalog-discoverability precedent) as craft cards showing the
+effect + `$cost + N crate` price, an owned-count chip + a **use it** button per item you hold (reading
+`me.items`, already on the view), and a **roll 30 rounds** button — all through the Garage's existing
+`data-*` delegation. §10.4 untouched (all three routes already existed and are ledgered `craft:*`; the
+wiring guard confirms the new `/v1/items/:id/use` resolves to a mounted route, the mirror confirms the new
+`rules.consumables` element fields are returned). Verified: client guard green (617 routes — the use route
+now client-reachable, 129 boards, checks 5/6/7), mobile 75/75, full suite green. **Every genuine player
+orphan now has a curated home** (stat respec, family contract, the workshop). The deck stays as "The
+Console" (the reframed power-user/agent raw API) — deliberately NOT deleted, since it's the only home for
+the chain/mod/leaderboard routes and the reframed header already resolves the "unfinished features"
+confusion. The Everything Else retirement is complete: home the orphans (done), reframe the drawer (done),
+keep it as an honest power-user tool rather than delete legit access.
+
+**STAGE 3 (design review) — THE DISPLAY FACE: one served poster font for the identity moments.** The
+console's whole type system was two roles (serif body, mono chrome) — headings were just the body face
+letterspaced, so the game's identity moments carried no typographic weight of their own. Stage 3's "served
+display font" is now live: **Oswald 600 (latin subset, 12.7KB woff2) self-hosted at `/art/display.woff2`**
+— the art allowlist's extension map gained `.woff2: font/woff2` (one line; the loader picks the file up at
+boot, same no-traversal Map as the plates) — declared as ONE `@font-face` + a `--display` token whose
+fallback stack (`Arial Narrow` → `Helvetica Neue`) keeps the condensed feel if the font ever fails, and
+`<link rel=preload>`'d since the masthead is fold-critical. **Applied with restraint to exactly five
+identity moments** (the artifact-design "spend your boldness in one place" rule): the masthead `#top h1`,
+the landing hero OMERTÀ (now a film-poster title over the alley plate), the cinematic `#cine .ctitle` (THE
+poster moment — was serif), the `#tabart` screen-name plates, and the hero-band numbers. Body stays serif,
+labels stay mono — the face marks *identity*, never prose. A non-latin screen name (the i18n packs' Мокрые
+дела etc.) falls back per-glyph to the condensed stack — coherent, not broken. **Verified by LOOKING, not
+just parsing** (the recorded discipline): a Playwright probe asserts the route serves `font/woff2`,
+`document.fonts.check('600 22px Oswald')` is true, the hero h1's computed family leads with Oswald, zero
+page errors — and the landing screenshot confirms the poster read. Client guard green, mobile 75/75, full
+suite green. Zero §10.4 surface (a font moves nothing). **Stage 3's remaining items stay deferred with
+reasons**: emoji→drawn-icon set (a huge-diff/high-regression change across the whole 800KB single file —
+its own pass), material art direction (wants the icon set first), data-gated tab consolidation (the
+screen-reach beacon is still accumulating the data that decision needs). Also in this session's art pass:
+the 14 F3 new-crime plates generated + contact-sheet reviewed (13 first-roll clean; `crime-meter` re-rolled
+— the heads read as camera lenses, the subject now anchors the DIAL FACE + coin slot; $11.12 lifetime of
+the $12 cap).
