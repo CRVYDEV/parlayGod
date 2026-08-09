@@ -10559,3 +10559,31 @@ this batch restarted the branch from origin/main per the merged-PR rule rather t
 history. Deferred (in the report, not live holes): per-operator mod identity, M3 read-coverage on the fully-keyless
 boards (nothing to revoke there; not worth a DB load per keyless read — the H4 pool-protection anti-precedent),
 and the chain/real-money layer (stays gated on the third-party audit + legal counsel).
+
+**THE VOCABULARY IS COMPLETE — check 7, the airtight gate/cost guard (Stage 1 of the design review).**
+`test/client.js` already enforced two of the tester's own bug classes: check 5 (a control that REFUSES on
+press — a gate the row's elements carry that the renderer ignores) and check 6 (a card that takes your money
+without naming the ONGOING cost — the pad, the nut). Both enforce a deliberately TIGHT allowlist
+(`GATE_FIELDS`/`OBLIGATION_FIELDS`), because a loose `/lock|cost/` pattern would drag in every one-off price
+and status and become noise. The hole that tight allowlist leaves is the exact one the design review named:
+a future board can ship a gate or a recurring cost under a NAME the allowlist does not yet know, and the
+enforcement silently never runs — it only starts once somebody remembers to add the name. **Check 7 closes
+that regression path without loosening 5/6**: a completeness sweep over every field on all ~129 boards flags
+any name that reads gate-shaped or cost-shaped and is neither ENFORCED (in 5/6's set) nor explicitly REVIEWED
+with a reason — the catalog-or-declare discipline `NOT_API` already uses for the way OUT, now applied to the
+gates and costs coming IN. The sweep found real work on its first run: **`unlocked`** (skills actives +
+grandmasteries gate a per-row control on it) was a genuine check-5 gate the tight list could not see →
+**ENFORCED** (added to `GATE_FIELDS`); **`blocked`** (a DM line-status, not a lock) exposed the first regex
+over-matching "b·locked" → the lock pattern tightened to `Locked$|^(un)?locked$` so non-locks drop out
+cleanly; and **13 fields waived with reasons** — pad RATE parameters whose owed figure is already enforced
+(`upkeepBps`/`upkeepCapHours`/`upkeepMult`/`coldHours`), credits owed TO the player (`incomeOwed`,
+`stipendOwed`), feud status (`bloodOwed`), a generic one-off debt (`owed`), and the top-level `canX`
+action-gate family (`canThrow`/`canSeek`/`canMentor`/`canHire`/`canChooseTrait` — the SINGLETON analogue of
+check 5's per-row gate, each verified READ and each disclosing its reason when false). So a new gate or cost
+under an unknown name is now a decision on the record, not a silent regression. Mutation-verified BOTH ways
+(drop a waiver, or un-enforce `unlocked`, and the sweep fails by name); the seventh check is in the guard's
+own success message. **The rest of the review's Stage 1 was already shipped and tested** across prior
+sessions — the art crop (`.ico object-fit:cover`/`.ico.wide`), the mark's name on every crime/death result,
+the sound-per-outcome map, the reordered Home, the pre-paint boot guard — so this drop is the one genuine
+remaining piece: the Refiner's thesis that the house rule must be a test the class cannot regress past. Full
+suite green.
