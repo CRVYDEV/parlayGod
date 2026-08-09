@@ -87,7 +87,10 @@ assert.equal((await pool.query(`SELECT claimed_onchain FROM vouchers WHERE nonce
 // ── Tier B: the afterSwap→Vig trade-fee stream (TradeFeePaid) — same cursor/confirmation/idempotency
 // discipline, its OWN 'trades' cursor, booking source='trade' Vig revenue (design §2). ──
 const { syncTradeFees } = await import('../src/watcher.js');
-const VIG_BPS = Number(process.env.VIG_BPS || 6000);
+// ROUTER F1: a trade fee books at its DECLARED lever (TRADE_FEE.VIG_BPS, the signed D1 100%) —
+// this suite previously asserted gross × VIG_BPS (the gameplay-fee 60%), i.e. it CODIFIED the
+// constant-vs-wiring drift the router fixed. The lever is read from rules so a retune re-measures.
+const { TRADE_FEE } = await import('../src/rules.js');
 const tradeLog = []; // { block, nonce, amount }
 source.tradeFeeLogs = async (from, to) => tradeLog.filter((l) => l.block >= from && l.block <= to)
   .map((l) => ({ nonce: l.nonce, amount: l.amount, txHash: '0xtrade' + l.nonce }));
@@ -106,7 +109,7 @@ r = await syncTradeFees(pool, source, { startBlock: 27 });
 assert.equal(r.processed, 1, 'trade fee booked once head clears confirmations');
 const rev = await tradeRev(501);
 assert.equal(Number(rev.gross_eth), 0.05, 'gross ETH recorded');
-assert.equal(Number(rev.vig_eth), Math.round(0.05 * VIG_BPS / 10000 * 1e6) / 1e6, 'Vig share = gross × VIG_BPS');
+assert.equal(Number(rev.vig_eth), Math.round(0.05 * TRADE_FEE.VIG_BPS / 10000 * 1e6) / 1e6, 'Vig share = gross × the DECLARED TRADE_FEE.VIG_BPS (F1: not the gameplay-fee VIG_BPS)');
 assert.equal(await getCursor(pool, 'trades'), 32, 'trades cursor advanced to safeHead (independent of fees/claimed)');
 
 // idempotent re-scan (a reorg-replay of the same nonce) does not double-book
