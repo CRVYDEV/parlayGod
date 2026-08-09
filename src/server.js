@@ -268,7 +268,8 @@ export async function buildServer() {
   try {
     for (const name of readdirSync(artDir)) {
       const ext = name.slice(name.lastIndexOf('.')).toLowerCase();
-      const type = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' }[ext];
+      const type = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp',
+        '.woff2': 'font/woff2' }[ext]; // the self-hosted display face rides the same allowlist as the art
       if (type) ART_FILES.set(name, { body: readFileSync(join(artDir, name)), type });
     }
   } catch { /* no art shipped — the flat fills stand in */ }

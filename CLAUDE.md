@@ -10634,3 +10634,27 @@ Console" (the reframed power-user/agent raw API) — deliberately NOT deleted, s
 the chain/mod/leaderboard routes and the reframed header already resolves the "unfinished features"
 confusion. The Everything Else retirement is complete: home the orphans (done), reframe the drawer (done),
 keep it as an honest power-user tool rather than delete legit access.
+
+**STAGE 3 (design review) — THE DISPLAY FACE: one served poster font for the identity moments.** The
+console's whole type system was two roles (serif body, mono chrome) — headings were just the body face
+letterspaced, so the game's identity moments carried no typographic weight of their own. Stage 3's "served
+display font" is now live: **Oswald 600 (latin subset, 12.7KB woff2) self-hosted at `/art/display.woff2`**
+— the art allowlist's extension map gained `.woff2: font/woff2` (one line; the loader picks the file up at
+boot, same no-traversal Map as the plates) — declared as ONE `@font-face` + a `--display` token whose
+fallback stack (`Arial Narrow` → `Helvetica Neue`) keeps the condensed feel if the font ever fails, and
+`<link rel=preload>`'d since the masthead is fold-critical. **Applied with restraint to exactly five
+identity moments** (the artifact-design "spend your boldness in one place" rule): the masthead `#top h1`,
+the landing hero OMERTÀ (now a film-poster title over the alley plate), the cinematic `#cine .ctitle` (THE
+poster moment — was serif), the `#tabart` screen-name plates, and the hero-band numbers. Body stays serif,
+labels stay mono — the face marks *identity*, never prose. A non-latin screen name (the i18n packs' Мокрые
+дела etc.) falls back per-glyph to the condensed stack — coherent, not broken. **Verified by LOOKING, not
+just parsing** (the recorded discipline): a Playwright probe asserts the route serves `font/woff2`,
+`document.fonts.check('600 22px Oswald')` is true, the hero h1's computed family leads with Oswald, zero
+page errors — and the landing screenshot confirms the poster read. Client guard green, mobile 75/75, full
+suite green. Zero §10.4 surface (a font moves nothing). **Stage 3's remaining items stay deferred with
+reasons**: emoji→drawn-icon set (a huge-diff/high-regression change across the whole 800KB single file —
+its own pass), material art direction (wants the icon set first), data-gated tab consolidation (the
+screen-reach beacon is still accumulating the data that decision needs). Also in this session's art pass:
+the 14 F3 new-crime plates generated + contact-sheet reviewed (13 first-roll clean; `crime-meter` re-rolled
+— the heads read as camera lenses, the subject now anchors the DIAL FACE + coin slot; $11.12 lifetime of
+the $12 cap).

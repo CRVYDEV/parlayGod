@@ -13,6 +13,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="OMERTÀ">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preload" href="/art/display.woff2" as="font" type="font/woff2" crossorigin>
 <title>OMERTÀ — the city</title>
 <meta name="description" content="OMERTÀ — a multiplayer noir mafia RPG with a real, server-authoritative economy on a built-in ledger. Autonomous agents are first-class players: play the whole game over a JSON API and withdraw $OMR on-chain. See /agents to start.">
 <!-- Machine discovery: agents & LLMs. See /agents (quickstart), /openapi.json (API), /llms.txt, /v1/rules. -->
@@ -41,6 +42,8 @@
      Tokens → surfaces → controls → motion. Every legacy class keeps working;
      this layer only changes how it FEELS. Motion respects prefers-reduced-motion.
      ═══════════════════════════════════════════════════════════════════════════ */
+  @font-face { font-family: 'Oswald'; font-style: normal; font-weight: 600; font-display: swap;
+    src: url(/art/display.woff2) format('woff2'); }
   :root {
     /* palette */
     --bg: #0a0a0e; --panel: #121218; --panel2: #17171f; --raise: #1d1d27;
@@ -58,6 +61,11 @@
     --ease: cubic-bezier(.22,.9,.3,1);
     --mono: ui-monospace, 'Cascadia Code', Menlo, Consolas, 'Courier New', monospace;
     --serif: Georgia, 'Palatino Linotype', 'Times New Roman', serif;
+    /* THE DISPLAY FACE (Stage 3) — one condensed poster face for the identity moments ONLY (the
+       masthead, the landing hero, the cinematic title, the screen-name plates, the hero numbers).
+       Self-hosted off /art (12.7KB latin subset); the fallback stack keeps the condensed feel, and a
+       non-latin screen name falls back per-glyph, which is coherent rather than broken. */
+    --display: 'Oswald', 'Arial Narrow', 'Helvetica Neue', 'Segoe UI', sans-serif;
     font-size: 16px;
   }
   * { box-sizing: border-box; }
@@ -84,7 +92,7 @@
     border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5;
     background: color-mix(in srgb, var(--panel) 82%, transparent);
     -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
-  #top h1 { font-size: 22px; margin: 0; letter-spacing: 8px; color: var(--neon); font-weight: normal;
+  #top h1 { font-family: var(--display); font-size: 22px; margin: 0; letter-spacing: 8px; color: var(--neon); font-weight: 600;
     text-shadow: 0 0 22px var(--neon-glow); }
   #top .sub { color: var(--faint); font-size: 12.5px; letter-spacing: .4px; }
   #whoami { margin-left: auto; color: var(--dim); font-size: 13.5px; }
@@ -368,7 +376,7 @@
   .hband .hst { flex: 1 1 120px; min-width: 110px; background: linear-gradient(180deg, var(--panel2), #12121a);
     border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px 14px;
     box-shadow: inset 0 1px 0 rgba(255,255,255,.03); }
-  .hband .hst .hv { font-size: 25px; font-weight: 600; color: var(--gold); letter-spacing: .3px;
+  .hband .hst .hv { font-family: var(--display); font-size: 25px; font-weight: 600; color: var(--gold); letter-spacing: .5px;
     font-variant-numeric: tabular-nums; line-height: 1.05; }
   .hband .hst.neon .hv { color: var(--neon); text-shadow: 0 0 14px var(--neon-soft); }
   .hband .hst.warn .hv { color: var(--warn); }
@@ -664,7 +672,7 @@
   }
   /* the copy has to stay legible over a photograph — a scrim, not a lighter image */
   .landing .hero > * { position: relative; text-shadow: 0 2px 18px rgba(0,0,0,.9), 0 0 40px rgba(0,0,0,.7); }
-  .landing .hero h1 { text-shadow: 0 3px 30px #000, 0 0 60px rgba(0,0,0,.9); }
+  .landing .hero h1 { font-family: var(--display); font-weight: 600; text-shadow: 0 3px 30px #000, 0 0 60px rgba(0,0,0,.9); }
 
   /* THE POSTER BREAK — hero-poster.jpg carries itself, so it gets no text over it at all. */
   .landing .poster { position: relative; left: calc(50% - 50vw); width: 100vw; height: 38vh; min-height: 240px;
@@ -856,7 +864,7 @@
   #tabart::after { content: ''; position: absolute; inset: 0;
     background: linear-gradient(15deg, var(--panel) 0%, color-mix(in srgb, var(--panel) 72%, transparent) 45%,
       transparent 88%); }
-  #tabart span { position: absolute; left: 16px; bottom: 11px; z-index: 1;
+  #tabart span { font-family: var(--display); font-weight: 600; position: absolute; left: 16px; bottom: 11px; z-index: 1;
     color: var(--accent, var(--neon)); font-size: 19px; letter-spacing: 4px; text-transform: uppercase;
     text-shadow: 0 2px 16px #000, 0 0 34px rgba(0,0,0,.9); }
   @media (max-width: 760px) { #tabart { height: 92px; } #tabart span { font-size: 15px; letter-spacing: 2px; left: 12px; bottom: 8px; } }
@@ -947,7 +955,7 @@
   #cine .cbox { text-align: center; padding: 0 24px; max-width: 620px; animation: cineIn .5s var(--ease); }
   #cine .ckicker { font-family: var(--mono); font-size: 12px; letter-spacing: 4px; text-transform: uppercase;
     color: var(--dim); margin-bottom: 10px; }
-  #cine .ctitle { font-family: var(--serif); font-size: clamp(34px, 8vw, 62px); letter-spacing: 6px;
+  #cine .ctitle { font-family: var(--display); font-weight: 600; font-size: clamp(34px, 8vw, 62px); letter-spacing: 6px;
     line-height: 1.05; color: var(--cine-accent, var(--neon)); text-transform: uppercase;
     text-shadow: 0 0 44px var(--cine-glow, var(--neon-glow)), 0 3px 20px #000; }
   #cine .csub { color: var(--ink); font-size: 16px; margin-top: 14px; line-height: 1.5; }
