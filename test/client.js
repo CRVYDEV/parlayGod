@@ -1066,6 +1066,12 @@ async function seedLists() {
     if (mgid) await q('INSERT INTO commission_ticker_votes (day, gang_id, ticker, standing) VALUES ($1,$2,$3,600)',
       [Math.floor(Date.now() / 86400000), mgid, 'TSLA']);
   }
+  {
+    // THE DAILY OFFERING — a window for today, so /v1/bonds.daily is non-null (the empty-object
+    // rule: a null board never proves its reads)
+    await q('INSERT INTO bond_offerings (day, offered_omr, quoted_omr) VALUES ($1, 100000, 250)',
+      [Math.floor(Date.now() / 86400000)]);
+  }
 
   // the LEGEND columns every "biggest ever" board ranks by — status counters, never currency
   await q(`UPDATE account_persistent SET product_moved=5000000, tycoon_earned=4000000, monument_built=900000,
