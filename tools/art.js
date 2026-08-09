@@ -379,7 +379,8 @@ const CRIME_SUBJECT = {
   depository: 'a federal depository corridor of barred gold cages receding into darkness, one flashlight beam',
   // F3 — the breadth drop (levels 6-29, filling the ladder's silent rungs)
   pigeon: 'a folded newspaper parcel and a roll of banknotes swapped over a park bench in thin morning fog',
-  meter: 'a row of parking meters on a wet kerb, one head unscrewed and lying open, coins spilled in the gutter',
+  // re-rolled: the first roll's heads read as camera lenses — anchor the DIAL FACE and the coin slot
+  meter: 'a row of 1940s coin-operated parking meters with round glass dial faces and coin slots on a wet kerb, one meter head pried open, coins spilled in the gutter',
   laundry: 'a laundry van\'s open side door, canvas sacks of linen and a cash tin prised open on the running board',
   bookie: 'a corner bookmaker\'s chalkboard of odds, a ledger slammed shut, a fist resting on the counter',
   pawn: 'a pawnshop back room at night: violins, radios and a rifle on hooks, the safe door standing open',

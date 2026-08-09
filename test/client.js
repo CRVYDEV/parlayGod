@@ -1451,6 +1451,7 @@ const OBLIGATION_FIELDS = new Set([
   'padOutran',                        // the crossover: the envelope now exceeds what the till can hand back
 ]);
 const undisclosed = [];
+const allFieldsSeen = new Set();  // check 7: the whole field universe, for the completeness sweep
 const noteObligations = (where, key, have, fields) => {
   const owed = [...have].filter((f) => OBLIGATION_FIELDS.has(f));
   const blind = owed.filter((f) => !fields.has(f));
@@ -1472,6 +1473,7 @@ for (const [key, fields] of reads) {
   const target = Array.isArray(obj) ? obj[0] : obj;
   if (!target || typeof target !== 'object') { unobservable.push(`${key} (${readWhere.get(key)})`); continue; }
   const have = new Set(Object.keys(target));
+  for (const f of have) allFieldsSeen.add(f);
   const gone = [...fields].filter((f) => !have.has(f));
   if (gone.length) notReturned.push(`${readWhere.get(key)} reads ${gone.join(',')} off ${key} — the route returns ${[...have].slice(0, 8).join(',')}…`);
   noteObligations(readWhere.get(key), key, have, fields);
@@ -1495,7 +1497,9 @@ const listMissing = [], listEmpty = [], listUngated = [];
 // having already decided. A board that adds a new gate name has to be added here — deliberately a
 // short explicit list rather than a pattern, so a field called `level` (the row's OWN level, not a
 // requirement) is never mistaken for a gate.
-const GATE_FIELDS = new Set(['minLvl', 'minLevel', 'locked', 'canRaid', 'eligible']);
+// `unlocked` was ADDED here by check 7's completeness sweep (below): skills' actives + grandmasteries
+// gate a per-row control on it, so it belongs in check 5's enforced set — the sweep is what found it.
+const GATE_FIELDS = new Set(['minLvl', 'minLevel', 'locked', 'canRaid', 'eligible', 'unlocked']);
 for (const [key, fields] of listReads) {
   const [rawPath, sub, listField] = key.split('|');
   let path = rawPath;
@@ -1510,6 +1514,7 @@ for (const [key, fields] of listReads) {
   // a list is heterogeneous often enough (market listings are car|good|order) that one element is
   // not the population — a field present on ANY element is a field the route really returns
   const have = new Set(arr.flatMap((e) => (e && typeof e === 'object' ? Object.keys(e) : [])));
+  for (const f of have) allFieldsSeen.add(f);
   const gone = [...fields].filter((f) => !have.has(f));
   if (gone.length) listMissing.push(`${listWhere.get(key)} reads ${gone.join(',')} off each element of ${key} — the elements carry ${[...have].slice(0, 8).join(',')}…`);
   noteObligations(listWhere.get(key), `each element of ${key}`, have, fields);
@@ -1555,6 +1560,59 @@ assert.deepEqual(listEmpty, [], `${listEmpty.length} list(s) came back EMPTY, so
   `${listEmpty.join('\n  ')}`);
 const listCount = [...listReads.values()].reduce((n, s) => n + s.size, 0);
 
+// ── CHECK 7: THE VOCABULARY IS COMPLETE — no gate or ongoing cost hides under a new NAME ─────────
+// Checks 5 and 6 enforce a TIGHT allowlist on purpose: a loose /lock|cost/ pattern would drag in
+// every one-off price and status in the game and make the enforcement noise. The hole that tight
+// allowlist leaves is the exact one the design review named — a future board can ship a gate or a
+// recurring cost under a name NOT in either set, and the enforcement silently never runs; it only
+// starts once somebody remembers to add the name. So the enforced sets stay tight, and a SEPARATE
+// completeness sweep makes the omission LOUD: any field across every board whose NAME reads like a
+// gate or an ongoing cost must be either ENFORCED (in check 5/6's set) or explicitly REVIEWED-and-
+// waived here with a reason. A new such field forces that decision at add-time instead of shipping
+// unchecked — the same catalog-or-declare discipline NOT_API already uses for the way OUT. This does
+// NOT loosen 5/6 (they still enforce only their tight sets); it closes the "unknown name" regression.
+// Precise on purpose: `Locked$`/`^(un)?locked$` catches locked/unlocked/carLocked but NOT "blocked"
+// (a DM line-status, not a lock — the first cut's `.*[lL]ocked` over-matched "b·locked").
+const GATE_SHAPE = /(^min(Lvl|Level)$|Locked$|^(un)?locked$|^gated?$|^eligible$|^can[A-Z]|^unmet$|Req$|^requires?$)/;
+const COST_SHAPE = /(upkeep|^wages?$|Wage[A-Z]|arrears|^rent|dues|^nut$|Owed$|^owed$|^cold|Cold$|padOutran)/;
+// Reviewed and deliberately NOT enforced — a field whose NAME matches the shape but which is NOT a
+// player-facing gate or a recurring cost the card must disclose. Kept with a reason so the waiver is
+// a decision on the record, not a blind spot. The enforced RECURRING costs (the pad, the nut) live
+// under their precise names in OBLIGATION_FIELDS; these are their parameters, their credits, or
+// generic debts disclosed per-board.
+const REVIEWED_NOT_ENFORCED = new Map([
+  ['owed', 'a one-off debt (loan / house marker / estate staff) — disclosed per board; too generic to enforce globally without false trips. The recurring costs are enforced under their precise names.'],
+  ['bloodOwed', 'the feud ledger — bodies owed between bloodlines, a status not currency.'],
+  ['incomeOwed', 'sov tribute owed TO the player (collect → treasury) — income, not a cost you pay.'],
+  ['stipendOwed', 'the pass stipend owed TO the player, paid as the backed pool funds — a credit, not a cost.'],
+  ['coldHours', 'a TERM of the pad/nut (the shut-off window), shown in the terms copy; the owed cost itself is enforced as upkeep*/crewWage*/cold(Seconds).'],
+  ['upkeepBps', 'a pad RATE parameter (% of the take); the owed amount is enforced as upkeepPerHr/upkeepOwed.'],
+  ['upkeepCapHours', 'a pad RATE parameter (how long the pad keeps running); the owed amount is enforced as upkeepPerHr/upkeepOwed.'],
+  ['upkeepMult', 'a roster/charter upkeep MULTIPLIER (a modifier the cost derives from), not a displayed owed amount.'],
+  // The top-level `canX` family — the SINGLETON analogue of check 5's per-row gate (the server decided
+  // whether one control shows). Each is verified READ by its renderer (and discloses the reason when
+  // false); check 5 enforces the per-ROW version, so these are waived from IT but still forced through
+  // the sweep, so a new `canFoo` is a decision on the record rather than a silent singleton.
+  ['canChooseTrait', 'action gate — mastery "choose your legacy" control (renderLife), shown only when true.'],
+  ['canHire', 'action gate — world/heist co-op "hire a gun/hand" control, shown only when true.'],
+  ['canMentor', 'action gate — mentor "offer to guide" control (renderDiscovery), with eligibility copy.'],
+  ['canSeek', 'action gate — "seek a mentor" control (renderDiscovery).'],
+  ['canThrow', 'action gate — estate gala control; discloses the tier/Butler/square-book requirement when false.'],
+]);
+const shapeFlags = [];
+for (const f of allFieldsSeen) {
+  const gate = GATE_SHAPE.test(f), cost = COST_SHAPE.test(f);
+  if (!gate && !cost) continue;
+  if (GATE_FIELDS.has(f) || OBLIGATION_FIELDS.has(f)) continue;   // already ENFORCED by check 5/6
+  if (REVIEWED_NOT_ENFORCED.has(f)) continue;                     // reviewed and waived, with a reason
+  shapeFlags.push(`${f} (${gate ? 'gate' : 'cost'}-shaped)`);
+}
+shapeFlags.sort();
+assert.deepEqual(shapeFlags, [], `${shapeFlags.length} field name(s) read like a GATE or an ONGOING COST but ` +
+  `are neither ENFORCED (checks 5/6) nor explicitly REVIEWED — a new gate/cost under an unknown name ships ` +
+  `UNCHECKED until someone adds it. Either enforce it (add to GATE_FIELDS/OBLIGATION_FIELDS and read it in ` +
+  `the client) or waive it in REVIEWED_NOT_ENFORCED with a reason:\n  ${shapeFlags.join('\n  ')}`);
+
 await app.close();
 console.log(`✅ client wiring test passed — across the console AND /admin: of ${refs.size} routes they can ` +
   `call, ${refs.size - dynamic.length} resolve to a really-mounted route (segment-wise, so ` +
@@ -1576,6 +1634,11 @@ console.log(`✅ client wiring test passed — across the console AND /admin: of
   `once rendered) and a lane picker that offered every route to a level-6 player and refused on ` +
   `press, among them a broken action, an ammo box sold by a control that asked for a ` +
   `quantity it could not honour, and an unstake box that emptied the whole stake whatever you typed. ` +
+  `And the SEVENTH, which is not a bug but the door one walks through: the tight allowlists 5 and 6 ` +
+  `enforce cannot see a gate or a cost shipped under a name they do not yet know, so a completeness ` +
+  `sweep flags every field across all ${reads.size} boards whose NAME reads like a gate or an ongoing ` +
+  `cost — each must be enforced above or waived here with a reason (${REVIEWED_NOT_ENFORCED.size} are), ` +
+  `so a new one is a decision on the record, not a silent regression. ` +
   `${Object.keys(CATALOGS).length} fields have ` +
   `catalogs and every other literal field is either an i18n key or declared not-an-API-value, so a ` +
   `new one forces that decision instead of being skipped in silence.`);

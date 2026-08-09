@@ -1,5 +1,5 @@
 {
-  "spent": 10.52,
+  "spent": 11.12,
   "images": {
     "card-legend": {
       "model": "fal-ai/flux-pro/v1.1",
@@ -2541,6 +2541,160 @@
       "job": "the Trade Goods section — the freight game",
       "prompt": "a dockside freight warehouse at night, tall stacks of wooden crates and burlap sacks on a loading platform, a hand truck loaded with cases, a clipboard manifest nailed to a post, a truck backed up to the dock with its doors open, one amber loading lamp over black water beyond, warm amber key light against cold teal shadow, the amber dominant, 1940s American noir, hard chiaroscuro, deep shadow, teal and amber light on wet asphalt, film grain, anamorphic haze, muted desaturated palette, cinematic wide lens, unpeopled, no signage, no lettering, no writing anywhere, no watermark",
       "at": "2026-07-30T08:14:34.134Z"
+    },
+    "crime-bookie": {
+      "model": "fal-ai/flux-pro/v1.1",
+      "ar": "16:9",
+      "seed": 2354240411,
+      "w": 1024,
+      "h": 576,
+      "bytes": 174631,
+      "job": "crime card: Lean on a corner bookie",
+      "prompt": "a corner bookmaker's chalkboard of odds, a ledger slammed shut, a fist resting on the counter, 1940s American noir, hard chiaroscuro, deep shadow, teal and amber light, film grain, muted desaturated palette, cinematic, unpeopled, no signage, no lettering, no writing anywhere, no watermark",
+      "at": "2026-08-09T14:25:39.503Z"
+    },
+    "crime-laundry": {
+      "model": "fal-ai/flux-pro/v1.1",
+      "ar": "16:9",
+      "seed": 2749287011,
+      "w": 1024,
+      "h": 576,
+      "bytes": 218739,
+      "job": "crime card: Skim the laundry route's takings",
+      "prompt": "a laundry van's open side door, canvas sacks of linen and a cash tin prised open on the running board, 1940s American noir, hard chiaroscuro, deep shadow, teal and amber light, film grain, muted desaturated palette, cinematic, unpeopled, no signage, no lettering, no writing anywhere, no watermark",
+      "at": "2026-08-09T14:25:40.731Z"
+    },
+    "crime-meter": {
+      "model": "fal-ai/flux-pro/v1.1",
+      "ar": "16:9",
+      "seed": 889587730,
+      "w": 1024,
+      "h": 576,
+      "bytes": 229093,
+      "job": "crime card: Empty the parking meters on Canal Row",
+      "prompt": "a row of 1940s coin-operated parking meters with round glass dial faces and coin slots on a wet kerb, one meter head pried open, coins spilled in the gutter, 1940s American noir, hard chiaroscuro, deep shadow, teal and amber light, film grain, muted desaturated palette, cinematic, unpeopled, no signage, no lettering, no writing anywhere, no watermark",
+      "at": "2026-08-09T14:28:59.272Z"
+    },
+    "crime-pigeon": {
+      "model": "fal-ai/flux-pro/v1.1",
+      "ar": "16:9",
+      "seed": 645711596,
+      "w": 1024,
+      "h": 576,
+      "bytes": 186989,
+      "job": "crime card: Clip the pigeon-drop man",
+      "prompt": "a folded newspaper parcel and a roll of banknotes swapped over a park bench in thin morning fog, 1940s American noir, hard chiaroscuro, deep shadow, teal and amber light, film grain, muted desaturated palette, cinematic, unpeopled, no signage, no lettering, no writing anywhere, no watermark",
+      "at": "2026-08-09T14:25:58.100Z"
+    },
+    "crime-protection": {
+      "model": "fal-ai/flux-pro/v1.1",
+      "ar": "16:9",
+      "seed": 2171842074,
+      "w": 1024,
+      "h": 576,
+      "bytes": 264463,
+      "job": "crime card: Collect protection on Fish Market Row",
+      "prompt": "a fish market stall at dawn, ice and crates, an envelope pressed into a monger's wet apron pocket, 1940s American noir, hard chiaroscuro, deep shadow, teal and amber light, film grain, muted desaturated palette, cinematic, unpeopled, no signage, no lettering, no writing anywhere, no watermark",
+      "at": "2026-08-09T14:25:59.845Z"
+    },
+    "crime-pawn": {
+      "model": "fal-ai/flux-pro/v1.1",
+      "ar": "16:9",
+      "seed": 4010530497,
+      "w": 1024,
+      "h": 576,
+      "bytes": 197132,
+      "job": "crime card: Clear out a pawnshop's back room",
+      "prompt": "a pawnshop back room at night: violins, radios and a rifle on hooks, the safe door standing open, 1940s American noir, hard chiaroscuro, deep shadow, teal and amber light, film grain, muted desaturated palette, cinematic, unpeopled, no signage, no lettering, no writing anywhere, no watermark",
+      "at": "2026-08-09T14:26:00.404Z"
+    },
+    "crime-switchbag": {
+      "model": "fal-ai/flux-pro/v1.1",
+      "ar": "16:9",
+      "seed": 3380277236,
+      "w": 1024,
+      "h": 576,
+      "bytes": 197055,
+      "job": "crime card: Switch the bagman's satchel",
+      "prompt": "two identical leather satchels on a bench in a marble station concourse, one hand on each, 1940s American noir, hard chiaroscuro, deep shadow, teal and amber light, film grain, muted desaturated palette, cinematic, unpeopled, no signage, no lettering, no writing anywhere, no watermark",
+      "at": "2026-08-09T14:26:00.611Z"
+    },
+    "crime-nightdeposit": {
+      "model": "fal-ai/flux-pro/v1.1",
+      "ar": "16:9",
+      "seed": 481164374,
+      "w": 1024,
+      "h": 576,
+      "bytes": 197341,
+      "job": "crime card: Take the night deposit off a manager",
+      "prompt": "a bank night-deposit slot at 2am, a canvas bag half in it, a manager's hat on the pavement, 1940s American noir, hard chiaroscuro, deep shadow, teal and amber light, film grain, muted desaturated palette, cinematic, unpeopled, no signage, no lettering, no writing anywhere, no watermark",
+      "at": "2026-08-09T14:26:13.805Z"
+    },
+    "crime-payoff": {
+      "model": "fal-ai/flux-pro/v1.1",
+      "ar": "16:9",
+      "seed": 3621304159,
+      "w": 1024,
+      "h": 576,
+      "bytes": 204000,
+      "job": "crime card: Intercept a precinct payoff",
+      "prompt": "a brown pay envelope taken from beneath a squad car's front seat in a rain-slicked precinct yard, 1940s American noir, hard chiaroscuro, deep shadow, teal and amber light, film grain, muted desaturated palette, cinematic, unpeopled, no signage, no lettering, no writing anywhere, no watermark",
+      "at": "2026-08-09T14:26:14.214Z"
+    },
+    "crime-ballot": {
+      "model": "fal-ai/flux-pro/v1.1",
+      "ar": "16:9",
+      "seed": 3984801657,
+      "w": 1024,
+      "h": 576,
+      "bytes": 169235,
+      "job": "crime card: Stuff the ward's ballot boxes",
+      "prompt": "a wooden ballot box tipped on a schoolroom table, printed slips fanned out under a bare bulb, 1940s American noir, hard chiaroscuro, deep shadow, teal and amber light, film grain, muted desaturated palette, cinematic, unpeopled, no signage, no lettering, no writing anywhere, no watermark",
+      "at": "2026-08-09T14:26:14.445Z"
+    },
+    "crime-bondsman": {
+      "model": "fal-ai/flux-pro/v1.1",
+      "ar": "16:9",
+      "seed": 2993689456,
+      "w": 1024,
+      "h": 576,
+      "bytes": 207829,
+      "job": "crime card: Rob a bail bondsman's safe",
+      "prompt": "a bail bondsman's office at night: barred window, a wall of case folders, a floor safe cracked open, 1940s American noir, hard chiaroscuro, deep shadow, teal and amber light, film grain, muted desaturated palette, cinematic, unpeopled, no signage, no lettering, no writing anywhere, no watermark",
+      "at": "2026-08-09T14:26:14.594Z"
+    },
+    "crime-ticker": {
+      "model": "fal-ai/flux-pro/v1.1",
+      "ar": "16:9",
+      "seed": 1835617536,
+      "w": 1024,
+      "h": 576,
+      "bytes": 163755,
+      "job": "crime card: Rob the racing wire's cash room",
+      "prompt": "a racing-wire cash room: telegraph keys, result slips on spikes, banded cash in an open drawer, 1940s American noir, hard chiaroscuro, deep shadow, teal and amber light, film grain, muted desaturated palette, cinematic, unpeopled, no signage, no lettering, no writing anywhere, no watermark",
+      "at": "2026-08-09T14:26:39.441Z"
+    },
+    "crime-distillery": {
+      "model": "fal-ai/flux-pro/v1.1",
+      "ar": "16:9",
+      "seed": 1429069498,
+      "w": 1024,
+      "h": 576,
+      "bytes": 207843,
+      "job": "crime card: Take a distillery's week of receipts",
+      "prompt": "a distillery office above copper stills, a week of receipts spiked on a nail, the till emptied, 1940s American noir, hard chiaroscuro, deep shadow, teal and amber light, film grain, muted desaturated palette, cinematic, unpeopled, no signage, no lettering, no writing anywhere, no watermark",
+      "at": "2026-08-09T14:26:39.489Z"
+    },
+    "crime-cathouse": {
+      "model": "fal-ai/flux-pro/v1.1",
+      "ar": "16:9",
+      "seed": 2714195919,
+      "w": 1024,
+      "h": 576,
+      "bytes": 170623,
+      "job": "crime card: Knock over the uptown cathouse's count",
+      "prompt": "a velvet parlour's back office, a cash box open on the desk, feather boa across the chair, 1940s American noir, hard chiaroscuro, deep shadow, teal and amber light, film grain, muted desaturated palette, cinematic, unpeopled, no signage, no lettering, no writing anywhere, no watermark",
+      "at": "2026-08-09T14:26:39.838Z"
     }
   }
 }
