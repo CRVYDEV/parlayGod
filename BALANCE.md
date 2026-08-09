@@ -5337,3 +5337,18 @@ whole ballot writes no ledger row; nothing is bought until Phase B clears counse
 TICKERS` (the buy list — adding a ticker is a listing decision, not a balance one) and
 `TICKER_BALLOT.DEFAULT` (what a silent/deadlocked chamber buys). Reverting is an empty record —
 the keeper simply never has a row to act on.
+
+## THE ACTIVATION MODEL (design-stage — sized before built; the burn ships with Phase B/A1)
+
+The Dynasty Machine's activation burn (`omerta-dynasty-machine-design.md` §8): burning $OMR during
+a day takes a linear share of that day's treasury stock buy. NOTHING IS BUILT — building a burn
+whose payout cannot exist until the keeper buys would sell exposure to nothing — but the model is
+SIZED now (sim P9.34, printed every run) so any retune of a treasury slice re-measures it. The one
+analytic result: each activated $OMR carries T/A ETH-worth of stock, so rational participation
+self-sizes toward the equilibrium A* ≈ T × oracle — **the recurring sink activation creates is the
+treasury inflow itself, denominated in $OMR** (at the live levers: fee 10% · store 20% · sell-tax
+4% of gross · bond 25% feed T; the burn itself recycles to the DESK, so demand cannot inflate its
+own payout — the anti-Ponzi shape). Illustrative bands print in the sim; every `ACTIVATION.*`
+number in the design (MIN_OMR 1, the day epoch, silent-day-still-buys, no per-account cap) is a
+proposed default that becomes a pinned founder lever the day it becomes a constant. INTERNAL
+sizing only — the standing copy rule forbids publishing any value-per-$OMR figure as marketing.
