@@ -362,6 +362,14 @@ export async function buildServer() {
   app.get('/agents', serveAgents);            // the agent onboarding quickstart
   app.get('/AGENTS.md', serveAgents);         // the conventional filename agents look for
   app.get('/llms.txt', async (req, reply) => reply.type('text/markdown; charset=utf-8').send(llmsTxt({ baseUrl })));
+  // robots.txt — every crawler (incl. all AI agents: GPTBot, ClaudeBot, Google-Extended, PerplexityBot,
+  // xAI/Grok, open-source fetchers) is explicitly WELCOME and pointed at the machine surfaces. Agents
+  // are first-class players here, so the default-allow is stated rather than implied by a 404.
+  app.get('/robots.txt', async (req, reply) => reply.type('text/plain; charset=utf-8').send(
+    ['# OMERTÀ — all crawlers and AI agents welcome. Agents are first-class players.',
+      '# Machine surfaces: /llms.txt (index) · /agents (agent guide) · /openapi.json (API contract) · /play (no-code setup)',
+      `# Start here: ${baseUrl}/llms.txt`,
+      'User-agent: *', 'Allow: /'].join('\n') + '\n'));
   // OpenAPI 3.1 of every mounted route — built once, after all routes register (deferred to first hit).
   let openApiCache = null;
   app.get('/openapi.json', async () => (openApiCache ||= buildOpenApi(routeRegistry, { baseUrl })));

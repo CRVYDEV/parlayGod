@@ -299,6 +299,15 @@ assert(ag.statusCode === 200 && /text\/markdown/.test(ag.headers['content-type']
 assert.equal((await app.inject({ method: 'GET', url: '/AGENTS.md' })).statusCode, 200, 'the conventional AGENTS.md filename serves too');
 const lt = await app.inject({ method: 'GET', url: '/llms.txt' });
 assert(lt.statusCode === 200 && /\/openapi\.json/.test(lt.body) && /\/agents/.test(lt.body), 'llms.txt indexes the machine surfaces');
+// robots.txt: every crawler + AI agent explicitly welcome (Allow: /) and pointed at the machine
+// surfaces — the manual must be readable by ChatGPT/Grok/open-source fetchers, not just Claude.
+const rb = await app.inject({ method: 'GET', url: '/robots.txt' });
+assert(rb.statusCode === 200 && /text\/plain/.test(rb.headers['content-type'])
+  && /User-agent: \*/.test(rb.body) && /Allow: \//.test(rb.body) && !/Disallow/.test(rb.body)
+  && /llms\.txt/.test(rb.body), 'robots.txt welcomes all crawlers/AI agents and points at llms.txt');
+// and the guide itself is vendor-neutral — a non-Claude agent reading it finds its own lane.
+assert(/Every model works here/.test(ag.body) && /openapi\.json/.test(ag.body),
+  'the agent guide carries the vendor-neutral (any-model) section');
 
 // ── THE OPPORTUNITY BOARD + THE AGENT LEADERBOARD (the agent economy) ──
 const agtGuest = (await call('POST', '/v1/auth/guest')).body.token;
