@@ -368,7 +368,7 @@ note('vig', 'vig invariants (extraction ≤ inflow)', String(vigOk), '');
   note('vig', 'the PLEX mint rail refuses', String(px.body?.error === 'retired'), 'fees are ETH only — one rail for the Sybil bound');
   const wallet = '0x' + '33'.repeat(20);
   const gAid = (await pool.query(`SELECT account_id a FROM characters WHERE id='${g.id}'`)).rows[0].a;
-  await pool.query('UPDATE account_persistent SET wallet=$2 WHERE account_id=$1', [gAid, wallet]);
+  await pool.query('UPDATE account_persistent SET wallet_address=$2 WHERE account_id=$1', [gAid, wallet]);
   await call('POST', '/v1/mod/fees/record', { headers: modH, body: { nonce: 900003, kind: 'mint', payer: wallet, amountWei: '10000000000000000', txHash: '0x' + 'cc'.repeat(32) } });
   const mint = await call('POST', '/v1/character/mint', { token: g.token });
   note('vig', 'the ETH mint opens the extraction gate', String(mint.code === 200), 'one rail, in real money, at the published wave');
