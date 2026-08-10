@@ -8,7 +8,10 @@
 > mechanics verified against the EIP text), which holds the Stock Machine's activated allocations.
 > The trophy/entitlement wall below STANDS — the entitlement stays account-bound in the DB — with
 > one knowing, counsel-gated exception recorded there (memo row A2): the TBA makes the trophy a
-> transferable container of on-chain value.
+> transferable container of on-chain value. **And §9 there adds THE PROVENANCE TRAITS**
+> (holdings-derived generative markers off the launch snapshots — opt-in, once per wallet,
+> banded, cosmetic only; this doc's layered-composition + review-the-layers + banded-traits rules
+> bind it, and its opt-in stamp is how the wealth rule below survives the feature).
 
 ---
 

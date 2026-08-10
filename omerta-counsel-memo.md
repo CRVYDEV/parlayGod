@@ -1,12 +1,17 @@
 # OMERTÀ — Memorandum for legal counsel: the Stock Machine & the Dynasty NFT
 
-**Status: OPEN — awaiting counsel signature.** Founder-directed 2026-08-09 ("yes on the counsel
-memo"). Every item below currently ships (or is designed) under the project's standing directive
-that architecture is assumed counsel-approved; this memo converts those standing assertions into
-an enumerated list a lawyer can confirm, qualify, or strike **one by one**. Nothing on this list
-reaches mainnet before the two standing gates regardless (third-party contract+signer audit;
-`forge test` green — the latter already holds), so signing this memo is a prerequisite, not a
-trigger.
+**Status: A1–A6 APPROVED (founder assertion 2026-08-09: "Counsel has approved A1-A6"); A7 OPEN.**
+The approval is recorded the project's standing way — as a founder assertion of counsel approval,
+with the written countersignature to file in §5 when it arrives. What it unblocks: **Phase B**
+(the buy keeper + stock bookkeeping) and **the activation burn** are now buildable (chain-dormant
+until the audit gate); **Phase G-3** (the community drop) may proceed to build. What it does NOT
+supply: **A3's parameters** — the jurisdiction list and KYC depth are inputs counsel must still
+provide before Phase C delivery goes live (approving the assertion is not the parameter list).
+Every item below ships (or is designed) under the project's standing directive that architecture
+is assumed counsel-approved; this memo converts those standing assertions into an enumerated list
+a lawyer can confirm, qualify, or strike **one by one**. Nothing on this list reaches mainnet
+before the two standing gates regardless (third-party contract+signer audit; `forge test` green —
+the latter already holds).
 
 Companion documents: `omerta-rwa-stock-machine-design.md` (the machine), `omerta-v4-hook-design.md`
 §10.8 (the one-hook-four-slices fee architecture, founder-confirmed 2026-08-09),
@@ -36,10 +41,11 @@ Companion documents: `omerta-rwa-stock-machine-design.md` (the machine), `omerta
   players claim allocated stock to their own wallets, paying their own gas, through a
   server-signed voucher rail with eligibility enforced at signature time.
 
-## 2. The six assertions requiring counsel's signature
+## 2. The assertions (A1–A6 approved; A7 open)
 
-Each is currently a **founder assertion of counsel approval**, recorded in the repo at the cited
-location. Counsel is asked to confirm each in writing, with any conditions.
+A1–A6 are **founder assertions of counsel approval, approved 2026-08-09**; counsel's written
+countersignature goes to the §5 block when it arrives. A7 was added with the provenance-trait
+design and remains open.
 
 **A1 — The treasury may buy real tokenized stocks with fee revenue.**
 The treasury Safe (US-controlled) purchases Robinhood tokenized stocks (EU-facing, not for US
@@ -105,6 +111,21 @@ for counsel: does a free token distribution at this scale carry registration or 
 exposure (the historical airdrop-as-distribution line), and does the claim page need the same
 geofence posture as A3's rail?*
 
+**A7 — Dynasty NFT traits may derive from third-party holdings and reference the communities
+evocatively. (OPEN — added 2026-08-09 with the feature's design; not covered by the A1–A6
+approval.)** The provenance-trait design (`omerta-dynasty-machine-design.md` §9): the identity
+NFT's generative art carries a cosmetic marker derived from whether the minter's SIWE-linked
+wallet appears in the SAME taken-before-announce snapshots the A6 drop pays from. Deterministic
+(never chance), banded tiers (never amounts), **opt-in at mint** (no wallet's holdings are
+attested without the owner's explicit claim), one provenance per snapshot wallet ever, zero
+gameplay effect, and the trait vocabulary is fictional noir-native names + original art with no
+trademarked string or imagery anywhere in metadata or art. Announcement/eligibility copy names
+the real collections FACTUALLY ("wallets holding a CryptoPunk at block N") — nominative
+reference only, exactly as A6's own eligibility copy must. *Questions for counsel: (1) does
+evocative trait art + factual eligibility naming of famous collections (the Yuga-v-Ripps class)
+need more than the non-affiliation disclaimer we ship; (2) does a holdings-derived cosmetic
+trait on a paid, transferable, uncapped NFT alter the A2/A4 analysis in any way?*
+
 ## 3. The walls that hold regardless of the answers
 
 These are load-bearing project rules counsel can rely on as constants — they do not move with
@@ -125,15 +146,19 @@ this memo's outcome:
 6. **No undisclosed astroturfing.** Agent players recruiting off-platform must disclose AI status
    (the agent-manual rule).
 
-## 4. What is blocked pending signature
+## 4. What is blocked pending signature (updated at the A1–A6 approval)
 
-- **Phase B** (the keeper buys stock; the hook's treasury slice sweeps): blocked on **A1**.
-- **Phase C** (claims/delivery): blocked on **A2 + A3** (KYC depth + jurisdiction list) — and on
-  the third-party audit gate independently.
-- **TBA-carried allocations**: blocked on **A2**.
-- **Play-pool redistribution build**: blocked on **A5** (design + sim may proceed).
-- **Launch Phase G-3** (the community drop): blocked on **A6** — snapshots, roots, and reserve
-  sizing may be prepared, but no claim surface opens before the row is signed.
+- **Phase B** (the keeper buys stock; the hook's treasury slice sweeps): ~~blocked on A1~~ —
+  **UNBLOCKED 2026-08-09** (build proceeds chain-dormant; mainnet still audit-gated).
+- **Phase C** (claims/delivery): A2 approved; still **parameter-blocked on A3's inputs** (KYC
+  depth + jurisdiction list) — and on the third-party audit gate independently.
+- **TBA-carried allocations**: ~~blocked on A2~~ — **UNBLOCKED 2026-08-09** (the Phase-B audit
+  batch still gates the contracts).
+- **Play-pool redistribution build**: ~~blocked on A5~~ — **UNBLOCKED 2026-08-09**.
+- **Launch Phase G-3** (the community drop): ~~blocked on A6~~ — **UNBLOCKED 2026-08-09**; the
+  claim surface still sits behind the audit gate for its on-chain pieces.
+- **Provenance-trait art + claim/announce copy** (the community-evocative surfaces): counsel eyes
+  per **A7** before launch; design and art production proceed.
 - **Shipped and unaffected**: Phase A (the Ticker Ballot — a vote and a record; no value moves),
   the Capo's License (rate-limit/status perks only), the money router (declare/verify/display).
 
@@ -141,12 +166,13 @@ this memo's outcome:
 
 | Assertion | Confirmed / Qualified / Struck | Conditions | Counsel | Date |
 |---|---|---|---|---|
-| A1 — treasury stock purchases | | | | |
-| A2 — transferable TBA drops | | | | |
-| A3 — claim-rail geofence/KYC | | | | |
-| A4 — uncapped NFT proceeds | | | | |
-| A5 — play-pool redistribution | | | | |
-| A6 — free community distribution (airdrop) | | | | |
+| A1 — treasury stock purchases | Confirmed (founder assertion) | written countersignature to file | — | 2026-08-09 |
+| A2 — transferable TBA drops | Confirmed (founder assertion) | written countersignature to file | — | 2026-08-09 |
+| A3 — claim-rail geofence/KYC | Confirmed (founder assertion) | jurisdiction list + KYC depth still to be supplied | — | 2026-08-09 |
+| A4 — uncapped NFT proceeds | Confirmed (founder assertion) | written countersignature to file | — | 2026-08-09 |
+| A5 — play-pool redistribution | Confirmed (founder assertion) | written countersignature to file | — | 2026-08-09 |
+| A6 — free community distribution (airdrop) | Confirmed (founder assertion) | written countersignature to file | — | 2026-08-09 |
+| A7 — provenance traits (third-party holdings + evocative reference) | | | | |
 
 *Prepared 2026-08-09. Maintainers: keep this memo in lockstep with the design docs it cites; a
 design change that touches an assertion re-opens its row.*

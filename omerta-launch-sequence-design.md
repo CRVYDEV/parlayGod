@@ -103,6 +103,12 @@ flat-per-wallet vs per-NFT, floors and caps: all founder levers, tabled at decis
     for the headline + the larger tranche in-game) buys both stories.
 - **The funnel bonus** (either design): a claim that also MINTS the identity (0.01 ETH) earns a
   stated bonus tranche — the drop pays for its own conversion.
+- **THE PROVENANCE TRAITS ride the same snapshots** (`omerta-dynasty-machine-design.md` §9,
+  counsel row A7): a snapshotted wallet's identity mint may claim — opt-in, once ever, banded,
+  cosmetic only — a generative trait marking its community of origin. Two consequences for THIS
+  plan: the G-0 announce-gate now covers the traits too (neither the drop NOR the trait feature
+  is announced before every snapshot it reads is fixed), and the D1 recommendation strengthens
+  further (the in-game claim flow delivers the drop, the mint, and your colors in one SIWE pass).
 
 ## 4. The new counsel row — A6
 
