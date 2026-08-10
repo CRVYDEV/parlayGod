@@ -453,7 +453,26 @@
         + rowHtml('the Safe must hold', `<b>Ξ${fmt(tre.body?.safeMustHold)}</b> <span class="note">reconcile against the real balance</span>`)
         + rowHtml('the wall', (tre.body?.checks || []).find((c) => c.name === 'allocated <= held (ETH)')?.ok
           ? '<span style="color:var(--ok)">✓ allocated ≤ held</span>'
-          : '<span style="color:var(--bad)">⚠ THE VAULT OWES MORE THAN IT HOLDS</span>') : '')
+          : '<span style="color:var(--bad)">⚠ THE VAULT OWES MORE THAN IT HOLDS</span>')
+        // THE SECOND OBLIGATION, in the second denomination. Reconciling `safeMustHold` by hand is a
+        // standing duty, and since the founder reopened stock acquisition the Safe also owes UNITS.
+        // Showing only the ETH figure would let a reconciliation come back square while the treasury
+        // owed stock nobody had been told about — the attestation version of an alarm nobody reads.
+        // Both rows are hidden entirely until there is stock, so a treasury that holds only ETH says
+        // so by silence rather than by a row of zeroes.
+        + (tre.body?.spentOnStockEth
+          ? rowHtml('spent on stock', `Ξ${fmt(tre.body?.spentOnStockEth)} <span class="note">no longer backs an ETH claim</span>`) : '')
+        // Gated on a NON-ZERO obligation, not on the ticker merely existing. A treasury holding ten
+        // TSLA and owing none produced `{TSLA: 0}`, which rendered as "must hold 0 TSLA" — a row that
+        // reads as *no stock* when the opposite is true. An attestation row exists to name what a
+        // human has to go and check; when there is nothing to check it should not be there.
+        + (Object.values(tre.body?.safeMustHoldUnits || {}).some((u) => u > 0)
+          ? rowHtml('…and must hold, in units',
+            `<b>${Object.entries(tre.body.safeMustHoldUnits).filter(([, u]) => u > 0).map(([t, u]) => `${fmt(u)} ${t}`).join(' · ')}</b>`)
+          + rowHtml('the stock wall', (tre.body?.checks || []).filter((c) => c.name.includes('units)')).every((c) => c.ok)
+            ? '<span style="color:var(--ok)">✓ allocated ≤ held, every ticker</span>'
+            : '<span style="color:var(--bad)">⚠ THE TREASURY OWES STOCK IT DOES NOT HOLD</span>')
+          : '') : '')
       + (bnd && bnd.oracle && bnd.oracle.state !== 'dormant'
         ? `<div class="note" style="margin-top:8px">the bond oracle keeper</div>`
           + rowHtml('keeper', bnd.oracle.state === 'ok'
