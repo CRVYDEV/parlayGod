@@ -79,14 +79,28 @@ vocabulary entry + `DESK.SINK_REASONS` row when built — sinks recycle to the d
 ## 3. The allocation rail (why counterfactual accrual is the design)
 
 - Allocation is BOOKKEEPING first: the game's vault ledger (the `allocated ≤ held, same asset both
-  sides` wall from the stock-layer retirement) assigns treasury-held stock units to a Dynasty
-  NFT's **computed TBA address** — no deploy, no gas, no on-chain writes at allocation time.
+  sides` wall from the stock-layer retirement) records the assignment — no deploy, no gas, no
+  on-chain writes at allocation time.
+- **CUSTODY CLARITY (the adversarial pass caught §3 and §8 disagreeing — this is the resolution,
+  and A2's fact pattern states it):** the bookkeeping is **ACCOUNT-keyed** (§8's DDL governs —
+  pre-Phase-B no token exists to key on, and account-keyed is the trophy/entitlement wall's own
+  preference). The TBA is the **DELIVERY DESTINATION**, resolved at claim. The consequence,
+  stated plainly so counsel signs the true thing: **a PENDING (undelivered) allocation is
+  account-bound and does NOT transfer with the NFT; only stock actually DELIVERED into the TBA
+  travels with the token.** Selling the NFT sells the TBA's contents — the delivered stock — and
+  nothing else. Anyone buying "the vault" buys what is IN it, verifiable on-chain, which is also
+  the honest frame for the drain-before-sale disclosure (§5).
 - DELIVERY is the player's act: deploy-if-needed + a server-signed transfer through the ONE
   extraction boundary (the voucher rail), eligibility enforced at signature time (counsel memo A3
   — geofence/KYC depth is counsel's parameter), the claimant paying their own gas end to end.
 - Between allocation and delivery, nothing custodial changes: the treasury Safe holds the stock,
   the ledger holds the assignment, `allocated ≤ held` is checked nightly like every other
   real-value invariant. An unclaimed allocation is a ledger row, not a stranded on-chain balance.
+- **The Sybil re-derivation flag (exploit lens):** a token whose TBA holds delivered stock is a
+  VALUE-BEARING token, and BALANCE.md § THE FARM's per-identity Sybil math was measured against a
+  token with no intrinsic value. Before mainnet delivery goes live, the Sybil bound must be
+  RE-DERIVED with the vault floor included — the §1 wall holds for the ENTITLEMENT only, and
+  nobody should claim otherwise.
 
 ## 4. Contract surface (Phase B of the Stock Machine, one audit batch)
 
@@ -102,15 +116,25 @@ in `omerta-rwa-stock-machine-design.md`. All of it lands in the SAME third-party
 ## 5. The drain-before-sale answer (ours, since the spec declines to pick)
 
 A hollow-trophy sale is a market-integrity problem on OUR flagship asset, and with SECURITIES in
-the vault it is also an A2 disclosure item. Three layers, cheapest first:
+the vault it is also an A2 disclosure item. **Stated honestly first (the adversarial pass's
+correction): at launch, NONE of the spec's marketplace-side mitigations exist** — state()-bound
+orders and order-validating contracts require 6551-aware marketplaces, which the mainstream ones
+are not and which a July-2026 Orbit chain has none of at all. So the answer to A2's "does
+drain-before-sale require disclosure language" is **yes**, and the layers below are what WE
+control, cheapest first:
 1. **Disclose structurally**: the public dossier/marketplace metadata for a Dynasty NFT surfaces
    the TBA's `state()` value and its current holdings summary (banded per the info-economy rule),
    so any marketplace or buyer CAN bind an order to state — the spec's own first mitigation.
-2. **Prefer an implementation with a holder-optional lock** (the spec's third mitigation): a
-   seller can lock the vault for N hours and point buyers at the lock — a locked listing is a
-   credible listing.
+2. **Prefer a DEFAULT-ON lock at listing time** in the account implementation we bless (the
+   holder-OPTIONAL lock creates a lemons market — an honest seller who keeps activating during
+   the listing window is indistinguishable from a drainer). Stronger still, and preferred if the
+   audit scope allows: delivered stock can only ever move OUT of the TBA through the same
+   eligibility-gated voucher path — no arbitrary ERC-20 transfer signer on the TBA — so a "drain"
+   is itself gated.
 3. **Never promise marketplace enforcement we don't control**: the buyer-side residual risk is a
-   stated caveat in A2's disclosure question for counsel, not something we paper over.
+   stated caveat in A2's disclosure question for counsel, not something we paper over — and the
+   claim/marketplace copy warns explicitly against wrapper/escrow "rentals" of vault-bearing
+   tokens (the one rental shape ERC-4907 immunity does not cover).
 
 ## 6. What this deliberately does not do
 
@@ -211,10 +235,11 @@ Traits derive from **the SAME taken-before-announce snapshots the community drop
 per-wallet balances at a fixed block to compute merkle amounts, so the trait derivation is a
 LOOKUP in data the launch already produces — no new infrastructure — and it inherits the
 snapshot's whole security argument: no Sybil, flash loan, rental, or buy-mint-sell can acquire
-into a past block. **The corollary the sweep surfaced: the provenance-trait feature itself must
-not be announced before every snapshot it will ever read from is fixed** — a trait announced
-ahead of its snapshot is a farmable snapshot, exactly the thing G-0's rule exists to prevent. The
-G-0 gate now covers both the drop AND the traits.
+into a past block. **The corollary the sweep surfaced, in its per-campaign form (the design lens
+corrected the first wording, which read literally would have forbidden every future campaign): no
+campaign — genesis included — is announced before its OWN snapshot blocks are fixed.** The
+mechanism being publicly known is harmless; the targets and blocks of an unfixed campaign are
+what must stay unannounced. The G-0 gate covers both the drop AND the traits.
 
 **"Other major chains" happen through CAMPAIGNS, never the genesis set** (the founder named
 ETH/RH/other): the genesis snapshots cover the two launch chains only (what A6 names). A later
@@ -223,11 +248,21 @@ own memo touch if it widens A7's surface. The mechanism is reusable; the genesis
 
 ### 9.2 A birth certificate, not a wallet tracker — and OPT-IN
 
-Provenance stamps ONCE, at identity mint, from the SIWE-linked wallet's snapshot membership — and
-never updates. Three reasons, each sufficient alone: a live-updating trait re-opens the farm (buy
-the token, refresh the art, sell the token); a portrait that tracks a wallet's current holdings
-is a WALLET SCANNER wearing art's clothes; and noir-wise, provenance is where you CAME from — a
-birthplace, not a balance.
+Provenance stamps ONCE and never updates. Three reasons, each sufficient alone: a live-updating
+trait re-opens the farm (buy the token, refresh the art, sell the token); a portrait that tracks
+a wallet's current holdings is a WALLET SCANNER wearing art's clothes; and noir-wise, provenance
+is where you CAME from — a birthplace, not a balance.
+
+**The stamp-eligible moment, defined** (the design lens caught four different "mint moments"
+across the docs — the account fee-mint live today, the future DynastyNFT issuance, the retrofit
+batch to already-minted accounts, and a PLEX mint with no wallet linked at all): the moment is
+**DynastyNFT token issuance — the retrofit batch included** — and the window is *at issuance, or
+at first wallet-link thereafter, one-time*. A grace window, not open-ended retroactivity: the
+certificate is issued when the token is, which for retrofitted veterans is the honest reading,
+and a PLEX/pay-before-link minter stamps from **the wallet LINKED at stamp time** (the paying
+wallet can differ; the linked one is the identity's). §9.8's "never retroactive" lever means
+never re-stamping an already-stamped or window-lapsed identity — not locking out the existing
+player base.
 
 **The stamp is OPT-IN at mint.** The identity doc's wealth rule ("exposed never, in any form";
 the free public token at most as revealing as the paid Wire dossier) is genuinely strained here:
@@ -247,10 +282,14 @@ snapshotted wallet could mint UNLIMITED trait-bearing NFTs at 0.01 ETH each and 
 forever: an open-ended monetizable grant to third-party communities that the drop's own design
 (fixed amounts, caps, time-boxed claims) deliberately avoids, and a quiet dilution of the trait's
 meaning. The rule: **a snapshot wallet stamps provenance onto exactly ONE identity, ever** — the
-first mint that claims it consumes it (recorded server-side beside the merkle claim state). A
-birth certificate is issued once. This also keeps A4's framing intact: no scarce-edition
-economics inside the uncapped collection, because the trait is a one-per-wallet birthmark, not an
-edition.
+first mint that claims it consumes it. **The consumption unit is the WALLET's one stamp EVENT,
+not (wallet, community)** — the design lens caught the ambiguity: per-community consumption would
+let a Punks+BAYC+PEPE wallet mint three separate trait-bearing NFTs, the exact grant this rule
+bounds. At the one event the minter chooses WHICH of their qualifying communities to record
+(opt-in is per-community — the consent granularity §9.2 wants); anything unclaimed at that event
+is forfeit. Recorded server-side keyed by WALLET, beside the merkle claim state. A birth
+certificate is issued once. This also keeps A4's framing intact: no scarce-edition economics
+inside the uncapped collection, because the trait is a one-per-wallet birthmark, not an edition.
 
 ### 9.4 DISPLAY-ONLY FOREVER — the wall, in the trophy/entitlement wall's own shape
 
@@ -318,19 +357,38 @@ art production proceed under the standing directive.
 
 ### 9.6 Slots, choice, transfer, and the layer pipeline
 
-Each provenance is ONE reviewed layer item (a lapel pin, a pocket square, a backdrop tint) in the
-identity doc's layered composition — reviewed as LAYERS, per its own rule. A multi-community
-wallet's single stamped identity records EVERY qualifying provenance in metadata attributes; the
-ART shows the one the player PICKS (server-stored like the title slot; default = the scarcest).
+Each provenance is ONE reviewed layer item in **its own named slot** in the identity doc's
+composition table (fixed z-position between attire and effects, so reputation effects render OVER
+it — the game's judgment outranks your origins, which is also the right fiction; "backdrop tint"
+is dropped as an example since it collides with the district-driven backdrop slot) — reviewed as
+LAYERS, per the standing rule. A multi-community wallet's single stamped identity records every
+provenance it CLAIMED at the stamp event (§9.3) in metadata attributes; the ART shows the one the
+player PICKS. **The pick's persistence, specified precisely** (the design lens caught both
+defects): stored ACCOUNT-level (a character-keyed slot dies with the street while the token
+persists across generations — a pick keyed "like the title slot" silently resets every death),
+and the default is the scarcest **computed ONCE at stamp time and stored AS the pick** (live
+"scarcest" recomputes as the uncapped collection mints, flipping unpicked portraits under
+marketplace caches). **The shame markers are never suppressible**: the player arranges the
+POSITIVE provenances; the identity doc's negative marks (rat/welsher/wanted effects) always
+render if present — the collectible cannot hide the mark.
 On NFT transfer the provenance travels with the token — correct for a trophy: it stamps the MINT
 moment, and the chain of custody is public. **Framing rule for every surface** (the
 false-statement-about-the-buyer fix): a provenance trait is an immutable historical fact about
-the FOUNDING wallet at the snapshot block — the metadata description reads "the wallet that
-founded this bloodline, at block N", which stays true through every transfer — and it is NEVER
-rendered as a badge of the current holder anywhere (dossier, marketplace description, console).
-The entitlement wall is untouched (account-bound in the DB, never read off the token).
-Cross-chain reads are archive-node RPC calls at the snapshot block; per-chain address lists are
-campaign config, not code.
+the FOUNDING wallet at the snapshot block — the metadata attribute reads as provenance-of-mint
+("Origin (at mint): …", description "the wallet that founded this bloodline, at block N"), which
+stays true through every transfer — and it is NEVER rendered as a badge of the current holder
+anywhere (dossier, marketplace description, console). **And the WHOLE PORTRAIT freezes at
+transfer** — both adversarial lenses converged on this independently, and it resolves a
+contradiction that predates this section: the identity doc's "dynamic, ages with the bloodline"
+portrait re-renders from the MINTING account's ongoing state, but the account never transfers
+with the token, so a sold "living portrait" would keep mutating on the SELLER's later play (the
+seller rats post-sale and the buyer's asset acquires the broken frame — drain-before-sale's
+presentational twin). The rule: **dynamic while held by the minting account's linked wallet,
+FROZEN at the block of first transfer away from it** — a sold portrait is a photograph, which is
+the identity doc's own thesis ("you can buy a dead man's photograph, you cannot buy his
+reputation"). The entitlement wall is untouched (account-bound in the DB, never read off the
+token). Cross-chain reads are archive-node RPC calls at the snapshot block; per-chain address
+lists are campaign config, not code.
 
 ### 9.7 What it does to the funnel
 
@@ -343,8 +401,10 @@ not the claim route, so it lands identically under D1's on-chain variant.
 
 ### 9.8 Open levers (tabled; none pinned — nothing here is a constant yet)
 
-Community list per campaign · tier thresholds (HELD/DEEP per community) · the evocative name set ·
-the visible-slot default · whether genesis snapshots ever re-open (recommended: never — the
-launch-era marker is the scarcest honest thing the collection will ever have) · whether a
-campaign may ever stamp an EXISTING identity retroactively (recommended: no — stamps happen at
-mint, or the birth-certificate fiction breaks).
+Community list per campaign · tier thresholds (HELD/DEEP per community) · the evocative name set
+(everything must pass the §9.5 guessability test) · the visible-slot default · whether
+genesis-named COMMUNITIES may ever appear in a later campaign at a NEW block (recommended: no —
+that is what preserves the launch-era marker's meaning; the design lens struck the earlier
+"re-open the snapshot" phrasing since a past block height cannot re-open) · whether an
+already-stamped or window-lapsed identity may ever be re-stamped (recommended: no — §9.2's grace
+window is the whole allowance, or the birth-certificate fiction breaks).

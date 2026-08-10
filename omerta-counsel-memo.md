@@ -1,6 +1,6 @@
 # OMERTÀ — Memorandum for legal counsel: the Stock Machine & the Dynasty NFT
 
-**Status: A1–A6 APPROVED (founder assertion 2026-08-09: "Counsel has approved A1-A6"); A7 OPEN.**
+**Status: A1–A6 APPROVED (founder assertion 2026-08-09: "Counsel has approved A1-A6"); A7 + A8 OPEN.**
 The approval is recorded the project's standing way — as a founder assertion of counsel approval,
 with the written countersignature to file in §5 when it arrives. What it unblocks: **Phase B**
 (the buy keeper + stock bookkeeping) and **the activation burn** are now buildable (chain-dormant
@@ -41,11 +41,11 @@ Companion documents: `omerta-rwa-stock-machine-design.md` (the machine), `omerta
   players claim allocated stock to their own wallets, paying their own gas, through a
   server-signed voucher rail with eligibility enforced at signature time.
 
-## 2. The assertions (A1–A6 approved; A7 open)
+## 2. The assertions (A1–A6 approved; A7 + A8 open)
 
 A1–A6 are **founder assertions of counsel approval, approved 2026-08-09**; counsel's written
-countersignature goes to the §5 block when it arrives. A7 was added with the provenance-trait
-design and remains open.
+countersignature goes to the §5 block when it arrives. A7 (the provenance traits) and A8 (the
+activator's securities leg) were added with their designs and remain open.
 
 **A1 — The treasury may buy real tokenized stocks with fee revenue.**
 The treasury Safe (US-controlled) purchases Robinhood tokenized stocks (EU-facing, not for US
@@ -80,6 +80,16 @@ priority; the wall is stated in §9.4 and will be test-pinned), metadata field
 supply stated as the securities-favorable fact it is. The aggregate profile counsel is signing:
 uncapped, fixed-price, TBA-carrying, provenance-marked — the Dapper-Labs/Impact-Theory class is
 the reason the traits are inside this row's fact pattern rather than beside it.
+**Custody amendment 2026-08-10 (the adversarial pass reconciled a §3/§8 contradiction so this
+row states the true thing):** allocation bookkeeping is ACCOUNT-keyed and a **PENDING
+(undelivered) allocation does NOT transfer with the NFT** — only stock actually DELIVERED into
+the TBA travels with the token, so "selling the NFT sells the vault contents" means the
+DELIVERED contents, verifiable on-chain, and nothing else. **Drain-before-sale, answered
+honestly:** at launch NO marketplace-side 6551 mitigation exists (mainstream marketplaces are
+not 6551-aware; the launch chain has no established marketplace), so the answer to this row's
+disclosure question is **yes** — the design responds with a default-ON listing lock (or
+voucher-gated TBA outflows) and explicit buyer-side disclosure, `omerta-dynasty-machine-design.md`
+§5.
 
 **A3 — Geofencing and eligibility live at the claim rail, and that is sufficient.**
 The stock tokens have no on-chain allowlist, so the game's enforcement point is
@@ -144,6 +154,20 @@ evocative trait art + factual eligibility naming of famous collections (the Yuga
 need more than the non-affiliation disclaimer we ship; (2) does a holdings-derived cosmetic
 trait on a paid, transferable, uncapped NFT alter the A2/A4 analysis in any way?*
 
+**A8 — The activator's own transaction: consideration paid for a deterministic, wealth-weighted
+allocation of third-party securities. (OPEN — added 2026-08-10; the adversarial pass found
+neither A2 nor A5 covers this leg.)** The activation model
+(`omerta-dynasty-machine-design.md` §8): a person burns $OMR — which is acquirable for ETH via
+bonds and desk auctions — for a linear pro-rata share of the day's treasury stock purchase. A2
+analyzes the NFT's profile; A5's operative qualifier is "skill/effort-based" — but activation is
+neither skill nor chance, it is **wealth-weighted**: the net path is ETH → $OMR → burn →
+deterministic securities allocation. The build proceeds chain-dormant under the standing
+directive; **live allocation accrual is blocked on this row** (delivery was already blocked on
+A3's parameters independently). *Question for counsel: analyze the ACTIVATOR's transaction as a
+distribution/sale of the underlying securities to the payer — what structure, disclosure, or
+gating (beyond the A3 claim rail) does that leg require, and does the $OMR intermediation change
+the analysis at all?*
+
 ## 3. The walls that hold regardless of the answers
 
 These are load-bearing project rules counsel can rely on as constants — they do not move with
@@ -177,6 +201,9 @@ this memo's outcome:
   claim surface still sits behind the audit gate for its on-chain pieces.
 - **Provenance-trait art + claim/announce copy** (the community-evocative surfaces): counsel eyes
   per **A7** before launch; design and art production proceed.
+- **Live activation accrual** (allocations actually accruing to accounts): blocked on **A8** —
+  the burn + bookkeeping BUILD proceeds chain-dormant; no allocation accrues to any account
+  before the row is signed.
 - **Shipped and unaffected**: Phase A (the Ticker Ballot — a vote and a record; no value moves),
   the Capo's License (rate-limit/status perks only), the money router (declare/verify/display).
 
@@ -191,6 +218,7 @@ this memo's outcome:
 | A5 — play-pool redistribution | Confirmed (founder assertion) | written countersignature to file | — | 2026-08-09 |
 | A6 — free community distribution (airdrop) | Confirmed (founder assertion) | written countersignature to file | — | 2026-08-09 |
 | A7 — provenance traits (third-party holdings + evocative reference) | | | | |
+| A8 — the activator's leg (consideration for wealth-weighted securities allocation) | | | | |
 
 *Prepared 2026-08-09. Maintainers: keep this memo in lockstep with the design docs it cites; a
 design change that touches an assertion re-opens its row.*

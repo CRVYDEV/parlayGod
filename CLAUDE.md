@@ -10999,3 +10999,54 @@ a history, not a claim about themselves); multi-community wallets record all, th
 the visible one; the entitlement wall untouched. Zero code (the derivation is a lookup in the
 launch's own snapshot data); all §9 numbers are tabled levers. NEXT (unblocked by A1): the Phase-B
 build — the buy keeper, stock bookkeeping, and the activation burn, chain-dormant.
+
+**THE EXPLOIT + DESIGN LENSES CLOSE THE PROVENANCE PASS (same drop, 2026-08-10).** The workflow's
+other two lenses (11 + 9 findings) landed after the legal fold-in; one HIGH and the rest
+MED/LOW/NOTE, every accepted finding folded into the docs the memo cites BEFORE it goes to
+counsel (the lockstep rule working as intended). **The HIGH — a custody contradiction that would
+have made A2 inaccurate as signed**: dynasty §3 said allocations assign to the NFT's computed TBA
+address (follows the TOKEN) while §8's DDL keys them by account (follows the ACCOUNT, which never
+transfers) — resolved as §8 governs: bookkeeping is ACCOUNT-keyed, the TBA is the DELIVERY
+destination, and the consequence is now stated in §3 AND A2's fact pattern: **a PENDING
+allocation does NOT transfer with the NFT; only stock DELIVERED into the TBA travels with the
+token** — "selling the vault" means the delivered, on-chain-verifiable contents. With it: the
+**Sybil re-derivation flag** (a vault-bearing token is value-bearing; BALANCE § THE FARM's
+per-identity math was measured against a valueless token — re-derive before mainnet delivery),
+and **drain-before-sale answered honestly** (at launch NO marketplace-side 6551 mitigation exists
+anywhere, so A2's disclosure answer is YES; §5 now prefers a default-ON listing lock or
+voucher-gated TBA outflows, and warns against wrapper/escrow rentals). **A8 (OPEN) joined the
+memo** — the exploit lens caught that neither A2 (the NFT's profile) nor A5 ("skill-based")
+covers the ACTIVATOR's own leg: consideration ($OMR, acquirable for ETH) paid for a
+deterministic, WEALTH-weighted allocation of third-party securities; live allocation accrual is
+blocked on the row while the build proceeds chain-dormant. **Launch-doc hardenings**: the genesis
+snapshot must be a HISTORICAL block predating every committed doc that NAMES the targets (the
+targets are already enumerated in the repo — snapshot-before-announce alone no longer closes the
+farm for drop one); coin communities are **never flat-per-wallet** (Sybil-magnetic regardless of
+timing — proportional with a dust floor and a hard per-wallet cap; per-NFT is fine for NFT
+communities); the holder-set ENUMERATION is a real unowned build task (ERC-20 log-replay from
+genesis, dataset published for reproducibility, archive/getLogs verified before heights are
+fixed); and the funnel bonus is SIZED against the Sybil math (strictly below the marginal mint
+cost net of the base drop, or non-transferable in-game credit) — a conversion bonus set without
+that check is a Sybil faucet. **Design-lens §9 fixes**: the announce-gate reworded per-campaign
+(the literal form forbade all future campaigns); the stamp-eligible moment DEFINED (DynastyNFT
+token issuance incl. the retrofit batch, window = issuance or first wallet-link after, one-time —
+the four conflicting "mint moments" would have locked out the whole existing player base);
+consumption is per-WALLET-EVENT not per-(wallet,community) (per-community records would multiply
+the bounded grant by the community count); the pick stored ACCOUNT-level with "scarcest" computed
+once at stamp (a character-keyed pick dies with the street; live scarcest flips cached art);
+provenance gets its OWN composition slot under the reputation effects (the game's judgment
+outranks your origins); the shame markers are never suppressible by the pick. **And the identity
+doc took three corrections before its Phase-2 metadata freeze**: the portrait is dynamic while
+held by the minting account's wallet and **FREEZES at first transfer** (both lenses converged
+independently — a sold "living portrait" re-renders on the SELLER's later play, so a seller could
+rat post-sale and degrade the buyer's asset; a sold portrait is a photograph, the doc's own
+thesis); the on-chain metadata must NOT engrave the mutable street name or the exact
+Generation/Rank/Assassin conjunction (wallet → street name → exact-field conjunction breaks the
+wallet↔character firewall — re-run anti-precise-kill-EV against the full metadata VECTOR plus the
+wallet linkage); and §4's Dynasty-tier trait row references the retired Portfolio (D11) — drop or
+re-source before freeze. Dead attacks recorded so nobody re-litigates them: ERC-4907 rentals
+(entitlement + activation account-bound; 6551 control derives from ownerOf), self-airdropping our
+own NFTs (the snapshots are third-party communities), activation Sybil-splitting (linear shares
+are split-neutral), plain wash-trading, flash-minting a rare trait (stamped-at-mint + banded +
+the impressive traits are slow-and-genuine — the dependency is RECORDED so a future change
+re-assesses it).

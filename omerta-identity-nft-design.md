@@ -12,6 +12,20 @@
 > (holdings-derived generative markers off the launch snapshots — opt-in, once per wallet,
 > banded, cosmetic only; this doc's layered-composition + review-the-layers + banded-traits rules
 > bind it, and its opt-in stamp is how the wealth rule below survives the feature).
+>
+> **Three adversarial-pass corrections to THIS doc (2026-08-10, before the Phase-2 metadata
+> freeze):** (1) **the portrait is dynamic while held by the minting account's linked wallet and
+> FREEZES at first transfer away from it** — "ages with the bloodline" as written re-renders a
+> SOLD token from the seller's ongoing play (the seller rats post-sale and the buyer's asset
+> acquires the broken frame); a sold portrait is a photograph, which is this doc's own thesis.
+> (2) **the on-chain metadata must not engrave the mutable STREET NAME, nor the exact
+> Generation/Rank/Assassin conjunction** — a wallet-held public token mapping wallet → street
+> name → an exact-field conjunction breaks the wallet↔character firewall the game guards
+> everywhere else (the anti-precise-kill-EV rule must be re-run against the FULL permanent
+> metadata vector plus the wallet linkage, not field by field; serial/generation on the plate,
+> the name as an off-chain opt-in overlay at most). (3) **the §4 trait table's Dynasty-tier row
+> references the retired Portfolio system (D11)** — drop or re-source it against a live system
+> before any metadata is frozen.
 
 ---
 
