@@ -71,7 +71,15 @@ accepting an offer); our mitigations and the residual buyer-side risk are §5 of
 Question for counsel: does a transferable NFT whose TBA accrues allocations of third-party
 securities create an investment-contract profile (Howey) for the NFT itself, and if so what
 disclosures/structure defeat it — and does the drain-before-sale residual require disclosure
-language on the marketplace surface?*
+language on the marketplace surface?* **Fact-pattern amendment 2026-08-09 (the lockstep rule —
+review the aggregate, not the TBA alone):** the NFT also carries banded cosmetic PROVENANCE
+traits derived from the founding wallet's snapshot holdings (`omerta-dynasty-machine-design.md`
+§9, row A7) — **display-only forever** (never an input to activation weight, allocation, or claim
+priority; the wall is stated in §9.4 and will be test-pinned), metadata field
+`genesis_provenance` (never tier/rank/rarity), no ordinal or value-ranked names, uncapped total
+supply stated as the securities-favorable fact it is. The aggregate profile counsel is signing:
+uncapped, fixed-price, TBA-carrying, provenance-marked — the Dapper-Labs/Impact-Theory class is
+the reason the traits are inside this row's fact pattern rather than beside it.
 
 **A3 — Geofencing and eligibility live at the claim rail, and that is sufficient.**
 The stock tokens have no on-chain allowlist, so the game's enforcement point is
@@ -106,10 +114,20 @@ $PEPE-class on mainnet; StonkBrokers and $CASHCAT-class on Robinhood Chain). Sna
 at a fixed block height BEFORE any announcement; amounts are fixed per snapshotted wallet/NFT
 against a published merkle root (no draw anywhere — the never-by-chance wall holds by
 construction); claims are gas-paid by the claimant and time-boxed, with unclaimed tokens
-reverting to the treasury; claim-page copy runs under the standing no-promise rules. *Question
-for counsel: does a free token distribution at this scale carry registration or jurisdiction
-exposure (the historical airdrop-as-distribution line), and does the claim page need the same
-geofence posture as A3's rail?*
+reverting to the treasury; claim-page copy runs under the standing no-promise rules.
+**Fact-pattern amendments 2026-08-09:** (1) **the funnel bonus is CARVED OUT of this row** — the
+launch plan's bonus tranche for a claim that also pays the 0.01 ETH mint is consideration-linked
+(the Tomahawk/free-stock class), so it is analyzed under **A4** as a retail purchase promotion on
+a fixed-price sale, and the BASE drop stays truly unconditional (a claim requires only a
+signature proving control of a snapshotted address); (2) the claim may also assign a cosmetic
+**provenance trait** (row A7 — opt-in, display-only, once per wallet). *Questions for counsel:
+does a free token distribution at this scale carry registration or jurisdiction exposure (the
+historical airdrop-as-distribution line); does the claim page need the same geofence posture as
+A3's rail; does **MiCA Art. 4(3)** — which removes the offer-to-public exemption where
+crypto-assets are provided in exchange for personal data or any fee/benefit — defeat the "free
+offer" characterization in the EU where the claim requires SIWE wallet-link + account
+registration (design (b)), and does that require jurisdiction-gating the claim page; and does the
+snapshot/eligibility publication (wallet addresses + amounts) need anything further in the EU?*
 
 **A7 — Dynasty NFT traits may derive from third-party holdings and reference the communities
 evocatively. (OPEN — added 2026-08-09 with the feature's design; not covered by the A1–A6

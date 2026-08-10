@@ -10975,10 +10975,25 @@ open-ended monetizable grant the drop's own bounded design deliberately avoids);
 that claims it consumes it. **(4) ART ONLY** — zero gameplay effect (outside wealth must not buy
 power; keeps the A2 analysis unchanged; farming buys a look, never an edge; §10.4 zero surface).
 **(5) TWO VOCABULARIES** — trait names/metadata/art are FICTIONAL noir-native inventions (the
-Broadcast posture on the token surface: the Pixel District, the Broker's Floor…), while
-eligibility/announcement copy names real collections FACTUALLY (nominative reference, exactly as
-A6's own claim copy must) — **memo row A7 (OPEN)** records both counsel questions (the
-Yuga-v-Ripps class on evocative art; whether holdings-derived traits alter A2/A4). Transfer
+Broadcast posture on the token surface), while eligibility/announcement copy names real
+collections FACTUALLY (nominative reference, exactly as A6's own claim copy must) — **memo row A7
+(OPEN)** records both counsel questions (the Yuga-v-Ripps class on evocative art; whether
+holdings-derived traits alter A2/A4). **The legal lens then hardened all five into enforceable
+rules** (§9.4/§9.5, and the memo's A2/A6 fact patterns amended per its own lockstep rule):
+DISPLAY-ONLY stated as a WALL with a future test-pin (the Howey cliff — one "reward our genesis
+communities" coupling away); **the GUESSABILITY TEST** on every community layer (a reviewer who
+hasn't seen the mapping must not identify the community from name+art — so "the Pixel District"
+class of working names FAILS by rule; no apes/frogs/pixel-aesthetics/serum/cat-mascots, Pepe
+being Furie's enforced character COPYRIGHT that no-trademarked-strings does nothing about);
+marks in eligibility prose ONLY with **numeric community ids** in contract source/URLs/merkle
+filenames; the **banned lexicon** (rare/rarity/limited/exclusive/floor/value) with the allowed
+recognition/homage frame and metadata field `genesis_provenance` never tier/rank/rarity; the
+post-transfer framing (an immutable fact about the FOUNDING wallet at block N, never a badge of
+the current holder); a GDPR paragraph (server-side trait mapping, never a public address→tier
+table); and **the funnel bonus CARVED OUT of A6** (consideration-linked — the Tomahawk class —
+analyzed under A4 as a purchase promotion, the base drop staying truly unconditional) plus the
+**MiCA Art. 4(3)** free-offer question added to A6 (SIWE-to-claim as "exchange for personal
+data" in the EU). Transfer
 carries the provenance with the token (it stamps the MINT moment — the buyer gets a portrait with
 a history, not a claim about themselves); multi-community wallets record all, the player picks
 the visible one; the entitlement wall untouched. Zero code (the derivation is a lookup in the

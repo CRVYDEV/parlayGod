@@ -102,7 +102,12 @@ flat-per-wallet vs per-NFT, floors and caps: all founder levers, tabled at decis
     surcharge), and "unclaimed" never left the Safe at all. A hybrid (a small on-chain tranche
     for the headline + the larger tranche in-game) buys both stories.
 - **The funnel bonus** (either design): a claim that also MINTS the identity (0.01 ETH) earns a
-  stated bonus tranche — the drop pays for its own conversion.
+  stated bonus tranche — the drop pays for its own conversion. **Carved out of A6 by design**
+  (the adversarial pass): tokens delivered in connection with a payment are consideration-linked
+  (the Tomahawk/free-stock class), so the bonus is analyzed under **A4** as a retail purchase
+  promotion on a fixed-price sale, while the BASE drop stays truly unconditional — a claim
+  requires only a signature proving control of a snapshotted address. The two tranches are
+  separate in the copy, the accounting, and the memo.
 - **THE PROVENANCE TRAITS ride the same snapshots** (`omerta-dynasty-machine-design.md` §9,
   counsel row A7): a snapshotted wallet's identity mint may claim — opt-in, once ever, banded,
   cosmetic only — a generative trait marking its community of origin. Two consequences for THIS

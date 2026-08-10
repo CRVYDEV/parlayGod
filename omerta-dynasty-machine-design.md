@@ -252,29 +252,69 @@ birth certificate is issued once. This also keeps A4's framing intact: no scarce
 economics inside the uncapped collection, because the trait is a one-per-wallet birthmark, not an
 edition.
 
-### 9.4 Art only — zero gameplay effect (a hard rule, three reasons)
+### 9.4 DISPLAY-ONLY FOREVER — the wall, in the trophy/entitlement wall's own shape
 
-A provenance trait moves NOTHING in-game: no stat, no cap, no discount, no access, no wage, no
-allocation weight. (1) Power from external holdings is pay-to-win via outside wealth — worse than
-anything the D8=D ceiling permits, and it would put third-party tokens inside the game's balance
-surface; (2) it keeps the A2 analysis unchanged — the trait is cosmetic art on the trophy, and
-nothing new accrues value to the NFT from gameplay; (3) it makes farming pointless even if a
-future campaign leaks early — a trait buys a look, never an edge. §10.4: zero surface (art moves
-no value; the fees.js precedent).
+A provenance trait moves NOTHING, in-game or on-chain: no stat, no cap, no discount, no access,
+no wage — and, stated as a WALL rather than an implication, **never an input to activation
+weight, allocation, claim eligibility or priority, or any till, gate, or lever, ever**. The
+adversarial pass named the cliff exactly: the drift is one future "reward our genesis
+communities" coupling away, and the moment a holdings-derived trait weights an allocation, the
+free trait retroactively becomes a distribution of expected securities allocations keyed to
+third-party asset holdings — the strongest possible Howey fact against the NFT AND against A6's
+"no investment of money" characterization, while nicking the never-by-chance wall (assigned by
+what a wallet happened to hold, not by purchase or effort). Three standing reasons besides:
+(1) power from external holdings is pay-to-win via outside wealth — worse than anything the D8=D
+ceiling permits; (2) display-only is what keeps the A2 analysis unchanged; (3) it makes farming
+pointless even if a future campaign leaks early — a trait buys a look, never an edge. **When the
+activation burn is built, this wall gets PINNED the house way**: a mutation-verified test that
+the allocation computation reads only `(day, account, omr)` and no trait/provenance column is
+reachable from it. §10.4: zero surface (art moves no value; the fees.js precedent).
 
 ### 9.5 The IP posture — two vocabularies, cleanly split (memo row A7)
 
 **Trait names, metadata, and art are fictional** — the Broadcast posture extended to the token
-surface: evocative noir-native inventions (working names, all levers — the Pixel District, the
-Ape Social Club, the Broker's Floor, the Frog Pond, the Cat's Table), original art, no
+surface: evocative noir-native inventions (working names, all levers), original art, no
 trademarked string or derivative imagery anywhere in tokenURI or plates. **Eligibility and
 announcement copy names the real collections FACTUALLY** ("wallets holding a CryptoPunk at block
 N") — nominative reference, unavoidable for any targeted drop and already required by A6's own
-claim copy; the mint/claim page carries a non-affiliation line. That split — factual naming in
-eligibility copy, fictional vocabulary in the artifact — is the posture; **memo row A7** records
-both questions (the Yuga-v-Ripps class on the art; whether holdings-derived traits alter the
-A2/A4 analysis) for counsel's eyes before launch. Design and art production proceed under the
-standing directive.
+claim copy. That split — factual naming in eligibility copy, fictional vocabulary in the
+artifact — is the posture, and the adversarial pass sharpened it into enforceable rules:
+
+- **The guessability test** (the layer-review gate, in this project's own mutation-test spirit):
+  a reviewer who has NOT seen the community→trait mapping must be unable to identify the source
+  community from the trait's name + art alone. Guessable = evocation of the mark, not noir —
+  rename/redraw. So the working names above ("the Pixel District", "the Ape Social Club") FAIL
+  this test and are placeholders only; invented district/club names with no source lexeme pass
+  trivially. The layer contact-sheet checklist gains an IP criterion for the community slots:
+  no apes/primates, no frogs (Pepe is Furie's actively-enforced character COPYRIGHT — the
+  no-trademarked-strings rule does nothing there), no pixel-avatar aesthetics, no serum motifs,
+  no cat-coin mascots.
+- **Marks live ONLY in eligibility prose**: plain-text collection names, minimum necessary,
+  never stylized, never logos, never their art; **numeric community ids** in contract source,
+  calldata, event names, merkle-set filenames, and URLs (a verified claim contract shipping
+  `enum Community { BAYC … }` embeds the marks in published source forever — the realistic
+  week-two breach is marketing surfaces, not the design doc).
+- **The non-affiliation disclaimer** sits adjacent to EVERY use of a community name (claim page,
+  announcement, landing copy) — and deliberately NEVER in tokenURI or on-chain artifacts, which
+  stay mark-free by construction, so the question never arises there.
+- **The banned lexicon** (an extension of the standing no-appreciation rule, attached to the
+  counsel copy-review packet as an exhibit): rare/rarity/rarest, limited, exclusive, floor,
+  value, "only N will ever" — banned in shop copy, docs, tweets, and the claim page for this
+  feature. The allowed frame, stated positively: recognition/homage/provenance — "the city
+  remembers where your founder came from." (Third-party rarity tools will price the trait
+  distribution from public metadata regardless — their speech; the rule protects OUR legal
+  surface, so it must be airtight there.) The metadata field is **`genesis_provenance`** — never
+  `tier`/`rank`/`rarity`, and no ordinal or value-ranked tier names.
+- **Privacy (EU-shaped, cheap to preempt)**: the snapshot is processing of pseudonymous personal
+  data — the privacy policy gains a paragraph (what was read, at what block, the
+  legitimate-interest basis, retention, that traits derive from it); publish the MINIMUM claims
+  need (address+amount for merkle proofs) with the trait mapping computed server-side at claim,
+  never shipped as a public address→tier table; bands stay coarse.
+
+**Memo row A7** records the counsel questions (the Yuga-v-Ripps class on the art; whether
+holdings-derived traits alter the A2/A4 analysis), and **A2/A4/A6's own fact patterns are
+amended** so no signature is given against a stale record (the memo's lockstep rule). Design and
+art production proceed under the standing directive.
 
 ### 9.6 Slots, choice, transfer, and the layer pipeline
 
@@ -283,10 +323,14 @@ identity doc's layered composition — reviewed as LAYERS, per its own rule. A m
 wallet's single stamped identity records EVERY qualifying provenance in metadata attributes; the
 ART shows the one the player PICKS (server-stored like the title slot; default = the scarcest).
 On NFT transfer the provenance travels with the token — correct for a trophy: it stamps the MINT
-moment, and the chain of custody is public; the buyer gets a portrait with a history, not a claim
-about themselves. The entitlement wall is untouched (account-bound in the DB, never read off the
-token). Cross-chain reads are archive-node RPC calls at the snapshot block; per-chain address
-lists are campaign config, not code.
+moment, and the chain of custody is public. **Framing rule for every surface** (the
+false-statement-about-the-buyer fix): a provenance trait is an immutable historical fact about
+the FOUNDING wallet at the snapshot block — the metadata description reads "the wallet that
+founded this bloodline, at block N", which stays true through every transfer — and it is NEVER
+rendered as a badge of the current holder anywhere (dossier, marketplace description, console).
+The entitlement wall is untouched (account-bound in the DB, never read off the token).
+Cross-chain reads are archive-node RPC calls at the snapshot block; per-chain address lists are
+campaign config, not code.
 
 ### 9.7 What it does to the funnel
 
