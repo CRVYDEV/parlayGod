@@ -130,33 +130,35 @@ assert(preflight({ ...GOOD, TRUST_PROXY: undefined }).warnings.some((w) => /shar
 // Every fee is payable in ETH or in earned $OMR (PLEX), and pre-market the $OMR price is the STATIC
 // floor — it ignores the ETH fee entirely. So raising one without the other silently makes the other
 // rail the cheap way to buy an identity, which is the Sybil bound. The invariant is the implied
-// RATE, and today both pairs imply 3,000 $OMR/ETH.
+// RATE, and today both pairs imply the genesis rate plus the premium (~247,058 $OMR/ETH).
 assert.deepEqual(preflight(GOOD).warnings.filter((w) => /rails disagree/.test(w)), [],
-  'the shipped defaults agree — 30/0.01 and 300/0.10 both imply 3,000 $OMR/ETH');
+  'the shipped defaults agree — both pairs derive from the one genesis rate, so they imply it');
 assert(preflight({ ...GOOD, MINT_FEE_ETH: '0.025' }).warnings.some((w) => /rails disagree/.test(w)),
   'raising the ETH mint fee alone is caught — the $OMR rail would still sell an identity at the old price');
 assert.deepEqual(
-  preflight({ ...GOOD, MINT_FEE_ETH: '0.025', PLEX_MINT_OMR: '75' }).warnings.filter((w) => /rails disagree/.test(w)),
+  preflight({ ...GOOD, MINT_FEE_ETH: '0.025', PLEX_MINT_OMR: '6176' }).warnings.filter((w) => /rails disagree/.test(w)),
   [], 'moving both together is clean — the guard is about agreement, not about any particular price');
-assert.deepEqual(preflight({ ...GOOD, MINT_FEE_ETH: '0.025', PLEX_MINT_OMR: '72' }).warnings.filter((w) => /rails disagree/.test(w)),
-  [], 'and a rounded-off price is fine — the band is 5%, so nobody is nagged for picking 72 over 75');
+assert.deepEqual(preflight({ ...GOOD, MINT_FEE_ETH: '0.025', PLEX_MINT_OMR: '6000' }).warnings.filter((w) => /rails disagree/.test(w)),
+  [], 'and a rounded-off price is fine — the band is 5%, so nobody is nagged for rounding 6176 to 6000');
 
-// THE TRANCHE SCHEDULE (Shape D, adopted): the mint pair must sit ON the published linear schedule
-// (tier k = k × 0.01 / k × 5), not merely agree on a rate — 0.015/7.5 is rate-clean and still a
-// price the published table never promised. Distinct message from the rate check, so the two guards
-// stay independently testable.
+// THE TRANCHE SCHEDULE (Shape D, five waves capped at 0.05): the mint FEE must sit ON a published
+// wave, not merely agree on a rate — 0.015 is rate-clean and still a price the published table never
+// promised. Distinct message from the rate check, so the two guards stay independently testable.
+// The $OMR side needs no separate schedule check now that it DERIVES from the fee.
 assert.deepEqual(preflight(GOOD).warnings.filter((w) => /OFF the published tranche/.test(w)), [],
-  'the shipped defaults (0.01/5) are tier 1 — on schedule');
-assert.deepEqual(preflight({ ...GOOD, MINT_FEE_ETH: '0.02', PLEX_MINT_OMR: '60' }).warnings.filter((w) => /OFF the published tranche/.test(w)), [],
-  'tier 2 (0.02/10) is on schedule — a boundary execution is clean');
-assert(preflight({ ...GOOD, MINT_FEE_ETH: '0.015', PLEX_MINT_OMR: '45' }).warnings.some((w) => /OFF the published tranche/.test(w)),
-  'a rate-clean pair the table never promised (0.015/7.5) is caught — the schedule is a commitment, not a ratio');
-// The check restates the schedule's base (0.01/5, the k-multiple rule). Pin the restatement to the
-// real table so it cannot rot (the vig-defaults discipline, applied to the new guard).
+  'the shipped default fee (0.01 ETH) is wave 1 — on schedule');
+assert.deepEqual(preflight({ ...GOOD, MINT_FEE_ETH: '0.025' }).warnings.filter((w) => /OFF the published tranche/.test(w)), [],
+  'wave 2 (0.025 ETH) is on schedule — a boundary execution is clean');
+assert(preflight({ ...GOOD, MINT_FEE_ETH: '0.015' }).warnings.some((w) => /OFF the published tranche/.test(w)),
+  'a fee the table never promised (0.015 ETH) is caught — the schedule is a commitment, not a ratio');
+// The check RESTATES the five waves. Pin the restatement to the real table so it cannot rot (the
+// vig-defaults discipline, applied to the new guard).
 {
-  const { MINT_TRANCHES } = await import('../src/rules.js');
-  assert.equal(MINT_TRANCHES[0].eth, 0.01, "the preflight schedule check's restated base ETH still matches MINT_TRANCHES[0]");
-  assert.equal(MINT_TRANCHES[0].omr, 30, '…and its $OMR');
+  const { MINT_TRANCHES, genesisOmrFor } = await import('../src/rules.js');
+  assert.deepEqual(MINT_TRANCHES.map((t) => t.eth), [0.01, 0.025, 0.035, 0.045, 0.05],
+    "the preflight schedule check's restated waves still match MINT_TRANCHES");
+  assert.equal(MINT_TRANCHES[0].omr, genesisOmrFor(0.01),
+    '…and the $OMR column is the derivation, not a hand-written number');
 }
 // The guard restates vig.js's defaults (preflight cannot import it — vig imports game.js, the
 // one-way rule). That restatement is only safe while something checks it, so: check it.
@@ -164,8 +166,16 @@ assert(preflight({ ...GOOD, MINT_FEE_ETH: '0.015', PLEX_MINT_OMR: '45' }).warnin
   const vig = await import('../src/vig.js');
   const src = fs.readFileSync('src/vig.js', 'utf8');
   const def = (k) => Number((src.match(new RegExp(`${k} \\|\\| ([0-9.]+)`)) || [])[1]);
-  assert.equal(vig.PLEX_MINT_OMR, 30, "preflight's restated PLEX_MINT_OMR default still matches vig.js");
-  assert.equal(vig.PLEX_RESPAWN_OMR, 300, "…and PLEX_RESPAWN_OMR");
+  // Both floors now DERIVE from the one genesis rate, so pin them to the derivation rather than to a
+  // literal — that is the property preflight's restatement has to keep matching, and it survives a
+  // re-rate without editing this file.
+  const { genesisOmrFor } = await import('../src/rules.js');
+  assert.equal(vig.PLEX_MINT_OMR, genesisOmrFor(0.01), "preflight's restated PLEX_MINT_OMR default still matches vig.js");
+  assert.equal(vig.PLEX_RESPAWN_OMR, genesisOmrFor(0.10), "…and PLEX_RESPAWN_OMR");
+  const psrc = fs.readFileSync('src/preflight.js', 'utf8');
+  assert(psrc.includes(`'PLEX_MINT_OMR', ${genesisOmrFor(0.01)}`),
+    "preflight's own restated mint floor is the derived value — a stale literal here is the drift this pin exists to catch");
+  assert(psrc.includes(`'PLEX_RESPAWN_OMR', ${genesisOmrFor(0.10)}`), "…and the respawn floor");
   assert.equal(def('MINT_FEE_ETH'), 0.01, '…and MINT_FEE_ETH (module-private, so read from source)');
   assert.equal(def('RESPAWN_FEE_ETH'), 0.10, '…and RESPAWN_FEE_ETH');
 }

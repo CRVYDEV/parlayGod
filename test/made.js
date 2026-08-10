@@ -21,7 +21,7 @@ import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { MADE, MADE_LADDER, madeRungIdx, ACCESS_STAKE, CASINO, DESK, recyclesToDesk, estateTierOf, SPEAKEASY,
   BUSINESSES, PACING, businessTierOf, isMade, MISSIONS, CONSTANTS, CARS, TRIMS, MINT_TRANCHES,
-  mintTierOf } from '../src/rules.js';
+  mintTierOf, genesisOmrFor } from '../src/rules.js';
 import { upkeepBps } from '../src/business.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
@@ -205,13 +205,27 @@ assert(freeOmrLifetime >= top.min,
 // effective price is the CHEAPER rail, so a row that broke rank would silently become the real
 // price. Plus the shape: thresholds strictly increasing (mintTierOf's findIndex depends on it).
 {
-  const maxOmr = Math.max(...MINT_TRANCHES.map((t) => t.omr));
-  assert(maxOmr < freeOmrLifetime,
-    `the tranche schedule's dearest $OMR price (${maxOmr}) stays under the mission ladder's lifetime payout (${freeOmrLifetime}) — the free path survives the whole published table`);
-  const rate = MINT_TRANCHES[0].omr / MINT_TRANCHES[0].eth;
+  // (1) THE FREE PATH, asserted at its MECHANISM rather than through a price proxy. This used to
+  // read "the dearest published $OMR price stays under the mission ladder's lifetime payout", which
+  // held only while the $OMR rail was mispriced at ~1/69th of the ETH fee. Priced correctly against
+  // the genesis rate a wave-1 mint is ~2,471 $OMR against ~220 lifetime earnable, so NO amount of
+  // playing buys a mint through the PLEX rail — and the promise survives anyway, because the
+  // mission GRANTS the credit outright. That is the thing to pin: the proxy was always a stand-in
+  // for this, and it silently stopped tracking it the moment the rail was priced honestly.
+  const freeMint = MISSIONS.find((m) => Number(m.reward?.mintCredit) > 0);
+  assert(freeMint, 'a mission grants a mint credit outright — the free path cannot depend on the '
+    + `$OMR rail, which at the genesis rate prices a wave-1 mint at ${MINT_TRANCHES[0].omr} $OMR `
+    + `against ~${freeOmrLifetime} lifetime earnable`);
+  assert(freeMint.req?.lvl > 0 && freeMint.req.lvl <= 20,
+    `the free mint is reachable early (${freeMint.name} at level ${freeMint.req?.lvl}) — a credit `
+    + 'gated past the mid-game is not a path a new player can walk');
+
+  // (2) THE LOCKSTEP LAW, now structural: every row's $OMR is the DERIVATION of its ETH at the one
+  // genesis rate, not a hand-written number that happens to agree. The effective price is the
+  // CHEAPER rail, so a row off-rate silently becomes the real price.
   for (const t of MINT_TRANCHES)
-    assert(Math.abs(t.omr / t.eth - rate) < 1e-6,
-      `tranche row through=${t.through} holds the schedule's one implied rate (${rate} $OMR/ETH) — a row off-rate silently becomes the real price`);
+    assert.equal(t.omr, genesisOmrFor(t.eth),
+      `tranche row through=${t.through} derives its $OMR from its ETH at the genesis rate — a hand-written column is how the two rails drift apart`);
   for (let i = 1; i < MINT_TRANCHES.length; i++)
     assert(MINT_TRANCHES[i].through > MINT_TRANCHES[i - 1].through,
       'tranche thresholds are strictly increasing — mintTierOf depends on it');

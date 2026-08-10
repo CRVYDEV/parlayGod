@@ -96,7 +96,7 @@ export const OPERATIONAL_ENV = [
   // economy levers — founder sign-off dials, deliberately operator-settable (BALANCE.md)
   'BOND_DEV_BPS', 'BOND_DISCOUNT_BPS', 'BOND_ETH_SCORE_OMR', 'BOND_PLEDGE_MIN', 'BOND_POL_BPS',
   'BOND_QUOTE_TTL_SEC', 'BOND_RWA_BPS', 'BOND_VEST_HOURS', 'BOND_VIG_BPS', 'EARLY_SELL_TAX_BPS',
-  'FEE_RWA_BPS', 'FRESH_WINDOW_MS', 'MINT_FEE_ETH', 'PLEX_MINT_OMR', 'PLEX_PREMIUM_BPS',
+  'FEE_RWA_BPS', 'FRESH_WINDOW_MS', 'MINT_FEE_ETH', 'PLEX_GENESIS_OMR_PER_ETH', 'PLEX_MINT_OMR', 'PLEX_PREMIUM_BPS',
   'PLEX_RESPAWN_OMR', 'RESPAWN_FEE_ETH', 'REVENUE_BUYBACK_BPS', 'REVENUE_FOUNDER_BPS',
   'REVENUE_RWA_BPS', 'SEASON_MODS', 'SELL_TAX_BPS', 'SELL_TAX_DEV_BPS',
   'SELL_TAX_LP_BPS', 'SELL_TAX_RWA_BPS', 'STORE_PLEX_FLOOR',
@@ -241,9 +241,9 @@ export function preflight(env = process.env) {
   // Sybil bound — it is the per-identity cost that makes a farm expensive — so a desync here quietly
   // undoes the thing the fee exists to do, with nothing in the game looking wrong.
   //
-  // The invariant is the IMPLIED RATE, not either number: both pairs currently imply 3,000 $OMR/ETH
-  // (30/0.01 and 300/0.10), and that agreement is what a change has to preserve. Checked as a ratio so
-  // it holds at any fee level and needs no view on what the right price is.
+  // The invariant is the IMPLIED RATE, not either number: both pairs imply the genesis rate plus the
+  // premium (~247,058 $OMR/ETH — 205,882 × 1.2), and that agreement is what a change has to preserve.
+  // Checked as a ratio so it holds at any fee level and needs no view on what the right price is.
   //
   // A WARNING, not an error, for the reason recorded above SOCIAL_VERIFY_MODE: preflight errors are
   // fatal, and taking a live server down over a mispriced rail is strictly worse than the mispricing.
@@ -253,8 +253,8 @@ export function preflight(env = process.env) {
     // `test/preflight.js` asserts these defaults still equal vig.js's, so the restatement cannot rot.
     const num = (k, d) => Number(env[k] ?? d);
     const rate = (omr, eth) => (eth > 0 ? omr / eth : null);
-    const mint = rate(num('PLEX_MINT_OMR', 30), num('MINT_FEE_ETH', 0.01));
-    const respawn = rate(num('PLEX_RESPAWN_OMR', 300), num('RESPAWN_FEE_ETH', 0.10));
+    const mint = rate(num('PLEX_MINT_OMR', 2471), num('MINT_FEE_ETH', 0.01));
+    const respawn = rate(num('PLEX_RESPAWN_OMR', 24706), num('RESPAWN_FEE_ETH', 0.10));
     if (mint && respawn && Math.abs(mint - respawn) / Math.max(mint, respawn) > 0.05)
       warnings.push(`The PLEX and ETH fee rails disagree on what value is worth: the mint implies `
         + `${Math.round(mint)} $OMR/ETH and the respawn implies ${Math.round(respawn)}. Pre-market the `
@@ -262,22 +262,21 @@ export function preflight(env = process.env) {
         + 'is the one a farm will use — and minting is the Sybil bound. Move PLEX_MINT_OMR/'
         + 'PLEX_RESPAWN_OMR with MINT_FEE_ETH/RESPAWN_FEE_ETH so both imply the same rate.');
 
-    // THE TRANCHE SCHEDULE (Shape D, adopted 2026-08-10): the mint pair does not just have to agree
-    // on a RATE — it has to sit ON the published linear schedule (tier k = k × 0.01 ETH / k × 30
-    // $OMR, MINT_TRANCHES in rules.tail.js). A pair like 0.015/7.5 passes the rate check above and
-    // is still off-schedule: a price the published table never promised, which is exactly the drift
-    // a published commitment exists to prevent. The base (0.01/30) is RESTATED here for the same
-    // one-way-rule reason as the vig defaults above; test/preflight.js pins it to MINT_TRANCHES[0]
-    // so the restatement cannot rot. A WARNING (the standing posture — a mispriced rail must not
-    // take a live server down). The admin chain panel shows the same expected-vs-live comparison
-    // against the CURRENT tier for whoever is actually looking.
+    // THE TRANCHE SCHEDULE (Shape D, adopted 2026-08-10; five waves capped at 0.05 ETH): the mint
+    // fee does not just have to agree on a RATE — it has to sit ON a published wave. A pair that is
+    // rate-clean and still off-schedule is a price the published table never promised, which is
+    // exactly the drift a published commitment exists to prevent. The waves are RESTATED here for
+    // the same one-way-rule reason as the vig defaults above; test/preflight.js pins them to
+    // MINT_TRANCHES so the restatement cannot rot. A WARNING (the standing posture — a mispriced
+    // rail must not take a live server down). The admin chain panel shows the same expected-vs-live
+    // comparison against the CURRENT wave for whoever is actually looking.
     {
-      const k = num('MINT_FEE_ETH', 0.01) / 0.01;
-      const kR = Math.round(k);
-      if (kR < 1 || Math.abs(k - kR) > 0.001 || Math.abs(num('PLEX_MINT_OMR', 30) - kR * 30) > 0.001)
-        warnings.push(`The live mint pair (${num('MINT_FEE_ETH', 0.01)} ETH / ${num('PLEX_MINT_OMR', 30)} $OMR) `
-          + 'is OFF the published tranche schedule (tier k = k × 0.01 ETH / k × 30 $OMR). The schedule '
-          + 'is a published commitment — set the pair to a MINT_TRANCHES row, or publish a new table.');
+      const WAVES = [0.01, 0.025, 0.035, 0.045, 0.05];
+      const fee = num('MINT_FEE_ETH', 0.01);
+      if (!WAVES.some((w) => Math.abs(fee - w) < 1e-9))
+        warnings.push(`The live mint fee (${fee} ETH) is OFF the published tranche schedule `
+          + `(${WAVES.join(' / ')} ETH). The schedule is a published commitment — set the fee to a `
+          + 'MINT_TRANCHES wave, or publish a new table.');
     }
   }
 

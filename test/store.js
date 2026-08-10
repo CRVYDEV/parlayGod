@@ -156,9 +156,14 @@ assert(rev.bySku.find((s) => s.sku === 'made_man'), 'the ops view tallies sales 
 // ── PLEX-for-packages: pay a SKU with EARNED $OMR (a plex:* BURN) for the same entitlement ──
 // (runs AFTER the neutrality check because the test SQL-grants $OMR — an unledgered mint; the plex
 // burn itself IS ledgered, asserted directly below.)
+// Seeded from the LIVE floor rather than a literal: the PLEX rail converts at the genesis rate, so a
+// hardcoded grant goes short the moment that rate moves (it did — 1,000 stopped covering a 0.01 ETH
+// SKU when the floors were re-derived). $OMR here is SQL-granted, so the amount is a fixture knob.
+const { STORE: STORE_R } = await import('../src/rules.js');
+const PLEX_SEED = Math.ceil(STORE_R.PLEX_FLOOR_OMR_PER_ETH * 0.05); // ample for any sub-0.05 ETH SKU
 const plexer = await mk('Plex Pete');
 const paid = (await pool.query(`SELECT account_id a FROM characters WHERE id='${plexer.id}'`)).rows[0].a;
-await pool.query(`UPDATE account_persistent SET omr=1000 WHERE account_id='${paid}'`);
+await pool.query(`UPDATE account_persistent SET omr=${PLEX_SEED} WHERE account_id='${paid}'`);
 const sb = (await call('GET', '/v1/store', { token: plexer.token })).body;
 const mm = sb.packages.find((p) => p.sku === 'made_man');
 assert(mm.plexOmr > 0, 'the PLEX $OMR price is quoted (the floor, before any buyback prints an oracle)');
@@ -208,7 +213,7 @@ assert(sbA.owned.patronStanding.nextTier && sbA.owned.patronStanding.nextTier.na
 
 // (B) THE PLEX CONTRIBUTION — a PLEX purchase (earned $OMR) bumps patron_spent by the SKU priceEth
 const plexPat = await mk('Plex Patron');
-await pool.query(`UPDATE account_persistent SET omr=1000 WHERE account_id='${plexPat.aid}'`);
+await pool.query(`UPDATE account_persistent SET omr=${PLEX_SEED} WHERE account_id='${plexPat.aid}'`);
 r = await call('POST', '/v1/store/plex/wire_month', { token: plexPat.token }); // 0.03 ETH SKU
 assert.equal(r.code, 200, `PLEX-bought the wire: ${JSON.stringify(r.body)}`);
 const sbPl = (await call('GET', '/v1/store', { token: plexPat.token })).body;

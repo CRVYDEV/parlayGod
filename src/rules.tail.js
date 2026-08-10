@@ -18,6 +18,39 @@ export function recruitRankOf(n) {
   return rank;
 }
 
+// ── THE GENESIS RATE — the pre-market oracle print ──────────────────────────────────────────────
+// (founder-directed 2026-08-10: "how can we make it so the OMR amount adjusts to whatever the value
+// of ETH is at the time".) Every real-money fee in this game is denominated in ETH and payable on a
+// second rail in $OMR. The $OMR side is therefore never a price of its own — it is a CONVERSION,
+// `feeEth × (OMR per ETH) × premium`, and `plexQuote`/`plexPackageQuote` have always computed it
+// that way from the latest buyback print. What they lacked was a correct rate BEFORE a market
+// exists, and the static floors that stood in for one were never derived from an exchange rate at
+// all: they were hand-set, then carried along by the ×6 sink re-denomination, which is a factor
+// about IN-GAME feel and says nothing about what an ETH is worth.
+//
+// Measured against the locked launch parameters (100M supply, $1.7M FDV → 205,882 $OMR/ETH), the
+// tree held THREE disagreeing rates: the mint/respawn floors implied 3,000 $OMR/ETH (68.6× cheap),
+// the Store's floor 30,000 (6.9× cheap), and the market 205,882. Since the effective price is
+// always the CHEAPER rail, that made the $OMR rail the real price of every fee at ~1/69th — a
+// 0.01 ETH ($35) mint payable for 30 $OMR ($0.51), which collapses the ETH revenue line the router
+// splits and prices the Sybil bound at a rounding error.
+//
+// So there is ONE rate, and it is this. Pre-market it stands in for the oracle; the moment a
+// buyback prints, `max(floor, feeEth × oracle × premium)` takes over and the floor stops binding.
+// Same formula on both sides of the market's existence — which is what makes the $OMR amount track
+// ETH automatically, including across a tranche boundary (the fee moves, the $OMR rail follows,
+// with no second env value to set by hand).
+//
+// It is ETH-denominated, so it does not move when ETH moves against the dollar. A fee is 0.01 ETH
+// whatever that is worth in USD — pegging the FEE to a dollar value is a separate decision and
+// would need a USD oracle this game deliberately does not have.
+export const PLEX_GENESIS_OMR_PER_ETH = Number(process.env.PLEX_GENESIS_OMR_PER_ETH || 205882);
+// The pre-market quote for an ETH-denominated fee. `premiumBps` is the caller's own premium (the
+// ETH rail must stay the economical one — ETH funds the pool, $OMR burns supply at a markup), so a
+// floor that omitted it would make $OMR the cheap rail again by exactly the premium.
+export const genesisOmrFor = (feeEth, premiumBps = 12000) =>
+  Math.round(Number(feeEth) * PLEX_GENESIS_OMR_PER_ETH * Number(premiumBps) / 10000);
+
 export const CONSTANTS = {
   // Randomized starting build — every fresh character rolls a UNIQUE distribution of the SAME
   // fixed budget (no two the same, but the total is constant → zero power creep, so the
@@ -2238,8 +2271,12 @@ export const STORE = {
 // ISK" path — ETH payers fund the Vig, $OMR payers BURN supply; both get the same entitlement). Price =
 // max(floor, feeEth × latest-buyback-oracle × premium) — market-linked like the vig PLEX, with a static
 // $OMR-per-ETH floor before the market prints a price. Sign-off levers.
-STORE.PLEX_FLOOR_OMR_PER_ETH = Number(process.env.STORE_PLEX_FLOOR || 30000); // 0.01 ETH → 300 $OMR floor
+// The floor is the SAME conversion the market path does, with the genesis rate standing in for the
+// oracle (see PLEX_GENESIS_OMR_PER_ETH). It was hand-set at 30,000 — 6.9× under the market — which
+// made $OMR the cheap rail for every SKU pre-market, the same defect the mint rail had at 68.6×.
 STORE.PLEX_PREMIUM_BPS = Number(process.env.STORE_PLEX_PREMIUM_BPS || 12000); // 1.2× the ETH-equivalent
+STORE.PLEX_FLOOR_OMR_PER_ETH = Number(process.env.STORE_PLEX_FLOOR
+  || PLEX_GENESIS_OMR_PER_ETH * STORE.PLEX_PREMIUM_BPS / 10000);
 export const packageOf = (sku) => STORE.PACKAGES.find((p) => p.sku === sku) || null;
 export const passActive = (a, now = Date.now()) => !!a?.pass_until && new Date(a.pass_until).getTime() > now;
 
@@ -5059,21 +5096,21 @@ export const TICKER_BALLOT = {
 // re-drafted question is in the row). Copy rules ride with it: founding-era frame only, never a
 // countdown/"N remaining" counter, the banned lexicon verbatim.
 // The founder's waves are 1k / 10k / 25k / 50k / 100k at .01 / .025 / .0333 / .0444 / .05 ETH.
-// Waves 3 and 4 are the only edit: .0333 and .0444 do not land whole on the $OMR rail at the
-// schedule's one rate (they price at 99.9 and 133.2), and a fractional PLEX floor matters because
-// the rail is set BY HAND at each boundary — a GM who types the round number would trip the
-// off-schedule warning over a 0.1% rounding, and a warning that fires on rounding is one people
-// learn to ignore. .035 and .045 are the nearest pair whole on both rails (+5.1% and +1.4% against
-// the founder's figures). Restoring the exact figures is this table's `eth` column plus omr 99.9 /
-// 133.2 — the rate law passes either way.
+// Waves 3 and 4 are rounded to .035 / .045 (+5.1% / +1.4%) so both waves land on tidy numbers.
+//
+// THE SCHEDULE IS THE ETH COLUMN. `omr` is DERIVED from it at the genesis rate — never hand-written,
+// so the lockstep law ("one implied rate per row") holds by construction rather than by assertion,
+// and a boundary is one Safe `setFees` transaction with the $OMR rail following on its own. Once a
+// market exists this column stops being the price at all: `plexQuote` returns
+// `max(floor, feeEth × oracle × premium)` and the live rate takes over.
 export const MINT_TRANCHES = [
-  { through: 1000,   eth: 0.01,  omr: 30  },  // wave 1 — the first thousand
-  { through: 11000,  eth: 0.025, omr: 75  },  // wave 2 — next 10,000
-  { through: 36000,  eth: 0.035, omr: 105 },  // wave 3 — next 25,000
-  { through: 86000,  eth: 0.045, omr: 135 },  // wave 4 — next 50,000
-  { through: 186000, eth: 0.05,  omr: 150 },  // wave 5 — next 100,000, and the CEILING: the flat
-                                              // tail holds here, so 0.05 is the most anyone ever pays
-];
+  { through: 1000,   eth: 0.01  },  // wave 1 — the first thousand
+  { through: 11000,  eth: 0.025 },  // wave 2 — next 10,000
+  { through: 36000,  eth: 0.035 },  // wave 3 — next 25,000
+  { through: 86000,  eth: 0.045 },  // wave 4 — next 50,000
+  { through: 186000, eth: 0.05   },  // wave 5 — next 100,000, and the CEILING: the flat tail holds
+                                     // here, so 0.05 ETH is the most anyone ever pays
+].map((w) => ({ ...w, omr: genesisOmrFor(w.eth) }));
 // The current tier for a cumulative minted-identity count. Past the table: the flat tail (the last
 // row holds, `flat: true` so a surface can say "the published schedule is fully minted").
 export const mintTierOf = (minted) => {

@@ -216,8 +216,12 @@ assert(nl.board.some((x) => x.name === 'Nucky Thompson'), 'the proprietor ranks 
 // ── STEP THREE — the ETH COSMETIC DECOR tier (Store SKU → account unlock → apply to the club) ──
 assert.equal((await call('POST', '/v1/speakeasy/decor', { token: owner.token, body: { style: 'gilded' } })).body.error, 'locked', "you can't apply decor you don't own");
 assert.equal((await call('POST', '/v1/speakeasy/decor', { token: owner.token, body: { style: 'nope' } })).body.error, 'bad_style', 'no such decor style');
-// buy the Art Deco style with EARNED $OMR (the PLEX path — floor price 0.02 ETH × 5000 = 100 $OMR, no oracle)
-await grantOmr(owner.aid, 900);
+// buy the Art Deco style with EARNED $OMR (the PLEX path, no oracle → the genesis-rate floor). The
+// grant is DERIVED from that floor: a literal goes short the moment the rate moves, which is what
+// happened when the PLEX rails were re-derived from the genesis price.
+const { STORE: STORE_SPK, packageOf: pkgOf } = await import('../src/rules.js');
+const DECO_OMR = Math.ceil(pkgOf('decor_deco').priceEth * STORE_SPK.PLEX_FLOOR_OMR_PER_ETH) + 10;
+await grantOmr(owner.aid, DECO_OMR);
 const buyDeco = await call('POST', '/v1/store/plex/decor_deco', { token: owner.token });
 assert.equal(buyDeco.code, 200, 'bought the Art Deco decor via PLEX ($OMR)');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM store_cosmetics WHERE account_id='${owner.aid}' AND style='deco'`)).rows[0].n), 1, 'the cosmetic unlock landed (account-level, survives death)');

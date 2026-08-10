@@ -5,7 +5,18 @@
 // PLEX bridge (pay a fee in earned $OMR, a §10.4 burn) and §10.4 in-game conservation throughout.
 import assert from 'node:assert';
 import { privateKeyToAccount } from 'viem/accounts';
-import { PLEX_MINT_OMR } from '../src/vig.js';
+
+// THE GENESIS RATE, pinned for this fixture. Every fee is payable in ETH or in $OMR, and the $OMR
+// side converts at `PLEX_GENESIS_OMR_PER_ETH` (205,882 — the locked launch price) until a market
+// prints one. This file's economics are sized in TENS of $OMR: 0.066 ETH of revenue buys 132, the
+// prize pays 60. At the real rate a mint costs ~2,471, so the earner could never reach one and the
+// PLEX-spend leg below would test nothing. Pinning the rate keeps the property under test — the
+// quote is max(floor, market) and the MARKET leg binds — at numbers the fixture can actually pay.
+// Set before the import because both modules read it at load (ESM hoists static imports, so these
+// two are dynamic).
+process.env.PLEX_GENESIS_OMR_PER_ETH = '2000';
+const { PLEX_MINT_OMR } = await import('../src/vig.js');
+const { PLEX_GENESIS_OMR_PER_ETH } = await import('../src/rules.js');
 
 // deterministic signer/player keys (well-known anvil accounts) — set BEFORE importing the server
 process.env.VOUCHER_SIGNER_PK = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
@@ -101,15 +112,17 @@ assert(near(r.body.paid, 0), 'an over-pool prize pays nothing');
 // ── (5) the PLEX bridge — MARKET-LINKED: fee-ETH × the latest buyback's price × 1.2 premium ──
 // (sim-audit F3: the static floor was minutes of play vs 0.01 ETH real money — the Vig starved)
 // The quote is max(FLOOR, market), so this block prints a HIGHER reference price than the earlier
-// buybacks: at 2000 the market leg would sit under the static floor and the assertion below would
-// be testing the floor while claiming to test the market. Recording a fresh reference price is the
-// cheapest way to keep the claim honest after a re-denomination moves the floor.
-await pool.query("INSERT INTO vig_buyback (id, eth_spent, omr_bought, price_omr_per_eth, to_reserve, to_prize) VALUES ('px-ref', 0, 0, 4000, 0, 0)");
+// buybacks: under the floor, the assertion below would be testing the floor while claiming to test
+// the market. It was a hardcoded 4000 and went stale the moment the floors were re-derived from the
+// genesis rate — so the reference is now DERIVED from that rate, and the block cannot rot again.
+// Both floor and market leg carry the same premium, so any oracle above the genesis rate binds.
+const REF_PRICE = PLEX_GENESIS_OMR_PER_ETH * 2;
+await pool.query(`INSERT INTO vig_buyback (id, eth_spent, omr_bought, price_omr_per_eth, to_reserve, to_prize) VALUES ('px-ref', 0, 0, ${REF_PRICE}, 0, 0)`);
 r = await call('GET', '/v1/plex/price');
-assert.equal(Number(r.body.mint.oracle), 4000, 'the oracle is the latest buyback price (4000 $OMR/ETH)');
+assert.equal(Number(r.body.mint.oracle), REF_PRICE, 'the oracle is the latest buyback price');
 assert(r.body.mint.price > PLEX_MINT_OMR, 'and the MARKET leg is the binding one, not the static floor');
-assert(near(r.body.mint.price, 48), `mint quote = 0.01 ETH × 4000 × 1.2 = 48 $OMR (got ${r.body.mint.price})`);
-assert(near(r.body.respawn.price, 480), 'respawn quote = 0.10 ETH × 4000 × 1.2 = 480 $OMR');
+assert(near(r.body.mint.price, 48), `mint quote = 0.01 ETH × ${REF_PRICE} × 1.2 = 48 $OMR (got ${r.body.mint.price})`);
+assert(near(r.body.respawn.price, 480), `respawn quote = 0.10 ETH × ${REF_PRICE} × 1.2 = 480 $OMR`);
 r = await call('POST', '/v1/plex/mint', { token });
 assert.equal(r.code, 200); assert(near(r.body.omrSpent, 48), 'PLEX mint burns the MARKET price (48), not the static floor');
 assert(near((await meOf(token)).omr, 12), 'earner spent 48 of 60 $OMR');

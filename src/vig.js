@@ -14,7 +14,7 @@
 // here — except the PLEX bridge, which burns IN-GAME $OMR and so is a legal §10.4 burn).
 import crypto from 'node:crypto';
 import { GameError, ledger } from './game.js';
-import { TRADE_FEE } from './rules.js'; // the trade-fee split lever — the booking path must read the DECLARED constant (F1)
+import { TRADE_FEE, genesisOmrFor } from './rules.js'; // the trade-fee split lever — the booking path must read the DECLARED constant (F1)
 import { fundReserve } from './chain.js';
 
 const uid = () => crypto.randomUUID();
@@ -27,16 +27,21 @@ const round6 = (x) => Math.round(x * 1e6) / 1e6;
 // price to pay a fee from earnings instead of ETH (the EVE PLEX bridge — a skilled player's rent).
 export const VIG_BPS = Number(process.env.VIG_BPS || 6000);         // 60% to the Vig (exported: the router derives the waterfall from the LIVE constant)
 export const RESERVE_BPS = Number(process.env.VIG_RESERVE_BPS || 5000); // 50% of bought $OMR to the reserve (exported for the router)
-export const PLEX_MINT_OMR = Number(process.env.PLEX_MINT_OMR || 30);
-export const PLEX_RESPAWN_OMR = Number(process.env.PLEX_RESPAWN_OMR || 300);
 // MARKET-LINKED PLEX (sim-audit F3): a static 5 $OMR was minutes of play vs 0.01 ETH real money —
 // nobody would ever pay ETH, starving the Vig at the source. The $OMR price now tracks the REAL
 // exchange rate: fee-in-ETH × the latest Vig buyback's price (the actual OMR/ETH the Vig paid —
 // on mainnet the DEX TWAP) × a premium ≥ 1 so the ETH rail stays the economical one (ETH funds
-// the pool; $OMR burns supply at a markup). Static PLEX_*_OMR is the pre-market fallback floor.
+// the pool; $OMR burns supply at a markup).
 const PLEX_PREMIUM_BPS = Number(process.env.PLEX_PREMIUM_BPS || 12000); // 1.2× the ETH-equivalent
 const MINT_FEE_ETH = Number(process.env.MINT_FEE_ETH || 0.01);
 const RESPAWN_FEE_ETH = Number(process.env.RESPAWN_FEE_ETH || 0.10);
+// F3 fixed the MARKET path and left the floors hand-set — so the pre-market rail priced a $35 mint
+// at $0.51 and, since the effective price is the cheaper rail, that WAS the price of a mint until a
+// buyback printed. The floors are now the same conversion the market path does, with the genesis
+// rate standing in for the oracle: derived from the LIVE fee, so a tranche boundary moves both rails
+// with one Safe transaction. The env stays as an override; preflight warns if it goes off-rate.
+export const PLEX_MINT_OMR = Number(process.env.PLEX_MINT_OMR || genesisOmrFor(MINT_FEE_ETH, PLEX_PREMIUM_BPS));
+export const PLEX_RESPAWN_OMR = Number(process.env.PLEX_RESPAWN_OMR || genesisOmrFor(RESPAWN_FEE_ETH, PLEX_PREMIUM_BPS));
 
 // The live quote: {price, oracle} — oracle null (static floor) until a first buyback prints a price.
 export async function plexQuote(db, kind) {
