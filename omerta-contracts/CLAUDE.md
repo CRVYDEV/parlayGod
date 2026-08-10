@@ -4,7 +4,7 @@ Solidity suite for OMERTÀ on Robinhood Chain. Rules for future sessions:
 1. `forge test` must pass after every change; new behavior needs new tests (happy path + every revert).
    **The suite IS runnable in the sandboxed build environment**: `./run-forge-test-sandboxed.sh`
    (forge from the official npm dist, forge-std/OZ/v4-core from npm, solc native-or-shim).
-   First executed 2026-07-23 (73/73); **128/128 green** after the v4 sell-tax hook, incl. five 512-run fuzzes. The runner PREFERS the
+   First executed 2026-07-23 (73/73); **177/177 green** after THE BANK's nUSD market, incl. seven 512-run fuzzes. The runner PREFERS the
    NATIVE solc binary and NEEDS it — the solc-js shim (same version+commit) runs out of wasm heap
    compiling v4's `PoolManager`, so on a shim-only box every suite runs EXCEPT `OmertaHook.t.sol`. On an open-internet machine prefer
    `./run-forge-test.sh` (native toolchain).
@@ -114,3 +114,40 @@ Solidity suite for OMERTÀ on Robinhood Chain. Rules for future sessions:
    - `DISCOUNT_BPS` must stay strictly BELOW `sellTaxBps` or a bond becomes an arbitrage rather than a
      hold (design §9.6). Asserted in `test/OmertaHook.t.sol` and warned about in the backend's
      `preflight.js` — the two constants live in different layers, so nothing else relates them.
+
+8. **THE BANK's nUSD market (`NUSD` / `CollateralEscrow` / `Alchemist` / `Transmuter`) — the rules
+   that are structural, not stylistic.** Design: `omerta-bank-protocol-design.md` §2.1–2.5.
+   - **THERE IS NO ORACLE ON THE BORROW PATH, AND NO `liquidate()` ANYWHERE.** The market is
+     denomination-matched (USD debt against USD collateral), so a borrow decision never reads a
+     price — and a price that is never read cannot be manipulated at any size. Both Inverse losses
+     (~$21M) were exactly that class. **Do not add a cross-denominated market as a parameter
+     change**; it is a separate deployment with its own oracle stack and its own audit.
+   - **NO POOL, THEREFORE NO SHARES.** Every depositor gets their own `CollateralEscrow` holding the
+     external vault's ERC-4626 shares. The design's §5 sketch called for internal shares accounting
+     to FIX Runtime Verification's finding #1 against Alchemix; escrows make it UNREACHABLE, which
+     is strictly stronger, because that bug only exists when a pool must be divided. **Do not
+     reintroduce an internal share layer** — it re-creates the bug it was meant to fix.
+   - **The escrow has no sweep, no rescue, no owner withdrawal, and must not gain one.** A sweep is
+     how an escrow becomes a rug vector. Tokens sent directly by mistake are lost; that is the
+     correct trade for a contract whose whole job is custody.
+   - **`setMinter(0)` halts issuance WITHOUT touching redemption, and that asymmetry is the point**
+     (§2.4): the protocol must stop issuing before it stops paying. The buffer floor encodes the
+     same ordering — it gates `mint`, never `redeem`. Do not "simplify" either into a pause that
+     covers both.
+   - **`Transmuter.redeem` deliberately carries NO same-block guard and NO caller allowlist.**
+     Redemption arbitrage is what repairs the peg, and most of it is executed by contracts — an
+     allowlist there would block the defense while claiming to be one. (An earlier cut had exactly
+     that bug and the red-team caught it.) Flow caps are the right tool for that path: they bound a
+     drain without gating who may repair the peg.
+   - **⚠ DEPLOY: the buffer MUST be seeded before the market is armed.** At zero supply the required
+     buffer is zero so the first borrow always passes; the instant supply is non-zero the floor
+     demands real backing, and reserves are fed only by repay/harvest, which need existing debt. An
+     unseeded market therefore takes ONE borrow and deadlocks, looking like a healthy config.
+     `test_an_unseeded_market_bricks_after_one_borrow` pins it. Do not "fix" this by exempting early
+     borrows — an exemption is a window in which the protocol issues claims it cannot honour.
+   - **KNOWN AND ACCEPTED: a yield-vault loss breaks `Σ supply ≤ Σ collateral × LTV` and nothing
+     restores it.** Denomination matching removes price risk, not sleeve risk (§2.6). There is no
+     liquidation by design, so the answer to a bad sleeve is "stop issuing, honour what is backed" —
+     which is what the buffer floor does. Pinned by
+     `test_a_vault_loss_breaks_the_invariant_and_the_protocol_stops_issuing`. Anyone proposing a
+     liquidation path is proposing to reintroduce the oracle class above.
