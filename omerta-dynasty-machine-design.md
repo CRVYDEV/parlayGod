@@ -549,4 +549,14 @@ said, in any channel: that earlier mints are worth more because later ones cost 
 discipline above)** < continuous auto-curve (Shape A — rejected, stays rejected). Shape D's
 residual that no copy rule removes: the schedule itself tells buyers the price will rise, on a
 tradeable asset — that is why the row goes back to counsel rather than being self-certified.
-Adoption is the founder's call; everything above is ready the day it is made.
+
+**ADOPTED 2026-08-10 (founder: "let's do your recommendation" — the LINEAR progression).** The
+published table is **`MINT_TRANCHES`** in the code (ten rows, tier k = k × 0.01 / k × 5, tranche
+sizes 1,000 → 10,000, cumulative 55,000; whole-array test-pinned) with `mintTierOf` as the one
+reader. The flat tail holds the last price beyond the table. Built with it: the preflight
+off-schedule warning (a rate-clean pair the table never promised — 0.015/7.5 — is caught at
+boot), the admin chain panel's tier-progress line with an OFF-SCHEDULE flag (the GM's instrument
+for executing a boundary), and the two row-level laws pinned in `test/made.js` beside the
+free-path computation they depend on (max published $OMR 50 vs ~220 earnable — 4.4× headroom;
+one implied rate per row). A4 is RE-OPENED in the memo with the amended fact pattern. The LIVE
+price today is tier 1 — nothing changes at the till until the 1,001st identity.

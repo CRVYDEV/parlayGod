@@ -639,6 +639,22 @@ const SIGNED = [
       blurb: 'The last week. Turf is cheap to challenge, the windows are short and contests settle fast — whatever you are holding when the books close is what the city remembers.',
       contestMsMult: 0.5, floorMult: 0.75, watchWindowMult: 0.5 },
   ]],
+  // THE TRANCHE SCHEDULE (dynasty §10 Shape D, ADOPTED 2026-08-10 — linear). A whole-array pin:
+  // the schedule is a PUBLISHED COMMITMENT, so a quiet edit to any row is exactly what the pin
+  // exists to catch. The row-level laws (one implied rate per row; the free-path headroom vs the
+  // live mission table) are asserted in test/made.js beside the ladder's own ceiling claim.
+  ['MINT_TRANCHES', [
+    { through: 1000,  eth: 0.01, omr: 5  },
+    { through: 3000,  eth: 0.02, omr: 10 },
+    { through: 6000,  eth: 0.03, omr: 15 },
+    { through: 10000, eth: 0.04, omr: 20 },
+    { through: 15000, eth: 0.05, omr: 25 },
+    { through: 21000, eth: 0.06, omr: 30 },
+    { through: 28000, eth: 0.07, omr: 35 },
+    { through: 36000, eth: 0.08, omr: 40 },
+    { through: 45000, eth: 0.09, omr: 45 },
+    { through: 55000, eth: 0.10, omr: 50 },
+  ]],
   // FAMILY CHARTERS (strategy package) — the asymmetry. Both halves of each trade are levers: the
   // handicap IS the mechanic, so a retune that quietly softened one side would turn a charter back
   // into a free upgrade. A whole-object pin (the multipliers are leaves on array entries).

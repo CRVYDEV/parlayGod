@@ -3,7 +3,7 @@
 // surface. The dashboard also calls the existing mod endpoints (invariants, funnel, vig, emission,
 // reserve, audit) alongside these two. Founder-facing so the alpha can be run and watched without a dev.
 
-import { POPULATION } from './rules.js';
+import { POPULATION, MINT_TRANCHES, mintTierOf } from './rules.js';
 import { seededToday } from './population.js';
 import { archiverHealth } from './dbhealth.js';
 import { socialProviders } from './verify.js';
@@ -76,6 +76,20 @@ export async function opsOverview(pool) {
     // secret (anyone holding it can post into the channel) and this endpoint's output ends up pasted
     // into bug reports.
     alerting: { webhook: !!process.env.INVARIANT_WEBHOOK_URL },
+    // THE TRANCHE SCHEDULE (Shape D): tier progress + the expected-vs-live pair, so the GM sees a
+    // boundary coming and a live pair that has drifted off the published table. The boundary is
+    // EXECUTED by hand (one Safe setFees tx + the two env values) — this line is the instrument.
+    mintTier: await (async () => {
+      const minted = await one('SELECT COUNT(*) n FROM account_persistent WHERE minted');
+      const t = mintTierOf(minted);
+      const liveEth = Number(process.env.MINT_FEE_ETH || 0.01);
+      const liveOmr = Number(process.env.PLEX_MINT_OMR || 5);
+      return {
+        minted, tier: t.tier, of: MINT_TRANCHES.length, through: t.flat ? null : t.through,
+        priceEth: t.eth, priceOmr: t.omr, flat: t.flat, liveEth, liveOmr,
+        offSchedule: Math.abs(liveEth - t.eth) > 1e-9 || Math.abs(liveOmr - t.omr) > 1e-9,
+      };
+    })(),
     players,
     economy: {
       ammPrice: Math.round(ammPrice * 100) / 100,

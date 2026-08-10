@@ -260,6 +260,18 @@ assert(ov.players.accounts >= 1 && ov.players.alive >= 1, 'overview counts accou
 assert(ov.economy.ammPrice > 0, 'overview reads the AMM spot ($/$OMR)');
 assert(ov.economy.omrSupply >= 20000, 'overview reads the true $OMR supply (≥ the 20k genesis)');
 assert(Array.isArray(ov.top.players) && Array.isArray(ov.top.gangs), 'overview carries the leaderboards');
+// THE TRANCHE SCHEDULE line (Shape D): the fixture's minted count sits inside tier 1, so the tier
+// line must quote MINT_TRANCHES[0] — asserted against the TABLE, not against mintTierOf (a broken
+// helper that always returned the last row would satisfy a helper-vs-helper comparison).
+{
+  const { MINT_TRANCHES } = await import('../src/rules.js');
+  assert(typeof ov.mintTier.minted === 'number' && ov.mintTier.minted < MINT_TRANCHES[0].through,
+    'the fixture mints fewer identities than tier 1 holds — the precondition for the next assert');
+  assert.equal(ov.mintTier.tier, 1, 'the tier line reads tier 1 for a tier-1 minted count');
+  assert.equal(ov.mintTier.priceEth, MINT_TRANCHES[0].eth, 'and quotes tier 1 ETH off the published table');
+  assert.equal(ov.mintTier.priceOmr, MINT_TRANCHES[0].omr, 'and tier 1 $OMR');
+  assert.equal(ov.mintTier.offSchedule, false, 'the shipped env pair sits ON the schedule');
+}
 
 // THE INTEGRATIONS PANEL — the dormant retention/funnel switchboard. Mod-gated, env-presence only,
 // and — the load-bearing property — it NEVER echoes a secret value (a key/webhook URL stays server-side).
