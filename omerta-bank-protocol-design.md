@@ -325,6 +325,44 @@ trading fees** (§2.8), which is a genuine yield with no faucet, no oracle and n
 BlockFi/Celsius fact pattern), or a share of protocol revenue (that is A11). The benefit is
 in-game utility and progression speed — which is precisely why it needs no new counsel row.
 
+### 2.10 Flash loans — what can actually be done, and what is built
+
+*Founder, 2026-08-10: "figure out how to write in the smart contract ways to kill flash loans from
+happening completely."* Built as `omerta-contracts/src/FlashGuard.sol` (compiles clean, solc
+0.8.26, 0 warnings).
+
+**The honest framing first, because it changes what to build. A flash loan cannot be blocked.** It
+is not a feature of one lender that we can refuse to integrate — it is a property of **EVM
+atomicity**: a transaction either fully succeeds or fully reverts, so anyone can borrow inside one,
+from Aave, Balancer, Morpho, Uniswap, or their own balance. There is no switch, and "is this
+capital borrowed?" is not reliably observable on-chain.
+
+**There is also no need for one, and this is the useful part: a flash loan is never the
+vulnerability — it is the amplifier.** Every flash-loan "exploit" on record is really one of three
+bugs: (1) a price read from a source the caller can move inside the same transaction; (2) a state
+you can ENTER and EXIT in one transaction and profit from the round trip; (3) reentrancy. The loan
+only makes the attacker briefly rich enough to do (1) or (2) at scale. **Remove those and a flash
+loan buys nothing** — a far stronger position than trying to detect borrowed money.
+
+**And we must not block them all anyway.** The Transmuter's 1:1 redemption is *defended* by
+arbitrage — someone who flash-loans to buy `nUSD` at 0.98 and redeems at 1.00 is repairing our peg
+at their own gas risk. A blanket ban would disable the mechanism that keeps the peg honest. So the
+guards are surgical: they attach where atomicity creates an *advantage*, never where it creates a
+*service*.
+
+**The layers, strongest first:**
+
+| | Layer | Where |
+|---|---|---|
+| **L0** | **REMOVE THE TARGET** — denomination-matched markets mean **no oracle on the borrow path at all**. A price never read cannot be manipulated, at any size. Worth more than everything below combined; both Inverse losses (~$21M) were exactly this. | §2.1 |
+| **L1** | **SAME-BLOCK SEPARATION** — entry and exit cannot share a block. Not a mitigation but a *proof*: a flash loan must be repaid in the transaction that took it, so forcing the profitable half into a later block means the loan cannot still exist. Costs an honest user one block (~250ms on an Orbit L2). | `FlashGuard` |
+| **L2** | **CONTRACT ALLOWLIST** — and deliberately **not** `require(msg.sender == tx.origin)`. That one-liner is now an anti-pattern: it breaks ERC-4337, Safe multisigs and every smart wallet — and Robinhood Chain's self-custody is Privy-style embedded wallets, so it would lock out exactly our users. It does not even work (an EOA can call us via a callback in the same transaction). | `FlashGuard` |
+| **L3** | **TIME-WEIGHTED ACCRUAL** — rewards, shares and voting accrue over elapsed time, so a position held zero blocks earns exactly zero. | Alchemist |
+| **L4** | **ORACLE HARDENING** where one is genuinely needed (the redemption price only): Chainlink rather than a DEX TWAP, read **pessimistically**, with staleness and single-block deviation breakers. | Transmuter |
+| **L5** | **FLOW CAPS** — per-block and per-day. A flash loan is *by definition* one block, so a per-block cap is the tightest possible bound on any atomic exploit; the daily cap (FiRM's) bounds the patient version that would otherwise just spread out. Bounds rather than prevents — the last line. | `FlashGuard` |
+| **L6** | **REENTRANCY** — `nonReentrant` plus strict checks-effects-interactions. | all |
+| **L7** | **SHARE INFLATION / DONATION** — track assets in a variable, never `balanceOf(this)`, so a direct transfer cannot move the share price. (OZ 5.x virtual shares cover the classic first-depositor case; internal accounting covers the rest.) | Alchemist |
+
 ---
 
 ## 3. The in-game surface
