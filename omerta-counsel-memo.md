@@ -115,8 +115,12 @@ implied-rate guard. "Fixed price" means **fixed at any given moment, repriced on
 product decision** (both rails moved in lockstep, announced factually); an AUTOMATIC
 supply-indexed escalation ("the price rises as more mint") was proposed, evaluated, and
 **REJECTED** — an auto-rising price is scarcity marketing in mechanical form (the Impact-Theory
-shape) and would re-open this row. The funnel bonus (A6's carve-out) is analyzed here as a retail
-purchase promotion on that fixed-price sale.
+shape) and would re-open this row. ~~The funnel bonus (A6's carve-out) is analyzed here as a
+retail purchase promotion on that fixed-price sale.~~ *(2026-08-10: the funnel bonus is RETIRED —
+superseded by THE WHITELIST's free mint, which is analyzed under A6; nothing
+consideration-linked remains on this row from that carve-out.)* One whitelist interaction DOES
+touch this row: free whitelist mints are EXCLUDED from the tranche-slot count (the schedule
+indexes PAID mints only), so the free program cannot advance the published price.
 **ADOPTED 2026-08-10 — the tranche schedule (LINEAR), and this row is RE-OPENED accordingly
 (`omerta-dynasty-machine-design.md` §10 Shape D; the table is `MINT_TRANCHES` in the code,
 whole-array test-pinned):** a pre-published table of ten discrete price tranches indexed to
@@ -158,7 +162,21 @@ launch plan's bonus tranche for a claim that also pays the 0.01 ETH mint is cons
 (the Tomahawk/free-stock class), so it is analyzed under **A4** as a retail purchase promotion on
 a fixed-price sale, and the BASE drop stays truly unconditional (a claim requires only a
 signature proving control of a snapshotted address); (2) the claim may also assign a cosmetic
-**provenance trait** (row A7 — opt-in, display-only, once per wallet). *Questions for counsel:
+**provenance trait** (row A7 — opt-in, display-only, once per wallet).
+**Fact-pattern amendment 2026-08-10 — THE WHITELIST (founder-directed):** the same snapshot
+claim may also deliver a **one-time FREE identity mint** to each snapshotted wallet — one free
+mint per wallet EVER, consumed on use, lapsing with the same claim window as the drop itself;
+every later mint by that wallet pays the published tranche schedule (A4). This **supersedes and
+RETIRES the funnel bonus**, which also dissolves amendment (1)'s carve-out: there is no longer
+any consideration-linked bonus attached to the claim — the identity mint itself is free, so the
+whole claim flow (drop + free mint + provenance stamp, one signature) is unconditional and stays
+inside this row. Free mints do not consume tranche-schedule slots (the schedule indexes PAID
+mints only), so the whitelist cannot move the published price. The identity granted is the same
+account-bound entitlement described in A2's trophy/entitlement wall. *Additional question for
+counsel: confirm that bundling a free identity mint (a paid product delivered at no charge to
+snapshotted wallets) into the free-distribution claim does not re-introduce the consideration
+analysis — the claimant still pays nothing and does nothing beyond proving control of a
+snapshotted address; and note the MiCA Art. 4(3) question above applies to this leg identically.* *Questions for counsel:
 does a free token distribution at this scale carry registration or jurisdiction exposure (the
 historical airdrop-as-distribution line); does the claim page need the same geofence posture as
 A3's rail; does **MiCA Art. 4(3)** — which removes the offer-to-public exemption where
