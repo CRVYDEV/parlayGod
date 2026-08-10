@@ -130,9 +130,9 @@ assert(preflight({ ...GOOD, TRUST_PROXY: undefined }).warnings.some((w) => /shar
 // Every fee is payable in ETH or in earned $OMR (PLEX), and pre-market the $OMR price is the STATIC
 // floor — it ignores the ETH fee entirely. So raising one without the other silently makes the other
 // rail the cheap way to buy an identity, which is the Sybil bound. The invariant is the implied
-// RATE, and today both pairs imply 500 $OMR/ETH.
+// RATE, and today both pairs imply 3,000 $OMR/ETH.
 assert.deepEqual(preflight(GOOD).warnings.filter((w) => /rails disagree/.test(w)), [],
-  'the shipped defaults agree — 5/0.01 and 50/0.10 both imply 500 $OMR/ETH');
+  'the shipped defaults agree — 30/0.01 and 300/0.10 both imply 3,000 $OMR/ETH');
 assert(preflight({ ...GOOD, MINT_FEE_ETH: '0.025' }).warnings.some((w) => /rails disagree/.test(w)),
   'raising the ETH mint fee alone is caught — the $OMR rail would still sell an identity at the old price');
 assert.deepEqual(

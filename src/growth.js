@@ -10,14 +10,14 @@ import { verifySocial, verifyPostUp, socialProviders, socialTaskAvailable, throt
 import { spendOmr } from './vanity.js';
 
 
-// ── PATHS (§5.1): first pick $10,000 at level ≥5; switching burns 25 $OMR ──
+// ── PATHS (§5.1): first pick $10,000 at level ≥5; switching burns PATH_SWITCH_OMR ──
 export async function choosePath(ch, pathId, client, h) {
   const pt = PATHS.find((x) => x.id === pathId);
   if (!pt) throw new GameError('bad_path', `Pick a real career: ${PATHS.map((x) => x.name).join(', ')}.`);
   if (ch.path === pathId) throw new GameError('same', "That's already your trade.");
   if (levelOf(Number(ch.respect)) < 5) throw new GameError('level', 'Pick a career at level 5.');
   // PATHS v2 — the switch cooldown: home/rival XP rates make hopping careers between activities a
-  // rate arbitrage the 25 $OMR burn alone doesn't price; a week between moves makes it a COMMITMENT
+  // rate arbitrage the switch burn alone doesn't price; a week between moves makes it a COMMITMENT
   if (ch.path && ch.path_at && Date.now() < new Date(ch.path_at).getTime() + PATH_SWITCH_CD_MS)
     throw new GameError('cooldown', 'You just changed careers — the street needs a week to take you seriously.');
   if (!ch.path) {

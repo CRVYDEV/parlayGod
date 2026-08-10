@@ -995,7 +995,7 @@ export const VANITY = {
 // the mark pays to read every funder on their own head (anonymity is purchasable, so is piercing
 // it; the two sinks feed each other). RESPEC: redistributes ALREADY-TRAINED stat points, total
 // conserved, none below the creation base — convenience over re-grinding, zero new power (the
-// path-switch precedent at 25 $OMR). Prices new/tunable — founder sign-off before production.
+// path-switch precedent). Prices new/tunable — founder sign-off before production.
 export const M8 = {
   BOARD_ANON_OMR: 18,   // anonymity on a FRESH contract pot (top-ups inherit the pot's flag, never charged)
   INTEL_PEEK_OMR: 30,   // "who wants me dead?" — funder names + shares on every open pot on you
@@ -4397,7 +4397,7 @@ export const MASTERY = {
 export const PATH_XP_HOME = 1.5;
 export const PATH_XP_RIVAL = 0.6;
 export const PATH_SWITCH_CD_MS = 7 * 24 * 3600 * 1000; // switching careers needs a week between moves
-                                                       // (XP-rate arbitrage made the 25 $OMR burn too cheap a throttle)
+                                                       // (XP-rate arbitrage made the switch burn too cheap a throttle)
 export const PATH_FX = {
   gun:     { home: ['wetwork', 'muscle'],     rival: ['commerce', 'chemistry'],
              fx: { jumpAtk: 1.1, hitEff: 1.15, goodsSell: 0.95 } },
@@ -5027,7 +5027,7 @@ export const TICKER_BALLOT = {
 // "first 1000 mints are .01 ETH or x OMR … next 2000 are .02 ETH and 2x OMR", resolution "let's do
 // your recommendation" = the LINEAR progression). The identity mint's published price table,
 // indexed to CUMULATIVE minted identities. The RULES, each load-bearing:
-//   - ONE implied rate per row, every row (omr/eth == 500 — the preflight two-rails guard's own
+//   - ONE implied rate per row, every row (omr/eth == 3,000 — the preflight two-rails guard's own
 //     number): the effective price is the CHEAPER rail, so a row that broke rank would silently
 //     become the real price. Pinned by test.
 //   - THE FLAT TAIL: past the last row the LAST price HOLDS until the founder publishes an

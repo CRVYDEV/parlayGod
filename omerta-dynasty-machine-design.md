@@ -499,7 +499,7 @@ the $OMR rail rides the existing `plex:%` vocabulary).
 The founder's refinement of Shape A: not a continuous curve — **discrete, pre-published price
 tranches indexed to cumulative mints, both rails moving together**. This is materially better
 than the rejected curve on every axis, and the founder's own example already obeys the lockstep
-law (0.01→5 and 0.02→10 both imply 500 $OMR/ETH — the exact rate the preflight guard pins). It
+law (0.01→30 and 0.02→60 both imply 3,000 $OMR/ETH — the exact rate the preflight guard pins). It
 is designed here as the ADOPTABLE shape, with the one honest cost stated up front: **adopting it
 re-opens A4** (the row's fixed-price predicate becomes a published-schedule predicate — the
 memo carries the proposed amendment and the re-drafted counsel question).
