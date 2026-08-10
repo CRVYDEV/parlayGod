@@ -1,6 +1,8 @@
 # OMERTÀ — Memorandum for legal counsel: the Stock Machine & the Dynasty NFT
 
-**Status: A1–A6 APPROVED (founder assertion 2026-08-09: "Counsel has approved A1-A6"); A7 + A8 OPEN.**
+**Status: A1–A3, A5, A6 APPROVED (founder assertion 2026-08-09: "Counsel has approved A1-A6");
+A4 RE-OPENED 2026-08-10 (the tranche schedule was adopted — the row's own lockstep rule);
+A7 + A8 OPEN.**
 The approval is recorded the project's standing way — as a founder assertion of counsel approval,
 with the written countersignature to file in §5 when it arrives. What it unblocks: **Phase B**
 (the buy keeper + stock bookkeeping) and **the activation burn** are now buildable (chain-dormant
@@ -113,16 +115,20 @@ supply-indexed escalation ("the price rises as more mint") was proposed, evaluat
 **REJECTED** — an auto-rising price is scarcity marketing in mechanical form (the Impact-Theory
 shape) and would re-open this row. The funnel bonus (A6's carve-out) is analyzed here as a retail
 purchase promotion on that fixed-price sale.
-**Proposed refinement 2026-08-10, PENDING FOUNDER ADOPTION — the tranche schedule
-(`omerta-dynasty-machine-design.md` §10 Shape D):** a pre-published table of discrete price
-tranches indexed to cumulative mints ("first 1,000 at 0.01 ETH / 5 $OMR; next 2,000 at 0.02 /
-10; …"), both rails held to one implied rate per row, executed through the existing owner-set
-fee (no contract change). Early-bird framed, no countdown/remaining counters, the banned lexicon
-in force. **Adopting it re-opens this row**, and the question changes to: *does a PUBLISHED
-forward escalation on an uncapped, transferable, TBA-carrying NFT — framed as founding-era
-pricing, with no urgency mechanics and no value language — create the appreciation expectation
-that fixed-price analysis avoided, and what copy/structure keeps it an ordinary early-bird
-discount rather than an investment pitch?*
+**ADOPTED 2026-08-10 — the tranche schedule (LINEAR), and this row is RE-OPENED accordingly
+(`omerta-dynasty-machine-design.md` §10 Shape D; the table is `MINT_TRANCHES` in the code,
+whole-array test-pinned):** a pre-published table of ten discrete price tranches indexed to
+cumulative mints — tier k = k × 0.01 ETH / k × 5 $OMR, tranche sizes growing 1,000 → 10,000
+(cumulative 55,000), **flat tail** beyond the table (the last price holds until a new table is
+published — a finite commitment, never an open-ended escalator). Both rails hold one implied rate
+per row (boot-checked); execution is the existing owner-set fee at each boundary (no contract
+change); the dearest published $OMR price (50) keeps 4.4× headroom under the mission ladder's
+lifetime earnable (the free path survives the whole table, test-pinned). Early-bird framed, no
+countdown/remaining counters, the banned lexicon in force. *The re-opened question: does a
+PUBLISHED forward escalation on an uncapped, transferable, TBA-carrying NFT — framed as
+founding-era pricing, with no urgency mechanics and no value language, bounded by a flat tail —
+create the appreciation expectation that fixed-price analysis avoided, and what copy/structure
+keeps it an ordinary early-bird discount rather than an investment pitch?*
 
 **A5 — Recycled $OMR may be redistributed as play-to-earn rewards.**
 Every in-game $OMR sink recycles to THE DESK (nothing is burned); the founder direction is that
@@ -232,7 +238,7 @@ this memo's outcome:
 | A1 — treasury stock purchases | Confirmed (founder assertion) | written countersignature to file | — | 2026-08-09 |
 | A2 — transferable TBA drops | Confirmed (founder assertion) | written countersignature to file | — | 2026-08-09 |
 | A3 — claim-rail geofence/KYC | Confirmed (founder assertion) | jurisdiction list + KYC depth still to be supplied | — | 2026-08-09 |
-| A4 — uncapped NFT proceeds | Confirmed (founder assertion) | written countersignature to file | — | 2026-08-09 |
+| A4 — uncapped NFT proceeds | RE-OPENED (tranche schedule adopted) | re-review the published-schedule fact pattern | — | 2026-08-10 |
 | A5 — play-pool redistribution | Confirmed (founder assertion) | written countersignature to file | — | 2026-08-09 |
 | A6 — free community distribution (airdrop) | Confirmed (founder assertion) | written countersignature to file | — | 2026-08-09 |
 | A7 — provenance traits (third-party holdings + evocative reference) | | | | |

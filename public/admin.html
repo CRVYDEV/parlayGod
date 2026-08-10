@@ -158,7 +158,7 @@
 
     $('#stamp').textContent = 'as of ' + new Date().toLocaleTimeString();
     renderIntegrity(inv.body); renderEconomy(ov.body, em.body); renderPlayers(ov.body); renderEngagement(eng.body);
-    renderFunnel(fn.body); renderTop(ov.body); renderChain(res.body, vig.body, em.body, rev.body, bnd.body, tre); renderRouter(rtr.body);
+    renderFunnel(fn.body); renderTop(ov.body); renderChain(res.body, vig.body, em.body, rev.body, bnd.body, tre, ov.body); renderRouter(rtr.body);
     renderBackups(ov.body); renderSocial(ov.body); renderCoach(coa.body);
     renderIntegrations(intg.body);
     renderActivity(act.body); renderMod();
@@ -428,7 +428,7 @@
   // ReferenceError and took the entire chain panel down with it: the reserve, extraction-≤-inflow,
   // the staking pool, the Store split, the vault's allocated-≤-held wall and the oracle keeper
   // all rendered as nothing, on the screen a founder opens when something is wrong.
-  function renderChain(res, vig, em, rev, bnd, tre) {
+  function renderChain(res, vig, em, rev, bnd, tre, ov) {
     const v = vig?.invariants || {}, vs = vig?.status || {};
     const extractOk = v.ok !== false;
     $('#p-chain').querySelector('.body').innerHTML =
@@ -464,7 +464,16 @@
       + (bnd ? (`<div class="note" style="margin-top:8px">the daily bond offering</div>`
           + rowHtml('today', bnd.daily
             ? `${fmt(bnd.daily.offeredOmr)} $OMR on offer · ${fmt(bnd.daily.quotedOmr)} quoted · <b>${fmt(bnd.daily.remainingOmr)} left</b>`
-            : `<span class="note">CLOSED — POST /v1/mod/bond/offer {omr} opens today's window</span>`)) : '');
+            : `<span class="note">CLOSED — POST /v1/mod/bond/offer {omr} opens today's window</span>`)) : '')
+      // THE TRANCHE SCHEDULE (Shape D) — tier progress; a boundary is executed BY HAND (one Safe
+      // setFees tx + the two env values), so an off-schedule live pair is flagged loudly.
+      + (ov && ov.mintTier ? (`<div class="note" style="margin-top:8px">the mint tranche (published schedule)</div>`
+          + rowHtml('tier', `${ov.mintTier.tier} of ${ov.mintTier.of} · ${fmt(ov.mintTier.minted)} minted`
+            + (ov.mintTier.flat ? ' · <span class="note">flat tail — the published table is fully minted</span>'
+                                : ` of ${fmt(ov.mintTier.through)}`))
+          + rowHtml('price', ov.mintTier.offSchedule
+            ? `<span style="color:var(--bad)">⚠ OFF SCHEDULE</span> — live Ξ${ov.mintTier.liveEth} / ${ov.mintTier.liveOmr} $OMR, the table says Ξ${ov.mintTier.priceEth} / ${ov.mintTier.priceOmr}`
+            : `Ξ${ov.mintTier.priceEth} / ${ov.mintTier.priceOmr} $OMR <span class="note">both rails on schedule</span>`)) : '');
   }
 
   // THE MONEY ROUTER — WHERE A DOLLAR GOES. The whole declared waterfall (every real-value inflow

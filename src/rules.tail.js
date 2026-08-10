@@ -5022,3 +5022,44 @@ export const TICKER_BALLOT = {
   TICKERS: ['SPY', 'AAPL', 'TSLA', 'NVDA', 'AMZN', 'MSFT'],  // the supported buy list (small + liquid to start)
   DEFAULT: 'SPY',                                             // deadlock/silence buys the broad market
 };
+
+// ═══ THE TRANCHE SCHEDULE (dynasty-machine §10 Shape D — ADOPTED, founder-directed 2026-08-10:
+// "first 1000 mints are .01 ETH or x OMR … next 2000 are .02 ETH and 2x OMR", resolution "let's do
+// your recommendation" = the LINEAR progression). The identity mint's published price table,
+// indexed to CUMULATIVE minted identities. The RULES, each load-bearing:
+//   - ONE implied rate per row, every row (omr/eth == 500 — the preflight two-rails guard's own
+//     number): the effective price is the CHEAPER rail, so a row that broke rank would silently
+//     become the real price. Pinned by test.
+//   - THE FLAT TAIL: past the last row the LAST price HOLDS until the founder publishes an
+//     extension — the schedule is a finite commitment, never an open-ended escalator.
+//   - THE FREE-PATH LAW: no row's omr may reach the mission ladder's lifetime $OMR payout (the
+//     "get made for free" promise, test-pinned in test/made.js against the LIVE MISSIONS table —
+//     max row 50 vs ~220 earnable, 4.4× headroom).
+//   - EXECUTION is the existing machinery, BY HAND at each boundary: one Safe `setFees` tx +
+//     MINT_FEE_ETH/PLEX_MINT_OMR env — plexQuote already scales the $OMR rail off MINT_FEE_ETH, so
+//     no code runs a boundary. The admin chain panel shows tier progress + flags a live pair that
+//     is OFF this schedule; preflight warns on an off-schedule pair at boot.
+// Adoption RE-OPENED counsel-memo row A4 (a published forward schedule on a tradeable asset — the
+// re-drafted question is in the row). Copy rules ride with it: founding-era frame only, never a
+// countdown/"N remaining" counter, the banned lexicon verbatim.
+export const MINT_TRANCHES = [
+  { through: 1000,  eth: 0.01, omr: 5  },
+  { through: 3000,  eth: 0.02, omr: 10 },
+  { through: 6000,  eth: 0.03, omr: 15 },
+  { through: 10000, eth: 0.04, omr: 20 },
+  { through: 15000, eth: 0.05, omr: 25 },
+  { through: 21000, eth: 0.06, omr: 30 },
+  { through: 28000, eth: 0.07, omr: 35 },
+  { through: 36000, eth: 0.08, omr: 40 },
+  { through: 45000, eth: 0.09, omr: 45 },
+  { through: 55000, eth: 0.10, omr: 50 },
+];
+// The current tier for a cumulative minted-identity count. Past the table: the flat tail (the last
+// row holds, `flat: true` so a surface can say "the published schedule is fully minted").
+export const mintTierOf = (minted) => {
+  const i = MINT_TRANCHES.findIndex((t) => Number(minted) < t.through);
+  const last = MINT_TRANCHES.length - 1;
+  return i === -1
+    ? { tier: MINT_TRANCHES.length, ...MINT_TRANCHES[last], flat: true }
+    : { tier: i + 1, ...MINT_TRANCHES[i], flat: false };
+};

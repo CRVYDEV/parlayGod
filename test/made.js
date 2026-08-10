@@ -20,7 +20,7 @@ process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { MADE, MADE_LADDER, madeRungIdx, ACCESS_STAKE, CASINO, DESK, recyclesToDesk, estateTierOf, SPEAKEASY,
-  BUSINESSES, PACING, businessTierOf, isMade, MISSIONS, CONSTANTS, CARS, TRIMS } from '../src/rules.js';
+  BUSINESSES, PACING, businessTierOf, isMade, MISSIONS, CONSTANTS, CARS, TRIMS, MINT_TRANCHES } from '../src/rules.js';
 import { upkeepBps } from '../src/business.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
@@ -193,6 +193,26 @@ const top = MADE_LADDER.RUNGS[MADE_LADDER.RUNGS.length - 1];
 const freeOmrLifetime = MISSIONS.reduce((n, m) => n + Number(m.reward?.omr || 0), 0);
 assert(freeOmrLifetime >= top.min,
   `the top rung (${top.min}) is reachable on mission $OMR alone (${freeOmrLifetime} lifetime) — the CEILING claim in the copy is TRUE`);
+
+// ═══ THE TRANCHE SCHEDULE (dynasty §10 Shape D) — the two row-level laws, pinned here beside the
+// free-path computation they depend on. (1) THE FREE-PATH LAW: no published row's $OMR price may
+// reach what the mission ladder pays lifetime, or "you can get made for free" silently dies at
+// that tier — asserted against the LIVE mission table, so retuning either side fails by name.
+// (2) THE LOCKSTEP LAW as a table constraint: one implied $OMR/ETH rate per row, every row — the
+// effective price is the CHEAPER rail, so a row that broke rank would silently become the real
+// price. Plus the shape: thresholds strictly increasing (mintTierOf's findIndex depends on it).
+{
+  const maxOmr = Math.max(...MINT_TRANCHES.map((t) => t.omr));
+  assert(maxOmr < freeOmrLifetime,
+    `the tranche schedule's dearest $OMR price (${maxOmr}) stays under the mission ladder's lifetime payout (${freeOmrLifetime}) — the free path survives the whole published table`);
+  const rate = MINT_TRANCHES[0].omr / MINT_TRANCHES[0].eth;
+  for (const t of MINT_TRANCHES)
+    assert(Math.abs(t.omr / t.eth - rate) < 1e-6,
+      `tranche row through=${t.through} holds the schedule's one implied rate (${rate} $OMR/ETH) — a row off-rate silently becomes the real price`);
+  for (let i = 1; i < MINT_TRANCHES.length; i++)
+    assert(MINT_TRANCHES[i].through > MINT_TRANCHES[i - 1].through,
+      'tranche thresholds are strictly increasing — mintTierOf depends on it');
+}
 
 // (ii) the shortcut: identical stakes, one made, and the made man reads exactly MADE_RUNGS higher
 const climber = await mk('Cassie Climber');
