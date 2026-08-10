@@ -662,7 +662,7 @@ const SIGNED = [
   ['BROKERS.ACTIVATION_MS', 30 * 24 * 3600 * 1000],
   ['BROKERS.EPOCH_DAYS', 7],
   ['BROKERS.MIN_WEIGHT', 1],
-  ['MINT_TRANCHES', [{"through":1000,"eth":0.01,"omr":30},{"through":3000,"eth":0.02,"omr":60},{"through":6000,"eth":0.03,"omr":90},{"through":10000,"eth":0.04,"omr":120},{"through":15000,"eth":0.05,"omr":150},{"through":21000,"eth":0.06,"omr":180},{"through":28000,"eth":0.07,"omr":210},{"through":36000,"eth":0.08,"omr":240},{"through":45000,"eth":0.09,"omr":270},{"through":55000,"eth":0.1,"omr":300}]],
+  ['MINT_TRANCHES', [{"through":1000,"eth":0.01,"omr":30},{"through":11000,"eth":0.025,"omr":75},{"through":36000,"eth":0.035,"omr":105},{"through":86000,"eth":0.045,"omr":135},{"through":186000,"eth":0.05,"omr":150}]],
   // FAMILY CHARTERS (strategy package) — the asymmetry. Both halves of each trade are levers: the
   // handicap IS the mechanic, so a retune that quietly softened one side would turn a charter back
   // into a free upgrade. A whole-object pin (the multipliers are leaves on array entries).

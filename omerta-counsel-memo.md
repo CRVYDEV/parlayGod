@@ -1,7 +1,7 @@
 # OMERTÀ — Memorandum for legal counsel: the Stock Machine & the Dynasty NFT
 
 **Status: A1–A3, A5, A6 APPROVED (founder assertion 2026-08-09: "Counsel has approved A1-A6");
-A4 RE-OPENED 2026-08-10 (the tranche schedule was adopted — the row's own lockstep rule);
+A4 RE-OPENED 2026-08-10 (the tranche schedule was adopted, then capped at five waves / 0.05 ETH);
 A7 + A8 OPEN; A9–A12 OPEN (THE BANK protocol rows, added 2026-08-10 — open as
 questions, NOT as gates; that build proceeds on the founder's instruction, §2).**
 The approval is recorded the project's standing way — as a founder assertion of counsel approval,
@@ -123,20 +123,29 @@ superseded by THE WHITELIST's free mint, which is analyzed under A6; nothing
 consideration-linked remains on this row from that carve-out.)* One whitelist interaction DOES
 touch this row: free whitelist mints are EXCLUDED from the tranche-slot count (the schedule
 indexes PAID mints only), so the free program cannot advance the published price.
-**ADOPTED 2026-08-10 — the tranche schedule (LINEAR), and this row is RE-OPENED accordingly
+**ADOPTED 2026-08-10 — the tranche schedule, and this row is RE-OPENED accordingly
 (`omerta-dynasty-machine-design.md` §10 Shape D; the table is `MINT_TRANCHES` in the code,
-whole-array test-pinned):** a pre-published table of ten discrete price tranches indexed to
-cumulative mints — tier k = k × 0.01 ETH / k × 5 $OMR, tranche sizes growing 1,000 → 10,000
-(cumulative 55,000), **flat tail** beyond the table (the last price holds until a new table is
-published — a finite commitment, never an open-ended escalator). Both rails hold one implied rate
-per row (boot-checked); execution is the existing owner-set fee at each boundary (no contract
-change); the dearest published $OMR price (50) keeps 4.4× headroom under the mission ladder's
-lifetime earnable (the free path survives the whole table, test-pinned). Early-bird framed, no
-countdown/remaining counters, the banned lexicon in force. *The re-opened question: does a
+whole-array test-pinned). REVISED the same day to FIVE WAVES WITH A PUBLISHED CEILING:** a
+pre-published table of five discrete price waves indexed to cumulative mints — waves of 1,000 /
+10,000 / 25,000 / 50,000 / 100,000 identities at 0.010 / 0.025 / 0.035 / 0.045 / **0.050 ETH**
+(30 / 75 / 105 / 135 / 150 $OMR), **flat tail** beyond the table (the last price holds until a new
+table is published — a finite commitment, never an open-ended escalator). **The material change for
+this row is the CEILING: the escalation TERMINATES at a number stated up front, so the most anyone
+ever pays for an identity is 0.05 ETH, and that is true on the day the table is published.** The
+increments also shrink as the waves widen, so the schedule flattens rather than accelerating; past
+the first thousand it is cheaper at every point than the ten-row ladder it replaces. Both rails hold
+one implied rate per row (boot-checked); execution is the existing owner-set fee at each boundary
+(no contract change); the dearest published $OMR price (150) stays under the mission ladder's
+lifetime earnable, and with the cap no future row can exceed it — the free path is guaranteed by the
+shape rather than re-derived per table (both test-pinned, the ceiling asserted directly). Early-bird
+framed, no countdown/remaining counters, the banned lexicon in force. *The re-opened question: does a
 PUBLISHED forward escalation on an uncapped, transferable, TBA-carrying NFT — framed as
-founding-era pricing, with no urgency mechanics and no value language, bounded by a flat tail —
-create the appreciation expectation that fixed-price analysis avoided, and what copy/structure
-keeps it an ordinary early-bird discount rather than an investment pitch?*
+founding-era pricing, with no urgency mechanics and no value language, bounded at a stated ceiling
+(0.05 ETH) beyond which every later mint pays the same — create the appreciation expectation that
+fixed-price analysis avoided, and what copy/structure keeps it an ordinary early-bird discount
+rather than an investment pitch? We believe the ceiling is materially favourable here, since the
+schedule promises the escalation ENDS rather than continues; please confirm, and say whether the
+cap should be stated in the mint copy itself.*
 
 **A5 — Recycled $OMR may be redistributed as play-to-earn rewards.**
 *(Fact-pattern amendment 2026-08-10 — THE BANK's city leg, `omerta-bank-protocol-design.md` §4.1.
@@ -344,7 +353,7 @@ this memo's outcome:
 | A1 — treasury stock purchases | Confirmed (founder assertion) | written countersignature to file | — | 2026-08-09 |
 | A2 — transferable TBA drops | Confirmed (founder assertion) | written countersignature to file | — | 2026-08-09 |
 | A3 — claim-rail geofence/KYC | Confirmed (founder assertion) | jurisdiction list + KYC depth still to be supplied | — | 2026-08-09 |
-| A4 — uncapped NFT proceeds | RE-OPENED (tranche schedule adopted) | re-review the published-schedule fact pattern | — | 2026-08-10 |
+| A4 — uncapped NFT proceeds | RE-OPENED (tranche schedule adopted, capped at 0.05 ETH) | re-review the published-schedule fact pattern | — | 2026-08-10 |
 | A5 — play-pool redistribution | Confirmed (founder assertion) | written countersignature to file | — | 2026-08-09 |
 | A6 — free community distribution (airdrop) | Confirmed (founder assertion) | written countersignature to file | — | 2026-08-09 |
 | A7 — provenance traits (third-party holdings + evocative reference) | | | | |

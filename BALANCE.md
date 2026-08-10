@@ -5353,42 +5353,62 @@ number in the design (MIN_OMR 1, the day epoch, silent-day-still-buys, no per-ac
 proposed default that becomes a pinned founder lever the day it becomes a constant. INTERNAL
 sizing only — the standing copy rule forbids publishing any value-per-$OMR figure as marketing.
 
-## THE TRANCHE SCHEDULE (dynasty §10 Shape D — ADOPTED 2026-08-10, linear)
+## THE TRANCHE SCHEDULE (dynasty §10 Shape D — ADOPTED 2026-08-10; REVISED same day to FIVE WAVES WITH A CEILING)
 
 The identity mint's published price table, indexed to cumulative minted identities
 (`MINT_TRANCHES`, whole-array pinned in test/levers.js; `mintTierOf` the one reader). Founder
-directive: "first 1000 mints are .01 ETH or x OMR … next 2000 are .02 and 2x", resolved to the
-LINEAR progression on the measured free-path crossing (linear crosses the mission ladder's ~220
-$OMR lifetime earnable at tier 45 ≈ 990k identities — effectively never; doubling crosses at
-tier 7 ≈ 63k — genuinely reachable).
+directive: "first 1000 mints are .01 ETH or x OMR … next 2000 are .02 and 2x", first resolved to
+a ten-row LINEAR ladder, then revised the same day — **"cap it at 5 waves so by wave 5 the maximum
+mint price anyone can pay would be .05"**.
 
-| tier | through (cumulative) | ETH | $OMR |
-|---|---|---|---|
-| 1 | 1,000 | 0.01 | 5 |
-| 2 | 3,000 | 0.02 | 10 |
-| 3 | 6,000 | 0.03 | 15 |
-| 4 | 10,000 | 0.04 | 20 |
-| 5 | 15,000 | 0.05 | 25 |
-| 6 | 21,000 | 0.06 | 30 |
-| 7 | 28,000 | 0.07 | 35 |
-| 8 | 36,000 | 0.08 | 40 |
-| 9 | 45,000 | 0.09 | 45 |
-| 10 | 55,000 | 0.10 | 50 |
+| wave | wave size | through (cumulative) | ETH | $OMR |
+|---|---|---|---|---|
+| 1 | 1,000 | 1,000 | 0.010 | 30 |
+| 2 | 10,000 | 11,000 | 0.025 | 75 |
+| 3 | 25,000 | 36,000 | 0.035 | 105 |
+| 4 | 50,000 | 86,000 | 0.045 | 135 |
+| 5 | 100,000 | 186,000 | 0.050 | 150 |
 
-The laws (each test-pinned): ONE implied rate per row (500 $OMR/ETH — the preflight two-rails
-number; test/made.js), the FLAT TAIL (past row 10 the last price holds until a new table is
-published — a finite commitment), and THE FREE-PATH LAW (max published $OMR 50 < the mission
-ladder's lifetime payout, asserted against the LIVE table — 4.4× headroom; a future extension
-that approaches the ceiling changes the "get made for free" promise + coach rung + codices in
-the SAME commit). Execution is BY HAND at each boundary (one Safe `setFees` tx + the
+**The ceiling is the improvement, not a softening**, and it is worth being precise about why. On the
+open ladder the free-path law held by arithmetic that had to be re-derived at every extension; with
+a cap the dearest row is 150 $OMR against a ~220 lifetime mission payout and *no future row can
+exceed it*, so "you can get made for free" is guaranteed by the SHAPE. And the growth headwind goes:
+the waves widen (1k → 100k) while the increments shrink (+0.015, +0.010, +0.010, +0.005), so the
+curve flattens exactly where a game gets crowded. Past the first thousand it is **cheaper than the
+ladder it replaces at every point** — identity #5,000 pays 0.025 where the old table charged 0.03,
+#20,000 pays 0.035 against 0.06.
+
+**Waves 3 and 4 deviate from the founder's figures, and only for a mechanical reason.** The stated
+0.0333 and 0.0444 do not land whole on the $OMR rail at the schedule's one rate (99.9 and 133.2).
+A fractional PLEX floor matters because the rail is set BY HAND at each boundary — a GM who typed
+the round number would trip the off-schedule warning over a 0.1% rounding, and a warning that fires
+on rounding is one people learn to ignore. 0.035 / 0.045 are the nearest pair whole on both rails
+(+5.1% and +1.4%). Restoring the exact figures is the `eth` column plus `omr` 99.9 / 133.2 — the
+rate law passes either way.
+
+Sizing, for the record: at a fully-minted 186,000 the schedule raises **8,312 ETH** against the old
+ladder's 3,850 to 55,000 — more in total, cheaper per identity, and bounded at the top.
+
+The laws (each test-pinned in test/made.js): ONE implied rate per row (**3,000 $OMR/ETH** — the
+preflight two-rails number), the FLAT TAIL (past wave 5 the last price holds until a new table is
+published — a finite commitment), THE FREE-PATH LAW (dearest published $OMR 150 < the mission
+ladder's lifetime payout, asserted against the LIVE table), and **THE CEILING** (the last row IS
+0.05, no row exceeds it, and the millionth identity still pays it — asserted directly, because the
+cap is the claim the whole shape rests on; raising it is a new promise, not a retune). Execution is
+BY HAND at each boundary (one Safe `setFees` tx + the
 MINT_FEE_ETH/PLEX_MINT_OMR env pair — plexQuote scales the $OMR rail off the ETH fee
 automatically); preflight warns on an off-schedule live pair, and the admin chain panel's tier
 line flags OFF SCHEDULE. §10.4: zero surface (the ETH rail is out-of-band; the $OMR rail rides
 the existing `plex:%` sink, which RECYCLES to the desk — the v3 revenue decision, kept).
 Counsel: adopting the schedule RE-OPENED memo row A4 (the published-forward-escalation question);
 the copy rules (founding-era frame, no countdown/"N remaining" counters, the banned lexicon) are
-part of the fact pattern counsel reviews. The LIVE price today is tier 1 — nothing changes at the
-till until the 1,001st identity.
+part of the fact pattern counsel reviews. **The ceiling strengthens that position rather than
+complicating it** — the hardest version of the A4 question is whether a forward schedule reads as a
+promise that later buyers pay more indefinitely, and a published cap answers it in the fact pattern
+itself: the escalation terminates, at a number stated up front, and the most anyone ever pays is
+0.05 ETH. Worth putting in front of counsel as the amended pattern rather than leaving the row
+drafted against the open ladder. The LIVE price today is wave 1 — nothing changes at the till until
+the 1,001st identity.
 
 ## THE SINK RE-DENOMINATION (founder-directed 2026-08-10, ×6 — APPLIED)
 

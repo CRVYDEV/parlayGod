@@ -20,7 +20,8 @@ process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { MADE, MADE_LADDER, madeRungIdx, ACCESS_STAKE, CASINO, DESK, recyclesToDesk, estateTierOf, SPEAKEASY,
-  BUSINESSES, PACING, businessTierOf, isMade, MISSIONS, CONSTANTS, CARS, TRIMS, MINT_TRANCHES } from '../src/rules.js';
+  BUSINESSES, PACING, businessTierOf, isMade, MISSIONS, CONSTANTS, CARS, TRIMS, MINT_TRANCHES,
+  mintTierOf } from '../src/rules.js';
 import { upkeepBps } from '../src/business.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
@@ -214,6 +215,24 @@ assert(freeOmrLifetime >= top.min,
   for (let i = 1; i < MINT_TRANCHES.length; i++)
     assert(MINT_TRANCHES[i].through > MINT_TRANCHES[i - 1].through,
       'tranche thresholds are strictly increasing — mintTierOf depends on it');
+
+  // (3) THE CEILING (founder-directed 2026-08-10: "cap it at 5 waves so by wave 5 the maximum mint
+  // price anyone can pay would be .05"). The cap is the whole reason the schedule reads as a
+  // founding-era discount rather than an escalator, and it is what makes the free-path law
+  // structural instead of arithmetic that must be re-checked at every extension. It is only true
+  // if the flat tail holds the LAST row — so assert the promise directly, at a count far past the
+  // published table, in the terms a player would state it: nobody ever pays more than this.
+  const CEILING_ETH = 0.05;
+  const last = MINT_TRANCHES[MINT_TRANCHES.length - 1];
+  assert.equal(last.eth, CEILING_ETH,
+    `the published table's dearest row IS the ceiling (${CEILING_ETH} ETH) — raising it is a new promise, not a retune`);
+  for (const t of MINT_TRANCHES)
+    assert(t.eth <= CEILING_ETH, `tranche row through=${t.through} is at or under the ${CEILING_ETH} ETH ceiling`);
+  const beyond = mintTierOf(last.through * 10);
+  assert.equal(beyond.flat, true, 'past the published table the schedule is flat, not extrapolated');
+  assert.equal(beyond.eth, CEILING_ETH,
+    `the millionth identity still pays the ceiling (${CEILING_ETH} ETH) — the flat tail is what makes "the most anyone ever pays" true`);
+  assert.equal(beyond.omr, last.omr, 'and the $OMR rail holds with it, so the two rails cannot drift apart in the tail');
 }
 
 // (ii) the shortcut: identical stakes, one made, and the made man reads exactly MADE_RUNGS higher

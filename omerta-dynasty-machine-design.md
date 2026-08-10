@@ -550,13 +550,38 @@ discipline above)** < continuous auto-curve (Shape A — rejected, stays rejecte
 residual that no copy rule removes: the schedule itself tells buyers the price will rise, on a
 tradeable asset — that is why the row goes back to counsel rather than being self-certified.
 
-**ADOPTED 2026-08-10 (founder: "let's do your recommendation" — the LINEAR progression).** The
-published table is **`MINT_TRANCHES`** in the code (ten rows, tier k = k × 0.01 / k × 5, tranche
-sizes 1,000 → 10,000, cumulative 55,000; whole-array test-pinned) with `mintTierOf` as the one
-reader. The flat tail holds the last price beyond the table. Built with it: the preflight
-off-schedule warning (a rate-clean pair the table never promised — 0.015/7.5 — is caught at
-boot), the admin chain panel's tier-progress line with an OFF-SCHEDULE flag (the GM's instrument
-for executing a boundary), and the two row-level laws pinned in `test/made.js` beside the
-free-path computation they depend on (max published $OMR 50 vs ~220 earnable — 4.4× headroom;
-one implied rate per row). A4 is RE-OPENED in the memo with the amended fact pattern. The LIVE
-price today is tier 1 — nothing changes at the till until the 1,001st identity.
+**ADOPTED 2026-08-10 (founder: "let's do your recommendation" — the LINEAR progression), then
+REVISED the same day to FIVE WAVES WITH A HARD CEILING** (founder: *"cap it at 5 waves so by wave 5
+the maximum mint price anyone can pay would be .05"*). The published table is **`MINT_TRANCHES`**
+in the code — five rows, waves of 1,000 / 10,000 / 25,000 / 50,000 / 100,000 at
+0.010 / 0.025 / 0.035 / 0.045 / 0.050 ETH (30 / 75 / 105 / 135 / 150 $OMR), cumulative 186,000,
+whole-array test-pinned — with `mintTierOf` as the one reader and the flat tail holding **0.05
+forever** beyond it.
+
+**The ceiling settles the progression question the LINEAR-vs-doubling analysis above was trying to
+answer, and settles it better than either.** That analysis picked LINEAR because doubling crossed
+the free-path ceiling at a reachable ~63k identities while linear crossed it at an unreachable
+~990k — but both answers were *arithmetic about where a rising price eventually breaks the promise*.
+A cap removes the crossing from the shape: the dearest row is 150 $OMR against ~220 earnable and
+**no future row can ever exceed it**, so the free path is guaranteed structurally rather than
+re-derived at each extension. It also reverses the growth headwind that counted against Shape A —
+the waves widen while the increments shrink, so past the first thousand the schedule is cheaper
+than the ladder it replaces at every point (#5,000 pays 0.025 against 0.03; #20,000 pays 0.035
+against 0.06).
+
+Waves 3 and 4 are the only edit to the founder's figures: 0.0333 and 0.0444 do not land whole on
+the $OMR rail at 3,000 $OMR/ETH (99.9 and 133.2), and a fractional PLEX floor matters because the
+rail is set by hand at each boundary — a GM typing the round number would trip the off-schedule
+warning over a 0.1% rounding. 0.035 / 0.045 are the nearest pair whole on both rails (+5.1%,
++1.4%); restoring the exact figures is the `eth` column plus `omr` 99.9 / 133.2.
+
+Built with it: the preflight off-schedule warning (a rate-clean pair the table never promised —
+0.015/7.5 — is caught at boot), the admin chain panel's tier-progress line with an OFF-SCHEDULE
+flag (the GM's instrument for executing a boundary), and the row-level laws pinned in
+`test/made.js` beside the free-path computation they depend on: one implied rate per row, the
+free-path law (dearest 150 vs ~220 earnable), and **the ceiling itself** — the last row IS 0.05, no
+row exceeds it, and the millionth identity still pays it, so raising the cap fails by name as a new
+promise rather than passing as a retune. A4 is RE-OPENED in the memo with the amended fact pattern,
+and the cap **strengthens** that position: the hardest form of the A4 question is whether a forward
+schedule promises indefinitely-rising prices, and a published ceiling answers it in the pattern
+itself. The LIVE price today is wave 1 — nothing changes at the till until the 1,001st identity.

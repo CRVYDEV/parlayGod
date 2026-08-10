@@ -11211,6 +11211,37 @@ rides the existing `plex:%` desk-recycled sink — the v3 revenue decision kept)
 flipped to RE-OPENED with the amended fact pattern (published forward escalation, founding-era
 framed, flat-tail bounded). The LIVE price is tier 1 — nothing changes at the till until the
 1,001st identity.
+**REVISED THE SAME DAY TO FIVE WAVES WITH A HARD CEILING** (founder: *"cap it at 5 waves so by wave
+5 the maximum mint price anyone can pay would be .05"*): waves of 1,000 / 10,000 / 25,000 / 50,000 /
+100,000 at 0.010 / 0.025 / 0.035 / 0.045 / **0.050 ETH** (30 / 75 / 105 / 135 / 150 $OMR),
+cumulative 186,000, the flat tail holding 0.05 forever. **The ceiling is the improvement, and it
+settles the progression question the LINEAR-vs-doubling analysis was only approximating**: that
+analysis picked LINEAR because doubling crossed the free-path ceiling at a reachable ~63k identities
+while linear crossed at ~990k — but both were arithmetic about WHERE a rising price eventually
+breaks the promise, and a cap removes the crossing from the SHAPE (dearest row 150 $OMR vs the
+~220 lifetime mission payout, and no future row can exceed it, so "you can get made for free" is
+guaranteed structurally rather than re-derived per table). It also reverses the growth headwind that
+counted against Shape A — the waves WIDEN while the increments SHRINK (+0.015/+0.010/+0.010/+0.005),
+so past the first thousand it is CHEAPER than the ladder it replaces at every point (#5,000 pays
+0.025 against 0.03; #20,000 pays 0.035 against 0.06). Sizing: 8,312 ETH at a fully-minted 186,000
+against the old ladder's 3,850 to 55,000 — more in total, cheaper per identity, bounded at the top.
+**Waves 3 and 4 are the only edit to the founder's figures, for a mechanical reason**: 0.0333 and
+0.0444 do not land whole on the $OMR rail at the schedule's one rate (99.9 and 133.2), and a
+fractional PLEX floor matters because the rail is set BY HAND at each boundary — a GM typing the
+round number would trip the off-schedule warning over a 0.1% rounding, and **a warning that fires on
+rounding is one people learn to ignore**; 0.035/0.045 are the nearest pair whole on both rails
+(+5.1%, +1.4%), and restoring the exact figures is the `eth` column plus `omr` 99.9/133.2 (the rate
+law passes either way). **A THIRD LAW joined the two row-level ones** — THE CEILING, asserted
+directly because it is the claim the whole shape rests on: the last row IS 0.05, no row exceeds it,
+and the MILLIONTH identity still pays it (the flat tail is what makes "the most anyone ever pays"
+true), mutation-verified both ways — a sixth wave at 0.075 and an extrapolating tail each fail by
+name. Counsel: the cap **strengthens** the re-opened A4 rather than complicating it (the hardest
+form of that question is whether a forward schedule promises indefinitely-rising prices, and a
+published ceiling answers it in the fact pattern itself), so the memo's row, header, status table
+and re-drafted question all carry the amendment. Found en route: **BALANCE's own tranche table was
+doubly stale** — it still carried the pre-re-denomination $OMR column (5…50) and the old 500
+$OMR/ETH rate, missed by the re-denomination pass because that pass read `src/`, not the decision
+sheet's tables; rewritten whole.
 
 **THE CLAWBACK — the airdrop's unclaimed-reversion mechanism, specified (founder-directed
 2026-08-10: "a function that allows us to clawback the tokens if the wallet holding it hasn't

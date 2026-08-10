@@ -5024,9 +5024,25 @@ export const TICKER_BALLOT = {
 };
 
 // ═══ THE TRANCHE SCHEDULE (dynasty-machine §10 Shape D — ADOPTED, founder-directed 2026-08-10:
-// "first 1000 mints are .01 ETH or x OMR … next 2000 are .02 ETH and 2x OMR", resolution "let's do
-// your recommendation" = the LINEAR progression). The identity mint's published price table,
-// indexed to CUMULATIVE minted identities. The RULES, each load-bearing:
+// "first 1000 mints are .01 ETH or x OMR … next 2000 are .02 ETH and 2x OMR"; REVISED the same day
+// to FIVE WAVES WITH A HARD CEILING — "cap it at 5 waves so by wave 5 the maximum mint price anyone
+// can pay would be .05"). The identity mint's published price table, indexed to CUMULATIVE minted
+// identities.
+//
+// WHY THE CEILING IS THE IMPROVEMENT, not a softening. The open LINEAR ladder it replaces was
+// defensible but had two costs the cap removes outright:
+//   - THE FREE-PATH LAW BECOMES STRUCTURAL. On the old ladder the dearest row was 300 $OMR and the
+//     law held by arithmetic that had to be re-checked at every extension. Here the dearest row is
+//     150 against a ~220 lifetime mission payout, and no future row can ever exceed it, so "you can
+//     get made for free" is now guaranteed by the SHAPE rather than re-derived per table.
+//   - THE GROWTH HEADWIND GOES. The waves widen (1k → 100k) while the increments SHRINK
+//     (+0.015, +0.010, +0.010, +0.006), so the curve flattens exactly where a game gets crowded.
+//     Past the first thousand it is cheaper than the ladder it replaces at every point — #5,000
+//     pays 0.025 where the old table charged 0.03, #20,000 pays 0.035 against 0.06.
+// The ceiling is what makes it a founding-era discount rather than an escalator: the most anyone
+// ever pays for an identity is 0.05 ETH, and that is true on the day the table is published.
+//
+// The RULES, each load-bearing:
 //   - ONE implied rate per row, every row (omr/eth == 3,000 — the preflight two-rails guard's own
 //     number): the effective price is the CHEAPER rail, so a row that broke rank would silently
 //     become the real price. Pinned by test.
@@ -5034,7 +5050,7 @@ export const TICKER_BALLOT = {
 //     extension — the schedule is a finite commitment, never an open-ended escalator.
 //   - THE FREE-PATH LAW: no row's omr may reach the mission ladder's lifetime $OMR payout (the
 //     "get made for free" promise, test-pinned in test/made.js against the LIVE MISSIONS table —
-//     max row 50 vs ~220 earnable, 4.4× headroom).
+//     dearest row 150 vs ~220 earnable, and with the ceiling it can never rise again).
 //   - EXECUTION is the existing machinery, BY HAND at each boundary: one Safe `setFees` tx +
 //     MINT_FEE_ETH/PLEX_MINT_OMR env — plexQuote already scales the $OMR rail off MINT_FEE_ETH, so
 //     no code runs a boundary. The admin chain panel shows tier progress + flags a live pair that
@@ -5042,17 +5058,21 @@ export const TICKER_BALLOT = {
 // Adoption RE-OPENED counsel-memo row A4 (a published forward schedule on a tradeable asset — the
 // re-drafted question is in the row). Copy rules ride with it: founding-era frame only, never a
 // countdown/"N remaining" counter, the banned lexicon verbatim.
+// The founder's waves are 1k / 10k / 25k / 50k / 100k at .01 / .025 / .0333 / .0444 / .05 ETH.
+// Waves 3 and 4 are the only edit: .0333 and .0444 do not land whole on the $OMR rail at the
+// schedule's one rate (they price at 99.9 and 133.2), and a fractional PLEX floor matters because
+// the rail is set BY HAND at each boundary — a GM who types the round number would trip the
+// off-schedule warning over a 0.1% rounding, and a warning that fires on rounding is one people
+// learn to ignore. .035 and .045 are the nearest pair whole on both rails (+5.1% and +1.4% against
+// the founder's figures). Restoring the exact figures is this table's `eth` column plus omr 99.9 /
+// 133.2 — the rate law passes either way.
 export const MINT_TRANCHES = [
-  { through: 1000,  eth: 0.01, omr: 30  },
-  { through: 3000,  eth: 0.02, omr: 60 },
-  { through: 6000,  eth: 0.03, omr: 90 },
-  { through: 10000, eth: 0.04, omr: 120 },
-  { through: 15000, eth: 0.05, omr: 150 },
-  { through: 21000, eth: 0.06, omr: 180 },
-  { through: 28000, eth: 0.07, omr: 210 },
-  { through: 36000, eth: 0.08, omr: 240 },
-  { through: 45000, eth: 0.09, omr: 270 },
-  { through: 55000, eth: 0.10, omr: 300 },
+  { through: 1000,   eth: 0.01,  omr: 30  },  // wave 1 — the first thousand
+  { through: 11000,  eth: 0.025, omr: 75  },  // wave 2 — next 10,000
+  { through: 36000,  eth: 0.035, omr: 105 },  // wave 3 — next 25,000
+  { through: 86000,  eth: 0.045, omr: 135 },  // wave 4 — next 50,000
+  { through: 186000, eth: 0.05,  omr: 150 },  // wave 5 — next 100,000, and the CEILING: the flat
+                                              // tail holds here, so 0.05 is the most anyone ever pays
 ];
 // The current tier for a cumulative minted-identity count. Past the table: the flat tail (the last
 // row holds, `flat: true` so a surface can say "the published schedule is fully minted").
