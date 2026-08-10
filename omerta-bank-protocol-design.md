@@ -313,11 +313,42 @@ its reward is linear in N: **identical ROI to an honest player.** That is the be
 without identity, and here it is *sufficient*, because this pool is funded by borrowers — a farm
 taking its proportional share of somebody else's money is simply a player.
 
-**The metric is a sign-off item**, with these as hard requirements rather than preferences:
-cooldown-bounded; spanning multiple systems so breadth is required; **linear**; agents and NPC
-residents excluded (the standing exclusion on every legend surface). The leading candidate is
-**mastery XP** (`masteries` / `mastery_legend`) — it accrues only on actions that already cost a
-bounded resource, spans ten tracks, is account-level, and survives death.
+### 4.2.1 THE METRIC, LOCKED (founder-directed 2026-08-10) — `ACTIVITY` in `src/rules.tail.js`
+
+**A player's epoch score is the sum of mastery XP from GAME-THROTTLED actions only.** Three rules,
+each pinned (`test/levers.js`) and each mutation-verified (`test/activity.js`, the 91st suite):
+
+**(a) `TAGS` is an explicit, fail-closed allowlist — and it is the severance wall.** Raw mastery XP
+was *not* safe, and the reason was found in code rather than assumed: `src/casino.js` shows the
+Madame's tier-1 perk **comps the nerve on dice (:116) and blackjack (:844)**, and `sellGood` carries
+no nerve/energy/cooldown check at all. So for anyone with Madame standing, den and commerce XP are
+bounded only by cash and HTTP round trips — which would let **cash buy a larger share of the
+bought-$OMR pool**, reopening the tokenomics-v2 severance. (The pool is fixed, so nothing is
+*created* and the landing page's claim stays true — but the wall's own words are "at any price".)
+The rule: **an action scores only if the GAME throttles it** — nerve, energy, a cooldown, or a hard
+per-day cap. *Nobody can buy wall-clock.* 22 tags qualify; `dice`, `blackjack`, `sell` and `fill`
+are excluded, each with its reason recorded at the list. A tag absent from the list scores **zero**,
+so a future action contributes nothing until somebody deliberately adds it (the
+`DESK.SINK_REASONS` discipline: one explicit list, default "no").
+
+**(b) The weight is linear and uncapped** — proven, not asserted: splitting one player's effort
+across three accounts yields the *identical* total (588 = 588 in the suite). Doubling effort exactly
+doubles the score. The test fails by name if a cap is ever reintroduced.
+
+**(c) `MIN_TRACKS` (3) is a GATE, not a cap.** Scoring in at least three distinct trades is
+required to qualify. Measured: a 200-crime single-loop grinder scores 600 and **does not qualify**;
+a broader player scoring 305 across four trades does. A gate charges a fixed cost *per account*
+(Sybil-negative) and never clips an honest player's payout (which is what makes a cap
+Sybil-positive). `MIN_SCORE` (25) refuses dust and is likewise a floor, never a ceiling — the suite
+asserts no key in the block is even *named* like a cap.
+
+Agents and NPC residents are excluded, as on every other legend surface.
+
+**Still owed before the leg goes live:** a sim probe (P9.35) measuring the realistic daily ceiling —
+the theoretical maximum is dominated by nerve regen (6/min → 8,640 nerve/day) and lands near
+~9,000 XP/day for a player who spends every regenerating point, but the *realistic* engaged figure
+is the number that sizes a farm's cost, and this project's rule is that faucet-adjacent numbers are
+measured rather than reasoned about.
 
 ### 4.3 The rail, and why §10.4 does not move
 
