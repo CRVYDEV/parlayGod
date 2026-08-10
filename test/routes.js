@@ -48,7 +48,7 @@ const PUBLIC = {
   'GET /v1/market': 'the Black Market board is a public order book',
   'GET /v1/market/prices': 'the deterministic §7.11 price surface — knowable by design',
   'GET /v1/online': 'the "N in the city" presence badge on the landing page',
-  'GET /v1/plex/price': 'the public PLEX quote (market-linked, moves nothing)',
+  'GET /v1/plex/price': 'the retired PLEX quote — a tombstone stating ETH-only (moves nothing)',
   'GET /v1/rules': 'the public rulebook — server stays authoritative, odds knowledge moves no roll',
   'GET /v1/seasons': 'THE SEASON HAS AN ENDING — the clock and the roll of past champions. A deadline '
     + 'nobody can read is not a deadline, and the record is the whole point of the arc',

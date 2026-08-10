@@ -18,38 +18,13 @@ export function recruitRankOf(n) {
   return rank;
 }
 
-// ── THE GENESIS RATE — the pre-market oracle print ──────────────────────────────────────────────
-// (founder-directed 2026-08-10: "how can we make it so the OMR amount adjusts to whatever the value
-// of ETH is at the time".) Every real-money fee in this game is denominated in ETH and payable on a
-// second rail in $OMR. The $OMR side is therefore never a price of its own — it is a CONVERSION,
-// `feeEth × (OMR per ETH) × premium`, and `plexQuote`/`plexPackageQuote` have always computed it
-// that way from the latest buyback print. What they lacked was a correct rate BEFORE a market
-// exists, and the static floors that stood in for one were never derived from an exchange rate at
-// all: they were hand-set, then carried along by the ×6 sink re-denomination, which is a factor
-// about IN-GAME feel and says nothing about what an ETH is worth.
-//
-// Measured against the locked launch parameters (100M supply, $1.7M FDV → 205,882 $OMR/ETH), the
-// tree held THREE disagreeing rates: the mint/respawn floors implied 3,000 $OMR/ETH (68.6× cheap),
-// the Store's floor 30,000 (6.9× cheap), and the market 205,882. Since the effective price is
-// always the CHEAPER rail, that made the $OMR rail the real price of every fee at ~1/69th — a
-// 0.01 ETH ($35) mint payable for 30 $OMR ($0.51), which collapses the ETH revenue line the router
-// splits and prices the Sybil bound at a rounding error.
-//
-// So there is ONE rate, and it is this. Pre-market it stands in for the oracle; the moment a
-// buyback prints, `max(floor, feeEth × oracle × premium)` takes over and the floor stops binding.
-// Same formula on both sides of the market's existence — which is what makes the $OMR amount track
-// ETH automatically, including across a tranche boundary (the fee moves, the $OMR rail follows,
-// with no second env value to set by hand).
-//
-// It is ETH-denominated, so it does not move when ETH moves against the dollar. A fee is 0.01 ETH
-// whatever that is worth in USD — pegging the FEE to a dollar value is a separate decision and
-// would need a USD oracle this game deliberately does not have.
-export const PLEX_GENESIS_OMR_PER_ETH = Number(process.env.PLEX_GENESIS_OMR_PER_ETH || 205882);
-// The pre-market quote for an ETH-denominated fee. `premiumBps` is the caller's own premium (the
-// ETH rail must stay the economical one — ETH funds the pool, $OMR burns supply at a markup), so a
-// floor that omitted it would make $OMR the cheap rail again by exactly the premium.
-export const genesisOmrFor = (feeEth, premiumBps = 12000) =>
-  Math.round(Number(feeEth) * PLEX_GENESIS_OMR_PER_ETH * Number(premiumBps) / 10000);
+// ── THE GENESIS RATE — retired with the bridge it existed for ───────────────────────────────────
+// This block held ONE $OMR-per-ETH conversion (205,882 — the locked launch price) so the two rails
+// of every real-money fee could not disagree. The bridge is gone (founder-directed 2026-08-10: fees
+// are ETH only), so the conversion has nothing left to convert: there is no second rail to keep in
+// lockstep, no floor to derive, and no rate for a guard to compare. Deleted rather than kept as a
+// value nothing reads — the launch price lives where it belongs, in BALANCE.md and the launch
+// sequence's G-1, and comes back with a reader the day the GenesisOracle is built.
 
 export const CONSTANTS = {
   // Randomized starting build — every fresh character rolls a UNIQUE distribution of the SAME
@@ -2258,7 +2233,7 @@ export const STORE = {
     { sku: 'patron', name: "Patron's Ring", priceEth: 0.10, grant: { patron: true },
       blurb: 'A permanent patron badge — a quiet flex on every screen you appear.' },
     // ── the Speakeasy COSMETIC DECOR tier (step three) — an account-level style unlock (survives death),
-    // applied to your club (display-only, zero gameplay). Payable in ETH (dormant paywall) or PLEX ($OMR).
+    // applied to your club (display-only, zero gameplay). Payable in ETH (dormant paywall).
     { sku: 'decor_deco', name: 'Art Deco Decor', priceEth: 0.02, grant: { cosmetic: 'deco' },
       blurb: 'A sunburst-and-chrome Art Deco fit-out for your club — pure style, no power.' },
     { sku: 'decor_gilded', name: 'Gilded Age Decor', priceEth: 0.04, grant: { cosmetic: 'gilded' },
@@ -2267,23 +2242,17 @@ export const STORE = {
       blurb: 'Deep velvet and low light — the Midnight room. Cosmetic only.' },
   ],
 };
-// PLEX-for-packages: pay a Store SKU's fee from EARNED $OMR instead of ETH (the EVE "pay your rent in
-// ISK" path — ETH payers fund the Vig, $OMR payers BURN supply; both get the same entitlement). Price =
-// max(floor, feeEth × latest-buyback-oracle × premium) — market-linked like the vig PLEX, with a static
-// $OMR-per-ETH floor before the market prints a price. Sign-off levers.
-// The floor is the SAME conversion the market path does, with the genesis rate standing in for the
-// oracle (see PLEX_GENESIS_OMR_PER_ETH). It was hand-set at 30,000 — 6.9× under the market — which
-// made $OMR the cheap rail for every SKU pre-market, the same defect the mint rail had at 68.6×.
-STORE.PLEX_PREMIUM_BPS = Number(process.env.STORE_PLEX_PREMIUM_BPS || 12000); // 1.2× the ETH-equivalent
-STORE.PLEX_FLOOR_OMR_PER_ETH = Number(process.env.STORE_PLEX_FLOOR
-  || PLEX_GENESIS_OMR_PER_ETH * STORE.PLEX_PREMIUM_BPS / 10000);
+// PLEX-for-packages is RETIRED (founder-directed 2026-08-10) — the Store is ETH only, so its two
+// $OMR-conversion levers are gone with the rail that read them. A Store SKU is a real-money PRODUCT
+// whose whole purpose is the four-way revenue split; paying for it in $OMR routed the purchase around
+// that split entirely, and since v3 step 2 it did not even burn (`plex:%` recycles to the desk).
 export const packageOf = (sku) => STORE.PACKAGES.find((p) => p.sku === sku) || null;
 export const passActive = (a, now = Date.now()) => !!a?.pass_until && new Date(a.pass_until).getTime() > now;
 
 // ── THE PATRON PROGRAM (Store Tier-4) — the off-chain backer-prestige ladder over the Store. patron_spent
 // is a lifetime ETH-equivalent contribution meter (bumped only on REAL contributions — a txHash'd ETH
-// purchase or a PLEX burn — the txHash-gate precedent, so a comp can't fabricate a top benefactor). PURE
-// STATUS: no new §10.4 reason (the PLEX discount rides the EXISTING plex:% burn — a smaller sink, no mint).
+// purchase — the txHash-gate precedent, so a comp can't fabricate a top benefactor). PURE STATUS: no new
+// §10.4 reason. `plexDiscountBps` shipped at 0 and its rail is retired — the tier NAMES are the program.
 // plexDiscountBps SHIPS AT 0 (pure status); the armed values are the one flagged sign-off lever. All numbers
 // are founder sign-off levers (cosmetic-axis, the family-seal/hitman-rep precedent).
 export const PATRON = {
@@ -2514,7 +2483,7 @@ export const SPEAKEASY = {
       { min: 300, name: 'High Roller' }, { min: 800, name: 'Big Shot' }, { min: 2000, name: 'King of the Night' },
     ],
     // ── step four — renown PERK (access/status, never power): EARNED decor styles unlocked by renown (no
-    // ETH/PLEX — a cosmetic you earn by being seen). id → the renown threshold to apply it. Style-name in DECOR_STYLES.
+    // ETH — a cosmetic you earn by being seen). id → the renown threshold to apply it. Style-name in DECOR_STYLES.
     STYLE_UNLOCKS: { house: 800, crown: 2000 },
   },
   // ── step three — the ETH COSMETIC DECOR styles (Store SKUs grant the account-level unlock; the owner
@@ -4603,7 +4572,7 @@ export const CAREER = {
     { id: 'don', name: 'The Don', capstone: 60000, tasks: [
       { id: 'dn_legend',  name: 'Build a legend',           cash: 20000, how: 'Any lifetime legend past $250,000 — smuggled, product moved, or racket income.', tab: 'city' },
       { id: 'dn_master',  name: 'Master a trade',           cash: 20000, how: 'Any trade to level 25 — The Trades on The Life.', tab: 'life' },
-      { id: 'dn_dynasty', name: 'Get made for good',        cash: 20000, how: 'Mint the identity — the bloodline made permanent (ETH, or earned $OMR via PLEX).', tab: 'portfolio' },
+      { id: 'dn_dynasty', name: 'Get made for good',        cash: 20000, how: 'Mint the identity — the bloodline made permanent. The fee is ETH; the mission ladder grants a credit outright.', tab: 'portfolio' },
       { id: 'dn_monument',name: 'Put your name in stone',   cash: 20000, how: 'Contribute to the Megaproject — The City. The plaque is forever.', tab: 'city' },
       { id: 'dn_champ',   name: 'Take a crown',             cash: 20000, how: '10 boxing wins, 10 race wins, or 5 duel wins — any champion’s record.', tab: 'boxing' },
       { id: 'dn_name',    name: 'Become a level-40 name',   cash: 20000, how: 'Level 40. The city knows who you are.', tab: 'streets' },

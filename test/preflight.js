@@ -126,23 +126,21 @@ assert(warn.warnings.some((w) => /MOD_KEY is short/.test(w)), 'a weak mod key is
 assert(preflight({ ...GOOD, TRUST_PROXY: undefined }).warnings.some((w) => /shared bucket/.test(w)),
   'the collapsed per-IP throttle behind a proxy is called out');
 
-// ── THE RESPAWN'S TWO RAILS AGREE ───────────────────────────────────────────────────────────────
-// A fee payable in ETH or in earned $OMR (PLEX) is always priced by the CHEAPER rail, and pre-market
-// the $OMR price is the STATIC floor — it ignores the ETH fee entirely. So raising one without the
-// other silently makes the other rail the real price.
-//
-// THE MINT IS NOT IN THIS CHECK ANY MORE: it has no $OMR rail (founder-directed 2026-08-10), which is
-// the stronger version of the same fix — the surest way to keep two rails in agreement about the
-// Sybil bound is for it to have one. What remains is the respawn, a repeatable consumable.
-assert.deepEqual(preflight(GOOD).warnings.filter((w) => /rails disagree/.test(w)), [],
-  'the shipped default derives from the one genesis rate, so it sits on it');
-assert(preflight({ ...GOOD, RESPAWN_FEE_ETH: '0.25' }).warnings.some((w) => /rails disagree/.test(w)),
-  'raising the ETH respawn fee alone is caught — the $OMR rail would still sell insurance at the old price');
-assert.deepEqual(
-  preflight({ ...GOOD, RESPAWN_FEE_ETH: '0.25', PLEX_RESPAWN_OMR: String(Math.round(0.25 * 205882 * 1.2)) }).warnings.filter((w) => /rails disagree/.test(w)),
-  [], 'moving both together is clean — the guard is about the rate, not about any particular price');
-assert.deepEqual(preflight({ ...GOOD, RESPAWN_FEE_ETH: '0.25', PLEX_RESPAWN_OMR: '60000' }).warnings.filter((w) => /rails disagree/.test(w)),
-  [], 'and a rounded-off price is fine — the band is 5%, so nobody is nagged for rounding');
+// THE TWO-RAILS GUARD IS GONE, and its absence is the fix rather than a gap. It compared a fee's ETH
+// price against its $OMR price, because a fee payable two ways is always priced by the cheaper rail
+// and the two diverge silently when only one is moved. Every fee is ETH only now (founder-directed
+// 2026-08-10), so there is no second rail to disagree — the surest way to keep two rails in lockstep
+// turned out to be having one. What is asserted is that nothing brings it back by accident.
+{
+  const psrc = fs.readFileSync('src/preflight.js', 'utf8');
+  assert(!/PLEX/.test(psrc), 'preflight reads no $OMR rail — every fee is ETH, so there is nothing to compare');
+  const vig = await import('../src/vig.js');
+  assert.equal(vig.PLEX_MINT_OMR, undefined,
+    'PLEX_MINT_OMR is DELETED, not zeroed — a rail that merely sleeps is one env var from being live again');
+  assert.equal(vig.PLEX_RESPAWN_OMR, undefined, '…and so is the respawn floor');
+  assert.deepEqual(preflight(GOOD).warnings.filter((w) => /rails disagree/.test(w)), [],
+    'and no rate warning can fire — the check it came from no longer exists');
+}
 
 // THE TRANCHE SCHEDULE (Shape D, five waves capped at 0.05): the mint FEE must sit ON a published
 // wave, not merely agree on a rate — 0.015 is rate-clean and still a price the published table never
@@ -163,25 +161,16 @@ assert(preflight({ ...GOOD, MINT_FEE_ETH: '0.015' }).warnings.some((w) => /OFF t
   assert(MINT_TRANCHES.every((t) => t.omr === undefined),
     '…and no row carries a $OMR price — the mint is ETH only, so there is one rail to check');
 }
-// The guard restates vig.js's defaults (preflight cannot import it — vig imports game.js, the
-// one-way rule). That restatement is only safe while something checks it, so: check it.
+// The tranche check RESTATES the five waves (preflight cannot import rules.js — the one-way rule).
+// That restatement is only safe while something checks it, so: check it. And pin the two ETH fee
+// defaults it reads, which are module-private in vig.js.
 {
   const vig = await import('../src/vig.js');
   const src = fs.readFileSync('src/vig.js', 'utf8');
   const def = (k) => Number((src.match(new RegExp(`${k} \\|\\| ([0-9.]+)`)) || [])[1]);
-  // Both floors now DERIVE from the one genesis rate, so pin them to the derivation rather than to a
-  // literal — that is the property preflight's restatement has to keep matching, and it survives a
-  // re-rate without editing this file.
-  const { genesisOmrFor } = await import('../src/rules.js');
-  assert.equal(vig.PLEX_MINT_OMR, undefined,
-    'PLEX_MINT_OMR is DELETED, not zeroed — the mint is ETH only, and a rail that merely sleeps is one env var from being live again');
-  assert.equal(vig.PLEX_RESPAWN_OMR, genesisOmrFor(0.10), "preflight's restated PLEX_RESPAWN_OMR default still matches vig.js");
-  const psrc = fs.readFileSync('src/preflight.js', 'utf8');
-  assert(!psrc.includes("'PLEX_MINT_OMR'"), 'preflight no longer reads a mint $OMR floor — there is none');
-  assert(psrc.includes(`'PLEX_RESPAWN_OMR', ${genesisOmrFor(0.10)}`),
-    "preflight's own restated respawn floor is the derived value — a stale literal here is the drift this pin exists to catch");
-  assert.equal(def('MINT_FEE_ETH'), 0.01, '…and MINT_FEE_ETH (module-private, so read from source)');
+  assert.equal(def('MINT_FEE_ETH'), 0.01, 'MINT_FEE_ETH (module-private, so read from source)');
   assert.equal(def('RESPAWN_FEE_ETH'), 0.10, '…and RESPAWN_FEE_ETH');
+  assert.equal(typeof vig.payPlex, 'function', 'the payer is still exported — as a tombstone that refuses');
 }
 
 // ── A BOND MUST STAY A HOLD, NOT AN ARBITRAGE ───────────────────────────────────────────────────

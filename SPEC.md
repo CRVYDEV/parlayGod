@@ -94,7 +94,7 @@ surcharge.
 
 ### 3.7 Risk-to-Earn economy
 Loot the living · located laundering · shield-not-bunker · the bank daily cap · THE VIG (real revenue →
-buyback → reserve + prize pool) · the PLEX bridge · backed emission (staking paid from a funded pool) ·
+buyback → reserve + prize pool) · backed emission (staking paid from a funded pool) ·
 THE STREET WAGE (a fixed, halving, endowment-capped daily emission to minted accounts) · THE RESERVE
 BOND (protocol-owned liquidity, no reflexive mint) · THE VAULT (four ETH slices accumulate; burn $OMR
 to claim allocation, `allocated <= held` in ETH on both sides — the stock denomination was retired

@@ -143,6 +143,11 @@ PHASE 1 for the exact calls/args.
       OMR reserve, sized so a full day's cap dumped moves the price ≤10%) and `maxOmrPerEth` **~15,000**
       (3× the launch price — a circuit breaker, not a price). Re-run it whenever POL materially deepens
       and raise the cap with it.
+      **At the planned genesis raise (21.38 ETH → POL 0.375R = 8.0175 ETH) the rule gives `dailyCapOMR`
+      ≈ 82,500/day.** Derive it against the ACTUAL POL at deploy, never from a figure written down
+      earlier: the raise is a founder lever and this cap moves with it (BALANCE.md § THE GENESIS RAISE —
+      a smaller raise means a shallower pool means the same cap does MORE price damage, which is exactly
+      why the number is a function of depth and not of supply).
 - [ ] **`OmrTwapOracle(safe, omrWethPair, omr, period)`** — WALL 4's price feed, deployed AFTER the pool
       exists (it reads that pool's cumulative price). `period >= MIN_PERIOD` (10 min); **30 min
       recommended** — past that the manipulation-cost curve flattens for a thin pool while the lag grows,

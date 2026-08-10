@@ -56,7 +56,7 @@ const TAG_DESC = {
   daily: 'Daily contracts + the Daily Score.', missions: 'One-time scripted jobs.',
   skills: 'The three-branch skill tree.', dynasty: 'Dynastic marriages + the consigliere.',
   landmarks: 'Dedicate a district plaque ($OMR flex).', safehouse: 'Go to ground (survival shield).',
-  bodyguard: 'The two-party protection market.', plex: 'Pay real-money fees from earned $OMR.',
+  bodyguard: 'The two-party protection market.',
   session: 'Pre-character session probe.', me: 'Your full character sheet.',
   mod: 'Moderator tools (x-mod-key header, not a player token).',
 };

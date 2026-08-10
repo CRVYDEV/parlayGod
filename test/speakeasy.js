@@ -216,16 +216,14 @@ assert(nl.board.some((x) => x.name === 'Nucky Thompson'), 'the proprietor ranks 
 // ── STEP THREE — the ETH COSMETIC DECOR tier (Store SKU → account unlock → apply to the club) ──
 assert.equal((await call('POST', '/v1/speakeasy/decor', { token: owner.token, body: { style: 'gilded' } })).body.error, 'locked', "you can't apply decor you don't own");
 assert.equal((await call('POST', '/v1/speakeasy/decor', { token: owner.token, body: { style: 'nope' } })).body.error, 'bad_style', 'no such decor style');
-// buy the Art Deco style with EARNED $OMR (the PLEX path, no oracle → the genesis-rate floor). The
-// grant is DERIVED from that floor: a literal goes short the moment the rate moves, which is what
-// happened when the PLEX rails were re-derived from the genesis price.
-const { STORE: STORE_SPK, packageOf: pkgOf } = await import('../src/rules.js');
-const DECO_OMR = Math.ceil(pkgOf('decor_deco').priceEth * STORE_SPK.PLEX_FLOOR_OMR_PER_ETH) + 10;
-await grantOmr(owner.aid, DECO_OMR);
-const buyDeco = await call('POST', '/v1/store/plex/decor_deco', { token: owner.token });
-assert.equal(buyDeco.code, 200, 'bought the Art Deco decor via PLEX ($OMR)');
+// grant the Art Deco unlock the way a real player now gets it: an ETH purchase at the Store (the
+// $OMR rail retired 2026-08-10 — a cosmetic is a real-money product, and its whole purpose is the
+// revenue split). The comp route is the mod/QA twin of the on-chain paywall.
+// (seeded — the on-chain checkout that grants it is dormant, exactly like every other Store SKU;
+// test/store.js owns the grant path. What THIS file is about is applying a style you own.)
+await pool.query(`INSERT INTO store_cosmetics (account_id, style) VALUES ('${owner.aid}','deco')`);
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM store_cosmetics WHERE account_id='${owner.aid}' AND style='deco'`)).rows[0].n), 1, 'the cosmetic unlock landed (account-level, survives death)');
-assert.equal((await call('POST', '/v1/store/plex/decor_deco', { token: owner.token })).body.error, 'owned', 'a re-buy of an owned cosmetic is refused BEFORE the burn');
+assert.equal((await call('POST', '/v1/store/plex/decor_deco', { token: owner.token })).body.error, 'retired', 'the $OMR rail is gone — the Store is ETH only');
 const applied = await call('POST', '/v1/speakeasy/decor', { token: owner.token, body: { style: 'deco' } });
 assert.equal(applied.code, 200, 'the owner fitted out the club');
 assert.equal(applied.body.decorName, 'Art Deco', 'the decor name resolves');
@@ -346,5 +344,5 @@ inv = await runLedgerInvariants(pool, { alert: false });
 assert.equal(inv.checks.find((c) => c.name === 'character cash').drift, cashDrift, 'cash §10.4 holds through the estate');
 assert(inv.checks.find((c) => c.name === 'reason vocabulary').ok, 'vocabulary still closed');
 
-console.log('✅ The Speakeasy test passed — open gates, the base bar take (lazy income + 24h cap + safehouse gate), the decor ladder, naming (vanity:speakeasy burn + no-op guard), buying a ROUND (two-party taxed patron→owner transfer + guest list + prestige + cooldown/travel/self/jail gates), the REGULAR status, BOTTLE service (a pure $OMR burn) + STEP TWO: the BACK-ROOM TABLE (min/max gates, the owner rake carved from the stake, win/lose, notoriety drawn, travel gate) and the PROHIBITION RAID (a hot club seized + fined + SHUTTERED on collect, the shutter blocking rounds/table/income) + STEP THREE: cross-club RENOWN (derived from patronage + ownership, the leaderboard), the ETH COSMETIC DECOR tier (PLEX-bought unlock + own-gate + apply/clear + survives death), and the P2P BUYOUT (list/not_for_sale/travel gates, a taxed transfer, ownership + guest-list reset, the seller freed, the club keeps its build) + STEP FOUR: renown-EARNED decor (unlocked by renown, not bought) and the STANDOVER (a hostile forced-sale — cash gate, the fee burns win/lose, a loss keeps the club + sets a cooldown, a win forces a taxed sale at the assessed build value + transfers ownership), the nightlife board, DEATH (the club goes dark + guest list clears + district reopens; the cosmetic unlock survives), and §10.4 (the per-character cash check reconciles speakeasy: incl. table:bet/rake/win + raid + buyout + standover; bottles/naming/decor-PLEX ride vanity:%/plex:%)');
+console.log('✅ The Speakeasy test passed — open gates, the base bar take (lazy income + 24h cap + safehouse gate), the decor ladder, naming (vanity:speakeasy burn + no-op guard), buying a ROUND (two-party taxed patron→owner transfer + guest list + prestige + cooldown/travel/self/jail gates), the REGULAR status, BOTTLE service (a pure $OMR burn) + STEP TWO: the BACK-ROOM TABLE (min/max gates, the owner rake carved from the stake, win/lose, notoriety drawn, travel gate) and the PROHIBITION RAID (a hot club seized + fined + SHUTTERED on collect, the shutter blocking rounds/table/income) + STEP THREE: cross-club RENOWN (derived from patronage + ownership, the leaderboard), the ETH COSMETIC DECOR tier (an owned unlock + own-gate + apply/clear + survives death; the $OMR rail retired), and the P2P BUYOUT (list/not_for_sale/travel gates, a taxed transfer, ownership + guest-list reset, the seller freed, the club keeps its build) + STEP FOUR: renown-EARNED decor (unlocked by renown, not bought) and the STANDOVER (a hostile forced-sale — cash gate, the fee burns win/lose, a loss keeps the club + sets a cooldown, a win forces a taxed sale at the assessed build value + transfers ownership), the nightlife board, DEATH (the club goes dark + guest list clears + district reopens; the cosmetic unlock survives), and §10.4 (the per-character cash check reconciles speakeasy: incl. table:bet/rake/win + raid + buyout + standover; bottles/naming ride vanity:%)');
 await app.close();

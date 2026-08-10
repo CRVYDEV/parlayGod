@@ -1256,20 +1256,20 @@ function coachLadder(ch, acct, owned) {
   if (lvl >= 14 && !Number(acct.race_wins || 0) && !Number(owned.mastery?.wheels || 0) && add('Run the streets', 'Street Races: tune a car from your garage and run the PvE circuit — fee up front, purse on a win. Fast iron finally earns.', 'races')) return rungs;
   // ── YOU CAN GET MADE FOR FREE. An alpha tester read the game as pay-to-win ("we can't earn OMR in
   // game anymore?"), and the mechanics say otherwise: $OMR is still earned by playing — the mission
-  // ladder alone pays 220 across nine jobs, the first at level 14 — and MINTING (the gate on
-  // withdrawing and on the Street Wage) is payable in that earned $OMR via PLEX, not only in ETH.
+  // ladder alone pays 220 across nine jobs — and MINTING (the gate on withdrawing and on the Street
+  // Wage) is HANDED OVER by the ladder itself, so the road to it costs nothing but play.
   // Nothing was missing but the sentence saying so, so this is the sentence. Fires at the level of
   // the first mission that pays $OMR (read from the catalog, so a re-extract can never leave the
   // rung firing before the job it points at exists) and self-clears the moment they're minted.
-  // The MINT PRICE is deliberately NOT quoted: `plexQuote` is `max(PLEX_MINT_OMR, feeEth × the
-  // latest buyback oracle × premium)`, so a hardcoded figure here would be a lie the player only
-  // discovers at the till. THE FIX (2026-08-10) removes the arithmetic from the promise entirely:
+  // The MINT PRICE is deliberately NOT quoted: it moves with the published tranche schedule, so a
+  // hardcoded figure here would be a lie the player only discovers at the till. THE FIX (2026-08-10)
+  // removes the arithmetic from the promise entirely:
   // the mission the rung names GRANTS the mint credit, so the rung states a fact rather than a
   // price, and it stays true at any token price. Read off the catalog so it can never fire before
   // the job it names exists.
   const freeMintMission = MISSIONS.find((m) => Number(m.reward?.mintCredit) > 0);
   if (freeMintMission && lvl >= (freeMintMission.req?.lvl || 14) && !acct.minted && !Number(acct.mint_credits || 0)
-    && add('You can get made for free', `Getting MADE unlocks withdrawing and the Street Wage, and it does not cost you a penny: the mission "${freeMintMission.name}" hands you the credit outright. Pull that job, then spend the credit on Going Legit ▸ Extraction. (You can also buy it with ETH or earned $OMR — the mission is the free road.)`, 'portfolio')) return rungs;
+    && add('You can get made for free', `Getting MADE unlocks withdrawing and the Street Wage, and it does not cost you a penny: the mission "${freeMintMission.name}" hands you the credit outright. Pull that job, then spend the credit on Going Legit ▸ Extraction. (You can also buy it with ETH — the mission is the free road.)`, 'portfolio')) return rungs;
   if (Number(acct.mint_credits || 0) > 0 && !acct.minted
     && add('Spend your mint credit', 'You are holding a credit that makes you a MADE MAN — withdrawals and the Street Wage open the moment you spend it. It costs nothing to use. Going Legit ▸ Extraction.', 'portfolio')) return rungs;
   // (founder: "not obvious… the steps you need to take to buy your first business") — concrete steps,

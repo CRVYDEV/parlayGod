@@ -255,12 +255,12 @@ is where you CAME from — a birthplace, not a balance.
 
 **The stamp-eligible moment, defined** (the design lens caught four different "mint moments"
 across the docs — the account fee-mint live today, the future DynastyNFT issuance, the retrofit
-batch to already-minted accounts, and a PLEX mint with no wallet linked at all): the moment is
+batch to already-minted accounts, and a fee paid with no wallet linked at all): the moment is
 **DynastyNFT token issuance — the retrofit batch included** — and the window is *at issuance, or
 at first wallet-link thereafter, one-time*. A grace window, not open-ended retroactivity: the
 certificate is issued when the token is, which for retrofitted veterans is the honest reading,
-and a PLEX/pay-before-link minter stamps from **the wallet LINKED at stamp time** (the paying
-wallet can differ; the linked one is the identity's). §9.8's "never retroactive" lever means
+and a pay-before-link minter stamps from **the wallet LINKED at stamp time** (the paying wallet
+can differ; the linked one is the identity's). §9.8's "never retroactive" lever means
 never re-stamping an already-stamped or window-lapsed identity — not locking out the existing
 player base.
 
@@ -411,6 +411,18 @@ window is the whole allowance, or the birth-certificate fiction breaks).
 
 ## 10. THE MINT PRICE (founder-directed 2026-08-10: "maybe instead of .01 ETH it can also be a
 number of OMR that gets burned and scales up as more NFTs are minted")
+
+> **SUPERSEDED IN PART, SAME DAY — THE MINT IS ETH ONLY, AND SO IS EVERYTHING ELSE.** The founder
+> then ruled *"Make the mint ETH only no OMR"* and, an hour later, *"Make plex items and consumables
+> eth only"*. So the whole $OMR-rail half of this section is history: **PLEX is retired** (payers
+> deleted, routes mounted as tombstones, `plex:%` kept in the vocabulary and the burn term forever
+> because real rows exist, and a `plex bridge retired` freshness check asserts nothing new writes
+> them). What SURVIVES from this analysis, and is now live: **Shape A (the automatic supply-indexed
+> curve) stays rejected**; **Shape D (discrete published tranches) is ADOPTED** — five waves, ETH
+> only, capped at 0.05 (`MINT_TRANCHES`); and the rail-interaction law below is the reason the
+> second rail went at all. The recycles-to-the-desk observation is what finally settled it: since
+> v3 step 2 a PLEX purchase did not burn anything, so the trade the bridge was sold on had already
+> expired. Read §10 for the reasoning, not for the mechanism. See BALANCE.md § THE TRANCHE SCHEDULE.
 
 **Half of this is already live.** The $OMR-denominated mint exists: PLEX (`POST /v1/plex/mint`) —
 pay the identity fee in earned $OMR (`PLEX_MINT_OMR` 5 floor, market-linked at

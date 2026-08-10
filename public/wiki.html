@@ -479,18 +479,18 @@ const SECTIONS = [
       disinformation).</p>
       ${R(`GET /v1/wire · POST /v1/wire/tap/:targetId · /wire/sweep · /wire/subscribe {tier} · /wire/watch/:targetId`)}` },
 
-  { id: 'store', group: 'Endgame & Going Legit', title: 'The Store, PLEX & the Ledger', tag: 'real-money packages',
+  { id: 'store', group: 'Endgame & Going Legit', title: 'The Store &amp; the Ledger', tag: 'real-money packages',
     html: `<p><b>The Store</b> sells ETH packages that grant <b>only non-currency items</b> (this prevents pay-to-win:
       entitlements, access, cosmetics, status — never cash, $OMR, gear, or power): Made Man (a mint credit), revive
       bundles, Street Wire, the Season Pass, the Patron badge, and decor. Revenue divides 40% founder / 40% buyback / 20%
       RWA reserve.</p>
-      <p><b>PLEX</b> — pay for a package or a fee with <b>earned $OMR</b> instead of ETH. <b>The mint is the one
-      exception: it is ETH only.</b> Becoming Made unlocks extraction, so it has a single unambiguous price — a fee
-      payable two ways is always priced by the cheaper rail. The free road is unchanged: the mission ladder hands you
-      a mint credit outright. <b>The Season Pass / Ledger</b> —
+      <p><b>Every real-money price is ETH.</b> A second rail (PLEX, paying in earned $OMR) is retired: a fee payable
+      two ways is always priced by the cheaper one — fatal for the mint, since becoming Made is what unlocks extraction —
+      and a package is a real-money product whose purpose is the revenue split. The free road is unchanged: the mission
+      ladder hands you a mint credit outright, and $OMR keeps every in-game use it had. <b>The Season Pass / Ledger</b> —
       while active, claim the next of 12 levels each day (titles, revives, energy, small funded $OMR stipends); it is
       account-level and survives death.</p>
-      ${R(`GET /v1/store [public] · POST /v1/store/plex/:sku · GET /v1/pass · /pass/claim · GET /v1/plex/price [public]`)}` },
+      ${R(`GET /v1/store [public] · GET /v1/pass · /pass/claim`)}` },
 
   { id: 'legit', group: 'Endgame & Going Legit', title: 'Going Legit — what your $OMR does', tag: 'the endgame',
     html: `<p><b>The stock book is retired</b> (D11, 2026-08-05): the game sells no shares, real or fictional —

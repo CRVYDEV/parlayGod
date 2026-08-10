@@ -5390,6 +5390,40 @@ what happened, and `plex:mint` stays in the vocabulary and the burn term **forev
 What is new is a freshness check — **`plex mint retired`** — so a fresh row is an alarm while history still
 reconciles.
 
+**AND THEN THE WHOLE BRIDGE WENT (founder-directed, same day: "Make plex items and consumables eth only") —
+superseding the paragraph above, which had argued the respawn should stay.** That argument was wrong, and it
+is worth recording *why* rather than just reversing it, because the mistake was defending a mechanism on a
+justification that had expired. PLEX was sold as *"ETH payers fund the pool, $OMR payers **burn** supply —
+both support the token"*. That was true when sinks destroyed the token. **Since economy v3 step 2 they do
+not**: `plex:%` is in `DESK.SINK_REASONS`, so a PLEX purchase RECYCLES the $OMR onto the desk shelf, which
+sells it for ETH at the daily auction. So the real comparison was never "immediate ETH versus deflation" —
+it was **immediate certain ETH versus deferred uncertain ETH, minus the deflation that justified the trade**.
+Stated that way there is nothing left to weigh. (`recyclesToDesk('plex:respawn') === true` — checked, not
+assumed.)
+
+A Store SKU has its own version of the same defect, and it is sharper: a package is a **real-money product**
+whose entire purpose is the four-way revenue split. Paying in $OMR routed the purchase *around* the split —
+the buyer got the entitlement and none of the four destinations got a wei.
+
+| what went | why |
+|---|---|
+| `payPlex` (mint + respawn), `plexQuote` | the payers, deleted — not flagged off |
+| `payPackagePlex`, `plexPackageQuote`, the board's `plexOmr` | the Store's rail; the board now says `null` **positively** |
+| `PLEX_GENESIS_OMR_PER_ETH`, `genesisOmrFor` | one conversion with nothing left to convert. The launch price lives in the launch sequence's G-1, and comes back **with a reader** the day the GenesisOracle is built |
+| `STORE.PLEX_FLOOR_OMR_PER_ETH`, `STORE.PLEX_PREMIUM_BPS` | the two levers that priced the retired rail (pins dropped in the same commit — the drift rule) |
+| preflight's **two-rails guard** | its absence *is* the fix: it existed because two rails diverge silently, and the surest way to keep two rails in lockstep turned out to be having one |
+| `PATRON.TIERS[].plexDiscountBps` | shipped at 0, now unread; reported as 0 rather than deleted, since the tier NAMES are the program |
+
+**What it costs, honestly:** the EVE *"pay your rent in ISK"* fantasy — a skilled player funding their own
+play from earnings. That is a real loss and it is the reason to think twice about the direction. It is
+bounded by the free path never having run through this rail, and by $OMR keeping **every in-game use it
+had**: dues, the compound, family seals, the Wire, vanity, respec, the staked ladder. The line is now short
+enough to say in one sentence: **real money buys real-money things; $OMR buys in-game things.**
+
+The freshness check widened from the exact `plex:mint` to the whole `plex:%` prefix and was renamed
+**`plex bridge retired`** — no `plex:` kind is live any more, so the narrower form would have been a check
+that could no longer fail.
+
 **The ceiling is the improvement, not a softening**, and it is worth being precise about why. On the
 open ladder the free-path law held by arithmetic that had to be re-derived at every extension; with
 a cap the dearest row is 150 $OMR against a ~220 lifetime mission payout and *no future row can
@@ -5432,11 +5466,46 @@ itself: the escalation terminates, at a number stated up front, and the most any
 drafted against the open ladder. The LIVE price today is wave 1 — nothing changes at the till until
 the 1,001st identity.
 
+## THE GENESIS RAISE — 33 → 21.38 ETH (founder-directed 2026-08-10)
+
+**FDV does not move, and that is the point of stating what does.** The raise is not a valuation — the
+price is (205,882 $OMR/ETH → $0.017/OMR → $1.7M FDV on 100M supply), and that is unchanged. What a
+smaller raise changes is **how much of the supply is sold** and **how deep the pool opens**:
+
+| | 33 ETH | **21.38 ETH** |
+|---|---|---|
+| $OMR sold at genesis | 6,794,106 (**6.79%** of supply) | **4,401,757 (4.40%)** |
+| POL (0.375R) — the LP seed | 12.375 ETH | **8.0175 ETH** |
+| treasury (0.25R) — the first stock budget | 8.25 ETH | **5.345 ETH** |
+| vig (0.225R) — the withdrawal reserve | 7.425 ETH | **4.8105 ETH** |
+| founder (0.15R) | 4.95 ETH | **3.207 ETH** |
+
+**The consequence that is not cosmetic: `OmertaBond.dailyCapOMR` must come down with it.** The dials
+harness established that cap as a **rule, not a number** — ≈5% of the pool's OMR reserve, sized so a
+full day at the cap, dumped entirely, moves the price ≤10% — precisely because **price impact, not
+dilution, is the damage, and impact is a function of DEPTH**. A shallower pool means the same daily
+cap does more harm:
+
+| | pool OMR at init | ≈5% rule → `dailyCapOMR` |
+|---|---|---|
+| 33 ETH | 2,547,790 | ~127,000/day |
+| **21.38 ETH** | **1,650,659** | **~82,500/day** |
+
+Leaving the cap where a 33-ETH pool put it would silently loosen the single wall standing between a
+leaked quote-signer and the market — which is the whole reason that number is derived from depth
+rather than from supply. **Re-derive at deploy against the ACTUAL POL, not against this table**, and
+re-derive again whenever POL deepens (CHAIN-DEPLOY carries the rule; `npm run dials` is the tool).
+
+Everything else is unaffected by construction: no in-game price is denominated in ETH, the money
+router's split is percentages, and the tranche schedule is a published ETH table that does not read
+the raise. The smaller float has one honest upside worth naming — **less supply is sold into the
+open**, so the day-one sell pressure the window creates is proportionally smaller.
+
 ## THE SINK RE-DENOMINATION (founder-directed 2026-08-10, ×6 — APPLIED)
 
 Every $OMR price in the game was written against an implicit **~$10M token** — six independent sinks
 cluster there, which is how we know it was an assumption rather than a decision. The launch
-parameters land at **$1.7M FDV** (33 ETH raise, 205,882 $OMR/ETH, 100M supply → **$0.017/OMR**), so
+parameters land at **$1.7M FDV** (21.38 ETH raise, 205,882 $OMR/ETH, 100M supply → **$0.017/OMR**), so
 every sink was **5.88× cheaper in dollars than it was designed to feel**. A Made Man's monthly dues
 were 34 cents. The factor is **6**, chosen as the round number nearest that ratio.
 

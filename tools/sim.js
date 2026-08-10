@@ -351,7 +351,7 @@ while (transferred === 0 && tries++ < 30) {
 note('collusion', 'one shakedown transfer', `$${fmt(transferred)}`, `30% of 24h pending; per-venue 8h cooldown → ~3×/day/venue; vs jump steal cap $${fmt(M3.JUMP_STEAL_CAP || 0)}`);
 
 // ════════════════ P9: THE VIG — real-revenue rail ════════════════
-phase('P9 vig — fees → buyback → reserve, PLEX');
+phase('P9 vig — fees → buyback → reserve, the ETH-only mint');
 await call('POST', '/v1/mod/fees/record', { headers: modH, body: { nonce: 900001, kind: 'mint', payer: '0x' + '11'.repeat(20), amountWei: '10000000000000000', txHash: '0x' + 'aa'.repeat(32) } });
 await call('POST', '/v1/mod/fees/record', { headers: modH, body: { nonce: 900002, kind: 'respawn', payer: '0x' + '22'.repeat(20), amountWei: '100000000000000000', txHash: '0x' + 'bb'.repeat(32) } });
 r = await call('POST', '/v1/mod/vig/buyback', { headers: modH, body: { priceOmrPerEth: 1000 } });
@@ -359,13 +359,19 @@ note('vig', 'vig buyback', r.code === 200 ? `${fmt(r.body.omrBought ?? 0)} hard 
 const vigStatus = await call('GET', '/v1/mod/vig', { headers: modH });
 const vigOk = vigStatus.body.ok ?? vigStatus.body.invariants?.ok ?? (vigStatus.body.checks || []).every?.((c) => c.ok);
 note('vig', 'vig invariants (extraction ≤ inflow)', String(vigOk), '');
-// PLEX: pay the mint fee from EARNED $OMR
-const { PLEX_MINT_OMR: PLEX_MINT_FLOOR } = await import('../src/vig.js'); // read, never restated
-const gOmr = (await meOf(g.token)).omr;
-if (gOmr >= PLEX_MINT_FLOOR) {
+// THE MINT IS ETH ONLY (2026-08-10) — the $OMR rail is retired, so the extraction gate opens the way
+// a real player opens it: a fee paid on the chain rail (the worker's fee watcher does this on a
+// MintFeePaid event; the mod route is its manual twin), then spend the credit. Asserted BOTH ways —
+// that the retired rail refuses, and that the live one works.
+{
   const px = await call('POST', '/v1/plex/mint', { token: g.token });
-  const mint = px.code === 200 ? await call('POST', '/v1/character/mint', { token: g.token }) : { code: px.code };
-  note('vig', `PLEX mint (${PLEX_MINT_FLOOR} earned $OMR → minted account)`, String(mint.code === 200), 'the extraction gate opens without ETH');
+  note('vig', 'the PLEX mint rail refuses', String(px.body?.error === 'retired'), 'fees are ETH only — one rail for the Sybil bound');
+  const wallet = '0x' + '33'.repeat(20);
+  const gAid = (await pool.query(`SELECT account_id a FROM characters WHERE id='${g.id}'`)).rows[0].a;
+  await pool.query('UPDATE account_persistent SET wallet=$2 WHERE account_id=$1', [gAid, wallet]);
+  await call('POST', '/v1/mod/fees/record', { headers: modH, body: { nonce: 900003, kind: 'mint', payer: wallet, amountWei: '10000000000000000', txHash: '0x' + 'cc'.repeat(32) } });
+  const mint = await call('POST', '/v1/character/mint', { token: g.token });
+  note('vig', 'the ETH mint opens the extraction gate', String(mint.code === 200), 'one rail, in real money, at the published wave');
 }
 
 // ════════════════ P9.5: THE DEN — realized house edge + street cut ════════════════

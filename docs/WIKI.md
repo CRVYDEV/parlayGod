@@ -24,7 +24,7 @@ CODEX button in the top bar).
 18. [Loan sharking](#18-loan-sharking) · 19. [Convoys](#19-convoys) · 20. [Crew heists](#20-crew-heists) ·
 21. [The Black Market](#21-the-black-market) · 22. [Vendettas](#22-vendettas) · 23. [Skills](#23-skills) ·
 24. [The Underworld (fixers)](#24-the-underworld) · 25. [The Wire](#25-the-wire) ·
-26. [The Store, PLEX & Season Pass](#26-the-store-plex--the-ledger) · 27. [Going Legit — what your $OMR does](#27-going-legit) ·
+26. [The Store & the Season Pass](#26-the-store--the-ledger) · 27. [Going Legit — what your $OMR does](#27-going-legit) ·
 28. [The Estate & Auction House](#28-the-estate--auction-house) · 29. [The chain — withdrawal & bonds](#29-the-chain) ·
 30. [Growth — paths, missions, first week](#30-growth) · 31. [Reference — districts, gotchas, glossary](#31-reference)
 
@@ -897,7 +897,7 @@ Information as a $OMR resource that you can spend. `GET /v1/wire`.
 
 ---
 
-## 26. The Store, PLEX & the Ledger
+## 26. The Store & the Ledger
 
 **The Store** (`GET /v1/store` [public]) — real-money (ETH) packages that grant **only non-currency items**
 (this prevents pay-to-win: entitlements, access windows, cosmetics, and status — never cash, $OMR, gear, or
@@ -905,14 +905,16 @@ power). Packages: Made Man (a mint credit), revive bundles, a 30-day Street Wire
 Ring badge, and decor styles. The revenue divides 40% to the founder, 40% to the buyback (the Vig, which funds
 withdrawals and prizes), and 20% to the RWA reserve.
 
-**PLEX** — pay for a Store package or a game fee with **earned $OMR** instead of ETH
-(`/v1/store/plex/:sku`, `/plex/respawn`; `GET /v1/plex/price` [public]). ETH payers fund the pool. $OMR
-payers reduce the supply.
+**Every real-money price is ETH.** There used to be a second rail — PLEX, which let you pay a fee or a
+package in earned $OMR — and it is retired. Two reasons. A fee payable two ways is always priced by whichever
+rail is cheaper, which is fatal for the mint, since becoming Made is what unlocks extraction and so is the one
+price that must be unambiguous. And a Store package is a real-money *product*: its whole purpose is the revenue
+split, and paying in $OMR routed the purchase around it.
 
-**The one exception is the mint, which is ETH only.** Becoming Made is what unlocks extraction, so it is
-the one price that has to be unambiguous — and a fee payable two ways is always priced by whichever rail is
-cheaper. There is no $OMR price for an identity at any wave. That costs you nothing: the mission ladder's
-*Dockside Heist* still hands you a mint credit outright, so the free road is unchanged.
+That costs you nothing on the free road: the mission ladder's *Dockside Heist* hands you a mint credit
+outright. And $OMR keeps every in-game use it had — dues, the compound, family seals, the Wire, vanity,
+respec, the staked ladder. The line is simple: **real money buys real-money things; $OMR buys in-game
+things.**
 
 **The Season Pass / The Ledger** (`GET /v1/pass`, `/pass/claim`) — while your pass is active, claim the next of
 12 levels one time each day: titles, revive tokens, energy refills, and small **$OMR stipends** paid from the

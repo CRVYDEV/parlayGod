@@ -153,49 +153,34 @@ assert(rev.buybackEth > 0, 'the buyback flywheel is funded by Store revenue');
 assert.equal(rev.treasuryEth, rev.rwaEth, 'the treasury slice is the same number under its honest name — nothing is spent on units any more');
 assert(rev.bySku.find((s) => s.sku === 'made_man'), 'the ops view tallies sales by SKU');
 
-// ── PLEX-for-packages: pay a SKU with EARNED $OMR (a plex:* BURN) for the same entitlement ──
-// (runs AFTER the neutrality check because the test SQL-grants $OMR — an unledgered mint; the plex
-// burn itself IS ledgered, asserted directly below.)
-// Seeded from the LIVE floor rather than a literal: the PLEX rail converts at the genesis rate, so a
-// hardcoded grant goes short the moment that rate moves (it did — 1,000 stopped covering a 0.01 ETH
-// SKU when the floors were re-derived). $OMR here is SQL-granted, so the amount is a fixture knob.
-const { STORE: STORE_R } = await import('../src/rules.js');
-const PLEX_SEED = Math.ceil(STORE_R.PLEX_FLOOR_OMR_PER_ETH * 0.05); // ample for any sub-0.05 ETH SKU
+// ── THE PLEX RAIL IS RETIRED — the Store is ETH only (founder-directed 2026-08-10) ──────────────
+// A Store SKU is a REAL-MONEY product: its whole purpose is the four-way revenue split (founder /
+// buyback / treasury / POL). Paying for one in $OMR routed the purchase AROUND that split — the
+// buyer got the entitlement and none of the four destinations got a wei — and since v3 step 2 it did
+// not even burn, because `plex:%` recycles to the desk shelf.
+//
+// Asserted the retirement way: the route stays MOUNTED so an old client hears why, the payer
+// REFUSES, the board quotes no $OMR price, and the LEDGER is untouched (the reason stays in the
+// vocabulary for HISTORY — nothing new may write it).
 const plexer = await mk('Plex Pete');
 const paid = (await pool.query(`SELECT account_id a FROM characters WHERE id='${plexer.id}'`)).rows[0].a;
-await pool.query(`UPDATE account_persistent SET omr=${PLEX_SEED} WHERE account_id='${paid}'`);
+await pool.query(`UPDATE account_persistent SET omr=100000 WHERE account_id='${paid}'`);
 const sb = (await call('GET', '/v1/store', { token: plexer.token })).body;
-const mm = sb.packages.find((p) => p.sku === 'made_man');
-assert(mm.plexOmr > 0, 'the PLEX $OMR price is quoted (the floor, before any buyback prints an oracle)');
-const plexBurnBefore = -Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason LIKE 'plex:%'")).rows[0].s);
+assert(sb.packages.every((p) => p.plexOmr === null),
+  'no SKU quotes a $OMR price — the shelf is ETH only, stated positively rather than by omission');
 const omrPre = (await meOf(plexer.token)).omr;
 r = await call('POST', '/v1/store/plex/made_man', { token: plexer.token });
-assert.equal(r.code, 200, 'PLEX-bought Made Man with earned $OMR');
-assert.equal(r.body.omrSpent, mm.plexOmr, 'burned exactly the quoted $OMR');
-assert.equal((await meOf(plexer.token)).omr, omrPre - mm.plexOmr, 'the $OMR left the account');
-assert.equal((await call('GET', '/v1/store', { token: plexer.token })).body.owned.mintCredits, 1, 'the entitlement granted — same as an ETH payer gets');
-// the spend is a LEDGERED plex:* burn (§10.4-legal deflationary sink; no clobber of the grant)
-const plexBurnAfter = -Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason LIKE 'plex:%'")).rows[0].s);
-assert.equal(plexBurnAfter - plexBurnBefore, mm.plexOmr, 'the PLEX spend is a ledgered plex:* burn');
-// walkthrough MED-1: buying made_man while ALREADY MINTED is refused BEFORE the burn (a dead credit) —
-// the vig.js:116 precedent; the $OMR must not leave the account
-await pool.query(`UPDATE account_persistent SET minted=true, omr=1000 WHERE account_id='${paid}'`);
-const omrBeforeDead = (await meOf(plexer.token)).omr;
-const deadBuy = await call('POST', '/v1/store/plex/made_man', { token: plexer.token });
-assert.equal(deadBuy.body.error, 'minted', 'a made account cannot PLEX-buy a dead mint credit');
-assert.equal((await meOf(plexer.token)).omr, omrBeforeDead, 'the refused made_man buy burned nothing');
-// and re-buying the pure Patron ring while already a patron is refused (no-op re-burn)
-await pool.query(`UPDATE account_persistent SET patron=true WHERE account_id='${paid}'`);
-const omrBeforePatron = (await meOf(plexer.token)).omr;
-assert.equal((await call('POST', '/v1/store/plex/patron', { token: plexer.token })).body.error, 'patron', 'a patron cannot re-buy the ring');
-assert.equal((await meOf(plexer.token)).omr, omrBeforePatron, 'the refused patron buy burned nothing');
-// insufficient earned $OMR + bad sku are clean refusals
-assert.equal((await call('POST', '/v1/store/plex/revive_5', { token: plexer.token })).body.error, 'omr', 'not enough earned $OMR is refused');
-assert.equal((await call('POST', '/v1/store/plex/nope', { token: plexer.token })).body.error, 'bad_sku', 'no such package');
+assert.equal(r.body.error, 'retired', 'the Store PLEX rail refuses');
+assert(/ETH only/i.test(r.body.message || ''), 'and says what replaced it');
+assert.equal((await meOf(plexer.token)).omr, omrPre, 'a refused buy burns NOTHING — the earner keeps every $OMR');
+assert.equal((await call('GET', '/v1/store', { token: plexer.token })).body.owned.mintCredits, 0,
+  'and grants nothing — the rail is gone, not merely priced out');
+assert.equal((await pool.query("SELECT COUNT(*) n FROM transactions WHERE reason LIKE 'plex:%'")).rows[0].n, '0',
+  'no plex:* row is written — the reason survives for HISTORY, but nothing new may use it');
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 // THE PATRON PROGRAM (Store Tier-4) — the backer-prestige ladder (patron_spent), THE LEDGER PRESTIGE
-// (pass_seasons), THE BENEFACTORS league + THE HOUSE'S FAVOR, the (ship-at-0) PLEX discount. Status only.
+// (pass_seasons), THE BENEFACTORS league + THE HOUSE'S FAVOR. Status only.
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 // (A) THE PATRON LADDER — a REAL purchase bumps patron_spent; a COMP does not; the tier climbs.
 // alice made a REAL made_man (0.01) earlier + a COMP revive_3 (0.25, no txHash) → spent should be 0.01.
@@ -211,24 +196,12 @@ assert.equal(sbA.owned.patronStanding.tier, patronTierOf(0.51), 'the tier index 
 assert.equal(sbA.owned.patronStanding.tierName, 'Benefactor', '0.51 ETH → Benefactor');
 assert(sbA.owned.patronStanding.nextTier && sbA.owned.patronStanding.nextTier.name === 'Patron', 'the next tier + delta surface');
 
-// (B) THE PLEX CONTRIBUTION — a PLEX purchase (earned $OMR) bumps patron_spent by the SKU priceEth
-const plexPat = await mk('Plex Patron');
-await pool.query(`UPDATE account_persistent SET omr=${PLEX_SEED} WHERE account_id='${plexPat.aid}'`);
-r = await call('POST', '/v1/store/plex/wire_month', { token: plexPat.token }); // 0.03 ETH SKU
-assert.equal(r.code, 200, `PLEX-bought the wire: ${JSON.stringify(r.body)}`);
-const sbPl = (await call('GET', '/v1/store', { token: plexPat.token })).body;
-assert.equal(sbPl.owned.patronStanding.spentEth, 0.03, 'a PLEX buy bumps patron_spent (a real earned-$OMR contribution)');
-
-// (C) THE PLEX DISCOUNT lever (ships 0) — armed, a higher tier burns less $OMR (never below the floor)
-// an oracle high enough that the MARKET leg beats the static floor — read off the lever, so a
-// re-denomination that moves the floor cannot leave this block testing the floor instead.
-const discOracle = STORE.PLEX_FLOOR_OMR_PER_ETH * 3;
-await pool.query(`INSERT INTO vig_buyback (id, eth_spent, omr_bought, price_omr_per_eth, to_reserve, to_prize) VALUES ('bb-disc', 1, ${discOracle}, ${discOracle}, ${discOracle / 2}, ${discOracle / 2})`);
-const noDisc = (await call('GET', '/v1/store', { token: alice.token })).body.packages.find((p) => p.sku === 'revive_5').plexOmr;
-PATRON.TIERS[2].plexDiscountBps = 1000; // arm Benefactor 10% off (TEST ONLY — ships at 0)
-const withDisc = (await call('GET', '/v1/store', { token: alice.token })).body.packages.find((p) => p.sku === 'revive_5').plexOmr; // alice is Benefactor
-assert.equal(withDisc, Math.round(noDisc * 0.9 * 1e6) / 1e6, 'an armed Benefactor discount shaves 10% off the PLEX price');
-PATRON.TIERS[2].plexDiscountBps = 0; // restore pure status
+// (B/C) THE PLEX CONTRIBUTION and THE PLEX DISCOUNT are both retired with the rail they priced.
+// `patron_spent` now moves on REAL ETH purchases alone, which is the honest meter: it measures what
+// reached the revenue split. `plexDiscountBps` shipped at 0 and is reported as 0 — the tier NAMES
+// are what the program is.
+assert.equal((await call('GET', '/v1/store', { token: alice.token })).body.owned.patronStanding.plexDiscountBps, 0,
+  'the retired discount reports 0 rather than a live-looking number');
 
 // (D) THE BENEFACTORS + THE HOUSE'S FAVOR — ranked by patron_spent; agents excluded; families aggregate
 let lb = await benefactorLeaderboard(pool);
@@ -241,9 +214,13 @@ await pool.query('UPDATE account_persistent SET agent_flag=true, patron_spent=99
 lb = await benefactorLeaderboard(pool);
 assert(!lb.patrons.some((p) => p.steward === 'Spook Patron'), 'an agent_flag patron never appears on the board');
 assert.equal(lb.favor.steward, 'Patron Alice', "the agent did not steal the House's Favor");
-// families aggregate a roster's spend (seed a light gang with alice + plexPat)
+// families aggregate a roster's spend (seed a light gang with alice + a second REAL patron)
+const famPat = await mk('Family Patron');
+const WFAM = getAddress('0x' + 'fa'.repeat(20));
+await setWallet(famPat.aid, WFAM);
+await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: nonce(), sku: 'wire_month', payer: WFAM, amountWei: ethWei(0.03), txHash: '0xreal_fam' } });
 await pool.query(`INSERT INTO gangs (id, name, tag) VALUES ('pat-gang','The Benefactors','BEN')`);
-await pool.query(`INSERT INTO gang_members (gang_id, character_id, role, joined_at) VALUES ('pat-gang','${alice.id}','boss',now()), ('pat-gang','${plexPat.id}','soldier',now())`);
+await pool.query(`INSERT INTO gang_members (gang_id, character_id, role, joined_at) VALUES ('pat-gang','${alice.id}','boss',now()), ('pat-gang','${famPat.id}','soldier',now())`);
 lb = await benefactorLeaderboard(pool);
 const fam = lb.families.find((g) => g.name === 'The Benefactors');
 assert(fam && fam.patrons === 2, 'the family board counts both patrons');
@@ -270,11 +247,11 @@ const aliceSpentBefore = sbA.owned.patronStanding.spentEth;
 await app.inject({ method: 'POST', url: '/v1/mod/kill', headers: { 'x-mod-key': 'test-mod-key' }, payload: { characterId: alice.id } });
 assert.equal((await call('GET', '/v1/store', { token: alice.token })).body.owned.patronStanding.spentEth, aliceSpentBefore, 'patron_spent survives death');
 
-// (F) §10.4 STILL NEUTRAL — the whole patron program minted nothing (the PLEX burns are ledgered)
+// (F) §10.4 STILL NEUTRAL — the whole patron program minted nothing
 const inv2 = await runLedgerInvariants(pool, { alert: false });
 assert(inv2.checks.find((c) => c.name === 'reason vocabulary').ok, 'no unknown-reason alarm from the patron program');
 
-console.log('✅ THE PATRON PROGRAM (Store Tier-4) test passed — the patron ladder (a REAL purchase bumps patron_spent, a COMP does not, the tier climbs Friend→Benefactor), the PLEX contribution bump, the (ship-at-0) PLEX discount lever, THE BENEFACTORS league + THE HOUSE\'S FAVOR crown (agents excluded, families aggregate a roster), THE LEDGER PRESTIGE (a completed-then-renewed track bumps pass_seasons, an unfinished one does not), and DEATH SURVIVAL of both status axes');
+console.log('✅ THE PATRON PROGRAM (Store Tier-4) test passed — the patron ladder (a REAL purchase bumps patron_spent, a COMP does not, the tier climbs Friend→Benefactor), the retired PLEX rail (the Store is ETH only), THE BENEFACTORS league + THE HOUSE\'S FAVOR crown (agents excluded, families aggregate a roster), THE LEDGER PRESTIGE (a completed-then-renewed track bumps pass_seasons, an unfinished one does not), and DEATH SURVIVAL of both status axes');
 
 console.log('✅ The Store (ETH revenue packages) test passed — the catalog board, the three-way revenue split (founder/buyback/rwa, exact math), idempotent ingestion (re-delivered nonce = no-op), per-SKU grants (mint credit, revive bundle, ETH Street Wire window, the season pass + patron, the permanent patron badge), pay-before-link reconcile (claim-then-grant, exactly-once), zero-value no-grant, §10.4 NEUTRALITY (every check drift-0 — the Store mints no currency), and the buyback share funding the EXISTING Vig flywheel (spend ≤ revenue holds; RWA recorded-only, R2 dormant)');
 await app.close();

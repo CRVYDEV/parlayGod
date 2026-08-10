@@ -667,7 +667,6 @@ const SIGNED = [
   ['MINT_TRANCHES', [{"through":1000,"eth":0.01},{"through":11000,"eth":0.025},{"through":36000,"eth":0.035},{"through":86000,"eth":0.045},{"through":186000,"eth":0.05}]],
   // The one rate every ETH-denominated fee converts through pre-market. Moving it re-prices EVERY
   // $OMR rail at once (mint, respawn, Store SKUs, the tranche column) — which is the point.
-  ['PLEX_GENESIS_OMR_PER_ETH', 205882],
   // FAMILY CHARTERS (strategy package) — the asymmetry. Both halves of each trade are levers: the
   // handicap IS the mechanic, so a retune that quietly softened one side would turn a charter back
   // into a free upgrade. A whole-object pin (the multipliers are leaves on array entries).
@@ -818,8 +817,6 @@ const SIGNED = [
   ['STABLE.TRAIN_ENERGY', 12],
   ['STABLE.TRAIN_GAIN', 1],
   ['STABLE.VARIANCE', 22],
-  ['STORE.PLEX_FLOOR_OMR_PER_ETH', 247058.4],
-  ['STORE.PLEX_PREMIUM_BPS', 12000],
   ['TAX.DEV_BPS', 5000],
   ['TERRITORY_SYNDICATE_MIN', 3],
   // THE VAULT — the founder kept the vault and backed it with ETH (2026-07-31). These meter the

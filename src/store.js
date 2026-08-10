@@ -14,7 +14,6 @@ import crypto from 'node:crypto';
 import { getAddress } from 'viem';
 import { GameError, notify } from './game.js';
 import { STORE, PASS, PATRON, packageOf, passActive, patronTierOf, patronTierName, passPrestigeOf } from './rules.js';
-import { spendOmr } from './vanity.js';
 
 const uid = () => crypto.randomUUID();
 const norm = (addr) => { try { return getAddress(addr); } catch { return null; } };
@@ -203,71 +202,24 @@ export async function sweepUncreditedStore(pool) {
   return { granted };
 }
 
-// ── PLEX-for-packages: pay a SKU's fee from EARNED $OMR (a plex:* burn) for the SAME entitlement ──
-// The market-linked quote: max(floor, feeEth × latest-buyback-price × premium). `db` is a pool or an
-// open client (in-txn read). oracle null (static floor) until a first buyback prints a price.
-export async function plexPackageQuote(db, sku) {
-  const pkg = packageOf(sku);
-  if (!pkg) return null;
-  const floor = round6(pkg.priceEth * STORE.PLEX_FLOOR_OMR_PER_ETH);
-  const last = (await db.query('SELECT price_omr_per_eth FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0];
-  const oracle = last ? Number(last.price_omr_per_eth) : null;
-  // defense-in-depth (audit LOW-1): a non-finite/≤0 oracle (only reachable via a hand-corrupted buyback
-  // row — runVigBuyback guards price>0) must never propagate NaN into the price → the spend → §10.4.
-  if (oracle == null || !Number.isFinite(oracle) || oracle <= 0) return { sku, price: floor, oracle: null };
-  const price = Math.max(floor, round6(pkg.priceEth * oracle * STORE.PLEX_PREMIUM_BPS / 10000));
-  return { sku, price, oracle };
-}
+// ── PLEX-for-packages is RETIRED (founder-directed 2026-08-10: "Make plex items and consumables eth
+// only") ────────────────────────────────────────────────────────────────────────────────────────────
+// The Store's second rail is gone for the same reason the mint's was, plus one specific to here: a
+// Store SKU is a REAL-MONEY product (the whole point of the Store is that ETH revenue funds the Vig,
+// the reserve, POL and the treasury). Paying for it in $OMR routed the purchase around the revenue
+// split entirely — the buyer got the entitlement and none of the four destinations got a wei. Since
+// v3 step 2 it did not even burn: `plex:%` recycles to the desk shelf, so the "it shrinks supply
+// instead" defence stopped being true two migrations ago.
+//
+// Retired the standard way — the PAYER and the QUOTE are DELETED (a rail behind a flag is one env var
+// from live), the reasons stay in the omr vocabulary + the burn term + `DESK.SINK_REASONS` forever
+// (real `plex:<sku>` rows exist and conservation is a claim about the WHOLE ledger), and the
+// `plex bridge retired` freshness check asserts nothing new writes them.
+export async function plexPackageQuote() { return null; }
 
-// POST /v1/store/plex/:sku — buy a Store package with EARNED $OMR. Runs under withCharacter (h.acct is
-// the account). BURNS the $OMR (plex:<sku>, a §10.4-legal deflationary sink via the plex:% term) and
-// grants the SAME non-§10.4 entitlement an ETH payer gets. The grant is done IN-CONTEXT: persisted
-// columns (mint_credits/respawn_tokens via persistAccount; wire_until via persistCharacter) are mutated
-// IN-MEMORY so the post-handler persist commits them; non-persisted state (patron/pass_*) is direct SQL
-// (no clobber). This is why we don't call the headless grantPackage here — it would be clobbered.
-export async function payPackagePlex(ch, sku, client, h) {
-  const pkg = packageOf(sku);
-  if (!pkg) throw new GameError('bad_sku', `Unknown package: ${sku}`);
-  const g = pkg.grant || {}, now = Date.now();
-  // GATE BEFORE THE BURN (walkthrough MED-1, the vig.js:116 precedent): a mint credit bought while
-  // already made is DEAD (mintCharacter short-circuits on acct.minted, never spending it), and a pure
-  // Patron's Ring re-buy is a no-op — refuse both so the player keeps their earned $OMR. (season_pass
-  // still grants patron alongside pass days + revives, so it's never a no-op — don't gate it.)
-  if (g.mintCredits && h.acct?.minted) throw new GameError('minted', 'This account is already made — the credit would be dead.');
-  if (g.patron && !g.passDays && !g.mintCredits && !g.respawnTokens && h.acct?.patron)
-    throw new GameError('patron', 'You already wear the ring.');
-  // a cosmetic you already own would be a dead re-buy — refuse BEFORE the burn (the mint-credit precedent)
-  if (g.cosmetic && (await client.query('SELECT 1 FROM store_cosmetics WHERE account_id=$1 AND style=$2', [ch.account_id, g.cosmetic])).rows[0])
-    throw new GameError('owned', 'You already own that decor style.');
-  const q = await plexPackageQuote(client, sku);
-  // THE PATRON DISCOUNT (Tier-4) — a higher patron tier shaves plexDiscountBps off the PLEX price (the
-  // DISCOUNTED $OMR is the number burned). SHIPS AT 0 (pure status) → q.price unchanged; the flagged lever.
-  const spent0 = Number((await client.query('SELECT patron_spent FROM account_persistent WHERE account_id=$1', [ch.account_id])).rows[0]?.patron_spent || 0);
-  const discBps = PATRON.TIERS[patronTierOf(spent0)]?.plexDiscountBps || 0;
-  const floor = round6(pkg.priceEth * STORE.PLEX_FLOOR_OMR_PER_ETH);
-  const price = Math.max(floor, round6(q.price * (10000 - discBps) / 10000)); // discounted, never below the PLEX floor
-  if (Number(h.acct.omr) < price) throw new GameError('omr', `That runs ${price} $OMR at the current rate — earn it, or pay the ETH fee.`);
-  await spendOmr(client, h, price, `plex:${sku}`); // gates h.acct.omr, debits in-memory, ledgers the burn (plex:% term)
-  // PLEX is a REAL earned-$OMR contribution → bump the lifetime patron meter (direct SQL under the actor lock, off the persist list)
-  if (pkg.priceEth > 0) await client.query('UPDATE account_persistent SET patron_spent = patron_spent + $2 WHERE account_id=$1', [ch.account_id, pkg.priceEth]);
-  if (g.mintCredits) h.acct.mint_credits = Number(h.acct.mint_credits || 0) + g.mintCredits;         // persistAccount commits
-  if (g.respawnTokens) h.acct.respawn_tokens = Number(h.acct.respawn_tokens || 0) + g.respawnTokens; // persistAccount commits
-  if (g.patron) { await client.query('UPDATE account_persistent SET patron=true WHERE account_id=$1', [ch.account_id]); if (h.acct) h.acct.patron = true; }
-  if (g.cosmetic) await client.query('INSERT INTO store_cosmetics (account_id, style) VALUES ($1,$2)', [ch.account_id, g.cosmetic]); // gated above → never a dup
-  if (g.passDays) {
-    const cur = (await client.query('SELECT pass_until, pass_tier FROM account_persistent WHERE account_id=$1', [ch.account_id])).rows[0];
-    const wasActive = cur?.pass_until && new Date(cur.pass_until).getTime() > now;
-    const until = new Date(laterMs(now, cur?.pass_until) + g.passDays * 86400000);
-    if (wasActive) await client.query('UPDATE account_persistent SET pass_until=$2 WHERE account_id=$1', [ch.account_id, until]);
-    else {
-      const completed = Number(cur?.pass_tier || 0) >= PASS.TRACK.length; // THE LEDGER PRESTIGE: a finished track → +1 season
-      await client.query(`UPDATE account_persistent SET pass_until=$2, pass_tier=0, pass_at=NULL${completed ? ', pass_seasons = pass_seasons + 1' : ''} WHERE account_id=$1`, [ch.account_id, until]);
-    }
-  }
-  if (g.wireDays) ch.wire_until = new Date(laterMs(now, ch.wire_until) + g.wireDays * 86400000); // persistCharacter commits
-  await client.query('INSERT INTO store_grants (id, account_id, sku, ref) VALUES ($1,$2,$3,NULL)', [uid(), ch.account_id, sku]);
-  await h.track(client, ch.account_id, 'plex_package', { sku, omr: price });
-  return { ok: true, sku, name: pkg.name, omrSpent: price };
+export async function payPackagePlex() {
+  throw new GameError('retired',
+    'The Store is ETH only. $OMR buys in-game things — dues, the compound, seals, the wire, vanity.');
 }
 
 // ── read model: the catalog + your live entitlements ──
@@ -278,30 +230,23 @@ export async function storeBoard(pool, accountId) {
   const now = Date.now();
   const wireMs = ch?.wire_until ? new Date(ch.wire_until).getTime() : 0;
   const passMs = a.pass_until ? new Date(a.pass_until).getTime() : 0;
-  // the PLEX price (pay in earned $OMR) — one oracle read, derived per SKU
-  const last = (await pool.query('SELECT price_omr_per_eth FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0];
-  const rawOracle = last ? Number(last.price_omr_per_eth) : null;
-  const oracle = (rawOracle != null && Number.isFinite(rawOracle) && rawOracle > 0) ? rawOracle : null; // LOW-1 guard
   const cosmetics = (await pool.query('SELECT style FROM store_cosmetics WHERE account_id=$1', [accountId])).rows.map((r) => r.style);
-  // THE PATRON PROGRAM (Tier-4): the caller's backer standing + the (ship-at-0) PLEX discount for their tier
+  // THE PATRON PROGRAM (Tier-4): the caller's backer standing. `plexDiscountBps` shipped at 0 and its
+  // rail is retired, so it is reported as 0 rather than read — the tier NAMES are what the program is.
   const spentEth = round6(Number(a.patron_spent || 0));
   const tierIdx = patronTierOf(spentEth);
-  const discBps = PATRON.TIERS[tierIdx]?.plexDiscountBps || 0;
   const nextT = PATRON.TIERS[tierIdx + 1] || null;
   const seasons = Number(a.pass_seasons || 0);
   const prIdx = passPrestigeOf(seasons);
-  const plexOf = (p) => {
-    const floor = round6(p.priceEth * STORE.PLEX_FLOOR_OMR_PER_ETH);
-    const raw = oracle ? Math.max(floor, round6(p.priceEth * oracle * STORE.PLEX_PREMIUM_BPS / 10000)) : floor;
-    return Math.max(floor, round6(raw * (10000 - discBps) / 10000)); // patron-discounted, never below the floor
-  };
   return {
-    packages: STORE.PACKAGES.map((p) => ({ sku: p.sku, name: p.name, priceEth: p.priceEth, plexOmr: plexOf(p), grant: p.grant, blurb: p.blurb })),
+    // `plexOmr: null` is a POSITIVE statement — the Store is ETH only — so a client renders "ETH only"
+    // rather than a number nobody can pay. Kept on the shape so an old client degrades to no button.
+    packages: STORE.PACKAGES.map((p) => ({ sku: p.sku, name: p.name, priceEth: p.priceEth, plexOmr: null, grant: p.grant, blurb: p.blurb })),
     split: STORE.SPLIT_BPS,
     owned: {
       minted: !!a.minted, mintCredits: Number(a.mint_credits || 0), respawnTokens: Number(a.respawn_tokens || 0),
       patron: !!a.patron,
-      patronStanding: { spentEth, tier: tierIdx, tierName: PATRON.TIERS[tierIdx].name, plexDiscountBps: discBps,
+      patronStanding: { spentEth, tier: tierIdx, tierName: PATRON.TIERS[tierIdx].name, plexDiscountBps: 0,
         nextTier: nextT ? { name: nextT.name, minEth: nextT.minEth, delta: round6(nextT.minEth - spentEth) } : null },
       pass: { active: passActive(a, now), seconds: Math.max(0, Math.ceil((passMs - now) / 1000)),
         seasons, prestigeRank: prIdx, prestigeName: PASS.PRESTIGE_RANKS[prIdx].name },

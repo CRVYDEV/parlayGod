@@ -2,21 +2,9 @@
 // (zero infra, chain dormant): real ETH revenue → the Vig's 60% share → the buyback buys hard
 // $OMR → splits reserve/prize → a player is paid a prize and EXTRACTS it (a withdrawal the Vig
 // funded, not team charity) → and the extraction-≤-inflow invariant holds at every step. Plus the
-// PLEX bridge (pay a fee in earned $OMR, a §10.4 burn) and §10.4 in-game conservation throughout.
+// the retired PLEX bridge (every fee is ETH) and §10.4 in-game conservation throughout.
 import assert from 'node:assert';
 import { privateKeyToAccount } from 'viem/accounts';
-
-// THE GENESIS RATE, pinned for this fixture. Every fee is payable in ETH or in $OMR, and the $OMR
-// side converts at `PLEX_GENESIS_OMR_PER_ETH` (205,882 — the locked launch price) until a market
-// prints one. This file's economics are sized in TENS of $OMR: 0.066 ETH of revenue buys 132, the
-// prize pays 60. At the real rate a mint costs ~2,471, so the earner could never reach one and the
-// PLEX-spend leg below would test nothing. Pinning the rate keeps the property under test — the
-// quote is max(floor, market) and the MARKET leg binds — at numbers the fixture can actually pay.
-// Set before the import because both modules read it at load (ESM hoists static imports, so these
-// two are dynamic).
-process.env.PLEX_GENESIS_OMR_PER_ETH = '2000';
-const { PLEX_RESPAWN_OMR } = await import('../src/vig.js');
-const { PLEX_GENESIS_OMR_PER_ETH } = await import('../src/rules.js');
 
 // deterministic signer/player keys (well-known anvil accounts) — set BEFORE importing the server
 process.env.VOUCHER_SIGNER_PK = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
@@ -109,40 +97,54 @@ assert(vig.invariants.ok, 'invariant still holds — the reserve is backed by th
 r = await call('POST', '/v1/mod/vig/prizes', { headers: modH, body: { winners: [{ accountId: acctId, omr: 1000 }] } });
 assert(near(r.body.paid, 0), 'an over-pool prize pays nothing');
 
-// ── (5) the PLEX bridge — MARKET-LINKED: fee-ETH × the latest buyback's price × 1.2 premium ──
-// (sim-audit F3: the static floor was minutes of play vs 0.01 ETH real money — the Vig starved)
-// The quote is max(FLOOR, market), so this block prints a HIGHER reference price than the earlier
-// buybacks: under the floor, the assertion below would be testing the floor while claiming to test
-// the market. It was a hardcoded 4000 and went stale the moment the floors were re-derived from the
-// genesis rate — so the reference is now DERIVED from that rate, and the block cannot rot again.
-// Both floor and market leg carry the same premium, so any oracle above the genesis rate binds.
-const REF_PRICE = PLEX_GENESIS_OMR_PER_ETH * 2;
-await pool.query(`INSERT INTO vig_buyback (id, eth_spent, omr_bought, price_omr_per_eth, to_reserve, to_prize) VALUES ('px-ref', 0, 0, ${REF_PRICE}, 0, 0)`);
+// ── (5) THE PLEX BRIDGE IS RETIRED (founder-directed 2026-08-10) ────────────────────────────────
+// Every real-money fee — the identity mint, the respawn token, every Store SKU — is ETH now. Two
+// arguments carried it: a fee payable two ways is always priced by the CHEAPER rail (fatal for the
+// mint, which is the Sybil bound), and since v3 step 2 the $OMR rail did not even burn — `plex:%` is
+// in DESK.SINK_REASONS, so it RECYCLED to the desk shelf, which is the thing the bridge was sold as
+// an alternative to.
+//
+// Retired the standard way, and all four ways it could come back are asserted: the QUOTE says so
+// positively, the ROUTES stay mounted so an old client hears why, the PAYERS refuse, and the LEDGER
+// is untouched (the reason stays in the vocabulary for HISTORY — nothing new may use it).
 r = await call('GET', '/v1/plex/price');
-assert.equal(Number(r.body.respawn.oracle), REF_PRICE, 'the oracle is the latest buyback price');
-assert(r.body.respawn.price > PLEX_RESPAWN_OMR, 'and the MARKET leg is the binding one, not the static floor');
-assert(near(r.body.respawn.price, 480), `respawn quote = 0.10 ETH × ${REF_PRICE} × 1.2 = 480 $OMR`);
-
-// ── THE MINT IS ETH ONLY (founder-directed 2026-08-10) ──────────────────────────────────────────
-// Minting is the SYBIL BOUND — it is what gates extraction — and a fee payable two ways is always
-// priced by the cheaper rail. So the identity has ONE price, in real money, at the published wave.
-// The board says so positively rather than leaving a stale number a client would render as payable,
-// the route stays MOUNTED so a client that has been posting to it learns what happened, and the
-// PAYER refuses (a rail that merely sleeps is one env var from being live again).
 assert.equal(r.body.mint, null, 'no $OMR mint price is quoted — the identity has one rail');
-assert.equal(r.body.mintEthOnly, true, 'and the board says so positively, rather than by omission');
-r = await call('POST', '/v1/plex/mint', { token });
-assert.equal(r.body.error, 'retired', 'the PLEX mint refuses — ETH only');
-assert(/ETH only/i.test(r.body.message || ''), 'and says what replaced it');
-assert(/mission/i.test(r.body.message || ''), '…including that the free path still exists — the mission grants a credit outright');
-const omrAfterRefusal = (await meOf(token)).omr;
-assert(near(omrAfterRefusal, 60), 'a refused mint burns NOTHING — the earner keeps every $OMR');
-assert.equal((await pool.query("SELECT COUNT(*) n FROM transactions WHERE reason='plex:mint'")).rows[0].n, '0',
-  'and writes no plex:mint row — the reason stays in the vocabulary for HISTORY, but nothing new may use it');
+assert.equal(r.body.respawn, null, 'and none for the respawn either — every fee is ETH');
+assert.equal(r.body.ethOnly, true, 'the board says so positively, rather than by omission');
 
-// the market-priced respawn (480) is beyond the earner's 60 — $OMR stays the PREMIUM rail, ETH the
-// economical one (that asymmetry is the point: ETH funds the Vig, $OMR burns at a markup)
-assert.equal((await call('POST', '/v1/plex/respawn', { token })).body.error, 'omr', 'market-priced respawn gates on the real rate');
+const omrBeforeRefusals = (await meOf(token)).omr;
+for (const kind of ['mint', 'respawn']) {
+  r = await call('POST', `/v1/plex/${kind}`, { token });
+  assert.equal(r.body.error, 'retired', `the PLEX ${kind} refuses — ETH only`);
+  assert(/ETH only/i.test(r.body.message || ''), 'and says what replaced it');
+  assert(/\$OMR buys in-game/i.test(r.body.message || ''), '…and what $OMR is still for');
+}
+r = await call('POST', '/v1/store/plex/made_man', { token });
+assert.equal(r.body.error, 'retired', 'and the Store rail refuses too — a SKU is a real-money product');
+
+assert(near((await meOf(token)).omr, omrBeforeRefusals),
+  'a refused PLEX purchase burns NOTHING — the earner keeps every $OMR');
+assert.equal((await pool.query("SELECT COUNT(*) n FROM transactions WHERE reason LIKE 'plex:%'")).rows[0].n, '0',
+  'and writes no plex:* row — the reason stays in the vocabulary for HISTORY, but nothing new may use it');
+{ // and the invariant SAYS so, rather than the test alone knowing it
+  const inv = await runLedgerInvariants(pool, { alert: false });
+  const retired = inv.checks.find((c) => c.name === 'plex bridge retired');
+  assert(retired && retired.ok, 'the `plex bridge retired` freshness check is live and clean');
+}
+{ // THE OTHER HALF, and the reason the reason must never leave the burn term: a HISTORICAL plex row
+  // is REAL — conservation is a claim about the whole ledger, so it has to keep reconciling while
+  // only NEW writes are an alarm (the emission.js retirement, in its second costume).
+  const conservBefore = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === '$OMR conservation');
+  await pool.query(`INSERT INTO transactions (id, account_id, currency, amount, reason, at)
+    VALUES ('hist-plex-1', $1, 'omr', -7, 'plex:mint', now() - interval '2 days')`, [acctId]);
+  await pool.query('UPDATE account_persistent SET omr = omr - 7 WHERE account_id=$1', [acctId]);
+  const inv2 = await runLedgerInvariants(pool, { alert: false });
+  const conservAfter = inv2.checks.find((c) => c.name === '$OMR conservation');
+  assert(near(Number(conservAfter.drift), Number(conservBefore.drift)),
+    'a 2-day-old plex burn still reconciles — the reason stays in the vocabulary AND the burn term forever');
+  assert(inv2.checks.find((c) => c.name === 'plex bridge retired').ok,
+    '…and does NOT trip the freshness alarm, which is about new writes, not history');
+}
 
 // ── (6) end-to-end extraction: the earner withdraws Vig-funded $OMR (a REAL living, not charity) ──
 r = await call('POST', '/v1/wallet/challenge', { token });
@@ -204,5 +206,5 @@ assert(vig.invariants.summary.extracted <= vig.invariants.summary.funded + 1e-9,
 // ── (7) §10.4 in-game conservation holds with the prize mint + PLEX/withdraw burns + the trade source in the mix ──
 assert((await runLedgerInvariants(pool, { alert: false })).ok, '§10.4 in-game ledger still balances (prize:omr mint offset by plex:* + withdraw:omr burns; trade revenue is out-of-band)');
 
-console.log('✅ Vig test passed — real revenue → 60/40 split → buyback (spend ≤ inflow) → reserve+prize → prize payout → PLEX bridge (pay fees in earned $OMR) → real Vig-funded withdrawal + TIER A: a TRADE-fee source (the afterSwap→Vig hook rail) splits/buys/reconciles end-to-end and WIDENS extraction≤inflow, §10.4 untouched — the extraction-≤-inflow invariant + §10.4 conservation holding throughout');
+console.log('✅ Vig test passed — real revenue → 60/40 split → buyback (spend ≤ inflow) → reserve+prize → prize payout → the RETIRED PLEX bridge (every fee is ETH) → real Vig-funded withdrawal + TIER A: a TRADE-fee source (the afterSwap→Vig hook rail) splits/buys/reconciles end-to-end and WIDENS extraction≤inflow, §10.4 untouched — the extraction-≤-inflow invariant + §10.4 conservation holding throughout');
 await app.close();

@@ -96,12 +96,12 @@ export const OPERATIONAL_ENV = [
   // economy levers — founder sign-off dials, deliberately operator-settable (BALANCE.md)
   'BOND_DEV_BPS', 'BOND_DISCOUNT_BPS', 'BOND_ETH_SCORE_OMR', 'BOND_PLEDGE_MIN', 'BOND_POL_BPS',
   'BOND_QUOTE_TTL_SEC', 'BOND_RWA_BPS', 'BOND_VEST_HOURS', 'BOND_VIG_BPS', 'EARLY_SELL_TAX_BPS',
-  'FEE_RWA_BPS', 'FRESH_WINDOW_MS', 'MINT_FEE_ETH', 'PLEX_GENESIS_OMR_PER_ETH', 'PLEX_PREMIUM_BPS',
-  'PLEX_RESPAWN_OMR', 'RESPAWN_FEE_ETH', 'REVENUE_BUYBACK_BPS', 'REVENUE_FOUNDER_BPS',
+  'FEE_RWA_BPS', 'FRESH_WINDOW_MS', 'MINT_FEE_ETH',
+  'RESPAWN_FEE_ETH', 'REVENUE_BUYBACK_BPS', 'REVENUE_FOUNDER_BPS',
   'REVENUE_RWA_BPS', 'SEASON_MODS', 'SELL_TAX_BPS', 'SELL_TAX_DEV_BPS',
-  'SELL_TAX_LP_BPS', 'SELL_TAX_RWA_BPS', 'STORE_PLEX_FLOOR',
+  'SELL_TAX_LP_BPS', 'SELL_TAX_RWA_BPS',
   'TRADE_FEE_BPS', 'TRADE_VIG_BPS', // D1: the buy-side trade fee → the Vig (rules.tail.js TRADE_FEE)
-  'STORE_PLEX_PREMIUM_BPS', 'VIG_BPS', 'VIG_MAX_PRICE_JUMP', 'VIG_RESERVE_BPS',
+  'VIG_BPS', 'VIG_MAX_PRICE_JUMP', 'VIG_RESERVE_BPS',
   'WITHDRAW_TAX_BPS',
   // content toggles
   'POPULATION_OFF',
@@ -232,51 +232,28 @@ export function preflight(env = process.env) {
   if (!env.MOD_KEY || (env.MOD_KEY || '').length < 24)
     warnings.push('MOD_KEY is short — it is the only credential on the mod perimeter (ban, mod-kill, confiscate, comp grants). Use a long random secret.');
 
-  // THE RESPAWN RAIL MUST SIT AT THE GENESIS RATE. A fee payable two ways — real ETH, or the same fee
-  // in EARNED $OMR through PLEX — is always priced by the CHEAPER rail, so the two have to agree or
-  // the cheap one is simply the price. `plexQuote` prices the $OMR side at
-  // `max(static_floor, feeEth × oracle × premium)`, and PRE-MARKET there is no oracle row, so it
-  // returns the static floor and ignores the ETH fee completely. Raise RESPAWN_FEE_ETH without
-  // raising PLEX_RESPAWN_OMR and they silently diverge.
+  // THE TRANCHE SCHEDULE (Shape D, adopted 2026-08-10; five waves capped at 0.05 ETH): the mint fee
+  // has to sit ON a published wave. A price off the table is one the published commitment never
+  // promised, which is exactly the drift a published commitment exists to prevent.
   //
-  // THE MINT IS NOT CHECKED HERE ANY MORE, because it no longer has a $OMR rail (founder-directed
-  // 2026-08-10). That is the stronger fix: minting is the Sybil bound, and the surest way to keep two
-  // rails in agreement about it is to have one. What remains is the respawn — a repeatable consumable
-  // rather than the bound — whose floor must still track the genesis rate (~247,058 $OMR/ETH,
-  // 205,882 × 1.2). Checked as a ratio so it holds at any fee level.
+  // THE TWO-RAILS CHECK THAT USED TO LIVE HERE IS GONE, and its absence is the fix rather than a gap.
+  // It compared a fee's ETH price against its $OMR price, because a fee payable two ways is always
+  // priced by the cheaper rail and the two silently diverge when only one is moved. Every fee is ETH
+  // only now (founder-directed 2026-08-10), so there is no second rail to disagree — the surest way
+  // to keep two rails in lockstep turned out to be having one.
   //
-  // A WARNING, not an error, for the reason recorded above SOCIAL_VERIFY_MODE: preflight errors are
-  // fatal, and taking a live server down over a mispriced rail is strictly worse than the mispricing.
-  // The live implied rate is on `GET /v1/mod/vig` for whoever is actually looking.
+  // The waves are RESTATED here because preflight cannot import rules.js (the one-way rule);
+  // test/preflight.js pins them to MINT_TRANCHES so the restatement cannot rot. A WARNING, not an
+  // error, for the reason recorded above SOCIAL_VERIFY_MODE: taking a live server down over a
+  // mispriced fee is strictly worse than the mispricing. The admin chain panel shows the same
+  // expected-vs-live comparison against the CURRENT wave for whoever is actually looking.
   {
-    // Restated from vig.js (which imports game.js, so preflight cannot import it — the one-way rule).
-    // `test/preflight.js` asserts these defaults still equal vig.js's, so the restatement cannot rot.
-    const num = (k, d) => Number(env[k] ?? d);
-    const rate = (omr, eth) => (eth > 0 ? omr / eth : null);
-    const GENESIS_RATE = 205882 * 1.2; // the one conversion every $OMR rail uses pre-market
-    const respawn = rate(num('PLEX_RESPAWN_OMR', 24706), num('RESPAWN_FEE_ETH', 0.10));
-    if (respawn && Math.abs(respawn - GENESIS_RATE) / GENESIS_RATE > 0.05)
-      warnings.push(`The respawn's PLEX and ETH rails disagree on what value is worth: it implies `
-        + `${Math.round(respawn)} $OMR/ETH against the genesis rate's ${Math.round(GENESIS_RATE)}. `
-        + 'Pre-market the $OMR price is the STATIC floor and ignores the ETH fee entirely, so whichever '
-        + 'rail is cheap is the one people will use. Move PLEX_RESPAWN_OMR with RESPAWN_FEE_ETH.');
-
-    // THE TRANCHE SCHEDULE (Shape D, adopted 2026-08-10; five waves capped at 0.05 ETH): the mint
-    // fee does not just have to agree on a RATE — it has to sit ON a published wave. A pair that is
-    // rate-clean and still off-schedule is a price the published table never promised, which is
-    // exactly the drift a published commitment exists to prevent. The waves are RESTATED here for
-    // the same one-way-rule reason as the vig defaults above; test/preflight.js pins them to
-    // MINT_TRANCHES so the restatement cannot rot. A WARNING (the standing posture — a mispriced
-    // rail must not take a live server down). The admin chain panel shows the same expected-vs-live
-    // comparison against the CURRENT wave for whoever is actually looking.
-    {
-      const WAVES = [0.01, 0.025, 0.035, 0.045, 0.05];
-      const fee = num('MINT_FEE_ETH', 0.01);
-      if (!WAVES.some((w) => Math.abs(fee - w) < 1e-9))
-        warnings.push(`The live mint fee (${fee} ETH) is OFF the published tranche schedule `
-          + `(${WAVES.join(' / ')} ETH). The schedule is a published commitment — set the fee to a `
-          + 'MINT_TRANCHES wave, or publish a new table.');
-    }
+    const WAVES = [0.01, 0.025, 0.035, 0.045, 0.05];
+    const fee = Number(env.MINT_FEE_ETH ?? 0.01);
+    if (!WAVES.some((w) => Math.abs(fee - w) < 1e-9))
+      warnings.push(`The live mint fee (${fee} ETH) is OFF the published tranche schedule `
+        + `(${WAVES.join(' / ')} ETH). The schedule is a published commitment — set the fee to a `
+        + 'MINT_TRANCHES wave, or publish a new table.');
   }
 
   // THE SELL TAX IS WHAT MAKES A BOND A HOLD RATHER THAN AN ARBITRAGE, and nothing else in the

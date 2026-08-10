@@ -2962,6 +2962,58 @@ rung is still proven a few lines down on a deliberately seeded one. `LEVEL_UP_RE
 founder sign-off lever (BALANCE.md § THE REFILL CEILING; 0 disables the refill, a large value restores
 the runaway).
 
+**THE PLEX BRIDGE IS RETIRED — every real-money price is ETH (founder-directed 2026-08-10: "Make the
+mint ETH only no OMR", then "Make plex items and consumables eth only") — BUILT** (`src/vig.js`,
+`src/store.js`, `src/invariants.js`, `src/preflight.js`, `src/rules.tail.js`; `test/vig.js`,
+`test/store.js`; BALANCE.md § THE TRANCHE SCHEDULE). The identity mint, the respawn token and every
+Store SKU were payable on TWO rails — real ETH, or the same fee in earned $OMR through PLEX. Both are
+now ETH, on two arguments. **(1) A fee payable two ways is always priced by the CHEAPER rail**, which
+is fatal for the mint specifically: minting is the SYBIL BOUND (it gates extraction), and the
+genesis-rate pass had just found three rails disagreeing by up to 68× — a 0.01 ETH ($35) mint payable
+for 30 $OMR (51¢). **(2) The $OMR rail had stopped burning two migrations ago.** PLEX was sold as
+"ETH payers fund the pool, $OMR payers BURN supply — both support the token"; since economy v3 step 2
+`plex:%` is in `DESK.SINK_REASONS`, so a PLEX purchase RECYCLES to the desk shelf, which sells it for
+ETH at the daily auction. So the real comparison was never "immediate ETH vs deflation" — it was
+**immediate certain ETH vs deferred uncertain ETH, minus the deflation that justified the trade**
+(`recyclesToDesk('plex:respawn') === true` — checked, not assumed; I had argued the respawn should
+stay and was wrong, on a justification that had expired). A Store SKU has a sharper version: a package
+is a real-money PRODUCT whose whole purpose is the four-way revenue split, and paying in $OMR routed
+the purchase AROUND it — the buyer got the entitlement and none of the four destinations got a wei.
+**Retired the standard way** (the emission.js discipline, second costume): the PAYERS are DELETED
+(`payPlex`, `payPackagePlex`, both quotes — a rail behind a flag is one env var from live), the ROUTES
+stay MOUNTED as tombstones so a polling client learns what happened, the board says `plexOmr: null`
+POSITIVELY rather than by omission, and `plex:%` stays in the omr vocabulary + the burn term +
+`DESK.SINK_REASONS` **forever** because real rows exist and conservation is a claim about the WHOLE
+ledger — with **`plex bridge retired`** (widened from the exact `plex:mint`; no `plex:` kind is live,
+so the narrow form would have been a check that could no longer fail) asserting nothing NEW writes
+them. Gone with it: `PLEX_GENESIS_OMR_PER_ETH`/`genesisOmrFor` (one conversion with nothing left to
+convert — the launch price lives in the launch sequence's G-1 and comes back WITH A READER the day the
+GenesisOracle is built), `STORE.PLEX_FLOOR_OMR_PER_ETH`/`PLEX_PREMIUM_BPS` (pins dropped in the same
+commit — the drift rule), and **preflight's two-rails guard, whose absence IS the fix**: it existed
+because two rails diverge silently, and the surest way to keep two rails in lockstep turned out to be
+having one. **What it costs, honestly:** the EVE "pay your rent in ISK" fantasy — a skilled player
+funding their play from earnings. That is a real loss and the reason to think twice about the
+direction; it is bounded by the FREE path never having run through this rail (the mission GRANTS a
+mint credit outright — shipped the same day) and by $OMR keeping every IN-GAME use it had (dues, the
+compound, seals, the Wire, vanity, respec, the staked ladder). The line is now one sentence: **real
+money buys real-money things; $OMR buys in-game things.** Two mutations each fail by name (`plex:%`
+dropped from the burn term → the HISTORY half fails, proving why the reason must stay; the respawn
+payer restored → the refusal assertion fails). §10.4 needed no new reason or bucket.
+
+**THE GENESIS RAISE — 33 → 21.38 ETH (founder-directed 2026-08-10).** FDV does not move (the PRICE is
+205,882 $OMR/ETH → $0.017/OMR → $1.7M on 100M supply; the raise is not a valuation). What moves is how
+much supply is sold — **6.79% → 4.40%**, so less day-one sell pressure — and how deep the pool opens:
+POL (0.375R) 12.375 → **8.0175 ETH**, treasury 8.25 → 5.345, vig 7.425 → 4.8105, founder 4.95 → 3.207.
+**The consequence that is not cosmetic: `OmertaBond.dailyCapOMR` must come down with it.** The dials
+harness sizes that cap as a RULE — ≈5% of the pool's OMR reserve — precisely because **price impact,
+not dilution, is the damage, and impact is a function of DEPTH**: ~127,000/day at the old pool,
+**~82,500/day** at this one. Leaving it where a 33-ETH pool put it would silently loosen the single
+wall between a leaked quote-signer and the market. Recorded in BALANCE.md § THE GENESIS RAISE and in
+CHAIN-DEPLOY's dials line, with the instruction to re-derive against ACTUAL POL at deploy rather than
+from any written figure. Everything else is unaffected by construction: no in-game price is
+ETH-denominated, the router's split is percentages, and the tranche schedule is a published ETH table
+that does not read the raise.
+
 **THE FARM + THE IDENTITY NFT (founder-directed 2026-08-01) — MEASURED, GUARDED, SPEC'D.** The
 founder proposed raising the identity mint to 0.025 ETH with a dynamic generative-art NFT attached,
 then **held the fee at 0.01** and asked for the rest. Three pieces. **(1) THE PLEX/ETH CONSISTENCY
@@ -3761,7 +3813,7 @@ PRINTED so the next occurrence names the server's own reason instead of leaving 
 `src/ops.js`, `src/growth.js`, `src/game.js`, `public/index.html`; BALANCE.md § THE SINK
 RE-DENOMINATION / § THE FREE PATH). Every $OMR price in the game was written against an implicit
 **~$10M token** — six independent sinks cluster there, which is how we know it was an assumption
-rather than a decision — while the locked launch parameters land at **$1.7M FDV** (33 ETH raise,
+rather than a decision — while the locked launch parameters land at **$1.7M FDV** (21.38 ETH raise,
 205,882 $OMR/ETH, 100M supply → **$0.017/OMR**). So every sink was **5.88× cheaper in dollars than
 designed**: a Made Man's monthly dues were 34 cents. Factor **6**, the round number nearest that
 ratio; 152 numbers classified BY HAND, because a blanket sweep gets three classes wrong and each

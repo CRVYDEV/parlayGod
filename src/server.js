@@ -2385,30 +2385,23 @@ export async function buildServer() {
   app.post('/v1/character/reroll', { preHandler: auth }, async (req) => Fees.rerollCharacter(pool, req.user.sub));
   app.get('/v1/fees/status', { preHandler: auth }, async (req) => Fees.feeStatus(pool, req.user.sub));
 
-  // ── Risk-to-Earn Phase 2: THE VIG (off-chain core) ──
-  // PLEX bridge — pay a real-money fee from EARNED $OMR instead of ETH (burns $OMR → the same
-  // entitlement). A skilled player funds their own play; a whale pays ETH (which funds the Vig).
-  // THE MINT IS ETH ONLY (2026-08-10). The route stays MOUNTED as a tombstone rather than being
-  // removed: a client that has been posting here learns what happened instead of guessing at a 404
-  // (the /v1/wage and swap precedent). payPlex is what actually refuses — the retirement lives with
-  // the mechanism, not in the routing table.
-  app.post('/v1/plex/mint', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Vig.payPlex(ch, 'mint', client, h)));
-  app.post('/v1/plex/respawn', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Vig.payPlex(ch, 'respawn', client, h)));
-  // the live market-linked quote (fee-ETH × latest buyback price × premium; static floor pre-market).
-  // `mint: null` is the positive claim that the identity has one rail — it is ETH, at the published
-  // wave — rather than a stale number a client would render as a payable price.
-  app.get('/v1/plex/price', async () => ({
-    mint: null, mintEthOnly: true, respawn: await Vig.plexQuote(pool, 'respawn') }));
+  // ── THE PLEX BRIDGE IS RETIRED (2026-08-10) — every real-money fee is ETH ──
+  // The routes stay MOUNTED as tombstones rather than being removed: a client that has been posting
+  // here learns what happened instead of guessing at a 404 (the /v1/wage and swap precedent). The
+  // PAYERS are what refuse — the retirement lives with the mechanism, not in the routing table.
+  app.post('/v1/plex/mint', { preHandler: auth }, async () => Vig.payPlex(null, 'mint'));
+  app.post('/v1/plex/respawn', { preHandler: auth }, async () => Vig.payPlex(null, 'respawn'));
+  // `null` on both is the POSITIVE claim that a fee has one rail and it is ETH — rather than a stale
+  // number a client would render as a payable price.
+  app.get('/v1/plex/price', async () => ({ mint: null, respawn: null, ethOnly: true }));
 
   // ── THE STORE (ETH revenue packages) ──
   // The catalog + your live entitlements. Purchases are made ON-CHAIN at the OmertaFees paywall
   // (dormant); the watcher observes StorePaid and calls recordStorePurchase (the mint/respawn fee
   // pattern). §10.4-neutral — the Store grants only entitlements/access/status, never currency.
   app.get('/v1/store', { preHandler: auth }, async (req) => Store.storeBoard(pool, req.user.sub));
-  app.post('/v1/store/plex/:sku', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Store.payPackagePlex(ch, req.params.sku, client, h)));
+  // the $OMR rail is retired (the Store is ETH only) — mounted so an old client hears why
+  app.post('/v1/store/plex/:sku', { preHandler: auth }, async () => Store.payPackagePlex());
 
   // THE LEDGER — the Season Pass reward track. The daily-claim track (status/consumables in the
   // claim txn; the $OMR stipend is paid post-commit through the BACKED prize-pool rail — pool-bounded,

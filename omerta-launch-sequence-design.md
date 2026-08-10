@@ -149,7 +149,7 @@ the cap bounds whales. NFT communities may be per-NFT (the NFT itself is the Syb
      price. The eligibility is time-boxed with the drop's own `CLAIM_WINDOW` (90–180d) and simply
      lapses unclaimed (nothing to sweep — a fee waiver that was never used).
   2. **Free mints do NOT consume tranche slots**: the published schedule indexes PAID mints only
-     (ETH or PLEX rails). Otherwise a whitelist wave pushes paid minters up tiers with no paid
+     (the mint is ETH only). Otherwise a whitelist wave pushes paid minters up tiers with no paid
      demand behind the move, and "the first 1,000 mints at 0.01" stops being an honest sentence.
      (Implementation note for the build: the tranche counter needs a mint-source distinction —
      today's `WHERE minted` count predates the whitelist; comps already sit in it at noise level.)
