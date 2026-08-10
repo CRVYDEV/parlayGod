@@ -2,7 +2,7 @@
 
 **Status: A1–A3, A5, A6 APPROVED (founder assertion 2026-08-09: "Counsel has approved A1-A6");
 A4 RE-OPENED 2026-08-10 (the tranche schedule was adopted — the row's own lockstep rule);
-A7 + A8 OPEN.**
+A7 + A8 OPEN; A9–A12 OPEN (the YieldBank rows, added 2026-08-10).**
 The approval is recorded the project's standing way — as a founder assertion of counsel approval,
 with the written countersignature to file in §5 when it arrives. What it unblocks: **Phase B**
 (the buy keeper + stock bookkeeping) and **the activation burn** are now buildable (chain-dormant
@@ -214,6 +214,50 @@ distribution/sale of the underlying securities to the payer — what structure, 
 gating (beyond the A3 claim rail) does that leg require, and does the $OMR intermediation change
 the analysis at all?*
 
+---
+
+### The YieldBank rows (A9–A12) — added 2026-08-10 with `omerta-yieldbank-design.md`
+
+The founder directed a DeFi layer synthesising Alchemix (self-repaying loans) and Inverse/DOLA
+(a debt-backed revenue-distributing stablecoin), routed through named Robinhood Chain strategies
+(Steakhouse's Morpho USDG vault, Morpho Blue isolated markets, Maple syrupUSDG, Ethena USDe, Spark
+spUSDG). **The design splits it into an in-game layer that ships and an on-chain layer that does
+not move until these four rows return.** All four are OPEN; none of them gates the in-game build,
+which moves only in-game cash and creates no new regulated activity.
+
+**A9 — Issuing a USD-pegged synthetic on Robinhood Chain. (OPEN.)** The design's `DebtToken` is
+over-collateralised, debt-backed, redeemable 1:1 through a Transmuter whose queue is filled from
+the repayment stream; mint authority is the position contract alone and there is no owner-mint and
+no confiscation path (the OMR discipline). *Questions: does this fall inside the GENIUS Act's
+payment-stablecoin definition, and if so which permitted-issuer route is available to us; what is
+its MiCA classification (e-money token vs asset-referenced token) and what authorisation follows;
+does the redeemable-1:1 design help or hurt that characterisation?*
+
+**A10 — Yield-bearing deposits from game users. (OPEN.)** The Mix-Yield Vault takes user USDG and
+allocates it across third-party strategies, returning yield. *Question: is this an investment
+contract on the BlockFi / Celsius / Genesis-Gemini-Earn fact pattern; does a game-native framing
+change the analysis at all, or does a retail, global, non-age-verified user base make it worse;
+and is there any structure (fixed-term, non-discretionary, fully-disclosed passthrough) that
+changes the answer?*
+
+**A11 — Revenue distribution to synthetic holders and governance stakers. (OPEN.)** The brief
+asks for protocol revenue "continuously distributed to holders of the stablecoin itself and to a
+governance/token-staking layer." **We assess this as the clearest securities leg of the four**, so
+`RevenueDistributor.sol` is specified and deliberately NOT written pending this row. *Question:
+confirm or correct that assessment, and identify what — if anything — a compliant distribution
+would look like.*
+
+**A12 — Custody and transmission. (OPEN.)** Routing user funds into Morpho/Maple/Ethena/Spark is
+custody plus, arguably, transmission. *Questions: does this require FinCEN MSB registration and
+state money-transmitter licensing in the US, and CASP authorisation under MiCA; and does the
+existing A3 jurisdiction list (still owed) cover this rail or does it need its own?*
+
+**A standing counterparty note for all four:** these strategies carry real loss modes — Morpho
+Blue market isolation and per-market oracle configuration, curator discretion inside the
+Steakhouse vault, Ethena's basis-trade/funding exposure, and Maple's **undercollateralised**
+institutional credit (its predecessor pools defaulted in 2022). A loss at any of them is a game
+user losing real money. Counsel should assume that fact pattern when answering A10 and A12.
+
 ## 3. The walls that hold regardless of the answers
 
 These are load-bearing project rules counsel can rely on as constants — they do not move with
@@ -250,6 +294,16 @@ this memo's outcome:
 - **Live activation accrual** (allocations actually accruing to accounts): blocked on **A8** —
   the burn + bookkeeping BUILD proceeds chain-dormant; no allocation accrues to any account
   before the row is signed.
+- **THE YIELDBANK, on-chain layer** (`omerta-yieldbank-design.md` §3 — the Mix-Yield Vault, the
+  self-repaying position, the Transmuter, the synthetic): blocked on **A9–A12** AND the standing
+  third-party audit gate. `RevenueDistributor.sol` is specified but deliberately **unwritten**
+  pending A11. No contract in that section is deployed, and no user funds are routed anywhere,
+  before those rows return.
+- **THE YIELDBANK, in-game layer** (§2 of the same design — the Vault, the Marker, the Private
+  Bank): **NOT blocked and needs no row.** It moves only in-game cash (which the tokenomics-v2
+  severance already walls off from the token), mints nothing, and adds no counterparty. It is a
+  game mechanic, and the design's §5 forbids by rule — and will forbid by test — any bridge
+  between the two layers.
 - **Shipped and unaffected**: Phase A (the Ticker Ballot — a vote and a record; no value moves),
   the Capo's License (rate-limit/status perks only), the money router (declare/verify/display).
 
@@ -265,6 +319,10 @@ this memo's outcome:
 | A6 — free community distribution (airdrop) | Confirmed (founder assertion) | written countersignature to file | — | 2026-08-09 |
 | A7 — provenance traits (third-party holdings + evocative reference) | | | | |
 | A8 — the activator's leg (consideration for wealth-weighted securities allocation) | | | | |
+| A9 — issuing a USD-pegged synthetic on Robinhood Chain | | | | |
+| A10 — yield-bearing deposits from game users | | | | |
+| A11 — revenue distribution to synthetic holders + governance stakers | | | | |
+| A12 — custody + transmission (routing user funds into third-party protocols) | | | | |
 
 *Prepared 2026-08-09. Maintainers: keep this memo in lockstep with the design docs it cites; a
 design change that touches an assertion re-opens its row.*
