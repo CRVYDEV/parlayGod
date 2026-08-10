@@ -5063,3 +5063,93 @@ export const mintTierOf = (minted) => {
     ? { tier: MINT_TRANCHES.length, ...MINT_TRANCHES[last], flat: true }
     : { tier: i + 1, ...MINT_TRANCHES[i], flat: false };
 };
+
+// ── THE CITY LEG'S ACTIVITY METRIC (THE BANK, `omerta-bank-protocol-design.md` §4.2) ────────────
+// Protocol profit buys $OMR on the open market and hands it to "the players who play"
+// (founder-directed 2026-08-10). This block is the definition of that phrase, and every rule in it
+// exists because of something this project already measured or verified.
+//
+// THE WEIGHT IS LINEAR AND UNCAPPED, and that is the correction to a measured bug rather than a
+// preference. `BALANCE.md` § THE FARM, on the Street Wage: "`WAGE_CAP_OMR` is commented
+// 'anti-concentration / anti-Sybil', but concentration is the OPPOSITE of Sybil. It clips the
+// honest whale and hands the remainder to whoever runs more accounts — the only way around a
+// per-individual cap is to be several individuals." Stated as the general law:
+//     concave score (a per-account cap, or log-share)  →  splitting effort across N accounts GAINS
+//     linear score                                     →  splitting gains nothing   ← what we want
+//     convex score                                     →  splitting loses, but whales concentrate
+// So: linear, uncapped. "Plays more, receives more" is the founder's intent, not a leak.
+//
+// A GATE IS NOT A CAP, and the difference is the whole trick. MIN_TRACKS is an ELIGIBILITY gate, so
+// it imposes a FIXED COST PER ACCOUNT without ever clipping an honest player's payout. A farm with N
+// accounts pays that cost N times while its reward stays linear — Sybil-NEGATIVE. A per-account cap
+// does the exact opposite. Both "limit" something; they point in opposite directions.
+//
+// TAGS IS FAIL-CLOSED, AND IT IS THE SEVERANCE WALL. Tokenomics v2 severed cash from $OMR ("cash
+// cannot become $OMR at any price"). Raw mastery XP would reopen it: verified in `src/casino.js`,
+// the Madame's T1 perk COMPS THE NERVE on both dice (:116) and blackjack (:844), and `sellGood`
+// carries no nerve/energy/cooldown check at all — so for anyone with Madame standing, den and
+// commerce XP are bounded only by cash and HTTP round trips. Cash would buy a larger share of the
+// bought-$OMR pool. (The pool is fixed, so nothing is CREATED and the landing page's claim stays
+// true — but the wall's own language is "at any price", and it should stay crisp.)
+//   THE RULE: an action scores only if the GAME throttles it — nerve, energy, a cooldown, or a hard
+//   per-day cap. Nobody can buy wall-clock. A tag absent from this list scores ZERO, so a new action
+//   added later contributes nothing until somebody deliberately adds it (the DESK.SINK_REASONS
+//   discipline: one explicit list, and the default is "no").
+export const ACTIVITY = {
+  // The epoch — the day, matching the ballot's clock and the activation model's.
+  EPOCH: 'day',
+  // Game-throttled action tags (the keys of MASTERY.XP). Scored at that tag's own XP value, so the
+  // relative weighting is the one already sized against each action's resource cost.
+  TAGS: [
+    'crime',                                  // nerve
+    'jump', 'shakedown', 'standover',         // energy
+    'fire', 'shank', 'duel',                  // nerve/ammo/cooldown, and rare by construction
+    'cook', 'deal',                           // a batch clock; deal costs nerve
+    'boost', 'race',                          // energy + the gta_at window; races on a 2h cooldown
+    'port', 'piracy',                         // a run clock + the daily supply cap; energy + ammo
+    'score', 'heist',                         // 8h / daily cooldowns
+    'bout', 'exhibition',                     // a willing rival; a 6h cooldown
+    'cards', 'yardtale',                      // pen: energy; once a day
+    'primetime',                              // capped at HAPPY_ROUNDS a night
+    'numbers', 'trackbet',                    // the den's THROTTLED draws: one ticket/day, one bet/race/day
+  ],
+  // DELIBERATELY ABSENT, each with its reason — this list is the audit trail for the wall above:
+  //   dice, blackjack — the Madame comps their nerve, so they carry NO game throttle (verified).
+  //   sell, fill      — no per-action throttle; a cash-funded arbitrage loop. Reviewable the day
+  //                     commerce grows a real throttle, and not before.
+  // THE BREADTH GATE (Sybil-NEGATIVE, per the note above): score in at least this many distinct
+  // trades in the epoch to qualify at all. Raises a farm's per-account cost; costs an engaged
+  // player nothing.
+  MIN_TRACKS: 3,
+  // Which trade each throttled tag belongs to — the breadth gate counts DISTINCT values here.
+  // `yardtale` is deliberately absent: it schools the teller's OWN track, which is variable, so it
+  // scores but cannot be a static member of any one trade (counting it under a fixed track would be
+  // a lie the gate then rewards).
+  TRACK_OF: {
+    crime: 'larceny',
+    jump: 'muscle', shakedown: 'muscle', standover: 'muscle',
+    fire: 'wetwork', shank: 'wetwork', duel: 'wetwork',
+    cook: 'chemistry', deal: 'chemistry',
+    boost: 'wheels', race: 'wheels',
+    port: 'seamanship', piracy: 'seamanship',
+    score: 'scores', heist: 'scores',
+    bout: 'fists', exhibition: 'fists',
+    cards: 'gambling', primetime: 'gambling', numbers: 'gambling', trackbet: 'gambling',
+  },
+  // A floor purely to refuse dust rows (the ACTIVATION.MIN_OMR shape). NOT a cap and never a cap.
+  MIN_SCORE: 25,
+  // Excluded from the distribution entirely — the standing exclusion on every legend surface.
+  EXCLUDE_AGENTS: true,
+  EXCLUDE_NPC: true,
+};
+// A player's epoch score: Σ over their throttled actions of that tag's XP. Linear by construction.
+export const activityScore = (gains = {}) => ACTIVITY.TAGS
+  .reduce((n, t) => n + (Number(gains[t]) || 0) * (Number(MASTERY.XP[t]) || 0), 0);
+// How many distinct trades those actions touched (the MIN_TRACKS gate reads this).
+export const activityTracks = (gains = {}) => new Set(ACTIVITY.TAGS
+  .filter((t) => (Number(gains[t]) || 0) > 0)
+  .map((t) => ACTIVITY.TRACK_OF[t]).filter(Boolean)).size;
+// Does this account qualify for the epoch's distribution at all? Breadth gate + the dust floor.
+// NOTE there is no cap here and there must never be one — see the block header.
+export const activityQualifies = (gains = {}) =>
+  activityTracks(gains) >= ACTIVITY.MIN_TRACKS && activityScore(gains) >= ACTIVITY.MIN_SCORE;

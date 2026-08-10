@@ -643,6 +643,15 @@ const SIGNED = [
   // the schedule is a PUBLISHED COMMITMENT, so a quiet edit to any row is exactly what the pin
   // exists to catch. The row-level laws (one implied rate per row; the free-path headroom vs the
   // live mission table) are asserted in test/made.js beside the ladder's own ceiling claim.
+  // THE CITY LEG'S ACTIVITY METRIC (THE BANK §4.2). Whole-object pins on both halves: TAGS is the
+  // SEVERANCE WALL (an unthrottled tag added here lets cash buy a share of the bought-$OMR pool),
+  // and TRACK_OF is what the breadth gate counts. MIN_TRACKS/MIN_SCORE are a GATE, never a cap —
+  // a per-account cap is Sybil-POSITIVE and is the measured Street Wage bug (BALANCE § THE FARM).
+  ['ACTIVITY.MIN_TRACKS', 3],
+  ['ACTIVITY.MIN_SCORE', 25],
+  ['ACTIVITY.TAGS', ['crime', 'jump', 'shakedown', 'standover', 'fire', 'shank', 'duel',
+    'cook', 'deal', 'boost', 'race', 'port', 'piracy', 'score', 'heist', 'bout', 'exhibition',
+    'cards', 'yardtale', 'primetime', 'numbers', 'trackbet']],
   ['MINT_TRANCHES', [
     { through: 1000,  eth: 0.01, omr: 5  },
     { through: 3000,  eth: 0.02, omr: 10 },
