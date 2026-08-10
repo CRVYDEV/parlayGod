@@ -278,6 +278,53 @@ conditions specific to being an LP:
 yield is real trading fees rather than an incentive that can end (§2.6's rule), and which
 mechanically drives toward the depth that makes every later question easier.
 
+### 2.9 Staking for in-game benefit — and the wall it must not cross
+
+*Founder, 2026-08-10: "users can stake OMR-WETH collateral somewhere for some sort of benefit not
+to be used as part of the loans or stablecoins… also an OMR single staking… maybe XP multiplier."*
+
+Both are safe, and the framing ("not part of the loans or stablecoins") is the right instinct — it
+keeps these entirely off §2.1's borrow path, so nothing here touches an oracle, a liquidation, or
+the Transmuter.
+
+**THE WALL, FIRST — an XP multiplier must never reach the city leg's `ACTIVITY` score.** This is
+the one way the idea could go wrong and it is not obvious. §4.2.1 distributes the bought-$OMR pool
+pro-rata on activity. If staked $OMR multiplied that score, then:
+
+> staked $OMR → higher score → a larger share of the $OMR distribution → more $OMR
+
+…a self-referential loop in which **holding the token buys a bigger share of the token handout.**
+That would (a) make the distribution wealth-weighted rather than effort-weighted, which is *not*
+what A5's approved "skill/effort-based" language covers and lands it next to A8's open question,
+and (b) destroy the linearity proof — two players with identical effort would receive different
+shares based on their balance.
+
+**It is already structurally safe, and that is now deliberate rather than lucky.** `activityScore`
+computes from **action counts × base XP**, never from XP awarded, so a multiplier applied to
+mastery progression cannot propagate into it. `test/activity.js` pins this directly.
+
+So the rule: **a staking multiplier may accelerate PROGRESSION (trade levels, milestone perks,
+ranks) and must never touch the DISTRIBUTION key.** Stated the way this project states these:
+*staking buys the ladder faster; it never buys a bigger slice of somebody else's money.*
+
+**(a) Single-sided $OMR — already built; this is one new column.** `MADE_LADDER` already keys on
+`account_persistent.staked` with four rungs (10 / 30 / 75 / 150 $OMR → trunk, energy cap, nerve,
+garage, and a fence bonus at the top two). The founder's ask is an **`xpBps` column** on those
+existing rungs — a mastery-XP multiplier — not a second staking system. That fits the current
+ceiling rule (power is allowed but **capped**, and the cap must be reachable without paying):
+a multiplier accelerates arrival at perks that a free player also reaches, and moves no ceiling —
+`MAX_LVL`, `STAT_CAP` and every perk value are untouched. **Staking buys time, not ceiling.**
+
+**(b) OMR-WETH LP — the same ladder, weighted higher, plus real fees.** LP is worth strictly more
+to the protocol than an idle single-sided stake, because depth is the thing §2.7(1) actually needs.
+So an LP position counts toward the SAME ladder at `LP_STAKE.WEIGHT` × the $OMR side it contains —
+one ladder, two ways onto it, no parallel benefit table to drift. On top of that it accrues **real
+trading fees** (§2.8), which is a genuine yield with no faucet, no oracle and no promise attached.
+
+**What neither may ever be:** a $OMR yield on the stake (that is a faucet *and* the
+BlockFi/Celsius fact pattern), or a share of protocol revenue (that is A11). The benefit is
+in-game utility and progression speed — which is precisely why it needs no new counsel row.
+
 ---
 
 ## 3. The in-game surface
