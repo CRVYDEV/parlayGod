@@ -11114,3 +11114,29 @@ because later ones cost more. The defensibility ladder stands recorded: Shape C 
 Shape D (A4 re-opens, defensible) < Shape A (rejected, stays rejected). The funnel bonus's
 sizing rule now references the CURRENT tier's mint cost. Zero code; the admin surface gains a
 tier-progress line when adopted.
+
+**THE TRANCHE SCHEDULE ADOPTED — Shape D goes from design to build (founder: "let's do your
+recommendation", 2026-08-10)** (`src/rules.tail.js` `MINT_TRANCHES`+`mintTierOf`, `src/preflight.js`,
+`src/ops.js`+`public/admin.html`, pins across test/levers+made+preflight+hardening; BALANCE.md § THE
+TRANCHE SCHEDULE; the memo's A4 row RE-OPENED). The LINEAR progression, as recommended: ten rows,
+tier k = k×0.01 ETH / k×5 $OMR, tranches growing 1,000→10,000 (cumulative 55,000), **flat tail**
+beyond the table (the last price holds until a new table is published — a finite commitment, never
+an open-ended escalator). Four pieces: **(1)** the table + its one reader (`mintTierOf` — findIndex
+on cumulative thresholds, boundary semantics verified 999→tier 1 / 1000→tier 2, flat past 55k);
+**(2)** the preflight OFF-SCHEDULE warning (the schedule check the rate check cannot do — 0.015/7.5
+agrees on the rate and is still a price the table never promised; base restated per the one-way
+rule, pinned to `MINT_TRANCHES[0]` so the restatement cannot rot — the vig-defaults discipline);
+**(3)** the admin chain panel's tier-progress line (`ops.js` `mintTier` — minted count vs the
+current threshold + expected-vs-live pair with a loud OFF SCHEDULE flag: the boundary is executed
+BY HAND, one Safe `setFees` tx + the two env values, and this line is the GM's instrument for
+seeing one coming); **(4)** the pins — the whole-array lever pin, the two row-level LAWS in
+test/made.js beside the free-path computation they depend on (max published $OMR 50 < the ~220
+mission-ladder lifetime earnable, asserted against the LIVE table; one implied rate per row —
+a row off-rate silently becomes the real price since the effective price is the cheaper rail),
+and the hardening overview shape asserted against the TABLE, not against `mintTierOf` (a broken
+helper returning the last row would satisfy a helper-vs-helper comparison — the recorded
+vacuous-check class, headed off). §10.4: ZERO surface (the ETH rail is out-of-band; the $OMR rail
+rides the existing `plex:%` desk-recycled sink — the v3 revenue decision kept). The memo's A4 row
+flipped to RE-OPENED with the amended fact pattern (published forward escalation, founding-era
+framed, flat-tail bounded). The LIVE price is tier 1 — nothing changes at the till until the
+1,001st identity.

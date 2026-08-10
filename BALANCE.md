@@ -5352,3 +5352,40 @@ own payout — the anti-Ponzi shape). Illustrative bands print in the sim; every
 number in the design (MIN_OMR 1, the day epoch, silent-day-still-buys, no per-account cap) is a
 proposed default that becomes a pinned founder lever the day it becomes a constant. INTERNAL
 sizing only — the standing copy rule forbids publishing any value-per-$OMR figure as marketing.
+
+## THE TRANCHE SCHEDULE (dynasty §10 Shape D — ADOPTED 2026-08-10, linear)
+
+The identity mint's published price table, indexed to cumulative minted identities
+(`MINT_TRANCHES`, whole-array pinned in test/levers.js; `mintTierOf` the one reader). Founder
+directive: "first 1000 mints are .01 ETH or x OMR … next 2000 are .02 and 2x", resolved to the
+LINEAR progression on the measured free-path crossing (linear crosses the mission ladder's ~220
+$OMR lifetime earnable at tier 45 ≈ 990k identities — effectively never; doubling crosses at
+tier 7 ≈ 63k — genuinely reachable).
+
+| tier | through (cumulative) | ETH | $OMR |
+|---|---|---|---|
+| 1 | 1,000 | 0.01 | 5 |
+| 2 | 3,000 | 0.02 | 10 |
+| 3 | 6,000 | 0.03 | 15 |
+| 4 | 10,000 | 0.04 | 20 |
+| 5 | 15,000 | 0.05 | 25 |
+| 6 | 21,000 | 0.06 | 30 |
+| 7 | 28,000 | 0.07 | 35 |
+| 8 | 36,000 | 0.08 | 40 |
+| 9 | 45,000 | 0.09 | 45 |
+| 10 | 55,000 | 0.10 | 50 |
+
+The laws (each test-pinned): ONE implied rate per row (500 $OMR/ETH — the preflight two-rails
+number; test/made.js), the FLAT TAIL (past row 10 the last price holds until a new table is
+published — a finite commitment), and THE FREE-PATH LAW (max published $OMR 50 < the mission
+ladder's lifetime payout, asserted against the LIVE table — 4.4× headroom; a future extension
+that approaches the ceiling changes the "get made for free" promise + coach rung + codices in
+the SAME commit). Execution is BY HAND at each boundary (one Safe `setFees` tx + the
+MINT_FEE_ETH/PLEX_MINT_OMR env pair — plexQuote scales the $OMR rail off the ETH fee
+automatically); preflight warns on an off-schedule live pair, and the admin chain panel's tier
+line flags OFF SCHEDULE. §10.4: zero surface (the ETH rail is out-of-band; the $OMR rail rides
+the existing `plex:%` sink, which RECYCLES to the desk — the v3 revenue decision, kept).
+Counsel: adopting the schedule RE-OPENED memo row A4 (the published-forward-escalation question);
+the copy rules (founding-era frame, no countdown/"N remaining" counters, the banned lexicon) are
+part of the fact pattern counsel reviews. The LIVE price today is tier 1 — nothing changes at the
+till until the 1,001st identity.

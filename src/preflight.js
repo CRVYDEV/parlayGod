@@ -261,6 +261,24 @@ export function preflight(env = process.env) {
         + '$OMR price is the STATIC floor and ignores the ETH fee entirely, so whichever rail is cheap '
         + 'is the one a farm will use — and minting is the Sybil bound. Move PLEX_MINT_OMR/'
         + 'PLEX_RESPAWN_OMR with MINT_FEE_ETH/RESPAWN_FEE_ETH so both imply the same rate.');
+
+    // THE TRANCHE SCHEDULE (Shape D, adopted 2026-08-10): the mint pair does not just have to agree
+    // on a RATE — it has to sit ON the published linear schedule (tier k = k × 0.01 ETH / k × 5
+    // $OMR, MINT_TRANCHES in rules.tail.js). A pair like 0.015/7.5 passes the rate check above and
+    // is still off-schedule: a price the published table never promised, which is exactly the drift
+    // a published commitment exists to prevent. The base (0.01/5) is RESTATED here for the same
+    // one-way-rule reason as the vig defaults above; test/preflight.js pins it to MINT_TRANCHES[0]
+    // so the restatement cannot rot. A WARNING (the standing posture — a mispriced rail must not
+    // take a live server down). The admin chain panel shows the same expected-vs-live comparison
+    // against the CURRENT tier for whoever is actually looking.
+    {
+      const k = num('MINT_FEE_ETH', 0.01) / 0.01;
+      const kR = Math.round(k);
+      if (kR < 1 || Math.abs(k - kR) > 0.001 || Math.abs(num('PLEX_MINT_OMR', 5) - kR * 5) > 0.001)
+        warnings.push(`The live mint pair (${num('MINT_FEE_ETH', 0.01)} ETH / ${num('PLEX_MINT_OMR', 5)} $OMR) `
+          + 'is OFF the published tranche schedule (tier k = k × 0.01 ETH / k × 5 $OMR). The schedule '
+          + 'is a published commitment — set the pair to a MINT_TRANCHES row, or publish a new table.');
+    }
   }
 
   // THE SELL TAX IS WHAT MAKES A BOND A HOLD RATHER THAN AN ARBITRAGE, and nothing else in the
