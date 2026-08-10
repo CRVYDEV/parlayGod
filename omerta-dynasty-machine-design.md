@@ -550,11 +550,24 @@ discipline above)** < continuous auto-curve (Shape A — rejected, stays rejecte
 residual that no copy rule removes: the schedule itself tells buyers the price will rise, on a
 tradeable asset — that is why the row goes back to counsel rather than being self-certified.
 
+**THE MINT IS ETH ONLY (founder-directed 2026-08-10: "Make the mint ETH only no OMR").** This
+supersedes the two-rail framing that the whole of §10 above reasons about — the rail-interaction law,
+the lockstep requirement, the "effective price is the cheaper rail" analysis. All of it was correct,
+and the conclusion it kept pointing at is that the surest way to keep two rails in agreement about
+the Sybil bound is for the bound to have ONE. The identity now has a single price, in ETH, at the
+published wave. `MINT_TRANCHES` has no `omr` column; `payPlex` refuses a mint; `PLEX_MINT_OMR` is
+deleted rather than zeroed; `plex:mint` stays in the §10.4 vocabulary and burn term forever (real
+rows exist) with a freshness check asserting nothing new uses it. **Respawn stays on PLEX** — a
+repeatable consumable is not the bound, so "pay your rent in ISK" applies to it cleanly. And the free
+path is untouched, because it never ran through this rail: the mission GRANTS a mint credit, which at
+the honest genesis rate is the only way it could have worked anyway (~2,471 $OMR for a wave-1 mint
+against ~220 lifetime earnable).
+
 **ADOPTED 2026-08-10 (founder: "let's do your recommendation" — the LINEAR progression), then
 REVISED the same day to FIVE WAVES WITH A HARD CEILING** (founder: *"cap it at 5 waves so by wave 5
 the maximum mint price anyone can pay would be .05"*). The published table is **`MINT_TRANCHES`**
 in the code — five rows, waves of 1,000 / 10,000 / 25,000 / 50,000 / 100,000 at
-0.010 / 0.025 / 0.035 / 0.045 / 0.050 ETH (30 / 75 / 105 / 135 / 150 $OMR), cumulative 186,000,
+0.010 / 0.025 / 0.035 / 0.045 / 0.050 ETH (ETH only — no $OMR column), cumulative 186,000,
 whole-array test-pinned — with `mintTierOf` as the one reader and the flat tail holding **0.05
 forever** beyond it.
 

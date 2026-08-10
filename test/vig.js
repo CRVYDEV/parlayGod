@@ -15,7 +15,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 // Set before the import because both modules read it at load (ESM hoists static imports, so these
 // two are dynamic).
 process.env.PLEX_GENESIS_OMR_PER_ETH = '2000';
-const { PLEX_MINT_OMR } = await import('../src/vig.js');
+const { PLEX_RESPAWN_OMR } = await import('../src/vig.js');
 const { PLEX_GENESIS_OMR_PER_ETH } = await import('../src/rules.js');
 
 // deterministic signer/player keys (well-known anvil accounts) — set BEFORE importing the server
@@ -119,17 +119,28 @@ assert(near(r.body.paid, 0), 'an over-pool prize pays nothing');
 const REF_PRICE = PLEX_GENESIS_OMR_PER_ETH * 2;
 await pool.query(`INSERT INTO vig_buyback (id, eth_spent, omr_bought, price_omr_per_eth, to_reserve, to_prize) VALUES ('px-ref', 0, 0, ${REF_PRICE}, 0, 0)`);
 r = await call('GET', '/v1/plex/price');
-assert.equal(Number(r.body.mint.oracle), REF_PRICE, 'the oracle is the latest buyback price');
-assert(r.body.mint.price > PLEX_MINT_OMR, 'and the MARKET leg is the binding one, not the static floor');
-assert(near(r.body.mint.price, 48), `mint quote = 0.01 ETH × ${REF_PRICE} × 1.2 = 48 $OMR (got ${r.body.mint.price})`);
+assert.equal(Number(r.body.respawn.oracle), REF_PRICE, 'the oracle is the latest buyback price');
+assert(r.body.respawn.price > PLEX_RESPAWN_OMR, 'and the MARKET leg is the binding one, not the static floor');
 assert(near(r.body.respawn.price, 480), `respawn quote = 0.10 ETH × ${REF_PRICE} × 1.2 = 480 $OMR`);
+
+// ── THE MINT IS ETH ONLY (founder-directed 2026-08-10) ──────────────────────────────────────────
+// Minting is the SYBIL BOUND — it is what gates extraction — and a fee payable two ways is always
+// priced by the cheaper rail. So the identity has ONE price, in real money, at the published wave.
+// The board says so positively rather than leaving a stale number a client would render as payable,
+// the route stays MOUNTED so a client that has been posting to it learns what happened, and the
+// PAYER refuses (a rail that merely sleeps is one env var from being live again).
+assert.equal(r.body.mint, null, 'no $OMR mint price is quoted — the identity has one rail');
+assert.equal(r.body.mintEthOnly, true, 'and the board says so positively, rather than by omission');
 r = await call('POST', '/v1/plex/mint', { token });
-assert.equal(r.code, 200); assert(near(r.body.omrSpent, 48), 'PLEX mint burns the MARKET price (48), not the static floor');
-assert(near((await meOf(token)).omr, 12), 'earner spent 48 of 60 $OMR');
-r = await call('POST', '/v1/character/mint', { token });
-assert.equal(r.body.minted, true, 'the burned $OMR bought a mint credit → made, without touching ETH');
-assert.equal((await call('POST', '/v1/plex/mint', { token })).body.error, 'minted', 'already made — no second PLEX mint');
-// the market-priced respawn (480) is beyond the earner's 12 — $OMR stays the PREMIUM rail, ETH the
+assert.equal(r.body.error, 'retired', 'the PLEX mint refuses — ETH only');
+assert(/ETH only/i.test(r.body.message || ''), 'and says what replaced it');
+assert(/mission/i.test(r.body.message || ''), '…including that the free path still exists — the mission grants a credit outright');
+const omrAfterRefusal = (await meOf(token)).omr;
+assert(near(omrAfterRefusal, 60), 'a refused mint burns NOTHING — the earner keeps every $OMR');
+assert.equal((await pool.query("SELECT COUNT(*) n FROM transactions WHERE reason='plex:mint'")).rows[0].n, '0',
+  'and writes no plex:mint row — the reason stays in the vocabulary for HISTORY, but nothing new may use it');
+
+// the market-priced respawn (480) is beyond the earner's 60 — $OMR stays the PREMIUM rail, ETH the
 // economical one (that asymmetry is the point: ETH funds the Vig, $OMR burns at a markup)
 assert.equal((await call('POST', '/v1/plex/respawn', { token })).body.error, 'omr', 'market-priced respawn gates on the real rate');
 
@@ -137,6 +148,15 @@ assert.equal((await call('POST', '/v1/plex/respawn', { token })).body.error, 'om
 r = await call('POST', '/v1/wallet/challenge', { token });
 const sig = await player.signMessage({ message: r.body.message });
 await call('POST', '/v1/wallet/verify', { token, body: { address: player.address, signature: sig } });
+// Withdrawing needs a MINTED account, and the mint is ETH ONLY — so the identity is paid for the way
+// the game now requires: a real fee payment on the chain rail (the worker's fee watcher calls this on
+// a MintFeePaid event; the mod route is its manual twin). This block used to reach `minted` through
+// the PLEX mint, which is exactly the rail that retired.
+assert.equal((await call('POST', '/v1/withdraw', { token, body: { amount: 5 } })).code, 400,
+  'an unminted account cannot extract — minting is the gate, and it is ETH only');
+await call('POST', '/v1/mod/fees/record', { headers: modH,
+  body: { nonce: 7001, kind: 'mint', payer: player.address, amountWei: '10000000000000000' } });
+assert.equal((await call('POST', '/v1/character/mint', { token })).body.minted, true, 'the ETH fee bought the identity');
 r = await call('POST', '/v1/withdraw', { token, body: { amount: 5 } });
 assert.equal(r.code, 200); assert.equal(r.body.status, 'signed', 'the withdrawal SIGNS — the Vig funded the reserve that backs it');
 vig = await vigOf();

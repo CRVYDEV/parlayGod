@@ -5098,11 +5098,11 @@ export const TICKER_BALLOT = {
 // The founder's waves are 1k / 10k / 25k / 50k / 100k at .01 / .025 / .0333 / .0444 / .05 ETH.
 // Waves 3 and 4 are rounded to .035 / .045 (+5.1% / +1.4%) so both waves land on tidy numbers.
 //
-// THE SCHEDULE IS THE ETH COLUMN. `omr` is DERIVED from it at the genesis rate — never hand-written,
-// so the lockstep law ("one implied rate per row") holds by construction rather than by assertion,
-// and a boundary is one Safe `setFees` transaction with the $OMR rail following on its own. Once a
-// market exists this column stops being the price at all: `plexQuote` returns
-// `max(floor, feeEth × oracle × premium)` and the live rate takes over.
+// THE SCHEDULE IS ETH, AND ONLY ETH (founder-directed 2026-08-10: "Make the mint ETH only no OMR").
+// There is no $OMR column because there is no $OMR rail: minting gates extraction, so it is the one
+// price that must never be ambiguous, and a fee with two rails is always priced by the cheaper one.
+// One rail, in real money, at the published wave — nothing to keep in lockstep and nothing to
+// diverge. The free path is untouched: the mission grants a mint credit outright.
 export const MINT_TRANCHES = [
   { through: 1000,   eth: 0.01  },  // wave 1 — the first thousand
   { through: 11000,  eth: 0.025 },  // wave 2 — next 10,000
@@ -5110,7 +5110,7 @@ export const MINT_TRANCHES = [
   { through: 86000,  eth: 0.045 },  // wave 4 — next 50,000
   { through: 186000, eth: 0.05   },  // wave 5 — next 100,000, and the CEILING: the flat tail holds
                                      // here, so 0.05 ETH is the most anyone ever pays
-].map((w) => ({ ...w, omr: genesisOmrFor(w.eth) }));
+];
 // The current tier for a cumulative minted-identity count. Past the table: the flat tail (the last
 // row holds, `flat: true` so a surface can say "the published schedule is fully minted").
 export const mintTierOf = (minted) => {

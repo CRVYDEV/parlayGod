@@ -905,9 +905,14 @@ power). Packages: Made Man (a mint credit), revive bundles, a 30-day Street Wire
 Ring badge, and decor styles. The revenue divides 40% to the founder, 40% to the buyback (the Vig, which funds
 withdrawals and prizes), and 20% to the RWA reserve.
 
-**PLEX** — pay for a Store package or a game fee with **earned $OMR** instead of ETH (`/v1/store/plex/:sku`,
-`/v1/plex/mint`, `/plex/respawn`; `GET /v1/plex/price` [public]). ETH payers fund the pool. $OMR payers reduce
-the supply.
+**PLEX** — pay for a Store package or a game fee with **earned $OMR** instead of ETH
+(`/v1/store/plex/:sku`, `/plex/respawn`; `GET /v1/plex/price` [public]). ETH payers fund the pool. $OMR
+payers reduce the supply.
+
+**The one exception is the mint, which is ETH only.** Becoming Made is what unlocks extraction, so it is
+the one price that has to be unambiguous — and a fee payable two ways is always priced by whichever rail is
+cheaper. There is no $OMR price for an identity at any wave. That costs you nothing: the mission ladder's
+*Dockside Heist* still hands you a mint credit outright, so the free road is unchanged.
 
 **The Season Pass / The Ledger** (`GET /v1/pass`, `/pass/claim`) — while your pass is active, claim the next of
 12 levels one time each day: titles, revive tokens, energy refills, and small **$OMR stipends** paid from the

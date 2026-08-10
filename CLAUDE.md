@@ -3827,6 +3827,42 @@ excluded, three mutations across the two codices each fail by name with file, li
 **A set broad enough to contain everything asserts nothing — and reads exactly like a clean bill of
 health.**
 
+**THE MINT IS ETH ONLY (founder-directed 2026-08-10: "Make the mint ETH only no OMR") — BUILT**
+(`src/vig.js`, `src/rules.tail.js` `MINT_TRANCHES`, `src/server.js`, `src/ops.js`, `src/preflight.js`,
+`src/invariants.js`, `public/index.html`, `test/vig.js`/`made.js`/`preflight.js`; BALANCE.md § THE
+TRANCHE SCHEDULE). Immediately after the genesis-rate pass corrected three disagreeing $OMR/ETH rates,
+the founder removed the reason they could ever disagree: **the identity now has ONE rail.** The
+argument is the general one that pass kept running into — *a fee payable two ways is always priced by
+the CHEAPER rail*, so two rails must be kept in agreement forever, and minting is the **Sybil bound**
+(it gates extraction), so it is the one price that must never be ambiguous. One rail, in real money,
+at the published wave: nothing to keep in lockstep and nothing to diverge. `MINT_TRANCHES` loses its
+`omr` column (the schedule was always the ETH waves), and a tranche boundary becomes **ONE Safe
+`setFees` transaction** with no second env value.
+**IT COSTS THE FREE PATH NOTHING, which is why it is cheap to do.** "You can get made for free" is
+delivered by the mission GRANTING a mint credit outright, not by converting earned $OMR — which at
+the honest genesis rate could never have bought one anyway (**~2,471 $OMR for a wave-1 mint against
+~220 lifetime earnable**). Retiring the rail removed a promise that had already stopped being true.
+**RESPAWN STAYS on PLEX deliberately**: a repeatable consumable is not the bound, so "pay your rent
+in ISK" applies to it cleanly — the line is the BOUND, not the denomination.
+**Retired the standard way** (the emission.js step-1 discipline): `payPlex` refuses a mint;
+`PLEX_MINT_OMR` is **DELETED rather than zeroed** (a rail that merely sleeps is one env var from
+live); the route stays MOUNTED as a tombstone so a client that has been posting there learns what
+happened instead of guessing at a 404; `/v1/plex/price` returns `mint: null` + `mintEthOnly: true`
+(the positive claim, rather than a stale number a client would render as payable); and **`plex:mint`
+stays in the omr vocabulary and the burn term FOREVER** because real rows exist and conservation is a
+claim about the whole ledger — what is new is a freshness check, **`plex mint retired`**, on the EXACT
+reason (never `plex:%`, since `plex:respawn` is live — the `rwa:vault` distinction). Verified all
+three states on a live ledger: silent on a 2-day-old row, that row still VISIBLE to conservation, and
+a fresh row fires. **Two test laws were rewritten rather than deleted**: the lockstep law became **ONE
+RAIL** (no row may carry a $OMR price — strictly stronger, since two rails can drift and must be
+checked while one cannot), and the free-path law now pins its **MECHANISM** (a mission grants the
+credit, reachable early) instead of the price proxy that held only while the rail was mispriced —
+*the proxy was always standing in for the mechanism and silently stopped tracking it the moment the
+rail was priced honestly.* The vig fixture had reached `minted` THROUGH the retired rail, so it now
+mints the way the game requires — a real ETH fee payment — which makes the test demonstrate the new
+rule instead of working around it. Two mutations (the payer stops refusing; a $OMR column returns)
+each fail by name. Full suite green + sim drift-0 + pgquery + pgcheck 43/43 on real Postgres.
+
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
 `payPlex` pattern); named landmarks / Founder's charter numbers; ~~R2 (the `rwa_revenue` → real-RWA-buy

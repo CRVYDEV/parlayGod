@@ -3,7 +3,7 @@
 // surface. The dashboard also calls the existing mod endpoints (invariants, funnel, vig, emission,
 // reserve, audit) alongside these two. Founder-facing so the alpha can be run and watched without a dev.
 
-import { POPULATION, MINT_TRANCHES, mintTierOf, genesisOmrFor } from './rules.js';
+import { POPULATION, MINT_TRANCHES, mintTierOf } from './rules.js';
 import { seededToday } from './population.js';
 import { archiverHealth } from './dbhealth.js';
 import { socialProviders } from './verify.js';
@@ -83,14 +83,13 @@ export async function opsOverview(pool) {
     mintTier: await (async () => {
       const minted = await one('SELECT COUNT(*) n FROM account_persistent WHERE minted');
       const t = mintTierOf(minted);
+      // ETH ONLY — the mint has one rail, so there is one number to compare and a boundary is one
+      // Safe setFees transaction.
       const liveEth = Number(process.env.MINT_FEE_ETH || 0.01);
-      // the default is the DERIVATION, not a literal — a restated number here goes stale the moment
-      // the rate moves and reports every correctly-priced server as off-schedule
-      const liveOmr = Number(process.env.PLEX_MINT_OMR || genesisOmrFor(liveEth));
       return {
         minted, tier: t.tier, of: MINT_TRANCHES.length, through: t.flat ? null : t.through,
-        priceEth: t.eth, priceOmr: t.omr, flat: t.flat, liveEth, liveOmr,
-        offSchedule: Math.abs(liveEth - t.eth) > 1e-9 || Math.abs(liveOmr - t.omr) > 1e-9,
+        priceEth: t.eth, priceOmr: null, flat: t.flat, liveEth, liveOmr: null,
+        offSchedule: Math.abs(liveEth - t.eth) > 1e-9,
       };
     })(),
     players,

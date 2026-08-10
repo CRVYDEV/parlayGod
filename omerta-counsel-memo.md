@@ -128,16 +128,19 @@ indexes PAID mints only), so the free program cannot advance the published price
 whole-array test-pinned). REVISED the same day to FIVE WAVES WITH A PUBLISHED CEILING:** a
 pre-published table of five discrete price waves indexed to cumulative mints — waves of 1,000 /
 10,000 / 25,000 / 50,000 / 100,000 identities at 0.010 / 0.025 / 0.035 / 0.045 / **0.050 ETH**
-(30 / 75 / 105 / 135 / 150 $OMR), **flat tail** beyond the table (the last price holds until a new
+(**ETH only — there is no $OMR price for an identity**, amended 2026-08-10: minting is the
+extraction gate, so it has one unambiguous price in real money; the earned-token rail that previously
+existed alongside it is retired, which also removes the two-denomination explanation from this row),
+**flat tail** beyond the table (the last price holds until a new
 table is published — a finite commitment, never an open-ended escalator). **The material change for
 this row is the CEILING: the escalation TERMINATES at a number stated up front, so the most anyone
 ever pays for an identity is 0.05 ETH, and that is true on the day the table is published.** The
 increments also shrink as the waves widen, so the schedule flattens rather than accelerating; past
 the first thousand it is cheaper at every point than the ten-row ladder it replaces. Both rails hold
 one implied rate per row (boot-checked); execution is the existing owner-set fee at each boundary
-(no contract change); the dearest published $OMR price (150) stays under the mission ladder's
-lifetime earnable, and with the cap no future row can exceed it — the free path is guaranteed by the
-shape rather than re-derived per table (both test-pinned, the ceiling asserted directly). Early-bird
+(no contract change); the free path is guaranteed by its own MECHANISM rather than by a price bound —
+a mission grants a mint credit outright, so a player who never spends real money can still be made
+(test-pinned, as is the ceiling, asserted directly). Early-bird
 framed, no countdown/remaining counters, the banned lexicon in force. *The re-opened question: does a
 PUBLISHED forward escalation on an uncapped, transferable, TBA-carrying NFT — framed as
 founding-era pricing, with no urgency mechanics and no value language, bounded at a stated ceiling

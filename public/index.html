@@ -5588,7 +5588,7 @@
       ['POST', '/v1/unstake', {}],
       ['POST', '/v1/rackets/:id/buy', {}], ['DELETE', '/v1/rackets/:id'], ['POST', '/v1/rackets/:id/upgrade', {}],
       ['POST', '/v1/assets/:id/buy', {}], ['POST', '/v1/assets/:id/sell', {}],
-      ['GET', '/v1/plex/price'], ['POST', '/v1/plex/mint', {}], ['POST', '/v1/plex/respawn', {}],
+      ['GET', '/v1/plex/price'], ['POST', '/v1/plex/respawn', {}],
     ],
     'Armory & Fights': [
       ['POST', '/v1/armory/gun/:id/buy', {}], ['POST', '/v1/armory/gun/:id/equip', {}],
@@ -5701,7 +5701,7 @@
       ['POST', '/v1/wallet/verify', { address: '', signature: '' }], ['POST', '/v1/withdraw', { amount: 1 }],
       ['GET', '/v1/withdraw/status'], ['POST', '/v1/character/mint', {}], ['POST', '/v1/character/reroll', {}], ['GET', '/v1/fees/status'],
       ['GET', '/v1/bonds'], ['POST', '/v1/bond/quote', { principalEth: 1 }],
-      ['GET', '/v1/store'], ['GET', '/v1/plex/price'], ['POST', '/v1/plex/mint', {}], ['POST', '/v1/plex/respawn', {}],
+      ['GET', '/v1/store'], ['GET', '/v1/plex/price'], ['POST', '/v1/plex/respawn', {}],
       ['GET', '/v1/pass'], ['POST', '/v1/pass/claim', {}],
     ],
   };
@@ -7278,7 +7278,7 @@
           <b>earn it</b> from a player who pays you in it, or <b>buy it</b>. That is the whole list, and a nightly job proves it.</div>
         <div class="d" style="color:var(--dim);font-size:11.5px;margin-top:4px;border-top:1px solid rgba(255,255,255,.06);padding-top:5px">
           A free account plays the <b>whole</b> game — every job, family, racket, kitchen, casino, PvP, all of it.
-          Minting (the Store’s Made Man, or PLEX it with earned $OMR) is what lets you move $OMR and gear
+          Minting (the Store’s Made Man, in ETH — or the mission ladder’s free credit) is what lets you move $OMR and gear
           <b>on-chain out of the game</b>. Everything you build in-game, you build free.</div></div>
       <div class="card" style="border-color:var(--gold)"><span class="t" style="color:var(--gold)">THE MADE MAN ${me.made ? '— YOU ARE MADE' : ''}</span>
         <div class="d">${me.made
@@ -7306,7 +7306,7 @@
           ? '<b style="color:var(--ok)">✓ you\'re made</b> — extraction is unlocked'
           : (me.mintCredits > 0
             ? '<b style="color:var(--neon)">a mint credit is in hand</b> — get made to unlock extraction'
-            : 'a free trial street plays fully, but only a <b>Made</b> account can extract $OMR / gear on-chain. <b>The free road:</b> the mission ladder&rsquo;s <i>Dockside Heist</i> hands you a mint credit outright. You can also buy one with the Made Man package in <b>The Store</b> (0.01 ETH) or pay it from earned $OMR (PLEX).')}</div>
+            : 'a free trial street plays fully, but only a <b>Made</b> account can extract $OMR / gear on-chain. <b>The free road:</b> the mission ladder&rsquo;s <i>Dockside Heist</i> hands you a mint credit outright. Otherwise the identity is bought with <b>ETH</b> — the Made Man package in <b>The Store</b>, at the published wave price. It is the one thing $OMR cannot buy: minting is what gates extraction, so it has a single price in real money.')}</div>
         ${!me.minted && me.mintCredits > 0 ? '<button class="act" id="mint-go" style="border-color:var(--neon)">get made (spend a mint credit)</button>' : ''}
         ${me.minted ? `
         <div style="margin-top:8px" class="d">Withdraw $OMR to ${me.wallet ? `<span class="chip good">${me.wallet.slice(0,6)}…${me.wallet.slice(-4)}</span>` : 'your wallet'} — a 2% exit toll applies; fresh (&lt;48h) $OMR also pays the early-exit tax.</div>

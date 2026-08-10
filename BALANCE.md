@@ -5361,13 +5361,34 @@ directive: "first 1000 mints are .01 ETH or x OMR … next 2000 are .02 and 2x",
 a ten-row LINEAR ladder, then revised the same day — **"cap it at 5 waves so by wave 5 the maximum
 mint price anyone can pay would be .05"**.
 
-| wave | wave size | through (cumulative) | ETH | $OMR |
-|---|---|---|---|---|
-| 1 | 1,000 | 1,000 | 0.010 | 30 |
-| 2 | 10,000 | 11,000 | 0.025 | 75 |
-| 3 | 25,000 | 36,000 | 0.035 | 105 |
-| 4 | 50,000 | 86,000 | 0.045 | 135 |
-| 5 | 100,000 | 186,000 | 0.050 | 150 |
+| wave | wave size | through (cumulative) | ETH |
+|---|---|---|---|
+| 1 | 1,000 | 1,000 | 0.010 |
+| 2 | 10,000 | 11,000 | 0.025 |
+| 3 | 25,000 | 36,000 | 0.035 |
+| 4 | 50,000 | 86,000 | 0.045 |
+| 5 | 100,000 | 186,000 | 0.050 |
+
+**THE MINT IS ETH ONLY (founder-directed 2026-08-10: "Make the mint ETH only no OMR").** The table has no
+$OMR column, because the identity has no $OMR rail. The reasoning is the general one this session kept
+running into: a fee payable two ways is always priced by the **cheaper** rail, so two rails have to be kept
+in agreement forever, and the genesis-rate pass had just found three that were not (the mint floor was 68.6×
+under the market, which made 30 $OMR — 51 cents — the real price of a $35 mint). Minting is the **Sybil
+bound**: it is what gates extraction, so it is the one price that must never be ambiguous. One rail, in real
+money, at the published wave — nothing to keep in lockstep and nothing to diverge.
+
+It costs the free path nothing, and that is why it is cheap to do. "You can get made for free" is delivered
+by the mission **granting** a mint credit outright, not by converting earned $OMR — which at the honest rate
+could never have bought one anyway (~2,471 $OMR against ~220 lifetime earnable). Retiring the rail removed a
+promise that had already stopped being true. **Respawn stays on PLEX deliberately**: it is a repeatable
+consumable rather than the bound, so "pay your rent in ISK" applies to it cleanly. The line is the bound, not
+the denomination.
+
+Retired the standard way — `payPlex` refuses, `PLEX_MINT_OMR` is **deleted rather than zeroed** (a rail that
+merely sleeps is one env var from live), the route stays mounted as a tombstone so a polling client learns
+what happened, and `plex:mint` stays in the vocabulary and the burn term **forever** because real rows exist.
+What is new is a freshness check — **`plex mint retired`** — so a fresh row is an alarm while history still
+reconciles.
 
 **The ceiling is the improvement, not a softening**, and it is worth being precise about why. On the
 open ladder the free-path law held by arithmetic that had to be re-derived at every extension; with
@@ -5389,16 +5410,17 @@ rate law passes either way.
 Sizing, for the record: at a fully-minted 186,000 the schedule raises **8,312 ETH** against the old
 ladder's 3,850 to 55,000 — more in total, cheaper per identity, and bounded at the top.
 
-The laws (each test-pinned in test/made.js): ONE implied rate per row (**3,000 $OMR/ETH** — the
-preflight two-rails number), the FLAT TAIL (past wave 5 the last price holds until a new table is
-published — a finite commitment), THE FREE-PATH LAW (dearest published $OMR 150 < the mission
-ladder's lifetime payout, asserted against the LIVE table), and **THE CEILING** (the last row IS
-0.05, no row exceeds it, and the millionth identity still pays it — asserted directly, because the
-cap is the claim the whole shape rests on; raising it is a new promise, not a retune). Execution is
-BY HAND at each boundary (one Safe `setFees` tx + the
-MINT_FEE_ETH/PLEX_MINT_OMR env pair — plexQuote scales the $OMR rail off the ETH fee
-automatically); preflight warns on an off-schedule live pair, and the admin chain panel's tier
-line flags OFF SCHEDULE. §10.4: zero surface (the ETH rail is out-of-band; the $OMR rail rides
+The laws (each test-pinned in test/made.js): **ONE RAIL** (no row may carry a $OMR price — the
+successor to the lockstep law, and strictly stronger, since two rails can drift and must be checked
+while one cannot), the FLAT TAIL (past wave 5 the last price holds until a new table is published —
+a finite commitment), **THE FREE PATH asserted at its MECHANISM** (a mission grants a mint credit
+outright, reachable early — the old price-proxy version held only while the $OMR rail was mispriced
+and silently stopped tracking the promise the moment it was priced honestly), and **THE CEILING**
+(the last row IS 0.05, no row exceeds it, and the millionth identity still pays it — asserted
+directly, because the cap is the claim the whole shape rests on; raising it is a new promise, not a
+retune). Execution is BY HAND at each boundary and is now ONE Safe `setFees` transaction, since
+there is no second rail to move; preflight warns on an off-schedule fee, and the admin chain panel's
+tier line flags OFF SCHEDULE. §10.4: zero surface (the ETH rail is out-of-band; the $OMR rail rides
 the existing `plex:%` sink, which RECYCLES to the desk — the v3 revenue decision, kept).
 Counsel: adopting the schedule RE-OPENED memo row A4 (the published-forward-escalation question);
 the copy rules (founding-era frame, no countdown/"N remaining" counters, the banned lexicon) are

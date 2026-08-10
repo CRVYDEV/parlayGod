@@ -318,6 +318,17 @@ async function collectLedgerChecks(pool) {
   const lifetimeEmission = await sum(pool, "currency='omr' AND reason LIKE 'emission:%'");
   push('emission faucet retired', freshEmission, 0, 0.001, { lifetimeEmission, since: 'v3 step 1' });
 
+  // (d1a1b) THE MINT IS ETH ONLY (founder-directed 2026-08-10). The identity mint had a second rail —
+  // burn earned $OMR through PLEX for the same mint credit — and it is retired, because minting is
+  // the SYBIL BOUND and a fee with two rails is always priced by the cheaper one. `payPlex` refuses
+  // it and `PLEX_MINT_OMR` is deleted rather than zeroed, but the reason itself has to STAY in the
+  // vocabulary and the burn term forever: real rows exist, and conservation is a claim about the
+  // whole ledger. So what is checked is FRESHNESS. An EXACT reason, not `plex:%` — `plex:respawn` is
+  // live and must never trip this, which is the same distinction `rwa:vault` needs above.
+  const freshPlexMint = await sum(pool, "currency='omr' AND reason='plex:mint' AND at >= now() - interval '1 day'");
+  const lifetimePlexMint = await sum(pool, "currency='omr' AND reason='plex:mint'");
+  push('plex mint retired', freshPlexMint, 0, 0.001, { lifetimePlexMint, since: 'the mint is ETH only' });
+
   // (d1a2) THE PORTFOLIO IS RETIRED (D11, 2026-08-05). The in-game stock book — invests, dynasty
   // naming, the Dynasty Fund dividends — writes nothing new. EXACT reasons, not `rwa:%`, because
   // `rwa:vault` (THE VAULT) is live and must never trip this. Historical rows stay in the

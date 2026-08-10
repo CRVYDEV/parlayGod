@@ -21,7 +21,7 @@ import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { MADE, MADE_LADDER, madeRungIdx, ACCESS_STAKE, CASINO, DESK, recyclesToDesk, estateTierOf, SPEAKEASY,
   BUSINESSES, PACING, businessTierOf, isMade, MISSIONS, CONSTANTS, CARS, TRIMS, MINT_TRANCHES,
-  mintTierOf, genesisOmrFor } from '../src/rules.js';
+  mintTierOf } from '../src/rules.js';
 import { upkeepBps } from '../src/business.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
@@ -220,12 +220,15 @@ assert(freeOmrLifetime >= top.min,
     `the free mint is reachable early (${freeMint.name} at level ${freeMint.req?.lvl}) — a credit `
     + 'gated past the mid-game is not a path a new player can walk');
 
-  // (2) THE LOCKSTEP LAW, now structural: every row's $OMR is the DERIVATION of its ETH at the one
-  // genesis rate, not a hand-written number that happens to agree. The effective price is the
-  // CHEAPER rail, so a row off-rate silently becomes the real price.
-  for (const t of MINT_TRANCHES)
-    assert.equal(t.omr, genesisOmrFor(t.eth),
-      `tranche row through=${t.through} derives its $OMR from its ETH at the genesis rate — a hand-written column is how the two rails drift apart`);
+  // (2) ONE RAIL. The schedule is ETH and only ETH: no row may carry a $OMR price, because the mint
+  // has no $OMR rail. This is the lockstep law's successor and it is strictly stronger — two rails
+  // can drift and have to be checked; one cannot. Minting is the Sybil bound, so it is the price
+  // that must never be ambiguous.
+  for (const t of MINT_TRANCHES) {
+    assert.equal(t.omr, undefined,
+      `tranche row through=${t.through} carries NO $OMR price — the mint is ETH only, and a second rail is always priced by whichever side is cheaper`);
+    assert(t.eth > 0, `tranche row through=${t.through} has an ETH price`);
+  }
   for (let i = 1; i < MINT_TRANCHES.length; i++)
     assert(MINT_TRANCHES[i].through > MINT_TRANCHES[i - 1].through,
       'tranche thresholds are strictly increasing — mintTierOf depends on it');
@@ -246,7 +249,7 @@ assert(freeOmrLifetime >= top.min,
   assert.equal(beyond.flat, true, 'past the published table the schedule is flat, not extrapolated');
   assert.equal(beyond.eth, CEILING_ETH,
     `the millionth identity still pays the ceiling (${CEILING_ETH} ETH) — the flat tail is what makes "the most anyone ever pays" true`);
-  assert.equal(beyond.omr, last.omr, 'and the $OMR rail holds with it, so the two rails cannot drift apart in the tail');
+  assert.equal(beyond.omr, undefined, 'and there is still no $OMR rail in the tail');
 }
 
 // (ii) the shortcut: identical stakes, one made, and the made man reads exactly MADE_RUNGS higher

@@ -96,7 +96,7 @@ export const OPERATIONAL_ENV = [
   // economy levers — founder sign-off dials, deliberately operator-settable (BALANCE.md)
   'BOND_DEV_BPS', 'BOND_DISCOUNT_BPS', 'BOND_ETH_SCORE_OMR', 'BOND_PLEDGE_MIN', 'BOND_POL_BPS',
   'BOND_QUOTE_TTL_SEC', 'BOND_RWA_BPS', 'BOND_VEST_HOURS', 'BOND_VIG_BPS', 'EARLY_SELL_TAX_BPS',
-  'FEE_RWA_BPS', 'FRESH_WINDOW_MS', 'MINT_FEE_ETH', 'PLEX_GENESIS_OMR_PER_ETH', 'PLEX_MINT_OMR', 'PLEX_PREMIUM_BPS',
+  'FEE_RWA_BPS', 'FRESH_WINDOW_MS', 'MINT_FEE_ETH', 'PLEX_GENESIS_OMR_PER_ETH', 'PLEX_PREMIUM_BPS',
   'PLEX_RESPAWN_OMR', 'RESPAWN_FEE_ETH', 'REVENUE_BUYBACK_BPS', 'REVENUE_FOUNDER_BPS',
   'REVENUE_RWA_BPS', 'SEASON_MODS', 'SELL_TAX_BPS', 'SELL_TAX_DEV_BPS',
   'SELL_TAX_LP_BPS', 'SELL_TAX_RWA_BPS', 'STORE_PLEX_FLOOR',
@@ -232,35 +232,34 @@ export function preflight(env = process.env) {
   if (!env.MOD_KEY || (env.MOD_KEY || '').length < 24)
     warnings.push('MOD_KEY is short — it is the only credential on the mod perimeter (ban, mod-kill, confiscate, comp grants). Use a long random secret.');
 
-  // THE TWO RAILS MUST AGREE ON WHAT AN IDENTITY COSTS. Every fee is payable two ways: real ETH, or
-  // the same fee in EARNED $OMR through PLEX. `plexQuote` prices the $OMR rail at
-  // `max(static_floor, feeEth × oracle × premium)` — and PRE-MARKET there is no oracle row, so it
-  // returns the static floor and IGNORES the ETH fee completely. Raise MINT_FEE_ETH without raising
-  // PLEX_MINT_OMR and the two rails silently diverge: the cheapest identity becomes the PLEX one, at
-  // a price that no longer tracks what you meant to charge. That matters because minting is the
-  // Sybil bound — it is the per-identity cost that makes a farm expensive — so a desync here quietly
-  // undoes the thing the fee exists to do, with nothing in the game looking wrong.
+  // THE RESPAWN RAIL MUST SIT AT THE GENESIS RATE. A fee payable two ways — real ETH, or the same fee
+  // in EARNED $OMR through PLEX — is always priced by the CHEAPER rail, so the two have to agree or
+  // the cheap one is simply the price. `plexQuote` prices the $OMR side at
+  // `max(static_floor, feeEth × oracle × premium)`, and PRE-MARKET there is no oracle row, so it
+  // returns the static floor and ignores the ETH fee completely. Raise RESPAWN_FEE_ETH without
+  // raising PLEX_RESPAWN_OMR and they silently diverge.
   //
-  // The invariant is the IMPLIED RATE, not either number: both pairs imply the genesis rate plus the
-  // premium (~247,058 $OMR/ETH — 205,882 × 1.2), and that agreement is what a change has to preserve.
-  // Checked as a ratio so it holds at any fee level and needs no view on what the right price is.
+  // THE MINT IS NOT CHECKED HERE ANY MORE, because it no longer has a $OMR rail (founder-directed
+  // 2026-08-10). That is the stronger fix: minting is the Sybil bound, and the surest way to keep two
+  // rails in agreement about it is to have one. What remains is the respawn — a repeatable consumable
+  // rather than the bound — whose floor must still track the genesis rate (~247,058 $OMR/ETH,
+  // 205,882 × 1.2). Checked as a ratio so it holds at any fee level.
   //
   // A WARNING, not an error, for the reason recorded above SOCIAL_VERIFY_MODE: preflight errors are
   // fatal, and taking a live server down over a mispriced rail is strictly worse than the mispricing.
-  // The live implied rates are on `GET /v1/mod/vig` for whoever is actually looking.
+  // The live implied rate is on `GET /v1/mod/vig` for whoever is actually looking.
   {
     // Restated from vig.js (which imports game.js, so preflight cannot import it — the one-way rule).
     // `test/preflight.js` asserts these defaults still equal vig.js's, so the restatement cannot rot.
     const num = (k, d) => Number(env[k] ?? d);
     const rate = (omr, eth) => (eth > 0 ? omr / eth : null);
-    const mint = rate(num('PLEX_MINT_OMR', 2471), num('MINT_FEE_ETH', 0.01));
+    const GENESIS_RATE = 205882 * 1.2; // the one conversion every $OMR rail uses pre-market
     const respawn = rate(num('PLEX_RESPAWN_OMR', 24706), num('RESPAWN_FEE_ETH', 0.10));
-    if (mint && respawn && Math.abs(mint - respawn) / Math.max(mint, respawn) > 0.05)
-      warnings.push(`The PLEX and ETH fee rails disagree on what value is worth: the mint implies `
-        + `${Math.round(mint)} $OMR/ETH and the respawn implies ${Math.round(respawn)}. Pre-market the `
-        + '$OMR price is the STATIC floor and ignores the ETH fee entirely, so whichever rail is cheap '
-        + 'is the one a farm will use — and minting is the Sybil bound. Move PLEX_MINT_OMR/'
-        + 'PLEX_RESPAWN_OMR with MINT_FEE_ETH/RESPAWN_FEE_ETH so both imply the same rate.');
+    if (respawn && Math.abs(respawn - GENESIS_RATE) / GENESIS_RATE > 0.05)
+      warnings.push(`The respawn's PLEX and ETH rails disagree on what value is worth: it implies `
+        + `${Math.round(respawn)} $OMR/ETH against the genesis rate's ${Math.round(GENESIS_RATE)}. `
+        + 'Pre-market the $OMR price is the STATIC floor and ignores the ETH fee entirely, so whichever '
+        + 'rail is cheap is the one people will use. Move PLEX_RESPAWN_OMR with RESPAWN_FEE_ETH.');
 
     // THE TRANCHE SCHEDULE (Shape D, adopted 2026-08-10; five waves capped at 0.05 ETH): the mint
     // fee does not just have to agree on a RATE — it has to sit ON a published wave. A pair that is

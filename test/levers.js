@@ -662,7 +662,9 @@ const SIGNED = [
   ['BROKERS.ACTIVATION_MS', 30 * 24 * 3600 * 1000],
   ['BROKERS.EPOCH_DAYS', 7],
   ['BROKERS.MIN_WEIGHT', 1],
-  ['MINT_TRANCHES', [{"through":1000,"eth":0.01,"omr":2471},{"through":11000,"eth":0.025,"omr":6176},{"through":36000,"eth":0.035,"omr":8647},{"through":86000,"eth":0.045,"omr":11118},{"through":186000,"eth":0.05,"omr":12353}]],
+  // ETH ONLY (2026-08-10). No $OMR column: the mint is the Sybil bound, and a fee with two rails is
+  // always priced by the cheaper one. The schedule was always the ETH waves.
+  ['MINT_TRANCHES', [{"through":1000,"eth":0.01},{"through":11000,"eth":0.025},{"through":36000,"eth":0.035},{"through":86000,"eth":0.045},{"through":186000,"eth":0.05}]],
   // The one rate every ETH-denominated fee converts through pre-market. Moving it re-prices EVERY
   // $OMR rail at once (mint, respawn, Store SKUs, the tranche column) — which is the point.
   ['PLEX_GENESIS_OMR_PER_ETH', 205882],

@@ -37,21 +37,22 @@ const MINT_FEE_ETH = Number(process.env.MINT_FEE_ETH || 0.01);
 const RESPAWN_FEE_ETH = Number(process.env.RESPAWN_FEE_ETH || 0.10);
 // F3 fixed the MARKET path and left the floors hand-set — so the pre-market rail priced a $35 mint
 // at $0.51 and, since the effective price is the cheaper rail, that WAS the price of a mint until a
-// buyback printed. The floors are now the same conversion the market path does, with the genesis
-// rate standing in for the oracle: derived from the LIVE fee, so a tranche boundary moves both rails
-// with one Safe transaction. The env stays as an override; preflight warns if it goes off-rate.
-export const PLEX_MINT_OMR = Number(process.env.PLEX_MINT_OMR || genesisOmrFor(MINT_FEE_ETH, PLEX_PREMIUM_BPS));
+// buyback printed. The floor is now the same conversion the market path does, with the genesis rate
+// standing in for the oracle. `PLEX_MINT_OMR` is GONE rather than set to zero: the mint is ETH only,
+// and a rail that merely sleeps is one env var away from being live again (the emission.js rule —
+// delete the payer, keep the reason).
 export const PLEX_RESPAWN_OMR = Number(process.env.PLEX_RESPAWN_OMR || genesisOmrFor(RESPAWN_FEE_ETH, PLEX_PREMIUM_BPS));
 
 // The live quote: {price, oracle} — oracle null (static floor) until a first buyback prints a price.
+// RESPAWN ONLY. A 'mint' asks for a price that no longer exists, so it answers null rather than
+// quoting one; the board renders that as "ETH only" instead of a number nobody can pay.
 export async function plexQuote(db, kind) {
-  const feeEth = kind === 'mint' ? MINT_FEE_ETH : RESPAWN_FEE_ETH;
-  const fallback = kind === 'mint' ? PLEX_MINT_OMR : PLEX_RESPAWN_OMR;
+  if (kind !== 'respawn') return null;
   const last = (await db.query(
     'SELECT price_omr_per_eth FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0];
-  if (!last) return { price: fallback, oracle: null };
+  if (!last) return { price: PLEX_RESPAWN_OMR, oracle: null };
   const oracle = Number(last.price_omr_per_eth);
-  const price = Math.max(fallback, round6(feeEth * oracle * PLEX_PREMIUM_BPS / 10000));
+  const price = Math.max(PLEX_RESPAWN_OMR, round6(RESPAWN_FEE_ETH * oracle * PLEX_PREMIUM_BPS / 10000));
   return { price, oracle };
 }
 
@@ -156,14 +157,28 @@ export async function runVigBuyback(pool, { priceOmrPerEth, maxEth } = {}) {
 // §10.4 sink, `plex:*`) — deflationary, offsetting emission. ETH payers fund the Vig; $OMR payers
 // shrink supply; both support the token. Runs under withCharacter (h.acct is the account).
 export async function payPlex(ch, kind, client, h) {
-  if (kind !== 'mint' && kind !== 'respawn') throw new GameError('bad_kind', "PLEX pays a 'mint' or a 'respawn'.");
-  if (kind === 'mint' && h.acct.minted) throw new GameError('minted', 'This account is already made.');
+  // THE MINT IS ETH ONLY (founder-directed 2026-08-10: "Make the mint ETH only no OMR"). The whole
+  // class of bug the genesis-rate pass just fixed — three disagreeing rates, and the effective price
+  // being whichever rail is cheaper — exists ONLY because a fee has two rails. Minting is the Sybil
+  // bound (it gates extraction), so it is the one price that must never be ambiguous: one rail, in
+  // real money, at the published wave. Nothing to keep in lockstep and nothing to diverge.
+  //
+  // The free path is UNAFFECTED and is why this costs nothing: "you can get made for free" is
+  // delivered by the mission GRANTING a mint credit outright, not by converting earned $OMR — which
+  // at the honest rate could never have bought one anyway (~2,471 $OMR against ~220 lifetime
+  // earnable). Retiring this rail removes a promise that had already stopped being true.
+  //
+  // RESPAWN STAYS on PLEX deliberately. It is a repeatable consumable, not the Sybil bound, so
+  // "pay your rent in ISK" applies to it cleanly: a skilled player covers their own insurance from
+  // earnings, and the burn is a recurring sink. The line is the bound, not the denomination.
+  if (kind === 'mint') throw new GameError('retired',
+    'The mint is ETH only. Pay the fee on-chain, or earn the credit — the mission ladder grants one outright.');
+  if (kind !== 'respawn') throw new GameError('bad_kind', "PLEX pays a 'respawn'.");
   const { price } = await plexQuote(client, kind); // market-linked: fee-ETH × latest buyback price × premium
   if (Number(h.acct.omr) < price) throw new GameError('omr', `That costs ${price} $OMR at the current rate — earn it, or pay the ETH fee.`);
   h.acct.omr = Number(h.acct.omr) - price;
   await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -price, reason: `plex:${kind}` });
-  if (kind === 'mint') h.acct.mint_credits = Number(h.acct.mint_credits || 0) + 1;
-  else h.acct.respawn_tokens = Number(h.acct.respawn_tokens || 0) + 1;
+  h.acct.respawn_tokens = Number(h.acct.respawn_tokens || 0) + 1;
   await h.track(client, ch.account_id, 'plex', { kind, omr: price });
   return { ok: true, kind, omrSpent: price,
     mintCredits: Number(h.acct.mint_credits || 0), respawnTokens: Number(h.acct.respawn_tokens || 0) };
@@ -213,12 +228,13 @@ export async function vigStatus(pool) {
     ethSpent: round6(ethSpent), unspentEth: round6(revenueIn - ethSpent),
     omrBought: round6(omrBought), toReserveTotal: round6(toReserve),
     prizePool: round6(num(pp.balance)), prizePaid: round6(num(pp.paid_total)),
-    config: { vigBps: VIG_BPS, reserveBps: RESERVE_BPS, plexMintOmr: PLEX_MINT_OMR, plexRespawnOmr: PLEX_RESPAWN_OMR,
-      // The IMPLIED RATE each fee pair puts on $OMR. Pre-market the PLEX price is the static floor
-      // and ignores the ETH fee, so these two must agree or whichever rail is cheap is the one a
-      // farm buys identities on — and minting is the Sybil bound. preflight warns at boot; this is
-      // the same number where an operator is already looking (the "a warning nobody reads" answer).
-      mintOmrPerEth: round6(PLEX_MINT_OMR / MINT_FEE_ETH),
+    config: { vigBps: VIG_BPS, reserveBps: RESERVE_BPS, plexMintOmr: null, plexRespawnOmr: PLEX_RESPAWN_OMR,
+      // THE MINT IS ETH ONLY, so it has no implied $OMR rate — `null` says that positively rather
+      // than leaving a stale number an operator would read as a live price. The respawn rail's rate
+      // still matters: pre-market its PLEX price is the static floor, so it must sit at the genesis
+      // rate or the cheap rail is the one people use. preflight warns at boot; this is the same
+      // number where an operator is already looking (the "a warning nobody reads" answer).
+      mintOmrPerEth: null,
       respawnOmrPerEth: round6(PLEX_RESPAWN_OMR / RESPAWN_FEE_ETH) },
   };
 }
