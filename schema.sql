@@ -3003,3 +3003,50 @@ CREATE TABLE IF NOT EXISTS ticker_ballot_results (
   decided_by TEXT NOT NULL DEFAULT 'default',   -- 'chamber' | 'default'
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ── THE BROKERS (omerta-brokers-design.md) ───────────────────────────────────────────────────────
+-- All ACCOUNT-keyed and all NEW tables, so `CREATE TABLE IF NOT EXISTS` is live-DB-safe (a new
+-- COLUMN on an existing table would need an ALTER — the 2026-08-06 boot-crash lesson).
+-- Account-keyed rather than character-keyed on purpose: an epoch's effort must not reset because a
+-- street died halfway through it, and the reward is owed to the holder, not to a body.
+
+-- Per-(account, day, tag) action counts. RAW COUNTS, never granted XP — `activityScore` multiplies
+-- by the BASE award itself, which is the structural reason a progression multiplier can never reach
+-- the distribution key (test/activity.js THE STAKING WALL).
+CREATE TABLE IF NOT EXISTS activity_log (
+  account_id TEXT NOT NULL,
+  day        INT  NOT NULL,
+  tag        TEXT NOT NULL,
+  n          INT  NOT NULL DEFAULT 0,
+  PRIMARY KEY (account_id, day, tag)
+);
+CREATE INDEX IF NOT EXISTS ix_activity_log_day ON activity_log(day);
+
+-- The activation window. Lapses on purpose: a recurring sink, not a one-time purchase.
+CREATE TABLE IF NOT EXISTS broker_activations (
+  account_id  TEXT PRIMARY KEY,
+  tier        INT  NOT NULL,
+  until       TIMESTAMPTZ NOT NULL,
+  spent_omr   NUMERIC NOT NULL DEFAULT 0,   -- lifetime, for the status ladder
+  activated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Published epochs. The allocator writes weights and DELIVERS NOTHING — delivery is step 7 and is
+-- gated on counsel. An epoch that has not been delivered can still be cancelled; a stream cannot.
+CREATE TABLE IF NOT EXISTS broker_epochs (
+  id          TEXT PRIMARY KEY,
+  start_day   INT NOT NULL,
+  end_day     INT NOT NULL,
+  total_weight NUMERIC NOT NULL DEFAULT 0,
+  computed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (start_day, end_day)
+);
+CREATE TABLE IF NOT EXISTS broker_weights (
+  epoch_id   TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  tier       INT NOT NULL,
+  score      NUMERIC NOT NULL,
+  weight     NUMERIC NOT NULL,
+  PRIMARY KEY (epoch_id, account_id)
+);
+CREATE INDEX IF NOT EXISTS ix_broker_weights_account ON broker_weights(account_id);

@@ -3066,7 +3066,7 @@ export const DESK = {
   SINK_REASONS: ['vest:%', 'cleanpapers', 'lab:%', 'gear:mint:%', 'path:%', 'gang:dissolved',
     'withdraw:omr', 'vanity:%', 'intel:%', 'respec%', 'plex:%', 'law:jury', 'law:envelope',
     'foundation:%', 'rwa:%', 'estate:%', 'auction:win', 'auction:take', 'auction:consign:fee',
-    'megaproject:omr', 'bond:%', 'business:spec%', 'death:duty', 'window:burn', 'made:%',
+    'megaproject:omr', 'bond:%', 'business:spec%', 'death:duty', 'window:burn', 'made:%', 'brokers:%',
     // THE LAB MODULE (kitchen.js:301) is a $OMR sink — but it ledgers `kitchen:module`, not `lab:*`,
     // so it was in the omr VOCABULARY yet MISSING from this burn term, and every purchase drifted the
     // §10.4 $OMR conservation check (a stable −N = the total ever spent on modules; found live via the
@@ -5153,3 +5153,45 @@ export const activityTracks = (gains = {}) => new Set(ACTIVITY.TAGS
 // NOTE there is no cap here and there must never be one — see the block header.
 export const activityQualifies = (gains = {}) =>
   activityTracks(gains) >= ACTIVITY.MIN_TRACKS && activityScore(gains) >= ACTIVITY.MIN_SCORE;
+
+// ── THE BROKERS — treasury-funded RWA rewards to NFT holders ──────────────────────────────────────
+// Design: `omerta-brokers-design.md`. Founder-directed 2026-08-10, funded from the TREASURY slice
+// (which carries no promise to anyone) so the withdrawal reserve is untouched.
+//
+// THE WEIGHT IS THE WHOLE DESIGN:
+//
+//     weight = activationMult(tier) x activityScore(actions in the epoch)
+//
+// The first term is Stonkbrokers' (a token burn buys you a bigger share). The second is the one they
+// do not have, and it is why this is a game mechanic rather than a yield product: their weight is a
+// pure function of tokens burned, so the largest holder is BY CONSTRUCTION the largest earner —
+// capital, not participation. Multiplying by ACTIVITY makes a zero on EITHER term a zero, so an
+// activated NFT owned by somebody who did not play earns nothing. Do not soften that later.
+//
+// ACTIVATION LAPSES ON PURPOSE. A permanent one-time burn is what the economy already has too much
+// of — every prior sink was one-time, which is exactly why supply pooled into staking (the standing
+// audit finding). A window that must be renewed is a RECURRING sink, and it also makes "you must
+// commit to be paid" true continuously rather than once.
+export const BROKERS = {
+  TIERS: [
+    { id: 1, name: 'Runner',       omr: 25,   mult: 1.0 },
+    { id: 2, name: 'Broker',       omr: 75,   mult: 1.5 },
+    { id: 3, name: 'Floor Trader', omr: 200,  mult: 2.0 },
+    { id: 4, name: 'Specialist',   omr: 500,  mult: 2.5 },
+    { id: 5, name: 'The Chairman', omr: 1500, mult: 3.0 },
+  ],
+  ACTIVATION_MS: 30 * 24 * 3600 * 1000,  // a window, not a purchase — see above
+  EPOCH_DAYS: 7,                          // the allocator's window
+  MIN_WEIGHT: 1,                          // dust floor: a weight under this is not worth a row
+};
+
+export const brokerTier = (id) => BROKERS.TIERS.find((t) => t.id === Number(id)) || null;
+export const brokerActive = (until, now = Date.now()) => !!until && new Date(until).getTime() > now;
+
+/// The published weight. Deterministic in both terms — NEVER by chance, which is the standing rule
+/// that keeps a securities distribution out of loot-box territory entirely.
+export const brokerWeight = (tierId, gains = {}) => {
+  const t = brokerTier(tierId);
+  if (!t) return 0;
+  return t.mult * activityScore(gains);
+};

@@ -10,7 +10,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS, RANKS,
          crewWageOwed, crewCold, LAW, rapStageOf, bribeCostOf, retainerActive, witproActive,
          cityHourOf, cityLawEventOf, estateTierOf, foundationOf, campaignOf, honorTierOf,
          SOLDIERS, soldierFxOf, CLUES, clueStepOf, rollClueTier, kingpinRankOf, tycoonRankOf, racketIncomeLeveled, empireTitles, launderRankOf, frontTitles, statesmanRankOf, seasonModOf, PACING,
-         carCollateralValue, carOf, MASTERY, masteryLvlOf, masteryRankOf, masteryXpFor, pathFx, pathXpMult,
+         ACTIVITY, carCollateralValue, carOf, MASTERY, masteryLvlOf, masteryRankOf, masteryXpFor, pathFx, pathXpMult,
          REGIMEN, disciplineLvlOf, energyCapOf, nerveCapOf, BUSINESSES, WIRE, RIVALS, CORNER, cornerTasksOf,
          KITCHENS, labModuleCost, recyclesToDesk, DESK_RECYCLE_REASON, isMade, madeSeconds,
          MADE_LADDER, madeRungIdx, madeRungOf, ladderFx,
@@ -544,6 +544,27 @@ export async function bumpMastery(client, h, ch, trackId, action) {
   const after = masteryLvlOf(next);
   if (after > before) {
     await notify(client, ch.id, 'mastery_up', { track: trackId, name: track.name, lvl: after, rank: masteryRankOf(after) });
+  }
+  // THE BROKERS — record the raw ACTION COUNT for the epoch allocator (omerta-brokers-design.md).
+  //
+  // Hooked HERE rather than at the 24 call sites, for the reason the desk recycle is hooked in
+  // `ledger`: a recorder you have to remember at each site is one a new action will forget, and a
+  // missed action is a player silently under-paid.
+  //
+  // ⚠ COUNTS, NOT `xp`. `xp` above has already been through `pathXpMult`, and ACTIVITY's whole
+  // structural guarantee is that it reads action counts × the BASE award — never XP actually
+  // granted — so no progression multiplier anywhere can propagate into the distribution key. Writing
+  // `xp` here would breach the staking wall that `test/activity.js` pins.
+  if (ACTIVITY.TAGS.includes(action) && ch.account_id) {
+    const day = dayOf();
+    const au = await client.query(
+      'UPDATE activity_log SET n = n + 1 WHERE account_id=$1 AND day=$2 AND tag=$3',
+      [ch.account_id, day, action]);
+    if (!au.rowCount) {
+      await client.query(
+        'INSERT INTO activity_log (account_id, day, tag, n) VALUES ($1,$2,$3,1)',
+        [ch.account_id, day, action]);
+    }
   }
   // STEP FOUR — STATS BY USE (founder-signed: "yes, tightly capped"). Working the trade exercises
   // its stat: a small roll per XP-paying action, on the GYM'S OWN diminishing factor, metered by a

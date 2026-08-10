@@ -91,7 +91,7 @@ const KNOWN_REASONS = {
     // ECONOMY v3 step 7 — `rarity:upgrade` is the deterministic one-tier NFT upgrade: a $OMR SINK
     // in DESK.SINK_REASONS, so it recycles to the shelf. No new bucket and no faucet — the item's
     // rarity is status, not currency.
-    'window:', 'yield:', 'desk:', 'made:', 'rarity:'],
+    'window:', 'yield:', 'desk:', 'made:', 'rarity:', 'brokers:'],
   cb: ['crime:', 'craft:', 'gun:buy:', 'jump:', 'death:', 'exchange:', 'onboard:', 'cook:'],
   ammo: ['melt', 'melt:tithe', 'craft:ammo', 'ammo:buy', 'jump', 'fire', 'death:', 'exchange:', 'gang:dissolved', 'convoy:', 'world:', 'port:', 'contract:', 'family:'],
 };

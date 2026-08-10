@@ -34,6 +34,7 @@ import * as A from './auth.js';
 import * as Chain from './chain.js';
 import * as Fees from './fees.js';
 import * as V from './vanity.js';
+import * as Brokers from './brokers.js';
 import * as Vig from './vig.js';
 import * as Territory from './territory.js';
 import * as Diplomacy from './diplomacy.js';
@@ -1250,6 +1251,7 @@ export async function buildServer() {
       rareArchetypes: AUCTION.RARE_ARCHETYPES, sets: AUCTION.SETS, collectorRanks: AUCTION.COLLECTOR_RANKS, consign: AUCTION.CONSIGN },
     envelope: { omr: LAW.ENVELOPE_OMR, days: Math.round(LAW.ENVELOPE_MS / 86400000), gainMult: LAW.ENVELOPE_GAIN_MULT, bleedMult: LAW.ENVELOPE_BLEED_MULT },
     foundation: FOUNDATION.TIERS.map((t) => ({ tier: t.tier, name: t.name, omr: t.omr, bustMult: t.bustMult, bleedMult: t.bleedMult, blurb: t.blurb })),
+    brokers: Brokers.brokerCatalog(),
     wire: { tapOmr: WIRE.TAP_OMR, tapHours: Math.round(WIRE.TAP_MS / 3600000), tapMax: WIRE.TAP_MAX,
       sweepOmr: WIRE.SWEEP_OMR, subOmr: WIRE.SUB_OMR, subDays: Math.round(WIRE.SUB_MS / 86400000),
       traceOmr: WIRE.TRACE_OMR, dossierOmr: WIRE.DOSSIER_OMR,
@@ -1475,6 +1477,17 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Landmarks.dedicateLandmark(ch, req.params.districtId, req.body?.amount, client, h)));
 
   // THE WIRE — the intelligence terminal: wiretaps on rivals + the Street Wire premium feed ($OMR sinks).
+  // ── THE BROKERS (omerta-brokers-design.md) — the activation sink + the published weights.
+  // NOTHING here delivers a reward: `allocateEpoch` computes a NUMBER and stops. Delivery is step 7
+  // and is gated on counsel, which is why there is no claim route to find.
+  app.get('/v1/brokers', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client) => Brokers.brokerBoard(client, ch)));
+  app.post('/v1/brokers/activate', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Brokers.activate(ch, client, h, req.body?.tier)));
+  app.get('/v1/mod/brokers', { preHandler: modAuth }, async () => Brokers.epochBoard(pool));
+  app.post('/v1/mod/brokers/allocate', { preHandler: modAuth }, async (req) =>
+    Brokers.allocateEpoch(pool, { endDay: req.body?.endDay != null ? Number(req.body.endDay) : undefined }));
+
   app.get('/v1/wire', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client, h) => Wire.wireBoard(ch, client, h)));
   app.post('/v1/wire/tap/:targetId', { preHandler: auth }, async (req) =>

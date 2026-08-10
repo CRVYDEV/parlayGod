@@ -652,6 +652,22 @@ const SIGNED = [
   ['ACTIVITY.TAGS', ['crime', 'jump', 'shakedown', 'standover', 'fire', 'shank', 'duel',
     'cook', 'deal', 'boost', 'race', 'port', 'piracy', 'score', 'heist', 'bout', 'exhibition',
     'cards', 'yardtale', 'primetime', 'numbers', 'trackbet']],
+
+  // THE BROKERS (omerta-brokers-design.md). The tier ladder is a $OMR SINK and the mults are one
+  // half of the distribution key — `weight = tier.mult x activityScore`. Pinned as the whole
+  // catalog because a leaf buried in an array entry is invisible to the register's reader check
+  // (the FAMILY_CHARTER_FX lesson). ACTIVATION_MS is what makes it RECURRING rather than a
+  // one-time purchase, which is the whole reason it helps an economy that pools into staking.
+  ['BROKERS.TIERS', [
+    { id: 1, name: 'Runner', omr: 25, mult: 1.0 },
+    { id: 2, name: 'Broker', omr: 75, mult: 1.5 },
+    { id: 3, name: 'Floor Trader', omr: 200, mult: 2.0 },
+    { id: 4, name: 'Specialist', omr: 500, mult: 2.5 },
+    { id: 5, name: 'The Chairman', omr: 1500, mult: 3.0 },
+  ]],
+  ['BROKERS.ACTIVATION_MS', 30 * 24 * 3600 * 1000],
+  ['BROKERS.EPOCH_DAYS', 7],
+  ['BROKERS.MIN_WEIGHT', 1],
   ['MINT_TRANCHES', [
     { through: 1000,  eth: 0.01, omr: 5  },
     { through: 3000,  eth: 0.02, omr: 10 },
