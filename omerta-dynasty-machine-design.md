@@ -492,3 +492,61 @@ A4 gains the soft fact-pattern amendment. Nothing else moves: the Sybil bound st
 price on whichever rail is cheaper (the guard keeps them equal), the provenance stamp keys on
 token issuance regardless of rail, and §10.4 is untouched (the ETH rail was always out-of-band;
 the $OMR rail rides the existing `plex:%` vocabulary).
+
+### Shape D — THE TRANCHE SCHEDULE (founder-directed refinement 2026-08-10: "first 1000 mints are
+.01 ETH or x OMR … next 2000 are .02 ETH and 2x OMR and so and so")
+
+The founder's refinement of Shape A: not a continuous curve — **discrete, pre-published price
+tranches indexed to cumulative mints, both rails moving together**. This is materially better
+than the rejected curve on every axis, and the founder's own example already obeys the lockstep
+law (0.01→5 and 0.02→10 both imply 500 $OMR/ETH — the exact rate the preflight guard pins). It
+is designed here as the ADOPTABLE shape, with the one honest cost stated up front: **adopting it
+re-opens A4** (the row's fixed-price predicate becomes a published-schedule predicate — the
+memo carries the proposed amendment and the re-drafted counsel question).
+
+**The mechanics — Shape C's machinery executing a published schedule (zero new code):**
+- The schedule is a PUBLISHED TABLE (a founder lever): `[{through: 1000, eth: 0.01, omr: 5},
+  {through: 3000, eth: 0.02, omr: 10}, …]` — cumulative-mint thresholds, both prices per row.
+- **One implied rate per row, every row** — the lockstep law as a table constraint: each row's
+  `omr/eth` must equal every other row's (the preflight guard extends per-row when the table
+  becomes a constant; today it already checks the live pair).
+- Execution at each boundary is exactly Shape C: one Safe `setFees` transaction (the setter is
+  live, `onlyOwner`) + the two env values — **`plexQuote` already scales the $OMR rail off
+  `MINT_FEE_ETH` automatically** (feeEth × oracle × premium), so only the floor moves by hand.
+  No contract change, NO audit-clock reset — the schedule is a COMMITMENT, the existing lever is
+  the mechanism. The admin surface gains a tier-progress line (minted count vs the current
+  threshold) so the GM sees a boundary coming.
+- **Boundary semantics are already safe**: `payMintFee` requires the EXACT fee, so a player who
+  loaded the page at 0.01 and submits after the raise gets a clean revert (no overpay, no
+  underpay) — a rare, annoying, harmless edge. Nothing at a boundary can be gamed; the worst
+  case is a reverted transaction and a refreshed quote.
+- The launch funnel bonus's sizing rule now references **the current tier's** mint cost (the
+  bonus stays strictly below the marginal cost net of the base drop — at every tier).
+
+**The progression decides the free-path crossing — measured, both readings of the example:**
+the mission ladder's lifetime earnable is 220 $OMR (test-pinned). **LINEAR** (tier k = k×0.01 /
+k×5, tranche sizes growing 1000, 2000, 3000…): the $OMR rail crosses 220 at tier 45 —
+**~990,000 identities in**, effectively never at any plausible scale. **DOUBLING** (0.01, 0.02,
+0.04… / 5, 10, 20…, tranches 1000, 2000, 4000…): crosses 220 at tier 7 — **~63,000 identities
+in**, genuinely reachable for a successful game. **Recommendation: LINEAR** — it keeps the free
+path alive to ~1M identities, delivers the early-bird effect exactly where it matters (the first
+few tranches), and rises gently enough that the growth headwind stays negligible. Either way,
+**the free-path law binds the schedule's tail**: the published table must either cap the $OMR
+rail below the earnable ceiling, or the release that crosses it changes the "get made for free"
+promise, the coach rung, and both codices in the SAME commit.
+
+**The copy rules, with more force than Shape C** (a published forward schedule is what converts
+"repricing" into "promised escalation" — this is the entire legal delta): the frame is
+**founding-era pricing** (an ordinary early-bird discount — concert tickets, presale software),
+never investment language. The mint page shows the CURRENT price and may state the published
+schedule as a fact sheet; it never shows a **countdown or "N remaining at this price" counter**
+(a pressure mechanic that reads as scarcity marketing); the banned lexicon
+(rare/limited/exclusive/floor/value/"only N will ever") applies verbatim. What may never be
+said, in any channel: that earlier mints are worth more because later ones cost more.
+
+**The defensibility ladder, honestly:** discretionary era repricing (Shape C — A4 intact) <
+**published tranche schedule, early-bird framed (Shape D — A4 re-opens, defensible with the copy
+discipline above)** < continuous auto-curve (Shape A — rejected, stays rejected). Shape D's
+residual that no copy rule removes: the schedule itself tells buyers the price will rise, on a
+tradeable asset — that is why the row goes back to counsel rather than being self-certified.
+Adoption is the founder's call; everything above is ready the day it is made.

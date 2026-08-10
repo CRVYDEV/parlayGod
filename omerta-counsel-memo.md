@@ -113,6 +113,16 @@ supply-indexed escalation ("the price rises as more mint") was proposed, evaluat
 **REJECTED** — an auto-rising price is scarcity marketing in mechanical form (the Impact-Theory
 shape) and would re-open this row. The funnel bonus (A6's carve-out) is analyzed here as a retail
 purchase promotion on that fixed-price sale.
+**Proposed refinement 2026-08-10, PENDING FOUNDER ADOPTION — the tranche schedule
+(`omerta-dynasty-machine-design.md` §10 Shape D):** a pre-published table of discrete price
+tranches indexed to cumulative mints ("first 1,000 at 0.01 ETH / 5 $OMR; next 2,000 at 0.02 /
+10; …"), both rails held to one implied rate per row, executed through the existing owner-set
+fee (no contract change). Early-bird framed, no countdown/remaining counters, the banned lexicon
+in force. **Adopting it re-opens this row**, and the question changes to: *does a PUBLISHED
+forward escalation on an uncapped, transferable, TBA-carrying NFT — framed as founding-era
+pricing, with no urgency mechanics and no value language — create the appreciation expectation
+that fixed-price analysis avoided, and what copy/structure keeps it an ordinary early-bird
+discount rather than an investment pitch?*
 
 **A5 — Recycled $OMR may be redistributed as play-to-earn rewards.**
 Every in-game $OMR sink recycles to THE DESK (nothing is burned); the founder direction is that
