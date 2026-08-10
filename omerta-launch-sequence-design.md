@@ -136,18 +136,40 @@ the cap bounds whales. NFT communities may be per-NFT (the NFT itself is the Syb
     the game, the claimed value is extractable only through the audited rail (mint gate → toll →
     surcharge), and "unclaimed" never left the Safe at all. A hybrid (a small on-chain tranche
     for the headline + the larger tranche in-game) buys both stories.
-- **The funnel bonus** (either design): a claim that also MINTS the identity (0.01 ETH) earns a
-  stated bonus tranche — the drop pays for its own conversion. **Carved out of A6 by design**
-  (the adversarial pass): tokens delivered in connection with a payment are consideration-linked
-  (the Tomahawk/free-stock class), so the bonus is analyzed under **A4** as a retail purchase
-  promotion on a fixed-price sale, while the BASE drop stays truly unconditional — a claim
-  requires only a signature proving control of a snapshotted address. The two tranches are
-  separate in the copy, the accounting, and the memo. **And the bonus is SIZED against the Sybil
-  math, never for conversion alone** (the exploit lens): a wallet eligible K times can claim +
-  mint K times, and each mint manufactures a MADE identity — the exact thing the 0.01 ETH fee
-  prices. The rule: the bonus's extractable value stays strictly below the marginal mint cost net
-  of the base drop (so mint-to-farm is never +EV), or it is granted as non-transferable in-game
-  credit that only realizes through play. A bonus set without that check is a Sybil faucet.
+- **THE WHITELIST — the one-time free mint (founder-directed 2026-08-10: whitelist the top
+  NFT + coin communities' wallets for a free mint; "one time free mint, rest of the time have to
+  pay").** Snapshotted wallets mint their identity FREE, once — and it rests on an inversion
+  worth stating plainly: **for exactly these wallets, the snapshot is a BETTER Sybil bound than
+  the fee ever was.** The 0.01 ETH exists to make identities costly to farm; a wallet that
+  provably held a floor-clearing position at a past block already paid a far higher entry price,
+  and nobody can Sybil into a historical block. The rules, each load-bearing:
+  1. **One free mint per snapshotted wallet, EVER — consumed on use** (the founder's rule,
+     verbatim; the same per-wallet consumption record the provenance stamp keeps, beside the
+     merkle claim state). Every mint after it — by that wallet or anyone — pays the live tranche
+     price. The eligibility is time-boxed with the drop's own `CLAIM_WINDOW` (90–180d) and simply
+     lapses unclaimed (nothing to sweep — a fee waiver that was never used).
+  2. **Free mints do NOT consume tranche slots**: the published schedule indexes PAID mints only
+     (ETH or PLEX rails). Otherwise a whitelist wave pushes paid minters up tiers with no paid
+     demand behind the move, and "the first 1,000 mints at 0.01" stops being an honest sentence.
+     (Implementation note for the build: the tranche counter needs a mint-source distinction —
+     today's `WHERE minted` count predates the whitelist; comps already sit in it at noise level.)
+  3. **The selection criterion is COMMUNITY, not market cap** — the honest correction to "top 5
+     coins ever": BTC/SOL/XRP don't live on these chains, ETH-the-coin means every wallet on
+     earth, and USDT holders are not a community. What snapshots AND carries tribal identity is
+     the class the plan already names: blue-chip NFT collections (Punks/BAYC/MAYC-class, ~4–11k
+     holders each — the NFT itself is the Sybil bound) and community tokens ($PEPE/$CASHCAT-class,
+     with a DUST FLOOR per coin so eligibility means a real position). The final five-and-five +
+     floors are founder levers, sized with the whitelist headcount (floors are what keep a
+     250k-holder memecoin's list in the tens of thousands).
+  4. **The free mint ABSORBS the funnel bonus, which is RETIRED.** The earlier design paid a
+     claimant a bonus for also PAYING the mint — a discount on a fee the whitelist no longer
+     charges, and a mechanism the exploit lens had flagged for Sybil-sizing care. One claim flow
+     replaces it: **claim your drop + mint free + your colors (the provenance stamp), one SIWE
+     pass, zero friction** — the strongest conversion story the launch has, with the sizing worry
+     deleted rather than managed. Gas stays the claimant's (claims, never pushes).
+  What a farmed free mint would even buy, post-wage-retirement: an empty made account — the
+  extraction gate on nothing, no wage to draw, no bonus attached. The entitlement only matters to
+  someone who then plays or buys, which is the point of giving it away.
 - **THE PROVENANCE TRAITS ride the same snapshots** (`omerta-dynasty-machine-design.md` §9,
   counsel row A7): a snapshotted wallet's identity mint may claim — opt-in, once ever, banded,
   cosmetic only — a generative trait marking its community of origin. Two consequences for THIS
