@@ -3282,16 +3282,17 @@ export const ACCESS_STAKE = {
 //
 // WHY BEING MADE IS A SHORTCUT AND NOT A GATE, which is a deliberate deviation from the shape first
 // proposed to the founder and is driven by a MEASUREMENT rather than taste. $OMR has no faucet since
-// v3 step 1; a free player's lifetime supply is the mission ladder — 9 jobs, 220 $OMR, and the last
-// two need level 100. Requiring BOTH a 20/month burn AND a held stake would put the ladder out of a
+// v3 step 1; a free player's lifetime supply is the mission ladder — 9 jobs, and the last two need
+// level 100. Requiring BOTH a recurring dues burn AND a held stake would put the ladder out of a
 // free player's reach entirely, which would break the one claim the new player-facing copy makes.
 // As a shortcut, dues buy a real rung AND the ceiling stays reachable without paying.
 //
-// THE CEILING IS THE CLAIM, and it is checkable rather than rhetorical: the top rung is 150 staked,
-// and a free player who works the mission ladder clears it (220 lifetime; the second-from-top rung at
-// 75 lands around level 58). Paying gets you there sooner and for less held; it does not get you
-// higher. `test/made.js` pins the relation to the live MISSIONS table so a retune of either cannot
-// quietly make the copy false.
+// THE CEILING IS THE CLAIM, and it is checkable rather than rhetorical: the top rung's `min` sits
+// under what the mission ladder pays lifetime, so a free player who works it clears the whole ladder.
+// Paying gets you there sooner and for less held; it does not get you higher. `test/made.js` pins
+// that RELATION against the live MISSIONS and MADE_LADDER tables so a retune of either cannot quietly
+// make the copy false — which is not hypothetical: both have since been rescaled ~6× together, and
+// the relation held while every literal that had been written into a comment went stale.
 //
 // WHAT IS DELIBERATELY ABSENT: anything in COMBAT — see the §4.3 note above for why that is a loop
 // argument, not a p2w one. The perks are CAPACITY (carry more, hold more energy/nerve, park more) plus
@@ -5063,10 +5064,10 @@ export const TICKER_BALLOT = {
 //
 // WHY THE CEILING IS THE IMPROVEMENT, not a softening. The open LINEAR ladder it replaces was
 // defensible but had two costs the cap removes outright:
-//   - THE FREE-PATH LAW BECOMES STRUCTURAL. On the old ladder the dearest row was 300 $OMR and the
-//     law held by arithmetic that had to be re-checked at every extension. Here the dearest row is
-//     150 against a ~220 lifetime mission payout, and no future row can ever exceed it, so "you can
-//     get made for free" is now guaranteed by the SHAPE rather than re-derived per table.
+//   - THE FREE-PATH LAW BECOMES STRUCTURAL. On the old ladder the dearest row was an open-ended
+//     number and the law held by arithmetic that had to be re-checked at every extension. Here the
+//     dearest row sits under the lifetime mission payout and no future row can ever exceed it, so
+//     "you can get made for free" is now guaranteed by the SHAPE rather than re-derived per table.
 //   - THE GROWTH HEADWIND GOES. The waves widen (1k → 100k) while the increments SHRINK
 //     (+0.015, +0.010, +0.010, +0.006), so the curve flattens exactly where a game gets crowded.
 //     Past the first thousand it is cheaper than the ladder it replaces at every point — #5,000

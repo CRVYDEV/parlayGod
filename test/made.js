@@ -207,15 +207,15 @@ assert(freeOmrLifetime >= top.min,
 {
   // (1) THE FREE PATH, asserted at its MECHANISM rather than through a price proxy. This used to
   // read "the dearest published $OMR price stays under the mission ladder's lifetime payout", which
-  // held only while the $OMR rail was mispriced at ~1/69th of the ETH fee. Priced correctly against
-  // the genesis rate a wave-1 mint is ~2,471 $OMR against ~220 lifetime earnable, so NO amount of
-  // playing buys a mint through the PLEX rail — and the promise survives anyway, because the
-  // mission GRANTS the credit outright. That is the thing to pin: the proxy was always a stand-in
-  // for this, and it silently stopped tracking it the moment the rail was priced honestly.
+  // held only while the $OMR rail was mispriced at ~1/69th of the ETH fee; priced honestly it stopped
+  // tracking, and the PLEX rail has since been retired outright, so there is no longer a $OMR mint
+  // price for a proxy to read at all. That makes this assertion MORE load-bearing than when it was
+  // written, not less: with fees ETH-only, a mission granting the credit OUTRIGHT is now the whole
+  // free path to being minted, and minting is what gates withdrawal.
   const freeMint = MISSIONS.find((m) => Number(m.reward?.mintCredit) > 0);
-  assert(freeMint, 'a mission grants a mint credit outright — the free path cannot depend on the '
-    + `$OMR rail, which at the genesis rate prices a wave-1 mint at ${MINT_TRANCHES[0].omr} $OMR `
-    + `against ~${freeOmrLifetime} lifetime earnable`);
+  assert(freeMint, 'a mission grants a mint credit outright — with the PLEX rail retired and fees '
+    + 'ETH-only, this is the ONLY way a non-paying player is ever minted, so no amount of playing '
+    + `(${freeOmrLifetime} $OMR lifetime earnable) can substitute for it`);
   assert(freeMint.req?.lvl > 0 && freeMint.req.lvl <= 20,
     `the free mint is reachable early (${freeMint.name} at level ${freeMint.req?.lvl}) — a credit `
     + 'gated past the mid-game is not a path a new player can walk');

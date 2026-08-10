@@ -4073,10 +4073,13 @@ know it no longer binds.
 
 **What replaces §4.3 is a CEILING, not a category.** Three bounds, and the first is the whole claim:
 
-1. **Power is capped, and the cap is reachable without paying.** `MADE_LADDER`'s top rung is **150
-   staked**; the mission ladder alone pays **220 $OMR lifetime**. `test/made.js` pins that relation
-   against the LIVE `MISSIONS` table, so retuning either the ladder or the missions fails by name
-   rather than quietly making the player-facing copy false.
+1. **Power is capped, and the cap is reachable without paying.** `MADE_LADDER`'s top rung sits under
+   what the mission ladder pays lifetime. `test/made.js` pins that RELATION against the LIVE
+   `MISSIONS` and `MADE_LADDER` tables, so retuning either fails by name rather than quietly making
+   the player-facing copy false. Deliberately stated as a relation and not as two numbers: both were
+   later rescaled ~6× together (top rung 150 → 900, lifetime 220 → 1,320, headroom 1.47× either way),
+   and the several comments that had written the literals down went stale while the claim held. The
+   guard is what kept the promise true; the prose is what broke.
 2. **No combat power at any price** — and that is a LOOP argument, not a fairness one. Offensive power
    makes paying players predators on free ones, which empties the free population that makes the
    streets worth walking; defensive power makes made men harder to rob, which directly undercuts
