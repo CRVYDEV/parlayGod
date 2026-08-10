@@ -2074,6 +2074,58 @@ CREATE TABLE IF NOT EXISTS eth_vault (
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS vault_used NUMERIC NOT NULL DEFAULT 0; -- rolling-24h claim bucket
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS vault_at TIMESTAMPTZ;
 
+-- ═══ THE STOCK RESERVE (omerta-brokers-design.md §3.2 wall 1, step 2 of the order of work) ═══
+-- The founder reopened stock acquisition on 2026-08-10 — treasury ETH buys tokenized stock, and that
+-- stock is distributed to NFT holders by play-weighted epoch. §3.3 then decided the stock lands
+-- STRAIGHT in the NFT's bound account with NO claim gate, which is what makes these two tables
+-- load-bearing rather than bookkeeping: with no gate at delivery, `allocated <= held` is the ONLY
+-- wall between the treasury and owing stock it does not have.
+--
+-- WHY PER-TICKER UNITS AND NOT CASH VALUE. A cash-denominated version reads fine and is silently
+-- wrong: value it at $X of TSLA, the price moves, and the same dollars now owe more units than the
+-- treasury holds — a shortfall created by nothing anybody did. Units are the only denomination in
+-- which "we owe only what we hold" is a fact rather than a snapshot. This is the same reasoning that
+-- made the 2026-07-31 retirement re-denominate the vault to ETH-on-both-sides; the stock layer
+-- returning means the property has to be re-established, not re-argued.
+--
+-- OUT-OF-BAND REAL VALUE, like every treasury table: ZERO §10.4 rows. Nothing here is a currency in
+-- the conservation set, so `invariants.js` is untouched; the wall lives in `runTreasuryInvariants`.
+
+-- What the treasury BOUGHT — one row per acquisition episode (an on-chain fill; the buy keeper is
+-- step 5 and is not built, so today only the mod/QA path writes here). `real` is the anti-fabrication
+-- gate the Vig, the Store, bonds and the desk all carry: a comp records the episode and books ZERO
+-- units and ZERO spend. That gate matters more here than anywhere else in the project — fabricated
+-- HOLDINGS are invisible to precisely the `allocated <= held` check that exists to catch them, so a
+-- comp that booked units would quietly raise the ceiling on what may be delivered.
+CREATE TABLE IF NOT EXISTS stock_buys (
+  ref TEXT PRIMARY KEY,                  -- the fill key (txHash:logIndex on-chain; a mod ref off it)
+  ticker TEXT NOT NULL,                  -- free text, NOT PORTFOLIO.TICKERS: what the treasury holds is
+                                         -- whatever exists on-chain, not our in-game status catalog
+  units NUMERIC NOT NULL DEFAULT 0,      -- units acquired (0 on a comp)
+  eth_spent NUMERIC NOT NULL DEFAULT 0,  -- treasury ETH it cost (0 on a comp)
+  price_eth_per_unit NUMERIC NOT NULL,   -- recorded for reconciliation; never used to value a holding
+  tx_hash TEXT,
+  real BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- What the treasury OWES — units promised out, per (epoch, ticker, account). ACCOUNT-keyed, so an
+-- allocation survives death exactly like the ETH vault line beside it. Delivery (step 7) resolves
+-- account -> Dynasty NFT -> its ERC-6551 account; keying the OWED side on the account rather than on
+-- a token id keeps this table meaningful before the NFT exists, and keeps an allocation attached to
+-- the player whose PLAY earned it rather than to whoever holds a token at delivery time.
+CREATE TABLE IF NOT EXISTS stock_allocations (
+  epoch_id TEXT NOT NULL,
+  account_id UUID NOT NULL,
+  ticker TEXT NOT NULL,
+  units NUMERIC NOT NULL DEFAULT 0,
+  delivered BOOLEAN NOT NULL DEFAULT false,  -- step 7 sets it; nothing does today
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (epoch_id, account_id, ticker)
+);
+CREATE INDEX IF NOT EXISTS ix_stock_alloc_ticker ON stock_allocations(ticker);
+CREATE INDEX IF NOT EXISTS ix_stock_alloc_account ON stock_allocations(account_id);
+
 -- THE CELLPHONE (founder-directed): a personal inbox + player-to-player DIRECT MESSAGES. Pure
 -- talk — zero §10.4 surface (no currency ever rides a DM). ACCOUNT-keyed on BOTH sides (the
 -- troll-box name-snapshot discipline, lifted to the bloodline: threads survive death/rename —

@@ -11196,3 +11196,49 @@ extract from an account that earned nothing — so the whitelist's cost is bound
 sets' size and the treasury's own drop budget, both founder levers (§6). Zero code (the
 mint-source distinction + whitelist consumption land with the G-3 build, post-A6-amendment
 countersignature).
+
+**THE WALL IS BACK — `allocated ≤ held`, per ticker, in units (brokers step 2, 2026-08-10) — BUILT**
+(`src/treasury.js`, `schema.sql` `stock_buys`/`stock_allocations`, `src/routes/modtools.js`,
+`test/treasury.js` — the 94th suite). The founder's §3.3 delivery decision — stock lands STRAIGHT in
+the NFT's ERC-6551 account with **no claim gate** — is recorded in `omerta-brokers-design.md` with the
+four arguments made against it and rejected (a bearer instrument for securities with no KYC or
+geofence; the irreversible direction, since gated could always become bearer but never the reverse;
+the contradiction of our own entitlement wall; the floor becoming a function of contents). The
+consequence that changed what gets built is one sentence: **with no gate at delivery,
+`allocated ≤ held` is the only wall left**, so it stops being one check among several and becomes
+load-bearing — built FIRST, before the keeper and before delivery, so the two systems that will move
+real stock are written against a wall that already exists rather than having one retrofitted.
+**Per-ticker UNITS, not cash value**, and not a summed check: a cash-denominated version reads fine
+and is silently wrong (value it at $X of TSLA, the price moves, and the same dollars now owe more
+units than are held — a shortfall created by nothing anybody did), while a summed one would let the
+treasury owe TSLA it does not hold as long as it held enough AMZN, which is not how a delivery in a
+specific ticker works. **`allocateStock` is the only writer of the owed side and it CLAMPS** — the
+invariant is the DETECTOR, the clamp is the PREVENTION, and with no delivery gate a detector that
+fires the next night is too late. **A comp books ZERO units**: the `txHash` gate matters more here
+than anywhere else it appears, because everywhere else a comp merely fails to credit revenue whereas
+here the fabricated quantity IS the wall's input, so a QA fill that booked units would raise the
+delivery ceiling with no asset behind it — invisible to precisely the check meant to catch it.
+**THE FINDING, which was not in the plan:** `rwa_revenue` is an INFLOW ledger and records nothing
+about what leaves, so the moment the keeper converts treasury ETH into stock the Safe holds less ETH
+and **no existing number moves** — the vault would have gone on quoting availability out of ETH
+already spent, allocating it to players, with the wall reading green throughout. The ETH arm is now
+TWO checks (`allocated ≤ held` and `allocated + spent ≤ held`) rather than one stronger one, because
+the two breaches have different owners — the first is a claim-path bug in the vault, the second an
+overspending keeper — and an alarm that cannot tell them apart is worse to be woken by; `stockBudget()`
+exposes the same figure as the keeper's root cap, so ETH already promised to a player is not the
+keeper's to spend. `runTreasuryInvariants` was ALREADY wired into the worker's nightly `alertDrift`,
+so every new check inherited the alarm the moment it existed. §10.4 is untouched by construction
+(out-of-band real value, the fees.js precedent — the suite asserts the whole stock layer moves real
+value and writes NOT ONE ledger row). **Two guards earned their keep:** the first cut *replaced* the
+ETH check and two suites that look it up by name went red (fixed by emitting both, which is the
+better design and not merely the cheaper patch); and `test/tokenomics.js` pinned `holds === 'eth'`
+with the words *"it does not buy stock"* — a statement of fact from the retirement that this design
+reverses, so the fact was updated rather than defended, keeping the part that still holds and still
+matters: **the player-facing vault rail stays denominated in ETH alone**, so the game is never owing
+a claim in one asset while holding another. Six mutations, each caught at its own named assertion
+(the clamp removed; the per-ticker arm deleted; the spend term dropped from the pool math; the
+spend-aware arm dropped from the sweep; a comp booking units; the accumulate path overwriting) — and
+the accumulate path was found UNCOVERED on review, the same half-tested-reads-as-whole shape that bit
+the brokers recorder. `omerta-identity-nft-design.md` was amended in the same commit: its one-line
+summary ("a tradeable trophy") no longer describes the whole token, though §1's entitlement wall
+survives intact. Suite 94/94 + sim drift-0 + pgquery 2711 statements + pgcheck 43/43 on real Postgres.

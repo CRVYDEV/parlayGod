@@ -150,10 +150,22 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
     // a silent keeper halt must read as a state on the founder's screen, not just a webhook)
     app.get('/v1/mod/bonds', { preHandler: modAuth }, async () =>
       ({ ...(await Bonds.bondStatus(pool)), oracle: await Chain.bondOracleHealth() }));
-    // THE TREASURY (omerta-stock-layer-retirement.md). The float's buy-bot seat is GONE with the
-    // stock layer — nothing buys units, so there is nothing to spend and no `allocated <= held` to
-    // reconcile. What is left is the ETH inflow ledger and the sell-tax ingest that feeds it.
+    // THE TREASURY. The ETH inflow ledger and the sell-tax ingest that feeds it — plus, since the
+    // founder reopened stock acquisition on 2026-08-10 (omerta-brokers-design.md), the STOCK reserve
+    // and the per-ticker `allocated <= held` wall. That wall had been deleted along with the buy bot
+    // on 2026-07-31 and is back because there is something to buy again; §3.3's no-gate delivery is
+    // what makes it the only wall left, so this view is where a founder reads whether it holds.
     app.get('/v1/mod/treasury', { preHandler: modAuth }, async () => Treasury.runTreasuryInvariants(pool));
+    // what the buy keeper (design step 5, unbuilt) may spend: ETH already promised to a player's
+    // vault line is not the keeper's to spend, so the budget is `held - allocated - alreadySpent`.
+    app.get('/v1/mod/treasury/budget', { preHandler: modAuth }, async () => Treasury.stockBudget(pool));
+    // ingest an acquisition fill. The modRealTxHash gate matters MORE here than anywhere else: units
+    // are the ceiling on what may ever be delivered, so a comp that booked them would raise that
+    // ceiling with no asset behind it — invisible to precisely the check meant to catch it. A comp
+    // records the episode and books ZERO units and ZERO spend.
+    app.post('/v1/mod/treasury/buy', { preHandler: modAuth }, async (req) =>
+      Treasury.recordStockBuy(pool, { ref: req.body?.ref, ticker: req.body?.ticker,
+        units: req.body?.units, ethSpent: req.body?.ethSpent, txHash: modRealTxHash(req) }));
     // ingest a DEX sell-tax episode (a `SellTaxTaken` log on mainnet). The modRealTxHash gate stands:
     // a simulate records the episode for QA but books ZERO revenue, so a comp can never assert the
     // treasury received ETH it did not.

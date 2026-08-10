@@ -44,7 +44,7 @@ This is unusually well-matched to existing machinery. Almost nothing here is new
 | Activation burn in the project token | A `$OMR` burn through the `spendOmr` till | Machinery exists; the sink is new |
 | "Clock In" trigger | **`ACTIVITY`** — the metric merged in #29 | **Built** |
 | Fee income as funding | The **treasury slice** — 10% of gameplay fees, 25% of bonds, 20% of Store, 4% of the sell tax, accruing in `rwa_revenue` | **Built** |
-| `allocated ≤ held` | `runTreasuryInvariants` | **Built, in ETH** — must be re-denominated per ticker |
+| `allocated ≤ held` | `runTreasuryInvariants` | **Built** — ETH arm *and* per-ticker units (step 2, done) |
 
 **The ACTIVITY fit is the important one.** Their "Clock In" is a button; ours is a measured,
 Sybil-resistant, fail-closed score over throttled actions with a breadth gate and agent exclusion.
@@ -154,15 +154,60 @@ The founder's funding decision keeps every existing wall intact, and that is wor
 ## 5. Order of work
 
 1. **Counsel, before code.** §6.
-2. Re-denominate `runTreasuryInvariants` to per-ticker units and restore the `allocated ≤ held` wall.
-3. The activation tiers + burn (in-game, shippable independently, a pure `$OMR` sink).
-4. The epoch allocator, computing weights off `ACTIVITY` — off-chain, dormant, no delivery.
-5. The buy keeper — chain-dormant behind the standing gates.
+2. ~~Re-denominate `runTreasuryInvariants` to per-ticker units and restore the `allocated ≤ held`
+   wall.~~ **DONE.**
+3. ~~The activation tiers + burn (in-game, shippable independently, a pure `$OMR` sink).~~ **DONE.**
+4. ~~The epoch allocator, computing weights off `ACTIVITY` — off-chain, dormant, no delivery.~~
+   **DONE.**
+5. The buy keeper — chain-dormant behind the standing gates. It reads `stockBudget()` for its root cap
+   and writes through `recordStockBuy`, both of which now exist.
 6. The Dynasty NFT + ERC-6551 bound accounts (currently design-only).
 7. Delivery. **Last**, and only after 1.
 
 Steps 3 and 4 are buildable now and are genuinely useful on their own: the activation sink helps the
 economy, and the allocator can compute and publish weights long before anything is delivered.
+
+### 5.1 What step 2 actually built, and the one thing it found
+
+The wall is back in `src/treasury.js`, in two arms, both inside `runTreasuryInvariants` — which was
+*already* wired into the worker's nightly `alertDrift`, so the new checks inherited the alarm the
+moment they existed rather than needing their own.
+
+- **`allocated ≤ held (<TICKER>, units)`, one check per ticker.** Not a summed one: stocks are not
+  fungible and a delivery is made in a *specific* ticker, so a summed check would let the treasury owe
+  TSLA it does not hold as long as it held enough AMZN.
+- **`allocateStock` is the only writer of the owed side, and it clamps.** The invariant is the
+  *detector*; the clamp is the *prevention*, and with §3.3's no-gate delivery a detector that fires
+  the next night is too late — the units are already in a freely-trading bound account.
+- **A comp books ZERO units.** The `txHash` gate matters more here than anywhere else it appears:
+  everywhere else a comp merely fails to credit revenue, but here the fabricated quantity *is the
+  wall's input*, so a QA fill that booked units would raise the delivery ceiling with no asset behind
+  it — invisible to precisely the check meant to catch it.
+
+**The thing it found, which was not in the plan.** `rwa_revenue` is an *inflow* ledger: it records
+what arrived and nothing about what leaves. So the moment the keeper converts treasury ETH into
+stock, the Safe holds less ETH and **no existing number moves**. The ETH vault would have gone on
+quoting availability out of ETH that was already spent, allocating it to players, with
+`allocated ≤ held` reading green throughout. The ETH arm is therefore
+`allocated + spent ≤ held (ETH)` — the spend term inside the comparison, not beside it — and
+`stockBudget()` exposes the same figure as the keeper's root cap, so ETH already promised to a
+player's vault line is not the keeper's to spend. Reopening the stock layer would have quietly
+weakened the wall the retirement was written to strengthen.
+
+**Two things the existing guards caught, both worth recording.** The first cut *replaced* the ETH
+check with the spend-aware one, and two suites that look it up by name went red. Renaming them would
+have been the cheap fix; emitting **both** is the better one, because the two ways the ETH arm can
+break have different owners — `allocated ≤ held` breaching is a claim-path bug in the vault, while
+`allocated + spent ≤ held` breaching *while the first holds* is an overspending keeper. One check
+catches both and tells whoever is woken by the alarm nothing about which they are looking at.
+
+The second was a `test/tokenomics.js` assertion reading `holds === 'eth'` with the words *"it does
+not buy stock"* — a statement of fact from the retirement that this design reverses. A test pinning a
+reversed decision protects nothing, so the fact was updated rather than defended; what was kept is
+the part that still holds and still matters, which is that **the player-facing vault rail stays
+denominated in ETH alone**. The treasury holding stock for this distribution never puts a player's
+claim into an asset the game would have to cash-settle — that separation was the retirement's central
+point and it survives intact.
 
 ---
 

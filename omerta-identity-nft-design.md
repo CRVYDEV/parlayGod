@@ -26,6 +26,28 @@
 > the name as an off-chain opt-in overlay at most). (3) **the §4 trait table's Dynasty-tier row
 > references the retired Portfolio system (D11)** — drop or re-source it against a live system
 > before any metadata is frozen.
+>
+> **AMENDED 2026-08-10 by `omerta-brokers-design.md` §3.3 — the exception is now recurring, and the
+> word "trophy" no longer describes the whole token.** The founder decided that treasury-bought
+> tokenized stock lands **straight in the token-bound account with no claim gate**. The 2026-08-09
+> banner above called the TBA "one knowing, counsel-gated exception" to the trophy/entitlement wall;
+> that framing assumed a bounded, one-off container. With no gate it is a **standing pipe**: every
+> epoch adds securities to the token, so the token is a **bearer instrument for real-world assets**,
+> continuously, by design.
+>
+> **What survives, precisely, and what does not.** §1's wall still holds *for the game entitlement* —
+> `account_persistent.minted` is a DB flag, nothing reads `balanceOf`, and selling the NFT does not
+> sell the right to withdraw $OMR or draw the wage. That half is unchanged and should not be softened.
+> What does NOT survive is the *one-line summary* as written: the NFT is no longer only a trophy, and
+> a reader who takes "tradeable trophy" at face value will underestimate what a secondary sale
+> transfers. It transfers real securities held in the token's own account, to a buyer with no KYC and
+> no jurisdiction check — which is the sharpest form of the concern §6 of the brokers design records,
+> and the specific item flagged there as the thing to put in front of counsel *before* delivery ships.
+>
+> **The consequence this doc owns.** §1's floor-vs-utility reasoning gets sharper and should be read
+> with the brokers §3.3 note beside it: once the token carries contents, the cheap end of the order
+> book becomes drained tokens and contents-versus-floor arbitrage, which is a different market from
+> the one a portrait alone would have.
 
 ---
 
