@@ -34,6 +34,18 @@ verified in-tree, carry the whole plan:
 - **Airdrop snapshots are taken BEFORE anything is announced** (the classic rule — a snapshot
   announced in advance gets farmed): block heights recorded per community, merkle roots computed
   and published (verifiable, unchangeable), amounts staying sealed until claims open if desired.
+  **Two adversarial-pass hardenings:** (1) the target communities are already NAMED in committed
+  repo docs, so for the genesis drop the snapshot rule alone is not enough — **snapshot a
+  HISTORICAL block that PREDATES every document naming the targets** (a past block cannot be
+  farmed by anyone, leak or no leak; treat the airdrop as adversarial by default, not
+  secret-by-default). (2) **The holder-set enumeration is a real, currently-unowned engineering
+  task**: publishing a root requires reconstructing EVERY holder at block N — ERC-20 communities
+  have no on-chain holder enumeration at any block (Transfer-log replay from contract genesis;
+  millions of events for a $PEPE-class token), and a root is only "verifiable" if outsiders can
+  reproduce the set, so the raw dataset (or the exact method) publishes with it. Enumerate AT
+  snapshot time and persist immediately; verify `getLogs` full-history + archive-state
+  availability on both chains BEFORE fixing block heights (a CHAIN-DEPLOY pre-flight line when
+  G-0 is scheduled); scope the enumeration tool as its own build task.
 
 ## Phase G-1 — the genesis window (1–3 days)
 
@@ -80,9 +92,14 @@ up — which is the bootstrap incentive doing its job, not a defect.
 
 **The reserve** comes from the Safe's genesis 100M (a founder-sized lever — sealed until claims
 open). Target communities per the founder: **ETH mainnet** — CryptoPunks, BAYC, MAYC holders +
-prominent coin communities ($PEPE-class, above a dust floor with a per-wallet cap); **Robinhood
-Chain** — StonkBrokers holders + native coin communities ($CASHCAT-class). Weights per community,
-flat-per-wallet vs per-NFT, floors and caps: all founder levers, tabled at decision time.
+prominent coin communities ($PEPE-class); **Robinhood Chain** — StonkBrokers holders + native
+coin communities ($CASHCAT-class). Weights per community, per-NFT amounts, floors and caps:
+founder levers, tabled at decision time — **with one shape RULED, not tabled** (the exploit
+lens): **coin communities are never flat-per-wallet**. A flat amount per holding wallet is
+Sybil-magnetic regardless of snapshot timing (split the bag across a thousand wallets before the
+block); coin drops are **proportional to the snapshotted balance, with a dust floor AND a hard
+per-wallet cap** — proportional is Sybil-neutral to wallet-splitting, the floor kills dust spam,
+the cap bounds whales. NFT communities may be per-NFT (the NFT itself is the Sybil bound).
 
 **The mechanics, each choice with its reason:**
 - **Snapshot-then-announce** (G-0) — no Sybil exists after a block height is fixed.
@@ -102,7 +119,23 @@ flat-per-wallet vs per-NFT, floors and caps: all founder levers, tabled at decis
     surcharge), and "unclaimed" never left the Safe at all. A hybrid (a small on-chain tranche
     for the headline + the larger tranche in-game) buys both stories.
 - **The funnel bonus** (either design): a claim that also MINTS the identity (0.01 ETH) earns a
-  stated bonus tranche — the drop pays for its own conversion.
+  stated bonus tranche — the drop pays for its own conversion. **Carved out of A6 by design**
+  (the adversarial pass): tokens delivered in connection with a payment are consideration-linked
+  (the Tomahawk/free-stock class), so the bonus is analyzed under **A4** as a retail purchase
+  promotion on a fixed-price sale, while the BASE drop stays truly unconditional — a claim
+  requires only a signature proving control of a snapshotted address. The two tranches are
+  separate in the copy, the accounting, and the memo. **And the bonus is SIZED against the Sybil
+  math, never for conversion alone** (the exploit lens): a wallet eligible K times can claim +
+  mint K times, and each mint manufactures a MADE identity — the exact thing the 0.01 ETH fee
+  prices. The rule: the bonus's extractable value stays strictly below the marginal mint cost net
+  of the base drop (so mint-to-farm is never +EV), or it is granted as non-transferable in-game
+  credit that only realizes through play. A bonus set without that check is a Sybil faucet.
+- **THE PROVENANCE TRAITS ride the same snapshots** (`omerta-dynasty-machine-design.md` §9,
+  counsel row A7): a snapshotted wallet's identity mint may claim — opt-in, once ever, banded,
+  cosmetic only — a generative trait marking its community of origin. Two consequences for THIS
+  plan: the G-0 announce-gate now covers the traits too (neither the drop NOR the trait feature
+  is announced before every snapshot it reads is fixed), and the D1 recommendation strengthens
+  further (the in-game claim flow delivers the drop, the mint, and your colors in one SIWE pass).
 
 ## 4. The new counsel row — A6
 
