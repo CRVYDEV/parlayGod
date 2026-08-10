@@ -255,24 +255,81 @@ consumes + redemption fees. It splits three ways:
 | Leg | Destination | Note |
 |---|---|---|
 | **Stakers** | `snUSD` / `snETH` holders | The sToken, Monolith's design. |
-| **NFT holders** | Dynasty NFT | ⚠️ **This is the securities leg** — memo row **A11**. Recorded, not softened. |
-| **The city** | **Buy $OMR on the open market → free players** | See below. |
+| **NFT holders** | Dynasty NFT | ⚠️ **The securities leg** — memo row **A11**. Ships at zero. |
+| **The city** | **Buy $OMR on the open market → the players who play** | §4.1. |
 
-**The third leg is genuinely well-formed, and it maps onto an already-audited pattern in this
-codebase.** Buying $OMR on the open market with external revenue and distributing it to free
-players is **not a mint** — it is a purchase-and-distribute, and it is exactly the shape of
-`prize:omr`, which `invariants.js` already documents as *"an in-game $OMR credit BACKED by hard
-$OMR the Vig moved into the withdrawal reserve — legal because real revenue backs every token."*
+### 4.1 THE CITY LEG — it funds the game, and only the players who play
 
-So it routes through machinery that exists: protocol profit → market buy → the withdrawal reserve
-→ credited to players as a backed distribution. **Wall 1 (no faucet) survives**, because every
-token handed to a free player was bought, not printed. And it does something no competitor's
-tokenomics does: **the DeFi protocol's earnings become the free-to-play economy's funding.** A
-player who never spends a cent is being subsidised by borrowers who do.
+*Founder-directed 2026-08-10: "make it so the OMR bought from the profit only funds the game the
+players who play."*
 
-The one honest caveat: distributing to NFT holders and distributing to players are *different*
-legal facts. The second is a game reward funded by revenue; the first is a return paid to holders
-of a tradeable asset. A11 covers the first. The third leg does not need it.
+Two rules, and each does real work.
+
+**RULE 1 — the bought $OMR is exclusively for in-game distribution to players.** It never reaches
+NFT holders, stakers, or the team; the other two legs are funded from the ETH/stable side of the
+split and never from this one. That makes the leg a **one-way, checkable** flow rather than a
+policy: `Σ $OMR bought == Σ $OMR distributed to players`, an identity the nightly runner can assert.
+
+**RULE 2 — the recipients are defined by PLAYING, not by not-paying.** This is a change from the
+earlier "free players" framing and it is better on three independent axes:
+
+- **As game design**, it rewards engagement instead of abstention. "Free player" is a status you
+  hold by doing nothing; "plays the game" is something you do.
+- **As legal posture**, it is row **A5's language verbatim** — *"free-to-play players can EARN from
+  that recycled pool through in-game performance… redistribution is skill/effort-based… never
+  chance-weighted."* **A5 is APPROVED.** So this leg is A5's distribution with a *second, better-
+  backed* funding source bolted on, and **it needs no new counsel row** — only A11 (the NFT leg)
+  does. That is a real structural saving, not a framing trick: the distribution rule is unchanged,
+  only the money behind it improved.
+- **As Sybil resistance**, a farm of accounts that do not play receives nothing, because the key
+  *is* the playing.
+
+### 4.2 The distribution law — linear, uncapped, and the reason is measured
+
+**Pro-rata linear on the activity score, with NO per-account cap.** That is not a preference; it is
+the correction to a bug this project already measured and paid for (`BALANCE.md` § THE FARM,
+`tools/sim.js` P9.29):
+
+> *"`WAGE_CAP_OMR` is commented 'anti-concentration / anti-Sybil', but concentration is the*
+> ***opposite*** *of Sybil. It clips the honest whale to 5 and hands the remainder to whoever runs
+> more accounts — the only way around a per-individual cap is to be several individuals."*
+
+The Street Wage's per-account cap was the thing that *created* its farm incentive. Stated as the
+general law:
+
+| Score shape | Splitting effort across N accounts | Verdict |
+|---|---|---|
+| **Concave** (a per-account cap, or log-share) | **gains** | Sybil-POSITIVE — the wage's bug |
+| **Linear** | gains nothing | **Sybil-NEUTRAL — correct** |
+| Convex | loses | Sybil-negative, but concentrates on whales |
+
+So: linear and uncapped. And "a player who plays more receives more" is the **founder's stated
+intent**, not a leak to be patched.
+
+**The actual Sybil bound is the game's own clocks.** The activity metric must be
+**cooldown-bounded** — nerve, energy, per-action cooldowns — so the maximum any one account can
+score in a day is capped by wall-clock rather than by will. Then a farm's cost is linear in N and
+its reward is linear in N: **identical ROI to an honest player.** That is the best achievable
+without identity, and here it is *sufficient*, because this pool is funded by borrowers — a farm
+taking its proportional share of somebody else's money is simply a player.
+
+**The metric is a sign-off item**, with these as hard requirements rather than preferences:
+cooldown-bounded; spanning multiple systems so breadth is required; **linear**; agents and NPC
+residents excluded (the standing exclusion on every legend surface). The leading candidate is
+**mastery XP** (`masteries` / `mastery_legend`) — it accrues only on actions that already cost a
+bounded resource, spans ten tracks, is account-level, and survives death.
+
+### 4.3 The rail, and why §10.4 does not move
+
+Protocol profit → market buy → `fundReserve` → credited as **`prize:omr`**, which `invariants.js`
+already documents as *"an in-game $OMR credit BACKED by hard $OMR the Vig moved into the withdrawal
+reserve — legal because real revenue backs every token."* It is machinery that exists and has been
+audited; the Vig's two-sided *reserve fully backed* / *not under-funded* pair already covers the
+backing from both directions.
+
+**Wall 1 (no faucet) survives intact**, because every token handed to a player was **bought, not
+printed** — and now, additionally, was bought *for* somebody who was playing. The result is
+something no competitor's tokenomics does: **borrowers who pay fund the players who don't.**
 
 ---
 

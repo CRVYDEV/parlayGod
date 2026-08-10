@@ -139,6 +139,17 @@ create the appreciation expectation that fixed-price analysis avoided, and what 
 keeps it an ordinary early-bird discount rather than an investment pitch?*
 
 **A5 — Recycled $OMR may be redistributed as play-to-earn rewards.**
+*(Fact-pattern amendment 2026-08-10 — THE BANK's city leg, `omerta-bank-protocol-design.md` §4.1.
+Protocol profit is used to buy $OMR on the open market and distribute it to **the players who
+play**. This row's operative language is unchanged and this amendment adds no new question: the
+distribution is the same **skill/effort-based, never chance-weighted** rail counsel already
+reviewed — pro-rata LINEAR on cooldown-bounded in-game activity, with **no per-account cap** (the
+project measured that a per-account cap is anti-concentration rather than anti-Sybil and is what
+created the Street Wage's farm incentive; see `BALANCE.md` § THE FARM). What changes is only the
+FUNDING SOURCE, and it improves: alongside recycled sinks, the pool is now fed by real protocol
+revenue used to purchase existing tokens on the open market. So the tokens distributed are, as
+this row already states, "previously-purchased" — now doubly so. **No new row is required for this
+leg**; A11 covers the separate NFT-holder distribution, which is a different legal fact.)*
 Every in-game $OMR sink recycles to THE DESK (nothing is burned); the founder direction is that
 free-to-play players can EARN from that recycled pool through in-game performance. Every token in
 the pool was originally bought with real money; redistribution is skill/effort-based, bounded by
@@ -321,7 +332,8 @@ this memo's outcome:
   the **third-party audit** of the contract batch, and the **RevenueSplitter's NFT leg**, which
   ships with its share settable to **zero** pending A11 — the staker leg and the open-market
   $OMR-buy leg are live from day one, because the $OMR leg is a purchase-and-distribute on the
-  already-audited `prize:omr` pattern and needs no new row.
+  already-audited `prize:omr` pattern, distributed on **A5's approved skill/effort rail to the
+  players who play**, and so needs no new row.
 - **Shipped and unaffected**: Phase A (the Ticker Ballot — a vote and a record; no value moves),
   the Capo's License (rate-limit/status perks only), the money router (declare/verify/display).
 
