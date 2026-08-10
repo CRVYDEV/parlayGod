@@ -19,6 +19,7 @@
 //   DATABASE_URL=postgres://localhost/omerta_check JWT_SECRET=x MOD_KEY=yyyyyyyyyyyy \
 //     MARKET_SEED='<32 random chars>' SOCIAL_VERIFY_MODE=off node tools/pgcheck.js
 import crypto from 'node:crypto';
+import { TREASURY } from '../src/rules.js'; // read the claim floor, never restate it
 
 if (!process.env.DATABASE_URL) {
   console.error('pgcheck needs DATABASE_URL pointed at a real (throwaway) Postgres — that is the whole point.');
@@ -481,12 +482,12 @@ console.log('\n9. THE VAULT SERIALIZES ON ITS ADVISORY LOCK');
     await holder.query('BEGIN');
     await holder.query('SELECT pg_advisory_xact_lock($1)', [0x45544856]); // 'ETHV' — the vault's key
     const t0 = Date.now();
-    const blocked = await call('POST', '/v1/vault/claim', { token, body: { omr: 100 } });
+    const blocked = await call('POST', '/v1/vault/claim', { token, body: { omr: TREASURY.CLAIM_MIN_OMR } });
     const ms = Date.now() - t0;
     check(blocked.code !== 200, 'a claim is NOT served while another holds the vault lock', `got ${blocked.code}`);
     check(ms >= lockMs * 0.5, 'and it waited on the lock rather than failing instantly', `waited ${ms}ms`);
   } finally { await holder.query('ROLLBACK').catch(() => {}); holder.release(); }
-  const served = await call('POST', '/v1/vault/claim', { token, body: { omr: 100 } });
+  const served = await call('POST', '/v1/vault/claim', { token, body: { omr: TREASURY.CLAIM_MIN_OMR } });
   check(served.code === 200, 'and the claim goes through once the lock is released', `got ${served.code} ${served.body?.error || ''}`);
   const held = Number((await pool.query('SELECT COALESCE(SUM(rwa_eth),0) s FROM rwa_revenue')).rows[0].s);
   const alloc = Number((await pool.query('SELECT COALESCE(SUM(eth),0) s FROM eth_vault')).rows[0].s);

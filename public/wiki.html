@@ -113,7 +113,7 @@ const SECTIONS = [
       the Estate, the Store patron/pass benefit, hitman reputation and lifetime
       kills, minted status, revive tokens, and 25% of your Underworld standings.</p>
       <p><b>Seasons</b> last 28 days. At the end, your level converts to prestige (<code>floor(level/2)</code>) and your
-      respect returns to 0. <b>Respec</b> your stats for 15 $OMR (24-hour cooldown).</p>
+      respect returns to 0. <b>Respec</b> your stats for 90 $OMR (24-hour cooldown).</p>
       ${R(`POST /v1/character · GET /v1/me · /v1/session · POST /v1/respec`)}` },
 
   { id: 'cars', group: 'The Basics', title: 'Cars, Guns & Gear', tag: 'the garage and the armory',
@@ -193,7 +193,7 @@ const SECTIONS = [
       swap and every laundering rail are retired. <b>The early-exit tax:</b> $OMR younger than 48 hours pays
       an extra toll when withdrawn on-chain — 50% at age zero, straight-line to 0% at 48 hours, newest tokens
       priced first, no exemptions.</p>
-      <p><b>THE MADE MAN</b> — the recurring subscription. Pay <b>20 $OMR every 30 days</b> and you are <i>made</i>:
+      <p><b>THE MADE MAN</b> — the recurring subscription. Pay <b>120 $OMR every 30 days</b> and you are <i>made</i>:
       the badge, the upper compound (Country Estate and above), a club of your own, and <b>the pad pays itself</b> —
       your fronts settle their own cash upkeep the moment you touch them, so a stretch away no longer leaves them cold.
       <b>It buys standing, never power:</b> no earning loop is gated, no odds move, no stat changes, and the pad is not
@@ -342,7 +342,7 @@ const SECTIONS = [
       cannot use it against family, yourself, new players, or safehoused players.</p>
       <p><b>The Contract Board</b> — escrow pots for each (target, kind). Post one (minimum $500; add 3 $OMR to be
       anonymous). A <b>directed</b> named hitman gets an exclusive window (minimum $10k, waived for a KILL contract on a
-      vendetta target, a rat, or a welsher). The target can <b>peek</b> (5 $OMR) to name every funder. <b>Hitman reputation</b> is a
+      vendetta target, a rat, or a welsher). The target can <b>peek</b> (30 $OMR) to name every funder. <b>Hitman reputation</b> is a
       status ladder (Associate to The Undertaker); lifetime reputation survives death.</p>
       ${R(`POST /v1/streets/:id/jump|search|fire|npchit|bounty · DELETE /streets/search · GET /v1/contracts [public] · /contracts/peek · /gangs/contract/:id`)}` },
 
@@ -575,7 +575,7 @@ const SECTIONS = [
       ${R(`POST /v1/withdraw · /gear/:id/withdraw · /wallet/challenge|verify · /character/mint · GET /v1/bonds [public] · /bonds/:id/claim`)}` },
 
   { id: 'growth', group: 'Reference', title: 'Growth — Paths, Missions, the First Week', tag: 'progression support',
-    html: `<p><b>Paths</b> (L5, $10k; switch for 25 $OMR + a 7-day cooldown) — SIX careers (The Gun, The Ledger,
+    html: `<p><b>Paths</b> (L5, $10k; switch for 150 $OMR + a 7-day cooldown) — SIX careers (The Gun, The Ledger,
       The Kitchen, The Wheel, The Shadow, The Ring), each with a signature edge, a real handicap, and trades that
       come easy (×1.5 mastery XP) or fight you (×0.6). <b>Missions</b> — 29 pay-once jobs
       (cash + respect + sometimes $OMR + titles). <b>Daily contracts</b> — 3 each day plus an all-three $OMR bonus. <b>The

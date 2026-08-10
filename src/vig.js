@@ -27,8 +27,8 @@ const round6 = (x) => Math.round(x * 1e6) / 1e6;
 // price to pay a fee from earnings instead of ETH (the EVE PLEX bridge — a skilled player's rent).
 export const VIG_BPS = Number(process.env.VIG_BPS || 6000);         // 60% to the Vig (exported: the router derives the waterfall from the LIVE constant)
 export const RESERVE_BPS = Number(process.env.VIG_RESERVE_BPS || 5000); // 50% of bought $OMR to the reserve (exported for the router)
-export const PLEX_MINT_OMR = Number(process.env.PLEX_MINT_OMR || 5);
-export const PLEX_RESPAWN_OMR = Number(process.env.PLEX_RESPAWN_OMR || 50);
+export const PLEX_MINT_OMR = Number(process.env.PLEX_MINT_OMR || 30);
+export const PLEX_RESPAWN_OMR = Number(process.env.PLEX_RESPAWN_OMR || 300);
 // MARKET-LINKED PLEX (sim-audit F3): a static 5 $OMR was minutes of play vs 0.01 ETH real money —
 // nobody would ever pay ETH, starving the Vig at the source. The $OMR price now tracks the REAL
 // exchange rate: fee-in-ETH × the latest Vig buyback's price (the actual OMR/ETH the Vig paid —

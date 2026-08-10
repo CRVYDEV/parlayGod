@@ -224,7 +224,7 @@ assert.equal(Number(ammPost.omr_reserve), Number(ammPre.omr_reserve), 'the retir
 assert.equal((await meOf(token)).cash, 2000000, 'a refused trade costs nothing');
 // $OMR for the staking block below now has to be GRANTED rather than bought, which is itself the
 // point of v2: the only ways in are bonds (real ETH) and the family yield.
-await pool.query(`UPDATE account_persistent SET omr = omr + 200 WHERE account_id=(SELECT account_id FROM characters WHERE id='${cid}')`);
+await pool.query(`UPDATE account_persistent SET omr = omr + 1200 WHERE account_id=(SELECT account_id FROM characters WHERE id='${cid}')`);
 
 // ── staking (§7.1 + Phase 4 backed emission): rewards PAID FROM a funded pool, not minted ──
 const modH = { 'x-mod-key': 'test-mod-key' };
@@ -371,12 +371,12 @@ assert.equal(Number(held.rows[0].n), faucet - sinks, `car conservation: ${faucet
 
 // (c) $OMR conservation — run the real §10.4 job and assert the $OMR total still reconciles.
 //     Since tokenomics v2 step 2 there is no way to BUY $OMR in-game, so this file grants what it
-//     needs by SQL (200 to the staker, 40 + 10 into the two legacy yield pools to give the merge
+//     needs by SQL (1200 to the staker, 40 + 10 into the two legacy yield pools to give the merge
 //     something real to move). Those grants are deliberately UNLEDGERED, so they are exactly the
 //     expected drift — asserting the drift equals them is a stronger claim than `ok`, because it
 //     proves every OTHER $OMR movement in the file (the pool merge, the retired-yield paths) is
 //     conservation-neutral rather than merely that the total happens to land somewhere plausible.
-const SQL_OMR_GRANTED = 200 + 40 + 10;
+const SQL_OMR_GRANTED = 1200 + 40 + 10;
 const { runLedgerInvariants } = await import('../src/invariants.js');
 const omrCheck = (await runLedgerInvariants(pool, { alert: false })).checks.find((x) => x.name === '$OMR conservation');
 assert(Math.abs(Number(omrCheck.drift) - SQL_OMR_GRANTED) < 1e-6,
@@ -953,7 +953,7 @@ assert(taperMe.bank > 30030000 && taperMe.bank < 30050000,
 process.env.BUSINESS_TAKEOVER_P = '1';
 await pool.query(`UPDATE businesses SET tier=3, spec=NULL, spec_at=NULL, scrutiny=0, scrutiny_at=now(), launder_used=0, launder_at=now(), last_collect_at=now(), upkeep_at=now(), takeover_cd_until=NULL WHERE id='${bizId}'`);
 await seed("cash=2000000, loc='docks', heat=0, safe_until=NULL, muscle=5, cunning=5");
-await pool.query(`UPDATE account_persistent SET omr=200 WHERE account_id=(SELECT account_id FROM characters WHERE id='${cid}')`);
+await pool.query(`UPDATE account_persistent SET omr=1200 WHERE account_id=(SELECT account_id FROM characters WHERE id='${cid}')`);
 const acctOf = async (col) => Number((await pool.query(`SELECT ${col} v FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${cid}')`)).rows[0].v);
 
 // (A) THE LAUNDERER legend is now a FROZEN historical board. It survives death and still ranks

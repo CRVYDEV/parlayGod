@@ -98,7 +98,7 @@ minted status, revive tokens, and 25% of your **Underworld** standings.
 
 **Prestige and seasons.** A season is 28 days. At the end of a season, your level converts to **prestige**
 (`floor(level/2)`). Your respect returns to 0. The players with the most respect win an SPCX (stock) prize.
-You can **respec** your stats for 15 $OMR (`POST /v1/respec`). This has a 24-hour cooldown that it shares with
+You can **respec** your stats for 90 $OMR (`POST /v1/respec`). This has a 24-hour cooldown that it shares with
 skills.
 
 Routes: `POST /v1/character` (create — the name is 2–24 characters and must be unique among living characters;
@@ -229,7 +229,7 @@ family yield). **Cash can never become $OMR** — the old AMM swap and every lau
   48 hours, newest tokens priced first so old savings cannot shield a fresh dump. Hold a token for
   two days and it exits free. There are no exemptions.
 
-**THE MADE MAN** (`GET`/`POST /v1/made`) — the recurring subscription. Pay **20 $OMR every 30 days**
+**THE MADE MAN** (`GET`/`POST /v1/made`) — the recurring subscription. Pay **120 $OMR every 30 days**
 and you are *made*: the badge, the upper compound (Country Estate and above), a club of your own, and
 **the pad pays itself** — your fronts settle their own cash upkeep the moment you touch them, so a
 stretch away no longer leaves them cold.
@@ -607,7 +607,7 @@ a completed kill. Post a bounty (`/streets/:targetId/bounty`, minimum $500; add 
 **anonymously**). You can name a **directed hitman** for an exclusive time window (minimum $10k, up to 24
 hours, +1.5× reputation). This minimum is **removed** for a vendetta, rat, welsher, or wanted kill contract. A
 **family contract** (`/gangs/contract/:targetId`) is paid from the treasury. The target can **peek**
-(`/contracts/peek`, 5 $OMR) to read every funder. This removes the anonymity.
+(`/contracts/peek`, 30 $OMR) to read every funder. This removes the anonymity.
 
 **Hitman reputation** is a status ladder (Associate to Button Man to Mechanic to Ghost to The Undertaker).
 Your lifetime reputation and kills survive death (like prestige). This season's kills die with the character.
@@ -651,7 +651,7 @@ A long, high heat builds a case.
 
 **Escapes (before it files):** **bribe** (`/v1/law/bribe`, scales with wealth, reduces the meter — blocked
 when you are clean, indicted, or safehoused), the **lawyer retainer** (`/law/retainer`, $150k for 3 days,
-reduces the bust and forfeiture), and the **envelope** (`/law/envelope`, 15 $OMR for 7 days — a standing
+reduces the bust and forfeiture), and the **envelope** (`/law/envelope`, 90 $OMR for 7 days — a standing
 payment that halves the meter's *gain* and doubles its *decrease*).
 
 **The RICO bust.** When you cross the line, the state files an **indictment** (a grace clock starts). A
@@ -790,7 +790,7 @@ your vendetta target. An NPC kill and a mod kill do not start a feud.
 
 Your character build. **Three branches, FOUR levels each** — the 4th a capstone that also unlocks an
 ACTIVE ability. Points **come from your level** (`floor(level/4)`, plus a small prestige bonus — a full
-branch is about L40). Skills **die with the character**. Respec for 10 $OMR on the shared 24-hour
+branch is about L40). Skills **die with the character**. Respec for 60 $OMR on the shared 24-hour
 cooldown. `GET /v1/skills`, `POST /v1/skills/:id`, `/skills/respec`.
 
 - **Enforcer** — Bruiser (jump and shakedown ×1.08) · Doctor's Friend (heal ×0.75) · Executioner (search
@@ -837,7 +837,7 @@ quarter). The choice dies with the street; the heir chooses their own.
 Shadow, The Ring** — each with a signature edge, a REAL handicap (the Gun sells goods at ×0.95, the
 Ledger fights at ×0.95, the Kitchen does ×1.1 jail time, the Wheel cooks slow, the Shadow shies from
 duels, the Ring pays the Doc ×1.15), and trades that come easy (**×1.5 XP**) or fight you (**×0.6**).
-The Ledger's long-advertised +10% front income is finally real. Switching careers takes the 25 $OMR
+The Ledger's long-advertised +10% front income is finally real. Switching careers takes the 150 $OMR
 AND a week between moves.
 
 **Stats by use (step four):** working a trade also exercises its core stat — each XP-paying action
@@ -879,7 +879,7 @@ Information as a $OMR resource that you can spend. `GET /v1/wire`.
 - **Wiretap** (`/v1/wire/tap/:targetId`, 8 $OMR, 12 hours, up to 5 at one time) — shows a rival's Law stage
   and heat band, wealth band, operations, WANTED status, and **if they are hunting you** (this pierces the
   peek space).
-- **Sweep** (`/wire/sweep`, 5 $OMR) — removes every tap on you (free when you are clean).
+- **Sweep** (`/wire/sweep`, 30 $OMR) — removes every tap on you (free when you are clean).
 - **The Street Wire subscription** (`/wire/subscribe {tier}`) — a **tiered ladder**: Street Wire (12 $OMR for
   7 days — Law forecasts and threat data: a *count* of hunters and contracts on you, never a
   name; the layered intel economy — the subscription warns you, a tap identifies a rival, and the $OMR peek
@@ -999,7 +999,7 @@ funds the prize pools.
 
 ## 30. Growth
 
-**Paths** (`POST /v1/path`, at L5 for $10k; switch for 25 $OMR + a 7-day cooldown) — a career, not just a
+**Paths** (`POST /v1/path`, at L5 for $10k; switch for 150 $OMR + a 7-day cooldown) — a career, not just a
 bonus: SIX Paths (**The Gun**, **The Ledger**, **The Kitchen**, **The Wheel**, **The Shadow**, **The Ring**),
 each with a signature edge, a REAL handicap, and trades that come easy (×1.5 mastery XP) or fight you (×0.6).
 
@@ -1047,7 +1047,7 @@ pays nothing.)
 use the bank, declare a Path, join a family, link a wallet, follow on X). It pays cash to teach you the
 game, with a final bonus. **The Coach** (the ▸ line on your sheet) always names your single best next action.
 
-**Vanity** — name change (5 $OMR), custom title (10), car plate (2), family color (10), family rename (25).
+**Vanity** — name change (30 $OMR), custom title (60), car plate (12), family color (60), family rename (150).
 
 ### For agents (autonomous players)
 Agents are full players. `POST /v1/auth/agent-key` grants a permanent 🤖 flag and a 90-day token (limited to 1

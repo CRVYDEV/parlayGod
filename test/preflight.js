@@ -136,10 +136,10 @@ assert.deepEqual(preflight(GOOD).warnings.filter((w) => /rails disagree/.test(w)
 assert(preflight({ ...GOOD, MINT_FEE_ETH: '0.025' }).warnings.some((w) => /rails disagree/.test(w)),
   'raising the ETH mint fee alone is caught — the $OMR rail would still sell an identity at the old price');
 assert.deepEqual(
-  preflight({ ...GOOD, MINT_FEE_ETH: '0.025', PLEX_MINT_OMR: '12.5' }).warnings.filter((w) => /rails disagree/.test(w)),
+  preflight({ ...GOOD, MINT_FEE_ETH: '0.025', PLEX_MINT_OMR: '75' }).warnings.filter((w) => /rails disagree/.test(w)),
   [], 'moving both together is clean — the guard is about agreement, not about any particular price');
-assert.deepEqual(preflight({ ...GOOD, MINT_FEE_ETH: '0.025', PLEX_MINT_OMR: '12' }).warnings.filter((w) => /rails disagree/.test(w)),
-  [], 'and a rounded-off price is fine — the band is 5%, so nobody is nagged for picking 12 over 12.5');
+assert.deepEqual(preflight({ ...GOOD, MINT_FEE_ETH: '0.025', PLEX_MINT_OMR: '72' }).warnings.filter((w) => /rails disagree/.test(w)),
+  [], 'and a rounded-off price is fine — the band is 5%, so nobody is nagged for picking 72 over 75');
 
 // THE TRANCHE SCHEDULE (Shape D, adopted): the mint pair must sit ON the published linear schedule
 // (tier k = k × 0.01 / k × 5), not merely agree on a rate — 0.015/7.5 is rate-clean and still a
@@ -147,16 +147,16 @@ assert.deepEqual(preflight({ ...GOOD, MINT_FEE_ETH: '0.025', PLEX_MINT_OMR: '12'
 // stay independently testable.
 assert.deepEqual(preflight(GOOD).warnings.filter((w) => /OFF the published tranche/.test(w)), [],
   'the shipped defaults (0.01/5) are tier 1 — on schedule');
-assert.deepEqual(preflight({ ...GOOD, MINT_FEE_ETH: '0.02', PLEX_MINT_OMR: '10' }).warnings.filter((w) => /OFF the published tranche/.test(w)), [],
+assert.deepEqual(preflight({ ...GOOD, MINT_FEE_ETH: '0.02', PLEX_MINT_OMR: '60' }).warnings.filter((w) => /OFF the published tranche/.test(w)), [],
   'tier 2 (0.02/10) is on schedule — a boundary execution is clean');
-assert(preflight({ ...GOOD, MINT_FEE_ETH: '0.015', PLEX_MINT_OMR: '7.5' }).warnings.some((w) => /OFF the published tranche/.test(w)),
+assert(preflight({ ...GOOD, MINT_FEE_ETH: '0.015', PLEX_MINT_OMR: '45' }).warnings.some((w) => /OFF the published tranche/.test(w)),
   'a rate-clean pair the table never promised (0.015/7.5) is caught — the schedule is a commitment, not a ratio');
 // The check restates the schedule's base (0.01/5, the k-multiple rule). Pin the restatement to the
 // real table so it cannot rot (the vig-defaults discipline, applied to the new guard).
 {
   const { MINT_TRANCHES } = await import('../src/rules.js');
   assert.equal(MINT_TRANCHES[0].eth, 0.01, "the preflight schedule check's restated base ETH still matches MINT_TRANCHES[0]");
-  assert.equal(MINT_TRANCHES[0].omr, 5, '…and its $OMR');
+  assert.equal(MINT_TRANCHES[0].omr, 30, '…and its $OMR');
 }
 // The guard restates vig.js's defaults (preflight cannot import it — vig imports game.js, the
 // one-way rule). That restatement is only safe while something checks it, so: check it.
@@ -164,8 +164,8 @@ assert(preflight({ ...GOOD, MINT_FEE_ETH: '0.015', PLEX_MINT_OMR: '7.5' }).warni
   const vig = await import('../src/vig.js');
   const src = fs.readFileSync('src/vig.js', 'utf8');
   const def = (k) => Number((src.match(new RegExp(`${k} \\|\\| ([0-9.]+)`)) || [])[1]);
-  assert.equal(vig.PLEX_MINT_OMR, 5, "preflight's restated PLEX_MINT_OMR default still matches vig.js");
-  assert.equal(vig.PLEX_RESPAWN_OMR, 50, "…and PLEX_RESPAWN_OMR");
+  assert.equal(vig.PLEX_MINT_OMR, 30, "preflight's restated PLEX_MINT_OMR default still matches vig.js");
+  assert.equal(vig.PLEX_RESPAWN_OMR, 300, "…and PLEX_RESPAWN_OMR");
   assert.equal(def('MINT_FEE_ETH'), 0.01, '…and MINT_FEE_ETH (module-private, so read from source)');
   assert.equal(def('RESPAWN_FEE_ETH'), 0.10, '…and RESPAWN_FEE_ETH');
 }

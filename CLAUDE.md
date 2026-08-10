@@ -3756,6 +3756,60 @@ success, so a run whose last attempt busts leaves the fixture JAILED. Reproduced
 fixed by GUARANTEEING the precondition rather than making it likelier, and the refusal is now
 PRINTED so the next occurrence names the server's own reason instead of leaving it to be guessed.
 
+**THE SINK RE-DENOMINATION (×6) + THE FREE PATH (founder-directed 2026-08-10: "Apply") — BUILT**
+(`reference-prototype-v24.jsx` + a re-extract, `src/rules.tail.js`, `src/vig.js`, `src/preflight.js`,
+`src/ops.js`, `src/growth.js`, `src/game.js`, `public/index.html`; BALANCE.md § THE SINK
+RE-DENOMINATION / § THE FREE PATH). Every $OMR price in the game was written against an implicit
+**~$10M token** — six independent sinks cluster there, which is how we know it was an assumption
+rather than a decision — while the locked launch parameters land at **$1.7M FDV** (33 ETH raise,
+205,882 $OMR/ETH, 100M supply → **$0.017/OMR**). So every sink was **5.88× cheaper in dollars than
+designed**: a Made Man's monthly dues were 34 cents. Factor **6**, the round number nearest that
+ratio; 152 numbers classified BY HAND, because a blanket sweep gets three classes wrong and each
+wrong one is silent. **146 scale ×6.** **2 are INVERSE** — `MEGAPROJECT.OMR_RATE` 500→83 and
+`SPEAKEASY.RENOWN.OMR_WEIGHT` 50→8 are *game-value per $OMR*, so a cheaper token makes them go DOWN;
+×6 would credit six times the monument progress and six times the renown for the same spend (the
+enumeration table said ONE inverse — the second was found while applying, and is recorded rather than
+quietly fixed). **2 LOCKSTEP** (`PLEX_MINT_OMR` 5→30 / `PLEX_RESPAWN_OMR` 50→300 + the
+`MINT_TRANCHES` $OMR column, moved together so the preflight implied-rate guard stays green at
+3,000 $OMR/ETH). **3 MUST NOT MOVE**: the two loot values are **fractions, not amounts** (×6 loots
+300% of a corpse) and `REF_LEGACY_RECRUIT_OMR` reads historical rows, so moving it makes My Profile
+lie about money already paid. **The fourth class was found by FAILING**: `KITCHEN.MODULE_OMR_FROM` is
+named for $OMR and holds a module LEVEL (3) — scaled to 18 it switched the lab-module $OMR burn off
+entirely with every §10.4 check green. **The verification is the lesson, not the sweep**: the first
+pass spot-checked the 8 special cases and reported success, and a later grep found **three
+assignment-form constants silently missed** (`STORE.PLEX_FLOOR_OMR_PER_ETH`, `BONDS.ETH_SCORE_OMR`,
+`ESTATE.GALA_OMR` — the sweep's regex wanted a `KEY:` colon and these are `KEY =`). A check that
+cannot fail for the majority reads exactly like a clean bill of health. The real verification loads
+the OLD rules from `git show HEAD:` and asserts **every** $OMR path moved by ITS classified factor —
+145 of 145, plus the thresholds not named for OMR (`MADE_LADDER.RUNGS[].min`, `LANDMARKS.MIN_DEDICATE`,
+`BONDS.PLEDGE_MIN`, `BACKER_TIERS[].min`, all on the underwriter-score scale). Machine-owned tables
+(MISSIONS/VESTS/KITCHENS) went through the seam per ground rule #2 — the regenerated diff was **17
+lines, all `omr`**. `RECRUIT_MILESTONES[].omr` deliberately left (the payout is retired and game.js
+stops reading it; scaling dead data is churn). **~20 test assertions had RESTATED a price** (`donOmr0
+- 5`, `'burned 15 $OMR'`, `-240`) and were converted to READ the lever, so the next retune touches no
+test at all — the lever-register argument applied to fixtures; seeds were scaled only where they fund
+a now-dearer purchase, and deliberately NOT where they feed a loot or estate assertion, since the
+loot RATES did not move.
+**THE FREE PATH.** "You can get made for free" is a promise the coach makes at level 14, and it
+rested on arithmetic: earn enough $OMR off the mission ladder to cover the PLEX mint. **The
+re-denomination proves why that was never safe** — the ladder pays $OMR (1,320 after the pass,
+$22.44) and the mint is priced in ETH and quoted through the market ($35 ETH rail / $42 PLEX), so
+*no factor closes a gap between two different units* and scaling both sides is a treadmill. So the
+mission the coach NAMES — **The Dockside Heist**, level 14, the first $OMR job — now grants the mint
+credit itself (`reward.mintCredit: 1`, through the machine-owned seam). The rung states a FACT
+instead of a price and stays true at any token price; a second rung (*Spend your mint credit*)
+catches the gap between holding one and using it, so the promise never goes silent halfway. Once per
+ACCOUNT, latched on the same `mission_omr_claimed` row as the mission's $OMR — both are account-level
+rewards of the same claim, so one latch is the correct scope, not a coincidence — and `mint_credits`
+rides persistAccount ($13), so the in-memory bump commits with the action. **The Sybil bound is
+untouched**: minting still gates EXTRACTION, and a farmed identity that reached level 14 and pulled
+the Dockside Heist has done ~4 hours of real play, a far stronger bound than 0.01 ETH ever was.
+Regression at the mission's own site (the catalog still carries the grant; the claim hands it over;
+it lands on the ACCOUNT; a re-run pays it ONCE) and in the coach walk (the rung names the job, quotes
+NO price, and swaps to *spend it* on a credit in hand). Both codices synced. `MISSIONS[m4].reward
+.mintCredit = 0` reverts to the arithmetic promise; the factor is one number, so a re-denomination at
+a different launch price is the same pass with a new factor.
+
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
 `payPlex` pattern); named landmarks / Founder's charter numbers; ~~R2 (the `rwa_revenue` → real-RWA-buy

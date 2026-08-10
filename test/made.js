@@ -68,12 +68,12 @@ assert(/fight/i.test(r.body.buysPower), 'and says plainly that none of it helps 
 assert.equal(r.body.ceiling.topRung, MADE_LADDER.RUNGS[MADE_LADDER.RUNGS.length - 1].min, 'the ceiling is published as a number');
 
 assert.equal((await call('POST', '/v1/made', { token: don.token })).body.error, 'omr', 'you cannot be made on credit');
-await grantOmr(don.id, 100); grantDrift += 100;
+await grantOmr(don.id, MADE.OMR * 5); grantDrift += MADE.OMR * 5;
 const shelfPre = await shelf();
 r = await call('POST', '/v1/made', { token: don.token });
 assert.equal(r.code, 200, 'the dues are paid');
 assert.equal(r.body.made, true, "you're made");
-assert.equal((await meOf(don.token)).omr, 100 - MADE.OMR, 'the burn debited exactly the dues');
+assert.equal((await meOf(don.token)).omr, MADE.OMR * 5 - MADE.OMR, 'the burn debited exactly the dues');
 assert.equal((await meOf(don.token)).made, true, 'and the badge is on the sheet');
 assert(Math.abs((await meOf(don.token)).madeSeconds - MADE.MS / 1000) < 60, 'the window is the full term');
 // the sink half: ledgered, and handed to the desk rather than destroyed
@@ -88,12 +88,14 @@ r = await call('POST', '/v1/made', { token: don.token });
 assert.equal(r.code, 200, 'a second month is fine');
 const endAfter = (await meOf(don.token)).madeSeconds;
 assert(endAfter > endBefore + MADE.MS / 1000 - 60, 'the second term stacks ON the first (later-of(now, end)) — paying early never burns the window you own');
-assert.equal((await meOf(don.token)).omr, 100 - 2 * MADE.OMR, 'twice the dues');
+assert.equal((await meOf(don.token)).omr, MADE.OMR * 5 - 2 * MADE.OMR, 'twice the dues');
 
 // ═══════════════ 3. WHAT THE DUES OPEN — status and access, never power ═══════════════
 // (a) THE UPPER COMPOUND. The estate is display-only, so this is status gating status.
 const nobody = await mk('Nick Nobody');
-await grantOmr(nobody.id, 5000); grantDrift += 5000;
+// enough for every tier up to and including the gated one, read off the ladder
+const ESTATE_NEED = Array.from({ length: MADE.ESTATE_TIER }, (_, i) => estateTierOf(i + 1).omr).reduce((a, b) => a + b, 0);
+await grantOmr(nobody.id, ESTATE_NEED); grantDrift += ESTATE_NEED;
 for (let t = 1; t < MADE.ESTATE_TIER; t++) {
   assert.equal((await call('POST', '/v1/estate/upgrade', { token: nobody.token })).code, 200,
     `tier ${t} is open to everyone — the lower compound is not a paywall`);

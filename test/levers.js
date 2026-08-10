@@ -28,7 +28,7 @@ import { walkSrc } from './lib/srcfiles.js';
 // runtime would assert that the code equals itself, which is exactly the vacuous check this suite
 // exists to avoid.
 const SIGNED = [
-  ['AUCTION.CONSIGN.FEE_OMR', 2],
+  ['AUCTION.CONSIGN.FEE_OMR', 12],
   ['AUCTION.CONSIGN.MAX_LIVE', 3],
   ['AUCTION.CONSIGN.MAX_RESERVE', 100000],
   ['AUCTION.CONSIGN.MIN_RAISE_BPS', 500],
@@ -167,7 +167,7 @@ const SIGNED = [
   ['DESK_AUCTION.DURATION_MS', 21600000],   // 6h
   ['DESK_AUCTION.OPEN_BPS', 15000],         // opens at 1.5x anchor, descending linearly to the reserve
   ['DESK_AUCTION.FLOAT_CAP_BPS', 100],      // 1% of float/day — a huge sink day must not become a dump
-  ['DESK_AUCTION.FLOAT_CAP_MIN_OMR', 1000], // the bootstrap floor under that cap (float 0 would deadlock it)
+  ['DESK_AUCTION.FLOAT_CAP_MIN_OMR', 6000], // the bootstrap floor under that cap (float 0 would deadlock it)
   ['DESK_AUCTION.MIN_LOT', 1],
   ['DESK_AUCTION.ORACLE_MAX_AGE_MS', 172800000], // 48h, then FAIL-CLOSED — never a fallback price
   ['DESK_AUCTION.ETH_POL_BPS', 5000],       // the ETH proceeds split 50/50 POL / founder
@@ -186,8 +186,8 @@ const SIGNED = [
   // same change — not a flag someone flips. FUND_BPS diverts 30% of the buyback the day it opens.
   ['EXCHANGE.OPEN', true],      // OPENED by tokenomics v2 step 2 (the interlock discharged — see BALANCE.md)
   ['EXCHANGE.RATE', 500],
-  ['EXCHANGE.MIN_OMR', 1],
-  ['EXCHANGE.DAILY_CAP_OMR', 250],
+  ['EXCHANGE.MIN_OMR', 6],
+  ['EXCHANGE.DAILY_CAP_OMR', 1500],
   ['EXCHANGE.FUND_BPS', 10000], // the WHOLE street take — with the AMM retired it has nowhere else to go
   // the migration dial — 0 means the buyback splits exactly as before; raising it moves yield from
   // individuals to families and must happen as stake:reward/dividend:omr retire, or it pays twice
@@ -201,7 +201,7 @@ const SIGNED = [
   // § THE FARM for the measured Sybil economics that decided it.)
   ['ESTATE.GALA_MIN_TIER', 2],
   ['ESTATE.GALA_MS', 14400000],
-  ['ESTATE.GALA_OMR', 15],
+  ['ESTATE.GALA_OMR', 90],
   ['ESTATE.STAFF_WALK_MS', 604800000],
   ['HEIST_FENCE_LO', 0.8],
   ['HEIST_FILL_FEE', 5000],
@@ -223,7 +223,7 @@ const SIGNED = [
   ['LAW.BUST_P_MIN', 0.15],
   ['LAW.ENVELOPE_GAIN_MULT', 0.5],
   ['LAW.ENVELOPE_MS', 604800000],
-  ['LAW.ENVELOPE_OMR', 15],
+  ['LAW.ENVELOPE_OMR', 90],
   ['LAW.EXPOSURE_DECAY', 0.1],
   ['LAW.INDICT_AT', 3000],
   ['LAW.JURY_BUST_MULT', 0.5],
@@ -249,25 +249,25 @@ const SIGNED = [
   ['LOAN.WANTED_MIN_LVL', 20],
   // ECONOMY v3 step 5 — THE FLOAT (design §5/§11.2/§11.5). MADE_OMR/MS are the subscription that
   // creates CONTINUOUS $OMR demand; ACCESS_STAKE.HIGH_OMR is the held float the high-stakes seat wants.
-  ['ACCESS_STAKE.HIGH_OMR', 50],
+  ['ACCESS_STAKE.HIGH_OMR', 300],
   ['MADE.ESTATE_TIER', 4],
   ['MADE.MS', 2592000000],
-  ['MADE.OMR', 20],
+  ['M4.REF_LEGACY_RECRUIT_OMR', 1],
+  ['BLOODLINE.SCORE.LEVEL', 10],
+  // MUST NOT MOVE with a re-denomination: REF_LEGACY_RECRUIT_OMR exists to read PRE-retirement
+  // referral rows honestly on My Profile, so scaling it makes the take box lie about money
+  // already paid. Pinned so a blanket sweep cannot take it along.
+  ['MADE.OMR', 120],
   // THE LADDER (D8=D) — power for HOLDING. RUNGS is pinned whole (bracket-accessed leaves are
   // invisible to the reader check, so the PARENT is the pin — the MASTERY.PERKS precedent).
-  ['MADE_LADDER.RUNGS', [
-    { min: 10,  name: 'Earner',    trunk: 1, energy: 5,  nerve: 1, garage: 1, fenceBps: 0 },
-    { min: 30,  name: 'Operator',  trunk: 2, energy: 10, nerve: 2, garage: 2, fenceBps: 0 },
-    { min: 75,  name: 'Capo',      trunk: 3, energy: 15, nerve: 3, garage: 3, fenceBps: 250 },
-    { min: 150, name: 'Kingmaker', trunk: 4, energy: 20, nerve: 4, garage: 4, fenceBps: 500 },
-  ]],
+  ['MADE_LADDER.RUNGS', [{"min":60,"name":"Earner","trunk":1,"energy":5,"nerve":1,"garage":1,"fenceBps":0},{"min":180,"name":"Operator","trunk":2,"energy":10,"nerve":2,"garage":2,"fenceBps":0},{"min":450,"name":"Capo","trunk":3,"energy":15,"nerve":3,"garage":3,"fenceBps":250},{"min":900,"name":"Kingmaker","trunk":4,"energy":20,"nerve":4,"garage":4,"fenceBps":500}]],
   ['MADE_LADDER.MADE_RUNGS', 1],
   // ECONOMY v3 step 7 — THE RARITY NFTs (design §7/§9.7). The tier weights decide how scarce a
   // legendary is (and therefore what one is worth on a secondary market); the upgrade ladder is the
   // only price money pays here, and it is DETERMINISTIC by design — see the RARITY block.
   ['RARITY.TIERS', [{ id: 'common', name: 'Common', w: 700 }, { id: 'rare', name: 'Rare', w: 220 },
     { id: 'legendary', name: 'Legendary', w: 65 }, { id: 'epic', name: 'Epic', w: 15 }]],
-  ['RARITY.UPGRADE_OMR', [0, 25, 90, 300]],
+  ['RARITY.UPGRADE_OMR', [0,150,540,1800]],
   ['M3.BODYGUARD_MIN_PRICE', 10000],
   ['M3.CASH_LOOT_RATE', 0.25],
   ['M3.COACH_FAMILY_BAND_LVL', 12],   // the early band the 'join a family' rung leads inside
@@ -338,10 +338,10 @@ const SIGNED = [
   ['M4.REF_PUSH_MAX_MULT', 5],
   ['M4.REF_TIER2_CASH', 5000],
   ['M8.RESPEC_CD_MS', 86400000],
-  ['M8.RESPEC_OMR', 15],
+  ['M8.RESPEC_OMR', 90],
   ['MEGAPROJECT.MIN_CASH', 100],
-  ['MEGAPROJECT.MIN_OMR', 1],
-  ['MEGAPROJECT.OMR_RATE', 500],
+  ['MEGAPROJECT.MIN_OMR', 6],
+  ['MEGAPROJECT.OMR_RATE', 83],
   // THE TRADES (mastery, step one 2026-07-29) — status-only today, load-bearing when the
   // milestone-perk / paths-v2 / stat-drip steps land (the curve + the death echo are the dials)
   ['MASTERY.XP_DIVISOR', 15],
@@ -594,7 +594,7 @@ const SIGNED = [
   // (D11 2026-08-05: the Portfolio's DIVIDEND_*/FAMILY_DYNASTY_NAME_OMR pins retired with their
   // levers; the surviving SCRUTINY_* window is the VAULT's and pinned below)
   ['PORTFOLIO.SCRUTINY_HEAT', 12],
-  ['PORTFOLIO.SCRUTINY_MIN_OMR', 1000],
+  ['PORTFOLIO.SCRUTINY_MIN_OMR', 6000],
   ['PORTFOLIO.SCRUTINY_WINDOW_MS', 86400000],
   ['RACES.CD_MS', 7200000],
   ['RACES.GP.MIN_ENTRANTS', 3],
@@ -658,28 +658,11 @@ const SIGNED = [
   // catalog because a leaf buried in an array entry is invisible to the register's reader check
   // (the FAMILY_CHARTER_FX lesson). ACTIVATION_MS is what makes it RECURRING rather than a
   // one-time purchase, which is the whole reason it helps an economy that pools into staking.
-  ['BROKERS.TIERS', [
-    { id: 1, name: 'Runner', omr: 25, mult: 1.0 },
-    { id: 2, name: 'Broker', omr: 75, mult: 1.5 },
-    { id: 3, name: 'Floor Trader', omr: 200, mult: 2.0 },
-    { id: 4, name: 'Specialist', omr: 500, mult: 2.5 },
-    { id: 5, name: 'The Chairman', omr: 1500, mult: 3.0 },
-  ]],
+  ['BROKERS.TIERS', [{"id":1,"name":"Runner","omr":150,"mult":1},{"id":2,"name":"Broker","omr":450,"mult":1.5},{"id":3,"name":"Floor Trader","omr":1200,"mult":2},{"id":4,"name":"Specialist","omr":3000,"mult":2.5},{"id":5,"name":"The Chairman","omr":9000,"mult":3}]],
   ['BROKERS.ACTIVATION_MS', 30 * 24 * 3600 * 1000],
   ['BROKERS.EPOCH_DAYS', 7],
   ['BROKERS.MIN_WEIGHT', 1],
-  ['MINT_TRANCHES', [
-    { through: 1000,  eth: 0.01, omr: 5  },
-    { through: 3000,  eth: 0.02, omr: 10 },
-    { through: 6000,  eth: 0.03, omr: 15 },
-    { through: 10000, eth: 0.04, omr: 20 },
-    { through: 15000, eth: 0.05, omr: 25 },
-    { through: 21000, eth: 0.06, omr: 30 },
-    { through: 28000, eth: 0.07, omr: 35 },
-    { through: 36000, eth: 0.08, omr: 40 },
-    { through: 45000, eth: 0.09, omr: 45 },
-    { through: 55000, eth: 0.10, omr: 50 },
-  ]],
+  ['MINT_TRANCHES', [{"through":1000,"eth":0.01,"omr":30},{"through":3000,"eth":0.02,"omr":60},{"through":6000,"eth":0.03,"omr":90},{"through":10000,"eth":0.04,"omr":120},{"through":15000,"eth":0.05,"omr":150},{"through":21000,"eth":0.06,"omr":180},{"through":28000,"eth":0.07,"omr":210},{"through":36000,"eth":0.08,"omr":240},{"through":45000,"eth":0.09,"omr":270},{"through":55000,"eth":0.1,"omr":300}]],
   // FAMILY CHARTERS (strategy package) — the asymmetry. Both halves of each trade are levers: the
   // handicap IS the mechanic, so a retune that quietly softened one side would turn a charter back
   // into a free upgrade. A whole-object pin (the multipliers are leaves on array entries).
@@ -687,7 +670,7 @@ const SIGNED = [
   ['FAMILY_CHARTER_FX.COST', 1.15],
   ['FAMILY_CHARTER_FX.HEAT_EDGE', 0.75],
   ['FAMILY_CHARTER_FX.LOSS_COST', 1.25],
-  ['FAMILY_CHARTER.CHANGE_OMR', 40],
+  ['FAMILY_CHARTER.CHANGE_OMR', 240],
   ['FAMILY_CHARTER.CHANGE_CD_MS', 604800000],
   // THE BLOOD WAR (NPC families step two) — NPC families as a PvE antagonist. A bounded family:raid
   // faucet on a regen pool that sits BELOW the weakest World outfit; the war score never touches
@@ -777,7 +760,7 @@ const SIGNED = [
   ['RIVALS.TAKE.MIN', 50],
   ['RIVALS.REVENGE_ATK_MULT', 1.10],
   ['RIVALS.REVENGE_CUT_MULT', 1.5],
-  ['SECRETS.DIG_OMR', 10],
+  ['SECRETS.DIG_OMR', 60],
   ['SECRETS.MAX_HELD', 5],
   ['SKILLS.ACTIVE_CD_MS', 28800000],
   ['SKILLS.CAPSTONE_COST', 4],
@@ -790,8 +773,8 @@ const SIGNED = [
   ['SKILLS.PRESTIGE_PER_POINT', 10],
   ['SKILLS.PRESTIGE_PER_SLOT', 8],
   ['SKILLS.PRESTIGE_POINT_MAX', 3],
-  ['SKILLS.RESPEC_OMR', 10],
-  ['SKILLS.RESPEC_ONE_OMR', 5],
+  ['SKILLS.RESPEC_OMR', 60],
+  ['SKILLS.RESPEC_ONE_OMR', 30],
   ['SOCIAL_GAME_URL', "https://www.omerta.fun"],
   ['SOCIAL_TASKS.ALL_BONUS', 500],
   ['SOCIAL_TASKS.CASH', 300],
@@ -806,7 +789,7 @@ const SIGNED = [
   ['SPEAKEASY.MIN_LEVEL', 15],
   ['SPEAKEASY.NOTORIETY_DECAY_HR', 4],
   ['SPEAKEASY.RAID_THRESHOLD', 60],
-  ['SPEAKEASY.RENOWN.OMR_WEIGHT', 50],
+  ['SPEAKEASY.RENOWN.OMR_WEIGHT', 8],
   ['SPEAKEASY.RENOWN.OWNER_WEIGHT', 0.5],
   ['SPEAKEASY.SALE_MAX', 50000000],
   ['SPEAKEASY.STANDOVER.CD_MS', 86400000],
@@ -830,14 +813,14 @@ const SIGNED = [
   ['STABLE.TRAIN_ENERGY', 12],
   ['STABLE.TRAIN_GAIN', 1],
   ['STABLE.VARIANCE', 22],
-  ['STORE.PLEX_FLOOR_OMR_PER_ETH', 5000],
+  ['STORE.PLEX_FLOOR_OMR_PER_ETH', 30000],
   ['STORE.PLEX_PREMIUM_BPS', 12000],
   ['TAX.DEV_BPS', 5000],
   ['TERRITORY_SYNDICATE_MIN', 3],
   // THE VAULT — the founder kept the vault and backed it with ETH (2026-07-31). These meter the
   // $OMR claim rail, not the backing asset, so they survived the re-denomination unchanged.
-  ['TREASURY.CLAIM_MIN_OMR', 25],
-  ['TREASURY.CLAIM_DAILY_OMR', 2000],
+  ['TREASURY.CLAIM_MIN_OMR', 150],
+  ['TREASURY.CLAIM_DAILY_OMR', 12000],
   ['TREASURY.CLAIM_WINDOW_MS', 86400000],
   ['UNDERWORLD.DISCHARGE_PER_MIN', 150],
   ['UNDERWORLD.FX.DOC_MULT', 0.9],
@@ -866,11 +849,11 @@ const SIGNED = [
   ['UNDERWORLD.STEP5.FIX_LOSS', 5],
   ['UNDERWORLD.STEP5.GRUDGE_DECAY_DAYS', 14],
   ['WIRE.SUB_MS', 604800000],
-  ['WIRE.SUB_OMR', 12],
-  ['WIRE.SWEEP_OMR', 5],
+  ['WIRE.SUB_OMR', 72],
+  ['WIRE.SWEEP_OMR', 30],
   ['WIRE.TAP_MAX', 5],
   ['WIRE.TAP_MS', 43200000],
-  ['WIRE.TAP_OMR', 8],
+  ['WIRE.TAP_OMR', 48],
   ['WORLD.COOP_MAX_CREW', 4],
   ['WORLD.COOP_MAX_P', 0.85],
   ['WORLD.COOP_MIN', 2],

@@ -24,7 +24,7 @@ import { buildServer } from '../src/server.js';
 import { payFamilyYield } from '../src/exchange.js';
 import { runBuyback } from '../src/worker.js';
 import { huntWanted, sweepContests } from '../src/social.js';
-import { familyTaskOf, weekOf, M3, BLACK_MARKET, bustProbOf, TERRITORY_RACKETS, territoryRankOf, territoryBuildCost, PORT, cityHourOf, DISTRICTS, DISTRICT_ADJ, MAP, CHARTERS, FAMILY_CHARTER, FAMILY_CHARTER_FX } from '../src/rules.js';
+import { familyTaskOf, weekOf, M3, BLACK_MARKET, bustProbOf, TERRITORY_RACKETS, territoryRankOf, territoryBuildCost, PORT, cityHourOf, DISTRICTS, DISTRICT_ADJ, MAP, CHARTERS, FAMILY_CHARTER, FAMILY_CHARTER_FX, VANITY, M8, GANG_SEALS, FOUNDATION } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -321,7 +321,7 @@ r = await call('POST', '/v1/armory/gun/lastresort/buy', { token: don.token });
 assert.equal(r.code, 200, 'gun bought'); assert.equal(r.body.character.gun, 'lastresort', 'first iron auto-equipped');
 assert.equal((await call('POST', '/v1/armory/gun/lastresort/buy', { token: don.token })).code, 400, 'no duplicate gun');
 assert.equal((await call('POST', '/v1/armory/ammo', { token: don.token })).code, 200, 'ammo box bought');
-await pool.query(`UPDATE account_persistent SET omr = omr + 5 WHERE account_id = (SELECT account_id FROM characters WHERE id='${don.id}')`);
+await pool.query(`UPDATE account_persistent SET omr = omr + 30 WHERE account_id = (SELECT account_id FROM characters WHERE id='${don.id}')`);
 r = await call('POST', '/v1/armory/vest/woolv', { token: don.token });
 assert.equal(r.code, 200, 'vest bought with $OMR'); assert.equal(r.body.character.vest, 'woolv');
 
@@ -962,22 +962,23 @@ await seedCh(gina.id, 'hosp_until=NULL');
 assert.equal((await call('POST', `/v1/bodyguard/hire/${gina.id}`, { token: carla.token })).code, 200, 'carla can hire a live guard immediately');
 
 // ── M8: the Tailor & Engraver — vanity/identity $OMR sinks (display-only, ledgered burns) ──
-await pool.query(`UPDATE account_persistent SET omr = 100 WHERE account_id = (SELECT account_id FROM characters WHERE id='${don.id}')`);
+await pool.query(`UPDATE account_persistent SET omr = 1000 WHERE account_id = (SELECT account_id FROM characters WHERE id='${don.id}')`);
 const donOmr0 = (await meOf(don.token)).omr;
-// street name change: costs 5 $OMR, living-name uniqueness still enforced
+// street name change: priced by the lever (read, not restated — a re-denomination must not
+// require editing this file), living-name uniqueness still enforced
 assert.equal((await call('POST', '/v1/vanity/name', { token: don.token, body: { name: 'Bullet Barry' } })).body.error, 'name_taken', 'no stealing a living name');
 r = await call('POST', '/v1/vanity/name', { token: don.token, body: { name: 'Don Fabrizio II' } });
 assert.equal(r.code, 200, 'the Don rebranded');
 assert.equal((await meOf(don.token)).name, 'Don Fabrizio II', 'the streets know the new name');
-assert.equal((await meOf(don.token)).omr, donOmr0 - 5, 'the name change burned 5 $OMR');
-// custom title: 10 $OMR into the SAME display slot mission titles use; clearing is free
+assert.equal((await meOf(don.token)).omr, donOmr0 - VANITY.NAME_CHANGE_OMR, `the name change burned ${VANITY.NAME_CHANGE_OMR} $OMR`);
+// custom title: into the SAME display slot mission titles use; clearing is free
 r = await call('POST', '/v1/vanity/title', { token: don.token, body: { title: 'The Velvet Hammer' } });
 assert.equal(r.code, 200, 'title engraved'); assert.equal((await meOf(don.token)).title, 'The Velvet Hammer', 'title displayed');
-assert.equal((await meOf(don.token)).omr, donOmr0 - 15, 'the title burned 10 $OMR');
+assert.equal((await meOf(don.token)).omr, donOmr0 - VANITY.NAME_CHANGE_OMR - VANITY.TITLE_OMR, `the title burned ${VANITY.TITLE_OMR} $OMR`);
 assert.equal((await call('POST', '/v1/vanity/title', { token: don.token, body: { title: '' } })).code, 200, 'cleared');
 assert.equal((await meOf(don.token)).title, null, 'slot empty again');
-assert.equal((await meOf(don.token)).omr, donOmr0 - 15, 'clearing a title is free (ink, not ransom)');
-// vanity plate: on YOUR car only, 2 $OMR, engraved uppercase
+assert.equal((await meOf(don.token)).omr, donOmr0 - VANITY.NAME_CHANGE_OMR - VANITY.TITLE_OMR, 'clearing a title is free (ink, not ransom)');
+// vanity plate: on YOUR car only, engraved uppercase
 await pool.query(`INSERT INTO cars (id, character_id, model_id, trim_id, dmg) VALUES ('doncar','${don.id}','junker','stock',0)`);
 assert.equal((await call('POST', '/v1/vanity/plate/nosuchcar', { token: don.token, body: { plate: 'OMERTA' } })).body.error, 'no_car', 'no engraving another man\'s ride');
 r = await call('POST', '/v1/vanity/plate/doncar', { token: don.token, body: { plate: 'omerta 1' } });
@@ -988,7 +989,7 @@ assert.equal((await call('POST', '/v1/gangs/vanity/color', { token: mook.token, 
 assert.equal((await call('POST', '/v1/gangs/vanity/color', { token: don.token, body: { color: 'purple' } })).body.error, 'color', 'a crest color is #rrggbb');
 assert.equal((await call('POST', '/v1/gangs/vanity/color', { token: don.token, body: { color: '#AA00FF' } })).code, 200, 'the family flies new colors');
 assert.equal((await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.color, '#aa00ff', 'the crest color shows on the family page');
-// family rename: boss only, founding rules + uniqueness, 25 $OMR
+// family rename: boss only, founding rules + uniqueness
 await seedCh(barry.id, 'respect=250, cash=50000'); // barry founds a throwaway family to squat a name
 assert.equal((await call('POST', '/v1/gangs', { token: barry.token, body: { name: 'The Landmarks', tag: 'LMK' } })).code, 200, 'barry founded a family');
 assert.equal((await call('POST', '/v1/gangs/vanity/name', { token: don.token, body: { name: 'The Landmarks' } })).body.error, 'taken', 'no renaming onto a claimed name');
@@ -998,7 +999,8 @@ assert.equal((await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.name, 'The 
 // §10.4: every vanity purchase is an enumerated, ledgered $OMR burn — spends match rows exactly
 const vanitySpent = donOmr0 - (await meOf(don.token)).omr;
 const vanityLedger = -Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='omr' AND reason LIKE 'vanity:%'")).rows[0].s);
-assert.equal(vanitySpent, 5 + 10 + 2 + 10 + 25, 'the shop charged exactly its price list');
+assert.equal(vanitySpent, VANITY.NAME_CHANGE_OMR + VANITY.TITLE_OMR + VANITY.PLATE_OMR + VANITY.GANG_COLOR_OMR + VANITY.GANG_RENAME_OMR,
+  'the shop charged exactly its price list');
 assert.equal(vanityLedger, vanitySpent, 'every $OMR the Tailor took is a ledgered vanity:* burn');
 
 // ── M8: board anonymity fee + counter-intelligence peek (the two sinks feed each other) ──
@@ -1010,9 +1012,9 @@ r = await call('POST', `/v1/streets/${barry.id}/bounty`, { token: frank.token, b
 assert.equal(r.body.error, 'omr', 'anonymity has a price');
 assert.equal((await meOf(frank.token)).cash, frankCash0, 'the failed anon post rolled back in full (cash untouched)');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM bounties WHERE target_character='${barry.id}'`)).rows[0].n), 0, 'no pot was opened');
-await seedOmr(frank.id, 20);
+await seedOmr(frank.id, 20 * M8.BOARD_ANON_OMR);
 assert.equal((await call('POST', `/v1/streets/${barry.id}/bounty`, { token: frank.token, body: { amount: 1000, kind: 'kill', anon: true } })).code, 200, 'anon contract posted');
-assert.equal((await meOf(frank.token)).omr, 17, 'the anon fee burned 3 $OMR');
+assert.equal((await meOf(frank.token)).omr, 20 * M8.BOARD_ANON_OMR - M8.BOARD_ANON_OMR, `the anon fee burned ${M8.BOARD_ANON_OMR} $OMR`);
 const anonRow = (await call('GET', '/v1/contracts', { token: mook.token })).body.contracts.find((c) => c.target.id === barry.id);
 assert(anonRow && anonRow.poster === null, 'the board shows no poster');
 // a top-up of a LIVE pot inherits its anonymity — the flag has no effect, so it is never charged
@@ -1021,10 +1023,10 @@ assert.equal((await call('POST', `/v1/streets/${barry.id}/bounty`, { token: don.
 assert.equal((await meOf(don.token)).omr, donOmrPre, 'no anon charge on a top-up (the flag took no effect)');
 // the peek: the MARK reads every funder — including the anon poster. Charged only when there is something to hear.
 assert.equal((await call('POST', '/v1/contracts/peek', { token: barry.token })).body.error, 'omr', 'intel has a price too');
-await seedOmr(barry.id, 10);
+await seedOmr(barry.id, 10 * M8.INTEL_PEEK_OMR);
 r = await call('POST', '/v1/contracts/peek', { token: barry.token });
 assert.equal(r.code, 200, 'barry bought the whisper');
-assert.equal((await meOf(barry.token)).omr, 5, 'the peek burned 5 $OMR');
+assert.equal((await meOf(barry.token)).omr, 10 * M8.INTEL_PEEK_OMR - M8.INTEL_PEEK_OMR, `the peek burned ${M8.INTEL_PEEK_OMR} $OMR`);
 let names = r.body.contracts.find((c) => c.kind === 'kill').funders.map((f) => f.name);
 assert(names.includes('Freelance Frank'), 'the peek PIERCES anonymity — the anon poster is named');
 assert(names.includes('Don Fabrizio II'), 'every funder is named with their share');
@@ -1044,7 +1046,7 @@ assert(names.includes('The New Fabrizi (family)'), 'a family stake is attributed
   const anonMark = await mk('Anon Mark');
   await seedCh(don.id, 'cash=100000');
   assert.equal((await call('POST', '/v1/gangs/tribute', { token: don.token, body: { amount: 50000 } })).code, 200, 'don topped up the treasury');
-  await seedOmr(don.id, 10);
+  await seedOmr(don.id, 10 * M8.BOARD_ANON_OMR);
   assert.equal((await call('POST', `/v1/gangs/contract/${anonMark.id}`, { token: don.token, body: { amount: 600, kind: 'kill', anon: true } })).code, 200, 'anon family contract posted');
   bus.off('streets', spy);
   const evt = feed.find((e) => e.type === 'bounty' && e.on === 'Anon Mark');
@@ -1064,16 +1066,16 @@ const reserve0 = (await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.omrRese
 assert.equal((await call('POST', '/v1/gangs/tribute/omr', { token: mook.token, body: { amount: 2000 } })).code, 200, 'mook pooled tokens for the family');
 assert.equal((await meOf(mook.token)).omr, 1000, "the tribute left mook's vault");
 assert(close((await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.omrReserve, reserve0 + 2000), 'and landed in the family reserve (a §10.4 bucket transfer)');
-// the ladder climbs sequentially: Wax (25) then Brass (75) — each burn ledgered against the reserve
+// the ladder climbs sequentially: Wax then Brass — each burn ledgered against the reserve
 r = await call('POST', '/v1/gangs/vanity/seal', { token: don.token });
 assert.equal(r.code, 200, 'the family took its first seal'); assert.equal(r.body.seal.name, 'Wax Seal', 'the ladder starts at wax');
 r = await call('POST', '/v1/gangs/vanity/seal', { token: don.token });
 assert.equal(r.code, 200, 'and climbed'); assert.equal(r.body.seal.name, 'Brass Seal', 'no skipping tiers');
-assert(close((await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.omrReserve, reserve0 + 2000 - 100), 'Wax (25) + Brass (75) burned from the reserve');
+assert(close((await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.omrReserve, reserve0 + 2000 - (GANG_SEALS[0].omr + GANG_SEALS[1].omr)), 'Wax + Brass burned from the reserve');
 assert.equal((await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.seal, 'Brass Seal', 'the family page bears the seal');
 assert.equal((await call('GET', '/v1/gangs', {})).body.gangs.find((g) => g.id === gangA).seal, 'Brass Seal', 'the seal shows on the families list');
 assert.equal((await meOf(don.token)).gang.seal, 'Brass Seal', 'every member carries it');
-assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='omr' AND reason='vanity:gang:seal'")).rows[0].s), -100, 'every seal $OMR is a ledgered burn');
+assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='omr' AND reason='vanity:gang:seal'")).rows[0].s), -(GANG_SEALS[0].omr + GANG_SEALS[1].omr), 'every seal $OMR is a ledgered burn');
 
 // ── THE FOUNDATION — the family charity: a $OMR sink from the reserve that softens members' RICO trials ──
 const soldier = await mk('Footsoldier Frankie');
@@ -1081,14 +1083,14 @@ assert.equal((await call('POST', `/v1/gangs/${gangA}/join`, { token: soldier.tok
 assert.equal((await call('POST', '/v1/gangs/foundation', { token: soldier.token })).body.error, 'rank', 'a rank-and-file soldier can\'t endow the foundation (boss/underboss only)');
 assert.equal((await call('POST', '/v1/gangs/foundation', { token: barry.token })).body.error, 'reserve', 'an empty reserve endows nothing');
 // top up the reserve, then climb sequentially: Community Fund (60) then Youth League (180)
-await seedOmr(mook.id, 1000);
-await call('POST', '/v1/gangs/tribute/omr', { token: mook.token, body: { amount: 300 } });
+await seedOmr(mook.id, 6000);
+await call('POST', '/v1/gangs/tribute/omr', { token: mook.token, body: { amount: 1800 } });
 const fReserve0 = (await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.omrReserve;
 r = await call('POST', '/v1/gangs/foundation', { token: don.token });
 assert.equal(r.code, 200, 'the family endowed its first foundation'); assert.equal(r.body.foundation.name, 'Community Fund', 'the ladder starts at the community fund');
 r = await call('POST', '/v1/gangs/foundation', { token: don.token });
 assert.equal(r.code, 200, 'and climbed'); assert.equal(r.body.foundation.name, 'Youth League', 'no skipping tiers');
-assert(close((await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.omrReserve, fReserve0 - 240), 'Community Fund (60) + Youth League (180) burned from the reserve');
+assert(close((await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.omrReserve, fReserve0 - (FOUNDATION.TIERS[0].omr + FOUNDATION.TIERS[1].omr)), 'the first two foundation tiers burned from the reserve');
 // the badge on all three views
 const fGang = (await call('GET', `/v1/gangs/${gangA}`, {})).body.gang;
 assert.equal(fGang.foundation, 'Youth League', 'the family page bears the foundation');
@@ -1100,7 +1102,7 @@ assert.equal((await meOf(don.token)).gang.foundation, 'Youth League', 'every mem
 const fboard = (await call('GET', '/v1/leaderboard/foundation', { token: don.token })).body.board;
 assert(fboard.some((g) => g.tier === 2 && g.foundation === 'Youth League'), 'the family tops the philanthropy board');
 // every foundation $OMR is a ledgered burn (its own reason, distinct from vanity)
-assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='omr' AND reason='foundation:tier'")).rows[0].s), -240, 'every foundation $OMR is a ledgered burn');
+assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='omr' AND reason='foundation:tier'")).rows[0].s), -(FOUNDATION.TIERS[0].omr + FOUNDATION.TIERS[1].omr), 'every foundation $OMR is a ledgered burn');
 // the RICO effect: the charity softens a member's conviction odds, more at higher tiers (bustProbOf × the tier mult)
 {
   const fch = { heat_exposure: 3500, indicted_at: new Date(), jury_bought: false };
@@ -2266,7 +2268,7 @@ assert(Math.abs(escNow - rhsEsc) <= 1, `bounty/contract escrow reconciles: bucke
 
   // (f) RE-FOUNDING costs the reserve and then locks. The $OMR is granted the way the seal/foundation
   // tests grant it (the reserve is a bucket, not a faucet — the burn is what is under test).
-  await pool.query(`UPDATE gangs SET omr_reserve = omr_reserve + 100 WHERE id='${cbg}'`);
+  await pool.query(`UPDATE gangs SET omr_reserve = omr_reserve + 600 WHERE id='${cbg}'`);
   const resBefore = (await call('GET', `/v1/gangs/${cbg}`, {})).body.gang.omrReserve;
   r = await call('POST', '/v1/gangs/charter/fixers', { token: chB.token });
   assert.equal(r.code, 200, `the family re-founds itself (${JSON.stringify(r.body)})`);

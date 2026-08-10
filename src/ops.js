@@ -83,7 +83,7 @@ export async function opsOverview(pool) {
       const minted = await one('SELECT COUNT(*) n FROM account_persistent WHERE minted');
       const t = mintTierOf(minted);
       const liveEth = Number(process.env.MINT_FEE_ETH || 0.01);
-      const liveOmr = Number(process.env.PLEX_MINT_OMR || 5);
+      const liveOmr = Number(process.env.PLEX_MINT_OMR || 30);
       return {
         minted, tier: t.tier, of: MINT_TRANCHES.length, through: t.flat ? null : t.through,
         priceEth: t.eth, priceOmr: t.omr, flat: t.flat, liveEth, liveOmr,

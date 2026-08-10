@@ -101,7 +101,7 @@ assert.equal(up.body.tier, 1, 'now The Lounge');
 assert.equal((await meOf(owner.token)).speakeasy.incomePerHr, speakeasyTierOf(1).incomePerHr, 'the take rises with the room');
 
 // ── NAME the club: a $OMR vanity burn (rides vanity:%) + the no-op guard ──
-await grantOmr(owner.aid, 50);
+await grantOmr(owner.aid, 300);
 assert.equal((await call('POST', '/v1/speakeasy/name', { token: owner.token, body: { name: 'x' } })).body.error, 'name', 'too short a name');
 const nm = await call('POST', '/v1/speakeasy/name', { token: owner.token, body: { name: 'The Onyx Club' } });
 assert.equal(nm.code, 200, 'the club is named');
@@ -145,7 +145,7 @@ assert(board.clubs[0].regulars >= 1, 'the club counts a regular');
 assert(board.clubs[0].prestige > speakeasyTierOf(1).prestige, 'the rounds raised the club prestige above the tier floor');
 
 // ── BOTTLE SERVICE: a pure $OMR status burn + big prestige ──
-await grantOmr(patron.aid, 100);
+await grantOmr(patron.aid, 600);
 const prestigePreBottle = board.clubs[0].prestige;
 const bottle = SPEAKEASY.BOTTLES[2]; // the reserve
 const omrPre = (await meOf(patron.token)).omr;
@@ -217,7 +217,7 @@ assert(nl.board.some((x) => x.name === 'Nucky Thompson'), 'the proprietor ranks 
 assert.equal((await call('POST', '/v1/speakeasy/decor', { token: owner.token, body: { style: 'gilded' } })).body.error, 'locked', "you can't apply decor you don't own");
 assert.equal((await call('POST', '/v1/speakeasy/decor', { token: owner.token, body: { style: 'nope' } })).body.error, 'bad_style', 'no such decor style');
 // buy the Art Deco style with EARNED $OMR (the PLEX path — floor price 0.02 ETH × 5000 = 100 $OMR, no oracle)
-await grantOmr(owner.aid, 150);
+await grantOmr(owner.aid, 900);
 const buyDeco = await call('POST', '/v1/store/plex/decor_deco', { token: owner.token });
 assert.equal(buyDeco.code, 200, 'bought the Art Deco decor via PLEX ($OMR)');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM store_cosmetics WHERE account_id='${owner.aid}' AND style='deco'`)).rows[0].n), 1, 'the cosmetic unlock landed (account-level, survives death)');

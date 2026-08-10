@@ -33,7 +33,7 @@ let grantDrift = 0;
 const watcher = await mk('Nosy Nick');
 const mark = await mk('Fat Tony');
 const other = await mk('Two-Face Sal');
-await acctOmr(watcher.id, 1000); grantDrift += 1000;
+await acctOmr(watcher.id, 6000); grantDrift += 6000;
 
 // give the mark a legible footprint: heat, an investigation-worthy exposure, a fat bankroll, a front
 await pool.query(`UPDATE characters SET heat=70, heat_exposure=1200, cash=300000, bank=2000000 WHERE id='${mark.id}'`);
@@ -133,12 +133,12 @@ assert.equal(r.body.spent, 0, 'a clean sweep is free (the peek precedent)');
 
 // SWEEP charges + clears when bugged
 const markOmrBefore = (await meOf(mark.token)).omr;
-await acctOmr(mark.id, 100); grantDrift += 100; // the mark needs $OMR to pay the sweeper
+await acctOmr(mark.id, 600); grantDrift += 600; // the mark needs $OMR to pay the sweeper
 r = await call('POST', '/v1/wire/sweep', { token: mark.token });
 assert.equal(r.code, 200, 'the mark sweeps their lines');
 assert.equal(r.body.bugsFound, 1, 'found the wire');
 assert.equal(r.body.spent, WIRE.SWEEP_OMR, 'the sweep cost was quoted');
-assert.equal((await meOf(mark.token)).omr, markOmrBefore + 100 - WIRE.SWEEP_OMR, 'exactly the sweep price burned');
+assert.equal((await meOf(mark.token)).omr, markOmrBefore + 600 - WIRE.SWEEP_OMR, 'exactly the sweep price burned');
 assert.equal((await call('GET', '/v1/wire', { token: mark.token })).body.bugsOnYou, 0, 'the lines are clean again');
 // the watcher's tap on the mark is gone (swept)
 assert.equal((await call('GET', '/v1/wire', { token: watcher.token })).body.taps.filter((t) => t.target === mark.id).length, 0, 'the swept wire dropped off the watcher terminal');
@@ -163,7 +163,7 @@ assert.equal(r.body.premium.threats.contracts.length, 1, 'and the open contract 
 assert.equal(r.body.premium.threats.contracts[0].pot, 50000, 'with the pot');
 
 // re-subscribing extends from the current end (the retainer precedent)
-await acctOmr(watcher.id, 100); grantDrift += 100;
+await acctOmr(watcher.id, 600); grantDrift += 600;
 const wireEnd1 = (await meOf(watcher.token)); // just to advance
 r = await call('POST', '/v1/wire/subscribe', { token: watcher.token });
 assert.equal(r.code, 200, 're-subscribed');
@@ -171,7 +171,7 @@ assert(r.body.wireSeconds > WIRE.SUB_MS / 1000, 'the window stacked past a singl
 
 // ── LOW-1 regression: a DEAD watcher's un-swept tap is NOT a phantom bug the victim pays to clear ──
 const ghost = await mk('Ghost Gus');
-await acctOmr(ghost.id, 100); grantDrift += 100;
+await acctOmr(ghost.id, 600); grantDrift += 600;
 await call('POST', `/v1/wire/tap/${mark.id}`, { token: ghost.token }); // ghost bugs the mark
 assert.equal((await call('GET', '/v1/wire', { token: mark.token })).body.bugsOnYou, 1, 'a live watcher is a real bug');
 await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: ghost.id }, headers: { 'x-mod-key': 'test-mod-key' } });
@@ -180,7 +180,7 @@ r = await call('POST', '/v1/wire/sweep', { token: mark.token });
 assert.equal(r.body.spent, 0, "and a sweep against only a dead watcher's ghost row is free — no phantom charge");
 // ── MED regression: a tap on a mark who DIES is deleted at their estate, freeing the watcher's cap slot ──
 const hunter = await mk('Wire Hunter'); const doomed = await mk('Doomed Mark');
-await acctOmr(hunter.id, 100); grantDrift += 100;
+await acctOmr(hunter.id, 600); grantDrift += 600;
 await call('POST', `/v1/wire/tap/${doomed.id}`, { token: hunter.token });
 assert.equal((await call('GET', '/v1/wire', { token: hunter.token })).body.taps.filter((t) => t.target === doomed.id).length, 1, 'the hunter is wired on the mark');
 await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: doomed.id }, headers: { 'x-mod-key': 'test-mod-key' } });
@@ -194,9 +194,9 @@ assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM wiretaps WHERE tar
 
 // ══ STEP TWO — THE BUG TRACE + THE DOSSIER + THE SPYMASTER ══
 // (A) THE BUG TRACE — NAME who's on your line (counter-intel; does NOT clear). `other` bugs the watcher.
-await acctOmr(other.id, 100); grantDrift += 100;
+await acctOmr(other.id, 600); grantDrift += 600;
 await call('POST', `/v1/wire/tap/${watcher.id}`, { token: other.token });
-await acctOmr(watcher.id, 100); grantDrift += 100;
+await acctOmr(watcher.id, 600); grantDrift += 600;
 const traceOmrBefore = (await meOf(watcher.token)).omr;
 r = await call('POST', '/v1/wire/trace', { token: watcher.token });
 assert.equal(r.code, 200, 'the trace runs');
@@ -213,9 +213,9 @@ const markAcct = (await pool.query(`SELECT account_id a FROM characters WHERE id
 const otherAcct = (await pool.query(`SELECT account_id a FROM characters WHERE id='${other.id}'`)).rows[0].a;
 await pool.query(`INSERT INTO kill_log (id, killer_account, victim_account, victim_name) VALUES ('kl_dos','${markAcct}','${otherAcct}','Two-Face Sal')`);
 await pool.query(`UPDATE characters SET welsher=true WHERE id='${mark.id}'`);
-await acctOmr(mark.id, 100); grantDrift += 100;
+await acctOmr(mark.id, 600); grantDrift += 600;
 await call('POST', `/v1/wire/tap/${watcher.id}`, { token: mark.token }); // the mark keeps a wire on the watcher
-await acctOmr(watcher.id, 100); grantDrift += 100;
+await acctOmr(watcher.id, 600); grantDrift += 600;
 const dossOmrBefore = (await meOf(watcher.token)).omr;
 r = await call('POST', `/v1/wire/dossier/${mark.id}`, { token: watcher.token });
 assert.equal(r.code, 200, 'the dossier compiles');
@@ -237,8 +237,8 @@ assert(wlb.spies.find((x) => x.name === 'Nosy Nick' && x.ops > 0), 'the watcher 
 // ════════ STEP THREE — the counter-intel triad (DISINFORMATION + THE INFORMANT) ════════
 const spy = await mk('Spooky Sue');       // a fresh operator + target for the triad
 const quarry = await mk('Slippery Sam');
-await acctOmr(spy.id, 200); grantDrift += 200;
-await acctOmr(quarry.id, 200); grantDrift += 200;
+await acctOmr(spy.id, 1200); grantDrift += 1200;
+await acctOmr(quarry.id, 1200); grantDrift += 1200;
 // the quarry is a whale who is HUNTING the spy (the money signal a tap/informant is worth)
 await pool.query(`UPDATE characters SET cash=6000000, bank=0, heat=90, heat_exposure=1200 WHERE id='${quarry.id}'`);
 await pool.query(`INSERT INTO searches (hunter, target) VALUES ('${quarry.id}','${spy.id}')`);
@@ -276,7 +276,7 @@ assert.equal(info.wealth, 'a whale — deep pockets', 'and reads the TRUE wealth
 assert(info.huntingAnyone >= 1, 'the human source also reports whether they’re hunting ANYONE (not just you)');
 
 // (C) the informant cap — three on retainer, no more
-await acctOmr(spy.id, 200); grantDrift += 200;
+await acctOmr(spy.id, 1200); grantDrift += 1200;
 const e1 = await mk('Extra One'); const e2 = await mk('Extra Two'); const e3 = await mk('Extra Three');
 await call('POST', `/v1/wire/informant/${e1.id}`, { token: spy.token });  // 2nd
 await call('POST', `/v1/wire/informant/${e2.id}`, { token: spy.token });  // 3rd (cap = 3)
@@ -287,7 +287,7 @@ assert((await sweepWire(pool)).swept >= 1, 'the worker sweeps a lapsed informant
 
 // ══════════ STEP FOUR — THE SPYMASTER'S TRADECRAFT + THE WATCHDOG ══════════
 // (A) TRADECRAFT: the earned SPY_RANKS now grant perks — more wire slots + an intel-read discount.
-const tspy = await mk('Tradecraft Terry'); await acctOmr(tspy.id, 200); grantDrift += 200;
+const tspy = await mk('Tradecraft Terry'); await acctOmr(tspy.id, 1200); grantDrift += 1200;
 await pool.query(`UPDATE account_persistent SET intel_ops = 100 WHERE account_id = (SELECT account_id FROM characters WHERE id='${tspy.id}')`); // → Spymaster: +2 slots, −10%
 const tBoard = (await call('GET', '/v1/wire', { token: tspy.token })).body;
 assert.equal(tBoard.spymaster.rank, 'Spymaster', 'intel_ops 100 → the Spymaster rank');
@@ -300,7 +300,7 @@ const tr = await call('POST', `/v1/wire/tap/${tmark.id}`, { token: tspy.token })
 assert.equal(tr.code, 200, 'the spymaster taps'); assert.equal(tr.body.spent, intelCost(WIRE.TAP_OMR, 100), 'and pays the discounted intel:wiretap burn (7, not 8)');
 
 // (B) THE WATCHDOG: a SUBSCRIBED watcher is pushed a wire_alert the moment a tapped mark turns hot.
-const wd = await mk('Watchdog Wanda'); await acctOmr(wd.id, 200); grantDrift += 200;
+const wd = await mk('Watchdog Wanda'); await acctOmr(wd.id, 1200); grantDrift += 1200;
 assert.equal((await call('POST', '/v1/wire/subscribe', { token: wd.token })).code, 200, 'Wanda subscribes to the Street Wire');
 const wdMark = await mk('Hot Harry');
 assert.equal((await call('POST', `/v1/wire/tap/${wdMark.id}`, { token: wd.token })).code, 200, 'Wanda taps Harry');
@@ -314,7 +314,7 @@ assert.equal(await alertCount(wd.id), 1, 'Wanda got a wire_alert push');
 assert.equal((await sweepWireAlerts(pool)).fired, 0, 'and it fires ONCE per event per tap — no spam');
 assert.equal(await alertCount(wd.id), 1, 'still just the one alert');
 // a NON-subscribed tapper gets NO watchdog alert (the premium-service gate)
-const nosub = await mk('No-Sub Ned'); await acctOmr(nosub.id, 50); grantDrift += 50;
+const nosub = await mk('No-Sub Ned'); await acctOmr(nosub.id, 300); grantDrift += 300;
 assert.equal((await call('POST', `/v1/wire/tap/${wdMark.id}`, { token: nosub.token })).code, 200, 'Ned taps the (already wanted) Harry without subscribing');
 await sweepWireAlerts(pool);
 assert.equal(await alertCount(nosub.id), 0, 'an un-subscribed watcher gets no watchdog alert — it rides the premium Street Wire');
@@ -326,7 +326,7 @@ assert.equal(await alertCount(wd.id), 2, 'Wanda got a second alert on the fresh 
 // ══════════ STEP FIVE — THE TIERED SUBSCRIPTION LADDER + THE STANDING WATCH ══════════
 const T2 = wireSubTier(2), T3 = wireSubTier(3);
 // (A) the tiered ladder: subscribe at a TIER (a bigger intel:wire burn) — the board surfaces the tier + slots
-const ss = await mk('Switchboard Steve'); await acctOmr(ss.id, 500); grantDrift += 500;
+const ss = await mk('Switchboard Steve'); await acctOmr(ss.id, 3000); grantDrift += 3000;
 const ssOmrBefore = (await meOf(ss.token)).omr;
 r = await call('POST', '/v1/wire/subscribe', { token: ss.token, body: { tier: 2 } });
 assert.equal(r.code, 200, 'subscribe at tier 2 (the Wire Room)');
@@ -353,7 +353,7 @@ assert.equal((await call('POST', `/v1/wire/watch/${w3.id}`, { token: ss.token })
 // (C) the no_sub + tier gates: a non-subscriber and a tier-1 subscriber can't run standing watches
 const nn = await mk('No-Wire Nate');
 assert.equal((await call('POST', `/v1/wire/watch/${w1.id}`, { token: nn.token })).body.error, 'no_sub', 'a standing watch needs a subscription');
-await acctOmr(nn.id, 50); grantDrift += 50;
+await acctOmr(nn.id, 300); grantDrift += 300;
 await call('POST', '/v1/wire/subscribe', { token: nn.token, body: { tier: 1 } }); // tier 1 = feed only, 0 watch slots
 assert.equal((await call('POST', `/v1/wire/watch/${w1.id}`, { token: nn.token })).body.error, 'tier', 'tier 1 (Street Wire) runs no standing watches — upgrade');
 

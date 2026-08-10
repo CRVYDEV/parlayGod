@@ -130,17 +130,33 @@ export async function doMission(ch, missionId, client, h) {
   // $OMR pays ONCE PER ACCOUNT (it survives death; missions_done is per-character, so a
   // per-character check would re-mint it on every heir). cash/respect/title can be
   // re-earned each life — they're street progression and cost a full re-grind.
-  let omrPaid = 0;
-  if (m.reward.omr) {
+  // THE FREE PATH (founder-directed 2026-08-10). "You can get made for free" is a promise the coach
+  // makes at level 14, and it used to rest on arithmetic: earn enough $OMR off the ladder to cover
+  // the PLEX mint. That was never safe, because the two sides are in DIFFERENT UNITS — the ladder
+  // pays $OMR, the mint is priced in ETH and quoted through the market — so no re-denomination of
+  // the sinks can close a gap between them, and at any plausible launch price the ladder came up
+  // short. So the mission the coach NAMES grants the credit itself: do the Dockside Heist and you
+  // are made, whatever the token is worth that day. Once per ACCOUNT (it survives death), latched on
+  // the same row as the $OMR — both are account-level rewards from the same claim, so one latch is
+  // the correct scope, not a coincidence. `mint_credits` rides persistAccount ($13), so the
+  // in-memory bump commits with the rest of the action.
+  let omrPaid = 0, creditPaid = 0;
+  if (m.reward.omr || m.reward.mintCredit) {
     const claimed = (await client.query('SELECT 1 FROM mission_omr_claimed WHERE account_id=$1 AND mission_id=$2', [h.accountId, missionId])).rows.length;
     if (!claimed) {
       await client.query('INSERT INTO mission_omr_claimed (account_id, mission_id) VALUES ($1,$2)', [h.accountId, missionId]);
-      omrPaid = m.reward.omr;
-      h.acct.omr = Number(h.acct.omr) + omrPaid;
-      await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: omrPaid, reason: `mission:${missionId}` }); // enumerated legal faucet (§2)
+      if (m.reward.omr) {
+        omrPaid = m.reward.omr;
+        h.acct.omr = Number(h.acct.omr) + omrPaid;
+        await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: omrPaid, reason: `mission:${missionId}` }); // enumerated legal faucet (§2)
+      }
+      if (m.reward.mintCredit && !h.acct.minted) {
+        creditPaid = m.reward.mintCredit;
+        h.acct.mint_credits = Number(h.acct.mint_credits || 0) + creditPaid;
+      }
     }
   }
-  return { ok: true, reward: { ...m.reward, respect: missionRep, omr: omrPaid }, title: m.title || null,
+  return { ok: true, reward: { ...m.reward, respect: missionRep, omr: omrPaid, mintCredit: creditPaid }, title: m.title || null,
     nextMissionSeconds: missionCd > 0 ? Math.ceil(missionCd / 1000) : 0 };
 }
 

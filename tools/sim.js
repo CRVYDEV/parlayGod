@@ -360,11 +360,12 @@ const vigStatus = await call('GET', '/v1/mod/vig', { headers: modH });
 const vigOk = vigStatus.body.ok ?? vigStatus.body.invariants?.ok ?? (vigStatus.body.checks || []).every?.((c) => c.ok);
 note('vig', 'vig invariants (extraction ≤ inflow)', String(vigOk), '');
 // PLEX: pay the mint fee from EARNED $OMR
+const { PLEX_MINT_OMR: PLEX_MINT_FLOOR } = await import('../src/vig.js'); // read, never restated
 const gOmr = (await meOf(g.token)).omr;
-if (gOmr >= 5) {
+if (gOmr >= PLEX_MINT_FLOOR) {
   const px = await call('POST', '/v1/plex/mint', { token: g.token });
   const mint = px.code === 200 ? await call('POST', '/v1/character/mint', { token: g.token }) : { code: px.code };
-  note('vig', 'PLEX mint (5 earned $OMR → minted account)', String(mint.code === 200), 'the extraction gate opens without ETH');
+  note('vig', `PLEX mint (${PLEX_MINT_FLOOR} earned $OMR → minted account)`, String(mint.code === 200), 'the extraction gate opens without ETH');
 }
 
 // ════════════════ P9.5: THE DEN — realized house edge + street cut ════════════════

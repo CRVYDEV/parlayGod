@@ -42,7 +42,7 @@ const setCash = (id, n) => pool.query(`UPDATE characters SET cash=${n} WHERE id=
 let spy, mark, secretId;
 {
   spy = await mk('Spy'); mark = await mk('Mrk');
-  await grantOmr(spy.id, 100);
+  await grantOmr(spy.id, 600);
   // self refused
   let r = await call('POST', `/v1/wire/dig/${spy.id}`, { token: spy.token });
   assert.equal(r.body?.error, 'self', 'no digging on yourself');
@@ -148,7 +148,7 @@ let spy, mark, secretId;
 // ═══ the worker deadline sweep — an unpaid demand BLOWS ═══
 {
   await pool.query(`DELETE FROM digs WHERE character_id='${spy.id}'`);
-  await grantOmr(spy.id, 100);
+  await grantOmr(spy.id, 600);
   let r = await call('POST', `/v1/wire/dig/${mark.id}`, { token: spy.token });
   const sid = r.body.id;
   await call('POST', `/v1/secrets/${sid}/extort`, { token: spy.token, body: { demand: 50000 } });
@@ -165,7 +165,7 @@ let spy, mark, secretId;
 // ═══ death: dirt dies with the mark's street ═══
 {
   await pool.query(`DELETE FROM digs WHERE character_id='${spy.id}'`);
-  await grantOmr(spy.id, 100);
+  await grantOmr(spy.id, 600);
   const r = await call('POST', `/v1/wire/dig/${mark.id}`, { token: spy.token });
   assert.ok(r.body.found, 'dig for the death test');
   await call('POST', '/v1/mod/kill', { body: { characterId: mark.id, reason: 'test' }, mod: true });
@@ -180,7 +180,7 @@ let spy, mark, secretId;
   const spy2 = await mk('DeadSpy');
   const mark2 = await mk('Mark2');
   await pool.query(`UPDATE characters SET season_kills=2 WHERE id='${mark2.id}'`);
-  await grantOmr(spy2.id, 100);
+  await grantOmr(spy2.id, 600);
   const r = await call('POST', `/v1/wire/dig/${mark2.id}`, { token: spy2.token });
   assert.ok(r.body.found, 'dead-holder setup dig lands');
   await call('POST', `/v1/secrets/${r.body.id}/extort`, { token: spy2.token, body: { demand: 25000 } });

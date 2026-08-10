@@ -215,7 +215,10 @@ const sbPl = (await call('GET', '/v1/store', { token: plexPat.token })).body;
 assert.equal(sbPl.owned.patronStanding.spentEth, 0.03, 'a PLEX buy bumps patron_spent (a real earned-$OMR contribution)');
 
 // (C) THE PLEX DISCOUNT lever (ships 0) — armed, a higher tier burns less $OMR (never below the floor)
-await pool.query("INSERT INTO vig_buyback (id, eth_spent, omr_bought, price_omr_per_eth, to_reserve, to_prize) VALUES ('bb-disc', 1, 20000, 20000, 10000, 10000)"); // an oracle so raw > floor
+// an oracle high enough that the MARKET leg beats the static floor — read off the lever, so a
+// re-denomination that moves the floor cannot leave this block testing the floor instead.
+const discOracle = STORE.PLEX_FLOOR_OMR_PER_ETH * 3;
+await pool.query(`INSERT INTO vig_buyback (id, eth_spent, omr_bought, price_omr_per_eth, to_reserve, to_prize) VALUES ('bb-disc', 1, ${discOracle}, ${discOracle}, ${discOracle / 2}, ${discOracle / 2})`);
 const noDisc = (await call('GET', '/v1/store', { token: alice.token })).body.packages.find((p) => p.sku === 'revive_5').plexOmr;
 PATRON.TIERS[2].plexDiscountBps = 1000; // arm Benefactor 10% off (TEST ONLY — ships at 0)
 const withDisc = (await call('GET', '/v1/store', { token: alice.token })).body.packages.find((p) => p.sku === 'revive_5').plexOmr; // alice is Benefactor

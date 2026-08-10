@@ -5,6 +5,7 @@
 // PLEX bridge (pay a fee in earned $OMR, a §10.4 burn) and §10.4 in-game conservation throughout.
 import assert from 'node:assert';
 import { privateKeyToAccount } from 'viem/accounts';
+import { PLEX_MINT_OMR } from '../src/vig.js';
 
 // deterministic signer/player keys (well-known anvil accounts) — set BEFORE importing the server
 process.env.VOUCHER_SIGNER_PK = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
@@ -98,18 +99,24 @@ r = await call('POST', '/v1/mod/vig/prizes', { headers: modH, body: { winners: [
 assert(near(r.body.paid, 0), 'an over-pool prize pays nothing');
 
 // ── (5) the PLEX bridge — MARKET-LINKED: fee-ETH × the latest buyback's price × 1.2 premium ──
-// (sim-audit F3: the static 5 $OMR was minutes of play vs 0.01 ETH real money — the Vig starved)
+// (sim-audit F3: the static floor was minutes of play vs 0.01 ETH real money — the Vig starved)
+// The quote is max(FLOOR, market), so this block prints a HIGHER reference price than the earlier
+// buybacks: at 2000 the market leg would sit under the static floor and the assertion below would
+// be testing the floor while claiming to test the market. Recording a fresh reference price is the
+// cheapest way to keep the claim honest after a re-denomination moves the floor.
+await pool.query("INSERT INTO vig_buyback (id, eth_spent, omr_bought, price_omr_per_eth, to_reserve, to_prize) VALUES ('px-ref', 0, 0, 4000, 0, 0)");
 r = await call('GET', '/v1/plex/price');
-assert.equal(Number(r.body.mint.oracle), 2000, 'the oracle is the latest buyback price (2000 $OMR/ETH)');
-assert(near(r.body.mint.price, 24), `mint quote = 0.01 ETH × 2000 × 1.2 = 24 $OMR (got ${r.body.mint.price})`);
-assert(near(r.body.respawn.price, 240), 'respawn quote = 0.10 ETH × 2000 × 1.2 = 240 $OMR');
+assert.equal(Number(r.body.mint.oracle), 4000, 'the oracle is the latest buyback price (4000 $OMR/ETH)');
+assert(r.body.mint.price > PLEX_MINT_OMR, 'and the MARKET leg is the binding one, not the static floor');
+assert(near(r.body.mint.price, 48), `mint quote = 0.01 ETH × 4000 × 1.2 = 48 $OMR (got ${r.body.mint.price})`);
+assert(near(r.body.respawn.price, 480), 'respawn quote = 0.10 ETH × 4000 × 1.2 = 480 $OMR');
 r = await call('POST', '/v1/plex/mint', { token });
-assert.equal(r.code, 200); assert(near(r.body.omrSpent, 24), 'PLEX mint burns the MARKET price (24), not the static floor');
-assert(near((await meOf(token)).omr, 36), 'earner spent 24 of 60 $OMR');
+assert.equal(r.code, 200); assert(near(r.body.omrSpent, 48), 'PLEX mint burns the MARKET price (48), not the static floor');
+assert(near((await meOf(token)).omr, 12), 'earner spent 48 of 60 $OMR');
 r = await call('POST', '/v1/character/mint', { token });
 assert.equal(r.body.minted, true, 'the burned $OMR bought a mint credit → made, without touching ETH');
 assert.equal((await call('POST', '/v1/plex/mint', { token })).body.error, 'minted', 'already made — no second PLEX mint');
-// the market-priced respawn (240) is beyond the earner's 36 — $OMR stays the PREMIUM rail, ETH the
+// the market-priced respawn (480) is beyond the earner's 12 — $OMR stays the PREMIUM rail, ETH the
 // economical one (that asymmetry is the point: ETH funds the Vig, $OMR burns at a markup)
 assert.equal((await call('POST', '/v1/plex/respawn', { token })).body.error, 'omr', 'market-priced respawn gates on the real rate');
 
@@ -157,7 +164,7 @@ assert(vig.invariants.ok, `A3: every Vig check green with a trade source: ${JSON
 // A6: extraction ≤ inflow is WIDENED — the reserve grew by the trade buyback's share, and a further
 // withdrawal signs against that new backing (never a bypass; the queue still caps at funded).
 assert(near(vig.invariants.summary.funded - fundedBefore, 48), 'A6: the trade fee added 48 $OMR of reserve backing — more extraction headroom');
-r = await call('POST', '/v1/withdraw', { token, body: { amount: 10 } });
+r = await call('POST', '/v1/withdraw', { token, body: { amount: 5 } });
 assert.equal(r.body.status, 'signed', 'A6: a further withdrawal signs against the trade-widened reserve');
 assert(vig.invariants.summary.extracted <= vig.invariants.summary.funded + 1e-9, 'A6: extraction never exceeds the funded reserve');
 

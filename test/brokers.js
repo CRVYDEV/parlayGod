@@ -58,7 +58,7 @@ assert.equal(r.body.weight, 0, 'but an UNACTIVATED holder weighs nothing');
 assert.equal(r.body.blocked, 'not_activated');
 
 // ── activation burns $OMR, and the burn RECYCLES to the desk like every sink since economy v3 ──
-await pool.query(`UPDATE account_persistent SET omr=1000 WHERE account_id='${sal.aid}'`);
+await pool.query(`UPDATE account_persistent SET omr=6000 WHERE account_id='${sal.aid}'`);
 const shelfBefore = await shelf();
 const t3 = BROKERS.TIERS.find((x) => x.id === 3);
 
@@ -66,7 +66,7 @@ r = await call('POST', '/v1/brokers/activate', { token: sal.token, body: { tier:
 assert.equal(r.code, 200, JSON.stringify(r.body));
 assert.equal(r.body.tier, 3);
 assert.equal(r.body.mult, t3.mult);
-assert.equal(await omrOf(sal.aid), 1000 - t3.omr, 'exactly the tier price left the balance');
+assert.equal(await omrOf(sal.aid), 6000 - t3.omr, 'exactly the tier price left the balance');
 
 const burns = (await pool.query(
   `SELECT amount FROM transactions WHERE account_id='${sal.aid}' AND reason='brokers:activate'`)).rows;
@@ -83,7 +83,7 @@ assert(r.body.weight > 0);
 
 // ── THE WALL: activation alone buys nothing ──────────────────────────────────────────────────────
 // If this ever returns non-zero, the mechanism has become a yield product for whoever burns most.
-await pool.query(`UPDATE account_persistent SET omr=5000 WHERE account_id='${nico.aid}'`);
+await pool.query(`UPDATE account_persistent SET omr=30000 WHERE account_id='${nico.aid}'`);
 r = await call('POST', '/v1/brokers/activate', { token: nico.token, body: { tier: 5 } });
 assert.equal(r.code, 200, JSON.stringify(r.body));
 r = await call('GET', '/v1/brokers', { token: nico.token });

@@ -9,6 +9,10 @@ process.env.ALLOW_MOD_REAL_REVENUE = 'on'; // QA: let the mod route drive the re
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { BONDS, bondPayout } from '../src/rules.js';
+// the pledge + charter figures are read off the levers, not restated, so a re-denomination moves
+// them without editing this file (the lever-register argument applied to a fixture)
+const PATRON_MIN = BONDS.BACKER_TIERS[1].min;      // the second rung: 'Patron'
+const CH1 = BONDS.CHARTER_TIERS[0].omr, CH2 = BONDS.CHARTER_TIERS[1].omr;
 import { runLedgerInvariants } from '../src/invariants.js';
 import { runBondInvariants, reconcileBonds, recordBond } from '../src/bonds.js';
 import { runVigInvariants } from '../src/vig.js';
@@ -145,38 +149,40 @@ const charterOfAcct = async (aid) => Number((await pool.query('SELECT bond_chart
 
 // ── (A) THE PLEDGE — the live-now $OMR sink ──
 const alice = await mk('Alice Underwriter');
-await grantOmr(alice.aid, 5000);
-assert.equal((await call('POST', '/v1/bonds/pledge', { token: alice.token, body: { omr: 5 } })).body.error, 'min', 'a pledge below PLEDGE_MIN is rejected');
-const pl = await call('POST', '/v1/bonds/pledge', { token: alice.token, body: { omr: 500 } });
+await grantOmr(alice.aid, PATRON_MIN + CH1 + CH2 + 10000);
+assert.equal((await call('POST', '/v1/bonds/pledge', { token: alice.token, body: { omr: BONDS.PLEDGE_MIN - 1 } })).body.error, 'min', 'a pledge below PLEDGE_MIN is rejected');
+const pl = await call('POST', '/v1/bonds/pledge', { token: alice.token, body: { omr: PATRON_MIN } });
 assert.equal(pl.code, 200, `pledge landed: ${JSON.stringify(pl.body)}`);
-assert.equal(await pledgedOf(alice.aid), 500, 'pledged_omr banked the pledge (account legend)');
-assert.equal(pl.body.standing.pledgedOmr, 500, 'the standing reflects the pledge');
-assert.equal(pl.body.standing.score, 500, 'score == pledge (no bonds)');
-assert.equal(pl.body.standing.tier, 'Patron', 'score 500 → Patron tier');
-assert(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='bond:pledge' AND account_id='${alice.aid}'`)).rows[0].s) === -500, 'bond:pledge is a ledgered $OMR burn (-500)');
-// over-pledge: more $OMR than held → the spendOmr 'omr' error (alice has 4500 left)
+assert.equal(await pledgedOf(alice.aid), PATRON_MIN, 'pledged_omr banked the pledge (account legend)');
+assert.equal(pl.body.standing.pledgedOmr, PATRON_MIN, 'the standing reflects the pledge');
+assert.equal(pl.body.standing.score, PATRON_MIN, 'score == pledge (no bonds)');
+assert.equal(pl.body.standing.tier, 'Patron', `score ${PATRON_MIN} → Patron tier`);
+assert(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='bond:pledge' AND account_id='${alice.aid}'`)).rows[0].s) === -PATRON_MIN, `bond:pledge is a ledgered $OMR burn (-${PATRON_MIN})`);
+// over-pledge: more $OMR than held → the spendOmr 'omr' error
 assert.equal((await call('POST', '/v1/bonds/pledge', { token: alice.token, body: { omr: 99999 } })).body.error, 'omr', 'you cannot pledge $OMR you do not hold');
 
 // ── (B) THE CHARTER — sequential seals, backer-gated ──
 const c1 = await call('POST', '/v1/bonds/charter', { token: alice.token });
-assert.equal(c1.code, 200); assert.equal(c1.body.charter, 1, 'commissioned the Bronze Charter'); assert.equal(c1.body.spent, 25);
+assert.equal(c1.code, 200); assert.equal(c1.body.charter, 1, 'commissioned the Bronze Charter'); assert.equal(c1.body.spent, CH1);
 assert.equal(await charterOfAcct(alice.aid), 1, 'bond_charter == 1');
 const c2 = await call('POST', '/v1/bonds/charter', { token: alice.token });
-assert.equal(c2.body.charter, 2, 'the next call buys the Silver Charter (sequential)'); assert.equal(c2.body.spent, 75);
-assert(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='bond:charter' AND account_id='${alice.aid}'`)).rows[0].s) === -100, 'bond:charter ledgered (-25 -75)');
+assert.equal(c2.body.charter, 2, 'the next call buys the Silver Charter (sequential)'); assert.equal(c2.body.spent, CH2);
+assert(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='bond:charter' AND account_id='${alice.aid}'`)).rows[0].s) === -(CH1 + CH2), `bond:charter ledgered (-${CH1} -${CH2})`);
 // a fresh account with score 0 cannot commission a charter
 const bob = await mk('Bob NoBacker');
 assert.equal((await call('POST', '/v1/bonds/charter', { token: bob.token })).body.error, 'not_backer', 'a non-backer cannot commission a charter');
 
 // ── (C) BACKER TIER DERIVATION — the combined ETH + pledge score ──
 const whale = await mk('Whale Financier');
-await grantOmr(whale.aid, 2000);
-await call('POST', '/v1/bonds/pledge', { token: whale.token, body: { omr: 1000 } });
-// a 2-ETH bond to the whale → derivedBondedEth 2 → score = 1000 + 2×5000 = 11000
+await grantOmr(whale.aid, BONDS.PLEDGE_MIN * 200);
+const WPLEDGE = BONDS.PLEDGE_MIN * 100;
+await call('POST', '/v1/bonds/pledge', { token: whale.token, body: { omr: WPLEDGE } });
+// a 2-ETH bond to the whale → derivedBondedEth 2 → score = pledge + 2 × ETH_SCORE_OMR
 await call('POST', '/v1/mod/bond/simulate', { modkey: mod, body: { nonce: 20, account: whale.aid, principalEth: 2, price: 5000, discountBps: 800, txHash: '0xwhalebond' } });
 const wStand = (await call('GET', '/v1/bonds', { token: whale.token })).body.yourStanding;
 assert.equal(wStand.bondedEth, 2, 'the whale bonded 2 ETH (read-derived)');
-assert.equal(wStand.score, 11000, 'underwriterScore == pledge + bondedEth × ETH_SCORE_OMR (1000 + 2×5000)');
+assert.equal(wStand.score, WPLEDGE + 2 * BONDS.ETH_SCORE_OMR,
+  `underwriterScore == pledge + bondedEth × ETH_SCORE_OMR (${WPLEDGE} + 2×${BONDS.ETH_SCORE_OMR})`);
 assert.equal(wStand.tier, 'Financier', 'score 11000 → the Financier tier');
 
 // ── (D) THE UNDERWRITERS' LEAGUE + the Financier crown + agent exclusion ──
@@ -188,15 +194,18 @@ const topBefore = lb.league[0].name; // whoever currently leads (an earlier bond
 // an agent with a huge (would-be-top) pledge never appears (excluded like referral payouts)
 const spook = await mk('Spook Agent');
 await pool.query('UPDATE account_persistent SET agent_flag=true WHERE account_id=$1', [spook.aid]);
-await grantOmr(spook.aid, 60000);
-await call('POST', '/v1/bonds/pledge', { token: spook.token, body: { omr: 50000 } });
+const SPOOK_PLEDGE = BONDS.PLEDGE_MIN * 5000; // a would-be-top pledge, still excluded
+await grantOmr(spook.aid, SPOOK_PLEDGE + BONDS.PLEDGE_MIN);
+await call('POST', '/v1/bonds/pledge', { token: spook.token, body: { omr: SPOOK_PLEDGE } });
 lb = (await call('GET', '/v1/leaderboard/underwriters', { token: alice.token })).body;
 assert(!lb.league.some((e) => e.name === 'Spook Agent'), 'an agent_flag backer never appears on the league');
 assert.equal(lb.league[0].name, topBefore, 'the crown did NOT go to the agent (still the prior top)');
-// the crown is READ-DERIVED — a bigger pledge by a new account flips it (25000 > any standing backer)
+// the crown is READ-DERIVED — a bigger pledge by a new account flips it (beats every standing backer,
+// sized off the whale's own score so a re-denomination cannot leave this asserting nothing)
 const titan = await mk('Titan Reserve');
-await grantOmr(titan.aid, 26000);
-await call('POST', '/v1/bonds/pledge', { token: titan.token, body: { omr: 25000 } });
+const TITAN = Math.ceil(Number(lb.league[0].score || 0)) + BONDS.PLEDGE_MIN; // beat whoever leads now
+await grantOmr(titan.aid, TITAN + BONDS.PLEDGE_MIN);
+await call('POST', '/v1/bonds/pledge', { token: titan.token, body: { omr: TITAN } });
 lb = (await call('GET', '/v1/leaderboard/underwriters', { token: alice.token })).body;
 assert.equal(lb.league[0].name, 'Titan Reserve', 'the biggest pledge flips the crown (recomputed on read)');
 assert.equal(lb.league[0].financier, true, 'Titan now wears the crown');
@@ -210,13 +219,13 @@ lb = (await call('GET', '/v1/leaderboard/underwriters', { token: alice.token }))
 const syn = lb.syndicate.find((g) => g.name === 'The Syndicate');
 assert(syn, 'the family appears on the syndicate board');
 assert.equal(syn.backers, 2, 'both backers counted');
-assert.equal(syn.score, 11000 + 25000, "the syndicate sums its roster's scores (whale 11000 + titan 25000)");
+assert.equal(syn.score, wStand.score + TITAN, `the syndicate sums its roster's scores (whale ${wStand.score} + titan ${TITAN})`);
 
 // ── (F) §10.4 — the vocabulary knows bond:; the burns reconcile; only the SQL grant drifts ──
 const inv = await runLedgerInvariants(pool, { alert: false });
 assert(inv.checks.find((c) => c.name === 'reason vocabulary').ok, 'bond: is enumerated (no unknown-reason alarm)');
 const bondBurns = -Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='omr' AND reason LIKE 'bond:%'")).rows[0].s);
-const totalSpent = 500 + 100 + 1000 + 50000 + 25000; // alice pledge+charters, whale pledge, spook pledge, titan pledge
+const totalSpent = PATRON_MIN + CH1 + CH2 + WPLEDGE + SPOOK_PLEDGE + TITAN; // alice pledge+charters, whale, spook, titan
 assert.equal(bondBurns, totalSpent, 'every $OMR pledge/charter reconciles as a bond: burn');
 const cons = inv.checks.find((c) => c.name === '$OMR conservation');
 assert(Math.abs((cons.lhs - cons.rhs) - grantedOmr) < 0.01, 'the only $OMR conservation drift is the SQL-seeded grant (the burns are all ledgered)');
