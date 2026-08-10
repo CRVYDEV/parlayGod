@@ -2114,9 +2114,16 @@ CREATE TABLE IF NOT EXISTS stock_buys (
 -- account -> Dynasty NFT -> its ERC-6551 account; keying the OWED side on the account rather than on
 -- a token id keeps this table meaningful before the NFT exists, and keeps an allocation attached to
 -- the player whose PLAY earned it rather than to whoever holds a token at delivery time.
+--   `account_id` IS **TEXT**, and that is not a style choice. This schema's account ids are mixed —
+-- `characters`, `account_persistent`, `broker_activations` and `activity_log` are all TEXT; the
+-- `eth_vault` row right above is one of the few UUID columns, so copying its declaration here (which
+-- the first cut did) would have set up a `uuid = text` comparison the moment the allocator joined
+-- this table to `broker_weights`. That comparison has no operator, so the whole STATEMENT fails to
+-- PARSE — every branch of it, not just the join — which is exactly how the 2026-07-30 outage took
+-- `loadOwned` down, and it is invisible to pg-mem. Match what you will be joined against.
 CREATE TABLE IF NOT EXISTS stock_allocations (
-  epoch_id TEXT NOT NULL,
-  account_id UUID NOT NULL,
+  epoch_id TEXT NOT NULL,             -- `broker_epochs.id` is TEXT
+  account_id TEXT NOT NULL,           -- `broker_weights.account_id` is TEXT — see the note above
   ticker TEXT NOT NULL,
   units NUMERIC NOT NULL DEFAULT 0,
   delivered BOOLEAN NOT NULL DEFAULT false,  -- step 7 sets it; nothing does today
