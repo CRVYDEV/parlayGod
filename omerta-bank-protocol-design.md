@@ -228,6 +228,56 @@ judgment call later, the gate is these five conditions, all met simultaneously:
 4. **Pessimistic oracle + a per-day borrow cap** below the manipulation cost in (1).
 5. A dedicated audit of that market. Not a parameter change.
 
+### 2.8 The OMR-WETH LP position — staking YES, collateral NO (and why the yes unlocks the no)
+
+*Founder, 2026-08-10: "Maybe also allow the OMR-WETH LP position to be used as collateral or stake
+it to earn fees from LP."*
+
+**These are two very different asks and they get opposite answers.**
+
+**STAKE IT FOR FEES — yes, and it should be built early.** An LP staking contract that accrues and
+auto-compounds trading fees has *no oracle on any path, no borrow, no liquidation, and no
+manipulation surface*, because nobody is lending against anything. It is a distribution contract.
+It also does something strategically valuable: **auto-compounding thickens the POL**, which is
+condition (1) of §2.7's gate. So the safe half of this idea is literally the machinery that earns
+the right to consider the dangerous half — build it first, and it compounds toward its own
+precondition.
+
+**AS COLLATERAL — no, and it is the strictest no in this document.** An OMR-WETH LP position is
+**both** of the attacks that drained Inverse, stacked:
+
+| Their loss | Collateral | Our LP position |
+|---|---|---|
+| Jun 2022, ~$5.8M | `yvCurve-3Crypto` — **an LP token**, flash-loaned into a fake price | it is an LP token |
+| Apr 2022, ~$15.6M | `INV` — **the protocol's own token**, TWAP-manipulated | it holds our own token |
+
+The naive LP valuation — `(r₀·p₀ + r₁·p₁) / totalSupply` from spot reserves — is manipulable by
+anyone with a flash loan, which is exactly the June 2022 mechanic. There **is** a manipulation-
+resistant formula (the fair-LP / Alpha Finance pricing):
+
+```
+P_LP  =  2 · √(k · p₀ · p₁) / totalSupply        where k = r₀·r₁ is the pool invariant
+```
+
+It works because `k` does **not** move under a swap — a flash loan changes the reserves and leaves
+the invariant alone — so the price it returns is the un-manipulated one. **But it requires an
+INDEPENDENT price for both sides.** WETH has Chainlink. `$OMR`'s only price is our own pool. Feed
+that back in and you have rebuilt April 2022 with extra steps.
+
+**So the gate is §2.7's, and the LP inherits it rather than getting its own softer one** — plus two
+conditions specific to being an LP:
+
+6. **Fair-LP pricing only** (the formula above), never spot-reserve valuation, with the independent
+   $OMR feed of §2.7(2) as the hard prerequisite — no feed, no market.
+7. **If the canonical pool is Uniswap v3/v4, the answer stays no regardless.** A concentrated
+   position is an NFT with a range, can sit entirely on one side of the tick, and has no clean
+   `totalSupply` to divide by; the fair-LP formula does not apply to it. Only a full-range v2-style
+   position is even a candidate.
+
+**What ships instead, and it is not a consolation prize:** LP staking + auto-compounding, whose
+yield is real trading fees rather than an incentive that can end (§2.6's rule), and which
+mechanically drives toward the depth that makes every later question easier.
+
 ---
 
 ## 3. The in-game surface
@@ -402,7 +452,11 @@ distribute anything by chance; the projected-payoff-date honesty rule of §3.
 4. **RateController + free/paid debt.**
 5. **RevenueSplitter** — staker + OMR-buy legs live; NFT leg at zero pending A11.
 6. **Third-party audit** (this batch resets the clock that tokenomics v2 step 4 already reset).
-7. **$OMR collateral** — only against §2.7's five conditions, with its own audit.
+7. **LP staking + auto-compounding** (§2.8) — no oracle, no borrow, no liquidation; it
+   compounds toward the POL depth §2.7(1) requires, so it is early rather than late.
+8. **$OMR collateral** — only against §2.7's five conditions, with its own audit. **The
+   OMR-WETH LP position inherits all five plus §2.8's two**, and is a flat no on a
+   concentrated-liquidity pool whatever the depth.
 
 **Not on this list, deliberately: cross-denominated markets, looping in the default basket, and
 any path by which in-game play affects protocol yield.**
