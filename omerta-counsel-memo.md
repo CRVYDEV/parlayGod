@@ -43,11 +43,13 @@ Companion documents: `omerta-rwa-stock-machine-design.md` (the machine), `omerta
   players claim allocated stock to their own wallets, paying their own gas, through a
   server-signed voucher rail with eligibility enforced at signature time.
 
-## 2. The assertions (A1–A6 approved; A7 + A8 open)
+## 2. The assertions (A1–A3, A5, A6 approved; A4 re-opened; A7 + A8 open)
 
-A1–A6 are **founder assertions of counsel approval, approved 2026-08-09**; counsel's written
-countersignature goes to the §5 block when it arrives. A7 (the provenance traits) and A8 (the
-activator's securities leg) were added with their designs and remain open.
+A1–A6 were **founder assertions of counsel approval, approved 2026-08-09**; counsel's written
+countersignature goes to the §5 block when it arrives. **A4 re-opened 2026-08-10** when the
+tranche schedule was adopted (the row's own lockstep rule — a design change touching an
+assertion re-opens it). A7 (the provenance traits) and A8 (the activator's securities leg) were
+added with their designs and remain open.
 
 **A1 — The treasury may buy real tokenized stocks with fee revenue.**
 The treasury Safe (US-controlled) purchases Robinhood tokenized stocks (EU-facing, not for US
@@ -147,8 +149,10 @@ unaffiliated NFT/token communities on ETH mainnet and Robinhood Chain (CryptoPun
 $PEPE-class on mainnet; StonkBrokers and $CASHCAT-class on Robinhood Chain). Snapshots are taken
 at a fixed block height BEFORE any announcement; amounts are fixed per snapshotted wallet/NFT
 against a published merkle root (no draw anywhere — the never-by-chance wall holds by
-construction); claims are gas-paid by the claimant and time-boxed, with unclaimed tokens
-reverting to the treasury; claim-page copy runs under the standing no-promise rules.
+construction); claims are gas-paid by the claimant and time-boxed (90–180 days,
+founder-set 2026-08-10), with UNCLAIMED allocations reverting to the treasury via a post-deadline
+Safe-only sweep — never any clawback of DELIVERED tokens (OMR has no confiscation path, by
+design); claim-page copy runs under the standing no-promise rules.
 **Fact-pattern amendments 2026-08-09:** (1) **the funnel bonus is CARVED OUT of this row** — the
 launch plan's bonus tranche for a claim that also pays the 0.01 ETH mint is consideration-linked
 (the Tomahawk/free-stock class), so it is analyzed under **A4** as a retail purchase promotion on

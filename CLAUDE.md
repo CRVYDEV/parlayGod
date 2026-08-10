@@ -11140,3 +11140,27 @@ rides the existing `plex:%` desk-recycled sink — the v3 revenue decision kept)
 flipped to RE-OPENED with the amended fact pattern (published forward escalation, founding-era
 framed, flat-tail bounded). The LIVE price is tier 1 — nothing changes at the till until the
 1,001st identity.
+
+**THE CLAWBACK — the airdrop's unclaimed-reversion mechanism, specified (founder-directed
+2026-08-10: "a function that allows us to clawback the tokens if the wallet holding it hasn't
+claimed in 3-6 months")** (`omerta-launch-sequence-design.md` G-3 + §6; the memo's A6 window
+synced). The design already had the bone ("time-boxed, unclaimed reverts to the treasury"); the
+ask made it concrete, and the answer splits on the one wall that matters: **in a merkle drop an
+eligible wallet HOLDS nothing until it claims** — so the function is a post-deadline sweep of
+UNCLAIMED allocations sitting in the distributor (standard practice — ENS and Arbitrum shipped
+exactly this), and **never a clawback of DELIVERED tokens** (once OMR lands in a wallet it is
+theirs; OMR deliberately has no confiscation/blacklist path, and adding one would be a rug vector
+that poisons every listing conversation and resets the audit). Per D1 variant: **design (b),
+in-game SIWE credit — NO function needed** (unclaimed never left the Safe; the clawback is
+closing the window server-side — the founder's ask is design (b)'s default behavior with zero
+contract surface, another argument for the recommendation); **design (a), on-chain — the
+MerkleDistributor carries an immutable `claimDeadline`**: `claim()` reverts after it, `sweep()`
+(Safe-only, the OmertaBond/OmertaFees discipline) callable ONLY after it — the deadline IS the
+over-sweep guard, no block exists where a claimant and the sweep can race. `CLAIM_WINDOW` moves
+to the founder's **90–180 day band** (generous by market norms, which also reads well). **One
+deliberate decoupling recorded**: the provenance stamp keys on snapshot membership, not on
+claiming the drop — a wallet that misses the money window can still mint later and claim its
+colors ("you missed the envelope, but the city still remembers where you came from" — a
+second-chance acquisition hook that costs the treasury nothing; coupling the windows is a tabled
+lever, recommended no). Zero code (design (b) needs none; design (a)'s deadline+sweep joins the
+Phase-B audit batch if that variant ships).
