@@ -102,18 +102,39 @@ weight(nft) = activationMult(tier) × activityScore(owner, epoch)
    holdings — the anti-fabrication gate that already guards the Vig, the Store, bonds and the desk.
    Fabricated backing is invisible to precisely the check that is supposed to catch it.
 
-### 3.3 The fork the founder should decide, not me
+### 3.3 DECIDED — stock lands in the bound account, and there is no claim gate
 
-**Does the stock land in the NFT's bound account, or is it a claim the account can pull?**
+**Founder decision, 2026-08-10, taken after the alternatives and their costs were put in front of
+them twice.** Stock accrues STRAIGHT into the NFT's ERC-6551 account, Stonkbrokers-style, and there
+is no gate at delivery.
 
-Stonkbrokers puts it in the bound account, so it transfers with the NFT. That is the model as asked
-for, and it is the default here. But note what it does to our own stated rule: the identity-NFT design
-says *"the token is a tradeable trophy; the game entitlement is account-bound and never read off a
-balance,"* and stock in the bound account makes the NFT a **bearer instrument for securities** —
-sold on a marketplace, the stock goes with it. That is a bigger step than a claim model, and it is the
-single design decision here that a securities lawyer will care about most.
+The case for it is real and was not a close call on product grounds: it is the proven model, the NFT
+visibly *contains* value, delivery is atomic and trustless with no claim process, nothing sits
+unclaimed in a protocol contract, and the NFT sells self-contained.
 
-Recorded as the default (matching the instruction), flagged as the thing to raise with counsel first.
+**What was argued against it and rejected — recorded so the tradeoff is not rediscovered later as a
+surprise:**
+
+1. **The NFT becomes a bearer instrument for securities.** Any marketplace buyer acquires the stock
+   with no KYC, no geofence and no jurisdiction check. Against the one hard operational fact here —
+   Robinhood's tokenized stocks are EU-facing and not offered to US persons — this routes them to US
+   persons by default, with no off switch.
+2. **It is the irreversible direction.** Claim-then-deliver could always have become bearer later;
+   bearer cannot become gated, because once stock is in freely-trading TBAs it is gone. That
+   asymmetry was the recommendation's whole basis.
+3. **It contradicts our own entitlement wall.** `omerta-identity-nft-design.md` states *"the token is
+   a tradeable trophy; the game entitlement is account-bound and never read off a balance."* That rule
+   does not survive this decision, and that doc should be amended rather than left contradicting
+   reality.
+4. **The floor becomes a function of contents rather than utility** — the cheap end of the order book
+   becomes drained NFTs and contents-vs-floor arbitrage, the same dynamic the identity-NFT design
+   already flagged for the entitlement.
+
+**The consequence that changes what gets built, and the reason it is written here rather than only in
+a commit message:** with no claim gate, **`allocated <= held` is the only wall left** between the
+treasury and a bad delivery. It stops being one check among several and becomes load-bearing, so it is
+built FIRST, in per-ticker UNITS (a cash-value version silently permits owing more units than exist
+the moment a price moves), and watched nightly by `alertDrift` rather than merely asserted in a test.
 
 ---
 
