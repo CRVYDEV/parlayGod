@@ -74,6 +74,28 @@ test('the activity metric', async (t) => {
       'agents and NPC residents are excluded from every legend surface, and from this one');
   });
 
+  await t.test('THE STAKING WALL: a multiplier may not reach the distribution key', () => {
+    // §2.9. Staked $OMR / LP may accelerate PROGRESSION (trade levels, perks, ranks). If it also
+    // multiplied THIS score, holding the token would buy a larger share of the token handout — a
+    // self-referential loop that makes the distribution wealth-weighted rather than effort-weighted
+    // (not what A5's approved "skill/effort-based" language covers) and destroys linearity.
+    //
+    // The structural guarantee: activityScore reads ACTION COUNTS and multiplies by the BASE
+    // MASTERY.XP award. It never reads XP actually granted, so a multiplier applied anywhere in the
+    // progression path cannot propagate here. Assert that directly — two players with identical
+    // effort must score identically however much either has staked.
+    const effort = { crime: 60, jump: 5, heist: 1 };
+    const base = activityScore(effort);
+    assert.equal(activityScore(effort), base,
+      'the score must be a pure function of ACTIONS — no wealth term may enter it');
+    // and the score's only inputs are the counts and the base table
+    for (const tag of ACTIVITY.TAGS) {
+      const one = activityScore({ [tag]: 1 });
+      assert.equal(one, MASTERY.XP[tag],
+        `${tag} must score exactly its BASE award — a multiplier here would be the wall breached`);
+    }
+  });
+
   await t.test('the dust floor is a floor, never a ceiling', () => {
     assert.ok(!activityQualifies({ crime: 1, jump: 1, boost: 1 }), 'dust does not qualify');
     assert.ok(ACTIVITY.MIN_SCORE > 0);
