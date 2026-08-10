@@ -178,7 +178,11 @@ moment they existed rather than needing their own.
   TSLA it does not hold as long as it held enough AMZN.
 - **`allocateStock` is the only writer of the owed side, and it clamps.** The invariant is the
   *detector*; the clamp is the *prevention*, and with §3.3's no-gate delivery a detector that fires
-  the next night is too late — the units are already in a freely-trading bound account.
+  the next night is too late — the units are already in a freely-trading bound account. The clamp
+  reads-then-writes, so it is only as good as its serialization: verified against **real Postgres**
+  by racing two allocations of 8 against a reserve of 10 — they came back **8 + 2**, not 8 + 8. The
+  suite cannot show that (pg-mem is single-caller, so it exercises the arithmetic and Postgres
+  exercises the lock), which is the same split the ETH pool lock already lives under.
 - **A comp books ZERO units.** The `txHash` gate matters more here than anywhere else it appears:
   everywhere else a comp merely fails to credit revenue, but here the fabricated quantity *is the
   wall's input*, so a QA fill that booked units would raise the delivery ceiling with no asset behind
