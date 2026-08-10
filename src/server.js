@@ -108,6 +108,7 @@ import * as Landmarks from './landmarks.js';
 import * as Ops from './ops.js';
 import { itemArt } from './assets.js';
 import { avatarSvg } from './avatar.js';
+import { portraitSvg, portraitStateOf, portraitTraits, portraitRow } from './portrait.js';
 import * as Cards from './cards.js';
 import { renderPng } from './cardpng.js';
 import { buildOpenApi, llmsTxt } from './agentgateway.js';
@@ -304,6 +305,35 @@ export async function buildServer() {
   app.get('/v1/avatar/:seed', async (req, reply) => {
     reply.type('image/svg+xml; charset=utf-8').header('cache-control', 'public, max-age=604800, immutable');
     return reply.send(avatarSvg(String(req.params.seed || '').slice(0, 128)));
+  });
+  // ── THE MADE MAN — the bloodline portrait (identity-NFT design §5, phase 1: entirely off-chain,
+  // no gates). A framed noir portrait composited live from PUBLIC game state, so it visibly deepens
+  // as the street ranks up and as the bloodline buries generations. PUBLIC + keyless like the avatar,
+  // and it discloses nothing beyond `publicDossier` by construction (`portrait.js` reads that shape
+  // and nothing else). Cached briefly rather than immutably — unlike an avatar this one CHANGES.
+  // ZERO §10.4. The keyless-/v1-GET default throttle covers it (this one hits the DB). ──
+  app.get('/v1/identity/:characterId/portrait.svg', async (req, reply) => {
+    const row = await portraitRow(pool, String(req.params.characterId || '').slice(0, 64));
+    reply.type('image/svg+xml; charset=utf-8').header('cache-control', 'public, max-age=300');
+    // an unknown id gets the house's blank plate rather than a 404 — a stale share link stays an image
+    return reply.send(portraitSvg(portraitStateOf(row || { id: 'unknown', name: 'UNKNOWN' })));
+  });
+  // Phase 2's reviewable JSON, in ERC-721 metadata shape, pointing at no token: the exact blob can be
+  // argued about before a contract exists to be stuck with it. Keyed by characterId today; the tokenId
+  // form arrives with the contract. WEALTH IS ABSENT IN ANY FORM (design §4's hard rule).
+  app.get('/v1/identity/:characterId', async (req, reply) => {
+    const id = String(req.params.characterId || '').slice(0, 64);
+    const row = await portraitRow(pool, id);
+    if (!row) return reply.code(404).send({ error: 'not_found' });
+    const st = portraitStateOf(row);
+    reply.header('cache-control', 'public, max-age=300');
+    return {
+      name: `${row.name} — Generation ${row.generation}`,
+      description: 'A portrait of a bloodline in OMERTÀ. The frame deepens with every generation '
+        + 'buried; the coat climbs with the street\'s rank. Held by the account, not by the token.',
+      image: `${baseUrl}/v1/identity/${encodeURIComponent(id)}/portrait.svg`,
+      attributes: portraitTraits(st),
+    };
   });
   // ── THE BROADCAST: shareable noir cards + public profile + frictionless ?ref attribution (§7.13). ──
   // PUBLIC + keyless + read-only; ZERO §10.4 surface (marketing/status only). Wealth is never exact.

@@ -33,6 +33,8 @@ const PUBLIC = {
   'GET /v1/art/:kind/:id': 'card/profile art rendered into unfurls by crawlers with no token',
   'GET /v1/avatar/:seed': 'deterministic cosmetic portrait from a public seed (a character id); no auth, no state, cacheable',
   'GET /v1/auth/x/callback': 'the OAuth return leg — the caller has no token yet, by definition',
+  'GET /v1/identity/:characterId/portrait.svg': 'THE MADE MAN — the bloodline portrait; the public collectible the token will point at, and an unfurl a crawler fetches with no token. Encodes only what publicDossier already discloses (portrait.js reads that shape and nothing else), so it is at most as revealing as the PAID Wire dossier',
+  'GET /v1/identity/:characterId': 'the same portrait in ERC-721 metadata shape (identity design §5 phase 2) — served, reviewable, pointing at no token; wealth absent in any form',
   'GET /v1/catalog': 'the public item catalog (agent/LLM discovery surface, AGENTS.md)',
   'GET /v1/city': 'the city board the landing page shows before sign-in',
   'GET /v1/commission': 'public politics: seats, votes and the decree in force are on the record',

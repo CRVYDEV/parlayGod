@@ -172,12 +172,28 @@ The founder's funding decision keeps every existing wall intact, and that is wor
    this is a wall precisely because no check can see it. The first cut scaled the bound with the gap
    and had to be discarded: it reaches 26× at a quarter, and a bound that widens with staleness is
    not fail-closed.
-6. The Dynasty NFT + ERC-6551 bound accounts (currently design-only).
+6. The Dynasty NFT + ERC-6551 bound accounts. **The OFF-CHAIN half is DONE** — `src/portrait.js`,
+   `test/portrait.js`, `GET /v1/identity/:characterId/portrait.svg` and the ERC-721-shaped metadata
+   at `GET /v1/identity/:characterId`, pointing at no token. That is `omerta-identity-nft-design.md`
+   §5's phase 1 + phase 2, which that doc sequences first *because they carry no gate at all* and
+   because the portrait is the thing the token would point at, so the ordering costs nothing.
+   **The CONTRACT half is correctly still waiting**, on two independent gates: counsel memo **A4 is
+   RE-OPENED** (the dynasty design's §7.2 makes the contract conditional on A2 *and* A4; A2 is signed,
+   A4 is not, because adopting the published tranche schedule changed its fact pattern), and the
+   third-party audit batch — which the dynasty design says to **batch, not dribble**, so writing
+   `DynastyNFT` now would start that clock for one contract instead of the set.
+   The build corrected three of the design's own slots; the reasons are recorded in the identity
+   doc's §3 banner, and one of them was a defect that doc had already flagged and nobody had acted
+   on: the frame slot cited **`dynastyTierOf`, which no longer exists** (retired with the Portfolio at
+   D11). The suite now asserts it is gone, so the frame cannot be re-sourced back to a dead symbol.
 7. Delivery. **Last**, and only after 1.
 
-Steps 2–5 are done. What remains is the NFT (step 6) and delivery (step 7) — and step 7 is the one
+Steps 2–5 are done, and step 6's off-chain half with them. What remains is step 6's CONTRACT (gated
+on the re-opened A4 and on assembling the audit batch) and delivery (step 7) — and step 7 is the one
 gated on counsel, which is why the order was arranged this way: everything above it moves real ETH
-into real holdings without a single share changing hands or being promised to anybody.
+into real holdings without a single share changing hands or being promised to anybody. The portrait
+is the clearest case for that ordering: it is the whole player-visible half of the flagship asset,
+and it shipped without touching a gate.
 
 ### 5.1 What step 2 actually built, and the one thing it found
 

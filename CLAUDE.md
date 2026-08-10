@@ -11482,3 +11482,60 @@ the accumulate path was found UNCOVERED on review, the same half-tested-reads-as
 the brokers recorder. `omerta-identity-nft-design.md` was amended in the same commit: its one-line
 summary ("a tradeable trophy") no longer describes the whole token, though §1's entitlement wall
 survives intact. Suite 94/94 + sim drift-0 + pgquery 2711 statements + pgcheck 43/43 on real Postgres.
+
+**THE MADE MAN — the bloodline portrait (brokers step 6, the OFF-CHAIN half; 2026-08-10) — BUILT**
+(`src/portrait.js`, `test/portrait.js` — the 95th suite; `GET /v1/identity/:characterId/portrait.svg`
++ the ERC-721-shaped metadata at `GET /v1/identity/:characterId`; a card on My Profile). Step 6 is
+the Dynasty NFT, and `omerta-identity-nft-design.md` §5 sequences it deliberately: **phase 1 is the
+portrait, entirely off-chain, with no gates** — most of the value, needing no token, no wallet and no
+chain, and generating the thing the token would point at, so the ordering is not a compromise. The
+CONTRACT half is correctly still waiting on two independent gates: counsel memo **A4 is RE-OPENED**
+(dynasty §7.2 makes the contract conditional on A2 *and* A4; adopting the published tranche schedule
+changed A4's fact pattern) and the third-party audit BATCH, which the dynasty design says to **batch,
+not dribble** — writing one contract now starts that clock for one contract instead of the set.
+**THE BRIGHT LINE, and it is narrower than the design's own slot table.** §4 states the constraint
+exactly right — *a free, permanently-public, marketplace-indexed surface must be AT MOST as revealing
+as the paid one* — and §3's table then breaks it in three places, which the build corrected rather
+than shipped: **backdrop ← "home district"** (there is no home district, only live `loc`, which is
+precisely what the Wire's PAID tap sells — a keyless image keyed on it is a position tracker a hunter
+can poll; now deterministic from the character id, the corner you came up on, fixed at birth);
+**figure ← "build"** (`muscle`/`cunning`/`speed` are on no public surface and not even on the paid
+dossier; now deterministic too); and **"a broken frame for a rat"** (a PAID Wire flag — dropped, and
+the suite asserts a rat's portrait is byte-identical to his portrait the moment before he flipped).
+The rule is enforced **STRUCTURALLY, not by spot check**: the route's only data source is
+`portraitRow`, and the suite asserts it may return no field `publicDossier` does not — add `loc` and
+it fails by name, which it did on its first run (catching the route parameter, allowed with the
+reason stated: the caller supplied it). **A defect the design had FLAGGED and nobody had acted on:**
+the frame slot cited **`dynastyTierOf`, which no longer exists** — it went with the Portfolio at D11,
+exactly as that doc's own 2026-08-10 banner warned needed re-sourcing "before any metadata is
+frozen". Re-sourced to **GENERATION** (public, account-level, survives death), which is the better
+answer anyway — the frame is the bloodline's age, pawn-shop pine deepening to gilt — and the suite
+asserts the symbol is gone so it cannot be re-sourced back to a dead dependency. **The parts are
+DRAWN, not generated**, and that was a constraint rather than a preference: the art budget stands at
+**$11.12 of a $12 cap** (38 plates ≈ $1.90) and there is no `FAL_KEY`, so generated parts were not on
+the table. The ARCHITECTURE is unchanged (§2 approach 2 — layered composition, assembled live, ~0 per
+read) and the compositor does not care where a part came from, so any slot can take a generated plate
+later without touching the assembly. The design's open question 2 is answered the way it leaned:
+**silhouette-forward**, the brim's shadow doing the work. **Two cuts were discarded on REVIEW, which
+is the art-pass discipline earning its keep**: a lit oval with two dots reads as a smiley, and a
+hard-edged shadow band with glints in it reads as a domino mask — the shipped version fades the
+shadow, which is what light actually does. Looking at the output also caught three real bugs a
+parsing check never would: the plate's subtitle used the FRAME's trim colour, so on pawn-shop pine it
+was dark brown on near-black and **could not be read at all**; a long dynasty name **ran off the
+frame** (now clamped with an ellipsis); and generation 12 was engraved **"GEN X"** because the cut
+clamped the roman-numeral INDEX — a plate is the one place a wrong number is permanent. **SAFETY: this
+one renders text, which `avatar.js` never does** — avatar is injection-proof by construction (the seed
+is hash-only), while the plate engraves the street name, dynasty and family tag, all untrusted, on a
+public keyless route, so every one goes through `esc` — and that escape is now EXPORTED from
+`cards.js` and shared rather than copied, because escaping is a security predicate and a private
+second copy is precisely the class this project was bitten by at 69 copies of three gate
+predicates: a fix to an escaping gap has to reach every site that escapes. SVG ids are
+seed-suffixed, because two portraits sharing a `clipPath` id would clip each other and the console
+renders them in a grid. **ZERO §10.4** (art moves no value; the suite pins zero ledger rows across
+both routes). Four mutations each caught at their own named assertion (leak `loc` into the row; stop
+escaping the name; restore the GEN X lie; drop the seed-unique ids) — and one assertion had to be
+rewritten because `/rat/i` matches **"gene-RAT-ion"** (the substring class again), so the rat check is
+now INVARIANCE: setting the flag must change the portrait not at all, with the `rowCount` asserted so
+the check cannot go vacuous. Deliberately NOT touched: the `/u/:name` profile page, whose legend card
+is its considered hero and which a portrait would compete with. Suite 95/95 + mobile 75/75 + client
+wiring/mirror (616 routes, 132 boards) + pgquery + pgcheck 43/43 on real Postgres.

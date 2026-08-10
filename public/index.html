@@ -4901,6 +4901,12 @@
           <div class="msp-mood">Mood: <b>${esc(p.mood)}</b> ${p.mood === 'hunted' || p.mood === 'doing time' ? '😰' : p.mood === 'flush' ? '😎' : '🚬'}</div>
           <div class="msp-mood" style="margin-top:3px">♫ Now spinning: <i>${esc(p.spinning)}</i></div>
         </div>
+        <div class="msp-h">The Portrait</div>
+        <div class="msp-box" style="text-align:center">
+          ${me?.id ? `<img src="/v1/identity/${encodeURIComponent(me.id)}/portrait.svg" alt="Your bloodline portrait" style="width:100%;max-width:220px;border-radius:2px">` : ''}
+          <div class="t" style="margin-top:6px;line-height:1.5">The coat climbs with your rank. The frame
+          deepens every time your bloodline buries someone. It is yours by playing — nothing to buy.</div>
+        </div>
         <div class="msp-h">General</div>
         <div class="msp-box" style="padding:0"><table class="msp-tbl">
           <tr><td>Member since</td><td>${p.memberSince ? new Date(p.memberSince).toLocaleDateString() : '—'} (${p.days}d)</td></tr>

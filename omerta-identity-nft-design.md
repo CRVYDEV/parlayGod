@@ -149,7 +149,56 @@ stand behind. Approach 1 cannot be dynamic; approach 3 multiplies the review bur
 
 ## 3. The layers
 
-Six slots, composited back-to-front. Counts are a starting point, not a commitment.
+> **BUILT 2026-08-10 — `src/portrait.js`, `test/portrait.js`, `GET /v1/identity/:characterId/portrait.svg`.**
+> Phase 1 shipped, and the table below is the DESIGN; three of its slots were changed in the build for
+> reasons that are corrections rather than compromises, and §4's own rule is what forced them.
+>
+> **THE BRIGHT LINE, as built: the portrait encodes only what `publicDossier` already discloses, plus
+> per-character deterministic art variety.** §4 states the constraint exactly right — a free,
+> permanently-public, marketplace-indexed surface must be *at most* as revealing as the paid one — and
+> then this table breaks it twice:
+> - **backdrop ← "home district"**: there is no home district in this game, only live `loc`, which is
+>   precisely what the Wire's PAID tap sells. A keyless image keyed on it is a position tracker a
+>   hunter can poll. **Built as deterministic from the character id** — the corner this street came up
+>   on, fixed at birth. Same eight-way variety, zero leak.
+> - **figure ← "build"**: `muscle`/`cunning`/`speed` are on no public surface and not even on the paid
+>   dossier. **Built as deterministic too.**
+> - **effects ← "…a broken frame for a rat"**: `rat` is a PAID Wire flag. **Dropped** — the build
+>   asserts a rat's portrait is byte-identical to his portrait the moment before he flipped.
+> - **frame ← "dynasty tier + estate tier"**: **`dynastyTierOf` DOES NOT EXIST** — it went with the
+>   Portfolio at D11, exactly as the 2026-08-10 banner above warned. **Re-sourced to GENERATION**
+>   (public, account-level, survives death), which is the better answer anyway: the frame is the
+>   bloodline's age, pawn-shop pine deepening to gilt as the generations stack.
+>
+> The line is enforced STRUCTURALLY rather than by spot check: the route's only data source is
+> `portraitRow`, and the suite asserts it may return no field `publicDossier` does not. Add `loc` and
+> it fails by name — which it did, on its first run, catching the route parameter (allowed, with the
+> reason stated: the caller supplied it).
+>
+> **The parts are DRAWN, not generated.** §2 assumed a pre-generated library; the art budget stands at
+> $11.12 of a $12 cap (38 plates ≈ $1.90) and there is no `FAL_KEY`, so that was not on the table. The
+> ARCHITECTURE is unchanged — layered composition, assembled live, ~0 per read — and the compositor
+> does not care where a part came from, so any slot can take a generated plate later without touching
+> the assembly. Open question 2 ("faces or silhouettes?") is answered in the build the way it leaned:
+> **silhouette-forward**, the brim's shadow across the eyes doing the work. Two cuts were discarded on
+> review — a lit oval with two dots reads as a smiley, and a hard-edged shadow band with glints in it
+> reads as a domino mask; the shipped version fades the shadow, which is what light actually does.
+>
+> **ONE KNOWN GAP, flagged rather than half-closed.** §5 phase 1 says *"the heir inherits a
+> recognisably related one"* — the build does not do that yet. The portrait is keyed on the CHARACTER
+> id, so an heir is a new row, a new seed, and a visually unrelated man; only the frame and the
+> engraved generation carry the bloodline. Closing it means seeding the *inherited* half (skin, the
+> corner) off something stable per BLOODLINE while keeping the figure per-street — and the obvious
+> key, the account id, must not reach a public surface, so the clean answer is the **dynasty name**
+> (already public, already on the dossier, already the line's identity), with un-named lines keeping
+> per-street variety. That also gives the dynasty-naming $OMR sink something visible to buy. It is a
+> small change with a real disclosure dimension (any stable cross-character key is a linkage
+> primitive), so it is a founder call, not a tidy-up. **Related, and for the CONTRACT phase:** §7's
+> open question 3 asks whether the portrait survives death. Keying on the character answers it for
+> phase 1 only — a token that persists across deaths must resolve its `tokenURI` to the ACCOUNT's
+> current street, not to a character, and that is a decision the contract makes, not this.
+>
+> Six slots, composited back-to-front. Counts are a starting point, not a commitment.
 
 | slot | ~parts | driven by | notes |
 |---|---|---|---|
