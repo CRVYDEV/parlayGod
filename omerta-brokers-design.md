@@ -160,7 +160,15 @@ The founder's funding decision keeps every existing wall intact, and that is wor
 4. ~~The epoch allocator, computing weights off `ACTIVITY` — off-chain, dormant, no delivery.~~
    **DONE.**
 5. The buy keeper — chain-dormant behind the standing gates. It reads `stockBudget()` for its root cap
-   and writes through `recordStockBuy`, both of which now exist.
+   and writes through `recordStockBuy`, both of which now exist. **Wall 3 (fail-closed, TWAP-bounded,
+   price-continuity) is its job and deliberately not step 2's:** `recordStockBuy` ingests a fill that
+   already happened on-chain, and refusing to record a real fill would make the books disagree with
+   the chain rather than prevent anything (the `recordBond` lesson — the event is authoritative, and
+   an overspend is for the invariant to scream about). Step 2 lays the groundwork by recording
+   `price_eth_per_unit` on every fill, so the keeper has a last print to bound against. **The
+   multiple itself is unsized** and should get the `tools/bond-dials.js` treatment before it is
+   picked — the equivalent number there turned out to be a function of pool depth rather than of
+   supply, and guessing it here would be inventing balance.
 6. The Dynasty NFT + ERC-6551 bound accounts (currently design-only).
 7. Delivery. **Last**, and only after 1.
 
