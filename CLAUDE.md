@@ -11050,3 +11050,39 @@ own NFTs (the snapshots are third-party communities), activation Sybil-splitting
 are split-neutral), plain wash-trading, flash-minting a rare trait (stamped-at-mint + banded +
 the impressive traits are slow-and-genuine — the dependency is RECORDED so a future change
 re-assesses it).
+
+**THE MINT PRICE — the founder's $OMR-mint-with-scaling proposal, resolved (founder-directed
+2026-08-10: "maybe instead of .01 ETH it can also be a number of OMR that gets burned and scales
+up as more NFTs are minted") — DESIGNED, Shape C recommended** (`omerta-dynasty-machine-design.md`
+§10; the memo's A4 fact-pattern amendment). **Half was already live**: the $OMR-denominated mint
+IS the PLEX bridge (`PLEX_MINT_OMR` 5 floor, market-linked ×1.2 premium), and post-v3 it RECYCLES
+to the desk rather than burning (the founder's own revenue-over-deflation call — `plex:%` is in
+`DESK.SINK_REASONS`). The new halves were evaluated against the walls: **the rail-interaction law
+frames everything** (with two rails open the EFFECTIVE price is the cheaper one, so rails move in
+LOCKSTEP or a scaling is decorative — the preflight implied-rate guard is the enforcement).
+**Shape A, the automatic supply-indexed curve — REJECTED four ways**: A4's signed "fixed price /
+no scarcity marketing" predicate (an auto-rising price IS the scarcity pitch, Impact-Theory-shaped
+— adopting it re-opens A4); the FREE-PATH CEILING (the mission ladder's lifetime $OMR is finite
+and test-pinned — a rising price crosses it at some supply number and silently breaks "you can get
+made for free", the withheld-terms class behind every recorded tester complaint); the GROWTH
+HEADWIND (a curve taxes exactly the later cohorts the funnel work optimizes for — and the Sybil
+bound never needed it, since a farm mints EARLY at the cheap end); and the unsolvable copy
+problem. **Shape B, $OMR-only — REJECTED three ways**: the severance means a fresh player holds
+zero $OMR (so it is ETH-with-extra-steps), it COUPLES ONBOARDING TO TOKEN SUPPLY (bonds are
+throttled by THE DAILY OFFERING, the desk sells only what sinks returned — a mint rush locks new
+players out of identity until tomorrow), and the ETH mint is declared router revenue the launch
+funnel bonus is priced against. **Shape C — dual-rail + ERA REPRICING BY HAND — RECOMMENDED**:
+the DAILY OFFERING's GM-control precedent applied to the mint price — the founder raises it at
+growth milestones, BOTH rails in lockstep (`mintFee` owner-settable on-chain, `PLEX_MINT_OMR`
+env, the guard warns on desync), each raise gated by TWO checks (the implied-rate guard + the
+free-path check: the $OMR price stays ≤ the mission ladder's lifetime payout, or the promise, the
+coach rung and both codices change in the SAME commit). Early-cheaper-than-late survives as a
+ratchet; A4 survives with the soft amendment now recorded in the memo (fixed-at-any-moment,
+repriced by ordinary product decision, never supply-indexed — the rejected curve is recorded IN
+the row so counsel sees the decision). **The demand-engine insight**: the founder's real goal —
+token demand scaling with adoption — is delivered by the RAIL, not the curve (every PLEX mint
+hands the price to the desk; demand scales linearly with headcount), and the chosen-more-often
+dial is the PREMIUM (×1.2 → 1.0), not escalation. **Burn-vs-recycle flagged as a lever**
+(a TRUE burn is a one-line `withdraw:omr`-shaped exclusion but reverses v3-step-2 for the single
+highest-volume sink the game will have — recommend keeping the recycle). Zero code (both rails
+live; Shape C is process + two existing guards).
