@@ -163,6 +163,70 @@ export async function recordStockBuy(pool, { ref, ticker, units, ethSpent, txHas
   } finally { client.release(); }
 }
 
+/// THE BUY KEEPER (brokers step 5) — decide what may be spent, refuse an absurd rate, record the fill.
+///
+/// The `runVigBuyback` shape exactly: this is the ACCOUNTING half, testable off-chain and deterministic
+/// because the achieved price is a PARAMETER. On mainnet the keeper bot does the real DEX buy (TWAP,
+/// slippage-capped) and passes what it got; here that same call is driven by a mod/QA route. It is
+/// CHAIN-DORMANT in the sense that matters — nothing in this function reaches a chain, and no fill is
+/// real without a `txHash`.
+///
+/// NOT WORKER-TICKED, deliberately, and for the same reason `runVigBuyback` is not: there is no price
+/// source in this process. A tick that had to invent a price would be inventing exactly the number
+/// wall 3 exists to bound, and "we do not know the price" must never resolve to "use the default" —
+/// the vault's own oracle rule, one system over. So the caller is the mainnet bot (which buys, then
+/// reports what it got) or its manual twin, `POST /v1/mod/treasury/keeper`. The ticker to buy is a
+/// separate, already-built decision: the worker's ticker ballot resolves it into a permanent record.
+///
+/// It enforces two of the five walls and deliberately not the others:
+///   • WALL 4 (the root cap) — `ethToSpend ≤ stockBudget().spendableEth`. ETH already promised to a
+///     player's vault line is not the keeper's to spend. Read, never re-derived: the invariant checks
+///     the same number.
+///   • WALL 3 (price continuity + fail-closed) — sized in `npm run keeper-dials`; see TREASURY.KEEPER_*.
+///   • Wall 5 (comps book zero) is `recordStockBuy`'s, and stays there: it is the ingest's job because
+///     the ingest is what every path goes through, including ones this keeper will never call.
+///   • Wall 1 (`allocated ≤ held`) is the ALLOCATOR's and the invariant's. It is worth saying plainly
+///     that wall 1 cannot catch what wall 3 catches: buying 1 unit for the whole budget leaves
+///     `allocated ≤ held` perfectly true. A check on units is blind to a bad price by construction.
+export async function runStockBuyback(pool, { ticker, priceEthPerUnit, maxEth, ref, txHash = null } = {}) {
+  const tk = String(ticker || '').trim().toUpperCase();
+  if (!tk) throw new GameError('ticker', 'A buy needs a ticker.');
+  const price = Number(priceEthPerUnit);
+  if (!(Number.isFinite(price) && price > 0)) throw new GameError('price', 'priceEthPerUnit must be > 0.');
+
+  // ── WALL 4: the root cap. Read the budget, never a looser number derived from `held` alone. ──
+  const { spendableEth } = await stockBudget(pool);
+  const want = Number(maxEth);
+  const eth = round6(Math.min(Number.isFinite(want) && want > 0 ? want : spendableEth, spendableEth));
+  if (!(eth > 0)) return { bought: false, reason: 'budget', spendableEth };
+
+  // ── WALL 3: continuity against the last REAL print for THIS ticker. ──
+  // Per ticker, because a print for one stock says nothing about another; `real` only, because a comp
+  // books a price with no asset behind it and letting comps set the reference would make the QA path
+  // able to move the wall (the anti-fabrication gate's whole point, applied one level up).
+  const last = (await pool.query(
+    'SELECT price_eth_per_unit p, created_at FROM stock_buys WHERE ticker=$1 AND real ORDER BY created_at DESC LIMIT 1',
+    [tk])).rows[0];
+  // No print at all → REFUSE. There is nothing to be continuous with, and a first buy that sets its
+  // own reference would let the very first fill be the absurd one. Seed it deliberately and small.
+  if (!last) return { bought: false, reason: 'no_print', ticker: tk };
+  const ageMs = Date.now() - new Date(last.created_at).getTime();
+  // A stale print does not earn a wider bound (see the lever's note) — it earns a halt.
+  if (ageMs > TREASURY.KEEPER_MAX_PRICE_AGE_MS)
+    return { bought: false, reason: 'stale_price', ticker: tk, ageDays: round6(ageMs / 86400000) };
+  const ref0 = Number(last.p);
+  const ceiling = round6(ref0 * TREASURY.KEEPER_MAX_PRICE_JUMP);
+  const floor = round6(ref0 * TREASURY.KEEPER_MIN_PRICE_FRAC);
+  if (price > ceiling) return { bought: false, reason: 'price_high', ticker: tk, price, lastPrint: ref0, ceiling };
+  if (price < floor) return { bought: false, reason: 'price_low', ticker: tk, price, lastPrint: ref0, floor };
+
+  const units = round6(eth / price);
+  if (!(units > 0)) return { bought: false, reason: 'dust', ticker: tk };
+  // Through the ingest, not around it — so idempotency and the comp gate are enforced in ONE place.
+  const rec = await recordStockBuy(pool, { ref: ref || `keeper:${tk}:${crypto.randomUUID()}`, ticker: tk, units, ethSpent: eth, txHash });
+  return { bought: rec.recorded, ...rec, ticker: tk, price, lastPrint: ref0, spendableEth };
+}
+
 /// Promise units out. THE ONLY writer of the owed side, and it refuses past what is held.
 ///
 /// The invariant is the DETECTOR; this is the PREVENTION, and both are needed. A nightly check that

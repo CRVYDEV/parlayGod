@@ -24,6 +24,7 @@
     "chaos": "node tools/chaos.js",
     "scale": "node tools/scale.js",
     "dials": "node tools/bond-dials.js",
+    "keeper-dials": "node tools/keeper-dials.js",
     "backup": "bash tools/backup.sh ${BACKUP_DIR:-./backups}",
     "backup:selftest": "bash tools/backup-selftest.sh"
   },

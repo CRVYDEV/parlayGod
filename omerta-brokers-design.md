@@ -159,21 +159,25 @@ The founder's funding decision keeps every existing wall intact, and that is wor
 3. ~~The activation tiers + burn (in-game, shippable independently, a pure `$OMR` sink).~~ **DONE.**
 4. ~~The epoch allocator, computing weights off `ACTIVITY` — off-chain, dormant, no delivery.~~
    **DONE.**
-5. The buy keeper — chain-dormant behind the standing gates. It reads `stockBudget()` for its root cap
-   and writes through `recordStockBuy`, both of which now exist. **Wall 3 (fail-closed, TWAP-bounded,
-   price-continuity) is its job and deliberately not step 2's:** `recordStockBuy` ingests a fill that
-   already happened on-chain, and refusing to record a real fill would make the books disagree with
-   the chain rather than prevent anything (the `recordBond` lesson — the event is authoritative, and
-   an overspend is for the invariant to scream about). Step 2 lays the groundwork by recording
-   `price_eth_per_unit` on every fill, so the keeper has a last print to bound against. **The
-   multiple itself is unsized** and should get the `tools/bond-dials.js` treatment before it is
-   picked — the equivalent number there turned out to be a function of pool depth rather than of
-   supply, and guessing it here would be inventing balance.
+5. ~~The buy keeper — chain-dormant behind the standing gates.~~ **DONE** (`runStockBuyback`,
+   `POST /v1/mod/treasury/keeper`). It reads `stockBudget()` for its root cap (wall 4) and writes
+   through `recordStockBuy`, so wall 5 (comps book zero) and idempotency are inherited rather than
+   reimplemented. **Wall 3 was its job and deliberately not step 2's:** `recordStockBuy` ingests a
+   fill that already happened on-chain, and refusing to record a real fill would make the books
+   disagree with the chain rather than prevent anything (the `recordBond` lesson).
+   **The multiple is now sized** — `npm run keeper-dials`, recorded in BALANCE.md § THE KEEPER'S
+   WALLS: **2× the last real print, 0.2× floor, halt past a 30d-old print, refuse a first buy.** The
+   sizing produced a finding worth carrying into step 7: the multiple does NOT bound the damage
+   (wall 4 does), and buying few units for much ETH leaves `allocated ≤ held` perfectly true — so
+   this is a wall precisely because no check can see it. The first cut scaled the bound with the gap
+   and had to be discarded: it reaches 26× at a quarter, and a bound that widens with staleness is
+   not fail-closed.
 6. The Dynasty NFT + ERC-6551 bound accounts (currently design-only).
 7. Delivery. **Last**, and only after 1.
 
-Steps 3 and 4 are buildable now and are genuinely useful on their own: the activation sink helps the
-economy, and the allocator can compute and publish weights long before anything is delivered.
+Steps 2–5 are done. What remains is the NFT (step 6) and delivery (step 7) — and step 7 is the one
+gated on counsel, which is why the order was arranged this way: everything above it moves real ETH
+into real holdings without a single share changing hands or being promised to anybody.
 
 ### 5.1 What step 2 actually built, and the one thing it found
 

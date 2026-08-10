@@ -2962,6 +2962,56 @@ rung is still proven a few lines down on a deliberately seeded one. `LEVEL_UP_RE
 founder sign-off lever (BALANCE.md § THE REFILL CEILING; 0 disables the refill, a large value restores
 the runaway).
 
+**THE BUY KEEPER — brokers step 5, and the wall that no check can see (founder-directed 2026-08-10)
+— BUILT** (`tools/keeper-dials.js` + `npm run keeper-dials`; `src/treasury.js:runStockBuyback`,
+`TREASURY.KEEPER_*` in the rules tail, `POST /v1/mod/treasury/keeper`, `test/treasury.js`; BALANCE.md
+§ THE KEEPER'S WALLS). The design left ONE number unset and said why — *"the multiple itself is
+unsized and should get the `tools/bond-dials.js` treatment before it is picked; guessing it here would
+be inventing balance"* — so the sizing came first and the code second.
+**THE SIZING (B1).** The keeper spends treasury ETH on tokenized stock; wall 3 is a per-buy PRICE
+CONTINUITY bound against the last real print, so a fat-finger, a stale feed or a leaked keeper key
+cannot buy at an absurd rate. **The finding inverts the obvious instinct**: a tight bound is not a
+safe bound, because **the multiple does not bound the damage — wall 4 does**. A keeper that spends its
+whole budget at a terrible rate has lost the budget either way; the multiple only changes how much of
+that spend was WASTED. The costs are asymmetric in the other direction — a false halt costs a skipped
+epoch and a human glance, while a loose bound costs real ETH **that no invariant catches**, because
+`allocated ≤ held` is in UNITS and buying one unit for the whole budget leaves every wall true. *A
+check on quantity is blind to a bad price by construction*, which is exactly why this needs a wall
+rather than a check, and it is the sentence to carry into step 7. The bounded quantity is a RATIO —
+stock/ETH — so **ETH's volatility sets it even for a blue chip** (a "calm" large-cap still moves
+~4.7%/day against ETH). **The first answer was wrong and is recorded because the error is
+instructive**: demanding the bound never fire on an honest move leads to scaling it with the gap since
+the last print (`BASE^√(Δ/epoch)`), and running it kills it — **6.7× at a month, 26.7× at a quarter**,
+and a 26× bound is a formality with a comment attached. The error was the design point, not the
+arithmetic: bound the ORDINARY case and let the extraordinary one halt the bot and fetch a human, since
+after a 3× move in stock/ETH a bot buying straight through it is precisely the behaviour you do not
+want. That also disposes of the long-gap problem with no scaling at all — **a stale print does not earn
+a wider bound, it earns a halt.** Signed: `KEEPER_MAX_PRICE_JUMP` **2×** (covers 3σ over an epoch and
+an ETH-halving week; wastes ≤50% of one buy in the worst allowed case), `KEEPER_MIN_PRICE_FRAC`
+**0.2×** (the low side — a rate an order of magnitude cheap is a broken feed or a fake token, the
+desk's `PRICE_FLOOR_BPS` precedent and the bug the RWA float actually shipped),
+`KEEPER_MAX_PRICE_AGE_MS` **30d** (halt, the `OmrTwapOracle` discipline where having no fallback price
+is the entire point), and a **first buy on a ticker with no print REFUSES** (nothing to be continuous
+with; a first fill that set its own reference could itself be the absurd one — seed it deliberately
+and small).
+**THE KEEPER (B2).** `runStockBuyback` is the `runVigBuyback` shape exactly: the ACCOUNTING half,
+deterministic and testable off-chain because the achieved price is a PARAMETER; on mainnet the bot does
+the real DEX buy and reports what it got. It enforces **wall 4** (reads `stockBudget().spendableEth`,
+never a looser number re-derived from `held` — the invariant checks the same one; an over-ask CLAMPS
+rather than overdrawing) and **wall 3**, and deliberately not the others: wall 5 (comps book zero) and
+idempotency stay in `recordStockBuy` because the ingest is what every path goes through, including
+ones the keeper will never call. **NOT worker-ticked**, for the same reason its sibling is not — there
+is no price source in-process, and a tick that had to invent one would be inventing exactly the number
+wall 3 bounds. The ticker is a separate, already-built decision (the worker's ticker ballot). §10.4 is
+untouched by construction: treasury ETH and tokenized stock are out-of-band real value, so the whole
+layer still writes ZERO `transactions` rows. `test/treasury.js` DRIVES every refusal rather than
+assuming it — no-print, price-high, price-low, stale-print, budget-empty, the clamp's exact spend, the
+comp booking zero, and the route being wired and mod-gated — with **four mutations each failing at its
+own named assertion** (ceiling removed; staleness widening instead of halting; the root cap dropped;
+the first buy allowed to set its own reference). Steps 2–5 are now done; what remains is the NFT (6)
+and delivery (7), and 7 is the one gated on counsel — which is why the order was arranged so
+everything above it moves real ETH into real holdings without a share changing hands.
+
 **THE PLEX BRIDGE IS RETIRED — every real-money price is ETH (founder-directed 2026-08-10: "Make the
 mint ETH only no OMR", then "Make plex items and consumables eth only") — BUILT** (`src/vig.js`,
 `src/store.js`, `src/invariants.js`, `src/preflight.js`, `src/rules.tail.js`; `test/vig.js`,

@@ -156,9 +156,17 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
     // on 2026-07-31 and is back because there is something to buy again; §3.3's no-gate delivery is
     // what makes it the only wall left, so this view is where a founder reads whether it holds.
     app.get('/v1/mod/treasury', { preHandler: modAuth }, async () => Treasury.runTreasuryInvariants(pool));
-    // what the buy keeper (design step 5, unbuilt) may spend: ETH already promised to a player's
-    // vault line is not the keeper's to spend, so the budget is `held - allocated - alreadySpent`.
+    // what the buy keeper may spend: ETH already promised to a player's vault line is not the
+    // keeper's to spend, so the budget is `held - allocated - alreadySpent`.
     app.get('/v1/mod/treasury/budget', { preHandler: modAuth }, async () => Treasury.stockBudget(pool));
+    // THE BUY KEEPER (step 5). Drives the accounting half — reads the budget (wall 4), enforces price
+    // continuity against the last real print (wall 3), and writes through recordStockBuy. On mainnet
+    // the bot does the real DEX buy and passes the achieved price; this is its manual twin, and the
+    // same modRealTxHash gate applies, for the same reason as the ingest below it: a comp exercises
+    // the walls and books ZERO units and ZERO spend.
+    app.post('/v1/mod/treasury/keeper', { preHandler: modAuth }, async (req) =>
+      Treasury.runStockBuyback(pool, { ticker: req.body?.ticker, priceEthPerUnit: req.body?.price,
+        maxEth: req.body?.maxEth, ref: req.body?.ref, txHash: modRealTxHash(req) }));
     // ingest an acquisition fill. The modRealTxHash gate matters MORE here than anywhere else: units
     // are the ceiling on what may ever be delivered, so a comp that booked them would raise that
     // ceiling with no asset behind it — invisible to precisely the check meant to catch it. A comp

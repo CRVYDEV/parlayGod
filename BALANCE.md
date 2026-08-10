@@ -5466,6 +5466,52 @@ itself: the escalation terminates, at a number stated up front, and the most any
 drafted against the open ladder. The LIVE price today is wave 1 — nothing changes at the till until
 the 1,001st identity.
 
+## THE KEEPER'S WALLS — sizing wall 3 (brokers step 5, 2026-08-10)
+
+`omerta-brokers-design.md` §5 left one number unset and said why: *"the multiple itself is unsized and
+should get the `tools/bond-dials.js` treatment before it is picked — guessing it here would be
+inventing balance."* `npm run keeper-dials` is that treatment. Pure arithmetic, no server, no chain.
+
+**What the keeper does, so the walls have something to bound.** It spends treasury ETH
+(`stockBudget().spendableEth`) on tokenized stock; every fill is ingested by `recordStockBuy`, which
+stores `price_eth_per_unit`. Wall 3 is a per-buy price continuity bound against the last real print.
+
+**The finding, which inverts the obvious instinct.** The instinct is that a tight bound is a safe
+bound. It is not, because **the multiple does not bound the damage — wall 4 does.** A keeper that
+spends its whole budget at a terrible rate has lost the budget either way; the multiple only changes
+how much of that spend was *wasted*. The costs are asymmetric in the other direction:
+
+| | |
+|---|---|
+| bound fires wrongly | the keeper skips an epoch, a human looks, the ETH is still there |
+| bound is too loose | real ETH buys few units, permanently, **and no invariant catches it** |
+
+That second row is the load-bearing one: `allocated ≤ held` is in UNITS, so buying one unit for the
+whole budget leaves every wall true. A check on quantity is blind to a bad price *by construction*,
+which is exactly why this needs a wall rather than a check.
+
+**The bounded quantity is a RATIO — stock/ETH — so ETH's volatility sets it even for a blue chip.** A
+"calm" large-cap still moves ~4.7%/day against ETH (√(1.5%² + 4.5%²)); a high-beta name ~5.7%.
+
+**The first answer was wrong, and it is recorded because the error is instructive.** Demanding the
+bound never fire on an honest move leads to scaling it with the gap since the last print
+(`BASE^√(Δ/epoch)`). Running it kills it: **6.7× at a month, 26.7× at a quarter** — a 26× bound is a
+formality with a comment attached. The error was the design point, not the arithmetic. The bound
+should accommodate *ordinary* moves and deliberately halt on extraordinary ones, because after a 3×
+move in stock/ETH a bot buying straight through it is precisely the behaviour you do not want. A
+human re-baselines with a small deliberate fill. That also disposes of the long-gap problem with no
+scaling at all: **a stale print does not earn a wider bound, it earns a halt.**
+
+| lever | value | why |
+|---|---|---|
+| `TREASURY.KEEPER_MAX_PRICE_JUMP` | **2×** | covers 3σ over an epoch (1.57×) and an ETH-halving week (2.00×); wastes at most 50% of one buy in the worst allowed case |
+| `TREASURY.KEEPER_MIN_PRICE_FRAC` | **0.2×** | the low side. A rate an order of magnitude cheap is a broken feed or a fake token, not a bargain — the desk's `PRICE_FLOOR_BPS` precedent, and the bug the RWA float actually shipped |
+| `TREASURY.KEEPER_MAX_PRICE_AGE_MS` | **30d** | past this the print is not a price. Halt — the `OmrTwapOracle`/vault discipline, where having *no* fallback price is the entire point |
+| first buy on a ticker (no print) | **refuse** | nothing to be continuous with; a first fill that set its own reference could itself be the absurd one. Seed it deliberately and small |
+
+All four are founder sign-off levers, pinned in `test/levers.js`. Re-run `npm run keeper-dials` if the
+epoch length moves or if the treasury starts buying something with a materially different vol.
+
 ## THE GENESIS RAISE — 33 → 21.38 ETH (founder-directed 2026-08-10)
 
 **FDV does not move, and that is the point of stating what does.** The raise is not a valuation — the

@@ -150,6 +150,109 @@ const status = (await mod('GET', '/v1/mod/treasury')).body;
 assert.equal(status.holds, 'eth+stock', 'the ops view says what the treasury holds now');
 assert.equal(status.spentOnStockEth, 4, 'and publishes the spend, which is why availability can fall');
 
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// THE BUY KEEPER (step 5) — wall 4 (the root cap) and wall 3 (price continuity, fail-closed)
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// Driven, not asserted-impossible: every refusal below is a call that really tries to buy.
+const { runStockBuyback } = await import('../src/treasury.js');
+const { TREASURY } = await import('../src/rules.js');
+const keeperRows = async (tk) => Number((await pool.query(
+  'SELECT COUNT(*) c FROM stock_buys WHERE ticker=$1', [tk])).rows[0].c);
+
+// ── the first buy REFUSES, and that is the wall, not a gap ──────────────────────────────────────
+// A ticker with no print has nothing to be continuous with. A keeper that set its own reference on
+// the first fill would let the very first buy be the absurd one — so it is seeded deliberately.
+{
+  const before = await keeperRows('NVDA');
+  const r0 = await runStockBuyback(pool, { ticker: 'NVDA', priceEthPerUnit: 0.2, maxEth: 1, ref: 'k:nvda:first', txHash: '0xk0' });
+  assert.equal(r0.bought, false, 'a ticker with no print cannot be bought into');
+  assert.equal(r0.reason, 'no_print', '…and says why, rather than failing obscurely');
+  assert.equal(await keeperRows('NVDA'), before, 'and it wrote nothing — a refusal is not a fill');
+}
+
+// TSLA has a real print from the fills above. Read it, so every bound below is relative to a REAL
+// number rather than a literal that goes stale the moment the fixture moves.
+const lastPrint = Number((await pool.query(
+  "SELECT price_eth_per_unit p FROM stock_buys WHERE ticker='TSLA' AND real ORDER BY created_at DESC LIMIT 1")).rows[0].p);
+assert(lastPrint > 0, 'the fixture really has a TSLA print to bound against');
+
+// ── WALL 3: an absurd rate is refused, in BOTH directions ───────────────────────────────────────
+{
+  const before = await keeperRows('TSLA');
+  const high = await runStockBuyback(pool, { ticker: 'TSLA',
+    priceEthPerUnit: lastPrint * TREASURY.KEEPER_MAX_PRICE_JUMP * 1.01, maxEth: 1, ref: 'k:high', txHash: '0xkh' });
+  assert.equal(high.bought, false, 'a rate above the ceiling is refused');
+  assert.equal(high.reason, 'price_high');
+  // the LOW side is the one the RWA float actually shipped as a bug: a rate an order of magnitude
+  // cheap reads as a bargain and is a broken feed or a fake token.
+  const low = await runStockBuyback(pool, { ticker: 'TSLA',
+    priceEthPerUnit: lastPrint * TREASURY.KEEPER_MIN_PRICE_FRAC * 0.99, maxEth: 1, ref: 'k:low', txHash: '0xkl' });
+  assert.equal(low.bought, false, 'and so is a rate far below the floor — cheap is a signal, not a bargain');
+  assert.equal(low.reason, 'price_low');
+  assert.equal(await keeperRows('TSLA'), before, 'neither refusal wrote a fill');
+}
+
+// ── WALL 3: fail-closed on a STALE print — it does not earn a wider bound ───────────────────────
+// The first cut of the sizing scaled the bound with the gap; it had to be thrown away because that
+// is not fail-closed. This is the assertion that keeps it thrown away.
+{
+  const cut = new Date(Date.now() - TREASURY.KEEPER_MAX_PRICE_AGE_MS - 86400000);
+  await pool.query("UPDATE stock_buys SET created_at=$1 WHERE ticker='TSLA'", [cut]);
+  const stale = await runStockBuyback(pool, { ticker: 'TSLA', priceEthPerUnit: lastPrint, maxEth: 1, ref: 'k:stale', txHash: '0xks' });
+  assert.equal(stale.bought, false, 'a print older than the age bound HALTS the keeper');
+  assert.equal(stale.reason, 'stale_price', '…rather than widening the bound to accommodate it');
+  await pool.query("UPDATE stock_buys SET created_at=now() WHERE ticker='TSLA'"); // restore
+}
+
+// ── WALL 4: the root cap, and the reason it is read rather than re-derived ──────────────────────
+// ETH already promised to a player's vault line is not the keeper's. Ask for far more than exists
+// and the spend CLAMPS to the budget instead of overdrawing it.
+{
+  const budgetBefore = (await stockBudget(pool)).spendableEth;
+  assert(budgetBefore > 0, 'the fixture has something left to spend');
+  const big = await runStockBuyback(pool, { ticker: 'TSLA', priceEthPerUnit: lastPrint,
+    maxEth: budgetBefore * 100, ref: 'k:clamp', txHash: '0xkc' });
+  assert.equal(big.bought, true, 'an over-ask still buys — it clamps rather than refusing');
+  assert.equal(big.ethSpent, budgetBefore, 'and spends EXACTLY the budget, never past it');
+  const after = await stockBudget(pool);
+  assert.equal(after.spendableEth, 0, 'which leaves nothing spendable');
+  // the units are the ETH at the achieved rate — the arithmetic the whole wall exists to protect
+  assert(Math.abs(big.units - budgetBefore / lastPrint) < 1e-6, 'units == eth / price');
+  // and now the budget is empty, the keeper refuses rather than spending ETH it does not have
+  const broke = await runStockBuyback(pool, { ticker: 'TSLA', priceEthPerUnit: lastPrint, maxEth: 1, ref: 'k:broke', txHash: '0xkb' });
+  assert.equal(broke.bought, false, 'an empty budget halts the keeper');
+  assert.equal(broke.reason, 'budget');
+}
+
+// ── the invariant still holds after the keeper has run, which is the point of wall 4 ────────────
+{
+  const inv2 = await runTreasuryInvariants(pool);
+  assert(check(inv2, 'allocated + spent <= held (ETH)').ok,
+    'the keeper spending to the cap does NOT breach the spend-aware arm — that is what the cap is for');
+}
+
+// ── WALL 5: a keeper comp books ZERO, same as the ingest ─────────────────────────────────────────
+// It goes through recordStockBuy, so it inherits the gate — asserted rather than assumed, because
+// "it goes through X" is exactly the kind of claim that stops being true after a refactor.
+{
+  await mod('POST', '/v1/mod/treasury/tax', { ref: 'tax:2', omrTaxed: 50000, price: 500, txHash: '0xtax2' });
+  const heldBefore = (await stockBudget(pool)).spentEth;
+  const comp = await runStockBuyback(pool, { ticker: 'TSLA', priceEthPerUnit: lastPrint, maxEth: 1, ref: 'k:comp' }); // no txHash
+  assert.equal(comp.bought, true, 'a comp records the episode');
+  assert.equal(comp.units, 0, 'and books ZERO units — the fabricated quantity IS the wall\'s input');
+  assert.equal(comp.ethSpent, 0, '…and ZERO spend');
+  assert.equal((await stockBudget(pool)).spentEth, heldBefore, 'so the budget is untouched by QA');
+}
+
+// ── the route is wired, mod-gated, and drives the same walls ────────────────────────────────────
+{
+  const viaRoute = await mod('POST', '/v1/mod/treasury/keeper', { ticker: 'NVDA', price: 0.2, maxEth: 1, ref: 'k:route' });
+  assert.equal(viaRoute.code, 200);
+  assert.equal(viaRoute.body.reason, 'no_print', 'the route reaches the keeper and its walls, not a stub');
+  const unauth = await app.inject({ method: 'POST', url: '/v1/mod/treasury/keeper', payload: { ticker: 'TSLA' } });
+  assert.equal(unauth.statusCode, 401, 'and it is mod-gated like every other treasury route');
+}
+
 // ── §10.4 IS UNTOUCHED ──────────────────────────────────────────────────────────────────────────
 // Treasury ETH and tokenized stock are out-of-band real value, exactly like fees.js: buying and
 // allocating write ZERO `transactions` rows, so the conservation set gains no reason and no bucket.
@@ -161,4 +264,8 @@ assert(led.checks.find((c) => /vocabulary/i.test(c.name)).ok, 'and the reason vo
 await app.close();
 console.log('✅ treasury test passed — `allocated <= held` is back, PER TICKER in UNITS, it can '
   + 'actually fail, a surplus in one ticker cannot cover a shortfall in another, a comp books ZERO '
-  + 'units, ETH spent on stock stops backing ETH claims, and §10.4 never sees any of it.');
+  + 'units, ETH spent on stock stops backing ETH claims, and §10.4 never sees any of it. Plus THE '
+  + 'BUY KEEPER (step 5): wall 4 CLAMPS a spend to the budget rather than overdrawing it and halts '
+  + 'when it is empty, wall 3 refuses a rate above the ceiling AND below the floor, HALTS on a print '
+  + 'older than the age bound rather than widening to accommodate it, and refuses a first buy on a '
+  + 'ticker with nothing to be continuous with — every refusal driven, not assumed.');

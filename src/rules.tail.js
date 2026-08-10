@@ -2137,6 +2137,32 @@ export const TREASURY = {
   CLAIM_PREMIUM_BPS: 500,     // +5% over spot. The vault is not a market maker: it should never hand
                               // out ETH at exactly the price a player could get elsewhere, or every
                               // claim is a risk-free skim on whichever side the oracle lags.
+
+  // ── THE BUY KEEPER'S WALLS (brokers step 5, §3.2 wall 3) — sized by `npm run keeper-dials` ──────
+  // The keeper spends treasury ETH on tokenized stock. Wall 3 is a per-buy PRICE CONTINUITY bound so
+  // a fat-finger, a stale feed or a leaked keeper key cannot buy at an absurd rate.
+  //
+  // The sizing produced one finding worth keeping at the definition, because it inverts the obvious
+  // instinct. **A false halt is cheap; a loose bound is expensive** — and asymmetrically so:
+  //   • bound fires wrongly → the keeper skips an epoch and a human looks. The ETH is still there.
+  //   • bound is too loose  → real ETH buys few units, permanently, and NO INVARIANT CATCHES IT:
+  //     `allocated ≤ held` is in UNITS, so buying few units for much ETH leaves every wall true.
+  // So the bound is deliberately NOT sized to accommodate every honest move. A first cut scaled it
+  // with the gap since the last print (`BASE^sqrt(Δ/epoch)`) and had to be thrown away — it yields
+  // 6.7× at a month and 26.7× at a quarter, and a 26× bound is a formality with a comment attached.
+  // Bound the ORDINARY case; let the extraordinary one stop the bot and fetch a human.
+  //
+  // The bounded quantity is stock/ETH, a RATIO, so ETH's volatility sets it even for a blue chip:
+  // a "calm" large-cap still moves ~4.7%/day against ETH. 2× covers 3σ over an epoch (1.57×) and an
+  // ETH-halving week (2.00×), and wastes at most 50% of a single buy in the worst allowed case.
+  KEEPER_MAX_PRICE_JUMP: 2,      // refuse a fill above this × the last real print for that ticker
+  KEEPER_MIN_PRICE_FRAC: 0.2,    // …and below this × it. A rate an order of magnitude cheap is a
+                                 // broken feed or a fake token, not a bargain (the desk's
+                                 // PRICE_FLOOR_BPS precedent — the RWA float shipped this bug).
+  KEEPER_MAX_PRICE_AGE_MS: 2592000000, // 30d. A stale print does NOT earn a wider bound — it earns a
+                                 // halt. Widening with age is precisely what makes a bound stop being
+                                 // fail-closed (the OmrTwapOracle discipline, where having no
+                                 // fallback price is the entire point).
 };
 // AUDIT F5 — fail fast on a misconfigured fee split: the Vig slice (vig.js, env VIG_BPS default
 // 6000) + the treasury slice book each real fee into two independently-recorded buckets; if they
