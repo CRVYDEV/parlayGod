@@ -228,6 +228,141 @@ judgment call later, the gate is these five conditions, all met simultaneously:
 4. **Pessimistic oracle + a per-day borrow cap** below the manipulation cost in (1).
 5. A dedicated audit of that market. Not a parameter change.
 
+### 2.8 The OMR-WETH LP position — staking YES, collateral NO (and why the yes unlocks the no)
+
+*Founder, 2026-08-10: "Maybe also allow the OMR-WETH LP position to be used as collateral or stake
+it to earn fees from LP."*
+
+**These are two very different asks and they get opposite answers.**
+
+**STAKE IT FOR FEES — yes, and it should be built early.** An LP staking contract that accrues and
+auto-compounds trading fees has *no oracle on any path, no borrow, no liquidation, and no
+manipulation surface*, because nobody is lending against anything. It is a distribution contract.
+It also does something strategically valuable: **auto-compounding thickens the POL**, which is
+condition (1) of §2.7's gate. So the safe half of this idea is literally the machinery that earns
+the right to consider the dangerous half — build it first, and it compounds toward its own
+precondition.
+
+**AS COLLATERAL — no, and it is the strictest no in this document.** An OMR-WETH LP position is
+**both** of the attacks that drained Inverse, stacked:
+
+| Their loss | Collateral | Our LP position |
+|---|---|---|
+| Jun 2022, ~$5.8M | `yvCurve-3Crypto` — **an LP token**, flash-loaned into a fake price | it is an LP token |
+| Apr 2022, ~$15.6M | `INV` — **the protocol's own token**, TWAP-manipulated | it holds our own token |
+
+The naive LP valuation — `(r₀·p₀ + r₁·p₁) / totalSupply` from spot reserves — is manipulable by
+anyone with a flash loan, which is exactly the June 2022 mechanic. There **is** a manipulation-
+resistant formula (the fair-LP / Alpha Finance pricing):
+
+```
+P_LP  =  2 · √(k · p₀ · p₁) / totalSupply        where k = r₀·r₁ is the pool invariant
+```
+
+It works because `k` does **not** move under a swap — a flash loan changes the reserves and leaves
+the invariant alone — so the price it returns is the un-manipulated one. **But it requires an
+INDEPENDENT price for both sides.** WETH has Chainlink. `$OMR`'s only price is our own pool. Feed
+that back in and you have rebuilt April 2022 with extra steps.
+
+**So the gate is §2.7's, and the LP inherits it rather than getting its own softer one** — plus two
+conditions specific to being an LP:
+
+6. **Fair-LP pricing only** (the formula above), never spot-reserve valuation, with the independent
+   $OMR feed of §2.7(2) as the hard prerequisite — no feed, no market.
+7. **If the canonical pool is Uniswap v3/v4, the answer stays no regardless.** A concentrated
+   position is an NFT with a range, can sit entirely on one side of the tick, and has no clean
+   `totalSupply` to divide by; the fair-LP formula does not apply to it. Only a full-range v2-style
+   position is even a candidate.
+
+**What ships instead, and it is not a consolation prize:** LP staking + auto-compounding, whose
+yield is real trading fees rather than an incentive that can end (§2.6's rule), and which
+mechanically drives toward the depth that makes every later question easier.
+
+### 2.9 Staking for in-game benefit — and the wall it must not cross
+
+*Founder, 2026-08-10: "users can stake OMR-WETH collateral somewhere for some sort of benefit not
+to be used as part of the loans or stablecoins… also an OMR single staking… maybe XP multiplier."*
+
+Both are safe, and the framing ("not part of the loans or stablecoins") is the right instinct — it
+keeps these entirely off §2.1's borrow path, so nothing here touches an oracle, a liquidation, or
+the Transmuter.
+
+**THE WALL, FIRST — an XP multiplier must never reach the city leg's `ACTIVITY` score.** This is
+the one way the idea could go wrong and it is not obvious. §4.2.1 distributes the bought-$OMR pool
+pro-rata on activity. If staked $OMR multiplied that score, then:
+
+> staked $OMR → higher score → a larger share of the $OMR distribution → more $OMR
+
+…a self-referential loop in which **holding the token buys a bigger share of the token handout.**
+That would (a) make the distribution wealth-weighted rather than effort-weighted, which is *not*
+what A5's approved "skill/effort-based" language covers and lands it next to A8's open question,
+and (b) destroy the linearity proof — two players with identical effort would receive different
+shares based on their balance.
+
+**It is already structurally safe, and that is now deliberate rather than lucky.** `activityScore`
+computes from **action counts × base XP**, never from XP awarded, so a multiplier applied to
+mastery progression cannot propagate into it. `test/activity.js` pins this directly.
+
+So the rule: **a staking multiplier may accelerate PROGRESSION (trade levels, milestone perks,
+ranks) and must never touch the DISTRIBUTION key.** Stated the way this project states these:
+*staking buys the ladder faster; it never buys a bigger slice of somebody else's money.*
+
+**(a) Single-sided $OMR — already built; this is one new column.** `MADE_LADDER` already keys on
+`account_persistent.staked` with four rungs (10 / 30 / 75 / 150 $OMR → trunk, energy cap, nerve,
+garage, and a fence bonus at the top two). The founder's ask is an **`xpBps` column** on those
+existing rungs — a mastery-XP multiplier — not a second staking system. That fits the current
+ceiling rule (power is allowed but **capped**, and the cap must be reachable without paying):
+a multiplier accelerates arrival at perks that a free player also reaches, and moves no ceiling —
+`MAX_LVL`, `STAT_CAP` and every perk value are untouched. **Staking buys time, not ceiling.**
+
+**(b) OMR-WETH LP — the same ladder, weighted higher, plus real fees.** LP is worth strictly more
+to the protocol than an idle single-sided stake, because depth is the thing §2.7(1) actually needs.
+So an LP position counts toward the SAME ladder at `LP_STAKE.WEIGHT` × the $OMR side it contains —
+one ladder, two ways onto it, no parallel benefit table to drift. On top of that it accrues **real
+trading fees** (§2.8), which is a genuine yield with no faucet, no oracle and no promise attached.
+
+**What neither may ever be:** a $OMR yield on the stake (that is a faucet *and* the
+BlockFi/Celsius fact pattern), or a share of protocol revenue (that is A11). The benefit is
+in-game utility and progression speed — which is precisely why it needs no new counsel row.
+
+### 2.10 Flash loans — what can actually be done, and what is built
+
+*Founder, 2026-08-10: "figure out how to write in the smart contract ways to kill flash loans from
+happening completely."* Built as `omerta-contracts/src/FlashGuard.sol` (compiles clean, solc
+0.8.26, 0 warnings).
+
+**The honest framing first, because it changes what to build. A flash loan cannot be blocked.** It
+is not a feature of one lender that we can refuse to integrate — it is a property of **EVM
+atomicity**: a transaction either fully succeeds or fully reverts, so anyone can borrow inside one,
+from Aave, Balancer, Morpho, Uniswap, or their own balance. There is no switch, and "is this
+capital borrowed?" is not reliably observable on-chain.
+
+**There is also no need for one, and this is the useful part: a flash loan is never the
+vulnerability — it is the amplifier.** Every flash-loan "exploit" on record is really one of three
+bugs: (1) a price read from a source the caller can move inside the same transaction; (2) a state
+you can ENTER and EXIT in one transaction and profit from the round trip; (3) reentrancy. The loan
+only makes the attacker briefly rich enough to do (1) or (2) at scale. **Remove those and a flash
+loan buys nothing** — a far stronger position than trying to detect borrowed money.
+
+**And we must not block them all anyway.** The Transmuter's 1:1 redemption is *defended* by
+arbitrage — someone who flash-loans to buy `nUSD` at 0.98 and redeems at 1.00 is repairing our peg
+at their own gas risk. A blanket ban would disable the mechanism that keeps the peg honest. So the
+guards are surgical: they attach where atomicity creates an *advantage*, never where it creates a
+*service*.
+
+**The layers, strongest first:**
+
+| | Layer | Where |
+|---|---|---|
+| **L0** | **REMOVE THE TARGET** — denomination-matched markets mean **no oracle on the borrow path at all**. A price never read cannot be manipulated, at any size. Worth more than everything below combined; both Inverse losses (~$21M) were exactly this. | §2.1 |
+| **L1** | **SAME-BLOCK SEPARATION** — entry and exit cannot share a block. Not a mitigation but a *proof*: a flash loan must be repaid in the transaction that took it, so forcing the profitable half into a later block means the loan cannot still exist. Costs an honest user one block (~250ms on an Orbit L2). | `FlashGuard` |
+| **L2** | **CONTRACT ALLOWLIST** — and deliberately **not** `require(msg.sender == tx.origin)`. That one-liner is now an anti-pattern: it breaks ERC-4337, Safe multisigs and every smart wallet — and Robinhood Chain's self-custody is Privy-style embedded wallets, so it would lock out exactly our users. It does not even work (an EOA can call us via a callback in the same transaction). | `FlashGuard` |
+| **L3** | **TIME-WEIGHTED ACCRUAL** — rewards, shares and voting accrue over elapsed time, so a position held zero blocks earns exactly zero. | Alchemist |
+| **L4** | **ORACLE HARDENING** where one is genuinely needed (the redemption price only): Chainlink rather than a DEX TWAP, read **pessimistically**, with staleness and single-block deviation breakers. | Transmuter |
+| **L5** | **FLOW CAPS** — per-block and per-day. A flash loan is *by definition* one block, so a per-block cap is the tightest possible bound on any atomic exploit; the daily cap (FiRM's) bounds the patient version that would otherwise just spread out. Bounds rather than prevents — the last line. | `FlashGuard` |
+| **L6** | **REENTRANCY** — `nonReentrant` plus strict checks-effects-interactions. | all |
+| **L7** | **SHARE INFLATION / DONATION** — track assets in a variable, never `balanceOf(this)`, so a direct transfer cannot move the share price. (OZ 5.x virtual shares cover the classic first-depositor case; internal accounting covers the rest.) | Alchemist |
+
 ---
 
 ## 3. The in-game surface
@@ -433,7 +568,11 @@ distribute anything by chance; the projected-payoff-date honesty rule of §3.
 4. **RateController + free/paid debt.**
 5. **RevenueSplitter** — staker + OMR-buy legs live; NFT leg at zero pending A11.
 6. **Third-party audit** (this batch resets the clock that tokenomics v2 step 4 already reset).
-7. **$OMR collateral** — only against §2.7's five conditions, with its own audit.
+7. **LP staking + auto-compounding** (§2.8) — no oracle, no borrow, no liquidation; it
+   compounds toward the POL depth §2.7(1) requires, so it is early rather than late.
+8. **$OMR collateral** — only against §2.7's five conditions, with its own audit. **The
+   OMR-WETH LP position inherits all five plus §2.8's two**, and is a flat no on a
+   concentrated-liquidity pool whatever the depth.
 
 **Not on this list, deliberately: cross-denominated markets, looping in the default basket, and
 any path by which in-game play affects protocol yield.**
