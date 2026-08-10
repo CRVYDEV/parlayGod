@@ -104,7 +104,15 @@ The identity mint is uncapped by design (a supply cap would cap the player count
 (0.01 ETH each) are game revenue routed through the declared waterfall. No scarcity marketing, no
 roadmap-of-appreciation, no buyback promise attaches to the NFT. *Question for counsel: confirm
 uncapped utility-NFT sales at fixed price, marketed without appreciation language, stay outside
-the securities perimeter in the target jurisdictions.*
+the securities perimeter in the target jurisdictions.* **Fact-pattern amendment 2026-08-10 (the
+mint-price posture, `omerta-dynasty-machine-design.md` §10):** the mint is payable on TWO rails —
+ETH, or earned $OMR through the live PLEX bridge — held to one effective price by a boot-time
+implied-rate guard. "Fixed price" means **fixed at any given moment, repriced only by ordinary
+product decision** (both rails moved in lockstep, announced factually); an AUTOMATIC
+supply-indexed escalation ("the price rises as more mint") was proposed, evaluated, and
+**REJECTED** — an auto-rising price is scarcity marketing in mechanical form (the Impact-Theory
+shape) and would re-open this row. The funnel bonus (A6's carve-out) is analyzed here as a retail
+purchase promotion on that fixed-price sale.
 
 **A5 — Recycled $OMR may be redistributed as play-to-earn rewards.**
 Every in-game $OMR sink recycles to THE DESK (nothing is burned); the founder direction is that
