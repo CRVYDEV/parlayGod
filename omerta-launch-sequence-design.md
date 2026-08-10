@@ -104,7 +104,25 @@ the cap bounds whales. NFT communities may be per-NFT (the NFT itself is the Syb
 **The mechanics, each choice with its reason:**
 - **Snapshot-then-announce** (G-0) — no Sybil exists after a block height is fixed.
 - **Claims, never pushes** — the claimant pays their own gas (the house model), time-boxed
-  (`CLAIM_WINDOW` ~60–90 days proposed), unclaimed reverts to the treasury.
+  (`CLAIM_WINDOW` **90–180 days** — founder-directed 2026-08-10, "3-6 months"; the exact figure a
+  lever in that band), unclaimed reverts to the treasury. **THE CLAWBACK, specified** (the
+  founder's ask, with the wall that shapes it): what reverts is **UNCLAIMED ALLOCATIONS ONLY** —
+  in a merkle drop an eligible wallet HOLDS nothing until it claims (eligibility is a ledger
+  entry; custody stays with the distributor), so the clawback is post-deadline housekeeping, the
+  standard practice (ENS and Arbitrum shipped exactly this). **It is never a clawback of
+  DELIVERED tokens**: once OMR lands in a wallet it is theirs — OMR deliberately has no
+  confiscation/blacklist path, and adding one would be a rug vector that poisons every listing
+  conversation and resets the audit. Per D1 variant: **design (b), in-game credit — no function
+  needed at all** (unclaimed never left the Safe; the clawback is closing the window server-side
+  — another argument for (b)); **design (a), on-chain — the MerkleDistributor carries an
+  immutable `claimDeadline`** baked at deploy: `claim()` reverts after it, and `sweep()`
+  (Safe-only — the OmertaBond/OmertaFees sweep discipline) is callable ONLY after it, sending
+  the remainder to the treasury. The deadline IS the over-sweep guard: there is no block where a
+  claimant and the sweep can race. A hybrid puts the deadline+sweep on the on-chain tranche only.
+  **One deliberate decoupling**: the PROVENANCE stamp (dynasty §9) keys on snapshot membership,
+  not on claiming the drop — a wallet that misses the money window can still mint later and claim
+  its colors (a second-chance acquisition hook that costs the treasury nothing; couple the two
+  windows only if the founder prefers).
 - **Deterministic by construction** — a fixed amount per snapshotted wallet/NFT, published merkle
   root, no draw anywhere. The never-by-chance rule holds without effort.
 - **D1 — the load-bearing decision: WHAT the claim delivers.** Two designs:
@@ -159,5 +177,7 @@ audit, A1–A5, and now A6.
 ## 6. Open founder levers (tabled at decision time, none pinned yet)
 
 Window length (1–3 days) · per-day offering sizes · THE GENESIS PRICE · desk-rail on/off ·
-airdrop reserve total · per-community weights + floors/caps · flat-per-wallet vs per-NFT ·
-D1 (on-chain vs in-game vs hybrid) · the funnel-bonus size · claim window length.
+airdrop reserve total · per-community weights + floors/caps · per-NFT amounts (coin drops are
+RULED: proportional + floor + cap, never flat-per-wallet) · D1 (on-chain vs in-game vs hybrid) ·
+the funnel-bonus size · the claim window's exact figure inside the founder's 90–180 day band ·
+whether the provenance-stamp window couples to the claim window (recommended: no).
