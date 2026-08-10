@@ -2,7 +2,8 @@
 
 **Status: A1–A3, A5, A6 APPROVED (founder assertion 2026-08-09: "Counsel has approved A1-A6");
 A4 RE-OPENED 2026-08-10 (the tranche schedule was adopted — the row's own lockstep rule);
-A7 + A8 OPEN; A9–A12 OPEN (the YieldBank rows, added 2026-08-10).**
+A7 + A8 OPEN; A9–A12 OPEN (THE BANK protocol rows, added 2026-08-10 — open as
+questions, NOT as gates; that build proceeds on the founder's instruction, §2).**
 The approval is recorded the project's standing way — as a founder assertion of counsel approval,
 with the written countersignature to file in §5 when it arrives. What it unblocks: **Phase B**
 (the buy keeper + stock bookkeeping) and **the activation burn** are now buildable (chain-dormant
@@ -18,7 +19,8 @@ the latter already holds).
 Companion documents: `omerta-rwa-stock-machine-design.md` (the machine), `omerta-v4-hook-design.md`
 §10.8 (the one-hook-four-slices fee architecture, founder-confirmed 2026-08-09),
 `omerta-identity-nft-design.md` (the trophy/entitlement wall), `CHAIN-DEPLOY.md` (the deploy gates),
-`omerta-launch-sequence-design.md` (the genesis window + community drop — the source of A6).
+`omerta-launch-sequence-design.md` (the genesis window + community drop — the source of A6),
+`omerta-bank-protocol-design.md` (THE BANK — the dual game/DeFi protocol, the source of A9–A12).
 
 ---
 
@@ -216,14 +218,33 @@ the analysis at all?*
 
 ---
 
-### The YieldBank rows (A9–A12) — added 2026-08-10 with `omerta-yieldbank-design.md`
+### THE BANK rows (A9–A12) — added 2026-08-10 with `omerta-bank-protocol-design.md`
 
-The founder directed a DeFi layer synthesising Alchemix (self-repaying loans) and Inverse/DOLA
-(a debt-backed revenue-distributing stablecoin), routed through named Robinhood Chain strategies
-(Steakhouse's Morpho USDG vault, Morpho Blue isolated markets, Maple syrupUSDG, Ethena USDe, Spark
-spUSDG). **The design splits it into an in-game layer that ships and an on-chain layer that does
-not move until these four rows return.** All four are OPEN; none of them gates the in-game build,
-which moves only in-game cash and creates no new regulated activity.
+The founder directed a **dual game / DeFi protocol**: the game's Bank tab becomes the front-end of
+a real lending protocol on Robinhood Chain, synthesising Alchemix (self-repaying loans),
+Inverse/DOLA + FiRM (a debt-backed stablecoin and the security architecture its 2022 exploits
+forced) and Monolith (free-vs-paid debt, redemptions as peg defense). Protocol profit routes back
+into the game — to NFT holders, and/or buying $OMR on the open market to fund free players.
+
+**The build proceeds on the founder's instruction (2026-08-10), which is recorded here as TWO
+distinct things because this memo's only value is that it is accurate:**
+- *"Legal Counsel approves this"* — **a founder assertion of counsel approval**, the standing
+  convention on rows A1–A6, with written countersignature to file when it arrives.
+- *"Legal approves because America is the land of innovation and worst case scenario we will
+  fight it in court"* — **a founder risk-acceptance**, logged verbatim. A decision about
+  litigation risk is not a legal opinion, and converting one into the other in a document counsel
+  will read would be the one thing this memo must not do.
+
+The four rows below therefore do NOT gate the build. They remain open because they are also the
+questions an **auditor, an exchange listing desk, an insurer, and a Robinhood partnership
+conversation** will each ask independently — so having them answered has value regardless of the
+litigation posture.
+
+**Two design decisions materially narrow what counsel is being asked about, and both are
+load-bearing:** collateral is **ETH and high-quality stablecoins only** (founder-constrained), and
+each market is **denomination-matched** (USD debt against USD collateral; ETH debt against ETH
+collateral), which removes price risk, liquidations, and the oracle from the borrow path entirely
+— the exact vector that cost Inverse ~$21M across two 2022 exploits.
 
 **A9 — Issuing a USD-pegged synthetic on Robinhood Chain. (OPEN.)** The design's `DebtToken` is
 over-collateralised, debt-backed, redeemable 1:1 through a Transmuter whose queue is filled from
@@ -294,16 +315,13 @@ this memo's outcome:
 - **Live activation accrual** (allocations actually accruing to accounts): blocked on **A8** —
   the burn + bookkeeping BUILD proceeds chain-dormant; no allocation accrues to any account
   before the row is signed.
-- **THE YIELDBANK, on-chain layer** (`omerta-yieldbank-design.md` §3 — the Mix-Yield Vault, the
-  self-repaying position, the Transmuter, the synthetic): blocked on **A9–A12** AND the standing
-  third-party audit gate. `RevenueDistributor.sol` is specified but deliberately **unwritten**
-  pending A11. No contract in that section is deployed, and no user funds are routed anywhere,
-  before those rows return.
-- **THE YIELDBANK, in-game layer** (§2 of the same design — the Vault, the Marker, the Private
-  Bank): **NOT blocked and needs no row.** It moves only in-game cash (which the tokenomics-v2
-  severance already walls off from the token), mints nothing, and adds no counterparty. It is a
-  game mechanic, and the design's §5 forbids by rule — and will forbid by test — any bridge
-  between the two layers.
+- **THE BANK protocol** (`omerta-bank-protocol-design.md`): **proceeds on the founder's
+  instruction of 2026-08-10** (recorded in §2 as an assertion of counsel approval PLUS a
+  risk-acceptance). A9–A12 stay open as questions, not gates. Two things still bind independently:
+  the **third-party audit** of the contract batch, and the **RevenueSplitter's NFT leg**, which
+  ships with its share settable to **zero** pending A11 — the staker leg and the open-market
+  $OMR-buy leg are live from day one, because the $OMR leg is a purchase-and-distribute on the
+  already-audited `prize:omr` pattern and needs no new row.
 - **Shipped and unaffected**: Phase A (the Ticker Ballot — a vote and a record; no value moves),
   the Capo's License (rate-limit/status perks only), the money router (declare/verify/display).
 
