@@ -205,6 +205,55 @@ const phantom = [...index.matchAll(/`(AUDIT-[a-z0-9.-]+\.md)`/g)].map((m) => m[1
   .filter((f) => !audits.includes(f));
 assert.deepEqual([...new Set(phantom)], [], `docs/AUDITS.md lists reports that do not exist: ${phantom.join(', ')}`);
 
+// ── the codices must not quote a price the game does not charge ─────────────────────────────────
+// The 2026-08-10 re-denomination moved 145 $OMR constants x6, and BOTH codices were left quoting the
+// old prices — 17 of them, and `public/wiki.html` was materially behind `docs/WIKI.md` because the
+// existing drift-detector checks only that a system is MENTIONED in both, never that the numbers
+// agree. It was found by a hand-run scan, twice, after a spot-check had already reported success.
+//
+// So the check is: every "<n> $OMR" in either codex must equal SOME live lever. That is deliberately
+// LOOSE — it cannot tell the peek price from the sweep price when both are 30 — and it is still the
+// right net for the failure that occurs, because a whole-tree re-denomination leaves the stale
+// figures at 1/6th of every live value, where they match nothing. It is a regression guard on the
+// class, not a claim that each figure is quoted against the correct lever.
+{
+  const R = await import('../src/rules.js');
+  // Only $OMR-DENOMINATED numbers count as live prices. The first cut of this guard swept every
+  // number in the rules module, and the mutation SURVIVED — restoring the old "5 $OMR" sweep price
+  // passed, because 5 is some unrelated count somewhere in rules.js. A set that broad matches any
+  // small integer and asserts nothing.
+  // A PRICE, specifically. Two things in rules.js are $OMR-keyed and are not prices, and both were
+  // letting a stale figure through: an INVERSE lever (SPEAKEASY.RENOWN.OMR_WEIGHT, game-value per
+  // $OMR, correctly divided rather than multiplied by the re-denomination) and RETIRED data
+  // (RECRUIT_MILESTONES[].omr, which game.js stopped reading when referrals went to a respect bonus).
+  const NOT_A_PRICE = /WEIGHT|RATE|MULT|BPS|DIV|PER_|_PER|MIN_LVL|LEVEL/i;
+  const RETIRED = new Set(['RECRUIT_MILESTONES']);
+  const live = new Set();
+  const seen = new Set();
+  const walk = (v, keyed) => {
+    if (typeof v === 'number') { if (keyed && Number.isFinite(v) && v > 0) live.add(v); return; }
+    if (!v || typeof v !== 'object' || seen.has(v)) return;
+    seen.add(v);
+    if (Array.isArray(v)) { for (const x of v) walk(x, keyed); return; }
+    for (const [k, x] of Object.entries(v)) {
+      if (RETIRED.has(k)) continue;
+      walk(x, NOT_A_PRICE.test(k) ? false : (/omr/i.test(k) || keyed));
+    }
+  };
+  walk(R, false);
+  assert(live.size > 40, `expected many $OMR-denominated levers, saw ${live.size}`);
+  const stale = [];
+  for (const f of ['docs/WIKI.md', 'public/wiki.html'])
+    read(f).split('\n').forEach((line, i) => {
+      for (const m of line.matchAll(/([0-9][0-9,]*) \$OMR/g)) {
+        const n = Number(m[1].replace(/,/g, ''));
+        if (!live.has(n)) stale.push(`${f}:${i + 1} quotes ${n} $OMR`);
+      }
+    });
+  assert.deepEqual(stale, [], 'a codex quotes a $OMR price that matches no live lever — the game '
+    + `charges something else and the player finds out at the till:\n  ${stale.join('\n  ')}`);
+}
+
 // ── §6 must not send anyone back to finished work ────────────────────────────────────────────────
 // SPEC has two places that talk about the same debt items: §4 describes each one's state, and §6 is
 // the "do this next" list. They drifted: §6 said "Finish the lock-free read path (D1) — blocked on a

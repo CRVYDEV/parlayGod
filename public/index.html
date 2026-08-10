@@ -7676,7 +7676,7 @@
       <h2 style="margin-top:12px">Vanity <span class="d" style="font-size:11px">(pure cosmetics — a $OMR flex · on hand: ${fmt(Math.floor(me.omr || 0))} $OMR)</span></h2>
       <div class="card">
         <div><input id="van-name" placeholder="new street name" size="16" maxlength="24"> <button class="act" id="van-name-go">rename yourself (${rules?.vanity?.nameOmr ?? ''} $OMR)</button></div>
-        <div style="margin-top:4px"><input id="van-title" placeholder="custom title (blank clears it, free)" size="20" maxlength="24"> <button class="act" id="van-title-go">set title (10 $OMR)</button></div>
+        <div style="margin-top:4px"><input id="van-title" placeholder="custom title (blank clears it, free)" size="20" maxlength="24"> <button class="act" id="van-title-go">set title (${rules?.vanity?.titleOmr ?? ''} $OMR)</button></div>
         ${(me.cars || []).filter((c) => !c.listed && !c.pledged).length
           ? `<div style="margin-top:4px"><select id="van-car">${(me.cars || []).filter((c) => !c.listed && !c.pledged).map((c) => `<option value="${c.id}">${c.model}${c.trim ? ' ' + c.trim : ''}${c.plate ? ` [${c.plate}]` : ''}</option>`).join('')}</select>
              <input id="van-plate" placeholder="PLATE" size="7" maxlength="8"> <button class="act" id="van-plate-go">plate it (${rules?.vanity?.plateOmr ?? ''} $OMR)</button></div>`

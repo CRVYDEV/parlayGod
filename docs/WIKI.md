@@ -243,7 +243,7 @@ you a seat at tables where you can lose money. It buys no advantage at any of th
 Dues are a sink like any other, so they go to **the Desk** to be sold again rather than being destroyed.
 
 **THE ACCESS STAKE** — the high-stakes room at the Den wants a seat (level 30, or the Madame's velvet
-rope) *and* **50 $OMR held in a stake**. Held, not spent: it earns nobody anything, and its whole job
+rope) *and* **300 $OMR held in a stake**. Held, not spent: it earns nobody anything, and its whole job
 is to put a permanent, visible, lootable float on exactly the players worth hunting.
 
 **The Vault (staking)** (`POST /v1/stake`, `/unstake`) — **cheaper cover, not a safe harbour.**
@@ -476,8 +476,8 @@ another post for six hours — nor stand him down and walk him into the next cha
 shuffle — so answering a hit costs the family a second made man. Every post is a
 bonus, never a requirement — the scarcity is which chairs you fill, not that the baseline moved.
 
-**The reserve pays for status:** **seals** (`/gangs/vanity/seal`, Wax 25 to Obsidian 1500 $OMR, a badge) and
-the **Foundation** (`/gangs/foundation`, Community Fund 60 to The Legacy 3000 $OMR). The Foundation is real
+**The reserve pays for status:** **seals** (`/gangs/vanity/seal`, Wax 150 to Obsidian 9000 $OMR, a badge) and
+the **Foundation** (`/gangs/foundation`, Community Fund 360 to The Legacy 18000 $OMR). The Foundation is real
 power: it **reduces the RICO conviction chance of every member** and speeds their case bleed (only members
 present when a case was filed get the benefit). The family also holds a legal **RWA book** that earns a
 dividend (section 27).
@@ -603,7 +603,7 @@ hospitalized player, or a safehoused player.
 
 **The Contract Board** (`GET /v1/contracts` [public]) — bounties are escrow pots that you can view. There is
 one pot for each (target, kind). A **hospitalize** pot pays for a jump or a kill. A **kill** pot pays only for
-a completed kill. Post a bounty (`/streets/:targetId/bounty`, minimum $500; add 3 $OMR to post it
+a completed kill. Post a bounty (`/streets/:targetId/bounty`, minimum $500; add 18 $OMR to post it
 **anonymously**). You can name a **directed hitman** for an exclusive time window (minimum $10k, up to 24
 hours, +1.5× reputation). This minimum is **removed** for a vendetta, rat, welsher, or wanted kill contract. A
 **family contract** (`/gangs/contract/:targetId`) is paid from the treasury. The target can **peek**
@@ -876,11 +876,11 @@ access, and a hunter count.
 ## 25. The Wire
 
 Information as a $OMR resource that you can spend. `GET /v1/wire`.
-- **Wiretap** (`/v1/wire/tap/:targetId`, 8 $OMR, 12 hours, up to 5 at one time) — shows a rival's Law stage
+- **Wiretap** (`/v1/wire/tap/:targetId`, 48 $OMR, 12 hours, up to 5 at one time) — shows a rival's Law stage
   and heat band, wealth band, operations, WANTED status, and **if they are hunting you** (this pierces the
   peek space).
 - **Sweep** (`/wire/sweep`, 30 $OMR) — removes every tap on you (free when you are clean).
-- **The Street Wire subscription** (`/wire/subscribe {tier}`) — a **tiered ladder**: Street Wire (12 $OMR for
+- **The Street Wire subscription** (`/wire/subscribe {tier}`) — a **tiered ladder**: Street Wire (72 $OMR for
   7 days — Law forecasts and threat data: a *count* of hunters and contracts on you, never a
   name; the layered intel economy — the subscription warns you, a tap identifies a rival, and the $OMR peek
   names funders), The Wire Room (30 — plus your family war room and 2 standing watches), The Switchboard (60 —
@@ -960,7 +960,7 @@ are shut, laundering at your own front is gone, and the swap says so plainly if 
 ## 28. The Estate & Auction House
 
 **The Estate** (`GET /v1/estate`) — a deep, account-level (death-proof) $OMR cost and a "home" surface: buy
-levels (Safe House 40 to The Compound 2500 $OMR), unlock features (Trophy Room to The Menagerie), name it, and
+levels (Safe House 240 to The Compound 36000 $OMR), unlock features (Trophy Room to The Menagerie), name it, and
 show **trophies** that come from your real holdings (rarest car, guns, book value, kills, family seal). Status
 only. `POST /v1/estate/upgrade`, `/feature/:id`, `/name`.
 

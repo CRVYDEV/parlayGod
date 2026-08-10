@@ -5450,6 +5450,29 @@ same argument as the lever register itself. Fixture SEEDS were scaled where they
 purchase, and deliberately **not** where they feed a loot or estate assertion, since the loot rates
 did not move.
 
+### The prose lagged the levers, twice, and now a guard says so
+
+The pass corrected six restated prices in a reader-side scan, and a second scan afterwards found
+**seventeen more** — the whole seal / Foundation / estate / stake / wiretap / anon set, plus the
+Vanity card's "set title (10 $OMR)" button, whose two neighbours on the same three-line card HAD
+been converted to read `/v1/rules` (which is exactly why a spot-check passed: two of three converted
+reads as all three). `public/wiki.html` was materially behind `docs/WIKI.md` — the existing
+drift-detector checks only that a system is MENTIONED in both codices, never that the numbers agree.
+
+So it is a guard now (`test/docs.js`): every `<n> $OMR` in either codex must equal some live
+**price** lever. Deliberately loose — it cannot tell the peek price from the sweep price when both
+are 30 — and still the right net for the failure that occurs, because a whole-tree re-denomination
+leaves the stale figures at a sixth of every live value, matching nothing.
+
+Building it re-taught the session's own lesson. The first cut swept **every** number in `rules.js`
+and the mutation SURVIVED: restoring "5 $OMR" passed, because 5 is some unrelated count somewhere in
+the module. Narrowing to `$OMR`-keyed values still let 5 and 8 through, and the two culprits were
+both instructive — the RETIRED `RECRUIT_MILESTONES[].omr` (dead data in a machine-owned table) and
+the INVERSE `SPEAKEASY.RENOWN.OMR_WEIGHT` (correctly divided, not multiplied). Neither is a price.
+With those excluded, three mutations across both codices each fail by name with the file, line and
+figure. **A set broad enough to contain everything asserts nothing** — and it reads exactly like a
+clean bill of health.
+
 ## THE FREE PATH (founder-directed 2026-08-10 — the mint credit)
 
 "You can get made for free" is a promise the coach makes at level 14, and it rested on arithmetic:

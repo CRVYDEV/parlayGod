@@ -201,7 +201,7 @@ const SECTIONS = [
       man who never pays dues runs the whole city at full strength, and can hunt made men for their $OMR. Dues are a
       sink like any other, so they go to <b>the Desk</b> to be sold again rather than being destroyed.</p>
       <p><b>The access stake</b> — the Den's high-stakes room wants a seat (level 30, or the Madame's velvet rope)
-      <i>and</i> <b>50 $OMR held in a stake</b>. Held, not spent: it earns nobody anything, and its whole job is to put a
+      <i>and</i> <b>300 $OMR held in a stake</b>. Held, not spent: it earns nobody anything, and its whole job is to put a
       permanent, visible, lootable float on exactly the players worth hunting.</p>
       ${L(`<b>The Vault (staking)</b> is <b>cheaper cover, not a safe harbour</b>. Staking used to make $OMR
       untouchable; it no longer does. A killer takes <b>50%</b> of a loose or unbonding balance and <b>20%</b> of a
@@ -267,7 +267,7 @@ const SECTIONS = [
       <p><b>The charter &mdash; what your family IS.</b> Every family used to be mechanically identical apart from what it happened to hold. Now the boss picks a charter, and every one of them trades an edge for a real <b>handicap</b> &mdash; a charter with only an upside would be a free upgrade everybody takes, and then nothing is asymmetric again. <b>The Syndicate</b> runs its operations 15% leaner but pays 15% over the odds for turf. <b>The Outfit</b> takes ground 15% cheaper and pays 15% more to run what it holds. <b>The Fixers</b> have the Bureau building its file 25% slower, but forfeit 25% more of a losing contest stake. Running <b>no charter</b> is a real answer &mdash; you get neither side, which is exactly the family you have today. The first pick is free; re-founding costs the family reserve and locks for a week afterwards. The two mirrors are deliberate: a Syndicate family and an Outfit family are each good at what the other is bad at, so an alliance between them is complementary rather than just twice as big.</p>
       <p><b>The season has an ending.</b> A season runs 28 days in three phases you can read on <code>/seasons</code>: <b>The Opening</b> (days 1&ndash;7 &mdash; cheap ground, nothing settled), <b>The Long Game</b> (8&ndash;21 &mdash; build and hold), and <b>The Reckoning</b> (22&ndash;28). In the last week held turf is a quarter cheaper to challenge, contests settle in half the time and a holder's watch window is halved, so an incumbent who has been sitting on a district since week one has to defend it while the door is open. Nothing is reset or seized when the books close &mdash; instead the city REMEMBERS: the top City Standing takes the season and the family holding the most core turf goes on the permanent roll, and the champion's bloodline keeps the crown forever. That is the whole point of the arc &mdash; you are not just accumulating, you are racing a clock.</p>
       <p><b>The posts.</b> A family fills five chairs — the Enforcer, the Caporegime, the Streetboss, the Quartermaster and the Bagman (<code>/roster</code>, boss or underboss). <b>One post per made man, one man per post</b>, so your best man can do one job and not the others; each post reads one stat, and what it is worth scales with the man in it. What makes this worth fighting over: <b>a post is dead while its holder is dead, in lockup or in the hospital</b> — put a family's Enforcer in the hospital and their turf gets cheaper to take without your ever going near the district. They can fill the chair again straight away, but only with somebody who was on the STREET; you cannot slide a man across from another post for six hours — nor stand him down and walk him into the next chair, which is the same shuffle — so answering a hit costs the family a second made man. Every post is a bonus, never a requirement — the scarcity is which chairs you fill, not that the baseline moved.</p>
-      <p>The reserve buys status: <b>seals</b> (Wax 25 to Obsidian 1500 $OMR) and the <b>Foundation</b> (60 to 3000 $OMR).
+      <p>The reserve buys status: <b>seals</b> (Wax 150 to Obsidian 9000 $OMR) and the <b>Foundation</b> (360 to 18000 $OMR).
       The Foundation is real power: it reduces the RICO conviction chance of every member (only members present when a case
       was filed). The family also holds a legal <b>RWA book</b> that earns a dividend.</p>
       ${R(`POST /v1/gangs · /gangs/:id/join · /leave · /kick · /promote · /gangs/tribute[/omr] · /war/:id · /districts/:id/seize · /gangs/foundation · /gangs/vanity/*`)}` },
@@ -340,7 +340,7 @@ const SECTIONS = [
       take one gear piece, swears a <b>vendetta</b>, pays open kill contracts, scores war points, and earns <b>hitman
       reputation</b>. <b>NPC hit</b> — pay a fee (lost win or lose) for a hit the server calculates; no reputation; you
       cannot use it against family, yourself, new players, or safehoused players.</p>
-      <p><b>The Contract Board</b> — escrow pots for each (target, kind). Post one (minimum $500; add 3 $OMR to be
+      <p><b>The Contract Board</b> — escrow pots for each (target, kind). Post one (minimum $500; add 18 $OMR to be
       anonymous). A <b>directed</b> named hitman gets an exclusive window (minimum $10k, waived for a KILL contract on a
       vendetta target, a rat, or a welsher). The target can <b>peek</b> (30 $OMR) to name every funder. <b>Hitman reputation</b> is a
       status ladder (Associate to The Undertaker); lifetime reputation survives death.</p>
@@ -359,7 +359,7 @@ const SECTIONS = [
     html: `<p>The state reacts to your <b>heat</b>. The <b>investigation meter</b> builds from high heat and decreases
       slowly: clean → watched → investigation → <b>indicted</b>. <code>GET /v1/law</code> is your record.</p>
       <p><b>Escapes:</b> <b>bribe</b> (scales with wealth), the <b>lawyer retainer</b> ($150k for 3 days, reduces the bust
-      and forfeiture), the <b>envelope</b> (15 $OMR for 7 days — halves the meter's gain, doubles its decrease).</p>
+      and forfeiture), the <b>envelope</b> (90 $OMR for 7 days — halves the meter's gain, doubles its decrease).</p>
       ${L(`<b>The RICO bust</b> takes 30% of pocket and bank — but <b>staked $OMR and minted gear are safe, and it is NOT
       death.</b> If you stay offline past the grace window, the state force-busts you.`)}
       <p><b>Courtroom:</b> plea, buy the jury ($OMR), demand trial. <b>Informants:</b> <b>flip</b> a rival (drop your case,
@@ -429,7 +429,7 @@ const SECTIONS = [
 
   { id: 'skills', group: 'The Underworld', title: 'Skills & Specializations', tag: 'your build',
     html: `<p>Three branches, FOUR levels each — the 4th a capstone that unlocks an ACTIVE ability; points <b>come from your level</b> (<code>floor(level/4)</code> plus a small prestige bonus). Skills
-      die with the character. Respec for 10 $OMR (shared 24-hour cooldown).</p>
+      die with the character. Respec for 60 $OMR (shared 24-hour cooldown).</p>
       <ul><li><b>Enforcer</b> — Bruiser (jump/shakedown ×1.08) · Doctor's Friend (heal ×0.75) · Executioner (search ×0.8).</li>
       <li><b>Operator</b> — Fast Talker (lay-low ×0.8) · Fence Network (fence/melt +8%) · Broker (listing fees ×0.5).</li>
       <li><b>Wheelman</b> — Pack Mule (+3 trunk) · Getaway (crime jail ×0.8) · Road Captain (own convoys 20% faster).</li></ul>
@@ -468,9 +468,9 @@ const SECTIONS = [
       ${R(`GET /v1/underworld · POST /v1/underworld/:npc/gift|penance|favor|errand · /discharge · /gun/:id/sell`)}` },
 
   { id: 'wire', group: 'The Underworld', title: 'The Wire', tag: 'information you buy',
-    html: `<p><b>Wiretap</b> (8 $OMR, 12 hours, up to 5) — shows a rival's Law stage and heat, wealth band, operations,
-      WANTED status, and <b>if they are hunting you</b>. <b>Sweep</b> (5 $OMR) removes taps on you (free when clean). The
-      <b>Street Wire subscription</b> is a <b>tiered ladder</b> — Street Wire (12 $OMR/7 days: Law
+    html: `<p><b>Wiretap</b> (48 $OMR, 12 hours, up to 5) — shows a rival's Law stage and heat, wealth band, operations,
+      WANTED status, and <b>if they are hunting you</b>. <b>Sweep</b> (30 $OMR) removes taps on you (free when clean). The
+      <b>Street Wire subscription</b> is a <b>tiered ladder</b> — Street Wire (72 $OMR/7 days: Law
       forecasts, threat data — a count of hunters on you, never a name), The Wire Room (30: plus the war room and 2
       standing watches), The Switchboard (60: plus 5 standing watches). A <b>standing watch</b> (tier 2 or higher) renews a
       tap from your $OMR, so the surveillance runs while you are offline. There are also <b>tradecraft</b> ranks (more
@@ -555,7 +555,7 @@ const SECTIONS = [
 
   { id: 'estate', group: 'Endgame & Going Legit', title: 'The Estate & Auction House', tag: 'status sinks',
     html: `<p><b>The Estate</b> — a deep, account-level (death-proof) $OMR cost and a home: buy levels (Safe House 40 to The
-      Compound 2500 $OMR), unlock features, name it, and show <b>trophies</b> from your real holdings.</p>
+      Compound 36000 $OMR), unlock features, name it, and show <b>trophies</b> from your real holdings.</p>
       <p><b>The Auction House</b> — a competitive weekly $OMR cost: 3 unique items each week; the highest <b>$OMR bid
       wins</b>, and <b>the winning bid burns</b>. Outbid bidders get a refund immediately; won items survive death.</p>
       ${R(`GET /v1/estate · POST /v1/estate/upgrade|feature/:id|name · GET /v1/auction [public] · POST /v1/auction/:lotId/bid`)}` },

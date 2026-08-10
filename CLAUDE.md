@@ -3808,7 +3808,24 @@ Regression at the mission's own site (the catalog still carries the grant; the c
 it lands on the ACCOUNT; a re-run pays it ONCE) and in the coach walk (the rung names the job, quotes
 NO price, and swaps to *spend it* on a credit in hand). Both codices synced. `MISSIONS[m4].reward
 .mintCredit = 0` reverts to the arithmetic promise; the factor is one number, so a re-denomination at
-a different launch price is the same pass with a new factor.
+a different launch price is the same pass with a new factor. **THE PROSE LAGGED THE LEVERS TWICE, AND
+IS A GUARD NOW.** A reader-side scan fixed six restatements; a second scan found **seventeen more** —
+the seal / Foundation / estate / access-stake / wiretap / anon set, plus the Vanity card's "set title
+(10 $OMR)" button whose two NEIGHBOURS on the same three-line card had been converted to read
+`/v1/rules` (which is why the spot-check passed: two of three converted reads as all three). And
+`public/wiki.html` sat materially behind `docs/WIKI.md`, because the existing drift-detector checks
+only that a system is MENTIONED in both codices, never that the numbers AGREE. So `test/docs.js` now
+asserts every `<n> $OMR` in either codex equals some live PRICE lever — loose by design (it cannot
+tell the peek price from the sweep price when both are 30) and still the right net, since a
+whole-tree re-denomination leaves the stale figures at a sixth of every live value, matching nothing.
+Building it re-taught this file's own lesson twice: the first cut swept EVERY number in `rules.js`
+and the mutation SURVIVED (restoring "5 $OMR" passed — 5 is some unrelated count in the module), and
+narrowing to `$OMR`-keyed values still let 5 and 8 through, both instructively — the RETIRED
+`RECRUIT_MILESTONES[].omr` (dead data in a machine-owned table) and the INVERSE
+`SPEAKEASY.RENOWN.OMR_WEIGHT` (correctly divided, not multiplied). Neither is a price; with both
+excluded, three mutations across the two codices each fail by name with file, line and figure.
+**A set broad enough to contain everything asserts nothing — and reads exactly like a clean bill of
+health.**
 
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
