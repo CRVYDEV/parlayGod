@@ -11086,3 +11086,31 @@ dial is the PREMIUM (×1.2 → 1.0), not escalation. **Burn-vs-recycle flagged a
 (a TRUE burn is a one-line `withdraw:omr`-shaped exclusion but reverses v3-step-2 for the single
 highest-volume sink the game will have — recommend keeping the recycle). Zero code (both rails
 live; Shape C is process + two existing guards).
+
+**THE TRANCHE SCHEDULE — Shape D, the founder's refinement of the mint price (founder-directed
+2026-08-10: "first 1000 mints are .01 ETH or x OMR … next 2000 are .02 ETH and 2x OMR and so and
+so") — DESIGNED, adoption = the founder's call + the A4 re-open** (`omerta-dynasty-machine-
+design.md` §10 Shape D; the memo A4 proposed-refinement note). The refinement is materially
+better than the rejected continuous curve — DISCRETE pre-published tranches, both rails moving
+together (the founder's own example preserves the 500 $OMR/ETH implied rate the preflight guard
+pins) — and it is **operationally FREE**: `plexQuote` already scales the $OMR rail off
+`MINT_FEE_ETH` automatically, so a tier boundary is one Safe `setFees` tx + two env values — the
+schedule is a published COMMITMENT executed by Shape C's existing machinery, **no contract
+change, no audit-clock reset**. Boundary semantics are already safe (`payMintFee` requires the
+EXACT fee → a stale quote reverts cleanly; nothing at a boundary can be gamed). **The progression
+choice decides the free-path crossing, measured both ways**: LINEAR (k×0.01 / k×5, growing
+tranches) crosses the mission ladder's test-pinned 220 $OMR earnable at tier 45 ≈ **990k
+identities** (effectively never); DOUBLING crosses at tier 7 ≈ **63k identities** (genuinely
+reachable) — **recommendation LINEAR**, and either way the free-path law binds the tail (cap the
+$OMR rail below the earnable ceiling, or the crossing release changes the promise + coach rung +
+codices in the SAME commit). **The one honest cost, stated rather than smoothed: a published
+forward schedule is what converts "repricing" into "promised escalation" on a tradeable asset —
+adopting Shape D RE-OPENS A4** (the memo carries the amended fact pattern + the re-drafted
+counsel question: does founding-era-priced published escalation, with no urgency mechanics and
+no value language, stay an ordinary early-bird discount?). Copy rules with more force than Shape
+C: the founding-era frame only, the current price shown, NEVER a countdown/"N remaining" counter,
+the banned lexicon verbatim, and never — in any channel — that earlier mints are worth more
+because later ones cost more. The defensibility ladder stands recorded: Shape C (A4 intact) <
+Shape D (A4 re-opens, defensible) < Shape A (rejected, stays rejected). The funnel bonus's
+sizing rule now references the CURRENT tier's mint cost. Zero code; the admin surface gains a
+tier-progress line when adopted.
