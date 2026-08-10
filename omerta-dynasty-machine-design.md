@@ -408,3 +408,87 @@ that is what preserves the launch-era marker's meaning; the design lens struck t
 "re-open the snapshot" phrasing since a past block height cannot re-open) · whether an
 already-stamped or window-lapsed identity may ever be re-stamped (recommended: no — §9.2's grace
 window is the whole allowance, or the birth-certificate fiction breaks).
+
+## 10. THE MINT PRICE (founder-directed 2026-08-10: "maybe instead of .01 ETH it can also be a
+number of OMR that gets burned and scales up as more NFTs are minted")
+
+**Half of this is already live.** The $OMR-denominated mint exists: PLEX (`POST /v1/plex/mint`) —
+pay the identity fee in earned $OMR (`PLEX_MINT_OMR` 5 floor, market-linked at
+`max(floor, feeEth × oracle × 1.2)`), and since economy-v3 step 2 that $OMR **recycles to THE
+DESK** rather than burning — the founder's own revenue-over-deflation decision (`plex:%` is in
+`DESK.SINK_REASONS`; the desk resells it, the auction ETH splits founder/POL). So "a number of
+OMR" is shipped; the two genuinely new pieces are **the scaling** and **the maybe-instead-of-ETH**
+— and both were evaluated against the walls rather than assumed.
+
+**The rail-interaction law first, because it shapes everything:** with two rails open, the
+EFFECTIVE mint price is the CHEAPER rail. Scaling one rail alone is either decorative (it becomes
+the expensive rail nobody uses) or silently becomes the only real price (it undercuts the other).
+The rails move in LOCKSTEP or not at all — this is exactly what the preflight implied-rate guard
+exists to enforce (both fee pairs pin ~500 $OMR/ETH; a desync makes the cheapest identity the
+lagging rail, and minting is the Sybil bound, so a desync quietly undoes the bound).
+
+### The three shapes, evaluated
+
+**Shape A — the automatic supply-indexed curve (the literal proposal): REJECTED, four reasons.**
+(1) **A4's signed predicate** is "uncapped at a FIXED price… no scarcity marketing, no
+roadmap-of-appreciation" — an automatically-rising mint price IS the scarcity pitch in mechanical
+form (mint now, it only goes up), the Impact-Theory-shaped fact the memo just hardened A2/A4
+against; adopting it re-opens A4. (2) **The free-path ceiling**: the mission ladder pays a FINITE
+lifetime $OMR (220, test-pinned against the live MISSIONS table — the D8=D bound-(1) promise that
+the top of the game is reachable without paying, and the "you can get made for free" coach rung).
+A rising $OMR price crosses that ceiling at some future supply number and breaks the promise
+SILENTLY — the exact class (the game withholding its own terms) behind every tester complaint this
+project has recorded. (3) **The growth headwind**: a curve prices identity UP exactly as the game
+succeeds. The whole funnel investment — the drop as user acquisition, provenance making the mint
+the thing you WANT — optimizes for LATER cohorts joining, and a curve taxes precisely them. The
+Sybil bound does not need it: a farm mints EARLY at the cheap end, so the curve is anti-late-player,
+not anti-farm. (4) **The copy problem is unsolvable**: there is no honest way to describe an
+auto-escalating mint that does not imply appreciation.
+
+**Shape B — $OMR-only, retire the ETH rail ("instead of"): REJECTED, three reasons.**
+(1) The tokenomics-v2 severance means a fresh player holds ZERO $OMR by construction — $OMR-only
+is ETH-with-extra-steps (buy at the bond/desk, then mint). (2) Worse, it couples ONBOARDING
+AVAILABILITY to token supply: bonds are throttled by THE DAILY OFFERING and the desk sells only
+what the sinks returned — a mint rush exhausts the day and NEW PLAYERS ARE LOCKED OUT OF IDENTITY
+until tomorrow, an onboarding stall the growth work exists to prevent. (3) The ETH mint is
+declared revenue in the money router, and the launch funnel bonus is priced against it.
+
+**Shape C — dual-rail + ERA REPRICING, by hand: RECOMMENDED.** The DAILY OFFERING's own
+GM-control precedent applied to the mint price: the founder raises the price at growth milestones
+— **both rails in lockstep** (`mintFee` is owner-settable on-chain; `PLEX_MINT_OMR` is env; the
+preflight guard warns on any desync) — announced factually as a repricing, never as an automatic
+curve. Every raise runs TWO checks before it ships: the implied-rate guard, and **the free-path
+check** — the $OMR price stays ≤ what the mission ladder pays lifetime, or the "get made for
+free" promise, the coach rung, and both codices change in the SAME commit (the pad-legibility
+rule: the game never withholds its own terms). What this keeps of the founder's instinct:
+early-cheaper-than-late is real (the price ratchets up over eras), urgency is real (a raise can be
+announced AFTER it happens, factually), and A4 survives with a soft amendment — fixed at any given
+moment, repriced by ordinary product decision, never supply-indexed, never marketed as
+appreciation. (Precedent: the founder already considered 0.01 → 0.025 once, 2026-08-01, and held —
+the lever was always there; this names the discipline for using it.)
+
+### The demand engine is already the rail, not the curve
+
+The founder's underlying goal — token demand that scales with adoption — is delivered by the $OMR
+rail ITSELF: every PLEX mint pulls the price out of a player's balance and hands it to the desk,
+so demand scales LINEARLY WITH HEADCOUNT with no escalation needed. If the $OMR rail should be
+chosen MORE often, the honest lever is the PREMIUM (`PLEX_PREMIUM_BPS` 1.2 — lower it toward 1.0
+and the earned path gets relatively cheaper), not a curve. And if minting should pull HARDER per
+head, raise the price on both rails through Shape C's discipline.
+
+### The burn-vs-recycle flag (a founder lever, one line either way)
+
+The proposal says "burned." Today a PLEX mint RECYCLES to the desk — house revenue, per the
+founder's own v3 decision ("you cannot burn AND recycle the same unit; the founder chose
+revenue"). A TRUE burn for identity mints is a one-line exclusion (the `withdraw:omr` shape) and
+buys deflationary optics for the collection at the cost of desk revenue on every $OMR mint —
+recorded as a lever, recommendation: keep the recycle (the v3 argument is unchanged: revenue ≈
+sink volume × price, and the mint is about to become the single highest-volume sink the game has).
+
+### What adopting Shape C changes (and what it does not)
+
+No code today (both rails are live; the repricing discipline is process + two existing guards).
+A4 gains the soft fact-pattern amendment. Nothing else moves: the Sybil bound stays the mint
+price on whichever rail is cheaper (the guard keeps them equal), the provenance stamp keys on
+token issuance regardless of rail, and §10.4 is untouched (the ETH rail was always out-of-band;
+the $OMR rail rides the existing `plex:%` vocabulary).
