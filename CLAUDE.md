@@ -11164,3 +11164,35 @@ colors ("you missed the envelope, but the city still remembers where you came fr
 second-chance acquisition hook that costs the treasury nothing; coupling the windows is a tabled
 lever, recommended no). Zero code (design (b) needs none; design (a)'s deadline+sweep joins the
 Phase-B audit batch if that variant ships).
+
+**THE WHITELIST — the one-time free mint for the snapshot communities (founder-directed
+2026-08-10: "whitelisting for a free mint from the top NFT communities and coin communities…"
+confirmed mid-design as "One time free mint, rest of the time have to pay") — DESIGN ONLY**
+(`omerta-launch-sequence-design.md` G-3 + §6; the memo's A6 fact-pattern amended, the A4
+funnel-bonus carve-out dissolved). The idea works because of an INVERSION: for exactly these
+wallets, **the snapshot IS a better Sybil bound than the fee** — the 0.01 ETH mint fee exists to
+price identities, but a wallet that held a Punk/BAYC at a block that predates any announcement
+cannot be manufactured after the fact, so waiving the fee for the snapshot set gives up nothing
+the fee was buying. Four rules make it safe, all written into G-3: **(1) one free mint per
+snapshotted wallet EVER** — consumed on use, lapsing with the same `CLAIM_WINDOW` as the drop
+(the founder's own confirmation; "rest of the time have to pay" = every later mint by that wallet
+pays the published tranche schedule). **(2) Free mints do NOT consume tranche slots** — the
+`MINT_TRANCHES` schedule indexes PAID mints only, so a 20k-wallet whitelist cannot advance the
+published price on paying customers (a free program moving a paid price would make the schedule a
+lie); implementation note recorded: today's tranche counter is `WHERE minted`, so the build needs
+a mint-source distinction (free/paid/comp/PLEX). **(3) Selection is COMMUNITY, not market cap** —
+the founder's "top 5 coins / top 5 NFTs ever" corrected honestly: BTC/SOL/XRP don't live on these
+chains, ETH = everyone (no set), USDT holders are not a community — so the real criterion is the
+one the launch doc already uses (Punks/BAYC/MAYC-class collections ~4–11k holders + $PEPE /
+$CASHCAT-class coins with dust floors + per-wallet caps), and any "top 5" framing resolves to
+named snapshots of real communities. **(4) The free mint ABSORBS and RETIRES the funnel bonus** —
+one claim flow (drop + free mint + provenance stamp, one SIWE pass, gas stays the claimant's),
+which also SIMPLIFIES the legal posture: the consideration-linked bonus that forced the A6→A4
+carve-out no longer exists, so the whole claim is unconditional and lives in A6 (the memo's A6
+carries the 2026-08-10 amendment + the added counsel question; A4's carve-out is struck with the
+supersession recorded). The economics stay honest by construction: post-wage-retirement a farmed
+free identity buys only an empty made account — minting gates EXTRACTION, and there is nothing to
+extract from an account that earned nothing — so the whitelist's cost is bounded by the snapshot
+sets' size and the treasury's own drop budget, both founder levers (§6). Zero code (the
+mint-source distinction + whitelist consumption land with the G-3 build, post-A6-amendment
+countersignature).
