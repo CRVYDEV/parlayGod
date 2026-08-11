@@ -444,6 +444,19 @@ export async function buildServer() {
       console.error('[db] unreachable:', err.message);
       return reply.code(503).header('retry-after', '15').send({ error: 'db_down' });
     }
+    // A MALFORMED REQUEST IS THE CALLER'S, NOT OURS — the third instance of the class above. Fastify
+    // raises its own 4xx for things the caller got wrong before a handler ever runs: an empty body
+    // under `content-type: application/json` (FST_ERR_CTP_EMPTY_JSON_BODY), unparseable JSON, an
+    // unsupported media type, a body over the limit. Blanket-500ing those says "the server is
+    // broken" about a request the server correctly refused, and the cost is not theoretical: that
+    // exact response sent me hunting a production outage that did not exist, because a bodyless POST
+    // from a probe is indistinguishable from a crash when both answer `500 internal`. It matters more
+    // for agents than for us — they are first-class players here, they read these codes, and 500
+    // means "retry later" when the honest instruction is "fix your request". Preserve the status
+    // Fastify chose and name the code; anything without a 4xx still falls through to the bug pile.
+    if (err.statusCode >= 400 && err.statusCode < 500) {
+      return reply.code(err.statusCode).send({ error: 'bad_request', code: err.code || null, message: err.message });
+    }
     req.log?.error?.(err); console.error(err);
     return reply.code(500).send({ error: 'internal' });
   });
@@ -1494,8 +1507,15 @@ export async function buildServer() {
   // THE BANK — the city leg. A pure READ (readCharacter, no write lock): what the borrowers' profit
   // bought, what each epoch paid out, and what THIS player earned. Authed rather than public because
   // `you` is per-account; there is no projection and no rate on it, by design.
-  app.get('/v1/bank', { preHandler: auth }, async (req) =>
-    G.readCharacter(pool, req.user.sub, (ch, client) => Bank.bankBoard(client, ch.account_id)));
+  //   The protocol POSITION is fetched OUTSIDE that transaction, deliberately. It is an RPC call,
+  // and an RPC call inside a held read txn pins a pooled connection for however long the node takes
+  // to answer — the pool-exhaustion shape (AUDIT-tokenomics F3, in the other direction). It needs
+  // only the account id, so there is nothing to gain by holding the lock across it.
+  app.get('/v1/bank', { preHandler: auth }, async (req) => {
+    const board = await G.readCharacter(pool, req.user.sub, (ch, client) => Bank.bankBoard(client, ch.account_id));
+    const protocol = await Bank.bankPosition(pool, req.user.sub).catch(() => ({ dormant: true, market: 'nUSD' }));
+    return { ...board, protocol };
+  });
   app.post('/v1/vault/claim', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Treasury.claimVaulted(ch, req.body?.omr, client, h)));
   // name the FAMILY fund (a reserve $OMR sink) + the family-legit leaderboard (biggest family books)

@@ -11786,3 +11786,73 @@ the check-5 "control that lies" class one level up. What is buyable is the SMALL
 shut state now says which is binding and disables the button. All numbers are founder sign-off levers
 (`ACTIVITY.*` were pinned when the metric locked; `CITY_EPOCH_DAYS` is new). Suite 97/97 + sim drift-0
 + mobile 75/75 + client wiring/mirror + pgquery 2742 statements + pgcheck 43/43 on real Postgres.
+
+**§3 THE BANK'S IN-GAME SURFACE (dormant) + the flake CI had been telling us about (2026-08-11).**
+The city leg is §4; §3 is the player's own protocol position, and it is built the way every chain
+surface here is built — **the reader ships INERT** (`bankPosition`, dormant without `CHAIN_RPC_URL` +
+`NUSD_ALCHEMIST_ADDRESS`), so the day the market is deployed the screen already exists. It reads
+`collateralOf`/`debtOf`/`maxDebtOf`/`ltvBps` off the Alchemist ABI already in the repo, keyed on the
+player's **proven wallet** rather than their account (the protocol has no idea what an account is),
+behind the `makeChainReader` **wrong-chain guard** — a same-address deploy on another chain would
+answer confidently and wrongly, and this figure is what a player reads their own debt off. The RPC
+runs OUTSIDE the `readCharacter` transaction: an RPC call inside a held read txn pins a pooled
+connection for as long as the node takes, which is the pool-exhaustion shape (AUDIT-tokenomics F3,
+in the other direction). `forge test` **198/198** confirms the nUSD market and the harvest fee.
+**§3's two product rules are now TESTS rather than prose.** Rule two (the play-money economy and the
+protocol stay separate ledgers) is asserted by counting: the whole surface writes ZERO `transactions`
+rows. Rule one (never a phrase implying speed or a guaranteed return) is why `payoffDays` is **null**
+— the design's wording is exact, the projection is *"computed from realised yield and moves with
+it"*, so with none there is no honest number and deriving one from a nominal rate is the thing the
+rule forbids. **The first version of that check was VACUOUS and a mutation proved it**: with the
+market undeployed every test saw the dormant object, so a banned-word scan over `{dormant:true}`
+passed whatever the LIVE path promised — invent a 5% APY on the live branch and the suite stayed
+green. The shaping is now split out as a pure `positionView`, so the rule is asserted against the
+object a real position produces; the mutation fails by name. **The mirror guard then caught the
+follow-on**: a dormant object carrying only `{dormant, market}` leaves every rendered field MISSING
+rather than null, so the card reads `undefined` and the client cannot tell "no position" from "no
+such field" — one `dormantView` now carries the same keys as the live one, pinned by asserting the
+key sets match.
+**AND THE RED CI WAS RIGHT.** Checking main per ground rule #8 found `c425093`'s run had FAILED on
+`test/population.js` — *"a resident jailbird is bustable"*, `actual: null`. Not a bad assertion: a
+**deterministic assertion resting on a probabilistic precondition**, the recorded class, in a new
+costume. The loop retries 40 times and reasoned it was safe at ~0.63 a try — but **`M3.BUST_ATTEMPTS_DAY`
+(5) was added AFTER that loop was written**, is charged BEFORE the roll win or lose, so 40 iterations
+are really **5 attempts** and the other 35 throw `bust_cap`: `0.375⁵ ≈ ONE RUN IN 135`, which is
+exactly the rate that fires in CI and never while you are watching. Fixed by GUARANTEEING the
+precondition (clear the bucket between tries) rather than by making it likelier — and it weakens
+nothing, because the cap has its own coverage in `test/social.js`. The assertion now also **names the
+server's own refusal** on failure, since `actual: null` is what this looked like in CI and says
+nothing about why. The general lesson is the one this project keeps paying for from the other side:
+**a flaky red is worse than a steady red, because it is what teaches people that red means nothing.**
+**One guard was sharpened on the way through, and NOT by loosening it.** The D1 tripwire (read
+routes must hand their board the guarded client, never the pool) fired on `/v1/bank` — correctly by
+its own rule, wrongly in substance, because the RPC there runs AFTER `readCharacter` has returned.
+It sliced *"from the arrow following `readCharacter` to the end of the route"*, which is equivalent
+while every such route is a one-liner and stops being so the moment one does work after the read.
+The temptation is to move the offending line so the text passes; that satisfies a guard without
+satisfying its argument. It now walks the `readCharacter` call's own parentheses, so a `pool` handed
+to something INSIDE the guarded callback still fails by name (mutation-verified) while a deliberate
+fetch outside the transaction no longer reads as a leak — sharper rather than weaker, which matters
+because a guard that cries wolf is one people learn to route around.
+**A FALSE ALARM I RAISED ON MYSELF, and the real defect underneath it.** Verifying the live deploy, a
+production `POST /v1/auth/guest` came back `500 {"error":"internal"}` — new players unable to sign
+up, on a box that had just deployed. Reproduced it in production config before saying a word, and the
+cause was **my own curl**: a bodyless POST carrying `content-type: application/json` is
+`FST_ERR_CTP_EMPTY_JSON_BODY`, a Fastify **400** raised before any handler runs (the same trap the
+console itself hit and fixed in the step-five client pass). Guest auth was healthy the whole time —
+200 with a token the moment the header came off. But the reason it fooled me is a genuine defect and
+it is the **third instance of the db_down/JWT class**: the error handler blanket-500'd every Fastify
+4xx, so *a request the server correctly refused* reported itself as *the server being broken*. That
+is precisely the ambiguity the 503 `db_down` work existed to remove, one layer up — and it costs more
+for AGENTS than for people, since they are first-class players here, they read these codes, and 500
+means "retry later" when the honest instruction is "fix your request". The handler now preserves
+Fastify's own status and names the code (`bad_request` + `FST_ERR_*`); a regression asserts both
+halves — the malformed call is a 400, and the same route answers 200 when asked properly, which is
+what makes it a legibility fix rather than a cover-up. Mutation-verified.
+**And preflight's unclassified-knob guard did better than classify.** The reader's first cut read
+`NUSD_ALCHEMIST_ADDRESS`; the guard failed the build asking for it to be classified, and the useful
+answer was that it should not exist — `ALCHEMIST_ADDRESS` is already the name the watcher, the worker
+and `chainparams.js` use for that exact contract. Two env vars for one address is a deploy where half
+the code finds the market and half does not, with nothing failing loudly. The guard exists to stop a
+knob reaching production by being forgotten; here it stopped one reaching production by being
+DUPLICATED, which is the same failure wearing a different hat.

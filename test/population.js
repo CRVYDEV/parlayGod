@@ -538,14 +538,24 @@ assert.equal(npcBandOf(0.999).id, 'boss', 'the high roll is the boss band');
   const bird = (await pool.query(
     'SELECT id, name FROM characters WHERE alive AND is_npc AND jail_until > now() LIMIT 1')).rows[0];
   const buster = await mk('Springer Sal');
-  let sprung = null;
+  let sprung = null; let refused = null;
   for (let i = 0; i < 40 && !sprung; i++) {
-    await pool.query(`UPDATE characters SET jail_until=NULL, cash=1000 WHERE id='${buster.id}'`);
+    // Clear the buster's fail-jail AND the D15 rolling attempt bucket between tries. The bucket is
+    // why this block used to flake: `BUST_ATTEMPTS_DAY` (5) is charged BEFORE the roll win or lose
+    // and was added AFTER this loop was written, so 40 iterations were really 5 attempts and the
+    // other 35 threw `bust_cap` — at ~0.375 per miss that is 0.375^5 ≈ ONE RUN IN 135, which is
+    // exactly the shape that fires in CI and never while you are watching. This is the recorded
+    // class: a deterministic assertion resting on a probabilistic precondition, fixed by
+    // GUARANTEEING the precondition rather than by making it likelier. It weakens nothing — the cap
+    // has its own coverage in test/social.js, which drives the refusal and the sheet's allowance.
+    await pool.query(`UPDATE characters SET jail_until=NULL, cash=1000, bust_used=0, bust_at=NULL WHERE id='${buster.id}'`);
     await pool.query(`UPDATE characters SET jail_until = now() + interval '30 seconds' WHERE id='${bird.id}'`);
     const r = await call('POST', `/v1/streets/${bird.id}/bust`, { token: buster.token });
-    if (r.body.success) sprung = r.body;
+    if (r.body.success) sprung = r.body; else if (r.body.error) refused = r.body.error;
   }
-  assert(sprung, 'a resident jailbird is bustable through the ordinary §7.8 verb (~0.63/attempt at a 30s tail)');
+  // Name the server's own reason on failure. `assert(sprung)` alone reports `actual: null`, which is
+  // what this failure looked like in CI and says nothing about why — the refusal is the diagnosis.
+  assert(sprung, `a resident jailbird is bustable through the ordinary §7.8 verb (~0.63/attempt at a 30s tail)${refused ? ` — every attempt was refused: ${refused}` : ''}`);
   assert(sprung.reward > 0, 'the bust paid the signed §7.8 reward');
   assert.equal(await one(
     `SELECT COALESCE(SUM(amount),0) n FROM transactions WHERE character_id='${buster.id}' AND reason='bust:reward'`),
