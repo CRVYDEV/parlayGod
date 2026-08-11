@@ -11906,3 +11906,43 @@ It also clears the second warning in the same logs, since setup-node stopped wri
 on `main` locally rather than the designated branch and had to be moved with `git branch -f` + a reset;
 and CI does not run on branch pushes at all (`ci.yml` builds pushes on `main` only and everything else
 via `pull_request`), so a bumped action is unverified until a PR exists — which is what PR #35 is for.
+
+**THE HOOK'S BUY SIDE + a recovery lesson (2026-08-11).** hookr.fun — a composable Uniswap v4 hook
+launchpad — shipped on **Robinhood Chain, our chain**, and the founder asked whether any of its five
+"blocks" could join OMERTÀ. We cannot use their hook (a `PoolKey` holds exactly one, and ours funds
+dev/treasury/LP), but the five are a menu of **buy-side** mechanics and `OmertaHook.sol`'s buy side was
+empty (`BUYS ARE FREE`). Decided on paper first (`omerta-hook-blocks-design.md`) because it is an
+IMMUTABLE, unaudited contract, then built two, deferred one for free, declined two — the discipline being
+the split *where does the output live*: a fee/cap/on-chain-payout is contract surface, a status/league/
+city-event is backend surface at zero contract cost. **ADOPTED (built, forge 213/213): ANTI-SNIPE** (a
+windowed size-cap + buy-fee + exact-output refusal — the launch's "the 120h vest outlasts the 72h window"
+is an argument about BONDERS, not about a block-0 buyer who sits on the whole early move for a 9% exit tax;
+it is the ONLY thing in the contract that can refuse a swap and it is NOT a pause — `MAX_ANTISNIPE_BLOCKS`
+is compile-time, the window counts from a birth block already in the past, and it can't be re-armed on an
+open pool) and **SURGE** (the rate rises with PRICE IMPACT toward a Safe-set ceiling under
+`MAX_SELL_TAX_BPS`, measured off the pool's own `sqrtPrice` via transient storage — no oracle — because
+impact is the exact metric `tools/bond-dials.js` sized the daily bond cap on). Both **armed at zero** =
+byte-for-byte today's flat tax. **DEFERRED with a reason: the LP status league** (extend `underwriterScore`
+with LP depth-time — the strongest strategic fit since depth is the binding bond-cap constraint, but the
+reader needs a live pool to read, the `bankPosition` dormant pattern). **DECLINED: auto-burn** (reintroduces
+the OMR-denominated reflexivity the whole v4 migration exists to kill) **and the paying Nth-buy pot** (a
+prize for trading = the Den's CASH-ONLY line + wash-trading the volume we tax; the free version is a city
+event). The permanent four-slice buy rate (`omerta-v4-hook-design.md:584`) is DELIBERATELY not this — a
+windowed rate ≠ a permanent fourth recipient — and shares this audit, so decide it before the batch or pay
+for a second one. **A test lesson worth keeping:** the exact-output refusal is load-bearing ONLY at
+`antiSnipeMaxBuy=0` — with a cap, `uint256(-amountSpecified)` for an exact-output amount underflows huge and
+`SnipeTooLarge` catches it anyway, so a mutation removing the refusal still reverts in that regime; the first
+cut tested the wrong regime and the mutation SURVIVED (the recorded "a check that cannot fail reads exactly
+like a clean bill of health" class), fixed by testing cap==0 where the refusal is the only guard. **THE
+RECOVERY LESSON (the expensive part):** mid-build, an external process ran `git merge origin/main` with the
+`'ours'` strategy on this branch, which moved HEAD to an unrelated lineage and **wiped every uncommitted
+file** — the hook changes, the tests, the design doc, the `ops.js` capacity readout, and the fee-flow
+artifact all vanished at once. Committed work was safe (PR #35 merged to `origin/main`; PR #36's capacity
+readout sat on `origin/claude/next-recommendations-svj4s6` as `de5b9c9`), so the recovery was
+`git checkout -B <branch> origin/<branch>` to get back on the correct remote tip, then rebuild from context.
+It was fully recoverable ONLY because the work existed verbatim in the conversation and forge had already
+proven it 213/213 — but the general rule is now explicit: **contract work (and any long uncommitted edit
+sequence) must be committed promptly, because a git operation you did not run can wipe the working tree**,
+and an artifact/design doc left uncommitted is not "saved" in any sense a merge respects. The
+`public/fee-flows.html` interactive fee diagram (editable, JSON export/import, published as an artifact) is
+committed with this drop.
