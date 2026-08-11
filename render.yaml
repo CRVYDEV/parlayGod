@@ -11,6 +11,23 @@ databases:
   - name: omerta-db
     plan: basic-256mb            # a small always-on Postgres (~$6/mo). Your data persists across restarts.
                                  # (A "free" Postgres exists but expires — use it only to kick the tires.)
+    highAvailability:
+      enabled: false             # STATED, though false is the default, because leaving it unstated is what
+                                 # broke the blueprint sync for 16 days. Render added this field to the
+                                 # schema after this file was written; their validator then evaluated
+                                 # `databases[0].highAvailability.enabled` against our plan and rejected it
+                                 # with "High availability is only available for Pro instances and higher" —
+                                 # an error about a field WE HAD NEVER SET. Nothing in this repo changed on
+                                 # the day the failures started, which is what made it hard to find.
+                                 #
+                                 # The failure was quiet in the way that matters: a blueprint sync and a
+                                 # service deploy are different machines, so deploys kept working and the
+                                 # site stayed current the whole time. What silently stopped was every
+                                 # CHANGE TO THIS FILE — including autoDeployTrigger: checksPass below,
+                                 # the guard that stops a red build reaching production.
+                                 #
+                                 # HA needs a Pro workspace AND a Pro instance type, so it cannot be turned
+                                 # on here; saying so explicitly costs nothing and cannot rot.
 
 envVarGroups:
   - name: omerta-secrets         # shared by BOTH processes so MARKET_SEED matches (the draws must agree)
