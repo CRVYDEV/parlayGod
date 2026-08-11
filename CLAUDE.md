@@ -11689,3 +11689,40 @@ now INVARIANCE: setting the flag must change the portrait not at all, with the `
 the check cannot go vacuous. Deliberately NOT touched: the `/u/:name` profile page, whose legend card
 is its considered hero and which a portrait would compete with. Suite 95/95 + mobile 75/75 + client
 wiring/mirror (616 routes, 132 boards) + pgquery + pgcheck 43/43 on real Postgres.
+
+**THE REFUSAL CARRIES THE WAY OUT — a tester's UI complaint that was a real defect (2026-08-11).**
+Tester feedback, verbatim: *"if I try to do something in foundry but I can't cause I was in docs, I
+have to click through half of the tabs and some of them repeatedly before I find the tab where I even
+can move to a different location."* He is describing a defect, not a preference. **27 gates across the
+game refuse an action for standing in the wrong district, and every one named the destination in
+PROSE** — which cannot be turned into a button — while the travel control lived on the Streets tab,
+one screen out of twenty-five. So the shortest path from "no" to "yes" was a hunt through the nav,
+every time, for the most common refusal in the game. Three changes, all additive: **(1)** `GameError`
+takes a third **structured-data** argument merged into the 400 body, so a gate that names
+`{ district }` gets its way out **for free at all 26 sites** rather than each having to remember to
+wire its own (`landmarks.js` is the 27th and deliberately does NOT carry it — its argument is a
+district name that does not exist, so there is nowhere to send anyone and offering to travel would be
+a lie); **(2)** the toast goes **STICKY when it carries an action** — a 3.4s auto-dismiss is right for
+information and wrong for a decision — and renders a `go there →` button that travels and re-renders
+the screen you were already on; **(3)** the masthead location becomes a **travel control**, so moving
+is reachable from every screen instead of one. **Guarded so the 28th gate cannot ship mute**:
+`test/gates.js` gains a completeness sweep — every `GameError('district')` must carry the payload or
+be waived with a stated reason, paren-matching the argument list rather than a fixed window (a
+`.slice(+200)` runs past the throw into the next statement's object literals and reads as a pass) —
+with an anti-vacuity floor so a broken extractor reports as a FAILURE rather than as zero problems.
+`test/casino.js` walks the whole path **on its own character**: refused → the destination arrives as
+DATA → travel there → the den is open. Its own character because playing a round would move the
+**server-wide** house book (`den_volume.profit`) and quietly loosen the craps session's exact
+`profit == bets − wins` identity below — *a test that weakens another test to prove itself is not a
+proof* — and the retry is asserted by what it now refuses (`min`, which sits BELOW the location gate)
+rather than by playing. Both halves mutation-verified by name (strip a payload → the sweep names the
+file, line and throw; drop the spread in the error handler → the behavioural assertion fails). ZERO
+§10.4 (a refusal moves no value), no new lever, no new table. Suite 96/96 + sim drift-0 + mobile 75/75
++ client wiring/mirror + docs + pgquery + pgcheck 43/43 on real Postgres. **The second half of the
+same tester's message — "the token should be able to be acquired from grinding" — is NOT actioned
+here**: it contradicts the severance (cash cannot become $OMR by any route), which is the single most
+load-bearing economic decision in the project and is founder-directed, and his own stated fear ("p2e
+guys can't nuke chart to zero") is precisely what the no-faucet design prevents. Raised with the
+founder as a decision, and partly a DISCOVERABILITY problem — $OMR *is* earned in-game (~1,320
+lifetime + 3/day via missions and the daily all-three bonus), it is simply never surfaced as "this is
+how you get the token."
