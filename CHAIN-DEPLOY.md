@@ -46,6 +46,38 @@ touches mainnet** until §0 is satisfied.
    claim is that no configuration can halt the pool. MEV around a fee-taking hook is worth an explicit
    look. **Do not treat the hook as a variant of the ERC-20 tax** — it is a different mechanism at a
    different layer, and the ERC-20 path survives armed at zero as its backstop.
+
+   ### THE BATCH — what goes out, and why it is drawn here
+   *"Batch, not dribble" (`omerta-dynasty-machine-design.md`) means the scope must be KNOWN before it
+   is sent. Enumerated 2026-08-11; `forge test` **185/185** green on this exact set.*
+
+   **In the batch — 14 contracts + 1 interface, 2,584 lines, every one carrying tests:**
+
+   | subsystem | contracts | the thing to attack |
+   |---|---|---|
+   | the $OMR rail | `OMR`, `VoucherClaim`, `GearVault`, `OMRStaking`, `OmertaFees` | the mint path (rule 2) and the two supply caps that survive a minter swap |
+   | issuance | `OmertaBond`, `OmrTwapOracle`, `GenesisOracle`, `IOmrOracle` | the four walls, and specifically that 3 and 4 COMPOSE rather than substitute |
+   | the market | `OmertaHook` | the pool gate, the `afterSwap` delta, the absence of a pause |
+   | THE BANK | `NUSD`, `CollateralEscrow`, `Alchemist`, `Transmuter`, `FlashGuard` | that no oracle sits on the borrow path and no `liquidate()` exists anywhere — the design's central claim, and the class that cost Inverse ~$21M twice |
+
+   **NOT in the batch, each for a different reason** — worth stating, because "we forgot it" and "we
+   deliberately held it" look identical from outside:
+   - **`DynastyNFT` + the ERC-6551 wiring** — *written? no.* Held on counsel **A4**, which is
+     RE-OPENED: the published tranche schedule changed its fact pattern, and A4's answer can change a
+     contract-level constant (whether an uncapped collection with published escalating pricing stays
+     defensible). Writing it first risks auditing the wrong contract.
+   - **`StockVault` (delivery)** — *written? no.* Brokers step 7, gated on **A3's parameters**
+     (jurisdiction list + KYC depth), which are still owed even though A3's assertion is approved.
+   - **`MerkleDistributor`** — *written? no.* Only exists under launch **D1 variant (a)**; variant (b)
+     (in-game SIWE credit, the recommendation) needs no contract at all. Do not write it before D1.
+
+   **The boundary this draws, and the founder's call:** A4 is externally blocked, so holding the whole
+   batch for `DynastyNFT` holds the chain rail — withdrawals, bonds, fees, the hook, the Bank — behind
+   a question only counsel can answer. Sending what is written now and the NFT later is **two**
+   engagements, which is the minimum reachable given that block; it is not the dribble the discipline
+   warns about. **`GenesisOracle` was written specifically so it would not become a third** — it is
+   launch-blocking (the genesis window bonds before the pool its TWAP would read exists), it carries no
+   counsel gate at all, and it was the one contract the launch plan needed that nobody had enumerated.
 3. **Legal counsel sign-off** on the Risk-to-Earn line (see the "Sensitive design notes" in `CLAUDE.md`).
    **The SECURITIES surface is GONE as of 2026-07-31** — the founder retired the stock layer
    (`omerta-stock-layer-retirement.md`): nothing acquires, holds, allocates or delivers real equities, so
@@ -103,7 +135,7 @@ makes co-mingling it with a spending key strictly worse than before.
 
 ## 1. Build + test the contracts
 - [ ] `cd omerta-contracts && ./run-forge-test.sh` → all `[PASS]` (Gate 0.1). Suite: OMR, VoucherClaim,
-      GearVault, OMRStaking, OmertaFees, OmertaBond, OmrTwapOracle, OmertaHook (128 tests, five fuzzes).
+      GearVault, OMRStaking, OmertaFees, OmertaBond, OmrTwapOracle, GenesisOracle, OmertaHook + THE BANK (185 tests, seven fuzzes).
       The hook's tests deploy a REAL Uniswap v4 `PoolManager`, which the emscripten solc cannot compile —
       **use native solc** (`./run-forge-test.sh`, or the sandboxed runner, which now fetches the native
       binary and says so if it cannot).
@@ -150,8 +182,22 @@ PHASE 1 for the exact calls/args.
       earlier: the raise is a founder lever and this cap moves with it (BALANCE.md § THE GENESIS RAISE —
       a smaller raise means a shallower pool means the same cap does MORE price damage, which is exactly
       why the number is a function of depth and not of supply).
-- [ ] **`OmrTwapOracle(safe, omrWethPair, omr, period)`** — WALL 4's price feed, deployed AFTER the pool
-      exists (it reads that pool's cumulative price). `period >= MIN_PERIOD` (10 min); **30 min
+- [ ] **`GenesisOracle(safe, price, validUntil)`** — WALL 4's feed for the GENESIS WINDOW ONLY, and the
+      reason the window can exist at all: `OmertaBond` fails closed without an oracle, but the TWAP
+      cannot be deployed before the pool it reads, and the window is what FUNDS that pool. So the
+      window runs on an administered price. `price` is the published genesis rate (OMR per 1 ETH),
+      `validUntil` the window's hard end. **Set `validUntil` to the window's real close and no
+      further**: this feed answers `updatedAt = block.timestamp` while open — deliberately, because an
+      administered price has no keeper and cannot go stale in the sense `maxOracleAge` guards, and
+      pinning it to the set-time would silently halt bonding one `maxOracleAge` in, during the single
+      event that funds the pool (`test_bonding_works_for_the_whole_window_not_one_max_age`). The
+      window is what replaces time-staleness, so it is the ONLY thing bounding this feed. Past it,
+      `consult()` reports the interface's own "no usable reading" and bonding refuses. `setPrice(0,0)`
+      is the kill switch — zero is already "unavailable", so there is no pause flag and no second path.
+      **This contract is retired by being unreferenced** at the `setOracle(twap)` cutover below;
+      nothing needs tearing down.
+- [ ] **`OmrTwapOracle(safe, omrWethPair, omr, period)`** — WALL 4's price feed for NORMAL OPERATION,
+      deployed AFTER the pool exists (it reads that pool's cumulative price). `period >= MIN_PERIOD` (10 min); **30 min
       recommended** — past that the manipulation-cost curve flattens for a thin pool while the lag grows,
       and what actually makes this expensive is POOL DEPTH, not the clock (see `npm run dials`). The
       constructor works out which side of the pair OMR sits on rather than being told. It reports **no

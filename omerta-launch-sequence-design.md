@@ -14,7 +14,7 @@ verified in-tree, carry the whole plan:
    genesis supply — no owner-mint is needed and none exists (bonds stay the only ongoing mint).
 2. **`OmertaBond` is born refusing every bond until the Safe sets an oracle**, and `setOracle` is
    deliberately swappable ("so the feed can follow the canonical pool"). A TWAP cannot exist
-   before the pool it reads — so the genesis window runs on a **GenesisOracle** (a tiny Safe-owned
+   before the pool it reads — so the genesis window runs on a **GenesisOracle** (**BUILT 2026-08-11** — `omerta-contracts/src/GenesisOracle.sol`, 8 tests; a tiny Safe-owned
    `IOmrOracle` returning one fixed price), swapped to the real `OmrTwapOracle` at pool init.
    One new ~20-line contract; it joins the audit batch.
 3. **The 120h bond vest outlasts the longest window (72h)** — every OMR sold in the genesis window
