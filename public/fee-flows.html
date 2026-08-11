@@ -135,12 +135,14 @@
 
 <div class="wrap">
   <header>
-    <div class="stamp">Working<br>Draft</div>
+    <div class="stamp">Recommended<br>Split</div>
     <div class="eyebrow">The Books · Real-Value Inflows</div>
     <h1>Where a Dollar Goes <span class="amp">&amp;</span> Why</h1>
-    <p class="sub">Every real-value inflow into OMERTÀ and how it splits, live from <span class="mono">src/router.js</span>.
-      <b>Every number here is editable.</b> Type new bps; add or drop a slice; rename a source; retire one.
-      When it reads the way you want the protocol to run, <b>Export</b> and send the file back — that JSON is the shape I'll build to.</p>
+    <p class="sub"><b>Seeded with my recommended split (Path A)</b>, not current production — keep a <em>smaller</em>
+      treasury (the backed vault + cold-reserve trust story + the solo "go legit" exit all survive) and route the
+      <em>majority</em> of former-treasury ETH to the family layer via <span class="mono">buyback → $OMR → family_yield_pool</span>
+      (so the family prize grows on real revenue without paying real ETH to a gang — the regulatory cliff). Bonds stay POL-heavy: liquidity depth binds the bond cap.
+      <b>Every number is editable</b> — retune it, then <b>Export</b> and send the JSON back; that's the shape I build to. <b>Reset</b> restores this seed; <b>Import</b> loads production or your own.</p>
   </header>
 
   <div class="bar">
@@ -198,21 +200,37 @@
 "use strict";
 /* ── THE LIVE WATERFALL, snapshotted from src/router.js. This is the seed; everything below edits a
       working copy of it and can Reset back to exactly this. ────────────────────────────────────── */
+/* SEEDED WITH THE RECOMMENDED SPLIT (Path A), not current production. The instinct — point more
+   real revenue at the family layer — is right; this does it WITHOUT killing the solo endgame:
+     • Treasury SURVIVES but smaller on every source that fed it → the backed vault + cold-reserve
+       (trust) narrative and the individual "go legit" exit both live on.
+     • The MAJORITY of the former-treasury slice goes to `community` — and for ETH/USD sources that
+       means: spend → buyback → $OMR → family_yield_pool (Path A). The family prize grows, funded by
+       real revenue, WITHOUT paying real ETH to a gang (which would be the regulatory cliff).
+     • Vig unchanged (the withdrawal reserve — solo extraction stays fed).
+     • Bonds stay POL-heavy: liquidity DEPTH is the binding constraint on the daily bond cap, so they
+       deliberately get NO family redirect.
+   Reset-to-live restores THIS seed; hit Import to load production or your own variant. */
 const LIVE = [
   {id:"fee",name:"Gameplay fees (mint / respawn / reroll)",currency:"eth",splits:[
-    {dest:"vig",bps:2500,lands:"vig_revenue source='fee'"},
-    {dest:"treasury",bps:2500,lands:"rwa_revenue source='fee'"},
+    {dest:"vig",bps:2500,lands:"vig_revenue source='fee' (withdrawal reserve)"},
+    {dest:"treasury",bps:1000,lands:"rwa_revenue source='fee' (backed vault — kept small)"},
+    {dest:"community",bps:1500,lands:"→ buyback → family_yield_pool (Path A)"},
     {dest:"operations",bps:5000,lands:"dev wallet (on-chain remainder)",implicit:true}]},
   {id:"store",name:"The Store (ETH packages)",currency:"eth",splits:[
     {dest:"vig",bps:2500,lands:"vig_revenue source='store'"},
-    {dest:"treasury",bps:2500,lands:"rwa_revenue source='store'"},
+    {dest:"treasury",bps:1000,lands:"rwa_revenue source='store' (backed vault)"},
+    {dest:"community",bps:1500,lands:"→ buyback → family_yield_pool (Path A)"},
     {dest:"operations",bps:5000,lands:"dev wallet (on-chain remainder)",implicit:true}]},
-  {id:"bond",name:"Reserve Bonds (ETH principal)",currency:"eth",splits:[
-    {dest:"pol",bps:8500,lands:"bond_reserve.pol_eth"},
+  {id:"bond",name:"Reserve Bonds (ETH principal) — stays POL-heavy (liquidity depth)",currency:"eth",splits:[
+    {dest:"pol",bps:7500,lands:"bond_reserve.pol_eth (the binding cap constraint)"},
+    {dest:"vig",bps:500,lands:"vig_revenue source='bond' (reserve)"},
+    {dest:"treasury",bps:500,lands:"bond_reserve.rwa_eth (backed float)"},
     {dest:"operations",bps:1500,lands:"bond_reserve.dev_eth"}]},
   {id:"tax",name:"DEX sell tax (900 bps of every OMR sell)",currency:"eth",splits:[
-    {dest:"operations",bps:3333,lands:"sell_tax_events.dev_eth"},
-    {dest:"community",bps:3333,lands:"sell_tax_events.rwa_eth + rwa_revenue"},
+    {dest:"operations",bps:2222,lands:"sell_tax_events.dev_eth"},
+    {dest:"treasury",bps:1778,lands:"sell_tax_events.rwa_eth (backed vault — kept small)"},
+    {dest:"community",bps:2666,lands:"→ buyback → family_yield_pool (Path A)"},
     {dest:"pol",bps:3334,lands:"sell_tax_events.lp_eth (remainder on LP)"}]},
   {id:"auction",name:"The Desk — daily Dutch auction (ETH proceeds)",currency:"eth",splits:[
     {dest:"pol",bps:5000,lands:"desk_sales.pol_eth"},
@@ -220,11 +238,11 @@ const LIVE = [
   {id:"polfees",name:"POL trading fees (the LP position earns)",currency:"eth",splits:[
     {dest:"desk-buyback",bps:10000,lands:"pol_fees (the buyback budget)"}]},
   {id:"harvest",name:"The Bank — harvest performance fee (2000 bps of yield)",currency:"usd",splits:[
-    {dest:"desk-buyback",bps:5000,lands:"bank_revenue source='harvest'"},
-    {dest:"community",bps:5000,lands:""}]},
+    {dest:"treasury",bps:3000,lands:"bank_revenue source='harvest' (backed reserve, USDC)"},
+    {dest:"community",bps:7000,lands:"→ buyback → family_yield_pool (Path A)"}]},
   {id:"toll",name:"$OMR exit toll (200 bps) + early-exit surcharge",currency:"omr",splits:[
     {dest:"operations",bps:5000,lands:"dev_fund (tax:dev)"},
-    {dest:"community",bps:5000,lands:"family_yield_pool (tax:buyback)"}]},
+    {dest:"community",bps:5000,lands:"family_yield_pool (tax:buyback — already $OMR, no buyback)"}]},
   {id:"trade",name:"Swap trade fee — RETIRED (the sell tax is the one hook)",currency:"eth",retired:true,splits:[
     {dest:"vig",bps:10000,lands:"vig_revenue source='trade' (historical only)"}]},
 ];
