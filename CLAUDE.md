@@ -3080,6 +3080,42 @@ $OMR has had no faucet since v3 step 1 and the mission ladder pays ~1,320 lifeti
 respawn at the market rate, so the player who funds fees in $OMR is overwhelmingly the one who TAKES
 it off somebody (`whack:loot` moves 20–50% of a victim's liquid and staked $OMR to their killer).
 
+
+**…AND THE `made_man` SKU RETIRED WITH IT (founder-directed, same day, from the decision sheet: "2").**
+Closing the SKU's `$OMR` door surfaced the bigger half of the same defect one layer over. `made_man`
+sold exactly ONE thing — a mint credit — for a **hardcoded `priceEth: 0.01`**, and nothing priced it
+from `MINT_TRANCHES` (the only readers are the admin display and preflight's warning, both on
+`MINT_FEE_ETH`). So from wave 2 the published price would have been 0.025 while the Store still sold
+the same entitlement for 0.01: **the cheaper-rail rule routed around by a SECOND ETH rail rather than
+a `$OMR` one**, and both credit `mint_credits`, which `POST /v1/character/mint` spends identically.
+Not live yet (tier 1 is 0.01 on both), which is exactly why it was worth deciding before the boundary.
+Retired outright rather than repriced from the schedule: the mint already has its own rail with a
+published table, a Safe-settable price and a preflight guard, and a duplicate storefront for the same
+entitlement is one more thing to keep in lockstep forever — the surest way to keep two rails in
+lockstep is to have one. **`RETIRED_PACKAGES`** (rules tail) keeps the sku by name — and by PRICE and
+GRANT, which the worker-sweep suite is what proved necessary: retiring a package must not cancel a
+purchase somebody already paid for. So the three paths are deliberately asymmetric — the two BUY
+paths (`recordStorePurchase`, `payPackagePlex`) refuse with `retired` naming where it went (never
+"unknown package", which would be a lie about a sku a client may still hold a card for — the
+`/v1/wage` tombstone discipline), while `grantPackage` HONORS it, because a payment recorded before
+the retirement or parked pre-link and reconciled after it is money that already moved. Getting that
+backwards does not merely cancel one purchase: the throw escapes `sweepUncreditedStore` and takes the
+sweep down for every OTHER parked payment queued behind the retired one (found by `test/sweeps.js`,
+which seeds exactly that row). **The ingest's throw is still the RIGHT failure**: it rolls back so the
+watcher cursor does NOT advance — if real money arrives for a package we no longer sell, a human
+looks, rather than the game keeping the ETH or granting a bound-bypassing credit. The board makes the
+POSITIVE claim (`retired: [{sku, name, why, where}]`, the `plexOmr: null` shape).
+**The `g.mintCredits` grant guard STAYS** though no SKU now trips it — it is the wall, not the patch,
+and checking the GRANT rather than the sku name is precisely what makes it hold for a package nobody
+has written yet. §10.4 untouched (the Store writes zero `transactions` rows either way). The store
+test re-points its representative purchases (real `decor_deco` 0.02 / comp `revive_3` 0.25) and now
+asserts the ladder actually CLIMBED between the two patron tiers, since 0.25 and 0.75 land in the same
+tier and a "climb" that does not move proves nothing. Five mutations each fail by name (the SKU restored; the
+board's `retired` emptied; the retired door reading as `bad_sku`; the grant path cancelling a paid
+purchase; the ingest quietly accepting one) — and the fourth had to be re-shaped after it killed the
+run with a raw `GameError` instead of naming what broke, since an uncaught throw in a test is a
+failure that teaches nothing.
+
 **THE GENESIS RAISE — 33 → 21.38 ETH (founder-directed 2026-08-10).** FDV does not move (the PRICE is
 205,882 $OMR/ETH → $0.017/OMR → $1.7M on 100M supply; the raise is not a valuation). What moves is how
 much supply is sold — **6.79% → 4.40%**, so less day-one sell pressure — and how deep the pool opens:

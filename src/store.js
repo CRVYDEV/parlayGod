@@ -13,7 +13,7 @@
 import crypto from 'node:crypto';
 import { getAddress } from 'viem';
 import { GameError, notify } from './game.js';
-import { STORE, PASS, PATRON, packageOf, passActive, patronTierOf, patronTierName, passPrestigeOf } from './rules.js';
+import { STORE, PASS, PATRON, packageOf, RETIRED_PACKAGES, passActive, patronTierOf, patronTierName, passPrestigeOf } from './rules.js';
 import { spendOmr } from './vanity.js'; // the audited $OMR till — gates the balance, debits in-memory, ledgers the burn
 
 const uid = () => crypto.randomUUID();
@@ -50,7 +50,12 @@ async function splitRevenue(client, { ref, amountWei }) {
 
 // ── apply a SKU's grant to the account (headless — direct SQL, the fees.js no-clobber discipline) ──
 async function grantPackage(client, accountId, sku, ref = null, real = false) {
-  const pkg = packageOf(sku);
+  // A RETIRED sku still GRANTS here, and that asymmetry with the ingest is deliberate. This function
+  // applies a payment that already exists — recorded before the retirement, or parked pre-link and
+  // reconciled after it — so the money has moved and the buyer is owed what they bought. Refusing
+  // would cancel a paid purchase AND crash sweepUncreditedStore for every other parked payment behind
+  // it. What stops is buying it ANEW: recordStorePurchase and payPackagePlex both refuse.
+  const pkg = packageOf(sku) || RETIRED_PACKAGES[sku];
   if (!pkg) throw new GameError('bad_sku', `Unknown package: ${sku}`);
   const g = pkg.grant || {};
   const now = Date.now();
@@ -124,7 +129,13 @@ export async function claimPendingWire(client, accountId, characterId) {
 // wallet is already linked AND the payment carried value, the entitlement is granted now; else the
 // row waits (account_id NULL, granted false) until reconcileStore runs at link.
 export async function recordStorePurchase(pool, { nonce, sku, payer, amountWei, txHash }) {
-  if (!packageOf(sku)) throw new GameError('bad_sku', `Unknown package: ${sku}`);
+  // A RETIRED sku throwing here is the RIGHT failure, not an oversight. This is the ingest, so a
+  // throw rolls the transaction back and the watcher cursor does NOT advance — which is what we want
+  // if real money ever arrives for a package we no longer sell: a human looks, rather than the game
+  // silently keeping the ETH or silently granting a bound-bypassing credit. Today it is unreachable
+  // for `made_man` (the on-chain Store paywall is unbuilt, so the only caller is the mod comp route).
+  if (!packageOf(sku)) throw new GameError(RETIRED_PACKAGES[sku] ? 'retired' : 'bad_sku',
+    RETIRED_PACKAGES[sku]?.why || `Unknown package: ${sku}`);
   const addr = norm(payer);
   if (!addr) throw new GameError('bad_payer', 'Payer is not a valid EVM address.');
   const n = Number(nonce);
@@ -225,6 +236,12 @@ export async function sweepUncreditedStore(pool) {
 // exactly the cheaper-rail hole the mint rule exists to prevent, routed around one layer up. No
 // $OMR rail may produce a mint credit, checked on the GRANT rather than on the sku name so a new
 // SKU cannot reopen it by being spelled differently.
+//
+// `made_man` itself is now RETIRED outright (see RETIRED_PACKAGES) — closing its $OMR door only to
+// leave it selling the same credit for a hardcoded 0.01 ETH would have swapped a $OMR cheap-rail for
+// an ETH one that did not move with MINT_TRANCHES. The grant guard below STAYS despite there no
+// longer being a SKU that trips it: it is the wall, not the patch, and the whole point of checking
+// the grant rather than the name is that it holds for a package nobody has written yet.
 export async function plexPackageQuote(db, sku) {
   const pkg = packageOf(sku);
   if (!pkg) return null;
@@ -240,7 +257,8 @@ export async function plexPackageQuote(db, sku) {
 
 export async function payPackagePlex(ch, sku, client, h) {
   const pkg = packageOf(sku);
-  if (!pkg) throw new GameError('bad_sku', `Unknown package: ${sku}`);
+  if (!pkg) throw new GameError(RETIRED_PACKAGES[sku] ? 'retired' : 'bad_sku',
+    RETIRED_PACKAGES[sku]?.why || `Unknown package: ${sku}`);
   const g = pkg.grant || {}, now = Date.now();
   // GATE BEFORE THE BURN (walkthrough MED-1, the vig.js:116 precedent): a mint credit bought while
   // already made is DEAD (mintCharacter short-circuits on acct.minted, never spending it), and a pure
@@ -317,6 +335,10 @@ export async function storeBoard(pool, accountId) {
   };
   return {
     packages: STORE.PACKAGES.map((p) => ({ sku: p.sku, name: p.name, priceEth: p.priceEth, plexOmr: plexOf(p), grant: p.grant, blurb: p.blurb })),
+    // A POSITIVE claim rather than a silent absence: a client with a card for a retired sku learns
+    // where the thing went instead of finding it simply gone (the `plexOmr: null` / `emission:
+    // {faucet: null}` shape). `where` is the route that now sells it.
+    retired: Object.entries(RETIRED_PACKAGES).map(([sku, p]) => ({ sku, name: p.name, why: p.why, where: p.where })),
     split: STORE.SPLIT_BPS,
     owned: {
       minted: !!a.minted, mintCredits: Number(a.mint_credits || 0), respawnTokens: Number(a.respawn_tokens || 0),

@@ -45,7 +45,7 @@ const mod = async (method, url, body) => {
   await mod('POST', '/v1/mod/fees/record',
     { nonce: 910002, kind: 'mint', payer: '0x' + 'b'.repeat(40), amountWei: (10n ** 16n).toString() }); // comp — no txHash
   const r2 = await mod('POST', '/v1/mod/store/grant',
-    { nonce: 910003, sku: 'made_man', payer: '0x' + 'c'.repeat(40), amountWei: (10n ** 16n).toString(), txHash: '0x' + 'e'.repeat(64) });
+    { nonce: 910003, sku: 'decor_deco', payer: '0x' + 'c'.repeat(40), amountWei: (10n ** 16n).toString(), txHash: '0x' + 'e'.repeat(64) });
   assert.equal(r2.code, 200, 'real store purchase ingests');
   const r3 = await mod('POST', '/v1/mod/treasury/tax',
     { ref: 'rt-tax-1', omrTaxed: 90, price: 500, txHash: '0x' + 'd'.repeat(64) });

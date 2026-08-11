@@ -5460,6 +5460,35 @@ That is the cheaper-rail rule routed around rather than broken, and it is now sh
 The freshness check narrows back to the exact `plex:mint` (never `plex:%`, which would fire on the living
 siblings — the `rwa:vault` distinction), so it still catches the one rail that must stay dead.
 
+### …and the `made_man` SKU went with the door (founder decision, same day)
+
+Closing the SKU's `$OMR` rail surfaced the bigger half of the same defect one layer over.
+
+| path to a mint credit | price | moves at a tranche boundary? |
+|---|---|---|
+| `payMintFee()` on-chain | `MINT_FEE_ETH` — 0.01 at wave 1, 0.05 at wave 5 | yes (Safe tx + env; preflight warns off-schedule) |
+| Store SKU `made_man` | hardcoded `priceEth: 0.01` | **no** |
+
+Both credit `mint_credits`; `POST /v1/character/mint` spends either identically. Nothing priced the
+SKU from `MINT_TRANCHES` — the only readers are the admin display and preflight's warning, both on
+`MINT_FEE_ETH` — so from wave 2 the published price is 0.025 while the Store sells the same
+entitlement for 0.01. **The cheaper-rail rule routed around by a second ETH rail rather than a `$OMR`
+one.** Not live at wave 1, which is why it was worth deciding before the boundary rather than at it.
+
+**Retired outright rather than repriced from the schedule.** Pricing the SKU off `mintTierOf` was the
+alternative and it keeps a duplicate storefront that must stay in lockstep forever; the mint already
+has its own rail with a published table, a Safe-settable price and a guard. The lesson this economy
+keeps re-learning is that the surest way to keep two rails in lockstep is to have one.
+
+**Retiring it must not cancel a purchase already paid for**, which the worker-sweep suite is what
+proved: `RETIRED_PACKAGES` keeps the price and the grant, so the two BUY paths refuse while
+`grantPackage` still honors a payment recorded before the retirement (or parked pre-link and
+reconciled after it). Getting that backwards would also have crashed `sweepUncreditedStore` for every
+other parked payment behind it.
+
+No lever moved and nothing was retuned — a SKU left the catalog. The `made_man` row in the Store
+table above is historical from this date.
+
 **The ceiling is the improvement, not a softening**, and it is worth being precise about why. On the
 open ladder the free-path law held by arithmetic that had to be re-derived at every extension; with
 a cap the dearest row is 150 $OMR against a ~220 lifetime mission payout and *no future row can

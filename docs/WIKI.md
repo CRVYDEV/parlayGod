@@ -901,20 +901,21 @@ Information as a $OMR resource that you can spend. `GET /v1/wire`.
 
 **The Store** (`GET /v1/store` [public]) — real-money (ETH) packages that grant **only non-currency items**
 (this prevents pay-to-win: entitlements, access windows, cosmetics, and status — never cash, $OMR, gear, or
-power). Packages: Made Man (a mint credit), revive bundles, a 30-day Street Wire, the Season Pass, the Patron's
+power). Packages: revive bundles, a 30-day Street Wire, the Season Pass, the Patron's
 Ring badge, and decor styles. The revenue divides 40% to the founder, 40% to the buyback (the Vig, which funds
 withdrawals and prizes), and 20% to the RWA reserve.
 
-**Every real-money price is ETH.** There used to be a second rail — PLEX, which let you pay a fee or a
-package in earned $OMR — and it is retired. Two reasons. A fee payable two ways is always priced by whichever
-rail is cheaper, which is fatal for the mint, since becoming Made is what unlocks extraction and so is the one
-price that must be unambiguous. And a Store package is a real-money *product*: its whole purpose is the revenue
-split, and paying in $OMR routed the purchase around it.
+**Most real-money prices have two rails — but getting Made has one.** PLEX lets you pay in earned $OMR
+instead of ETH: the respawn token and every Store package are payable either way, because none of them
+gates anything. Which currency bought a revive, a Wire month or a decor style changes nothing about what
+it does.
 
-That costs you nothing on the free road: the mission ladder's *Dockside Heist* hands you a mint credit
-outright. And $OMR keeps every in-game use it had — dues, the compound, family seals, the Wire, vanity,
-respec, the staked ladder. The line is simple: **real money buys real-money things; $OMR buys in-game
-things.**
+**Becoming Made is the exception, and it is deliberate.** A price payable two ways is always the cheaper
+of the two, and being Made is what unlocks extraction — so it is the one price that must be unambiguous.
+It costs ETH, at the published wave, and nothing else sells it. That costs you nothing on the free road:
+the mission ladder's *Dockside Heist* hands you a mint credit outright.
+
+The line is short: **the bound has one price; everything else is a currency choice.**
 
 **The Season Pass / The Ledger** (`GET /v1/pass`, `/pass/claim`) — while your pass is active, claim the next of
 12 levels one time each day: titles, revive tokens, energy refills, and small **$OMR stipends** paid from the

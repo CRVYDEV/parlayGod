@@ -48,7 +48,17 @@ const bob = await mk('Latecomer Bob');
 let r = await call('GET', '/v1/store', { token: alice.token });
 assert.equal(r.code, 200, 'the store is readable');
 assert.equal(r.body.packages.length, STORE.PACKAGES.length, 'the full catalog');
-assert(r.body.packages.find((p) => p.sku === 'made_man'), 'made_man is on the shelf');
+// THE MINT HAS ITS OWN RAIL, and the Store no longer runs a second one. `made_man` sold ONE thing —
+// a mint credit — for a hardcoded 0.01 ETH that did NOT move with MINT_TRANCHES, so from wave 2 the
+// published price would have been 0.025 while this door still sold the same entitlement for 0.01.
+// Retired outright; the board makes the POSITIVE claim so a client with a card for it learns where
+// the thing went rather than finding it silently gone.
+assert(!r.body.packages.find((p) => p.sku === 'made_man'), 'made_man is OFF the shelf — the mint is not sold twice');
+assert(!r.body.packages.some((p) => p.grant?.mintCredits),
+  'and NO package grants a mint credit — the entitlement that gates extraction has exactly one price');
+const gone = r.body.retired.find((x) => x.sku === 'made_man');
+assert(gone && /mint/.test(gone.why) && gone.where === '/v1/character/mint',
+  'the board says where it went, rather than leaving a hole');
 assert.equal(r.body.owned.mintCredits, 0, 'a nobody owns nothing');
 assert.equal(r.body.owned.patron, false, 'not a patron yet');
 assert.equal(r.body.split.founder + r.body.split.buyback + r.body.split.rwa, 10000, 'the split sums to 10000');
@@ -56,41 +66,41 @@ assert.equal(r.body.split.founder + r.body.split.buyback + r.body.split.rwa, 100
 // ── bad sku is refused ──
 assert.equal((await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: nonce(), sku: 'nope', payer: W1, amountWei: ethWei(0.01) } })).body.error, 'bad_sku', 'no such package');
 
-// ── link alice's wallet, then a Made Man purchase (0.01 ETH) — granted now, split recorded ──
+// ── link alice's wallet, then a real purchase (decor_deco, 0.02 ETH) — granted now, split recorded ──
 await setWallet(alice.aid, W1);
 let n1 = nonce();
 // a REAL on-chain purchase carries a txHash (the StorePaid event) → it records the revenue split
-r = await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: n1, sku: 'made_man', payer: W1, amountWei: ethWei(0.01), txHash: '0xrealtx1' } });
+r = await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: n1, sku: 'decor_deco', payer: W1, amountWei: ethWei(0.02), txHash: '0xrealtx1' } });
 assert.equal(r.code, 200, 'the purchase landed');
 assert.equal(r.body.granted, true, 'a linked wallet is granted immediately');
-assert.equal((await call('GET', '/v1/store', { token: alice.token })).body.owned.mintCredits, 1, 'the mint credit is on the account');
+assert.equal(Number((await pool.query("SELECT COUNT(*) n FROM store_cosmetics WHERE account_id=$1 AND style='deco'", [alice.aid])).rows[0].n), 1, 'the cosmetic unlock is on the account');
 
-// the three-way split: 0.01 ETH → founder 40% / buyback 40% / rwa 20%
+// the three-way split: 0.02 ETH → founder 40% / buyback 40% / rwa 20%
 let rev = await revenueStatus(pool);
-assert.equal(rev.grossEth, 0.01, 'gross recorded');
-assert.equal(rev.buybackEth, 0.004, 'buyback share = 40%');
-assert.equal(rev.rwaEth, 0.002, 'rwa share = 20%');
-assert.equal(rev.founderEth, 0.004, 'founder share = gross − buyback − rwa = 40%');
+assert.equal(rev.grossEth, 0.02, 'gross recorded');
+assert.equal(rev.buybackEth, 0.008, 'buyback share = 40%');
+assert.equal(rev.rwaEth, 0.004, 'rwa share = 20%');
+assert.equal(rev.founderEth, 0.008, 'founder share = gross − buyback − rwa = 40%');
 assert.equal(rev.treasuryHolds, 'eth', 'the treasury slice is recorded and HELD AS ETH — the stock layer it once funded is retired');
 
 // ── idempotency: re-delivering the SAME nonce is a no-op (no double-grant) ──
-r = await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: n1, sku: 'made_man', payer: W1, amountWei: ethWei(0.01) } });
+r = await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: n1, sku: 'decor_deco', payer: W1, amountWei: ethWei(0.02) } });
 assert.equal(r.body.duplicate, true, 'a re-delivered event is a no-op');
-assert.equal((await call('GET', '/v1/store', { token: alice.token })).body.owned.mintCredits, 1, 'still just one mint credit');
+assert.equal(Number((await pool.query("SELECT COUNT(*) n FROM store_cosmetics WHERE account_id=$1 AND style='deco'", [alice.aid])).rows[0].n), 1, 'still just the one unlock');
 
 // ── a COMP (no txHash — the mod tool, not a real payment): grants the entitlement but records NO
 // Vig revenue, so a free comp can never fabricate buyback basis (audit MED) ──
 await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: nonce(), sku: 'revive_3', payer: W1, amountWei: ethWei(0.25) } });
 assert.equal((await call('GET', '/v1/store', { token: alice.token })).body.owned.respawnTokens, 3, 'the comp granted three revives');
-assert.equal((await revenueStatus(pool)).grossEth, 0.01, 'a comp (no txHash) records NO revenue — only real on-chain payments (with a tx) feed the flywheel');
+assert.equal((await revenueStatus(pool)).grossEth, 0.02, 'a comp (no txHash) records NO revenue — only real on-chain payments (with a tx) feed the flywheel');
 
 // ── D-MED2 regression: in PRODUCTION (the QA flag OFF), a caller-supplied txHash on the mod route
 // CANNOT fabricate real-ETH revenue — the vector that would unback the withdrawal reserve. Only the
 // on-chain watcher (observing a genuine event) may book revenue.
 process.env.ALLOW_MOD_REAL_REVENUE = 'off';
 const W_NEVER = getAddress('0x' + '99'.repeat(20)); // never linked to an account → nothing parked reconciles later
-await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: nonce(), sku: 'made_man', payer: W_NEVER, amountWei: ethWei(0.01), txHash: '0xFABRICATED' } });
-assert.equal((await revenueStatus(pool)).grossEth, 0.01, 'production (flag off): a caller txHash CANNOT fabricate Vig revenue (D-MED2)');
+await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: nonce(), sku: 'revive_5', payer: W_NEVER, amountWei: ethWei(0.40), txHash: '0xFABRICATED' } });
+assert.equal((await revenueStatus(pool)).grossEth, 0.02, 'production (flag off): a caller txHash CANNOT fabricate Vig revenue (D-MED2)');
 process.env.ALLOW_MOD_REAL_REVENUE = 'on';
 
 // ── the ETH Street Wire — a 30-day access window on the living character ──
@@ -137,9 +147,9 @@ assert.equal((await call('GET', '/v1/store', { token: bob.token })).body.owned.p
 assert.equal((await reconcileStore(pool, bob.aid, W2)).granted, 0, 'no double-grant on a second reconcile');
 
 // ── a zero-value payment attributes but grants nothing (belt-and-suspenders vs a fee misconfig) ──
-r = await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: nonce(), sku: 'made_man', payer: W1, amountWei: '0' } });
+r = await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: nonce(), sku: 'revive_5', payer: W1, amountWei: '0' } });
 assert.equal(r.body.granted, false, 'a zero-wei payment grants no entitlement');
-assert.equal((await call('GET', '/v1/store', { token: alice.token })).body.owned.mintCredits, 1, 'still one mint credit (unchanged)');
+assert.equal((await call('GET', '/v1/store', { token: alice.token })).body.owned.respawnTokens, 5, 'still five revives (3 bought + 2 from the pass — unchanged)');
 
 // ── §10.4 NEUTRALITY: the Store minted no currency — every in-game check holds at drift-0 ──
 const inv = await runLedgerInvariants(pool, { alert: false });
@@ -151,41 +161,55 @@ assert(vig.checks.find((c) => c.name === 'spend ≤ revenue').ok, 'spend ≤ rev
 rev = await revenueStatus(pool);
 assert(rev.buybackEth > 0, 'the buyback flywheel is funded by Store revenue');
 assert.equal(rev.treasuryEth, rev.rwaEth, 'the treasury slice is the same number under its honest name — nothing is spent on units any more');
-assert(rev.bySku.find((s) => s.sku === 'made_man'), 'the ops view tallies sales by SKU');
+assert(rev.bySku.find((s) => s.sku === 'decor_deco'), 'the ops view tallies sales by SKU');
 
-// ── THE PLEX RAIL — every SKU but the one that would MAKE you ───────────────────────────────────
-// (founder-directed 2026-08-10: retired wholesale, then pulled back to the mint alone.)
+// ── THE PLEX RAIL — every SKU, because the one that wasn't is GONE ─────────────────────────────
+// (founder-directed 2026-08-10: retired wholesale, then pulled back to the mint alone, then the mint
+// SKU retired outright rather than left selling the same credit on a stale ETH price.)
 //
 // THE LINE IS THE BOUND, NOT THE DENOMINATION. A Store SKU is a consumable, an access window or
-// cosmetic status — nothing about what it DOES depends on which currency bought it, so the rail is
-// a choice. The single exception is anything granting a mint credit, and closing that is a real fix
-// rather than a restoration: before the full retirement `payPlex('mint')` refused while `made_man`
-// sold the same credit for $OMR one layer up, which is the cheaper-rail hole the mint rule exists to
-// prevent, routed around. It is checked on the GRANT, not the sku id, so a new package cannot reopen
-// it by being spelled differently.
+// cosmetic status — nothing about what it DOES depends on which currency bought it, so the rail is a
+// choice. The single exception was anything granting a mint credit, and no such SKU exists now. The
+// GRANT guard STAYS anyway, and asserting it here on a package nobody has written yet is the point:
+// it is the wall, not the patch, which is why it is checked on the grant rather than the sku name.
 const plexer = await mk('Plex Pete');
 const paid = (await pool.query(`SELECT account_id a FROM characters WHERE id='${plexer.id}'`)).rows[0].a;
 await pool.query(`UPDATE account_persistent SET omr=100000000 WHERE account_id='${paid}'`);
 const sb = (await call('GET', '/v1/store', { token: plexer.token })).body;
-{
-  const made = sb.packages.find((p) => p.grant?.mintCredits);
-  const consumable = sb.packages.find((p) => !p.grant?.mintCredits);
-  assert(made && made.plexOmr === null,
-    'a SKU that would MAKE you quotes NO $OMR price — the identity has one rail, stated positively');
-  assert(consumable && consumable.plexOmr > 0,
-    'everything else quotes one — a consumable is not a bound');
-}
-const omrPre = (await meOf(plexer.token)).omr;
+assert(sb.packages.every((p) => p.plexOmr > 0),
+  'EVERY shelf SKU quotes a $OMR price now — none of them is a bound');
+// the retired door still names itself rather than reading as a typo
 r = await call('POST', '/v1/store/plex/made_man', { token: plexer.token });
-assert.equal(r.body.error, 'retired', 'the mint SKU refuses on the $OMR rail — even with the balance to cover it');
-assert(/ETH only/i.test(r.body.message || ''), 'and says what replaced it');
-assert.equal((await meOf(plexer.token)).omr, omrPre, 'a refused buy burns NOTHING — the earner keeps every $OMR');
+assert.equal(r.body.error, 'retired', 'the retired SKU says so — not "unknown package", which would be a lie');
+assert(/mint/i.test(r.body.message || ''), 'and points at the rail that does sell it');
+
+// RETIRING A PACKAGE MUST NOT CANCEL A PURCHASE SOMEBODY ALREADY PAID FOR. A payment recorded before
+// the retirement — or parked pre-link and reconciled after it — is money that already moved, so the
+// GRANT path still honors it while the two BUY paths refuse. Getting this backwards would also crash
+// sweepUncreditedStore for every other parked payment queued behind the retired one.
+{
+  const buyer = await mk('Paid Before It Went');
+  const wOld = getAddress('0x' + '77'.repeat(20));
+  await setWallet(buyer.aid, wOld);
+  const credBefore = (await call('GET', '/v1/store', { token: buyer.token })).body.owned.mintCredits;
+  // a NEW purchase is refused at the ingest, and the throw is what stops a watcher cursor advancing
+  await assert.rejects(() => recordStorePurchase(pool, { nonce: nonce(), sku: 'made_man', payer: wOld, amountWei: ethWei(0.01), txHash: '0xtoolate' }),
+    (e) => e.code === 'retired', 'a NEW payment for a retired sku is refused loudly — a human looks');
+  // but a HISTORICAL row (recorded when it was still sold) reconciles and grants what was bought
+  await pool.query("INSERT INTO store_payments (nonce, sku, payer_address, amount_wei, granted) VALUES (990111,'made_man',$1,'10000000000000000',false)", [wOld]);
+  // caught rather than awaited bare: if the grant path stops honoring a retired sku it THROWS, and an
+  // uncaught throw kills the run without naming what broke.
+  const honored = await reconcileStore(pool, buyer.aid, wOld).catch((e) => ({ granted: 0, threw: e.code || e.message }));
+  assert.equal(honored.granted, 1, `the paid-for purchase is honored, not cancelled (${honored.threw || ''})`);
+  assert.equal((await call('GET', '/v1/store', { token: buyer.token })).body.owned.mintCredits, credBefore + 1,
+    'and grants exactly what they paid for');
+}
 assert.equal((await call('GET', '/v1/store', { token: plexer.token })).body.owned.mintCredits, 0,
   'and grants nothing — no amount of $OMR makes you');
 assert.equal((await pool.query("SELECT COUNT(*) n FROM transactions WHERE reason='plex:made_man'")).rows[0].n, '0',
   'no plex:made_man row is ever written');
 { // and a CONSUMABLE goes through, for real $OMR, granting exactly what an ETH payer would get
-  const sku = sb.packages.find((p) => p.grant?.respawnTokens && !p.grant?.mintCredits);
+  const sku = sb.packages.find((p) => p.grant?.respawnTokens);
   const quoted = sku.plexOmr;
   const before = (await meOf(plexer.token)).omr;
   const tokBefore = Number((await pool.query(`SELECT respawn_tokens t FROM account_persistent WHERE account_id='${paid}'`)).rows[0].t);
@@ -204,17 +228,18 @@ assert.equal((await pool.query("SELECT COUNT(*) n FROM transactions WHERE reason
 // (pass_seasons), THE BENEFACTORS league + THE HOUSE'S FAVOR. Status only.
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 // (A) THE PATRON LADDER — a REAL purchase bumps patron_spent; a COMP does not; the tier climbs.
-// alice made a REAL made_man (0.01) earlier + a COMP revive_3 (0.25, no txHash) → spent should be 0.01.
+// alice made a REAL decor_deco (0.02) earlier + a COMP revive_3 (0.25, no txHash) → spent should be 0.02.
 let sbA = (await call('GET', '/v1/store', { token: alice.token })).body;
-assert.equal(sbA.owned.patronStanding.spentEth, 0.01, 'a REAL purchase bumped patron_spent (0.01); the comp did NOT (txHash-gated)');
-assert.equal(sbA.owned.patronStanding.tierName, 'Friend', '0.01 ETH → Friend tier');
-// two more REAL purchases climb the ladder: 0.01 + 0.10 (patron) + 0.40 (revive_5) = 0.51 → Benefactor
+assert.equal(sbA.owned.patronStanding.spentEth, 0.02, 'a REAL purchase bumped patron_spent (0.02); the comp did NOT (txHash-gated)');
+assert.equal(sbA.owned.patronStanding.tierName, PATRON.TIERS[patronTierOf(0.02)].name, '0.02 ETH sits on the ladder where patronTierOf puts it');
+// two more REAL purchases climb the ladder: 0.02 + 0.10 (patron) + 0.40 (revive_5) = 0.52 → Benefactor
 await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: nonce(), sku: 'patron', payer: W1, amountWei: ethWei(0.10), txHash: '0xreal_pat' } });
 await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: nonce(), sku: 'revive_5', payer: W1, amountWei: ethWei(0.40), txHash: '0xreal_rev5' } });
 sbA = (await call('GET', '/v1/store', { token: alice.token })).body;
-assert.equal(sbA.owned.patronStanding.spentEth, 0.51, 'patron_spent summed the real purchases');
-assert.equal(sbA.owned.patronStanding.tier, patronTierOf(0.51), 'the tier index matches patronTierOf');
-assert.equal(sbA.owned.patronStanding.tierName, 'Benefactor', '0.51 ETH → Benefactor');
+assert.equal(sbA.owned.patronStanding.spentEth, 0.52, 'patron_spent summed the real purchases');
+assert.equal(sbA.owned.patronStanding.tier, patronTierOf(0.52), 'the tier index matches patronTierOf');
+assert.equal(sbA.owned.patronStanding.tierName, 'Benefactor', '0.52 ETH → Benefactor');
+assert(patronTierOf(0.52) > patronTierOf(0.02), 'and the ladder actually CLIMBED — otherwise this proves nothing');
 assert(sbA.owned.patronStanding.nextTier && sbA.owned.patronStanding.nextTier.name === 'Patron', 'the next tier + delta surface');
 
 // (B/C) THE PLEX CONTRIBUTION and THE PLEX DISCOUNT are both retired with the rail they priced.
@@ -227,7 +252,7 @@ assert.equal((await call('GET', '/v1/store', { token: alice.token })).body.owned
 // (D) THE BENEFACTORS + THE HOUSE'S FAVOR — ranked by patron_spent; agents excluded; families aggregate
 let lb = await benefactorLeaderboard(pool);
 assert(lb.patrons.some((p) => p.steward === 'Patron Alice'), 'alice is on the Benefactors board');
-assert.equal(lb.patrons[0].steward, 'Patron Alice', 'the top spender (0.51) leads');
+assert.equal(lb.patrons[0].steward, 'Patron Alice', 'the top spender (0.52) leads');
 assert(lb.favor && lb.favor.steward === 'Patron Alice', "THE HOUSE'S FAVOR is the top patron (read-derived crown)");
 // an agent with the biggest spend is EXCLUDED from the status board
 const spook = await mk('Spook Patron');
@@ -245,7 +270,7 @@ await pool.query(`INSERT INTO gang_members (gang_id, character_id, role, joined_
 lb = await benefactorLeaderboard(pool);
 const fam = lb.families.find((g) => g.name === 'The Benefactors');
 assert(fam && fam.patrons === 2, 'the family board counts both patrons');
-assert.equal(fam.spentEth, Math.round((0.51 + 0.03) * 1e6) / 1e6, "the family sums its roster's spend");
+assert.equal(fam.spentEth, Math.round((0.52 + 0.03) * 1e6) / 1e6, "the family sums its roster's spend");
 
 // (E) THE LEDGER PRESTIGE — completing the 12-tier track then buying a FRESH pass bumps pass_seasons
 const led = await mk('Ledger Larry');

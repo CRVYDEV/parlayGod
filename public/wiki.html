@@ -481,13 +481,13 @@ const SECTIONS = [
 
   { id: 'store', group: 'Endgame & Going Legit', title: 'The Store &amp; the Ledger', tag: 'real-money packages',
     html: `<p><b>The Store</b> sells ETH packages that grant <b>only non-currency items</b> (this prevents pay-to-win:
-      entitlements, access, cosmetics, status — never cash, $OMR, gear, or power): Made Man (a mint credit), revive
+      entitlements, access, cosmetics, status — never cash, $OMR, gear, or power): revive
       bundles, Street Wire, the Season Pass, the Patron badge, and decor. Revenue divides 40% founder / 40% buyback / 20%
       RWA reserve.</p>
-      <p><b>Every real-money price is ETH.</b> A second rail (PLEX, paying in earned $OMR) is retired: a fee payable
-      two ways is always priced by the cheaper one — fatal for the mint, since becoming Made is what unlocks extraction —
-      and a package is a real-money product whose purpose is the revenue split. The free road is unchanged: the mission
-      ladder hands you a mint credit outright, and $OMR keeps every in-game use it had. <b>The Season Pass / Ledger</b> —
+      <p><b>Two rails — except for getting Made.</b> PLEX lets you pay in earned $OMR instead of ETH, and every
+      package takes it, because none of them gates anything. Becoming Made is the exception: a price payable two ways
+      is always the cheaper of the two, and being Made is what unlocks extraction, so it costs ETH at the published
+      wave and nothing else sells it. The free road is unchanged: the mission ladder hands you a mint credit outright. <b>The Season Pass / Ledger</b> —
       while active, claim the next of 12 levels each day (titles, revives, energy, small funded $OMR stipends); it is
       account-level and survives death.</p>
       ${R(`GET /v1/store [public] · GET /v1/pass · /pass/claim`)}` },

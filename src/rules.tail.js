@@ -2260,8 +2260,6 @@ export const STORE = {
     rwa: Number(process.env.REVENUE_RWA_BPS || 2000),
   },
   PACKAGES: [
-    { sku: 'made_man', name: 'Made Man', priceEth: 0.01, grant: { mintCredits: 1 },
-      blurb: 'Get made — a mint credit unlocks on-chain extraction (withdraw $OMR, take gear).' },
     { sku: 'revive_3', name: 'Revive Bundle (3)', priceEth: 0.25, grant: { respawnTokens: 3 },
       blurb: 'Three pre-paid revives — a killing blow is absorbed, you keep everything.' },
     { sku: 'revive_5', name: 'Revive Bundle (5)', priceEth: 0.40, grant: { respawnTokens: 5 },
@@ -2292,6 +2290,33 @@ export const STORE = {
 STORE.PLEX_PREMIUM_BPS = Number(process.env.STORE_PLEX_PREMIUM_BPS || 12000); // 1.2× the ETH-equivalent
 STORE.PLEX_FLOOR_OMR_PER_ETH = Number(process.env.STORE_PLEX_FLOOR
   || PLEX_GENESIS_OMR_PER_ETH * STORE.PLEX_PREMIUM_BPS / 10000);
+// RETIRED SKUS — a package that once existed and no longer sells. Kept by NAME so the routes can say
+// what happened instead of "unknown package", which would be a lie about a sku somebody may have a
+// bookmark or a client card for (the /v1/wage tombstone discipline).
+//
+// `made_man` sold ONE thing — a mint credit — for a hardcoded 0.01 ETH, which made it a SECOND ETH
+// rail on the mint that did not move with MINT_TRANCHES. Nothing priced it from the schedule (the
+// only readers are the admin display and preflight's warning, both on MINT_FEE_ETH), so from wave 2
+// the published price would have been 0.025 while this door still sold the same entitlement for
+// 0.01 — the cheaper-rail rule routed around by a second ETH rail rather than a $OMR one. The mint
+// already has its own rail with a published schedule, a Safe-settable price and a preflight guard;
+// a duplicate storefront for the same entitlement is one more thing to keep in lockstep forever,
+// and the lesson this economy keeps re-learning is that the surest way to keep two rails in
+// lockstep is to have one. Retired 2026-08-10, before wave 2 made the gap live.
+// A retired entry keeps its PRICE and its GRANT, not just its epitaph, because retiring a package
+// must not cancel a purchase somebody already paid for. A payment recorded before the retirement (or
+// one parked pre-link that reconciles after it) is money that already moved, so `grantPackage`
+// resolves it here and honors exactly what was bought. Buying it ANEW is what stops: the ingest and
+// the $OMR rail both refuse. Without this the retirement would also crash `sweepUncreditedStore` for
+// every OTHER parked payment queued behind it — a retired sku is not an emergency for the sweep.
+export const RETIRED_PACKAGES = {
+  made_man: {
+    priceEth: 0.01, grant: { mintCredits: 1 }, name: 'Made Man',
+    why: 'Getting made has its own rail: pay the published fee on-chain (POST /v1/character/mint '
+      + 'spends the credit), or earn one — the mission ladder grants a credit outright.',
+    where: '/v1/character/mint',
+  },
+};
 export const packageOf = (sku) => STORE.PACKAGES.find((p) => p.sku === sku) || null;
 export const passActive = (a, now = Date.now()) => !!a?.pass_until && new Date(a.pass_until).getTime() > now;
 
