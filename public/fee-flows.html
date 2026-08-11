@@ -236,10 +236,11 @@ const LIVE = [
     {dest:"pol",bps:5000,lands:"desk_sales.pol_eth"},
     {dest:"operations",bps:5000,lands:"desk_sales.founder_eth (remainder)"}]},
   {id:"polfees",name:"POL trading fees (the LP position earns)",currency:"eth",splits:[
-    {dest:"desk-buyback",bps:10000,lands:"pol_fees (the buyback budget)"}]},
+    {dest:"desk-buyback",bps:7500,lands:"pol_fees (the buyback budget)"},
+    {dest:"vig",bps:2500,lands:"vig_revenue (reserve — diverted off the buyback-only budget)"}]},
   {id:"harvest",name:"The Bank — harvest performance fee (2000 bps of yield)",currency:"usd",splits:[
-    {dest:"treasury",bps:3000,lands:"bank_revenue source='harvest' (backed reserve, USDC)"},
-    {dest:"community",bps:7000,lands:"→ buyback → family_yield_pool (Path A)"}]},
+    {dest:"treasury",bps:3720,lands:"bank_revenue source='harvest' (backed reserve, USDC)"},
+    {dest:"community",bps:6280,lands:"→ buyback → family_yield_pool (Path A)"}]},
   {id:"toll",name:"$OMR exit toll (200 bps) + early-exit surcharge",currency:"omr",splits:[
     {dest:"operations",bps:5000,lands:"dev_fund (tax:dev)"},
     {dest:"community",bps:5000,lands:"family_yield_pool (tax:buyback — already $OMR, no buyback)"}]},
@@ -267,7 +268,7 @@ const destLabel = d => (DESTS.find(x=>x.id===d)||{}).label || d;
    load the NEW seed and FLAG it (never silently drop edits — the status pill says the baseline moved
    and to Import to recover). An Import or Reset re-saves under the current version, so a chosen
    variant persists. */
-const SEED_VERSION = 3;
+const SEED_VERSION = 4;
 let staleLocal = false;
 let model = load();
 function load(){
