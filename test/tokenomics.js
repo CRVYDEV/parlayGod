@@ -179,7 +179,14 @@ assert.equal(Number((await pool.query('SELECT pool FROM street_tax WHERE id=1'))
   const r = await call('POST', '/v1/window/redeem', a.token, { amount: EXCHANGE.DAILY_CAP_OMR });
   assert.equal(r.code, 400); assert.equal(r.body.error, 'cap', 'the daily cap holds');
   const b = (await call('GET', '/v1/window', a.token)).body;
-  assert.equal(b.yourHeadroomOmr, EXCHANGE.DAILY_CAP_OMR - 10, 'and the board shows what is left of it');
+  // The bucket DECAYS on the wall clock (a rolling 24h, not a midnight reset), so headroom creeps
+  // back up between the redeem above and this read — at 1500/day that is ~0.017 $OMR per second, and
+  // an exact `=== 1490` was a deterministic assertion resting on the run being fast enough. It passed
+  // for months and then failed on an unrelated commit that made the process a few hundred ms slower.
+  // Assert the RELATION with a tolerance sized to the decay rate, which is what the code promises.
+  const spent = EXCHANGE.DAILY_CAP_OMR - b.yourHeadroomOmr;
+  assert(spent > 9.5 && spent <= 10,
+    `the board shows what is left of the bucket: 10 spent, decaying back — got ${spent} spent`);
 }
 
 { // the floor

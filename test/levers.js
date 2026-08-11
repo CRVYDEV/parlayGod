@@ -395,6 +395,14 @@ const SIGNED = [
   ['PACING.MISSION_RESPECT_MULT', 0.25],
   ['PACING.MISSION_CD_MS', 14400000],
   ['PACING.TRAIN_CD_MS', 180000],
+  // the PLEX rail's pricing. The mint is ETH ONLY (the Sybil bound + the extraction gate), so no
+  // row here prices one — these price the RESPAWN and the Store SKUs, which are repeatable
+  // consumables and access, where "pay your rent in ISK" applies cleanly. The genesis rate is the
+  // pre-market anchor both the $OMR quote and the floor derive from; move it and every $OMR price
+  // on the rail moves with it, which is the point of pinning it rather than the derived numbers.
+  ['PLEX_GENESIS_OMR_PER_ETH', 205882],
+  ['STORE.PLEX_PREMIUM_BPS', 12000],
+  ['STORE.PLEX_FLOOR_OMR_PER_ETH', 247058.4],
   ['PEN.BREAK_CAUGHT_ADD_S', 900],
   ['PEN.BREAK_FAIL_DMG', [20,45]],
   ['PEN.BREAK_HEAT', 40],

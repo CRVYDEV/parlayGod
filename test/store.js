@@ -153,30 +153,51 @@ assert(rev.buybackEth > 0, 'the buyback flywheel is funded by Store revenue');
 assert.equal(rev.treasuryEth, rev.rwaEth, 'the treasury slice is the same number under its honest name — nothing is spent on units any more');
 assert(rev.bySku.find((s) => s.sku === 'made_man'), 'the ops view tallies sales by SKU');
 
-// ── THE PLEX RAIL IS RETIRED — the Store is ETH only (founder-directed 2026-08-10) ──────────────
-// A Store SKU is a REAL-MONEY product: its whole purpose is the four-way revenue split (founder /
-// buyback / treasury / POL). Paying for one in $OMR routed the purchase AROUND that split — the
-// buyer got the entitlement and none of the four destinations got a wei — and since v3 step 2 it did
-// not even burn, because `plex:%` recycles to the desk shelf.
+// ── THE PLEX RAIL — every SKU but the one that would MAKE you ───────────────────────────────────
+// (founder-directed 2026-08-10: retired wholesale, then pulled back to the mint alone.)
 //
-// Asserted the retirement way: the route stays MOUNTED so an old client hears why, the payer
-// REFUSES, the board quotes no $OMR price, and the LEDGER is untouched (the reason stays in the
-// vocabulary for HISTORY — nothing new may write it).
+// THE LINE IS THE BOUND, NOT THE DENOMINATION. A Store SKU is a consumable, an access window or
+// cosmetic status — nothing about what it DOES depends on which currency bought it, so the rail is
+// a choice. The single exception is anything granting a mint credit, and closing that is a real fix
+// rather than a restoration: before the full retirement `payPlex('mint')` refused while `made_man`
+// sold the same credit for $OMR one layer up, which is the cheaper-rail hole the mint rule exists to
+// prevent, routed around. It is checked on the GRANT, not the sku id, so a new package cannot reopen
+// it by being spelled differently.
 const plexer = await mk('Plex Pete');
 const paid = (await pool.query(`SELECT account_id a FROM characters WHERE id='${plexer.id}'`)).rows[0].a;
-await pool.query(`UPDATE account_persistent SET omr=100000 WHERE account_id='${paid}'`);
+await pool.query(`UPDATE account_persistent SET omr=100000000 WHERE account_id='${paid}'`);
 const sb = (await call('GET', '/v1/store', { token: plexer.token })).body;
-assert(sb.packages.every((p) => p.plexOmr === null),
-  'no SKU quotes a $OMR price — the shelf is ETH only, stated positively rather than by omission');
+{
+  const made = sb.packages.find((p) => p.grant?.mintCredits);
+  const consumable = sb.packages.find((p) => !p.grant?.mintCredits);
+  assert(made && made.plexOmr === null,
+    'a SKU that would MAKE you quotes NO $OMR price — the identity has one rail, stated positively');
+  assert(consumable && consumable.plexOmr > 0,
+    'everything else quotes one — a consumable is not a bound');
+}
 const omrPre = (await meOf(plexer.token)).omr;
 r = await call('POST', '/v1/store/plex/made_man', { token: plexer.token });
-assert.equal(r.body.error, 'retired', 'the Store PLEX rail refuses');
+assert.equal(r.body.error, 'retired', 'the mint SKU refuses on the $OMR rail — even with the balance to cover it');
 assert(/ETH only/i.test(r.body.message || ''), 'and says what replaced it');
 assert.equal((await meOf(plexer.token)).omr, omrPre, 'a refused buy burns NOTHING — the earner keeps every $OMR');
 assert.equal((await call('GET', '/v1/store', { token: plexer.token })).body.owned.mintCredits, 0,
-  'and grants nothing — the rail is gone, not merely priced out');
-assert.equal((await pool.query("SELECT COUNT(*) n FROM transactions WHERE reason LIKE 'plex:%'")).rows[0].n, '0',
-  'no plex:* row is written — the reason survives for HISTORY, but nothing new may use it');
+  'and grants nothing — no amount of $OMR makes you');
+assert.equal((await pool.query("SELECT COUNT(*) n FROM transactions WHERE reason='plex:made_man'")).rows[0].n, '0',
+  'no plex:made_man row is ever written');
+{ // and a CONSUMABLE goes through, for real $OMR, granting exactly what an ETH payer would get
+  const sku = sb.packages.find((p) => p.grant?.respawnTokens && !p.grant?.mintCredits);
+  const quoted = sku.plexOmr;
+  const before = (await meOf(plexer.token)).omr;
+  const tokBefore = Number((await pool.query(`SELECT respawn_tokens t FROM account_persistent WHERE account_id='${paid}'`)).rows[0].t);
+  r = await call('POST', `/v1/store/plex/${sku.sku}`, { token: plexer.token });
+  assert.equal(r.code, 200, `${sku.sku} is payable in earned $OMR — the rail is a currency choice, not a bypassed bound`);
+  assert.equal(r.body.omrSpent, quoted, 'it charges exactly what the shelf quoted');
+  assert.equal((await meOf(plexer.token)).omr, before - quoted, 'and burns exactly that much');
+  assert.equal(Number((await pool.query(`SELECT respawn_tokens t FROM account_persistent WHERE account_id='${paid}'`)).rows[0].t),
+    tokBefore + sku.grant.respawnTokens, 'granting the SAME entitlement an ETH payer gets');
+  assert.equal((await pool.query(`SELECT COUNT(*) n FROM transactions WHERE reason='plex:${sku.sku}'`)).rows[0].n, '1',
+    'one ledgered burn, on a reason already in the vocabulary + the burn term + DESK.SINK_REASONS');
+}
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 // THE PATRON PROGRAM (Store Tier-4) — the backer-prestige ladder (patron_spent), THE LEDGER PRESTIGE

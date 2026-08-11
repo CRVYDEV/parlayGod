@@ -97,6 +97,11 @@ export const OPERATIONAL_ENV = [
   'BOND_DEV_BPS', 'BOND_DISCOUNT_BPS', 'BOND_ETH_SCORE_OMR', 'BOND_PLEDGE_MIN', 'BOND_POL_BPS',
   'BOND_QUOTE_TTL_SEC', 'BOND_RWA_BPS', 'BOND_VEST_HOURS', 'BOND_VIG_BPS', 'EARLY_SELL_TAX_BPS',
   'FEE_RWA_BPS', 'FRESH_WINDOW_MS', 'MINT_FEE_ETH',
+  // the PLEX rail — the respawn + the Store SKUs, priced in earned $OMR. NOT the mint: that is ETH
+  // only, so there is deliberately no $OMR knob for it here to forget (a rail behind an env var is one
+  // env var from live). The genesis rate is the pre-market anchor; the two STORE_* derive from it.
+  'PLEX_GENESIS_OMR_PER_ETH', 'PLEX_PREMIUM_BPS', 'PLEX_RESPAWN_OMR',
+  'STORE_PLEX_FLOOR', 'STORE_PLEX_PREMIUM_BPS',
   'RESPAWN_FEE_ETH', 'REVENUE_BUYBACK_BPS', 'REVENUE_FOUNDER_BPS',
   'REVENUE_RWA_BPS', 'SEASON_MODS', 'SELL_TAX_BPS', 'SELL_TAX_DEV_BPS',
   'SELL_TAX_LP_BPS', 'SELL_TAX_RWA_BPS',
@@ -236,11 +241,30 @@ export function preflight(env = process.env) {
   // has to sit ON a published wave. A price off the table is one the published commitment never
   // promised, which is exactly the drift a published commitment exists to prevent.
   //
-  // THE TWO-RAILS CHECK THAT USED TO LIVE HERE IS GONE, and its absence is the fix rather than a gap.
-  // It compared a fee's ETH price against its $OMR price, because a fee payable two ways is always
-  // priced by the cheaper rail and the two silently diverge when only one is moved. Every fee is ETH
-  // only now (founder-directed 2026-08-10), so there is no second rail to disagree — the surest way
-  // to keep two rails in lockstep turned out to be having one.
+  // THE TWO-RAILS CHECK BELOW COVERS THE RESPAWN AND NOT THE MINT, and that asymmetry is the whole
+  // rule rather than an oversight. A fee payable two ways — real ETH, or the same fee in EARNED $OMR
+  // through PLEX — is always priced by the CHEAPER rail, so two rails have to agree or the cheap one
+  // simply IS the price. Minting is the SYBIL BOUND (it gates extraction), so it has one rail and
+  // nothing here to compare: the surest way to keep two rails in lockstep is to have one, and
+  // `payPlex` refuses a mint. The respawn is a repeatable CONSUMABLE, not the bound, so "pay your
+  // rent in ISK" applies to it cleanly — but its $OMR price is env-settable, so it can still drift.
+  // `plexQuote` prices the $OMR side at `max(static_floor, feeEth × oracle × premium)`, and
+  // PRE-MARKET there is no oracle row, so it returns the static floor and ignores the ETH fee
+  // completely — raise RESPAWN_FEE_ETH without raising PLEX_RESPAWN_OMR and they diverge in silence.
+  // Checked as a RATIO so it holds at any fee level.
+  {
+    // Restated from vig.js (which imports game.js, so preflight cannot import it — the one-way rule).
+    // test/preflight.js asserts these defaults still equal vig.js's, so the restatement cannot rot.
+    const GENESIS_RATE = 205882 * 1.2; // the one conversion every $OMR rail uses pre-market
+    const eth = Number(env.RESPAWN_FEE_ETH ?? 0.10);
+    const omr = Number(env.PLEX_RESPAWN_OMR ?? Math.round(0.10 * GENESIS_RATE));
+    const implied = eth > 0 ? omr / eth : null;
+    if (implied && Math.abs(implied - GENESIS_RATE) / GENESIS_RATE > 0.05)
+      warnings.push('The respawn\'s PLEX and ETH rails disagree on what value is worth: it implies '
+        + `${Math.round(implied)} $OMR/ETH against the genesis rate's ${Math.round(GENESIS_RATE)}. `
+        + 'Pre-market the $OMR price is the STATIC floor and ignores the ETH fee entirely, so whichever '
+        + 'rail is cheap is the one people will use. Move PLEX_RESPAWN_OMR with RESPAWN_FEE_ETH.');
+  }
   //
   // The waves are RESTATED here because preflight cannot import rules.js (the one-way rule);
   // test/preflight.js pins them to MINT_TRANCHES so the restatement cannot rot. A WARNING, not an

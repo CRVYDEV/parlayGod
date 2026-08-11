@@ -326,13 +326,19 @@ async function collectLedgerChecks(pool) {
   // `plex:%` is in `DESK.SINK_REASONS`, so it RECYCLED to the desk shelf, which is what the bridge was
   // sold as an alternative to.
   //
-  // The payers are DELETED, but the reason has to STAY in the vocabulary and the burn term forever:
-  // real `plex:*` rows exist and conservation is a claim about the WHOLE ledger (the emission.js
-  // lesson, in its second costume). So what is checked is FRESHNESS — the whole prefix now, since no
-  // `plex:` kind is live any more.
-  const freshPlex = await sum(pool, "currency='omr' AND reason LIKE 'plex:%' AND at >= now() - interval '1 day'");
+  // The reason STAYS in the vocabulary and the burn term forever: real `plex:*` rows exist and
+  // conservation is a claim about the WHOLE ledger (the emission.js lesson, in its second costume).
+  //
+  // What is checked is FRESHNESS, on the EXACT reason `plex:mint` and never on `plex:%`. The whole
+  // prefix was briefly right — for the hours the entire bridge was retired — and is WRONG now that
+  // the founder pulled that back to the mint alone: `plex:respawn` and `plex:<sku>` are LIVE rails,
+  // so a prefix check would alarm on ordinary play. This is the `rwa:vault` distinction exactly: a
+  // retirement check must name the dead thing, not the family it belonged to, or it fires on its
+  // living siblings.
+  const freshPlexMint = await sum(pool, "currency='omr' AND reason='plex:mint' AND at >= now() - interval '1 day'");
   const lifetimePlex = await sum(pool, "currency='omr' AND reason LIKE 'plex:%'");
-  push('plex bridge retired', freshPlex, 0, 0.001, { lifetimePlex, since: 'fees are ETH only' });
+  push('plex mint retired', freshPlexMint, 0, 0.001,
+    { lifetimePlex, since: 'the mint is ETH only; respawn + Store SKUs are payable in earned $OMR' });
 
   // (d1a2) THE PORTFOLIO IS RETIRED (D11, 2026-08-05). The in-game stock book — invests, dynasty
   // naming, the Dynasty Fund dividends — writes nothing new. EXACT reasons, not `rwa:%`, because

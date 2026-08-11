@@ -216,14 +216,17 @@ assert(nl.board.some((x) => x.name === 'Nucky Thompson'), 'the proprietor ranks 
 // ── STEP THREE — the ETH COSMETIC DECOR tier (Store SKU → account unlock → apply to the club) ──
 assert.equal((await call('POST', '/v1/speakeasy/decor', { token: owner.token, body: { style: 'gilded' } })).body.error, 'locked', "you can't apply decor you don't own");
 assert.equal((await call('POST', '/v1/speakeasy/decor', { token: owner.token, body: { style: 'nope' } })).body.error, 'bad_style', 'no such decor style');
-// grant the Art Deco unlock the way a real player now gets it: an ETH purchase at the Store (the
-// $OMR rail retired 2026-08-10 — a cosmetic is a real-money product, and its whole purpose is the
-// revenue split). The comp route is the mod/QA twin of the on-chain paywall.
+// grant the Art Deco unlock the way a real player gets it: a Store purchase — payable in ETH, or in
+// EARNED $OMR through PLEX (a cosmetic is ACCESS, not the Sybil bound; only the mint is ETH only).
+// The comp route is the mod/QA twin of the on-chain paywall.
 // (seeded — the on-chain checkout that grants it is dormant, exactly like every other Store SKU;
 // test/store.js owns the grant path. What THIS file is about is applying a style you own.)
 await pool.query(`INSERT INTO store_cosmetics (account_id, style) VALUES ('${owner.aid}','deco')`);
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM store_cosmetics WHERE account_id='${owner.aid}' AND style='deco'`)).rows[0].n), 1, 'the cosmetic unlock landed (account-level, survives death)');
-assert.equal((await call('POST', '/v1/store/plex/decor_deco', { token: owner.token })).body.error, 'retired', 'the $OMR rail is gone — the Store is ETH only');
+// …and the rail is LIVE for a cosmetic, so what protects the earner here is the pre-burn guard: a
+// style you already own is a dead re-buy, refused BEFORE the burn (the mint-credit precedent).
+assert.equal((await call('POST', '/v1/store/plex/decor_deco', { token: owner.token })).body.error, 'owned',
+  'a cosmetic you already own is refused before it can burn a single $OMR');
 const applied = await call('POST', '/v1/speakeasy/decor', { token: owner.token, body: { style: 'deco' } });
 assert.equal(applied.code, 200, 'the owner fitted out the club');
 assert.equal(applied.body.decorName, 'Art Deco', 'the decor name resolves');

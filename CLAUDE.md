@@ -3050,6 +3050,36 @@ money buys real-money things; $OMR buys in-game things.** Two mutations each fai
 dropped from the burn term → the HISTORY half fails, proving why the reason must stay; the respawn
 payer restored → the refusal assertion fails). §10.4 needed no new reason or bucket.
 
+**…AND THE SWEEP WENT TOO FAR — THE BRIDGE IS BACK FOR EVERYTHING BUT THE MINT (founder-directed
+2026-08-10: "maybe we over exaggerated on removing everything payable by OMR in Plex").** The founder
+was acting on a flag I had raised MYSELF one paragraph above ("what it costs, honestly: the EVE fantasy
+… a real loss and the reason to think twice about the direction") — and on a line I had drawn correctly
+on the FIRST pass and then talked myself out of on the second: **the line is the BOUND, not the
+denomination.** Minting is the Sybil bound and the extraction gate, so it gets one rail and one price;
+a respawn token and a Store SKU are repeatable CONSUMABLES and ACCESS, neither is a bound, so
+"pay your rent in ISK" applies to them exactly as it always did. **The argument that retired them does
+not survive being read back**: it was that a PLEX purchase RECYCLES to the desk rather than burning, so
+the trade is "immediate certain ETH vs deferred uncertain ETH" — but the desk is not a lottery ticket,
+it is the machinery this economy is now built on (every sink since v3 step 2 routes through it), and a
+purchase that puts $OMR on the shelf CREATES the supply the daily auction sells for ETH, which is the
+revenue model rather than a leak from it. What the sweep actually removed was the only thing a player
+could do with $OMR that felt like winning something back. **Restored**: `payPlex('respawn')` +
+`plexQuote`, `payPackagePlex` + `plexPackageQuote` + the board's `plexOmr`, `PLEX_GENESIS_OMR_PER_ETH`
++ `genesisOmrFor` + the two `STORE.PLEX_*` levers (re-pinned in the same commit — the drift rule), and
+preflight's two-rails guard **narrowed to the respawn** (the mint arm is gone because with ONE rail
+there is nothing to compare — which is the point, not a gap; the guard is a ratio so it holds at any
+fee level, and mutation-verified: raise `RESPAWN_FEE_ETH` alone and it fires by name, move both and it
+is silent). **Still dead**: `payPlex('mint')` refuses, there is no `PLEX_MINT_OMR` to forget, and the
+freshness check narrows BACK to the exact `plex:mint` (never `plex:%`, which would fire on the living
+siblings — the `rwa:vault` distinction). **One hole was closed on the way back in, and it PREDATES the
+retirement**: the `made_man` SKU grants a mint credit, so while `payPlex('mint')` refused, the Store
+sold the same thing for $OMR one layer up — the cheaper-rail rule routed around rather than broken;
+now shut on the GRANT (`if (g.mintCredits) throw`), not on the sku id, so a new package cannot reopen
+it by being spelled differently. Recorded honestly in `src/vig.js`: this is NOT rent-from-grinding —
+$OMR has had no faucet since v3 step 1 and the mission ladder pays ~1,320 lifetime, nowhere near a
+respawn at the market rate, so the player who funds fees in $OMR is overwhelmingly the one who TAKES
+it off somebody (`whack:loot` moves 20–50% of a victim's liquid and staked $OMR to their killer).
+
 **THE GENESIS RAISE — 33 → 21.38 ETH (founder-directed 2026-08-10).** FDV does not move (the PRICE is
 205,882 $OMR/ETH → $0.017/OMR → $1.7M on 100M supply; the raise is not a valuation). What moves is how
 much supply is sold — **6.79% → 4.40%**, so less day-one sell pressure — and how deep the pool opens:

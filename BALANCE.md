@@ -5408,6 +5408,9 @@ A Store SKU has its own version of the same defect, and it is sharper: a package
 whose entire purpose is the four-way revenue split. Paying in $OMR routed the purchase *around* the split —
 the buyer got the entitlement and none of the four destinations got a wei.
 
+*(This table is the RECORD of that sweep, and everything in it except the mint arm was reversed the same
+day — see the subsection below. It is kept whole because the reasoning is the useful part.)*
+
 | what went | why |
 |---|---|
 | `payPlex` (mint + respawn), `plexQuote` | the payers, deleted — not flagged off |
@@ -5426,6 +5429,36 @@ enough to say in one sentence: **real money buys real-money things; $OMR buys in
 The freshness check widened from the exact `plex:mint` to the whole `plex:%` prefix and was renamed
 **`plex bridge retired`** — no `plex:` kind is live any more, so the narrower form would have been a check
 that could no longer fail.
+
+### …AND THE SWEEP WENT TOO FAR — the bridge is BACK for everything but the mint (founder-directed 2026-08-10: *"maybe we over exaggerated on removing everything payable by OMR in Plex"*)
+
+The founder was acting on a flag I had raised myself two paragraphs above — *"what it costs, honestly:
+the EVE fantasy … a real loss and the reason to think twice about the direction"* — and on a line I had
+already drawn correctly on the FIRST pass and then talked myself out of on the second: **the line is the
+BOUND, not the denomination.** Minting is the Sybil bound and the extraction gate, so it has one rail and
+one price. A respawn token and a Store SKU are repeatable consumables and access — neither is a bound —
+so "pay your rent in ISK" applies to them exactly as it always did.
+
+The argument that retired them does not survive being read back. It was that a PLEX purchase RECYCLES to
+the desk rather than burning, so the trade is *"immediate certain ETH versus deferred uncertain ETH"*. Both
+halves overstate the case: the desk is not a lottery ticket, it is the machinery this economy is now built
+on (every sink since v3 step 2 routes through it), and a purchase that puts $OMR on the shelf creates the
+supply the daily auction sells for ETH — which is the revenue model, not a leak from it. What the sweep
+actually removed was the only thing a player could do with $OMR that felt like *winning something back*.
+
+| what came back | what did not |
+|---|---|
+| `payPlex('respawn')` + `plexQuote` — the consumable | `payPlex('mint')` — still refuses, and there is still no `PLEX_MINT_OMR` to forget |
+| `payPackagePlex` + `plexPackageQuote` + the board's `plexOmr` | any SKU whose grant includes a **mint credit** — checked on the GRANT, not the sku id, so a new package cannot reopen the hole by being spelled differently |
+| `PLEX_GENESIS_OMR_PER_ETH` + `genesisOmrFor`, `STORE.PLEX_*` (re-pinned) | — |
+| preflight's two-rails guard, **narrowed to the respawn** | the mint arm: with one rail there is nothing to compare, which is the point |
+
+**One hole was closed on the way back in, and it predates the retirement.** The `made_man` SKU grants a
+mint credit — so while `payPlex('mint')` refused, the Store sold the same thing for $OMR one layer up.
+That is the cheaper-rail rule routed around rather than broken, and it is now shut on the grant.
+
+The freshness check narrows back to the exact `plex:mint` (never `plex:%`, which would fire on the living
+siblings — the `rwa:vault` distinction), so it still catches the one rail that must stay dead.
 
 **The ceiling is the improvement, not a softening**, and it is worth being precise about why. On the
 open ladder the free-path law held by arithmetic that had to be re-derived at every extension; with

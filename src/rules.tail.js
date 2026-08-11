@@ -18,13 +18,28 @@ export function recruitRankOf(n) {
   return rank;
 }
 
-// ── THE GENESIS RATE — retired with the bridge it existed for ───────────────────────────────────
-// This block held ONE $OMR-per-ETH conversion (205,882 — the locked launch price) so the two rails
-// of every real-money fee could not disagree. The bridge is gone (founder-directed 2026-08-10: fees
-// are ETH only), so the conversion has nothing left to convert: there is no second rail to keep in
-// lockstep, no floor to derive, and no rate for a guard to compare. Deleted rather than kept as a
-// value nothing reads — the launch price lives where it belongs, in BALANCE.md and the launch
-// sequence's G-1, and comes back with a reader the day the GenesisOracle is built.
+// ── THE GENESIS RATE — the ONE $OMR-per-ETH conversion ──────────────────────────────────────────
+// 205,882 is the locked launch price (the raise ÷ the supply sold; BALANCE.md § THE GENESIS RAISE
+// and the launch sequence's G-1). It exists so that a fee's $OMR price and its ETH price cannot
+// silently disagree — the genesis-rate pass found three rails quoting three different rates, and
+// since the effective price of anything is always the CHEAPER rail, a hand-set floor beside a
+// market-linked path is not a second opinion, it is the real price.
+//
+// It was DELETED on 2026-08-10 when the whole PLEX bridge was retired ("nothing left to convert"),
+// and RESTORED the same day when the founder read the cost that sweep had been flagged with and
+// pulled it back to the mint alone. That reasoning is worth keeping rather than tidying away: the
+// deletion was correct *given* its premise, and the premise stopped holding the moment a rail came
+// back. Everything below derives from this ONE number, so a fee change moves the $OMR floor with it
+// and there is no second value to set by hand — which was the actual finding, not the deletion.
+//
+// ETH-denominated: a fee is 0.01 ETH whatever that is in USD. Pegging a fee to a dollar value is a
+// separate decision needing a USD oracle this game deliberately does not have.
+export const PLEX_GENESIS_OMR_PER_ETH = Number(process.env.PLEX_GENESIS_OMR_PER_ETH || 205882);
+// The pre-market quote for an ETH-denominated fee. `premiumBps` is the CALLER's premium — the ETH
+// rail must stay the economical one (ETH funds the pool; $OMR recycles to the desk at a markup), so
+// a floor that omitted it would hand the cheap rail straight back to $OMR by exactly the premium.
+export const genesisOmrFor = (feeEth, premiumBps = 12000) =>
+  Math.round(Number(feeEth) * PLEX_GENESIS_OMR_PER_ETH * Number(premiumBps) / 10000);
 
 export const CONSTANTS = {
   // Randomized starting build — every fresh character rolls a UNIQUE distribution of the SAME
@@ -2268,17 +2283,23 @@ export const STORE = {
       blurb: 'Deep velvet and low light — the Midnight room. Cosmetic only.' },
   ],
 };
-// PLEX-for-packages is RETIRED (founder-directed 2026-08-10) — the Store is ETH only, so its two
-// $OMR-conversion levers are gone with the rail that read them. A Store SKU is a real-money PRODUCT
-// whose whole purpose is the four-way revenue split; paying for it in $OMR routed the purchase around
-// that split entirely, and since v3 step 2 it did not even burn (`plex:%` recycles to the desk).
+// PLEX-for-packages: pay a Store SKU's fee from EARNED $OMR instead of ETH. Market-linked like the
+// vig's rail — max(floor, feeEth × the latest buyback oracle × premium) — with the floor derived from
+// the ONE genesis rate rather than hand-set, because a hand-set floor beside a market path is not a
+// second opinion: the effective price is always the cheaper rail, which is what the genesis-rate pass
+// found when three rails quoted three rates. (Retired wholesale on 2026-08-10 and pulled back to the
+// mint alone the same day — see the note in store.js for which half of that argument survived.)
+STORE.PLEX_PREMIUM_BPS = Number(process.env.STORE_PLEX_PREMIUM_BPS || 12000); // 1.2× the ETH-equivalent
+STORE.PLEX_FLOOR_OMR_PER_ETH = Number(process.env.STORE_PLEX_FLOOR
+  || PLEX_GENESIS_OMR_PER_ETH * STORE.PLEX_PREMIUM_BPS / 10000);
 export const packageOf = (sku) => STORE.PACKAGES.find((p) => p.sku === sku) || null;
 export const passActive = (a, now = Date.now()) => !!a?.pass_until && new Date(a.pass_until).getTime() > now;
 
 // ── THE PATRON PROGRAM (Store Tier-4) — the off-chain backer-prestige ladder over the Store. patron_spent
 // is a lifetime ETH-equivalent contribution meter (bumped only on REAL contributions — a txHash'd ETH
 // purchase — the txHash-gate precedent, so a comp can't fabricate a top benefactor). PURE STATUS: no new
-// §10.4 reason. `plexDiscountBps` shipped at 0 and its rail is retired — the tier NAMES are the program.
+// §10.4 reason. `plexDiscountBps` ships at 0, so the tier NAMES are the program — but the rail it would
+// discount is LIVE again (everything but the mint), so arming it is a real lever rather than dead weight.
 // plexDiscountBps SHIPS AT 0 (pure status); the armed values are the one flagged sign-off lever. All numbers
 // are founder sign-off levers (cosmetic-axis, the family-seal/hitman-rep precedent).
 export const PATRON = {
