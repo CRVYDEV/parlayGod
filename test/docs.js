@@ -24,6 +24,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { walkSrc } from './lib/srcfiles.js';
+import { MINT_TRANCHES, STORE } from '../src/rules.js';
 
 const read = (p) => fs.readFileSync(p, 'utf8');
 // Counted the way `wc -l` counts — newlines, not `split('\n').length`, which adds a phantom line for
@@ -204,6 +205,32 @@ assert.deepEqual(unlisted, [], `docs/AUDITS.md does not list: ${unlisted.join(',
 const phantom = [...index.matchAll(/`(AUDIT-[a-z0-9.-]+\.md)`/g)].map((m) => m[1])
   .filter((f) => !audits.includes(f));
 assert.deepEqual([...new Set(phantom)], [], `docs/AUDITS.md lists reports that do not exist: ${phantom.join(', ')}`);
+
+// ── the counsel memo must not state a fee the game does not charge ──────────────────────────────
+// This one is here because it FAILED in the field, and its failure mode is the expensive kind: a
+// same-day founder reversal (the PLEX rail retired, then restored an hour later for everything but
+// the mint) left the memo telling counsel the product had ONE payment rail across every real-money
+// price. The row's own analysis was unaffected — it concerns the identity sale, which really is
+// ETH-only — but a memo's entire value is that it is accurate about the product, and a lawyer
+// opining on a wrong fact pattern is worse than no memo.
+//
+// The narrow, durable thing to check is the FEE FIGURES, because those are levers and levers move.
+// Every "<n> ETH" the memo states as a price must be a live fee: a published tranche wave, the
+// respawn fee, or a Store SKU price. Prose and legal reasoning are deliberately NOT checked — a
+// guard over an argument would be noise, and noise gets deleted.
+{
+  const memo = read('omerta-counsel-memo.md');
+  const live = new Set([
+    ...MINT_TRANCHES.map((t) => t.eth),                  // the published mint schedule
+    Number(process.env.RESPAWN_FEE_ETH || 0.10),         // the respawn fee
+    ...STORE.PACKAGES.map((p) => p.priceEth),            // every SKU on the shelf
+  ].map((n) => Number(n)));
+  const quoted = [...memo.matchAll(/([0-9]+\.[0-9]+)\s*ETH/g)].map((m) => Number(m[1]));
+  const bogus = [...new Set(quoted)].filter((n) => !live.has(n));
+  assert.deepEqual(bogus, [], `omerta-counsel-memo.md quotes ETH fees the game does not charge: `
+    + `${bogus.join(', ')}. Live fees are ${[...live].sort((a, b) => a - b).join(', ')}. A memo that `
+    + 'misstates a price is a lawyer opining on the wrong product — restate it or remove the figure.');
+}
 
 // ── the codices must not quote a price the game does not charge ─────────────────────────────────
 // The 2026-08-10 re-denomination moved 145 $OMR constants x6, and BOTH codices were left quoting the

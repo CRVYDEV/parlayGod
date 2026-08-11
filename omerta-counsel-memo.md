@@ -35,9 +35,18 @@ Companion documents: `omerta-rwa-stock-machine-design.md` (the machine), `omerta
   stocks trade there as standard ERC-20s with day-one Uniswap liquidity and **no on-chain
   transfer allowlist**. They are EU-facing instruments **not offered to US persons** by their
   issuer.
-- **The revenue**: real ETH enters via gameplay fees (mint 0.01 ETH, respawn 0.10 ETH), Store
+- **The revenue**: real ETH enters via gameplay fees (the identity mint, on a **published
+  five-wave schedule** rising 0.01 → 0.05 ETH and capped there — see A4; respawn 0.10 ETH), Store
   packages, bonds, and DEX fees. A declared money router (`src/router.js`) publishes every split;
   a **treasury slice** of each source accrues to a treasury Safe.
+- **Two payment rails, and the asymmetry is deliberate.** Real-money prices other than the identity
+  mint — the respawn token and every Store package — are payable EITHER in ETH or in earned in-game
+  $OMR (the "PLEX" rail). The **identity mint has one rail, ETH**, because minting is what gates
+  extraction and a price payable two ways is always the cheaper of the two. Counsel should know the
+  $OMR rail exists when characterising the token: it means an in-game token discharges a
+  real-money-priced obligation. *(Stated here 2026-08-11 after a sweep found the memo described it
+  only inside A4. The rail was retired for about an hour on 2026-08-10 and restored the same day for
+  everything but the mint.)*
 - **The plan under review** (the Stock Machine, phased): **(A)** the in-game Commission (the top
   player families) votes daily on which supported ticker the treasury buys — shipped 2026-08-09 as
   a record only, nothing bought; **(B)** a keeper sweeps the treasury slice accrued in the pool's
@@ -45,7 +54,7 @@ Companion documents: `omerta-rwa-stock-machine-design.md` (the machine), `omerta
   players claim allocated stock to their own wallets, paying their own gas, through a
   server-signed voucher rail with eligibility enforced at signature time.
 
-## 2. The assertions (A1–A3, A5, A6 approved; A4 re-opened; A7 + A8 open)
+## 2. The assertions (A1–A3, A5, A6 approved; A4 re-opened; A7–A12 open)
 
 A1–A6 were **founder assertions of counsel approval, approved 2026-08-09**; counsel's written
 countersignature goes to the §5 block when it arrives. **A4 re-opened 2026-08-10** when the
@@ -107,7 +116,8 @@ sufficient, or is issuer-grade KYC required before any delivery? Provide the jur
 
 **A4 — The Dynasty NFT has no maximum supply, and proceeds are ordinary sales revenue.**
 The identity mint is uncapped by design (a supply cap would cap the player count). Mint proceeds
-(0.01 ETH each) are game revenue routed through the declared waterfall. No scarcity marketing, no
+(0.01 ETH at the first wave, rising on the published schedule below to a capped 0.05) are game
+revenue routed through the declared waterfall. No scarcity marketing, no
 roadmap-of-appreciation, no buyback promise attaches to the NFT. *Question for counsel: confirm
 uncapped utility-NFT sales at fixed price, marketed without appreciation language, stay outside
 the securities perimeter in the target jurisdictions.* **Fact-pattern amendment 2026-08-10 (the
@@ -171,10 +181,17 @@ FUNDING SOURCE, and it improves: alongside recycled sinks, the pool is now fed b
 revenue used to purchase existing tokens on the open market. So the tokens distributed are, as
 this row already states, "previously-purchased" — now doubly so. **No new row is required for this
 leg**; A11 covers the separate NFT-holder distribution, which is a different legal fact.)*
-Every in-game $OMR sink recycles to THE DESK (nothing is burned); the founder direction is that
-free-to-play players can EARN from that recycled pool through in-game performance. Every token in
-the pool was originally bought with real money; redistribution is skill/effort-based, bounded by
-what the sinks collected, and **never chance-weighted**. The standing copy rule (no
+Every in-game $OMR sink recycles to THE DESK rather than being burned — with ONE exception, stated
+because a counsel reading "nothing is burned" would rightly query a burn in the ledger: a
+**withdrawal** (`withdraw:omr`) burns the in-game balance, because that token now exists on-chain in
+the player's own wallet instead. Nothing is destroyed; it changed venue. The founder direction is
+that free-to-play players can EARN from the recycled pool through in-game performance.
+**Substantially every token in the pool was originally bought with real money**, and the exceptions
+are enumerated and small rather than open-ended: a mission ladder mints **1,320 $OMR per account,
+once, over a whole career** (0.0013% of the 100M genesis supply), and prize payouts (`prize:omr`) are
+themselves funded by real revenue. *(Precision added 2026-08-11 — the row previously said "every
+token", which the enumerated mint set does not quite support.)* Redistribution is skill/effort-based,
+bounded by what the sinks collected, and **never chance-weighted**. The standing copy rule (no
 income/earnings promises in any official copy) continues to apply to how this is described.
 *Question for counsel: confirm skill-based redistribution of previously-purchased tokens, with
 extraction still bounded by the full-reserve queue, does not create a wagering or

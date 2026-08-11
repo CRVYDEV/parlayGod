@@ -3101,6 +3101,27 @@ on the retirement copy, and the better sentence says *"made"* — so both were r
 PROPERTY that matters (the entry points at the mint route; the prose names no route, because the same
 string is an API error AND a card a player reads), mutation-verified.
 
+**THE COUNSEL-MEMO SWEEP (founder-directed 2026-08-11: "2") — four stale facts + a guard.** A4 had
+gone stale because a same-day reversal never propagated, so the whole memo was re-checked row by row
+against the code. `omerta-counsel-memo.md` is the one document whose ONLY value is that it is
+accurate — a lawyer opining on a wrong fact pattern is worse than no memo — and it carried four
+things the tree does not support. **(1) §1 stated the mint fee as a flat 0.01 ETH**; it is a
+published five-wave schedule 0.01 → 0.05 (A4's own amendment says so, but §1, which is what counsel
+reads FIRST, did not). **(2) §1 omitted the PLEX rail entirely** — the memo described it only inside
+A4's correction, so a reader would not learn that an in-game token discharges a real-money-priced
+obligation for the respawn and every Store SKU, which is material to how the token is characterised.
+**(3) A4's headline** repeated "(0.01 ETH each)". **(4) A5 stated two things more absolutely than the
+code supports** — *"nothing is burned"* (a `withdraw:omr` DOES burn the in-game balance, because the
+token now exists on-chain instead; nothing is destroyed, it changed venue) and *"every token in the
+pool was originally bought with real money"* (the enumerated mint set includes `mission:%`, which
+mints **1,320 per account over a whole career** — 0.0013% of the genesis supply, so *substantially*
+every token, with the exception named and quantified rather than glossed). The §2 header also listed
+only A1–A8 after the BANK rows landed. **The structural fix is a guard**, because prose written by
+hand goes stale by hand: `test/docs.js` now asserts every `<n> ETH` the memo states as a PRICE is a
+live fee — a published tranche wave, the respawn, or a Store SKU — and deliberately checks nothing
+else, since a guard over a legal argument would be noise and noise gets deleted. Mutation-verified
+(change one quoted fee and it names the figure and lists the live ones).
+
 
 **…AND THE `made_man` SKU RETIRED WITH IT (founder-directed, same day, from the decision sheet: "2").**
 Closing the SKU's `$OMR` door surfaced the bigger half of the same defect one layer over. `made_man`
