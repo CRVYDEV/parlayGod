@@ -163,30 +163,81 @@ assert(preflight({ ...GOOD, TRUST_PROXY: undefined }).warnings.some((w) => /shar
 // wave, not merely agree on a rate — 0.015 is rate-clean and still a price the published table never
 // promised. Distinct message from the rate check, so the two guards stay independently testable.
 // The $OMR side needs no separate schedule check now that it DERIVES from the fee.
-assert.deepEqual(preflight(GOOD).warnings.filter((w) => /OFF the published tranche/.test(w)), [],
-  'the shipped default fee (0.01 ETH) is wave 1 — on schedule');
-assert.deepEqual(preflight({ ...GOOD, MINT_FEE_ETH: '0.025' }).warnings.filter((w) => /OFF the published tranche/.test(w)), [],
-  'wave 2 (0.025 ETH) is on schedule — a boundary execution is clean');
-assert(preflight({ ...GOOD, MINT_FEE_ETH: '0.015' }).warnings.some((w) => /OFF the published tranche/.test(w)),
-  'a fee the table never promised (0.015 ETH) is caught — the schedule is a commitment, not a ratio');
-// The check RESTATES the five waves. Pin the restatement to the real table so it cannot rot (the
-// vig-defaults discipline, applied to the new guard).
+// Driven off the REAL table rather than three literal fees: a literal probe fails when the SCHEDULE
+// changes as well as when the guard breaks, which makes it a brittle test rather than a guard — and
+// it would then be demanding a table the founder has deliberately replaced.
 {
   const { MINT_TRANCHES } = await import('../src/rules.js');
-  assert.deepEqual(MINT_TRANCHES.map((t) => t.eth), [0.01, 0.025, 0.035, 0.045, 0.05],
-    "the preflight schedule check's restated waves still match MINT_TRANCHES");
+  const waves = MINT_TRANCHES.map((t) => t.eth);
+  for (const w of waves)
+    assert.deepEqual(preflight({ ...GOOD, MINT_FEE_ETH: String(w) }).warnings.filter((x) => /OFF the published tranche/.test(x)), [],
+      `${w} ETH is a published wave — a boundary execution must be clean`);
+  const off = (waves[0] + waves[1]) / 2; // between two waves, so on neither
+  assert(!waves.some((w) => Math.abs(w - off) < 1e-9), 'the off-schedule probe must genuinely be off schedule');
+  assert(preflight({ ...GOOD, MINT_FEE_ETH: String(off) }).warnings.some((w) => /OFF the published tranche/.test(w)),
+    'a fee the table never promised is caught — the schedule is a commitment, not a ratio');
+}
+// ── THE RESTATEMENT LEDGER ──────────────────────────────────────────────────────────────────────
+// preflight cannot import rules.js or vig.js (the one-way rule), so every default it names is a
+// COPY — and a copy is only safe while something compares it to the ORIGINAL.
+//
+// What used to sit here did not. It asserted `MINT_TRANCHES.map(t=>t.eth) === [0.01, …]` and
+// `BONDS.DISCOUNT_BPS === 800`: the SOURCE against a literal in this file. That detects a lever
+// MOVING — which is levers.js's job and it already does it — and cannot detect the COPY going
+// stale, which is the only reason these pins exist. Edit preflight's own `?? 800` and every one of
+// them passed.
+//
+// So: extract each literal from preflight's OWN source and cross it against the value it stands in
+// for. This is the check that would have caught PLEX_PREMIUM_BPS being baked in at 1.2, where the
+// symptom was the guard firing on a legitimate lever move and the reflex fix was to widen it.
+{
+  const { MINT_TRANCHES, BONDS, SELL_TAX, STORE, PLEX_GENESIS_OMR_PER_ETH } = await import('../src/rules.js');
+  const vig = await import('../src/vig.js');
+  const pre = fs.readFileSync('src/preflight.js', 'utf8');
+  const vsrc = fs.readFileSync('src/vig.js', 'utf8');
+  // preflight's restated default for an env var, read out of its source.
+  const restated = (k) => Number((pre.match(new RegExp(`env\\.${k} \\?\\? ([0-9.]+)`)) || [])[1]);
+  // vig.js keeps several of these module-private, so its own defaults come from source too.
+  const vigDef = (k) => Number((vsrc.match(new RegExp(`${k} \\|\\| ([0-9.]+)`)) || [])[1]);
+
+  const LEDGER = [
+    ['PLEX_PREMIUM_BPS', () => vigDef('PLEX_PREMIUM_BPS'), 'the premium is the deliberate wedge the rails guard measures against, so baking it in makes a lever move look like a fault'],
+    ['PLEX_GENESIS_OMR_PER_ETH', () => PLEX_GENESIS_OMR_PER_ETH, 'the one conversion every $OMR rail uses pre-market'],
+    ['RESPAWN_FEE_ETH', () => vigDef('RESPAWN_FEE_ETH'), 'the ETH side of the pair the rails guard compares'],
+    ['MINT_FEE_ETH', () => MINT_TRANCHES[0].eth, 'the founding wave — the live fee is checked against the schedule, so the default must BE a wave'],
+    ['BOND_DISCOUNT_BPS', () => BONDS.DISCOUNT_BPS, 'half of the relation that keeps a bond a hold rather than a subsidy on selling'],
+    ['SELL_TAX_BPS', () => SELL_TAX.BPS, '…and the other half'],
+  ];
+  for (const [k, real, why] of LEDGER) {
+    const copy = restated(k);
+    assert(Number.isFinite(copy), `preflight no longer restates ${k} in the \`env.${k} ?? N\` shape the ledger reads — re-point the extraction or drop the row`);
+    assert.equal(copy, real(), `preflight's restated ${k} default (${copy}) has drifted from the real ${real()} — ${why}`);
+  }
+
+  // COMPLETENESS: a restatement added later must be pinned or waived WITH a reason, or this ledger
+  // silently stops covering the file it is about (the catalog-or-declare discipline).
+  const WAIVED = {
+    // Derived from two rows already in the ledger, so it cannot drift independently of them.
+    PLEX_RESPAWN_OMR: 'computed from the genesis rate and the ETH fee above, not restated',
+  };
+  const found = [...pre.matchAll(/env\.([A-Z_]+) \?\? /g)].map((m) => m[1]);
+  const unpinned = [...new Set(found)].filter((k) => !LEDGER.some(([n]) => n === k) && !WAIVED[k]);
+  assert.deepEqual(unpinned, [],
+    `preflight restates ${unpinned.join(', ')} with nothing checking the copy against the original. `
+    + 'Add a ledger row, or waive it with the reason it cannot drift.');
+
+  // The WAVES array is a restatement too, and an array needs its own comparison.
+  const waves = JSON.parse((pre.match(/const WAVES = (\[[^\]]*\])/) || [])[1] || 'null');
+  assert.deepEqual(waves, MINT_TRANCHES.map((t) => t.eth),
+    "preflight's restated tranche waves have drifted from MINT_TRANCHES — the guard would then warn on a "
+    + 'legitimate wave, and the reflex fix for a guard that cries wolf is to delete it');
   assert(MINT_TRANCHES.every((t) => t.omr === undefined),
     '…and no row carries a $OMR price — the mint is ETH only, so there is one rail to check');
-}
-// The tranche check RESTATES the five waves (preflight cannot import rules.js — the one-way rule).
-// That restatement is only safe while something checks it, so: check it. And pin the two ETH fee
-// defaults it reads, which are module-private in vig.js.
-{
-  const vig = await import('../src/vig.js');
-  const src = fs.readFileSync('src/vig.js', 'utf8');
-  const def = (k) => Number((src.match(new RegExp(`${k} \\|\\| ([0-9.]+)`)) || [])[1]);
-  assert.equal(def('MINT_FEE_ETH'), 0.01, 'MINT_FEE_ETH (module-private, so read from source)');
-  assert.equal(def('RESPAWN_FEE_ETH'), 0.10, '…and RESPAWN_FEE_ETH');
+
+  // The two premiums price the same thing on two surfaces, so a split between them is a price
+  // difference nobody decided on. Asserted rather than merely commented.
+  assert.equal(vigDef('PLEX_PREMIUM_BPS'), STORE.PLEX_PREMIUM_BPS,
+    'the respawn and Store PLEX premiums must move in lockstep');
   assert.equal(typeof vig.payPlex, 'function', 'the payer is still exported — as a tombstone that refuses');
 }
 

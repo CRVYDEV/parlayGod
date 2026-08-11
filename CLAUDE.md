@@ -3110,6 +3110,34 @@ was **vacuous** — preflight derives its expected price from its own restated r
 set it agrees with itself at any rate, and only the comparison against vig's real number crosses
 the restatement. The derived `STORE.PLEX_FLOOR_OMR_PER_ETH` moved too and the lever register
 DEMANDED its own re-pin, which is that guard working.
+**THEN THE CLASS WAS SWEPT — and the pins meant to prevent it were the same bug** (`test/preflight.js`
+THE RESTATEMENT LEDGER). preflight is the one file structurally forbidden from importing rules.js or
+vig.js, so every default it names is a COPY, and it carries **seven** of them plus the `WAVES` array.
+Each was "pinned" — and every pin compared the **SOURCE to a literal in the test**
+(`assert.equal(BONDS.DISCOUNT_BPS, 800)`), which detects a lever MOVING (levers.js's job, already
+done) and **cannot detect the copy going stale**, which is the only reason those pins exist: editing
+preflight's own `?? 800` passed all of them. The "vig-defaults discipline" their comments invoke was
+never implemented. Now each literal is EXTRACTED from preflight's own source and crossed against the
+value it stands in for, in one ledger loop, with a **completeness rule** (catalog-or-declare — a
+restatement added later must be pinned or waived with the reason it cannot drift) so the ledger cannot
+silently stop covering the file it is about. The behavioural tranche probes were also driven off
+`MINT_TRANCHES` rather than three literal fees — a literal probe fails when the SCHEDULE changes as
+well as when the guard breaks, so it would have demanded a table the founder had deliberately
+replaced. Five mutations, five distinct named failures — including the one that proves the array pin
+is load-bearing rather than decoration: an EXTRA wave in preflight's copy passes every behavioural
+probe while accepting a fee the published schedule never promised. **Two negative results recorded so
+nobody re-runs them:** (1) the mechanical value-collision sweep (every pinned lever value grepped as a
+bare literal across `src/`) **cannot work at this scale** — 615 pins, and the common values collide
+with ordinary arithmetic (`86400000` is a day in ms, `0.75`/`1.15` are ordinary multipliers), so it
+returns noise, and a mostly-wrong advisory gets ignored; the tractable class is restatements FORCED by
+the one-way rule, which are rare, self-declaring by comment convention, and concentrated in preflight.
+(2) `game.js`'s two restatements copy the FORMULA while reading the live levers, so no literal can
+rot; a crossing check for the skills one was built, measured and **REMOVED** — `pointsOf` is
+module-private and the coach publishes no number, so the only available comparison is behavioural, and
+the walk's existing assertions already bracket the rung from both sides, meaning the new check could
+not fail in a way they did not already catch (the residual — a term added to `pointsOf` and not the
+copy — needs the coach to publish its budget, i.e. production surface added for a test, and is
+recorded at the site instead).
 **Two brittle assertions were caught by their own guard here**: `test/store.js` word-matched `/mint/`
 on the retirement copy, and the better sentence says *"made"* — so both were replaced with the
 PROPERTY that matters (the entry points at the mint route; the prose names no route, because the same

@@ -581,6 +581,14 @@ assert.equal(await coachOf(), 'Money while you sleep',
   '(b) the four SOLO First-Week tasks clear the gate — ob_family no longer pins it');
 await seedCh(rook.id, "lab='street'");
 assert.equal(await coachOf(), 'You\'ve earned skill points', 'the ladder advances to skills');
+// NOTE: the rung's arithmetic is a RESTATEMENT of skills.js's `pointsOf` (skills.js imports game.js,
+// so the coach cannot call it). A crossing check was tried here and REMOVED: `pointsOf` is
+// module-private and the coach publishes no number, so the only available comparison is behavioural
+// — and the two assertions either side of this already bracket the rung from both directions at this
+// character's state, so the crossing could not fail in a way they do not already catch. The residual
+// risk is a term added to `pointsOf` and not to the copy, which changes the NUMBER without changing
+// fire/clear here; catching that needs the coach to publish its budget, which is production surface
+// added for a test. Recorded rather than shipped as a check that cannot fail.
 await call('POST', '/v1/skills/bruiser', { token: rook.token });
 assert.notEqual(await coachOf(), 'You\'ve earned skill points',
   '(c) buying a skill CLEARS the rung — owned.skills is a Set, so .length would have hung here forever; '
