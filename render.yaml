@@ -128,6 +128,19 @@ services:
         value: "on"
       - key: TRUST_PROXY
         value: "on"               # Render sits behind a load balancer → per-IP throttles use the real client IP
+      # The pool is a CLIFF, not a slope, and the default (20, src/db.js) sits on the wrong side of it.
+      # Measured with `npm run loadtest` at 30 concurrent players against real Postgres:
+      #     PG_POOL_MAX=20  →   30 req/s, p95 10.0s, NINE 503s   (10.0s is the connect timeout exactly:
+      #                                                            requests queue for a connection, give up,
+      #                                                            and the player is told the database is down)
+      #     PG_POOL_MAX=60  →  284 req/s, p95  87ms, zero 5xx, zero pool failures
+      # 3× the pool bought 9.4× the throughput because past the cliff it is queueing collapse, not a slope.
+      # 40 is the declared value: comfortably clear of the cliff, and 40 (api) + 20 (worker) is far under
+      # anything a pro-4gb instance limits. Raise it with the API plan, not on its own — past this point the
+      # binding constraint is CPU, and on that same run POSTGRES was the heavier half (~1.9 cores against
+      # node's ~1), so the database plan is the scaling dial before the web plan is.
+      - key: PG_POOL_MAX
+        value: "40"
       - key: DATABASE_URL
         fromDatabase:
           name: omerta-db

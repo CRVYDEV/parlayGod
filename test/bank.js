@@ -291,4 +291,62 @@ const checkOf = async (runner, name) => {
   }
 }
 
+// ── §3 THE IN-GAME SURFACE — dormant, and the two hard product rules ────────────────────────────
+// The protocol is not deployed, so what is asserted here is the SHAPE of the honesty: that an
+// unbuilt feature reads as unbuilt rather than as broken, that it stays a pure read, and that
+// neither of §3's product rules can be walked back by an edit to the copy.
+{
+  const p = await mk('Reader Rocco');
+  const { body } = await call('GET', '/v1/bank', { token: p.token });
+
+  // (1) UNBUILT READS AS UNBUILT. With no CHAIN_RPC_URL / ALCHEMIST_ADDRESS the position is
+  // dormant, not an error — a surface that throws when a feature is merely unshipped is
+  // indistinguishable from one that is broken, and the player cannot tell which they are looking at.
+  assert(body.protocol, 'the board carries the protocol position');
+  assert.equal(body.protocol.dormant, true, 'and says DORMANT rather than erroring, because the market is not deployed');
+  assert.equal(body.protocol.market, 'nUSD', 'naming which market it is waiting on');
+  // Asserted at the SOURCE too, not only through the route: the route wraps this in a catch (so a
+  // dead RPC degrades to dormant rather than 500ing the whole board), which would happily mask a
+  // reader that throws on an unconfigured chain. The board's answer alone cannot tell the two apart.
+  const direct = await Bank.bankPosition(pool, p.acct);
+  assert.equal(direct.dormant, true, 'the reader itself returns dormant — it does not throw and get caught');
+  // ONE SHAPE, dormant or live. The mirror guard found the alternative: a dormant object carrying
+  // only {dormant, market} leaves every rendered field MISSING rather than null, so the card shows
+  // `undefined` and the client cannot tell "no position" from "no such field".
+  const liveKeys = Object.keys(Bank.positionView({ wallet: '0x1', collateral: 0n, debt: 0n, maxDebt: 0n, ltvBps: 0 }));
+  for (const k of liveKeys) {
+    assert(k in direct, `the dormant position carries "${k}" too — one shape, so a renderer written against one is right for both`);
+  }
+
+  // (2) THE LEDGERS STAY SEPARATE (§3, rule two). The protocol read must never move play money.
+  // Asserted by counting: not one ledger row, in either currency, from the whole surface.
+  const before = Number((await pool.query('SELECT COUNT(*) n FROM transactions')).rows[0].n);
+  await call('GET', '/v1/bank', { token: p.token });
+  await Bank.bankPosition(pool, null);
+  const after = Number((await pool.query('SELECT COUNT(*) n FROM transactions')).rows[0].n);
+  assert.equal(after, before, 'the protocol surface writes ZERO ledger rows — in-game cash and the protocol are separate books');
+
+  // (3) NEVER A PHRASE IMPLYING SPEED OR A GUARANTEED RETURN (§3, rule one).
+  //
+  // Asserted against the object a LIVE position produces, NOT the dormant one — and that distinction
+  // is not pedantry, it is a mutation that survived. Scanning `{dormant:true, market:'nUSD'}` for
+  // banned words passes whatever the live path says, so the first version of this check could not
+  // fail no matter what the shipped surface promised. `positionView` is the shaping split out from
+  // the RPC precisely so this can reach it.
+  const live = Bank.positionView({
+    wallet: '0x0000000000000000000000000000000000000001',
+    collateral: 1000n * 10n ** 18n, debt: 400n * 10n ** 18n, maxDebt: 500n * 10n ** 18n, ltvBps: 5000,
+  });
+  assert.equal(live.collateral, 1000, 'a live position reports its collateral');
+  assert.equal(live.borrowable, 100, 'and what is left to borrow — the ceiling minus the debt');
+  assert.strictEqual(live.payoffDays, null,
+    'and NO payoff projection, because none has been realised — the rule, not a gap');
+  assert.equal(live.liquidation, 'none',
+    'the one forward-looking claim it does make is structural: matching denominations removes the mechanism');
+  const text = JSON.stringify(live) + JSON.stringify(body.protocol);
+  for (const banned of ['APY', 'apy', 'guaranteed', 'per year', 'per day', 'earn', 'yield']) {
+    assert(!text.includes(banned), `neither the live nor the dormant surface says "${banned}" (§3 rule one)`);
+  }
+}
+
 console.log('bank ok — the split gains nothing, the comp books zero, and every token paid was bought');

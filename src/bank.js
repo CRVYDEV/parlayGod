@@ -300,6 +300,98 @@ async function runCityLegInner(pool, { endDay = dayOf() - 1, days = CITY_EPOCH_D
   return { startDay, endDay, paid: funded };
 }
 
+/// ── §3 THE IN-GAME SURFACE — the player's own protocol position, read from the chain.
+///
+/// DORMANT until the market is deployed (`CHAIN_RPC_URL` + `ALCHEMIST_ADDRESS`), which is the
+/// M6 posture: build the reader, ship it inert, and the day the deployment lands the screen already
+/// exists. Returns `{ dormant: true }` rather than throwing, so the tab renders an honest "not open
+/// yet" instead of an error — a surface that errors when a feature is merely unbuilt is
+/// indistinguishable from one that is broken.
+///
+/// PURE READ, and that is the second of §3's two hard product rules made structural: **the
+/// play-money economy and the protocol stay separate ledgers.** Nothing here writes a
+/// `transactions` row, touches in-game cash, or lets one become the other. The only value that
+/// crosses between them is §4 above, in one direction, as a purchase.
+///
+/// The FIRST product rule — never a phrase implying speed or a guaranteed return — is why there is
+/// no rate on this object and why `payoffDays` is null until a harvest has actually happened. The
+/// design's wording is exact: the projected payoff date is "computed from realised yield and moves
+/// with it". With no realised yield there is no honest projection, and inventing one from a
+/// nominal rate is the thing the rule forbids.
+/// ONE SHAPE, dormant or live. The mirror guard caught the alternative: a dormant object carrying
+/// only `{dormant, market}` leaves every field the screen renders missing rather than null, so the
+/// card reads `undefined` and the client cannot tell "no position" from "no such field". Both paths
+/// return the same keys, so a renderer written against one is correct against the other.
+function dormantView(extra = {}) {
+  return { dormant: true, market: 'nUSD', linked: false, wallet: null,
+    collateral: null, debt: null, borrowable: null, ltvBps: null,
+    payoffDays: null, liquidation: 'none', ...extra };
+}
+
+export async function bankPosition(pool, accountId) {
+  // THE SAME env var the watcher, the worker and chainparams already use for this contract. The
+  // first cut invented `NUSD_ALCHEMIST_ADDRESS`, and preflight's unclassified-knob guard caught it —
+  // which turned out to be the more useful catch: two names for one contract is a deploy where half
+  // the code finds the market and half does not, with nothing failing loudly.
+  const addr = process.env.ALCHEMIST_ADDRESS;
+  if (!process.env.CHAIN_RPC_URL || !addr) return dormantView();
+  const { createPublicClient, http, isAddress, getAddress } = await import('viem');
+  if (!isAddress(addr)) return dormantView({ note: 'misconfigured address' });
+
+  // The position belongs to the player's PROVEN wallet, never to their account — the protocol has
+  // no idea what an account is, and a position keyed on anything but the on-chain address would be
+  // this game asserting a fact about a contract it does not control.
+  const w = accountId ? (await pool.query(
+    'SELECT wallet_address FROM account_persistent WHERE account_id=$1', [accountId])).rows[0] : null;
+  const wallet = w?.wallet_address;
+  if (!wallet || !isAddress(wallet)) return dormantView({ dormant: false });
+
+  const client = createPublicClient({ transport: http(process.env.CHAIN_RPC_URL) });
+  // WRONG-CHAIN GUARD (the makeChainReader discipline): a same-address deploy on another chain would
+  // answer confidently and wrongly, and this figure is what a player reads their own debt off.
+  if (process.env.CHAIN_ID) {
+    try {
+      if (Number(process.env.CHAIN_ID) !== Number(await client.getChainId())) {
+        return dormantView({ note: 'wrong chain' });
+      }
+    } catch { return dormantView({ note: 'unreachable' }); }
+  }
+  const address = getAddress(addr); const user = getAddress(wallet);
+  const u256 = (name) => ({ type: 'function', name, stateMutability: 'view',
+    inputs: [{ name: 'user', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] });
+  const abi = [u256('collateralOf'), u256('debtOf'), u256('maxDebtOf'),
+    { type: 'function', name: 'ltvBps', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'uint16' }] }];
+  try {
+    const [collateral, debt, maxDebt, ltvBps] = await Promise.all(
+      ['collateralOf', 'debtOf', 'maxDebtOf'].map((fn) =>
+        client.readContract({ address, abi, functionName: fn, args: [user] }))
+        .concat(client.readContract({ address, abi, functionName: 'ltvBps' })));
+    return positionView({ wallet: user, collateral, debt, maxDebt, ltvBps });
+  } catch { return dormantView({ note: 'unreachable' }); }
+}
+
+/// The SHAPING, split out from the I/O — and split out for a reason a mutation found. §3's first
+/// product rule (never a phrase implying speed or a guaranteed return) can only be asserted against
+/// the object a LIVE position produces, and with the market undeployed every test sees the dormant
+/// one. A banned-word scan over `{dormant:true}` passes whatever the live path says, which is a
+/// check that cannot fail reading as a clean bill of health. Pure, so the test reaches it directly.
+export function positionView({ wallet, collateral, debt, maxDebt, ltvBps }) {
+  const n = (x) => Number(x) / 1e18;
+  return {
+    dormant: false, market: 'nUSD', linked: true, wallet,
+    collateral: n(collateral), debt: n(debt),
+    borrowable: Math.max(0, n(maxDebt) - n(debt)),
+    ltvBps: Number(ltvBps),
+    // NO PROJECTION WITHOUT REALISED YIELD. The design's wording is exact — the payoff date is
+    // "computed from realised yield and moves with it" — so with none there is no honest number,
+    // and deriving one from a nominal rate is the thing the rule forbids. This is the rule, not a gap.
+    payoffDays: null,
+    // The one claim here that is a structural fact rather than a forecast: matching the debt's
+    // denomination to the collateral's removes the mechanism, so the debt only ever falls.
+    liquidation: 'none',
+  };
+}
+
 /// The player-facing read. What the leg is, what it paid, and what THIS player earned — never a
 /// projection and never a rate, because §3's first product rule is that nothing here may imply a
 /// speed or a guaranteed return.

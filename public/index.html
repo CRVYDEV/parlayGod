@@ -7361,6 +7361,20 @@
           ${(bk.you.payouts).slice(0, 5).map((p) => `<div class="row"><span class="k">day ${p.endDay}</span><span>${fmt(p.omr)} $OMR</span></div>`).join('')}` : ''}
         ${(bk.epochs || []).length ? `<div class="d" style="margin-top:6px;color:var(--dim);font-size:11.5px">last split: ${fmt(bk.epochs[0].paidOmr)} $OMR across ${bk.epochs[0].players} player${bk.epochs[0].players === 1 ? '' : 's'}</div>` : ''}
       </div>
+      ${(() => { const pr = bk.protocol || {}; return `
+      <div class="card"${pr.dormant ? ' style="opacity:.8"' : ''}>
+        <span class="t">Your Position${pr.dormant ? ' <span class="chip">NOT OPEN YET</span>' : ''}</span>
+        ${pr.dormant
+          ? `<div class="d">The Bank's borrowing side isn't open. When it is, you put up collateral, borrow against
+             it, and <b>the debt pays itself down out of the yield</b> — there is no price at which you are
+             liquidated, because the loan and the collateral are the same kind of money. Nothing to do here yet.</div>`
+          : (pr.linked === false
+            ? `<div class="d">Link your wallet above — a position belongs to a proven address, not to an account.</div>`
+            : `<div class="d">put up <b>${fmt(pr.collateral)}</b> · owed <b>${fmt(pr.debt)}</b> · you can still draw <b>${fmt(pr.borrowable)}</b></div>
+               <div class="d" style="color:var(--dim);font-size:11.5px;margin-top:4px">There is <b>no price</b> at which you are
+               liquidated — the debt only ever falls.${pr.payoffDays == null ? ' It has not paid down enough yet to say how long it will take, and we will not guess.' : ''}</div>`)}
+        <div class="d" style="color:var(--dim);font-size:11.5px;margin-top:4px">The Bank keeps its own books. City money never becomes collateral and collateral never becomes city money — the only thing that crosses is the profit above, and it only goes one way.</div>
+      </div>`; })()}
 
       <div class="card"><span class="t">THE LADDER — ${me.ladder?.name || 'off the ladder'}${me.ladder?.rung ? ` (rung ${me.ladder.rung}/${me.ladder.of})` : ''}</span>
         <div class="d">Power runs on $OMR you <b>HOLD</b>, not what you spend — ${fmt(Math.floor(me.ladder?.staked || 0))} staked.

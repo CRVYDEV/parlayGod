@@ -955,6 +955,25 @@ if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actual
   if (after.code === 200 && gid) assert(after.body.messages.some((m) => m.text.includes('new orders')), 'but sees messages from after they joined');
 }
 
+// ── A MALFORMED REQUEST SAYS SO TOO — Fastify's own 4xx, never 500 internal ──
+// The third instance of the db_down/JWT class, found the same way as the first: a bodyless POST
+// carrying `content-type: application/json` is a Fastify 400 raised before any handler runs, and
+// the error handler turned it into `500 internal` — so a probe I had written wrong looked exactly
+// like a production outage, and I spent minutes hunting one that did not exist. It matters more for
+// agents than for people: they are first-class players here, they read these codes, and 500 means
+// "retry later" when the honest instruction is "fix your request".
+{
+  const bad = await call('POST', '/v1/auth/guest', { headers: { 'content-type': 'application/json' } });
+  assert.equal(bad.code, 400, 'an empty JSON body is the CALLER’s 400, not the server’s 500');
+  assert.equal(bad.body.error, 'bad_request', 'and says so in a word a client can act on');
+  assert.equal(bad.body.code, 'FST_ERR_CTP_EMPTY_JSON_BODY', 'naming what Fastify actually refused');
+  // …and the same route is perfectly healthy when asked properly, which is the half that makes the
+  // above a legibility fix rather than a cover-up.
+  const good = await call('POST', '/v1/auth/guest');
+  assert.equal(good.code, 200, 'guest auth itself is fine — the 400 was about the request, not the route');
+  assert(good.body.token, 'and hands back a token');
+}
+
 // ── AN UNREACHABLE DATABASE SAYS SO — 503 db_down, never 500 internal ──
 // The 2026-07-25 incident: every database problem surfaced as `{"error":"internal"}`, which is also
 // what a genuine bug looks like, so a tester reporting "Internal on every button" could have been
@@ -1262,7 +1281,19 @@ if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actual
     for (let j = i + 1; j < end; j++) if (/^\s*app\.(get|post|put|delete|patch)\(/.test(server[j])) { end = j; break; }
     const body = server.slice(i, end).join('\n');
     if (!body.includes('readCharacter')) continue;
-    const inner = body.slice(body.indexOf('=>', body.indexOf('readCharacter')) + 2);
+    // BOUND THE REGION TO THE readCharacter CALL ITSELF. The concern is a `pool` handed to something
+    // running INSIDE the guarded callback — that acquires a second connection while the first is
+    // held. Slicing "from the arrow to the end of the route" was equivalent while every such route
+    // was a one-liner, and stopped being so the moment one did work AFTER the read returned: a
+    // deliberate fetch outside the transaction then reads as a leak, which is a false positive, and
+    // a guard that cries wolf is one people route around. So walk the call's own parentheses.
+    const start = body.indexOf('readCharacter');
+    let depth = 0, open = body.indexOf('(', start), end2 = -1;
+    for (let k = open; k >= 0 && k < body.length; k++) {
+      if (body[k] === '(') depth++;
+      else if (body[k] === ')') { depth--; if (depth === 0) { end2 = k; break; } }
+    }
+    const inner = end2 > open ? body.slice(open, end2) : body.slice(start);
     for (const c of inner.matchAll(/\b[A-Z][A-Za-z]*\.[a-zA-Z]+\(([^)]*)\)/g))
       if (c[1].split(',').map((a) => a.trim()).includes('pool')) leaks.push(`${m[1]} -> ${c[0]}`);
   }

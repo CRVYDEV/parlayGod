@@ -11786,3 +11786,123 @@ the check-5 "control that lies" class one level up. What is buyable is the SMALL
 shut state now says which is binding and disables the button. All numbers are founder sign-off levers
 (`ACTIVITY.*` were pinned when the metric locked; `CITY_EPOCH_DAYS` is new). Suite 97/97 + sim drift-0
 + mobile 75/75 + client wiring/mirror + pgquery 2742 statements + pgcheck 43/43 on real Postgres.
+
+**§3 THE BANK'S IN-GAME SURFACE (dormant) + the flake CI had been telling us about (2026-08-11).**
+The city leg is §4; §3 is the player's own protocol position, and it is built the way every chain
+surface here is built — **the reader ships INERT** (`bankPosition`, dormant without `CHAIN_RPC_URL` +
+`NUSD_ALCHEMIST_ADDRESS`), so the day the market is deployed the screen already exists. It reads
+`collateralOf`/`debtOf`/`maxDebtOf`/`ltvBps` off the Alchemist ABI already in the repo, keyed on the
+player's **proven wallet** rather than their account (the protocol has no idea what an account is),
+behind the `makeChainReader` **wrong-chain guard** — a same-address deploy on another chain would
+answer confidently and wrongly, and this figure is what a player reads their own debt off. The RPC
+runs OUTSIDE the `readCharacter` transaction: an RPC call inside a held read txn pins a pooled
+connection for as long as the node takes, which is the pool-exhaustion shape (AUDIT-tokenomics F3,
+in the other direction). `forge test` **198/198** confirms the nUSD market and the harvest fee.
+**§3's two product rules are now TESTS rather than prose.** Rule two (the play-money economy and the
+protocol stay separate ledgers) is asserted by counting: the whole surface writes ZERO `transactions`
+rows. Rule one (never a phrase implying speed or a guaranteed return) is why `payoffDays` is **null**
+— the design's wording is exact, the projection is *"computed from realised yield and moves with
+it"*, so with none there is no honest number and deriving one from a nominal rate is the thing the
+rule forbids. **The first version of that check was VACUOUS and a mutation proved it**: with the
+market undeployed every test saw the dormant object, so a banned-word scan over `{dormant:true}`
+passed whatever the LIVE path promised — invent a 5% APY on the live branch and the suite stayed
+green. The shaping is now split out as a pure `positionView`, so the rule is asserted against the
+object a real position produces; the mutation fails by name. **The mirror guard then caught the
+follow-on**: a dormant object carrying only `{dormant, market}` leaves every rendered field MISSING
+rather than null, so the card reads `undefined` and the client cannot tell "no position" from "no
+such field" — one `dormantView` now carries the same keys as the live one, pinned by asserting the
+key sets match.
+**AND THE RED CI WAS RIGHT.** Checking main per ground rule #8 found `c425093`'s run had FAILED on
+`test/population.js` — *"a resident jailbird is bustable"*, `actual: null`. Not a bad assertion: a
+**deterministic assertion resting on a probabilistic precondition**, the recorded class, in a new
+costume. The loop retries 40 times and reasoned it was safe at ~0.63 a try — but **`M3.BUST_ATTEMPTS_DAY`
+(5) was added AFTER that loop was written**, is charged BEFORE the roll win or lose, so 40 iterations
+are really **5 attempts** and the other 35 throw `bust_cap`: `0.375⁵ ≈ ONE RUN IN 135`, which is
+exactly the rate that fires in CI and never while you are watching. Fixed by GUARANTEEING the
+precondition (clear the bucket between tries) rather than by making it likelier — and it weakens
+nothing, because the cap has its own coverage in `test/social.js`. The assertion now also **names the
+server's own refusal** on failure, since `actual: null` is what this looked like in CI and says
+nothing about why. The general lesson is the one this project keeps paying for from the other side:
+**a flaky red is worse than a steady red, because it is what teaches people that red means nothing.**
+**One guard was sharpened on the way through, and NOT by loosening it.** The D1 tripwire (read
+routes must hand their board the guarded client, never the pool) fired on `/v1/bank` — correctly by
+its own rule, wrongly in substance, because the RPC there runs AFTER `readCharacter` has returned.
+It sliced *"from the arrow following `readCharacter` to the end of the route"*, which is equivalent
+while every such route is a one-liner and stops being so the moment one does work after the read.
+The temptation is to move the offending line so the text passes; that satisfies a guard without
+satisfying its argument. It now walks the `readCharacter` call's own parentheses, so a `pool` handed
+to something INSIDE the guarded callback still fails by name (mutation-verified) while a deliberate
+fetch outside the transaction no longer reads as a leak — sharper rather than weaker, which matters
+because a guard that cries wolf is one people learn to route around.
+**A FALSE ALARM I RAISED ON MYSELF, and the real defect underneath it.** Verifying the live deploy, a
+production `POST /v1/auth/guest` came back `500 {"error":"internal"}` — new players unable to sign
+up, on a box that had just deployed. Reproduced it in production config before saying a word, and the
+cause was **my own curl**: a bodyless POST carrying `content-type: application/json` is
+`FST_ERR_CTP_EMPTY_JSON_BODY`, a Fastify **400** raised before any handler runs (the same trap the
+console itself hit and fixed in the step-five client pass). Guest auth was healthy the whole time —
+200 with a token the moment the header came off. But the reason it fooled me is a genuine defect and
+it is the **third instance of the db_down/JWT class**: the error handler blanket-500'd every Fastify
+4xx, so *a request the server correctly refused* reported itself as *the server being broken*. That
+is precisely the ambiguity the 503 `db_down` work existed to remove, one layer up — and it costs more
+for AGENTS than for people, since they are first-class players here, they read these codes, and 500
+means "retry later" when the honest instruction is "fix your request". The handler now preserves
+Fastify's own status and names the code (`bad_request` + `FST_ERR_*`); a regression asserts both
+halves — the malformed call is a 400, and the same route answers 200 when asked properly, which is
+what makes it a legibility fix rather than a cover-up. Mutation-verified.
+**And preflight's unclassified-knob guard did better than classify.** The reader's first cut read
+`NUSD_ALCHEMIST_ADDRESS`; the guard failed the build asking for it to be classified, and the useful
+answer was that it should not exist — `ALCHEMIST_ADDRESS` is already the name the watcher, the worker
+and `chainparams.js` use for that exact contract. Two env vars for one address is a deploy where half
+the code finds the market and half does not, with nothing failing loudly. The guard exists to stop a
+knob reaching production by being forgotten; here it stopped one reaching production by being
+DUPLICATED, which is the same failure wearing a different hat.
+
+**THE POOL IS A CLIFF, AND THE PACKAGE IS LIVE (2026-08-11).** The founder asked how many concurrent
+players the current configuration could host. It is measurable rather than guessable —
+`tools/loadtest.js` exists for exactly this — and measuring it found a live production defect, which
+is the more useful half of the answer. **At 30 concurrent players against real Postgres, same tree,
+same box, only the pool changed: `PG_POOL_MAX=20` (the `src/db.js` default) gave 30 req/s, a p95 of
+10.0s and NINE 503s; `PG_POOL_MAX=60` gave 284 req/s, a p95 of 87ms and zero 5xx.** Three times the
+pool bought **9.4×** the throughput, which is the signature of QUEUEING COLLAPSE rather than a slope:
+past the cliff requests queue for a connection, hit the 10s `connectionTimeout` exactly (that IS the
+p95), and the player is told the database is unreachable — the app is simply saturated, and the
+`isDbDown` classifier is not wrong to say so, it just makes a capacity problem read as an outage.
+`render.yaml` had never DECLARED the pool, so production has been running the default; declared at 40
+(40 api + 20 worker is far under anything a pro-4gb instance limits). **The CPU split is the finding
+that decides the scaling dial, and it inverts the intuitive answer**: at 284 req/s Postgres was the
+heavier half — **~1.9 cores against node's ~1** — so the DATABASE plan binds before the web plan, and
+adding a second API instance would buy nothing until the database is upgraded. Translating req/s to
+players goes through the rate limiter (human bucket 1/s sustained, so that is a hard per-player
+ceiling): ~150 req/s on production's 1-CPU database is **~150 players pinned at the limit, ~500
+genuinely active at ~0.3 req/s, thousands idling on the 30s poll** — against ~30 before the fix. Stated
+honestly at the time: the box under test ran server, database AND all 30 client loops on 4 shared
+CPUs, and the harness's virtual players hammer at ~9.5 req/s each, which is 10–30× a human — which is
+precisely why the conversion runs through the rate limiter rather than quoting the raw number.
+**AND `omerta-mcp@1.0.0` IS PUBLISHED** (run #5, verified live — `npx -y omerta-mcp` installs from the
+registry and connects to the game, so `/play`'s copy-paste setup is real rather than aspirational).
+The two failed runs before it are worth keeping for the diagnostic lesson. The publish reported
+`404 Not Found - PUT .../omerta-mcp`, which reads like a name collision or a permissions scope; the
+registry had no such package (checked) and the scope was never reached. The workflow's own whoami step
+had ALREADY said the true thing one line earlier — `401 Unauthorized` — and then let the publish run
+and bury it. **When the diagnosis is unambiguous, handing the reader a worse error afterwards is not
+neutrality, it is noise**, so that step now STOPS on a 401 and names the causes in likelihood order,
+led by the one that is now dominant: npm caps granular tokens at 90 days and revoked every classic
+token in December 2025, so a stored npm credential does not degrade, it DIES. A token that
+authenticates still falls through to `npm publish`, because that case really is ambiguous. Residual,
+and it has a deadline: the package went out on a token so it carries **no provenance attestation**,
+and from **January 2027** a 2FA-bypass token loses direct publish outright — the package page now
+exists, so the trusted publisher can finally be configured and `NPM_TOKEN` deleted, which needs no
+edit to the workflow (`NODE_AUTH_TOKEN` resolves empty and npm falls through to OIDC). npm still has
+no "pending publisher" (npm/cli#8544), which is the only reason a token was ever involved.
+**Also: the three workflows moved to `actions/checkout@v7` + `actions/setup-node@v7`** — v4 targets
+node20, which the runners force onto node24 with a deprecation warning on every run. Checked rather
+than assumed, because a broken CI is worse than a warning: the breaking changes between v4 and v7 are
+a credential-storage change (checkout v6), a fork-PR block for `pull_request_target`/`workflow_run`
+(checkout v7) and automatic dependency caching (setup-node v5, narrowed to npm in v6), and none reach
+this repo — nothing pushes or reads the checkout credential, no workflow uses either trigger (so v7's
+block is a security improvement taken for free), and `ci.yml` already asks for `cache: npm` explicitly.
+It also clears the second warning in the same logs, since setup-node stopped writing the deprecated
+`always-auth` key in v6.1. **A process note that cost real time twice this session**: a commit landed
+on `main` locally rather than the designated branch and had to be moved with `git branch -f` + a reset;
+and CI does not run on branch pushes at all (`ci.yml` builds pushes on `main` only and everything else
+via `pull_request`), so a bumped action is unverified until a PR exists — which is what PR #35 is for.
