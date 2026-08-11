@@ -260,9 +260,25 @@ const DESTS = [
 const destColor = d => `var(--d-${d}, var(--gold))`;
 const destLabel = d => (DESTS.find(x=>x.id===d)||{}).label || d;
 
+/* SEED_VERSION — bump this WHENEVER the LIVE array above changes. localStorage persists the editor's
+   working copy (a feature — edits survive reload), but that means a fresh seed I push is invisible
+   until the browser is told the baseline moved. So a saved model carries the version it was saved
+   under: match → restore the user's edits; stale (older seed, or the pre-versioning raw array) →
+   load the NEW seed and FLAG it (never silently drop edits — the status pill says the baseline moved
+   and to Import to recover). An Import or Reset re-saves under the current version, so a chosen
+   variant persists. */
+const SEED_VERSION = 3;
+let staleLocal = false;
 let model = load();
-function load(){ try{ const s=localStorage.getItem("omerta_fee_model"); if(s) return JSON.parse(s);}catch(e){} return structuredClone(LIVE); }
-function save(){ try{ localStorage.setItem("omerta_fee_model", JSON.stringify(model)); }catch(e){} }
+function load(){
+  try{ const s=localStorage.getItem("omerta_fee_model"); if(s){
+    const o=JSON.parse(s);
+    if(o && o._seedVersion===SEED_VERSION && Array.isArray(o.model)) return o.model; // edits on the current seed
+    staleLocal = true; // older seed (or pre-versioning array) — the pushed baseline wins
+  }}catch(e){}
+  return structuredClone(LIVE);
+}
+function save(){ staleLocal=false; try{ localStorage.setItem("omerta_fee_model", JSON.stringify({_seedVersion:SEED_VERSION, model})); }catch(e){} }
 
 /* ── theme ── */
 const root=document.documentElement;
@@ -444,6 +460,7 @@ function status(){
   const bad=model.filter(s=>!s.retired && sumOf(s)!==10000);
   const live=model.filter(s=>!s.retired).length;
   const el=document.getElementById("status");
+  if(staleLocal){ el.textContent="↺ Loaded the NEW recommended split — it replaced older local edits in this browser. (Export your work before I push a seed to keep it; Import to reload a past variant.)"; el.style.color="var(--stamp)"; return; }
   if(bad.length){ el.textContent=`⚠ ${bad.length} source${bad.length>1?'s do':' does'} not sum to 10,000 bps — fix before exporting`; el.style.color="var(--stamp)"; }
   else { el.textContent=`✓ ${live} live source${live>1?'s':''}, every one balanced to 10,000 bps · edits saved locally`; el.style.color="var(--faint)"; }
 }
