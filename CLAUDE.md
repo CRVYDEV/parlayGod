@@ -3078,7 +3078,7 @@ now shut on the GRANT (`if (g.mintCredits) throw`), not on the sku id, so a new 
 it by being spelled differently. **And the fantasy it was restored on is MEASURED, not assumed** (sim
 **P9.35 THE PLEX REACH**, printed every run): the whole $OMR earn surface is **1,320 lifetime** (the
 mission ladder, once per account) + **3/day** (`daily:all`, a transfer out of the event fund) —
-against **4,941** for the CHEAPEST thing the rail sells, i.e. **3.7× the entire ladder**, and 24,706
+against **4,118** for the CHEAPEST thing the rail sells, i.e. **3.1× the entire ladder**, and 20,588
 for a respawn (7,796 further days of perfect daily play). So a player who completes every $OMR
 mission in the game can buy NOTHING on the rail. $OMR has had no faucet since v3 step 1, so the rail
 is reached by **predation** (`whack:loot` takes 20–50% of a victim's liquid AND staked $OMR) or
@@ -3093,9 +3093,23 @@ $OMR *that day* read as entirely unbuyable — the withheld-terms class (the pad
 lane picker), one screen over. The shelf now shows BOTH prices with a working pay-in-$OMR button
 (rounded UP for display, so a shown price can never understate the charge), renders the retired
 entry, and states where the $OMR comes from in the player's own terms; both codices carry the
-arithmetic (1,320 lifetime + 3/day against a 4,941 cheapest purchase) so nobody plans around a rail
-they cannot reach. `PLEX_PREMIUM_BPS` 1.2 → 1.0 stays the dial if it should FEEL reachable — 17% off
-every rail price, one env value — but it does not close a 3.7× gap, so it is comfort, not a fix.
+arithmetic (1,320 lifetime + 3/day against a 4,118 cheapest purchase) so nobody plans around a rail
+they cannot reach. **THEN THE PREMIUM WAS TAKEN (founder, 2026-08-11): `PLEX_PREMIUM_BPS` and
+`STORE.PLEX_PREMIUM_BPS` both 1.2 → 1.0, in lockstep** — not because it closes the gap (it does
+not) but because the wedge was set when $OMR was the CHEAP rail and kept ETH economical; since the
+mint went ETH-only, $OMR is the premium rail on both surfaces it still serves, so the premium was
+charging twice for the same asymmetry. Re-measured (P9.35): cheapest purchase 4,941 → **4,118**
+(3.7× → 3.1× the ladder), respawn 24,706 → 20,588; the pre-market floors derive from it and fell
+with it. §10.4 untouched (a price, on a burn that already recycles). **The guard was the real
+work**: the premium was restated as a literal `1.2` inside preflight's two-rails check and twice
+in its test, so moving the lever fired the guard SPURIOUSLY — and the fix somebody reaches for
+then is widening the tolerance, which kills the guard. It now READS the premium (the wedge is what
+it measures against, so it must know it), and the rot check is premium-agnostic: it feeds
+preflight vig.js's ACTUAL default and requires silence. The bare-defaults assertion it replaced
+was **vacuous** — preflight derives its expected price from its own restated rate, so with nothing
+set it agrees with itself at any rate, and only the comparison against vig's real number crosses
+the restatement. The derived `STORE.PLEX_FLOOR_OMR_PER_ETH` moved too and the lever register
+DEMANDED its own re-pin, which is that guard working.
 **Two brittle assertions were caught by their own guard here**: `test/store.js` word-matched `/mint/`
 on the retirement copy, and the better sentence says *"made"* — so both were replaced with the
 PROPERTY that matters (the entry points at the mint route; the prose names no route, because the same

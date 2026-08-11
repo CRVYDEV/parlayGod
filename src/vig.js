@@ -49,8 +49,8 @@ export const RESERVE_BPS = Number(process.env.VIG_RESERVE_BPS || 5000); // 50% o
 // 1, and the mission ladder pays ~1,320 lifetime — nowhere near a respawn at the market rate. So
 // this is NOT rent-from-grinding, and sim P9.35 now MEASURES the gap rather than leaving it to a
 // comment: the whole earn surface is 1,320 lifetime (the mission ladder, once per account) plus 3/day
-// (`daily:all`, a transfer out of the event fund), against 4,941 for the CHEAPEST thing the rail
-// sells — 3.7× the entire ladder. So the player who funds their fees in $OMR is the one who takes it
+// (`daily:all`, a transfer out of the event fund), against 4,118 for the CHEAPEST thing the rail
+// sells — 3.1× the entire ladder. So the player who funds their fees in $OMR is the one who takes it
 // off somebody: `whack:loot` moves 20–50% of a victim's liquid AND staked $OMR to their killer. That
 // is a better fit than EVE's version, not a worse one — you pay your rent by robbing people, which is
 // the entire premise — but it is a DIFFERENT claim, so do not describe it as ISK-rent.
@@ -62,7 +62,7 @@ const RESPAWN_FEE_ETH = Number(process.env.RESPAWN_FEE_ETH || 0.10);
 // vig. The static floor is the PRE-MARKET stand-in only, and it derives from the ONE stated rate
 // rather than being hand-set — the genesis-rate pass's whole finding was that a hand-set floor and a
 // market path silently disagree, and the effective price is whichever is cheaper.
-const PLEX_PREMIUM_BPS = Number(process.env.PLEX_PREMIUM_BPS || 12000); // 1.2× the ETH-equivalent
+const PLEX_PREMIUM_BPS = Number(process.env.PLEX_PREMIUM_BPS || 10000); // 1.0× the ETH-equivalent
 export const PLEX_RESPAWN_OMR = Number(process.env.PLEX_RESPAWN_OMR
   || genesisOmrFor(RESPAWN_FEE_ETH, PLEX_PREMIUM_BPS));
 

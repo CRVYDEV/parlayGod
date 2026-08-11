@@ -141,15 +141,20 @@ assert(preflight({ ...GOOD, TRUST_PROXY: undefined }).warnings.some((w) => /shar
   assert(typeof vig.PLEX_RESPAWN_OMR === 'number' && vig.PLEX_RESPAWN_OMR > 0,
     'the respawn DOES have a $OMR rail — a consumable is not the bound, so "pay your rent in ISK" applies');
 
-  assert.deepEqual(preflight(GOOD).warnings.filter((w) => /rails disagree/.test(w)), [],
-    'the shipped defaults sit at the genesis rate, so no warning fires');
-  // Restated defaults must equal vig.js's, or the guard silently checks a price nobody charges.
-  assert.equal(vig.PLEX_RESPAWN_OMR, Math.round(0.10 * 205882 * 1.2),
-    "preflight's restated respawn default must equal vig.js's, or the restatement has rotted");
+  // NOT the bare-defaults case: preflight derives its own expected $OMR price from its own restated
+  // rate, so with nothing set it agrees with itself whatever the rate is — silent, and vacuous as a
+  // rot check. The rot check is feeding it vig.js's REAL default and requiring silence, which is the
+  // only comparison that crosses the restatement. Premium-agnostic on purpose: the literal 1.2 that
+  // used to sit here would have made moving the lever fail this test for no reason.
+  assert.deepEqual(preflight({ ...GOOD, PLEX_RESPAWN_OMR: String(vig.PLEX_RESPAWN_OMR) })
+    .warnings.filter((w) => /rails disagree/.test(w)), [],
+    "preflight's restated genesis rate must equal vig.js's, or the guard checks a price nobody charges");
   // Raising ONE rail is exactly the divergence this exists to catch.
   assert(preflight({ ...GOOD, RESPAWN_FEE_ETH: '0.30' }).warnings.some((w) => /rails disagree/.test(w)),
     'raise the ETH fee alone and the $OMR rail becomes the cheap price — that must be called out');
-  assert.deepEqual(preflight({ ...GOOD, RESPAWN_FEE_ETH: '0.30', PLEX_RESPAWN_OMR: String(Math.round(0.30 * 205882 * 1.2)) })
+  // 0.30 is 3× the shipped fee, so 3× the shipped $OMR price is the SAME ratio — stated as a multiple
+  // rather than recomputed, so it holds at any premium and any genesis rate.
+  assert.deepEqual(preflight({ ...GOOD, RESPAWN_FEE_ETH: '0.30', PLEX_RESPAWN_OMR: String(vig.PLEX_RESPAWN_OMR * 3) })
     .warnings.filter((w) => /rails disagree/.test(w)), [],
     '…and moving both together is silent, so the guard checks the RATIO rather than a fixed price');
 }

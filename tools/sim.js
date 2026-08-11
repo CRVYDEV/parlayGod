@@ -1499,7 +1499,7 @@ phase('P9.35 THE PLEX REACH — how long the earn surface takes to reach the che
   note('plex reach', 'a respawn token', `${respawn.toLocaleString()} $OMR`,
     `${daysTo(respawn).toLocaleString()} days of perfect daily play after the full ladder`);
   note('plex reach', 'the verdict', 'PLEX is reachable by PREDATION or PURCHASE, not by grinding',
-    'that is on-theme and it is NOT the EVE fantasy the restore invoked: in EVE, PLEX is reachable by grinding ISK. Here $OMR has had no faucet since v3 step 1, so the rail is funded by taking it off somebody (whack:loot moves 20-50% of a victim\'s liquid + staked) or buying it at the desk. FOUNDER CALL: accept it (the predator framing), or if the fantasy matters the dials are the ladder\'s $OMR (machine-owned — a re-extract), M4.DAILY_ALL_OMR, or STORE.PLEX_PREMIUM_BPS');
+    'that is on-theme and it is NOT the EVE fantasy the restore invoked: in EVE, PLEX is reachable by grinding ISK. Here $OMR has had no faucet since v3 step 1, so the rail is funded by taking it off somebody (whack:loot moves 20-50% of a victim\'s liquid + staked) or buying it at the desk. SIGNED: the predator framing is accepted, and the premium has already been taken to 1.0 (17% off every rail price — comfort, not a fix, since it cannot close a multiple this size). The dials left are the ladder\'s $OMR (machine-owned — a re-extract) and M4.DAILY_ALL_OMR, and both are faucet changes rather than pricing ones');
 }
 
 phase('P10 §10.4 ledger invariants over the ENTIRE sim (nothing was seeded)');

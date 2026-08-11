@@ -145,7 +145,7 @@ EVE's masterstroke, and the thing that lets a skilled player fund their play fro
 > on the desk shelf and is sold for ETH at the daily auction (the founder's revenue-over-deflation
 > decision). So the deflation claim below is history; the revenue claim replaces it, and it is the
 > stronger one. (3) The *fantasy* in this section's first line is measured and does not currently
-> hold — sim **P9.35**: the whole earn surface is 1,320 lifetime + 3/day against a 4,941 cheapest
+> hold — sim **P9.35**: the whole earn surface is 1,320 lifetime + 3/day against a 4,118 cheapest
 > purchase, so the rail is reached by PREDATION or PURCHASE rather than by grinding. On-theme for
 > this game, but it is not EVE's economics and should not be described as if it were.
 

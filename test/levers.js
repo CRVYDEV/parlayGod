@@ -401,8 +401,8 @@ const SIGNED = [
   // pre-market anchor both the $OMR quote and the floor derive from; move it and every $OMR price
   // on the rail moves with it, which is the point of pinning it rather than the derived numbers.
   ['PLEX_GENESIS_OMR_PER_ETH', 205882],
-  ['STORE.PLEX_PREMIUM_BPS', 12000],
-  ['STORE.PLEX_FLOOR_OMR_PER_ETH', 247058.4],
+  ['STORE.PLEX_PREMIUM_BPS', 10000],
+  ['STORE.PLEX_FLOOR_OMR_PER_ETH', 205882],
   ['PEN.BREAK_CAUGHT_ADD_S', 900],
   ['PEN.BREAK_FAIL_DMG', [20,45]],
   ['PEN.BREAK_HEAT', 40],

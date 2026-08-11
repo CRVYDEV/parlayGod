@@ -254,8 +254,12 @@ export function preflight(env = process.env) {
   // Checked as a RATIO so it holds at any fee level.
   {
     // Restated from vig.js (which imports game.js, so preflight cannot import it — the one-way rule).
-    // test/preflight.js asserts these defaults still equal vig.js's, so the restatement cannot rot.
-    const GENESIS_RATE = 205882 * 1.2; // the one conversion every $OMR rail uses pre-market
+    // test/preflight.js feeds this guard vig.js's ACTUAL default and requires silence, so the
+    // restatement cannot rot. The PREMIUM is read rather than baked in: it is the deliberate wedge
+    // between the two rails, so a guard that hardcodes it fires spuriously the moment the lever moves
+    // — and the fix somebody reaches for then is widening the tolerance, which kills the guard.
+    const PREMIUM = Number(env.PLEX_PREMIUM_BPS ?? 10000) / 10000;
+    const GENESIS_RATE = Number(env.PLEX_GENESIS_OMR_PER_ETH ?? 205882) * PREMIUM;
     const eth = Number(env.RESPAWN_FEE_ETH ?? 0.10);
     const omr = Number(env.PLEX_RESPAWN_OMR ?? Math.round(0.10 * GENESIS_RATE));
     const implied = eth > 0 ? omr / eth : null;

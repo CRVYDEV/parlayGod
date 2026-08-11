@@ -104,7 +104,7 @@ Measurements: `tools/sim.js` (honest-money simulation, §10.4 drift-0 on every r
 | `APY` | 14% ceiling | Now a CEILING on a pool-backed rate (throttles when dry — sim confirmed). | **KEEP** |
 | `STAKE_POOL_BPS` | 30% of buyback | Yield = f(economic activity), zero mint. | **KEEP** |
 | `VIG_BPS` / `VIG_RESERVE_BPS` | 60% / 50% | Extraction ≤ inflow by construction; two-sided invariant. | **KEEP** |
-| `PLEX_PREMIUM_BPS` | 1.2× | $OMR is the premium rail; ETH funds the pool. Floors ($5/$50) pre-market only. | **KEEP** |
+| `PLEX_PREMIUM_BPS` / `STORE.PLEX_PREMIUM_BPS` | **1.0×** (was 1.2×) | Set when $OMR was the CHEAP rail, where a premium kept ETH the economical one. Since the mint went ETH-only, $OMR is the premium rail on both surfaces it still serves, so the wedge was charging twice for the same asymmetry. Taken to 1.0 (founder, 2026-08-11) — 17% off every rail price. Both move in lockstep; the pre-market floors derive from it. | **SIGNED** |
 | `MINT_FEE_ETH` / `RESPAWN_FEE_ETH` | 0.01 / 0.10 | Deploy-time contract values mirrored in env. | **KEEP** (price in USD terms at launch) |
 
 ## 9. The Den (all PROPOSED)
@@ -5494,8 +5494,8 @@ than asserted in a comment.
 
 | what the rail costs | amount |
 |---|---|
-| cheapest SKU (`decor_deco`, 0.02 ETH) | **4,941** — **3.7× the entire mission ladder** |
-| a respawn token (0.10 ETH) | **24,706** |
+| cheapest SKU (`decor_deco`, 0.02 ETH) | **4,118** — **3.1× the entire mission ladder** |
+| a respawn token (0.10 ETH) | **20,588** |
 
 **So a player who completes every $OMR mission in the game can buy nothing on the rail**, and the
 daily bonus takes a further **1,207 days** to close the gap to the cheapest item — **7,796 days** for
@@ -5508,8 +5508,9 @@ reachable by taking someone else's. Which is a perfectly good design for a mafia
 that the two are different, and the restore invoked the EVE framing. This is a **founder call, not a
 defect**: accept the predator framing (and stop describing it as ISK-rent, which the design docs now
 do), or move a dial. The dials, cheapest first: `M4.DAILY_ALL_OMR` (3/day, event-fund bounded),
-`STORE.PLEX_PREMIUM_BPS` (1.2 → 1.0 makes every rail price 17% cheaper), or the mission ladder's
-`omr` column — which is MACHINE-OWNED, so it moves through the prototype and a re-extract.
+`STORE.PLEX_PREMIUM_BPS` (1.2 → 1.0 makes every rail price 17% cheaper — **TAKEN 2026-08-11**), or
+the mission ladder's `omr` column — which is MACHINE-OWNED, so it moves through the prototype and a
+re-extract.
 
 **SIGNED 2026-08-11 — accept the predator framing; no lever moved.** The rail stays where it is and
 the COPY changes to match, which is the honest half of the decision rather than the cheap half. What
@@ -5518,9 +5519,28 @@ shipped with the signature: the Store shelf now shows BOTH prices and a working 
 purchasable *today* read as entirely unbuyable — the withheld-terms class, one screen over from the
 pad and the nut), and the card states where the $OMR comes from in the player's own terms: nothing in
 the city mints it, you take it off somebody or buy it at the desk, and grinding jobs will not get you
-here. `PLEX_PREMIUM_BPS` 1.2 → 1.0 remains the cheapest dial if the rail should FEEL reachable — it
-is a 17% cut to every rail price and one env value — but it does not close a 3.7× gap, so it would be
-a comfort change, not a fix.
+here.
+
+**THE PREMIUM TAKEN (founder-directed 2026-08-11).** `PLEX_PREMIUM_BPS` and
+`STORE.PLEX_PREMIUM_BPS` both 1.2 → **1.0**, in lockstep (they price the same thing on two
+surfaces; a split between them is a price difference nobody decided on). The argument is not that
+it closes the gap — it does not, and it was never going to — it is that **the premium was set when
+$OMR was the CHEAP rail**, where a wedge kept ETH the economical one and that asymmetry fed the
+vig. Since the mint went ETH-only, $OMR is the premium rail on both surfaces it still serves, so
+the wedge was charging twice for the same asymmetry. Measured (P9.35, re-run): the cheapest rail
+purchase **4,941 → 4,118** (3.7× → **3.1×** the entire mission ladder), a respawn **24,706 →
+20,588**; the pre-market floors derive from the premium, so they fell with it. §10.4 untouched —
+this is a PRICE, and the burn it prices already rides `plex:%` into the desk.
+
+**The guard was the real work.** The premium was restated as a literal `1.2` inside preflight's
+two-rails check and twice more in its test — so moving the lever fired the guard SPURIOUSLY, and
+the fix somebody reaches for at that point is widening the tolerance, which kills the guard. The
+premium is now READ (it is the deliberate wedge the guard measures against, so it must know it),
+and the test's rot check is premium-agnostic by construction: it feeds preflight vig.js's ACTUAL
+default and requires silence. The bare-defaults case that used to sit there was **vacuous** —
+preflight derives its own expected price from its own restated rate, so with nothing set it agrees
+with itself at any rate. The only comparison that crosses the restatement is the one against vig's
+real number. Mutation-verified: move either side alone and it fails by name.
 
 Nothing was retuned. P9.35 prints all of it every run, so a change to the ladder, the daily, the
 premium or any package price re-measures the reach.

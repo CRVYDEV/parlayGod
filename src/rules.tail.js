@@ -2287,7 +2287,9 @@ export const STORE = {
 // second opinion: the effective price is always the cheaper rail, which is what the genesis-rate pass
 // found when three rails quoted three rates. (Retired wholesale on 2026-08-10 and pulled back to the
 // mint alone the same day — see the note in store.js for which half of that argument survived.)
-STORE.PLEX_PREMIUM_BPS = Number(process.env.STORE_PLEX_PREMIUM_BPS || 12000); // 1.2× the ETH-equivalent
+// Moves in LOCKSTEP with vig.js's PLEX_PREMIUM_BPS — the two price the same thing on two surfaces,
+// so a split between them is a price difference nobody decided on.
+STORE.PLEX_PREMIUM_BPS = Number(process.env.STORE_PLEX_PREMIUM_BPS || 10000); // 1.0× the ETH-equivalent
 STORE.PLEX_FLOOR_OMR_PER_ETH = Number(process.env.STORE_PLEX_FLOOR
   || PLEX_GENESIS_OMR_PER_ETH * STORE.PLEX_PREMIUM_BPS / 10000);
 // RETIRED SKUS — a package that once existed and no longer sells. Kept by NAME so the routes can say
