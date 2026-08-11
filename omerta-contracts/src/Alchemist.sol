@@ -47,6 +47,13 @@ contract Alchemist is Ownable, ReentrancyGuard, FlashGuard {
     uint16 public constant MAX_LTV_BPS = 9_000;
     uint16 public constant BPS = 10_000;
 
+    /// @notice Compile-time hard ceiling on the harvest performance fee — the `MAX_LTV_BPS` /
+    ///         `MAX_DISCOUNT_BPS` discipline applied to the one lever that touches the product's
+    ///         central promise. **A stolen key cannot take the whole yield**, which is the entire
+    ///         reason this is a constant rather than just an owner-set number: without it, the
+    ///         self-repaying loan can be turned into a non-repaying one in a single transaction.
+    uint16 public constant MAX_HARVEST_FEE_BPS = 3_000; // 30%
+
     NUSD public immutable debtToken;
     IERC20 public immutable asset;
     IERC4626 public immutable vault;
@@ -55,6 +62,33 @@ contract Alchemist is Ownable, ReentrancyGuard, FlashGuard {
     uint256 public immutable scale;
 
     uint16 public ltvBps = 5_000; // 50% at deploy; the Safe raises it deliberately
+
+    /// @notice The protocol's performance fee on harvested yield, in bps. 20% at deploy — the
+    ///         canonical DeFi performance fee (Yearn's number), so it needs no explaining, and
+    ///         double Alchemix's 10%.
+    ///
+    ///         ── WHAT IT COSTS THE BORROWER, STATED PLAINLY ────────────────────────────────────
+    ///         Debt repays from yield, so `T = LTV / yield` and a fee f stretches it to
+    ///         `T = LTV / (yield * (1-f))`. At 50% LTV and 8% yield that is 6.25 years -> 7.8.
+    ///         Nobody pays this out of pocket; it lengthens the payoff date. Which is exactly why
+    ///         §2.2's disclosure rule is load-bearing: the UI must show the projected payoff date
+    ///         from the LIVE REALISED, POST-FEE yield. Charging the fee and quoting a pre-fee date
+    ///         would be the dishonest version of this.
+    ///
+    ///         ── WHY IT IS CHARGED ON WHAT IS APPLIED, NOT ON THE ESCROW BALANCE ───────────────
+    ///         The fee is proportional to the yield actually MOVED to service debt (see `harvest`),
+    ///         never to yield sitting in the escrow compounding for the user. A fee on the standing
+    ///         balance is the management-fee antipattern: it charges repeatedly for the same money,
+    ///         and it would bill a user whose debt is already clear.
+    uint16 public harvestFeeBps = 2_000;
+
+    /// @notice Where the performance fee goes. **Zero disables the fee entirely.** This is not
+    ///         tidiness: measured by removing it, an unset recipient makes `safeTransfer` revert
+    ///         `ERC20InvalidReceiver` and **every harvest in the market fails** — so a deploy that
+    ///         forgets this one address would brick the product's core function while looking
+    ///         perfectly configured. The guard turns that into under-charging, which is recoverable
+    ///         with one transaction (the GearVault fail-closed precedent).
+    address public feeRecipient;
 
     mapping(address => CollateralEscrow) public escrowOf;
     /// @notice Underlying deposited by the user, in asset units. Yield above this is harvestable.
@@ -76,6 +110,10 @@ contract Alchemist is Ownable, ReentrancyGuard, FlashGuard {
     event Harvested(address indexed user, uint256 assets, uint256 debtCleared);
     event LtvSet(uint16 bps);
     event MintCapsSet(uint256 perBlock, uint256 perDay);
+    event HarvestFeeSet(uint16 bps, address recipient);
+    /// @dev Emitted alongside `Harvested` so the fee is independently indexable: the backend books
+    ///      protocol revenue off THIS event, and never off a figure it derived itself.
+    event HarvestFeeTaken(address indexed user, address indexed recipient, uint256 assets);
 
     error ZeroAmount();
     error NoEscrow();
@@ -83,6 +121,7 @@ contract Alchemist is Ownable, ReentrancyGuard, FlashGuard {
     error Undercollateralised();
     error BufferUnhealthy();
     error NothingToHarvest();
+    error FeeTooHigh();
 
     constructor(NUSD debtToken_, IERC20 asset_, IERC4626 vault_, Transmuter transmuter_, address safe)
         Ownable(safe)
@@ -109,6 +148,15 @@ contract Alchemist is Ownable, ReentrancyGuard, FlashGuard {
         if (bps > MAX_LTV_BPS) revert LtvTooHigh();
         ltvBps = bps;
         emit LtvSet(bps);
+    }
+
+    /// @notice Set the harvest performance fee and its recipient. Bounded by `MAX_HARVEST_FEE_BPS`,
+    ///         which a stolen key cannot raise. Setting the recipient to zero turns the fee OFF.
+    function setHarvestFee(uint16 bps, address recipient) external onlyOwner {
+        if (bps > MAX_HARVEST_FEE_BPS) revert FeeTooHigh();
+        harvestFeeBps = bps;
+        feeRecipient = recipient;
+        emit HarvestFeeSet(bps, recipient);
     }
 
     function setMintCaps(uint256 perBlock, uint256 perDay) external onlyOwner {
@@ -243,21 +291,42 @@ contract Alchemist is Ownable, ReentrancyGuard, FlashGuard {
         uint256 d = debtOf[user];
         if (d == 0) revert NothingToHarvest(); // leave the yield compounding in the escrow
 
-        // Take the whole yield unless it would clear more than is owed, in which case take only
-        // what the debt needs — rounded UP, so the assets moved always cover the debt cleared and
-        // never the other way round. `take` can never exceed `yield_`, so the two clamps below are
-        // the same statement from both sides.
-        uint256 take = yield_;
+        // THE PERFORMANCE FEE comes off the yield BEFORE it services debt, so `net` is what this
+        // harvest can actually repay. A zero recipient disables it (fail-safe: an unset recipient
+        // under-charges rather than burning the yield).
+        uint16 feeBps = feeRecipient == address(0) ? 0 : harvestFeeBps;
+        uint256 net = yield_ - (yield_ * feeBps) / BPS;
+
+        // Take the whole (net) yield unless it would clear more than is owed, in which case take
+        // only what the debt needs — rounded UP, so the assets moved always cover the debt cleared
+        // and never the other way round.
+        uint256 take = net;
         uint256 asDebt = take * scale;
         if (asDebt > d) {
             take = (d + scale - 1) / scale; // ceil(d / scale)
-            if (take > yield_) take = yield_;
+            if (take > net) take = net;
             asDebt = take * scale;
             if (asDebt > d) asDebt = d;
         }
 
-        e.withdraw(take, address(this));
+        // The fee is PROPORTIONAL TO WHAT WAS TAKEN, not to the escrow balance: fee / (take + fee)
+        // == feeBps / BPS. When the debt is smaller than the yield, the untouched remainder keeps
+        // compounding for the user and is never billed — which is what stops this becoming a
+        // management fee that charges for the same money every harvest.
+        //   Both branches satisfy `take + fee <= yield_`:
+        //     debt-bound   take = need <= net = yield_(1-f)  =>  take + fee = need/(1-f) <= yield_
+        //     yield-bound  take = net  = yield_(1-f)         =>  take + fee = yield_ exactly
+        //   Integer division rounds the fee DOWN, which only widens the margin.
+        uint256 fee = feeBps == 0 ? 0 : (take * feeBps) / (BPS - feeBps);
+        if (take + fee > yield_) fee = yield_ - take; // defence in depth; unreachable by the above
+
+        e.withdraw(take + fee, address(this));
         debtOf[user] = d - asDebt;
+
+        if (fee > 0) {
+            asset.safeTransfer(feeRecipient, fee);
+            emit HarvestFeeTaken(user, feeRecipient, fee);
+        }
 
         asset.forceApprove(address(transmuter), take);
         transmuter.fund(take);

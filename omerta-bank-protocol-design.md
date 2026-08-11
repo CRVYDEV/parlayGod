@@ -387,6 +387,29 @@ or buying OMR from the open market to bring to the game and feed the free player
 Protocol revenue = paid-debt interest + the spread between deployed yield and what self-repayment
 consumes + redemption fees. It splits three ways:
 
+**THE SPREAD IS NOW IMPLEMENTED, founder-directed 2026-08-11 ("the greedy version").** It is a
+**20% performance fee on harvest** (`Alchemist.harvestFeeBps`, Yearn's canonical number and double
+Alchemix's 10%), bounded by a compile-time `MAX_HARVEST_FEE_BPS` of 3000 that a stolen key cannot
+raise — the `MAX_LTV_BPS` / `MAX_DISCOUNT_BPS` discipline applied to the one lever that can turn a
+self-repaying loan into a non-repaying one. Three properties, each test-pinned and each
+mutation-verified:
+
+1. **Charged on what SERVICES DEBT, never on the escrow balance.** The fee is proportional to the
+   yield actually moved (`fee / (take + fee) == feeBps / BPS`); yield left compounding for the user
+   is never billed, and a debt-free position is never billed at all. A fee on the standing balance
+   is the management-fee antipattern — it charges repeatedly for the same money.
+2. **An unset recipient disables it.** Measured by removing the guard: without it `safeTransfer` to
+   the zero address reverts and **every harvest in the market fails**, so a deploy that forgot one
+   address would brick the core function while looking configured.
+3. **The fee can never exceed the yield it came from** (512-run fuzz over rate × yield).
+
+§2.2's disclosure rule does the rest of the work and becomes load-bearing rather than decorative:
+the UI must show the projected payoff date from the live realised **post-fee** yield. At 50% LTV and
+8% yield the fee moves payoff from 6.25 years to 7.8 — real, and disclosed by a rule that already
+existed. **Still open:** the destination (`feeRecipient` is one Safe-set address; the three-way split
+below is downstream of it), and the contradiction that this section lists redemption fees as protocol
+revenue while §2.3 pays them to the borrower being redeemed against. Both cannot be true.
+
 | Leg | Destination | Note |
 |---|---|---|
 | **Stakers** | `snUSD` / `snETH` holders | The sToken, Monolith's design. |

@@ -304,6 +304,95 @@ contract BankTest is Test {
         assertLt(alchemist.debtOf(alice), before);
     }
 
+    // ── THE HARVEST PERFORMANCE FEE ──────────────────────────────────────────────────────────────
+    // Founder-directed 2026-08-11. The design (§4) always named "the spread between deployed yield
+    // and what self-repayment consumes" as protocol revenue; nothing implemented it. These pin the
+    // three properties that make charging it defensible rather than just profitable.
+
+    address feeDest = address(0xFEE);
+
+    function _armFee(uint16 bps) internal {
+        vm.prank(safe);
+        alchemist.setHarvestFee(bps, feeDest);
+    }
+
+    function test_the_fee_is_charged_on_what_services_debt_and_the_rest_still_repays() public {
+        _armFee(2_000); // 20%
+        _depositAndBorrow(alice, 1000 * M, 400 ether);
+        uint256 debtBefore = alchemist.debtOf(alice);
+
+        vault.earn(100 * M);           // yield is smaller than the debt, so the WHOLE yield is consumed
+        alchemist.harvest(alice);
+
+        // 20% of the yield reaches the protocol; the other 80% clears debt. Both halves asserted,
+        // because a fee that quietly took the lot would satisfy either one alone.
+        assertApproxEqAbs(usdc.balanceOf(feeDest), 20 * M, 10, "the protocol takes 20% of the yield");
+        uint256 cleared = debtBefore - alchemist.debtOf(alice);
+        assertApproxEqAbs(cleared, 80 ether, 1e13, "the remaining 80% still repays the borrower's debt");
+    }
+
+    function test_a_stolen_key_cannot_take_the_whole_yield() public {
+        // The wall. Without a compile-time ceiling, one transaction turns a self-repaying loan into
+        // a non-repaying one — the single worst thing that can happen to this product.
+        vm.prank(safe);
+        vm.expectRevert(Alchemist.FeeTooHigh.selector);
+        alchemist.setHarvestFee(3_001, feeDest);
+
+        // HOISTED, and this file's documented footgun is why: an external call in the ARGUMENTS of a
+        // pranked call makes a staticcall that consumes the prank, so `setHarvestFee` would arrive
+        // from the test contract and revert on ownership instead of exercising the ceiling.
+        uint16 cap = alchemist.MAX_HARVEST_FEE_BPS();
+        vm.prank(safe);
+        alchemist.setHarvestFee(cap, feeDest); // the ceiling itself is fine
+        assertEq(alchemist.harvestFeeBps(), 3_000);
+    }
+
+    function test_yield_left_compounding_is_never_billed() public {
+        // The management-fee antipattern, refused: with the debt long cleared, a second harvest must
+        // not keep charging the standing escrow balance. (The first harvest clears the debt and is
+        // billed on what it moved; after that there is nothing to service and nothing to charge.)
+        _armFee(2_000);
+        _depositAndBorrow(alice, 1000 * M, 10 ether); // tiny debt, large yield to come
+        vault.earn(500 * M);
+        alchemist.harvest(alice);
+        assertEq(alchemist.debtOf(alice), 0, "debt cleared");
+        uint256 takenOnce = usdc.balanceOf(feeDest);
+        assertGt(takenOnce, 0, "the harvest that serviced the debt WAS billed");
+
+        vault.earn(500 * M);                       // more yield, still no debt
+        vm.expectRevert(Alchemist.NothingToHarvest.selector);
+        alchemist.harvest(alice);
+        assertEq(usdc.balanceOf(feeDest), takenOnce, "a debt-free position is never billed again");
+    }
+
+    function test_an_unset_recipient_fails_SAFE_rather_than_burning_the_yield() public {
+        // A misconfigured deploy must UNDER-charge, never destroy a borrower's yield.
+        vm.prank(safe);
+        alchemist.setHarvestFee(2_000, address(0));
+        _depositAndBorrow(alice, 1000 * M, 400 ether);
+        uint256 debtBefore = alchemist.debtOf(alice);
+        vault.earn(100 * M);
+        alchemist.harvest(alice);
+        assertApproxEqAbs(debtBefore - alchemist.debtOf(alice), 100 ether, 1e13,
+            "the whole yield repays the borrower");
+        assertEq(usdc.balanceOf(feeDest), 0, "and nothing is taken");
+    }
+
+    function testFuzz_the_fee_never_exceeds_the_yield_it_came_from(uint96 yieldRaw, uint16 bpsRaw) public {
+        uint256 y = bound(uint256(yieldRaw), 1 * M, 10_000 * M);
+        uint16 cap = alchemist.MAX_HARVEST_FEE_BPS();
+        uint16 bps = uint16(bound(uint256(bpsRaw), 0, cap));
+        _armFee(bps);
+        _depositAndBorrow(alice, 100_000 * M, 40_000 ether);
+
+        uint256 escrowBefore = alchemist.escrowOf(alice).totalAssets();
+        vault.earn(y);
+        alchemist.harvest(alice);
+        uint256 drawn = escrowBefore + y - alchemist.escrowOf(alice).totalAssets();
+        assertLe(drawn, y, "a harvest can never draw more than the yield it realised");
+        assertLe(usdc.balanceOf(feeDest), y, "and the fee alone can never exceed it");
+    }
+
     function test_harvest_never_clears_more_debt_than_assets_moved() public {
         _depositAndBorrow(alice, 1000 * M, 10 ether); // small debt, large yield
         vault.earn(500 * M);
