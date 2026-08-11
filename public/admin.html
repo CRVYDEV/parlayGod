@@ -242,7 +242,21 @@
           ${x.live ? '' : `<div class="note" style="margin-top:4px"><b>Needs:</b> <code>${(x.needs || []).join('</code> <code>')}</code></div>
             <div class="note" style="margin-top:3px"><b>To switch on:</b> ${x.steps}</div>`}
         </div>`).join('')
-      + '<div class="note" style="margin-top:6px">These are env-config switches (no code deploy). Set the vars on the API and redeploy. Secrets never leave the server — this panel reads presence only.</div>';
+      + '<div class="note" style="margin-top:6px">These are env-config switches (no code deploy). Set the vars on the API and redeploy. Secrets never leave the server — this panel reads presence only.</div>'
+      + capacityLine(ig && ig.capacity);
+  }
+
+  // The pool is the one deploy setting whose failure looks like an OUTAGE rather than a slowdown:
+  // past the cliff, requests queue for a connection and the player is told the database is down.
+  // Measured at 30 concurrent players — 20 gave nine 503s, 60 gave none.
+  function capacityLine(c) {
+    if (!c) return '';
+    const ok = c.aboveCliff && c.declared;
+    return `<div style="margin-top:10px;padding:8px;border:1px solid var(--line);border-radius:5px">
+      <div class="row"><span class="k"><b>DB connection pool</b> <span style="opacity:.6;font-size:11px">capacity</span></span>
+        <span class="v" style="color:var(--${ok ? 'ok' : 'bad'})">${c.poolMax}${c.declared ? '' : ' (default)'}</span></div>
+      <div class="note" style="margin-top:4px">${c.note || 'Above the measured cliff — at 20 the same load served 30 req/s with nine 503s; clear of it, 284 req/s with none.'}</div>
+    </div>`;
   }
 
   function renderSocial(ov) {
