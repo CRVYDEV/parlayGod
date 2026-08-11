@@ -36,7 +36,7 @@ You start as a new player in the Docks district. You have $500 and no reputation
 to earn cash. Train your stats. Put your cash in the bank. Set up income sources that pay you while you are
 away. Increase your level.**
 
-**Crimes** (`POST /v1/crimes/:id`) — there are 29 jobs. The first job is Pickpocket (L1, 2 nerve, $40–120). The
+**Crimes** (`POST /v1/crimes/:id`) — there are 43 jobs. The first job is Pickpocket (L1, 2 nerve, $40–120). The
 last job is Empty the Federal Depository (L110, 35 nerve, $160k–400k). Each job has a level requirement, a
 nerve cost, a cash range, and a chance of jail if you fail. Your success rate increases with your **cunning**
 and **speed**, your family level, some districts, and your rank. A job can also give you **contraband crates**
@@ -618,9 +618,9 @@ You earn reputation only from targets at L5 or higher. It is reduced if you kill
 
 A kill is designed to be worth the risk — contracts, war points, and loot all attach to it.
 
-**Loot (only for a PLAYER fire-kill):** the killer takes 25% of the victim's **pocket and in-transit** cash and
-20% of their **liquid and unbonding** $OMR. **Cleared bank cash and staked $OMR are safe.** (An NPC kill and a
-mod kill take nothing.) A fire-kill also takes 25% of the victim's open market buy-order escrow and loan-offer
+**Loot (only for a PLAYER fire-kill):** the killer takes 25% of the victim's **pocket and in-transit** cash,
+**50% of their loose and unbonding** $OMR, and **20% of their staked** $OMR. **Only cleared bank cash is safe** —
+staking is cheaper cover, never a safe harbour. (An NPC kill and a mod kill take nothing.) A fire-kill also takes 25% of the victim's open market buy-order escrow and loan-offer
 escrow.
 
 **Loot surfaces** — this is why banking is a *timed* action: a new deposit is in transit for 2 hours, and

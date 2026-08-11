@@ -259,6 +259,12 @@ export async function buildServer() {
   for (const [name, buf] of PWA_ICONS) {
     app.get('/' + name, async (req, reply) => reply.type('image/png').header('cache-control', 'public, max-age=604800').send(buf));
   }
+  // Browsers request /favicon.ico unprompted on every page, and a 404 there put a console error on
+  // EVERY page load — which is not cosmetic: a permanent error is exactly the noise that hides a real
+  // one. Served as the 192 PNG (every current browser accepts a PNG at this path).
+  const FAVICON = PWA_ICONS.get('icon-192.png');
+  if (FAVICON) app.get('/favicon.ico', async (req, reply) =>
+    reply.type('image/png').header('cache-control', 'public, max-age=604800').send(FAVICON));
   // ── GENERATED ART (public/art/*.jpg): the landing hero, the district plates, the system interiors.
   // Loaded into memory ONCE at boot as an ALLOWLIST keyed by filename, and the request only ever does a
   // Map lookup — user input is never joined into a path, so there is no traversal surface by
