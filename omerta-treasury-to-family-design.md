@@ -89,12 +89,20 @@ reserve), so the discipline is already audited:
 2. A keeper — **`runFamilyBuyback`**, the `runVigBuyback` twin — spends the UNSPENT community revenue on
    $OMR off the canonical pool (mainnet: the real DEX; off-chain-first: a mod/QA param, `txHash`-gated
    like every real-value ingest). The root cap is `ethToSpend ≤ revenue − alreadySpent`.
-3. The bought $OMR credits `family_yield_pool` (ledgered — reuse `yield:family` or a distinct
-   `yield:community`; it rides the `yield:` prefix, in neither the mint nor the burn term, so **§10.4
-   needs no new mint reason**). `payFamilyYield` then distributes it (the existing mechanism, untouched).
+3. The bought $OMR credits `family_yield_pool`, ledgered **`yield:buyback` — an EXACT new reason in
+   `omrMints`** (never the `yield:%` prefix: `yield:window`/`yield:family` are genuine transfers and
+   must stay out of both terms). *[CORRECTED at build time, 2026-08-11 — the first draft of this line
+   said the credit "needs no new mint reason", which was WRONG: the credit has no counted-bucket
+   debit, so an unclassified reason crediting `family_yield_pool` is precisely the `kitchen:module`
+   silent-drift class. The soft credit is a mint admissible exactly to the extent the hard token
+   really arrived — the `desk:buyback` shape — which conservation cannot see, so
+   `runFamilyBuybackInvariants` asserts credited == bought over real rows.]*
+   `payFamilyYield` then distributes it (the existing mechanism, untouched).
 
 **§10.4 posture (the load-bearing part):** the bought $OMR is *already-circulating* supply pulled into
-the pool with real ETH — **not a mint**. So Wall 1 (no faucet) holds, and the extraction discipline
+the pool with real ETH — in-game it books as the `yield:buyback` mint above, backed one-for-one by the
+hard purchase the invariant reconciles. So Wall 1 (no faucet paying a PLAYER from nothing) holds in
+substance — nobody is paid unbacked supply — and the extraction discipline
 extends by construction: **the family pool can never distribute more $OMR than the buyback bought**
 (the `prize pool ≤ bought` shape). A new real-value invariant, **`runFamilyBuybackInvariants`**
 (the `runVigInvariants` twin), asserts `distributed ≤ bought` and the split-exactness, wired into the
@@ -172,6 +180,8 @@ one custody.
 1. **Backend earmark + keeper, chain-dormant** — add the `community` revenue earmark, `runFamilyBuyback`
    (mod/QA-param priced until the DEX bot), `runFamilyBuybackInvariants`, and re-derive the router
    `waterfall()` from the new levers. Zero new regulatory surface. Sim + `runRouterInvariants` green.
+   **✅ BUILT 2026-08-11** (`src/community.js`, `test/community.js` — every lever ships 0, production
+   byte-identical until step 2; the §4 mint-reason correction above landed with it).
 2. **The lever changes** — the fee/store/auction/harvest/toll/polfees earmarks (env), sign-off recorded
    in BALANCE.md. Re-sim the whole cash + real-revenue economy (the whole point of the router is that a
    slice move is on the record).

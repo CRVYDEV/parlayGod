@@ -53,7 +53,7 @@
 import crypto from 'node:crypto';
 import { GameError } from './game.js';
 import { drainQueue } from './chain.js';
-import { BAND, DESK, DESK_AUCTION, DESK_BUYBACK, DESK_RECYCLE_REASON, auctionPriceAt, dayOf } from './rules.js';
+import { BAND, DESK, DESK_AUCTION, DESK_BUYBACK, DESK_RECYCLE_REASON, COMMUNITY, auctionPriceAt, dayOf } from './rules.js';
 
 const round6 = (n) => Math.round(n * 1e6) / 1e6;
 const round8 = (n) => Math.round(n * 1e8) / 1e8;
@@ -247,14 +247,29 @@ export async function recordPolFees(pool, { ref, eth, txHash = null } = {}) {
   const real = !!txHash;
   // SELECT-then-INSERT (pg-mem does not report a suppressed conflict's rowCount — the sell-tax note).
   if ((await pool.query('SELECT 1 FROM pol_fees WHERE ref=$1', [key])).rows[0]) return { recorded: false, duplicate: true };
+  // THE VIG DIVERSION (the locked treasury→family split, Phase 1 — ships at 0): POL_FEES_VIG_BPS of
+  // each real fee books to the Vig instead of the buyback budget (the design doc's Wall-4
+  // relaxation, recorded there with the ops-slice alternative). Carved AT THE INGEST so polBudget —
+  // which sums pol_fees with no other term — is automatically right; pol_fees books the NET.
+  // Ordered vig-INSERT FIRST: this recorder is non-transactional (its one pre-existing statement
+  // never needed a txn), so a crash between the two inserts must leave a state a re-delivered event
+  // heals — vig booked + pol_fees missing re-runs cleanly (both sides idempotent on ref), whereas
+  // the reverse order would strand a permanently under-booked vig share.
+  const vigShare = real ? round6(amt * COMMUNITY.POLFEES_VIG_BPS() / 10000) : 0;
+  const netEth = real ? round6(amt - vigShare) : 0;
+  if (vigShare > 0 && !(await pool.query(
+    "SELECT 1 FROM vig_revenue WHERE source='polfees' AND ref=$1", [key])).rows[0])
+    await pool.query(
+      "INSERT INTO vig_revenue (source, ref, kind, gross_eth, vig_eth) VALUES ('polfees',$1,'polfees',$2,$3)",
+      [key, round6(amt), vigShare]);
   try {
     await pool.query('INSERT INTO pol_fees (ref, eth, tx_hash, real) VALUES ($1,$2,$3,$4)',
-      [key, real ? round6(amt) : 0, txHash, real]);   // a comp books ZERO — the anti-fabrication gate
+      [key, netEth, txHash, real]);   // a comp books ZERO — the anti-fabrication gate
   } catch (e) {
     if (e.code === '23505') return { recorded: false, duplicate: true };
     throw e;
   }
-  return { recorded: true, eth: real ? round6(amt) : 0, real };
+  return { recorded: true, eth: netEth, vigEth: vigShare, real };
 }
 
 // What the bot may still spend: fees earned minus fees already spent. Self-limiting by construction —

@@ -5873,3 +5873,39 @@ is Sybil-NEGATIVE and never clips an engaged player.
 casual player (the board tells them the gate, so the signal will be visible), and the realised
 $OMR-per-player-per-day once the Bank has borrowers — which is a function of revenue, not of a
 setting.
+
+## THE FAMILY BUYBACK — Phase 1 (the treasury→family split, built dormant 2026-08-11)
+
+`omerta-treasury-to-family-design.md` is the locked spec; this is the lever record for build-order
+step 1. **Every slice ships at ZERO, so production is byte-identical until the Phase-2 flip** —
+`test/community.js` block 1 asserts the byte-identity directly (no community row, the full harvest
+amount to the bank, the full POL fee to the buyback budget, the original three-way sell-tax split).
+These are all env FUNCTION-levers (read per call, the `FEE_RWA_BPS` shape), so they are covered by
+preflight classification rather than a `test/levers.js` pin; the Phase-2 flip is an env change plus
+the sign-off row here.
+
+| Lever (env) | Ships | Phase-2 target (the locked design) | What it carves |
+|---|---|---|---|
+| `FEE_COMMUNITY_BPS` | 0 | 1500 | of each gameplay fee's gross, from the implicit operations remainder |
+| `STORE_COMMUNITY_BPS` | 0 | 1500 | of each Store payment's gross, from the operations remainder |
+| `SELL_TAX_COMMUNITY_BPS` | 0 | 240 (of the 900 tax — **and `SELL_TAX_RWA_BPS` 400→160 in the SAME deploy**; the rules.tail.js four-way load guard refuses one without the other) | of each taxed sell |
+| `HARVEST_COMMUNITY_BPS` | 0 | 6280 | of each Bank harvest fee, **in the market's underlying** (the treasury keeps the remainder) |
+| `POL_FEES_VIG_BPS` | 0 | 2500 | of each POL fee, diverted to the Vig (the same locked package; pol_fees books the NET) |
+| `FAMILY_MAX_PRICE_JUMP` | 10 | 10 | the keeper's price-continuity band vs the last real buy, per currency |
+
+**The one interaction to sign off with the flip, not after it:** the harvest carve comes out of
+`bank_revenue`, which is ALSO the city leg's budget (§ THE CITY LEG above) — at 6280 bps the
+players-who-play pool keeps 37.2% of what it kept before, per harvest fee. That is the locked
+design's declared trade (the community slice funds the FAMILY prize instead), but it is a real cut
+to an already-shipped payout, so the flip's BALANCE row must state both numbers side by side.
+
+**What the keeper can never do, by construction** (`test/community.js` mutations, each failing by
+name): mint without a matching real purchase (`yield:buyback` is an exact reason in `omrMints`;
+`runFamilyBuybackInvariants` reconciles credited == bought over real rows), outspend the community
+revenue that actually arrived (the per-currency root cap), let a comp/QA price move money (comps
+book ZERO spend and ZERO $OMR — the bank posture, since the pool's exit reaches real families), or
+ship a nonzero default. The bought hard $OMR stays in the community-buyback wallet, attested by
+`walletMustHold` (the treasury `safeMustHold` shape) — deliberately NO `fundReserve`, because gang
+reserves are burn-only today (seals, the Foundation); if gang-reserve $OMR ever reaches an account,
+that decision re-opens (the credit would then need the bank's reserve pairing AND a named term in
+both halves of the Vig sandwich).

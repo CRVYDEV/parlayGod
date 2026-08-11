@@ -9,6 +9,7 @@ import * as Bank from '../bank.js';
 import * as Bonds from '../bonds.js';
 import * as Chain from '../chain.js';
 import * as ChainParams from '../chainparams.js';
+import * as Community from '../community.js';
 import * as Desk from '../desk.js';
 import * as Fees from '../fees.js';
 import * as G from '../game.js';
@@ -218,6 +219,16 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
         spent: req.body?.spent, omrBought: req.body?.omr, txHash: modRealTxHash(req) }));
     app.post('/v1/mod/bank/epoch', { preHandler: modAuth }, async (req) =>
       Bank.runCityLeg(pool, { ...(req.body?.endDay != null ? { endDay: Number(req.body.endDay) } : {}) }));
+    // ── THE FAMILY BUYBACK (the treasury→family split's keeper, src/community.js) ───────────────
+    // `/community` is the real-value invariant (spend ≤ revenue per currency, the pool credit backed
+    // by a real purchase, comps buying nothing) plus the walletMustHold attestation. `/community/buy`
+    // is the keeper's seat until the DEX leg is wired — the same modRealTxHash gate as its siblings,
+    // and with MORE force here: the PRICE is caller-supplied, so an un-gated comp could mint a
+    // colossal family-pool credit from a small real budget.
+    app.get('/v1/mod/community', { preHandler: modAuth }, async () => Community.runFamilyBuybackInvariants(pool));
+    app.post('/v1/mod/community/buy', { preHandler: modAuth }, async (req) =>
+      Community.runFamilyBuyback(pool, { currency: req.body?.currency, priceOmr: req.body?.price,
+        ...(req.body?.maxSpend != null ? { maxSpend: Number(req.body.maxSpend) } : {}), txHash: modRealTxHash(req) }));
     app.get('/v1/mod/desk', { preHandler: modAuth }, async () => Desk.runDeskInvariants(pool));
     app.post('/v1/mod/desk/open', { preHandler: modAuth }, async () => Desk.openAuction(pool));
     app.post('/v1/mod/desk/fill', { preHandler: modAuth }, async (req) =>

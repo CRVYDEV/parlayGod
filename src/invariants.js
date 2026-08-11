@@ -277,7 +277,12 @@ async function collectLedgerChecks(pool) {
   // admissible exactly to the extent that the hard token really arrived, which conservation cannot
   // see (it counts the mint and moves on) — so `runDeskInvariants` asserts the soft credit equals the
   // hard purchase, and the Vig's two-sided reserve-backing pair carries the desk's contribution.
-  const omrMints = await sum(pool, "currency='omr' AND (reason LIKE 'mission:%' OR reason='prize:omr' OR reason LIKE 'emission:%' OR reason='desk:buyback')");
+  // yield:buyback (the family buyback, src/community.js) is the desk:buyback shape one pool over:
+  // an in-game mint into family_yield_pool paired with a hard $OMR purchase off the DEX, admissible
+  // exactly to the extent the hard token arrived — which runFamilyBuybackInvariants asserts
+  // (credited == bought, real rows only). The EXACT reason, never the yield:% prefix: yield:window
+  // and yield:family are genuine transfers and must stay out of both terms.
+  const omrMints = await sum(pool, "currency='omr' AND (reason LIKE 'mission:%' OR reason='prize:omr' OR reason LIKE 'emission:%' OR reason='desk:buyback' OR reason='yield:buyback')");
   // plex:* was a Phase-2 burn: a player paid a real-money fee from earned $OMR instead of ETH (the
   // PLEX bridge). RETIRED 2026-08-10 (fees are ETH only) — the rows are real, so the reason stays in
   // the burn term forever; only new writes stopped ('plex bridge retired' below asserts that).

@@ -127,13 +127,13 @@
   }
 
   async function refreshAll() {
-    const [ov, inv, fn, res, vig, em, act, rev, eng, bnd, tre, coa, intg, rtr, cpar, bkv] = await Promise.all([
+    const [ov, inv, fn, res, vig, em, act, rev, eng, bnd, tre, coa, intg, rtr, cpar, bkv, com] = await Promise.all([
       j('GET', '/v1/mod/overview'), j('GET', '/v1/mod/invariants'), j('GET', '/v1/mod/funnel'),
       j('GET', '/v1/mod/reserve'), j('GET', '/v1/mod/vig'), j('GET', '/v1/mod/emission'),
       j('GET', '/v1/mod/activity?limit=60'), j('GET', '/v1/mod/revenue'),
       j('GET', '/v1/mod/engagement'), j('GET', '/v1/mod/bonds'), j('GET', '/v1/mod/treasury'),
       j('GET', '/v1/mod/coach'), j('GET', '/v1/mod/integrations'), j('GET', '/v1/mod/router'),
-      j('GET', '/v1/mod/chain/params'), j('GET', '/v1/mod/bank'),
+      j('GET', '/v1/mod/chain/params'), j('GET', '/v1/mod/bank'), j('GET', '/v1/mod/community'),
     ]);
     if (ov.code === 401) return $('#logout').onclick();
 
@@ -160,7 +160,7 @@
 
     $('#stamp').textContent = 'as of ' + new Date().toLocaleTimeString();
     renderIntegrity(inv.body); renderEconomy(ov.body, em.body); renderPlayers(ov.body); renderEngagement(eng.body);
-    renderFunnel(fn.body); renderTop(ov.body); renderChain(res.body, vig.body, em.body, rev.body, bnd.body, tre, ov.body, bkv.body); renderRouter(rtr.body);
+    renderFunnel(fn.body); renderTop(ov.body); renderChain(res.body, vig.body, em.body, rev.body, bnd.body, tre, ov.body, bkv.body, com.body); renderRouter(rtr.body);
     renderBackups(ov.body); renderSocial(ov.body); renderCoach(coa.body);
     renderIntegrations(intg.body); window.__cpar = (cpar.body && cpar.body.rows) || []; renderChainParams(cpar.body);
     renderActivity(act.body); renderMod();
@@ -495,7 +495,7 @@
   // ReferenceError and took the entire chain panel down with it: the reserve, extraction-≤-inflow,
   // the staking pool, the Store split, the vault's allocated-≤-held wall and the oracle keeper
   // all rendered as nothing, on the screen a founder opens when something is wrong.
-  function renderChain(res, vig, em, rev, bnd, tre, ov, bk) {
+  function renderChain(res, vig, em, rev, bnd, tre, ov, bk, com) {
     const v = vig?.invariants || {}, vs = vig?.status || {};
     const extractOk = v.ok !== false;
     $('#p-chain').querySelector('.body').innerHTML =
@@ -569,7 +569,16 @@
           + rowHtml('waiting for the next split', `${fmt(bk.summary?.balance)} $OMR`)
           + rowHtml('the books', bk.ok
             ? '<span style="color:var(--ok)">✓ every token paid was bought</span>'
-            : `<span style="color:var(--bad)">⚠ ${esc((bk.checks || []).filter((c) => !c.ok).map((c) => c.name).join(' · '))}</span>`)) : '');
+            : `<span style="color:var(--bad)">⚠ ${esc((bk.checks || []).filter((c) => !c.ok).map((c) => c.name).join(' · '))}</span>`)) : '')
+      // THE FAMILY BUYBACK — community revenue → hard $OMR → the family yield pot. Phase 1 ships
+      // with every slice lever at 0, so "quiet" here is the expected state until the flip; what must
+      // never read quiet is a red runner (credited != bought / overspend / a comp that moved money).
+      + (com && !com.error ? (`<div class="note" style="margin-top:8px">the family buyback — community revenue</div>`
+          + rowHtml('arrived / spent', `${esc(Object.entries(com.summary?.revenue || {}).map(([c, v]) => `${fmt(v)} ${c}`).join(' · ') || 'nothing yet')} / ${esc(Object.entries(com.summary?.spent || {}).map(([c, v]) => `${fmt(v)} ${c}`).join(' · ') || '0')}`)
+          + rowHtml('the wallet must hold', `<b>${fmt(com.summary?.walletMustHold)} $OMR</b> <span class="note">bought for the family pot — attest against the community-buyback wallet</span>`)
+          + rowHtml('the books', com.ok
+            ? '<span style="color:var(--ok)">✓ every token credited was bought</span>'
+            : `<span style="color:var(--bad)">⚠ ${esc((com.checks || []).filter((c) => !c.ok).map((c) => c.name).join(' · '))}</span>`)) : '');
   }
 
   // THE MONEY ROUTER — WHERE A DOLLAR GOES. The whole declared waterfall (every real-value inflow

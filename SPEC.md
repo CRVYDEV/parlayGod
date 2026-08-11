@@ -10,10 +10,10 @@ Written 2026-07-25. Every number below was measured from the tree, not recalled.
 
 | | |
 |---|---|
-| Backend modules | **140** files, **45863** lines (`src/`, incl. `src/routes/` and `src/social/`) |
-| Test suites | **97** files, **32490** lines (`test/`) — ratio 0.71 test:src |
+| Backend modules | **141** files, **46251** lines (`src/`, incl. `src/routes/` and `src/social/`) |
+| Test suites | **98** files, **32807** lines (`test/`) — ratio 0.71 test:src |
 | HTTP routes | **651** registrations |
-| Database tables | **220** (`schema.sql`, 3194 lines) |
+| Database tables | **222** (`schema.sql`, 3234 lines) |
 | Client | **8314** lines (`public/index.html`, single file, zero dependencies) |
 | Ops dashboard + wiki | `public/admin.html`, `public/wiki.html` |
 | Smart contracts | **15** contracts, **2914** lines Solidity, **213** Foundry tests passing |

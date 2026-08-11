@@ -11946,3 +11946,51 @@ sequence) must be committed promptly, because a git operation you did not run ca
 and an artifact/design doc left uncommitted is not "saved" in any sense a merge respects. The
 `public/fee-flows.html` interactive fee diagram (editable, JSON export/import, published as an artifact) is
 committed with this drop.
+
+**THE FAMILY BUYBACK — Phase 1 of the treasury→family split (founder-directed 2026-08-11: the
+fee-structure iteration → "Lock this in" → "Let's start") — BUILT, chain-dormant, byte-identical
+until the flip** (`omerta-treasury-to-family-design.md` §4/§8; `src/community.js` — the 141st module,
+`test/community.js` — the 98th suite; `community_revenue`/`family_buybacks` — the 221st/222nd tables +
+`sell_tax_events.community_eth`; `GET /v1/mod/community` + `POST /v1/mod/community/buy`; the worker's
+nightly `alertDrift` gains the runner). The locked design's build-order step 1: five revenue ingests
+carve a COMMUNITY slice out of each REAL payment — the gameplay fee and the Store from the implicit
+operations remainder, the sell tax as a FOURTH slice before the LP remainder, the Bank harvest fee at
+ingest IN THE MARKET'S UNDERLYING (the treasury keeps the exact remainder — which is ALSO the city
+leg's budget, flagged in BALANCE.md as the flip's stated trade), and the POL fees diverting a Vig
+share with the NET booked to `pol_fees` (vig-INSERT FIRST, so a crash between the two inserts heals
+on re-delivery — both sides idempotent on ref). The keeper (`runFamilyBuyback`, the `runVigBuyback`
+twin) spends the unspent community revenue on hard $OMR per CURRENCY (root cap + a
+`FAMILY_MAX_PRICE_JUMP` continuity wall vs the last REAL buy, `ORDER BY created_at` never id) and
+credits `family_yield_pool` through the ONE `fundFamilyYield` implementation — so `payFamilyYield`'s
+5-4-3-2-1 seasonal distribution and the exchange's own `family yield backed`/`balance` identities
+absorb the second funder with zero changes. **§10.4: the pool credit is a MINT — `yield:buyback`, an
+EXACT reason in `omrMints`** (never the `yield:%` prefix; `yield:window`/`yield:family` are genuine
+transfers), because the credit has no counted-bucket debit — the first draft of the design doc said
+"no new mint reason" and was WRONG (the `kitchen:module` silent-drift class; corrected in the doc in
+this commit). It is admissible exactly to the extent the hard token arrived, which conservation
+cannot see, so `runFamilyBuybackInvariants` (nightly, + the mod GET) reconciles credited == bought
+over REAL rows, spend ≤ revenue per currency, comps-buy-nothing, and publishes `walletMustHold` (the
+treasury safeMustHold attestation shape). **Deliberately NO fundReserve** — the desk-shelf posture,
+not the bank's: gang reserves are burn-only (seals, the Foundation), so reserve-funding this pool
+would raise signable withdrawal capacity for claims that cannot be made; the re-open condition (gang
+$OMR ever reaching an account → the bank pairing + a named term in BOTH Vig-sandwich halves, the
+cityPaid lesson) is written at the site. **Comps book ZERO spend AND zero $OMR** (the bank posture,
+stricter than the desk's — the PRICE is caller-supplied and the pool's exit reaches real families);
+the mod buy route strips txHash unless `ALLOW_MOD_REAL_REVENUE=on` (D-MED2), proven at the route.
+All five slice levers are FUNCTION-levers (env read per call — settable in-suite post-load, and the
+Phase-2 flip is an env change): `FEE/STORE/SELL_TAX/HARVEST_COMMUNITY_BPS` + `POL_FEES_VIG_BPS`, each
+defaulting 0; the rules.tail.js FOUR-way sell-tax load guard makes the flip honest (community on
+REQUIRES lowering a sibling — the locked design lowers `SELL_TAX_RWA_BPS` 400→160 — or the module
+refuses to boot; proven BOTH ways in a subprocess). The router gained community rows on four
+sources + the polfees vig diversion, `COMMUNITY_SOURCES` membership, and two LEVER-HISTORY-IMMUNE
+checks — per-row `amount ≤ gross` + the two-sided tax mirror — because a declared-split mirror
+against a lever DESIGNED to move (ships 0, flips later) would false-alarm on flip day against all
+pre-flip history (my own first cut, discarded on that argument). `test/community.js` proves the
+Phase-1 byte-identity, the five exact carves (+ comp zeros), the keeper (cap/clamp/wall/per-currency,
+the comp not consuming the budget), §10.4 ABSOLUTE with the mint in the ledger, the runner + router
+failing by name, and the flip guard both ways — **five mutations, each caught at its own named
+assertion** (the reason dropped from omrMints → conservation drift = exactly the minted total; the
+root cap removed; a comp crediting the pool; the fee booking dropped with the lever on; a nonzero
+default breaking byte-identity). BALANCE.md § THE FAMILY BUYBACK is the lever record; Phases 2–4
+(the env flip with sign-off, the two contracts into the audit batch, the DEX keeper + custody) wait
+per the design's §8.
