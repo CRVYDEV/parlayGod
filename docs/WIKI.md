@@ -196,9 +196,8 @@ playing, extractable on-chain by minted accounts; held at the account level, so 
 stays in the city; $OMR comes in from outside and leaves through the Exchange window. The
 main economic rule (section 10.4): the game records and checks every movement of value.
 
-**Nothing you do in the game creates $OMR.** There is no wage, no yield and no drip — the Street Wage
-was retired, and the game now has no printer at all. Every $OMR in the city was **bought with real
-money** by somebody, which is exactly why it is worth taking off them. Your three ways to get some:
+**Nothing you do in the game creates $OMR.** There is no wage, no yield and no drip — the city has no
+printer at all. Every $OMR in it was **bought with real money** by somebody, which is exactly why it is worth taking off them. Your three ways to get some:
 **take it** (killing a player loots their liquid $OMR — staked and committed $OMR is safer), **earn it**
 from another player who pays you in it, or **buy it**. A nightly job asserts that no new $OMR appeared,
 so this is a fact you can check rather than a promise.
@@ -222,8 +221,8 @@ the full early-exit toll for its first 48 hours, same as any other fresh token.
 game, and it runs one way: **burn $OMR, receive cash at a published rate**, from a till that real
 cash sinks fill (the street take). A short till refuses cleanly and burns nothing — the window is a
 claim on what was funded, never a promise. 5% of every redemption goes to the top families (the
-family yield). **Cash can never become $OMR** — the old AMM swap and every laundering rail
-(street and private) are retired; those routes answer `retired`.
+family yield). **Cash can never become $OMR** — there is no swap and no laundering rail, street or
+private; any route that would do it answers `retired`.
 - **The early-exit tax on withdrawals:** $OMR that you received less than 48 hours ago pays an
   extra toll when you extract it on-chain — 50% at age zero, decreasing in a straight line to 0% at
   48 hours, newest tokens priced first so old savings cannot shield a fresh dump. Hold a token for
@@ -232,7 +231,7 @@ family yield). **Cash can never become $OMR** — the old AMM swap and every lau
 **THE MADE MAN** (`GET`/`POST /v1/made`) — the recurring subscription. Pay **120 $OMR every 30 days**
 and you are *made*: the badge, the upper compound (Country Estate and above), a club of your own, and
 **the pad pays itself** — your fronts settle their own cash upkeep the moment you touch them, so a
-stretch away no longer leaves them cold.
+stretch away does not leave them cold.
 
 **It buys standing, never power.** No earning loop is gated, no odds move, no stat changes, and the
 pad is not discounted by a cent — the same money leaves your pocket, you just stop having to remember.
@@ -247,7 +246,7 @@ rope) *and* **300 $OMR held in a stake**. Held, not spent: it earns nobody anyth
 is to put a permanent, visible, lootable float on exactly the players worth hunting.
 
 **The Vault (staking)** (`POST /v1/stake`, `/unstake`) — **cheaper cover, not a safe harbour.**
-Staking used to make $OMR untouchable. It no longer does: a killer takes 50% of a loose or unbonding
+Nothing makes $OMR untouchable: a killer takes 50% of a loose or unbonding
 balance but only 20% of a staked one, so committing halves what a bad night costs you without ever
 making you safe. You always get your full principal back, but it "unbonds" for 6 hours (at the higher
 IDLE rate during that window) before it is liquid. **Nothing you hold is out of reach** — the whole
@@ -281,9 +280,9 @@ Four things follow, and each is a mechanism rather than a policy:
   the city. A player who plays twenty hours a day is a rich player, not a source of new supply.
 - **Supply is enumerated, and the list is shrinking.** The ledger check is
   `buckets == genesis + mints − burns`, and a reason nobody enumerated is itself an alarm. The Street
-  Wage — the one scheduled printer — is retired, and a nightly check now asserts that no new unit of it
-  appears. Two small legacy taps remain (mission rewards and the Vig prize pool) and retire with their
-  own systems. There is no fourth tap to find.
+  city has no scheduled printer, and a nightly check asserts that none appears. Two small taps remain —
+  mission rewards and the Vig prize pool — and both are enumerated and bounded. There is no third tap
+  to find.
 - **No faucet is the strong version of the promise.** With nothing paying $OMR for play, in-game $OMR
   can never exceed what was deposited — so "you can only take out what somebody put in" stops being a
   rule the game has to enforce and becomes an arithmetic fact about the ledger.
@@ -355,8 +354,7 @@ assassin and trade ranks.
 Businesses are premium, level-gated, **upgradeable** places that earn pocket cash — the endgame
 personal-income engine, different from flat Rackets and Assets. Catalog: **Laundromat (L15) to
 Casino (L58)**. Each has 3 levels. You can own one of each kind. `GET /v1/catalog` [public] lists
-them all. *(Fronts no longer launder anything — cash can't become $OMR anywhere since the wash
-houses shut.)*
+them all. *(Fronts do not launder anything — cash cannot become $OMR anywhere in the game.)*
 
 Loop: **buy** (`/v1/business/:kind/buy`) → **collect** (income accrues, 24-hour limit,
 `/business/collect`) → **upgrade** (`/business/:id/upgrade`) → **pay the upkeep**.
@@ -445,8 +443,8 @@ discount however many borders you share, not a bonus for encirclement. So "we ca
 we do not hold the docks" is now a real sentence, and taking the district next to your own beats taking
 the rich one across town.
 
-**The charter — what your family IS.** Every family used to be mechanically identical apart from what
-it happened to hold. Now the boss picks a charter, and every one of them trades an edge for a real
+**The charter — what your family IS.** Without one, a family is defined only by what it happens to
+hold. The boss picks a charter, and every one of them trades an edge for a real
 handicap — a charter with only an upside would be a free upgrade everybody takes, and then nothing is
 asymmetric again. **The Syndicate** runs its operations 15% leaner but pays 15% over the odds for
 turf. **The Outfit** takes ground 15% cheaper and pays 15% more to run what it holds. **The Fixers**
@@ -946,10 +944,10 @@ actually does:
 - **Landmarks** (`/v1/landmarks/:districtId`) — one plaque in each district still bears a name that
   survives death.
 
-### The Window and the Family Yield (tokenomics v2)
+### The Window and the Family Yield
 
-How $OMR works changed (`omerta-tokenomics-v2-design.md`). **Cash no longer buys $OMR** — the wash houses
-are shut, laundering at your own front is gone, and the swap says so plainly if you try it. In exchange:
+**Cash does not buy $OMR** — there are no wash houses, no laundering at your own front, and no swap;
+any route that would convert cash into $OMR says so plainly if you try it. What you get instead:
 
 - **The Window** (`GET /v1/window`, `/v1/window/redeem`) — burn $OMR, take in-game cash at a published
   rate, from a till that the street take fills. It runs **one way only**: cash never becomes $OMR again.
@@ -1035,7 +1033,7 @@ conditions (L8, 40 jobs, 3 check-ins, $25k net worth). Milestones pay the recrui
   respect you earn, anywhere in the game. It is **live** — recomputed from your crew's current levels,
   so it rises as they rise, falls when one of them dies back to an heir, and stops when they stop.
   It is capped, and it is not a currency: it cannot be sold, given away or laundered.
-  **Referrals no longer pay $OMR** (retired 2026-07-31).
+  **Referrals pay respect, never $OMR.**
 - **Naming your referrer** — a recruit can type the sharer's street name in the **"who sent you?"
   field when they create their character** (a shared `?ref=` link pre-fills it), or — if they missed
   it — from the **"Did someone send you?" card on Start Here within their first 3 days**. Spelling is

@@ -168,8 +168,8 @@ const SECTIONS = [
       on-chain by minted accounts, account-level so it survives death), crates, and ammo. <b>Cash and $OMR do
       not trade</b> — cash is the city's own money and stays here; $OMR comes in from outside and leaves
       through the Exchange window. The main rule: the game records every movement of value on a ledger.</p>
-      <p><b>Nothing you do in the game creates $OMR.</b> No wage, no yield, no drip — the Street Wage was
-      retired and the game has no printer at all. Every $OMR in this city was <b>bought with real money</b>
+      <p><b>Nothing you do in the game creates $OMR.</b> No wage, no yield, no drip — the game has no printer
+      at all. Every $OMR in this city was <b>bought with real money</b>
       by somebody, which is exactly why it is worth taking off them. Three ways to get some: <b>take it</b>
       (a kill loots the victim's liquid $OMR — staked and committed $OMR is safer), <b>earn it</b> from a
       player who pays you in it, or <b>buy it</b>. A nightly job asserts no new $OMR appeared, so it is a
@@ -189,13 +189,13 @@ const SECTIONS = [
       bought at the desk is FRESH</b> — full early-exit toll for its first 48 hours, like any other.</p>
       <p><b>The Exchange window</b> — the ONE conversion, one way: burn $OMR, receive cash at a published
       rate, from a till that real cash sinks fill. A short till refuses and burns nothing. 5% of every
-      redemption goes to the top families (the family yield). <b>Cash can never become $OMR</b> — the old
-      swap and every laundering rail are retired. <b>The early-exit tax:</b> $OMR younger than 48 hours pays
+      redemption goes to the top families (the family yield). <b>Cash can never become $OMR</b> — there is no swap
+      and no laundering rail. <b>The early-exit tax:</b> $OMR younger than 48 hours pays
       an extra toll when withdrawn on-chain — 50% at age zero, straight-line to 0% at 48 hours, newest tokens
       priced first, no exemptions.</p>
       <p><b>THE MADE MAN</b> — the recurring subscription. Pay <b>120 $OMR every 30 days</b> and you are <i>made</i>:
       the badge, the upper compound (Country Estate and above), a club of your own, and <b>the pad pays itself</b> —
-      your fronts settle their own cash upkeep the moment you touch them, so a stretch away no longer leaves them cold.
+      your fronts settle their own cash upkeep the moment you touch them, so a stretch away does not leave them cold.
       <b>It buys standing, never power:</b> no earning loop is gated, no odds move, no stat changes, and the pad is not
       discounted by a cent. Operating costs stay in cash — all of them — which is the line that keeps the game free. A
       man who never pays dues runs the whole city at full strength, and can hunt made men for their $OMR. Dues are a
@@ -203,11 +203,11 @@ const SECTIONS = [
       <p><b>The access stake</b> — the Den's high-stakes room wants a seat (level 30, or the Madame's velvet rope)
       <i>and</i> <b>300 $OMR held in a stake</b>. Held, not spent: it earns nobody anything, and its whole job is to put a
       permanent, visible, lootable float on exactly the players worth hunting.</p>
-      ${L(`<b>The Vault (staking)</b> is <b>cheaper cover, not a safe harbour</b>. Staking used to make $OMR
-      untouchable; it no longer does. A killer takes <b>50%</b> of a loose or unbonding balance and <b>20%</b> of a
+      ${L(`<b>The Vault (staking)</b> is <b>cheaper cover, not a safe harbour</b>. Nothing makes $OMR
+      untouchable. A killer takes <b>50%</b> of a loose or unbonding balance and <b>20%</b> of a
       staked one — committing halves what a bad night costs you without ever making you safe. Your full principal
-      always returns, but it <b>unbonds for 6 hours</b> (at the higher idle rate) on the way out. The old per-staker
-      yield is retired — $OMR yield pays THE FAMILIES via the family yield now.`)}
+      always returns, but it <b>unbonds for 6 hours</b> (at the higher idle rate) on the way out. Staking pays the
+      staker no yield — $OMR yield goes to THE FAMILIES, through the family yield.`)}
       <p><b>The cycle:</b> cash costs go to the street-tax pool, and every 12 hours the whole take funds the
       Exchange window's till — the cash players spend backs the cash $OMR redeems for. <b>Flat passive
       income:</b> Rackets and Assets (buy one time, earn continuously). <b>Trade goods</b> — buy at a low
@@ -230,7 +230,7 @@ const SECTIONS = [
 
   { id: 'business', group: 'Money', title: 'Businesses & Fronts', tag: 'premium upgradeable venues',
     html: `<p>Level-gated, upgradeable places (Laundromat L15 to Casino L58) that earn pocket cash — the
-      endgame personal-income engine. <code>GET /v1/catalog</code> lists them. <i>(Fronts no longer launder
+      endgame personal-income engine. <code>GET /v1/catalog</code> lists them. <i>(Fronts do not launder
       anything — cash can't become $OMR anywhere.)</i></p>
       ${L(`<b>buy</b> → <b>collect</b> (24-hour limit) → <b>upgrade</b> → <b>pay the upkeep</b>.`)}
       <p><b>A front wants an owner who shows up, and the terms say so.</b> The till holds only a <b>day</b> of
@@ -264,7 +264,7 @@ const SECTIONS = [
       <p><b>The watch.</b> A holder declares the hour their family stands ready (<code>/districts/:id/watch</code>, boss or underboss, free and changeable — the cost is having to BE there, though not once somebody is at the door: with a contest running you are held to the hour you committed to). Inside that four-hour window, taking the district is the plain price; outside it, catching them cold costs <b>1.5&times;</b>. A family that never declares a watch is dear at every hour, so declaring is what buys you the cheap window. Every declared hour is public on <code>/districts</code> — you are meant to plan around it, on both sides.</p>
       <p><b>The sealed bid.</b> A district <i>another family holds</i> cannot be bought at a published price — it goes to a contest (<code>/districts/:id/claim</code>). Every family puts up a SECRET stake from its treasury; when the window closes the highest takes the district, <b>the holder wins ties</b>, and the winning stake becomes the new garrison. The board tells you how many families are in and never what any of them put up. A loser gets half of their stake back and forfeits the rest, so committing everything against a family that was never coming is how you lose money without losing a fight. A stake only ever goes up, and it leaves the treasury the moment you make it — you cannot bluff with money you have already spent. The watch still applies: staking outside the holder's declared window costs more just to get in.</p>
       <p><b>The map.</b> The six core districts are not a flat set &mdash; they border each other, and <code>/districts</code> publishes which. Geography prices the door from both sides. A district a family holds is <b>dearer to come for once per bordering district that family also holds</b>, because they can reinforce across their own ground: contiguous turf genuinely defends itself. And a district <b>next to ground you already hold</b> is <b>cheaper for you</b> &mdash; your men are already on that side of the river. That is one foothold discount however many borders you share, not a bonus for encirclement. So "we cannot defend the canal, we do not hold the docks" is now a real sentence, and taking the district next to your own beats taking the rich one across town.</p>
-      <p><b>The charter &mdash; what your family IS.</b> Every family used to be mechanically identical apart from what it happened to hold. Now the boss picks a charter, and every one of them trades an edge for a real <b>handicap</b> &mdash; a charter with only an upside would be a free upgrade everybody takes, and then nothing is asymmetric again. <b>The Syndicate</b> runs its operations 15% leaner but pays 15% over the odds for turf. <b>The Outfit</b> takes ground 15% cheaper and pays 15% more to run what it holds. <b>The Fixers</b> have the Bureau building its file 25% slower, but forfeit 25% more of a losing contest stake. Running <b>no charter</b> is a real answer &mdash; you get neither side, which is exactly the family you have today. The first pick is free; re-founding costs the family reserve and locks for a week afterwards. The two mirrors are deliberate: a Syndicate family and an Outfit family are each good at what the other is bad at, so an alliance between them is complementary rather than just twice as big.</p>
+      <p><b>The charter &mdash; what your family IS.</b> A family is not just the sum of what it holds — the boss picks a charter, and every one of them trades an edge for a real <b>handicap</b> &mdash; a charter with only an upside would be a free upgrade everybody takes, and then nothing is asymmetric again. <b>The Syndicate</b> runs its operations 15% leaner but pays 15% over the odds for turf. <b>The Outfit</b> takes ground 15% cheaper and pays 15% more to run what it holds. <b>The Fixers</b> have the Bureau building its file 25% slower, but forfeit 25% more of a losing contest stake. Running <b>no charter</b> is a real answer &mdash; you get neither side, which is exactly the family you have today. The first pick is free; re-founding costs the family reserve and locks for a week afterwards. The two mirrors are deliberate: a Syndicate family and an Outfit family are each good at what the other is bad at, so an alliance between them is complementary rather than just twice as big.</p>
       <p><b>The season has an ending.</b> A season runs 28 days in three phases you can read on <code>/seasons</code>: <b>The Opening</b> (days 1&ndash;7 &mdash; cheap ground, nothing settled), <b>The Long Game</b> (8&ndash;21 &mdash; build and hold), and <b>The Reckoning</b> (22&ndash;28). In the last week held turf is a quarter cheaper to challenge, contests settle in half the time and a holder's watch window is halved, so an incumbent who has been sitting on a district since week one has to defend it while the door is open. Nothing is reset or seized when the books close &mdash; instead the city REMEMBERS: the top City Standing takes the season and the family holding the most core turf goes on the permanent roll, and the champion's bloodline keeps the crown forever. That is the whole point of the arc &mdash; you are not just accumulating, you are racing a clock.</p>
       <p><b>The posts.</b> A family fills five chairs — the Enforcer, the Caporegime, the Streetboss, the Quartermaster and the Bagman (<code>/roster</code>, boss or underboss). <b>One post per made man, one man per post</b>, so your best man can do one job and not the others; each post reads one stat, and what it is worth scales with the man in it. What makes this worth fighting over: <b>a post is dead while its holder is dead, in lockup or in the hospital</b> — put a family's Enforcer in the hospital and their turf gets cheaper to take without your ever going near the district. They can fill the chair again straight away, but only with somebody who was on the STREET; you cannot slide a man across from another post for six hours — nor stand him down and walk him into the next chair, which is the same shuffle — so answering a hit costs the family a second made man. Every post is a bonus, never a requirement — the scarcity is which chairs you fill, not that the baseline moved.</p>
       <p>The reserve buys status: <b>seals</b> (Wax 150 to Obsidian 9000 $OMR) and the <b>Foundation</b> (360 to 18000 $OMR).
@@ -496,33 +496,33 @@ const SECTIONS = [
       ${R(`GET /v1/store [public] · GET /v1/pass · /pass/claim`)}` },
 
   { id: 'legit', group: 'Endgame & Going Legit', title: 'Going Legit — what your $OMR does', tag: 'the endgame',
-    html: `<p><b>The stock book is retired</b> (D11, 2026-08-05): the game sells no shares, real or fictional —
-      the tickers, the invests and the Dynasty Fund are gone, and their routes say so plainly if you try them.
-      Going legit now means what your <b>earned $OMR</b> actually does:</p>
+    html: `<p><b>The game sells no shares</b>, real or fictional — there are no tickers to buy and no fund to
+      invest in, and any route that would do it says so plainly if you try it. Going legit means what your
+      <b>earned $OMR</b> actually does:</p>
       <p><b>Stake it</b> — a held balance climbs the ladder (trunk, energy, nerve, garage, the fence at the top),
       and a committed balance is looted lighter than an idle one when you die. <b>Redeem it</b> at the Window for
       cash. <b>Claim backed ETH</b> at the Vault — real ETH the treasury holds, never more than it holds.
       <b>Get Made</b> and take your $OMR out on-chain. <b>Landmarks</b> — a district plaque still bears your name.</p>
       ${R(`POST /v1/stake · /v1/made · GET /v1/vault · /v1/window · POST /v1/landmarks/:id`)}` },
 
-  { id: 'window', group: 'Endgame & Going Legit', title: 'The Window & the Family Yield', tag: 'tokenomics v2',
-    html: `<p>How $OMR works changed. <b>Cash no longer buys $OMR</b> — the wash houses are shut, laundering at your own
-      front is gone, and the swap says so plainly if you try it. In exchange:</p>
+  { id: 'window', group: 'Endgame & Going Legit', title: 'The Window & the Family Yield', tag: 'the one conversion',
+    html: `<p><b>Cash cannot buy $OMR — at any price, by any route.</b> There is no wash house, no laundering at
+      your own front, no swap. The two economies are severed on purpose, and the one crossing between them runs
+      one way:</p>
       <p><b>The Window</b> — burn $OMR, take in-game cash at a published rate, out of a till the street take fills. It runs
       <b>one way only</b>: cash never becomes $OMR again. The till can run dry, and a short window refuses and
       <b>burns nothing</b> — it is a claim on what was funded, never a promise; there is a daily limit per account. It is
-      <b>open</b>, which it could not be while cash still bought $OMR: the two together would be a money pump, and the game
-      refuses to run both.</p>
+      <b>open</b> precisely because cash cannot buy $OMR: a fixed-rate window alongside a purchase rail would be a money
+      pump, so the game runs one or the other, never both.</p>
       <p><b>The Family Yield</b> — the top families by this season's standing split a pot of $OMR into their reserve. The
       pot is fed by <b>the family's cut of every redemption at the Window</b> — a small share of what a player burns goes
       to the families instead of leaving supply. It is what staking rewards and personal dividends become: standing stops
       being only a badge and starts paying, so tribute, wars and the Commission are worth real money to a family.</p>
       <p><b>The Vault</b> — four streams of real ETH (the DEX sell tax, treasury bonds, the store, game fees) fund the
       protocol: liquidity, the withdrawal reserve, the founder, and a treasury. Burn earned $OMR and you claim a share of
-      what that treasury actually holds. It is <b>backed by ETH, not by stock</b> — until 2026-07-31 the vault was
-      denominated in real tokenized shares; that layer is retired. The rule is the same one it always had and is now
-      unbreakable: <b>the house never owes more than it holds</b>, and with ETH on both sides no price move can change
-      that. The board publishes what came in and from where. Allocation only — nothing is delivered, no sell, no
+      what that treasury actually holds. It is <b>backed by ETH</b>, on both sides of the book — what the treasury holds and what it can owe you are
+      the same asset, so the rule is unbreakable rather than merely watched: <b>the house never owes more than it
+      holds</b>, and no price move can change that. The board publishes what came in and from where. Allocation only — nothing is delivered, no sell, no
       cash-out.</p>
       <h3>Why it is built this way</h3>
       <p>Almost every game with a token has the same pipe: farm the game's currency, convert it to the token, sell.
@@ -537,8 +537,8 @@ const SECTIONS = [
         city. A player who never logs off is a rich player, not a source of new supply.</li>
         <li><b>Supply is enumerated, and the list is shrinking.</b> The ledger checks
         <code>buckets == genesis + mints − burns</code>, and a reason nobody enumerated is itself an alarm. The Street
-        Wage — the one scheduled printer — is retired, and a nightly check asserts no new unit of it appears. Two small
-        legacy taps remain (mission rewards, the Vig prize pool) and retire with their own systems.</li>
+        city has no scheduled printer, and a nightly check asserts none appears. Two small taps remain — mission rewards
+        and the Vig prize pool — and both are enumerated and bounded.</li>
         <li><b>No faucet is the strong version of the promise.</b> With nothing paying $OMR for play, in-game $OMR can
         never exceed what was deposited — so "you can only take out what somebody put in" stops being a rule the game
         enforces and becomes an arithmetic fact about the ledger.</li>
@@ -592,7 +592,7 @@ const SECTIONS = [
       and titles. <b>THE CREW BONUS</b> is the real reward: every qualified recruit makes you earn <b>respect faster</b>,
       scaled by how far THEY have got (level 5 → +5%, level 10 → +10%, level 15 → +15%, in steps), applied to every
       respect you earn anywhere. It is live — it rises as they rise and stops when they stop — capped, and not a
-      currency, so it cannot be sold or given away. <b>Referrals no longer pay $OMR</b> (retired 2026-07-31). A recruit names who sent them in the <b>"who sent you?"</b> field at character creation
+      currency, so it cannot be sold or given away. <b>Referrals pay in cash and in respect, never in $OMR.</b> A recruit names who sent them in the <b>"who sent you?"</b> field at character creation
       (a shared link pre-fills it) or from the <b>"Did someone send you?"</b> card on Start Here in their first
       3 days — wrong capitalization is forgiven, and it's set once. <b>The spark</b> pays a small early bonus at L3 and 10 jobs; <b>tier-2 "the family tree"</b> pays a
       one-time $5k finder's fee when your recruit brings in their own qualified recruit (cash only, depth 2); a

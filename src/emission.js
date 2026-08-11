@@ -28,6 +28,6 @@ import { GameError } from './game.js';
 // polling /v1/wage — learns what happened instead of guessing (the v2 `swap`/`launder` precedent).
 export function wageBoard() {
   throw new GameError('retired',
-    'The Street Wage is gone. The game no longer prints $OMR — every $OMR in the city was bought or '
+    'The game does not print $OMR. Every $OMR in the city was bought, or '
     + 'taken from somebody who bought it. Earn cash on the street, and take theirs.');
 }
