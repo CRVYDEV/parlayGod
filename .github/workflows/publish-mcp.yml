@@ -1,0 +1,68 @@
+# Publishes omerta-mcp to npm, so nobody has to run `npm publish` from a laptop.
+#
+# WHY A WORKFLOW RATHER THAN A TERMINAL. Publishing is a one-line command, but that line has to run
+# somewhere with npm credentials on it. Putting those credentials on a personal machine means the
+# release depends on which machine is to hand and who has logged in lately. Here the credential lives
+# in one place (a repository secret), the release is a button on a web page, and every publish leaves
+# a log saying who pressed it and what went out.
+#
+# HOW TO RELEASE: Actions → "publish omerta-mcp" → Run workflow. That is the whole operation.
+#
+# ONE-TIME SETUP: a repository secret named NPM_TOKEN holding an npm *Automation* token (or a
+# Granular Access token with write access to omerta-mcp). An Automation token is the right kind
+# specifically because it bypasses the 2FA prompt — a CI runner has no phone to approve a push from,
+# so a normal token would make this workflow hang and then fail.
+name: publish omerta-mcp
+
+on:
+  workflow_dispatch:          # deliberately manual — a publish is irreversible at a given version
+    inputs:
+      dry_run:
+        description: 'Rehearse only — pack the tarball and show what WOULD be published, publish nothing'
+        type: boolean
+        default: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: omerta-mcp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'   # writes the .npmrc that NODE_AUTH_TOKEN feeds
+
+      # The package has one dependency and no build step, so there is nothing to compile — but it
+      # must at least LOAD. A published package that throws on import is worse than none, because
+      # every agent that follows the install instructions hits it.
+      - name: install
+        run: npm install --no-audit --no-fund
+      - name: the server must actually start
+        run: |
+          node --check index.js
+          timeout 10s node index.js < /dev/null > /dev/null 2>&1 || code=$?
+          # An MCP server speaks over stdin and exits 0 when stdin closes; `timeout` returns 124 if
+          # it had to be killed, which also means it was running. Anything else is a real failure.
+          if [ "${code:-0}" != "0" ] && [ "${code:-0}" != "124" ]; then
+            echo "the server exited $code on startup — not publishing a broken package"; exit 1
+          fi
+
+      # Show exactly what is about to be shipped. `files` in package.json is an allowlist, so this is
+      # where you find out that something you expected is missing — or that something private is not.
+      - name: what would go out
+        run: npm pack --dry-run
+
+      - name: publish
+        if: ${{ inputs.dry_run == false }}
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: it is live
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          echo "published — anyone can now run it with: npx -y omerta-mcp"
+          echo "listing: https://www.npmjs.com/package/omerta-mcp"
