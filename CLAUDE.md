@@ -11856,3 +11856,53 @@ and `chainparams.js` use for that exact contract. Two env vars for one address i
 the code finds the market and half does not, with nothing failing loudly. The guard exists to stop a
 knob reaching production by being forgotten; here it stopped one reaching production by being
 DUPLICATED, which is the same failure wearing a different hat.
+
+**THE POOL IS A CLIFF, AND THE PACKAGE IS LIVE (2026-08-11).** The founder asked how many concurrent
+players the current configuration could host. It is measurable rather than guessable —
+`tools/loadtest.js` exists for exactly this — and measuring it found a live production defect, which
+is the more useful half of the answer. **At 30 concurrent players against real Postgres, same tree,
+same box, only the pool changed: `PG_POOL_MAX=20` (the `src/db.js` default) gave 30 req/s, a p95 of
+10.0s and NINE 503s; `PG_POOL_MAX=60` gave 284 req/s, a p95 of 87ms and zero 5xx.** Three times the
+pool bought **9.4×** the throughput, which is the signature of QUEUEING COLLAPSE rather than a slope:
+past the cliff requests queue for a connection, hit the 10s `connectionTimeout` exactly (that IS the
+p95), and the player is told the database is unreachable — the app is simply saturated, and the
+`isDbDown` classifier is not wrong to say so, it just makes a capacity problem read as an outage.
+`render.yaml` had never DECLARED the pool, so production has been running the default; declared at 40
+(40 api + 20 worker is far under anything a pro-4gb instance limits). **The CPU split is the finding
+that decides the scaling dial, and it inverts the intuitive answer**: at 284 req/s Postgres was the
+heavier half — **~1.9 cores against node's ~1** — so the DATABASE plan binds before the web plan, and
+adding a second API instance would buy nothing until the database is upgraded. Translating req/s to
+players goes through the rate limiter (human bucket 1/s sustained, so that is a hard per-player
+ceiling): ~150 req/s on production's 1-CPU database is **~150 players pinned at the limit, ~500
+genuinely active at ~0.3 req/s, thousands idling on the 30s poll** — against ~30 before the fix. Stated
+honestly at the time: the box under test ran server, database AND all 30 client loops on 4 shared
+CPUs, and the harness's virtual players hammer at ~9.5 req/s each, which is 10–30× a human — which is
+precisely why the conversion runs through the rate limiter rather than quoting the raw number.
+**AND `omerta-mcp@1.0.0` IS PUBLISHED** (run #5, verified live — `npx -y omerta-mcp` installs from the
+registry and connects to the game, so `/play`'s copy-paste setup is real rather than aspirational).
+The two failed runs before it are worth keeping for the diagnostic lesson. The publish reported
+`404 Not Found - PUT .../omerta-mcp`, which reads like a name collision or a permissions scope; the
+registry had no such package (checked) and the scope was never reached. The workflow's own whoami step
+had ALREADY said the true thing one line earlier — `401 Unauthorized` — and then let the publish run
+and bury it. **When the diagnosis is unambiguous, handing the reader a worse error afterwards is not
+neutrality, it is noise**, so that step now STOPS on a 401 and names the causes in likelihood order,
+led by the one that is now dominant: npm caps granular tokens at 90 days and revoked every classic
+token in December 2025, so a stored npm credential does not degrade, it DIES. A token that
+authenticates still falls through to `npm publish`, because that case really is ambiguous. Residual,
+and it has a deadline: the package went out on a token so it carries **no provenance attestation**,
+and from **January 2027** a 2FA-bypass token loses direct publish outright — the package page now
+exists, so the trusted publisher can finally be configured and `NPM_TOKEN` deleted, which needs no
+edit to the workflow (`NODE_AUTH_TOKEN` resolves empty and npm falls through to OIDC). npm still has
+no "pending publisher" (npm/cli#8544), which is the only reason a token was ever involved.
+**Also: the three workflows moved to `actions/checkout@v7` + `actions/setup-node@v7`** — v4 targets
+node20, which the runners force onto node24 with a deprecation warning on every run. Checked rather
+than assumed, because a broken CI is worse than a warning: the breaking changes between v4 and v7 are
+a credential-storage change (checkout v6), a fork-PR block for `pull_request_target`/`workflow_run`
+(checkout v7) and automatic dependency caching (setup-node v5, narrowed to npm in v6), and none reach
+this repo — nothing pushes or reads the checkout credential, no workflow uses either trigger (so v7's
+block is a security improvement taken for free), and `ci.yml` already asks for `cache: npm` explicitly.
+It also clears the second warning in the same logs, since setup-node stopped writing the deprecated
+`always-auth` key in v6.1. **A process note that cost real time twice this session**: a commit landed
+on `main` locally rather than the designated branch and had to be moved with `git branch -f` + a reset;
+and CI does not run on branch pushes at all (`ci.yml` builds pushes on `main` only and everything else
+via `pull_request`), so a bumped action is unverified until a PR exists — which is what PR #35 is for.
