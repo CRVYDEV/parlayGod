@@ -20,6 +20,14 @@
 # publish needs a token in NPM_TOKEN, and after it lands the trusted publisher is configured and
 # **the NPM_TOKEN secret is deleted**. From then on this file authenticates by identity, not secret.
 #
+# TREAT THE MIGRATION AS THE POINT, not as tidying up afterwards. npm caps granular tokens at 90 days
+# and revoked every classic token in December 2025, so a stored credential here is not a thing that
+# works and occasionally needs rotating — it is a thing that is guaranteed to be dead the next time
+# anyone reaches for it, at which point the failure is a misleading 404 and the debugging starts from
+# scratch. Worse, from January 2027 a 2FA-bypass token loses direct publish outright, so this bootstrap
+# path has an expiry date of its own. Configure the trusted publisher on the FIRST publish, while the
+# package page is open in front of you, and this file never needs a secret again.
+#
 # The step order below is deliberate: NODE_AUTH_TOKEN resolves to an empty string once the secret is
 # gone, and npm falls through to OIDC. So deleting the secret is the whole migration — no edit here.
 name: publish omerta-mcp
@@ -82,8 +90,14 @@ jobs:
       # because npm answers an auth failure with 404 rather than 401 so the error cannot be used to
       # probe which private packages exist. That is a genuinely misleading error (npm/cli#9088) and it
       # makes two very different problems look identical: a token that does not authenticate at all,
-      # and a token that authenticates but may not create this package. This splits them — never
-      # fatal, because its job is to say what happened, not to decide.
+      # and a token that authenticates but may not create this package. This splits them.
+      #
+      # It STOPS on a dead credential rather than reporting and carrying on. Run #4 proved the point:
+      # this step said plainly "the token did NOT authenticate — 401", the publish ran anyway, and the
+      # 404 it produced sent the reader off hunting a name collision and a permissions scope that were
+      # both fine. When the diagnosis is unambiguous, handing the reader a worse error afterwards is
+      # not neutrality, it is noise. A token that authenticates still falls through to `npm publish`,
+      # because THAT case really is ambiguous and only the publish can settle it.
       - name: who does npm think we are
         if: ${{ inputs.dry_run == false }}
         run: |
@@ -92,11 +106,26 @@ jobs:
             echo "→ so if the publish below still fails, the token is REAL but not permitted to"
             echo "  create this package: check its Packages-and-scopes is 'All packages' with"
             echo "  Read and write. A brand-new package cannot be named in a per-package scope."
-          else
-            echo "the token did NOT authenticate: $who"
-            echo "→ so the publish below will fail on credentials, not permissions: check the"
-            echo "  NPM_TOKEN secret exists, is spelled exactly that, and has no stray whitespace."
+            exit 0
           fi
+          echo "the token did NOT authenticate: $who"
+          echo
+          echo "STOPPING HERE. The publish would fail with a 404 that reads like a missing package"
+          echo "or a name someone else owns; neither is the problem. The credential is dead."
+          echo
+          echo "Most likely, in order:"
+          echo "  1. IT EXPIRED. npm caps granular tokens at 90 days — there is no longer such a"
+          echo "     thing as a token that keeps working. This is the common case."
+          echo "  2. IT WAS A CLASSIC TOKEN. npm revoked every one of them in December 2025."
+          echo "  3. It was pasted with a stray newline, or truncated, or the token NAME was pasted"
+          echo "     instead of the value."
+          echo
+          echo "Fix: npmjs.com → Access Tokens → Generate → Granular. Expiry 7 days (this token has"
+          echo "one job and should not outlive it). Packages and scopes: ALL packages, Read and"
+          echo "write — a package that does not exist yet cannot be named in a per-package scope."
+          echo "Bypass 2FA: ON (still permitted for publish until January 2027). Then paste it into"
+          echo "the NPM_TOKEN repository secret and run this again."
+          exit 1
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
