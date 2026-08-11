@@ -5832,3 +5832,44 @@ at the point of payment or say in the waiver why not. And it must be at the **po
 `agent_flag` is set by the account's own call to `/v1/auth/agent-key`, so a gate at formation time
 reads state the account can flip before it collects. That is not hypothetical: `mentor` shipped
 exactly that bug, and the fix is what the family was written around.
+
+---
+
+## THE CITY LEG — the Bank's profit pays the players (BUILT 2026-08-11, `src/bank.js`)
+
+Founder-directed: *"make it so the OMR bought from the profit only funds the game the players who
+play."* Protocol profit → market buy → distributed as `prize:omr`, pro-rata on the day's activity.
+
+**There is no new lever here, and that is the point.** The distribution's shape is `ACTIVITY`
+(already pinned when the metric locked — `MIN_TRACKS` 3, `MIN_SCORE` 25, the tag list) and its
+SIZE is not a number anybody sets: it is **whatever the Bank actually earned**, which is why the
+leg is the safest emission surface in the game. There is nothing to tune upward.
+
+| what | value | why it is not a dial |
+|---|---|---|
+| the payout | 100% of what was bought | RULE 1 — `distributed ≤ bought` is a nightly check, not a policy |
+| the split | linear, pro-rata, **uncapped** | see below — the cap is the bug, not the safeguard |
+| the epoch | 1 day | matches `ACTIVITY.EPOCH` and the ticker ballot's clock |
+| who is in | ≥3 trades, ≥25 score, human | `ACTIVITY`, pinned |
+
+**WHY THERE IS NO PER-ACCOUNT CAP, restated because the instinct to add one is strong.** § THE FARM
+measured this already: `WAGE_CAP_OMR` was commented "anti-Sybil" and did the opposite. A cap is
+**concave**, and the only way around a per-individual cap is to *be several individuals* — so it
+clips the honest whale and hands the remainder to whoever runs more accounts.
+
+    concave (a cap, a log-share) → splitting effort across N accounts GAINS   → Sybil-POSITIVE
+    linear                      → splitting gains exactly nothing             → Sybil-NEUTRAL ✔
+
+The Sybil bound is the game's own clocks: every scoring tag is throttled by nerve, energy or a
+cooldown, so a farm's cost and its reward are both linear in N — identical ROI to one honest player.
+`test/bank.js` asserts it directly (three accounts doing a third each take *exactly* what one doing
+all of it took), and under a cap that number goes **3× larger**. **Anyone proposing a cap here should
+read § THE FARM first, then run that test with the cap in and look at the number it prints.**
+
+The breadth gate is the opposite shape and belongs: `MIN_TRACKS` is a fixed cost per ACCOUNT, so it
+is Sybil-NEGATIVE and never clips an engaged player.
+
+**Watch in the alpha, rather than pre-tune:** whether `MIN_TRACKS` 3 is a real barrier to a
+casual player (the board tells them the gate, so the signal will be visible), and the realised
+$OMR-per-player-per-day once the Bank has borrowers — which is a function of revenue, not of a
+setting.

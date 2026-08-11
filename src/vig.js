@@ -267,6 +267,14 @@ export async function runVigInvariants(pool) {
   // The two must agree or the sandwich fires spuriously — which is the point: with both halves gated
   // this pair now CATCHES a comp-funded reserve instead of silently absorbing it.
   const deskToReserve = round6(await sumEth(pool, 'desk_buys', 'omr_bought', 'WHERE real'));
+  // THE CITY LEG (src/bank.js) is the third legitimate funder. Every $OMR it credits a player is
+  // fundReserve'd for the same amount immediately after the commit — the payPrizes shape — so its
+  // lifetime paid IS its contribution to `funded`. It has to be named in BOTH terms below, and the
+  // failure mode if it is not is worth stating: this pair does not fail OPEN on an unknown funder,
+  // it fires SPURIOUSLY on both halves at once, which reads as a reserve emergency that is not one.
+  // (AUDIT-desk F1 learned this the same way, one funder earlier.)
+  const cityPaid = round6(num((await pool.query(
+    'SELECT COALESCE(paid_total,0) s FROM bank_city_pool WHERE id=1')).rows[0]?.s));
 
   const eps = 1e-6;
   // (1) the bot never spends more ETH than the Vig received — the root cap
@@ -275,15 +283,15 @@ export async function runVigInvariants(pool) {
   push('buyback split exact', Math.abs((toReserve + toPrize) - omrBought) <= eps, { toReserve, toPrize, omrBought });
   // (3) the reserve holds ONLY Vig-bought $OMR — the buyback's reserve share plus any prize $OMR
   // moved from the pool to back a prize withdrawal. No unbacked (team-charity) funding.
-  push('reserve fully backed', funded <= toReserve + prizePaid + deskToReserve + eps,
-    { funded, toReserve, prizePaid, deskToReserve });
+  push('reserve fully backed', funded <= toReserve + prizePaid + deskToReserve + cityPaid + eps,
+    { funded, toReserve, prizePaid, deskToReserve, cityPaid });
   // (3b) …and holds ALL of it: fundReserve runs post-commit (it opens its own txn), so a crash
   // between the buyback/prize COMMIT and the reserve top-up would leave the intended funding
   // recorded but never applied — winners' withdrawals queue forever with every one-sided check
   // green. Under-funding is a LOST-FUNDING alarm (re-fund the difference); over-funding stays
   // check (3)'s charity alarm. (Audit: the invariant was one-sided.)
-  push('reserve not under-funded', funded >= toReserve + prizePaid + deskToReserve - eps,
-    { funded, toReserve, prizePaid, deskToReserve });
+  push('reserve not under-funded', funded >= toReserve + prizePaid + deskToReserve + cityPaid - eps,
+    { funded, toReserve, prizePaid, deskToReserve, cityPaid });
   // (4) extraction never exceeds the funded reserve (the queue guarantees this live; assert it)
   push('extraction ≤ reserve', extracted <= funded + eps, { extracted, funded });
   // (5) prizes paid + still pooled never exceed what the Vig bought for prizes
