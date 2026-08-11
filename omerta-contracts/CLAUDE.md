@@ -114,6 +114,32 @@ Solidity suite for OMERTÀ on Robinhood Chain. Rules for future sessions:
    - `DISCOUNT_BPS` must stay strictly BELOW `sellTaxBps` or a bond becomes an arbitrage rather than a
      hold (design §9.6). Asserted in `test/OmertaHook.t.sol` and warned about in the backend's
      `preflight.js` — the two constants live in different layers, so nothing else relates them.
+   - **THE BUY SIDE (anti-snipe + surge, design `omerta-hook-blocks-design.md`, prompted by
+     hookr.fun landing on our chain).** Both ship ARMED AT ZERO — `antiSnipeBlocks=0` and
+     `surgeMaxBps=0` are byte-for-byte today's flat-tax behaviour (`test_the_surge_off_is_byte_for_byte_the_flat_tax`).
+     - **The opening window is the ONLY thing in this contract that can refuse a swap, and it is not a
+       pause.** Its length is capped at a COMPILE-TIME `MAX_ANTISNIPE_BLOCKS` (200), counted from
+       `openedAt` (written once in `afterInitialize`, never updated). So a compromised Safe cannot
+       extend it, renew it, or re-arm a pool that has already been open longer than the window — the
+       branch expires by block count with nobody acting. Do not make `openedAt` writable, and do not
+       raise the cap into hours. Sells are NEVER refused (a window that blocks exits is the honeypot
+       `MAX_SELL_TAX_BPS` exists to forbid) — pinned by `test_sells_are_NEVER_refused_by_the_window`.
+     - **The exact-output-buy refusal is load-bearing ONLY when no size cap is set** (`antiSnipeMaxBuy=0`).
+       With a cap, `uint256(-amountSpecified)` for an exact-output amount underflows to a huge number
+       and `SnipeTooLarge` catches it anyway — so the regression MUST test the cap==0 regime or it
+       cannot tell the refusal is doing anything (the first cut tested the wrong regime and a mutation
+       survived — see `test_an_exact_output_buy_is_refused_outright...`).
+     - **The surge is a rate WITHIN `MAX_SELL_TAX_BPS`, never an escape from it** — the ceiling is
+       Safe-set under the same compile-time cap as the base (`test_the_surge_ceiling_cannot_exceed_the_anti_rug_cap`).
+       It scales with PRICE IMPACT measured off the pool's own `sqrtPrice` (pre in transient storage
+       from `beforeSwap`, post in `afterSwap`) — NO oracle, so nothing for a manipulated feed to
+       loosen — because impact is the damage metric `tools/bond-dials.js` sized `dailyCapOMR` on. The
+       surge only ever WIDENS the `DISCOUNT_BPS < sellTaxBps` margin.
+     - **The permanent four-slice buy rate is DELIBERATELY NOT this** (design §3 /
+       `omerta-v4-hook-design.md:584`). The window fee is a WINDOWED buy rate that expires; a
+       permanent buy tax adds a fourth recipient and is an economic surface for its own sign-off. It
+       shares this audit, so if it is wanted, decide it before the batch — a second buy-side change on
+       an immutable contract is a second audit.
 
 8. **THE BANK's nUSD market (`NUSD` / `CollateralEscrow` / `Alchemist` / `Transmuter`) — the rules
    that are structural, not stylistic.** Design: `omerta-bank-protocol-design.md` §2.1–2.5.
