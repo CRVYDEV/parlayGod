@@ -30,6 +30,11 @@
 #
 # The step order below is deliberate: NODE_AUTH_TOKEN resolves to an empty string once the secret is
 # gone, and npm falls through to OIDC. So deleting the secret is the whole migration — no edit here.
+#
+# WHERE THIS STANDS: omerta-mcp@1.0.0 published 2026-08-11 (run #5), on a token. The package page now
+# exists, so the trusted publisher CAN be configured — which means the bootstrap is over and the only
+# thing keeping a credential in this repo is that nobody has switched it off yet. Do the two steps the
+# final job prints. Until then every release rides a secret that npm will expire out from under it.
 name: publish omerta-mcp
 
 on:
@@ -52,8 +57,8 @@ jobs:
       run:
         working-directory: omerta-mcp
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'   # writes the .npmrc NODE_AUTH_TOKEN feeds
