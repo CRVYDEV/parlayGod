@@ -47,10 +47,13 @@ export const RESERVE_BPS = Number(process.env.VIG_RESERVE_BPS || 5000); // 50% o
 //
 // WHO ACTUALLY PAYS IN $OMR, stated honestly rather than sold. $OMR has had no faucet since v3 step
 // 1, and the mission ladder pays ~1,320 lifetime — nowhere near a respawn at the market rate. So
-// this is NOT rent-from-grinding. The player who funds their fees in $OMR is the one who ACCUMULATES
-// it by playing, and in this game that overwhelmingly means taking it off somebody: `whack:loot`
-// moves 20–50% of a victim's liquid and staked $OMR to their killer. That is a better fit than EVE's
-// version, not a worse one — you pay your rent by robbing people, which is the entire premise.
+// this is NOT rent-from-grinding, and sim P9.35 now MEASURES the gap rather than leaving it to a
+// comment: the whole earn surface is 1,320 lifetime (the mission ladder, once per account) plus 3/day
+// (`daily:all`, a transfer out of the event fund), against 4,941 for the CHEAPEST thing the rail
+// sells — 3.7× the entire ladder. So the player who funds their fees in $OMR is the one who takes it
+// off somebody: `whack:loot` moves 20–50% of a victim's liquid AND staked $OMR to their killer. That
+// is a better fit than EVE's version, not a worse one — you pay your rent by robbing people, which is
+// the entire premise — but it is a DIFFERENT claim, so do not describe it as ISK-rent.
 const MINT_FEE_ETH = Number(process.env.MINT_FEE_ETH || 0.01);
 const RESPAWN_FEE_ETH = Number(process.env.RESPAWN_FEE_ETH || 0.10);
 // MARKET-LINKED (sim-audit F3): a hand-set $OMR price is minutes of play against real money, so the

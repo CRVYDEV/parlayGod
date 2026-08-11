@@ -3075,10 +3075,17 @@ siblings — the `rwa:vault` distinction). **One hole was closed on the way back
 retirement**: the `made_man` SKU grants a mint credit, so while `payPlex('mint')` refused, the Store
 sold the same thing for $OMR one layer up — the cheaper-rail rule routed around rather than broken;
 now shut on the GRANT (`if (g.mintCredits) throw`), not on the sku id, so a new package cannot reopen
-it by being spelled differently. Recorded honestly in `src/vig.js`: this is NOT rent-from-grinding —
-$OMR has had no faucet since v3 step 1 and the mission ladder pays ~1,320 lifetime, nowhere near a
-respawn at the market rate, so the player who funds fees in $OMR is overwhelmingly the one who TAKES
-it off somebody (`whack:loot` moves 20–50% of a victim's liquid and staked $OMR to their killer).
+it by being spelled differently. **And the fantasy it was restored on is MEASURED, not assumed** (sim
+**P9.35 THE PLEX REACH**, printed every run): the whole $OMR earn surface is **1,320 lifetime** (the
+mission ladder, once per account) + **3/day** (`daily:all`, a transfer out of the event fund) —
+against **4,941** for the CHEAPEST thing the rail sells, i.e. **3.7× the entire ladder**, and 24,706
+for a respawn (7,796 further days of perfect daily play). So a player who completes every $OMR
+mission in the game can buy NOTHING on the rail. $OMR has had no faucet since v3 step 1, so the rail
+is reached by **predation** (`whack:loot` takes 20–50% of a victim's liquid AND staked $OMR) or
+**purchase** (the desk auction, for ETH) — never by grinding. That is on-theme for a mafia game and
+it is **not EVE**, where PLEX *is* reachable by grinding ISK; the design docs that described it as
+ISK-rent are corrected, and BALANCE.md § THE PLEX REACH ranks the dials (`M4.DAILY_ALL_OMR`,
+`STORE.PLEX_PREMIUM_BPS`, or the machine-owned mission `omr` column) as a founder call, not a defect.
 
 
 **…AND THE `made_man` SKU RETIRED WITH IT (founder-directed, same day, from the decision sheet: "2").**

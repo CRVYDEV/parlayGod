@@ -112,11 +112,17 @@ roadmap-of-appreciation, no buyback promise attaches to the NFT. *Question for c
 uncapped utility-NFT sales at fixed price, marketed without appreciation language, stay outside
 the securities perimeter in the target jurisdictions.* **Fact-pattern amendment 2026-08-10 (the
 mint-price posture, `omerta-dynasty-machine-design.md` §10):** the mint is payable on **ONE rail —
-ETH.** The second rail (PLEX, paying in earned $OMR) was retired the same day, across every
-real-money price in the product: minting is the Sybil bound that gates extraction, and a fee
-payable two ways is always priced by whichever rail is cheaper. So there is one price, in real
-money, at the published wave — which simplifies this row rather than complicating it, since there
-is no conversion, no oracle and no lockstep to describe. "Fixed price" means **fixed at any given
+ETH.** A second rail (PLEX, paying a fee in earned in-game $OMR) exists elsewhere in the product
+and does NOT reach the mint: minting is the Sybil bound that gates extraction, and a fee payable
+two ways is always priced by whichever rail is cheaper, so the identity has one price, in real
+money, at the published wave. There is no conversion, no oracle and no lockstep to describe for
+this row. *(Corrected 2026-08-11: an earlier draft of this amendment said the second rail had been
+retired across every real-money price in the product. It was, for about an hour on 2026-08-10, and
+was then restored for repeatable consumables and access — a respawn token and store packages — while
+the mint stayed ETH-only. Nothing about THIS row's analysis changes, since it concerns the identity
+sale alone, but counsel should not be told the product has one payment rail when it has two.)*
+The Store SKU that also sold a mint credit was retired outright rather than left on a second ETH
+price, so no path other than the published wave produces an identity. "Fixed price" means **fixed at any given
 moment, repriced only by ordinary product decision** (announced factually); an AUTOMATIC
 supply-indexed escalation ("the price rises as more mint") was proposed, evaluated, and
 **REJECTED** — an auto-rising price is scarcity marketing in mechanical form (the Impact-Theory
@@ -132,8 +138,8 @@ whole-array test-pinned). REVISED the same day to FIVE WAVES WITH A PUBLISHED CE
 pre-published table of five discrete price waves indexed to cumulative mints — waves of 1,000 /
 10,000 / 25,000 / 50,000 / 100,000 identities at 0.010 / 0.025 / 0.035 / 0.045 / **0.050 ETH**
 (**ETH only — there is no $OMR price for an identity**, amended 2026-08-10: minting is the
-extraction gate, so it has one unambiguous price in real money; the earned-token rail that previously
-existed alongside it is retired, which also removes the two-denomination explanation from this row),
+extraction gate, so it has one unambiguous price in real money; the earned-token rail does not reach
+it, which removes the two-denomination explanation from this row),
 **flat tail** beyond the table (the last price holds until a new
 table is published — a finite commitment, never an open-ended escalator). **The material change for
 this row is the CEILING: the escalation TERMINATES at a number stated up front, so the most anyone

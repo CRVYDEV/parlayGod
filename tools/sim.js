@@ -31,7 +31,7 @@ import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
          CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES, BUSINESSES, PACING, POPULATION, boatResale, CORNER, CONTACTS, FAMILY_WAR,
          EXCHANGE, ESTATE, WIRE, GANG_SEALS, FOUNDATION, RIVALS, RACKETS, ASSETS, M4, DRUGS,
          MADE, ACCESS_STAKE, OPERATIONS, opSlotsOf, SOV,
-         TREASURY, STORE, SELL_TAX, BONDS } from '../src/rules.js';
+         TREASURY, STORE, SELL_TAX, BONDS, MISSIONS } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -1463,6 +1463,43 @@ phase('P9.34 THE ACTIVATION MODEL — the treasury rate card (design-stage; re-m
   }
   note('activation', 'the sizing answer', 'the recurring sink ≈ the treasury inflow, in $OMR at the oracle',
     'activation converts every ETH of declared treasury revenue into that much daily $OMR demand — the demand engine the Dynasty design promised. Every ACTIVATION.* number stays a proposed default until the burn is built (post-A1)');
+}
+
+// ════════ P9.35 THE PLEX REACH — can a player actually PAY in earned $OMR? ════════════════════════
+// The PLEX rail came back on 2026-08-10 for everything but the mint, and it was restored on an
+// explicit fantasy: "pay your rent in ISK" — a skilled player funding their play from earnings. That
+// is a claim about REACH, and reach is measurable, so it is measured here rather than asserted in a
+// comment. Analytic, off the LIVE levers; no value seeded, §10.4 untouched (the P9.33/P9.34 shape).
+//
+// What a player can EARN, from the enumerated $OMR mint set + the one recurring transfer:
+//   • `mission:%`  — the ladder, ONCE per account, lifetime
+//   • `daily:all`  — the all-three daily bonus, a TRANSFER out of the event fund (not a mint)
+//   • `prize:omr`  — the vig prize pool + pass stipends, both funded by REAL revenue (not grinding)
+// Everything else that moves $OMR to a player is a TRANSFER they must take, buy, or be given:
+// `whack:loot` off a corpse, `desk:sale` for ETH at the auction, `yield:family` from a treasury.
+// So this probe answers one question — how long does the earn surface take to reach the CHEAPEST
+// thing the rail sells — and it re-measures on any retune of the ladder, the daily, the premium or
+// a package price. `MISSIONS` is machine-owned, so a re-extract re-measures it too.
+phase('P9.35 THE PLEX REACH — how long the earn surface takes to reach the cheapest rail purchase');
+{
+  const lifetimeMission = MISSIONS.reduce((n, m) => n + Number(m.reward?.omr || 0), 0);
+  const perDay = Number(M4.DAILY_ALL_OMR || 0);   // the all-three daily bonus (event-fund bounded)
+  const floor = STORE.PLEX_FLOOR_OMR_PER_ETH;     // the pre-market $OMR/ETH anchor both quotes derive from
+  const shelf = STORE.PACKAGES.map((p) => ({ sku: p.sku, omr: Math.round(p.priceEth * floor) }))
+    .sort((a, b) => a.omr - b.omr);
+  const cheapest = shelf[0];
+  const respawn = Math.round(0.10 * floor);       // the respawn fee at the genesis anchor
+
+  const daysTo = (target) => (perDay > 0 ? Math.ceil(Math.max(0, target - lifetimeMission) / perDay) : Infinity);
+
+  note('plex reach', 'the whole earn surface', `${lifetimeMission.toLocaleString()} $OMR lifetime (missions) + ${perDay}/day (daily:all)`,
+    'the ladder pays ONCE per account; the daily is a transfer out of the event fund, so it is bounded by the fund, not printed');
+  note('plex reach', `the cheapest thing the rail sells (${cheapest.sku})`, `${cheapest.omr.toLocaleString()} $OMR`,
+    `${(cheapest.omr / lifetimeMission).toFixed(1)}× the ENTIRE mission ladder — so doing every $OMR mission in the game buys nothing on the rail, and the daily takes ${daysTo(cheapest.omr).toLocaleString()} more days to close the gap`);
+  note('plex reach', 'a respawn token', `${respawn.toLocaleString()} $OMR`,
+    `${daysTo(respawn).toLocaleString()} days of perfect daily play after the full ladder`);
+  note('plex reach', 'the verdict', 'PLEX is reachable by PREDATION or PURCHASE, not by grinding',
+    'that is on-theme and it is NOT the EVE fantasy the restore invoked: in EVE, PLEX is reachable by grinding ISK. Here $OMR has had no faucet since v3 step 1, so the rail is funded by taking it off somebody (whack:loot moves 20-50% of a victim\'s liquid + staked) or buying it at the desk. FOUNDER CALL: accept it (the predator framing), or if the fantasy matters the dials are the ladder\'s $OMR (machine-owned — a re-extract), M4.DAILY_ALL_OMR, or STORE.PLEX_PREMIUM_BPS');
 }
 
 phase('P10 §10.4 ledger invariants over the ENTIRE sim (nothing was seeded)');

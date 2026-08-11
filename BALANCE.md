@@ -5480,6 +5480,40 @@ alternative and it keeps a duplicate storefront that must stay in lockstep forev
 has its own rail with a published table, a Safe-settable price and a guard. The lesson this economy
 keeps re-learning is that the surest way to keep two rails in lockstep is to have one.
 
+### THE PLEX REACH — measured, and the fantasy does not currently hold (sim P9.35)
+
+The rail was restored on an explicit fantasy: *"pay your rent in ISK"* — a skilled player funding
+their play from earnings. That is a claim about REACH, so it is now measured every sim run rather
+than asserted in a comment.
+
+| what a player can EARN in $OMR | amount |
+|---|---|
+| `mission:%` — the whole ladder, **once per account** | **1,320** lifetime |
+| `daily:all` — the all-three daily bonus (a TRANSFER out of the event fund, not a mint) | **3 / day** |
+| `prize:omr` — vig prize pool + pass stipends | funded by REAL revenue, not by grinding |
+
+| what the rail costs | amount |
+|---|---|
+| cheapest SKU (`decor_deco`, 0.02 ETH) | **4,941** — **3.7× the entire mission ladder** |
+| a respawn token (0.10 ETH) | **24,706** |
+
+**So a player who completes every $OMR mission in the game can buy nothing on the rail**, and the
+daily bonus takes a further **1,207 days** to close the gap to the cheapest item — **7,796 days** for
+a respawn. $OMR has had no faucet since v3 step 1, so the rail is reached by **predation** (a
+`whack:loot` fire-kill takes 20–50% of a victim's liquid *and staked* $OMR) or **purchase** (the desk
+auction, for ETH). Not by playing well.
+
+**That is on-theme, and it is not EVE.** In EVE, PLEX is reachable by grinding ISK; here it is
+reachable by taking someone else's. Which is a perfectly good design for a mafia game — the point is
+that the two are different, and the restore invoked the EVE framing. This is a **founder call, not a
+defect**: accept the predator framing (and stop describing it as ISK-rent, which the design docs now
+do), or move a dial. The dials, cheapest first: `M4.DAILY_ALL_OMR` (3/day, event-fund bounded),
+`STORE.PLEX_PREMIUM_BPS` (1.2 → 1.0 makes every rail price 17% cheaper), or the mission ladder's
+`omr` column — which is MACHINE-OWNED, so it moves through the prototype and a re-extract.
+
+Nothing was retuned. P9.35 prints all of it every run, so a change to the ladder, the daily, the
+premium or any package price re-measures the reach.
+
 **Retiring it must not cancel a purchase already paid for**, which the worker-sweep suite is what
 proved: `RETIRED_PACKAGES` keeps the price and the grant, so the two BUY paths refuse while
 `grantPackage` still honors a payment recorded before the retirement (or parked pre-link and

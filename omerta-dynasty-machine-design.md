@@ -412,17 +412,27 @@ window is the whole allowance, or the birth-certificate fiction breaks).
 ## 10. THE MINT PRICE (founder-directed 2026-08-10: "maybe instead of .01 ETH it can also be a
 number of OMR that gets burned and scales up as more NFTs are minted")
 
-> **SUPERSEDED IN PART, SAME DAY — THE MINT IS ETH ONLY, AND SO IS EVERYTHING ELSE.** The founder
-> then ruled *"Make the mint ETH only no OMR"* and, an hour later, *"Make plex items and consumables
-> eth only"*. So the whole $OMR-rail half of this section is history: **PLEX is retired** (payers
-> deleted, routes mounted as tombstones, `plex:%` kept in the vocabulary and the burn term forever
-> because real rows exist, and a `plex bridge retired` freshness check asserts nothing new writes
-> them). What SURVIVES from this analysis, and is now live: **Shape A (the automatic supply-indexed
-> curve) stays rejected**; **Shape D (discrete published tranches) is ADOPTED** — five waves, ETH
-> only, capped at 0.05 (`MINT_TRANCHES`); and the rail-interaction law below is the reason the
-> second rail went at all. The recycles-to-the-desk observation is what finally settled it: since
-> v3 step 2 a PLEX purchase did not burn anything, so the trade the bridge was sold on had already
-> expired. Read §10 for the reasoning, not for the mechanism. See BALANCE.md § THE TRANCHE SCHEDULE.
+> **SUPERSEDED IN PART — THE MINT IS ETH ONLY; EVERYTHING ELSE IS NOT.** Read this section for the
+> reasoning, not the mechanism. Three founder rulings landed on 2026-08-10 and the third narrows the
+> second: *"Make the mint ETH only no OMR"*, then *"Make plex items and consumables eth only"*, then
+> *"maybe we over exaggerated on removing everything payable by OMR in Plex"*. Where that leaves it:
+>
+> - **The mint has ONE rail, in ETH.** `payPlex` refuses a mint, there is no `PLEX_MINT_OMR`,
+>   `MINT_TRANCHES` has no `omr` column, and a `plex mint retired` freshness check (on the EXACT
+>   reason, never `plex:%`) asserts nothing new writes it. The `made_man` Store SKU was retired with
+>   it — it sold the same credit on a hardcoded price that did not move with the schedule, which is
+>   the same hole one layer up.
+> - **The respawn and every Store SKU are payable in earned $OMR again.** They are repeatable
+>   consumables and access; neither is a bound. The line is the BOUND, not the denomination.
+> - **The recycles-to-the-desk observation does NOT survive as an argument for retiring the rail.**
+>   It is true (`plex:%` is in `DESK.SINK_REASONS`, so a PLEX purchase recycles rather than burns),
+>   but it was over-read: the desk is the machinery this economy runs on, and putting $OMR on the
+>   shelf CREATES the supply the daily auction sells for ETH. That is the revenue model, not a leak.
+> - **Shape A (the automatic supply-indexed curve) stays rejected**; **Shape D (discrete published
+>   tranches) is ADOPTED** — five waves capped at 0.05 ETH. The rail-interaction law below is why
+>   the mint has one rail, and it is the part of §10 that did the real work.
+>
+> See BALANCE.md § THE TRANCHE SCHEDULE and § …AND THE SWEEP WENT TOO FAR.
 
 **Half of this is already live.** The $OMR-denominated mint exists: PLEX (`POST /v1/plex/mint`) —
 pay the identity fee in earned $OMR (`PLEX_MINT_OMR` 5 floor, market-linked at
@@ -572,8 +582,8 @@ deleted rather than zeroed; `plex:mint` stays in the §10.4 vocabulary and burn 
 rows exist) with a freshness check asserting nothing new uses it. **Respawn stays on PLEX** — a
 repeatable consumable is not the bound, so "pay your rent in ISK" applies to it cleanly. And the free
 path is untouched, because it never ran through this rail: the mission GRANTS a mint credit, which at
-the honest genesis rate is the only way it could have worked anyway (~2,471 $OMR for a wave-1 mint
-against ~220 lifetime earnable).
+the honest genesis rate is the only way it could have worked anyway (a wave-1 mint prices at ~2,471
+$OMR against **1,320** lifetime earnable off the whole ladder — measured, sim P9.35).
 
 **ADOPTED 2026-08-10 (founder: "let's do your recommendation" — the LINEAR progression), then
 REVISED the same day to FIVE WAVES WITH A HARD CEILING** (founder: *"cap it at 5 waves so by wave 5
@@ -587,7 +597,10 @@ forever** beyond it.
 answer, and settles it better than either.** That analysis picked LINEAR because doubling crossed
 the free-path ceiling at a reachable ~63k identities while linear crossed it at an unreachable
 ~990k — but both answers were *arithmetic about where a rising price eventually breaks the promise*.
-A cap removes the crossing from the shape: the dearest row is 150 $OMR against ~220 earnable and
+A cap removes the crossing from the shape — though note the SCHEDULE has carried no $OMR column
+since the mint went ETH-only, so what the cap now bounds is the ETH price alone and the free path is
+asserted at its MECHANISM (a mission grants the credit) rather than through a price proxy. The
+argument as originally written: the dearest row is 150 $OMR against the lifetime earnable, and
 **no future row can ever exceed it**, so the free path is guaranteed structurally rather than
 re-derived at each extension. It also reverses the growth headwind that counted against Shape A —
 the waves widen while the increments shrink, so past the first thousand the schedule is cheaper
@@ -604,7 +617,8 @@ Built with it: the preflight off-schedule warning (a rate-clean pair the table n
 0.015/7.5 — is caught at boot), the admin chain panel's tier-progress line with an OFF-SCHEDULE
 flag (the GM's instrument for executing a boundary), and the row-level laws pinned in
 `test/made.js` beside the free-path computation they depend on: one implied rate per row, the
-free-path law (dearest 150 vs ~220 earnable), and **the ceiling itself** — the last row IS 0.05, no
+free-path law (now asserted at the mechanism — a mission grants the credit — since no row carries a
+$OMR price), and **the ceiling itself** — the last row IS 0.05, no
 row exceeds it, and the millionth identity still pays it, so raising the cap fails by name as a new
 promise rather than passing as a retune. A4 is RE-OPENED in the memo with the amended fact pattern,
 and the cap **strengthens** that position: the hardest form of the A4 question is whether a forward
