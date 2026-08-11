@@ -2,6 +2,10 @@
 
 **Status: A1–A3, A5, A6 APPROVED (founder assertion 2026-08-09: "Counsel has approved A1-A6");
 A4 RE-OPENED 2026-08-10 (the tranche schedule was adopted, then capped at five waves / 0.05 ETH);
+FOUNDER DIRECTION 2026-08-11: defend the schedule AS SHIPPED — it is an early-bird discount with a
+published ceiling on an uncapped asset, and the ask of counsel is the wording that keeps it one;
+FOUNDER DIRECTION 2026-08-11 on A3: the game performs NO KYC (see the row) — the geofence half and
+the jurisdiction list are still owed;
 A7 + A8 OPEN; A9–A12 OPEN (THE BANK protocol rows, added 2026-08-10 — open as
 questions, NOT as gates; that build proceeds on the founder's instruction, §2).**
 The approval is recorded the project's standing way — as a founder assertion of counsel approval,
@@ -109,10 +113,31 @@ voucher-gated TBA outflows) and explicit buyer-side disclosure, `omerta-dynasty-
 **A3 — Geofencing and eligibility live at the claim rail, and that is sufficient.**
 The stock tokens have no on-chain allowlist, so the game's enforcement point is
 `signStockVoucher`: the server signs a claim only for a wallet that has passed the
-jurisdiction/attestation gate counsel specifies (Phase C is BLOCKED on counsel's answer to KYC
-depth and the jurisdiction list). A US-person account plays fully and holds the in-game record
-but can never claim delivery. *Question for counsel: is voucher-time attestation + geofence
-sufficient, or is issuer-grade KYC required before any delivery? Provide the jurisdiction list.*
+jurisdiction/attestation gate counsel specifies. A US-person account plays fully and holds the
+in-game record but can never claim delivery.
+
+**FOUNDER POSITION, 2026-08-11 (recorded as a directed answer to the KYC half of this row):** *the
+game performs no KYC.* The tokens live on Robinhood Chain, and a holder who wants to convert a
+tokenized share into anything is doing that through Robinhood's own broker-dealer rails, where
+Robinhood performs identity verification as the regulated intermediary. The game's position is that
+identity verification is downstream of delivery and outside the game's hands, so the claim rail
+gates on wallet + attestation and does not collect identity documents.
+
+**COUNSEL: this position answers the KYC question and does NOT answer the geofence question, and
+those are the two halves of this row.** They come apart on one fact: Robinhood's tokenized equities
+are EU-facing and **not available to US persons**. So "the user handles KYC downstream" does not
+rescue a US-person recipient — it BLOCKS them, and the game would have delivered an asset that
+particular holder can never redeem. Three things follow, and we need the answer to each rather than
+an answer to the row as a whole:
+  1. Does delivering a tokenized security to a wallet constitute a distribution BY US, regardless of
+     who verifies identity afterwards — and if so, does downstream verification by the redemption
+     venue discharge any part of our obligation?
+  2. If US persons cannot redeem, must the claim rail geofence them OUT at voucher time (our
+     preference, since delivering an unredeemable asset is both a disclosure problem and a product
+     one), or is a clear pre-claim disclosure sufficient?
+  3. **The jurisdiction list is still owed** — it is the one input the code cannot infer, and Phase C
+     stays BLOCKED on it. KYC depth is now answered (none, by the position above); geofence scope
+     is not.
 
 **A4 — The Dynasty NFT has no maximum supply, and proceeds are ordinary sales revenue.**
 The identity mint is uncapped by design (a supply cap would cap the player count). Mint proceeds
@@ -146,7 +171,12 @@ indexes PAID mints only), so the free program cannot advance the published price
 (`omerta-dynasty-machine-design.md` §10 Shape D; the table is `MINT_TRANCHES` in the code,
 whole-array test-pinned). REVISED the same day to FIVE WAVES WITH A PUBLISHED CEILING:** a
 pre-published table of five discrete price waves indexed to cumulative mints — waves of 1,000 /
-10,000 / 25,000 / 50,000 / 100,000 identities at 0.010 / 0.025 / 0.035 / 0.045 / **0.050 ETH**
+10,000 / 25,000 / 50,000 / 100,000 identities at 0.010 / 0.025 / 0.035 / 0.045 / **0.050 ETH**.
+**THE SUPPLY OF IDENTITIES IS UNCAPPED and the waves must not be read as a maximum**: 186,000 is the
+mint at which the PRICE stops rising, not a limit on players. The 186,001st identity pays 0.05 ETH
+and so does the ten-millionth — the schedule bounds the price, never the population (asserted
+directly in `test/made.js`, which pins the millionth identity at the ceiling price). There is
+therefore no scarcity of the asset itself for an escalating price to interact with
 (**ETH only — there is no $OMR price for an identity**, amended 2026-08-10: minting is the
 extraction gate, so it has one unambiguous price in real money; the earned-token rail does not reach
 it, which removes the two-denomination explanation from this row),

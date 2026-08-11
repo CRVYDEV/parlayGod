@@ -5571,8 +5571,16 @@ on rounding is one people learn to ignore. 0.035 / 0.045 are the nearest pair wh
 (+5.1% and +1.4%). Restoring the exact figures is the `eth` column plus `omr` 99.9 / 133.2 — the
 rate law passes either way.
 
-Sizing, for the record: at a fully-minted 186,000 the schedule raises **8,312 ETH** against the old
-ladder's 3,850 to 55,000 — more in total, cheaper per identity, and bounded at the top.
+**186,000 IS NOT A PLAYER CAP, and the distinction is the whole point of the ceiling.** Identity
+supply is UNCAPPED — 186,000 is simply the mint at which the price stops rising. The 186,001st
+identity pays 0.05 ETH and so does the ten-millionth (`mintTierOf` returns the last row for any
+number past the table; test-pinned in `test/made.js` as THE CEILING, which asserts the millionth
+identity explicitly). So the schedule bounds the PRICE, never the population, and any copy that
+sums the waves without saying so invites the wrong reading.
+
+Sizing, for the record: the first 186,000 identities raise **8,312 ETH** against the old ladder's
+3,850 to 55,000 — more in total, cheaper per identity, bounded at the top — and every identity
+after that adds 0.05 ETH with no ceiling on how many there are.
 
 The laws (each test-pinned in test/made.js): **ONE RAIL** (no row may carry a $OMR price — the
 successor to the lockstep law, and strictly stronger, since two rails can drift and must be checked
