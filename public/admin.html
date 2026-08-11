@@ -79,6 +79,7 @@
     <div class="panel" id="p-engage"><h2>Engagement &amp; Retention</h2><div class="body">…</div></div>
     <div class="panel" id="p-top"><h2>The Powerful</h2><div class="body">…</div></div>
     <div class="panel" id="p-chain"><h2>Chain · Reserve · Vig</h2><div class="body">…</div></div>
+    <div class="panel" id="p-tokenhealth"><h2>Token Health</h2><div class="body">…</div></div>
     <div class="panel" id="p-router"><h2>Where a Dollar Goes</h2><div class="body">…</div></div>
     <div class="panel" id="p-activity"><h2>Live Activity</h2><div class="feed body">…</div></div>
     <div class="panel" id="p-mod"><h2>Moderation</h2><div class="body"></div></div>
@@ -127,13 +128,14 @@
   }
 
   async function refreshAll() {
-    const [ov, inv, fn, res, vig, em, act, rev, eng, bnd, tre, coa, intg, rtr, cpar, bkv, com] = await Promise.all([
+    const [ov, inv, fn, res, vig, em, act, rev, eng, bnd, tre, coa, intg, rtr, cpar, bkv, com, thl] = await Promise.all([
       j('GET', '/v1/mod/overview'), j('GET', '/v1/mod/invariants'), j('GET', '/v1/mod/funnel'),
       j('GET', '/v1/mod/reserve'), j('GET', '/v1/mod/vig'), j('GET', '/v1/mod/emission'),
       j('GET', '/v1/mod/activity?limit=60'), j('GET', '/v1/mod/revenue'),
       j('GET', '/v1/mod/engagement'), j('GET', '/v1/mod/bonds'), j('GET', '/v1/mod/treasury'),
       j('GET', '/v1/mod/coach'), j('GET', '/v1/mod/integrations'), j('GET', '/v1/mod/router'),
       j('GET', '/v1/mod/chain/params'), j('GET', '/v1/mod/bank'), j('GET', '/v1/mod/community'),
+      j('GET', '/v1/mod/tokenhealth'),
     ]);
     if (ov.code === 401) return $('#logout').onclick();
 
@@ -160,7 +162,7 @@
 
     $('#stamp').textContent = 'as of ' + new Date().toLocaleTimeString();
     renderIntegrity(inv.body); renderEconomy(ov.body, em.body); renderPlayers(ov.body); renderEngagement(eng.body);
-    renderFunnel(fn.body); renderTop(ov.body); renderChain(res.body, vig.body, em.body, rev.body, bnd.body, tre, ov.body, bkv.body, com.body); renderRouter(rtr.body);
+    renderFunnel(fn.body); renderTop(ov.body); renderChain(res.body, vig.body, em.body, rev.body, bnd.body, tre, ov.body, bkv.body, com.body); renderRouter(rtr.body); renderTokenHealth(thl.body);
     renderBackups(ov.body); renderSocial(ov.body); renderCoach(coa.body);
     renderIntegrations(intg.body); window.__cpar = (cpar.body && cpar.body.rows) || []; renderChainParams(cpar.body);
     renderActivity(act.body); renderMod();
@@ -579,6 +581,42 @@
           + rowHtml('the books', com.ok
             ? '<span style="color:var(--ok)">✓ every token credited was bought</span>'
             : `<span style="color:var(--bad)">⚠ ${esc((com.checks || []).filter((c) => !c.ok).map((c) => c.name).join(' · '))}</span>`)) : '');
+  }
+
+  // TOKEN HEALTH — the second instrument. Every other runner here answers "can the books lie?";
+  // these five answer "is the economy working?", which conservation is structurally blind to. Each
+  // carries the reading that would make a person act, because a number with no threshold beside it
+  // is decoration. DORMANT is rendered as its own quiet state on purpose: pre-market most of these
+  // are zero by construction, and a board that cries wolf before launch is one nobody reads at 2am.
+  function renderTokenHealth(th) {
+    const el = $('#p-tokenhealth').querySelector('.body');
+    if (!th || th.error) { el.innerHTML = `<div class="note">${esc(th?.error || 'unreachable')}</div>`; return; }
+    const tone = { ok: 'var(--ok)', watch: 'var(--warn)', act: 'var(--bad)', dormant: 'inherit' };
+    const head = th.verdict === 'dormant'
+      ? '<div class="note">No market yet — these read <b>dormant</b> rather than zero, because a structural zero is not an alarm. They come alive with the pool.</div>'
+      : th.verdict === 'ok'
+        ? '<div style="color:var(--ok)">✓ every reading inside its band</div>'
+        : `<div style="color:${th.verdict === 'act' ? 'var(--bad)' : 'var(--warn)'};font-weight:bold">${th.verdict === 'act' ? '⚠ ACT' : '⚠ WATCH'} — ${esc(th.kpis.filter((k) => k.state === th.verdict).map((k) => k.label).join(' · '))}</div>`;
+    el.innerHTML = head
+      + `<div class="note" style="margin-top:6px">trailing ${th.window.days} days</div>`
+      + th.kpis.map((k) => '<div style="margin:9px 0;padding:8px;border:1px solid var(--line);border-radius:5px">'
+          + `<div class="row"><span class="k"><b>${esc(k.label)}</b></span>`
+          + `<span class="v" style="color:${tone[k.state] || 'inherit'}">`
+          + (k.value === null ? '<span style="opacity:.5">dormant</span>' : `<b>${fmt(k.value)}</b> <span style="opacity:.6;font-size:11px">${esc(k.unit)}</span>`)
+          + '</span></div>'
+          + `<div class="note" style="margin-top:3px">${esc(k.reads)}</div>`
+          + `<div class="note" style="margin-top:2px;opacity:.7">acts at: ${esc(k.threshold)}</div>`
+          + '</div>').join('')
+      + '<div class="note" style="margin-top:8px">the float</div>'
+      + rowHtml('players hold', `${fmt(th.float.player.total)} $OMR <span class="note">${fmt(th.float.player.liquid)} liquid · ${fmt(th.float.player.staked)} staked · ${fmt(th.float.player.unbonding)} unbonding · ${fmt(th.float.player.gangReserves)} family</span>`)
+      + rowHtml('the house holds', `${fmt(th.float.system.total)} $OMR <span class="note">${fmt(th.float.system.shelf)} on the desk shelf · ${fmt(th.float.system.familyPot)} family pot · ${fmt(th.float.system.eventFund)} event fund · ${fmt(th.float.system.devFund)} operations</span>`)
+      + '<div class="note" style="margin-top:8px">who is spending — humans vs agents</div>'
+      + rowHtml('sink volume', `${fmt(th.sinks.byCohort.human)} human / ${fmt(th.sinks.byCohort.agent)} agent <span class="note">${th.players.humans} human · ${th.players.agents} agent active</span>`)
+      + ((th.sinks.topSinks || []).length
+          ? '<div class="note" style="margin-top:4px">' + th.sinks.topSinks.slice(0, 6).map((t) =>
+              `${esc(t.reason)} <b>${fmt(t.human + t.agent)}</b>${t.agent > 0 ? ` <span style="opacity:.6">(${fmt(t.agent)} agent)</span>` : ''}`).join(' · ')
+            + '</div>'
+          : '<div class="note" style="margin-top:4px">no sinks have run in the window</div>');
   }
 
   // THE MONEY ROUTER — WHERE A DOLLAR GOES. The whole declared waterfall (every real-value inflow

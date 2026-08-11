@@ -286,7 +286,11 @@ async function collectLedgerChecks(pool) {
   // plex:* was a Phase-2 burn: a player paid a real-money fee from earned $OMR instead of ETH (the
   // PLEX bridge). RETIRED 2026-08-10 (fees are ETH only) — the rows are real, so the reason stays in
   // the burn term forever; only new writes stopped ('plex bridge retired' below asserts that).
-  // law:jury is a Phase-3 burn: the war chest reaching the jury box leaves the game (deflationary).
+  // law:jury is a Phase-3 sink: the war chest reaches the jury box. It is in DESK.SINK_REASONS, so
+  // since v3 step 2 it RECYCLES to the desk's shelf like every other sink — it does not leave the
+  // game and it is not deflationary. (That word was left here from before the recycle shipped; a
+  // stale internal claim is exactly what licenses a false player-facing one later — the retired
+  // `ammSpot` class. Its neighbour two lines down gets it right for `auction:win`.)
   // rwa:* is a $OMR BURN. Live: rwa:vault (THE VAULT — treasury.js). HISTORICAL: rwa:invest /
   // rwa:dynasty (the retired Portfolio, D11 2026-08-05) — the rows are real, so the reason stays in
   // the burn term forever; only new writes stopped ('portfolio retired' below asserts that).

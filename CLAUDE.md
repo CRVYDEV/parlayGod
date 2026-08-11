@@ -11994,3 +11994,56 @@ root cap removed; a comp crediting the pool; the fee booking dropped with the le
 default breaking byte-identity). BALANCE.md § THE FAMILY BUYBACK is the lever record; Phases 2–4
 (the env flip with sign-off, the two contracts into the audit batch, the DEX keeper + custody) wait
 per the design's §8.
+
+**THE TOKEN-HEALTH BOARD, THE EQUILIBRIUM ANSWER, AND A FALSE SUPPLY CLAIM ON THE LANDING PAGE
+(founder-directed 2026-08-11: "Let's do your recommended order") — BUILT** (`src/tokenhealth.js` —
+the 142nd module, `test/tokenhealth.js` — the 99th suite; `GET /v1/mod/tokenhealth` + an /admin
+panel; sim **P9.36**; a copy guard in `test/docs.js`). Three of the tokenomics review's six open
+angles, in the order that makes the others observable. **(1) THE BOARD.** Every other instrument
+here answers *can the books lie?*; this one answers *is the economy working?* — five KPIs, each
+carrying the reading that would make a person ACT, because a number with no threshold beside it is
+decoration: return velocity (the revenue engine per token held), sink volume per active player
+(multiply by DAU), desk clearance (recycled supply that never clears never becomes ETH), the float
+split (the holding-vs-spending equilibrium, live) and the withdrawal queue (the full-reserve rail
+turns a shock into a queue, so the queue IS the shock gauge). Pure read — **zero §10.4 surface**,
+asserted by counting ledger rows across a full computation rather than by intent. **DORMANT IS A
+STATE, NOT A GRADE**, and getting that wrong would have made it useless before launch: pre-market
+most KPIs are structurally zero, so each reports `dormant` when its denominator does not exist yet
+(the desk's own `no_price`-quiet vs `stale_price`-alarm split). Sink volume is measured off the
+`desk:recycle` rows, which is **drift-proof by construction** — the ledger hook writes exactly one
+per recycled sink from the same `DESK.SINK_REASONS` the §10.4 burn term is generated from, so a sink
+added tomorrow is counted the day it ships without this file knowing it exists; the agent-vs-human
+composition (review angle 5) is one grouped query filtered in JS through the SAME `recyclesToDesk`
+predicate, which both avoids a generated NOT-IN and yields the per-reason breakdown that is the
+actually-useful half (*which* sinks an EV optimizer routes around). The queue reuses `chain.js`'s own
+`reserveStatus` so the board and the rail cannot disagree. Four mutations, each caught at its own
+named assertion (the house pools folded into the velocity denominator — which would report the engine
+SLOWING every time it collected a sink; a structural zero rendered as `act`; a transfer counted as
+spend; the non-recycling withdrawal dropped from sink volume). **(2) THE EQUILIBRIUM, MEASURED (sim
+P9.36).** The review's sharpest open question — velocity vs holding — has a STRUCTURAL answer, not a
+forecast: the ladder's rungs are **absolute thresholds** (60/180/450/900 staked), not a proportional
+yield, so a rational player stakes exactly enough for the rung they want and not one $OMR more —
+**hold demand is CAPPED per player while the sinks are RECURRING and unbounded over a career**. Off
+the live levers: a made, subscribed player holds 450 (being made buys a rung, releasing 450 of lock
+for 120 every 30 days forever — the subscription converts a one-time lock into recurring spend)
+against ~5,214 $OMR/year of subscription spend alone = **~11.6 turns/year against an act band of 2**.
+The probe also states what it does NOT prove: that is one ENGAGED player, and the base-wide figure is
+this times the engaged share, which no model can supply — the same "conservation ≠ demand" boundary.
+**(3) THE COPY WAS FALSE IN BOTH DIRECTIONS, and the guard is the durable half.** Since v3 step 2 a
+sink RECYCLES rather than burning, so no scarcity claim about $OMR can be true — and the sweep found
+the codices reading *"Supply is enumerated, and the list is shrinking"*. Worse in the other
+direction, and on the most-read surface in the project: the landing page claimed **"$OMR is not
+created in game at all"** while `omrMints` enumerates four live reasons (the mission ladder pays for
+play; three more mint only when a real token arrives to back them) — a claim a player could falsify
+in one query. Both fixed, plus a stale internal comment calling `law:jury` deflationary when it
+recycles (the class that licenses a false player-facing claim later — the retired-`ammSpot` shape).
+The guard is **deliberately narrow**, which is the price-parity lesson applied: a pattern broad
+enough to catch every "burn" or "scarce" catches the game's own DEFINED vocabulary (both codices
+correctly define a burn as *"not destroyed — it lands on the desk's shelf"*), NFT rarity and the
+roster's scarce chairs — so it matches only phrases false about the TOKEN whenever they appear, with
+a catalog-or-declare waiver list, plus a positive half that FAILS if the mechanism ever changes so a
+stale prohibition cannot outlive the game it describes. It caught my own replacement copy on the
+first run ("Nothing here shrinks supply either" — a denial, but the sentence after already said it),
+which was fixed by tightening the prose rather than weakening the guard. Two mutations restore each
+false claim and fail by name with the exact reason. Suite 99 files + sim drift-0 + mobile 75/75 +
+client wiring/mirror + levers 672 + docs.

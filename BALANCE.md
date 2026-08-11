@@ -5909,3 +5909,88 @@ ship a nonzero default. The bought hard $OMR stays in the community-buyback wall
 reserves are burn-only today (seals, the Foundation); if gang-reserve $OMR ever reaches an account,
 that decision re-opens (the credit would then need the bank's reserve pairing AND a named term in
 both halves of the Vig sandwich).
+
+## THE REPRICING PLAYBOOK — what we do when the token's price moves the sink economy (2026-08-11)
+
+**The gap this closes:** the mint has its tranche machinery and the PLEX rails self-reprice
+(`plexQuote` is market-linked), but the pure-$OMR sink prices — the dues, the seals, the compound,
+the Wire, vanity, respec — are FIXED levers. If the token 10×s, dues become ~$20/month and the sink
+economy strangles the players it runs on; if it halves, revenue halves with nothing deciding whether
+that is fine. Nothing here retunes anything today. This is the PROCEDURE, written before it is
+needed, because the alternative is inventing it mid-pump.
+
+**The trigger is a measurement, not a feeling:** the realized $OMR/ETH TWAP (the Vig buyback's own
+print — the oracle every quote already reads) sustained at ≥3× or ≤0.5× the genesis rate
+(205,882 $OMR/ETH ↔ $0.017) across two consecutive buyback prints. The token-health board is where
+that number lives; when it crosses, this section is the runbook.
+
+**The procedure IS the ×6 re-denomination pass** (§ THE SINK RE-DENOMINATION above — it was the
+rehearsal, and its lessons are the steps):
+1. **Pick ONE factor** (a round number nearest the price move's inverse), and classify EVERY $OMR
+   number BY HAND into the four classes that pass established: **scale** (prices — move by the
+   factor), **inverse** (game-value-per-$OMR rates — move by 1/factor), **lockstep pairs** (the two
+   PLEX rails + the tranche $OMR column move together or the implied-rate guard fires), and
+   **must-not-move** (fractions like the loot RATES, historical readers like the legacy referral
+   figure, and thresholds on non-$OMR scales). The ×6 pass's enumeration is the template; the fourth
+   class it found by FAILING (a level number wearing an $OMR name) is why this is a hand
+   classification, never a sweep.
+2. **Machine-owned tables go through the seam** (ground rule #2 — edit the prototype, re-extract;
+   the mission `omr` column is the big one).
+3. **The verification is old-vs-new, not spot checks:** load the prior rules from git and assert
+   every $OMR path moved by ITS classified factor — the ×6 pass proved a spot-check reads as a clean
+   bill of health while three assignment-form constants sit unmoved.
+4. **The guards do the rest in the same commit:** the levers register demands every pin re-pinned,
+   the codex price-parity guard fails on any stale player-facing figure, and preflight's implied-rate
+   check holds the two rails together. Then the full gate run (suite + sim + pgquery + pgcheck) and
+   the harness re-measures anything pacing-adjacent.
+
+**The structural alternative, recorded as an option and deliberately NOT built:** a single global
+price-index multiplier that every listed sink price reads through would make repricing one env
+change instead of ~150 classified edits. It is the better machine at the third or fourth repricing;
+it is ALSO a new indirection through every till in the game for an event that has happened zero
+times. Decision: build it the SECOND time this playbook runs, with the first run's classification as
+its spec. Until then the playbook above is the governor.
+
+**What must never happen, stated so it cannot be argued mid-event:** repricing is a PRODUCT decision
+executed by hand on a measurement — never automatic, never supply-indexed, and never marketed as a
+response to price (the standing no-price-talk rule applies with more force during a pump, not less).
+
+## THE TOKEN-HEALTH BOARD + THE VELOCITY–HOLDING EQUILIBRIUM (2026-08-11)
+
+Two instruments and one measured answer, from the tokenomics review's open angles. **Neither is a
+lever** — the board is a read (`GET /v1/mod/tokenhealth`, `src/tokenhealth.js`) and the probe is
+arithmetic over levers that already exist (sim **P9.36**). Nothing in the game reads either.
+
+**The five KPIs, and the band that would make somebody act** — the bands are OBSERVATION thresholds,
+not signed numbers, and they are written down here so they are a decision rather than a feeling:
+
+| KPI | act | watch | why this number |
+|---|---|---|---|
+| return velocity | < 2 turns/yr | < 4 | revenue ≈ sink volume × price, so this IS the revenue engine per token held |
+| sink volume / active player | < 0.5 $OMR/day | < 2 | multiply by DAU for revenue; target ÷ this = the headcount required |
+| desk clearance | < 25% | < 60% | recycled supply that does not clear never becomes ETH; the shelf grows instead |
+| float committed | — | > 80% or < 15% | the holding-vs-spending equilibrium, live |
+| withdrawal queue | queued > funded | any standing queue | the full-reserve rail turns a shock into a queue, so the queue IS the shock gauge |
+
+**DORMANT is a state, not a grade.** Pre-market most of these are structurally zero, and a board
+that reads `act` before launch is one nobody trusts at 2am — so each reports `dormant` when its
+denominator does not exist yet (the desk's own `no_price` vs `stale_price` discipline).
+
+**THE EQUILIBRIUM ANSWER (P9.36), and it is structural rather than a forecast.** The ladder's rungs
+are **absolute thresholds** (60 / 180 / 450 / 900 staked), not a proportional yield — so a rational
+player stakes exactly enough for the rung they want and not one $OMR more, and **hold demand is
+CAPPED per player** while the sinks are RECURRING and therefore unbounded over a career. Measured off
+the live levers: a made, wire-subscribed player holds **450** (being made buys a rung, releasing 450
+of lock in exchange for 120 every 30 days forever — the subscription converts a one-time lock into
+recurring spend) against **~5,214 $OMR/year** of recurring spend on subscriptions alone, i.e.
+**~11.6 turns/year** against an act band of 2. The two halves of the design do not fight to a
+standstill.
+
+**What the probe does NOT prove, and this is the honest half:** that is ONE ENGAGED player. An
+unmade, unsubscribed holder spends nothing recurring and can still lock up to 900 — velocity 0 — so
+the base-wide figure is this multiplied by the engaged share, which no model can supply. The
+mechanisms are compatible; whether players show up is a retention question the board measures live.
+
+**If holding ever does win** the dial is `M3.OMR_LOOT_COMMITTED` (20% today against 50% idle — raise
+it and a staked hoard stops being the cheaper shelter), then the rung minimums. Both are signed
+levers and P9.36 re-measures on either.

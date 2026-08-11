@@ -30,7 +30,7 @@ import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
          PORT, boatOf, portRouteOf, interdictChance,
          CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES, BUSINESSES, PACING, POPULATION, boatResale, CORNER, CONTACTS, FAMILY_WAR,
          EXCHANGE, ESTATE, WIRE, GANG_SEALS, FOUNDATION, RIVALS, RACKETS, ASSETS, M4, DRUGS,
-         MADE, ACCESS_STAKE, OPERATIONS, opSlotsOf, SOV,
+         MADE, MADE_LADDER, ACCESS_STAKE, OPERATIONS, opSlotsOf, SOV, DESK_AUCTION,
          TREASURY, STORE, SELL_TAX, BONDS, MISSIONS } from '../src/rules.js';
 
 const app = await buildServer();
@@ -1504,6 +1504,67 @@ phase('P9.35 THE PLEX REACH — how long the earn surface takes to reach the che
     `${daysTo(respawn).toLocaleString()} days of perfect daily play after the full ladder`);
   note('plex reach', 'the verdict', 'PLEX is reachable by PREDATION or PURCHASE, not by grinding',
     'that is on-theme and it is NOT the EVE fantasy the restore invoked: in EVE, PLEX is reachable by grinding ISK. Here $OMR has had no faucet since v3 step 1, so the rail is funded by taking it off somebody (whack:loot moves 20-50% of a victim\'s liquid + staked) or buying it at the desk. SIGNED: the predator framing is accepted, and the premium has already been taken to 1.0 (17% off every rail price — comfort, not a fix, since it cannot close a multiple this size). The dials left are the ladder\'s $OMR (machine-owned — a re-extract) and M4.DAILY_ALL_OMR, and both are faucet changes rather than pricing ones');
+}
+
+// ════════ P9.36 THE VELOCITY–HOLDING EQUILIBRIUM — do the two halves of the design fight? ════════
+// The tokenomics review's sharpest open question: revenue's KPI is RETURN VELOCITY (spend into
+// sinks), while the D8=D ladder, the tiered loot rate and the family yield all pay players to LOCK
+// $OMR. Those pull opposite ways and nobody had modelled the equilibrium — what share of float ends
+// up held-idle versus circulating, and where the desk starves. Analytic, off the LIVE levers; no
+// value seeded, §10.4 untouched (the P9.33/P9.34/P9.35 shape).
+//
+// THE STRUCTURAL ANSWER, which is the finding: the ladder's rungs are ABSOLUTE THRESHOLDS, not a
+// proportional yield. A rational player stakes exactly enough to reach the rung they want and NOT
+// ONE $OMR MORE, because the marginal token above a threshold earns nothing from the ladder. So
+// hold demand is CAPPED PER PLAYER — while the sinks are RECURRING and therefore unbounded over a
+// career. The two do not fight to a standstill; over any long enough horizon spend dominates by
+// construction, and the only question is the ratio.
+phase('P9.36 THE VELOCITY–HOLDING EQUILIBRIUM — capped holding vs recurring spend');
+{
+  const rungs = MADE_LADDER.RUNGS;
+  const top = rungs[rungs.length - 1];
+  // A MADE man climbs MADE_RUNGS rungs on the dues alone, so he reaches the top rung from a LOWER
+  // stake — the subscription converts locked float into recurring spend, which is precisely the
+  // trade the revenue model wants and was not previously stated anywhere.
+  const madeIdx = Math.max(0, rungs.length - 1 - MADE_LADDER.MADE_RUNGS);
+  const holdUnmade = top.min;
+  const holdMade = rungs[madeIdx].min;
+  const stake = Number(ACCESS_STAKE?.HIGH_OMR || 0);
+
+  note('equilibrium', 'rational hold is CAPPED, not proportional', `${holdUnmade} $OMR to top the ladder`,
+    `the rungs are absolute thresholds (${rungs.map((r) => r.min).join(' / ')}), so a $OMR above the top one earns nothing from the ladder — a whale has no ladder reason to lock more than a mid player. The high-stakes seat wants ${stake} held, which the ladder stake already covers`);
+  note('equilibrium', 'and dues buy a rung, so being made LOWERS the lock', `${holdMade} $OMR (made) vs ${holdUnmade} (unmade)`,
+    `${holdUnmade - holdMade} $OMR of float released per made man, in exchange for ${MADE.OMR} $OMR every ${Math.round(MADE.MS / 86400000)} days FOREVER — the subscription converts a one-time lock into recurring spend, which is the revenue model's own direction`);
+
+  // The recurring side. Deliberately only the SUBSCRIPTIONS — the dues and a Street Wire seat — so
+  // this is a FLOOR on spend, not a flattering estimate: every one-time sink (an estate tier, a
+  // seal, vanity, respec, a peek) is real spend this number ignores.
+  const duesYr = MADE.OMR * (365 * 86400000 / MADE.MS);
+  const wireYr = WIRE.SUB_TIERS[0].omr * (365 * 86400000 / WIRE.SUB_MS);
+  const recurringYr = duesYr + wireYr;
+  const velocityMade = recurringYr / holdMade;
+  note('equilibrium', 'recurring spend per engaged player', `${Math.round(recurringYr)} $OMR/year`,
+    `dues ${Math.round(duesYr)} + a Street Wire seat ${Math.round(wireYr)}. SUBSCRIPTIONS ONLY — every one-time sink (estate tiers, seals, vanity, respec, the peek) is spend this floor ignores`);
+  note('equilibrium', 'the implied equilibrium velocity', `${velocityMade.toFixed(1)} turns/year`,
+    `${Math.round(recurringYr)} $OMR of recurring spend against a ${holdMade} $OMR capped hold. THE CONTRADICTION DOES NOT BITE: holding is bounded per player and spending is not, so a made man's float turns over ~${Math.round(velocityMade)}x a year on subscriptions alone. Watch it live on GET /v1/mod/tokenhealth ('return velocity'), whose act band is under 2`);
+
+  // Where the desk actually starves — it is a lot-size question, not a velocity one.
+  const capBps = DESK_AUCTION.FLOAT_CAP_BPS, capMin = DESK_AUCTION.FLOAT_CAP_MIN_OMR;
+  const dailyPerPlayer = recurringYr / 365;
+  const breakEvenFloat = dailyPerPlayer / (capBps / 10000);   // float at which returns == the 1% cap
+  note('equilibrium', 'what binds the desk lot', `returns below ${(capBps / 100).toFixed(0)}% of float`,
+    `the lot is min(yesterday's returns, ${(capBps / 100).toFixed(0)}% of float, the shelf) with a ${capMin} $OMR bootstrap floor. One engaged player returns ~${dailyPerPlayer.toFixed(1)} $OMR/day, so RETURNS bind (the healthy case — the desk sells what came home) until float per player exceeds ~${Math.round(breakEvenFloat)} $OMR. The starvation case is not "holding won", it is "nobody is playing"`);
+
+  // THE BOUNDARY OF WHAT THIS PROVES, stated rather than left for a reader to assume. The figure
+  // above is one ENGAGED player: made, subscribed, climbing. A player who is neither made nor
+  // subscribed has recurring spend of ZERO and may still lock up to the top rung — velocity 0. So
+  // the base-wide number is this multiplied by the ENGAGED SHARE, which no amount of arithmetic can
+  // tell us. Same lesson as everywhere else here: the books cannot lie, and that is not demand.
+  note('equilibrium', 'what this does NOT prove', 'the base-wide figure is this x the engaged share',
+    `an unmade, unsubscribed holder spends nothing recurring and can still lock up to ${holdUnmade} $OMR — velocity 0. The mechanisms do not fight, which is what the probe establishes; whether players engage is a retention question the dashboard measures live and no model can settle`);
+
+  note('equilibrium', 'the dial if holding ever does win', 'M3.OMR_LOOT_COMMITTED, then the rung heights',
+    `raise the committed loot rate (${(M3.OMR_LOOT_COMMITTED * 100).toFixed(0)}% today vs ${(M3.OMR_LOOT_IDLE * 100).toFixed(0)}% idle) and a staked hoard stops being the cheaper shelter; raise the rung minimums and the cap moves. Both are signed levers — this probe re-measures on either`);
 }
 
 phase('P10 §10.4 ledger invariants over the ENTIRE sim (nothing was seeded)');

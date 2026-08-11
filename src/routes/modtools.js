@@ -10,6 +10,7 @@ import * as Bonds from '../bonds.js';
 import * as Chain from '../chain.js';
 import * as ChainParams from '../chainparams.js';
 import * as Community from '../community.js';
+import * as TokenHealth from '../tokenhealth.js';
 import * as Desk from '../desk.js';
 import * as Fees from '../fees.js';
 import * as G from '../game.js';
@@ -229,6 +230,12 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
     app.post('/v1/mod/community/buy', { preHandler: modAuth }, async (req) =>
       Community.runFamilyBuyback(pool, { currency: req.body?.currency, priceOmr: req.body?.price,
         ...(req.body?.maxSpend != null ? { maxSpend: Number(req.body.maxSpend) } : {}), txHash: modRealTxHash(req) }));
+    // ── THE TOKEN-HEALTH BOARD (src/tokenhealth.js) ────────────────────────────────────────────
+    // The second instrument. Every other runner on this perimeter answers "can the books lie?"; this
+    // one answers "is the economy working?" — five KPIs, each with the reading that would make a
+    // person act. Pure read (no writes, no §10.4 surface); `?days=` widens the trailing window.
+    app.get('/v1/mod/tokenhealth', { preHandler: modAuth }, async (req) =>
+      TokenHealth.tokenHealth(pool, { ...(req.query?.days != null ? { days: Number(req.query.days) } : {}) }));
     app.get('/v1/mod/desk', { preHandler: modAuth }, async () => Desk.runDeskInvariants(pool));
     app.post('/v1/mod/desk/open', { preHandler: modAuth }, async () => Desk.openAuction(pool));
     app.post('/v1/mod/desk/fill', { preHandler: modAuth }, async (req) =>
