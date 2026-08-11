@@ -3085,7 +3085,21 @@ is reached by **predation** (`whack:loot` takes 20–50% of a victim's liquid AN
 **purchase** (the desk auction, for ETH) — never by grinding. That is on-theme for a mafia game and
 it is **not EVE**, where PLEX *is* reachable by grinding ISK; the design docs that described it as
 ISK-rent are corrected, and BALANCE.md § THE PLEX REACH ranks the dials (`M4.DAILY_ALL_OMR`,
-`STORE.PLEX_PREMIUM_BPS`, or the machine-owned mission `omr` column) as a founder call, not a defect.
+`STORE.PLEX_PREMIUM_BPS`, or the machine-owned mission `omr` column) as a founder call, not a defect. **DECIDED (founder, 2026-08-11): accept the predator framing — no lever
+moved, and the COPY changes to match**, which is the honest half rather than the cheap half. That
+decision surfaced a live defect on the way in: the Store shelf rendered a DISABLED *"ETH checkout
+opens at launch"* button and nothing else, so a shelf where every item was purchasable in earned
+$OMR *that day* read as entirely unbuyable — the withheld-terms class (the pad, the nut, the Port
+lane picker), one screen over. The shelf now shows BOTH prices with a working pay-in-$OMR button
+(rounded UP for display, so a shown price can never understate the charge), renders the retired
+entry, and states where the $OMR comes from in the player's own terms; both codices carry the
+arithmetic (1,320 lifetime + 3/day against a 4,941 cheapest purchase) so nobody plans around a rail
+they cannot reach. `PLEX_PREMIUM_BPS` 1.2 → 1.0 stays the dial if it should FEEL reachable — 17% off
+every rail price, one env value — but it does not close a 3.7× gap, so it is comfort, not a fix.
+**Two brittle assertions were caught by their own guard here**: `test/store.js` word-matched `/mint/`
+on the retirement copy, and the better sentence says *"made"* — so both were replaced with the
+PROPERTY that matters (the entry points at the mint route; the prose names no route, because the same
+string is an API error AND a card a player reads), mutation-verified.
 
 
 **…AND THE `made_man` SKU RETIRED WITH IT (founder-directed, same day, from the decision sheet: "2").**

@@ -57,8 +57,12 @@ assert(!r.body.packages.find((p) => p.sku === 'made_man'), 'made_man is OFF the 
 assert(!r.body.packages.some((p) => p.grant?.mintCredits),
   'and NO package grants a mint credit — the entitlement that gates extraction has exactly one price');
 const gone = r.body.retired.find((x) => x.sku === 'made_man');
-assert(gone && /mint/.test(gone.why) && gone.where === '/v1/character/mint',
-  'the board says where it went, rather than leaving a hole');
+assert(gone && gone.where === '/v1/character/mint', 'the board says WHERE it went, rather than leaving a hole');
+// the same string is an API error AND a card on the shelf, so it must read as prose to a player.
+// (This used to word-match /mint/ on the copy — a proxy that broke the moment the copy was reworded
+// to say "made" instead, which is the better sentence. Assert the PROPERTY, not the wording.)
+assert(gone.why && gone.why.length > 30 && !/\/v1\//.test(gone.why),
+  'and says WHY in prose — no route name, because this renders on a card a player reads');
 assert.equal(r.body.owned.mintCredits, 0, 'a nobody owns nothing');
 assert.equal(r.body.owned.patron, false, 'not a patron yet');
 assert.equal(r.body.split.founder + r.body.split.buyback + r.body.split.rwa, 10000, 'the split sums to 10000');
@@ -181,7 +185,7 @@ assert(sb.packages.every((p) => p.plexOmr > 0),
 // the retired door still names itself rather than reading as a typo
 r = await call('POST', '/v1/store/plex/made_man', { token: plexer.token });
 assert.equal(r.body.error, 'retired', 'the retired SKU says so — not "unknown package", which would be a lie');
-assert(/mint/i.test(r.body.message || ''), 'and points at the rail that does sell it');
+assert(/made|mission ladder/i.test(r.body.message || ''), 'and points at the rail that does sell it');
 
 // RETIRING A PACKAGE MUST NOT CANCEL A PURCHASE SOMEBODY ALREADY PAID FOR. A payment recorded before
 // the retirement — or parked pre-link and reconciled after it — is money that already moved, so the

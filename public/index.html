@@ -6321,12 +6321,18 @@
     if (r.code >= 400) { t.innerHTML = '<span class="d">the store is closed.</span>'; return; }
     const S = r.body, o = S.owned;
     const eth = (n) => `Ξ${n}`;
+    const myOmr = Number(me.omr || 0);   // the $OMR rail's affordability, read off the sheet
     t.innerHTML = `
       <h2>The Store</h2>
-      <div class="card"><div class="d">Support the family with real ETH — for consumables, access, and status.
-        <b>Never</b> for power: everything here is a revive, a credit, a subscription, or a badge, so a
-        skilled free player still tops the boards. Your spend also funds the token buyback + the
-        backed prize pools.</div></div>
+      <div class="card"><div class="d">Consumables, access, and status — <b>never</b> power. Everything here is a
+        revive, a subscription, or a badge, so a skilled free player still tops the boards. Your spend
+        funds the token buyback + the backed prize pools.
+        <div style="margin-top:6px">Two ways to pay: <b>real ETH</b>, or <b>earned $OMR</b> through PLEX. Same
+        goods either way. Getting <b>made</b> is the one exception — that has a single price, in ETH, because
+        it's what unlocks taking money off the chain.</div>
+        <div style="margin-top:6px;color:var(--dim);font-size:11px">Where the $OMR comes from, honestly: nothing
+        in the city mints it. You take it off somebody (a kill strips a fifth to a half of what they're
+        carrying), you buy it at the desk, or your family hands it to you. Grinding jobs won't get you here.</div></div></div>
       <h2 style="margin-top:12px">What You Hold</h2>
       <div class="grid">
         <div class="card"><span class="t">${o.minted ? 'MADE' : 'Free Trial'}</span><div class="d">${o.minted ? 'a made man — on-chain extraction unlocked' : `${o.mintCredits} mint credit(s)${o.mintCredits ? ' — spend on the chain to get made' : ''}`}</div></div>
@@ -6339,12 +6345,15 @@
       </div>
       <h2 style="margin-top:12px">The Shelf</h2>
       <div class="grid">${S.packages.map((p) => `
-        <div class="card"><span class="t">${p.name}</span> <span class="chip">${eth(p.priceEth)}</span>
+        <div class="card"><span class="t">${p.name}</span> <span class="chip">${eth(p.priceEth)}</span>${p.plexOmr ? ` <span class="chip good">${fmt(Math.ceil(p.plexOmr))} $OMR</span>` : ''}
           <div class="d">${p.blurb}</div>
-          <!-- a card with a price and NO button reads as broken. The Store is ETH only and the
-               on-chain checkout is dormant until the paywall ships, so say that in the button's
-               place rather than leaving a hole. -->
+          <!-- BOTH rails, and both stated. The ETH checkout is genuinely dormant until the on-chain
+               paywall ships, but the $OMR rail is LIVE right now — showing only the dead one made the
+               whole shelf read as unbuyable. A price with no way to pay it is the withheld-terms class. -->
+          ${p.plexOmr ? `<button class="act" data-plex="${p.sku}" ${myOmr >= p.plexOmr ? '' : `disabled title="you hold ${fmt(Math.floor(myOmr))} $OMR"`}>${myOmr >= p.plexOmr ? `pay ${fmt(Math.ceil(p.plexOmr))} $OMR` : `needs ${fmt(Math.ceil(p.plexOmr - myOmr))} more $OMR`}</button>` : ''}
           <button class="act" disabled title="the on-chain checkout is not live yet">ETH checkout opens at launch</button></div>`).join('')}</div>
+      ${(S.retired || []).length ? `<div class="card" style="margin-top:8px"><span class="t">Off the shelf</span>${(S.retired || []).map((x) => `
+        <div class="d">${esc(x.name || x.sku)} — ${esc(x.why)}</div>`).join('')}</div>` : ''}
       <div class="card" style="margin-top:8px"><div class="d">${S.note} ${me.wallet ? '' : '<b>Link a wallet first</b> (Everything Else → Chain) — a purchase made before linking is credited the moment you link.'}</div></div>
       <div class="d" style="font-size:11px;margin-top:6px">Revenue split — founder ${S.split.founder / 100}% · token buyback ${S.split.buyback / 100}% · RWA reserve ${S.split.rwa / 100}%.</div>
       <div id="pass-slot"></div>
@@ -6369,6 +6378,8 @@
             <span class="t">${t.claimed ? '✓ ' : ''}Tier ${t.tier}</span><div class="d">${t.reward}</div></div>`).join('')}</div>`;
       const cb = $('#pass-claim'); if (cb) cb.onclick = () => act('POST', '/v1/pass/claim', {}).then(() => renderStore());
     }
+    t.querySelectorAll('[data-plex]').forEach((b) => { b.onclick = () =>
+      act('POST', `/v1/store/plex/${b.dataset.plex}`, {}).then(() => renderStore()); });
     { const lk = $('#patron-lb'); if (lk) lk.onclick = async (e) => { e.preventDefault();
       const b = (await api('GET', '/v1/leaderboard/patrons')).body || {};
       $('#patron-board').innerHTML = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">

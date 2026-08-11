@@ -917,6 +917,13 @@ the mission ladder's *Dockside Heist* hands you a mint credit outright.
 
 The line is short: **the bound has one price; everything else is a currency choice.**
 
+**Where that $OMR comes from, said plainly, because the arithmetic matters.** Nothing in the city
+mints it. Every $OMR mission in the game pays 1,320 across a whole career and the daily contract
+bonus adds 3 a day — against 4,941 for the *cheapest* thing PLEX sells. So the rail is not funded by
+grinding. It is funded by taking it off somebody (a kill strips a fifth to a half of what they are
+carrying, staked included), by buying it at the desk, or by a family handing it to you. That is the
+game working as intended, and it is worth knowing before you plan around it.
+
 **The Season Pass / The Ledger** (`GET /v1/pass`, `/pass/claim`) — while your pass is active, claim the next of
 12 levels one time each day: titles, revive tokens, energy refills, and small **$OMR stipends** paid from the
 funded prize pool (never created). This is account-level, so it survives death.

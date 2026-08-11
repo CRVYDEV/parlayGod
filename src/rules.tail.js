@@ -2312,8 +2312,9 @@ STORE.PLEX_FLOOR_OMR_PER_ETH = Number(process.env.STORE_PLEX_FLOOR
 export const RETIRED_PACKAGES = {
   made_man: {
     priceEth: 0.01, grant: { mintCredits: 1 }, name: 'Made Man',
-    why: 'Getting made has its own rail: pay the published fee on-chain (POST /v1/character/mint '
-      + 'spends the credit), or earn one — the mission ladder grants a credit outright.',
+    // reads in BOTH contexts — an API error and a card on the shelf — so it names no route.
+    why: 'Getting made has its own rail: pay the published fee on-chain, or earn a credit off the '
+      + 'mission ladder, which grants one outright.',
     where: '/v1/character/mint',
   },
 };

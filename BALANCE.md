@@ -5511,6 +5511,17 @@ do), or move a dial. The dials, cheapest first: `M4.DAILY_ALL_OMR` (3/day, event
 `STORE.PLEX_PREMIUM_BPS` (1.2 → 1.0 makes every rail price 17% cheaper), or the mission ladder's
 `omr` column — which is MACHINE-OWNED, so it moves through the prototype and a re-extract.
 
+**SIGNED 2026-08-11 — accept the predator framing; no lever moved.** The rail stays where it is and
+the COPY changes to match, which is the honest half of the decision rather than the cheap half. What
+shipped with the signature: the Store shelf now shows BOTH prices and a working pay-in-$OMR button
+(it had a disabled *"ETH checkout opens at launch"* and nothing else, so a shelf where every item was
+purchasable *today* read as entirely unbuyable — the withheld-terms class, one screen over from the
+pad and the nut), and the card states where the $OMR comes from in the player's own terms: nothing in
+the city mints it, you take it off somebody or buy it at the desk, and grinding jobs will not get you
+here. `PLEX_PREMIUM_BPS` 1.2 → 1.0 remains the cheapest dial if the rail should FEEL reachable — it
+is a 17% cut to every rail price and one env value — but it does not close a 3.7× gap, so it would be
+a comfort change, not a fix.
+
 Nothing was retuned. P9.35 prints all of it every run, so a change to the ladder, the daily, the
 premium or any package price re-measures the reach.
 
