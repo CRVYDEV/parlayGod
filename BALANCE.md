@@ -5003,17 +5003,36 @@ Their pins left `test/levers.js` with the levers. What this does to the economy,
   feels 5; the §7.8 faucet ceiling falls to ~5 × $6.5k ≈ $32.5k/day/player at the jailbird cap.
   A gate on a signed faucet — no §10.4 change. `bustAttemptsLeft` rides the sheet.
 
-## D1 — THE TRADE FEE (RATE SIGNED 2026-08-05, founder: "Max fee for D1")
+## D1 — THE TRADE FEE IS RETIRED (founder-directed 2026-08-11: "get rid of the Vig trade fee")
 
-`TRADE_FEE.BPS` **30** (the MAX of the confirmed 10–30 band), `TRADE_VIG_BPS` **10000** (100% → the
-Vig — a trade has no founder/business counterparty), `MAX_BPS` **100** (contract cap, 1%). Armed at
-zero (the sell-tax posture). What it funds: the Vig — the ETH pot that backs $OMR withdrawals
-(`recordTradeFee` → `recordVigRevenue` → the buyback → the full-reserve queue), so a busy market
-directly raises withdrawal headroom ("traders fund earners too"). Chain-dormant: the backend
-(`recordTradeFee`/`syncTradeFees`/the `TradeFeePaid` adapter) is built; the CONTRACT fold into
-`OmertaHook` is the remaining mainnet-milestone build (an ETH-on-buys fee needs the input-side
-`beforeSwap` path, which the subtree's rule 7 flags as partial-fill-risky — its own focused,
-forge-verified contract session). The rate landing first is the design's required sequencing.
+The rate was signed 2026-08-05 and the rail never fired — the backend was built chain-dormant, so
+not one real row was ever written and there is nothing to unwind. What retired it is the decision it
+was blocking: **a `PoolKey` holds exactly ONE hook address, and two hooks wanted the canonical
+OMR/ETH pool** — this one (an afterSwap cut of every swap's ETH leg → the Vig) and `OmertaHook`'s
+four-slice SELL TAX. That had been carried as an open item since the v4 hook design; it is now
+closed, and the sell tax is the canonical pool's hook.
+
+Why the sell tax wins, on three independent counts:
+
+- **The money router already declares it end to end** — dev / treasury / LP / vig, with the remainder
+  rule on one slice and a mirror check per destination. The trade fee had one destination and a
+  booking path that read no lever at all (the F1 drift: 60% booked against a declared 100%, both
+  invariants green).
+- **It taxes SELLING, not all trading.** A fee on every swap prices the buy side of the market we are
+  trying to make deep. The point of POL and the bond programme is depth; charging entry works against
+  both.
+- **It is what makes a bond a HOLD rather than an arbitrage** (§9.6: `DISCOUNT_BPS` must stay strictly
+  under `sellTaxBps`). A separate trade fee does nothing for that relation, so keeping both would have
+  meant maintaining two fee surfaces where only one carries the load-bearing invariant.
+
+Retired the standard way: the PAYER is deleted (`recordTradeFee`, `syncTradeFees`, the `TradeFeePaid`
+adapter, the worker wiring, the `TRADE_FEE` constants — nothing is one env var from live), the
+`'trade'` source STAYS in the router's membership set forever (deleting a retired source would make
+its historical rows read as the router's loudest alarm), the waterfall still declares the row marked
+retired so the map makes the positive claim, and router check (8) inverted from "it books its
+declared split" to **"nothing new books it"**. `TRADE_FEE_HOOK_ADDRESS` / `TRADE_FEE_BPS` /
+`TRADE_VIG_BPS` are now `RETIRED_ENV` in preflight, so a stale deploy config warns rather than
+looking configured.
 
 ## D14 — stats matter more to the crime roll (SIGNED 2026-08-05, founder chose OPTION A)
 

@@ -265,7 +265,7 @@ Each rail is OFF until its address/config is present. Set on BOTH processes.
 | `DAILY_CAP_OMR` | per-day withdrawal cap (wei) | mirrors the contract's `dailyCapOMR` |
 | `OMERTA_FEES_ADDRESS` | fee sync (`MintFeePaid`/`RespawnFeePaid`/`RerollFeePaid` → credits) | — |
 | `OMERTA_BOND_ADDRESS` | **the `Bonded` → `recordBond` bond sync (NEW — now wired)** | books the event's authoritative payout + POL/Vig split; idempotent on nonce |
-| `TRADE_FEE_HOOK_ADDRESS` | the afterSwap→Vig trade-fee sync | only when the DEX hook ships |
+| `ALCHEMIST_ADDRESS` (+ `ALCHEMIST_ASSET`, `ALCHEMIST_ASSET_DECIMALS`) | THE BANK's harvest-fee sync → `bank_revenue` | only when the bank market ships |
 | `MINT_FEE_ETH` / `RESPAWN_FEE_ETH` | the PLEX price quote | ETH-denominated; keep == the contract fees |
 | `WALLETCONNECT_PROJECT_ID` | the console's **WalletConnect (mobile)** option — the ONLY way a phone can link a wallet (desktop browser wallets are auto-discovered via EIP-6963 and need nothing) | a PUBLIC WalletConnect/Reown project id, free from https://dashboard.reown.com; unset ⇒ the console hides the option. Surfaced in `/v1/rules`. Not chain-gated: linking is a signature, so the chain is requested as OPTIONAL and a wallet that has never heard of the OMERTÀ chain still connects |
 | `PLEX_RESPAWN_OMR` | the respawn's PLEX floor price (pre-market) | a sign-off lever. **There is no `PLEX_MINT_OMR`** — the mint is ETH only (it is the Sybil bound and the extraction gate, so it gets one rail and one published price); setting it does nothing |
@@ -273,7 +273,7 @@ Each rail is OFF until its address/config is present. Set on BOTH processes.
 
 **`ALLOW_MOD_REAL_REVENUE` — leave UNSET/off in production.** It is a QA-only flag that lets the mod
 comp/simulate routes inject *real* revenue; in prod the ONLY legitimate real-revenue source is a real on-chain
-event carrying a txHash (fees, trade fees, `Bonded`). With it off, a comp books zero POL/Vig — no fabricated,
+event carrying a txHash (fees, `Bonded`, `HarvestFeeTaken`). With it off, a comp books zero POL/Vig — no fabricated,
 unbacked reserve. (Red-team D-MED2.)
 
 ## 5. Fund + reconcile the backend accounting to MIRROR the chain
@@ -294,7 +294,7 @@ The backend keeps its own reserve records; they must track the on-chain balances
       fund reserve → withdraw signs an EIP-712 voucher → `claim()` on-chain → replay/tamper REVERT → the
       `Claimed` watcher frees reserve → gear voucher mints → uncapped gearId fails closed → §10.4 holds).
 - [ ] Boot the worker; confirm the sync logs advance (`💰 fee sync`, `👁 claimed sync`, `🏦 bond sync` once a
-      `Bonded` fires, `💱 trade-fee sync` if the hook is live) and the cursors persist (`chain_cursor`).
+      `Bonded` fires, `🏛  bank sync` if the Alchemist is live) and the cursors persist (`chain_cursor`).
 - [ ] `GET /v1/mod/reserve`, `/v1/mod/vig`, `/v1/mod/bonds`, `/v1/mod/emission` read green (backed / within
       caps). The `/admin` §10.4 banner reads OK. `npm run invariants` all `ok:true`.
 - [ ] Do one real player round-trip on testnet: pay the mint fee → mint a character → earn $OMR → link wallet
@@ -331,12 +331,13 @@ The backend keeps its own reserve records; they must track the on-chain balances
     number. And re-derive `dailyCapOMR` (`npm run dials`) against the new depth afterwards.
   - **Seed POL into the hooked pool BEFORE migrating** (§4b). Pool-local enforcement means the moat is
     depth; it is thinnest at launch, which is exactly when a rival untaxed pool is cheapest to stand up.
-  - **DECIDED (SIGN-OFF D1 = fold; RATE SIGNED 2026-08-05):** the trade fee → Vig (backend already
-    built and dormant behind `TRADE_FEE_HOOK_ADDRESS`) folds INTO `OmertaHook` as a fourth destination
-    — `TRADE_FEE.BPS = 30`, 100% to the Vig, armed at zero, contract cap 100. The rate is locked; the
-    CONTRACT change is the remaining build and MUST land before an address is mined. It is not trivial:
-    an ETH-denominated fee on BUYS needs the input-side `beforeSwap` delta, which rule 7 warns breaks
-    partial fills — so it is a focused contract session with full `forge test`, not a bolt-on.
+  - **CLOSED 2026-08-11 (founder: "get rid of the Vig trade fee") — the sell tax is the canonical
+    pool's ONE hook and the trade fee is RETIRED, not folded.** The earlier fold (D1 = A) was never
+    built because its ETH-on-buys fee needs the input-side `beforeSwap` path, which breaks partial
+    fills. Consequence to carry into deploy: the Vig has no trading leg, so withdrawal backing is
+    gameplay fees + Store + bonds only (sim P9.15 prints it). **Nothing to configure and nothing left
+    to build here** — `OmertaHook` already IS the canonical pool's hook, so the address may be mined
+    against it as it stands.
 - **The POL-pairing bot** (pairs the bonded ETH into the OMR-ETH pool) and **the DEX buyback bot** (the real
   TWAP source that replaces the manual `mod/vig/buyback` price).
 - **The on-chain Store** — `OmertaFees.payForPackage` + a `StorePaid` watcher. The Store is off-chain/mod-driven

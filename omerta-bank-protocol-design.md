@@ -403,12 +403,48 @@ mutation-verified:
    address would brick the core function while looking configured.
 3. **The fee can never exceed the yield it came from** (512-run fuzz over rate × yield).
 
+**THE DESTINATION IS THE TREASURY SAFE, founder-directed 2026-08-11.** `feeRecipient` is one address
+and §4 wants three legs, so the honest answer today is a COLLECTOR: the sToken is unbuilt, the NFT leg
+ships at zero per memo A11, and the city leg's buy path is design — pointing the fee at any one of
+them now would be picking a leg by default rather than by decision. So it goes to the one address
+that only ever RECEIVES (no hot key, no swap on a collection path — the fee is denominated in the
+market's underlying, not ETH), and the three-way split becomes a policy decision about a RECORDED
+balance rather than a scramble to reconstruct where money went.
+
+That reconstruction is the actual risk, and it is why the ingest shipped in the same change as the
+fee: **the bond's fourth slice reached the right wallet for months while the ledger recorded nothing
+and both invariants stayed green**, because money arrived somewhere nobody counted. The fee is now
+booked from the first wei — a `HarvestFeeTaken` log → `recordHarvestFee` → `bank_revenue`, idempotent
+on the log key, with the anti-fabrication `txHash` gate (a QA call records the episode and books
+ZERO), a declared `harvest` row in the money router, and a source-membership invariant. It is booked
+in the market's UNDERLYING with the asset named, never mirrored into the ETH-denominated
+`rwa_revenue` — that ledger's sum IS the vault's `allocated <= held` wall, so a USDC amount landing
+there would inflate the one number that bounds what players may be owed.
+
+**THE REDEMPTION-FEE CONTRADICTION IS RESOLVED, founder-directed 2026-08-11 ("let's do 10%").** §4
+listed redemption fees as protocol revenue while §2.3 paid them to the borrower; both could not be
+true. They are now split — and the split turns on the fact that TWO different things are called
+redemption:
+
+- **The Transmuter's 1:1 redemption (§2.4) is NEVER TAXED, at any rate.** It is the peg defense, and
+  a fee there does not earn revenue — it **widens the peg band to the size of the fee**, because no
+  arbitrageur repairs a discount smaller than the toll. At 10%, nUSD trades to 0.90 and nothing pulls
+  it back. This is now a WALL with a named test (`test_the_peg_redemption_is_NEVER_taxed`), because
+  "we set the redemption fee to 10%" is exactly the sentence that would otherwise be applied here by
+  a future reader.
+- **The free-debt redemption (§2.3, Monolith, unbuilt) carries the 10%, and it is a SPLIT: the
+  borrower keeps 90%, the protocol takes 10%.** §2.3's promise — being redeemed against is
+  compensated, not punitive — is load-bearing: it is the entire reason anyone takes free debt, and
+  free debt is what gives the redemption mechanic its liquidity. A 10% tithe leaves that intact while
+  giving §4 its revenue line. It ships with the Monolith layer; there is no free/paid debt split, no
+  oracle and no redeem-against-a-borrower path in the contracts today, so recording it here is the
+  whole of the decision for now.
+
 §2.2's disclosure rule does the rest of the work and becomes load-bearing rather than decorative:
 the UI must show the projected payoff date from the live realised **post-fee** yield. At 50% LTV and
 8% yield the fee moves payoff from 6.25 years to 7.8 — real, and disclosed by a rule that already
-existed. **Still open:** the destination (`feeRecipient` is one Safe-set address; the three-way split
-below is downstream of it), and the contradiction that this section lists redemption fees as protocol
-revenue while §2.3 pays them to the borrower being redeemed against. Both cannot be true.
+existed. Both of this section's open items — the destination and the redemption-fee contradiction —
+were closed by the founder on 2026-08-11 and are recorded above.
 
 | Leg | Destination | Note |
 |---|---|---|

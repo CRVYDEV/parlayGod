@@ -2395,21 +2395,25 @@ export const bondPayout = (principalEth, price, discountBps) =>
 // DORMANT until step 4 arms the contract and a `SellTaxTaken` watcher records episodes; the ingest
 // (`recordSellTax`) and the mod/QA seat exist now so the accounting is testable ahead of the chain.
 // ── D1 (SIGNED 2026-08-05, founder: "Max fee for D1") — THE TRADE FEE, folded into OmertaHook ──
-// A small fee on EVERY swap (buys INCLUDED), taken in ETH, funding the VIG — the pot that backs $OMR
-// withdrawals (recordTradeFee → recordVigRevenue → the buyback → the full-reserve queue). So spenders
-// fund earners AND traders fund earners: a busy market directly raises how much players can withdraw.
-// A trade has no founder/business counterparty, so 100% goes to the Vig (TRADE_VIG_BPS 10000). MAX of
-// the confirmed 10–30 bps band = 30. Armed-at-zero (the sell-tax posture) with a compile-time cap in
-// the contract; the on-chain OmertaHook.tradeFeeBps mirrors this. §9.6 operating rule holds: this is a
-// FLAT fee, unrelated to the bond discount. Chain-dormant — the backend (recordTradeFee/syncTradeFees)
-// is built; the contract fold is the mainnet milestone (third-party audit + legal gated).
-export const TRADE_FEE = {
-  BPS: Number(process.env.TRADE_FEE_BPS || 30),                // 0.30% on every swap (contract MAX 100 = 1%)
-  VIG_BPS: Number(process.env.TRADE_VIG_BPS || 10000),         // 100% → the Vig (no business counterparty on a trade)
-  MAX_BPS: 100,                                                // OmertaHook.MAX_TRADE_FEE_BPS — kept in lockstep
-};
-(() => { if (TRADE_FEE.BPS > TRADE_FEE.MAX_BPS) throw new Error(`TRADE_FEE.BPS ${TRADE_FEE.BPS} exceeds the contract cap ${TRADE_FEE.MAX_BPS}`);
-  if (TRADE_FEE.VIG_BPS > 10000) throw new Error(`TRADE_FEE.VIG_BPS ${TRADE_FEE.VIG_BPS} exceeds 100%`); })();
+// THE SWAP TRADE FEE IS RETIRED (founder-directed 2026-08-11: "get rid of the Vig trade fee").
+//
+// It was a small fee on EVERY swap (buys included), 100% to the Vig, and it was never armed — the
+// backend was built and chain-dormant, so not one real row was ever written. What retired it is the
+// decision it was blocking: a `PoolKey` holds exactly ONE hook address, and TWO hooks wanted the
+// canonical OMR/ETH pool — this one (an afterSwap cut of every swap's ETH leg → the Vig) and
+// `OmertaHook`'s four-slice SELL TAX (dev / treasury / LP / vig). They cannot both serve it. The
+// sell tax wins on three counts: it is the one the money router already declares end to end, it
+// taxes SELLING rather than all trading (so it never prices the buy side of the market we want
+// deep), and it is what makes a bond a hold rather than an arbitrage (§9.6 — `DISCOUNT_BPS` must
+// stay strictly under `sellTaxBps`, a relation a separate trade fee does nothing for).
+//
+// Retired the standard way (the emission.js / PLEX-mint discipline): the PAYER is DELETED, not left
+// dormant behind a flag — `recordTradeFee`, `syncTradeFees`, the watcher's `tradeFeeLogs` and the
+// worker's wiring are gone, and `TRADE_FEE` no longer exists, so nothing is one env var from live.
+// What STAYS is the history half: `'trade'` remains in the router's `VIG_SOURCES` forever (a source
+// removed from membership is the loudest alarm the router has, and conservation is a claim about the
+// WHOLE ledger), the waterfall still declares the row marked retired so "where a dollar goes" makes
+// the POSITIVE claim rather than going silent, and a freshness check asserts nothing new writes it.
 
 export const SELL_TAX = {
   BPS: Number(process.env.SELL_TAX_BPS || 900),                // 9% on a sell (contract cap: 1000)

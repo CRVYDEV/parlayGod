@@ -190,6 +190,11 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
     // treasury received ETH it did not.
     app.post('/v1/mod/treasury/tax', { preHandler: modAuth }, async (req) =>
       Treasury.recordSellTax(pool, { ref: req.body?.ref, omrTaxed: req.body?.omrTaxed, priceOmrPerEth: req.body?.price, txHash: modRealTxHash(req) }));
+    // ingest a BANK harvest performance fee (a `HarvestFeeTaken` log on mainnet). Booked in the
+    // market's underlying, never mirrored into the ETH ledger — see recordHarvestFee. Same gate.
+    app.post('/v1/mod/bank/harvest', { preHandler: modAuth }, async (req) =>
+      Treasury.recordHarvestFee(pool, { ref: req.body?.ref, asset: req.body?.asset,
+        amount: req.body?.amount, payer: req.body?.payer, txHash: modRealTxHash(req) }));
     // THE DESK (economy v3 step 3). `/desk` is the real-value invariant — the ETH side of the daily
     // auction (the $OMR side is §10.4's `desk sales ledgered`). `/desk/open` forces today's auction
     // rather than waiting for the worker tick, and `/desk/fill` is the QA/comp purchase path until

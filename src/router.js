@@ -9,7 +9,7 @@
 //
 // THIS MODULE MOVES NO MONEY. Three jobs:
 //   1. DECLARE  — waterfall(): every real-value inflow and its split, DERIVED from the live signed
-//                 constants (STORE.SPLIT_BPS, BONDS.*, SELL_TAX.*, TRADE_FEE.*, VIG_BPS, TAX.*,
+//                 constants (STORE.SPLIT_BPS, BONDS.*, SELL_TAX.*, VIG_BPS, TAX.*,
 //                 DESK_AUCTION.*) so the declaration structurally cannot drift from the code that
 //                 books the slices. Unifying the PERCENTAGES across sources is a separate balance
 //                 decision (BALANCE.md § THE MONEY ROUTER) — deliberately NOT made here: folding
@@ -17,16 +17,17 @@
 //                 lesson, recorded 2026-07-31).
 //   2. VERIFY   — runRouterInvariants(): the CROSS-SOURCE layer the five per-system runners
 //                 (vig/bond/treasury/desk/exchange) structurally cannot see — source membership on
-//                 both revenue ledgers, the two orphan mirrors reconciled, the trade-fee booking
-//                 held to its DECLARED lever, and the dev_fund balance identity (the one revenue
-//                 bucket that had no balance==ledger check).
+//                 both revenue ledgers, the two orphan mirrors reconciled, the retired trade rail
+//                 staying retired, and the dev_fund balance identity (the one revenue bucket that
+//                 had no balance==ledger check).
 //   3. DISPLAY  — routerBoard(): WHERE A DOLLAR GOES — the whole waterfall with lifetime figures
 //                 per source × destination, one screen (GET /v1/mod/router + the /admin panel).
 //
 // Import discipline: rules.js (the universal leaf) + vig.js (which imports game/rules — router sits
 // at the worker/server layer, so no cycle). Nothing imports router.js except server/worker/tests.
-import { STORE, BONDS, SELL_TAX, TRADE_FEE, TAX, TREASURY, DESK_AUCTION, withdrawTaxBps } from './rules.js';
+import { STORE, BONDS, SELL_TAX, TAX, TREASURY, DESK_AUCTION, withdrawTaxBps } from './rules.js';
 import { VIG_BPS } from './vig.js';
+import { bankRevenueByAsset } from './treasury.js';
 
 const round6 = (n) => Math.round(n * 1e6) / 1e6;
 
@@ -67,12 +68,13 @@ export function waterfall() {
         { dest: 'pol', bps: 10000 - Math.round(SELL_TAX.DEV_BPS / SELL_TAX.BPS * 10000) - Math.round(SELL_TAX.RWA_BPS / SELL_TAX.BPS * 10000),
           lands: 'sell_tax_events.lp_eth (the remainder rule sits on LP)' },
       ] },
-    { id: 'trade', name: `Swap trade fee (${TRADE_FEE.BPS} bps, buys included — OmertaHook)`, currency: 'eth', totalBps: 10000,
-      splits: [
-        { dest: 'vig', bps: TRADE_FEE.VIG_BPS, lands: "vig_revenue source='trade'" },
-        ...(TRADE_FEE.VIG_BPS < 10000
-          ? [{ dest: 'founder', bps: 10000 - TRADE_FEE.VIG_BPS, lands: 'dev wallet (implicit remainder)', implicit: true }] : []),
-      ] },
+    // RETIRED 2026-08-11 (founder-directed). The row STAYS so the map makes the positive claim —
+    // a retired rail that simply vanishes from the board says nothing, and any historical row would
+    // then have no declaration to reconcile against. Two hooks wanted one canonical pool; the
+    // four-slice sell tax won. It never fired in production, so `lifetime.trade` reads zero forever.
+    { id: 'trade', name: 'Swap trade fee — RETIRED (the sell tax is the canonical pool’s one hook)',
+      currency: 'eth', totalBps: 10000, retired: true,
+      splits: [{ dest: 'vig', bps: 10000, lands: "vig_revenue source='trade' (historical only)" }] },
     { id: 'auction', name: "The Desk's daily Dutch auction (ETH proceeds)", currency: 'eth', totalBps: 10000,
       splits: [
         { dest: 'pol', bps: DESK_AUCTION.ETH_POL_BPS, lands: 'desk_sales.pol_eth' },
@@ -80,6 +82,14 @@ export function waterfall() {
       ] },
     { id: 'polfees', name: 'POL trading fees (the LP position earns)', currency: 'eth', totalBps: 10000,
       splits: [{ dest: 'desk-buyback', bps: 10000, lands: 'pol_fees (the buyback budget — exclusively)' }] },
+    // THE BANK's 20% harvest performance fee. Denominated in the MARKET'S UNDERLYING (USDC), not ETH
+    // — hence its own ledger and its own currency here, rather than a row in the ETH-denominated
+    // rwa_revenue whose sum IS the vault's `held` wall. Destination: the treasury Safe, because §4's
+    // three legs (stakers / NFT holders / the city) are unbuilt, at zero, and design respectively —
+    // so this records the money now and splits it when there is something to split it into.
+    { id: 'harvest', name: `THE BANK — harvest performance fee (${BANK_HARVEST_FEE_BPS} bps of yield that serviced debt)`,
+      currency: 'usd', totalBps: 10000,
+      splits: [{ dest: 'treasury', bps: 10000, lands: "bank_revenue source='harvest' (in the market's underlying)" }] },
     // The one non-ETH revenue line: the $OMR exit toll (+ the early-exit surcharge, which rides the
     // SAME split). Declared here because "where a dollar goes" must include the founder's other
     // revenue bucket, or the map is not the map.
@@ -94,8 +104,16 @@ export function waterfall() {
 // The membership sets the VERIFY layer holds the ledgers to. Extending a ledger with a new source
 // means extending the waterfall — a decision on the record, not a quiet INSERT (schema comments
 // name 'cosmetic' | 'rent' | 'pass' as future sources; they join HERE when they are built).
+// 'trade' is RETIRED but stays a member FOREVER: membership is what makes an unknown source the
+// loudest alarm, so deleting a retired one would make its historical rows read as the alarm instead.
 export const VIG_SOURCES = ['fee', 'store', 'bond', 'trade'];
 export const TREASURY_SOURCES = ['fee', 'store', 'tax', 'bond'];
+// The bank's own ledger, in the market's underlying rather than ETH. Same membership discipline.
+export const BANK_SOURCES = ['harvest'];
+// Mirrors Alchemist.harvestFeeBps. A RESTATEMENT (the contract is the authority and this layer
+// cannot import Solidity), so it is pinned against the contract source in test/router.js — the
+// preflight vig-defaults discipline, applied to a number that decides what the board claims.
+export const BANK_HARVEST_FEE_BPS = 2000;
 
 // Load-time guard: every declared source's splits sum to exactly its total. A waterfall that does
 // not sum is a config error worth refusing to boot over (the STORE.SPLIT_BPS precedent).
@@ -152,15 +170,26 @@ export async function runRouterInvariants(pool) {
   push('store → treasury mirror matches the declared split', Math.abs(storeTre - storeGross * STORE.SPLIT_BPS.rwa / 10000) <= storeTol,
     `booked ${storeTre} vs declared ${round6(storeGross * STORE.SPLIT_BPS.rwa / 10000)}`);
 
-  // (8) THE TRADE DECLARATION — the F1 class made a standing check: what recordTradeFee BOOKS must
-  // equal what TRADE_FEE.VIG_BPS DECLARES. Before F1 the booking path never read the lever (60%
-  // booked against a declared 100% — 40% of every trade-fee gross to nobody); this is what would
-  // have caught it, and what catches the next constant-vs-wiring drift.
-  const tr = (await pool.query("SELECT COALESCE(SUM(gross_eth),0) g, COALESCE(SUM(vig_eth),0) v, COUNT(*) n FROM vig_revenue WHERE source='trade'")).rows[0];
-  push('trade fee books its declared split', Math.abs(num(tr.v) - num(tr.g) * TRADE_FEE.VIG_BPS / 10000) <= 2e-6 * (Number(tr.n) + 1),
-    `booked ${tr.v} vs declared ${round6(num(tr.g) * TRADE_FEE.VIG_BPS / 10000)}`);
+  // (8) THE TRADE RAIL IS RETIRED — the freshness shape (emission.js's `emission faucet retired`).
+  // The check that lived here held the booking to its declared lever, which caught the F1 drift; with
+  // the payer deleted there is no booking left to hold, and the thing worth asserting inverts: that
+  // nothing writes it AGAIN. Deliberately NOT a membership deletion — `'trade'` stays a declared
+  // VIG_SOURCE forever, because conservation is a claim about the whole ledger and a source removed
+  // from membership is the loudest alarm this module has. Scoped to the last day so a historical row
+  // (none exist — it never fired in production) still reconciles rather than alarming forever.
+  const trFresh = Number((await pool.query(
+    "SELECT COUNT(*) n FROM vig_revenue WHERE source='trade' AND created_at > now() - interval '1 day'")).rows[0].n);
+  push('trade fee retired (nothing new books it)', trFresh === 0, `${trFresh} fresh source='trade' row(s)`);
 
-  // (9) THE DEV FUND identity — the one revenue bucket with no balance==ledger check (GAP-1's
+  // (9) BANK SOURCE MEMBERSHIP — the same rule as the two ETH ledgers: revenue outside the declared
+  // map inflates any unfiltered SUM over it. Cheap, and it is what makes adding a bank revenue line
+  // a decision on the record rather than a quiet INSERT.
+  const bankUnknown = (await pool.query(
+    `SELECT DISTINCT source FROM bank_revenue WHERE source NOT IN (${BANK_SOURCES.map((_, i) => `$${i + 1}`).join(',')})`,
+    BANK_SOURCES)).rows.map((r) => r.source);
+  push('bank_revenue sources are declared', bankUnknown.length === 0, `unknown: ${bankUnknown.join(',')}`);
+
+  // (10) THE DEV FUND identity — the one revenue bucket with no balance==ledger check (GAP-1's
   // checkable half; the exchange/family-yield pools have this, dev_fund did not): the balance is
   // exactly what tax:dev put in minus what tax:dev:claim took out, and lifetime never moves down.
   const df = (await pool.query('SELECT omr, lifetime FROM dev_fund WHERE id=1')).rows[0] || { omr: 0, lifetime: 0 };
@@ -213,6 +242,8 @@ export async function routerBoard(pool) {
   lifetime.auction = { gross: await one('SELECT COALESCE(SUM(eth),0) s FROM desk_sales WHERE real'),
     pol: await one('SELECT COALESCE(SUM(pol_eth),0) s FROM desk_sales WHERE real'),
     founder: await one('SELECT COALESCE(SUM(founder_eth),0) s FROM desk_sales WHERE real') };
+
+  lifetime.harvest = { byAsset: await bankRevenueByAsset(pool) };
 
   lifetime.polfees = { gross: await one('SELECT COALESCE(SUM(eth),0) s FROM pol_fees WHERE real'),
     spent: await one('SELECT COALESCE(SUM(eth_spent),0) s FROM desk_buys WHERE real') };

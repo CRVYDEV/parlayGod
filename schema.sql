@@ -2588,6 +2588,36 @@ CREATE TABLE IF NOT EXISTS sell_tax_events (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- THE BANK'S REVENUE LEDGER — one row per `HarvestFeeTaken` log (Alchemist's 20% performance fee on
+-- harvested yield, founder-directed 2026-08-11). Its own table rather than a row in `rwa_revenue`
+-- for one hard reason: the fee is denominated in the MARKET'S UNDERLYING (USDC for the nUSD market),
+-- and `rwa_revenue.rwa_eth` is ETH. Booking a stablecoin amount into an ETH column is the units error
+-- this codebase keeps catching, and it would silently inflate `held` — the number the vault's
+-- `allocated <= held` wall is measured against. So: asset + amount, stated.
+--
+-- DESTINATION: the treasury Safe (founder-directed). §4's three legs (stakers / NFT holders / the
+-- city) do not exist yet — the sToken is unbuilt, the NFT leg ships at zero per memo A11, and the
+-- city leg's buy path is design — so `feeRecipient` points at the one address that only ever
+-- RECEIVES, and the split becomes a policy decision about a RECORDED balance rather than a scramble
+-- to reconstruct where the money went. That reconstruction is the actual risk: the bond's fourth
+-- slice reached the right wallet for months while the ledger recorded nothing and both invariants
+-- stayed green, because the money arrived somewhere nobody counted.
+--
+-- Out-of-band real value like vig_revenue/rwa_revenue: ZERO §10.4 rows. `real` marks a genuine
+-- on-chain log; a mod/QA simulate records the episode and books NO revenue (the anti-fabrication
+-- gate — "the treasury received this much" must never be assertable by a QA call).
+CREATE TABLE IF NOT EXISTS bank_revenue (
+  source TEXT NOT NULL,                       -- 'harvest' (the waterfall id it reconciles against)
+  ref TEXT NOT NULL,                          -- the log key (txHash:logIndex on-chain)
+  asset TEXT NOT NULL,                        -- the underlying the fee was taken in ('USDC', 'WETH')
+  amount NUMERIC NOT NULL DEFAULT 0,          -- in whole units of `asset`, NOT wei and NOT ETH
+  payer TEXT,                                 -- the position whose harvest was billed (informational)
+  tx_hash TEXT,
+  real BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (source, ref)
+);
+
 -- ═══════════════ THE TRADES (mastery expansion, omerta-mastery-design.md) ═══════════════
 -- Per-street use-XP tracks — RuneScape farming pointed at the verbs the game already has.
 -- NUMERIC on purpose (the pg-mem INT-arithmetic quirk register); writes are absolute values

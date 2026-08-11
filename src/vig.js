@@ -14,7 +14,7 @@
 // here — the PLEX bridge, which used to burn IN-GAME $OMR, is retired; see below).
 import crypto from 'node:crypto';
 import { GameError, ledger } from './game.js';
-import { TRADE_FEE, genesisOmrFor } from './rules.js'; // the trade-fee split lever — the booking path must read the DECLARED constant (F1)
+import { genesisOmrFor } from './rules.js';
 import { fundReserve } from './chain.js';
 
 const uid = () => crypto.randomUUID();
@@ -110,9 +110,9 @@ export async function recordVigRevenue(client, { source, ref, kind, amountWei, b
   try { grossEth = Number(BigInt(amountWei ?? '0')) / 1e18; } catch { grossEth = 0; }
   if (!(grossEth > 0)) return { recorded: false };
   // `bps` defaults to the gameplay-fee split; a source with its OWN declared split passes it
-  // explicitly (ROUTER F1: recordTradeFee booked 60% while TRADE_FEE.VIG_BPS declares 100% —
-  // the constant was read nowhere on the booking path, so 40% of every trade-fee gross would
-  // have been booked to nobody. Chain-dormant, so zero real rows were wrong; the wiring was.)
+  // explicitly. Kept after the trade fee's retirement because the LESSON outlives the rail that
+  // taught it (ROUTER F1: the booking path read no lever at all, so a source whose declared split
+  // differed from the default booked the difference to nobody, with both invariants green).
   const vigEth = round6(grossEth * (bps ?? VIG_BPS) / 10000);
   // SELECT-then-INSERT (pg-mem's ON CONFLICT is unreliable) — a re-delivered fee event is a no-op
   const seen = (await client.query('SELECT 1 FROM vig_revenue WHERE source=$1 AND ref=$2', [source, String(ref)])).rows[0];
@@ -123,22 +123,11 @@ export async function recordVigRevenue(client, { source, ref, kind, amountWei, b
   return { recorded: true, vigEth };
 }
 
-// ── the afterSwap→Vig hook's revenue ingestion (the recordFeePayment twin; chain-dormant, watcher-driven) ──
-// A `TradeFeePaid(nonce, amountWei)` log from the OMR/ETH pool's afterSwap hook → the Vig's share, through
-// the SAME rail as gameplay fees (recordVigRevenue splits VIG_BPS, idempotent on source+ref). Design:
-// omerta-uniswap-hooks-design.md §2. Security posture: there is NO mod route for trade fees BY DESIGN —
-// the on-chain watcher is the ONLY producer, so unlike fees/store/bonds (which carry a QA mod route behind
-// ALLOW_MOD_REAL_REVENUE) there is ZERO fabrication surface. A re-delivered / reorged log is a no-op.
-export async function recordTradeFee(pool, { nonce, amountWei }) {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const r = await recordVigRevenue(client, { source: 'trade', ref: nonce, kind: 'trade', amountWei, bps: TRADE_FEE.VIG_BPS });
-    await client.query('COMMIT');
-    return r;
-  } catch (e) { await client.query('ROLLBACK'); throw e; }
-  finally { client.release(); }
-}
+// THE TRADE-FEE PAYER IS RETIRED (founder-directed 2026-08-11) — `recordTradeFee` is DELETED rather
+// than left dormant, because a payer behind a flag is one env var from live. Two hooks wanted one
+// pool and the four-slice sell tax won; see the retirement note in rules.tail.js. `'trade'` stays in
+// the router's VIG_SOURCES forever (history), and `router.js` check (8) now asserts nothing NEW
+// writes it — the freshness shape, not a membership deletion.
 
 const sumEth = async (pool, table, col, where = '') =>
   Number((await pool.query(`SELECT COALESCE(SUM(${col}),0) s FROM ${table} ${where}`)).rows[0].s);

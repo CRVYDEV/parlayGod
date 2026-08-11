@@ -315,6 +315,56 @@ export async function recordSellTax(pool, { ref, omrTaxed, priceOmrPerEth, txHas
   } finally { client.release(); }
 }
 
+// ── THE BANK'S HARVEST FEE ingest (founder-directed 2026-08-11) ──
+// One row per `HarvestFeeTaken(user, recipient, amount)` log from `Alchemist`. The fee is 20% of the
+// yield that serviced a position's debt, taken in the market's UNDERLYING — so it is booked in
+// `bank_revenue` with its asset named, never mirrored into the ETH-denominated `rwa_revenue`. That is
+// not fastidiousness: `rwa_revenue.rwa_eth` is summed into `held`, the number the vault's
+// `allocated <= held` wall is measured against, so a USDC amount landing there would inflate the one
+// figure that bounds what players may be owed.
+//
+// The event carries no nonce, so `ref` is the log key (txHash:logIndex) — the sell-tax discipline.
+// Idempotent on it; a re-delivered or reorged log is a clean no-op. `txHash` marks a REAL fee: a
+// mod/QA simulate records the episode and books ZERO, because "the treasury received this much"
+// must never be assertable by a QA call.
+export async function recordHarvestFee(pool, { ref, asset, amount, payer = null, txHash = null } = {}) {
+  const key = String(ref || '').trim();
+  if (!key) throw new GameError('ref', 'A harvest fee needs a ref (txHash:logIndex).');
+  const sym = String(asset || '').trim().toUpperCase();
+  if (!sym) throw new GameError('asset', 'A harvest fee needs the asset it was taken in.');
+  const amt = Number(amount);
+  if (!(Number.isFinite(amt) && amt > 0)) throw new GameError('amount', 'amount must be > 0');
+  const real = !!txHash;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // SELECT-then-INSERT, not ON CONFLICT + rowCount (pg-mem misreports a suppressed conflict, so
+    // the tidier idiom would report every duplicate as a fresh booking — see recordSellTax).
+    if ((await client.query('SELECT 1 FROM bank_revenue WHERE source=$1 AND ref=$2', ['harvest', key])).rows[0]) {
+      await client.query('COMMIT');
+      return { recorded: false, duplicate: true };
+    }
+    await client.query(
+      'INSERT INTO bank_revenue (source, ref, asset, amount, payer, tx_hash, real) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+      ['harvest', key, sym, real ? round6(amt) : 0, payer, txHash, real]);
+    await client.query('COMMIT');
+    return { recorded: true, asset: sym, amount: real ? round6(amt) : 0, real };
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (e?.code === '23505') return { recorded: false, duplicate: true };
+    throw e;
+  } finally { client.release(); }
+}
+
+// What the bank has earned, by asset. Read by the router board and the ops view.
+export async function bankRevenueByAsset(db) {
+  const out = {};
+  for (const r of (await db.query(
+    'SELECT asset, COALESCE(SUM(amount),0) s FROM bank_revenue WHERE real GROUP BY asset')).rows)
+    out[r.asset] = round6(Number(r.s));
+  return out;
+}
+
 // ── the ops board: what the treasury holds, what it owes, and where the ETH came from ──
 // Public-safe (no per-account anything); mounted mod-gated. The PLAYER-facing view is vaultBoard.
 export async function treasuryStatus(pool) {

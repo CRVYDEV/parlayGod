@@ -604,25 +604,29 @@ for (const route of PORT.ROUTES) {
 note('port', 'daily faucet (best route, maxed)', `~$${fmt(Math.round(PORT.SUPPLY_CAP_DAY * bestNetRatio))}/day`,
   `bounded by SUPPLY_CAP_DAY $${fmt(PORT.SUPPLY_CAP_DAY)} × the best net margin — sign-off vs boxing exhibition / territory (~$300-400k)`);
 
-// ════════ P9.15 the afterSwap→Vig trade-fee flywheel — analytic contribution (design §2, Tier D) ════════
-// The dormant Uniswap hook skims HOOK_FEE_BPS of each swap's ETH leg → the Vig books VIG_BPS of that as
-// source='trade' revenue → the existing buyback turns it into reserve (RESERVE_BPS) + prize pool. This is a
-// SIGN-OFF number, NOT a §10.4 assertion: real ETH is out-of-band (zero `transactions` rows — the fees.js
-// precedent), so it neither seeds value nor moves the sweep. It bounds how much extra withdrawal-reserve a
-// given daily OMR/ETH trade volume underwrites — "traders fund earners." Illustrative volumes; the real
-// figure is the DEX's realized volume at mainnet.
-phase('P9.15 trade-fee flywheel — Vig contribution vs daily swap volume (analytic, out-of-band)');
-const VIG_BPS = Number(process.env.VIG_BPS || 6000);
-const RESERVE_BPS = Number(process.env.VIG_RESERVE_BPS || 5000);
-const HOOK_FEE_BPS = 30; // illustrative pool skim (contract lever, MAX_FEE_BPS 100) — sign-off
-for (const volEth of [10, 100, 1000]) {                              // daily ETH-leg swap volume scenarios
-  const skimEth = volEth * HOOK_FEE_BPS / 10000;                      // the hook's take
-  const vigEth = skimEth * VIG_BPS / 10000;                           // booked as source='trade' revenue
-  const toReserveEth = vigEth * RESERVE_BPS / 10000;                  // buyback → withdrawal reserve
-  note('vig', `flywheel @ ${fmt(volEth)} ETH/day traded`, `+${vigEth.toFixed(3)} ETH/day to the Vig`,
-    `skim ${HOOK_FEE_BPS}bps → ${skimEth.toFixed(3)} ETH · Vig ${(VIG_BPS/100)}% → ${toReserveEth.toFixed(3)} ETH/day underwrites withdrawal reserve (rest → prize pool); real vol = the DEX at mainnet`);
+// ════════ P9.15 WHAT TRADING FUNDS, after the trade fee's retirement (analytic, out-of-band) ════════
+// The trade fee (a cut of EVERY swap → the Vig) was retired 2026-08-11: a PoolKey holds one hook and the
+// four-slice SELL TAX won the canonical pool. This probe exists to keep the CONSEQUENCE measured rather
+// than assumed, because it is easy to miss: the sell tax's slices are dev / treasury / LP — **none of them
+// is the Vig** — so after the retirement, trading volume contributes NOTHING to withdrawal backing. The
+// Vig is funded by gameplay fees, the Store and bonds alone. That is not automatically wrong (the LP slice
+// buys depth, which is what a thin market needs most), but "extraction ≤ inflow" is now a tighter bound,
+// and this prints the number so a founder decision to add a fourth vig slice has something to price.
+// Out-of-band real value: zero `transactions` rows (the fees.js precedent), so the sweep is untouched.
+phase('P9.15 what trading funds — the sell tax by destination, and the Vig\'s missing trading leg');
+const SELL_BPS = Number(process.env.SELL_TAX_BPS || 900);
+const SELL_DEV = Number(process.env.SELL_TAX_DEV_BPS || 200);
+const SELL_RWA = Number(process.env.SELL_TAX_RWA_BPS || 400);
+const SELL_LP = SELL_BPS - SELL_DEV - SELL_RWA;              // the remainder rule sits on LP
+for (const volEth of [10, 100, 1000]) {                       // daily ETH-leg SELL volume scenarios
+  const taxEth = volEth * SELL_BPS / 10000;
+  note('vig', `sell tax @ ${fmt(volEth)} ETH/day sold`, `${taxEth.toFixed(3)} ETH/day taxed`,
+    `founder ${(volEth * SELL_DEV / 10000).toFixed(3)} · treasury ${(volEth * SELL_RWA / 10000).toFixed(3)} · LP depth ${(volEth * SELL_LP / 10000).toFixed(3)} — and 0.000 to the Vig`);
 }
-note('vig', 'flywheel §10.4 posture', 'out-of-band, zero ledger rows', 'the fees.js precedent — trade fees never seed value, so the sweep is untouched; extraction ≤ inflow only STRENGTHENS');
+note('vig', 'the Vig\'s trading leg', 'ZERO after the retirement',
+  'withdrawal backing now comes only from gameplay fees (60%), the Store (40%) and bonds (22.5%). '
+  + 'A fourth vig slice on the hook is the dial if trading should underwrite withdrawals again — a '
+  + 'reallocation OUT of dev/treasury/LP, which is a founder call, not a default (BALANCE § D1)');
 
 // ════════ P9.16 THE GRAND PRIX — a redistribution, NET SINK via the rake (NOT a faucet) ════════
 // A parimutuel: N drivers escrow BUYIN, the top places split the pool net of RAKE_BPS (half → street tax,

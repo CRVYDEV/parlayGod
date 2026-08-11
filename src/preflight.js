@@ -91,7 +91,10 @@ export const OPERATIONAL_ENV = [
   'SOCIAL_GAME_URL', 'SOCIAL_X_HANDLE', 'WALLETCONNECT_PROJECT_ID', 'X_CHECK_CD_MS', 'X_FOLLOW_PAGES',
   // the chain layer — every one dormant unless set (mainnet is legal + audit gated regardless)
   'CHAIN_CONFIRMATIONS', 'CHAIN_ID', 'CHAIN_POLL_MS', 'CHAIN_RPC_URL', 'CHAIN_START_BLOCK',
-  'DAILY_CAP_OMR', 'OMERTA_BOND_ADDRESS', 'OMERTA_FEES_ADDRESS', 'TRADE_FEE_HOOK_ADDRESS',
+  'DAILY_CAP_OMR', 'OMERTA_BOND_ADDRESS', 'OMERTA_FEES_ADDRESS',
+  // THE BANK's Alchemist — the harvest-fee stream. Dormant unless set; the asset symbol + decimals
+  // are config because the market's underlying is not always 18-decimal (USDC is 6).
+  'ALCHEMIST_ADDRESS', 'ALCHEMIST_ASSET', 'ALCHEMIST_ASSET_DECIMALS',
   'VOUCHER_CLAIM_ADDRESS', 'VOUCHER_RECLAIM_GRACE_SEC', 'VOUCHER_SIGNER_PK',
   // economy levers — founder sign-off dials, deliberately operator-settable (BALANCE.md)
   'BOND_DEV_BPS', 'BOND_DISCOUNT_BPS', 'BOND_ETH_SCORE_OMR', 'BOND_PLEDGE_MIN', 'BOND_POL_BPS',
@@ -105,7 +108,6 @@ export const OPERATIONAL_ENV = [
   'RESPAWN_FEE_ETH', 'REVENUE_BUYBACK_BPS', 'REVENUE_FOUNDER_BPS',
   'REVENUE_RWA_BPS', 'SEASON_MODS', 'SELL_TAX_BPS', 'SELL_TAX_DEV_BPS',
   'SELL_TAX_LP_BPS', 'SELL_TAX_RWA_BPS',
-  'TRADE_FEE_BPS', 'TRADE_VIG_BPS', // D1: the buy-side trade fee → the Vig (rules.tail.js TRADE_FEE)
   'VIG_BPS', 'VIG_MAX_PRICE_JUMP', 'VIG_RESERVE_BPS',
   'WITHDRAW_TAX_BPS',
   // content toggles
@@ -305,5 +307,20 @@ export function preflight(env = process.env) {
         + 'than capital formation. Keep the discount strictly under the sell tax.');
   }
 
+  // RETIRED RAILS — a var that no longer means anything is worse than an unknown one, because it
+  // LOOKS configured. The classification guard only sees vars src/ still reads, so a retired rail
+  // leaves its config behind silently; this says so. A warning, not an error: an operator with a
+  // stale value has a stale value, not a broken server.
+  for (const [k, why] of Object.entries(RETIRED_ENV)) if (env[k]) warnings.push(`${k} is set but ${why}`);
+
   return { errors, warnings };
 }
+
+// Vars that USED to do something. Keep the entry when a rail retires — deleting it turns "this does
+// nothing now" into "we have never heard of this", which is the same silence in a different costume.
+export const RETIRED_ENV = {
+  TRADE_FEE_HOOK_ADDRESS: 'the swap trade fee is retired (2026-08-11) — a PoolKey holds one hook, and '
+    + "the canonical pool's is the four-slice sell tax. Nothing reads this; unset it.",
+  TRADE_FEE_BPS: 'the swap trade fee is retired (2026-08-11). Nothing reads this; unset it.',
+  TRADE_VIG_BPS: 'the swap trade fee is retired (2026-08-11). Nothing reads this; unset it.',
+};

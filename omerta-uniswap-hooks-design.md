@@ -1,26 +1,41 @@
-# OMERTÀ × Uniswap — DEX strategy + the afterSwap→Vig fee hook (design)
+# OMERTÀ × Uniswap — DEX strategy + the afterSwap→Vig fee hook (RETIRED 2026-08-11)
 
-Status: **DESIGN ONLY. Chain-dormant, mainnet-gated on legal counsel + a third-party contract audit
-+ `forge test`** (the M6 posture). Nothing here is wired into the critical path. This doc is the
-plan; the hook is the one piece worth prototyping first.
+Status: **RETIRED.** Kept as the record of the reasoning, not as a plan. See the banner below.
 
-> ⚠ **§2's trade-fee hook now COLLIDES with a built one.** `OmertaHook.sol` (economy v3 step 6,
-> `omerta-v4-hook-design.md`) is deployed-in-repo as the OMR/ETH pool's `afterSwap` hook, and a v4
-> `PoolKey` holds **exactly one** hook address — so the `OmertaTradeFeeHook` sketched below and
-> `OmertaHook` cannot both serve the canonical pool. They are different fees, not variants: this one
-> is a small cut of *every* swap's ETH leg funding the **Vig**; that one is 900 bps on **sells only**,
-> split dev/rwa/lp, with no Vig slice. The backend half of THIS design is already built and dormant
-> (`recordTradeFee`, `syncTradeFees`, `TRADE_FEE_HOOK_ADDRESS`) and is unaffected either way — what
-> needs deciding is which contract emits into it. Tracked as the founder call at
-> `omerta-v4-hook-design.md` §10.8, where the three ways out are ranked.
+> ⛔ **§2's TRADE FEE IS RETIRED — founder-directed 2026-08-11 ("get rid of the Vig trade fee").**
+> Everything below §2 is kept as the RECORD of a rail that was designed, half-built and then closed;
+> it is not a plan any more. Read it for the reasoning, not the roadmap.
 >
-> **RESOLVED — the FOLD (D1 = A, 2026-08-02; rate signed 2026-08-05; founder-confirmed "one hook
-> four slices" 2026-08-09):** ONE hook serves the canonical pool with FOUR slice destinations —
-> dev / treasury / LP / **vig**. §2's trade fee becomes a rate ON that hook (30 bps buys, 100% →
-> Vig, emitting the `TradeFeePaid` shape this doc's built backend already consumes), and the
-> treasury slice doubles as the Stock Machine's buy budget
-> (`omerta-rwa-stock-machine-design.md`). `OmertaTradeFeeHook` as a separate contract is retired;
-> the fold is the Phase-B contract build.
+> **What decided it.** A v4 `PoolKey` holds exactly ONE hook address, and two hooks wanted the
+> canonical OMR/ETH pool: this one (a small cut of *every* swap's ETH leg → the Vig) and
+> `OmertaHook`'s SELL TAX (900 bps on sells only, split dev / treasury / LP). They are different
+> fees, not variants, so "which one" was a real decision and it had been open since
+> `omerta-v4-hook-design.md` §10.8. An earlier resolution folded them — one hook, four slices,
+> the trade fee becoming a rate ON the sell-tax hook with a fourth vig destination. The founder has
+> now closed it the simpler way: **the sell tax is the canonical pool's hook, and the trade fee is
+> gone rather than folded in.** The sell tax wins on three counts — the money router already declares
+> it end to end, it taxes SELLING rather than all trading (a fee on every swap prices the buy side of
+> the market POL and the bond programme exist to make deep), and it carries the §9.6 relation that
+> makes a bond a hold rather than an arbitrage (`DISCOUNT_BPS` strictly under `sellTaxBps`), which a
+> separate trade fee does nothing for.
+>
+> **What was deleted, and what deliberately was not.** The backend was built and chain-dormant — it
+> never wrote one real row — so the PAYER is deleted rather than flagged off (`recordTradeFee`,
+> `syncTradeFees`, the `tradeFeeLogs` adapter, the worker wiring, the `TRADE_FEE` constants); a payer
+> behind a flag is one env var from live. What STAYS is the history half: `'trade'` remains a declared
+> `VIG_SOURCE` forever (deleting a retired source would make any historical row read as the router's
+> loudest alarm — an *unknown* source), the money router still declares the row marked `retired` so
+> the map makes the positive claim, and router check (8) inverted from "it books its declared split"
+> to **"nothing new books it"**. `TRADE_FEE_HOOK_ADDRESS` / `TRADE_FEE_BPS` / `TRADE_VIG_BPS` are now
+> `RETIRED_ENV` in preflight, so a stale deploy config warns instead of looking configured.
+>
+> **The consequence, stated rather than buried: the Vig now has no trading leg.** The sell tax's
+> slices are dev / treasury / LP — none of them the Vig — so after this, withdrawal backing comes
+> only from gameplay fees (60%), the Store (40%) and bonds (22.5%), and trading volume contributes
+> nothing to it. That is not automatically wrong (the LP slice buys depth, which is what a thin
+> market needs most), but "extraction ≤ inflow" is a tighter bound than it was, and sim **P9.15** now
+> prints the number every run so a decision to add a fourth vig slice has something to price. Doing
+> so would be a reallocation OUT of dev/treasury/LP — a founder call, not a default.
 
 Companion to: `omerta-phase2-vig-design.md` (the Vig), `omerta-phase4-emission-design.md` (backed
 emission), `omerta-rwa-portfolio-design.md` (R2/R3 tokenized stocks on Uniswap), `omerta-reserve-bond-design.md`

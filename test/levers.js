@@ -43,6 +43,11 @@ const SIGNED = [
   ['BLACK_MARKET.MIN_RAISE_BPS', 500],
   ['BLACK_MARKET.SNIPE_WINDOW_MS', 300000],
   ['BLACK_MARKET.TAKE_BPS', 200],
+  // The two the register check had been SHADOWING: it matches by LEAF name, so pinning
+  // TRADE_FEE.MAX_BPS silently "covered" SELL_TAX.MAX_BPS, and retiring the trade fee exposed it.
+  // Both are contract-mirrored ceilings the subtree's rules forbid raising — pinned properly now.
+  ['SELL_TAX.MAX_BPS', 1000],       // OMR.sol MAX_SELL_TAX_BPS — the anti-rug/anti-honeypot ceiling
+  ['BONDS.DISCOUNT_BPS', 800],      // must stay strictly UNDER SELL_TAX.BPS (§9.6) or a bond is an arbitrage
   ['BONDS.DEV_BPS', 1500],   // v2 step 3: 2000 -> 1500, the design's own number (BALANCE.md)
   ['BONDS.MAX_DISCOUNT_BPS', 2000],
   ['BONDS.POL_BPS', 3750],   // 5000 -> 3750: the remainder after the float slice, at the signed 5:3 POL:VIG
@@ -448,9 +453,6 @@ const SIGNED = [
   // probe was written, so the ceiling can't move by a quiet edit to the jail stretch.
   ['M3.BUST_FAIL_JAIL_S', 180],
   ['M3.BUST_ATTEMPTS_DAY', 5], // D15 (SIGNED 2026-08-05): the rolling-24h bust-attempt cap
-  ['TRADE_FEE.BPS', 30],        // D1 (RATE SIGNED 2026-08-05): the buy-side trade fee → the Vig
-  ['TRADE_FEE.VIG_BPS', 10000],
-  ['TRADE_FEE.MAX_BPS', 100],
   // THE TICKER BALLOT — the chamber's daily stock pick (§10.4-free: the ballot moves no value; the
   // Phase-B keeper consumes the record). TICKERS is a whole-array pin (the STREAK.MILESTONES shape).
   ['TICKER_BALLOT.TICKERS', ['SPY', 'AAPL', 'TSLA', 'NVDA', 'AMZN', 'MSFT']],

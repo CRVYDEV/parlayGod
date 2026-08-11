@@ -4,16 +4,17 @@
 A4 RE-OPENED 2026-08-10 (the tranche schedule was adopted, then capped at five waves / 0.05 ETH);
 FOUNDER DIRECTION 2026-08-11: defend the schedule AS SHIPPED — it is an early-bird discount with a
 published ceiling on an uncapped asset, and the ask of counsel is the wording that keeps it one;
-FOUNDER DIRECTION 2026-08-11 on A3: the game performs NO KYC (see the row) — the geofence half and
-the jurisdiction list are still owed;
+FOUNDER DIRECTION 2026-08-11 on A3: the game performs NO KYC and applies NO geofence — all
+jurisdictions (see the row, which records the one fact that direction leaves unaddressed);
 A7 + A8 OPEN; A9–A12 OPEN (THE BANK protocol rows, added 2026-08-10 — open as
 questions, NOT as gates; that build proceeds on the founder's instruction, §2).**
 The approval is recorded the project's standing way — as a founder assertion of counsel approval,
 with the written countersignature to file in §5 when it arrives. What it unblocks: **Phase B**
 (the buy keeper + stock bookkeeping) and **the activation burn** are now buildable (chain-dormant
-until the audit gate); **Phase G-3** (the community drop) may proceed to build. What it does NOT
-supply: **A3's parameters** — the jurisdiction list and KYC depth are inputs counsel must still
-provide before Phase C delivery goes live (approving the assertion is not the parameter list).
+until the audit gate); **Phase G-3** (the community drop) may proceed to build. **A3's parameters are now answered by founder direction** (no KYC, no geofence), so Phase C is no
+longer parameter-blocked — it is blocked only by the two standing gates. What that direction does
+NOT answer is whether delivery is a distribution BY US and what a US-person recipient must be told;
+both are put to counsel in the A3 row.
 Every item below ships (or is designed) under the project's standing directive that architecture
 is assumed counsel-approved; this memo converts those standing assertions into an enumerated list
 a lawyer can confirm, qualify, or strike **one by one**. Nothing on this list reaches mainnet
@@ -123,21 +124,35 @@ Robinhood performs identity verification as the regulated intermediary. The game
 identity verification is downstream of delivery and outside the game's hands, so the claim rail
 gates on wallet + attestation and does not collect identity documents.
 
-**COUNSEL: this position answers the KYC question and does NOT answer the geofence question, and
-those are the two halves of this row.** They come apart on one fact: Robinhood's tokenized equities
-are EU-facing and **not available to US persons**. So "the user handles KYC downstream" does not
-rescue a US-person recipient — it BLOCKS them, and the game would have delivered an asset that
-particular holder can never redeem. Three things follow, and we need the answer to each rather than
-an answer to the row as a whole:
+**FOUNDER POSITION, 2026-08-11 (the geofence half): *all jurisdictions are fine for this project.***
+Both halves of this row are therefore answered by direction: no KYC, and no geofence. The claim rail
+gates on a linked wallet and nothing else, so **Phase C is no longer parameter-blocked** — it is
+blocked only by the two standing gates every chain item is (third-party audit; counsel's written
+countersignature to this memo).
+
+**COUNSEL: we are recording that position as directed and we are not asking you to ratify it
+silently. It resolves a policy question by removing the gate, which leaves one FACT unaddressed, and
+the fact is the reason the row was split in the first place.** Robinhood's tokenized equities are
+EU-facing and **not available to US persons**. So "no geofence" does not mean every recipient is
+served — it means a US-person wallet receives an asset it cannot redeem at the only venue that
+redeems it. That is a disclosure and product problem before it is a securities one, and it does not
+go away by declining to check. What we need from you, in order of how much it changes the build:
+
   1. Does delivering a tokenized security to a wallet constitute a distribution BY US, regardless of
      who verifies identity afterwards — and if so, does downstream verification by the redemption
-     venue discharge any part of our obligation?
-  2. If US persons cannot redeem, must the claim rail geofence them OUT at voucher time (our
-     preference, since delivering an unredeemable asset is both a disclosure problem and a product
-     one), or is a clear pre-claim disclosure sufficient?
-  3. **The jurisdiction list is still owed** — it is the one input the code cannot infer, and Phase C
-     stays BLOCKED on it. KYC depth is now answered (none, by the position above); geofence scope
-     is not.
+     venue discharge any part of our obligation? **If the answer is "yes, it is our distribution",
+     then "all jurisdictions" is a position about who we distribute to, not a way of not
+     distributing, and we need to hear that before Phase C ships rather than after.**
+  2. Given no geofence: is a clear, pre-claim, per-jurisdiction DISCLOSURE ("this asset is redeemable
+     only through a venue that does not serve US persons") sufficient, and what must it say? This is
+     the cheapest thing on the list to build and the one we would build first.
+  3. If any jurisdiction must in fact be excluded, say which — the claim rail already has the shape
+     for it (`signStockVoucher` is the single enforcement point, one server-side check), so the cost
+     of adding a list back is small. The cost of having delivered without one is not.
+
+**Engineering note, so the record is straight:** with no list to enforce, `signStockVoucher` gates on
+a linked wallet alone. Nothing in the code assumes otherwise, and nothing was removed to get here —
+the gate was never built, because the list it needed was never supplied.
 
 **A4 — The Dynasty NFT has no maximum supply, and proceeds are ordinary sales revenue.**
 The identity mint is uncapped by design (a supply cap would cap the player count). Mint proceeds
@@ -382,8 +397,9 @@ this memo's outcome:
 
 - **Phase B** (the keeper buys stock; the hook's treasury slice sweeps): ~~blocked on A1~~ —
   **UNBLOCKED 2026-08-09** (build proceeds chain-dormant; mainnet still audit-gated).
-- **Phase C** (claims/delivery): A2 approved; still **parameter-blocked on A3's inputs** (KYC
-  depth + jurisdiction list) — and on the third-party audit gate independently.
+- **Phase C** (claims/delivery): A2 approved; ~~parameter-blocked on A3's inputs~~ — **UNBLOCKED
+  2026-08-11** by founder direction (no KYC, no geofence, all jurisdictions). Still gated by the
+  third-party audit independently, and the A3 row puts the residual disclosure question to counsel.
 - **TBA-carried allocations**: ~~blocked on A2~~ — **UNBLOCKED 2026-08-09** (the Phase-B audit
   batch still gates the contracts).
 - **Play-pool redistribution build**: ~~blocked on A5~~ — **UNBLOCKED 2026-08-09**.
@@ -411,7 +427,7 @@ this memo's outcome:
 |---|---|---|---|---|
 | A1 — treasury stock purchases | Confirmed (founder assertion) | written countersignature to file | — | 2026-08-09 |
 | A2 — transferable TBA drops | Confirmed (founder assertion) | written countersignature to file | — | 2026-08-09 |
-| A3 — claim-rail geofence/KYC | Confirmed (founder assertion) | jurisdiction list + KYC depth still to be supplied | — | 2026-08-09 |
+| A3 — claim-rail geofence/KYC | Confirmed (founder assertion) | parameters answered by direction 2026-08-11: no KYC, no geofence, all jurisdictions. Open: is delivery a distribution by us, and what must a US-person recipient be told? | — | 2026-08-09 |
 | A4 — uncapped NFT proceeds | RE-OPENED (tranche schedule adopted, capped at 0.05 ETH) | re-review the published-schedule fact pattern | — | 2026-08-10 |
 | A5 — play-pool redistribution | Confirmed (founder assertion) | written countersignature to file | — | 2026-08-09 |
 | A6 — free community distribution (airdrop) | Confirmed (founder assertion) | written countersignature to file | — | 2026-08-09 |

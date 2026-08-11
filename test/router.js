@@ -2,17 +2,19 @@
 // The split landscape grew a slice at a time (sell tax 3-way, bonds 4, Store 3, fees 3, toll 2,
 // auction 2), each individually checked but with NO statement of the whole map, NO source-membership
 // check on either revenue ledger, TWO mirrors ('fee'/'store') never reconciled anywhere, NO dev_fund
-// balance identity — and one live constant-vs-wiring drift: recordTradeFee booked VIG_BPS (60%)
-// while TRADE_FEE.VIG_BPS declares 100% (F1, fixed with this suite). This proves the router closes
-// every one of those, and that a mutation to any of them fails BY NAME.
+// balance identity — and one live constant-vs-wiring drift: the trade fee's booking path read no
+// lever at all, so it booked 60% against a declared 100% with both invariants green (F1, fixed with
+// this suite; the rail itself was retired 2026-08-11 and the check inverted to a freshness check).
+// This proves the router closes every one of those, and that a mutation to any fails BY NAME.
 process.env.MOD_KEY = 'test-mod-key';
 process.env.ALLOW_MOD_REAL_REVENUE = 'on'; // QA gate: the mod ingest routes may carry a txHash here
 import assert from 'node:assert';
 import crypto from 'node:crypto';
 import { buildServer } from '../src/server.js';
-import { waterfall, runRouterInvariants, routerBoard, VIG_SOURCES, TREASURY_SOURCES } from '../src/router.js';
-import { recordTradeFee, VIG_BPS } from '../src/vig.js';
-import { TRADE_FEE, STORE, TREASURY } from '../src/rules.js';
+import fs from 'node:fs';
+import { waterfall, runRouterInvariants, routerBoard, VIG_SOURCES, TREASURY_SOURCES, BANK_SOURCES, BANK_HARVEST_FEE_BPS } from '../src/router.js';
+import { VIG_BPS } from '../src/vig.js';
+import { STORE, TREASURY } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -24,8 +26,22 @@ const mod = async (method, url, body) => {
 // ── 1. THE DECLARATION — every source sums, and the shape is what the board serves ──
 {
   const wf = waterfall();
-  assert.deepEqual(wf.map((s) => s.id), ['fee', 'store', 'bond', 'tax', 'trade', 'auction', 'polfees', 'toll'],
+  assert.deepEqual(wf.map((s) => s.id), ['fee', 'store', 'bond', 'tax', 'trade', 'auction', 'polfees', 'harvest', 'toll'],
     'the waterfall declares every real-value inflow, in one place');
+  // THE BANK's harvest fee is declared in the market's UNDERLYING, not ETH. That is not cosmetic:
+  // `rwa_revenue`'s sum IS the vault's `held` wall, so a USDC amount mirrored there would inflate the
+  // one number bounding what players may be owed.
+  const harvest = wf.find((s) => s.id === 'harvest');
+  assert.equal(harvest.currency, 'usd', "the harvest fee is denominated in the market's underlying, never ETH");
+  assert.equal(harvest.splits[0].dest, 'treasury', 'the harvest fee lands in the treasury (the one address that only ever receives)');
+  // The rate here RESTATES Alchemist.harvestFeeBps (this layer cannot import Solidity), so it is
+  // pinned against the contract source — the preflight vig-defaults discipline. A restatement nobody
+  // crosses against its source is exactly how the bond's fourth slice read zero for months.
+  const alch = fs.readFileSync('omerta-contracts/src/Alchemist.sol', 'utf8');
+  const m = alch.match(/harvestFeeBps\s*=\s*(\d[\d_]*)/);
+  assert(m, 'found the contract default');
+  assert.equal(Number(m[1].replace(/_/g, '')), BANK_HARVEST_FEE_BPS,
+    'the router restates the CONTRACT\'s harvest fee — if the contract moves, this must move with it');
   for (const s of wf)
     assert.equal(s.splits.reduce((a, x) => a + x.bps, 0), s.totalBps, `source '${s.id}' splits sum exactly`);
   // the declaration derives from the LIVE constants — spot-pin two so a lever move shows up here
@@ -50,22 +66,35 @@ const mod = async (method, url, body) => {
   const r3 = await mod('POST', '/v1/mod/treasury/tax',
     { ref: 'rt-tax-1', omrTaxed: 90, price: 500, txHash: '0x' + 'd'.repeat(64) });
   assert.equal(r3.code, 200, 'real sell-tax episode ingests');
-  // a trade fee through the REAL producer path (no mod route exists BY DESIGN — zero fabrication
-  // surface; the watcher is the sole caller in production, recordTradeFee is its exact entry)
-  await recordTradeFee(pool, { nonce: 910004, amountWei: (10n ** 15n).toString() }); // 0.001 ETH
 
   const inv = await runRouterInvariants(pool);
   assert(inv.ok, `router invariants hold over real ingests: ${JSON.stringify(inv.checks.filter((c) => !c.ok))}`);
 
-  // F1 REGRESSION — the trade fee books its DECLARED split (TRADE_FEE.VIG_BPS 10000, the signed D1
-  // lever), not the gameplay-fee VIG_BPS (6000) it silently rode before. Asserted at the ROW so the
-  // aggregate check can't mask a compensating error. MUTATION: revert recordTradeFee to omit
-  // `bps: TRADE_FEE.VIG_BPS` and BOTH this and the 'trade fee books its declared split' check fail.
-  const tr = (await pool.query("SELECT gross_eth, vig_eth FROM vig_revenue WHERE source='trade' AND ref='910004'")).rows[0];
-  assert(tr, 'the trade fee row landed');
-  assert.equal(Number(tr.vig_eth), Number(tr.gross_eth) * TRADE_FEE.VIG_BPS / 10000,
-    'the trade fee books the DECLARED 100% to the Vig — the booking path reads the lever (F1)');
-  assert.notEqual(TRADE_FEE.VIG_BPS, VIG_BPS, 'the two levers genuinely differ, so the assertion above is not vacuous');
+  // THE RETIRED RAIL — the declaration still carries it (a rail that vanishes from the map explains
+  // nothing, and a historical row would have nothing to reconcile against) and the freshness check
+  // asserts nothing NEW books it. MUTATION: insert a fresh source='trade' row and the run fails BY
+  // NAME on 'trade fee retired (nothing new books it)'.
+  // THE BANK's ingest through its real entry (the mod route carries the same anti-fabrication gate
+  // as fees/store/bonds: a comp records the episode and books ZERO).
+  const h1 = await mod('POST', '/v1/mod/bank/harvest',
+    { ref: '0xharvest:1', asset: 'usdc', amount: 12.5, txHash: '0x' + '1'.repeat(64) });
+  assert.equal(h1.code, 200, 'a real harvest fee ingests');
+  const h2 = await mod('POST', '/v1/mod/bank/harvest', { ref: '0xharvest:2', asset: 'USDC', amount: 99 }); // comp
+  assert.equal(h2.code, 200, 'a comp harvest records the episode');
+  const hr = (await pool.query("SELECT asset, amount, real FROM bank_revenue WHERE ref='0xharvest:1'")).rows[0];
+  assert.equal(hr.asset, 'USDC', 'the asset is named and normalised');
+  assert.equal(Number(hr.amount), 12.5, 'the amount is booked in whole units of the asset, not wei');
+  const hc = (await pool.query("SELECT amount, real FROM bank_revenue WHERE ref='0xharvest:2'")).rows[0];
+  assert.equal(Number(hc.amount), 0, 'a comp books ZERO — "the treasury received this" is never assertable by a QA call');
+  assert.equal(hc.real, false, 'and it is marked as not real');
+  const again = await mod('POST', '/v1/mod/bank/harvest',
+    { ref: '0xharvest:1', asset: 'USDC', amount: 999, txHash: '0x' + '2'.repeat(64) });
+  assert.equal(again.body.duplicate, true, 'a re-delivered log is a clean no-op (idempotent on the log key)');
+
+  const traded = waterfall().find((s) => s.id === 'trade');
+  assert(traded?.retired, "the retired trade rail stays DECLARED and is marked retired");
+  assert.equal((await pool.query("SELECT COUNT(*)::int c FROM vig_revenue WHERE source='trade'")).rows[0].c, 0,
+    'the retired rail has no producer left, so it books nothing');
 
   // the comp booked ZERO revenue on both ledgers (the txHash gate — restated here because the
   // router's mirrors would drift if a comp ever booked)
@@ -77,7 +106,8 @@ const mod = async (method, url, body) => {
 // ── 3. THE BOARD — where a dollar goes, lifetime, with implicit remainders labelled ──
 {
   const b = await routerBoard(pool);
-  assert(b.waterfall.length === 8 && b.invariants.ok, 'the board carries the waterfall + a passing verdict');
+  assert.equal(b.lifetime.harvest.byAsset.USDC, 12.5, 'the board reports bank revenue by ASSET, so a stablecoin is never read as ETH');
+  assert(b.waterfall.length === 9 && b.invariants.ok, 'the board carries the waterfall + a passing verdict');
   assert.equal(b.lifetime.fee.gross, 0.01, 'the fee gross counts ONLY the real payment (the comp is excluded)');
   assert.equal(b.lifetime.fee.vig, 0.01 * VIG_BPS / 10000, 'the fee vig slice matches the declared split');
   assert.equal(b.lifetime.store.treasury, 0.01 * STORE.SPLIT_BPS.rwa / 10000, 'the store treasury slice matches');
@@ -135,5 +165,5 @@ const mod = async (method, url, body) => {
   assert.equal(noKey.statusCode, 401, 'and it is mod-gated');
 }
 
-console.log("✅ THE MONEY ROUTER test passed — one declared waterfall over every real-value inflow (8 sources, each summing exactly, derived from the LIVE levers), the cross-source invariants the five per-system runners cannot see (source membership on both revenue ledgers naming an unknown source, the two orphan 'fee'/'store' mirrors reconciled against the declared splits, the trade fee held to its DECLARED lever — the F1 constant-vs-wiring drift that booked 60% against a signed 100%, now fixed and regression-pinned at the ROW, non-vacuous by construction — and the dev-fund balance==ledger identity on both legs), the WHERE-A-DOLLAR-GOES board (real-only grosses, implicit remainders labelled, the sell-tax remainder rule summing exactly), and the mod-gated surface. The router moves NO money — declare, verify, display.");
+console.log("✅ THE MONEY ROUTER test passed — one declared waterfall over every real-value inflow (9 sources, each summing exactly, derived from the LIVE levers), the cross-source invariants the five per-system runners cannot see (source membership on all THREE revenue ledgers naming an unknown source, the two orphan 'fee'/'store' mirrors reconciled against the declared splits, the retired trade rail staying retired — the freshness shape that replaced the F1 constant-vs-wiring check, with the declaration kept so history still has something to reconcile against — and the dev-fund balance==ledger identity on both legs), the WHERE-A-DOLLAR-GOES board (real-only grosses, implicit remainders labelled, the sell-tax remainder rule summing exactly), and the mod-gated surface. The router moves NO money — declare, verify, display.");
 await app.close();

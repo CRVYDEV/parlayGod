@@ -546,33 +546,36 @@ and the choice is the founder's because it turns on wallet topology, not on code
    per-bond "the slice reached the ledger" check — the one thing neither existing invariant could see.
    Deploy requirement: `rwaRecipient` must be a DIFFERENT key from `vigRecipient`, or the custody
    defect the backend interim was rejected for reappears with the books still reading correct.
-8. **TWO HOOKS ARE PLANNED FOR ONE POOL, AND A `PoolKey` HOLDS EXACTLY ONE.** **ANSWERED 2026-08-02
-   (SIGN-OFF D1 = A, the fold: one hook, four destinations). RATE SIGNED 2026-08-05 (founder: "Max fee
-   for D1") — the buy-side trade fee is `TRADE_FEE.BPS = 30` (the MAX of the confirmed 10–30 band),
-   `TRADE_VIG_BPS = 10000` (100% → the Vig, since a trade has no founder/business counterparty), armed
-   at zero with a compile-time cap of 100 (1%); the constants are locked in `rules.tail.js:TRADE_FEE`.
-   THE CONTRACT FOLD IS THE REMAINING MAINNET-MILESTONE BUILD, and it is deliberately its own focused
-   session rather than a bolt-on: the fee is taken in ETH so the Vig can book it, and ETH is the
-   SPECIFIED (input) currency on an exact-input BUY — the dominant router shape — so charging it there
-   needs the input-side `beforeSwap` delta path. The subtree's audited rule 7 warns that moving a
-   charge to `beforeSwap` breaks partially-filled swaps (the exact reason the sell tax lives in
-   `afterSwap`). Reconciling an ETH-always buy fee with partial fills is a real contract-design problem
-   that belongs in a session with full `forge test` iteration, not smuggled in with a rate confirmation.
-   The rate landing FIRST is the point — the design required it before an address is mined; it now has.** The original fork, kept as the record: `omerta-uniswap-hooks-design.md` §2 specifies an
-   `afterSwap`→Vig **trade-fee** hook — a small cut of *every* swap's ETH leg, funding the withdrawal
-   reserve — and its BACKEND IS ALREADY BUILT AND DORMANT (`vig.js:recordTradeFee`,
-   `watcher.js:syncTradeFees`, `TRADE_FEE_HOOK_ADDRESS`, the `TradeFeePaid(nonce, amountWei)` adapter).
-   `OmertaHook` is a different fee with different economics: sells only, 900 bps, dev/rwa/lp — **the
-   Vig is not among its slices.** They are not variants of each other and they cannot both be the hook
-   for the canonical pool. Three ways out, in order of preference:
-   1. **Fold** — one hook, four destinations: keep the sell tax as-is and add the trade fee as its own
-      rate on all swaps, emitting both events so the built Vig rail needs no change. Recommended, but
-      it is a NEW FEE ON BUYS, which is an economic surface and wants its own sign-off, so it is not
-      done here.
-   2. **Retire the trade fee** and accept that the Vig is funded only by fees/store/bonds. Cheapest,
-      and it costs a revenue line that was designed to widen `extraction ≤ inflow` headroom.
-   3. Run the trade-fee hook on a second pool. Rejected for the same reason §4 rejects fragmenting
-      liquidity — that pool would be the *untaxed* one and §9.6 says who would find it first.
+8. **TWO HOOKS FOR ONE POOL — CLOSED 2026-08-11 by OPTION 2 (founder: "get rid of the Vig trade
+   fee").** A `PoolKey` holds exactly one hook address, and two were planned: `OmertaHook`'s SELL TAX
+   (900 bps, sells only, dev / treasury / LP — no Vig slice) and `omerta-uniswap-hooks-design.md` §2's
+   `afterSwap`→Vig TRADE FEE (a small cut of *every* swap's ETH leg). They are different fees with
+   different economics, not variants, so this was a real decision.
+
+   It was first answered by option 1, the FOLD (D1 = A, 2026-08-02; rate signed 2026-08-05 at 30 bps
+   / 100% to the Vig). That answer was never built, and the reason it stalled is the reason option 2
+   is better: the fold's fee is taken in ETH so the Vig can book it, and ETH is the SPECIFIED (input)
+   currency on an exact-input BUY — the dominant router shape — so charging it needs the input-side
+   `beforeSwap` delta path, which the subtree's audited rule 7 warns breaks partially-filled swaps
+   (the exact reason the sell tax lives in `afterSwap`). The fold was therefore a real contract-design
+   problem wearing a rate confirmation's clothes, and it was carried as "a focused session" for nine
+   days without one.
+
+   **Option 2 is now taken: the sell tax is the canonical pool's one hook, and the trade fee is
+   RETIRED rather than folded in.** Three arguments beyond the one above — the money router already
+   declares the sell tax end to end; it taxes SELLING rather than all trading, so it never prices the
+   buy side of the market POL and the bond programme exist to make deep; and it carries the §9.6
+   relation that makes a bond a hold rather than an arbitrage (`DISCOUNT_BPS` strictly under
+   `sellTaxBps`), which a separate trade fee does nothing for.
+
+   **The cost, which option 2's own summary named and which is now real: the Vig loses its trading
+   leg.** Withdrawal backing comes from gameplay fees (60%), the Store (40%) and bonds (22.5%) alone;
+   trading volume contributes nothing to it. Sim **P9.15** prints the number every run so a later
+   decision to add a fourth vig slice to the hook has something to price — and that would be a
+   reallocation OUT of dev/treasury/LP, which is a founder call rather than a default.
+
+   Option 3 (a second pool for the trade fee) stays rejected for the reason §4 rejects fragmenting
+   liquidity: that pool would be the *untaxed* one, and §9.6 says who would find it first.
 
    **FOUNDER-CONFIRMED 2026-08-09 ("one hook four slices"), extending the fold to the Stock
    Machine:** the canonical pool runs ONE hook whose accrued fees route to FOUR destinations —

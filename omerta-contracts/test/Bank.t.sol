@@ -436,6 +436,40 @@ contract BankTest is Test {
         assertEq(nusd.totalSupply(), 150 ether, "and the supply fell by exactly the burn");
     }
 
+    /// THE PEG REDEMPTION IS NEVER TAXED, and this test exists to stop a plausible future edit.
+    ///
+    /// §4 of the design lists "redemption fees" as protocol revenue, and on 2026-08-11 the founder
+    /// set that fee at 10%. It does NOT belong here. Two different things are called redemption:
+    ///
+    ///   1. THIS one — an nUSD holder burning debt for underlying at 1:1. It is the PEG DEFENSE.
+    ///      Arbitrage is what repairs the peg: someone who buys nUSD at 0.98 and redeems at 1.00 is
+    ///      doing our work for us. A 10% fee here does not earn revenue — it WIDENS THE PEG BAND to
+    ///      10%, because no arbitrageur repairs a discount smaller than the toll. nUSD would trade
+    ///      down to 0.90 and nothing would pull it back.
+    ///   2. The Monolith FREE-DEBT redemption (design §2.3, unbuilt) — an nUSD holder redeeming
+    ///      AGAINST a borrower's collateral at oracle price + fee. That fee is where the 10% lives,
+    ///      and it is split: the borrower keeps 90% (being redeemed against must stay compensated,
+    ///      not punitive, or nobody takes free debt and the mechanic has no liquidity), the protocol
+    ///      takes 10%. That resolves §4's contradiction with §2.3 as a SPLIT rather than an either/or.
+    ///
+    /// So: a redeemer here receives the full 1:1 value, and the protocol's balance does not grow by
+    /// redeeming. If this test ever fails, someone has taxed the peg defense.
+    function test_the_peg_redemption_is_NEVER_taxed() public {
+        _depositAndBorrow(alice, 1000 * M, 400 ether);
+        vm.prank(alice); alchemist.repay(400 * M);
+
+        vm.prank(alice); nusd.approve(address(transmuter), type(uint256).max);
+        uint256 before = usdc.balanceOf(alice);
+        uint256 transmuterBefore = usdc.balanceOf(address(transmuter));
+        vm.prank(alice); transmuter.redeem(300 ether);
+
+        // the redeemer gets the WHOLE 1:1 value — not 90% of it, not 99% of it
+        assertEq(usdc.balanceOf(alice) - before, 300 * M, "a redeemer receives the full 1:1 value");
+        // and the protocol keeps nothing back: the transmuter's balance fell by exactly what it paid
+        assertEq(transmuterBefore - usdc.balanceOf(address(transmuter)), 300 * M,
+            "the protocol withheld nothing: a fee here is a peg band, not revenue");
+    }
+
     /// Sub-unit dust must not burn for nothing. 1 wei of nUSD is less than one USDC unit, so paying
     /// out zero while burning the debt would be a silent loss for the redeemer.
     function test_dust_below_one_asset_unit_reverts_rather_than_burning_for_zero() public {
