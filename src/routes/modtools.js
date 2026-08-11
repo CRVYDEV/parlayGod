@@ -7,6 +7,7 @@ import { runLedgerInvariants, alertDrift } from '../invariants.js';
 import { TAX, withdrawTaxBps } from '../rules.js';
 import * as Bonds from '../bonds.js';
 import * as Chain from '../chain.js';
+import * as ChainParams from '../chainparams.js';
 import * as Desk from '../desk.js';
 import * as Fees from '../fees.js';
 import * as G from '../game.js';
@@ -137,6 +138,16 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
     app.get('/v1/mod/activity', { preHandler: modAuth }, async (req) => Ops.opsActivity(pool, req.query?.limit)); // the live event feed
     app.get('/v1/mod/coach', { preHandler: modAuth }, async () => Ops.opsCoach(pool)); // the live coach census — where every active player is stuck
     app.get('/v1/mod/integrations', { preHandler: modAuth }, async () => Ops.integrationsStatus()); // the dormant retention/funnel wiring: live-vs-off + activation steps (env presence only, no secrets)
+    // THE CONTROL ROOM — every on-chain parameter, its live value, and what it disagrees with.
+    // READ + BUILD ONLY. There is no execute route and there must not be: these setters are
+    // onlyOwner with owner = the Safe, and a panel that could sign would make the shared MOD_KEY
+    // equivalent to the multisig. `/tx` returns calldata for a human to take to the Safe.
+    app.get('/v1/mod/chain/params', { preHandler: modAuth }, async () => ChainParams.readChainParams());
+    app.post('/v1/mod/chain/tx', { preHandler: modAuth }, async (req, reply) => {
+      try {
+        return await ChainParams.buildParamTx(req.body?.key, req.body?.values || {});
+      } catch (e) { return reply.code(400).send({ error: 'bad_param', message: String(e.message || e) }); }
+    });
     // which systems anyone actually uses + whether players come back. Reads telemetry that was
     // already being written — the reader was the missing half, not the instrumentation.
     app.get('/v1/mod/engagement', { preHandler: modAuth }, async (req) => opsEngagement(pool, req.query?.days));

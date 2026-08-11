@@ -68,6 +68,7 @@
   </div>
   <div class="grid">
     <div class="panel" id="p-integrations"><h2>Integrations</h2><div class="body">…</div></div>
+    <div class="panel" id="p-chainparams"><h2>The Control Room — on-chain parameters</h2><div class="body">…</div></div>
     <div class="panel" id="p-backups"><h2>Backups</h2><div class="body">…</div></div>
     <div class="panel" id="p-social"><h2>Growth loop</h2><div class="body">…</div></div>
     <div class="panel" id="p-integrity"><h2>§10.4 Integrity</h2><div class="body">…</div></div>
@@ -126,12 +127,13 @@
   }
 
   async function refreshAll() {
-    const [ov, inv, fn, res, vig, em, act, rev, eng, bnd, tre, coa, intg, rtr] = await Promise.all([
+    const [ov, inv, fn, res, vig, em, act, rev, eng, bnd, tre, coa, intg, rtr, cpar] = await Promise.all([
       j('GET', '/v1/mod/overview'), j('GET', '/v1/mod/invariants'), j('GET', '/v1/mod/funnel'),
       j('GET', '/v1/mod/reserve'), j('GET', '/v1/mod/vig'), j('GET', '/v1/mod/emission'),
       j('GET', '/v1/mod/activity?limit=60'), j('GET', '/v1/mod/revenue'),
       j('GET', '/v1/mod/engagement'), j('GET', '/v1/mod/bonds'), j('GET', '/v1/mod/treasury'),
       j('GET', '/v1/mod/coach'), j('GET', '/v1/mod/integrations'), j('GET', '/v1/mod/router'),
+      j('GET', '/v1/mod/chain/params'),
     ]);
     if (ov.code === 401) return $('#logout').onclick();
 
@@ -160,7 +162,7 @@
     renderIntegrity(inv.body); renderEconomy(ov.body, em.body); renderPlayers(ov.body); renderEngagement(eng.body);
     renderFunnel(fn.body); renderTop(ov.body); renderChain(res.body, vig.body, em.body, rev.body, bnd.body, tre, ov.body); renderRouter(rtr.body);
     renderBackups(ov.body); renderSocial(ov.body); renderCoach(coa.body);
-    renderIntegrations(intg.body);
+    renderIntegrations(intg.body); window.__cpar = (cpar.body && cpar.body.rows) || []; renderChainParams(cpar.body);
     renderActivity(act.body); renderMod();
   }
 
@@ -176,6 +178,57 @@
   // no boot error, nothing in the game, nothing here. That is how it shipped. Now it is one line.
   // INTEGRATIONS — the dormant retention/funnel wiring. Each ships built + tested and switched on by
   // ONE deploy-config action; this is the switchboard (env presence only — no secret ever crosses).
+
+  // THE CONTROL ROOM. Read + validate + emit calldata. There is deliberately NO execute button:
+  // every setter here is onlyOwner with owner = the Safe, and a panel that could sign would make
+  // this browser session equivalent to the multisig. The value it adds is VISIBILITY (you cannot
+  // see any of these today without a developer) and the LOCKSTEP column, which is the check no
+  // single layer can perform on itself — the bond's fourth slice was zero on every real bond for
+  // exactly this reason, with every invariant green.
+  function renderChainParams(cp) {
+    const el = $('#p-chainparams').querySelector('.body');
+    const rows = (cp && cp.rows) || [];
+    if (!rows.length) { el.innerHTML = '<div class="note">unavailable</div>'; return; }
+    const alerts = rows.filter((r) => r.alert);
+    el.innerHTML =
+      (cp.configured
+        ? '<div class="note">Live values read from chain. Changes are prepared here and <b>signed in the Safe</b> — this panel cannot send a transaction, which is what bounds a compromised admin session.</div>'
+        : '<div class="note" style="color:var(--warn)"><b>Chain dormant</b> — ' + esc(cp.why) + '</div>')
+      + alerts.map((r) => '<div style="margin:8px 0;padding:8px;border:1px solid var(--bad);border-radius:5px;color:var(--bad)"><b>RELATION BROKEN — ' + esc(r.label) + '</b><div class="note" style="color:var(--bad)">' + esc(r.alert) + '</div></div>').join('')
+      + rows.map((r) => {
+        const fields = r.args.map((a) => '<input id="cp-' + r.key + '-' + a + '" placeholder="' + a + '" style="width:130px;margin:2px 3px 2px 0">').join('');
+        return '<div style="margin:10px 0;padding:9px;border:1px solid var(--line);border-radius:5px">'
+          + '<div class="row"><span class="k"><b>' + esc(r.label) + '</b> <span style="opacity:.55;font-size:11px">' + esc(r.contract) + '.' + esc(r.setter) + '</span></span>'
+          + '<span class="v">' + (r.live !== null && r.live !== undefined ? esc(r.live) + ' <span style="opacity:.55;font-size:11px">' + esc(r.unit || '') + '</span>'
+              : '<span style="opacity:.5">' + (r.readError ? 'unreadable' : (!cp.configured ? 'chain dormant' : (!r.address ? 'not deployed' : (r.setter && !r.hasGetter ? 'no getter' : 'not deployed')))) + '</span>') + '</span></div>'
+          + (r.mirror ? '<div class="note" style="margin-top:4px"><b>Must agree with:</b> ' + esc(r.mirror.label) + ' — <b>' + esc(r.mirror.value) + '</b></div>' : '')
+          + '<div class="note" style="margin-top:4px">' + esc(r.why) + '</div>'
+          + '<div class="note" style="margin-top:3px;color:var(--warn)"><b>Wall:</b> ' + esc(r.wall) + '</div>'
+          + (r.hint ? '<div class="note" style="margin-top:3px">' + esc(r.hint) + '</div>' : '')
+          + '<div style="margin-top:6px">' + fields
+          + '<button onclick="buildTx(\'' + r.key + '\')">prepare for the Safe</button></div>'
+          + '<div id="cp-out-' + r.key + '" class="note" style="margin-top:5px"></div>'
+          + '</div>';
+      }).join('');
+  }
+
+  window.buildTx = async function (key) {
+    const row = (window.__cpar || []).find((r) => r.key === key);
+    if (!row) return;
+    const values = {};
+    // getElementById, NOT querySelector: these keys contain dots (bond.dailyCap), and a dot in a CSS
+    // selector is a CLASS separator — `#cp-out-bond.dailyCap` asks for id `cp-out-bond` with class
+    // `dailyCap` and finds nothing. Caught by driving the panel rather than by it parsing.
+    row.args.forEach((a) => { values[a] = (document.getElementById('cp-' + key + '-' + a) || {}).value; });
+    const r = await j('POST', '/v1/mod/chain/tx', { key: key, values: values });
+    const out = document.getElementById('cp-out-' + key);
+    if (r.code >= 400) { out.innerHTML = '<span style="color:var(--bad)"><b>Refused:</b> ' + esc(r.body && r.body.message || 'error') + '</span>'; return; }
+    const b = r.body;
+    out.innerHTML = '<b>Take this to the Safe:</b><br>To: <code>' + esc(b.to) + '</code><br>Value: <code>0</code>'
+      + '<br>Data: <textarea readonly style="width:100%;height:56px;font-size:11px">' + esc(b.data) + '</textarea>'
+      + '<div style="margin-top:3px">' + esc(b.next) + '</div>';
+  };
+
   function renderIntegrations(ig) {
     const el = $('#p-integrations').querySelector('.body');
     const list = (ig && ig.integrations) || [];
