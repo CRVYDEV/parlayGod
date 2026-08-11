@@ -9,8 +9,36 @@
 
 databases:
   - name: omerta-db
-    plan: basic-256mb            # a small always-on Postgres (~$6/mo). Your data persists across restarts.
-                                 # (A "free" Postgres exists but expires — use it only to kick the tires.)
+    # THE FILE MUST MATCH THE DATABASE. This said `basic-256mb` while the live instance had been
+    # upgraded to Pro-4gb with high availability switched on, and that mismatch is what broke the
+    # blueprint sync for ~16 days:
+    #
+    #   databases[0].highAvailability.enabled
+    #   High availability is only available for Pro instances and higher
+    #
+    # Render was not refusing HA. It was refusing HA *on the plan this file claimed*. The upgrade was
+    # made in the dashboard and never written down here, so the declared state and the real state
+    # drifted apart and reconciliation stopped dead.
+    #
+    # THE FAILURE WAS QUIET IN THE WAY THAT MATTERS. A blueprint sync and a service deploy are
+    # different machines: deploys kept working and the site stayed current throughout, so the red
+    # banner read as cosmetic. What silently stopped was every CHANGE TO THIS FILE reaching Render —
+    # including `autoDeployTrigger: checksPass` below, the guard that stops a commit with failing CI
+    # from reaching production. Sixteen days of that guard being written down and not in force.
+    #
+    # And while it was red it was also PROTECTIVE: a sync forced green with `basic-256mb` still
+    # declared would have reconciled a live Pro database back down to basic. If you change the
+    # instance type or the HA toggle in the dashboard again, change these two lines in the same
+    # sitting — that is the whole lesson.
+    plan: pro-4gb                # 4 GB RAM / 1 CPU / 15 GB storage. Was basic-256mb; upgraded Aug 2026.
+    highAvailability:
+      enabled: true              # a standby instance with automatic failover. Pro-and-above only, which
+                                 # is exactly what the old `basic-256mb` line made illegal. Stated as the
+                                 # nested object because that is the shape Render's own validator names
+                                 # in the error above; the docs' `highAvailability: true` is shorthand.
+                                 # Declared rather than omitted ON PURPOSE — a blueprint reconciles what
+                                 # it declares, so staying silent here risks Render deciding the standby
+                                 # you are paying for should be switched off.
 
 envVarGroups:
   - name: omerta-secrets         # shared by BOTH processes so MARKET_SEED matches (the draws must agree)
