@@ -135,8 +135,22 @@ minted — now at the ETH↔$OMR boundary too.**
 
 ## 5. The PLEX bridge — pay in ETH *or* $OMR
 
-EVE's masterstroke, and the thing that lets a skilled player fund their play from earnings. Every
-real-money cost — mint, respawn, cosmetics, rent, convenience — is payable **either way**:
+EVE's masterstroke, and the thing that lets a skilled player fund their play from earnings.
+
+> **AS BUILT (2026-08-11), two corrections to this section.** (1) **Not every cost** — the MINT is
+> ETH only. It is the Sybil bound and the extraction gate, and a fee payable two ways is always
+> priced by the cheaper rail, so the bound gets one price. The respawn and every Store package do
+> take $OMR. **The line is the BOUND, not the denomination.** (2) **The $OMR does not BURN, it
+> RECYCLES** — since economy-v3 step 2 `plex:%` is in `DESK.SINK_REASONS`, so a PLEX payment lands
+> on the desk shelf and is sold for ETH at the daily auction (the founder's revenue-over-deflation
+> decision). So the deflation claim below is history; the revenue claim replaces it, and it is the
+> stronger one. (3) The *fantasy* in this section's first line is measured and does not currently
+> hold — sim **P9.35**: the whole earn surface is 1,320 lifetime + 3/day against a 4,118 cheapest
+> purchase, so the rail is reached by PREDATION or PURCHASE rather than by grinding. On-theme for
+> this game, but it is not EVE's economics and should not be described as if it were.
+
+Every real-money cost except the mint — respawn, cosmetics, rent, convenience — is payable
+**either way**:
 
 - **Pay in ETH** → the OmertaFees split (§3.1): part to the Vig (funds everyone's extraction),
   part to dev. This is the whale / newcomer path — real money in.

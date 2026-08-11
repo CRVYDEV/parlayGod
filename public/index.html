@@ -1022,6 +1022,13 @@
   #tab-profile .msp-t8 .face { font-size: 26px; }
   #tab-profile .msp-t8.open { border-style: dashed; color: var(--dim); }
   #tab-profile .msp-mood { color: #9fc2e0; font-size: 12.5px; }
+#go-travel{background:none;border:1px dashed var(--dim);color:inherit;font:inherit;cursor:pointer;
+  padding:0 6px;border-radius:4px;line-height:1.3}
+#go-travel:hover{border-style:solid;border-color:var(--gold);color:var(--gold)}
+.toast-act{margin-left:10px;background:var(--gold);color:#12100f;border:0;border-radius:4px;
+  font:inherit;font-size:12px;padding:4px 10px;cursor:pointer;white-space:nowrap}
+.toast-x{margin-left:6px;background:none;border:0;color:inherit;opacity:.6;cursor:pointer;font-size:13px}
+
 </style>
 </head>
 <body>
@@ -2053,7 +2060,6 @@
     if (body.spent !== undefined && body.tier && body.name) bits.push(`moved up to the ${body.name}`);
     if (body.feature && body.name) bits.push(`built the ${body.name}`);
     if (body.bid !== undefined && body.name && body.youLead) bits.push(`bid ${fmt(body.bid)} $OMR on ${body.name} — you lead`);
-    if (body.omrSpent !== undefined && body.sku) bits.push(`bought ${body.name} with ${fmt(body.omrSpent)} earned $OMR (PLEX)`);
     if (body.place && body.amount !== undefined) bits.push(`dedicated ${body.place} to ${body.name} (${fmt(body.amount)} $OMR)`);
     if (body.toOwner !== undefined && body.round) bits.push(`bought ${body.round} — $${fmt(body.toOwner)} to the house${body.regular ? ' (you\'re a regular now)' : ''}`);
     if (body.bottle && body.spent !== undefined) bits.push(`${body.bottle} — the room turned to look`);
@@ -2171,15 +2177,49 @@
     // act() writes #resp with the ACTION's result instead, so the viewer shows what you actually did.
     return { code: r.status, body: j };
   }
-  function toast(msg, bad = false) {
+  // A toast can carry the WAY OUT. Tester feedback (2026-08-11): a refusal that names a place you
+  // are not standing in leaves the player hunting for the travel control, and a 3.4s toast is the
+  // wrong place to put an action anyway — so when there IS one, the toast STAYS until it is used or
+  // dismissed. A refusal you can act on is worth more than one that merely explains itself.
+  function toast(msg, bad = false, action = null) {
     const t = $('#toast');
     t.innerHTML = '';
     const ic = document.createElement('span'); ic.className = 'ti'; ic.textContent = bad ? '✕' : '✓';
     const tx = document.createElement('span'); tx.textContent = msg;
     t.append(ic, tx);
+    if (action) {
+      const b = document.createElement('button');
+      b.className = 'toast-act'; b.textContent = action.label;
+      b.onclick = () => { t.classList.remove('show'); action.run(); };
+      const x = document.createElement('button');
+      x.className = 'toast-x'; x.textContent = '✕'; x.title = 'dismiss';
+      x.onclick = () => t.classList.remove('show');
+      t.append(b, x);
+    }
     t.classList.toggle('bad', bad); t.classList.add('show');
     haptic(bad ? 'error' : 'success');
-    clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 3400);
+    clearTimeout(t._h);
+    if (!action) t._h = setTimeout(() => t.classList.remove('show'), 3400);
+  }
+
+  // THE TRAVEL PICKER — reachable from anywhere, because "where can I even move?" turned out to be
+  // the question the 25-screen nav answered worst. Used by the masthead location and by any refusal
+  // that names a district.
+  function travelTo(district) {
+    return act('POST', `/v1/travel/${district}`, {}).then((r) => { if (r.code < 400) renderActive(); return r; });
+  }
+  function openTravel() {
+    const here = me?.loc;
+    const ds = (rules?.districts || []).map((d) => (typeof d === 'string' ? { id: d, name: d } : d));
+    if (!ds.length) return toast('the map has not loaded yet — give it a second', true);
+    sheetModal('Where to?', `<p class="dim">A ride costs $${fmt(rules?.travelCost ?? 0)}. You are at
+      <b>${esc(ds.find((d) => d.id === here)?.name || here || '—')}</b>.</p>
+      <div class="row" style="flex-wrap:wrap;gap:8px;margin-top:10px">${ds.map((d) => d.id === here
+        ? `<button class="act" disabled style="opacity:.45">${esc(d.name)} — you are here</button>`
+        : `<button class="act" data-go-district="${esc(d.id)}">${esc(d.name)}</button>`).join('')}</div>`);
+    document.querySelectorAll('[data-go-district]').forEach((b) => {
+      b.onclick = () => { document.querySelector('.modal-bg:not(.hidden) [data-x]')?.click(); travelTo(b.dataset.goDistrict); };
+    });
   }
   // SHARE-A-WIN: turn a notable highlight into a one-tap brag on X carrying your referral code (your
   // name). Only fires on genuinely brag-worthy moments so it never nags.
@@ -2251,7 +2291,11 @@
       // the "Last Word" viewer shows the ACTION result (written here, before refresh's GET /v1/me
       // would otherwise overwrite it — the raw JSON for the deck / power users; the toast is the human read).
       $('#resp').textContent = `${method} ${path}\n` + JSON.stringify(r.body, null, 2);
-      toast(describe(r.body, r.code), r.code >= 400);
+      // a location refusal comes back naming the district (GameError data) — offer the ride rather
+      // than leaving the player to find the travel control on one screen out of 25
+      const goHere = r.code >= 400 && r.body?.error === 'district' && r.body?.district;
+      toast(describe(r.body, r.code), r.code >= 400,
+        goHere ? { label: 'go there →', run: () => travelTo(r.body.district) } : null);
       if (r.code < 400) {
         // THE BEAT. cineFor() returns null for almost everything — a pickpocket is a toast. When it
         // does fire, the overlay goes up and the refresh runs BEHIND it, so the cinematic never
@@ -2664,7 +2708,7 @@
        <p class="dim">Crimes run on <b>nerve</b> (it refills on its own). Every job has three plays: <b>case it</b> (quiet), <b>do it</b>, or <b>go loud</b> (bigger score, draws the Law). Get busted and you sit in lockup.</p>` },
     { art: 'interior-legit', title: 'YOUR MONEY', body:
       `<p><b>Pocket cash gets jumped.</b> Bank it — deposits ride "in transit" for a couple of hours before they're safe, so bank early, not on the way to a fight.</p>
-       <p class="dim"><b style="color:var(--neon)">$OMR</b> is the token — earned by playing well, spent on the serious things, and losable if you get whacked holding it loose. Staked or vaulted is safe harbour.</p>` },
+       <p class="dim"><b style="color:var(--neon)">$OMR</b> is the token — earned by playing well, spent on the serious things, and losable if you get whacked holding it loose. Staking cuts what a killer takes — 20% of a staked balance against 50% of a loose one — but nothing makes it safe.</p>` },
     { art: 'interior-trade', title: 'THE FREIGHT GAME', body:
       `<p><b>Trade goods are the city's oldest hustle</b> — every district posts its own prices, fresh each day. Buy gin where it's cheap, drive across town, sell it where it's rich. The spread is your margin.</p>
        <p class="dim">Start small on the Streets (the Trade Goods drawer shows each good's cheapest and richest district). Scale up later: <b>convoys</b> haul in bulk, <b>boats</b> run contraband, and the <b>Trade Winds</b> board on The City maps the whole day's spread.</p>` },
@@ -3041,8 +3085,9 @@
       fam.classList.toggle('hidden', !me.gang);
       if (!me.gang && wtab === 'family') { $('[data-wtab="feed"]')?.click(); }
     }
-    $('#whoami').innerHTML = `<b>${me.name}</b> · gen ${me.generation} · lvl ${me.level} · ${me.loc}` +
+    $('#whoami').innerHTML = `<b>${me.name}</b> · gen ${me.generation} · lvl ${me.level} · <button id="go-travel" title="travel">${esc(me.loc)} ⇄</button>` +
       (me.gang ? ` · <span style="color:${me.gang.color || 'var(--dim)'}">${me.gang.tag}</span>` : '');
+    const gt = $('#go-travel'); if (gt) gt.onclick = openTravel;   // move from ANY screen
     const chips = [];
     // LIVE countdowns (mins() ticks in place) — a short jail reads "0:08" and drains, not a static, wrong "1m"
     if (me.jailSeconds > 0) chips.push(['bad', `LOCKUP ${mins(me.jailSeconds)}`]);
@@ -3921,8 +3966,8 @@
       <div class="card"><span class="t">Seal: ${g.seal || 'none'}</span>
         ${g.nextSeal ? (boss ? `<button class="act" data-do="POST /v1/gangs/vanity/seal">commission the ${g.nextSeal.name} (${g.nextSeal.omr} $OMR)</button>` : '<span class="d" style="color:var(--dim)"> — the boss commissions seals</span>') : '<span class="chip good"> Obsidian — the finest seal in the city</span>'}</div>
       ${boss ? `<div class="card" style="margin-top:6px"><span class="t">Crest &amp; Name</span>
-        <div style="margin-top:4px"><input id="crest-color" placeholder="#rrggbb" size="9"> <button class="act" id="crest-go">recolor the crest (10 $OMR)</button></div>
-        <div style="margin-top:4px"><input id="fam-rename" placeholder="new family name" size="16"> <input id="fam-retag" placeholder="TAG" size="5" maxlength="4"> <button class="act" id="fam-rename-go">rename the family (25 $OMR)</button></div></div>` : ''}`)}
+        <div style="margin-top:4px"><input id="crest-color" placeholder="#rrggbb" size="9"> <button class="act" id="crest-go">recolor the crest (${rules?.seals?.colorOmr ?? ''} $OMR)</button></div>
+        <div style="margin-top:4px"><input id="fam-rename" placeholder="new family name" size="16"> <input id="fam-retag" placeholder="TAG" size="5" maxlength="4"> <button class="act" id="fam-rename-go">rename the family (${rules?.seals?.renameOmr ?? ''} $OMR)</button></div></div>` : ''}`)}
 
       <div style="margin-top:14px"><button class="act" data-do="POST /v1/gangs/leave" style="border-color:var(--blood)">walk away from the family</button></div>`;
     wireSects(t);
@@ -4712,7 +4757,7 @@
           <div class="card"><img class="ico wide" loading="lazy" alt="" src="/art/interior-streets.jpg"><span class="t">The Streets</span>
             <div class="d">Crime runs on <b>nerve</b>; the gym on <b>energy</b>. Every job: case it (quiet), do it, or go loud (bigger, hotter).</div></div>
           <div class="card"><img class="ico wide" loading="lazy" alt="" src="/art/interior-legit.jpg"><span class="t">Your Money</span>
-            <div class="d">Pocket cash gets jumped — <b>bank it</b> (deposits clear after a couple hours). $OMR is the token; staked is safe harbour.</div></div>
+            <div class="d">Pocket cash gets jumped — <b>bank it</b> (deposits clear after a couple hours). $OMR is the token; staking it halves what a killer takes, but never makes it safe.</div></div>
           <div class="card"><img class="ico wide" loading="lazy" alt="" src="/art/interior-trade.jpg"><span class="t">The Freight Game</span>
             <div class="d">Every district posts its own goods prices daily. <b>Buy cheap, haul, sell rich</b> — the Trade Goods drawer on the Streets shows each good's spread; convoys and boats move it in bulk.</div></div>
           <div class="card"><img class="ico wide" loading="lazy" alt="" src="/art/card-whacked.jpg"><span class="t">Death Is Real</span>
@@ -4902,6 +4947,12 @@
           <div class="msp-mood">Mood: <b>${esc(p.mood)}</b> ${p.mood === 'hunted' || p.mood === 'doing time' ? '😰' : p.mood === 'flush' ? '😎' : '🚬'}</div>
           <div class="msp-mood" style="margin-top:3px">♫ Now spinning: <i>${esc(p.spinning)}</i></div>
         </div>
+        <div class="msp-h">The Portrait</div>
+        <div class="msp-box" style="text-align:center">
+          ${me?.id ? `<img src="/v1/identity/${encodeURIComponent(me.id)}/portrait.svg" alt="Your bloodline portrait" style="width:100%;max-width:220px;border-radius:2px">` : ''}
+          <div class="t" style="margin-top:6px;line-height:1.5">The coat climbs with your rank. The frame
+          deepens every time your bloodline buries someone. It is yours by playing — nothing to buy.</div>
+        </div>
         <div class="msp-h">General</div>
         <div class="msp-box" style="padding:0"><table class="msp-tbl">
           <tr><td>Member since</td><td>${p.memberSince ? new Date(p.memberSince).toLocaleDateString() : '—'} (${p.days}d)</td></tr>
@@ -4945,7 +4996,6 @@
           <tr><td>Brought in</td><td>${p.recruitsTotal} (${p.recruitsQualified} made, ${p.recruitsSparked} coming up)</td></tr>
           <tr><td>Cash earned</td><td style="color:var(--neon)">$${fmt(p.earnedCash)}</td></tr>
           <tr><td>Crew bonus</td><td style="color:var(--neon)"><b>+${p.crewBonusPct}%</b> respect on everything you do</td></tr>
-          ${p.earnedOmr > 0 ? `<tr><td>$OMR earned</td><td class="d">${fmt(p.earnedOmr)} $OMR <span style="font-size:11px">(historic — referrals no longer pay $OMR)</span></td></tr>` : ''}
           <tr><td>Recruiter rank</td><td>${esc(p.recruitRank || 'unranked')} (${p.recruitsLifetime} made ${p.recruitsLifetime === 1 ? 'man' : 'men'})</td></tr>
         </table></div>
         <div class="d" style="font-size:11.5px;color:var(--dim)">A recruit pays out as they come up — an early cut when they find their feet, the full reward when they're made. But the real prize is <b>the crew bonus</b>: every recruit makes you earn respect faster, and the further THEY get, the more it's worth (level 5 → +5%, level 10 → +10%, and up). It's live — it rises as they do, and it goes when they do.</div>
@@ -4979,7 +5029,7 @@
     const hu = (await api('GET', '/v1/hustle')).body || {};
     // WORD ON THE STREET — this district's daily quest board (same covered idiom)
     const cn = (await api('GET', '/v1/corner')).body || {};
-    // the density fix: don't wall a player with all 29 jobs — lead with the BEST ones they can
+    // the density fix: don't wall a player with all 43 jobs — lead with the BEST ones they can
     // actually pull (the highest-level unlocked, up to 8) and fold the full book behind a drawer
     // D6a — THE APPROACH: every job takes a risk/reward choice. Case It = safer, low-heat, soft bust
     // (play it when you're hot or can't afford lockup); Go Loud = bigger single score + more contraband,
@@ -5588,7 +5638,6 @@
       ['POST', '/v1/unstake', {}],
       ['POST', '/v1/rackets/:id/buy', {}], ['DELETE', '/v1/rackets/:id'], ['POST', '/v1/rackets/:id/upgrade', {}],
       ['POST', '/v1/assets/:id/buy', {}], ['POST', '/v1/assets/:id/sell', {}],
-      ['GET', '/v1/plex/price'], ['POST', '/v1/plex/mint', {}], ['POST', '/v1/plex/respawn', {}],
     ],
     'Armory & Fights': [
       ['POST', '/v1/armory/gun/:id/buy', {}], ['POST', '/v1/armory/gun/:id/equip', {}],
@@ -5701,7 +5750,7 @@
       ['POST', '/v1/wallet/verify', { address: '', signature: '' }], ['POST', '/v1/withdraw', { amount: 1 }],
       ['GET', '/v1/withdraw/status'], ['POST', '/v1/character/mint', {}], ['POST', '/v1/character/reroll', {}], ['GET', '/v1/fees/status'],
       ['GET', '/v1/bonds'], ['POST', '/v1/bond/quote', { principalEth: 1 }],
-      ['GET', '/v1/store'], ['GET', '/v1/plex/price'], ['POST', '/v1/plex/mint', {}], ['POST', '/v1/plex/respawn', {}],
+      ['GET', '/v1/store'],
       ['GET', '/v1/pass'], ['POST', '/v1/pass/claim', {}],
     ],
   };
@@ -5797,7 +5846,7 @@
       <select id="ct-target">${streets.map((s) => `<option value="${s.id}">${s.name} (lvl ${s.level}${s.gangTag ? ' · ' + s.gangTag : ''})</option>`).join('')}</select>
       <select id="ct-kind"><option value="hospitalize">hospitalize</option><option value="kill">kill</option></select>
       <input id="ct-amt" placeholder="pot $" size="9">
-      <label style="font-size:12.5px;color:var(--dim)"><input type="checkbox" id="ct-anon"> anonymous (3 $OMR)</label>
+      <label style="font-size:12.5px;color:var(--dim)"><input type="checkbox" id="ct-anon"> anonymous (${rules?.contracts?.anonOmr ?? ''} $OMR)</label>
       <input id="ct-reason" placeholder="reason (public)" size="18">
       <button class="act" id="ct-post">post it</button>
       <div style="margin-top:4px"><span class="d" style="color:var(--dim);font-size:12.5px">name a gun (optional — directed contract, $10k floor):</span>
@@ -5830,7 +5879,7 @@
           <div class="d">${me.guardedBy ? `guarded — one lethal shot absorbed (${mins(me.guardSeconds)})` : me.guardPrice != null ? `you're for hire at $${fmt(me.guardPrice)}` : 'list yourself, or hire off the roster below'}</div>
           <input id="bg-price" placeholder="your price" size="9"> <button class="act" id="bg-offer">offer to guard</button></div>
         <div class="card"><span class="t">Counter-intel</span>
-          <div class="d">5 $OMR reads every funder on every pot on YOUR head — pierces anonymity</div>
+          <div class="d">${rules?.contracts?.peekOmr ?? ''} $OMR reads every funder on every pot on YOUR head — pierces anonymity</div>
           <button class="act" data-do="POST /v1/contracts/peek">peek</button></div>
         ${me.wanted || me.welsher ? `<div class="card" style="border-color:var(--blood)"><span class="t" style="color:var(--bad)">Square Your Name</span>
           <div class="d">$50k clears WANTED + the welsher mark and calls off the pool bounty (settle the debt first)</div>
@@ -6317,12 +6366,18 @@
     if (r.code >= 400) { t.innerHTML = '<span class="d">the store is closed.</span>'; return; }
     const S = r.body, o = S.owned;
     const eth = (n) => `Ξ${n}`;
+    const myOmr = Number(me.omr || 0);   // the $OMR rail's affordability, read off the sheet
     t.innerHTML = `
       <h2>The Store</h2>
-      <div class="card"><div class="d">Support the family with real ETH — for consumables, access, and status.
-        <b>Never</b> for power: everything here is a revive, a credit, a subscription, or a badge, so a
-        skilled free player still tops the boards. Your spend also funds the token buyback + the
-        backed prize pools.</div></div>
+      <div class="card"><div class="d">Consumables, access, and status — <b>never</b> power. Everything here is a
+        revive, a subscription, or a badge, so a skilled free player still tops the boards. Your spend
+        funds the token buyback + the backed prize pools.
+        <div style="margin-top:6px">Two ways to pay: <b>real ETH</b>, or <b>earned $OMR</b> through PLEX. Same
+        goods either way. Getting <b>made</b> is the one exception — that has a single price, in ETH, because
+        it's what unlocks taking money off the chain.</div>
+        <div style="margin-top:6px;color:var(--dim);font-size:11px">Where the $OMR comes from, honestly: nothing
+        in the city mints it. You take it off somebody (a kill strips a fifth to a half of what they're
+        carrying), you buy it at the desk, or your family hands it to you. Grinding jobs won't get you here.</div></div></div>
       <h2 style="margin-top:12px">What You Hold</h2>
       <div class="grid">
         <div class="card"><span class="t">${o.minted ? 'MADE' : 'Free Trial'}</span><div class="d">${o.minted ? 'a made man — on-chain extraction unlocked' : `${o.mintCredits} mint credit(s)${o.mintCredits ? ' — spend on the chain to get made' : ''}`}</div></div>
@@ -6335,14 +6390,15 @@
       </div>
       <h2 style="margin-top:12px">The Shelf</h2>
       <div class="grid">${S.packages.map((p) => `
-        <div class="card"><span class="t">${p.name}</span> <span class="chip">${eth(p.priceEth)}</span>${p.plexOmr ? ` <span class="chip cold">or ${fmt(p.plexOmr)} $OMR</span>` : ''}
+        <div class="card"><span class="t">${p.name}</span> <span class="chip">${eth(p.priceEth)}</span>${p.plexOmr ? ` <span class="chip good">${fmt(Math.ceil(p.plexOmr))} $OMR</span>` : ''}
           <div class="d">${p.blurb}</div>
-          <!-- a card with a price and NO button reads as broken. The ETH rail is dormant until the
-               paywall ships, so say that in the button's place rather than leaving a hole. -->
-          ${p.plexOmr ? `<button class="act prime" data-plex="${p.sku}">pay ${fmt(p.plexOmr)} $OMR (PLEX)</button>`
-            : '<button class="act" disabled title="the on-chain checkout is not live yet">ETH checkout opens at launch</button>'}</div>`).join('')}</div>
+          <!-- BOTH rails, and both stated. The ETH checkout is genuinely dormant until the on-chain
+               paywall ships, but the $OMR rail is LIVE right now — showing only the dead one made the
+               whole shelf read as unbuyable. A price with no way to pay it is the withheld-terms class. -->
+          ${p.plexOmr ? `<button class="act" data-plex="${p.sku}" ${myOmr >= p.plexOmr ? '' : `disabled title="you hold ${fmt(Math.floor(myOmr))} $OMR"`}>${myOmr >= p.plexOmr ? `pay ${fmt(Math.ceil(p.plexOmr))} $OMR` : `needs ${fmt(Math.ceil(p.plexOmr - myOmr))} more $OMR`}</button>` : ''}
+          <button class="act" disabled title="the on-chain checkout is not live yet">ETH checkout opens at launch</button></div>`).join('')}</div>
       <div class="card" style="margin-top:8px"><div class="d">${S.note} ${me.wallet ? '' : '<b>Link a wallet first</b> (Everything Else → Chain) — a purchase made before linking is credited the moment you link.'}</div></div>
-      <div class="d" style="font-size:11px;margin-top:6px">Revenue split — founder ${S.split.founder / 100}% · token buyback ${S.split.buyback / 100}% · RWA reserve ${S.split.rwa / 100}%.</div>
+      <div class="d" style="font-size:11px;margin-top:6px">Revenue split — founder ${S.split.founder / 100}% · token buyback ${S.split.buyback / 100}% · treasury ${S.split.rwa / 100}%.</div>
       <div id="pass-slot"></div>
       <h2 style="margin-top:14px">The Benefactors <span class="d" style="font-size:11px">(the family's biggest patrons — a status board, no power)</span> <a href="#" id="patron-lb" style="font-size:12px">🏛 the league →</a></h2>
       <div id="patron-board"></div>`;
@@ -6365,8 +6421,8 @@
             <span class="t">${t.claimed ? '✓ ' : ''}Tier ${t.tier}</span><div class="d">${t.reward}</div></div>`).join('')}</div>`;
       const cb = $('#pass-claim'); if (cb) cb.onclick = () => act('POST', '/v1/pass/claim', {}).then(() => renderStore());
     }
-    t.querySelectorAll('[data-plex]').forEach((b) => b.onclick = () =>
-      act('POST', `/v1/store/plex/${b.dataset.plex}`, {}).then(() => renderStore()));
+    t.querySelectorAll('[data-plex]').forEach((b) => { b.onclick = () =>
+      act('POST', `/v1/store/plex/${b.dataset.plex}`, {}).then(() => renderStore()); });
     { const lk = $('#patron-lb'); if (lk) lk.onclick = async (e) => { e.preventDefault();
       const b = (await api('GET', '/v1/leaderboard/patrons')).body || {};
       $('#patron-board').innerHTML = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
@@ -7278,7 +7334,7 @@
           <b>earn it</b> from a player who pays you in it, or <b>buy it</b>. That is the whole list, and a nightly job proves it.</div>
         <div class="d" style="color:var(--dim);font-size:11.5px;margin-top:4px;border-top:1px solid rgba(255,255,255,.06);padding-top:5px">
           A free account plays the <b>whole</b> game — every job, family, racket, kitchen, casino, PvP, all of it.
-          Minting (the Store’s Made Man, or PLEX it with earned $OMR) is what lets you move $OMR and gear
+          Minting (the Store’s Made Man, in ETH — or the mission ladder’s free credit) is what lets you move $OMR and gear
           <b>on-chain out of the game</b>. Everything you build in-game, you build free.</div></div>
       <div class="card" style="border-color:var(--gold)"><span class="t" style="color:var(--gold)">THE MADE MAN ${me.made ? '— YOU ARE MADE' : ''}</span>
         <div class="d">${me.made
@@ -7306,7 +7362,7 @@
           ? '<b style="color:var(--ok)">✓ you\'re made</b> — extraction is unlocked'
           : (me.mintCredits > 0
             ? '<b style="color:var(--neon)">a mint credit is in hand</b> — get made to unlock extraction'
-            : 'a free trial street plays fully, but only a <b>Made</b> account can extract $OMR / gear on-chain. Get made with the Made Man package in <b>The Store</b> (0.01 ETH) or pay it from earned $OMR (PLEX).')}</div>
+            : 'a free trial street plays fully, but only a <b>Made</b> account can extract $OMR / gear on-chain. <b>The free road:</b> the mission ladder&rsquo;s <i>Dockside Heist</i> hands you a mint credit outright. Otherwise the identity is bought with <b>ETH</b> — the Made Man package in <b>The Store</b>, at the published wave price. It is the one thing $OMR cannot buy: minting is what gates extraction, so it has a single price in real money.')}</div>
         ${!me.minted && me.mintCredits > 0 ? '<button class="act" id="mint-go" style="border-color:var(--neon)">get made (spend a mint credit)</button>' : ''}
         ${me.minted ? `
         <div style="margin-top:8px" class="d">Withdraw $OMR to ${me.wallet ? `<span class="chip good">${me.wallet.slice(0,6)}…${me.wallet.slice(-4)}</span>` : 'your wallet'} — a 2% exit toll applies; fresh (&lt;48h) $OMR also pays the early-exit tax.</div>
@@ -7325,7 +7381,7 @@
 
       <h2 style="margin-top:12px">The Exchange <span class="d" style="font-size:11px">(closed for good)</span></h2>
       <div class="card"><div class="d">pocket $${fmt(me.cash)} · $OMR on hand ${fmt(Math.floor(me.omr || 0))}</div>
-        <div class="d" style="margin-top:4px;color:var(--dim)">The wash houses are shut. Cash and $OMR no longer trade in either direction — cash is the city's own money now, and it stays here. $OMR comes in from the outside, and goes out through the window below.</div></div>
+        <div class="d" style="margin-top:4px;color:var(--dim)">Cash and $OMR do not trade in either direction, at any price. Cash is the city's own money and it stays here; $OMR comes in from the outside, and goes out through the window below.</div></div>
 
       ${win.rate ? `
       <h2 style="margin-top:12px">The Window <span class="d" style="font-size:11px">(one way: burn $OMR, take cash — cash never runs back the other way)</span></h2>
@@ -7344,7 +7400,7 @@
         ${yld.families.map((f) => `<tr><td>${f.rank}</td><td>${esc(f.name)} <span class="chip">${esc(f.tag)}</span></td><td>${(f.shareBps / 100).toFixed(0)}%</td><td>${fmt(f.nextPayout)}</td></tr>`).join('')}</table>
         <div class="d" style="font-size:11px;color:var(--dim)">${yld.note}</div></div>` : ''}
 
-      <h2 style="margin-top:12px">The Vault <span class="d" style="font-size:11px">(a safe harbour — staked $OMR is loot-proof and your principal always returns whole; the old per-staker yield is retired, it pays the FAMILIES now; unstaking pulls it ALL and unbonds 6h before it's liquid)</span></h2>
+      <h2 style="margin-top:12px">The Vault <span class="d" style="font-size:11px">(cheaper cover, not a safe harbour — a killer takes 20% of a staked balance against 50% of a loose or unbonding one, so committing halves what a bad night costs without ever making you safe. Your principal always returns whole; yield pays the FAMILIES, not the staker; unstaking pulls it ALL and unbonds 6h — at the higher loose rate — before it's liquid)</span></h2>
       <div class="card"><div class="d">staked ${fmt(Math.floor(me.staked || 0))} $OMR${me.unbonding ? ` · unbonding ${fmt(Math.floor(me.unbonding))} (${mins(me.unbondSeconds || 0)})` : ''}</div>
         <input id="stake-amt" placeholder="$OMR" size="8">
         <button class="act" id="stake-in">stake</button>
@@ -7675,11 +7731,11 @@
 
       <h2 style="margin-top:12px">Vanity <span class="d" style="font-size:11px">(pure cosmetics — a $OMR flex · on hand: ${fmt(Math.floor(me.omr || 0))} $OMR)</span></h2>
       <div class="card">
-        <div><input id="van-name" placeholder="new street name" size="16" maxlength="24"> <button class="act" id="van-name-go">rename yourself (5 $OMR)</button></div>
-        <div style="margin-top:4px"><input id="van-title" placeholder="custom title (blank clears it, free)" size="20" maxlength="24"> <button class="act" id="van-title-go">set title (10 $OMR)</button></div>
+        <div><input id="van-name" placeholder="new street name" size="16" maxlength="24"> <button class="act" id="van-name-go">rename yourself (${rules?.vanity?.nameOmr ?? ''} $OMR)</button></div>
+        <div style="margin-top:4px"><input id="van-title" placeholder="custom title (blank clears it, free)" size="20" maxlength="24"> <button class="act" id="van-title-go">set title (${rules?.vanity?.titleOmr ?? ''} $OMR)</button></div>
         ${(me.cars || []).filter((c) => !c.listed && !c.pledged).length
           ? `<div style="margin-top:4px"><select id="van-car">${(me.cars || []).filter((c) => !c.listed && !c.pledged).map((c) => `<option value="${c.id}">${c.model}${c.trim ? ' ' + c.trim : ''}${c.plate ? ` [${c.plate}]` : ''}</option>`).join('')}</select>
-             <input id="van-plate" placeholder="PLATE" size="7" maxlength="8"> <button class="act" id="van-plate-go">plate it (2 $OMR)</button></div>`
+             <input id="van-plate" placeholder="PLATE" size="7" maxlength="8"> <button class="act" id="van-plate-go">plate it (${rules?.vanity?.plateOmr ?? ''} $OMR)</button></div>`
           : '<div class="d" style="color:var(--dim)">boost a car in the Garage to give it a vanity plate</div>'}
       </div>
 

@@ -86,6 +86,14 @@ export const SYSTEMS = {
   'street life': ['corner', 'contact_call', 'favor_run'],
   'landmarks': ['landmark'],
   'vanity': ['vanity_name', 'vanity_gang_name'],
+  // (`plex`/`plex_package` left with their emitters when the bridge retired on 2026-08-10 and came
+  // BACK with them the same day — the rail is live for everything except the mint. That round trip
+  // is the rule this catalog runs on, stated once: an event is listed here exactly while something
+  // EMITS it, because the guard demands every catalogued event be emitted somewhere and a catalog
+  // pointing at nothing reads as a dead system forever. Note the deliberate ASYMMETRY with the §10.4
+  // ledger, where `plex:%` stays in the vocabulary and the burn term FOREVER: conservation is a claim
+  // about the whole ledger and must reconcile history, while this report answers "is anyone using
+  // this NOW" over a rolling window.)
   'the store / pass': ['plex', 'plex_package', 'pass_claim'],
   'growth / social': ['social_task', 'social_post', 'broadcast_share', 'first_week_step',
     'referral_qualified', 'referral_spark', 'referral_same_ip_flag', 'referral_claim_late'],

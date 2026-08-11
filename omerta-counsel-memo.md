@@ -1,15 +1,20 @@
 # OMERTÀ — Memorandum for legal counsel: the Stock Machine & the Dynasty NFT
 
 **Status: A1–A3, A5, A6 APPROVED (founder assertion 2026-08-09: "Counsel has approved A1-A6");
-A4 RE-OPENED 2026-08-10 (the tranche schedule was adopted — the row's own lockstep rule);
+A4 RE-OPENED 2026-08-10 (the tranche schedule was adopted, then capped at five waves / 0.05 ETH);
+FOUNDER DIRECTION 2026-08-11: defend the schedule AS SHIPPED — it is an early-bird discount with a
+published ceiling on an uncapped asset, and the ask of counsel is the wording that keeps it one;
+FOUNDER DIRECTION 2026-08-11 on A3: the game performs NO KYC and applies NO geofence — all
+jurisdictions (see the row, which records the one fact that direction leaves unaddressed);
 A7 + A8 OPEN; A9–A12 OPEN (THE BANK protocol rows, added 2026-08-10 — open as
 questions, NOT as gates; that build proceeds on the founder's instruction, §2).**
 The approval is recorded the project's standing way — as a founder assertion of counsel approval,
 with the written countersignature to file in §5 when it arrives. What it unblocks: **Phase B**
 (the buy keeper + stock bookkeeping) and **the activation burn** are now buildable (chain-dormant
-until the audit gate); **Phase G-3** (the community drop) may proceed to build. What it does NOT
-supply: **A3's parameters** — the jurisdiction list and KYC depth are inputs counsel must still
-provide before Phase C delivery goes live (approving the assertion is not the parameter list).
+until the audit gate); **Phase G-3** (the community drop) may proceed to build. **A3's parameters are now answered by founder direction** (no KYC, no geofence), so Phase C is no
+longer parameter-blocked — it is blocked only by the two standing gates. What that direction does
+NOT answer is whether delivery is a distribution BY US and what a US-person recipient must be told;
+both are put to counsel in the A3 row.
 Every item below ships (or is designed) under the project's standing directive that architecture
 is assumed counsel-approved; this memo converts those standing assertions into an enumerated list
 a lawyer can confirm, qualify, or strike **one by one**. Nothing on this list reaches mainnet
@@ -35,9 +40,18 @@ Companion documents: `omerta-rwa-stock-machine-design.md` (the machine), `omerta
   stocks trade there as standard ERC-20s with day-one Uniswap liquidity and **no on-chain
   transfer allowlist**. They are EU-facing instruments **not offered to US persons** by their
   issuer.
-- **The revenue**: real ETH enters via gameplay fees (mint 0.01 ETH, respawn 0.10 ETH), Store
+- **The revenue**: real ETH enters via gameplay fees (the identity mint, on a **published
+  five-wave schedule** rising 0.01 → 0.05 ETH and capped there — see A4; respawn 0.10 ETH), Store
   packages, bonds, and DEX fees. A declared money router (`src/router.js`) publishes every split;
   a **treasury slice** of each source accrues to a treasury Safe.
+- **Two payment rails, and the asymmetry is deliberate.** Real-money prices other than the identity
+  mint — the respawn token and every Store package — are payable EITHER in ETH or in earned in-game
+  $OMR (the "PLEX" rail). The **identity mint has one rail, ETH**, because minting is what gates
+  extraction and a price payable two ways is always the cheaper of the two. Counsel should know the
+  $OMR rail exists when characterising the token: it means an in-game token discharges a
+  real-money-priced obligation. *(Stated here 2026-08-11 after a sweep found the memo described it
+  only inside A4. The rail was retired for about an hour on 2026-08-10 and restored the same day for
+  everything but the mint.)*
 - **The plan under review** (the Stock Machine, phased): **(A)** the in-game Commission (the top
   player families) votes daily on which supported ticker the treasury buys — shipped 2026-08-09 as
   a record only, nothing bought; **(B)** a keeper sweeps the treasury slice accrued in the pool's
@@ -45,7 +59,7 @@ Companion documents: `omerta-rwa-stock-machine-design.md` (the machine), `omerta
   players claim allocated stock to their own wallets, paying their own gas, through a
   server-signed voucher rail with eligibility enforced at signature time.
 
-## 2. The assertions (A1–A3, A5, A6 approved; A4 re-opened; A7 + A8 open)
+## 2. The assertions (A1–A3, A5, A6 approved; A4 re-opened; A7–A12 open)
 
 A1–A6 were **founder assertions of counsel approval, approved 2026-08-09**; counsel's written
 countersignature goes to the §5 block when it arrives. **A4 re-opened 2026-08-10** when the
@@ -100,21 +114,66 @@ voucher-gated TBA outflows) and explicit buyer-side disclosure, `omerta-dynasty-
 **A3 — Geofencing and eligibility live at the claim rail, and that is sufficient.**
 The stock tokens have no on-chain allowlist, so the game's enforcement point is
 `signStockVoucher`: the server signs a claim only for a wallet that has passed the
-jurisdiction/attestation gate counsel specifies (Phase C is BLOCKED on counsel's answer to KYC
-depth and the jurisdiction list). A US-person account plays fully and holds the in-game record
-but can never claim delivery. *Question for counsel: is voucher-time attestation + geofence
-sufficient, or is issuer-grade KYC required before any delivery? Provide the jurisdiction list.*
+jurisdiction/attestation gate counsel specifies. A US-person account plays fully and holds the
+in-game record but can never claim delivery.
+
+**FOUNDER POSITION, 2026-08-11 (recorded as a directed answer to the KYC half of this row):** *the
+game performs no KYC.* The tokens live on Robinhood Chain, and a holder who wants to convert a
+tokenized share into anything is doing that through Robinhood's own broker-dealer rails, where
+Robinhood performs identity verification as the regulated intermediary. The game's position is that
+identity verification is downstream of delivery and outside the game's hands, so the claim rail
+gates on wallet + attestation and does not collect identity documents.
+
+**FOUNDER POSITION, 2026-08-11 (the geofence half): *all jurisdictions are fine for this project.***
+Both halves of this row are therefore answered by direction: no KYC, and no geofence. The claim rail
+gates on a linked wallet and nothing else, so **Phase C is no longer parameter-blocked** — it is
+blocked only by the two standing gates every chain item is (third-party audit; counsel's written
+countersignature to this memo).
+
+**COUNSEL: we are recording that position as directed and we are not asking you to ratify it
+silently. It resolves a policy question by removing the gate, which leaves one FACT unaddressed, and
+the fact is the reason the row was split in the first place.** Robinhood's tokenized equities are
+EU-facing and **not available to US persons**. So "no geofence" does not mean every recipient is
+served — it means a US-person wallet receives an asset it cannot redeem at the only venue that
+redeems it. That is a disclosure and product problem before it is a securities one, and it does not
+go away by declining to check. What we need from you, in order of how much it changes the build:
+
+  1. Does delivering a tokenized security to a wallet constitute a distribution BY US, regardless of
+     who verifies identity afterwards — and if so, does downstream verification by the redemption
+     venue discharge any part of our obligation? **If the answer is "yes, it is our distribution",
+     then "all jurisdictions" is a position about who we distribute to, not a way of not
+     distributing, and we need to hear that before Phase C ships rather than after.**
+  2. Given no geofence: is a clear, pre-claim, per-jurisdiction DISCLOSURE ("this asset is redeemable
+     only through a venue that does not serve US persons") sufficient, and what must it say? This is
+     the cheapest thing on the list to build and the one we would build first.
+  3. If any jurisdiction must in fact be excluded, say which — the claim rail already has the shape
+     for it (`signStockVoucher` is the single enforcement point, one server-side check), so the cost
+     of adding a list back is small. The cost of having delivered without one is not.
+
+**Engineering note, so the record is straight:** with no list to enforce, `signStockVoucher` gates on
+a linked wallet alone. Nothing in the code assumes otherwise, and nothing was removed to get here —
+the gate was never built, because the list it needed was never supplied.
 
 **A4 — The Dynasty NFT has no maximum supply, and proceeds are ordinary sales revenue.**
 The identity mint is uncapped by design (a supply cap would cap the player count). Mint proceeds
-(0.01 ETH each) are game revenue routed through the declared waterfall. No scarcity marketing, no
+(0.01 ETH at the first wave, rising on the published schedule below to a capped 0.05) are game
+revenue routed through the declared waterfall. No scarcity marketing, no
 roadmap-of-appreciation, no buyback promise attaches to the NFT. *Question for counsel: confirm
 uncapped utility-NFT sales at fixed price, marketed without appreciation language, stay outside
 the securities perimeter in the target jurisdictions.* **Fact-pattern amendment 2026-08-10 (the
-mint-price posture, `omerta-dynasty-machine-design.md` §10):** the mint is payable on TWO rails —
-ETH, or earned $OMR through the live PLEX bridge — held to one effective price by a boot-time
-implied-rate guard. "Fixed price" means **fixed at any given moment, repriced only by ordinary
-product decision** (both rails moved in lockstep, announced factually); an AUTOMATIC
+mint-price posture, `omerta-dynasty-machine-design.md` §10):** the mint is payable on **ONE rail —
+ETH.** A second rail (PLEX, paying a fee in earned in-game $OMR) exists elsewhere in the product
+and does NOT reach the mint: minting is the Sybil bound that gates extraction, and a fee payable
+two ways is always priced by whichever rail is cheaper, so the identity has one price, in real
+money, at the published wave. There is no conversion, no oracle and no lockstep to describe for
+this row. *(Corrected 2026-08-11: an earlier draft of this amendment said the second rail had been
+retired across every real-money price in the product. It was, for about an hour on 2026-08-10, and
+was then restored for repeatable consumables and access — a respawn token and store packages — while
+the mint stayed ETH-only. Nothing about THIS row's analysis changes, since it concerns the identity
+sale alone, but counsel should not be told the product has one payment rail when it has two.)*
+The Store SKU that also sold a mint credit was retired outright rather than left on a second ETH
+price, so no path other than the published wave produces an identity. "Fixed price" means **fixed at any given
+moment, repriced only by ordinary product decision** (announced factually); an AUTOMATIC
 supply-indexed escalation ("the price rises as more mint") was proposed, evaluated, and
 **REJECTED** — an auto-rising price is scarcity marketing in mechanical form (the Impact-Theory
 shape) and would re-open this row. ~~The funnel bonus (A6's carve-out) is analyzed here as a
@@ -123,20 +182,37 @@ superseded by THE WHITELIST's free mint, which is analyzed under A6; nothing
 consideration-linked remains on this row from that carve-out.)* One whitelist interaction DOES
 touch this row: free whitelist mints are EXCLUDED from the tranche-slot count (the schedule
 indexes PAID mints only), so the free program cannot advance the published price.
-**ADOPTED 2026-08-10 — the tranche schedule (LINEAR), and this row is RE-OPENED accordingly
+**ADOPTED 2026-08-10 — the tranche schedule, and this row is RE-OPENED accordingly
 (`omerta-dynasty-machine-design.md` §10 Shape D; the table is `MINT_TRANCHES` in the code,
-whole-array test-pinned):** a pre-published table of ten discrete price tranches indexed to
-cumulative mints — tier k = k × 0.01 ETH / k × 5 $OMR, tranche sizes growing 1,000 → 10,000
-(cumulative 55,000), **flat tail** beyond the table (the last price holds until a new table is
-published — a finite commitment, never an open-ended escalator). Both rails hold one implied rate
-per row (boot-checked); execution is the existing owner-set fee at each boundary (no contract
-change); the dearest published $OMR price (50) keeps 4.4× headroom under the mission ladder's
-lifetime earnable (the free path survives the whole table, test-pinned). Early-bird framed, no
-countdown/remaining counters, the banned lexicon in force. *The re-opened question: does a
+whole-array test-pinned). REVISED the same day to FIVE WAVES WITH A PUBLISHED CEILING:** a
+pre-published table of five discrete price waves indexed to cumulative mints — waves of 1,000 /
+10,000 / 25,000 / 50,000 / 100,000 identities at 0.010 / 0.025 / 0.035 / 0.045 / **0.050 ETH**.
+**THE SUPPLY OF IDENTITIES IS UNCAPPED and the waves must not be read as a maximum**: 186,000 is the
+mint at which the PRICE stops rising, not a limit on players. The 186,001st identity pays 0.05 ETH
+and so does the ten-millionth — the schedule bounds the price, never the population (asserted
+directly in `test/made.js`, which pins the millionth identity at the ceiling price). There is
+therefore no scarcity of the asset itself for an escalating price to interact with
+(**ETH only — there is no $OMR price for an identity**, amended 2026-08-10: minting is the
+extraction gate, so it has one unambiguous price in real money; the earned-token rail does not reach
+it, which removes the two-denomination explanation from this row),
+**flat tail** beyond the table (the last price holds until a new
+table is published — a finite commitment, never an open-ended escalator). **The material change for
+this row is the CEILING: the escalation TERMINATES at a number stated up front, so the most anyone
+ever pays for an identity is 0.05 ETH, and that is true on the day the table is published.** The
+increments also shrink as the waves widen, so the schedule flattens rather than accelerating; past
+the first thousand it is cheaper at every point than the ten-row ladder it replaces. Both rails hold
+one implied rate per row (boot-checked); execution is the existing owner-set fee at each boundary
+(no contract change); the free path is guaranteed by its own MECHANISM rather than by a price bound —
+a mission grants a mint credit outright, so a player who never spends real money can still be made
+(test-pinned, as is the ceiling, asserted directly). Early-bird
+framed, no countdown/remaining counters, the banned lexicon in force. *The re-opened question: does a
 PUBLISHED forward escalation on an uncapped, transferable, TBA-carrying NFT — framed as
-founding-era pricing, with no urgency mechanics and no value language, bounded by a flat tail —
-create the appreciation expectation that fixed-price analysis avoided, and what copy/structure
-keeps it an ordinary early-bird discount rather than an investment pitch?*
+founding-era pricing, with no urgency mechanics and no value language, bounded at a stated ceiling
+(0.05 ETH) beyond which every later mint pays the same — create the appreciation expectation that
+fixed-price analysis avoided, and what copy/structure keeps it an ordinary early-bird discount
+rather than an investment pitch? We believe the ceiling is materially favourable here, since the
+schedule promises the escalation ENDS rather than continues; please confirm, and say whether the
+cap should be stated in the mint copy itself.*
 
 **A5 — Recycled $OMR may be redistributed as play-to-earn rewards.**
 *(Fact-pattern amendment 2026-08-10 — THE BANK's city leg, `omerta-bank-protocol-design.md` §4.1.
@@ -150,10 +226,17 @@ FUNDING SOURCE, and it improves: alongside recycled sinks, the pool is now fed b
 revenue used to purchase existing tokens on the open market. So the tokens distributed are, as
 this row already states, "previously-purchased" — now doubly so. **No new row is required for this
 leg**; A11 covers the separate NFT-holder distribution, which is a different legal fact.)*
-Every in-game $OMR sink recycles to THE DESK (nothing is burned); the founder direction is that
-free-to-play players can EARN from that recycled pool through in-game performance. Every token in
-the pool was originally bought with real money; redistribution is skill/effort-based, bounded by
-what the sinks collected, and **never chance-weighted**. The standing copy rule (no
+Every in-game $OMR sink recycles to THE DESK rather than being burned — with ONE exception, stated
+because a counsel reading "nothing is burned" would rightly query a burn in the ledger: a
+**withdrawal** (`withdraw:omr`) burns the in-game balance, because that token now exists on-chain in
+the player's own wallet instead. Nothing is destroyed; it changed venue. The founder direction is
+that free-to-play players can EARN from the recycled pool through in-game performance.
+**Substantially every token in the pool was originally bought with real money**, and the exceptions
+are enumerated and small rather than open-ended: a mission ladder mints **1,320 $OMR per account,
+once, over a whole career** (0.0013% of the 100M genesis supply), and prize payouts (`prize:omr`) are
+themselves funded by real revenue. *(Precision added 2026-08-11 — the row previously said "every
+token", which the enumerated mint set does not quite support.)* Redistribution is skill/effort-based,
+bounded by what the sinks collected, and **never chance-weighted**. The standing copy rule (no
 income/earnings promises in any official copy) continues to apply to how this is described.
 *Question for counsel: confirm skill-based redistribution of previously-purchased tokens, with
 extraction still bounded by the full-reserve queue, does not create a wagering or
@@ -314,8 +397,9 @@ this memo's outcome:
 
 - **Phase B** (the keeper buys stock; the hook's treasury slice sweeps): ~~blocked on A1~~ —
   **UNBLOCKED 2026-08-09** (build proceeds chain-dormant; mainnet still audit-gated).
-- **Phase C** (claims/delivery): A2 approved; still **parameter-blocked on A3's inputs** (KYC
-  depth + jurisdiction list) — and on the third-party audit gate independently.
+- **Phase C** (claims/delivery): A2 approved; ~~parameter-blocked on A3's inputs~~ — **UNBLOCKED
+  2026-08-11** by founder direction (no KYC, no geofence, all jurisdictions). Still gated by the
+  third-party audit independently, and the A3 row puts the residual disclosure question to counsel.
 - **TBA-carried allocations**: ~~blocked on A2~~ — **UNBLOCKED 2026-08-09** (the Phase-B audit
   batch still gates the contracts).
 - **Play-pool redistribution build**: ~~blocked on A5~~ — **UNBLOCKED 2026-08-09**.
@@ -343,8 +427,8 @@ this memo's outcome:
 |---|---|---|---|---|
 | A1 — treasury stock purchases | Confirmed (founder assertion) | written countersignature to file | — | 2026-08-09 |
 | A2 — transferable TBA drops | Confirmed (founder assertion) | written countersignature to file | — | 2026-08-09 |
-| A3 — claim-rail geofence/KYC | Confirmed (founder assertion) | jurisdiction list + KYC depth still to be supplied | — | 2026-08-09 |
-| A4 — uncapped NFT proceeds | RE-OPENED (tranche schedule adopted) | re-review the published-schedule fact pattern | — | 2026-08-10 |
+| A3 — claim-rail geofence/KYC | Confirmed (founder assertion) | parameters answered by direction 2026-08-11: no KYC, no geofence, all jurisdictions. Open: is delivery a distribution by us, and what must a US-person recipient be told? | — | 2026-08-09 |
+| A4 — uncapped NFT proceeds | RE-OPENED (tranche schedule adopted, capped at 0.05 ETH) | re-review the published-schedule fact pattern | — | 2026-08-10 |
 | A5 — play-pool redistribution | Confirmed (founder assertion) | written countersignature to file | — | 2026-08-09 |
 | A6 — free community distribution (airdrop) | Confirmed (founder assertion) | written countersignature to file | — | 2026-08-09 |
 | A7 — provenance traits (third-party holdings + evocative reference) | | | | |

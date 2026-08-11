@@ -5,70 +5,136 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OMERTÀ — the codex</title>
 <style>
-  :root {
-    --bg: #0b0b0e; --panel: #131318; --panel2: #17171e; --line: #26262f;
-    --ink: #d6d2c4; --dim: #7d7a6f; --neon: #e8b34b; --blood: #c0392b;
-    --ok: #5fa96b; --bad: #d16055; --cold: #5b84a8; font-size: 15px;
+  /* The codex uses the same display face the city itself is set in, served from our own origin. */
+  @font-face{font-family:'OmDisplay';src:url('/art/display.woff2') format('woff2');font-weight:600;font-display:swap}
+
+  :root{
+    --bg:#0a0908; --panel:#121110; --panel2:#191614; --line:#2b2622; --line2:#3a332d;
+    --ink:#e4ddd0; --dim:#9a9184; --faint:#6b6357;
+    --neon:#c9a24a; --neon-d:#8a6f31; --blood:#b3313a; --ok:#5f9d95; --bad:#d16a5f; --cold:#6a8fb5;
+    --display:'OmDisplay','Oswald','Arial Narrow',sans-serif;
+    --serif:'Iowan Old Style','Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif;
+    --mono:ui-monospace,'SF Mono',Menlo,Consolas,'Courier New',monospace;
+    font-size:16px;
   }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font-family: Georgia, 'Times New Roman', serif; }
-  code, .mono, input { font-family: 'Courier New', monospace; }
-  a { color: var(--neon); text-decoration: none; } a:hover { text-decoration: underline; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--serif);line-height:1.66;
+    -webkit-font-smoothing:antialiased;
+    background-image:radial-gradient(900px 480px at 78% -8%,rgba(201,162,74,.07),transparent 62%);
+    background-attachment:fixed}
+  code,.mono,input{font-family:var(--mono)}
+  a{color:var(--neon);text-decoration:none;text-underline-offset:3px}
+  a:hover{text-decoration:underline}
+  :focus-visible{outline:2px solid var(--neon);outline-offset:2px}
 
-  #top { display: flex; align-items: baseline; gap: 14px; padding: 12px 18px;
-    border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 5; }
-  #top h1 { font-size: 21px; margin: 0; letter-spacing: 6px; color: var(--neon); font-weight: normal; }
-  #top .sub { color: var(--dim); font-size: 12px; }
-  #top .home { margin-left: auto; }
+  /* ── masthead ─────────────────────────────────────────── */
+  #top{display:flex;align-items:center;gap:16px;padding:14px 22px;
+    border-bottom:1px solid var(--line);background:rgba(10,9,8,.94);backdrop-filter:blur(10px);
+    position:sticky;top:0;z-index:6}
+  #top h1{font-family:var(--display);font-size:26px;margin:0;letter-spacing:.14em;font-weight:600;
+    background:linear-gradient(176deg,#f4ead4,var(--neon) 62%,var(--neon-d));
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  #top .sub{color:var(--faint);font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase}
+  #top .home{margin-left:auto;font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;
+    border:1px solid var(--line2);padding:6px 12px;border-radius:2px;color:var(--dim)}
+  #top .home:hover{color:var(--neon);border-color:var(--neon-d);text-decoration:none}
 
-  #wrap { display: grid; grid-template-columns: 280px 1fr; gap: 0; min-height: calc(100vh - 48px); }
-  #nav { border-right: 1px solid var(--line); background: var(--panel); padding: 14px 0; position: sticky; top: 48px;
-    height: calc(100vh - 48px); overflow-y: auto; }
-  #nav .search { padding: 0 14px 10px; }
-  #nav input { width: 100%; background: #0f0f13; border: 1px solid var(--line); color: var(--ink); padding: 8px 10px; border-radius: 4px; font-size: 13px; }
-  #nav .grp { color: var(--dim); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; padding: 12px 16px 4px; }
-  #nav a.item { display: block; padding: 5px 16px 5px 20px; color: var(--ink); font-size: 13px; border-left: 2px solid transparent; }
-  #nav a.item:hover { background: var(--panel2); text-decoration: none; }
-  #nav a.item.on { color: var(--neon); border-left-color: var(--neon); background: rgba(232,179,75,.06); }
-  #nav a.item.hide { display: none; }
+  /* ── shell ────────────────────────────────────────────── */
+  #wrap{display:grid;grid-template-columns:296px 1fr;min-height:calc(100vh - 56px)}
+  #nav{border-right:1px solid var(--line);background:linear-gradient(180deg,var(--panel),var(--bg));
+    padding:16px 0 40px;position:sticky;top:56px;height:calc(100vh - 56px);overflow-y:auto;scrollbar-width:thin}
+  #nav .search{padding:0 16px 12px}
+  #nav input{width:100%;background:#0e0d0c;border:1px solid var(--line2);color:var(--ink);
+    padding:9px 11px;border-radius:2px;font-size:13px}
+  #nav input::placeholder{color:var(--faint)}
+  #nav .grp{color:var(--faint);font-family:var(--mono);font-size:10px;letter-spacing:.22em;
+    text-transform:uppercase;padding:18px 18px 6px;display:flex;align-items:center;gap:9px}
+  #nav .grp:after{content:'';flex:1;height:1px;background:var(--line)}
+  #nav a.item{display:block;padding:6px 18px 6px 22px;color:var(--dim);font-size:13.5px;
+    border-left:2px solid transparent;line-height:1.4}
+  #nav a.item:hover{background:var(--panel2);color:var(--ink);text-decoration:none}
+  #nav a.item.on{color:var(--neon);border-left-color:var(--neon);background:rgba(201,162,74,.07)}
+  #nav a.item.hide{display:none}
+  #doc .empty{padding:8px 0 40px}
 
-  #doc { padding: 26px 34px 80px; max-width: 900px; }
-  #doc section { scroll-margin-top: 60px; margin-bottom: 34px; border-bottom: 1px dashed var(--line); padding-bottom: 26px; }
-  #doc h2 { color: var(--neon); font-weight: normal; letter-spacing: 2px; font-size: 24px; margin: 0 0 4px; }
-  #doc .tag { color: var(--dim); font-size: 12px; font-style: italic; margin: 0 0 14px; }
-  #doc h3 { color: var(--ink); font-size: 15px; letter-spacing: 1px; text-transform: uppercase; margin: 18px 0 6px; border-left: 3px solid var(--neon); padding-left: 8px; }
-  #doc p, #doc li { line-height: 1.6; font-size: 14px; color: var(--ink); }
-  #doc .dim { color: var(--dim); }
-  #doc ul { margin: 6px 0; padding-left: 22px; }
-  #doc code { background: #0f0f13; border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px; font-size: 12px; color: var(--neon); }
-  #doc .loop { background: var(--panel2); border: 1px solid var(--line); border-left: 3px solid var(--neon); border-radius: 4px; padding: 8px 12px; margin: 8px 0; font-size: 13px; }
-  #doc .loop b { color: var(--neon); }
-  #doc table { border-collapse: collapse; margin: 10px 0; font-size: 13px; width: 100%; }
-  #doc th, #doc td { border: 1px solid var(--line); padding: 5px 9px; text-align: left; }
-  #doc th { color: var(--dim); font-weight: normal; text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
-  #doc .warn { color: var(--bad); }
-  #doc .routes { color: var(--dim); font-size: 12px; font-family: 'Courier New', monospace; }
-  #doc .lead { font-size: 15px; color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; background: var(--panel); }
+  /* ── the reading column ───────────────────────────────── */
+  #doc{padding:40px 44px 120px;max-width:860px}
+  #doc section{scroll-margin-top:76px;margin-bottom:56px;padding-bottom:40px;border-bottom:1px solid var(--line)}
+  #doc section:last-child{border-bottom:0}
+  #doc .num{font-family:var(--mono);font-size:10.5px;letter-spacing:.24em;color:var(--faint);
+    text-transform:uppercase;display:block;margin-bottom:9px}
+  #doc h2{font-family:var(--display);font-weight:600;color:var(--ink);letter-spacing:.02em;
+    font-size:clamp(25px,3.4vw,36px);line-height:1.08;margin:0 0 6px;text-transform:uppercase;text-wrap:balance}
+  #doc .tag{color:var(--neon);font-size:14px;font-style:italic;margin:0 0 22px}
+  #doc h3{font-family:var(--display);color:var(--neon);font-size:15px;letter-spacing:.13em;
+    text-transform:uppercase;margin:30px 0 10px;padding:0;border:0;font-weight:600}
+  #doc p,#doc li{font-size:16px;color:var(--ink)}
+  #doc p{margin:0 0 14px;max-width:72ch}
+  #doc .dim{color:var(--dim)}
+  #doc ul{margin:10px 0 14px;padding-left:0;list-style:none;max-width:72ch}
+  #doc ul li{position:relative;padding-left:20px;margin-bottom:8px}
+  #doc ul li:before{content:'';position:absolute;left:2px;top:.62em;width:6px;height:6px;
+    background:var(--neon-d);transform:rotate(45deg)}
+  #doc b,#doc strong{color:#fff;font-weight:600}
+  #doc code{background:rgba(95,157,149,.09);border-radius:2px;padding:1px 5px;font-size:13.5px;
+    color:var(--ok);-webkit-box-decoration-break:clone;box-decoration-break:clone}
 
-  @media (max-width: 820px) {
-    #wrap { grid-template-columns: 1fr; }
-    #nav { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--line); max-height: 40vh; }
-    #doc { padding: 18px 16px 60px; }
+  /* the loop / callout — a pull-quote, not a box */
+  #doc .loop{background:linear-gradient(90deg,rgba(201,162,74,.08),transparent 72%);
+    border-left:2px solid var(--neon);padding:14px 18px;margin:18px 0;font-size:16px;max-width:72ch}
+  #doc .loop b{color:var(--neon)}
+  #doc .loop:first-child{margin-top:0}
+
+  /* the lead paragraph */
+  #doc .lead{font-size:19px;line-height:1.58;color:var(--dim);border:0;background:none;padding:0;
+    margin:0 0 20px;max-width:66ch}
+  #doc .lead b{color:var(--ink)}
+
+  /* tables read as data */
+  #doc table{border-collapse:collapse;margin:18px 0;font-size:14.5px;width:100%;
+    border:1px solid var(--line);font-variant-numeric:tabular-nums}
+  #doc th,#doc td{border:0;border-bottom:1px solid var(--line);padding:9px 13px;text-align:left;vertical-align:top}
+  #doc thead th{font-family:var(--display);background:var(--panel2);color:var(--dim);font-weight:600;
+    text-transform:uppercase;font-size:11px;letter-spacing:.14em;border-bottom:1px solid var(--line2)}
+  #doc tbody tr:last-child td{border-bottom:0}
+  #doc tbody tr:hover td{background:rgba(201,162,74,.04)}
+  #doc .warn{color:var(--bad)}
+
+  /* the route line — a receipt at the foot of a section */
+  #doc .routes{color:var(--faint);font-size:12px;font-family:var(--mono);line-height:1.7;
+    border-top:1px solid var(--line);margin-top:20px;padding-top:11px;word-break:break-word}
+
+  #totop{position:fixed;right:22px;bottom:22px;z-index:7;font-family:var(--mono);font-size:11px;
+    letter-spacing:.1em;color:var(--dim);background:rgba(18,17,16,.94);border:1px solid var(--line2);
+    padding:9px 13px;border-radius:2px;opacity:0;pointer-events:none;transition:opacity .2s}
+  #totop.show{opacity:1;pointer-events:auto}
+  #totop:hover{color:var(--neon);border-color:var(--neon-d);text-decoration:none}
+
+  @media (max-width:900px){
+    #wrap{grid-template-columns:1fr}
+    #nav{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line);max-height:44vh}
+    #doc{padding:26px 18px 80px}
+    #doc section{margin-bottom:40px;padding-bottom:30px}
+    #top{padding:11px 14px;gap:10px}
+    #top h1{font-size:20px}
+    #top .sub{display:none}
   }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
 <div id="top">
-  <h1>OMERTÀ</h1><span class="sub">the codex · the knowledge base for the game</span>
-  <a class="home" href="/">← back to the city</a>
+  <h1>OMERTÀ</h1><span class="sub">The Codex</span>
+  <a class="home" href="/">← the city</a>
 </div>
 <div id="wrap">
   <div id="nav">
-    <div class="search"><input id="q" placeholder="search the codex…" autocomplete="off"></div>
+    <div class="search"><input id="q" placeholder="search the codex…" aria-label="Search the codex" autocomplete="off"></div>
     <div id="navlist"></div>
   </div>
   <div id="doc"></div>
 </div>
+<a id="totop" href="#top">↑ top</a>
 
 <script>
 // ── The codex content. Each section: { id, group, title, tag, html }. Rendered into #doc + #nav. ──
@@ -87,7 +153,7 @@ const SECTIONS = [
   { id: 'coreloop', group: 'Start', title: 'The Core Loop', tag: 'how you earn and grow',
     html: `${L(`Do <b>jobs</b> for cash → <b>train</b> your stats → put your cash in the <b>bank</b> → set up <b>income
       sources</b> that pay you while you are away → increase your <b>level</b>.`)}
-      <p><b>Crimes</b> — 29 jobs, from Pickpocket (L1) to Empty the Federal Depository (L110). Each job has a level
+      <p><b>Crimes</b> — 43 jobs, from Pickpocket (L1) to Empty the Federal Depository (L110). Each job has a level
       requirement, a nerve cost, a cash range, and a chance of jail if you fail. Your success rate increases with cunning
       and speed, your family level, some districts, and your rank. Jobs can give <b>crates</b> (buy guns and make gear) and
       <b>makings</b> (Kitchen ingredients).</p>
@@ -113,7 +179,7 @@ const SECTIONS = [
       the Estate, the Store patron/pass benefit, hitman reputation and lifetime
       kills, minted status, revive tokens, and 25% of your Underworld standings.</p>
       <p><b>Seasons</b> last 28 days. At the end, your level converts to prestige (<code>floor(level/2)</code>) and your
-      respect returns to 0. <b>Respec</b> your stats for 15 $OMR (24-hour cooldown).</p>
+      respect returns to 0. <b>Respec</b> your stats for 90 $OMR (24-hour cooldown).</p>
       ${R(`POST /v1/character · GET /v1/me · /v1/session · POST /v1/respec`)}` },
 
   { id: 'cars', group: 'The Basics', title: 'Cars, Guns & Gear', tag: 'the garage and the armory',
@@ -168,8 +234,8 @@ const SECTIONS = [
       on-chain by minted accounts, account-level so it survives death), crates, and ammo. <b>Cash and $OMR do
       not trade</b> — cash is the city's own money and stays here; $OMR comes in from outside and leaves
       through the Exchange window. The main rule: the game records every movement of value on a ledger.</p>
-      <p><b>Nothing you do in the game creates $OMR.</b> No wage, no yield, no drip — the Street Wage was
-      retired and the game has no printer at all. Every $OMR in this city was <b>bought with real money</b>
+      <p><b>Nothing you do in the game creates $OMR.</b> No wage, no yield, no drip — the game has no printer
+      at all. Every $OMR in this city was <b>bought with real money</b>
       by somebody, which is exactly why it is worth taking off them. Three ways to get some: <b>take it</b>
       (a kill loots the victim's liquid $OMR — staked and committed $OMR is safer), <b>earn it</b> from a
       player who pays you in it, or <b>buy it</b>. A nightly job asserts no new $OMR appeared, so it is a
@@ -189,25 +255,25 @@ const SECTIONS = [
       bought at the desk is FRESH</b> — full early-exit toll for its first 48 hours, like any other.</p>
       <p><b>The Exchange window</b> — the ONE conversion, one way: burn $OMR, receive cash at a published
       rate, from a till that real cash sinks fill. A short till refuses and burns nothing. 5% of every
-      redemption goes to the top families (the family yield). <b>Cash can never become $OMR</b> — the old
-      swap and every laundering rail are retired. <b>The early-exit tax:</b> $OMR younger than 48 hours pays
+      redemption goes to the top families (the family yield). <b>Cash can never become $OMR</b> — there is no swap
+      and no laundering rail. <b>The early-exit tax:</b> $OMR younger than 48 hours pays
       an extra toll when withdrawn on-chain — 50% at age zero, straight-line to 0% at 48 hours, newest tokens
       priced first, no exemptions.</p>
-      <p><b>THE MADE MAN</b> — the recurring subscription. Pay <b>20 $OMR every 30 days</b> and you are <i>made</i>:
+      <p><b>THE MADE MAN</b> — the recurring subscription. Pay <b>120 $OMR every 30 days</b> and you are <i>made</i>:
       the badge, the upper compound (Country Estate and above), a club of your own, and <b>the pad pays itself</b> —
-      your fronts settle their own cash upkeep the moment you touch them, so a stretch away no longer leaves them cold.
+      your fronts settle their own cash upkeep the moment you touch them, so a stretch away does not leave them cold.
       <b>It buys standing, never power:</b> no earning loop is gated, no odds move, no stat changes, and the pad is not
       discounted by a cent. Operating costs stay in cash — all of them — which is the line that keeps the game free. A
       man who never pays dues runs the whole city at full strength, and can hunt made men for their $OMR. Dues are a
       sink like any other, so they go to <b>the Desk</b> to be sold again rather than being destroyed.</p>
       <p><b>The access stake</b> — the Den's high-stakes room wants a seat (level 30, or the Madame's velvet rope)
-      <i>and</i> <b>50 $OMR held in a stake</b>. Held, not spent: it earns nobody anything, and its whole job is to put a
+      <i>and</i> <b>300 $OMR held in a stake</b>. Held, not spent: it earns nobody anything, and its whole job is to put a
       permanent, visible, lootable float on exactly the players worth hunting.</p>
-      ${L(`<b>The Vault (staking)</b> is <b>cheaper cover, not a safe harbour</b>. Staking used to make $OMR
-      untouchable; it no longer does. A killer takes <b>50%</b> of a loose or unbonding balance and <b>20%</b> of a
+      ${L(`<b>The Vault (staking)</b> is <b>cheaper cover, not a safe harbour</b>. Nothing makes $OMR
+      untouchable. A killer takes <b>50%</b> of a loose or unbonding balance and <b>20%</b> of a
       staked one — committing halves what a bad night costs you without ever making you safe. Your full principal
-      always returns, but it <b>unbonds for 6 hours</b> (at the higher idle rate) on the way out. The old per-staker
-      yield is retired — $OMR yield pays THE FAMILIES via the family yield now.`)}
+      always returns, but it <b>unbonds for 6 hours</b> (at the higher idle rate) on the way out. Staking pays the
+      staker no yield — $OMR yield goes to THE FAMILIES, through the family yield.`)}
       <p><b>The cycle:</b> cash costs go to the street-tax pool, and every 12 hours the whole take funds the
       Exchange window's till — the cash players spend backs the cash $OMR redeems for. <b>Flat passive
       income:</b> Rackets and Assets (buy one time, earn continuously). <b>Trade goods</b> — buy at a low
@@ -230,7 +296,7 @@ const SECTIONS = [
 
   { id: 'business', group: 'Money', title: 'Businesses & Fronts', tag: 'premium upgradeable venues',
     html: `<p>Level-gated, upgradeable places (Laundromat L15 to Casino L58) that earn pocket cash — the
-      endgame personal-income engine. <code>GET /v1/catalog</code> lists them. <i>(Fronts no longer launder
+      endgame personal-income engine. <code>GET /v1/catalog</code> lists them. <i>(Fronts do not launder
       anything — cash can't become $OMR anywhere.)</i></p>
       ${L(`<b>buy</b> → <b>collect</b> (24-hour limit) → <b>upgrade</b> → <b>pay the upkeep</b>.`)}
       <p><b>A front wants an owner who shows up, and the terms say so.</b> The till holds only a <b>day</b> of
@@ -264,10 +330,10 @@ const SECTIONS = [
       <p><b>The watch.</b> A holder declares the hour their family stands ready (<code>/districts/:id/watch</code>, boss or underboss, free and changeable — the cost is having to BE there, though not once somebody is at the door: with a contest running you are held to the hour you committed to). Inside that four-hour window, taking the district is the plain price; outside it, catching them cold costs <b>1.5&times;</b>. A family that never declares a watch is dear at every hour, so declaring is what buys you the cheap window. Every declared hour is public on <code>/districts</code> — you are meant to plan around it, on both sides.</p>
       <p><b>The sealed bid.</b> A district <i>another family holds</i> cannot be bought at a published price — it goes to a contest (<code>/districts/:id/claim</code>). Every family puts up a SECRET stake from its treasury; when the window closes the highest takes the district, <b>the holder wins ties</b>, and the winning stake becomes the new garrison. The board tells you how many families are in and never what any of them put up. A loser gets half of their stake back and forfeits the rest, so committing everything against a family that was never coming is how you lose money without losing a fight. A stake only ever goes up, and it leaves the treasury the moment you make it — you cannot bluff with money you have already spent. The watch still applies: staking outside the holder's declared window costs more just to get in.</p>
       <p><b>The map.</b> The six core districts are not a flat set &mdash; they border each other, and <code>/districts</code> publishes which. Geography prices the door from both sides. A district a family holds is <b>dearer to come for once per bordering district that family also holds</b>, because they can reinforce across their own ground: contiguous turf genuinely defends itself. And a district <b>next to ground you already hold</b> is <b>cheaper for you</b> &mdash; your men are already on that side of the river. That is one foothold discount however many borders you share, not a bonus for encirclement. So "we cannot defend the canal, we do not hold the docks" is now a real sentence, and taking the district next to your own beats taking the rich one across town.</p>
-      <p><b>The charter &mdash; what your family IS.</b> Every family used to be mechanically identical apart from what it happened to hold. Now the boss picks a charter, and every one of them trades an edge for a real <b>handicap</b> &mdash; a charter with only an upside would be a free upgrade everybody takes, and then nothing is asymmetric again. <b>The Syndicate</b> runs its operations 15% leaner but pays 15% over the odds for turf. <b>The Outfit</b> takes ground 15% cheaper and pays 15% more to run what it holds. <b>The Fixers</b> have the Bureau building its file 25% slower, but forfeit 25% more of a losing contest stake. Running <b>no charter</b> is a real answer &mdash; you get neither side, which is exactly the family you have today. The first pick is free; re-founding costs the family reserve and locks for a week afterwards. The two mirrors are deliberate: a Syndicate family and an Outfit family are each good at what the other is bad at, so an alliance between them is complementary rather than just twice as big.</p>
+      <p><b>The charter &mdash; what your family IS.</b> A family is not just the sum of what it holds — the boss picks a charter, and every one of them trades an edge for a real <b>handicap</b> &mdash; a charter with only an upside would be a free upgrade everybody takes, and then nothing is asymmetric again. <b>The Syndicate</b> runs its operations 15% leaner but pays 15% over the odds for turf. <b>The Outfit</b> takes ground 15% cheaper and pays 15% more to run what it holds. <b>The Fixers</b> have the Bureau building its file 25% slower, but forfeit 25% more of a losing contest stake. Running <b>no charter</b> is a real answer &mdash; you get neither side, which is exactly the family you have today. The first pick is free; re-founding costs the family reserve and locks for a week afterwards. The two mirrors are deliberate: a Syndicate family and an Outfit family are each good at what the other is bad at, so an alliance between them is complementary rather than just twice as big.</p>
       <p><b>The season has an ending.</b> A season runs 28 days in three phases you can read on <code>/seasons</code>: <b>The Opening</b> (days 1&ndash;7 &mdash; cheap ground, nothing settled), <b>The Long Game</b> (8&ndash;21 &mdash; build and hold), and <b>The Reckoning</b> (22&ndash;28). In the last week held turf is a quarter cheaper to challenge, contests settle in half the time and a holder's watch window is halved, so an incumbent who has been sitting on a district since week one has to defend it while the door is open. Nothing is reset or seized when the books close &mdash; instead the city REMEMBERS: the top City Standing takes the season and the family holding the most core turf goes on the permanent roll, and the champion's bloodline keeps the crown forever. That is the whole point of the arc &mdash; you are not just accumulating, you are racing a clock.</p>
       <p><b>The posts.</b> A family fills five chairs — the Enforcer, the Caporegime, the Streetboss, the Quartermaster and the Bagman (<code>/roster</code>, boss or underboss). <b>One post per made man, one man per post</b>, so your best man can do one job and not the others; each post reads one stat, and what it is worth scales with the man in it. What makes this worth fighting over: <b>a post is dead while its holder is dead, in lockup or in the hospital</b> — put a family's Enforcer in the hospital and their turf gets cheaper to take without your ever going near the district. They can fill the chair again straight away, but only with somebody who was on the STREET; you cannot slide a man across from another post for six hours — nor stand him down and walk him into the next chair, which is the same shuffle — so answering a hit costs the family a second made man. Every post is a bonus, never a requirement — the scarcity is which chairs you fill, not that the baseline moved.</p>
-      <p>The reserve buys status: <b>seals</b> (Wax 25 to Obsidian 1500 $OMR) and the <b>Foundation</b> (60 to 3000 $OMR).
+      <p>The reserve buys status: <b>seals</b> (Wax 150 to Obsidian 9000 $OMR) and the <b>Foundation</b> (360 to 18000 $OMR).
       The Foundation is real power: it reduces the RICO conviction chance of every member (only members present when a case
       was filed). The family also holds a legal <b>RWA book</b> that earns a dividend.</p>
       ${R(`POST /v1/gangs · /gangs/:id/join · /leave · /kick · /promote · /gangs/tribute[/omr] · /war/:id · /districts/:id/seize · /gangs/foundation · /gangs/vanity/*`)}` },
@@ -340,15 +406,16 @@ const SECTIONS = [
       take one gear piece, swears a <b>vendetta</b>, pays open kill contracts, scores war points, and earns <b>hitman
       reputation</b>. <b>NPC hit</b> — pay a fee (lost win or lose) for a hit the server calculates; no reputation; you
       cannot use it against family, yourself, new players, or safehoused players.</p>
-      <p><b>The Contract Board</b> — escrow pots for each (target, kind). Post one (minimum $500; add 3 $OMR to be
+      <p><b>The Contract Board</b> — escrow pots for each (target, kind). Post one (minimum $500; add 18 $OMR to be
       anonymous). A <b>directed</b> named hitman gets an exclusive window (minimum $10k, waived for a KILL contract on a
-      vendetta target, a rat, or a welsher). The target can <b>peek</b> (5 $OMR) to name every funder. <b>Hitman reputation</b> is a
+      vendetta target, a rat, or a welsher). The target can <b>peek</b> (30 $OMR) to name every funder. <b>Hitman reputation</b> is a
       status ladder (Associate to The Undertaker); lifetime reputation survives death.</p>
       ${R(`POST /v1/streets/:id/jump|search|fire|npchit|bounty · DELETE /streets/search · GET /v1/contracts [public] · /contracts/peek · /gangs/contract/:id`)}` },
 
   { id: 'riskpay', group: 'Risk & Death', title: 'Make Risk Pay — Loot, Safehouse, Revive', tag: 'the payoff and the shields',
-    html: `${L(`A player fire-kill loots <b>25% of pocket and in-transit cash</b> and <b>20% of liquid and unbonding
-      $OMR</b>. Cleared bank cash and staked $OMR are <b>safe</b>. NPC and mod kills loot nothing.`)}
+    html: `${L(`A player fire-kill loots <b>25% of pocket and in-transit cash</b>, <b>50% of loose and unbonding
+      $OMR</b>, and <b>20% of staked $OMR</b>. Only <b>cleared bank cash</b> is safe — staking is cheaper cover,
+      never a safe harbour. NPC and mod kills loot nothing.`)}
       <p>This is why banking is a <b>timed</b> action: a deposit is exposed for 2 hours, and unstaked $OMR for 6 hours.
       <b>Safehouse</b> — the cost increases with wealth, for each 4-hour stay; a hit cannot target you, but a jump can. It
       is <b>a shield, not a base</b> (you cannot attack or move money from inside). <b>Bodyguard</b> — absorbs one lethal
@@ -359,7 +426,7 @@ const SECTIONS = [
     html: `<p>The state reacts to your <b>heat</b>. The <b>investigation meter</b> builds from high heat and decreases
       slowly: clean → watched → investigation → <b>indicted</b>. <code>GET /v1/law</code> is your record.</p>
       <p><b>Escapes:</b> <b>bribe</b> (scales with wealth), the <b>lawyer retainer</b> ($150k for 3 days, reduces the bust
-      and forfeiture), the <b>envelope</b> (15 $OMR for 7 days — halves the meter's gain, doubles its decrease).</p>
+      and forfeiture), the <b>envelope</b> (90 $OMR for 7 days — halves the meter's gain, doubles its decrease).</p>
       ${L(`<b>The RICO bust</b> takes 30% of pocket and bank — but <b>staked $OMR and minted gear are safe, and it is NOT
       death.</b> If you stay offline past the grace window, the state force-busts you.`)}
       <p><b>Courtroom:</b> plea, buy the jury ($OMR), demand trial. <b>Informants:</b> <b>flip</b> a rival (drop your case,
@@ -429,7 +496,7 @@ const SECTIONS = [
 
   { id: 'skills', group: 'The Underworld', title: 'Skills & Specializations', tag: 'your build',
     html: `<p>Three branches, FOUR levels each — the 4th a capstone that unlocks an ACTIVE ability; points <b>come from your level</b> (<code>floor(level/4)</code> plus a small prestige bonus). Skills
-      die with the character. Respec for 10 $OMR (shared 24-hour cooldown).</p>
+      die with the character. Respec for 60 $OMR (shared 24-hour cooldown).</p>
       <ul><li><b>Enforcer</b> — Bruiser (jump/shakedown ×1.08) · Doctor's Friend (heal ×0.75) · Executioner (search ×0.8).</li>
       <li><b>Operator</b> — Fast Talker (lay-low ×0.8) · Fence Network (fence/melt +8%) · Broker (listing fees ×0.5).</li>
       <li><b>Wheelman</b> — Pack Mule (+3 trunk) · Getaway (crime jail ×0.8) · Road Captain (own convoys 20% faster).</li></ul>
@@ -451,7 +518,7 @@ const SECTIONS = [
       <b>Dynast</b> (your heir keeps HALF this trade instead of a quarter). It dies with the street.</p>
       <p><b>Paths v2:</b> six careers — The Gun, The Ledger, The Kitchen, <b>The Wheel, The Shadow, The
       Ring</b> — each with a signature edge, a REAL handicap, and trades that come easy (×1.5 XP) or
-      fight you (×0.6). Switching takes the 25 $OMR and a week between moves.</p>
+      fight you (×0.6). Switching takes the $OMR switch fee and a week between moves.</p>
       <p><b>Stats by use:</b> working a trade also builds its core stat (larceny→cunning, wet work→muscle,
       wheels→speed…) — a small chance per action on the gym's own diminishing curve, hard-capped at
       <b>3 points per rolling day</b>. The gym is still the fast lane.</p>
@@ -468,9 +535,9 @@ const SECTIONS = [
       ${R(`GET /v1/underworld · POST /v1/underworld/:npc/gift|penance|favor|errand · /discharge · /gun/:id/sell`)}` },
 
   { id: 'wire', group: 'The Underworld', title: 'The Wire', tag: 'information you buy',
-    html: `<p><b>Wiretap</b> (8 $OMR, 12 hours, up to 5) — shows a rival's Law stage and heat, wealth band, operations,
-      WANTED status, and <b>if they are hunting you</b>. <b>Sweep</b> (5 $OMR) removes taps on you (free when clean). The
-      <b>Street Wire subscription</b> is a <b>tiered ladder</b> — Street Wire (12 $OMR/7 days: Law
+    html: `<p><b>Wiretap</b> (48 $OMR, 12 hours, up to 5) — shows a rival's Law stage and heat, wealth band, operations,
+      WANTED status, and <b>if they are hunting you</b>. <b>Sweep</b> (30 $OMR) removes taps on you (free when clean). The
+      <b>Street Wire subscription</b> is a <b>tiered ladder</b> — Street Wire (72 $OMR/7 days: Law
       forecasts, threat data — a count of hunters on you, never a name), The Wire Room (30: plus the war room and 2
       standing watches), The Switchboard (60: plus 5 standing watches). A <b>standing watch</b> (tier 2 or higher) renews a
       tap from your $OMR, so the surveillance runs while you are offline. There are also <b>tradecraft</b> ranks (more
@@ -479,44 +546,50 @@ const SECTIONS = [
       disinformation).</p>
       ${R(`GET /v1/wire · POST /v1/wire/tap/:targetId · /wire/sweep · /wire/subscribe {tier} · /wire/watch/:targetId`)}` },
 
-  { id: 'store', group: 'Endgame & Going Legit', title: 'The Store, PLEX & the Ledger', tag: 'real-money packages',
+  { id: 'store', group: 'Endgame & Going Legit', title: 'The Store &amp; the Ledger', tag: 'real-money packages',
     html: `<p><b>The Store</b> sells ETH packages that grant <b>only non-currency items</b> (this prevents pay-to-win:
-      entitlements, access, cosmetics, status — never cash, $OMR, gear, or power): Made Man (a mint credit), revive
+      entitlements, access, cosmetics, status — never cash, $OMR, gear, or power): revive
       bundles, Street Wire, the Season Pass, the Patron badge, and decor. Revenue divides 40% founder / 40% buyback / 20%
       RWA reserve.</p>
-      <p><b>PLEX</b> — pay for a package or a fee with <b>earned $OMR</b> instead of ETH. <b>The Season Pass / Ledger</b> —
+      <p><b>Two rails — except for getting Made.</b> PLEX lets you pay in earned $OMR instead of ETH, and every
+      package takes it, because none of them gates anything. Becoming Made is the exception: a price payable two ways
+      is always the cheaper of the two, and being Made is what unlocks extraction, so it costs ETH at the published
+      wave and nothing else sells it. The free road is unchanged: the mission ladder hands you a mint credit outright.
+      And where the $OMR for that rail comes from, plainly: nothing mints it. Every $OMR mission pays 1,320 across a
+      career and the daily bonus adds 3 a day, against 4,118 for the cheapest thing PLEX sells — so you fund it by
+      taking it off somebody, buying it at the desk, or being handed it by your family, not by grinding jobs. <b>The Season Pass / Ledger</b> —
       while active, claim the next of 12 levels each day (titles, revives, energy, small funded $OMR stipends); it is
       account-level and survives death.</p>
-      ${R(`GET /v1/store [public] · POST /v1/store/plex/:sku · GET /v1/pass · /pass/claim · GET /v1/plex/price [public]`)}` },
+      ${R(`GET /v1/store [public] · GET /v1/pass · /pass/claim`)}` },
 
   { id: 'legit', group: 'Endgame & Going Legit', title: 'Going Legit — what your $OMR does', tag: 'the endgame',
-    html: `<p><b>The stock book is retired</b> (D11, 2026-08-05): the game sells no shares, real or fictional —
-      the tickers, the invests and the Dynasty Fund are gone, and their routes say so plainly if you try them.
-      Going legit now means what your <b>earned $OMR</b> actually does:</p>
+    html: `<p><b>The game sells no shares</b>, real or fictional — there are no tickers to buy and no fund to
+      invest in, and any route that would do it says so plainly if you try it. Going legit means what your
+      <b>earned $OMR</b> actually does:</p>
       <p><b>Stake it</b> — a held balance climbs the ladder (trunk, energy, nerve, garage, the fence at the top),
       and a committed balance is looted lighter than an idle one when you die. <b>Redeem it</b> at the Window for
       cash. <b>Claim backed ETH</b> at the Vault — real ETH the treasury holds, never more than it holds.
       <b>Get Made</b> and take your $OMR out on-chain. <b>Landmarks</b> — a district plaque still bears your name.</p>
       ${R(`POST /v1/stake · /v1/made · GET /v1/vault · /v1/window · POST /v1/landmarks/:id`)}` },
 
-  { id: 'window', group: 'Endgame & Going Legit', title: 'The Window & the Family Yield', tag: 'tokenomics v2',
-    html: `<p>How $OMR works changed. <b>Cash no longer buys $OMR</b> — the wash houses are shut, laundering at your own
-      front is gone, and the swap says so plainly if you try it. In exchange:</p>
+  { id: 'window', group: 'Endgame & Going Legit', title: 'The Window & the Family Yield', tag: 'the one conversion',
+    html: `<p><b>Cash cannot buy $OMR — at any price, by any route.</b> There is no wash house, no laundering at
+      your own front, no swap. The two economies are severed on purpose, and the one crossing between them runs
+      one way:</p>
       <p><b>The Window</b> — burn $OMR, take in-game cash at a published rate, out of a till the street take fills. It runs
       <b>one way only</b>: cash never becomes $OMR again. The till can run dry, and a short window refuses and
       <b>burns nothing</b> — it is a claim on what was funded, never a promise; there is a daily limit per account. It is
-      <b>open</b>, which it could not be while cash still bought $OMR: the two together would be a money pump, and the game
-      refuses to run both.</p>
+      <b>open</b> precisely because cash cannot buy $OMR: a fixed-rate window alongside a purchase rail would be a money
+      pump, so the game runs one or the other, never both.</p>
       <p><b>The Family Yield</b> — the top families by this season's standing split a pot of $OMR into their reserve. The
-      pot is fed by <b>the family's cut of every redemption at the Window</b> — a small share of what a player burns goes
-      to the families instead of leaving supply. It is what staking rewards and personal dividends become: standing stops
+      pot is fed by <b>the family's cut of every redemption at the Window</b> — a small share of what a player spends goes
+      to the families rather than to the house. It is what staking rewards and personal dividends become: standing stops
       being only a badge and starts paying, so tribute, wars and the Commission are worth real money to a family.</p>
       <p><b>The Vault</b> — four streams of real ETH (the DEX sell tax, treasury bonds, the store, game fees) fund the
       protocol: liquidity, the withdrawal reserve, the founder, and a treasury. Burn earned $OMR and you claim a share of
-      what that treasury actually holds. It is <b>backed by ETH, not by stock</b> — until 2026-07-31 the vault was
-      denominated in real tokenized shares; that layer is retired. The rule is the same one it always had and is now
-      unbreakable: <b>the house never owes more than it holds</b>, and with ETH on both sides no price move can change
-      that. The board publishes what came in and from where. Allocation only — nothing is delivered, no sell, no
+      what that treasury actually holds. It is <b>backed by ETH</b>, on both sides of the book — what the treasury holds and what it can owe you are
+      the same asset, so the rule is unbreakable rather than merely watched: <b>the house never owes more than it
+      holds</b>, and no price move can change that. The board publishes what came in and from where. Allocation only — nothing is delivered, no sell, no
       cash-out.</p>
       <h3>Why it is built this way</h3>
       <p>Almost every game with a token has the same pipe: farm the game's currency, convert it to the token, sell.
@@ -531,8 +604,8 @@ const SECTIONS = [
         city. A player who never logs off is a rich player, not a source of new supply.</li>
         <li><b>Supply is enumerated, and the list is shrinking.</b> The ledger checks
         <code>buckets == genesis + mints − burns</code>, and a reason nobody enumerated is itself an alarm. The Street
-        Wage — the one scheduled printer — is retired, and a nightly check asserts no new unit of it appears. Two small
-        legacy taps remain (mission rewards, the Vig prize pool) and retire with their own systems.</li>
+        city has no scheduled printer, and a nightly check asserts none appears. Two small taps remain — mission rewards
+        and the Vig prize pool — and both are enumerated and bounded.</li>
         <li><b>No faucet is the strong version of the promise.</b> With nothing paying $OMR for play, in-game $OMR can
         never exceed what was deposited — so "you can only take out what somebody put in" stops being a rule the game
         enforces and becomes an arithmetic fact about the ledger.</li>
@@ -555,9 +628,9 @@ const SECTIONS = [
 
   { id: 'estate', group: 'Endgame & Going Legit', title: 'The Estate & Auction House', tag: 'status sinks',
     html: `<p><b>The Estate</b> — a deep, account-level (death-proof) $OMR cost and a home: buy levels (Safe House 40 to The
-      Compound 2500 $OMR), unlock features, name it, and show <b>trophies</b> from your real holdings.</p>
+      Compound 36000 $OMR), unlock features, name it, and show <b>trophies</b> from your real holdings.</p>
       <p><b>The Auction House</b> — a competitive weekly $OMR cost: 3 unique items each week; the highest <b>$OMR bid
-      wins</b>, and <b>the winning bid burns</b>. Outbid bidders get a refund immediately; won items survive death.</p>
+      wins</b>, and <b>the winning bid is sunk</b> — it leaves you for good and goes to the house, which sells it back at the daily auction. Outbid bidders get a refund immediately; won items survive death.</p>
       ${R(`GET /v1/estate · POST /v1/estate/upgrade|feature/:id|name · GET /v1/auction [public] · POST /v1/auction/:lotId/bid`)}` },
 
   { id: 'chain', group: 'The Chain', title: 'The Chain — Withdrawal & Bonds', tag: 'settling on the blockchain (not active)',
@@ -567,7 +640,9 @@ const SECTIONS = [
       time inside hard walls (a daily cap, a discount ceiling, a rate ceiling).</p>
       <p><b>Withdraw $OMR</b> — burns your $OMR and signs a voucher <b>only if the reserve can back it</b> (if not, it
       waits in a queue). <b>Only a minted account can extract.</b> <b>Gear withdrawal</b> mints your gear as an NFT (it
-      leaves the game). <b>Wallet link</b> is SIWE; <b>character mint</b> (0.01 ETH) makes a trial character permanent.
+      leaves the game). <b>Wallet link</b> is SIWE; <b>character mint</b> makes a trial character permanent — a one-off
+      ETH fee on a published schedule (five waves, 0.01 at the founding wave, never above 0.05; the Store shows
+      the current one), or a mint credit earned outright off the mission ladder.
       <b>Bonds</b> — deposit ETH for discounted $OMR that vests over time; the ETH deepens the pool and feeds the
       <b>Vig</b> (the real-revenue engine that backs withdrawals). Bonds are the one mint — new $OMR is issued at
       bond time inside hard on-chain walls (daily cap, discount ceiling, rate ceiling). Every withdrawal pays a
@@ -575,7 +650,7 @@ const SECTIONS = [
       ${R(`POST /v1/withdraw · /gear/:id/withdraw · /wallet/challenge|verify · /character/mint · GET /v1/bonds [public] · /bonds/:id/claim`)}` },
 
   { id: 'growth', group: 'Reference', title: 'Growth — Paths, Missions, the First Week', tag: 'progression support',
-    html: `<p><b>Paths</b> (L5, $10k; switch for 25 $OMR + a 7-day cooldown) — SIX careers (The Gun, The Ledger,
+    html: `<p><b>Paths</b> (L5, $10k; switch for 150 $OMR + a 7-day cooldown) — SIX careers (The Gun, The Ledger,
       The Kitchen, The Wheel, The Shadow, The Ring), each with a signature edge, a real handicap, and trades that
       come easy (×1.5 mastery XP) or fight you (×0.6). <b>Missions</b> — 29 pay-once jobs
       (cash + respect + sometimes $OMR + titles). <b>Daily contracts</b> — 3 each day plus an all-three $OMR bonus. <b>The
@@ -584,7 +659,7 @@ const SECTIONS = [
       and titles. <b>THE CREW BONUS</b> is the real reward: every qualified recruit makes you earn <b>respect faster</b>,
       scaled by how far THEY have got (level 5 → +5%, level 10 → +10%, level 15 → +15%, in steps), applied to every
       respect you earn anywhere. It is live — it rises as they rise and stops when they stop — capped, and not a
-      currency, so it cannot be sold or given away. <b>Referrals no longer pay $OMR</b> (retired 2026-07-31). A recruit names who sent them in the <b>"who sent you?"</b> field at character creation
+      currency, so it cannot be sold or given away. <b>Referrals pay in cash and in respect, never in $OMR.</b> A recruit names who sent them in the <b>"who sent you?"</b> field at character creation
       (a shared link pre-fills it) or from the <b>"Did someone send you?"</b> card on Start Here in their first
       3 days — wrong capitalization is forgiven, and it's set once. <b>The spark</b> pays a small early bonus at L3 and 10 jobs; <b>tier-2 "the family tree"</b> pays a
       one-time $5k finder's fee when your recruit brings in their own qualified recruit (cash only, depth 2); a
@@ -691,8 +766,8 @@ const SECTIONS = [
       ${R(`GET /v1/opportunities (the Opportunity Board — open actions and skill loops, ranked by estimated value) · /v1/leaderboard/agents (the agent leaderboard)`)}` },
 ];
 
-const GROUP_ORDER = ['Start','The Basics','Money','Crews & Family','The Underworld','Risk & Death',
-  'The Law','Endgame & Going Legit','The Chain','Reference'];
+const GROUP_ORDER = ['Start','The Basics','Money','Money & Legit','Crews & Family','The City & the World',
+  'The Underworld','Risk & Death','The Law','Endgame & Going Legit','The Chain','Reference'];
 
 function render() {
   const doc = document.getElementById('doc');
@@ -701,13 +776,17 @@ function render() {
   const groups = {};
   for (const s of SECTIONS) (groups[s.group] = groups[s.group] || []).push(s);
   const order = [...GROUP_ORDER.filter((g) => groups[g]), ...Object.keys(groups).filter((g) => !GROUP_ORDER.includes(g))];
+  let n = 0;
   for (const g of order) {
     const gl = document.createElement('div'); gl.className = 'grp'; gl.textContent = g; nav.appendChild(gl);
     for (const s of groups[g]) {
       const a = document.createElement('a'); a.className = 'item'; a.href = '#' + s.id; a.dataset.id = s.id;
       a.textContent = s.title; nav.appendChild(a);
       const sec = document.createElement('section'); sec.id = s.id;
-      sec.innerHTML = `<h2>${s.title}</h2>${s.tag ? `<div class="tag">${s.tag}</div>` : ''}${s.html}`;
+      n += 1;
+      const num = String(n).padStart(2, '0');
+      sec.innerHTML = `<span class="num">${num} — ${g}</span><h2>${s.title}</h2>`
+        + `${s.tag ? `<div class="tag">${s.tag}</div>` : ''}${s.html}`;
       doc.appendChild(sec);
     }
   }
@@ -719,19 +798,45 @@ function wireScroll() {
   const io = new IntersectionObserver((ents) => {
     for (const e of ents) if (e.isIntersecting) {
       links.forEach((l) => l.classList.toggle('on', l.dataset.id === e.target.id));
+      // …and keep the active item in view: the nav is far taller than one screen, so without this
+      // the reader's place in the contents silently scrolls out of sight.
+      const on = links.find((l) => l.classList.contains('on'));
+      if (on) {
+        const nav = document.getElementById('nav');
+        const r = on.getBoundingClientRect(), nr = nav.getBoundingClientRect();
+        if (r.top < nr.top + 8 || r.bottom > nr.bottom - 8) {
+          nav.scrollTop += r.top - nr.top - nav.clientHeight / 3;
+        }
+      }
     }
   }, { rootMargin: '-40% 0px -55% 0px' });
   secs.forEach((s) => io.observe(s));
 }
 document.getElementById('q').addEventListener('input', (e) => {
   const q = e.target.value.trim().toLowerCase();
+  let hits = 0;
   for (const sec of document.querySelectorAll('#doc section')) {
     const hit = !q || sec.textContent.toLowerCase().includes(q);
+    if (hit) hits += 1;
     sec.style.display = hit ? '' : 'none';
     const link = document.querySelector(`#nav a.item[data-id="${sec.id}"]`);
     if (link) link.classList.toggle('hide', !hit);
   }
+  // A search that hides everything and says nothing reads like a broken page.
+  let none = document.getElementById('nohit');
+  if (!none) {
+    none = document.createElement('div'); none.id = 'nohit'; none.className = 'empty';
+    document.getElementById('doc').appendChild(none);
+  }
+  none.innerHTML = hits ? '' : `<h2 style="color:#6b6357">Nothing matches</h2>`
+    + `<p class="lead">The codex has no section mentioning “${q.replace(/[<>&]/g, '')}”. Try a shorter word.</p>`;
+  none.style.display = hits ? 'none' : '';
 });
+
+// the way back up, once the reader is deep enough to want one
+const totop = document.getElementById('totop');
+addEventListener('scroll', () => totop.classList.toggle('show', scrollY > 700), { passive: true });
+
 render();
 </script>
 </body>

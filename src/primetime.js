@@ -144,6 +144,13 @@ export async function buyRound(ch, client, h) {
   if (s.pt.mechanic !== 'happyhour') throw new GameError('not_happy', 'Tonight is not a happy hour — check the board for what\'s on.');
   if (!s.live) throw new GameError('closed', 'Happy Hour isn\'t live right now. The board shows when tonight\'s window opens.');
   if (levelOf(Number(ch.respect)) < PRIME_TIME.RALLY_MIN_LVL) throw new GameError('rookie', `Join the round at level ${PRIME_TIME.RALLY_MIN_LVL}.`);
+  // Agents are excluded from cash faucets (the standing posture). Rally and siege already exclude
+  // them AT SETTLE, in this same file, under a header claiming the whole module does — this is the
+  // only PRIME TIME payout that pays INLINE, which is exactly how it was missed. Gated on the VALUE
+  // mode only: an honor night pays mastery XP, which is status, and agents are welcome to it.
+  // (red-team F3)
+  if (s.pt.mode === 'value' && h?.acct?.agent_flag)
+    throw new GameError('agent', 'The house does not buy rounds for machines.');
   const day = s.pt.day;
   const rounds = await roundsOf(client, day, ch.id);
   if (rounds >= PRIME_TIME.HAPPY_ROUNDS) throw new GameError('done', `You\'ve had your ${PRIME_TIME.HAPPY_ROUNDS} rounds tonight — pace yourself.`);

@@ -6,6 +6,15 @@
 > ETH slices this doc created **survive at their bps** — only the destination changed, from a buy bot to
 > a treasury Safe (`src/treasury.js`, formerly `src/rwa.js`). Everything below is HISTORY: read it for
 > why the design was shaped this way, not for what the code does.
+>
+> **PARTLY REVERSED 2026-08-10 by `omerta-brokers-design.md`.** The founder reopened stock
+> acquisition: treasury ETH buys tokenized stock again, and **`allocated ≤ held` is back** — per
+> ticker, in units, in `runTreasuryInvariants`, exactly as this doc argued it had to be. What did
+> *not* come back is this doc's **player claim rail**: a player still burns $OMR for **ETH**, never
+> for stock, so the game is never in the position of owing a claim in one asset while holding
+> another. The reopened stock is owed to NFT holders by play-weighted epoch, which is a different
+> obligation with its own wall. Read this doc's reasoning about denomination — it is the reasoning
+> that put the wall back.
 
 **Founder-directed 2026-07-23.** Supersedes the R2 sketch in `omerta-rwa-portfolio-design.md`.
 The founder's diagnosis — "the OMR → tokenized-stocks conversion doesn't really work" — is correct,

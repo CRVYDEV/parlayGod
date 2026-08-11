@@ -24,7 +24,9 @@
 // arbitrage the window against. That is the quiet benefit of the one-way design and it is why a flat
 // published rate is safe here where it would not be in a two-way market.
 //
-// §10.4: `window:burn` is an $OMR BURN (omrBurns). `window:payout` is a character_id'd cash
+// §10.4: `window:burn` is an $OMR SINK — it sits in the burn TERM (so conservation stays exact)
+// but the value is not destroyed: it is in DESK.SINK_REASONS, so a paired `desk:recycle` row hands
+// it to the shelf. `window:payout` is a character_id'd cash
 // FAUCET — honest about being one, bounded by the pool, and reconciled by a new `exchange pool
 // backed` invariant (paid <= funded) which proves it is a redistribution of real sinks rather than
 // inflation. The prefix is `window:` and NOT `exchange:` on purpose — the M3 cb/ammo barter board
@@ -134,7 +136,11 @@ export async function redeem(ch, amount, client, h) {
     h.acct.omr = round6(Number(h.acct.omr));
     await fundFamilyYield(client, cut);
   }
-  await spendOmr(client, h, burn, 'window:burn');         // the rest leaves supply
+  // The rest is the house's cut. NOT destroyed: `window:burn` is in DESK.SINK_REASONS, so since
+  // v3 step 2 it RECYCLES to the desk shelf, which sells it back for ETH at the daily auction. The
+  // reason keeps its name (renaming a live reason drifts every historical row) but the economics
+  // are revenue, not deflation — do not describe this as burning supply.
+  await spendOmr(client, h, burn, 'window:burn');
   await client.query(
     'UPDATE exchange_pool SET balance = balance - $1, lifetime_paid = lifetime_paid + $1 WHERE id=1', [cash]);
   ch.cash = num(ch.cash) + cash;

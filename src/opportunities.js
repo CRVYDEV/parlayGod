@@ -129,7 +129,7 @@ export async function opportunityBoard(pool, ch) {
     // What actually exists now runs the other way: burn $OMR, take cash, from a funded till.
     redemption: {
       note: 'The window runs ONE WAY: burn $OMR for cash at a published rate (POST /v1/window/redeem), '
-        + 'out of a till the street take funds. Cash can no longer be turned into $OMR at all — no swap, '
+        + 'out of a till the street take funds. Cash cannot be turned into $OMR at all — no swap, '
         + 'no laundering. A short till refuses and burns nothing. GET /v1/window for the rate and headroom.',
       rate: window.rate, poolCash: window.pool, poolOmr: window.poolOmr, open: window.open,
     },

@@ -291,7 +291,7 @@ export async function fire(ch, victim, client, h, rounds) {
     await client.query('DELETE FROM searches WHERE hunter=$1', [ch.id]);
     throw new GameError('crew', "They run with your crew now. The hit's off.");
   }
-  if (victim.loc !== ch.loc) throw new GameError('district', `They were placed in ${victim.loc} — you're in ${ch.loc}. Travel there, then fire.`);
+  if (victim.loc !== ch.loc) throw new GameError('district', `They were placed in ${victim.loc} — you're in ${ch.loc}. Travel there, then fire.`, { district: victim.loc });
 
   ch.energy = Number(ch.energy) - M3.FIRE_ENERGY;
   ch.ammo = Number(ch.ammo) - fired;
@@ -691,6 +691,12 @@ export async function huntWanted(pool) {
 // ═══════════════════ BUSTING (§7.8) ═══════════════════
 export async function bust(ch, victim, client, h) {
   if (jailed(ch)) throw new GameError('jailed', "You're in the same cage.");
+  // Springing somebody is street work that pays a cash faucet, so it takes the same two actor gates
+  // every other street verb does. It sat in no gate-matrix family, which is why nothing caught it —
+  // the completeness rule covers `assertStreetCrime` verbs and `collect*`, and this is neither.
+  // (red-team F5)
+  if (hospitalized(ch)) throw new GameError('hosp', "You're in no shape to spring anybody — see the Doc.");
+  if (safeHoused(ch)) throw new GameError('safe', "You're supposed to be off the street. Come out first.");
   const remaining = victim.jail_until ? Math.max(0, (new Date(victim.jail_until) - Date.now()) / 1000) : 0;
   if (remaining <= 0) throw new GameError('free', 'They already walked.');
   // D15 — the rolling-24h attempt bucket (the safehouse-cap shape): charged BEFORE the roll, win or
@@ -896,7 +902,7 @@ export async function robTrunk(ch, victim, client, h) {
 export async function stealBoat(ch, victim, client, h) {
   const BT = RIVALS.BOAT_THEFT, C = RIVALS.CAR_THEFT;
   assertStreetCrime(ch, victim, h, BT.ENERGY);
-  if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `Boats are stolen where they float — the ${PORT.DISTRICT}.`);
+  if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `Boats are stolen where they float — the ${PORT.DISTRICT}.`, { district: PORT.DISTRICT });
   if (ch.gta_at && Date.now() < new Date(ch.gta_at).getTime() + CONSTANTS.GTA_CD_MS)
     throw new GameError('cooldown', "The heat's still on from the last job — lay off a minute.");
   const fleet = Number((await client.query('SELECT COUNT(*) n FROM boats WHERE character_id=$1 AND NOT minted_onchain', [ch.id])).rows[0].n);

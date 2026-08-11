@@ -112,7 +112,11 @@ side. So: real ETH → revenue + grant; comp → grant only.
 ## Deferred (post-this-drop, ranked)
 
 1. The on-chain `OmertaFees.payForPackage` + the watcher `storeLogs` wiring (the mainnet milestone).
-2. PLEX-for-packages (pay a SKU's fee from earned $OMR — the `vig.js:payPlex` pattern, per-SKU).
+2. ~~PLEX-for-packages (pay a SKU's fee from earned $OMR — the `vig.js:payPlex` pattern, per-SKU).~~
+   **BUILT** — `payPackagePlex` / `plexPackageQuote`; every SKU is payable in earned $OMR, priced
+   `max(floor, feeEth × the buyback oracle × premium)` off the ONE genesis rate. Retired wholesale on
+   2026-08-10 and restored the same day for everything but a mint credit; the `made_man` SKU (which
+   sold one) was retired outright rather than left on a second, schedule-free ETH price.
 3. ~~The Season Pass reward *track* (tiered claims) + a per-pass prize-pool $OMR stipend.~~ **BUILT** —
    `src/pass.js` (THE LEDGER): a 12-tier daily-claim track; status/consumable rewards + a backed $OMR
    stipend through `Vig.payPrizes` (pool-bounded, funded by the pass's own buyback share). See CLAUDE.md.

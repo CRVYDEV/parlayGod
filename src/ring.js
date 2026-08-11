@@ -195,7 +195,7 @@ export async function openTable(ch, body, client, h) {
 
 export async function sitAt(ch, tableId, buyin, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No cards in lockup.');
-  if (ch.loc !== CASINO.DISTRICT) throw new GameError('district', `The back room is on the ${CASINO.DISTRICT}.`);
+  if (ch.loc !== CASINO.DISTRICT) throw new GameError('district', `The back room is on the ${CASINO.DISTRICT}.`, { district: CASINO.DISTRICT });
   if (levelOf(Number(ch.respect)) < CASINO.RING.MIN_LVL) throw new GameError('level', 'Earn a name before you sit down.');
   const t = await lockTable(client, tableId);
   const seats = await seatsOf(client, tableId);

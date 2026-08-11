@@ -277,7 +277,7 @@ export async function raidRivalRacket(ch, districtId, client, h) {
   // the raid is location-pinned muscle work (the convoy-ambush / business-shakedown pattern + counterplay:
   // you must travel to and expose yourself at the target's district) — red-team: the client always said so,
   // the server didn't enforce it, letting a raid launch from anywhere.
-  if (ch.loc !== districtId) throw new GameError('district', "You have to be on their block to muscle in.");
+  if (ch.loc !== districtId) throw new GameError('district', "You have to be on their block to muscle in.", { district: districtId });
   if (jailed(ch)) throw new GameError('jailed', 'Not from lockup.');
   if (hospitalized(ch)) throw new GameError('hospitalized', "You're in no shape for muscle work.");
   if (safeHoused(ch)) throw new GameError('safe', "You can't run a raid from a safehouse.");  // P1.3

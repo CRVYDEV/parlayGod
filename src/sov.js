@@ -179,7 +179,7 @@ export async function siegeSov(ch, districtId, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'Not from lockup.');
   if (hospitalized(ch)) throw new GameError('hospitalized', "You're in no shape to lead a siege.");
   if (safeHoused(ch)) throw new GameError('safe', "You can't run a siege from a safehouse.");  // P1.3
-  if (ch.loc !== districtId) throw new GameError('district', 'You lead a siege from their block, not from a barstool.');
+  if (ch.loc !== districtId) throw new GameError('district', 'You lead a siege from their block, not from a barstool.', { district: districtId });
   const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
   const s = (await client.query('SELECT * FROM sov_structures WHERE district_id=$1 FOR UPDATE', [districtId])).rows[0];
   if (!s) throw new GameError('no_structure', 'Nothing stands there to tear down.');

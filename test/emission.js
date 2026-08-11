@@ -57,8 +57,18 @@ const t = await mk('Sal Tombstone');
 const wage = await call('GET', '/v1/wage', { token: t });
 assert.equal(wage.code, 400, `/v1/wage should refuse cleanly, got ${wage.code}`);
 assert.equal(wage.body.error, 'retired', `expected a 'retired' error, got ${wage.body.error}`);
-assert.ok(/no longer prints|bought or taken/i.test(wage.body.message || ''),
-  'the refusal must say what replaced the wage, not just that it is gone');
+// Two properties, not a phrase — the previous version word-matched "bought or taken" and broke on a
+// comma. (a) it must say where $OMR actually comes from, so a caller learns something; and (b) it
+// must NOT describe a past state, because a player who never knew the wage reads "no longer" as a
+// change they missed. The second is a founder rule for all player-facing copy (2026-08-11) and it is
+// cheapest to hold at the one place a retired route still talks to a human.
+{
+  const msg = wage.body.message || '';
+  assert.ok(/bought/i.test(msg),
+    'the refusal must say where $OMR comes from, not just that there is no wage');
+  assert.ok(!/no longer|used to|previously|formerly|is gone|was retired/i.test(msg),
+    `the refusal must describe the game as it IS, with no reference to how it was — got: "${msg}"`);
+}
 // and the public rulebook makes the same positive claim, so a client can render it
 const rules = (await call('GET', '/v1/rules')).body;
 assert.equal(rules.emission.faucet, null, '/v1/rules must state that there is no faucet');

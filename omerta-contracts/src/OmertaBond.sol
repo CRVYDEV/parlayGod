@@ -207,7 +207,12 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
         if (polBps_ > 0 && polRecipient_ == address(0)) revert ZeroAddress();
         if (devBps_ > 0 && devRecipient_ == address(0)) revert ZeroAddress();
         if (rwaBps_ > 0 && rwaRecipient_ == address(0)) revert ZeroAddress();
-        if (polBps_ + devBps_ + rwaBps_ < 10000 && vigRecipient_ == address(0)) revert ZeroAddress();
+        // UNCONDITIONAL, not `< 10000`. The Vig takes the REMAINDER, and floor division leaves a
+        // remainder even when the three named slices sum to exactly 10000 — so the one arrangement
+        // that looks like "the Vig gets nothing" is precisely the one that forwards dust, and a
+        // forward to address(0) succeeds on the EVM and burns it. The remainder rule exists so no
+        // wei goes unowned; exempting this case would defeat it in exactly that case.
+        if (vigRecipient_ == address(0)) revert ZeroAddress();
         signer = signer_;
         omr = omr_;
         omrMint = IOMRMintable(address(omr_));
@@ -397,7 +402,7 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
         if (polBps > 0 && pol == address(0)) revert ZeroAddress();
         if (devBps > 0 && dev == address(0)) revert ZeroAddress();
         if (rwaBps > 0 && rwa == address(0)) revert ZeroAddress();
-        if (polBps + devBps + rwaBps < 10000 && vig == address(0)) revert ZeroAddress();
+        if (vig == address(0)) revert ZeroAddress(); // unconditional: the remainder is dust-bearing
         polRecipient = pol;
         devRecipient = dev;
         rwaRecipient = rwa;

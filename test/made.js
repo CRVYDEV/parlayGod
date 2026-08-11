@@ -20,7 +20,8 @@ process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { MADE, MADE_LADDER, madeRungIdx, ACCESS_STAKE, CASINO, DESK, recyclesToDesk, estateTierOf, SPEAKEASY,
-  BUSINESSES, PACING, businessTierOf, isMade, MISSIONS, CONSTANTS, CARS, TRIMS, MINT_TRANCHES } from '../src/rules.js';
+  BUSINESSES, PACING, businessTierOf, isMade, MISSIONS, CONSTANTS, CARS, TRIMS, MINT_TRANCHES,
+  mintTierOf } from '../src/rules.js';
 import { upkeepBps } from '../src/business.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
@@ -68,12 +69,12 @@ assert(/fight/i.test(r.body.buysPower), 'and says plainly that none of it helps 
 assert.equal(r.body.ceiling.topRung, MADE_LADDER.RUNGS[MADE_LADDER.RUNGS.length - 1].min, 'the ceiling is published as a number');
 
 assert.equal((await call('POST', '/v1/made', { token: don.token })).body.error, 'omr', 'you cannot be made on credit');
-await grantOmr(don.id, 100); grantDrift += 100;
+await grantOmr(don.id, MADE.OMR * 5); grantDrift += MADE.OMR * 5;
 const shelfPre = await shelf();
 r = await call('POST', '/v1/made', { token: don.token });
 assert.equal(r.code, 200, 'the dues are paid');
 assert.equal(r.body.made, true, "you're made");
-assert.equal((await meOf(don.token)).omr, 100 - MADE.OMR, 'the burn debited exactly the dues');
+assert.equal((await meOf(don.token)).omr, MADE.OMR * 5 - MADE.OMR, 'the burn debited exactly the dues');
 assert.equal((await meOf(don.token)).made, true, 'and the badge is on the sheet');
 assert(Math.abs((await meOf(don.token)).madeSeconds - MADE.MS / 1000) < 60, 'the window is the full term');
 // the sink half: ledgered, and handed to the desk rather than destroyed
@@ -88,12 +89,14 @@ r = await call('POST', '/v1/made', { token: don.token });
 assert.equal(r.code, 200, 'a second month is fine');
 const endAfter = (await meOf(don.token)).madeSeconds;
 assert(endAfter > endBefore + MADE.MS / 1000 - 60, 'the second term stacks ON the first (later-of(now, end)) — paying early never burns the window you own');
-assert.equal((await meOf(don.token)).omr, 100 - 2 * MADE.OMR, 'twice the dues');
+assert.equal((await meOf(don.token)).omr, MADE.OMR * 5 - 2 * MADE.OMR, 'twice the dues');
 
 // ═══════════════ 3. WHAT THE DUES OPEN — status and access, never power ═══════════════
 // (a) THE UPPER COMPOUND. The estate is display-only, so this is status gating status.
 const nobody = await mk('Nick Nobody');
-await grantOmr(nobody.id, 5000); grantDrift += 5000;
+// enough for every tier up to and including the gated one, read off the ladder
+const ESTATE_NEED = Array.from({ length: MADE.ESTATE_TIER }, (_, i) => estateTierOf(i + 1).omr).reduce((a, b) => a + b, 0);
+await grantOmr(nobody.id, ESTATE_NEED); grantDrift += ESTATE_NEED;
 for (let t = 1; t < MADE.ESTATE_TIER; t++) {
   assert.equal((await call('POST', '/v1/estate/upgrade', { token: nobody.token })).code, 200,
     `tier ${t} is open to everyone — the lower compound is not a paywall`);
@@ -202,16 +205,51 @@ assert(freeOmrLifetime >= top.min,
 // effective price is the CHEAPER rail, so a row that broke rank would silently become the real
 // price. Plus the shape: thresholds strictly increasing (mintTierOf's findIndex depends on it).
 {
-  const maxOmr = Math.max(...MINT_TRANCHES.map((t) => t.omr));
-  assert(maxOmr < freeOmrLifetime,
-    `the tranche schedule's dearest $OMR price (${maxOmr}) stays under the mission ladder's lifetime payout (${freeOmrLifetime}) — the free path survives the whole published table`);
-  const rate = MINT_TRANCHES[0].omr / MINT_TRANCHES[0].eth;
-  for (const t of MINT_TRANCHES)
-    assert(Math.abs(t.omr / t.eth - rate) < 1e-6,
-      `tranche row through=${t.through} holds the schedule's one implied rate (${rate} $OMR/ETH) — a row off-rate silently becomes the real price`);
+  // (1) THE FREE PATH, asserted at its MECHANISM rather than through a price proxy. This used to
+  // read "the dearest published $OMR price stays under the mission ladder's lifetime payout", which
+  // held only while the $OMR rail was mispriced at ~1/69th of the ETH fee; priced honestly it stopped
+  // tracking, and the PLEX rail has since been retired outright, so there is no longer a $OMR mint
+  // price for a proxy to read at all. That makes this assertion MORE load-bearing than when it was
+  // written, not less: with fees ETH-only, a mission granting the credit OUTRIGHT is now the whole
+  // free path to being minted, and minting is what gates withdrawal.
+  const freeMint = MISSIONS.find((m) => Number(m.reward?.mintCredit) > 0);
+  assert(freeMint, 'a mission grants a mint credit outright — with the PLEX rail retired and fees '
+    + 'ETH-only, this is the ONLY way a non-paying player is ever minted, so no amount of playing '
+    + `(${freeOmrLifetime} $OMR lifetime earnable) can substitute for it`);
+  assert(freeMint.req?.lvl > 0 && freeMint.req.lvl <= 20,
+    `the free mint is reachable early (${freeMint.name} at level ${freeMint.req?.lvl}) — a credit `
+    + 'gated past the mid-game is not a path a new player can walk');
+
+  // (2) ONE RAIL. The schedule is ETH and only ETH: no row may carry a $OMR price, because the mint
+  // has no $OMR rail. This is the lockstep law's successor and it is strictly stronger — two rails
+  // can drift and have to be checked; one cannot. Minting is the Sybil bound, so it is the price
+  // that must never be ambiguous.
+  for (const t of MINT_TRANCHES) {
+    assert.equal(t.omr, undefined,
+      `tranche row through=${t.through} carries NO $OMR price — the mint is ETH only, and a second rail is always priced by whichever side is cheaper`);
+    assert(t.eth > 0, `tranche row through=${t.through} has an ETH price`);
+  }
   for (let i = 1; i < MINT_TRANCHES.length; i++)
     assert(MINT_TRANCHES[i].through > MINT_TRANCHES[i - 1].through,
       'tranche thresholds are strictly increasing — mintTierOf depends on it');
+
+  // (3) THE CEILING (founder-directed 2026-08-10: "cap it at 5 waves so by wave 5 the maximum mint
+  // price anyone can pay would be .05"). The cap is the whole reason the schedule reads as a
+  // founding-era discount rather than an escalator, and it is what makes the free-path law
+  // structural instead of arithmetic that must be re-checked at every extension. It is only true
+  // if the flat tail holds the LAST row — so assert the promise directly, at a count far past the
+  // published table, in the terms a player would state it: nobody ever pays more than this.
+  const CEILING_ETH = 0.05;
+  const last = MINT_TRANCHES[MINT_TRANCHES.length - 1];
+  assert.equal(last.eth, CEILING_ETH,
+    `the published table's dearest row IS the ceiling (${CEILING_ETH} ETH) — raising it is a new promise, not a retune`);
+  for (const t of MINT_TRANCHES)
+    assert(t.eth <= CEILING_ETH, `tranche row through=${t.through} is at or under the ${CEILING_ETH} ETH ceiling`);
+  const beyond = mintTierOf(last.through * 10);
+  assert.equal(beyond.flat, true, 'past the published table the schedule is flat, not extrapolated');
+  assert.equal(beyond.eth, CEILING_ETH,
+    `the millionth identity still pays the ceiling (${CEILING_ETH} ETH) — the flat tail is what makes "the most anyone ever pays" true`);
+  assert.equal(beyond.omr, undefined, 'and there is still no $OMR rail in the tail');
 }
 
 // (ii) the shortcut: identical stakes, one made, and the made man reads exactly MADE_RUNGS higher

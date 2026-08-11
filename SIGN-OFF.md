@@ -31,7 +31,7 @@ done. **Part B is everything new since 2026-08-02** that wants a verdict. Answer
 
 | # | your answer | build state | what I need from you |
 |---|---|---|---|
-| D1 | fold both fees into ONE hook (a new fee on buys) | **RATE SIGNED 2026-08-05** (founder: *"Max fee for D1"*) — **30 bps**, 100% → the Vig, armed-at-zero, contract cap 100 (1%). Constants locked (`TRADE_FEE` in rules.tail.js). The CONTRACT fold is the remaining mainnet-milestone build: an ETH-denominated fee on buys needs the input-side `beforeSwap` path, which the subtree's audited rule 7 warns breaks partial fills — so it's its own focused, forge-verified contract session, not a bolt-on. Gated on the third-party audit anyway; the rate landing first is exactly the design's sequencing. |
+| D1 | fold both fees into ONE hook (a new fee on buys) | **REVERSED AND CLOSED 2026-08-11** (founder: *"get rid of the Vig trade fee"*) — option **B**, not the fold. The sell tax is the canonical pool's one hook; the trade fee is RETIRED (payer deleted, source kept for history, a freshness check pins it shut). The fold was signed on 2026-08-05 and never built, because its ETH-on-buys fee needs the input-side `beforeSwap` path that rule 7 warns breaks partial fills — so what looked like a rate confirmation was a contract-design problem, and closing it removes a carried milestone rather than deferring one again. **Cost, accepted:** the Vig loses its trading leg (backing = fees + Store + bonds), measured every run by sim P9.15. |
 | D2 | higher mainnet withdrawal minimum, said plainly | copy/deploy-time | nothing — lands with mainnet config |
 | D3 | early-exit toll stays at the game boundary | **BUILT** (it always was) | nothing |
 | D4 | bond split confirmed as built (37.5/25/22.5/15) | **BUILT** | nothing |
@@ -148,25 +148,33 @@ expensive or impossible to change afterwards. D6–D10 are live in the game toda
 
 ## PART I — decide before anything deploys to mainnet (D1–D5)
 
-### D1 — Two hooks are planned for one Uniswap pool, and a pool can only have one
+### D1 — Two hooks for one Uniswap pool — CLOSED 2026-08-11 by option B
 
-**The situation.** A v4 pool's hook address is baked into its identity, so a pool has exactly one hook
-forever. Two are designed. `OmertaHook` (built, 128 tests green) takes **9% on sells only**, split
-dev/treasury/liquidity. A second **trade-fee hook** takes a small cut of **every** swap and funds the
-Vig — the pot that backs $OMR withdrawals — and its entire backend is already built and sitting
-dormant. The Vig is not one of `OmertaHook`'s three slices. They are not versions of each other.
+**Answered:** *"Get rid of the Vig trade fee."* The sell tax is the canonical pool's one hook.
 
-**Why it is yours.** Option A adds a fee to **buying**, which no design has ever charged. That is an
-economic surface, not an implementation detail.
+**The situation, kept as the record.** A v4 pool's hook address is baked into its identity, so a pool
+has exactly one hook forever. Two were designed. `OmertaHook` (built, green) takes **9% on sells
+only**, split dev / treasury / liquidity. A second **trade-fee hook** took a small cut of **every**
+swap and funded the Vig — the pot that backs $OMR withdrawals — and its entire backend was built and
+sitting dormant. The Vig was not one of `OmertaHook`'s three slices. They were not versions of each
+other, which is what made this a decision rather than a merge.
 
-- **A. Fold them into one hook, four destinations.** Keep the 9% sell tax exactly as built, add the
-  trade fee as its own rate on all swaps, emit both events so the dormant Vig rail needs no changes.
-  *Cost: buying OMR now carries a fee. You would need to name that rate.*
-- **B. Retire the trade fee.** The Vig is funded by gameplay fees, the Store and bonds only.
-  *Cost: a revenue line that existed specifically to widen the room between what players extract and
-  what actually comes in. Cheapest to do, and reversible only by a new pool.*
-- **C. Two pools, one taxed and one not.** *Rejected on analysis: the untaxed pool becomes the real
-  market within a day. Listed so it is on the record as considered.*
+**It was signed as option A (the fold) on 2026-08-05 and then never built** — and the reason it
+stalled is the strongest argument for B. The fold's fee is taken in ETH so the Vig can book it, and
+ETH is the *input* currency on an exact-input buy (the dominant router shape), so charging it needs
+the input-side `beforeSwap` path, which the contracts subtree's audited rule 7 warns breaks
+partially-filled swaps. What read as a rate confirmation was a contract-design problem, and it was
+carried as "its own focused session" for nine days without one. Closing it as B removes a carried
+mainnet milestone rather than deferring it a tenth time.
+
+**What B costs, stated plainly and now measured every run.** The Vig loses its trading leg:
+withdrawal backing comes from gameplay fees (60%), the Store (40%) and bonds (22.5%), and trading
+volume contributes nothing to it. Sim **P9.15** prints the sell tax by destination alongside a
+`0.000 to the Vig` line, so a later decision to add a fourth vig slice has a number to price — and
+that would be a reallocation OUT of dev / treasury / LP, which is a founder call, not a default.
+
+**Option C** (two pools, one taxed and one not) stays rejected on analysis: the untaxed pool becomes
+the real market within a day. On the record as considered.
 
 **My recommendation: A**, at a small rate (10–30 bps). It is the only option that keeps both revenue
 lines, and the built-and-dormant backend means it costs almost nothing to wire. **Decide before an

@@ -145,7 +145,7 @@ export async function runFavor(ch, favorId, client, h) {
     throw new GameError('gone', 'Somebody else already ran that one.');
   if (f.poster_character === ch.id) throw new GameError('own', "It's your own favor.");
   if (ch.loc !== f.district)
-    throw new GameError('district', `They want it at ${districtName(f.district)} — travel there first.`);
+    throw new GameError('district', `They want it at ${districtName(f.district)} — travel there first.`, { district: f.district });
   const qty = Number(f.qty);
   const have = Number(h.owned.cargo[f.good_id] || 0);
   if (have < qty) throw new GameError('short', `They want ${qty} ${f.good_id} — you're carrying ${have}.`);

@@ -13,8 +13,8 @@
 import crypto from 'node:crypto';
 import { getAddress } from 'viem';
 import { GameError, notify } from './game.js';
-import { STORE, PASS, PATRON, packageOf, passActive, patronTierOf, patronTierName, passPrestigeOf } from './rules.js';
-import { spendOmr } from './vanity.js';
+import { STORE, PASS, PATRON, packageOf, RETIRED_PACKAGES, passActive, patronTierOf, patronTierName, passPrestigeOf } from './rules.js';
+import { spendOmr } from './vanity.js'; // the audited $OMR till — gates the balance, debits in-memory, ledgers the burn
 
 const uid = () => crypto.randomUUID();
 const norm = (addr) => { try { return getAddress(addr); } catch { return null; } };
@@ -50,7 +50,12 @@ async function splitRevenue(client, { ref, amountWei }) {
 
 // ── apply a SKU's grant to the account (headless — direct SQL, the fees.js no-clobber discipline) ──
 async function grantPackage(client, accountId, sku, ref = null, real = false) {
-  const pkg = packageOf(sku);
+  // A RETIRED sku still GRANTS here, and that asymmetry with the ingest is deliberate. This function
+  // applies a payment that already exists — recorded before the retirement, or parked pre-link and
+  // reconciled after it — so the money has moved and the buyer is owed what they bought. Refusing
+  // would cancel a paid purchase AND crash sweepUncreditedStore for every other parked payment behind
+  // it. What stops is buying it ANEW: recordStorePurchase and payPackagePlex both refuse.
+  const pkg = packageOf(sku) || RETIRED_PACKAGES[sku];
   if (!pkg) throw new GameError('bad_sku', `Unknown package: ${sku}`);
   const g = pkg.grant || {};
   const now = Date.now();
@@ -124,7 +129,13 @@ export async function claimPendingWire(client, accountId, characterId) {
 // wallet is already linked AND the payment carried value, the entitlement is granted now; else the
 // row waits (account_id NULL, granted false) until reconcileStore runs at link.
 export async function recordStorePurchase(pool, { nonce, sku, payer, amountWei, txHash }) {
-  if (!packageOf(sku)) throw new GameError('bad_sku', `Unknown package: ${sku}`);
+  // A RETIRED sku throwing here is the RIGHT failure, not an oversight. This is the ingest, so a
+  // throw rolls the transaction back and the watcher cursor does NOT advance — which is what we want
+  // if real money ever arrives for a package we no longer sell: a human looks, rather than the game
+  // silently keeping the ETH or silently granting a bound-bypassing credit. Today it is unreachable
+  // for `made_man` (the on-chain Store paywall is unbuilt, so the only caller is the mod comp route).
+  if (!packageOf(sku)) throw new GameError(RETIRED_PACKAGES[sku] ? 'retired' : 'bad_sku',
+    RETIRED_PACKAGES[sku]?.why || `Unknown package: ${sku}`);
   const addr = norm(payer);
   if (!addr) throw new GameError('bad_payer', 'Payer is not a valid EVM address.');
   const n = Number(nonce);
@@ -203,9 +214,34 @@ export async function sweepUncreditedStore(pool) {
   return { granted };
 }
 
-// ── PLEX-for-packages: pay a SKU's fee from EARNED $OMR (a plex:* burn) for the SAME entitlement ──
-// The market-linked quote: max(floor, feeEth × latest-buyback-price × premium). `db` is a pool or an
-// open client (in-txn read). oracle null (static floor) until a first buyback prints a price.
+// ── PLEX-for-packages: pay a Store SKU from EARNED $OMR instead of ETH ──────────────────────────
+// (founder-directed 2026-08-10, after the full retirement was pulled back to the mint alone: "maybe
+// we over exaggerated on removing everything payable by OMR in Plex".)
+//
+// THE LINE IS THE BOUND, NOT THE DENOMINATION (see the same note in vig.js). A Store SKU is a
+// consumable, an access window or cosmetic status — none of it gates anything, so which currency
+// paid for it changes nothing about what it does. The one exception is absolute and is enforced
+// below rather than remembered.
+//
+// The retirement's Store-specific argument was that a $OMR purchase routes around the four-way
+// revenue split, and that half is TRUE: the four destinations get no wei today. What it left out is
+// where the $OMR goes — since v3 step 2 `plex:%` is in `DESK.SINK_REASONS`, so it recycles onto the
+// desk shelf and is sold for ETH at the daily auction. So the split is DEFERRED and re-routed
+// through the desk, not skipped; and against that the rail buys the thing the post-v3 economy most
+// lacks, which is a recurring reason to want the token at all.
+//
+// THE MINT IS THE EXCEPTION, and closing it is a real fix rather than a restoration. Before the full
+// retirement, `payPlex('mint')` refused while the `made_man` SKU — which grants the same mint credit
+// — was still PLEX-payable, so the ETH-only mint had a $OMR door standing open beside it. That is
+// exactly the cheaper-rail hole the mint rule exists to prevent, routed around one layer up. No
+// $OMR rail may produce a mint credit, checked on the GRANT rather than on the sku name so a new
+// SKU cannot reopen it by being spelled differently.
+//
+// `made_man` itself is now RETIRED outright (see RETIRED_PACKAGES) — closing its $OMR door only to
+// leave it selling the same credit for a hardcoded 0.01 ETH would have swapped a $OMR cheap-rail for
+// an ETH one that did not move with MINT_TRANCHES. The grant guard below STAYS despite there no
+// longer being a SKU that trips it: it is the wall, not the patch, and the whole point of checking
+// the grant rather than the name is that it holds for a package nobody has written yet.
 export async function plexPackageQuote(db, sku) {
   const pkg = packageOf(sku);
   if (!pkg) return null;
@@ -219,21 +255,21 @@ export async function plexPackageQuote(db, sku) {
   return { sku, price, oracle };
 }
 
-// POST /v1/store/plex/:sku — buy a Store package with EARNED $OMR. Runs under withCharacter (h.acct is
-// the account). BURNS the $OMR (plex:<sku>, a §10.4-legal deflationary sink via the plex:% term) and
-// grants the SAME non-§10.4 entitlement an ETH payer gets. The grant is done IN-CONTEXT: persisted
-// columns (mint_credits/respawn_tokens via persistAccount; wire_until via persistCharacter) are mutated
-// IN-MEMORY so the post-handler persist commits them; non-persisted state (patron/pass_*) is direct SQL
-// (no clobber). This is why we don't call the headless grantPackage here — it would be clobbered.
 export async function payPackagePlex(ch, sku, client, h) {
   const pkg = packageOf(sku);
-  if (!pkg) throw new GameError('bad_sku', `Unknown package: ${sku}`);
+  if (!pkg) throw new GameError(RETIRED_PACKAGES[sku] ? 'retired' : 'bad_sku',
+    RETIRED_PACKAGES[sku]?.why || `Unknown package: ${sku}`);
   const g = pkg.grant || {}, now = Date.now();
   // GATE BEFORE THE BURN (walkthrough MED-1, the vig.js:116 precedent): a mint credit bought while
   // already made is DEAD (mintCharacter short-circuits on acct.minted, never spending it), and a pure
   // Patron's Ring re-buy is a no-op — refuse both so the player keeps their earned $OMR. (season_pass
   // still grants patron alongside pass days + revives, so it's never a no-op — don't gate it.)
-  if (g.mintCredits && h.acct?.minted) throw new GameError('minted', 'This account is already made — the credit would be dead.');
+  // THE MINT IS ETH ONLY, and this is the door beside it. `payPlex('mint')` has refused since the
+  // mint-only pass, but a SKU whose grant includes a mint credit sold the same thing for $OMR one
+  // layer up — the cheaper-rail hole the rule exists to close, routed around. Checked on the GRANT,
+  // not the sku id, so a new package cannot reopen it by being spelled differently.
+  if (g.mintCredits) throw new GameError('retired',
+    'Anything that makes you is ETH only. Pay the fee on-chain, or earn the credit — the mission ladder grants one outright.');
   if (g.patron && !g.passDays && !g.mintCredits && !g.respawnTokens && h.acct?.patron)
     throw new GameError('patron', 'You already wear the ring.');
   // a cosmetic you already own would be a dead re-buy — refuse BEFORE the burn (the mint-credit precedent)
@@ -278,25 +314,31 @@ export async function storeBoard(pool, accountId) {
   const now = Date.now();
   const wireMs = ch?.wire_until ? new Date(ch.wire_until).getTime() : 0;
   const passMs = a.pass_until ? new Date(a.pass_until).getTime() : 0;
-  // the PLEX price (pay in earned $OMR) — one oracle read, derived per SKU
-  const last = (await pool.query('SELECT price_omr_per_eth FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0];
-  const rawOracle = last ? Number(last.price_omr_per_eth) : null;
-  const oracle = (rawOracle != null && Number.isFinite(rawOracle) && rawOracle > 0) ? rawOracle : null; // LOW-1 guard
   const cosmetics = (await pool.query('SELECT style FROM store_cosmetics WHERE account_id=$1', [accountId])).rows.map((r) => r.style);
-  // THE PATRON PROGRAM (Tier-4): the caller's backer standing + the (ship-at-0) PLEX discount for their tier
+  // THE PATRON PROGRAM (Tier-4): the caller's backer standing + the (ship-at-0) PLEX discount.
   const spentEth = round6(Number(a.patron_spent || 0));
   const tierIdx = patronTierOf(spentEth);
   const discBps = PATRON.TIERS[tierIdx]?.plexDiscountBps || 0;
   const nextT = PATRON.TIERS[tierIdx + 1] || null;
   const seasons = Number(a.pass_seasons || 0);
   const prIdx = passPrestigeOf(seasons);
+  const oracleRow = (await pool.query('SELECT price_omr_per_eth FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0];
+  const oracle = oracleRow ? Number(oracleRow.price_omr_per_eth) : null;
+  // `plexOmr: null` on a SKU is the POSITIVE claim that this one has a single rail and it is ETH —
+  // which is now true of exactly one thing, anything that would MAKE you. Everything else quotes.
   const plexOf = (p) => {
+    if (p.grant?.mintCredits) return null;               // the mint is ETH only — no $OMR price exists
     const floor = round6(p.priceEth * STORE.PLEX_FLOOR_OMR_PER_ETH);
-    const raw = oracle ? Math.max(floor, round6(p.priceEth * oracle * STORE.PLEX_PREMIUM_BPS / 10000)) : floor;
+    const raw = (oracle && Number.isFinite(oracle) && oracle > 0)
+      ? Math.max(floor, round6(p.priceEth * oracle * STORE.PLEX_PREMIUM_BPS / 10000)) : floor;
     return Math.max(floor, round6(raw * (10000 - discBps) / 10000)); // patron-discounted, never below the floor
   };
   return {
     packages: STORE.PACKAGES.map((p) => ({ sku: p.sku, name: p.name, priceEth: p.priceEth, plexOmr: plexOf(p), grant: p.grant, blurb: p.blurb })),
+    // A POSITIVE claim rather than a silent absence: a client with a card for a retired sku learns
+    // where the thing went instead of finding it simply gone (the `plexOmr: null` / `emission:
+    // {faucet: null}` shape). `where` is the route that now sells it.
+    retired: Object.entries(RETIRED_PACKAGES).map(([sku, p]) => ({ sku, name: p.name, why: p.why, where: p.where })),
     split: STORE.SPLIT_BPS,
     owned: {
       minted: !!a.minted, mintCredits: Number(a.mint_credits || 0), respawnTokens: Number(a.respawn_tokens || 0),

@@ -2962,6 +2962,258 @@ rung is still proven a few lines down on a deliberately seeded one. `LEVEL_UP_RE
 founder sign-off lever (BALANCE.md § THE REFILL CEILING; 0 disables the refill, a large value restores
 the runaway).
 
+**THE BUY KEEPER — brokers step 5, and the wall that no check can see (founder-directed 2026-08-10)
+— BUILT** (`tools/keeper-dials.js` + `npm run keeper-dials`; `src/treasury.js:runStockBuyback`,
+`TREASURY.KEEPER_*` in the rules tail, `POST /v1/mod/treasury/keeper`, `test/treasury.js`; BALANCE.md
+§ THE KEEPER'S WALLS). The design left ONE number unset and said why — *"the multiple itself is
+unsized and should get the `tools/bond-dials.js` treatment before it is picked; guessing it here would
+be inventing balance"* — so the sizing came first and the code second.
+**THE SIZING (B1).** The keeper spends treasury ETH on tokenized stock; wall 3 is a per-buy PRICE
+CONTINUITY bound against the last real print, so a fat-finger, a stale feed or a leaked keeper key
+cannot buy at an absurd rate. **The finding inverts the obvious instinct**: a tight bound is not a
+safe bound, because **the multiple does not bound the damage — wall 4 does**. A keeper that spends its
+whole budget at a terrible rate has lost the budget either way; the multiple only changes how much of
+that spend was WASTED. The costs are asymmetric in the other direction — a false halt costs a skipped
+epoch and a human glance, while a loose bound costs real ETH **that no invariant catches**, because
+`allocated ≤ held` is in UNITS and buying one unit for the whole budget leaves every wall true. *A
+check on quantity is blind to a bad price by construction*, which is exactly why this needs a wall
+rather than a check, and it is the sentence to carry into step 7. The bounded quantity is a RATIO —
+stock/ETH — so **ETH's volatility sets it even for a blue chip** (a "calm" large-cap still moves
+~4.7%/day against ETH). **The first answer was wrong and is recorded because the error is
+instructive**: demanding the bound never fire on an honest move leads to scaling it with the gap since
+the last print (`BASE^√(Δ/epoch)`), and running it kills it — **6.7× at a month, 26.7× at a quarter**,
+and a 26× bound is a formality with a comment attached. The error was the design point, not the
+arithmetic: bound the ORDINARY case and let the extraordinary one halt the bot and fetch a human, since
+after a 3× move in stock/ETH a bot buying straight through it is precisely the behaviour you do not
+want. That also disposes of the long-gap problem with no scaling at all — **a stale print does not earn
+a wider bound, it earns a halt.** Signed: `KEEPER_MAX_PRICE_JUMP` **2×** (covers 3σ over an epoch and
+an ETH-halving week; wastes ≤50% of one buy in the worst allowed case), `KEEPER_MIN_PRICE_FRAC`
+**0.2×** (the low side — a rate an order of magnitude cheap is a broken feed or a fake token, the
+desk's `PRICE_FLOOR_BPS` precedent and the bug the RWA float actually shipped),
+`KEEPER_MAX_PRICE_AGE_MS` **30d** (halt, the `OmrTwapOracle` discipline where having no fallback price
+is the entire point), and a **first buy on a ticker with no print REFUSES** (nothing to be continuous
+with; a first fill that set its own reference could itself be the absurd one — seed it deliberately
+and small).
+**THE KEEPER (B2).** `runStockBuyback` is the `runVigBuyback` shape exactly: the ACCOUNTING half,
+deterministic and testable off-chain because the achieved price is a PARAMETER; on mainnet the bot does
+the real DEX buy and reports what it got. It enforces **wall 4** (reads `stockBudget().spendableEth`,
+never a looser number re-derived from `held` — the invariant checks the same one; an over-ask CLAMPS
+rather than overdrawing) and **wall 3**, and deliberately not the others: wall 5 (comps book zero) and
+idempotency stay in `recordStockBuy` because the ingest is what every path goes through, including
+ones the keeper will never call. **NOT worker-ticked**, for the same reason its sibling is not — there
+is no price source in-process, and a tick that had to invent one would be inventing exactly the number
+wall 3 bounds. The ticker is a separate, already-built decision (the worker's ticker ballot). §10.4 is
+untouched by construction: treasury ETH and tokenized stock are out-of-band real value, so the whole
+layer still writes ZERO `transactions` rows. `test/treasury.js` DRIVES every refusal rather than
+assuming it — no-print, price-high, price-low, stale-print, budget-empty, the clamp's exact spend, the
+comp booking zero, and the route being wired and mod-gated — with **four mutations each failing at its
+own named assertion** (ceiling removed; staleness widening instead of halting; the root cap dropped;
+the first buy allowed to set its own reference). Steps 2–5 are now done; what remains is the NFT (6)
+and delivery (7), and 7 is the one gated on counsel — which is why the order was arranged so
+everything above it moves real ETH into real holdings without a share changing hands.
+
+**THE PLEX BRIDGE IS RETIRED — every real-money price is ETH (founder-directed 2026-08-10: "Make the
+mint ETH only no OMR", then "Make plex items and consumables eth only") — BUILT** (`src/vig.js`,
+`src/store.js`, `src/invariants.js`, `src/preflight.js`, `src/rules.tail.js`; `test/vig.js`,
+`test/store.js`; BALANCE.md § THE TRANCHE SCHEDULE). The identity mint, the respawn token and every
+Store SKU were payable on TWO rails — real ETH, or the same fee in earned $OMR through PLEX. Both are
+now ETH, on two arguments. **(1) A fee payable two ways is always priced by the CHEAPER rail**, which
+is fatal for the mint specifically: minting is the SYBIL BOUND (it gates extraction), and the
+genesis-rate pass had just found three rails disagreeing by up to 68× — a 0.01 ETH ($35) mint payable
+for 30 $OMR (51¢). **(2) The $OMR rail had stopped burning two migrations ago.** PLEX was sold as
+"ETH payers fund the pool, $OMR payers BURN supply — both support the token"; since economy v3 step 2
+`plex:%` is in `DESK.SINK_REASONS`, so a PLEX purchase RECYCLES to the desk shelf, which sells it for
+ETH at the daily auction. So the real comparison was never "immediate ETH vs deflation" — it was
+**immediate certain ETH vs deferred uncertain ETH, minus the deflation that justified the trade**
+(`recyclesToDesk('plex:respawn') === true` — checked, not assumed; I had argued the respawn should
+stay and was wrong, on a justification that had expired). A Store SKU has a sharper version: a package
+is a real-money PRODUCT whose whole purpose is the four-way revenue split, and paying in $OMR routed
+the purchase AROUND it — the buyer got the entitlement and none of the four destinations got a wei.
+**Retired the standard way** (the emission.js discipline, second costume): the PAYERS are DELETED
+(`payPlex`, `payPackagePlex`, both quotes — a rail behind a flag is one env var from live), the ROUTES
+stay MOUNTED as tombstones so a polling client learns what happened, the board says `plexOmr: null`
+POSITIVELY rather than by omission, and `plex:%` stays in the omr vocabulary + the burn term +
+`DESK.SINK_REASONS` **forever** because real rows exist and conservation is a claim about the WHOLE
+ledger — with **`plex bridge retired`** (widened from the exact `plex:mint`; no `plex:` kind is live,
+so the narrow form would have been a check that could no longer fail) asserting nothing NEW writes
+them. Gone with it: `PLEX_GENESIS_OMR_PER_ETH`/`genesisOmrFor` (one conversion with nothing left to
+convert — the launch price lives in the launch sequence's G-1 and comes back WITH A READER the day the
+GenesisOracle is built), `STORE.PLEX_FLOOR_OMR_PER_ETH`/`PLEX_PREMIUM_BPS` (pins dropped in the same
+commit — the drift rule), and **preflight's two-rails guard, whose absence IS the fix**: it existed
+because two rails diverge silently, and the surest way to keep two rails in lockstep turned out to be
+having one. **What it costs, honestly:** the EVE "pay your rent in ISK" fantasy — a skilled player
+funding their play from earnings. That is a real loss and the reason to think twice about the
+direction; it is bounded by the FREE path never having run through this rail (the mission GRANTS a
+mint credit outright — shipped the same day) and by $OMR keeping every IN-GAME use it had (dues, the
+compound, seals, the Wire, vanity, respec, the staked ladder). The line is now one sentence: **real
+money buys real-money things; $OMR buys in-game things.** Two mutations each fail by name (`plex:%`
+dropped from the burn term → the HISTORY half fails, proving why the reason must stay; the respawn
+payer restored → the refusal assertion fails). §10.4 needed no new reason or bucket.
+
+**…AND THE SWEEP WENT TOO FAR — THE BRIDGE IS BACK FOR EVERYTHING BUT THE MINT (founder-directed
+2026-08-10: "maybe we over exaggerated on removing everything payable by OMR in Plex").** The founder
+was acting on a flag I had raised MYSELF one paragraph above ("what it costs, honestly: the EVE fantasy
+… a real loss and the reason to think twice about the direction") — and on a line I had drawn correctly
+on the FIRST pass and then talked myself out of on the second: **the line is the BOUND, not the
+denomination.** Minting is the Sybil bound and the extraction gate, so it gets one rail and one price;
+a respawn token and a Store SKU are repeatable CONSUMABLES and ACCESS, neither is a bound, so
+"pay your rent in ISK" applies to them exactly as it always did. **The argument that retired them does
+not survive being read back**: it was that a PLEX purchase RECYCLES to the desk rather than burning, so
+the trade is "immediate certain ETH vs deferred uncertain ETH" — but the desk is not a lottery ticket,
+it is the machinery this economy is now built on (every sink since v3 step 2 routes through it), and a
+purchase that puts $OMR on the shelf CREATES the supply the daily auction sells for ETH, which is the
+revenue model rather than a leak from it. What the sweep actually removed was the only thing a player
+could do with $OMR that felt like winning something back. **Restored**: `payPlex('respawn')` +
+`plexQuote`, `payPackagePlex` + `plexPackageQuote` + the board's `plexOmr`, `PLEX_GENESIS_OMR_PER_ETH`
++ `genesisOmrFor` + the two `STORE.PLEX_*` levers (re-pinned in the same commit — the drift rule), and
+preflight's two-rails guard **narrowed to the respawn** (the mint arm is gone because with ONE rail
+there is nothing to compare — which is the point, not a gap; the guard is a ratio so it holds at any
+fee level, and mutation-verified: raise `RESPAWN_FEE_ETH` alone and it fires by name, move both and it
+is silent). **Still dead**: `payPlex('mint')` refuses, there is no `PLEX_MINT_OMR` to forget, and the
+freshness check narrows BACK to the exact `plex:mint` (never `plex:%`, which would fire on the living
+siblings — the `rwa:vault` distinction). **One hole was closed on the way back in, and it PREDATES the
+retirement**: the `made_man` SKU grants a mint credit, so while `payPlex('mint')` refused, the Store
+sold the same thing for $OMR one layer up — the cheaper-rail rule routed around rather than broken;
+now shut on the GRANT (`if (g.mintCredits) throw`), not on the sku id, so a new package cannot reopen
+it by being spelled differently. **And the fantasy it was restored on is MEASURED, not assumed** (sim
+**P9.35 THE PLEX REACH**, printed every run): the whole $OMR earn surface is **1,320 lifetime** (the
+mission ladder, once per account) + **3/day** (`daily:all`, a transfer out of the event fund) —
+against **4,118** for the CHEAPEST thing the rail sells, i.e. **3.1× the entire ladder**, and 20,588
+for a respawn (7,796 further days of perfect daily play). So a player who completes every $OMR
+mission in the game can buy NOTHING on the rail. $OMR has had no faucet since v3 step 1, so the rail
+is reached by **predation** (`whack:loot` takes 20–50% of a victim's liquid AND staked $OMR) or
+**purchase** (the desk auction, for ETH) — never by grinding. That is on-theme for a mafia game and
+it is **not EVE**, where PLEX *is* reachable by grinding ISK; the design docs that described it as
+ISK-rent are corrected, and BALANCE.md § THE PLEX REACH ranks the dials (`M4.DAILY_ALL_OMR`,
+`STORE.PLEX_PREMIUM_BPS`, or the machine-owned mission `omr` column) as a founder call, not a defect. **DECIDED (founder, 2026-08-11): accept the predator framing — no lever
+moved, and the COPY changes to match**, which is the honest half rather than the cheap half. That
+decision surfaced a live defect on the way in: the Store shelf rendered a DISABLED *"ETH checkout
+opens at launch"* button and nothing else, so a shelf where every item was purchasable in earned
+$OMR *that day* read as entirely unbuyable — the withheld-terms class (the pad, the nut, the Port
+lane picker), one screen over. The shelf now shows BOTH prices with a working pay-in-$OMR button
+(rounded UP for display, so a shown price can never understate the charge), renders the retired
+entry, and states where the $OMR comes from in the player's own terms; both codices carry the
+arithmetic (1,320 lifetime + 3/day against a 4,118 cheapest purchase) so nobody plans around a rail
+they cannot reach. **THEN THE PREMIUM WAS TAKEN (founder, 2026-08-11): `PLEX_PREMIUM_BPS` and
+`STORE.PLEX_PREMIUM_BPS` both 1.2 → 1.0, in lockstep** — not because it closes the gap (it does
+not) but because the wedge was set when $OMR was the CHEAP rail and kept ETH economical; since the
+mint went ETH-only, $OMR is the premium rail on both surfaces it still serves, so the premium was
+charging twice for the same asymmetry. Re-measured (P9.35): cheapest purchase 4,941 → **4,118**
+(3.7× → 3.1× the ladder), respawn 24,706 → 20,588; the pre-market floors derive from it and fell
+with it. §10.4 untouched (a price, on a burn that already recycles). **The guard was the real
+work**: the premium was restated as a literal `1.2` inside preflight's two-rails check and twice
+in its test, so moving the lever fired the guard SPURIOUSLY — and the fix somebody reaches for
+then is widening the tolerance, which kills the guard. It now READS the premium (the wedge is what
+it measures against, so it must know it), and the rot check is premium-agnostic: it feeds
+preflight vig.js's ACTUAL default and requires silence. The bare-defaults assertion it replaced
+was **vacuous** — preflight derives its expected price from its own restated rate, so with nothing
+set it agrees with itself at any rate, and only the comparison against vig's real number crosses
+the restatement. The derived `STORE.PLEX_FLOOR_OMR_PER_ETH` moved too and the lever register
+DEMANDED its own re-pin, which is that guard working.
+**THEN THE CLASS WAS SWEPT — and the pins meant to prevent it were the same bug** (`test/preflight.js`
+THE RESTATEMENT LEDGER). preflight is the one file structurally forbidden from importing rules.js or
+vig.js, so every default it names is a COPY, and it carries **seven** of them plus the `WAVES` array.
+Each was "pinned" — and every pin compared the **SOURCE to a literal in the test**
+(`assert.equal(BONDS.DISCOUNT_BPS, 800)`), which detects a lever MOVING (levers.js's job, already
+done) and **cannot detect the copy going stale**, which is the only reason those pins exist: editing
+preflight's own `?? 800` passed all of them. The "vig-defaults discipline" their comments invoke was
+never implemented. Now each literal is EXTRACTED from preflight's own source and crossed against the
+value it stands in for, in one ledger loop, with a **completeness rule** (catalog-or-declare — a
+restatement added later must be pinned or waived with the reason it cannot drift) so the ledger cannot
+silently stop covering the file it is about. The behavioural tranche probes were also driven off
+`MINT_TRANCHES` rather than three literal fees — a literal probe fails when the SCHEDULE changes as
+well as when the guard breaks, so it would have demanded a table the founder had deliberately
+replaced. Five mutations, five distinct named failures — including the one that proves the array pin
+is load-bearing rather than decoration: an EXTRA wave in preflight's copy passes every behavioural
+probe while accepting a fee the published schedule never promised. **Two negative results recorded so
+nobody re-runs them:** (1) the mechanical value-collision sweep (every pinned lever value grepped as a
+bare literal across `src/`) **cannot work at this scale** — 615 pins, and the common values collide
+with ordinary arithmetic (`86400000` is a day in ms, `0.75`/`1.15` are ordinary multipliers), so it
+returns noise, and a mostly-wrong advisory gets ignored; the tractable class is restatements FORCED by
+the one-way rule, which are rare, self-declaring by comment convention, and concentrated in preflight.
+(2) `game.js`'s two restatements copy the FORMULA while reading the live levers, so no literal can
+rot; a crossing check for the skills one was built, measured and **REMOVED** — `pointsOf` is
+module-private and the coach publishes no number, so the only available comparison is behavioural, and
+the walk's existing assertions already bracket the rung from both sides, meaning the new check could
+not fail in a way they did not already catch (the residual — a term added to `pointsOf` and not the
+copy — needs the coach to publish its budget, i.e. production surface added for a test, and is
+recorded at the site instead).
+**Two brittle assertions were caught by their own guard here**: `test/store.js` word-matched `/mint/`
+on the retirement copy, and the better sentence says *"made"* — so both were replaced with the
+PROPERTY that matters (the entry points at the mint route; the prose names no route, because the same
+string is an API error AND a card a player reads), mutation-verified.
+
+**THE COUNSEL-MEMO SWEEP (founder-directed 2026-08-11: "2") — four stale facts + a guard.** A4 had
+gone stale because a same-day reversal never propagated, so the whole memo was re-checked row by row
+against the code. `omerta-counsel-memo.md` is the one document whose ONLY value is that it is
+accurate — a lawyer opining on a wrong fact pattern is worse than no memo — and it carried four
+things the tree does not support. **(1) §1 stated the mint fee as a flat 0.01 ETH**; it is a
+published five-wave schedule 0.01 → 0.05 (A4's own amendment says so, but §1, which is what counsel
+reads FIRST, did not). **(2) §1 omitted the PLEX rail entirely** — the memo described it only inside
+A4's correction, so a reader would not learn that an in-game token discharges a real-money-priced
+obligation for the respawn and every Store SKU, which is material to how the token is characterised.
+**(3) A4's headline** repeated "(0.01 ETH each)". **(4) A5 stated two things more absolutely than the
+code supports** — *"nothing is burned"* (a `withdraw:omr` DOES burn the in-game balance, because the
+token now exists on-chain instead; nothing is destroyed, it changed venue) and *"every token in the
+pool was originally bought with real money"* (the enumerated mint set includes `mission:%`, which
+mints **1,320 per account over a whole career** — 0.0013% of the genesis supply, so *substantially*
+every token, with the exception named and quantified rather than glossed). The §2 header also listed
+only A1–A8 after the BANK rows landed. **The structural fix is a guard**, because prose written by
+hand goes stale by hand: `test/docs.js` now asserts every `<n> ETH` the memo states as a PRICE is a
+live fee — a published tranche wave, the respawn, or a Store SKU — and deliberately checks nothing
+else, since a guard over a legal argument would be noise and noise gets deleted. Mutation-verified
+(change one quoted fee and it names the figure and lists the live ones).
+
+
+**…AND THE `made_man` SKU RETIRED WITH IT (founder-directed, same day, from the decision sheet: "2").**
+Closing the SKU's `$OMR` door surfaced the bigger half of the same defect one layer over. `made_man`
+sold exactly ONE thing — a mint credit — for a **hardcoded `priceEth: 0.01`**, and nothing priced it
+from `MINT_TRANCHES` (the only readers are the admin display and preflight's warning, both on
+`MINT_FEE_ETH`). So from wave 2 the published price would have been 0.025 while the Store still sold
+the same entitlement for 0.01: **the cheaper-rail rule routed around by a SECOND ETH rail rather than
+a `$OMR` one**, and both credit `mint_credits`, which `POST /v1/character/mint` spends identically.
+Not live yet (tier 1 is 0.01 on both), which is exactly why it was worth deciding before the boundary.
+Retired outright rather than repriced from the schedule: the mint already has its own rail with a
+published table, a Safe-settable price and a preflight guard, and a duplicate storefront for the same
+entitlement is one more thing to keep in lockstep forever — the surest way to keep two rails in
+lockstep is to have one. **`RETIRED_PACKAGES`** (rules tail) keeps the sku by name — and by PRICE and
+GRANT, which the worker-sweep suite is what proved necessary: retiring a package must not cancel a
+purchase somebody already paid for. So the three paths are deliberately asymmetric — the two BUY
+paths (`recordStorePurchase`, `payPackagePlex`) refuse with `retired` naming where it went (never
+"unknown package", which would be a lie about a sku a client may still hold a card for — the
+`/v1/wage` tombstone discipline), while `grantPackage` HONORS it, because a payment recorded before
+the retirement or parked pre-link and reconciled after it is money that already moved. Getting that
+backwards does not merely cancel one purchase: the throw escapes `sweepUncreditedStore` and takes the
+sweep down for every OTHER parked payment queued behind the retired one (found by `test/sweeps.js`,
+which seeds exactly that row). **The ingest's throw is still the RIGHT failure**: it rolls back so the
+watcher cursor does NOT advance — if real money arrives for a package we no longer sell, a human
+looks, rather than the game keeping the ETH or granting a bound-bypassing credit. The board makes the
+POSITIVE claim (`retired: [{sku, name, why, where}]`, the `plexOmr: null` shape).
+**The `g.mintCredits` grant guard STAYS** though no SKU now trips it — it is the wall, not the patch,
+and checking the GRANT rather than the sku name is precisely what makes it hold for a package nobody
+has written yet. §10.4 untouched (the Store writes zero `transactions` rows either way). The store
+test re-points its representative purchases (real `decor_deco` 0.02 / comp `revive_3` 0.25) and now
+asserts the ladder actually CLIMBED between the two patron tiers, since 0.25 and 0.75 land in the same
+tier and a "climb" that does not move proves nothing. Five mutations each fail by name (the SKU restored; the
+board's `retired` emptied; the retired door reading as `bad_sku`; the grant path cancelling a paid
+purchase; the ingest quietly accepting one) — and the fourth had to be re-shaped after it killed the
+run with a raw `GameError` instead of naming what broke, since an uncaught throw in a test is a
+failure that teaches nothing.
+
+**THE GENESIS RAISE — 33 → 21.38 ETH (founder-directed 2026-08-10).** FDV does not move (the PRICE is
+205,882 $OMR/ETH → $0.017/OMR → $1.7M on 100M supply; the raise is not a valuation). What moves is how
+much supply is sold — **6.79% → 4.40%**, so less day-one sell pressure — and how deep the pool opens:
+POL (0.375R) 12.375 → **8.0175 ETH**, treasury 8.25 → 5.345, vig 7.425 → 4.8105, founder 4.95 → 3.207.
+**The consequence that is not cosmetic: `OmertaBond.dailyCapOMR` must come down with it.** The dials
+harness sizes that cap as a RULE — ≈5% of the pool's OMR reserve — precisely because **price impact,
+not dilution, is the damage, and impact is a function of DEPTH**: ~127,000/day at the old pool,
+**~82,500/day** at this one. Leaving it where a 33-ETH pool put it would silently loosen the single
+wall between a leaked quote-signer and the market. Recorded in BALANCE.md § THE GENESIS RAISE and in
+CHAIN-DEPLOY's dials line, with the instruction to re-derive against ACTUAL POL at deploy rather than
+from any written figure. Everything else is unaffected by construction: no in-game price is
+ETH-denominated, the router's split is percentages, and the tranche schedule is a published ETH table
+that does not read the raise.
+
 **THE FARM + THE IDENTITY NFT (founder-directed 2026-08-01) — MEASURED, GUARDED, SPEC'D.** The
 founder proposed raising the identity mint to 0.025 ETH with a dynamic generative-art NFT attached,
 then **held the fee at 0.01** and asked for the rest. Three pieces. **(1) THE PLEX/ETH CONSISTENCY
@@ -3755,6 +4007,113 @@ the seed just before it ends with a boost loop that resets `jail_until` per atte
 success, so a run whose last attempt busts leaves the fixture JAILED. Reproduced by forcing it,
 fixed by GUARANTEEING the precondition rather than making it likelier, and the refusal is now
 PRINTED so the next occurrence names the server's own reason instead of leaving it to be guessed.
+
+**THE SINK RE-DENOMINATION (×6) + THE FREE PATH (founder-directed 2026-08-10: "Apply") — BUILT**
+(`reference-prototype-v24.jsx` + a re-extract, `src/rules.tail.js`, `src/vig.js`, `src/preflight.js`,
+`src/ops.js`, `src/growth.js`, `src/game.js`, `public/index.html`; BALANCE.md § THE SINK
+RE-DENOMINATION / § THE FREE PATH). Every $OMR price in the game was written against an implicit
+**~$10M token** — six independent sinks cluster there, which is how we know it was an assumption
+rather than a decision — while the locked launch parameters land at **$1.7M FDV** (21.38 ETH raise,
+205,882 $OMR/ETH, 100M supply → **$0.017/OMR**). So every sink was **5.88× cheaper in dollars than
+designed**: a Made Man's monthly dues were 34 cents. Factor **6**, the round number nearest that
+ratio; 152 numbers classified BY HAND, because a blanket sweep gets three classes wrong and each
+wrong one is silent. **146 scale ×6.** **2 are INVERSE** — `MEGAPROJECT.OMR_RATE` 500→83 and
+`SPEAKEASY.RENOWN.OMR_WEIGHT` 50→8 are *game-value per $OMR*, so a cheaper token makes them go DOWN;
+×6 would credit six times the monument progress and six times the renown for the same spend (the
+enumeration table said ONE inverse — the second was found while applying, and is recorded rather than
+quietly fixed). **2 LOCKSTEP** (`PLEX_MINT_OMR` 5→30 / `PLEX_RESPAWN_OMR` 50→300 + the
+`MINT_TRANCHES` $OMR column, moved together so the preflight implied-rate guard stays green at
+3,000 $OMR/ETH). **3 MUST NOT MOVE**: the two loot values are **fractions, not amounts** (×6 loots
+300% of a corpse) and `REF_LEGACY_RECRUIT_OMR` reads historical rows, so moving it makes My Profile
+lie about money already paid. **The fourth class was found by FAILING**: `KITCHEN.MODULE_OMR_FROM` is
+named for $OMR and holds a module LEVEL (3) — scaled to 18 it switched the lab-module $OMR burn off
+entirely with every §10.4 check green. **The verification is the lesson, not the sweep**: the first
+pass spot-checked the 8 special cases and reported success, and a later grep found **three
+assignment-form constants silently missed** (`STORE.PLEX_FLOOR_OMR_PER_ETH`, `BONDS.ETH_SCORE_OMR`,
+`ESTATE.GALA_OMR` — the sweep's regex wanted a `KEY:` colon and these are `KEY =`). A check that
+cannot fail for the majority reads exactly like a clean bill of health. The real verification loads
+the OLD rules from `git show HEAD:` and asserts **every** $OMR path moved by ITS classified factor —
+145 of 145, plus the thresholds not named for OMR (`MADE_LADDER.RUNGS[].min`, `LANDMARKS.MIN_DEDICATE`,
+`BONDS.PLEDGE_MIN`, `BACKER_TIERS[].min`, all on the underwriter-score scale). Machine-owned tables
+(MISSIONS/VESTS/KITCHENS) went through the seam per ground rule #2 — the regenerated diff was **17
+lines, all `omr`**. `RECRUIT_MILESTONES[].omr` deliberately left (the payout is retired and game.js
+stops reading it; scaling dead data is churn). **~20 test assertions had RESTATED a price** (`donOmr0
+- 5`, `'burned 15 $OMR'`, `-240`) and were converted to READ the lever, so the next retune touches no
+test at all — the lever-register argument applied to fixtures; seeds were scaled only where they fund
+a now-dearer purchase, and deliberately NOT where they feed a loot or estate assertion, since the
+loot RATES did not move.
+**THE FREE PATH.** "You can get made for free" is a promise the coach makes at level 14, and it
+rested on arithmetic: earn enough $OMR off the mission ladder to cover the PLEX mint. **The
+re-denomination proves why that was never safe** — the ladder pays $OMR (1,320 after the pass,
+$22.44) and the mint is priced in ETH and quoted through the market ($35 ETH rail / $42 PLEX), so
+*no factor closes a gap between two different units* and scaling both sides is a treadmill. So the
+mission the coach NAMES — **The Dockside Heist**, level 14, the first $OMR job — now grants the mint
+credit itself (`reward.mintCredit: 1`, through the machine-owned seam). The rung states a FACT
+instead of a price and stays true at any token price; a second rung (*Spend your mint credit*)
+catches the gap between holding one and using it, so the promise never goes silent halfway. Once per
+ACCOUNT, latched on the same `mission_omr_claimed` row as the mission's $OMR — both are account-level
+rewards of the same claim, so one latch is the correct scope, not a coincidence — and `mint_credits`
+rides persistAccount ($13), so the in-memory bump commits with the action. **The Sybil bound is
+untouched**: minting still gates EXTRACTION, and a farmed identity that reached level 14 and pulled
+the Dockside Heist has done ~4 hours of real play, a far stronger bound than 0.01 ETH ever was.
+Regression at the mission's own site (the catalog still carries the grant; the claim hands it over;
+it lands on the ACCOUNT; a re-run pays it ONCE) and in the coach walk (the rung names the job, quotes
+NO price, and swaps to *spend it* on a credit in hand). Both codices synced. `MISSIONS[m4].reward
+.mintCredit = 0` reverts to the arithmetic promise; the factor is one number, so a re-denomination at
+a different launch price is the same pass with a new factor. **THE PROSE LAGGED THE LEVERS TWICE, AND
+IS A GUARD NOW.** A reader-side scan fixed six restatements; a second scan found **seventeen more** —
+the seal / Foundation / estate / access-stake / wiretap / anon set, plus the Vanity card's "set title
+(10 $OMR)" button whose two NEIGHBOURS on the same three-line card had been converted to read
+`/v1/rules` (which is why the spot-check passed: two of three converted reads as all three). And
+`public/wiki.html` sat materially behind `docs/WIKI.md`, because the existing drift-detector checks
+only that a system is MENTIONED in both codices, never that the numbers AGREE. So `test/docs.js` now
+asserts every `<n> $OMR` in either codex equals some live PRICE lever — loose by design (it cannot
+tell the peek price from the sweep price when both are 30) and still the right net, since a
+whole-tree re-denomination leaves the stale figures at a sixth of every live value, matching nothing.
+Building it re-taught this file's own lesson twice: the first cut swept EVERY number in `rules.js`
+and the mutation SURVIVED (restoring "5 $OMR" passed — 5 is some unrelated count in the module), and
+narrowing to `$OMR`-keyed values still let 5 and 8 through, both instructively — the RETIRED
+`RECRUIT_MILESTONES[].omr` (dead data in a machine-owned table) and the INVERSE
+`SPEAKEASY.RENOWN.OMR_WEIGHT` (correctly divided, not multiplied). Neither is a price; with both
+excluded, three mutations across the two codices each fail by name with file, line and figure.
+**A set broad enough to contain everything asserts nothing — and reads exactly like a clean bill of
+health.**
+
+**THE MINT IS ETH ONLY (founder-directed 2026-08-10: "Make the mint ETH only no OMR") — BUILT**
+(`src/vig.js`, `src/rules.tail.js` `MINT_TRANCHES`, `src/server.js`, `src/ops.js`, `src/preflight.js`,
+`src/invariants.js`, `public/index.html`, `test/vig.js`/`made.js`/`preflight.js`; BALANCE.md § THE
+TRANCHE SCHEDULE). Immediately after the genesis-rate pass corrected three disagreeing $OMR/ETH rates,
+the founder removed the reason they could ever disagree: **the identity now has ONE rail.** The
+argument is the general one that pass kept running into — *a fee payable two ways is always priced by
+the CHEAPER rail*, so two rails must be kept in agreement forever, and minting is the **Sybil bound**
+(it gates extraction), so it is the one price that must never be ambiguous. One rail, in real money,
+at the published wave: nothing to keep in lockstep and nothing to diverge. `MINT_TRANCHES` loses its
+`omr` column (the schedule was always the ETH waves), and a tranche boundary becomes **ONE Safe
+`setFees` transaction** with no second env value.
+**IT COSTS THE FREE PATH NOTHING, which is why it is cheap to do.** "You can get made for free" is
+delivered by the mission GRANTING a mint credit outright, not by converting earned $OMR — which at
+the honest genesis rate could never have bought one anyway (**~2,471 $OMR for a wave-1 mint against
+~220 lifetime earnable**). Retiring the rail removed a promise that had already stopped being true.
+**RESPAWN STAYS on PLEX deliberately**: a repeatable consumable is not the bound, so "pay your rent
+in ISK" applies to it cleanly — the line is the BOUND, not the denomination.
+**Retired the standard way** (the emission.js step-1 discipline): `payPlex` refuses a mint;
+`PLEX_MINT_OMR` is **DELETED rather than zeroed** (a rail that merely sleeps is one env var from
+live); the route stays MOUNTED as a tombstone so a client that has been posting there learns what
+happened instead of guessing at a 404; `/v1/plex/price` returns `mint: null` + `mintEthOnly: true`
+(the positive claim, rather than a stale number a client would render as payable); and **`plex:mint`
+stays in the omr vocabulary and the burn term FOREVER** because real rows exist and conservation is a
+claim about the whole ledger — what is new is a freshness check, **`plex mint retired`**, on the EXACT
+reason (never `plex:%`, since `plex:respawn` is live — the `rwa:vault` distinction). Verified all
+three states on a live ledger: silent on a 2-day-old row, that row still VISIBLE to conservation, and
+a fresh row fires. **Two test laws were rewritten rather than deleted**: the lockstep law became **ONE
+RAIL** (no row may carry a $OMR price — strictly stronger, since two rails can drift and must be
+checked while one cannot), and the free-path law now pins its **MECHANISM** (a mission grants the
+credit, reachable early) instead of the price proxy that held only while the rail was mispriced —
+*the proxy was always standing in for the mechanism and silently stopped tracking it the moment the
+rail was priced honestly.* The vig fixture had reached `minted` THROUGH the retired rail, so it now
+mints the way the game requires — a real ETH fee payment — which makes the test demonstrate the new
+rule instead of working around it. Two mutations (the payer stops refusing; a $OMR column returns)
+each fail by name. Full suite green + sim drift-0 + pgquery + pgcheck 43/43 on real Postgres.
 
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
@@ -11140,6 +11499,37 @@ rides the existing `plex:%` desk-recycled sink — the v3 revenue decision kept)
 flipped to RE-OPENED with the amended fact pattern (published forward escalation, founding-era
 framed, flat-tail bounded). The LIVE price is tier 1 — nothing changes at the till until the
 1,001st identity.
+**REVISED THE SAME DAY TO FIVE WAVES WITH A HARD CEILING** (founder: *"cap it at 5 waves so by wave
+5 the maximum mint price anyone can pay would be .05"*): waves of 1,000 / 10,000 / 25,000 / 50,000 /
+100,000 at 0.010 / 0.025 / 0.035 / 0.045 / **0.050 ETH** (30 / 75 / 105 / 135 / 150 $OMR),
+cumulative 186,000, the flat tail holding 0.05 forever. **The ceiling is the improvement, and it
+settles the progression question the LINEAR-vs-doubling analysis was only approximating**: that
+analysis picked LINEAR because doubling crossed the free-path ceiling at a reachable ~63k identities
+while linear crossed at ~990k — but both were arithmetic about WHERE a rising price eventually
+breaks the promise, and a cap removes the crossing from the SHAPE (dearest row 150 $OMR vs the
+~220 lifetime mission payout, and no future row can exceed it, so "you can get made for free" is
+guaranteed structurally rather than re-derived per table). It also reverses the growth headwind that
+counted against Shape A — the waves WIDEN while the increments SHRINK (+0.015/+0.010/+0.010/+0.005),
+so past the first thousand it is CHEAPER than the ladder it replaces at every point (#5,000 pays
+0.025 against 0.03; #20,000 pays 0.035 against 0.06). Sizing: 8,312 ETH at a fully-minted 186,000
+against the old ladder's 3,850 to 55,000 — more in total, cheaper per identity, bounded at the top.
+**Waves 3 and 4 are the only edit to the founder's figures, for a mechanical reason**: 0.0333 and
+0.0444 do not land whole on the $OMR rail at the schedule's one rate (99.9 and 133.2), and a
+fractional PLEX floor matters because the rail is set BY HAND at each boundary — a GM typing the
+round number would trip the off-schedule warning over a 0.1% rounding, and **a warning that fires on
+rounding is one people learn to ignore**; 0.035/0.045 are the nearest pair whole on both rails
+(+5.1%, +1.4%), and restoring the exact figures is the `eth` column plus `omr` 99.9/133.2 (the rate
+law passes either way). **A THIRD LAW joined the two row-level ones** — THE CEILING, asserted
+directly because it is the claim the whole shape rests on: the last row IS 0.05, no row exceeds it,
+and the MILLIONTH identity still pays it (the flat tail is what makes "the most anyone ever pays"
+true), mutation-verified both ways — a sixth wave at 0.075 and an extrapolating tail each fail by
+name. Counsel: the cap **strengthens** the re-opened A4 rather than complicating it (the hardest
+form of that question is whether a forward schedule promises indefinitely-rising prices, and a
+published ceiling answers it in the fact pattern itself), so the memo's row, header, status table
+and re-drafted question all carry the amendment. Found en route: **BALANCE's own tranche table was
+doubly stale** — it still carried the pre-re-denomination $OMR column (5…50) and the old 500
+$OMR/ETH rate, missed by the re-denomination pass because that pass read `src/`, not the decision
+sheet's tables; rewritten whole.
 
 **THE CLAWBACK — the airdrop's unclaimed-reversion mechanism, specified (founder-directed
 2026-08-10: "a function that allows us to clawback the tokens if the wallet holding it hasn't
@@ -11196,3 +11586,143 @@ extract from an account that earned nothing — so the whitelist's cost is bound
 sets' size and the treasury's own drop budget, both founder levers (§6). Zero code (the
 mint-source distinction + whitelist consumption land with the G-3 build, post-A6-amendment
 countersignature).
+
+**THE WALL IS BACK — `allocated ≤ held`, per ticker, in units (brokers step 2, 2026-08-10) — BUILT**
+(`src/treasury.js`, `schema.sql` `stock_buys`/`stock_allocations`, `src/routes/modtools.js`,
+`test/treasury.js` — the 94th suite). The founder's §3.3 delivery decision — stock lands STRAIGHT in
+the NFT's ERC-6551 account with **no claim gate** — is recorded in `omerta-brokers-design.md` with the
+four arguments made against it and rejected (a bearer instrument for securities with no KYC or
+geofence; the irreversible direction, since gated could always become bearer but never the reverse;
+the contradiction of our own entitlement wall; the floor becoming a function of contents). The
+consequence that changed what gets built is one sentence: **with no gate at delivery,
+`allocated ≤ held` is the only wall left**, so it stops being one check among several and becomes
+load-bearing — built FIRST, before the keeper and before delivery, so the two systems that will move
+real stock are written against a wall that already exists rather than having one retrofitted.
+**Per-ticker UNITS, not cash value**, and not a summed check: a cash-denominated version reads fine
+and is silently wrong (value it at $X of TSLA, the price moves, and the same dollars now owe more
+units than are held — a shortfall created by nothing anybody did), while a summed one would let the
+treasury owe TSLA it does not hold as long as it held enough AMZN, which is not how a delivery in a
+specific ticker works. **`allocateStock` is the only writer of the owed side and it CLAMPS** — the
+invariant is the DETECTOR, the clamp is the PREVENTION, and with no delivery gate a detector that
+fires the next night is too late. **A comp books ZERO units**: the `txHash` gate matters more here
+than anywhere else it appears, because everywhere else a comp merely fails to credit revenue whereas
+here the fabricated quantity IS the wall's input, so a QA fill that booked units would raise the
+delivery ceiling with no asset behind it — invisible to precisely the check meant to catch it.
+**THE FINDING, which was not in the plan:** `rwa_revenue` is an INFLOW ledger and records nothing
+about what leaves, so the moment the keeper converts treasury ETH into stock the Safe holds less ETH
+and **no existing number moves** — the vault would have gone on quoting availability out of ETH
+already spent, allocating it to players, with the wall reading green throughout. The ETH arm is now
+TWO checks (`allocated ≤ held` and `allocated + spent ≤ held`) rather than one stronger one, because
+the two breaches have different owners — the first is a claim-path bug in the vault, the second an
+overspending keeper — and an alarm that cannot tell them apart is worse to be woken by; `stockBudget()`
+exposes the same figure as the keeper's root cap, so ETH already promised to a player is not the
+keeper's to spend. `runTreasuryInvariants` was ALREADY wired into the worker's nightly `alertDrift`,
+so every new check inherited the alarm the moment it existed. §10.4 is untouched by construction
+(out-of-band real value, the fees.js precedent — the suite asserts the whole stock layer moves real
+value and writes NOT ONE ledger row). **Two guards earned their keep:** the first cut *replaced* the
+ETH check and two suites that look it up by name went red (fixed by emitting both, which is the
+better design and not merely the cheaper patch); and `test/tokenomics.js` pinned `holds === 'eth'`
+with the words *"it does not buy stock"* — a statement of fact from the retirement that this design
+reverses, so the fact was updated rather than defended, keeping the part that still holds and still
+matters: **the player-facing vault rail stays denominated in ETH alone**, so the game is never owing
+a claim in one asset while holding another. Six mutations, each caught at its own named assertion
+(the clamp removed; the per-ticker arm deleted; the spend term dropped from the pool math; the
+spend-aware arm dropped from the sweep; a comp booking units; the accumulate path overwriting) — and
+the accumulate path was found UNCOVERED on review, the same half-tested-reads-as-whole shape that bit
+the brokers recorder. `omerta-identity-nft-design.md` was amended in the same commit: its one-line
+summary ("a tradeable trophy") no longer describes the whole token, though §1's entitlement wall
+survives intact. Suite 94/94 + sim drift-0 + pgquery 2711 statements + pgcheck 43/43 on real Postgres.
+
+**THE MADE MAN — the bloodline portrait (brokers step 6, the OFF-CHAIN half; 2026-08-10) — BUILT**
+(`src/portrait.js`, `test/portrait.js` — the 95th suite; `GET /v1/identity/:characterId/portrait.svg`
++ the ERC-721-shaped metadata at `GET /v1/identity/:characterId`; a card on My Profile). Step 6 is
+the Dynasty NFT, and `omerta-identity-nft-design.md` §5 sequences it deliberately: **phase 1 is the
+portrait, entirely off-chain, with no gates** — most of the value, needing no token, no wallet and no
+chain, and generating the thing the token would point at, so the ordering is not a compromise. The
+CONTRACT half is correctly still waiting on two independent gates: counsel memo **A4 is RE-OPENED**
+(dynasty §7.2 makes the contract conditional on A2 *and* A4; adopting the published tranche schedule
+changed A4's fact pattern) and the third-party audit BATCH, which the dynasty design says to **batch,
+not dribble** — writing one contract now starts that clock for one contract instead of the set.
+**THE BRIGHT LINE, and it is narrower than the design's own slot table.** §4 states the constraint
+exactly right — *a free, permanently-public, marketplace-indexed surface must be AT MOST as revealing
+as the paid one* — and §3's table then breaks it in three places, which the build corrected rather
+than shipped: **backdrop ← "home district"** (there is no home district, only live `loc`, which is
+precisely what the Wire's PAID tap sells — a keyless image keyed on it is a position tracker a hunter
+can poll; now deterministic from the character id, the corner you came up on, fixed at birth);
+**figure ← "build"** (`muscle`/`cunning`/`speed` are on no public surface and not even on the paid
+dossier; now deterministic too); and **"a broken frame for a rat"** (a PAID Wire flag — dropped, and
+the suite asserts a rat's portrait is byte-identical to his portrait the moment before he flipped).
+The rule is enforced **STRUCTURALLY, not by spot check**: the route's only data source is
+`portraitRow`, and the suite asserts it may return no field `publicDossier` does not — add `loc` and
+it fails by name, which it did on its first run (catching the route parameter, allowed with the
+reason stated: the caller supplied it). **A defect the design had FLAGGED and nobody had acted on:**
+the frame slot cited **`dynastyTierOf`, which no longer exists** — it went with the Portfolio at D11,
+exactly as that doc's own 2026-08-10 banner warned needed re-sourcing "before any metadata is
+frozen". Re-sourced to **GENERATION** (public, account-level, survives death), which is the better
+answer anyway — the frame is the bloodline's age, pawn-shop pine deepening to gilt — and the suite
+asserts the symbol is gone so it cannot be re-sourced back to a dead dependency. **The parts are
+DRAWN, not generated**, and that was a constraint rather than a preference: the art budget stands at
+**$11.12 of a $12 cap** (38 plates ≈ $1.90) and there is no `FAL_KEY`, so generated parts were not on
+the table. The ARCHITECTURE is unchanged (§2 approach 2 — layered composition, assembled live, ~0 per
+read) and the compositor does not care where a part came from, so any slot can take a generated plate
+later without touching the assembly. The design's open question 2 is answered the way it leaned:
+**silhouette-forward**, the brim's shadow doing the work. **Two cuts were discarded on REVIEW, which
+is the art-pass discipline earning its keep**: a lit oval with two dots reads as a smiley, and a
+hard-edged shadow band with glints in it reads as a domino mask — the shipped version fades the
+shadow, which is what light actually does. Looking at the output also caught three real bugs a
+parsing check never would: the plate's subtitle used the FRAME's trim colour, so on pawn-shop pine it
+was dark brown on near-black and **could not be read at all**; a long dynasty name **ran off the
+frame** (now clamped with an ellipsis); and generation 12 was engraved **"GEN X"** because the cut
+clamped the roman-numeral INDEX — a plate is the one place a wrong number is permanent. **SAFETY: this
+one renders text, which `avatar.js` never does** — avatar is injection-proof by construction (the seed
+is hash-only), while the plate engraves the street name, dynasty and family tag, all untrusted, on a
+public keyless route, so every one goes through `esc` — and that escape is now EXPORTED from
+`cards.js` and shared rather than copied, because escaping is a security predicate and a private
+second copy is precisely the class this project was bitten by at 69 copies of three gate
+predicates: a fix to an escaping gap has to reach every site that escapes. SVG ids are
+seed-suffixed, because two portraits sharing a `clipPath` id would clip each other and the console
+renders them in a grid. **ZERO §10.4** (art moves no value; the suite pins zero ledger rows across
+both routes). Four mutations each caught at their own named assertion (leak `loc` into the row; stop
+escaping the name; restore the GEN X lie; drop the seed-unique ids) — and one assertion had to be
+rewritten because `/rat/i` matches **"gene-RAT-ion"** (the substring class again), so the rat check is
+now INVARIANCE: setting the flag must change the portrait not at all, with the `rowCount` asserted so
+the check cannot go vacuous. Deliberately NOT touched: the `/u/:name` profile page, whose legend card
+is its considered hero and which a portrait would compete with. Suite 95/95 + mobile 75/75 + client
+wiring/mirror (616 routes, 132 boards) + pgquery + pgcheck 43/43 on real Postgres.
+
+**THE REFUSAL CARRIES THE WAY OUT — a tester's UI complaint that was a real defect (2026-08-11).**
+Tester feedback, verbatim: *"if I try to do something in foundry but I can't cause I was in docs, I
+have to click through half of the tabs and some of them repeatedly before I find the tab where I even
+can move to a different location."* He is describing a defect, not a preference. **27 gates across the
+game refuse an action for standing in the wrong district, and every one named the destination in
+PROSE** — which cannot be turned into a button — while the travel control lived on the Streets tab,
+one screen out of twenty-five. So the shortest path from "no" to "yes" was a hunt through the nav,
+every time, for the most common refusal in the game. Three changes, all additive: **(1)** `GameError`
+takes a third **structured-data** argument merged into the 400 body, so a gate that names
+`{ district }` gets its way out **for free at all 26 sites** rather than each having to remember to
+wire its own (`landmarks.js` is the 27th and deliberately does NOT carry it — its argument is a
+district name that does not exist, so there is nowhere to send anyone and offering to travel would be
+a lie); **(2)** the toast goes **STICKY when it carries an action** — a 3.4s auto-dismiss is right for
+information and wrong for a decision — and renders a `go there →` button that travels and re-renders
+the screen you were already on; **(3)** the masthead location becomes a **travel control**, so moving
+is reachable from every screen instead of one. **Guarded so the 28th gate cannot ship mute**:
+`test/gates.js` gains a completeness sweep — every `GameError('district')` must carry the payload or
+be waived with a stated reason, paren-matching the argument list rather than a fixed window (a
+`.slice(+200)` runs past the throw into the next statement's object literals and reads as a pass) —
+with an anti-vacuity floor so a broken extractor reports as a FAILURE rather than as zero problems.
+`test/casino.js` walks the whole path **on its own character**: refused → the destination arrives as
+DATA → travel there → the den is open. Its own character because playing a round would move the
+**server-wide** house book (`den_volume.profit`) and quietly loosen the craps session's exact
+`profit == bets − wins` identity below — *a test that weakens another test to prove itself is not a
+proof* — and the retry is asserted by what it now refuses (`min`, which sits BELOW the location gate)
+rather than by playing. Both halves mutation-verified by name (strip a payload → the sweep names the
+file, line and throw; drop the spread in the error handler → the behavioural assertion fails). ZERO
+§10.4 (a refusal moves no value), no new lever, no new table. Suite 96/96 + sim drift-0 + mobile 75/75
++ client wiring/mirror + docs + pgquery + pgcheck 43/43 on real Postgres. **The second half of the
+same tester's message — "the token should be able to be acquired from grinding" — is NOT actioned
+here**: it contradicts the severance (cash cannot become $OMR by any route), which is the single most
+load-bearing economic decision in the project and is founder-directed, and his own stated fear ("p2e
+guys can't nuke chart to zero") is precisely what the no-faucet design prevents. Raised with the
+founder as a decision, and partly a DISCOVERABILITY problem — $OMR *is* earned in-game (~1,320
+lifetime + 3/day via missions and the daily all-three bonus), it is simply never surfaced as "this is
+how you get the token."

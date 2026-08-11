@@ -175,7 +175,7 @@ Read `GET /v1/rules` and `GET /v1/catalog` for exact numbers.
 | **Crime grind** | `POST /v1/crimes/:id` | Highest EV crime for your level/nerve; watch heat + jail risk. |
 | **Kitchen** | `/v1/kitchen/*` (cook/collect/deal/crew) | Batch timing, quality-weighted deals, district demand, crew wages. |
 | **Trade-goods arbitrage** | `GET /v1/market/prices`, `/v1/goods/*` | Prices are a deterministic hash — buy low district, sell high. |
-| **The window** | `GET /v1/window`, `POST /v1/window/redeem` | Burn $OMR for cash at a published rate, from a funded till. **One way** — cash can no longer be turned into $OMR at all (no swap, no laundering; both answer `retired`). A short till refuses and burns nothing. |
+| **The window** | `GET /v1/window`, `POST /v1/window/redeem` | Burn $OMR for cash at a published rate, from a funded till. **One way** — cash cannot be turned into $OMR at all (there is no swap and no laundering; both answer `retired`). A short till refuses and burns nothing. |
 | **Convoys** | `/v1/convoy/*`, `GET /v1/convoys` | Run bulk freight on a real clock; or ambush others' shipments. |
 | **Contracts** | `GET /v1/contracts`, `/v1/streets/:id/*` | Fulfill kill/hospitalize bounties; NPC hits; hitman work. |
 | **Heists** | `GET /v1/heists`, `/v1/heists/*` | Co-op crews, role-matched stats, shared risk. |

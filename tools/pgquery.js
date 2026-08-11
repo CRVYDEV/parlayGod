@@ -110,7 +110,7 @@ for (const s of stmts) {
 
 // ── 3. REPORT ────────────────────────────────────────────────────────────────────────────────────
 console.log(`\npgquery — ${stmts.length} static statements prepared against real Postgres`);
-console.log(`  ${interpolated.length} interpolated (cannot be prepared — listed below, never silently passed)`);
+console.log(`  ${interpolated.length} interpolated (cannot be prepared — counted, never silently passed; PGQUERY_LIST=1 to list)`);
 console.log(`  ${skipped.length} non-DML (DDL / transaction control — not preparable by design)`);
 console.log(`  ${unreadable.length} call sites whose argument is not a literal (a variable or a helper)\n`);
 
@@ -130,10 +130,14 @@ if (failures.length) {
 // levelled/retained). Dynamic IN lists are the recorded pg-mem posture (`= ANY($1)` returns zero
 // rows there), so these are interpolated by necessity; each is parameterized except the IN
 // placeholders + two Number()-coerced constants.
+// 65 → 66 (2026-08-11): THE BANK's harvest-fee source-membership check, the third instance of the
+// same generated-NOT-IN shape — `BANK_SOURCES` is exported and the SQL is built from it, so the
+// guard and the declaration cannot drift. (Found by re-running this after the commit that added it
+// rather than before, which is ground rule #8's whole point: `npm test` cannot see this class.)
 // 63 → 65 (2026-08-09): the money router's two source-membership queries — their NOT-IN lists are
 // GENERATED from the exported VIG_SOURCES/TREASURY_SOURCES sets so the check and the declaration
 // structurally cannot drift apart (the DESK.SINK_REASONS generated-SQL precedent).
-const CEILING = { interpolated: 65, unreadable: 40 };
+const CEILING = { interpolated: 66, unreadable: 40 };
 const overflow = [];
 if (interpolated.length > CEILING.interpolated)
   overflow.push(`interpolated queries grew to ${interpolated.length} (ceiling ${CEILING.interpolated}) — these are UNCHECKED by this guard`);
@@ -148,6 +152,13 @@ if (process.env.PGQUERY_LIST) {
 await pool.end();
 if (failures.length || overflow.length) {
   for (const o of overflow) console.error(`✗ ${o}`);
+  // The whole point of an overflow is that somebody has to look at what grew, so print it here
+  // rather than only behind PGQUERY_LIST — a message that says "listed below" and lists nothing
+  // sends the reader hunting for a flag it never names.
+  if (overflow.length && !process.env.PGQUERY_LIST) {
+    console.error('\ninterpolated (unchecked):'); for (const i of interpolated) console.error(`  ${i.where}`);
+    console.error('non-literal (unchecked):'); for (const u of unreadable) console.error(`  ${u}`);
+  }
   console.error('\nA statement that does not parse is a 500 on every request that reaches it.');
   process.exit(1);
 }

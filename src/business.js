@@ -352,7 +352,7 @@ export async function upgradeBusiness(ch, businessId, client, h) {
 // live table is a migration this change does not need to take on.
 export async function launderAtBusiness() {
   throw new GameError('retired',
-    'Nothing to wash any more — cash and $OMR no longer trade. Your fronts still earn; $OMR is redeemed for cash at the Exchange window.');
+    'There is nothing to wash — cash and $OMR do not trade. Your fronts still earn; $OMR is redeemed for cash at the Exchange window.');
 }
 
 // ── step two: SHAKEDOWN — the PvP risk on passive income (runs under withTwoCharacters) ──

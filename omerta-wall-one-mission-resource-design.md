@@ -43,7 +43,15 @@ it):
 | 75 | m22 | 30 | One Perfect Season |
 | 100 | m24 | 50 | The Hundred-Year Deed |
 
-**The first rung is load-bearing.** `PLEX_MINT_OMR` is 5 (`src/vig.js:29`) and m4 pays exactly 5 at
+> **SUPERSEDED 2026-08-10 (the mechanism, not the conclusion).** The mint is now **ETH only** —
+> `payPlex('mint')` refuses and there is no `PLEX_MINT_OMR`, because minting is the Sybil bound and
+> the extraction gate, so it gets one rail at one published price. The free path did not go with it:
+> **m4 now GRANTS a mint credit outright** (`reward.mintCredit`), which is a stronger promise than the
+> price-match below — it is a FACT rather than an arithmetic coincidence between two numbers that
+> could drift apart, and it stays true at any token price. The paragraph is kept because the reasoning
+> is why the free path had to survive the retirement at all.
+
+**The first rung was load-bearing.** `PLEX_MINT_OMR` was 5 (`src/vig.js:29`) and m4 paid exactly 5 at
 level 14. That is not coincidence — `src/game.js:1139` is a coach rung reading *"You can get made
 for free … you can pay for it with $OMR you earned in game (5 $OMR), not just ETH. Earn it on the
 mission ladder: 'The Dockside Heist'."* **The mission mint IS the free path to being made**, which

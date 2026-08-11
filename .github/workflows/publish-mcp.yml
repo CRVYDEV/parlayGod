@@ -1,0 +1,97 @@
+# Publishes omerta-mcp to npm, so nobody has to run `npm publish` from a laptop.
+#
+# WHY A WORKFLOW RATHER THAN A TERMINAL. Publishing is a one-line command, but that line has to run
+# somewhere holding npm credentials. On a personal machine the release depends on which laptop is to
+# hand and who logged in last. Here the release is a button on a web page and every publish leaves a
+# log saying who pressed it and what went out.
+#
+# HOW TO RELEASE: Actions → "publish omerta-mcp" → Run workflow. That is the whole operation.
+#
+# ── AUTH: THIS RUNS ONE OF TWO WAYS, AND THE SECOND IS THE DESTINATION ──────────────────────────
+#
+# TRUSTED PUBLISHING (OIDC) is the target state and needs NO stored credential at all. GitHub mints
+# a short-lived identity token for this exact workflow file, npm checks it against the trusted
+# publisher configured on the package, and that is the whole handshake. Nothing long-lived exists to
+# leak, and npm stamps the release with PROVENANCE — a verified link back to this repo and this
+# workflow, which matters for a package whose entire audience is agents running it unattended.
+#
+# A TOKEN, exactly once. Trusted publishing is configured on a package's settings page, and that page
+# does not exist until the package does — npm has no "pending publisher" (npm/cli#8544). So the FIRST
+# publish needs a token in NPM_TOKEN, and after it lands the trusted publisher is configured and
+# **the NPM_TOKEN secret is deleted**. From then on this file authenticates by identity, not secret.
+#
+# The step order below is deliberate: NODE_AUTH_TOKEN resolves to an empty string once the secret is
+# gone, and npm falls through to OIDC. So deleting the secret is the whole migration — no edit here.
+name: publish omerta-mcp
+
+on:
+  workflow_dispatch:          # deliberately manual — a publish is irreversible at a given version
+    inputs:
+      dry_run:
+        description: 'Rehearse only — pack the tarball and show what WOULD be published, publish nothing'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write             # OIDC. Without this npm cannot verify who this workflow is, and
+                              # trusted publishing fails closed rather than falling back to a token.
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: omerta-mcp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'   # writes the .npmrc NODE_AUTH_TOKEN feeds
+
+      # setup-node's Node 22 ships npm 10.x, and OIDC needs 11.5.1+. Without this the trusted-publish
+      # path silently degrades to "no credential", which surfaces as a misleading 404 (npm/cli#9088)
+      # rather than as "your npm is too old" — so pin the capability rather than hope for it.
+      - name: npm new enough to speak OIDC
+        run: |
+          npm install -g npm@latest
+          npm --version
+
+      # One dependency, no build step — but the thing must LOAD. A published MCP server that throws
+      # on import is worse than no package at all, because every agent that follows the documented
+      # install line hits it, and they hit it unattended.
+      - name: install
+        run: npm install --no-audit --no-fund
+      - name: the server must actually start
+        run: |
+          node --check index.js
+          timeout 10s node index.js < /dev/null > /dev/null 2>&1 || code=$?
+          # An MCP server speaks over stdin and exits 0 when stdin closes; `timeout` returns 124 if it
+          # had to be killed, which equally means it was running. Anything else is a real failure.
+          if [ "${code:-0}" != "0" ] && [ "${code:-0}" != "124" ]; then
+            echo "the server exited $code on startup — not publishing a broken package"; exit 1
+          fi
+
+      # Show exactly what is about to ship. `files` in package.json is an allowlist, so this is where
+      # you find out something you expected is missing — or that something private is not.
+      - name: what would go out
+        run: npm pack --dry-run
+
+      - name: publish
+        if: ${{ inputs.dry_run == false }}
+        run: npm publish
+        env:
+          # Empty once the secret is deleted, at which point npm authenticates over OIDC instead.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: it is live
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          echo "published — anyone can now run it with: npx -y omerta-mcp"
+          echo "listing: https://www.npmjs.com/package/omerta-mcp"
+          echo
+          echo "IF THIS WAS THE FIRST PUBLISH, do these two things now and never think about it again:"
+          echo "  1. npmjs.com/package/omerta-mcp/access → Trusted Publisher → GitHub Actions"
+          echo "     repository: CRVYDEV/parlayGod   workflow: publish-mcp.yml"
+          echo "  2. Delete the NPM_TOKEN repository secret. This workflow needs no edit."

@@ -10,6 +10,11 @@ import assert from 'node:assert';
 import { getAddress } from 'viem';
 import { buildServer } from '../src/server.js';
 import { PASS } from '../src/rules.js';
+// the three stipend tiers, read off the track — a re-denomination moves them and this file
+// must not need editing (the lever-register argument applied to a fixture)
+const STIPENDS = PASS.TRACK.map((t) => Number(t.reward?.omr || 0)).filter(Boolean);
+const [S1, S2, S3] = STIPENDS;
+const STIPEND_TOTAL = STIPENDS.reduce((a, b) => a + b, 0);
 import { runVigBuyback } from '../src/vig.js';
 import { sweepPassStipends } from '../src/pass.js';
 import { runLedgerInvariants } from '../src/invariants.js';
@@ -73,27 +78,30 @@ assert.equal(r.body.granted.energy > 0, true, 'tanked up');
 // (durably recorded, never lost), the tier still advances, and $0 is paid now (the fix) ──
 r = await call('POST', '/v1/pass/claim', { token: alice.token });
 assert.equal(r.body.tier, 4, 'tier 4');
-assert.equal(r.body.stipendOwed, 2, 'the tier owes a 2 $OMR stipend');
+assert.equal(r.body.stipendOwed, S1, `the tier owes a ${S1} $OMR stipend`);
 assert.equal(r.body.stipendPaid || 0, 0, 'a dry pool pays nothing NOW — but the tier is not lost');
-assert.equal((await call('GET', '/v1/pass', { token: alice.token })).body.stipendOwed, 2, 'the 2 $OMR is on the books');
+assert.equal((await call('GET', '/v1/pass', { token: alice.token })).body.stipendOwed, S1, `the ${S1} $OMR is on the books`);
 assert.equal((await meOf(alice.token)).omr, 0, 'nothing paid yet');
 
 // ── fund the pool via the pass's OWN buyback share, then the worker sweep pays the owed stipend ──
-await runVigBuyback(pool, { priceOmrPerEth: 1000 }); // 0.05 × 40% = 0.02 ETH × 1000 = 20 $OMR; 50% (10) → prize pool
-assert(Number((await pool.query('SELECT balance FROM vig_prize_pool WHERE id=1')).rows[0].balance) >= 10, 'the pool is funded by the pass buyback');
+// price the buyback off the TRACK's own stipends: 0.05 ETH × 40% = 0.02 ETH is bought, half of it
+// lands in the prize pool, so this covers the whole track with headroom whatever the stipends are.
+await runVigBuyback(pool, { priceOmrPerEth: STIPEND_TOTAL * 200 });
+assert(Number((await pool.query('SELECT balance FROM vig_prize_pool WHERE id=1')).rows[0].balance) >= STIPEND_TOTAL,
+  'the pool is funded by the pass buyback');
 await sweepPassStipends(pool); // the worker net: pays down owed as the pool funds
-assert.equal((await meOf(alice.token)).omr, 2, 'the owed 2 $OMR is now paid (backed prize:omr)');
+assert.equal((await meOf(alice.token)).omr, S1, `the owed ${S1} $OMR is now paid (backed prize:omr)`);
 assert.equal((await call('GET', '/v1/pass', { token: alice.token })).body.stipendOwed, 0, 'the books are square');
 
-// ── finish the track (tiers 5–12; more stipends at 8 and 12, now paid inline since the pool is funded) ──
+// ── finish the track (tiers 5–12; more stipends later in the track, now paid inline since the pool is funded) ──
 for (let i = 0; i < 8; i++) await call('POST', '/v1/pass/claim', { token: alice.token });
 r = await call('GET', '/v1/pass', { token: alice.token });
 assert.equal(r.body.tier, PASS.TRACK.length, 'the whole Ledger is claimed');
 assert.equal(r.body.complete, true, 'complete');
 assert.equal(r.body.claimable, false, 'nothing left to claim');
 assert.equal((await call('POST', '/v1/pass/claim', { token: alice.token })).body.error, 'complete', "can't claim past the end");
-// total $OMR earned = the three stipend tiers (2 + 3 + 5 = 10), all from the pool
-assert.equal((await meOf(alice.token)).omr, 10, 'the stipends totalled 10 $OMR — funded by the pass buyback, never minted');
+// total $OMR earned = the three stipend tiers, all from the pool
+assert.equal((await meOf(alice.token)).omr, STIPEND_TOTAL, `the stipends totalled ${STIPEND_TOTAL} $OMR — funded by the pass buyback, never minted`);
 
 // ── §10.4: every earned $OMR is a backed prize:omr faucet — conservation holds at drift-0 ──
 const inv = await runLedgerInvariants(pool, { alert: false });
@@ -110,5 +118,5 @@ r = await call('GET', '/v1/pass', { token: alice.token });
 assert.equal(r.body.active, true, 'a new season is live');
 assert.equal(r.body.tier, 0, 'the fresh season reset the track to 0');
 
-console.log('✅ The Ledger (Season Pass reward track) test passed — the pass gate, the board, the daily claim (title / revive tokens / energy refill), the ~daily cooldown, the BACKED $OMR stipend (paid through the pool the pass buyback funded, pool-bounded, totalling 10 $OMR — never minted), completing the track + the complete gate, §10.4 (prize:omr reconciles, drift-0), DEATH SURVIVAL (the heir inherits the track), and the fresh-season reset');
+console.log('✅ The Ledger (Season Pass reward track) test passed — the pass gate, the board, the daily claim (title / revive tokens / energy refill), the ~daily cooldown, the BACKED $OMR stipend (paid through the pool the pass buyback funded, pool-bounded, never minted), completing the track + the complete gate, §10.4 (prize:omr reconciles, drift-0), DEATH SURVIVAL (the heir inherits the track), and the fresh-season reset');
 await app.close();

@@ -365,20 +365,13 @@ async function obeyCoach(m) {
     hit('coach:race', r.body?.error || r.code);
     return false;
   }
-  // "You can get made for free" — the rung clears on acct.minted, and the free path is two calls:
-  // burn earned $OMR for a mint credit (PLEX), then spend the credit. The price is the LIVE quote
-  // (max(PLEX_MINT_OMR, feeEth × the latest buyback oracle × premium)), so this reads it rather than
-  // assuming the pre-market floor — the same reason the rung's own copy stopped quoting a number.
+  // "You can get made for free" — the rung clears on acct.minted, and since 2026-08-10 the free path
+  // is ONE call: the mission the rung names GRANTS the credit outright (the $OMR rail retired, so
+  // there is no price to read and no conversion to get wrong), and this spends it. A player who has
+  // not pulled that job yet simply has no credit — early, not stuck, so it returns false quietly and
+  // the mission handler above is what advances them.
   if (label.startsWith('You can get made for free')) {
-    const q = await call('GET', '/v1/plex/price', { token });
-    const price = Number(q.body?.mint?.price || 0);
-    if (!price || Number(m.omr || 0) < price) return false;   // still earning it — not stuck
-    const p = await call('POST', '/v1/plex/mint', { token });
-    if (p.code !== 200) {
-      hit('coach:plex', p.body?.error || p.code);
-      coachCantAct.set(label, `plex mint refused: "${p.body?.error || p.code}"`);
-      return false;
-    }
+    if (!Number(m.mintCredits || 0)) return false;   // the mission hands it over — not stuck
     const r = await call('POST', '/v1/character/mint', { token });
     if (r.code === 200) { did('coach:made'); first('coach:made'); return obeyed(); }
     hit('coach:made', r.body?.error || r.code);

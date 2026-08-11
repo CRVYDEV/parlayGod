@@ -125,7 +125,7 @@ assert(board.convictionOdds > 0, 'the docket shows conviction odds');
 assert.equal((await call('POST', '/v1/law/bribe', { token: dan.token })).body.error, 'indicted', 'bribe refused once indicted');
 
 // buy the jury — a $OMR sink that cuts the odds once
-await seedAcct(dan.id, 'omr=100');
+await seedAcct(dan.id, 'omr=600');
 const oddsBefore = (await lawOf(dan.token)).convictionOdds;
 r = await call('POST', '/v1/law/jury', { token: dan.token });
 assert.equal(r.code, 200, 'jury seen to');
@@ -312,7 +312,7 @@ assert(!!(await rawCh(fresh.id)).indicted_at, 'Fred keeps his window to lawyer u
 }
 // pay it — a ledgered $OMR sink, the window live on the docket, extends on re-pay
 const gil = await mk('Grifter Gil');
-await seedAcct(gil.id, 'omr=100');
+await seedAcct(gil.id, 'omr=600');
 let lb = await lawOf(gil.token);
 assert.equal(lb.envelope.active, false, 'no envelope on a fresh street');
 assert.equal(lb.envelope.cost, LAW.ENVELOPE_OMR, 'the envelope quote is published');
@@ -324,14 +324,14 @@ lb = await lawOf(gil.token);
 assert.equal(lb.envelope.active, true, 'the envelope is current on the docket');
 assert(lb.envelope.seconds > 0, 'the window is live');
 const secs1 = lb.envelope.seconds;
-await seedAcct(gil.id, 'omr=100');
+await seedAcct(gil.id, 'omr=600');
 r = await call('POST', '/v1/law/envelope', { token: gil.token });
 assert(r.body.envelopeSeconds > secs1, 'paying again extends the window from the current end');
 // gates: broke can't pay, and no reaching the precinct from a cell
 await seedAcct(gil.id, 'omr=0');
 assert.equal((await call('POST', '/v1/law/envelope', { token: gil.token })).body.error, 'omr', "a broke street can't keep the envelope current");
 await seedCh(gil.id, "jail_until = now() + interval '1 hour'");
-await seedAcct(gil.id, 'omr=100');
+await seedAcct(gil.id, 'omr=600');
 assert.equal((await call('POST', '/v1/law/envelope', { token: gil.token })).body.error, 'jailed', 'no reaching the precinct from lockup');
 await seedCh(gil.id, 'jail_until=NULL');
 

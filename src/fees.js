@@ -165,7 +165,7 @@ export async function mintCharacter(pool, accountId) {
       return { minted: true, alreadyMinted: true };
     }
     if (Number(acct.mint_credits) < 1)
-      throw new GameError('no_mint_credit', 'Pay the 0.01 ETH mint fee on-chain first (then your character is made).');
+      throw new GameError('no_mint_credit', 'You need a mint credit first — pull the Dockside Heist on the mission ladder (free), or buy one with ETH or earned $OMR.');
     if (!ch) throw new GameError('no_character', 'Create a character first, then mint it.');
     await client.query('UPDATE account_persistent SET minted=true, mint_credits = mint_credits - 1 WHERE account_id=$1', [accountId]);
     await client.query('UPDATE characters SET minted=true WHERE id=$1', [ch.id]);

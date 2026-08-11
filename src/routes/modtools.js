@@ -7,6 +7,7 @@ import { runLedgerInvariants, alertDrift } from '../invariants.js';
 import { TAX, withdrawTaxBps } from '../rules.js';
 import * as Bonds from '../bonds.js';
 import * as Chain from '../chain.js';
+import * as ChainParams from '../chainparams.js';
 import * as Desk from '../desk.js';
 import * as Fees from '../fees.js';
 import * as G from '../game.js';
@@ -137,6 +138,16 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
     app.get('/v1/mod/activity', { preHandler: modAuth }, async (req) => Ops.opsActivity(pool, req.query?.limit)); // the live event feed
     app.get('/v1/mod/coach', { preHandler: modAuth }, async () => Ops.opsCoach(pool)); // the live coach census — where every active player is stuck
     app.get('/v1/mod/integrations', { preHandler: modAuth }, async () => Ops.integrationsStatus()); // the dormant retention/funnel wiring: live-vs-off + activation steps (env presence only, no secrets)
+    // THE CONTROL ROOM — every on-chain parameter, its live value, and what it disagrees with.
+    // READ + BUILD ONLY. There is no execute route and there must not be: these setters are
+    // onlyOwner with owner = the Safe, and a panel that could sign would make the shared MOD_KEY
+    // equivalent to the multisig. `/tx` returns calldata for a human to take to the Safe.
+    app.get('/v1/mod/chain/params', { preHandler: modAuth }, async () => ChainParams.readChainParams());
+    app.post('/v1/mod/chain/tx', { preHandler: modAuth }, async (req, reply) => {
+      try {
+        return await ChainParams.buildParamTx(req.body?.key, req.body?.values || {});
+      } catch (e) { return reply.code(400).send({ error: 'bad_param', message: String(e.message || e) }); }
+    });
     // which systems anyone actually uses + whether players come back. Reads telemetry that was
     // already being written — the reader was the missing half, not the instrumentation.
     app.get('/v1/mod/engagement', { preHandler: modAuth }, async (req) => opsEngagement(pool, req.query?.days));
@@ -150,15 +161,40 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
     // a silent keeper halt must read as a state on the founder's screen, not just a webhook)
     app.get('/v1/mod/bonds', { preHandler: modAuth }, async () =>
       ({ ...(await Bonds.bondStatus(pool)), oracle: await Chain.bondOracleHealth() }));
-    // THE TREASURY (omerta-stock-layer-retirement.md). The float's buy-bot seat is GONE with the
-    // stock layer — nothing buys units, so there is nothing to spend and no `allocated <= held` to
-    // reconcile. What is left is the ETH inflow ledger and the sell-tax ingest that feeds it.
+    // THE TREASURY. The ETH inflow ledger and the sell-tax ingest that feeds it — plus, since the
+    // founder reopened stock acquisition on 2026-08-10 (omerta-brokers-design.md), the STOCK reserve
+    // and the per-ticker `allocated <= held` wall. That wall had been deleted along with the buy bot
+    // on 2026-07-31 and is back because there is something to buy again; §3.3's no-gate delivery is
+    // what makes it the only wall left, so this view is where a founder reads whether it holds.
     app.get('/v1/mod/treasury', { preHandler: modAuth }, async () => Treasury.runTreasuryInvariants(pool));
+    // what the buy keeper may spend: ETH already promised to a player's vault line is not the
+    // keeper's to spend, so the budget is `held - allocated - alreadySpent`.
+    app.get('/v1/mod/treasury/budget', { preHandler: modAuth }, async () => Treasury.stockBudget(pool));
+    // THE BUY KEEPER (step 5). Drives the accounting half — reads the budget (wall 4), enforces price
+    // continuity against the last real print (wall 3), and writes through recordStockBuy. On mainnet
+    // the bot does the real DEX buy and passes the achieved price; this is its manual twin, and the
+    // same modRealTxHash gate applies, for the same reason as the ingest below it: a comp exercises
+    // the walls and books ZERO units and ZERO spend.
+    app.post('/v1/mod/treasury/keeper', { preHandler: modAuth }, async (req) =>
+      Treasury.runStockBuyback(pool, { ticker: req.body?.ticker, priceEthPerUnit: req.body?.price,
+        maxEth: req.body?.maxEth, ref: req.body?.ref, txHash: modRealTxHash(req) }));
+    // ingest an acquisition fill. The modRealTxHash gate matters MORE here than anywhere else: units
+    // are the ceiling on what may ever be delivered, so a comp that booked them would raise that
+    // ceiling with no asset behind it — invisible to precisely the check meant to catch it. A comp
+    // records the episode and books ZERO units and ZERO spend.
+    app.post('/v1/mod/treasury/buy', { preHandler: modAuth }, async (req) =>
+      Treasury.recordStockBuy(pool, { ref: req.body?.ref, ticker: req.body?.ticker,
+        units: req.body?.units, ethSpent: req.body?.ethSpent, txHash: modRealTxHash(req) }));
     // ingest a DEX sell-tax episode (a `SellTaxTaken` log on mainnet). The modRealTxHash gate stands:
     // a simulate records the episode for QA but books ZERO revenue, so a comp can never assert the
     // treasury received ETH it did not.
     app.post('/v1/mod/treasury/tax', { preHandler: modAuth }, async (req) =>
       Treasury.recordSellTax(pool, { ref: req.body?.ref, omrTaxed: req.body?.omrTaxed, priceOmrPerEth: req.body?.price, txHash: modRealTxHash(req) }));
+    // ingest a BANK harvest performance fee (a `HarvestFeeTaken` log on mainnet). Booked in the
+    // market's underlying, never mirrored into the ETH ledger — see recordHarvestFee. Same gate.
+    app.post('/v1/mod/bank/harvest', { preHandler: modAuth }, async (req) =>
+      Treasury.recordHarvestFee(pool, { ref: req.body?.ref, asset: req.body?.asset,
+        amount: req.body?.amount, payer: req.body?.payer, txHash: modRealTxHash(req) }));
     // THE DESK (economy v3 step 3). `/desk` is the real-value invariant — the ETH side of the daily
     // auction (the $OMR side is §10.4's `desk sales ledgered`). `/desk/open` forces today's auction
     // rather than waiting for the worker tick, and `/desk/fill` is the QA/comp purchase path until

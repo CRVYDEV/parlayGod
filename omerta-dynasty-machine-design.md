@@ -53,7 +53,8 @@ consistent) — and extends `omerta-identity-nft-design.md` (the trophy/entitlem
 ## 2. The three founder rules, restated as architecture
 
 **(1) NO MAXIMUM SUPPLY.** A supply cap on the identity would cap the player count. The Dynasty
-NFT mints uncapped at the fixed identity fee (0.01 ETH — the existing mint fee), proceeds through
+NFT mints uncapped at the published identity fee (`MINT_TRANCHES` — five waves 0.01 → 0.05 ETH,
+flat tail; see §10 Shape D), proceeds through
 the declared money-router waterfall. No scarcity marketing, no appreciation language (counsel memo
 A4 + the standing copy rule).
 
@@ -255,12 +256,12 @@ is where you CAME from — a birthplace, not a balance.
 
 **The stamp-eligible moment, defined** (the design lens caught four different "mint moments"
 across the docs — the account fee-mint live today, the future DynastyNFT issuance, the retrofit
-batch to already-minted accounts, and a PLEX mint with no wallet linked at all): the moment is
+batch to already-minted accounts, and a fee paid with no wallet linked at all): the moment is
 **DynastyNFT token issuance — the retrofit batch included** — and the window is *at issuance, or
 at first wallet-link thereafter, one-time*. A grace window, not open-ended retroactivity: the
 certificate is issued when the token is, which for retrofitted veterans is the honest reading,
-and a PLEX/pay-before-link minter stamps from **the wallet LINKED at stamp time** (the paying
-wallet can differ; the linked one is the identity's). §9.8's "never retroactive" lever means
+and a pay-before-link minter stamps from **the wallet LINKED at stamp time** (the paying wallet
+can differ; the linked one is the identity's). §9.8's "never retroactive" lever means
 never re-stamping an already-stamped or window-lapsed identity — not locking out the existing
 player base.
 
@@ -278,7 +279,8 @@ thresholds as levers), never an amount, never a count.
 ### 9.3 One provenance per snapshot wallet, EVER (the unbounded-grant fix)
 
 The collection is uncapped (A4) and snapshot membership is immutable — so without a bound, one
-snapshotted wallet could mint UNLIMITED trait-bearing NFTs at 0.01 ETH each and sell them
+snapshotted wallet could mint UNLIMITED trait-bearing NFTs at the current wave's fee (0.01 ETH at
+wave 1, capped at 0.05 — cheap either way against an open-ended grant) and sell them
 forever: an open-ended monetizable grant to third-party communities that the drop's own design
 (fixed amounts, caps, time-boxed claims) deliberately avoids, and a quiet dilution of the trait's
 meaning. The rule: **a snapshot wallet stamps provenance onto exactly ONE identity, ever** — the
@@ -412,20 +414,47 @@ window is the whole allowance, or the birth-certificate fiction breaks).
 ## 10. THE MINT PRICE (founder-directed 2026-08-10: "maybe instead of .01 ETH it can also be a
 number of OMR that gets burned and scales up as more NFTs are minted")
 
-**Half of this is already live.** The $OMR-denominated mint exists: PLEX (`POST /v1/plex/mint`) —
-pay the identity fee in earned $OMR (`PLEX_MINT_OMR` 5 floor, market-linked at
-`max(floor, feeEth × oracle × 1.2)`), and since economy-v3 step 2 that $OMR **recycles to THE
-DESK** rather than burning — the founder's own revenue-over-deflation decision (`plex:%` is in
-`DESK.SINK_REASONS`; the desk resells it, the auction ETH splits founder/POL). So "a number of
-OMR" is shipped; the two genuinely new pieces are **the scaling** and **the maybe-instead-of-ETH**
-— and both were evaluated against the walls rather than assumed.
+> **SUPERSEDED IN PART — THE MINT IS ETH ONLY; EVERYTHING ELSE IS NOT.** Read this section for the
+> reasoning, not the mechanism. Three founder rulings landed on 2026-08-10 and the third narrows the
+> second: *"Make the mint ETH only no OMR"*, then *"Make plex items and consumables eth only"*, then
+> *"maybe we over exaggerated on removing everything payable by OMR in Plex"*. Where that leaves it:
+>
+> - **The mint has ONE rail, in ETH.** `payPlex` refuses a mint, there is no `PLEX_MINT_OMR`,
+>   `MINT_TRANCHES` has no `omr` column, and a `plex mint retired` freshness check (on the EXACT
+>   reason, never `plex:%`) asserts nothing new writes it. The `made_man` Store SKU was retired with
+>   it — it sold the same credit on a hardcoded price that did not move with the schedule, which is
+>   the same hole one layer up.
+> - **The respawn and every Store SKU are payable in earned $OMR again.** They are repeatable
+>   consumables and access; neither is a bound. The line is the BOUND, not the denomination.
+> - **The recycles-to-the-desk observation does NOT survive as an argument for retiring the rail.**
+>   It is true (`plex:%` is in `DESK.SINK_REASONS`, so a PLEX purchase recycles rather than burns),
+>   but it was over-read: the desk is the machinery this economy runs on, and putting $OMR on the
+>   shelf CREATES the supply the daily auction sells for ETH. That is the revenue model, not a leak.
+> - **Shape A (the automatic supply-indexed curve) stays rejected**; **Shape D (discrete published
+>   tranches) is ADOPTED** — five waves capped at 0.05 ETH. The rail-interaction law below is why
+>   the mint has one rail, and it is the part of §10 that did the real work.
+>
+> See BALANCE.md § THE TRANCHE SCHEDULE and § …AND THE SWEEP WENT TOO FAR.
+
+**Half of this WAS live when this section was written, and is not any more** (superseded by the
+banner above — recorded rather than deleted, because the analysis below turns on it). The
+$OMR-denominated mint was PLEX (`POST /v1/plex/mint`): pay the identity fee in earned $OMR
+(`PLEX_MINT_OMR` floor, market-linked at `max(floor, feeEth × oracle × 1.2)`), recycling to THE
+DESK rather than burning since economy-v3 step 2. **`payPlex('mint')` now refuses and there is no
+`PLEX_MINT_OMR`** — the mint has ONE rail, in ETH, because it is the Sybil bound and the
+extraction gate. The rail stays live for the RESPAWN and for Store SKUs (the line is the bound,
+not the denomination). So of the founder's proposal the genuinely open pieces were **the scaling**
+and **the maybe-instead-of-ETH** — and both were evaluated against the walls rather than assumed;
+the second is now settled against.
 
 **The rail-interaction law first, because it shapes everything:** with two rails open, the
 EFFECTIVE mint price is the CHEAPER rail. Scaling one rail alone is either decorative (it becomes
 the expensive rail nobody uses) or silently becomes the only real price (it undercuts the other).
 The rails move in LOCKSTEP or not at all — this is exactly what the preflight implied-rate guard
-exists to enforce (both fee pairs pin ~500 $OMR/ETH; a desync makes the cheapest identity the
-lagging rail, and minting is the Sybil bound, so a desync quietly undoes the bound).
+exists to enforce (a desync makes the cheapest identity the lagging rail, and minting is the Sybil
+bound, so a desync quietly undoes the bound). *Since superseded in the strongest way available:
+the mint has ONE rail, so there is nothing to keep in lockstep — the guard now covers the respawn
+pair alone, which is the only place two rails still meet.*
 
 ### The three shapes, evaluated
 
@@ -455,7 +484,7 @@ declared revenue in the money router, and the launch funnel bonus is priced agai
 
 **Shape C — dual-rail + ERA REPRICING, by hand: RECOMMENDED.** The DAILY OFFERING's own
 GM-control precedent applied to the mint price: the founder raises the price at growth milestones
-— **both rails in lockstep** (`mintFee` is owner-settable on-chain; `PLEX_MINT_OMR` is env; the
+— **both rails in lockstep** (`mintFee` is owner-settable on-chain; the $OMR floor was env; the
 preflight guard warns on any desync) — announced factually as a repricing, never as an automatic
 curve. Every raise runs TWO checks before it ships: the implied-rate guard, and **the free-path
 check** — the $OMR price stays ≤ what the mission ladder pays lifetime, or the "get made for
@@ -499,7 +528,7 @@ the $OMR rail rides the existing `plex:%` vocabulary).
 The founder's refinement of Shape A: not a continuous curve — **discrete, pre-published price
 tranches indexed to cumulative mints, both rails moving together**. This is materially better
 than the rejected curve on every axis, and the founder's own example already obeys the lockstep
-law (0.01→5 and 0.02→10 both imply 500 $OMR/ETH — the exact rate the preflight guard pins). It
+law (0.01→30 and 0.02→60 both imply 3,000 $OMR/ETH — the exact rate the preflight guard pins). It
 is designed here as the ADOPTABLE shape, with the one honest cost stated up front: **adopting it
 re-opens A4** (the row's fixed-price predicate becomes a published-schedule predicate — the
 memo carries the proposed amendment and the re-drafted counsel question).
@@ -550,13 +579,55 @@ discipline above)** < continuous auto-curve (Shape A — rejected, stays rejecte
 residual that no copy rule removes: the schedule itself tells buyers the price will rise, on a
 tradeable asset — that is why the row goes back to counsel rather than being self-certified.
 
-**ADOPTED 2026-08-10 (founder: "let's do your recommendation" — the LINEAR progression).** The
-published table is **`MINT_TRANCHES`** in the code (ten rows, tier k = k × 0.01 / k × 5, tranche
-sizes 1,000 → 10,000, cumulative 55,000; whole-array test-pinned) with `mintTierOf` as the one
-reader. The flat tail holds the last price beyond the table. Built with it: the preflight
-off-schedule warning (a rate-clean pair the table never promised — 0.015/7.5 — is caught at
-boot), the admin chain panel's tier-progress line with an OFF-SCHEDULE flag (the GM's instrument
-for executing a boundary), and the two row-level laws pinned in `test/made.js` beside the
-free-path computation they depend on (max published $OMR 50 vs ~220 earnable — 4.4× headroom;
-one implied rate per row). A4 is RE-OPENED in the memo with the amended fact pattern. The LIVE
-price today is tier 1 — nothing changes at the till until the 1,001st identity.
+**THE MINT IS ETH ONLY (founder-directed 2026-08-10: "Make the mint ETH only no OMR").** This
+supersedes the two-rail framing that the whole of §10 above reasons about — the rail-interaction law,
+the lockstep requirement, the "effective price is the cheaper rail" analysis. All of it was correct,
+and the conclusion it kept pointing at is that the surest way to keep two rails in agreement about
+the Sybil bound is for the bound to have ONE. The identity now has a single price, in ETH, at the
+published wave. `MINT_TRANCHES` has no `omr` column; `payPlex` refuses a mint; `PLEX_MINT_OMR` is
+deleted rather than zeroed; `plex:mint` stays in the §10.4 vocabulary and burn term forever (real
+rows exist) with a freshness check asserting nothing new uses it. **Respawn stays on PLEX** — a
+repeatable consumable is not the bound, so "pay your rent in ISK" applies to it cleanly. And the free
+path is untouched, because it never ran through this rail: the mission GRANTS a mint credit, which at
+the honest genesis rate is the only way it could have worked anyway (a wave-1 mint prices at ~2,471
+$OMR against **1,320** lifetime earnable off the whole ladder — measured, sim P9.35).
+
+**ADOPTED 2026-08-10 (founder: "let's do your recommendation" — the LINEAR progression), then
+REVISED the same day to FIVE WAVES WITH A HARD CEILING** (founder: *"cap it at 5 waves so by wave 5
+the maximum mint price anyone can pay would be .05"*). The published table is **`MINT_TRANCHES`**
+in the code — five rows, waves of 1,000 / 10,000 / 25,000 / 50,000 / 100,000 at
+0.010 / 0.025 / 0.035 / 0.045 / 0.050 ETH (ETH only — no $OMR column), cumulative 186,000,
+whole-array test-pinned — with `mintTierOf` as the one reader and the flat tail holding **0.05
+forever** beyond it.
+
+**The ceiling settles the progression question the LINEAR-vs-doubling analysis above was trying to
+answer, and settles it better than either.** That analysis picked LINEAR because doubling crossed
+the free-path ceiling at a reachable ~63k identities while linear crossed it at an unreachable
+~990k — but both answers were *arithmetic about where a rising price eventually breaks the promise*.
+A cap removes the crossing from the shape — though note the SCHEDULE has carried no $OMR column
+since the mint went ETH-only, so what the cap now bounds is the ETH price alone and the free path is
+asserted at its MECHANISM (a mission grants the credit) rather than through a price proxy. The
+argument as originally written: the dearest row is 150 $OMR against the lifetime earnable, and
+**no future row can ever exceed it**, so the free path is guaranteed structurally rather than
+re-derived at each extension. It also reverses the growth headwind that counted against Shape A —
+the waves widen while the increments shrink, so past the first thousand the schedule is cheaper
+than the ladder it replaces at every point (#5,000 pays 0.025 against 0.03; #20,000 pays 0.035
+against 0.06).
+
+Waves 3 and 4 are the only edit to the founder's figures: 0.0333 and 0.0444 do not land whole on
+the $OMR rail at 3,000 $OMR/ETH (99.9 and 133.2), and a fractional PLEX floor matters because the
+rail is set by hand at each boundary — a GM typing the round number would trip the off-schedule
+warning over a 0.1% rounding. 0.035 / 0.045 are the nearest pair whole on both rails (+5.1%,
++1.4%); restoring the exact figures is the `eth` column plus `omr` 99.9 / 133.2.
+
+Built with it: the preflight off-schedule warning (a rate-clean pair the table never promised —
+0.015/7.5 — is caught at boot), the admin chain panel's tier-progress line with an OFF-SCHEDULE
+flag (the GM's instrument for executing a boundary), and the row-level laws pinned in
+`test/made.js` beside the free-path computation they depend on: one implied rate per row, the
+free-path law (now asserted at the mechanism — a mission grants the credit — since no row carries a
+$OMR price), and **the ceiling itself** — the last row IS 0.05, no
+row exceeds it, and the millionth identity still pays it, so raising the cap fails by name as a new
+promise rather than passing as a retune. A4 is RE-OPENED in the memo with the amended fact pattern,
+and the cap **strengthens** that position: the hardest form of the A4 question is whether a forward
+schedule promises indefinitely-rising prices, and a published ceiling answers it in the pattern
+itself. The LIVE price today is wave 1 — nothing changes at the till until the 1,001st identity.
