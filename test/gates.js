@@ -143,7 +143,7 @@ for (const f of files) {
       if (ti >= 0) { scope += bodyOf(src, ti); helpers.push(thin[1]); }
     }
     const has = (g) => new RegExp(`(?<![\\w$])${g}\\s*\\(`).test(scope) || (INLINE[g] && INLINE[g].test(scope));
-    fns.set(marks[i].name, { file: path.basename(f), gates: new Set(GATES.filter(has)), helpers,
+    fns.set(marks[i].name, { file: path.basename(f), scope, gates: new Set(GATES.filter(has)), helpers,
       inline: GATES.filter((g) => INLINE[g] && INLINE[g].test(code) && !new RegExp(`(?<![\\w$])${g}\\s*\\(`).test(code)) });
   }
 }
@@ -226,6 +226,58 @@ const strayCollect = [...fns.keys()].filter((n) => /^collect[A-Z]/.test(n)
 assert.equal(strayCollect.length, 0,
   `collect action(s) neither in the family nor exempted with a reason: ${strayCollect.join(', ')}`);
 console.log(`✓ completeness: ${streetCrimes.length} street crimes and every collect* action are classified`);
+
+// ── FAMILY 6: AGENT-EXCLUDED CASH FAUCETS, ENFORCED AT THE POINT OF PAYMENT ──────────────────────
+// Recommended by the night economy red-team after it found two instances the five families above
+// structurally could not see, because they are about WHO is paid rather than about reachability.
+//
+// The rule, and why it is a rule rather than a list: a handful of cash faucets exist specifically to
+// reward a HUMAN for showing up — a login streak, a mentor's protégé stake, a crew's weekly job, a
+// nightly window, the corner, the hustle. Agents are excluded from every one of them by standing
+// posture, and that exclusion is the whole anti-Sybil argument for those faucets existing at all.
+//
+// AND IT MUST BE CHECKED AT THE POINT OF PAYMENT, which is the finding worth keeping: `agent_flag`
+// is set by the account's OWN call to /v1/auth/agent-key, so it is mutable at any moment. A gate at
+// formation time — "you may not be offered a mentorship if you are an agent" — reads state that can
+// change before the money moves, and `mentor` shipped exactly that: form the tie as a human, flip
+// the flag, collect $20,000. So membership is derived from the LEDGER WRITE, not from a hand list:
+// any function that writes one of these reasons must reference agent_flag in the same scope.
+const REWARD_PREFIXES = ['streak:', 'mentor:protege', 'crew:objective', 'primetime:', 'corner:', 'hustle:', 'firstblood:'];
+// DECLARE-or-WAIVE (the NOT_API / COLLECT_EXEMPT discipline): a faucet on these prefixes either
+// excludes agents at the point of payment, or says here why it does not. What the check enforces is
+// therefore not "every participation faucet excludes agents" — that was never the standing posture,
+// and asserting it would be inventing policy — but the thing that actually generalises: **the
+// decision is made explicitly, and where it is made, it is made where the money moves.**
+const FAUCET_WAIVED = {
+  // A TRANSFER between two players out of the mentor's own earned cash, not a faucet — nothing is
+  // created, so there is nothing for an agent to farm.
+  mentorGift: 'a two-party transfer of the mentor\'s own cash, not a faucet',
+  // ⚑ FOUNDER CALL, flagged 2026-08-11 (BALANCE.md § AGENTS AND THE PARTICIPATION FAUCETS). These
+  // three pay a participation reward and do NOT exclude agents, while streak / crew-objective /
+  // primetime / mentor do. Neither posture is obviously right: an agent that plays the corner is
+  // playing the game, and the cash is non-extractable since the severance (it can never become
+  // $OMR). Left as they ship rather than changed unilaterally — but now they are a decision on the
+  // record instead of an omission nobody had noticed.
+  claimCorner: 'not agent-excluded — founder call (petty, capped 5/day, non-extractable)',
+  advanceHustle: 'not agent-excluded — founder call (level-scaled daily, non-extractable)',
+  settleFirstBlood: 'not agent-excluded — founder call (once ever per street, non-extractable)',
+};
+const paysReward = (v) => REWARD_PREFIXES.some((p) => new RegExp(`reason: ['\`]${p}`).test(v.scope || ''));
+// The anti-vacuity guard measures what the EXTRACTOR finds, before waivers — otherwise waiving
+// everything would silently satisfy it, which is the failure mode it exists to prevent.
+const allFaucets = [...fns].filter(([, v]) => paysReward(v));
+assert(allFaucets.length >= 7,
+  `the reward-faucet scan found only ${allFaucets.length} function(s) — the extractor has stopped seeing `
+  + 'the ledger writes it keys on, so this family is checking nothing');
+const faucets = allFaucets.filter(([n]) => !FAUCET_WAIVED[n]);
+const leaky = faucets.filter(([, v]) => !/agent_flag/.test(v.scope || ''));
+assert.equal(leaky.length, 0,
+  `participation cash faucet(s) that never read agent_flag: ${leaky.map(([n, v]) => `${n}() [${v.file}]`).join(', ')}\n`
+  + '      why it matters: these faucets exist to reward a human for showing up, and agents are excluded\n'
+  + '      from every one by standing posture. Check the flag WHERE THE MONEY MOVES — a gate at\n'
+  + '      formation time reads state the account can flip before it collects.');
+console.log(`✓ ${faucets.length} participation cash faucets exclude agents at the point of payment `
+  + `(${allFaucets.length - faucets.length} waived with a stated reason)`);
 
 // ── the inline copies, COUNTED rather than silently tolerated ────────────────────────────────────
 // A hand-rolled `safe_until` comparison is byte-equivalent to safeHoused() today. That is exactly

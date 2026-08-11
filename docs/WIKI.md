@@ -956,7 +956,7 @@ any route that would convert cash into $OMR says so plainly if you try it. What 
   while cash still bought $OMR: the two together would be a money pump, and the game refuses to run both.
 - **The Family Yield** (`GET /v1/yield`) — the top families by this season's standing split a pot of $OMR
   into their reserve. The pot is fed by **the family's cut of every redemption at the Window** — a small
-  share of what a player burns goes to the families instead of leaving supply, so the yield scales with
+  share of what a player spends goes to the families rather than to the house, so the yield scales with
   real redemption volume. It is what staking rewards and personal dividends become: standing stops being
   only a badge and starts paying, so tribute, wars and the Commission are worth real money to a family.
 - **The Vault** (`GET /v1/vault`) — four streams of real ETH (the DEX sell tax, treasury bonds, the
@@ -978,7 +978,7 @@ show **trophies** that come from your real holdings (rarest car, guns, book valu
 only. `POST /v1/estate/upgrade`, `/feature/:id`, `/name`.
 
 **The Auction House** (`GET /v1/auction` [public]) — a competitive weekly $OMR cost: 3 unique numbered prestige
-items each week. The highest **$OMR bid wins**, and **the winning bid burns** (it reduces the supply). Bids go
+items each week. The highest **$OMR bid wins**, and **the winning bid is sunk** — it leaves you for good and goes to the house, which sells it back at the daily auction. Bids go
 into escrow. An outbid bidder gets a refund immediately. Won items are account-level and survive death.
 `POST /v1/auction/:lotId/bid`.
 

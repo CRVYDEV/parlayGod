@@ -287,8 +287,10 @@ async function collectLedgerChecks(pool) {
   // the burn term forever; only new writes stopped ('portfolio retired' below asserts that).
   // estate:* (THE ESTATE) is a $OMR BURN — the deep personal compound sink, account bucket, pure
   // status (like rwa:/vanity:); no new §10.4 bucket, only the burn term.
-  // auction:win (THE AUCTION HOUSE) is a $OMR BURN — the winning bid leaves escrow and the game
-  // (deflationary). bid/refund are transfers (escrow ↔ account, both inside omrBuckets), NOT here.
+  // auction:win (THE AUCTION HOUSE) is a $OMR SINK — the winning bid leaves escrow for good. It sits
+  // in the burn TERM so conservation stays exact, but it is in DESK.SINK_REASONS, so the value goes
+  // to the shelf (revenue), not to the fire. bid/refund are transfers (escrow ↔ account, both inside
+  // omrBuckets), NOT here.
   // law:envelope (THE ENVELOPE) is a $OMR BURN — the standing graft (account bucket, the law:jury twin).
   // foundation:tier (THE FOUNDATION) is a $OMR BURN — the family charity, against the gang reserve bucket
   // (the vanity:gang:seal precedent; the reserve is already in omrBuckets, so only the burn term is new).

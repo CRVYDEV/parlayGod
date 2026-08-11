@@ -243,6 +243,33 @@ PHASE 1 for the exact calls/args.
       `_update` path anyway, ARMED AT ZERO: a hook tax is a property of ONE pool and anyone may open an
       unhooked one, so the token tax is the universal backstop the Safe arms if that starts to matter.
 
+### 2b. THE BANK — the nUSD market (only when it ships; not part of the first cut)
+Order matters more here than anywhere else in this file, because **two of these steps fail SILENTLY**:
+omit them and the market looks healthy from the outside and is not.
+- [ ] **`NUSD(name, symbol, safe)`** → **`Transmuter(nusd, asset, safe)`** →
+      **`Alchemist(nusd, asset, vault, transmuter, safe)`**, then wire:
+      `nusd.setMinter(alchemist)`, `nusd.setBurner(transmuter)`, `transmuter.setFunder(alchemist, true)`,
+      `transmuter.setFunder(safe, true)` (the launch seeder).
+- [ ] **`alchemist.setLtvBps(bps)`.** Bounded by `MAX_LTV_BPS` **and** by the harvest fee — the pair must
+      satisfy `ltv + fee <= 10000`, enforced in both setters, so at the shipped 20% fee the reachable
+      ceiling is 80%, not 90%.
+- [ ] **⚠ SEED THE BUFFER BEFORE ANY BORROW.** `transmuter.fund(seed)` from the Safe. At zero supply
+      the required buffer is zero, so the FIRST borrow always passes and every one after it reverts
+      `BufferUnhealthy` — reserves are fed only by repay/harvest, which need existing debt. An unseeded
+      market takes one borrow and deadlocks while reading as a correct config.
+      `test_an_unseeded_market_bricks_after_one_borrow` pins it.
+- [ ] **⚠ SET THE MINT CAPS.** `alchemist.setMintCaps(perBlock, perDay)`. **Zero means UNLIMITED here** —
+      these fail OPEN, unlike `maxOmrPerEth` and the gear caps. Skipping this does not stop the market;
+      it runs it with no rate limit on issuance.
+- [ ] **`alchemist.setHarvestFee(bps, recipient)`** — the performance fee on realised yield, capped by
+      `MAX_HARVEST_FEE_BPS`. A ZERO recipient disables the fee (fail-safe: an unset recipient
+      under-charges rather than burning a borrower's yield), so this is the one bank setter whose
+      omission costs revenue and nothing else.
+- [ ] Backend: set `ALCHEMIST_ADDRESS` + `ALCHEMIST_ASSET` + `ALCHEMIST_ASSET_DECIMALS` so the worker
+      syncs `HarvestFeeTaken` into `bank_revenue`. The decimals matter: the fee is denominated in the
+      market's UNDERLYING (6dp for USDC), and `bank_revenue` is deliberately NOT mirrored into the
+      ETH-denominated `rwa_revenue`, whose sum is the vault's `allocated <= held` wall.
+
 ## 3. Transfer ownership to the Safe
 - [ ] Every contract is `Ownable2Step`. From the deployer: `transferOwnership(safe)`; from the Safe:
       `acceptOwnership()`. Verify `owner() == safe` on all six. (In `chain-e2e.js` the deployer *is* the Safe;

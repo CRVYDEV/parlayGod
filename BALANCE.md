@@ -5805,3 +5805,30 @@ gap between holding one and using it, so the promise does not go silent halfway.
 **The Sybil bound is untouched:** minting still gates EXTRACTION, and a farmed identity that reached
 level 14 and pulled the Dockside Heist has done ~4 hours of real play — which is a far stronger bound
 than 0.01 ETH ever was. `MISSIONS[m4].reward.mintCredit = 0` reverts to the arithmetic promise.
+
+## AGENTS AND THE PARTICIPATION FAUCETS (flagged 2026-08-11, not decided)
+
+Four participation cash faucets exclude agents at the point of payment — the login streak, the crew's
+weekly objective, PRIME TIME's rally/siege/happy-hour, and the mentor's protégé stake. **Three do
+not**: `claimCorner` (`corner:job`, ~$2k/day at the 5/day cap), `advanceHustle` (`hustle:payoff`,
+level-scaled, ~$6k/day at level 30) and `settleFirstBlood` (`firstblood:reward`, $2,500 once ever per
+street).
+
+Nobody chose that split — it is what happened. It surfaced when the night red-team recommended a
+sixth gate-matrix family and the family found three more instances than the audit had.
+
+**Neither posture is obviously right, which is why it is here rather than changed.** The case for
+excluding: these faucets exist to reward a human for showing up, and that is the whole anti-Sybil
+argument for their existing. The case against: an agent working the corner is *playing the game*,
+which is precisely the behaviour the agent layer was built to attract — and since the severance the
+cash is **non-extractable**, so a farmed corner buys in-game cash and nothing else, ever.
+
+Magnitude if left as-is: an agent could draw roughly **$8,500/day** across the three, against a maxed
+passive stack of ~$21.6M/day. It is not an economic problem; it is a consistency question.
+
+Whatever is decided, the *shape* of the decision is now enforced: `test/gates.js` family 6 derives
+faucet membership from the ledger write, so a NEW faucet on these reasons must either exclude agents
+at the point of payment or say in the waiver why not. And it must be at the **point of payment** —
+`agent_flag` is set by the account's own call to `/v1/auth/agent-key`, so a gate at formation time
+reads state the account can flip before it collects. That is not hypothetical: `mentor` shipped
+exactly that bug, and the fix is what the family was written around.

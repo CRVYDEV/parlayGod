@@ -403,6 +403,29 @@ mutation-verified:
    address would brick the core function while looking configured.
 3. **The fee can never exceed the yield it came from** (512-run fuzz over rate × yield).
 
+**A FOURTH PROPERTY, added the same night by a red-team pass over the fee: THE LTV AND THE FEE ARE
+NOT INDEPENDENT KNOBS.** A harvest removes `take + fee` of collateral but reduces debt by `take`
+only, so the ceiling falls faster than the debt — and at the ceiling that is a breach whenever
+`ltv > 1 − fee`. Measured before the fix at **910 > 900**: deposit 1000, let 100 of yield accrue,
+borrow against the ceiling that now INCLUDES it, and any EOA calling the permissionless `harvest`
+returns collateral to 1000 (ceiling 900) while debt only falls to 910. The identical sequence at a
+zero fee lands at 890 ≤ 900, which is what identifies the fee as the sole cause. It is not a loss —
+there is no liquidation — but `mint` and `withdraw` both refuse an unhealthy position, so a stranger
+could freeze a borrower's withdrawal by calling a function anyone may call.
+
+Both setters now enforce `ltvBps + harvestFeeBps <= BPS`, so the pair cannot be walked into an
+invalid state from either side (mutation-verified in both directions).
+
+**⚑ THE PRODUCT CONSEQUENCE, which is a founder decision rather than an implementation detail: you
+can have a 90% LTV or a 20% harvest fee, not both.** At the shipped 20% fee the reachable ceiling is
+**80%** — the bottom of §2.2's stated 80–90% band — and `MAX_LTV_BPS` (9000) is unreachable as
+configured. Raising LTV to 90% means dropping the fee to 10%. The two live options:
+
+| | LTV | Harvest fee | Reading |
+|---|---|---|---|
+| **As shipped** | 80% | 20% | The greedier fee; the borrow ceiling at the bottom of the band. |
+| **The alternative** | 90% | 10% | Alchemix's own fee; the headline LTV the design leads with. |
+
 **THE DESTINATION IS THE TREASURY SAFE, founder-directed 2026-08-11.** `feeRecipient` is one address
 and §4 wants three legs, so the honest answer today is a COLLECTOR: the sToken is unbuilt, the NFT leg
 ships at zero per memo A11, and the city leg's buy path is design — pointing the fee at any one of

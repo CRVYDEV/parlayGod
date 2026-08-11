@@ -64,6 +64,29 @@ export async function notify(client, characterId, type, payload = {}) {
   bus.emit(`me:${characterId}`, { type, payload });
 }
 
+// SOLICITATIONS — the notify variant for anything one player can send another AT WILL: a mentor
+// offer, a vouch, a crew invite. These differ from an event notification in one way that matters:
+// a kill or a raid happens TO you and every instance is real news, whereas a solicitation is a
+// button, so the same one repeated is not news — it is a megaphone. Every such call site is a free,
+// uncapped, no-counterplay ping at a chosen victim (the red-team's F1/F4 class), and the shape recurs
+// because each one is individually reasonable.
+//
+// So: if the recipient still has an UNREAD notification identical to this one, say nothing more.
+// Nothing is lost — the message they have not read yet says exactly what the new one would — and the
+// loop collapses to one ping until they engage. Exact-payload match on a TEXT column, which is the
+// same comparison on both engines (no JSON operators, which pg-mem is unreliable about).
+export async function notifyOnce(client, characterId, type, payload = {}) {
+  const body = JSON.stringify(payload);
+  const seen = (await client.query(
+    'SELECT 1 FROM notifications WHERE character_id=$1 AND type=$2 AND payload=$3 AND NOT delivered LIMIT 1',
+    [characterId, type, body])).rows[0];
+  if (seen) return false;
+  await client.query('INSERT INTO notifications (id, character_id, type, payload) VALUES ($1,$2,$3,$4)',
+    [uid(), characterId, type, body]);
+  bus.emit(`me:${characterId}`, { type, payload });
+  return true;
+}
+
 // §5.5 weekly family contracts — the same actions that call bumpFamilyTask in v24
 // (tribute $, crime, melt rounds, gta, jump, deal, recruit) progress the gang's task.
 // Goal scales with roster size; completion pays +15,000 standing and +5 $OMR to the

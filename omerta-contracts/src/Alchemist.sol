@@ -82,12 +82,15 @@ contract Alchemist is Ownable, ReentrancyGuard, FlashGuard {
     ///         and it would bill a user whose debt is already clear.
     uint16 public harvestFeeBps = 2_000;
 
-    /// @notice Where the performance fee goes. **Zero disables the fee entirely.** This is not
-    ///         tidiness: measured by removing it, an unset recipient makes `safeTransfer` revert
-    ///         `ERC20InvalidReceiver` and **every harvest in the market fails** — so a deploy that
-    ///         forgets this one address would brick the product's core function while looking
-    ///         perfectly configured. The guard turns that into under-charging, which is recoverable
-    ///         with one transaction (the GearVault fail-closed precedent).
+    /// @notice Where the performance fee goes. **Zero disables the fee entirely**, so a deploy that
+    ///         forgets this one address under-charges rather than taking a cut it can never pay out
+    ///         — recoverable with one transaction (the GearVault fail-closed precedent). Charging
+    ///         into an unset recipient would strand the fee in `accruedFees` forever, since
+    ///         `sweepFees` refuses a zero destination.
+    ///
+    ///         Note the fee is only ACCRUED here and pushed by `sweepFees`, so this address being
+    ///         unable to receive costs a failed sweep rather than a failed harvest — see `harvest`
+    ///         for why that separation is not optional on a token with a blocklist.
     address public feeRecipient;
 
     mapping(address => CollateralEscrow) public escrowOf;
@@ -98,6 +101,19 @@ contract Alchemist is Ownable, ReentrancyGuard, FlashGuard {
     ///         the protocol and this batch deliberately issues none.
     mapping(address => uint256) public debtOf;
 
+    /// @notice Harvest fees taken but not yet pushed to `feeRecipient`. Held by this contract, NOT
+    ///         by the escrows and NOT counted as reserves anywhere (the Transmuter tracks reserves
+    ///         in a variable, never a balance), so this can never be mistaken for backing.
+    uint256 public accruedFees;
+
+    /// @notice Flow caps on issuance. **ZERO MEANS UNLIMITED, so an unset cap is NO cap** — these
+    ///         fail OPEN, unlike `maxOmrPerEth` and `GearVault.cap`, which fail closed at zero.
+    ///         The asymmetry is deliberate and it is not a preference: a fail-closed cap here would
+    ///         make a forgotten setter brick borrowing for every user, and this market already has
+    ///         one deploy step whose omission looks like a healthy config (the buffer seed). Two of
+    ///         those is one too many. The cost is that a deploy which forgets `setMintCaps` runs
+    ///         with no rate limit on issuance — which is why it is a checklist item in
+    ///         CHAIN-DEPLOY.md rather than a comment, and why it is stated here at the field.
     uint256 public mintPerBlockCap;
     uint256 public mintPerDayCap;
     Flow private _mintFlow;
@@ -110,6 +126,7 @@ contract Alchemist is Ownable, ReentrancyGuard, FlashGuard {
     event Harvested(address indexed user, uint256 assets, uint256 debtCleared);
     event LtvSet(uint16 bps);
     event MintCapsSet(uint256 perBlock, uint256 perDay);
+    event FeesSwept(address indexed to, uint256 amount);
     event HarvestFeeSet(uint16 bps, address recipient);
     /// @dev Emitted alongside `Harvested` so the fee is independently indexable: the backend books
     ///      protocol revenue off THIS event, and never off a figure it derived itself.
@@ -122,6 +139,9 @@ contract Alchemist is Ownable, ReentrancyGuard, FlashGuard {
     error BufferUnhealthy();
     error NothingToHarvest();
     error FeeTooHigh();
+    error LtvFeeIncompatible();
+    error FeeRecipientUnset();
+    error BadFeeRecipient();
 
     constructor(NUSD debtToken_, IERC20 asset_, IERC4626 vault_, Transmuter transmuter_, address safe)
         Ownable(safe)
@@ -144,19 +164,69 @@ contract Alchemist is Ownable, ReentrancyGuard, FlashGuard {
 
     // ── admin ────────────────────────────────────────────────────────────────────────────────────
 
+    /// @notice Set the borrow ceiling. Bounded by `MAX_LTV_BPS`, and — since the harvest fee shipped
+    ///         — by the fee as well: see `_assertLtvFeeCompatible`.
     function setLtvBps(uint16 bps) external onlyOwner {
         if (bps > MAX_LTV_BPS) revert LtvTooHigh();
+        _assertLtvFeeCompatible(bps, harvestFeeBps);
         ltvBps = bps;
         emit LtvSet(bps);
+    }
+
+    /// @dev THE LTV AND THE HARVEST FEE ARE NOT INDEPENDENT KNOBS, and nothing said so until a
+    ///      permissionless harvest was measured pushing a healthy 90% position to `910 > 900`.
+    ///
+    ///      Why they are related: a harvest removes `take + fee` of collateral but reduces debt by
+    ///      `take` only, so the ceiling falls faster than the debt. At the ceiling that is a breach
+    ///      whenever `ltv > 1 - fee`. Concretely — deposit 1000, let 100 of yield accrue, borrow
+    ///      against the ceiling that now INCLUDES it, and a stranger's harvest returns collateral to
+    ///      1000 (ceiling 900) while debt only falls to 910. With no fee the same sequence lands at
+    ///      890 <= 900, which is what identifies the fee as the sole cause.
+    ///
+    ///      There is no liquidation here, so the breach is not a loss — but `mint` and `withdraw`
+    ///      both refuse an unhealthy position, so ANY caller could freeze a borrower's withdrawal by
+    ///      calling a permissionless function. Bounding the pair is the fix that needs no new state
+    ///      and no post-state check on a hot path.
+    ///
+    ///      THE PRODUCT CONSEQUENCE, stated because it is a real tradeoff and not an implementation
+    ///      detail: **you can have a 90% LTV or a 20% harvest fee, not both.** At the shipped 20%
+    ///      fee the ceiling is 80%, which is the bottom of the design's stated 80–90% band. Raising
+    ///      LTV to 90% requires dropping the fee to 10%. Both setters enforce it, so the pair cannot
+    ///      be walked into an invalid state from either side.
+    function _assertLtvFeeCompatible(uint16 ltv, uint16 fee) internal pure {
+        if (uint256(ltv) + uint256(fee) > BPS) revert LtvFeeIncompatible();
     }
 
     /// @notice Set the harvest performance fee and its recipient. Bounded by `MAX_HARVEST_FEE_BPS`,
     ///         which a stolen key cannot raise. Setting the recipient to zero turns the fee OFF.
     function setHarvestFee(uint16 bps, address recipient) external onlyOwner {
         if (bps > MAX_HARVEST_FEE_BPS) revert FeeTooHigh();
+        // Two addresses swallow the fee without anyone noticing, which is why they are named rather
+        // than left to care: THIS contract has no rescue path, so a sweep to itself would zero
+        // `accruedFees` against a transfer that moved nothing; and the Transmuter tracks reserves in
+        // a VARIABLE, never a balance, so assets sent there neither back a redemption nor come back
+        // out. `address(0)` is the deliberate off switch and stays allowed. The point of a
+        // fail-safe is that it is complete — a half-covered one reads as covered.
+        if (recipient == address(this) || recipient == address(transmuter)) revert BadFeeRecipient();
+        _assertLtvFeeCompatible(ltvBps, bps);
         harvestFeeBps = bps;
         feeRecipient = recipient;
         emit HarvestFeeSet(bps, recipient);
+    }
+
+    /// @notice Push the accrued harvest fees to the recipient. **Permissionless on purpose** — the
+    ///         same reasoning as `OmertaHook.sweep`: a stalled or lost Safe must not be able to
+    ///         strand revenue, and there is nothing here for a caller to take, since the only
+    ///         destination is the Safe-set recipient. Reverts if the recipient is unset, so an
+    ///         unconfigured market accrues rather than burning the fee to address(0).
+    function sweepFees() external nonReentrant {
+        address to = feeRecipient;
+        if (to == address(0)) revert FeeRecipientUnset();
+        uint256 amount = accruedFees;
+        if (amount == 0) revert ZeroAmount();
+        accruedFees = 0;
+        asset.safeTransfer(to, amount);
+        emit FeesSwept(to, amount);
     }
 
     function setMintCaps(uint256 perBlock, uint256 perDay) external onlyOwner {
@@ -313,18 +383,34 @@ contract Alchemist is Ownable, ReentrancyGuard, FlashGuard {
         // == feeBps / BPS. When the debt is smaller than the yield, the untouched remainder keeps
         // compounding for the user and is never billed — which is what stops this becoming a
         // management fee that charges for the same money every harvest.
-        //   Both branches satisfy `take + fee <= yield_`:
+        //   In exact arithmetic both branches satisfy `take + fee <= yield_`:
         //     debt-bound   take = need <= net = yield_(1-f)  =>  take + fee = need/(1-f) <= yield_
         //     yield-bound  take = net  = yield_(1-f)         =>  take + fee = yield_ exactly
-        //   Integer division rounds the fee DOWN, which only widens the margin.
+        //
+        // THE CLAMP BELOW IS REACHABLE, and the argument above is why it is easy to believe it is
+        // not. `net` is computed with a floored fee, so net >= yield_(1-f) — it can sit up to one
+        // unit ABOVE the exact figure, and dividing that back out by (1-f) can overshoot yield_ by
+        // up to 1/(1-f). At DUST scale that rounds into a whole unit: yield_ = 4, f = 20% gives
+        // net = 4, take = 4, naive fee = 1, take + fee = 5 > 4. Without the clamp the escrow would
+        // be asked for more than it realised. It fires only in the last unit or two, which is
+        // exactly why no test above the micro-unit range can see it — the fuzz's lower bound is
+        // now 1 wei so it can, and test_the_dust_clamp_is_reachable pins the case by hand.
         uint256 fee = feeBps == 0 ? 0 : (take * feeBps) / (BPS - feeBps);
-        if (take + fee > yield_) fee = yield_ - take; // defence in depth; unreachable by the above
+        if (take + fee > yield_) fee = yield_ - take;
 
         e.withdraw(take + fee, address(this));
         debtOf[user] = d - asDebt;
 
+        // THE FEE ACCRUES; `sweepFees` pushes it. Do NOT "simplify" this into an in-tx transfer to
+        // `feeRecipient`. `harvest` is the self-repaying mechanism and it is PERMISSIONLESS — a
+        // keeper runs it for everyone — so a recipient that cannot receive would brick it for every
+        // borrower in the market, not just for the treasury. That is not hypothetical on a USDC
+        // market: USDC has a live blocklist, and a blocked recipient would turn a revenue setting
+        // into a protocol outage. The rule is the one `OmertaHook` already follows for exactly this
+        // reason (subtree CLAUDE.md rule 7): pool/mechanism liveness must never depend on a wallet's
+        // behaviour. A broken recipient now costs a failed sweep, which the Safe can fix.
         if (fee > 0) {
-            asset.safeTransfer(feeRecipient, fee);
+            accruedFees += fee;
             emit HarvestFeeTaken(user, feeRecipient, fee);
         }
 

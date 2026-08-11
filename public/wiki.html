@@ -582,8 +582,8 @@ const SECTIONS = [
       <b>open</b> precisely because cash cannot buy $OMR: a fixed-rate window alongside a purchase rail would be a money
       pump, so the game runs one or the other, never both.</p>
       <p><b>The Family Yield</b> — the top families by this season's standing split a pot of $OMR into their reserve. The
-      pot is fed by <b>the family's cut of every redemption at the Window</b> — a small share of what a player burns goes
-      to the families instead of leaving supply. It is what staking rewards and personal dividends become: standing stops
+      pot is fed by <b>the family's cut of every redemption at the Window</b> — a small share of what a player spends goes
+      to the families rather than to the house. It is what staking rewards and personal dividends become: standing stops
       being only a badge and starts paying, so tribute, wars and the Commission are worth real money to a family.</p>
       <p><b>The Vault</b> — four streams of real ETH (the DEX sell tax, treasury bonds, the store, game fees) fund the
       protocol: liquidity, the withdrawal reserve, the founder, and a treasury. Burn earned $OMR and you claim a share of
@@ -630,7 +630,7 @@ const SECTIONS = [
     html: `<p><b>The Estate</b> — a deep, account-level (death-proof) $OMR cost and a home: buy levels (Safe House 40 to The
       Compound 36000 $OMR), unlock features, name it, and show <b>trophies</b> from your real holdings.</p>
       <p><b>The Auction House</b> — a competitive weekly $OMR cost: 3 unique items each week; the highest <b>$OMR bid
-      wins</b>, and <b>the winning bid burns</b>. Outbid bidders get a refund immediately; won items survive death.</p>
+      wins</b>, and <b>the winning bid is sunk</b> — it leaves you for good and goes to the house, which sells it back at the daily auction. Outbid bidders get a refund immediately; won items survive death.</p>
       ${R(`GET /v1/estate · POST /v1/estate/upgrade|feature/:id|name · GET /v1/auction [public] · POST /v1/auction/:lotId/bid`)}` },
 
   { id: 'chain', group: 'The Chain', title: 'The Chain — Withdrawal & Bonds', tag: 'settling on the blockchain (not active)',

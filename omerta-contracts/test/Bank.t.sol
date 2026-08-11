@@ -20,6 +20,17 @@ contract MockUSDC is ERC20 {
     constructor() ERC20("USD Coin", "USDC") {}
     function decimals() public pure override returns (uint8) { return 6; }
     function mint(address to, uint256 a) external { _mint(to, a); }
+
+    /// USDC's real BLOCKLIST, modelled rather than approximated. A "recipient contract that
+    /// reverts" would test nothing here: a plain ERC20 transfer never calls its receiver, so the
+    /// only way a push to a live address fails is the token refusing it — which is exactly the
+    /// production case this suite has to cover.
+    mapping(address => bool) public blocked;
+    function setBlocked(address a, bool b) external { blocked[a] = b; }
+    function _update(address from, address to, uint256 v) internal override {
+        require(!blocked[to] && !blocked[from], "USDC: blocked");
+        super._update(from, to, v);
+    }
 }
 
 /// A real OZ ERC-4626. Yield appears the way it does in production — assets arrive at the vault and
@@ -155,7 +166,12 @@ contract BankTest is Test {
     function testFuzz_supply_never_exceeds_collateral_times_ltv(
         uint96 depositA, uint96 depositB, uint96 borrowA, uint96 borrowB, uint16 ltv
     ) public {
-        ltv = uint16(bound(ltv, 1, alchemist.MAX_LTV_BPS()));
+        // the ceiling is now the PAIR bound, not MAX_LTV_BPS alone (see _assertLtvFeeCompatible):
+        // at the shipped 20% fee the reachable maximum is 80%, not 90%.
+        uint16 ltvCeiling = alchemist.MAX_LTV_BPS();
+        uint16 pairCeiling = uint16(alchemist.BPS() - alchemist.harvestFeeBps());
+        if (pairCeiling < ltvCeiling) ltvCeiling = pairCeiling;
+        ltv = uint16(bound(ltv, 1, ltvCeiling));
         vm.prank(safe); alchemist.setLtvBps(ltv);
 
         uint256 dA = bound(depositA, 1, 100_000 * M);
@@ -311,6 +327,13 @@ contract BankTest is Test {
 
     address feeDest = address(0xFEE);
 
+    /// What the PROTOCOL has taken, swept or not. The fee accrues in the Alchemist and is pushed by
+    /// a separate permissionless `sweepFees`, so a balance check alone would silently start
+    /// measuring the sweep rather than the charge.
+    function _feeTaken() internal view returns (uint256) {
+        return usdc.balanceOf(feeDest) + alchemist.accruedFees();
+    }
+
     function _armFee(uint16 bps) internal {
         vm.prank(safe);
         alchemist.setHarvestFee(bps, feeDest);
@@ -326,7 +349,7 @@ contract BankTest is Test {
 
         // 20% of the yield reaches the protocol; the other 80% clears debt. Both halves asserted,
         // because a fee that quietly took the lot would satisfy either one alone.
-        assertApproxEqAbs(usdc.balanceOf(feeDest), 20 * M, 10, "the protocol takes 20% of the yield");
+        assertApproxEqAbs(_feeTaken(), 20 * M, 10, "the protocol takes 20% of the yield");
         uint256 cleared = debtBefore - alchemist.debtOf(alice);
         assertApproxEqAbs(cleared, 80 ether, 1e13, "the remaining 80% still repays the borrower's debt");
     }
@@ -356,13 +379,13 @@ contract BankTest is Test {
         vault.earn(500 * M);
         alchemist.harvest(alice);
         assertEq(alchemist.debtOf(alice), 0, "debt cleared");
-        uint256 takenOnce = usdc.balanceOf(feeDest);
+        uint256 takenOnce = _feeTaken();
         assertGt(takenOnce, 0, "the harvest that serviced the debt WAS billed");
 
         vault.earn(500 * M);                       // more yield, still no debt
         vm.expectRevert(Alchemist.NothingToHarvest.selector);
         alchemist.harvest(alice);
-        assertEq(usdc.balanceOf(feeDest), takenOnce, "a debt-free position is never billed again");
+        assertEq(_feeTaken(), takenOnce, "a debt-free position is never billed again");
     }
 
     function test_an_unset_recipient_fails_SAFE_rather_than_burning_the_yield() public {
@@ -375,11 +398,15 @@ contract BankTest is Test {
         alchemist.harvest(alice);
         assertApproxEqAbs(debtBefore - alchemist.debtOf(alice), 100 ether, 1e13,
             "the whole yield repays the borrower");
-        assertEq(usdc.balanceOf(feeDest), 0, "and nothing is taken");
+        assertEq(_feeTaken(), 0, "and nothing is taken");
     }
 
     function testFuzz_the_fee_never_exceeds_the_yield_it_came_from(uint96 yieldRaw, uint16 bpsRaw) public {
-        uint256 y = bound(uint256(yieldRaw), 1 * M, 10_000 * M);
+        // The lower bound is ONE WEI on purpose. A bound of 1 * M reads like a reasonable "a real
+        // yield is at least a micro-unit" simplification and it silently excludes the only regime
+        // where the fee rounding can overshoot the yield (see the clamp in Alchemist._harvest).
+        // A lever measured in the wrong range reports a clean bill of health.
+        uint256 y = bound(uint256(yieldRaw), 1, 10_000 * M);
         uint16 cap = alchemist.MAX_HARVEST_FEE_BPS();
         uint16 bps = uint16(bound(uint256(bpsRaw), 0, cap));
         _armFee(bps);
@@ -387,10 +414,114 @@ contract BankTest is Test {
 
         uint256 escrowBefore = alchemist.escrowOf(alice).totalAssets();
         vault.earn(y);
+        // Measure what the escrow REALISED, not what was minted to the vault. At the bottom of the
+        // range a wei of vault yield rounds away below one unit of the escrow's share price, so the
+        // position genuinely earned nothing and the harvest correctly refuses — the property has no
+        // subject there. Comparing against `y` instead would have called that a violation.
+        uint256 realised = alchemist.escrowOf(alice).totalAssets() - escrowBefore;
+        if (realised == 0) return;
         alchemist.harvest(alice);
-        uint256 drawn = escrowBefore + y - alchemist.escrowOf(alice).totalAssets();
-        assertLe(drawn, y, "a harvest can never draw more than the yield it realised");
-        assertLe(usdc.balanceOf(feeDest), y, "and the fee alone can never exceed it");
+        uint256 drawn = escrowBefore + realised - alchemist.escrowOf(alice).totalAssets();
+        assertLe(drawn, realised, "a harvest can never draw more than the yield it realised");
+        assertLe(_feeTaken(), realised, "and the fee alone can never exceed it");
+    }
+
+    function test_a_broken_fee_recipient_cannot_brick_the_harvest() public {
+        // THE AVAILABILITY RULE, and it is the one `OmertaHook` already follows: mechanism liveness
+        // must never depend on a wallet's behaviour. `harvest` is permissionless and is how every
+        // borrower's loan repays itself, so pushing the fee inside it would let one un-receivable
+        // recipient stop the product for the whole market. That is not hypothetical on USDC, which
+        // has a live blocklist. The fee accrues; a separate sweep pushes it.
+        _armFee(2_000);
+        address blockedDest = address(0xB10CED);
+        usdc.setBlocked(blockedDest, true);
+        vm.prank(safe);
+        alchemist.setHarvestFee(2_000, blockedDest);
+        _depositAndBorrow(alice, 1000 * M, 400 ether);
+        uint256 debtBefore = alchemist.debtOf(alice);
+
+        vault.earn(100 * M);
+        alchemist.harvest(alice);                       // must NOT revert
+
+        assertLt(alchemist.debtOf(alice), debtBefore, "the borrower's loan still repaid itself");
+        assertGt(alchemist.accruedFees(), 0, "and the fee is held, waiting for a sweep");
+
+        // The sweep is where the broken recipient actually costs something — which is recoverable.
+        vm.expectRevert();
+        alchemist.sweepFees();
+
+        vm.prank(safe);
+        alchemist.setHarvestFee(2_000, feeDest);        // one transaction fixes it
+        uint256 owed = alchemist.accruedFees();
+        alchemist.sweepFees();                          // permissionless: no Safe needed to collect
+        assertEq(usdc.balanceOf(feeDest), owed, "the held fee reaches the new recipient");
+        assertEq(alchemist.accruedFees(), 0, "and nothing is left double-payable");
+    }
+
+    function test_sweeping_refuses_an_unset_recipient_rather_than_burning_the_fee() public {
+        _armFee(2_000);
+        _depositAndBorrow(alice, 1000 * M, 400 ether);
+        vault.earn(100 * M);
+        alchemist.harvest(alice);
+        assertGt(alchemist.accruedFees(), 0, "there is a fee to strand");
+
+        vm.prank(safe);
+        alchemist.setHarvestFee(2_000, address(0));
+        vm.expectRevert(Alchemist.FeeRecipientUnset.selector);
+        alchemist.sweepFees();                          // never a transfer to address(0)
+
+        vm.prank(safe);
+        alchemist.setHarvestFee(2_000, feeDest);
+        alchemist.sweepFees();                          // drains it
+        vm.expectRevert(Alchemist.ZeroAmount.selector);
+        vm.prank(bob); alchemist.sweepFees();           // and an empty sweep is a clean refusal
+    }
+
+    function test_the_fee_cannot_be_pointed_at_an_address_that_swallows_it() public {
+        // Both of these look like ordinary addresses and both destroy the fee silently. This
+        // contract has no rescue path, and the Transmuter counts reserves in a variable rather than
+        // a balance — so assets sent to either are gone without any revert to notice.
+        vm.prank(safe);
+        vm.expectRevert(Alchemist.BadFeeRecipient.selector);
+        alchemist.setHarvestFee(2_000, address(alchemist));
+
+        vm.prank(safe);
+        vm.expectRevert(Alchemist.BadFeeRecipient.selector);
+        alchemist.setHarvestFee(2_000, address(transmuter));
+
+        vm.prank(safe);
+        alchemist.setHarvestFee(2_000, address(0)); // the deliberate off switch still works
+        assertEq(alchemist.feeRecipient(), address(0), "zero is the off switch, not a mistake");
+    }
+
+    function test_the_dust_clamp_is_reachable() public {
+        // The `take + fee > yield_` clamp carried a comment calling itself unreachable. It is not:
+        // `net` is computed with a FLOORED fee, so it can sit a unit above yield_*(1-f), and
+        // dividing that back out overshoots. At 4 wei of yield and a 20% fee the naive fee is 1 and
+        // take + fee = 5 against a realised yield of 4 — the escrow would be asked for a unit it
+        // never earned. Pinned by hand because it lives in the last unit or two and no fuzz bounded
+        // above the micro-unit can see it.
+        _armFee(2_000);
+        _depositAndBorrow(alice, 1000 * M, 400 ether); // debt far larger than the yield: yield-bound
+        uint256 escrowBefore = alchemist.escrowOf(alice).totalAssets();
+
+        vault.earn(1_000_005);
+        // Measure what the escrow REALISED. A first cut of this test earned four wei and asserted
+        // against four; the escrow's share-price rounding swallowed them entirely, `total <= p`
+        // reverted before the clamp was ever reached, and the test passed under mutation. Assert the
+        // precondition instead of assuming it.
+        uint256 realised = alchemist.escrowOf(alice).totalAssets() - escrowBefore;
+        uint256 net = realised - (realised * 2_000) / 10_000;
+        uint256 naiveFee = (net * 2_000) / (10_000 - 2_000); // take == net in the yield-bound branch
+        assertGt(net + naiveFee, realised,
+            "precondition failed: this yield does not overshoot, so the clamp is not exercised");
+
+        alchemist.harvest(alice);
+
+        uint256 drawn = escrowBefore + realised - alchemist.escrowOf(alice).totalAssets();
+        assertLe(drawn, realised, "the harvest drew more than it realised: the clamp is gone");
+        assertEq(_feeTaken(), realised - net,
+            "the fee was charged on top of the whole take: the clamp did not fire");
     }
 
     function test_harvest_never_clears_more_debt_than_assets_moved() public {
@@ -740,5 +871,61 @@ contract BankTest is Test {
         MockVault wrong = new MockVault(IERC20(address(other)));
         vm.expectRevert(bytes("vault asset mismatch"));
         new Alchemist(nusd, IERC20(address(usdc)), IERC4626(address(wrong)), transmuter, safe);
+    }
+
+    /// THE LTV AND THE HARVEST FEE ARE NOT INDEPENDENT KNOBS.
+    ///
+    /// Measured before the fix: `910 > 900`. Deposit 1000, let 100 of yield accrue, borrow against
+    /// the ceiling that now INCLUDES it — then ANYONE calls the permissionless `harvest`, which
+    /// removes `take + fee` of collateral while cutting debt by `take` only. The ceiling falls to
+    /// 900 and the debt only to 910. There is no liquidation, so it is not a loss — but `mint` and
+    /// `withdraw` both refuse an unhealthy position, so a stranger could freeze a borrower's
+    /// withdrawal by calling a function anyone may call.
+    ///
+    /// The pair is now bounded in BOTH setters (`ltv + fee <= BPS`), so the invalid state cannot be
+    /// reached from either side. MUTATION: drop `_assertLtvFeeCompatible` from either setter and
+    /// this fails on the combination it then allows.
+    function test_the_ltv_and_the_harvest_fee_cannot_be_set_into_a_breach() public {
+        // 90% + 20% is the combination that produced 910 > 900, and it is refused from both sides.
+        // Note the DEFAULT fee is already 20%, so this is not hypothetical: `MAX_LTV_BPS` (9000) is
+        // unreachable as shipped, which is the product consequence stated on _assertLtvFeeCompatible.
+        vm.prank(safe);
+        vm.expectRevert(Alchemist.LtvFeeIncompatible.selector);
+        alchemist.setLtvBps(9_000);
+
+        vm.prank(safe); alchemist.setHarvestFee(1_000, address(0xFEE));
+        vm.prank(safe); alchemist.setLtvBps(9_000);   // 90 + 10 is fine — the pair, not either alone
+        vm.prank(safe);
+        vm.expectRevert(Alchemist.LtvFeeIncompatible.selector);
+        alchemist.setHarvestFee(2_000, address(0xFEE)); // raising the fee under a 90% ltv is refused
+
+        vm.prank(safe); alchemist.setLtvBps(8_000);
+        vm.prank(safe); alchemist.setHarvestFee(2_000, address(0xFEE)); // 80 + 20 is the boundary: allowed
+        vm.prank(safe);
+        vm.expectRevert(Alchemist.LtvFeeIncompatible.selector);
+        alchemist.setLtvBps(8_001);                                     // and one bps past it is not
+    }
+
+    /// And the property the bound exists for, driven end to end at the boundary: a stranger's
+    /// harvest must never leave a borrower unhealthy, however tightly they borrowed.
+    function test_a_stranger_cannot_harvest_a_borrower_into_unhealth() public {
+        vm.prank(safe); alchemist.setLtvBps(8_000);
+        vm.prank(safe); alchemist.setHarvestFee(2_000, address(0xFEE));
+        vm.prank(alice); alchemist.deposit(1000 * M);
+        vm.roll(block.number + 1);
+        vault.earn(100 * M);                                  // yield accrues BEFORE the borrow
+        uint256 ceiling = alchemist.maxDebtOf(alice);   // hoisted: an inline external call in a
+        vm.prank(alice); alchemist.mint(ceiling);       // pranked call's args CONSUMES the prank
+
+        vm.prank(bob); alchemist.harvest(alice);              // any EOA may call this on anyone
+
+        assertLe(alchemist.debtOf(alice), alchemist.maxDebtOf(alice),
+            "a permissionless harvest left the position healthy");
+        // The fee is CHARGED inside the harvest and PUSHED by a separate sweep, so read what the
+        // protocol took rather than the recipient's balance, then prove the sweep delivers it.
+        assertGt(alchemist.accruedFees(), 0, "and the fee was still collected");
+        uint256 owed = alchemist.accruedFees();
+        alchemist.sweepFees();
+        assertEq(usdc.balanceOf(address(0xFEE)), owed, "and it reaches the recipient on the sweep");
     }
 }

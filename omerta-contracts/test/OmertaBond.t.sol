@@ -101,6 +101,16 @@ contract OmertaBondTest is Test {
     }
 
     // ── the happy path ──
+    function test_an_exact_ten_thousand_split_still_needs_a_vig_recipient() public {
+        // The Vig takes the REMAINDER, and floor division leaves one even when the three named
+        // slices sum to exactly 10000. So "the Vig gets 0 bps" is the one arrangement that still
+        // forwards dust, and a forward to address(0) SUCCEEDS on the EVM and burns it. The
+        // remainder rule exists so no wei goes unowned; this is the case that would defeat it.
+        vm.expectRevert(OmertaBond.ZeroAddress.selector);
+        new OmertaBond(safe, signer, IERC20(address(omr)), 5000, 3000, 2000,
+            pol, dev, rwa, payable(address(0)), 0, MAX_RATE);
+    }
+
     function test_bond_pays_discounted_omr_and_splits_eth() public {
         OmertaBond.BondQuote memory q = _quote(bonder, 1 ether, 800, 5 days, 1);
         bytes memory sig = _sign(q, signerPk);

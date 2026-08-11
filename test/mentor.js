@@ -45,6 +45,21 @@ assert.equal((await call('POST', '/v1/mentor/seeking', { token: vet.token, body:
 // you can't accept before an offer
 assert.equal((await call('POST', `/v1/mentor/accept/${vet.id}`, { token: kid.token })).body.error, 'no_offer', 'no wing without an offer first');
 assert.equal((await call('POST', `/v1/mentor/offer/${kid.id}`, { token: vet.token })).body.mentor, 'offered', 'the veteran offers to mentor the newcomer');
+
+// A SOLICITATION IS NOT AN EVENT (night red-team F1). Every gate on offering is on the TARGET's
+// eligibility and none of them is consumed, so the same call succeeds forever — which made this a
+// free, uncapped, no-counterplay ping at a chosen newcomer, i.e. at the onboarding funnel itself.
+// The offer row is idempotent; the NOTIFICATION was not. Now an identical UNREAD offer says nothing
+// more: nothing is lost (the message they have not read yet says exactly what a new one would) and
+// the loop collapses to one ping. MUTATION: put `notify` back in place of `notifyOnce` in
+// offerMentor and the count below climbs with every call.
+{
+  const cnt = async () => Number((await pool.query(
+    "SELECT COUNT(*)::int n FROM notifications WHERE character_id=$1 AND type='mentor_offer'", [kid.id])).rows[0].n);
+  assert.equal(await cnt(), 1, 'the first offer rings once');
+  for (let i = 0; i < 5; i++) await call('POST', `/v1/mentor/offer/${kid.id}`, { token: vet.token });
+  assert.equal(await cnt(), 1, 'five more offers ring NOTHING while the first is still unread');
+}
 // a would-be mentor under the level floor can't take a protégé
 {
   const green = await mk('Green Horn'); await seed(green.id, 'respect=160');

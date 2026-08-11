@@ -299,6 +299,12 @@ export async function retireResident(client, charId) {
   // helper so this can't drift from the death path. (Bounty pots on the resident resolve via the
   // expiry sweep's refund — deliberately not death-burned here.)
   await clearInboundPointers(client, charId, c.account_id);
+  // A resident accrues mastery XP headlessly — `bumpMastery(client, null, winner, …)` fires when a
+  // player loses a duel to one, and residents list duel stakes. `runEstate` wipes `masteries`;
+  // retirement never did, so the rows outlived the character. Unreachable rather than harmful (the
+  // Trades board ranks account-keyed `mastery_legend` and excludes residents), but a character-scoped
+  // table that survives its character is the shape every retirement-vs-death bug here has taken.
+  await client.query('DELETE FROM masteries WHERE character_id=$1', [charId]);
   await client.query('UPDATE characters SET alive=false, cash=0, bank=0 WHERE id=$1', [charId]);
   return { id: charId, burned: held };
 }

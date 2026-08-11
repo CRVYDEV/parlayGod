@@ -22,7 +22,7 @@
 // crewmate's head is still collectable by everyone else, and a rat / WANTED crewmate forfeits the
 // shield exactly as they forfeit family omertà.
 import crypto from 'node:crypto';
-import { GameError, cleanText, notify, bus } from './game.js';
+import { GameError, cleanText, notify, notifyOnce, bus } from './game.js';
 import { CREW, DISTRICTS, levelOf, weekOf, crewObjectiveOf } from './rules.js';
 
 const uid = () => crypto.randomUUID();
@@ -70,7 +70,8 @@ export async function inviteToCrew(ch, name, client, h) {
   const pending = Number((await client.query('SELECT COUNT(*) n FROM crew_invites WHERE crew_id=$1', [crewId])).rows[0].n);
   if (pending >= CREW.MAX_MEMBERS) throw new GameError('too_many_pending', 'Too many invites out — wait for some to be answered.');
   await client.query('INSERT INTO crew_invites (crew_id, account_id, from_name) VALUES ($1,$2,$3)', [crewId, t.account_id, ch.name]);
-  await notify(client, t.id, 'crew_invite', { from: ch.name, crewId }).catch(() => {});
+  // a solicitation, not an event: cancel-and-reinvite would otherwise be a free ping loop
+  await notifyOnce(client, t.id, 'crew_invite', { from: ch.name, crewId }).catch(() => {});
   return { ok: true, crew: 'invited', to: t.name };
 }
 
@@ -150,7 +151,7 @@ export async function requestJoin(ch, crewId, client, h) {
   if (dup) throw new GameError('already', "You've already asked to join.");
   await client.query('INSERT INTO crew_requests (crew_id, account_id, from_name) VALUES ($1,$2,$3)', [crewId, ch.account_id, ch.name]);
   const boss = (await client.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [crew.leader_account])).rows[0];
-  if (boss) await notify(client, boss.id, 'crew_request', { from: ch.name, crewId }).catch(() => {});
+  if (boss) await notifyOnce(client, boss.id, 'crew_request', { from: ch.name, crewId }).catch(() => {});
   return { ok: true, crew: 'requested', to: crew.name };
 }
 

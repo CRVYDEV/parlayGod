@@ -390,8 +390,10 @@ export async function treasuryStatus(pool) {
 
 // ── THE CLAIM — the player rail (withCharacter; char + account rows held) ──
 // Burn earned $OMR to claim ETH out of what the treasury actually holds. $OMR is the RATIONING
-// TICKET; the four ETH slices were the funding — so the burn is pure deflation and the ETH allocated
-// was already paid for by real revenue. Clamps to what is unallocated (never an IOU).
+// TICKET; the four ETH slices were the funding — so the ETH allocated was already paid for by real
+// revenue. The $OMR side is a SINK, not destruction: `rwa:%` is in DESK.SINK_REASONS, so the claim's
+// $OMR recycles to the shelf and is sold back for ETH at the auction. It counts in the burn term (so
+// conservation is exact) but it is revenue, not deflation. Clamps to what is unallocated (never an IOU).
 //
 // THE WALL: `allocated <= held`, in ETH on both sides. A claim can only ever move ETH from the
 // unallocated pool into a player's line, so the treasury can never owe more than it holds, whatever

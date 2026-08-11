@@ -691,6 +691,12 @@ export async function huntWanted(pool) {
 // ═══════════════════ BUSTING (§7.8) ═══════════════════
 export async function bust(ch, victim, client, h) {
   if (jailed(ch)) throw new GameError('jailed', "You're in the same cage.");
+  // Springing somebody is street work that pays a cash faucet, so it takes the same two actor gates
+  // every other street verb does. It sat in no gate-matrix family, which is why nothing caught it —
+  // the completeness rule covers `assertStreetCrime` verbs and `collect*`, and this is neither.
+  // (red-team F5)
+  if (hospitalized(ch)) throw new GameError('hosp', "You're in no shape to spring anybody — see the Doc.");
+  if (safeHoused(ch)) throw new GameError('safe', "You're supposed to be off the street. Come out first.");
   const remaining = victim.jail_until ? Math.max(0, (new Date(victim.jail_until) - Date.now()) / 1000) : 0;
   if (remaining <= 0) throw new GameError('free', 'They already walked.');
   // D15 — the rolling-24h attempt bucket (the safehouse-cap shape): charged BEFORE the roll, win or
