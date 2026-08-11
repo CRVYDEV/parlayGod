@@ -123,7 +123,9 @@ PHASE 1 for the exact calls/args.
       `gearVault.setMinter(voucherClaim)` so gear mints route through it.
 - [ ] **`OMRStaking(omr, safe)`** — pre-funded reward pool; principal always withdrawable.
 - [ ] **`OmertaFees(devWallet, safe, mintFeeWei, respawnFeeWei)`** — the ETH tollbooth. Fees:
-      `MINT = 0.01 ETH`, `RESPAWN = 0.10 ETH`, `reroll` defaults to `mintFee` (owner-settable). Forwards ETH to
+      `MINT = 0.01 ETH` (wave 1 of the published `MINT_TRANCHES` schedule — five waves to a capped 0.05;
+      each boundary is ONE owner `setFees` tx, watched on `/admin`), `RESPAWN = 0.10 ETH`,
+      `reroll` defaults to `mintFee` (owner-settable). Forwards ETH to
       the dev wallet in-tx; custodies nothing.
 - [ ] **`OmertaBond(safe, signer, omr, polBps=3750, devBps=1500, rwaBps=2500, polRecipient, devRecipient,
       rwaRecipient, vigRecipient, dailyCapOMR, maxOmrPerEth)`** — POL bonding with the four-way ETH split
@@ -220,7 +222,7 @@ Each rail is OFF until its address/config is present. Set on BOTH processes.
 | `TRADE_FEE_HOOK_ADDRESS` | the afterSwap→Vig trade-fee sync | only when the DEX hook ships |
 | `MINT_FEE_ETH` / `RESPAWN_FEE_ETH` | the PLEX price quote | ETH-denominated; keep == the contract fees |
 | `WALLETCONNECT_PROJECT_ID` | the console's **WalletConnect (mobile)** option — the ONLY way a phone can link a wallet (desktop browser wallets are auto-discovered via EIP-6963 and need nothing) | a PUBLIC WalletConnect/Reown project id, free from https://dashboard.reown.com; unset ⇒ the console hides the option. Surfaced in `/v1/rules`. Not chain-gated: linking is a signature, so the chain is requested as OPTIONAL and a wallet that has never heard of the OMERTÀ chain still connects |
-| `PLEX_MINT_OMR` / `PLEX_RESPAWN_OMR` | PLEX floor prices | sign-off levers |
+| `PLEX_RESPAWN_OMR` | the respawn's PLEX floor price (pre-market) | a sign-off lever. **There is no `PLEX_MINT_OMR`** — the mint is ETH only (it is the Sybil bound and the extraction gate, so it gets one rail and one published price); setting it does nothing |
 | `VIG_BPS` / `VIG_RESERVE_BPS` / `VIG_MAX_PRICE_JUMP` | Vig split + the buyback price-sanity bound | — |
 
 **`ALLOW_MOD_REAL_REVENUE` — leave UNSET/off in production.** It is a QA-only flag that lets the mod

@@ -53,7 +53,8 @@ consistent) — and extends `omerta-identity-nft-design.md` (the trophy/entitlem
 ## 2. The three founder rules, restated as architecture
 
 **(1) NO MAXIMUM SUPPLY.** A supply cap on the identity would cap the player count. The Dynasty
-NFT mints uncapped at the fixed identity fee (0.01 ETH — the existing mint fee), proceeds through
+NFT mints uncapped at the published identity fee (`MINT_TRANCHES` — five waves 0.01 → 0.05 ETH,
+flat tail; see §10 Shape D), proceeds through
 the declared money-router waterfall. No scarcity marketing, no appreciation language (counsel memo
 A4 + the standing copy rule).
 
@@ -278,7 +279,8 @@ thresholds as levers), never an amount, never a count.
 ### 9.3 One provenance per snapshot wallet, EVER (the unbounded-grant fix)
 
 The collection is uncapped (A4) and snapshot membership is immutable — so without a bound, one
-snapshotted wallet could mint UNLIMITED trait-bearing NFTs at 0.01 ETH each and sell them
+snapshotted wallet could mint UNLIMITED trait-bearing NFTs at the current wave's fee (0.01 ETH at
+wave 1, capped at 0.05 — cheap either way against an open-ended grant) and sell them
 forever: an open-ended monetizable grant to third-party communities that the drop's own design
 (fixed amounts, caps, time-boxed claims) deliberately avoids, and a quiet dilution of the trait's
 meaning. The rule: **a snapshot wallet stamps provenance onto exactly ONE identity, ever** — the
@@ -434,20 +436,25 @@ number of OMR that gets burned and scales up as more NFTs are minted")
 >
 > See BALANCE.md § THE TRANCHE SCHEDULE and § …AND THE SWEEP WENT TOO FAR.
 
-**Half of this is already live.** The $OMR-denominated mint exists: PLEX (`POST /v1/plex/mint`) —
-pay the identity fee in earned $OMR (`PLEX_MINT_OMR` 5 floor, market-linked at
-`max(floor, feeEth × oracle × 1.2)`), and since economy-v3 step 2 that $OMR **recycles to THE
-DESK** rather than burning — the founder's own revenue-over-deflation decision (`plex:%` is in
-`DESK.SINK_REASONS`; the desk resells it, the auction ETH splits founder/POL). So "a number of
-OMR" is shipped; the two genuinely new pieces are **the scaling** and **the maybe-instead-of-ETH**
-— and both were evaluated against the walls rather than assumed.
+**Half of this WAS live when this section was written, and is not any more** (superseded by the
+banner above — recorded rather than deleted, because the analysis below turns on it). The
+$OMR-denominated mint was PLEX (`POST /v1/plex/mint`): pay the identity fee in earned $OMR
+(`PLEX_MINT_OMR` floor, market-linked at `max(floor, feeEth × oracle × 1.2)`), recycling to THE
+DESK rather than burning since economy-v3 step 2. **`payPlex('mint')` now refuses and there is no
+`PLEX_MINT_OMR`** — the mint has ONE rail, in ETH, because it is the Sybil bound and the
+extraction gate. The rail stays live for the RESPAWN and for Store SKUs (the line is the bound,
+not the denomination). So of the founder's proposal the genuinely open pieces were **the scaling**
+and **the maybe-instead-of-ETH** — and both were evaluated against the walls rather than assumed;
+the second is now settled against.
 
 **The rail-interaction law first, because it shapes everything:** with two rails open, the
 EFFECTIVE mint price is the CHEAPER rail. Scaling one rail alone is either decorative (it becomes
 the expensive rail nobody uses) or silently becomes the only real price (it undercuts the other).
 The rails move in LOCKSTEP or not at all — this is exactly what the preflight implied-rate guard
-exists to enforce (both fee pairs pin ~500 $OMR/ETH; a desync makes the cheapest identity the
-lagging rail, and minting is the Sybil bound, so a desync quietly undoes the bound).
+exists to enforce (a desync makes the cheapest identity the lagging rail, and minting is the Sybil
+bound, so a desync quietly undoes the bound). *Since superseded in the strongest way available:
+the mint has ONE rail, so there is nothing to keep in lockstep — the guard now covers the respawn
+pair alone, which is the only place two rails still meet.*
 
 ### The three shapes, evaluated
 
@@ -477,7 +484,7 @@ declared revenue in the money router, and the launch funnel bonus is priced agai
 
 **Shape C — dual-rail + ERA REPRICING, by hand: RECOMMENDED.** The DAILY OFFERING's own
 GM-control precedent applied to the mint price: the founder raises the price at growth milestones
-— **both rails in lockstep** (`mintFee` is owner-settable on-chain; `PLEX_MINT_OMR` is env; the
+— **both rails in lockstep** (`mintFee` is owner-settable on-chain; the $OMR floor was env; the
 preflight guard warns on any desync) — announced factually as a repricing, never as an automatic
 curve. Every raise runs TWO checks before it ships: the implied-rate guard, and **the free-path
 check** — the $OMR price stays ≤ what the mission ladder pays lifetime, or the "get made for

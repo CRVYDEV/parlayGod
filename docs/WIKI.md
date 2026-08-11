@@ -1000,7 +1000,9 @@ bond time inside hard walls (a daily cap, a discount ceiling, a rate ceiling).
 - **Gear withdrawal** (`/gear/:id/withdraw`) — mints your in-game gear as an ERC-1155 NFT (it leaves the game,
   and it becomes safe and tradeable).
 - **Wallet link** — SIWE (`/wallet/challenge`, sign, `/wallet/verify`). **Character mint**
-  (`/character/mint`) — a 0.01 ETH fee makes a free-trial character permanent (able to withdraw). Revive
+  (`/character/mint`) — a one-off ETH fee makes a free-trial character permanent (able to withdraw). The
+  price follows a published schedule (five waves, 0.01 ETH at the founding wave, never above 0.05); the
+  Store shows the current one. You can also earn a mint credit outright off the mission ladder. Revive
   insurance is a 0.10 ETH fee.
 - **Bonds** (`GET /v1/bonds` [public], `/bonds/:id/claim`) — the Reserve Bond (Protocol-Owned Liquidity):
   deposit ETH to receive **discounted $OMR that vests over time**. The ETH deepens the OMR-ETH pool
