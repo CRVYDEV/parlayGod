@@ -78,9 +78,50 @@ jobs:
       - name: what would go out
         run: npm pack --dry-run
 
+      # WHO DOES NPM THINK WE ARE. A failed publish reports `404 Not Found - PUT .../omerta-mcp`,
+      # because npm answers an auth failure with 404 rather than 401 so the error cannot be used to
+      # probe which private packages exist. That is a genuinely misleading error (npm/cli#9088) and it
+      # makes two very different problems look identical: a token that does not authenticate at all,
+      # and a token that authenticates but may not create this package. This splits them — never
+      # fatal, because its job is to say what happened, not to decide.
+      - name: who does npm think we are
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          if who=$(npm whoami 2>&1); then
+            echo "authenticated as: $who"
+            echo "→ so if the publish below still fails, the token is REAL but not permitted to"
+            echo "  create this package: check its Packages-and-scopes is 'All packages' with"
+            echo "  Read and write. A brand-new package cannot be named in a per-package scope."
+          else
+            echo "the token did NOT authenticate: $who"
+            echo "→ so the publish below will fail on credentials, not permissions: check the"
+            echo "  NPM_TOKEN secret exists, is spelled exactly that, and has no stray whitespace."
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: publish
         if: ${{ inputs.dry_run == false }}
-        run: npm publish
+        # THE TWO AUTH ERAS, decided by whether the secret exists rather than by anyone remembering.
+        #
+        # With a token present we are bootstrapping, and npm 11.5.1+ will ATTEMPT OIDC whenever the
+        # runner offers it — which this workflow does, because `id-token: write` is set for the
+        # trusted publishing we are heading toward. That attempt cannot succeed here: a trusted
+        # publisher is configured on a package, and the package does not exist yet. Worse, it does
+        # not fail cleanly and step aside — it surfaces as the same misleading 404 above. So while a
+        # token is in play, take OIDC off the table by removing the two variables npm probes for.
+        #
+        # Once the trusted publisher is configured and NPM_TOKEN is deleted, the branch flips on its
+        # own: no token, so the variables stay, and npm authenticates by identity. Deleting the
+        # secret remains the whole migration — still no edit to this file.
+        run: |
+          if [ -n "$NODE_AUTH_TOKEN" ]; then
+            echo "bootstrap: publishing with the stored token (OIDC held back)"
+            unset ACTIONS_ID_TOKEN_REQUEST_URL ACTIONS_ID_TOKEN_REQUEST_TOKEN
+          else
+            echo "publishing over OIDC — no stored credential involved"
+          fi
+          npm publish
         env:
           # Empty once the secret is deleted, at which point npm authenticates over OIDC instead.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -2618,6 +2618,59 @@ CREATE TABLE IF NOT EXISTS bank_revenue (
   PRIMARY KEY (source, ref)
 );
 
+-- ── THE CITY LEG (omerta-bank-protocol-design.md §4.1–§4.3, src/bank.js) ────────────────────────
+-- Protocol profit buys $OMR at market and the players who PLAY receive it, pro-rata linear and
+-- UNCAPPED. All four are NEW tables, so CREATE TABLE IF NOT EXISTS applies cleanly to a live
+-- database — unlike a column added to an existing table, which needs its own ALTER (the 2026-08-06
+-- roster boot crash-loop). NUMERIC throughout: the pg-mem INT-arithmetic quirk register.
+
+-- The pool's books. `balance` is bought-but-not-yet-distributed; the two totals are lifetime, and
+-- `runBankInvariants` reconciles all three against the row-level tables below in both directions.
+CREATE TABLE IF NOT EXISTS bank_city_pool (
+  id            INT PRIMARY KEY DEFAULT 1,
+  balance       NUMERIC NOT NULL DEFAULT 0,
+  bought_total  NUMERIC NOT NULL DEFAULT 0,
+  paid_total    NUMERIC NOT NULL DEFAULT 0
+);
+
+-- Each market buy of $OMR made with protocol profit. `real` is the anti-fabrication gate: a comp or
+-- QA call records the episode and books ZERO spend, because fabricated revenue would let the pool
+-- distribute $OMR that no hard token stands behind.
+CREATE TABLE IF NOT EXISTS bank_buys (
+  ref         TEXT PRIMARY KEY,                 -- the log key; idempotent on re-delivery
+  asset       TEXT NOT NULL,                    -- what was spent ('USDC', 'WETH') — NOT wei
+  spent       NUMERIC NOT NULL DEFAULT 0,
+  omr_bought  NUMERIC NOT NULL DEFAULT 0,
+  tx_hash     TEXT,
+  real        BOOLEAN NOT NULL DEFAULT false,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- One published distribution. UNIQUE on the window is the idempotency backstop that makes a worker
+-- sweep safe to run every tick: a second pass over the same days is a no-op, never a second payout.
+CREATE TABLE IF NOT EXISTS bank_epochs (
+  id          TEXT PRIMARY KEY,
+  start_day   INT NOT NULL,
+  end_day     INT NOT NULL,
+  pool_omr    NUMERIC NOT NULL DEFAULT 0,       -- the pot this epoch had to share
+  total_score NUMERIC NOT NULL DEFAULT 0,
+  players     INT NOT NULL DEFAULT 0,
+  paid_omr    NUMERIC NOT NULL DEFAULT 0,
+  computed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (start_day, end_day)
+);
+
+-- Who received what, and the score it was computed from — so any player can audit their own share
+-- and anyone can audit the distribution.
+CREATE TABLE IF NOT EXISTS bank_payouts (
+  epoch_id   TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  score      NUMERIC NOT NULL DEFAULT 0,
+  omr        NUMERIC NOT NULL DEFAULT 0,
+  PRIMARY KEY (epoch_id, account_id)
+);
+CREATE INDEX IF NOT EXISTS ix_bank_payouts_account ON bank_payouts(account_id);
+
 -- ═══════════════ THE TRADES (mastery expansion, omerta-mastery-design.md) ═══════════════
 -- Per-street use-XP tracks — RuneScape farming pointed at the verbs the game already has.
 -- NUMERIC on purpose (the pg-mem INT-arithmetic quirk register); writes are absolute values
