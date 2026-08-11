@@ -11,7 +11,10 @@ import { readFileSync } from 'node:fs';
 import { levelOf, hitmanRankOf, SOCIAL_X_HANDLE } from './rules.js';
 
 const GOLD = '#c9a24b', DIM = '#8f7433', TEAL = '#4fd6c2', BLOOD = '#9b2f2f', INK = '#e8e2d4', BG = '#0c0d11';
-const esc = (s) => String(s == null ? '' : s).replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]));
+// ONE escape for every public surface. Exported because `portrait.js` engraves untrusted names
+// onto a keyless image and a second private copy is the class this project has been bitten by: a
+// fix to an escaping gap must reach every site that escapes, not just the one it was found in.
+export const esc = (s) => String(s == null ? '' : s).replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // ── the safe public dossier (by living name; falls back to the most recent bearer) ──
 export async function publicDossier(pool, name) {

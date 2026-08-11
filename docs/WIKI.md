@@ -24,7 +24,7 @@ CODEX button in the top bar).
 18. [Loan sharking](#18-loan-sharking) · 19. [Convoys](#19-convoys) · 20. [Crew heists](#20-crew-heists) ·
 21. [The Black Market](#21-the-black-market) · 22. [Vendettas](#22-vendettas) · 23. [Skills](#23-skills) ·
 24. [The Underworld (fixers)](#24-the-underworld) · 25. [The Wire](#25-the-wire) ·
-26. [The Store, PLEX & Season Pass](#26-the-store-plex--the-ledger) · 27. [Going Legit — what your $OMR does](#27-going-legit) ·
+26. [The Store & the Season Pass](#26-the-store--the-ledger) · 27. [Going Legit — what your $OMR does](#27-going-legit) ·
 28. [The Estate & Auction House](#28-the-estate--auction-house) · 29. [The chain — withdrawal & bonds](#29-the-chain) ·
 30. [Growth — paths, missions, first week](#30-growth) · 31. [Reference — districts, gotchas, glossary](#31-reference)
 
@@ -36,7 +36,7 @@ You start as a new player in the Docks district. You have $500 and no reputation
 to earn cash. Train your stats. Put your cash in the bank. Set up income sources that pay you while you are
 away. Increase your level.**
 
-**Crimes** (`POST /v1/crimes/:id`) — there are 29 jobs. The first job is Pickpocket (L1, 2 nerve, $40–120). The
+**Crimes** (`POST /v1/crimes/:id`) — there are 43 jobs. The first job is Pickpocket (L1, 2 nerve, $40–120). The
 last job is Empty the Federal Depository (L110, 35 nerve, $160k–400k). Each job has a level requirement, a
 nerve cost, a cash range, and a chance of jail if you fail. Your success rate increases with your **cunning**
 and **speed**, your family level, some districts, and your rank. A job can also give you **contraband crates**
@@ -98,7 +98,7 @@ minted status, revive tokens, and 25% of your **Underworld** standings.
 
 **Prestige and seasons.** A season is 28 days. At the end of a season, your level converts to **prestige**
 (`floor(level/2)`). Your respect returns to 0. The players with the most respect win an SPCX (stock) prize.
-You can **respec** your stats for 15 $OMR (`POST /v1/respec`). This has a 24-hour cooldown that it shares with
+You can **respec** your stats for 90 $OMR (`POST /v1/respec`). This has a 24-hour cooldown that it shares with
 skills.
 
 Routes: `POST /v1/character` (create — the name is 2–24 characters and must be unique among living characters;
@@ -196,9 +196,8 @@ playing, extractable on-chain by minted accounts; held at the account level, so 
 stays in the city; $OMR comes in from outside and leaves through the Exchange window. The
 main economic rule (section 10.4): the game records and checks every movement of value.
 
-**Nothing you do in the game creates $OMR.** There is no wage, no yield and no drip — the Street Wage
-was retired, and the game now has no printer at all. Every $OMR in the city was **bought with real
-money** by somebody, which is exactly why it is worth taking off them. Your three ways to get some:
+**Nothing you do in the game creates $OMR.** There is no wage, no yield and no drip — the city has no
+printer at all. Every $OMR in it was **bought with real money** by somebody, which is exactly why it is worth taking off them. Your three ways to get some:
 **take it** (killing a player loots their liquid $OMR — staked and committed $OMR is safer), **earn it**
 from another player who pays you in it, or **buy it**. A nightly job asserts that no new $OMR appeared,
 so this is a fact you can check rather than a promise.
@@ -222,17 +221,17 @@ the full early-exit toll for its first 48 hours, same as any other fresh token.
 game, and it runs one way: **burn $OMR, receive cash at a published rate**, from a till that real
 cash sinks fill (the street take). A short till refuses cleanly and burns nothing — the window is a
 claim on what was funded, never a promise. 5% of every redemption goes to the top families (the
-family yield). **Cash can never become $OMR** — the old AMM swap and every laundering rail
-(street and private) are retired; those routes answer `retired`.
+family yield). **Cash can never become $OMR** — there is no swap and no laundering rail, street or
+private; any route that would do it answers `retired`.
 - **The early-exit tax on withdrawals:** $OMR that you received less than 48 hours ago pays an
   extra toll when you extract it on-chain — 50% at age zero, decreasing in a straight line to 0% at
   48 hours, newest tokens priced first so old savings cannot shield a fresh dump. Hold a token for
   two days and it exits free. There are no exemptions.
 
-**THE MADE MAN** (`GET`/`POST /v1/made`) — the recurring subscription. Pay **20 $OMR every 30 days**
+**THE MADE MAN** (`GET`/`POST /v1/made`) — the recurring subscription. Pay **120 $OMR every 30 days**
 and you are *made*: the badge, the upper compound (Country Estate and above), a club of your own, and
 **the pad pays itself** — your fronts settle their own cash upkeep the moment you touch them, so a
-stretch away no longer leaves them cold.
+stretch away does not leave them cold.
 
 **It buys standing, never power.** No earning loop is gated, no odds move, no stat changes, and the
 pad is not discounted by a cent — the same money leaves your pocket, you just stop having to remember.
@@ -243,11 +242,11 @@ you a seat at tables where you can lose money. It buys no advantage at any of th
 Dues are a sink like any other, so they go to **the Desk** to be sold again rather than being destroyed.
 
 **THE ACCESS STAKE** — the high-stakes room at the Den wants a seat (level 30, or the Madame's velvet
-rope) *and* **50 $OMR held in a stake**. Held, not spent: it earns nobody anything, and its whole job
+rope) *and* **300 $OMR held in a stake**. Held, not spent: it earns nobody anything, and its whole job
 is to put a permanent, visible, lootable float on exactly the players worth hunting.
 
 **The Vault (staking)** (`POST /v1/stake`, `/unstake`) — **cheaper cover, not a safe harbour.**
-Staking used to make $OMR untouchable. It no longer does: a killer takes 50% of a loose or unbonding
+Nothing makes $OMR untouchable: a killer takes 50% of a loose or unbonding
 balance but only 20% of a staked one, so committing halves what a bad night costs you without ever
 making you safe. You always get your full principal back, but it "unbonds" for 6 hours (at the higher
 IDLE rate during that window) before it is liquid. **Nothing you hold is out of reach** — the whole
@@ -281,9 +280,9 @@ Four things follow, and each is a mechanism rather than a policy:
   the city. A player who plays twenty hours a day is a rich player, not a source of new supply.
 - **Supply is enumerated, and the list is shrinking.** The ledger check is
   `buckets == genesis + mints − burns`, and a reason nobody enumerated is itself an alarm. The Street
-  Wage — the one scheduled printer — is retired, and a nightly check now asserts that no new unit of it
-  appears. Two small legacy taps remain (mission rewards and the Vig prize pool) and retire with their
-  own systems. There is no fourth tap to find.
+  city has no scheduled printer, and a nightly check asserts that none appears. Two small taps remain —
+  mission rewards and the Vig prize pool — and both are enumerated and bounded. There is no third tap
+  to find.
 - **No faucet is the strong version of the promise.** With nothing paying $OMR for play, in-game $OMR
   can never exceed what was deposited — so "you can only take out what somebody put in" stops being a
   rule the game has to enforce and becomes an arithmetic fact about the ledger.
@@ -355,8 +354,7 @@ assassin and trade ranks.
 Businesses are premium, level-gated, **upgradeable** places that earn pocket cash — the endgame
 personal-income engine, different from flat Rackets and Assets. Catalog: **Laundromat (L15) to
 Casino (L58)**. Each has 3 levels. You can own one of each kind. `GET /v1/catalog` [public] lists
-them all. *(Fronts no longer launder anything — cash can't become $OMR anywhere since the wash
-houses shut.)*
+them all. *(Fronts do not launder anything — cash cannot become $OMR anywhere in the game.)*
 
 Loop: **buy** (`/v1/business/:kind/buy`) → **collect** (income accrues, 24-hour limit,
 `/business/collect`) → **upgrade** (`/business/:id/upgrade`) → **pay the upkeep**.
@@ -445,8 +443,8 @@ discount however many borders you share, not a bonus for encirclement. So "we ca
 we do not hold the docks" is now a real sentence, and taking the district next to your own beats taking
 the rich one across town.
 
-**The charter — what your family IS.** Every family used to be mechanically identical apart from what
-it happened to hold. Now the boss picks a charter, and every one of them trades an edge for a real
+**The charter — what your family IS.** Without one, a family is defined only by what it happens to
+hold. The boss picks a charter, and every one of them trades an edge for a real
 handicap — a charter with only an upside would be a free upgrade everybody takes, and then nothing is
 asymmetric again. **The Syndicate** runs its operations 15% leaner but pays 15% over the odds for
 turf. **The Outfit** takes ground 15% cheaper and pays 15% more to run what it holds. **The Fixers**
@@ -476,8 +474,8 @@ another post for six hours — nor stand him down and walk him into the next cha
 shuffle — so answering a hit costs the family a second made man. Every post is a
 bonus, never a requirement — the scarcity is which chairs you fill, not that the baseline moved.
 
-**The reserve pays for status:** **seals** (`/gangs/vanity/seal`, Wax 25 to Obsidian 1500 $OMR, a badge) and
-the **Foundation** (`/gangs/foundation`, Community Fund 60 to The Legacy 3000 $OMR). The Foundation is real
+**The reserve pays for status:** **seals** (`/gangs/vanity/seal`, Wax 150 to Obsidian 9000 $OMR, a badge) and
+the **Foundation** (`/gangs/foundation`, Community Fund 360 to The Legacy 18000 $OMR). The Foundation is real
 power: it **reduces the RICO conviction chance of every member** and speeds their case bleed (only members
 present when a case was filed get the benefit). The family also holds a legal **RWA book** that earns a
 dividend (section 27).
@@ -603,11 +601,11 @@ hospitalized player, or a safehoused player.
 
 **The Contract Board** (`GET /v1/contracts` [public]) — bounties are escrow pots that you can view. There is
 one pot for each (target, kind). A **hospitalize** pot pays for a jump or a kill. A **kill** pot pays only for
-a completed kill. Post a bounty (`/streets/:targetId/bounty`, minimum $500; add 3 $OMR to post it
+a completed kill. Post a bounty (`/streets/:targetId/bounty`, minimum $500; add 18 $OMR to post it
 **anonymously**). You can name a **directed hitman** for an exclusive time window (minimum $10k, up to 24
 hours, +1.5× reputation). This minimum is **removed** for a vendetta, rat, welsher, or wanted kill contract. A
 **family contract** (`/gangs/contract/:targetId`) is paid from the treasury. The target can **peek**
-(`/contracts/peek`, 5 $OMR) to read every funder. This removes the anonymity.
+(`/contracts/peek`, 30 $OMR) to read every funder. This removes the anonymity.
 
 **Hitman reputation** is a status ladder (Associate to Button Man to Mechanic to Ghost to The Undertaker).
 Your lifetime reputation and kills survive death (like prestige). This season's kills die with the character.
@@ -620,9 +618,9 @@ You earn reputation only from targets at L5 or higher. It is reduced if you kill
 
 A kill is designed to be worth the risk — contracts, war points, and loot all attach to it.
 
-**Loot (only for a PLAYER fire-kill):** the killer takes 25% of the victim's **pocket and in-transit** cash and
-20% of their **liquid and unbonding** $OMR. **Cleared bank cash and staked $OMR are safe.** (An NPC kill and a
-mod kill take nothing.) A fire-kill also takes 25% of the victim's open market buy-order escrow and loan-offer
+**Loot (only for a PLAYER fire-kill):** the killer takes 25% of the victim's **pocket and in-transit** cash,
+**50% of their loose and unbonding** $OMR, and **20% of their staked** $OMR. **Only cleared bank cash is safe** —
+staking is cheaper cover, never a safe harbour. (An NPC kill and a mod kill take nothing.) A fire-kill also takes 25% of the victim's open market buy-order escrow and loan-offer
 escrow.
 
 **Loot surfaces** — this is why banking is a *timed* action: a new deposit is in transit for 2 hours, and
@@ -651,7 +649,7 @@ A long, high heat builds a case.
 
 **Escapes (before it files):** **bribe** (`/v1/law/bribe`, scales with wealth, reduces the meter — blocked
 when you are clean, indicted, or safehoused), the **lawyer retainer** (`/law/retainer`, $150k for 3 days,
-reduces the bust and forfeiture), and the **envelope** (`/law/envelope`, 15 $OMR for 7 days — a standing
+reduces the bust and forfeiture), and the **envelope** (`/law/envelope`, 90 $OMR for 7 days — a standing
 payment that halves the meter's *gain* and doubles its *decrease*).
 
 **The RICO bust.** When you cross the line, the state files an **indictment** (a grace clock starts). A
@@ -790,7 +788,7 @@ your vendetta target. An NPC kill and a mod kill do not start a feud.
 
 Your character build. **Three branches, FOUR levels each** — the 4th a capstone that also unlocks an
 ACTIVE ability. Points **come from your level** (`floor(level/4)`, plus a small prestige bonus — a full
-branch is about L40). Skills **die with the character**. Respec for 10 $OMR on the shared 24-hour
+branch is about L40). Skills **die with the character**. Respec for 60 $OMR on the shared 24-hour
 cooldown. `GET /v1/skills`, `POST /v1/skills/:id`, `/skills/respec`.
 
 - **Enforcer** — Bruiser (jump and shakedown ×1.08) · Doctor's Friend (heal ×0.75) · Executioner (search
@@ -837,7 +835,7 @@ quarter). The choice dies with the street; the heir chooses their own.
 Shadow, The Ring** — each with a signature edge, a REAL handicap (the Gun sells goods at ×0.95, the
 Ledger fights at ×0.95, the Kitchen does ×1.1 jail time, the Wheel cooks slow, the Shadow shies from
 duels, the Ring pays the Doc ×1.15), and trades that come easy (**×1.5 XP**) or fight you (**×0.6**).
-The Ledger's long-advertised +10% front income is finally real. Switching careers takes the 25 $OMR
+The Ledger's long-advertised +10% front income is finally real. Switching careers takes the 150 $OMR
 AND a week between moves.
 
 **Stats by use (step four):** working a trade also exercises its core stat — each XP-paying action
@@ -876,11 +874,11 @@ access, and a hunter count.
 ## 25. The Wire
 
 Information as a $OMR resource that you can spend. `GET /v1/wire`.
-- **Wiretap** (`/v1/wire/tap/:targetId`, 8 $OMR, 12 hours, up to 5 at one time) — shows a rival's Law stage
+- **Wiretap** (`/v1/wire/tap/:targetId`, 48 $OMR, 12 hours, up to 5 at one time) — shows a rival's Law stage
   and heat band, wealth band, operations, WANTED status, and **if they are hunting you** (this pierces the
   peek space).
-- **Sweep** (`/wire/sweep`, 5 $OMR) — removes every tap on you (free when you are clean).
-- **The Street Wire subscription** (`/wire/subscribe {tier}`) — a **tiered ladder**: Street Wire (12 $OMR for
+- **Sweep** (`/wire/sweep`, 30 $OMR) — removes every tap on you (free when you are clean).
+- **The Street Wire subscription** (`/wire/subscribe {tier}`) — a **tiered ladder**: Street Wire (72 $OMR for
   7 days — Law forecasts and threat data: a *count* of hunters and contracts on you, never a
   name; the layered intel economy — the subscription warns you, a tap identifies a rival, and the $OMR peek
   names funders), The Wire Room (30 — plus your family war room and 2 standing watches), The Switchboard (60 —
@@ -897,17 +895,32 @@ Information as a $OMR resource that you can spend. `GET /v1/wire`.
 
 ---
 
-## 26. The Store, PLEX & the Ledger
+## 26. The Store & the Ledger
 
 **The Store** (`GET /v1/store` [public]) — real-money (ETH) packages that grant **only non-currency items**
 (this prevents pay-to-win: entitlements, access windows, cosmetics, and status — never cash, $OMR, gear, or
-power). Packages: Made Man (a mint credit), revive bundles, a 30-day Street Wire, the Season Pass, the Patron's
+power). Packages: revive bundles, a 30-day Street Wire, the Season Pass, the Patron's
 Ring badge, and decor styles. The revenue divides 40% to the founder, 40% to the buyback (the Vig, which funds
 withdrawals and prizes), and 20% to the RWA reserve.
 
-**PLEX** — pay for a Store package or a game fee with **earned $OMR** instead of ETH (`/v1/store/plex/:sku`,
-`/v1/plex/mint`, `/plex/respawn`; `GET /v1/plex/price` [public]). ETH payers fund the pool. $OMR payers reduce
-the supply.
+**Most real-money prices have two rails — but getting Made has one.** PLEX lets you pay in earned $OMR
+instead of ETH: the respawn token and every Store package are payable either way, because none of them
+gates anything. Which currency bought a revive, a Wire month or a decor style changes nothing about what
+it does.
+
+**Becoming Made is the exception, and it is deliberate.** A price payable two ways is always the cheaper
+of the two, and being Made is what unlocks extraction — so it is the one price that must be unambiguous.
+It costs ETH, at the published wave, and nothing else sells it. That costs you nothing on the free road:
+the mission ladder's *Dockside Heist* hands you a mint credit outright.
+
+The line is short: **the bound has one price; everything else is a currency choice.**
+
+**Where that $OMR comes from, said plainly, because the arithmetic matters.** Nothing in the city
+mints it. Every $OMR mission in the game pays 1,320 across a whole career and the daily contract
+bonus adds 3 a day — against 4,118 for the *cheapest* thing PLEX sells. So the rail is not funded by
+grinding. It is funded by taking it off somebody (a kill strips a fifth to a half of what they are
+carrying, staked included), by buying it at the desk, or by a family handing it to you. That is the
+game working as intended, and it is worth knowing before you plan around it.
 
 **The Season Pass / The Ledger** (`GET /v1/pass`, `/pass/claim`) — while your pass is active, claim the next of
 12 levels one time each day: titles, revive tokens, energy refills, and small **$OMR stipends** paid from the
@@ -931,10 +944,10 @@ actually does:
 - **Landmarks** (`/v1/landmarks/:districtId`) — one plaque in each district still bears a name that
   survives death.
 
-### The Window and the Family Yield (tokenomics v2)
+### The Window and the Family Yield
 
-How $OMR works changed (`omerta-tokenomics-v2-design.md`). **Cash no longer buys $OMR** — the wash houses
-are shut, laundering at your own front is gone, and the swap says so plainly if you try it. In exchange:
+**Cash does not buy $OMR** — there are no wash houses, no laundering at your own front, and no swap;
+any route that would convert cash into $OMR says so plainly if you try it. What you get instead:
 
 - **The Window** (`GET /v1/window`, `/v1/window/redeem`) — burn $OMR, take in-game cash at a published
   rate, from a till that the street take fills. It runs **one way only**: cash never becomes $OMR again.
@@ -943,7 +956,7 @@ are shut, laundering at your own front is gone, and the swap says so plainly if 
   while cash still bought $OMR: the two together would be a money pump, and the game refuses to run both.
 - **The Family Yield** (`GET /v1/yield`) — the top families by this season's standing split a pot of $OMR
   into their reserve. The pot is fed by **the family's cut of every redemption at the Window** — a small
-  share of what a player burns goes to the families instead of leaving supply, so the yield scales with
+  share of what a player spends goes to the families rather than to the house, so the yield scales with
   real redemption volume. It is what staking rewards and personal dividends become: standing stops being
   only a badge and starts paying, so tribute, wars and the Commission are worth real money to a family.
 - **The Vault** (`GET /v1/vault`) — four streams of real ETH (the DEX sell tax, treasury bonds, the
@@ -960,12 +973,12 @@ are shut, laundering at your own front is gone, and the swap says so plainly if 
 ## 28. The Estate & Auction House
 
 **The Estate** (`GET /v1/estate`) — a deep, account-level (death-proof) $OMR cost and a "home" surface: buy
-levels (Safe House 40 to The Compound 2500 $OMR), unlock features (Trophy Room to The Menagerie), name it, and
+levels (Safe House 240 to The Compound 36000 $OMR), unlock features (Trophy Room to The Menagerie), name it, and
 show **trophies** that come from your real holdings (rarest car, guns, book value, kills, family seal). Status
 only. `POST /v1/estate/upgrade`, `/feature/:id`, `/name`.
 
 **The Auction House** (`GET /v1/auction` [public]) — a competitive weekly $OMR cost: 3 unique numbered prestige
-items each week. The highest **$OMR bid wins**, and **the winning bid burns** (it reduces the supply). Bids go
+items each week. The highest **$OMR bid wins**, and **the winning bid is sunk** — it leaves you for good and goes to the house, which sells it back at the daily auction. Bids go
 into escrow. An outbid bidder gets a refund immediately. Won items are account-level and survive death.
 `POST /v1/auction/:lotId/bid`.
 
@@ -985,7 +998,9 @@ bond time inside hard walls (a daily cap, a discount ceiling, a rate ceiling).
 - **Gear withdrawal** (`/gear/:id/withdraw`) — mints your in-game gear as an ERC-1155 NFT (it leaves the game,
   and it becomes safe and tradeable).
 - **Wallet link** — SIWE (`/wallet/challenge`, sign, `/wallet/verify`). **Character mint**
-  (`/character/mint`) — a 0.01 ETH fee makes a free-trial character permanent (able to withdraw). Revive
+  (`/character/mint`) — a one-off ETH fee makes a free-trial character permanent (able to withdraw). The
+  price follows a published schedule (five waves, 0.01 ETH at the founding wave, never above 0.05); the
+  Store shows the current one. You can also earn a mint credit outright off the mission ladder. Revive
   insurance is a 0.10 ETH fee.
 - **Bonds** (`GET /v1/bonds` [public], `/bonds/:id/claim`) — the Reserve Bond (Protocol-Owned Liquidity):
   deposit ETH to receive **discounted $OMR that vests over time**. The ETH deepens the OMR-ETH pool
@@ -999,7 +1014,7 @@ funds the prize pools.
 
 ## 30. Growth
 
-**Paths** (`POST /v1/path`, at L5 for $10k; switch for 25 $OMR + a 7-day cooldown) — a career, not just a
+**Paths** (`POST /v1/path`, at L5 for $10k; switch for 150 $OMR + a 7-day cooldown) — a career, not just a
 bonus: SIX Paths (**The Gun**, **The Ledger**, **The Kitchen**, **The Wheel**, **The Shadow**, **The Ring**),
 each with a signature edge, a REAL handicap, and trades that come easy (×1.5 mastery XP) or fight you (×0.6).
 
@@ -1018,7 +1033,7 @@ conditions (L8, 40 jobs, 3 check-ins, $25k net worth). Milestones pay the recrui
   respect you earn, anywhere in the game. It is **live** — recomputed from your crew's current levels,
   so it rises as they rise, falls when one of them dies back to an heir, and stops when they stop.
   It is capped, and it is not a currency: it cannot be sold, given away or laundered.
-  **Referrals no longer pay $OMR** (retired 2026-07-31).
+  **Referrals pay respect, never $OMR.**
 - **Naming your referrer** — a recruit can type the sharer's street name in the **"who sent you?"
   field when they create their character** (a shared `?ref=` link pre-fills it), or — if they missed
   it — from the **"Did someone send you?" card on Start Here within their first 3 days**. Spelling is
@@ -1047,7 +1062,7 @@ pays nothing.)
 use the bank, declare a Path, join a family, link a wallet, follow on X). It pays cash to teach you the
 game, with a final bonus. **The Coach** (the ▸ line on your sheet) always names your single best next action.
 
-**Vanity** — name change (5 $OMR), custom title (10), car plate (2), family color (10), family rename (25).
+**Vanity** — name change (30 $OMR), custom title (60), car plate (12), family color (60), family rename (150).
 
 ### For agents (autonomous players)
 Agents are full players. `POST /v1/auth/agent-key` grants a permanent 🤖 flag and a 90-day token (limited to 1

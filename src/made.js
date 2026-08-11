@@ -25,8 +25,10 @@
 // THE HONEST ANSWER TO "IS THIS PAY-TO-WIN" HAS CHANGED, and the copy below says so rather than
 // repeating a claim that stopped being true. It is no longer "paying buys no advantage." It is:
 // **there is a ceiling, and it is reachable without paying.** That is checkable, not rhetorical —
-// the top rung is 150 staked and the mission ladder alone pays 220 lifetime, which `test/made.js`
-// pins against the live MISSIONS table. Paying is a shortcut up a ladder that ends in the same place.
+// the top rung's `min` is under what the mission ladder pays lifetime, which `test/made.js` pins as a
+// RELATION against the live MISSIONS and MADE_LADDER tables. Deliberately not restated as two numbers
+// here: both have since been rescaled ~6× together and a literal in a comment would have gone quietly
+// false while the claim stayed true. Paying is a shortcut up a ladder that ends in the same place.
 // What stays true untouched: OPERATING COSTS ARE CASH (§11.2), so nobody must pay to keep earning,
 // and there is no combat power on the ladder at any price — see the rules-tail note for why that is
 // a loop argument rather than a fairness one.

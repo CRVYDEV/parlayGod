@@ -53,7 +53,7 @@ import { sweepTournaments, sweepTrackEntries, sweepFuturity } from './casino.js'
 import { sweepRingTables } from './ring.js';
 import { sweepGrandPrix } from './races.js';
 import { sweepStakes } from './stable.js';
-import { syncFeeEvents, syncClaimedEvents, syncTradeFees, syncBondEvents, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
+import { syncFeeEvents, syncClaimedEvents, syncBondEvents, syncHarvestFees, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
 
 const BUYBACK_PERIOD_MS = 12 * 3600 * 1000;
 
@@ -604,11 +604,11 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
             const c = await syncClaimedEvents(pool, source, { startBlock });
             if (c.processed) console.log(`👁  claimed sync: freed ${c.processed} voucher(s) (blocks ${c.from}–${c.to})`);
           }
-          // afterSwap→Vig trade-fee hook (design §2). Dormant unless TRADE_FEE_HOOK_ADDRESS is set;
-          // the watcher is the SOLE producer of source='trade' revenue (no mod route — zero fabrication).
-          if (process.env.TRADE_FEE_HOOK_ADDRESS) {
-            const t = await syncTradeFees(pool, source, { startBlock });
-            if (t.processed) console.log(`💱 trade-fee sync: booked ${t.processed} swap fee(s) to the Vig (blocks ${t.from}–${t.to})`);
+          // THE BANK (Alchemist): HarvestFeeTaken → recordHarvestFee. Dormant unless ALCHEMIST_ADDRESS
+          // is set. Booked in the market's underlying — see recordHarvestFee for why not in ETH.
+          if (process.env.ALCHEMIST_ADDRESS) {
+            const hv = await syncHarvestFees(pool, source, { startBlock });
+            if (hv.processed) console.log(`🏛  bank sync: booked ${hv.processed} harvest fee(s) to the treasury (blocks ${hv.from}–${hv.to})`);
           }
           // THE RESERVE BOND (OmertaBond): Bonded → recordBond (POL + the Vig buyback basis). Dormant
           // unless OMERTA_BOND_ADDRESS is set; the on-chain event is authoritative + idempotent on nonce.

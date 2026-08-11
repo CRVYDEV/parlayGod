@@ -11,10 +11,10 @@
 // the mainnet bot's job (dormant until the chain is wired — the M6 pattern). Its DB writes are
 // confined to vig_revenue / vig_buyback / vig_prize_pool + (via fundReserve) chain_reserve; real
 // ETH and hard $OMR are out-of-band value, OUTSIDE the §10.4 in-game set (zero `transactions` rows
-// here — except the PLEX bridge, which burns IN-GAME $OMR and so is a legal §10.4 burn).
+// here — the PLEX bridge, which used to burn IN-GAME $OMR, is retired; see below).
 import crypto from 'node:crypto';
 import { GameError, ledger } from './game.js';
-import { TRADE_FEE } from './rules.js'; // the trade-fee split lever — the booking path must read the DECLARED constant (F1)
+import { genesisOmrFor } from './rules.js';
 import { fundReserve } from './chain.js';
 
 const uid = () => crypto.randomUUID();
@@ -23,31 +23,82 @@ const round6 = (x) => Math.round(x * 1e6) / 1e6;
 
 // ── config (env-overridable, like chain.js; all founder sim + sign-off levers) ──
 // VIG_BPS: the Vig's share of real revenue (the rest is dev/business). RESERVE_BPS: of each
-// buyback's $OMR, how much backs withdrawals vs the season prize pool. PLEX_*: the in-game $OMR
-// price to pay a fee from earnings instead of ETH (the EVE PLEX bridge — a skilled player's rent).
+// buyback's $OMR, how much backs withdrawals vs the season prize pool.
 export const VIG_BPS = Number(process.env.VIG_BPS || 6000);         // 60% to the Vig (exported: the router derives the waterfall from the LIVE constant)
 export const RESERVE_BPS = Number(process.env.VIG_RESERVE_BPS || 5000); // 50% of bought $OMR to the reserve (exported for the router)
-export const PLEX_MINT_OMR = Number(process.env.PLEX_MINT_OMR || 5);
-export const PLEX_RESPAWN_OMR = Number(process.env.PLEX_RESPAWN_OMR || 50);
-// MARKET-LINKED PLEX (sim-audit F3): a static 5 $OMR was minutes of play vs 0.01 ETH real money —
-// nobody would ever pay ETH, starving the Vig at the source. The $OMR price now tracks the REAL
-// exchange rate: fee-in-ETH × the latest Vig buyback's price (the actual OMR/ETH the Vig paid —
-// on mainnet the DEX TWAP) × a premium ≥ 1 so the ETH rail stays the economical one (ETH funds
-// the pool; $OMR burns supply at a markup). Static PLEX_*_OMR is the pre-market fallback floor.
-const PLEX_PREMIUM_BPS = Number(process.env.PLEX_PREMIUM_BPS || 12000); // 1.2× the ETH-equivalent
+// ── THE PLEX BRIDGE — THE MINT IS ETH ONLY, EVERYTHING ELSE IS PAYABLE IN EARNED $OMR ───────────
+// (founder-directed 2026-08-10: "Make the mint ETH only no OMR", then "Make plex items and
+// consumables eth only", then — reading the cost that second sweep was flagged with — "maybe we over
+// exaggerated on removing everything payable by OMR in Plex".)
+//
+// THE LINE IS THE BOUND, NOT THE DENOMINATION. That was the rule the mint-only pass drew and the
+// second sweep erased; this restores it, because only one of the two arguments for retirement was
+// ever about PLEX itself:
+//
+//   • "A fee payable two ways is always priced by the CHEAPER rail." TRUE, and FATAL for the MINT —
+//     minting is the Sybil bound AND the extraction gate, so it is the one price that must never be
+//     ambiguous. It is not fatal anywhere else: for a repeatable CONSUMABLE, two rails is a choice
+//     of currency, not a bypassed bound. Nothing is gated by how you paid for a revive.
+//   • "The $OMR rail stopped burning." True since v3 step 2 (`plex:%` is in `DESK.SINK_REASONS`, so
+//     it RECYCLES to the desk shelf, which sells it for ETH at the daily auction). But read again,
+//     that is an argument that the two rails are roughly EQUIVALENT — immediate ETH vs deferred ETH
+//     through the desk — not an argument for removing one. And it undersells the $OMR rail, which
+//     also creates the thing the post-v3 economy most lacks: recurring DEMAND for the token.
+//
+// WHO ACTUALLY PAYS IN $OMR, stated honestly rather than sold. $OMR has had no faucet since v3 step
+// 1, and the mission ladder pays ~1,320 lifetime — nowhere near a respawn at the market rate. So
+// this is NOT rent-from-grinding, and sim P9.35 now MEASURES the gap rather than leaving it to a
+// comment: the whole earn surface is 1,320 lifetime (the mission ladder, once per account) plus 3/day
+// (`daily:all`, a transfer out of the event fund), against 4,118 for the CHEAPEST thing the rail
+// sells — 3.1× the entire ladder. So the player who funds their fees in $OMR is the one who takes it
+// off somebody: `whack:loot` moves 20–50% of a victim's liquid AND staked $OMR to their killer. That
+// is a better fit than EVE's version, not a worse one — you pay your rent by robbing people, which is
+// the entire premise — but it is a DIFFERENT claim, so do not describe it as ISK-rent.
 const MINT_FEE_ETH = Number(process.env.MINT_FEE_ETH || 0.01);
 const RESPAWN_FEE_ETH = Number(process.env.RESPAWN_FEE_ETH || 0.10);
+// MARKET-LINKED (sim-audit F3): a hand-set $OMR price is minutes of play against real money, so the
+// rail is priced off the REAL rate — fee-ETH × the latest Vig buyback's price (the DEX TWAP on
+// mainnet) × a premium ≥ 1, so ETH stays the economical rail and that asymmetry keeps feeding the
+// vig. The static floor is the PRE-MARKET stand-in only, and it derives from the ONE stated rate
+// rather than being hand-set — the genesis-rate pass's whole finding was that a hand-set floor and a
+// market path silently disagree, and the effective price is whichever is cheaper.
+const PLEX_PREMIUM_BPS = Number(process.env.PLEX_PREMIUM_BPS || 10000); // 1.0× the ETH-equivalent
+export const PLEX_RESPAWN_OMR = Number(process.env.PLEX_RESPAWN_OMR
+  || genesisOmrFor(RESPAWN_FEE_ETH, PLEX_PREMIUM_BPS));
 
-// The live quote: {price, oracle} — oracle null (static floor) until a first buyback prints a price.
+// The live quote: {price, oracle} — oracle null (the static floor) until a first buyback prints one.
+// RESPAWN ONLY: a 'mint' asks for a price that does not exist, so it answers null rather than
+// quoting one, and the board renders that as "ETH only" instead of a number nobody may pay.
 export async function plexQuote(db, kind) {
-  const feeEth = kind === 'mint' ? MINT_FEE_ETH : RESPAWN_FEE_ETH;
-  const fallback = kind === 'mint' ? PLEX_MINT_OMR : PLEX_RESPAWN_OMR;
+  if (kind !== 'respawn') return null;
   const last = (await db.query(
     'SELECT price_omr_per_eth FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0];
-  if (!last) return { price: fallback, oracle: null };
+  if (!last) return { price: PLEX_RESPAWN_OMR, oracle: null };
   const oracle = Number(last.price_omr_per_eth);
-  const price = Math.max(fallback, round6(feeEth * oracle * PLEX_PREMIUM_BPS / 10000));
+  const price = Math.max(PLEX_RESPAWN_OMR, round6(RESPAWN_FEE_ETH * oracle * PLEX_PREMIUM_BPS / 10000));
   return { price, oracle };
+}
+
+// Pay a real-money fee from EARNED $OMR instead of ETH. Burns through the audited ledger under the
+// caller's held account lock (runs inside withCharacter, so `h.acct` is the account). §10.4: the
+// `plex:*` reason is already in the omr vocabulary, the burn term and `DESK.SINK_REASONS`, so the
+// value recycles to the desk shelf — no new reason, no new bucket.
+export async function payPlex(ch, kind, client, h) {
+  // THE MINT STAYS ETH ONLY. Minting is the Sybil bound and it gates extraction, so it is the one
+  // price that must never be ambiguous — and the FREE path does not run through this rail anyway:
+  // "you can get made for free" is delivered by a mission GRANTING the credit outright, which is why
+  // retiring this half cost nothing and why restoring it would give nothing back.
+  if (kind === 'mint') throw new GameError('retired',
+    'The mint is ETH only. Pay the fee on-chain, or earn the credit — the mission ladder grants one outright.');
+  if (kind !== 'respawn') throw new GameError('bad_kind', "PLEX pays a 'respawn'.");
+  const { price } = await plexQuote(client, kind); // market-linked: fee-ETH × latest buyback price × premium
+  if (Number(h.acct.omr) < price) throw new GameError('omr', `That costs ${price} $OMR at the current rate — earn it, or pay the ETH fee.`);
+  h.acct.omr = Number(h.acct.omr) - price;
+  await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -price, reason: `plex:${kind}` });
+  h.acct.respawn_tokens = Number(h.acct.respawn_tokens || 0) + 1;
+  await h.track(client, ch.account_id, 'plex', { kind, omr: price });
+  return { ok: true, kind, omrSpent: price,
+    mintCredits: Number(h.acct.mint_credits || 0), respawnTokens: Number(h.acct.respawn_tokens || 0) };
 }
 
 // ── revenue ingestion (called inside recordFeePayment's txn; idempotent on source+ref) ──
@@ -59,9 +110,9 @@ export async function recordVigRevenue(client, { source, ref, kind, amountWei, b
   try { grossEth = Number(BigInt(amountWei ?? '0')) / 1e18; } catch { grossEth = 0; }
   if (!(grossEth > 0)) return { recorded: false };
   // `bps` defaults to the gameplay-fee split; a source with its OWN declared split passes it
-  // explicitly (ROUTER F1: recordTradeFee booked 60% while TRADE_FEE.VIG_BPS declares 100% —
-  // the constant was read nowhere on the booking path, so 40% of every trade-fee gross would
-  // have been booked to nobody. Chain-dormant, so zero real rows were wrong; the wiring was.)
+  // explicitly. Kept after the trade fee's retirement because the LESSON outlives the rail that
+  // taught it (ROUTER F1: the booking path read no lever at all, so a source whose declared split
+  // differed from the default booked the difference to nobody, with both invariants green).
   const vigEth = round6(grossEth * (bps ?? VIG_BPS) / 10000);
   // SELECT-then-INSERT (pg-mem's ON CONFLICT is unreliable) — a re-delivered fee event is a no-op
   const seen = (await client.query('SELECT 1 FROM vig_revenue WHERE source=$1 AND ref=$2', [source, String(ref)])).rows[0];
@@ -72,22 +123,11 @@ export async function recordVigRevenue(client, { source, ref, kind, amountWei, b
   return { recorded: true, vigEth };
 }
 
-// ── the afterSwap→Vig hook's revenue ingestion (the recordFeePayment twin; chain-dormant, watcher-driven) ──
-// A `TradeFeePaid(nonce, amountWei)` log from the OMR/ETH pool's afterSwap hook → the Vig's share, through
-// the SAME rail as gameplay fees (recordVigRevenue splits VIG_BPS, idempotent on source+ref). Design:
-// omerta-uniswap-hooks-design.md §2. Security posture: there is NO mod route for trade fees BY DESIGN —
-// the on-chain watcher is the ONLY producer, so unlike fees/store/bonds (which carry a QA mod route behind
-// ALLOW_MOD_REAL_REVENUE) there is ZERO fabrication surface. A re-delivered / reorged log is a no-op.
-export async function recordTradeFee(pool, { nonce, amountWei }) {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const r = await recordVigRevenue(client, { source: 'trade', ref: nonce, kind: 'trade', amountWei, bps: TRADE_FEE.VIG_BPS });
-    await client.query('COMMIT');
-    return r;
-  } catch (e) { await client.query('ROLLBACK'); throw e; }
-  finally { client.release(); }
-}
+// THE TRADE-FEE PAYER IS RETIRED (founder-directed 2026-08-11) — `recordTradeFee` is DELETED rather
+// than left dormant, because a payer behind a flag is one env var from live. Two hooks wanted one
+// pool and the four-slice sell tax won; see the retirement note in rules.tail.js. `'trade'` stays in
+// the router's VIG_SOURCES forever (history), and `router.js` check (8) now asserts nothing NEW
+// writes it — the freshness shape, not a membership deletion.
 
 const sumEth = async (pool, table, col, where = '') =>
   Number((await pool.query(`SELECT COALESCE(SUM(${col}),0) s FROM ${table} ${where}`)).rows[0].s);
@@ -146,24 +186,6 @@ export async function runVigBuyback(pool, { priceOmrPerEth, maxEth } = {}) {
 }
 
 // ── the PLEX bridge (pay a real-money fee in earned $OMR instead of ETH) ──
-// A skilled player covers their own "rent" from earnings: burn in-game $OMR → get the SAME
-// entitlement an ETH payer gets (a mint credit or a respawn token). The $OMR is BURNED (a legal
-// §10.4 sink, `plex:*`) — deflationary, offsetting emission. ETH payers fund the Vig; $OMR payers
-// shrink supply; both support the token. Runs under withCharacter (h.acct is the account).
-export async function payPlex(ch, kind, client, h) {
-  if (kind !== 'mint' && kind !== 'respawn') throw new GameError('bad_kind', "PLEX pays a 'mint' or a 'respawn'.");
-  if (kind === 'mint' && h.acct.minted) throw new GameError('minted', 'This account is already made.');
-  const { price } = await plexQuote(client, kind); // market-linked: fee-ETH × latest buyback price × premium
-  if (Number(h.acct.omr) < price) throw new GameError('omr', `That costs ${price} $OMR at the current rate — earn it, or pay the ETH fee.`);
-  h.acct.omr = Number(h.acct.omr) - price;
-  await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -price, reason: `plex:${kind}` });
-  if (kind === 'mint') h.acct.mint_credits = Number(h.acct.mint_credits || 0) + 1;
-  else h.acct.respawn_tokens = Number(h.acct.respawn_tokens || 0) + 1;
-  await h.track(client, ch.account_id, 'plex', { kind, omr: price });
-  return { ok: true, kind, omrSpent: price,
-    mintCredits: Number(h.acct.mint_credits || 0), respawnTokens: Number(h.acct.respawn_tokens || 0) };
-}
-
 // ── season prize payout (from the prize pool, through the withdrawal rail) ──
 // Pay a winner: credit their IN-GAME $OMR (a legal faucet `prize:omr`, like a mission reward) AND
 // move the same hard $OMR from the prize pool to the withdrawal reserve to BACK it — so the prize
@@ -208,13 +230,11 @@ export async function vigStatus(pool) {
     ethSpent: round6(ethSpent), unspentEth: round6(revenueIn - ethSpent),
     omrBought: round6(omrBought), toReserveTotal: round6(toReserve),
     prizePool: round6(num(pp.balance)), prizePaid: round6(num(pp.paid_total)),
-    config: { vigBps: VIG_BPS, reserveBps: RESERVE_BPS, plexMintOmr: PLEX_MINT_OMR, plexRespawnOmr: PLEX_RESPAWN_OMR,
-      // The IMPLIED RATE each fee pair puts on $OMR. Pre-market the PLEX price is the static floor
-      // and ignores the ETH fee, so these two must agree or whichever rail is cheap is the one a
-      // farm buys identities on — and minting is the Sybil bound. preflight warns at boot; this is
-      // the same number where an operator is already looking (the "a warning nobody reads" answer).
-      mintOmrPerEth: round6(PLEX_MINT_OMR / MINT_FEE_ETH),
-      respawnOmrPerEth: round6(PLEX_RESPAWN_OMR / RESPAWN_FEE_ETH) },
+    // EVERY real-money price is ETH now, so there is no implied $OMR rate for an operator to watch
+    // and nothing for the two-rails guard to compare. `null` states that positively rather than
+    // leaving a stale number somebody would read as a live price.
+    config: { vigBps: VIG_BPS, reserveBps: RESERVE_BPS,
+      plexMintOmr: null, plexRespawnOmr: null, mintOmrPerEth: null, respawnOmrPerEth: null },
   };
 }
 

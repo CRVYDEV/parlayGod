@@ -31,7 +31,7 @@ import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
          CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES, BUSINESSES, PACING, POPULATION, boatResale, CORNER, CONTACTS, FAMILY_WAR,
          EXCHANGE, ESTATE, WIRE, GANG_SEALS, FOUNDATION, RIVALS, RACKETS, ASSETS, M4, DRUGS,
          MADE, ACCESS_STAKE, OPERATIONS, opSlotsOf, SOV,
-         TREASURY, STORE, SELL_TAX, BONDS } from '../src/rules.js';
+         TREASURY, STORE, SELL_TAX, BONDS, MISSIONS } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -351,7 +351,7 @@ while (transferred === 0 && tries++ < 30) {
 note('collusion', 'one shakedown transfer', `$${fmt(transferred)}`, `30% of 24h pending; per-venue 8h cooldown → ~3×/day/venue; vs jump steal cap $${fmt(M3.JUMP_STEAL_CAP || 0)}`);
 
 // ════════════════ P9: THE VIG — real-revenue rail ════════════════
-phase('P9 vig — fees → buyback → reserve, PLEX');
+phase('P9 vig — fees → buyback → reserve, the ETH-only mint');
 await call('POST', '/v1/mod/fees/record', { headers: modH, body: { nonce: 900001, kind: 'mint', payer: '0x' + '11'.repeat(20), amountWei: '10000000000000000', txHash: '0x' + 'aa'.repeat(32) } });
 await call('POST', '/v1/mod/fees/record', { headers: modH, body: { nonce: 900002, kind: 'respawn', payer: '0x' + '22'.repeat(20), amountWei: '100000000000000000', txHash: '0x' + 'bb'.repeat(32) } });
 r = await call('POST', '/v1/mod/vig/buyback', { headers: modH, body: { priceOmrPerEth: 1000 } });
@@ -359,12 +359,19 @@ note('vig', 'vig buyback', r.code === 200 ? `${fmt(r.body.omrBought ?? 0)} hard 
 const vigStatus = await call('GET', '/v1/mod/vig', { headers: modH });
 const vigOk = vigStatus.body.ok ?? vigStatus.body.invariants?.ok ?? (vigStatus.body.checks || []).every?.((c) => c.ok);
 note('vig', 'vig invariants (extraction ≤ inflow)', String(vigOk), '');
-// PLEX: pay the mint fee from EARNED $OMR
-const gOmr = (await meOf(g.token)).omr;
-if (gOmr >= 5) {
+// THE MINT IS ETH ONLY (2026-08-10) — the $OMR rail is retired, so the extraction gate opens the way
+// a real player opens it: a fee paid on the chain rail (the worker's fee watcher does this on a
+// MintFeePaid event; the mod route is its manual twin), then spend the credit. Asserted BOTH ways —
+// that the retired rail refuses, and that the live one works.
+{
   const px = await call('POST', '/v1/plex/mint', { token: g.token });
-  const mint = px.code === 200 ? await call('POST', '/v1/character/mint', { token: g.token }) : { code: px.code };
-  note('vig', 'PLEX mint (5 earned $OMR → minted account)', String(mint.code === 200), 'the extraction gate opens without ETH');
+  note('vig', 'the PLEX mint rail refuses', String(px.body?.error === 'retired'), 'fees are ETH only — one rail for the Sybil bound');
+  const wallet = '0x' + '33'.repeat(20);
+  const gAid = (await pool.query(`SELECT account_id a FROM characters WHERE id='${g.id}'`)).rows[0].a;
+  await pool.query('UPDATE account_persistent SET wallet_address=$2 WHERE account_id=$1', [gAid, wallet]);
+  await call('POST', '/v1/mod/fees/record', { headers: modH, body: { nonce: 900003, kind: 'mint', payer: wallet, amountWei: '10000000000000000', txHash: '0x' + 'cc'.repeat(32) } });
+  const mint = await call('POST', '/v1/character/mint', { token: g.token });
+  note('vig', 'the ETH mint opens the extraction gate', String(mint.code === 200), 'one rail, in real money, at the published wave');
 }
 
 // ════════════════ P9.5: THE DEN — realized house edge + street cut ════════════════
@@ -597,25 +604,29 @@ for (const route of PORT.ROUTES) {
 note('port', 'daily faucet (best route, maxed)', `~$${fmt(Math.round(PORT.SUPPLY_CAP_DAY * bestNetRatio))}/day`,
   `bounded by SUPPLY_CAP_DAY $${fmt(PORT.SUPPLY_CAP_DAY)} × the best net margin — sign-off vs boxing exhibition / territory (~$300-400k)`);
 
-// ════════ P9.15 the afterSwap→Vig trade-fee flywheel — analytic contribution (design §2, Tier D) ════════
-// The dormant Uniswap hook skims HOOK_FEE_BPS of each swap's ETH leg → the Vig books VIG_BPS of that as
-// source='trade' revenue → the existing buyback turns it into reserve (RESERVE_BPS) + prize pool. This is a
-// SIGN-OFF number, NOT a §10.4 assertion: real ETH is out-of-band (zero `transactions` rows — the fees.js
-// precedent), so it neither seeds value nor moves the sweep. It bounds how much extra withdrawal-reserve a
-// given daily OMR/ETH trade volume underwrites — "traders fund earners." Illustrative volumes; the real
-// figure is the DEX's realized volume at mainnet.
-phase('P9.15 trade-fee flywheel — Vig contribution vs daily swap volume (analytic, out-of-band)');
-const VIG_BPS = Number(process.env.VIG_BPS || 6000);
-const RESERVE_BPS = Number(process.env.VIG_RESERVE_BPS || 5000);
-const HOOK_FEE_BPS = 30; // illustrative pool skim (contract lever, MAX_FEE_BPS 100) — sign-off
-for (const volEth of [10, 100, 1000]) {                              // daily ETH-leg swap volume scenarios
-  const skimEth = volEth * HOOK_FEE_BPS / 10000;                      // the hook's take
-  const vigEth = skimEth * VIG_BPS / 10000;                           // booked as source='trade' revenue
-  const toReserveEth = vigEth * RESERVE_BPS / 10000;                  // buyback → withdrawal reserve
-  note('vig', `flywheel @ ${fmt(volEth)} ETH/day traded`, `+${vigEth.toFixed(3)} ETH/day to the Vig`,
-    `skim ${HOOK_FEE_BPS}bps → ${skimEth.toFixed(3)} ETH · Vig ${(VIG_BPS/100)}% → ${toReserveEth.toFixed(3)} ETH/day underwrites withdrawal reserve (rest → prize pool); real vol = the DEX at mainnet`);
+// ════════ P9.15 WHAT TRADING FUNDS, after the trade fee's retirement (analytic, out-of-band) ════════
+// The trade fee (a cut of EVERY swap → the Vig) was retired 2026-08-11: a PoolKey holds one hook and the
+// four-slice SELL TAX won the canonical pool. This probe exists to keep the CONSEQUENCE measured rather
+// than assumed, because it is easy to miss: the sell tax's slices are dev / treasury / LP — **none of them
+// is the Vig** — so after the retirement, trading volume contributes NOTHING to withdrawal backing. The
+// Vig is funded by gameplay fees, the Store and bonds alone. That is not automatically wrong (the LP slice
+// buys depth, which is what a thin market needs most), but "extraction ≤ inflow" is now a tighter bound,
+// and this prints the number so a founder decision to add a fourth vig slice has something to price.
+// Out-of-band real value: zero `transactions` rows (the fees.js precedent), so the sweep is untouched.
+phase('P9.15 what trading funds — the sell tax by destination, and the Vig\'s missing trading leg');
+const SELL_BPS = Number(process.env.SELL_TAX_BPS || 900);
+const SELL_DEV = Number(process.env.SELL_TAX_DEV_BPS || 200);
+const SELL_RWA = Number(process.env.SELL_TAX_RWA_BPS || 400);
+const SELL_LP = SELL_BPS - SELL_DEV - SELL_RWA;              // the remainder rule sits on LP
+for (const volEth of [10, 100, 1000]) {                       // daily ETH-leg SELL volume scenarios
+  const taxEth = volEth * SELL_BPS / 10000;
+  note('vig', `sell tax @ ${fmt(volEth)} ETH/day sold`, `${taxEth.toFixed(3)} ETH/day taxed`,
+    `founder ${(volEth * SELL_DEV / 10000).toFixed(3)} · treasury ${(volEth * SELL_RWA / 10000).toFixed(3)} · LP depth ${(volEth * SELL_LP / 10000).toFixed(3)} — and 0.000 to the Vig`);
 }
-note('vig', 'flywheel §10.4 posture', 'out-of-band, zero ledger rows', 'the fees.js precedent — trade fees never seed value, so the sweep is untouched; extraction ≤ inflow only STRENGTHENS');
+note('vig', 'the Vig\'s trading leg', 'ZERO after the retirement',
+  'withdrawal backing now comes only from gameplay fees (60%), the Store (40%) and bonds (22.5%). '
+  + 'A fourth vig slice on the hook is the dial if trading should underwrite withdrawals again — a '
+  + 'reallocation OUT of dev/treasury/LP, which is a founder call, not a default (BALANCE § D1)');
 
 // ════════ P9.16 THE GRAND PRIX — a redistribution, NET SINK via the rake (NOT a faucet) ════════
 // A parimutuel: N drivers escrow BUYIN, the top places split the pool net of RAKE_BPS (half → street tax,
@@ -1456,6 +1467,43 @@ phase('P9.34 THE ACTIVATION MODEL — the treasury rate card (design-stage; re-m
   }
   note('activation', 'the sizing answer', 'the recurring sink ≈ the treasury inflow, in $OMR at the oracle',
     'activation converts every ETH of declared treasury revenue into that much daily $OMR demand — the demand engine the Dynasty design promised. Every ACTIVATION.* number stays a proposed default until the burn is built (post-A1)');
+}
+
+// ════════ P9.35 THE PLEX REACH — can a player actually PAY in earned $OMR? ════════════════════════
+// The PLEX rail came back on 2026-08-10 for everything but the mint, and it was restored on an
+// explicit fantasy: "pay your rent in ISK" — a skilled player funding their play from earnings. That
+// is a claim about REACH, and reach is measurable, so it is measured here rather than asserted in a
+// comment. Analytic, off the LIVE levers; no value seeded, §10.4 untouched (the P9.33/P9.34 shape).
+//
+// What a player can EARN, from the enumerated $OMR mint set + the one recurring transfer:
+//   • `mission:%`  — the ladder, ONCE per account, lifetime
+//   • `daily:all`  — the all-three daily bonus, a TRANSFER out of the event fund (not a mint)
+//   • `prize:omr`  — the vig prize pool + pass stipends, both funded by REAL revenue (not grinding)
+// Everything else that moves $OMR to a player is a TRANSFER they must take, buy, or be given:
+// `whack:loot` off a corpse, `desk:sale` for ETH at the auction, `yield:family` from a treasury.
+// So this probe answers one question — how long does the earn surface take to reach the CHEAPEST
+// thing the rail sells — and it re-measures on any retune of the ladder, the daily, the premium or
+// a package price. `MISSIONS` is machine-owned, so a re-extract re-measures it too.
+phase('P9.35 THE PLEX REACH — how long the earn surface takes to reach the cheapest rail purchase');
+{
+  const lifetimeMission = MISSIONS.reduce((n, m) => n + Number(m.reward?.omr || 0), 0);
+  const perDay = Number(M4.DAILY_ALL_OMR || 0);   // the all-three daily bonus (event-fund bounded)
+  const floor = STORE.PLEX_FLOOR_OMR_PER_ETH;     // the pre-market $OMR/ETH anchor both quotes derive from
+  const shelf = STORE.PACKAGES.map((p) => ({ sku: p.sku, omr: Math.round(p.priceEth * floor) }))
+    .sort((a, b) => a.omr - b.omr);
+  const cheapest = shelf[0];
+  const respawn = Math.round(0.10 * floor);       // the respawn fee at the genesis anchor
+
+  const daysTo = (target) => (perDay > 0 ? Math.ceil(Math.max(0, target - lifetimeMission) / perDay) : Infinity);
+
+  note('plex reach', 'the whole earn surface', `${lifetimeMission.toLocaleString()} $OMR lifetime (missions) + ${perDay}/day (daily:all)`,
+    'the ladder pays ONCE per account; the daily is a transfer out of the event fund, so it is bounded by the fund, not printed');
+  note('plex reach', `the cheapest thing the rail sells (${cheapest.sku})`, `${cheapest.omr.toLocaleString()} $OMR`,
+    `${(cheapest.omr / lifetimeMission).toFixed(1)}× the ENTIRE mission ladder — so doing every $OMR mission in the game buys nothing on the rail, and the daily takes ${daysTo(cheapest.omr).toLocaleString()} more days to close the gap`);
+  note('plex reach', 'a respawn token', `${respawn.toLocaleString()} $OMR`,
+    `${daysTo(respawn).toLocaleString()} days of perfect daily play after the full ladder`);
+  note('plex reach', 'the verdict', 'PLEX is reachable by PREDATION or PURCHASE, not by grinding',
+    'that is on-theme and it is NOT the EVE fantasy the restore invoked: in EVE, PLEX is reachable by grinding ISK. Here $OMR has had no faucet since v3 step 1, so the rail is funded by taking it off somebody (whack:loot moves 20-50% of a victim\'s liquid + staked) or buying it at the desk. SIGNED: the predator framing is accepted, and the premium has already been taken to 1.0 (17% off every rail price — comfort, not a fix, since it cannot close a multiple this size). The dials left are the ladder\'s $OMR (machine-owned — a re-extract) and M4.DAILY_ALL_OMR, and both are faucet changes rather than pricing ones');
 }
 
 phase('P10 §10.4 ledger invariants over the ENTIRE sim (nothing was seeded)');

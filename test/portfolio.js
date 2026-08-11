@@ -9,7 +9,7 @@ process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import crypto from 'node:crypto';
 import { buildServer } from '../src/server.js';
-import { PORTFOLIO } from '../src/rules.js';
+import { PORTFOLIO, TREASURY } from '../src/rules.js';
 import * as Treasury from '../src/treasury.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { mergeLegacyYieldPools } from '../src/exchange.js';
@@ -127,7 +127,7 @@ assert.equal(Number((await pool.query('SELECT balance FROM family_yield_pool WHE
   const early = await mk('Vault Vinny');
   await acctOmr(early.id, 3000); grantDrift += 3000;
   await pool.query(`UPDATE account_persistent SET minted=true WHERE account_id=(SELECT account_id FROM characters WHERE id='${early.id}')`);
-  let r = await call('POST', '/v1/vault/claim', { token: early.token, body: { omr: 50 } });
+  let r = await call('POST', '/v1/vault/claim', { token: early.token, body: { omr: 300 } });
   assert.equal(r.body.error, 'vault_dry', 'an empty treasury has nothing to allocate');
   // 1.0 ETH of real revenue lands (out-of-band real-value accounting — the vig/bond test precedent)
   await pool.query("INSERT INTO rwa_revenue (source, ref, rwa_eth) VALUES ('store','vault-test-1',1.0)");
@@ -135,7 +135,7 @@ assert.equal(Number((await pool.query('SELECT balance FROM family_yield_pool WHE
   // that the vault owes real ETH: with no oracle the old code fell back to a FIXED floor, which turns
   // "we don't know what ETH costs" into "sell it at the default" — a standing free option on the
   // treasury. Fail-closed, no fallback.
-  r = await call('POST', '/v1/vault/claim', { token: early.token, body: { omr: 50 } });
+  r = await call('POST', '/v1/vault/claim', { token: early.token, body: { omr: 300 } });
   assert.equal(r.body.error, 'no_price', 'a funded vault with no ETH price REFUSES rather than guessing one');
   let vb = (await call('GET', '/v1/vault', { token: early.token })).body;
   assert.equal(vb.open, false, 'and the board says closed rather than advertising a price the claim would refuse');
@@ -143,7 +143,7 @@ assert.equal(Number((await pool.query('SELECT balance FROM family_yield_pool WHE
   await pool.query("INSERT INTO vig_buyback (id, eth_spent, omr_bought, price_omr_per_eth, to_reserve, to_prize) VALUES ('bb-vault', 1, 5000, 5000, 0, 0)");
   // …and a STALE print is refused too — the same hole with a timestamp on it
   await pool.query("UPDATE vig_buyback SET created_at = now() - interval '5 days' WHERE id='bb-vault'");
-  r = await call('POST', '/v1/vault/claim', { token: early.token, body: { omr: 50 } });
+  r = await call('POST', '/v1/vault/claim', { token: early.token, body: { omr: 300 } });
   assert.equal(r.body.error, 'stale_price', 'a stale ETH price is refused, not used');
   await pool.query("UPDATE vig_buyback SET created_at = now() WHERE id='bb-vault'");
   vb = (await call('GET', '/v1/vault', { token: early.token })).body;
@@ -155,7 +155,7 @@ assert.equal(Number((await pool.query('SELECT balance FROM family_yield_pool WHE
   // MINTED-ONLY: a claiming identity pays the mint fee first, so the per-account cap is a real bound
   const free = await mk('Free Freddie');
   await acctOmr(free.id, 500); grantDrift += 500;
-  r = await call('POST', '/v1/vault/claim', { token: free.token, body: { omr: 50 } });
+  r = await call('POST', '/v1/vault/claim', { token: free.token, body: { omr: 300 } });
   assert.equal(r.body.error, 'mint', 'a free-trial character cannot claim from the vault');
   // the claim: burn $OMR at the oracle → allocated ETH
   r = await call('POST', '/v1/vault/claim', { token: early.token, body: { omr: 525 } });
@@ -163,21 +163,24 @@ assert.equal(Number((await pool.query('SELECT balance FROM family_yield_pool WHE
   assert.equal(r.body.eth, 0.1, '525 $OMR at 5250/ETH (spot + premium) = 0.1 ETH');
   assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='rwa:vault'")).rows[0].s),
     -525, 'the claim is a ledgered rwa:vault burn — $OMR is the rationing ticket, the ETH was already paid for');
-  // the rolling-24h per-account cap (anti-sweep)
-  r = await call('POST', '/v1/vault/claim', { token: early.token, body: { omr: 1600 } });
-  assert.equal(r.body.error, 'daily_cap', 'the daily bucket refuses a sweep (525 + 1600 > 2000)');
+  // the rolling-24h per-account cap (anti-sweep). Sized OFF THE LEVER, so a re-denomination that
+  // moves the cap cannot leave this assertion testing nothing.
+  const sweep = TREASURY.CLAIM_DAILY_OMR - 525 + 1;
+  await acctOmr(early.id, sweep); grantDrift += sweep;
+  r = await call('POST', '/v1/vault/claim', { token: early.token, body: { omr: sweep } });
+  assert.equal(r.body.error, 'daily_cap', `the daily bucket refuses a sweep (525 + ${sweep} > ${TREASURY.CLAIM_DAILY_OMR})`);
   // THE WALL, at the margin: a second house claims and the vault clamps to what is left rather than
   // promising ETH the treasury does not hold. 0.9 ETH remain = 4500 $OMR worth; ask for more.
   const whale = await mk('Clamp Carl');
   await acctOmr(whale.id, 3000); grantDrift += 3000;
   await pool.query(`UPDATE account_persistent SET minted=true WHERE account_id=(SELECT account_id FROM characters WHERE id='${whale.id}')`);
   await pool.query("UPDATE rwa_revenue SET rwa_eth=0.12 WHERE ref='vault-test-1'"); // held 0.12, 0.1 already owed
-  r = await call('POST', '/v1/vault/claim', { token: whale.token, body: { omr: 2000 } });
+  r = await call('POST', '/v1/vault/claim', { token: whale.token, body: { omr: 12000 } });
   assert.equal(r.code, 200, 'the clamped claim lands');
   assert.equal(r.body.clamped, true, 'the treasury ran short of the ask');
   assert.equal(r.body.eth, 0.02, 'clamped to the 0.02 ETH that was unallocated');
   assert.equal(r.body.spent, 105, 'and charged only for what was got (never an IOU, never overpaid)');
-  r = await call('POST', '/v1/vault/claim', { token: whale.token, body: { omr: 50 } });
+  r = await call('POST', '/v1/vault/claim', { token: whale.token, body: { omr: 300 } });
   assert.equal(r.body.error, 'vault_dry', 'a fully-allocated vault refuses cleanly');
   // THE ANTI-PONZI CHECK, in ETH on both sides
   const ti = await Treasury.runTreasuryInvariants(pool);
@@ -189,15 +192,16 @@ assert.equal(Number((await pool.query('SELECT balance FROM family_yield_pool WHE
   // bucket, and the vault still charges it. Structuring against the vault's OWN till: a sub-threshold
   // claim flies from a safehouse, the one that crosses the window is blocked.
   const launderer = await mk('Sly Sal');
-  await acctOmr(launderer.id, 2000); grantDrift += 2000;
+  const structuring = PORTFOLIO.SCRUTINY_MIN_OMR + TREASURY.CLAIM_MIN_OMR; // enough for both legs
+  await acctOmr(launderer.id, structuring); grantDrift += structuring;
   await pool.query(`UPDATE account_persistent SET minted=true WHERE account_id=(SELECT account_id FROM characters WHERE id='${launderer.id}')`);
   await pool.query(`UPDATE characters SET safe_until = now() + interval '1 hour' WHERE id='${launderer.id}'`);
-  await pool.query("INSERT INTO rwa_revenue (source, ref, rwa_eth) VALUES ('bond','vault-test-2',1.0)");
-  r = await call('POST', '/v1/vault/claim', { token: launderer.token, body: { omr: 990 } });
-  assert.equal(r.code, 200, 'a sub-threshold vault claim flies from a safehouse');
-  r = await call('POST', '/v1/vault/claim', { token: launderer.token, body: { omr: 50 } });
+  await pool.query("INSERT INTO rwa_revenue (source, ref, rwa_eth) VALUES ('bond','vault-test-2',5.0)");
+  r = await call('POST', '/v1/vault/claim', { token: launderer.token, body: { omr: PORTFOLIO.SCRUTINY_MIN_OMR - 10 } });
+  assert.equal(r.code, 200, `a sub-threshold vault claim flies from a safehouse: ${JSON.stringify(r.body)}`);
+  r = await call('POST', '/v1/vault/claim', { token: launderer.token, body: { omr: 300 } });
   assert.equal(r.body.error, 'safe',
-    'the claim that crosses the rolling window is blocked from a safehouse (structuring-proof against the vault itself)');
+    `the claim that crosses the rolling window is blocked from a safehouse: ${JSON.stringify(r.body)}`);
   console.log('✓ THE VAULT — backed with ETH: allocated <= held on both sides, the ledgered burn, the daily cap, the honest clamp, the RICO window survives D11');
 }
 

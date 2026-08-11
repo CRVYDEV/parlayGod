@@ -74,7 +74,7 @@ async function bumpVolume(client, amt) {
 
 function gateBet(ch, amount, min, max) {
   if (jailed(ch)) throw new GameError('jailed', 'No dice in lockup — yet.');
-  if (ch.loc !== CASINO.DISTRICT) throw new GameError('district', `The den runs on the ${CASINO.DISTRICT} — the games are where the lights are.`);
+  if (ch.loc !== CASINO.DISTRICT) throw new GameError('district', `The den runs on the ${CASINO.DISTRICT} — the games are where the lights are.`, { district: CASINO.DISTRICT });
   const amt = Math.floor(Number(amount));
   if (!(amt >= min)) throw new GameError('min', `Table minimum is $${min}.`);
   if (amt > max) throw new GameError('max', `Table maximum is $${max} — the house knows variance.`);
@@ -174,7 +174,11 @@ export function setFadeLimit(ch, limit) {
 
 export async function pvpDice(ch, fader, amount, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No dice in lockup — yet.');
-  if (ch.loc !== CASINO.DISTRICT) throw new GameError('district', `The back room is on the ${CASINO.DISTRICT}.`);
+  // The ACTOR gate its six siblings enforce (fightBout, raceChallenge, pinkSlipRace, matchRace,
+  // duel, playTable) and this one had missed: a hospitalized player is untargetable, so without it
+  // the ward is a place you can still take other people's money from. (red-team F2)
+  if (hospitalized(ch)) throw new GameError('hosp', "You're in no shape for the back room — see the Doc.");
+  if (ch.loc !== CASINO.DISTRICT) throw new GameError('district', `The back room is on the ${CASINO.DISTRICT}.`, { district: CASINO.DISTRICT });
   if (fader.id === ch.id) throw new GameError('self', "You can't fade your own action."); // defense-in-depth: withTwoCharacters already throws self (one alive char/account) — explicit like every sibling
   const limit = fader.fade_limit != null ? Math.floor(Number(fader.fade_limit)) : 0;
   if (!(limit > 0)) throw new GameError('not_fading', "They're not taking action.");
@@ -454,7 +458,7 @@ export async function claimTrack(ch, client, h) {
 // can be raced/bred/sold after. The town bets on it via the normal card; the worker banks its win. ──
 export async function enterTrackRace(ch, racerId, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No entries from lockup.');
-  if (ch.loc !== CASINO.DISTRICT) throw new GameError('district', `The track runs on the ${CASINO.DISTRICT}.`);
+  if (ch.loc !== CASINO.DISTRICT) throw new GameError('district', `The track runs on the ${CASINO.DISTRICT}.`, { district: CASINO.DISTRICT });
   const r = (await client.query('SELECT * FROM racers WHERE id=$1 FOR UPDATE', [racerId])).rows[0];
   if (!r || r.character_id !== ch.id) throw new GameError('no_racer', "That's not one of your racers.");
   if (r.injured_until && new Date(r.injured_until) > new Date()) throw new GameError('injured', 'That racer is laid up — let them heal.');
@@ -528,7 +532,7 @@ const futurityMs = () => Number(process.env.FUTURITY_MS) || CASINO.FUTURITY.REGI
 // ── nominate one of your fit racers into the open futurity card. Form snapshotted; the fee burns. ──
 export async function nominateFuturity(ch, racerId, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No nominations from lockup.');
-  if (ch.loc !== CASINO.DISTRICT) throw new GameError('district', `The futurity runs on the ${CASINO.DISTRICT}.`);
+  if (ch.loc !== CASINO.DISTRICT) throw new GameError('district', `The futurity runs on the ${CASINO.DISTRICT}.`, { district: CASINO.DISTRICT });
   // materialize/find the open futurity under the state singleton lock FIRST, THEN lock the racer (LOCK
   // ORDER: char → account [withCharacter] → futurity_state → card → racer — audit v4 MED-1: resolveFuturity
   // locks state→card→racer, so nominate must lock state BEFORE the racer or it's an AB-BA on the state singleton).
@@ -987,7 +991,8 @@ export function setPokerLimit(ch, limit) {
 
 export async function playPoker(ch, dealer, amount, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No cards in lockup.');
-  if (ch.loc !== CASINO.DISTRICT) throw new GameError('district', `The table is on the ${CASINO.DISTRICT}.`);
+  if (hospitalized(ch)) throw new GameError('hosp', "You're in no shape to sit down — see the Doc."); // the sibling actor gate (red-team F2)
+  if (ch.loc !== CASINO.DISTRICT) throw new GameError('district', `The table is on the ${CASINO.DISTRICT}.`, { district: CASINO.DISTRICT });
   if (dealer.id === ch.id) throw new GameError('self', "You can't play your own table."); // defense-in-depth: withTwoCharacters already throws self — explicit like every sibling
   const limit = dealer.poker_limit != null ? Math.floor(Number(dealer.poker_limit)) : 0;
   if (!(limit > 0)) throw new GameError('not_dealing', "They're not dealing a hand.");
@@ -1045,7 +1050,7 @@ function deal7() { // an independent 7-card hand from a fresh shuffle (scales to
 
 export async function enterTournament(ch, client, h, opts = {}) {
   if (jailed(ch)) throw new GameError('jailed', 'No cards in lockup.');
-  if (ch.loc !== CASINO.DISTRICT) throw new GameError('district', `The big table is on the ${CASINO.DISTRICT}.`);
+  if (ch.loc !== CASINO.DISTRICT) throw new GameError('district', `The big table is on the ${CASINO.DISTRICT}.`, { district: CASINO.DISTRICT });
   const buyin = CASINO.TOURNEY.BUYIN;
   if (Number(ch.cash) < buyin) throw new GameError('cash', `The buy-in is $${buyin}.`);
   // materialize/find the open tournament under the state singleton lock (LOCK ORDER: char → poker_state → tournament)

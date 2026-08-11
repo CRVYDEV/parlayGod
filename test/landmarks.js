@@ -8,6 +8,7 @@ process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { LANDMARKS } from '../src/rules.js';
+const DED = LANDMARKS.MIN_DEDICATE * 5; // a real flex, sized off the floor rather than restated
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -41,10 +42,10 @@ assert.equal(neon.holder, null, 'open — nobody dedicated it yet');
 assert.equal(neon.nextMin, LANDMARKS.MIN_DEDICATE, 'first dedication is the floor');
 
 // ── gates: bad district, below the floor ──
-assert.equal((await call('POST', '/v1/landmarks/nowhere', { token: don.token, body: { amount: 100 } })).body.error, 'district', 'no landmark there');
+assert.equal((await call('POST', '/v1/landmarks/nowhere', { token: don.token, body: { amount: DED } })).body.error, 'district', 'no landmark there');
 // audit LOW: a prototype-chain key must NOT slip past the district gate (own-property lookup)
-assert.equal((await call('POST', '/v1/landmarks/__proto__', { token: don.token, body: { amount: 100 } })).body.error, 'district', '__proto__ is not a district');
-assert.equal((await call('POST', '/v1/landmarks/constructor', { token: don.token, body: { amount: 100 } })).body.error, 'district', 'constructor is not a district');
+assert.equal((await call('POST', '/v1/landmarks/__proto__', { token: don.token, body: { amount: DED } })).body.error, 'district', '__proto__ is not a district');
+assert.equal((await call('POST', '/v1/landmarks/constructor', { token: don.token, body: { amount: DED } })).body.error, 'district', 'constructor is not a district');
 assert.equal((await call('POST', '/v1/landmarks/neon', { token: don.token, body: { amount: LANDMARKS.MIN_DEDICATE - 1 } })).body.error, 'amount', 'below the floor is refused');
 
 // ── name your dynasty, then dedicate — a ledgered vanity:landmark BURN ──
@@ -52,25 +53,25 @@ assert.equal((await call('POST', '/v1/landmarks/neon', { token: don.token, body:
 // plaque still bears, so the fixture seeds it directly (the historical-rows posture)
 await pool.query(`UPDATE account_persistent SET dynasty_name='The Corleones' WHERE account_id=(SELECT account_id FROM characters WHERE id='${don.id}')`);
 const omrPre = (await meOf(don.token)).omr;
-r = await call('POST', '/v1/landmarks/neon', { token: don.token, body: { amount: 100 } });
+r = await call('POST', '/v1/landmarks/neon', { token: don.token, body: { amount: DED } });
 assert.equal(r.code, 200, 'dedicated the Neon Arch');
 assert.equal(r.body.name, 'The Corleones', 'the dynasty name is borne on the plaque');
-assert.equal((await meOf(don.token)).omr, omrPre - 100, 'the flex burned exactly 100 $OMR');
+assert.equal((await meOf(don.token)).omr, omrPre - DED, `the flex burned exactly ${DED} $OMR`);
 r = await call('GET', '/v1/landmarks');
 const neon2 = r.body.landmarks.find((l) => l.district === 'neon');
 assert.equal(neon2.holder, 'The Corleones', 'the plaque bears the family');
-assert.equal(neon2.amount, 100, 'and the flex amount');
-assert.equal(neon2.nextMin, 101, 'a takeover must beat it');
+assert.equal(neon2.amount, DED, 'and the flex amount');
+assert.equal(neon2.nextMin, DED + 1, 'a takeover must beat it');
 
 // ── takeover: a bigger flex takes the plaque; a too-low flex is refused ──
-assert.equal((await call('POST', '/v1/landmarks/neon', { token: rival.token, body: { amount: 100 } })).body.error, 'outbid', 'matching the flex is not beating it');
-r = await call('POST', '/v1/landmarks/neon', { token: rival.token, body: { amount: 250 } });
+assert.equal((await call('POST', '/v1/landmarks/neon', { token: rival.token, body: { amount: DED } })).body.error, 'outbid', 'matching the flex is not beating it');
+r = await call('POST', '/v1/landmarks/neon', { token: rival.token, body: { amount: DED * 2 } });
 assert.equal(r.code, 200, 'the rival takes the plaque with a bigger flex');
 r = await call('GET', '/v1/landmarks');
 assert.equal(r.body.landmarks.find((l) => l.district === 'neon').holder, 'Sollozzo', 'the plaque changed hands (no dynasty name → the street)');
-assert.equal(r.body.landmarks.find((l) => l.district === 'neon').amount, 250, 'to the bigger flex');
-// the ousted don is not refunded (a flex, not escrow) — he still spent his 100
-assert.equal((await meOf(don.token)).omr, omrPre - 100, 'the ousted holder gets no refund (a burn, not escrow)');
+assert.equal(r.body.landmarks.find((l) => l.district === 'neon').amount, DED * 2, 'to the bigger flex');
+// the ousted don is not refunded (a flex, not escrow) — he still spent his
+assert.equal((await meOf(don.token)).omr, omrPre - DED, 'the ousted holder gets no refund (a burn, not escrow)');
 
 // ── DEATH SURVIVAL: the plaque bears the account-level dynasty, so it stands after the holder dies ──
 await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: rival.id }, headers: { 'x-mod-key': 'test-mod-key' } });

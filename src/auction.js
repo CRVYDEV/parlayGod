@@ -86,7 +86,9 @@ export async function bidAuction(ch, lotId, amount, client, h) {
     minNext: Math.ceil(amt * (1 + AUCTION.MIN_RAISE_BPS / 10000)), youLead: true };
 }
 
-// The worker settles lots whose week is over: the top bidder WINS the trophy, the winning bid BURNS.
+// The worker settles lots whose week is over: the top bidder WINS the trophy and the winning bid is
+// SUNK — it leaves the bidder for good, but since v3 step 2 `auction:win` is in DESK.SINK_REASONS,
+// so the value goes to the desk shelf to be sold back for ETH rather than being destroyed.
 // Per-lot txn, lot row locked (serializes vs a late bid — though bids can't land on a past-week lot).
 export async function sweepAuctions(pool) {
   const cur = weekOf();
@@ -101,7 +103,7 @@ export async function sweepAuctions(pool) {
       const bid = Number(row.current_bid);
       if (row.bidder && bid > 0) {
         const lot = auctionLotsOf(row.week).find((l) => l.id === lot_id) || { name: row.archetype, serial: '' };
-        // burn the winning bid (escrow → gone) — the only $OMR the auction removes
+        // sink the winning bid (escrow → the house) — the only $OMR the auction takes off a player
         await ledger(client, { accountId: row.bidder, currency: 'omr', amount: -bid, reason: 'auction:win' });
         await bumpPrestige(client, row.bidder, bid); // THE COLLECTOR legend — the winner sank the bid
         await client.query('INSERT INTO auction_wins (account_id, lot_id, archetype, name, serial, price) VALUES ($1,$2,$3,$4,$5,$6)',

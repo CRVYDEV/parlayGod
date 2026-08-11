@@ -78,16 +78,18 @@ export async function opsOverview(pool) {
     alerting: { webhook: !!process.env.INVARIANT_WEBHOOK_URL },
     // THE TRANCHE SCHEDULE (Shape D): tier progress + the expected-vs-live pair, so the GM sees a
     // boundary coming and a live pair that has drifted off the published table. The boundary is
-    // EXECUTED by hand (one Safe setFees tx + the two env values) — this line is the instrument.
+    // EXECUTED by hand — one Safe setFees tx, and the $OMR rail follows on its own now that it
+    // DERIVES from the fee at the genesis rate. This line is the instrument.
     mintTier: await (async () => {
       const minted = await one('SELECT COUNT(*) n FROM account_persistent WHERE minted');
       const t = mintTierOf(minted);
+      // ETH ONLY — the mint has one rail, so there is one number to compare and a boundary is one
+      // Safe setFees transaction.
       const liveEth = Number(process.env.MINT_FEE_ETH || 0.01);
-      const liveOmr = Number(process.env.PLEX_MINT_OMR || 5);
       return {
         minted, tier: t.tier, of: MINT_TRANCHES.length, through: t.flat ? null : t.through,
-        priceEth: t.eth, priceOmr: t.omr, flat: t.flat, liveEth, liveOmr,
-        offSchedule: Math.abs(liveEth - t.eth) > 1e-9 || Math.abs(liveOmr - t.omr) > 1e-9,
+        priceEth: t.eth, priceOmr: null, flat: t.flat, liveEth, liveOmr: null,
+        offSchedule: Math.abs(liveEth - t.eth) > 1e-9,
       };
     })(),
     players,

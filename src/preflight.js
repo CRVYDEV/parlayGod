@@ -91,17 +91,24 @@ export const OPERATIONAL_ENV = [
   'SOCIAL_GAME_URL', 'SOCIAL_X_HANDLE', 'WALLETCONNECT_PROJECT_ID', 'X_CHECK_CD_MS', 'X_FOLLOW_PAGES',
   // the chain layer — every one dormant unless set (mainnet is legal + audit gated regardless)
   'CHAIN_CONFIRMATIONS', 'CHAIN_ID', 'CHAIN_POLL_MS', 'CHAIN_RPC_URL', 'CHAIN_START_BLOCK',
-  'DAILY_CAP_OMR', 'OMERTA_BOND_ADDRESS', 'OMERTA_FEES_ADDRESS', 'TRADE_FEE_HOOK_ADDRESS',
+  'DAILY_CAP_OMR', 'OMERTA_BOND_ADDRESS', 'OMERTA_FEES_ADDRESS',
+  // THE BANK's Alchemist — the harvest-fee stream. Dormant unless set; the asset symbol + decimals
+  // are config because the market's underlying is not always 18-decimal (USDC is 6).
+  'ALCHEMIST_ADDRESS', 'ALCHEMIST_ASSET', 'ALCHEMIST_ASSET_DECIMALS',
   'VOUCHER_CLAIM_ADDRESS', 'VOUCHER_RECLAIM_GRACE_SEC', 'VOUCHER_SIGNER_PK',
   // economy levers — founder sign-off dials, deliberately operator-settable (BALANCE.md)
   'BOND_DEV_BPS', 'BOND_DISCOUNT_BPS', 'BOND_ETH_SCORE_OMR', 'BOND_PLEDGE_MIN', 'BOND_POL_BPS',
   'BOND_QUOTE_TTL_SEC', 'BOND_RWA_BPS', 'BOND_VEST_HOURS', 'BOND_VIG_BPS', 'EARLY_SELL_TAX_BPS',
-  'FEE_RWA_BPS', 'FRESH_WINDOW_MS', 'MINT_FEE_ETH', 'PLEX_MINT_OMR', 'PLEX_PREMIUM_BPS',
-  'PLEX_RESPAWN_OMR', 'RESPAWN_FEE_ETH', 'REVENUE_BUYBACK_BPS', 'REVENUE_FOUNDER_BPS',
+  'FEE_RWA_BPS', 'FRESH_WINDOW_MS', 'MINT_FEE_ETH',
+  // the PLEX rail — the respawn + the Store SKUs, priced in earned $OMR. NOT the mint: that is ETH
+  // only, so there is deliberately no $OMR knob for it here to forget (a rail behind an env var is one
+  // env var from live). The genesis rate is the pre-market anchor; the two STORE_* derive from it.
+  'PLEX_GENESIS_OMR_PER_ETH', 'PLEX_PREMIUM_BPS', 'PLEX_RESPAWN_OMR',
+  'STORE_PLEX_FLOOR', 'STORE_PLEX_PREMIUM_BPS',
+  'RESPAWN_FEE_ETH', 'REVENUE_BUYBACK_BPS', 'REVENUE_FOUNDER_BPS',
   'REVENUE_RWA_BPS', 'SEASON_MODS', 'SELL_TAX_BPS', 'SELL_TAX_DEV_BPS',
-  'SELL_TAX_LP_BPS', 'SELL_TAX_RWA_BPS', 'STORE_PLEX_FLOOR',
-  'TRADE_FEE_BPS', 'TRADE_VIG_BPS', // D1: the buy-side trade fee → the Vig (rules.tail.js TRADE_FEE)
-  'STORE_PLEX_PREMIUM_BPS', 'VIG_BPS', 'VIG_MAX_PRICE_JUMP', 'VIG_RESERVE_BPS',
+  'SELL_TAX_LP_BPS', 'SELL_TAX_RWA_BPS',
+  'VIG_BPS', 'VIG_MAX_PRICE_JUMP', 'VIG_RESERVE_BPS',
   'WITHDRAW_TAX_BPS',
   // content toggles
   'POPULATION_OFF',
@@ -232,53 +239,51 @@ export function preflight(env = process.env) {
   if (!env.MOD_KEY || (env.MOD_KEY || '').length < 24)
     warnings.push('MOD_KEY is short — it is the only credential on the mod perimeter (ban, mod-kill, confiscate, comp grants). Use a long random secret.');
 
-  // THE TWO RAILS MUST AGREE ON WHAT AN IDENTITY COSTS. Every fee is payable two ways: real ETH, or
-  // the same fee in EARNED $OMR through PLEX. `plexQuote` prices the $OMR rail at
-  // `max(static_floor, feeEth × oracle × premium)` — and PRE-MARKET there is no oracle row, so it
-  // returns the static floor and IGNORES the ETH fee completely. Raise MINT_FEE_ETH without raising
-  // PLEX_MINT_OMR and the two rails silently diverge: the cheapest identity becomes the PLEX one, at
-  // a price that no longer tracks what you meant to charge. That matters because minting is the
-  // Sybil bound — it is the per-identity cost that makes a farm expensive — so a desync here quietly
-  // undoes the thing the fee exists to do, with nothing in the game looking wrong.
+  // THE TRANCHE SCHEDULE (Shape D, adopted 2026-08-10; five waves capped at 0.05 ETH): the mint fee
+  // has to sit ON a published wave. A price off the table is one the published commitment never
+  // promised, which is exactly the drift a published commitment exists to prevent.
   //
-  // The invariant is the IMPLIED RATE, not either number: both pairs currently imply 500 $OMR/ETH
-  // (5/0.01 and 50/0.10), and that agreement is what a change has to preserve. Checked as a ratio so
-  // it holds at any fee level and needs no view on what the right price is.
-  //
-  // A WARNING, not an error, for the reason recorded above SOCIAL_VERIFY_MODE: preflight errors are
-  // fatal, and taking a live server down over a mispriced rail is strictly worse than the mispricing.
-  // The live implied rates are on `GET /v1/mod/vig` for whoever is actually looking.
+  // THE TWO-RAILS CHECK BELOW COVERS THE RESPAWN AND NOT THE MINT, and that asymmetry is the whole
+  // rule rather than an oversight. A fee payable two ways — real ETH, or the same fee in EARNED $OMR
+  // through PLEX — is always priced by the CHEAPER rail, so two rails have to agree or the cheap one
+  // simply IS the price. Minting is the SYBIL BOUND (it gates extraction), so it has one rail and
+  // nothing here to compare: the surest way to keep two rails in lockstep is to have one, and
+  // `payPlex` refuses a mint. The respawn is a repeatable CONSUMABLE, not the bound, so "pay your
+  // rent in ISK" applies to it cleanly — but its $OMR price is env-settable, so it can still drift.
+  // `plexQuote` prices the $OMR side at `max(static_floor, feeEth × oracle × premium)`, and
+  // PRE-MARKET there is no oracle row, so it returns the static floor and ignores the ETH fee
+  // completely — raise RESPAWN_FEE_ETH without raising PLEX_RESPAWN_OMR and they diverge in silence.
+  // Checked as a RATIO so it holds at any fee level.
   {
     // Restated from vig.js (which imports game.js, so preflight cannot import it — the one-way rule).
-    // `test/preflight.js` asserts these defaults still equal vig.js's, so the restatement cannot rot.
-    const num = (k, d) => Number(env[k] ?? d);
-    const rate = (omr, eth) => (eth > 0 ? omr / eth : null);
-    const mint = rate(num('PLEX_MINT_OMR', 5), num('MINT_FEE_ETH', 0.01));
-    const respawn = rate(num('PLEX_RESPAWN_OMR', 50), num('RESPAWN_FEE_ETH', 0.10));
-    if (mint && respawn && Math.abs(mint - respawn) / Math.max(mint, respawn) > 0.05)
-      warnings.push(`The PLEX and ETH fee rails disagree on what value is worth: the mint implies `
-        + `${Math.round(mint)} $OMR/ETH and the respawn implies ${Math.round(respawn)}. Pre-market the `
-        + '$OMR price is the STATIC floor and ignores the ETH fee entirely, so whichever rail is cheap '
-        + 'is the one a farm will use — and minting is the Sybil bound. Move PLEX_MINT_OMR/'
-        + 'PLEX_RESPAWN_OMR with MINT_FEE_ETH/RESPAWN_FEE_ETH so both imply the same rate.');
-
-    // THE TRANCHE SCHEDULE (Shape D, adopted 2026-08-10): the mint pair does not just have to agree
-    // on a RATE — it has to sit ON the published linear schedule (tier k = k × 0.01 ETH / k × 5
-    // $OMR, MINT_TRANCHES in rules.tail.js). A pair like 0.015/7.5 passes the rate check above and
-    // is still off-schedule: a price the published table never promised, which is exactly the drift
-    // a published commitment exists to prevent. The base (0.01/5) is RESTATED here for the same
-    // one-way-rule reason as the vig defaults above; test/preflight.js pins it to MINT_TRANCHES[0]
-    // so the restatement cannot rot. A WARNING (the standing posture — a mispriced rail must not
-    // take a live server down). The admin chain panel shows the same expected-vs-live comparison
-    // against the CURRENT tier for whoever is actually looking.
-    {
-      const k = num('MINT_FEE_ETH', 0.01) / 0.01;
-      const kR = Math.round(k);
-      if (kR < 1 || Math.abs(k - kR) > 0.001 || Math.abs(num('PLEX_MINT_OMR', 5) - kR * 5) > 0.001)
-        warnings.push(`The live mint pair (${num('MINT_FEE_ETH', 0.01)} ETH / ${num('PLEX_MINT_OMR', 5)} $OMR) `
-          + 'is OFF the published tranche schedule (tier k = k × 0.01 ETH / k × 5 $OMR). The schedule '
-          + 'is a published commitment — set the pair to a MINT_TRANCHES row, or publish a new table.');
-    }
+    // test/preflight.js feeds this guard vig.js's ACTUAL default and requires silence, so the
+    // restatement cannot rot. The PREMIUM is read rather than baked in: it is the deliberate wedge
+    // between the two rails, so a guard that hardcodes it fires spuriously the moment the lever moves
+    // — and the fix somebody reaches for then is widening the tolerance, which kills the guard.
+    const PREMIUM = Number(env.PLEX_PREMIUM_BPS ?? 10000) / 10000;
+    const GENESIS_RATE = Number(env.PLEX_GENESIS_OMR_PER_ETH ?? 205882) * PREMIUM;
+    const eth = Number(env.RESPAWN_FEE_ETH ?? 0.10);
+    const omr = Number(env.PLEX_RESPAWN_OMR ?? Math.round(0.10 * GENESIS_RATE));
+    const implied = eth > 0 ? omr / eth : null;
+    if (implied && Math.abs(implied - GENESIS_RATE) / GENESIS_RATE > 0.05)
+      warnings.push('The respawn\'s PLEX and ETH rails disagree on what value is worth: it implies '
+        + `${Math.round(implied)} $OMR/ETH against the genesis rate's ${Math.round(GENESIS_RATE)}. `
+        + 'Pre-market the $OMR price is the STATIC floor and ignores the ETH fee entirely, so whichever '
+        + 'rail is cheap is the one people will use. Move PLEX_RESPAWN_OMR with RESPAWN_FEE_ETH.');
+  }
+  //
+  // The waves are RESTATED here because preflight cannot import rules.js (the one-way rule);
+  // test/preflight.js pins them to MINT_TRANCHES so the restatement cannot rot. A WARNING, not an
+  // error, for the reason recorded above SOCIAL_VERIFY_MODE: taking a live server down over a
+  // mispriced fee is strictly worse than the mispricing. The admin chain panel shows the same
+  // expected-vs-live comparison against the CURRENT wave for whoever is actually looking.
+  {
+    const WAVES = [0.01, 0.025, 0.035, 0.045, 0.05];
+    const fee = Number(env.MINT_FEE_ETH ?? 0.01);
+    if (!WAVES.some((w) => Math.abs(fee - w) < 1e-9))
+      warnings.push(`The live mint fee (${fee} ETH) is OFF the published tranche schedule `
+        + `(${WAVES.join(' / ')} ETH). The schedule is a published commitment — set the fee to a `
+        + 'MINT_TRANCHES wave, or publish a new table.');
   }
 
   // THE SELL TAX IS WHAT MAKES A BOND A HOLD RATHER THAN AN ARBITRAGE, and nothing else in the
@@ -302,5 +307,20 @@ export function preflight(env = process.env) {
         + 'than capital formation. Keep the discount strictly under the sell tax.');
   }
 
+  // RETIRED RAILS — a var that no longer means anything is worse than an unknown one, because it
+  // LOOKS configured. The classification guard only sees vars src/ still reads, so a retired rail
+  // leaves its config behind silently; this says so. A warning, not an error: an operator with a
+  // stale value has a stale value, not a broken server.
+  for (const [k, why] of Object.entries(RETIRED_ENV)) if (env[k]) warnings.push(`${k} is set but ${why}`);
+
   return { errors, warnings };
 }
+
+// Vars that USED to do something. Keep the entry when a rail retires — deleting it turns "this does
+// nothing now" into "we have never heard of this", which is the same silence in a different costume.
+export const RETIRED_ENV = {
+  TRADE_FEE_HOOK_ADDRESS: 'the swap trade fee is retired (2026-08-11) — a PoolKey holds one hook, and '
+    + "the canonical pool's is the four-slice sell tax. Nothing reads this; unset it.",
+  TRADE_FEE_BPS: 'the swap trade fee is retired (2026-08-11). Nothing reads this; unset it.',
+  TRADE_VIG_BPS: 'the swap trade fee is retired (2026-08-11). Nothing reads this; unset it.',
+};

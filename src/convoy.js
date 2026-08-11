@@ -80,7 +80,7 @@ export async function openConvoy(ch, to, goodId, qty, client, h) {
 
 async function loadConvoyRow(ch, convoy, goodId, qty, client, h) {
   if (!GOODS.find((g) => g.id === goodId)) throw new GameError('bad_good', 'No such good.');
-  if (ch.loc !== convoy.origin) throw new GameError('district', 'Loading happens at the origin dock.');
+  if (ch.loc !== convoy.origin) throw new GameError('district', 'Loading happens at the origin dock.', { district: convoy.origin });
   const have = h.owned.cargo[goodId] || 0;
   const n = Math.min(Math.max(1, Math.floor(Number(qty) || 0)), have);
   if (n <= 0) throw new GameError('none', 'Nothing of that in the trunk.');
@@ -281,7 +281,7 @@ export async function collectConvoy(ch, convoyId, client, h) {
   if (!c || c.owner_character !== ch.id) throw new GameError('no_convoy', 'Not your shipment.');
   if (c.status !== 'transit') throw new GameError('no_convoy', 'Nothing to collect.');
   if (!arrived(c)) throw new GameError('en_route', 'Still on the road.');
-  if (ch.loc !== c.destination) throw new GameError('district', `The freight lands at ${c.destination} — be there.`);
+  if (ch.loc !== c.destination) throw new GameError('district', `The freight lands at ${c.destination} — be there.`, { district: c.destination });
   const manifest = await manifestOf(client, convoyId);
   const cap = trunkCap(h);
   let space = Math.max(0, cap - cargoCount(h.owned.cargo));

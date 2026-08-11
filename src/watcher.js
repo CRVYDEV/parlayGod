@@ -11,8 +11,8 @@
 // The chain specifics (viem getLogs + ABI decode) live in a `source` adapter the caller passes,
 // so the cursor / confirmation / idempotency logic here is unit-testable with a mock source.
 import { recordFeePayment } from './fees.js';
-import { recordTradeFee } from './vig.js';
 import { recordBond } from './bonds.js';
+import { recordHarvestFee } from './treasury.js';
 import { markClaimed } from './chain.js';
 
 export const DEFAULT_CONFIRMATIONS = Number(process.env.CHAIN_CONFIRMATIONS || 5);
@@ -88,18 +88,30 @@ export async function syncClaimedEvents(pool, source, opts = {}) {
   return { processed, from: w.from, to: w.to };
 }
 
-// Sync the afterSwap→Vig hook's TradeFeePaid(nonce, amountWei) → recordTradeFee (source='trade',
-// idempotent on the nonce, real-only — the watcher is the sole producer). Same cursor + confirmation-
-// depth discipline as the fee stream. Dormant unless TRADE_FEE_HOOK_ADDRESS is set. Design §2.
-export async function syncTradeFees(pool, source, opts = {}) {
+// (The afterSwap→Vig trade-fee stream is RETIRED — founder-directed 2026-08-11. Two hooks wanted
+// one canonical pool and the four-slice sell tax won; the payer is deleted rather than dormant.
+// See the retirement note in rules.tail.js. `'trade'` stays a declared VIG_SOURCE for history.)
+
+// Sync THE BANK's HarvestFeeTaken(user, recipient, amount) → recordHarvestFee (source='harvest',
+// idempotent on the log key, real-only). The event carries no nonce, so the ref is txHash:logIndex —
+// the sell-tax discipline. Booked in the market's UNDERLYING, never mirrored into the ETH ledger:
+// `rwa_revenue`'s sum IS the vault's `held` wall, so a USDC amount landing there would inflate the
+// one number that bounds what players may be owed. Dormant unless ALCHEMIST_ADDRESS is set.
+export async function syncHarvestFees(pool, source, opts = {}) {
   const confirmations = opts.confirmations ?? DEFAULT_CONFIRMATIONS;
-  const w = await windowFor(pool, source, 'trades', confirmations, opts.startBlock);
+  const w = await windowFor(pool, source, 'harvest', confirmations, opts.startBlock);
   if (!w) return { processed: 0 };
-  const logs = await source.tradeFeeLogs(w.from, w.to);
+  const logs = await source.harvestFeeLogs(w.from, w.to);
   let processed = 0;
-  // (red-team R19 F3) per-log isolation symmetry with syncFeeEvents (see syncClaimedEvents).
-  for (const l of logs) { if (await isolate('trade', () => recordTradeFee(pool, { nonce: l.nonce, amountWei: l.amount }))) processed++; }
-  await setCursor(pool, 'trades', w.to);
+  // per-log isolation, symmetric with the fee/bond streams (red-team R19 F3): a deterministically
+  // poison log is skipped so the cursor is not stalled forever by one bad row; a transient error
+  // re-throws so the cursor does not advance past a good one.
+  for (const l of logs) {
+    if (await isolate('harvest', () => recordHarvestFee(pool, {
+      ref: l.ref, asset: l.asset, amount: l.amount, payer: l.payer, txHash: l.txHash,
+    }))) processed++;
+  }
+  await setCursor(pool, 'harvest', w.to);
   return { processed, from: w.from, to: w.to };
 }
 
@@ -137,13 +149,15 @@ export async function makeViemSource() {
   const client = createPublicClient({ transport: http(process.env.CHAIN_RPC_URL) });
   const feesAddr = process.env.OMERTA_FEES_ADDRESS;
   const claimAddr = process.env.VOUCHER_CLAIM_ADDRESS;
-  const hookAddr = process.env.TRADE_FEE_HOOK_ADDRESS; // the OMR/ETH pool's afterSwap→Vig hook
   const bondAddr = process.env.OMERTA_BOND_ADDRESS;    // the OmertaBond contract (Bonded events)
+  const alchAddr = process.env.ALCHEMIST_ADDRESS;      // THE BANK's Alchemist (HarvestFeeTaken)
+  const alchAsset = process.env.ALCHEMIST_ASSET || 'USDC';       // the market's underlying symbol
+  const alchDecimals = Number(process.env.ALCHEMIST_ASSET_DECIMALS || 6); // USDC is 6, not 18
   const mintEv = parseAbiItem('event MintFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount)');
   const respawnEv = parseAbiItem('event RespawnFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount)');
   const rerollEv = parseAbiItem('event RerollFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount)');
   const claimedEv = parseAbiItem('event Claimed(uint256 indexed nonce, address indexed to, uint8 kind, uint256 amount, uint256 gearId)');
-  const tradeEv = parseAbiItem('event TradeFeePaid(uint256 indexed nonce, uint256 amountWei)');
+  const harvestEv = parseAbiItem('event HarvestFeeTaken(address indexed user, address indexed recipient, uint256 amount)');
   const bondEv = parseAbiItem('event Bonded(uint256 indexed bondId, address indexed payer, uint256 indexed nonce, uint256 principal, uint256 payout, uint256 toPol, uint256 toDev, uint256 toRwa, uint256 toVig)');
   const range = (from, to) => ({ fromBlock: BigInt(from), toBlock: BigInt(to) });
   // wei / 1e18-decimal-OMR → ETH / in-game $OMR units, via viem's decimal-exact formatter (Number() alone
@@ -167,10 +181,19 @@ export async function makeViemSource() {
       const logs = await client.getLogs({ address: claimAddr, event: claimedEv, ...range(from, to) });
       return logs.map((l) => ({ nonce: Number(l.args.nonce) }));
     },
-    tradeFeeLogs: async (from, to) => {
-      if (!hookAddr) return [];
-      const logs = await client.getLogs({ address: hookAddr, event: tradeEv, ...range(from, to) });
-      return logs.map((l) => ({ nonce: Number(l.args.nonce), amount: l.args.amountWei?.toString(), txHash: l.transactionHash }));
+    harvestFeeLogs: async (from, to) => {
+      if (!alchAddr) return [];
+      const logs = await client.getLogs({ address: alchAddr, event: harvestEv, ...range(from, to) });
+      // The event carries no nonce, so the ref is the log key. Decimals come from config because the
+      // market's underlying is not always 18 — reading a 6-decimal USDC amount as 18 would understate
+      // the fee by a factor of a trillion, which is the sort of thing that looks like "no revenue yet".
+      return logs.map((l) => ({
+        ref: `${l.transactionHash}:${l.logIndex}`,
+        asset: alchAsset,
+        amount: Number(formatUnits(l.args.amount, alchDecimals)),
+        payer: l.args.user,
+        txHash: l.transactionHash,
+      }));
     },
     bondLogs: async (from, to) => {
       if (!bondAddr) return [];

@@ -34,8 +34,7 @@ import { GameError } from './game.js';
 
 const gone = () => {
   throw new GameError('retired',
-    'The stock book is closed — the city sells no shares. Your $OMR works at the Window, the Vault, '
-    + 'the stake ladder and the Made Man now; what the old book held is history, not a holding.');
+    'The city sells no shares. Your $OMR works at the Window, the Vault, the stake ladder and the Made Man.');
 };
 
 // Tombstones, not 404s (the emission.js / v2 swap-launder precedent): a client or agent that has

@@ -10,7 +10,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS, RANKS,
          crewWageOwed, crewCold, LAW, rapStageOf, bribeCostOf, retainerActive, witproActive,
          cityHourOf, cityLawEventOf, estateTierOf, foundationOf, campaignOf, honorTierOf,
          SOLDIERS, soldierFxOf, CLUES, clueStepOf, rollClueTier, kingpinRankOf, tycoonRankOf, racketIncomeLeveled, empireTitles, launderRankOf, frontTitles, statesmanRankOf, seasonModOf, PACING,
-         carCollateralValue, carOf, MASTERY, masteryLvlOf, masteryRankOf, masteryXpFor, pathFx, pathXpMult,
+         ACTIVITY, carCollateralValue, carOf, MASTERY, masteryLvlOf, masteryRankOf, masteryXpFor, pathFx, pathXpMult,
          REGIMEN, disciplineLvlOf, energyCapOf, nerveCapOf, BUSINESSES, WIRE, RIVALS, CORNER, cornerTasksOf,
          KITCHENS, labModuleCost, recyclesToDesk, DESK_RECYCLE_REASON, isMade, madeSeconds,
          MADE_LADDER, madeRungIdx, madeRungOf, ladderFx,
@@ -25,7 +25,15 @@ import { fightersOf } from './boxing.js';
 
 const uid = () => crypto.randomUUID();
 import { startFirstBlood } from './firstblood.js';   // THE AHA MOMENT — assign a fresh player their first rival
-export class GameError extends Error { constructor(code, msg) { super(msg); this.code = code; } }
+// A refusal carries STRUCTURED data when the way out is a concrete thing the client can offer.
+// The motivating case (tester feedback 2026-08-11): every location gate said "the den is on the Neon
+// Mile" and left the player to go hunting for the travel control, which lived on one tab out of 25.
+// Prose alone cannot be turned into a button. `data` is merged into the 400 body, so a gate that
+// names `{ district }` gets a one-tap "go there" in the client for free — at every one of the 27
+// sites, rather than each having to remember to wire its own.
+export class GameError extends Error {
+  constructor(code, msg, data) { super(msg); this.code = code; if (data) this.data = data; }
+}
 
 // (red-team R6 — stored-XSS fix) Player-controlled display strings (character/gang names, custom
 // titles, contract reasons) render into the console's innerHTML, and the bearer token lives in the
@@ -62,6 +70,29 @@ export async function notify(client, characterId, type, payload = {}) {
   await client.query('INSERT INTO notifications (id, character_id, type, payload) VALUES ($1,$2,$3,$4)',
     [uid(), characterId, type, JSON.stringify(payload)]);
   bus.emit(`me:${characterId}`, { type, payload });
+}
+
+// SOLICITATIONS — the notify variant for anything one player can send another AT WILL: a mentor
+// offer, a vouch, a crew invite. These differ from an event notification in one way that matters:
+// a kill or a raid happens TO you and every instance is real news, whereas a solicitation is a
+// button, so the same one repeated is not news — it is a megaphone. Every such call site is a free,
+// uncapped, no-counterplay ping at a chosen victim (the red-team's F1/F4 class), and the shape recurs
+// because each one is individually reasonable.
+//
+// So: if the recipient still has an UNREAD notification identical to this one, say nothing more.
+// Nothing is lost — the message they have not read yet says exactly what the new one would — and the
+// loop collapses to one ping until they engage. Exact-payload match on a TEXT column, which is the
+// same comparison on both engines (no JSON operators, which pg-mem is unreliable about).
+export async function notifyOnce(client, characterId, type, payload = {}) {
+  const body = JSON.stringify(payload);
+  const seen = (await client.query(
+    'SELECT 1 FROM notifications WHERE character_id=$1 AND type=$2 AND payload=$3 AND NOT delivered LIMIT 1',
+    [characterId, type, body])).rows[0];
+  if (seen) return false;
+  await client.query('INSERT INTO notifications (id, character_id, type, payload) VALUES ($1,$2,$3,$4)',
+    [uid(), characterId, type, body]);
+  bus.emit(`me:${characterId}`, { type, payload });
+  return true;
 }
 
 // §5.5 weekly family contracts — the same actions that call bumpFamilyTask in v24
@@ -544,6 +575,27 @@ export async function bumpMastery(client, h, ch, trackId, action) {
   const after = masteryLvlOf(next);
   if (after > before) {
     await notify(client, ch.id, 'mastery_up', { track: trackId, name: track.name, lvl: after, rank: masteryRankOf(after) });
+  }
+  // THE BROKERS — record the raw ACTION COUNT for the epoch allocator (omerta-brokers-design.md).
+  //
+  // Hooked HERE rather than at the 24 call sites, for the reason the desk recycle is hooked in
+  // `ledger`: a recorder you have to remember at each site is one a new action will forget, and a
+  // missed action is a player silently under-paid.
+  //
+  // ⚠ COUNTS, NOT `xp`. `xp` above has already been through `pathXpMult`, and ACTIVITY's whole
+  // structural guarantee is that it reads action counts × the BASE award — never XP actually
+  // granted — so no progression multiplier anywhere can propagate into the distribution key. Writing
+  // `xp` here would breach the staking wall that `test/activity.js` pins.
+  if (ACTIVITY.TAGS.includes(action) && ch.account_id) {
+    const day = dayOf();
+    const au = await client.query(
+      'UPDATE activity_log SET n = n + 1 WHERE account_id=$1 AND day=$2 AND tag=$3',
+      [ch.account_id, day, action]);
+    if (!au.rowCount) {
+      await client.query(
+        'INSERT INTO activity_log (account_id, day, tag, n) VALUES ($1,$2,$3,1)',
+        [ch.account_id, day, action]);
+    }
   }
   // STEP FOUR — STATS BY USE (founder-signed: "yes, tightly capped"). Working the trade exercises
   // its stat: a small roll per XP-paying action, on the GYM'S OWN diminishing factor, metered by a
@@ -1235,21 +1287,22 @@ function coachLadder(ch, acct, owned) {
   if (lvl >= 14 && !Number(acct.race_wins || 0) && !Number(owned.mastery?.wheels || 0) && add('Run the streets', 'Street Races: tune a car from your garage and run the PvE circuit — fee up front, purse on a win. Fast iron finally earns.', 'races')) return rungs;
   // ── YOU CAN GET MADE FOR FREE. An alpha tester read the game as pay-to-win ("we can't earn OMR in
   // game anymore?"), and the mechanics say otherwise: $OMR is still earned by playing — the mission
-  // ladder alone pays 220 across nine jobs, the first at level 14 — and MINTING (the gate on
-  // withdrawing and on the Street Wage) is payable in that earned $OMR via PLEX, not only in ETH.
+  // ladder alone pays 220 across nine jobs — and MINTING (the gate on withdrawing and on the Street
+  // Wage) is HANDED OVER by the ladder itself, so the road to it costs nothing but play.
   // Nothing was missing but the sentence saying so, so this is the sentence. Fires at the level of
   // the first mission that pays $OMR (read from the catalog, so a re-extract can never leave the
   // rung firing before the job it points at exists) and self-clears the moment they're minted.
-  // The MINT PRICE is deliberately NOT quoted: `plexQuote` is `max(PLEX_MINT_OMR, feeEth × the
-  // latest buyback oracle × premium)`, so the static 5 is only a PRE-MARKET floor — the moment a
-  // buyback prints above ~417 $OMR/ETH the real price moves and a hardcoded figure here would be
-  // a lie the player only discovers at the till (the first-front hint's lesson: price off the live
-  // surface or don't state a price). vig.js imports game.js, so the quote cannot be imported here
-  // and cannot be read without a query on the hot path — so the rung points at the Store, which
-  // quotes it, instead of asserting it.
-  const firstOmrMission = MISSIONS.find((m) => Number(m.reward?.omr) > 0);
-  if (firstOmrMission && lvl >= (firstOmrMission.req?.lvl || 14) && !acct.minted
-    && add('You can get made for free', `Getting MADE unlocks withdrawing and the Street Wage — and you can pay for it with $OMR you earned in game, not just ETH. Earn it on the mission ladder: "${firstOmrMission.name}" pays ${firstOmrMission.reward.omr} $OMR on its own. Then The Store ▸ pay with $OMR, which quotes the live price.`, 'store')) return rungs;
+  // The MINT PRICE is deliberately NOT quoted: it moves with the published tranche schedule, so a
+  // hardcoded figure here would be a lie the player only discovers at the till. THE FIX (2026-08-10)
+  // removes the arithmetic from the promise entirely:
+  // the mission the rung names GRANTS the mint credit, so the rung states a fact rather than a
+  // price, and it stays true at any token price. Read off the catalog so it can never fire before
+  // the job it names exists.
+  const freeMintMission = MISSIONS.find((m) => Number(m.reward?.mintCredit) > 0);
+  if (freeMintMission && lvl >= (freeMintMission.req?.lvl || 14) && !acct.minted && !Number(acct.mint_credits || 0)
+    && add('You can get made for free', `Getting MADE unlocks withdrawing and the Street Wage, and it does not cost you a penny: the mission "${freeMintMission.name}" hands you the credit outright. Pull that job, then spend the credit on Going Legit ▸ Extraction. (You can also buy it with ETH — the mission is the free road.)`, 'portfolio')) return rungs;
+  if (Number(acct.mint_credits || 0) > 0 && !acct.minted
+    && add('Spend your mint credit', 'You are holding a credit that makes you a MADE MAN — withdrawals and the Street Wage open the moment you spend it. It costs nothing to use. Going Legit ▸ Extraction.', 'portfolio')) return rungs;
   // (founder: "not obvious… the steps you need to take to buy your first business") — concrete steps,
   // priced off the live catalog so the hint can never drift from what the buy button charges.
   const firstFront = BUSINESSES.find((b) => b.kind === 'laundromat');

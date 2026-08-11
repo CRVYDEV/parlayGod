@@ -18,7 +18,10 @@ import assert from 'node:assert';
 import crypto from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { buildServer } from '../src/server.js';
-import { BAND, DESK, DESK_RECYCLE_REASON, recyclesToDesk, auctionPriceAt, freshWindowMs } from '../src/rules.js';
+import { BAND, DESK, DESK_AUCTION, DESK_RECYCLE_REASON, recyclesToDesk, auctionPriceAt, freshWindowMs } from '../src/rules.js';
+// the sink day is sized so the FLOAT CAP is the binding bound (not what came home) — read off
+// the lever, so a re-denomination cannot leave this block asserting the wrong bound
+const BIG_SINK = DESK_AUCTION.FLOAT_CAP_MIN_OMR * 3;
 import { ledger } from '../src/game.js';
 import { earlySurcharge } from '../src/tax.js';
 import * as Desk from '../src/desk.js';
@@ -126,6 +129,29 @@ assert(cons.ok, `a historical (unpaired) burn row broke conservation — drift $
   + 'the sink reasons must stay in the burn term so old rows still count as the burns they were');
 console.log('✓ a pre-recycle burn row still reconciles — the change is safe on a live database');
 
+// ── (4b) THE SIGN GUARD — only a DEBIT feeds the shelf ─────────────────────────────────────────
+// `amount < 0` in the hook is load-bearing and easy to lose in a refactor. A sink reason can appear
+// on a POSITIVE row — a refund, a reversal, or simply a mis-signed credit in a new caller — and if
+// the hook fired on it the shelf would grow while the PLAYER was also credited: the same $OMR in two
+// places, which is exactly the "supply is invented" failure this suite exists to catch. Conservation
+// would not see it either, since both legs sit inside counted buckets.
+const signBefore = await books();
+await pool.query('BEGIN');
+await ledger(pool, { accountId: acct, currency: 'omr', amount: 25, reason: 'vanity:name' });
+await pool.query('COMMIT');
+const signAfter = await books();
+assert(Number(signAfter.balance) === Number(signBefore.balance)
+  && Number(signAfter.lifetime_in) === Number(signBefore.lifetime_in),
+  'a POSITIVE row carrying a sink reason fed the desk — the `amount < 0` guard is gone, so a refund '
+  + `credits both the player and the shelf (balance ${signBefore.balance} → ${signAfter.balance})`);
+const recycleRows = (await pool.query(
+  "SELECT COUNT(*)::int AS n FROM transactions WHERE reason=$1 AND counterparty='vanity:name' AND amount=25",
+  [DESK_RECYCLE_REASON])).rows[0].n;
+assert(recycleRows === 0, 'a credit minted a desk:recycle row');
+// leave the ledger honest — the row above was a real +25 credit, so take it back out
+await pool.query('UPDATE account_persistent SET omr = omr + 25 WHERE account_id=$1', [acct]);
+console.log('✓ only a debit recycles — a positive row with a sink reason feeds the desk nothing');
+
 // ── (5) THE ON-CHAIN WITHDRAWAL IS NOT THE HOUSE'S CUT ─────────────────────────────────────────
 // The one exclusion, asserted at the LEDGER rather than only at the predicate: a withdrawal debits
 // $OMR that reappears on-chain in the player's own wallet, backed by the reserve. Recycle it and the
@@ -207,11 +233,11 @@ console.log('✓ fail-closed: no print and a stale print both refuse, the board 
 // Stock the shelf through the SAME hook a player's spend takes (a big sink), so the lot is a real
 // one. Deliberately more than the dump cap allows, so the cap is exercised rather than merely present
 // — a bound that never binds is a bound nobody has tested.
-await grant(3000);
+await grant(BIG_SINK);
 const c1 = await pool.connect();
 await c1.query('BEGIN');
-await ledger(c1, { accountId: acct, currency: 'omr', amount: -3000, reason: 'estate:tier' });
-await c1.query('UPDATE account_persistent SET omr = omr - 3000 WHERE account_id=$1', [acct]);
+await ledger(c1, { accountId: acct, currency: 'omr', amount: -BIG_SINK, reason: 'estate:tier' });
+await c1.query('UPDATE account_persistent SET omr = omr - $2 WHERE account_id=$1', [acct, BIG_SINK]);
 await c1.query('COMMIT');
 c1.release();
 
@@ -225,7 +251,7 @@ assert.equal(lot.qty, lot.floatCap,
 assert(lot.returned > lot.qty, 'so most of what came home is deliberately held back for later days');
 // the bootstrap floor is not decoration: with a float near zero the cap would be zero, so no auction
 // would ever open, so nobody could buy, so the float would stay near zero.
-assert.equal(lot.floatCap, 1000, 'and on a cold start the cap is its bootstrap floor, not zero');
+assert.equal(lot.floatCap, DESK_AUCTION.FLOAT_CAP_MIN_OMR, 'and on a cold start the cap is its bootstrap floor, not zero');
 console.log(`✓ the lot is min(returned ${lot.returned}, floatCap ${lot.floatCap}, shelf ${lot.shelf}) = ${lot.qty}`);
 
 // ── (10) THE OPEN — and the reserve IS the band ────────────────────────────────────────────────

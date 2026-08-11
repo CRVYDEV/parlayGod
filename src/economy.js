@@ -398,7 +398,7 @@ export async function sellAsset(ch, assetId, client, h) {
 // nobody trades against any more, and the §10.4 sweep stays drift-0.
 export async function swap() {
   throw new GameError('retired',
-    'The wash houses are shut. Cash and $OMR no longer trade — $OMR is redeemed for cash at the Exchange window, at a published rate.');
+    'Cash and $OMR do not trade in either direction. $OMR is redeemed for cash at the Exchange window, at a published rate.');
 }
 
 // ═══════════════════ STAKING (§7.1 / §5.4) ═══════════════════
@@ -444,7 +444,7 @@ export async function unstake(ch, client, h) {
 // remaining purpose, so it is left alone here rather than pre-empted.
 export async function claimRewards() {
   throw new GameError('retired',
-    'Staking pays the families now, not the man — standing earns it into the family reserve. Your principal is untouched and still comes back whole.');
+    'Staking pays the FAMILIES, not the man — standing earns it into the family reserve. Your principal is untouched and comes back whole.');
 }
 
 // ═══════════════════ THE ARMORY (§5.2) ═══════════════════

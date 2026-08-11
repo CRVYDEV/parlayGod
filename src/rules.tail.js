@@ -18,6 +18,29 @@ export function recruitRankOf(n) {
   return rank;
 }
 
+// ── THE GENESIS RATE — the ONE $OMR-per-ETH conversion ──────────────────────────────────────────
+// 205,882 is the locked launch price (the raise ÷ the supply sold; BALANCE.md § THE GENESIS RAISE
+// and the launch sequence's G-1). It exists so that a fee's $OMR price and its ETH price cannot
+// silently disagree — the genesis-rate pass found three rails quoting three different rates, and
+// since the effective price of anything is always the CHEAPER rail, a hand-set floor beside a
+// market-linked path is not a second opinion, it is the real price.
+//
+// It was DELETED on 2026-08-10 when the whole PLEX bridge was retired ("nothing left to convert"),
+// and RESTORED the same day when the founder read the cost that sweep had been flagged with and
+// pulled it back to the mint alone. That reasoning is worth keeping rather than tidying away: the
+// deletion was correct *given* its premise, and the premise stopped holding the moment a rail came
+// back. Everything below derives from this ONE number, so a fee change moves the $OMR floor with it
+// and there is no second value to set by hand — which was the actual finding, not the deletion.
+//
+// ETH-denominated: a fee is 0.01 ETH whatever that is in USD. Pegging a fee to a dollar value is a
+// separate decision needing a USD oracle this game deliberately does not have.
+export const PLEX_GENESIS_OMR_PER_ETH = Number(process.env.PLEX_GENESIS_OMR_PER_ETH || 205882);
+// The pre-market quote for an ETH-denominated fee. `premiumBps` is the CALLER's premium — the ETH
+// rail must stay the economical one (ETH funds the pool; $OMR recycles to the desk at a markup), so
+// a floor that omitted it would hand the cheap rail straight back to $OMR by exactly the premium.
+export const genesisOmrFor = (feeEth, premiumBps = 12000) =>
+  Math.round(Number(feeEth) * PLEX_GENESIS_OMR_PER_ETH * Number(premiumBps) / 10000);
+
 export const CONSTANTS = {
   // Randomized starting build — every fresh character rolls a UNIQUE distribution of the SAME
   // fixed budget (no two the same, but the total is constant → zero power creep, so the
@@ -27,7 +50,7 @@ export const CONSTANTS = {
   CREATE_STAT_MIN: 3, CREATE_STAT_TOTAL: 15,
   GARAGE_CAP: 12, GTA_CD_MS: 300000, MELT_TITHE: 0.25, TITHE_ROUND_VALUE: 30,
   SEARCH_MS: 3*3600*1000, SHOOT_CD_MS: 2*3600*1000, MIN_FIRE: 50,   // PRODUCTION timers
-  COOK_MULT: 12, APY: 0.14, SWAP_MIN: 500, PATH_FIRST_COST: 10000, PATH_SWITCH_OMR: 25,
+  COOK_MULT: 12, APY: 0.14, SWAP_MIN: 500, PATH_FIRST_COST: 10000, PATH_SWITCH_OMR: 150,
   ONBOARD_CAPSTONE: { cash: 5000, cb: 3, en: 25 },
   TRAVEL_COST: 250, BANK_RATE: 0.02, BANK_PERIOD_MS: 12*3600*1000, OFFLINE_CAP_MS: 8*3600*1000,
   // COACH_BANK_NUDGE (progression harness) — the coach's "you're carrying too much" floor. The old $25k
@@ -434,14 +457,14 @@ export const M4 = {
   // BALANCE.md § THE NUT.
   CREW_WAGE_PER_HR: 1200, CREW_WAGE_CAP_MS: 2*24*3600*1000, CREW_WAGE_COLD_MS: 3*24*3600*1000,
   LAYLOW_CASH: 5000, LAYLOW_ENERGY: 25, LAYLOW_COOL: 25,
-  CLEANPAPERS_OMR: 10,
+  CLEANPAPERS_OMR: 60,
   HEIST_CD_MS: 8*3600*1000,
   BATCH_CRATE_UNITS: 20,                        // 1 📦 per 20 units cooked
   // D13 (SIGNED 2026-08-05, founder: "let's go with your recommendation"): the deal's ENERGY cost —
   // dealing is physical work, so the corner finally competes with the gym/crews/raids for the tank.
   // Flat per deal (nerve carries the play/throughput axis); energy is regen → zero §10.4 surface.
   DEAL_ENERGY: 4,
-  DAILY_ALL_OMR: 0.5,                           // all-three bonus from the event fund
+  DAILY_ALL_OMR: 3,                           // all-three bonus from the event fund
   REF_RECRUITER_CASH: 10000, REF_RECRUIT_CASH: 5000,
   // Retained ONLY to keep a historical figure honest: a database that predates the retirement has
   // real `referral:fund` rows on it, and My Profile subtracts the player's own welcome bonus so it
@@ -522,7 +545,7 @@ export const KITCHEN = {
   MODULE_MAX: 5,
   MODULE_BASE_CASH: 60000,   // cash = BASE_CASH × (curLevel+1) × (labIdx+1)
   MODULE_OMR_FROM: 3,        // module levels whose RESULT ≥ this also burn $OMR
-  MODULE_OMR_STEP: 4,        // omr = (resultLevel − MODULE_OMR_FROM + 1) × MODULE_OMR_STEP
+  MODULE_OMR_STEP: 24,        // omr = (resultLevel − MODULE_OMR_FROM + 1) × MODULE_OMR_STEP
   // CUTTING AGENTS — stretch a stash line: +CUT_UNITS of its own qty at −CUT_QUALITY, floored at
   // CUT_FLOOR (over-cut is near worthless — the deal price scales on quality). A cash sink.
   CUT_COST: 8000, CUT_UNITS: 0.4, CUT_QUALITY: 0.15, CUT_FLOOR: 0.55,
@@ -708,7 +731,7 @@ export const M3 = {
   ROSTER_STREETBOSS_WAR_PER: 0.03,     // the war chest costs less, per power (the discounted number is ledgered)
   ROSTER_QM_GUARD_DEF: 3,              // + per power onto your family's convoy guards
   ROSTER_BAGMAN_UPKEEP_PER: 0.03,      // the operations pad comes cheaper, per power (discounted number ledgered)
-  WEEKLY_STANDING: 15000, WEEKLY_OMR: 5,
+  WEEKLY_STANDING: 15000, WEEKLY_OMR: 30,
   // M7 Phase 2 assassin rep (a STATUS ladder — no gameplay power, so it doesn't touch
   // sim-audited balance): a kill earns vicLvl × REP_PER_LVL feared-rep, only from targets at
   // or above MIN_TARGET_LVL, diminished 1/(priorBloodlineKills+1). Directed-contract kills add
@@ -982,11 +1005,11 @@ export const PACING = {
 // RECURRING utility sinks the token economy was missing (the framing rule holds: utility only).
 // Prices are new/tunable — sim + founder sign-off before production.
 export const VANITY = {
-  NAME_CHANGE_OMR: 5,   // a new street name (living-name uniqueness still enforced; your referral code follows it)
-  TITLE_OMR: 10,        // a custom title — the same display slot mission titles use; clearing it is free
-  PLATE_OMR: 2,         // a vanity plate for one car in the garage
-  GANG_COLOR_OMR: 10,   // the family crest color (boss only)
-  GANG_RENAME_OMR: 25,  // family rename/retag (boss only; founding-rules validation + uniqueness)
+  NAME_CHANGE_OMR: 30,   // a new street name (living-name uniqueness still enforced; your referral code follows it)
+  TITLE_OMR: 60,        // a custom title — the same display slot mission titles use; clearing it is free
+  PLATE_OMR: 12,         // a vanity plate for one car in the garage
+  GANG_COLOR_OMR: 60,   // the family crest color (boss only)
+  GANG_RENAME_OMR: 150,  // family rename/retag (boss only; founding-rules validation + uniqueness)
   TITLE_MAX: 24, PLATE_MAX: 8,
 };
 // M8 second drop — sinks tied to the game's loops (not pure vanity, so each carries a note on
@@ -995,14 +1018,14 @@ export const VANITY = {
 // the mark pays to read every funder on their own head (anonymity is purchasable, so is piercing
 // it; the two sinks feed each other). RESPEC: redistributes ALREADY-TRAINED stat points, total
 // conserved, none below the creation base — convenience over re-grinding, zero new power (the
-// path-switch precedent at 25 $OMR). Prices new/tunable — founder sign-off before production.
+// path-switch precedent). Prices new/tunable — founder sign-off before production.
 export const M8 = {
-  BOARD_ANON_OMR: 3,   // anonymity on a FRESH contract pot (top-ups inherit the pot's flag, never charged)
-  INTEL_PEEK_OMR: 5,   // "who wants me dead?" — funder names + shares on every open pot on you
-  RESPEC_OMR: 15,      // redistribute muscle/cunning/speed; sum must match, each ≥ RESPEC_STAT_MIN
+  BOARD_ANON_OMR: 18,   // anonymity on a FRESH contract pot (top-ups inherit the pot's flag, never charged)
+  INTEL_PEEK_OMR: 30,   // "who wants me dead?" — funder names + shares on every open pot on you
+  RESPEC_OMR: 90,      // redistribute muscle/cunning/speed; sum must match, each ≥ RESPEC_STAT_MIN
   RESPEC_STAT_MIN: 5,  // the creation base — respec never drops a stat below the man you started as
   RESPEC_CD_MS: 24 * 3600 * 1000, // D7: opposed rolls are shape-sensitive — no re-shaping between fights
-  TRIBUTE_OMR_MIN: 1,  // minimum $OMR tribute into the family reserve
+  TRIBUTE_OMR_MIN: 6,  // minimum $OMR tribute into the family reserve
 };
 // M8 — FAMILY SEALS: the gang-prestige ladder, the family-level $OMR sink. Pure STATUS (a badge
 // on the family's name everywhere it appears — no member cap, no combat edge, no income). Bought
@@ -1011,11 +1034,11 @@ export const M8 = {
 // COOPERATIVE purchase: the family pools tokens for its colors. Escalating prices make the top
 // seals genuinely rare. Prices new/tunable — founder sign-off before production.
 export const GANG_SEALS = [
-  { tier: 1, id: 'wax',      name: 'Wax Seal',      omr: 25 },
-  { tier: 2, id: 'brass',    name: 'Brass Seal',    omr: 75 },
-  { tier: 3, id: 'silver',   name: 'Silver Seal',   omr: 200 },
-  { tier: 4, id: 'gold',     name: 'Gold Seal',     omr: 500 },
-  { tier: 5, id: 'obsidian', name: 'Obsidian Seal', omr: 1500 },
+  { tier: 1, id: 'wax',      name: 'Wax Seal',      omr: 150 },
+  { tier: 2, id: 'brass',    name: 'Brass Seal',    omr: 450 },
+  { tier: 3, id: 'silver',   name: 'Silver Seal',   omr: 1200 },
+  { tier: 4, id: 'gold',     name: 'Gold Seal',     omr: 3000 },
+  { tier: 5, id: 'obsidian', name: 'Obsidian Seal', omr: 9000 },
 ];
 export const sealOf = (tier = 0) => GANG_SEALS.find((s) => s.tier === Number(tier)) || null;
 // VENDETTAS — a status axis (no gameplay power beyond the rep multiplier + the KILL-only
@@ -1064,7 +1087,7 @@ export const LAW = {
   ACQUIT_TO: 1000,             // on acquittal the case collapses — exposure resets to this (not re-indicted next tick)
   // ── Phase 3 — the courtroom ──
   PLEA_FORFEIT_RATE: 0.15, PLEA_JAIL_S: 240, // settle: a certain, smaller loss + a short stretch
-  JURY_COST_OMR: 20, JURY_BUST_MULT: 0.5,    // buy the jury once → conviction P × this (a $OMR sink — the war chest beats the rap)
+  JURY_COST_OMR: 120, JURY_BUST_MULT: 0.5,    // buy the jury once → conviction P × this (a $OMR sink — the war chest beats the rap)
   // ── Phase 4 — informants ──
   FLIP_SEED: 1500,             // exposure the rat's testimony adds to the named target
   FLIP_JAIL_S: 120,            // the rat does a short, soft stretch
@@ -1073,7 +1096,7 @@ export const LAW = {
   // PROACTIVE (vs the reactive one-shot bribe): pay $OMR to keep the envelope current for a window;
   // while current, the investigation meter GAINS at ENVELOPE_GAIN_MULT rate (the cops write less
   // down). NOT immunity — a reckless player still builds a case, just slower. A $OMR sink (law:envelope).
-  ENVELOPE_OMR: 15,                     // $OMR to keep the envelope current
+  ENVELOPE_OMR: 90,                     // $OMR to keep the envelope current
   ENVELOPE_MS: 7 * 24 * 3600 * 1000,    // how long one payment buys
   ENVELOPE_GAIN_MULT: 0.5,              // exposure gain scaled by this while the envelope is current
   ENVELOPE_BLEED_MULT: 2,               // step two: the meter also BLEEDS this much faster while current
@@ -1101,11 +1124,11 @@ export const envelopeActive = (ch, now = Date.now()) => !!ch.envelope_until && n
 // case, not just softens the bust once filed. Both are founder sign-off levers (a Law surface).
 export const FOUNDATION = {
   TIERS: [
-    { tier: 1, name: 'Community Fund', omr: 60,   bustMult: 0.97, bleedMult: 1.15, blurb: 'A soup kitchen, a little goodwill.' },
-    { tier: 2, name: 'Youth League',   omr: 180,  bustMult: 0.93, bleedMult: 1.30, blurb: 'Ball fields with the family name on them.' },
-    { tier: 3, name: 'City Trust',     omr: 500,  bustMult: 0.88, bleedMult: 1.50, blurb: 'Grants, ribbons, a friend on the council.' },
-    { tier: 4, name: 'The Institute',  omr: 1200, bustMult: 0.82, bleedMult: 1.75, blurb: 'A wing at the hospital. Judges attend the galas.' },
-    { tier: 5, name: 'The Legacy',     omr: 3000, bustMult: 0.75, bleedMult: 2.00, blurb: 'Pillars of the community. The DA takes the call.' },
+    { tier: 1, name: 'Community Fund', omr: 360,   bustMult: 0.97, bleedMult: 1.15, blurb: 'A soup kitchen, a little goodwill.' },
+    { tier: 2, name: 'Youth League',   omr: 1080,  bustMult: 0.93, bleedMult: 1.30, blurb: 'Ball fields with the family name on them.' },
+    { tier: 3, name: 'City Trust',     omr: 3000,  bustMult: 0.88, bleedMult: 1.50, blurb: 'Grants, ribbons, a friend on the council.' },
+    { tier: 4, name: 'The Institute',  omr: 7200, bustMult: 0.82, bleedMult: 1.75, blurb: 'A wing at the hospital. Judges attend the galas.' },
+    { tier: 5, name: 'The Legacy',     omr: 18000, bustMult: 0.75, bleedMult: 2.00, blurb: 'Pillars of the community. The DA takes the call.' },
   ],
 };
 export const foundationOf = (tier) => FOUNDATION.TIERS.find((t) => t.tier === Number(tier)) || null;
@@ -1775,7 +1798,7 @@ const CAPSTONE_COST = 4;
 
 export const SKILLS = {
   LVL_PER_POINT: 4,     // one skill point per four levels
-  RESPEC_OMR: 10,       // burn to unlearn everything (shared respec cooldown)
+  RESPEC_OMR: 60,       // burn to unlearn everything (shared respec cooldown)
   TREE: [
     { id: 'bruiser',        branch: 'enforcer', tier: 1, cost: 1, name: 'Bruiser',          desc: 'Jumps and shakedowns hit 8% harder.' },
     { id: 'doctors_friend', branch: 'enforcer', tier: 2, cost: 2, name: "The Doc's Friend", desc: 'Healing costs 25% less.' },
@@ -1794,7 +1817,7 @@ export const SKILLS = {
   ],
   CAPSTONE_COST,
   ACTIVE_CD_MS: 8 * 3600 * 1000,   // shared cooldown across your unlocked ACTIVE abilities
-  RESPEC_ONE_OMR: 5,               // step two: unlearn ONE skill (leaf-first) for less than a full respec
+  RESPEC_ONE_OMR: 30,               // step two: unlearn ONE skill (leaf-first) for less than a full respec
   // capstone-unlocked ACTIVE abilities (the new mechanic): resource/cooldown bursts, off every §10.4 +
   // audit-locked surface (energy/nerve are pure regen resources; heist/world cooldowns are op pacing).
   ACTIVES: [
@@ -2055,7 +2078,7 @@ export const BUSINESS_EMPIRE = {
     { at: 0, name: 'Bagman' }, { at: 1_000_000, name: 'The Washman' }, { at: 20_000_000, name: 'The Rinse Cycle' },
     { at: 200_000_000, name: 'The Cleaner' }, { at: 2_000_000_000, name: 'The Bleach King' }, { at: 20_000_000_000, name: 'The Holy See' },
   ],
-  SPEC_OMR: 40, // $OMR burned to specialize / re-specialize a MAX-TIER front (deflationary sink)
+  SPEC_OMR: 240, // $OMR burned to specialize / re-specialize a MAX-TIER front (deflationary sink)
   SPECS: {
     accountant: { name: 'The Accountant', scrutinyMult: 0.5 },  // washing draws half the Bureau's eye
     fortress: { name: 'The Fortress', defBonus: 40 },           // a hostile takeover defends +40
@@ -2106,7 +2129,7 @@ export const npcHitmanOf = (id) => NPC_HITMEN.find((n) => n.id === id);
 // structuring still trips it) — draws heat and can't be done from a safehouse (P1.3). Historical
 // ledger rows keep their reasons in invariants.js; nothing writes a new one.
 export const PORTFOLIO = {
-  SCRUTINY_MIN_OMR: 1000, SCRUTINY_HEAT: 12, SCRUTINY_WINDOW_MS: 24 * 3600 * 1000,
+  SCRUTINY_MIN_OMR: 6000, SCRUTINY_HEAT: 12, SCRUTINY_WINDOW_MS: 24 * 3600 * 1000,
 };
 // ── THE TREASURY & THE VAULT (omerta-stock-layer-retirement.md) ────────────────────────────────
 // Was RWA_FLOAT. The founder retired the STOCK layer on 2026-07-31 and kept the vault, BACKED WITH
@@ -2116,8 +2139,8 @@ export const PORTFOLIO = {
 // re-denomination unchanged (they meter $OMR, not the backing asset).
 export const TREASURY = {
   FEE_TREASURY_BPS: () => Number(process.env.FEE_RWA_BPS ?? 1000), // 10% of gameplay fees → the treasury ledger. Env name kept: renaming it would silently reset a configured deploy to the default.
-  CLAIM_MIN_OMR: 25,          // floor on a claim — below this the round6 grid and the ledger row cost more than the claim is worth
-  CLAIM_DAILY_OMR: 2000,      // per-ACCOUNT rolling-window cap: one house cannot sweep the vault in a day
+  CLAIM_MIN_OMR: 150,          // floor on a claim — below this the round6 grid and the ledger row cost more than the claim is worth
+  CLAIM_DAILY_OMR: 12000,      // per-ACCOUNT rolling-window cap: one house cannot sweep the vault in a day
   CLAIM_WINDOW_MS: 86400000,  // the bucket refills continuously over 24h (the D3 wash-cap shape)
   // THE PRICE IS NOW THE PRICE OF REAL ETH, so it gets the OmrTwapOracle treatment. Once the vault
   // owes ETH, a stale or absent OMR/ETH price is a FREE OPTION on the treasury: claim at yesterday's
@@ -2129,6 +2152,32 @@ export const TREASURY = {
   CLAIM_PREMIUM_BPS: 500,     // +5% over spot. The vault is not a market maker: it should never hand
                               // out ETH at exactly the price a player could get elsewhere, or every
                               // claim is a risk-free skim on whichever side the oracle lags.
+
+  // ── THE BUY KEEPER'S WALLS (brokers step 5, §3.2 wall 3) — sized by `npm run keeper-dials` ──────
+  // The keeper spends treasury ETH on tokenized stock. Wall 3 is a per-buy PRICE CONTINUITY bound so
+  // a fat-finger, a stale feed or a leaked keeper key cannot buy at an absurd rate.
+  //
+  // The sizing produced one finding worth keeping at the definition, because it inverts the obvious
+  // instinct. **A false halt is cheap; a loose bound is expensive** — and asymmetrically so:
+  //   • bound fires wrongly → the keeper skips an epoch and a human looks. The ETH is still there.
+  //   • bound is too loose  → real ETH buys few units, permanently, and NO INVARIANT CATCHES IT:
+  //     `allocated ≤ held` is in UNITS, so buying few units for much ETH leaves every wall true.
+  // So the bound is deliberately NOT sized to accommodate every honest move. A first cut scaled it
+  // with the gap since the last print (`BASE^sqrt(Δ/epoch)`) and had to be thrown away — it yields
+  // 6.7× at a month and 26.7× at a quarter, and a 26× bound is a formality with a comment attached.
+  // Bound the ORDINARY case; let the extraordinary one stop the bot and fetch a human.
+  //
+  // The bounded quantity is stock/ETH, a RATIO, so ETH's volatility sets it even for a blue chip:
+  // a "calm" large-cap still moves ~4.7%/day against ETH. 2× covers 3σ over an epoch (1.57×) and an
+  // ETH-halving week (2.00×), and wastes at most 50% of a single buy in the worst allowed case.
+  KEEPER_MAX_PRICE_JUMP: 2,      // refuse a fill above this × the last real print for that ticker
+  KEEPER_MIN_PRICE_FRAC: 0.2,    // …and below this × it. A rate an order of magnitude cheap is a
+                                 // broken feed or a fake token, not a bargain (the desk's
+                                 // PRICE_FLOOR_BPS precedent — the RWA float shipped this bug).
+  KEEPER_MAX_PRICE_AGE_MS: 2592000000, // 30d. A stale print does NOT earn a wider bound — it earns a
+                                 // halt. Widening with age is precisely what makes a bound stop being
+                                 // fail-closed (the OmrTwapOracle discipline, where having no
+                                 // fallback price is the entire point).
 };
 // AUDIT F5 — fail fast on a misconfigured fee split: the Vig slice (vig.js, env VIG_BPS default
 // 6000) + the treasury slice book each real fee into two independently-recorded buckets; if they
@@ -2146,9 +2195,9 @@ export const TREASURY = {
 // intelligence service (forecasts, threat chatter, the ticker tape, the war room). All numbers are
 // founder sign-off levers; every burn rides the existing intel:* omr vocabulary (zero invariant changes).
 export const WIRE = {
-  TAP_OMR: 8, TAP_MS: 12 * 3600 * 1000, TAP_MAX: 5, // place a wire: cost, window, concurrent cap
-  SWEEP_OMR: 5,                                     // sweep your lines clean of bugs
-  SUB_OMR: 12, SUB_MS: 7 * 24 * 3600 * 1000,        // the Street Wire premium feed: cost, window (== SUB_TIERS[0], kept for back-compat)
+  TAP_OMR: 48, TAP_MS: 12 * 3600 * 1000, TAP_MAX: 5, // place a wire: cost, window, concurrent cap
+  SWEEP_OMR: 30,                                     // sweep your lines clean of bugs
+  SUB_OMR: 72, SUB_MS: 7 * 24 * 3600 * 1000,        // the Street Wire premium feed: cost, window (== SUB_TIERS[0], kept for back-compat)
   // ── STEP FIVE — the TIERED SUBSCRIPTION ladder + the STANDING WATCH automation (all $OMR sinks via the
   // intel: vocabulary — ZERO invariant changes). The flat Street Wire becomes a ladder: a higher tier
   // costs more $OMR (a bigger intel:wire burn), unlocks more of the premium feed (the war room), and —
@@ -2157,13 +2206,13 @@ export const WIRE = {
   // runs while you're offline without manual re-tapping. The watch pauses if the sub lapses or you go
   // broke (the taps lapse naturally). All access/status/pacing — no new bucket, no faucet. Sign-off levers.
   SUB_TIERS: [
-    { tier: 1, name: 'Street Wire',    omr: 12, ms: 7 * 24 * 3600 * 1000, watchSlots: 0, warRoom: false }, // the feed: forecast + threats + tape
-    { tier: 2, name: 'The Wire Room',  omr: 30, ms: 7 * 24 * 3600 * 1000, watchSlots: 2, warRoom: true },  // + the war room + 2 standing watches
-    { tier: 3, name: 'The Switchboard',omr: 60, ms: 7 * 24 * 3600 * 1000, watchSlots: 5, warRoom: true },  // + 5 standing watches
+    { tier: 1, name: 'Street Wire',    omr: 72, ms: 7 * 24 * 3600 * 1000, watchSlots: 0, warRoom: false }, // the feed: forecast + threats + tape
+    { tier: 2, name: 'The Wire Room',  omr: 180, ms: 7 * 24 * 3600 * 1000, watchSlots: 2, warRoom: true },  // + the war room + 2 standing watches
+    { tier: 3, name: 'The Switchboard',omr: 360, ms: 7 * 24 * 3600 * 1000, watchSlots: 5, warRoom: true },  // + 5 standing watches
   ],
   // ── STEP TWO (all $OMR sinks through the intel: vocabulary — ZERO invariant changes; + a status axis) ──
-  TRACE_OMR: 15,                                    // THE BUG TRACE — sweep NAMES the watchers (counter-intel); free when clean
-  DOSSIER_OMR: 20,                                  // THE DOSSIER — a one-shot deep read (kills/flags/role/who-they-tap; NO exact cash — banding holds)
+  TRACE_OMR: 90,                                    // THE BUG TRACE — sweep NAMES the watchers (counter-intel); free when clean
+  DOSSIER_OMR: 120,                                  // THE DOSSIER — a one-shot deep read (kills/flags/role/who-they-tap; NO exact cash — banding holds)
   // THE SPYMASTER — a lifetime intel-ops status axis (account-level, survives death — the war-effort
   // precedent). Pure status: a count of intel actions run, ranked. No §10.4 surface.
   // STEP FOUR — THE TRADECRAFT: the SPY_RANKS ladder now grants PERKS (the earned status axis finally
@@ -2180,8 +2229,8 @@ export const WIRE = {
   // ── STEP THREE — the counter-intel triad (all $OMR sinks via the intel: vocabulary — ZERO invariant
   // changes). A rock-paper-scissors: a cheap WIRETAP is machine surveillance → foiled by DISINFORMATION;
   // an expensive INFORMANT is a HUMAN source → sees THROUGH the disinfo (a mole can't be fed lies). ──
-  DISINFO_OMR: 10, DISINFO_MS: 12 * 3600 * 1000,   // plant false intel: any WIRETAP reading you gets cooked private signals for a window
-  INFORMANT_OMR: 25, INFORMANT_MS: 7 * 24 * 3600 * 1000, INFORMANT_MAX: 3, // a standing HUMAN source: recurring retainer, deeper read, pierces disinfo
+  DISINFO_OMR: 60, DISINFO_MS: 12 * 3600 * 1000,   // plant false intel: any WIRETAP reading you gets cooked private signals for a window
+  INFORMANT_OMR: 150, INFORMANT_MS: 7 * 24 * 3600 * 1000, INFORMANT_MAX: 3, // a standing HUMAN source: recurring retainer, deeper read, pierces disinfo
 };
 export const disinfoActive = (ch, now = Date.now()) => !!ch.disinfo_until && new Date(ch.disinfo_until).getTime() > now;
 export const spyRankOf = (ops) =>
@@ -2211,8 +2260,6 @@ export const STORE = {
     rwa: Number(process.env.REVENUE_RWA_BPS || 2000),
   },
   PACKAGES: [
-    { sku: 'made_man', name: 'Made Man', priceEth: 0.01, grant: { mintCredits: 1 },
-      blurb: 'Get made — a mint credit unlocks on-chain extraction (withdraw $OMR, take gear).' },
     { sku: 'revive_3', name: 'Revive Bundle (3)', priceEth: 0.25, grant: { respawnTokens: 3 },
       blurb: 'Three pre-paid revives — a killing blow is absorbed, you keep everything.' },
     { sku: 'revive_5', name: 'Revive Bundle (5)', priceEth: 0.40, grant: { respawnTokens: 5 },
@@ -2225,7 +2272,7 @@ export const STORE = {
     { sku: 'patron', name: "Patron's Ring", priceEth: 0.10, grant: { patron: true },
       blurb: 'A permanent patron badge — a quiet flex on every screen you appear.' },
     // ── the Speakeasy COSMETIC DECOR tier (step three) — an account-level style unlock (survives death),
-    // applied to your club (display-only, zero gameplay). Payable in ETH (dormant paywall) or PLEX ($OMR).
+    // applied to your club (display-only, zero gameplay). Payable in ETH (dormant paywall).
     { sku: 'decor_deco', name: 'Art Deco Decor', priceEth: 0.02, grant: { cosmetic: 'deco' },
       blurb: 'A sunburst-and-chrome Art Deco fit-out for your club — pure style, no power.' },
     { sku: 'decor_gilded', name: 'Gilded Age Decor', priceEth: 0.04, grant: { cosmetic: 'gilded' },
@@ -2234,19 +2281,53 @@ export const STORE = {
       blurb: 'Deep velvet and low light — the Midnight room. Cosmetic only.' },
   ],
 };
-// PLEX-for-packages: pay a Store SKU's fee from EARNED $OMR instead of ETH (the EVE "pay your rent in
-// ISK" path — ETH payers fund the Vig, $OMR payers BURN supply; both get the same entitlement). Price =
-// max(floor, feeEth × latest-buyback-oracle × premium) — market-linked like the vig PLEX, with a static
-// $OMR-per-ETH floor before the market prints a price. Sign-off levers.
-STORE.PLEX_FLOOR_OMR_PER_ETH = Number(process.env.STORE_PLEX_FLOOR || 5000); // 0.01 ETH → 50 $OMR floor
-STORE.PLEX_PREMIUM_BPS = Number(process.env.STORE_PLEX_PREMIUM_BPS || 12000); // 1.2× the ETH-equivalent
+// PLEX-for-packages: pay a Store SKU's fee from EARNED $OMR instead of ETH. Market-linked like the
+// vig's rail — max(floor, feeEth × the latest buyback oracle × premium) — with the floor derived from
+// the ONE genesis rate rather than hand-set, because a hand-set floor beside a market path is not a
+// second opinion: the effective price is always the cheaper rail, which is what the genesis-rate pass
+// found when three rails quoted three rates. (Retired wholesale on 2026-08-10 and pulled back to the
+// mint alone the same day — see the note in store.js for which half of that argument survived.)
+// Moves in LOCKSTEP with vig.js's PLEX_PREMIUM_BPS — the two price the same thing on two surfaces,
+// so a split between them is a price difference nobody decided on.
+STORE.PLEX_PREMIUM_BPS = Number(process.env.STORE_PLEX_PREMIUM_BPS || 10000); // 1.0× the ETH-equivalent
+STORE.PLEX_FLOOR_OMR_PER_ETH = Number(process.env.STORE_PLEX_FLOOR
+  || PLEX_GENESIS_OMR_PER_ETH * STORE.PLEX_PREMIUM_BPS / 10000);
+// RETIRED SKUS — a package that once existed and no longer sells. Kept by NAME so the routes can say
+// what happened instead of "unknown package", which would be a lie about a sku somebody may have a
+// bookmark or a client card for (the /v1/wage tombstone discipline).
+//
+// `made_man` sold ONE thing — a mint credit — for a hardcoded 0.01 ETH, which made it a SECOND ETH
+// rail on the mint that did not move with MINT_TRANCHES. Nothing priced it from the schedule (the
+// only readers are the admin display and preflight's warning, both on MINT_FEE_ETH), so from wave 2
+// the published price would have been 0.025 while this door still sold the same entitlement for
+// 0.01 — the cheaper-rail rule routed around by a second ETH rail rather than a $OMR one. The mint
+// already has its own rail with a published schedule, a Safe-settable price and a preflight guard;
+// a duplicate storefront for the same entitlement is one more thing to keep in lockstep forever,
+// and the lesson this economy keeps re-learning is that the surest way to keep two rails in
+// lockstep is to have one. Retired 2026-08-10, before wave 2 made the gap live.
+// A retired entry keeps its PRICE and its GRANT, not just its epitaph, because retiring a package
+// must not cancel a purchase somebody already paid for. A payment recorded before the retirement (or
+// one parked pre-link that reconciles after it) is money that already moved, so `grantPackage`
+// resolves it here and honors exactly what was bought. Buying it ANEW is what stops: the ingest and
+// the $OMR rail both refuse. Without this the retirement would also crash `sweepUncreditedStore` for
+// every OTHER parked payment queued behind it — a retired sku is not an emergency for the sweep.
+export const RETIRED_PACKAGES = {
+  made_man: {
+    priceEth: 0.01, grant: { mintCredits: 1 }, name: 'Made Man',
+    // reads in BOTH contexts — an API error and a card on the shelf — so it names no route.
+    why: 'Getting made has its own rail: pay the published fee on-chain, or earn a credit off the '
+      + 'mission ladder, which grants one outright.',
+    where: '/v1/character/mint',
+  },
+};
 export const packageOf = (sku) => STORE.PACKAGES.find((p) => p.sku === sku) || null;
 export const passActive = (a, now = Date.now()) => !!a?.pass_until && new Date(a.pass_until).getTime() > now;
 
 // ── THE PATRON PROGRAM (Store Tier-4) — the off-chain backer-prestige ladder over the Store. patron_spent
 // is a lifetime ETH-equivalent contribution meter (bumped only on REAL contributions — a txHash'd ETH
-// purchase or a PLEX burn — the txHash-gate precedent, so a comp can't fabricate a top benefactor). PURE
-// STATUS: no new §10.4 reason (the PLEX discount rides the EXISTING plex:% burn — a smaller sink, no mint).
+// purchase — the txHash-gate precedent, so a comp can't fabricate a top benefactor). PURE STATUS: no new
+// §10.4 reason. `plexDiscountBps` ships at 0, so the tier NAMES are the program — but the rail it would
+// discount is LIVE again (everything but the mint), so arming it is a real lever rather than dead weight.
 // plexDiscountBps SHIPS AT 0 (pure status); the armed values are the one flagged sign-off lever. All numbers
 // are founder sign-off levers (cosmetic-axis, the family-seal/hitman-rep precedent).
 export const PATRON = {
@@ -2314,21 +2395,25 @@ export const bondPayout = (principalEth, price, discountBps) =>
 // DORMANT until step 4 arms the contract and a `SellTaxTaken` watcher records episodes; the ingest
 // (`recordSellTax`) and the mod/QA seat exist now so the accounting is testable ahead of the chain.
 // ── D1 (SIGNED 2026-08-05, founder: "Max fee for D1") — THE TRADE FEE, folded into OmertaHook ──
-// A small fee on EVERY swap (buys INCLUDED), taken in ETH, funding the VIG — the pot that backs $OMR
-// withdrawals (recordTradeFee → recordVigRevenue → the buyback → the full-reserve queue). So spenders
-// fund earners AND traders fund earners: a busy market directly raises how much players can withdraw.
-// A trade has no founder/business counterparty, so 100% goes to the Vig (TRADE_VIG_BPS 10000). MAX of
-// the confirmed 10–30 bps band = 30. Armed-at-zero (the sell-tax posture) with a compile-time cap in
-// the contract; the on-chain OmertaHook.tradeFeeBps mirrors this. §9.6 operating rule holds: this is a
-// FLAT fee, unrelated to the bond discount. Chain-dormant — the backend (recordTradeFee/syncTradeFees)
-// is built; the contract fold is the mainnet milestone (third-party audit + legal gated).
-export const TRADE_FEE = {
-  BPS: Number(process.env.TRADE_FEE_BPS || 30),                // 0.30% on every swap (contract MAX 100 = 1%)
-  VIG_BPS: Number(process.env.TRADE_VIG_BPS || 10000),         // 100% → the Vig (no business counterparty on a trade)
-  MAX_BPS: 100,                                                // OmertaHook.MAX_TRADE_FEE_BPS — kept in lockstep
-};
-(() => { if (TRADE_FEE.BPS > TRADE_FEE.MAX_BPS) throw new Error(`TRADE_FEE.BPS ${TRADE_FEE.BPS} exceeds the contract cap ${TRADE_FEE.MAX_BPS}`);
-  if (TRADE_FEE.VIG_BPS > 10000) throw new Error(`TRADE_FEE.VIG_BPS ${TRADE_FEE.VIG_BPS} exceeds 100%`); })();
+// THE SWAP TRADE FEE IS RETIRED (founder-directed 2026-08-11: "get rid of the Vig trade fee").
+//
+// It was a small fee on EVERY swap (buys included), 100% to the Vig, and it was never armed — the
+// backend was built and chain-dormant, so not one real row was ever written. What retired it is the
+// decision it was blocking: a `PoolKey` holds exactly ONE hook address, and TWO hooks wanted the
+// canonical OMR/ETH pool — this one (an afterSwap cut of every swap's ETH leg → the Vig) and
+// `OmertaHook`'s four-slice SELL TAX (dev / treasury / LP / vig). They cannot both serve it. The
+// sell tax wins on three counts: it is the one the money router already declares end to end, it
+// taxes SELLING rather than all trading (so it never prices the buy side of the market we want
+// deep), and it is what makes a bond a hold rather than an arbitrage (§9.6 — `DISCOUNT_BPS` must
+// stay strictly under `sellTaxBps`, a relation a separate trade fee does nothing for).
+//
+// Retired the standard way (the emission.js / PLEX-mint discipline): the PAYER is DELETED, not left
+// dormant behind a flag — `recordTradeFee`, `syncTradeFees`, the watcher's `tradeFeeLogs` and the
+// worker's wiring are gone, and `TRADE_FEE` no longer exists, so nothing is one env var from live.
+// What STAYS is the history half: `'trade'` remains in the router's `VIG_SOURCES` forever (a source
+// removed from membership is the loudest alarm the router has, and conservation is a claim about the
+// WHOLE ledger), the waterfall still declares the row marked retired so "where a dollar goes" makes
+// the POSITIVE claim rather than going silent, and a freshness check asserts nothing new writes it.
 
 export const SELL_TAX = {
   BPS: Number(process.env.SELL_TAX_BPS || 900),                // 9% on a sell (contract cap: 1000)
@@ -2346,16 +2431,16 @@ export const SELL_TAX = {
 // real-ETH axis (bonded_eth, read-derived from the bonds table) with an earn-in-game pledge axis
 // (pledged_omr, an account column bumped by a $OMR burn), so a player reaches backer status in
 // alpha via THE PLEDGE while the ETH axis lights up at mainnet. All numbers are sign-off levers.
-BONDS.ETH_SCORE_OMR = Number(process.env.BOND_ETH_SCORE_OMR || 5000);  // $OMR-equiv per bonded ETH for the STATUS score (deterministic, NOT the live oracle — the R1-Portfolio precedent)
-BONDS.PLEDGE_MIN = Number(process.env.BOND_PLEDGE_MIN || 10);          // min in-game $OMR pledge
+BONDS.ETH_SCORE_OMR = Number(process.env.BOND_ETH_SCORE_OMR || 30000);  // $OMR-equiv per bonded ETH for the STATUS score (deterministic, NOT the live oracle — the R1-Portfolio precedent)
+BONDS.PLEDGE_MIN = Number(process.env.BOND_PLEDGE_MIN || 60);          // min in-game $OMR pledge
 BONDS.BACKER_TIERS = [
-  { min: 0, name: 'Depositor' }, { min: 100, name: 'Patron' }, { min: 1000, name: 'Underwriter' },
-  { min: 10000, name: 'Financier' }, { min: 50000, name: 'Kingmaker' }, { min: 250000, name: 'The Reserve' },
+  { min: 0, name: 'Depositor' }, { min: 600, name: 'Patron' }, { min: 6000, name: 'Underwriter' },
+  { min: 60000, name: 'Financier' }, { min: 300000, name: 'Kingmaker' }, { min: 1500000, name: 'The Reserve' },
 ];
 BONDS.CHARTER_TIERS = [
-  { tier: 1, name: 'Bronze Charter', omr: 25 }, { tier: 2, name: 'Silver Charter', omr: 75 },
-  { tier: 3, name: 'Gold Charter', omr: 200 }, { tier: 4, name: 'Platinum Charter', omr: 600 },
-  { tier: 5, name: 'The Founding Charter', omr: 1500 },
+  { tier: 1, name: 'Bronze Charter', omr: 150 }, { tier: 2, name: 'Silver Charter', omr: 450 },
+  { tier: 3, name: 'Gold Charter', omr: 1200 }, { tier: 4, name: 'Platinum Charter', omr: 3600 },
+  { tier: 5, name: 'The Founding Charter', omr: 9000 },
 ];
 export const underwriterScore = (bondedEth, pledgedOmr) =>
   Math.round((Number(bondedEth || 0) * BONDS.ETH_SCORE_OMR + Number(pledgedOmr || 0)) * 1e6) / 1e6;
@@ -2378,15 +2463,15 @@ export const PASS = {
     { tier: 1, reward: { title: 'Ledger Initiate' } },
     { tier: 2, reward: { respawnTokens: 1 } },
     { tier: 3, reward: { energy: true } },
-    { tier: 4, reward: { omr: 2 } },
+    { tier: 4, reward: { omr: 12 } },
     { tier: 5, reward: { title: 'Bag Man' } },
     { tier: 6, reward: { respawnTokens: 1 } },
     { tier: 7, reward: { energy: true } },
-    { tier: 8, reward: { omr: 3 } },
+    { tier: 8, reward: { omr: 18 } },
     { tier: 9, reward: { title: 'The Bookkeeper' } },
     { tier: 10, reward: { respawnTokens: 2 } },
     { tier: 11, reward: { energy: true } },
-    { tier: 12, reward: { title: 'Made of the Ledger', omr: 5 } }, // the capstone
+    { tier: 12, reward: { title: 'Made of the Ledger', omr: 30 } }, // the capstone
   ],
 };
 // the per-tier claim cooldown (~daily). A TEST-ONLY env knob shrinks it (the SEARCH_MS precedent) —
@@ -2410,7 +2495,7 @@ export const passPrestigeOf = (seasons) => {
 // by burning $OMR; a bigger flex takes the plaque. The name borne is the account's dynasty (or street).
 // Pure status — outside §10.4 (the burn rides vanity:%) and outside the sim-audited balance. Levers.
 export const LANDMARKS = {
-  MIN_DEDICATE: 20, // the first-dedication floor; a takeover must strictly exceed the current flex
+  MIN_DEDICATE: 120, // the first-dedication floor; a takeover must strictly exceed the current flex
   PLACES: {
     docks: 'The Harbor Gate', neon: 'The Neon Arch', foundry: 'The Ironworks Obelisk',
     brick: 'The Brickyard Monument', canal: 'The Canal Bridge', cathedral: 'The Cathedral Steps',
@@ -2432,7 +2517,7 @@ export const SPEAKEASY = {
   INCOME_CAP_MS: 86400000,   // 24h base bar-take cap (the business pattern)
   UPKEEP_BPS: 2000,          // SIGN-OFF (net-EV): protection + wages come off the top of every collect (the business-'pad' 20% rate) — the bar take is no longer a risk-free faucet; a §10.4 speakeasy: cash sink
   VISIT_CD_MS: 3600000,      // 1h per-(patron,club) round cooldown
-  NAME_OMR: 8,               // name the club ($OMR vanity burn)
+  NAME_OMR: 48,               // name the club ($OMR vanity burn)
   REGULAR_VISITS: 10,        // visits to become a "regular" (status)
   TIERS: [
     { tier: 0, name: 'The Backroom',  cost: 0,        incomePerHr: 8000,   prestige: 10 },  // as opened
@@ -2446,9 +2531,9 @@ export const SPEAKEASY = {
     { id: 'topshelf', name: 'top-shelf all night',   cost: 40000, prestige: 4 },
   ],
   BOTTLES: [ // bottle service — $OMR, a PURE-STATUS deflationary burn (rides vanity:%), no owner cut
-    { id: 'bottle',  name: 'bottle service',            omr: 3,  prestige: 12 },
-    { id: 'magnum',  name: 'a magnum of champagne',     omr: 8,  prestige: 35 },
-    { id: 'reserve', name: 'the reserve — top of the top', omr: 20, prestige: 90 },
+    { id: 'bottle',  name: 'bottle service',            omr: 18,  prestige: 12 },
+    { id: 'magnum',  name: 'a magnum of champagne',     omr: 48,  prestige: 35 },
+    { id: 'reserve', name: 'the reserve — top of the top', omr: 120, prestige: 90 },
   ],
   // ── step two — THE BACK-ROOM TABLE: the club hosts a house game (the wheel). A patron plays, the OWNER
   // takes a RAKE (carved from the stake, a transfer — never minted on top; the casino discipline), the
@@ -2471,13 +2556,13 @@ export const SPEAKEASY = {
   // street). renown = floor(Σ spent_cash / CASH_PER + Σ spent_omr × OMR_WEIGHT + ownClubPrestige × OWNER_WEIGHT).
   // Bottle-service ($OMR) is weighted heaviest — the flex is worth the most. RANKS is a display ladder.
   RENOWN: {
-    CASH_PER: 10000, OMR_WEIGHT: 50, OWNER_WEIGHT: 0.5,
+    CASH_PER: 10000, OMR_WEIGHT: 8, OWNER_WEIGHT: 0.5,
     RANKS: [
       { min: 0, name: 'Nobody' }, { min: 25, name: 'A Face' }, { min: 100, name: 'A Regular' },
       { min: 300, name: 'High Roller' }, { min: 800, name: 'Big Shot' }, { min: 2000, name: 'King of the Night' },
     ],
     // ── step four — renown PERK (access/status, never power): EARNED decor styles unlocked by renown (no
-    // ETH/PLEX — a cosmetic you earn by being seen). id → the renown threshold to apply it. Style-name in DECOR_STYLES.
+    // ETH — a cosmetic you earn by being seen). id → the renown threshold to apply it. Style-name in DECOR_STYLES.
     STYLE_UNLOCKS: { house: 800, crown: 2000 },
   },
   // ── step three — the ETH COSMETIC DECOR styles (Store SKUs grant the account-level unlock; the owner
@@ -2851,25 +2936,25 @@ export const smuggleRepPerks = (tier) => ({
 // so it SURVIVES DEATH — the compound passes to the heir. TIERS are bought SEQUENTIALLY (the seal
 // ladder); FEATURES are one-time unlocks gated by `minTier`. All numbers are founder sign-off levers.
 export const ESTATE = {
-  NAME_OMR: 3, // name / rename your compound
+  NAME_OMR: 18, // name / rename your compound
   TIERS: [
-    { tier: 1, name: 'Safe House',        omr: 40,   blurb: 'A room over a social club. It\'s a start.' },
-    { tier: 2, name: 'Row House',         omr: 120,  blurb: 'Your name on the deed. Respectable.' },
-    { tier: 3, name: 'Uptown Brownstone', omr: 350,  blurb: 'Doormen who forget what they see.' },
-    { tier: 4, name: 'Country Estate',    omr: 900,  blurb: 'Gates, dogs, and a long driveway.' },
-    { tier: 5, name: 'The Compound',      omr: 2500, blurb: 'The kind of place they make movies about.' },
+    { tier: 1, name: 'Safe House',        omr: 240,   blurb: 'A room over a social club. It\'s a start.' },
+    { tier: 2, name: 'Row House',         omr: 720,  blurb: 'Your name on the deed. Respectable.' },
+    { tier: 3, name: 'Uptown Brownstone', omr: 2100,  blurb: 'Doormen who forget what they see.' },
+    { tier: 4, name: 'Country Estate',    omr: 5400,  blurb: 'Gates, dogs, and a long driveway.' },
+    { tier: 5, name: 'The Compound',      omr: 15000, blurb: 'The kind of place they make movies about.' },
   ],
   FEATURES: [ // one-time $OMR unlocks; cosmetic, some display a real trophy. minTier gates each.
-    { id: 'trophy_room', name: 'Trophy Room',    omr: 60,  minTier: 2, blurb: 'Your rarest iron and finest guns, mounted.' },
-    { id: 'wine_cellar', name: 'Wine Cellar',    omr: 40,  minTier: 2, blurb: 'Vintages older than most grudges.' },
-    { id: 'garden',      name: 'Rose Garden',    omr: 30,  minTier: 2, blurb: 'Where quiet conversations happen.' },
-    { id: 'show_garage', name: 'Show Garage',    omr: 80,  minTier: 3, blurb: 'Glass walls for the collection.' },
-    { id: 'study',       name: 'The Study',      omr: 50,  minTier: 3, blurb: 'Leather, brass, and the family books.' },
-    { id: 'chapel',      name: 'Private Chapel', omr: 100, minTier: 4, blurb: 'Absolution, in-house.' },
-    { id: 'vault',       name: 'The Vault',      omr: 150, minTier: 4, blurb: 'What survives you sits behind a foot of steel.' },
-    { id: 'panic_room',  name: 'Panic Room',     omr: 120, minTier: 4, blurb: 'For when the doors come down.' },
-    { id: 'ballroom',    name: 'Grand Ballroom', omr: 200, minTier: 5, blurb: 'For weddings, wakes, and sit-downs.' },
-    { id: 'menagerie',   name: 'The Menagerie',  omr: 250, minTier: 5, blurb: 'A tiger. Because you can.' },
+    { id: 'trophy_room', name: 'Trophy Room',    omr: 360,  minTier: 2, blurb: 'Your rarest iron and finest guns, mounted.' },
+    { id: 'wine_cellar', name: 'Wine Cellar',    omr: 240,  minTier: 2, blurb: 'Vintages older than most grudges.' },
+    { id: 'garden',      name: 'Rose Garden',    omr: 180,  minTier: 2, blurb: 'Where quiet conversations happen.' },
+    { id: 'show_garage', name: 'Show Garage',    omr: 480,  minTier: 3, blurb: 'Glass walls for the collection.' },
+    { id: 'study',       name: 'The Study',      omr: 300,  minTier: 3, blurb: 'Leather, brass, and the family books.' },
+    { id: 'chapel',      name: 'Private Chapel', omr: 600, minTier: 4, blurb: 'Absolution, in-house.' },
+    { id: 'vault',       name: 'The Vault',      omr: 900, minTier: 4, blurb: 'What survives you sits behind a foot of steel.' },
+    { id: 'panic_room',  name: 'Panic Room',     omr: 720, minTier: 4, blurb: 'For when the doors come down.' },
+    { id: 'ballroom',    name: 'Grand Ballroom', omr: 1200, minTier: 5, blurb: 'For weddings, wakes, and sit-downs.' },
+    { id: 'menagerie',   name: 'The Menagerie',  omr: 1500, minTier: 5, blurb: 'A tiger. Because you can.' },
   ],
 };
 export const estateTierOf = (tier) => ESTATE.TIERS.find((t) => t.tier === Number(tier)) || null;
@@ -2883,26 +2968,26 @@ export const estateFeatureOf = (id) => ESTATE.FEATURES.find((f) => f.id === id) 
 // Hire fees are 10× the daily wage, so the dismiss-before-payday dodge is always −EV vs the
 // 7-day walk window (you save ≤7 days' wage and pay 10 to restaff).
 ESTATE.STAFF = [
-  { id: 'groundskeeper', name: 'Groundskeeper',     wageOmrDay: 0.5, hireOmr: 5,  minTier: 1, blurb: 'The roses never say what they saw.' },
-  { id: 'butler',        name: 'The Butler',        wageOmrDay: 1,   hireOmr: 10, minTier: 2, blurb: 'Runs the house. Required to host a gala.' },
-  { id: 'sommelier',     name: 'Sommelier',         wageOmrDay: 1.5, hireOmr: 15, minTier: 3, blurb: 'Pours vintages older than most grudges.' },
-  { id: 'curator',       name: 'Curator',           wageOmrDay: 2,   hireOmr: 20, minTier: 3, blurb: 'Keeps the trophies gleaming and the books straight.' },
-  { id: 'house_capo',    name: 'Capo of the House', wageOmrDay: 3,   hireOmr: 30, minTier: 4, blurb: 'Security, discretion, and a very short memory.' },
+  { id: 'groundskeeper', name: 'Groundskeeper',     wageOmrDay: 3, hireOmr: 30,  minTier: 1, blurb: 'The roses never say what they saw.' },
+  { id: 'butler',        name: 'The Butler',        wageOmrDay: 6,   hireOmr: 60, minTier: 2, blurb: 'Runs the house. Required to host a gala.' },
+  { id: 'sommelier',     name: 'Sommelier',         wageOmrDay: 9, hireOmr: 90, minTier: 3, blurb: 'Pours vintages older than most grudges.' },
+  { id: 'curator',       name: 'Curator',           wageOmrDay: 12,   hireOmr: 120, minTier: 3, blurb: 'Keeps the trophies gleaming and the books straight.' },
+  { id: 'house_capo',    name: 'Capo of the House', wageOmrDay: 18,   hireOmr: 180, minTier: 4, blurb: 'Security, discretion, and a very short memory.' },
 ];
 ESTATE.STAFF_WALK_MS = 7 * 24 * 3600 * 1000;   // arrears older than this → the staff WALK (bounds owed)
-ESTATE.GALA_OMR = 15;                           // × the estate tier — the host's burn
+ESTATE.GALA_OMR = 90;                           // × the estate tier — the host's burn
 ESTATE.GALA_MIN_TIER = 2;                       // a Row House can host; a Safe House can't
 ESTATE.GALA_MS = 4 * 3600 * 1000;               // the open-doors window
 export const estateStaffOf = (id) => ESTATE.STAFF.find((s) => s.id === id) || null;
 // ── ESTATE Tier-4 catalog growth (content only — estateTierOf/upgradeEstate/unlockFeature/hireStaff
 // already iterate the catalog, so the additions are zero-logic; the gala cost = GALA_OMR×tier scales
 // itself). A 6th tier, 2 tier-gated features (the home of the collection), 1 staff. Sign-off levers.
-ESTATE.TIERS.push({ tier: 6, name: 'The Palazzo', omr: 6000, blurb: 'A city block that answers to your name.' });
+ESTATE.TIERS.push({ tier: 6, name: 'The Palazzo', omr: 36000, blurb: 'A city block that answers to your name.' });
 ESTATE.FEATURES.push(
-  { id: 'gallery',     name: 'The Gallery',     omr: 300, minTier: 5, blurb: 'Your auction trophies, lit and labelled.' },
-  { id: 'observatory', name: 'The Observatory', omr: 350, minTier: 6, blurb: 'You watch the whole city from up here.' });
+  { id: 'gallery',     name: 'The Gallery',     omr: 1800, minTier: 5, blurb: 'Your auction trophies, lit and labelled.' },
+  { id: 'observatory', name: 'The Observatory', omr: 2100, minTier: 6, blurb: 'You watch the whole city from up here.' });
 ESTATE.STAFF.push(
-  { id: 'archivist', name: 'The Archivist', wageOmrDay: 4, hireOmr: 40, minTier: 5, blurb: 'Keeps the provenance and the collection catalog.' });
+  { id: 'archivist', name: 'The Archivist', wageOmrDay: 24, hireOmr: 240, minTier: 5, blurb: 'Keeps the provenance and the collection catalog.' });
 
 // ── THE AUCTION HOUSE ("the sit-down"): the COMPETITIVE, RECURRING $OMR sink ──
 // Server-run weekly auctions of UNIQUE, numbered prestige items — highest $OMR bid wins, the winning
@@ -2936,7 +3021,7 @@ AUCTION.RARE_ARCHETYPES = [
   { id: 'idol',   name: 'The Golden Idol',        min: 1000, rarity: 'legendary', blurb: 'Solid. Cursed, they say. You keep it anyway.' },
 ];
 AUCTION.CONSIGN = {
-  FEE_OMR: 2,             // the anti-spam listing fee (BURNS — auction:consign:fee)
+  FEE_OMR: 12,             // the anti-spam listing fee (BURNS — auction:consign:fee)
   TAKE_BPS: 500,          // the house cut on a sale (5%, BURNS — auction:take)
   MIN_RESERVE: 10, MAX_RESERVE: 100000,
   MAX_LIVE: 3,            // concurrent live consignments per seller (the MAX_LISTINGS precedent)
@@ -3066,7 +3151,7 @@ export const DESK = {
   SINK_REASONS: ['vest:%', 'cleanpapers', 'lab:%', 'gear:mint:%', 'path:%', 'gang:dissolved',
     'withdraw:omr', 'vanity:%', 'intel:%', 'respec%', 'plex:%', 'law:jury', 'law:envelope',
     'foundation:%', 'rwa:%', 'estate:%', 'auction:win', 'auction:take', 'auction:consign:fee',
-    'megaproject:omr', 'bond:%', 'business:spec%', 'death:duty', 'window:burn', 'made:%',
+    'megaproject:omr', 'bond:%', 'business:spec%', 'death:duty', 'window:burn', 'made:%', 'brokers:%',
     // THE LAB MODULE (kitchen.js:301) is a $OMR sink — but it ledgers `kitchen:module`, not `lab:*`,
     // so it was in the omr VOCABULARY yet MISSING from this burn term, and every purchase drifted the
     // §10.4 $OMR conservation check (a stable −N = the total ever spent on modules; found live via the
@@ -3126,7 +3211,7 @@ export const DESK_AUCTION = {
                              // that a genuine squeeze can clear up there; nobody is forced to bid it.
   FLOAT_CAP_BPS: 100,        // 1% of float per day. Yesterday's sink volume is the lot size, but a
                              // huge sink day must not become a dump — the cap is what makes that true.
-  FLOAT_CAP_MIN_OMR: 1000,   // the BOOTSTRAP floor under that cap, and it is not decoration: with a
+  FLOAT_CAP_MIN_OMR: 6000,   // the BOOTSTRAP floor under that cap, and it is not decoration: with a
                              // float of zero the 1% cap is zero, so no auction opens, so nobody can
                              // buy, so the float stays zero. A cold start would deadlock without it.
   MIN_LOT: 1,                // below this the desk does not bother opening; a dust auction is noise.
@@ -3213,7 +3298,7 @@ export const auctionPriceAt = (a, now) => {
 //           money to keep earning. A ladder you may climb is a premium tier; a bill you must pay is
 //           a rented game.
 export const MADE = {
-  OMR: 20,                        // the dues
+  OMR: 120,                        // the dues
   MS: 30 * 24 * 3600 * 1000,      // 30 days, extended from later-of(now, current end) — the retainer/wire-sub precedent
   ESTATE_TIER: 4,                 // the UPPER estate tiers (Country Estate and above) want standing
 };
@@ -3237,7 +3322,7 @@ export const madeSeconds = (acct, now = Date.now()) =>
 //     would not change the trust model — only add gas to the loop it exists to create. Staked $OMR is
 //     lootable at the COMMITTED rate above; defending your seat is the game.
 export const ACCESS_STAKE = {
-  HIGH_OMR: 50,   // the high-stakes room (CASINO.HIGH_MAX per roll) wants this much staked
+  HIGH_OMR: 300,   // the high-stakes room (CASINO.HIGH_MAX per roll) wants this much staked
 };
 
 // ═══ THE LADDER — power for HOLDING (founder decision D8=D, 2026-08-02) ═══
@@ -3250,16 +3335,17 @@ export const ACCESS_STAKE = {
 //
 // WHY BEING MADE IS A SHORTCUT AND NOT A GATE, which is a deliberate deviation from the shape first
 // proposed to the founder and is driven by a MEASUREMENT rather than taste. $OMR has no faucet since
-// v3 step 1; a free player's lifetime supply is the mission ladder — 9 jobs, 220 $OMR, and the last
-// two need level 100. Requiring BOTH a 20/month burn AND a held stake would put the ladder out of a
+// v3 step 1; a free player's lifetime supply is the mission ladder — 9 jobs, and the last two need
+// level 100. Requiring BOTH a recurring dues burn AND a held stake would put the ladder out of a
 // free player's reach entirely, which would break the one claim the new player-facing copy makes.
 // As a shortcut, dues buy a real rung AND the ceiling stays reachable without paying.
 //
-// THE CEILING IS THE CLAIM, and it is checkable rather than rhetorical: the top rung is 150 staked,
-// and a free player who works the mission ladder clears it (220 lifetime; the second-from-top rung at
-// 75 lands around level 58). Paying gets you there sooner and for less held; it does not get you
-// higher. `test/made.js` pins the relation to the live MISSIONS table so a retune of either cannot
-// quietly make the copy false.
+// THE CEILING IS THE CLAIM, and it is checkable rather than rhetorical: the top rung's `min` sits
+// under what the mission ladder pays lifetime, so a free player who works it clears the whole ladder.
+// Paying gets you there sooner and for less held; it does not get you higher. `test/made.js` pins
+// that RELATION against the live MISSIONS and MADE_LADDER tables so a retune of either cannot quietly
+// make the copy false — which is not hypothetical: both have since been rescaled ~6× together, and
+// the relation held while every literal that had been written into a comment went stale.
 //
 // WHAT IS DELIBERATELY ABSENT: anything in COMBAT — see the §4.3 note above for why that is a loop
 // argument, not a p2w one. The perks are CAPACITY (carry more, hold more energy/nerve, park more) plus
@@ -3269,10 +3355,10 @@ export const ACCESS_STAKE = {
 export const MADE_LADDER = {
   // cumulative (absolute) values per rung, the GANG_SEALS/tier-ladder shape — not additive steps
   RUNGS: [
-    { min: 10,  name: 'Earner',    trunk: 1, energy: 5,  nerve: 1, garage: 1, fenceBps: 0 },
-    { min: 30,  name: 'Operator',  trunk: 2, energy: 10, nerve: 2, garage: 2, fenceBps: 0 },
-    { min: 75,  name: 'Capo',      trunk: 3, energy: 15, nerve: 3, garage: 3, fenceBps: 250 },
-    { min: 150, name: 'Kingmaker', trunk: 4, energy: 20, nerve: 4, garage: 4, fenceBps: 500 },
+    { min: 60,  name: 'Earner',    trunk: 1, energy: 5,  nerve: 1, garage: 1, fenceBps: 0 },
+    { min: 180,  name: 'Operator',  trunk: 2, energy: 10, nerve: 2, garage: 2, fenceBps: 0 },
+    { min: 450,  name: 'Capo',      trunk: 3, energy: 15, nerve: 3, garage: 3, fenceBps: 250 },
+    { min: 900, name: 'Kingmaker', trunk: 4, energy: 20, nerve: 4, garage: 4, fenceBps: 500 },
   ],
   MADE_RUNGS: 1,   // dues climb the ladder by this many rungs — the shortcut, never a gate
 };
@@ -3522,7 +3608,7 @@ export const rollSoldierName = () =>
 // (`secret:` cash prefix); exposure feeds the RICO meter (the Port BUST_EXPOSURE precedent —
 // the exposeHeat set is the one Law-surface lever).
 export const SECRETS = {
-  DIG_OMR: 10,                 // the shovel — burns win or lose (the npchit-fee posture)
+  DIG_OMR: 60,                 // the shovel — burns win or lose (the npchit-fee posture)
   DIG_CD_MS: 24 * 3600e3,      // per (digger, target)
   TTL_MS: 7 * 86400e3,         // dirt goes stale
   EXTORT_WINDOW_MS: 24 * 3600e3, // pay the hush or it blows
@@ -3576,8 +3662,8 @@ export const MEGAPROJECT = {
       target: 12_000_000_000, blurb: "A fire that never goes out, for the ones who built this city and never got their names in stone. Now they will." },
   ],
   MIN_CASH: 100,          // smallest cash brick
-  MIN_OMR: 1,             // smallest $OMR brick
-  OMR_RATE: 500,          // $-value credited per donated $OMR (fixed lever, genesis AMM rate)
+  MIN_OMR: 6,             // smallest $OMR brick
+  OMR_RATE: 83,          // $-value credited per donated $OMR (fixed lever, genesis AMM rate)
   MILESTONES: [0.25, 0.5, 0.75],  // streets-feed scaffolding announcements
   TIERS: [                // plaque tiers by contribution RANK (computed at read, pure status)
     { rank: 1,  title: 'The Architect' },
@@ -3902,7 +3988,7 @@ export const FAMILY_CHARTER = {
   // free the first time — an alpha family should not be trapped by a decision made before they knew
   // what they were. Changing it is a real $OMR sink from the family reserve on a long cooldown (the
   // seal/foundation precedent), so a charter stays a commitment without being a life sentence.
-  CHANGE_OMR: 40,
+  CHANGE_OMR: 240,
   CHANGE_CD_MS: 7 * 24 * 60 * 60 * 1000,
 };
 
@@ -4201,7 +4287,7 @@ export const EXCHANGE = {
   // window gets progressively less attractive in real terms. That self-limits rather than breaking,
   // but it wants a look each season — indexing it to the pool's own growth is the obvious v2.1.
   RATE: 500,
-  MIN_OMR: 1,                  // no dust redemptions
+  MIN_OMR: 6,                  // no dust redemptions
   // THE INTERLOCK. The design's claim that "arbitrage is impossible by construction" holds ONLY
   // once cash → OMR is severed (design §2): while the AMM buy side is still live and spot sits
   // below RATE, anyone can buy $OMR with cash and redeem it here for more cash — a money pump.
@@ -4217,7 +4303,7 @@ export const EXCHANGE = {
   // flips with the code — it now asserts the buy side really is gone AND the window really is open,
   // so re-introducing cash → $OMR without shutting the window fails the suite.
   OPEN: true,
-  DAILY_CAP_OMR: 250,          // per account, rolling 24h — the wash-cap token-bucket pattern
+  DAILY_CAP_OMR: 1500,          // per account, rolling 24h — the wash-cap token-bucket pattern
   // The pool is FED, never created: this share of the street-tax pool (which every in-game take
   // already feeds) moves across on the same 12h tick the buyback runs on. A dry pool refuses
   // cleanly and burns nothing — the Phase-4 stake-pool discipline: a claim on what was funded,
@@ -4397,7 +4483,7 @@ export const MASTERY = {
 export const PATH_XP_HOME = 1.5;
 export const PATH_XP_RIVAL = 0.6;
 export const PATH_SWITCH_CD_MS = 7 * 24 * 3600 * 1000; // switching careers needs a week between moves
-                                                       // (XP-rate arbitrage made the 25 $OMR burn too cheap a throttle)
+                                                       // (XP-rate arbitrage made the switch burn too cheap a throttle)
 export const PATH_FX = {
   gun:     { home: ['wetwork', 'muscle'],     rival: ['commerce', 'chemistry'],
              fx: { jumpAtk: 1.1, hitEff: 1.15, goodsSell: 0.95 } },
@@ -4566,7 +4652,7 @@ export const CAREER = {
     { id: 'don', name: 'The Don', capstone: 60000, tasks: [
       { id: 'dn_legend',  name: 'Build a legend',           cash: 20000, how: 'Any lifetime legend past $250,000 — smuggled, product moved, or racket income.', tab: 'city' },
       { id: 'dn_master',  name: 'Master a trade',           cash: 20000, how: 'Any trade to level 25 — The Trades on The Life.', tab: 'life' },
-      { id: 'dn_dynasty', name: 'Get made for good',        cash: 20000, how: 'Mint the identity — the bloodline made permanent (ETH, or earned $OMR via PLEX).', tab: 'portfolio' },
+      { id: 'dn_dynasty', name: 'Get made for good',        cash: 20000, how: 'Mint the identity — the bloodline made permanent. The fee is ETH; the mission ladder grants a credit outright.', tab: 'portfolio' },
       { id: 'dn_monument',name: 'Put your name in stone',   cash: 20000, how: 'Contribute to the Megaproject — The City. The plaque is forever.', tab: 'city' },
       { id: 'dn_champ',   name: 'Take a crown',             cash: 20000, how: '10 boxing wins, 10 race wins, or 5 duel wins — any champion’s record.', tab: 'boxing' },
       { id: 'dn_name',    name: 'Become a level-40 name',   cash: 20000, how: 'Level 40. The city knows who you are.', tab: 'streets' },
@@ -4940,7 +5026,7 @@ export const RARITY = {
   // upgrades into common). Deterministic: this price, that tier, no roll. A §10.4 SINK that recycles
   // to the desk like every other, which is the design's "bridge between the two markets" — ETH-priced
   // NFT demand pulls on OMR without the game ever selling a random outcome for money.
-  UPGRADE_OMR: [0, 25, 90, 300],
+  UPGRADE_OMR: [0, 150, 540, 1800],
   // On-chain tokenId spaces. GearVault's id is just a uint256 with a per-id lifetime cap, so cars and
   // boats need no contract change at all — only disjoint ranges and a Safe-set cap per id at deploy.
   // tokenId = BASE + catalogIndex * STRIDE + rarityIndex. Gear keeps 1..N (its 1-based catalog index),
@@ -5024,17 +5110,33 @@ export const TICKER_BALLOT = {
 };
 
 // ═══ THE TRANCHE SCHEDULE (dynasty-machine §10 Shape D — ADOPTED, founder-directed 2026-08-10:
-// "first 1000 mints are .01 ETH or x OMR … next 2000 are .02 ETH and 2x OMR", resolution "let's do
-// your recommendation" = the LINEAR progression). The identity mint's published price table,
-// indexed to CUMULATIVE minted identities. The RULES, each load-bearing:
-//   - ONE implied rate per row, every row (omr/eth == 500 — the preflight two-rails guard's own
+// "first 1000 mints are .01 ETH or x OMR … next 2000 are .02 ETH and 2x OMR"; REVISED the same day
+// to FIVE WAVES WITH A HARD CEILING — "cap it at 5 waves so by wave 5 the maximum mint price anyone
+// can pay would be .05"). The identity mint's published price table, indexed to CUMULATIVE minted
+// identities.
+//
+// WHY THE CEILING IS THE IMPROVEMENT, not a softening. The open LINEAR ladder it replaces was
+// defensible but had two costs the cap removes outright:
+//   - THE FREE-PATH LAW BECOMES STRUCTURAL. On the old ladder the dearest row was an open-ended
+//     number and the law held by arithmetic that had to be re-checked at every extension. Here the
+//     dearest row sits under the lifetime mission payout and no future row can ever exceed it, so
+//     "you can get made for free" is now guaranteed by the SHAPE rather than re-derived per table.
+//   - THE GROWTH HEADWIND GOES. The waves widen (1k → 100k) while the increments SHRINK
+//     (+0.015, +0.010, +0.010, +0.006), so the curve flattens exactly where a game gets crowded.
+//     Past the first thousand it is cheaper than the ladder it replaces at every point — #5,000
+//     pays 0.025 where the old table charged 0.03, #20,000 pays 0.035 against 0.06.
+// The ceiling is what makes it a founding-era discount rather than an escalator: the most anyone
+// ever pays for an identity is 0.05 ETH, and that is true on the day the table is published.
+//
+// The RULES, each load-bearing:
+//   - ONE implied rate per row, every row (omr/eth == 3,000 — the preflight two-rails guard's own
 //     number): the effective price is the CHEAPER rail, so a row that broke rank would silently
 //     become the real price. Pinned by test.
 //   - THE FLAT TAIL: past the last row the LAST price HOLDS until the founder publishes an
 //     extension — the schedule is a finite commitment, never an open-ended escalator.
 //   - THE FREE-PATH LAW: no row's omr may reach the mission ladder's lifetime $OMR payout (the
 //     "get made for free" promise, test-pinned in test/made.js against the LIVE MISSIONS table —
-//     max row 50 vs ~220 earnable, 4.4× headroom).
+//     dearest row 150 vs ~220 earnable, and with the ceiling it can never rise again).
 //   - EXECUTION is the existing machinery, BY HAND at each boundary: one Safe `setFees` tx +
 //     MINT_FEE_ETH/PLEX_MINT_OMR env — plexQuote already scales the $OMR rail off MINT_FEE_ETH, so
 //     no code runs a boundary. The admin chain panel shows tier progress + flags a live pair that
@@ -5042,17 +5144,21 @@ export const TICKER_BALLOT = {
 // Adoption RE-OPENED counsel-memo row A4 (a published forward schedule on a tradeable asset — the
 // re-drafted question is in the row). Copy rules ride with it: founding-era frame only, never a
 // countdown/"N remaining" counter, the banned lexicon verbatim.
+// The founder's waves are 1k / 10k / 25k / 50k / 100k at .01 / .025 / .0333 / .0444 / .05 ETH.
+// Waves 3 and 4 are rounded to .035 / .045 (+5.1% / +1.4%) so both waves land on tidy numbers.
+//
+// THE SCHEDULE IS ETH, AND ONLY ETH (founder-directed 2026-08-10: "Make the mint ETH only no OMR").
+// There is no $OMR column because there is no $OMR rail: minting gates extraction, so it is the one
+// price that must never be ambiguous, and a fee with two rails is always priced by the cheaper one.
+// One rail, in real money, at the published wave — nothing to keep in lockstep and nothing to
+// diverge. The free path is untouched: the mission grants a mint credit outright.
 export const MINT_TRANCHES = [
-  { through: 1000,  eth: 0.01, omr: 5  },
-  { through: 3000,  eth: 0.02, omr: 10 },
-  { through: 6000,  eth: 0.03, omr: 15 },
-  { through: 10000, eth: 0.04, omr: 20 },
-  { through: 15000, eth: 0.05, omr: 25 },
-  { through: 21000, eth: 0.06, omr: 30 },
-  { through: 28000, eth: 0.07, omr: 35 },
-  { through: 36000, eth: 0.08, omr: 40 },
-  { through: 45000, eth: 0.09, omr: 45 },
-  { through: 55000, eth: 0.10, omr: 50 },
+  { through: 1000,   eth: 0.01  },  // wave 1 — the first thousand
+  { through: 11000,  eth: 0.025 },  // wave 2 — next 10,000
+  { through: 36000,  eth: 0.035 },  // wave 3 — next 25,000
+  { through: 86000,  eth: 0.045 },  // wave 4 — next 50,000
+  { through: 186000, eth: 0.05   },  // wave 5 — next 100,000, and the CEILING: the flat tail holds
+                                     // here, so 0.05 ETH is the most anyone ever pays
 ];
 // The current tier for a cumulative minted-identity count. Past the table: the flat tail (the last
 // row holds, `flat: true` so a surface can say "the published schedule is fully minted").
@@ -5153,3 +5259,45 @@ export const activityTracks = (gains = {}) => new Set(ACTIVITY.TAGS
 // NOTE there is no cap here and there must never be one — see the block header.
 export const activityQualifies = (gains = {}) =>
   activityTracks(gains) >= ACTIVITY.MIN_TRACKS && activityScore(gains) >= ACTIVITY.MIN_SCORE;
+
+// ── THE BROKERS — treasury-funded RWA rewards to NFT holders ──────────────────────────────────────
+// Design: `omerta-brokers-design.md`. Founder-directed 2026-08-10, funded from the TREASURY slice
+// (which carries no promise to anyone) so the withdrawal reserve is untouched.
+//
+// THE WEIGHT IS THE WHOLE DESIGN:
+//
+//     weight = activationMult(tier) x activityScore(actions in the epoch)
+//
+// The first term is Stonkbrokers' (a token burn buys you a bigger share). The second is the one they
+// do not have, and it is why this is a game mechanic rather than a yield product: their weight is a
+// pure function of tokens burned, so the largest holder is BY CONSTRUCTION the largest earner —
+// capital, not participation. Multiplying by ACTIVITY makes a zero on EITHER term a zero, so an
+// activated NFT owned by somebody who did not play earns nothing. Do not soften that later.
+//
+// ACTIVATION LAPSES ON PURPOSE. A permanent one-time burn is what the economy already has too much
+// of — every prior sink was one-time, which is exactly why supply pooled into staking (the standing
+// audit finding). A window that must be renewed is a RECURRING sink, and it also makes "you must
+// commit to be paid" true continuously rather than once.
+export const BROKERS = {
+  TIERS: [
+    { id: 1, name: 'Runner',       omr: 150,   mult: 1.0 },
+    { id: 2, name: 'Broker',       omr: 450,   mult: 1.5 },
+    { id: 3, name: 'Floor Trader', omr: 1200,  mult: 2.0 },
+    { id: 4, name: 'Specialist',   omr: 3000,  mult: 2.5 },
+    { id: 5, name: 'The Chairman', omr: 9000, mult: 3.0 },
+  ],
+  ACTIVATION_MS: 30 * 24 * 3600 * 1000,  // a window, not a purchase — see above
+  EPOCH_DAYS: 7,                          // the allocator's window
+  MIN_WEIGHT: 1,                          // dust floor: a weight under this is not worth a row
+};
+
+export const brokerTier = (id) => BROKERS.TIERS.find((t) => t.id === Number(id)) || null;
+export const brokerActive = (until, now = Date.now()) => !!until && new Date(until).getTime() > now;
+
+/// The published weight. Deterministic in both terms — NEVER by chance, which is the standing rule
+/// that keeps a securities distribution out of loot-box territory entirely.
+export const brokerWeight = (tierId, gains = {}) => {
+  const t = brokerTier(tierId);
+  if (!t) return 0;
+  return t.mult * activityScore(gains);
+};

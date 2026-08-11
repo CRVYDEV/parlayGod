@@ -261,12 +261,12 @@ assert.equal(await myXp(kim.id, 'gambling'), MASTERY.XP.dice * rules.pathFx.xpRi
   'a RIVAL trade fights you (0.6 XP — fractional, never rounded to 0 or 1)');
 
 // ── the SWITCH COOLDOWN: hopping careers between activities is rate arbitrage; a week prices it ──
-await pool.query(`UPDATE account_persistent SET omr = omr + 100 WHERE account_id='${kim.aid}'`);
+await pool.query(`UPDATE account_persistent SET omr = omr + 600 WHERE account_id='${kim.aid}'`);
 assert.equal((await call('POST', '/v1/path', { token: kim.token, body: { path: 'gun' } })).body.error,
   'cooldown', 'a fresh career sticks for a week — even with the $OMR in hand');
 await pool.query(`UPDATE characters SET path_at = now() - interval '8 days' WHERE id='${kim.id}'`);
 assert.equal((await call('POST', '/v1/path', { token: kim.token, body: { path: 'gun' } })).code,
-  200, 'past the week, the 25 $OMR switch works as before');
+  200, 'past the week, the paid switch works as before');
 
 // ── the HANDICAPS bite at real tills ──
 // the Gun sells goods at 0.95 (a soldier's no merchant) — same district, same day, vs a pathless twin

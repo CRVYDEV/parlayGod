@@ -2074,6 +2074,65 @@ CREATE TABLE IF NOT EXISTS eth_vault (
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS vault_used NUMERIC NOT NULL DEFAULT 0; -- rolling-24h claim bucket
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS vault_at TIMESTAMPTZ;
 
+-- ═══ THE STOCK RESERVE (omerta-brokers-design.md §3.2 wall 1, step 2 of the order of work) ═══
+-- The founder reopened stock acquisition on 2026-08-10 — treasury ETH buys tokenized stock, and that
+-- stock is distributed to NFT holders by play-weighted epoch. §3.3 then decided the stock lands
+-- STRAIGHT in the NFT's bound account with NO claim gate, which is what makes these two tables
+-- load-bearing rather than bookkeeping: with no gate at delivery, `allocated <= held` is the ONLY
+-- wall between the treasury and owing stock it does not have.
+--
+-- WHY PER-TICKER UNITS AND NOT CASH VALUE. A cash-denominated version reads fine and is silently
+-- wrong: value it at $X of TSLA, the price moves, and the same dollars now owe more units than the
+-- treasury holds — a shortfall created by nothing anybody did. Units are the only denomination in
+-- which "we owe only what we hold" is a fact rather than a snapshot. This is the same reasoning that
+-- made the 2026-07-31 retirement re-denominate the vault to ETH-on-both-sides; the stock layer
+-- returning means the property has to be re-established, not re-argued.
+--
+-- OUT-OF-BAND REAL VALUE, like every treasury table: ZERO §10.4 rows. Nothing here is a currency in
+-- the conservation set, so `invariants.js` is untouched; the wall lives in `runTreasuryInvariants`.
+
+-- What the treasury BOUGHT — one row per acquisition episode (an on-chain fill; the buy keeper is
+-- step 5 and is not built, so today only the mod/QA path writes here). `real` is the anti-fabrication
+-- gate the Vig, the Store, bonds and the desk all carry: a comp records the episode and books ZERO
+-- units and ZERO spend. That gate matters more here than anywhere else in the project — fabricated
+-- HOLDINGS are invisible to precisely the `allocated <= held` check that exists to catch them, so a
+-- comp that booked units would quietly raise the ceiling on what may be delivered.
+CREATE TABLE IF NOT EXISTS stock_buys (
+  ref TEXT PRIMARY KEY,                  -- the fill key (txHash:logIndex on-chain; a mod ref off it)
+  ticker TEXT NOT NULL,                  -- free text, NOT PORTFOLIO.TICKERS: what the treasury holds is
+                                         -- whatever exists on-chain, not our in-game status catalog
+  units NUMERIC NOT NULL DEFAULT 0,      -- units acquired (0 on a comp)
+  eth_spent NUMERIC NOT NULL DEFAULT 0,  -- treasury ETH it cost (0 on a comp)
+  price_eth_per_unit NUMERIC NOT NULL,   -- recorded for reconciliation; never used to value a holding
+  tx_hash TEXT,
+  real BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- What the treasury OWES — units promised out, per (epoch, ticker, account). ACCOUNT-keyed, so an
+-- allocation survives death exactly like the ETH vault line beside it. Delivery (step 7) resolves
+-- account -> Dynasty NFT -> its ERC-6551 account; keying the OWED side on the account rather than on
+-- a token id keeps this table meaningful before the NFT exists, and keeps an allocation attached to
+-- the player whose PLAY earned it rather than to whoever holds a token at delivery time.
+--   `account_id` IS **TEXT**, and that is not a style choice. This schema's account ids are mixed —
+-- `characters`, `account_persistent`, `broker_activations` and `activity_log` are all TEXT; the
+-- `eth_vault` row right above is one of the few UUID columns, so copying its declaration here (which
+-- the first cut did) would have set up a `uuid = text` comparison the moment the allocator joined
+-- this table to `broker_weights`. That comparison has no operator, so the whole STATEMENT fails to
+-- PARSE — every branch of it, not just the join — which is exactly how the 2026-07-30 outage took
+-- `loadOwned` down, and it is invisible to pg-mem. Match what you will be joined against.
+CREATE TABLE IF NOT EXISTS stock_allocations (
+  epoch_id TEXT NOT NULL,             -- `broker_epochs.id` is TEXT
+  account_id TEXT NOT NULL,           -- `broker_weights.account_id` is TEXT — see the note above
+  ticker TEXT NOT NULL,
+  units NUMERIC NOT NULL DEFAULT 0,
+  delivered BOOLEAN NOT NULL DEFAULT false,  -- step 7 sets it; nothing does today
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (epoch_id, account_id, ticker)
+);
+CREATE INDEX IF NOT EXISTS ix_stock_alloc_ticker ON stock_allocations(ticker);
+CREATE INDEX IF NOT EXISTS ix_stock_alloc_account ON stock_allocations(account_id);
+
 -- THE CELLPHONE (founder-directed): a personal inbox + player-to-player DIRECT MESSAGES. Pure
 -- talk — zero §10.4 surface (no currency ever rides a DM). ACCOUNT-keyed on BOTH sides (the
 -- troll-box name-snapshot discipline, lifted to the bloodline: threads survive death/rename —
@@ -2527,6 +2586,36 @@ CREATE TABLE IF NOT EXISTS sell_tax_events (
   tx_hash TEXT,
   real BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- THE BANK'S REVENUE LEDGER — one row per `HarvestFeeTaken` log (Alchemist's 20% performance fee on
+-- harvested yield, founder-directed 2026-08-11). Its own table rather than a row in `rwa_revenue`
+-- for one hard reason: the fee is denominated in the MARKET'S UNDERLYING (USDC for the nUSD market),
+-- and `rwa_revenue.rwa_eth` is ETH. Booking a stablecoin amount into an ETH column is the units error
+-- this codebase keeps catching, and it would silently inflate `held` — the number the vault's
+-- `allocated <= held` wall is measured against. So: asset + amount, stated.
+--
+-- DESTINATION: the treasury Safe (founder-directed). §4's three legs (stakers / NFT holders / the
+-- city) do not exist yet — the sToken is unbuilt, the NFT leg ships at zero per memo A11, and the
+-- city leg's buy path is design — so `feeRecipient` points at the one address that only ever
+-- RECEIVES, and the split becomes a policy decision about a RECORDED balance rather than a scramble
+-- to reconstruct where the money went. That reconstruction is the actual risk: the bond's fourth
+-- slice reached the right wallet for months while the ledger recorded nothing and both invariants
+-- stayed green, because the money arrived somewhere nobody counted.
+--
+-- Out-of-band real value like vig_revenue/rwa_revenue: ZERO §10.4 rows. `real` marks a genuine
+-- on-chain log; a mod/QA simulate records the episode and books NO revenue (the anti-fabrication
+-- gate — "the treasury received this much" must never be assertable by a QA call).
+CREATE TABLE IF NOT EXISTS bank_revenue (
+  source TEXT NOT NULL,                       -- 'harvest' (the waterfall id it reconciles against)
+  ref TEXT NOT NULL,                          -- the log key (txHash:logIndex on-chain)
+  asset TEXT NOT NULL,                        -- the underlying the fee was taken in ('USDC', 'WETH')
+  amount NUMERIC NOT NULL DEFAULT 0,          -- in whole units of `asset`, NOT wei and NOT ETH
+  payer TEXT,                                 -- the position whose harvest was billed (informational)
+  tx_hash TEXT,
+  real BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (source, ref)
 );
 
 -- ═══════════════ THE TRADES (mastery expansion, omerta-mastery-design.md) ═══════════════
@@ -3003,3 +3092,50 @@ CREATE TABLE IF NOT EXISTS ticker_ballot_results (
   decided_by TEXT NOT NULL DEFAULT 'default',   -- 'chamber' | 'default'
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ── THE BROKERS (omerta-brokers-design.md) ───────────────────────────────────────────────────────
+-- All ACCOUNT-keyed and all NEW tables, so `CREATE TABLE IF NOT EXISTS` is live-DB-safe (a new
+-- COLUMN on an existing table would need an ALTER — the 2026-08-06 boot-crash lesson).
+-- Account-keyed rather than character-keyed on purpose: an epoch's effort must not reset because a
+-- street died halfway through it, and the reward is owed to the holder, not to a body.
+
+-- Per-(account, day, tag) action counts. RAW COUNTS, never granted XP — `activityScore` multiplies
+-- by the BASE award itself, which is the structural reason a progression multiplier can never reach
+-- the distribution key (test/activity.js THE STAKING WALL).
+CREATE TABLE IF NOT EXISTS activity_log (
+  account_id TEXT NOT NULL,
+  day        INT  NOT NULL,
+  tag        TEXT NOT NULL,
+  n          INT  NOT NULL DEFAULT 0,
+  PRIMARY KEY (account_id, day, tag)
+);
+CREATE INDEX IF NOT EXISTS ix_activity_log_day ON activity_log(day);
+
+-- The activation window. Lapses on purpose: a recurring sink, not a one-time purchase.
+CREATE TABLE IF NOT EXISTS broker_activations (
+  account_id  TEXT PRIMARY KEY,
+  tier        INT  NOT NULL,
+  until       TIMESTAMPTZ NOT NULL,
+  spent_omr   NUMERIC NOT NULL DEFAULT 0,   -- lifetime, for the status ladder
+  activated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Published epochs. The allocator writes weights and DELIVERS NOTHING — delivery is step 7 and is
+-- gated on counsel. An epoch that has not been delivered can still be cancelled; a stream cannot.
+CREATE TABLE IF NOT EXISTS broker_epochs (
+  id          TEXT PRIMARY KEY,
+  start_day   INT NOT NULL,
+  end_day     INT NOT NULL,
+  total_weight NUMERIC NOT NULL DEFAULT 0,
+  computed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (start_day, end_day)
+);
+CREATE TABLE IF NOT EXISTS broker_weights (
+  epoch_id   TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  tier       INT NOT NULL,
+  score      NUMERIC NOT NULL,
+  weight     NUMERIC NOT NULL,
+  PRIMARY KEY (epoch_id, account_id)
+);
+CREATE INDEX IF NOT EXISTS ix_broker_weights_account ON broker_weights(account_id);

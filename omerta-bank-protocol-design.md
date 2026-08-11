@@ -387,6 +387,88 @@ or buying OMR from the open market to bring to the game and feed the free player
 Protocol revenue = paid-debt interest + the spread between deployed yield and what self-repayment
 consumes + redemption fees. It splits three ways:
 
+**THE SPREAD IS NOW IMPLEMENTED, founder-directed 2026-08-11 ("the greedy version").** It is a
+**20% performance fee on harvest** (`Alchemist.harvestFeeBps`, Yearn's canonical number and double
+Alchemix's 10%), bounded by a compile-time `MAX_HARVEST_FEE_BPS` of 3000 that a stolen key cannot
+raise — the `MAX_LTV_BPS` / `MAX_DISCOUNT_BPS` discipline applied to the one lever that can turn a
+self-repaying loan into a non-repaying one. Three properties, each test-pinned and each
+mutation-verified:
+
+1. **Charged on what SERVICES DEBT, never on the escrow balance.** The fee is proportional to the
+   yield actually moved (`fee / (take + fee) == feeBps / BPS`); yield left compounding for the user
+   is never billed, and a debt-free position is never billed at all. A fee on the standing balance
+   is the management-fee antipattern — it charges repeatedly for the same money.
+2. **An unset recipient disables it.** Measured by removing the guard: without it `safeTransfer` to
+   the zero address reverts and **every harvest in the market fails**, so a deploy that forgot one
+   address would brick the core function while looking configured.
+3. **The fee can never exceed the yield it came from** (512-run fuzz over rate × yield).
+
+**A FOURTH PROPERTY, added the same night by a red-team pass over the fee: THE LTV AND THE FEE ARE
+NOT INDEPENDENT KNOBS.** A harvest removes `take + fee` of collateral but reduces debt by `take`
+only, so the ceiling falls faster than the debt — and at the ceiling that is a breach whenever
+`ltv > 1 − fee`. Measured before the fix at **910 > 900**: deposit 1000, let 100 of yield accrue,
+borrow against the ceiling that now INCLUDES it, and any EOA calling the permissionless `harvest`
+returns collateral to 1000 (ceiling 900) while debt only falls to 910. The identical sequence at a
+zero fee lands at 890 ≤ 900, which is what identifies the fee as the sole cause. It is not a loss —
+there is no liquidation — but `mint` and `withdraw` both refuse an unhealthy position, so a stranger
+could freeze a borrower's withdrawal by calling a function anyone may call.
+
+Both setters now enforce `ltvBps + harvestFeeBps <= BPS`, so the pair cannot be walked into an
+invalid state from either side (mutation-verified in both directions).
+
+**⚑ THE PRODUCT CONSEQUENCE, which is a founder decision rather than an implementation detail: you
+can have a 90% LTV or a 20% harvest fee, not both.** At the shipped 20% fee the reachable ceiling is
+**80%** — the bottom of §2.2's stated 80–90% band — and `MAX_LTV_BPS` (9000) is unreachable as
+configured. Raising LTV to 90% means dropping the fee to 10%. The two live options:
+
+| | LTV | Harvest fee | Reading |
+|---|---|---|---|
+| **As shipped** | 80% | 20% | The greedier fee; the borrow ceiling at the bottom of the band. |
+| **The alternative** | 90% | 10% | Alchemix's own fee; the headline LTV the design leads with. |
+
+**THE DESTINATION IS THE TREASURY SAFE, founder-directed 2026-08-11.** `feeRecipient` is one address
+and §4 wants three legs, so the honest answer today is a COLLECTOR: the sToken is unbuilt, the NFT leg
+ships at zero per memo A11, and the city leg's buy path is design — pointing the fee at any one of
+them now would be picking a leg by default rather than by decision. So it goes to the one address
+that only ever RECEIVES (no hot key, no swap on a collection path — the fee is denominated in the
+market's underlying, not ETH), and the three-way split becomes a policy decision about a RECORDED
+balance rather than a scramble to reconstruct where money went.
+
+That reconstruction is the actual risk, and it is why the ingest shipped in the same change as the
+fee: **the bond's fourth slice reached the right wallet for months while the ledger recorded nothing
+and both invariants stayed green**, because money arrived somewhere nobody counted. The fee is now
+booked from the first wei — a `HarvestFeeTaken` log → `recordHarvestFee` → `bank_revenue`, idempotent
+on the log key, with the anti-fabrication `txHash` gate (a QA call records the episode and books
+ZERO), a declared `harvest` row in the money router, and a source-membership invariant. It is booked
+in the market's UNDERLYING with the asset named, never mirrored into the ETH-denominated
+`rwa_revenue` — that ledger's sum IS the vault's `allocated <= held` wall, so a USDC amount landing
+there would inflate the one number that bounds what players may be owed.
+
+**THE REDEMPTION-FEE CONTRADICTION IS RESOLVED, founder-directed 2026-08-11 ("let's do 10%").** §4
+listed redemption fees as protocol revenue while §2.3 paid them to the borrower; both could not be
+true. They are now split — and the split turns on the fact that TWO different things are called
+redemption:
+
+- **The Transmuter's 1:1 redemption (§2.4) is NEVER TAXED, at any rate.** It is the peg defense, and
+  a fee there does not earn revenue — it **widens the peg band to the size of the fee**, because no
+  arbitrageur repairs a discount smaller than the toll. At 10%, nUSD trades to 0.90 and nothing pulls
+  it back. This is now a WALL with a named test (`test_the_peg_redemption_is_NEVER_taxed`), because
+  "we set the redemption fee to 10%" is exactly the sentence that would otherwise be applied here by
+  a future reader.
+- **The free-debt redemption (§2.3, Monolith, unbuilt) carries the 10%, and it is a SPLIT: the
+  borrower keeps 90%, the protocol takes 10%.** §2.3's promise — being redeemed against is
+  compensated, not punitive — is load-bearing: it is the entire reason anyone takes free debt, and
+  free debt is what gives the redemption mechanic its liquidity. A 10% tithe leaves that intact while
+  giving §4 its revenue line. It ships with the Monolith layer; there is no free/paid debt split, no
+  oracle and no redeem-against-a-borrower path in the contracts today, so recording it here is the
+  whole of the decision for now.
+
+§2.2's disclosure rule does the rest of the work and becomes load-bearing rather than decorative:
+the UI must show the projected payoff date from the live realised **post-fee** yield. At 50% LTV and
+8% yield the fee moves payoff from 6.25 years to 7.8 — real, and disclosed by a rule that already
+existed. Both of this section's open items — the destination and the redemption-fee contradiction —
+were closed by the founder on 2026-08-11 and are recorded above.
+
 | Leg | Destination | Note |
 |---|---|---|
 | **Stakers** | `snUSD` / `snETH` holders | The sToken, Monolith's design. |

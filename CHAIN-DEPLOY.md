@@ -46,6 +46,38 @@ touches mainnet** until §0 is satisfied.
    claim is that no configuration can halt the pool. MEV around a fee-taking hook is worth an explicit
    look. **Do not treat the hook as a variant of the ERC-20 tax** — it is a different mechanism at a
    different layer, and the ERC-20 path survives armed at zero as its backstop.
+
+   ### THE BATCH — what goes out, and why it is drawn here
+   *"Batch, not dribble" (`omerta-dynasty-machine-design.md`) means the scope must be KNOWN before it
+   is sent. Enumerated 2026-08-11; `forge test` **185/185** green on this exact set.*
+
+   **In the batch — 14 contracts + 1 interface, 2,584 lines, every one carrying tests:**
+
+   | subsystem | contracts | the thing to attack |
+   |---|---|---|
+   | the $OMR rail | `OMR`, `VoucherClaim`, `GearVault`, `OMRStaking`, `OmertaFees` | the mint path (rule 2) and the two supply caps that survive a minter swap |
+   | issuance | `OmertaBond`, `OmrTwapOracle`, `GenesisOracle`, `IOmrOracle` | the four walls, and specifically that 3 and 4 COMPOSE rather than substitute |
+   | the market | `OmertaHook` | the pool gate, the `afterSwap` delta, the absence of a pause |
+   | THE BANK | `NUSD`, `CollateralEscrow`, `Alchemist`, `Transmuter`, `FlashGuard` | that no oracle sits on the borrow path and no `liquidate()` exists anywhere — the design's central claim, and the class that cost Inverse ~$21M twice |
+
+   **NOT in the batch, each for a different reason** — worth stating, because "we forgot it" and "we
+   deliberately held it" look identical from outside:
+   - **`DynastyNFT` + the ERC-6551 wiring** — *written? no.* Held on counsel **A4**, which is
+     RE-OPENED: the published tranche schedule changed its fact pattern, and A4's answer can change a
+     contract-level constant (whether an uncapped collection with published escalating pricing stays
+     defensible). Writing it first risks auditing the wrong contract.
+   - **`StockVault` (delivery)** — *written? no.* Brokers step 7, gated on **A3's parameters**
+     (jurisdiction list + KYC depth), which are still owed even though A3's assertion is approved.
+   - **`MerkleDistributor`** — *written? no.* Only exists under launch **D1 variant (a)**; variant (b)
+     (in-game SIWE credit, the recommendation) needs no contract at all. Do not write it before D1.
+
+   **The boundary this draws, and the founder's call:** A4 is externally blocked, so holding the whole
+   batch for `DynastyNFT` holds the chain rail — withdrawals, bonds, fees, the hook, the Bank — behind
+   a question only counsel can answer. Sending what is written now and the NFT later is **two**
+   engagements, which is the minimum reachable given that block; it is not the dribble the discipline
+   warns about. **`GenesisOracle` was written specifically so it would not become a third** — it is
+   launch-blocking (the genesis window bonds before the pool its TWAP would read exists), it carries no
+   counsel gate at all, and it was the one contract the launch plan needed that nobody had enumerated.
 3. **Legal counsel sign-off** on the Risk-to-Earn line (see the "Sensitive design notes" in `CLAUDE.md`).
    **The SECURITIES surface is GONE as of 2026-07-31** — the founder retired the stock layer
    (`omerta-stock-layer-retirement.md`): nothing acquires, holds, allocates or delivers real equities, so
@@ -103,7 +135,7 @@ makes co-mingling it with a spending key strictly worse than before.
 
 ## 1. Build + test the contracts
 - [ ] `cd omerta-contracts && ./run-forge-test.sh` → all `[PASS]` (Gate 0.1). Suite: OMR, VoucherClaim,
-      GearVault, OMRStaking, OmertaFees, OmertaBond, OmrTwapOracle, OmertaHook (128 tests, five fuzzes).
+      GearVault, OMRStaking, OmertaFees, OmertaBond, OmrTwapOracle, GenesisOracle, OmertaHook + THE BANK (185 tests, seven fuzzes).
       The hook's tests deploy a REAL Uniswap v4 `PoolManager`, which the emscripten solc cannot compile —
       **use native solc** (`./run-forge-test.sh`, or the sandboxed runner, which now fetches the native
       binary and says so if it cannot).
@@ -123,7 +155,9 @@ PHASE 1 for the exact calls/args.
       `gearVault.setMinter(voucherClaim)` so gear mints route through it.
 - [ ] **`OMRStaking(omr, safe)`** — pre-funded reward pool; principal always withdrawable.
 - [ ] **`OmertaFees(devWallet, safe, mintFeeWei, respawnFeeWei)`** — the ETH tollbooth. Fees:
-      `MINT = 0.01 ETH`, `RESPAWN = 0.10 ETH`, `reroll` defaults to `mintFee` (owner-settable). Forwards ETH to
+      `MINT = 0.01 ETH` (wave 1 of the published `MINT_TRANCHES` schedule — five waves to a capped 0.05;
+      each boundary is ONE owner `setFees` tx, watched on `/admin`), `RESPAWN = 0.10 ETH`,
+      `reroll` defaults to `mintFee` (owner-settable). Forwards ETH to
       the dev wallet in-tx; custodies nothing.
 - [ ] **`OmertaBond(safe, signer, omr, polBps=3750, devBps=1500, rwaBps=2500, polRecipient, devRecipient,
       rwaRecipient, vigRecipient, dailyCapOMR, maxOmrPerEth)`** — POL bonding with the four-way ETH split
@@ -143,8 +177,27 @@ PHASE 1 for the exact calls/args.
       OMR reserve, sized so a full day's cap dumped moves the price ≤10%) and `maxOmrPerEth` **~15,000**
       (3× the launch price — a circuit breaker, not a price). Re-run it whenever POL materially deepens
       and raise the cap with it.
-- [ ] **`OmrTwapOracle(safe, omrWethPair, omr, period)`** — WALL 4's price feed, deployed AFTER the pool
-      exists (it reads that pool's cumulative price). `period >= MIN_PERIOD` (10 min); **30 min
+      **At the planned genesis raise (21.38 ETH → POL 0.375R = 8.0175 ETH) the rule gives `dailyCapOMR`
+      ≈ 82,500/day.** Derive it against the ACTUAL POL at deploy, never from a figure written down
+      earlier: the raise is a founder lever and this cap moves with it (BALANCE.md § THE GENESIS RAISE —
+      a smaller raise means a shallower pool means the same cap does MORE price damage, which is exactly
+      why the number is a function of depth and not of supply).
+- [ ] **`GenesisOracle(safe, price, validUntil)`** — WALL 4's feed for the GENESIS WINDOW ONLY, and the
+      reason the window can exist at all: `OmertaBond` fails closed without an oracle, but the TWAP
+      cannot be deployed before the pool it reads, and the window is what FUNDS that pool. So the
+      window runs on an administered price. `price` is the published genesis rate (OMR per 1 ETH),
+      `validUntil` the window's hard end. **Set `validUntil` to the window's real close and no
+      further**: this feed answers `updatedAt = block.timestamp` while open — deliberately, because an
+      administered price has no keeper and cannot go stale in the sense `maxOracleAge` guards, and
+      pinning it to the set-time would silently halt bonding one `maxOracleAge` in, during the single
+      event that funds the pool (`test_bonding_works_for_the_whole_window_not_one_max_age`). The
+      window is what replaces time-staleness, so it is the ONLY thing bounding this feed. Past it,
+      `consult()` reports the interface's own "no usable reading" and bonding refuses. `setPrice(0,0)`
+      is the kill switch — zero is already "unavailable", so there is no pause flag and no second path.
+      **This contract is retired by being unreferenced** at the `setOracle(twap)` cutover below;
+      nothing needs tearing down.
+- [ ] **`OmrTwapOracle(safe, omrWethPair, omr, period)`** — WALL 4's price feed for NORMAL OPERATION,
+      deployed AFTER the pool exists (it reads that pool's cumulative price). `period >= MIN_PERIOD` (10 min); **30 min
       recommended** — past that the manipulation-cost curve flattens for a thin pool while the lag grows,
       and what actually makes this expensive is POOL DEPTH, not the clock (see `npm run dials`). The
       constructor works out which side of the pair OMR sits on rather than being told. It reports **no
@@ -190,6 +243,33 @@ PHASE 1 for the exact calls/args.
       `_update` path anyway, ARMED AT ZERO: a hook tax is a property of ONE pool and anyone may open an
       unhooked one, so the token tax is the universal backstop the Safe arms if that starts to matter.
 
+### 2b. THE BANK — the nUSD market (only when it ships; not part of the first cut)
+Order matters more here than anywhere else in this file, because **two of these steps fail SILENTLY**:
+omit them and the market looks healthy from the outside and is not.
+- [ ] **`NUSD(name, symbol, safe)`** → **`Transmuter(nusd, asset, safe)`** →
+      **`Alchemist(nusd, asset, vault, transmuter, safe)`**, then wire:
+      `nusd.setMinter(alchemist)`, `nusd.setBurner(transmuter)`, `transmuter.setFunder(alchemist, true)`,
+      `transmuter.setFunder(safe, true)` (the launch seeder).
+- [ ] **`alchemist.setLtvBps(bps)`.** Bounded by `MAX_LTV_BPS` **and** by the harvest fee — the pair must
+      satisfy `ltv + fee <= 10000`, enforced in both setters, so at the shipped 20% fee the reachable
+      ceiling is 80%, not 90%.
+- [ ] **⚠ SEED THE BUFFER BEFORE ANY BORROW.** `transmuter.fund(seed)` from the Safe. At zero supply
+      the required buffer is zero, so the FIRST borrow always passes and every one after it reverts
+      `BufferUnhealthy` — reserves are fed only by repay/harvest, which need existing debt. An unseeded
+      market takes one borrow and deadlocks while reading as a correct config.
+      `test_an_unseeded_market_bricks_after_one_borrow` pins it.
+- [ ] **⚠ SET THE MINT CAPS.** `alchemist.setMintCaps(perBlock, perDay)`. **Zero means UNLIMITED here** —
+      these fail OPEN, unlike `maxOmrPerEth` and the gear caps. Skipping this does not stop the market;
+      it runs it with no rate limit on issuance.
+- [ ] **`alchemist.setHarvestFee(bps, recipient)`** — the performance fee on realised yield, capped by
+      `MAX_HARVEST_FEE_BPS`. A ZERO recipient disables the fee (fail-safe: an unset recipient
+      under-charges rather than burning a borrower's yield), so this is the one bank setter whose
+      omission costs revenue and nothing else.
+- [ ] Backend: set `ALCHEMIST_ADDRESS` + `ALCHEMIST_ASSET` + `ALCHEMIST_ASSET_DECIMALS` so the worker
+      syncs `HarvestFeeTaken` into `bank_revenue`. The decimals matter: the fee is denominated in the
+      market's UNDERLYING (6dp for USDC), and `bank_revenue` is deliberately NOT mirrored into the
+      ETH-denominated `rwa_revenue`, whose sum is the vault's `allocated <= held` wall.
+
 ## 3. Transfer ownership to the Safe
 - [ ] Every contract is `Ownable2Step`. From the deployer: `transferOwnership(safe)`; from the Safe:
       `acceptOwnership()`. Verify `owner() == safe` on all six. (In `chain-e2e.js` the deployer *is* the Safe;
@@ -212,15 +292,15 @@ Each rail is OFF until its address/config is present. Set on BOTH processes.
 | `DAILY_CAP_OMR` | per-day withdrawal cap (wei) | mirrors the contract's `dailyCapOMR` |
 | `OMERTA_FEES_ADDRESS` | fee sync (`MintFeePaid`/`RespawnFeePaid`/`RerollFeePaid` → credits) | — |
 | `OMERTA_BOND_ADDRESS` | **the `Bonded` → `recordBond` bond sync (NEW — now wired)** | books the event's authoritative payout + POL/Vig split; idempotent on nonce |
-| `TRADE_FEE_HOOK_ADDRESS` | the afterSwap→Vig trade-fee sync | only when the DEX hook ships |
+| `ALCHEMIST_ADDRESS` (+ `ALCHEMIST_ASSET`, `ALCHEMIST_ASSET_DECIMALS`) | THE BANK's harvest-fee sync → `bank_revenue` | only when the bank market ships |
 | `MINT_FEE_ETH` / `RESPAWN_FEE_ETH` | the PLEX price quote | ETH-denominated; keep == the contract fees |
 | `WALLETCONNECT_PROJECT_ID` | the console's **WalletConnect (mobile)** option — the ONLY way a phone can link a wallet (desktop browser wallets are auto-discovered via EIP-6963 and need nothing) | a PUBLIC WalletConnect/Reown project id, free from https://dashboard.reown.com; unset ⇒ the console hides the option. Surfaced in `/v1/rules`. Not chain-gated: linking is a signature, so the chain is requested as OPTIONAL and a wallet that has never heard of the OMERTÀ chain still connects |
-| `PLEX_MINT_OMR` / `PLEX_RESPAWN_OMR` | PLEX floor prices | sign-off levers |
+| `PLEX_RESPAWN_OMR` | the respawn's PLEX floor price (pre-market) | a sign-off lever. **There is no `PLEX_MINT_OMR`** — the mint is ETH only (it is the Sybil bound and the extraction gate, so it gets one rail and one published price); setting it does nothing |
 | `VIG_BPS` / `VIG_RESERVE_BPS` / `VIG_MAX_PRICE_JUMP` | Vig split + the buyback price-sanity bound | — |
 
 **`ALLOW_MOD_REAL_REVENUE` — leave UNSET/off in production.** It is a QA-only flag that lets the mod
 comp/simulate routes inject *real* revenue; in prod the ONLY legitimate real-revenue source is a real on-chain
-event carrying a txHash (fees, trade fees, `Bonded`). With it off, a comp books zero POL/Vig — no fabricated,
+event carrying a txHash (fees, `Bonded`, `HarvestFeeTaken`). With it off, a comp books zero POL/Vig — no fabricated,
 unbacked reserve. (Red-team D-MED2.)
 
 ## 5. Fund + reconcile the backend accounting to MIRROR the chain
@@ -241,7 +321,7 @@ The backend keeps its own reserve records; they must track the on-chain balances
       fund reserve → withdraw signs an EIP-712 voucher → `claim()` on-chain → replay/tamper REVERT → the
       `Claimed` watcher frees reserve → gear voucher mints → uncapped gearId fails closed → §10.4 holds).
 - [ ] Boot the worker; confirm the sync logs advance (`💰 fee sync`, `👁 claimed sync`, `🏦 bond sync` once a
-      `Bonded` fires, `💱 trade-fee sync` if the hook is live) and the cursors persist (`chain_cursor`).
+      `Bonded` fires, `🏛  bank sync` if the Alchemist is live) and the cursors persist (`chain_cursor`).
 - [ ] `GET /v1/mod/reserve`, `/v1/mod/vig`, `/v1/mod/bonds`, `/v1/mod/emission` read green (backed / within
       caps). The `/admin` §10.4 banner reads OK. `npm run invariants` all `ok:true`.
 - [ ] Do one real player round-trip on testnet: pay the mint fee → mint a character → earn $OMR → link wallet
@@ -278,12 +358,13 @@ The backend keeps its own reserve records; they must track the on-chain balances
     number. And re-derive `dailyCapOMR` (`npm run dials`) against the new depth afterwards.
   - **Seed POL into the hooked pool BEFORE migrating** (§4b). Pool-local enforcement means the moat is
     depth; it is thinnest at launch, which is exactly when a rival untaxed pool is cheapest to stand up.
-  - **DECIDED (SIGN-OFF D1 = fold; RATE SIGNED 2026-08-05):** the trade fee → Vig (backend already
-    built and dormant behind `TRADE_FEE_HOOK_ADDRESS`) folds INTO `OmertaHook` as a fourth destination
-    — `TRADE_FEE.BPS = 30`, 100% to the Vig, armed at zero, contract cap 100. The rate is locked; the
-    CONTRACT change is the remaining build and MUST land before an address is mined. It is not trivial:
-    an ETH-denominated fee on BUYS needs the input-side `beforeSwap` delta, which rule 7 warns breaks
-    partial fills — so it is a focused contract session with full `forge test`, not a bolt-on.
+  - **CLOSED 2026-08-11 (founder: "get rid of the Vig trade fee") — the sell tax is the canonical
+    pool's ONE hook and the trade fee is RETIRED, not folded.** The earlier fold (D1 = A) was never
+    built because its ETH-on-buys fee needs the input-side `beforeSwap` path, which breaks partial
+    fills. Consequence to carry into deploy: the Vig has no trading leg, so withdrawal backing is
+    gameplay fees + Store + bonds only (sim P9.15 prints it). **Nothing to configure and nothing left
+    to build here** — `OmertaHook` already IS the canonical pool's hook, so the address may be mined
+    against it as it stands.
 - **The POL-pairing bot** (pairs the bonded ETH into the OMR-ETH pool) and **the DEX buyback bot** (the real
   TWAP source that replaces the manual `mod/vig/buyback` price).
 - **The on-chain Store** — `OmertaFees.payForPackage` + a `StorePaid` watcher. The Store is off-chain/mod-driven

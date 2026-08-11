@@ -14,7 +14,7 @@ verified in-tree, carry the whole plan:
    genesis supply — no owner-mint is needed and none exists (bonds stay the only ongoing mint).
 2. **`OmertaBond` is born refusing every bond until the Safe sets an oracle**, and `setOracle` is
    deliberately swappable ("so the feed can follow the canonical pool"). A TWAP cannot exist
-   before the pool it reads — so the genesis window runs on a **GenesisOracle** (a tiny Safe-owned
+   before the pool it reads — so the genesis window runs on a **GenesisOracle** (**BUILT 2026-08-11** — `omerta-contracts/src/GenesisOracle.sol`, 8 tests; a tiny Safe-owned
    `IOmrOracle` returning one fixed price), swapped to the real `OmrTwapOracle` at pool init.
    One new ~20-line contract; it joins the audit batch.
 3. **The 120h bond vest outlasts the longest window (72h)** — every OMR sold in the genesis window
@@ -149,7 +149,7 @@ the cap bounds whales. NFT communities may be per-NFT (the NFT itself is the Syb
      price. The eligibility is time-boxed with the drop's own `CLAIM_WINDOW` (90–180d) and simply
      lapses unclaimed (nothing to sweep — a fee waiver that was never used).
   2. **Free mints do NOT consume tranche slots**: the published schedule indexes PAID mints only
-     (ETH or PLEX rails). Otherwise a whitelist wave pushes paid minters up tiers with no paid
+     (the mint is ETH only). Otherwise a whitelist wave pushes paid minters up tiers with no paid
      demand behind the move, and "the first 1,000 mints at 0.01" stops being an honest sentence.
      (Implementation note for the build: the tranche counter needs a mint-source distinction —
      today's `WHERE minted` count predates the whitelist; comps already sit in it at noise level.)

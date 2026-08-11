@@ -7,7 +7,7 @@ process.env.MOD_KEY = 'test-mod-key';
 
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS, CONSTANTS, DISTRICTS, HUSTLE, CORNER, cornerTasksOf, dayOf, M4, levelOf, PACING, MASTERY, masteryXpFor, CRIMES, MISSIONS } from '../src/rules.js';
+import { SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS, CONSTANTS, DISTRICTS, HUSTLE, CORNER, cornerTasksOf, dayOf, M4, levelOf, PACING, MASTERY, masteryXpFor, CRIMES, MISSIONS, M8 } from '../src/rules.js';
 import { socialRewardsLive } from '../src/growth.js';
 import { sweepGrandReferrals, gainRespect } from '../src/game.js';
 
@@ -308,7 +308,7 @@ assert((((await meOf(chef.token)).stash.find((s) => s.drug === 'vim')?.qty) || 0
 
 // ══ THE KITCHEN → Tier 4: lab modules, cutting agents, the kingpin legend ══
 await seedCh(chef.id, 'cash=5000000, jail_until=NULL');
-await pool.query(`UPDATE account_persistent SET omr=50 WHERE account_id=(SELECT account_id FROM characters WHERE id='${chef.id}')`);
+await pool.query(`UPDATE account_persistent SET omr=300 WHERE account_id=(SELECT account_id FROM characters WHERE id='${chef.id}')`);
 // (A) LAB MODULES — a bad module id is refused; a level-1 buy is a ledgered cash sink surfaced in the view
 assert.equal((await call('POST', '/v1/kitchen/module/nope', { token: chef.token })).body.error, 'bad_module', 'no such module');
 r = await call('POST', '/v1/kitchen/module/purity', { token: chef.token });
@@ -320,7 +320,7 @@ const omrPre = (await meOf(chef.token)).omr;
 // §10.4: a kitchen:module $OMR burn must reconcile — it rides DESK.SINK_REASONS (the burn term +
 // recycle to the desk), NOT a transfer. A prod incident (drift -72) proved it had been mis-classified
 // as an uncounted transfer; assert the burn leaves $OMR conservation UNCHANGED. growth.js SQL-seeds
-// omr=50 un-ledgered, so the baseline drift is non-zero → assert a DELTA (the scale/loadtest posture).
+// omr=300 un-ledgered, so the baseline drift is non-zero → assert a DELTA (the scale/loadtest posture).
 const { runLedgerInvariants: runInv } = await import('../src/invariants.js');
 const driftOmrPre = Number((await runInv(pool, { alert: false })).checks.find((c) => c.name === '$OMR conservation').drift);
 r = await call('POST', '/v1/kitchen/module/purity', { token: chef.token });
@@ -391,7 +391,7 @@ assert(Number((await pool.query("SELECT COUNT(*) n FROM telemetry WHERE event='r
 await seedCh(chef.id, 'heat=50, energy=200, jail_until=NULL');
 r = await call('POST', '/v1/kitchen/laylow', { token: chef.token });
 assert.equal(r.code, 200); assert.equal(r.body.heat, 25, '−25 heat for $5k + 25 energy');
-await pool.query(`UPDATE account_persistent SET omr = omr + 12 WHERE account_id = (SELECT account_id FROM characters WHERE id='${chef.id}')`);
+await pool.query(`UPDATE account_persistent SET omr = omr + 72 WHERE account_id = (SELECT account_id FROM characters WHERE id='${chef.id}')`);
 r = await call('POST', '/v1/kitchen/cleanpapers', { token: chef.token });
 assert.equal(r.code, 200); assert.equal(r.body.heat, 0, 'papers retyped, heat wiped');
 
@@ -419,9 +419,24 @@ await seedCh(chef.id, 'mission_at=NULL'); // the rest of this block tests missio
 await seedCh(chef.id, 'respect=2500, cunning=40, cb=20, cash=500000'); // lvl 16 for m4
 await call('POST', '/v1/armory/gun/argument/buy', { token: chef.token }); // fp 18
 const omrBefore = (await meOf(chef.token)).omr;
+const m4 = MISSIONS.find((m) => m.id === 'm4');
+const credBefore = (await meOf(chef.token)).mintCredits || 0;
 r = await call('POST', '/v1/missions/m4', { token: chef.token });
 assert.equal(r.code, 200, 'the Dockside Heist');
-assert.equal((await meOf(chef.token)).omr, omrBefore + 5, 'mission $OMR faucet paid');
+assert.equal((await meOf(chef.token)).omr, omrBefore + m4.reward.omr, 'mission $OMR faucet paid');
+// ── THE FREE PATH (2026-08-10): the mission the coach names hands over the MINT CREDIT itself, so
+// "you can get made for free" is a fact rather than an arithmetic race between a $OMR reward and an
+// ETH-priced mint. Asserted off the CATALOG, so a re-extract that drops the grant fails here by name.
+assert.equal(m4.reward.mintCredit, 1, 'the catalog still attaches the free mint credit to the job the coach names');
+assert.equal(r.body.reward.mintCredit, 1, 'the claim hands over the credit');
+assert.equal((await meOf(chef.token)).mintCredits, credBefore + 1, 'and it lands on the ACCOUNT (it survives death)');
+// once per account, latched on the same row as the $OMR — an heir cannot re-farm it
+await pool.query(`DELETE FROM missions_done WHERE character_id='${chef.id}' AND mission_id='m4'`);
+await seedCh(chef.id, 'mission_at=NULL');
+r = await call('POST', '/v1/missions/m4', { token: chef.token });
+assert.equal(r.code, 200, 'the job can be re-run');
+assert.equal(r.body.reward.mintCredit, 0, 'but the credit pays ONCE per account');
+assert.equal((await meOf(chef.token)).mintCredits, credBefore + 1, 'the credit count is unmoved');
 
 // ── daily contracts (§7.4): deterministic draw, claim, all-three bonus ──
 await pool.query('UPDATE street_tax SET fund = fund + 20 WHERE id=1');
@@ -439,7 +454,7 @@ for (let i = 0; i < 3; i++) {
   assert.equal(r.body.payout, expected, 'level-scaled payout (+all-three bonus on the last)');
   if (i === 2) {
     assert(r.body.all, 'full envelope');
-    assert.equal(r.body.omrBonus, 0.5, 'event fund covers the extra');
+    assert.equal(r.body.omrBonus, M4.DAILY_ALL_OMR, 'event fund covers the extra');
     // refill targets the level at claim time (v24); the claim's own rep may nudge max upward
     assert(r.body.character.energy >= 50 + 2 * me.level, 'energy refilled');
   }
@@ -566,6 +581,14 @@ assert.equal(await coachOf(), 'Money while you sleep',
   '(b) the four SOLO First-Week tasks clear the gate — ob_family no longer pins it');
 await seedCh(rook.id, "lab='street'");
 assert.equal(await coachOf(), 'You\'ve earned skill points', 'the ladder advances to skills');
+// NOTE: the rung's arithmetic is a RESTATEMENT of skills.js's `pointsOf` (skills.js imports game.js,
+// so the coach cannot call it). A crossing check was tried here and REMOVED: `pointsOf` is
+// module-private and the coach publishes no number, so the only available comparison is behavioural
+// — and the two assertions either side of this already bracket the rung from both directions at this
+// character's state, so the crossing could not fail in a way they do not already catch. The residual
+// risk is a term added to `pointsOf` and not to the copy, which changes the NUMBER without changing
+// fire/clear here; catching that needs the coach to publish its budget, which is production surface
+// added for a test. Recorded rather than shipped as a check that cannot fail.
 await call('POST', '/v1/skills/bruiser', { token: rook.token });
 assert.notEqual(await coachOf(), 'You\'ve earned skill points',
   '(c) buying a skill CLEARS the rung — owned.skills is a Set, so .length would have hung here forever; '
@@ -599,11 +622,17 @@ await seedCh(rook.id, `respect=${PACING.LEVEL_DIVISOR * 19 * 19}`);   // back to
 assert.equal(await coachOf(), 'Run the streets', 'lvl 14+ never raced → Street Races');
 await pool.query(`UPDATE account_persistent SET race_wins=1 WHERE account_id='${rookAid}'`);
 // (founder, from an alpha tester reading the game as pay-to-win) — the free route to being MADE is
-// real and was simply never said. The rung must name the $OMR price and clear on being minted.
+// real and was simply never said. Since 2026-08-10 the rung states a FACT rather than a price: the
+// mission it names hands over the credit, so it must NAME that job and clear on being minted.
 const made = (await call('GET', '/v1/me', { token: rook.token })).body.character.coach;
 assert.equal(made?.label, 'You can get made for free', 'lvl 14+ unminted → the free route to being made');
-assert(/\$OMR/.test(made.hint) && /5 \$OMR/.test(made.hint), 'naming the PLEX price in earned $OMR, not ETH');
-await pool.query(`UPDATE account_persistent SET minted=true WHERE account_id='${rookAid}'`);
+const freeJob = MISSIONS.find((m) => Number(m.reward?.mintCredit) > 0);
+assert(made.hint.includes(freeJob.name), 'the rung names the job that hands over the credit');
+assert(!/\d+ \$OMR/.test(made.hint), 'and states no price — a quoted figure would be a lie at the till');
+// holding a credit swaps the rung for "spend it" — the promise does not go silent mid-way
+await pool.query(`UPDATE account_persistent SET mint_credits=1 WHERE account_id='${rookAid}'`);
+assert.equal(await coachOf(), 'Spend your mint credit', 'a credit in hand → spend it');
+await pool.query(`UPDATE account_persistent SET mint_credits=0, minted=true WHERE account_id='${rookAid}'`);
 assert.notEqual(await coachOf(), 'You can get made for free', 'being minted clears it — it cannot nag a made man');
 // (founder: "not obvious… the steps to buy your first business") — concrete, priced off the catalog
 let front = (await call('GET', '/v1/me', { token: rook.token })).body.character.coach;
@@ -613,9 +642,9 @@ await pool.query(`INSERT INTO businesses (id, character_id, kind, tier) VALUES (
 // D11: the stake rung moved to 15 (going legit IS the ladder now) — it gates on HOLDING the first
 // rung's $OMR, so a broke rook skips it; then it fires funded and clears through the REAL till
 assert.notEqual(await coachOf(), 'Put your $OMR to work', "holding nothing → the stake rung stands down");
-await pool.query(`UPDATE account_persistent SET omr=10 WHERE account_id='${rookAid}'`);
+await pool.query(`UPDATE account_persistent SET omr=60 WHERE account_id='${rookAid}'`);
 assert.equal(await coachOf(), 'Put your $OMR to work', 'lvl 15+ nothing staked, holding the first rung → the ladder');
-assert.equal((await call('POST', '/v1/stake', { token: rook.token, body: { amount: 10 } })).code, 200, 'the stake goes through');
+assert.equal((await call('POST', '/v1/stake', { token: rook.token, body: { amount: 60 } })).code, 200, 'the stake goes through');
 // staking spent the balance to 0, so the wire rung (18, needs a tap's worth) skips too
 assert.equal(await coachOf(), 'Take it to the water', 'lvl 16+ never smuggled → the Port');
 await pool.query(`UPDATE account_persistent SET smuggled=1000 WHERE account_id='${rookAid}'`);
@@ -651,7 +680,7 @@ assert.notEqual(await coachOf(), 'You can afford your dues', 'holding no $OMR �
 assert.notEqual(await coachOf(), 'Open a club of your own', 'funded but UNMADE → the club rung stands down');
 // (D11: the old lvl-15 legit rung's GLD clearing-signal is gone with the Portfolio; rook is already
 // STAKED from the 15-rung above, so granting $OMR re-arms only the wire rung — intel_ops clears it)
-await pool.query(`UPDATE account_persistent SET omr=20, intel_ops=1 WHERE account_id='${rookAid}'`);
+await pool.query(`UPDATE account_persistent SET omr=120, intel_ops=1 WHERE account_id='${rookAid}'`);
 assert.equal(await coachOf(), 'You can afford your dues', 'lvl 26+ unmade, holding the dues → become a Made Man');
 // pay through the REAL till — the burn + made_until land exactly as a player's would
 assert.equal((await call('POST', '/v1/made', { token: rook.token })).code, 200, 'the dues go through');
@@ -667,7 +696,7 @@ await seedCh(rook.id, `respect=${10 * 30 * 30}`);
 assert.notEqual(await coachOf(), 'Buy the compound', 'no $OMR → the estate rung stands down');
 // (the wire re-arm signal was cleared back at the dues step; rook is staked so the stake rung
 // stays quiet too — this grant only opens the compound's own gate)
-await pool.query(`UPDATE account_persistent SET omr=50 WHERE account_id='${rookAid}'`);
+await pool.query(`UPDATE account_persistent SET omr=300 WHERE account_id='${rookAid}'`);
 const compound = (await call('GET', '/v1/me', { token: rook.token })).body.character.coach;
 assert.equal(compound?.label, 'Buy the compound', 'lvl 30+ holding the price, no estate → The Estate');
 assert(/Safe House/.test(compound.hint), 'naming tier 1 off the live catalog');
@@ -1511,23 +1540,23 @@ assert.equal(r.code, 200); assert(r.body.transactions.length > 0 && r.body.rng.l
 await seedCh(chef.id, 'muscle=50, cunning=20, speed=30, jail_until=NULL'); // total 100
 await pool.query(`UPDATE account_persistent SET omr = 0 WHERE account_id = (SELECT account_id FROM characters WHERE id='${chef.id}')`);
 assert.equal((await call('POST', '/v1/respec', { token: chef.token, body: { muscle: 60, cunning: 20, speed: 20 } })).body.error, 'omr', 'the ledger man charges up front');
-await pool.query(`UPDATE account_persistent SET omr = 20 WHERE account_id = (SELECT account_id FROM characters WHERE id='${chef.id}')`);
+await pool.query(`UPDATE account_persistent SET omr = 120 WHERE account_id = (SELECT account_id FROM characters WHERE id='${chef.id}')`);
 assert.equal((await call('POST', '/v1/respec', { token: chef.token, body: { muscle: 60, cunning: 20, speed: 30 } })).body.error, 'alloc', 'no minting points — the sum must match exactly');
 assert.equal((await call('POST', '/v1/respec', { token: chef.token, body: { muscle: 94, cunning: 3, speed: 3 } })).body.error, 'alloc', 'no stat below the creation base (5)');
 assert.equal((await call('POST', '/v1/respec', { token: chef.token, body: { muscle: 50, cunning: 20, speed: 30 } })).body.error, 'same', 'a no-op respec is refused, not charged');
-assert.equal((await meOf(chef.token)).omr, 20, 'every rejection above charged nothing');
+assert.equal((await meOf(chef.token)).omr, 120, 'every rejection above charged nothing');
 r = await call('POST', '/v1/respec', { token: chef.token, body: { muscle: 20, cunning: 20, speed: 60 } });
 assert.equal(r.code, 200, 'the chef rebuilt himself for the getaway life');
 const respecMe = await meOf(chef.token);
 assert.equal(respecMe.stats.muscle, 20); assert.equal(respecMe.stats.speed, 60);
 assert.equal(respecMe.stats.muscle + respecMe.stats.cunning + respecMe.stats.speed, 100, 'the total is conserved exactly');
-assert.equal(respecMe.omr, 5, 'the respec burned 15 $OMR');
-assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='omr' AND reason='respec'")).rows[0].s), -15, 'the burn is ledgered');
+assert.equal(respecMe.omr, 120 - M8.RESPEC_OMR, `the respec burned ${M8.RESPEC_OMR} $OMR`);
+assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='omr' AND reason='respec'")).rows[0].s), -M8.RESPEC_OMR, 'the burn is ledgered');
 // BALANCE D7: one re-shaping a day — a second paid respec inside the window is refused (unpaid)
 assert.equal((await call('POST', '/v1/respec', { token: chef.token, body: { muscle: 60, cunning: 20, speed: 20 } })).body.error, 'cooldown', 'no re-shaping between fights (24h)');
-assert.equal((await meOf(chef.token)).omr, 5, 'the refused respec charged nothing');
+assert.equal((await meOf(chef.token)).omr, 120 - M8.RESPEC_OMR, 'the refused respec charged nothing');
 await pool.query(`UPDATE characters SET respec_at = now() - interval '25 hours' WHERE id='${chef.id}'`);
-await pool.query(`UPDATE account_persistent SET omr = 20 WHERE account_id = (SELECT account_id FROM characters WHERE id='${chef.id}')`);
+await pool.query(`UPDATE account_persistent SET omr = 120 WHERE account_id = (SELECT account_id FROM characters WHERE id='${chef.id}')`);
 assert.equal((await call('POST', '/v1/respec', { token: chef.token, body: { muscle: 60, cunning: 20, speed: 20 } })).code, 200, 'a day later the trainer works again');
 
 // ── THE HUSTLE + THE MARK (crime-loop interactivity, founder-directed) ──────────────────────────

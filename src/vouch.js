@@ -11,7 +11,7 @@
 // the hitmen-board way: no payout attaches so a Sybil ring gains nothing tangible, both sides must be a real
 // HUMAN (an NPC resident or an agent is neither voucher nor target), and the outbound CAP makes each vouch
 // scarce — you only have so many, so spending one means something.
-import { GameError } from './game.js';
+import { GameError, notifyOnce } from './game.js';
 import { VOUCH, vouchRankOf } from './rules.js';
 
 // resolve a character id → { account_id, name, human }. A plain read (the mentor.js pattern).
@@ -41,7 +41,10 @@ export async function giveVouch(ch, targetCharId, client, h) {
   await client.query('INSERT INTO vouches (voucher_account, target_account, from_name) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [ch.account_id, t.account_id, ch.name]);
   // did they already vouch for YOU? then it's now mutual — tell them the bond is sworn both ways.
   const mutual = (await client.query('SELECT 1 FROM vouches WHERE voucher_account=$1 AND target_account=$2', [t.account_id, ch.account_id])).rows[0];
-  if (h?.notify) await h.notify(client, targetCharId, mutual ? 'vouch_mutual' : 'vouched', { by: ch.name });
+  // notifyOnce (red-team F4): give → revoke → give re-creates the row, so a duplicate check on the
+  // row cannot close the loop; suppressing an identical UNREAD ping does. A vouch they have not read
+  // yet already says what a second one would.
+  if (h?.notify) await notifyOnce(client, targetCharId, mutual ? 'vouch_mutual' : 'vouched', { by: ch.name });
   return { ok: true, vouched: t.name, mutual: !!mutual };
 }
 

@@ -34,6 +34,7 @@ import * as A from './auth.js';
 import * as Chain from './chain.js';
 import * as Fees from './fees.js';
 import * as V from './vanity.js';
+import * as Brokers from './brokers.js';
 import * as Vig from './vig.js';
 import * as Territory from './territory.js';
 import * as Diplomacy from './diplomacy.js';
@@ -107,6 +108,7 @@ import * as Landmarks from './landmarks.js';
 import * as Ops from './ops.js';
 import { itemArt } from './assets.js';
 import { avatarSvg } from './avatar.js';
+import { portraitSvg, portraitStateOf, portraitTraits, portraitRow } from './portrait.js';
 import * as Cards from './cards.js';
 import { renderPng } from './cardpng.js';
 import { buildOpenApi, llmsTxt } from './agentgateway.js';
@@ -116,11 +118,11 @@ import { bulletinPublic, bulletinBoard, claimBulletin } from './bulletin.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit, checkAuthRateLimit, checkReadLimit, checkPublicRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
-         levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, CARS, KITCHENS, CONSUMABLES, TRADE_RANKS, M3, M4, M8, PATHS,
+         levelOf, GOODS, DRUGS, DISTRICTS, CONSTANTS, sealOf, CRIMES, GUNS, VESTS, CARS, KITCHENS, CONSUMABLES, TRADE_RANKS, M3, M4, M8, PATHS,
          RANKS,
          cityLawEventOf, cityForecast, regionShockOf, cityHourOf, ESTATE, AUCTION, MEGAPROJECT, CLUES, DUELS, DUEL_TITLE_RANKS, SEASON_MODS, seasonModOf, seasonIdxOf, seasonDaysLeft, SEASON_PHASES, seasonPhaseOf, seasonPhaseLeft,
          foundationOf, foundationBustMult, foundationBleedMult, CHARTERS, familyCharterOf, FAMILY_CHARTER, FOUNDATION, LAW, WIRE, STORE, PASS, PATRON, BONDS, SPEAKEASY, BOXING, RARITY,
-         RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf, syndicateOf, TERRITORY_TYPES, TERRITORY_RACKETS,
+         RACKETS, ASSETS, MISSIONS, GANG_SEALS, VANITY, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf, syndicateOf, TERRITORY_TYPES, TERRITORY_RACKETS,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE, NOTORIETY, MAP, DISTRICT_ADJ, districtNeighbours,
          TAX, withdrawTaxBps,
          HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, OPERATIONS, BUSINESS_EMPIRE, PACING, MASTERY,
@@ -257,6 +259,12 @@ export async function buildServer() {
   for (const [name, buf] of PWA_ICONS) {
     app.get('/' + name, async (req, reply) => reply.type('image/png').header('cache-control', 'public, max-age=604800').send(buf));
   }
+  // Browsers request /favicon.ico unprompted on every page, and a 404 there put a console error on
+  // EVERY page load — which is not cosmetic: a permanent error is exactly the noise that hides a real
+  // one. Served as the 192 PNG (every current browser accepts a PNG at this path).
+  const FAVICON = PWA_ICONS.get('icon-192.png');
+  if (FAVICON) app.get('/favicon.ico', async (req, reply) =>
+    reply.type('image/png').header('cache-control', 'public, max-age=604800').send(FAVICON));
   // ── GENERATED ART (public/art/*.jpg): the landing hero, the district plates, the system interiors.
   // Loaded into memory ONCE at boot as an ALLOWLIST keyed by filename, and the request only ever does a
   // Map lookup — user input is never joined into a path, so there is no traversal surface by
@@ -303,6 +311,35 @@ export async function buildServer() {
   app.get('/v1/avatar/:seed', async (req, reply) => {
     reply.type('image/svg+xml; charset=utf-8').header('cache-control', 'public, max-age=604800, immutable');
     return reply.send(avatarSvg(String(req.params.seed || '').slice(0, 128)));
+  });
+  // ── THE MADE MAN — the bloodline portrait (identity-NFT design §5, phase 1: entirely off-chain,
+  // no gates). A framed noir portrait composited live from PUBLIC game state, so it visibly deepens
+  // as the street ranks up and as the bloodline buries generations. PUBLIC + keyless like the avatar,
+  // and it discloses nothing beyond `publicDossier` by construction (`portrait.js` reads that shape
+  // and nothing else). Cached briefly rather than immutably — unlike an avatar this one CHANGES.
+  // ZERO §10.4. The keyless-/v1-GET default throttle covers it (this one hits the DB). ──
+  app.get('/v1/identity/:characterId/portrait.svg', async (req, reply) => {
+    const row = await portraitRow(pool, String(req.params.characterId || '').slice(0, 64));
+    reply.type('image/svg+xml; charset=utf-8').header('cache-control', 'public, max-age=300');
+    // an unknown id gets the house's blank plate rather than a 404 — a stale share link stays an image
+    return reply.send(portraitSvg(portraitStateOf(row || { id: 'unknown', name: 'UNKNOWN' })));
+  });
+  // Phase 2's reviewable JSON, in ERC-721 metadata shape, pointing at no token: the exact blob can be
+  // argued about before a contract exists to be stuck with it. Keyed by characterId today; the tokenId
+  // form arrives with the contract. WEALTH IS ABSENT IN ANY FORM (design §4's hard rule).
+  app.get('/v1/identity/:characterId', async (req, reply) => {
+    const id = String(req.params.characterId || '').slice(0, 64);
+    const row = await portraitRow(pool, id);
+    if (!row) return reply.code(404).send({ error: 'not_found' });
+    const st = portraitStateOf(row);
+    reply.header('cache-control', 'public, max-age=300');
+    return {
+      name: `${row.name} — Generation ${row.generation}`,
+      description: 'A portrait of a bloodline in OMERTÀ. The frame deepens with every generation '
+        + 'buried; the coat climbs with the street\'s rank. Held by the account, not by the token.',
+      image: `${baseUrl}/v1/identity/${encodeURIComponent(id)}/portrait.svg`,
+      attributes: portraitTraits(st),
+    };
   });
   // ── THE BROADCAST: shareable noir cards + public profile + frictionless ?ref attribution (§7.13). ──
   // PUBLIC + keyless + read-only; ZERO §10.4 surface (marketing/status only). Wealth is never exact.
@@ -387,7 +424,7 @@ export async function buildServer() {
   });
 
   app.setErrorHandler((err, req, reply) => {
-    if (err instanceof G.GameError) return reply.code(400).send({ error: err.code, message: err.message });
+    if (err instanceof G.GameError) return reply.code(400).send({ error: err.code, message: err.message, ...(err.data || {}) });
     // A bad token is a bad token — 401, never 500. Most fast-jwt errors already arrive carrying a 401,
     // but not all: FAST_JWT_INVALID_ALGORITHM (raised by the pinned `algorithms` above when a token is
     // signed with an algorithm we do not accept) has no statusCode and fell through to `internal`. So
@@ -1099,6 +1136,9 @@ export async function buildServer() {
     dealPlays: Object.values(M4.DEAL_PLAYS).map((p) => ({ id: p.id, name: p.name,
       heatMult: p.heatMult, nerveMult: p.nerveMult, repMult: p.repMult })),
     districts: DISTRICTS,
+    // the ride's price, published so the travel picker quotes the number the till actually charges
+    // rather than a restated literal (the catalog-discoverability rule)
+    travelCost: CONSTANTS.TRAVEL_COST,
     stats: ['muscle', 'cunning', 'speed'],
     paths: PATHS,
     // PATHS v2 — the hand-written teeth behind the catalog (home/rival trades + the fx matrix),
@@ -1185,7 +1225,10 @@ export async function buildServer() {
       launderer: BUSINESS_EMPIRE.LAUNDERER_RANKS, specs: BUSINESS_EMPIRE.SPECS, specOmr: BUSINESS_EMPIRE.SPEC_OMR,
       takeover: { fee: BUSINESS_EMPIRE.TAKEOVER.FEE, minLevel: BUSINESS_EMPIRE.TAKEOVER.MIN_LEVEL } },
     missions: MISSIONS.map((m) => ({ id: m.id, name: m.name, req: m.req, reward: m.reward, brief: m.brief })),
-    seals: GANG_SEALS,
+    seals: { ladder: GANG_SEALS, colorOmr: VANITY.GANG_COLOR_OMR, renameOmr: VANITY.GANG_RENAME_OMR },
+    // the shop's own price list, so the console never restates a lever (the terms ride with the price)
+    vanity: { nameOmr: VANITY.NAME_CHANGE_OMR, titleOmr: VANITY.TITLE_OMR, plateOmr: VANITY.PLATE_OMR },
+    contracts: { anonOmr: M8.BOARD_ANON_OMR, peekOmr: M8.INTEL_PEEK_OMR },
     guns: GUNS.map((g) => ({ id: g.id, name: g.name, cash: g.cash, crates: g.crates, fp: g.fp, desc: g.desc })),
     races: { minLevel: RACES.MIN_LEVEL, tiers: RACES.TIERS.map((t) => ({ id: t.id, name: t.name, minLvl: t.minLvl, fee: t.fee, purse: t.purse })), tune: { cost: RACES.TUNE_COST, max: RACES.TUNE_MAX }, wager: { min: RACES.WAGER_MIN, max: RACES.WAGER_MAX }, nos: { cost: RACES.NOS_COST, max: RACES.NOS_MAX, power: RACES.NOS_POWER }, pinkSlips: true, grandPrix: { buyin: RACES.GP.BUYIN, minLevel: RACES.GP.MIN_LEVEL, minEntrants: RACES.GP.MIN_ENTRANTS, payouts: RACES.GP.PAYOUTS } },
     port: { minLevel: PORT.MIN_LEVEL, district: PORT.DISTRICT, boats: PORT.BOATS.map((b) => ({ id: b.id, name: b.name, cost: b.cost, hold: b.hold, speed: b.speed })), routes: PORT.ROUTES.map((r) => ({ id: r.id, name: r.name, minLvl: r.minLvl, minSpeed: r.minSpeed, buy: r.buy, sell: r.sell })), upgrade: { max: PORT.STEP2.UPGRADE_MAX, hullStep: PORT.STEP2.HULL_STEP, engineStep: PORT.STEP2.ENGINE_STEP }, piracy: { minLevel: PORT.STEP2.PIRATE_MIN_LEVEL, energy: PORT.STEP2.PIRATE_ENERGY, ammo: PORT.STEP2.PIRATE_AMMO } },
@@ -1250,6 +1293,7 @@ export async function buildServer() {
       rareArchetypes: AUCTION.RARE_ARCHETYPES, sets: AUCTION.SETS, collectorRanks: AUCTION.COLLECTOR_RANKS, consign: AUCTION.CONSIGN },
     envelope: { omr: LAW.ENVELOPE_OMR, days: Math.round(LAW.ENVELOPE_MS / 86400000), gainMult: LAW.ENVELOPE_GAIN_MULT, bleedMult: LAW.ENVELOPE_BLEED_MULT },
     foundation: FOUNDATION.TIERS.map((t) => ({ tier: t.tier, name: t.name, omr: t.omr, bustMult: t.bustMult, bleedMult: t.bleedMult, blurb: t.blurb })),
+    brokers: Brokers.brokerCatalog(),
     wire: { tapOmr: WIRE.TAP_OMR, tapHours: Math.round(WIRE.TAP_MS / 3600000), tapMax: WIRE.TAP_MAX,
       sweepOmr: WIRE.SWEEP_OMR, subOmr: WIRE.SUB_OMR, subDays: Math.round(WIRE.SUB_MS / 86400000),
       traceOmr: WIRE.TRACE_OMR, dossierOmr: WIRE.DOSSIER_OMR,
@@ -1475,6 +1519,17 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Landmarks.dedicateLandmark(ch, req.params.districtId, req.body?.amount, client, h)));
 
   // THE WIRE — the intelligence terminal: wiretaps on rivals + the Street Wire premium feed ($OMR sinks).
+  // ── THE BROKERS (omerta-brokers-design.md) — the activation sink + the published weights.
+  // NOTHING here delivers a reward: `allocateEpoch` computes a NUMBER and stops. Delivery is step 7
+  // and is gated on counsel, which is why there is no claim route to find.
+  app.get('/v1/brokers', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client) => Brokers.brokerBoard(client, ch)));
+  app.post('/v1/brokers/activate', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Brokers.activate(ch, client, h, req.body?.tier)));
+  app.get('/v1/mod/brokers', { preHandler: modAuth }, async () => Brokers.epochBoard(pool));
+  app.post('/v1/mod/brokers/allocate', { preHandler: modAuth }, async (req) =>
+    Brokers.allocateEpoch(pool, { endDay: req.body?.endDay != null ? Number(req.body.endDay) : undefined }));
+
   app.get('/v1/wire', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client, h) => Wire.wireBoard(ch, client, h)));
   app.post('/v1/wire/tap/:targetId', { preHandler: auth }, async (req) =>
@@ -2369,22 +2424,27 @@ export async function buildServer() {
   app.post('/v1/character/reroll', { preHandler: auth }, async (req) => Fees.rerollCharacter(pool, req.user.sub));
   app.get('/v1/fees/status', { preHandler: auth }, async (req) => Fees.feeStatus(pool, req.user.sub));
 
-  // ── Risk-to-Earn Phase 2: THE VIG (off-chain core) ──
-  // PLEX bridge — pay a real-money fee from EARNED $OMR instead of ETH (burns $OMR → the same
-  // entitlement). A skilled player funds their own play; a whale pays ETH (which funds the Vig).
+  // ── THE PLEX BRIDGE — pay a real-money fee from EARNED $OMR, except the mint ──
+  // The MINT route stays mounted as a tombstone rather than being removed: a client that has been
+  // posting there learns what happened instead of guessing at a 404 (the /v1/wage and swap
+  // precedent). `payPlex` is what actually refuses — the rule lives with the mechanism, not in the
+  // routing table, which is why restoring the respawn rail needed no change here at all.
   app.post('/v1/plex/mint', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Vig.payPlex(ch, 'mint', client, h)));
   app.post('/v1/plex/respawn', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Vig.payPlex(ch, 'respawn', client, h)));
-  // the live market-linked quote (fee-ETH × latest buyback price × premium; static floor pre-market)
+  // the live market-linked quote (fee-ETH × latest buyback price × premium; the static floor
+  // pre-market). `mint: null` is the POSITIVE claim that the identity has one rail and it is ETH,
+  // at the published wave — rather than a stale number a client would render as payable.
   app.get('/v1/plex/price', async () => ({
-    mint: await Vig.plexQuote(pool, 'mint'), respawn: await Vig.plexQuote(pool, 'respawn') }));
+    mint: null, mintEthOnly: true, respawn: await Vig.plexQuote(pool, 'respawn') }));
 
   // ── THE STORE (ETH revenue packages) ──
   // The catalog + your live entitlements. Purchases are made ON-CHAIN at the OmertaFees paywall
   // (dormant); the watcher observes StorePaid and calls recordStorePurchase (the mint/respawn fee
   // pattern). §10.4-neutral — the Store grants only entitlements/access/status, never currency.
   app.get('/v1/store', { preHandler: auth }, async (req) => Store.storeBoard(pool, req.user.sub));
+  // the $OMR rail: any SKU except one that would make you (payPackagePlex refuses on the GRANT)
   app.post('/v1/store/plex/:sku', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Store.payPackagePlex(ch, req.params.sku, client, h)));
 

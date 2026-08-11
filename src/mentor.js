@@ -13,7 +13,7 @@
 //
 // §10.4: one faucet, `mentor:protege` (character_id'd → the per-character cash check reconciles). The
 // legend, the seeking flag and graduation move no value. The test proves the vocabulary is closed.
-import { GameError, notify } from './game.js';
+import { GameError, notify, notifyOnce } from './game.js';
 import { MENTOR, mentorRankOf, levelOf } from './rules.js';
 
 const lvlOf = (respect) => levelOf(Number(respect));
@@ -53,7 +53,10 @@ export async function offerMentor(ch, targetCharId, client, h) {
   const active = Number((await client.query('SELECT COUNT(*) n FROM mentorships WHERE mentor_account=$1 AND NOT graduated', [ch.account_id])).rows[0].n);
   if (active >= MENTOR.ACTIVE_MAX) throw new GameError('full', `You already have ${MENTOR.ACTIVE_MAX} protégés under your wing.`);
   await client.query('INSERT INTO mentor_offers (mentor_account, protege_account, from_name) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [ch.account_id, t.account_id, ch.name]);
-  await notify(client, targetCharId, 'mentor_offer', { from: ch.name }).catch(() => {});
+  // notifyOnce, not notify: every gate above is on the TARGET's eligibility and none is consumed, so
+  // the same call succeeds forever — a free, uncapped ping at a chosen newcomer, which is exactly the
+  // audience an onboarding feature must not hand a megaphone at. (red-team F1)
+  await notifyOnce(client, targetCharId, 'mentor_offer', { from: ch.name }).catch(() => {});
   return { ok: true, mentor: 'offered', to: t.name };
 }
 
@@ -85,6 +88,13 @@ export async function acceptMentor(ch, mentorCharId, client, h) {
 export async function claimMentor(ch, client, h) {
   const ms = (await client.query('SELECT * FROM mentorships WHERE protege_account=$1 FOR UPDATE', [ch.account_id])).rows[0];
   if (!ms) throw new GameError('no_mentor', 'You have no mentor.');
+  // AN AGENT GATE AT FORMATION IS NOT A GATE (night red-team F2). `offerMentor` refuses a non-human
+  // protégé — but `agent_flag` is set by the account's OWN call to /v1/auth/agent-key at any moment,
+  // so that check reads mutable state and a tie formed as a human pays out fine after the flip. The
+  // general rule, and the reason this is worth a comment rather than a line: **every agent exclusion
+  // belongs at the POINT OF PAYMENT**, where the flag is read at the instant money moves. Every other
+  // cash faucet in the tree already does it that way; this was the sole outlier.
+  if (h?.acct?.agent_flag) throw new GameError('agent', 'Machines do not draw a newcomer\'s stake.');
   const lvl = lvlOf(ch.respect);
   let mask = Number(ms.claimed_mask), cash = 0, graduated = false;
   const hit = [];

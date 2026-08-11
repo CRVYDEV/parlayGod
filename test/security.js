@@ -5,6 +5,8 @@ process.env.MOD_KEY = 'test-mod-key';
 process.env.SOCIAL_VERIFY_MODE = 'trust';
 
 import assert from 'node:assert';
+import { MISSIONS } from '../src/rules.js';
+const M4_OMR = MISSIONS.find((m) => m.id === 'm4').reward.omr;
 import { buildServer } from '../src/server.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
@@ -141,8 +143,8 @@ const addsNoDrift = async (name, action, label) => {
   await call('POST', '/v1/armory/gun/argument/buy', { token: chef.token }); // fp 18 for m4
   const before = (await meOf(chef.token)).omr;
   let r = await call('POST', '/v1/missions/m4', { token: chef.token });
-  assert.equal(r.code, 200, 'mission cleared'); assert.equal(r.body.reward.omr, 5, 'first time pays $OMR');
-  assert.equal((await meOf(chef.token)).omr, before + 5, 'omr credited once');
+  assert.equal(r.code, 200, 'mission cleared'); assert.equal(r.body.reward.omr, M4_OMR, 'first time pays $OMR');
+  assert.equal((await meOf(chef.token)).omr, before + M4_OMR, 'omr credited once');
   // kill → heir re-grinds and re-does the same mission: cash/respect re-earn, $OMR must NOT
   await call('POST', '/v1/mod/kill', { body: { characterId: chef.id }, headers: modH });
   await seedCh((await meOf(chef.token)).id, 'respect = 2500, cunning = 40, cb = 20, cash = 500000');

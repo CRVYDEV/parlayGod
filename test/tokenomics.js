@@ -179,7 +179,14 @@ assert.equal(Number((await pool.query('SELECT pool FROM street_tax WHERE id=1'))
   const r = await call('POST', '/v1/window/redeem', a.token, { amount: EXCHANGE.DAILY_CAP_OMR });
   assert.equal(r.code, 400); assert.equal(r.body.error, 'cap', 'the daily cap holds');
   const b = (await call('GET', '/v1/window', a.token)).body;
-  assert.equal(b.yourHeadroomOmr, EXCHANGE.DAILY_CAP_OMR - 10, 'and the board shows what is left of it');
+  // The bucket DECAYS on the wall clock (a rolling 24h, not a midnight reset), so headroom creeps
+  // back up between the redeem above and this read — at 1500/day that is ~0.017 $OMR per second, and
+  // an exact `=== 1490` was a deterministic assertion resting on the run being fast enough. It passed
+  // for months and then failed on an unrelated commit that made the process a few hundred ms slower.
+  // Assert the RELATION with a tolerance sized to the decay rate, which is what the code promises.
+  const spent = EXCHANGE.DAILY_CAP_OMR - b.yourHeadroomOmr;
+  assert(spent > 9.5 && spent <= 10,
+    `the board shows what is left of the bucket: 10 spent, decaying back — got ${spent} spent`);
 }
 
 { // the floor
@@ -370,12 +377,21 @@ await pool.query('UPDATE gangs SET season_tribute=5000000 WHERE id=$1', [gid]);
   delete process.env.ALLOW_MOD_REAL_REVENUE;
 
   // (5) BOTH sources land in the treasury's ledger, and each episode reconciles.
-  // (The buy bot and the per-ticker stock reserve went on 2026-07-31 — omerta-stock-layer-retirement.md.
-  // `allocated <= held` did NOT: the founder kept the vault and backed it with ETH, so the wall is
-  // still here and is now ETH-on-both-sides. What must hold is that the ETH the books claim is the
-  // ETH that arrived, and that the vault never owes more of it than the treasury holds.)
+  //
+  // WHAT THIS BLOCK USED TO ASSERT AND NO LONGER CAN. Until 2026-08-10 it pinned `holds === 'eth'`
+  // with the words "it does not buy stock" — a statement of fact from the 2026-07-31 retirement that
+  // the founder then REVERSED (omerta-brokers-design.md). A test that pins a reversed decision does
+  // not protect anything; it just fails until somebody edits it, so the fact is updated here rather
+  // than defended.
+  //
+  // WHAT STILL HOLDS, and is the part worth keeping: the ETH the books claim is the ETH that
+  // arrived, the vault never owes more ETH than the treasury holds, and — assertion (6) — the
+  // PLAYER-facing vault rail stays denominated in ETH alone. The treasury acquiring stock for the
+  // brokers distribution does not put a player's claim into an asset the game would have to
+  // cash-settle; that separation was the whole point of the retirement and it survives intact.
   const inv0 = await Treasury.runTreasuryInvariants(pool);
-  assert.equal(inv0.holds, 'eth', 'the treasury holds ETH — it does not buy stock');
+  assert.equal(inv0.holds, 'eth+stock',
+    'the treasury holds ETH and, since the founder reopened acquisition, stock — and says so');
   assert.equal(inv0.bySource.tax, 0.124444, 'the tax brought in 0.124444 ETH (0.08 + the dusty episode)');
   assert.equal(inv0.bySource.bond, 1, '…and bonds brought in 1 ETH');
   assert.equal(inv0.totalEth, 1.124444, 'and the total is what the two sources add up to');
@@ -386,8 +402,10 @@ await pool.query('UPDATE gangs SET season_tribute=5000000 WHERE id=$1', [gid]);
   assert.ok(inv0.checks.find((c) => c.name === 'allocated <= held (ETH)').ok,
     'the anti-Ponzi wall is live and holding — in ETH on both sides, so no price move can breach it');
 
-  // (6) the vault is BACKED, not gone: the rail answers, and it answers in ETH. What is gone is the
-  // stock — no ticker, no units, nothing owed in an asset the treasury does not hold.
+  // (6) the vault is BACKED, and the PLAYER rail answers in ETH — the separation that survives the
+  // stock layer reopening. The treasury may now hold stock for the brokers distribution, but a
+  // player's vault claim is never denominated in it, so the game is never in the position of owing
+  // a claim in one asset while holding another.
   const vb = (await call('GET', '/v1/vault', a.token)).body;
   assert.equal(vb.heldEth, 1.124444, 'the vault board holds exactly what the four ETH streams brought in');
   assert.equal(vb.allocatedEth, 0, 'nothing owed yet');

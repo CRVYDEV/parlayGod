@@ -91,7 +91,7 @@ const KNOWN_REASONS = {
     // ECONOMY v3 step 7 — `rarity:upgrade` is the deterministic one-tier NFT upgrade: a $OMR SINK
     // in DESK.SINK_REASONS, so it recycles to the shelf. No new bucket and no faucet — the item's
     // rarity is status, not currency.
-    'window:', 'yield:', 'desk:', 'made:', 'rarity:'],
+    'window:', 'yield:', 'desk:', 'made:', 'rarity:', 'brokers:'],
   cb: ['crime:', 'craft:', 'gun:buy:', 'jump:', 'death:', 'exchange:', 'onboard:', 'cook:'],
   ammo: ['melt', 'melt:tithe', 'craft:ammo', 'ammo:buy', 'jump', 'fire', 'death:', 'exchange:', 'gang:dissolved', 'convoy:', 'world:', 'port:', 'contract:', 'family:'],
 };
@@ -278,16 +278,19 @@ async function collectLedgerChecks(pool) {
   // see (it counts the mint and moves on) — so `runDeskInvariants` asserts the soft credit equals the
   // hard purchase, and the Vig's two-sided reserve-backing pair carries the desk's contribution.
   const omrMints = await sum(pool, "currency='omr' AND (reason LIKE 'mission:%' OR reason='prize:omr' OR reason LIKE 'emission:%' OR reason='desk:buyback')");
-  // plex:* is a Phase-2 burn: a player paid a real-money fee from earned $OMR instead of ETH (the
-  // PLEX bridge), so the $OMR leaves the game (deflationary, offsets emission).
+  // plex:* was a Phase-2 burn: a player paid a real-money fee from earned $OMR instead of ETH (the
+  // PLEX bridge). RETIRED 2026-08-10 (fees are ETH only) — the rows are real, so the reason stays in
+  // the burn term forever; only new writes stopped ('plex bridge retired' below asserts that).
   // law:jury is a Phase-3 burn: the war chest reaching the jury box leaves the game (deflationary).
   // rwa:* is a $OMR BURN. Live: rwa:vault (THE VAULT — treasury.js). HISTORICAL: rwa:invest /
   // rwa:dynasty (the retired Portfolio, D11 2026-08-05) — the rows are real, so the reason stays in
   // the burn term forever; only new writes stopped ('portfolio retired' below asserts that).
   // estate:* (THE ESTATE) is a $OMR BURN — the deep personal compound sink, account bucket, pure
   // status (like rwa:/vanity:); no new §10.4 bucket, only the burn term.
-  // auction:win (THE AUCTION HOUSE) is a $OMR BURN — the winning bid leaves escrow and the game
-  // (deflationary). bid/refund are transfers (escrow ↔ account, both inside omrBuckets), NOT here.
+  // auction:win (THE AUCTION HOUSE) is a $OMR SINK — the winning bid leaves escrow for good. It sits
+  // in the burn TERM so conservation stays exact, but it is in DESK.SINK_REASONS, so the value goes
+  // to the shelf (revenue), not to the fire. bid/refund are transfers (escrow ↔ account, both inside
+  // omrBuckets), NOT here.
   // law:envelope (THE ENVELOPE) is a $OMR BURN — the standing graft (account bucket, the law:jury twin).
   // foundation:tier (THE FOUNDATION) is a $OMR BURN — the family charity, against the gang reserve bucket
   // (the vanity:gang:seal precedent; the reserve is already in omrBuckets, so only the burn term is new).
@@ -317,6 +320,27 @@ async function collectLedgerChecks(pool) {
   const freshEmission = await sum(pool, "currency='omr' AND reason LIKE 'emission:%' AND at >= now() - interval '1 day'");
   const lifetimeEmission = await sum(pool, "currency='omr' AND reason LIKE 'emission:%'");
   push('emission faucet retired', freshEmission, 0, 0.001, { lifetimeEmission, since: 'v3 step 1' });
+
+  // (d1a1b) THE PLEX BRIDGE IS RETIRED (founder-directed 2026-08-10: "Make plex items and consumables
+  // eth only"). Every real-money price — the identity mint, the respawn token, every Store SKU — is
+  // ETH now. Two arguments carried it: a fee with two rails is always priced by the CHEAPER one (fatal
+  // for the mint, which is the Sybil bound), and since v3 step 2 the $OMR rail did not even burn —
+  // `plex:%` is in `DESK.SINK_REASONS`, so it RECYCLED to the desk shelf, which is what the bridge was
+  // sold as an alternative to.
+  //
+  // The reason STAYS in the vocabulary and the burn term forever: real `plex:*` rows exist and
+  // conservation is a claim about the WHOLE ledger (the emission.js lesson, in its second costume).
+  //
+  // What is checked is FRESHNESS, on the EXACT reason `plex:mint` and never on `plex:%`. The whole
+  // prefix was briefly right — for the hours the entire bridge was retired — and is WRONG now that
+  // the founder pulled that back to the mint alone: `plex:respawn` and `plex:<sku>` are LIVE rails,
+  // so a prefix check would alarm on ordinary play. This is the `rwa:vault` distinction exactly: a
+  // retirement check must name the dead thing, not the family it belonged to, or it fires on its
+  // living siblings.
+  const freshPlexMint = await sum(pool, "currency='omr' AND reason='plex:mint' AND at >= now() - interval '1 day'");
+  const lifetimePlex = await sum(pool, "currency='omr' AND reason LIKE 'plex:%'");
+  push('plex mint retired', freshPlexMint, 0, 0.001,
+    { lifetimePlex, since: 'the mint is ETH only; respawn + Store SKUs are payable in earned $OMR' });
 
   // (d1a2) THE PORTFOLIO IS RETIRED (D11, 2026-08-05). The in-game stock book — invests, dynasty
   // naming, the Dynasty Fund dividends — writes nothing new. EXACT reasons, not `rwa:%`, because

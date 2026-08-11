@@ -206,7 +206,7 @@ never-by-chance rule — the ballot is a vote, the allocation is a purchase, the
 transaction). No new hook — the deployed-in-design `OmertaHook` already accrues the slice, and
 one pool takes one hook. **FOUNDER-RESOLVED 2026-08-09 ("one hook four slices"): the canonical
 pool runs ONE hook whose accrued fees route to FOUR destinations — dev / treasury (this
-machine's buy budget) / LP / vig — folding the §10.8 trade-fee question and this design's
+machine's buy budget) / LP — the §10.8 trade-fee question was CLOSED 2026-08-11 by retiring the trade fee (no vig slice), and this design's
 treasury slice into a single contract. The Stock Machine adds a KEEPER that sweeps the hook's
 treasury accrual, never a second hook.** And no copy that promises anything about what the
 stock will be worth.

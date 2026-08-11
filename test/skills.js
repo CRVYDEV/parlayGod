@@ -73,7 +73,7 @@ assert.equal(r.body.fee, Math.max(1, Math.floor(fullFee * SKILLS.FX.BROKER_FEE_M
 await call('POST', `/v1/market/${r.body.id}/cancel`, { token: vic.token }); // reclaim (space math below)
 
 // ── respec: ledgered $OMR burn, points restored, shared cooldown ──
-await pool.query(`UPDATE account_persistent SET omr = omr + 20 WHERE account_id = (SELECT account_id FROM characters WHERE id='${vic.id}')`);
+await pool.query(`UPDATE account_persistent SET omr = omr + 120 WHERE account_id = (SELECT account_id FROM characters WHERE id='${vic.id}')`);
 r = await call('POST', '/v1/skills/respec', { token: vic.token });
 assert.equal(r.code, 200, 'the trainer wipes the slate');
 assert.deepEqual(r.body.unlearned.sort(), ['broker', 'fast_talker', 'fence_network'], 'everything unlearned');
@@ -155,7 +155,7 @@ assert.equal((await meOf(ex.token)).energy, r.body.energy, 'and the sheet agrees
 assert.equal((await call('POST', '/v1/skills/active/adrenaline', { token: ex.token })).body.error, 'cooldown', 'one burst per shared cooldown');
 
 // PER-SKILL RESPEC: leaf-first (the capstone blocks the tier beneath it), ledgered, shared daily cooldown
-await pool.query(`UPDATE account_persistent SET omr = omr + 20 WHERE account_id = (SELECT account_id FROM characters WHERE id='${ex.id}')`);
+await pool.query(`UPDATE account_persistent SET omr = omr + 120 WHERE account_id = (SELECT account_id FROM characters WHERE id='${ex.id}')`);
 assert.equal((await call('POST', '/v1/skills/respec/executioner', { token: ex.token })).body.error, 'dependent', 'unlearn the capstone above it first');
 assert.equal((await call('POST', '/v1/skills/respec/getaway', { token: ex.token })).body.error, 'not_known', "you can't unlearn what you never learned");
 r = await call('POST', '/v1/skills/respec/made_man', { token: ex.token });

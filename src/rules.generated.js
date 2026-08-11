@@ -63,7 +63,7 @@ export const MISSIONS = [
   { id: "m3", name: "Silence the Rat", req: { lvl: 8, muscle: 20, speed: 20, fp: 10 }, reward: { cash: 10000, respect: 150 }, brief: "Someone's been talking to the wrong people. Persuade him a long vacation is healthier. Bring iron — persuasion needs punctuation." },
   { id: "m12", name: "The Warehouse Ledger", req: { lvl: 10, cunning: 24 }, reward: { cash: 15000, respect: 220 }, brief: "Somewhere in pier 4's office is a book with the family's name in it. By dawn there is no book and no office." },
   { id: "m13", name: "Debt of Honor", req: { lvl: 12, muscle: 28 }, reward: { cash: 22000, respect: 300 }, brief: "The old tailor on Canal Row is being squeezed by freelancers. He hemmed the Don's first suit. Make it right." },
-  { id: "m4", name: "The Dockside Heist", req: { lvl: 14, cunning: 35, fp: 18 }, reward: { cash: 30000, respect: 400, omr: 5 }, brief: "A container of 'olive oil' lands at pier 9 at 3am. It's not olive oil. It's ours now. The night crew won't hand it over politely." },
+  { id: "m4", name: "The Dockside Heist", req: { lvl: 14, cunning: 35, fp: 18 }, reward: { cash: 30000, respect: 400, omr: 30, mintCredit: 1 }, brief: "A container of 'olive oil' lands at pier 9 at 3am. It's not olive oil. It's ours now. The night crew won't hand it over politely." },
   { id: "m14", name: "The Long Drive", req: { lvl: 16, speed: 40 }, reward: { cash: 45000, respect: 550 }, brief: "A passenger who doesn't exist needs to reach a town that isn't on maps, before a train that isn't scheduled." },
   { id: "m29", name: "The Quiet Ward", req: { lvl: 17, cunning: 42 }, reward: { cash: 50000, respect: 620 }, brief: "A ward boss has stopped returning calls. Sit in his kitchen until he remembers the number." },
   { id: "m30", name: "The Fire Inspector", req: { lvl: 18, muscle: 43 }, reward: { cash: 57000, respect: 700 }, brief: "Every business on Brick Lane suddenly fails inspection. Find who bought the inspector, and buy him louder." },
@@ -72,26 +72,26 @@ export const MISSIONS = [
   { id: "m32", name: "The Empty Ambulance", req: { lvl: 23, cunning: 48, fp: 20 }, reward: { cash: 88000, respect: 1060 }, brief: "A man the Bureau is very interested in has a heart attack at 9pm. The ambulance that collects him is not the city's." },
   { id: "m33", name: "The Widow's Rent", req: { lvl: 24, muscle: 50 }, reward: { cash: 94000, respect: 1130 }, brief: "A landlord is turning out families who paid the family's tithe for thirty years. Explain the arithmetic to him personally." },
   { id: "m5", name: "Sit at the Table", req: { lvl: 25, muscle: 50, cunning: 50, speed: 50, fp: 30 }, reward: { cash: 100000, respect: 1200 }, brief: "The Don is watching. Run the whole southside operation for a week without a single arrest.", title: "MADE IN BLOOD" },
-  { id: "m16", name: "The Insurance Job", req: { lvl: 28, cunning: 55, fp: 22 }, reward: { cash: 140000, respect: 1500, omr: 5 }, brief: "A furrier wants his own warehouse robbed Thursday. Rob it Wednesday, then sell him back his furs Friday." },
+  { id: "m16", name: "The Insurance Job", req: { lvl: 28, cunning: 55, fp: 22 }, reward: { cash: 140000, respect: 1500, omr: 30 }, brief: "A furrier wants his own warehouse robbed Thursday. Rob it Wednesday, then sell him back his furs Friday." },
   { id: "m34", name: "The Sunday Edition", req: { lvl: 27, speed: 54 }, reward: { cash: 128000, respect: 1400 }, brief: "A reporter has our name, a photograph and a Sunday deadline. He keeps the photograph. We keep the Sunday." },
   { id: "m35", name: "The Vacancy", req: { lvl: 29, muscle: 56, cunning: 52 }, reward: { cash: 155000, respect: 1650 }, brief: "A rival capo's underboss has an opening beneath him. Create the opening, then fill it with our man before the body is cold.", title: "THE OPENING" },
   { id: "m36", name: "The Comptroller's Books", req: { lvl: 31, cunning: 58, fp: 24 }, reward: { cash: 185000, respect: 1880 }, brief: "City Hall keeps two sets of accounts and audits neither. By Monday there is one set, and our column is the honest one." },
-  { id: "m6", name: "The Long Con", req: { lvl: 32, cunning: 60 }, reward: { cash: 200000, respect: 2000, omr: 10 }, brief: "A nightclub burns. The insurance pays twice — once to the owner, once to whoever wrote the policy. You wrote the policy." },
+  { id: "m6", name: "The Long Con", req: { lvl: 32, cunning: 60 }, reward: { cash: 200000, respect: 2000, omr: 60 }, brief: "A nightclub burns. The insurance pays twice — once to the owner, once to whoever wrote the policy. You wrote the policy." },
   { id: "m17", name: "The Motor Pool", req: { lvl: 35, speed: 65 }, reward: { cash: 260000, respect: 2600 }, brief: "The family needs eleven clean cars by Sunday and the paperwork to match. The city has plenty of both, loosely attended." },
   { id: "m18", name: "Break the Blockade", req: { lvl: 38, muscle: 70, fp: 26 }, reward: { cash: 320000, respect: 3000 }, brief: "Someone's checkpoint is strangling Canal Row's trade. Open the road. Leave the checkpoint as a story people tell." },
   { id: "m7", name: "Ghost the Convoy", req: { lvl: 45, speed: 80, fp: 30 }, reward: { cash: 450000, respect: 4000 }, brief: "A federal evidence convoy crosses the Canal at 4am. Everything in truck two used to be ours. Take it back without a shot heard." },
-  { id: "m19", name: "The Judge's Calendar", req: { lvl: 50, cunning: 85 }, reward: { cash: 600000, respect: 5000, omr: 15 }, brief: "Fourteen family cases sit on the autumn docket. By September the docket has other priorities." },
+  { id: "m19", name: "The Judge's Calendar", req: { lvl: 50, cunning: 85 }, reward: { cash: 600000, respect: 5000, omr: 90 }, brief: "Fourteen family cases sit on the autumn docket. By September the docket has other priorities." },
   { id: "m20", name: "The Counterfeit Summer", req: { lvl: 52, cunning: 88, speed: 75 }, reward: { cash: 700000, respect: 5500 }, brief: "Someone is printing our territory's money badly. Find the plates, keep the plates, retire the printer." },
-  { id: "m8", name: "The Velvet Coup", req: { lvl: 60, muscle: 90, cunning: 90, fp: 45 }, reward: { cash: 1000000, respect: 8000, omr: 25 }, brief: "The police commissioner retires Friday. His replacement is decided Thursday. Make sure the right name is on the desk.", title: "KINGMAKER" },
+  { id: "m8", name: "The Velvet Coup", req: { lvl: 60, muscle: 90, cunning: 90, fp: 45 }, reward: { cash: 1000000, respect: 8000, omr: 150 }, brief: "The police commissioner retires Friday. His replacement is decided Thursday. Make sure the right name is on the desk.", title: "KINGMAKER" },
   { id: "m21", name: "The Silent Partner", req: { lvl: 68, cunning: 100, fp: 48 }, reward: { cash: 1500000, respect: 11000 }, brief: "The Grand Casino needs a new investor. Its current owner needs a new continent. Arrange both by the gala." },
-  { id: "m22", name: "One Perfect Season", req: { lvl: 75, muscle: 105, speed: 105 }, reward: { cash: 2000000, respect: 14000, omr: 30 }, brief: "Every fight, every race, every series — called in advance for four months, and not one bookmaker sees the pattern.", title: "THE UNTOUCHED" },
+  { id: "m22", name: "One Perfect Season", req: { lvl: 75, muscle: 105, speed: 105 }, reward: { cash: 2000000, respect: 14000, omr: 180 }, brief: "Every fight, every race, every series — called in advance for four months, and not one bookmaker sees the pattern.", title: "THE UNTOUCHED" },
   { id: "m9", name: "Empire of Ash", req: { lvl: 85, muscle: 120, cunning: 120, speed: 120, fp: 60 }, reward: { cash: 3000000, respect: 20000 }, brief: "The old order meets at midnight, all five tables, one roof. By morning there is no old order. There is only you.", title: "THE QUIET KING" },
   { id: "m23", name: "The Foreign Delegation", req: { lvl: 92, cunning: 130, fp: 52 }, reward: { cash: 4000000, respect: 26000 }, brief: "Three families from across the water want the port. Host them, feast them, and send them home understanding it will never be theirs." },
-  { id: "m24", name: "The Hundred-Year Deed", req: { lvl: 100, muscle: 140, cunning: 140, speed: 140 }, reward: { cash: 6000000, respect: 36000, omr: 50 }, brief: "Beneath City Hall is the deed to the land the city stands on. Legend says it's blank after the word 'Belongs to'. Fill it in.", title: "CAPO DI TUTTI" },
+  { id: "m24", name: "The Hundred-Year Deed", req: { lvl: 100, muscle: 140, cunning: 140, speed: 140 }, reward: { cash: 6000000, respect: 36000, omr: 300 }, brief: "Beneath City Hall is the deed to the land the city stands on. Legend says it's blank after the word 'Belongs to'. Fill it in.", title: "CAPO DI TUTTI" },
   { id: "m25", name: "The Last Word", req: { lvl: 110, muscle: 155, cunning: 155, speed: 155, fp: 60 }, reward: { cash: 10000000, respect: 60000 }, brief: "Write the rules the next fifty years of this city will pretend were always there.", title: "THE LAST WORD" },
   { id: "m26", name: "The Taste Test", req: { lvl: 15, trade: 100000, cunning: 30 }, reward: { cash: 60000, respect: 700 }, brief: "A buyer uptown wants proof your product is what the street says it is. One dinner, one demonstration, no second chances." },
-  { id: "m27", name: "Pure", req: { lvl: 40, trade: 5000000, cunning: 75 }, reward: { cash: 800000, respect: 6000, omr: 20 }, brief: "Every batch in the city gets measured against yours now. Cook the one they'll still be talking about when you're gone.", title: "PURE" },
-  { id: "m28", name: "The King of Appetites", req: { lvl: 70, trade: 100000000, cunning: 120 }, reward: { cash: 5000000, respect: 30000, omr: 60 }, brief: "Every den, every corner, every appetite in the city clears its ledger through you now. The Bureau has a wall with your face on it. The face is smiling.", title: "KING OF APPETITES" },
+  { id: "m27", name: "Pure", req: { lvl: 40, trade: 5000000, cunning: 75 }, reward: { cash: 800000, respect: 6000, omr: 120 }, brief: "Every batch in the city gets measured against yours now. Cook the one they'll still be talking about when you're gone.", title: "PURE" },
+  { id: "m28", name: "The King of Appetites", req: { lvl: 70, trade: 100000000, cunning: 120 }, reward: { cash: 5000000, respect: 30000, omr: 360 }, brief: "Every den, every corner, every appetite in the city clears its ledger through you now. The Bureau has a wall with your face on it. The face is smiling.", title: "KING OF APPETITES" },
 ]
 
 export const RACKETS = [
@@ -225,12 +225,12 @@ export const GUNS = [
 ]
 
 export const VESTS = [
-  { id: "woolv", name: "Padded Overcoat", mult: 1.1, omr: 4, desc: "Better than a suit. Barely." },
-  { id: "lightv", name: "Light Vest", mult: 1.25, omr: 10, desc: "Turns a sure thing into a maybe." },
-  { id: "medv", name: "Reinforced Vest", mult: 1.5, omr: 25, desc: "The tailor asks no questions." },
-  { id: "tailorv", name: "Tailored Plate", mult: 1.75, omr: 40, desc: "Fitted twice: once for the suit, once for survival." },
-  { id: "heavyv", name: "Heavy Plate Rig", mult: 2.0, omr: 60, desc: "You'll hear the shots. That's the point — you'll HEAR them." },
-  { id: "vaultv", name: "The Walking Vault", mult: 2.5, omr: 120, desc: "Bank-door steel, cut for shoulders. Walk slow. Outlive everyone." },
+  { id: "woolv", name: "Padded Overcoat", mult: 1.1, omr: 24, desc: "Better than a suit. Barely." },
+  { id: "lightv", name: "Light Vest", mult: 1.25, omr: 60, desc: "Turns a sure thing into a maybe." },
+  { id: "medv", name: "Reinforced Vest", mult: 1.5, omr: 150, desc: "The tailor asks no questions." },
+  { id: "tailorv", name: "Tailored Plate", mult: 1.75, omr: 240, desc: "Fitted twice: once for the suit, once for survival." },
+  { id: "heavyv", name: "Heavy Plate Rig", mult: 2.0, omr: 360, desc: "You'll hear the shots. That's the point — you'll HEAR them." },
+  { id: "vaultv", name: "The Walking Vault", mult: 2.5, omr: 720, desc: "Bank-door steel, cut for shoulders. Walk slow. Outlive everyone." },
 ]
 
 export const CONSUMABLES = [
@@ -414,8 +414,8 @@ export const KITCHENS = [
   { id: "bathtub", name: "Bathtub Rig", cost: 20000, omr: 0, cap: 20, mins: 10, q: 0, fire: 0.08, desc: "One tub, one burner, one prayer." },
   { id: "cellar", name: "Cellar Still", cost: 80000, omr: 0, cap: 35, mins: 15, q: 0.05, fire: 0.065, desc: "Under the florist's. The flowers hide a lot." },
   { id: "basement", name: "Basement Lab", cost: 250000, omr: 0, cap: 60, mins: 20, q: 0.1, fire: 0.05, desc: "Proper glassware. Improper everything else." },
-  { id: "facility", name: "The Facility", cost: 2000000, omr: 50, cap: 150, mins: 30, q: 0.2, fire: 0.03, desc: "White coats, clipboards, and no address." },
-  { id: "cathedral", name: "The Cathedral", cost: 10000000, omr: 200, cap: 400, mins: 45, q: 0.3, fire: 0.02, desc: "Built under an actual church. God forgives; chemistry doesn't." },
+  { id: "facility", name: "The Facility", cost: 2000000, omr: 300, cap: 150, mins: 30, q: 0.2, fire: 0.03, desc: "White coats, clipboards, and no address." },
+  { id: "cathedral", name: "The Cathedral", cost: 10000000, omr: 1200, cap: 400, mins: 45, q: 0.3, fire: 0.02, desc: "Built under an actual church. God forgives; chemistry doesn't." },
 ]
 
 export const TRADE_RANKS = [

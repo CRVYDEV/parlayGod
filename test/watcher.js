@@ -2,6 +2,7 @@
 // driven by a MOCK source (no live chain). Proves: downtime backfill credits missed fees; the
 // sync never processes inside the confirmation window; a reorg-then-replay doesn't double-apply;
 // and the cursor advances so events are processed exactly once.
+import fs from 'node:fs/promises';
 import assert from 'node:assert';
 process.env.MOD_KEY = 'test-mod-key';
 process.env.CHAIN_CONFIRMATIONS = '3';
@@ -84,46 +85,26 @@ r = await syncClaimedEvents(pool, source, { startBlock: 0 });
 assert.equal(r.processed, 1, 'claim processed once confirmations clear');
 assert.equal((await pool.query(`SELECT claimed_onchain FROM vouchers WHERE nonce=99`)).rows[0].claimed_onchain, true, 'reserve freed after confirmations');
 
-// ── Tier B: the afterSwap→Vig trade-fee stream (TradeFeePaid) — same cursor/confirmation/idempotency
-// discipline, its OWN 'trades' cursor, booking source='trade' Vig revenue (design §2). ──
-const { syncTradeFees } = await import('../src/watcher.js');
-// ROUTER F1: a trade fee books at its DECLARED lever (TRADE_FEE.VIG_BPS, the signed D1 100%) —
-// this suite previously asserted gross × VIG_BPS (the gameplay-fee 60%), i.e. it CODIFIED the
-// constant-vs-wiring drift the router fixed. The lever is read from rules so a retune re-measures.
-const { TRADE_FEE } = await import('../src/rules.js');
-const tradeLog = []; // { block, nonce, amount }
-source.tradeFeeLogs = async (from, to) => tradeLog.filter((l) => l.block >= from && l.block <= to)
-  .map((l) => ({ nonce: l.nonce, amount: l.amount, txHash: '0xtrade' + l.nonce }));
-const tradeRev = async (ref) => (await pool.query(`SELECT gross_eth, vig_eth FROM vig_revenue WHERE source='trade' AND ref='${ref}'`)).rows[0];
-
-// a swap fee lands at block 30; head 31 → inside the 3-conf window, not yet booked (reorg-safe)
-tradeLog.push({ block: 30, nonce: 501, amount: wei(0.05) });
-head = 31;
-r = await syncTradeFees(pool, source, { startBlock: 27 });
-assert.equal(r.processed, 0, 'trade fee not booked inside the confirmation window');
-assert.equal(await tradeRev(501), undefined, 'no premature trade revenue');
-
-// head clears confirmations → the fee is booked to the Vig with the exact split
-head = 35; // safeHead 32 ≥ 30
-r = await syncTradeFees(pool, source, { startBlock: 27 });
-assert.equal(r.processed, 1, 'trade fee booked once head clears confirmations');
-const rev = await tradeRev(501);
-assert.equal(Number(rev.gross_eth), 0.05, 'gross ETH recorded');
-assert.equal(Number(rev.vig_eth), Math.round(0.05 * TRADE_FEE.VIG_BPS / 10000 * 1e6) / 1e6, 'Vig share = gross × the DECLARED TRADE_FEE.VIG_BPS (F1: not the gameplay-fee VIG_BPS)');
-assert.equal(await getCursor(pool, 'trades'), 32, 'trades cursor advanced to safeHead (independent of fees/claimed)');
-
-// idempotent re-scan (a reorg-replay of the same nonce) does not double-book
-r = await syncTradeFees(pool, source, { startBlock: 27 });
-assert.equal(r.processed, 0, 'no reprocessing of already-synced trade blocks');
-assert.equal((await pool.query(`SELECT COUNT(*)::int c FROM vig_revenue WHERE source='trade'`)).rows[0].c, 1, 'exactly one trade revenue row (source+ref PK idempotent)');
-
-// downtime backfill: two swap fees fired while "down" (blocks 33,34) are both caught on wake
-tradeLog.push({ block: 33, nonce: 502, amount: wei(0.02) });
-tradeLog.push({ block: 34, nonce: 503, amount: wei(0.08) });
-head = 40;
-r = await syncTradeFees(pool, source, { startBlock: 27 });
-assert.equal(r.processed, 2, 'backfilled both trade fees missed during downtime');
-assert.equal((await pool.query(`SELECT COUNT(*)::int c FROM vig_revenue WHERE source='trade'`)).rows[0].c, 3, 'three trade revenue rows total');
+// ── Tier B: the trade-fee stream is RETIRED (founder-directed 2026-08-11) ──
+// It never fired in production, so what is worth asserting is not that it books correctly but that
+// it CANNOT BOOK AT ALL — the emission.js "the printer is off" shape. A payer left dormant behind a
+// flag is one env var from live, so all four ways it could come back are pinned: the module export,
+// the source adapter, the worker wiring, and the ledger.
+{
+  const watcherMod = await import('../src/watcher.js');
+  const vigMod = await import('../src/vig.js');
+  assert.equal(watcherMod.syncTradeFees, undefined, 'syncTradeFees must be DELETED, not left dormant');
+  assert.equal(vigMod.recordTradeFee, undefined, 'recordTradeFee must be DELETED, not left dormant');
+  const wsrc = await fs.readFile(new URL('../src/watcher.js', import.meta.url), 'utf8');
+  assert.ok(!/tradeFeeLogs|TradeFeePaid/.test(wsrc), 'the viem adapter must not still fetch trade-fee logs');
+  const worker = await fs.readFile(new URL('../src/worker.js', import.meta.url), 'utf8');
+  assert.ok(!/syncTradeFees|TRADE_FEE_HOOK_ADDRESS/.test(worker), 'the worker must not still poll a retired stream');
+  // The HISTORY half, and it is the half that is easy to get wrong: 'trade' stays a declared
+  // VIG_SOURCE forever. Deleting a retired source from membership would make its historical rows
+  // read as the router's loudest alarm — an unknown source — which is the opposite of the truth.
+  const { VIG_SOURCES } = await import('../src/router.js');
+  assert.ok(VIG_SOURCES.includes('trade'), "'trade' stays a declared source so history reconciles");
+}
 
 // ── Tier C: the RESERVE BOND stream (OmertaBond `Bonded`) — the on-chain event is AUTHORITATIVE. The
 // watcher books the event's ACTUAL payout + POL/Vig split (recordBond's onchain path), NOT a re-derivation
@@ -175,5 +156,5 @@ r = await syncBondEvents(pool, source, { startBlock: 40 });
 assert.equal((await pool.query(`SELECT COUNT(*)::int c FROM bonds WHERE nonce=700`)).rows[0].c, 1, 'exactly one bond row (nonce UNIQUE idempotent)');
 assert.equal(await reserveOf('committed_omr'), 2200, 'committed unchanged on the idempotent re-scan');
 
-console.log('✅ watcher test passed — confirmation-depth gating (reorg-safe), downtime backfill (no lost fee credits), cursor advance, and idempotent reprocessing for the fee + Claimed + trade-fee + reserve-bond streams');
+console.log('✅ watcher test passed — confirmation-depth gating (reorg-safe), downtime backfill (no lost fee credits), cursor advance, and idempotent reprocessing for the fee + Claimed + reserve-bond streams, with the retired trade-fee stream proven un-revivable');
 await app.close();

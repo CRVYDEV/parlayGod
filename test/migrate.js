@@ -123,6 +123,14 @@ const DISPOSITION = {
   // sweep / the target's estate), not with the member. A listed member's own death leaves a row that
   // can never do anything (a corpse cannot claim), and the pot's own teardown reaps it.
   bounty_gang_roster: 'special',
+
+  // ── the `%_char` / bare-role / `%_fighter` half (night audit F2): five more tables the parser could
+  // not see. All five were already handled — the defect was the guard's silence, not the code's.
+  searches: 'wiped',        // the hunt dies with EITHER party (estate deletes hunter=$1 OR target=$1)
+  boxing_title: 'singleton', // ONE row, forever: wipeFighterAtDeath VACATES the belt (holder → NULL)
+  boxing_bouts: 'special',  // cancelMainEventsAtDeath cancels a dead principal's booked card + refunds
+  boxing_bets: 'escrow',    // refunded on a cancelled card; at resolve a dead bettor's stake burns
+  futurity_bets: 'escrow',  // same shape — resolveFuturity LEFT JOINs `alive` and burns a dead stake
 };
 // SCOPE: this guard covers the literal `character_id` column convention (42 tables). Tables that
 // reference a character via a DIFFERENTLY-NAMED column (npc_hits payer/target, searches hunter/target,
@@ -147,7 +155,16 @@ const charTables = new Set();
     // on an unclassified character-scoped table. All sixteen happen to be handled today, which is
     // exactly the problem: a guard that cannot see the class it guards reads as a clean bill of
     // health. Any `%_character` column counts.
-    if (/^\s*(character_id|[a-z0-9_]+_character)\b/m.test(body)) charTables.add(mm[1]);
+    //
+    // (night audit F2) And that was still not the whole convention. THREE more shapes existed —
+    // `%_char` (`holder_char`, `npc_character`'s sibling), the bare role name (`hunter`), and a
+    // typed role (`holder_fighter`) — covering five tables the guard could not see: searches,
+    // boxing_title, boxing_bouts, boxing_bets, futurity_bets. All five are handled correctly today;
+    // the defect was that the success line claimed a completeness it did not have, and a NEW table
+    // in the established `_char` house style would have failed OPEN. Third occurrence of the class
+    // this guard's own comment names, which is the argument for matching the family rather than
+    // enumerating members: a suffix rule generalises, a list of five does not.
+    if (/^\s*(character_id|[a-z0-9_]+_(character|char|fighter)|hunter)\b/m.test(body)) charTables.add(mm[1]);
   }
 }
 // (a) every character_id table is classified; no stale classifications
@@ -171,6 +188,17 @@ for (const [t, kind] of Object.entries(DISPOSITION)) {
   if (kind === 'wiped' || kind === 'special') assert(
     new RegExp(`DELETE FROM ${t}\\b|UPDATE ${t} SET status=|['"]${t}['"]`).test(allSrc),
     `${t} is classified '${kind}' but no death-cleanup DELETE / resolving status UPDATE for it exists in src/ — the estate wipe is missing`);
+  // A FOURTH shape, found the same way the third was: `boxing_title` holds ONE row forever and a
+  // death does not remove a row from it — it clears the dead player's claim ON it (the belt is
+  // vacated). Neither a DELETE nor a status UPDATE, and calling it 'special' made the guard demand
+  // cleanup that would be wrong to write. So a singleton is its own contract: it must be UPDATEd by
+  // the death path, and it must NOT be deleted from — deleting the row would remove the belt itself.
+  if (kind === 'singleton') {
+    assert(new RegExp(`UPDATE ${t} SET`).test(allSrc),
+      `${t} is classified 'singleton' but the death path never UPDATEs it — nothing releases a dead holder's claim`);
+    assert(!new RegExp(`DELETE FROM ${t}\\b`).test(allSrc),
+      `${t} is a 'singleton' but something DELETEs from it — a singleton's row is the thing itself, not a per-player record`);
+  }
 }
 
 // ── (c) DISTRICT → GANG lock order (full-sweep red-team, lens B) ──────────────────────────────
