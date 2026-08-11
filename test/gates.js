@@ -324,6 +324,53 @@ assert.equal(copies.length, 0,
   + `the inline check above and cannot be fixed by fixing the helper:\n   - ${copies.join('\n   - ')}`);
 console.log(`✓ no module re-defines ${CANON.join('/')} — every gate resolves to the one definition`);
 
+// ── EVERY LOCATION GATE NAMES THE WAY OUT ────────────────────────────────────────────────────────
+// A refusal that only says WHERE you should be leaves the player to go find the travel control,
+// which is one screen out of twenty-five. Tester feedback 2026-08-11, verbatim: "if I try to do
+// something in foundry but I can't cause I was in docs, I have to click through half of the tabs
+// [...] before I find the tab where I even can move to a different location."
+//
+// Prose cannot be turned into a button, so `GameError` carries the destination as DATA and the
+// client renders a one-tap "go there" from it. That works only if EVERY gate carries it — a single
+// site that forgets is a refusal with no way out, and it looks identical to the others until a
+// player hits exactly that one. So the payload is required here rather than remembered at 27 call
+// sites, and a 28th written next month fails by name instead of shipping mute.
+const DISTRICT_WAIVED = {
+  // Not a location gate at all: the argument is a district NAME that doesn't exist, so there is
+  // nowhere to send anyone. Travelling cannot help, and offering to travel would be a lie.
+  'src/landmarks.js': 'bad district argument, not a wrong-location refusal — nowhere to travel to',
+};
+const mute = [];
+let districtGates = 0;
+for (const f of files) {
+  const rel = path.relative(process.cwd(), f);
+  const src = fs.readFileSync(f, 'utf8');
+  for (const m of src.matchAll(/new GameError\(\s*'district'/g)) {
+    districtGates++;
+    // paren-match the whole argument list — the payload is the third argument and a `.slice(+200)`
+    // window would run past the throw into the next statement's object literals and read as a pass.
+    let i = src.indexOf('(', m.index);
+    let d = 0; let end = i;
+    for (; i < src.length; i++) {
+      if (src[i] === '(') d++;
+      else if (src[i] === ')') { d--; if (!d) { end = i; break; } }
+    }
+    const args = src.slice(m.index, end);
+    if (!/district:/.test(args) && !DISTRICT_WAIVED[rel]) {
+      mute.push(`${rel}:${src.slice(0, m.index).split('\n').length} — ${args.slice(0, 90)}…`);
+    }
+  }
+}
+// Anti-vacuity: if the extractor stops matching, "0 mute gates" is what a broken scan looks like.
+assert(districtGates >= 20,
+  `the location-gate scan found only ${districtGates} site(s) — the extractor has stopped seeing the `
+  + 'throws it keys on, so this check is passing over code it never read');
+assert.equal(mute.length, 0,
+  `location refusal(s) that name the destination in prose but not in DATA, so the client cannot offer\n`
+  + `      a one-tap way out (pass it as the third GameError argument: { district: <id> }):\n   - ${mute.join('\n   - ')}`);
+console.log(`✓ all ${districtGates - Object.keys(DISTRICT_WAIVED).length} wrong-location refusals carry the `
+  + 'destination as data — the client turns every one into a "go there" button');
+
 console.log('✅ THE GATE MATRIX passed — every verb in a family enforces the gates its siblings do, '
   + 'checked through direct calls, shared assert helpers and inline column comparisons alike; the '
   + 'membership is derived from the code rather than trusted, so a new street crime or collect action '

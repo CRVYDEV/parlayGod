@@ -25,7 +25,15 @@ import { fightersOf } from './boxing.js';
 
 const uid = () => crypto.randomUUID();
 import { startFirstBlood } from './firstblood.js';   // THE AHA MOMENT — assign a fresh player their first rival
-export class GameError extends Error { constructor(code, msg) { super(msg); this.code = code; } }
+// A refusal carries STRUCTURED data when the way out is a concrete thing the client can offer.
+// The motivating case (tester feedback 2026-08-11): every location gate said "the den is on the Neon
+// Mile" and left the player to go hunting for the travel control, which lived on one tab out of 25.
+// Prose alone cannot be turned into a button. `data` is merged into the 400 body, so a gate that
+// names `{ district }` gets a one-tap "go there" in the client for free — at every one of the 27
+// sites, rather than each having to remember to wire its own.
+export class GameError extends Error {
+  constructor(code, msg, data) { super(msg); this.code = code; if (data) this.data = data; }
+}
 
 // (red-team R6 — stored-XSS fix) Player-controlled display strings (character/gang names, custom
 // titles, contract reasons) render into the console's innerHTML, and the bearer token lives in the

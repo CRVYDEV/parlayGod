@@ -26,6 +26,31 @@ const seed = (cols) => pool.query(`UPDATE characters SET ${cols} WHERE id='${cid
 // ── gates: the den is at the Neon Mile; the tables have limits; lockup has no dice ──
 await seed("cash=1000000, nerve=50, energy=200, loc='docks'");
 assert.equal((await call('POST', '/v1/casino/dice', { token, body: { amount: 500 } })).body.error, 'district', 'the den runs on neon — travel there');
+
+// THE REFUSAL CARRIES THE WAY OUT. The prose says where the den is; this asserts the destination
+// arrives as DATA too, because prose cannot be turned into a button and the travel control lives on
+// one screen out of twenty-five (tester feedback 2026-08-11). test/gates.js proves all 26 location
+// gates pass the payload; this proves it survives GameError and the error handler and lands in the
+// 400 body the client reads — then walks the whole one-tap path: refused → travel → played.
+// On its OWN character, because the round it plays would otherwise land in the craps session's
+// rng_audit and ledger sums below and quietly loosen assertions that are exact today.
+{
+  const { body: { token: wt } } = await call('POST', '/v1/auth/guest');
+  await call('POST', '/v1/character', { token: wt, body: { name: 'Wrong Way Walsh' } });
+  const wid = (await meOf(wt)).id;
+  await pool.query(`UPDATE characters SET cash=50000, nerve=50, loc='docks' WHERE id='${wid}'`);
+  const refused = await call('POST', '/v1/casino/dice', { token: wt, body: { amount: 500 } });
+  assert.equal(refused.body.error, 'district', 'a wrong-location refusal');
+  assert.equal(refused.body.district, 'neon', 'names the destination as DATA, not only in prose');
+  assert.equal((await call('POST', `/v1/travel/${refused.body.district}`, { token: wt })).code, 200,
+    'and the district it names is somewhere you can actually go');
+  // The retry is asserted by what it refuses, not by playing: the location gate sits ABOVE the table
+  // minimum, so a $50 bet answering `min` proves the gate is behind us. Playing a real round here
+  // would move the SERVER-WIDE house book (den_volume.profit) and quietly loosen the craps session's
+  // exact profit == bets − wins identity below — a test that weakens another test to prove itself.
+  assert.equal((await call('POST', '/v1/casino/dice', { token: wt, body: { amount: 50 } })).body.error, 'min',
+    'so one tap later the den is open to them — the only thing left to argue about is the stake');
+}
 await seed("loc='neon'");
 assert.equal((await call('POST', '/v1/casino/dice', { token, body: { amount: 50 } })).body.error, 'min', 'table minimum $100');
 assert.equal((await call('POST', '/v1/casino/dice', { token, body: { amount: 500000 } })).body.error, 'max', 'table maximum $250k');

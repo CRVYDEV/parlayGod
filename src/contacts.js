@@ -187,7 +187,7 @@ export async function fulfillCall(ch, npc, client, h) {
   if (!call || new Date(call.expires_at) < new Date()) throw new GameError('no_call', 'Nobody is waiting on you.');
   if (call.npc_character !== npc.id) throw new GameError('wrong_contact', 'That is not who called you.');
   if (ch.loc !== call.district)
-    throw new GameError('district', `They're waiting at ${districtName(call.district)} — travel there first.`);
+    throw new GameError('district', `They're waiting at ${districtName(call.district)} — travel there first.`, { district: call.district });
   // (Lens D LOW-2) the frozen pay is a CEILING, never an option: goodPriceOf drifts daily and the
   // 24h TTL spans a day boundary, so a held call was a free option on the swing — fulfil only on a
   // day the good runs cheaper than the frozen basis and net > the premium. Re-clamp to the LIVE

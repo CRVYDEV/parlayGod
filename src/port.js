@@ -71,7 +71,7 @@ function supplyState(ch) {
 // POST /v1/port/boat/:kind — buy a boat at the Docks (a cash sink)
 export async function buyBoat(ch, kind, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No dealing from lockup.');
-  if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `The boatyard is at the ${PORT.DISTRICT} — travel there.`);
+  if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `The boatyard is at the ${PORT.DISTRICT} — travel there.`, { district: PORT.DISTRICT });
   if (levelOf(Number(ch.respect)) < PORT.MIN_LEVEL) throw new GameError('level', `The harbormaster deals with level ${PORT.MIN_LEVEL}+.`);
   const spec = boatOf(kind);
   if (!spec) throw new GameError('bad_boat', 'No such vessel at the yard.');
@@ -111,7 +111,7 @@ export async function sellBoat(ch, boatId, client, h) {
 // POST /v1/port/upgrade/:boatId {part} — NAVAL UPGRADE: buy a hull (+cargo) or engine (+knots) level (cash sink)
 export async function upgradeBoat(ch, boatId, part, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No work on the boat from lockup.');
-  if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `The dry dock is at the ${PORT.DISTRICT}.`);
+  if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `The dry dock is at the ${PORT.DISTRICT}.`, { district: PORT.DISTRICT });
   if (part !== 'hull' && part !== 'engine') throw new GameError('bad_part', 'Upgrade the hull or the engine.');
   const boat = (await client.query('SELECT * FROM boats WHERE id=$1 AND character_id=$2 FOR UPDATE', [boatId, ch.id])).rows[0];
   if (!boat) throw new GameError('no_boat', 'No such boat in your fleet.');
@@ -136,7 +136,7 @@ export async function launchRun(ch, boatId, routeId, escort, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No runs from lockup.');
   if (hospitalized(ch)) throw new GameError('hosp', "You're in no shape to captain a run.");
   if (safeHoused(ch)) throw new GameError('safe', "You can't run contraband from a safehouse."); // P1.3 — an op
-  if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `Load a run at the ${PORT.DISTRICT}.`);
+  if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `Load a run at the ${PORT.DISTRICT}.`, { district: PORT.DISTRICT });
   const boat = (await client.query('SELECT * FROM boats WHERE id=$1 AND character_id=$2 FOR UPDATE', [boatId, ch.id])).rows[0];
   if (!boat) throw new GameError('no_boat', 'No such boat in your fleet.');
   assertAfloat(boat);
@@ -180,7 +180,7 @@ export async function collectRun(ch, boatId, warehouse, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No collecting a run from lockup.');
   if (hospitalized(ch)) throw new GameError('hosp', "You're in no shape to work the dock.");
   if (safeHoused(ch)) throw new GameError('safe', 'The take waits for a captain on the dock, not a ghost.'); // D2 collect
-  if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `Collect at the ${PORT.DISTRICT}.`);
+  if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `Collect at the ${PORT.DISTRICT}.`, { district: PORT.DISTRICT });
   const boat = (await client.query('SELECT * FROM boats WHERE id=$1 AND character_id=$2 FOR UPDATE', [boatId, ch.id])).rows[0];
   if (!boat) throw new GameError('no_boat', 'No such boat in your fleet.');
   if (!atSea(boat)) throw new GameError('not_out', "She's docked — nothing to collect.");
@@ -257,7 +257,7 @@ export async function fenceContraband(ch, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No fencing from lockup.');
   if (hospitalized(ch)) throw new GameError('hosp', "You're in no shape to meet the fence."); // (red-team R18) parity
   if (safeHoused(ch)) throw new GameError('safe', 'The fence deals face to face, not with a ghost.'); // D2 extraction-ish
-  if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `The fence works out of the ${PORT.DISTRICT}.`);
+  if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `The fence works out of the ${PORT.DISTRICT}.`, { district: PORT.DISTRICT });
   const book = Number((await client.query('SELECT contraband FROM characters WHERE id=$1', [ch.id])).rows[0]?.contraband || 0);
   if (book <= 0) throw new GameError('nothing', "You've got no contraband warehoused.");
   const mult = fenceMultOf();
@@ -276,7 +276,7 @@ export async function fenceContraband(ch, client, h) {
 // POST /v1/port/berth — rent a permanent harbor slip (+1 fleet cap), a one-time cash sink, capped
 export async function rentBerth(ch, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No paperwork from lockup.');
-  if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `The harbormaster's office is at the ${PORT.DISTRICT}.`);
+  if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `The harbormaster's office is at the ${PORT.DISTRICT}.`, { district: PORT.DISTRICT });
   const berths = Number(ch.berths) || 0;
   if (berths >= PORT.STEP4.BERTH_MAX) throw new GameError('maxed', `You already lease the max (${PORT.STEP4.BERTH_MAX}) slips.`);
   if (Number(ch.cash) < PORT.STEP4.BERTH_COST) throw new GameError('cash', `A slip runs $${PORT.STEP4.BERTH_COST}.`);
@@ -298,7 +298,7 @@ export async function interceptRun(ch, targetBoatId, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No piracy from lockup.');
   if (hospitalized(ch)) throw new GameError('hosp', 'Not in your condition.');
   if (safeHoused(ch)) throw new GameError('safe', 'No raids while you hide — a safehouse is a shield, not a corsair.'); // P1.3
-  if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `Put to sea from the ${PORT.DISTRICT}.`);
+  if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `Put to sea from the ${PORT.DISTRICT}.`, { district: PORT.DISTRICT });
   if (levelOf(Number(ch.respect)) < S.PIRATE_MIN_LEVEL) throw new GameError('level', `Piracy is level ${S.PIRATE_MIN_LEVEL}+ work.`);
   if (Number(ch.energy) < S.PIRATE_ENERGY) throw new GameError('energy', `Running one down takes ${S.PIRATE_ENERGY} energy.`);
   if ((Number(ch.ammo) || 0) < S.PIRATE_AMMO) throw new GameError('ammo', `Boarding takes ${S.PIRATE_AMMO} rounds.`);

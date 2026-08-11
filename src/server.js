@@ -118,7 +118,7 @@ import { bulletinPublic, bulletinBoard, claimBulletin } from './bulletin.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit, checkAuthRateLimit, checkReadLimit, checkPublicRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
-         levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, CARS, KITCHENS, CONSUMABLES, TRADE_RANKS, M3, M4, M8, PATHS,
+         levelOf, GOODS, DRUGS, DISTRICTS, CONSTANTS, sealOf, CRIMES, GUNS, VESTS, CARS, KITCHENS, CONSUMABLES, TRADE_RANKS, M3, M4, M8, PATHS,
          RANKS,
          cityLawEventOf, cityForecast, regionShockOf, cityHourOf, ESTATE, AUCTION, MEGAPROJECT, CLUES, DUELS, DUEL_TITLE_RANKS, SEASON_MODS, seasonModOf, seasonIdxOf, seasonDaysLeft, SEASON_PHASES, seasonPhaseOf, seasonPhaseLeft,
          foundationOf, foundationBustMult, foundationBleedMult, CHARTERS, familyCharterOf, FAMILY_CHARTER, FOUNDATION, LAW, WIRE, STORE, PASS, PATRON, BONDS, SPEAKEASY, BOXING, RARITY,
@@ -424,7 +424,7 @@ export async function buildServer() {
   });
 
   app.setErrorHandler((err, req, reply) => {
-    if (err instanceof G.GameError) return reply.code(400).send({ error: err.code, message: err.message });
+    if (err instanceof G.GameError) return reply.code(400).send({ error: err.code, message: err.message, ...(err.data || {}) });
     // A bad token is a bad token — 401, never 500. Most fast-jwt errors already arrive carrying a 401,
     // but not all: FAST_JWT_INVALID_ALGORITHM (raised by the pinned `algorithms` above when a token is
     // signed with an algorithm we do not accept) has no statusCode and fell through to `internal`. So
@@ -1136,6 +1136,9 @@ export async function buildServer() {
     dealPlays: Object.values(M4.DEAL_PLAYS).map((p) => ({ id: p.id, name: p.name,
       heatMult: p.heatMult, nerveMult: p.nerveMult, repMult: p.repMult })),
     districts: DISTRICTS,
+    // the ride's price, published so the travel picker quotes the number the till actually charges
+    // rather than a restated literal (the catalog-discoverability rule)
+    travelCost: CONSTANTS.TRAVEL_COST,
     stats: ['muscle', 'cunning', 'speed'],
     paths: PATHS,
     // PATHS v2 — the hand-written teeth behind the catalog (home/rival trades + the fx matrix),

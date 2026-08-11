@@ -291,7 +291,7 @@ export async function fire(ch, victim, client, h, rounds) {
     await client.query('DELETE FROM searches WHERE hunter=$1', [ch.id]);
     throw new GameError('crew', "They run with your crew now. The hit's off.");
   }
-  if (victim.loc !== ch.loc) throw new GameError('district', `They were placed in ${victim.loc} — you're in ${ch.loc}. Travel there, then fire.`);
+  if (victim.loc !== ch.loc) throw new GameError('district', `They were placed in ${victim.loc} — you're in ${ch.loc}. Travel there, then fire.`, { district: victim.loc });
 
   ch.energy = Number(ch.energy) - M3.FIRE_ENERGY;
   ch.ammo = Number(ch.ammo) - fired;
@@ -902,7 +902,7 @@ export async function robTrunk(ch, victim, client, h) {
 export async function stealBoat(ch, victim, client, h) {
   const BT = RIVALS.BOAT_THEFT, C = RIVALS.CAR_THEFT;
   assertStreetCrime(ch, victim, h, BT.ENERGY);
-  if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `Boats are stolen where they float — the ${PORT.DISTRICT}.`);
+  if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `Boats are stolen where they float — the ${PORT.DISTRICT}.`, { district: PORT.DISTRICT });
   if (ch.gta_at && Date.now() < new Date(ch.gta_at).getTime() + CONSTANTS.GTA_CD_MS)
     throw new GameError('cooldown', "The heat's still on from the last job — lay off a minute.");
   const fleet = Number((await client.query('SELECT COUNT(*) n FROM boats WHERE character_id=$1 AND NOT minted_onchain', [ch.id])).rows[0].n);

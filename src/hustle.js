@@ -66,7 +66,7 @@ export async function advanceHustle(ch, client, h2) {
   const cur = stepOf(h, row);
   if (cur.step >= 3) throw new GameError('done', 'Today\'s hustle is done — fresh work tomorrow.');
   if (ch.loc !== cur.district)
-    throw new GameError('district', `Not here — this stop is at ${districtName(cur.district)}. Travel there first.`);
+    throw new GameError('district', `Not here — this stop is at ${districtName(cur.district)}. Travel there first.`, { district: cur.district });
   const counters = await countersOf(client, ch.id, day);
   if (cur.step === 1) {
     const base = JSON.parse(row?.baseline || '{}');
