@@ -34,7 +34,7 @@ const round6 = (n) => Math.round(n * 1e6) / 1e6;
 // ── 1. THE DECLARATION ────────────────────────────────────────────────────────────────────────────
 // One row per inflow. `splits` name every destination with its bps OF THE GROSS and where the slice
 // LANDS (the table/bucket an auditor reconciles against). `implicit: true` marks a remainder share
-// that is never stored anywhere (GAP-1 of the mapping pass — the founder shares of the fee + Store
+// that is never stored anywhere (GAP-1 of the mapping pass — the operations shares of the fee + Store
 // splits exist only as arithmetic; the board computes them and says so rather than hiding it).
 // A function, not a const: TREASURY.FEE_TREASURY_BPS() and withdrawTaxBps() are env-read per call.
 export function waterfall() {
@@ -44,26 +44,26 @@ export function waterfall() {
       splits: [
         { dest: 'vig', bps: VIG_BPS, lands: "vig_revenue source='fee'" },
         { dest: 'treasury', bps: feeTreasury, lands: "rwa_revenue source='fee'" },
-        { dest: 'founder', bps: 10000 - VIG_BPS - feeTreasury, lands: 'dev wallet (on-chain, implicit remainder)', implicit: true },
+        { dest: 'operations', bps: 10000 - VIG_BPS - feeTreasury, lands: 'dev wallet (on-chain, implicit remainder)', implicit: true },
       ] },
     { id: 'store', name: 'The Store (ETH packages)', currency: 'eth', totalBps: 10000,
       splits: [
         { dest: 'vig', bps: STORE.SPLIT_BPS.buyback, lands: "vig_revenue source='store'" },
         { dest: 'treasury', bps: STORE.SPLIT_BPS.rwa, lands: "rwa_revenue source='store'" },
-        { dest: 'founder', bps: STORE.SPLIT_BPS.founder, lands: 'dev wallet (on-chain, implicit remainder)', implicit: true },
+        { dest: 'operations', bps: STORE.SPLIT_BPS.founder, lands: 'dev wallet (on-chain, implicit remainder)', implicit: true },
       ] },
     { id: 'bond', name: 'Reserve Bonds (ETH principal)', currency: 'eth', totalBps: 10000,
       splits: [
         { dest: 'pol', bps: BONDS.POL_BPS, lands: 'bond_reserve.pol_eth' },
         { dest: 'vig', bps: BONDS.VIG_BPS, lands: "vig_revenue source='bond'" },
         { dest: 'treasury', bps: BONDS.RWA_BPS, lands: "bond_reserve.rwa_eth + rwa_revenue source='bond'" },
-        { dest: 'founder', bps: BONDS.DEV_BPS, lands: 'bond_reserve.dev_eth' },
+        { dest: 'operations', bps: BONDS.DEV_BPS, lands: 'bond_reserve.dev_eth' },
       ] },
     // The sell tax's slices are declared as bps OF THE TAXED GROSS (DEV_BPS/RWA_BPS/LP_BPS sum to
     // SELL_TAX.BPS, not 10000) — normalized here to shares-of-the-inflow so every row reads alike.
     { id: 'tax', name: `DEX sell tax (${SELL_TAX.BPS} bps of every OMR sell)`, currency: 'eth', totalBps: 10000,
       splits: [
-        { dest: 'founder', bps: Math.round(SELL_TAX.DEV_BPS / SELL_TAX.BPS * 10000), lands: 'sell_tax_events.dev_eth' },
+        { dest: 'operations', bps: Math.round(SELL_TAX.DEV_BPS / SELL_TAX.BPS * 10000), lands: 'sell_tax_events.dev_eth' },
         { dest: 'treasury', bps: Math.round(SELL_TAX.RWA_BPS / SELL_TAX.BPS * 10000), lands: "sell_tax_events.rwa_eth + rwa_revenue source='tax'" },
         { dest: 'pol', bps: 10000 - Math.round(SELL_TAX.DEV_BPS / SELL_TAX.BPS * 10000) - Math.round(SELL_TAX.RWA_BPS / SELL_TAX.BPS * 10000),
           lands: 'sell_tax_events.lp_eth (the remainder rule sits on LP)' },
@@ -78,7 +78,7 @@ export function waterfall() {
     { id: 'auction', name: "The Desk's daily Dutch auction (ETH proceeds)", currency: 'eth', totalBps: 10000,
       splits: [
         { dest: 'pol', bps: DESK_AUCTION.ETH_POL_BPS, lands: 'desk_sales.pol_eth' },
-        { dest: 'founder', bps: 10000 - DESK_AUCTION.ETH_POL_BPS, lands: 'desk_sales.founder_eth (remainder)' },
+        { dest: 'operations', bps: 10000 - DESK_AUCTION.ETH_POL_BPS, lands: 'desk_sales.founder_eth (remainder)' },
       ] },
     { id: 'polfees', name: 'POL trading fees (the LP position earns)', currency: 'eth', totalBps: 10000,
       splits: [{ dest: 'desk-buyback', bps: 10000, lands: 'pol_fees (the buyback budget — exclusively)' }] },
@@ -91,11 +91,11 @@ export function waterfall() {
       currency: 'usd', totalBps: 10000,
       splits: [{ dest: 'treasury', bps: 10000, lands: "bank_revenue source='harvest' (in the market's underlying)" }] },
     // The one non-ETH revenue line: the $OMR exit toll (+ the early-exit surcharge, which rides the
-    // SAME split). Declared here because "where a dollar goes" must include the founder's other
+    // SAME split). Declared here because "where a dollar goes" must include operations' other
     // revenue bucket, or the map is not the map.
     { id: 'toll', name: `$OMR exit toll (${withdrawTaxBps()} bps) + early-exit surcharge`, currency: 'omr', totalBps: 10000,
       splits: [
-        { dest: 'founder', bps: TAX.DEV_BPS, lands: "dev_fund (ledger reason tax:dev)" },
+        { dest: 'operations', bps: TAX.DEV_BPS, lands: "dev_fund (ledger reason tax:dev)" },
         { dest: 'community', bps: 10000 - TAX.DEV_BPS, lands: "family_yield_pool (ledger reason tax:buyback)" },
       ] },
   ];
@@ -217,22 +217,22 @@ export async function routerBoard(pool) {
   lifetime.fee = { gross: round6(feeGross),
     vig: await one("SELECT COALESCE(SUM(vig_eth),0) s FROM vig_revenue WHERE source='fee'"),
     treasury: await one("SELECT COALESCE(SUM(rwa_eth),0) s FROM rwa_revenue WHERE source='fee'") };
-  lifetime.fee.founder = round6(Math.max(0, feeGross - lifetime.fee.vig - lifetime.fee.treasury));
+  lifetime.fee.operations = round6(Math.max(0, feeGross - lifetime.fee.vig - lifetime.fee.treasury));
 
   const storeRows = (await pool.query('SELECT amount_wei FROM store_payments WHERE tx_hash IS NOT NULL')).rows;
   const storeGross = storeRows.reduce((a, r) => { try { return a + Number(BigInt(r.amount_wei)) / 1e18; } catch { return a; } }, 0);
   lifetime.store = { gross: round6(storeGross),
     vig: await one("SELECT COALESCE(SUM(vig_eth),0) s FROM vig_revenue WHERE source='store'"),
     treasury: await one("SELECT COALESCE(SUM(rwa_eth),0) s FROM rwa_revenue WHERE source='store'") };
-  lifetime.store.founder = round6(Math.max(0, storeGross - lifetime.store.vig - lifetime.store.treasury));
+  lifetime.store.operations = round6(Math.max(0, storeGross - lifetime.store.vig - lifetime.store.treasury));
 
   const br = (await pool.query('SELECT pol_eth, dev_eth, rwa_eth FROM bond_reserve WHERE id=1')).rows[0] || {};
-  lifetime.bond = { pol: num(br.pol_eth), founder: num(br.dev_eth), treasury: num(br.rwa_eth),
+  lifetime.bond = { pol: num(br.pol_eth), operations: num(br.dev_eth), treasury: num(br.rwa_eth),
     vig: await one("SELECT COALESCE(SUM(vig_eth),0) s FROM vig_revenue WHERE source='bond'") };
-  lifetime.bond.gross = round6(lifetime.bond.pol + lifetime.bond.founder + lifetime.bond.treasury + lifetime.bond.vig);
+  lifetime.bond.gross = round6(lifetime.bond.pol + lifetime.bond.operations + lifetime.bond.treasury + lifetime.bond.vig);
 
   lifetime.tax = { gross: await one('SELECT COALESCE(SUM(gross_eth),0) s FROM sell_tax_events WHERE real'),
-    founder: await one('SELECT COALESCE(SUM(dev_eth),0) s FROM sell_tax_events WHERE real'),
+    operations: await one('SELECT COALESCE(SUM(dev_eth),0) s FROM sell_tax_events WHERE real'),
     treasury: await one('SELECT COALESCE(SUM(rwa_eth),0) s FROM sell_tax_events WHERE real'),
     pol: await one('SELECT COALESCE(SUM(lp_eth),0) s FROM sell_tax_events WHERE real') };
 
@@ -241,7 +241,7 @@ export async function routerBoard(pool) {
 
   lifetime.auction = { gross: await one('SELECT COALESCE(SUM(eth),0) s FROM desk_sales WHERE real'),
     pol: await one('SELECT COALESCE(SUM(pol_eth),0) s FROM desk_sales WHERE real'),
-    founder: await one('SELECT COALESCE(SUM(founder_eth),0) s FROM desk_sales WHERE real') };
+    operations: await one('SELECT COALESCE(SUM(founder_eth),0) s FROM desk_sales WHERE real') };
 
   lifetime.harvest = { byAsset: await bankRevenueByAsset(pool) };
 
@@ -249,7 +249,7 @@ export async function routerBoard(pool) {
     spent: await one('SELECT COALESCE(SUM(eth_spent),0) s FROM desk_buys WHERE real') };
 
   const df = (await pool.query('SELECT omr, lifetime FROM dev_fund WHERE id=1')).rows[0] || { omr: 0, lifetime: 0 };
-  lifetime.toll = { founder: num(df.lifetime), founderUnclaimed: num(df.omr),
+  lifetime.toll = { operations: num(df.lifetime), operationsUnclaimed: num(df.omr),
     community: await one("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='tax:buyback' AND amount < 0") * -1 };
 
   return { waterfall: wf, lifetime, invariants: await runRouterInvariants(pool) };

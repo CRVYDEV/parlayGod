@@ -6,7 +6,7 @@
     --bg:#efe9dc; --panel:#f6f1e6; --ink:#1c1a15; --faint:#6f6858; --line:#d6cdb8;
     --gold:#9a7a2e; --stamp:#8f3a2f; --rule:#2a2620;
     --eth:#3a6b5f; --omr:#8a6d1f; --usd:#4a5d7a;
-    --d-vig:#6b4a8f; --d-treasury:#3a6b5f; --d-founder:#8f3a2f; --d-pol:#2f6d55;
+    --d-vig:#6b4a8f; --d-treasury:#3a6b5f; --d-operations:#8f3a2f; --d-pol:#2f6d55;
     --d-community:#9a6a2e; --d-desk-buyback:#4a5d7a;
     --shadow:0 1px 0 #fff8, 0 14px 34px -18px #0007;
   }
@@ -15,7 +15,7 @@
       --bg:#14120e; --panel:#1c1913; --ink:#ece4d2; --faint:#9a917c; --line:#332d22;
       --gold:#c9a24b; --stamp:#c8574a; --rule:#c9bfa8;
       --eth:#6fb3a1; --omr:#d3ad4e; --usd:#8aa2c6;
-      --d-vig:#a986d6; --d-treasury:#6fb3a1; --d-founder:#d47a6e; --d-pol:#63c096;
+      --d-vig:#a986d6; --d-treasury:#6fb3a1; --d-operations:#d47a6e; --d-pol:#63c096;
       --d-community:#d3a45e; --d-desk-buyback:#8aa2c6;
       --shadow:0 1px 0 #fff1, 0 18px 40px -20px #000a;
     }
@@ -24,7 +24,7 @@
     --bg:#14120e; --panel:#1c1913; --ink:#ece4d2; --faint:#9a917c; --line:#332d22;
     --gold:#c9a24b; --stamp:#c8574a; --rule:#c9bfa8;
     --eth:#6fb3a1; --omr:#d3ad4e; --usd:#8aa2c6;
-    --d-vig:#a986d6; --d-treasury:#6fb3a1; --d-founder:#d47a6e; --d-pol:#63c096;
+    --d-vig:#a986d6; --d-treasury:#6fb3a1; --d-operations:#d47a6e; --d-pol:#63c096;
     --d-community:#d3a45e; --d-desk-buyback:#8aa2c6;
     --shadow:0 1px 0 #fff1, 0 18px 40px -20px #000a;
   }
@@ -200,31 +200,30 @@
       working copy of it and can Reset back to exactly this. ────────────────────────────────────── */
 const LIVE = [
   {id:"fee",name:"Gameplay fees (mint / respawn / reroll)",currency:"eth",splits:[
-    {dest:"vig",bps:6000,lands:"vig_revenue source='fee'"},
-    {dest:"treasury",bps:1000,lands:"rwa_revenue source='fee'"},
-    {dest:"founder",bps:3000,lands:"dev wallet (on-chain remainder)",implicit:true}]},
+    {dest:"vig",bps:2500,lands:"vig_revenue source='fee'"},
+    {dest:"treasury",bps:2500,lands:"rwa_revenue source='fee'"},
+    {dest:"operations",bps:5000,lands:"dev wallet (on-chain remainder)",implicit:true}]},
   {id:"store",name:"The Store (ETH packages)",currency:"eth",splits:[
-    {dest:"vig",bps:4000,lands:"vig_revenue source='store'"},
-    {dest:"treasury",bps:2000,lands:"rwa_revenue source='store'"},
-    {dest:"founder",bps:4000,lands:"dev wallet (on-chain remainder)",implicit:true}]},
+    {dest:"vig",bps:2500,lands:"vig_revenue source='store'"},
+    {dest:"treasury",bps:2500,lands:"rwa_revenue source='store'"},
+    {dest:"operations",bps:5000,lands:"dev wallet (on-chain remainder)",implicit:true}]},
   {id:"bond",name:"Reserve Bonds (ETH principal)",currency:"eth",splits:[
-    {dest:"pol",bps:3750,lands:"bond_reserve.pol_eth"},
-    {dest:"vig",bps:2250,lands:"vig_revenue source='bond'"},
-    {dest:"treasury",bps:2500,lands:"bond_reserve.rwa_eth + rwa_revenue"},
-    {dest:"founder",bps:1500,lands:"bond_reserve.dev_eth"}]},
+    {dest:"pol",bps:8500,lands:"bond_reserve.pol_eth"},
+    {dest:"operations",bps:1500,lands:"bond_reserve.dev_eth"}]},
   {id:"tax",name:"DEX sell tax (900 bps of every OMR sell)",currency:"eth",splits:[
-    {dest:"founder",bps:2222,lands:"sell_tax_events.dev_eth"},
-    {dest:"treasury",bps:4444,lands:"sell_tax_events.rwa_eth + rwa_revenue"},
+    {dest:"operations",bps:3333,lands:"sell_tax_events.dev_eth"},
+    {dest:"community",bps:3333,lands:"sell_tax_events.rwa_eth + rwa_revenue"},
     {dest:"pol",bps:3334,lands:"sell_tax_events.lp_eth (remainder on LP)"}]},
   {id:"auction",name:"The Desk — daily Dutch auction (ETH proceeds)",currency:"eth",splits:[
     {dest:"pol",bps:5000,lands:"desk_sales.pol_eth"},
-    {dest:"founder",bps:5000,lands:"desk_sales.founder_eth (remainder)"}]},
+    {dest:"operations",bps:5000,lands:"desk_sales.founder_eth (remainder)"}]},
   {id:"polfees",name:"POL trading fees (the LP position earns)",currency:"eth",splits:[
     {dest:"desk-buyback",bps:10000,lands:"pol_fees (the buyback budget)"}]},
   {id:"harvest",name:"The Bank — harvest performance fee (2000 bps of yield)",currency:"usd",splits:[
-    {dest:"treasury",bps:10000,lands:"bank_revenue source='harvest'"}]},
+    {dest:"desk-buyback",bps:5000,lands:"bank_revenue source='harvest'"},
+    {dest:"community",bps:5000,lands:""}]},
   {id:"toll",name:"$OMR exit toll (200 bps) + early-exit surcharge",currency:"omr",splits:[
-    {dest:"founder",bps:5000,lands:"dev_fund (tax:dev)"},
+    {dest:"operations",bps:5000,lands:"dev_fund (tax:dev)"},
     {dest:"community",bps:5000,lands:"family_yield_pool (tax:buyback)"}]},
   {id:"trade",name:"Swap trade fee — RETIRED (the sell tax is the one hook)",currency:"eth",retired:true,splits:[
     {dest:"vig",bps:10000,lands:"vig_revenue source='trade' (historical only)"}]},
@@ -236,7 +235,7 @@ const DESTS = [
   {id:"vig",label:"The Vig (withdrawal reserve + prizes)"},
   {id:"treasury",label:"Treasury Safe (cold)"},
   {id:"pol",label:"Protocol-owned liquidity (depth)"},
-  {id:"founder",label:"Founder / dev wallet"},
+  {id:"operations",label:"Operations"},
   {id:"community",label:"Community (family yield pool)"},
   {id:"desk-buyback",label:"The Desk buyback budget"},
 ];

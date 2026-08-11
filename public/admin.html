@@ -510,7 +510,7 @@
       + rowHtml('pool / backed', `${fmt(em?.poolBalance)} $OMR · ${Math.round((em?.backed ?? 1) * 100)}%`)
       + (rev ? `<div class="note" style="margin-top:8px">the Store (ETH revenue, split ${rev.split.founder / 100}/${rev.split.buyback / 100}/${rev.split.rwa / 100})</div>`
         + rowHtml('gross ETH', `Ξ${fmt(rev.grossEth)}`)
-        + rowHtml('founder / buyback / rwa', `Ξ${fmt(rev.founderEth)} · Ξ${fmt(rev.buybackEth)} · Ξ${fmt(rev.rwaEth)}`)
+        + rowHtml('operations / buyback / rwa', `Ξ${fmt(rev.founderEth)} · Ξ${fmt(rev.buybackEth)} · Ξ${fmt(rev.rwaEth)}`)
         + rowHtml('treasury', `Ξ${fmt(rev.rwaEth)} <span class="note">held as ETH</span>`)
         + (rev.pendingLinks ? rowHtml('pending links', `${rev.pendingLinks} unclaimed purchase(s)`) : '') : '')
       + (tre && tre.code !== 401 ? `<div class="note" style="margin-top:8px">THE VAULT — what the treasury owes players</div>`
