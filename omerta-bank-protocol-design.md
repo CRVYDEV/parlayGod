@@ -579,6 +579,39 @@ backing from both directions.
 printed** — and now, additionally, was bought *for* somebody who was playing. The result is
 something no competitor's tokenomics does: **borrowers who pay fund the players who don't.**
 
+### 4.4 BUILT — `src/bank.js`, `test/bank.js` (2026-08-11)
+
+The off-chain half is live and chain-dormant, the M6 pattern: the accounting is deterministic and
+testable, and on mainnet the bot does the real DEX buy and reports what it got.
+
+- **`recordBankBuy`** — idempotent on `ref`; the per-asset root cap (`spend ≤ revenue`) read INSIDE
+  the transaction so two concurrent buys cannot each see the whole budget.
+- **`runCityLeg`** — one epoch, idempotent on the window; pro-rata **linear, uncapped**; the breadth
+  gate and dust floor from `ACTIVITY`; agents and residents excluded at the source; the remainder
+  rule on the last payee; `prize:omr` + `fundReserve` post-commit.
+- **`runBankInvariants`** — RULE 1 (`distributed ≤ bought`) plus the books either side, wired into
+  the worker's nightly `alertDrift` beside vig/bond/desk/treasury.
+- **`cityPaid`** is named in BOTH halves of the Vig's reserve sandwich. That is not optional: an
+  unnamed funder does not fail open, it fires **spuriously on both halves at once** (AUDIT-desk F1).
+
+**One thing is STRICTER than the design as written, and deliberately.** A comp/QA buy (no `txHash`)
+books **zero $OMR**, not merely zero spend — unlike the desk's comp, which stocks its shelf freely.
+The difference is where the pool's contents can go: desk inventory is soft supply inside
+`omrBuckets` that only reaches a player through a paid fill, whereas this pool's **only** exit is a
+`prize:omr` mint followed by `fundReserve`, i.e. the assertion *"hard $OMR arrived and stands behind
+this"*. A comp crediting here would let the server sign a real withdrawal against backing that never
+existed. It is the treasury's *"a comp books ZERO units"* posture, and this is why it is that one.
+
+**And one thing the design did not specify: an empty pool does not consume the window.**
+`UNIQUE (start_day, end_day)` makes the epoch row that day's only chance, so a sweep landing at 00:05
+before the day's buy must skip rather than close it empty — otherwise the day's players silently lose
+a purchase that lands at noon.
+
+`test/bank.js` asserts the split-is-neutral property directly — three accounts doing a third each
+take **exactly** what one doing all of it took. Under a per-account cap that number becomes 3× larger,
+which is the finding, and it is why the assertion sits ABOVE the pool-drain checks: a cap breaks
+those too, so with them first the mutation never reaches the claim it is meant to test.
+
 ---
 
 ## 5. The contracts
@@ -649,6 +682,8 @@ distribute anything by chance; the projected-payoff-date honesty rule of §3.
 3. **`nETH` market** — the same contracts, second instance.
 4. **RateController + free/paid debt.**
 5. **RevenueSplitter** — staker + OMR-buy legs live; NFT leg at zero pending A11.
+   *(The OMR-buy leg's OFF-CHAIN half is BUILT — §4.4. What remains on-chain is the splitter itself
+   and the market-buy bot; `recordBankBuy` is already the ingest they report to.)*
 6. **Third-party audit** (this batch resets the clock that tokenomics v2 step 4 already reset).
 7. **LP staking + auto-compounding** (§2.8) — no oracle, no borrow, no liquidation; it
    compounds toward the POL depth §2.7(1) requires, so it is early rather than late.

@@ -127,13 +127,13 @@
   }
 
   async function refreshAll() {
-    const [ov, inv, fn, res, vig, em, act, rev, eng, bnd, tre, coa, intg, rtr, cpar] = await Promise.all([
+    const [ov, inv, fn, res, vig, em, act, rev, eng, bnd, tre, coa, intg, rtr, cpar, bkv] = await Promise.all([
       j('GET', '/v1/mod/overview'), j('GET', '/v1/mod/invariants'), j('GET', '/v1/mod/funnel'),
       j('GET', '/v1/mod/reserve'), j('GET', '/v1/mod/vig'), j('GET', '/v1/mod/emission'),
       j('GET', '/v1/mod/activity?limit=60'), j('GET', '/v1/mod/revenue'),
       j('GET', '/v1/mod/engagement'), j('GET', '/v1/mod/bonds'), j('GET', '/v1/mod/treasury'),
       j('GET', '/v1/mod/coach'), j('GET', '/v1/mod/integrations'), j('GET', '/v1/mod/router'),
-      j('GET', '/v1/mod/chain/params'),
+      j('GET', '/v1/mod/chain/params'), j('GET', '/v1/mod/bank'),
     ]);
     if (ov.code === 401) return $('#logout').onclick();
 
@@ -160,7 +160,7 @@
 
     $('#stamp').textContent = 'as of ' + new Date().toLocaleTimeString();
     renderIntegrity(inv.body); renderEconomy(ov.body, em.body); renderPlayers(ov.body); renderEngagement(eng.body);
-    renderFunnel(fn.body); renderTop(ov.body); renderChain(res.body, vig.body, em.body, rev.body, bnd.body, tre, ov.body); renderRouter(rtr.body);
+    renderFunnel(fn.body); renderTop(ov.body); renderChain(res.body, vig.body, em.body, rev.body, bnd.body, tre, ov.body, bkv.body); renderRouter(rtr.body);
     renderBackups(ov.body); renderSocial(ov.body); renderCoach(coa.body);
     renderIntegrations(intg.body); window.__cpar = (cpar.body && cpar.body.rows) || []; renderChainParams(cpar.body);
     renderActivity(act.body); renderMod();
@@ -481,7 +481,7 @@
   // ReferenceError and took the entire chain panel down with it: the reserve, extraction-≤-inflow,
   // the staking pool, the Store split, the vault's allocated-≤-held wall and the oracle keeper
   // all rendered as nothing, on the screen a founder opens when something is wrong.
-  function renderChain(res, vig, em, rev, bnd, tre, ov) {
+  function renderChain(res, vig, em, rev, bnd, tre, ov, bk) {
     const v = vig?.invariants || {}, vs = vig?.status || {};
     const extractOk = v.ok !== false;
     $('#p-chain').querySelector('.body').innerHTML =
@@ -545,7 +545,17 @@
                                 : ` of ${fmt(ov.mintTier.through)}`))
           + rowHtml('price', ov.mintTier.offSchedule
             ? `<span style="color:var(--bad)">⚠ OFF SCHEDULE</span> — live Ξ${ov.mintTier.liveEth} / ${ov.mintTier.liveOmr} $OMR, the table says Ξ${ov.mintTier.priceEth} / ${ov.mintTier.priceOmr}`
-            : `Ξ${ov.mintTier.priceEth} / ${ov.mintTier.priceOmr} $OMR <span class="note">both rails on schedule</span>`)) : '');
+            : `Ξ${ov.mintTier.priceEth} / ${ov.mintTier.priceOmr} $OMR <span class="note">both rails on schedule</span>`)) : '')
+      // THE BANK'S CITY LEG — borrowers' profit buys $OMR and the players who play receive it.
+      // RULE 1 (`distributed <= bought`) is the wall; the rest is books. It is on THIS screen for the
+      // same reason every sibling runner is: the nightly alarm fires into alertDrift, and an alarm
+      // with nowhere to look at 2am is the failure mode this dashboard exists to prevent.
+      + (bk && !bk.error ? (`<div class="note" style="margin-top:8px">the Bank — the city leg</div>`
+          + rowHtml('bought / paid out', `${fmt(bk.summary?.bought)} / ${fmt(bk.summary?.paidTotal)} $OMR`)
+          + rowHtml('waiting for the next split', `${fmt(bk.summary?.balance)} $OMR`)
+          + rowHtml('the books', bk.ok
+            ? '<span style="color:var(--ok)">✓ every token paid was bought</span>'
+            : `<span style="color:var(--bad)">⚠ ${esc((bk.checks || []).filter((c) => !c.ok).map((c) => c.name).join(' · '))}</span>`)) : '');
   }
 
   // THE MONEY ROUTER — WHERE A DOLLAR GOES. The whole declared waterfall (every real-value inflow

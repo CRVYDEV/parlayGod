@@ -11726,3 +11726,63 @@ guys can't nuke chart to zero") is precisely what the no-faucet design prevents.
 founder as a decision, and partly a DISCOVERABILITY problem — $OMR *is* earned in-game (~1,320
 lifetime + 3/day via missions and the daily all-three bonus), it is simply never surfaced as "this is
 how you get the token."
+
+**THE CITY LEG — the Bank's profit buys $OMR and the players who PLAY receive it (founder-directed
+2026-08-10: "make it so the OMR bought from the profit only funds the game the players who play") —
+BUILT** (`src/bank.js` — the 140th module, `test/bank.js` — the 97th suite; `omerta-bank-protocol-design.md`
+§4.1–§4.4; `GET /v1/bank` + three mod routes + the worker sweep). The Bank's other half was already
+here — the contracts, the `bank_revenue` ledger harvest fees land in, and `ACTIVITY` locked and pinned
+in the rules tail — and **nothing connected them**: no code turned revenue into $OMR and nothing handed
+that $OMR to anybody. This is the connection, and it is the flywheel the whole design is for:
+**borrowers who pay fund the players who don't.**
+**LINEAR AND UNCAPPED, which is not a preference.** Pro-rata on the activity score with NO per-account
+cap, because this project already measured and paid for the alternative (BALANCE.md § THE FARM): the
+Street Wage's `WAGE_CAP_OMR` was commented "anti-Sybil" and did the exact opposite — **a per-individual
+cap is CONCAVE, and the only way around a per-individual cap is to BE several individuals**, so it
+clips the honest whale and hands the remainder to whoever runs more accounts. The general law:
+concave → splitting effort across N accounts GAINS → Sybil-POSITIVE; linear → splitting gains exactly
+nothing → Sybil-NEUTRAL. So the Sybil bound is not a cap, it is the game's own clocks: every tag in
+`ACTIVITY.TAGS` is throttled by nerve, energy or a cooldown, so a farm's cost and its reward are both
+linear in N. **`test/bank.js` asserts the split-is-neutral property DIRECTLY** — three accounts doing a
+third each take *exactly* what one doing all of it took — because it is the property an added cap
+would silently break. The breadth gate (`MIN_TRACKS`) is the opposite shape and belongs: a fixed cost
+per ACCOUNT is Sybil-NEGATIVE and never clips an honest player.
+**§10.4: ONE reason, and not a new one.** `prize:omr` — already documented as an in-game credit BACKED
+by hard $OMR moved into the withdrawal reserve — so Wall 1 (no faucet) survives intact: every token
+handed to a player was BOUGHT, not printed, and now additionally bought *for* somebody who was playing.
+The backing is asserted from both directions, and that needed care: **`cityPaid` is named in BOTH halves
+of the Vig's reserve sandwich**, because an unnamed funder does not fail open — it fires SPURIOUSLY on
+both halves at once (AUDIT-desk F1, one funder earlier). `runBankInvariants` is the real-value runner
+(RULE 1 `distributed ≤ bought`, the pool's own books, summary-vs-rows on both sides, the per-asset root
+cap), wired into the worker's nightly `alertDrift` beside vig/bond/desk/treasury.
+**TWO THINGS ARE STRICTER OR DIFFERENT THAN THE DESIGN AS WRITTEN, both deliberate.** (1) **A comp/QA
+buy books ZERO $OMR, not merely zero spend** — unlike the desk's comp, which stocks its shelf freely.
+The difference is where the pool's contents can GO: desk inventory is soft supply inside `omrBuckets`
+that only reaches a player through a paid fill, whereas this pool's ONLY exit is a `prize:omr` mint
+followed by `fundReserve`, i.e. the assertion *"hard $OMR arrived and stands behind this"* — so a comp
+crediting here would let the server sign a real withdrawal against backing that never existed. It is
+the treasury's "a comp books ZERO units" posture, and that is why it is that one rather than the desk's.
+(2) **An empty pool does not consume the window.** `UNIQUE (start_day, end_day)` makes the epoch row
+that day's only chance, so a sweep landing at 00:05 before the day's buy SKIPS rather than closing it
+empty — otherwise the day's players silently lose a purchase that lands at noon.
+**The test's ORDER is load-bearing and the mutation run is what proved it**: the linearity assertion
+sits ABOVE the pool-drain checks, because a cap breaks those too — with them first, the cap mutation
+fails on "nothing is stranded" and the centrepiece never fires. Reordered, it fails by name showing
+`750` against `250`, the split earning 3× the solo: the Sybil-positive shape, exactly. Five mutations,
+five named failures (the cap; the comp booking $OMR; the empty pool closing the window; `cityPaid`
+dropped from the Vig sandwich; the breadth gate dropped).
+**The client copy moved in the same commit**, which the recorded stale-promise lessons demand: Going
+Legit's "Where $OMR Comes From" card said there were THREE ways to get some and now says four, and the
+new **THE BANK** section states the mechanism, the player's own standing today (score, in-or-out, and
+the gate stated rather than implied), and what they have been paid. The board carries **no rate, no
+projection and no APY** — §3's first product rule — and the test asserts that over the board's own
+fields rather than the whole envelope (`readCharacter` merges the character sheet, whose kitchen lab
+has a `yield` MODULE — an unrelated word that would have made the check read as a violation forever).
+**Shipped with it: THE BOND DESK**, promoted out of a collapsed drawer into a real surface — today's
+window with what is left, the terms as a table, take-the-deal, your bonds. **Looking at it found a real
+defect a parsing check could not**: the card showed `TODAY'S WINDOW — OPEN · 100,000` while the tranche
+behind it held **0**, and `quoteBond` gates on BOTH — so it advertised open and would refuse on press,
+the check-5 "control that lies" class one level up. What is buyable is the SMALLER of the two, and the
+shut state now says which is binding and disables the button. All numbers are founder sign-off levers
+(`ACTIVITY.*` were pinned when the metric locked; `CITY_EPOCH_DAYS` is new). Suite 97/97 + sim drift-0
++ mobile 75/75 + client wiring/mirror + pgquery 2742 statements + pgcheck 43/43 on real Postgres.

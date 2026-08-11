@@ -5,6 +5,7 @@
 import crypto from 'node:crypto';
 import { runLedgerInvariants, alertDrift } from '../invariants.js';
 import { TAX, withdrawTaxBps } from '../rules.js';
+import * as Bank from '../bank.js';
 import * as Bonds from '../bonds.js';
 import * as Chain from '../chain.js';
 import * as ChainParams from '../chainparams.js';
@@ -202,6 +203,21 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
     // stands on the fill for exactly the same reason it stands on the bond: the $OMR side of a comp
     // is real (a transfer off a shelf we hold, so it can be), but "the desk received this much ETH"
     // must never be assertable by a mod call.
+    // ── THE CITY LEG (the Bank's §4.1 distribution, src/bank.js) ────────────────────────────────
+    // `/bank` is the real-value invariant — RULE 1 (`Σ distributed ≤ Σ bought`) plus the books
+    // either side of it. `/bank/buy` is the buy bot's seat until the DEX leg is wired, and carries
+    // the same modRealTxHash gate as the desk fill and the bond for the same reason: the $OMR side
+    // of a comp is real enough to test a distribution with, but "protocol profit of this size
+    // arrived" must never be assertable by a mod call — a fabricated buy would hand players $OMR
+    // that no hard token stands behind, which is precisely what the reserve credit asserts.
+    // `/bank/epoch` runs a distribution now rather than waiting for the worker; it is idempotent on
+    // the window, so pressing it twice is a no-op rather than a second payout.
+    app.get('/v1/mod/bank', { preHandler: modAuth }, async () => Bank.runBankInvariants(pool));
+    app.post('/v1/mod/bank/buy', { preHandler: modAuth }, async (req) =>
+      Bank.recordBankBuy(pool, { ref: req.body?.ref, asset: req.body?.asset,
+        spent: req.body?.spent, omrBought: req.body?.omr, txHash: modRealTxHash(req) }));
+    app.post('/v1/mod/bank/epoch', { preHandler: modAuth }, async (req) =>
+      Bank.runCityLeg(pool, { ...(req.body?.endDay != null ? { endDay: Number(req.body.endDay) } : {}) }));
     app.get('/v1/mod/desk', { preHandler: modAuth }, async () => Desk.runDeskInvariants(pool));
     app.post('/v1/mod/desk/open', { preHandler: modAuth }, async () => Desk.openAuction(pool));
     app.post('/v1/mod/desk/fill', { preHandler: modAuth }, async (req) =>

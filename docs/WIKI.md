@@ -197,10 +197,22 @@ stays in the city; $OMR comes in from outside and leaves through the Exchange wi
 main economic rule (section 10.4): the game records and checks every movement of value.
 
 **Nothing you do in the game creates $OMR.** There is no wage, no yield and no drip — the city has no
-printer at all. Every $OMR in it was **bought with real money** by somebody, which is exactly why it is worth taking off them. Your three ways to get some:
+printer at all. Every $OMR in it was **bought with real money** by somebody, which is exactly why it is worth taking off them. Your four ways to get some:
 **take it** (killing a player loots their liquid $OMR — staked and committed $OMR is safer), **earn it**
-from another player who pays you in it, or **buy it**. A nightly job asserts that no new $OMR appeared,
-so this is a fact you can check rather than a promise.
+from another player who pays you in it, **buy it**, or **get paid out of the Bank** (below). A nightly
+job asserts that no new $OMR appeared, so this is a fact you can check rather than a promise.
+
+**The Bank's city leg** (`GET /v1/bank`) — the fourth way, and the only one that pays you for simply
+playing. People who borrow from the Bank pay to use it; that profit is spent **buying $OMR on the open
+market**, and the whole of it is handed to the players who played that day. Nothing is printed — every
+token in the split was purchased first, which is why it does not move supply.
+
+Your share is your share of what the whole city did that day, **flat and with no cap** — so a man
+running ten accounts takes exactly what he would have taken running one, and there is no reward for
+splitting yourself up. Only actions the game itself rations count (nerve, energy, a cooldown); nothing
+you can simply buy more of. To be in a day's split at all you need work across **three different
+trades** and a minimum day's score — the board tells you where you stand and what you still need. It
+is not a rate and it is not a promise: the size of the split is whatever the Bank actually earned.
 
 **The Desk** (`GET /v1/desk`) — where you buy it, and where it goes when you spend it. Every $OMR a
 sink takes off you (a vanity burn, an estate tier, a jury, the Window) is **not destroyed** — it lands

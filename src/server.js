@@ -76,6 +76,7 @@ import * as Treasury from './treasury.js';
 import * as Emission from './emission.js';
 import * as Desk from './desk.js';
 import * as Exchange from './exchange.js';
+import * as Bank from './bank.js';
 import { register as registerCasino } from './routes/casino.js';
 import { register as registerPen } from './routes/pen.js';
 import { register as registerSpeakeasy } from './routes/speakeasy.js';
@@ -1490,6 +1491,11 @@ export async function buildServer() {
   // write path because it burns $OMR and touches the account's rolling cap.
   app.get('/v1/vault', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client) => Treasury.vaultBoard(client, ch.account_id)));
+  // THE BANK — the city leg. A pure READ (readCharacter, no write lock): what the borrowers' profit
+  // bought, what each epoch paid out, and what THIS player earned. Authed rather than public because
+  // `you` is per-account; there is no projection and no rate on it, by design.
+  app.get('/v1/bank', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client) => Bank.bankBoard(client, ch.account_id)));
   app.post('/v1/vault/claim', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Treasury.claimVaulted(ch, req.body?.omr, client, h)));
   // name the FAMILY fund (a reserve $OMR sink) + the family-legit leaderboard (biggest family books)

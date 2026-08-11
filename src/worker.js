@@ -17,6 +17,7 @@ import { runVigInvariants } from './vig.js';
 import { carveExchange, mergeLegacyYieldPools, payFamilyYield, runExchangeInvariants } from './exchange.js';
 import { runRouterInvariants } from './router.js';
 import { runBondInvariants } from './bonds.js';
+import { runCityLeg, runBankInvariants } from './bank.js';
 import { runTreasuryInvariants } from './treasury.js';
 import { openAuction, closeExpired, runDeskInvariants } from './desk.js';
 import { sweepExpiredBounties, huntWanted, sweepContests } from './social.js';
@@ -550,6 +551,21 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
       // the three above, and the same alarm channel, because a check nobody reads is not a check.
       const dinv = await safe('desk invariants', () => runDeskInvariants(pool));
       if (dinv && !dinv.ok) await safe('desk alert', () => alertDrift(pool, dinv.checks.filter((c) => !c.ok), 'desk'));
+      // ── THE CITY LEG — the Bank's profit, distributed to the players who played.
+      //
+      // The distribution is INERT until protocol profit actually exists: `runCityLeg` SKIPS a window
+      // whose pool is empty rather than closing it, so nothing fires until the Bank is deployed and
+      // earning — and, more importantly, a tick landing at 00:05 before the day's buy cannot spend
+      // that day's only chance (`UNIQUE (start_day, end_day)`) on an empty pot. Idempotent on the
+      // window, so a second tick over the same day is a no-op rather than a second payout.
+      //
+      // Then RULE 1 — `Σ distributed ≤ Σ bought`. The design calls this "an identity the nightly
+      // runner can assert" rather than a policy, and this is the runner. On the same alarm channel
+      // as its four siblings, because the one thing every one of them has taught is that a check
+      // reaching an unread log is worse than no check: it manufactures confidence.
+      await safe('city leg', () => runCityLeg(pool));
+      const kinv = await safe('bank invariants', () => runBankInvariants(pool));
+      if (kinv && !kinv.ok) await safe('bank alert', () => alertDrift(pool, kinv.checks.filter((c) => !c.ok), 'bank'));
       // BLUE-TEAM M7: THE REDEMPTION WINDOW's backing proof (paid ≤ funded — "redistribution, not
       // inflation"). It was reachable only via GET /v1/mod/exchange — the pre-R6-A state the vig/bond
       // checks were pulled OUT of. The exchange_pool cash buffer is OUTSIDE §10.4's counted buckets, so

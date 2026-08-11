@@ -7317,21 +7317,23 @@
     // response and the next request, and the keyless boards genuinely do run in parallel.
     // (D11 2026-08-05: the stock book retired — /v1/portfolio and its boards are tombstones now;
     // this screen is the REAL money arc: made → ladder → wallet → extraction → window → vault → bonds)
-    const [vaultR, bdR, winR, yldR, wdR] = await Promise.all([
+    const [vaultR, bdR, winR, yldR, wdR, bkR] = await Promise.all([
       api('GET', '/v1/vault'), api('GET', '/v1/bonds'),
       api('GET', '/v1/window'), api('GET', '/v1/yield'),
-      api('GET', '/v1/withdraw/status'),
+      api('GET', '/v1/withdraw/status'), api('GET', '/v1/bank'),
     ]);
     const vault = vaultR.body || {}, bd = bdR.body || {};
     const win = winR.body || {}, yld = yldR.body || {};
-    const wd = wdR.body || {};
+    const wd = wdR.body || {}, bk = bkR.body || {};
     t.innerHTML = `
       <h2>Going Legit <span class="d" style="font-size:11px">(what your $OMR does: the ladder, the vault, the window — and the on-chain way out)</span></h2>
       <div class="card" style="border-color:var(--neon)"><span class="t" style="color:var(--neon)">Where $OMR Comes From</span>
         <div class="d">Nowhere in the game. There is no wage, no yield, no drip — <b>nothing you do on the street prints a single $OMR</b>.
           Every token in this city was bought with real money by somebody, which is why it is worth taking off them.</div>
-        <div class="d">Your three ways to get some: <b>take it</b> off a man who is holding (a kill loots their liquid $OMR),
-          <b>earn it</b> from a player who pays you in it, or <b>buy it</b>. That is the whole list, and a nightly job proves it.</div>
+        <div class="d">Your four ways to get some: <b>take it</b> off a man who is holding (a kill loots their liquid $OMR),
+          <b>earn it</b> from a player who pays you in it, <b>buy it</b>, or <b>get paid out of the Bank</b> — whose
+          borrowers' fees buy $OMR on the market and hand it to the people who played that day.
+          That is the whole list, and a nightly job proves it.</div>
         <div class="d" style="color:var(--dim);font-size:11.5px;margin-top:4px;border-top:1px solid rgba(255,255,255,.06);padding-top:5px">
           A free account plays the <b>whole</b> game — every job, family, racket, kitchen, casino, PvP, all of it.
           Minting (the Store’s Made Man, in ETH — or the mission ladder’s free credit) is what lets you move $OMR and gear
@@ -7342,6 +7344,24 @@
           : `Pay the dues and you're <i>made</i>: the badge, the upper compound, a club of your own, a seat in the high-stakes room, and a rung up the ladder.`}</div>
         <div class="d" style="color:var(--dim);font-size:11.5px;margin-top:4px">It buys <b>real advantage</b> — but there is a <b>ceiling</b>, and holding ${rules?.made?.ceilingOmr ?? 150} $OMR reaches it without paying a subscription. Nothing dues buy helps you fight. A free man runs the whole city, and can still hunt you for your $OMR.</div>
         <div class="row" style="margin-top:6px"><button data-do="POST /v1/made">${me.made ? 'ANOTHER 30 DAYS' : 'PAY THE DUES'} — ${rules?.made?.omr ?? 20} $OMR</button></div></div>
+      <h2 style="margin-top:12px">The Bank <span class="d" style="font-size:11px">(borrowers pay to use it — that profit buys $OMR and goes to the people who play)</span></h2>
+      <div class="card"${bk.you?.today?.qualifies ? ' style="border-color:var(--ok)"' : ''}>
+        <div class="d">${esc(bk.what || '')}</div>
+        <div class="d" style="margin-top:6px">bought so far <b>${fmt(Math.floor(bk.pool?.boughtTotal || 0))}</b> $OMR ·
+          paid out <b>${fmt(Math.floor(bk.pool?.paidTotal || 0))}</b> ·
+          waiting for the next split <b>${fmt(Math.floor(bk.pool?.balance || 0))}</b></div>
+        ${bk.you?.today ? `<div class="d" style="margin-top:6px;border-top:1px solid rgba(255,255,255,.06);padding-top:6px">
+          <b>Your day so far:</b> ${fmt(bk.you.today.score)} ${bk.you.today.qualifies
+            ? '<span class="chip good">IN THE NEXT SPLIT</span>'
+            : `<span class="chip cold">NOT IN YET</span> — you need work across <b>${bk.you.today.minTracks}</b> different trades and at least <b>${bk.you.today.minScore}</b>`}</div>` : ''}
+        <div class="d" style="color:var(--dim);font-size:11.5px;margin-top:4px">Your share is your share of what the whole city did
+          — flat, with <b>no cap</b>, so a man running ten accounts takes exactly what he would have taken running one.
+          Only actions the game itself rations count (nerve, energy, a cooldown); nothing you can simply buy more of.</div>
+        ${(bk.you?.payouts || []).length ? `<div class="d" style="margin-top:6px"><b>What you've been paid</b></div>
+          ${(bk.you.payouts).slice(0, 5).map((p) => `<div class="row"><span class="k">day ${p.endDay}</span><span>${fmt(p.omr)} $OMR</span></div>`).join('')}` : ''}
+        ${(bk.epochs || []).length ? `<div class="d" style="margin-top:6px;color:var(--dim);font-size:11.5px">last split: ${fmt(bk.epochs[0].paidOmr)} $OMR across ${bk.epochs[0].players} player${bk.epochs[0].players === 1 ? '' : 's'}</div>` : ''}
+      </div>
+
       <div class="card"><span class="t">THE LADDER — ${me.ladder?.name || 'off the ladder'}${me.ladder?.rung ? ` (rung ${me.ladder.rung}/${me.ladder.of})` : ''}</span>
         <div class="d">Power runs on $OMR you <b>HOLD</b>, not what you spend — ${fmt(Math.floor(me.ladder?.staked || 0))} staked.
           ${me.ladder?.fx ? `Carrying <b>+${me.ladder.fx.trunk}</b>, energy cap <b>+${me.ladder.fx.energy}</b>, nerve <b>+${me.ladder.fx.nerve}</b>, garage <b>+${me.ladder.fx.garage}</b>${me.ladder.fx.fenceBps ? `, the fence pays <b>+${(me.ladder.fx.fenceBps / 100).toFixed(1)}%</b>` : ''}.` : 'Stake $OMR to climb it.'}</div>
@@ -7406,17 +7426,54 @@
         <button class="act" id="stake-in">stake</button>
         <button class="act" id="stake-out">unstake it all</button></div>
 
-      ${sect('legit-bonds', 'Reserve Bonds', 'deposit ETH → discounted, vested $OMR issued within hard on-chain caps — deepens the OMR-ETH pool', `
+      <h2 style="margin-top:12px">The Bond Desk <span class="d" style="font-size:11px">(the house sells $OMR below market for ETH — and only as much as it opened the window for that day)</span></h2>
+      ${(() => {
+        const dl = bd.daily, off = bd.offering || {};
+        // TWO things have to hold before a quote can be signed: the house posted a window TODAY, and
+        // the tranche behind the desk still has $OMR in it. The server checks both — so a card that
+        // showed only the window would say OPEN over an empty tranche and refuse on press, which is
+        // the exact "control that lies" class. What is actually buyable is the SMALLER of the two.
+        const tranche = Number(bd.reserve?.remainingOmr || 0);
+        const posted = dl ? Number(dl.remainingOmr || 0) : 0;
+        const left = Math.min(posted, tranche);
+        const open = !!dl && left > 0;
+        const pct = dl && Number(dl.offeredOmr) > 0 ? Math.round((posted / Number(dl.offeredOmr)) * 100) : 0;
+        return `
+      <div class="card" style="border-color:${open ? 'var(--neon)' : 'rgba(255,255,255,.12)'}">
+        <span class="t" style="color:${open ? 'var(--neon)' : 'var(--dim)'}">${open ? "TODAY'S WINDOW — OPEN" : 'THE WINDOW IS SHUT TODAY'}</span>
+        ${open ? `<div class="d"><b>${fmt(left)}</b> $OMR still on offer${posted > left ? ` <span class="chip cold">the tranche behind the desk is the tighter of the two</span>` : ` of ${fmt(dl.offeredOmr)} posted`}</div>
+          <div class="bar" style="margin-top:4px"><i style="width:${pct}%"></i></div>
+          <div class="d" style="font-size:11.5px;color:var(--dim);margin-top:4px">When it's gone it's gone until the house posts the next one. There is no queue and no reservation.</div>`
+        : (dl
+          ? `<div class="d">A window was posted for today, but the tranche behind the desk is empty — so there is nothing to sell and no quote can be signed. It reopens when the house funds it.</div>`
+          : `<div class="d">No offering was posted. The house opens the window day by day and it is shut until it does — nothing is bought or sold here today.</div>`)}
+      </div>
       <div class="card">
-        <div class="d">${bd.offering ? `${bd.offering.discountBps / 100}% discount · vests ${bd.offering.vestHours}h · min ${bd.offering.minEth} ETH · tranche left ${fmt(bd.reserve?.remainingOmr || 0)} $OMR` : '—'}${bd.quote ? ` · ~${fmt(bd.quote.payoutOmr)} $OMR per ETH` : (bd.offering ? ' · no oracle price yet' : '')}</div>
-        ${(() => { const dl = bd.daily; return dl ? `<div class="d" style="color:var(--neon)">today's window: ${fmt(dl.offeredOmr)} $OMR on offer · ${fmt(dl.remainingOmr)} left</div>` : `<div class="d" style="color:var(--dim)">the desk is closed today — no offering posted (the house opens the window day by day)</div>`; })()}
-        <div class="d" style="color:var(--dim);font-size:11px">Bonds are bought on-chain at the paywall (mainnet, dormant). Your vested bonds claim here.</div>
-        <div style="margin-top:6px"><input id="bond-eth" placeholder="ETH" size="6"> <button class="act" id="bond-quote">request a signed quote</button>
+        <span class="t">The Terms</span>
+        <table>
+          <tr><th>what you pay</th><td>ETH, on-chain, minimum ${off.minEth ?? '—'}</td></tr>
+          <tr><th>what you get</th><td>$OMR at <b>${off.discountBps != null ? (off.discountBps / 100) + '%' : '—'}</b> below the market price${bd.quote ? ` — about <b>${fmt(bd.quote.payoutOmr)}</b> per ETH right now` : ''}</td></tr>
+          <tr><th>when</th><td>released steadily over <b>${off.vestHours ?? '—'}h</b>, not all at once</td></tr>
+          <tr><th>where your ETH goes</th><td>the pool, the treasury and the withdrawal reserve — split by a published rule, none of it to a promise</td></tr>
+        </table>
+        <div class="d" style="font-size:11.5px;color:var(--dim);margin-top:4px">${bd.quote ? '' : 'No market price has printed yet, so no quote can be signed. '}${tranche > 0
+          ? `The tranche behind the desk holds ${fmt(tranche)} $OMR in total — the daily window is a slice of it, never the whole thing.`
+          : 'The tranche behind the desk is empty, so nothing can be sold today whatever window is posted.'}</div>
+      </div>
+      <div class="card">
+        <span class="t">Take the Deal</span>
+        <div class="d">You ask the house for a signed quote, then your own wallet sends the ETH. Nothing is taken from you here — the quote is bound to your linked address and expires.</div>
+        <div style="margin-top:6px"><input id="bond-eth" placeholder="ETH" size="6"> <button class="act" id="bond-quote"${open ? '' : ' disabled'}>${open ? 'request a signed quote' : 'the window is shut'}</button>
           <button class="act" id="bond-submit" style="display:none;border-color:var(--neon)">submit on-chain with wallet</button>
-          <div class="d" style="font-size:11px;color:var(--dim)">signs an EIP-712 BondQuote bound to your linked wallet, then your wallet (MetaMask / Robinhood Wallet) submits it to the OmertaBond contract (mainnet, dormant)</div>
+          <div class="d" style="font-size:11px;color:var(--dim)">${me.wallet ? '' : '<b>Link your wallet above first</b> — a quote is bound to a proven address. '}The on-chain desk is <b>dormant until launch</b>.</div>
           <pre id="bond-quote-out" style="display:none;white-space:pre-wrap;font-size:11px;background:#111;padding:6px;border-radius:4px;margin-top:4px;overflow-x:auto"></pre></div>
-        ${(bd.yours || []).length ? (bd.yours || []).map((b) => `<div class="d">bond #${b.id}: ${fmt(b.payoutOmr)} $OMR total · ${fmt(b.claimableOmr)} claimable ${b.claimableOmr ? `<button class="act" data-bondclaim="${b.id}">claim</button>` : ''}</div>`).join('') : '<div class="d" style="color:var(--dim)">no bonds yet — you\'re not a Treasury Backer</div>'}</div>`,
-        (bd.yours || []).some((b) => b.claimableOmr > 0))}
+      </div>
+      <div class="card">
+        <span class="t">Your Bonds</span>
+        ${(bd.yours || []).length ? (bd.yours || []).map((b) => `<div class="row"><span class="k">bond #${b.id} — ${fmt(b.payoutOmr)} $OMR${b.fullyVested ? ' <span class="chip good">fully released</span>' : ''}</span>
+          <span>${b.claimableOmr ? `${fmt(b.claimableOmr)} ready <button class="act" data-bondclaim="${b.id}">claim</button>` : `<span class="chip">${fmt(b.claimedOmr)} taken</span>`}</span></div>`).join('')
+        : '<div class="d" style="color:var(--dim)">You hold none. Anyone who does is a <b>Treasury Backer</b> — a standing the city can see.</div>'}
+      </div>`; })()}
 
       ${bd.yourStanding ? sect('legit-underwriter', "The Underwriters' League", 'back the treasury with $OMR — earn a backer tier, commission a Charter seal, climb the league', `
       <div class="card">
