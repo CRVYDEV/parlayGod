@@ -16,6 +16,12 @@
 //       human composition are inflated by player-to-player churn.
 //   (4) THE BOARD MOVES MONEY. It is a read; it must write nothing at all, and that is asserted by
 //       counting ledger rows across a full computation rather than by intent.
+//   (5) A THIN SAMPLE READS AS A HEALTHY ONE — the launch-hour lie, and the one (1) does not cover.
+//       (1) is about a denominator that is ZERO; this is about one that EXISTS and means nothing.
+//       Measured before the floors shipped: one player holding 5 $OMR who spends it once produced
+//       `velocity: 52.14 turns/year, band ok` — the headline revenue KPI reporting a confident
+//       PASS off a sample of one, on exactly the day a founder is most likely to read it. A number
+//       that cannot say "I do not know yet" is indistinguishable from a good one.
 //
 // pg-mem, zero infra.
 process.env.MOD_KEY = 'test-mod-key';
@@ -174,9 +180,17 @@ const kpiOf = (board, key) => {
   const tap = b.sinks.topSinks.find((s) => s.reason === 'intel:tap');
   assert(tap && tap.agent === 250 && tap.human === 0,
     'the per-reason breakdown is the useful half: WHICH sinks a cohort pays for');
+  // A PER-HEAD RATE NEEDS HEADS. The board refuses to compute one below its significance floor (a
+  // "rate" across four people is a portrait of one of them), so the city has to be a city before this
+  // property is even reachable. These extra players never spend, so every cohort figure above is
+  // unchanged — they exist purely to make the denominator real.
+  for (let i = 0; i < 8; i++) await mk(`Bystander ${i}`);
+  const c = await tokenHealth(pool);
+  assert(c.players.active >= 10, 'the sample now clears the per-head significance floor');
+
   // and the per-player figure divides by everyone active, agents included — they are real players
-  const per = kpiOf(b, 'sinkPerPlayer');
-  assert.equal(per.value, Math.round(b.sinks.windowVolume / b.players.active / b.window.days * 100) / 100,
+  const per = kpiOf(c, 'sinkPerPlayer');
+  assert.equal(per.value, Math.round(c.sinks.windowVolume / c.players.active / c.window.days * 100) / 100,
     'sink volume per active player per day');
 }
 
@@ -238,6 +252,47 @@ const kpiOf = (board, key) => {
   assert.equal(wide.body.window.days, 30, 'the window widens on request');
   const ungated = await app.inject({ method: 'GET', url: '/v1/mod/tokenhealth' });
   assert(ungated.statusCode >= 400, 'no mod key, no board');
+}
+
+// ── 8. THE LAUNCH-HOUR LIE — a sample of one must not read as a healthy city ────────────────────
+// Block 1 proves an EMPTY world reads dormant. This proves the harder case: a world with data in it
+// that is far too thin to judge. The numbers below are the ones actually measured against the code
+// before the significance floors existed — one player, a 5 $OMR float, one spend — which produced
+// `velocity 52.14, band ok`. The assertion is not that the value is different; it is that the board
+// declines to answer AND says why, because a founder reading "ok" on launch day is the failure.
+{
+  const fresh = await buildServer();
+  try {
+    const one = await (async () => {
+      const g = await fresh.inject({ method: 'POST', url: '/v1/auth/guest', headers: { 'content-type': 'application/json' }, payload: {} });
+      const tok = g.json().token;
+      await fresh.inject({ method: 'POST', url: '/v1/character',
+        headers: { authorization: `Bearer ${tok}`, 'content-type': 'application/json' }, payload: { name: 'Only Soul' } });
+      return (await fresh.pool.query('SELECT account_id FROM account_persistent LIMIT 1')).rows[0].account_id;
+    })();
+    await fresh.pool.query('UPDATE account_persistent SET omr = 5 WHERE account_id=$1', [one]);
+    await ledger(fresh.pool, { accountId: one, currency: 'omr', amount: -5, reason: 'estate:tier' });
+
+    const h = await tokenHealth(fresh.pool);
+    assert.equal(h.players.active, 1, 'exactly one player, which is the point');
+    assert(h.float.player.total < 1000, 'and a float far below anything meaningful');
+    assert(h.sinks.windowVolume > 0, 'a real sink DID happen — this is not the empty-world case');
+
+    for (const key of ['velocity', 'sinkPerPlayer', 'committedShare']) {
+      const k = h.kpis.find((x) => x.key === key);
+      assert.equal(k.value, null, `${key} declines to answer on a sample of one`);
+      assert.equal(k.state, 'dormant', `${key} says dormant, not a band`);
+      assert(/too thin to judge/.test(k.reads),
+        `${key} must SAY why it is silent — a blank reads like a bug, and the founder needs the reason`);
+    }
+    // and the floors are per-denominator: the reason names the float for a per-token ratio and the
+    // headcount for a per-head rate. Getting these crossed would be a threshold chosen to be strict
+    // rather than to match the thing it bounds.
+    assert(/player float/.test(h.kpis.find((x) => x.key === 'velocity').reads),
+      'velocity is a per-TOKEN rate, so its floor is the float');
+    assert(/active player/.test(h.kpis.find((x) => x.key === 'sinkPerPlayer').reads),
+      'sink-per-player is a per-HEAD rate, so its floor is the headcount');
+  } finally { await fresh.close(); }
 }
 
 console.log('tokenhealth: a fresh database reads DORMANT rather than crying wolf; velocity divides by the PLAYER float (never the house pools it grows); a transfer is not a sink and a withdrawal is; the agent/human split names WHICH sinks each cohort pays for; clearance is driven through a real auction; the queue is the shock gauge off chain.js own reserveStatus; and the whole board writes zero ledger rows behind the mod key.');
