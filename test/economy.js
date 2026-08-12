@@ -770,6 +770,40 @@ await seed("jail_until=NULL, hosp_until=NULL, health=100, welsher=false, wanted_
   const plan = [me2.coach, ...(me2.coachPlan || [])].filter(Boolean);
   assert(plan.some((c) => /moved on you/i.test(c.label || '')),
     'the coach names the fresh malice (48h window — self-clears as it rolls)');
+  // ...and it CLEARS BY ANSWERING, which is what its own hint promises. Counted per aggressor over
+  // the same 48h window, so squaring up with every one of them takes it to 0. Before this the rung
+  // counted incoming only: hitting back never quieted it, and it sits above the entire ladder — the
+  // masking class (a rung that never clears must never sit above rungs that do). Measured in the
+  // progression harness at 28% of advised play, second only to the daily-contract rung.
+  const acctOf = async (c) => (await pool.query(`SELECT account_id a FROM characters WHERE id='${c}'`)).rows[0].a;
+  const [aMark, aThug] = [await acctOf(cid), await acctOf(c2)];
+  const between = async (v, a) => Number((await pool.query(
+    `SELECT COUNT(*) n FROM rival_events WHERE victim_account='${v}' AND aggressor_account='${a}'
+       AND at > now() - interval '48 hours'`)).rows[0].n);
+  // the mark already answered ONCE for real (the payback jump in D), so the debt is the difference —
+  // answering the raw incoming count would overshoot and the fresh-strike leg below would read
+  // "still square". Testing the exact boundary is the point.
+  const owed = (await between(aMark, aThug)) - (await between(aThug, aMark));
+  assert(owed > 0, `the thug is ${owed} strikes up on the mark`);
+  const answer = async (n) => { for (let i = 0; i < n; i++) await pool.query(
+    `INSERT INTO rival_events (id, victim_account, aggressor_account, kind)
+     VALUES ('${crypto.randomUUID()}', '${aThug}', '${aMark}', 'jump')`); };
+  await answer(owed); // the mark settles every one of them
+  {
+    const m3 = (await call('GET', '/v1/me', { token })).body.character;
+    const plan3 = [m3.coach, ...(m3.coachPlan || [])].filter(Boolean);
+    assert(!plan3.some((c) => /moved on you/i.test(c.label || '')),
+      'settled up — the rung goes quiet, so the ladder under it is reachable again');
+  }
+  // and a FRESH strike puts it straight back: answered is per-aggressor, not once-ever
+  await pool.query(`INSERT INTO rival_events (id, victim_account, aggressor_account, kind)
+    VALUES ('${crypto.randomUUID()}', '${aMark}', '${aThug}', 'rob')`);
+  {
+    const m4 = (await call('GET', '/v1/me', { token })).body.character;
+    const plan4 = [m4.coach, ...(m4.coachPlan || [])].filter(Boolean);
+    assert(plan4.some((c) => /moved on you/i.test(c.label || '')),
+      'they came back for more — the rung is back');
+  }
 }
 
 // ══════════ RECURRING SINKS — "the pad" (business upkeep) ══════════

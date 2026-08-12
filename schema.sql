@@ -2776,6 +2776,10 @@ CREATE TABLE IF NOT EXISTS rival_events (
   at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ix_rival_events_victim ON rival_events (victim_account, at DESC);
+-- the mirror of the above: loadOwned reads MY outgoing strikes on every authed request (the coach's
+-- "have you answered them" fold), so the aggressor side needs its own index or that is a seq scan
+-- on the hottest function in the game.
+CREATE INDEX IF NOT EXISTS ix_rival_events_aggressor ON rival_events (aggressor_account, at DESC);
 -- the victim's car-theft shield: a player loses at most ONE car per window to theft, however many
 -- thieves try (direct-SQL under the withTwoCharacters victim lock — outside persistCharacter's list)
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS car_stolen_at TIMESTAMPTZ;
