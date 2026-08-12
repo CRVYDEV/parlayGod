@@ -81,11 +81,29 @@ assert.equal(inv.stock.length, 0, 'so a comp leaves the reserve genuinely empty'
 
 // ── a REAL fill stocks the reserve ──────────────────────────────────────────────────────────────
 r = await mod('POST', '/v1/mod/treasury/buy',
-  { ref: 'buy:1', ticker: 'TSLA', units: 10, ethSpent: 2, txHash: '0xfill1' });
+  { ref: 'buy:1', ticker: 'TSLA', units: 10, ethSpent: 2, txHash: '0xfill1', bootstrap: true });
 assert.equal(r.body.real, true);
 assert.equal(r.body.units, 10, 'a real fill books its units');
 r = await mod('POST', '/v1/mod/treasury/buy', { ref: 'buy:1', ticker: 'TSLA', units: 10, ethSpent: 2, txHash: '0xfill1' });
 assert.equal(r.body.duplicate, true, 'a re-delivered fill is a clean no-op, not a second holding');
+
+// ── AND THE INGEST WALLS THE RATE, not just the realness ───────────────────────────────────────
+// The comp gate above stops a FABRICATED fill. It cannot stop a real one at an absurd RATE, and the
+// quantity is the wall's input: `SUM(units) WHERE real` IS `held`. The keeper enforces this too,
+// but the keeper is not the only way in — this route is, and so is whatever the mainnet bot calls.
+{
+  const wild = await mod('POST', '/v1/mod/treasury/buy',
+    { ref: 'buy:wild', ticker: 'TSLA', units: 1000000, ethSpent: 0.01, txHash: '0xfillwild' });
+  assert.equal(wild.body?.error, 'price_sanity',
+    'a million units for a penny is refused at the ingest, not just at the keeper');
+  const stillTen = (await runTreasuryInvariants(pool)).stock.find((s) => s.ticker === 'TSLA');
+  assert.equal(stillTen.held, 10, 'and the ceiling on what may be delivered did not move');
+  // per TICKER — a TSLA print says nothing about AMZN, so AMZN's first fill is still unanchored
+  const other = await mod('POST', '/v1/mod/treasury/buy',
+    { ref: 'buy:other', ticker: 'AMZN', units: 5, ethSpent: 1, txHash: '0xfillother' });
+  assert.equal(other.body?.error, 'price_unanchored',
+    "a TSLA print does not anchor AMZN — the wall is per ticker");
+}
 
 inv = await runTreasuryInvariants(pool);
 const tsla = inv.stock.find((s) => s.ticker === 'TSLA');
@@ -145,7 +163,7 @@ await pool.query("DELETE FROM stock_allocations WHERE epoch_id='e2'");
 // They are not fungible and a delivery is made in a specific ticker, so a summed check would let the
 // treasury owe TSLA it does not hold as long as it held enough AMZN.
 await mod('POST', '/v1/mod/treasury/buy',
-  { ref: 'buy:2', ticker: 'AMZN', units: 50, ethSpent: 1, txHash: '0xfill2' });
+  { ref: 'buy:2', ticker: 'AMZN', units: 50, ethSpent: 1, txHash: '0xfill2', bootstrap: true });
 await pool.query(
   "INSERT INTO stock_allocations (epoch_id, account_id, ticker, units) VALUES ('e3','00000000-0000-0000-0000-000000000005','TSLA',5)");
 inv = await runTreasuryInvariants(pool);

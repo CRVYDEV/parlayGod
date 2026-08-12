@@ -187,7 +187,8 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
     // records the episode and books ZERO units and ZERO spend.
     app.post('/v1/mod/treasury/buy', { preHandler: modAuth }, async (req) =>
       Treasury.recordStockBuy(pool, { ref: req.body?.ref, ticker: req.body?.ticker,
-        units: req.body?.units, ethSpent: req.body?.ethSpent, txHash: modRealTxHash(req) }));
+        units: req.body?.units, ethSpent: req.body?.ethSpent, txHash: modRealTxHash(req),
+        bootstrap: req.body?.bootstrap === true }));
     // ingest a DEX sell-tax episode (a `SellTaxTaken` log on mainnet). The modRealTxHash gate stands:
     // a simulate records the episode for QA but books ZERO revenue, so a comp can never assert the
     // treasury received ETH it did not.

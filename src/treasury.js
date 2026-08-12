@@ -127,7 +127,7 @@ export async function stockBudget(db) {
 /// ingest should hide by dropping the row). The budget lives in `stockBudget`, which is the keeper's
 /// job to respect; `eth spent <= eth available to spend` in `runTreasuryInvariants` is what catches it
 /// if the keeper ever does not.
-export async function recordStockBuy(pool, { ref, ticker, units, ethSpent, txHash = null } = {}) {
+export async function recordStockBuy(pool, { ref, ticker, units, ethSpent, txHash = null, bootstrap = false } = {}) {
   const key = String(ref || '').trim();
   const tk = String(ticker || '').trim().toUpperCase();
   if (!key) throw new GameError('ref', 'A fill needs a ref (txHash:logIndex).');
@@ -137,6 +137,35 @@ export async function recordStockBuy(pool, { ref, ticker, units, ethSpent, txHas
   if (!(Number.isFinite(u) && u > 0)) throw new GameError('amount', 'units must be > 0');
   if (!(Number.isFinite(eth) && eth > 0)) throw new GameError('amount', 'ethSpent must be > 0');
   const real = !!txHash;
+  // ── WALL 3 LIVES HERE TOO, for the reason wall 5 does (2026-08-12) ─────────────────────────────
+  // `runStockBuyback` enforces a rate wall, but it is not the only way in: this ingest is reachable
+  // directly (POST /v1/mod/treasury/buy, and whatever the mainnet bot ends up calling), and the
+  // quantity it books IS the wall's input — `SUM(units) WHERE real` is `held`, the per-ticker
+  // ceiling on what may ever be delivered. So a real direct fill of a million units for a penny
+  // would leave `allocated <= held` perfectly green while the Safe held nothing, which is precisely
+  // the failure the comp gate below is written to prevent and could not, because that gate is about
+  // fabricated REALNESS, not a fabricated RATE.
+  //
+  // Duplicated rather than moved: the keeper keeps its own check so it can refuse cheaply, with the
+  // budget and staleness bounds it alone owns, and reports a reason instead of throwing. A keeper
+  // fill passes here by construction (its price already cleared the same reference), so this is a
+  // backstop on the direct route, not a second opinion. Per ticker, real prints only — a print for
+  // one stock says nothing about another, and a comp must never be able to move the wall. The
+  // keeper refuses a ticker with no print at all, so the FIRST fill can only arrive here: seed it
+  // deliberately with bootstrap.
+  {
+    const jump = Number(process.env.STOCK_MAX_PRICE_JUMP) || 10;
+    const rate = round6(eth / u);
+    const ref0 = Number((await pool.query(
+      'SELECT price_eth_per_unit p FROM stock_buys WHERE ticker=$1 AND real ORDER BY created_at DESC LIMIT 1',
+      [tk])).rows[0]?.p || 0);
+    if (ref0 > 0 && (rate > ref0 * jump || rate < ref0 / jump))
+      throw new GameError('price_sanity',
+        `${rate} ETH/unit is outside ${jump}x of the last real ${tk} print (${ref0}). Units bought are the ceiling on what may be delivered — check the fill.`);
+    if (!(ref0 > 0) && real && !bootstrap)
+      throw new GameError('price_unanchored',
+        `No prior real ${tk} print to check this rate against. Seed the first fill deliberately with bootstrap:true.`);
+  }
   // A COMP BOOKS ZERO — both sides, not just the spend. Units are the ceiling on what may ever be
   // delivered, so a QA path that booked them would raise that ceiling with no asset behind it, and
   // `allocated <= held` would happily wave the delivery through. This is the sharpest instance of the
