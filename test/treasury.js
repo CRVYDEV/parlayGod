@@ -37,8 +37,33 @@ const ledgerRows = async () => Number((await pool.query('SELECT COUNT(*) c FROM 
 // The treasury needs ETH before it can buy anything. A real sell-tax episode is the honest way to put
 // it there — the same ingest production uses, so the budget below is a real number and not a seed.
 const rows0 = await ledgerRows();
+// THE FIRST EPISODE IS DELIBERATE. `grossEth = omrTaxed / price`, and that gross is what `held` is
+// built from — so an unreferenced first fill setting its own reference would let the very first
+// episode be the absurd one. Asserted here rather than in the wall's own block below, because this
+// is the one moment in the suite when both anchor tables are genuinely empty.
+{
+  const unanchored = await mod('POST', '/v1/mod/treasury/tax',
+    { ref: 'tax:0', omrTaxed: 100000, price: 500, txHash: '0xtax0' });
+  assert.equal(unanchored.body?.error, 'price_unanchored',
+    'the first REAL tax episode is refused until it is seeded deliberately');
+  assert.equal((await pool.query('SELECT COUNT(*) c FROM sell_tax_events')).rows[0].c, '0',
+    'a refused episode books nothing at all');
+
+  // AND A COMP CANNOT BECOME THE ANCHOR. An unanchored comp is free (it books zero, so there is
+  // nothing to bound), which is precisely why the reference must read REAL prints only: otherwise a
+  // QA call would plant the reference and the first real episode would inherit it — the QA path
+  // moving the wall, which is the anti-fabrication gate's whole point one level up.
+  const comp = await mod('POST', '/v1/mod/treasury/tax',
+    { ref: 'tax:0-comp', omrTaxed: 100000, price: 0.0001 }); // no txHash
+  assert.equal(comp.code, 200, 'an unanchored comp records the episode');
+  assert.equal(comp.body.rwaEth, 0, 'and books zero, as comps always do');
+  const after = await mod('POST', '/v1/mod/treasury/tax',
+    { ref: 'tax:0b', omrTaxed: 100000, price: 0.0001, txHash: '0xtax0b' });
+  assert.equal(after.body?.error, 'price_unanchored',
+    'a comp does not anchor the wall — the first REAL episode is still refused');
+}
 await mod('POST', '/v1/mod/treasury/tax',
-  { ref: 'tax:1', omrTaxed: 100000, price: 500, txHash: '0xtax' });
+  { ref: 'tax:1', omrTaxed: 100000, price: 500, txHash: '0xtax', bootstrap: true });
 
 // ── A COMP BOOKS ZERO UNITS — the sharpest instance of the anti-fabrication gate ────────────────
 // Everywhere else a comp merely fails to credit revenue. Here the fabricated quantity IS the wall's
@@ -251,6 +276,36 @@ assert(lastPrint > 0, 'the fixture really has a TSLA print to bound against');
   assert.equal(viaRoute.body.reason, 'no_print', 'the route reaches the keeper and its walls, not a stub');
   const unauth = await app.inject({ method: 'POST', url: '/v1/mod/treasury/keeper', payload: { ticker: 'TSLA' } });
   assert.equal(unauth.statusCode, 401, 'and it is mod-gated like every other treasury route');
+}
+
+// ── THE INGEST'S PRICE WALL — the number every other wall is measured against ───────────────────
+// Placed LAST because the accepted episode at the end adds to `held`, and the budget assertions
+// above are exact. Wall 3 protects the SPEND side (runStockBuyback); this is the other side of the
+// same trade — `grossEth = omrTaxed / price`, so a deflated price inflates `rwa_revenue` and
+// therefore `held`, the figure BOTH halves of the anti-Ponzi sandwich compare `allocated` against.
+// The point of the first assertion is not that the call fails; it is that WITHOUT the wall it
+// SUCCEEDS and every check still reads green — measured before the wall existed: 900 taxed $OMR at
+// a millionth of the last print booked 400,000 ETH of `held`, ok:true throughout.
+{
+  const heldBefore = (await stockBudget(pool)).heldEth;
+  const deflated = await mod('POST', '/v1/mod/treasury/tax',
+    { ref: 'tax:wall', omrTaxed: 900, price: 0.001, txHash: '0xtaxwall' });
+  assert.equal(deflated.body?.error, 'price_sanity',
+    'a price a millionth of the last print is refused, not booked');
+  assert.equal((await stockBudget(pool)).heldEth, heldBefore,
+    'and it moved `held` by nothing — the refusal is before the insert');
+
+  // the wall is symmetric: an INFLATED price under-books the gross, which quietly strands real ETH
+  const inflated = await mod('POST', '/v1/mod/treasury/tax',
+    { ref: 'tax:wall2', omrTaxed: 900, price: 500 * 11, txHash: '0xtaxwall2' });
+  assert.equal(inflated.body?.error, 'price_sanity', 'and a price 11x the last print is refused too');
+
+  // ...while a price inside the band still ingests, so the wall bounds the feed rather than closing it
+  const sane = await mod('POST', '/v1/mod/treasury/tax',
+    { ref: 'tax:wall3', omrTaxed: 900, price: 500 * 2, txHash: '0xtaxwall3' });
+  assert.equal(sane.code, 200, 'a price within the band ingests normally');
+  assert.equal(sane.body.recorded, true, 'and is really booked');
+  assert(sane.body.grossEth > 0, 'with a gross derived from it');
 }
 
 // ── §10.4 IS UNTOUCHED ──────────────────────────────────────────────────────────────────────────

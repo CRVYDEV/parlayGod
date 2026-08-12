@@ -273,7 +273,31 @@ export async function allocateStock(client, { epochId, accountId, ticker, units 
 // D-MED2 discipline: a mod/QA simulate records the episode but books ZERO revenue. That gate mattered
 // more when fabricated revenue could buy real-looking units; it is kept because "the treasury received
 // this much ETH" should never be assertable by a QA call either.
-export async function recordSellTax(pool, { ref, omrTaxed, priceOmrPerEth, txHash = null } = {}) {
+//
+// ── THE PRICE WALL, and why the ingest has to own it (2026-08-12) ────────────────────────────────
+// `grossEth = omrTaxed / priceOmrPerEth`, so the price is not a label on this episode — it is the
+// number that DECIDES how much ETH the treasury is recorded as having received, and `rwa_revenue` is
+// summed into `held`, the figure BOTH halves of the anti-Ponzi sandwich are measured against. So a
+// deflated price does not merely mis-book one row: it raises the ceiling on what players may be
+// allocated, and it raises `spendableEth`, the keeper's root cap. Reproduced before this wall
+// existed: 900 taxed $OMR at a price a millionth of the last print booked 400,000 ETH of `held`,
+// with `allocated <= held` and `allocated + spent <= held` BOTH reading ok:true — because they
+// compare `allocated` against the very number the bad price inflated. That is this file's own
+// doctrine (see runStockBuyback's wall list) turned on the other side of the trade: a check on
+// quantity is blind to a bad price by construction, so the price needs its own wall.
+//
+// It lives HERE rather than in a caller for the reason wall 5 lives here — the ingest is what every
+// path goes through, including the ones that do not exist yet (the `SellTaxTaken` watcher is not
+// wired, so today the only caller is the mod route and a comp books zero across all four slices;
+// this wall is what makes the day the watcher lands uneventful).
+//
+// The anchor is the last REAL print, falling back to the VIG's — `vig_buyback.price_omr_per_eth` is
+// the same quantity in the same units, and it is the print every other consumer in the project
+// already reads. Real prints only: letting a comp set the reference would hand the QA path the
+// ability to move the wall, which is the anti-fabrication gate's whole point one level up.
+// `bootstrap: true` is the deliberate first fill (the treasury's own posture — an unreferenced first
+// fill is refused, never silently trusted).
+export async function recordSellTax(pool, { ref, omrTaxed, priceOmrPerEth, txHash = null, bootstrap = false } = {}) {
   const key = String(ref || '').trim();
   if (!key) throw new GameError('ref', 'A tax episode needs a ref (txHash:logIndex).');
   const omr = Number(omrTaxed);
@@ -281,6 +305,24 @@ export async function recordSellTax(pool, { ref, omrTaxed, priceOmrPerEth, txHas
   if (!(Number.isFinite(omr) && omr > 0)) throw new GameError('amount', 'omrTaxed must be > 0');
   if (!(Number.isFinite(price) && price > 0)) throw new GameError('price', 'priceOmrPerEth must be > 0 (mainnet: the TWAP the bot realized).');
   const real = !!txHash;
+  {
+    const jump = Number(process.env.TAX_MAX_PRICE_JUMP) || 10;
+    // ORDER BY created_at, never id — the id is a UUID, so "the latest row" by id is nothing at all.
+    let ref0 = Number((await pool.query(
+      'SELECT price_omr_per_eth p FROM sell_tax_events WHERE real ORDER BY created_at DESC LIMIT 1')).rows[0]?.p || 0);
+    let anchor = ref0 > 0 ? 'tax' : null;
+    if (!(ref0 > 0)) {
+      ref0 = Number((await pool.query(
+        'SELECT price_omr_per_eth p FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0]?.p || 0);
+      if (ref0 > 0) anchor = 'vig';
+    }
+    if (ref0 > 0 && (price > ref0 * jump || price < ref0 / jump))
+      throw new GameError('price_sanity',
+        `priceOmrPerEth ${price} is outside ${jump}x of the last ${anchor} print (${ref0}). A tax episode's price decides how much ETH the treasury is recorded as receiving — check the feed.`);
+    if (!(ref0 > 0) && real && !bootstrap)
+      throw new GameError('price_unanchored',
+        'No prior real print to check this price against. Seed the first episode deliberately with bootstrap:true.');
+  }
   const grossEth = round6(omr / price);
   // the REMAINDER rule sits on the LP slice so the three shares sum to the gross EXACTLY (two of
   // three round down; a "natural" third division strands wei belonging to nobody).
