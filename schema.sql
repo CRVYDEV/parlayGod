@@ -3192,3 +3192,43 @@ CREATE TABLE IF NOT EXISTS broker_weights (
   PRIMARY KEY (epoch_id, account_id)
 );
 CREATE INDEX IF NOT EXISTS ix_broker_weights_account ON broker_weights(account_id);
+
+-- ── THE COMMUNITY EARMARK + THE FAMILY BUYBACK (Phase 1, omerta-treasury-to-family-design.md §4/§8,
+-- 2026-08-11). Out-of-band real value like vig_revenue/rwa_revenue/bank_revenue: ZERO §10.4 rows —
+-- the only in-game flow the keeper produces is the `yield:buyback` mint into family_yield_pool
+-- (src/community.js), backed by these books. `community_revenue` is the inflow ledger: one row per
+-- real payment's community slice, written by the ingests (fees/store/sell-tax/harvest) ONLY when the
+-- payment carried a txHash and the slice lever is above zero — so like its siblings it needs no
+-- `real` column; the gate lives at the callers. `currency` is 'eth' for the three ETH sources and
+-- the market's UNDERLYING asset symbol ('USDC') for the harvest carve — the keeper's root cap and
+-- the price wall are both per-currency, because "spend ≤ revenue" across two denominations is not a
+-- number. `gross` records the payment the slice was carved from, so the router's mirror checks can
+-- hold booked == gross × the declared bps without re-deriving from another table.
+CREATE TABLE IF NOT EXISTS community_revenue (
+  source     TEXT NOT NULL,               -- 'fee' | 'store' | 'tax' | 'harvest' (router COMMUNITY_SOURCES)
+  ref        TEXT NOT NULL,               -- the payment's own key (nonce / txHash:logIndex)
+  currency   TEXT NOT NULL DEFAULT 'eth',
+  gross      NUMERIC NOT NULL DEFAULT 0,  -- the full payment the slice came from, in `currency`
+  amount     NUMERIC NOT NULL DEFAULT 0,  -- the community slice, in `currency`
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (source, ref)
+);
+-- The keeper's buy log (the vig_buyback twin, per-currency): each row is one runFamilyBuyback
+-- episode. A comp/QA call (no txHash) records the episode with spent=0 and omr_bought=0 — the bank
+-- posture, NOT the desk's: this pool's exit reaches real families' reserves, so a comp must never
+-- be able to assert hard $OMR was bought (the price is caller-supplied; a fabricated price would
+-- mint a colossal pool credit from a small real budget).
+CREATE TABLE IF NOT EXISTS family_buybacks (
+  id         TEXT PRIMARY KEY,
+  currency   TEXT NOT NULL DEFAULT 'eth',
+  spent      NUMERIC NOT NULL DEFAULT 0,  -- in `currency`; comps book 0
+  price_omr  NUMERIC NOT NULL DEFAULT 0,  -- $OMR per unit of `currency` (mainnet: the DEX TWAP the bot realized)
+  omr_bought NUMERIC NOT NULL DEFAULT 0,  -- comps book 0
+  tx_hash    TEXT,
+  real       BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- The sell tax's fourth slice column. sell_tax_events is an EXISTING table, so the column MUST be an
+-- ALTER — on a live DB the CREATE TABLE IF NOT EXISTS above it is a no-op and an inline column never
+-- lands (the 2026-08-06 boot-crash lesson).
+ALTER TABLE sell_tax_events ADD COLUMN IF NOT EXISTS community_eth NUMERIC NOT NULL DEFAULT 0;

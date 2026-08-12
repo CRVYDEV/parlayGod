@@ -472,4 +472,158 @@ contract OmertaHookTest is Test {
         // accident of two independently-chosen constants.
         assertGt(uint256(2000), TAX_BPS, "MAX_DISCOUNT_BPS is a backstop, above the operating rate");
     }
+// ── THE OPENING WINDOW (anti-snipe) — the only thing here that can refuse a swap ─────────────
+    //
+    // The launch argues nobody can dump at the bell because the bond vest outlasts the genesis
+    // window. That is an argument about BONDERS; it says nothing about a buyer in block 0. These
+    // pin the guard's whole shape.
+
+    function _armWindow(uint256 blocks_, uint256 buyBps, uint256 maxBuy) internal {
+        vm.prank(safe);
+        hook.setAntiSnipe(blocks_, buyBps, maxBuy);
+    }
+
+    function test_a_buy_over_the_cap_is_refused_inside_the_window() public {
+        _armWindow(50, 0, 1 ether);
+        vm.expectRevert(); // SnipeTooLarge, wrapped by the manager/router
+        _buyExactIn(2 ether);
+    }
+
+    function test_a_buy_under_the_cap_clears_inside_the_window() public {
+        _armWindow(50, 0, 1 ether);
+        BalanceDelta d = _buyExactIn(0.5 ether);
+        assertGt(d.amount1(), 0, "an in-size buy must clear during the window");
+    }
+
+    function test_an_exact_output_buy_is_refused_outright_because_it_dodges_the_cap() public {
+        // Tested with NO size cap (fee-only window) ON PURPOSE. When a cap IS set the refusal looks
+        // redundant, because `uint256(-amountSpecified)` for a positive (exact-output) amount
+        // underflows to a huge number and SnipeTooLarge catches it anyway — a mutation removing the
+        // refusal then still reverts, so that regime cannot tell the refusal is doing anything. With
+        // cap == 0 the size branch returns early, so ONLY the explicit refusal stands between an
+        // exact-output buy and the pool — which is exactly where the guard earns its place.
+        _armWindow(50, 500, 0);
+        vm.expectRevert(); // SnipeExactOutput — with cap 0, nothing else would stop it
+        _swap(true, int256(0.5e18));
+    }
+
+    function test_an_exact_input_buy_still_clears_a_fee_only_window() public {
+        _armWindow(50, 500, 0);
+        BalanceDelta d = _buyExactIn(0.5 ether);
+        assertGt(d.amount1(), 0, "an exact-input buy clears a fee-only window");
+    }
+
+    function test_sells_are_NEVER_refused_by_the_window() public {
+        // A window that blocks exits is a honeypot. Cap at 1 wei so ANY buy would refuse — and a
+        // sell far over it still clears.
+        _armWindow(50, 0, 1);
+        BalanceDelta d = _sellExactIn(100e18);
+        assertGt(d.amount0(), 0, "a sell during the window must always clear");
+    }
+
+    function test_the_window_fee_taxes_buys_and_lands_in_the_book() public {
+        _armWindow(50, 500, 0); // fee-only window, no size cap
+        (uint256 d0, uint256 r0, uint256 l0) = _owed(omrC);
+        _buyExactIn(1 ether);
+        (uint256 d1, uint256 r1, uint256 l1) = _owed(omrC);
+        assertGt((d1 + r1 + l1) - (d0 + r0 + l0), 0, "the window fee must accrue to the sweep book");
+    }
+
+    function test_the_window_expires_by_block_count_with_nobody_acting() public {
+        _armWindow(10, 500, 1 ether);
+        vm.roll(block.number + 10);
+        (uint256 d0, uint256 r0, uint256 l0) = _owed(omrC);
+        BalanceDelta d = _buyExactIn(2 ether);
+        assertGt(d.amount1(), 0, "past the window a big buy clears");
+        (uint256 d1, uint256 r1, uint256 l1) = _owed(omrC);
+        assertEq(d1 + r1 + l1, d0 + r0 + l0, "past the window a buy pays nothing");
+    }
+
+    function test_arming_the_window_late_cannot_rearm_an_already_open_pool() public {
+        // The property that keeps this from being a pause: the window counts from a birth block that
+        // is already in the past. Arm it AFTER the pool has been open longer than the window and
+        // nothing is refused — a compromised Safe cannot halt an open market this way.
+        vm.roll(block.number + 300); // pool opened at setUp; MAX is 200
+        _armWindow(200, 500, 1);
+        BalanceDelta d = _buyExactIn(2 ether);
+        assertGt(d.amount1(), 0, "a pool past MAX_ANTISNIPE_BLOCKS can never re-enter a window");
+    }
+
+    function test_the_window_length_is_capped_at_compile_time() public {
+        // Hoisted ABOVE the cheatcodes — an inline `hook.MAX_ANTISNIPE_BLOCKS()` is a staticcall
+        // that consumes the expectRevert (the suite's own recorded footgun, hit again right here).
+        uint256 tooLong = hook.MAX_ANTISNIPE_BLOCKS() + 1;
+        vm.prank(safe);
+        vm.expectRevert(OmertaHook.BadBps.selector);
+        hook.setAntiSnipe(tooLong, 0, 0);
+    }
+
+    function test_the_window_fee_lives_under_the_anti_rug_cap() public {
+        vm.prank(safe);
+        vm.expectRevert(OmertaHook.BadBps.selector);
+        hook.setAntiSnipe(50, 1001, 0); // MAX_SELL_TAX_BPS is 1000
+    }
+
+    // ── THE SURGE — the rate follows the damage ──────────────────────────────────────────────────
+    //
+    // `tools/bond-dials.js` sized the daily bond cap on PRICE IMPACT against depth. The surge taxes
+    // exactly that behaviour: a sell that barely moves the pool pays the base; one that shoves the
+    // price pays toward the ceiling. Measured off the pool's own sqrtPrice — no oracle.
+
+    function test_a_small_sell_pays_the_base_rate_even_with_the_surge_armed() public {
+        vm.prank(safe);
+        hook.setSurge(1000, 500); // ceiling 10%, full at 5% impact
+        (uint256 d0, uint256 r0, uint256 l0) = _owed(eth);
+        BalanceDelta d = _sellExactIn(0.01e18); // dust against 1000e18 of liquidity
+        uint256 gross = uint256(uint128(int128(d.amount0()))) * 10000 / (10000 - TAX_BPS);
+        (uint256 d1, uint256 r1, uint256 l1) = _owed(eth);
+        uint256 fee = (d1 + r1 + l1) - (d0 + r0 + l0);
+        assertApproxEqRel(fee, gross * TAX_BPS / 10000, 0.02e18, "a no-impact sell must pay the base rate");
+    }
+
+    function test_a_pool_shoving_sell_pays_more_than_the_base_and_at_most_the_ceiling() public {
+        vm.prank(safe);
+        hook.setSurge(1000, 50); // ceiling 10%, full at 0.5% sqrtPrice impact — reachable here
+        (uint256 d0, uint256 r0, uint256 l0) = _owed(eth);
+        BalanceDelta d = _sellExactIn(50e18); // 5% of the pool's OMR side
+        uint256 net = uint256(uint128(int128(d.amount0())));
+        (uint256 d1, uint256 r1, uint256 l1) = _owed(eth);
+        uint256 fee = (d1 + r1 + l1) - (d0 + r0 + l0);
+        uint256 gross = net + fee;
+        assertGt(fee * 10000 / gross, TAX_BPS, "a big sell must pay MORE than the flat rate");
+        assertLe(fee * 10000 / gross, 1000, "and never more than MAX_SELL_TAX_BPS");
+    }
+
+    function test_the_surge_ceiling_cannot_exceed_the_anti_rug_cap() public {
+        vm.startPrank(safe);
+        vm.expectRevert(OmertaHook.BadBps.selector);
+        hook.setSurge(1001, 500);
+        // And an armed surge must carry a real ramp — full-at-zero is a flat raise in a costume.
+        vm.expectRevert(OmertaHook.BadBps.selector);
+        hook.setSurge(1000, 0);
+        vm.stopPrank();
+    }
+
+    function test_the_surge_off_is_byte_for_byte_the_flat_tax() public {
+        // surgeMaxBps = 0 is the deploy default; this run must be indistinguishable from the flat
+        // suite above. One representative sell, checked to the wei.
+        (uint256 d0, uint256 r0, uint256 l0) = _owed(eth);
+        BalanceDelta d = _sellExactIn(10e18);
+        uint256 net = uint256(uint128(int128(d.amount0())));
+        (uint256 d1, uint256 r1, uint256 l1) = _owed(eth);
+        uint256 fee = (d1 + r1 + l1) - (d0 + r0 + l0);
+        assertApproxEqAbs(fee * (10000 - TAX_BPS), net * TAX_BPS, 10000, "surge-off must be the flat 9%");
+    }
+
+    function test_the_surge_never_touches_buys() public {
+        vm.prank(safe);
+        hook.setSurge(1000, 50);
+        (uint256 d0, uint256 r0, uint256 l0) = _owed(eth);
+        (uint256 od0, uint256 or0, uint256 ol0) = _owed(omrC);
+        _buyExactIn(50 ether); // a pool-shoving BUY
+        (uint256 d1, uint256 r1, uint256 l1) = _owed(eth);
+        (uint256 od1, uint256 or1, uint256 ol1) = _owed(omrC);
+        assertEq(d1 + r1 + l1, d0 + r0 + l0, "no ETH-side fee on a buy");
+        assertEq(od1 + or1 + ol1, od0 + or0 + ol0, "no OMR-side fee on a buy");
+    }
 }

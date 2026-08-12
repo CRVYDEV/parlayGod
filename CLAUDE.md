@@ -11906,3 +11906,274 @@ It also clears the second warning in the same logs, since setup-node stopped wri
 on `main` locally rather than the designated branch and had to be moved with `git branch -f` + a reset;
 and CI does not run on branch pushes at all (`ci.yml` builds pushes on `main` only and everything else
 via `pull_request`), so a bumped action is unverified until a PR exists — which is what PR #35 is for.
+
+**THE HOOK'S BUY SIDE + a recovery lesson (2026-08-11).** hookr.fun — a composable Uniswap v4 hook
+launchpad — shipped on **Robinhood Chain, our chain**, and the founder asked whether any of its five
+"blocks" could join OMERTÀ. We cannot use their hook (a `PoolKey` holds exactly one, and ours funds
+dev/treasury/LP), but the five are a menu of **buy-side** mechanics and `OmertaHook.sol`'s buy side was
+empty (`BUYS ARE FREE`). Decided on paper first (`omerta-hook-blocks-design.md`) because it is an
+IMMUTABLE, unaudited contract, then built two, deferred one for free, declined two — the discipline being
+the split *where does the output live*: a fee/cap/on-chain-payout is contract surface, a status/league/
+city-event is backend surface at zero contract cost. **ADOPTED (built, forge 213/213): ANTI-SNIPE** (a
+windowed size-cap + buy-fee + exact-output refusal — the launch's "the 120h vest outlasts the 72h window"
+is an argument about BONDERS, not about a block-0 buyer who sits on the whole early move for a 9% exit tax;
+it is the ONLY thing in the contract that can refuse a swap and it is NOT a pause — `MAX_ANTISNIPE_BLOCKS`
+is compile-time, the window counts from a birth block already in the past, and it can't be re-armed on an
+open pool) and **SURGE** (the rate rises with PRICE IMPACT toward a Safe-set ceiling under
+`MAX_SELL_TAX_BPS`, measured off the pool's own `sqrtPrice` via transient storage — no oracle — because
+impact is the exact metric `tools/bond-dials.js` sized the daily bond cap on). Both **armed at zero** =
+byte-for-byte today's flat tax. **DEFERRED with a reason: the LP status league** (extend `underwriterScore`
+with LP depth-time — the strongest strategic fit since depth is the binding bond-cap constraint, but the
+reader needs a live pool to read, the `bankPosition` dormant pattern). **DECLINED: auto-burn** (reintroduces
+the OMR-denominated reflexivity the whole v4 migration exists to kill) **and the paying Nth-buy pot** (a
+prize for trading = the Den's CASH-ONLY line + wash-trading the volume we tax; the free version is a city
+event). The permanent four-slice buy rate (`omerta-v4-hook-design.md:584`) is DELIBERATELY not this — a
+windowed rate ≠ a permanent fourth recipient — and shares this audit, so decide it before the batch or pay
+for a second one. **A test lesson worth keeping:** the exact-output refusal is load-bearing ONLY at
+`antiSnipeMaxBuy=0` — with a cap, `uint256(-amountSpecified)` for an exact-output amount underflows huge and
+`SnipeTooLarge` catches it anyway, so a mutation removing the refusal still reverts in that regime; the first
+cut tested the wrong regime and the mutation SURVIVED (the recorded "a check that cannot fail reads exactly
+like a clean bill of health" class), fixed by testing cap==0 where the refusal is the only guard. **THE
+RECOVERY LESSON (the expensive part):** mid-build, an external process ran `git merge origin/main` with the
+`'ours'` strategy on this branch, which moved HEAD to an unrelated lineage and **wiped every uncommitted
+file** — the hook changes, the tests, the design doc, the `ops.js` capacity readout, and the fee-flow
+artifact all vanished at once. Committed work was safe (PR #35 merged to `origin/main`; PR #36's capacity
+readout sat on `origin/claude/next-recommendations-svj4s6` as `de5b9c9`), so the recovery was
+`git checkout -B <branch> origin/<branch>` to get back on the correct remote tip, then rebuild from context.
+It was fully recoverable ONLY because the work existed verbatim in the conversation and forge had already
+proven it 213/213 — but the general rule is now explicit: **contract work (and any long uncommitted edit
+sequence) must be committed promptly, because a git operation you did not run can wipe the working tree**,
+and an artifact/design doc left uncommitted is not "saved" in any sense a merge respects. The
+`public/fee-flows.html` interactive fee diagram (editable, JSON export/import, published as an artifact) is
+committed with this drop.
+
+**THE FAMILY BUYBACK — Phase 1 of the treasury→family split (founder-directed 2026-08-11: the
+fee-structure iteration → "Lock this in" → "Let's start") — BUILT, chain-dormant, byte-identical
+until the flip** (`omerta-treasury-to-family-design.md` §4/§8; `src/community.js` — the 141st module,
+`test/community.js` — the 98th suite; `community_revenue`/`family_buybacks` — the 221st/222nd tables +
+`sell_tax_events.community_eth`; `GET /v1/mod/community` + `POST /v1/mod/community/buy`; the worker's
+nightly `alertDrift` gains the runner). The locked design's build-order step 1: five revenue ingests
+carve a COMMUNITY slice out of each REAL payment — the gameplay fee and the Store from the implicit
+operations remainder, the sell tax as a FOURTH slice before the LP remainder, the Bank harvest fee at
+ingest IN THE MARKET'S UNDERLYING (the treasury keeps the exact remainder — which is ALSO the city
+leg's budget, flagged in BALANCE.md as the flip's stated trade), and the POL fees diverting a Vig
+share with the NET booked to `pol_fees` (vig-INSERT FIRST, so a crash between the two inserts heals
+on re-delivery — both sides idempotent on ref). The keeper (`runFamilyBuyback`, the `runVigBuyback`
+twin) spends the unspent community revenue on hard $OMR per CURRENCY (root cap + a
+`FAMILY_MAX_PRICE_JUMP` continuity wall vs the last REAL buy, `ORDER BY created_at` never id) and
+credits `family_yield_pool` through the ONE `fundFamilyYield` implementation — so `payFamilyYield`'s
+5-4-3-2-1 seasonal distribution and the exchange's own `family yield backed`/`balance` identities
+absorb the second funder with zero changes. **§10.4: the pool credit is a MINT — `yield:buyback`, an
+EXACT reason in `omrMints`** (never the `yield:%` prefix; `yield:window`/`yield:family` are genuine
+transfers), because the credit has no counted-bucket debit — the first draft of the design doc said
+"no new mint reason" and was WRONG (the `kitchen:module` silent-drift class; corrected in the doc in
+this commit). It is admissible exactly to the extent the hard token arrived, which conservation
+cannot see, so `runFamilyBuybackInvariants` (nightly, + the mod GET) reconciles credited == bought
+over REAL rows, spend ≤ revenue per currency, comps-buy-nothing, and publishes `walletMustHold` (the
+treasury safeMustHold attestation shape). **Deliberately NO fundReserve** — the desk-shelf posture,
+not the bank's: gang reserves are burn-only (seals, the Foundation), so reserve-funding this pool
+would raise signable withdrawal capacity for claims that cannot be made; the re-open condition (gang
+$OMR ever reaching an account → the bank pairing + a named term in BOTH Vig-sandwich halves, the
+cityPaid lesson) is written at the site. **Comps book ZERO spend AND zero $OMR** (the bank posture,
+stricter than the desk's — the PRICE is caller-supplied and the pool's exit reaches real families);
+the mod buy route strips txHash unless `ALLOW_MOD_REAL_REVENUE=on` (D-MED2), proven at the route.
+All five slice levers are FUNCTION-levers (env read per call — settable in-suite post-load, and the
+Phase-2 flip is an env change): `FEE/STORE/SELL_TAX/HARVEST_COMMUNITY_BPS` + `POL_FEES_VIG_BPS`, each
+defaulting 0; the rules.tail.js FOUR-way sell-tax load guard makes the flip honest (community on
+REQUIRES lowering a sibling — the locked design lowers `SELL_TAX_RWA_BPS` 400→160 — or the module
+refuses to boot; proven BOTH ways in a subprocess). The router gained community rows on four
+sources + the polfees vig diversion, `COMMUNITY_SOURCES` membership, and two LEVER-HISTORY-IMMUNE
+checks — per-row `amount ≤ gross` + the two-sided tax mirror — because a declared-split mirror
+against a lever DESIGNED to move (ships 0, flips later) would false-alarm on flip day against all
+pre-flip history (my own first cut, discarded on that argument). `test/community.js` proves the
+Phase-1 byte-identity, the five exact carves (+ comp zeros), the keeper (cap/clamp/wall/per-currency,
+the comp not consuming the budget), §10.4 ABSOLUTE with the mint in the ledger, the runner + router
+failing by name, and the flip guard both ways — **five mutations, each caught at its own named
+assertion** (the reason dropped from omrMints → conservation drift = exactly the minted total; the
+root cap removed; a comp crediting the pool; the fee booking dropped with the lever on; a nonzero
+default breaking byte-identity). BALANCE.md § THE FAMILY BUYBACK is the lever record; Phases 2–4
+(the env flip with sign-off, the two contracts into the audit batch, the DEX keeper + custody) wait
+per the design's §8.
+
+**THE TOKEN-HEALTH BOARD, THE EQUILIBRIUM ANSWER, AND A FALSE SUPPLY CLAIM ON THE LANDING PAGE
+(founder-directed 2026-08-11: "Let's do your recommended order") — BUILT** (`src/tokenhealth.js` —
+the 142nd module, `test/tokenhealth.js` — the 99th suite; `GET /v1/mod/tokenhealth` + an /admin
+panel; sim **P9.36**; a copy guard in `test/docs.js`). Three of the tokenomics review's six open
+angles, in the order that makes the others observable. **(1) THE BOARD.** Every other instrument
+here answers *can the books lie?*; this one answers *is the economy working?* — five KPIs, each
+carrying the reading that would make a person ACT, because a number with no threshold beside it is
+decoration: return velocity (the revenue engine per token held), sink volume per active player
+(multiply by DAU), desk clearance (recycled supply that never clears never becomes ETH), the float
+split (the holding-vs-spending equilibrium, live) and the withdrawal queue (the full-reserve rail
+turns a shock into a queue, so the queue IS the shock gauge). Pure read — **zero §10.4 surface**,
+asserted by counting ledger rows across a full computation rather than by intent. **DORMANT IS A
+STATE, NOT A GRADE**, and getting that wrong would have made it useless before launch: pre-market
+most KPIs are structurally zero, so each reports `dormant` when its denominator does not exist yet
+(the desk's own `no_price`-quiet vs `stale_price`-alarm split). Sink volume is measured off the
+`desk:recycle` rows, which is **drift-proof by construction** — the ledger hook writes exactly one
+per recycled sink from the same `DESK.SINK_REASONS` the §10.4 burn term is generated from, so a sink
+added tomorrow is counted the day it ships without this file knowing it exists; the agent-vs-human
+composition (review angle 5) is one grouped query filtered in JS through the SAME `recyclesToDesk`
+predicate, which both avoids a generated NOT-IN and yields the per-reason breakdown that is the
+actually-useful half (*which* sinks an EV optimizer routes around). The queue reuses `chain.js`'s own
+`reserveStatus` so the board and the rail cannot disagree. Four mutations, each caught at its own
+named assertion (the house pools folded into the velocity denominator — which would report the engine
+SLOWING every time it collected a sink; a structural zero rendered as `act`; a transfer counted as
+spend; the non-recycling withdrawal dropped from sink volume). **(2) THE EQUILIBRIUM, MEASURED (sim
+P9.36).** The review's sharpest open question — velocity vs holding — has a STRUCTURAL answer, not a
+forecast: the ladder's rungs are **absolute thresholds** (60/180/450/900 staked), not a proportional
+yield, so a rational player stakes exactly enough for the rung they want and not one $OMR more —
+**hold demand is CAPPED per player while the sinks are RECURRING and unbounded over a career**. Off
+the live levers: a made, subscribed player holds 450 (being made buys a rung, releasing 450 of lock
+for 120 every 30 days forever — the subscription converts a one-time lock into recurring spend)
+against ~5,214 $OMR/year of subscription spend alone = **~11.6 turns/year against an act band of 2**.
+The probe also states what it does NOT prove: that is one ENGAGED player, and the base-wide figure is
+this times the engaged share, which no model can supply — the same "conservation ≠ demand" boundary.
+**(3) THE COPY WAS FALSE IN BOTH DIRECTIONS, and the guard is the durable half.** Since v3 step 2 a
+sink RECYCLES rather than burning, so no scarcity claim about $OMR can be true — and the sweep found
+the codices reading *"Supply is enumerated, and the list is shrinking"*. Worse in the other
+direction, and on the most-read surface in the project: the landing page claimed **"$OMR is not
+created in game at all"** while `omrMints` enumerates four live reasons (the mission ladder pays for
+play; three more mint only when a real token arrives to back them) — a claim a player could falsify
+in one query. Both fixed, plus a stale internal comment calling `law:jury` deflationary when it
+recycles (the class that licenses a false player-facing claim later — the retired-`ammSpot` shape).
+The guard is **deliberately narrow**, which is the price-parity lesson applied: a pattern broad
+enough to catch every "burn" or "scarce" catches the game's own DEFINED vocabulary (both codices
+correctly define a burn as *"not destroyed — it lands on the desk's shelf"*), NFT rarity and the
+roster's scarce chairs — so it matches only phrases false about the TOKEN whenever they appear, with
+a catalog-or-declare waiver list, plus a positive half that FAILS if the mechanism ever changes so a
+stale prohibition cannot outlive the game it describes. It caught my own replacement copy on the
+first run ("Nothing here shrinks supply either" — a denial, but the sentence after already said it),
+which was fixed by tightening the prose rather than weakening the guard. Two mutations restore each
+false claim and fail by name with the exact reason. Suite 99 files + sim drift-0 + mobile 75/75 +
+client wiring/mirror + levers 672 + docs.
+
+**THE FAMILY BUYBACK RED-TEAMED — a fat-fingered first buy could mint ten times the genesis supply
+with every check green (`AUDIT-family-buyback.md`, 2026-08-12).** `src/community.js` shipped hours
+earlier with mutation-verified tests and no adversarial pass, and it MINTS $OMR (`yield:buyback`) —
+the one class of surface this project never leaves un-attacked (the desk, the bank and the treasury
+each got a pass). The parallel five-lens workflow died on a subagent quota with zero results, so the
+pass was done first-hand, which turned out to matter: every claim was reproduced against a booted
+server before being called a finding, and **three of the five candidates died on checking** (the
+pool singleton IS seeded in `schema.sql` so its `FOR UPDATE` always takes a real lock;
+`fundFamilyYield` does no rounding of its own so the pool and the ledger row move by the identical
+number; the root cap's missing `WHERE real` cannot matter because comps book `spent = 0`). Two
+survived and both are fixed. **F1 (MED) — the first real buy in a currency faced no price wall at
+all**, and the reproduction is the headline: **1 ETH of real revenue at a fat-fingered 1e9 minted
+1,000,000,000 $OMR — ten times the entire genesis supply — into the family pool, with
+`runFamilyBuybackInvariants` returning `ok: true`.** The invariants are green *by construction*
+there: `credited == bought` compares the ledger to the books and both derive from the same wrong
+price (the desk's own *"a check on quantity is blind to a bad price"* lesson, one pool over), which
+is why the WALL and not the invariant is the thing that has to hold. The header called
+`runVigBuyback` its twin and inherited the twin's documented bootstrap — **and that was the mistake,
+for a reason specific to what the price is FOR**: every consumer in the game reads the Vig print (the
+ETH vault, bond quotes, PLEX, the exit toll), so a wrong first print there is loud and self-correcting
+through those consumers, whereas **nothing reads this keeper's price except its own next wall**, so a
+wrong first print is silent, permanent, and lands in real families' reserves. The treasury — the most
+recent sibling, built with the most thought about exactly this question — refuses an unreferenced
+first fill, and that is the posture taken, with a cheaper answer wherever one exists: **an ETH buy now
+anchors on the canonical Vig print** (the number the rest of the game already trusts — no new lever,
+no operator ritual, fails closed only when the game has no price at all), and **a currency the game
+has no price for** (the harvest carve arrives in the market's underlying) refuses `price_unanchored`
+unless the caller passes `bootstrap: true` — never set by the bot's ordinary path, read strictly
+(`=== true`) at the route, and **not a standing exemption**: the wall check is independent of the
+flag, so the seeded price walls every buy after it (asserted directly, because that is the property
+that would make the flag a bypass if it were wrong). A comp needs no anchor and keeps quoting, since
+it books zeros and can mint nothing. **F2 (LOW) — a stranded budget read exactly like an empty one**:
+`recordHarvestFee` UPPERCASES its asset symbol, the three ETH sources write a lowercase `'eth'`, and
+the keeper only `.trim()`d — so a bot asking for `usdc` read a zero budget, spent nothing and returned
+a **bare `null`**, indistinguishable from "the budget is genuinely empty" (the *silence-reads-as-fine*
+class, the desk's `no_price`-quiet vs `stale_price`-alarm split). It fails closed, which is why it is
+LOW, but the cost of not noticing is money sitting unspent while the dashboard says the pool is fine.
+Fixed on both halves — the caller's spelling is canonicalized case-insensitively against what the
+ledger actually holds, and the nothing-to-do case NAMES itself (`no_budget` vs `budget_spent`, plus
+the list of currencies that DO hold budget, so a typo is obvious at a glance) — and the root cap moved
+above the price wall so a typo'd currency hears about the BUDGET rather than about price anchoring
+(both refuse before any write, so the order is legibility, not safety). **Four mutations, each caught
+at its own named assertion** — and M4 initially failed with a raw `TypeError: Cannot read properties
+of null`, which is the recorded *"a failure that teaches nothing"* shape, so the two assertions are
+null-safe now and name what broke. The regressions that need budget of their own sit in a block
+AFTER the router-board block on purpose, so the board keeps measuring the INGEST carves rather than a
+fixture's hand-seeded rows. Also recorded as accepted-with-reasons: a bootstrapped currency is still
+unbounded for that one deliberate root-of-trust call (the treasury's own posture), the pool can
+accumulate with no seated family to pay (a distribution-timing property, not a leak — it is a counted
+bucket), and `walletMustHold` is a FLOOR rather than an equality because a dissolving family burns its
+soft claim (`gang:dissolved`) while the hard $OMR stays in the wallet — the conservative direction.
+Suite 99 files + sim drift-0 + pgquery + pgcheck 43/43 on real Postgres.
+
+**THE SAME WALL, ONE SYSTEM OVER — and why a class sweep beat the fix (2026-08-12).** F1 above was
+an INSTANCE; treating it as a CLASS and sweeping every sibling that takes a caller-supplied price
+found a worse one. **`bank.js:recordBankBuy` takes `spent` and `omrBought` as two INDEPENDENT
+numbers, caps only the first against arrived revenue, and books the second unconditionally** — so
+the implied price was unbounded on EVERY fill, not merely the first. Reproduced against a booted
+server: **1 USDC of real protocol profit booked 1,000,000,000 $OMR into the city pool, with
+`runBankInvariants` returning ok:true** — green for the identical structural reason as F1, because
+`distributed ≤ bought` compares against the caller's own `bought`. **The consequence is sharper than
+F1's**: the family pool exits to gang reserves, which are burn-only, while this pool's exit is
+`payCityLeg` → a `prize:omr` MINT **to players** plus `fundReserve`, i.e. it raises the number
+`signVoucher` reads before signing a REAL on-chain withdrawal. Fixed with the family keeper's answer
+exactly (the game has no OMR/USDC price to anchor on): continuity against the last real buy IN THAT
+ASSET, a deliberate one-time `bootstrap` for an asset with nothing to be continuous with, walls
+PER-ASSET so seeding one leaves the others alone. Two mutations, each caught at its own named
+assertion; the regression block sits LAST in `test/bank.js` because its bootstrap credits the pool
+and the empty-pool block above it needs a pool that is genuinely empty (the community suite's
+block-9 ordering lesson). The rest of the sweep came back CLEAN and is recorded so nobody repeats
+it: `runStockBuyback` already refuses an unreferenced first fill, `runDeskBuyback` carries a band
+plus a fat-finger floor against a fail-closed anchor, and `runVigBuyback`'s documented bootstrap is
+defensible precisely because its print is the number every other consumer reads. **The lesson worth
+keeping: when a finding names a shape rather than a line, sweep the shape — the second instance was
+the dangerous one, and nothing about the first would have led anyone to it.**
+
+**LAUNCH READINESS — the copy promised extraction nobody can do (founder-directed 2026-08-12: "let's
+try to launch this weekend").** Checked production before touching anything, and most of it was
+better than expected: healthy (db up 19ms, worker beating), with push, X one-click sign-in and
+WalletConnect **already activated**. But the chain is DORMANT — `CHAIN_ID` unset (so
+`walletConnect.chainId` falls back to 1), `POST /v1/withdraw` cannot sign, and `/v1/arena` reports
+`totalExtracted: 0` for everybody — while **three public surfaces stated extraction in the present
+tense**: the landing agents pill ("earn, kill, and **extract real value**"), the arena's own social
+unfurl ("**extract real $OMR on-chain. This board is live.**"), and AGENTS.md's "Real extraction"
+bullet plus a How-to-extract section with no hint that step 3 refuses today. A capability claim the
+product cannot keep, next to real-money framing, on the pages a launch points people at — the same
+class as the false supply claims fixed hours earlier, in the direction that matters most when the
+doors open. Fixed by separating what is true NOW from what is coming (the rail is built and
+devnet-proven; it opens when the audit and counsel gates clear), and **guarded** in `test/docs.js`
+beside the deflation guard: a per-FILE rule, deliberately loose about wording — a surface may
+describe the rail freely so long as it says somewhere that the rail is not open. **When extraction
+DOES go live the guard fails until it is updated**, which is the point: going live becomes a
+decision on the record rather than a silent change of tense. Mutation-verified (strip the qualifier
+and it names the file). **The two codices turned out to be ALREADY honest** ("built but not active
+until mainnet"; the section tagged "(not active)") — my first scan used the wrong marker words, not
+their copy, and that is recorded because verifying before acting is what stopped a "fix" to
+something that was not broken. Config: `SOCIAL_VERIFY_MODE: live` was already in `render.yaml`;
+`INVITE_MODE` was already effectively off (the `auth.js` default) but ABSENT from `render.yaml`, so
+the open-doors posture rested on an unstated default — now written down explicitly, because a launch
+posture nobody can see in a diff is one nobody can review. **Flagged for the founder, not fixable
+here:** `SOCIAL_VERIFY_MODE=live` verifies WITH a token, so without `X_BEARER_TOKEN` the
+word-of-mouth faucet reports itself OFF and pays nobody (/admin's Growth loop panel reads PAYING or
+NOT PAYING at a glance).
+
+**SIGN-OFF PART A CLOSED — and two rows said NOT BUILT for a week while they were live.** The
+founder answered D8/D13/D15; checking each against source BEFORE building anything found **D13 and
+D15 had already shipped on 2026-08-05, at exactly the values just re-chosen** (`M4.DEAL_ENERGY` 4 on
+the Kitchen deal — gated AND deducted, pinned, the exact spend asserted in `test/growth.js`;
+`M3.BUST_ATTEMPTS_DAY` 5 — a rolling-24h bucket charged BEFORE the roll, surfaced as
+`bustAttemptsLeft`, pinned, and load-bearing enough that `test/population.js` documents a flake it
+caused). So two decisions were made twice and the second time changed nothing. **That is SIGN-OFF.md's
+own warning running in the other direction** — it warns that a signed decision which never shipped is
+worse than an open one, and here a SHIPPED decision was still carried as open. It is not mechanically
+guardable (neither row names a lever, so nothing in `test/levers.js` could have caught the drift), so
+the discipline is stated in the file instead: **when a row moves to BUILT, edit the sheet in the same
+commit as the build.** D8=D confirmed as the standing answer; Part A is closed and the only open items
+on the sheet are the alpha WATCH rows.
+
+**A PROCESS NOTE FROM THIS SESSION, because it cost real work twice.** The container restarted twice
+mid-session and silently reverted the checkout to an OLD lineage (`7aad77f`, which predates
+`src/bank.js` entirely) — `git status` read "working tree clean" while a file the suite had just
+exercised did not exist. Uncommitted work was eaten both times, including the whole F3 fix, and the
+second time a commit landed on the WRONG BASE and was rejected as a non-fast-forward. Recovery is the
+recorded shape: the pushed tip is the source of truth (`git fetch` then `git reset --hard` to the
+remote branch, never to a local ref that may be stale), re-apply from context, and **verify HEAD
+immediately before every commit**. The durable lesson is the one already written for the stale-base
+trap, in a harsher form: **a green suite proves nothing about the tree you are about to push if you
+have not just confirmed which tree that is** — and under a flaky container the answer is to commit
+each fix the moment it passes rather than batching.

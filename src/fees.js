@@ -17,7 +17,8 @@ import { getAddress } from 'viem';
 import crypto from 'node:crypto';
 import { GameError, notify, deadlockToRetry } from './game.js';
 import { recordVigRevenue } from './vig.js';
-import { rollStats, TREASURY } from './rules.js';
+import { recordCommunityRevenue } from './community.js';
+import { rollStats, TREASURY, COMMUNITY } from './rules.js';
 
 const norm = (addr) => { try { return getAddress(addr); } catch { return null; } };
 // A payment only grants an entitlement if it actually carried value — belt-and-suspenders
@@ -83,6 +84,13 @@ export async function recordFeePayment(pool, { nonce, kind, payer, amountWei, tx
       if (rwaEth > 0 && !(await client.query(
         "SELECT 1 FROM rwa_revenue WHERE source='fee' AND ref=$1", [String(n)])).rows[0])
         await client.query("INSERT INTO rwa_revenue (source, ref, rwa_eth) VALUES ('fee',$1,$2)", [String(n), rwaEth]);
+      // THE COMMUNITY SLICE (the family buyback, omerta-treasury-to-family-design.md §4) — carved
+      // from the implicit founder/operations remainder exactly like the treasury slice above. The
+      // lever ships at 0 (Phase 1), so this books nothing until the Phase-2 flip; same txHash gate,
+      // same idempotency, recorded inside the same txn.
+      const commEth = Math.round(grossEth * COMMUNITY.FEE_BPS() / 10000 * 1e6) / 1e6;
+      if (commEth > 0)
+        await recordCommunityRevenue(client, { source: 'fee', ref: String(n), currency: 'eth', gross: grossEth, amount: commEth });
     }
     const acct = (await client.query('SELECT account_id FROM account_persistent WHERE wallet_address=$1', [addr])).rows[0];
     let credited = false;

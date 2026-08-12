@@ -11,6 +11,7 @@ import {Currency} from "v4-core/types/Currency.sol";
 import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/types/BeforeSwapDelta.sol";
 import {ModifyLiquidityParams, SwapParams} from "v4-core/types/PoolOperation.sol";
+import {StateLibrary} from "v4-core/libraries/StateLibrary.sol";
 
 /// @notice The seam the hook-native oracle (omerta-v4-hook-design.md §5, sequencing step 3) plugs
 ///         into. It exists NOW, unused, because THIS HOOK'S PERMISSION SET AND LOGIC ARE BOTH
@@ -126,6 +127,15 @@ contract OmertaHook is IHooks, Ownable {
     ///         cost a swapper a little gas but can never consume the swap's whole budget.
     uint256 public constant OBSERVER_GAS = 150_000;
 
+    /// @notice THE LONGEST HALT THIS CONTRACT CAN EXPRESS. Anti-snipe is the only thing here that can
+    ///         refuse a swap, and the header is explicit that a hook able to revert can halt a public
+    ///         market. That objection is answered by CONSTRUCTION rather than by promise: the window
+    ///         is counted from an initialization block that is already in the past, and its length is
+    ///         capped at compile time — so a compromised Safe cannot extend it, cannot renew it, and
+    ///         cannot re-arm it on a pool that has already opened. It expires with nobody acting.
+    ///         ~200 blocks is minutes, not hours, on any chain we would deploy to.
+    uint256 public constant MAX_ANTISNIPE_BLOCKS = 200;
+
     IPoolManager public immutable poolManager;
     /// @notice The taxed token. A pool is only allowed on this hook if one of its currencies is OMR.
     address public immutable omr;
@@ -146,6 +156,32 @@ contract OmertaHook is IHooks, Ownable {
 
     /// @notice Optional oracle sink (design §5). Zero = no observer, which is the deploy default.
     IOmrHookObserver public observer;
+
+    // ── the opening window (anti-snipe) ──────────────────────────────────────────────────────────
+    // The launch argues nobody can dump at the bell because the 120h bond vest outlasts the 72h
+    // window — but that is an argument about BONDERS. It says nothing about someone who buys in
+    // block 0 and sits on it, and since the genesis price equals the LP init price by design, that
+    // buyer captures the whole early move for the price of a 9% exit tax they are glad to pay.
+    uint256 public antiSnipeBlocks; // 0 = off (the deploy default)
+    uint256 public antiSnipeBuyBps; // extra fee on buys inside the window
+    uint256 public antiSnipeMaxBuy; // largest single buy inside the window, in QUOTE. 0 = uncapped.
+
+    /// @notice The block a pool opened, per pool. Written once, in `afterInitialize`. Never updated —
+    ///         which is what makes the window non-renewable.
+    mapping(PoolId => uint256) public openedAt;
+
+    // ── surge (design §2.2) ──────────────────────────────────────────────────────────────────────
+    // Scales the rate with PRICE IMPACT rather than with depth consumed, because impact is the damage
+    // metric `tools/bond-dials.js` identified when it sized `dailyCapOMR` ("the damage metric that
+    // matters, since a griefer need not profit"), and because measuring the price the pool actually
+    // moved to needs no oracle and no conversion between L and token units.
+    uint256 public surgeMaxBps; // 0 = off. The ceiling impact can drive the rate to.
+    uint256 public surgeFullBps; // the impact (in bps) at which the ceiling is reached.
+
+    /// @dev Transient slot holding the pre-swap `sqrtPriceX96`. Per-swap scratch, never state: it is
+    ///      written in `beforeSwap` and read in `afterSwap` of the SAME call, so it must not survive
+    ///      the transaction and must not cost a cold SSTORE on every trade.
+    bytes32 private constant PRE_PRICE_SLOT = keccak256("omerta.hook.prePrice");
 
     /// @notice Fees taken and not yet swept, per currency. Three counters rather than one total, so
     ///         the split that the event reports is exactly the split that gets transferred.
@@ -175,6 +211,9 @@ contract OmertaHook is IHooks, Ownable {
     event RecipientsSet(address dev, address rwa, address lp);
     event QuoteAllowed(Currency indexed currency, bool allowed);
     event ObserverSet(address observer);
+    event AntiSnipeSet(uint256 blocks_, uint256 buyBps, uint256 maxBuy);
+    event SurgeSet(uint256 maxBps, uint256 fullBps);
+    event PoolOpened(PoolId indexed poolId, uint256 blockNumber);
 
     // ── errors ───────────────────────────────────────────────────────────────────────────────────
     error HookAddressMismatch();
@@ -184,6 +223,10 @@ contract OmertaHook is IHooks, Ownable {
     error ZeroAddress();
     error PoolNotAllowed();
     error NothingToSweep();
+    /// @dev The opening window's two refusals. Named separately from `PoolNotAllowed` so a swapper
+    ///      who hits one can tell "this pool is not for me" from "you are early and too big".
+    error SnipeTooLarge();
+    error SnipeExactOutput();
 
     modifier onlyPoolManager() {
         if (msg.sender != address(poolManager)) revert NotPoolManager();
@@ -236,6 +279,39 @@ contract OmertaHook is IHooks, Ownable {
         emit ObserverSet(address(observer_));
     }
 
+    /// @notice Arm the opening window. `blocks_ = 0` is off and is the deploy default.
+    /// @dev    Setting this AFTER a pool has opened does not re-arm that pool: the window is measured
+    ///         from `openedAt`, which is written once and never updated, so a pool whose opening
+    ///         block is already `blocks_` in the past is permanently past its window whatever the
+    ///         Safe does later. That is the property that keeps this from being a pause.
+    function setAntiSnipe(uint256 blocks_, uint256 buyBps, uint256 maxBuy) external onlyOwner {
+        if (blocks_ > MAX_ANTISNIPE_BLOCKS) revert BadBps();
+        // The extra buy fee lives under the same compile-time cap as the sell tax. The window must
+        // not become a way to charge a rate the anti-rug wall forbids everywhere else.
+        if (buyBps > MAX_SELL_TAX_BPS) revert BadBps();
+        if (buyBps > 0 && (devRecipient == address(0) || rwaRecipient == address(0) || lpRecipient == address(0))) {
+            revert ZeroAddress();
+        }
+        antiSnipeBlocks = blocks_;
+        antiSnipeBuyBps = buyBps;
+        antiSnipeMaxBuy = maxBuy;
+        emit AntiSnipeSet(blocks_, buyBps, maxBuy);
+    }
+
+    /// @notice Arm the surge. `maxBps = 0` is off and is the deploy default.
+    /// @dev    `maxBps` is a CEILING WITHIN the existing cap, never an escape from it — the surge
+    ///         raises the rate toward it as price impact grows, so a pool that is never moved much
+    ///         is never charged more than `sellTaxBps`.
+    function setSurge(uint256 maxBps, uint256 fullBps) external onlyOwner {
+        if (maxBps > MAX_SELL_TAX_BPS) revert BadBps();
+        // A zero `fullBps` would mean "reach the ceiling at zero impact", i.e. a flat raise wearing a
+        // surge's name. Require a real ramp whenever the surge is armed.
+        if (maxBps > 0 && fullBps == 0) revert BadBps();
+        surgeMaxBps = maxBps;
+        surgeFullBps = fullBps;
+        emit SurgeSet(maxBps, fullBps);
+    }
+
     // ── the sweep ────────────────────────────────────────────────────────────────────────────────
 
     /// @notice Push accrued fees to the three wallets. Permissionless — it cannot send anywhere but
@@ -273,21 +349,70 @@ contract OmertaHook is IHooks, Ownable {
         onlyPoolManager
         returns (bytes4)
     {
+        // Stamp the birth block. Written ONCE, here, and never updated anywhere — that is what makes
+        // the opening window non-renewable, and it is why this is recorded rather than configured.
+        PoolId id = key.toId();
+        openedAt[id] = block.number;
+        emit PoolOpened(id, block.number);
         _observe(key);
         return IHooks.afterInitialize.selector;
     }
 
-    /// @notice Reserved. The rate ships FLAT, so this returns no delta and no fee override (a zero
-    ///         override means "use the pool's stored fee", which is correct for a static-fee pool
-    ///         and harmless for a dynamic-fee one). Its flags are mined so a future dynamic-fee pool
-    ///         can be created against this same hook without a new address.
-    function beforeSwap(address, PoolKey calldata, SwapParams calldata, bytes calldata)
+    /// @notice THE OPENING WINDOW, and the surge's price snapshot.
+    ///
+    /// @dev    Returns no delta and no fee override (a zero override means "use the pool's stored
+    ///         fee", correct for a static-fee pool and harmless for a dynamic-fee one) — the surge is
+    ///         charged in `afterSwap` with the rest of the tax, because that is where the amount that
+    ///         REALLY moved is known. All this does here is refuse the two snipe shapes and record the
+    ///         price to measure impact against.
+    ///
+    ///         This is the ONLY function in this contract that can refuse a swap, and it can only do
+    ///         so for `antiSnipeBlocks` (≤ `MAX_ANTISNIPE_BLOCKS`) after a pool opens. See that
+    ///         constant for why that is not a pause.
+    function beforeSwap(address, PoolKey calldata key, SwapParams calldata params, bytes calldata)
         external
-        view
         onlyPoolManager
         returns (bytes4, BeforeSwapDelta, uint24)
     {
+        _guardOpening(key, params);
+
+        // Snapshot for the surge. Unconditional and transient: cheaper than branching on whether the
+        // surge is armed, and it must be written before the swap moves the price.
+        if (surgeMaxBps > 0) {
+            (uint160 sqrtPriceX96,,,) = StateLibrary.getSlot0(poolManager, key.toId());
+            bytes32 slot = PRE_PRICE_SLOT;
+            assembly ("memory-safe") {
+                tstore(slot, sqrtPriceX96)
+            }
+        }
         return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+    }
+
+    /// @dev The opening window's refusals, split out to keep `beforeSwap` readable.
+    ///      Applies to BUYS only: a sell during the window is already taxed, and refusing sells would
+    ///      be a honeypot — the exact thing `MAX_SELL_TAX_BPS` exists to make impossible.
+    function _guardOpening(PoolKey calldata key, SwapParams calldata params) private view {
+        uint256 window = antiSnipeBlocks;
+        if (window == 0) return; // off — the deploy default
+        uint256 opened = openedAt[key.toId()];
+        // A pool that predates the stamp (impossible for a pool created against this hook, since
+        // `afterInitialize` always runs) reads zero and is treated as long since open.
+        if (opened == 0 || block.number >= opened + window) return;
+
+        bool zeroIsOmr = Currency.unwrap(key.currency0) == omr;
+        if (zeroIsOmr == (Currency.unwrap(key.currency1) == omr)) return; // not an OMR pool: not ours to guard
+        if (params.zeroForOne == zeroIsOmr) return; // OMR is the INPUT ⇒ a sell ⇒ untouched
+
+        // EXACT-OUTPUT BUYS ARE REFUSED OUTRIGHT, and this is the load-bearing half of the cap rather
+        // than an extra. A cap on the quote spent is trivially circumvented by naming the OMR you
+        // want and letting the router work out the input — so a cap without this is not a cap.
+        if (params.amountSpecified > 0) revert SnipeExactOutput();
+
+        uint256 cap = antiSnipeMaxBuy;
+        if (cap == 0) return; // fee-only window: legitimate, and the default when no size is set
+        // Exact input: `amountSpecified` is negative and denominated in the input, which for a buy is
+        // the QUOTE currency. That is the number the cap is written in.
+        if (uint256(-params.amountSpecified) > cap) revert SnipeTooLarge();
     }
 
     /// @notice THE SELL TAX. Returns a positive delta on the unspecified currency, which the
@@ -316,16 +441,20 @@ contract OmertaHook is IHooks, Ownable {
         view
         returns (Currency feeCurrency, uint256 total)
     {
-        uint256 rate = sellTaxBps;
-        if (rate == 0) return (feeCurrency, 0);
-
         bool zeroIsOmr = Currency.unwrap(key.currency0) == omr;
         // Defensive: `beforeInitialize` already guarantees exactly one side is OMR, and a pool that
         // predates this hook cannot exist (the hook is part of the PoolKey). Belt-and-braces.
         if (zeroIsOmr == (Currency.unwrap(key.currency1) == omr)) return (feeCurrency, 0);
 
         // A SELL is OMR flowing IN. `zeroForOne` means currency0 is the input.
-        if (params.zeroForOne != zeroIsOmr) return (feeCurrency, 0); // BUYS ARE FREE
+        bool isSell = params.zeroForOne == zeroIsOmr;
+
+        // BUYS ARE FREE, except inside the opening window — and even there the rate is windowed
+        // rather than permanent. The permanent buy-side rate the four-slice resolution calls for is
+        // deliberately NOT this (design §3): it is an economic surface with a fourth recipient, and it
+        // should not arrive smuggled in behind a launch guard.
+        uint256 rate = isSell ? _sellRate(key) : _openingBuyRate(key);
+        if (rate == 0) return (feeCurrency, 0);
 
         // The unspecified currency is the OUTPUT for an exact-input swap and the INPUT for an
         // exact-output one — see the header for why that is left as-is rather than forced. Derived
@@ -340,6 +469,47 @@ contract OmertaHook is IHooks, Ownable {
         int128 swapperDelta = feeOnCurrency0 ? delta.amount0() : delta.amount1();
         uint256 base = swapperDelta < 0 ? uint256(uint128(-swapperDelta)) : uint256(uint128(swapperDelta));
         total = (base * rate) / 10000;
+    }
+
+    /// @dev The sell rate: the flat base, raised toward `surgeMaxBps` by the PRICE IMPACT this swap
+    ///      actually caused. Impact is measured, not modelled — the pre-swap `sqrtPriceX96` was
+    ///      stashed in transient storage by `beforeSwap`, and the post-swap price is read here — so
+    ///      there is no oracle, no liquidity math, and nothing for a manipulated feed to loosen.
+    ///      The result can only ever sit BETWEEN `sellTaxBps` and `surgeMaxBps`, both of which the
+    ///      Safe set under `MAX_SELL_TAX_BPS` — the anti-rug wall binds the surge by construction.
+    function _sellRate(PoolKey calldata key) private view returns (uint256) {
+        uint256 base = sellTaxBps;
+        uint256 ceil = surgeMaxBps;
+        if (ceil <= base) return base; // surge off, or configured at/below base: flat
+
+        bytes32 slot = PRE_PRICE_SLOT;
+        uint256 pre;
+        assembly ("memory-safe") {
+            pre := tload(slot)
+        }
+        if (pre == 0) return base; // no snapshot (surge armed mid-tx?) — charge the base, never guess
+
+        (uint160 postX96,,,) = StateLibrary.getSlot0(poolManager, key.toId());
+        uint256 post = uint256(postX96);
+        if (post == 0) return base;
+
+        // |Δ sqrtPrice| / sqrtPrice, in bps. sqrtPrice moves ~half as much as price for small moves,
+        // which is fine: `surgeFullBps` is a Safe-set lever calibrated against THIS measure, and a
+        // consistent measure beats a converted one on a mint-adjacent path.
+        uint256 diff = post > pre ? post - pre : pre - post;
+        uint256 impactBps = (diff * 10000) / pre;
+        if (impactBps >= surgeFullBps) return ceil;
+        return base + ((ceil - base) * impactBps) / surgeFullBps;
+    }
+
+    /// @dev The opening window's buy fee. Zero — the permanent state — outside the window, when the
+    ///      window is off, and when the window carries no fee (a size-cap-only configuration).
+    function _openingBuyRate(PoolKey calldata key) private view returns (uint256) {
+        uint256 window = antiSnipeBlocks;
+        if (window == 0) return 0;
+        uint256 opened = openedAt[key.toId()];
+        if (opened == 0 || block.number >= opened + window) return 0;
+        return antiSnipeBuyBps;
     }
 
     /// @dev Book the three slices. The remainder rule sits on LP, so they sum to `total` exactly.

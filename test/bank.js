@@ -91,7 +91,9 @@ const checkOf = async (runner, name) => {
   for (const x of [a, b, c]) await played(x.acct, THIRD, dSplit);
 
   await revenue(2000);
-  await Bank.recordBankBuy(pool, { ref: 'lin-1', spent: 1000, omrBought: 600, txHash: '0xlin1' });
+  // bootstrap:true seeds this asset's price reference ONCE, deliberately (the F3 wall) — every
+  // later buy in this file is then walled against it, which is the point.
+  await Bank.recordBankBuy(pool, { ref: 'lin-1', spent: 1000, omrBought: 600, txHash: '0xlin1', bootstrap: true });
   const soloRun = await Bank.runCityLeg(pool, { endDay: dSolo });
   const soloTook = round6(await paidTo(solo.acct));
 
@@ -347,6 +349,49 @@ const checkOf = async (runner, name) => {
   for (const banned of ['APY', 'apy', 'guaranteed', 'per year', 'per day', 'earn', 'yield']) {
     assert(!text.includes(banned), `neither the live nor the dormant surface says "${banned}" (§3 rule one)`);
   }
+}
+
+// ── THE PRICE WALL: THE ROOT CAP BOUNDS THE SPEND, NOT THE RATIO (AUDIT-family-buyback F3) ───────
+// This ingest takes `spent` and `omrBought` as two INDEPENDENT numbers, so capping only the first
+// left the implied PRICE unbounded — measured on the unfixed code, 1 USDC of real profit booked
+// 1,000,000,000 $OMR with runBankInvariants green, because `distributed <= bought` compares against
+// the caller's own `bought`. The consequence is sharper than the family keeper's twin: this pool's
+// exit mints `prize:omr` to PLAYERS and calls fundReserve, i.e. it raises the number signVoucher
+// reads before signing a real on-chain withdrawal.
+//
+// Placed LAST on purpose: the WETH bootstrap below credits the pool, and the empty-pool block above
+// needs a pool that is genuinely empty (the community suite's block-9 ordering lesson).
+{
+  const poolBefore = Number((await pool.query('SELECT balance FROM bank_city_pool WHERE id=1')).rows[0].balance);
+  const lastPrice = Number((await pool.query(
+    "SELECT omr_bought / spent p FROM bank_buys WHERE real AND asset='USDC' AND spent > 0 ORDER BY created_at DESC LIMIT 1")).rows[0].p);
+  await revenue(50);
+  await assert.rejects(
+    Bank.recordBankBuy(pool, { ref: 'fat-1', spent: 1, omrBought: 1e9, txHash: '0xfat1' }),
+    (e) => e.code === 'price_sanity',
+    'a fat-fingered price is refused however small the spend — the RATIO is walled, not just the budget');
+  assert.equal(Number((await pool.query('SELECT balance FROM bank_city_pool WHERE id=1')).rows[0].balance), poolBefore,
+    '...and the city pool did not move (the refusal rolls back before the credit)');
+  // an ASSET with no prior real buy has nothing to be continuous with, so it is REFUSED rather than
+  // trusted to set its own reference — seeded once, deliberately, never by the bot's ordinary path
+  await revenue(10, 'WETH');
+  await assert.rejects(
+    Bank.recordBankBuy(pool, { ref: 'weth-1', asset: 'WETH', spent: 1, omrBought: 1e9, txHash: '0xweth1' }),
+    (e) => e.code === 'price_unanchored',
+    'a first real buy in a NEW asset is refused — the game has no price for it to be checked against');
+  const seeded = await Bank.recordBankBuy(pool,
+    { ref: 'weth-2', asset: 'WETH', spent: 1, omrBought: 200000, txHash: '0xweth2', bootstrap: true });
+  assert.equal(seeded.omrBought, 200000, 'a deliberate bootstrap seeds the reference and books normally');
+  // ...and the seeded price walls every buy after it — a bootstrap is ONE act, not a standing
+  // exemption (the property that would make the flag a bypass if it were wrong)
+  await assert.rejects(
+    Bank.recordBankBuy(pool, { ref: 'weth-3', asset: 'WETH', spent: 1, omrBought: 200000 * 11, txHash: '0xweth3' }),
+    (e) => e.code === 'price_sanity',
+    'the bootstrapped price walls every buy after it');
+  // the walls are per ASSET: seeding WETH left the USDC reference this file has been building alone
+  const stillUsdc = Number((await pool.query(
+    "SELECT omr_bought / spent p FROM bank_buys WHERE real AND asset='USDC' AND spent > 0 ORDER BY created_at DESC LIMIT 1")).rows[0].p);
+  assert.equal(stillUsdc, lastPrice, 'the WETH bootstrap left the USDC reference alone (walls are per-asset)');
 }
 
 console.log('bank ok — the split gains nothing, the comp books zero, and every token paid was bought');

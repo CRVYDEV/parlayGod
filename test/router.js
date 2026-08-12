@@ -111,11 +111,11 @@ const mod = async (method, url, body) => {
   assert.equal(b.lifetime.fee.gross, 0.01, 'the fee gross counts ONLY the real payment (the comp is excluded)');
   assert.equal(b.lifetime.fee.vig, 0.01 * VIG_BPS / 10000, 'the fee vig slice matches the declared split');
   assert.equal(b.lifetime.store.treasury, 0.01 * STORE.SPLIT_BPS.rwa / 10000, 'the store treasury slice matches');
-  assert(b.lifetime.tax.gross > 0 && Math.abs(b.lifetime.tax.founder + b.lifetime.tax.treasury + b.lifetime.tax.pol - b.lifetime.tax.gross) < 1e-6,
+  assert(b.lifetime.tax.gross > 0 && Math.abs(b.lifetime.tax.operations + b.lifetime.tax.treasury + b.lifetime.tax.pol - b.lifetime.tax.gross) < 1e-6,
     'the sell-tax slices sum to the taxed gross (the remainder rule holds on the board)');
   const feeDecl = b.waterfall.find((s) => s.id === 'fee');
-  assert(feeDecl.splits.find((x) => x.dest === 'founder').implicit === true,
-    'the never-stored founder remainder is LABELLED implicit — arithmetic is not a ledger');
+  assert(feeDecl.splits.find((x) => x.dest === 'operations').implicit === true,
+    'the never-stored operations remainder is LABELLED implicit — arithmetic is not a ledger');
 }
 
 // ── 4. THE CROSS-SOURCE CHECKS each catch their own class (attack, assert, restore) ──

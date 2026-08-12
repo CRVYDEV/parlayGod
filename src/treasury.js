@@ -44,7 +44,8 @@
 import crypto from 'node:crypto';
 import { GameError } from './game.js';
 import { spendOmr } from './vanity.js';
-import { BONDS, PORTFOLIO, SELL_TAX, TREASURY, jailed, safeHoused } from './rules.js';
+import { recordCommunityRevenue } from './community.js';
+import { BONDS, PORTFOLIO, SELL_TAX, TREASURY, COMMUNITY, jailed, safeHoused } from './rules.js';
 
 const round6 = (n) => Math.round(n * 1e6) / 1e6;
 
@@ -289,7 +290,12 @@ export async function recordSellTax(pool, { ref, omrTaxed, priceOmrPerEth, txHas
   // gate, and it is the reason a mod route cannot manufacture a real-value position.
   const devEth = real ? round6(grossEth * SELL_TAX.DEV_BPS / SELL_TAX.BPS) : 0;
   const rwaEth = real ? round6(grossEth * SELL_TAX.RWA_BPS / SELL_TAX.BPS) : 0;
-  const lpEth = real ? round6(grossEth - devEth - rwaEth) : 0;
+  // THE COMMUNITY SLICE (the family buyback, Phase 1 — ships at 0): the FOURTH slice, computed
+  // BEFORE the LP remainder so LP keeps absorbing the rounding dust and the four still sum to the
+  // gross exactly. The rules.tail.js load guard makes the Phase-2 flip lower a sibling scalar (the
+  // locked design lowers RWA_BPS) in the same deploy, so LP is never silently squeezed.
+  const communityEth = real ? round6(grossEth * COMMUNITY.TAX_BPS() / SELL_TAX.BPS) : 0;
+  const lpEth = real ? round6(grossEth - devEth - rwaEth - communityEth) : 0;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -301,12 +307,15 @@ export async function recordSellTax(pool, { ref, omrTaxed, priceOmrPerEth, txHas
       return { recorded: false, duplicate: true }; // a re-delivered log is a clean no-op
     }
     await client.query(
-      'INSERT INTO sell_tax_events (ref, omr_taxed, price_omr_per_eth, gross_eth, dev_eth, rwa_eth, lp_eth, tx_hash, real) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
-      [key, round6(omr), price, grossEth, devEth, rwaEth, lpEth, txHash, real]);
+      'INSERT INTO sell_tax_events (ref, omr_taxed, price_omr_per_eth, gross_eth, dev_eth, rwa_eth, lp_eth, community_eth, tx_hash, real) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+      [key, round6(omr), price, grossEth, devEth, rwaEth, lpEth, communityEth, txHash, real]);
     if (real && rwaEth > 0)
       await client.query("INSERT INTO rwa_revenue (source, ref, rwa_eth) VALUES ('tax',$1,$2)", [key, rwaEth]);
+    // the community slice mirrors into the family-buyback inflow ledger (the rwa_revenue twin)
+    if (real && communityEth > 0)
+      await recordCommunityRevenue(client, { source: 'tax', ref: key, currency: 'eth', gross: grossEth, amount: communityEth });
     await client.query('COMMIT');
-    return { recorded: true, grossEth, devEth, rwaEth, lpEth, real };
+    return { recorded: true, grossEth, devEth, rwaEth, lpEth, communityEth, real };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     // a concurrent re-delivery of the same log (23505) is the duplicate case, not an error
@@ -344,11 +353,20 @@ export async function recordHarvestFee(pool, { ref, asset, amount, payer = null,
       await client.query('COMMIT');
       return { recorded: false, duplicate: true };
     }
+    // THE COMMUNITY CARVE (the family buyback, Phase 1 — ships at 0): the harvest fee splits at the
+    // ingest — the treasury share books to bank_revenue (which is ALSO the city leg's budget, so the
+    // Phase-2 flip shrinks that budget; flagged in BALANCE.md), the community share to the
+    // family-buyback inflow ledger IN THE MARKET'S UNDERLYING (currency = the asset symbol, never
+    // 'eth' — the keeper's root cap and price wall are per-currency for exactly this row).
+    const commAmt = real ? round6(round6(amt) * COMMUNITY.HARVEST_BPS() / 10000) : 0;
+    const treAmt = real ? round6(round6(amt) - commAmt) : 0;   // treasury keeps the exact remainder
     await client.query(
       'INSERT INTO bank_revenue (source, ref, asset, amount, payer, tx_hash, real) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-      ['harvest', key, sym, real ? round6(amt) : 0, payer, txHash, real]);
+      ['harvest', key, sym, treAmt, payer, txHash, real]);
+    if (commAmt > 0)
+      await recordCommunityRevenue(client, { source: 'harvest', ref: key, currency: sym, gross: round6(amt), amount: commAmt });
     await client.query('COMMIT');
-    return { recorded: true, asset: sym, amount: real ? round6(amt) : 0, real };
+    return { recorded: true, asset: sym, amount: treAmt, communityAmount: commAmt, real };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     if (e?.code === '23505') return { recorded: false, duplicate: true };
@@ -531,9 +549,11 @@ export async function runTreasuryInvariants(pool) {
   // each sell-tax episode's three slices sum to its gross, and the treasury slice reached the ledger.
   // A silent mismatch means the books disagree with what the tax actually took.
   const tax = (await pool.query(
-    'SELECT COALESCE(SUM(gross_eth),0) g, COALESCE(SUM(dev_eth),0) d, COALESCE(SUM(rwa_eth),0) r, COALESCE(SUM(lp_eth),0) l FROM sell_tax_events WHERE real')).rows[0];
+    'SELECT COALESCE(SUM(gross_eth),0) g, COALESCE(SUM(dev_eth),0) d, COALESCE(SUM(rwa_eth),0) r, COALESCE(SUM(lp_eth),0) l, COALESCE(SUM(community_eth),0) c FROM sell_tax_events WHERE real')).rows[0];
   const taxMirror = Number((await pool.query("SELECT COALESCE(SUM(rwa_eth),0) s FROM rwa_revenue WHERE source='tax'")).rows[0].s);
-  push('sell-tax split == gross', Number(tax.d) + Number(tax.r) + Number(tax.l), Number(tax.g));
+  // four-way since the family buyback's community slice (Phase 1; 0 until the Phase-2 flip) — an
+  // unnamed slice here would make this check fire spuriously the day the lever turns on.
+  push('sell-tax split == gross', Number(tax.d) + Number(tax.r) + Number(tax.l) + Number(tax.c), Number(tax.g));
   push('sell-tax treasury slice == recorded', Number(tax.r), taxMirror);
   const status = await treasuryStatus(pool);
   return { ok: checks.every((c) => c.ok), checks, ...status };

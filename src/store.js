@@ -13,7 +13,8 @@
 import crypto from 'node:crypto';
 import { getAddress } from 'viem';
 import { GameError, notify } from './game.js';
-import { STORE, PASS, PATRON, packageOf, RETIRED_PACKAGES, passActive, patronTierOf, patronTierName, passPrestigeOf } from './rules.js';
+import { recordCommunityRevenue } from './community.js';
+import { STORE, PASS, PATRON, COMMUNITY, packageOf, RETIRED_PACKAGES, passActive, patronTierOf, patronTierName, passPrestigeOf } from './rules.js';
 import { spendOmr } from './vanity.js'; // the audited $OMR till — gates the balance, debits in-memory, ledgers the burn
 
 const uid = () => crypto.randomUUID();
@@ -34,7 +35,13 @@ async function splitRevenue(client, { ref, amountWei }) {
   const { founder, buyback, rwa } = STORE.SPLIT_BPS;
   const buybackEth = round6(grossEth * buyback / 10000);
   const rwaEth = round6(grossEth * rwa / 10000);
-  const founderEth = round6(grossEth - buybackEth - rwaEth);
+  // THE COMMUNITY SLICE (the family buyback, Phase 1 — ships at 0): carved from the implicit
+  // founder/operations remainder at booking time, computed BEFORE founderEth so founder stays the
+  // exact remainder and the shares still sum to the gross. Phase 2 flips STORE_COMMUNITY_BPS; the
+  // SPLIT_BPS equality guard (founder+buyback+rwa == 10000) is untouched because community is a
+  // carve FROM founder, the same shape as the gameplay fee's treasury slice.
+  const communityEth = round6(grossEth * COMMUNITY.STORE_BPS() / 10000);
+  const founderEth = round6(grossEth - buybackEth - rwaEth - communityEth);
   // buyback share → the Vig flywheel (source 'store'). SELECT-then-INSERT (pg-mem ON CONFLICT is
   // unreliable); a re-delivered event is a no-op. gross_eth = the FULL payment, vig_eth = the buyback
   // share (so vigStatus.devRevenueEth = gross − buyback = founder + rwa, correct from the Vig's view).
@@ -45,7 +52,10 @@ async function splitRevenue(client, { ref, amountWei }) {
   // rwa share → the dormant R2 accounting bucket
   if (!(await client.query("SELECT 1 FROM rwa_revenue WHERE source='store' AND ref=$1", [String(ref)])).rows[0])
     await client.query("INSERT INTO rwa_revenue (source, ref, rwa_eth) VALUES ('store',$1,$2)", [String(ref), rwaEth]);
-  return { split: true, grossEth: round6(grossEth), founderEth, buybackEth, rwaEth };
+  // community share → the family-buyback inflow ledger (idempotent inside recordCommunityRevenue)
+  if (communityEth > 0)
+    await recordCommunityRevenue(client, { source: 'store', ref: String(ref), currency: 'eth', gross: round6(grossEth), amount: communityEth });
+  return { split: true, grossEth: round6(grossEth), founderEth, buybackEth, rwaEth, communityEth };
 }
 
 // ── apply a SKU's grant to the account (headless — direct SQL, the fees.js no-clobber discipline) ──

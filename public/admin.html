@@ -79,6 +79,7 @@
     <div class="panel" id="p-engage"><h2>Engagement &amp; Retention</h2><div class="body">…</div></div>
     <div class="panel" id="p-top"><h2>The Powerful</h2><div class="body">…</div></div>
     <div class="panel" id="p-chain"><h2>Chain · Reserve · Vig</h2><div class="body">…</div></div>
+    <div class="panel" id="p-tokenhealth"><h2>Token Health</h2><div class="body">…</div></div>
     <div class="panel" id="p-router"><h2>Where a Dollar Goes</h2><div class="body">…</div></div>
     <div class="panel" id="p-activity"><h2>Live Activity</h2><div class="feed body">…</div></div>
     <div class="panel" id="p-mod"><h2>Moderation</h2><div class="body"></div></div>
@@ -127,13 +128,14 @@
   }
 
   async function refreshAll() {
-    const [ov, inv, fn, res, vig, em, act, rev, eng, bnd, tre, coa, intg, rtr, cpar, bkv] = await Promise.all([
+    const [ov, inv, fn, res, vig, em, act, rev, eng, bnd, tre, coa, intg, rtr, cpar, bkv, com, thl] = await Promise.all([
       j('GET', '/v1/mod/overview'), j('GET', '/v1/mod/invariants'), j('GET', '/v1/mod/funnel'),
       j('GET', '/v1/mod/reserve'), j('GET', '/v1/mod/vig'), j('GET', '/v1/mod/emission'),
       j('GET', '/v1/mod/activity?limit=60'), j('GET', '/v1/mod/revenue'),
       j('GET', '/v1/mod/engagement'), j('GET', '/v1/mod/bonds'), j('GET', '/v1/mod/treasury'),
       j('GET', '/v1/mod/coach'), j('GET', '/v1/mod/integrations'), j('GET', '/v1/mod/router'),
-      j('GET', '/v1/mod/chain/params'), j('GET', '/v1/mod/bank'),
+      j('GET', '/v1/mod/chain/params'), j('GET', '/v1/mod/bank'), j('GET', '/v1/mod/community'),
+      j('GET', '/v1/mod/tokenhealth'),
     ]);
     if (ov.code === 401) return $('#logout').onclick();
 
@@ -160,7 +162,7 @@
 
     $('#stamp').textContent = 'as of ' + new Date().toLocaleTimeString();
     renderIntegrity(inv.body); renderEconomy(ov.body, em.body); renderPlayers(ov.body); renderEngagement(eng.body);
-    renderFunnel(fn.body); renderTop(ov.body); renderChain(res.body, vig.body, em.body, rev.body, bnd.body, tre, ov.body, bkv.body); renderRouter(rtr.body);
+    renderFunnel(fn.body); renderTop(ov.body); renderChain(res.body, vig.body, em.body, rev.body, bnd.body, tre, ov.body, bkv.body, com.body); renderRouter(rtr.body); renderTokenHealth(thl.body);
     renderBackups(ov.body); renderSocial(ov.body); renderCoach(coa.body);
     renderIntegrations(intg.body); window.__cpar = (cpar.body && cpar.body.rows) || []; renderChainParams(cpar.body);
     renderActivity(act.body); renderMod();
@@ -242,7 +244,21 @@
           ${x.live ? '' : `<div class="note" style="margin-top:4px"><b>Needs:</b> <code>${(x.needs || []).join('</code> <code>')}</code></div>
             <div class="note" style="margin-top:3px"><b>To switch on:</b> ${x.steps}</div>`}
         </div>`).join('')
-      + '<div class="note" style="margin-top:6px">These are env-config switches (no code deploy). Set the vars on the API and redeploy. Secrets never leave the server — this panel reads presence only.</div>';
+      + '<div class="note" style="margin-top:6px">These are env-config switches (no code deploy). Set the vars on the API and redeploy. Secrets never leave the server — this panel reads presence only.</div>'
+      + capacityLine(ig && ig.capacity);
+  }
+
+  // The pool is the one deploy setting whose failure looks like an OUTAGE rather than a slowdown:
+  // past the cliff, requests queue for a connection and the player is told the database is down.
+  // Measured at 30 concurrent players — 20 gave nine 503s, 60 gave none.
+  function capacityLine(c) {
+    if (!c) return '';
+    const ok = c.aboveCliff && c.declared;
+    return `<div style="margin-top:10px;padding:8px;border:1px solid var(--line);border-radius:5px">
+      <div class="row"><span class="k"><b>DB connection pool</b> <span style="opacity:.6;font-size:11px">capacity</span></span>
+        <span class="v" style="color:var(--${ok ? 'ok' : 'bad'})">${c.poolMax}${c.declared ? '' : ' (default)'}</span></div>
+      <div class="note" style="margin-top:4px">${c.note || 'Above the measured cliff — at 20 the same load served 30 req/s with nine 503s; clear of it, 284 req/s with none.'}</div>
+    </div>`;
   }
 
   function renderSocial(ov) {
@@ -481,7 +497,7 @@
   // ReferenceError and took the entire chain panel down with it: the reserve, extraction-≤-inflow,
   // the staking pool, the Store split, the vault's allocated-≤-held wall and the oracle keeper
   // all rendered as nothing, on the screen a founder opens when something is wrong.
-  function renderChain(res, vig, em, rev, bnd, tre, ov, bk) {
+  function renderChain(res, vig, em, rev, bnd, tre, ov, bk, com) {
     const v = vig?.invariants || {}, vs = vig?.status || {};
     const extractOk = v.ok !== false;
     $('#p-chain').querySelector('.body').innerHTML =
@@ -496,7 +512,7 @@
       + rowHtml('pool / backed', `${fmt(em?.poolBalance)} $OMR · ${Math.round((em?.backed ?? 1) * 100)}%`)
       + (rev ? `<div class="note" style="margin-top:8px">the Store (ETH revenue, split ${rev.split.founder / 100}/${rev.split.buyback / 100}/${rev.split.rwa / 100})</div>`
         + rowHtml('gross ETH', `Ξ${fmt(rev.grossEth)}`)
-        + rowHtml('founder / buyback / rwa', `Ξ${fmt(rev.founderEth)} · Ξ${fmt(rev.buybackEth)} · Ξ${fmt(rev.rwaEth)}`)
+        + rowHtml('operations / buyback / rwa', `Ξ${fmt(rev.founderEth)} · Ξ${fmt(rev.buybackEth)} · Ξ${fmt(rev.rwaEth)}`)
         + rowHtml('treasury', `Ξ${fmt(rev.rwaEth)} <span class="note">held as ETH</span>`)
         + (rev.pendingLinks ? rowHtml('pending links', `${rev.pendingLinks} unclaimed purchase(s)`) : '') : '')
       + (tre && tre.code !== 401 ? `<div class="note" style="margin-top:8px">THE VAULT — what the treasury owes players</div>`
@@ -555,7 +571,52 @@
           + rowHtml('waiting for the next split', `${fmt(bk.summary?.balance)} $OMR`)
           + rowHtml('the books', bk.ok
             ? '<span style="color:var(--ok)">✓ every token paid was bought</span>'
-            : `<span style="color:var(--bad)">⚠ ${esc((bk.checks || []).filter((c) => !c.ok).map((c) => c.name).join(' · '))}</span>`)) : '');
+            : `<span style="color:var(--bad)">⚠ ${esc((bk.checks || []).filter((c) => !c.ok).map((c) => c.name).join(' · '))}</span>`)) : '')
+      // THE FAMILY BUYBACK — community revenue → hard $OMR → the family yield pot. Phase 1 ships
+      // with every slice lever at 0, so "quiet" here is the expected state until the flip; what must
+      // never read quiet is a red runner (credited != bought / overspend / a comp that moved money).
+      + (com && !com.error ? (`<div class="note" style="margin-top:8px">the family buyback — community revenue</div>`
+          + rowHtml('arrived / spent', `${esc(Object.entries(com.summary?.revenue || {}).map(([c, v]) => `${fmt(v)} ${c}`).join(' · ') || 'nothing yet')} / ${esc(Object.entries(com.summary?.spent || {}).map(([c, v]) => `${fmt(v)} ${c}`).join(' · ') || '0')}`)
+          + rowHtml('the wallet must hold', `<b>${fmt(com.summary?.walletMustHold)} $OMR</b> <span class="note">bought for the family pot — attest against the community-buyback wallet</span>`)
+          + rowHtml('the books', com.ok
+            ? '<span style="color:var(--ok)">✓ every token credited was bought</span>'
+            : `<span style="color:var(--bad)">⚠ ${esc((com.checks || []).filter((c) => !c.ok).map((c) => c.name).join(' · '))}</span>`)) : '');
+  }
+
+  // TOKEN HEALTH — the second instrument. Every other runner here answers "can the books lie?";
+  // these five answer "is the economy working?", which conservation is structurally blind to. Each
+  // carries the reading that would make a person act, because a number with no threshold beside it
+  // is decoration. DORMANT is rendered as its own quiet state on purpose: pre-market most of these
+  // are zero by construction, and a board that cries wolf before launch is one nobody reads at 2am.
+  function renderTokenHealth(th) {
+    const el = $('#p-tokenhealth').querySelector('.body');
+    if (!th || th.error) { el.innerHTML = `<div class="note">${esc(th?.error || 'unreachable')}</div>`; return; }
+    const tone = { ok: 'var(--ok)', watch: 'var(--warn)', act: 'var(--bad)', dormant: 'inherit' };
+    const head = th.verdict === 'dormant'
+      ? '<div class="note">No market yet — these read <b>dormant</b> rather than zero, because a structural zero is not an alarm. They come alive with the pool.</div>'
+      : th.verdict === 'ok'
+        ? '<div style="color:var(--ok)">✓ every reading inside its band</div>'
+        : `<div style="color:${th.verdict === 'act' ? 'var(--bad)' : 'var(--warn)'};font-weight:bold">${th.verdict === 'act' ? '⚠ ACT' : '⚠ WATCH'} — ${esc(th.kpis.filter((k) => k.state === th.verdict).map((k) => k.label).join(' · '))}</div>`;
+    el.innerHTML = head
+      + `<div class="note" style="margin-top:6px">trailing ${th.window.days} days</div>`
+      + th.kpis.map((k) => '<div style="margin:9px 0;padding:8px;border:1px solid var(--line);border-radius:5px">'
+          + `<div class="row"><span class="k"><b>${esc(k.label)}</b></span>`
+          + `<span class="v" style="color:${tone[k.state] || 'inherit'}">`
+          + (k.value === null ? '<span style="opacity:.5">dormant</span>' : `<b>${fmt(k.value)}</b> <span style="opacity:.6;font-size:11px">${esc(k.unit)}</span>`)
+          + '</span></div>'
+          + `<div class="note" style="margin-top:3px">${esc(k.reads)}</div>`
+          + `<div class="note" style="margin-top:2px;opacity:.7">acts at: ${esc(k.threshold)}</div>`
+          + '</div>').join('')
+      + '<div class="note" style="margin-top:8px">the float</div>'
+      + rowHtml('players hold', `${fmt(th.float.player.total)} $OMR <span class="note">${fmt(th.float.player.liquid)} liquid · ${fmt(th.float.player.staked)} staked · ${fmt(th.float.player.unbonding)} unbonding · ${fmt(th.float.player.gangReserves)} family</span>`)
+      + rowHtml('the house holds', `${fmt(th.float.system.total)} $OMR <span class="note">${fmt(th.float.system.shelf)} on the desk shelf · ${fmt(th.float.system.familyPot)} family pot · ${fmt(th.float.system.eventFund)} event fund · ${fmt(th.float.system.devFund)} operations</span>`)
+      + '<div class="note" style="margin-top:8px">who is spending — humans vs agents</div>'
+      + rowHtml('sink volume', `${fmt(th.sinks.byCohort.human)} human / ${fmt(th.sinks.byCohort.agent)} agent <span class="note">${th.players.humans} human · ${th.players.agents} agent active</span>`)
+      + ((th.sinks.topSinks || []).length
+          ? '<div class="note" style="margin-top:4px">' + th.sinks.topSinks.slice(0, 6).map((t) =>
+              `${esc(t.reason)} <b>${fmt(t.human + t.agent)}</b>${t.agent > 0 ? ` <span style="opacity:.6">(${fmt(t.agent)} agent)</span>` : ''}`).join(' · ')
+            + '</div>'
+          : '<div class="note" style="margin-top:4px">no sinks have run in the window</div>');
   }
 
   // THE MONEY ROUTER — WHERE A DOLLAR GOES. The whole declared waterfall (every real-value inflow

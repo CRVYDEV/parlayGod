@@ -137,7 +137,12 @@ if (failures.length) {
 // 63 → 65 (2026-08-09): the money router's two source-membership queries — their NOT-IN lists are
 // GENERATED from the exported VIG_SOURCES/TREASURY_SOURCES sets so the check and the declaration
 // structurally cannot drift apart (the DESK.SINK_REASONS generated-SQL precedent).
-const CEILING = { interpolated: 66, unreadable: 40 };
+// 66 → 67 (2026-08-11): the family buyback's `community_revenue` source-membership check — the
+// FOURTH instance of the same generated-NOT-IN shape, built from the exported COMMUNITY_SOURCES.
+// (The keeper's own dynamic-SQL helper was the first cut's OTHER new interpolated site and was
+// inlined to literal query() calls instead — a ceiling raise is for shapes that cannot be literal,
+// never for ones that merely happen not to be.)
+const CEILING = { interpolated: 67, unreadable: 40 };
 const overflow = [];
 if (interpolated.length > CEILING.interpolated)
   overflow.push(`interpolated queries grew to ${interpolated.length} (ceiling ${CEILING.interpolated}) — these are UNCHECKED by this guard`);

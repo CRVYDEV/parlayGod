@@ -281,6 +281,97 @@ assert.deepEqual([...new Set(phantom)], [], `docs/AUDITS.md lists reports that d
     + `charges something else and the player finds out at the till:\n  ${stale.join('\n  ')}`);
 }
 
+// ── NO PLAYER-FACING SURFACE MAY CLAIM THE TOKEN IS DEFLATIONARY ────────────────────────────────
+// Since economy v3 step 2 a $OMR sink does not destroy the token — it RECYCLES to the desk's shelf
+// to be sold again, which is the whole revenue model ("revenue ≈ sink volume × price"). The design
+// says it plainly: nothing here may be called deflationary. Verified against the code rather than
+// taken on trust — `recyclesToDesk` returns true for all 27 sink reasons and false for exactly one,
+// `withdraw:omr`, and even THAT is not a supply reduction (the token leaves the in-game ledger to
+// exist on-chain in the player's own wallet, backed one-for-one; it changes venue, nothing is
+// destroyed). So there is no mechanic left that could justify a scarcity claim about $OMR.
+//
+// The claim in the OTHER direction is equally false and was live on the most-read surface in the
+// project: the landing page said "$OMR is not created in game at all" while `omrMints` enumerates
+// four live reasons — the mission ladder pays for play, and three more mint against a real token
+// arriving. A player could check that in one query.
+//
+// THE GUARD IS DELIBERATELY NARROW, and that is the lesson from the price-parity check above: a
+// pattern broad enough to catch every use of "burn" or "scarce" catches the game's own DEFINED
+// vocabulary (both codices define a burn as "not destroyed — it lands on the desk's shelf"), NFT
+// rarity, and the roster's scarce chairs — and an advisory that is mostly wrong is one people learn
+// to route around. So this matches only phrases that are false about the TOKEN whenever they appear,
+// with a waiver list for any legitimate use (catalog-or-declare, so a new one is a decision on the
+// record rather than a silent regression).
+{
+  const FALSE_OF_THE_TOKEN = [
+    [/deflationar/i, 'nothing reduces $OMR supply — every sink recycles to the desk shelf'],
+    [/supply (is |will |can )?shrink/i, 'supply does not shrink; a sink is the house\'s cut, not a fire'],
+    [/shrink\w*( the)? supply/i, 'same claim, other word order'],
+    [/list is shrinking/i, 'the enumerated MINT list is not shrinking — it has four live reasons'],
+    [/(increasingly|ever.more|more and more) scarce/i, 'no mechanic makes $OMR scarcer over time'],
+    [/not created in game (at all|whatsoever)/i,
+      'FALSE THE OTHER WAY — omrMints enumerates live reasons, the mission ladder among them'],
+  ];
+  // Any legitimate hit goes here WITH the reason it is legitimate. Empty today.
+  const WAIVED = new Map([]);
+  const SURFACES = ['docs/WIKI.md', 'public/wiki.html', 'public/index.html', 'public/play.html',
+    'public/arena.html', 'AGENTS.md'];
+  const bad = [];
+  for (const f of SURFACES) {
+    let text;
+    try { text = read(f); } catch { continue; }               // an optional surface may not exist
+    text.split('\n').forEach((line, i) => {
+      // A line that FORBIDS the claim is not making it — MARKETING.md's rules and AGENTS.md's
+      // "never promise ... token appreciation" are the guard working, not violations of it.
+      if (/never (promise|claim|say)|do not (promise|claim|say)|→ rewrite|forbidden/i.test(line)) return;
+      for (const [re, why] of FALSE_OF_THE_TOKEN) {
+        if (!re.test(line)) continue;
+        const key = `${f}:${i + 1}`;
+        if (WAIVED.has(key)) return;
+        bad.push(`${key} — ${why}\n      ${line.trim().slice(0, 140)}`);
+      }
+    });
+  }
+  assert.deepEqual(bad, [], 'a player-facing surface makes a supply claim the mechanics do not '
+    + `support. Fix the copy, or waive the line here with the reason it is honest:\n  ${bad.join('\n  ')}`);
+
+  // ── AND THE OTHER PROMISE A LAUNCH CAN BREAK: extraction is BUILT, not OPEN ──────────────────
+  // The withdrawal rail is real code and devnet-proven, but production runs with no chain
+  // configured, so `POST /v1/withdraw` cannot sign and `/v1/arena` reports totalExtracted 0 for
+  // everybody. Found live on the launch-readiness pass: the landing page told agents they "extract
+  // real value", and the arena's own unfurl said they "extract real $OMR on-chain. This board is
+  // live." Both stated a dormant capability in the present tense, next to real-money framing — the
+  // same class as the false supply claims above, in the direction that matters most at launch.
+  //
+  // The rule is per-FILE and deliberately loose about wording: a surface may describe the rail all
+  // it likes, so long as it also says somewhere that the rail is not open. When it DOES open, this
+  // guard fails until it is updated — which is the point: going live is a decision on the record,
+  // not a silent change of tense.
+  const OPENS_THE_RAIL = /not active|dormant|not yet open|not live yet|until the audit|behind legal/i;
+  const DESCRIBES_EXTRACTION = /extract\w* (real |your |earned )?\$?OMR|on-chain (withdrawal|extraction)|POST \/v1\/withdraw/i;
+  const unqualified = [];
+  for (const f of SURFACES) {
+    let text;
+    try { text = read(f); } catch { continue; }
+    if (!DESCRIBES_EXTRACTION.test(text)) continue;            // says nothing about the rail — fine
+    if (OPENS_THE_RAIL.test(text)) continue;                   // describes it AND says it is shut
+    unqualified.push(f);
+  }
+  assert.deepEqual(unqualified, [], 'a player- or agent-facing surface describes on-chain extraction '
+    + 'without saying anywhere that the rail is not open yet. Nobody can extract today (no chain is '
+    + 'configured in production), so stating it in the present tense is a promise the product cannot '
+    + `keep:\n  ${unqualified.join('\n  ')}`);
+
+  // …and the positive half, so the guard cannot be satisfied by the mechanism quietly changing:
+  // if $OMR ever DOES become deflationary, this fails and forces the copy rules to be revisited
+  // rather than leaving a stale prohibition standing over a game that outgrew it.
+  const { recyclesToDesk, DESK } = await import('../src/rules.js');
+  const recycling = DESK.SINK_REASONS.filter((r) => recyclesToDesk(r.replace(/%$/, 'x')));
+  assert(recycling.length >= DESK.SINK_REASONS.length - DESK.NOT_RECYCLED.length - 1,
+    'essentially every $OMR sink must still recycle to the desk — if that changed, the copy rules '
+    + 'above are the thing to revisit, not this assertion');
+}
+
 // ── §6 must not send anyone back to finished work ────────────────────────────────────────────────
 // SPEC has two places that talk about the same debt items: §4 describes each one's state, and §6 is
 // the "do this next" list. They drifted: §6 said "Finish the lock-free read path (D1) — blocked on a

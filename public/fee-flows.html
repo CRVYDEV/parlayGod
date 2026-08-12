@@ -1,0 +1,504 @@
+<title>OMERTÀ — Where a Dollar Goes</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  /* ── palette: a prohibition-era ledger. bare :root is the light set; dark redefines tokens only ── */
+  :root{
+    --bg:#efe9dc; --panel:#f6f1e6; --ink:#1c1a15; --faint:#6f6858; --line:#d6cdb8;
+    --gold:#9a7a2e; --stamp:#8f3a2f; --rule:#2a2620;
+    --eth:#3a6b5f; --omr:#8a6d1f; --usd:#4a5d7a;
+    --d-vig:#6b4a8f; --d-treasury:#3a6b5f; --d-operations:#8f3a2f; --d-pol:#2f6d55;
+    --d-community:#9a6a2e; --d-desk-buyback:#4a5d7a;
+    --shadow:0 1px 0 #fff8, 0 14px 34px -18px #0007;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#14120e; --panel:#1c1913; --ink:#ece4d2; --faint:#9a917c; --line:#332d22;
+      --gold:#c9a24b; --stamp:#c8574a; --rule:#c9bfa8;
+      --eth:#6fb3a1; --omr:#d3ad4e; --usd:#8aa2c6;
+      --d-vig:#a986d6; --d-treasury:#6fb3a1; --d-operations:#d47a6e; --d-pol:#63c096;
+      --d-community:#d3a45e; --d-desk-buyback:#8aa2c6;
+      --shadow:0 1px 0 #fff1, 0 18px 40px -20px #000a;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#14120e; --panel:#1c1913; --ink:#ece4d2; --faint:#9a917c; --line:#332d22;
+    --gold:#c9a24b; --stamp:#c8574a; --rule:#c9bfa8;
+    --eth:#6fb3a1; --omr:#d3ad4e; --usd:#8aa2c6;
+    --d-vig:#a986d6; --d-treasury:#6fb3a1; --d-operations:#d47a6e; --d-pol:#63c096;
+    --d-community:#d3a45e; --d-desk-buyback:#8aa2c6;
+    --shadow:0 1px 0 #fff1, 0 18px 40px -20px #000a;
+  }
+
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font:15px/1.5 "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    -webkit-font-smoothing:antialiased; padding:0 0 80px;
+  }
+  .wrap{max-width:1140px; margin:0 auto; padding:0 20px}
+  .mono{font-family:"SF Mono", ui-monospace, "Roboto Mono", Menlo, monospace; font-variant-numeric:tabular-nums}
+
+  /* ── masthead ── */
+  header{border-bottom:2.5px solid var(--rule); margin:26px 0 4px; padding-bottom:14px; position:relative}
+  .eyebrow{font-family:"SF Mono",ui-monospace,monospace; letter-spacing:.34em; text-transform:uppercase;
+    font-size:10.5px; color:var(--faint)}
+  h1{font-size:clamp(30px,5vw,48px); margin:.12em 0 .1em; letter-spacing:-.01em; line-height:1;
+    text-wrap:balance; font-weight:700}
+  h1 .amp{color:var(--gold)}
+  .sub{color:var(--faint); font-size:14.5px; max-width:70ch; margin:.3em 0 0}
+  .stamp{position:absolute; top:-6px; right:0; border:2.5px solid var(--stamp); color:var(--stamp);
+    font-family:"SF Mono",ui-monospace,monospace; letter-spacing:.14em; text-transform:uppercase; font-size:11px;
+    padding:6px 11px; border-radius:6px; transform:rotate(-6deg); opacity:.9; text-align:center; line-height:1.35}
+  @media(max-width:640px){ .stamp{display:none} }
+
+  /* ── toolbar ── */
+  .bar{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:16px 0 6px}
+  .bar .grow{flex:1 1 auto}
+  button, .btn{font-family:"SF Mono",ui-monospace,monospace; font-size:12px; letter-spacing:.04em;
+    background:var(--panel); color:var(--ink); border:1.5px solid var(--line); border-radius:7px;
+    padding:8px 12px; cursor:pointer; box-shadow:var(--shadow); transition:transform .06s ease, border-color .12s}
+  button:hover, .btn:hover{border-color:var(--gold); transform:translateY(-1px)}
+  button:active{transform:translateY(0)}
+  button.gold{border-color:var(--gold); color:var(--gold)}
+  button.warn{border-color:var(--stamp); color:var(--stamp)}
+  button:focus-visible, [contenteditable]:focus-visible, input:focus-visible{outline:2px solid var(--gold); outline-offset:2px}
+  .pill{font-family:"SF Mono",ui-monospace,monospace; font-size:10.5px; letter-spacing:.06em; color:var(--faint);
+    border:1px solid var(--line); border-radius:20px; padding:4px 10px}
+
+  /* ── the flow canvas ── */
+  .flowcard{background:var(--panel); border:1.5px solid var(--line); border-radius:12px; box-shadow:var(--shadow);
+    margin:14px 0; padding:6px}
+  figure{margin:0}
+  figcaption{font-size:12.5px; color:var(--faint); padding:8px 12px 4px; text-align:center}
+  .svgscroll{overflow-x:auto}
+  svg{display:block; width:100%; height:auto; min-width:680px}
+  .flowlink{transition:opacity .15s}
+  .node-label{font-family:"SF Mono",ui-monospace,monospace; font-size:12px; fill:var(--ink)}
+  .node-sub{font-family:"SF Mono",ui-monospace,monospace; font-size:10px; fill:var(--faint)}
+  .dimmed{opacity:.12 !important}
+
+  /* ── legend / destinations totals ── */
+  .totals{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; margin:8px 0 4px}
+  .tot{background:var(--panel); border:1.5px solid var(--line); border-left-width:5px; border-radius:9px; padding:10px 12px;
+    cursor:pointer; box-shadow:var(--shadow)}
+  .tot b{display:block; font-family:"SF Mono",ui-monospace,monospace; font-size:11px; letter-spacing:.05em;
+    text-transform:uppercase}
+  .tot .n{font-size:22px; font-weight:700; margin-top:2px}
+  .tot .n small{font-size:12px; color:var(--faint); font-weight:400}
+
+  /* ── the editable ledger ── */
+  h2{font-size:13px; letter-spacing:.22em; text-transform:uppercase; color:var(--faint);
+    font-family:"SF Mono",ui-monospace,monospace; border-bottom:1.5px solid var(--line); padding-bottom:8px; margin:34px 0 6px}
+  .src{background:var(--panel); border:1.5px solid var(--line); border-radius:11px; box-shadow:var(--shadow);
+    margin:12px 0; overflow:hidden}
+  .src.retired{opacity:.62}
+  .src-head{display:flex; gap:10px; align-items:center; padding:11px 14px; border-bottom:1.5px solid var(--line)}
+  .cur-chip{font-family:"SF Mono",ui-monospace,monospace; font-size:10px; font-weight:700; letter-spacing:.08em;
+    padding:3px 8px; border-radius:5px; color:#fff; flex:none}
+  .cur-eth{background:var(--eth)} .cur-omr{background:var(--omr)} .cur-usd{background:var(--usd)}
+  .src-name{font-size:15px; flex:1 1 auto; min-width:0}
+  .src-name [contenteditable]{outline:none}
+  .src-sum{font-family:"SF Mono",ui-monospace,monospace; font-size:12px; flex:none}
+  .src-sum.bad{color:var(--stamp); font-weight:700}
+  .src-sum.ok{color:var(--d-pol)}
+  .split-row{display:grid; grid-template-columns:130px 1fr auto auto; gap:10px; align-items:center;
+    padding:9px 14px; border-top:1px dashed var(--line)}
+  @media(max-width:640px){ .split-row{grid-template-columns:110px 1fr auto; } .split-row .lands{grid-column:1/-1; order:5} }
+  .dest-sel{font-family:"SF Mono",ui-monospace,monospace; font-size:12px; background:var(--bg); color:var(--ink);
+    border:1.5px solid var(--line); border-radius:6px; padding:6px 8px; border-left-width:5px}
+  .lands{font-size:11.5px; color:var(--faint); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .lands[contenteditable]{white-space:normal}
+  .bps-wrap{display:flex; align-items:center; gap:6px; justify-self:end}
+  .bps{width:74px; text-align:right; font-family:"SF Mono",ui-monospace,monospace; font-size:13px; font-weight:700;
+    background:var(--bg); color:var(--ink); border:1.5px solid var(--line); border-radius:6px; padding:6px 8px}
+  .bps-pct{font-family:"SF Mono",ui-monospace,monospace; font-size:11px; color:var(--faint); width:44px; text-align:right}
+  .rowbtn{border:none; background:none; color:var(--faint); font-size:15px; padding:2px 6px; cursor:pointer; box-shadow:none}
+  .rowbtn:hover{color:var(--stamp); transform:none}
+  .src-foot{padding:8px 14px; display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+  .note{font-size:11.5px; color:var(--faint); font-style:italic}
+
+  dialog{border:2px solid var(--rule); border-radius:12px; background:var(--panel); color:var(--ink);
+    max-width:min(560px,92vw); box-shadow:0 30px 80px -20px #000c; padding:0}
+  dialog::backdrop{background:#0009}
+  .dlg-h{padding:14px 18px; border-bottom:1.5px solid var(--line); font-family:"SF Mono",ui-monospace,monospace;
+    letter-spacing:.16em; text-transform:uppercase; font-size:12px; color:var(--faint)}
+  .dlg-b{padding:16px 18px}
+  textarea{width:100%; height:230px; font-family:"SF Mono",ui-monospace,monospace; font-size:11.5px; line-height:1.45;
+    background:var(--bg); color:var(--ink); border:1.5px solid var(--line); border-radius:8px; padding:10px; resize:vertical}
+  .dlg-f{padding:12px 18px; border-top:1.5px solid var(--line); display:flex; gap:8px; justify-content:flex-end}
+  footer{margin-top:40px; padding-top:16px; border-top:1.5px solid var(--line); color:var(--faint); font-size:12px}
+  .legend-cur{display:inline-flex; gap:14px; flex-wrap:wrap; margin-top:6px}
+  .legend-cur span{display:inline-flex; align-items:center; gap:5px; font-family:"SF Mono",ui-monospace,monospace; font-size:11px}
+  .sw{width:11px; height:11px; border-radius:3px; display:inline-block}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="stamp">Recommended<br>Split</div>
+    <div class="eyebrow">The Books · Real-Value Inflows</div>
+    <h1>Where a Dollar Goes <span class="amp">&amp;</span> Why</h1>
+    <p class="sub"><b>Seeded with my recommended split (Path A)</b>, not current production — keep a <em>smaller</em>
+      treasury (the backed vault + cold-reserve trust story + the solo "go legit" exit all survive) and route the
+      <em>majority</em> of former-treasury ETH to the family layer via <span class="mono">buyback → $OMR → family_yield_pool</span>
+      (so the family prize grows on real revenue without paying real ETH to a gang — the regulatory cliff). Bonds stay POL-heavy: liquidity depth binds the bond cap.
+      <b>Every number is editable</b> — retune it, then <b>Export</b> and send the JSON back; that's the shape I build to. <b>Reset</b> restores this seed; <b>Import</b> loads production or your own.</p>
+  </header>
+
+  <div class="bar">
+    <button id="theme" title="Toggle light/dark">◑ Theme</button>
+    <span class="grow"></span>
+    <button id="reset" class="warn">↺ Reset to live</button>
+    <button id="add" class="gold">+ New source</button>
+    <button id="imp">↥ Import</button>
+    <button id="exp" class="gold">↧ Export for Claude</button>
+  </div>
+  <div class="pill" id="status">loading the live waterfall…</div>
+
+  <div class="totals" id="totals"></div>
+
+  <div class="flowcard">
+    <figure>
+      <div class="svgscroll">
+        <svg id="flow" role="img" aria-label="Sankey flow of every OMERTA real-value inflow to its destinations"></svg>
+      </div>
+      <figcaption>Band height ∝ share of that source. Hover a source or a destination to isolate its flows. This picture is generated from the ledger below — edit the ledger and it redraws.</figcaption>
+    </figure>
+    <div class="legend-cur wrap" style="padding:0 12px 10px">
+      <span><i class="sw" style="background:var(--eth)"></i> ETH</span>
+      <span><i class="sw" style="background:var(--omr)"></i> $OMR</span>
+      <span><i class="sw" style="background:var(--usd)"></i> USD (market underlying)</span>
+    </div>
+  </div>
+
+  <h2>The Ledger — every source, every slice</h2>
+  <p class="note" style="margin:6px 0 0">Each source's slices must sum to <b>10,000 bps (100%)</b> — the badge on the right goes red until they do.
+    A <span class="mono">retired</span> source is kept on the record rather than deleted (a rail that just vanishes says nothing).</p>
+  <div id="ledger"></div>
+
+  <footer>
+    <b>How to hand this back:</b> hit <span class="mono">Export for Claude</span>, which downloads
+    <span class="mono">fee-structure.json</span> and copies it to your clipboard. Paste it into our chat or attach the file.
+    I read the JSON, not the picture — so restructure freely: the visual is just how the numbers look.
+    <div style="margin-top:8px">Sources marked <span class="mono">implicit</span> take the on-chain remainder (they aren't booked as a row) — kept for honesty, not because they need a ledger entry.</div>
+  </footer>
+</div>
+
+<dialog id="io">
+  <div class="dlg-h" id="io-h">Fee structure JSON</div>
+  <div class="dlg-b">
+    <p class="note" id="io-note" style="margin:0 0 10px"></p>
+    <textarea id="io-text" spellcheck="false"></textarea>
+  </div>
+  <div class="dlg-f">
+    <button id="io-cancel">Close</button>
+    <button id="io-do" class="gold"></button>
+  </div>
+</dialog>
+
+<script>
+"use strict";
+/* ── THE LIVE WATERFALL, snapshotted from src/router.js. This is the seed; everything below edits a
+      working copy of it and can Reset back to exactly this. ────────────────────────────────────── */
+/* SEEDED WITH THE RECOMMENDED SPLIT (Path A), not current production. The instinct — point more
+   real revenue at the family layer — is right; this does it WITHOUT killing the solo endgame:
+     • Treasury SURVIVES but smaller on every source that fed it → the backed vault + cold-reserve
+       (trust) narrative and the individual "go legit" exit both live on.
+     • The MAJORITY of the former-treasury slice goes to `community` — and for ETH/USD sources that
+       means: spend → buyback → $OMR → family_yield_pool (Path A). The family prize grows, funded by
+       real revenue, WITHOUT paying real ETH to a gang (which would be the regulatory cliff).
+     • Vig unchanged (the withdrawal reserve — solo extraction stays fed).
+     • Bonds stay POL-heavy: liquidity DEPTH is the binding constraint on the daily bond cap, so they
+       deliberately get NO family redirect.
+   Reset-to-live restores THIS seed; hit Import to load production or your own variant. */
+const LIVE = [
+  {id:"fee",name:"Gameplay fees (mint / respawn / reroll)",currency:"eth",splits:[
+    {dest:"vig",bps:2500,lands:"vig_revenue source='fee' (withdrawal reserve)"},
+    {dest:"treasury",bps:1000,lands:"rwa_revenue source='fee' (backed vault — kept small)"},
+    {dest:"community",bps:1500,lands:"→ buyback → family_yield_pool (Path A)"},
+    {dest:"operations",bps:5000,lands:"dev wallet (on-chain remainder)",implicit:true}]},
+  {id:"store",name:"The Store (ETH packages)",currency:"eth",splits:[
+    {dest:"vig",bps:2500,lands:"vig_revenue source='store'"},
+    {dest:"treasury",bps:1000,lands:"rwa_revenue source='store' (backed vault)"},
+    {dest:"community",bps:1500,lands:"→ buyback → family_yield_pool (Path A)"},
+    {dest:"operations",bps:5000,lands:"dev wallet (on-chain remainder)",implicit:true}]},
+  {id:"bond",name:"Reserve Bonds (ETH principal) — stays POL-heavy (liquidity depth)",currency:"eth",splits:[
+    {dest:"pol",bps:7500,lands:"bond_reserve.pol_eth (the binding cap constraint)"},
+    {dest:"vig",bps:500,lands:"vig_revenue source='bond' (reserve)"},
+    {dest:"treasury",bps:500,lands:"bond_reserve.rwa_eth (backed float)"},
+    {dest:"operations",bps:1500,lands:"bond_reserve.dev_eth"}]},
+  {id:"tax",name:"DEX sell tax (900 bps of every OMR sell)",currency:"eth",splits:[
+    {dest:"operations",bps:2222,lands:"sell_tax_events.dev_eth"},
+    {dest:"treasury",bps:1778,lands:"sell_tax_events.rwa_eth (backed vault — kept small)"},
+    {dest:"community",bps:2666,lands:"→ buyback → family_yield_pool (Path A)"},
+    {dest:"pol",bps:3334,lands:"sell_tax_events.lp_eth (remainder on LP)"}]},
+  {id:"auction",name:"The Desk — daily Dutch auction (ETH proceeds)",currency:"eth",splits:[
+    {dest:"pol",bps:5000,lands:"desk_sales.pol_eth"},
+    {dest:"operations",bps:5000,lands:"desk_sales.founder_eth (remainder)"}]},
+  {id:"polfees",name:"POL trading fees (the LP position earns)",currency:"eth",splits:[
+    {dest:"desk-buyback",bps:7500,lands:"pol_fees (the buyback budget)"},
+    {dest:"vig",bps:2500,lands:"vig_revenue (reserve — diverted off the buyback-only budget)"}]},
+  {id:"harvest",name:"The Bank — harvest performance fee (2000 bps of yield)",currency:"usd",splits:[
+    {dest:"treasury",bps:3720,lands:"bank_revenue source='harvest' (backed reserve, USDC)"},
+    {dest:"community",bps:6280,lands:"→ buyback → family_yield_pool (Path A)"}]},
+  {id:"toll",name:"$OMR exit toll (200 bps) + early-exit surcharge",currency:"omr",splits:[
+    {dest:"operations",bps:5000,lands:"dev_fund (tax:dev)"},
+    {dest:"community",bps:5000,lands:"family_yield_pool (tax:buyback — already $OMR, no buyback)"}]},
+  {id:"trade",name:"Swap trade fee — RETIRED (the sell tax is the one hook)",currency:"eth",retired:true,splits:[
+    {dest:"vig",bps:10000,lands:"vig_revenue source='trade' (historical only)"}]},
+];
+
+/* Destination catalogue: the buckets a slice may point at, and the colour each carries in the flow.
+   An unknown dest still renders, just without a preset colour. */
+const DESTS = [
+  {id:"vig",label:"The Vig (withdrawal reserve + prizes)"},
+  {id:"treasury",label:"Treasury Safe (cold)"},
+  {id:"pol",label:"Protocol-owned liquidity (depth)"},
+  {id:"operations",label:"Operations"},
+  {id:"community",label:"Community (family yield pool)"},
+  {id:"desk-buyback",label:"The Desk buyback budget"},
+];
+const destColor = d => `var(--d-${d}, var(--gold))`;
+const destLabel = d => (DESTS.find(x=>x.id===d)||{}).label || d;
+
+/* SEED_VERSION — bump this WHENEVER the LIVE array above changes. localStorage persists the editor's
+   working copy (a feature — edits survive reload), but that means a fresh seed I push is invisible
+   until the browser is told the baseline moved. So a saved model carries the version it was saved
+   under: match → restore the user's edits; stale (older seed, or the pre-versioning raw array) →
+   load the NEW seed and FLAG it (never silently drop edits — the status pill says the baseline moved
+   and to Import to recover). An Import or Reset re-saves under the current version, so a chosen
+   variant persists. */
+const SEED_VERSION = 4;
+let staleLocal = false;
+let model = load();
+function load(){
+  try{ const s=localStorage.getItem("omerta_fee_model"); if(s){
+    const o=JSON.parse(s);
+    if(o && o._seedVersion===SEED_VERSION && Array.isArray(o.model)) return o.model; // edits on the current seed
+    staleLocal = true; // older seed (or pre-versioning array) — the pushed baseline wins
+  }}catch(e){}
+  return structuredClone(LIVE);
+}
+function save(){ staleLocal=false; try{ localStorage.setItem("omerta_fee_model", JSON.stringify({_seedVersion:SEED_VERSION, model})); }catch(e){} }
+
+/* ── theme ── */
+const root=document.documentElement;
+document.getElementById("theme").onclick=()=>{
+  const now=root.getAttribute("data-theme")|| (matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");
+  root.setAttribute("data-theme", now==="dark"?"light":"dark"); draw();
+};
+
+/* ── the editable ledger ── */
+const ledger=document.getElementById("ledger");
+function sumOf(s){ return s.splits.reduce((a,x)=>a+(+x.bps||0),0); }
+function renderLedger(){
+  ledger.innerHTML="";
+  model.forEach((src,si)=>{
+    const sum=sumOf(src), ok=sum===10000;
+    const card=document.createElement("div");
+    card.className="src"+(src.retired?" retired":"");
+    card.dataset.src=src.id;
+    const curClass="cur-"+src.currency;
+    card.innerHTML=`
+      <div class="src-head">
+        <span class="cur-chip ${curClass}" title="denomination">${src.currency.toUpperCase()}</span>
+        <span class="src-name"><span contenteditable data-f="name" data-si="${si}">${esc(src.name)}</span></span>
+        <span class="src-sum ${ok?'ok':'bad'}" title="slices must total 10000 bps">${sum.toLocaleString()} / 10,000</span>
+      </div>
+      <div class="rows"></div>
+      <div class="src-foot">
+        <button class="addrow" data-si="${si}">+ slice</button>
+        <button class="cyc" data-si="${si}" title="denomination">⤿ ${src.currency.toUpperCase()}</button>
+        <button class="ret" data-si="${si}">${src.retired?'↺ un-retire':'⊘ retire'}</button>
+        <span class="grow" style="flex:1"></span>
+        <button class="delsrc warn" data-si="${si}">✕ delete source</button>
+      </div>`;
+    const rows=card.querySelector(".rows");
+    src.splits.forEach((sp,pi)=>{
+      const pct=(sp.bps/100).toFixed(2).replace(/\.00$/,"")+"%";
+      const row=document.createElement("div");
+      row.className="split-row";
+      const opts=DESTS.map(d=>`<option value="${d.id}" ${d.id===sp.dest?'selected':''}>${d.id}</option>`).join("")
+        + (DESTS.some(d=>d.id===sp.dest)?"":`<option value="${esc(sp.dest)}" selected>${esc(sp.dest)}</option>`);
+      row.innerHTML=`
+        <select class="dest-sel" data-si="${si}" data-pi="${pi}" style="border-left-color:${destColor(sp.dest)}">${opts}</select>
+        <span class="lands" contenteditable data-f="lands" data-si="${si}" data-pi="${pi}" title="${esc(sp.lands||'')}">${esc(sp.lands||'')}</span>
+        <div class="bps-wrap">
+          <input class="bps" type="number" min="0" max="10000" step="1" value="${sp.bps}" data-si="${si}" data-pi="${pi}">
+          <span class="bps-pct">${pct}</span>
+        </div>
+        <button class="rowbtn delrow" data-si="${si}" data-pi="${pi}" title="remove slice">✕</button>`;
+      rows.appendChild(row);
+    });
+    ledger.appendChild(card);
+  });
+  wire();
+  status();
+}
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+function wire(){
+  ledger.querySelectorAll(".bps").forEach(inp=>{
+    inp.oninput=()=>{ const {si,pi}=inp.dataset; model[si].splits[pi].bps=Math.max(0,Math.min(10000,Math.round(+inp.value||0)));
+      inp.nextElementSibling.textContent=(model[si].splits[pi].bps/100).toFixed(2).replace(/\.00$/,"")+"%";
+      const sum=sumOf(model[si]); const badge=inp.closest(".src").querySelector(".src-sum");
+      badge.textContent=sum.toLocaleString()+" / 10,000"; badge.className="src-sum "+(sum===10000?"ok":"bad");
+      commit(false); };
+  });
+  ledger.querySelectorAll(".dest-sel").forEach(sel=>{
+    sel.onchange=()=>{ const {si,pi}=sel.dataset; model[si].splits[pi].dest=sel.value;
+      sel.style.borderLeftColor=destColor(sel.value); commit(); };
+  });
+  ledger.querySelectorAll("[contenteditable][data-f]").forEach(el=>{
+    el.onblur=()=>{ const {si,pi,f}=el.dataset; const v=el.textContent.trim();
+      if(pi!=null) model[si].splits[pi][f]=v; else model[si][f]=v; commit(false); };
+  });
+  ledger.querySelectorAll(".addrow").forEach(b=> b.onclick=()=>{ const si=+b.dataset.si;
+    model[si].splits.push({dest:"treasury",bps:0,lands:""}); commit(); });
+  ledger.querySelectorAll(".delrow").forEach(b=> b.onclick=()=>{ const {si,pi}=b.dataset;
+    model[si].splits.splice(+pi,1); if(!model[si].splits.length) model[si].splits.push({dest:"treasury",bps:10000,lands:""}); commit(); });
+  ledger.querySelectorAll(".delsrc").forEach(b=> b.onclick=()=>{ if(confirm("Delete this whole source?")){ model.splice(+b.dataset.si,1); commit(); } });
+  ledger.querySelectorAll(".ret").forEach(b=> b.onclick=()=>{ const s=model[+b.dataset.si]; s.retired=!s.retired; commit(); });
+  ledger.querySelectorAll(".cyc").forEach(b=> b.onclick=()=>{ const s=model[+b.dataset.si];
+    const order=["eth","omr","usd"]; s.currency=order[(order.indexOf(s.currency)+1)%3]; commit(); });
+}
+function commit(redrawLedger=true){ save(); draw(); if(redrawLedger) renderLedger(); }
+
+/* ── the flow (hand-authored Sankey) ── */
+const svg=document.getElementById("flow");
+const NS="http://www.w3.org/2000/svg";
+function el(t,a){ const e=document.createElementNS(NS,t); for(const k in a) e.setAttribute(k,a[k]); return e; }
+function draw(){
+  const live=model.filter(s=>!s.retired);
+  const W=1080, padY=24;
+  const srcX=20, srcW=250, dstW=250, dstX=W-dstW-20;
+  const bandGap=14;
+
+  // Destination totals. Sources are different currencies/scales, so this is a STRUCTURE view: each
+  // source counts as one unit split by its bps, which keeps the picture about SHAPE — what an editor
+  // of the structure needs. Not a claim about dollar volume.
+  const destTotals={};
+  live.forEach(s=>{ const sum=sumOf(s)||1; s.splits.forEach(sp=>{ destTotals[sp.dest]=(destTotals[sp.dest]||0)+ (sp.bps/sum); }); });
+  const destIds=Object.keys(destTotals).sort((a,b)=>destTotals[b]-destTotals[a]);
+  const grand=Object.values(destTotals).reduce((a,b)=>a+b,0)||1;
+
+  const nSrc=live.length, nDst=destIds.length;
+  const H=Math.max(360, Math.max(nSrc,nDst)*58 + padY*2);
+  svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
+  svg.innerHTML="";
+
+  const srcH=(H-2*padY - (nSrc-1)*bandGap)/Math.max(nSrc,1);
+  const srcNodes=live.map((s,i)=>({s, x:srcX, w:srcW, y:padY+i*(srcH+bandGap), h:srcH}));
+  let dy=padY; const dstNodes=destIds.map(id=>{
+    const h=Math.max(26,(destTotals[id]/grand)*(H-2*padY - (nDst-1)*bandGap));
+    const n={id, x:dstX, w:dstW, y:dy, h, cursorIn:0}; dy+=h+bandGap; return n;
+  });
+  const dstMap=Object.fromEntries(dstNodes.map(n=>[n.id,n]));
+
+  const linkG=el("g",{}); svg.appendChild(linkG);
+  srcNodes.forEach(sn=>{
+    const sum=sumOf(sn.s)||1; let cy=sn.y;
+    sn.s.splits.forEach(sp=>{
+      const frac=sp.bps/sum; const bandH=frac*sn.h; const dn=dstMap[sp.dest]; if(!dn) return;
+      // this source's share of the destination band, in destination-height units:
+      const dFracH=(sp.bps/sum)/ (destTotals[sp.dest]||1) * dn.h;
+      const dyi=dn.y+dn.cursorIn; dn.cursorIn+=dFracH;
+      const x0=sn.x+sn.w, x1=dn.x, mx=(x0+x1)/2;
+      const path=`M${x0},${cy} C${mx},${cy} ${mx},${dyi} ${x1},${dyi} L${x1},${dyi+dFracH} C${mx},${dyi+dFracH} ${mx},${cy+bandH} ${x0},${cy+bandH} Z`;
+      const p=el("path",{d:path, fill:destColor(sp.dest), opacity:.34, class:"flowlink"});
+      p.dataset.src=sn.s.id; p.dataset.dest=sp.dest;
+      linkG.appendChild(p);
+      cy+=bandH;
+    });
+  });
+
+  srcNodes.forEach(sn=>{
+    const g=el("g",{class:"flowlink"}); g.dataset.srcnode=sn.s.id;
+    const curVar=sn.s.currency==="eth"?"var(--eth)":sn.s.currency==="omr"?"var(--omr)":"var(--usd)";
+    g.appendChild(el("rect",{x:sn.x,y:sn.y,width:sn.w,height:sn.h,rx:5,fill:"var(--panel)",stroke:curVar,"stroke-width":2}));
+    g.appendChild(el("rect",{x:sn.x,y:sn.y,width:5,height:sn.h,fill:curVar}));
+    const t=el("text",{x:sn.x+14,y:sn.y+sn.h/2-3,class:"node-label"}); t.textContent=clip(sn.s.name,34); g.appendChild(t);
+    const t2=el("text",{x:sn.x+14,y:sn.y+sn.h/2+13,class:"node-sub"}); t2.textContent=sn.s.currency.toUpperCase()+" · "+sumOf(sn.s).toLocaleString()+" bps"; g.appendChild(t2);
+    g.addEventListener("mouseenter",()=>isolate("src",sn.s.id));
+    g.addEventListener("mouseleave",clearIso);
+    svg.appendChild(g);
+  });
+  dstNodes.forEach(dn=>{
+    const g=el("g",{class:"flowlink"}); g.dataset.dstnode=dn.id;
+    g.appendChild(el("rect",{x:dn.x,y:dn.y,width:dn.w,height:dn.h,rx:5,fill:"var(--panel)",stroke:destColor(dn.id),"stroke-width":2}));
+    g.appendChild(el("rect",{x:dn.x+dn.w-5,y:dn.y,width:5,height:dn.h,fill:destColor(dn.id)}));
+    const share=Math.round(destTotals[dn.id]/grand*100);
+    const t=el("text",{x:dn.x+14,y:dn.y+dn.h/2-3,class:"node-label"}); t.textContent=clip(destLabel(dn.id),30); g.appendChild(t);
+    const t2=el("text",{x:dn.x+14,y:dn.y+dn.h/2+13,class:"node-sub"}); t2.textContent=share+"% of the structure"; g.appendChild(t2);
+    g.addEventListener("mouseenter",()=>isolate("dest",dn.id));
+    g.addEventListener("mouseleave",clearIso);
+    svg.appendChild(g);
+  });
+
+  renderTotals(destTotals,grand);
+}
+function clip(s,n){ s=String(s); return s.length>n?s.slice(0,n-1)+"…":s; }
+function isolate(kind,id){
+  svg.querySelectorAll("path.flowlink").forEach(p=>{
+    const on = kind==="src"? p.dataset.src===id : p.dataset.dest===id;
+    p.classList.toggle("dimmed",!on); p.setAttribute("opacity",on?.72:.06);
+  });
+}
+function clearIso(){ svg.querySelectorAll("path.flowlink").forEach(p=>{ p.classList.remove("dimmed"); p.setAttribute("opacity",.34); }); }
+
+function renderTotals(dt,grand){
+  const box=document.getElementById("totals"); box.innerHTML="";
+  Object.keys(dt).sort((a,b)=>dt[b]-dt[a]).forEach(id=>{
+    const share=Math.round(dt[id]/grand*100);
+    const c=document.createElement("div"); c.className="tot"; c.style.borderLeftColor=destColor(id);
+    c.innerHTML=`<b style="color:${destColor(id)}">${id}</b><div class="n">${share}<small>%</small></div><div class="note" style="font-style:normal">${esc(destLabel(id))}</div>`;
+    c.onmouseenter=()=>isolate("dest",id); c.onmouseleave=clearIso;
+    box.appendChild(c);
+  });
+}
+
+function status(){
+  const bad=model.filter(s=>!s.retired && sumOf(s)!==10000);
+  const live=model.filter(s=>!s.retired).length;
+  const el=document.getElementById("status");
+  if(staleLocal){ el.textContent="↺ Loaded the NEW recommended split — it replaced older local edits in this browser. (Export your work before I push a seed to keep it; Import to reload a past variant.)"; el.style.color="var(--stamp)"; return; }
+  if(bad.length){ el.textContent=`⚠ ${bad.length} source${bad.length>1?'s do':' does'} not sum to 10,000 bps — fix before exporting`; el.style.color="var(--stamp)"; }
+  else { el.textContent=`✓ ${live} live source${live>1?'s':''}, every one balanced to 10,000 bps · edits saved locally`; el.style.color="var(--faint)"; }
+}
+
+/* ── import / export ── */
+const dlg=document.getElementById("io"), ioText=document.getElementById("io-text");
+document.getElementById("exp").onclick=()=>{
+  const json=JSON.stringify({schema:"omerta.fee-structure.v1",exportedAt:new Date().toISOString(),sources:model},null,2);
+  const blob=new Blob([json],{type:"application/json"}); const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download="fee-structure.json"; a.click(); URL.revokeObjectURL(url);
+  navigator.clipboard?.writeText(json).catch(()=>{});
+  document.getElementById("io-h").textContent="Exported — fee-structure.json";
+  document.getElementById("io-note").textContent="Downloaded and copied to your clipboard. Paste it into our chat, or attach the file. I build from this JSON.";
+  const dobtn=document.getElementById("io-do"); dobtn.textContent="Done"; dobtn.onclick=()=>dlg.close();
+  ioText.value=json; dlg.showModal();
+};
+document.getElementById("imp").onclick=()=>{
+  document.getElementById("io-h").textContent="Import a fee structure";
+  document.getElementById("io-note").textContent="Paste a fee-structure.json (or the sources array) and load it.";
+  ioText.value=""; const dobtn=document.getElementById("io-do"); dobtn.textContent="Load";
+  dobtn.onclick=()=>{ try{
+    const p=JSON.parse(ioText.value); const arr=Array.isArray(p)?p:p.sources;
+    if(!Array.isArray(arr)) throw new Error("no sources array");
+    model=arr.map(s=>({id:s.id||("src"+Math.random().toString(36).slice(2,6)),name:s.name||"Untitled",
+      currency:["eth","omr","usd"].includes(s.currency)?s.currency:"eth",retired:!!s.retired,
+      splits:(s.splits||[]).map(x=>({dest:x.dest||"treasury",bps:Math.round(+x.bps||0),lands:x.lands||"",implicit:!!x.implicit}))}));
+    commit(); dlg.close();
+  }catch(e){ alert("Could not parse: "+e.message); } };
+  dlg.showModal();
+};
+document.getElementById("io-cancel").onclick=()=>dlg.close();
+
+document.getElementById("reset").onclick=()=>{ if(confirm("Discard your edits and reset to the live protocol split?")){ model=structuredClone(LIVE); commit(); } };
+document.getElementById("add").onclick=()=>{ model.unshift({id:"new"+Math.random().toString(36).slice(2,5),name:"New source",currency:"eth",
+  splits:[{dest:"treasury",bps:10000,lands:""}]}); commit(); };
+
+/* ── go ── */
+renderLedger(); draw();
+addEventListener("resize",()=>draw());
+</script>
