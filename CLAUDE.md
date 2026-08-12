@@ -12100,3 +12100,80 @@ accumulate with no seated family to pay (a distribution-timing property, not a l
 bucket), and `walletMustHold` is a FLOOR rather than an equality because a dissolving family burns its
 soft claim (`gang:dissolved`) while the hard $OMR stays in the wallet — the conservative direction.
 Suite 99 files + sim drift-0 + pgquery + pgcheck 43/43 on real Postgres.
+
+**THE SAME WALL, ONE SYSTEM OVER — and why a class sweep beat the fix (2026-08-12).** F1 above was
+an INSTANCE; treating it as a CLASS and sweeping every sibling that takes a caller-supplied price
+found a worse one. **`bank.js:recordBankBuy` takes `spent` and `omrBought` as two INDEPENDENT
+numbers, caps only the first against arrived revenue, and books the second unconditionally** — so
+the implied price was unbounded on EVERY fill, not merely the first. Reproduced against a booted
+server: **1 USDC of real protocol profit booked 1,000,000,000 $OMR into the city pool, with
+`runBankInvariants` returning ok:true** — green for the identical structural reason as F1, because
+`distributed ≤ bought` compares against the caller's own `bought`. **The consequence is sharper than
+F1's**: the family pool exits to gang reserves, which are burn-only, while this pool's exit is
+`payCityLeg` → a `prize:omr` MINT **to players** plus `fundReserve`, i.e. it raises the number
+`signVoucher` reads before signing a REAL on-chain withdrawal. Fixed with the family keeper's answer
+exactly (the game has no OMR/USDC price to anchor on): continuity against the last real buy IN THAT
+ASSET, a deliberate one-time `bootstrap` for an asset with nothing to be continuous with, walls
+PER-ASSET so seeding one leaves the others alone. Two mutations, each caught at its own named
+assertion; the regression block sits LAST in `test/bank.js` because its bootstrap credits the pool
+and the empty-pool block above it needs a pool that is genuinely empty (the community suite's
+block-9 ordering lesson). The rest of the sweep came back CLEAN and is recorded so nobody repeats
+it: `runStockBuyback` already refuses an unreferenced first fill, `runDeskBuyback` carries a band
+plus a fat-finger floor against a fail-closed anchor, and `runVigBuyback`'s documented bootstrap is
+defensible precisely because its print is the number every other consumer reads. **The lesson worth
+keeping: when a finding names a shape rather than a line, sweep the shape — the second instance was
+the dangerous one, and nothing about the first would have led anyone to it.**
+
+**LAUNCH READINESS — the copy promised extraction nobody can do (founder-directed 2026-08-12: "let's
+try to launch this weekend").** Checked production before touching anything, and most of it was
+better than expected: healthy (db up 19ms, worker beating), with push, X one-click sign-in and
+WalletConnect **already activated**. But the chain is DORMANT — `CHAIN_ID` unset (so
+`walletConnect.chainId` falls back to 1), `POST /v1/withdraw` cannot sign, and `/v1/arena` reports
+`totalExtracted: 0` for everybody — while **three public surfaces stated extraction in the present
+tense**: the landing agents pill ("earn, kill, and **extract real value**"), the arena's own social
+unfurl ("**extract real $OMR on-chain. This board is live.**"), and AGENTS.md's "Real extraction"
+bullet plus a How-to-extract section with no hint that step 3 refuses today. A capability claim the
+product cannot keep, next to real-money framing, on the pages a launch points people at — the same
+class as the false supply claims fixed hours earlier, in the direction that matters most when the
+doors open. Fixed by separating what is true NOW from what is coming (the rail is built and
+devnet-proven; it opens when the audit and counsel gates clear), and **guarded** in `test/docs.js`
+beside the deflation guard: a per-FILE rule, deliberately loose about wording — a surface may
+describe the rail freely so long as it says somewhere that the rail is not open. **When extraction
+DOES go live the guard fails until it is updated**, which is the point: going live becomes a
+decision on the record rather than a silent change of tense. Mutation-verified (strip the qualifier
+and it names the file). **The two codices turned out to be ALREADY honest** ("built but not active
+until mainnet"; the section tagged "(not active)") — my first scan used the wrong marker words, not
+their copy, and that is recorded because verifying before acting is what stopped a "fix" to
+something that was not broken. Config: `SOCIAL_VERIFY_MODE: live` was already in `render.yaml`;
+`INVITE_MODE` was already effectively off (the `auth.js` default) but ABSENT from `render.yaml`, so
+the open-doors posture rested on an unstated default — now written down explicitly, because a launch
+posture nobody can see in a diff is one nobody can review. **Flagged for the founder, not fixable
+here:** `SOCIAL_VERIFY_MODE=live` verifies WITH a token, so without `X_BEARER_TOKEN` the
+word-of-mouth faucet reports itself OFF and pays nobody (/admin's Growth loop panel reads PAYING or
+NOT PAYING at a glance).
+
+**SIGN-OFF PART A CLOSED — and two rows said NOT BUILT for a week while they were live.** The
+founder answered D8/D13/D15; checking each against source BEFORE building anything found **D13 and
+D15 had already shipped on 2026-08-05, at exactly the values just re-chosen** (`M4.DEAL_ENERGY` 4 on
+the Kitchen deal — gated AND deducted, pinned, the exact spend asserted in `test/growth.js`;
+`M3.BUST_ATTEMPTS_DAY` 5 — a rolling-24h bucket charged BEFORE the roll, surfaced as
+`bustAttemptsLeft`, pinned, and load-bearing enough that `test/population.js` documents a flake it
+caused). So two decisions were made twice and the second time changed nothing. **That is SIGN-OFF.md's
+own warning running in the other direction** — it warns that a signed decision which never shipped is
+worse than an open one, and here a SHIPPED decision was still carried as open. It is not mechanically
+guardable (neither row names a lever, so nothing in `test/levers.js` could have caught the drift), so
+the discipline is stated in the file instead: **when a row moves to BUILT, edit the sheet in the same
+commit as the build.** D8=D confirmed as the standing answer; Part A is closed and the only open items
+on the sheet are the alpha WATCH rows.
+
+**A PROCESS NOTE FROM THIS SESSION, because it cost real work twice.** The container restarted twice
+mid-session and silently reverted the checkout to an OLD lineage (`7aad77f`, which predates
+`src/bank.js` entirely) — `git status` read "working tree clean" while a file the suite had just
+exercised did not exist. Uncommitted work was eaten both times, including the whole F3 fix, and the
+second time a commit landed on the WRONG BASE and was rejected as a non-fast-forward. Recovery is the
+recorded shape: the pushed tip is the source of truth (`git fetch` then `git reset --hard` to the
+remote branch, never to a local ref that may be stale), re-apply from context, and **verify HEAD
+immediately before every commit**. The durable lesson is the one already written for the stale-base
+trap, in a harsher form: **a green suite proves nothing about the tree you are about to push if you
+have not just confirmed which tree that is** — and under a flaky container the answer is to commit
+each fix the moment it passes rather than batching.
