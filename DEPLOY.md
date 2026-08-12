@@ -36,7 +36,11 @@ are set). Two Node processes over one Postgres DB. No build step.
       First measurement (2026-07-26): flat ~175 req/s from 5 to 50 players with latency rising linearly
       — a CPU-bound queue, not a lock wall — **zero deadlocks at every level**, and §10.4 unmoved. Run it
       after anything that touches a lock, a transaction boundary, or the pool. Absolute req/s is a
-      property of the machine and is not a capacity figure.
+      property of the machine and is not a capacity figure — and it cannot be one, because this harness
+      boots the server IN-PROCESS with its client loops, so its req/s is server AND clients together.
+      **For the capacity question — how many players can we take, and which plan moves it — see the
+      measurement in `render.yaml` beside `PG_POOL_MAX`** (server and Postgres isolated in cgroups at the
+      real plan sizes: the DATABASE plan is the dial, ~+50% against the web plan's ~+2%).
 - [ ] **`npm run chaos`** against a throwaway Postgres you are allowed to STOP AND START — the only check
       that interrupts anything. It SIGKILLs the worker mid-sweep and verifies the resumed run pays exactly
       once (twenty sweeps in this codebase claim to be idempotent; this is what makes that claim true),
