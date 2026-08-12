@@ -569,7 +569,10 @@ assert.equal(k.hitman.blood.theirs, 0, 'and no bodies the other way');
   await seedCh(heir3.id, `respect=${10 * 3 * 3}`);
   const after = (await meOf(marked.token)).coach;
   assert.notEqual(after?.label, 'You rise again', 'a level-3 heir has arrived — the rung stands down');
-  assert.equal(after?.label, 'Someone moved on you', 'and the generic rival rung takes over, no longer masked');
+  // matched on the PROPERTY, not the copy: the label counts how many aggressors are still unanswered
+  // ("Someone" / "3 people"), so an exact match would pass today and break the day this fixture grows
+  // a second attacker — for a reason that has nothing to do with what is being asserted here.
+  assert.match(after?.label || '', /moved on you$/, 'and the generic rival rung takes over, no longer masked');
 }
 donMe = await meOf(don.token);
 assert.equal(donMe.hitmanRep, 98, 'rep 82 + 16');
