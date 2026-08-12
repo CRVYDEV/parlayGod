@@ -86,6 +86,13 @@ const OWNED_CLOCKS = [
   // when it is the harness holding its own watch (the boats lesson, two more rows).
   ['convoys', 'owner_character', ['arrives_at']],
   ['racers', 'character_id', ['injured_until', 'circuit_at']],
+  // …and the RIVALS ledger, for the same reason one row further out. `recentRivals` counts events
+  // in the last 48 HOURS, so with `at` left at real now() the "Someone moved on you" rung can never
+  // age out inside a single run: it measured 99% of advised play, which is precisely what a stuck
+  // rung looks like from the outside. The rung is fine — the harness was holding its own watch
+  // again, exactly as it did for boats, convoys and racers. Keyed on the VICTIM, since that is the
+  // side `recentRivals` reads.
+  ['rival_events', 'victim_account', ['at'], 'account'],
 ];
 // …and THE CALENDAR, which is a different kind of clock and was missing entirely. A growing set of
 // loops is keyed on `dayOf()` rather than on a timestamp — the daily contracts, the corner and its
@@ -119,15 +126,22 @@ const DAY_SHIFT = [   // day is a field, not a key → carry the progress backwa
   ['corner_chains', 'character_id', ['last_day', 'started_day']],
   ['npc_errands', 'character_id', ['started_day', 'last_day']],
 ];
+let cachedAccountId = null;
+const accountIdOf = async (id) => (cachedAccountId ||=
+  (await pool.query('SELECT account_id FROM characters WHERE id=$1', [id])).rows[0]?.account_id);
 let simMinutes = 0; // wall-clock minutes elapsed since the character was born
 let daysRolled = 0; // simulated calendar days already applied
 const advance = async (id, minutes) => {
   simMinutes += minutes;
   const sets = CLOCK_COLS.map((c) => `${c} = ${c} - interval '${minutes} minutes'`).join(', ');
   await pool.query(`UPDATE characters SET ${sets} WHERE id='${id}'`);
-  for (const [table, key, cols] of OWNED_CLOCKS) {
+  for (const [table, key, cols, keyKind] of OWNED_CLOCKS) {
     const s = cols.map((c) => `${c} = ${c} - interval '${minutes} minutes'`).join(', ');
-    await pool.query(`UPDATE ${table} SET ${s} WHERE ${key}=$1`, [id]);
+    // Most of these hang off the character; the rivals ledger hangs off the ACCOUNT. Declaring which
+    // is deliberate: passing a character id to an account-keyed table matches NOTHING and fails
+    // silently, which reads exactly like a table that simply has no rows to warp.
+    const owner = keyKind === 'account' ? await accountIdOf(id) : id;
+    await pool.query(`UPDATE ${table} SET ${s} WHERE ${key}=$1`, [owner]);
   }
   const wantDays = Math.floor(simMinutes / 1440);
   if (ROLL_DAYS && wantDays > daysRolled) {
@@ -436,6 +450,26 @@ async function obeyCoach(m) {
   // genuinely followed the advice still reported them as "no action wired in this harness". An
   // untested rung and a broken rung look identical from the outside, which is the whole reason this
   // function counts what it cannot do rather than skipping it.
+  // THE AHA MOMENT — the scripted first rival. Wired because the harness's own warning about it was
+  // the thing that found the bug: it measured the rung at 100% of advised play, which is what an
+  // unclearable rung looks like from the outside. It could not distinguish "the harness cannot jump"
+  // from "the player cannot jump", and the second turned out to be true whenever the assigned rival
+  // had been retired out from under the pointer.
+  if (label.startsWith('Settle your first score')) {
+    // Matched BY NAME off the coach's own line, which is exactly what the rung tells a player to do
+    // ("find them on the Wet Work roster and JUMP them") — and it has to be the named one, because
+    // settleFirstBlood clears the stage only for that character. Jumping a stranger would look like
+    // obedience, do nothing to the rung, and hide the very failure this handler exists to expose.
+    const named = String(m.coach?.hint || '').split(' put the word out')[0].trim();
+    const roster = await call('GET', '/v1/streets', { token });
+    const list = roster.body?.streets || roster.body?.here || (Array.isArray(roster.body) ? roster.body : []);
+    const mark = named ? list.find((x) => x.name === named) : null;
+    if (!mark) { coachCantAct.set(label, `the coach names "${named}", who is not on the roster — a rung pointing at somebody gone`); return false; }
+    const r = await call('POST', `/v1/streets/${mark.id}/jump`, { token, body: { intent: 'standard' } });
+    if (r.code === 200) { did('jump'); first('jump'); return obeyed(); }
+    hit('jump', r.body?.error || r.code);
+    return false;
+  }
   if (label.startsWith('A job came in from the family')) {
     const ready = MISSIONS.filter((x) => !doneMissions.has(x.id) && missionReady(x, m))
       .sort((a, b) => b.reward.respect - a.reward.respect)[0];
