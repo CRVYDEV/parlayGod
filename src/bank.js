@@ -102,7 +102,7 @@ async function spentByAsset(client) {
 ///     against backing that does not exist — the treasury's "a comp books ZERO units" posture, and
 ///     the reason it is that one rather than the desk's.
 ///     To exercise the distribution in QA, pass a txHash (the mod route's `modRealTxHash` gate).
-export async function recordBankBuy(pool, { ref, asset = 'USDC', spent, omrBought, txHash = null } = {}) {
+export async function recordBankBuy(pool, { ref, asset = 'USDC', spent, omrBought, txHash = null, bootstrap = false } = {}) {
   if (!ref) throw new GameError('ref', 'Every buy needs a reference.');
   const sp = Number(spent); const got = Number(omrBought);
   if (!Number.isFinite(sp) || !(sp > 0)) throw new GameError('spent', 'Positive amounts only.');
@@ -125,6 +125,34 @@ export async function recordBankBuy(pool, { ref, asset = 'USDC', spent, omrBough
       if (round6(already + sp) > round6(rev) + 1e-6) {
         await client.query('ROLLBACK');
         throw new GameError('budget', `Only ${round6(rev - already)} ${asset} of protocol profit has arrived.`);
+      }
+      // THE PRICE WALL (AUDIT-family-buyback F3 — the same class as the family keeper's, one system
+      // over, and with a sharper consequence). This ingest takes `spent` and `omrBought` as two
+      // INDEPENDENT numbers and caps only the first, so the implied price was unbounded: measured on
+      // the unfixed code, 1 USDC of real protocol profit booked 1,000,000,000 $OMR into the city pool
+      // with runBankInvariants green — green BY CONSTRUCTION, because `distributed \u2264 bought` compares
+      // against the caller's own `bought`. And this pool's exit is not a badge: payCityLeg mints
+      // `prize:omr` to PLAYERS and calls fundReserve, i.e. it raises the number signVoucher reads
+      // before signing a REAL on-chain withdrawal.
+      // The game has no OMR/USDC price to anchor on (the canonical print is OMR per ETH), so this is
+      // the family keeper's answer exactly: continuity against the last real buy IN THIS ASSET, and a
+      // first fill that has nothing to be continuous with is REFUSED rather than trusted to set its
+      // own reference — the treasury's posture, seeded once, deliberately.
+      const price = round6(got / sp);
+      const jump = Number(process.env.BANK_MAX_PRICE_JUMP) || 10;
+      const lastRow = (await client.query(
+        'SELECT spent, omr_bought FROM bank_buys WHERE asset=$1 AND real AND spent > 0 ORDER BY created_at DESC LIMIT 1',
+        [asset])).rows[0];
+      const ref0 = lastRow ? round6(num(lastRow.omr_bought) / num(lastRow.spent)) : 0;
+      if (ref0 > 0 && (price > ref0 * jump || price < ref0 / jump)) {
+        await client.query('ROLLBACK');
+        throw new GameError('price_sanity',
+          `${price} $OMR per ${asset} is more than ${jump}x away from the last real buy (${ref0}).`);
+      }
+      if (!(ref0 > 0) && !bootstrap) {
+        await client.query('ROLLBACK');
+        throw new GameError('price_unanchored',
+          `No prior real buy in ${asset} to check ${price} $OMR per ${asset} against — pass bootstrap:true to seed the reference deliberately.`);
       }
     }
     // Both columns are gated, not just `spent` — see the header. The episode is on the record either

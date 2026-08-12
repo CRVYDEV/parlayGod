@@ -25,7 +25,7 @@
 //
 // Import discipline: rules.js (the universal leaf) + vig.js (which imports game/rules — router sits
 // at the worker/server layer, so no cycle). Nothing imports router.js except server/worker/tests.
-import { STORE, BONDS, SELL_TAX, TAX, TREASURY, DESK_AUCTION, withdrawTaxBps } from './rules.js';
+import { STORE, BONDS, SELL_TAX, TAX, TREASURY, DESK_AUCTION, COMMUNITY, withdrawTaxBps } from './rules.js';
 import { VIG_BPS } from './vig.js';
 import { bankRevenueByAsset } from './treasury.js';
 
@@ -34,38 +34,51 @@ const round6 = (n) => Math.round(n * 1e6) / 1e6;
 // ── 1. THE DECLARATION ────────────────────────────────────────────────────────────────────────────
 // One row per inflow. `splits` name every destination with its bps OF THE GROSS and where the slice
 // LANDS (the table/bucket an auditor reconciles against). `implicit: true` marks a remainder share
-// that is never stored anywhere (GAP-1 of the mapping pass — the founder shares of the fee + Store
+// that is never stored anywhere (GAP-1 of the mapping pass — the operations shares of the fee + Store
 // splits exist only as arithmetic; the board computes them and says so rather than hiding it).
 // A function, not a const: TREASURY.FEE_TREASURY_BPS() and withdrawTaxBps() are env-read per call.
 export function waterfall() {
   const feeTreasury = TREASURY.FEE_TREASURY_BPS();
+  // The community slices (the family buyback, Phase 1 — every lever defaults to 0). A zero slice is
+  // OMITTED rather than declared at 0 bps: the board renders every declared split, and a permanent
+  // row of zeroes reads as a destination that exists when it does not (the empty-state honesty rule).
+  const commFee = COMMUNITY.FEE_BPS();
+  const commStore = COMMUNITY.STORE_BPS();
+  // sell-tax community, normalized from a share OF THE TAX to a share of the inflow (the dev/rwa shape)
+  const commTax = Math.round(COMMUNITY.TAX_BPS() / SELL_TAX.BPS * 10000);
+  const commHarvest = COMMUNITY.HARVEST_BPS();
+  const polfeesVig = COMMUNITY.POLFEES_VIG_BPS();
   return [
     { id: 'fee', name: 'Gameplay fees (mint / respawn / reroll — OmertaFees)', currency: 'eth', totalBps: 10000,
       splits: [
         { dest: 'vig', bps: VIG_BPS, lands: "vig_revenue source='fee'" },
         { dest: 'treasury', bps: feeTreasury, lands: "rwa_revenue source='fee'" },
-        { dest: 'founder', bps: 10000 - VIG_BPS - feeTreasury, lands: 'dev wallet (on-chain, implicit remainder)', implicit: true },
+        ...(commFee > 0 ? [{ dest: 'community', bps: commFee, lands: "community_revenue source='fee' (→ family buyback)" }] : []),
+        { dest: 'operations', bps: 10000 - VIG_BPS - feeTreasury - commFee, lands: 'dev wallet (on-chain, implicit remainder)', implicit: true },
       ] },
     { id: 'store', name: 'The Store (ETH packages)', currency: 'eth', totalBps: 10000,
       splits: [
         { dest: 'vig', bps: STORE.SPLIT_BPS.buyback, lands: "vig_revenue source='store'" },
         { dest: 'treasury', bps: STORE.SPLIT_BPS.rwa, lands: "rwa_revenue source='store'" },
-        { dest: 'founder', bps: STORE.SPLIT_BPS.founder, lands: 'dev wallet (on-chain, implicit remainder)', implicit: true },
+        ...(commStore > 0 ? [{ dest: 'community', bps: commStore, lands: "community_revenue source='store' (→ family buyback)" }] : []),
+        // community carves FROM the founder share at booking time, so the implicit remainder shrinks
+        { dest: 'operations', bps: STORE.SPLIT_BPS.founder - commStore, lands: 'dev wallet (on-chain, implicit remainder)', implicit: true },
       ] },
     { id: 'bond', name: 'Reserve Bonds (ETH principal)', currency: 'eth', totalBps: 10000,
       splits: [
         { dest: 'pol', bps: BONDS.POL_BPS, lands: 'bond_reserve.pol_eth' },
         { dest: 'vig', bps: BONDS.VIG_BPS, lands: "vig_revenue source='bond'" },
         { dest: 'treasury', bps: BONDS.RWA_BPS, lands: "bond_reserve.rwa_eth + rwa_revenue source='bond'" },
-        { dest: 'founder', bps: BONDS.DEV_BPS, lands: 'bond_reserve.dev_eth' },
+        { dest: 'operations', bps: BONDS.DEV_BPS, lands: 'bond_reserve.dev_eth' },
       ] },
     // The sell tax's slices are declared as bps OF THE TAXED GROSS (DEV_BPS/RWA_BPS/LP_BPS sum to
     // SELL_TAX.BPS, not 10000) — normalized here to shares-of-the-inflow so every row reads alike.
     { id: 'tax', name: `DEX sell tax (${SELL_TAX.BPS} bps of every OMR sell)`, currency: 'eth', totalBps: 10000,
       splits: [
-        { dest: 'founder', bps: Math.round(SELL_TAX.DEV_BPS / SELL_TAX.BPS * 10000), lands: 'sell_tax_events.dev_eth' },
+        { dest: 'operations', bps: Math.round(SELL_TAX.DEV_BPS / SELL_TAX.BPS * 10000), lands: 'sell_tax_events.dev_eth' },
         { dest: 'treasury', bps: Math.round(SELL_TAX.RWA_BPS / SELL_TAX.BPS * 10000), lands: "sell_tax_events.rwa_eth + rwa_revenue source='tax'" },
-        { dest: 'pol', bps: 10000 - Math.round(SELL_TAX.DEV_BPS / SELL_TAX.BPS * 10000) - Math.round(SELL_TAX.RWA_BPS / SELL_TAX.BPS * 10000),
+        ...(commTax > 0 ? [{ dest: 'community', bps: commTax, lands: "sell_tax_events.community_eth + community_revenue source='tax'" }] : []),
+        { dest: 'pol', bps: 10000 - Math.round(SELL_TAX.DEV_BPS / SELL_TAX.BPS * 10000) - Math.round(SELL_TAX.RWA_BPS / SELL_TAX.BPS * 10000) - commTax,
           lands: 'sell_tax_events.lp_eth (the remainder rule sits on LP)' },
       ] },
     // RETIRED 2026-08-11 (founder-directed). The row STAYS so the map makes the positive claim —
@@ -78,10 +91,15 @@ export function waterfall() {
     { id: 'auction', name: "The Desk's daily Dutch auction (ETH proceeds)", currency: 'eth', totalBps: 10000,
       splits: [
         { dest: 'pol', bps: DESK_AUCTION.ETH_POL_BPS, lands: 'desk_sales.pol_eth' },
-        { dest: 'founder', bps: 10000 - DESK_AUCTION.ETH_POL_BPS, lands: 'desk_sales.founder_eth (remainder)' },
+        { dest: 'operations', bps: 10000 - DESK_AUCTION.ETH_POL_BPS, lands: 'desk_sales.founder_eth (remainder)' },
       ] },
     { id: 'polfees', name: 'POL trading fees (the LP position earns)', currency: 'eth', totalBps: 10000,
-      splits: [{ dest: 'desk-buyback', bps: 10000, lands: 'pol_fees (the buyback budget — exclusively)' }] },
+      splits: [
+        { dest: 'desk-buyback', bps: 10000 - polfeesVig, lands: `pol_fees (the buyback budget${polfeesVig > 0 ? '' : ' — exclusively'})` },
+        // the locked split's Wall-4 relaxation (design §6): a slice of POL fees diverts to the Vig
+        // reserve. At the 0 default the row is omitted and the budget stays exclusive.
+        ...(polfeesVig > 0 ? [{ dest: 'vig', bps: polfeesVig, lands: "vig_revenue source='polfees'" }] : []),
+      ] },
     // THE BANK's 20% harvest performance fee. Denominated in the MARKET'S UNDERLYING (USDC), not ETH
     // — hence its own ledger and its own currency here, rather than a row in the ETH-denominated
     // rwa_revenue whose sum IS the vault's `held` wall. Destination: the treasury Safe, because §4's
@@ -89,13 +107,16 @@ export function waterfall() {
     // so this records the money now and splits it when there is something to split it into.
     { id: 'harvest', name: `THE BANK — harvest performance fee (${BANK_HARVEST_FEE_BPS} bps of yield that serviced debt)`,
       currency: 'usd', totalBps: 10000,
-      splits: [{ dest: 'treasury', bps: 10000, lands: "bank_revenue source='harvest' (in the market's underlying)" }] },
+      splits: [
+        { dest: 'treasury', bps: 10000 - commHarvest, lands: "bank_revenue source='harvest' (in the market's underlying; also the city leg's budget)" },
+        ...(commHarvest > 0 ? [{ dest: 'community', bps: commHarvest, lands: "community_revenue source='harvest' (in the underlying → family buyback)" }] : []),
+      ] },
     // The one non-ETH revenue line: the $OMR exit toll (+ the early-exit surcharge, which rides the
-    // SAME split). Declared here because "where a dollar goes" must include the founder's other
+    // SAME split). Declared here because "where a dollar goes" must include operations' other
     // revenue bucket, or the map is not the map.
     { id: 'toll', name: `$OMR exit toll (${withdrawTaxBps()} bps) + early-exit surcharge`, currency: 'omr', totalBps: 10000,
       splits: [
-        { dest: 'founder', bps: TAX.DEV_BPS, lands: "dev_fund (ledger reason tax:dev)" },
+        { dest: 'operations', bps: TAX.DEV_BPS, lands: "dev_fund (ledger reason tax:dev)" },
         { dest: 'community', bps: 10000 - TAX.DEV_BPS, lands: "family_yield_pool (ledger reason tax:buyback)" },
       ] },
   ];
@@ -106,10 +127,14 @@ export function waterfall() {
 // name 'cosmetic' | 'rent' | 'pass' as future sources; they join HERE when they are built).
 // 'trade' is RETIRED but stays a member FOREVER: membership is what makes an unknown source the
 // loudest alarm, so deleting a retired one would make its historical rows read as the alarm instead.
-export const VIG_SOURCES = ['fee', 'store', 'bond', 'trade'];
+export const VIG_SOURCES = ['fee', 'store', 'bond', 'trade', 'polfees'];
 export const TREASURY_SOURCES = ['fee', 'store', 'tax', 'bond'];
 // The bank's own ledger, in the market's underlying rather than ETH. Same membership discipline.
 export const BANK_SOURCES = ['harvest'];
+// The family buyback's inflow ledger (community_revenue — Phase 1 of the treasury→family split).
+// Declared even while every slice lever is 0: membership is what makes an unknown source the
+// loudest alarm, and the sources exist the moment the Phase-2 flip lands.
+export const COMMUNITY_SOURCES = ['fee', 'store', 'tax', 'harvest'];
 // Mirrors Alchemist.harvestFeeBps. A RESTATEMENT (the contract is the authority and this layer
 // cannot import Solidity), so it is pinned against the contract source in test/router.js — the
 // preflight vig-defaults discipline, applied to a number that decides what the board claims.
@@ -189,6 +214,36 @@ export async function runRouterInvariants(pool) {
     BANK_SOURCES)).rows.map((r) => r.source);
   push('bank_revenue sources are declared', bankUnknown.length === 0, `unknown: ${bankUnknown.join(',')}`);
 
+  // (9b) COMMUNITY SOURCE MEMBERSHIP — the family buyback's inflow ledger is the keeper's root cap,
+  // so an unknown source here is spendable budget outside the declared map.
+  const commUnknown = (await pool.query(
+    `SELECT DISTINCT source FROM community_revenue WHERE source NOT IN (${COMMUNITY_SOURCES.map((_, i) => `$${i + 1}`).join(',')})`,
+    COMMUNITY_SOURCES)).rows.map((r) => r.source);
+  push('community_revenue sources are declared', commUnknown.length === 0, `unknown: ${commUnknown.join(',')}`);
+
+  // (9c)+(9d) THE COMMUNITY CHECKS. Deliberately NOT the fee/store declared-split mirror shape:
+  // those mirrors compare lifetime sums against the CURRENT env lever, which is sound only for a
+  // lever that never moves — and the community slices are DESIGNED to move (they ship 0 and the
+  // Phase-2 flip turns them on), so a declared-split mirror would fire spuriously on flip day
+  // against every pre-flip payment. What IS lever-history-immune: (9c) no community row ever
+  // exceeds the payment it was carved from (per-row, catches a fabricated or mis-scaled slice);
+  // (9d) the tax slice's two sides agree — sell_tax_events.community_eth (the authoritative
+  // per-episode split) == what reached the community ledger, both written by the same code path at
+  // the same moment (the rwa_revenue-mirror twin). The dropped-booking class the declared-split
+  // mirror would have caught is covered behaviorally in test/community.js instead (drive a real
+  // payment with the lever on, assert the row) — a runtime alarm cannot tell "lever moved" from
+  // "booking dropped" without per-row context it does not have.
+  const commOver = (await pool.query(
+    'SELECT source, ref FROM community_revenue WHERE amount > gross + 0.000001')).rows;
+  push('community slice never exceeds its payment', commOver.length === 0,
+    `over: ${commOver.map((r) => `${r.source}/${r.ref}`).join(',')}`);
+  const commTaxLedger = num((await pool.query(
+    "SELECT COALESCE(SUM(amount),0) s FROM community_revenue WHERE source='tax'")).rows[0].s);
+  const commTaxEvents = num((await pool.query(
+    'SELECT COALESCE(SUM(community_eth),0) s FROM sell_tax_events WHERE real')).rows[0].s);
+  push('tax → community slice reached the ledger', Math.abs(commTaxLedger - commTaxEvents) <= 0.000002,
+    `ledger ${commTaxLedger} vs events ${commTaxEvents}`);
+
   // (10) THE DEV FUND identity — the one revenue bucket with no balance==ledger check (GAP-1's
   // checkable half; the exchange/family-yield pools have this, dev_fund did not): the balance is
   // exactly what tax:dev put in minus what tax:dev:claim took out, and lifetime never moves down.
@@ -216,24 +271,27 @@ export async function routerBoard(pool) {
   const feeGross = feeRows.reduce((a, r) => { try { return a + Number(BigInt(r.amount_wei)) / 1e18; } catch { return a; } }, 0);
   lifetime.fee = { gross: round6(feeGross),
     vig: await one("SELECT COALESCE(SUM(vig_eth),0) s FROM vig_revenue WHERE source='fee'"),
-    treasury: await one("SELECT COALESCE(SUM(rwa_eth),0) s FROM rwa_revenue WHERE source='fee'") };
-  lifetime.fee.founder = round6(Math.max(0, feeGross - lifetime.fee.vig - lifetime.fee.treasury));
+    treasury: await one("SELECT COALESCE(SUM(rwa_eth),0) s FROM rwa_revenue WHERE source='fee'"),
+    community: await one("SELECT COALESCE(SUM(amount),0) s FROM community_revenue WHERE source='fee'") };
+  lifetime.fee.operations = round6(Math.max(0, feeGross - lifetime.fee.vig - lifetime.fee.treasury - lifetime.fee.community));
 
   const storeRows = (await pool.query('SELECT amount_wei FROM store_payments WHERE tx_hash IS NOT NULL')).rows;
   const storeGross = storeRows.reduce((a, r) => { try { return a + Number(BigInt(r.amount_wei)) / 1e18; } catch { return a; } }, 0);
   lifetime.store = { gross: round6(storeGross),
     vig: await one("SELECT COALESCE(SUM(vig_eth),0) s FROM vig_revenue WHERE source='store'"),
-    treasury: await one("SELECT COALESCE(SUM(rwa_eth),0) s FROM rwa_revenue WHERE source='store'") };
-  lifetime.store.founder = round6(Math.max(0, storeGross - lifetime.store.vig - lifetime.store.treasury));
+    treasury: await one("SELECT COALESCE(SUM(rwa_eth),0) s FROM rwa_revenue WHERE source='store'"),
+    community: await one("SELECT COALESCE(SUM(amount),0) s FROM community_revenue WHERE source='store'") };
+  lifetime.store.operations = round6(Math.max(0, storeGross - lifetime.store.vig - lifetime.store.treasury - lifetime.store.community));
 
   const br = (await pool.query('SELECT pol_eth, dev_eth, rwa_eth FROM bond_reserve WHERE id=1')).rows[0] || {};
-  lifetime.bond = { pol: num(br.pol_eth), founder: num(br.dev_eth), treasury: num(br.rwa_eth),
+  lifetime.bond = { pol: num(br.pol_eth), operations: num(br.dev_eth), treasury: num(br.rwa_eth),
     vig: await one("SELECT COALESCE(SUM(vig_eth),0) s FROM vig_revenue WHERE source='bond'") };
-  lifetime.bond.gross = round6(lifetime.bond.pol + lifetime.bond.founder + lifetime.bond.treasury + lifetime.bond.vig);
+  lifetime.bond.gross = round6(lifetime.bond.pol + lifetime.bond.operations + lifetime.bond.treasury + lifetime.bond.vig);
 
   lifetime.tax = { gross: await one('SELECT COALESCE(SUM(gross_eth),0) s FROM sell_tax_events WHERE real'),
-    founder: await one('SELECT COALESCE(SUM(dev_eth),0) s FROM sell_tax_events WHERE real'),
+    operations: await one('SELECT COALESCE(SUM(dev_eth),0) s FROM sell_tax_events WHERE real'),
     treasury: await one('SELECT COALESCE(SUM(rwa_eth),0) s FROM sell_tax_events WHERE real'),
+    community: await one('SELECT COALESCE(SUM(community_eth),0) s FROM sell_tax_events WHERE real'),
     pol: await one('SELECT COALESCE(SUM(lp_eth),0) s FROM sell_tax_events WHERE real') };
 
   lifetime.trade = { gross: await one("SELECT COALESCE(SUM(gross_eth),0) s FROM vig_revenue WHERE source='trade'"),
@@ -241,15 +299,20 @@ export async function routerBoard(pool) {
 
   lifetime.auction = { gross: await one('SELECT COALESCE(SUM(eth),0) s FROM desk_sales WHERE real'),
     pol: await one('SELECT COALESCE(SUM(pol_eth),0) s FROM desk_sales WHERE real'),
-    founder: await one('SELECT COALESCE(SUM(founder_eth),0) s FROM desk_sales WHERE real') };
+    operations: await one('SELECT COALESCE(SUM(founder_eth),0) s FROM desk_sales WHERE real') };
 
   lifetime.harvest = { byAsset: await bankRevenueByAsset(pool) };
+  // the harvest carve, per underlying asset (the family buyback's USD-side inflow)
+  for (const r of (await pool.query(
+    "SELECT currency, COALESCE(SUM(amount),0) s FROM community_revenue WHERE source='harvest' GROUP BY currency")).rows)
+    (lifetime.harvest.community ??= {})[r.currency] = round6(num(r.s));
 
   lifetime.polfees = { gross: await one('SELECT COALESCE(SUM(eth),0) s FROM pol_fees WHERE real'),
-    spent: await one('SELECT COALESCE(SUM(eth_spent),0) s FROM desk_buys WHERE real') };
+    spent: await one('SELECT COALESCE(SUM(eth_spent),0) s FROM desk_buys WHERE real'),
+    vig: await one("SELECT COALESCE(SUM(vig_eth),0) s FROM vig_revenue WHERE source='polfees'") };
 
   const df = (await pool.query('SELECT omr, lifetime FROM dev_fund WHERE id=1')).rows[0] || { omr: 0, lifetime: 0 };
-  lifetime.toll = { founder: num(df.lifetime), founderUnclaimed: num(df.omr),
+  lifetime.toll = { operations: num(df.lifetime), operationsUnclaimed: num(df.omr),
     community: await one("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='tax:buyback' AND amount < 0") * -1 };
 
   return { waterfall: wf, lifetime, invariants: await runRouterInvariants(pool) };

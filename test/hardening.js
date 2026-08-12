@@ -17,6 +17,7 @@ import { runLedgerInvariants, alertDrift } from '../src/invariants.js';
 import { runSeasonRollover } from '../src/worker.js';
 import { deadlockToRetry as G_deadlockToRetry, withCharacterRead } from '../src/game.js';
 import { CONTACTS, contactRankOf, contactStandingOf } from '../src/rules.js';
+import * as Ops from '../src/ops.js';
 
 // audit (process): the two codices (canonical docs/WIKI.md + served public/wiki.html) drifted — a
 // system landed in one but not the other. This drift-detector fails if a system this audit re-synced
@@ -287,6 +288,31 @@ const wireI = intg.integrations.find((x) => x.id === 'city_wire');
 assert(wireI && wireI.live === false && typeof wireI.steps === 'string', 'an unconfigured integration reads OFF with activation steps');
 // the secret VALUE is never echoed anywhere in the response (only its var name / a boolean)
 assert(!JSON.stringify(intg).includes('zzq-priv-sentinel-9x7q'), 'the panel never echoes a secret value — env presence only');
+
+// CAPACITY POSTURE. The pool is the one deploy setting whose failure reads as an OUTAGE rather than a
+// slowdown, and production ran the undeclared default for two months with nothing able to say so:
+// `npm run loadtest` finds the cliff only on the box you run it on, and CI deliberately runs 8 players
+// (a correctness gate, not a benchmark), which is well under it. So the panel states it — and the two
+// cases that matter are the DEFAULT (which must announce itself as such, or it reads like a choice
+// somebody made) and a value BELOW the measured edge.
+assert(intg.capacity && typeof intg.capacity.poolMax === 'number',
+  'the panel carries the capacity posture, so the pool can be read without the Render dashboard');
+const prevPool = process.env.PG_POOL_MAX;
+process.env.PG_POOL_MAX = '40';
+const capOn = Ops.capacityPosture();
+assert(capOn.poolMax === 40 && capOn.declared === true && capOn.aboveCliff === true,
+  'a declared pool clear of the cliff reads as such');
+assert.equal(capOn.note, null, 'nothing to warn about when it is declared and clear');
+delete process.env.PG_POOL_MAX;
+const capOff = Ops.capacityPosture();
+assert(capOff.poolMax === 20 && capOff.declared === false && capOff.aboveCliff === false,
+  'an UNDECLARED pool reports the built-in default and flags it below the cliff');
+assert(/not set/.test(capOff.note) && /503/.test(capOff.note),
+  'and says what that costs — the failure is 503s, not slowness');
+process.env.PG_POOL_MAX = '25';
+assert.equal(Ops.capacityPosture().aboveCliff, false, 'declared but under the edge is still not clear of it');
+if (prevPool === undefined) delete process.env.PG_POOL_MAX; else process.env.PG_POOL_MAX = prevPool;
+
 delete process.env.VAPID_PUBLIC_KEY; delete process.env.VAPID_PRIVATE_KEY;
 const act = (await call('GET', '/v1/mod/activity?limit=10', { headers: modH })).body;
 assert(Array.isArray(act.events), 'the activity feed returns events');

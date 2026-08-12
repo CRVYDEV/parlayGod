@@ -115,6 +115,12 @@ services:
       - fromGroup: omerta-secrets
       - key: NODE_ENV
         value: production
+      - key: INVITE_MODE
+        value: "off"              # LAUNCH (founder-directed 2026-08-12): the doors are OPEN — anyone
+                                 # can create an account. `off` is also the code default, but a launch
+                                 # posture resting on an unstated default is invisible: written here so
+                                 # opening or closing the doors is a diff, not somebody's memory.
+                                 # Set to "on" to go back to closed alpha (codes: POST /v1/mod/invites).
       - key: SOCIAL_VERIFY_MODE
         value: live               # REQUIRED in production or social/First-Week rewards pay nothing.
                                  # BUT `live` means "verify for real", and that needs a token to verify

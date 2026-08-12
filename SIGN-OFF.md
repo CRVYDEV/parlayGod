@@ -38,14 +38,23 @@ done. **Part B is everything new since 2026-08-02** that wants a verdict. Answer
 | D5 | NFT caps scale by rarity (1000/300/60/10) | **BUILT** (`RARITY.SUPPLY_CAP`, deploy config) | nothing |
 | D6 | pad envelope 7d → 2d | **BUILT** | nothing |
 | D7 | crew nut cap 7d → 2d | **BUILT** (asymmetry 21× → 6×) | nothing |
-| D8 | C, then **superseded by your own D8=D the same day** — the gates came back, §4.3 retired | **BUILT as D8=D** (speakeasy + high-stakes gates live, MADE_LADDER live) | confirm D8=D is the standing answer (it's what's live) |
+| D8 | C, then **superseded by your own D8=D the same day** — the gates came back, §4.3 retired | **BUILT as D8=D** (speakeasy + high-stakes gates live, MADE_LADDER live) | **✅ CONFIRMED 2026-08-12** — D8=D is the standing answer. Nothing to build; the row is closed. |
 | D9 | rarity weights/prices ship as-is | **BUILT** | revisit only when a real secondary market exists |
 | D10 | income assets stay out of extraction | **BUILT** (nothing to build — the exclusion holds) | nothing |
 | D11 | *"remove all tickers and RWA assets"* — the whole in-game Portfolio retires | **✅ BUILT 2026-08-05** (founder: *"D11 retire portfolio"*) | Done, on the emission.js retirement pattern: 9 tombstone routes (`retired`, never 404), the payers deleted (grantShares gone; the heist AAPL cut and season SPCX prize with it), the vocabulary + pools KEPT for historical rows, a new `portfolio retired` §10.4 freshness check, the stranded family dividend pool drained into the family yield, and the ETH vault untouched. The coach's lvl-15 legit rung became the stake rung; career's md_legit/dn_dynasty retarget to staked/minted. |
 | D12 | identity NFT not built | **HONOURED** (nothing built) | nothing |
-| D13 | one loop gets its own energy cost | **NOT BUILT** | tell me the loop, or take my pick: **the Kitchen deal** (it's the deepest earner with no physical cost, and it keeps crime pure-nerve). Measured before/after with the harness. |
+| D13 | one loop gets its own energy cost | **✅ BUILT + SIGNED 2026-08-05** — `M4.DEAL_ENERGY` 4 on the Kitchen deal | **CONFIRMED 2026-08-12** (founder re-picked the Kitchen deal, which is what shipped). Gated AND deducted in `kitchen.js:deal`, pinned in `test/levers.js`, the exact spend asserted in `test/growth.js`, recorded in BALANCE.md. Crime stays pure-nerve; energy is regen, so zero §10.4 surface. **This row said NOT BUILT for a week while it was live** — see the note under the table. |
 | D14 | stats matter more to the crime roll | **BUILT + SIGNED** (option A, 2026-08-05; the +10% faucet signed as-is 2026-08-06) | `M3.CRIME_STAT` CUN×0.008/SPD×0.004/OFFSET 0.072 — EV-neutral at a mid build (fresh −4.9% / mid 0.0% / maxed +22.3%); the cash-weighted base-wide +10.4% accepted as the cost of "builds matter" over neutralize (hurts fresh/mid) or revert. Tracked by sim P9.33. See BALANCE.md § D14. |
-| D15 | cap bust attempts per day | **NOT BUILT** | one number: proposed **5 attempts/day** (the harness showed uncapped chasing = 26% of play in lockup) |
+| D15 | cap bust attempts per day | **✅ BUILT + SIGNED 2026-08-05** — `M3.BUST_ATTEMPTS_DAY` 5 | **CONFIRMED 2026-08-12** (founder re-picked 5/day, which is what shipped). A rolling-24h bucket on `bust_used`/`bust_at` (the safehouse-cap shape), charged BEFORE the roll so a failed try is not a free retry, surfaced as `bustAttemptsLeft`, pinned, and load-bearing enough that `test/population.js` documents a flake it caused. **This row said NOT BUILT for a week while it was live.** |
+
+> **A staleness note, recorded rather than quietly fixed.** On 2026-08-12 the founder was asked to
+> decide D13 and D15 because this sheet said **NOT BUILT**. Both had shipped on 2026-08-05, at
+> exactly the values that were then re-chosen — so two decisions were made twice and the second time
+> changed nothing. That is the failure this sheet's own header warns about (*"a signed decision that
+> never shipped is worse than an open one, because you think it's done"*) running in the other
+> direction: a shipped decision the sheet still calls open. It is not mechanically guardable — the
+> rows name no lever, so nothing in `test/levers.js` could have caught the drift — so the discipline
+> is simply: **when a row moves to BUILT, edit this file in the same commit as the build.**
 
 ## PART B — ✅ SIGNED 2026-08-05 (founder: *"Part B: SHIP"*)
 
@@ -55,7 +64,9 @@ and re-measured the same day: **A5** `JAILBIRDS.MAX_S` 1200 → 400 (city ceilin
 run) and **A12** `FRONTIER.INVADE_BASE_BPS` 200 (an apex outpost's invade floor is now indexed to
 the outfit's size — volkov $240k — while the $30k unheld-district on-ramp stays flat on purpose).
 The WATCH rows (A4 hired guns at apex cadence; the Float's whales-actually-commit question) are the
-alpha watch-list. Part A's five unbuilt answers remain the open items on this sheet.
+alpha watch-list. **Part A is now closed** (2026-08-12): D8 confirmed, D13 and D15 found already
+built and confirmed at the shipped values, D1 a mainnet-milestone contract build and D2 mainnet
+config. The only open items on this sheet are the alpha WATCH rows.
 
 Everything here shipped as PROPOSED DEFAULTS under your standing direction and is safe as-is for the
 alpha; a verdict makes it production balance. Measurements are the sim's, cited in BALANCE.md.

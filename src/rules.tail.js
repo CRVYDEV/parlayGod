@@ -2184,9 +2184,12 @@ export const TREASURY = {
 // summed past 100% the books would claim more than the payment (the BONDS/STORE load-time
 // sum-validation precedent).
 {
+  // FEE_COMMUNITY_BPS read directly here (the COMMUNITY block is defined later in this file — the
+  // guard runs at load, before it exists; same default, commented at COMMUNITY.FEE_BPS).
   const vig = Number(process.env.VIG_BPS || 6000), tre = TREASURY.FEE_TREASURY_BPS();
-  if (vig + tre > 10000)
-    throw new Error(`VIG_BPS (${vig}) + FEE_RWA_BPS (${tre}) exceed 10000 — the fee split would book >100% of each real payment as revenue.`);
+  const community = Number(process.env.FEE_COMMUNITY_BPS ?? 0);
+  if (vig + tre + community > 10000)
+    throw new Error(`VIG_BPS (${vig}) + FEE_RWA_BPS (${tre}) + FEE_COMMUNITY_BPS (${community}) exceed 10000 — the fee split would book >100% of each real payment as revenue.`);
 }
 // ── THE WIRE — the intelligence terminal (design omerta-the-wire-and-revenue-design.md) ──
 // Information as a spendable resource. WIRETAPS (a $OMR sink, intel:wiretap) surveil a rival for a
@@ -2422,8 +2425,17 @@ export const SELL_TAX = {
   LP_BPS: Number(process.env.SELL_TAX_LP_BPS || 300),          // 3% → LP depth / buybacks. the three sum to BPS
   MAX_BPS: 1000,                                               // OMR.sol's MAX_SELL_TAX_BPS — kept in lockstep
 };
-(() => { const t = SELL_TAX.DEV_BPS + SELL_TAX.RWA_BPS + SELL_TAX.LP_BPS;
-  if (t !== SELL_TAX.BPS) throw new Error(`SELL_TAX DEV+RWA+LP must sum to BPS ${SELL_TAX.BPS} (got ${t})`);
+(() => {
+  // The equality is FOUR-way since the family buyback (Phase 1, 2026-08-11): the community slice
+  // (SELL_TAX_COMMUNITY_BPS, env read directly — COMMUNITY.TAX_BPS is defined later in this file,
+  // after this guard runs) sits BEFORE the LP remainder in recordSellTax. At the default 0 the sum
+  // is the original three-way 900. The guard is what makes the Phase-2 flip honest: turning the
+  // slice on REQUIRES lowering a sibling scalar in the same deploy (the locked design lowers
+  // SELL_TAX_RWA_BPS 400→160 as SELL_TAX_COMMUNITY_BPS goes 0→240) or the module refuses to load —
+  // never a silent squeeze of the LP remainder.
+  const community = Number(process.env.SELL_TAX_COMMUNITY_BPS ?? 0);
+  const t = SELL_TAX.DEV_BPS + SELL_TAX.RWA_BPS + SELL_TAX.LP_BPS + community;
+  if (t !== SELL_TAX.BPS) throw new Error(`SELL_TAX DEV+RWA+LP+COMMUNITY must sum to BPS ${SELL_TAX.BPS} (got ${t})`);
   if (SELL_TAX.BPS > SELL_TAX.MAX_BPS) throw new Error(`SELL_TAX.BPS ${SELL_TAX.BPS} exceeds the contract cap ${SELL_TAX.MAX_BPS}`); })();
 
 // ── THE UNDERWRITER — the off-chain backer-prestige pillar layered over the chain bond. Purely
@@ -5300,4 +5312,23 @@ export const brokerWeight = (tierId, gains = {}) => {
   const t = brokerTier(tierId);
   if (!t) return 0;
   return t.mult * activityScore(gains);
+};
+
+// ── THE COMMUNITY EARMARK — the family buyback's revenue slices (omerta-treasury-to-family-design.md
+// §4/§8, Phase 1). Every lever here is a FUNCTION (env read per call — the FEE_TREASURY_BPS shape) and
+// every default is ZERO, which is the Phase-1 guarantee: with no env set, every ingest books
+// byte-identically to the day before this shipped. Phase 2 (the founder's lever flip, BALANCE.md
+// § THE FAMILY BUYBACK) turns them on: the locked targets are FEE 1500 / STORE 1500 / TAX 2666-of-gross
+// (= 240 of the 900-bps tax) / HARVEST 6280 / POLFEES_VIG 2500. Where each slice comes FROM is part of
+// the machinery: fee + store carve the implicit founder (operations) remainder at booking time; the
+// sell-tax slice sits BEFORE the LP remainder (so Phase 2 lowers SELL_TAX_RWA_BPS in the same flip and
+// LP stays ≈300); harvest splits the bank_revenue booking (which also shrinks the city leg's budget —
+// flagged in BALANCE.md); POLFEES_VIG diverts POL fees to the Vig reserve (the Wall-4 relaxation the
+// design doc records, with the ops-slice alternative if the founder wants the buyback budget pure).
+export const COMMUNITY = {
+  FEE_BPS: () => Number(process.env.FEE_COMMUNITY_BPS ?? 0),          // of each gameplay fee's gross
+  STORE_BPS: () => Number(process.env.STORE_COMMUNITY_BPS ?? 0),      // of each Store payment's gross
+  TAX_BPS: () => Number(process.env.SELL_TAX_COMMUNITY_BPS ?? 0),     // of the TAX (out of SELL_TAX.BPS, not 10000)
+  HARVEST_BPS: () => Number(process.env.HARVEST_COMMUNITY_BPS ?? 0),  // of each harvest fee (in the market's underlying)
+  POLFEES_VIG_BPS: () => Number(process.env.POL_FEES_VIG_BPS ?? 0),   // POL fees diverted to the Vig (not community — the same locked package)
 };

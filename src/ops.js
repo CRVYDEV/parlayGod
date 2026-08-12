@@ -149,7 +149,34 @@ export function integrationsStatus() {
       why: 'Mobile wallet linking for on-chain $OMR extraction (mainnet-gated — lower priority until the chain is live).',
       needs: ['WALLETCONNECT_PROJECT_ID'],
       steps: 'Grab a free public project id from dashboard.reown.com, set WALLETCONNECT_PROJECT_ID (public/client-embedded by design).' },
-  ] };
+  ], capacity: capacityPosture() };
+}
+
+// ── CAPACITY POSTURE — the one deploy setting that fails as an OUTAGE rather than as a slowdown ──
+// The pool is a cliff, not a slope, and the cliff was measured (`npm run loadtest`, 30 concurrent
+// players, real Postgres, only the pool changed): at 20 it served 30 req/s with a 10.0s p95 and NINE
+// 503s; at 60, 284 req/s with an 87ms p95 and none. Past the edge the requests queue for a
+// connection, hit connectionTimeout exactly, and the player is told the DATABASE is unreachable —
+// so the symptom of running out of capacity is indistinguishable from the symptom of being down.
+//
+// It is here because for two months production ran the src/db.js default while render.yaml never
+// mentioned the setting, and nothing in the game could say so: `npm run loadtest` finds the cliff
+// but only on the machine you run it on, and CI deliberately runs 8 players ("a correctness gate,
+// not a benchmark", ci.yml), which is comfortably under it. A number nobody can read is a number
+// nobody checks — the same argument the integrations panel above is built on.
+export function capacityPosture() {
+  const declared = Number(process.env.PG_POOL_MAX || 0) || null;
+  const pool = declared || 20;                  // the src/db.js default, restated (ops must not import db)
+  return {
+    poolMax: pool,
+    declared: !!declared,                       // false ⇒ running the default because nobody said otherwise
+    // The measured edge, not a guess, and deliberately well clear of it: the failure is an outage.
+    aboveCliff: pool >= 30,
+    note: declared
+      ? null
+      : 'PG_POOL_MAX is not set, so this is the built-in default of 20 — measured at 30 req/s with '
+        + 'nine 503s under 30 concurrent players. Declare it in render.yaml (40) and redeploy.',
+  };
 }
 
 // ── THE COACH CENSUS — where the coach has every ACTIVE player standing, live ────────────────────

@@ -9,6 +9,8 @@ import * as Bank from '../bank.js';
 import * as Bonds from '../bonds.js';
 import * as Chain from '../chain.js';
 import * as ChainParams from '../chainparams.js';
+import * as Community from '../community.js';
+import * as TokenHealth from '../tokenhealth.js';
 import * as Desk from '../desk.js';
 import * as Fees from '../fees.js';
 import * as G from '../game.js';
@@ -215,9 +217,30 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
     app.get('/v1/mod/bank', { preHandler: modAuth }, async () => Bank.runBankInvariants(pool));
     app.post('/v1/mod/bank/buy', { preHandler: modAuth }, async (req) =>
       Bank.recordBankBuy(pool, { ref: req.body?.ref, asset: req.body?.asset,
-        spent: req.body?.spent, omrBought: req.body?.omr, txHash: modRealTxHash(req) }));
+        spent: req.body?.spent, omrBought: req.body?.omr,
+        bootstrap: req.body?.bootstrap === true, txHash: modRealTxHash(req) }));
     app.post('/v1/mod/bank/epoch', { preHandler: modAuth }, async (req) =>
       Bank.runCityLeg(pool, { ...(req.body?.endDay != null ? { endDay: Number(req.body.endDay) } : {}) }));
+    // ── THE FAMILY BUYBACK (the treasury→family split's keeper, src/community.js) ───────────────
+    // `/community` is the real-value invariant (spend ≤ revenue per currency, the pool credit backed
+    // by a real purchase, comps buying nothing) plus the walletMustHold attestation. `/community/buy`
+    // is the keeper's seat until the DEX leg is wired — the same modRealTxHash gate as its siblings,
+    // and with MORE force here: the PRICE is caller-supplied, so an un-gated comp could mint a
+    // colossal family-pool credit from a small real budget.
+    app.get('/v1/mod/community', { preHandler: modAuth }, async () => Community.runFamilyBuybackInvariants(pool));
+    // `bootstrap` is the operator's deliberate seeding of a currency that has no price to be checked
+    // against (the treasury's first-fill posture) — it is never set by the bot's ordinary path, so a
+    // buggy bot cannot establish its own reference.
+    app.post('/v1/mod/community/buy', { preHandler: modAuth }, async (req) =>
+      Community.runFamilyBuyback(pool, { currency: req.body?.currency, priceOmr: req.body?.price,
+        ...(req.body?.maxSpend != null ? { maxSpend: Number(req.body.maxSpend) } : {}),
+        bootstrap: req.body?.bootstrap === true, txHash: modRealTxHash(req) }));
+    // ── THE TOKEN-HEALTH BOARD (src/tokenhealth.js) ────────────────────────────────────────────
+    // The second instrument. Every other runner on this perimeter answers "can the books lie?"; this
+    // one answers "is the economy working?" — five KPIs, each with the reading that would make a
+    // person act. Pure read (no writes, no §10.4 surface); `?days=` widens the trailing window.
+    app.get('/v1/mod/tokenhealth', { preHandler: modAuth }, async (req) =>
+      TokenHealth.tokenHealth(pool, { ...(req.query?.days != null ? { days: Number(req.query.days) } : {}) }));
     app.get('/v1/mod/desk', { preHandler: modAuth }, async () => Desk.runDeskInvariants(pool));
     app.post('/v1/mod/desk/open', { preHandler: modAuth }, async () => Desk.openAuction(pool));
     app.post('/v1/mod/desk/fill', { preHandler: modAuth }, async (req) =>

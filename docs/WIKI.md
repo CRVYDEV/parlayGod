@@ -290,14 +290,18 @@ Four things follow, and each is a mechanism rather than a policy:
 
 - **Grinding cannot inflate the token.** Grinding makes cash, and cash has nowhere to go but back into
   the city. A player who plays twenty hours a day is a rich player, not a source of new supply.
-- **Supply is enumerated, and the list is shrinking.** The ledger check is
+- **Supply is enumerated, and a nightly job proves it.** The ledger check is
   `buckets == genesis + mints − burns`, and a reason nobody enumerated is itself an alarm. The Street
-  city has no scheduled printer, and a nightly check asserts that none appears. Two small taps remain —
-  mission rewards and the Vig prize pool — and both are enumerated and bounded. There is no third tap
-  to find.
-- **No faucet is the strong version of the promise.** With nothing paying $OMR for play, in-game $OMR
-  can never exceed what was deposited — so "you can only take out what somebody put in" stops being a
-  rule the game has to enforce and becomes an arithmetic fact about the ledger.
+  city has no scheduled printer, and a nightly check asserts that none appears. What can mint is a
+  short list: the mission ladder (a few hundred $OMR over a whole career, once per account) is the one
+  tap that pays you for playing, and the rest — the prize pool and the two buybacks — issue a token
+  only when a real one has arrived to back it, one for one. And a sink does not destroy anything: it
+  is the house's cut, and it goes to the desk to be sold again rather than to the fire. There is no scheduled
+  printer to find.
+- **What you can take out is bounded by code, not by arithmetic.** The withdrawal rail signs nothing
+  the reserve cannot back, and the reserve is filled by real revenue — so "you can only take out what
+  somebody put in" is a rule the rail enforces on every single withdrawal, whatever the supply does.
+  That is the guarantee worth having, and it is the one that holds even with the mission tap open.
 - **The one conversion runs the other way, and only on money that already exists.** The Window burns
   $OMR and pays cash out of a till that real cash sinks filled. A short till refuses and burns
   nothing. It is a claim on what was collected, never a promise about what will be.

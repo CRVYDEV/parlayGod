@@ -16,6 +16,7 @@ import { runLedgerInvariants, alertDrift } from './invariants.js';
 import { runVigInvariants } from './vig.js';
 import { carveExchange, mergeLegacyYieldPools, payFamilyYield, runExchangeInvariants } from './exchange.js';
 import { runRouterInvariants } from './router.js';
+import { runFamilyBuybackInvariants } from './community.js';
 import { runBondInvariants } from './bonds.js';
 import { runCityLeg, runBankInvariants } from './bank.js';
 import { runTreasuryInvariants } from './treasury.js';
@@ -578,6 +579,12 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
       // outside it — same alarm channel, same reason as all of them.
       const rinv = await safe('router invariants', () => runRouterInvariants(pool));
       if (rinv && !rinv.ok) await safe('router alert', () => alertDrift(pool, rinv.checks.filter((c) => !c.ok), 'router'));
+      // THE FAMILY BUYBACK (src/community.js) — the treasury→family split's real-value runner:
+      // spend ≤ community revenue per currency, the pool credit backed by a real purchase, comps
+      // buying nothing. Same alarm channel as every sibling — a check nobody reads is the recorded
+      // failure mode this block exists to prevent.
+      const finv = await safe('family buyback invariants', () => runFamilyBuybackInvariants(pool));
+      if (finv && !finv.ok) await safe('family buyback alert', () => alertDrift(pool, finv.checks.filter((c) => !c.ok), 'familybuyback'));
       if (vinv && binv) console.log((vinv.ok && binv.ok) ? '✅ vig + bond (real-value) invariants hold' : '🚨 VIG/BOND DRIFT — see alert above');
     }
   };
