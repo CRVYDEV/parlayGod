@@ -217,7 +217,8 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
     app.get('/v1/mod/bank', { preHandler: modAuth }, async () => Bank.runBankInvariants(pool));
     app.post('/v1/mod/bank/buy', { preHandler: modAuth }, async (req) =>
       Bank.recordBankBuy(pool, { ref: req.body?.ref, asset: req.body?.asset,
-        spent: req.body?.spent, omrBought: req.body?.omr, txHash: modRealTxHash(req) }));
+        spent: req.body?.spent, omrBought: req.body?.omr,
+        bootstrap: req.body?.bootstrap === true, txHash: modRealTxHash(req) }));
     app.post('/v1/mod/bank/epoch', { preHandler: modAuth }, async (req) =>
       Bank.runCityLeg(pool, { ...(req.body?.endDay != null ? { endDay: Number(req.body.endDay) } : {}) }));
     // ── THE FAMILY BUYBACK (the treasury→family split's keeper, src/community.js) ───────────────

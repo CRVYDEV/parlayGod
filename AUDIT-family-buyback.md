@@ -80,6 +80,34 @@ legibility, not safety.
 
 ---
 
+## F3 (MED) — the same class, one system over, and worse: the bank's buy walled the spend, not the ratio
+
+Found by sweeping every sibling that takes a caller-supplied price, because F1 is a CLASS rather than
+an instance. `bank.js:recordBankBuy` takes `spent` and `omrBought` as two **independent** numbers,
+caps only the first against arrived revenue, and books the second unconditionally — so the implied
+price was unbounded on EVERY fill, not merely the first. Reproduced:
+
+```
+1 USDC of real protocol profit, omrBought 1e9  →  bank_city_pool.balance = 1,000,000,000
+runBankInvariants()                            →  ok: true   (spend ≤ revenue: ok)
+```
+
+Green for the same structural reason as F1: `distributed ≤ bought` compares against the caller's own
+`bought`. **The consequence is sharper than F1's.** The family pool exits to gang reserves, which are
+burn-only; this pool's exit is `payCityLeg` → a `prize:omr` MINT **to players** plus `fundReserve` —
+i.e. it raises the number `signVoucher` reads before signing a real on-chain withdrawal.
+
+Fixed with the family keeper's answer exactly, because the game has no OMR/USDC price to anchor on
+(the canonical print is OMR per ETH): continuity against the last real buy **in that asset**, a
+deliberate one-time `bootstrap` for an asset with nothing to be continuous with, and the walls are
+per-asset so seeding one leaves the others alone. Two mutations, each caught at its own named
+assertion.
+
+The sweep's other siblings came back clean and are recorded here so the next reader does not repeat
+it: `runStockBuyback` refuses an unreferenced first fill already, `runDeskBuyback` carries a band plus
+a fat-finger floor against a fail-closed anchor, and `runVigBuyback`'s documented bootstrap is
+defensible precisely because its print is the number every other consumer reads.
+
 ## Verified clean (recorded rather than assumed)
 
 - **§10.4 admissibility.** `yield:buyback` is EXACT in `omrMints` (never the `yield:%` prefix —

@@ -113,7 +113,7 @@ export const OPERATIONAL_ENV = [
   // the community earmark + family buyback (omerta-treasury-to-family-design.md — Phase 1 ships
   // every slice at 0; the Phase-2 flip sets the locked targets, BALANCE.md § THE FAMILY BUYBACK)
   'FEE_COMMUNITY_BPS', 'STORE_COMMUNITY_BPS', 'SELL_TAX_COMMUNITY_BPS',
-  'HARVEST_COMMUNITY_BPS', 'POL_FEES_VIG_BPS', 'FAMILY_MAX_PRICE_JUMP',
+  'HARVEST_COMMUNITY_BPS', 'POL_FEES_VIG_BPS', 'FAMILY_MAX_PRICE_JUMP', 'BANK_MAX_PRICE_JUMP',
   // content toggles
   'POPULATION_OFF',
 ];
