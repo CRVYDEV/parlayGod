@@ -30,10 +30,31 @@
 // reports `dormant` when its denominator does not exist yet, which is the same discipline the desk's
 // own `no_price` (expected, quiet) vs `stale_price` (alarm) split already uses.
 //
+// ...AND A DENOMINATOR THAT EXISTS IS NOT THE SAME AS ONE THAT MEANS ANYTHING (2026-08-12). The rule
+// above was read as "zero", which leaves the far more misleading case open: on launch day ONE player
+// holding a 5 $OMR float who spends it once produces `velocity: 52 turns/year` and a band of **ok** —
+// measured, not hypothesised. That is the worst reading a dashboard can give, because it is the same
+// shape as the failure this project keeps finding in its own guards: a number that cannot say "I do
+// not know yet" is indistinguishable from a healthy one, and launch is exactly when the sample is
+// thinnest and the temptation to read the board is highest. So the significance floors below extend
+// the same rule to "too thin to judge" — the board says DORMANT and names the reason, rather than
+// printing a confident number computed from one person.
+//
 // The thresholds are OBSERVATION bands, not signed levers: they say what would make a person look,
 // and they are stated here rather than left in someone's head. Moving one is a judgement call about
 // what "healthy" means, not an economy change — nothing in the game reads this file.
 import { DESK, DESK_RECYCLE_REASON, recyclesToDesk } from './rules.js';
+
+// ── SIGNIFICANCE FLOORS — the sample below which a rate is one player's behaviour, not the city's.
+// Judgement calls of the same kind as the bands, with the reasoning stated so moving them is a
+// decision rather than a shrug:
+//   MIN_ACTIVE — a PER-PLAYER rate computed across fewer than this is a portrait of one or two
+//                people. Ten is the smallest number where a single outlier cannot own the mean.
+//   MIN_FLOAT  — a velocity denominated on a handful of tokens swings wildly on one purchase. A
+//                thousand $OMR is roughly fifty subscription-months of float: small, but enough that
+//                one player's spend is not the entire numerator.
+const MIN_ACTIVE = 10;
+const MIN_FLOAT = 1000;
 
 const round6 = (n) => Math.round(n * 1e6) / 1e6;
 const round2 = (n) => Math.round(n * 100) / 100;
@@ -140,15 +161,28 @@ export async function tokenHealth(pool, { days = 7, now = Date.now() } = {}) {
 
   // ── THE FIVE ─────────────────────────────────────────────────────────────────────────────────
   const perYear = 365 / windowDays;
-  const velocity = playerFloat > 0 ? round2(sinkVolume * perYear / playerFloat) : null;
-  const perPlayerDay = active > 0 ? round2(sinkVolume / active / windowDays) : null;
+  // A rate needs BOTH a denominator and enough of it — see the significance floors at the top. Below
+  // them the value is null, which every band below already renders as `dormant`, and the `reads` line
+  // says which floor was short so the founder sees "not enough yet" instead of a confident number.
+  const enoughFloat = playerFloat >= MIN_FLOAT;
+  const enoughPlayers = active >= MIN_ACTIVE;
+  const thinFloat = `too thin to judge — a ${round6(playerFloat)} $OMR player float (needs ${MIN_FLOAT})`;
+  const thinHeads = `too thin to judge — ${active} active player(s) (needs ${MIN_ACTIVE})`;
+  // Each KPI takes the floor that matches ITS OWN denominator, which is not the same floor for all
+  // of them: velocity and committed share are per-TOKEN ratios, so what has to be big enough is the
+  // FLOAT; sink-per-player is a per-HEAD rate, so what has to be big enough is the headcount. (The
+  // first cut gated velocity on both and broke a legitimate fixture — the test was right and the
+  // floor was over-reach, which is the tell that a threshold was chosen to be strict rather than to
+  // match the thing it bounds.)
+  const velocity = enoughFloat ? round2(sinkVolume * perYear / playerFloat) : null;
+  const perPlayerDay = enoughPlayers ? round2(sinkVolume / active / windowDays) : null;
   const clearance = offered > 0 ? sold / offered : null;
-  const committedShare = playerFloat > 0 ? committed / playerFloat : null;
+  const committedShare = enoughFloat ? committed / playerFloat : null;
 
   const kpis = [
     kpi('velocity', 'return velocity', velocity, 'turns/year',
       velocity === null ? 'dormant' : velocity < 2 ? 'act' : velocity < 4 ? 'watch' : 'ok',
-      `${round6(sinkVolume)} $OMR of sinks over ${windowDays}d against a ${round6(playerFloat)} $OMR player float`,
+      (enoughFloat ? null : thinFloat) || `${round6(sinkVolume)} $OMR of sinks over ${windowDays}d against a ${round6(playerFloat)} $OMR player float`,
       'watch under 4 turns/year · act under 2',
       'Revenue is sink volume x price, so this IS the revenue engine expressed per token held. Low '
       + 'velocity means the float is idle: the shelf starves, the auction has nothing to sell, and the '
@@ -157,7 +191,7 @@ export async function tokenHealth(pool, { days = 7, now = Date.now() } = {}) {
 
     kpi('sinkPerPlayer', 'sink volume per active player', perPlayerDay, '$OMR/player/day',
       perPlayerDay === null ? 'dormant' : perPlayerDay < 0.5 ? 'act' : perPlayerDay < 2 ? 'watch' : 'ok',
-      `${round6(sinkVolume)} $OMR over ${windowDays}d across ${active} active (${activeHumans} human, ${activeAgents} agent)`,
+      enoughPlayers ? `${round6(sinkVolume)} $OMR over ${windowDays}d across ${active} active (${activeHumans} human, ${activeAgents} agent)` : thinHeads,
       'watch under 2 $OMR/player/day · act under 0.5',
       'What multiplies by headcount into revenue. This is the number to multiply out before believing '
       + 'any revenue target: target ÷ this = the DAU required. If it is low while velocity is fine, '
@@ -176,7 +210,7 @@ export async function tokenHealth(pool, { days = 7, now = Date.now() } = {}) {
     kpi('committedShare', 'float committed (staked + unbonding)',
       committedShare === null ? null : pct(committedShare), '% of player float',
       committedShare === null ? 'dormant' : committedShare > 0.8 ? 'watch' : committedShare < 0.15 ? 'watch' : 'ok',
-      `${round6(committed)} committed of ${round6(playerFloat)} held (${round6(liquid)} liquid, ${round6(gangReserves)} in family reserves)`,
+      enoughFloat ? `${round6(committed)} committed of ${round6(playerFloat)} held (${round6(liquid)} liquid, ${round6(gangReserves)} in family reserves)` : thinFloat,
       'watch above 80% (holding wins, the shelf starves) or below 15% (nothing is at stake)',
       'THE CONTRADICTION MADE VISIBLE: the made ladder, the loot tiers and the family yield pay '
       + 'players to lock $OMR, while the revenue model needs them to spend it. Neither extreme is '
