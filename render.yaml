@@ -142,9 +142,35 @@ services:
       #     PG_POOL_MAX=60  →  284 req/s, p95  87ms, zero 5xx, zero pool failures
       # 3× the pool bought 9.4× the throughput because past the cliff it is queueing collapse, not a slope.
       # 40 is the declared value: comfortably clear of the cliff, and 40 (api) + 20 (worker) is far under
-      # anything a pro-4gb instance limits. Raise it with the API plan, not on its own — past this point the
-      # binding constraint is CPU, and on that same run POSTGRES was the heavier half (~1.9 cores against
-      # node's ~1), so the database plan is the scaling dial before the web plan is.
+      # anything a pro-4gb instance limits.
+      #
+      # ── AND THE DATABASE IS THE SCALING DIAL, MEASURED PROPERLY (2026-08-12) ──────────────────────
+      # That claim used to rest on a CONFOUNDED number: tools/loadtest.js boots the server IN-PROCESS
+      # with its client loops, which is right for what it measures (contention, §10.4 under overlap)
+      # and cannot say how much CPU the SERVER needed — "node ~1 core" included the clients. Re-measured
+      # with the server and Postgres in separate cgroups at exactly the plans below (API 0.5 CPU =
+      # `starter`, DB 1 CPU = `pro-4gb`), driven by an external client, read-dominated mix, 25 concurrent:
+      #
+      #     API 0.5 · DB 1   (what we run)   290 req/s   p95 205ms      —
+      #     API 1.0 · DB 1   (web upgrade)   295 req/s   p95 201ms    +2%
+      #     API 0.5 · DB 2   (db upgrade)    435 req/s   p95 123ms   +50%
+      #
+      # So: doubling the WEB plan's CPU buys ~2%, doubling the DATABASE's buys ~50%. Upgrade the database
+      # first, and expect the web plan to buy you almost nothing until you have. (I went in expecting to
+      # correct this line and the measurement corrected me instead — it is recorded because the cheap
+      # version of this reasoning, "the app is on the small plan so upgrade the app", is wrong here.)
+      #
+      # WHAT THAT IS IN PLAYERS: a real console session was measured in a browser at 0.56 req/s IDLE and
+      # 0.72 req/s while actively playing, so ~290 req/s is roughly 450-500 concurrent players before
+      # latency starts climbing. Two caveats, both pushing the real number DOWN: that ran against a small
+      # database (query cost grows with data) and with the rate limiter off.
+      #
+      # THE CHEAPEST CAPACITY WIN IS NOT A PLAN. An idle player costs almost as much as a playing one
+      # (0.56 vs 0.72 req/s) because the 30s tick re-renders the open screen, and Home fans out 13 board
+      # GETs in one Promise.all. The poll IS the load. Making that tick cheaper — refresh the sheet
+      # always, re-render the boards less often, or only on a websocket event — would raise the ceiling
+      # in PLAYERS without buying anything. Deliberately NOT done here: it is a client behaviour change
+      # with staleness consequences, and this file is not the place to make it quietly.
       - key: PG_POOL_MAX
         value: "40"
       - key: DATABASE_URL

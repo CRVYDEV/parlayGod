@@ -241,6 +241,14 @@ export async function loadOwned(client, ch) {
     UNION ALL SELECT 'est', name, NULL::text, tier::numeric, spent_omr::numeric, NULL::timestamptz FROM estates WHERE account_id=$2
     UNION ALL SELECT 'disc', discipline, NULL::text, xp::numeric, NULL::numeric, NULL::timestamptz FROM character_disciplines WHERE character_id=$1
     UNION ALL SELECT 'rival', aggressor_account::text, NULL::text, NULL::numeric, NULL::numeric, at FROM rival_events WHERE victim_account=$3 AND at > now() - interval '48 hours'
+    -- ...and MY OWN strikes in the same window, so the coach can tell "somebody moved on you" from
+    -- "somebody moved on you AND YOU HAVE NOT ANSWERED". The rung's own hint promises that settling
+    -- your scores is the move; without this branch it counted only incoming, so hitting back did not
+    -- quiet it and the rung sat above the whole ladder for as long as the city kept touching you.
+    -- Deliberately the SAME 48h window on both sides, which is NOT revengeOwed's semantics (that
+    -- one judges honor over the full retention window): fresh malice answered a month ago is still
+    -- fresh malice, and a score settled last week does not pay for a jumping this morning.
+    UNION ALL SELECT 'rvback', victim_account::text, NULL::text, NULL::numeric, NULL::numeric, at FROM rival_events WHERE aggressor_account=$3 AND at > now() - interval '48 hours'
     -- THE CREW BONUS (M4.REF_XP): the CURRENT respect of every qualified recruit this account brought
     -- in. Read live rather than banked, so the bonus tracks how far the crew has actually got — a
     -- recruit who dies drops to their heir's level and the bonus falls with them. Agents and NPC
@@ -292,7 +300,8 @@ export async function loadOwned(client, ch) {
   // STREET WAR step two — fresh malice against this bloodline (last 48h): the coach's
   // someone-moved-on-you rung reads the COUNT (self-clears as the window rolls — the harness-F1
   // rule; a bounded read: shields/cooldowns bound how often anyone can be wronged in 48h)
-  const rival = of('rival', (r) => ({ at: r.ts }));
+  const rival = of('rival', (r) => ({ who: r.k, at: r.ts }));
+  const rvback = of('rvback', (r) => ({ who: r.k, at: r.ts }));
   const refx = of('refx', (r) => ({ respect: Number(r.n) }));
   // THE WORK BOARD — today's repeatable work, folded into ONE shape the coach reads. Deliberately
   // COUNTS and FLAGS rather than the boards themselves: a rung only has to know there is unclaimed
@@ -385,7 +394,20 @@ export async function loadOwned(client, ch) {
       .filter(([, c]) => c > 0)),
     work, // THE WORK BOARD — today's unclaimed repeatable work, for the coach's never-empty tail
     estate: est.rows[0] || null, // account-level compound (survives death) — a summary; the board is the full view
-    recentRivals: rival.rows.length, // STREET WAR step two — fresh malice in the last 48h (the coach rung)
+    // STREET WAR step two — fresh malice in the last 48h that you have NOT answered. Counted per
+    // aggressor (their strikes on me vs mine on them, same window) and folded in JS: two flat lists,
+    // never a correlated subquery (the pg-mem posture). Answering every one of them takes the rung
+    // to 0 and it goes quiet — which is what makes it safe to sit where it does, above the whole
+    // ladder: a rung that never clears must never mask rungs that do.
+    recentRivals: (() => {
+      const back = new Map();
+      for (const r of rvback.rows) back.set(r.who, (back.get(r.who) || 0) + 1);
+      const hit = new Map();
+      for (const r of rival.rows) hit.set(r.who, (hit.get(r.who) || 0) + 1);
+      let owed = 0;
+      for (const [who, n] of hit) if (n > (back.get(who) || 0)) owed++;
+      return owed;
+    })(),
     // THE CREW BONUS: computed once here, read synchronously by gainRespect at ~a dozen sites.
     refBonus: referralXpBonus(refx.rows.map((r) => levelOf(r.respect))),
   };
@@ -1208,7 +1230,8 @@ function coachLadder(ch, acct, owned) {
   // IS a recorded rival event, so that rung would otherwise fire) — for a fresh player this IS the
   // specific, urgent version of it. Self-clears at stage 2 (settled): a winnable jump in Wet Work.
   if (Number(ch.aha_stage) === 1 && add('Settle your first score', `${ch.aha_rival_name || 'Somebody'} put the word out that you're nobody — and the street is listening. Find them on the Wet Work roster and JUMP them. Hit back and you've made your bones.`, 'pvp')) return rungs;
-  if ((owned.recentRivals || 0) > 0 && add('Someone moved on you', 'You were robbed, jumped or hit inside the last two days. Check YOUR RIVALS on Wet Work — the city remembers who, and settling your own scores pays honor.', 'pvp')) return rungs;
+  if ((owned.recentRivals || 0) > 0
+    && add(`${owned.recentRivals > 1 ? `${owned.recentRivals} people` : 'Someone'} moved on you`, `You were robbed, jumped or hit inside the last two days and haven't answered ${owned.recentRivals > 1 ? 'them' : 'it'}. YOUR RIVALS on Wet Work names who — hit back and it pays honor. This clears when you've settled with every one of them.`, 'pvp')) return rungs;
   if (Number(ch.lc_crime || 0) < 1 && add('Pull your first job', 'Head to the Streets. Pick any crime and press DO IT. That\'s the whole move — it pays cash and respect.', 'streets')) return rungs;
   // ── THE ROAD TO LEVEL 5 (founder-directed: walk a brand-new player there, no exploring needed).
   // Two rungs, both clear on their own: the nerve-wait clears in minutes, the level rung at 5 —

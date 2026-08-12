@@ -384,7 +384,14 @@ async function obeyCoach(m) {
   // there is no price to read and no conversion to get wrong), and this spends it. A player who has
   // not pulled that job yet simply has no credit — early, not stuck, so it returns false quietly and
   // the mission handler above is what advances them.
-  if (label.startsWith('You can get made for free')) {
+  //
+  // BOTH labels, and that was the bug: these are two rungs, not one. "You can get made for free"
+  // fires only while `mint_credits === 0` (go pull the job), and this handler's own first line
+  // returns false in exactly that state — so it was unreachable. The moment the credit exists the
+  // coach switches to "Spend your mint credit", which had no handler at all, and the rung sat at
+  // 50% of advised play with everything below it unmeasured. A handler bound to a label its guard
+  // can never satisfy looks identical to no handler at all.
+  if (label.startsWith('You can get made for free') || label.startsWith('Spend your mint credit')) {
     if (!Number(m.mintCredits || 0)) return false;   // the mission hands it over — not stuck
     const r = await call('POST', '/v1/character/mint', { token });
     if (r.code === 200) { did('coach:made'); first('coach:made'); return obeyed(); }
@@ -468,6 +475,22 @@ async function obeyCoach(m) {
     const r = await call('POST', `/v1/streets/${mark.id}/jump`, { token, body: { intent: 'standard' } });
     if (r.code === 200) { did('jump'); first('jump'); return obeyed(); }
     hit('jump', r.body?.error || r.code);
+    return false;
+  }
+  if (/moved on you$/.test(label)) {
+    // "YOUR RIVALS on Wet Work names who — hit back." The rung counts aggressors you have not
+    // ANSWERED, so obeying it is a jump at one of them and the count drops by one; a stranger would
+    // not move it. Until the count reaches 0 the rung legitimately stands, which is why it can be
+    // obeyed several times in a run rather than clearing on the first hit.
+    const board = await call('GET', '/v1/rivals', { token });
+    const live = (board.body?.rivals || []).filter((x) => x.street?.id);
+    if (!live.length) { coachCantAct.set(label, 'the coach says somebody moved on you but no rival has a living street'); return false; }
+    for (const rv of live) {
+      const r = await call('POST', `/v1/streets/${rv.street.id}/jump`, { token, body: { intent: 'standard' } });
+      if (r.code === 200) { did('jump'); first('jump'); return obeyed(); }
+      hit('jump', r.body?.error || r.code);
+      if (r.body?.error === 'energy' || r.body?.error === 'jailed') break; // not their fault — mine
+    }
     return false;
   }
   if (label.startsWith('A job came in from the family')) {
