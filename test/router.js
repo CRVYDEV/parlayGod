@@ -64,7 +64,7 @@ const mod = async (method, url, body) => {
     { nonce: 910003, sku: 'decor_deco', payer: '0x' + 'c'.repeat(40), amountWei: (10n ** 16n).toString(), txHash: '0x' + 'e'.repeat(64) });
   assert.equal(r2.code, 200, 'real store purchase ingests');
   const r3 = await mod('POST', '/v1/mod/treasury/tax',
-    { ref: 'rt-tax-1', omrTaxed: 90, price: 500, txHash: '0x' + 'd'.repeat(64) });
+    { ref: 'rt-tax-1', omrTaxed: 90, price: 500, txHash: '0x' + 'd'.repeat(64), bootstrap: true });
   assert.equal(r3.code, 200, 'real sell-tax episode ingests');
 
   const inv = await runRouterInvariants(pool);

@@ -66,7 +66,7 @@ const checkOf = async (runner, name) => {
 {
   await recordFeePayment(pool, { nonce: 800001, kind: 'mint', payer: wallet, amountWei: (10n ** 16n).toString(), txHash: tx() });
   await recordStorePurchase(pool, { nonce: 800002, sku: 'decor_deco', payer: wallet, amountWei: (2n * 10n ** 16n).toString(), txHash: tx() });
-  const taxed = await recordSellTax(pool, { ref: 'cm-tax-0', omrTaxed: 900, priceOmrPerEth: 1000, txHash: tx() });
+  const taxed = await recordSellTax(pool, { ref: 'cm-tax-0', omrTaxed: 900, priceOmrPerEth: 1000, txHash: tx(), bootstrap: true });
   // gross 0.9 ETH → the ORIGINAL three-way split: dev 0.2 / rwa 0.4 / lp 0.3, community 0
   assert.equal(taxed.communityEth, 0, 'a default sell-tax episode carves NO community slice');
   assert.equal(taxed.lpEth, round6(0.9 * SELL_TAX.LP_BPS / SELL_TAX.BPS), 'the LP remainder is the pre-drop figure exactly');

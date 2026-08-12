@@ -187,12 +187,14 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
     // records the episode and books ZERO units and ZERO spend.
     app.post('/v1/mod/treasury/buy', { preHandler: modAuth }, async (req) =>
       Treasury.recordStockBuy(pool, { ref: req.body?.ref, ticker: req.body?.ticker,
-        units: req.body?.units, ethSpent: req.body?.ethSpent, txHash: modRealTxHash(req) }));
+        units: req.body?.units, ethSpent: req.body?.ethSpent, txHash: modRealTxHash(req),
+        bootstrap: req.body?.bootstrap === true }));
     // ingest a DEX sell-tax episode (a `SellTaxTaken` log on mainnet). The modRealTxHash gate stands:
     // a simulate records the episode for QA but books ZERO revenue, so a comp can never assert the
     // treasury received ETH it did not.
     app.post('/v1/mod/treasury/tax', { preHandler: modAuth }, async (req) =>
-      Treasury.recordSellTax(pool, { ref: req.body?.ref, omrTaxed: req.body?.omrTaxed, priceOmrPerEth: req.body?.price, txHash: modRealTxHash(req) }));
+      Treasury.recordSellTax(pool, { ref: req.body?.ref, omrTaxed: req.body?.omrTaxed, priceOmrPerEth: req.body?.price,
+        txHash: modRealTxHash(req), bootstrap: req.body?.bootstrap === true }));
     // ingest a BANK harvest performance fee (a `HarvestFeeTaken` log on mainnet). Booked in the
     // market's underlying, never mirrored into the ETH ledger — see recordHarvestFee. Same gate.
     app.post('/v1/mod/bank/harvest', { preHandler: modAuth }, async (req) =>

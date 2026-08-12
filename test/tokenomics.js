@@ -340,7 +340,7 @@ await pool.query('UPDATE gangs SET season_tribute=5000000 WHERE id=$1', [gid]);
 
   // (1) a REAL tax episode: 900 OMR taken at 5000 OMR/ETH = 0.18 ETH gross, split 200/400/300 of 900
   process.env.ALLOW_MOD_REAL_REVENUE = 'on'; // the QA escape hatch; production strips caller txHashes
-  const tax = await modCall('/v1/mod/treasury/tax', { ref: '0xsell01:3', omrTaxed: 900, price: 5000, txHash: '0xsell01' });
+  const tax = await modCall('/v1/mod/treasury/tax', { ref: '0xsell01:3', omrTaxed: 900, price: 5000, txHash: '0xsell01', bootstrap: true });
   assert.equal(tax.code, 200);
   assert.equal(tax.body.grossEth, 0.18, '900 OMR at 5000/ETH is 0.18 ETH of tax');
   assert.equal(tax.body.devEth, 0.04, '2 of the 9 points → founder');

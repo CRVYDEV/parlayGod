@@ -378,3 +378,68 @@ console.log('✅ THE GATE MATRIX passed — every verb in a family enforces the 
   + 'are named rather than quietly accepted; and no module may re-define a canonical predicate, which '
   + 'is the shape the inline check structurally cannot see. Scope: it proves a gate is REACHED, not '
   + 'that it is correct.');
+
+// ── THE PRICE WALLS — every real-value rate, or a stated reason ─────────────────────────────────
+// Four times now a caller-supplied price has reached a real-value ledger with nothing bounding it
+// (the family buyback, the bank buy, the sell tax, the stock fill), and each time the fix was the
+// same wall and each time the checks downstream read green throughout — because they compare two
+// numbers BOTH derived from the bad price. That is the class this asserts away.
+//
+// The rule is narrow so it stays true rather than becoming noise: in the REAL-VALUE modules, an
+// exported function that takes a price (or derives a rate from an amount and a quantity) must
+// either enforce a continuity wall or be listed here WITH the bound that stands in its place. A
+// player's asking price on a listing is in-game cash, not a rate against real value, so those
+// modules are out of scope by construction rather than by waiver.
+{
+  const MODULES = ['treasury.js', 'community.js', 'bank.js', 'desk.js', 'vig.js', 'bonds.js'];
+  // A function is walled if it throws/returns a price refusal, or reads a *_MAX_PRICE_JUMP bound.
+  const WALLED = /price_sanity|price_unanchored|price_high|price_low|MAX_PRICE_JUMP|MIN_PRICE_FRAC|PRICE_FLOOR_BPS/;
+  const WAIVED = {
+    // Bounded by QUANTITY rather than rate, in two places at once: the anti-Ponzi tranche cap
+    // (`committed + payout <= capacity`) bounds the off-chain path, and the REAL path books the
+    // contract's own authoritative payout, which Solidity already bounded with `maxOmrPerEth`
+    // (fail-closed at 0), MAX_DISCOUNT_BPS and dailyCapOMR. A rate wall here would be a fourth
+    // bound on a path that has three.
+    'bonds.js:recordBond': 'the tranche cap off-chain; maxOmrPerEth + discount ceiling + daily cap on-chain',
+    // The price is not the caller's at all: it is the descending Dutch clock read off the auction
+    // row (`auctionPriceAt`), clamped at both ends, so the reserve IS the floor. The caller supplies
+    // a QUANTITY, itself clamped to the lot and the shelf. Nothing to be continuous with.
+    'desk.js:recordAuctionBuy': 'the price is server-computed (the Dutch clock), not supplied',
+  };
+  const unwalled = [];
+  let scanned = 0;
+  // Comments OUT first. A body slice runs to the next `export`, which swallows THAT function's
+  // leading doc comment — so prose about a price would put a neighbour in scope, and prose about a
+  // wall would credit one that isn't there. (Both directions observed on the first run.) `//` is
+  // left alone after a colon so a URL in an error string does not eat its own line.
+  const decomment = (t) => t.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  for (const rel of MODULES) {
+    const src = decomment(fs.readFileSync(new URL(`../src/${rel}`, import.meta.url), 'utf8'));
+    // split on exported function boundaries so each body is read whole and no wall is credited to
+    // its neighbour (the sliced-body lesson — an over-read makes the check MORE permissive, which
+    // is the direction that turns a green run into a false clean bill of health).
+    const marks = [...src.matchAll(/^export (?:async )?function (\w+)\s*\(/gm)];
+    for (let i = 0; i < marks.length; i++) {
+      const name = marks[i][1];
+      const body = src.slice(marks[i].index, i + 1 < marks.length ? marks[i + 1].index : src.length);
+      const sig = body.slice(0, body.indexOf(')') + 1);
+      // in scope: it is handed a price, or it derives a rate to store as one
+      const takesPrice = /price/i.test(sig);
+      const derivesRate = /price_(?:omr|eth)_per|round6\([a-z]+ \/ [a-z]+\)/.test(body) && /INSERT INTO/.test(body);
+      if (!takesPrice && !derivesRate) continue;
+      scanned++;
+      if (WAIVED[`${rel}:${name}`] || WALLED.test(body)) continue;
+      unwalled.push(`${rel}:${name}`);
+    }
+  }
+  // Anti-vacuity: if the extractor stops matching, an empty `unwalled` is what a broken scan looks
+  // like. Eight surfaces were walled by hand; the scan must still be finding them.
+  assert(scanned >= 7,
+    `the price-wall scan found only ${scanned} real-value rate surface(s) — the extractor has stopped `
+    + 'seeing them, so this check is passing over code it never read');
+  assert.equal(unwalled.length, 0,
+    'real-value function(s) that take or derive a PRICE with nothing bounding it. A downstream check\n'
+    + '      cannot catch this: it compares two numbers both derived from the bad price. Add a continuity\n'
+    + `      wall against the last REAL print, or waive it here with the bound that replaces it:\n   - ${unwalled.join('\n   - ')}`);
+  console.log(`✓ all ${scanned} real-value price surfaces are walled or waived with a stated bound`);
+}
