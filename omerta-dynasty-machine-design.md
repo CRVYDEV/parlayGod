@@ -1,6 +1,6 @@
 # THE DYNASTY MACHINE — the uncapped identity NFT, its ERC-6551 vault, and the activation model
 
-Status: **DESIGN. Chain-dormant, gated on counsel memo rows A2 + A4 (`omerta-counsel-memo.md`) and
+Status: **DESIGN. Chain-dormant, gated on counsel memo rows A2 + A4 (the counsel memo (kept privately — see the founder)) and
 the standing third-party-audit gate.** Founder-directed: the identity NFT rides **ERC-6551
 token-bound accounts** (the founder pointed at the standard itself:
 https://eips.ethereum.org/EIPS/eip-6551), has **no maximum supply**, and carries the utility of the

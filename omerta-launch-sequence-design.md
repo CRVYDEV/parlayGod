@@ -1,7 +1,7 @@
 # THE LAUNCH SEQUENCE — the genesis window, the pool, and the community drop
 
 Status: **DESIGN (founder-directed 2026-08-09). Every phase sits behind the two standing gates
-(third-party audit of contracts AND signer; counsel signatures on `omerta-counsel-memo.md`) plus
+(third-party audit of contracts AND signer; counsel signatures on the counsel memo (kept privately — see the founder)) plus
 one NEW counsel row this plan adds (A6, the airdrop).** The founder's shape: *a 1–3 day alpha/beta
 phase where users can bond and purchase OMR; after that it initializes an LP where our designed
 hook comes into play; and an amount of OMR reserved to airdrop to the top NFT and coin communities
@@ -179,7 +179,7 @@ the cap bounds whales. NFT communities may be per-NFT (the NFT itself is the Syb
 
 ## 4. The new counsel row — A6
 
-`omerta-counsel-memo.md` gains: **A6 — OMR may be distributed free to snapshotted third-party
+The counsel memo (private) gains: **A6 — OMR may be distributed free to snapshotted third-party
 communities.** A free, deterministic, snapshot-based distribution of the game token (not a sale;
 no investment of money) to holders of unaffiliated NFT/token communities on ETH mainnet and
 Robinhood Chain, claims gas-paid and time-boxed, claim-page copy under the standing no-promise

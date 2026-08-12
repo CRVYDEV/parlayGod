@@ -5355,7 +5355,7 @@ roll the worker resolves YESTERDAY into `ticker_ballot_results` — the permanen
 buy keeper will consume — with deadlock/silence recorded as `TICKER_BALLOT.DEFAULT` ('SPY', the
 broad market) and `decided_by` naming chamber vs default. **ZERO §10.4 surface** (test-pinned: the
 whole ballot writes no ledger row; nothing is bought until Phase B clears counsel memo A1 —
-`omerta-counsel-memo.md`). The board says so honestly (`buying: false`). Levers: `TICKER_BALLOT.
+the counsel memo (kept privately — see the founder)). The board says so honestly (`buying: false`). Levers: `TICKER_BALLOT.
 TICKERS` (the buy list — adding a ticker is a listing decision, not a balance one) and
 `TICKER_BALLOT.DEFAULT` (what a silent/deadlocked chamber buys). Reverting is an empty record —
 the keeper simply never has a row to act on.
