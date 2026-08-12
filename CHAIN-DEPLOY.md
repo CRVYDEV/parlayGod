@@ -79,6 +79,16 @@ touches mainnet** until §0 is satisfied.
    launch-blocking (the genesis window bonds before the pool its TWAP would read exists), it carries no
    counsel gate at all, and it was the one contract the launch plan needed that nobody had enumerated.
 3. **Legal counsel sign-off** on the Risk-to-Earn line (see the "Sensitive design notes" in `CLAUDE.md`).
+   **✅ CLEARED 2026-08-12** — the founder reports counsel has approved the tokenomics and the on-chain
+   details. Recorded here as the founder's statement, which is what closes this gate; the scope counsel
+   reviewed is the $OMR side described below (the withdrawal rail, the Street Wage, bonds, the Store and
+   the ETH vault). **This gate does NOT unlock mainnet on its own, and the distinction is worth keeping
+   sharp: gate 2 is a SECURITY review, not a legal one.** It is also the gate with the freshest reason to
+   exist — tokenomics v2 step 4 deleted the property every prior contract review rested on ("nothing
+   mints") and replaced it with four walls, and on 2026-08-12 two unbounded-mint holes were found in the
+   BACKEND keepers (`AUDIT-family-buyback.md`) that had shipped with green tests and passing invariants.
+   That is precisely the class an external auditor exists to catch in the contracts, where it cannot be
+   patched after the fact. **Nothing on this checklist should be armed until gate 2 also clears.**
    **The SECURITIES surface is GONE as of 2026-07-31** — the founder retired the stock layer
    (`omerta-stock-layer-retirement.md`): nothing acquires, holds, allocates or delivers real equities, so
    there is no stock oracle, no KYC gate and no geofence question. **The VAULT remains, denominated in

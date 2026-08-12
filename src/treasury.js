@@ -127,7 +127,7 @@ export async function stockBudget(db) {
 /// ingest should hide by dropping the row). The budget lives in `stockBudget`, which is the keeper's
 /// job to respect; `eth spent <= eth available to spend` in `runTreasuryInvariants` is what catches it
 /// if the keeper ever does not.
-export async function recordStockBuy(pool, { ref, ticker, units, ethSpent, txHash = null } = {}) {
+export async function recordStockBuy(pool, { ref, ticker, units, ethSpent, txHash = null, bootstrap = false } = {}) {
   const key = String(ref || '').trim();
   const tk = String(ticker || '').trim().toUpperCase();
   if (!key) throw new GameError('ref', 'A fill needs a ref (txHash:logIndex).');
@@ -137,6 +137,35 @@ export async function recordStockBuy(pool, { ref, ticker, units, ethSpent, txHas
   if (!(Number.isFinite(u) && u > 0)) throw new GameError('amount', 'units must be > 0');
   if (!(Number.isFinite(eth) && eth > 0)) throw new GameError('amount', 'ethSpent must be > 0');
   const real = !!txHash;
+  // ── WALL 3 LIVES HERE TOO, for the reason wall 5 does (2026-08-12) ─────────────────────────────
+  // `runStockBuyback` enforces a rate wall, but it is not the only way in: this ingest is reachable
+  // directly (POST /v1/mod/treasury/buy, and whatever the mainnet bot ends up calling), and the
+  // quantity it books IS the wall's input — `SUM(units) WHERE real` is `held`, the per-ticker
+  // ceiling on what may ever be delivered. So a real direct fill of a million units for a penny
+  // would leave `allocated <= held` perfectly green while the Safe held nothing, which is precisely
+  // the failure the comp gate below is written to prevent and could not, because that gate is about
+  // fabricated REALNESS, not a fabricated RATE.
+  //
+  // Duplicated rather than moved: the keeper keeps its own check so it can refuse cheaply, with the
+  // budget and staleness bounds it alone owns, and reports a reason instead of throwing. A keeper
+  // fill passes here by construction (its price already cleared the same reference), so this is a
+  // backstop on the direct route, not a second opinion. Per ticker, real prints only — a print for
+  // one stock says nothing about another, and a comp must never be able to move the wall. The
+  // keeper refuses a ticker with no print at all, so the FIRST fill can only arrive here: seed it
+  // deliberately with bootstrap.
+  {
+    const jump = Number(process.env.STOCK_MAX_PRICE_JUMP) || 10;
+    const rate = round6(eth / u);
+    const ref0 = Number((await pool.query(
+      'SELECT price_eth_per_unit p FROM stock_buys WHERE ticker=$1 AND real ORDER BY created_at DESC LIMIT 1',
+      [tk])).rows[0]?.p || 0);
+    if (ref0 > 0 && (rate > ref0 * jump || rate < ref0 / jump))
+      throw new GameError('price_sanity',
+        `${rate} ETH/unit is outside ${jump}x of the last real ${tk} print (${ref0}). Units bought are the ceiling on what may be delivered — check the fill.`);
+    if (!(ref0 > 0) && real && !bootstrap)
+      throw new GameError('price_unanchored',
+        `No prior real ${tk} print to check this rate against. Seed the first fill deliberately with bootstrap:true.`);
+  }
   // A COMP BOOKS ZERO — both sides, not just the spend. Units are the ceiling on what may ever be
   // delivered, so a QA path that booked them would raise that ceiling with no asset behind it, and
   // `allocated <= held` would happily wave the delivery through. This is the sharpest instance of the
@@ -273,7 +302,31 @@ export async function allocateStock(client, { epochId, accountId, ticker, units 
 // D-MED2 discipline: a mod/QA simulate records the episode but books ZERO revenue. That gate mattered
 // more when fabricated revenue could buy real-looking units; it is kept because "the treasury received
 // this much ETH" should never be assertable by a QA call either.
-export async function recordSellTax(pool, { ref, omrTaxed, priceOmrPerEth, txHash = null } = {}) {
+//
+// ── THE PRICE WALL, and why the ingest has to own it (2026-08-12) ────────────────────────────────
+// `grossEth = omrTaxed / priceOmrPerEth`, so the price is not a label on this episode — it is the
+// number that DECIDES how much ETH the treasury is recorded as having received, and `rwa_revenue` is
+// summed into `held`, the figure BOTH halves of the anti-Ponzi sandwich are measured against. So a
+// deflated price does not merely mis-book one row: it raises the ceiling on what players may be
+// allocated, and it raises `spendableEth`, the keeper's root cap. Reproduced before this wall
+// existed: 900 taxed $OMR at a price a millionth of the last print booked 400,000 ETH of `held`,
+// with `allocated <= held` and `allocated + spent <= held` BOTH reading ok:true — because they
+// compare `allocated` against the very number the bad price inflated. That is this file's own
+// doctrine (see runStockBuyback's wall list) turned on the other side of the trade: a check on
+// quantity is blind to a bad price by construction, so the price needs its own wall.
+//
+// It lives HERE rather than in a caller for the reason wall 5 lives here — the ingest is what every
+// path goes through, including the ones that do not exist yet (the `SellTaxTaken` watcher is not
+// wired, so today the only caller is the mod route and a comp books zero across all four slices;
+// this wall is what makes the day the watcher lands uneventful).
+//
+// The anchor is the last REAL print, falling back to the VIG's — `vig_buyback.price_omr_per_eth` is
+// the same quantity in the same units, and it is the print every other consumer in the project
+// already reads. Real prints only: letting a comp set the reference would hand the QA path the
+// ability to move the wall, which is the anti-fabrication gate's whole point one level up.
+// `bootstrap: true` is the deliberate first fill (the treasury's own posture — an unreferenced first
+// fill is refused, never silently trusted).
+export async function recordSellTax(pool, { ref, omrTaxed, priceOmrPerEth, txHash = null, bootstrap = false } = {}) {
   const key = String(ref || '').trim();
   if (!key) throw new GameError('ref', 'A tax episode needs a ref (txHash:logIndex).');
   const omr = Number(omrTaxed);
@@ -281,6 +334,24 @@ export async function recordSellTax(pool, { ref, omrTaxed, priceOmrPerEth, txHas
   if (!(Number.isFinite(omr) && omr > 0)) throw new GameError('amount', 'omrTaxed must be > 0');
   if (!(Number.isFinite(price) && price > 0)) throw new GameError('price', 'priceOmrPerEth must be > 0 (mainnet: the TWAP the bot realized).');
   const real = !!txHash;
+  {
+    const jump = Number(process.env.TAX_MAX_PRICE_JUMP) || 10;
+    // ORDER BY created_at, never id — the id is a UUID, so "the latest row" by id is nothing at all.
+    let ref0 = Number((await pool.query(
+      'SELECT price_omr_per_eth p FROM sell_tax_events WHERE real ORDER BY created_at DESC LIMIT 1')).rows[0]?.p || 0);
+    let anchor = ref0 > 0 ? 'tax' : null;
+    if (!(ref0 > 0)) {
+      ref0 = Number((await pool.query(
+        'SELECT price_omr_per_eth p FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0]?.p || 0);
+      if (ref0 > 0) anchor = 'vig';
+    }
+    if (ref0 > 0 && (price > ref0 * jump || price < ref0 / jump))
+      throw new GameError('price_sanity',
+        `priceOmrPerEth ${price} is outside ${jump}x of the last ${anchor} print (${ref0}). A tax episode's price decides how much ETH the treasury is recorded as receiving — check the feed.`);
+    if (!(ref0 > 0) && real && !bootstrap)
+      throw new GameError('price_unanchored',
+        'No prior real print to check this price against. Seed the first episode deliberately with bootstrap:true.');
+  }
   const grossEth = round6(omr / price);
   // the REMAINDER rule sits on the LP slice so the three shares sum to the gross EXACTLY (two of
   // three round down; a "natural" third division strands wei belonging to nobody).

@@ -4115,6 +4115,44 @@ mints the way the game requires — a real ETH fee payment — which makes the t
 rule instead of working around it. Two mutations (the payer stops refusing; a $OMR column returns)
 each fail by name. Full suite green + sim drift-0 + pgquery + pgcheck 43/43 on real Postgres.
 
+**THE PRICE-WALL CLASS, CLOSED — four ingests, then a guard (2026-08-12).** Two days produced four
+fixes of ONE shape: a caller-supplied PRICE reaching a real-value ledger with nothing bounding it, and
+every downstream check reading green throughout — because a check on QUANTITY compares two numbers
+BOTH derived from the bad price, so it is blind to a bad rate by construction (`treasury.js` already
+stated exactly that in `runStockBuyback`'s wall list; the gap was that the doctrine was applied to the
+SPEND side and not to the INFLOW side that sets what every other wall is measured against).
+**`recordSellTax`** was the sharpest: `grossEth = omrTaxed / priceOmrPerEth`, and the treasury slice of
+that gross is summed into `held` — the figure BOTH halves of the anti-Ponzi sandwich measure `allocated`
+against AND the figure `spendableEth` (the stock keeper's root cap) derives from. Reproduced before the
+wall existed: **900 taxed $OMR at a millionth of the last print booked 400,000 ETH of `held`, with
+`allocated <= held` and `allocated + spent <= held` both `ok:true`.** **`recordStockBuy`** was the same
+shape one level down — `SUM(units) WHERE real` IS the per-ticker delivery ceiling, `runStockBuyback`
+walls the rate but is not the only way in (`POST /v1/mod/treasury/buy` reaches the ingest directly, and
+so will the mainnet bot), so a real direct fill of a million units for a penny left the wall green with
+nothing behind it. The comp gate could not catch either: **that gate is about fabricated REALNESS, not
+a fabricated RATE.** Both fixed with the established shape — a continuity wall against the last REAL
+print (`TAX_MAX_PRICE_JUMP` / `STOCK_MAX_PRICE_JUMP`, `ORDER BY created_at` never `id`), real prints
+only (an unanchored comp is free, so letting comps set the reference hands the QA path the ability to
+move the wall), and a deliberate `bootstrap: true` first fill. The sell tax falls back to the VIG's
+print — same quantity, same units, and it is walled itself (R41), which is what makes it a sound anchor.
+**The sweep is complete and the catalog is now a TEST** (`test/gates.js`, the file whose premise is "a
+verb that forgets a gate its sibling enforces"): nine real-value price surfaces, seven walled, two
+waived WITH the bound that replaces a rate wall — `recordBond` (the anti-Ponzi tranche cap off-chain;
+`maxOmrPerEth` + discount ceiling + daily cap in Solidity on the real path) and `recordAuctionBuy` (the
+price is the server-computed Dutch clock, clamped at both ends; the caller supplies only a quantity).
+Player listing prices are in-game cash, so those modules are out of scope by construction rather than by
+waiver. **Comments are stripped before the scan, and the first run proved why in both directions at
+once:** a body slice runs to the next `export` and swallows THAT function's leading doc comment, so
+prose about a price pulled a neighbour into scope and prose about a wall would have credited one that is
+not there — and the over-read is the dangerous direction, because it makes the check MORE permissive.
+Mutation-verified throughout (each wall by its own named assertion; the guard by stripping a wall AND by
+breaking its extractor, which trips the anti-vacuity bound rather than passing with nothing found — the
+recurring lesson that a scan seeing nothing reads exactly like a clean bill of health). Suite green + sim
+drift-0 + pgquery + pgcheck 43/43 on real Postgres. **CI note:** `ci.yml` fires on `main` pushes and pull
+requests only ("branch pushes run once via pull_request — not twice"), so a branch push with no open PR
+runs nothing — the local real-Postgres gates are what ground rule #8 asks for in that window, and CI runs
+when the PR opens.
+
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
 `payPlex` pattern); named landmarks / Founder's charter numbers; ~~R2 (the `rwa_revenue` → real-RWA-buy
