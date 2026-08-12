@@ -12047,3 +12047,56 @@ first run ("Nothing here shrinks supply either" — a denial, but the sentence a
 which was fixed by tightening the prose rather than weakening the guard. Two mutations restore each
 false claim and fail by name with the exact reason. Suite 99 files + sim drift-0 + mobile 75/75 +
 client wiring/mirror + levers 672 + docs.
+
+**THE FAMILY BUYBACK RED-TEAMED — a fat-fingered first buy could mint ten times the genesis supply
+with every check green (`AUDIT-family-buyback.md`, 2026-08-12).** `src/community.js` shipped hours
+earlier with mutation-verified tests and no adversarial pass, and it MINTS $OMR (`yield:buyback`) —
+the one class of surface this project never leaves un-attacked (the desk, the bank and the treasury
+each got a pass). The parallel five-lens workflow died on a subagent quota with zero results, so the
+pass was done first-hand, which turned out to matter: every claim was reproduced against a booted
+server before being called a finding, and **three of the five candidates died on checking** (the
+pool singleton IS seeded in `schema.sql` so its `FOR UPDATE` always takes a real lock;
+`fundFamilyYield` does no rounding of its own so the pool and the ledger row move by the identical
+number; the root cap's missing `WHERE real` cannot matter because comps book `spent = 0`). Two
+survived and both are fixed. **F1 (MED) — the first real buy in a currency faced no price wall at
+all**, and the reproduction is the headline: **1 ETH of real revenue at a fat-fingered 1e9 minted
+1,000,000,000 $OMR — ten times the entire genesis supply — into the family pool, with
+`runFamilyBuybackInvariants` returning `ok: true`.** The invariants are green *by construction*
+there: `credited == bought` compares the ledger to the books and both derive from the same wrong
+price (the desk's own *"a check on quantity is blind to a bad price"* lesson, one pool over), which
+is why the WALL and not the invariant is the thing that has to hold. The header called
+`runVigBuyback` its twin and inherited the twin's documented bootstrap — **and that was the mistake,
+for a reason specific to what the price is FOR**: every consumer in the game reads the Vig print (the
+ETH vault, bond quotes, PLEX, the exit toll), so a wrong first print there is loud and self-correcting
+through those consumers, whereas **nothing reads this keeper's price except its own next wall**, so a
+wrong first print is silent, permanent, and lands in real families' reserves. The treasury — the most
+recent sibling, built with the most thought about exactly this question — refuses an unreferenced
+first fill, and that is the posture taken, with a cheaper answer wherever one exists: **an ETH buy now
+anchors on the canonical Vig print** (the number the rest of the game already trusts — no new lever,
+no operator ritual, fails closed only when the game has no price at all), and **a currency the game
+has no price for** (the harvest carve arrives in the market's underlying) refuses `price_unanchored`
+unless the caller passes `bootstrap: true` — never set by the bot's ordinary path, read strictly
+(`=== true`) at the route, and **not a standing exemption**: the wall check is independent of the
+flag, so the seeded price walls every buy after it (asserted directly, because that is the property
+that would make the flag a bypass if it were wrong). A comp needs no anchor and keeps quoting, since
+it books zeros and can mint nothing. **F2 (LOW) — a stranded budget read exactly like an empty one**:
+`recordHarvestFee` UPPERCASES its asset symbol, the three ETH sources write a lowercase `'eth'`, and
+the keeper only `.trim()`d — so a bot asking for `usdc` read a zero budget, spent nothing and returned
+a **bare `null`**, indistinguishable from "the budget is genuinely empty" (the *silence-reads-as-fine*
+class, the desk's `no_price`-quiet vs `stale_price`-alarm split). It fails closed, which is why it is
+LOW, but the cost of not noticing is money sitting unspent while the dashboard says the pool is fine.
+Fixed on both halves — the caller's spelling is canonicalized case-insensitively against what the
+ledger actually holds, and the nothing-to-do case NAMES itself (`no_budget` vs `budget_spent`, plus
+the list of currencies that DO hold budget, so a typo is obvious at a glance) — and the root cap moved
+above the price wall so a typo'd currency hears about the BUDGET rather than about price anchoring
+(both refuse before any write, so the order is legibility, not safety). **Four mutations, each caught
+at its own named assertion** — and M4 initially failed with a raw `TypeError: Cannot read properties
+of null`, which is the recorded *"a failure that teaches nothing"* shape, so the two assertions are
+null-safe now and name what broke. The regressions that need budget of their own sit in a block
+AFTER the router-board block on purpose, so the board keeps measuring the INGEST carves rather than a
+fixture's hand-seeded rows. Also recorded as accepted-with-reasons: a bootstrapped currency is still
+unbounded for that one deliberate root-of-trust call (the treasury's own posture), the pool can
+accumulate with no seated family to pay (a distribution-timing property, not a leak — it is a counted
+bucket), and `walletMustHold` is a FLOOR rather than an equality because a dissolving family burns its
+soft claim (`gang:dissolved`) while the hard $OMR stays in the wallet — the conservative direction.
+Suite 99 files + sim drift-0 + pgquery + pgcheck 43/43 on real Postgres.

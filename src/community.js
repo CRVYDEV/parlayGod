@@ -74,10 +74,10 @@ export async function recordCommunityRevenue(client, { source, ref, currency = '
 // reported price, credit the pool. `priceOmr` is $OMR per unit of `currency` — a PARAMETER, so the
 // accounting is deterministic and testable off-chain; on mainnet the bot reports the TWAP it
 // realized, carrying the trade's txHash.
-export async function runFamilyBuyback(pool, { currency = 'eth', priceOmr, maxSpend, txHash = null } = {}) {
+export async function runFamilyBuyback(pool, { currency = 'eth', priceOmr, maxSpend, txHash = null, bootstrap = false } = {}) {
   const price = Number(priceOmr);
   if (!(Number.isFinite(price) && price > 0)) throw new GameError('price', 'A family buyback needs a positive $OMR price per unit.');
-  const ccy = String(currency || 'eth').trim();
+  let ccy = String(currency || 'eth').trim();
   const real = !!txHash;
   const client = await pool.connect();
   try {
@@ -87,23 +87,61 @@ export async function runFamilyBuyback(pool, { currency = 'eth', priceOmr, maxSp
     // lock, so there is no cycle against payFamilyYield's gangs→pool order — a single-lock
     // transaction cannot AB-BA, and "the pool is taken last" holds trivially.
     await client.query('SELECT balance FROM family_yield_pool WHERE id=1 FOR UPDATE');
-    // The price-continuity wall (the VIG_MAX_PRICE_JUMP twin), per currency, against the last REAL
-    // buy — a fat-finger or a leaked mod key cannot reprice the pool credit by more than the band.
-    // ORDER BY created_at DESC, never id (a UUID order anchors on an arbitrary historical row).
-    const jump = Number(process.env.FAMILY_MAX_PRICE_JUMP) || 10;
-    const last = num((await client.query(
-      'SELECT price_omr FROM family_buybacks WHERE currency=$1 AND real ORDER BY created_at DESC LIMIT 1',
-      [ccy])).rows[0]?.price_omr);
-    if (last > 0 && (price > last * jump || price < last / jump))
-      throw new GameError('price_sanity', `Price ${price} is more than ${jump}x away from the last real buy (${last}).`);
-    // The root cap: never spend more than the community revenue that actually arrived, per currency.
+    // CANONICALIZE THE CURRENCY against what the ledger actually holds. The harvest ingest
+    // UPPERCASES its asset symbol (recordHarvestFee) while the three ETH sources write a lowercase
+    // 'eth', so a bot asking for `usdc` used to read a zero budget, spend nothing and return a bare
+    // null — indistinguishable from "the budget is genuinely empty", which is the silence-reads-as-
+    // fine class (the desk's no_price-quiet vs stale_price-alarm split). Case-insensitive match, so
+    // the caller's spelling never has to track the ingest's normalization.
+    const known = (await client.query('SELECT DISTINCT currency FROM community_revenue')).rows.map((r) => r.currency);
+    ccy = known.find((k) => String(k).toLowerCase() === ccy.toLowerCase()) || ccy;
+    // THE ROOT CAP FIRST, so the nothing-to-do case answers about the BUDGET rather than the price:
+    // a caller who typo'd a currency wants "that one holds nothing, here is what does", not a note
+    // about price anchoring. Both refuse before any write, so the order is legibility, not safety.
     const rev = num((await client.query(
       'SELECT COALESCE(SUM(amount),0) s FROM community_revenue WHERE currency=$1', [ccy])).rows[0].s);
     const spent = num((await client.query(
       'SELECT COALESCE(SUM(spent),0) s FROM family_buybacks WHERE currency=$1', [ccy])).rows[0].s);
     let toSpend = round6(rev - spent);
     if (maxSpend != null) toSpend = Math.min(toSpend, Number(maxSpend));
-    if (!(toSpend > 0)) { await client.query('COMMIT'); return null; }
+    // NAME the nothing-to-do case. A bare null cannot tell a genuinely empty budget from a caller
+    // who asked for a currency the ledger has never seen — and `currencies` is what makes the second
+    // one obvious at a glance rather than after an hour in the tables.
+    if (!(toSpend > 0)) {
+      await client.query('COMMIT');
+      return { currency: ccy, spent: 0, omrBought: 0, real, bought: false,
+        reason: rev > 0 ? 'budget_spent' : 'no_budget', revenue: rev, alreadySpent: spent, currencies: known };
+    }
+    // The price-continuity wall (the VIG_MAX_PRICE_JUMP twin), per currency, against the last REAL
+    // buy — a fat-finger or a leaked mod key cannot reprice the pool credit by more than the band.
+    // ORDER BY created_at DESC, never id (a UUID order anchors on an arbitrary historical row).
+    const jump = Number(process.env.FAMILY_MAX_PRICE_JUMP) || 10;
+    let ref = num((await client.query(
+      'SELECT price_omr FROM family_buybacks WHERE currency=$1 AND real ORDER BY created_at DESC LIMIT 1',
+      [ccy])).rows[0]?.price_omr);
+    let anchor = ref > 0 ? 'family' : null;
+    // THE BOOTSTRAP ANCHOR, and why this keeper does NOT inherit its twin's bootstrap. runVigBuyback
+    // documents the unreferenced first buy as "the unavoidable bootstrap (Safe = root of trust)" and
+    // gets away with it because EVERY consumer in the game reads the Vig print (the ETH vault, bond
+    // quotes, PLEX, the exit toll), so a wrong first print is loud. NOTHING reads this price except
+    // this wall — so an absurd first buy mints an absurd credit into real families' reserves and
+    // every check passes, because `credited` and `bought` both derive from the same wrong number
+    // (the desk's "a check on quantity is blind to a bad price by construction" lesson). Measured on
+    // the unfixed code: 1 ETH of real revenue at a fat-fingered 1e9 minted 1,000,000,000 $OMR — ten
+    // times the genesis supply — with runFamilyBuybackInvariants returning ok:true.
+    // So an ETH buy anchors on the number the rest of the game already trusts, and a currency with
+    // no anchor at all takes the treasury's posture (a first fill that sets its own reference could
+    // itself be the absurd one): REFUSE, and make the operator seed it deliberately.
+    if (!(ref > 0) && ccy.toLowerCase() === 'eth') {
+      ref = num((await client.query(
+        'SELECT price_omr_per_eth FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0]?.price_omr_per_eth);
+      if (ref > 0) anchor = 'vig';
+    }
+    if (ref > 0 && (price > ref * jump || price < ref / jump))
+      throw new GameError('price_sanity', `Price ${price} is more than ${jump}x away from the last ${anchor} price (${ref}).`);
+    if (!(ref > 0) && real && !bootstrap)
+      throw new GameError('price_unanchored',
+        `No prior real buy in ${ccy} and no canonical price to check ${price} against — pass bootstrap:true to seed the reference deliberately.`);
     const omrNotional = round6(toSpend * price);
     // A comp records the episode and moves NOTHING — zero spend (the budget is not consumed), zero
     // $OMR (the pool does not grow). The header explains why this is the bank posture, not the desk's.
@@ -124,7 +162,7 @@ export async function runFamilyBuyback(pool, { currency = 'eth', priceOmr, maxSp
         [crypto.randomUUID(), 'omr', boughtBooked, 'yield:buyback']);
     }
     await client.query('COMMIT');
-    return { currency: ccy, spent: spentBooked, price, omrBought: boughtBooked, real,
+    return { currency: ccy, spent: spentBooked, price, omrBought: boughtBooked, real, bought: true, anchor,
       // the notional a comp WOULD have moved — QA legibility, never booked
       quote: { toSpend, omrNotional } };
   } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; }

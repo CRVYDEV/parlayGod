@@ -188,6 +188,14 @@ one custody.
 3. **The two contracts** (§5) — bond reweight + the four-way sell-tax hook with the community recipient;
    `forge test` green; into the audit batch.
 4. **The DEX keeper + custody wiring** — mainnet, behind the audit + counsel gates.
+   Two operational requirements the red-team (`AUDIT-family-buyback.md`) put on the bot, because
+   nothing downstream reads this keeper's price and a wrong one mints silently: (a) the price it
+   reports must pass the continuity wall — an ETH buy is checked against the canonical Vig print
+   even on the FIRST family buy, so the bot needs no special-casing; (b) a currency the game has no
+   price for (the harvest carve arrives in the market's underlying) refuses `price_unanchored` until
+   an operator seeds the reference ONCE with `bootstrap: true` — a deliberate act on the mod route,
+   never something the bot sets, and never a standing exemption (the seeded price walls every buy
+   after it).
 
 The regulatory line stays: **families are paid in in-game $OMR, funded by a real-revenue buyback; never
 real ETH to a gang.**

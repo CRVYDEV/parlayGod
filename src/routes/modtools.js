@@ -227,9 +227,13 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
     // and with MORE force here: the PRICE is caller-supplied, so an un-gated comp could mint a
     // colossal family-pool credit from a small real budget.
     app.get('/v1/mod/community', { preHandler: modAuth }, async () => Community.runFamilyBuybackInvariants(pool));
+    // `bootstrap` is the operator's deliberate seeding of a currency that has no price to be checked
+    // against (the treasury's first-fill posture) — it is never set by the bot's ordinary path, so a
+    // buggy bot cannot establish its own reference.
     app.post('/v1/mod/community/buy', { preHandler: modAuth }, async (req) =>
       Community.runFamilyBuyback(pool, { currency: req.body?.currency, priceOmr: req.body?.price,
-        ...(req.body?.maxSpend != null ? { maxSpend: Number(req.body.maxSpend) } : {}), txHash: modRealTxHash(req) }));
+        ...(req.body?.maxSpend != null ? { maxSpend: Number(req.body.maxSpend) } : {}),
+        bootstrap: req.body?.bootstrap === true, txHash: modRealTxHash(req) }));
     // ── THE TOKEN-HEALTH BOARD (src/tokenhealth.js) ────────────────────────────────────────────
     // The second instrument. Every other runner on this perimeter answers "can the books lie?"; this
     // one answers "is the economy working?" — five KPIs, each with the reading that would make a

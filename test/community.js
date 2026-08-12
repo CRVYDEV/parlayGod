@@ -79,8 +79,9 @@ const checkOf = async (runner, name) => {
   assert.equal((await pool.query("SELECT 1 FROM vig_revenue WHERE source='polfees'")).rows.length, 0,
     'no polfees vig row exists at the defaults');
   assert.equal((await commRows()).length, 0, 'the community ledger is EMPTY at the defaults — Phase 1 is byte-identical');
-  assert.equal(await Community.runFamilyBuyback(pool, { priceOmr: 100 }), null,
-    'the keeper has nothing to spend at the defaults (a clean null, never a zero-buy row)');
+  const idle = await Community.runFamilyBuyback(pool, { priceOmr: 100 });
+  assert.equal(idle?.bought, false, 'the keeper has nothing to spend at the defaults');
+  assert.equal(idle?.reason, 'no_budget', '...and NAMES why — a bare null cannot tell an empty budget from a typo\'d currency');
   assert.equal((await pool.query('SELECT COUNT(*)::int c FROM family_buybacks')).rows[0].c, 0,
     'no buyback row was written for the empty budget');
 }
@@ -152,9 +153,25 @@ process.env.POL_FEES_VIG_BPS = '2500';
 
 // ── 3. THE KEEPER — real buys credit the pool; the root cap, the clamp, the wall, per currency ──
 {
+  // THE BOOTSTRAP ANCHOR (the red-team's F1). A real buy with NOTHING to check its price against is
+  // refused: nothing downstream reads this keeper's price, so an absurd first fill mints an absurd
+  // credit and every check passes (measured on the unfixed code — 1 ETH at a fat-fingered 1e9 minted
+  // 1,000,000,000 $OMR, ten times the genesis supply, with the invariants returning ok:true).
+  await pool.query("INSERT INTO community_revenue (source, ref, currency, gross, amount) VALUES ('fee','cm-anchor','eth',0.01,0.0015)");
+  await assert.rejects(() => Community.runFamilyBuyback(pool, { currency: 'eth', priceOmr: 1e9, txHash: tx() }),
+    (e) => e.code === 'price_unanchored', 'a real ETH buy with no anchor at all is REFUSED, not trusted');
+  // On mainnet the Vig prints long before this keeper runs, and its price is the number the ETH
+  // vault, bond quotes, PLEX and the exit toll all already read — so that is what an ETH buy anchors
+  // on, and the wall covers the very first family buy rather than starting at the second.
+  await pool.query("INSERT INTO vig_buyback (id, eth_spent, omr_bought, price_omr_per_eth, to_reserve, to_prize) VALUES ('cm-vig',1,200000,200000,100000,100000)");
+  await assert.rejects(() => Community.runFamilyBuyback(pool, { currency: 'eth', priceOmr: 1e9, txHash: tx() }),
+    (e) => e.code === 'price_sanity', '...and once the Vig has printed, the FIRST family buy is walled against it');
+  await pool.query("DELETE FROM community_revenue WHERE ref='cm-anchor'");
+
   // the ETH budget so far: fee 0.0015 + store 0.003 + tax 0.24 = 0.2445
   const before = await poolRow();
   const buy = await Community.runFamilyBuyback(pool, { currency: 'eth', priceOmr: 200000, txHash: tx() });
+  assert.equal(buy.anchor, 'vig', 'the first family buy names the anchor it was checked against');
   assert.equal(buy.spent, 0.2445, 'the keeper spends EXACTLY the unspent community revenue (the root cap)');
   assert.equal(buy.omrBought, round6(0.2445 * 200000), 'bought = spend × price');
   const after = await poolRow();
@@ -163,8 +180,9 @@ process.env.POL_FEES_VIG_BPS = '2500';
   assert.equal(round6(Number(after.lifetime_funded) - Number(before.lifetime_funded)), buy.omrBought,
     '...and lifetime_funded moved WITH it (fundFamilyYield is the one implementation)');
   assert.equal(await mintedOmr(), buy.omrBought, 'the yield:buyback mint row matches the credit to the unit');
-  assert.equal(await Community.runFamilyBuyback(pool, { currency: 'eth', priceOmr: 200000, txHash: tx() }), null,
-    'a second run finds nothing left — the budget is a stock, not a promise');
+  const drained = await Community.runFamilyBuyback(pool, { currency: 'eth', priceOmr: 200000, txHash: tx() });
+  assert.equal(drained?.bought, false, 'a second run finds nothing left — the budget is a stock, not a promise');
+  assert.equal(drained?.reason, 'budget_spent', '...and says SPENT, not empty (the two are a different operator action)');
 
   // the price-continuity wall, against the last REAL buy, per currency
   await pool.query("INSERT INTO community_revenue (source, ref, currency, gross, amount) VALUES ('fee','cm-wall','eth',0.01,0.0015)");
@@ -186,11 +204,22 @@ process.env.POL_FEES_VIG_BPS = '2500';
   assert.equal(usdcComp.body.spent + usdcComp.body.omrBought, 0, 'a comp books ZERO spend and ZERO $OMR');
   assert.equal(usdcComp.body.quote.toSpend, 62.8, '...but quotes the notional for QA legibility');
   const poolAfterComp = await poolRow();
-  const usdcReal = await Community.runFamilyBuyback(pool, { currency: 'USDC', priceOmr: 4, txHash: tx() });
+  // A comp needs no anchor (it books zeros, so it can mint nothing) — but the first REAL buy in a
+  // currency the game has no price for takes the treasury's first-fill posture: the operator seeds
+  // the reference DELIBERATELY. The bot's ordinary path never sets this, so a buggy bot cannot
+  // establish its own reference.
+  await assert.rejects(() => Community.runFamilyBuyback(pool, { currency: 'USDC', priceOmr: 4, txHash: tx() }),
+    (e) => e.code === 'price_unanchored', 'a first real USDC buy is refused — there is no USDC price in the game to check it against');
+  const usdcReal = await Community.runFamilyBuyback(pool, { currency: 'USDC', priceOmr: 4, txHash: tx(), bootstrap: true });
   assert.equal(usdcReal.spent, 62.8, 'the comp did NOT consume the budget — the real buy still spends the full carve');
   assert.equal(usdcReal.omrBought, round6(62.8 * 4), 'a USDC buy at 4 clears with no ETH-wall interference (per-currency walls)');
   assert.equal(round6(Number((await poolRow()).balance) - Number(poolAfterComp.balance)), usdcReal.omrBought,
     'only the REAL buy moved the pool');
+  // a currency the ledger has genuinely never seen is a NAMED no-op, not a bare null (F2, below)
+  const typo = await Community.runFamilyBuyback(pool, { currency: 'DOGE', priceOmr: 1, txHash: tx() });
+  assert.equal(typo.reason, 'no_budget', 'an unknown currency is a NAMED no-op');
+  assert(typo.currencies.includes('USDC') && typo.currencies.includes('eth'),
+    '...listing the currencies that do hold budget, so a typo is obvious at a glance');
 }
 
 // ── 4. §10.4 + the sibling invariants hold with the new funder in the mix ───────────────────────
@@ -309,5 +338,24 @@ process.env.POL_FEES_VIG_BPS = '2500';
   assert(/familybuyback/.test(src), '...and routes a red result into alertDrift under its own label');
 }
 
-console.log('community: Phase 1 defaults byte-identical, the five earmarks exact (comps zero), the keeper capped/walled/clamped per currency crediting the pool through the one implementation, §10.4 absolute with yield:buyback minted, the runner + router fail by name, the flip guard proven both ways, the worker wired.');
+// ── 9. THE RED-TEAM FIXES that need budget of their own (after the board block on purpose, so the
+//      board keeps measuring the INGEST carves rather than a fixture's hand-seeded rows) ─────────
+{
+  await pool.query("INSERT INTO community_revenue (source, ref, currency, gross, amount) VALUES ('harvest','cm-usdc2','USDC',100,10)");
+  // F1: a bootstrap is ONE deliberate act, not a standing exemption — the seeded price is the wall
+  // for every buy after it.
+  await assert.rejects(() => Community.runFamilyBuyback(pool, { currency: 'USDC', priceOmr: 4 * 11, txHash: tx() }),
+    (e) => e.code === 'price_sanity', 'the bootstrapped price becomes the wall for every buy after it');
+  // F2 — THE STRANDED BUDGET. The harvest ingest UPPERCASES its asset symbol while the three ETH
+  // sources write a lowercase 'eth', so a bot asking for `usdc` used to read a zero budget, spend
+  // nothing and return a bare null: a stranded budget that reads exactly like an empty one.
+  const lower = await Community.runFamilyBuyback(pool, { currency: 'usdc', priceOmr: 4, txHash: tx() });
+  assert.equal(lower.currency, 'USDC', 'the caller\'s spelling is canonicalized against what the ledger actually holds');
+  assert.equal(lower.spent, 10, '...so the budget is FOUND rather than silently stranded');
+  // and the books still reconcile with the extra episode in them
+  const inv = await Community.runFamilyBuybackInvariants(pool);
+  assert(inv.ok, `the runner still holds after the red-team fixtures: ${JSON.stringify(inv.checks.filter((c) => !c.ok))}`);
+}
+
+console.log('community: Phase 1 defaults byte-identical, the five earmarks exact (comps zero), the keeper capped/walled/clamped per currency crediting the pool through the one implementation, §10.4 absolute with yield:buyback minted, the runner + router fail by name, the flip guard proven both ways, the worker wired — and the red-team\'s two: a real buy with nothing to check its price against is REFUSED (an ETH buy anchors on the Vig print the rest of the game already reads; an unanchored currency is seeded deliberately, once), and a stranded budget names itself instead of reading like an empty one.');
 process.exit(0);
