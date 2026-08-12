@@ -10,7 +10,7 @@ process.env.SEASON_PHASE = 'long_game';  // TEST-ONLY — pin the season phase
 
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { spawnResident } from '../src/population.js';
+import { spawnResident, retireResident } from '../src/population.js';
 import { AHA, levelOf } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
@@ -107,6 +107,54 @@ assert.equal(cashCheck.drift, drift0, 'the first-blood faucet is ledgered — no
 // the reason vocabulary is closed (firstblood: is enumerated)
 const vocab = checks.find((c) => c.name === 'reason vocabulary');
 assert.equal(vocab.ok, true, 'the reason vocabulary is closed — firstblood: is enumerated');
+
+// ── THE RIVAL CAN BE RETIRED OUT FROM UNDER THE POINTER ─────────────────────────────────────────
+// The rung clears ONLY by jumping that exact character (settleFirstBlood checks `aha_rival ===
+// victim.id`), and it sits ABOVE "Pull your first job" and the whole road to level 5. So a rival who
+// is gone does not merely make the beat unreachable — it PINS THE COACH on an instruction the player
+// cannot carry out, masking every rung below it for the rest of that street's life. Unrecoverable,
+// unlike the masking cases found before, which at least cleared when the player did something.
+//
+// It is the most likely pointer to go stale, not the least: startFirstBlood picks the WEAKEST nearby
+// resident, and the turnover loop retires exactly the residents players have picked clean.
+// Found by tools/playthrough.js measuring the rung at 100% of advised play.
+{
+  // a fresh weak resident for this player's beat to point at, and a fresh player
+  const r2 = await spawnResident(pool, { band: { id: 'corner', lvl: [1, 2], seed: [200, 400], stat: [1, 3] } });
+  await seedCh(r2.id, "loc='neon', respect=100, muscle=1, cunning=1, speed=1");
+  const p2 = await mk('Second Soul');
+  await seedCh(p2.id, "respect=200, cash=5000, muscle=400, speed=400, energy=200, loc='neon', aha_stage=0");
+  // drive the assignment the ordinary way
+  let st = 0;
+  for (let i = 0; i < 12 && st !== 1; i++) {
+    await call('POST', '/v1/crimes/pick', { token: p2.token });
+    st = Number((await rowOf(p2.id)).aha_stage);
+  }
+  assert.equal(st, 1, 'the beat was assigned');
+  const rival = (await rowOf(p2.id)).aha_rival;
+  assert(rival, 'and it names a rival');
+
+  // the worker retires that resident — a routine event, not an exotic one
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await retireResident(client, rival);
+    await client.query('COMMIT');
+  } finally { client.release(); }
+
+  const after = await rowOf(p2.id);
+  assert.notEqual(Number(after.aha_stage), 1,
+    'a retired rival must not leave the coach pinned on stage 1 forever — the rung sits above the '
+    + 'whole on-ramp, so an unclearable stage 1 masks every rung below it for the rest of the street');
+  assert.equal(after.aha_rival, null, 'and the dangling pointer is gone');
+
+  // the beat is not silently CANCELLED either — it goes back to unassigned, so the player still gets
+  // it, with somebody who exists. (Stage 2 would mean "settled": the reward skipped, the beat lost.)
+  assert.equal(Number(after.aha_stage), 0, 'it resets to unassigned so a live rival is picked next');
+  const me = await call('GET', '/v1/me', { token: p2.token });
+  assert.notEqual(me.body?.character?.coach?.label, 'Settle your first score',
+    'and the coach has moved on rather than naming somebody who is gone');
+}
 
 console.log('✅ THE AHA MOMENT (first blood): assign, coach, idempotent, settle, once-ever, §10.4');
 process.exit(0);

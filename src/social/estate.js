@@ -85,6 +85,22 @@ export async function clearInboundPointers(client, charId, accountId) {
   // a pending family retaliation on a gone raider (THE MANHUNT); a hunter's search on a gone target
   await client.query('DELETE FROM family_aggro WHERE target_character=$1', [charId]);
   await client.query('DELETE FROM searches WHERE hunter=$1 OR target=$1', [charId]);
+  // THE AHA MOMENT's scripted first rival, and this is the sharpest pointer in the list because it is
+  // the only one that can WEDGE THE COACH. `settleFirstBlood` clears stage 1 only by jumping THAT
+  // EXACT character, and the rung sits above "Pull your first job" and the whole road to level 5 — so
+  // a rival who is gone leaves the coach permanently pinned on an instruction the player cannot carry
+  // out, masking every rung below it for the rest of that street's life. Unrecoverable, unlike the
+  // masking cases found before, which at least cleared when the player did something.
+  //
+  // It is also the MOST likely pointer to go stale, not the least: startFirstBlood picks the WEAKEST
+  // nearby resident (`ORDER BY respect ASC`), and the turnover loop retires residents players have
+  // picked clean — so the rung deliberately targets the character most likely to be retired out from
+  // under it. Found by tools/playthrough.js measuring the rung at 100% of advised play.
+  //
+  // Reset to stage 0 rather than 2: the beat has not HAPPENED, so the player should still get it —
+  // the post-commit hook simply assigns a live rival on their next action.
+  await client.query(
+    'UPDATE characters SET aha_stage=0, aha_rival=NULL, aha_rival_name=NULL WHERE aha_rival=$1', [charId]);
   // secrets die with the spy (holder) AND with the mark (dirt on the gone is worthless); digs
   // TARGETING the account persist as a bloodline throttle (the 7-day hygiene sweep reaps them).
   await client.query('DELETE FROM secrets WHERE holder_character=$1 OR target_account=$2', [charId, accountId]);
