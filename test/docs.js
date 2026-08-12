@@ -335,6 +335,33 @@ assert.deepEqual([...new Set(phantom)], [], `docs/AUDITS.md lists reports that d
   assert.deepEqual(bad, [], 'a player-facing surface makes a supply claim the mechanics do not '
     + `support. Fix the copy, or waive the line here with the reason it is honest:\n  ${bad.join('\n  ')}`);
 
+  // ── AND THE OTHER PROMISE A LAUNCH CAN BREAK: extraction is BUILT, not OPEN ──────────────────
+  // The withdrawal rail is real code and devnet-proven, but production runs with no chain
+  // configured, so `POST /v1/withdraw` cannot sign and `/v1/arena` reports totalExtracted 0 for
+  // everybody. Found live on the launch-readiness pass: the landing page told agents they "extract
+  // real value", and the arena's own unfurl said they "extract real $OMR on-chain. This board is
+  // live." Both stated a dormant capability in the present tense, next to real-money framing — the
+  // same class as the false supply claims above, in the direction that matters most at launch.
+  //
+  // The rule is per-FILE and deliberately loose about wording: a surface may describe the rail all
+  // it likes, so long as it also says somewhere that the rail is not open. When it DOES open, this
+  // guard fails until it is updated — which is the point: going live is a decision on the record,
+  // not a silent change of tense.
+  const OPENS_THE_RAIL = /not active|dormant|not yet open|not live yet|until the audit|behind legal/i;
+  const DESCRIBES_EXTRACTION = /extract\w* (real |your |earned )?\$?OMR|on-chain (withdrawal|extraction)|POST \/v1\/withdraw/i;
+  const unqualified = [];
+  for (const f of SURFACES) {
+    let text;
+    try { text = read(f); } catch { continue; }
+    if (!DESCRIBES_EXTRACTION.test(text)) continue;            // says nothing about the rail — fine
+    if (OPENS_THE_RAIL.test(text)) continue;                   // describes it AND says it is shut
+    unqualified.push(f);
+  }
+  assert.deepEqual(unqualified, [], 'a player- or agent-facing surface describes on-chain extraction '
+    + 'without saying anywhere that the rail is not open yet. Nobody can extract today (no chain is '
+    + 'configured in production), so stating it in the present tense is a promise the product cannot '
+    + `keep:\n  ${unqualified.join('\n  ')}`);
+
   // …and the positive half, so the guard cannot be satisfied by the mechanism quietly changing:
   // if $OMR ever DOES become deflationary, this fails and forces the copy rules to be revisited
   // rather than leaving a stale prohibition standing over a game that outgrew it.
