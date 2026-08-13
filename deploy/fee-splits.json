@@ -1,0 +1,49 @@
+{
+  "schema": "omerta.fee-structure.v1",
+  "exportedAt": "2026-08-13T20:56:54.104Z",
+  "note": "The founder-signed Path A revenue configuration (exported from the 'Where a Dollar Goes' artifact 2026-08-13). Translated to backend levers + contract args in fee-splits.env; validated by `node tools/validate-fee-splits.js`. GO-LIVE config: applied at chain go-live (past the launch-checklist + audit gate), NOT armed in live render.yaml while the chain is dormant.",
+  "sources": [
+    { "id": "fee", "name": "Gameplay fees (mint / respawn / reroll)", "currency": "eth",
+      "splits": [
+        { "dest": "vig", "bps": 2500, "lands": "vig_revenue source='fee' (withdrawal reserve)" },
+        { "dest": "treasury", "bps": 1000, "lands": "rwa_revenue source='fee' (backed vault — kept small)" },
+        { "dest": "community", "bps": 1500, "lands": "→ buyback → family_yield_pool (Path A)" },
+        { "dest": "operations", "bps": 5000, "lands": "dev wallet (on-chain remainder)", "implicit": true } ] },
+    { "id": "store", "name": "The Store (ETH packages)", "currency": "eth",
+      "splits": [
+        { "dest": "vig", "bps": 2500, "lands": "vig_revenue source='store'" },
+        { "dest": "treasury", "bps": 1000, "lands": "rwa_revenue source='store' (backed vault)" },
+        { "dest": "community", "bps": 1500, "lands": "→ buyback → family_yield_pool (Path A)" },
+        { "dest": "operations", "bps": 5000, "lands": "dev wallet (on-chain remainder)", "implicit": true } ] },
+    { "id": "bond", "name": "Reserve Bonds (ETH principal) — stays POL-heavy (liquidity depth)", "currency": "eth",
+      "splits": [
+        { "dest": "pol", "bps": 7500, "lands": "bond_reserve.pol_eth (the binding cap constraint)" },
+        { "dest": "vig", "bps": 500, "lands": "vig_revenue source='bond' (reserve)" },
+        { "dest": "treasury", "bps": 500, "lands": "bond_reserve.rwa_eth (backed float)" },
+        { "dest": "operations", "bps": 1500, "lands": "bond_reserve.dev_eth" } ] },
+    { "id": "tax", "name": "DEX sell tax (900 bps of every OMR sell)", "currency": "eth",
+      "splits": [
+        { "dest": "operations", "bps": 2222, "lands": "sell_tax_events.dev_eth" },
+        { "dest": "treasury", "bps": 1778, "lands": "sell_tax_events.rwa_eth (backed vault — kept small)" },
+        { "dest": "community", "bps": 2666, "lands": "→ buyback → family_yield_pool (Path A)" },
+        { "dest": "pol", "bps": 3334, "lands": "sell_tax_events.lp_eth (remainder on LP)" } ] },
+    { "id": "auction", "name": "The Desk — daily Dutch auction (ETH proceeds)", "currency": "eth",
+      "splits": [
+        { "dest": "pol", "bps": 5000, "lands": "desk_sales.pol_eth" },
+        { "dest": "operations", "bps": 5000, "lands": "desk_sales.founder_eth (remainder)" } ] },
+    { "id": "polfees", "name": "POL trading fees (the LP position earns)", "currency": "eth",
+      "splits": [
+        { "dest": "desk-buyback", "bps": 7500, "lands": "pol_fees (the buyback budget)" },
+        { "dest": "vig", "bps": 2500, "lands": "vig_revenue (reserve — diverted off the buyback-only budget)" } ] },
+    { "id": "harvest", "name": "The Bank — harvest performance fee (2000 bps of yield)", "currency": "usd",
+      "splits": [
+        { "dest": "treasury", "bps": 3720, "lands": "bank_revenue source='harvest' (backed reserve, USDC)" },
+        { "dest": "community", "bps": 6280, "lands": "→ buyback → family_yield_pool (Path A)" } ] },
+    { "id": "toll", "name": "$OMR exit toll (200 bps) + early-exit surcharge", "currency": "omr",
+      "splits": [
+        { "dest": "operations", "bps": 5000, "lands": "dev_fund (tax:dev)" },
+        { "dest": "community", "bps": 5000, "lands": "family_yield_pool (tax:buyback — already $OMR, no buyback)" } ] },
+    { "id": "trade", "name": "Swap trade fee — RETIRED (the sell tax is the one hook)", "currency": "eth", "retired": true,
+      "splits": [ { "dest": "vig", "bps": 10000, "lands": "vig_revenue source='trade' (historical only)" } ] }
+  ]
+}
