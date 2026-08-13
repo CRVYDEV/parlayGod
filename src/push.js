@@ -68,7 +68,9 @@ function bodyFor(type, p) {
   switch (type) {
     case 'whacked': return `${p.by || 'Someone'} put you in the ground — your heir is up.`;
     case 'indicted': return 'The clock is ticking — square it or stand trial.';
-    case 'bounty_on_you': return `${p.amount ? '$' + Number(p.amount).toLocaleString() + ' ' : ''}on your head. Lie low or square your name.`;
+    case 'bounty_on_you': return p.amount
+      ? `$${Number(p.amount).toLocaleString('en-US')} on your head. Lie low or square your name.`
+      : `There's a price on your head. Lie low or square your name.`;
     case 'sacked': return `${p.by || 'A rival'} took over one of your fronts.`;
     case 'extortion': return `${p.from || 'Someone'} wants a cut — pay up or expose it.`;
     case 'protege_attacked': return `${p.protege || 'Your protégé'} got ${p.what || 'hit'} by ${p.from || 'someone'}.`;

@@ -159,7 +159,7 @@ export function card(type, d, ref) {
     <text x="${W / 2}" y="344" text-anchor="middle" fill="${accent}" font-size="28" letter-spacing="2">${title}${!d.alive ? ' · a ghost' : ''}</text>
     ${stat(W * 0.28, 'LVL ' + d.level, 'RESPECT')}
     ${stat(W * 0.5, d.kills, d.kills === 1 ? 'KILL' : 'KILLS')}
-    ${stat(W * 0.72, d.wanted ? 'WANTED' : d.welsher ? 'WELSHER' : 'MADE', 'STANDING')}`,
+    ${stat(W * 0.72, d.wanted ? 'WANTED' : d.welsher ? 'WELSHER' : 'CLEAN', 'STANDING')}`,
     { accent, cta, plate: 'legend' });
 }
 

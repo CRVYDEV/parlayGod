@@ -107,7 +107,7 @@ function renderEmail(name, d, accountId) {
   const unsub = `${base}/v1/digest/unsubscribe?a=${encodeURIComponent(accountId)}&t=${unsubToken(accountId)}`;
   const heads = d.headlines.slice(0, 6).map((h) => `${headLine(h.type)}${h.n > 1 ? ` (×${h.n})` : ''}`);
   const subject = heads.length
-    ? `While you were gone: ${heads[0]}${heads.length > 1 ? ` +${heads.length - 1} more` : ''}`
+    ? `While you were gone: ${heads[0]}${heads.length > 1 ? ` (+${heads.length - 1} more)` : ''}`
     : `The city moved without you`;
   const takeLine = d.totalIn > 0 ? `Your operations booked ${money(d.totalIn)} while you were away.` : '';
   const bullets = heads.map((h) => `<li style="margin:6px 0">${h}</li>`).join('');
@@ -116,7 +116,7 @@ function renderEmail(name, d, accountId) {
       <div style="font-family:monospace;font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:#a89e90">The Morning Paper</div>
       <h1 style="font-size:30px;margin:10px 0 4px;color:#e9e3d6">While you were gone, ${escapeHtml(name)}.</h1>
       ${takeLine ? `<p style="color:#c9a24a;margin:8px 0 16px">${takeLine}</p>` : ''}
-      ${bullets ? `<p style="color:#a89e90;margin:16px 0 6px">Here's what the city got up to:</p><ul style="color:#e9e3d6;padding-left:18px;margin:0">${bullets}</ul>` : `<p style="color:#a89e90">It's quiet — but it won't stay that way. Come see who's on the wire.</p>`}
+      ${bullets ? `<p style="color:#a89e90;margin:16px 0 6px">Here's what the city got up to:</p><ul style="color:#e9e3d6;padding-left:18px;margin:0">${bullets}</ul>` : `<p style="color:#a89e90">${takeLine ? 'Otherwise quiet' : "It's quiet"} — but it won't stay that way. Come see who's on the wire.</p>`}
       <div style="margin:28px 0">
         <a href="${base}/" style="display:inline-block;background:#b02a30;color:#fff;text-decoration:none;padding:12px 22px;border-radius:3px;font-family:monospace;letter-spacing:.1em;text-transform:uppercase;font-size:13px">Back to the city →</a>
       </div>
@@ -126,7 +126,7 @@ function renderEmail(name, d, accountId) {
         <a href="${unsub}" style="color:#a89e90">Unsubscribe</a> — one click, no questions.
       </p>
     </div></body></html>`;
-  const text = `While you were gone, ${name}.\n\n${takeLine ? takeLine + '\n\n' : ''}${heads.length ? heads.map((h) => '· ' + h).join('\n') : "It's quiet — but it won't stay that way."}\n\nBack to the city: ${base}/\n\nUnsubscribe: ${unsub}`;
+  const text = `While you were gone, ${name}.\n\n${takeLine ? takeLine + '\n\n' : ''}${heads.length ? heads.map((h) => '· ' + h).join('\n') : `${takeLine ? 'Otherwise quiet' : "It's quiet"} — but it won't stay that way.`}\n\nBack to the city: ${base}/\n\nFigures are in-game currency only.\n\nUnsubscribe: ${unsub}`;
   return { subject, html, text };
 }
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }

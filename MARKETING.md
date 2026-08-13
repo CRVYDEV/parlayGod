@@ -221,8 +221,8 @@ specific that happened in it.
 ## 7. Standing FAQ
 
 **Is this pay-to-win?** No, with a stated ceiling rather than a slogan. Money buys time, access and
-status — and, since the D8=D ladder, a capped amount of *earning* power whose top rung (150 staked
-$OMR) is reachable without paying, because the mission ladder alone pays 220 lifetime. There is **no
+status — and, since the D8=D ladder, a capped amount of *earning* power whose top rung (900 staked
+$OMR) is reachable without paying, because the mission ladder alone pays ~1,320 lifetime. There is **no
 combat power at any price**, which is the axis where paying would break the game for everyone else.
 
 **Can I earn?** The game has an extraction rail and it is deliberately dormant. We do not make

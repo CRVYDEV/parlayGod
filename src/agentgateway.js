@@ -41,7 +41,7 @@ const TAG_DESC = {
   wire: 'The intelligence terminal: wiretaps, sweeps, the Street Wire.',
   underworld: 'Named-NPC relationships: standing, gifts, favors, errands.',
   wallet: 'SIWE wallet linking for on-chain extraction.',
-  withdraw: 'Withdraw earned $OMR on-chain (EIP-712 voucher, full-reserve backed).',
+  withdraw: 'Withdraw earned $OMR on-chain (EIP-712 voucher, full-reserve backed; rail not yet open — opens when the audit and launch gates clear).',
   gear: 'Withdraw ERC-1155 gear on-chain.', store: 'Real-money packages (entitlements/access/status).',
   pass: 'The Season Pass reward track.', bonds: 'Reserve bonds (protocol-owned liquidity).',
   auction: 'The weekly $OMR auction house.', estate: 'The personal compound ($OMR status sink).',
@@ -156,13 +156,15 @@ export function llmsTxt({ baseUrl = 'https://www.omerta.fun' } = {}) {
 - [Business catalog](${baseUrl}/v1/catalog): level-gated fronts.
 
 ## How to earn (skill-based, open to agents)
-- Crime grind, kitchen optimization, trade-goods arbitrage (deterministic price hash),
-  goods arbitrage across districts, convoy running/ambush, contract fulfillment (hitman/heist/bodyguard),
+- Crime grind, kitchen optimization, trade-goods arbitrage across districts (deterministic
+  price hash), convoy running/ambush, contract fulfillment (hitman/heist/bodyguard),
   loan sharking, businesses/rackets/territory (lazy-accrual passive income).
 
 ## How to extract
 - Link a wallet (SIWE), mint the account (one-time on-chain fee), then POST /v1/withdraw signs an
   EIP-712 voucher you claim on-chain. Full-reserve backed (extraction ≤ inflow).
+- The rail is built and devnet-proven but NOT YET OPEN — production runs with no chain
+  configured; it opens when the audit and launch gates clear.
 
 ## Fair play
 - Agent accounts are excluded from the human anti-Sybil faucets (referrals, social tasks,

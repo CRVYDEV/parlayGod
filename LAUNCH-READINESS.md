@@ -134,14 +134,14 @@ that screen.
 
 # DOOR 3 — the chain
 
-**Hard-gated. Nothing below ships until all three gates are green, and two of them are not ours to
-close alone.** `CHAIN-DEPLOY.md` §0 is the authority; this is the summary.
+**Hard-gated. Nothing below ships until all three gates are green — and the one still open (the
+security audit) is not ours to close alone.** `CHAIN-DEPLOY.md` §0 is the authority; this is the summary.
 
 | Gate | State | Owner |
 |---|---|---|
-| **1 — `forge test` green** | ✅ 198/198, 7 fuzzes | us |
+| **1 — `forge test` green** | ✅ 213/213, incl. fuzzes | us |
 | **2 — third-party audit of contracts AND the signer** | ❌ **not started** | external |
-| **3 — the launch review** | ⚠ **partial** | external |
+| **3 — the launch review** | ✅ **CLEARED 2026-08-13** (founder statement — the whole checklist) | external |
 
 ### Gate 2 — the audit
 
@@ -164,16 +164,19 @@ close alone.** `CHAIN-DEPLOY.md` §0 is the authority; this is the summary.
 ### Gate 3 — the launch checklist
 
 The checklist is kept **outside this repo** — see the founder. It is the review of every surface that
-moves real value, and it is what blocks Door 3. The surfaces it covers are the ones this repo builds
-chain-dormant and never arms on its own: treasury stock purchases, transferable TBA drops, the claim
-rail, NFT proceeds, the play-pool redistribution, the free community distribution, provenance traits,
-the activator's leg, and THE BANK's four (synthetic issuance, yield-bearing deposits, revenue
-distribution, custody).
+moves real value. The surfaces it covers are the ones this repo builds chain-dormant and never arms
+on its own: treasury stock purchases, transferable TBA drops, the claim rail, NFT proceeds, the
+play-pool redistribution, the free community distribution, provenance traits, the activator's leg,
+and THE BANK's four (synthetic issuance, yield-bearing deposits, revenue distribution, custody).
 
-**Do not read a green build as a green checklist.** Every one of those surfaces already exists in the
-tree behind an env flag, and the tests prove they *work* — not that they are cleared to run.
+**✅ CLEARED 2026-08-13** — the founder states the outside review cleared the WHOLE checklist,
+every surface above included. Recorded here as the founder's statement, which is what closes this
+gate (the $OMR side had already been recorded cleared 2026-08-12 in `CHAIN-DEPLOY.md`; this widens
+it to the full list). **Gate 2 — the security audit — is a different thing entirely and is still
+not started: nothing here should be ARMED until it also clears.** A review of whether a surface may
+run says nothing about whether the contract holding the money is safe; that is what the audit is for.
 
-### If both gates go green — the sequence
+### If gate 2 also goes green — the sequence
 
 `omerta-launch-sequence-design.md` is the plan; `CHAIN-DEPLOY.md` §2 is the exact call order.
 

@@ -21,7 +21,7 @@ const WIRE = {
   family_war_declared: (e) => `⚔️ **${e.who}** declared WAR on the **${e.family}** family.`,
   family_war_won: (e) => `🏴 **${e.who}** crushed the **${e.family}** family and took the spoils.`,
   ticker_ballot: (e) => e.ticker ? (e.decidedBy === 'chamber'
-    ? `📈 The Commission set the day's buy: **${e.ticker}** (${e.votes} families voted).`
+    ? `📈 The Commission set the day's buy: **${e.ticker}** (${e.votes} ${e.votes === 1 ? 'family' : 'families'} voted).`
     : `📈 The chamber was silent — the day's buy defaults to **${e.ticker}**.`) : null,
   frontier_seized: (e) => e.gang ? `🌆 The **${e.gang}** family routed the ${e.npc} and planted their flag.`
     : `🌆 The ${e.npc} cartel was routed on the frontier.`,
