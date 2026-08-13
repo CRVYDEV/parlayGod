@@ -10,7 +10,7 @@
 // the canonical pool (mainnet: the DEX bot reports the trade; until then a mod/QA param) and credits
 // the bought amount to `family_yield_pool`, which `payFamilyYield` already distributes 5-4-3-2-1 by
 // seasonal standing. So the family prize grows on REAL revenue, in in-game $OMR — never real ETH to
-// a gang, which is the regulatory line the whole design exists to hold.
+// a gang, which is the hard line the whole design exists to hold.
 //
 // ── THE §10.4 SHAPE, and the decision behind it ─────────────────────────────────────────────────
 // The pool credit is a MINT: `yield:buyback`, an EXACT new reason in invariants.js's omrMints term

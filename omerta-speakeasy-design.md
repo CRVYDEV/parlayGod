@@ -164,7 +164,7 @@ display-only, free to re-apply — you own it). §10.4-NEUTRAL by construction: 
 existing plex:% term). Payable in ETH (dormant paywall) OR earned $OMR (PLEX, live now) — the same
 anti-p2w posture as every Store SKU. **Deferred (mainnet-gated):** the cosmetics-as-NFT + resale-royalty
 market (the GearVault rail — cosmetics minted to the player's ERC-1155, tradeable P2P with a creator
-royalty) is the on-chain revenue engine, gated on legal + the third-party audit like all chain work; the
+royalty) is the on-chain revenue engine, gated on the launch checklist + the third-party audit like all chain work; the
 account-level unlock built here is exactly what that NFT would represent, so it's forward-compatible.
 
 ### §10.4 (step three)
@@ -252,7 +252,7 @@ the assessed value is the lever if whale-club predation is seen in the alpha (re
 
 ## Deferred (step five)
 The cosmetics-as-NFT + resale-royalty market (the GearVault/chain rail — cosmetics minted to the player's
-ERC-1155, tradeable P2P with a creator royalty; mainnet-gated on legal + the third-party audit, the M6
+ERC-1155, tradeable P2P with a creator royalty; mainnet-gated on the launch checklist + the third-party audit, the M6
 dormant pattern — the account-level `store_cosmetics` unlock built in step 3 is exactly what that NFT
 represents, so it's forward-compatible), the WINDOWED contested auction variant of the takeover (an escrow
 bid the owner can defend/outbid — deferred in favour of the leaner instant Standover), and deeper renown

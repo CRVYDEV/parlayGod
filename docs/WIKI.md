@@ -1003,7 +1003,7 @@ into escrow. An outbid bidder gets a refund immediately. Won items are account-l
 ## 29. The chain
 
 OMERTÀ settles on Robinhood Chain (an EVM L2). The blockchain layer is built but **not active until mainnet**
-(behind legal and audit approval). The design: the off-chain game is authoritative; the blockchain settles
+(behind the launch checklist and audit). The design: the off-chain game is authoritative; the blockchain settles
 withdrawals and ownership proofs. The ONE place new $OMR is created on-chain is bonds — minted at
 bond time inside hard walls (a daily cap, a discount ceiling, a rate ceiling).
 

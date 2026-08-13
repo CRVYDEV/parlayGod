@@ -4,7 +4,7 @@ Founder-directed 2026-07-27. Supersedes the Risk-to-Earn token architecture wher
 everything not named here is unchanged.
 
 **Founder rulings recorded on this date:**
-1. Burn-to-redeem of real stock tokens is **legal-cleared and Robinhood-approved**. R3 delivery is
+1. Burn-to-redeem of real stock tokens is **cleared and Robinhood-approved**. R3 delivery is
    green-lit as a product, not gated behind further review.
 2. Cash → OMR is removed. OMR → cash survives as a purpose-built redemption window.
 3. Individual yield (staking rewards, personal RWA dividends) is **repurposed to a family yield**
@@ -212,12 +212,12 @@ growing when volume is thin. **This was the single largest gap in the original p
 
 **`allocated ≤ held`, per ticker.** Never promise a unit that is not already bought and sitting in the
 reserve. No IOUs, no "redeemable once the bot catches up." `runRwaInvariants` enforces it and it is
-the reason this design is honest rather than a claim. Legal clearance changes what may be *delivered*;
-it does not change what may be *owed*.
+the reason this design is honest rather than a claim. Clearing the launch checklist changes what may
+be *delivered*; it does not change what may be *owed*.
 
 Retained regardless of clearance, as cheap deploy-time config rather than a blocker:
 - the per-account rolling-24h claim cap
-- the jurisdiction/geofence hook (a switch, defaulting open)
+- the eligibility hook (a switch, defaulting open)
 - the RICO graduation on large conversions (`SCRUTINY_MIN_OMR`, cumulative window)
 
 ---

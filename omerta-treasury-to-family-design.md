@@ -17,7 +17,7 @@ backed vault, the cold-ETH reserve trust story, and the individual "go legit" ex
 
 The rejected alternatives, recorded so they stay rejected:
 - **Path B (real ETH to families):** distributing real money to in-game groups by competitive standing
-  reads as a gambling payout / money transmission. The whole point of keeping the family yield in
+  moves real money to a person. The whole point of keeping the family yield in
   **$OMR** was to stay clear of exactly this line. Do NOT build without founder sign-off.
 - **Kill the treasury entirely:** also deletes the individual ETH exit (THE VAULT / "go legit") and the
   growing cold reserve that is a *backing/trust signal* for a real-money-adjacent token. The split keeps
@@ -108,7 +108,7 @@ extends by construction: **the family pool can never distribute more $OMR than t
 (the `runVigInvariants` twin), asserts `distributed ≤ bought` and the split-exactness, wired into the
 worker's nightly `alertDrift` beside vig/bond/desk/treasury/bank.
 
-**Why this keeps the regulatory posture:** families receive **in-game $OMR**, extractable only through
+**Why this keeps the posture:** families receive **in-game $OMR**, extractable only through
 the same throttled withdrawal rail as everything else. No real ETH ever reaches a gang. That is the
 entire reason Path A is chosen over Path B.
 
@@ -197,5 +197,5 @@ one custody.
    never something the bot sets, and never a standing exemption (the seeded price walls every buy
    after it).
 
-The regulatory line stays: **families are paid in in-game $OMR, funded by a real-revenue buyback; never
+The hard line stays: **families are paid in in-game $OMR, funded by a real-revenue buyback; never
 real ETH to a gang.**

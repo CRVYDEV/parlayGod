@@ -2,7 +2,7 @@
 
 Two independent red-team lenses over the drop (`src/rwa.js`, the fees FEE_RWA_BPS slice, the
 routes, the schema, the test block), every finding verified against source before any fix.
-**No CRITICAL.** The core walls held on inspection: **the legal wall is airtight in code** (no
+**No CRITICAL.** The core walls held on inspection: **the wall is airtight in code** (no
 path anywhere decrements `rwa_vault`/`rwa_reserve.units`, no unit transfer between accounts, no
 redeem/sell affordance, entry is exclusively the `spendOmr` burn, zero RNG grants), **§10.4 is
 exact** (`rwa:vault` rides the pre-existing `rwa:%` vocabulary + burn term — genuinely zero
@@ -14,7 +14,7 @@ outside `persistAccount`'s named columns, written under the held account lock) a
 (gated on the ask, advanced by the smaller actual charge), and death survival is proven.
 
 - Lens A: reserve accounting / §10.4 / concurrency
-- Lens B: economic exploits / Sybil / the legal wall / cross-system
+- Lens B: economic exploits / Sybil / the wall / cross-system
 
 ## Fixed in-commit (regression each)
 
@@ -76,7 +76,7 @@ re-delivered event books it exactly once.
 2. **Minted-only claims (B-F4)** — `claimVaulted` has no `minted` gate. Two independent reasons
    to add one: the Street Wage D1 precedent (every claiming identity should cost the 0.01-ETH
    mint fee, blunting Sybil multiplication of the daily cap via cash-funnel → alt-swap → claim),
-   and R3 dead allocation (units claimed by never-to-KYC alts permanently shrink the claimable
+   and R3 dead allocation (units claimed by never-to-identity verification alts permanently shrink the claimable
    float, since nothing ever decrements `rwa_vault`). Recommended; one-line gate when signed.
 3. **First-come sniping (B-F7)** — claims are FCFS and agents are first-class; a bot ring takes
    most of a small float within seconds of a buyback. Fair-priced it's a race to pay fair value;

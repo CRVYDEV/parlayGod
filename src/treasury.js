@@ -15,23 +15,23 @@
 // WHY THAT IS THE STRONG VERSION, NOT THE WEAK ONE. The float rested on `allocated <= held`: the
 // game only ever owes what it already holds, and price movement can never create a shortfall. That
 // property works ONLY while both sides of the ledger are the SAME asset. Backing a STOCK-denominated
-// claim with ETH would have broken it twice over — legally it turns handing over an asset you own
+// claim with ETH would have broken it twice over — it turns handing over an asset you own
 // into a cash-settled payout on one you do not, and mechanically the treasury goes short exactly when
 // players claim. Denominating BOTH SIDES in ETH restores the original wall EXACTLY: the game only
 // ever owes ETH it already holds, and there is no second asset to diverge from.
 //
 // WHAT THE RETIREMENT DELETED, AND WHAT THE REOPENING BRINGS BACK. The retirement removed the buy
 // bot, the per-ticker reserve, the stock oracle and the price-continuity bound — and with them the
-// only securities event in the project. The 2026-08-10 reversal brings back the reserve and the wall
+// only gated surface in the project. The 2026-08-10 reversal brings back the reserve and the wall
 // (below), and the keeper (design step 5) with them; `rwa_reserve`/`rwa_buys` stayed gone, because
 // the new tables are `stock_buys`/`stock_allocations` and HELD-in-ETH is still just the inflow
-// ledger. The securities question came back too, and §6 of the brokers design is where it is
+// ledger. The gate came back too, and §6 of the brokers design is where it is
 // recorded rather than here.
 //
 // WHAT IT IS, PRECISELY. An ALLOCATION ledger, exactly as the float was: a claim moves ETH from the
 // treasury's unallocated pool into the player's account-level line. **Nothing here delivers ETH to a
 // player** — no transfer, no withdrawal, no on-chain path. Delivery is a separate decision with its
-// own legal question, and it is deliberately unbuilt (R3 was the same shape).
+// own open question, and it is deliberately unbuilt (R3 was the same shape).
 //
 // The four slices keep their bps and their sources (Store 20% / gameplay fees FEE_TREASURY_BPS / the
 // DEX sell tax's SELL_TAX.RWA_BPS / bond ETH's BONDS.RWA_BPS). The table is still named

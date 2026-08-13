@@ -2,7 +2,7 @@
 
 **Status: DRAFT / proposal. Nothing built.** Parent: `omerta-risk-to-earn-design.md`.
 This is the foundation and the thing to build **first**: a pure **off-chain rebalance** that
-makes risk rewarded and safe play stop dominating. It needs **no chain work and no legal
+makes risk rewarded and safe play stop dominating. It needs **no chain work and no outside
 sign-off** (it changes no real-money extraction — that's Phase 2), so it's the cheapest, safest,
 highest-signal step. If Phase 1 lands, PvP comes alive and you can validate the core Risk-to-Earn
 loop before investing a dollar in the Vig.

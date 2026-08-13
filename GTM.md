@@ -131,7 +131,8 @@ re-acquire. So the sequence is:
                   └────────────┬─────────────┘
                                │
    PHASE 4        ┌────────────▼─────────────┐
-   chain          │  gated on audit + the launch checklist│  ← never a date we promise publicly
+   chain          │  gated on audit + the    │  ← never a date we promise publicly
+                  │  launch checklist        │
                   └──────────────────────────┘
 ```
 
@@ -272,7 +273,7 @@ that can prove it isn't printing money, and an underworld that autonomous agents
 | **Cold start fails — players arrive, find nobody, leave** | The whole reason Phase 1 precedes Phase 2. Recruit in cohorts. Watch co-presence, not headcount. If co-presence stays flat, stop acquiring. |
 | **Depth overwhelms new players** | Already the most-invested-in area (coach, tour, THE DAY, career, progressive disclosure). Read the census; fix the top rung. |
 | **The crypto angle attracts the wrong first cohort** | Segment C is deliberately last. Lead with the game everywhere until the chain clears its gates. |
-| **A regulatory misstep in copy** | The five never-claim rules, applied to every channel including replies and Discord messages. When in doubt, describe the *system*, never the *outcome*. |
+| **A misstep in copy** | The five never-claim rules, applied to every channel including replies and Discord messages. When in doubt, describe the *system*, never the *outcome*. |
 | **We ship features instead of acquiring players** | The honest failure mode of a project this deep. The measurement above is the antidote: if the census says the base is stuck on a rung, that is the work — not the next system. |
 | **A live incident during a launch push** | `/health` (with worker liveness), the nightly §10.4 alarm, the backup watchdog and the archiver monitor all exist and route to a webhook. Confirm the webhook reaches a human *before* the push, not after. |
 

@@ -14,10 +14,9 @@ Two things I owe you up front, plainly, because they decide whether this succeed
    hyperinflated, earners cashed out faster than value came in, growth stalled, spiral. The
    iron rule of this design is therefore: **a player can only extract value that someone else
    put in.** We make that *structural*, not hopeful — an invariant as sacred as §10.4.
-2. **This has real-world weight.** Real-money earning + a token = potential securities, money-
-   transmission, tax, and gambling exposure that varies by jurisdiction. I am not your lawyer
-   and this is not legal advice — but you should not ship mainnet extraction without one. Flagging
-   once, then moving on to the design.
+2. **This has real-world weight.** Real-money earning plus a token is a serious undertaking, and
+   neither of us is qualified to judge it. Get someone who is, before mainnet extraction ships.
+   Flagging it once, then moving on to the design.
 
 ---
 
@@ -162,7 +161,7 @@ and gated on your sim + sign-off for every number. Nothing later depends on main
    PvP comes alive and the safe play stops dominating.
 2. **Phase 2 — The Vig + PLEX bridge (Pillar 3).** The sustainability engine and the actual
    "living." Build the Prize Reserve, the P3.2 invariant, and pay-fees-in-$OMR-or-ETH. This is where
-   extraction becomes real *and* safe from collapse. **Highest legal-review priority.**
+   extraction becomes real *and* safe from collapse. **Highest review priority.**
 3. **Phase 3 — Productive NFTs (Pillar 2).** Rackets/territory as tradeable, seizable assets. The
    deep end-game that gives wars and markets their teeth. Contract work + heavy balancing.
 4. **Phase 4 — Tokenomics hardening (Pillar 4).** Backed emission, scaling sinks, safe-income fix.
@@ -175,9 +174,9 @@ and gated on your sim + sign-off for every number. Nothing later depends on main
 - **If P3.2 is not enforced, this becomes Axie.** The extraction-≤-inflow invariant is not
   optional garnish; it is the mechanism that prevents the death spiral. Build it first in Phase 2,
   test it like §10.4.
-- **Regulatory:** real-money earning + a token invites securities / money-transmitter / tax /
-  gambling scrutiny that differs by jurisdiction (and can gate which users you can serve). Get
-  a launch review before Phase 2 mainnet. Non-negotiable given the stakes.
+- **Outside review:** real-money earning plus a token draws outside scrutiny, and what is permitted
+  differs by country (which can gate who you may serve). Get a launch review before Phase 2
+  mainnet. Non-negotiable given the stakes.
 - **It changes the game's soul.** Utility-only kept the game about *playing*; Risk-to-Earn makes it
   partly about *money*, which attracts extractors, bots, and RMT pressure, and raises the stakes of
   every balance bug (a §10.4 leak is now a real-money leak). The agent-flag / anti-abuse machinery
@@ -193,7 +192,7 @@ and gated on your sim + sign-off for every number. Nothing later depends on main
 ## 6. What I'd build first, if you greenlight
 
 **Phase 1 (Pillar 1)** — it's the cheapest, safest, highest-signal step: it makes the game *feel*
-Risk-to-Earn immediately, needs no chain work or legal sign-off, and validates the core loop before
+Risk-to-Earn immediately, needs no chain work and no outside sign-off, and validates the core loop before
 you invest in the Vig. Concretely: loot-on-kill (P1.1), the vault/extraction tradeoff (P1.2), and
 shield-not-bunker defense (P1.3) — all off-chain, all behind founder-signed numbers, all with
 tests. Then we design Phase 2's Vig in detail with the extraction-≤-inflow invariant at its core.

@@ -89,7 +89,7 @@ export const OPERATIONAL_ENV = [
   'EMAIL_API_KEY', 'EMAIL_FROM', 'EMAIL_API_URL', 'DIGEST_LAPSE_DAYS', 'DIGEST_COOLDOWN_DAYS', 'DIGEST_MAX_LAPSE_DAYS',
   // marketing / share surfaces
   'SOCIAL_GAME_URL', 'SOCIAL_X_HANDLE', 'WALLETCONNECT_PROJECT_ID', 'X_CHECK_CD_MS', 'X_FOLLOW_PAGES',
-  // the chain layer — every one dormant unless set (mainnet is legal + audit gated regardless)
+  // the chain layer — every one dormant unless set (mainnet is launch + audit gated regardless)
   'CHAIN_CONFIRMATIONS', 'CHAIN_ID', 'CHAIN_POLL_MS', 'CHAIN_RPC_URL', 'CHAIN_START_BLOCK',
   'DAILY_CAP_OMR', 'OMERTA_BOND_ADDRESS', 'OMERTA_FEES_ADDRESS',
   // THE BANK's Alchemist — the harvest-fee stream. Dormant unless set; the asset symbol + decimals

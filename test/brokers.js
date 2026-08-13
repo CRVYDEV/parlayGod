@@ -119,7 +119,7 @@ assert.equal(Number((await pool.query('SELECT COUNT(*) c FROM broker_epochs')).r
 
 // ── THE RECORDER LOGS COUNTS, NEVER GRANTED XP ──────────────────────────────────────────────────
 // bumpMastery applies pathXpMult (1.5x home / 0.6x rival) to `xp`. If the recorder wrote `xp`, a
-// player's declared PATH would silently change their share of a securities distribution. It writes 1.
+// player's declared PATH would silently change their share of a stock distribution. It writes 1.
 assert.notEqual(MASTERY.XP.crime, 1,
   'precondition: the base crime award is not 1, so a COUNT is distinguishable from XP');
 const before = await gainsFor(pool, sal.aid, today, today);

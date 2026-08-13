@@ -115,9 +115,9 @@ unclaimed in a protocol contract, and the NFT sells self-contained.
 **What was argued against it and rejected — recorded so the tradeoff is not rediscovered later as a
 surprise:**
 
-1. **The NFT becomes a bearer instrument for securities.** Any marketplace buyer acquires the stock
-   with no KYC, no geofence and no jurisdiction check. Against the one hard operational fact here —
-   Robinhood's tokenized stocks are EU-facing and not offered to US persons — this routes them to US
+1. **The NFT becomes a bearer instrument for real assets.** Any marketplace buyer acquires the stock
+   with no identity verification, no eligibility gate and no check on who they are. Against the one hard operational fact here —
+   Robinhood's tokenized stocks are EU-facing and restricted by the issuer — this routes them to US
    persons by default, with no off switch.
 2. **It is the irreversible direction.** Claim-then-deliver could always have become bearer later;
    bearer cannot become gated, because once stock is in freely-trading TBAs it is gone. That
@@ -249,8 +249,9 @@ The founder cleared this to be built (this session, and the standing directive i
 section exists because the next reader needs the facts in one place.
 
 **What is being reversed.** `omerta-stock-layer-retirement.md` retired stock acquisition on
-2026-07-31 with recorded reasons: it deleted the project's one gated surface, removed the KYC and
-geofencing requirements, and stopped R2/R3 being carried milestones. This design reopens that.
+2026-07-31 with recorded reasons: it deleted the project's one gated surface, removed the
+verification and eligibility requirements, and stopped R2/R3 being carried milestones. This design
+reopens all three.
 
 **What a precedent does and does not establish.** StonkBrokers is doing this, visibly, at scale, on
 the same chain. That is real evidence about what infrastructure exists and how it is received. **It
@@ -259,15 +260,13 @@ nobody mistakes a citation for a green light.
 
 **Three concrete facts that do not go away:**
 
-1. **Buying an asset and distributing it to token holders on the strength of holding the token is the
-   hardest version of this to defend.** A launch-checklist row already covers revenue distribution to
-   holders as the sharpest surface in the project. Weighting by *play* rather than by holdings
-   genuinely helps — effort is not passive — and the activation burn is a purchase rather than a
-   payout. Neither makes the question go away.
-2. **Jurisdiction is an operational constraint.** Robinhood's tokenized stocks are EU-facing and not
-   offered to US persons. A US-controlled treasury acquiring and distributing them raises questions a
-   precedent project does not answer for us, and delivery realistically needs geofencing and KYC at
-   the boundary — which is exactly the machinery the retirement deleted.
+1. **Handing an asset to somebody because they hold the token is the sharpest surface in the
+   project**, and a launch-checklist row already covers it. Weighting by *play* rather than by
+   holdings genuinely helps — effort is not passive — and the activation burn is a purchase rather
+   than a payout. Neither makes the question go away.
+2. **Eligibility is an operational constraint.** Robinhood's tokenized stocks are EU-facing and not
+   offered everywhere, so delivery realistically needs an eligibility gate and identity verification
+   at the boundary — which is exactly the machinery the retirement deleted.
 3. **A bearer-instrument NFT (§3.3) is the sharpest version of all of the above**, because the asset
    then moves on a secondary marketplace with no gate at all.
 

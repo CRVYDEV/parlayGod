@@ -45,7 +45,7 @@ This is the load-bearing decision, and we come down hard on one side:
 | **Earned standing** (`lifetime_tribute + 10,000 × wars_won`) | **Chosen.** It's the exact metric the buyback already ranks families by, it's **earned through play, non-transferable, and un-purchasable** — you cannot buy standing on any market — and it aligns governance power with the players most invested in the game's health. |
 
 Standing-weighting keeps $OMR a pure utility token *and* closes the buy-the-vote attack in one
-move. It is the anti-securities choice and the anti-capture choice simultaneously.
+move. It is the anti-financialisation choice and the anti-capture choice simultaneously.
 
 **Seats are families, not individuals.** The Council is the **top-N families by standing**
 (propose **N = 9** — a "Commission" reads right and keeps quorum math simple; tune with
@@ -165,14 +165,12 @@ Epoch open/close runs in the **worker**, in the existing hourly tick, in its own
 no new global clock (respects the lazy-accrual / no-global-tick rule; this is a coarse weekly
 housekeeping job, not a per-player tick). Dial reads are per-call and cached like rate limits.
 
-## 9. Legal (flagged, not waived by this doc)
+## 9. The one design rule that must survive a revision
 
-The founder has waived legal *gating* for build sequencing ("innovate first"), but this doc
-records the reasoning because it shaped the design: **standing-weighted (not token-weighted)
-voting is the specific choice that keeps $OMR utility-only and off the governance-token /
-securities path.** If a future revision is tempted to add staked-$OMR voting for "more skin
-in the game," that temptation is exactly the trap — re-read §3 first and get a launch review
-before touching it. Robinhood Chain ToS re: governance dApps is a separate launch item.
+**Voting weight is STANDING, never the token.** If a future revision is tempted to add staked-$OMR
+voting for "more skin in the game," that temptation is exactly the trap this design was built to
+avoid — it turns the council into a thing you buy, and it turns $OMR into something other than a
+game currency. Re-read §3 before touching it, and put it on the launch checklist.
 
 ## 10. Build phasing (when it's greenlit)
 

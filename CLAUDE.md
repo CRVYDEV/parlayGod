@@ -354,7 +354,7 @@ on-ramp, family-contract laundering, etc.) were flagged as founder balance/desig
 chose to move $OMR from utility-only toward a genuine EVE/Axie/DFK-style Risk-to-Earn economy
 where a skilled, risk-taking player can theoretically earn a small living. Design docs:
 `omerta-risk-to-earn-design.md` (parent — four pillars, the "spenders fund earners" sustainability
-model, the honest legal/financial flags), `omerta-phase2-vig-design.md` (the Vig — real-revenue
+model, the honest flags), `omerta-phase2-vig-design.md` (the Vig — real-revenue
 redistribution + PLEX bridge + the "extraction ≤ inflow" invariant enforced by the existing
 full-reserve queue), `omerta-phase1-riskpay-design.md` (the off-chain first step).
 
@@ -2245,20 +2245,21 @@ burn reconciles by asserting the only drift is the SQL grant itself. A deep, UNC
 sink** the late game lacked (helps extraction-≤-inflow), a death-proof endgame store + graceful exit, and
 family politics (a war-proof book). Suite 21/21 + sim drift-0. ALL numbers (tickers, base/drift,
 MIN_INVEST_OMR) are founder sign-off levers. **R2** (a real ETH-fee `RWA_BPS` slice → a buy bot → a real
-RWA reserve backing the shares via the full-reserve invariant) and **R3** (the KYC'd on-chain extraction
+RWA reserve backing the shares via the full-reserve invariant) and **R3** (the verified on-chain extraction
 through Robinhood's broker-dealer rails — the one gated event) are **launch-gated** (Robinhood
 partnership + the third-party audit that already gates mainnet) and NOT built. The
-three hard rules the design respects so R3 stays inside the lines: never distribute securities by CHANCE
-(every RNG/loot/casino layer stays in cash/$OMR; RWA is purchase/earned/vested only), receiving stock is a
-taxable KYC-gated event (Robinhood's KYC is the enabling asset), and the regulated surface is confined to
-one gated extraction boundary. Deferred R1 step-two (never-by-chance earn hooks): the big-score cut,
+three hard rules the design respects so R3 stays inside the lines: never distribute the stock by
+CHANCE (every RNG/loot/casino layer stays in cash/$OMR; RWA is purchase/earned/vested only), handing
+a real asset to a person is a verified, eligibility-gated event (the partner's own verification is
+what makes it possible at all), and the whole gated surface is confined to that one boundary.
+Deferred R1 step-two (never-by-chance earn hooks): the big-score cut,
 skill/season leaderboard payouts, the laundering-graduation tier that draws RICO scrutiny, an automatic
 "Envelope" tithe on taxed flows.
 
 **THE PORTFOLIO — R1 step-two (EARNED exposure) + the console screen — BUILT** (`src/portfolio.js`,
 `src/heists.js`, `src/worker.js`, `public/index.html`; `test/portfolio.js` + `test/heists.js`). Three
 earn hooks, each **earned/vested/skill, never a chance draw for stock** (so the R3 "never distribute
-securities by chance" rule holds by construction), plus a curated client tab. New shared helper
+by chance" rule holds by construction), plus a curated client tab. New shared helper
 `portfolio.js:grantShares(client, accountId, ticker, omrWorth)` — a $OMR-worth-denominated STATUS
 grant (`shares = omrWorth/price`, **cost basis 0** — a free legit kickback), no `h`, headless-safe, no
 §10.4 (shares aren't a currency). **(1) THE BIG-SCORE CUT** (`heists.js` success branch): a completed
@@ -2288,7 +2289,7 @@ A **max-effort five-lens red-team over the Portfolio + all contract interactions
 found **no CRITICAL/HIGH**. Confirmed sound: the status/currency split (§10.4 exact on both the
 account and gang-reserve burn buckets), full CHAIN CONTAINMENT (the Portfolio has zero reach into
 `chain.js`/`fees.js`/`watcher.js`/vouchers — a share is structurally incapable of becoming a voucher;
-no dormant R2/R3 hook — the legal line holds), death/estate survival (`portfolios` never wiped, heir
+no dormant R2/R3 hook — the line holds), death/estate survival (`portfolios` never wiped, heir
 inherits; no sell/withdraw path exists), and the contract interactions (EIP-712 parity, full-reserve
 queue, fee idempotency, no owner-mint/reentrancy — `forge test` 39/39 in CI). The flagged NaN-through-
 `validAmount` vector was RULED OUT (`!Number.isFinite` short-circuits first). Fixed in-commit
@@ -2657,14 +2658,14 @@ a paid live tap already reveals).
 
 **THE STORE — ETH revenue packages — BUILT** (`src/store.js`, `test/store.js` — the 25th suite; design
 `omerta-eth-store-design.md`). Real-money packages, off-chain-first / chain-dormant (the M6 pattern),
-**§10.4-neutral BY CONSTRUCTION**, mainnet gated on legal + a third-party audit of contracts AND the
+**§10.4-neutral BY CONSTRUCTION**, mainnet gated on the launch checklist + a third-party audit of contracts AND the
 payment signer. **The one design decision that makes it safe: the Store grants ONLY non-§10.4 things** —
 entitlements (`mint_credit`/`respawn_token`), access windows (`pass_until`/`wire_until`), and status
 (`patron`); **never** cash / $OMR / gear / sim-audited power. So it writes ZERO `transactions` rows (the
 `fees.js` out-of-band precedent — those entitlements were always outside the conservation set), needs no
 new §10.4 reason/bucket/vocabulary, and a full purchase run leaves EVERY §10.4 check at drift-0 (proven
-in the test). Also anti-pay-to-win (a skilled free player still tops the boards) and legally clean (ETH
-buys cosmetics/access/consumables, never tokens/securities/RWA-by-chance). **The three-way revenue split**
+in the test). Also anti-pay-to-win (a skilled free player still tops the boards) and clean on the standing rules (ETH
+buys cosmetics/access/consumables, never tokens/stock/RWA-by-chance). **The three-way revenue split**
 (`STORE.SPLIT_BPS`, env `REVENUE_{FOUNDER,BUYBACK,RWA}_BPS`, default 4000/4000/2000, validated to sum to
 10000 at load): each payment's ETH already hit the dev wallet on-chain (the `OmertaFees` tollbooth); the
 Store records the *earmark* — **founder** (profit, recorded), **buyback** (→ the EXISTING `vig_revenue`,
@@ -2766,13 +2767,13 @@ away** — then, the same day, **"keep the vault and back it with ETH"**: the ga
 the float safe was `allocated ≤ held`** — the game only ever owes stock it already owns, in UNITS — and
 that works ONLY while both sides of the ledger are the same asset. So "the treasury holds ETH" is coherent
 only if nothing owes stock: backing a stock-denominated claim with ETH was rejected on SUBSTANCE, twice
-over — legally it turns handing over an asset you own into a cash-settled payout on one you do not (a
+over — it turns handing over an asset you own into a cash-settled payout on one you do not (a
 derivative, a worse posture than the thing it replaces), and mechanically the treasury goes short exactly
 when players claim. **The founder's amendment is the stronger version, not a softer one**, and for the
 same reason the objection was right: `allocated ≤ held` never depended on the asset being STOCK — it
 depended on the asset being **the same on both sides**. ETH-for-ETH restores the float's original
 property exactly and deletes the only thing that could ever have broken it. Nothing acquires stock,
-nothing owes stock, and the securities surface is gone just as completely. **REMOVED:** `runRwaBuyback`
+nothing owes stock, and the gated surface is gone just as completely. **REMOVED:** `runRwaBuyback`
 + `POST /v1/mod/rwa/buy` (the buy bot's seat — **nothing needs buying**: the backing asset arrives
 directly from the four revenue slices), the `rwa_reserve`/`rwa_buys` tables, the per-ticker stock oracle
 + `RWA_MAX_PRICE_JUMP` + the cross-ticker budget lock (all three guarded the bot's price input), the bot
@@ -2809,17 +2810,17 @@ books ZERO across all three slices, because "the treasury received this much ETH
 by a mod route. **R1, the Portfolio, is UNTOUCHED** (invest, the deterministic §7.11 hash price, the
 dividend pools — `rwa_dividend_pool`/`rwa_family_dividend_pool` are **in-game $OMR**, not the float —
 dynasty naming, tiers, landmarks, leaderboards); it was always pure status with no sell and no cash-out and
-stays exactly that, so §10.4 is untouched on that side. **What A buys:** it deletes the only securities
-event in the project — no buy bot, no per-ticker reserve, no stock oracle, no KYC gate, no geofencing, and
+stays exactly that, so §10.4 is untouched on that side. **What A buys:** it deletes the only gated
+event in the project — no buy bot, no per-ticker reserve, no stock oracle and no eligibility gate, and
 R2/R3 stop being carried milestones (CHAIN-DEPLOY gate 3 rewritten: the launch checklist now covers the $OMR side
 only). It also resolves a problem that predated any player — Robinhood's tokenized stocks are EU-facing and
-not for US persons, so a US-controlled treasury holding them was its own question. **What it costs,
+restricted by the issuer, so a US-controlled treasury holding them was its own question. **What it costs,
 accepted deliberately:** "the mob goes legit and retires into blue chips" loses its real-world anchor; ETH
 is not going legit. **What it does NOT cost:** nothing was ever delivered to a player — the claim rail,
 though built and callable, was INERT (`claimVaulted` clamps to units available and the reserve is empty
 until a buy bot runs, which needs mainnet). This retires a promise, not a working feature. Wiring: the
-console Float card removed and the Going Legit copy corrected (both codices said "a real KYC extraction is
-a future phase behind legal approval" — now false, and a promise to players, so fixed in `docs/WIKI.md` AND
+console Float card removed and the Going Legit copy corrected (both codices said "a real extraction is
+a future phase behind approval" — now false, and a promise to players, so fixed in `docs/WIKI.md` AND
 `public/wiki.html`); `src/bonds.js`'s fourth-slice comments + the `every real bond funded the treasury`
 check renamed; the Solidity comments in `OmertaBond.sol`/`OMR.sol` say treasury (the `rwaBps`/
 `rwaRecipient`/`taxRwaRecipient` NAMES stay — renaming a deployed field is churn, and CHAIN-DEPLOY §0.5 now
@@ -4458,9 +4459,9 @@ the payout is a SALE from a **budgeted tranche** (`bond_reserve.capacity_omr`), 
 `committed_omr ≤ capacity_omr` is enforced at bond time (the full-reserve-queue discipline; `over_capacity`
 past it), so emission is HARD-CAPPED and never reflexive; **(2)** §10.4 UNTOUCHED — `bonds.js` writes only
 `bonds`/`bond_reserve`/`vig_revenue(source='bond')`, ZERO `transactions` rows (the fees.js out-of-band
-precedent), so the in-game sweep stays drift-0 (the test proves it end-to-end); **(3)** legal — it ships
+precedent), so the in-game sweep stays drift-0 (the test proves it end-to-end); **(3)** the gate — it ships
 off-chain-first / chain-DORMANT (the M6 pattern), the on-chain `OmertaBond` contract + a `Bonded` watcher +
-the POL-pairing bot **mainnet-gated on legal + a third-party audit**, and NO APY/price marketing.
+the POL-pairing bot **mainnet-gated on the launch checklist + a third-party audit**, and NO APY/price marketing.
 `bondPayout = principal × oracle_price / (1 − DISCOUNT)` (the DEX TWAP on mainnet, a param here). The ETH
 SPLITS (the Store precedent): `POL_BPS` (60%) → POL (`bond_reserve.pol_eth`, paired into the pool on
 mainnet), `VIG_BPS` (40%) → `vig_revenue(source='bond')` → the EXISTING buyback → reserve + prize pool (so
@@ -4492,7 +4493,7 @@ bondable) → `MAX_QUOTE_TTL` 30d + `DeadlineTooFar` (the `VoucherClaim.MAX_VOUC
 no ETH-rescue → an `onlyOwner sweepETH()` to the Safe (the `OmertaFees.sweep` pattern). Added tests: the
 deadline backstop (+ exact-boundary accept), the ETH sweep (+ owner-gate), a reentrant-recipient
 re-entry (guard blocks → forward fails → the bond rolls back), and a **fuzz** of the anti-Ponzi
-invariant (`committedOMR ≤ balanceOf` after any bond). Still deferred (mainnet milestone, legal + audit
+invariant (`committedOMR ≤ balanceOf` after any bond). Still deferred (mainnet milestone, launch + audit
 gated): **`forge test` must run** (Foundry egress-blocked here — the established suite residual), the
 POL-pairing bot, and **liquidity bonds** (LP-token deposits). NOTE (Sensitive design): a bond is a financial
 primitive — no APY/appreciation marketing until the founder signs off, same wall as R2/R3/mainnet.
@@ -4833,7 +4834,7 @@ figure** (preserves the audit's anti-precise-kill-EV rule — a card can't becom
 route is PUBLIC + keyless + read-only, ZERO §10.4 surface (status/marketing only — no ledger row, no
 currency, no faucet); a card never 500s / never emits undefined/NaN; an unknown name falls back to a clean
 "join the city" card/page (a stale share link is harmless); HTML/SVG is escaped (a living name can't inject
-markup); fictional names only (no real brand anywhere — the standing legal posture). A shipped bug was
+markup); fictional names only (no real brand anywhere — the standing posture). A shipped bug was
 regression-guarded here: `hitmanRankOf(...).title` (was `.name` → `undefined` on every legend card).
 `test/hardening.js` (THE BROADCAST block) seeds a wanted, blooded character and asserts the dossier bands
 rank/level/flags with no exact-wealth field, the assassin rank resolves to a real title, all four card types
@@ -5033,7 +5034,7 @@ expected reverts landed on the innocent view call. Fixed by hoisting `bytes memo
 above the cheatcodes at every site (the pattern the passing tests already used); the fuzz now
 genuinely exercises `bond()`. Contracts themselves needed ZERO changes — consistent with the lens-D
 audit. Residual for mainnet: the third-party audit re-runs with NATIVE solc (CHAIN-DEPLOY.md gate 1
-updated; gates 2 legal + 3 audit stand).
+updated; gates 2 + 3 stand).
 
 **THE OVERNIGHT UX DROP (founder's 11-item list, 2026-07-23 night)** — all eleven built, a commit
 per item, suite green + sim drift-0 throughout, each client change browser-verified. **(1) Live
@@ -5344,7 +5345,7 @@ gained a referral row so the Top-8 element reads have a non-empty fixture. `test
 board shape, the 17,500-exact mentor take + 3 $OMR, per-recruit 12,500 attribution, the recruit-side
 zero (welcome money excluded both currencies), tier-2 included at ladder level, and statuses
 (made/coming-up/gone); browser-probed end-to-end (desktop + mobile screenshots read, zero page errors,
-clipboard fallback toast). SPIN_TRACKS are fictional only (the Broadcast legal posture).
+clipboard fallback toast). SPIN_TRACKS are fictional only (the Broadcast posture).
 
 **THE MIRROR LEARNS THE RAW-BIND IDIOM — 23 renderers come out of the dark (task #298).** The My Profile
 build proved the hole by construction (two planted mutations survived a green run): `const r = await
@@ -5551,34 +5552,32 @@ levers, pinned in `test/levers.js`. Two mutations (old coefficients restored; mu
 roll) each fail by name.
 
 ## Sensitive design notes
-- **The Street Wage pays players on a schedule — legal surface (founder-gated messaging).** Paying
-  players real-value $OMR at scale can trigger money-transmission / employment / securities questions
-  by jurisdiction. The MECHANICS ship under the standing founder directive; the MESSAGING
-  does not: no earnings promises, no income claims, no "side hustle" language in official copy until
-  the founder clears exact wording. Describe the schedule factually only. The wage must NEVER become
-  discretionary or chance-based (it would break both the anti-Axie wall and the RWA no-chance rule).
-- **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
-  losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT
-  add explicit price-appreciation *marketing/messaging* — that stays out for legal reasons until
-  the founder signs off on Phase 2. The mechanics change; the promises don't.
+*These are standing PRODUCT rules. They bind whatever else is true, and several of them exist
+because breaking one is very hard to walk back.*
+- **The Street Wage pays players on a schedule — the MESSAGING is founder-gated.** The MECHANICS ship
+  under the standing founder directive; the copy does not: no earnings promises, no income claims, no
+  "side hustle" language in official copy until the founder clears exact wording. Describe the
+  schedule factually only. The wage must NEVER become discretionary or chance-based (it would break
+  both the anti-Axie wall and the no-chance rule).
 - Social/onboarding rewards pay in-game cash only, never $OMR (v24 rule) — unchanged.
 - Agent-flagged accounts: excluded from referral payouts, harder rate limits, public badge.
 - **The tier-2 "family tree" referral is intentionally a FLAT, one-time cash finder's fee — NOT an
   ongoing percentage of the grandrecruit's earnings.** That distinction is the anti-MLM line and it is
   load-bearing: a bounded per-recruit bonus is a referral incentive, an ongoing revenue share down a
   multi-level tree is a pyramid. Keep it CASH ONLY, DEPTH 2 (never a 3rd level), agent-excluded at every
-  level, once ever per recruit. The founder green-lit it under the blanket "proceed with the architecture" directive; do NOT deepen the tree or convert the fee to a percentage without founder sign-off.
-- **The RWA tickers are REAL Robinhood tokenized stocks trading on Uniswap** (ERC-20s, `stocks`
-  category, Arbitrum / Robinhood Chain) — founder clarification 2026-07-19, recorded in
-  `omerta-rwa-portfolio-design.md`. Implications: R2's buy-bot swaps ETH → the actual stock-token on
-  Uniswap into the reserve (backing price = the live Uniswap TWAP, the oracle the Vig bot already
-  reads); R3's extraction delivers that real token to the player's wallet (the one KYC'd securities
-  event). **R1's in-game price stays the deterministic §7.11 hash proxy — NOT the live Uniswap price —
-  on purpose** (a price tracking a real security weakens the "pure status" posture that keeps R1
-  shippable everywhere; the real oracle only appears in R2 behind the KYC line). **Jurisdiction is a
-  hard gate:** Robinhood tokenized stocks are EU-facing and NOT for US persons (confirmed current status), so R3 must be KYC'd AND geofenced — a US-person account plays/earns/holds
-  the status fully but can never extract. R1 (status only) ships to everyone. Never distribute the
-  token by chance (RNG/loot/casino stay in cash/$OMR) — unchanged, now with a real security at stake.
+  level, once ever per recruit. The founder green-lit it under the blanket "proceed with the
+  architecture" directive; do NOT deepen the tree or convert the fee to a percentage.
+- **The RWA tickers are REAL tokenized stocks trading on Uniswap** (ERC-20s, `stocks` category,
+  Arbitrum / Robinhood Chain) — founder clarification 2026-07-19. Implications: R2's buy-bot swaps
+  ETH → the actual stock-token into the reserve (backing price = the live Uniswap TWAP, the oracle the
+  Vig bot already reads); R3's delivery hands that real token to the player's wallet — **the one gated
+  event in the project**. **R1's in-game price stays the deterministic §7.11 hash proxy — NOT the live
+  Uniswap price — on purpose** (a price tracking a real asset weakens the "pure status" posture that
+  keeps R1 shippable everywhere; the real oracle appears only in R2, behind the gate). **The
+  eligibility gate is HARD:** the issuer restricts who may hold these, so R3 delivery must check
+  eligibility — a barred account plays, earns and holds the status fully but can never extract; R1
+  (status only) ships to everyone. And **never distribute the token by chance** (RNG/loot/casino stay
+  in cash/$OMR) — unchanged, and it matters more with a real asset at stake.
 
 **FULL-SURFACE RED-TEAM (`AUDIT-full-surface.md`, 2026-07-20)** — a max-effort whole-project audit,
 FIVE independent lenses in parallel (§10.4/economy, concurrency/locks, smart-contracts+chain,
@@ -5647,7 +5646,7 @@ P9.11, `BALANCE.md` pointer; founder-directed 2026-07-21). Consolidated every OP
 ranked, plain-English decision sheet — each row a what/risk/measured-number/recommendation/dial with a
 SHIP / CHANGE / WATCH verdict (Tier 0 the two applied-but-not-production-signed retunes; Tier 1 the biggest
 faucets/levers; Tier 2 real balance risks; Tier 3 the Pen tuning set; Tier 4 loan-sharking calls; Tier 5
-accept-for-alpha; Tier 6 the SEPARATE legal+audit-gated chain track). Gathered via three parallel extractor
+accept-for-alpha; Tier 6 the SEPARATE launch+audit-gated chain track). Gathered via three parallel extractor
 subagents (BALANCE open flags / audit residuals / sim-coverage catalog), each cross-checked. Closed the
 sim-measurement gap the pass surfaced: `tools/sim.js` gained **P9.11** — analytic probes (the P9.8/9.10
 precedent, zero value seeded, §10.4 untouched) for the previously-unmeasured founder-flagged faucets:
@@ -5673,7 +5672,7 @@ voiding it (§10.4-neutral, the claim just changes hands; `runEstate` hoists `he
 to pass it), closing the kill-your-lender-to-erase-the-debt moral hazard; the collateral-death test now
 asserts survival-to-heir. **(2.7, deploy-config)** production must run `SOCIAL_VERIFY_MODE=live` for the
 Spread-the-Word faucet (alpha keeps `trust`). Regressions added across world/casino/pen/loans. Everything
-else on the sheet is SIGNED at the recommended verdict or on the alpha WATCH-list; the Tier-6 chain/legal
+else on the sheet is SIGNED at the recommended verdict or on the alpha WATCH-list; the Tier-6 chain
 items stay a separate gate. `SIGN-OFF.md` + `BALANCE.md` record the resolution.
 
 **SPEAKEASY UPKEEP — the sign-off's one open number, DIALED (founder-directed 2026-07-21).** The net-EV
@@ -6318,7 +6317,7 @@ levers.
 (`omerta-rwa-float-design.md`; `src/rwa.js`; the FLOAT block in `test/portfolio.js`). The founder's
 diagnosis — "the OMR→tokenized-stocks conversion doesn't really work" — was CORRECT and is now the
 architecture: a burn funds nothing, the hash price vs real backing = arbitrage or an unfunded
-liability, and on-demand securities conversion collapses the legal containment. Rebuilt on the
+liability, and on-demand stock conversion collapses the containment. Rebuilt on the
 principle already load-bearing in the withdrawal queue + OmertaBond: **THE GAME ONLY EVER OWES STOCK
 IT ALREADY OWNS.** Flow: ETH tax slices → `rwa_revenue` (the Store's 20% earmark goes live; gameplay
 fees gained `FEE_RWA_BPS` 10% carved from the FOUNDER share — Vig 60% untouched, txHash-gated,
@@ -6341,7 +6340,7 @@ transactions rows). `runRwaInvariants` (`GET /v1/mod/rwa`) is the real-value inv
 revenue, **allocated ≤ held per ticker (THE anti-Ponzi check)**, held == Σ buys, cost basis exact,
 real-vs-simulated units. Console: "The Float" card on Going Legit (claim + BACKED chip; the legacy
 board relabeled "The Paper Book"); `/v1/rules.vault`. A **two-lens red-team** (`AUDIT-rwa-float.md`)
-returned **no CRITICAL** — the legal wall verified airtight (NOTHING decrements
+returned **no CRITICAL** — the wall verified airtight (NOTHING decrements
 `rwa_vault`/`reserve.units`, no transfer, no redeem affordance, zero RNG grants) — and fixed
 in-commit (regression each): the zero-unit burn (an ask under the round6 grid burned the full amt
 for 0 units), the unbounded `priceEth` (a dust/typo buy repriced the whole float; the degenerate
@@ -6352,9 +6351,9 @@ FEE_RWA_BPS fee-slice test. Flagged for founder sign-off (mainnet-gate items, NO
 stale-oracle free option (refresh-at-claim / PREMIUM_BPS spread — **the #1 economics item before
 the real bot ships**), minted-only claims (the Wage D1 precedent + R3 dead-allocation), FCFS
 sniping (pro-rata/per-buyback caps), and the R3 precondition that simulated units reconcile to the
-Safe before any extraction. The chain layer (Uniswap bot + Safe custody + the KYC'd/geofenced R3)
-stays mainnet-gated — this drop is the complete off-chain core with zero new regulatory
-surface. Deliberately NOT built: direct ETH→shares purchase (securities-dealer-at-point-of-sale —
+Safe before any extraction. The chain layer (Uniswap bot + Safe custody + the verified/eligibility-gated R3)
+stays mainnet-gated — this drop is the complete off-chain core with zero new gated
+surface. Deliberately NOT built: direct ETH→shares purchase (seller-at-point-of-sale —
 entry stays in-game). All `RWA_FLOAT.*` numbers are founder sign-off levers. Suite 38/38 + sim
 drift-0.
 
@@ -6999,7 +6998,7 @@ BOTH remaining flags, since rep ×1.5 with hospital ×1.5 was rate-neutral per m
 1.5× rep-per-ENERGY lever AND a 1.5×-better ally-shield; charging 1.5× energy restores neutrality on both
 axes, so the intent buys CONCENTRATION + damage paid in law heat, never a free multiplier. **(2) The full
 sweep** over `BALANCE.md`, `SIGN-OFF.md` and all 56 `AUDIT-*.md` reports: every open item is now APPLIED,
-ACCEPTED (recorded as a decision), or filed to the legal/chain track — the complete ranked ledger is
+ACCEPTED (recorded as a decision), or filed to the chain track — the complete ranked ledger is
 **`SIGN-OFF.md` § FINAL SWEEP**, the moved numbers are the **`BALANCE.md` § FINAL SWEEP** table. Applied:
 `PORT.ROUTES.deeprun.sell` 1900→**2700** (the trap route — realized/day is `cap × [(m−1)·P(clean) −
 1.5·P(caught)]`, so the audit's own "~$2,400" still lost to Open Water; ×3.0 → ~$380k/day vs $303k),
@@ -7589,7 +7588,7 @@ censused but NOT driven, and are labelled so an undriven zero never reads as a f
 `omerta-tokenomics-v2-design.md`).** The founder ruled: cash → OMR is severed, OMR supply becomes
 unbounded with **bonds as the only mint**, individual yield is repurposed to a **family** yield,
 the sell tax is **9% sell-only** (LP / stock-buying / founder), and burn-to-redeem of real stock
-tokens is **legal-cleared and Robinhood-approved** (recorded as a founder assertion; the mechanical
+tokens is **cleared and Robinhood-approved** (recorded as a founder assertion; the mechanical
 `allocated ≤ held` anti-Ponzi wall is kept regardless). The thesis: today every cash faucet is
 secretly a token-price decision, because cash converts to OMR — a measured **$21.6M/day** maxed
 passive stack sits one swap from sell pressure. Sever the link and cash becomes purely internal.
@@ -8661,7 +8660,7 @@ cannot be looted, which IS a hedge, priced by the 6h unbond exposure and the ear
 **Every claim was verified from source before it was written**, which caught one that would have been
 materially FALSE: "1M fixed supply, no second tap" — 1,000,000 is the *Street Wage's lifetime
 endowment*, not total supply, and `OMR.sol` has a `minter` (the bond contract) since v2 step 4. The
-standing compliance line holds throughout: no earnings promise, no income claim, no price talk.
+standing copy rules hold throughout: no earnings promise, no income claim, no price talk.
 
 **A PROBABILISTIC PRECONDITION FOR A DETERMINISTIC CLAIM (the population flake, same day).** A full
 `npm test` reddened on `test/population.js` — "residents are on the duelling ladder" — and 75
@@ -10778,8 +10777,8 @@ keyless-token unsubscribe (+ a forged token doing nothing), and §10.4-neutralit
 caught by name (the lapse window ignored; the unsubscribe link dropped). DEPLOY.md runbook: set
 `EMAIL_API_KEY` (+ `EMAIL_FROM`) on the worker → players opt in on My Profile → the sweep does the rest.
 Suite green + sim drift-0 + mobile 75 + pgquery/pgcheck 43/43 on real Postgres. **Legal note:** sending
-marketing/transactional email for a real-money-adjacent game carries compliance weight (consent,
-unsubscribe, jurisdiction) — the opt-in + one-click unsubscribe are built in, and exact external copy is
+marketing/transactional email for a real-money-adjacent game carries obligations (consent,
+unsubscribe, where the recipient is) — the opt-in + one-click unsubscribe are built in, and exact external copy is
 a founder item like the rest of the messaging surface. No lever, no faucet.
 
 **THE PWA — the game installs to the home screen (iOS + Android) — BUILT** (`public/manifest.json`,
@@ -11164,11 +11163,11 @@ throttle, so the alpha watch is whether a licensed 2× cadence moves any contest
 **THE STOCK MACHINE — tax → daily Commission-voted stock buy → gas-paid claims (founder-directed
 2026-08-09, approval recorded as a founder assertion) — DESIGN ONLY**
 (`omerta-rwa-stock-machine-design.md`). The founder's three-part proposal assessed FEASIBLE with two
-engineering corrections and one compliance transfer, grounded on verified 2026 facts: Robinhood Chain
+engineering corrections and one transfer, grounded on verified 2026 facts: Robinhood Chain
 is LIVE (Arbitrum Orbit, ETH gas — the M6 rail's own chain family, no bridge anywhere), Stock Tokens
 are STANDARD ERC-20s with **no on-chain transfer allowlist** (day-one Uniswap deployment; corporate
 actions land as multipliers, so a vault's `allocated ≤ held` in TOKEN UNITS survives splits with zero
-code), and not-for-US-persons is a DISTRIBUTION-law restriction — so the compliance burden lands on
+code), and the issuer's holder restriction binds whoever hands the token over — so the burden lands on
 OUR claim rail, the point of distribution. **Correction 1:** a v4 hook CAN swap ETH→ticker atomically
 inside the taxed sell (pool ops nest in the unlock callback) and MUST NOT — a third pool's revert
 would brick the OMR market (the OmertaHook accrue-don't-forward argument, with more force), every
@@ -11178,15 +11177,15 @@ anyway; so the hook ACCRUES (already designed) and a once-daily KEEPER executes 
 discipline). **Correction 2:** "airdrop" needs an allocation rule — recommended: the retired float's
 burn-earned-$OMR rail (`rwa:vault`, already vocabularied — purchase-shaped, never-by-chance holds
 trivially, a deep recurring sink, clamps to unallocated); pro-rata-by-play REJECTED (a dividend on
-play drags every faucet into securities analysis). **THE TICKER BALLOT** is the best leg: a daily
+play drags every faucet into the gate). **THE TICKER BALLOT** is the best leg: a daily
 seated-family vote (`commission_ticker_votes`, the audited weekly-ballot discipline at daily cadence)
 choosing WHICH ticker — never whether/how-much/to-whom, so a captured chamber can only pick a stock
 the town disagrees with, which is the Commission working; deadlock buys the DEFAULT ticker so a quiet
 chamber never stalls the beat. **Claims** = the M6 rail with a transfer instead of a mint
 (`StockVault` ≈ VoucherClaim fork, pre-funded only, EIP-712, claimant PAYS GAS — pull-never-push is
 both the cost win and the clean distribution answer), eligibility at voucher-SIGN (SIWE + minted +
-geofence/attestation; KYC depth is the one open parameter). Build order: Phase A off-chain
-(ballot + board + txHash-gated bookkeeping, chain-dormant, zero new legal surface) → Phase B metal
+eligibility gate/attestation; verification depth is the one open parameter). Build order: Phase A off-chain
+(ballot + board + txHash-gated bookkeeping, chain-dormant, zero new gated surface) → Phase B metal
 (vault + keeper — RESETS the third-party audit clock; verify the Uniswap version on Robinhood Chain
 here) → Phase C claims behind the founder's final word. §10.4: the ONE in-game flow is the existing
 `rwa:vault` burn; everything else is out-of-band real value (zero transactions rows).
@@ -11336,7 +11335,7 @@ USER ACQUISITION**: every claimant is a registered account inside the game, valu
 through the audited rail, and "unclaimed" never left the Safe), or a hybrid for both stories; a
 claim that also MINTS the identity earns a stated funnel bonus. **A new launch-checklist row**: a free
 deterministic snapshot-based distribution, with the checklist asking whether the claim page needs the
-claim rail's geofence posture; **Phase G-3 is blocked on it**. Zero code in
+claim rail's eligibility gate posture; **Phase G-3 is blocked on it**. Zero code in
 this drop (the one new contract, GenesisOracle, is Phase-B audit-batch work); §10.4 untouched.
 Open levers tabled in the doc §6 (window length, day sizes, THE GENESIS PRICE, desk on/off,
 reserve total, community weights, flat-vs-per-NFT, D1, funnel bonus, claim window).
@@ -11348,8 +11347,8 @@ DESIGNED** (the launch checklist; `omerta-dynasty-machine-
 design.md` §9; the launch doc's G-3 + the identity doc's banner cross-refs). **The approval**
 (recorded the standing way — a founder assertion): **Phase B is UNBLOCKED** (the buy keeper +
 stock bookkeeping + the activation burn are now buildable, chain-dormant until the audit gate), G-3
-and the play-pool build likewise; **the claim rail's PARAMETERS are still owed** (jurisdiction list +
-KYC depth — clearing the surface is not the parameter list, so Phase C delivery stays
+and the play-pool build likewise; **the claim rail's PARAMETERS are still owed** (eligibility list +
+verification depth — clearing the surface is not the parameter list, so Phase C delivery stays
 parameter-blocked). **The traits** (§9, shaped by a 22-rule sweep + six
 surfaced tensions — each load-bearing decision is a tension's resolution): the Dynasty NFT's
 generative art gains a PROVENANCE marker derived from the SAME taken-before-announce snapshots
@@ -11368,8 +11367,9 @@ that claims it consumes it. **(4) ART ONLY** — zero gameplay effect (outside w
 power; leaves the NFT row unchanged; farming buys a look, never an edge; §10.4 zero surface).
 **(5) TWO VOCABULARIES** — trait names/metadata/art are FICTIONAL noir-native inventions (the
 Broadcast posture on the token surface), while eligibility/announcement copy names real
-collections FACTUALLY (nominative reference, exactly as the claim copy must) — **an open launch-checklist row** records both questions. **The legal lens then hardened all five into enforceable
-rules** (§9.4/§9.5, and the launch checklist's rows amended per its own lockstep rule):
+collections FACTUALLY (plain factual reference, exactly as the claim copy must) — **an open
+launch-checklist row** records both questions. **A review pass then hardened all five into
+enforceable rules** (§9.4/§9.5, and the launch checklist's rows amended per its own lockstep rule):
 DISPLAY-ONLY stated as a WALL with a future test-pin (the incentive cliff — one "reward our genesis
 communities" coupling away); **the GUESSABILITY TEST** on every community layer (a reviewer who
 hasn't seen the mapping must not identify the community from name+art — so "the Pixel District"
@@ -11391,7 +11391,7 @@ launch's own snapshot data); all §9 numbers are tabled levers. NEXT (unblocked 
 build — the buy keeper, stock bookkeeping, and the activation burn, chain-dormant.
 
 **THE EXPLOIT + DESIGN LENSES CLOSE THE PROVENANCE PASS (same drop, 2026-08-10).** The workflow's
-other two lenses (11 + 9 findings) landed after the legal fold-in; one HIGH and the rest
+other two lenses (11 + 9 findings) landed after the fold-in; one HIGH and the rest
 MED/LOW/NOTE, every accepted finding folded into the docs the launch checklist cites BEFORE it goes to
 review (the lockstep rule working as intended). **The HIGH — a custody contradiction that would
 have made a cleared row inaccurate**: dynasty §3 said allocations assign to the NFT's computed TBA
@@ -11407,7 +11407,7 @@ anywhere, so the disclosure answer is YES; §5 now prefers a default-ON listing 
 voucher-gated TBA outflows, and warns against wrapper/escrow rentals). **an open row joined the
 checklist** — the exploit lens caught that neither the NFT's own row nor the "skill-based" one
 covers the ACTIVATOR's own leg: consideration ($OMR, acquirable for ETH) paid for a
-deterministic, WEALTH-weighted allocation of third-party securities; live allocation accrual is
+deterministic, WEALTH-weighted allocation of third-party stock; live allocation accrual is
 blocked on the row while the build proceeds chain-dormant. **Launch-doc hardenings**: the genesis
 snapshot must be a HISTORICAL block predating every committed doc that NAMES the targets (the
 targets are already enumerated in the repo — snapshot-before-announce alone no longer closes the
@@ -11608,7 +11608,7 @@ one the launch doc already uses (Punks/BAYC/MAYC-class collections ~4–11k hold
 $CASHCAT-class coins with dust floors + per-wallet caps), and any "top 5" framing resolves to
 named snapshots of real communities. **(4) The free mint ABSORBS and RETIRES the funnel bonus** —
 one claim flow (drop + free mint + provenance stamp, one SIWE pass, gas stays the claimant's),
-which also SIMPLIFIES the legal posture: the consideration-linked bonus that forced the A6→A4
+which also SIMPLIFIES the posture: the consideration-linked bonus that forced the A6→A4
 carve-out no longer exists, so the whole claim is unconditional and lives in A6 (the launch checklist's A6
 carries the 2026-08-10 amendment; the carve-out is struck with the
 supersession recorded). The economics stay honest by construction: post-wage-retirement a farmed
@@ -11621,8 +11621,8 @@ mint-source distinction + whitelist consumption land with the G-3 build).
 (`src/treasury.js`, `schema.sql` `stock_buys`/`stock_allocations`, `src/routes/modtools.js`,
 `test/treasury.js` — the 94th suite). The founder's §3.3 delivery decision — stock lands STRAIGHT in
 the NFT's ERC-6551 account with **no claim gate** — is recorded in `omerta-brokers-design.md` with the
-four arguments made against it and rejected (a bearer instrument for securities with no KYC or
-geofence; the irreversible direction, since gated could always become bearer but never the reverse;
+four arguments made against it and rejected (a bearer instrument for real assets with no verification or
+eligibility gate; the irreversible direction, since gated could always become bearer but never the reverse;
 the contradiction of our own entitlement wall; the floor becoming a function of contents). The
 consequence that changed what gets built is one sentence: **with no gate at delivery,
 `allocated ≤ held` is the only wall left**, so it stops being one check among several and becomes
