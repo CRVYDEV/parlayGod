@@ -200,6 +200,6 @@ remove `auth` from a leaderboard → it is reported as an undeclared public rout
 Nothing new. The previously-flagged and accepted items stand (market `bidListing` AB-BA which is
 retry-masked, `VoucherClaim.sweep` under the Safe-as-root-of-trust posture, purchasable seasonal
 Commission standing, the shared dividend-pool allocation). `forge test` is green (73/73 since
-2026-07-23); mainnet still gates on legal counsel and the third-party audit.
+2026-07-23); mainnet still gates on the launch checklist and the third-party audit.
 
 Suite 57/57 + sim drift-0 after every change.

@@ -270,7 +270,7 @@ Safes on mainnet.
 
 ## 11. What must precede mainnet (non-negotiable)
 
-1. **Legal counsel** (parent §5) — real-money earning + a token is securities / MTL / tax /
+1. **Launch review** (parent §5) — real-money earning + a token is a regulated-product question spanning
    gambling exposure that varies by jurisdiction and may gate which users you can serve. Highest
    priority; before any real extraction goes live.
 2. **Third-party audit** of the modified `OmertaFees`, the buyback bot, and the signer — the M6

@@ -41,7 +41,7 @@ This is the load-bearing decision, and we come down hard on one side:
 
 | Option | Verdict |
 |---|---|
-| **Staked $OMR** (token-weighted, à la most DeFi DAOs) | **Rejected.** It makes $OMR a governance-rights instrument — squarely the Howey "expectation of profit from the efforts of others" pattern we are keeping $OMR *out* of (sensitive design note: utility-only). It also lets anyone **buy** control on the DEX: a whale with cash converts to $OMR and owns the economy. Both fatal. |
+| **Staked $OMR** (token-weighted, à la most DeFi DAOs) | **Rejected.** It makes $OMR a governance-rights instrument — squarely the expectation-of-profit pattern we are keeping $OMR *out* of (sensitive design note: utility-only). It also lets anyone **buy** control on the DEX: a whale with cash converts to $OMR and owns the economy. Both fatal. |
 | **Earned standing** (`lifetime_tribute + 10,000 × wars_won`) | **Chosen.** It's the exact metric the buyback already ranks families by, it's **earned through play, non-transferable, and un-purchasable** — you cannot buy standing on any market — and it aligns governance power with the players most invested in the game's health. |
 
 Standing-weighting keeps $OMR a pure utility token *and* closes the buy-the-vote attack in one
@@ -171,8 +171,8 @@ The founder has waived legal *gating* for build sequencing ("innovate first"), b
 records the reasoning because it shaped the design: **standing-weighted (not token-weighted)
 voting is the specific choice that keeps $OMR utility-only and off the governance-token /
 securities path.** If a future revision is tempted to add staked-$OMR voting for "more skin
-in the game," that temptation is exactly the securities trap — re-read §3 first and get counsel
-before touching it. Robinhood Chain ToS re: governance dApps is a separate counsel item.
+in the game," that temptation is exactly the trap — re-read §3 first and get a launch review
+before touching it. Robinhood Chain ToS re: governance dApps is a separate launch item.
 
 ## 10. Build phasing (when it's greenlit)
 

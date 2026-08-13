@@ -95,6 +95,6 @@ Deferred: devnet deploy + wiring, and `forge test` on the new `OmertaFees` suite
 Foundry VM was not run this session).
 
 ## Before mainnet (non-negotiable)
-Third-party audit of all four contracts **and** the signing service; counsel review
+Third-party audit of all four contracts **and** the signing service; launch review
 of Robinhood Chain ToS re: wagering-adjacent dApps; a Safe signer ceremony; and
 daily-cap + tranche sizes set deliberately small for launch.

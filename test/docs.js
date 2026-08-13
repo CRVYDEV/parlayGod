@@ -205,22 +205,19 @@ const phantom = [...index.matchAll(/`(AUDIT-[a-z0-9.-]+\.md)`/g)].map((m) => m[1
   .filter((f) => !audits.includes(f));
 assert.deepEqual([...new Set(phantom)], [], `docs/AUDITS.md lists reports that do not exist: ${phantom.join(', ')}`);
 
-// ── the counsel memo's fee guard — RETIRED 2026-08-12, and this is the tombstone ─────────────────
-// It checked that every "<n> ETH" the memo stated as a price was a live fee (a published tranche
-// wave, the respawn fee, a Store SKU), because a memo's entire value is being accurate about the
-// product and a lawyer opining on a wrong fact pattern is worse than no memo. It earned its place:
-// it was written after a same-day founder reversal left the memo describing one payment rail across
-// every real-money price.
+// ── the launch checklist's fee guard — RETIRED 2026-08-12, and this is the tombstone ─────────────
+// It checked that every "<n> ETH" the checklist stated as a price was a live fee (a published
+// tranche wave, the respawn fee, a Store SKU), because that document's entire value is being
+// accurate about the product, and a review run against a wrong fact pattern is worse than no review.
+// It earned its place: it was written after a same-day founder reversal left the checklist
+// describing one payment rail across every real-money price.
 //
-// The memo left the repository when the repo went PUBLIC. It is a legal document — the enumerated
-// assertions counsel approved, and the questions still OPEN — and publishing your own record of
-// legal uncertainty is a different act from publishing source code. It was purged from the history
-// rather than merely deleted, so there is no file here to read.
+// The checklist left the repository when the repo went PUBLIC — it is kept outside, with the founder.
 //
 // THE DISCIPLINE DID NOT MOVE WITH IT, AND THAT IS THE POINT OF THIS COMMENT. A check that
 // silently stops existing is how the thing it guarded goes stale unnoticed — so it is written down
 // instead: whenever a fee lever moves (MINT_TRANCHES, RESPAWN_FEE_ETH, a STORE package price), the
-// memo has to be re-read by hand against the new figure before it next goes to counsel. The live
+// checklist has to be re-read by hand against the new figure before it is next relied on. The live
 // prices are always recoverable from `GET /v1/rules` and the levers register; what cannot be
 // recovered is somebody remembering to look.
 

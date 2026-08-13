@@ -208,7 +208,7 @@ the honest description of Model 1 without R3, and belongs in any player-facing c
 
 Jurisdiction is likewise untouched: a Jersey issuer, EU-facing, **not for US persons**. A US-controlled
 treasury buying autonomously is a question about *our* buying, not only about player delivery. The bot
-industrialises that question rather than answering it, and it is the first thing for counsel.
+industrialises that question rather than answering it, and it is the first thing on the launch checklist.
 
 ## Build order (unchanged from the D11 breakdown, minus the step now answered)
 

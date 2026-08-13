@@ -37,7 +37,7 @@ Three further weaknesses worth naming plainly:
    `/admin → Integrations` renders the activation steps). Turning them on is higher-leverage than
    anything we could build.
 2. **The chain layer is not live and will not be for this launch.** Mainnet is gated on a third-party
-   audit and counsel. Any GTM that leans on "earn and withdraw" is describing a product we cannot
+   audit and the launch checklist. Any GTM that leans on "earn and withdraw" is describing a product we cannot
    ship on a date we control.
 3. **The depth that is our best asset is also our worst first impression.** 25 screens is a lot of
    game to hand somebody in their first ten minutes. The onboarding work (the coach ladder, THE DAY,
@@ -131,7 +131,7 @@ re-acquire. So the sequence is:
                   └────────────┬─────────────┘
                                │
    PHASE 4        ┌────────────▼─────────────┐
-   chain          │  gated on audit + counsel│  ← never a date we promise publicly
+   chain          │  gated on audit + the launch checklist│  ← never a date we promise publicly
                   └──────────────────────────┘
 ```
 
@@ -194,7 +194,7 @@ work. A referral loop in an empty city just burns the referrer's social capital.
 
 ### Phase 4 — chain
 
-Gated on the three hard gates in `CHAIN-DEPLOY.md` §0 and on the counsel memo rows. **Never a
+Gated on the three hard gates in `CHAIN-DEPLOY.md` §0 and on the launch checklist. **Never a
 publicly promised date.** The launch sequence (`omerta-launch-sequence-design.md`) is the plan; the
 community drop there doubles as Segment C acquisition.
 

@@ -158,7 +158,7 @@ Each phase is independently shippable, testable (extend the suite, both success 
 and gated on your sim + sign-off for every number. Nothing later depends on mainnet.
 
 1. **Phase 1 — Reward the risk (Pillar 1).** Pure off-chain rebalance. Immediate Risk-to-Earn
-   *feel*, no infrastructure, low regulatory surface (no new extraction). Ship first, validate that
+   *feel*, no infrastructure, low extraction surface (no new extraction). Ship first, validate that
    PvP comes alive and the safe play stops dominating.
 2. **Phase 2 — The Vig + PLEX bridge (Pillar 3).** The sustainability engine and the actual
    "living." Build the Prize Reserve, the P3.2 invariant, and pay-fees-in-$OMR-or-ETH. This is where
@@ -177,7 +177,7 @@ and gated on your sim + sign-off for every number. Nothing later depends on main
   test it like §10.4.
 - **Regulatory:** real-money earning + a token invites securities / money-transmitter / tax /
   gambling scrutiny that differs by jurisdiction (and can gate which users you can serve). Get
-  counsel before Phase 2 mainnet. Non-negotiable given the stakes.
+  a launch review before Phase 2 mainnet. Non-negotiable given the stakes.
 - **It changes the game's soul.** Utility-only kept the game about *playing*; Risk-to-Earn makes it
   partly about *money*, which attracts extractors, bots, and RMT pressure, and raises the stakes of
   every balance bug (a §10.4 leak is now a real-money leak). The agent-flag / anti-abuse machinery

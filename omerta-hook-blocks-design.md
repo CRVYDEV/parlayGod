@@ -163,7 +163,7 @@ the best fit on the list. Mechanically it is a prize for trading, and that runs 
 2. **It pays for wash trading** — buying repeatedly to reach N manufactures the one metric that is
    supposed to tell us the pool is real, and our fee revenue scales with volume, so we'd be taxing
    volume we paid to create.
-3. It would be a new counsel row on a memo whose existing rows are still being cleared.
+3. It would be a new launch-checklist row while the existing ones are still being cleared.
 
 **The free version is good and costs nothing:** the counter is public and we already watch the chain,
 so the Nth buy fires a **city event** — the numbers came in, on the streets feed, no payout, no

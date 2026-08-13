@@ -7,7 +7,7 @@
 > NFT is an uncapped **ERC-721** carrying an **ERC-6551 token-bound account** (the standard's
 > mechanics verified against the EIP text), which holds the Stock Machine's activated allocations.
 > The trophy/entitlement wall below STANDS — the entitlement stays account-bound in the DB — with
-> one knowing, counsel-gated exception recorded there (memo row A2): the TBA makes the trophy a
+> one knowing, gated exception recorded there: the TBA makes the trophy a
 > transferable container of on-chain value. **And §9 there adds THE PROVENANCE TRAITS**
 > (holdings-derived generative markers off the launch snapshots — opt-in, once per wallet,
 > banded, cosmetic only; this doc's layered-composition + review-the-layers + banded-traits rules
@@ -30,7 +30,7 @@
 > **AMENDED 2026-08-10 by `omerta-brokers-design.md` §3.3 — the exception is now recurring, and the
 > word "trophy" no longer describes the whole token.** The founder decided that treasury-bought
 > tokenized stock lands **straight in the token-bound account with no claim gate**. The 2026-08-09
-> banner above called the TBA "one knowing, counsel-gated exception" to the trophy/entitlement wall;
+> banner above called the TBA "one knowing, gated exception" to the trophy/entitlement wall;
 > that framing assumed a bounded, one-off container. With no gate it is a **standing pipe**: every
 > epoch adds securities to the token, so the token is a **bearer instrument for real-world assets**,
 > continuously, by design.
@@ -42,7 +42,7 @@
 > a reader who takes "tradeable trophy" at face value will underestimate what a secondary sale
 > transfers. It transfers real securities held in the token's own account, to a buyer with no KYC and
 > no jurisdiction check — which is the sharpest form of the concern §6 of the brokers design records,
-> and the specific item flagged there as the thing to put in front of counsel *before* delivery ships.
+> and the specific item flagged there as the thing to put on the launch checklist *before* delivery ships.
 >
 > **The consequence this doc owns.** §1's floor-vs-utility reasoning gets sharper and should be read
 > with the brokers §3.3 note beside it: once the token carries contents, the cheap end of the order
@@ -252,7 +252,7 @@ every-marketplace JSON blob must be **at most** as revealing as the paid one.
 The M6 pattern, for a specific reason: **a new contract resets the third-party audit clock**, and
 tokenomics v2 step 4 already reset it once (`OMR.mint` deleted the "nothing mints" property every
 prior audit rested on). Mainnet is gated on `forge test` (green), third-party audit (not run), and
-legal counsel (not done). None of that should block the part players can actually see.
+the launch checklist (not done). None of that should block the part players can actually see.
 
 **Phase 1 — the portrait, entirely off-chain (no gates).**
 Parts library, compositor, `GET /v1/identity/:characterId.svg`, a console card on the sheet, traits
@@ -267,7 +267,7 @@ JSON be reviewed and argued about before a contract exists to be stuck with it.
 **Phase 3 — the contract (gated).**
 `OmertaIdentity`, ERC-721, minted by the existing `OmertaFees.payMintFee()` path so the fee rail is
 unchanged. Safe-owned. **The entitlement stays on `account_persistent.minted` and the contract must
-not gate anything on `balanceOf`** — see §1. Foundry tests; then the audit and counsel gates like
+not gate anything on `balanceOf`** — see §1. Foundry tests; then the audit and launch gates like
 everything else on the chain track.
 
 ---
@@ -289,7 +289,7 @@ with *more* force rather than less:
 - market it as what it is: a **collectible portrait of a character you played**;
 - royalties are ordinary and fine; a **revenue-share or "floor support" framing is not** — that is a
   security-shaped promise and it is out;
-- **counsel reviews the copy** before any of it is public, on the same basis as the R2/R3 and mainnet
+- **the founder reviews the copy** before any of it is public, on the same basis as the R2/R3 and mainnet
   gates.
 
 ---

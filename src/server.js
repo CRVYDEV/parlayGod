@@ -1547,7 +1547,7 @@ export async function buildServer() {
   // THE WIRE — the intelligence terminal: wiretaps on rivals + the Street Wire premium feed ($OMR sinks).
   // ── THE BROKERS (omerta-brokers-design.md) — the activation sink + the published weights.
   // NOTHING here delivers a reward: `allocateEpoch` computes a NUMBER and stops. Delivery is step 7
-  // and is gated on counsel, which is why there is no claim route to find.
+  // and is gated on the launch checklist, which is why there is no claim route to find.
   app.get('/v1/brokers', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client) => Brokers.brokerBoard(client, ch)));
   app.post('/v1/brokers/activate', { preHandler: auth }, async (req) =>

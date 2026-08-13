@@ -99,6 +99,6 @@ with open egress before the third-party audit.
 - **Perimeter**: every mutating route auth'd + rate-limited + idempotent (reserve-before-execute,
   body-bound, 2xx-only); no unparameterized SQL anywhere; Privy JWT hardened; value inputs
   floored + positivity-guarded.
-- **Casino**: no den path touches $OMR (the regulatory line); no +EV house game; seed draws not
+- **Casino**: no den path touches $OMR (the hard line); no +EV house game; seed draws not
   manipulable/early/double-claimable; income-clock aliasing telescopes to ≤ one window; token
   buckets leak correctly.

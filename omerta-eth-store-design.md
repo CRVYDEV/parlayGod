@@ -38,7 +38,7 @@ is earmarked, via one env-configurable split:
   players as $OMR prizes, and the `extraction ≤ inflow` invariant (`runVigInvariants`) absorbs it
   unchanged — Store revenue is just more Vig revenue.
 - **rwa** (20%) — routed into a new `rwa_revenue` bucket. **Dormant (R2):** R2 (a real RWA reserve
-  backing the Dynasty Fund shares) is legal-gated and unbuilt, so this bucket is *recorded only, never
+  backing the Dynasty Fund shares) is launch-gated and unbuilt, so this bucket is *recorded only, never
   spent* — it's the accounting seat R2 will draw on. A light invariant asserts nothing has drained it.
 
 The existing **mint/respawn gameplay fees keep their legacy `VIG_BPS` posture** (`recordFeePayment` →
@@ -121,6 +121,6 @@ side. So: real ETH → revenue + grant; comp → grant only.
    `src/pass.js` (THE LEDGER): a 12-tier daily-claim track; status/consumable rewards + a backed $OMR
    stipend through `Vig.payPrizes` (pool-bounded, funded by the pass's own buyback share). See CLAUDE.md.
 4. Named landmarks / Founder's charter numbers (whale status flexes — more `store_grants` SKUs).
-5. R2: the rwa_revenue → real-RWA-buy bot + the reserve that backs Dynasty shares (legal-gated).
+5. R2: the rwa_revenue → real-RWA-buy bot + the reserve that backs Dynasty shares (launch-gated).
 
 All prices/splits are founder sign-off levers — sim + sign-off into BALANCE.md before production.

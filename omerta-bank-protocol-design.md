@@ -295,7 +295,7 @@ pro-rata on activity. If staked $OMR multiplied that score, then:
 
 …a self-referential loop in which **holding the token buys a bigger share of the token handout.**
 That would (a) make the distribution wealth-weighted rather than effort-weighted, which is *not*
-what A5's approved "skill/effort-based" language covers and lands it next to A8's open question,
+what the approved "skill/effort-based" framing covers and lands it next to an open question,
 and (b) destroy the linearity proof — two players with identical effort would receive different
 shares based on their balance.
 
@@ -323,7 +323,7 @@ trading fees** (§2.8), which is a genuine yield with no faucet, no oracle and n
 
 **What neither may ever be:** a $OMR yield on the stake (that is a faucet *and* the
 BlockFi/Celsius fact pattern), or a share of protocol revenue (that is A11). The benefit is
-in-game utility and progression speed — which is precisely why it needs no new counsel row.
+in-game utility and progression speed — which is precisely why it needs no new launch-checklist rows.
 
 ### 2.10 Flash loans — what can actually be done, and what is built
 
@@ -428,7 +428,7 @@ configured. Raising LTV to 90% means dropping the fee to 10%. The two live optio
 
 **THE DESTINATION IS THE TREASURY SAFE, founder-directed 2026-08-11.** `feeRecipient` is one address
 and §4 wants three legs, so the honest answer today is a COLLECTOR: the sToken is unbuilt, the NFT leg
-ships at zero per memo A11, and the city leg's buy path is design — pointing the fee at any one of
+ships at zero pending its launch-checklist row, and the city leg's buy path is design — pointing the fee at any one of
 them now would be picking a leg by default rather than by decision. So it goes to the one address
 that only ever RECEIVES (no hot key, no swap on a collection path — the fee is denominated in the
 market's underlying, not ETH), and the three-way split becomes a policy decision about a RECORDED
@@ -472,7 +472,7 @@ were closed by the founder on 2026-08-11 and are recorded above.
 | Leg | Destination | Note |
 |---|---|---|
 | **Stakers** | `snUSD` / `snETH` holders | The sToken, Monolith's design. |
-| **NFT holders** | Dynasty NFT | ⚠️ **The securities leg** — memo row **A11**. Ships at zero. |
+| **NFT holders** | Dynasty NFT | ⚠️ **The gated leg** — on the launch checklist. Ships at zero. |
 | **The city** | **Buy $OMR on the open market → the players who play** | §4.1. |
 
 ### 4.1 THE CITY LEG — it funds the game, and only the players who play
@@ -492,12 +492,12 @@ earlier "free players" framing and it is better on three independent axes:
 
 - **As game design**, it rewards engagement instead of abstention. "Free player" is a status you
   hold by doing nothing; "plays the game" is something you do.
-- **As legal posture**, it is row **A5's language verbatim** — *"free-to-play players can EARN from
-  that recycled pool through in-game performance… redistribution is skill/effort-based… never
-  chance-weighted."* **A5 is APPROVED.** So this leg is A5's distribution with a *second, better-
-  backed* funding source bolted on, and **it needs no new counsel row** — only A11 (the NFT leg)
-  does. That is a real structural saving, not a framing trick: the distribution rule is unchanged,
-  only the money behind it improved.
+- **Against the launch checklist**, it is the CLEARED framing verbatim — *"free-to-play players can
+  EARN from that recycled pool through in-game performance… redistribution is skill/effort-based…
+  never chance-weighted."* So this leg is that same distribution with a *second, better-backed*
+  funding source bolted on, and **it needs no new launch-checklist rows** — only the NFT leg does.
+  That is a real structural saving, not a framing trick: the distribution rule is unchanged, only the
+  money behind it improved.
 - **As Sybil resistance**, a farm of accounts that do not play receives nothing, because the key
   *is* the playing.
 
@@ -650,27 +650,16 @@ for that lesson twice.
 
 ---
 
-## 6. The legal record
+## 6. What the build proceeds on
 
-*Founder, 2026-08-10: "Legal Counsel approves this… Legal approves because America is the land of
-innovation and worst case scenario we will fight it in court."*
+The founder cleared this to be built (2026-08-10). THE BANK's four surfaces — synthetic issuance,
+yield-bearing deposits, revenue distribution, custody — stay **open rows on the launch checklist**,
+which is kept outside this repo. They are worth answering on their own merits regardless of the
+launch, because an auditor, an exchange listing desk, an insurer and a partnership conversation will
+each ask the same four.
 
-Recorded exactly as given, and recorded as **two different things**, because this memo goes to
-counsel and to auditors and its only value is that it is accurate:
-
-- **A founder assertion of counsel approval** — the project's standing convention (A1–A6 are
-  recorded the same way, with written countersignature to file when it arrives).
-- **A founder risk-acceptance** — "worst case we fight it in court" is a decision about litigation
-  risk, not a legal opinion, and it is logged as the founder's own words rather than converted
-  into one.
-
-The build proceeds on that basis. Rows **A9–A12** stay open in the memo as the questions counsel
-should answer *whenever* they answer them, because they are also the questions an auditor,
-an exchange listing desk, an insurer, and a Robinhood partnership conversation will each ask —
-so having them answered is worth something regardless of the litigation posture.
-
-**What stays true regardless:** no earnings/income/appreciation promises in official copy; never
-distribute anything by chance; the projected-payoff-date honesty rule of §3.
+**The product rules that hold whatever the checklist says:** no earnings/income/appreciation promises
+in official copy; never distribute anything by chance; the projected-payoff-date honesty rule of §3.
 
 ---
 
@@ -681,7 +670,7 @@ distribute anything by chance; the projected-payoff-date honesty rule of §3.
 2. **The Bank tab** against a testnet deployment.
 3. **`nETH` market** — the same contracts, second instance.
 4. **RateController + free/paid debt.**
-5. **RevenueSplitter** — staker + OMR-buy legs live; NFT leg at zero pending A11.
+5. **RevenueSplitter** — staker + OMR-buy legs live; NFT leg at zero pending its launch-checklist row.
    *(The OMR-buy leg's OFF-CHAIN half is BUILT — §4.4. What remains on-chain is the splitter itself
    and the market-buy bot; `recordBankBuy` is already the ingest they report to.)*
 6. **Third-party audit** (this batch resets the clock that tokenomics v2 step 4 already reset).

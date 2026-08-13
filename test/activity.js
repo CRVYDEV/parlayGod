@@ -78,7 +78,7 @@ test('the activity metric', async (t) => {
     // §2.9. Staked $OMR / LP may accelerate PROGRESSION (trade levels, perks, ranks). If it also
     // multiplied THIS score, holding the token would buy a larger share of the token handout — a
     // self-referential loop that makes the distribution wealth-weighted rather than effort-weighted
-    // (not what A5's approved "skill/effort-based" language covers) and destroys linearity.
+    // (not what the approved "skill/effort-based" framing covers) and destroys linearity.
     //
     // The structural guarantee: activityScore reads ACTION COUNTS and multiplies by the BASE
     // MASTERY.XP award. It never reads XP actually granted, so a multiplier applied anywhere in the

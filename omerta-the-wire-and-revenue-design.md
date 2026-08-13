@@ -13,9 +13,9 @@ The hard rails (unchanged, from the existing chain/legal design):
 - **Never sell $OMR or securities for ETH directly** (unregistered-offering / securities risk). ETH
   buys **cosmetics, status, access, and consumables** — never raw sim-audited power, never tokens.
 - The RWA layer is **status-only in R1** (deterministic price, no sell, no cash-out). R2 (a real RWA
-  reserve backing shares) and R3 (KYC'd on-chain extraction) stay **legal-gated** (Robinhood
-  partnership + securities counsel + third-party audit) — design now, wire later.
-- Everything buildable **now** is off-chain, §10.4-clean, no new regulatory surface. Everything that
+  reserve backing shares) and R3 (KYC'd on-chain extraction) stay **launch-gated** (Robinhood
+  partnership + third-party audit) — design now, wire later.
+- Everything buildable **now** is off-chain, §10.4-clean, no new extraction surface. Everything that
   touches real ETH is built **dormant** (the M6 pattern — inert unless `CHAIN_RPC_URL` + contract
   addresses are set), so mainnet stays gated on legal + audit.
 
@@ -89,7 +89,7 @@ real-money **store** surface itself ("wire money in")? My recommendation: **A**,
   generations. Bounded like the stake pool.
 - **Dynasty tiers / crest** — status ladders on total lifetime invested (the estate/seal precedent).
 - **Family dynasty** — the gang book (`gang_portfolios`) gets the same naming + leaderboard treatment.
-- **R2 (legal-gated):** a slice of ETH revenue buys **real RWA** into a reserve that *backs* the
+- **R2 (launch-gated):** a slice of ETH revenue buys **real RWA** into a reserve that *backs* the
   in-game shares — the "going legit" fantasy made real. Design the reserve accounting now (mirrors the
   withdrawal reserve / full-reserve queue); wire on legal + Robinhood.
 
@@ -99,7 +99,7 @@ real-money **store** surface itself ("wire money in")? My recommendation: **A**,
 
 The goal: more ways to spend ETH, split three ways — **(F) Founder wallet** (profit), **(B) Buyback
 flywheel** (Vig → buy $OMR off the AMM → back withdrawals + fund staker yield + prize pool), **(R) RWA
-reserve** (back the Dynasty Fund, legal-gated). A single config split (`REVENUE_SPLIT_BPS = {founder,
+reserve** (back the Dynasty Fund, launch-gated). A single config split (`REVENUE_SPLIT_BPS = {founder,
 buyback, rwa}`) the founder tunes. Today the on-chain fee forwards 100% to the dev wallet and the Vig
 split is off-chain accounting; the new model makes the split explicit and configurable.
 
@@ -134,12 +134,12 @@ split is off-chain accounting; the new model makes the split explicit and config
 8. **Founder's boxes / charter memberships** — a limited "founding family" tier (numbered, permanent
    badge) — early-supporter monetization.
 
-**Tier 4 — legal-gated (design now, wire later):**
+**Tier 4 — launch-gated (design now, wire later):**
 9. **PLEX bridge (already designed)** — pay a real-money fee from *earned $OMR* instead of ETH (the
    EVE "pay your rent in ISK" path). ETH payers fund the pool; $OMR payers shrink supply. Live in
    `vig.js` (chain-dormant).
 10. **R2 RWA backing / R3 extraction** — the Dynasty Fund's on-chain future. Securities + KYC —
-    gated on Robinhood + counsel + audit.
+    gated on Robinhood + the launch checklist + audit.
 
 ### The split, made concrete (my recommended default — a founder lever)
 Per ETH package: **Founder 40% · Buyback 40% · RWA reserve 20%** (matches the existing Vig posture: the

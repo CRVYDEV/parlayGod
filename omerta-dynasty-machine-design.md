@@ -1,6 +1,6 @@
 # THE DYNASTY MACHINE — the uncapped identity NFT, its ERC-6551 vault, and the activation model
 
-Status: **DESIGN. Chain-dormant, gated on counsel memo rows A2 + A4 (the counsel memo (kept privately — see the founder)) and
+Status: **DESIGN. Chain-dormant, gated on the launch checklist and
 the standing third-party-audit gate.** Founder-directed: the identity NFT rides **ERC-6551
 token-bound accounts** (the founder pointed at the standard itself:
 https://eips.ethereum.org/EIPS/eip-6551), has **no maximum supply**, and carries the utility of the
@@ -55,7 +55,7 @@ consistent) — and extends `omerta-identity-nft-design.md` (the trophy/entitlem
 **(1) NO MAXIMUM SUPPLY.** A supply cap on the identity would cap the player count. The Dynasty
 NFT mints uncapped at the published identity fee (`MINT_TRANCHES` — five waves 0.01 → 0.05 ETH,
 flat tail; see §10 Shape D), proceeds through
-the declared money-router waterfall. No scarcity marketing, no appreciation language (counsel memo
+the declared money-router waterfall. No scarcity marketing, no appreciation language (the launch checklist
 A4 + the standing copy rule).
 
 **(2) THE TROPHY/ENTITLEMENT WALL HOLDS — the TBA is the exception, deliberately.**
@@ -63,7 +63,7 @@ A4 + the standing copy rule).
 (`account_persistent.minted`, wage/withdraw gates) stays account-bound in the database and is
 never read off `balanceOf` — otherwise the real per-identity cost decays to the secondary floor
 (the dead alts of the last farm). What the NFT + TBA adds is a **container of on-chain value**
-(the activated stock allocations) that IS transferable — knowingly, as counsel memo A2 records.
+(the activated stock allocations) that IS transferable — knowingly, as the launch checklist records.
 Selling your Dynasty NFT sells your vault contents and your portrait; it never sells your ACCOUNT
 (the buyer does not get your login, your legends, or your entitlement — those live in the DB, on
 the account, where they always did).
@@ -83,17 +83,17 @@ vocabulary entry + `DESK.SINK_REASONS` row when built — sinks recycle to the d
   sides` wall from the stock-layer retirement) records the assignment — no deploy, no gas, no
   on-chain writes at allocation time.
 - **CUSTODY CLARITY (the adversarial pass caught §3 and §8 disagreeing — this is the resolution,
-  and A2's fact pattern states it):** the bookkeeping is **ACCOUNT-keyed** (§8's DDL governs —
+  and the launch checklist states it):** the bookkeeping is **ACCOUNT-keyed** (§8's DDL governs —
   pre-Phase-B no token exists to key on, and account-keyed is the trophy/entitlement wall's own
   preference). The TBA is the **DELIVERY DESTINATION**, resolved at claim. The consequence,
-  stated plainly so counsel signs the true thing: **a PENDING (undelivered) allocation is
+  stated plainly so the checklist states the true thing: **a PENDING (undelivered) allocation is
   account-bound and does NOT transfer with the NFT; only stock actually DELIVERED into the TBA
   travels with the token.** Selling the NFT sells the TBA's contents — the delivered stock — and
   nothing else. Anyone buying "the vault" buys what is IN it, verifiable on-chain, which is also
   the honest frame for the drain-before-sale disclosure (§5).
 - DELIVERY is the player's act: deploy-if-needed + a server-signed transfer through the ONE
-  extraction boundary (the voucher rail), eligibility enforced at signature time (counsel memo A3
-  — geofence/KYC depth is counsel's parameter), the claimant paying their own gas end to end.
+  extraction boundary (the voucher rail), eligibility enforced at signature time (the launch checklist
+  — geofence/KYC depth is a launch parameter), the claimant paying their own gas end to end.
 - Between allocation and delivery, nothing custodial changes: the treasury Safe holds the stock,
   the ledger holds the assignment, `allocated ≤ held` is checked nightly like every other
   real-value invariant. An unclaimed allocation is a ledger row, not a stranded on-chain balance.
@@ -133,7 +133,7 @@ control, cheapest first:
    eligibility-gated voucher path — no arbitrary ERC-20 transfer signer on the TBA — so a "drain"
    is itself gated.
 3. **Never promise marketplace enforcement we don't control**: the buyer-side residual risk is a
-   stated caveat in A2's disclosure question for counsel, not something we paper over — and the
+   stated caveat in the disclosure question, not something we paper over — and the
    claim/marketplace copy warns explicitly against wrapper/escrow "rentals" of vault-bearing
    tokens (the one rental shape ERC-4907 immunity does not cover).
 
@@ -147,18 +147,18 @@ promises anything about what the NFT or the stock will be worth.
 
 ## 7. Order of work
 
-1. **Now (chain-dormant, no counsel dependency):** the activation-model design + sim (the burn is
+1. **Now (chain-dormant, no launch-review dependency):** the activation-model design + sim (the burn is
    a §10.4 sink — sizing wants the standard sim pass) and the allocation ledger schema (pure
    bookkeeping, the vault-ledger shape that already exists for ETH).
 2. **On A2 + A4 signatures:** DynastyNFT + pinned account implementation + registry replay on a
    devnet → the audit batch with StockVault.
-3. **On A3's parameters:** delivery live behind the voucher rail.
+3. **On the claim rail's parameters:** delivery live behind the voucher rail.
 
 *Maintainers: every mechanical claim in §1 cites the EIP as verified 2026-08-09; if the EIP moves
-out of Review with changes, §1 is the checklist to re-verify. The counsel memo's A2 row is the
-legal gate for everything past §7.1.*
+out of Review with changes, §1 is the checklist to re-verify. The launch checklist is the gate for
+everything past §7.1.*
 
-## 8. THE ACTIVATION MECHANICS (designed 2026-08-09 — the §7.1 deliverable; build waits on A1)
+## 8. THE ACTIVATION MECHANICS (designed 2026-08-09 — the §7.1 deliverable; build waits on the gate)
 
 The §2.3 model made concrete. Every number below is a PROPOSED DEFAULT — a founder sign-off lever
 the moment it becomes a constant; none exists in code yet, deliberately (building a burn whose
@@ -186,7 +186,7 @@ never-by-chance holds by construction.
   purchase-shaped, not chance-shaped, and capping it would only fragment the burn across alts.
   `ACTIVATION.MIN_OMR` (proposed 1) exists solely to refuse dust rows.
 - **Agents may activate** (they burn real-money-backed $OMR like anyone); the A3 claim-rail gate
-  is where delivery eligibility lives, and counsel's A3 answer governs them there.
+  is where delivery eligibility lives, and the launch answer governs them there.
 - **No self-reference in the money loop** (checked against the router, not assumed): the
   activation burn recycles to THE DESK, whose auction ETH splits founder/POL — the treasury's
   stock budget is fed ONLY by the four declared revenue slices (fee 10% · store 20% · sell-tax
@@ -217,7 +217,7 @@ engine §2.3 promised. Below-equilibrium participation over-rewards early activa
 incentive); above it, the burn is dominated by simply holding — both self-correcting. INTERNAL
 sizing only: the standing copy rule forbids ever publishing a value-per-$OMR figure as marketing.
 
-## 9. THE PROVENANCE TRAITS (founder-directed 2026-08-09; design only — counsel row A7)
+## 9. THE PROVENANCE TRAITS (founder-directed 2026-08-09; design only — an open launch-checklist row)
 
 The founder's idea: *make the NFTs generative in a way affected by traits derived or generated by
 how much or which tokens or other NFTs a wallet held on ETH / Robinhood Chain / other major
@@ -301,7 +301,7 @@ weight, allocation, claim eligibility or priority, or any till, gate, or lever, 
 adversarial pass named the cliff exactly: the drift is one future "reward our genesis
 communities" coupling away, and the moment a holdings-derived trait weights an allocation, the
 free trait retroactively becomes a distribution of expected securities allocations keyed to
-third-party asset holdings — the strongest possible Howey fact against the NFT AND against A6's
+third-party asset holdings — the strongest possible fact against the NFT AND against A6's
 "no investment of money" characterization, while nicking the never-by-chance wall (assigned by
 what a wallet happened to hold, not by purchase or effort). Three standing reasons besides:
 (1) power from external holdings is pay-to-win via outside wealth — worse than anything the D8=D
@@ -311,7 +311,7 @@ activation burn is built, this wall gets PINNED the house way**: a mutation-veri
 the allocation computation reads only `(day, account, omr)` and no trait/provenance column is
 reachable from it. §10.4: zero surface (art moves no value; the fees.js precedent).
 
-### 9.5 The IP posture — two vocabularies, cleanly split (memo row A7)
+### 9.5 The IP posture — two vocabularies, cleanly split
 
 **Trait names, metadata, and art are fictional** — the Broadcast posture extended to the token
 surface: evocative noir-native inventions (working names, all levers), original art, no
@@ -339,7 +339,7 @@ artifact — is the posture, and the adversarial pass sharpened it into enforcea
   announcement, landing copy) — and deliberately NEVER in tokenURI or on-chain artifacts, which
   stay mark-free by construction, so the question never arises there.
 - **The banned lexicon** (an extension of the standing no-appreciation rule, attached to the
-  counsel copy-review packet as an exhibit): rare/rarity/rarest, limited, exclusive, floor,
+  copy-review packet as an exhibit): rare/rarity/rarest, limited, exclusive, floor,
   value, "only N will ever" — banned in shop copy, docs, tweets, and the claim page for this
   feature. The allowed frame, stated positively: recognition/homage/provenance — "the city
   remembers where your founder came from." (Third-party rarity tools will price the trait
@@ -352,9 +352,9 @@ artifact — is the posture, and the adversarial pass sharpened it into enforcea
   need (address+amount for merkle proofs) with the trait mapping computed server-side at claim,
   never shipped as a public address→tier table; bands stay coarse.
 
-**Memo row A7** records the counsel questions (the Yuga-v-Ripps class on the art; whether
-holdings-derived traits alter the A2/A4 analysis), and **A2/A4/A6's own fact patterns are
-amended** so no signature is given against a stale record (the memo's lockstep rule). Design and
+**A launch-checklist row** records the open questions (evocative art built from another
+community's identity; whether holdings-derived traits change the rows above it), and **the
+checklist's own descriptions are amended** so nothing is cleared against a stale record. Design and
 art production proceed under the standing directive.
 
 ### 9.6 Slots, choice, transfer, and the layer pipeline
@@ -459,10 +459,10 @@ pair alone, which is the only place two rails still meet.*
 ### The three shapes, evaluated
 
 **Shape A — the automatic supply-indexed curve (the literal proposal): REJECTED, four reasons.**
-(1) **A4's signed predicate** is "uncapped at a FIXED price… no scarcity marketing, no
+(1) **The cleared predicate** is "uncapped at a FIXED price… no scarcity marketing, no
 roadmap-of-appreciation" — an automatically-rising mint price IS the scarcity pitch in mechanical
-form (mint now, it only goes up), the Impact-Theory-shaped fact the memo just hardened A2/A4
-against; adopting it re-opens A4. (2) **The free-path ceiling**: the mission ladder pays a FINITE
+form (mint now, it only goes up), which is exactly what those rows were hardened against; adopting
+it re-opens them. (2) **The free-path ceiling**: the mission ladder pays a FINITE
 lifetime $OMR (220, test-pinned against the live MISSIONS table — the D8=D bound-(1) promise that
 the top of the game is reachable without paying, and the "you can get made for free" coach rung).
 A rising $OMR price crosses that ceiling at some future supply number and breaks the promise
@@ -531,7 +531,7 @@ than the rejected curve on every axis, and the founder's own example already obe
 law (0.01→30 and 0.02→60 both imply 3,000 $OMR/ETH — the exact rate the preflight guard pins). It
 is designed here as the ADOPTABLE shape, with the one honest cost stated up front: **adopting it
 re-opens A4** (the row's fixed-price predicate becomes a published-schedule predicate — the
-memo carries the proposed amendment and the re-drafted counsel question).
+memo carries the proposed amendment and the re-drafted open question).
 
 **The mechanics — Shape C's machinery executing a published schedule (zero new code):**
 - The schedule is a PUBLISHED TABLE (a founder lever): `[{through: 1000, eth: 0.01, omr: 5},
@@ -577,7 +577,7 @@ said, in any channel: that earlier mints are worth more because later ones cost 
 **published tranche schedule, early-bird framed (Shape D — A4 re-opens, defensible with the copy
 discipline above)** < continuous auto-curve (Shape A — rejected, stays rejected). Shape D's
 residual that no copy rule removes: the schedule itself tells buyers the price will rise, on a
-tradeable asset — that is why the row goes back to counsel rather than being self-certified.
+tradeable asset — that is why the row goes back on the launch checklist rather than being self-certified.
 
 **THE MINT IS ETH ONLY (founder-directed 2026-08-10: "Make the mint ETH only no OMR").** This
 supersedes the two-rail framing that the whole of §10 above reasons about — the rail-interaction law,
@@ -627,7 +627,7 @@ flag (the GM's instrument for executing a boundary), and the row-level laws pinn
 free-path law (now asserted at the mechanism — a mission grants the credit — since no row carries a
 $OMR price), and **the ceiling itself** — the last row IS 0.05, no
 row exceeds it, and the millionth identity still pays it, so raising the cap fails by name as a new
-promise rather than passing as a retune. A4 is RE-OPENED in the memo with the amended fact pattern,
+promise rather than passing as a retune. the launch checklist carries the amended fact pattern,
 and the cap **strengthens** that position: the hardest form of the A4 question is whether a forward
 schedule promises indefinitely-rising prices, and a published ceiling answers it in the pattern
 itself. The LIVE price today is wave 1 — nothing changes at the till until the 1,001st identity.

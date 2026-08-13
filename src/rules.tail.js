@@ -511,7 +511,7 @@ export const M4 = {
   // OWN qualified recruit, you earn a BOUNDED, ONE-TIME finder's fee. Deliberately a flat one-shot —
   // NOT an ongoing percentage of the grandrecruit's earnings — so it's a referral bonus, not a
   // revenue-share pyramid (the anti-MLM line). CASH ONLY, capped at depth 2 (no third level), agents
-  // excluded at every level. Sensitive design: recorded as counsel-gated; founder green-lit.
+  // excluded at every level. Sensitive design: recorded as gated; founder green-lit.
   REF_TIER2_CASH: 5000,
   // Time-boxed RECRUITMENT DRIVE ("the push"): a mod starts a window during which every referral
   // CASH payout (spark + full + milestone + tier-2) is multiplied. $OMR is untouched (fund-bounded).
@@ -5153,9 +5153,9 @@ export const TICKER_BALLOT = {
 //     MINT_FEE_ETH/PLEX_MINT_OMR env — plexQuote already scales the $OMR rail off MINT_FEE_ETH, so
 //     no code runs a boundary. The admin chain panel shows tier progress + flags a live pair that
 //     is OFF this schedule; preflight warns on an off-schedule pair at boot.
-// Adoption RE-OPENED counsel-memo row A4 (a published forward schedule on a tradeable asset — the
-// re-drafted question is in the row). Copy rules ride with it: founding-era frame only, never a
-// countdown/"N remaining" counter, the banned lexicon verbatim.
+// Adoption re-opened a launch-checklist row (a published forward schedule on a tradeable asset).
+// Copy rules ride with it: founding-era frame only, never a countdown/"N remaining" counter, the
+// banned lexicon verbatim.
 // The founder's waves are 1k / 10k / 25k / 50k / 100k at .01 / .025 / .0333 / .0444 / .05 ETH.
 // Waves 3 and 4 are rounded to .035 / .045 (+5.1% / +1.4%) so both waves land on tidy numbers.
 //
