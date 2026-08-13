@@ -168,5 +168,5 @@ jobs:
           echo
           echo "IF THIS WAS THE FIRST PUBLISH, do these two things now and never think about it again:"
           echo "  1. npmjs.com/package/omerta-mcp/access → Trusted Publisher → GitHub Actions"
-          echo "     repository: CRVYDEV/parlayGod   workflow: publish-mcp.yml"
+          echo "     repository: OmertaDev/Omerta   workflow: publish-mcp.yml"
           echo "  2. Delete the NPM_TOKEN repository secret. This workflow needs no edit."

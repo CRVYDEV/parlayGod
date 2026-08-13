@@ -95,8 +95,8 @@ To set one, add an `env` block, e.g.:
 To hack on the server itself:
 
 ```bash
-git clone https://github.com/crvydev/parlaygod.git
-cd parlaygod/omerta-mcp
+git clone https://github.com/OmertaDev/Omerta.git
+cd Omerta/omerta-mcp
 npm install
 node index.js
 ```

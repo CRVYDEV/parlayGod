@@ -26,7 +26,7 @@
   "homepage": "https://www.omerta.fun/play",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/crvydev/parlaygod.git",
+    "url": "git+https://github.com/OmertaDev/Omerta.git",
     "directory": "omerta-mcp"
   },
   "bugs": {
