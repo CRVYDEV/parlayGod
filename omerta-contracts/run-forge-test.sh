@@ -21,7 +21,7 @@ fi
 echo "▸ $(forge --version)"
 
 # 2. Dependencies into lib/ (idempotent) --------------------------------------------
-# omerta-contracts lives inside the parlayGod git repo, so tell forge NOT to touch git
+# omerta-contracts lives inside the Omerta git repo, so tell forge NOT to touch git
 # (submodules/commits) — a plain checkout into lib/ is all the compiler needs.
 NOGIT=""; forge install --help 2>&1 | grep -q -- "--no-git" && NOGIT="--no-git"
 [ -d lib/forge-std ]             || forge install $NOGIT foundry-rs/forge-std@v1.9.6
