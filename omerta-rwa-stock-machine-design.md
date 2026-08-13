@@ -9,14 +9,14 @@ Commission, on **which stock** gets bought — a live call-to-action; (3) distri
 so the bought stock **sits and accumulates** until a user **claims their airdrop by paying the
 gas** themselves.
 
-**Verdict: FEASIBLE — all three legs — with two engineering corrections and one compliance
-transfer.** The corrections: the buy should be **hook-accrued but keeper-executed** (per-swap
-atomic buying is technically possible in v4 and a bad idea — §2); and "airdrop" needs an
-**allocation rule** (who is owed how much), for which the retired float design's burn-earned-$OMR
-rail is the sound answer (§4). The compliance transfer: Robinhood Stock Tokens are **standard
-ERC-20s with no on-chain transfer allowlist** — they move peer-to-peer and trade on a day-one
-Uniswap deployment — so the not-for-US-persons restriction is enforced by the *distributor*, i.e.
-by OUR claim rail, not by the token (§5).
+**Verdict: FEASIBLE — all three legs — with two engineering corrections, and one place where the
+gate lands that is not where you would expect.** The corrections: the buy should be **hook-accrued
+but keeper-executed** (per-swap atomic buying is technically possible in v4 and a bad idea — §2);
+and "airdrop" needs an **allocation rule** (who is owed how much), for which the retired float
+design's burn-earned-$OMR rail is the sound answer (§4). Where the gate lands: Robinhood Stock
+Tokens are **standard ERC-20s with no on-chain transfer allowlist** — they move peer-to-peer and
+trade on a day-one Uniswap deployment — so the holder restriction is enforced by whoever hands it
+over, i.e. by OUR claim rail, not by the token (§5).
 
 ---
 
@@ -32,9 +32,9 @@ by OUR claim rail, not by the token (§5).
 - **Uniswap runs on Robinhood Chain from day one** (a dedicated deployment). OPEN DEPENDENCY:
   which version the stock-token pools run (v3 vs v4) — the keeper's swap call differs, nothing
   else in this design does. Verify before Phase B.
-- **Not for US persons** is a securities-law restriction on offer/sale, not a token-level gate.
-  Anyone technically *can* hold the ERC-20; the party distributing to a US person is the one with
-  the problem. The moment we distribute, that party is us — §5.
+- **The issuer's holder restriction** is enforced by whoever hands the token over, not by the token.
+  Anyone technically *can* hold the ERC-20; the party distributing to an ineligible holder is the
+  one with the problem. The moment we distribute, that party is us — §5.
 - **In our own tree**: the four tax slices already flow into `rwa_revenue` (bond 2500 bps,
   sell-tax 400, Store 2000, gameplay-fee 1000); the v4 `OmertaHook` already **accrues** its RWA
   slice in ETH with a permissionless `sweep` to Safe-set recipients; the Commission has weekly
@@ -43,7 +43,7 @@ by OUR claim rail, not by the token (§5).
   bookkeeping, the `allocated ≤ held` invariant, the anti-fabrication txHash gate, and the
   oracle-priced burn-to-claim rail; and `VoucherClaim` is a battle-tested server-signed EIP-712
   claim contract. **Almost every part of this machine exists; the new work is one keeper, one
-  vault contract, one daily ballot, and the geofence.**
+  vault contract, one daily ballot, and the eligibility gate.**
 
 ## 1. The pipeline at a glance
 
@@ -64,7 +64,7 @@ by OUR claim rail, not by the token (§5).
   (rwa:vault — the reason already in the vocabulary)          ▼
                                                     CLAIM: server-signed EIP-712
                                                     voucher; THE PLAYER PAYS GAS;
-                                                    geofence + eligibility at sign
+                                                    eligibility at sign
 ```
 
 ## 2. Leg one — "programmable like a v4 hook": accrue in the hook, buy with a keeper
@@ -132,7 +132,7 @@ treasury operation into a daily server-wide political event.
 "Anyone can claim while it sits and accumulates, paying the gas for their airdrop" — the
 **pull-payment** pattern, and correct: distribution cost lands on the claimant, unclaimed stock
 just sits (custody is free), and nobody is ever pushed a token they didn't ask for (which
-matters legally — see §5).
+matters — see §5).
 
 **The missing piece is the allocation rule** — an "airdrop" implies everyone is owed something,
 but *how much*? Two options, one recommended:
@@ -147,7 +147,7 @@ but *how much*? Two options, one recommended:
   so an IOU can never be issued; structuring-guarded by the shared `rwa_used` RICO window that
   already exists.
 - **Rejected — pro-rata "everyone accrues a share by playing."** Distribution-by-gameplay makes
-  the stock a *dividend on play*, drags every §10.4 faucet into securities analysis, strengthens
+  the stock a *dividend on play*, drags every §10.4 faucet inside the gate, strengthens
   the investment-contract reading of $OMR itself, and still needs a claims registry. The
   founder's "any user can choose to claim" is fully satisfied by the burn rail — anyone CAN
   claim; what they claim is what they allocated.
@@ -161,17 +161,16 @@ The claimant submits and **pays the gas**; the server signs only for an eligible
 An expired unclaimed voucher's units return to the account's allocation (the
 `reclaimExpiredVouchers` pattern, easier here since nothing was burned to sign).
 
-## 5. The compliance transfer — because the token itself won't stop anyone
+## 5. Where the gate lands — because the token itself won't stop anyone
 
 The searches confirmed the sharp fact: **there is no on-chain allowlist**. A Stock Token moves
 like any ERC-20. So every restriction lives at the point of *distribution* — and the claim rail
 is our point of distribution. Consequences, all mechanical:
 
 1. **Eligibility is checked at voucher-SIGN time, server-side**: linked SIWE wallet + minted
-   account (the extraction gate that already exists) + **geofence/attestation for the excluded
-   jurisdictions** (US persons at minimum; Robinhood's own excluded list — UK, Canada,
-   Switzerland — mirrored unless the founder narrows it). An ineligible account can still ALLOCATE
-   (the in-game burn and the vault line are not the securities event) — it just can't claim
+   account (the extraction gate that already exists) + **an eligibility allowlist** (the issuer's
+   own excluded list — a founder-supplied parameter). An ineligible account can still ALLOCATE
+   (the in-game burn and the vault line are not the gated event) — it just can't claim
    on-chain until eligible. This is exactly the R3 posture the original design recorded.
 2. **Pull, never push.** No token ever moves to a wallet that didn't sign a claim transaction —
    which is both the gas-cost win the founder wants and the clean answer to "did you distribute
@@ -179,13 +178,13 @@ is our point of distribution. Consequences, all mechanical:
 3. **The standing copy rules stand**: no appreciation language, no earnings promises, describe
    the machine factually. The approval covers architecture; exact player-facing copy is
    its own review (the recorded rule).
-4. **KYC depth is a founder call, not ours**: the issuer's own redemption path is KYC'd; whether
-   our claim counter needs full KYC or geofence+attestation is the one open legal parameter.
-   The design works under either — it only changes what `signStockVoucher` checks.
+4. **Identity depth is a founder call, not ours**: how much verification the claim counter needs
+   is the one open parameter. The design works under either — it only changes what
+   `signStockVoucher` checks.
 
 ## 6. Build order (each phase shippable alone)
 
-- **PHASE A — off-chain, zero new legal surface, buildable now**: the TICKER BALLOT
+- **PHASE A — off-chain, zero new gated surface, buildable now**: the TICKER BALLOT
   (`commission_ticker_votes` + tally + the city/family/feed surfaces), the vault BOARD (public
   units/cost/value), and `rwa_reserve` bookkeeping resurrected txHash-gated (mod-driven sim
   buys for QA book zero units). Chain-dormant like every M6 sibling.
@@ -193,9 +192,9 @@ is our point of distribution. Consequences, all mechanical:
   vault, slippage-bounded, watchdogged) + real `rwa_buys`. **Resets the third-party audit clock**
   (the recorded rule for any contract change) — batch it with whatever else is queued for that
   audit. Verify the Uniswap version on Robinhood Chain here.
-- **PHASE C — claims live**: `signStockVoucher` + the geofence/attestation gate + the client
+- **PHASE C — claims live**: `signStockVoucher` + the eligibility gate + the client
   claim flow (the wallet picker + calldata rail already exist), behind the founder's final word on
-  KYC depth and the jurisdiction list.
+  verification depth and the eligibility list.
 
 ## 7. What this deliberately does not do
 

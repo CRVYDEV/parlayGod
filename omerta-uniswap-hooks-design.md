@@ -89,11 +89,11 @@ defense-in-depth for the invariant we care most about: a per-epoch net-OMR-outfl
 `DAILY_CAP_OMR`) + a pause on extreme price deviation (which also shields the buyback bot from being
 sandwiched right before it executes). Moves a slice of the off-chain safety on-chain / trustless.
 
-**Rung 5 — gated pieces of R2/R3.** (a) A `beforeSwap` KYC/geofence hook on the *stock* pool that
-checks an on-chain attested allowlist (KYC'd, non-US) before permitting a swap that delivers a security
-token — the "one regulated extraction boundary" enforced on-chain. (b) Surfacing a player's real LP
-position as the apex "going legit" status trophy in the Estate/Portfolio. **Both are securities-law
-designs, not features to ship** — same wall as R2/R3 (the launch checklist + audit).
+**Rung 5 — gated pieces of R2/R3.** (a) A `beforeSwap` eligibility hook on the *stock* pool that
+checks an on-chain attested allowlist before permitting a swap that delivers stock — the "one gated
+extraction boundary" enforced on-chain. (b) Surfacing a player's real LP position as the apex "going
+legit" status trophy in the Estate/Portfolio. **Both are gated designs, not features to ship** —
+same wall as R2/R3 (the launch checklist + audit).
 
 **Explicitly OUT:** do NOT move the in-game cash↔$OMR AMM (`amm_pool`, a DB table) on-chain — it's
 server-authoritative and "cash" isn't a token, deliberately. Do NOT replace `OmertaBond` with a v4
@@ -211,7 +211,7 @@ Wire the trade watcher through the same gate.
 ## 5. Deploy / audit gates (the standing walls)
 
 - **Confirm v4's `PoolManager` is live on Robinhood Chain (Arbitrum Orbit L2).** v3 is far more widely
-  deployed; if v4 isn't there, Rungs 1/2/5 (oracle, concentrated POL, and even the KYC-pool via a v3
+  deployed; if v4 isn't there, Rungs 1/2/5 (oracle, concentrated POL, and even the eligibility pool via a v3
   permissioned periphery) still work, but the afterSwap hook (Rung 3) does not — it becomes a v3 custom-
   router fee take. This is the first thing to verify before any hook work.
 - The hook is **new critical-path Solidity** → the existing mainnet gate applies: `forge test` on a
@@ -233,7 +233,7 @@ Wire the trade watcher through the same gate.
    gate; add `HOOK_FEE_BPS`/`TRADE_VIG_BPS` env levers + a `test/` scenario proving `runVigInvariants`
    stays green with a `trade` source in the mix.
 4. **Next hardening:** the `beforeSwap` circuit-breaker / outflow rate-limit (Rung 4).
-5. **Gated, with R2/R3:** the KYC/geofence stock-pool hook + LP-as-status (Rung 5).
+5. **Gated, with R2/R3:** the eligibility stock-pool hook + LP-as-status (Rung 5).
 
 The prototype target is #3: it's the smallest hook that pays for its own audit by making the Vig
 self-sustaining on real market activity — the strongest possible version of "spenders fund earners."

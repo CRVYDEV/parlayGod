@@ -261,8 +261,7 @@ This is a second contract with its own audit surface, and it is on the bond mint
 ## 6. The cross-chain RWA leg — the consequence most likely to be missed
 
 The R2 float buys **real Robinhood tokenized stocks**, which trade on **Arbitrum / Robinhood Chain**
-(recorded in `CLAUDE.md`'s Sensitive design notes, and jurisdiction-gated: EU-facing, not for US
-persons, so R3 extraction must be KYC'd *and* geofenced).
+(recorded in `CLAUDE.md`'s Sensitive design notes, and eligibility-gated by the issuer, so R3 extraction must be verified *and* eligibility-gated).
 
 If OMR and its pool live on **mainnet**, then:
 
@@ -637,7 +636,7 @@ Nothing below starts before the founder answers §10, and nothing deploys before
 6. POL seeding into the hooked pool ahead of migration (§4b), then the POL position migration (§9.3).
 7. **Oracle cutover before liquidity migration** (§9.2), with a full accumulation window between deploy
    and `setOracle`. Re-derive `dailyCapOMR` against the new depth afterwards (§9.4, `npm run dials`).
-8. Third-party audit — **contracts, hook and signer**. Then legal. Then deploy.
+8. Third-party audit — **contracts, hook and signer**. Then the launch checklist. Then deploy.
 
 ---
 

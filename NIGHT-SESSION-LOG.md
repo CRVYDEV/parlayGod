@@ -1,7 +1,7 @@
 # Night session log — autonomous build + shakedown
 
 Founder asleep; running autonomously per the "build 4 features + audit MAX EFFORT + loop shakedowns
-until I wake" directive. Guardrails: no legal-gated R2/R3, no Foundry contract work; `npm test`
+until I wake" directive. Guardrails: no gated R2/R3, no Foundry contract work; `npm test`
 (26 suites) + `node tools/sim.js` drift-0 stay green after every change; push only to
 `claude/new-session-7ufca0`; nothing destructive/outward-facing beyond branch pushes.
 

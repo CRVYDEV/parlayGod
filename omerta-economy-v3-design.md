@@ -390,7 +390,7 @@ does not. Steps 1–5 are off-chain and gated on nothing.
 
 ## 10. Risks, on the record
 
-**A. This is a real-money competition with a rake — a GAMBLING question, not the securities question
+**A. This is a real-money competition with a rake — a different question from the stock one
 we have been managing.** Players buy in with ETH, compete against each other under RNG, the house
 takes a cut, and they cash out. In some jurisdictions that is gambling regardless of the skill
 ratio; in others the skill ratio decides, and our combat has meaningful RNG. The founder's standing
@@ -402,7 +402,7 @@ supports price, recycle produces revenue. We chose revenue. The pitch changes fr
 "high-velocity" and must never be marketed as the former.
 
 **C. 50% of primary issuance as founder revenue is the first thing anyone forensic will compute.**
-Not a legal problem, an optics one. Vesting that half costs nothing long-run and removes the "exit"
+Not a real problem, an optics one. Vesting that half costs nothing long-run and removes the "exit"
 read entirely.
 
 **D. No faucet means f2p has no OMR income.** Their path is NFT drops and hunting. I think that is

@@ -224,7 +224,7 @@ export const CONSTANTS = {
   BANK_TAPER_ABOVE: 10000000, BANK_TAPER_KEEP: 0.10,
 };
 // THE GAMBLING DEN — player-vs-house games at the Neon Mile. CASH ONLY (never $OMR — the
-// regulatory line), server-rolled + rng_audit'd, every stake/payout ledgered casino:* so §10.4
+// hard line), server-rolled + rng_audit'd, every stake/payout ledgered casino:* so §10.4
 // reconciles per character; 1% of every stake goes to the street-tax pool (the buyback loop),
 // the rest of the house edge burns. Dice = the real pass-line (edge ~1.41%, entertainment-thin);
 // the Numbers pays the historically accurate 600:1 on 999:1 odds (~40% edge — a daily flutter).
@@ -4606,7 +4606,7 @@ export const HUSTLE = {
 // The day's chain for one street — three DISTINCT stops + a (fictional) contact + the legwork,
 // all off the §7.11 hash: deterministic and verifiable, and PER-STREET so the whole town isn't
 // standing on the same corner. The contact draws from the SOLDIERS noir name pool (fictional
-// only — the Broadcast legal posture).
+// only — the Broadcast posture).
 export const hustleOf = (chId, day = dayOf()) => {
   const pick = (s, n) => Math.floor(hash01(`hustle:${chId}:${day}:${s}`) * n) % n;
   const rest = DISTRICTS.map((d) => d.id);
@@ -5307,7 +5307,7 @@ export const brokerTier = (id) => BROKERS.TIERS.find((t) => t.id === Number(id))
 export const brokerActive = (until, now = Date.now()) => !!until && new Date(until).getTime() > now;
 
 /// The published weight. Deterministic in both terms — NEVER by chance, which is the standing rule
-/// that keeps a securities distribution out of loot-box territory entirely.
+/// that keeps a stock distribution out of loot-box territory entirely.
 export const brokerWeight = (tierId, gains = {}) => {
   const t = brokerTier(tierId);
   if (!t) return 0;

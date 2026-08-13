@@ -49,7 +49,7 @@ ZERO §10.4 surface** (status/marketing only — no ledger row, no currency, no 
   the city" card/page, so a stale or malformed share link is harmless.
 - **HTML/SVG output is escaped** (`esc`) — a player's living name can't inject markup.
 - **Fictional names only.** The cards carry the game's invented family/player names; no real
-  brand appears anywhere (the standing legal posture — matters more here because of real-money
+  brand appears anywhere (the standing posture — matters more here because of real-money
   extraction).
 
 ## The test (`test/hardening.js`, THE BROADCAST block)

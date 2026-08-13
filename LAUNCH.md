@@ -7,7 +7,7 @@ this one.
 
 **Honest framing first.** I'm the AI that helped build this. This plan is a solid framework, but it is **not**
 a substitute for three humans you will need to pay: a **developer/operator**, a **smart-contract auditor**, and
-a **crypto/securities lawyer**. With zero technical ability you cannot (and should not) deploy smart contracts,
+someone qualified to advise on the money side. With zero technical ability you cannot (and should not) deploy smart contracts,
 run a production server, or custody the treasury key yourself. Your job is to be the CEO: hire the right people,
 make the decisions marked ⚑ below, hold the money, and own the timeline. Everything technical is delegable.
 
@@ -18,20 +18,20 @@ make the decisions marked ⚑ below, hold the money, and own the timeline. Every
 The single most important thing to understand: **the game and the money are separable, on purpose.** The whole
 system was built so the blockchain layer is *dormant by default* — the game runs completely without it, and you
 switch the crypto on later by setting a few config values. So don't try to launch everything at once. That
-would chain your fast, low-risk game launch to your slow, expensive, legally-gated crypto launch.
+would chain your fast, low-risk game launch to your slow, expensive, externally-gated crypto launch.
 
 | | **WAVE 1 — The Game** | **WAVE 2 — The Money (mainnet)** |
 |---|---|---|
 | **What goes live** | The full game at a real website. $OMR is an in-game currency you earn and spend. | Real ETH in, real on-chain OMR out. Withdrawals, bonds, the Store paywall. |
-| **Risk** | Low. It's a game. No real-money extraction. | High. Real value + securities-adjacent (RWA stocks) + custody of a signing key. |
-| **What blocks it** | Nothing technical — it's built and tested (34/34). Just needs hosting + a domain. | THREE hard gates: an audit, a lawyer's sign-off, and a security-audited signing key. |
-| **Time to live** | Days to ~2 weeks (mostly hiring + setup). | 2–4+ months (audit queues + legal are the long poles). |
-| **Rough cost** | Low — hosting is ~$20–70/month; setup is a few hours of a contractor. | High — audit $15k–$80k+, legal $10k–$50k+, plus liquidity you seed. |
+| **Risk** | Low. It's a game. No real-money extraction. | High. Real value moves, and you custody a signing key. |
+| **What blocks it** | Nothing technical — it's built and tested (34/34). Just needs hosting + a domain. | THREE hard gates: an audit, the launch checklist, and a security-audited signing key. |
+| **Time to live** | Days to ~2 weeks (mostly hiring + setup). | 2–4+ months (the audit and advice queues are the long poles). |
+| **Rough cost** | Low — hosting is ~$20–70/month; setup is a few hours of a contractor. | High — audit $15k–$80k+, advice $10k–$50k+, plus liquidity you seed. |
 | **Runbook** | `DEPLOY.md` | `CHAIN-DEPLOY.md` |
 
 **Recommendation:** ship Wave 1 as a **closed alpha** (invite-only) in the next few weeks. Get real people
 playing, find the fun, watch the economy with the built-in dashboards. Run Wave 2 in parallel on a slower
-track (start the audit + lawyer conversations *now*, because they take months). Turn the money on only when
+track (start the audit + advice conversations *now*, because they take months). Turn the money on only when
 all three gates are green. The game already tells players the crypto rail is "coming at launch," so this is the
 intended path, not a compromise.
 
@@ -54,17 +54,16 @@ firm. Ranges are rough US/EU market rates in 2026 — adjust for freelancers/reg
    authority. *Cost: ~$15k–$80k+ depending on firm + scope. Queues are weeks–months — book early.* Names to get
    quotes from: Trail of Bits, OpenZeppelin, Spearbit, Zellic, Cantina, Sherlock/Code4rena (contest-style).
 
-3. **A crypto/securities lawyer** — *non-negotiable for Wave 2.* This project touches real-money extraction,
-   **tokenized real-world stocks (RWA)**, geofencing/KYC for US persons, and a **two-level referral bonus**
-   that must stay on the right side of the MLM line. *Cost: ~$10k–$50k+ for an opinion + structure.* This is
-   the **#1 gate on Wave 2** and the slowest — start these conversations *this month*, before the audit.
+3. **Professional advice on the money side** — *non-negotiable for Wave 2, and the slowest thing on the
+   list.* Anything that moves real value needs someone qualified reviewing it before it ships. *Budget:
+   ~$10k–$50k+.* This is the **#1 gate on Wave 2** — start these conversations *this month*, before the
+   audit, because the queue is the timeline.
 
 Optional later: a part-time **community manager / marketer** for the alpha, and a **designer** if you want a
 marketing landing page beyond the in-game one.
 
-> **You are not qualified to make the legal or securities calls, and neither am I.** Nothing in this repo is
-> legal or financial advice. The lawyer decides what's allowed, in which countries, for whom. Build to their
-> guidance.
+> **Neither of us is qualified to make the calls on the money side.** Nothing in this repo is advice of
+> any kind. Get someone qualified, and build to what they tell you.
 
 ---
 
@@ -114,7 +113,7 @@ They follow `DEPLOY.md`. In plain English, they will:
 - Collect feedback, fix rough edges, decide the balance sign-offs in `SIGN-OFF.md` that are still open.
 
 **At the end of Wave 1 you have:** a live game, real players, real feedback, and a running economy you can
-watch — all with essentially zero legal/financial risk, because no real money moves. This alone is a shippable
+watch — all with essentially zero downside, because no real money moves. This alone is a shippable
 product.
 
 ---
@@ -131,18 +130,18 @@ is the technical runbook; here's the founder view + the order that actually matt
    and it must be green before you pay an auditor to look.
 2. **A third-party audit of the contracts AND the signer** comes back clean (or you fix what it finds). *This
    is what you're paying the auditor for.* Book it early — queues are long.
-3. **Your lawyer signs off** on the Risk-to-Earn model, the RWA/tokenized-stock feature, KYC/geofencing, and
+3. **The launch checklist clears** — the Risk-to-Earn model, the stock feature, the eligibility gate, and
    the referral structure — and tells you which countries/users you can serve. *The longest pole. Start now.*
 
-### Step 2.1 — Start the legal + audit conversations (MONTH 1 of Wave 2)
-Do this *before* any deployment. Get quotes + timelines from 2–3 auditors and 1–2 law firms. The lawyer's
-guidance may change what you launch (e.g. geofence US persons out of RWA extraction), so you want it early.
+### Step 2.1 — Start the audit + advice conversations (MONTH 1 of Wave 2)
+Do this *before* any deployment. Get quotes + timelines from 2–3 auditors and 1–2 advisers. Their
+guidance may change what you launch (e.g. gate some players out of RWA extraction), so you want it early.
 
 ### Step 2.2 — Rehearse the whole thing on a test network (free, no risk)
 Your developer can dry-run the *entire* chain flow on a free test network **today** — the repo has a one-command
 end-to-end prover (`tools/chain-e2e.js`) that deploys the contracts, links a wallet, pays a fee, mints, and does
 a real withdrawal, all on a throwaay chain. This proves the machinery works and trains your operator, at zero
-cost, while the audit + legal run. **Do this during Step 2.1.**
+cost, while the audit + advice run. **Do this during Step 2.1.**
 
 ### Step 2.3 — Set up the treasury "vault" (the Gnosis Safe) ⚑
 The contracts, the OMR token supply, and the treasury are owned by a **Safe** — a shared multi-signature wallet
@@ -178,13 +177,13 @@ watch the dashboards, then announce.
 ```
 WAVE 1 (game):   hire dev ──► buy domain+host ──► deploy game ──► closed alpha ──► (open when ready)
                                                                      │
-WAVE 2 (money):  ┌─ hire lawyer  ─────────(months)─────────────┐    │
+WAVE 2 (money):  ┌─ hire adviser ─────────(months)─────────────┐    │
    start now ──► ├─ hire auditor ─► forge test ─► AUDIT ────────┤──► set up Safe ─► deploy contracts
                  └─ testnet rehearsal (free, anytime) ──────────┘         + fund + key mgmt ─► seed liquidity
                                                                           + build bots ─► FLIP THE CRYPTO ON
 ```
 The two waves are independent until the very end. Wave 1 can launch and run for months before Wave 2 is ready.
-**The gate that will actually decide your mainnet date is the lawyer + the audit queue — so start those first.**
+**The gate that will actually decide your mainnet date is the advice + audit queue — so start those first.**
 
 ---
 
@@ -195,10 +194,10 @@ Everything else is delegable, but these are yours:
   your mind; I recommend shipping the game first.)
 - ⚑ **The name + domain.**
 - ⚑ **Closed vs open alpha** for Wave 1 (recommend closed/invite-only first).
-- ⚑ **Who you hire** (dev, auditor, lawyer) and the budget you'll spend.
+- ⚑ **Who you hire** (dev, auditor, adviser) and the budget you'll spend.
 - ⚑ **The Safe signers** (who holds the keys to the treasury) — pick trustworthy people; use hardware wallets.
 - ⚑ **The economy sign-offs** in `SIGN-OFF.md` (the game ships fine on the built-in defaults; these are dials).
-- ⚑ **The legal boundaries** your lawyer defines (which countries, KYC, US persons, RWA) — you enforce them.
+- ⚑ **The boundaries** your adviser defines (which countries, what verification, who is eligible) — you enforce them.
 
 ---
 
@@ -211,7 +210,7 @@ Everything else is delegable, but these are yours:
 | Developer — Wave 1 setup | Wave 1 | a few hours' rate |
 | Developer — ongoing operator + Wave 2 build | both | part-time retainer (varies widely) |
 | Smart-contract audit (contracts + signer) | Wave 2 | ~$15k–$80k+ |
-| Crypto/securities legal opinion | Wave 2 | ~$10k–$50k+ |
+| Professional advice on the money side | Wave 2 | ~$10k–$50k+ |
 | Hardware wallets for the Safe signers | Wave 2 | ~$60–150 each |
 | Liquidity you seed (real ETH) | Wave 2 | your call — a launch-economics decision |
 
@@ -224,7 +223,7 @@ behind the game launch and the two gates.
 1. **Decide the two-wave plan** (⚑) and pick a working name + domain.
 2. **Find your developer/operator.** They do the Wave-1 deploy from `DEPLOY.md` and run the free testnet
    rehearsal from `CHAIN-DEPLOY.md`/`tools/chain-e2e.js`.
-3. **Email 2 auditors and 1 crypto lawyer for quotes + timelines.** These are the long poles for Wave 2; the
+3. **Email 2 auditors and 1 adviser for quotes + timelines.** These are the long poles for Wave 2; the
    sooner they're in motion, the sooner "mainnet" has a real date.
 
 *Runbooks referenced: `DEPLOY.md` (the game), `CHAIN-DEPLOY.md` (mainnet), `SIGN-OFF.md` (economy decisions),

@@ -13,7 +13,7 @@ are out of design-patent protection. What we never put anywhere (art or names) i
 **brand name, model name, logo, or badge**. This is the GTA playbook: the "Cheetah" *is*
 a Ferrari to look at, but it's never called one. It matters more for us than a normal
 game because OMERTÀ has real-money/crypto extraction — a trademark fight is a fight we
-don't want. If anyone ever asks to use real brand names, that's a lawyer conversation,
+don't want. If anyone ever asks to use real brand names, that is a conversation to have with somebody qualified,
 not a code change.
 
 ## Layer 1 — the SVG set (live today, free)

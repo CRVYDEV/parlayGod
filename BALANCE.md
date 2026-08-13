@@ -867,7 +867,7 @@ not a lever.
   carries to the heir.
 - The Store's real payment path is the on-chain paywall (dormant, mainnet-gated); today's live path is the
   mod comp/simulate route. Deploy note: nothing extracts real value until the `OmertaFees.payForPackage`
-  contract + the `StorePaid` watcher ship — both gated on legal + the third-party audit.
+  contract + the `StorePaid` watcher ship — both gated on the launch checklist + the third-party audit.
 
 ## THE LEDGER — Season Pass reward track (proposed levers, sign-off pending)
 
@@ -965,7 +965,7 @@ defaults — sim + founder sign-off before production (ground rule #1). §10.4-c
 - The round transfer is the audited `bodyguard:hire` mechanism verbatim (1% street tax → buyback + 1%
   dev off-ledger + 98% net) — an untaxed unlimited P2P transfer is the cheapest value pipe in the game.
 - Step two is the **revenue layer**: real-money (ETH) cosmetic decor + bottle service, and the club
-  hosting the games with a rake to the owner — both gated on the Store/chain rail (mainnet, legal + audit).
+  hosting the games with a rake to the owner — both gated on the Store/chain rail (mainnet, launch checklist + audit).
 
 ## The Speakeasy — step two (the games + the risk)
 
@@ -1351,7 +1351,7 @@ Jorge shipped the `SIGN-OFF.md` sheet. Applied + tested (suite 30/30, sim drift-
   Spread-the-Word cash faucet requires real social verification (alpha keeps `trust`).
 
 Everything else on the sheet is SIGNED at the recommended verdict (SHIP) or on the alpha WATCH-list. The
-Tier-6 chain/legal items remain a SEPARATE gate (the launch checklist + `forge test` + third-party audit), not
+Tier-6 chain items remain a SEPARATE gate (the launch checklist + `forge test` + third-party audit), not
 signed by this pass.
 
 ### Speakeasy bar take — NET-EV measurement (sim P9.12, 2026-07-21)
@@ -2948,7 +2948,7 @@ what four signed bps are FOR, and a reader of this file should not have to find 
 The game will not acquire, hold, allocate or deliver real tokenized equities. The float's wall was
 `allocated ≤ held` — the game only ever owes stock it already owns, in UNITS — which works only while both
 sides of the ledger are the same asset. Backing a stock-denominated claim with ETH was rejected on
-substance: legally it turns handing over an asset you own into a cash-settled payout on one you do not,
+substance: it turns handing over an asset you own into a cash-settled payout on one you do not,
 and mechanically the treasury goes short exactly when players claim. So the cut was **remove the promise,
 keep the accounting.**
 
@@ -4022,7 +4022,7 @@ itself is status and extraction is an ownership move, so neither writes a ledger
 **The one thing NOT to retune without reading §7 first: the upgrade must stay DETERMINISTIC.** Pay
 the tier's price, get exactly that tier. A random paid upgrade would be a loot box bought with a
 token people reach through ETH, which is the question the design's "sell deterministic, drop random"
-rule exists to avoid entirely. Making it a roll is a legal decision wearing a balance decision's
+rule exists to avoid entirely. Making it a roll is an outside decision wearing a balance decision's
 clothes.
 
 **Not a balance flag, but the number that governs supply:** each tokenId's LIFETIME cap is set by the

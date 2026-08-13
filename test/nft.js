@@ -7,7 +7,7 @@
 // The assertions aim at the two ways this drop could be wrong, not at the happy path:
 //
 //   (1) THE LOOT-BOX LINE. "Sell deterministic, drop random" is the sentence that keeps this outside
-//       a genuinely contested regulatory question, so it is asserted rather than promised: rarity is
+//       a genuinely open question, so it is asserted rather than promised: rarity is
 //       rolled ONLY when an item is earned in play (and rng_audit'd, so the draw is replayable), and
 //       the one thing money buys is a KNOWN tier for a KNOWN price.
 //   (2) SAFE **AND** INERT. Extraction has to be both halves or the tradeoff collapses. A safe item

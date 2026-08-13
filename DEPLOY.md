@@ -196,7 +196,7 @@ available and are already built and tested — the panel just tells you which ar
 ## 4. Chain — LEAVE UNSET for the off-chain alpha
 The chain service is dormant unless configured. Setting `CHAIN_RPC_URL` + `CHAIN_ID` +
 `VOUCHER_CLAIM_ADDRESS` (+ `VOUCHER_SIGNER_PK`, `OMERTA_FEES_ADDRESS`, …) activates the watcher/withdraw
-rail — **do not** until the chain go-live path (devnet → audit → mainnet, gated on legal + the third-party
+rail — **do not** until the chain go-live path (devnet → audit → mainnet, gated on the launch checklist + the third-party
 contract+signer audit). `ALLOW_MOD_REAL_REVENUE` is a QA-only flag — **never** set in production.
 
 ## 5. NEVER set in production (the boot guard rejects them)

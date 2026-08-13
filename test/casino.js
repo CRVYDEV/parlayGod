@@ -95,7 +95,7 @@ assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM tra
 const dvCraps = (await pool.query('SELECT profit, distributed FROM den_volume WHERE id=1')).rows[0];
 assert.equal(Number(dvCraps.profit), staked - paidOut, 'the house book mirrors the ledger (profit == bets − wins)');
 assert.equal(Number(dvCraps.distributed), denDist, 'and knows exactly what it tipped out');
-// THE regulatory line: a gambling session never touches $OMR
+// THE hard line: a gambling session never touches $OMR
 assert.equal((await meOf(token)).omr, omrBefore, 'the den never touches $OMR — cash only');
 
 // ── the Numbers: one ticket a day, lazy claim at 600:1 against the seed-drawn number ──
@@ -333,7 +333,7 @@ assert.equal(-(await sum('casino:bet:blackjack')), bjBetPre + bjStaked, 'every s
 assert.equal(await sum('casino:win:blackjack'), bjWinPre + bjPaid, 'every payout is a ledgered casino:win:blackjack faucet');
 // every blackjack draw is rng-audited (deal + at least one dealer/hit event per resolved hand)
 assert(Number((await pool.query(`SELECT COUNT(*) n FROM rng_audit WHERE action LIKE 'casino:blackjack:%' AND character_id='${cid}'`)).rows[0].n) > 90, 'blackjack draws are rng-audited');
-// THE regulatory line holds through the table games too
+// THE hard line holds through the table games too
 const omrAfterBJ = (await meOf(token)).omr;
 
 // red-team regression: a LIVE blackjack hand's pending payout is RESERVED (openLiability), so the

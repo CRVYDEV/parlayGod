@@ -184,8 +184,8 @@ communities.** A free, deterministic, snapshot-based distribution of the game to
 no investment of money) to holders of unaffiliated NFT/token communities on ETH mainnet and
 Robinhood Chain, claims gas-paid and time-boxed, claim-page copy under the standing no-promise
 rules. *Open question: does a free token distribution at this scale carry registration or
-jurisdiction exposure (the historical airdrop-as-distribution line), and does the claim page need
-the same geofence posture as A3's rail?* Phase G-3 is blocked on this row.
+exposure (the historical airdrop-as-distribution line), and does the claim page need
+the same eligibility posture as A3's rail?* Phase G-3 is blocked on this row.
 
 ## 5. What this deliberately does not do
 

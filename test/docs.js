@@ -336,7 +336,9 @@ assert.deepEqual([...new Set(phantom)], [], `docs/AUDITS.md lists reports that d
   // it likes, so long as it also says somewhere that the rail is not open. When it DOES open, this
   // guard fails until it is updated — which is the point: going live is a decision on the record,
   // not a silent change of tense.
-  const OPENS_THE_RAIL = /not active|dormant|not yet open|not live yet|until the audit|behind legal/i;
+  // (`behind legal` was an arm here until 2026-08-13; the phrasing it matched is gone from the tree,
+  // and a dead alternation in a guard is how the guard quietly stops covering anything.)
+  const OPENS_THE_RAIL = /not active|dormant|not yet open|not live yet|until the audit|behind the launch checklist|until the launch/i;
   const DESCRIBES_EXTRACTION = /extract\w* (real |your |earned )?\$?OMR|on-chain (withdrawal|extraction)|POST \/v1\/withdraw/i;
   const unqualified = [];
   for (const f of SURFACES) {

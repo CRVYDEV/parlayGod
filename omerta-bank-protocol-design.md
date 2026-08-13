@@ -150,7 +150,7 @@ must show the **actual projected payoff date from the live realised yield**, rec
 yield moves, and must never use a phrase implying speed. The mechanic's honesty is the feature;
 a user who understands "this repays itself over years, and I am never liquidated meanwhile" is
 getting a genuinely good deal. One who was told "self-repaying" and expected months is a
-complaint and a regulatory exhibit.
+complaint and an exhibit.
 
 At the founder's requested 80–90% LTV against stables, the collateral is USD and the debt is USD,
 so high LTV carries *no liquidation risk* — the only cost is that repayment takes longer. **90% is
@@ -571,7 +571,7 @@ measured rather than reasoned about.
 
 Protocol profit → market buy → `fundReserve` → credited as **`prize:omr`**, which `invariants.js`
 already documents as *"an in-game $OMR credit BACKED by hard $OMR the Vig moved into the withdrawal
-reserve — legal because real revenue backs every token."* It is machinery that exists and has been
+reserve — admissible because real revenue backs every token."* It is machinery that exists and has been
 audited; the Vig's two-sided *reserve fully backed* / *not under-funded* pair already covers the
 backing from both directions.
 

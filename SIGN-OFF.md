@@ -361,7 +361,7 @@ only meaningful relative to demand, and there is no demand to measure yet.
 
 **One thing here is not a balance lever and I want it on the record:** the upgrade must stay
 **deterministic** — pay the price, get exactly that tier. Making it a random roll turns it into a loot
-box bought with a token people reach through real money, which is a legal decision wearing a balance
+box bought with a token people reach through real money, which is an outside decision wearing a balance
 decision's clothes.
 
 ---
@@ -497,7 +497,7 @@ Jorge: *"Ship all your recommendations."* Applied + tested (suite 30/30, sim dri
 faucet requires real social verification (keeps the alpha `trust` mode for now). An ops requirement, not code.
 
 **Everything else = SIGNED** at my recommended verdict (SHIP or WATCH). WATCH items are the alpha watch-list.
-**Tier 6 remains a separate legal/audit track** — not signed here.
+**Tier 6 remains a separate launch/audit track** — not signed here.
 
 Below is the full sheet as-decided (verdicts stand as the record).
 
@@ -595,7 +595,7 @@ Low-severity, mostly design-consistent-with-the-rest, or expensive-to-abuse. **R
 
 ---
 
-## TIER 6 — SEPARATE TRACK: legal + audit gated (NOT balance — do not "sign" here)
+## TIER 6 — SEPARATE TRACK: launch + audit gated (NOT balance — do not "sign" here)
 
 These are **not economy levers** — they're gated on **the launch checklist + a third-party audit** before any
 mainnet/real-money step, independent of everything above. Listed so nothing's lost.
@@ -656,22 +656,22 @@ client XSS, and the kitchen economy) came back **clean** — no reachable bug.
 | **S1** | **R43 — kitchen crew-sale Bureau-raid probability reads UNCLAMPED heat.** Over a long offline window a very hot stash faces a higher raid chance than the heat-100 ceiling implies (the sibling Law-exposure path deliberately uses the *clamped* value). It is **player-UNFAVORABLE** (raids more likely — no gain, no §10.4 drift) and touches the sim-audited heat/raid surface, so I flagged rather than patched. | **WATCH** (or **CHANGE**: clamp the raid-probability heat feed to `min(100, heat)` for parity — a tiny player-favorable nudge on neglected hot stashes; a one-line dial) |
 | **S2** | **`VIG_MAX_PRICE_JUMP` (default 10×)** — the new fraud/fat-finger bound R41 added to the manual `mod/vig/buyback` price (once a first buyback sets a reference, a subsequent manual price must be within 10× of the last, up or down). A real DEX TWAP never moves 10× between 12h buybacks; a 200× typo/attack is refused. Env-configurable ops lever, not a game number. | **SHIP** — confirm 10× is comfortable, or set `VIG_MAX_PRICE_JUMP` to your preferred factor |
 
-### Chain go-live — engineering-ready, still legal/audit-gated
+### Chain go-live — engineering-ready, still launch/audit-gated
 The `Bonded` → `recordBond` **watcher wiring is now complete** (`src/watcher.js:syncBondEvents` + the worker
 tick, dormant unless `OMERTA_BOND_ADDRESS` is set; test/watcher.js covers it). A new **`CHAIN-DEPLOY.md`**
 runbook sequences the whole on-chain go-live. **The three Tier-6 hard gates are unchanged and remain the only
-blockers to mainnet — they are NOT signed here (legal/audit track, not a founder tuning call):**
+blockers to mainnet — they are NOT signed here (launch/audit track, not a founder tuning call):**
 1. **`forge test`** green on a real Foundry toolchain (`omerta-contracts/run-forge-test.sh` — the suite compiles
    clean here but the Foundry VM is egress-blocked; this is the hard pre-audit gate).
 2. **Third-party audit of the contracts AND the off-chain EIP-712 signer** (`src/chain.js`).
-3. **Launch review** on the Risk-to-Earn / RWA line (jurisdiction/KYC/geofence).
+3. **Launch review** on the Risk-to-Earn / RWA line (eligibility).
 
 Still deferred engineering (not blockers, but needed before real bonds flow): the bond **quote signer** (no
 on-chain bond can be created until it ships — the watcher is wired but idle), the POL-pairing + DEX buyback
 bots, and the on-chain Store paywall. See `CHAIN-DEPLOY.md` §7.
 
 **Fastest path:** reply *"ship S1/S2"* (or name a CHANGE), and confirm the three chain gates are owned by the
-legal/audit track. The correctness fixes above need nothing from you.
+launch/audit track. The correctness fixes above need nothing from you.
 
 ---
 
@@ -680,7 +680,7 @@ legal/audit track. The correctness fixes above need nothing from you.
 Every item still marked open across `BALANCE.md`, the 56 `AUDIT-*.md` reports and the sheet above was
 re-read, classified, and **acted on**. Nothing is left as an un-owned "flagged" note: each row below is
 either **APPLIED** (the recommendation is now in the code), **ACCEPTED** (my recommendation *was* to keep
-it — recorded as a decision, not a to-do), or **NOT-A-BALANCE-ITEM** (legal/chain/infra — a separate track,
+it — recorded as a decision, not a to-do), or **NOT-A-BALANCE-ITEM** (chain/infra — a separate track,
 listed so nothing is lost).
 
 Suite green + `node tools/sim.js` drift-0 after the package.
@@ -705,7 +705,7 @@ Suite green + `node tools/sim.js` drift-0 after the package.
 | A14 | **Heist `fenceLoot` had no safehouse gate** (tier1-deepening) | added — fencing is income-realizing, so it can't run from cover. Now the whole risk layer reads one way. |
 | A15 | **`buyPaper` had no safehouse gate** (loan step-three F1) | added for offerLoan parity. Low value on its own (the audit said so) — shipped so the loan surface is consistent: you don't do business from a bunker. |
 | A16 | **Megaproject goods rail had no $-value floor** (megaproject C5) | freight worth less than `MIN_CASH` is refused — a $40 unit could buy a plaque row the $100 cash floor rejects. |
-| A17 | **RWA float claims weren't minted-gated** (rwa-float #2) | `claimVaulted` now requires `minted`. Two independent reasons the audit gave: the per-account daily cap only bounds anything if an account *costs* something (the Wage D1 precedent), and un-KYC'd alt claims permanently shrink the float (nothing decrements `rwa_vault`). |
+| A17 | **RWA float claims weren't minted-gated** (rwa-float #2) | `claimVaulted` now requires `minted`. Two independent reasons the audit gave: the per-account daily cap only bounds anything if an account *costs* something (the Wage D1 precedent), and un-verified alt claims permanently shrink the float (nothing decrements `rwa_vault`). |
 | A18 | **Numbers lazy-dominates the hot racket types** (full-product #3) | guidance, not a retune (the curve is signed): every type's description now states the collection cadence it needs — Numbers explicitly "the best type if you collect once a day", the hot types "collect inside ~Nh". Informed choice instead of a trap. |
 | A19 | **i18n over-promise** (full-product #5) | the picker is labelled **"(menus)"** with a tooltip saying the game text stays English. Honest about what the 15 packs cover; a prose translation remains a real content project, not an overnight machine pass. |
 

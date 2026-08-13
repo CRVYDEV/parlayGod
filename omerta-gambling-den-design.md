@@ -7,7 +7,7 @@ already runs on.
 
 ## 1. Hard rules (non-negotiable guardrails)
 
-1. **CASH ONLY. Never $OMR.** Gambling with an extractable token is a regulatory line we do not
+1. **CASH ONLY. Never $OMR.** Gambling with an extractable token is a hard line we do not
    cross regardless of launch posture on the rest of the pivot. The Den's tables take pocket
    cash; no route touches `account_persistent.omr` in any direction. (The PLEX/extraction rail
    stays exactly as boring as a withdrawal should be.)

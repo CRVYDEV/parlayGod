@@ -93,7 +93,7 @@ vocabulary entry + `DESK.SINK_REASONS` row when built — sinks recycle to the d
   the honest frame for the drain-before-sale disclosure (§5).
 - DELIVERY is the player's act: deploy-if-needed + a server-signed transfer through the ONE
   extraction boundary (the voucher rail), eligibility enforced at signature time (the launch checklist
-  — geofence/KYC depth is a launch parameter), the claimant paying their own gas end to end.
+  — the verification depth is a launch parameter), the claimant paying their own gas end to end.
 - Between allocation and delivery, nothing custodial changes: the treasury Safe holds the stock,
   the ledger holds the assignment, `allocated ≤ held` is checked nightly like every other
   real-value invariant. An unclaimed allocation is a ledger row, not a stranded on-chain balance.
@@ -108,7 +108,7 @@ vocabulary entry + `DESK.SINK_REASONS` row when built — sinks recycle to the d
 New: **DynastyNFT** (minimal ERC-721 — uncapped mint at the identity fee, tokenURI to the layered
 portrait composition, zero owner-mint paths beyond the fee-gated mint, the house discipline) and
 the **TBA account implementation** we bless (prefer the ecosystem reference implementation,
-pinned by bytecode hash, over writing our own — an account that custodies securities is the last
+pinned by bytecode hash, over writing our own — an account that custodies real assets is the last
 place for novel Solidity; if we must fork, it is for §5's lock only). The registry we do not
 write — we replay the published deploy transaction. The StockVault/claim rail is already specified
 in `omerta-rwa-stock-machine-design.md`. All of it lands in the SAME third-party audit batch
@@ -116,8 +116,8 @@ in `omerta-rwa-stock-machine-design.md`. All of it lands in the SAME third-party
 
 ## 5. The drain-before-sale answer (ours, since the spec declines to pick)
 
-A hollow-trophy sale is a market-integrity problem on OUR flagship asset, and with SECURITIES in
-the vault it is also an A2 disclosure item. **Stated honestly first (the adversarial pass's
+A hollow-trophy sale is a market-integrity problem on OUR flagship asset, and with real assets in
+the vault it is also something a buyer must be told. **Stated honestly first (the adversarial pass's
 correction): at launch, NONE of the spec's marketplace-side mitigations exist** — state()-bound
 orders and order-validating contracts require 6551-aware marketplaces, which the mainstream ones
 are not and which a July-2026 Orbit chain has none of at all. So the answer to A2's "does
@@ -300,7 +300,7 @@ no wage — and, stated as a WALL rather than an implication, **never an input t
 weight, allocation, claim eligibility or priority, or any till, gate, or lever, ever**. The
 adversarial pass named the cliff exactly: the drift is one future "reward our genesis
 communities" coupling away, and the moment a holdings-derived trait weights an allocation, the
-free trait retroactively becomes a distribution of expected securities allocations keyed to
+free trait retroactively becomes a distribution of expected stock allocations keyed to
 third-party asset holdings — the strongest possible fact against the NFT AND against A6's
 "no investment of money" characterization, while nicking the never-by-chance wall (assigned by
 what a wallet happened to hold, not by purchase or effort). Three standing reasons besides:
@@ -343,14 +343,12 @@ artifact — is the posture, and the adversarial pass sharpened it into enforcea
   value, "only N will ever" — banned in shop copy, docs, tweets, and the claim page for this
   feature. The allowed frame, stated positively: recognition/homage/provenance — "the city
   remembers where your founder came from." (Third-party rarity tools will price the trait
-  distribution from public metadata regardless — their speech; the rule protects OUR legal
+  distribution from public metadata regardless — their speech; the rule protects OUR
   surface, so it must be airtight there.) The metadata field is **`genesis_provenance`** — never
   `tier`/`rank`/`rarity`, and no ordinal or value-ranked tier names.
-- **Privacy (EU-shaped, cheap to preempt)**: the snapshot is processing of pseudonymous personal
-  data — the privacy policy gains a paragraph (what was read, at what block, the
-  legitimate-interest basis, retention, that traits derive from it); publish the MINIMUM claims
-  need (address+amount for merkle proofs) with the trait mapping computed server-side at claim,
-  never shipped as a public address→tier table; bands stay coarse.
+- **Data handling (cheap to preempt)**: say plainly what the snapshot read and at what block, and
+  publish the MINIMUM claims need (address+amount for merkle proofs) with the trait mapping
+  computed server-side at claim, never shipped as a public address→tier table; bands stay coarse.
 
 **A launch-checklist row** records the open questions (evocative art built from another
 community's identity; whether holdings-derived traits change the rows above it), and **the
@@ -565,7 +563,7 @@ rail below the earnable ceiling, or the release that crosses it changes the "get
 promise, the coach rung, and both codices in the SAME commit.
 
 **The copy rules, with more force than Shape C** (a published forward schedule is what converts
-"repricing" into "promised escalation" — this is the entire legal delta): the frame is
+"repricing" into "promised escalation" — this is the entire delta): the frame is
 **founding-era pricing** (an ordinary early-bird discount — concert tickets, presale software),
 never investment language. The mint page shows the CURRENT price and may state the published
 schedule as a fact sheet; it never shows a **countdown or "N remaining at this price" counter**

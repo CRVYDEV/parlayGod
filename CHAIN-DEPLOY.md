@@ -67,7 +67,7 @@ touches mainnet** until §0 is satisfied.
      contract-level constant (whether an uncapped collection with published escalating pricing holds
      up). Writing it first risks auditing the wrong contract.
    - **`StockVault` (delivery)** — *written? no.* Brokers step 7, gated on the **claim-rail parameters**
-     (jurisdiction list + KYC depth), which are still owed even though the surface itself is cleared.
+     (the eligibility list + verification depth), which are still owed even though the surface itself is cleared.
    - **`MerkleDistributor`** — *written? no.* Only exists under launch **D1 variant (a)**; variant (b)
      (in-game SIWE credit, the recommendation) needs no contract at all. Do not write it before D1.
 
@@ -83,7 +83,7 @@ touches mainnet** until §0 is satisfied.
    details. Recorded here as the founder's statement, which is what closes this gate; the scope the review
    reviewed is the $OMR side described below (the withdrawal rail, the Street Wage, bonds, the Store and
    the ETH vault). **This gate does NOT unlock mainnet on its own, and the distinction is worth keeping
-   sharp: gate 2 is a SECURITY review, not a legal one.** It is also the gate with the freshest reason to
+   sharp: gate 2 is a SECURITY review — a different thing entirely.** It is also the gate with the freshest reason to
    exist — tokenomics v2 step 4 deleted the property every prior contract review rested on ("nothing
    mints") and replaced it with four walls, and on 2026-08-12 two unbounded-mint holes were found in the
    BACKEND keepers (`AUDIT-family-buyback.md`) that had shipped with green tests and passing invariants.
@@ -91,10 +91,10 @@ touches mainnet** until §0 is satisfied.
    patched after the fact. **Nothing on this checklist should be armed until gate 2 also clears.**
    **What this gate covers has moved TWICE, and the current position is the second one.** The stock
    layer was retired 2026-07-31 (`omerta-stock-layer-retirement.md`) and **reinstated 2026-08-10**
-   (`omerta-brokers-design.md`, founder decision), so the earlier "there is no stock oracle, no KYC gate
-   and no geofence question" reading in this runbook was stale for two days and is corrected here:
+   (`omerta-brokers-design.md`, founder decision), so this runbook's earlier reading — that there was
+   no stock oracle and no eligibility gate to build — was stale for two days and is corrected here:
    **buying, holding and eventually delivering tokenized stock is back in scope**, and with it the
-   claim-rail parameters (jurisdiction list + KYC depth) that step 7 is gated on.
+   claim-rail parameters (the eligibility list + verification depth) that step 7 is gated on.
    **What is live TODAY is narrower than either framing suggests, and that is the operative fact:** the
    treasury BUYS and the wall (`allocated ≤ held`, per ticker, in units) holds, but **nothing is
    delivered to anybody** — `StockVault` is unwritten and there is no claim route to find. The ETH
@@ -384,7 +384,7 @@ The backend keeps its own reserve records; they must track the on-chain balances
 - **The on-chain Store** — `OmertaFees.payForPackage` + a `StorePaid` watcher. The Store is off-chain/mod-driven
   today; the on-chain paywall is the mainnet Store milestone.
 - **Liquidity bonds** (LP-token deposits) — launch-gated (§0.3). **R2/R3 (the real-stock buy bot, the
-  reserve backing Dynasty shares, and the KYC'd on-chain extraction) are RETIRED, not deferred** — the
+  reserve backing Dynasty shares, and the verified on-chain extraction) are RETIRED, not deferred** — the
   founder removed the stock layer 2026-07-31 (`omerta-stock-layer-retirement.md`); the treasury holds ETH
   and nothing in the game owes anybody a share.
 

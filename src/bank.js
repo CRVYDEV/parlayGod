@@ -41,7 +41,7 @@
 // ── §10.4 ──────────────────────────────────────────────────────────────────────────────────────
 //
 // ONE reason, and it is not a new one: `prize:omr`, which `invariants.js` already documents as "an
-// in-game $OMR credit BACKED by hard $OMR moved into the withdrawal reserve — legal because real
+// in-game $OMR credit BACKED by hard $OMR moved into the withdrawal reserve — admissible because real
 // revenue backs every token". Wall 1 (no faucet) survives intact, because every token handed to a
 // player was BOUGHT, not printed — and now, additionally, bought for somebody who was playing.
 //
