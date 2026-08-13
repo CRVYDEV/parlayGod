@@ -166,24 +166,36 @@ PHASE 1 for the exact calls/args.
 - [ ] **`OMR(treasurySafe)`** — founding supply `100_000_000e18` minted once to the Safe. **No longer a
       fixed-supply token** (tokenomics v2 §4): it has ONE mint path, the `minter` address, which ships
       **unset (= minting off)** and is armed deliberately below. There is no owner mint.
-- [ ] **`GearVault(safe)`** — ERC-1155; mint gated to VoucherClaim (set in the next step); per-`gearId` supply
-      caps set by the Safe (set caps BEFORE signing any gear voucher — an uncapped id is fail-closed).
+- [ ] **`GearVault(safe, imageBase)`** — ERC-1155; mint gated to VoucherClaim (set in the next step);
+      per-tokenId supply caps set by the Safe (set caps BEFORE signing any gear voucher — an uncapped id
+      is fail-closed). `imageBase` is the IPFS base for the pinned plates, e.g. `ipfs://<CID>/`, so the
+      per-tokenId image resolves to `<imageBase><tokenId>.png` (settable later via `setImageBase`).
+      **Metadata is on-chain**: `uri(id)` returns a self-contained JSON data URI whose Type/Class/Rarity
+      traits are derived from the tokenId (provable, no per-token storage); only the image is off-chain.
+      OPTIONAL but recommended for marketplace readability: `setClassNames(classKeys, names)` gives each
+      car/boat/gear class a display name (unset falls back to "Car #<idx>" etc.). A class key is the
+      class's BASE tokenId (rarity digit 0). The encoding constants `CAR_BASE`/`BOAT_BASE`/`STRIDE` and
+      the rarity names MIRROR `RARITY.TOKEN`/`RARITY.TIERS` in `src/rules.tail.js` — keep them in lockstep.
 - [ ] **`VoucherClaim(omr, gearVault, signer, safe, dailyCapOMR)`** — the only $OMR bridge. Then
       `gearVault.setMinter(voucherClaim)` so gear mints route through it.
 - [ ] **`OMRStaking(omr, safe)`** — pre-funded reward pool; principal always withdrawable.
-- [ ] **`OmertaFees(devWallet, safe, mintFeeWei, respawnFeeWei)`** — the ETH tollbooth. Fees:
-      `MINT = 0.01 ETH` (wave 1 of the published `MINT_TRANCHES` schedule — five waves to a capped 0.05;
-      each boundary is ONE owner `setFees` tx, watched on `/admin`), `RESPAWN = 0.10 ETH`,
-      `reroll` defaults to `mintFee` (owner-settable). Forwards ETH to
-      the dev wallet in-tx; custodies nothing.
-- [ ] **`OmertaBond(safe, signer, omr, polBps=3750, devBps=1500, rwaBps=2500, polRecipient, devRecipient,
-      rwaRecipient, vigRecipient, dailyCapOMR, maxOmrPerEth)`** — POL bonding with the four-way ETH split
-      (37.5% POL / 15% dev wallet / 25% treasury / the REMAINDER, 22.5%, to Vig). All four leave the
-      contract in the same tx; it custodies no ETH. **`rwaRecipient` must be the TREASURY Safe's own
-      address, distinct from `vigRecipient`** (founder ruling on key separation — §0.5; the `rwa` name is
-      historical, see `omerta-stock-layer-retirement.md`). **This contract
-      MINTS** — see below. Keep `polBps`/`devBps`/`rwaBps`/`maxDiscountBps` in lockstep with the backend
-      `BONDS.*` in `src/rules.js`.
+- [ ] **`OmertaFees(safe, feeRecipient=devWallet, vigRecipient, vigBps=2500, mintFeeWei, respawnFeeWei)`** —
+      the ETH tollbooth. It splits each fee ON-CHAIN in one tx: `vigBps` → `vigRecipient`, the remainder →
+      `feeRecipient` (dev); it custodies nothing. **`vigBps=2500` is the Path A fee split** (fee vig 2500 —
+      down from 6000); it is IMMUTABLE, so set it at deploy and keep it in lockstep with the backend
+      `VIG_BPS` in `deploy/fee-splits.env` (the treasury + community slices of the fee are backend earmarks
+      carved from the dev remainder — not on-chain). Fees: `MINT = 0.01 ETH` (wave 1 of the published
+      `MINT_TRANCHES` schedule — five waves to a capped 0.05; each boundary is ONE owner `setFees` tx,
+      watched on `/admin`), `RESPAWN = 0.10 ETH`, `reroll` defaults to `mintFee` (owner-settable).
+- [ ] **`OmertaBond(safe, signer, omr, polBps=7500, devBps=1500, rwaBps=500, polRecipient, devRecipient,
+      rwaRecipient, vigRecipient, dailyCapOMR, maxOmrPerEth)`** — POL bonding with the four-way ETH split.
+      **Path A: 75% POL / 15% dev wallet / 5% treasury / the REMAINDER, 5%, to Vig** (POL-heavy for
+      liquidity depth — up from 37.5% POL). All four leave the contract in the same tx; it custodies no
+      ETH. **`rwaRecipient` must be the TREASURY Safe's own address, distinct from `vigRecipient`** (founder
+      ruling on key separation — §0.5; the `rwa` name is historical, see
+      `omerta-stock-layer-retirement.md`). **This contract MINTS** — see below. Keep
+      `polBps`/`devBps`/`rwaBps`/`maxDiscountBps` in lockstep with the backend `BONDS.*` in `src/rules.js`
+      / `deploy/fee-splits.env`.
       **Operating rule (`omerta-v4-hook-design.md` §9.6): keep `BONDS.DISCOUNT_BPS` strictly BELOW
       `SELL_TAX.BPS`.** At today's 800 vs 900 an immediate bond-and-flip nets `1.08 × 0.91 = 0.983` — a
       ~1.7% loss, which is what makes a bond a hold rather than an arbitrage. Invert the two and every
@@ -246,9 +258,12 @@ PHASE 1 for the exact calls/args.
 - [ ] **Arm the DEX sell tax (after the pool exists):** `OMR.setTaxRecipients(devWallet, rwaWallet, lpWallet)` →
       `setExempt` for the POL manager + OmertaBond + VoucherClaim + the Safe → `setPair(pool, true)` →
       `setSellTax(bps, devBps, rwaBps)` — the total is hard-capped at 10% and defaults to 0 = off; LP takes
-      the remainder after dev + rwa. Ship the backend's `SELL_TAX` values (900 total = 200 dev / 400 rwa /
-      300 lp) so the two layers agree about where the money went. Only transfers INTO registered pools are
-      taxed; buys and wallet transfers are clean. **HARD REQUIREMENT: the canonical pool must be
+      the remainder after dev + rwa. **Path A: ship `setSellTax(900, 200, 160)`** (dev 200 / rwa 160 / lp
+      remainder), matching `deploy/fee-splits.env`'s `SELL_TAX_RWA_BPS=160`. The **community slice (240 bps
+      of trade) is a BACKEND carve** in `recordSellTax` — it is NOT a 4th on-chain recipient, so the
+      community's ETH physically sits in the LP wallet and is drawn by the family-buyback keeper; wire that
+      keeper's source wallet as part of the wallet topology (same class as the treasury/Vig key separation
+      in §0.5). Only transfers INTO registered pools are taxed; buys and wallet transfers are clean. **HARD REQUIREMENT: the canonical pool must be
       Uniswap V2-COMPATIBLE** (sell-taxed tokens need the *SupportingFeeOnTransferTokens router path;
       Uniswap V3 does not support them). RESOLVED (verified July 2026): Uniswap deployed **v2, v3, v4 +
       UniswapX on Robinhood Chain at its July 1, 2026 mainnet launch** — so a V2 pool is available. Still
@@ -323,6 +338,18 @@ comp/simulate routes inject *real* revenue; in prod the ONLY legitimate real-rev
 event carrying a txHash (fees, `Bonded`, `HarvestFeeTaken`). With it off, a comp books zero POL/Vig — no fabricated,
 unbacked reserve. (Red-team D-MED2.)
 
+- [ ] **THE PATH A REVENUE SPLIT — the env flip (`deploy/fee-splits.env`).** The founder-signed fee split
+      (`deploy/fee-splits.json`, 2026-08-13) is a coherent SET of ~17 backend levers. Apply them on **BOTH
+      the api and worker** at go-live — never piecemeal: several are validated by rules.tail.js load guards
+      at boot (`SELL_TAX` four-way sum, `BOND` sum, the fee sum), so a partial set crash-loops the process.
+      **Run `node tools/validate-fee-splits.js` first** — it loads the router with exactly these values and
+      asserts they reproduce the JSON and pass every guard. The code DEFAULTS stay byte-identical (community
+      slices 0), so this file IS the "env flip with sign-off" (`omerta-treasury-to-family-design.md` §8
+      Phase 2); do NOT set these in the pre-chain render.yaml. The three IMMUTABLE contract args that must
+      match — `OmertaFees.vigBps=2500`, `OmertaBond(polBps=7500,devBps=1500,rwaBps=500)` — are in the deploy
+      steps above; the sell-tax `setSellTax(900,200,160)` matches too, with the 240-bps community as a
+      backend carve.
+
 ## 5. Fund + reconcile the backend accounting to MIRROR the chain
 The backend keeps its own reserve records; they must track the on-chain balances, or the invariants flag a gap.
 - [ ] `POST /v1/mod/reserve/fund` → set `chain_reserve.funded_omr` to match the OMR held by `VoucherClaim`
@@ -370,7 +397,8 @@ The backend keeps its own reserve records; they must track the on-chain balances
     flag is a new hook plus a full liquidity migration.
   - **Wire before arming:** `setRecipients(dev, rwa, lp)` → `setAllowedQuote(quote, true)` for each quote
     currency the Safe is willing to HOLD (the empty allow-list is the deploy default, and until it is set
-    NO pool can be created on this hook at all) → `initialize` the pool → `setSellTax(900, 200, 400)`.
+    NO pool can be created on this hook at all) → `initialize` the pool → `setSellTax(900, 200, 160)`
+    (Path A — rwa 400→160; the 240-bps community slice is a backend carve, see the OMR sell-tax step above).
     `setObserver` once the hook-native oracle exists.
   - **Sequencing that is not optional** (§9.2): deploy the hook-native oracle → let it accumulate a FULL
     window → `OmertaBond.setOracle` → *then* migrate liquidity. Doing the migration first points wall 4 at

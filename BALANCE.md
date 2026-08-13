@@ -5910,6 +5910,52 @@ reserves are burn-only today (seals, the Foundation); if gang-reserve $OMR ever 
 that decision re-opens (the credit would then need the bank's reserve pairing AND a named term in
 both halves of the Vig sandwich).
 
+### PATH A — the full signed revenue split (founder export 2026-08-13)
+
+The founder exported the whole fee map from the "Where a Dollar Goes" artifact and signed it. It is
+the community flip ABOVE **plus** three non-community reallocations. Source of truth:
+`deploy/fee-splits.json`; the translated backend levers: `deploy/fee-splits.env`; the check:
+`node tools/validate-fee-splits.js` (loads the router with those levers and asserts they reproduce
+the JSON and pass every load guard). GO-LIVE config, applied at chain go-live (past the launch
+checklist + audit gate) on BOTH the api and worker — NOT armed in the dormant render.yaml. The code
+DEFAULTS stay byte-identical, so this is the designed env flip, not a default change.
+
+| Source | dest | current default | Path A | mechanism |
+|---|---|---|---|---|
+| **fee** | vig | 6000 | **2500** | `VIG_BPS` **+ `OmertaFees.vigBps` (immutable ctor arg)** |
+| | treasury | 1000 | 1000 | `FEE_RWA_BPS` (unchanged) |
+| | community | 0 | **1500** | `FEE_COMMUNITY_BPS` |
+| | operations | 3000 | **5000** | implicit remainder |
+| **store** | vig | 4000 | **2500** | `REVENUE_BUYBACK_BPS` |
+| | treasury | 2000 | **1000** | `REVENUE_RWA_BPS` |
+| | community | 0 | **1500** | `STORE_COMMUNITY_BPS` |
+| | operations | 4000 | **5000** | `REVENUE_FOUNDER_BPS` 4000→6500, net of community |
+| **bond** | pol | 3750 | **7500** | `BOND_POL_BPS` **+ `OmertaBond.polBps` (immutable)** — POL-heavy for depth |
+| | vig | 2250 | **500** | `BOND_VIG_BPS` (on-chain remainder) |
+| | treasury | 2500 | **500** | `BOND_RWA_BPS` **+ `OmertaBond.rwaBps` (immutable)** |
+| | operations | 1500 | 1500 | `BOND_DEV_BPS` (unchanged) |
+| **tax** | dev | 200 | 200 | `SELL_TAX_DEV_BPS` (unchanged); of-trade bps |
+| | rwa | 400 | **160** | `SELL_TAX_RWA_BPS` (+ on-chain `setSellTax`) |
+| | community | 0 | **240** | `SELL_TAX_COMMUNITY_BPS` (backend carve; the four-way guard forces rwa 400→160 in the same deploy) |
+| | lp | 300 | 300 | `SELL_TAX_LP_BPS` (unchanged remainder) |
+| **harvest** | treasury | 10000 | **3720** | of the 2000-bps Bank fee |
+| | community | 0 | **6280** | `HARVEST_COMMUNITY_BPS` (in the market's underlying) |
+| **polfees** | desk-buyback | 10000 | **7500** | remainder |
+| | vig | 0 | **2500** | `POL_FEES_VIG_BPS` |
+| **auction** | pol / operations | 5000 / 5000 | 5000 / 5000 | `DESK_AUCTION.ETH_POL_BPS` (unchanged) |
+| **toll** | operations / community | 5000 / 5000 | 5000 / 5000 | `TAX.DEV_BPS` (unchanged; community = `tax:buyback` → family_yield_pool) |
+
+**The three non-community reallocations, and why:** (1) **fee vig 6000→2500** — the gameplay-fee vig
+share drops so the fee funds the community pool + a fatter operations remainder; the immutable
+`OmertaFees.vigBps` must be set to 2500 at deploy or the on-chain split disagrees with the ledger.
+(2) **store 40/40/20 → 25/10/65-of-which-15-is-community** — Store leans further to operations, with a
+community slice. (3) **bond 3750→7500 POL** — the bond gets much POL-heavier for liquidity depth (the
+binding cap constraint), pulling from vig (2250→500) and treasury (2500→500); the immutable
+`OmertaBond.polBps`/`rwaBps` must match. All validated by `tools/validate-fee-splits.js` (mutation-checked
+both ways: a broken sum trips a load guard, a wrong value trips the JSON diff). §10.4 untouched — the
+community pool is the audited backend buyback (`yield:buyback`, backed by a real purchase); nothing here
+moves real ETH until the chain is live.
+
 ## THE REPRICING PLAYBOOK — what we do when the token's price moves the sink economy (2026-08-11)
 
 **The gap this closes:** the mint has its tranche machinery and the PLEX rails self-reprice
