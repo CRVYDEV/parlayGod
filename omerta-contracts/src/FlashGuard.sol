@@ -23,7 +23,7 @@ pragma solidity 0.8.26;
 ///
 ///         ── AND WE MUST NOT BLOCK ALL OF THEM ANYWAY ─────────────────────────────────────────
 ///         The Transmuter's 1:1 redemption is DEFENDED by arbitrage: someone who flash-loans to buy
-///         nUSD at 0.98 and redeem it at 1.00 is repairing our peg at their own gas risk. Blanket
+///         DNR at 0.98 and redeem it at 1.00 is repairing our peg at their own gas risk. Blanket
 ///         "no flash loans" would disable the mechanism that keeps the peg honest. So the guards
 ///         here are SURGICAL — they attach to the paths where atomicity creates an advantage, and
 ///         deliberately not to the paths where it creates a service.

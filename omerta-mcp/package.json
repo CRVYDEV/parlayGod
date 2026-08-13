@@ -1,6 +1,6 @@
 {
   "name": "omerta-mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Model Context Protocol server for OMERTÀ — let any MCP-capable agent play the game natively.",
   "type": "module",
   "bin": {

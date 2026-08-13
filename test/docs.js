@@ -304,11 +304,15 @@ assert.deepEqual([...new Set(phantom)], [], `docs/AUDITS.md lists reports that d
   // Any legitimate hit goes here WITH the reason it is legitimate. Empty today.
   const WAIVED = new Map([]);
   const SURFACES = ['docs/WIKI.md', 'public/wiki.html', 'public/index.html', 'public/play.html',
-    'public/arena.html', 'AGENTS.md'];
+    'public/arena.html', 'AGENTS.md', 'omerta-mcp/README.md'];
+  // llms.txt is BUILT, not a file — generate it so the guard covers what agents actually fetch.
+  const { llmsTxt } = await import('../src/agentgateway.js');
+  const surfaceText = (f) => (f === '<llms.txt>' ? llmsTxt() : read(f));
+  const ALL_SURFACES = [...SURFACES, '<llms.txt>'];
   const bad = [];
-  for (const f of SURFACES) {
+  for (const f of ALL_SURFACES) {
     let text;
-    try { text = read(f); } catch { continue; }               // an optional surface may not exist
+    try { text = surfaceText(f); } catch { continue; }        // an optional surface may not exist
     text.split('\n').forEach((line, i) => {
       // A line that FORBIDS the claim is not making it — MARKETING.md's rules and AGENTS.md's
       // "never promise ... token appreciation" are the guard working, not violations of it.
@@ -341,9 +345,9 @@ assert.deepEqual([...new Set(phantom)], [], `docs/AUDITS.md lists reports that d
   const OPENS_THE_RAIL = /not active|dormant|not yet open|not live yet|until the audit|behind the launch checklist|until the launch/i;
   const DESCRIBES_EXTRACTION = /extract\w* (real |your |earned )?\$?OMR|on-chain (withdrawal|extraction)|POST \/v1\/withdraw/i;
   const unqualified = [];
-  for (const f of SURFACES) {
+  for (const f of ALL_SURFACES) {
     let text;
-    try { text = read(f); } catch { continue; }
+    try { text = surfaceText(f); } catch { continue; }
     if (!DESCRIBES_EXTRACTION.test(text)) continue;            // says nothing about the rail — fine
     if (OPENS_THE_RAIL.test(text)) continue;                   // describes it AND says it is shut
     unqualified.push(f);

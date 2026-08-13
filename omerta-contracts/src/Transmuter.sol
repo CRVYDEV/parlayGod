@@ -7,14 +7,14 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {FlashGuard} from "./FlashGuard.sol";
-import {NUSD} from "./NUSD.sol";
+import {Denari} from "./Denari.sol";
 
 /// @title Transmuter — 1:1 redemption, the buffer floor, and the only burn authority
 /// @notice Design: `omerta-bank-protocol-design.md` §2.4, answering Runtime Verification's finding
 ///         #2 against Alchemix (the 1:1 promise must survive the backing losing value).
 ///
 ///         ── THE PROMISE, AND THE FOUR THINGS THAT KEEP IT ────────────────────────────────────
-///         One nUSD redeems for one dollar of underlying. Always, or the peg is a suggestion.
+///         One DNR redeems for one dollar of underlying. Always, or the peg is a suggestion.
 ///           1. **Denomination matching** (§2.1) removes the price leg of RV's risk before it
 ///              starts — the collateral behind this token is the same unit as the debt.
 ///           2. **A hard buffer floor.** `bufferHealthy()` is false when reserves fall below
@@ -26,7 +26,7 @@ import {NUSD} from "./NUSD.sol";
 ///
 ///         ── WHY REDEMPTION IS NOT SAME-BLOCK GUARDED, DELIBERATELY ───────────────────────────
 ///         `FlashGuard`'s L1 is absent from `redeem()` ON PURPOSE. Somebody who flash-loans to buy
-///         nUSD at 0.98 and redeems it here at 1.00 is REPAIRING OUR PEG at their own gas risk.
+///         DNR at 0.98 and redeems it here at 1.00 is REPAIRING OUR PEG at their own gas risk.
 ///         Blanket-blocking atomicity would disable the mechanism that keeps the peg honest — the
 ///         guards attach where atomicity creates an advantage, never where it creates a service.
 ///
@@ -65,16 +65,16 @@ contract Transmuter is Ownable, ReentrancyGuard, FlashGuard {
     uint16 public constant MIN_BUFFER_FLOOR_BPS = 500; // 5%
     uint16 public constant BPS = 10_000;
 
-    NUSD public immutable debtToken;
+    Denari public immutable debtToken;
     IERC20 public immutable asset;
-    /// @dev 10^(18 - assetDecimals). nUSD is 18dp; USDC is 6dp. A 1:1 redemption across a decimal
+    /// @dev 10^(18 - assetDecimals). DNR is 18dp; USDC is 6dp. A 1:1 redemption across a decimal
     ///      mismatch is a classic silent-loss bug, so the scale is computed once at construction
     ///      from the token itself rather than passed in and trusted.
     uint256 public immutable scale;
 
     /// @notice Underlying held to honour redemptions, in asset units. Never `balanceOf`.
     uint256 public reserves;
-    /// @notice Buffer floor, in bps of outstanding nUSD supply.
+    /// @notice Buffer floor, in bps of outstanding DNR supply.
     uint16 public bufferFloorBps = 2_000; // 20%
 
     /// @notice Redemption flow caps, in asset units. Zero disables a cap (see FlashGuard._meter).
@@ -96,7 +96,7 @@ contract Transmuter is Ownable, ReentrancyGuard, FlashGuard {
     error ZeroAmount();
     error InsufficientReserves();
 
-    constructor(NUSD debtToken_, IERC20 asset_, address safe) Ownable(safe) {
+    constructor(Denari debtToken_, IERC20 asset_, address safe) Ownable(safe) {
         debtToken = debtToken_;
         asset = asset_;
         uint8 d = IERC20Metadata(address(asset_)).decimals();
@@ -151,10 +151,10 @@ contract Transmuter is Ownable, ReentrancyGuard, FlashGuard {
 
     // ── redemption ───────────────────────────────────────────────────────────────────────────────
 
-    /// @notice Burn `debtAmount` nUSD (18dp) for the same value of underlying (asset dp), 1:1.
+    /// @notice Burn `debtAmount` DNR (18dp) for the same value of underlying (asset dp), 1:1.
     /// @dev    Checks-effects-interactions: reserves fall and the burn happens before the transfer
     ///         out, and `nonReentrant` backstops it. The burn is of THIS contract's own balance
-    ///         after pulling the tokens in — see NUSD.burn's note on why that matters.
+    ///         after pulling the tokens in — see Denari.burn's note on why that matters.
     /// @dev    **No `onlyAllowedCaller` here, and that absence is deliberate.** An earlier cut of this
     ///         contract carried the L2 allowlist on this function, which contradicted its own header:
     ///         most redemption arbitrage is executed BY CONTRACTS, so an allowlist on the redeem path
@@ -174,7 +174,7 @@ contract Transmuter is Ownable, ReentrancyGuard, FlashGuard {
         reserves -= assetsOut;
 
         // pull the debt in, then burn our own balance (never a third party's — no allowance is
-        // checked inside NUSD.burn, and this is the reason that is safe)
+        // checked inside Denari.burn, and this is the reason that is safe)
         IERC20(address(debtToken)).safeTransferFrom(msg.sender, address(this), debtAmount);
         debtToken.burn(address(this), debtAmount);
 

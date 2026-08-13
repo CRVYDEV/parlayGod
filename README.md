@@ -1,6 +1,6 @@
-# OMERTÀ Backend — M1
+# OMERTÀ Backend
 
-Server-authoritative backend for OMERTÀ, built to `omerta-backend-spec.md` (in this repo). M1 delivers the playable solo loop: auth, character creation, lazy accrual, crimes, gym, Doc, bank, travel, daily check-in — with the transaction ledger and RNG audit live from day one.
+Server-authoritative backend for OMERTÀ, built to `omerta-backend-spec.md` (in this repo). What began as the M1 solo loop is now the full city: 142 backend modules, 100 test suites, 222 database tables, and a playable web console covering every system — with the transaction ledger and RNG audit live from day one.
 
 ## Run it (zero setup)
 ```
@@ -38,7 +38,7 @@ fee reverts) → the getLogs cursor watcher credits it → character MINTED → 
 ERC-20 in the player's wallet; replay + tampering revert) → the `Claimed` watcher closes the
 reserve accounting → gear voucher mints the ERC-1155 (uncapped ids fail closed; only VoucherClaim
 mints) → §10.4 $OMR conservation holds with the chain live. The Foundry unit+fuzz suite
-(`omerta-contracts/test`) now **passes 29/29 (incl. a 512-run fuzz) in CI** — `.github/workflows/forge.yml`
+(`omerta-contracts/test`) now **passes 213/213 (incl. 512-run fuzzes) in CI** — `.github/workflows/forge.yml`
 runs `forge test` on GitHub's runners on every contracts push; run it locally with `omerta-contracts/run-forge-test.sh`.
 
 ## Try it
@@ -101,7 +101,7 @@ curl -s localhost:8787/v1/me -H "Authorization: Bearer $TOKEN"
 `anon: true` on `POST /streets/:id/bounty` or `/gangs/contract/:targetId` (3 $OMR on a FRESH pot; top-ups inherit free) · `POST /contracts/peek` (5 $OMR — the mark reads every funder on their own head, pierces anon; free when nothing's posted) · `POST /respec` `{muscle,cunning,speed}` (15 $OMR — total conserved, each stat ≥ 5)
 
 ## Staking (the Vault) — principal only; the individual yield is RETIRED (tokenomics v2)
-`POST /stake` / `POST /unstake` hold and release principal (unstaking still unbonds for the loot-exposure window; **principal always returns whole**). The old per-staker yield (`POST /claim-rewards`) answers `retired`: $OMR yield now pays THE FAMILIES — the top families by seasonal standing draw the **family yield** into their gang reserves, fed by a cut of every Exchange-window redemption (`yield:window`). Staked $OMR remains the safe harbour a fire-kill can't loot. Design: `omerta-tokenomics-v2-design.md`.
+`POST /stake` / `POST /unstake` hold and release principal (unstaking still unbonds for the loot-exposure window; **principal always returns whole**). The old per-staker yield (`POST /claim-rewards`) answers `retired`: $OMR yield now pays THE FAMILIES — the top families by seasonal standing draw the **family yield** into their gang reserves, fed by a cut of every Exchange-window redemption (`yield:window`). Staked $OMR is looted LIGHTER on a fire-kill (a fifth of a staked balance against half of a loose one) — a hedge, never a safe harbour. Design: `omerta-tokenomics-v2-design.md`.
 
 ## Business Empire (premium, acquired-later personal fronts — cash farming under PvP risk)
 `GET /catalog` (public — the venue catalog + tier ladders; laundromat lvl15 → casino lvl58) · `POST /business/:kind/buy` (level-gated, one per kind; cash sink `business:buy`) · `POST /business/collect` (lazy income → pocket cash, capped 24h; faucet `business:income`) · `POST /business/:id/upgrade` (next tier; collects pending at the OLD rate first; sink `business:upgrade`) · `GET /business` (your empire + pending income; also surfaced in the character view). *(`POST /business/:id/launder` answers `retired` — private laundering ended with tokenomics v2; cash can no longer become $OMR anywhere. With laundering gone, front scrutiny has no feed, so the Bureau-raid layer is dormant — a front's risk today is PvP.)* **The risk layer (PvP):** `POST /business/:id/shakedown` (a rival extorts 30% of a front's pending income in a muscle/cunning contest — per-venue 8h cooldown, heat win or lose, family off-limits; the owner keeps the rest pending) · hostile takeovers, inside-job heists, and a fire-kill can SACK a front outright (the killer takes it over). **The pad (recurring upkeep):** every front owes protection + wages = 20% of its income, accruing on its own clock (up to 7 days — distinct from the 24h income cap, so an absent owner owes more than they can earn) · `POST /business/upkeep` pays the pad on every front you can afford (cash sink `business:upkeep`) · a front unpaid past 3 days goes **cold** — no income, no upgrades — until you square it (`upkeepOwed`/`upkeepPerHr`/`cold` in the view). Numbers are founder sign-off levers. Design: `omerta-business-empire-design.md`, `omerta-recurring-sinks-design.md`.
@@ -143,7 +143,7 @@ A player fire-kill swears the victim's BLOODLINE (account) against the killer's 
 Bank deposits ride **in transit** for 2h (lootable on a fire-kill; view: `bankInTransit`/`bankClearSeconds`) · unstaking **unbonds** for 6h (no yield, lootable; view: `unbonding`/`unbondSeconds`; staking in stays instant; principal always releases whole) · **safehouse costs 1% of cash+bank** (min $25k) per 4h — the view quotes `safehouseCost` · **PLEX is market-linked**: `GET /plex/price` quotes fee-ETH × the latest vig buyback price × 1.2 premium (static floor pre-market) — ETH stays the economical rail, $OMR burns at a markup · *(the 12h tick no longer buys $OMR or carves AMM liquidity — since tokenomics v2 the whole street take funds the Exchange window's till).* All numbers founder sign-off levers.
 
 ## Risk-to-Earn Phase 1 (off-chain rebalance — no new routes, changed behavior)
-Loot on a player fire-kill (killer takes 25% of victim pocket cash + 20% of liquid $OMR; `whack:loot` transfers; response adds `loot`/`omrLoot`) · a safe-housed player can't `fire`/`jump`/`deal` (shield, not bunker) · bodyguard floor $1k→$10k, guard hospital 2h→4h · bank interest capped by a daily bucket (no ~4%/day risk-free). *(Phase 1's laundering gate on `POST /swap` is history — tokenomics v2 later retired cash→$OMR entirely.)* Numbers are founder sign-off levers. Design: `omerta-phase1-riskpay-design.md`, superseded in part by `omerta-tokenomics-v2-design.md`.
+Loot on a player fire-kill (killer takes 25% of victim pocket cash + 50% of loose $OMR — a staked balance is looted lighter at 20%; `whack:loot` transfers; response adds `loot`/`omrLoot`) · a safe-housed player can't `fire`/`jump`/`deal` (shield, not bunker) · bodyguard floor $1k→$10k, guard hospital 2h→4h · bank interest capped by a daily bucket (no ~4%/day risk-free). *(Phase 1's laundering gate on `POST /swap` is history — tokenomics v2 later retired cash→$OMR entirely.)* Numbers are founder sign-off levers. Design: `omerta-phase1-riskpay-design.md`, superseded in part by `omerta-tokenomics-v2-design.md`.
 
 ## M8 endpoints (family seals — the gang prestige ladder)
 `POST /gangs/tribute/omr` (any member pools $OMR into the family reserve) · `POST /gangs/vanity/seal` (boss only — buys the NEXT seal from the reserve: Wax 25 → Brass 75 → Silver 200 → Gold 500 → Obsidian 1500; displayed on the family everywhere, pure status)

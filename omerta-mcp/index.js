@@ -90,7 +90,7 @@ const TOOLS = [
       type: 'object',
       properties: {
         method: { type: 'string', enum: ['GET', 'POST', 'DELETE', 'PUT'], description: 'HTTP method.' },
-        path: { type: 'string', description: 'Route path, e.g. "/v1/crimes/mugging" or "/v1/swap".' },
+        path: { type: 'string', description: 'Route path, e.g. "/v1/crimes/pick" or "/v1/window/redeem".' },
         body: { type: 'object', description: 'JSON body for a mutation (optional).' },
       },
       required: ['method', 'path'],
@@ -98,7 +98,7 @@ const TOOLS = [
   },
 ];
 
-const server = new Server({ name: 'omerta', version: '1.0.0' }, { capabilities: { tools: {} } });
+const server = new Server({ name: 'omerta', version: '1.0.1' }, { capabilities: { tools: {} } });
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
 
 server.setRequestHandler(CallToolRequestSchema, async (req) => {

@@ -10,7 +10,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {FlashGuard} from "./FlashGuard.sol";
 import {CollateralEscrow} from "./CollateralEscrow.sol";
 import {Transmuter} from "./Transmuter.sol";
-import {NUSD} from "./NUSD.sol";
+import {Denari} from "./Denari.sol";
 
 /// @title Alchemist — the borrow side of one denomination-matched market
 /// @notice Design: `omerta-bank-protocol-design.md` §2.1–2.5.
@@ -34,7 +34,7 @@ import {NUSD} from "./NUSD.sol";
 ///         reintroduce an internal share layer — it would re-create the bug it was meant to fix.
 ///
 ///         ── THE INVARIANT THIS FILE EXISTS TO HOLD ───────────────────────────────────────────
-///             Σ nUSD supply ≤ Σ collateral × LTV
+///             Σ DNR supply ≤ Σ collateral × LTV
 ///         Enforced per-user at every issuance and every withdrawal, and fuzzed in the tests.
 contract Alchemist is Ownable, ReentrancyGuard, FlashGuard {
     using SafeERC20 for IERC20;
@@ -54,7 +54,7 @@ contract Alchemist is Ownable, ReentrancyGuard, FlashGuard {
     ///         self-repaying loan can be turned into a non-repaying one in a single transaction.
     uint16 public constant MAX_HARVEST_FEE_BPS = 3_000; // 30%
 
-    NUSD public immutable debtToken;
+    Denari public immutable debtToken;
     IERC20 public immutable asset;
     IERC4626 public immutable vault;
     Transmuter public immutable transmuter;
@@ -96,7 +96,7 @@ contract Alchemist is Ownable, ReentrancyGuard, FlashGuard {
     mapping(address => CollateralEscrow) public escrowOf;
     /// @notice Underlying deposited by the user, in asset units. Yield above this is harvestable.
     mapping(address => uint256) public principalOf;
-    /// @notice Outstanding debt in nUSD (18dp). Never negative in this batch — repayment credits
+    /// @notice Outstanding debt in DNR (18dp). Never negative in this batch — repayment credits
     ///         are clamped at zero rather than banked, because a negative balance is a claim on
     ///         the protocol and this batch deliberately issues none.
     mapping(address => uint256) public debtOf;
@@ -143,7 +143,7 @@ contract Alchemist is Ownable, ReentrancyGuard, FlashGuard {
     error FeeRecipientUnset();
     error BadFeeRecipient();
 
-    constructor(NUSD debtToken_, IERC20 asset_, IERC4626 vault_, Transmuter transmuter_, address safe)
+    constructor(Denari debtToken_, IERC20 asset_, IERC4626 vault_, Transmuter transmuter_, address safe)
         Ownable(safe)
     {
         debtToken = debtToken_;
@@ -291,7 +291,7 @@ contract Alchemist is Ownable, ReentrancyGuard, FlashGuard {
 
     // ── borrow ───────────────────────────────────────────────────────────────────────────────────
 
-    /// @notice Draw `debtAmount` of nUSD (18dp) against your escrow.
+    /// @notice Draw `debtAmount` of DNR (18dp) against your escrow.
     function mint(uint256 debtAmount) external nonReentrant onlyAllowedCaller notSameBlockAsEntry(msg.sender) {
         if (debtAmount == 0) revert ZeroAmount();
         if (address(escrowOf[msg.sender]) == address(0)) revert NoEscrow();
@@ -312,10 +312,10 @@ contract Alchemist is Ownable, ReentrancyGuard, FlashGuard {
     // ── repay ────────────────────────────────────────────────────────────────────────────────────
 
     /// @notice Repay in UNDERLYING. The assets go to the Transmuter as backing.
-    /// @dev    Repayment is deliberately not "burn your nUSD here": the Transmuter is the single
-    ///         burn authority (NUSD's header), and paying in underlying is strictly better for the
-    ///         system — it clears debt AND deepens the buffer, leaving the outstanding nUSD fully
-    ///         redeemable rather than merely destroyed. Anyone holding nUSD who wants out uses the
+    /// @dev    Repayment is deliberately not "burn your DNR here": the Transmuter is the single
+    ///         burn authority (Denari's header), and paying in underlying is strictly better for the
+    ///         system — it clears debt AND deepens the buffer, leaving the outstanding DNR fully
+    ///         redeemable rather than merely destroyed. Anyone holding DNR who wants out uses the
     ///         Transmuter directly.
     ///
     ///         Overpayment is REFUSED rather than banked as a credit. A negative debt balance is a

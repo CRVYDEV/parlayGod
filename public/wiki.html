@@ -175,7 +175,7 @@ const SECTIONS = [
       ${L(`<b>Death:</b> the character dies, but the account does not die. An heir is born and inherits everything at the
       account level.`)}
       <p><b>Lost when the character dies:</b> stats, skills, businesses, the speakeasy, the Kitchen crew, the boxing
-      fighter, territory operation control, and this season's kills. <b>Passes to the heir:</b> prestige, the legal
+      fighter, territory operation control, and this season's kills. <b>Passes to the heir:</b> prestige,
       the Estate, the Store patron/pass benefit, hitman reputation and lifetime
       kills, minted status, revive tokens, and 25% of your Underworld standings.</p>
       <p><b>Seasons</b> last 28 days. At the end, your level converts to prestige (<code>floor(level/2)</code>) and your
@@ -189,7 +189,7 @@ const SECTIONS = [
       <p><b>Guns and the Armory.</b> 15 guns (Rusty .25 fp3 to the 'Undertaker' fp60), bought with cash and crates.
       <b>Vests</b> (bought with $OMR) increase survival. <b>Ammo</b> costs $2000 for 50 rounds. Its price is <b>never
       reduced</b> — it controls the cost of a kill.</p>
-      <p><b>Gear</b> (about 55 items, priced in $OMR) increases stats. Gear is a tradeable NFT on the blockchain. A
+      <p><b>Gear</b> (about 50 items, priced in $OMR) increases stats. Gear is a tradeable NFT on the blockchain. A
       fire-kill has a <b>15% chance to take one in-game gear piece</b> — but <b>gear minted on the blockchain is safe</b>.
       Keep gear in the game to use it (you can lose it), or move it to the blockchain (it is safe and tradeable, but you
       cannot use it in the game).</p>
@@ -219,8 +219,8 @@ const SECTIONS = [
       <tr><td>Brick Yards</td><td>+2% crime success</td></tr>
       <tr><td>Canal Row</td><td>+10% crime pay</td></tr>
       <tr><td>Cathedral Hill</td><td>nerve increases two times faster</td></tr></table>
-      <p><b>NPC rival families</b> — shared cash reserves that the whole server reduces together (Zappa L8, Kryl L20,
-      Moreau L40). A raid costs energy, ammo, and heat, and pays a bonus if you reduce a family below its floor. If you
+      <p><b>NPC rival families</b> — shared cash reserves that the whole server reduces together (Dock Rats L4, Zappa L8,
+      Kryl L20, Moreau L40, Volkov L55 — the top three are crew-only raids). A raid costs energy, ammo, and heat, and pays a bonus if you reduce a family below its floor. If you
       defeat a family, your family holds its outpost (the outpost pays tribute to the treasury; a rival can take it by
       paying more than your garrison).</p>
       <p><b>The uprising</b> — the NPC families fight back. On some days (shown in advance on the forecast) a family rises up
@@ -234,13 +234,15 @@ const SECTIONS = [
       on-chain by minted accounts, account-level so it survives death), crates, and ammo. <b>Cash and $OMR do
       not trade</b> — cash is the city's own money and stays here; $OMR comes in from outside and leaves
       through the Exchange window. The main rule: the game records every movement of value on a ledger.</p>
-      <p><b>Nothing you do in the game creates $OMR.</b> No wage, no yield, no drip — the game has no printer
-      at all. Every $OMR in this city was <b>bought with real money</b>
-      by somebody, which is exactly why it is worth taking off them. Four ways to get some: <b>take it</b>
+      <p><b>Nothing you do in the game creates $OMR on a schedule.</b> No wage, no yield, no drip — the game has no
+      scheduled printer. Outside the mission ladder's one-time payouts (~1,320 across a career) and the small
+      daily bonus, every $OMR in this city was <b>bought with real money</b>
+      by somebody, which is exactly why it is worth taking off them. Five ways to get some: <b>take it</b>
       (a kill loots the victim's liquid $OMR — staked and committed $OMR is safer), <b>earn it</b> from a
-      player who pays you in it, <b>buy it</b>, or <b>get paid out of the Bank</b>. A nightly job asserts no
-      new $OMR appeared, so it is a fact you can check rather than a promise.</p>
-      <p><b>The Bank's city leg</b> — the fourth way, and the only one that pays you for simply playing.
+      player who pays you in it, <b>work for it</b> (the mission ladder's one-time payouts and the daily
+      all-three bonus), <b>buy it</b>, or <b>get paid out of the Bank</b>. A nightly job asserts nothing
+      unenumerated appeared, so it is a fact you can check rather than a promise.</p>
+      <p><b>The Bank's city leg</b> — the fifth way, and the only one that pays you for simply playing.
       People who borrow from the Bank pay to use it; that profit is spent <b>buying $OMR on the open
       market</b>, and the whole of it goes to the players who played that day. Nothing is printed — every
       token in the split was purchased first, so it moves no supply.</p>
@@ -345,7 +347,7 @@ const SECTIONS = [
       <p><b>The posts.</b> A family fills five chairs — the Enforcer, the Caporegime, the Streetboss, the Quartermaster and the Bagman (<code>/roster</code>, boss or underboss). <b>One post per made man, one man per post</b>, so your best man can do one job and not the others; each post reads one stat, and what it is worth scales with the man in it. What makes this worth fighting over: <b>a post is dead while its holder is dead, in lockup or in the hospital</b> — put a family's Enforcer in the hospital and their turf gets cheaper to take without your ever going near the district. They can fill the chair again straight away, but only with somebody who was on the STREET; you cannot slide a man across from another post for six hours — nor stand him down and walk him into the next chair, which is the same shuffle — so answering a hit costs the family a second made man. Every post is a bonus, never a requirement — the scarcity is which chairs you fill, not that the baseline moved.</p>
       <p>The reserve buys status: <b>seals</b> (Wax 150 to Obsidian 9000 $OMR) and the <b>Foundation</b> (360 to 18000 $OMR).
       The Foundation is real power: it reduces the RICO conviction chance of every member (only members present when a case
-      was filed). The family also holds a legal <b>RWA book</b> that earns a dividend.</p>
+      was filed). The reserve also draws the <b>family yield</b>.</p>
       ${R(`POST /v1/gangs · /gangs/:id/join · /leave · /kick · /promote · /gangs/tribute[/omr] · /war/:id · /districts/:id/seize · /gangs/foundation · /gangs/vanity/*`)}` },
 
   { id: 'commission', group: 'Crews & Family', title: 'The Commission', tag: 'server politics',
@@ -360,8 +362,8 @@ const SECTIONS = [
   { id: 'den', group: 'Money', title: 'The Den (Casino)', tag: 'cash-only gambling',
     html: `<p><b>CASH ONLY, never $OMR.</b> The server calculates and records every result. The house adds 1% to the
       street-tax pool from real profit only.</p>
-      <ul><li><b>Craps</b> — the pass line in one action, 1:1, edge about 1.41%, 1 nerve, up to $250k ($2M high-stakes at
-      L30 or higher).</li>
+      <ul><li><b>Craps</b> — the pass line in one action, 1:1, edge about 1.41%, 1 nerve, up to $250k ($2M in the high-stakes room —
+      L30 or the Madame's rope, plus the 300 $OMR access stake).</li>
       <li><b>The Numbers</b> — pick a number 0–999, one ticket each day, pays 600:1.</li>
       <li><b>Back-room PvP dice</b> — agree by listing a fade limit; the winner takes the pot minus a 5% rake.</li>
       <li><b>The weekly Fight</b> — one $5k bet on a favorite; the Neon-holding boss can <b>fix</b> it for $50k.</li>
@@ -391,7 +393,7 @@ const SECTIONS = [
       ${R(`GET /v1/stable [+ /v1/leaderboard/stable] · POST /v1/stable/buy · /train/:id · /list/:id · /circuit/:id · /match/:opponentId · /breed · /stakes/:id`)}` },
 
   { id: 'speakeasy', group: 'Money', title: 'The Speakeasy', tag: 'the social hub',
-    html: `<p>One prestige nightclub in each district (open at L15, $750k) — a business, a casino, and a social place. It
+    html: `<p>One prestige nightclub in each district (a made man, L15, $750k) — a business, a casino, and a social place. It
       dies when the owner's character dies.</p>
       <p><b>Collect</b> the bar income, <b>upgrade</b> the decor, and <b>name</b> it. <b>Be seen:</b> buy a <b>round</b> (a
       taxed payment to the owner; it adds you to the guest list; 10 visits make a "regular") or buy <b>bottle service</b> (a
@@ -478,14 +480,13 @@ const SECTIONS = [
 
   { id: 'heists', group: 'The Underworld', title: 'Crew Heists (The Big Score)', tag: 'co-op raids',
     html: `<p>Jobs: a 12-rung ladder from the Corner Store (crew 2, L4) up to the Federal Reserve (crew 5, L80),
-      plus the Inside Job (against a player business). Each position is a <b>role</b> (brains/muscle/wheelman/gun), and the calculation uses each member's
+      plus the Inside Job (against a player business). Each position is a <b>role</b> (brains/muscle/wheelman/gun — plus lookout and hacker on the big crews), and the calculation uses each member's
       stat for their role.</p>
       ${L(`A leader <b>plans</b> and stakes → the crew <b>join</b> by role → the leader <b>executes</b> (one calculation
       for all).`)}
       <p>Success divides the pot (1.2× for the leader); failure jails everyone. <b>The Rat</b> — any member can inform
       silently; the job fails, the rat leaves with half the stake, the rest get double jail, and the feed only says
-      "somebody talked." A standard heist also gives every crew member a small legal <b>AAPL</b> share. The <b>solo Daily
-      Score</b> shares an 8-hour cooldown.</p>
+      "somebody talked." The <b>solo Daily Score</b> shares an 8-hour cooldown.</p>
       ${R(`GET /v1/heists [public] · POST /v1/heists/plan · /:id/join|leave|rat|execute · POST /v1/heist (solo)`)}` },
 
   { id: 'market', group: 'The Underworld', title: 'The Black Market', tag: 'player-to-player trade',
@@ -518,7 +519,7 @@ const SECTIONS = [
       The Cook (batches, deals) · Wheels (boosts, races) · Seamanship (landings, piracy) · The Gambler (the
       Den's games) · Protection (jumps, shakedowns, standovers) · Commerce (goods sales, market fills) ·
       Big Scores (the Score, crew heists) · Fisticuffs (bouts, exhibitions).</p>
-      <p>Level = √(xp/15)+1, capped at 50; ranks Green → Made → Craftsman → Expert → <b>Master of the
+      <p>Level = √(xp/15)+1, capped at 50; ranks Green → Apprentice → Made → Craftsman → Expert → <b>Master of the
       Trade</b>. Levels <b>die with the street</b> — the heir keeps <b>25% of each track's XP</b> (the
       bloodline echo) — while a lifetime account-level XP <b>legend</b> survives whole and ranks the trades
       board (Dabbler → A Legend of the Life; agents excluded).</p>
@@ -537,7 +538,7 @@ const SECTIONS = [
   { id: 'underworld', group: 'The Underworld', title: 'The Underworld (Fixers)', tag: 'the people you know',
     html: `<p>Six named fixers you build standing with (0–100, for each character): <b>Doc Moretti</b> (survival),
       <b>Vinnie the Match</b> (contracts), <b>Bella Bang-Bang</b> (gear), <b>Big Tuna</b> (trade), <b>The Madame</b> (the
-      Den).</p>
+      Den), <b>Mickey the Corner</b> (boxing &amp; the stable).</p>
       <p>You <b>earn standing when you work with a fixer</b> (limit 25 each day). Levels at 25/60/90 unlock discounts and
       favors. <b>Gifts</b> ($5k, +5) only work below 50 — you must earn the top levels. A <b>daily lead</b>, a <b>weekly
       favor</b>, and an <b>errand chain</b> reward loyalty. A <b>grudge</b> (killing a fixer's friend) limits your level
@@ -548,8 +549,8 @@ const SECTIONS = [
     html: `<p><b>Wiretap</b> (48 $OMR, 12 hours, up to 5) — shows a rival's Law stage and heat, wealth band, operations,
       WANTED status, and <b>if they are hunting you</b>. <b>Sweep</b> (30 $OMR) removes taps on you (free when clean). The
       <b>Street Wire subscription</b> is a <b>tiered ladder</b> — Street Wire (72 $OMR/7 days: Law
-      forecasts, threat data — a count of hunters on you, never a name), The Wire Room (30: plus the war room and 2
-      standing watches), The Switchboard (60: plus 5 standing watches). A <b>standing watch</b> (tier 2 or higher) renews a
+      forecasts, threat data — a count of hunters on you, never a name), The Wire Room (180: plus the war room and 2
+      standing watches), The Switchboard (360: plus 5 standing watches). A <b>standing watch</b> (tier 2 or higher) renews a
       tap from your $OMR, so the surveillance runs while you are offline. There are also <b>tradecraft</b> ranks (more
       slots and a read discount), the <b>watchdog</b> (a live alert when a tapped target becomes hot), the <b>bug
       trace</b>, the <b>dossier</b>, <b>disinformation</b>, and the <b>informant</b> (a human source that passes
@@ -560,7 +561,7 @@ const SECTIONS = [
     html: `<p><b>The Store</b> sells ETH packages that grant <b>only non-currency items</b> (this prevents pay-to-win:
       entitlements, access, cosmetics, status — never cash, $OMR, gear, or power): revive
       bundles, Street Wire, the Season Pass, the Patron badge, and decor. Revenue divides 40% founder / 40% buyback / 20%
-      RWA reserve.</p>
+      treasury (the Vault's ETH).</p>
       <p><b>Two rails — except for getting Made.</b> PLEX lets you pay in earned $OMR instead of ETH, and every
       package takes it, because none of them gates anything. Becoming Made is the exception: a price payable two ways
       is always the cheaper of the two, and being Made is what unlocks extraction, so it costs ETH at the published
@@ -613,7 +614,7 @@ const SECTIONS = [
         <li><b>Grinding cannot inflate the token.</b> Grinding makes cash, and cash has nowhere to go but back into the
         city. A player who never logs off is a rich player, not a source of new supply.</li>
         <li><b>Supply is enumerated, and a nightly job proves it.</b> The ledger checks
-        <code>buckets == genesis + mints − burns</code>, and a reason nobody enumerated is itself an alarm. The Street
+        <code>buckets == genesis + mints − burns</code>, and a reason nobody enumerated is itself an alarm. The
         city has no scheduled printer, and a nightly check asserts none appears. What can mint is a short list: the
         mission ladder (a few hundred $OMR over a whole career, once per account) is the one tap that pays you for
         playing, and the rest — the prize pool and the two buybacks — issue a token only when a real one has arrived to
@@ -641,8 +642,8 @@ const SECTIONS = [
       ${R(`GET /v1/window · POST /v1/window/redeem · GET /v1/yield [public] · GET /v1/vault · POST /v1/vault/claim`)}` },
 
   { id: 'estate', group: 'Endgame & Going Legit', title: 'The Estate & Auction House', tag: 'status sinks',
-    html: `<p><b>The Estate</b> — a deep, account-level (death-proof) $OMR cost and a home: buy levels (Safe House 40 to The
-      Compound 36000 $OMR), unlock features, name it, and show <b>trophies</b> from your real holdings.</p>
+    html: `<p><b>The Estate</b> — a deep, account-level (death-proof) $OMR cost and a home: buy levels (Safe House 240 to The
+      Compound 15,000 $OMR), unlock features, name it, and show <b>trophies</b> from your real holdings.</p>
       <p><b>The Auction House</b> — a competitive weekly $OMR cost: 3 unique items each week; the highest <b>$OMR bid
       wins</b>, and <b>the winning bid is sunk</b> — it leaves you for good and goes to the house, which sells it back at the daily auction. Outbid bidders get a refund immediately; won items survive death.</p>
       ${R(`GET /v1/estate · POST /v1/estate/upgrade|feature/:id|name · GET /v1/auction [public] · POST /v1/auction/:lotId/bid`)}` },
@@ -666,7 +667,7 @@ const SECTIONS = [
   { id: 'growth', group: 'Reference', title: 'Growth — Paths, Missions, the First Week', tag: 'progression support',
     html: `<p><b>Paths</b> (L5, $10k; switch for 150 $OMR + a 7-day cooldown) — SIX careers (The Gun, The Ledger,
       The Kitchen, The Wheel, The Shadow, The Ring), each with a signature edge, a real handicap, and trades that
-      come easy (×1.5 mastery XP) or fight you (×0.6). <b>Missions</b> — 29 pay-once jobs
+      come easy (×1.5 mastery XP) or fight you (×0.6). <b>Missions</b> — 36 pay-once jobs
       (cash + respect + sometimes $OMR + titles). <b>Daily contracts</b> — 3 each day plus an all-three $OMR bonus. <b>The
       Daily Score</b> is the best repeatable at a low level (8-hour cooldown).</p>
       <p><b>Referrals</b> (your code is your character NAME) — a recruit qualifies after 4 conditions; milestones pay cash
@@ -688,7 +689,7 @@ const SECTIONS = [
 
   { id: 'megaproject', group: 'The City & the World', title: 'The Megaproject', tag: 'the city builds a monument',
     html: `<p>The whole server pools value toward ONE announced monument (the City tab). Contribute <b>cash</b>,
-    <b>trade goods</b> from your trunk (at catalog base value), or <b>$OMR</b> (at a fixed $500 rate). Every
+    <b>trade goods</b> from your trunk (at catalog base value), or <b>$OMR</b> (at a fixed $83 rate). Every
     contribution is a <b>burn</b> — this buys glory, not power. The city sees milestones at 25/50/75%; when the
     monument completes it joins <b>the skyline</b> forever, and the plaque records every contributor — tiered
     <b>The Architect</b> (top brick) → Foreman → Patron → Builder. The plaque is account-level: your dynasty keeps
@@ -714,7 +715,7 @@ const SECTIONS = [
     challenge anyone listed: your BUILD fights (stats + gear), the stake changes hands minus the 5% rake, and
     your <b>ELO</b> moves. Seasonal (resets every 28 days), dies with your street; lifetime wins are a dynasty
     legend. Rematch-farming the same rival pays less each day.</p>
-    <p><b>Clue Scrolls</b> (Streets) — a rare drop on any successful job starts a treasure trail: 3–5 riddles,
+    <p><b>Clue Scrolls</b> (Streets) — a rare drop on any successful job starts a treasure trail: 3–7 riddles by tier,
     each naming a district (sometimes an hour of day). Travel there and DIG. The last dig opens a <b>casket</b>
     and counts on your lifetime diggers' legend. One hunt at a time; after a casket the streets go quiet 8h.</p>
     <p><b>The Season</b> (the City board) — each 28-day season may carry ONE rule twist from a public pool
@@ -759,15 +760,16 @@ const SECTIONS = [
     returns; nobody runs it in a day and it returns by itself. But escrow is cash outside your pocket, so it is
     NOT a hiding place: no posting from a safehouse, and a killer takes a quarter of every open favor.</p>` },
   { id: 'reference', group: 'Reference', title: 'Quick Reference', tag: 'the things to remember',
-    html: `<h3>What is safe from looting</h3><p>Cleared <b>bank</b> cash · <b>staked</b> $OMR · <b>minted (on-chain)</b>
-      gear · your account-level <b>estate / prestige</b>. Everything in your pocket is at risk when you die.</p>
+    html: `<h3>What is safest when you die</h3><p>Cleared <b>bank</b> cash · <b>minted (on-chain)</b>
+      gear · your account-level <b>estate / prestige</b>. Staked $OMR is looted LIGHTER (a fifth vs half of a
+      loose balance) — cheaper cover, never safe. Everything in your pocket is at risk when you die.</p>
       <h3>Status marks on your sheet</h3><p><b>wanted</b> (hunted, even by family — square it) · <b>welsher</b>
       (defaulted, cannot borrow — square it) · <b>indicted</b> (a RICO case — go to The Law) · <b>in transit</b> (a deposit
       is not cleared — another player can steal it) · <b>unbonding</b> ($OMR is not liquid — another player can steal it) ·
       <b>safehouse</b> (untargetable, but you cannot act) · <b>hospital / lockup / the hole</b> (wait).</p>
       <h3>Currencies</h3><p><b>Cash</b> (pocket can be stolen, bank is safe) · <b>$OMR</b> (premium, earned by
       playing — never converted from cash — extractable after minting, account-level, so it survives death;
-      staked is safe, liquid can be stolen) · <b>crates</b> (guns/gear) ·
+      staked is looted lighter (a fifth vs half), never safe) · <b>crates</b> (guns/gear) ·
       <b>ammo</b> (jumps/fires/raids).</p>
       <h3>Do not confuse these</h3><p>A flat Racket/Asset "Speakeasy/Nightclub/Casino" (buy-once income) is NOT a Business
       casino/nightclub (an upgradeable front); NOT The Speakeasy (the deep club system); NOT The Den (the games).</p>

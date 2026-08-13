@@ -261,8 +261,11 @@ export function portraitTraits(state) {
   if (s.hitman) out.push({ trait_type: 'Assassin', value: s.hitman });
   if (s.dynasty) out.push({ trait_type: 'Dynasty', value: s.dynasty });
   if (s.tag) out.push({ trait_type: 'Family', value: s.tag });
-  if (s.wanted) out.push({ trait_type: 'Notoriety', value: 'Wanted' });
-  if (s.welsher) out.push({ trait_type: 'Notoriety', value: 'Welsher' });
+  // One value per trait_type — ERC-721 metadata consumers keep only one entry per type, so a
+  // wanted welsher must not emit two 'Notoriety' rows (one flag would silently disappear).
+  if (s.wanted || s.welsher) {
+    out.push({ trait_type: 'Notoriety', value: s.wanted && s.welsher ? 'Wanted · Welsher' : s.wanted ? 'Wanted' : 'Welsher' });
+  }
   return out;
 }
 

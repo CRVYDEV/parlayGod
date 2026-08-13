@@ -5,8 +5,11 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-/// @title nUSD — the debt token of THE BANK's USD market
-/// @notice Design: `omerta-bank-protocol-design.md` §2.1 / §5.
+/// @title Denari (DNR) — the debt token of THE BANK's USD market
+/// @notice Design: `omerta-bank-protocol-design.md` §2.1 / §5. Founder-named 2026-08-13
+///         ("Denari" — the Italian word for money, the coins suit of the Italian deck; the
+///         near-miss "Dinari" was rejected for colliding with a real tokenized-securities company).
+///         Deploy with name "Denari", symbol "DNR" — the constructor takes both.
 ///
 ///         ── WHAT THIS TOKEN IS ────────────────────────────────────────────────────────────────
 ///         A borrower's claim, not a currency we sell. It comes into existence ONLY when somebody
@@ -36,7 +39,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 ///         • **No rebasing, no fee-on-transfer.** Integrators may assume `transfer(x)` moves
 ///           exactly `x`; a debt token that lies about its own transfers breaks every downstream
 ///           accounting assumption, including our own Transmuter's.
-contract NUSD is ERC20, ERC20Permit, Ownable {
+contract Denari is ERC20, ERC20Permit, Ownable {
     /// @notice The only address that may mint. `address(0)` = issuance off.
     address public minter;
     /// @notice The only address that may burn. `address(0)` = redemption off.

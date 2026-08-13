@@ -91,7 +91,7 @@ compound, the collection, who owed whom blood — and your heir walks out into a
 | **Vice** | A casino, a racetrack, a boxing stable, a poker room, street races. All cash. Never $OMR — that line is deliberate. |
 | **Going legit** | The Vault, the compound, the Dynasty, the estate. Where a made man puts money he intends to keep. |
 
-**Scale, checked:** 139 backend modules, 96 test suites, 216 database tables, 15 smart contracts, 191
+**Scale, checked:** 142 backend modules, 100 test suites, 222 database tables, 15 smart contracts, 213
 Foundry tests. This is not a prototype with a whitepaper attached.
 
 ---
@@ -105,7 +105,7 @@ Four things, in the order they are hardest to copy.
 Most games check their economy when something looks wrong. This one checks it every night, against
 30 invariants, and treats a drift of one cent as an alarm. There is a **money router** that
 *declares* every real-value inflow and where each slice lands, derived from the live constants so the
-declaration cannot drift from the code. There are 80 red-team reports in the repo, each
+declaration cannot drift from the code. There are 85 red-team reports in the repo, each
 point-in-time, each with the findings it fixed and the things it attacked and found sound.
 
 That is not a feature players ask for. It is the thing that lets everything else be true.
@@ -149,7 +149,7 @@ Every figure below is a live constant. The file that owns it is named.
 | **The identity mint** | **0.01 ETH** now, rising in five published waves to a **0.05 ETH ceiling** (`MINT_TRANCHES`) | The right to extract. A free trial character plays everything; a minted one can withdraw. **Also earnable free** — the level-14 mission grants a mint credit outright. |
 | **Revive insurance** | 0.10 ETH, or the same in earned $OMR | Absorbs one killing blow. |
 | **The Store** | 0.02–0.10 ETH | Cosmetics, access windows, consumables. Never power, never $OMR. |
-| **Dues (Made Man)** | 20 $OMR / 30 days | Status, the upper compound, and your fronts pay their own upkeep. Time and access, not power. |
+| **Dues (Made Man)** | 120 $OMR / 30 days | Status, the upper compound, and your fronts pay their own upkeep. Time and access, not power. |
 
 **Identity supply is uncapped.** 186,000 is where the *price* stops rising, not where the *players*
 stop. The 186,001st identity pays 0.05 ETH and so does the ten-millionth. Say this whenever the
@@ -164,7 +164,7 @@ Four inflows, and the split is published rather than promised:
 | **Gameplay fees** | 60% Vig (backs withdrawals) · 10% treasury · 30% founder |
 | **The Store** | 40% Vig · 20% treasury · 40% founder |
 | **Bonds** (ETH in for discounted OMR) | 37.5% protocol-owned liquidity · 25% treasury · 22.5% Vig · 15% founder |
-| **The DEX sell tax** (9% on sells only, never buys) | 33% founder · 44% treasury · 33% liquidity depth |
+| **The DEX sell tax** (9% on sells only, never buys) | 22% founder · 44% treasury · 33% liquidity depth |
 | **The exit toll** (2% of a withdrawal) | 50% founder · 50% the family yield pool |
 
 `GET /v1/mod/router` renders the whole map with lifetime figures. **We can show this to anyone.**
@@ -178,8 +178,10 @@ decision never reads a price, and a price that is never read cannot be manipulat
 $21M Inverse Finance losses were exactly that class.
 
 The protocol takes 20% of harvested yield, capped at 30% in the contract so a stolen key cannot raise
-it. **We disclose what that does to your payoff date**: at 50% LTV and 8% yield it moves payoff from
-6.25 years to 7.8, and the UI shows the projected date from live post-fee yield.
+it. **We disclose what that does to your payoff date**: an ILLUSTRATIVE example — at 50% LTV and an
+8% realised yield it would move payoff from 6.25 years to 7.8. The UI never quotes a nominal rate:
+the projected date is computed from live post-fee REALISED yield once the market is live, and moves
+with it (no yield, no number — never a promise).
 
 ---
 
@@ -198,7 +200,7 @@ Each of these is one thread, and each is true.
 6. **"The Bureau is building a case."** Heat → RICO → indictment → the Pen → the wall → WANTED. A
    whole antagonist arc most games don't have.
 7. **"A self-repaying loan with no liquidations."** THE BANK, for the DeFi audience.
-8. **"We wrote down what we're not sure about."** BALANCE.md and 80 audit reports. Radical for the
+8. **"We wrote down what we're not sure about."** BALANCE.md and 85 audit reports. Radical for the
    space, and it is the trust play.
 
 ---
@@ -221,8 +223,8 @@ specific that happened in it.
 ## 7. Standing FAQ
 
 **Is this pay-to-win?** No, with a stated ceiling rather than a slogan. Money buys time, access and
-status — and, since the D8=D ladder, a capped amount of *earning* power whose top rung (150 staked
-$OMR) is reachable without paying, because the mission ladder alone pays 220 lifetime. There is **no
+status — and, since the D8=D ladder, a capped amount of *earning* power whose top rung (900 staked
+$OMR) is reachable without paying, because the mission ladder alone pays ~1,320 lifetime. There is **no
 combat power at any price**, which is the axis where paying would break the game for everyone else.
 
 **Can I earn?** The game has an extraction rail and it is deliberately dormant. We do not make
@@ -259,7 +261,7 @@ Getting this wrong is the fastest way to lose trust, so it has its own section.
 
 ## 9. Assets we have
 
-42 generated noir plates (hero, districts, crimes, fixtures, the den, the track), a per-player
+~245 generated noir plates (hero, districts, crimes, fixtures, the den, the track), a per-player
 procedural portrait route, four shareable card types (legend / wanted / whacked / join), a two-name
 **beef poster** rendering the body count between two bloodlines, and a public profile page per player
 that unfurls with the card. Every share link carries the player's own referral code.

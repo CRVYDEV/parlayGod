@@ -216,7 +216,7 @@ export const CHAIN_PARAMS = [
   },
   {
     key: 'alchemist.caps', contract: 'Alchemist', env: 'ALCHEMIST_ADDRESS',
-    label: 'Mint caps (per block / per day)', unit: 'nUSD',
+    label: 'Mint caps (per block / per day)', unit: 'DNR',
     read: null, write: { fn: 'setMintCaps', args: ['perBlock', 'perDay'] },
     wall: 'Flow caps bound worst-case issuance without gating who may borrow.',
     why: 'The atomicity defense: a per-block cap is what makes a flash-loan-scale borrow impossible '
@@ -235,7 +235,7 @@ export const CHAIN_PARAMS = [
   },
   {
     key: 'transmuter.caps', contract: 'Transmuter', env: 'TRANSMUTER_ADDRESS',
-    label: 'Redeem caps (per block / per day)', unit: 'nUSD',
+    label: 'Redeem caps (per block / per day)', unit: 'DNR',
     read: null, write: { fn: 'setRedeemCaps', args: ['perBlock', 'perDay'] },
     wall: 'Redemption has NO same-block guard and NO caller allowlist, deliberately.',
     why: 'Redemption arbitrage is what repairs the peg, and most of it is executed by contracts — an '
@@ -243,8 +243,8 @@ export const CHAIN_PARAMS = [
       + 'without gating who may repair the peg.',
   },
   {
-    key: 'nusd.minter', contract: 'NUSD', env: 'NUSD_ADDRESS',
-    label: 'nUSD minter', unit: 'address',
+    key: 'denari.minter', contract: 'Denari', env: 'DENARI_ADDRESS',
+    label: 'Denari (DNR) minter', unit: 'address',
     read: 'minter', write: { fn: 'setMinter', args: ['minter'] },
     wall: 'setMinter(0) halts ISSUANCE without touching redemption — and that asymmetry is the point.',
     why: 'The Bank\'s emergency stop. Do not "simplify" it into a pause that covers both directions.',

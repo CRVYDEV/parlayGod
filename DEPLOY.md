@@ -6,7 +6,7 @@ are set). Two Node processes over one Postgres DB. No build step.
 ## 0. Pre-flight (on the release commit)
 - [ ] `npm ci` (or `npm install`) — one runtime dep tree; no native build required for the game (the
       `@resvg/resvg-js` used by social-share PNGs is an **optionalDependency** — absent → cards fall back to SVG).
-- [ ] `npm test` → **48/48 suites green**.
+- [ ] `npm test` → **100 suites green**.
 - [ ] `node tools/sim.js` → ends with `✅ sim complete — §10.4 holds exactly` (drift-0).
 - [ ] **`npm run preflight`** — on the box, with the real environment loaded. Runs exactly the checks
       the server runs at startup, so a green result means it will boot; non-zero exit means it won't,
@@ -111,7 +111,9 @@ collapses a pacing timer server-wide; `TRAIN_CD_MS`/`MISSION_CD_MS` in particula
 - [ ] `RATE_LIMIT=on` — token buckets (auto-on in prod anyway; set explicitly to be sure).
 - [ ] `TRUST_PROXY=on` — **only if** behind a load balancer / reverse proxy, so per-IP throttles key on the
       real client IP (`X-Forwarded-For`), not the proxy. Leave OFF if the app is internet-facing directly.
-- [ ] `PG_POOL_MAX=20` (default) — raise with instance count / concurrency.
+- [ ] `PG_POOL_MAX` — `render.yaml` declares **40** (api) / 20 (worker); the code default is 20, and
+      at ~30 concurrent players the 20-pool COLLAPSES (queueing on `connectionTimeout` → 503s read as an
+      outage — measured 2026-08-11: 30 vs 284 req/s). Keep it declared; scale the DATABASE plan first.
 - [ ] `INVARIANT_WEBHOOK_URL=<url>` — §10.4 drift, Vig/Bond, and backup-watchdog alerts (recommended).
       **Must be set on the WORKER process** — every automatic alarm lives there (`src/worker.js`); the api
       only alerts on a manual `GET /v1/mod/invariants` or an `/admin` load. On Render, put it on the shared
@@ -327,7 +329,7 @@ or call the script directly:
 It dumps to a temp name, **verifies**, and only then moves the file into place — so a run that dies
 halfway leaves no truncated file wearing a plausible name. Verification is: readable by `pg_restore`,
 the expected schema, `accounts`/`characters`/`transactions` present, a size floor, **and actual rows**
-(a schema-only database dumps to 161 tables and ~194 KB — it clears every other check while holding
+(a schema-only database dumps every table — 222 in the current schema — at ~200 KB: it clears every other check while holding
 nothing, so only reading the data section back proves there is data in there). Retention runs **only
 after a good dump**, so a run of bad nights can never age out the last known-good backup.
 - exit non-zero = **no backup was kept**; the message says why. Alert on it.
@@ -359,7 +361,7 @@ Success looks exactly like this (measured, not paraphrased):
 ```
 dumping…
 verifying…
-backup verified: ./backups/omerta-20260726-123716.dump (194085 bytes, 161 tables)
+backup verified: ./backups/omerta-20260726-123716.dump (194085 bytes, 161 tables)   # an example run from 2026-07 — the table count grows with the schema (222 today)
 restore with: pg_restore --no-owner --clean --if-exists -d <target> ./backups/omerta-…dump
 ```
 If it instead says `'accounts' holds 0 rows … expected ≥ 1`, it dumped an EMPTY database — almost always

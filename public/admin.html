@@ -6,7 +6,7 @@
 <title>OMERTÀ — the books</title>
 <style>
   :root { --bg:#0b0b0e; --panel:#131318; --panel2:#17171e; --line:#26262f; --ink:#d6d2c4;
-    --dim:#7d7a6f; --neon:#e8b34b; --blood:#c0392b; --ok:#5fa96b; --bad:#d16055; --cold:#5b84a8; font-size:15px; }
+    --dim:#7d7a6f; --neon:#e8b34b; --blood:#c0392b; --ok:#5fa96b; --bad:#d16055; --cold:#5b84a8; --warn:#d1a355; font-size:15px; }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--ink); font-family:Georgia,'Times New Roman',serif; }
   code,input,button,.mono { font-family:'Courier New',monospace; }
@@ -349,7 +349,7 @@
       `<div class="big">$${fmt(e.ammPrice)} <span class="note">per $OMR (the frozen AMM reserves ratio — no live market)</span></div>`
       + rowHtml('$OMR supply', `${fmt(e.omrSupply)} (${fmt(e.omrStaked)} staked)`)
       + rowHtml('AMM pool', `$${fmt(e.ammCash)} / ${fmt(e.ammOmr)} $OMR`)
-      + rowHtml('street-tax pool', `$${fmt(e.taxPool)} <span class="note">→ next buyback</span>`)
+      + rowHtml('street-tax pool', `$${fmt(e.taxPool)} <span class="note">→ the redemption window</span>`)
       + rowHtml('event fund', `${fmt(e.eventFund)} $OMR`)
       + rowHtml('stake pool', `${fmt(e.stakePool)} $OMR (${Math.round((em?.backed ?? 1) * 100)}% backed)`)
       + rowHtml('the den book', `profit $${fmt(e.den.profit)} · paid $${fmt(e.den.distributed)}`)
@@ -449,7 +449,7 @@
       `<div class="row"><span class="k">${s.system}</span><span class="v">${fmt(s.accounts)} player(s) · ${fmt(s.events)} events</span></div>`).join('');
     const deadList = e.dead.length
       ? `<div class="note" style="margin-top:10px;color:var(--bad)">NEVER TOUCHED BY A PLAYER (${e.dead.length}/${e.systems.length}): ${e.dead.join(' · ')}</div>`
-      : '<div class="note" style="margin-top:10px;color:var(--good)">every tracked system has been used by at least one player</div>';
+      : '<div class="note" style="margin-top:10px;color:var(--ok)">every tracked system has been used by at least one player</div>';
     const untracked = e.untracked.length
       ? `<div class="note" style="color:var(--dim)">untracked (no telemetry declared, so no verdict): ${e.untracked.join(' · ')}</div>` : '';
     const uncat = e.uncatalogued.length

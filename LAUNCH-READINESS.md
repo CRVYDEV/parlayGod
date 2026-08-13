@@ -21,7 +21,7 @@ There are three distinct launches here and conflating them is the main way this 
 | | What opens | Gated on | Status |
 |---|---|---|---|
 | **DOOR 1 — the game** | Real players in a live city. No chain, no token sale, no real-money extraction. | Engineering + ops readiness only | **Effectively open.** Blocked only by the Phase-0 activation items below. |
-| **DOOR 2 — the agent channel** | Segment B: MCP directories, Show HN, `/arena`. | `npm publish omerta-mcp` + Door 1 populated | **One 5-minute task from open.** |
+| **DOOR 2 — the agent channel** | Segment B: MCP directories, Show HN, `/arena`. | Door 1 populated | **OPEN** — `omerta-mcp@1.0.0` is live on npm (verified 2026-08-11); 1.0.1 republish pending via the publish workflow. |
 | **DOOR 3 — the chain** | Genesis window, pool, community drop, on-chain extraction. | Third-party audit **and** the launch checklist **and** `forge test` | **Hard-blocked.** Two of three gates are red and neither is ours to close alone. |
 
 **Doors 1 and 2 do not wait for Door 3.** That separation is the single most important structural
@@ -37,13 +37,13 @@ product.
 
 | Gate | Command | State |
 |---|---|---|
-| Full suite green | `npm test` | ✅ 96 suites |
+| Full suite green | `npm test` | ✅ 100 suites |
 | §10.4 conservation drift-0 | `node tools/sim.js` | ✅ ends `§10.4 holds exactly` |
 | Every SQL string parses on **real** Postgres | `npm run pgquery` | ✅ (pg-mem cannot see the `uuid = text` class that took production down on 2026-07-30) |
 | Loop / lock / ledger integrity on real Postgres | `npm run pgcheck` | ✅ 43/43 |
 | Mobile layout, real Chromium, two viewports | `npm run mobile` | ✅ |
 | Client wiring — every button reaches a real route, sends fields the handler reads, and reads fields the board sends | `node test/client.js` | ✅ 7 checks |
-| Contracts | `omerta-contracts/run-forge-test-sandboxed.sh` | ✅ 198/198, 7 fuzzes |
+| Contracts | `omerta-contracts/run-forge-test-sandboxed.sh` | ✅ 213/213, incl. fuzzes |
 | Docs match the tree | `node test/docs.js` | ✅ |
 | Signed levers pinned + register complete | `node test/levers.js` | ✅ |
 
@@ -113,9 +113,10 @@ that screen.
 
 # DOOR 2 — the agent channel
 
-- [ ] **`npm publish` from `omerta-mcp/`.** ⚠ Until this runs, the copy-paste `npx -y omerta-mcp`
-      config in `/play`, `AGENTS.md` and the MCP README **404s** — the segment's entire on-ramp is a
-      broken command. Five minutes, and it is the only real blocker.
+- [x] **`npm publish` from `omerta-mcp/`.** ✅ DONE — `omerta-mcp@1.0.0` is live on the registry
+      (verified 2026-08-11: `npx -y omerta-mcp` installs and connects), so the copy-paste config in
+      `/play`, `AGENTS.md` and the MCP README is real. A **1.0.1 republish is queued** (README +
+      tool-copy fixes; run the publish workflow).
 - [x] `omerta-mcp` is publish-shaped ✅ — `files`, `repository`, `homepage`, `keywords`,
       `publishConfig.access: public`, `bin` + shebang all present.
 - [x] `/play` — three-step no-code setup, vendor-neutral (MCP is an open protocol; ChatGPT, Cursor,
@@ -134,20 +135,20 @@ that screen.
 
 # DOOR 3 — the chain
 
-**Hard-gated. Nothing below ships until all three gates are green, and two of them are not ours to
-close alone.** `CHAIN-DEPLOY.md` §0 is the authority; this is the summary.
+**Hard-gated. Nothing below ships until all three gates are green — and the one still open (the
+security audit) is not ours to close alone.** `CHAIN-DEPLOY.md` §0 is the authority; this is the summary.
 
 | Gate | State | Owner |
 |---|---|---|
-| **1 — `forge test` green** | ✅ 198/198, 7 fuzzes | us |
+| **1 — `forge test` green** | ✅ 213/213, incl. fuzzes | us |
 | **2 — third-party audit of contracts AND the signer** | ❌ **not started** | external |
-| **3 — the launch review** | ⚠ **partial** | external |
+| **3 — the launch review** | ✅ **CLEARED 2026-08-13** (founder statement — the whole checklist) | external |
 
 ### Gate 2 — the audit
 
 - The batch is assembled: `OMR`, `VoucherClaim`, `GearVault`, `OMRStaking`, `OmertaFees`,
   `OmertaBond`, `OmrTwapOracle`, `GenesisOracle`, `OmertaHook`, and THE BANK
-  (`NUSD`/`CollateralEscrow`/`Alchemist`/`Transmuter`/`FlashGuard`).
+  (`Denari`/`CollateralEscrow`/`Alchemist`/`Transmuter`/`FlashGuard`).
 - **Point the auditor at the deleted property.** Until tokenomics v2 step 4, every prior review of
   this suite rested on "nothing mints". That is no longer true — bonds mint — and what replaced it is
   four walls (`dailyCapOMR`, `MAX_DISCOUNT_BPS`, `maxOmrPerEth`, the accretion oracle). An auditor who
@@ -164,16 +165,19 @@ close alone.** `CHAIN-DEPLOY.md` §0 is the authority; this is the summary.
 ### Gate 3 — the launch checklist
 
 The checklist is kept **outside this repo** — see the founder. It is the review of every surface that
-moves real value, and it is what blocks Door 3. The surfaces it covers are the ones this repo builds
-chain-dormant and never arms on its own: treasury stock purchases, transferable TBA drops, the claim
-rail, NFT proceeds, the play-pool redistribution, the free community distribution, provenance traits,
-the activator's leg, and THE BANK's four (synthetic issuance, yield-bearing deposits, revenue
-distribution, custody).
+moves real value. The surfaces it covers are the ones this repo builds chain-dormant and never arms
+on its own: treasury stock purchases, transferable TBA drops, the claim rail, NFT proceeds, the
+play-pool redistribution, the free community distribution, provenance traits, the activator's leg,
+and THE BANK's four (synthetic issuance, yield-bearing deposits, revenue distribution, custody).
 
-**Do not read a green build as a green checklist.** Every one of those surfaces already exists in the
-tree behind an env flag, and the tests prove they *work* — not that they are cleared to run.
+**✅ CLEARED 2026-08-13** — the founder states the outside review cleared the WHOLE checklist,
+every surface above included. Recorded here as the founder's statement, which is what closes this
+gate (the $OMR side had already been recorded cleared 2026-08-12 in `CHAIN-DEPLOY.md`; this widens
+it to the full list). **Gate 2 — the security audit — is a different thing entirely and is still
+not started: nothing here should be ARMED until it also clears.** A review of whether a surface may
+run says nothing about whether the contract holding the money is safe; that is what the audit is for.
 
-### If both gates go green — the sequence
+### If gate 2 also goes green — the sequence
 
 `omerta-launch-sequence-design.md` is the plan; `CHAIN-DEPLOY.md` §2 is the exact call order.
 
@@ -215,7 +219,7 @@ works, which is the lead time.
 |---|---|
 | Supply is being inflated | `OMR.setMinter(address(0))` — one transaction, minting off |
 | The sell tax needs to stop | `setSellTax(0,0,0)` — the fee stops, the pool keeps trading. **There is no pause, deliberately:** a hook that can revert `beforeSwap` can halt a public market |
-| THE BANK is issuing against a bad sleeve | `NUSD.setMinter(0)` — halts issuance **without** touching redemption. The asymmetry is the point: stop issuing before you stop paying |
+| THE BANK is issuing against a bad sleeve | `Denari.setMinter(0)` — halts issuance **without** touching redemption. The asymmetry is the point: stop issuing before you stop paying |
 | A player token is compromised | `POST /v1/mod/revoke` (lighter than a ban) or `POST /v1/auth/logout-all` |
 | The game itself | `INVITE_MODE=on` closes the doors without touching anyone already inside |
 
@@ -242,7 +246,7 @@ Written down so it is a decision on the record rather than something that quietl
 
 **Blocking Door 1:** four deploy-config items and a launch night. No engineering.
 
-**Blocking Door 2:** one `npm publish`.
+**Blocking Door 2:** nothing — the package is live; populate Door 1 and post.
 
 **Blocking Door 3:** a third-party audit that has not started and six open launch-checklist rows. Neither is
 ours to close alone, and neither should hold the game.

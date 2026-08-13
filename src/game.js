@@ -1241,7 +1241,7 @@ function coachLadder(ch, acct, owned) {
     const need = Math.max(0, PACING.LEVEL_DIVISOR * 16 - Number(ch.respect));
     if (add('Get to level 5', `Keep pulling jobs. Every job pays respect, and respect IS your level — ${need} more respect reaches level 5, where you choose your Path. That\'s the whole plan: do a job, wait for nerve, do another.`, 'streets')) return rungs;
   }
-  if (lvl >= 5 && !ch.path && add('You\'ve made rank', 'Declare a Path — The Gun, The Ledger, or The Kitchen. It shapes how you earn.', 'streets')) return rungs;
+  if (lvl >= 5 && !ch.path && add('You\'ve made rank', 'Declare a Path — six careers are on the board, from The Gun to The Ring. It shapes how you earn.', 'streets')) return rungs;
   // (harness F1) A rung that a player can DECLINE forever, or one that RE-ARMS every few minutes,
   // must never sit above the one-time milestone rungs — it masks all of them permanently. The
   // progression harness caught exactly that: a solo player who never joined a family was pinned on

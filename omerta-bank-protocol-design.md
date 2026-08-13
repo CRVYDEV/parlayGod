@@ -10,6 +10,13 @@ ETH gas). The player-facing surface is the **Bank** tab.*
 mechanic and a blocked on-chain protocol. That framing was wrong: the founder's direction is one
 protocol that is simultaneously a game system and a real DeFi protocol.**
 
+**NAMING (founder-directed 2026-08-13): the USD market's debt token is `Denari` — symbol `DNR`.**
+This document (and every audit report before that date) drafted it as the generic `nUSD`; the
+contract, backend, tests and runbooks are renamed, and the working name survives only in
+point-in-time records. "Denari" is the Italian word for money — the coins suit of the Italian
+deck; the near-miss "Dinari" was rejected for colliding with a real tokenized-securities company.
+The ETH market's future debt token (`nETH` below) keeps its working name until it is founder-named.
+
 ---
 
 ## 0. What this is
@@ -123,7 +130,7 @@ never one against the other. So we run **two isolated markets**:
 
 | Market | Collateral | Debt token | Price risk | Liquidations | Oracle on borrow path |
 |---|---|---|---|---|---|
-| **The Vault** | USDC / USDG | **`nUSD`** (USD-denominated) | none | **none** | **none** |
+| **The Vault** | USDC / USDG | **`Denari` (`DNR`)** (USD-denominated) | none | **none** | **none** |
 | **The Ledger** | ETH / wstETH | **`nETH`** (ETH-denominated) | none | **none** | **none** |
 
 **A cross-denominated market (ETH collateral → USD debt) is exactly the shape that lost Inverse
@@ -162,12 +169,12 @@ constraint on LTV becomes the Transmuter's solvency (§2.4), not price.
 Both markets carry Monolith's two modes, and they map onto the noir fiction with no strain:
 
 - **"On the arm"** (free debt, 0%) — you owe nothing in interest, but the house can call on your
-  collateral: any `nUSD` holder may redeem against you at oracle price + fee, pro-rata with the
+  collateral: any `DNR` holder may redeem against you at oracle price + fee, pro-rata with the
   other free-debt borrowers, **and you keep the fee**.
 - **"On the books"** (paid debt, variable) — you pay a rate and nobody can touch your collateral.
 
 The autonomous controller targets a free-debt **share**, not a revenue number. Paid-debt interest
-funds the staking vault (`snUSD` / `snETH`), which is the sToken, which is one of the two profit
+funds the staking vault (`sDNR` / `snETH`), which is the sToken, which is one of the two profit
 legs in §4.
 
 This is a real decision with a real tradeoff, which is exactly what the game's own strategy pass
@@ -175,7 +182,7 @@ says the mid-game lacks — and here it is the *same* decision for a DeFi user a
 
 ### 2.4 The Transmuter, and Runtime Verification's finding #2
 
-`nUSD` redeems 1:1 for underlying through a Transmuter fed by `repay()`, `liquidate()` and
+`DNR` redeems 1:1 for underlying through a Transmuter fed by `repay()`, `liquidate()` and
 `harvest()`, buffered with flow limits (the Alchemix shape). RV's finding was that this promise
 must survive the backing yield token losing value. Our answers:
 
@@ -184,7 +191,7 @@ must survive the backing yield token losing value. Our answers:
    in *underlying*, not yield-bearing form. Below it, new borrowing halts before redemption does —
    **the protocol stops issuing before it stops paying.**
 3. **Flow rate limits** on buffer→Transmuter, so a single block cannot drain the queue.
-4. **Invariant, checked and fuzzed:** `Σ nUSD supply ≤ Σ collateral value × LTV` at all times.
+4. **Invariant, checked and fuzzed:** `Σ DNR supply ≤ Σ collateral value × LTV` at all times.
 
 ### 2.5 The security architecture — FiRM's answers, adopted wholesale
 
@@ -345,7 +352,7 @@ only makes the attacker briefly rich enough to do (1) or (2) at scale. **Remove 
 loan buys nothing** — a far stronger position than trying to detect borrowed money.
 
 **And we must not block them all anyway.** The Transmuter's 1:1 redemption is *defended* by
-arbitrage — someone who flash-loans to buy `nUSD` at 0.98 and redeems at 1.00 is repairing our peg
+arbitrage — someone who flash-loans to buy `DNR` at 0.98 and redeems at 1.00 is repairing our peg
 at their own gas risk. A blanket ban would disable the mechanism that keeps the peg honest. So the
 guards are surgical: they attach where atomicity creates an *advantage*, never where it creates a
 *service*.
@@ -451,7 +458,7 @@ redemption:
 
 - **The Transmuter's 1:1 redemption (§2.4) is NEVER TAXED, at any rate.** It is the peg defense, and
   a fee there does not earn revenue — it **widens the peg band to the size of the fee**, because no
-  arbitrageur repairs a discount smaller than the toll. At 10%, nUSD trades to 0.90 and nothing pulls
+  arbitrageur repairs a discount smaller than the toll. At 10%, DNR trades to 0.90 and nothing pulls
   it back. This is now a WALL with a named test (`test_the_peg_redemption_is_NEVER_taxed`), because
   "we set the redemption fee to 10%" is exactly the sentence that would otherwise be applied here by
   a future reader.
@@ -471,7 +478,7 @@ were closed by the founder on 2026-08-11 and are recorded above.
 
 | Leg | Destination | Note |
 |---|---|---|
-| **Stakers** | `snUSD` / `snETH` holders | The sToken, Monolith's design. |
+| **Stakers** | `sDNR` / `snETH` holders | The sToken, Monolith's design. |
 | **NFT holders** | Dynasty NFT | ⚠️ **The gated leg** — on the launch checklist. Ships at zero. |
 | **The city** | **Buy $OMR on the open market → the players who play** | §4.1. |
 
@@ -620,7 +627,7 @@ One audit batch, Safe-owned, fail-closed, following this repo's existing discipl
 mint, no confiscation path, compile-time caps, `forge test` + fuzzed invariants):
 
 ```
-NUSD.sol / NETH.sol      The debt tokens. Mint: the Alchemist for that market, only.
+Denari.sol / NETH.sol      The debt tokens. Mint: the Alchemist for that market, only.
                          Burn: the Transmuter, only. No owner mint. No blacklist,
                          no confiscation — a confiscation path is a rug vector and
                          resets the audit clock (the OMR discipline).
@@ -665,7 +672,7 @@ in official copy; never distribute anything by chance; the projected-payoff-date
 
 ## 7. Order of work
 
-1. **`nUSD` market, contracts + fuzzed invariants** — USDC collateral, USD debt, no oracle on the
+1. **`Denari` market, contracts + fuzzed invariants** — USDC collateral, USD debt, no oracle on the
    borrow path, personal escrows, Transmuter with the buffer floor.
 2. **The Bank tab** against a testnet deployment.
 3. **`nETH` market** — the same contracts, second instance.

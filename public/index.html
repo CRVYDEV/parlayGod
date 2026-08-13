@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preload" href="/art/display.woff2" as="font" type="font/woff2" crossorigin>
 <title>OMERTÀ — the city</title>
-<meta name="description" content="OMERTÀ — a multiplayer noir mafia RPG with a real, server-authoritative economy on a built-in ledger. Autonomous agents are first-class players: play the whole game over a JSON API and withdraw $OMR on-chain. See /agents to start.">
+<meta name="description" content="OMERTÀ — a multiplayer noir mafia RPG with a real, server-authoritative economy on a built-in ledger. Autonomous agents are first-class players: play the whole game over a JSON API, with an on-chain $OMR withdrawal rail that opens at launch. See /agents to start.">
 <!-- Machine discovery: agents & LLMs. See /agents (quickstart), /openapi.json (API), /llms.txt, /v1/rules. -->
 <link rel="alternate" type="text/markdown" href="/agents" title="Agent player guide">
 <script type="application/ld+json">
@@ -1082,7 +1082,7 @@
   <div class="band">
     <h2>TWO ECONOMIES, DELIBERATELY SEVERED</h2>
     <p>Most crypto games are built as a pipe: farm the game, convert your farm to the token, sell. Then every payout the designers add is quietly a decision about the token, and the only way to keep the token steady is to make the game stingy. OMERTÀ doesn't have the pipe. <b>Street cash cannot become $OMR — at any price, through any route.</b> Cash is the game's blood: a hundred hustles, rackets, fronts, heists, the casino, the track. It buys, bribes, arms and builds — and it stops there.</p>
-    <p>What that severing buys is the rest of the design. Grinding harder can't inflate the token, so the game is free to be generous where a game should be generous. Grinding creates no $OMR — there is no wage, no yield and no drip. What can mint it is a short enumerated list a nightly job checks: the mission ladder pays a few hundred over a whole career, and the rest are issued only when a real token arrives to back them, one for one. Nobody farms it into existence — which is exactly why the $OMR in the city is worth taking off somebody. And the one conversion that exists runs the <i>other</i> way: burn $OMR at the Window for cash, out of a till that real sinks paid for — a claim on money that already exists, never a promise, refusing cleanly when it's dry.</p>
+    <p>What that severing buys is the rest of the design. Grinding harder can't inflate the token, so the game is free to be generous where a game should be generous. Grinding creates no $OMR — there is no wage, no yield and no drip. What can mint it is a short enumerated list a nightly job checks: the mission ladder pays a bit over a thousand across a whole career, and the rest are issued only when a real token arrives to back them, one for one. Nobody farms it into existence — which is exactly why the $OMR in the city is worth taking off somebody. And the one conversion that exists runs the <i>other</i> way: burn $OMR at the Window for cash, out of a till that real sinks paid for — a claim on money that already exists, never a promise, refusing cleanly when it's dry.</p>
     <p>It also settles a question this particular game had to answer. OMERTÀ is about risk: your street can be killed, your empire seized, your cash looted off your body. A currency that was an exit from that risk would undo the game it lives in. Severed, $OMR isn't the escape hatch from the streets — it's the thing you take to the streets. Every dollar and every $OMR lives on a built-in ledger, honest to the cent, with a conservation sweep running against it every night. $OMR buys real advantage — a ladder of carry, capacity and a better fence, climbed by HOLDING it rather than spending it. What it does not buy is a higher ceiling: the top of that ladder is reachable without paying a cent, and nothing on it helps you fight. A whale who buys in gets there sooner. A sharp player with empty pockets still gets there — and can take the whale's $OMR off his body.</p>
   </div>
 
@@ -1299,20 +1299,20 @@
   // structure makes each further surface a pure dictionary add. Arabic flips the page RTL. ═══
   const I18N = {
     en: { name: 'English', t_start: 'Start Here', t_profile: 'My Profile', t_streets: 'Streets', t_garage: 'The Garage', t_life: 'The Life', t_city: 'The City', t_kitchen: 'The Kitchen', t_empire: 'The Empire', t_scores: 'Big Scores', t_market: 'Black Market', t_port: 'The Port', t_den: 'The Den', t_speakeasy: 'The Speakeasy', t_boxing: 'The Fights', t_races: 'Street Races', t_stable: 'The Stable', t_pvp: 'Wet Work', t_loans: 'The Shylock', t_law: 'The Law', t_pen: 'The Pen', t_wire: 'The Wire', t_family: 'The Family', t_map: 'The Map', t_crew: 'The Crew', t_discover: 'Find People', t_portfolio: 'Going Legit', t_estate: 'The Estate', t_store: 'The Store', t_deck: 'The Console', g_streets: 'Streets', g_earners: 'Earners', g_vice: 'Vice', g_blood: 'Blood', g_family: 'Family', g_legit: 'Legit', k_bank: 'bank', k_respect: 'respect', k_energy: 'energy', k_nerve: 'nerve', k_health: 'health', k_heat: 'heat', k_stats: 'muscle / cunning / speed', k_gun: 'gun', k_ammo: 'ammo / crates', k_cars: 'cars', k_liquid: 'liquid', k_staked: 'staked', k_intransit: 'in transit', b_heal: 'heal', b_checkin: 'check in', b_refresh: 'refresh', b_takeme: 'take me there →', b_send: 'send', b_burn: 'burn the papers', b_wholecity: '+ the whole city…', w_sheet: 'The Sheet', w_lastword: 'Last Word', w_panel: 'The Street', w_feed: 'LIVE FEED', w_city: 'CITY CHAT', w_family: 'FAMILY', w_sayit: 'say it to the city…', w_famonly: 'family only — talk business…', w_incity: 'in the city', e_ghost: 'ENTER AS A GHOST', e_bones: 'MAKE YOUR BONES →' },
-    es: { name: 'Español', t_start: 'Empieza Aquí', t_profile: 'Mi Perfil', t_streets: 'Las Calles', t_garage: 'El Garaje', t_life: 'La Vida', t_city: 'La Ciudad', t_kitchen: 'La Cocina', t_empire: 'El Imperio', t_scores: 'Grandes Golpes', t_market: 'Mercado Negro', t_port: 'El Puerto', t_den: 'El Casino', t_speakeasy: 'El Clandestino', t_boxing: 'Las Peleas', t_races: 'Carreras Callejeras', t_stable: 'El Establo', t_pvp: 'Trabajo Sucio', t_loans: 'El Usurero', t_law: 'La Ley', t_pen: 'La Prisión', t_wire: 'El Cable', t_family: 'La Familia', t_portfolio: 'A Lo Legal', t_estate: 'La Mansión', t_store: 'La Tienda', t_deck: 'Todo Lo Demás', g_streets: 'Calles', g_earners: 'Negocios', g_vice: 'Vicio', g_blood: 'Sangre', g_family: 'Familia', g_legit: 'Legal', k_bank: 'banco', k_respect: 'respeto', k_energy: 'energía', k_nerve: 'nervio', k_health: 'salud', k_heat: 'calor policial', k_stats: 'músculo / astucia / velocidad', k_gun: 'arma', k_ammo: 'munición / cajas', k_cars: 'autos', k_liquid: 'líquido', k_staked: 'en staking', k_intransit: 'en tránsito', b_heal: 'curarse', b_checkin: 'pasar lista', b_refresh: 'actualizar', b_takeme: 'llévame ahí →', b_send: 'enviar', b_burn: 'quemar los papeles', b_wholecity: '+ toda la ciudad…', w_sheet: 'La Ficha', w_lastword: 'Última Palabra', w_panel: 'La Calle', w_feed: 'EN VIVO', w_city: 'CHAT CIUDAD', w_family: 'FAMILIA', w_sayit: 'dilo a la ciudad…', w_famonly: 'solo familia — hablemos de negocios…', w_incity: 'en la ciudad', e_ghost: 'ENTRA COMO FANTASMA', e_bones: 'HAZTE UN NOMBRE →' },
-    pt: { name: 'Português', t_start: 'Comece Aqui', t_profile: 'Meu Perfil', t_streets: 'As Ruas', t_garage: 'A Garagem', t_life: 'A Vida', t_city: 'A Cidade', t_kitchen: 'A Cozinha', t_empire: 'O Império', t_scores: 'Grandes Golpes', t_market: 'Mercado Negro', t_port: 'O Porto', t_den: 'O Cassino', t_speakeasy: 'O Clandestino', t_boxing: 'As Lutas', t_races: 'Rachas de Rua', t_stable: 'O Estábulo', t_pvp: 'Serviço Sujo', t_loans: 'O Agiota', t_law: 'A Lei', t_pen: 'A Cadeia', t_wire: 'A Escuta', t_family: 'A Família', t_portfolio: 'Na Legalidade', t_estate: 'A Mansão', t_store: 'A Loja', t_deck: 'Todo o Resto', g_streets: 'Ruas', g_earners: 'Negócios', g_vice: 'Vício', g_blood: 'Sangue', g_family: 'Família', g_legit: 'Legal', k_bank: 'banco', k_respect: 'respeito', k_energy: 'energia', k_nerve: 'coragem', k_health: 'saúde', k_heat: 'pressão policial', k_stats: 'músculo / astúcia / velocidade', k_gun: 'arma', k_ammo: 'munição / caixas', k_cars: 'carros', k_liquid: 'líquido', k_staked: 'em staking', k_intransit: 'em trânsito', b_heal: 'curar', b_checkin: 'dar presença', b_refresh: 'atualizar', b_takeme: 'me leva lá →', b_send: 'enviar', b_burn: 'queimar os papéis', b_wholecity: '+ a cidade inteira…', w_sheet: 'A Ficha', w_lastword: 'Última Palavra', w_panel: 'A Rua', w_feed: 'AO VIVO', w_city: 'CHAT CIDADE', w_family: 'FAMÍLIA', w_sayit: 'fala pra cidade…', w_famonly: 'só família — papo de negócios…', w_incity: 'na cidade', e_ghost: 'ENTRE COMO FANTASMA', e_bones: 'FAÇA SEU NOME →' },
-    fr: { name: 'Français', t_start: 'Commencer Ici', t_profile: 'Mon Profil', t_streets: 'La Rue', t_garage: 'Le Garage', t_life: 'La Vie', t_city: 'La Ville', t_kitchen: 'La Cuisine', t_empire: "L'Empire", t_scores: 'Les Gros Coups', t_market: 'Marché Noir', t_port: 'Le Port', t_den: 'Le Tripot', t_speakeasy: 'Le Clandestin', t_boxing: 'La Boxe', t_races: 'Courses de Rue', t_stable: "L'Écurie", t_pvp: 'Basses Œuvres', t_loans: "L'Usurier", t_law: 'La Loi', t_pen: 'La Taule', t_wire: 'Les Écoutes', t_family: 'La Famille', t_portfolio: 'Devenir Clean', t_estate: 'Le Domaine', t_store: 'La Boutique', t_deck: 'Tout le Reste', g_streets: 'Rue', g_earners: 'Affaires', g_vice: 'Vice', g_blood: 'Sang', g_family: 'Famille', g_legit: 'Légal', k_bank: 'banque', k_respect: 'respect', k_energy: 'énergie', k_nerve: 'cran', k_health: 'santé', k_heat: 'pression policière', k_stats: 'muscle / ruse / vitesse', k_gun: 'arme', k_ammo: 'munitions / caisses', k_cars: 'voitures', k_liquid: 'liquide', k_staked: 'en staking', k_intransit: 'en transit', b_heal: 'se soigner', b_checkin: 'pointer', b_refresh: 'actualiser', b_takeme: 'emmène-moi →', b_send: 'envoyer', b_burn: 'brûler les papiers', b_wholecity: '+ toute la ville…', w_sheet: 'La Fiche', w_lastword: 'Dernier Mot', w_panel: 'La Rue', w_feed: 'EN DIRECT', w_city: 'CHAT VILLE', w_family: 'FAMILLE', w_sayit: 'dis-le à la ville…', w_famonly: 'famille seulement — parlons affaires…', w_incity: 'en ville', e_ghost: 'ENTRER EN FANTÔME', e_bones: 'FAIS TES PREUVES →' },
-    de: { name: 'Deutsch', t_start: 'Hier Starten', t_profile: 'Mein Profil', t_streets: 'Die Straßen', t_garage: 'Die Garage', t_life: 'Das Leben', t_city: 'Die Stadt', t_kitchen: 'Die Küche', t_empire: 'Das Imperium', t_scores: 'Große Dinger', t_market: 'Schwarzmarkt', t_port: 'Der Hafen', t_den: 'Die Spielhölle', t_speakeasy: 'Die Flüsterkneipe', t_boxing: 'Die Kämpfe', t_races: 'Straßenrennen', t_stable: 'Der Stall', t_pvp: 'Nasse Sachen', t_loans: 'Der Kredithai', t_law: 'Das Gesetz', t_pen: 'Der Knast', t_wire: 'Die Abhörung', t_family: 'Die Familie', t_portfolio: 'Sauber Werden', t_estate: 'Das Anwesen', t_store: 'Der Laden', t_deck: 'Alles Andere', g_streets: 'Straße', g_earners: 'Geschäfte', g_vice: 'Laster', g_blood: 'Blut', g_family: 'Familie', g_legit: 'Legal', k_bank: 'Bank', k_respect: 'Respekt', k_energy: 'Energie', k_nerve: 'Nerven', k_health: 'Gesundheit', k_heat: 'Fahndungsdruck', k_stats: 'Muskeln / List / Tempo', k_gun: 'Waffe', k_ammo: 'Munition / Kisten', k_cars: 'Autos', k_liquid: 'flüssig', k_staked: 'gestakt', k_intransit: 'unterwegs', b_heal: 'heilen', b_checkin: 'einchecken', b_refresh: 'aktualisieren', b_takeme: 'bring mich hin →', b_send: 'senden', b_burn: 'Papiere verbrennen', b_wholecity: '+ die ganze Stadt…', w_sheet: 'Die Akte', w_lastword: 'Letztes Wort', w_panel: 'Die Straße', w_feed: 'LIVE', w_city: 'STADT-CHAT', w_family: 'FAMILIE', w_sayit: 'sag es der Stadt…', w_famonly: 'nur Familie — reden wir Geschäfte…', w_incity: 'in der Stadt', e_ghost: 'ALS GEIST EINTRETEN', e_bones: 'MACH DIR EINEN NAMEN →' },
-    ru: { name: 'Русский', t_start: 'Начни здесь', t_profile: 'Мой профиль', t_streets: 'Улицы', t_garage: 'Гараж', t_life: 'Жизнь', t_city: 'Город', t_kitchen: 'Кухня', t_empire: 'Империя', t_scores: 'Крупные дела', t_market: 'Чёрный рынок', t_port: 'Порт', t_den: 'Казино', t_speakeasy: 'Спикизи', t_boxing: 'Бои', t_races: 'Уличные гонки', t_stable: 'Конюшня', t_pvp: 'Мокрые дела', t_loans: 'Ростовщик', t_law: 'Закон', t_pen: 'Тюрьма', t_wire: 'Прослушка', t_family: 'Семья', t_portfolio: 'Легализация', t_estate: 'Поместье', t_store: 'Магазин', t_deck: 'Всё остальное', g_streets: 'Улицы', g_earners: 'Бизнес', g_vice: 'Порок', g_blood: 'Кровь', g_family: 'Семья', g_legit: 'Легально', k_bank: 'банк', k_respect: 'уважение', k_energy: 'энергия', k_nerve: 'кураж', k_health: 'здоровье', k_heat: 'внимание полиции', k_stats: 'сила / хитрость / скорость', k_gun: 'ствол', k_ammo: 'патроны / ящики', k_cars: 'машины', k_liquid: 'ликвидно', k_staked: 'в стейкинге', k_intransit: 'в пути', b_heal: 'лечиться', b_checkin: 'отметиться', b_refresh: 'обновить', b_takeme: 'веди меня →', b_send: 'отправить', b_burn: 'сжечь бумаги', b_wholecity: '+ весь город…', w_sheet: 'Досье', w_lastword: 'Последнее слово', w_panel: 'Улица', w_feed: 'ЭФИР', w_city: 'ЧАТ ГОРОДА', w_family: 'СЕМЬЯ', w_sayit: 'скажи городу…', w_famonly: 'только семья — о делах…', w_incity: 'в городе', e_ghost: 'ВОЙТИ ПРИЗРАКОМ', e_bones: 'СДЕЛАЙ СЕБЕ ИМЯ →' },
-    ar: { name: 'العربية', rtl: true, t_start: 'ابدأ هنا', t_profile: 'ملفي الشخصي', t_streets: 'الشوارع', t_garage: 'المرآب', t_life: 'الحياة', t_city: 'المدينة', t_kitchen: 'المطبخ', t_empire: 'الإمبراطورية', t_scores: 'الضربات الكبرى', t_market: 'السوق السوداء', t_port: 'الميناء', t_den: 'الكازينو', t_speakeasy: 'الحانة السرية', t_boxing: 'الملاكمة', t_races: 'سباقات الشوارع', t_stable: 'الإسطبل', t_pvp: 'العمل القذر', t_loans: 'المرابي', t_law: 'القانون', t_pen: 'السجن', t_wire: 'التنصت', t_family: 'العائلة', t_portfolio: 'طريق الشرعية', t_estate: 'العزبة', t_store: 'المتجر', t_deck: 'كل شيء آخر', g_streets: 'الشوارع', g_earners: 'الأعمال', g_vice: 'الملاهي', g_blood: 'الدم', g_family: 'العائلة', g_legit: 'شرعي', k_bank: 'البنك', k_respect: 'الاحترام', k_energy: 'الطاقة', k_nerve: 'الجرأة', k_health: 'الصحة', k_heat: 'ملاحقة الشرطة', k_stats: 'قوة / دهاء / سرعة', k_gun: 'السلاح', k_ammo: 'ذخيرة / صناديق', k_cars: 'السيارات', k_liquid: 'سائل', k_staked: 'مرهون', k_intransit: 'قيد التحويل', b_heal: 'تعافَ', b_checkin: 'سجّل حضورك', b_refresh: 'تحديث', b_takeme: '→ خذني إلى هناك', b_send: 'أرسل', b_burn: 'احرق الأوراق', b_wholecity: '+ المدينة كلها…', w_sheet: 'الملف', w_lastword: 'الكلمة الأخيرة', w_panel: 'الشارع', w_feed: 'البث الحي', w_city: 'دردشة المدينة', w_family: 'العائلة', w_sayit: 'قلها للمدينة…', w_famonly: 'للعائلة فقط — لنتحدث في العمل…', w_incity: 'في المدينة', e_ghost: 'ادخل كشبح', e_bones: 'اصنع اسمك →' },
-    hi: { name: 'हिन्दी', t_start: 'यहाँ शुरू करें', t_profile: 'मेरी प्रोफ़ाइल', t_streets: 'सड़कें', t_garage: 'गैराज', t_life: 'ज़िंदगी', t_city: 'शहर', t_kitchen: 'रसोई', t_empire: 'साम्राज्य', t_scores: 'बड़े हाथ', t_market: 'काला बाज़ार', t_port: 'बंदरगाह', t_den: 'जुआघर', t_speakeasy: 'गुप्त अड्डा', t_boxing: 'मुक्केबाज़ी', t_races: 'सड़क रेस', t_stable: 'अस्तबल', t_pvp: 'गंदा काम', t_loans: 'सूदखोर', t_law: 'कानून', t_pen: 'जेल', t_wire: 'वायरटैप', t_family: 'परिवार', t_portfolio: 'वैध धंधा', t_estate: 'हवेली', t_store: 'दुकान', t_deck: 'बाकी सब', g_streets: 'सड़कें', g_earners: 'धंधा', g_vice: 'ऐयाशी', g_blood: 'खून', g_family: 'परिवार', g_legit: 'वैध', k_bank: 'बैंक', k_respect: 'इज़्ज़त', k_energy: 'ऊर्जा', k_nerve: 'हिम्मत', k_health: 'सेहत', k_heat: 'पुलिस की नज़र', k_stats: 'ताकत / चालाकी / रफ़्तार', k_gun: 'बंदूक', k_ammo: 'गोलियाँ / पेटियाँ', k_cars: 'गाड़ियाँ', k_liquid: 'नकद', k_staked: 'स्टेक पर', k_intransit: 'रास्ते में', b_heal: 'इलाज', b_checkin: 'हाज़िरी', b_refresh: 'ताज़ा करें', b_takeme: 'मुझे वहाँ ले चलो →', b_send: 'भेजें', b_burn: 'कागज़ जला दो', b_wholecity: '+ पूरा शहर…', w_sheet: 'फ़ाइल', w_lastword: 'आख़िरी बात', w_panel: 'सड़क', w_feed: 'लाइव फ़ीड', w_city: 'शहर चैट', w_family: 'परिवार', w_sayit: 'शहर से कहो…', w_famonly: 'सिर्फ़ परिवार — धंधे की बात…', w_incity: 'शहर में', e_ghost: 'भूत बनकर घुसो', e_bones: 'अपना नाम बनाओ →' },
-    id: { name: 'Bahasa Indonesia', t_start: 'Mulai di Sini', t_profile: 'Profilku', t_streets: 'Jalanan', t_garage: 'Garasi', t_life: 'Kehidupan', t_city: 'Kota', t_kitchen: 'Dapur', t_empire: 'Kerajaan', t_scores: 'Aksi Besar', t_market: 'Pasar Gelap', t_port: 'Pelabuhan', t_den: 'Kasino', t_speakeasy: 'Bar Rahasia', t_boxing: 'Tinju', t_races: 'Balap Liar', t_stable: 'Istal', t_pvp: 'Kerja Kotor', t_loans: 'Rentenir', t_law: 'Hukum', t_pen: 'Penjara', t_wire: 'Penyadapan', t_family: 'Keluarga', t_portfolio: 'Jadi Legal', t_estate: 'Rumah Besar', t_store: 'Toko', t_deck: 'Lainnya', g_streets: 'Jalanan', g_earners: 'Bisnis', g_vice: 'Hiburan', g_blood: 'Darah', g_family: 'Keluarga', g_legit: 'Legal', k_bank: 'bank', k_respect: 'respek', k_energy: 'energi', k_nerve: 'nyali', k_health: 'kesehatan', k_heat: 'incaran polisi', k_stats: 'otot / akal / kecepatan', k_gun: 'senjata', k_ammo: 'peluru / peti', k_cars: 'mobil', k_liquid: 'likuid', k_staked: 'di-stake', k_intransit: 'dalam perjalanan', b_heal: 'berobat', b_checkin: 'absen harian', b_refresh: 'muat ulang', b_takeme: 'antar aku ke sana →', b_send: 'kirim', b_burn: 'bakar dokumen', b_wholecity: '+ seluruh kota…', w_sheet: 'Berkas', w_lastword: 'Kata Terakhir', w_panel: 'Jalanan', w_feed: 'SIARAN', w_city: 'CHAT KOTA', w_family: 'KELUARGA', w_sayit: 'bilang ke kota…', w_famonly: 'khusus keluarga — bahas bisnis…', w_incity: 'di kota', e_ghost: 'MASUK SEBAGAI HANTU', e_bones: 'BANGUN NAMAMU →' },
-    vi: { name: 'Tiếng Việt', t_start: 'Bắt Đầu', t_profile: 'Hồ Sơ Tôi', t_streets: 'Đường Phố', t_garage: 'Ga-ra', t_life: 'Cuộc Đời', t_city: 'Thành Phố', t_kitchen: 'Nhà Bếp', t_empire: 'Đế Chế', t_scores: 'Phi Vụ Lớn', t_market: 'Chợ Đen', t_port: 'Bến Cảng', t_den: 'Sòng Bạc', t_speakeasy: 'Quán Ngầm', t_boxing: 'Võ Đài', t_races: 'Đua Xe', t_stable: 'Chuồng Ngựa', t_pvp: 'Việc Đẫm Máu', t_loans: 'Cho Vay Nặng Lãi', t_law: 'Pháp Luật', t_pen: 'Nhà Tù', t_wire: 'Nghe Lén', t_family: 'Gia Đình', t_portfolio: 'Làm Ăn Sạch', t_estate: 'Dinh Thự', t_store: 'Cửa Hàng', t_deck: 'Còn Lại', g_streets: 'Phố', g_earners: 'Làm Ăn', g_vice: 'Ăn Chơi', g_blood: 'Máu', g_family: 'Gia Đình', g_legit: 'Hợp Pháp', k_bank: 'ngân hàng', k_respect: 'uy tín', k_energy: 'thể lực', k_nerve: 'gan lì', k_health: 'sức khỏe', k_heat: 'cảnh sát để mắt', k_stats: 'cơ bắp / mưu mẹo / tốc độ', k_gun: 'súng', k_ammo: 'đạn / thùng hàng', k_cars: 'xe', k_liquid: 'khả dụng', k_staked: 'đang stake', k_intransit: 'đang chuyển', b_heal: 'chữa trị', b_checkin: 'điểm danh', b_refresh: 'làm mới', b_takeme: 'đưa tôi tới đó →', b_send: 'gửi', b_burn: 'đốt giấy tờ', b_wholecity: '+ cả thành phố…', w_sheet: 'Hồ Sơ', w_lastword: 'Lời Cuối', w_panel: 'Đường Phố', w_feed: 'TRỰC TIẾP', w_city: 'CHAT PHỐ', w_family: 'GIA ĐÌNH', w_sayit: 'nói với cả phố…', w_famonly: 'chỉ gia đình — bàn chuyện làm ăn…', w_incity: 'trong phố', e_ghost: 'VÀO NHƯ BÓNG MA', e_bones: 'TẠO DANH TIẾNG →' },
-    tl: { name: 'Filipino', t_start: 'Magsimula Dito', t_profile: 'Aking Profile', t_streets: 'Ang Kalye', t_garage: 'Ang Garahe', t_life: 'Ang Buhay', t_city: 'Ang Lungsod', t_kitchen: 'Ang Kusina', t_empire: 'Ang Imperyo', t_scores: 'Malalaking Trabaho', t_market: 'Black Market', t_port: 'Ang Pantalan', t_den: 'Ang Sugalan', t_speakeasy: 'Ang Speakeasy', t_boxing: 'Ang Boksing', t_races: 'Karera sa Kalye', t_stable: 'Ang Kuwadra', t_pvp: 'Madugong Trabaho', t_loans: 'Ang 5-6', t_law: 'Ang Batas', t_pen: 'Ang Bilangguan', t_wire: 'Ang Wiretap', t_family: 'Ang Pamilya', t_portfolio: 'Pagpapakalinis', t_estate: 'Ang Mansiyon', t_store: 'Ang Tindahan', t_deck: 'Iba Pa', g_streets: 'Kalye', g_earners: 'Negosyo', g_vice: 'Bisyo', g_blood: 'Dugo', g_family: 'Pamilya', g_legit: 'Legal', k_bank: 'bangko', k_respect: 'respeto', k_energy: 'lakas', k_nerve: 'tapang', k_health: 'kalusugan', k_heat: 'init ng pulis', k_stats: 'muscle / diskarte / bilis', k_gun: 'baril', k_ammo: 'bala / kahon', k_cars: 'kotse', k_liquid: 'likido', k_staked: 'naka-stake', k_intransit: 'padala pa', b_heal: 'magpagamot', b_checkin: 'mag-check in', b_refresh: 'i-refresh', b_takeme: 'dalhin mo ako →', b_send: 'ipadala', b_burn: 'sunugin ang papeles', b_wholecity: '+ ang buong lungsod…', w_sheet: 'Ang Rekord', w_lastword: 'Huling Salita', w_panel: 'Ang Kalye', w_feed: 'LIVE FEED', w_city: 'CITY CHAT', w_family: 'PAMILYA', w_sayit: 'sabihin sa lungsod…', w_famonly: 'pamilya lang — usapang negosyo…', w_incity: 'nasa lungsod', e_ghost: 'PUMASOK NA PARANG MULTO', e_bones: 'GAWIN ANG PANGALAN MO →' },
-    tr: { name: 'Türkçe', t_start: 'Buradan Başla', t_profile: 'Profilim', t_streets: 'Sokaklar', t_garage: 'Garaj', t_life: 'Hayat', t_city: 'Şehir', t_kitchen: 'Mutfak', t_empire: 'İmparatorluk', t_scores: 'Büyük Vurgunlar', t_market: 'Karaborsa', t_port: 'Liman', t_den: 'Kumarhane', t_speakeasy: 'Gizli Meyhane', t_boxing: 'Dövüşler', t_races: 'Sokak Yarışları', t_stable: 'Ahır', t_pvp: 'Kirli İşler', t_loans: 'Tefeci', t_law: 'Kanun', t_pen: 'Kodes', t_wire: 'Dinleme', t_family: 'Aile', t_portfolio: 'Aklanma', t_estate: 'Malikâne', t_store: 'Dükkân', t_deck: 'Geri Kalanı', g_streets: 'Sokak', g_earners: 'İşler', g_vice: 'Keyif', g_blood: 'Kan', g_family: 'Aile', g_legit: 'Yasal', k_bank: 'banka', k_respect: 'itibar', k_energy: 'enerji', k_nerve: 'cesaret', k_health: 'sağlık', k_heat: 'polis baskısı', k_stats: 'kas / kurnazlık / hız', k_gun: 'silah', k_ammo: 'mermi / kasa', k_cars: 'arabalar', k_liquid: 'likit', k_staked: 'stake edilmiş', k_intransit: 'yolda', b_heal: 'iyileş', b_checkin: 'giriş yap', b_refresh: 'yenile', b_takeme: 'beni oraya götür →', b_send: 'gönder', b_burn: 'evrakları yak', b_wholecity: '+ bütün şehir…', w_sheet: 'Dosya', w_lastword: 'Son Söz', w_panel: 'Sokak', w_feed: 'CANLI', w_city: 'ŞEHİR SOHBETİ', w_family: 'AİLE', w_sayit: 'şehre söyle…', w_famonly: 'sadece aile — iş konuşalım…', w_incity: 'şehirde', e_ghost: 'HAYALET OLARAK GİR', e_bones: 'ADINI DUYUR →' },
-    zh: { name: '中文', t_start: '从这里开始', t_profile: '我的主页', t_streets: '街头', t_garage: '车库', t_life: '人生', t_city: '城市', t_kitchen: '厨房', t_empire: '帝国', t_scores: '大买卖', t_market: '黑市', t_port: '港口', t_den: '赌场', t_speakeasy: '地下酒吧', t_boxing: '拳赛', t_races: '街头赛车', t_stable: '马厩', t_pvp: '湿活', t_loans: '高利贷', t_law: '法律', t_pen: '监狱', t_wire: '窃听', t_family: '家族', t_portfolio: '洗白', t_estate: '庄园', t_store: '商店', t_deck: '其他一切', g_streets: '街头', g_earners: '生意', g_vice: '娱乐', g_blood: '血战', g_family: '家族', g_legit: '洗白', k_bank: '银行', k_respect: '声望', k_energy: '体力', k_nerve: '胆量', k_health: '健康', k_heat: '警方关注', k_stats: '肌肉 / 心机 / 速度', k_gun: '枪械', k_ammo: '弹药 / 货箱', k_cars: '车辆', k_liquid: '可用', k_staked: '质押中', k_intransit: '转账中', b_heal: '治疗', b_checkin: '签到', b_refresh: '刷新', b_takeme: '带我去 →', b_send: '发送', b_burn: '销毁证件', b_wholecity: '+ 整座城市…', w_sheet: '档案', w_lastword: '回执', w_panel: '街头', w_feed: '实时动态', w_city: '城市聊天', w_family: '家族', w_sayit: '向全城喊话…', w_famonly: '家族专属 — 谈正事…', w_incity: '人在城中', e_ghost: '以幽灵身份进入', e_bones: '闯出名号 →' },
-    ja: { name: '日本語', t_start: 'ここから始める', t_profile: 'マイページ', t_streets: 'ストリート', t_garage: 'ガレージ', t_life: '人生', t_city: '街', t_kitchen: 'キッチン', t_empire: '帝国', t_scores: '大仕事', t_market: '闇市場', t_port: '港', t_den: 'カジノ', t_speakeasy: 'もぐり酒場', t_boxing: 'ボクシング', t_races: 'ストリートレース', t_stable: '厩舎', t_pvp: '汚れ仕事', t_loans: '闇金', t_law: '警察', t_pen: 'ムショ', t_wire: '盗聴', t_family: 'ファミリー', t_portfolio: '堅気になる', t_estate: '屋敷', t_store: 'ストア', t_deck: 'その他すべて', g_streets: '街', g_earners: 'シノギ', g_vice: '遊び', g_blood: '血', g_family: '一家', g_legit: '堅気', k_bank: '銀行', k_respect: '評判', k_energy: 'スタミナ', k_nerve: '度胸', k_health: '体力', k_heat: '警察の注目', k_stats: '腕力 / 悪知恵 / 速さ', k_gun: '銃', k_ammo: '弾薬 / 箱', k_cars: '車', k_liquid: '流動', k_staked: 'ステーク中', k_intransit: '送金中', b_heal: '治療', b_checkin: 'チェックイン', b_refresh: '更新', b_takeme: '連れて行け →', b_send: '送信', b_burn: '書類を燃やす', b_wholecity: '+ 街のすべて…', w_sheet: '身上書', w_lastword: '結果', w_panel: 'ストリート', w_feed: 'ライブ', w_city: '街のチャット', w_family: 'ファミリー', w_sayit: '街に言え…', w_famonly: '一家のみ — 仕事の話を…', w_incity: '人が街に', e_ghost: '幽霊として入る', e_bones: '名を上げろ →' },
-    ko: { name: '한국어', t_start: '여기서 시작', t_profile: '내 프로필', t_streets: '거리', t_garage: '차고', t_life: '인생', t_city: '도시', t_kitchen: '주방', t_empire: '제국', t_scores: '큰 건수', t_market: '암시장', t_port: '항구', t_den: '카지노', t_speakeasy: '밀주점', t_boxing: '복싱', t_races: '거리 레이싱', t_stable: '마구간', t_pvp: '피의 일', t_loans: '사채업자', t_law: '법', t_pen: '감옥', t_wire: '도청', t_family: '패밀리', t_portfolio: '합법으로', t_estate: '저택', t_store: '상점', t_deck: '그 외 전부', g_streets: '거리', g_earners: '사업', g_vice: '유흥', g_blood: '피', g_family: '패밀리', g_legit: '합법', k_bank: '은행', k_respect: '명성', k_energy: '기력', k_nerve: '배짱', k_health: '체력', k_heat: '경찰의 주목', k_stats: '근육 / 꾀 / 속도', k_gun: '총', k_ammo: '탄약 / 상자', k_cars: '차량', k_liquid: '유동', k_staked: '스테이킹 중', k_intransit: '이체 중', b_heal: '치료', b_checkin: '출석', b_refresh: '새로고침', b_takeme: '데려다줘 →', b_send: '보내기', b_burn: '서류 태우기', b_wholecity: '+ 도시 전체…', w_sheet: '신상 기록', w_lastword: '결과', w_panel: '거리', w_feed: '라이브', w_city: '도시 채팅', w_family: '패밀리', w_sayit: '도시에 말해…', w_famonly: '패밀리 전용 — 사업 얘기…', w_incity: '접속 중', e_ghost: '유령으로 입장', e_bones: '이름을 떨쳐라 →' },
+    es: { name: 'Español', t_start: 'Empieza Aquí', t_profile: 'Mi Perfil', t_streets: 'Las Calles', t_garage: 'El Garaje', t_life: 'La Vida', t_city: 'La Ciudad', t_kitchen: 'La Cocina', t_empire: 'El Imperio', t_scores: 'Grandes Golpes', t_market: 'Mercado Negro', t_port: 'El Puerto', t_den: 'El Casino', t_speakeasy: 'El Clandestino', t_boxing: 'Las Peleas', t_races: 'Carreras Callejeras', t_stable: 'El Establo', t_pvp: 'Trabajo Sucio', t_loans: 'El Usurero', t_law: 'La Ley', t_pen: 'La Prisión', t_wire: 'El Cable', t_family: 'La Familia', t_map: 'El Mapa', t_crew: 'La Banda', t_discover: 'Buscar Gente', t_portfolio: 'A Lo Legal', t_estate: 'La Mansión', t_store: 'La Tienda', t_deck: 'La Consola', g_streets: 'Calles', g_earners: 'Negocios', g_vice: 'Vicio', g_blood: 'Sangre', g_family: 'Familia', g_legit: 'Legal', k_bank: 'banco', k_respect: 'respeto', k_energy: 'energía', k_nerve: 'nervio', k_health: 'salud', k_heat: 'calor policial', k_stats: 'músculo / astucia / velocidad', k_gun: 'arma', k_ammo: 'munición / cajas', k_cars: 'autos', k_liquid: 'líquido', k_staked: 'en staking', k_intransit: 'en tránsito', b_heal: 'curarse', b_checkin: 'pasar lista', b_refresh: 'actualizar', b_takeme: 'llévame ahí →', b_send: 'enviar', b_burn: 'quemar los papeles', b_wholecity: '+ toda la ciudad…', w_sheet: 'La Ficha', w_lastword: 'Última Palabra', w_panel: 'La Calle', w_feed: 'EN VIVO', w_city: 'CHAT CIUDAD', w_family: 'FAMILIA', w_sayit: 'dilo a la ciudad…', w_famonly: 'solo familia — hablemos de negocios…', w_incity: 'en la ciudad', e_ghost: 'ENTRA COMO FANTASMA', e_bones: 'HAZTE UN NOMBRE →' },
+    pt: { name: 'Português', t_start: 'Comece Aqui', t_profile: 'Meu Perfil', t_streets: 'As Ruas', t_garage: 'A Garagem', t_life: 'A Vida', t_city: 'A Cidade', t_kitchen: 'A Cozinha', t_empire: 'O Império', t_scores: 'Grandes Golpes', t_market: 'Mercado Negro', t_port: 'O Porto', t_den: 'O Cassino', t_speakeasy: 'O Clandestino', t_boxing: 'As Lutas', t_races: 'Rachas de Rua', t_stable: 'O Estábulo', t_pvp: 'Serviço Sujo', t_loans: 'O Agiota', t_law: 'A Lei', t_pen: 'A Cadeia', t_wire: 'A Escuta', t_family: 'A Família', t_map: 'O Mapa', t_crew: 'O Bando', t_discover: 'Achar Gente', t_portfolio: 'Na Legalidade', t_estate: 'A Mansão', t_store: 'A Loja', t_deck: 'O Console', g_streets: 'Ruas', g_earners: 'Negócios', g_vice: 'Vício', g_blood: 'Sangue', g_family: 'Família', g_legit: 'Legal', k_bank: 'banco', k_respect: 'respeito', k_energy: 'energia', k_nerve: 'coragem', k_health: 'saúde', k_heat: 'pressão policial', k_stats: 'músculo / astúcia / velocidade', k_gun: 'arma', k_ammo: 'munição / caixas', k_cars: 'carros', k_liquid: 'líquido', k_staked: 'em staking', k_intransit: 'em trânsito', b_heal: 'curar', b_checkin: 'dar presença', b_refresh: 'atualizar', b_takeme: 'me leva lá →', b_send: 'enviar', b_burn: 'queimar os papéis', b_wholecity: '+ a cidade inteira…', w_sheet: 'A Ficha', w_lastword: 'Última Palavra', w_panel: 'A Rua', w_feed: 'AO VIVO', w_city: 'CHAT CIDADE', w_family: 'FAMÍLIA', w_sayit: 'fala pra cidade…', w_famonly: 'só família — papo de negócios…', w_incity: 'na cidade', e_ghost: 'ENTRE COMO FANTASMA', e_bones: 'FAÇA SEU NOME →' },
+    fr: { name: 'Français', t_start: 'Commencer Ici', t_profile: 'Mon Profil', t_streets: 'La Rue', t_garage: 'Le Garage', t_life: 'La Vie', t_city: 'La Ville', t_kitchen: 'La Cuisine', t_empire: "L'Empire", t_scores: 'Les Gros Coups', t_market: 'Marché Noir', t_port: 'Le Port', t_den: 'Le Tripot', t_speakeasy: 'Le Clandestin', t_boxing: 'La Boxe', t_races: 'Courses de Rue', t_stable: "L'Écurie", t_pvp: 'Basses Œuvres', t_loans: "L'Usurier", t_law: 'La Loi', t_pen: 'La Taule', t_wire: 'Les Écoutes', t_family: 'La Famille', t_map: 'La Carte', t_crew: "L'Équipe", t_discover: 'Trouver du Monde', t_portfolio: 'Devenir Clean', t_estate: 'Le Domaine', t_store: 'La Boutique', t_deck: 'La Console', g_streets: 'Rue', g_earners: 'Affaires', g_vice: 'Vice', g_blood: 'Sang', g_family: 'Famille', g_legit: 'Légal', k_bank: 'banque', k_respect: 'respect', k_energy: 'énergie', k_nerve: 'cran', k_health: 'santé', k_heat: 'pression policière', k_stats: 'muscle / ruse / vitesse', k_gun: 'arme', k_ammo: 'munitions / caisses', k_cars: 'voitures', k_liquid: 'liquide', k_staked: 'en staking', k_intransit: 'en transit', b_heal: 'se soigner', b_checkin: 'pointer', b_refresh: 'actualiser', b_takeme: 'emmène-moi →', b_send: 'envoyer', b_burn: 'brûler les papiers', b_wholecity: '+ toute la ville…', w_sheet: 'La Fiche', w_lastword: 'Dernier Mot', w_panel: 'La Rue', w_feed: 'EN DIRECT', w_city: 'CHAT VILLE', w_family: 'FAMILLE', w_sayit: 'dis-le à la ville…', w_famonly: 'famille seulement — parlons affaires…', w_incity: 'en ville', e_ghost: 'ENTRER EN FANTÔME', e_bones: 'FAIS TES PREUVES →' },
+    de: { name: 'Deutsch', t_start: 'Hier Starten', t_profile: 'Mein Profil', t_streets: 'Die Straßen', t_garage: 'Die Garage', t_life: 'Das Leben', t_city: 'Die Stadt', t_kitchen: 'Die Küche', t_empire: 'Das Imperium', t_scores: 'Große Dinger', t_market: 'Schwarzmarkt', t_port: 'Der Hafen', t_den: 'Die Spielhölle', t_speakeasy: 'Die Flüsterkneipe', t_boxing: 'Die Kämpfe', t_races: 'Straßenrennen', t_stable: 'Der Stall', t_pvp: 'Nasse Sachen', t_loans: 'Der Kredithai', t_law: 'Das Gesetz', t_pen: 'Der Knast', t_wire: 'Die Abhörung', t_family: 'Die Familie', t_map: 'Die Karte', t_crew: 'Die Crew', t_discover: 'Leute Finden', t_portfolio: 'Sauber Werden', t_estate: 'Das Anwesen', t_store: 'Der Laden', t_deck: 'Die Konsole', g_streets: 'Straße', g_earners: 'Geschäfte', g_vice: 'Laster', g_blood: 'Blut', g_family: 'Familie', g_legit: 'Legal', k_bank: 'Bank', k_respect: 'Respekt', k_energy: 'Energie', k_nerve: 'Nerven', k_health: 'Gesundheit', k_heat: 'Fahndungsdruck', k_stats: 'Muskeln / List / Tempo', k_gun: 'Waffe', k_ammo: 'Munition / Kisten', k_cars: 'Autos', k_liquid: 'flüssig', k_staked: 'gestakt', k_intransit: 'unterwegs', b_heal: 'heilen', b_checkin: 'einchecken', b_refresh: 'aktualisieren', b_takeme: 'bring mich hin →', b_send: 'senden', b_burn: 'Papiere verbrennen', b_wholecity: '+ die ganze Stadt…', w_sheet: 'Die Akte', w_lastword: 'Letztes Wort', w_panel: 'Die Straße', w_feed: 'LIVE', w_city: 'STADT-CHAT', w_family: 'FAMILIE', w_sayit: 'sag es der Stadt…', w_famonly: 'nur Familie — reden wir Geschäfte…', w_incity: 'in der Stadt', e_ghost: 'ALS GEIST EINTRETEN', e_bones: 'MACH DIR EINEN NAMEN →' },
+    ru: { name: 'Русский', t_start: 'Начни здесь', t_profile: 'Мой профиль', t_streets: 'Улицы', t_garage: 'Гараж', t_life: 'Жизнь', t_city: 'Город', t_kitchen: 'Кухня', t_empire: 'Империя', t_scores: 'Крупные дела', t_market: 'Чёрный рынок', t_port: 'Порт', t_den: 'Казино', t_speakeasy: 'Спикизи', t_boxing: 'Бои', t_races: 'Уличные гонки', t_stable: 'Конюшня', t_pvp: 'Мокрые дела', t_loans: 'Ростовщик', t_law: 'Закон', t_pen: 'Тюрьма', t_wire: 'Прослушка', t_family: 'Семья', t_map: 'Карта', t_crew: 'Братва', t_discover: 'Найти людей', t_portfolio: 'Легализация', t_estate: 'Поместье', t_store: 'Магазин', t_deck: 'Консоль', g_streets: 'Улицы', g_earners: 'Бизнес', g_vice: 'Порок', g_blood: 'Кровь', g_family: 'Семья', g_legit: 'Легально', k_bank: 'банк', k_respect: 'уважение', k_energy: 'энергия', k_nerve: 'кураж', k_health: 'здоровье', k_heat: 'внимание полиции', k_stats: 'сила / хитрость / скорость', k_gun: 'ствол', k_ammo: 'патроны / ящики', k_cars: 'машины', k_liquid: 'ликвидно', k_staked: 'в стейкинге', k_intransit: 'в пути', b_heal: 'лечиться', b_checkin: 'отметиться', b_refresh: 'обновить', b_takeme: 'веди меня →', b_send: 'отправить', b_burn: 'сжечь бумаги', b_wholecity: '+ весь город…', w_sheet: 'Досье', w_lastword: 'Последнее слово', w_panel: 'Улица', w_feed: 'ЭФИР', w_city: 'ЧАТ ГОРОДА', w_family: 'СЕМЬЯ', w_sayit: 'скажи городу…', w_famonly: 'только семья — о делах…', w_incity: 'в городе', e_ghost: 'ВОЙТИ ПРИЗРАКОМ', e_bones: 'СДЕЛАЙ СЕБЕ ИМЯ →' },
+    ar: { name: 'العربية', rtl: true, t_start: 'ابدأ هنا', t_profile: 'ملفي الشخصي', t_streets: 'الشوارع', t_garage: 'المرآب', t_life: 'الحياة', t_city: 'المدينة', t_kitchen: 'المطبخ', t_empire: 'الإمبراطورية', t_scores: 'الضربات الكبرى', t_market: 'السوق السوداء', t_port: 'الميناء', t_den: 'الكازينو', t_speakeasy: 'الحانة السرية', t_boxing: 'الملاكمة', t_races: 'سباقات الشوارع', t_stable: 'الإسطبل', t_pvp: 'العمل القذر', t_loans: 'المرابي', t_law: 'القانون', t_pen: 'السجن', t_wire: 'التنصت', t_family: 'العائلة', t_map: 'الخريطة', t_crew: 'العصابة', t_discover: 'ابحث عن ناس', t_portfolio: 'طريق الشرعية', t_estate: 'العزبة', t_store: 'المتجر', t_deck: 'الكونسول', g_streets: 'الشوارع', g_earners: 'الأعمال', g_vice: 'الملاهي', g_blood: 'الدم', g_family: 'العائلة', g_legit: 'شرعي', k_bank: 'البنك', k_respect: 'الاحترام', k_energy: 'الطاقة', k_nerve: 'الجرأة', k_health: 'الصحة', k_heat: 'ملاحقة الشرطة', k_stats: 'قوة / دهاء / سرعة', k_gun: 'السلاح', k_ammo: 'ذخيرة / صناديق', k_cars: 'السيارات', k_liquid: 'سائل', k_staked: 'مرهون', k_intransit: 'قيد التحويل', b_heal: 'تعافَ', b_checkin: 'سجّل حضورك', b_refresh: 'تحديث', b_takeme: '→ خذني إلى هناك', b_send: 'أرسل', b_burn: 'احرق الأوراق', b_wholecity: '+ المدينة كلها…', w_sheet: 'الملف', w_lastword: 'الكلمة الأخيرة', w_panel: 'الشارع', w_feed: 'البث الحي', w_city: 'دردشة المدينة', w_family: 'العائلة', w_sayit: 'قلها للمدينة…', w_famonly: 'للعائلة فقط — لنتحدث في العمل…', w_incity: 'في المدينة', e_ghost: 'ادخل كشبح', e_bones: 'اصنع اسمك →' },
+    hi: { name: 'हिन्दी', t_start: 'यहाँ शुरू करें', t_profile: 'मेरी प्रोफ़ाइल', t_streets: 'सड़कें', t_garage: 'गैराज', t_life: 'ज़िंदगी', t_city: 'शहर', t_kitchen: 'रसोई', t_empire: 'साम्राज्य', t_scores: 'बड़े हाथ', t_market: 'काला बाज़ार', t_port: 'बंदरगाह', t_den: 'जुआघर', t_speakeasy: 'गुप्त अड्डा', t_boxing: 'मुक्केबाज़ी', t_races: 'सड़क रेस', t_stable: 'अस्तबल', t_pvp: 'गंदा काम', t_loans: 'सूदखोर', t_law: 'कानून', t_pen: 'जेल', t_wire: 'वायरटैप', t_family: 'परिवार', t_map: 'नक्शा', t_crew: 'टोली', t_discover: 'लोग खोजें', t_portfolio: 'वैध धंधा', t_estate: 'हवेली', t_store: 'दुकान', t_deck: 'कंसोल', g_streets: 'सड़कें', g_earners: 'धंधा', g_vice: 'ऐयाशी', g_blood: 'खून', g_family: 'परिवार', g_legit: 'वैध', k_bank: 'बैंक', k_respect: 'इज़्ज़त', k_energy: 'ऊर्जा', k_nerve: 'हिम्मत', k_health: 'सेहत', k_heat: 'पुलिस की नज़र', k_stats: 'ताकत / चालाकी / रफ़्तार', k_gun: 'बंदूक', k_ammo: 'गोलियाँ / पेटियाँ', k_cars: 'गाड़ियाँ', k_liquid: 'नकद', k_staked: 'स्टेक पर', k_intransit: 'रास्ते में', b_heal: 'इलाज', b_checkin: 'हाज़िरी', b_refresh: 'ताज़ा करें', b_takeme: 'मुझे वहाँ ले चलो →', b_send: 'भेजें', b_burn: 'कागज़ जला दो', b_wholecity: '+ पूरा शहर…', w_sheet: 'फ़ाइल', w_lastword: 'आख़िरी बात', w_panel: 'सड़क', w_feed: 'लाइव फ़ीड', w_city: 'शहर चैट', w_family: 'परिवार', w_sayit: 'शहर से कहो…', w_famonly: 'सिर्फ़ परिवार — धंधे की बात…', w_incity: 'शहर में', e_ghost: 'भूत बनकर घुसो', e_bones: 'अपना नाम बनाओ →' },
+    id: { name: 'Bahasa Indonesia', t_start: 'Mulai di Sini', t_profile: 'Profilku', t_streets: 'Jalanan', t_garage: 'Garasi', t_life: 'Kehidupan', t_city: 'Kota', t_kitchen: 'Dapur', t_empire: 'Kerajaan', t_scores: 'Aksi Besar', t_market: 'Pasar Gelap', t_port: 'Pelabuhan', t_den: 'Kasino', t_speakeasy: 'Bar Rahasia', t_boxing: 'Tinju', t_races: 'Balap Liar', t_stable: 'Istal', t_pvp: 'Kerja Kotor', t_loans: 'Rentenir', t_law: 'Hukum', t_pen: 'Penjara', t_wire: 'Penyadapan', t_family: 'Keluarga', t_map: 'Peta', t_crew: 'Kru', t_discover: 'Cari Orang', t_portfolio: 'Jadi Legal', t_estate: 'Rumah Besar', t_store: 'Toko', t_deck: 'Konsol', g_streets: 'Jalanan', g_earners: 'Bisnis', g_vice: 'Hiburan', g_blood: 'Darah', g_family: 'Keluarga', g_legit: 'Legal', k_bank: 'bank', k_respect: 'respek', k_energy: 'energi', k_nerve: 'nyali', k_health: 'kesehatan', k_heat: 'incaran polisi', k_stats: 'otot / akal / kecepatan', k_gun: 'senjata', k_ammo: 'peluru / peti', k_cars: 'mobil', k_liquid: 'likuid', k_staked: 'di-stake', k_intransit: 'dalam perjalanan', b_heal: 'berobat', b_checkin: 'absen harian', b_refresh: 'muat ulang', b_takeme: 'antar aku ke sana →', b_send: 'kirim', b_burn: 'bakar dokumen', b_wholecity: '+ seluruh kota…', w_sheet: 'Berkas', w_lastword: 'Kata Terakhir', w_panel: 'Jalanan', w_feed: 'SIARAN', w_city: 'CHAT KOTA', w_family: 'KELUARGA', w_sayit: 'bilang ke kota…', w_famonly: 'khusus keluarga — bahas bisnis…', w_incity: 'di kota', e_ghost: 'MASUK SEBAGAI HANTU', e_bones: 'BANGUN NAMAMU →' },
+    vi: { name: 'Tiếng Việt', t_start: 'Bắt Đầu', t_profile: 'Hồ Sơ Tôi', t_streets: 'Đường Phố', t_garage: 'Ga-ra', t_life: 'Cuộc Đời', t_city: 'Thành Phố', t_kitchen: 'Nhà Bếp', t_empire: 'Đế Chế', t_scores: 'Phi Vụ Lớn', t_market: 'Chợ Đen', t_port: 'Bến Cảng', t_den: 'Sòng Bạc', t_speakeasy: 'Quán Ngầm', t_boxing: 'Võ Đài', t_races: 'Đua Xe', t_stable: 'Chuồng Ngựa', t_pvp: 'Việc Đẫm Máu', t_loans: 'Cho Vay Nặng Lãi', t_law: 'Pháp Luật', t_pen: 'Nhà Tù', t_wire: 'Nghe Lén', t_family: 'Gia Đình', t_map: 'Bản Đồ', t_crew: 'Băng Nhóm', t_discover: 'Tìm Người', t_portfolio: 'Làm Ăn Sạch', t_estate: 'Dinh Thự', t_store: 'Cửa Hàng', t_deck: 'Bảng Điều Khiển', g_streets: 'Phố', g_earners: 'Làm Ăn', g_vice: 'Ăn Chơi', g_blood: 'Máu', g_family: 'Gia Đình', g_legit: 'Hợp Pháp', k_bank: 'ngân hàng', k_respect: 'uy tín', k_energy: 'thể lực', k_nerve: 'gan lì', k_health: 'sức khỏe', k_heat: 'cảnh sát để mắt', k_stats: 'cơ bắp / mưu mẹo / tốc độ', k_gun: 'súng', k_ammo: 'đạn / thùng hàng', k_cars: 'xe', k_liquid: 'khả dụng', k_staked: 'đang stake', k_intransit: 'đang chuyển', b_heal: 'chữa trị', b_checkin: 'điểm danh', b_refresh: 'làm mới', b_takeme: 'đưa tôi tới đó →', b_send: 'gửi', b_burn: 'đốt giấy tờ', b_wholecity: '+ cả thành phố…', w_sheet: 'Hồ Sơ', w_lastword: 'Lời Cuối', w_panel: 'Đường Phố', w_feed: 'TRỰC TIẾP', w_city: 'CHAT PHỐ', w_family: 'GIA ĐÌNH', w_sayit: 'nói với cả phố…', w_famonly: 'chỉ gia đình — bàn chuyện làm ăn…', w_incity: 'trong phố', e_ghost: 'VÀO NHƯ BÓNG MA', e_bones: 'TẠO DANH TIẾNG →' },
+    tl: { name: 'Filipino', t_start: 'Magsimula Dito', t_profile: 'Aking Profile', t_streets: 'Ang Kalye', t_garage: 'Ang Garahe', t_life: 'Ang Buhay', t_city: 'Ang Lungsod', t_kitchen: 'Ang Kusina', t_empire: 'Ang Imperyo', t_scores: 'Malalaking Trabaho', t_market: 'Black Market', t_port: 'Ang Pantalan', t_den: 'Ang Sugalan', t_speakeasy: 'Ang Speakeasy', t_boxing: 'Ang Boksing', t_races: 'Karera sa Kalye', t_stable: 'Ang Kuwadra', t_pvp: 'Madugong Trabaho', t_loans: 'Ang 5-6', t_law: 'Ang Batas', t_pen: 'Ang Bilangguan', t_wire: 'Ang Wiretap', t_family: 'Ang Pamilya', t_map: 'Ang Mapa', t_crew: 'Ang Tropa', t_discover: 'Maghanap ng Tao', t_portfolio: 'Pagpapakalinis', t_estate: 'Ang Mansiyon', t_store: 'Ang Tindahan', t_deck: 'Ang Console', g_streets: 'Kalye', g_earners: 'Negosyo', g_vice: 'Bisyo', g_blood: 'Dugo', g_family: 'Pamilya', g_legit: 'Legal', k_bank: 'bangko', k_respect: 'respeto', k_energy: 'lakas', k_nerve: 'tapang', k_health: 'kalusugan', k_heat: 'init ng pulis', k_stats: 'muscle / diskarte / bilis', k_gun: 'baril', k_ammo: 'bala / kahon', k_cars: 'kotse', k_liquid: 'likido', k_staked: 'naka-stake', k_intransit: 'padala pa', b_heal: 'magpagamot', b_checkin: 'mag-check in', b_refresh: 'i-refresh', b_takeme: 'dalhin mo ako →', b_send: 'ipadala', b_burn: 'sunugin ang papeles', b_wholecity: '+ ang buong lungsod…', w_sheet: 'Ang Rekord', w_lastword: 'Huling Salita', w_panel: 'Ang Kalye', w_feed: 'LIVE FEED', w_city: 'CITY CHAT', w_family: 'PAMILYA', w_sayit: 'sabihin sa lungsod…', w_famonly: 'pamilya lang — usapang negosyo…', w_incity: 'nasa lungsod', e_ghost: 'PUMASOK NA PARANG MULTO', e_bones: 'GAWIN ANG PANGALAN MO →' },
+    tr: { name: 'Türkçe', t_start: 'Buradan Başla', t_profile: 'Profilim', t_streets: 'Sokaklar', t_garage: 'Garaj', t_life: 'Hayat', t_city: 'Şehir', t_kitchen: 'Mutfak', t_empire: 'İmparatorluk', t_scores: 'Büyük Vurgunlar', t_market: 'Karaborsa', t_port: 'Liman', t_den: 'Kumarhane', t_speakeasy: 'Gizli Meyhane', t_boxing: 'Dövüşler', t_races: 'Sokak Yarışları', t_stable: 'Ahır', t_pvp: 'Kirli İşler', t_loans: 'Tefeci', t_law: 'Kanun', t_pen: 'Kodes', t_wire: 'Dinleme', t_family: 'Aile', t_map: 'Harita', t_crew: 'Ekip', t_discover: 'İnsan Bul', t_portfolio: 'Aklanma', t_estate: 'Malikâne', t_store: 'Dükkân', t_deck: 'Konsol', g_streets: 'Sokak', g_earners: 'İşler', g_vice: 'Keyif', g_blood: 'Kan', g_family: 'Aile', g_legit: 'Yasal', k_bank: 'banka', k_respect: 'itibar', k_energy: 'enerji', k_nerve: 'cesaret', k_health: 'sağlık', k_heat: 'polis baskısı', k_stats: 'kas / kurnazlık / hız', k_gun: 'silah', k_ammo: 'mermi / kasa', k_cars: 'arabalar', k_liquid: 'likit', k_staked: 'stake edilmiş', k_intransit: 'yolda', b_heal: 'iyileş', b_checkin: 'giriş yap', b_refresh: 'yenile', b_takeme: 'beni oraya götür →', b_send: 'gönder', b_burn: 'evrakları yak', b_wholecity: '+ bütün şehir…', w_sheet: 'Dosya', w_lastword: 'Son Söz', w_panel: 'Sokak', w_feed: 'CANLI', w_city: 'ŞEHİR SOHBETİ', w_family: 'AİLE', w_sayit: 'şehre söyle…', w_famonly: 'sadece aile — iş konuşalım…', w_incity: 'şehirde', e_ghost: 'HAYALET OLARAK GİR', e_bones: 'ADINI DUYUR →' },
+    zh: { name: '中文', t_start: '从这里开始', t_profile: '我的主页', t_streets: '街头', t_garage: '车库', t_life: '人生', t_city: '城市', t_kitchen: '厨房', t_empire: '帝国', t_scores: '大买卖', t_market: '黑市', t_port: '港口', t_den: '赌场', t_speakeasy: '地下酒吧', t_boxing: '拳赛', t_races: '街头赛车', t_stable: '马厩', t_pvp: '湿活', t_loans: '高利贷', t_law: '法律', t_pen: '监狱', t_wire: '窃听', t_family: '家族', t_map: '地图', t_crew: '小队', t_discover: '找人', t_portfolio: '洗白', t_estate: '庄园', t_store: '商店', t_deck: '控制台', g_streets: '街头', g_earners: '生意', g_vice: '娱乐', g_blood: '血战', g_family: '家族', g_legit: '洗白', k_bank: '银行', k_respect: '声望', k_energy: '体力', k_nerve: '胆量', k_health: '健康', k_heat: '警方关注', k_stats: '肌肉 / 心机 / 速度', k_gun: '枪械', k_ammo: '弹药 / 货箱', k_cars: '车辆', k_liquid: '可用', k_staked: '质押中', k_intransit: '转账中', b_heal: '治疗', b_checkin: '签到', b_refresh: '刷新', b_takeme: '带我去 →', b_send: '发送', b_burn: '销毁证件', b_wholecity: '+ 整座城市…', w_sheet: '档案', w_lastword: '回执', w_panel: '街头', w_feed: '实时动态', w_city: '城市聊天', w_family: '家族', w_sayit: '向全城喊话…', w_famonly: '家族专属 — 谈正事…', w_incity: '人在城中', e_ghost: '以幽灵身份进入', e_bones: '闯出名号 →' },
+    ja: { name: '日本語', t_start: 'ここから始める', t_profile: 'マイページ', t_streets: 'ストリート', t_garage: 'ガレージ', t_life: '人生', t_city: '街', t_kitchen: 'キッチン', t_empire: '帝国', t_scores: '大仕事', t_market: '闇市場', t_port: '港', t_den: 'カジノ', t_speakeasy: 'もぐり酒場', t_boxing: 'ボクシング', t_races: 'ストリートレース', t_stable: '厩舎', t_pvp: '汚れ仕事', t_loans: '闇金', t_law: '警察', t_pen: 'ムショ', t_wire: '盗聴', t_family: 'ファミリー', t_map: '地図', t_crew: 'クルー', t_discover: '仲間を探す', t_portfolio: '堅気になる', t_estate: '屋敷', t_store: 'ストア', t_deck: 'コンソール', g_streets: '街', g_earners: 'シノギ', g_vice: '遊び', g_blood: '血', g_family: '一家', g_legit: '堅気', k_bank: '銀行', k_respect: '評判', k_energy: 'スタミナ', k_nerve: '度胸', k_health: '体力', k_heat: '警察の注目', k_stats: '腕力 / 悪知恵 / 速さ', k_gun: '銃', k_ammo: '弾薬 / 箱', k_cars: '車', k_liquid: '流動', k_staked: 'ステーク中', k_intransit: '送金中', b_heal: '治療', b_checkin: 'チェックイン', b_refresh: '更新', b_takeme: '連れて行け →', b_send: '送信', b_burn: '書類を燃やす', b_wholecity: '+ 街のすべて…', w_sheet: '身上書', w_lastword: '結果', w_panel: 'ストリート', w_feed: 'ライブ', w_city: '街のチャット', w_family: 'ファミリー', w_sayit: '街に言え…', w_famonly: '一家のみ — 仕事の話を…', w_incity: '人が街に', e_ghost: '幽霊として入る', e_bones: '名を上げろ →' },
+    ko: { name: '한국어', t_start: '여기서 시작', t_profile: '내 프로필', t_streets: '거리', t_garage: '차고', t_life: '인생', t_city: '도시', t_kitchen: '주방', t_empire: '제국', t_scores: '큰 건수', t_market: '암시장', t_port: '항구', t_den: '카지노', t_speakeasy: '밀주점', t_boxing: '복싱', t_races: '거리 레이싱', t_stable: '마구간', t_pvp: '피의 일', t_loans: '사채업자', t_law: '법', t_pen: '감옥', t_wire: '도청', t_family: '패밀리', t_map: '지도', t_crew: '크루', t_discover: '사람 찾기', t_portfolio: '합법으로', t_estate: '저택', t_store: '상점', t_deck: '콘솔', g_streets: '거리', g_earners: '사업', g_vice: '유흥', g_blood: '피', g_family: '패밀리', g_legit: '합법', k_bank: '은행', k_respect: '명성', k_energy: '기력', k_nerve: '배짱', k_health: '체력', k_heat: '경찰의 주목', k_stats: '근육 / 꾀 / 속도', k_gun: '총', k_ammo: '탄약 / 상자', k_cars: '차량', k_liquid: '유동', k_staked: '스테이킹 중', k_intransit: '이체 중', b_heal: '치료', b_checkin: '출석', b_refresh: '새로고침', b_takeme: '데려다줘 →', b_send: '보내기', b_burn: '서류 태우기', b_wholecity: '+ 도시 전체…', w_sheet: '신상 기록', w_lastword: '결과', w_panel: '거리', w_feed: '라이브', w_city: '도시 채팅', w_family: '패밀리', w_sayit: '도시에 말해…', w_famonly: '패밀리 전용 — 사업 얘기…', w_incity: '접속 중', e_ghost: '유령으로 입장', e_bones: '이름을 떨쳐라 →' },
   };
   // ENGLISH BY DEFAULT — no locale auto-detect (user feedback: the auto-switched chrome + the
   // lang= stamp invited Chrome's Google Translate to machine-translate the English game prose,
@@ -1342,6 +1342,10 @@
   }
   const el = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d.firstElementChild; };
   const fmt = (n) => Number(n).toLocaleString('en-US');
+  // Module scope on purpose: renderStart AND renderMap both print watch/prime-time hours — a copy
+  // local to one renderer is a ReferenceError in the other (The Map went blank the moment any
+  // district declared a watch hour; fixtures never declare one, which is why guards stayed green).
+  const ptHour = (h) => `${String(h).padStart(2, '0')}:00 UTC`;
   // ordinals for the blood count ("the 3rd body between your bloodlines")
   const nth = (n) => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return `the ${n}${s[(v - 20) % 10] || s[v] || s[0]}`; };
   // ── polish layer: haptics + tactile feedback (progressive enhancement — silent no-ops where unsupported;
@@ -1523,8 +1527,8 @@
     // ── you killed someone. The single heaviest thing a player can do.
     if (b.kill) {
       const lines = [];
-      if (b.looted) lines.push(`took ${$c(b.looted)} off the body`);
-      if (b.omrLooted) lines.push(`${b.omrLooted} $OMR`);
+      if (b.loot) lines.push(`took ${$c(b.loot)} off the body`);
+      if (b.omrLoot) lines.push(`${b.omrLoot} $OMR`);
       if (b.empireLoot) lines.push(`seized their ${b.empireLoot.name}`);
       if (b.bounty) lines.push(`contract paid ${$c(b.bounty)}`);
       if (b.vendetta) lines.push('the vendetta is settled');
@@ -1785,7 +1789,6 @@
     // v3 step 7 — the rarity NFTs
     extracted: "That one's on-chain — a trophy now, not a working car.",
     their_extracted: "Theirs is on-chain — it isn't in the game any more.",
-    maxed: "There's nothing above that tier.",
     no_code: "type their street name first",
     already_referred: "your referrer is already on record",
     unknown_code: "nobody goes by that name — check the spelling with them",
@@ -1815,6 +1818,8 @@
     listed: "that car's on the block — pull the listing first", bad_path: "pick a real career — six paths are on the board",
     self: "you can't do that to yourself", family: "omertà — you can't move on your own family", dry: "the pool's dry — check back after the next buyback",
     nothing: "nothing to collect", no_contracts: "no contracts on your head", maxed: "you're already at the cap", spent: "already used up",
+    rate_limited: "easy — you're moving too fast. Give it a second.", auth: "your session expired — sign in again",
+    token_revoked: "that session was signed out — sign in again",
     once: "one shot only — you've taken it", not_due: "that isn't due yet", too_soon: "not yet — the clock's still running", cooldown: "still on cooldown",
     // STREET LIFE — `taken`/`capped`/`short` stay GENERIC (gangs/wires/exchange reuse the codes;
     // every server throw carries its own message which wins over this fallback anyway)
@@ -1891,7 +1896,7 @@
       return `\u{1F4DC} the family runs as ${body.charter.name} — ${body.charter.good}, but ${body.charter.bad}${body.free ? ' (free — the first is on the house)' : ` (${body.cost} $OMR)`}`;
     // THE SEALED BID — a stake is secret, so the toast reports YOUR number and nobody else's.
     if (body && body.staked !== undefined && body.families !== undefined)
-      return `\u{1F576} $${fmt(body.staked)} on ${body.district}${body.defending ? ' \u2014 defending' : ''} \u2014 ${body.families} in, ${mins(body.resolvesSeconds)} to go`;
+      return `\u{1F576} $${fmt(body.staked)} on ${body.district}${body.defending ? ' \u2014 defending' : ''} \u2014 ${body.families} in, ${minsTxt(body.resolvesSeconds)} to go`;
     // THE OPERATION SLOTS — retiring a racket. Leads with the freed seat, which is the whole point.
     if (body && body.slotsUsed !== undefined && body.slots !== undefined && body.racket)
       return `\u{1F91D} you're out of the ${String(body.racket).replace(/_/g, ' ')}${body.back ? ` — $${fmt(body.back)} back` : ''} — ${body.slotsUsed} of ${body.slots} seats running`;
@@ -1913,7 +1918,11 @@
     if (body.rerolled && body.stats) bits.push(`new build rolled — muscle ${body.stats.muscle} / cunning ${body.stats.cunning} / speed ${body.stats.speed}`);
     if (body.proposedTo) bits.push(`🕊 you offered a sit-down to the ${body.proposedTo} bloodline`);
     if (body.peaceWith) bits.push(`🕊 the feud with ${body.peaceWith} is BURIED — peace`);
-    if (body.success === true) bits.push(`${body.approach === 'loud' ? '🔊 loud job' : body.approach === 'quiet' ? '🤫 quiet job' : 'clean job'} — $${fmt(body.take || 0)}${body.rep ? `, +${body.rep} respect` : ''}${body.crates ? `, ${body.crates} crate${body.crates > 1 ? 's' : ''}` : ''}${body.victim ? ` · the mark: ${body.victim}${body.markTook ? ` (took $${fmt(body.markTook)} off them)` : ''}` : ''}`);
+    if (body.success === true && body.take !== undefined) bits.push(`${body.approach === 'loud' ? '🔊 loud job' : body.approach === 'quiet' ? '🤫 quiet job' : 'clean job'} — $${fmt(body.take || 0)}${body.rep ? `, +${body.rep} respect` : ''}${body.crates ? `, ${body.crates} crate${body.crates > 1 ? 's' : ''}` : ''}${body.victim ? ` · the mark: ${body.victim}${body.markTook ? ` (took $${fmt(body.markTook)} off them)` : ''}` : ''}`);
+    // a clean boost / a solo cartel raid — each carries success:true with no `take`, so each
+    // needs its own line or the generic crime bit reads "clean job — $0" over a real result
+    if (body.success === true && body.car) bits.push(`boosted a${body.car.rarity && body.car.rarity !== 'common' ? ` ${body.car.rarity}` : ''} ride — she's in the garage${body.car.dmg ? ` (took some dents: ${body.car.dmg} dmg)` : ''}`);
+    if (body.success === true && body.npc && body.loot !== undefined && body.family === undefined) bits.push(`raided the ${body.npc} — took $${fmt(body.loot)}${body.routBonus ? ` + a $${fmt(body.routBonus)} rout bonus` : ''}${body.routed ? ' · ROUTED' : ''}`);
     // the §7.8 bust — success frees them and pays; a miss is the guards taking YOU (falls through
     // to the generic BUSTED line below, which is exactly what happened)
     if (body.busts !== undefined && body.success) bits.push(`🔓 sprung them from lockup — +$${fmt(body.reward)} (${body.busts} lifetime bust${body.busts === 1 ? '' : 's'})`);
@@ -1929,10 +1938,10 @@
     // renders here, not through ERRMAP.
     if (body.call === true && body.voided) bits.push(`📞 ${body.message || "the job's off — they got turned over since they called."}`);
     else if (body.call === true && body.from) bits.push(body.kind === 'freight'
-      ? `📞 delivered ${fmt(body.qty)} ${body.good} to ${body.from} — they paid $${fmt(body.pay)}`
+      ? `📞 delivered ${fmt(body.qty)} ${goodName(body.good)} to ${body.from} — they paid $${fmt(body.pay)}`
       : `📞 paid ${body.from} a visit — worth $${fmt(body.pay)}`);
-    if (body.favor === 'posted') bits.push(`🤝 the word's out — ${fmt(body.qty)} ${body.good} wanted at ${body.district}, $${fmt(body.pay)} held up front`);
-    if (body.favor === 'ran') bits.push(`🤝 ran the favor — ${fmt(body.qty)} ${body.good} delivered, +$${fmt(body.net)} (house took $${fmt(body.take)})`);
+    if (body.favor === 'posted') bits.push(`🤝 the word's out — ${fmt(body.qty)} ${goodName(body.good)} wanted at ${body.district}, $${fmt(body.pay)} held up front`);
+    if (body.favor === 'ran') bits.push(`🤝 ran the favor — ${fmt(body.qty)} ${goodName(body.good)} delivered, +$${fmt(body.net)} (house took $${fmt(body.take)})`);
     if (body.favor === 'pulled') bits.push(`🤝 pulled it back — $${fmt(body.refund)} returned`);
     // THE DISPATCH — the email digest opt-in response is {available, email, optin}
     if ('available' in body && 'optin' in body && 'email' in body) bits.push(body.optin ? "📬 digest on — we'll email you what you missed while you're away" : '📭 digest off');
@@ -2043,7 +2052,7 @@
     // `pay` is the generic "what it paid" field, but a FAVOR's pay is the poster's gross — the
     // runner nets it minus the house cut, and the favor branch above already says so. Appending the
     // gross here would report a bigger number than the pocket actually moved.
-    if (body.pay && !body.favor) bits.push(`+$${fmt(body.pay)}${body.streak ? ` (day ${body.streak})` : ''}`);
+    if (body.pay && !body.favor && !body.call && !body.contact) bits.push(`+$${fmt(body.pay)}${body.streak ? ` (day ${body.streak})` : ''}`);
     if (body.won !== undefined && body.settled) bits.push(body.won > 0 ? `settled — +$${fmt(body.won)}` : 'settled — nothing hit');
     if (body.qty && body.quality) bits.push(`pulled ${body.qty} units at q${body.quality}`);
     if (body.fire) bits.push('THE BATCH BURNED — you got out with your skin');
@@ -2070,11 +2079,11 @@
       body.outcome === 'bust' ? `bust at ${body.playerTotal} — −$${fmt(Math.abs(body.net))}` :
       body.outcome === 'push' ? "a push — your bet's returned" :
       `${body.playerTotal} vs the dealer's ${body.dealerTotal} — ${body.net > 0 ? `+$${fmt(body.net)}` : body.net < 0 ? `−$${fmt(Math.abs(body.net))}` : 'even'}`);
-    if (body.game === 'track') bits.push(`down on ${body.horse} (${body.odds}:1) in the ${body.race} — $${fmt(body.stake)} to win`);
+    if (body.game === 'track') bits.push(`down on ${body.horse} at ${body.odds}× in the ${body.race} — pays $${fmt(Math.round(body.stake * body.odds))} if it comes in`);
     if (body.racer && body.post !== undefined && body.fee !== undefined && body.race) bits.push(`${body.racer} is in today's ${body.race} — post ${body.post} at ${body.odds}:1 (the town's betting on your animal now)`);
     if (body.futurity && body.racer && body.fee !== undefined && body.form !== undefined) bits.push(`${body.racer} (form ${body.form}) is nominated to the futurity — the whole town's betting on the field`);
     if (body.futurity && body.on && body.amount !== undefined) bits.push(`$${fmt(body.amount)} on ${body.on} in the futurity`);
-    if (body.spent !== undefined && body.garrison !== undefined && body.name && body.npc) bits.push(`reinforced ${body.name}'s garrison to $${fmt(body.garrison)} (−$${fmt(body.spent)} from the treasury)`);
+    if (body.cost !== undefined && body.garrison !== undefined && body.name && body.npc) bits.push(`reinforced ${body.name}'s garrison to $${fmt(body.garrison)} (−$${fmt(body.cost)} from the treasury)`);
     if (body.settled !== undefined && Array.isArray(body.results) && body.results[0]?.winner !== undefined && body.results[0]?.race) bits.push(
       body.won > 0 ? `it came in — +$${fmt(body.won)} at the window` : `the tickets tore up — better luck at the next post`);
     if (body.game === 'tourney') bits.push(`seated at the big table — $${fmt(body.buyin)} in, pool $${fmt(body.pool)} (${body.entrants} runner${body.entrants === 1 ? '' : 's'})`);
@@ -2112,14 +2121,19 @@
     if (body.principal !== undefined && body.owed !== undefined) bits.push(`took the loan — $${fmt(body.principal)} now, owe $${fmt(body.owed)}${body.collateral ? ' (car pledged)' : ''}`);
     if (body.guard !== undefined && body.price !== undefined) bits.push(`hired protection — $${fmt(body.price)} up front`);
     if (body.hired === true && body.fee !== undefined) bits.push(`hired a hand for the ${body.role} seat — $${fmt(body.fee)}. A body fills the crew, but takes a cut and earns you nothing extra.`);
-    if (body.family !== undefined && body.success !== undefined && body.loot !== undefined) {
+    if (body.family !== undefined && body.success !== undefined && (body.loot !== undefined || body.hospSeconds !== undefined)) {
       if (body.success) bits.push(`hit ${body.family} — took $${fmt(body.loot)} off their war chest${body.conquered ? '. ROUTED — your family now holds them as a vassal.' : ''}${body.warWon ? ' \u{2694}\u{FE0F} CAMPAIGN WON — a war-chief trophy for the family.' : ''}${body.countered ? ' Their guns caught you leaving — you\'re in the hospital.' : ''}`);
       else bits.push(`${body.family} repelled the raid — their guns put you in the hospital.`);
     }
-    if (body.winScore !== undefined && body.endsSeconds !== undefined) bits.push(`\u{2694}\u{FE0F} war declared on ${body.family} — land ${body.winScore} raids inside ${mins(body.endsSeconds)} to win the campaign`);
+    if (body.winScore !== undefined && body.endsSeconds !== undefined) bits.push(`\u{2694}\u{FE0F} war declared on ${body.family} — land ${body.winScore} raids inside ${minsTxt(body.endsSeconds)} to win the campaign`);
     if (body.tributes !== undefined && body.collected !== undefined) { if (body.collected > 0) bits.push(`collected $${fmt(body.collected)} in vassal tribute → the treasury.`);
     }
     if (body.bid !== undefined && body.id !== undefined && body.name === undefined && !body.youLead) bits.push(`bid $${fmt(body.bid)} placed${body.extended ? ' (clock reset)' : ''}`);
+    // a demanded RICO trial — the conviction gets the cinematic; the acquittal deserves a line too
+    if (body.convicted === false && body.forfeited !== undefined) bits.push('ACQUITTED — the case fell apart. Walk out clean.');
+    if (body.convicted === true && body.forfeited !== undefined) bits.push(`CONVICTED — they seized $${fmt(body.forfeited)}${body.jailSeconds ? ` and you're in for ${minsTxt(body.jailSeconds)}` : ''}`);
+    // the solo Score — {take, rep} with no success flag
+    if (body.take !== undefined && body.rep !== undefined && !('success' in body) && !bits.length) bits.push(`THE SCORE — $${fmt(body.take)}, +${body.rep} respect`);
     // the repair is a GAMBLE (a botched roll charges you and doesn't fix it) — say so plainly so a
     // failed repair reads as "the shop botched it," never as a silent charge that looks like fraud
     if (body.fixed === true && body.cost !== undefined) bits.push(`the shop fixed her up — good as new, $${fmt(body.cost)}`);
@@ -2227,7 +2241,7 @@
     if (!body || typeof body !== 'object') return null;
     if (body.kill) return 'just put a rival in the river';
     if (body.escaped === true) return 'went over the wall — broke out of the pen';
-    if (body.won === true && body.purse !== undefined) return 'my fighter took the purse';
+    if (body.win === true && body.purse !== undefined) return 'took the purse with my fighter';
     if (body.won === true && body.feePaid !== undefined) return "stood over a rival's whole operation";
     // MANUFACTURED SHARE MOMENTS — the big status wins auto-offer a bespoke one-tap brag (each keyed on
     // a clean, unambiguous field in that win's own response; every one carries the ?ref referral link)
@@ -2235,7 +2249,7 @@
     if (body.made === true && body.omr !== undefined) return "got made — I'm a Made Man now";
     if (body.completed === true && body.monument) return `helped raise ${body.monument} — it stands over the city forever`;
     if (body.capstone && body.tier) return `cleared the rank of ${body.tier} — moving up in the outfit`;
-    if (body.reward !== undefined && body.crew === 'objective_claimed') return "my crew cracked the week's job together";
+    if (body.reward !== undefined && body.crew === 'objective_claimed') return "cracked the week's job with my crew";
     if (body.capstone) return 'made my bones — first week done';
     return null;
   }
@@ -3506,7 +3520,7 @@
     pen: 'Lockup is a place, not a timeout: work the yard, buy protection, bribe the guard, join a crew — or go over the wall and live wanted.',
     wire: 'Information is a weapon: tap rivals to see what they hold, sweep your own lines, buy the dirt. Everything here is paid in $OMR — knowing is never free.',
     family: 'Nobody survives alone: a family means turf, a shared treasury, wars, territory rackets, and a seat at the Commission. Join one, or found your own.',
-    portfolio: 'Going legit: the stake ladder, the redemption window, the backed vault — and the on-chain way out. This is where street money becomes real.',
+    portfolio: 'Going legit: the stake ladder, the redemption window, the backed vault — and the on-chain way out. This is where your earned $OMR becomes real.',
     estate: 'The compound: a $OMR monument to your bloodline — tiers, wings, staff, galas, the auction block. Pure status, survives death, and status is the point.',
     store: 'Real-money support: revives, passes, cosmetics — never power. A skilled free player still tops every board; spending here funds the prize pools.',
     life: 'Who you are and who you know: skills, the Trades, your Path, and the six fixtures of the Underworld — earn their trust and the whole city gets cheaper.',
@@ -3930,7 +3944,7 @@
         <button class="act" id="com-vote">cast the family's vote</button>
         <button class="act" id="com-propose">table a motion ($${fmt(com.proposalDeposit || 100000)} deposit)</button>
         <div style="margin-top:6px"><select id="com-ticker">${((tkb && tkb.tickers) || []).map((x) => `<option value="${x}">${x}</option>`).join('')}</select>
-        <button class="act" id="com-ticker-cast">vote the day's BUY (the treasury's stock)</button>
+        <button class="act" id="com-ticker-cast">vote the day's ticker — the record the treasury's buy desk follows when it opens</button>
         <span class="d" style="color:var(--dim);font-size:12px">today's ballot${tkb && tkb.leading ? ` — leading: <b>${tkb.leading}</b>` : ' — no votes yet'}${tkb && tkb.lastResult ? ` · yesterday: ${tkb.lastResult.ticker}` : ''}</span></div>
         ${(com.seats || []).indexOf(mySeat) === 0 ? `<button class="act" data-do="POST /v1/commission/veto">VETO (head of the table)</button>` : ''}
         ${(com.seats || []).indexOf(mySeat) > 0 && com.veto ? `<button class="act" data-do="POST /v1/commission/override">move to OVERRIDE the veto</button>` : ''}</div>
@@ -4083,7 +4097,7 @@
     // lever. Uses the frictionless referral share link (/u/<name>?ref=<name>) the funnel already runs on.
     const bo = b.bringOne || {};
     const bringOneCard = `<div class="card" style="margin-top:6px;border-color:var(--gold)"><span class="t" style="color:var(--gold)">Bring one in</span> <span class="d" style="font-size:11px">— the crew's first-blood bonus</span>
-      <div class="d" style="margin-top:4px">Get a real friend into the city and run with them. When they get established${bo.RECRUIT_CASH ? ` — level 8, 40 jobs, $25k to their name — <b>you both collect</b>: <span class="chip good">$${fmt(bo.RECRUITER_CASH)}</span> to you, <span class="chip good">$${fmt(bo.RECRUIT_CASH)}</span> to them` : ''}.</div>
+      <div class="d" style="margin-top:4px">Get a real friend into the city and run with them. When they get established${bo.RECRUIT_CASH ? ` — level 8, 40 jobs, three days checked in, $25k to their name — <b>you both collect</b>: <span class="chip good">$${fmt(bo.RECRUITER_CASH)}</span> to you, <span class="chip good">$${fmt(bo.RECRUIT_CASH)}</span> to them` : ''}.</div>
       <div class="row" style="margin-top:6px">
         <button class="act" id="bring-one-x" style="border-color:var(--gold)">📣 send them the invite ↗</button>
         <button class="act" id="bring-one-copy">copy your link</button></div>
@@ -4555,7 +4569,6 @@
     // the SAME hour. Live → a bright "answer the call" with the turnout count (the co-presence signal)
     // and a countdown to close; else → tonight's window at a fixed UTC hour + what's on. The mechanic +
     // mode rotate (value pays turnout-scaled cash; honor pays a rotating badge). `pt` is the board.
-    const ptHour = (h) => `${String(h).padStart(2, '0')}:00 UTC`;
     const ptHappy = pt.mechanic === 'happyhour', ptSiege = pt.mechanic === 'siege';
     const ptName = ptHappy ? 'Happy Hour' : ptSiege ? 'The Siege' : 'Prime Time';
     const ptMechLabel = (f) => f.mechanic === 'happyhour' ? 'happy hour' : f.mechanic === 'siege' ? 'the siege' : 'the call';
@@ -4757,7 +4770,7 @@
           <div class="card"><img class="ico wide" loading="lazy" alt="" src="/art/interior-streets.jpg"><span class="t">The Streets</span>
             <div class="d">Crime runs on <b>nerve</b>; the gym on <b>energy</b>. Every job: case it (quiet), do it, or go loud (bigger, hotter).</div></div>
           <div class="card"><img class="ico wide" loading="lazy" alt="" src="/art/interior-legit.jpg"><span class="t">Your Money</span>
-            <div class="d">Pocket cash gets jumped — <b>bank it</b> (deposits clear after a couple hours). $OMR is the token; staking it halves what a killer takes, but never makes it safe.</div></div>
+            <div class="d">Pocket cash gets jumped — <b>bank it</b> (deposits clear after a couple hours). $OMR is the token; staking it cuts what a killer takes (20% staked vs 50% loose), but never makes it safe.</div></div>
           <div class="card"><img class="ico wide" loading="lazy" alt="" src="/art/interior-trade.jpg"><span class="t">The Freight Game</span>
             <div class="d">Every district posts its own goods prices daily. <b>Buy cheap, haul, sell rich</b> — the Trade Goods drawer on the Streets shows each good's spread; convoys and boats move it in bulk.</div></div>
           <div class="card"><img class="ico wide" loading="lazy" alt="" src="/art/card-whacked.jpg"><span class="t">Death Is Real</span>
@@ -4777,7 +4790,7 @@
       ${!ob.allDone ? `<h2 style="margin-top:14px">The City Standing <span class="d" style="font-size:11px">— where you'll sit once you've made your bones</span></h2>
       <div id="city-standing" class="d" style="color:var(--dim);font-size:12.5px;margin-bottom:12px">loading…</div>` : ''}
 
-      <h2 style="margin-top:14px">Spread the Word <span class="d" style="font-size:11px">— daily: share OMERTÀ for petty in-game cash. Your code is your name; a recruit who sticks earns you referral rewards (in-game cash + $OMR)</span></h2>
+      <h2 style="margin-top:14px">Spread the Word <span class="d" style="font-size:11px">— daily: share OMERTÀ for petty in-game cash. Your code is your name; a recruit who sticks earns you referral rewards (in-game cash) — and a crew that plays makes you earn respect faster</span></h2>
       ${!sw.enabled ? '<div class="d" style="color:var(--dim);font-size:12.5px;margin-bottom:4px">Reward payouts go live soon — but sharing still brings in new blood (and referral cash) right now.</div>' : ''}
       <div class="grid">${(sw.tasks || []).map((s) => `
         <div class="card" ${s.state !== 'claimed' && sw.enabled ? 'style="border-color:var(--neon)"' : ''}><span class="t">${s.state === 'claimed' ? '✓ ' : ''}${s.name}</span>
@@ -4792,7 +4805,7 @@
             : `<button class="act" data-swclaim="${s.id}" disabled>standing…</button>`}</div>`).join('')}</div>
       ${sw.allBonus ? `<div class="d" style="color:var(--dim);font-size:12.5px;margin-top:4px">Do all three in a day for a +$${fmt(sw.allBonus)} bonus. A share pays after it stands ${sw.matureHours || 4} hours — post-and-delete pays nothing.</div>` : ''}
 
-      <h2 style="margin-top:14px">The Recruiters <span class="d" style="font-size:11px">— the hall of fame for bringing in made men. Every recruit who sticks earns you referral rewards (in-game cash + $OMR) + milestone bonuses</span></h2>
+      <h2 style="margin-top:14px">The Recruiters <span class="d" style="font-size:11px">— the hall of fame for bringing in made men. Every recruit who sticks earns you referral rewards (in-game cash) + milestone bonuses</span></h2>
       <div id="recruit-lb" class="d" style="color:var(--dim);font-size:12.5px">loading…</div>
 
       <h2 style="margin-top:14px">Missions <span class="d" style="font-size:11px">— the family's story, one job at a time (cash + respect, sometimes $OMR &amp; a title)</span></h2>
@@ -5136,13 +5149,13 @@
       jump: ['Jump a player: Wet Work → The Streets roster → jump. A win counts.', 'pvp'],
       dice: ['Win back-room dice at the Den — fade a player taking bets (or list your own limit and let them come to you).', 'den'],
       tribute: ['Pay cash tribute to your family (The Family → tribute). You need a family first.', 'family'],
-      craft: ['Craft an item at the Workshop — The Empire.', 'empire'],
-      trade: ['Buy a lot on the cb/ammo Exchange (the raw deck → Exchange, or the Garage armory).', 'garage'],
+      craft: ['Craft an item at the Workshop — The Garage.', 'garage'],
+      trade: ['Buy a lot on the cb/ammo Exchange (The Garage → the armory / Exchange).', 'garage'],
       goods: ['Buy or sell trade goods — the Trade Goods drawer below.', null],
       melt: ['Melt a car down for parts in The Garage.', 'garage'],
       cook: ['Cook a batch at the Kitchen.', 'kitchen'],
       deal: ['Deal product on the corner at the Kitchen.', 'kitchen'],
-      heist: ['Pull the Daily Score (the card right here) — crew heists count too.', null],
+      heist: ['Pull the Daily Score (the card right here — the solo Score is what counts).', null],
       bust: ['Spring ANYONE from lockup — Wet Work → The Streets roster: anyone with a LOCKUP chip shows a "bust them out" button. A success frees them and pays you; best odds near the end of a stretch.', 'pvp'],
     };
     const dailyCards = (daily.jobs || []).map((j) => {
@@ -5364,7 +5377,7 @@
       <h2 style="margin-top:12px">Trade Winds <span class="d" style="font-size:11px">— today's goods prices by district (the arbitrage map)</span></h2>
       ${cheap && rich ? `<div class="card"><span class="t">📦 the play today</span>
         <div class="d">goods run <b>cheapest in ${cheap[0]}</b> (×${cheap[1].toFixed(2)}) and <b>richest in ${rich[0]}</b> (×${rich[1].toFixed(2)})
-        — a ~${spreadPct}% spread. Buy low there, haul, sell high here. Prices hold until midnight.</div></div>` : ''}
+        — a ~${spreadPct}% spread. Buy where it's cheap, haul, sell where it's rich. Prices hold until midnight.</div></div>` : ''}
       <div class="grid">${shocks.map(([d, x]) =>
         `<div class="card distcard"${DISTRICT_ART[d] ? ` style="--art:url(/art/${DISTRICT_ART[d]}.jpg)"` : ''}><span class="t">${d}</span><div class="d">${x < 0.97 ? '<span style="color:var(--ok)">cheap — buy here</span>' : x > 1.03 ? '<span style="color:var(--gold, #d4af37)">rich — sell here</span>' : 'fair prices'} (×${x.toFixed(2)})</div></div>`).join('')}</div>
       <h2 style="margin-top:12px">The Forecast <span class="d" style="font-size:11px">— the next days are knowable. Plan around them.</span></h2>
@@ -5372,7 +5385,7 @@
         const dd = f.day - c.day;
         return `<div class="card"><span class="t">${dd <= 0 ? 'today' : dd === 1 ? 'tomorrow' : `in ${dd} days`}</span><div class="d">${f.city || ''}<br><span style="color:var(--dim)">law: ${f.law || ''}</span></div></div>`;
       }).join('')}</div>
-      <h2 style="margin-top:12px">The Cartels <span class="d" style="font-size:11px">— NPC outfits the whole city grinds down together. The loop: RAID them for cash + ammo → ROUT one (drain its strength) → plant your family's flag → the conquered outfit pays your treasury TRIBUTE${w.phase === 'night' ? ' · night: their guard is down' : ''}</span></h2>
+      <h2 style="margin-top:12px">The Cartels <span class="d" style="font-size:11px">— NPC outfits the whole city grinds down together. The loop: RAID them for cash (costs energy + ammo) → ROUT one (drain its strength) → plant your family's flag → the conquered outfit pays your treasury TRIBUTE${w.phase === 'night' ? ' · night: their guard is down' : ''}</span></h2>
       ${w.warEffort ? `<div class="card" style="border-color:var(--neon)"><span class="t">⚔️ War Effort: ${w.warEffort.rank}</span> <span class="d">$${fmt(w.warEffort.damage)} lifetime cartel damage — <a href="#" id="w-lb">the leaderboard →</a> · <a href="#" id="w-flb">the frontier →</a></span></div>` : ''}
       ${w.uprising ? `<div class="card" style="border-color:var(--blood)"><span class="t">🔥 UPRISING — ${w.uprising.name} is in revolt</span> <span class="d">they've dug in (raiding them is harder today) and pay no tribute. If a family holds their outpost and hasn't reinforced the garrison, they'll break free at the reckoning — <b>reinforce or lose the turf.</b></span></div>` : ''}
       ${w.frontier && w.frontier.held ? `<div class="card"><span class="t">🏴 The Frontier — your family holds ${w.frontier.held} outpost${w.frontier.held === 1 ? '' : 's'}</span>
@@ -5546,8 +5559,8 @@
            <input id="trk-runner" placeholder="post #" size="5"> <input id="trk-amt" placeholder="stake" size="8" value="500">
            <button class="act" id="trk-go">bet the race</button>
            <button class="act" data-do="POST /v1/casino/track/claim">claim tickets</button></div>
-           <div style="margin-top:4px" class="d" style="font-size:11px">★ = a player's racer. Run your own (fee $${fmt(tk.entryFee || 5000)}, ${tk.playerSlots || 2} owner posts a race): <input id="trk-racer" placeholder="racer id" size="14"> <button class="act" id="trk-enter">run in the card</button></div>`; })()}
-      <h2 style="margin-top:14px">Blackjack <span class="d" style="font-size:11px">(a natural pays 3:2 — dealer stands on 17)</span></h2>
+           <div class="d" style="margin-top:4px;font-size:11px">★ = a player's racer. Run your own (fee $${fmt(tk.entryFee || 5000)}, ${tk.playerSlots || 2} owner posts per race): <input id="trk-racer" placeholder="racer id" size="14"> <button class="act" id="trk-enter">run in the card</button></div>`; })()}
+      <h2 style="margin-top:14px">Blackjack <span class="d" style="font-size:11px">(a natural pays 3:2 — dealer hits soft 17)</span></h2>
       ${(() => { const hd = den.blackjack?.hand; const rk = (c) => c === 1 ? 'A' : c === 11 ? 'J' : c === 12 ? 'Q' : c === 13 ? 'K' : String(c);
         // a hand rendered as pasteboards, not as the letters "A 7 K" in a <b> — and the dealer's
         // hole card shown face-DOWN, which is the whole tension of the game (the server never
@@ -6264,9 +6277,9 @@
 
       <h2 style="margin-top:12px">Dirty Laundry <span class="d" style="font-size:11px">(dig up REAL dirt — hold it, name a price, or hand it to the Bureau)</span></h2>
       <div class="card">
-        <div class="d">DIG through a mark's life for ${SEC.digOmr || 10} $OMR (burns win or lose — cooked books beat the shovel). What you find is LEVERAGE: extort hush money (they pay or it blows in ${SEC.windowHours || 24}h) or EXPOSE it — their federal file thickens and the street hears.</div>
+        <div class="d">DIG through a mark's life for ${SEC.digOmr || 60} $OMR (burns win or lose — cooked books beat the shovel). What you find is LEVERAGE: extort hush money (they pay or it blows in ${SEC.windowHours || 24}h) or EXPOSE it — their federal file thickens and the street hears.</div>
         <select id="sec-dig-target"></select>
-        <button class="act" id="sec-dig-go">dig up dirt (${SEC.digOmr || 10} $OMR)</button>
+        <button class="act" id="sec-dig-go">dig up dirt (${SEC.digOmr || 60} $OMR)</button>
       </div>
       ${(SEC.held || []).length ? `<div class="grid" style="margin-top:6px">${SEC.held.map((s) => `
         <div class="card"><span class="t">🗂 ${s.kindName}</span> <span class="chip">on ${s.on}</span>
@@ -6373,14 +6386,15 @@
         revive, a subscription, or a badge, so a skilled free player still tops the boards. Your spend
         funds the token buyback + the backed prize pools.
         <div style="margin-top:6px">Two ways to pay: <b>real ETH</b>, or <b>earned $OMR</b> through PLEX. Same
-        goods either way. Getting <b>made</b> is the one exception — that has a single price, in ETH, because
-        it's what unlocks taking money off the chain.</div>
-        <div style="margin-top:6px;color:var(--dim);font-size:11px">Where the $OMR comes from, honestly: nothing
-        in the city mints it. You take it off somebody (a kill strips a fifth to a half of what they're
-        carrying), you buy it at the desk, or your family hands it to you. Grinding jobs won't get you here.</div></div></div>
+        goods either way. <b>Minting your identity</b> is the one exception — that has a single price, in ETH,
+        because it's what unlocks taking money off the chain.</div>
+        <div style="margin-top:6px;color:var(--dim);font-size:11px">Where the $OMR comes from, honestly: next to
+        nothing in the city mints it — the mission ladder pays a bit over a thousand across a whole career, a
+        fraction of anything on this shelf. You take it off somebody (a kill strips a fifth to a half of what
+        they're carrying), you buy it at the desk, or your family hands it to you. Grinding jobs won't get you here.</div></div></div>
       <h2 style="margin-top:12px">What You Hold</h2>
       <div class="grid">
-        <div class="card"><span class="t">${o.minted ? 'MADE' : 'Free Trial'}</span><div class="d">${o.minted ? 'a made man — on-chain extraction unlocked' : `${o.mintCredits} mint credit(s)${o.mintCredits ? ' — spend on the chain to get made' : ''}`}</div></div>
+        <div class="card"><span class="t">${o.minted ? 'MINTED' : 'Free Trial'}</span><div class="d">${o.minted ? 'identity minted — on-chain extraction unlocked' : `${o.mintCredits} mint credit(s)${o.mintCredits ? ' — spend it to mint your identity' : ''}`}</div></div>
         <div class="card"><span class="t">Revives</span><div class="d">${o.respawnTokens} pre-paid revive token(s)</div></div>
         <div class="card"><span class="t">${o.patron ? '★ PATRON' : 'Patron'}</span><div class="d">${o.patron ? 'the permanent patron badge is yours' : 'not a patron yet'}</div></div>
         ${o.patronStanding ? `<div class="card"><span class="t">${o.patronStanding.tierName}</span> <span class="chip good">${eth(o.patronStanding.spentEth)} contributed</span>
@@ -6397,7 +6411,7 @@
                whole shelf read as unbuyable. A price with no way to pay it is the withheld-terms class. -->
           ${p.plexOmr ? `<button class="act" data-plex="${p.sku}" ${myOmr >= p.plexOmr ? '' : `disabled title="you hold ${fmt(Math.floor(myOmr))} $OMR"`}>${myOmr >= p.plexOmr ? `pay ${fmt(Math.ceil(p.plexOmr))} $OMR` : `needs ${fmt(Math.ceil(p.plexOmr - myOmr))} more $OMR`}</button>` : ''}
           <button class="act" disabled title="the on-chain checkout is not live yet">ETH checkout opens at launch</button></div>`).join('')}</div>
-      <div class="card" style="margin-top:8px"><div class="d">${S.note} ${me.wallet ? '' : '<b>Link a wallet first</b> (Everything Else → Chain) — a purchase made before linking is credited the moment you link.'}</div></div>
+      <div class="card" style="margin-top:8px"><div class="d">${S.note} ${me.wallet ? '' : '<b>Link a wallet first</b> (Going Legit → Your Wallet) — a purchase made before linking is credited the moment you link.'}</div></div>
       <div class="d" style="font-size:11px;margin-top:6px">Revenue split — founder ${S.split.founder / 100}% · token buyback ${S.split.buyback / 100}% · treasury ${S.split.rwa / 100}%.</div>
       <div id="pass-slot"></div>
       <h2 style="margin-top:14px">The Benefactors <span class="d" style="font-size:11px">(the family's biggest patrons — a status board, no power)</span> <a href="#" id="patron-lb" style="font-size:12px">🏛 the league →</a></h2>
@@ -6459,7 +6473,7 @@
       <div class="d" style="margin-bottom:6px">Every car and boat carries a rarity, rolled when you EARN it. Pay $OMR to buy
         exactly the next tier — a known item at a known price, never a gamble. Take one ON-CHAIN and it becomes an NFT in your
         own wallet: <b>safe</b> (it survives your death, nobody can steal or win it) but <b>inert</b> (it never races, hauls,
-        melts or fences again). Use it or own it.
+        melts or fences again). Use it or own it. <span class="chip cold">the on-chain rail opens at launch</span>
         ${nft.minted ? '' : ' <span class="chip cold">you must be MADE to take anything on-chain</span>'}</div>
       ${(nft.items || []).length ? `<div class="grid">${nft.items.map((i) => `
         <div class="card"><span class="t">${esc(i.name)}</span>
@@ -6597,7 +6611,7 @@
           ${b.maxed ? `<div class="d" style="margin-top:4px">specialize (${b.specOmr} $OMR): <button class="act" data-bizspec="${b.id}:fortress">${(rules?.empire?.specs?.fortress?.name) || 'The Fortress'}</button> <button class="act" data-bizspec="${b.id}:accountant">${(rules?.empire?.specs?.accountant?.name) || 'The Accountant'}</button> <button class="act" data-bizspec="${b.id}:fixer">${(rules?.empire?.specs?.fixer?.name) || 'The Fixer'}</button> <span style="color:var(--dim);font-size:11px">(takeover defence · half the Bureau heat · half the fine + cools 2×)</span></div>` : '<div class="d" style="font-size:11px;color:var(--dim)">max the tier to specialize</div>'}</div>`).join('')}</div>`
         : '<span class="d" style="color:var(--dim)">no fronts yet — the catalog is below</span>'}
       <div class="card" style="margin-top:6px"><span class="t">Hostile Takeover</span>
-        <div class="d">force a rival's front to sell to you (${fmt(rules?.empire?.takeover?.fee || 0)} fee, burns win or lose; lvl ${rules?.empire?.takeover?.minLevel || 20}+, you can't already run that kind)</div>
+        <div class="d">force a rival's front to sell to you ($${fmt(rules?.empire?.takeover?.fee || 0)} fee, burns win or lose; lvl ${rules?.empire?.takeover?.minLevel || 20}+, you can't already run that kind)</div>
         <input id="biz-takeover-id" placeholder="rival front id" size="24"> <button class="act" id="biz-takeover-go"${(me.level || 0) >= (rules?.empire?.takeover?.minLevel || 20) ? '' : ' disabled'}>${(me.level || 0) >= (rules?.empire?.takeover?.minLevel || 20) ? '' : `🔒 lvl ${rules?.empire?.takeover?.minLevel || 20}+ — `}muscle in</button></div>
 
       <h2 style="margin-top:12px">The Catalog <span class="d" style="font-size:11px">(passive income — but a front wants an owner who shows up)</span></h2>
@@ -6621,7 +6635,7 @@
             ${o.nextAt ? `The next seat opens at <b>level ${o.nextAt}</b>` : `That's all ${o.max} seats — the most anyone runs`}.
             Wheels and Property don't take a seat.</div></div>`; })()}
 
-      <h2 style="margin-top:14px">Rackets <span class="d" style="font-size:11px">— buy once, drip cash forever (banks to the treasury via the tithe on melt)</span></h2>
+      <h2 style="margin-top:14px">Rackets <span class="d" style="font-size:11px">— buy once, drip pocket cash forever (each takes an operation seat)</span></h2>
       <div class="grid">${(rules?.rackets || []).map((r) => { const owned = (me.rackets || []).includes(r.id), locked = me.level < r.lvl;
         const noSeat = !owned && !locked && (me.ops?.free || 0) <= 0;
         const lvl = Number(me.racketLevels?.[r.id] || 0); const upMax = emp.upMax || 5;
@@ -6949,7 +6963,7 @@
         <div class="card"><span class="t">Your Garage</span>
           ${cars.length ? cars.map((c) => `<div class="row" style="margin-top:4px"><span>${c.model} — <b>power ${c.power}</b>${c.nos ? ` · <span class="chip good">💨 ${c.nos} NOS</span>` : ''}${c.dmg ? ` · <span style="color:var(--bad)">${c.dmg}% dmg</span>` : ''}${c.raceLimit ? ` · <span class="chip good">racing ≤ $${fmt(c.raceLimit)}</span>` : ''}${c.pinkSlip ? ' · <span class="chip" style="color:var(--bad)">🎀 up for pinks</span>' : ''}</span>
             <span><button class="act" data-tune="${c.id}"${c.tune >= (b.tune?.max || 5) ? ' disabled' : ''}>tune $${fmt(b.tune?.cost || 25000)} (${c.tune}/${b.tune?.max || 5})</button>
-            <button class="act" data-nos="${c.id}"${(c.nos || 0) >= nosMax ? ' disabled' : ''}>NOS $${fmt(b.nos?.cost || 15000)} (${c.nos || 0}/${nosMax})</button>
+            <button class="act" data-nos="${c.id}"${(c.nos || 0) >= nosMax ? ' disabled' : ''}>NOS $${fmt(b.nos?.cost || 8000)} (${c.nos || 0}/${nosMax})</button>
             <button class="act" data-pink="${c.id}" data-on="${c.pinkSlip ? '0' : '1'}">${c.pinkSlip ? 'pull pinks' : 'put up pinks'}</button>
             ${c.raceLimit ? `<button class="act" data-unlist="${c.id}">pull</button>` : `<input id="rc-lim-${c.id}" type="number" placeholder="list for $" style="width:96px"><button class="act" data-list="${c.id}">list</button>`}</span></div>`).join('') : '<div class="d">No cars — boost or buy some iron first.</div>'}
         </div>
@@ -7328,22 +7342,26 @@
     t.innerHTML = `
       <h2>Going Legit <span class="d" style="font-size:11px">(what your $OMR does: the ladder, the vault, the window — and the on-chain way out)</span></h2>
       <div class="card" style="border-color:var(--neon)"><span class="t" style="color:var(--neon)">Where $OMR Comes From</span>
-        <div class="d">Nowhere in the game. There is no wage, no yield, no drip — <b>nothing you do on the street prints a single $OMR</b>.
-          Every token in this city was bought with real money by somebody, which is why it is worth taking off them.</div>
-        <div class="d">Your four ways to get some: <b>take it</b> off a man who is holding (a kill loots their liquid $OMR),
+        <div class="d">Almost nowhere in the game. There is no wage, no yield, no drip — the one trickle the street
+          pays is the <b>mission ladder</b> (a bit over a thousand across a whole career, once per account, plus a few
+          a day for a perfect daily board). Every other token in this city was bought with real money by somebody,
+          which is why it is worth taking off them.</div>
+        <div class="d">Your five ways to get some: <b>work the ladder</b> (the once-ever mission $OMR),
+          <b>take it</b> off a man who is holding (a kill loots their liquid $OMR),
           <b>earn it</b> from a player who pays you in it, <b>buy it</b>, or <b>get paid out of the Bank</b> — whose
           borrowers' fees buy $OMR on the market and hand it to the people who played that day.
           That is the whole list, and a nightly job proves it.</div>
         <div class="d" style="color:var(--dim);font-size:11.5px;margin-top:4px;border-top:1px solid rgba(255,255,255,.06);padding-top:5px">
           A free account plays the <b>whole</b> game — every job, family, racket, kitchen, casino, PvP, all of it.
-          Minting (the Store’s Made Man, in ETH — or the mission ladder’s free credit) is what lets you move $OMR and gear
+          Minting (the mission ladder’s free credit — The Dockside Heist hands you one — or ETH at the published
+          wave price once the on-chain checkout opens) is what lets you move $OMR and gear
           <b>on-chain out of the game</b>. Everything you build in-game, you build free.</div></div>
       <div class="card" style="border-color:var(--gold)"><span class="t" style="color:var(--gold)">THE MADE MAN ${me.made ? '— YOU ARE MADE' : ''}</span>
         <div class="d">${me.made
           ? `Standing runs another <b>${Math.floor((me.madeSeconds || 0) / 86400)}d</b>. Your fronts pay their own pad when you touch them.`
           : `Pay the dues and you're <i>made</i>: the badge, the upper compound, a club of your own, a seat in the high-stakes room, and a rung up the ladder.`}</div>
-        <div class="d" style="color:var(--dim);font-size:11.5px;margin-top:4px">It buys <b>real advantage</b> — but there is a <b>ceiling</b>, and holding ${rules?.made?.ceilingOmr ?? 150} $OMR reaches it without paying a subscription. Nothing dues buy helps you fight. A free man runs the whole city, and can still hunt you for your $OMR.</div>
-        <div class="row" style="margin-top:6px"><button data-do="POST /v1/made">${me.made ? 'ANOTHER 30 DAYS' : 'PAY THE DUES'} — ${rules?.made?.omr ?? 20} $OMR</button></div></div>
+        <div class="d" style="color:var(--dim);font-size:11.5px;margin-top:4px">It buys <b>real advantage</b> — but there is a <b>ceiling</b>, and holding ${rules?.made?.ceilingOmr ?? 900} $OMR reaches it without paying a subscription. Nothing dues buy helps you fight. A free man runs the whole city, and can still hunt you for your $OMR.</div>
+        <div class="row" style="margin-top:6px"><button data-do="POST /v1/made">${me.made ? 'ANOTHER 30 DAYS' : 'PAY THE DUES'} — ${rules?.made?.omr ?? 120} $OMR</button></div></div>
       <h2 style="margin-top:12px">The Bank <span class="d" style="font-size:11px">(borrowers pay to use it — that profit buys $OMR and goes to the people who play)</span></h2>
       <div class="card"${bk.you?.today?.qualifies ? ' style="border-color:var(--ok)"' : ''}>
         <div class="d">${esc(bk.what || '')}</div>
@@ -7390,14 +7408,14 @@
         : `<span class="t">No wallet linked</span><div class="d">sign a one-time challenge to link it — MetaMask, Coinbase, Trust, Rabby, Phantom, Crypto.com, Robinhood Wallet or any other browser wallet${rules?.walletConnect ? ', or scan the QR with a wallet on your phone (WalletConnect)' : ''}. Nothing leaves your wallet; it just proves the address.</div>
            <button class="act" id="wallet-link" style="border-color:var(--neon)">connect &amp; sign</button>`}</div>
 
-      <h2 style="margin-top:12px">Extraction <span class="d" style="font-size:11px">(become Made, then withdraw your $OMR on-chain to your own wallet — a small exit toll applies, steeper on fresh tokens)</span></h2>
+      <h2 style="margin-top:12px">Extraction <span class="d" style="font-size:11px">(mint your identity, then withdraw your $OMR on-chain to your own wallet — a small exit toll applies, steeper on fresh tokens)</span></h2>
       <div class="card">
-        <div class="d">Made status: ${me.minted
-          ? '<b style="color:var(--ok)">✓ you\'re made</b> — extraction is unlocked'
+        <div class="d">Minted identity: ${me.minted
+          ? '<b style="color:var(--ok)">✓ minted</b> — extraction is unlocked'
           : (me.mintCredits > 0
-            ? '<b style="color:var(--neon)">a mint credit is in hand</b> — get made to unlock extraction'
-            : 'a free trial street plays fully, but only a <b>Made</b> account can extract $OMR / gear on-chain. <b>The free road:</b> the mission ladder&rsquo;s <i>Dockside Heist</i> hands you a mint credit outright. Otherwise the identity is bought with <b>ETH</b> — the Made Man package in <b>The Store</b>, at the published wave price. It is the one thing $OMR cannot buy: minting is what gates extraction, so it has a single price in real money.')}</div>
-        ${!me.minted && me.mintCredits > 0 ? '<button class="act" id="mint-go" style="border-color:var(--neon)">get made (spend a mint credit)</button>' : ''}
+            ? '<b style="color:var(--neon)">a mint credit is in hand</b> — mint your identity to unlock extraction'
+            : 'a free trial street plays fully, but only a <b>minted</b> account can extract $OMR / gear on-chain. (Paying the Made Man dues is status — it does not open the chain; this does.) <b>The free road:</b> the mission ladder&rsquo;s <i>Dockside Heist</i> hands you a mint credit outright. Otherwise the identity is bought with <b>ETH</b> at the published wave price, on-chain, when that checkout opens at launch. It is the one thing $OMR cannot buy: minting is what gates extraction, so it has a single price in real money.')}</div>
+        ${!me.minted && me.mintCredits > 0 ? '<button class="act" id="mint-go" style="border-color:var(--neon)">mint your identity (spend the credit)</button>' : ''}
         ${me.minted ? `
         <div style="margin-top:8px" class="d">Withdraw $OMR to ${me.wallet ? `<span class="chip good">${me.wallet.slice(0,6)}…${me.wallet.slice(-4)}</span>` : 'your wallet'} — a 2% exit toll applies; fresh (&lt;48h) $OMR also pays the early-exit tax.</div>
         ${me.wallet
@@ -7434,7 +7452,7 @@
         ${yld.families.map((f) => `<tr><td>${f.rank}</td><td>${esc(f.name)} <span class="chip">${esc(f.tag)}</span></td><td>${(f.shareBps / 100).toFixed(0)}%</td><td>${fmt(f.nextPayout)}</td></tr>`).join('')}</table>
         <div class="d" style="font-size:11px;color:var(--dim)">${yld.note}</div></div>` : ''}
 
-      <h2 style="margin-top:12px">The Vault <span class="d" style="font-size:11px">(cheaper cover, not a safe harbour — a killer takes 20% of a staked balance against 50% of a loose or unbonding one, so committing halves what a bad night costs without ever making you safe. Your principal always returns whole; yield pays the FAMILIES, not the staker; unstaking pulls it ALL and unbonds 6h — at the higher loose rate — before it's liquid)</span></h2>
+      <h2 style="margin-top:12px">The Vault <span class="d" style="font-size:11px">(cheaper cover, not a safe harbour — a killer takes 20% of a staked balance against 50% of a loose or unbonding one, so committing drops the take from half to a fifth without ever making you safe. Your principal always returns whole; yield pays the FAMILIES, not the staker; unstaking pulls it ALL and unbonds 6h — at the higher loose rate — before it's liquid)</span></h2>
       <div class="card"><div class="d">staked ${fmt(Math.floor(me.staked || 0))} $OMR${me.unbonding ? ` · unbonding ${fmt(Math.floor(me.unbonding))} (${mins(me.unbondSeconds || 0)})` : ''}</div>
         <input id="stake-amt" placeholder="$OMR" size="8">
         <button class="act" id="stake-in">stake</button>
@@ -7504,7 +7522,7 @@
 
       <h2 style="margin-top:12px">The Vault <span class="d" style="font-size:11px">(BACKED — real ETH the treasury holds, funded by the city's four ETH streams; burn earned $OMR to claim your share of it)</span></h2>
       <div class="card">
-        <div class="d">the house never owes ETH it doesn't hold · claims ${vault.claimMin ?? 25}–${fmt(vault.claimDailyOmr ?? 2000)} $OMR/day per house · big moves draw the Bureau's eye</div>
+        <div class="d">the house never owes ETH it doesn't hold · claims ${vault.claimMin ?? 150}–${fmt(vault.claimDailyOmr ?? 12000)} $OMR/day per house · big moves draw the Bureau's eye</div>
         ${vault.availableEth > 0 ? `
         <div class="d" style="margin-top:6px"><b>${vault.availableEth} ETH</b> unclaimed of ${vault.heldEth} held · ${fmt(vault.omrPerEth)} $OMR per ETH
           <input id="vault-amt" placeholder="$OMR" size="7"> <button class="act" id="vault-claim">claim</button></div>`
@@ -7574,7 +7592,7 @@
       <div class="card">${e.tier > 0 ? aart('estate', e.tier) : ''}<span class="t">The Deed</span>
         <div class="d">${e.tierName ? `You hold a ${e.tierName}.` : 'You don\'t own a thing worth showing.'} · ${fmt(Math.floor(e.omr || 0))} $OMR on hand</div>
         ${e.nextTier ? `<button class="act" id="est-up">move up → ${e.nextTier.name} (${fmt(e.nextTier.omr)} $OMR)</button> <span class="d">${e.nextTier.blurb}</span>` : '<span class="chip good">THE COMPOUND — top of the world</span>'}
-        ${e.tier > 0 ? `<div style="margin-top:6px"><input id="est-name" placeholder="name the place" size="18"> <button class="act" id="est-name-go">name it (${fmt(rules?.estate?.nameOmr ?? 3)} $OMR)</button></div>` : ''}</div>
+        ${e.tier > 0 ? `<div style="margin-top:6px"><input id="est-name" placeholder="name the place" size="18"> <button class="act" id="est-name-go">name it (${fmt(rules?.estate?.nameOmr ?? 18)} $OMR)</button></div>` : ''}</div>
 
       ${(() => { const hh = e.household, ga = e.gala; if (!hh) return ''; return `
       <h2 style="margin-top:12px">The Household <span class="d" style="font-size:11px">(staff draw $OMR wages — stiff them a week and they walk)</span></h2>
@@ -7626,7 +7644,7 @@
       <h2 style="margin-top:14px">The Block — Resale <span class="d" style="font-size:11px">(put a trophy up for a $OMR reserve; the house takes ${(rules?.auction?.consign?.TAKE_BPS ?? 500) / 100}% — and it burns)</span></h2>
       ${(auc.wins || []).some((w) => !w.listed) ? `<div class="card"><span class="t">Consign a trophy</span>
         <div style="margin-top:4px"><select id="consign-lot">${auc.wins.filter((w) => !w.listed).map((w) => `<option value="${w.lot}">${w.name} #${w.serial}</option>`).join('')}</select>
-        <input id="consign-res" placeholder="reserve $OMR" size="10"> <button class="act" id="consign-go">put it on the block (${auc.consign?.FEE_OMR ?? 2} $OMR fee)</button></div></div>` : ''}
+        <input id="consign-res" placeholder="reserve $OMR" size="10"> <button class="act" id="consign-go">put it on the block (${auc.consign?.FEE_OMR ?? 12} $OMR fee)</button></div></div>` : ''}
       ${(auc.consignments || []).length ? `<div class="grid" style="margin-top:6px">${auc.consignments.map((c) => `
         <div class="card" ${c.youLead ? 'style="border-color:var(--neon)"' : ''}><span class="t">${c.name} <span class="d">#${c.serial}</span></span>
           ${c.mine ? '<span class="chip">yours</span>' : ''}${c.youLead ? '<span class="chip good">you lead</span>' : ''}${c.reserveMet ? '<span class="chip good">reserve met</span>' : '<span class="chip cold">reserve not met</span>'}
@@ -7726,7 +7744,7 @@
           ${k.nextAt != null ? `<div class="bar" style="margin-top:4px"><div class="fill" style="width:${Math.min(100, Math.round(100 * (k.xp - (k.lvl > 1 ? (ms.xpDivisor ?? 15) * (k.lvl - 1) * (k.lvl - 1) : 0)) / Math.max(1, k.nextAt - (k.lvl > 1 ? (ms.xpDivisor ?? 15) * (k.lvl - 1) * (k.lvl - 1) : 0))))}%"></div></div>` : ''}</div>`).join('')}</div>
 
       <h2>The Build <span class="d" style="font-size:11px">(${sk.points?.available ?? 0} of ${sk.points?.total ?? 0} points free · 1 per ${sk.lvlPerPoint || 4} levels · dies with the street)</span>
-        <button class="act" data-do="POST /v1/skills/respec" style="margin-left:6px">respec (${sk.respecOmr || 10} $OMR)</button></h2>
+        <button class="act" data-do="POST /v1/skills/respec" style="margin-left:6px">respec (${sk.respecOmr || 60} $OMR)</button></h2>
       <div class="d" style="font-size:11px;margin:-4px 0 6px;color:var(--dim)">Bloodline (prestige ${sk.prestige ?? 0}):
         ${sk.points?.prestigeBonus ? `+${sk.points.prestigeBonus} bonus point${sk.points.prestigeBonus > 1 ? 's' : ''}` : `no bonus points yet (1 per ${sk.prestigePerPoint || 10} prestige)`}
         · your heir is born knowing ${sk.memorySlots ?? 0}/${sk.memoryMax ?? 3} of your basics (muscle memory — 1 slot per ${sk.prestigePerSlot || 8} prestige)</div>
@@ -7735,7 +7753,7 @@
           ${list.sort((a, b) => a.tier - b.tier).map((s) => `
             <div class="d" style="margin-top:5px">${s.known ? '◆' : '◇'} <b>${s.name}</b>${s.tier === 4 ? ' <span class="chip good">capstone</span>' : ''} (t${s.tier}, ${s.cost}pt) — ${s.desc}
               ${!s.known ? `<button class="act" data-learn="${s.id}" style="font-size:11px;padding:2px 6px">learn</button>`
-                : `<button class="act" data-respec1="${s.id}" style="font-size:11px;padding:2px 6px">unlearn (${sk.respecOneOmr || 5} $OMR)</button>`}</div>`).join('')}</div>`).join('')}</div>
+                : `<button class="act" data-respec1="${s.id}" style="font-size:11px;padding:2px 6px">unlearn (${sk.respecOneOmr || 30} $OMR)</button>`}</div>`).join('')}</div>`).join('')}</div>
       ${(sk.actives || []).some((a) => a.unlocked) ? `
       <h2 style="margin-top:12px">Active Abilities <span class="d" style="font-size:11px">(capstone-unlocked bursts${sk.grandmaster ? ` · GRANDMASTER — cooldown ${Math.round((sk.activeCdSeconds || 0) / 3600)}h` : ''}${sk.activeCooldownSeconds > 0 ? ` · ready in ${Math.ceil(sk.activeCooldownSeconds / 60)}m` : ' · ready'})</span></h2>
       <div class="grid">${sk.actives.filter((a) => a.unlocked).map((a) => `
@@ -7810,14 +7828,14 @@
           : '<div class="d" style="color:var(--dim)">boost a car in the Garage to give it a vanity plate</div>'}
       </div>
 
-      <h2 style="margin-top:12px">Respec Your Stats <span class="d" style="font-size:11px">(redistribute your base build — the total stays ${me.statTotal ?? 15}, each ≥ ${rules?.respecStatMin ?? 5} · costs ${rules?.respecOmr ?? 15} $OMR · on hand: ${fmt(Math.floor(me.omr || 0))})</span></h2>
+      <h2 style="margin-top:12px">Respec Your Stats <span class="d" style="font-size:11px">(redistribute your base build — the total stays ${me.statTotal ?? 15}, each ≥ ${rules?.respecStatMin ?? 5} · costs ${rules?.respecOmr ?? 90} $OMR · on hand: ${fmt(Math.floor(me.omr || 0))})</span></h2>
       <div class="card">
         <div class="d">base build now: <b>${me.stats.muscle} / ${me.stats.cunning} / ${me.stats.speed}</b> (muscle / cunning / speed)</div>
         <div class="row" style="margin-top:6px;align-items:center;gap:10px;flex-wrap:wrap">
           <label class="d">muscle <input id="respec-mus" type="number" min="${rules?.respecStatMin ?? 5}" value="${me.stats.muscle}" style="width:56px"></label>
           <label class="d">cunning <input id="respec-cun" type="number" min="${rules?.respecStatMin ?? 5}" value="${me.stats.cunning}" style="width:56px"></label>
           <label class="d">speed <input id="respec-spd" type="number" min="${rules?.respecStatMin ?? 5}" value="${me.stats.speed}" style="width:56px"></label>
-          <button class="act" id="respec-go">respec (${rules?.respecOmr ?? 15} $OMR)</button>
+          <button class="act" id="respec-go">respec (${rules?.respecOmr ?? 90} $OMR)</button>
         </div>
         <div class="d" id="respec-note" style="font-size:11px;color:var(--dim);margin-top:4px"></div>
       </div>`;
@@ -8118,8 +8136,12 @@
       ring_folded_up: () => `the ring table folded up — your $${fmt(d.cashedOut)} came home`,
       loan_forfeited: () => d.lost ? 'your pledged car was forfeited to the lender' : 'a pledged car was forfeited to you',
       gp_entry: () => `${d.who} entered the Grand Prix (${d.entrants} on the grid)`,
-      gp_result: () => `${d.winner} won the Grand Prix — ${$c(d.pool)} pool, ${d.runners} ran`,
-      futurity_result: () => `${d.winner} won the Futurity (${d.runners} ran)`,
+      gp_result: () => d.place != null
+        ? `🏁 Grand Prix: you finished ${d.place} of ${d.of}${d.payout ? ` — ${$c(d.payout)}` : ''}`
+        : `${d.winner} won the Grand Prix — ${$c(d.pool)} pool, ${d.runners} ran`,
+      futurity_result: () => d.place != null
+        ? `🐎 Futurity: ${d.racer || 'your runner'} came ${d.place} of ${d.of}${d.won ? ' — WON IT' : ''}`
+        : `${d.winner} won the Futurity (${d.runners} ran)`,
       port_landing: () => `${d.by} landed a ${d.route} shipment — ${$c(d.value)}`,
       port_piracy: () => `${d.by} took a prize at sea${d.route ? ` on the ${d.route}` : ''}`,
       breakout: () => `a crew of ${d.crew} went OVER THE WALL`,
@@ -8129,7 +8151,7 @@
       frontier_seized: () => `${d.gang} planted their flag on ${d.npc}'s turf`,
       errand_done: () => `${d.who} did right by ${d.npc}`,
       vendetta_settled: () => `a vendetta was settled in blood`,
-      ticker_ballot: (e) => `📈 the Commission ${e.decidedBy === 'chamber' ? 'set' : 'defaulted'} the day's buy: ${e.ticker}`,
+      ticker_ballot: () => `📈 the Commission ${d.decidedBy === 'chamber' ? 'set' : 'defaulted'} the day's buy: ${d.ticker}`,
       vendetta_peace: () => `two bloodlines sat down and made peace`,
       wage_paid: () => `street wage: +${d.omr} $OMR`,
       clue_found: () => `🗺 a CLUE SCROLL turned up on that job — “${d.riddle}” (${d.steps} steps to a casket)`,

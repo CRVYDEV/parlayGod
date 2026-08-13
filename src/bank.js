@@ -351,7 +351,7 @@ async function runCityLegInner(pool, { endDay = dayOf() - 1, days = CITY_EPOCH_D
 /// card reads `undefined` and the client cannot tell "no position" from "no such field". Both paths
 /// return the same keys, so a renderer written against one is correct against the other.
 function dormantView(extra = {}) {
-  return { dormant: true, market: 'nUSD', linked: false, wallet: null,
+  return { dormant: true, market: 'Denari', linked: false, wallet: null,
     collateral: null, debt: null, borrowable: null, ltvBps: null,
     payoffDays: null, liquidation: 'none', ...extra };
 }
@@ -406,7 +406,7 @@ export async function bankPosition(pool, accountId) {
 export function positionView({ wallet, collateral, debt, maxDebt, ltvBps }) {
   const n = (x) => Number(x) / 1e18;
   return {
-    dormant: false, market: 'nUSD', linked: true, wallet,
+    dormant: false, market: 'Denari', linked: true, wallet,
     collateral: n(collateral), debt: n(debt),
     borrowable: Math.max(0, n(maxDebt) - n(debt)),
     ltvBps: Number(ltvBps),

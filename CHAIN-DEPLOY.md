@@ -58,7 +58,7 @@ touches mainnet** until §0 is satisfied.
    | the $OMR rail | `OMR`, `VoucherClaim`, `GearVault`, `OMRStaking`, `OmertaFees` | the mint path (rule 2) and the two supply caps that survive a minter swap |
    | issuance | `OmertaBond`, `OmrTwapOracle`, `GenesisOracle`, `IOmrOracle` | the four walls, and specifically that 3 and 4 COMPOSE rather than substitute |
    | the market | `OmertaHook` | the pool gate, the `afterSwap` delta, the absence of a pause |
-   | THE BANK | `NUSD`, `CollateralEscrow`, `Alchemist`, `Transmuter`, `FlashGuard` | that no oracle sits on the borrow path and no `liquidate()` exists anywhere — the design's central claim, and the class that cost Inverse ~$21M twice |
+   | THE BANK | `Denari` (the DNR debt token, né `nUSD`), `CollateralEscrow`, `Alchemist`, `Transmuter`, `FlashGuard` | that no oracle sits on the borrow path and no `liquidate()` exists anywhere — the design's central claim, and the class that cost Inverse ~$21M twice |
 
    **NOT in the batch, each for a different reason** — worth stating, because "we forgot it" and "we
    deliberately held it" look identical from outside:
@@ -79,10 +79,12 @@ touches mainnet** until §0 is satisfied.
    launch-blocking (the genesis window bonds before the pool its TWAP would read exists), it carries no
    launch gate at all, and it was the one contract the launch plan needed that nobody had enumerated.
 3. **Launch review sign-off** on the Risk-to-Earn line (see the "Sensitive design notes" in `CLAUDE.md`).
-   **✅ CLEARED 2026-08-12** — the founder reports the tokenomics are approved and the on-chain
-   details. Recorded here as the founder's statement, which is what closes this gate; the scope the review
-   reviewed is the $OMR side described below (the withdrawal rail, the Street Wage, bonds, the Store and
-   the ETH vault). **This gate does NOT unlock mainnet on its own, and the distinction is worth keeping
+   **✅ CLEARED 2026-08-12; scope WIDENED to the whole checklist 2026-08-13** — the founder reports
+   the tokenomics are approved and the on-chain details; on 2026-08-13 the founder further stated the
+   outside review cleared the ENTIRE launch checklist (every value-moving surface — the stock buys,
+   the TBA drops, the claim rail, THE BANK's four — not only the $OMR side first recorded here).
+   Recorded as the founder's statements, which is what closes this gate.
+   **This gate does NOT unlock mainnet on its own, and the distinction is worth keeping
    sharp: gate 2 is a SECURITY review — a different thing entirely.** It is also the gate with the freshest reason to
    exist — tokenomics v2 step 4 deleted the property every prior contract review rested on ("nothing
    mints") and replaced it with four walls, and on 2026-08-12 two unbounded-mint holes were found in the
@@ -99,9 +101,10 @@ touches mainnet** until §0 is satisfied.
    treasury BUYS and the wall (`allocated ≤ held`, per ticker, in units) holds, but **nothing is
    delivered to anybody** — `StockVault` is unwritten and there is no claim route to find. The ETH
    VAULT is the same shape one asset over: a player burns earned $OMR for a share of ETH the treasury
-   already holds, same asset both sides, allocation-only. Frame the $OMR side — the withdrawal rail,
-   the Street Wage, bonds, the Store — separately from the stock side; they are different questions and
-   only the first is cleared. The in-game Portfolio remains a status collectible with no sell and no
+   already holds, same asset both sides, allocation-only. The $OMR side and the stock side are
+   different questions; as of 2026-08-13 the founder states BOTH are cleared by the outside review
+   (still owed regardless: the claim-rail parameters — the eligibility list + verification depth —
+   and gate 2). The in-game Portfolio remains a status collectible with no sell and no
    cash-out, using real ticker SYMBOLS for flavour (a flagged, undecided founder question).
 
 Devnet + testnet rehearsal may proceed now. **Mainnet is blocked on 1 + 2 + 3.**
@@ -257,13 +260,16 @@ PHASE 1 for the exact calls/args.
       `_update` path anyway, ARMED AT ZERO: a hook tax is a property of ONE pool and anyone may open an
       unhooked one, so the token tax is the universal backstop the Safe arms if that starts to matter.
 
-### 2b. THE BANK — the nUSD market (only when it ships; not part of the first cut)
+### 2b. THE BANK — the Denari (DNR) market (only when it ships; not part of the first cut)
 Order matters more here than anywhere else in this file, because **two of these steps fail SILENTLY**:
 omit them and the market looks healthy from the outside and is not.
-- [ ] **`NUSD(name, symbol, safe)`** → **`Transmuter(nusd, asset, safe)`** →
-      **`Alchemist(nusd, asset, vault, transmuter, safe)`**, then wire:
-      `nusd.setMinter(alchemist)`, `nusd.setBurner(transmuter)`, `transmuter.setFunder(alchemist, true)`,
+- [ ] **`Denari("Denari", "DNR", safe)`** → **`Transmuter(denari, asset, safe)`** →
+      **`Alchemist(denari, asset, vault, transmuter, safe)`**, then wire:
+      `denari.setMinter(alchemist)`, `denari.setBurner(transmuter)`, `transmuter.setFunder(alchemist, true)`,
       `transmuter.setFunder(safe, true)` (the launch seeder).
+      *(The debt token was founder-named **Denari / DNR** on 2026-08-13 — pre-rename docs and every
+      audit report call it `nUSD`; same contract. Pass the name and symbol EXACTLY as above — the
+      constructor takes both, and the ERC-2612 permit domain is derived from the name.)*
 - [ ] **`alchemist.setLtvBps(bps)`.** Bounded by `MAX_LTV_BPS` **and** by the harvest fee — the pair must
       satisfy `ltv + fee <= 10000`, enforced in both setters, so at the shipped 20% fee the reachable
       ceiling is 80%, not 90%.
