@@ -24,7 +24,7 @@ would chain your fast, low-risk game launch to your slow, expensive, externally-
 |---|---|---|
 | **What goes live** | The full game at a real website. $OMR is an in-game currency you earn and spend. | Real ETH in, real on-chain OMR out. Withdrawals, bonds, the Store paywall. |
 | **Risk** | Low. It's a game. No real-money extraction. | High. Real value moves, and you custody a signing key. |
-| **What blocks it** | Nothing technical — it's built and tested (34/34). Just needs hosting + a domain. | THREE hard gates: an audit, the launch checklist, and a security-audited signing key. |
+| **What blocks it** | Nothing technical — it's built and tested (100 suites green). Just needs hosting + a domain. | THREE hard gates: an audit, the launch checklist, and a security-audited signing key. |
 | **Time to live** | Days to ~2 weeks (mostly hiring + setup). | 2–4+ months (the audit and advice queues are the long poles). |
 | **Rough cost** | Low — hosting is ~$20–70/month; setup is a few hours of a contractor. | High — audit $15k–$80k+, advice $10k–$50k+, plus liquidity you seed. |
 | **Runbook** | `DEPLOY.md` | `CHAIN-DEPLOY.md` |
@@ -32,7 +32,7 @@ would chain your fast, low-risk game launch to your slow, expensive, externally-
 **Recommendation:** ship Wave 1 as a **closed alpha** (invite-only) in the next few weeks. Get real people
 playing, find the fun, watch the economy with the built-in dashboards. Run Wave 2 in parallel on a slower
 track (start the audit + advice conversations *now*, because they take months). Turn the money on only when
-all three gates are green. The game already tells players the crypto rail is "coming at launch," so this is the
+all three gates are green. The game already tells players the crypto rail "opens at launch," so this is the
 intended path, not a compromise.
 
 ---
@@ -124,10 +124,10 @@ Run this **in parallel** with Wave 1, but it goes live only after all three gate
 is the technical runbook; here's the founder view + the order that actually matters.
 
 ### The three HARD GATES (nothing touches mainnet until all three are ✅)
-1. **The contract test suite passes on a real toolchain.** The Solidity was written + compiles clean, but the
-   full `forge test` has never actually *run* here (the build sandbox blocked the tool's downloads). Your
-   developer runs it on any normal machine first (`cd omerta-contracts && ./run-forge-test.sh`). Cheap, fast,
-   and it must be green before you pay an auditor to look.
+1. **The contract test suite passes on a real toolchain.** `forge test` runs green here (213/213, incl.
+   fuzzes) via the sandboxed runner, but the toolchain is stitched together in this environment — your
+   developer re-runs it on any normal machine first (`cd omerta-contracts && ./run-forge-test.sh`). Cheap,
+   fast, and it must be green before you pay an auditor to look.
 2. **A third-party audit of the contracts AND the signer** comes back clean (or you fix what it finds). *This
    is what you're paying the auditor for.* Book it early — queues are long.
 3. **The launch checklist clears** — the Risk-to-Earn model, the stock feature, the eligibility gate, and
@@ -140,7 +140,7 @@ guidance may change what you launch (e.g. gate some players out of RWA extractio
 ### Step 2.2 — Rehearse the whole thing on a test network (free, no risk)
 Your developer can dry-run the *entire* chain flow on a free test network **today** — the repo has a one-command
 end-to-end prover (`tools/chain-e2e.js`) that deploys the contracts, links a wallet, pays a fee, mints, and does
-a real withdrawal, all on a throwaay chain. This proves the machinery works and trains your operator, at zero
+a real withdrawal, all on a throwaway chain. This proves the machinery works and trains your operator, at zero
 cost, while the audit + advice run. **Do this during Step 2.1.**
 
 ### Step 2.3 — Set up the treasury "vault" (the Gnosis Safe) ⚑
@@ -152,7 +152,7 @@ The contracts, the OMR token supply, and the treasury are owned by a **Safe** �
   transactions by clicking + confirming on your hardware wallet.
 
 ### Step 2.4 — Deploy the contracts + fund the reserves (after gates 1+2)
-Your developer follows `CHAIN-DEPLOY.md` §2–§5: deploys the six contracts, hands ownership to the Safe, and the
+Your developer follows `CHAIN-DEPLOY.md` §2–§5: deploys the contract batch (fourteen contracts, THE BANK included), hands ownership to the Safe, and the
 **Safe funds them** with OMR (this backs withdrawals — the system can *never* mint more than you fund, by
 design). The **signing key** (`VOUCHER_SIGNER_PK`) — the thing that authorizes withdrawals — must live in a
 proper key-management service (HSM/KMS), *not* a plain environment variable. This is the single most

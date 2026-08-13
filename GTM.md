@@ -20,7 +20,7 @@ week three.
 
 **What is unusually strong.** The product is enormous and it is *verified* enormous — 139 source
 files, 96 test suites, 216 tables, 84 audit reports, a nightly conservation sweep across 30 checks, a
-198-test contract suite. The economic design is genuinely differentiated (the severance is a real
+213-test contract suite. The economic design is genuinely differentiated (the severance is a real
 structural claim, not a slogan), the agent surface is something no competitor has, and the whole thing
 runs on two Node processes and one Postgres with no build step.
 

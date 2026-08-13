@@ -14,7 +14,7 @@ jump to the last section.
 ### Step 1 — put the code on GitHub's main branch (5 min)
 The code already lives at your GitHub repo. This deploy config (`render.yaml`) is on a working branch, so first
 get it onto your **main** branch:
-- On GitHub, open the repo → the Pull Requests tab → find/open the PR for branch `claude/new-session-7ufca0`
+- On GitHub, open the repo → the Pull Requests tab → find/open the open Claude working-branch PR (currently `claude/fresh-coding-session-29ltho`)
   (or "New pull request" → base `main`, compare that branch) → **Merge**.
 - (If you'd rather not merge yet, you can instead tell Render in Step 3 to deploy *that branch* — there's a
   "Branch" dropdown. Either works.)
@@ -27,7 +27,7 @@ get it onto your **main** branch:
 - In Render: **New +** (top right) → **Blueprint**.
 - Pick your OMERTÀ repository. Render finds the `render.yaml` file and shows it will create **three things**:
   `omerta-api` (the website), `omerta-worker` (the background engine), and `omerta-db` (the database).
-- (If you skipped the merge in Step 1, set the **Branch** to `claude/new-session-7ufca0` here.)
+- (If you skipped the merge in Step 1, set the **Branch** to the open Claude working branch here.)
 - Click **Apply**. Render generates the secret values automatically and starts building. First build ≈ 2–5 min.
 - When `omerta-api` shows **"Live"**, click its URL (looks like `https://omerta-api.onrender.com`). **The game
   loads.** 🎉 That's your site.
@@ -86,7 +86,7 @@ database) + your domain. No blockchain, minimal risk.
   3. In the project folder: `DATABASE_URL='<paste it>' npm run backup`
      (Windows PowerShell: `$env:DATABASE_URL='<paste it>'; npm run backup`)
 
-  It prints `backup verified: ./backups/omerta-….dump (… bytes, 161 tables)`. That word *verified*
+  It prints `backup verified: ./backups/omerta-….dump (… bytes, … tables)`. That word *verified*
   matters — it read the dump back and confirmed real player rows are inside, because the one thing worse
   than no backup is one that looks fine and isn't. If it says `'accounts' holds 0 rows`, the URL is
   pointing at the wrong database. The file is a complete copy of everything — keep it somewhere private.
