@@ -31,7 +31,7 @@ So "the treasury holds ETH" is only coherent if the vault stops owing stock. The
 
 **B and C were rejected on substance, not preference.** Handing someone a stock token you own is a
 transfer of an asset you hold. Paying out the *value* of a stock you do not hold is a cash-settled
-contract for difference — a derivative, and a materially worse legal posture than the thing it replaces.
+contract for difference — a derivative, and a materially worse posture than the thing it replaces.
 Both also break the wall mechanically: if the stock runs and ETH does not, the treasury is short exactly
 when players claim.
 
@@ -44,12 +44,12 @@ This is not a weaker version of A. It is a *stronger* version of the original fl
 `allocated ≤ held` never depended on the asset being stock — it depended on the asset being **the same
 on both sides**. ETH-for-ETH restores that property exactly and removes the only thing that could ever
 have broken it: a second asset whose price could move. Nothing acquires stock, nothing owes stock, and
-the securities surface is gone just as completely as under A.
+the gated surface is gone just as completely as under A.
 
-**What A buys.** It deletes the only securities event in the project. No buy bot, no per-ticker reserve,
-no stock oracle, no KYC gate, no geofencing, and R2/R3 stop being carried milestones. It also resolves a
+**What A buys.** It deletes the project's one gated surface. No buy bot, no per-ticker reserve,
+no stock oracle and no eligibility gate, and R2/R3 stop being carried milestones. It also resolves a
 question that existed *before* any player was involved: Robinhood's tokenized stocks are EU-facing and
-not for US persons, so a US-controlled treasury holding them was its own problem.
+restricted by the issuer, so holding them raised a question we had no answer for.
 
 **What A costs, honestly.** "The mob goes legit and retires into blue chips" loses its real-world anchor.
 ETH is not going legit — it is the same crypto risk in a different ticker. That narrative cost is real
@@ -57,9 +57,9 @@ and is accepted deliberately.
 
 **What A′ does not cost.** Nothing was ever delivered to a player, and nothing is now: the vault
 **allocates**, it does not pay out. There is no transfer, no withdrawal and no on-chain path — delivery
-is a separate decision with its own legal question and is deliberately unbuilt (R3 was the same shape).
+is a separate decision with its own open question and is deliberately unbuilt (R3 was the same shape).
 What the ETH re-denomination removes is the thing that made delivery *hard*: handing someone ETH the
-treasury holds is a transfer of an asset you own, not a securities event.
+treasury holds is a transfer of an asset you own, not a gated event.
 
 ---
 
@@ -75,7 +75,7 @@ The surgical line is **anything that creates an obligation goes; anything that r
 | `rwa_reserve`, `rwa_buys` tables | the per-ticker stock holding and its purchase history; both existed only to serve the bot |
 | the per-ticker stock oracle, `RWA_MAX_PRICE_JUMP`, the cross-ticker budget lock | all of them guarded the bot's price input. With no bot and no second asset, the only price on the path is the OMR/ETH oracle the Vig already publishes |
 | `runRwaInvariants`' bot checks (`held == Σ buys`, cost basis) | nothing is bought; `held` **is** the revenue ledger |
-| any acquisition, holding or delivery of real equities | the securities surface, entirely |
+| any acquisition, holding or delivery of real equities | the gated surface, entirely |
 
 ### Kept, repointed
 
@@ -142,7 +142,7 @@ it still applies.
 ## Step 0 — the binary precondition, ANSWERED: **there are no transfer restrictions**
 
 The whole plan rested on one question that could have ended it: if the tokenized-stock ERC-20 carries
-an allowlist, KYC gate or jurisdiction hook in `_update`, a bot swap from an unlisted treasury address
+an allowlist or eligibility hook in `_update`, a bot swap from an unlisted treasury address
 simply REVERTS, and no amount of automation fixes it — Model 1 would then need the treasury onboarded
 as an institutional holder, a business-development conversation rather than code.
 
@@ -188,8 +188,8 @@ explicitly NOT rebasing tokens. The consequence for `allocated ≤ held`:
   wrong for everybody at once. It wants a test before any player sees a share count.
 
 **(4) ACQUISITION IS SECONDARY-MARKET ONLY, and the venue picture is messier than "swap on Uniswap".**
-Direct mint/burn with the issuer (**Robinhood Assets (Jersey) Limited**) is **KYB-gated and restricted
-to Authorized Participants**, so the treasury is an ordinary secondary-market buyer. Venues, in the
+Direct mint/burn with the issuer (**Robinhood Assets (Jersey) Limited**) is **open only to vetted
+Authorized Participants**, so the treasury is an ordinary secondary-market buyer. Venues, in the
 docs' own order: **RFQ** (0x / 1inch Fusion / LiFi — off-chain signed quotes, the *launch* venue),
 **Uniswap AMM**, **propAMM** (Rialto), and **Lighter** (orderbook). Robinhood's own wording —
 *"where on-chain AMM liquidity is limited"* — says plainly that AMM depth may be thin. That matters for
@@ -202,13 +202,14 @@ worth building.**
 
 The two structural objections that killed the stock layer are unchanged by the above, and neither is a
 code problem: **the game becomes a custodian of a security**, and **delivery to a player (R3) is a
-KYC'd, geofenced, taxable event** that no bot performs. Acquisition automates completely; delivery does
+gated, verified event** that no bot performs. Acquisition automates completely; delivery does
 not. Until delivery exists, a player holds a claim on a treasury asset rather than a share — which is
 the honest description of Model 1 without R3, and belongs in any player-facing copy.
 
-Jurisdiction is likewise untouched: a Jersey issuer, EU-facing, **not for US persons**. A US-controlled
-treasury buying autonomously is a question about *our* buying, not only about player delivery. The bot
-industrialises that question rather than answering it, and it is the first thing for counsel.
+Eligibility is likewise untouched: the issuer restricts who may hold these tokens, and a treasury
+buying autonomously is a question about *our* buying, not only about player delivery. The bot
+industrialises that question rather than answering it, and it is the first thing on the launch
+checklist.
 
 ## Build order (unchanged from the D11 breakdown, minus the step now answered)
 

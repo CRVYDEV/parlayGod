@@ -8,10 +8,10 @@
 // weights long before anything is delivered.
 //
 // **NOTHING HERE ACQUIRES, HOLDS, OR DELIVERS A SECURITY.** No stock is bought (that is the keeper,
-// step 5), no NFT exists yet (step 6), and no allocation is ever paid out (step 7, gated on counsel).
+// step 5), no NFT exists yet (step 6), and no allocation is ever paid out (step 7, gated).
 // The allocator's output is a published NUMBER. Keep it that way until the §3.3 fork and the
-// delivery boundary have been through counsel — the order of work is arranged so that gate blocks
-// nothing else.
+// delivery boundary have cleared the launch checklist — the order of work puts that gate where it
+// blocks nothing else.
 //
 // ── §10.4 ────────────────────────────────────────────────────────────────────────────────────────
 // The only value that moves is the activation burn: `brokers:activate`, an $OMR SINK through the
@@ -187,6 +187,6 @@ export async function epochBoard(pool, { limit = 10 } = {}) {
     // stated plainly on the surface a founder or auditor reads, so nobody mistakes a published
     // weight for a delivered reward
     delivered: false,
-    note: 'Weights are published only. Delivery is gated on counsel (design §6, step 7).',
+    note: 'Weights are published only. Delivery is gated (design §6, step 7).',
   };
 }

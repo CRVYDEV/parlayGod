@@ -15,15 +15,15 @@ Handle: **@OmertaOnRH** · Play: `www.omerta.fun` · Rulebook: `/wiki` · For ag
 
 ## ⚠️ READ FIRST — the five things we never claim
 
-Standing constraints on all public messaging. Not legal advice; these are the lines the whole
+Standing constraints on all public messaging. These are the lines the whole
 document is written to respect, and **new copy must respect them too.**
 
 | Never say | Why |
 |---|---|
-| **Any earnings / income / "make money playing" claim** | Paying players real-value assets at scale raises money-transmission, employment and securities questions that vary by jurisdiction. Describe *systems*, never *outcomes*. |
-| **Anything about the token's price going up** | Price-appreciation marketing is the fastest route to a securities problem. Describe what the token **does**, never what it will be **worth**. |
+| **Any earnings / income / "make money playing" claim** | Paying players real value at scale draws outside scrutiny, and what is allowed varies by country. Describe *systems*, never *outcomes*. |
+| **Anything about the token's price going up** | Price-appreciation marketing is the fastest route to a problem. Describe what the token **does**, never what it will be **worth**. |
 | **That the mint schedule makes early mints more valuable** | The five-wave schedule is an early-bird discount with a published ceiling. The moment we say "earlier is worth more", it stops being a discount and becomes a promise about resale value. Say *"founding-era pricing"*; never *"rarity"*, *"limited"*, *"floor"*, or a countdown. |
-| **That anyone can cash out real stocks** | Stock delivery is a future phase, gated on counsel and a third-party audit. It is not live, and saying otherwise commits us to a date we do not control. |
+| **That anyone can cash out real stocks** | Stock delivery is a future phase, gated on the launch checklist and a third-party audit. It is not live, and saying otherwise commits us to a date we do not control. |
 | **That referrals pay a percentage of anyone's earnings** | It is a flat, one-time, cash-only finder's fee, capped at two levels. That distinction is the anti-pyramid line and it is load-bearing. Never "revenue share", never "downline". |
 
 **One more, added this edition:** never describe $OMR as reachable by grinding. It isn't, and the sim
@@ -234,7 +234,7 @@ and every economic ceiling is a compile-time constant a stolen key cannot raise.
 mainnet until a third-party audit passes.**
 
 **Why Robinhood Chain?** It is an Arbitrum Orbit L2 with ETH gas and a tokenized-equity venue on it.
-The stock layer is a future, counsel-gated phase — mention the chain, not the phase.
+The stock layer is a future, gated phase — mention the chain, not the phase.
 
 **What happens when I die?** You lose the street: cash, cars, the fronts, the crew. The bloodline
 keeps prestige, the compound, the collection, the legend and the feuds. Your heir starts at level 1
@@ -251,7 +251,7 @@ Getting this wrong is the fastest way to lose trust, so it has its own section.
 | The game | **LIVE** | Play it now. |
 | $OMR in-game | **LIVE** | Earned, spent, burned, looted. |
 | Web push, the Discord wire, X sign-in | **BUILT, config-gated** | "Turning on" — do not promise a date. |
-| Withdrawals / bonds / the Store paywall | **BUILT, DORMANT** | "Built and deliberately not live — gated on legal review and a third-party audit." |
+| Withdrawals / bonds / the Store paywall | **BUILT, DORMANT** | "Built and deliberately not live — gated on the launch checklist review and a third-party audit." |
 | THE BANK | **BUILT, DORMANT** | Same sentence. |
 | Stock delivery, the Dynasty NFT contract | **DESIGNED** | "A future phase." Never a date. |
 
@@ -272,6 +272,6 @@ that unfurls with the card. Every share link carries the player's own referral c
 
 1. Does it make an earnings, price, or scarcity claim? → rewrite.
 2. Is every number in it still true? → check the file named in §4.
-3. Does it promise a date for anything gated on counsel or an audit? → remove the date.
+3. Does it promise a date for anything gated on the launch checklist or an audit? → remove the date.
 4. Would a player who read it, then played, feel the game matched? → if not, the copy is wrong, not
    the game.

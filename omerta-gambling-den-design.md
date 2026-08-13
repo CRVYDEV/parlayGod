@@ -7,8 +7,8 @@ already runs on.
 
 ## 1. Hard rules (non-negotiable guardrails)
 
-1. **CASH ONLY. Never $OMR.** Gambling with an extractable token is a regulatory line we do not
-   cross regardless of counsel posture on the rest of the pivot. The Den's tables take pocket
+1. **CASH ONLY. Never $OMR.** Gambling with an extractable token is a hard line we do not
+   cross regardless of launch posture on the rest of the pivot. The Den's tables take pocket
    cash; no route touches `account_persistent.omr` in any direction. (The PLEX/extraction rail
    stays exactly as boring as a withdrawal should be.)
 2. **Server-authoritative randomness, audited.** Every roll is server-side and written to
@@ -89,7 +89,7 @@ the table limits.
 
 Real table games at the Neon Mile, on the audited den-book accounting (no new emission — the house
 edge is booked as profit and the street is tipped only from realized profit; on average both games
-are house-favorable, i.e. a SINK). CASH ONLY (the regulatory line). All numbers are founder sign-off
+are house-favorable, i.e. a SINK). CASH ONLY (the hard line). All numbers are founder sign-off
 levers (`CASINO.BJ_*`, `CASINO.POKER_MIN`).
 
 - **Blackjack (stateful PvE)** — a real hand you play out. `POST /v1/casino/blackjack {amount}` deals

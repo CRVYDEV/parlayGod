@@ -3,7 +3,7 @@
 Founder-directed 2026-07-19 ("Build the eth revenue packages"). Realizes §3 of
 `omerta-the-wire-and-revenue-design.md` (the revenue-engine brainstorm) as a concrete, buildable
 system. Off-chain-first, chain-dormant (the M6 pattern), **§10.4-neutral by construction**, mainnet
-gated on legal + a third-party audit of contracts AND the payment signer.
+gated on the launch checklist + a third-party audit of contracts AND the payment signer.
 
 ## The one design decision that makes this safe
 
@@ -19,8 +19,8 @@ $OMR, gear, or any sim-audited power. Consequences:
 2. **Anti-pay-to-win.** Nothing bought with ETH gives combat/economic advantage a skilled free player
    can't match. Revive insurance, a mint credit, an intel subscription, and a status badge are
    consumables / access / cosmetics — never raw power (the guardrail from the parent design).
-3. **Legally clean.** ETH buys cosmetics, status, access, and bounded consumables — never tokens,
-   never securities, never RWA-by-chance. The regulated surface stays confined to the one gated
+3. **Nothing gated is on the shelf.** ETH buys cosmetics, status, access, and bounded consumables — never tokens,
+   never stock, never RWA-by-chance. The gated surface stays confined to the one gated
    withdrawal boundary that already exists.
 
 ## The three-way revenue split (the founder lever)
@@ -38,7 +38,7 @@ is earmarked, via one env-configurable split:
   players as $OMR prizes, and the `extraction ≤ inflow` invariant (`runVigInvariants`) absorbs it
   unchanged — Store revenue is just more Vig revenue.
 - **rwa** (20%) — routed into a new `rwa_revenue` bucket. **Dormant (R2):** R2 (a real RWA reserve
-  backing the Dynasty Fund shares) is legal-gated and unbuilt, so this bucket is *recorded only, never
+  backing the Dynasty Fund shares) is launch-gated and unbuilt, so this bucket is *recorded only, never
   spent* — it's the accounting seat R2 will draw on. A light invariant asserts nothing has drained it.
 
 The existing **mint/respawn gameplay fees keep their legacy `VIG_BPS` posture** (`recordFeePayment` →
@@ -82,7 +82,7 @@ share funds (already built).
 - `storeBoard` / `storeStatus` — the catalog + your live entitlements. `revenueStatus` — the founder's
   three-way split totals for the ops dashboard.
 
-## The chain layer (dormant, the milestone after legal + audit)
+## The chain layer (dormant, the milestone after the launch checklist + audit)
 
 On-chain, `OmertaFees` gains a generic `payForPackage(bytes32 sku)` that enforces a per-SKU price,
 forwards the ETH to the dev wallet, and emits `StorePaid(nonce, sku, payer, amount)` — the `MintFeePaid`
@@ -121,6 +121,6 @@ side. So: real ETH → revenue + grant; comp → grant only.
    `src/pass.js` (THE LEDGER): a 12-tier daily-claim track; status/consumable rewards + a backed $OMR
    stipend through `Vig.payPrizes` (pool-bounded, funded by the pass's own buyback share). See CLAUDE.md.
 4. Named landmarks / Founder's charter numbers (whale status flexes — more `store_grants` SKUs).
-5. R2: the rwa_revenue → real-RWA-buy bot + the reserve that backs Dynasty shares (legal-gated).
+5. R2: the rwa_revenue → real-RWA-buy bot + the reserve that backs Dynasty shares (launch-gated).
 
 All prices/splits are founder sign-off levers — sim + sign-off into BALANCE.md before production.

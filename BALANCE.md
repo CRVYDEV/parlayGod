@@ -867,7 +867,7 @@ not a lever.
   carries to the heir.
 - The Store's real payment path is the on-chain paywall (dormant, mainnet-gated); today's live path is the
   mod comp/simulate route. Deploy note: nothing extracts real value until the `OmertaFees.payForPackage`
-  contract + the `StorePaid` watcher ship — both gated on legal + the third-party audit.
+  contract + the `StorePaid` watcher ship — both gated on the launch checklist + the third-party audit.
 
 ## THE LEDGER — Season Pass reward track (proposed levers, sign-off pending)
 
@@ -965,7 +965,7 @@ defaults — sim + founder sign-off before production (ground rule #1). §10.4-c
 - The round transfer is the audited `bodyguard:hire` mechanism verbatim (1% street tax → buyback + 1%
   dev off-ledger + 98% net) — an untaxed unlimited P2P transfer is the cheapest value pipe in the game.
 - Step two is the **revenue layer**: real-money (ETH) cosmetic decor + bottle service, and the club
-  hosting the games with a rake to the owner — both gated on the Store/chain rail (mainnet, legal + audit).
+  hosting the games with a rake to the owner — both gated on the Store/chain rail (mainnet, launch checklist + audit).
 
 ## The Speakeasy — step two (the games + the risk)
 
@@ -1110,8 +1110,8 @@ The fillHeist twin on the World raid. A soloist opens a co-op raid on an apex ou
 rows, so §10.4 (the in-game sweep) is untouched by construction; it carries its OWN invariant
 (`runBondInvariants`) on the real-value side (the `runVigInvariants` twin). The payout is a SALE of budgeted
 treasury OMR, NEVER a mint (OMR is fixed-supply on-chain). The on-chain `OmertaBond` contract + `Bonded`
-watcher + POL-pairing bot are MAINNET-GATED on legal counsel + a third-party audit (the R2/R3/withdrawal-rail
-wall), and there is **no APY / price-appreciation marketing** until counsel signs off.
+watcher + POL-pairing bot are MAINNET-GATED on the launch checklist + a third-party audit (the R2/R3/withdrawal-rail
+wall), and there is **no APY / price-appreciation marketing** until the founder signs off.
 
 **Notes (sign-off):**
 - The table's RAKE is carved from the stake (never minted on top — the econ-pass casino anti-precedent);
@@ -1351,7 +1351,7 @@ Jorge shipped the `SIGN-OFF.md` sheet. Applied + tested (suite 30/30, sim drift-
   Spread-the-Word cash faucet requires real social verification (alpha keeps `trust`).
 
 Everything else on the sheet is SIGNED at the recommended verdict (SHIP) or on the alpha WATCH-list. The
-Tier-6 chain/legal items remain a SEPARATE gate (legal counsel + `forge test` + third-party audit), not
+Tier-6 chain items remain a SEPARATE gate (the launch checklist + `forge test` + third-party audit), not
 signed by this pass.
 
 ### Speakeasy bar take — NET-EV measurement (sim P9.12, 2026-07-21)
@@ -2322,7 +2322,7 @@ the daily cap wants to be sized against real bond demand, and the rate ceiling a
 buy-side policy expects to sign. Until then they are "set them small" rather than a recommendation.
 
 **Mainnet is unchanged and still gated** on the third-party audit (whose clock this drop RESET — see
-`CHAIN-DEPLOY.md` §0.2) and legal counsel. Gate 1 (`forge test`) is green at 77/77.
+`CHAIN-DEPLOY.md` §0.2) and the launch checklist. Gate 1 (`forge test`) is green at 77/77.
 
 ---
 
@@ -2948,7 +2948,7 @@ what four signed bps are FOR, and a reader of this file should not have to find 
 The game will not acquire, hold, allocate or deliver real tokenized equities. The float's wall was
 `allocated ≤ held` — the game only ever owes stock it already owns, in UNITS — which works only while both
 sides of the ledger are the same asset. Backing a stock-denominated claim with ETH was rejected on
-substance: legally it turns handing over an asset you own into a cash-settled payout on one you do not,
+substance: it turns handing over an asset you own into a cash-settled payout on one you do not,
 and mechanically the treasury goes short exactly when players claim. So the cut was **remove the promise,
 keep the accounting.**
 
@@ -4022,7 +4022,7 @@ itself is status and extraction is an ownership move, so neither writes a ledger
 **The one thing NOT to retune without reading §7 first: the upgrade must stay DETERMINISTIC.** Pay
 the tier's price, get exactly that tier. A random paid upgrade would be a loot box bought with a
 token people reach through ETH, which is the question the design's "sell deterministic, drop random"
-rule exists to avoid entirely. Making it a roll is a legal decision wearing a balance decision's
+rule exists to avoid entirely. Making it a roll is an outside decision wearing a balance decision's
 clothes.
 
 **Not a balance flag, but the number that governs supply:** each tokenId's LIFETIME cap is set by the
@@ -4123,9 +4123,9 @@ the landing page and MARKETING.md all promised *"no pay-to-win"*, which stopped 
 this shipped. All four now make the ceiling claim instead. The Store's own claim is untouched and
 still true — ETH packages still grant only cosmetics, access windows and consumables, never $OMR.
 
-**Sensitive, and flagged for the counsel packet:** this game has real-money extraction, so the chain
+**Sensitive, and flagged for the launch packet:** this game has real-money extraction, so the chain
 is real money → in-game earning power → $OMR → the Window / the withdrawal rail. That is a materially
-different product posture from "pay for cosmetics" and belongs in front of counsel beside the bond and
+different product posture from "pay for cosmetics" and belongs on the launch checklist beside the bond and
 the Store, alongside the standing no-earnings-promise rule.
 
 **Asserted from both sides in three suites** (`test/made.js`, `test/speakeasy.js`,
@@ -5354,8 +5354,8 @@ electorate bounded at `COMMISSION.SEATS`, weights SEATS..1 by rank, tie → dead
 roll the worker resolves YESTERDAY into `ticker_ballot_results` — the permanent record the Phase-B
 buy keeper will consume — with deadlock/silence recorded as `TICKER_BALLOT.DEFAULT` ('SPY', the
 broad market) and `decided_by` naming chamber vs default. **ZERO §10.4 surface** (test-pinned: the
-whole ballot writes no ledger row; nothing is bought until Phase B clears counsel memo A1 —
-`omerta-counsel-memo.md`). The board says so honestly (`buying: false`). Levers: `TICKER_BALLOT.
+whole ballot writes no ledger row; nothing is bought until Phase B clears its launch-checklist row —
+the launch checklist (kept privately — see the founder)). The board says so honestly (`buying: false`). Levers: `TICKER_BALLOT.
 TICKERS` (the buy list — adding a ticker is a listing decision, not a balance one) and
 `TICKER_BALLOT.DEFAULT` (what a silent/deadlocked chamber buys). Reverting is an empty record —
 the keeper simply never has a row to act on.
@@ -5613,13 +5613,13 @@ retune). Execution is BY HAND at each boundary and is now ONE Safe `setFees` tra
 there is no second rail to move; preflight warns on an off-schedule fee, and the admin chain panel's
 tier line flags OFF SCHEDULE. §10.4: zero surface (the ETH rail is out-of-band; the $OMR rail rides
 the existing `plex:%` sink, which RECYCLES to the desk — the v3 revenue decision, kept).
-Counsel: adopting the schedule RE-OPENED memo row A4 (the published-forward-escalation question);
+Launch checklist: adopting the schedule re-opened the published-forward-escalation question;
 the copy rules (founding-era frame, no countdown/"N remaining" counters, the banned lexicon) are
-part of the fact pattern counsel reviews. **The ceiling strengthens that position rather than
+part of the fact pattern the launch review covers. **The ceiling strengthens that position rather than
 complicating it** — the hardest version of the A4 question is whether a forward schedule reads as a
 promise that later buyers pay more indefinitely, and a published cap answers it in the fact pattern
 itself: the escalation terminates, at a number stated up front, and the most anyone ever pays is
-0.05 ETH. Worth putting in front of counsel as the amended pattern rather than leaving the row
+0.05 ETH. Worth putting on the launch checklist as the amended pattern rather than leaving the row
 drafted against the open ladder. The LIVE price today is wave 1 — nothing changes at the till until
 the 1,001st identity.
 

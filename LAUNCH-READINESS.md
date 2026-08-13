@@ -22,7 +22,7 @@ There are three distinct launches here and conflating them is the main way this 
 |---|---|---|---|
 | **DOOR 1 — the game** | Real players in a live city. No chain, no token sale, no real-money extraction. | Engineering + ops readiness only | **Effectively open.** Blocked only by the Phase-0 activation items below. |
 | **DOOR 2 — the agent channel** | Segment B: MCP directories, Show HN, `/arena`. | `npm publish omerta-mcp` + Door 1 populated | **One 5-minute task from open.** |
-| **DOOR 3 — the chain** | Genesis window, pool, community drop, on-chain extraction. | Third-party audit **and** counsel **and** `forge test` | **Hard-blocked.** Two of three gates are red and neither is ours to close alone. |
+| **DOOR 3 — the chain** | Genesis window, pool, community drop, on-chain extraction. | Third-party audit **and** the launch checklist **and** `forge test` | **Hard-blocked.** Two of three gates are red and neither is ours to close alone. |
 
 **Doors 1 and 2 do not wait for Door 3.** That separation is the single most important structural
 decision in this plan: it means we can launch a game, learn from real players, and fix what they
@@ -141,7 +141,7 @@ close alone.** `CHAIN-DEPLOY.md` §0 is the authority; this is the summary.
 |---|---|---|
 | **1 — `forge test` green** | ✅ 198/198, 7 fuzzes | us |
 | **2 — third-party audit of contracts AND the signer** | ❌ **not started** | external |
-| **3 — legal counsel** | ⚠ **partial** | external |
+| **3 — the launch review** | ⚠ **partial** | external |
 
 ### Gate 2 — the audit
 
@@ -161,22 +161,17 @@ close alone.** `CHAIN-DEPLOY.md` §0 is the authority; this is the summary.
 - **The clock has been reset twice** (v2 step 4; the bond's fourth slice). Do not start it a third
   time with a contract change unless the change is worth the delay.
 
-### Gate 3 — counsel
+### Gate 3 — the launch checklist
 
-| Row | State |
-|---|---|
-| A1 treasury stock purchases | Confirmed (founder assertion) — countersignature to file |
-| A2 transferable TBA drops | Confirmed — countersignature to file |
-| A3 claim-rail geofence / KYC | Confirmed; **direction 2026-08-11: no KYC, no geofence, all jurisdictions.** Still open: is delivery a distribution *by us*, and what must a US-person recipient be told? |
-| A4 uncapped NFT proceeds | ⚠ **RE-OPENED** — the five-wave published schedule capped at 0.05 ETH changed the fact pattern |
-| A5 play-pool redistribution | Confirmed |
-| A6 free community distribution (airdrop) | Confirmed |
-| A7 provenance traits | ❌ **OPEN** |
-| A8 the activator's leg | ❌ **OPEN** |
-| A9–A12 THE BANK rows | ❌ **OPEN** (synthetic issuance, yield-bearing deposits, revenue distribution, custody) |
+The checklist is kept **outside this repo** — see the founder. It is the review of every surface that
+moves real value, and it is what blocks Door 3. The surfaces it covers are the ones this repo builds
+chain-dormant and never arms on its own: treasury stock purchases, transferable TBA drops, the claim
+rail, NFT proceeds, the play-pool redistribution, the free community distribution, provenance traits,
+the activator's leg, and THE BANK's four (synthetic issuance, yield-bearing deposits, revenue
+distribution, custody).
 
-**Get the countersignatures to file.** A founder assertion that counsel approved something is a record
-of a conversation, not a legal opinion, and the difference matters precisely when it is tested.
+**Do not read a green build as a green checklist.** Every one of those surfaces already exists in the
+tree behind an env flag, and the tests prove they *work* — not that they are cleared to run.
 
 ### If both gates go green — the sequence
 
@@ -249,7 +244,7 @@ Written down so it is a decision on the record rather than something that quietl
 
 **Blocking Door 2:** one `npm publish`.
 
-**Blocking Door 3:** a third-party audit that has not started and six open counsel rows. Neither is
+**Blocking Door 3:** a third-party audit that has not started and six open launch-checklist rows. Neither is
 ours to close alone, and neither should hold the game.
 
 **The real risk is not any of the above.** It is launching into a city where nobody meets anybody.

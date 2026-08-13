@@ -1,5 +1,5 @@
 // THE GAMBLING DEN — player-vs-house games at the Neon Mile (design: omerta-gambling-den-design.md).
-// HARD RULES: cash only, never $OMR (the regulatory line); every roll server-side + rng_audit'd
+// HARD RULES: cash only, never $OMR (the hard line); every roll server-side + rng_audit'd
 // (ground rule #3); every stake a §10.4 sink (casino:bet:<game>), every payout a faucet
 // (casino:win:<game>), both with character_id so the per-character cash check reconciles. The
 // street's 1% cut (→ the buyback/yield loop) and the fronts' rakeback are paid ONLY from the

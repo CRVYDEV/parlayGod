@@ -8,7 +8,7 @@ Each lens ran independently; every finding was verified against source before an
 ## Verdict
 
 **No CRITICAL, no HIGH.** The feature is sound by construction: the status/currency split holds
-(§10.4 exact), the Portfolio is fully chain-contained (the legal line), death/estate survival is
+(§10.4 exact), the Portfolio is fully chain-contained (the hard line), death/estate survival is
 correct, and the contract interactions are unchanged and sound. Fixed in-commit: **one MED design
 hole** (structuring defeated the RICO-graduation intent) and **four LOW** hardenings (a latent
 concurrency window, a defensive guard, an actor-gate consistency gap, a heat clamp). Regression per
@@ -68,7 +68,7 @@ is cosmetic parity. (`portfolio.js:invest`.)
 - **Chain daily-cap liveness + `OmertaFees` forward-DoS**: previously-accepted, fail-closed, Safe-
   recoverable (no value leak).
 
-## Chain containment (the legal line) — CONFIRMED
+## Chain containment (the hard line) — CONFIRMED
 
 The R1 Portfolio has **zero reach into any chain surface**: `portfolio.js`/`heists.js`/`worker.js`
 import only game/rules/vanity; the only tables touched are `portfolios`/`gang_portfolios`/

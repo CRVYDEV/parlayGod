@@ -390,11 +390,11 @@ does not. Steps 1–5 are off-chain and gated on nothing.
 
 ## 10. Risks, on the record
 
-**A. This is a real-money competition with a rake — a GAMBLING question, not the securities question
+**A. This is a real-money competition with a rake — a different question from the stock one
 we have been managing.** Players buy in with ETH, compete against each other under RNG, the house
 takes a cut, and they cash out. In some jurisdictions that is gambling regardless of the skill
 ratio; in others the skill ratio decides, and our combat has meaningful RNG. The founder's standing
-"assume counsel approved the architecture" directive predates this category. **This one needs its own
+"proceed with the architecture" directive predates this category. **This one needs its own
 opinion before launch, and it is the highest-stakes open item in the document.**
 
 **B. Recycling means supply never falls.** You cannot burn *and* recycle the same unit — burn
@@ -402,7 +402,7 @@ supports price, recycle produces revenue. We chose revenue. The pitch changes fr
 "high-velocity" and must never be marketed as the former.
 
 **C. 50% of primary issuance as founder revenue is the first thing anyone forensic will compute.**
-Not a legal problem, an optics one. Vesting that half costs nothing long-run and removes the "exit"
+Not a real problem, an optics one. Vesting that half costs nothing long-run and removes the "exit"
 read entirely.
 
 **D. No faucet means f2p has no OMR income.** Their path is NFT drops and hunting. I think that is
@@ -509,7 +509,7 @@ But operations need funding now, so split the founder half rather than locking a
 
 | slice | of the founder 50% | treatment |
 |---|---|---|
-| **OPEX** | 30% (15% of bond ETH) | immediate — servers, art, audits, counsel |
+| **OPEX** | 30% (15% of bond ETH) | immediate — servers, art, audits, professional fees |
 | **CARRY** | 70% (35% of bond ETH) | **90-day cliff, then linear over 24 months**, at a published address |
 
 **And reframe the split itself, because the current framing undersells it.** The LP half is not

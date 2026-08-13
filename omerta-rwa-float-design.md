@@ -29,9 +29,9 @@ slice.
    the cost (unbounded drain), or the game promises stock it doesn't own (Ponzi-shaped liability).
 2. **The fake price breaks backing.** R1's deterministic §7.11 hash price ≠ the Uniswap price. Any
    backed share priced off the hash is either free money for players or a treasury hole.
-3. **It collapses the legal wall.** $OMR convertible into securities on demand makes $OMR itself a
-   securities-purchasing instrument — dragging the whole token into the regulated zone instead of
-   confining it to one KYC'd exit gate.
+3. **It collapses the wall.** $OMR convertible into stock on demand makes $OMR itself a
+   stock-purchasing instrument — dragging the whole token inside the gate instead of confining
+   it to one gated exit.
 
 ## 2. The principle (already load-bearing elsewhere)
 
@@ -58,7 +58,7 @@ ETH taxes ──► rwa_revenue (accounting bucket, out-of-band)
    players claim from the float by burning earned $OMR at the REAL oracle price
    (rwa:vault — $OMR is the RATIONING TICKET; the ETH taxes were the FUNDING)
                  │
-                 ▼  (R3, legal-gated: KYC + geofence)
+                 ▼  (R3, launch-gated: verified + eligibility-gated)
         extraction delivers the actual token — trivially safe: it's already held
 ```
 
@@ -112,11 +112,11 @@ the invariant view makes the gap visible, never hidden.
 
 ## 8. What is deliberately NOT built
 
-- **Direct ETH→shares purchase** — makes the game a securities dealer at the point of sale (KYC at
+- **Direct ETH→shares purchase** — makes the game the seller at the point of sale (verificationerification at
   entry, the heaviest surface). Rejected; entry stays in-game.
-- **The real Uniswap bot + Safe custody** — mainnet milestone, gated on legal counsel + the
+- **The real Uniswap bot + Safe custody** — mainnet milestone, gated on the launch checklist + the
   third-party audit (the M6/bond dormant pattern). This drop is the complete off-chain core.
-- **R3 extraction** — unchanged: KYC'd + geofenced (no US persons per Robinhood's product terms),
+- **R3 extraction** — unchanged: eligibility-gated (per the issuer's own restrictions),
   capped by the player's vaulted units, reserve-backed by construction.
 - **Never by chance** — unchanged: no RNG/loot/casino path touches either book.
 
@@ -124,4 +124,4 @@ the invariant view makes the gap visible, never hidden.
 
 `FEE_RWA_BPS` 1000 · `CLAIM_DAILY_OMR` 500 · `CLAIM_MIN_OMR` 5 · the oracle floor
 (`STORE.PLEX_FLOOR_OMR_PER_ETH`, shared) · buyback cadence/size (bot). No earnings/appreciation
-marketing until counsel clears wording (the standing wall).
+marketing until the founder clears wording (the standing wall).

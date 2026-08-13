@@ -398,7 +398,7 @@ export async function recruitingFamilyLeaderboard(pool, limit = 20) {
 //    as recruiting income. On a fresh database this is simply 0.
 // pg-mem: recruit lookups JOIN `referrals` directly — NEVER ANY($1)-of-array (pg-mem returns zero
 // rows for it; the same-IP flag in game.js documents the class). Flat queries + JS aggregation.
-const SPIN_TRACKS = [ // the "now spinning" record — seeded per (account, day); FICTIONAL tracks only (the Broadcast legal posture)
+const SPIN_TRACKS = [ // the "now spinning" record — seeded per (account, day); FICTIONAL tracks only (the Broadcast posture)
   'Gin & Regret — The Canal Street Quartet',
   'Last Train to Neon Mile — Dixie Holloway',
   'Blood on the Brickworks — Sal "Two Rings" Marino',

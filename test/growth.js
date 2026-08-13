@@ -1084,7 +1084,7 @@ const tonyBefore = tonyMe0.cash, tonyOmrBefore = tonyMe0.omr;
 for (let i = 0; i < 20; i++) { await seedCh(bBenny.id, 'nerve=50, energy=200, jail_until=NULL'); r = await call('POST', '/v1/crimes/pick', { token: bBenny.token }); if (r.body.success) break; }
 const tonyAfter = await meOf(gTony.token);
 assert.equal(tonyAfter.cash, tonyBefore + 5000, 'the grandrecruiter earns the one-time tier-2 fee ($5k) when their recruit\'s recruit qualifies');
-assert.equal(tonyAfter.omr, tonyOmrBefore, 'tier-2 adds NO $OMR — CASH ONLY (the anti-MLM/legal line)');
+assert.equal(tonyAfter.omr, tonyOmrBefore, 'tier-2 adds NO $OMR — CASH ONLY (the anti-MLM line)');
 assert.equal((await pool.query(`SELECT ref_l2_paid FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${bBenny.id}')`)).rows[0].ref_l2_paid, true, 'the tier-2 latch is set');
 assert.equal(Number((await pool.query(`SELECT amount FROM transactions WHERE character_id='${gTony.id}' AND reason='referral:tier2'`)).rows[0].amount), 5000, 'the tier-2 fee is ledgered referral:tier2');
 await call('POST', '/v1/crimes/pick', { token: bBenny.token });

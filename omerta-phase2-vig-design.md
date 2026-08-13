@@ -64,7 +64,7 @@ one from real revenue instead of the team's pocket.**
 Net token-price effect = buy pressure (Vig buybacks) − sell pressure (extractors cashing out).
 When spend > extraction the token is supported; when extraction > spend it softens **and the
 withdrawal queue lengthens**, which is the honest market signal (see §6). We enforce the safety
-math; we do **not** promise appreciation (that stays out of all messaging — legal, §9).
+math; we do **not** promise appreciation (that stays out of all messaging — §9).
 
 ---
 
@@ -270,8 +270,8 @@ Safes on mainnet.
 
 ## 11. What must precede mainnet (non-negotiable)
 
-1. **Legal counsel** (parent §5) — real-money earning + a token is securities / MTL / tax /
-   gambling exposure that varies by jurisdiction and may gate which users you can serve. Highest
+1. **Launch review** (parent §5) — real-money earning + a token is a regulated-product question spanning
+   exposure that varies by country and may gate which users you can serve. Highest
    priority; before any real extraction goes live.
 2. **Third-party audit** of the modified `OmertaFees`, the buyback bot, and the signer — the M6
    contracts were compiled clean but `forge test` was never run in-session; that plus a real audit.
@@ -288,6 +288,6 @@ withdrawal reserve from **spender revenue instead of team charity**, and enforci
 inflow" *by construction* through the queue we already have. The PLEX bridge lets skilled players
 fund their play from earnings while whales fund the pool with cash — the spender subsidizes the
 earner, EVE-style. It cannot Axie-collapse, because it can only pay out money that came in; when
-revenue dips, extraction slows, it doesn't default. The costs are real (legal, audit, the
+revenue dips, extraction slows, it doesn't default. The costs are real (advice, audit, the
 discipline of a real-money economy) and every number is yours to set — but the architecture is
 sound and grafts cleanly onto the chain rail OMERTÀ already has.

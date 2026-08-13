@@ -1,8 +1,8 @@
 # THE LAUNCH SEQUENCE — the genesis window, the pool, and the community drop
 
 Status: **DESIGN (founder-directed 2026-08-09). Every phase sits behind the two standing gates
-(third-party audit of contracts AND signer; counsel signatures on `omerta-counsel-memo.md`) plus
-one NEW counsel row this plan adds (A6, the airdrop).** The founder's shape: *a 1–3 day alpha/beta
+(third-party audit of contracts AND signer; sign-off on the launch checklist (kept privately — see the founder)) plus
+one NEW launch-checklist rows this plan adds (A6, the airdrop).** The founder's shape: *a 1–3 day alpha/beta
 phase where users can bond and purchase OMR; after that it initializes an LP where our designed
 hook comes into play; and an amount of OMR reserved to airdrop to the top NFT and coin communities
 on ETH and Robinhood Chain (CryptoPunks, BAYC, MAYC, StonkBrokers, $PEPE, $CASHCAT and similar).*
@@ -24,12 +24,12 @@ verified in-tree, carry the whole plan:
 ## Phase G-0 — pre-flight (everything here is a gate, not a task list)
 
 - The audit batch (already scheduled for Phase B) gains the GenesisOracle + the launch checklist;
-  counsel signs A1–A5 plus the new **A6** (§4 below). `forge test` green (standing).
+  the launch checklist is signed off (§4 below). `forge test` green (standing).
 - Deploys, in the contract's own documented order inverted only at the oracle step: OMR →
   OmertaBond → **setOracle(GenesisOracle)** → hook address mined → the 6551 registry replayed →
   `setMinter(bond)` LAST (the mint arms last — the standing rule).
 - **THE GENESIS PRICE is the one number that anchors everything** (founder decision, priced with
-  counsel's no-promise copy rules): the window sells at it, the LP initializes at it, and setting
+  the no-promise copy rules): the window sells at it, the LP initializes at it, and setting
   them EQUAL is what makes the pool open with no arbitrage gap in either direction.
 - **Airdrop snapshots are taken BEFORE anything is announced** (the classic rule — a snapshot
   announced in advance gets farmed): block heights recorded per community, merkle roots computed
@@ -171,30 +171,30 @@ the cap bounds whales. NFT communities may be per-NFT (the NFT itself is the Syb
   extraction gate on nothing, no wage to draw, no bonus attached. The entitlement only matters to
   someone who then plays or buys, which is the point of giving it away.
 - **THE PROVENANCE TRAITS ride the same snapshots** (`omerta-dynasty-machine-design.md` §9,
-  counsel row A7): a snapshotted wallet's identity mint may claim — opt-in, once ever, banded,
+  an open launch-checklist row): a snapshotted wallet's identity mint may claim — opt-in, once ever, banded,
   cosmetic only — a generative trait marking its community of origin. Two consequences for THIS
   plan: the G-0 announce-gate now covers the traits too (neither the drop NOR the trait feature
   is announced before every snapshot it reads is fixed), and the D1 recommendation strengthens
   further (the in-game claim flow delivers the drop, the mint, and your colors in one SIWE pass).
 
-## 4. The new counsel row — A6
+## 4. The new launch-checklist row
 
-`omerta-counsel-memo.md` gains: **A6 — OMR may be distributed free to snapshotted third-party
+The launch checklist gains a row: **OMR may be distributed free to snapshotted third-party
 communities.** A free, deterministic, snapshot-based distribution of the game token (not a sale;
 no investment of money) to holders of unaffiliated NFT/token communities on ETH mainnet and
 Robinhood Chain, claims gas-paid and time-boxed, claim-page copy under the standing no-promise
-rules. *Question for counsel: does a free token distribution at this scale carry registration or
-jurisdiction exposure (the historical airdrop-as-distribution line), and does the claim page need
-the same geofence posture as A3's rail?* Phase G-3 is blocked on this row.
+rules. *Open question: does a free token distribution at this scale carry registration or
+exposure (the historical airdrop-as-distribution line), and does the claim page need
+the same eligibility posture as A3's rail?* Phase G-3 is blocked on this row.
 
 ## 5. What this deliberately does not do
 
 No pre-announced snapshots. No pushed tokens (every distribution is a claim). No chance anywhere
 (fixed amounts, published roots). No LP before the window (the window funds it) and no second
 pool (the untaxed-pool argument, §9.6). No genesis price talk in public copy beyond the number
-itself — no targets, no projections, no appreciation language (the standing rule, with counsel's
+itself — no targets, no projections, no appreciation language (the standing rule, with the founder's
 eyes on the claim page and the window copy specifically). And no phase starts before the gates:
-audit, A1–A5, and now A6.
+the third-party audit, and the launch checklist.
 
 ## 6. Open founder levers (tabled at decision time, none pinned yet)
 

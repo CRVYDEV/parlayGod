@@ -224,7 +224,7 @@ export const CONSTANTS = {
   BANK_TAPER_ABOVE: 10000000, BANK_TAPER_KEEP: 0.10,
 };
 // THE GAMBLING DEN — player-vs-house games at the Neon Mile. CASH ONLY (never $OMR — the
-// regulatory line), server-rolled + rng_audit'd, every stake/payout ledgered casino:* so §10.4
+// hard line), server-rolled + rng_audit'd, every stake/payout ledgered casino:* so §10.4
 // reconciles per character; 1% of every stake goes to the street-tax pool (the buyback loop),
 // the rest of the house edge burns. Dice = the real pass-line (edge ~1.41%, entertainment-thin);
 // the Numbers pays the historically accurate 600:1 on 999:1 odds (~40% edge — a daily flutter).
@@ -511,7 +511,7 @@ export const M4 = {
   // OWN qualified recruit, you earn a BOUNDED, ONE-TIME finder's fee. Deliberately a flat one-shot —
   // NOT an ongoing percentage of the grandrecruit's earnings — so it's a referral bonus, not a
   // revenue-share pyramid (the anti-MLM line). CASH ONLY, capped at depth 2 (no third level), agents
-  // excluded at every level. Sensitive design: recorded as counsel-gated; founder green-lit.
+  // excluded at every level. Sensitive design: recorded as gated; founder green-lit.
   REF_TIER2_CASH: 5000,
   // Time-boxed RECRUITMENT DRIVE ("the push"): a mod starts a window during which every referral
   // CASH payout (spark + full + milestone + tier-2) is multiplied. $OMR is untouched (fund-bounded).
@@ -4606,7 +4606,7 @@ export const HUSTLE = {
 // The day's chain for one street — three DISTINCT stops + a (fictional) contact + the legwork,
 // all off the §7.11 hash: deterministic and verifiable, and PER-STREET so the whole town isn't
 // standing on the same corner. The contact draws from the SOLDIERS noir name pool (fictional
-// only — the Broadcast legal posture).
+// only — the Broadcast posture).
 export const hustleOf = (chId, day = dayOf()) => {
   const pick = (s, n) => Math.floor(hash01(`hustle:${chId}:${day}:${s}`) * n) % n;
   const rest = DISTRICTS.map((d) => d.id);
@@ -5153,9 +5153,9 @@ export const TICKER_BALLOT = {
 //     MINT_FEE_ETH/PLEX_MINT_OMR env — plexQuote already scales the $OMR rail off MINT_FEE_ETH, so
 //     no code runs a boundary. The admin chain panel shows tier progress + flags a live pair that
 //     is OFF this schedule; preflight warns on an off-schedule pair at boot.
-// Adoption RE-OPENED counsel-memo row A4 (a published forward schedule on a tradeable asset — the
-// re-drafted question is in the row). Copy rules ride with it: founding-era frame only, never a
-// countdown/"N remaining" counter, the banned lexicon verbatim.
+// Adoption re-opened a launch-checklist row (a published forward schedule on a tradeable asset).
+// Copy rules ride with it: founding-era frame only, never a countdown/"N remaining" counter, the
+// banned lexicon verbatim.
 // The founder's waves are 1k / 10k / 25k / 50k / 100k at .01 / .025 / .0333 / .0444 / .05 ETH.
 // Waves 3 and 4 are rounded to .035 / .045 (+5.1% / +1.4%) so both waves land on tidy numbers.
 //
@@ -5307,7 +5307,7 @@ export const brokerTier = (id) => BROKERS.TIERS.find((t) => t.id === Number(id))
 export const brokerActive = (until, now = Date.now()) => !!until && new Date(until).getTime() > now;
 
 /// The published weight. Deterministic in both terms — NEVER by chance, which is the standing rule
-/// that keeps a securities distribution out of loot-box territory entirely.
+/// that keeps a stock distribution out of loot-box territory entirely.
 export const brokerWeight = (tierId, gains = {}) => {
   const t = brokerTier(tierId);
   if (!t) return 0;

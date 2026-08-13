@@ -6,7 +6,7 @@
 // writes only bonds / bond_reserve / vig_revenue(source='bond') — ZERO `transactions` rows — so the in-game
 // §10.4 sweep is untouched by construction (the fees.js precedent). It carries its OWN invariant
 // (`runBondInvariants`) on the real-value side. The chain layer (the OmertaBond contract + a Bonded watcher
-// + the POL pairing bot) is DORMANT, mainnet-gated on legal + a third-party audit.
+// + the POL pairing bot) is DORMANT, mainnet-gated on the launch checklist + a third-party audit.
 import crypto from 'node:crypto';
 import { getAddress } from 'viem';
 import { GameError } from './game.js';
@@ -351,7 +351,7 @@ export async function bondStatus(pool) {
     polEth: round6(Number(r.pol_eth || 0)), devEth: round6(Number(r.dev_eth || 0)),
     rwaEth: round6(Number(r.rwa_eth || 0)), vigEth, bonds, claimedOmr: claimed,
     invariant: inv.ok, checks: inv.checks,
-    chainDormant: true, // the OmertaBond contract + watcher + POL bot are the mainnet milestone (legal + audit gated)
+    chainDormant: true, // the OmertaBond contract + watcher + POL bot are the mainnet milestone (launch + audit gated)
   };
 }
 

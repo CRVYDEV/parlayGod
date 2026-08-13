@@ -337,7 +337,7 @@ for (const [i, b] of R.PORT.BOATS.entries()) MANIFEST.push({
 //
 // The portrait vocabulary is separate ON PURPOSE: the shared NOIR string says "unpeopled", which
 // is exactly wrong for a fixture portrait. Faces are FICTIONAL characters only (the Broadcast
-// legal posture) — no lookalikes, no real names, invented mugs.
+// posture) — no lookalikes, no real names, invented mugs.
 const SCENE = '1940s American noir, hard chiaroscuro, deep shadow, teal and amber light, film grain, '
   + 'muted desaturated palette, cinematic, unpeopled, no signage, no lettering, no writing anywhere, no watermark';
 const PORTRAIT = 'a 1940s American noir character portrait, head and shoulders, hard chiaroscuro, one warm '

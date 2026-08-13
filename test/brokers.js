@@ -109,7 +109,7 @@ assert.equal(Number(wrows[0].tier), 3);
 
 const board = await epochBoard(pool);
 assert.equal(board.delivered, false, 'the board states plainly that nothing was delivered');
-assert(/counsel/i.test(board.note), 'and names the gate');
+assert(/gated/i.test(board.note), 'and names the gate');
 
 // ── re-running an epoch is idempotent, not a second payout ──
 const again = await allocateEpoch(pool, { endDay: today });
@@ -119,7 +119,7 @@ assert.equal(Number((await pool.query('SELECT COUNT(*) c FROM broker_epochs')).r
 
 // ── THE RECORDER LOGS COUNTS, NEVER GRANTED XP ──────────────────────────────────────────────────
 // bumpMastery applies pathXpMult (1.5x home / 0.6x rival) to `xp`. If the recorder wrote `xp`, a
-// player's declared PATH would silently change their share of a securities distribution. It writes 1.
+// player's declared PATH would silently change their share of a stock distribution. It writes 1.
 assert.notEqual(MASTERY.XP.crime, 1,
   'precondition: the base crime award is not 1, so a COUNT is distinguishable from XP');
 const before = await gainsFor(pool, sal.aid, today, today);

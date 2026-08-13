@@ -182,7 +182,7 @@ above is the real path and the only one the console offers).
   (a Resend API key by default; `EMAIL_API_URL` overrides the endpoint for another provider) + `EMAIL_FROM`
   (e.g. `OMERTA <noreply@yourdomain>`) on the **worker** (it does the sending), redeploy, and players can
   opt in. Windows tune with `DIGEST_LAPSE_DAYS` (3) / `DIGEST_COOLDOWN_DAYS` (7) / `DIGEST_MAX_LAPSE_DAYS`
-  (30). Every email carries a one-click unsubscribe; keep the copy counsel-cleared. Zero §10.4 surface.
+  (30). Every email carries a one-click unsubscribe; keep the copy founder-cleared. Zero §10.4 surface.
 
 ### The switchboard — `/admin` → **Integrations**
 The retention/funnel wiring all ships DORMANT and switches on by env config (no code deploy). The
@@ -196,7 +196,7 @@ available and are already built and tested — the panel just tells you which ar
 ## 4. Chain — LEAVE UNSET for the off-chain alpha
 The chain service is dormant unless configured. Setting `CHAIN_RPC_URL` + `CHAIN_ID` +
 `VOUCHER_CLAIM_ADDRESS` (+ `VOUCHER_SIGNER_PK`, `OMERTA_FEES_ADDRESS`, …) activates the watcher/withdraw
-rail — **do not** until the chain go-live path (devnet → audit → mainnet, gated on legal + the third-party
+rail — **do not** until the chain go-live path (devnet → audit → mainnet, gated on the launch checklist + the third-party
 contract+signer audit). `ALLOW_MOD_REAL_REVENUE` is a QA-only flag — **never** set in production.
 
 ## 5. NEVER set in production (the boot guard rejects them)
@@ -441,7 +441,7 @@ step 3 returned the true counts, step 4 came back `"ok": true` with every §10.4
 
 ## 9. Still gated (NOT part of the off-chain alpha)
 Mainnet / on-chain extraction — `forge test` on a real toolchain, the third-party audit of the contracts
-**and** the off-chain signer, and legal counsel on the Risk-to-Earn / RWA line. See CLAUDE.md + `SIGN-OFF.md`.
+**and** the off-chain signer, and the launch checklist on the Risk-to-Earn / RWA line. See CLAUDE.md + `SIGN-OFF.md`.
 Founder balance sign-offs (`BALANCE.md` / `SIGN-OFF.md`) are numbers, not blockers, for the alpha.
 
 ## 3c. Seasonal League Modifiers (slate #6) — ARMED by default since 2026-08-02

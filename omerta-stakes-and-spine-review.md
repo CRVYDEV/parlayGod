@@ -187,7 +187,7 @@ shipped too (THE APPROACH). The other verbs (endgame collect/bet) stay idle-shap
   commit / CLAUDE.md entry.)*
 - **#5 — free-path legibility (BUILT).** The wage card now carries a plain "Free trial vs Made Man —
   straight facts, no promises" disclosure (a free account plays the WHOLE game; minting unlocks the
-  wage payroll + on-chain extraction, nothing else). Facts, not earnings marketing — the counsel-gated
+  wage payroll + on-chain extraction, nothing else). Facts, not earnings marketing — the gated
   line holds.
 - **#7 — consistency snags (VERIFIED / already shipped).** Cooldown legibility was already live (the
   `[data-until]` ticker from the overnight UX drop). The ownership-transfer-flag class is **verified
@@ -206,7 +206,7 @@ shipped too (THE APPROACH). The other verbs (endgame collect/bet) stay idle-shap
 | 2 | death costs nothing for the established | **L2a BUILT** | the Death Duty (25% of liquid $OMR); L2b/L2c further flavor |
 | 3 | PvP is −EV and opt-out-able | **L3a/L3b/L3c ALL BUILT** | the Sacking + the Shield Cap + the Contract's Bullets — done |
 | 4 | 35 leaderboards, no spine | **BUILT** | — |
-| 5 | "pay then earn" legibility | **BUILT** | (messaging still counsel-gated) |
+| 5 | "pay then earn" legibility | **BUILT** | (messaging still gated) |
 | 6 | breadth ≫ depth | **D6a BUILT (both steps)** | THE APPROACH (crime) + THE MESSAGE (jump) + THE PLAY (deal) — all three entry verbs carry a real decision, none touches a signed cash curve; D6b remains the honest framing |
 | 7 | consistency snags | **VERIFIED / shipped** | (cooldown-window rhythm = a tuning call) |
 

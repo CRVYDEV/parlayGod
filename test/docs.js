@@ -24,7 +24,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { walkSrc } from './lib/srcfiles.js';
-import { MINT_TRANCHES, STORE } from '../src/rules.js';
 
 const read = (p) => fs.readFileSync(p, 'utf8');
 // Counted the way `wc -l` counts — newlines, not `split('\n').length`, which adds a phantom line for
@@ -206,31 +205,21 @@ const phantom = [...index.matchAll(/`(AUDIT-[a-z0-9.-]+\.md)`/g)].map((m) => m[1
   .filter((f) => !audits.includes(f));
 assert.deepEqual([...new Set(phantom)], [], `docs/AUDITS.md lists reports that do not exist: ${phantom.join(', ')}`);
 
-// ── the counsel memo must not state a fee the game does not charge ──────────────────────────────
-// This one is here because it FAILED in the field, and its failure mode is the expensive kind: a
-// same-day founder reversal (the PLEX rail retired, then restored an hour later for everything but
-// the mint) left the memo telling counsel the product had ONE payment rail across every real-money
-// price. The row's own analysis was unaffected — it concerns the identity sale, which really is
-// ETH-only — but a memo's entire value is that it is accurate about the product, and a lawyer
-// opining on a wrong fact pattern is worse than no memo.
+// ── the launch checklist's fee guard — RETIRED 2026-08-12, and this is the tombstone ─────────────
+// It checked that every "<n> ETH" the checklist stated as a price was a live fee (a published
+// tranche wave, the respawn fee, a Store SKU), because that document's entire value is being
+// accurate about the product, and a review run against a wrong fact pattern is worse than no review.
+// It earned its place: it was written after a same-day founder reversal left the checklist
+// describing one payment rail across every real-money price.
 //
-// The narrow, durable thing to check is the FEE FIGURES, because those are levers and levers move.
-// Every "<n> ETH" the memo states as a price must be a live fee: a published tranche wave, the
-// respawn fee, or a Store SKU price. Prose and legal reasoning are deliberately NOT checked — a
-// guard over an argument would be noise, and noise gets deleted.
-{
-  const memo = read('omerta-counsel-memo.md');
-  const live = new Set([
-    ...MINT_TRANCHES.map((t) => t.eth),                  // the published mint schedule
-    Number(process.env.RESPAWN_FEE_ETH || 0.10),         // the respawn fee
-    ...STORE.PACKAGES.map((p) => p.priceEth),            // every SKU on the shelf
-  ].map((n) => Number(n)));
-  const quoted = [...memo.matchAll(/([0-9]+\.[0-9]+)\s*ETH/g)].map((m) => Number(m[1]));
-  const bogus = [...new Set(quoted)].filter((n) => !live.has(n));
-  assert.deepEqual(bogus, [], `omerta-counsel-memo.md quotes ETH fees the game does not charge: `
-    + `${bogus.join(', ')}. Live fees are ${[...live].sort((a, b) => a - b).join(', ')}. A memo that `
-    + 'misstates a price is a lawyer opining on the wrong product — restate it or remove the figure.');
-}
+// The checklist left the repository when the repo went PUBLIC — it is kept outside, with the founder.
+//
+// THE DISCIPLINE DID NOT MOVE WITH IT, AND THAT IS THE POINT OF THIS COMMENT. A check that
+// silently stops existing is how the thing it guarded goes stale unnoticed — so it is written down
+// instead: whenever a fee lever moves (MINT_TRANCHES, RESPAWN_FEE_ETH, a STORE package price), the
+// checklist has to be re-read by hand against the new figure before it is next relied on. The live
+// prices are always recoverable from `GET /v1/rules` and the levers register; what cannot be
+// recovered is somebody remembering to look.
 
 // ── the codices must not quote a price the game does not charge ─────────────────────────────────
 // The 2026-08-10 re-denomination moved 145 $OMR constants x6, and BOTH codices were left quoting the
@@ -347,7 +336,9 @@ assert.deepEqual([...new Set(phantom)], [], `docs/AUDITS.md lists reports that d
   // it likes, so long as it also says somewhere that the rail is not open. When it DOES open, this
   // guard fails until it is updated — which is the point: going live is a decision on the record,
   // not a silent change of tense.
-  const OPENS_THE_RAIL = /not active|dormant|not yet open|not live yet|until the audit|behind legal/i;
+  // (`behind legal` was an arm here until 2026-08-13; the phrasing it matched is gone from the tree,
+  // and a dead alternation in a guard is how the guard quietly stops covering anything.)
+  const OPENS_THE_RAIL = /not active|dormant|not yet open|not live yet|until the audit|behind the launch checklist|until the launch/i;
   const DESCRIBES_EXTRACTION = /extract\w* (real |your |earned )?\$?OMR|on-chain (withdrawal|extraction)|POST \/v1\/withdraw/i;
   const unqualified = [];
   for (const f of SURFACES) {

@@ -115,9 +115,9 @@ unclaimed in a protocol contract, and the NFT sells self-contained.
 **What was argued against it and rejected — recorded so the tradeoff is not rediscovered later as a
 surprise:**
 
-1. **The NFT becomes a bearer instrument for securities.** Any marketplace buyer acquires the stock
-   with no KYC, no geofence and no jurisdiction check. Against the one hard operational fact here —
-   Robinhood's tokenized stocks are EU-facing and not offered to US persons — this routes them to US
+1. **The NFT becomes a bearer instrument for real assets.** Any marketplace buyer acquires the stock
+   with no identity verification, no eligibility gate and no check on who they are. Against the one hard operational fact here —
+   Robinhood's tokenized stocks are EU-facing and restricted by the issuer — this routes them to US
    persons by default, with no off switch.
 2. **It is the irreversible direction.** Claim-then-deliver could always have become bearer later;
    bearer cannot become gated, because once stock is in freely-trading TBAs it is gone. That
@@ -153,7 +153,7 @@ The founder's funding decision keeps every existing wall intact, and that is wor
 
 ## 5. Order of work
 
-1. **Counsel, before code.** §6.
+1. **The gate, before code.** §6.
 2. ~~Re-denominate `runTreasuryInvariants` to per-ticker units and restore the `allocated ≤ held`
    wall.~~ **DONE.**
 3. ~~The activation tiers + burn (in-game, shippable independently, a pure `$OMR` sink).~~ **DONE.**
@@ -177,9 +177,9 @@ The founder's funding decision keeps every existing wall intact, and that is wor
    at `GET /v1/identity/:characterId`, pointing at no token. That is `omerta-identity-nft-design.md`
    §5's phase 1 + phase 2, which that doc sequences first *because they carry no gate at all* and
    because the portrait is the thing the token would point at, so the ordering costs nothing.
-   **The CONTRACT half is correctly still waiting**, on two independent gates: counsel memo **A4 is
-   RE-OPENED** (the dynasty design's §7.2 makes the contract conditional on A2 *and* A4; A2 is signed,
-   A4 is not, because adopting the published tranche schedule changed its fact pattern), and the
+   **The CONTRACT half is correctly still waiting**, on two independent gates: an OPEN
+   launch-checklist row (the dynasty design's §7.2 makes the contract conditional on two of them; one
+   is cleared, the other re-opened when the published tranche schedule changed what it covers), and the
    third-party audit batch — which the dynasty design says to **batch, not dribble**, so writing
    `DynastyNFT` now would start that clock for one contract instead of the set.
    The build corrected three of the design's own slots; the reasons are recorded in the identity
@@ -189,8 +189,8 @@ The founder's funding decision keeps every existing wall intact, and that is wor
 7. Delivery. **Last**, and only after 1.
 
 Steps 2–5 are done, and step 6's off-chain half with them. What remains is step 6's CONTRACT (gated
-on the re-opened A4 and on assembling the audit batch) and delivery (step 7) — and step 7 is the one
-gated on counsel, which is why the order was arranged this way: everything above it moves real ETH
+on that open row and on assembling the audit batch) and delivery (step 7) — and step 7 is the one
+gated on the launch checklist, which is why the order was arranged this way: everything above it moves real ETH
 into real holdings without a single share changing hands or being promised to anybody. The portrait
 is the clearest case for that ordering: it is the whole player-visible half of the flagship asset,
 and it shipped without touching a gate.
@@ -243,37 +243,35 @@ point and it survives intact.
 
 ---
 
-## 6. The legal record — stated once, and honestly
+## 6. What this reverses, and what the gate is for
 
-The founder has asserted counsel approval and accepted the risk in writing (this session, and the
-standing directive in `CLAUDE.md`). This section is not a re-litigation of that; it exists because the
-next reader needs the facts in one place.
+The founder cleared this to be built (this session, and the standing directive in `CLAUDE.md`). This
+section exists because the next reader needs the facts in one place.
 
 **What is being reversed.** `omerta-stock-layer-retirement.md` retired stock acquisition on
-2026-07-31 with recorded reasons: it deleted the only securities event in the project, removed the
-KYC and geofencing requirements, and stopped R2/R3 being carried milestones. This design reopens that.
+2026-07-31 with recorded reasons: it deleted the project's one gated surface, removed the
+verification and eligibility requirements, and stopped R2/R3 being carried milestones. This design
+reopens all three.
 
 **What a precedent does and does not establish.** StonkBrokers is doing this, visibly, at scale, on
-the same chain. That is real evidence about enforcement *appetite* and about what infrastructure
-exists. **It is not a legal opinion, and "they did it first" has never been a defence.** Worth saying
-plainly once so nobody mistakes the citation for a clearance.
+the same chain. That is real evidence about what infrastructure exists and how it is received. **It
+is not a clearance, and "they did it first" has never been a defence.** Worth saying plainly once so
+nobody mistakes a citation for a green light.
 
 **Three concrete facts that do not go away:**
 
-1. **Buying an asset and distributing it to token holders on the strength of holding the token is the
-   classic profit-expectation fact pattern.** Counsel row A11 already assesses revenue distribution to
-   holders as the clearest securities leg in the project. Weighting by *play* rather than by holdings
-   genuinely helps that argument — effort is not passive — and the activation burn is a purchase
-   rather than a dividend. Neither makes the question go away.
-2. **Jurisdiction is an operational constraint, not an opinion.** Robinhood's tokenized stocks are
-   EU-facing and not offered to US persons. A US-controlled treasury acquiring and distributing them
-   raises questions a precedent project does not answer for us, and delivery realistically needs
-   geofencing and KYC at the boundary — which is exactly the machinery the retirement deleted.
-3. **A bearer-instrument NFT (§3.3) is the sharpest version of all of the above**, because the
-   security then moves on a secondary marketplace with no gate at all.
+1. **Handing an asset to somebody because they hold the token is the sharpest surface in the
+   project**, and a launch-checklist row already covers it. Weighting by *play* rather than by
+   holdings genuinely helps — effort is not passive — and the activation burn is a purchase rather
+   than a payout. Neither makes the question go away.
+2. **Eligibility is an operational constraint.** Robinhood's tokenized stocks are EU-facing and not
+   offered everywhere, so delivery realistically needs an eligibility gate and identity verification
+   at the boundary — which is exactly the machinery the retirement deleted.
+3. **A bearer-instrument NFT (§3.3) is the sharpest version of all of the above**, because the asset
+   then moves on a secondary marketplace with no gate at all.
 
-**The recommendation I am obliged to make, once:** get the §3.3 fork and the delivery boundary in
-front of counsel *before* step 7, not after. Everything in steps 2–6 can be built, tested and merged
+**The recommendation, made once:** get the §3.3 fork and the delivery boundary onto the launch
+checklist *before* step 7, not after. Everything in steps 2–6 can be built, tested and merged
 meanwhile without a single share changing hands, which is why the order of work is arranged that way.
 
 ---

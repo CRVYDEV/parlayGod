@@ -1,6 +1,6 @@
 # OMERTÀ — The Portfolio ("Going Legit"): RWA / blue-chip holdings
 
-**Status: R1 (off-chain, no securities) — SPEC + BUILD. R2/R3 are RETIRED, not gated** — the founder
+**Status: R1 (off-chain, no stock) — SPEC + BUILD. R2/R3 are RETIRED, not gated** — the founder
 removed the stock layer on 2026-07-31 (`omerta-stock-layer-retirement.md`): the treasury holds ETH and
 the game never acquires or owes a real share. **R1 below is current and unchanged**; every R2/R3 passage
 is history. One open founder question the retirement raises: R1 uses real ticker symbols for a purely
@@ -19,33 +19,33 @@ rung of that ladder.** Not a bolt-on: the missing capstone.
 
 | Model | Player holds | Legal weight | Role |
 |---|---|---|---|
-| A — real tokenized equity | real AAPL tokens in-wallet | heaviest (a securities *distribution*) | the R3 destination |
+| A — real tokenized equity | real AAPL tokens in-wallet | heaviest (a real stock *distribution*) | the R3 destination |
 | B — synthetic price-tracker | a cashable number that tracks the stock | deceptively heavy (a *derivative*) | avoided |
 | C — earn-in-game, graduate-to-real | in-game credits, later *extracted* to a real token | one gated boundary | **this build** |
 
 Model C is the exact architecture already shipped for $OMR: earn freely off-chain (a game
-mechanic, no securities); the *only* moment a real security exists is a single, KYC-gated, on-chain
-extraction (the voucher → reserve → claim rail already built + CI-tested). The full-reserve queue
+mechanic, no stock); the *only* moment a real asset exists is a single, eligibility-gated, verified,
+on-chain extraction (the voucher → reserve → claim rail already built + CI-tested). The full-reserve queue
 (`signedOutstanding + amt ≤ funded_omr`) already guarantees **extraction ≤ reserve** — point that
 same invariant at an RWA reserve and every credit is 1:1 backed. It is "the Vig, but the prize is
 fractional AAPL instead of $OMR."
 
 ## Phasing (R1 carries the same risk profile as everything shipped this year — none)
 
-- **R1 — buildable now, ZERO regulatory surface (THIS DOC).** The in-game Portfolio: ticker-
+- **R1 — buildable now, ZERO extraction surface (THIS DOC).** The in-game Portfolio: ticker-
   denominated credits bought by burning clean $OMR, tracked by a deterministic server-authoritative
   price (the §7.11 seed machinery). **Pure STATUS** — no sell, no cash-out — so shares touch no
-  securities/derivative law (the hitman-rep / family-seal precedent: a status axis *outside* §10.4
+  the applicable rules (the hitman-rep / family-seal precedent: a status axis *outside* §10.4
   and outside the sim-audited balance). Ships the whole fiction, the earning loop, the family book,
   the death-proof retirement fantasy, the leaderboard. Gathers data.
 - **R2 — the real reserve, still no distribution.** A `RWA_BPS` slice of real ETH fee revenue funds
   a buy bot that acquires real fractional RWA into a reserve wallet; the in-game credits become
   *backed* (the full-reserve invariant). We *hold* assets; players do not yet extract. **Gated on
-  legal structuring.**
-- **R3 — extraction: the one securities event.** The KYC'd on-chain claim, through Robinhood's own
-  broker-dealer rails (their KYC / custody / tax reporting / issuance — *not* ours; OMERTÀ is a
-  rewards program distributing THROUGH Robinhood, not an independent issuer). **Hard-gated on a
-  Robinhood partnership + securities counsel + the third-party audit that already gates mainnet.**
+  the launch checklist.**
+- **R3 — extraction: the one gated event.** The verified on-chain claim, through Robinhood's own
+  broker-dealer rails (their verification, custody, reporting and issuance — *not* ours; OMERTÀ is a
+  rewards program distributing THROUGH Robinhood, never an independent issuer). **Hard-gated on the
+  Robinhood partnership + the third-party audit that already gates mainnet.**
 
 **WHAT THE RWAs ACTUALLY ARE (founder clarification, 2026-07-19).** The tickers (AAPL / TSLA / SPCX /
 HOOD / …) are **Robinhood's tokenized stocks — real ERC-20 tokens trading on Uniswap** (the `stocks`
@@ -55,24 +55,24 @@ category, on Arbitrum / Robinhood Chain), NOT abstract collectibles. This makes 
   The backing price is the **live Uniswap pool price (a TWAP)** — the same oracle the Vig buyback bot
   already reads for $OMR. (`RWA_BPS` of ETH revenue → this swap.)
 - **R3's extraction delivers that real Uniswap-traded token to the player's own wallet** — a genuine
-  tokenized-security transfer, hence the KYC / jurisdiction gate below.
+  stock transfer, hence the eligibility gate below.
 - **The R1 in-game price stays the deterministic §7.11 hash (a PROXY), NOT the live Uniswap price** —
   deliberately. A display price that TRACKS a real security's live price weakens the "pure status,
-  outside securities law" posture that keeps R1 shippable everywhere; the hash proxy is the safer
-  choice until R2 introduces the real oracle behind the KYC boundary. (Open decision if the founder
-  wants R1 to "feel real" — flagged, counsel call.)
-- **Jurisdiction is a hard gate, not a nicety.** Robinhood's tokenized stocks are offered to EU
-  customers and are **not available to US persons** (as of the knowledge cutoff — counsel/Robinhood
-  confirm current status). So R3 extraction must be **KYC'd AND geofenced** to eligible jurisdictions;
-  a US-person account can play + earn + hold the in-game status fully but can never cross the
-  extraction boundary. R1 (status only) has no such restriction — it ships to everyone.
+  outside the applicable rules" posture that keeps R1 shippable everywhere; the hash proxy is the safer
+  choice until R2 introduces the real oracle behind the identity verification boundary. (Open decision if the founder
+  wants R1 to "feel real" — flagged, a founder call.)
+- **Eligibility is a hard gate, not a nicety.** Robinhood's tokenized stocks are offered to EU
+  customers and are **restricted by the issuer** (as of the knowledge cutoff — the launch review
+  confirms current status). So R3 extraction must be **eligibility-gated**; an ineligible account
+  can play + earn + hold the in-game status fully but can never cross the extraction boundary.
+  R1 (status only) has no such restriction — it ships to everyone.
 
 The three hard rules the whole design respects, so R3 stays inside the lines:
-1. **Never distribute securities by chance.** Every RNG/loot/casino layer stays in cash/$OMR; RWA
+1. **Never distribute stock by chance.** Every RNG/loot/casino layer stays in cash/$OMR; RWA
    acquisition is a *purchase* or an *earned/vested/skill* payout only — never a spin-to-win.
-2. Receiving stock is a taxable event; jurisdiction/KYC gating is mandatory (Robinhood's KYC is the
-   asset that makes this plausible at all).
-3. The regulated surface is confined to one gated extraction boundary (the $OMR model).
+2. Receiving stock has consequences for the recipient, so the eligibility gate is mandatory — the
+   partner's own verification is what makes this plausible at all.
+3. The gated surface is confined to that one extraction boundary (the $OMR model).
 
 ---
 
@@ -161,5 +161,5 @@ The console **"Going Legit"** tab (`public/index.html`) surfaces the whole layer
 
 ## Still deferred (R1 step three / R2)
 An automatic "Envelope" tithe skim on taxed flows; convoy-arrival / war-spoils cuts (trivial
-`grantShares` extensions of the big-score hook). R2 (real RWA reserve backing) and R3 (KYC'd on-chain
-extraction) remain legal-gated.
+`grantShares` extensions of the big-score hook). R2 (real RWA reserve backing) and R3 (verified on-chain
+extraction) remain launch-gated.

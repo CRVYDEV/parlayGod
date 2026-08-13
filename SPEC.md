@@ -18,7 +18,7 @@ Written 2026-07-25. Every number below was measured from the tree, not recalled.
 | Ops dashboard + wiki | `public/admin.html`, `public/wiki.html` |
 | Smart contracts | **15** contracts, **2914** lines Solidity, **213** Foundry tests passing |
 | Harnesses | `tools/sim.js` (economy), `tools/playthrough.js` (player experience), `tools/pgcheck.js` (real Postgres), `tools/loadtest.js` (concurrency), `tools/chaos.js` (interruption), `tools/mobile.js` (the screens, at phone size), `tools/scale.js` (market liquidity at population scale), `tools/bond-dials.js` (sizing the on-chain mint walls), `tools/keeper-dials.js` (sizing the stock keeper's price-continuity wall), `tools/pgquery.js` (every SQL string parses on real Postgres), `tools/concurrency.js` (lost-update correctness on real Postgres) |
-| Design + audit docs | **186** markdown files, **51870** lines — indexed in `docs/AUDITS.md`, which states they are point-in-time |
+| Design + audit docs | **185** markdown files, **51870** lines — indexed in `docs/AUDITS.md`, which states they are point-in-time |
 | Ledger invariants | 18 named escrow/identity checks + per-currency conservation, **drift-0** |
 
 Roughly **55,000 lines** of code, tests, schema and contracts.
@@ -643,4 +643,4 @@ assertion's message is what identifies it, and a re-run destroys the evidence. E
 convention) is measured and accepted; D8–D10 are accepted as-is with guards; D11 is addressed and now
 runs in CI; D13 is an open, unidentified test flake rather than a defect in the system. What remains is not architecture: the founder's operational steps (the alert webhook, one
 production backup, the X token), the balance levers tracked in `SIGN-OFF.md`, and the chain track, which
-is gated on a third-party audit and legal counsel rather than on any work in this repo.
+is gated on a third-party audit and the launch checklist rather than on any work in this repo.

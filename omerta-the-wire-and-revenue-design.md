@@ -6,18 +6,18 @@ for players to spend real money, split between founder profit, the $OMR buyback 
 reserve. The through-line: **spenders fund earners** — whales buy real-money packages, the Vig
 redistributes to skilled players as $OMR prizes and buyback support, engagement grows, more whales.
 
-The hard rails (unchanged, from the existing chain/legal design):
+The hard rails (unchanged, from the existing chain design):
 - Real ETH is **out-of-band value** — never a §10.4 ledger row. The on-chain `OmertaFees` tollbooth
   forwards ETH straight to the dev wallet in the same tx; the backend only credits an in-game
   *entitlement* (`fees.js:recordFeePayment`).
-- **Never sell $OMR or securities for ETH directly** (unregistered-offering / securities risk). ETH
+- **Never sell $OMR or stock for ETH directly** (the risk). ETH
   buys **cosmetics, status, access, and consumables** — never raw sim-audited power, never tokens.
 - The RWA layer is **status-only in R1** (deterministic price, no sell, no cash-out). R2 (a real RWA
-  reserve backing shares) and R3 (KYC'd on-chain extraction) stay **legal-gated** (Robinhood
-  partnership + securities counsel + third-party audit) — design now, wire later.
-- Everything buildable **now** is off-chain, §10.4-clean, no new regulatory surface. Everything that
+  reserve backing shares) and R3 (verified on-chain extraction) stay **launch-gated** (Robinhood
+  partnership + third-party audit) — design now, wire later.
+- Everything buildable **now** is off-chain, §10.4-clean, no new extraction surface. Everything that
   touches real ETH is built **dormant** (the M6 pattern — inert unless `CHAIN_RPC_URL` + contract
-  addresses are set), so mainnet stays gated on legal + audit.
+  addresses are set), so mainnet stays gated on the launch checklist + audit.
 
 ---
 
@@ -89,9 +89,9 @@ real-money **store** surface itself ("wire money in")? My recommendation: **A**,
   generations. Bounded like the stake pool.
 - **Dynasty tiers / crest** — status ladders on total lifetime invested (the estate/seal precedent).
 - **Family dynasty** — the gang book (`gang_portfolios`) gets the same naming + leaderboard treatment.
-- **R2 (legal-gated):** a slice of ETH revenue buys **real RWA** into a reserve that *backs* the
+- **R2 (launch-gated):** a slice of ETH revenue buys **real RWA** into a reserve that *backs* the
   in-game shares — the "going legit" fantasy made real. Design the reserve accounting now (mirrors the
-  withdrawal reserve / full-reserve queue); wire on legal + Robinhood.
+  withdrawal reserve / full-reserve queue); wire on the launch checklist + Robinhood.
 
 ---
 
@@ -99,16 +99,16 @@ real-money **store** surface itself ("wire money in")? My recommendation: **A**,
 
 The goal: more ways to spend ETH, split three ways — **(F) Founder wallet** (profit), **(B) Buyback
 flywheel** (Vig → buy $OMR off the AMM → back withdrawals + fund staker yield + prize pool), **(R) RWA
-reserve** (back the Dynasty Fund, legal-gated). A single config split (`REVENUE_SPLIT_BPS = {founder,
+reserve** (back the Dynasty Fund, launch-gated). A single config split (`REVENUE_SPLIT_BPS = {founder,
 buyback, rwa}`) the founder tunes. Today the on-chain fee forwards 100% to the dev wallet and the Vig
 split is off-chain accounting; the new model makes the split explicit and configurable.
 
-### The mechanisms (ranked by revenue potential × legal-safety × build-cost)
+### The mechanisms (ranked by revenue potential × safety × build-cost)
 
 **Tier 1 — build first (safe, recurring, proven):**
 1. **The Season Pass / "The Ledger"** — a recurring (monthly) ETH pass with a cosmetic + status reward
    track + a small $OMR stipend paid from the *prize pool* (redistribution, not a mint). The
-   single strongest recurring-revenue model in games, and legally clean (a cosmetic pass, not tokens).
+   single strongest recurring-revenue model in games, and clean on the standing rules (a cosmetic pass, not tokens).
    Ties to the Vig: pass ETH → split F/B/R.
 2. **The Premium Wire subscription** (§1b) — recurring ETH (or $OMR) for the intelligence terminal.
    Convenience/surveillance, never power — clean.
@@ -125,7 +125,7 @@ split is off-chain accounting; the new model makes the split explicit and config
    existing precedent (access to extraction, carefully bounded — free-trial characters still play
    fully).
 6. **Cosmetic loot crates** — ETH buys a crate of *cosmetic-only* items (skins/plates/titles). NB:
-   never RWA or power by chance (the R3 "never distribute securities/power by chance" rule) — cosmetics
+   never RWA or power by chance (the R3 "never distribute stock or power by chance" rule) — cosmetics
    only, and disclose odds.
 
 **Tier 3 — high-margin flexes (whale status, one-off):**
@@ -134,12 +134,12 @@ split is off-chain accounting; the new model makes the split explicit and config
 8. **Founder's boxes / charter memberships** — a limited "founding family" tier (numbered, permanent
    badge) — early-supporter monetization.
 
-**Tier 4 — legal-gated (design now, wire later):**
+**Tier 4 — launch-gated (design now, wire later):**
 9. **PLEX bridge (already designed)** — pay a real-money fee from *earned $OMR* instead of ETH (the
    EVE "pay your rent in ISK" path). ETH payers fund the pool; $OMR payers shrink supply. Live in
    `vig.js` (chain-dormant).
-10. **R2 RWA backing / R3 extraction** — the Dynasty Fund's on-chain future. Securities + KYC —
-    gated on Robinhood + counsel + audit.
+10. **R2 RWA backing / R3 extraction** — the Dynasty Fund's on-chain future. Gated, and
+    gated on Robinhood + the launch checklist + audit.
 
 ### The split, made concrete (my recommended default — a founder lever)
 Per ETH package: **Founder 40% · Buyback 40% · RWA reserve 20%** (matches the existing Vig posture: the
@@ -155,7 +155,7 @@ enforces it — the reserve can only sign what real revenue funded).
 ### The anti-pay-to-win guardrail
 Every ETH package sells **cosmetics, status, access, or bounded consumables** — never raw combat/economic
 power that would break the sim-audited §10.4 balance. This keeps the game fair (skilled free players can
-top the leaderboards), keeps it legally clean (no tokens/securities sold), and protects the "spenders
+top the leaderboards), keeps it clean on the standing rules (no tokens or stock sold), and protects the "spenders
 fund earners" model (earners must be able to *win* the prizes whales fund).
 
 ---
@@ -164,7 +164,7 @@ fund earners" model (earners must be able to *win* the prizes whales fund).
 **Built (off-chain, §10.4-clean, tests green):** the 5 new tickers + the named Dynasty (a $OMR vanity
 sink + generational leaderboard + console surface).
 
-**Needs a founder decision before I build (product vision + real-money/legal weight):**
+**Needs a founder decision before I build (product vision + real-money weight):**
 1. **The Wire's shape** — A (surveillance + premium feed), B (premium feed only), or C (the store
    surface). *Rec: A, off-chain first.*
 2. **Which ETH packages to prioritize** — Season Pass, Premium Wire sub, Vanity Store, revive bundles,
@@ -173,4 +173,4 @@ sink + generational leaderboard + console surface).
 3. **The revenue split** — Founder / Buyback / RWA-reserve BPS. *Rec: 40/40/20, env-configurable.*
 
 Once you pick, I build The Wire's off-chain core + the ETH-package *entitlement scaffolding* (dormant
-chain layer, the M6 pattern) so nothing touches mainnet until legal + audit sign off.
+chain layer, the M6 pattern) so nothing touches mainnet until the launch checklist + audit sign off.

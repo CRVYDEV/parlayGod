@@ -4,8 +4,8 @@ Founder-directed 2026-07-27. Supersedes the Risk-to-Earn token architecture wher
 everything not named here is unchanged.
 
 **Founder rulings recorded on this date:**
-1. Burn-to-redeem of real stock tokens is **legal-cleared and Robinhood-approved**. R3 delivery is
-   green-lit as a product, not gated behind further counsel.
+1. Burn-to-redeem of real stock tokens is **cleared and Robinhood-approved**. R3 delivery is
+   green-lit as a product, not gated behind further review.
 2. Cash → OMR is removed. OMR → cash survives as a purpose-built redemption window.
 3. Individual yield (staking rewards, personal RWA dividends) is **repurposed to a family yield**
    split among the top families on the standing leaderboard.
@@ -212,12 +212,12 @@ growing when volume is thin. **This was the single largest gap in the original p
 
 **`allocated ≤ held`, per ticker.** Never promise a unit that is not already bought and sitting in the
 reserve. No IOUs, no "redeemable once the bot catches up." `runRwaInvariants` enforces it and it is
-the reason this design is honest rather than a claim. Legal clearance changes what may be *delivered*;
-it does not change what may be *owed*.
+the reason this design is honest rather than a claim. Clearing the launch checklist changes what may
+be *delivered*; it does not change what may be *owed*.
 
 Retained regardless of clearance, as cheap deploy-time config rather than a blocker:
 - the per-account rolling-24h claim cap
-- the jurisdiction/geofence hook (a switch, defaulting open)
+- the eligibility hook (a switch, defaulting open)
 - the RICO graduation on large conversions (`SCRUTINY_MIN_OMR`, cumulative window)
 
 ---
@@ -382,7 +382,7 @@ sum-validated, and `runBondInvariants` reconciles whatever is set.
 It writes no `transactions` rows, adds no §10.4 reason, and moves no game-currency faucet — it routes
 real ETH between out-of-band destinations. The suite asserts that directly by counting ledger rows
 across a full re-sourcing cycle. The chain half (the contract's three-way tax, a `SellTaxTaken`
-watcher, the real buy bot) is step 4 and stays mainnet/legal-gated.
+watcher, the real buy bot) is step 4 and stays mainnet-gated.
 
 ---
 
@@ -437,7 +437,7 @@ path and that trade-off should be taken deliberately, not by me.
 ### What step 4 does not do
 
 No in-game faucet moved; zero `transactions` rows; §10.4 untouched. Mainnet is unchanged and still
-gated on legal counsel and the third-party audit — **whose clock this drop resets**, since the
+gated on the launch checklist and the third-party audit — **whose clock this drop resets**, since the
 property every prior contract review leaned on is the one it deletes. The step-5 **RE-SIM is still
 owed** and is now the largest open item in the pivot.
 
@@ -541,5 +541,5 @@ mirrored transfers are ledgered once and the treasury credit is derived. The pro
 `character_id` the way the invariants do. A measurement that looks authoritative and is subtly wrong is
 worse than none.
 
-**The pivot is complete.** Steps 1-5 are built; what remains is mainnet, which is gated on legal counsel
+**The pivot is complete.** Steps 1-5 are built; what remains is mainnet, which is gated on the launch checklist
 and the third-party audit (whose clock step 4 reset).

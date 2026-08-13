@@ -261,7 +261,7 @@ async function collectLedgerChecks(pool) {
     + await one(pool, 'SELECT COALESCE(SUM(balance),0) s FROM desk_inventory')
     + auctionEscrow;
   // prize:omr is a Phase-2 mint: an in-game $OMR credit BACKED by hard $OMR the Vig moved into the
-  // withdrawal reserve (src/vig.js payPrizes) — legal because real revenue backs every token.
+  // withdrawal reserve (src/vig.js payPrizes) — admissible because real revenue backs every token.
   // Phase 4: stake:reward is NO LONGER a mint — rewards are paid from stake_pool (a transfer, both
   // sides inside omrBuckets), so staking contributes zero to net supply. It's out of the mint term.
   // THE STREET WAGE, RETIRED (economy v3 step 1 — the "no faucet" wall). `emission:%` STAYS in the

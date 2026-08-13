@@ -136,7 +136,7 @@ The half that works needs no contract at all, because **we already shipped the l
 `BONDS.BACKER_TIERS` (Depositor → Patron → Underwriter → …), `backerTierOf`, `underwriterScore`, the
 Underwriters' League and THE FINANCIER crown. Extend `underwriterScore` to count LP depth-over-time
 and an external liquidity provider becomes a named figure in the city with a rank on a board. Pure
-status, the hitman-rep precedent: no token flow, no payout, no securities surface.
+status, the hitman-rep precedent: no token flow, no payout, no gated surface.
 
 **Deliberately not built yet, and the reason is honest:** it reads LP positions off a pool that does
 not exist. Building the reader against nothing means guessing at the shape. It follows the pool (the
@@ -158,12 +158,12 @@ needs ETH, so realising it meant selling, which is pressure on the pool being ta
 It is *literally the Numbers*, which the Den already runs as a daily 600:1 draw. Thematically it is
 the best fit on the list. Mechanically it is a prize for trading, and that runs into three walls:
 
-1. **The gambling layer is CASH ONLY, never $OMR** — the stated regulatory line for the whole Den. A
+1. **The gambling layer is CASH ONLY, never $OMR** — the stated hard line for the whole Den. A
    pot paying ETH to the Nth buyer of the token is a prize attached to a financial instrument.
 2. **It pays for wash trading** — buying repeatedly to reach N manufactures the one metric that is
    supposed to tell us the pool is real, and our fee revenue scales with volume, so we'd be taxing
    volume we paid to create.
-3. It would be a new counsel row on a memo whose existing rows are still being cleared.
+3. It would be a new launch-checklist row while the existing ones are still being cleared.
 
 **The free version is good and costs nothing:** the counter is public and we already watch the chain,
 so the Nth buy fires a **city event** — the numbers came in, on the streets feed, no payout, no

@@ -10,9 +10,9 @@ inflationary token mint). This document specifies a bond that fits OMERTÀ's thr
    treasury OMR out) — the `fees.js` precedent: it writes ZERO `transactions` rows, so the in-game §10.4
    sweep is untouched by construction. It carries its OWN invariant on the real-value side (the
    `runVigInvariants` twin).
-3. **Legal posture.** A bond is a financial primitive that could read as a yield product. It ships
+3. **How it ships.** A bond is a financial primitive that could read as a yield product. It ships
    **off-chain-first / chain-dormant** (the M6/Vig/Store pattern), and the on-chain contract + real ETH are
-   **MAINNET-GATED on legal counsel + a third-party audit**, exactly like R2/R3 and the withdrawal rail.
+   **MAINNET-GATED on the launch checklist + a third-party audit**, exactly like R2/R3 and the withdrawal rail.
    **No APY / price-appreciation marketing** — the bond is framed as "help capitalize the treasury," not
    "earn X%." (Same rule the whole codebase already holds.)
 
@@ -131,9 +131,9 @@ forward fails → the whole bond rolls back, nothing committed/leaked, nonce fre
 the anti-Ponzi invariant (`committedOMR ≤ omr.balanceOf(this)` after any bond). LOW-2 (a zero-payout
 bond books a nonce + forwards ETH) is accepted as informational self-harm, server-gated.
 
-## Deferred (mainnet milestone — legal + audit gated)
+## Deferred (mainnet milestone — launch + audit gated)
 `forge test` execution (the pre-audit gate), the **`Bonded` event watcher** (the `getLogs` cursor pattern,
 `watcher.js` precedent → `recordBond`), the **POL pairing bot** (pairs the POL ETH share with treasury OMR
-into the DEX pool), and **liquidity bonds** (LP-token deposits). All wired only after counsel + the
+into the DEX pool), and **liquidity bonds** (LP-token deposits). All wired only after the launch checklist + the
 third-party audit that already gates mainnet. Numbers (`DISCOUNT`, `MAX_DISCOUNT`, `VEST_HOURS`, the POL/Vig
 split, the tranche capacity) are founder sign-off levers.

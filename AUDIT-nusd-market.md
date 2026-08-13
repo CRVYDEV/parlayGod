@@ -114,7 +114,7 @@ custody, since a sweep is how an escrow becomes a rug vector.
 ## Not built in this batch
 
 `RateController` (free-debt share targeting) and `RevenueSplitter` (the three-way split, with the NFT
-leg gated at zero behind counsel row A11) are specified in design §5 and deliberately out of scope
+leg gated at zero behind launch-checklist rows A11) are specified in design §5 and deliberately out of scope
 here. The free/paid debt modes of §2.3 are likewise not implemented: this batch ships the borrow,
 redeem and self-repay core, and every position in it is "on the books" with no interest.
 

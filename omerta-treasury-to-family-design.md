@@ -17,8 +17,8 @@ backed vault, the cold-ETH reserve trust story, and the individual "go legit" ex
 
 The rejected alternatives, recorded so they stay rejected:
 - **Path B (real ETH to families):** distributing real money to in-game groups by competitive standing
-  reads as a gambling payout / money transmission. The whole point of keeping the family yield in
-  **$OMR** was to stay clear of exactly this line. Do NOT build without counsel.
+  moves real money to a person. The whole point of keeping the family yield in
+  **$OMR** was to stay clear of exactly this line. Do NOT build without founder sign-off.
 - **Kill the treasury entirely:** also deletes the individual ETH exit (THE VAULT / "go legit") and the
   growing cold reserve that is a *backing/trust signal* for a real-money-adjacent token. The split keeps
   both.
@@ -108,7 +108,7 @@ extends by construction: **the family pool can never distribute more $OMR than t
 (the `runVigInvariants` twin), asserts `distributed ≤ bought` and the split-exactness, wired into the
 worker's nightly `alertDrift` beside vig/bond/desk/treasury/bank.
 
-**Why this keeps the regulatory posture:** families receive **in-game $OMR**, extractable only through
+**Why this keeps the posture:** families receive **in-game $OMR**, extractable only through
 the same throttled withdrawal rail as everything else. No real ETH ever reaches a gang. That is the
 entire reason Path A is chosen over Path B.
 
@@ -179,7 +179,7 @@ one custody.
 
 1. **Backend earmark + keeper, chain-dormant** — add the `community` revenue earmark, `runFamilyBuyback`
    (mod/QA-param priced until the DEX bot), `runFamilyBuybackInvariants`, and re-derive the router
-   `waterfall()` from the new levers. Zero new regulatory surface. Sim + `runRouterInvariants` green.
+   `waterfall()` from the new levers. Zero new extraction surface. Sim + `runRouterInvariants` green.
    **✅ BUILT 2026-08-11** (`src/community.js`, `test/community.js` — every lever ships 0, production
    byte-identical until step 2; the §4 mint-reason correction above landed with it).
 2. **The lever changes** — the fee/store/auction/harvest/toll/polfees earmarks (env), sign-off recorded
@@ -187,7 +187,7 @@ one custody.
    slice move is on the record).
 3. **The two contracts** (§5) — bond reweight + the four-way sell-tax hook with the community recipient;
    `forge test` green; into the audit batch.
-4. **The DEX keeper + custody wiring** — mainnet, behind the audit + counsel gates.
+4. **The DEX keeper + custody wiring** — mainnet, behind the audit + launch gates.
    Two operational requirements the red-team (`AUDIT-family-buyback.md`) put on the bot, because
    nothing downstream reads this keeper's price and a wrong one mints silently: (a) the price it
    reports must pass the continuity wall — an ETH buy is checked against the canonical Vig print
@@ -197,5 +197,5 @@ one custody.
    never something the bot sets, and never a standing exemption (the seeded price walls every buy
    after it).
 
-The regulatory line stays: **families are paid in in-game $OMR, funded by a real-revenue buyback; never
+The hard line stays: **families are paid in in-game $OMR, funded by a real-revenue buyback; never
 real ETH to a gang.**

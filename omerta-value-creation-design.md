@@ -58,7 +58,7 @@ mint fee (or its PLEX price in earned $OMR): every wage-drawing identity costs r
 the dev wallet — a bot farm funds the house. Free-trial players still play and earn everything
 else; minting was already the extraction gate, so "paid identities earn the extractable wage"
 closes the loop coherently (`WAGE_REQUIRE_MINTED`, default on). **No chance, no lottery** — this
-keeps the "never distribute value by chance" posture that protects the RWA/legal architecture.
+keeps the "never distribute value by chance" posture that protects the RWA architecture.
 
 **P4 — Revenue amplifies.** The existing Vig machinery is unchanged and now sits ON TOP of the
 endowment: spender revenue (Store, fees, bonds) still buys hard $OMR into the reserve and prize
@@ -113,7 +113,7 @@ Nothing here needs new contracts — it is operations on the existing rails.
 must be able to cash out); fee-sponsored (or batched) claims so gas never eats a day's wage —
 Robinhood Chain/Arbitrum Orbit fees are already cents; localization of the console + wiki;
 regional payment/liquidity partners; and a "wage history" statement view (people budgeting on this
-need records). KYC/geo posture unchanged from the RWA rules — counsel-gated where required.
+need records). The verification/eligibility posture is unchanged from the RWA rules — gated where required.
 
 ## 5. The numbers (ALL founder sign-off levers, sim before production)
 
@@ -138,11 +138,11 @@ ceilings extend it).
 - The full-reserve withdrawal queue and "no unbacked signing" — untouched (E2 *feeds* it).
 - Cash-economy balance (BALANCE.md signed levers) — untouched; the wage pays $OMR, not cash.
 - No-chance distribution, agent exclusions, level floors — extended to the wage, not weakened.
-- **Marketing discipline (legal):** no earnings promises, no income claims, no price talk. The
+- **Marketing discipline:** no earnings promises, no income claims, no price talk. The
   schedule may be described factually ("a fixed, public emission schedule pays active players in
-  $OMR"). "Side hustle" language stays OUT of official copy until counsel clears it — payments to
-  players at scale can trigger money-transmission/employment/securities questions by jurisdiction.
-  Recorded here as a Sensitive flag, per the standing counsel-approval directive.
+  $OMR"). "Side hustle" language stays OUT of official copy until the founder clears it — payments to
+  players real value at scale draws outside scrutiny, and what is allowed differs by country.
+  Recorded here as a Sensitive flag, per the standing founder directive.
 
 ## 7. Open design options (deferred, founder-ranked)
 

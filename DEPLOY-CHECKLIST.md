@@ -98,15 +98,17 @@ database) + your domain. No blockchain, minimal risk.
 ---
 
 ## PART C — when you're ready for real money (Wave 2 / mainnet)
-You said the legal side is cleared — good, that's the biggest gate. **But "legal-approved" is not the same as
-"safe to hold funds."** Two technical safety steps still genuinely protect you (and your players' money):
+You said the outside review is cleared — good, that's the biggest gate. **But cleared to ship is not the
+same as safe to hold funds.** Two technical safety steps still genuinely protect you (and your players'
+money):
 
-1. **Run the contract tests once, for real.** The blockchain code compiles clean but its full test run
-   (`forge test`) has never actually executed here (the build tool was network-blocked). Have it run green on a
-   normal machine first. It's free and fast.
-2. **Strongly consider the third-party audit anyway.** Even with legal clearance, a bug in the withdrawal
-   contract or the signing key means real money can be lost or stolen — that's not a legal risk, it's a
-   *theft/loss* risk. An audit is the standard insurance. Your call, but I'd urge it before real ETH flows.
+1. **Re-run the contract tests on a normal machine.** They pass here (`forge test`, every suite green),
+   but the toolchain is stitched together in this sandbox. Confirm it green on ordinary hardware
+   before anything holds real money. It's free and fast.
+2. **Strongly consider the third-party audit anyway.** Whatever else is cleared, a bug in the withdrawal
+   contract or the signing key means real money can be lost or stolen — that is a *theft/loss* risk and
+   nothing outside the code addresses it. An audit is the standard insurance. Your call, but I'd urge it
+   before real ETH flows.
 
 Then the mechanics (a developer or a careful, methodical you following **`CHAIN-DEPLOY.md`** step by step):
 - **Rehearse the entire flow FREE first** on a test network — the repo has a one-command prover
