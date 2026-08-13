@@ -439,6 +439,75 @@ step 3 returned the true counts, step 4 came back `"ok": true` with every §10.4
 - [ ] `npm run invariants` (or `GET /v1/mod/invariants`) → every check `ok:true`.
 - [ ] Confirm the worker logged a tick (and, after 12h, a buyback).
 
+## 8b. LAUNCH DAY — what to watch, and the one number that decides an upgrade
+
+§7d is the path when something is *wrong*. This is the other half: how to tell it is going *well*,
+and when to spend money. Everything here reads off `/admin`; none of it needs a developer.
+
+### The first hour — three things, in this order
+
+1. **No banner on `/admin`.** Database, backups, §10.4. A banner outranks everything below it.
+2. **Accounts climbing** (Players panel). If it is flat, players are not arriving — that is a
+   marketing problem, not a server one, and the server will look perfectly healthy the whole time.
+3. **The coach census is SPREAD** (Where the Coach Has Them). Every live player's current top rung,
+   worst-first. Healthy is a spread. **Half the base sitting on one rung is the launch-day signal**
+   — it means that rung is a wall, and the panel names it. That is the fastest read you have on
+   whether people are actually getting anywhere.
+
+Do NOT judge the first hour by §10.4 or the invariants. They are integrity checks: they will read
+green through an empty game, a stalled funnel and a wall nobody can pass.
+
+### The first day — where people stop
+
+The Onboarding funnel panel gives per-task First-Week claim counts. Read it as a drop-off curve: the
+task where the count falls off a cliff is where the game loses people. The Career panel does the same
+for the ladder past the first week, and lists any rung **never claimed by anyone** — a task nobody can
+do reads as a zero, and that is the shape to look for.
+
+### Capacity — the binding constraint is the DATABASE, not the web service
+
+Measured with `npm run loadtest` against real Postgres, and it inverts the intuitive answer: at 284
+req/s the database was doing **~1.9 CPU-seconds per second** against node's ~1. `omerta-db` is
+`pro-4gb`, which is **1 CPU**. So the database saturates first, and adding a second API instance buys
+nothing until it is upgraded.
+
+The pool is what turns saturation into an outage, and it is a cliff rather than a slope. At 30
+concurrent players, same box, only `PG_POOL_MAX` changed:
+
+| pool | throughput | p95      | 5xx |
+|-----:|-----------:|---------:|----:|
+|   20 |   30 req/s | 10.0 s   |   9 |
+|   60 |  284 req/s | 87 ms    |   0 |
+
+Past the cliff, requests queue for a connection, hit the 10 s `connectionTimeout` exactly (that IS
+the p95), and the player is told the database is unreachable — a capacity problem wearing an outage's
+clothes. `render.yaml` now declares **40**; it had been running the code default of 20.
+
+**What that means in players.** The rate limiter caps a human at 1 req/s sustained, and an idle tab
+costs 1.8 requests per 30 s tick (the board re-render backs off after 3 minutes untouched):
+
+- ~150 players hammering at the limit
+- ~500 genuinely active at ~0.3 req/s
+- a few thousand idle
+
+**The upgrade trigger is one number: database CPU.** Watch it in the Render dashboard. Sustained
+above ~70% and the next thing to buy is a database plan with more CPU — *not* a second web instance,
+*not* a bigger API plan. Re-run `npm run loadtest` after any upgrade rather than trusting the shape
+of this table; it was measured on a box that was also running the server and the client loops.
+
+### Rolling back
+
+`autoDeployTrigger: checksPass` means a commit with red CI never deploys — so the common bad-deploy
+case cannot happen by accident. If a *green* build turns out to be bad:
+
+1. **Render dashboard → the service → Deploys → the last known-good deploy → Redeploy.** This is the
+   fast path and it needs no git surgery.
+2. Then fix forward on a branch. Do **not** force-push `main` to undo it: the deploy is already
+   pinned by step 1, and a rewrite makes every other checkout diverge.
+3. **A schema change does not roll back with the code.** Migrations here are additive
+   (`ALTER TABLE ... ADD COLUMN IF NOT EXISTS`), so an older build tolerates a newer database — but
+   verify that before assuming it, and take a backup first (`npm run backup`).
+
 ## 9. Still gated (NOT part of the off-chain alpha)
 Mainnet / on-chain extraction — `forge test` on a real toolchain, the third-party audit of the contracts
 **and** the off-chain signer, and the launch checklist on the Risk-to-Earn / RWA line. See CLAUDE.md + `SIGN-OFF.md`.
