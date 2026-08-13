@@ -147,7 +147,7 @@ close alone.** `CHAIN-DEPLOY.md` §0 is the authority; this is the summary.
 
 - The batch is assembled: `OMR`, `VoucherClaim`, `GearVault`, `OMRStaking`, `OmertaFees`,
   `OmertaBond`, `OmrTwapOracle`, `GenesisOracle`, `OmertaHook`, and THE BANK
-  (`NUSD`/`CollateralEscrow`/`Alchemist`/`Transmuter`/`FlashGuard`).
+  (`Denari`/`CollateralEscrow`/`Alchemist`/`Transmuter`/`FlashGuard`).
 - **Point the auditor at the deleted property.** Until tokenomics v2 step 4, every prior review of
   this suite rested on "nothing mints". That is no longer true — bonds mint — and what replaced it is
   four walls (`dailyCapOMR`, `MAX_DISCOUNT_BPS`, `maxOmrPerEth`, the accretion oracle). An auditor who
@@ -215,7 +215,7 @@ works, which is the lead time.
 |---|---|
 | Supply is being inflated | `OMR.setMinter(address(0))` — one transaction, minting off |
 | The sell tax needs to stop | `setSellTax(0,0,0)` — the fee stops, the pool keeps trading. **There is no pause, deliberately:** a hook that can revert `beforeSwap` can halt a public market |
-| THE BANK is issuing against a bad sleeve | `NUSD.setMinter(0)` — halts issuance **without** touching redemption. The asymmetry is the point: stop issuing before you stop paying |
+| THE BANK is issuing against a bad sleeve | `Denari.setMinter(0)` — halts issuance **without** touching redemption. The asymmetry is the point: stop issuing before you stop paying |
 | A player token is compromised | `POST /v1/mod/revoke` (lighter than a ban) or `POST /v1/auth/logout-all` |
 | The game itself | `INVITE_MODE=on` closes the doors without touching anyone already inside |
 

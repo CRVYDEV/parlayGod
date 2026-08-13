@@ -61,7 +61,7 @@ import { BONDS, SELL_TAX, MINT_TRANCHES } from '../src/rules.js';
   for (const k of ['bond.dailyCap', 'bond.maxRate', 'bond.oracle', 'omr.minter'])
     assert(seen.has(k), `${k} is missing — it is one of the walls that replaced the fixed supply cap`);
   // …and THE BANK, which is in the audit batch and was absent from the working record for a while.
-  for (const k of ['alchemist.ltv', 'transmuter.buffer', 'nusd.minter'])
+  for (const k of ['alchemist.ltv', 'transmuter.buffer', 'denari.minter'])
     assert(seen.has(k), `${k} is missing — THE BANK's parameters are as load-bearing as the token's`);
 }
 

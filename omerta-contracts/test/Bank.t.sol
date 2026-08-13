@@ -7,13 +7,13 @@ import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.so
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {NUSD} from "../src/NUSD.sol";
+import {Denari} from "../src/Denari.sol";
 import {Alchemist} from "../src/Alchemist.sol";
 import {Transmuter} from "../src/Transmuter.sol";
 import {CollateralEscrow} from "../src/CollateralEscrow.sol";
 import {FlashGuard} from "../src/FlashGuard.sol";
 
-/// USDC-shaped: SIX decimals. The decimal mismatch against 18dp nUSD is deliberate and load-bearing
+/// USDC-shaped: SIX decimals. The decimal mismatch against 18dp DNR is deliberate and load-bearing
 /// — a 1:1 redemption across mismatched decimals is a classic silent-loss bug, so every test here
 /// runs against the mismatch rather than a convenient 18dp stand-in.
 contract MockUSDC is ERC20 {
@@ -61,7 +61,7 @@ contract EvilVault is ERC4626 {
 contract BankTest is Test {
     MockUSDC usdc;
     MockVault vault;
-    NUSD nusd;
+    Denari dnr;
     Transmuter transmuter;
     Alchemist alchemist;
 
@@ -74,13 +74,13 @@ contract BankTest is Test {
     function setUp() public {
         usdc = new MockUSDC();
         vault = new MockVault(IERC20(address(usdc)));
-        nusd = new NUSD("Omerta USD", "nUSD", safe);
-        transmuter = new Transmuter(nusd, IERC20(address(usdc)), safe);
-        alchemist = new Alchemist(nusd, IERC20(address(usdc)), IERC4626(address(vault)), transmuter, safe);
+        dnr = new Denari("Denari", "DNR", safe);
+        transmuter = new Transmuter(dnr, IERC20(address(usdc)), safe);
+        alchemist = new Alchemist(dnr, IERC20(address(usdc)), IERC4626(address(vault)), transmuter, safe);
 
         vm.startPrank(safe);
-        nusd.setMinter(address(alchemist));
-        nusd.setBurner(address(transmuter));
+        dnr.setMinter(address(alchemist));
+        dnr.setBurner(address(transmuter));
         transmuter.setFunder(address(alchemist), true);
         transmuter.setFunder(safe, true);       // the launch seeder
         alchemist.setLtvBps(5_000);
@@ -117,10 +117,10 @@ contract BankTest is Test {
     /// bootstrap test, which needs one seeded with nothing at all.
     function _market(uint256 seed)
         internal
-        returns (NUSD n, Transmuter t, Alchemist a, MockVault v)
+        returns (Denari n, Transmuter t, Alchemist a, MockVault v)
     {
         v = new MockVault(IERC20(address(usdc)));
-        n = new NUSD("Omerta USD", "nUSD", safe);
+        n = new Denari("Denari", "DNR", safe);
         t = new Transmuter(n, IERC20(address(usdc)), safe);
         a = new Alchemist(n, IERC20(address(usdc)), IERC4626(address(v)), t, safe);
         vm.startPrank(safe);
@@ -161,7 +161,7 @@ contract BankTest is Test {
 
     // ── the headline invariant ───────────────────────────────────────────────────────────────────
 
-    /// Σ nUSD supply ≤ Σ collateral × LTV — the design's §2.4 item 4, fuzzed. Everything else in
+    /// Σ DNR supply ≤ Σ collateral × LTV — the design's §2.4 item 4, fuzzed. Everything else in
     /// this file is a mechanism; this is the property those mechanisms exist to hold.
     function testFuzz_supply_never_exceeds_collateral_times_ltv(
         uint96 depositA, uint96 depositB, uint96 borrowA, uint96 borrowB, uint16 ltv
@@ -204,7 +204,7 @@ contract BankTest is Test {
 
         uint256 collateral = alchemist.collateralOf(alice) + alchemist.collateralOf(bob);
         assertLe(
-            nusd.totalSupply(),
+            dnr.totalSupply(),
             (collateral * alchemist.scale() * ltv) / alchemist.BPS(),
             "supply must never exceed collateral x LTV"
         );
@@ -224,7 +224,7 @@ contract BankTest is Test {
         _depositAndBorrow(alice, 1000 * M, 400 ether);
         vm.prank(alice);
         vm.expectRevert(Alchemist.Undercollateralised.selector);
-        alchemist.withdraw(300 * M); // would leave 700 USDC backing 400 nUSD at 50% LTV
+        alchemist.withdraw(300 * M); // would leave 700 USDC backing 400 DNR at 50% LTV
     }
 
     // ── L1 in the real market ────────────────────────────────────────────────────────────────────
@@ -559,12 +559,12 @@ contract BankTest is Test {
         _depositAndBorrow(alice, 1000 * M, 400 ether);
         vm.prank(alice); alchemist.repay(400 * M); // fill the buffer so redemption can be paid
 
-        vm.prank(alice); nusd.approve(address(transmuter), type(uint256).max);
+        vm.prank(alice); dnr.approve(address(transmuter), type(uint256).max);
         uint256 usdcBefore = usdc.balanceOf(alice);
         vm.prank(alice); transmuter.redeem(250 ether);
 
-        assertEq(usdc.balanceOf(alice) - usdcBefore, 250 * M, "250 nUSD (18dp) -> 250 USDC (6dp)");
-        assertEq(nusd.totalSupply(), 150 ether, "and the supply fell by exactly the burn");
+        assertEq(usdc.balanceOf(alice) - usdcBefore, 250 * M, "250 DNR (18dp) -> 250 USDC (6dp)");
+        assertEq(dnr.totalSupply(), 150 ether, "and the supply fell by exactly the burn");
     }
 
     /// THE PEG REDEMPTION IS NEVER TAXED, and this test exists to stop a plausible future edit.
@@ -572,12 +572,12 @@ contract BankTest is Test {
     /// §4 of the design lists "redemption fees" as protocol revenue, and on 2026-08-11 the founder
     /// set that fee at 10%. It does NOT belong here. Two different things are called redemption:
     ///
-    ///   1. THIS one — an nUSD holder burning debt for underlying at 1:1. It is the PEG DEFENSE.
-    ///      Arbitrage is what repairs the peg: someone who buys nUSD at 0.98 and redeems at 1.00 is
+    ///   1. THIS one — an DNR holder burning debt for underlying at 1:1. It is the PEG DEFENSE.
+    ///      Arbitrage is what repairs the peg: someone who buys DNR at 0.98 and redeems at 1.00 is
     ///      doing our work for us. A 10% fee here does not earn revenue — it WIDENS THE PEG BAND to
-    ///      10%, because no arbitrageur repairs a discount smaller than the toll. nUSD would trade
+    ///      10%, because no arbitrageur repairs a discount smaller than the toll. DNR would trade
     ///      down to 0.90 and nothing would pull it back.
-    ///   2. The Monolith FREE-DEBT redemption (design §2.3, unbuilt) — an nUSD holder redeeming
+    ///   2. The Monolith FREE-DEBT redemption (design §2.3, unbuilt) — an DNR holder redeeming
     ///      AGAINST a borrower's collateral at oracle price + fee. That fee is where the 10% lives,
     ///      and it is split: the borrower keeps 90% (being redeemed against must stay compensated,
     ///      not punitive, or nobody takes free debt and the mechanic has no liquidity), the protocol
@@ -589,7 +589,7 @@ contract BankTest is Test {
         _depositAndBorrow(alice, 1000 * M, 400 ether);
         vm.prank(alice); alchemist.repay(400 * M);
 
-        vm.prank(alice); nusd.approve(address(transmuter), type(uint256).max);
+        vm.prank(alice); dnr.approve(address(transmuter), type(uint256).max);
         uint256 before = usdc.balanceOf(alice);
         uint256 transmuterBefore = usdc.balanceOf(address(transmuter));
         vm.prank(alice); transmuter.redeem(300 ether);
@@ -601,12 +601,12 @@ contract BankTest is Test {
             "the protocol withheld nothing: a fee here is a peg band, not revenue");
     }
 
-    /// Sub-unit dust must not burn for nothing. 1 wei of nUSD is less than one USDC unit, so paying
+    /// Sub-unit dust must not burn for nothing. 1 wei of DNR is less than one USDC unit, so paying
     /// out zero while burning the debt would be a silent loss for the redeemer.
     function test_dust_below_one_asset_unit_reverts_rather_than_burning_for_zero() public {
         _depositAndBorrow(alice, 1000 * M, 400 ether);
         vm.prank(alice); alchemist.repay(400 * M);
-        vm.prank(alice); nusd.approve(address(transmuter), type(uint256).max);
+        vm.prank(alice); dnr.approve(address(transmuter), type(uint256).max);
         vm.prank(alice);
         vm.expectRevert(Transmuter.ZeroAmount.selector);
         transmuter.redeem(1); // 1 wei
@@ -618,7 +618,7 @@ contract BankTest is Test {
     /// halt new debt while leaving existing claims redeemable — the reverse ordering would be a
     /// protocol that keeps selling claims it cannot honour.
     function test_a_thin_buffer_halts_issuance_but_never_redemption() public {
-        (NUSD n, Transmuter t, Alchemist a, ) = _market(100 * M); // a deliberately thin seed
+        (Denari n, Transmuter t, Alchemist a, ) = _market(100 * M); // a deliberately thin seed
         vm.startPrank(alice);
         usdc.approve(address(a), type(uint256).max);
         a.deposit(100_000 * M);
@@ -650,17 +650,17 @@ contract BankTest is Test {
 
     function test_the_owner_cannot_mint() public {
         vm.prank(safe);
-        vm.expectRevert(NUSD.NotMinter.selector);
-        nusd.mint(safe, 1 ether);
+        vm.expectRevert(Denari.NotMinter.selector);
+        dnr.mint(safe, 1 ether);
     }
 
     function test_a_stranger_cannot_mint_or_burn() public {
         vm.prank(bob);
-        vm.expectRevert(NUSD.NotMinter.selector);
-        nusd.mint(bob, 1 ether);
+        vm.expectRevert(Denari.NotMinter.selector);
+        dnr.mint(bob, 1 ether);
         vm.prank(bob);
-        vm.expectRevert(NUSD.NotBurner.selector);
-        nusd.burn(bob, 1 ether);
+        vm.expectRevert(Denari.NotBurner.selector);
+        dnr.burn(bob, 1 ether);
     }
 
     /// setMinter(0) is the one-transaction emergency stop, and it must halt issuance WITHOUT
@@ -668,14 +668,14 @@ contract BankTest is Test {
     function test_disarming_the_minter_halts_issuance_only() public {
         _depositAndBorrow(alice, 1000 * M, 400 ether);
         vm.prank(alice); alchemist.repay(400 * M);
-        vm.prank(safe); nusd.setMinter(address(0));
+        vm.prank(safe); dnr.setMinter(address(0));
 
         vm.roll(block.number + 1);
         vm.prank(alice);
-        vm.expectRevert(NUSD.NotMinter.selector);
+        vm.expectRevert(Denari.NotMinter.selector);
         alchemist.mint(1 ether);
 
-        vm.prank(alice); nusd.approve(address(transmuter), type(uint256).max);
+        vm.prank(alice); dnr.approve(address(transmuter), type(uint256).max);
         vm.prank(alice); transmuter.redeem(100 ether); // still payable
     }
 
@@ -740,7 +740,7 @@ contract BankTest is Test {
         _depositAndBorrow(alice, 10_000 * M, 4_000 ether);
         vm.prank(alice); alchemist.repay(4_000 * M);
         vm.prank(safe); transmuter.setRedeemCaps(100 * M, 0);
-        vm.prank(alice); nusd.approve(address(transmuter), type(uint256).max);
+        vm.prank(alice); dnr.approve(address(transmuter), type(uint256).max);
         vm.prank(alice); transmuter.redeem(100 ether);
         vm.prank(alice);
         vm.expectRevert(FlashGuard.PerBlockCapExceeded.selector);
@@ -752,7 +752,7 @@ contract BankTest is Test {
     function test_redemption_is_deliberately_not_same_block_guarded() public {
         _depositAndBorrow(alice, 1000 * M, 400 ether);
         vm.prank(alice); alchemist.repay(400 * M);
-        vm.prank(alice); nusd.approve(address(transmuter), type(uint256).max);
+        vm.prank(alice); dnr.approve(address(transmuter), type(uint256).max);
         vm.startPrank(alice);
         transmuter.redeem(50 ether);
         transmuter.redeem(50 ether); // twice in one block: allowed, on purpose
@@ -774,11 +774,11 @@ contract BankTest is Test {
         vm.prank(alice); alchemist.repay(r);
 
         uint256 red = bound(redeemAmt, 1, type(uint96).max);
-        vm.prank(alice); nusd.approve(address(transmuter), type(uint256).max);
+        vm.prank(alice); dnr.approve(address(transmuter), type(uint256).max);
         uint256 reservesBefore = transmuter.reserves();
         uint256 usdcBefore = usdc.balanceOf(address(transmuter));
 
-        if (red / alchemist.scale() > 0 && red / alchemist.scale() <= reservesBefore && red <= nusd.balanceOf(alice)) {
+        if (red / alchemist.scale() > 0 && red / alchemist.scale() <= reservesBefore && red <= dnr.balanceOf(alice)) {
             vm.prank(alice); transmuter.redeem(red);
         }
         // reserves tracked and reality must agree, and reserves must never exceed real holdings
@@ -804,7 +804,7 @@ contract BankTest is Test {
     ///
     /// Denomination matching (§2.1) removes PRICE risk, which is what kills liquidations. It does
     /// NOT remove the risk that a Morpho/Maple sleeve loses principal (§2.6's "dependency's bad
-    /// day"). When that happens `Σ supply ≤ Σ collateral × LTV` is false, existing nUSD is
+    /// day"). When that happens `Σ supply ≤ Σ collateral × LTV` is false, existing DNR is
     /// under-backed, and there is no liquidation to close the gap — by design, because adding one
     /// would reintroduce the oracle-on-the-borrow-path class that cost Inverse $21M.
     ///
@@ -825,7 +825,7 @@ contract BankTest is Test {
 
         // the invariant is now FALSE, and we say so out loud rather than pretending otherwise
         uint256 maxBacked = (a.collateralOf(alice) * a.scale() * a.ltvBps()) / a.BPS();
-        assertGt(nusd_supply(t), maxBacked, "a sleeve loss genuinely breaks the bound");
+        assertGt(dnr_supply(t), maxBacked, "a sleeve loss genuinely breaks the bound");
 
         // there is no liquidation path to call
         // (asserted structurally: the Alchemist exposes no such function — see its header)
@@ -834,7 +834,7 @@ contract BankTest is Test {
         assertEq(t.reserves(), 50_000 * M, "the buffer is untouched by the sleeve's loss");
     }
 
-    function nusd_supply(Transmuter t) internal view returns (uint256) {
+    function dnr_supply(Transmuter t) internal view returns (uint256) {
         return t.debtToken().totalSupply();
     }
 
@@ -842,7 +842,7 @@ contract BankTest is Test {
 
     function test_a_malicious_vault_cannot_reenter_the_alchemist() public {
         EvilVault ev = new EvilVault(IERC20(address(usdc)));
-        NUSD n = new NUSD("n", "n", safe);
+        Denari n = new Denari("n", "n", safe);
         Transmuter t = new Transmuter(n, IERC20(address(usdc)), safe);
         Alchemist a = new Alchemist(n, IERC20(address(usdc)), IERC4626(address(ev)), t, safe);
         vm.startPrank(safe);
@@ -870,7 +870,7 @@ contract BankTest is Test {
         MockUSDC other = new MockUSDC();
         MockVault wrong = new MockVault(IERC20(address(other)));
         vm.expectRevert(bytes("vault asset mismatch"));
-        new Alchemist(nusd, IERC20(address(usdc)), IERC4626(address(wrong)), transmuter, safe);
+        new Alchemist(dnr, IERC20(address(usdc)), IERC4626(address(wrong)), transmuter, safe);
     }
 
     /// THE LTV AND THE HARVEST FEE ARE NOT INDEPENDENT KNOBS.

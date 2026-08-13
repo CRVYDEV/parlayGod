@@ -1513,7 +1513,7 @@ export async function buildServer() {
   // only the account id, so there is nothing to gain by holding the lock across it.
   app.get('/v1/bank', { preHandler: auth }, async (req) => {
     const board = await G.readCharacter(pool, req.user.sub, (ch, client) => Bank.bankBoard(client, ch.account_id));
-    const protocol = await Bank.bankPosition(pool, req.user.sub).catch(() => ({ dormant: true, market: 'nUSD' }));
+    const protocol = await Bank.bankPosition(pool, req.user.sub).catch(() => ({ dormant: true, market: 'Denari' }));
     return { ...board, protocol };
   });
   app.post('/v1/vault/claim', { preHandler: auth }, async (req) =>

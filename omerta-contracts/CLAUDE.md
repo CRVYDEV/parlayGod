@@ -4,7 +4,8 @@ Solidity suite for OMERTÀ on Robinhood Chain. Rules for future sessions:
 1. `forge test` must pass after every change; new behavior needs new tests (happy path + every revert).
    **The suite IS runnable in the sandboxed build environment**: `./run-forge-test-sandboxed.sh`
    (forge from the official npm dist, forge-std/OZ/v4-core from npm, solc native-or-shim).
-   First executed 2026-07-23 (73/73); **185/185 green** after THE BANK's nUSD market and `GenesisOracle`, incl. seven 512-run fuzzes. The runner PREFERS the
+   First executed 2026-07-23 (73/73); **213/213 green** after THE BANK's Denari market (né nUSD),
+   `GenesisOracle` and the hook's buy side, incl. the 512-run fuzzes. The runner PREFERS the
    NATIVE solc binary and NEEDS it — the solc-js shim (same version+commit) runs out of wasm heap
    compiling v4's `PoolManager`, so on a shim-only box every suite runs EXCEPT `OmertaHook.t.sol`. On an open-internet machine prefer
    `./run-forge-test.sh` (native toolchain).
@@ -141,8 +142,10 @@ Solidity suite for OMERTÀ on Robinhood Chain. Rules for future sessions:
        shares this audit, so if it is wanted, decide it before the batch — a second buy-side change on
        an immutable contract is a second audit.
 
-8. **THE BANK's nUSD market (`NUSD` / `CollateralEscrow` / `Alchemist` / `Transmuter`) — the rules
-   that are structural, not stylistic.** Design: `omerta-bank-protocol-design.md` §2.1–2.5.
+8. **THE BANK's Denari market (`Denari` (DNR) / `CollateralEscrow` / `Alchemist` / `Transmuter`) — the
+   rules that are structural, not stylistic.** Design: `omerta-bank-protocol-design.md` §2.1–2.5.
+   (The debt token was founder-named **Denari / DNR** on 2026-08-13 — it was `nUSD` in every audit
+   report and design note before that date; same contract, new name.)
    - **THERE IS NO ORACLE ON THE BORROW PATH, AND NO `liquidate()` ANYWHERE.** The market is
      denomination-matched (USD debt against USD collateral), so a borrow decision never reads a
      price — and a price that is never read cannot be manipulated at any size. Both Inverse losses

@@ -306,7 +306,7 @@ const checkOf = async (runner, name) => {
   // indistinguishable from one that is broken, and the player cannot tell which they are looking at.
   assert(body.protocol, 'the board carries the protocol position');
   assert.equal(body.protocol.dormant, true, 'and says DORMANT rather than erroring, because the market is not deployed');
-  assert.equal(body.protocol.market, 'nUSD', 'naming which market it is waiting on');
+  assert.equal(body.protocol.market, 'Denari', 'naming which market it is waiting on');
   // Asserted at the SOURCE too, not only through the route: the route wraps this in a catch (so a
   // dead RPC degrades to dormant rather than 500ing the whole board), which would happily mask a
   // reader that throws on an unconfigured chain. The board's answer alone cannot tell the two apart.
@@ -331,7 +331,7 @@ const checkOf = async (runner, name) => {
   // (3) NEVER A PHRASE IMPLYING SPEED OR A GUARANTEED RETURN (§3, rule one).
   //
   // Asserted against the object a LIVE position produces, NOT the dormant one — and that distinction
-  // is not pedantry, it is a mutation that survived. Scanning `{dormant:true, market:'nUSD'}` for
+  // is not pedantry, it is a mutation that survived. Scanning `{dormant:true, market:'Denari'}` for
   // banned words passes whatever the live path says, so the first version of this check could not
   // fail no matter what the shipped surface promised. `positionView` is the shaping split out from
   // the RPC precisely so this can reach it.
