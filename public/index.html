@@ -3005,8 +3005,34 @@
   $('#phone').onclick = (e) => { if (e.target.id === 'phone') { $('#phone').classList.add('hidden'); phoneOpenThread = null; } };
   $('#death-go').onclick = () => { $('#deathmodal').classList.add('hidden'); setTab('streets'); };
 
-  // the sheet stays honest on its own: countdowns and accrual don't wait for a click
-  setInterval(() => { if (me && !document.hidden) { refresh(); renderActive(); pollOnline(); } }, 30000);
+  // The sheet stays honest on its own: countdowns and accrual don't wait for a click.
+  //
+  // But the two halves of this tick cost wildly different amounts, and only one of them is worth
+  // paying for while nobody is looking. MEASURED on a real browser over a full poll window:
+  // refresh() + pollOnline() is 2 requests, while renderActive() re-fetches the whole open board —
+  // 16 more on Home, which is exactly where a returning player parks. Mean 11.6 requests per tick,
+  // i.e. 0.39 req/s from a player who is doing nothing at all.
+  //
+  // So the board re-render backs off once the page has been untouched for IDLE_MS. The sheet keeps
+  // ticking (that is the part a player watches — money, energy, cooldowns), and the board comes back
+  // the instant anything happens: any input resumes it below, a websocket event re-renders directly,
+  // and returning to the tab re-renders on visibilitychange. A board only goes stale for somebody who
+  // has not touched the page in minutes and is not being told anything by the wire.
+  const IDLE_MS = 180000;
+  let lastInput = Date.now();
+  const noteInput = () => {
+    const wasIdle = Date.now() - lastInput >= IDLE_MS;
+    lastInput = Date.now();
+    if (wasIdle && me) renderActive();          // came back — freshen what they are looking at NOW
+  };
+  for (const ev of ['pointerdown', 'keydown', 'wheel', 'touchstart'])
+    document.addEventListener(ev, noteInput, { passive: true });
+
+  setInterval(() => {
+    if (!me || document.hidden) return;
+    refresh(); pollOnline();                                        // cheap, always
+    if (Date.now() - lastInput < IDLE_MS) renderActive();           // expensive, only while watched
+  }, 30000);
   document.addEventListener('visibilitychange', () => {
     document.body.classList.toggle('paused', document.hidden); // stop the ambient loops off-screen (battery)
     if (!document.hidden && me) { refresh(); renderActive(); }
