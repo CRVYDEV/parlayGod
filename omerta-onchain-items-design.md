@@ -71,22 +71,33 @@ you get it for the photographic items via IPFS pinning without pixel-arting anyt
 on-chain rendering is only worth its gas + art-rewrite cost for art that is *already* vector — which
 is exactly the portrait, and nothing else you have.
 
-## 4. The actual gap to close first (independent of any Unipeg decision)
+## 4. The actual gap to close first (independent of any Unipeg decision) — ✅ BUILT 2026-08-13
 
-Before any of §3's ambition: **`GearVault` needs a `tokenURI` at all.** Today an extracted item is
-an ERC-1155 with no metadata, so it is invisible on every marketplace. The minimum viable
-marketplace rail:
+Before any of §3's ambition: **`GearVault` needs on-chain metadata at all.** It shipped with an
+`uri(id)` that returned `<base><id>.json` — a URL to an off-chain, server-hosted file — so an
+extracted item was invisible on a marketplace the moment that host wasn't serving it, and its traits
+were a server's claim rather than the token's. The minimum viable marketplace rail:
 
-1. **`tokenURI(id)` on the vault** (or a metadata contract it points at) returning ERC-721/1155
-   metadata JSON: `name`, `description`, `image`, `attributes` (the item's rarity, catalog id, and
-   its stable traits).
-2. **The image**: for cars/gear, an IPFS URI to the pinned plate (per catalog-id × rarity); for the
-   portrait, a `data:image/svg+xml` URI rendered on-chain (§3).
+1. **`uri(id)` on the vault** returning a self-contained ERC-1155 metadata JSON `name`,
+   `description`, `image`, `attributes` (the item's rarity, catalog id, and its stable traits).
+2. **The image**: for cars/gear/boats, an IPFS URI to the pinned plate (per catalog-id × rarity); for
+   the portrait, a `data:image/svg+xml` URI rendered on-chain (§3).
 3. **Traits on-chain** so the marketplace shows rarity/attributes and they are provably the token's,
    not a server's claim.
 
+**Shipped (`GearVault.sol` + `test/GearVault.t.sol`, forge 222/222):** `uri(id)` now assembles a
+`data:application/json;base64,...` JSON on-chain. The tokenId is self-describing (gear `1..N`; car
+`CAR_BASE + idx*STRIDE + rarityIdx`; boat `BOAT_BASE + ...`, mirroring `RARITY.TOKEN`), so **every
+scarcity trait — Type / Class / Rarity — is DERIVED from the tokenId with zero per-token storage**,
+which is exactly what makes it provable rather than a claim. Only the `image` points off-chain (the
+IPFS-pinned plate at `<imageBase><tokenId>.png`), which is correct for the rich photographic art (§3).
+An optional Safe-set `setClassName`/`setClassNames` registry gives marketplace-readable names ("GTO ·
+Legendary" instead of "Car #3"), with a graceful derived fallback when unset. Chain-dormant like the
+rest of the rail; deploy note in CHAIN-DEPLOY.md. The renderer for the portrait (§3, point 2's
+`data:image/svg+xml`) is the remaining §3 piece — porting `portrait.js` to Solidity — and is separate.
+
 This is the piece that makes "sell items on marketplaces" *true* rather than aspirational, and it
-needs no Unipeg mechanic — just the metadata standard the whole NFT market already speaks.
+needed no Unipeg mechanic — just the metadata standard the whole NFT market already speaks.
 
 ## 5. The game-economy safety check — why marketplace-tradeable items are safe
 
@@ -107,9 +118,9 @@ never be true of anything with game-power — which the inert rule guarantees.
 
 ## 6. Recommendation
 
-1. **Build the metadata rail** (`tokenURI` + traits + IPFS pinning) — this is the real, launch-of-
-   the-marketplace-story work, and it is Unipeg-independent. Do this first if item-selling is a
-   priority.
+1. **Build the metadata rail** (on-chain `uri` + derived traits + IPFS image) — this is the real,
+   launch-of-the-marketplace-story work, and it is Unipeg-independent. ✅ **DONE 2026-08-13** (§4);
+   IPFS pinning of the plates is the remaining ops step, done at chain go-live.
 2. **Cars / gear / boats: on-chain traits + IPFS image.** Keep the rich art. Marketplace-native,
    permanent, no aesthetic sacrifice.
 3. **The portrait: port `portrait.js` to a fully-on-chain Solidity renderer** (deterministic from

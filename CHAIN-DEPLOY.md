@@ -166,8 +166,16 @@ PHASE 1 for the exact calls/args.
 - [ ] **`OMR(treasurySafe)`** — founding supply `100_000_000e18` minted once to the Safe. **No longer a
       fixed-supply token** (tokenomics v2 §4): it has ONE mint path, the `minter` address, which ships
       **unset (= minting off)** and is armed deliberately below. There is no owner mint.
-- [ ] **`GearVault(safe)`** — ERC-1155; mint gated to VoucherClaim (set in the next step); per-`gearId` supply
-      caps set by the Safe (set caps BEFORE signing any gear voucher — an uncapped id is fail-closed).
+- [ ] **`GearVault(safe, imageBase)`** — ERC-1155; mint gated to VoucherClaim (set in the next step);
+      per-tokenId supply caps set by the Safe (set caps BEFORE signing any gear voucher — an uncapped id
+      is fail-closed). `imageBase` is the IPFS base for the pinned plates, e.g. `ipfs://<CID>/`, so the
+      per-tokenId image resolves to `<imageBase><tokenId>.png` (settable later via `setImageBase`).
+      **Metadata is on-chain**: `uri(id)` returns a self-contained JSON data URI whose Type/Class/Rarity
+      traits are derived from the tokenId (provable, no per-token storage); only the image is off-chain.
+      OPTIONAL but recommended for marketplace readability: `setClassNames(classKeys, names)` gives each
+      car/boat/gear class a display name (unset falls back to "Car #<idx>" etc.). A class key is the
+      class's BASE tokenId (rarity digit 0). The encoding constants `CAR_BASE`/`BOAT_BASE`/`STRIDE` and
+      the rarity names MIRROR `RARITY.TOKEN`/`RARITY.TIERS` in `src/rules.tail.js` — keep them in lockstep.
 - [ ] **`VoucherClaim(omr, gearVault, signer, safe, dailyCapOMR)`** — the only $OMR bridge. Then
       `gearVault.setMinter(voucherClaim)` so gear mints route through it.
 - [ ] **`OMRStaking(omr, safe)`** — pre-funded reward pool; principal always withdrawable.
