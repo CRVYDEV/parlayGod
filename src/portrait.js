@@ -3,7 +3,7 @@
 // `omerta-identity-nft-design.md` §5 sequences this deliberately: the portrait ships FIRST, with no
 // gates, because it is most of the value and it needs no token, no wallet and no chain — and because
 // it generates the thing the token would later point at, so the ordering is not a compromise. The
-// contract half (step 6's other leg) waits on the counsel memo's re-opened A4 and on the third-party
+// contract half (step 6's other leg) waits on an open launch-checklist row and on the third-party
 // audit BATCH, which the dynasty design says to batch rather than dribble.
 //
 // ── ARCHITECTURE: layered composition (design §2, approach 2) ──

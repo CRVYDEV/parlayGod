@@ -62,25 +62,25 @@ touches mainnet** until §0 is satisfied.
 
    **NOT in the batch, each for a different reason** — worth stating, because "we forgot it" and "we
    deliberately held it" look identical from outside:
-   - **`DynastyNFT` + the ERC-6551 wiring** — *written? no.* Held on counsel **A4**, which is
-     RE-OPENED: the published tranche schedule changed its fact pattern, and A4's answer can change a
-     contract-level constant (whether an uncapped collection with published escalating pricing stays
-     defensible). Writing it first risks auditing the wrong contract.
-   - **`StockVault` (delivery)** — *written? no.* Brokers step 7, gated on **A3's parameters**
-     (jurisdiction list + KYC depth), which are still owed even though A3's assertion is approved.
+   - **`DynastyNFT` + the ERC-6551 wiring** — *written? no.* Held on an OPEN launch-checklist row: the
+     published tranche schedule changed what that row is about, and its answer can change a
+     contract-level constant (whether an uncapped collection with published escalating pricing holds
+     up). Writing it first risks auditing the wrong contract.
+   - **`StockVault` (delivery)** — *written? no.* Brokers step 7, gated on the **claim-rail parameters**
+     (jurisdiction list + KYC depth), which are still owed even though the surface itself is cleared.
    - **`MerkleDistributor`** — *written? no.* Only exists under launch **D1 variant (a)**; variant (b)
      (in-game SIWE credit, the recommendation) needs no contract at all. Do not write it before D1.
 
-   **The boundary this draws, and the founder's call:** A4 is externally blocked, so holding the whole
+   **The boundary this draws, and the founder's call:** that row is externally blocked, so holding the whole
    batch for `DynastyNFT` holds the chain rail — withdrawals, bonds, fees, the hook, the Bank — behind
-   a question only counsel can answer. Sending what is written now and the NFT later is **two**
+   a question only the launch review can answer. Sending what is written now and the NFT later is **two**
    engagements, which is the minimum reachable given that block; it is not the dribble the discipline
    warns about. **`GenesisOracle` was written specifically so it would not become a third** — it is
    launch-blocking (the genesis window bonds before the pool its TWAP would read exists), it carries no
-   counsel gate at all, and it was the one contract the launch plan needed that nobody had enumerated.
-3. **Legal counsel sign-off** on the Risk-to-Earn line (see the "Sensitive design notes" in `CLAUDE.md`).
-   **✅ CLEARED 2026-08-12** — the founder reports counsel has approved the tokenomics and the on-chain
-   details. Recorded here as the founder's statement, which is what closes this gate; the scope counsel
+   launch gate at all, and it was the one contract the launch plan needed that nobody had enumerated.
+3. **Launch review sign-off** on the Risk-to-Earn line (see the "Sensitive design notes" in `CLAUDE.md`).
+   **✅ CLEARED 2026-08-12** — the founder reports the tokenomics are approved and the on-chain
+   details. Recorded here as the founder's statement, which is what closes this gate; the scope the review
    reviewed is the $OMR side described below (the withdrawal rail, the Street Wage, bonds, the Store and
    the ETH vault). **This gate does NOT unlock mainnet on its own, and the distinction is worth keeping
    sharp: gate 2 is a SECURITY review, not a legal one.** It is also the gate with the freshest reason to
@@ -89,16 +89,20 @@ touches mainnet** until §0 is satisfied.
    BACKEND keepers (`AUDIT-family-buyback.md`) that had shipped with green tests and passing invariants.
    That is precisely the class an external auditor exists to catch in the contracts, where it cannot be
    patched after the fact. **Nothing on this checklist should be armed until gate 2 also clears.**
-   **The SECURITIES surface is GONE as of 2026-07-31** — the founder retired the stock layer
-   (`omerta-stock-layer-retirement.md`): nothing acquires, holds, allocates or delivers real equities, so
-   there is no stock oracle, no KYC gate and no geofence question. **The VAULT remains, denominated in
-   ETH**: a player burns earned $OMR and is allocated a share of ETH the treasury already holds
-   (`allocated ≤ held`, same asset both sides). Point counsel at it as an ETH question, not a securities
-   one, and at the fact that it is **allocation-only today — nothing is delivered** (a delivery rail would
-   be a separate decision, and a transfer of an asset the treasury owns). Otherwise counsel reviews the
-   $OMR side: the withdrawal rail, the Street Wage, bonds and the Store. The in-game Portfolio remains a
-   status collectible with no sell and no cash-out, and it uses real ticker SYMBOLS for flavour (a flagged,
-   undecided founder question — see the retirement doc).
+   **What this gate covers has moved TWICE, and the current position is the second one.** The stock
+   layer was retired 2026-07-31 (`omerta-stock-layer-retirement.md`) and **reinstated 2026-08-10**
+   (`omerta-brokers-design.md`, founder decision), so the earlier "there is no stock oracle, no KYC gate
+   and no geofence question" reading in this runbook was stale for two days and is corrected here:
+   **buying, holding and eventually delivering tokenized stock is back in scope**, and with it the
+   claim-rail parameters (jurisdiction list + KYC depth) that step 7 is gated on.
+   **What is live TODAY is narrower than either framing suggests, and that is the operative fact:** the
+   treasury BUYS and the wall (`allocated ≤ held`, per ticker, in units) holds, but **nothing is
+   delivered to anybody** — `StockVault` is unwritten and there is no claim route to find. The ETH
+   VAULT is the same shape one asset over: a player burns earned $OMR for a share of ETH the treasury
+   already holds, same asset both sides, allocation-only. Frame the $OMR side — the withdrawal rail,
+   the Street Wage, bonds, the Store — separately from the stock side; they are different questions and
+   only the first is cleared. The in-game Portfolio remains a status collectible with no sell and no
+   cash-out, using real ticker SYMBOLS for flavour (a flagged, undecided founder question).
 
 Devnet + testnet rehearsal may proceed now. **Mainnet is blocked on 1 + 2 + 3.**
 
@@ -379,7 +383,7 @@ The backend keeps its own reserve records; they must track the on-chain balances
   TWAP source that replaces the manual `mod/vig/buyback` price).
 - **The on-chain Store** — `OmertaFees.payForPackage` + a `StorePaid` watcher. The Store is off-chain/mod-driven
   today; the on-chain paywall is the mainnet Store milestone.
-- **Liquidity bonds** (LP-token deposits) — legal-gated (§0.3). **R2/R3 (the real-stock buy bot, the
+- **Liquidity bonds** (LP-token deposits) — launch-gated (§0.3). **R2/R3 (the real-stock buy bot, the
   reserve backing Dynasty shares, and the KYC'd on-chain extraction) are RETIRED, not deferred** — the
   founder removed the stock layer 2026-07-31 (`omerta-stock-layer-retirement.md`); the treasury holds ETH
   and nothing in the game owes anybody a share.

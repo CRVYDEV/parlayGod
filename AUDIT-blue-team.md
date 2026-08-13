@@ -48,7 +48,7 @@ hardening list read alone makes a system look weaker than it is.
   (the `uuid = text` outage class), `pgcheck` runs the loop/locks/ledger on real Postgres, and the
   client/routes/mobile/docs/levers guards keep the surface honest. Real-Postgres CI catches the pg-mem/prod
   divergence that a unit suite structurally cannot.
-- **The chain layer is dormant and gated** on a third-party contract+signer audit and legal counsel; the
+- **The chain layer is dormant and gated** on a third-party contract+signer audit and the launch checklist; the
   contracts carry their own `forge` suite and anti-rug walls (no owner mint, daily caps, fail-closed oracle).
 - **DB-outage resilience was already hardened** — pool `error` handlers on idle *and* checked-out clients
   (the 2026-07-25/07-26 incidents), a `db_down` 503 classification distinct from a 500, `/health`, and a
@@ -169,7 +169,7 @@ Nothing here is a live hole; each is a bound on how far a fix went or a next ste
   pool-protection intent). The important half (anything that moves money, and every authed read) is covered.
 - **Grandfathered tokens.** Old tokens are valid ≤30 days after M3 ships. This is the *safe* semantics (no
   deploy-day mass logout); the weak window closes on its own.
-- **The chain / real-money layer** stays gated on the third-party contract+signer audit and legal counsel
+- **The chain / real-money layer** stays gated on the third-party contract+signer audit and the launch checklist
   (`CHAIN-DEPLOY.md`). Nothing in this pass touched it.
 
 **Bottom line:** the perimeter, the secrets posture, the detection, and the blast radius are materially

@@ -1,7 +1,6 @@
 # THE STOCK MACHINE — tax → daily Commission-voted stock buy → gas-paid claims
 
-**Status: DESIGN ONLY (founder-directed 2026-08-09). Counsel approval recorded as a founder
-assertion ("Counsel has approved"), the standing directive pattern. Nothing here is built; the
+**Status: DESIGN ONLY (founder-directed 2026-08-09). Approval recorded as a founder assertion, the standing directive pattern. Nothing here is built; the
 chain half is mainnet-gated on the third-party audit clock like every contract change.**
 
 The founder's proposal, verbatim in spirit: (1) the fee slice dedicated to RWA should buy the
@@ -171,16 +170,16 @@ is our point of distribution. Consequences, all mechanical:
 1. **Eligibility is checked at voucher-SIGN time, server-side**: linked SIWE wallet + minted
    account (the extraction gate that already exists) + **geofence/attestation for the excluded
    jurisdictions** (US persons at minimum; Robinhood's own excluded list — UK, Canada,
-   Switzerland — mirrored unless counsel narrows it). An ineligible account can still ALLOCATE
+   Switzerland — mirrored unless the founder narrows it). An ineligible account can still ALLOCATE
    (the in-game burn and the vault line are not the securities event) — it just can't claim
    on-chain until eligible. This is exactly the R3 posture the original design recorded.
 2. **Pull, never push.** No token ever moves to a wallet that didn't sign a claim transaction —
    which is both the gas-cost win the founder wants and the clean answer to "did you distribute
    to them?" (they came to the counter, attested, and paid).
 3. **The standing copy rules stand**: no appreciation language, no earnings promises, describe
-   the machine factually. The counsel approval covers architecture; exact player-facing copy is
+   the machine factually. The approval covers architecture; exact player-facing copy is
    its own review (the recorded rule).
-4. **KYC depth is counsel's call, not ours**: the issuer's own redemption path is KYC'd; whether
+4. **KYC depth is a founder call, not ours**: the issuer's own redemption path is KYC'd; whether
    our claim counter needs full KYC or geofence+attestation is the one open legal parameter.
    The design works under either — it only changes what `signStockVoucher` checks.
 
@@ -195,7 +194,7 @@ is our point of distribution. Consequences, all mechanical:
   (the recorded rule for any contract change) — batch it with whatever else is queued for that
   audit. Verify the Uniswap version on Robinhood Chain here.
 - **PHASE C — claims live**: `signStockVoucher` + the geofence/attestation gate + the client
-  claim flow (the wallet picker + calldata rail already exist), behind counsel's final word on
+  claim flow (the wallet picker + calldata rail already exist), behind the founder's final word on
   KYC depth and the jurisdiction list.
 
 ## 7. What this deliberately does not do

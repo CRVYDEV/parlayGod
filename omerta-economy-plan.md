@@ -10,7 +10,7 @@ governance levers) needs a full re-sim + Jorge's sign-off before it ships (groun
 > 1. **Legal surface grows.** A player-governance body that tunes economic levers, plus
 >    a freely-withdrawable yield token that bots can extract, pushes this further toward
 >    "governance token + financial product" — squarely more securities/regulatory
->    exposure. This plan does not change the standing recommendation: **counsel review
+>    exposure. This plan does not change the standing recommendation: **launch review
 >    before M6-B.** The Mob Council especially should be legally scoped before design.
 > 2. **Re-sim before balance ships.** The sink %, upkeep rates, prestige buffs, and
 >    insurance costs below are placeholders to show the mechanism — not final numbers.
@@ -66,7 +66,7 @@ advisory or binding. **Recommend: scope this legally first, then a dedicated des
 do not fold it into the first economy patch.**
 
 *Status:* (b) is a near-term, low-risk fix. (c) needs re-sim + sign-off. (a) is a
-principle that shapes M6-B. (d) is a separate track, legal-gated.
+principle that shapes M6-B. (d) is a separate track, launch-gated.
 
 ---
 
@@ -117,7 +117,7 @@ product track (design pass of its own).
 3. **M6-B** built around the **full-reserve queue (D1)** — ✅ **shipped** (`src/chain.js`).
    Agent extraction config (D4) still open.
 4. **Re-sim** the wealth sink (D2c) + permadeath softeners (D3); Jorge signs the numbers; implement.
-5. **Mob Council (D2d)** and the **agent-experience layer (D4)** — separate design docs, legal-gated.
+5. **Mob Council (D2d)** and the **agent-experience layer (D4)** — separate design docs, launch-gated.
 
 ## Open decisions still needed
 - Mob Council vote weight + binding-vs-advisory (and its legal scope).

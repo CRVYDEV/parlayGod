@@ -109,7 +109,7 @@ assert.equal(Number(wrows[0].tier), 3);
 
 const board = await epochBoard(pool);
 assert.equal(board.delivered, false, 'the board states plainly that nothing was delivered');
-assert(/counsel/i.test(board.note), 'and names the gate');
+assert(/gated/i.test(board.note), 'and names the gate');
 
 // ── re-running an epoch is idempotent, not a second payout ──
 const again = await allocateEpoch(pool, { endDay: today });

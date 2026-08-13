@@ -643,4 +643,4 @@ assertion's message is what identifies it, and a re-run destroys the evidence. E
 convention) is measured and accepted; D8–D10 are accepted as-is with guards; D11 is addressed and now
 runs in CI; D13 is an open, unidentified test flake rather than a defect in the system. What remains is not architecture: the founder's operational steps (the alert webhook, one
 production backup, the X token), the balance levers tracked in `SIGN-OFF.md`, and the chain track, which
-is gated on a third-party audit and legal counsel rather than on any work in this repo.
+is gated on a third-party audit and the launch checklist rather than on any work in this repo.

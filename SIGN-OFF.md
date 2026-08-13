@@ -339,7 +339,7 @@ whether money buys advantage.
 > promised players *"no pay-to-win"* now make the ceiling claim instead, because the old one stopped
 > being true. Full reasoning, the rung table and the open items: **BALANCE.md § D8=C, THEN D8=D**.
 >
-> **For the counsel packet:** this game has real-money extraction, so the chain is now real money →
+> **For the launch packet:** this game has real-money extraction, so the chain is now real money →
 > in-game earning power → $OMR → the withdrawal rail. A materially different posture from "pay for
 > cosmetics," and it belongs beside the bond and the Store.
 
@@ -473,7 +473,7 @@ A person learns after two tries; the harness now models that. So this bites new 
 ## What is NOT on this sheet
 
 Two things gate mainnet and neither is yours to tune: a **third-party audit** of the contracts and the
-off-chain signer, and **legal counsel** on the extraction line. The contract test suite is green
+off-chain signer, and **the launch checklist** on the extraction line. The contract test suite is green
 (128 tests). Nothing above unblocks those, and they do not block anything above.
 
 ---
@@ -597,13 +597,13 @@ Low-severity, mostly design-consistent-with-the-rest, or expensive-to-abuse. **R
 
 ## TIER 6 — SEPARATE TRACK: legal + audit gated (NOT balance — do not "sign" here)
 
-These are **not economy levers** — they're gated on **legal counsel + a third-party audit** before any
+These are **not economy levers** — they're gated on **the launch checklist + a third-party audit** before any
 mainnet/real-money step, independent of everything above. Listed so nothing's lost.
 
-**Legal-gated (counsel signs, not you):**
+**Gated (not your call):**
 - Reserve Bond, the Store's RWA revenue share, PLEX pricing, R2/R3 real-RWA extraction, the tier-2
-  "family tree" referral — all held until counsel + audit. Keep the tier-2 referral **flat, cash-only,
-  depth-2, agent-excluded** (the anti-MLM line) — do not deepen without counsel.
+  "family tree" referral — all held until the launch checklist + audit. Keep the tier-2 referral **flat, cash-only,
+  depth-2, agent-excluded** (the anti-MLM line) — do not deepen without founder sign-off.
 
 **Pre-mainnet chain hardening (engineering gate, mostly needs the Foundry toolchain we don't have here):**
 - **Run `forge test`** (the suite compiles clean but the Foundry VM was never executed here) — the hard
@@ -664,7 +664,7 @@ blockers to mainnet — they are NOT signed here (legal/audit track, not a found
 1. **`forge test`** green on a real Foundry toolchain (`omerta-contracts/run-forge-test.sh` — the suite compiles
    clean here but the Foundry VM is egress-blocked; this is the hard pre-audit gate).
 2. **Third-party audit of the contracts AND the off-chain EIP-712 signer** (`src/chain.js`).
-3. **Legal counsel** on the Risk-to-Earn / RWA line (jurisdiction/KYC/geofence).
+3. **Launch review** on the Risk-to-Earn / RWA line (jurisdiction/KYC/geofence).
 
 Still deferred engineering (not blockers, but needed before real bonds flow): the bond **quote signer** (no
 on-chain bond can be created until it ships — the watcher is wired but idle), the POL-pairing + DEX buyback
@@ -747,7 +747,7 @@ Suite green + `node tools/sim.js` drift-0 after the package.
 
 - **Chain / mainnet (Tier 6):** `forge test` is now **GREEN — 73/73 incl. both fuzzes** (first execution,
   2026-07-23), so gate 1 is closed. Remaining: **third-party audit** of contracts + the off-chain EIP-712
-  signer, and **legal counsel** on the Risk-to-Earn / RWA line. Neither is a founder tuning call.
+  signer, and **the launch checklist** on the Risk-to-Earn / RWA line. Neither is a founder tuning call.
 - **RWA float pre-mainnet economics** (rwa-float #1/#3/#4): the stale-oracle free option, FCFS sniping, and
   the R3 simulated-unit reconciliation. #2 (minted-only) shipped as A17; the rest genuinely need the real
   buy bot + oracle to exist before they can be decided. **#1 remains the single most important economics

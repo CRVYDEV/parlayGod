@@ -1928,7 +1928,7 @@ agent surface. The last four rounds (R27/R29/R30/R31 — 7 fresh lenses) returne
 **Founder sign-off backlog (flagged, not patched per ground rule #1):** MED-1 no DB migration path (top deploy
 item), MED-2 zero FKs, the `bust:reward` unguarded faucet, client `esc()` consistency, two by-design wealth-
 inference channels, two fail-safe vig backing seams, the agent-board prompt-injection surface, and the
-standing pre-mainnet gates (`forge test`, third-party contract+signer audit, legal counsel). §10.4 untouched
+standing pre-mainnet gates (`forge test`, third-party contract+signer audit, the launch checklist). §10.4 untouched
 throughout; suite 33/33 + sim drift-0 every round.
 
 ---

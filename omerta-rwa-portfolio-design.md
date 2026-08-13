@@ -32,20 +32,20 @@ fractional AAPL instead of $OMR."
 
 ## Phasing (R1 carries the same risk profile as everything shipped this year — none)
 
-- **R1 — buildable now, ZERO regulatory surface (THIS DOC).** The in-game Portfolio: ticker-
+- **R1 — buildable now, ZERO extraction surface (THIS DOC).** The in-game Portfolio: ticker-
   denominated credits bought by burning clean $OMR, tracked by a deterministic server-authoritative
   price (the §7.11 seed machinery). **Pure STATUS** — no sell, no cash-out — so shares touch no
-  securities/derivative law (the hitman-rep / family-seal precedent: a status axis *outside* §10.4
+  the applicable rules (the hitman-rep / family-seal precedent: a status axis *outside* §10.4
   and outside the sim-audited balance). Ships the whole fiction, the earning loop, the family book,
   the death-proof retirement fantasy, the leaderboard. Gathers data.
 - **R2 — the real reserve, still no distribution.** A `RWA_BPS` slice of real ETH fee revenue funds
   a buy bot that acquires real fractional RWA into a reserve wallet; the in-game credits become
   *backed* (the full-reserve invariant). We *hold* assets; players do not yet extract. **Gated on
   legal structuring.**
-- **R3 — extraction: the one securities event.** The KYC'd on-chain claim, through Robinhood's own
+- **R3 — extraction: the one gated event.** The KYC'd on-chain claim, through Robinhood's own
   broker-dealer rails (their KYC / custody / tax reporting / issuance — *not* ours; OMERTÀ is a
   rewards program distributing THROUGH Robinhood, not an independent issuer). **Hard-gated on a
-  Robinhood partnership + securities counsel + the third-party audit that already gates mainnet.**
+  the Robinhood partnership + the third-party audit that already gates mainnet.**
 
 **WHAT THE RWAs ACTUALLY ARE (founder clarification, 2026-07-19).** The tickers (AAPL / TSLA / SPCX /
 HOOD / …) are **Robinhood's tokenized stocks — real ERC-20 tokens trading on Uniswap** (the `stocks`
@@ -58,11 +58,11 @@ category, on Arbitrum / Robinhood Chain), NOT abstract collectibles. This makes 
   tokenized-security transfer, hence the KYC / jurisdiction gate below.
 - **The R1 in-game price stays the deterministic §7.11 hash (a PROXY), NOT the live Uniswap price** —
   deliberately. A display price that TRACKS a real security's live price weakens the "pure status,
-  outside securities law" posture that keeps R1 shippable everywhere; the hash proxy is the safer
+  outside the applicable rules" posture that keeps R1 shippable everywhere; the hash proxy is the safer
   choice until R2 introduces the real oracle behind the KYC boundary. (Open decision if the founder
-  wants R1 to "feel real" — flagged, counsel call.)
+  wants R1 to "feel real" — flagged, a founder call.)
 - **Jurisdiction is a hard gate, not a nicety.** Robinhood's tokenized stocks are offered to EU
-  customers and are **not available to US persons** (as of the knowledge cutoff — counsel/Robinhood
+  customers and are **not available to US persons** (as of the knowledge cutoff — the launch review
   confirm current status). So R3 extraction must be **KYC'd AND geofenced** to eligible jurisdictions;
   a US-person account can play + earn + hold the in-game status fully but can never cross the
   extraction boundary. R1 (status only) has no such restriction — it ships to everyone.
@@ -162,4 +162,4 @@ The console **"Going Legit"** tab (`public/index.html`) surfaces the whole layer
 ## Still deferred (R1 step three / R2)
 An automatic "Envelope" tithe skim on taxed flows; convoy-arrival / war-spoils cuts (trivial
 `grantShares` extensions of the big-score hook). R2 (real RWA reserve backing) and R3 (KYC'd on-chain
-extraction) remain legal-gated.
+extraction) remain launch-gated.

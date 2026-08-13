@@ -228,7 +228,7 @@ passive income stops dominating (B2). The game *feels* Risk-to-Earn — risk is 
 where you keep your wealth is a real decision.
 
 **Deliberately doesn't:** change real-money extraction at all. No new withdrawal, no token
-appreciation mechanic, no Vig — so Phase 1 carries **no new regulatory surface** and needs no
+appreciation mechanic, no Vig — so Phase 1 carries **no new extraction surface** and needs no
 chain work. It's the safe way to prove the loop before Phase 2 turns earned $OMR into a real,
 sustainable living. Ship this, watch whether PvP and the wealth-carry tension come alive, tune the
 seven numbers, *then* commit to the Vig.

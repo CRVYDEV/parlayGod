@@ -240,5 +240,5 @@ later counts it as one.** Recorded in `CHAIN-DEPLOY.md` next to the dial recomme
 
 `forge test` is green (gate 1). Mainnet remains blocked on **gate 2 — third-party audit of contracts
 AND signer**, whose clock step 4 reset by deleting the "nothing mints" property, and **gate 3 —
-legal counsel**. An auditor must be pointed explicitly at what was deleted and at the four walls
+the launch checklist**. An auditor must be pointed explicitly at what was deleted and at the four walls
 that replaced it; this report is part of that packet.

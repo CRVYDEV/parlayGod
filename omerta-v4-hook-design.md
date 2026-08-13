@@ -2,7 +2,7 @@
 
 **Status: §11 steps 1 and 2 are BUILT** (`OmertaBond`'s four-way ETH split; `OmertaHook.sol` +
 `test/OmertaHook.t.sol`, 19 tests against a REAL `PoolManager`). Steps 3–8 are not. Everything here
-still sits behind the two standing gates (third-party audit of contracts + signer; legal counsel)
+still sits behind the two standing gates (third-party audit of contracts + signer; the launch checklist)
 exactly like the rest of the chain track — and it *enlarges* the audit gate, see §7. Nothing is
 deployed; the hook is inert code in a repo.
 

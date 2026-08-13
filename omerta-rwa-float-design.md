@@ -58,7 +58,7 @@ ETH taxes ──► rwa_revenue (accounting bucket, out-of-band)
    players claim from the float by burning earned $OMR at the REAL oracle price
    (rwa:vault — $OMR is the RATIONING TICKET; the ETH taxes were the FUNDING)
                  │
-                 ▼  (R3, legal-gated: KYC + geofence)
+                 ▼  (R3, launch-gated: KYC + geofence)
         extraction delivers the actual token — trivially safe: it's already held
 ```
 
@@ -114,7 +114,7 @@ the invariant view makes the gap visible, never hidden.
 
 - **Direct ETH→shares purchase** — makes the game a securities dealer at the point of sale (KYC at
   entry, the heaviest surface). Rejected; entry stays in-game.
-- **The real Uniswap bot + Safe custody** — mainnet milestone, gated on legal counsel + the
+- **The real Uniswap bot + Safe custody** — mainnet milestone, gated on the launch checklist + the
   third-party audit (the M6/bond dormant pattern). This drop is the complete off-chain core.
 - **R3 extraction** — unchanged: KYC'd + geofenced (no US persons per Robinhood's product terms),
   capped by the player's vaulted units, reserve-backed by construction.
@@ -124,4 +124,4 @@ the invariant view makes the gap visible, never hidden.
 
 `FEE_RWA_BPS` 1000 · `CLAIM_DAILY_OMR` 500 · `CLAIM_MIN_OMR` 5 · the oracle floor
 (`STORE.PLEX_FLOOR_OMR_PER_ETH`, shared) · buyback cadence/size (bot). No earnings/appreciation
-marketing until counsel clears wording (the standing wall).
+marketing until the founder clears wording (the standing wall).

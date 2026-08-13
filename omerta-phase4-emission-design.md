@@ -6,7 +6,7 @@ $OMR mint*, and it structurally out-runs every sink, so net supply grows for any
 population. Phase 2 (the Vig) explicitly flagged that this must "land close behind, so in-game
 emission can't outrun the Vig and bloat the withdrawal queue." Phase 4 does exactly that.
 
-Off-chain, no new extraction, no chain work — so no new regulatory surface. Numbers are proposed
+Off-chain, no new extraction, no chain work — so no new extraction surface. Numbers are proposed
 defaults (founder sim + sign-off, ground rule #1).
 
 ---
