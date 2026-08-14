@@ -49,9 +49,9 @@ touches mainnet** until §0 is satisfied.
 
    ### THE BATCH — what goes out, and why it is drawn here
    *"Batch, not dribble" (`omerta-dynasty-machine-design.md`) means the scope must be KNOWN before it
-   is sent. Enumerated 2026-08-11; `forge test` **185/185** green on this exact set.*
+   is sent. Enumerated 2026-08-11; `forge test` **249/249** green on this exact set (StreetDeed added 2026-08-14).*
 
-   **In the batch — 14 contracts + 1 interface, 2,584 lines, every one carrying tests:**
+   **In the batch — 15 contracts + 1 interface, every one carrying tests:**
 
    | subsystem | contracts | the thing to attack |
    |---|---|---|
@@ -59,6 +59,7 @@ touches mainnet** until §0 is satisfied.
    | issuance | `OmertaBond`, `OmrTwapOracle`, `GenesisOracle`, `IOmrOracle` | the four walls, and specifically that 3 and 4 COMPOSE rather than substitute |
    | the market | `OmertaHook` | the pool gate, the `afterSwap` delta, the absence of a pause |
    | THE BANK | `Denari` (the DNR debt token, né `nUSD`), `CollateralEscrow`, `Alchemist`, `Transmuter`, `FlashGuard` | that no oracle sits on the borrow path and no `liquidate()` exists anywhere — the design's central claim, and the class that cost Inverse ~$21M twice |
+   | Street Deeds | `StreetDeed` | the EIP-712 self-mint (name↔tokenId bijection, the daily cap, replay/deadline; NO owner mint), and that `redeem` (the burn-to-re-import) is never pausable so a paused contract can never trap a holder's asset |
 
    **NOT in the batch, each for a different reason** — worth stating, because "we forgot it" and "we
    deliberately held it" look identical from outside:
@@ -152,7 +153,7 @@ makes co-mingling it with a spending key strictly worse than before.
 
 ## 1. Build + test the contracts
 - [ ] `cd omerta-contracts && ./run-forge-test.sh` → all `[PASS]` (Gate 0.1). Suite: OMR, VoucherClaim,
-      GearVault, OMRStaking, OmertaFees, OmertaBond, OmrTwapOracle, GenesisOracle, OmertaHook + THE BANK (185 tests, seven fuzzes).
+      GearVault, OMRStaking, OmertaFees, OmertaBond, OmrTwapOracle, GenesisOracle, OmertaHook + THE BANK + StreetDeed (249 tests, seven fuzzes).
       The hook's tests deploy a REAL Uniswap v4 `PoolManager`, which the emscripten solc cannot compile —
       **use native solc** (`./run-forge-test.sh`, or the sandboxed runner, which now fetches the native
       binary and says so if it cannot).
@@ -281,6 +282,26 @@ PHASE 1 for the exact calls/args.
       `_update` path anyway, ARMED AT ZERO: a hook tax is a property of ONE pool and anyone may open an
       unhooked one, so the token tax is the universal backstop the Safe arms if that starts to matter.
 
+### 2a. STREET DEEDS — the on-chain tradeable deed (only when it ships; dormant until env-set)
+- [ ] **`StreetDeed(safe, signer, imageBase, externalBase)`** — the ERC-721 Street Deed
+      (`omerta-street-deeds-design.md` §2/§3). SELF-MINTING on the SAME `signer` as VoucherClaim (no owner
+      mint — a deed mints only against a server-signed EIP-712 `DeedVoucher`), Safe-owned. `imageBase` →
+      the game's block-plate route (`https://<host>/v1/deeds/plate/`), `externalBase` → the deed's legend
+      page (`https://<host>/deed/`); both take `<tokenId>` appended. **NO wiring needed** (it verifies its
+      own voucher — the OmertaBond precedent, since a deed voucher carries name+district strings the
+      fixed VoucherClaim struct can't). Optional rate-cap: `setDailyMintCap(n)` (0 = unlimited).
+      **Backend activation:** set **`STREET_DEED_ADDRESS`** on BOTH the API (so `POST /v1/deeds/extract`
+      signs the DeedVoucher — needs `CHAIN_ID` + the shared `VOUCHER_SIGNER_PK` too) AND the WORKER (so the
+      `Extracted` watcher `syncDeedExtractedEvents` → `markDeedExtracted` frees the extractor, and the
+      `Redeemed` watcher `syncDeedRedeemedEvents` → `reimportDeed` brings a burned deed back into the game;
+      the worker also needs `CHAIN_RPC_URL`). Dormant until set. The deed goes INERT in-game while
+      extracted (no rent/control — the car/boat v3-step-7 precedent); a holder RE-IMPORTS by calling
+      `redeem(tokenId)` (burn), which the `Redeemed` watcher hands to a deedless linked account.
+      §10.4-NEUTRAL: a deed is ownership, never a currency — zero `transactions` rows. `tokenId =
+      uint256(keccak256(bytes(name)))` (a name↔id bijection enforced on-chain), so a name mints at most
+      once; a re-import (burn) frees the same id for re-extraction. `redeem` is NEVER pausable — a paused
+      contract must never trap a holder's asset.
+
 ### 2b. THE BANK — the Denari (DNR) market (only when it ships; not part of the first cut)
 Order matters more here than anywhere else in this file, because **two of these steps fail SILENTLY**:
 omit them and the market looks healthy from the outside and is not.
@@ -333,6 +354,7 @@ Each rail is OFF until its address/config is present. Set on BOTH processes.
 | `DAILY_CAP_OMR` | per-day withdrawal cap (wei) | mirrors the contract's `dailyCapOMR` |
 | `OMERTA_FEES_ADDRESS` | fee sync (`MintFeePaid`/`RespawnFeePaid`/`RerollFeePaid` → credits) | — |
 | `OMERTA_BOND_ADDRESS` | **the `Bonded` → `recordBond` bond sync (NEW — now wired)** | books the event's authoritative payout + POL/Vig split; idempotent on nonce |
+| `STREET_DEED_ADDRESS` | API: `POST /v1/deeds/extract` signs the DeedVoucher (needs `CHAIN_ID` + `VOUCHER_SIGNER_PK`) + it's the deed `verifyingContract`. WORKER: `Extracted` → `markDeedExtracted` (frees the extractor) + `Redeemed` → `reimportDeed` (burn brings the deed back) | set on BOTH processes; dormant until set. §10.4-neutral (ownership, not currency) |
 | `ALCHEMIST_ADDRESS` (+ `ALCHEMIST_ASSET`, `ALCHEMIST_ASSET_DECIMALS`) | THE BANK's harvest-fee sync → `bank_revenue` | only when the bank market ships |
 | `MINT_FEE_ETH` / `RESPAWN_FEE_ETH` | the PLEX price quote | ETH-denominated; keep == the contract fees |
 | `WALLETCONNECT_PROJECT_ID` | the console's **WalletConnect (mobile)** option — the ONLY way a phone can link a wallet (desktop browser wallets are auto-discovered via EIP-6963 and need nothing) | a PUBLIC WalletConnect/Reown project id, free from https://dashboard.reown.com; unset ⇒ the console hides the option. Surfaced in `/v1/rules`. Not chain-gated: linking is a signature, so the chain is requested as OPTIONAL and a wallet that has never heard of the OMERTÀ chain still connects |

@@ -94,6 +94,8 @@ export const OPERATIONAL_ENV = [
   'DAILY_CAP_OMR', 'OMERTA_BOND_ADDRESS', 'OMERTA_FEES_ADDRESS',
   // GearVault (Redeemed events) — the NFT re-import watcher (Option A). Dormant unless set on the worker.
   'GEARVAULT_ADDRESS',
+  // StreetDeed (Extracted/Redeemed events) — the on-chain tradeable deed NFT. Dormant unless set.
+  'STREET_DEED_ADDRESS',
   // THE BANK's Alchemist — the harvest-fee stream. Dormant unless set; the asset symbol + decimals
   // are config because the market's underlying is not always 18-decimal (USDC is 6).
   'ALCHEMIST_ADDRESS', 'ALCHEMIST_ASSET', 'ALCHEMIST_ASSET_DECIMALS',

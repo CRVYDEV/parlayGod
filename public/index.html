@@ -4319,6 +4319,23 @@
         <div class="d" style="font-size:11px;color:var(--dim);margin-bottom:3px">a street is real, tradeable property — its provenance is its value. One street per name; sell before you buy another.</div>
         ${rows.join('')}</div>`;
     };
+    // ON-CHAIN (Phase 3) — extract your street as a tradeable StreetDeed ERC-721. It carries its legend
+    // and is yours to sell on any marketplace; INERT in-game until re-imported. `minted` never travels.
+    const chain = b.chain || {};
+    const chainCard = () => {
+      if (!deed || !chain.configured) return '';   // only when you hold a street + the deed chain is live
+      if (chain.extractPending) return `<div class="card" style="border-color:var(--gold);margin-top:10px"><span class="t">On-Chain</span>
+        <div class="d">Your street is being taken on-chain — submit the signed claim to your wallet to mint the NFT. It's <b>inert in-game</b> (no corner, no in-game sale) until you re-import it.</div>
+        ${chain.tokenId ? `<div class="d" style="margin-top:3px"><a href="/deed/${esc(chain.tokenId)}" target="_blank">its NFT page →</a></div>` : ''}</div>`;
+      let row = '';
+      if (chain.canExtract) row = `<button class="act" id="deed-extract">take your street on-chain (mint the NFT)</button>`;
+      else if (!chain.minted) row = `<div class="d" style="color:var(--dim)">Get made (the 0.01 ETH mint) to take your street on-chain.</div>`;
+      else if (!chain.walletLinked) row = `<div class="d" style="color:var(--dim)">Link a wallet (Going Legit) to take your street on-chain.</div>`;
+      else row = `<div class="d" style="color:var(--dim)">Pull the street off the in-game market first to extract it.</div>`;
+      return `<div class="card" style="border-color:var(--gold);margin-top:10px"><span class="t">On-Chain</span>
+        <div class="d" style="font-size:11px;color:var(--dim);margin-bottom:3px">turn your street into a tradeable ERC-721 you own in your own wallet — it carries its whole legend and sells on any marketplace. While on-chain it's a collectible (inert in-game) until you or a buyer re-import it to play the corner game with it again. The deed transfers; your extraction entitlement doesn't.</div>
+        ${row}</div>`;
+    };
     // THE GROWING MAP (Phase 4) — the city expands as users join
     const cityBanner = b.city ? `<div class="card" style="margin-top:8px"><span class="t">The City</span>
       <div class="d"><b>${b.city.population}</b> in the city · <b>${b.city.openNeighborhoods}/${b.city.totalNeighborhoods}</b> neighborhoods open. The map grows as more join — the next opens at <b>${b.city.nextExpansionAt}</b> players. Late arrivals get fresh ground on the frontier.</div></div>` : '';
@@ -4343,6 +4360,7 @@
           <div style="margin-top:6px"><input id="deed-name" placeholder="name your street" size="20" maxlength="${b.nameMax || 28}"></div></div>`}
       ${cornerCard(b.corner)}
       ${marketCard(b.market)}
+      ${chainCard()}
       ${cityBanner}
       ${districtCards}
       <div class="d" style="margin-top:8px"><a href="#" id="streets-lb-link">the great streets of the city →</a></div>
@@ -4365,6 +4383,9 @@
       if (!p) { toast('Name a price.'); return; }
       act('POST', '/v1/deeds/list', { price: p }).then(() => renderDeeds()); }; }
     { const el = $('#deed-unlist'); if (el) el.onclick = () => act('POST', '/v1/deeds/unlist').then(() => renderDeeds()); }
+    { const el = $('#deed-extract'); if (el) el.onclick = () =>
+      ask('Take your street on-chain as a tradeable NFT? It goes inert in-game (no corner, no in-game sale) until you re-import it — but you keep the deed and its whole legend, and it sells on any marketplace.', 'Take it on-chain')
+        .then((ok) => { if (ok) act('POST', '/v1/deeds/extract').then(() => renderDeeds()); }); }
     t.querySelectorAll('[data-buydeed]').forEach((btn) => btn.onclick = () =>
       ask(`Buy this street for $${Number(btn.dataset.price).toLocaleString()}? You get the name and its legend — the corner you'll have to fight for.`, 'Buy it')
         .then((ok) => { if (ok) act('POST', '/v1/deeds/buy/' + btn.dataset.buydeed).then(() => renderDeeds()); }));

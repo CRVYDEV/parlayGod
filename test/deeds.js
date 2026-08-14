@@ -8,8 +8,11 @@
 // flow writes ZERO transactions rows — the portrait/dynasty/estate precedent).
 process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
+import { recoverTypedDataAddress } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 import { buildServer } from '../src/server.js';
 import { DEEDS, deedRankOf, deedRenown, deedNeighborhoodsOpen } from '../src/rules.js';
+import { deedChainConfig, DEED_VOUCHER_TYPES, deedTokenId, markDeedExtracted, reimportDeed } from '../src/chain.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -251,6 +254,98 @@ const bHeir = (await call('GET', '/v1/deeds', { token: a.token })).body;
 assert.equal(bHeir.deed.name, 'Corvino Way', 'the heir inherits the deed — it survives death');
 // the death left a "fell here" mark on the record (the legend engine)
 assert(bHeir.history.some((h) => h.kind === 'fell'), 'a bloodline dying holding the deed leaves a "fell here" mark');
+
+// ════════════ PHASE 3 (on-chain) — THE TRADEABLE DEED (chain-dormant until env-configured) ════════════
+// The deed EXTRACTS as an ERC-721 (EIP-712 self-mint, the OmertaBond precedent) and goes INERT in-game
+// until someone RE-IMPORTS (burns) it back — the car/boat v3-step-7 precedent. The deed + its whole legend
+// travel with the token; the extraction entitlement (`minted`) and the corner control do NOT. §10.4-ZERO.
+process.env.VOUCHER_SIGNER_PK = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+process.env.STREET_DEED_ADDRESS = '0x3333333333333333333333333333333333333333';
+process.env.CHAIN_ID = '46630';
+const signerAddr = privateKeyToAccount(process.env.VOUCHER_SIGNER_PK).address;
+const eWallet = privateKeyToAccount('0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d').address;
+const burnerWallet = privateKeyToAccount('0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a').address;
+const mint = (acct) => pool.query('UPDATE account_persistent SET minted=true WHERE account_id=$1', [acct]);
+const linkWallet = (acct, w) => pool.query('UPDATE account_persistent SET wallet_address=$2 WHERE account_id=$1', [acct, w]);
+
+const chainTx0 = await txCount();
+const e = await mk('Enzo');
+assert.equal((await call('POST', '/v1/deeds/claim', { token: e.token, body: { name: 'Enzo Alley', district: 'docks' } })).code, 200,
+  'the extractor claims a street');
+
+// GATE: not minted → can't extract (the Sybil bound — `minted` never travels with the token)
+assert.equal((await call('POST', '/v1/deeds/extract', { token: e.token })).body.error, 'not_minted',
+  'an unmade account cannot take its street on-chain');
+await mint(e.acct);
+// GATE: made but no linked wallet → can't extract
+assert.equal((await call('POST', '/v1/deeds/extract', { token: e.token })).body.error, 'wallet',
+  'a made account with no linked wallet cannot extract');
+await linkWallet(e.acct, eWallet);
+// GATE: a listed street can't ALSO be extracted (no double-disposal)
+await call('POST', '/v1/deeds/list', { token: e.token, body: { price: 40000 } });
+assert.equal((await call('POST', '/v1/deeds/extract', { token: e.token })).body.error, 'listed',
+  'a street on the in-game market cannot also be extracted');
+await call('POST', '/v1/deeds/unlist', { token: e.token });
+
+// the board surfaces the chain state
+const eBoard = (await call('GET', '/v1/deeds', { token: e.token })).body;
+assert.equal(eBoard.chain.configured, true, 'the deed chain reads configured');
+assert.equal(eBoard.chain.canExtract, true, 'a made, wallet-linked, unlisted holder can extract');
+assert.equal(eBoard.chain.extractPending, false, 'nothing pending yet');
+
+// EXTRACT — the voucher signs and the deed goes extraction-pending (state 1→2, INERT)
+const ext = await call('POST', '/v1/deeds/extract', { token: e.token });
+assert.equal(ext.code, 200, 'the extract signs a voucher');
+assert.equal(ext.body.street, 'Enzo Alley', 'the voucher carries the street name');
+// PARITY: recover the signer against a domain HARDCODED to mirror the CONTRACT's EIP712("OmertaStreetDeed","1").
+// Recovering with deedChainConfig() would be vacuous (any consistent-but-wrong domain agrees with itself) —
+// pinning the literal is what catches the server's domain drifting from StreetDeed.sol's own domain separator.
+const contractDomain = { name: 'OmertaStreetDeed', version: '1', chainId: 46630,
+  verifyingContract: process.env.STREET_DEED_ADDRESS };
+assert.deepEqual(deedChainConfig(), { ...contractDomain, verifyingContract: contractDomain.verifyingContract },
+  'the server domain matches the contract domain field-for-field');
+const msg = { to: ext.body.voucher.to, name: ext.body.voucher.name, district: ext.body.voucher.district,
+  nonce: BigInt(ext.body.voucher.nonce), deadline: BigInt(ext.body.voucher.deadline) };
+const rec = await recoverTypedDataAddress({ domain: contractDomain, types: DEED_VOUCHER_TYPES,
+  primaryType: 'DeedVoucher', message: msg, signature: ext.body.signature });
+assert.equal(rec.toLowerCase(), signerAddr.toLowerCase(), 'the DeedVoucher recovers to the server signer under the CONTRACT domain — EIP-712 parity');
+assert.equal(ext.body.tokenId, deedTokenId('Enzo Alley'), 'the tokenId is uint256(keccak256(name)) — exact on-chain parity');
+
+// INERT: pending, can't extract twice, can't list, can't claim a fresh street, can't shake a corner
+const ePend = (await call('GET', '/v1/deeds', { token: e.token })).body;
+assert.equal(ePend.chain.extractPending, true, 'the deed reads extraction-pending');
+assert.equal(ePend.chain.tokenId, deedTokenId('Enzo Alley'), 'the pending tokenId is surfaced');
+assert.equal(ePend.deed.onChain, true, 'the deed flags on-chain');
+assert.equal((await call('POST', '/v1/deeds/extract', { token: e.token })).body.error, 'already',
+  'a pending street cannot be extracted twice');
+assert.equal((await call('POST', '/v1/deeds/list', { token: e.token, body: { price: 1000 } })).body.error, 'onchain',
+  'an inert street cannot be listed on the in-game market');
+assert.equal((await call('POST', '/v1/deeds/claim', { token: e.token, body: { name: 'New Row', district: 'canal' } })).body.error,
+  'have_deed', 'a pending extraction still counts as holding a street (one deed per account)');
+
+// CONFIRM ON-CHAIN (the Extracted watcher): state 2→3 — re-key to onchain:<token>, freeing the extractor
+await markDeedExtracted(pool, { nonce: ext.body.nonce, tokenId: ext.body.tokenId });
+const eFreed = (await call('GET', '/v1/deeds', { token: e.token })).body;
+assert.equal(eFreed.deed, null, 'once on-chain, the extractor is deedless — free to claim again');
+assert.equal(eFreed.canClaim, true, 'and canClaim is back');
+await markDeedExtracted(pool, { nonce: ext.body.nonce, tokenId: ext.body.tokenId }); // idempotent — a re-delivered event is a no-op
+
+// RE-IMPORT (the Redeemed watcher): a DEEDLESS burner with a linked wallet takes the on-chain deed back
+const burner = await mk('Bruno');
+await linkWallet(burner.acct, burnerWallet);
+const ri = await reimportDeed(pool, { ref: 'tx1:0', from: burnerWallet, tokenId: ext.body.tokenId });
+assert.equal(ri.applied, true, 'the re-import applies to the linked burner');
+const brBoard = (await call('GET', '/v1/deeds', { token: burner.token })).body;
+assert.equal(brBoard.deed.name, 'Enzo Alley', 'the burner now holds the street — deed + name travelled');
+assert.equal(brBoard.deed.onChain, false, 'back in the game (not on-chain)');
+assert(brBoard.history.some((h) => h.kind === 'claim'), 'the WHOLE legend travelled with the token');
+assert(brBoard.history.some((h) => h.detail && h.detail.includes('on-chain')), 'a lineage line marks the re-import');
+assert.equal(brBoard.corner.iControl, true, 'control RESET to the re-importer — a clean corner (the identity-NFT lesson)');
+assert.equal((await reimportDeed(pool, { ref: 'tx1:0', from: burnerWallet, tokenId: ext.body.tokenId })).duplicate, true,
+  're-import is idempotent on the log ref (txHash:logIndex)');
+
+// §10.4-NEUTRALITY: the whole on-chain lifecycle (extract → confirm → re-import) wrote ZERO ledger rows
+assert.equal(await txCount(), chainTx0, 'the on-chain deed lifecycle moves NO §10.4 value — a deed is ownership, not a currency');
 
 console.log('deeds: PASS');
 await app.close();

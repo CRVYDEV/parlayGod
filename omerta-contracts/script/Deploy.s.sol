@@ -7,6 +7,7 @@ import {GearVault} from "../src/GearVault.sol";
 import {VoucherClaim, IGearVault} from "../src/VoucherClaim.sol";
 import {OMRStaking} from "../src/OMRStaking.sol";
 import {OmertaFees} from "../src/OmertaFees.sol";
+import {StreetDeed} from "../src/StreetDeed.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// Deploy order: OMR -> GearVault -> VoucherClaim -> Staking -> OmertaFees -> wire minter.
@@ -39,6 +40,12 @@ contract Deploy is Script {
         uint256 mintFee = vm.envOr("MINT_FEE_WEI", uint256(0.01 ether));
         uint256 respawnFee = vm.envOr("RESPAWN_FEE_WEI", uint256(0.10 ether));
         OmertaFees fees = new OmertaFees(safe, devWallet, vigWallet, vigBps, mintFee, respawnFee);
+        // StreetDeed — the on-chain tradeable Street Deed NFT (omerta-street-deeds-design.md §2/§3).
+        // Self-minting ERC-721 on the SAME server signer as VoucherClaim (no owner-mint), Safe-owned.
+        // deedImageBase → the game's block-plate route; deedExternalBase → the deed's legend page.
+        string memory deedImg = vm.envOr("DEED_IMAGE_BASE", string("https://www.omerta.fun/v1/deeds/plate/"));
+        string memory deedExt = vm.envOr("DEED_EXTERNAL_BASE", string("https://www.omerta.fun/deed/"));
+        StreetDeed deed = new StreetDeed(safe, signer, deedImg, deedExt);
         vm.stopBroadcast();
 
         console.log("OMR:         ", address(omr));
@@ -46,7 +53,9 @@ contract Deploy is Script {
         console.log("VoucherClaim:", address(vc));
         console.log("OMRStaking:  ", address(staking));
         console.log("OmertaFees:  ", address(fees));
+        console.log("StreetDeed:  ", address(deed));
         console.log("NEXT (all Safe txs): gear.setMinter(VoucherClaim); vc.setGearSupplyCap(id,cap) per class;");
         console.log("  fund VoucherClaim OMR tranche; omr.approve(staking) + staking.fundRewards(...).");
+        console.log("  StreetDeed: no wiring needed (self-minting on SIGNER); set deed.setDailyMintCap(n) to rate-cap.");
     }
 }

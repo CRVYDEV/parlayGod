@@ -1614,6 +1614,7 @@ const REVIEWED_NOT_ENFORCED = new Map([
   ['canSeek', 'action gate — "seek a mentor" control (renderDiscovery).'],
   ['canThrow', 'action gate — estate gala control; discloses the tier/Butler/square-book requirement when false.'],
   ['canClaim', 'action gate — Street Deeds claim control (renderDeeds), shown only when true (one deed per account).'],
+  ['canExtract', 'action gate — the Street Deed on-chain extract button (renderDeeds chainCard), shown only when true (made + wallet-linked + unlisted + chain configured); the reason is disclosed when false.'],
 ]);
 const shapeFlags = [];
 for (const f of allFieldsSeen) {

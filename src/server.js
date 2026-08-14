@@ -111,6 +111,7 @@ import * as Ops from './ops.js';
 import { itemArt } from './assets.js';
 import { avatarSvg } from './avatar.js';
 import { portraitSvg, portraitStateOf, portraitTraits, portraitRow } from './portrait.js';
+import * as Deeds from './deeds.js';
 import * as Cards from './cards.js';
 import { renderPng } from './cardpng.js';
 import { buildOpenApi, llmsTxt } from './agentgateway.js';
@@ -342,6 +343,25 @@ export async function buildServer() {
       image: `${baseUrl}/v1/identity/${encodeURIComponent(id)}/portrait.svg`,
       attributes: portraitTraits(st),
     };
+  });
+  // ── STREET DEEDS on-chain: the tradeable ERC-721's IMAGE (block plate) + external_url (legend page).
+  // The StreetDeed tokenURI is on-chain (name + district); these serve the LIVE parts the design keeps
+  // off-chain — the block plate and the growing legend. PUBLIC + keyless + read-only; ZERO §10.4 surface.
+  // The tokenId path segment carries a trailing `.svg` from the on-chain imageBase → strip it. A burned/
+  // unknown token renders the house's blank plate (a stale marketplace link stays an image). ──
+  app.get('/v1/deeds/plate/:tokenId', async (req, reply) => {
+    const tokenId = String(req.params.tokenId || '').replace(/\.svg$/i, '').slice(0, 128);
+    const d = /^[0-9]+$/.test(tokenId) ? await Deeds.deedByToken(pool, tokenId) : null;
+    reply.type('image/svg+xml; charset=utf-8').header('cache-control', 'public, max-age=300');
+    return reply.send(Deeds.deedPlateSvg(d || {}));
+  });
+  // The deed's public LEGEND page (external_url target on the NFT). Keyless HTML; escaped; points into
+  // the game. A burned/unknown token gets a clean "enter the city" fallback.
+  app.get('/deed/:tokenId', async (req, reply) => {
+    const tokenId = String(req.params.tokenId || '').replace(/\.svg$/i, '').slice(0, 128);
+    const d = /^[0-9]+$/.test(tokenId) ? await Deeds.deedByToken(pool, tokenId) : null;
+    reply.type('text/html; charset=utf-8').header('cache-control', 'public, max-age=120');
+    return reply.send(Deeds.deedPage(d, { gameUrl: baseUrl }));
   });
   // ── THE BROADCAST: shareable noir cards + public profile + frictionless ?ref attribution (§7.13). ──
   // PUBLIC + keyless + read-only; ZERO §10.4 surface (marketing/status only). Wealth is never exact.
@@ -599,7 +619,7 @@ export async function buildServer() {
     // /v1/landmarks, /v1/ws, /v1/arena, /v1/events, /v1/results, /v1/avatar, /v1/auth/x/callback and
     // every DB-heavy board) are covered below by the BLUE-TEAM H4 default-throttle, not by name.
     if (rateLimitsEnabled() && (req.method === 'GET' || req.method === 'HEAD')
-      && (req.url.startsWith('/card/') || req.url.startsWith('/u/') || req.url.startsWith('/beef/'))) {
+      && (req.url.startsWith('/card/') || req.url.startsWith('/u/') || req.url.startsWith('/beef/') || req.url.startsWith('/deed/'))) {
       const limited = await checkPublicRateLimit({ ip: req.ip });
       if (limited) return reply.code(429).header('retry-after', limited.retryAfter)
         .send({ error: 'rate_limited', retryAfter: limited.retryAfter });
@@ -2442,6 +2462,10 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => upgradeRarity(ch, req.params.kind, req.params.id, client, h), req));
   app.post('/v1/nft/:kind/:id/withdraw', { preHandler: auth }, async (req) =>
     Chain.requestItemWithdraw(pool, req.user.sub, req.params.kind, req.params.id, req.body?.address));
+  // STREET DEEDS on-chain — extract your street as a tradeable StreetDeed ERC-721 (design §2/§3). The
+  // deed goes INERT in-game until re-imported; the `minted` extraction entitlement never travels with it.
+  app.post('/v1/deeds/extract', { preHandler: auth }, async (req) =>
+    Chain.requestDeedWithdraw(pool, req.user.sub, req.body?.address));
   app.get('/v1/withdraw/status', { preHandler: auth }, async (req) => {
     const mine = (await pool.query(
       'SELECT id, kind, amount, gear_id, nonce, status, claimed_onchain, signed_payload FROM vouchers WHERE account_id=$1 ORDER BY created_at DESC LIMIT 50',

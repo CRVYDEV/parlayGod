@@ -103,10 +103,14 @@ founder sign-off, not a slam.
   free player earns by seizing turf), not shipped with B.
 - B is sim-measured (P9.37), tabled in BALANCE.md, all numbers founder sign-off levers.
 
-### Phase 3 — the secondary market (off-chain core BUILT · the on-chain tradeable NFT AUDIT-GATED)
-**The off-chain SECONDARY MARKET is BUILT** (`src/deeds.js` `listDeed`/`unlistDeed`/`buyDeed`); the
-on-chain ERC-721 tradeable token is **DESIGN-ONLY** (a new contract resets the third-party audit clock,
-and §7 needs securities counsel — NOT written during launch prep).
+### Phase 3 — the secondary market (off-chain core BUILT · the on-chain tradeable NFT BUILT, chain-dormant)
+**Both the off-chain SECONDARY MARKET and the on-chain ERC-721 are BUILT** (2026-08-14; the founder
+cleared all three former blockers — legal approved every design choice, no launch-schedule constraint,
+build guided by completeness). Off-chain: `src/deeds.js` `listDeed`/`unlistDeed`/`buyDeed`. On-chain:
+`omerta-contracts/src/StreetDeed.sol` (ERC-721, EIP-712 self-mint on the shared voucher signer, NO owner
+mint, Safe-owned; 21 Foundry tests, part of the pre-mainnet audit batch — CHAIN-DEPLOY §0.5/§2a) +
+`src/chain.js` (`requestDeedWithdraw` / `markDeedExtracted` / `reimportDeed`) + `src/watcher.js` (the
+`Extracted`/`Redeemed` syncs). Chain-DORMANT until `STREET_DEED_ADDRESS` is set on both processes.
 - **The market (BUILT):** a deed holder LISTS their street for cash (`sale_price`, no escrow — the
   car-auction row-stays precedent; you keep collecting the corner while listed). A **DEEDLESS** buyer
   buys it (one deed per account — the identity/Sybil model; a multi-deed PORTFOLIO is a deferred step

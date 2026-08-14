@@ -8,7 +8,7 @@
 // `wallet_challenges`, plus the ledger row for the $OMR debit. A compromised signer is
 // bounded on-chain by the tranche + daily cap (OMR) and the per-gearId cap (gear).
 import crypto from 'node:crypto';
-import { hashTypedData, recoverTypedDataAddress, parseUnits, isAddress, getAddress, verifyMessage, encodeFunctionData } from 'viem';
+import { hashTypedData, recoverTypedDataAddress, parseUnits, isAddress, getAddress, verifyMessage, encodeFunctionData, keccak256, toBytes } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { GameError, ledger } from './game.js';
 import { reconcileFees } from './fees.js';
@@ -147,7 +147,7 @@ function toVoucherMessage(row) {
 }
 // Gear class id → on-chain uint256. The game's gear are string ids (MARKET table); the
 // on-chain tokenId is their 1-based index (matches "one tokenId per gear class").
-import { MARKET, BONDS, bondPayout, TAX, withdrawTaxBps, nftTokenId, nftDecode, dayOf } from './rules.js';
+import { MARKET, BONDS, bondPayout, TAX, withdrawTaxBps, nftTokenId, nftDecode, dayOf, DISTRICTS } from './rules.js';
 import { earlySurcharge, creditTollBuckets, splitToll } from './tax.js';
 import { nftKind } from './nft.js';
 // A car/boat voucher stores `<kind>:<catalogId>:<rarity>:<itemId>` in `gear_id` (no schema change).
@@ -625,6 +625,246 @@ export async function sweepReimports(pool) {
     finally { client.release(); }
   }
   return { applied, pending: pend.length };
+}
+
+// ── STREET DEEDS on-chain (omerta-street-deeds-design.md §2/§3) ────────────────────────────────
+// The deed rail: extract a named street as a StreetDeed ERC-721, and re-import it (burn) back into the
+// game. THE ONE STRUCTURAL RULE (design §0): the DEED transfers on-chain, the game's `minted` EXTRACTION
+// entitlement and the rent/turf CONTROL do NOT. A deed is INERT while extracted (the car/boat precedent):
+// its legend is PRESERVED and travels with the token — the value — and to play the rent/turf game with
+// it again its holder RE-IMPORTS it (burn → the Redeemed watcher re-keys it to the burner's account).
+//
+// §10.4-NEUTRAL by construction: a deed is ownership, never a §10.4 currency — every function here
+// writes ZERO `transactions` rows. The three states of a deed row:
+//   1. in-game       account_id = A (real),   onchain_token_id = NULL          — fully playable
+//   2. extract-pending account_id = A (real),  onchain_token_id = <token>       — INERT; A can't claim
+//        a new street (still holds this row) until the on-chain claim lands (Extracted watcher) or the
+//        voucher expires (sweep clears it → state 1). This closes the double-dispose window: A can't
+//        list/sell/collect the deed off-chain AND mint the NFT for the same street.
+//   3. on-chain      account_id = 'onchain:<token>', onchain_token_id = <token> — A freed; the NFT is
+//        in a wallet, tradeable; the row (+ its legend) persists to reserve the name and preserve the
+//        story until someone RE-IMPORTS it (state 3 → 1 on the burner).
+
+// EIP-712 shape — MUST stay in exact parity with StreetDeed.DEED_VOUCHER_TYPEHASH and its domain
+// ("OmertaStreetDeed","1"). Field order matches the Solidity struct.
+export const DEED_VOUCHER_TYPES = {
+  DeedVoucher: [
+    { name: 'to', type: 'address' },
+    { name: 'name', type: 'string' },
+    { name: 'district', type: 'string' },
+    { name: 'nonce', type: 'uint256' },
+    { name: 'deadline', type: 'uint256' },
+  ],
+};
+// The StreetDeed EIP-712 domain (its own contract → its own verifyingContract). No defaults (the
+// chainConfig fail-closed discipline): a wrong/zero chainId or verifyingContract signs a voucher under
+// the WRONG domain → every on-chain claim() reverts BadSignature while the deed is flagged inert.
+export function deedChainConfig() {
+  const chainId = Number(process.env.CHAIN_ID);
+  const verifyingContract = process.env.STREET_DEED_ADDRESS;
+  if (!chainId || !verifyingContract || !isAddress(verifyingContract))
+    throw new GameError('chain_unconfigured', 'Taking a Street Deed on-chain is not enabled on this server yet (chain config missing).');
+  return { name: 'OmertaStreetDeed', version: '1', chainId, verifyingContract: getAddress(verifyingContract) };
+}
+// tokenId = uint256(keccak256(bytes(name))) as a decimal string — the deterministic id the contract
+// DERIVES (tokenIdFor), and the re-import lookup key. keccak of the raw UTF-8 name bytes, exact parity.
+export function deedTokenId(name) {
+  return BigInt(keccak256(toBytes(String(name)))).toString();
+}
+
+// A StreetDeed `usedNonce(nonce)` reader (the makeChainReader twin, for sweepDeedVouchers). Returns null
+// when the deed chain is unconfigured/unreachable/wrong-chain → the sweep FAILS CLOSED (never clears an
+// inert deed blind, which could strand a genuinely-extracted street back into the game).
+export async function makeDeedReader() {
+  if (!process.env.CHAIN_RPC_URL || !process.env.STREET_DEED_ADDRESS || !isAddress(process.env.STREET_DEED_ADDRESS)) return null;
+  const { createPublicClient, http } = await import('viem');
+  const client = createPublicClient({ transport: http(process.env.CHAIN_RPC_URL) });
+  if (process.env.CHAIN_ID) {  // the wrong-chain guard (makeChainReader posture)
+    try { if (Number(process.env.CHAIN_ID) !== Number(await client.getChainId())) return null; } catch { return null; }
+  }
+  const address = getAddress(process.env.STREET_DEED_ADDRESS);
+  const abi = [{ type: 'function', name: 'usedNonce', stateMutability: 'view',
+    inputs: [{ name: '', type: 'uint256' }], outputs: [{ name: '', type: 'bool' }] }];
+  return { usedNonce: (nonce) => client.readContract({ address, abi, functionName: 'usedNonce', args: [BigInt(nonce)] }) };
+}
+
+// EXTRACT a named street on-chain: sign a DeedVoucher, and flag the deed EXTRACTION-PENDING (state 1→2).
+// Gates mirror requestItemWithdraw: a MADE account (the Sybil bound — `minted` never travels with the
+// token) + a linked wallet + the account owns a NOT-already-on-chain, NOT-listed deed. ZERO §10.4.
+export async function requestDeedWithdraw(pool, accountId, toAddress) {
+  const domain = deedChainConfig();  // throws chain_unconfigured if not configured
+  const signer = signerAccount();    // throws chain_unconfigured if the signer PK is missing
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const acct = (await client.query('SELECT * FROM account_persistent WHERE account_id=$1 FOR UPDATE', [accountId])).rows[0];
+    if (!acct?.minted) throw new GameError('not_minted', 'Only a made account can take a Street Deed on-chain — pay the 0.01 ETH mint fee first.');
+    const to = toAddress || acct?.wallet_address;
+    if (!to || !isAddress(to)) throw new GameError('wallet', 'Link a wallet (SIWE) or pass a valid address first.');
+    const deed = (await client.query('SELECT * FROM street_deeds WHERE account_id=$1 FOR UPDATE', [accountId])).rows[0];
+    if (!deed) throw new GameError('no_deed', "You don't hold a street to take on-chain.");
+    if (deed.onchain_token_id) throw new GameError('already', "It's already on-chain (or an extraction is pending).");
+    if (deed.sale_price != null) throw new GameError('listed', 'Pull the street off the in-game market before extracting it.');
+    const districtDisp = (DISTRICTS.find((d) => d.id === deed.district) || {}).name || deed.district;
+    const token = deedTokenId(deed.name);
+
+    // nonce from the shared chain_reserve counter (unique across ALL vouchers; the deed contract's own
+    // usedNonce only ever sees this subset, all distinct). NOT reserve-bounded — no $OMR moves.
+    const res = (await client.query('SELECT * FROM chain_reserve WHERE id=1 FOR UPDATE')).rows[0];
+    const nonce = Number(res.next_nonce);
+    await client.query('UPDATE chain_reserve SET next_nonce = next_nonce + 1 WHERE id=1');
+    const deadline = Math.floor(Date.now() / 1000) + WITHDRAW_TTL_SEC;
+
+    const message = { to: getAddress(to), name: deed.name, district: districtDisp, nonce: BigInt(nonce), deadline: BigInt(deadline) };
+    const signature = await signer.signTypedData({ domain, types: DEED_VOUCHER_TYPES, primaryType: 'DeedVoucher', message });
+    const voucher = Object.fromEntries(Object.entries(message).map(([k, v]) => [k, typeof v === 'bigint' ? v.toString() : v]));
+
+    // state 1 → 2: INERT (onchain_token_id set), account_id unchanged so the account can't claim a new
+    // street until this resolves; control cleared (a rival's grip lapses — the deed is leaving the game).
+    await client.query(
+      'UPDATE street_deeds SET onchain_token_id=$2, controller_account=NULL, control_until=NULL WHERE account_id=$1', [accountId, token]);
+    const id = uid();
+    await client.query(
+      'INSERT INTO vouchers (id, account_id, kind, amount, gear_id, nonce, to_address, deadline, status, signed_payload) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+      [id, accountId, 'deed', 1, token, nonce, getAddress(to), deadline, 'signed', JSON.stringify({ voucher, signature })]);
+    await client.query('COMMIT');
+    return { id, nonce, status: 'signed', street: deed.name, district: deed.district, tokenId: token,
+      contract: domain.verifyingContract, chainId: domain.chainId, voucher, signature,
+      note: 'Submit claim(voucher, signature) to the StreetDeed contract to mint your deed NFT. It is INERT in-game until you re-import it.' };
+  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  finally { client.release(); }
+}
+
+// StreetDeed Extracted(nonce, to, tokenId, name, district) → the deed genuinely minted on-chain.
+// Transition EXTRACTION-PENDING → ON-CHAIN (state 2→3): re-key the deed (and its legend) to a synthetic
+// `onchain:<tokenId>` owner (freeing the extractor to claim a new street; the name + story persist), and
+// mark the voucher claimed. Idempotent: a re-delivered event finds the deed already re-keyed (no-op).
+export async function markDeedExtracted(pool, { nonce, tokenId }) {
+  const owner = 'onchain:' + String(tokenId);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const deed = (await client.query(
+      "SELECT account_id FROM street_deeds WHERE onchain_token_id=$1 AND account_id NOT LIKE 'onchain:%' FOR UPDATE", [String(tokenId)])).rows[0];
+    if (deed) {
+      await client.query('UPDATE street_deed_history SET account_id=$2 WHERE account_id=$1', [deed.account_id, owner]);
+      await client.query('UPDATE street_deeds SET account_id=$2 WHERE account_id=$1', [deed.account_id, owner]);
+    }
+    if (nonce != null)
+      await client.query("UPDATE vouchers SET status='claimed', claimed_onchain=true WHERE nonce=$1 AND kind='deed' AND status='signed'", [Number(nonce)]);
+    await client.query('COMMIT');
+    return { extracted: !!deed };
+  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  finally { client.release(); }
+}
+
+// Apply ONE recorded deed re-import (called inline from reimportDeed and from the sweep). Locks the
+// pending row, resolves the burner's wallet → account, requires that account be DEEDLESS (one deed per
+// account), and re-keys the on-chain deed (+ its legend) to them with control RESET (the buyer earns the
+// corner — the identity-NFT lesson). No living account / already holds a deed → returns null (stays
+// pending; the sweep retries). §10.4-NEUTRAL — ownership, never a currency; zero ledger rows.
+async function applyDeedReimport(client, ref, wallet, tokenId) {
+  const r = (await client.query("SELECT status FROM deed_reimports WHERE ref=$1 FOR UPDATE", [ref])).rows[0];
+  if (!r || r.status !== 'pending') return null; // already applied / gone
+  const onchainOwner = 'onchain:' + String(tokenId);
+  const deed = (await client.query(
+    'SELECT account_id, name FROM street_deeds WHERE onchain_token_id=$1 AND account_id=$2 FOR UPDATE', [String(tokenId), onchainOwner])).rows[0];
+  if (!deed) { // the deed isn't in the on-chain state (already re-imported, or never extracted) — settle
+    await client.query("UPDATE deed_reimports SET status='applied', applied_at=now() WHERE ref=$1", [ref]);
+    return null;
+  }
+  const acct = (await client.query(
+    'SELECT account_id FROM account_persistent WHERE lower(wallet_address)=lower($1)', [wallet])).rows[0];
+  if (!acct) return null; // burner's wallet not linked to any account yet — wait
+  if ((await client.query("SELECT 1 FROM street_deeds WHERE account_id=$1 AND (onchain_token_id IS NULL OR account_id NOT LIKE 'onchain:%')", [acct.account_id])).rowCount)
+    return null; // they already hold a street in-game — must offload it first (wait)
+  // re-key the deed + its legend to the burner, clear the on-chain flag, RESET control (they earn the corner)
+  await client.query('UPDATE street_deed_history SET account_id=$2 WHERE account_id=$1', [onchainOwner, acct.account_id]);
+  await client.query(
+    `UPDATE street_deeds SET account_id=$2, onchain_token_id=NULL, controller_account=NULL, control_until=NULL,
+       corner_at=now(), shakedown_at=NULL, sale_price=NULL WHERE account_id=$1`, [onchainOwner, acct.account_id]);
+  // append a lineage line to the legend (fixed string, no user input → a plain insert, no cleanText/SAVEPOINT)
+  await client.query("INSERT INTO street_deed_history (account_id, kind, detail) VALUES ($1,'sold','brought back into the city from on-chain')", [acct.account_id]);
+  await client.query("UPDATE deed_reimports SET status='applied', applied_account=$2, applied_at=now() WHERE ref=$1", [ref, acct.account_id]);
+  return acct.account_id;
+}
+
+// StreetDeed Redeemed(from, tokenId) → record + apply the re-import (state 3→1). Idempotent on the log
+// ref (txHash:logIndex — the harvest-fee discipline); the burn is the ownership proof (no server signature).
+export async function reimportDeed(pool, { ref, from, tokenId }) {
+  if (!ref || !from || !isAddress(from) || tokenId == null) {
+    console.error('deed reimport: malformed Redeemed event', ref, from, tokenId); return { skipped: true };
+  }
+  const wallet = getAddress(from);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // SELECT-then-INSERT (pg-mem doesn't report a suppressed conflict's rowCount; the single worker
+    // serialises delivery). Real Postgres: the ref PK backstops a lost race (23505 → re-scan → duplicate).
+    if ((await client.query('SELECT 1 FROM deed_reimports WHERE ref=$1', [ref])).rows[0]) {
+      await client.query('ROLLBACK'); return { duplicate: true };
+    }
+    await client.query('INSERT INTO deed_reimports (ref, wallet_address, token_id) VALUES ($1,$2,$3)', [ref, wallet, String(tokenId)]);
+    const account = await applyDeedReimport(client, ref, wallet, String(tokenId));
+    await client.query('COMMIT');
+    return account ? { applied: true, account } : { pending: true };
+  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  finally { client.release(); }
+}
+
+// Worker sweep: apply deed re-imports still WAITING for a linked, deedless burner account. Per-row txn.
+export async function sweepDeedReimports(pool) {
+  const pend = (await pool.query(
+    "SELECT ref, wallet_address, token_id FROM deed_reimports WHERE status='pending' ORDER BY created_at LIMIT 200")).rows;
+  let applied = 0;
+  for (const p of pend) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const a = await applyDeedReimport(client, p.ref, p.wallet_address, p.token_id);
+      await client.query('COMMIT');
+      if (a) applied++;
+    } catch (e) { await client.query('ROLLBACK'); console.error('deed reimport sweep failed', p.ref, e?.code || e?.message || e); }
+    finally { client.release(); }
+  }
+  return { applied, pending: pend.length };
+}
+
+// Fallback for signed deed vouchers past deadline+grace (the Extracted watcher may be down / the player
+// never submitted the tx). Consults the deed contract's usedNonce: CLAIMED → transition on-chain (a
+// missed Extracted); NOT claimed → clear the inert flag (the deed never left the game → state 2→1). No
+// reader (RPC unset/down/wrong-chain) → SKIP (never clear blind — the reclaimExpiredVouchers fail-safe).
+export async function sweepDeedVouchers(pool, reader = undefined) {
+  const chain = reader !== undefined ? reader : await makeDeedReader();
+  const cutoff = Math.floor(Date.now() / 1000) - RECLAIM_GRACE_SEC;
+  const stale = (await pool.query(
+    "SELECT id, nonce, gear_id FROM vouchers WHERE kind='deed' AND status='signed' AND NOT claimed_onchain AND deadline < $1", [cutoff])).rows;
+  if (!chain && stale.length)
+    console.error(`deed voucher sweep: ${stale.length} stale deed voucher(s) but no on-chain reader — skipping (never clear an inert deed blind)`);
+  let cleared = 0, extracted = 0, skipped = 0;
+  for (const v of stale) {
+    if (!chain) { skipped++; continue; }
+    let used;
+    try { used = await chain.usedNonce(v.nonce); }
+    catch { continue; } // RPC hiccup — retry next tick
+    if (used) { await markDeedExtracted(pool, { nonce: Number(v.nonce), tokenId: v.gear_id }); extracted++; continue; }
+    // never claimed on-chain → the deed never left the game. Clear the inert flag (state 2→1) and expire
+    // the voucher. Guard the deed is still pending under the extractor (account_id NOT onchain).
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const cur = (await client.query("SELECT status FROM vouchers WHERE id=$1 FOR UPDATE", [v.id])).rows[0];
+      if (cur && cur.status === 'signed') {
+        await client.query(
+          "UPDATE street_deeds SET onchain_token_id=NULL WHERE onchain_token_id=$1 AND account_id NOT LIKE 'onchain:%'", [String(v.gear_id)]);
+        await client.query("UPDATE vouchers SET status='expired' WHERE id=$1", [v.id]);
+        cleared++;
+      }
+      await client.query('COMMIT');
+    } catch (e) { await client.query('ROLLBACK'); console.error('deed voucher clear failed', v.id, e?.code || e?.message || e); }
+    finally { client.release(); }
+  }
+  return { cleared, extracted, skipped };
 }
 
 // ── SIWE wallet link (§4, EVM) — proves the player controls the address ──

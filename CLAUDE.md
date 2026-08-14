@@ -12327,3 +12327,49 @@ neighborhoods-open formula (1 → +1/step → capped) + the board's city/neighbo
 sign-off levers (BALANCE.md § THE STREET DEEDS MARKET + THE GROWING MAP, pinned in `test/levers.js`). Suite
 green + sim drift-0 + client wiring/mirror + gate matrix + mobile 77/77 + pgquery + pgcheck 43/43 on real
 Postgres.
+**THE ON-CHAIN TRADEABLE DEED — Phase 3's audit-gated piece, BUILT (founder-directed 2026-08-14: "Make on
+the onchain tradeable NFT. legal has approved all design choices and no longer worry about meeting a launch
+schedule … we will launch when I feel we are complete based on your guidance").** The three blockers that
+held this DESIGN-ONLY are all removed (legal cleared every design choice; no launch-schedule constraint; a
+new contract resetting the third-party audit clock is now acceptable). `omerta-contracts/src/StreetDeed.sol`
+— an **ERC-721 that verifies its OWN EIP-712 `DeedVoucher`** (the OmertaBond self-mint precedent, NOT routed
+through VoucherClaim, because a deed voucher carries name+district STRINGS the fixed VoucherClaim struct
+can't hold): `EIP712("OmertaStreetDeed","1")`, Ownable2Step/Pausable/ReentrancyGuard, **NO owner-mint** (a
+deed mints only against a server-signed voucher — the Sybil bound). `tokenId = uint256(keccak256(bytes(name)))`
+is a **name↔id bijection enforced on-chain** — `_safeMint` reverts on an existing id, so a name mints at most
+once, and a re-import (burn) frees the same id for re-extraction. `claim(voucher,sig)` runs the replay/
+deadline/daily-cap/bad-sig gates; `redeem(tokenId)` burns (the ownership proof, no server signature) and is
+**NEVER pausable** — a paused contract must never trap a holder's asset. 21 Foundry tests, part of the
+pre-mainnet audit batch (CHAIN-DEPLOY §0.5/§2a); **`forge test` 249/249** on the whole suite. **THE
+LOAD-BEARING SPLIT (design §0, unchanged): the deed transfers, the extraction entitlement (`minted`) and the
+corner CONTROL do NOT.** Provenance travels with the token (it IS the value — the legend re-keys with the
+deed); control resets (the identity-NFT lesson — the buyer/re-importer earns the corner). **INERT-while-
+extracted** (the car/boat v3-step-7 precedent — no rent/control on-chain, no Transfer watcher; the strongest
+securities posture: a pure collectible with a history, not passive yield). **The three-state model** on
+`street_deeds` (one `ALTER TABLE ADD COLUMN IF NOT EXISTS onchain_token_id` — the outage lesson): state 1
+in-game (account_id real, token NULL) → state 2 extract-PENDING (`requestDeedWithdraw` signs the voucher,
+sets onchain_token_id + clears control; the account can't claim a new street) → state 3 on-chain
+(`markDeedExtracted` off the `Extracted` watcher re-keys the deed + legend to a synthetic `onchain:<token>`
+owner, freeing the extractor). State 2 (not signing-then-re-keying) is what prevents **double-disposal**
+(can't off-chain-sell AND mint the same street) and the **expiry-PK-collision** (a stale voucher clears the
+inert flag [2→1] with no re-key). Re-import: `reimportDeed` off the `Redeemed` watcher (idempotent on the log
+ref — the harvest-fee discipline) hands a burned deed to a DEEDLESS linked account, control reset + a "sold"
+lineage line on the legend. `sweepDeedVouchers` is the expiry fail-safe (consults the contract's `usedNonce`:
+claimed → transition on-chain; not → clear the inert flag; **no reader → SKIP, never clear blind** — the
+reclaimExpiredVouchers posture). §10.4-NEUTRAL by construction — a deed is ownership, never a currency; the
+whole on-chain lifecycle (extract → confirm → re-import) writes **ZERO `transactions` rows** (test-pinned).
+Chain-DORMANT until `STREET_DEED_ADDRESS` is set on BOTH the API (signs) + WORKER (the two watchers). Routes:
+`POST /v1/deeds/extract`, keyless `GET /v1/deeds/plate/:tokenId` (the block-plate SVG, escaped — a public
+route rendering the untrusted street name) + `GET /deed/:tokenId` (the legend page). Client: an "On-Chain"
+card on the Street Deeds tab (extract when made+wallet-linked+unlisted; the reason disclosed when not).
+**THE PARITY TEST WENT VACUOUS FIRST, and that is the lesson** (the recorded "a check that cannot fail reads
+exactly like a clean bill of health" class): the first cut recovered the signer against `deedChainConfig()` —
+the SAME function the server signs with — so a mutation to the domain NAME left both sides agreeing and
+`deeds: PASS`; the fix recovers against a HARDCODED domain literal mirroring the contract's own
+`EIP712("OmertaStreetDeed","1")`, and now the domain-drift mutation fails BY NAME. `test/deeds.js` (chain
+block) proves the parity (against the contract domain), the tokenId keccak parity, the gates (not_minted/
+wallet/listed/already/have_deed), extract→pending INERT (no list/claim/shake), `markDeedExtracted` freeing
+the extractor (idempotent), `reimportDeed` handing the deed to a deedless burner (legend + name travelled,
+control reset, "sold" line, idempotent on ref), and §10.4-neutrality (zero ledger rows). Suite green + sim
+drift-0 + client wiring/mirror (the `canExtract` singleton gate waived in check 7's `canX` family) + gates +
+levers + preflight + docs + pgquery + pgcheck 43/43 on real Postgres + `forge test` 249/249.

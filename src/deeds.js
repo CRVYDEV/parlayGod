@@ -88,6 +88,7 @@ export async function claimDeed(ch, body, client, h) {
 // built-up each is — the growing-world texture). Read-only; the client re-derives no game state.
 export async function deedBoard(ch, client, h) {
   const deed = await loadDeed(client, ch.account_id);
+  const acct = (await client.query('SELECT minted, wallet_address FROM account_persistent WHERE account_id=$1', [ch.account_id])).rows[0] || {};
   const history = deed ? await deedHistory(client, ch.account_id) : [];
   const renown = deedRenown(history);
   const counts = new Map();
@@ -163,11 +164,24 @@ export async function deedBoard(ch, client, h) {
     canBuy: !deed,                          // one deed per account → only a deedless player buys
     forSale,
   };
+  // Phase 3 (on-chain) — THE TRADEABLE NFT. A minted account with a linked wallet EXTRACTS its deed as a
+  // StreetDeed ERC-721 (chain.js requestDeedWithdraw), tradeable on any marketplace. It goes INERT in-game
+  // (the car/boat precedent — no rent/control) until someone RE-IMPORTS it (burns it back). `extractPending`
+  // = a voucher signed, not yet claimed on-chain (still inert; the account can't claim a new street yet).
+  const chain = {
+    configured: !!(process.env.STREET_DEED_ADDRESS && process.env.CHAIN_ID),
+    minted: !!acct.minted, walletLinked: !!acct.wallet_address,
+    extractPending: !!(deed && deed.onchain_token_id),
+    tokenId: deed && deed.onchain_token_id ? deed.onchain_token_id : null,
+    canExtract: !!(deed && !deed.onchain_token_id && deed.sale_price == null && acct.minted && acct.wallet_address
+      && process.env.STREET_DEED_ADDRESS && process.env.CHAIN_ID),
+  };
   return {
     deed: deed ? { name: deed.name, district: deed.district, districtName: districtName(deed.district),
-      claimedAt: deed.claimed_at, neighborhood: myHood ? myHood.name : null, frontier: myHood ? myHood.frontier : false } : null,
+      claimedAt: deed.claimed_at, neighborhood: myHood ? myHood.name : null, frontier: myHood ? myHood.frontier : false,
+      onChain: !!deed.onchain_token_id } : null,
     renown, rank: deedRankOf(renown).name, ranks: DEEDS.RANKS,
-    history, corner, market,
+    history, corner, market, chain,
     // Phase 4 — the growing map: how big the city is, and how much more opens as it grows
     city: { population, step, nextExpansionAt: nextAt, openNeighborhoods: totalOpen, totalNeighborhoods: totalHoods },
     districts: DISTRICTS.map((d) => ({ id: d.id, name: d.name, perk: d.perk, deeds: counts.get(d.id) || 0,
@@ -189,9 +203,11 @@ export async function collectCorner(ch, client, h) {
   if (safeHoused(ch)) throw new GameError('safe', "Can't work the corner from a safehouse — it's a shield, not a bunker.");
   const now = Date.now();
   // every deed I effectively control: my own (when not seized) or a rival's inside my window
+  // `onchain_token_id IS NULL` excludes a deed that's extracted or extraction-pending — an on-chain deed
+  // is INERT in-game (the car/boat precedent), so it generates no corner take until it's re-imported.
   const rows = (await client.query(
-    `SELECT * FROM street_deeds WHERE account_id=$1 OR (controller_account=$1 AND control_until > now())
-       ORDER BY account_id FOR UPDATE`, [ch.account_id])).rows;
+    `SELECT * FROM street_deeds WHERE (account_id=$1 OR (controller_account=$1 AND control_until > now()))
+       AND onchain_token_id IS NULL ORDER BY account_id FOR UPDATE`, [ch.account_id])).rows;
   let total = 0; const collected = [];
   for (const d of rows) {
     if (deedController(d, now) !== ch.account_id) continue; // my own deed a rival currently holds → skip
@@ -224,6 +240,7 @@ export async function shakedownCorner(ch, targetCharacterId, client, h) {
   if (!target) throw new GameError('gone', 'No such mark.');
   const deed = (await client.query('SELECT * FROM street_deeds WHERE account_id=$1 FOR UPDATE', [target.account_id])).rows[0];
   if (!deed) throw new GameError('no_deed', "They don't hold a street.");
+  if (deed.onchain_token_id) throw new GameError('onchain', "That street is on-chain — there's no corner to muscle until someone brings it back into the city.");
   if (String(ch.loc) !== String(deed.district))
     throw new GameError('district', 'You have to be on the block to lean on the corner.', { district: deed.district });
   const now = Date.now();
@@ -271,6 +288,7 @@ export async function listDeed(ch, price, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No dealing from lockup.');
   const deed = await loadDeed(client, ch.account_id);
   if (!deed) throw new GameError('no_deed', "You don't hold a street to sell.");
+  if (deed.onchain_token_id) throw new GameError('onchain', "That street is on-chain — trade the NFT on a marketplace, or re-import it first.");
   const p = Math.floor(Number(price) || 0);
   if (!Number.isFinite(p) || p < DEEDS.MARKET_MIN)
     throw new GameError('min_price', `The floor for a street is $${DEEDS.MARKET_MIN.toLocaleString()}.`);
@@ -316,6 +334,105 @@ export async function buyDeed(buyer, seller, client, h) {
   await h.notify(client, seller.id, 'deed_sold', { street: deed.name, to: buyer.name, price });
   await h.track(client, buyer.account_id, 'deed_buy', { street: deed.name, price });
   return { ok: true, street: deed.name, price, net };
+}
+
+// ══════════ THE ON-CHAIN NFT — the block plate (image) + the legend page (external_url) ══════════
+// The StreetDeed tokenURI is on-chain (name + district), but the IMAGE and the "see its full history"
+// link are off-chain because the block plate and the LIVE legend grow with play. These render them.
+
+// Look up an extracted (or on-chain) deed by its tokenId (onchain_token_id, keccak(name)). The row
+// persists through extraction (re-keyed to `onchain:<token>`) so the plate/page resolve while it's a
+// tradeable NFT. Returns { name, district, renown } or null (burned/re-imported → the NFT no longer exists).
+export async function deedByToken(pool, tokenId) {
+  const d = (await pool.query('SELECT account_id, name, district FROM street_deeds WHERE onchain_token_id=$1', [String(tokenId)])).rows[0];
+  if (!d) return null;
+  const hist = (await pool.query('SELECT kind, detail, at FROM street_deed_history WHERE account_id=$1 ORDER BY at DESC LIMIT $2', [d.account_id, DEEDS.HISTORY_MAX])).rows;
+  return { name: d.name, district: d.district, districtName: districtName(d.district),
+    renown: deedRenown(hist), rank: deedRankOf(deedRenown(hist)).name,
+    history: hist.map((r) => ({ kind: r.kind, detail: r.detail || '', at: r.at })) };
+}
+
+// esc — the two-byte structural escape for a public, keyless, marketplace-fetched document (the
+// avatar.js/portrait.js discipline; the name is already cleanText-stripped of < > " at claim).
+const esc = (s) => String(s == null ? '' : s).replace(/[<>&"']/g, (c) =>
+  ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// THE BLOCK PLATE — the deed NFT's image. A DRAWN noir street sign, deterministic from the name (no
+// Math.random → stable forever), the text escaped. Reads like the map plaque a Monopoly deed carries.
+export function deedPlateSvg({ name, district, districtName: dn, rank } = {}) {
+  const nm = esc(String(name || 'A Street of the City'));
+  const dist = esc(String(dn || district || ''));
+  const rk = esc(String(rank || ''));
+  // deterministic accent hue from the name (FNV-1a)
+  let h = 2166136261 >>> 0;
+  for (const c of String(name || '')) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; }
+  const hue = h % 360;
+  const long = nm.length > 16;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0c0b0d"/><stop offset="1" stop-color="#17141a"/>
+    </linearGradient>
+    <linearGradient id="sign" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="hsl(${hue},42%,26%)"/><stop offset="1" stop-color="hsl(${hue},46%,18%)"/>
+    </linearGradient>
+    <filter id="soft"><feGaussianBlur stdDeviation="7"/></filter>
+  </defs>
+  <rect width="1000" height="1000" fill="url(#bg)"/>
+  <!-- a low skyline silhouette -->
+  <g fill="#000" opacity="0.55">
+    <rect x="0" y="820" width="120" height="180"/><rect x="130" y="760" width="90" height="240"/>
+    <rect x="235" y="800" width="70" height="200"/><rect x="320" y="700" width="110" height="300"/>
+    <rect x="450" y="780" width="80" height="220"/><rect x="545" y="720" width="130" height="280"/>
+    <rect x="690" y="800" width="70" height="200"/><rect x="775" y="750" width="100" height="250"/>
+    <rect x="885" y="810" width="115" height="190"/>
+  </g>
+  <!-- the sign post -->
+  <rect x="486" y="470" width="28" height="360" rx="6" fill="#2a2530"/>
+  <rect x="493" y="470" width="6" height="360" fill="#3a3442"/>
+  <!-- the street-name sign -->
+  <g transform="translate(500,300)">
+    <rect x="-430" y="-70" width="860" height="150" rx="14" fill="url(#sign)" stroke="hsl(${hue},50%,40%)" stroke-width="3"/>
+    <rect x="-418" y="-58" width="836" height="126" rx="10" fill="none" stroke="#ffffff" stroke-opacity="0.22" stroke-width="2"/>
+    <text x="0" y="12" text-anchor="middle" fill="#f4f1ea" font-family="Georgia,'Times New Roman',serif"
+      font-weight="700" font-size="${long ? 62 : 78}" letter-spacing="2" style="text-transform:uppercase">${nm}</text>
+  </g>
+  <!-- district + rank plaque -->
+  <text x="500" y="470" text-anchor="middle" fill="hsl(${hue},30%,66%)" font-family="Georgia,serif"
+    font-size="34" letter-spacing="6" style="text-transform:uppercase">${dist}</text>
+  ${rk ? `<text x="500" y="700" text-anchor="middle" fill="#8a8290" font-family="Georgia,serif" font-size="30" letter-spacing="3" style="font-style:italic">${rk}</text>` : ''}
+  <!-- the house mark -->
+  <text x="500" y="930" text-anchor="middle" fill="#6a6472" font-family="Georgia,serif" font-size="26"
+    letter-spacing="10">OMERTÀ · STREET DEED</text>
+</svg>`;
+}
+
+// THE LEGEND PAGE — the deed NFT's external_url. A minimal public page showing the street, its district,
+// and its provenance (the value). Escaped; keyless. Points into the game. Robust to a burned/unknown token.
+export function deedPage(deed, { gameUrl } = {}) {
+  const url = String(gameUrl || 'https://www.omerta.fun');
+  if (!deed) {
+    return `<!doctype html><meta charset="utf-8"><title>A Street of OMERTÀ</title>
+<body style="background:#0c0b0d;color:#c9c3d0;font-family:Georgia,serif;text-align:center;padding:80px">
+<h1 style="color:#f4f1ea">A Street of OMERTÀ</h1><p>This deed is not on-chain right now.</p>
+<p><a href="${esc(url)}" style="color:#c99">Enter the city →</a></p></body>`;
+  }
+  const rows = (deed.history || []).slice(0, 20).map((e) =>
+    `<li><b style="color:hsl(280,20%,70%)">${esc(e.kind)}</b> &mdash; ${esc(e.detail || '')}</li>`).join('');
+  return `<!doctype html><meta charset="utf-8"><title>${esc(deed.name)} — OMERTÀ</title>
+<meta property="og:title" content="${esc(deed.name)} — a Street of OMERTÀ">
+<meta property="og:description" content="${esc(deed.districtName || deed.district)} · ${esc(deed.rank)}. Property with a history.">
+<body style="background:#0c0b0d;color:#c9c3d0;font-family:Georgia,serif;max-width:720px;margin:0 auto;padding:48px 20px">
+<div style="text-align:center;border-bottom:1px solid #2a2530;padding-bottom:24px">
+  <h1 style="color:#f4f1ea;letter-spacing:2px;text-transform:uppercase;margin:0">${esc(deed.name)}</h1>
+  <p style="color:#8a8290;letter-spacing:4px;text-transform:uppercase;margin:8px 0">${esc(deed.districtName || deed.district)}</p>
+  <p style="color:#a99;font-style:italic">${esc(deed.rank)}</p>
+</div>
+<h2 style="color:#c9c3d0;font-size:18px;letter-spacing:2px;text-transform:uppercase">The record on this block</h2>
+<ul style="line-height:1.9;color:#b0aab8">${rows || '<li>Nothing has happened here yet.</li>'}</ul>
+<p style="text-align:center;margin-top:40px"><a href="${esc(url)}" style="color:#c99;letter-spacing:2px">ENTER THE CITY →</a></p>
+<p style="text-align:center;color:#555;font-size:13px">A Street Deed — property with a history. The market sets its price; the story is player-made.</p>
+</body>`;
 }
 
 // THE GREAT STREETS — the status leaderboard, ranked by a deed's legend (renown). Two flat queries +

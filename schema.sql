@@ -661,8 +661,8 @@ CREATE TABLE IF NOT EXISTS invite_codes (
 CREATE TABLE IF NOT EXISTS vouchers (
   id TEXT PRIMARY KEY,
   account_id TEXT NOT NULL,
-  kind TEXT NOT NULL,                          -- 'omr' | 'gear'
-  amount NUMERIC NOT NULL DEFAULT 0,           -- whole $OMR for omr; 1 for gear
+  kind TEXT NOT NULL,                          -- 'omr' | 'gear' | 'car' | 'boat' | 'deed'
+  amount NUMERIC NOT NULL DEFAULT 0,           -- whole $OMR for omr; 1 for an NFT (gear/car/boat/deed)
   gear_id TEXT,                                -- gear class id (gear kind)
   nonce BIGINT NOT NULL UNIQUE,                -- server-unique uint256 nonce (replay guard)
   to_address TEXT NOT NULL,                    -- recipient EVM address
@@ -1531,6 +1531,15 @@ ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS shakedown_at TIMESTAMPTZ;     
 -- buyer buys it → the deed + its provenance transfer to the buyer's account, control resets (the buyer
 -- earns the corner). §10.4: `deed:sale` a taxed cash transfer (the bodyguard:hire pattern). No escrow.
 ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS sale_price BIGINT;                    -- listed for this cash price (null = not for sale)
+-- Phase 3 — THE ON-CHAIN TRADEABLE NFT (omerta-street-deeds-design.md §2/§3). A minted account with a
+-- linked wallet EXTRACTS its deed as a StreetDeed ERC-721 (chain.js requestDeedWithdraw). The in-game
+-- row is re-keyed to a synthetic `onchain:<tokenId>` owner — freeing the account to claim anew, RESERVING
+-- the name (the row persists so the unique index holds), and PRESERVING the legend (re-keyed too). The
+-- deed is INERT while extracted (the car/boat precedent — no rent/control): to play the rent/turf game
+-- with it again its holder RE-IMPORTS (burns → the Redeemed watcher re-keys it to the burner's account).
+-- `onchain_token_id` = uint256(keccak256(name)) as a decimal string, the deterministic re-import lookup.
+ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS onchain_token_id TEXT;                -- non-null = extracted (held on-chain, inert in-game)
+CREATE INDEX IF NOT EXISTS ix_street_deeds_token ON street_deeds (onchain_token_id);
 -- THE LEGEND ENGINE — the provenance record of everything that happened on a deed (§4). Account-keyed
 -- like the deed (survives death — the record is the value). Pure-status append log; never a currency.
 CREATE TABLE IF NOT EXISTS street_deed_history (
@@ -1541,6 +1550,19 @@ CREATE TABLE IF NOT EXISTS street_deed_history (
   at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ix_deed_history_acct ON street_deed_history (account_id, at DESC);
+-- Deed RE-IMPORT: a StreetDeed NFT burned back into the game (chain.js reimportDeed). The pending store
+-- + idempotency guard (the nft_reimports twin): the burner's wallet is resolved to a deedless account
+-- and the on-chain deed re-keyed to them; if they have no linked account (or already hold a street) the
+-- re-import WAITS. Dormant unless STREET_DEED_ADDRESS is set. §10.4-neutral (ownership, not currency).
+CREATE TABLE IF NOT EXISTS deed_reimports (
+  ref TEXT PRIMARY KEY,                             -- txHash:logIndex (idempotency)
+  wallet_address TEXT NOT NULL,                     -- the burner (Redeemed.from), checksummed
+  token_id TEXT NOT NULL,                           -- the burned deed tokenId (keccak(name), decimal string)
+  status TEXT NOT NULL DEFAULT 'pending',           -- 'pending' | 'applied'
+  applied_account TEXT,                             -- the account the deed was re-keyed to
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  applied_at TIMESTAMPTZ
+);
 
 -- ── THE AUCTION HOUSE ("the sit-down"): the competitive, recurring $OMR sink ──
 -- A live auction row exists once a lot gets its first bid. `current_bid` on status='live' rows IS the
