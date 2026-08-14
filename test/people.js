@@ -75,6 +75,12 @@ const C = await mk('Quiet Carmela');
   assert.equal(r.nemesis.vendetta.mine, true, 'my sworn vendetta shows');
   assert.equal(r.nemesis.vendetta.theirs, false, 'no vendetta the other way');
   assert.equal(r.vendettas, 1, 'the open-vendetta count agrees');
+  // THE VOUCHED-BY CHIP — two peers stake their name on B; the board carries the count on the face.
+  assert.equal(r.nemesis.street.vouches, 0, 'nobody has vouched for the nemesis yet');
+  for (const voucher of ['voucher-acct-1', 'voucher-acct-2']) await pool.query(
+    'INSERT INTO vouches (voucher_account, target_account, from_name) VALUES ($1,$2,$3)', [voucher, B.acct, 'A Friend']);
+  const r2 = (await call('GET', '/v1/people', { token: A.token })).body;
+  assert.equal(r2.nemesis.street.vouches, 2, 'the vouch count surfaces on the nemesis face');
 }
 
 // ── THE ALLIANCES — spouse, consigliere (both directions), the family, the bonds ──

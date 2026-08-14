@@ -24,6 +24,7 @@
 import { GameError } from './game.js';
 import { levelOf } from './rules.js';
 import { marriageOf } from './dynasty.js';
+import { vouchCounts } from './vouch.js';
 
 // a bloodline's face: its current LIVING street, else the freshest name the record holds
 async function faceOf(client, accountId, fallbackName = null) {
@@ -105,12 +106,23 @@ export async function peopleBoard(client, ch) {
   // open vendettas sworn by YOUR bloodline (the view carries the detail; this is the count)
   const vendettas = Number((await client.query(
     'SELECT COUNT(*) n FROM vendettas WHERE avenger_account=$1 AND expires_at > now()', [me])).rows[0].n);
+  // THE VOUCHED-BY CHIP — how many peers publicly stake their name on each person on the board.
+  // A read of the account-level `vouches` (reputation survives death); keyed by the living face's
+  // character id. One batched `vouchCounts` over every id the board carries, then attach `.vouches`.
+  const faceIds = [nemesis?.street?.id, spouse?.street?.id, consigliere?.street?.id,
+    guardedBy?.id, ...guarding.map((g) => g.id), ...bonds.map((b) => b.id)].filter(Boolean);
+  const vch = await vouchCounts(client, faceIds);
+  const withVouch = (o, id) => (o ? { ...o, vouches: vch.get(id) || 0 } : o);
   return {
-    nemesis, spouse, consigliere, advising,
+    nemesis: nemesis ? { ...nemesis, street: withVouch(nemesis.street, nemesis.street?.id) } : null,
+    spouse: spouse ? { ...spouse, street: withVouch(spouse.street, spouse.street?.id) } : null,
+    consigliere: consigliere ? { ...consigliere, street: withVouch(consigliere.street, consigliere.street?.id) } : null,
+    advising,
     family: fam ? { name: fam.name, tag: fam.tag, role: fam.role } : null,
-    guardedBy: guardedBy ? { id: guardedBy.id, name: guardedBy.name } : null,
-    guarding: guarding.map((g) => ({ id: g.id, name: g.name })),
-    bonds, vendettas,
+    guardedBy: guardedBy ? { id: guardedBy.id, name: guardedBy.name, vouches: vch.get(guardedBy.id) || 0 } : null,
+    guarding: guarding.map((g) => ({ id: g.id, name: g.name, vouches: vch.get(g.id) || 0 })),
+    bonds: bonds.map((b) => ({ ...b, vouches: vch.get(b.id) || 0 })),
+    vendettas,
   };
 }
 

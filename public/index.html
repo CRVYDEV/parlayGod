@@ -674,6 +674,15 @@
     content: ''; position: absolute; inset: -6vh calc(50% - 50vw) -2vh; z-index: -1;
     background: radial-gradient(56% 52% at 50% 42%, rgba(8,9,12,.84) 0%, rgba(8,9,12,.52) 52%, transparent 100%);
   }
+  /* THE LIVING HERO — an ambient motion clip of the same alley, layered exactly where the still
+     plate sits (same inset, same mask), so if it never loads or never plays the still IS the frame.
+     Injected by JS only when motion is allowed (reduced-motion users keep the photograph). */
+  .landing .hero .herovid { position: absolute; inset: -6vh calc(50% - 50vw) -2vh; z-index: -1;
+    width: calc(100vw + 2px); height: calc(100% + 8vh); object-fit: cover; object-position: center 62%;
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 10%, #000 80%, transparent 100%);
+    mask-image: linear-gradient(180deg, transparent 0%, #000 10%, #000 80%, transparent 100%);
+    opacity: 0; transition: opacity 1.4s var(--ease); }
+  .landing .hero .herovid.live { opacity: 1; }
   /* the copy has to stay legible over a photograph — a scrim, not a lighter image */
   .landing .hero > * { position: relative; text-shadow: 0 2px 18px rgba(0,0,0,.9), 0 0 40px rgba(0,0,0,.7); }
   .landing .hero h1 { font-family: var(--display); font-weight: 600; text-shadow: 0 3px 30px #000, 0 0 60px rgba(0,0,0,.9); }
@@ -956,7 +965,15 @@
     backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); cursor: pointer;
     animation: fadeIn .16s var(--ease); }
   #cine.on { display: grid; }
-  #cine .cbox { text-align: center; padding: 0 24px; max-width: 620px; animation: cineIn .5s var(--ease); }
+  /* THE MOTION BACKDROP — an ambient clip from the generated library behind the title card. Dimmed +
+     vignetted so the type stays the hero; the card reads identically if the clip never loads (the
+     gradient above still stands), and under prefers-reduced-motion cine() never mounts at all. */
+  #cine .cvid { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+    opacity: 0; z-index: -1; filter: saturate(.85) brightness(.8); animation: cvidIn 1.1s var(--ease) forwards; }
+  #cine::after { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background: radial-gradient(90% 80% at 50% 45%, rgba(0,0,0,.45), rgba(0,0,0,.88)); }
+  @keyframes cvidIn { to { opacity: .5; } }
+  #cine .cbox { text-align: center; padding: 0 24px; max-width: 620px; animation: cineIn .5s var(--ease); position: relative; }
   #cine .ckicker { font-family: var(--mono); font-size: 12px; letter-spacing: 4px; text-transform: uppercase;
     color: var(--dim); margin-bottom: 10px; }
   #cine .ctitle { font-family: var(--display); font-weight: 600; font-size: clamp(34px, 8vw, 62px); letter-spacing: 6px;
@@ -1479,6 +1496,18 @@
   // fire it on every crime and players learn to look away from it, which costs you
   // the one tool you had for the moments that DO matter.
   let cineEl = null, cineT = null;
+  // THE MOTION LIBRARY — which ambient clip backs which KIND of moment. Generated Seedance loops that
+  // ship in the repo (/art/hype/*.mp4, served off the boot allowlist). Keyed by the spec's fx (the
+  // same tag that picks the sting), with a couple of context overrides; anything unmapped gets no
+  // video, which is most things, on purpose — the rarity rule that keeps the big moments big.
+  const CINE_CLIPS = {
+    violent: ['hitman-professional.mp4', 'hitman-legbreaker.mp4', 'crime-torch.mp4'],   // a kill / the first-blood beat
+    payday: ['crime-counting.mp4', 'crime-diamond.mp4', 'heist-goldvault.mp4', 'crime-vaultjob.mp4'], // money in hand
+    jail: ['interior-law.mp4'],            // the pinch
+    escape: ['district-docks.mp4'],        // over the wall
+    title: ['hero-backdrop.mp4', 'crest.mp4'],  // the belt / a crowned moment
+  };
+  let cineClipN = 0; // rotate within a moment's set so back-to-back cinematics don't repeat a clip
   function cine(spec) {
     if (REDUCED || !spec) return;
     if (!cineEl) {
@@ -1489,6 +1518,17 @@
     const { kicker = '', title, sub = '', lines = [], accent = 'var(--neon)', glow = 'var(--neon-glow)' } = spec;
     cineEl.style.setProperty('--cine-accent', accent);
     cineEl.style.setProperty('--cine-glow', glow);
+    // mount/replace the backdrop clip for this moment (absent = none; a failed load self-removes so
+    // the card never shows a broken video frame)
+    cineEl.querySelector('.cvid')?.remove();
+    const set = CINE_CLIPS[spec.fx];
+    const clipFile = spec.clip || (set ? set[cineClipN++ % set.length] : null);
+    if (clipFile) {
+      const v = el(`<video class="cvid" src="/art/hype/${clipFile}" muted autoplay loop playsinline></video>`);
+      v.onerror = () => v.remove();
+      v.play?.()?.catch?.(() => {});
+      cineEl.appendChild(v);
+    }
     cineEl.firstElementChild.innerHTML = `
       ${kicker ? `<div class="ckicker">${esc(kicker)}</div>` : ''}
       <div class="ctitle">${esc(title)}</div>
@@ -1500,7 +1540,7 @@
     cineEl.classList.add('on');
     clearTimeout(cineT); cineT = setTimeout(closeCine, spec.hold || 2100);
   }
-  function closeCine() { clearTimeout(cineT); cineEl?.classList.remove('on'); }
+  function closeCine() { clearTimeout(cineT); cineEl?.classList.remove('on'); cineEl?.querySelector('.cvid')?.remove(); }
   // THE AHA MOMENT — the scripted first rival lands as a cinematic (with a fallback toast under reduced
   // motion), then the coach + the nemesis card carry it. Jumps the player to Wet Work so the target is
   // one tap away. Deduped by a localStorage flag so a backfilled notification can't replay it.
@@ -1544,12 +1584,12 @@
     // ── the Law took you. Not death, but the closest thing to it.
     if (b.convicted === true || b.busted === true) {
       return { kicker: 'the bureau', title: 'Indicted', sub: b.forfeited ? `they took ${$c(b.forfeited)}.` : 'the case landed.',
-        accent: 'var(--cold)', glow: 'rgba(107,147,184,.5)', fx: 'violent' };
+        accent: 'var(--cold)', glow: 'rgba(107,147,184,.5)', fx: 'violent', clip: 'interior-law.mp4' };
     }
     // ── over the wall
     if (b.escaped === true) {
       return { kicker: 'the pen', title: 'Over the wall', sub: "you're out — and you're WANTED.",
-        accent: 'var(--neon)', fx: 'payday' };
+        accent: 'var(--neon)', fx: 'payday', clip: 'district-docks.mp4' };
     }
     // ── a genuine payday. The floor is deliberately high: a $600 crime is a toast.
     const take = Number(b.earned ?? b.payout ?? b.take ?? b.won ?? b.purse ?? b.share ?? 0);
@@ -1764,6 +1804,19 @@
   // PROCEDURAL PORTRAIT — a deterministic noir mugshot per player (seed = their characterId), so a name
   // reads as a PERSON on the roster/Cast/circle/leaderboards. The server route caches one face per seed.
   const av = (seed, px = 34) => seed ? `<img class="avatar" loading="lazy" alt="" width="${px}" height="${px}" src="/v1/avatar/${encodeURIComponent(seed)}">` : '';
+  // THE VOUCHED-BY CHIP — how many peers publicly stake their name on this person (reputation, survives
+  // death). Rendered on the Cast/Situation people cards from the count the /v1/people board carries.
+  const vouchChipOf = (o) => (o && o.vouches) ? ` <span class="chip">🤝 ${o.vouches}</span>` : '';
+  // THE CHAMPION'S MOMENT — given a winner-side result notification, return the cinematic if the player
+  // actually WON the competition (1st place / took the belt / cracked the siege), else null. A richer
+  // beat than the crowd's bet-win sting; the entrant who took the title gets the poster.
+  const championCine = (type, p) => {
+    if (type === 'boxing_main_result' && p.won) return { kicker: p.belt ? 'and STILL' : 'THE MAIN EVENT', title: p.belt ? 'CHAMPION OF THE CITY' : 'YOU TOOK THE MAIN EVENT', sub: p.purse ? `promoter's purse — $${fmt(p.purse)}` : 'the crowd saw it' };
+    if (type === 'belt_won_callout') return { kicker: 'YOU CALLED IT — AND TOOK IT', title: 'CHAMPION OF THE CITY', sub: p.was ? `you took the belt off ${p.was}` : 'the belt is yours' };
+    if ((type === 'tourney_result' || type === 'stakes_result') && p.place === 1) return { kicker: type === 'tourney_result' ? 'THE TABLE IS YOURS' : 'THE STAKES ARE YOURS', title: 'YOU WON IT ALL', sub: p.payout ? `first prize — $${fmt(p.payout)}${p.hand ? ` · ${p.hand}` : ''}` : (p.racer ? p.racer : 'first place') };
+    if (type === 'primetime_siege_won') return { kicker: 'THE GATES ARE DOWN', title: 'YOU CRACKED THE SIEGE', sub: p.mode === 'value' && p.reward ? `your cut — $${fmt(p.reward)}` : (p.title ? `you are ${p.title}` : 'prime time is yours') };
+    return null;
+  };
   let token = localStorage.getItem('omerta_token') || null;
   // drawn UI icons (the sprite in <body>) — nav chrome only; toasts/options stay text (textContent)
   const ic = (n) => `<svg class="ic" aria-hidden="true"><use href="#i-${n}"/></svg>`;
@@ -2515,6 +2568,26 @@
   function show(id) {
     for (const s of ['screen-auth', 'screen-create', 'screen-main', 'screen-down']) $('#' + s).classList.add('hidden');
     $('#' + id).classList.remove('hidden');
+    if (id === 'screen-auth') mountHeroMotion();
+  }
+  // THE LIVING HERO — the landing's alley breathes. Progressive enhancement over the still plate:
+  // injected only when the landing actually shows, only once, never under reduced motion or Save-Data
+  // (an ambient ~1MB loop is exactly what that setting exists to refuse). The clip fades in over the
+  // still, so a slow network / missing file / autoplay refusal all leave the photograph standing.
+  // Clips are H.264 (the web's baseline — every consumer browser incl. iOS decodes it). A browser
+  // WITHOUT the codec (the test sandbox's Playwright Chromium) fires the element's error event and
+  // the fail-safe below removes the clip — proven live: the still stands, zero page errors.
+  let heroMotionDone = false;
+  function mountHeroMotion() {
+    if (heroMotionDone || REDUCED || navigator.connection?.saveData) return;
+    heroMotionDone = true;
+    const hero = document.querySelector('#screen-auth .hero');
+    if (!hero) return;
+    const v = el('<video class="herovid" src="/art/hype/hero-poster.mp4" muted autoplay loop playsinline preload="metadata"></video>');
+    v.onerror = () => v.remove();
+    v.addEventListener('playing', () => v.classList.add('live'), { once: true });
+    hero.prepend(v);
+    v.play?.()?.catch?.(() => v.remove());   // autoplay refused → the still stands, no corpse
   }
 
   // ── ONE-CLICK X SIGN-IN: the OAuth callback lands results in the URL FRAGMENT (never sent to
@@ -3238,7 +3311,7 @@
         const sub = rank ? `you made ${rank.name} — ${rank.perk}.`
           : opened.length ? `${opened.slice(0, 3).join(' · ')}${opened.length > 3 ? ` · +${opened.length - 3} more` : ''}`
           : 'the city gives you a little more room.';
-        playCine({ kicker: 'you moved up', title: `LEVEL ${me.level}`, sub, fx: 'payday', hold: 1900 });
+        playCine({ kicker: 'you moved up', title: `LEVEL ${me.level}`, sub, fx: 'payday', clip: 'hero-backdrop.mp4', hold: 1900 });
         $('#sheet')?.classList.add('lvlup');
         setTimeout(() => $('#sheet')?.classList.remove('lvlup'), 1500);
       } }
@@ -4798,18 +4871,18 @@
       <div class="grid">
         ${liveCard}
         ${paperCard}
-        ${nem ? `<div class="card" style="border-color:var(--bad)"><span class="t" style="color:var(--bad)">${av(nem.street?.id, 30)}YOUR NEMESIS${nem.street?.alive === false ? ' — LINE FALLEN' : ''}</span>
+        ${nem ? `<div class="card" style="border-color:var(--bad)"><span class="t" style="color:var(--bad)">${av(nem.street?.id, 30)}YOUR NEMESIS${nem.street?.alive === false ? ' — LINE FALLEN' : ''}${vouchChipOf(nem.street)}</span>
           <div class="d"><b>${esc(nem.street?.name || 'a fallen line')}</b> has moved on you <b>${nem.total}</b> time${nem.total === 1 ? '' : 's'}${nem.bloodOwed > 0 ? ` — and their line owes yours <b>${nem.bloodOwed} bod${nem.bloodOwed === 1 ? 'y' : 'ies'}</b>` : nem.bloodOwed < 0 ? ` — your line owes theirs ${-nem.bloodOwed}` : ''}.${nem.vendetta?.mine ? ' A vendetta is SWORN.' : ''}${nem.vendetta?.theirs ? ' Their line has sworn one on YOU.' : ''}</div>
           <div class="row">${nem.street?.id ? `<button class="act" data-story="${nem.street.id}" data-story-name="${esc(nem.street.name)}">the story of you two</button><button class="act" data-go-tab="pvp">settle it →</button>${me?.name ? `<a href="${xIntent(`Me vs ${nem.street.name} in OMERTÀ — ${nem.total} bod${nem.total === 1 ? 'y' : 'ies'} between us and counting. Come help me end them.`, beefUrl(me.name, nem.street.name))}" target="_blank" rel="noopener noreferrer"><button class="act" data-beacon="beef">call them out ↗</button></a>` : ''}` : `<button class="act" ${''}disabled>their line is dead — for now</button>`}</div></div>` : ''}
         ${(pp.family || pp.spouse || pp.consigliere || pp.guardedBy || (pp.guarding || []).length || (pp.bonds || []).length) ? `<div class="card" style="border-color:var(--gold)"><span class="t" style="color:var(--gold)">YOUR PEOPLE</span>
           <div class="d">${[
             pp.family ? `<b>${esc(pp.family.name)}</b> [${esc(pp.family.tag || '')}] — your family (${esc(pp.family.role)})` : null,
-            pp.spouse ? `married into <b>${esc(pp.spouse.dynasty || pp.spouse.street?.name || 'a house')}</b>${pp.spouse.street?.name ? ` (${esc(pp.spouse.street.name)})` : ''}` : null,
-            pp.consigliere ? `<b>${esc(pp.consigliere.street?.name || 'a counselor')}</b> advises your house` : null,
+            pp.spouse ? `married into <b>${esc(pp.spouse.dynasty || pp.spouse.street?.name || 'a house')}</b>${pp.spouse.street?.name ? ` (${esc(pp.spouse.street.name)})` : ''}${vouchChipOf(pp.spouse.street)}` : null,
+            pp.consigliere ? `<b>${esc(pp.consigliere.street?.name || 'a counselor')}</b> advises your house${vouchChipOf(pp.consigliere.street)}` : null,
             pp.advising ? `you counsel ${pp.advising} house${pp.advising === 1 ? '' : 's'}` : null,
-            pp.guardedBy ? `<b>${esc(pp.guardedBy.name)}</b> is watching your back` : null,
-            (pp.guarding || []).length ? `you stand over ${pp.guarding.map((g) => `<b>${esc(g.name)}</b>`).join(', ')}` : null,
-            (pp.bonds || []).length ? `${pp.bonds.map((b) => `<b>${esc(b.name)}</b> (${b.jobs} job${b.jobs === 1 ? '' : 's'})`).join(', ')} owe you a hearing` : null,
+            pp.guardedBy ? `<b>${esc(pp.guardedBy.name)}</b> is watching your back${vouchChipOf(pp.guardedBy)}` : null,
+            (pp.guarding || []).length ? `you stand over ${pp.guarding.map((g) => `<b>${esc(g.name)}</b>${vouchChipOf(g)}`).join(', ')}` : null,
+            (pp.bonds || []).length ? `${pp.bonds.map((b) => `<b>${esc(b.name)}</b> (${b.jobs} job${b.jobs === 1 ? '' : 's'})${vouchChipOf(b)}`).join(', ')} owe you a hearing` : null,
           ].filter(Boolean).join(' · ')}</div></div>` : ''}
         ${cw.crew ? `<div class="card" style="border-color:var(--neon)"><span class="t" style="color:var(--neon)">YOUR CREW — ${esc(cw.crew.name)}</span>
           <div class="d">${(cw.crew.members || []).map((m) => esc(m.name) + (m.leader ? ' (boss)' : '')).join(' · ')}</div>
@@ -8349,6 +8422,24 @@
     if (channel === 'me' && ev && ev.type === 'event_result') {
       const p = ev.payload || {};
       if (p.outcome === 'won') { haptic('big'); sfx('win'); toast(`${p.icon || '🎟'} ${p.headline} — you took $${fmt(p.payout)}`, false); }
+    }
+    // THE CHAMPION'S MOMENT — you didn't just bet on a marquee event, you WON one. A distinct, bigger
+    // cinematic than a bettor's win sting: the entrant who took first place / the belt gets the poster.
+    if (channel === 'me' && ev && championCine(ev.type, ev.payload || {})) {
+      const c = championCine(ev.type, ev.payload || {});
+      haptic('big'); sfx('win');
+      playCine({ kicker: c.kicker, title: c.title, sub: c.sub, accent: 'var(--gold)', fx: 'payday', clip: 'hero-backdrop.mp4', hold: 2400 });
+    }
+    // THE CONVERGENCE NUDGE — a real human walked into a district. Only act on it when it's YOUR
+    // district and it isn't you: a quiet presence toast (not a feed line — for everyone else it's
+    // noise). Presence is public, so this leaks nothing the /v1/live board doesn't already show.
+    if (channel === 'streets' && ev && ev.type === 'arrival') {
+      if (me && ev.district === me.loc && ev.cid !== me.id) {
+        const dn = (rules?.districts || []).find((d) => d.id === ev.district)?.name || ev.district;
+        toast(`👣 ${esc(ev.who)} just showed up in ${esc(dn)}`, false);
+        if (currentTab === 'start') renderActive();
+      }
+      return;
     }
     if (channel === 'me' && ev && ev.type === 'dm') phoneRing(ev.payload || {});
     if (channel === 'chat' || (channel === 'gang' && ev.type === 'chat')) { chatLine(channel === 'chat' ? 'city' : 'family', ev); return; }

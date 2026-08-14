@@ -48,6 +48,27 @@ assert.ok(html.includes('rel="apple-touch-icon"'), 'an apple-touch-icon (iOS hom
 assert.ok(html.includes('name="apple-mobile-web-app-capable"'), 'iOS standalone meta');
 assert.ok(html.includes('name="theme-color"'), 'a theme-color');
 
+// ── THE MOTION LIBRARY route — the generated ambient clips behind the cinematics + the landing hero.
+// The boot ALLOWLIST discipline (a request is a Map lookup — no traversal by construction), streamed
+// from disk with RANGE support, which is NOT optional for <video>: Chromium's media stack refuses a
+// source it cannot seek (found live by the motion probe — the element fires error and the client's
+// fail-safe removes the clip).
+{
+  const r = await get('/art/hype/hero-poster.mp4');
+  assert.equal(r.statusCode, 200, 'a motion clip serves');
+  assert.ok(/video\/mp4/.test(r.headers['content-type']), 'as video/mp4');
+  assert.equal(r.headers['accept-ranges'], 'bytes', 'and advertises range support (the <video> decoder needs it)');
+  assert.ok(Number(r.headers['content-length']) > 100000, 'with a real content-length');
+  const rr = await app.inject({ method: 'GET', url: '/art/hype/hero-poster.mp4', headers: { range: 'bytes=0-1023' } });
+  assert.equal(rr.statusCode, 206, 'a range request gets 206 partial content');
+  assert.equal(rr.headers['content-length'], '1024', 'exactly the requested slice');
+  assert.ok(/^bytes 0-1023\//.test(rr.headers['content-range']), 'with a correct content-range');
+  const bad = await app.inject({ method: 'GET', url: '/art/hype/hero-poster.mp4', headers: { range: 'bytes=999999999-' } });
+  assert.equal(bad.statusCode, 416, 'an unsatisfiable range is refused, not crashed');
+  assert.equal((await get('/art/hype/no-such-clip.mp4')).statusCode, 404, 'an unknown clip 404s (allowlist)');
+  assert.equal((await get('/art/hype/..%2F..%2Fpackage.json')).statusCode, 404, 'traversal is a key not in the Map');
+}
+
 console.log('pwa: PASS');
 await app.close();
 process.exit(0);

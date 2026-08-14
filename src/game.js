@@ -2002,6 +2002,13 @@ export async function travel(ch, district, client, h) {
   ch.cash = Number(ch.cash) - CONSTANTS.TRAVEL_COST; ch.loc = district;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -CONSTANTS.TRAVEL_COST, reason: 'travel' });
   await logCollect(client, ch.account_id, 'districts', district); // THE COLLECTION — set foot everywhere
+  // THE CONVERGENCE NUDGE — a real human just walked into a district. Announce it on the streets
+  // channel so anyone STANDING there gets a live "someone real just showed up" push (the collision
+  // Home card + the 30s poll surface presence otherwise; this is the instant signal). Presence is
+  // already public (/v1/live shows who's in a district), so this leaks nothing. Real humans only —
+  // NPC residents move via residentAct (no emit), and agents are excluded like every other human
+  // presence surface (the collision board's rule). Best-effort, post-state.
+  if (!ch.is_npc && !h?.acct?.agent_flag) bus.emit('streets', { type: 'arrival', who: ch.name, cid: ch.id, district });
   return { ok: true, loc: district };
 }
 

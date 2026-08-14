@@ -169,3 +169,35 @@ one generated for drama, because it was too dark and too blue to read against a 
 
 Name files after what they are and what they are for. The `job` field in the manifest states what each
 image has to survive, and that is the thing to judge it against — not whether it is pretty.
+
+## The motion pass (2026-08-14) — the library goes in-game, and the next-spend plan
+
+**What shipped without a dollar:** the 31-clip Seedance motion library (already generated, committed,
+~40MB) was dark — no route served it. Now `/art/hype/:file` streams it off the boot allowlist **with
+HTTP Range support** (not optional: Chromium's media stack refuses a source it cannot seek — found
+live by the motion probe, the element fires `error`), and the client uses it in two places:
+
+- **The cinematics** (`playCine`) carry an ambient motion backdrop per moment — violent (kills) /
+  payday / jail / escape / title — rotating within each set so back-to-back cards don't repeat, dimmed
+  behind the type so the title stays the hero. Absent under `prefers-reduced-motion` (cine never
+  mounts there at all); a failed load self-removes so the card never shows a broken frame.
+- **The landing hero breathes** — `hero-poster.mp4` layered exactly where the still sits (same inset,
+  same mask), faded in only once it is actually PLAYING, never under reduced-motion or Save-Data. The
+  still is the poster and the fallback; a browser without H.264 (the test sandbox's Playwright
+  Chromium — no proprietary codecs) exercises the fail-safe: the photograph stands, zero page errors.
+
+**Model research (before any new spend — 2026-08 pricing on fal):** for short ambient loops from
+stills we already own, **Seedance 2.0 Fast image-to-video at 720p** is the price/quality pick
+(fast tier ≈ $0.10–0.15/s → ~$0.55–0.75 per 5s clip); the standard 1080p tier (~$0.68/s ≈ $3.40/clip)
+is not worth it for a background dimmed to 50% opacity. Budget alternative: **Wan 2.6** (~$0.05/s).
+Sources: fal's own 2026 image-to-video roundup + the Seedance 2.0 endpoint pricing pages.
+
+**When FAL_KEY returns** (the container drop lost it — no credits can be spent from this box today):
+
+    FAL_VIDEO_MODEL=bytedance/seedance-2.0/fast/image-to-video FAL_RES=720p FAL_EST_PER=0.75 \
+      FAL_KEY=… node tools/hype.js --fal --cap 20
+
+The wishlist worth the next ~$10 (in value order): per-district ambients for the remaining four core
+districts (canal/brick/foundry/cathedral — docks + neon exist), `interior-den` variants for the den's
+jackpot moments, and a `wanted`-poster wind/rain loop for the manhunt beat. Everything else the cine
+layer wants already exists in the library.
