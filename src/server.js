@@ -87,6 +87,7 @@ import { register as registerBoxing } from './routes/boxing.js';
 import { register as registerRaces } from './routes/races.js';
 import { register as registerLaw } from './routes/law.js';
 import { register as registerEstate } from './routes/estate.js';
+import { register as registerDeeds } from './routes/deeds.js';
 import { register as registerStable } from './routes/stable.js';
 import { register as registerConvoy } from './routes/convoy.js';
 import { register as registerHeists } from './routes/heists.js';
@@ -1525,6 +1526,10 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Portfolio.nameDynasty(ch, req.body?.name, client, h)));
 
   registerEstate(app, { pool, auth });
+  // STREET DEEDS (omerta-street-deeds-design.md) — the Monopoly layer: claim a named, mapped plot of
+  // the world and build a legend on it. Phase 1 pure status (survives death); the leaderboard route is
+  // registered with the other status boards. CONTROL (rent/turf) is Phase 2; the on-chain token Phase 3.
+  registerDeeds(app, { pool, auth });
 
   // THE AUCTION HOUSE ("the sit-down"): weekly $OMR auctions of unique prestige items — highest bid burns.
   app.get('/v1/auction', { preHandler: auth }, async (req) =>

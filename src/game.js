@@ -239,6 +239,7 @@ export async function loadOwned(client, ch) {
     UNION ALL SELECT 'my', track_id, NULL::text, xp::numeric, NULL::numeric, NULL::timestamptz FROM masteries WHERE character_id=$1
     UNION ALL SELECT 'trait', track_id, trait_id, NULL::numeric, NULL::numeric, NULL::timestamptz FROM character_traits WHERE character_id=$1
     UNION ALL SELECT 'est', name, NULL::text, tier::numeric, spent_omr::numeric, NULL::timestamptz FROM estates WHERE account_id=$2
+    UNION ALL SELECT 'deed', name, district, NULL::numeric, NULL::numeric, claimed_at FROM street_deeds WHERE account_id=$2
     UNION ALL SELECT 'disc', discipline, NULL::text, xp::numeric, NULL::numeric, NULL::timestamptz FROM character_disciplines WHERE character_id=$1
     UNION ALL SELECT 'rival', aggressor_account::text, NULL::text, NULL::numeric, NULL::numeric, at FROM rival_events WHERE victim_account=$3 AND at > now() - interval '48 hours'
     -- ...and MY OWN strikes in the same window, so the coach can tell "somebody moved on you" from
@@ -299,6 +300,10 @@ export async function loadOwned(client, ch) {
   const trait = of('trait', (r) => ({ track_id: r.k, trait_id: r.k2 }));
   // THE ESTATE — account-level too (survives death; the heir inherits the compound)
   const est = of('est', (r) => ({ name: r.k, tier: n(r.n), spent_omr: n(r.n2) }));
+  // STREET DEEDS — account-level too (survives death; the heir inherits the deed). A summary; the
+  // /v1/deeds board is the full view (the legend + the map). Read here so runEstate's report.kept.deed
+  // and the estate-report modal can name the street the bloodline keeps.
+  const deed = of('deed', (r) => ({ name: r.k, district: r.k2, claimed_at: r.ts }));
   // THE REGIMEN — discipline xp per id (dies with the street; levels derived, never stored)
   const disc = of('disc', (r) => ({ discipline: r.k, xp: n(r.n) }));
   // STREET WAR step two — fresh malice against this bloodline (last 48h): the coach's
@@ -397,6 +402,7 @@ export async function loadOwned(client, ch) {
       .filter(([, c]) => c > 0)),
     work, // THE WORK BOARD — today's unclaimed repeatable work, for the coach's never-empty tail
     estate: est.rows[0] || null, // account-level compound (survives death) — a summary; the board is the full view
+    deed: deed.rows[0] || null,  // account-level street deed (survives death) — a summary; /v1/deeds is the full view
     // STREET WAR step two — fresh malice in the last 48h that you have NOT answered. Counted per
     // aggressor (their strikes on me vs mine on them, same window) and folded in JS: two flat lists,
     // never a correlated subquery (the pg-mem posture). Answering every one of them takes the rung

@@ -12207,3 +12207,52 @@ immediately before every commit**. The durable lesson is the one already written
 trap, in a harsher form: **a green suite proves nothing about the tree you are about to push if you
 have not just confirmed which tree that is** — and under a flaky container the answer is to commit
 each fix the moment it passes rather than batching.
+
+**STREET DEEDS — the map as property (founder-directed 2026-08-14: "mint a 'Street Name' mapped onto the
+world instead of a PFP — a Monopoly aspect where you sell your STREET, and the map grows as users join";
+then "A+B+C together so it's valuable as an NFT on secondary markets"; design `omerta-street-deeds-design.md`)
+— PHASE 1 BUILT** (`src/deeds.js` — the 143rd src module, `src/routes/deeds.js`, `test/deeds.js` — the
+102nd suite; `street_deeds`/`street_deed_history` — the 224th/225th tables; the `DEEDS` rules-tail block +
+`deedRankOf`/`deedRenown`; `GET /v1/deeds` + `POST /v1/deeds/claim` + `GET /v1/leaderboard/streets`; a
+"Street Deeds" tab under the Family group). The founder's reframe of the identity mint from a character PFP
+into a mintable, mapped Street — the Monopoly layer. **The one structural idea that lets collectible (A) +
+rent (B) + productive turf (C) coexist without breaking the sim-audited war economy, turning minting into
+pay-to-win, or shipping a security: SEPARATE THE DEED FROM CONTROL.** The deed is permanent, tradeable
+PROPERTY (a named street, mapped, with a record of everything that happened on it — nobody takes it off you);
+CONTROL — the rent + the turf power — is earned and defended IN-GAME (you own Boardwalk, but a rival with
+muscle on it collects while you hold only the paper). That split is what keeps it (1) not pay-to-win (money
+buys the deed + a head start; income is capped at what a free player reaches by seizing turf in a war),
+(2) war-economy-safe (the income is FOUGHT OVER, not passively piped, so turf/territory/sovereignty are
+untouched), and (3) on the right side of the securities line (returns require the holder's own effort; the
+team promises no value — §7, needs counsel before any Phase-3 mint). **Phase 1 is the deed + THE LEGEND
+ENGINE, and it is PURE STATUS, §10.4-ZERO by construction** (the whole flow writes not one `transactions`
+row — test-pinned; the portrait/dynasty/estate precedent). Claim ONE named deed (the identity/Sybil model —
+a Monopoly PORTFOLIO of many streets is a Phase-3 secondary-market behavior, not a mint primitive) mapped to
+a core district: the name is validated like a living-street name (`cleanText` markup-strip → stored-XSS;
+`DEEDS.NAME_MIN`/`MAX` length; city-wide unique on `name_lc`, race-safe on the unique index → a clean 400,
+never a 500), FREE in Phase 1 (the ETH mint fee attaches at Phase 3). **ACCOUNT-keyed → SURVIVES DEATH**
+(outside the runEstate wipe BY CONSTRUCTION — the death-disposition guard scans character_id-keyed tables,
+never account_id-keyed ones, so a new such table needs no disposition entry; the heir inherits the deed,
+`report.kept.deed` names the street). **THE LEGEND ENGINE** (`street_deed_history`, the value driver §4/§5):
+a deed accrues a provenance RECORD of real play — Phase 1 hooks the CLAIM + a "the line fell here" mark when
+a bloodline dies holding the deed (`recordDeedEvent` in `runEstate`, best-effort under a SAVEPOINT — the
+logCollect discipline; a no-op if the account holds no deed). renown = Σ event weights (`deedRenown`) → a
+rank ladder (`deedRankOf`); `GET /v1/leaderboard/streets` ranks the great streets by their legend
+(unforgeable, unfarmable — it is a record of real play, and THAT is what makes one Street outsell another on
+a secondary market). Surfaced on `GET /v1/map` (per-district deed count + your street flagged on its tile) +
+a "Street Deeds" console tab (your deed + its record + the map's build-up + the great-streets board).
+**Deliberately NOT wired into the live mint / the `minted` extraction flag** (design §8) — additive and
+independent of the identity/extraction machinery, which is untouched. `DEEDS` numbers are display/scope only
+(no balance lever → no BALANCE.md table, no test/levers.js pin). `test/deeds.js` proves the claim + every
+gate (bad district / short name / one-per-account / city-wide uniqueness), the legend engine + renown/rank,
+the great-streets leaderboard (agents excluded), SURVIVES DEATH (a mod-kill's heir inherits; the estate
+report names the deed; the death leaves a "fell here" mark on the record), and §10.4-neutrality (zero ledger
+rows across the whole flow). Suite green + sim drift-0 + mobile 77/77 + client wiring/mirror + pgquery +
+pgcheck 43/43 on real Postgres. **Phases 2–3 are DESIGNED, gated:** control — B (rent) REDIRECTS a bounded
+existing faucet (the shakedown/territory pattern — owner keeps the rest, the shared clock bounds total
+emission by the signed curve → §10.4-neutral, sim + founder sign-off) + C (a racket slot + turf perks capped
+at free-player parity); the on-chain TRADEABLE deed with an account-bound extraction entitlement (the
+identity-NFT lesson — the deed transfers, the entitlement does not, or the secondary floor becomes the Sybil
+cost) is audit + securities-counsel gated. Phase 4 (the growing map — new blocks open off the §7.11 world
+seed as the playerbase crosses thresholds) ships design-only with Phase 1's map render, **marketed as a
+living, growing world, NEVER as scarce/appreciating land** (§6, the project's highest-scrutiny copy surface).

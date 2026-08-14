@@ -5352,3 +5352,24 @@ export const COMMUNITY = {
   HARVEST_BPS: () => Number(process.env.HARVEST_COMMUNITY_BPS ?? 0),  // of each harvest fee (in the market's underlying)
   POLFEES_VIG_BPS: () => Number(process.env.POL_FEES_VIG_BPS ?? 0),   // POL fees diverted to the Vig (not community — the same locked package)
 };
+
+// ── STREET DEEDS (omerta-street-deeds-design.md) — the Monopoly layer. A named, mapped plot of the
+// world a player OWNS and builds a legend on. Phase 1 is PURE STATUS (account-level → survives death,
+// the estate/portfolio precedent; ZERO §10.4 — no currency, no faucet, no new reason). The deed is
+// the permanent property; CONTROL (rent/turf, Phase 2) is earned and defended in-game; the on-chain
+// tradeable token is Phase 3 (audit + counsel gated). These numbers are display/scope only — never a
+// balance lever, so they are NOT tabled in BALANCE.md and carry no test/levers.js pin.
+export const DEEDS = {
+  NAME_MIN: 3, NAME_MAX: 28,        // a street name: "Corvino Way", "Ash Street", "Nine Fingers Row"
+  HISTORY_MAX: 40,                  // events on a deed's dossier (the legend, newest first)
+  // renown = Σ event weights. A deed's legend is the RECORD OF REAL PLAY on it — unforgeable, unfarmable,
+  // the driver of what one street is worth over another (§4/§5). Weighted by how notable the event is.
+  EVENT_WEIGHT: { claim: 1, fell: 5, blood: 4, empire: 3, title: 4, war: 6 },
+  RANKS: [
+    { min: 0, name: 'A Nameless Block' }, { min: 5, name: 'Known Ground' },
+    { min: 20, name: 'A Storied Corner' }, { min: 50, name: 'Bloody Ground' },
+    { min: 120, name: 'A Legend of the City' },
+  ],
+};
+export const deedRankOf = (renown) => { let r = DEEDS.RANKS[0]; for (const t of DEEDS.RANKS) if (Number(renown) >= t.min) r = t; return r; };
+export const deedRenown = (history) => (history || []).reduce((a, e) => a + (DEEDS.EVENT_WEIGHT[e.kind] || 1), 0);

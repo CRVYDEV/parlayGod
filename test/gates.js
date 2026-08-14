@@ -339,6 +339,9 @@ const DISTRICT_WAIVED = {
   // Not a location gate at all: the argument is a district NAME that doesn't exist, so there is
   // nowhere to send anyone. Travelling cannot help, and offering to travel would be a lie.
   'src/landmarks.js': 'bad district argument, not a wrong-location refusal — nowhere to travel to',
+  // STREET DEEDS: the player PICKS the district for their new street from a list; 'district' means
+  // "pick a valid one", not "you're in the wrong place" — there is no single destination to offer.
+  'src/deeds.js': 'the caller chooses which district to claim in — a bad pick, not a wrong-location refusal',
 };
 const mute = [];
 let districtGates = 0;

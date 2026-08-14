@@ -1502,6 +1502,33 @@ CREATE TABLE IF NOT EXISTS estates (
   spent_omr NUMERIC NOT NULL DEFAULT 0      -- lifetime $OMR sunk into the estate (a status figure)
 );
 
+-- ── STREET DEEDS (omerta-street-deeds-design.md) — the map as property (the Monopoly layer) ──
+-- A named, mapped plot of the world a player OWNS and builds a legend on. ACCOUNT-level (keyed on
+-- account_id) so it SURVIVES DEATH — the heir inherits the deed (the estate/portfolio precedent,
+-- outside the runEstate wipe BY CONSTRUCTION; a character_id-keyed table would be scanned by the
+-- death-disposition guard, an account_id-keyed one is not). Phase 1 is PURE STATUS: no `transactions`
+-- row is ever written, so the §10.4 sweep stays drift-0. CONTROL (rent/turf) is earned in-game
+-- (Phase 2); the on-chain tradeable token is Phase 3 (audit + counsel gated). One deed per account.
+CREATE TABLE IF NOT EXISTS street_deeds (
+  account_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  name_lc TEXT NOT NULL,                     -- lower-cased, for the city-wide uniqueness index
+  district TEXT NOT NULL,                    -- the core district the street sits inside
+  claimed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_street_deeds_name ON street_deeds (name_lc);
+CREATE INDEX IF NOT EXISTS ix_street_deeds_district ON street_deeds (district);
+-- THE LEGEND ENGINE — the provenance record of everything that happened on a deed (§4). Account-keyed
+-- like the deed (survives death — the record is the value). Pure-status append log; never a currency.
+CREATE TABLE IF NOT EXISTS street_deed_history (
+  id BIGSERIAL PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  kind TEXT NOT NULL,                        -- claim | fell | empire | title | war | blood
+  detail TEXT NOT NULL DEFAULT '',           -- a pre-humanized, markup-stripped one-liner
+  at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_deed_history_acct ON street_deed_history (account_id, at DESC);
+
 -- ── THE AUCTION HOUSE ("the sit-down"): the competitive, recurring $OMR sink ──
 -- A live auction row exists once a lot gets its first bid. `current_bid` on status='live' rows IS the
 -- $OMR escrow bucket (the bounty/loan/market-escrow twin, on the $OMR side — added to omrBuckets so
