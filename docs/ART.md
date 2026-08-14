@@ -201,3 +201,37 @@ The wishlist worth the next ~$10 (in value order): per-district ambients for the
 districts (canal/brick/foundry/cathedral — docks + neon exist), `interior-den` variants for the den's
 jackpot moments, and a `wanted`-poster wind/rain loop for the manhunt beat. Everything else the cine
 layer wants already exists in the library.
+
+## The living city (2026-08-14, ~$95 of the founder's credit directive)
+
+The founder directed ~$100 of fal credits at "stunning and visually addictive GUI/aesthetics/
+haptics/sounds/animations." What shipped, in one pass:
+
+**~110 ambient motion clips** (Seedance 2.0 Fast image-to-video @720p, ≈$0.62/5s clip — the
+researched price/quality pick; each clip animates its own already-reviewed still plate, so the
+noir vocabulary carries over by construction): every screen-header plate (21), every crime
+vignette (37 new + the 6 that existed), den games (9), the six Underworld fixture portraits
+breathing, businesses/clubs/estate tiers/heists/boxers (26), boats/drugs/guns/outfits (33),
+the four remaining districts, and six text-to-video CINE payoffs (the fallen-fedora kill, the
+payday, the funeral procession behind the death modal, the champion, a war standoff, a wedding —
+t2v because no plate exists for those moments). **8 ambient beds + 2 stingers** (Stable Audio
+2.5): rain over the streets, brushed jazz in the den, the speakeasy sax, harbor fog, the Law's
+drone, the pen yard, the family parlor, the legit office.
+
+Review was SAMPLED, not skipped — one mid-clip frame per family (11 in all) plus every t2v
+payoff, the same contact-sheet discipline as the stills (t2v is where hallucination lives;
+image-to-video inherits its plate). One systemic catch: the i2v endpoint hard-requires
+`image_url`, so the plateless cine jobs 422'd until resubmitted on the t2v endpoint — the
+failure cost nothing (a failed submit doesn't bill).
+
+Engineering that makes the volume affordable: everything re-encoded before shipping (cards
+480×270 CRF 30, headers 960×540 CRF 29, cine 720p CRF 27, audio stripped, faststart) so the
+whole library lands near ~60MB; served through the same boot-allowlist + range machinery the
+first clips proved; and the client learns what shipped from `GET /v1/art/motion` (derived from
+the server's own allowlist) so no hardcoded list can drift. Motion mounts are opt-in per
+surface: the screen plate and vignette play always (dimmed, posters underneath, fail-safe
+removal), card art is HOVER-TO-LIVE (a still comes alive under the pointer/finger, capped at 5
+concurrent, zero cost at rest), and everything dies under prefers-reduced-motion/saveData.
+Haptics ride the SFX map (navigator.vibrate, same one "game feel" toggle); the ambient beds
+crossfade per part of town, first-gesture gated, paused with a hidden tab, silence — never an
+error — when a bed didn't ship.

@@ -290,11 +290,15 @@ export async function buildServer() {
   // resolved PATH and the route streams from disk. Only files the boot scan found are reachable.
   const ART_VIDEOS = new Map();
   try {
+    // .mp4 = motion clips; .m4a = the generated ambient beds/stingers (audio rides the same
+    // allowlist + range machinery — a <audio> element wants seekability exactly like <video>)
+    const MEDIA_TYPES = { '.mp4': 'video/mp4', '.m4a': 'audio/mp4' };
+    const mediaType = (n) => MEDIA_TYPES[n.toLowerCase().slice(n.lastIndexOf('.'))];
     for (const name of readdirSync(artDir))
-      if (name.toLowerCase().endsWith('.mp4')) ART_VIDEOS.set(name, { path: join(artDir, name), size: statSync(join(artDir, name)).size });
+      if (mediaType(name)) ART_VIDEOS.set(name, { path: join(artDir, name), size: statSync(join(artDir, name)).size, type: mediaType(name) });
     const hypeDir = join(artDir, 'hype');
     for (const name of readdirSync(hypeDir))
-      if (name.toLowerCase().endsWith('.mp4')) ART_VIDEOS.set('hype/' + name, { path: join(hypeDir, name), size: statSync(join(hypeDir, name)).size });
+      if (mediaType(name)) ART_VIDEOS.set('hype/' + name, { path: join(hypeDir, name), size: statSync(join(hypeDir, name)).size, type: mediaType(name) });
   } catch { /* no motion shipped — the still plates stand in */ }
   // RANGE support is not optional for <video>: Chromium's media stack refuses a source it cannot seek
   // (a chunked stream with no Content-Length/Accept-Ranges fires the element's error event and the
@@ -309,12 +313,12 @@ export async function buildServer() {
       const end = (m[1] !== '' && m[2] !== '') ? Math.min(Number(m[2]), hit.size - 1) : hit.size - 1;
       if (start >= hit.size || start > end)
         return reply.code(416).header('content-range', `bytes */${hit.size}`).send();
-      return reply.code(206).type('video/mp4')
+      return reply.code(206).type(hit.type || 'video/mp4')
         .header('content-range', `bytes ${start}-${end}/${hit.size}`)
         .header('content-length', String(end - start + 1))
         .send(createReadStream(hit.path, { start, end }));
     }
-    return reply.type('video/mp4').header('content-length', String(hit.size)).send(createReadStream(hit.path));
+    return reply.type(hit.type || 'video/mp4').header('content-length', String(hit.size)).send(createReadStream(hit.path));
   };
   app.get('/art/:file', async (req, reply) => {
     const hit = ART_FILES.get(req.params.file);
@@ -323,6 +327,14 @@ export async function buildServer() {
     return reply.code(404).send({ error: 'not_found' });
   });
   app.get('/art/hype/:file', async (req, reply) => sendVideo('hype/' + req.params.file, req, reply));
+  // THE MOTION MANIFEST — the client asks which plates have a living clip (and which ambient beds
+  // shipped) instead of hardcoding a list that would drift from the directory. Derived from the SAME
+  // boot allowlist the serving route reads, so manifest and server can never disagree.
+  const MOTION_KEYS = [...ART_VIDEOS.keys()].filter((k) => k.startsWith('hype/')).map((k) => k.slice(5));
+  app.get('/v1/art/motion', async (req, reply) => reply
+    .header('cache-control', 'public, max-age=3600')
+    .send({ clips: MOTION_KEYS.filter((k) => k.endsWith('.mp4')).map((k) => k.slice(0, -4)),
+            beds: MOTION_KEYS.filter((k) => k.endsWith('.m4a')).map((k) => k.slice(0, -4)) }));
   // ── ITEM ART: a generated photo per catalog entry when one shipped (public/art/<kind>-<id>.jpg —
   // the tools/art.js catalog pass covers every car/boat/drug/gun/vest/good), else the procedural SVG
   // (cosmetic; no ledger surface). Public + keyless, heavily cacheable — the same id always renders

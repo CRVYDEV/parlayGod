@@ -1,0 +1,342 @@
+{
+  "model": "bytedance/seedance-2.5/image-to-video",
+  "spentUsd": 158.06,
+  "clips": [
+    {
+      "plate": "hero-poster",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa64958/i-4d43Y1JjawHB0bylqqe_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "district-neon",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa6496a/NLeyy0zoBGj2MZdii-GKv_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "interior-speakeasy",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa6496b/luRiXRTntoYBzskcZeJnP_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "interior-market",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa64958/cQaTNxIWeI7bbV1xAaZJM_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "crime-armored",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa6496a/uzkBIwlqpyLw9WH6erxYm_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "crime-torch",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa64958/tQPFE8UcKMy3D3j1O13is_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "car-spectre",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa64958/0jKbbnxImfFnp-u--koom_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "crime-counting",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa6496a/GQd37XGbp5N7IDpGgNV1x_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "interior-estate",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa64959/dEJZOkpDjjhquMW2D22j7_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "interior-den",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa6495a/Tt8I6g7BAWWIOJeFKqWOl_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "car-sovereign",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa6496c/HJfFaq1fUCWxh61yZ_KU5_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "crime-torch",
+      "ar": "9:16",
+      "url": "https://v3b.fal.media/files/b/0aa6496c/HXyVYsxachBdfV-wnA-4z_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "citymap",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa6495a/Jog-Io06bwHvmnfOA7wjT_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "outfit-volkov",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa6495b/16d_L99piXG4mZIbxxONP_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "hero-backdrop",
+      "ar": "9:16",
+      "url": "https://v3b.fal.media/files/b/0aa6495c/g9ckQc9lDeYORbfSNpb73_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "interior-law",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa6495c/WacY7qGB0HbN-1oelQRgm_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "district-docks",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa64961/GzZH3eSBXyqmhHA7yEhoS_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "hitman-legbreaker",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa64975/FV3o5ntxxiY0GZynwYAEf_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "hero-backdrop",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa64964/DLwxTRLgq7urpEAWiAP0j_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "crime-counting",
+      "ar": "9:16",
+      "url": "https://v3b.fal.media/files/b/0aa64963/KHfZeHFITGBPY7vNUH-eR_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "crime-mint",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa64966/hourz4ifJTiFkI1RQgFLu_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "interior-estate",
+      "ar": "9:16",
+      "url": "https://v3b.fal.media/files/b/0aa64979/tZP-g9ka29mi47zdnufoX_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "crime-diamond",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa6497a/hUww_7sDYxpSdQrB5PxKq_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "hitman-professional",
+      "ar": "9:16",
+      "url": "https://v3b.fal.media/files/b/0aa6497b/s_Gg_acbY9MAmTkkKJa6D_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "crime-vaultjob",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa6496b/rHWjeQYPWU8En04fw7TVC_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "heist-goldvault",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa6496b/Rz2PtMqZd16yK-xBzNdZX_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "crest",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa6496d/-1D7s30kuFCVZnPpuyTRf_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "interior-empire",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa64971/ww_jMRuJfJrZBM1jVvLFp_video.mp4",
+      "est": 2.37
+    }
+  ],
+  "passes": [
+    {
+      "date": "2026-08-14",
+      "note": "THE LIVING CITY pass — ambient motion for every screen plate, crime vignette, den game, fixture portrait, business/club/estate/heist/boat/drug/gun/outfit card + 6 t2v cine payoffs; 8 ambient beds + 2 stingers (Stable Audio 2.5). All compressed (cards 480p / headers 960x540 / cine 720p, -an, faststart).",
+      "videoModel": "bytedance/seedance-2.0/fast (image-to-video @720p; t2v for the cine payoffs)",
+      "audioModel": "fal-ai/stable-audio-25/text-to-audio",
+      "clips": [
+        "boat-cigarette.mp4",
+        "boat-cutter.mp4",
+        "boat-dinghy.mp4",
+        "boat-freighter.mp4",
+        "boat-skiff.mp4",
+        "boat-trawler.mp4",
+        "boxer-clubfighter.mp4",
+        "boxer-gatekeeper.mp4",
+        "boxer-journeyman.mp4",
+        "business-casino.mp4",
+        "business-hotel.mp4",
+        "business-laundromat.mp4",
+        "business-nightclub.mp4",
+        "business-restaurant.mp4",
+        "cine-champion.mp4",
+        "cine-funeral.mp4",
+        "cine-payday.mp4",
+        "cine-war.mp4",
+        "cine-wedding.mp4",
+        "cine-whacked.mp4",
+        "club-0.mp4",
+        "club-1.mp4",
+        "club-2.mp4",
+        "club-3.mp4",
+        "club-4.mp4",
+        "crime-alderman.mp4",
+        "crime-ballot.mp4",
+        "crime-bonds.mp4",
+        "crime-bondsman.mp4",
+        "crime-booze.mp4",
+        "crime-cardgame.mp4",
+        "crime-cathouse.mp4",
+        "crime-clearing.mp4",
+        "crime-customs.mp4",
+        "crime-depository.mp4",
+        "crime-distillery.mp4",
+        "crime-fedtrain.mp4",
+        "crime-fixfight.mp4",
+        "crime-furs.mp4",
+        "crime-grandcasino.mp4",
+        "crime-harbormaster.mp4",
+        "crime-highroll.mp4",
+        "crime-jewelry.mp4",
+        "crime-laundry.mp4",
+        "crime-meter.mp4",
+        "crime-museum.mp4",
+        "crime-nightdeposit.mp4",
+        "crime-numbers.mp4",
+        "crime-pawn.mp4",
+        "crime-payoff.mp4",
+        "crime-payroll.mp4",
+        "crime-pick.mp4",
+        "crime-pigeon.mp4",
+        "crime-poker.mp4",
+        "crime-protection.mp4",
+        "crime-railfreight.mp4",
+        "crime-shake.mp4",
+        "crime-stereo.mp4",
+        "crime-switchbag.mp4",
+        "crime-ticker.mp4",
+        "crime-truck.mp4",
+        "district-brick.mp4",
+        "district-canal.mp4",
+        "district-cathedral.mp4",
+        "district-foundry.mp4",
+        "drug-ambrosia.mp4",
+        "drug-glass.mp4",
+        "drug-halo.mp4",
+        "drug-lotus.mp4",
+        "drug-moonmilk.mp4",
+        "drug-nocturne.mp4",
+        "drug-static.mp4",
+        "drug-vim.mp4",
+        "estate-1.mp4",
+        "estate-2.mp4",
+        "estate-3.mp4",
+        "estate-4.mp4",
+        "estate-5.mp4",
+        "estate-6.mp4",
+        "game-blackjack.mp4",
+        "game-dice.mp4",
+        "game-fight.mp4",
+        "game-futurity.mp4",
+        "game-numbers.mp4",
+        "game-poker.mp4",
+        "game-ring.mp4",
+        "game-tournament.mp4",
+        "game-track.mp4",
+        "gun-alleycat.mp4",
+        "gun-anniversary.mp4",
+        "gun-argument.mp4",
+        "gun-badge.mp4",
+        "gun-broom.mp4",
+        "gun-brothers.mp4",
+        "gun-chorusline.mp4",
+        "gun-doorbell.mp4",
+        "gun-lastresort.mp4",
+        "gun-orchestra.mp4",
+        "gun-penny.mp4",
+        "gun-pocket22.mp4",
+        "gun-rancher.mp4",
+        "gun-undertaker.mp4",
+        "gun-whisper.mp4",
+        "heist-armored.mp4",
+        "heist-casino.mp4",
+        "heist-corner.mp4",
+        "heist-diamond.mp4",
+        "heist-fedtrain.mp4",
+        "heist-jewel.mp4",
+        "heist-museum.mp4",
+        "heist-payroll.mp4",
+        "heist-thefed.mp4",
+        "heist-vault.mp4",
+        "interior-family.mp4",
+        "interior-garage.mp4",
+        "interior-gym.mp4",
+        "interior-kitchen.mp4",
+        "interior-legit.mp4",
+        "interior-life.mp4",
+        "interior-loans.mp4",
+        "interior-pen.mp4",
+        "interior-port.mp4",
+        "interior-pvp.mp4",
+        "interior-races.mp4",
+        "interior-scores.mp4",
+        "interior-stable.mp4",
+        "interior-start.mp4",
+        "interior-store.mp4",
+        "interior-streets.mp4",
+        "interior-track.mp4",
+        "interior-trade.mp4",
+        "interior-wire.mp4",
+        "landing-break.mp4",
+        "npc-armorer.mp4",
+        "npc-cornerman.mp4",
+        "npc-doc.mp4",
+        "npc-fixer.mp4",
+        "npc-harbor.mp4",
+        "npc-madame.mp4",
+        "outfit-dockrats.mp4",
+        "outfit-kryl.mp4",
+        "outfit-moreau.mp4",
+        "outfit-zappa.mp4",
+        "pill-agents.mp4",
+        "pill-legacy.mp4"
+      ],
+      "audio": [
+        "bed-den.m4a",
+        "bed-docks.m4a",
+        "bed-family.m4a",
+        "bed-law.m4a",
+        "bed-legit.m4a",
+        "bed-pen.m4a",
+        "bed-speakeasy.m4a",
+        "bed-streets.m4a",
+        "sting-death.m4a",
+        "sting-win.m4a"
+      ],
+      "estUsd": 91.7
+    }
+  ]
+}
