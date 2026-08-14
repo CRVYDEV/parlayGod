@@ -678,7 +678,10 @@
      plate sits (same inset, same mask), so if it never loads or never plays the still IS the frame.
      Injected by JS only when motion is allowed (reduced-motion users keep the photograph). */
   .landing .hero .herovid { position: absolute; inset: -6vh calc(50% - 50vw) -2vh; z-index: -1;
-    width: calc(100vw + 2px); height: calc(100% + 8vh); object-fit: cover; object-position: center 62%;
+    width: 100vw; height: calc(100% + 8vh); object-fit: cover; object-position: center 62%;
+    /* exactly 100vw — a +2px seam-hiding overshoot here made the whole page scroll sideways by 2px
+       on a 375px phone (the mobile harness caught it in CI); a possible 1px rounding seam against a
+       near-black page is invisible, a horizontal scrollbar is not */
     -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 10%, #000 80%, transparent 100%);
     mask-image: linear-gradient(180deg, transparent 0%, #000 10%, #000 80%, transparent 100%);
     opacity: 0; transition: opacity 1.4s var(--ease); }
