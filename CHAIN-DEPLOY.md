@@ -176,6 +176,12 @@ PHASE 1 for the exact calls/args.
       car/boat/gear class a display name (unset falls back to "Car #<idx>" etc.). A class key is the
       class's BASE tokenId (rarity digit 0). The encoding constants `CAR_BASE`/`BOAT_BASE`/`STRIDE` and
       the rarity names MIRROR `RARITY.TOKEN`/`RARITY.TIERS` in `src/rules.tail.js` — keep them in lockstep.
+      **NFT RE-IMPORT (Option A, `omerta-nft-reimport-design.md`)**: GearVault also has `redeem(tokenId,
+      amount)` — a holder BURNS an extracted CAR/BOAT back toward the game (gear is one-way, rejected), and
+      the backend re-creates the live in-game row. Wire the backend to it by setting **`GEARVAULT_ADDRESS`**
+      (this contract's address) on the WORKER so the `Redeemed` watcher (`syncRedeemedEvents` → `reimportItem`
+      + the `sweepReimports` retry) runs; dormant until set. The `redeem` burn is new audit surface — it is
+      part of THIS deploy's audit batch (rule 2 clock), not a later add. No env is needed on the API for it.
 - [ ] **`VoucherClaim(omr, gearVault, signer, safe, dailyCapOMR)`** — the only $OMR bridge. Then
       `gearVault.setMinter(voucherClaim)` so gear mints route through it.
 - [ ] **`OMRStaking(omr, safe)`** — pre-funded reward pool; principal always withdrawable.

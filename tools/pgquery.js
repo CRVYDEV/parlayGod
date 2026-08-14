@@ -142,7 +142,14 @@ if (failures.length) {
 // (The keeper's own dynamic-SQL helper was the first cut's OTHER new interpolated site and was
 // inlined to literal query() calls instead — a ceiling raise is for shapes that cannot be literal,
 // never for ones that merely happen not to be.)
-const CEILING = { interpolated: 67, unreadable: 40 };
+// 67 → 71 (2026-08-14): the backend perf pass added four dynamic-SHAPE queries, each
+// placeholder/constant-only with no user input (so injection-safe, but not preparable): honorLeaderboard's
+// board helper (`${col}`/`${dir}`/`${cond}` are hardcoded column/direction/predicate strings), the
+// /v1/streets fronts scan restricted to a parameterized IN-list of the board's own 100 char ids, and
+// persistKitchen's two multi-row `INSERT ... VALUES (...),(...)` batches (placeholders built from the
+// row count, values bound). All four are exercised by the suite; none can be literal (the shape is
+// dynamic), which is exactly when a ceiling raise is warranted.
+const CEILING = { interpolated: 71, unreadable: 40 };
 const overflow = [];
 if (interpolated.length > CEILING.interpolated)
   overflow.push(`interpolated queries grew to ${interpolated.length} (ceiling ${CEILING.interpolated}) — these are UNCHECKED by this guard`);

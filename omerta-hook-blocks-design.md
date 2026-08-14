@@ -221,3 +221,41 @@ change could go wrong:
 - `MAX_SELL_TAX_BPS` binds the surge ceiling. The anti-rug wall is not routed around.
 - the observer stays fail-safe and gas-stipended.
 - `DISCOUNT_BPS < sellTaxBps` still holds — and surge only widens the margin.
+
+---
+
+## Addendum — 0xprogrammable / "Programmable" evaluated (2026-08-13, founder-asked)
+
+A second launchpad in the same class as hookr.fun. What it is, from its own repos
+([`0xprogrammable`](https://github.com/0xprogrammable)): a **Uniswap-v4 hook launchpad** — deploy and
+trade "programmable tokens" whose market behavior lives in a v4 hook — plus an AI `hookbuilder` skill
+(a Claude Code / Codex skill with a six-phase intent→architecture→implement→validate→bind→submit
+flow), reusable "capability packs" / "fee kernels," a `submit-launch` review gate, and a public token
+indexer. Revenue model: an **inclusive 10 bps protocol cut of executed swap/fill volume** per
+canonical scope. It is **Ethereum-mainnet**, and its contracts are **unaudited** (stated in the repo).
+
+**Conclusion: nothing new to adopt — recorded so it is not re-evaluated.** The transferable value of
+this whole category we already captured in the hookr.fun pass above (fee-taking hook, anti-snipe,
+surge), and the reasons it does not fit are the same, plus two sharper ones:
+
+1. **Venue is a non-fit, twice over.** Programmable is a launchpad ON ETHEREUM MAINNET that takes a
+   10 bps cut and installs ITS OWN hook. OMR launches on Robinhood Chain with OMERTÀ's own genesis
+   sequence, its own POL, and `OmertaHook` funding dev/treasury/LP. A `PoolKey` holds exactly one
+   hook, so using theirs means giving up ours (the same wall hookr.fun hit). And routing our launch
+   through an unaudited third-party launchpad, for a real-money token, is precisely the surface the
+   launch checklist exists to keep closed.
+2. **The `hookbuilder` AI-skill workflow is the one genuinely interesting artifact — and we already
+   live it.** Its discipline (design → local Foundry validation → bind exact source revisions →
+   review before launch) is what this repo does by hand and better: `OmertaHook` has 34 mutation-
+   verified tests, native-solc `forge test`, and a red-team. We do not need a skill to build a hook we
+   have already built and are about to audit; codifying our own would be nice-to-have, never a launch
+   item.
+3. **The composable "fee kernel" idea is architecturally real but wrong for us NOW.** Our hook is
+   deliberately monolithic and IMMUTABLE (permissions in the address, no proxy) and about to be
+   audited; refactoring it into pluggable kernels resets that clock for zero launch benefit, and the
+   four-slice split it already encodes is the only "kernel" we need.
+
+The honest one-liner: **this is a distribution/launch VENUE and an AI hook-builder, not a feature
+source — and we have our own venue, our own hook, and our own builder.** If there is ever a strategic
+reason to LIST or cross-promote $OMR on such a platform, that is a marketing/partnership decision, not
+a code one, and it is still gated behind "would we hand our launch to an unaudited third party" (no).

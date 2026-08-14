@@ -130,7 +130,7 @@ contract OmertaTest is Test {
         assertEq(gear.cap(5), 100);
         vm.prank(safe); gear.setMinter(address(0xCA5E));
         vm.prank(address(0xCA5E)); gear.mint(player, 5, 10);
-        vm.prank(safe); vm.expectRevert("GearVault: below minted"); // can't lower below minted
+        vm.prank(safe); vm.expectRevert("GearVault: below live"); // can't lower below LIVE supply (minted - redeemed; here redeemed=0 so it's minted)
         gear.setGearCap(5, 5);
     }
 

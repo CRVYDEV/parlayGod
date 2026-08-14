@@ -757,6 +757,29 @@ CREATE TABLE IF NOT EXISTS chain_cursor (
   last_block BIGINT NOT NULL DEFAULT 0
 );
 
+-- NFT RE-IMPORT (Option A, omerta-nft-reimport-design.md) — the inverse of extraction: a GearVault
+-- Redeemed(from, tokenId, amount) burn re-created as a live in-game car/boat row on the burner's
+-- LIVING character. Keyed by the chain-event log ref (txHash:logIndex) for exactly-once. 'pending'
+-- means the burn arrived but the burner had no living character yet (unlinked wallet / dead street) —
+-- the worker sweep retries. NOT character-owned state: `applied_character` RECORDS where the re-created
+-- row went (a car that then dies via the normal cars estate path); this row is an immutable
+-- chain-event audit record that persists past that character's death (the chat_messages 'log'
+-- precedent — test/migrate.js classifies it). Chain-dormant with the rest of the on-chain items rail.
+CREATE TABLE IF NOT EXISTS nft_reimports (
+  id TEXT PRIMARY KEY,                              -- txHash:logIndex (idempotency)
+  wallet_address TEXT NOT NULL,                     -- the burner (Redeemed.from), checksummed
+  token_id TEXT NOT NULL,                           -- the burned tokenId (string — > 2^53 safe)
+  amount INT NOT NULL,
+  kind TEXT NOT NULL,                               -- 'car' | 'boat' (gear is one-way, not redeemable)
+  catalog_id TEXT NOT NULL,                         -- decoded model_id / boat kind
+  rarity TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',           -- 'pending' | 'applied'
+  applied_character TEXT,                           -- the living character the row(s) were created on
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  applied_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS ix_nft_reimports_status ON nft_reimports (status);
+
 -- ── Risk-to-Earn Phase 3: TERRITORY RACKETS (productive, seizable capital) ──
 -- The asset that makes wars fight over income, not just a treasury cut. ONE racket per district,
 -- owned by whoever holds the turf: established on your own turf, income accrues to the owning

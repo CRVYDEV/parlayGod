@@ -5076,6 +5076,26 @@ export const nftTokenId = (kind, catalogId, rarity) => {
   if (idx < 0) throw new Error(`nftTokenId: no such ${kind} class ${catalogId}`);
   return (kind === 'car' ? CAR_BASE : BOAT_BASE) + idx * STRIDE + rarityIdx(rarity);
 };
+// The inverse of nftTokenId — a burned tokenId → { kind, catalogId, rarity } — used by the re-import
+// watcher (omerta-nft-reimport-design.md) to turn a `Redeemed` event back into the exact catalog class
+// and rarity to re-create in-game. CAR/BOAT ONLY: gear (below CAR_BASE) is not re-importable (its
+// in-game form is account-level set membership, the same reason character_assets are deferred; the
+// contract's redeem() rejects it), so a gear/out-of-range token throws — fail-closed, matching
+// nftTokenId. Never trusts the id blindly: an index past the catalog throws rather than pointing at a
+// plausible-but-wrong class, because this re-creates a real asset a player then owns.
+export const nftDecode = (tokenId) => {
+  const id = Number(tokenId);
+  const { CAR_BASE, BOAT_BASE, STRIDE } = RARITY.TOKEN;
+  if (!Number.isInteger(id) || id < CAR_BASE) throw new Error(`nftDecode: token ${tokenId} is not a re-importable car/boat`);
+  const isBoat = id >= BOAT_BASE;
+  const base = isBoat ? BOAT_BASE : CAR_BASE;
+  const idx = Math.floor((id - base) / STRIDE);
+  const rIdx = (id - base) % STRIDE;
+  const cat = isBoat ? PORT.BOATS[idx] : CARS[idx];
+  const tier = RARITY.TIERS[rIdx];
+  if (!cat || !tier) throw new Error(`nftDecode: no ${isBoat ? 'boat' : 'car'}/rarity for token ${id}`);
+  return { kind: isBoat ? 'boat' : 'car', catalogId: cat.id, rarity: tier.id };
+};
 
 // ── THE CAPO'S LICENSE — agent recruiting perks (capability, never cash) ──────────────────────────
 // Agents are excluded from every referral CASH faucet by design (the anti-Sybil wall — an agent can

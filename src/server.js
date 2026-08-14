@@ -1720,13 +1720,18 @@ export async function buildServer() {
       FROM characters c LEFT JOIN gang_members m ON m.character_id = c.id LEFT JOIN gangs g ON g.id = m.gang_id
       WHERE c.alive ORDER BY c.respect DESC LIMIT 100`);
     // THE STREET WAR discovery: each mark's fronts as {id, kind} — EXISTENCE, never the books
-    // (pending/scrutiny stay the owner's; the anti-precise-kill-EV info rule). One flat query
-    // + a JS group (the /v1/gangs pg-mem posture).
-    const fr = await pool.query('SELECT id, character_id, kind FROM businesses');
+    // (pending/scrutiny stay the owner's; the anti-precise-kill-EV info rule). perf: restricted to the
+    // 100 characters on THIS board via a parameterized IN-list (pg-mem-safe, unlike `= ANY`), so the
+    // scan does not grow unbounded with the front economy; grouped in JS (the /v1/gangs posture).
     const frontsBy = new Map();
-    for (const b of fr.rows) {
-      if (!frontsBy.has(b.character_id)) frontsBy.set(b.character_id, []);
-      frontsBy.get(b.character_id).push({ id: b.id, kind: b.kind });
+    const ids = r.rows.map((c) => c.id);
+    if (ids.length) {
+      const fr = await pool.query(
+        `SELECT id, character_id, kind FROM businesses WHERE character_id IN (${ids.map((_, i) => `$${i + 1}`).join(',')})`, ids);
+      for (const b of fr.rows) {
+        if (!frontsBy.has(b.character_id)) frontsBy.set(b.character_id, []);
+        frontsBy.get(b.character_id).push({ id: b.id, kind: b.kind });
+      }
     }
     return { streets: r.rows.map((c) => ({ id: c.id, name: c.name, level: levelOf(Number(c.respect)),
       respect: Number(c.respect), loc: c.loc, gangTag: c.tag || null,

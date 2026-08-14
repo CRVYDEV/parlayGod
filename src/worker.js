@@ -32,7 +32,7 @@ import { sweepStaleBreaks } from './pen.js';
 import { sweepStaleRaids, sweepUprisings } from './world.js';
 import { sweepFamilyAggro, sweepNpcWars, sweepNpcAggression } from './npcwar.js';
 import { sweepWire, sweepWireAlerts, sweepStandingWatches } from './wire.js';
-import { reclaimExpiredVouchers, assertChainId, bondOracleHealth } from './chain.js';
+import { reclaimExpiredVouchers, sweepReimports, assertChainId, bondOracleHealth } from './chain.js';
 import { sweepMarket } from './market.js';
 import { sweepDiplomacy, sweepNpcDiplomacy } from './diplomacy.js';
 import { settleProposals, activeDecree, seatedGangs, sweepTickerBallot } from './commission.js';
@@ -55,7 +55,7 @@ import { sweepTournaments, sweepTrackEntries, sweepFuturity } from './casino.js'
 import { sweepRingTables } from './ring.js';
 import { sweepGrandPrix } from './races.js';
 import { sweepStakes } from './stable.js';
-import { syncFeeEvents, syncClaimedEvents, syncBondEvents, syncHarvestFees, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
+import { syncFeeEvents, syncClaimedEvents, syncBondEvents, syncHarvestFees, syncRedeemedEvents, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
 
 const BUYBACK_PERIOD_MS = 12 * 3600 * 1000;
 
@@ -470,6 +470,10 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     // otherwise-permanently-committed reserve capacity) and restore optimistically-removed gear.
     const vr = await safe('voucher reclaim', () => reclaimExpiredVouchers(pool));
     if (vr && (vr.omrReclaimed > 0 || vr.gearRestored > 0)) console.log(`♻️  vouchers: reclaimed ${vr.omrReclaimed.toFixed(3)} $OMR + restored ${vr.gearRestored} gear from expired claims`);
+    // NFT RE-IMPORT (Option A): apply any burned-back car/boat NFTs that were WAITING for the burner to
+    // have a living character (unlinked wallet / dead street when the Redeemed event landed).
+    const rir = await safe('reimport sweep', () => sweepReimports(pool));
+    if (rir && rir.applied > 0) console.log(`🔁 re-import: brought ${rir.applied} burned NFT(s) back into play`);
     // ARE THE BACKUPS ACTUALLY RUNNING? Checked EVERY tick, not nightly, because this is the one
     // failure that is invisible from inside the game: the database serves perfectly while its
     // point-in-time-recovery chain rots. It broke twice on 2026-07-25 and the only evidence was in
@@ -638,6 +642,12 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
           if (process.env.OMERTA_BOND_ADDRESS) {
             const b = await syncBondEvents(pool, source, { startBlock });
             if (b.processed) console.log(`🏦 bond sync: booked ${b.processed} bond(s) → reserve/POL/Vig (blocks ${b.from}–${b.to})`);
+          }
+          // NFT RE-IMPORT (Option A): GearVault Redeemed → re-create the burned car/boat in-game.
+          // Dormant unless GEARVAULT_ADDRESS is set; idempotent on the log ref; applies now or waits.
+          if (process.env.GEARVAULT_ADDRESS) {
+            const rd = await syncRedeemedEvents(pool, source, { startBlock });
+            if (rd.processed) console.log(`🔁 re-import sync: processed ${rd.processed} Redeemed event(s) (blocks ${rd.from}–${rd.to})`);
           }
         } catch (e) { console.error('chain sync error', e.message); }
       };

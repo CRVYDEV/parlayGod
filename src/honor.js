@@ -33,23 +33,21 @@ export async function bumpHonor(client, ch, delta) {
 // THE REPUTATION BOARDS (Tier-4) — MEN OF HONOR (highest honor the bloodline ever reached) and THE
 // MOST FEARED (its deepest infamy). Account-level, survives death; agents excluded. Pure STATUS.
 export async function honorLeaderboard(pool) {
-  const nameFor = async (rows) => {
-    const out = rows.map((r) => ({ ...r }));
-    for (const r of out) {
-      const c = (await pool.query('SELECT name FROM characters WHERE account_id=$1 AND alive LIMIT 1', [r.account_id])).rows[0];
-      r.name = c?.name || (r.dynasty_name ? `House ${r.dynasty_name}` : 'a fallen name');
-    }
-    return out;
-  };
-  const menRows = await nameFor((await pool.query(
-    `SELECT account_id, honor_peak, dynasty_name FROM account_persistent
-      WHERE NOT agent_flag AND honor_peak > 0 ORDER BY honor_peak DESC, account_id LIMIT 15`)).rows);
-  const fearedRows = await nameFor((await pool.query(
-    `SELECT account_id, honor_low, dynasty_name FROM account_persistent
-      WHERE NOT agent_flag AND honor_low < 0 ORDER BY honor_low ASC, account_id LIMIT 15`)).rows);
+  // perf: the living-name resolution is a plain LEFT JOIN of account_persistent → characters (both
+  // account_id TEXT, so type-safe — the uuid=text outage class), NOT a per-row lookup. Was up to 30
+  // per-row SELECTs per board load (15 rows × two boards); now two queries total. A LEFT JOIN, never
+  // `= ANY` (pg-mem returns zero rows for it — the MY PROFILE lesson).
+  const board = async (col, dir, cond) => (await pool.query(
+    `SELECT ap.account_id, ap.${col} AS v, ap.dynasty_name, c.name
+       FROM account_persistent ap
+       LEFT JOIN characters c ON c.account_id = ap.account_id AND c.alive
+      WHERE NOT ap.agent_flag AND ${cond} ORDER BY ap.${col} ${dir}, ap.account_id LIMIT 15`)).rows;
+  const nm = (r) => r.name || (r.dynasty_name ? `House ${r.dynasty_name}` : 'a fallen name');
+  const menRows = await board('honor_peak', 'DESC', 'ap.honor_peak > 0');
+  const fearedRows = await board('honor_low', 'ASC', 'ap.honor_low < 0');
   return {
-    menOfHonor: menRows.map((r, i) => ({ pos: i + 1, name: r.name, peak: Number(r.honor_peak), tier: honorTierOf(r.honor_peak).name })),
-    mostFeared: fearedRows.map((r, i) => ({ pos: i + 1, name: r.name, low: Number(r.honor_low), tier: honorTierOf(r.honor_low).name })),
+    menOfHonor: menRows.map((r, i) => ({ pos: i + 1, name: nm(r), peak: Number(r.v), tier: honorTierOf(r.v).name })),
+    mostFeared: fearedRows.map((r, i) => ({ pos: i + 1, name: nm(r), low: Number(r.v), tier: honorTierOf(r.v).name })),
   };
 }
 
