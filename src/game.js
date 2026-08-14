@@ -271,6 +271,10 @@ export async function loadOwned(client, ch) {
     UNION ALL SELECT 'hustle', NULL::text, NULL::text, step::numeric, NULL::numeric, NULL::timestamptz FROM hustles WHERE character_id=$1 AND day=$4
     UNION ALL SELECT 'corner', district, NULL::text, slot::numeric, CASE WHEN claimed THEN 1 ELSE 0 END::numeric, NULL::timestamptz FROM corner_jobs WHERE character_id=$1 AND day=$4
     UNION ALL SELECT 'drill', npc, NULL::text, NULL::numeric, NULL::numeric, NULL::timestamptz FROM npc_drills WHERE character_id=$1 AND day=$4
+    -- THE CREW id, folded in here rather than its own round trip. account_id is TEXT (→ $2, like gear/
+    -- est), so this branch is type-safe (the uuid=text outage class). Its only consumers are the crew
+    -- non-aggression gate + the board, both reading h.owned.crewId; a scalar, so it fits the shape.
+    UNION ALL SELECT 'crew', crew_id, NULL::text, NULL::numeric, NULL::numeric, NULL::timestamptz FROM crew_members WHERE account_id=$2
     UNION ALL SELECT 'clue', NULL::text, NULL::text, step::numeric, steps::numeric, NULL::timestamptz FROM clue_scrolls WHERE character_id=$1`,
   [ch.id, ch.account_id, ch.account_id, today]);
   // demultiplex — one entry per original query, in its original column names/types. Kept as
@@ -333,11 +337,10 @@ export async function loadOwned(client, ch) {
   const cars = await client.query('SELECT * FROM cars WHERE character_id=$1 ORDER BY created_at', [ch.id]);
   const batch = await client.query('SELECT * FROM batches WHERE character_id=$1', [ch.id]);
   const gangId = gm.rows[0]?.gang_id || null;
-  // THE CREW — the lightweight social tie (account-keyed, so read by account not character). One
-  // indexed lookup; its only consumer is the crew non-aggression gate in combat (h.owned.crewId /
-  // h.victimOwned.crewId) + the board. Loaded here so victimOwned carries it wherever a PvP verb
-  // already reads victimOwned for family omertà.
-  const crewId = (await client.query('SELECT crew_id FROM crew_members WHERE account_id=$1', [ch.account_id])).rows[0]?.crew_id || null;
+  // THE CREW — the lightweight social tie (account-keyed). Its only consumer is the crew
+  // non-aggression gate in combat (h.owned.crewId / h.victimOwned.crewId) + the board; carried on
+  // victimOwned wherever a PvP verb already reads it for family omertà.
+  const crewId = grp.get('crew')?.[0]?.k || null; // folded into the UNION above (was its own query)
   let gang = null, held = [];
   if (gangId) {
     gang = (await client.query('SELECT * FROM gangs WHERE id=$1', [gangId])).rows[0] || null;
@@ -830,14 +833,23 @@ async function accrueAndLedger(client, ch, acct, owned) {
 // Persist the in-memory stash/makings maps back to their tables (kitchen state
 // is mutated by accrual and actions alike, so one uniform write path).
 async function persistKitchen(client, ch, owned) {
+  // perf: one multi-row INSERT per table instead of a per-drug-type INSERT loop (runs on every write).
+  // Bounded by distinct drug types, but this collapses 2+N write statements to 2+2 (a delete + one
+  // batched insert each, skipped entirely when there is nothing to write).
   await client.query('DELETE FROM stash WHERE character_id=$1', [ch.id]);
-  for (const s of owned.stash)
-    if (Number(s.qty) > 0)
-      await client.query('INSERT INTO stash (character_id, drug_id, qty, quality) VALUES ($1,$2,$3,$4)', [ch.id, s.drug_id, s.qty, s.quality]);
+  const stashRows = owned.stash.filter((s) => Number(s.qty) > 0);
+  if (stashRows.length) {
+    const vals = [], params = [ch.id];
+    for (const s of stashRows) { const b = params.length; params.push(s.drug_id, s.qty, s.quality); vals.push(`($1,$${b + 1},$${b + 2},$${b + 3})`); }
+    await client.query(`INSERT INTO stash (character_id, drug_id, qty, quality) VALUES ${vals.join(',')}`, params);
+  }
   await client.query('DELETE FROM makings WHERE character_id=$1', [ch.id]);
-  for (const [drugId, qty] of Object.entries(owned.makings))
-    if (qty > 0)
-      await client.query('INSERT INTO makings (character_id, drug_id, qty) VALUES ($1,$2,$3)', [ch.id, drugId, qty]);
+  const mkRows = Object.entries(owned.makings).filter(([, qty]) => qty > 0);
+  if (mkRows.length) {
+    const vals = [], params = [ch.id];
+    for (const [drugId, qty] of mkRows) { const b = params.length; params.push(drugId, qty); vals.push(`($1,$${b + 1},$${b + 2})`); }
+    await client.query(`INSERT INTO makings (character_id, drug_id, qty) VALUES ${vals.join(',')}`, params);
+  }
 }
 
 // §12 telemetry — one row per event, queried by the mod dashboards.

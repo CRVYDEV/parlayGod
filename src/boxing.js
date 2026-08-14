@@ -554,9 +554,18 @@ export async function sweepMainEvents(pool) {
 async function openMainEvents(pool, characterId, beltId) {
   const bouts = (await pool.query("SELECT * FROM boxing_bouts WHERE status='booked' ORDER BY resolves_at")).rows;
   if (!bouts.length) return [];
+  // perf: ALL bets for the booked bouts in ONE query (JOIN, both ids TEXT → type-safe; grouped in JS
+  // by bout_id — the /v1/gangs pg-mem posture), not a per-bout SELECT. Was N queries for N booked bouts.
+  const betsBy = new Map();
+  for (const b of (await pool.query(
+    `SELECT b.bout_id, b.bettor_char, b.fighter, b.amount FROM boxing_bets b
+       JOIN boxing_bouts o ON o.id = b.bout_id WHERE o.status='booked'`)).rows) {
+    if (!betsBy.has(b.bout_id)) betsBy.set(b.bout_id, []);
+    betsBy.get(b.bout_id).push(b);
+  }
   const out = [];
   for (const o of bouts) {
-    const bets = (await pool.query('SELECT bettor_char, fighter, amount FROM boxing_bets WHERE bout_id=$1', [o.id])).rows;
+    const bets = betsBy.get(o.id) || [];
     const poolA = bets.filter((b) => b.fighter === o.a_fighter).reduce((a, b) => a + Number(b.amount), 0);
     const poolB = bets.filter((b) => b.fighter === o.b_fighter).reduce((a, b) => a + Number(b.amount), 0);
     const mine = bets.find((b) => b.bettor_char === characterId);
@@ -581,8 +590,13 @@ const fighterView = (f, beltId) => ({
 
 // the manager's STABLE (loadOwned + the character view). [] if they run no fighter.
 export async function fightersOf(pool, characterId) {
-  const beltId = (await pool.query('SELECT holder_fighter FROM boxing_title WHERE id=1')).rows[0]?.holder_fighter || null;
+  // perf: fetch the STABLE first and short-circuit — the vast majority of players manage no fighters,
+  // so the belt-singleton read (only needed to flag which of THIS man's fighters holds the title) is
+  // pure waste for them. This runs in loadOwned on every authed request; the reorder saves one round
+  // trip for every non-manager.
   const rows = (await pool.query('SELECT * FROM fighters WHERE character_id=$1 ORDER BY wins DESC, created_at', [characterId])).rows;
+  if (!rows.length) return [];
+  const beltId = (await pool.query('SELECT holder_fighter FROM boxing_title WHERE id=1')).rows[0]?.holder_fighter || null;
   return rows.map((f) => fighterView(f, beltId));
 }
 
