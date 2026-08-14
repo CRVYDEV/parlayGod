@@ -484,6 +484,11 @@ const SIGNED = [
   ['DEEDS.SHAKE_MIN_P', 0.15],
   ['DEEDS.SHAKE_MAX_P', 0.85],
   ['DEEDS.SHAKE_STAT_SCALE', 200],
+  // Phase 3 — the deed market (a taxed cash transfer, the bodyguard:hire pattern) + Phase 4 — the growing map
+  ['DEEDS.MARKET_MIN', 10000],
+  ['DEEDS.SALE_FEE_BPS', 100],
+  ['DEEDS.SALE_TAX_BPS', 100],
+  ['DEEDS.EXPANSION_STEP', 8],
   // THE CALL — recycle-only transfers from the contact's own pocket (zero new faucet)
   ['CONTACTS.CALL_TTL_MS', 24 * 3600 * 1000],
   ['CONTACTS.CALL_FREIGHT_PREMIUM_BPS', 11500],

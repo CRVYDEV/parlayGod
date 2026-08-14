@@ -103,18 +103,35 @@ founder sign-off, not a slam.
   free player earns by seizing turf), not shipped with B.
 - B is sim-measured (P9.37), tabled in BALANCE.md, all numbers founder sign-off levers.
 
-### Phase 3 — the tradeable NFT + secondary market (AUDIT-GATED · a new contract resets the audit clock)
-- On-chain deed as a tradeable token; the DEED transfers, the **extraction entitlement stays
-  account-bound** (the identity-NFT lesson, verbatim — or the secondary floor becomes the Sybil cost
-  and dead-alt streets flood the order book).
-- Provenance travels with the token (it's the value); control does not (it's earned by the new holder).
-- Gated on the launch checklist + a third-party audit, exactly like every other chain feature.
+### Phase 3 — the secondary market (off-chain core BUILT · the on-chain tradeable NFT AUDIT-GATED)
+**The off-chain SECONDARY MARKET is BUILT** (`src/deeds.js` `listDeed`/`unlistDeed`/`buyDeed`); the
+on-chain ERC-721 tradeable token is **DESIGN-ONLY** (a new contract resets the third-party audit clock,
+and §7 needs securities counsel — NOT written during launch prep).
+- **The market (BUILT):** a deed holder LISTS their street for cash (`sale_price`, no escrow — the
+  car-auction row-stays precedent; you keep collecting the corner while listed). A **DEEDLESS** buyer
+  buys it (one deed per account — the identity/Sybil model; a multi-deed PORTFOLIO is a deferred step
+  needing the `account_id`-PK refactor). The deed + its **whole PROVENANCE** (the legend) transfer to
+  the buyer, and **CONTROL RESETS** (the identity-NFT lesson, verbatim — the paper + legend travel, the
+  corner-take control does NOT; the buyer must shake for the corner). §10.4: `deed:sale` is the audited
+  **bodyguard:hire** non-escrow taxed transfer — seller nets 98% (1% dev off-ledger + 1% street tax →
+  buyback), riding the existing `deed:` cash prefix (no new reason, no mint, no faucet — a pure
+  redistribution). The test asserts exactly two `deed:sale` rows (the two-party transfer, no mint) + the
+  transferred legend + reset control.
+- **On-chain (DESIGN):** the deed as a tradeable ERC-721; the DEED transfers, the extraction entitlement
+  stays **account-bound** (or the secondary floor becomes the Sybil cost and dead-alt streets flood the
+  order book). Provenance travels with the token; control does not. Gated on the launch checklist + a
+  third-party audit + securities counsel.
 
-### Phase 4 — the growing map (design; ships with Phase 1's map render)
-As the mint count crosses thresholds, new blocks/neighborhoods **open** on the map — deterministic
-off the world seed (the §7.11 hash the game already generates content from). The city expands with the
-playerbase; late joiners get fresh ground. **Marketed as a living, growing world — NEVER as "limited
-land that appreciates"** (§6).
+### Phase 4 — the growing map (BUILT · §10.4-ZERO — pure render)
+**BUILT** (`src/deeds.js` deedBoard + `DEEDS.NEIGHBORHOODS`/`deedNeighborhoodsOpen`/`deedNeighborhoodOf`).
+Each district's **neighborhoods OPEN in order** as the **living-player population** crosses
+`EXPANSION_STEP` thresholds (the "as users join" framing the founder named — deterministic off the
+count, not a mint). A deed's neighborhood is DERIVED from its name (stable, no column); a not-yet-open
+one reads as the **FRONTIER** (you claimed ground before it was even a neighborhood). The city expands
+with the playerbase; late joiners get fresh ground. **§10.4-ZERO** (reads + a formula — no schema, no
+faucet). Surfaced on `GET /v1/deeds` (a `city` summary + per-district `neighborhoods {open, coming}`)
+and the map render. **Marketed as a living, growing world — NEVER as "limited land that appreciates"**
+(§6, the project's highest-scrutiny copy surface).
 
 ---
 

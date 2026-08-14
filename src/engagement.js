@@ -87,7 +87,7 @@ export const SYSTEMS = {
   'landmarks': ['landmark'],
   // STREET DEEDS (the Monopoly layer) — claiming a named, mapped plot. "how many players own a street"
   // is the adoption signal for the map-as-property feature; the deed itself is pure status.
-  'street deeds': ['deed_claim', 'deed_corner', 'deed_shakedown'],
+  'street deeds': ['deed_claim', 'deed_corner', 'deed_shakedown', 'deed_buy'],
   'vanity': ['vanity_name', 'vanity_gang_name'],
   // (`plex`/`plex_package` left with their emitters when the bridge retired on 2026-08-10 and came
   // BACK with them the same day — the rail is live for everything except the mint. That round trip

@@ -12,7 +12,13 @@
 // so the Sybil/extraction machinery is untouched (design §8).
 import { GameError, cleanText } from './game.js';
 import { DEEDS, DISTRICTS, deedRankOf, deedRenown, deedCornerOwed, deedController,
+  deedNeighborhoodsOpen, deedNeighborhoodOf,
   effStat, levelOf, jailed, hospitalized, safeHoused } from './rules.js';
+
+// living-player population (drives the growing map — Phase 4). NPCs/dead excluded (the ops.js count).
+async function livingPlayers(client) {
+  return Number((await client.query('SELECT COUNT(*) n FROM characters WHERE alive AND NOT is_npc')).rows[0].n);
+}
 
 // rules.js doesn't export a district-name helper (hustle.js/citymap.js keep it local), so map it here.
 const districtName = (id) => (DISTRICTS.find((d) => d.id === id) || {}).name || id;
@@ -87,6 +93,20 @@ export async function deedBoard(ch, client, h) {
   const counts = new Map();
   for (const r of (await client.query('SELECT district FROM street_deeds')).rows)
     counts.set(r.district, (counts.get(r.district) || 0) + 1);
+  // Phase 4 — THE GROWING MAP: the city expands as users join. Neighborhoods open in order as the
+  // living-player population crosses EXPANSION_STEP thresholds (§10.4-zero — pure render off the count).
+  const population = await livingPlayers(client);
+  const step = DEEDS.EXPANSION_STEP;
+  let totalOpen = 0, totalHoods = 0;
+  const hoodsFor = (d) => {
+    const list = DEEDS.NEIGHBORHOODS[d] || [];
+    const open = deedNeighborhoodsOpen(population, d);
+    totalOpen += open; totalHoods += list.length;
+    return { open: list.slice(0, open), coming: list.slice(open), openCount: open, total: list.length };
+  };
+  const districtHoods = Object.fromEntries(DISTRICTS.map((d) => [d.id, hoodsFor(d.id)]));
+  const nextAt = (population - (population % step)) + step;   // players at which the next neighborhood opens
+  const myHood = deed ? deedNeighborhoodOf(deed.name, deed.district, population) : null;
   // Phase 2 — CONTROL + THE CORNER TAKE. Your own deed: who controls it (you, or a rival who muscled in)
   // and the corner take you can collect while you do. Plus any RIVAL corners you currently control.
   const now = Date.now();
@@ -120,12 +140,38 @@ export async function deedBoard(ch, client, h) {
     myTargetId: ch.id,                     // the client targets this to reclaim your own corner
     shakedownMinLvl: DEEDS.SHAKEDOWN_MIN_LVL, shakedownEnergy: DEEDS.SHAKEDOWN_ENERGY,
   };
+  // Phase 3 — THE MARKET: your own listing state + the streets currently for sale (a deedless buyer
+  // browses these). One deed per account, so only a deedless account can buy — the "acquire a storied
+  // street instead of a fresh block" entry. Two flat queries + a JS join (the /v1/gangs pg-mem posture).
+  const forSaleRows = (await client.query(
+    `SELECT d.account_id AS acct, d.name, d.district, d.sale_price, c.id AS seller_id, c.name AS seller
+       FROM street_deeds d JOIN characters c ON c.account_id = d.account_id AND c.alive AND NOT c.is_npc
+       WHERE d.sale_price IS NOT NULL AND d.account_id <> $1 ORDER BY d.sale_price ASC LIMIT 30`, [ch.account_id])).rows;
+  // renown per for-sale deed — the whole-table group (the greatStreetsLeaderboard posture; pg-mem can't
+  // do a correlated subquery or `= ANY`, and the legend IS the value a buyer is paying for)
+  const forHist = new Map();
+  for (const r of (await client.query('SELECT account_id, kind FROM street_deed_history')).rows)
+    (forHist.get(r.account_id) || forHist.set(r.account_id, []).get(r.account_id)).push({ kind: r.kind });
+  const forSale = forSaleRows.map((r) => ({ street: r.name, district: r.district, districtName: districtName(r.district),
+    price: Number(r.sale_price), sellerId: r.seller_id, seller: r.seller,
+    renown: deedRenown(forHist.get(r.acct) || []), rank: deedRankOf(deedRenown(forHist.get(r.acct) || [])).name,
+    neighborhood: (deedNeighborhoodOf(r.name, r.district, population) || {}).name || null }));
+  const market = {
+    minPrice: DEEDS.MARKET_MIN,
+    listed: !!(deed && deed.sale_price != null),
+    salePrice: deed && deed.sale_price != null ? Number(deed.sale_price) : null,
+    canBuy: !deed,                          // one deed per account → only a deedless player buys
+    forSale,
+  };
   return {
     deed: deed ? { name: deed.name, district: deed.district, districtName: districtName(deed.district),
-      claimedAt: deed.claimed_at } : null,
+      claimedAt: deed.claimed_at, neighborhood: myHood ? myHood.name : null, frontier: myHood ? myHood.frontier : false } : null,
     renown, rank: deedRankOf(renown).name, ranks: DEEDS.RANKS,
-    history, corner,
-    districts: DISTRICTS.map((d) => ({ id: d.id, name: d.name, perk: d.perk, deeds: counts.get(d.id) || 0 })),
+    history, corner, market,
+    // Phase 4 — the growing map: how big the city is, and how much more opens as it grows
+    city: { population, step, nextExpansionAt: nextAt, openNeighborhoods: totalOpen, totalNeighborhoods: totalHoods },
+    districts: DISTRICTS.map((d) => ({ id: d.id, name: d.name, perk: d.perk, deeds: counts.get(d.id) || 0,
+      neighborhoods: districtHoods[d.id] })),
     nameMin: DEEDS.NAME_MIN, nameMax: DEEDS.NAME_MAX,
     canClaim: !deed,
   };
@@ -216,6 +262,60 @@ export async function shakedownCorner(ch, targetCharacterId, client, h) {
   await h.track(client, ch.account_id, 'deed_shakedown', { street: deed.name, reclaim });
   return { ok: true, won: true, street: deed.name, reclaim,
     controlHours: reclaim ? null : DEEDS.CONTROL_MS / 3600000 };
+}
+
+// ══════════ Phase 3 — THE SECONDARY MARKET (off-chain core) ══════════
+// LIST your street for sale (cash). No escrow — the deed stays yours until a buyer takes it (the car-auction
+// row-stays precedent); you keep collecting the corner while listed. Jail-gated (no dealing from lockup).
+export async function listDeed(ch, price, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No dealing from lockup.');
+  const deed = await loadDeed(client, ch.account_id);
+  if (!deed) throw new GameError('no_deed', "You don't hold a street to sell.");
+  const p = Math.floor(Number(price) || 0);
+  if (!Number.isFinite(p) || p < DEEDS.MARKET_MIN)
+    throw new GameError('min_price', `The floor for a street is $${DEEDS.MARKET_MIN.toLocaleString()}.`);
+  await client.query('UPDATE street_deeds SET sale_price=$2 WHERE account_id=$1', [ch.account_id, p]);
+  return { ok: true, name: deed.name, price: p };
+}
+// PULL your street off the market.
+export async function unlistDeed(ch, client, h) {
+  const deed = await loadDeed(client, ch.account_id);
+  if (!deed) throw new GameError('no_deed', "You don't hold a street.");
+  if (deed.sale_price == null) throw new GameError('not_listed', "It's not for sale.");
+  await client.query('UPDATE street_deeds SET sale_price=NULL WHERE account_id=$1', [ch.account_id]);
+  return { ok: true, name: deed.name };
+}
+// BUY a listed street. Two-party (withTwoCharacters buyer+seller). The buyer must be DEEDLESS (one deed
+// per account — the identity/Sybil model; a portfolio of many streets is a deferred Phase-3 step needing
+// the PK refactor). The deed + its whole PROVENANCE (the legend) transfer to the buyer; CONTROL RESETS
+// (the identity-NFT lesson — the paper + legend travel, the corner-take control does NOT, the buyer must
+// shake for it). §10.4: `deed:sale` is the audited bodyguard:hire non-escrow taxed transfer — seller nets
+// 98% (1% dev off-ledger + 1% street tax → buyback), riding the existing `deed:` cash prefix.
+export async function buyDeed(buyer, seller, client, h) {
+  if (jailed(buyer)) throw new GameError('jailed', 'No dealing from lockup.');
+  if (buyer.account_id === seller.account_id) throw new GameError('own', "That's your own street.");
+  if (await loadDeed(client, buyer.account_id)) throw new GameError('have_deed', 'You already hold a street — sell it before buying another.');
+  const deed = (await client.query('SELECT * FROM street_deeds WHERE account_id=$1 FOR UPDATE', [seller.account_id])).rows[0];
+  if (!deed || deed.sale_price == null) throw new GameError('not_listed', "That street isn't for sale.");
+  const price = Number(deed.sale_price);
+  if (Number(buyer.cash) < price) throw new GameError('cash', `That street runs $${price.toLocaleString()}.`);
+  // the standard 2% house take (1% dev off-ledger + 1% street tax → buyback) — the bodyguard:hire pattern
+  const fee = Math.ceil(price * DEEDS.SALE_FEE_BPS / 10000), tax = Math.ceil(price * DEEDS.SALE_TAX_BPS / 10000);
+  const net = price - fee - tax;
+  buyer.cash = Number(buyer.cash) - price;
+  seller.cash = Number(seller.cash) + net;
+  await h.ledger(client, { characterId: buyer.id, currency: 'cash', amount: -price, reason: 'deed:sale', counterparty: seller.id });
+  await h.ledger(client, { characterId: seller.id, currency: 'cash', amount: net, reason: 'deed:sale', counterparty: buyer.id });
+  await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [tax]);
+  // TRANSFER the deed + re-key its provenance to the buyer; control RESETS (the buyer earns the corner).
+  await client.query(
+    `UPDATE street_deeds SET account_id=$2, sale_price=NULL, controller_account=NULL, control_until=NULL, corner_at=now()
+       WHERE account_id=$1`, [seller.account_id, buyer.account_id]);
+  await client.query('UPDATE street_deed_history SET account_id=$2 WHERE account_id=$1', [seller.account_id, buyer.account_id]);
+  await recordDeedEvent(client, buyer.account_id, 'sold', `${seller.name} sold the street to ${buyer.name} for $${price.toLocaleString()}`);
+  await h.notify(client, seller.id, 'deed_sold', { street: deed.name, to: buyer.name, price });
+  await h.track(client, buyer.account_id, 'deed_buy', { street: deed.name, price });
+  return { ok: true, street: deed.name, price, net };
 }
 
 // THE GREAT STREETS — the status leaderboard, ranked by a deed's legend (renown). Two flat queries +

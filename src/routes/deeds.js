@@ -17,4 +17,12 @@ export function register(app, { pool, auth }) {
   app.post('/v1/deeds/shakedown/:targetCharacterId', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) =>
       Deeds.shakedownCorner(ch, req.params.targetCharacterId, client, h)));
+  // Phase 3 — the secondary market: list/pull your street, or buy a listed one (two-party).
+  app.post('/v1/deeds/list', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Deeds.listDeed(ch, req.body?.price, client, h)));
+  app.post('/v1/deeds/unlist', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Deeds.unlistDeed(ch, client, h)));
+  app.post('/v1/deeds/buy/:sellerCharacterId', { preHandler: auth }, async (req) =>
+    G.withTwoCharacters(pool, req.user.sub, req.params.sellerCharacterId, (ch, seller, client, h) =>
+      Deeds.buyDeed(ch, seller, client, h)));
 }

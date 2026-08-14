@@ -1527,6 +1527,10 @@ ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS controller_account TEXT;      
 ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS control_until TIMESTAMPTZ;            -- when the rival's control lapses back to the owner
 ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS corner_at TIMESTAMPTZ;               -- the corner-take accrual clock (reset on claim + on a seizure/collect)
 ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS shakedown_at TIMESTAMPTZ;            -- per-deed cooldown on a corner shakedown
+-- Phase 3 — THE SECONDARY MARKET (off-chain core). A deed holder LISTS their street for sale; a DEEDLESS
+-- buyer buys it → the deed + its provenance transfer to the buyer's account, control resets (the buyer
+-- earns the corner). §10.4: `deed:sale` a taxed cash transfer (the bodyguard:hire pattern). No escrow.
+ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS sale_price BIGINT;                    -- listed for this cash price (null = not for sale)
 -- THE LEGEND ENGINE — the provenance record of everything that happened on a deed (§4). Account-keyed
 -- like the deed (survives death — the record is the value). Pure-status append log; never a currency.
 CREATE TABLE IF NOT EXISTS street_deed_history (

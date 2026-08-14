@@ -9,7 +9,7 @@
 process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { DEEDS, deedRankOf, deedRenown } from '../src/rules.js';
+import { DEEDS, deedRankOf, deedRenown, deedNeighborhoodsOpen } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -179,6 +179,64 @@ await pool.query("UPDATE characters SET loc='neon', respect=1 WHERE id=$1", [b.i
 assert.equal((await call('POST', `/v1/deeds/shakedown/${a.id}`, { token: b.token })).body.error,
   'rookie', 'a rookie under the level floor can\'t muscle a corner');
 delete process.env.DEEDS_SHAKE_P;
+
+// ════════════ PHASE 4 — THE GROWING MAP (§10.4-zero — pure render off the population) ════════════
+// the helper: the first neighborhood is always open, one more per EXPANSION_STEP living players, capped
+assert.equal(deedNeighborhoodsOpen(0, 'neon'), 1, 'a fresh city opens the first neighborhood only');
+assert.equal(deedNeighborhoodsOpen(DEEDS.EXPANSION_STEP, 'neon'), 2, 'one more neighborhood opens per EXPANSION_STEP players');
+assert.equal(deedNeighborhoodsOpen(10 * DEEDS.EXPANSION_STEP, 'neon'), DEEDS.NEIGHBORHOODS.neon.length, 'the map caps at the district\'s neighborhood count');
+// the board surfaces the growing city + per-district neighborhoods
+const bg = (await call('GET', '/v1/deeds', { token: a.token })).body;
+assert(bg.city && typeof bg.city.population === 'number', 'the board reports the city population (how big the world is)');
+assert.equal(bg.city.step, DEEDS.EXPANSION_STEP, 'the expansion cadence is published');
+assert(bg.city.nextExpansionAt > bg.city.population, 'the next expansion threshold is ahead of the current population');
+const neonTile = bg.districts.find((d) => d.id === 'neon');
+assert(neonTile.neighborhoods && neonTile.neighborhoods.open.length >= 1, 'a district surfaces its open neighborhoods');
+assert.equal(neonTile.neighborhoods.total, DEEDS.NEIGHBORHOODS.neon.length, 'and its total (open + coming) neighborhoods');
+assert(bg.deed.neighborhood, 'your deed shows which neighborhood it sits in');
+
+// ════════════ PHASE 3 — THE SECONDARY MARKET (the off-chain deed trade) ════════════
+const cc = await mk('Clemenza');           // a DEEDLESS buyer
+await pool.query('UPDATE characters SET cash=200000 WHERE id=$1', [cc.id]);
+// LIST gates: a deedless account can't list; a price under the floor is refused
+assert.equal((await call('POST', '/v1/deeds/list', { token: cc.token, body: { price: 50000 } })).body.error, 'no_deed', 'a deedless account has no street to sell');
+assert.equal((await call('POST', '/v1/deeds/list', { token: b.token, body: { price: 1 } })).body.error, 'min_price', 'a street has a real floor price');
+// b lists their street
+const sellerStreet = (await call('GET', '/v1/deeds', { token: b.token })).body.deed.name;
+const list = await call('POST', '/v1/deeds/list', { token: b.token, body: { price: 50000 } });
+assert.equal(list.code, 200, 'the listing lands');
+const bMarket = (await call('GET', '/v1/deeds', { token: b.token })).body.market;
+assert.equal(bMarket.listed, true, 'the seller sees their street listed');
+assert.equal(bMarket.salePrice, 50000, 'at the asked price');
+// a deedless buyer browses the market and sees it (with its legend — the value)
+const ccBoard = (await call('GET', '/v1/deeds', { token: cc.token })).body.market;
+assert.equal(ccBoard.canBuy, true, 'a deedless account can buy');
+const onSale = ccBoard.forSale.find((s) => s.street === sellerStreet);
+assert(onSale, 'the listed street is on the market board');
+assert.equal(onSale.price, 50000, 'at its price');
+assert('renown' in onSale, 'the legend (renown) travels with the listing — it is the value');
+// BUY gates: b can't buy their own; a (holds a deed) can't buy
+assert.equal((await call('POST', `/v1/deeds/buy/${b.id}`, { token: b.token })).body.error, 'self', "you can't buy your own street (the two-party guard catches it)");
+assert.equal((await call('POST', `/v1/deeds/buy/${b.id}`, { token: a.token })).body.error, 'have_deed', 'one deed per account — sell before you buy');
+// cc buys Nine Fingers Row from b
+const ccCash0 = Number((await pool.query('SELECT cash FROM characters WHERE id=$1', [cc.id])).rows[0].cash);
+const bCash0 = Number((await pool.query('SELECT cash FROM characters WHERE id=$1', [b.id])).rows[0].cash);
+const pool0 = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
+const buy = await call('POST', `/v1/deeds/buy/${b.id}`, { token: cc.token });
+assert.equal(buy.code, 200, 'the sale goes through');
+const fee = Math.ceil(50000 * DEEDS.SALE_FEE_BPS / 10000), tax = Math.ceil(50000 * DEEDS.SALE_TAX_BPS / 10000);
+assert.equal(Number((await pool.query('SELECT cash FROM characters WHERE id=$1', [cc.id])).rows[0].cash), ccCash0 - 50000, 'the buyer pays the full price');
+assert.equal(Number((await pool.query('SELECT cash FROM characters WHERE id=$1', [b.id])).rows[0].cash), bCash0 + (50000 - fee - tax), 'the seller nets 98% (1% dev + 1% street tax)');
+assert.equal(Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool), pool0 + tax, 'the street-tax half of the take feeds the buyback');
+// exactly two deed:sale rows (buyer + seller); the take is off-ledger/burned, not minted on top
+assert.equal(Number((await pool.query("SELECT COUNT(*) n FROM transactions WHERE reason='deed:sale'")).rows[0].n), 2, 'the sale ledgers exactly the two-party transfer — no mint');
+// the deed + its provenance transferred to cc; b is now deedless; control reset; a "sold" event marks the record
+const ccAfter = (await call('GET', '/v1/deeds', { token: cc.token })).body;
+assert.equal(ccAfter.deed.name, sellerStreet, 'the buyer now holds the street');
+assert(ccAfter.history.some((h) => h.kind === 'claim'), 'the whole PROVENANCE (legend) travelled with the deed');
+assert(ccAfter.history.some((h) => h.kind === 'sold'), 'the sale is written into the street\'s record');
+assert.equal(ccAfter.corner.iControl, true, 'control RESET to the new owner — they hold a clean corner');
+assert.equal((await call('GET', '/v1/deeds', { token: b.token })).body.deed, null, 'the seller is now deedless — they can claim or buy again');
 
 // ════════════ SURVIVES DEATH — the heir inherits the deed; the bloodline leaves its mark ════════════
 const kill = await call('POST', '/v1/mod/kill', { mod: true, body: { characterId: a.id } });

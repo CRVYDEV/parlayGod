@@ -12292,3 +12292,38 @@ gates (district/rookie). Turf perks (C) touch the signed district-perk surface �
 founder sign-off; the on-chain tradeable deed stays Phase 3 (audit + counsel gated). Suite green + sim
 drift-0 + client wiring/mirror + gate matrix + levers + docs; pgquery + pgcheck on real Postgres (the four
 ALTERs apply).
+**PHASE 3 (THE SECONDARY MARKET, off-chain) + PHASE 4 (THE GROWING MAP) BUILT** (`src/deeds.js` +
+`src/routes/deeds.js` + `test/deeds.js`; `DEEDS.MARKET_*`/`SALE_*_BPS`/`NEIGHBORHOODS`/`EXPANSION_STEP` +
+`deedNeighborhoodsOpen`/`deedNeighborhoodOf` in rules.tail.js; one `ALTER TABLE street_deeds ADD COLUMN IF
+NOT EXISTS sale_price`, the outage-lesson way). **Phase 3 — THE DEED MARKET:** a deed holder LISTS their
+street for cash (`listDeed`, `POST /v1/deeds/list`; `sale_price`, NO escrow — the car-auction row-stays
+precedent, you keep collecting the corner while listed), a **DEEDLESS** buyer BUYS it (`buyDeed`, `POST
+/v1/deeds/buy/:sellerCharacterId`, two-party `withTwoCharacters`). **The identity-NFT lesson made real:**
+the deed + its **whole PROVENANCE** (the legend/`street_deed_history`, re-keyed to the buyer) transfer, and
+**CONTROL RESETS** (`controller_account`/`corner_at` cleared — the paper + legend travel, the corner-take
+control does NOT; the buyer must shake for the corner). §10.4: `deed:sale` is the audited **bodyguard:hire**
+non-escrow taxed transfer — seller nets 98% (1% dev off-ledger + 1% street tax → buyback) — riding the
+existing `deed:` cash prefix (**no new reason, no mint, no faucet** — a pure redistribution; the test asserts
+EXACTLY two `deed:sale` rows). One deed per account (`have_deed` gate), so only a deedless buyer buys — the
+"acquire a storied street instead of a fresh block" entry; a multi-deed PORTFOLIO is a deferred step (the
+`account_id`-PK refactor). The seller becomes deedless (can claim/buy again); a `sold` event marks the
+record; the seller is `deed_sold`-notified. Jail-gated. **The on-chain tradeable ERC-721 is DESIGN-ONLY**
+(a new contract resets the third-party audit clock the founder is closing for launch, and §7 needs
+securities counsel — NOT built). **Phase 4 — THE GROWING MAP (§10.4-ZERO — pure render):** each district's
+NEIGHBORHOODS (`DEEDS.NEIGHBORHOODS`, ~5 authored noir names/district) OPEN in order as the **living-player
+population** crosses `EXPANSION_STEP` (8) thresholds (the "as users join" framing — deterministic off the
+count, not a mint); a deed's neighborhood is DERIVED from its name (stable, no column), a not-yet-open one
+reads as the **FRONTIER** ("you claimed ground before it was even a neighborhood"). Surfaced on `GET
+/v1/deeds` (a `city` summary — population / open-vs-total neighborhoods / next-expansion threshold — +
+per-district `neighborhoods {open, coming}`) + the map render; late joiners get fresh ground. Marketed as a
+living, GROWING world — NEVER as scarce/appreciating land (§6, the highest-scrutiny copy surface). Client:
+THE MARKET card (list/pull your street; a deedless buyer browses the streets for sale WITH their legend +
+buys with a confirm) + a city banner + open/coming neighborhoods on the district cards + the deed's
+neighborhood; `describe()` + `deed_sold` feed line. `test/deeds.js` (Phase 3+4 block) proves the
+neighborhoods-open formula (1 → +1/step → capped) + the board's city/neighborhood surface, the list gates
+(no_deed/min_price), the market board (a deedless buyer sees the listing WITH its renown), the buy gates
+(self/have_deed), and the sale (buyer −price / seller +98% / street-tax half / exactly two `deed:sale` rows
+/ the legend + control transferred / seller now deedless). All `DEEDS` Phase-3/4 numbers are founder
+sign-off levers (BALANCE.md § THE STREET DEEDS MARKET + THE GROWING MAP, pinned in `test/levers.js`). Suite
+green + sim drift-0 + client wiring/mirror + gate matrix + mobile 77/77 + pgquery + pgcheck 43/43 on real
+Postgres.

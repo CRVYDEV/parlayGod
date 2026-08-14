@@ -5364,7 +5364,7 @@ export const DEEDS = {
   HISTORY_MAX: 40,                  // events on a deed's dossier (the legend, newest first)
   // renown = Σ event weights. A deed's legend is the RECORD OF REAL PLAY on it — unforgeable, unfarmable,
   // the driver of what one street is worth over another (§4/§5). Weighted by how notable the event is.
-  EVENT_WEIGHT: { claim: 1, fell: 5, blood: 4, empire: 3, title: 4, war: 6 },
+  EVENT_WEIGHT: { claim: 1, fell: 5, blood: 4, empire: 3, title: 4, war: 6, sold: 2 },
   RANKS: [
     { min: 0, name: 'A Nameless Block' }, { min: 5, name: 'Known Ground' },
     { min: 20, name: 'A Storied Corner' }, { min: 50, name: 'Bloody Ground' },
@@ -5402,3 +5402,40 @@ export const deedCornerOwed = (deed, now = Date.now()) => {
 export const deedController = (deed, now = Date.now()) =>
   (deed && deed.controller_account && deed.control_until && new Date(deed.control_until).getTime() > now)
     ? deed.controller_account : (deed ? deed.account_id : null);
+// ── STREET DEEDS Phase 3 — THE SECONDARY MARKET (off-chain core; the on-chain tradeable NFT is
+// AUDIT + securities-counsel gated, design-only). A deed holder LISTS their street for sale; a DEEDLESS
+// buyer buys it → the deed + its whole PROVENANCE (the legend) transfer to the buyer, and CONTROL RESETS
+// (the identity-NFT lesson: the paper + the legend travel, the corner-take control does NOT — the buyer
+// must shake for the corner). §10.4: `deed:sale` is the audited bodyguard:hire non-escrow taxed transfer
+// (seller nets 98%, 1% dev off-ledger + 1% street tax → buyback), riding the existing `deed:` cash prefix.
+DEEDS.MARKET_MIN = 10000;               // floor sale price (a street is a real asset, not a $1 flip)
+DEEDS.SALE_FEE_BPS = 100;               // 1% dev (off-ledger — the bodyguard:hire pattern)
+DEEDS.SALE_TAX_BPS = 100;               // 1% street tax → buyback (the standard 2% house take)
+// ── STREET DEEDS Phase 4 — THE GROWING MAP (§10.4-ZERO — pure render off the living-player count). The
+// city EXPANDS as users join: each district's neighborhoods OPEN in order as the population crosses
+// EXPANSION_STEP thresholds. Late joiners get FRESH GROUND on the frontier. Marketed as a living, growing
+// world — NEVER as scarce/appreciating land (design §6). A deed's neighborhood is DERIVED (stable, no
+// column); a not-yet-open one reads as the FRONTIER (you claimed ground before it was even a neighborhood).
+DEEDS.NEIGHBORHOODS = {
+  docks:     ['Wharf Side', 'The Cannery', 'Saltwater Row', "Dead Man's Pier", 'The Breakwater'],
+  neon:      ['The Strip', 'Ruby Lane', 'Midnight Row', 'The Velvet Blocks', 'Chinatown Gate'],
+  foundry:   ['The Slag', 'Ironside', 'Furnace Row', 'The Coke Yards', 'Cinder Flats'],
+  brick:     ['The Kilns', 'Mortar Row', 'Red Hollow', 'The Claypits', 'Bricktown'],
+  canal:     ['Lockgate', 'The Towpath', 'Barge End', 'Willow Bend', 'The Cut'],
+  cathedral: ['The Spire', 'Rosary Row', "Saint's Rest", 'The Cloisters', 'Gallows Hill'],
+};
+DEEDS.EXPANSION_STEP = 8;               // living players per new neighborhood opening (per district)
+// how many of a district's neighborhoods are OPEN at a given living-player population (the first is always
+// open; one more per EXPANSION_STEP players, capped at the district's neighborhood count)
+export const deedNeighborhoodsOpen = (population, district) => {
+  const list = DEEDS.NEIGHBORHOODS[district] || [];
+  return Math.max(1, Math.min(list.length, 1 + Math.floor(Math.max(0, Number(population) || 0) / DEEDS.EXPANSION_STEP)));
+};
+// a deed's neighborhood — DERIVED from its name (stable, no column). Returns { name, index, frontier }
+// where `frontier` = not-yet-open at this population (a pioneer on the edge of the growing city).
+export const deedNeighborhoodOf = (name, district, population) => {
+  const list = DEEDS.NEIGHBORHOODS[district] || [];
+  if (!list.length) return null;
+  const idx = Math.floor(hash01('deednbr:' + String(name)) * list.length) % list.length;
+  return { name: list[idx], index: idx, frontier: idx >= deedNeighborhoodsOpen(population, district) };
+};
