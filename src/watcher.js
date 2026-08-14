@@ -14,7 +14,7 @@ import { recordFeePayment } from './fees.js';
 import { recordBond } from './bonds.js';
 import { recordHarvestFee } from './treasury.js';
 import { confirmStockDelivered } from './stockdeliver.js';
-import { markClaimed, reimportItem, markDeedExtracted, reimportDeed } from './chain.js';
+import { markClaimed, reimportItem, markDeedExtracted, reimportDeed, recordDeedTransfer } from './chain.js';
 
 export const DEFAULT_CONFIRMATIONS = Number(process.env.CHAIN_CONFIRMATIONS || 5);
 
@@ -143,6 +143,25 @@ export async function syncDeedRedeemedEvents(pool, source, opts = {}) {
   return { processed, from: w.from, to: w.to };
 }
 
+// Sync StreetDeed Transfer(from, to, tokenId) → recordDeedTransfer (the SECONDARY MARKET stream:
+// keep `onchain_owner` current so a deed sold on a marketplace stops being its extractor's stock
+// delivery target, and put the sale on the deed's public legend). Its own cursor; recordDeedTransfer
+// is replay-safe (IS DISTINCT FROM), so a re-scanned window is a no-op. Burns are skipped inside the
+// recorder (the Redeemed stream owns them). Dormant unless STREET_DEED_ADDRESS is set.
+// `source.deedTransferLogs(from,to)` → [{ from, to, tokenId }].
+export async function syncDeedTransferEvents(pool, source, opts = {}) {
+  const confirmations = opts.confirmations ?? DEFAULT_CONFIRMATIONS;
+  const w = await windowFor(pool, source, 'deed_transfer', confirmations, opts.startBlock);
+  if (!w) return { processed: 0 };
+  const logs = await source.deedTransferLogs(w.from, w.to);
+  let processed = 0;
+  for (const l of logs) {
+    if (await isolate('deed_transfer', () => recordDeedTransfer(pool, { tokenId: l.tokenId, to: l.to, from: l.from }))) processed++;
+  }
+  await setCursor(pool, 'deed_transfer', w.to);
+  return { processed, from: w.from, to: w.to };
+}
+
 // (The afterSwap→Vig trade-fee stream is RETIRED — founder-directed 2026-08-11. Two hooks wanted
 // one canonical pool and the four-slice sell tax won; the payer is deleted rather than dormant.
 // See the retirement note in rules.tail.js. `'trade'` stays a declared VIG_SOURCE for history.)
@@ -240,6 +259,7 @@ export async function makeViemSource() {
   const redeemedEv = parseAbiItem('event Redeemed(address indexed from, uint256 indexed tokenId, uint256 amount)');
   const deedExtractedEv = parseAbiItem('event Extracted(uint256 indexed nonce, address indexed to, uint256 indexed tokenId, string name, string district)');
   const deedRedeemedEv = parseAbiItem('event Redeemed(address indexed from, uint256 indexed tokenId)');
+  const erc721TransferEv = parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)');
   const deliveredEv = parseAbiItem('event Delivered(uint256 indexed deliveryId, address indexed token, address indexed to, uint256 units)');
   const range = (from, to) => ({ fromBlock: BigInt(from), toBlock: BigInt(to) });
   // wei / 1e18-decimal-OMR → ETH / in-game $OMR units, via viem's decimal-exact formatter (Number() alone
@@ -313,6 +333,11 @@ export async function makeViemSource() {
       const logs = await client.getLogs({ address: streetDeedAddr, event: deedRedeemedEv, ...range(from, to) });
       return logs.map((l) => ({ ref: `${l.transactionHash}:${l.logIndex}`, from: l.args.from,
         tokenId: l.args.tokenId?.toString(), txHash: l.transactionHash }));
+    },
+    deedTransferLogs: async (from, to) => {
+      if (!streetDeedAddr) return [];
+      const logs = await client.getLogs({ address: streetDeedAddr, event: erc721TransferEv, ...range(from, to) });
+      return logs.map((l) => ({ from: l.args.from, to: l.args.to, tokenId: l.args.tokenId?.toString() }));
     },
   };
 }

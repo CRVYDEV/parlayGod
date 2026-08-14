@@ -763,6 +763,50 @@ export async function markDeedExtracted(pool, { nonce, tokenId }) {
   finally { client.release(); }
 }
 
+// Apply ONE observed on-chain deed Transfer (the secondary market watcher). Two jobs: (1) keep
+// `onchain_owner` current — the stock-delivery rail reads it, because a deed SOLD on a secondary
+// market must stop receiving its EXTRACTOR's stock allocations (the vault now belongs to the buyer;
+// pushing A's stock into it would hand A's assets to a stranger); (2) append a public "changed hands
+// on-chain" line to the deed's legend and tell the extractor. REPLAY-SAFE by construction: the UPDATE
+// fires only when the owner actually CHANGES (`IS DISTINCT FROM`), so a re-scanned log window can
+// never duplicate the legend line or re-notify. Mint transfers (from 0x0) record the FIRST owner —
+// useful, and harmless to the exclusion since that owner IS the extractor's wallet. Burns are skipped
+// here (`to` = 0x0 is the Redeemed stream's business, which re-imports the deed whole).
+export async function recordDeedTransfer(pool, { tokenId, to, from }) {
+  if (!tokenId || !to) return { changed: false };
+  const owner = String(to).toLowerCase();
+  if (owner === '0x0000000000000000000000000000000000000000') return { changed: false }; // a burn — the Redeemed stream's business
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // read-compare-write (NOT `IS DISTINCT FROM` — pg-mem cannot parse it); the FOR UPDATE lock +
+    // the JS comparison give the same replay-safety: a re-delivered event finds the owner already
+    // recorded and changes nothing.
+    const cur = (await client.query(
+      'SELECT account_id, extracted_by_account, name, onchain_owner FROM street_deeds WHERE onchain_token_id=$1 FOR UPDATE',
+      [String(tokenId)])).rows[0];
+    const row = (cur && String(cur.onchain_owner || '').toLowerCase() !== owner) ? cur : null;
+    if (row) await client.query('UPDATE street_deeds SET onchain_owner=$2 WHERE onchain_token_id=$1', [String(tokenId), owner]);
+    // a genuine SECONDARY move (not the mint — the mint has no prior owner recorded) goes on the
+    // public record: provenance is the deed's value, and a sale is part of its story
+    const isMint = !from || String(from).toLowerCase() === '0x0000000000000000000000000000000000000000';
+    if (row && !isMint) {
+      const { recordDeedEvent } = await import('./deeds.js');
+      await recordDeedEvent(client, row.account_id, 'sold', 'the deed changed hands on-chain');
+      if (row.extracted_by_account) {
+        const ch = (await client.query(
+          'SELECT id FROM characters WHERE account_id=$1 AND alive LIMIT 1', [row.extracted_by_account])).rows[0];
+        if (ch) await client.query(
+          `INSERT INTO notifications (character_id, type, payload) VALUES ($1,'deed_transferred',$2)`,
+          [ch.id, JSON.stringify({ name: row.name, note: 'your extracted street changed hands on-chain — new deliveries stop targeting it' })]);
+      }
+    }
+    await client.query('COMMIT');
+    return { changed: !!row };
+  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  finally { client.release(); }
+}
+
 // Apply ONE recorded deed re-import (called inline from reimportDeed and from the sweep). Locks the
 // pending row, resolves the burner's wallet → account, requires that account be DEEDLESS (one deed per
 // account), and re-keys the on-chain deed (+ its legend) to them with control RESET (the buyer earns the
