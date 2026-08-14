@@ -1,51 +1,54 @@
-# OMERTÀ — launch hype video
+# OMERTÀ — launch hype videos
 
-Two ways to make it, one tool (`tools/hype.js`):
+One tool (`tools/hype.js`), one library of AI motion clips, **four cuts** for different jobs.
 
-1. **`node tools/hype.js`** — the **motion montage** (default). A ~30s noir trailer built entirely from
-   the game's own 245 noir plates with Ken-Burns motion, condensed-display title cards, cross-dissolves
-   and a synthesized atmospheric bed. **No `FAL_KEY`, no spend** — assembled locally with a bundled
-   `ffmpeg-static` + `@resvg/resvg-js` (the same rasteriser `src/cardpng.js` uses). Output:
-   `public/art/hype.mp4`. This can BE the launch video, or the animatic the AI clips upgrade.
+## Build
 
-2. **`FAL_KEY=… node tools/hype.js --fal --cap 20`** — the **AI upgrade path**. For each shot it
-   image-to-videos the seed plate through a fal.ai video model (Kling/Wan/Luma-class), so the pan/push
-   becomes real camera motion. Hard USD cap, a `hype-manifest.json` ledger (the `tools/art.js`
-   discipline). Clips land in `public/art/hype/` for **human review** (video can't be reviewed by the
-   agent — someone watches each clip), then `node tools/hype.js --assemble` stitches the approved ones
-   over the same title cards + audio.
+```
+FAL_KEY=… node tools/hype.js --fal --cap 9   # generate the motion library (once) + build all 4 cuts
+node tools/hype.js --all                     # rebuild all 4 from the library (no spend)
+node tools/hype.js --cut flywheel            # rebuild one
+node tools/hype.js --music track.mp3 --all   # swap the placeholder synth bed for a licensed track
+node tools/hype.js                           # no key → the free Ken-Burns montage (stills) → hype.mp4
+```
 
-## The cut (storyboard)
+`--fal` image-to-videos each of the game's 11 noir plates through Kling (fal.ai) — **real camera + scene
+motion** (rain, smoke, neon, the figure walking) — into `public/art/hype/<plate>.mp4`. Jobs run in
+**parallel** (Kling is ~4 min/clip; serial would be ~45 min) with a **hard `--cap`** and a spend ledger.
+Every cut is a **fast edit** of that shared library — short shots, hard cuts, a driving synth bed — so
+3–4 videos cost **one** round of generation (~$3 total at the current model).
 
-Marketing-rules-compliant by construction: **no earnings / income / appreciation / "play-to-earn"
-language** — the copy is about the WORLD and the distinctive mechanics (permadeath, the bloodline,
-going legit). **Fictional only** (no real brands/people). **The founder signs the final wording + the
-tagline before this ships.**
+## The four cuts
 
-| # | plate | motion | on-screen copy |
-|---|-------|--------|----------------|
-| 1 | hero-poster | push in | **OMERTÀ** |
-| 2 | district-neon | pan → | A city that runs on silence. |
-| 3 | interior-kitchen | push in | Build an empire. |
-| 4 | interior-den | push in | Or bleed for one. |
-| 5 | district-docks | pan ← | *(breathe — no text)* |
-| 6 | hitman-legbreaker | punch in | Every street remembers. |
-| 7 | crest | slow push | Family is leverage. |
-| 8 | interior-estate | slow reveal | Go legit — or go down. |
-| 9 | interior-pen | push in | Death is permanent. |
-| 10 | citymap | pull back | The bloodline isn't. |
-| 11 | hero-backdrop | slow push | **OMERTÀ** · enter the city — omerta.fun |
+| file | size | ~len | job | angle |
+|---|---|---|---|---|
+| `hype.mp4` | 1920×1080 | ~16s | the trailer | world first, earnings closer |
+| `hype-flywheel.mp4` | 1920×1080 | ~20s | tokenomics | the $OMR value flywheel, mechanism-true |
+| `hype-earn.mp4` | 1920×1080 | ~14s | acquisition | risk-to-earn: play, take it, cash out |
+| `hype-short.mp4` | 1080×1920 | ~10s | social | vertical, fastest cut for X/TikTok/Reels |
 
-~29s. Every line is about the game, none is a money promise.
+## Copy — earnings + the flywheel (founder-directed 2026-08-14)
+
+The founder lifted the standing no-earnings rule and asked for earnings language + the $OMR value
+flywheel. The copy is written **mechanism-true** and carries **no fabricated numbers**:
+
+- **flywheel** (all true per the design): *$OMR isn't printed, it's bought* · *every sink buys $OMR off
+  the market* · *buybacks from real revenue* · *fund the players who play* · *spenders fund earners* ·
+  *more players → more volume → more demand*.
+- **earn**: *play, take risks* · *take it off somebody who didn't* · *turn the streets into a living* ·
+  *cash out — on-chain, for real*.
+
+**Legal note (flagged to the founder):** earnings/income + "OMR value" framing in *public* marketing is
+the Howey-test surface (an investment sold on profit from others' efforts). Kept defensible by staying
+mechanism-true and number-free, but **have counsel eyeball the wording before it goes public.**
 
 ## Audio
 
-The default bed is a synthesized noir drone + a slow pulse that builds to the final card — a rights-free
-PLACEHOLDER so the cut isn't silent. **Swap in a licensed track for the real thing**
-(`node tools/hype.js --music path/to/track.mp3`) — a noir/trap/orchestral cue, or one generated via a
-music service. Do not ship the placeholder as the final without the founder's ear on it.
+Placeholder rights-free **driving synth bed** (kick + sub + a riser into the finale + an impact on the
+title). Swap a licensed noir/trap/orchestral cue with `--music track.mp3` before shipping.
 
-## Review before shipping
+## Review
 
-The agent can verify the render is well-formed (duration, frames, no black output) but **cannot watch it**.
-A person watches `public/art/hype.mp4` end-to-end before it goes anywhere public.
+The tool verifies each render is well-formed (duration, non-black frames, audio present, text paints) —
+but **cannot watch them**. A person watches each `.mp4` end-to-end, and the founder signs the wording +
+the track, before anything goes public.
