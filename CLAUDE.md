@@ -12256,3 +12256,39 @@ identity-NFT lesson — the deed transfers, the entitlement does not, or the sec
 cost) is audit + securities-counsel gated. Phase 4 (the growing map — new blocks open off the §7.11 world
 seed as the playerbase crosses thresholds) ships design-only with Phase 1's map render, **marketed as a
 living, growing world, NEVER as scarce/appreciating land** (§6, the project's highest-scrutiny copy surface).
+**PHASE 2 (CONTROL — the rent layer) BUILT** (`src/deeds.js` + `src/routes/deeds.js` + `test/deeds.js`; the
+`DEEDS` Phase-2 constants + `deedCornerOwed`/`deedController` in rules.tail.js; four `ALTER TABLE street_deeds
+ADD COLUMN IF NOT EXISTS` — controller_account/control_until/corner_at/shakedown_at, the outage-lesson way).
+The design's load-bearing **deed-vs-control split** made real: you own the deed forever, but a rival with
+muscle on the block collects while you hold only the paper. **THE CORNER TAKE** (`collectCorner`, `POST
+/v1/deeds/corner`) — a small HARD-CAPPED lazy cash faucet (`deed:corner`, `CORNER_PER_HR` $2k × up to
+`CORNER_CAP_MS` 24h) collected only by whoever CONTROLS a deed (your own if a rival hasn't muscled in, PLUS
+any rival corner you've seized); safehouse-gated (the signed **D2** "shield not bunker" income rule its
+`collectTerritory` sibling enforces — classified in the gate matrix's collect-income family). **THE
+SHAKEDOWN** (`shakedownCorner`, `POST /v1/deeds/shakedown/:targetCharacterId`) — a muscle+cunning/2 stat
+contest (the territory/npcHit pattern, `DEEDS_SHAKE_P` a TEST-ONLY roll knob) that SEIZES control for
+`CONTROL_MS` 12h (a rival muscles in — pending take forfeits, the seize precedent) OR lets the owner
+RECLAIM their own corner; location-pinned (`ch.loc === deed.district`, the district-refusal payload so the
+console offers "go there →"), level-floored (`SHAKEDOWN_MIN_LVL` 8, anti-alt), energy/heat/per-deed-cooldown
+bounded. **Lock-clean** — the shakedown mutates ONLY the deed row (a leaf `FOR UPDATE`); the defender is read
+UNLOCKED (no cross-character lock, no AB-BA), so only the attacker's own char is held (withCharacter).
+Control LAPSES on its own clock (`deedController` reads the window → falls back to the owner with no action).
+**§10.4: the shakedown moves CONTROL, not money** (zero ledger rows); `deed:corner` is the ONE new cash
+faucet — `deed:` joined the cash `KNOWN_REASONS`, character_id'd → the per-character check reconciles it,
+measured in `tools/sim.js` **P9.37** (~$48k/day/deed cap; base-wide linear in the playerbase, ONE deed per
+account; contesting a corner only moves WHO collects, never widens the faucet — petty per deed, ~a
+territory-racket rung). **The design's "pure redirect" ideal was corrected honestly** (design §2/§3 + the
+module comment): a true redirect needs a cross-character lock on a hot path or a new §10.4 bucket, so the
+cleaner engineering answer is the **bounded-faucet-measured-and-flagged** precedent (territory/business/
+port/world) — every `DEEDS` Phase-2 number is a founder sim sign-off lever (BALANCE.md § THE STREET DEEDS
+CORNER TAKE, pinned in `test/levers.js`). Client: THE CORNER card on the Street Deeds tab (collect the take,
+take your corner back if seized, lean on rival corners at your location — the board's `here` field lists the
+marks you could shake down and `canReclaim`/`myTargetId` drive the reclaim); `corner_seized`/`corner_defended`
+notifications humanized in `feedText`; `describe()` covers the collect + shakedown responses.
+`test/deeds.js` (Phase 2 block) proves the corner accrual + collect + the 24h cap, the clock reset on
+collect, the shakedown seize (a rival muscles in, NO cash moves) + the seized owner's board, a rival
+collecting the seized corner, the owner's RECLAIM, control lapsing back on its window, and the shakedown
+gates (district/rookie). Turf perks (C) touch the signed district-perk surface → **deferred** to a separate
+founder sign-off; the on-chain tradeable deed stays Phase 3 (audit + counsel gated). Suite green + sim
+drift-0 + client wiring/mirror + gate matrix + levers + docs; pgquery + pgcheck on real Postgres (the four
+ALTERs apply).

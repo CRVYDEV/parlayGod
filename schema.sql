@@ -1518,6 +1518,15 @@ CREATE TABLE IF NOT EXISTS street_deeds (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ix_street_deeds_name ON street_deeds (name_lc);
 CREATE INDEX IF NOT EXISTS ix_street_deeds_district ON street_deeds (district);
+-- Phase 2 — CONTROL + THE CORNER TAKE. The deed (owner) is permanent; CONTROL (who collects the corner
+-- take) is contestable: a rival muscles in for a window, then it lapses back to the owner. `corner_at`
+-- is the corner-take lazy clock (a small bounded cash faucet `deed:corner`); a seizure forfeits pending
+-- (the territory-seize precedent, so `corner_at` resets). All account_id-keyed → survive death by
+-- construction (a dead usurper's control simply lapses on `control_until`; the deed's owner heir keeps it).
+ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS controller_account TEXT;              -- a rival who shook the corner (null = owner controls)
+ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS control_until TIMESTAMPTZ;            -- when the rival's control lapses back to the owner
+ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS corner_at TIMESTAMPTZ;               -- the corner-take accrual clock (reset on claim + on a seizure/collect)
+ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS shakedown_at TIMESTAMPTZ;            -- per-deed cooldown on a corner shakedown
 -- THE LEGEND ENGINE — the provenance record of everything that happened on a deed (§4). Account-keyed
 -- like the deed (survives death — the record is the value). Pure-status append log; never a currency.
 CREATE TABLE IF NOT EXISTS street_deed_history (

@@ -472,6 +472,18 @@ const SIGNED = [
   ['CORNER.CHAIN_STEPS', 3],
   ['CORNER.CHAIN_BONUS', 1500],
   ['CORNER.CHAIN_RESPECT', 40],
+  // STREET DEEDS Phase 2 — the corner take (a bounded located cash faucet) + the control shakedown
+  ['DEEDS.CORNER_PER_HR', 2000],
+  ['DEEDS.CORNER_CAP_MS', 24 * 3600 * 1000],
+  ['DEEDS.CONTROL_MS', 12 * 3600 * 1000],
+  ['DEEDS.SHAKEDOWN_CD_MS', 6 * 3600 * 1000],
+  ['DEEDS.SHAKEDOWN_ENERGY', 15],
+  ['DEEDS.SHAKEDOWN_HEAT', 10],
+  ['DEEDS.SHAKEDOWN_MIN_LVL', 8],
+  ['DEEDS.SHAKE_BASE_P', 0.5],
+  ['DEEDS.SHAKE_MIN_P', 0.15],
+  ['DEEDS.SHAKE_MAX_P', 0.85],
+  ['DEEDS.SHAKE_STAT_SCALE', 200],
   // THE CALL — recycle-only transfers from the contact's own pocket (zero new faucet)
   ['CONTACTS.CALL_TTL_MS', 24 * 3600 * 1000],
   ['CONTACTS.CALL_FREIGHT_PREMIUM_BPS', 11500],

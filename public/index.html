@@ -1845,6 +1845,13 @@
     // STREET DEEDS — you claimed a named plot of the world (the claim response is {ok,name,district,districtName})
     if (body && body.ok && body.districtName && body.district && body.name && !body.tier)
       return `\u{1F3F7} the deed to ${esc(body.name)} is yours — on ${esc(body.districtName)}. It's yours forever, and it outlives your street.`;
+    // STREET DEEDS Phase 2 — the corner take collect ({ok,total,collected}) and the shakedown ({ok,won,street,reclaim})
+    if (body && body.ok && typeof body.total === 'number' && Array.isArray(body.collected))
+      return `\u{1F4B5} corner take collected — $${body.total.toLocaleString()} off ${body.collected.length} corner${body.collected.length === 1 ? '' : 's'}`;
+    if (body && body.ok && 'won' in body && body.street)
+      return body.won
+        ? (body.reclaim ? `\u{1F91C} you took your corner back — ${esc(body.street)} is yours to run again` : `\u{1F91C} you muscled in on ${esc(body.street)} — you run the corner now`)
+        : `they held the corner — ${esc(body.street)} stayed theirs`;
     // IDENTITY — the "about me" blurb (the setBio response is exactly {ok, bio})
     if (body && body.ok === true && Object.keys(body).length === 2 && 'bio' in body)
       return body.bio ? 'your story is on the record' : 'back to the auto-blurb';
@@ -4264,6 +4271,27 @@
     const deed = b.deed, districts = b.districts || [], history = b.history || [], ranks = b.ranks || [];
     const evLabel = (k) => ({ claim: '🏷 claimed', fell: '🩸 a bloodline fell here', blood: '🔫 blood spilled',
       empire: '💰 an empire ran here', title: '👑 a title held', war: '⚔ a war won' }[k] || k);
+    // THE CORNER (Phase 2) — the contestable rent layer. You hold the deed forever; a rival with muscle
+    // on the block collects the corner take while they hold CONTROL. Collect what you control; lean on a
+    // rival's corner; take your own back if it's been muscled.
+    const corner = b.corner || {};
+    const cornerCard = (c) => {
+      if (!c) return '';
+      const parts = [];
+      if (c.collectable > 0)
+        parts.push(`<button class="act" id="deed-collect">collect the corner take — $${(c.collectable).toLocaleString()}</button>`);
+      if (c.iControl && deed) parts.push(`<div class="d">You run your corner — it's yours to collect. It banks up to ${c.capHours}h ($${(c.perHr * c.capHours).toLocaleString()}) while you're away.</div>`);
+      if (c.seized) parts.push(`<div class="d" style="color:var(--bad)">A rival muscled in on your corner${c.seizedForSeconds ? ' — they run it for ' + Math.ceil(c.seizedForSeconds / 3600) + 'h more' : ''}. You keep the deed; they collect the take until you take it back.</div>`);
+      if (c.canReclaim) parts.push(`<button class="act" data-shake="${c.myTargetId}" data-reclaim="1">take your corner back</button>`);
+      if ((c.rivalCorners || []).length) parts.push(`<div class="d">Corners you run: ${c.rivalCorners.map((r) => esc(r.name) + ' ($' + r.owed.toLocaleString() + ')').join(', ')}.</div>`);
+      const marks = (c.here || []).filter((h) => !h.mine);
+      if (marks.length) parts.push(`<div class="d" style="margin-top:3px">On this block you could lean on:</div>` +
+        marks.map((m) => `<button class="act" data-shake="${m.targetId}">lean on ${esc(m.street)} <span class="d">(${esc(m.steward)})</span></button>`).join(''));
+      if (!parts.length) return '';
+      return `<div class="card" style="border-color:var(--neon);margin-top:10px"><span class="t">The Corner</span>
+        <div class="d" style="font-size:11px;color:var(--dim);margin-bottom:3px">the rent layer — you own the deed, but control (and its take) is fought over. Muscling a corner takes level ${c.shakedownMinLvl} + ${c.shakedownEnergy} energy, and you have to be on the block.</div>
+        ${parts.join('')}</div>`;
+    };
     const districtCards = `<h2 style="margin-top:12px">The Map <span class="d" style="font-size:11px">(how built-up each district is — the world grows as players claim ground)</span></h2>
       <div class="grid">${districts.map((d) => `<div class="card"${deed && deed.district === d.id ? ' style="border-color:var(--neon)"' : ''}>
         <span class="t">${esc(d.name)}</span> <span class="chip">${d.deeds} deed${d.deeds === 1 ? '' : 's'}</span>${deed && deed.district === d.id ? ' <span class="chip good">your street</span>' : ''}
@@ -4281,6 +4309,7 @@
         : `<div class="card"><span class="t">Own your street</span>
           <div class="d">Claim a named plot of the world — a Street on the map that's yours. It survives death (the heir inherits it), and everything that happens on it becomes its story. Pick a district below and name it.</div>
           <div style="margin-top:6px"><input id="deed-name" placeholder="name your street" size="20" maxlength="${b.nameMax || 28}"></div></div>`}
+      ${cornerCard(b.corner)}
       ${districtCards}
       <div class="d" style="margin-top:8px"><a href="#" id="streets-lb-link">the great streets of the city →</a></div>
       <div id="streets-lb"></div>`;
@@ -4293,6 +4322,9 @@
       if (!name) { toast('Name your street first.'); return; }
       act('POST', '/v1/deeds/claim', { name, district: btn.dataset.claimdist }).then(() => renderDeeds());
     });
+    { const el = $('#deed-collect'); if (el) el.onclick = () => act('POST', '/v1/deeds/corner').then(() => renderDeeds()); }
+    t.querySelectorAll('[data-shake]').forEach((btn) => btn.onclick = () =>
+      act('POST', '/v1/deeds/shakedown/' + btn.dataset.shake).then(() => renderDeeds()));
     { const el = $('#streets-lb-link'); if (el) el.onclick = async (ev) => { ev.preventDefault();
       const lb = (await api('GET', '/v1/leaderboard/streets')).body || {};
       $('#streets-lb').innerHTML = `<div class="grid" style="margin-top:4px">${(lb.streets || []).map((s) => `
@@ -8139,6 +8171,9 @@
       trunk_rob: () => `${d.by} mugged the freight off ${d.on}'s back`,
       boat_theft: () => `${d.by} stole a boat off ${d.on}'s berth`,
       sabotage: () => `${d.by} wrecked something in ${d.on}'s stable`,
+      // STREET DEEDS Phase 2 — the corner shakedown (the deed owner is notified)
+      corner_seized: () => `${d.from} muscled in on your corner at ${d.street} — they collect the take until you take it back`,
+      corner_defended: () => `${d.from} tried to lean on your corner at ${d.street} — you held it`,
       bounty: () => `a ${$c(d.amount)} ${d.kind === 'kill' ? 'KILL' : 'hospital'} contract is out on ${d.on}`,
       bust: () => `${d.by} busted ${d.freed} out of lockup`,
       busted: () => `${d.who} got hauled in`,

@@ -5373,3 +5373,32 @@ export const DEEDS = {
 };
 export const deedRankOf = (renown) => { let r = DEEDS.RANKS[0]; for (const t of DEEDS.RANKS) if (Number(renown) >= t.min) r = t; return r; };
 export const deedRenown = (history) => (history || []).reduce((a, e) => a + (DEEDS.EVENT_WEIGHT[e.kind] || 1), 0);
+// ── STREET DEEDS Phase 2 — CONTROL + THE CORNER TAKE (omerta-street-deeds-design.md §2/§3). The deed
+// is permanent property (A, Phase 1); CONTROL is the contestable RENT layer (B). THE CORNER TAKE is a
+// small, HARD-CAPPED, lazy cash faucet (`deed:corner`, character_id'd → the per-character cash check
+// reconciles; ONE deed per account → the base-wide ceiling is (deed holders) × PER_HR × 24h, petty vs
+// the passive stack) collected only by whoever CONTROLS the deed. THE SHAKEDOWN moves control, not
+// money (§10.4-neutral). Turf perks (C) touch the SIGNED district-perk surface → deferred to a
+// separate founder sign-off. Every number here is a founder SIM sign-off lever (BALANCE.md), NOT a
+// signed value — the design's "redirect not faucet" ideal is a genuine small faucet in engineering
+// terms (a true redirect needs a cross-character lock on a hot path or a new §10.4 bucket; the
+// bounded-faucet-measured-and-flagged precedent — territory/business/port/world — is cleaner), so the
+// corner take is measured in tools/sim.js and kept petty.
+DEEDS.CORNER_PER_HR = 2000;                 // cash/hr the corner take accrues (sign-off lever)
+DEEDS.CORNER_CAP_MS = 24 * 3600 * 1000;     // hard cap (an absent controller earns ≤ 24h)
+DEEDS.CONTROL_MS = 12 * 3600 * 1000;        // a rival's control window before it lapses back to the owner
+DEEDS.SHAKEDOWN_CD_MS = 6 * 3600 * 1000;    // per-deed cooldown (bounds spam/grief)
+DEEDS.SHAKEDOWN_ENERGY = 15;
+DEEDS.SHAKEDOWN_HEAT = 10;                  // exposure win or lose (leaning on a corner is exposure)
+DEEDS.SHAKEDOWN_MIN_LVL = 8;                // anti-alt floor (the RIVALS/npcHit precedent)
+DEEDS.SHAKE_BASE_P = 0.5; DEEDS.SHAKE_MIN_P = 0.15; DEEDS.SHAKE_MAX_P = 0.85; DEEDS.SHAKE_STAT_SCALE = 200;
+// the corner take owed on a deed (capped) — a pure function of its accrual clock
+export const deedCornerOwed = (deed, now = Date.now()) => {
+  if (!deed || !deed.corner_at) return 0;
+  const ms = Math.min(Math.max(0, now - new Date(deed.corner_at).getTime()), DEEDS.CORNER_CAP_MS);
+  return Math.floor(DEEDS.CORNER_PER_HR * ms / 3600000);
+};
+// who currently CONTROLS a deed (collects its corner take): a rival inside their window, else the owner
+export const deedController = (deed, now = Date.now()) =>
+  (deed && deed.controller_account && deed.control_until && new Date(deed.control_until).getTime() > now)
+    ? deed.controller_account : (deed ? deed.account_id : null);

@@ -6065,3 +6065,31 @@ the car/racing/hauling ladder the sim balanced against EARNED rarity. The scope 
 rows); gear is deliberately one-way (its in-game form is account-level set membership — the contract's
 `redeem` rejects gear). Chain-dormant in production (no `GEARVAULT_ADDRESS`); the `redeem` burn is new
 audit surface, so it goes into the on-chain-items audit batch before mainnet.
+
+## § THE STREET DEEDS CORNER TAKE (Phase 2 — sim-measured, founder sign-off)
+
+Street Deeds Phase 2 adds the CONTROL layer: THE CORNER TAKE (B, rent) is the one new cash faucet;
+the shakedown moves control, not money (§10.4-neutral). The deed itself (Phase 1) is pure status.
+
+**The faucet — `deed:corner`** (character_id'd → the per-character §10.4 check reconciles it; measured
+in `tools/sim.js` P9.37, re-measured every run):
+
+| Lever | Value | What it is |
+|---|---|---|
+| `DEEDS.CORNER_PER_HR` | $2,000/hr | the corner take accrual rate on a controlled deed |
+| `DEEDS.CORNER_CAP_MS` | 24h | hard cap — an absent controller banks ≤ 24h ($48,000) |
+| `DEEDS.CONTROL_MS` | 12h | a rival's control window before it lapses back to the owner |
+| `DEEDS.SHAKEDOWN_CD_MS` | 6h | per-deed cooldown (bounds spam/grief) |
+| `DEEDS.SHAKEDOWN_ENERGY` | 15 | energy per shakedown attempt |
+| `DEEDS.SHAKEDOWN_HEAT` | 10 | exposure win or lose |
+| `DEEDS.SHAKEDOWN_MIN_LVL` | 8 | anti-alt floor (the RIVALS/npcHit precedent) |
+| `DEEDS.SHAKE_BASE_P` / `MIN_P` / `MAX_P` / `STAT_SCALE` | 0.5 / 0.15 / 0.85 / 200 | the muscle+cunning/2 stat contest |
+
+**Posture:** one corner ≈ a territory-racket rung ($48k/day cap). ONE deed per account, so the base-wide
+ceiling is **linear in the playerbase** — (deed holders) × $2,000/hr × 24h — and petty per deed. The
+shakedown only moves WHO collects (control), never mints, so **contesting a corner can never widen the
+faucet**. Collecting is safehouse-gated (the signed D2 income rule); the shakedown is location-pinned +
+level-floored + energy/heat/cooldown-bounded. All numbers are founder sim sign-off levers, pinned in
+`test/levers.js`; the design's "pure redirect" ideal proved to need a cross-character lock on a hot path,
+so the bounded-faucet-measured-and-flagged precedent (territory/business/port/world) was used instead.
+Turf perks (C) touch the SIGNED district-perk surface → deferred to a separate founder sign-off.

@@ -31,7 +31,7 @@ import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
          CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES, BUSINESSES, PACING, POPULATION, boatResale, CORNER, CONTACTS, FAMILY_WAR,
          EXCHANGE, ESTATE, WIRE, GANG_SEALS, FOUNDATION, RIVALS, RACKETS, ASSETS, M4, DRUGS,
          MADE, MADE_LADDER, ACCESS_STAKE, OPERATIONS, opSlotsOf, SOV, DESK_AUCTION,
-         TREASURY, STORE, SELL_TAX, BONDS, MISSIONS } from '../src/rules.js';
+         TREASURY, STORE, SELL_TAX, BONDS, MISSIONS, DEEDS } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -1565,6 +1565,27 @@ phase('P9.36 THE VELOCITY–HOLDING EQUILIBRIUM — capped holding vs recurring 
 
   note('equilibrium', 'the dial if holding ever does win', 'M3.OMR_LOOT_COMMITTED, then the rung heights',
     `raise the committed loot rate (${(M3.OMR_LOOT_COMMITTED * 100).toFixed(0)}% today vs ${(M3.OMR_LOOT_IDLE * 100).toFixed(0)}% idle) and a staked hoard stops being the cheaper shelter; raise the rung minimums and the cap moves. Both are signed levers — this probe re-measures on either`);
+}
+
+// ════════ P9.37 STREET DEEDS — the corner take, the one new Phase-2 faucet ════════
+// The deed itself is pure status (Phase 1). Phase 2's CONTROL layer adds ONE cash faucet: `deed:corner`,
+// collected only by whoever CONTROLS a deed. Bounded HARD by construction — ONE deed per account (the
+// identity model), the take caps at CORNER_CAP_MS (an absent controller banks ≤ 24h), so the base-wide
+// exposure is (deed holders) × PER_HR × 24h with a fully-collected steady state of PER_HR × 24h per deed.
+// The shakedown moves CONTROL, not money — it only redistributes WHO collects, never widens the faucet.
+phase('P9.37 street deeds — the corner take (the one Phase-2 faucet, bounded)');
+{
+  const perDeedDay = DEEDS.CORNER_PER_HR * 24;                 // steady state: a controlled deed, collected daily
+  note('deeds', 'corner take per deed', `$${fmt(perDeedDay)}/day`,
+    `CORNER_PER_HR ${DEEDS.CORNER_PER_HR} × 24h — the cap; a controller who never collects banks ≤ this, and collecting more often banks less per collect (the clock resets)`);
+  // the base-wide ceiling is one deed per account, and control is contestable, so no player can stack
+  // more than the deeds they personally hold the corner on at a time (bounded by shakedown energy/cooldown)
+  for (const holders of [100, 1000]) {
+    note('deeds', `base-wide ceiling @ ${holders} deed-holders`, `≤ $${fmt(perDeedDay * holders)}/day`,
+      'ONE deed per account, so this is a linear function of the playerbase — every dollar is a ledgered deed:corner faucet, character_id\'d (the per-character §10.4 check reconciles it)');
+  }
+  note('deeds', 'faucet posture', perDeedDay < 100000 ? 'petty per deed vs the signed loops' : 'SIGN-OFF: material',
+    'a single corner is ~a territory-racket rung; the shakedown only moves WHO collects (control), never mints — so the faucet cannot be widened by contesting it. Sign-off levers: DEEDS.CORNER_PER_HR / CORNER_CAP_MS');
 }
 
 phase('P10 §10.4 ledger invariants over the ENTIRE sim (nothing was seeded)');

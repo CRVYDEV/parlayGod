@@ -76,16 +76,32 @@ The A layer and the value driver, buildable correctly today with zero economy ri
 Pure status, like the portrait/dynasty/estate: no currency moves, no new faucet, the nightly §10.4
 sweep stays drift-0 by construction.
 
-### Phase 2 — control: rent (B) + turf (C) (DESIGNED · sim + founder sign-off before ship)
-The income layers touch §10.4 and the war economy, so they get the full treatment, not a fast slam:
-- **B (rent):** a "corner take" that **redirects** a bounded existing faucet (the shakedown/territory
-  pattern — the owner keeps the rest, the clock advances by only the stolen share, so total emission
-  stays bounded by the same signed curve → §10.4-neutral). Capped. Collected only while you control
-  the street; contestable by rivals (the existing rival-raid/shakedown mechanic).
-- **C (turf):** owning a street grants a **racket slot + turf perks in that district**, capped at what
-  a free player earns by seizing turf. Interacts with the war system — the deed is permanent, but the
-  *control* can be occupied/shaken down by whoever has muscle there.
-- Both sim-measured (the P9.x faucet-measurement discipline), tabled in BALANCE.md, founder-signed.
+### Phase 2 — control: rent (B) BUILT · turf (C) deferred (sim-measured + founder sign-off levers)
+The income layer touches §10.4, so it gets the full treatment. **B (rent) is BUILT** as THE CORNER
+TAKE; **C (turf perks) is deferred** — it touches the SIGNED district-perk surface, so it wants its own
+founder sign-off, not a slam.
+- **B (rent) — THE CORNER TAKE + THE SHAKEDOWN (`src/deeds.js`, `test/deeds.js`):** a small, HARD-CAPPED
+  lazy cash faucet (`deed:corner`, `DEEDS.CORNER_PER_HR` × up to `CORNER_CAP_MS` 24h) collected only by
+  whoever **controls** a deed. Control is contestable: `shakedownCorner` is a stat contest (muscle +
+  cunning/2 vs the incumbent) that **seizes control** for `CONTROL_MS` (a rival muscles in) or lets the
+  owner **reclaim** their own corner; the seize forfeits the pending take (the seize precedent) and the
+  shakedown moves **control, not money** (§10.4-neutral). Collecting is safehouse-gated (the signed D2
+  "shield not bunker" income rule its `collectTerritory` sibling enforces); the shakedown is
+  location-pinned (you must stand on the block) + level-floored + energy/heat/cooldown-bounded.
+  - **HONEST NOTE, corrected from this doc's own §3 ideal:** B is a genuine small **bounded faucet**,
+    not the "pure redirect" §3 first proposed. A true redirect (the owner keeps the rest, the shared
+    clock bounds emission) needs a **cross-character lock on a hot path** (the collector and the deed
+    owner are different accounts) or a new §10.4 bucket. The cleaner engineering answer is the
+    **bounded-faucet-measured-and-flagged** precedent the whole game already uses (territory/business/
+    port/world): `deed:corner` is a character_id'd cash faucet the per-character §10.4 check reconciles,
+    it is measured in `tools/sim.js` **P9.37**, and every `DEEDS` number is a founder sim sign-off lever
+    (BALANCE.md, pinned in `test/levers.js`). Base-wide ceiling = (deed holders) × PER_HR × 24h — ONE
+    deed per account, so it is linear in the playerbase and petty per deed (~a territory-racket rung).
+    The shakedown only moves WHO collects, so contesting a corner can never **widen** the faucet.
+- **C (turf) — DEFERRED:** owning a street granting a **racket slot + turf perks in that district**
+  touches the sim-audited district-perk surface, so it is a separate founder sign-off (capped at what a
+  free player earns by seizing turf), not shipped with B.
+- B is sim-measured (P9.37), tabled in BALANCE.md, all numbers founder sign-off levers.
 
 ### Phase 3 — the tradeable NFT + secondary market (AUDIT-GATED · a new contract resets the audit clock)
 - On-chain deed as a tradeable token; the DEED transfers, the **extraction entitlement stays
@@ -107,9 +123,14 @@ land that appreciates"** (§6).
 - **Phase 1 is zero-surface:** the deed, its name, its map plot, and its provenance are all status.
   No `transactions` row is written; the reason vocabulary is unchanged; the sweep stays drift-0. The
   test asserts zero ledger rows across the whole flow (the portrait/dynasty precedent).
-- **Phase 2's rent is a REDIRECT, not a faucet:** it rides the existing `territory`/`shakedown`
-  vocabulary (owner keeps the rest, the shared clock bounds total emission by the signed curve). No
-  new mint reason; the gang-treasuries / per-character checks reconcile it. Measured before ship.
+- **Phase 2's rent (BUILT) is a bounded, measured CASH FAUCET, `deed:corner`:** the one new reason,
+  added to the cash `KNOWN_REASONS` prefix `deed:` in `invariants.js`, character_id'd → the per-character
+  cash check reconciles it. NOT the "pure redirect" first proposed here — a redirect needs a
+  cross-character lock on a hot path or a new bucket; the bounded-faucet-measured-and-flagged precedent
+  (territory/business/port/world) is cleaner. Hard-capped (`CORNER_CAP_MS` 24h, one deed per account),
+  measured in `tools/sim.js` P9.37, every number a founder sign-off lever. The shakedown moves control,
+  not money (zero ledger rows). The test asserts `deed:corner` is the ONLY new cash faucet across the
+  whole Phase-2 flow and the shakedown is §10.4-neutral.
 - **The claim fee (if any) is a SINK,** routed to the desk like every other $OMR sink, or an ETH mint
   fee out-of-band (the fees.js precedent — zero `transactions` rows). Decided at Phase 3.
 

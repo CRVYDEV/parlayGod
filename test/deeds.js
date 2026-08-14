@@ -95,6 +95,91 @@ const lb2 = (await call('GET', '/v1/leaderboard/streets', { token: a.token })).b
 assert(!lb2.streets.find((s) => s.name === 'Nine Fingers Row'), "an agent's street is off the status board");
 await pool.query('UPDATE account_persistent SET agent_flag=false WHERE account_id=$1', [b.acct]);
 
+// ════════════ PHASE 2 — CONTROL + THE CORNER TAKE ════════════
+// The deed is property; CONTROL (the corner take) is contestable. `a` owns "Corvino Way" in neon,
+// `b` owns "Nine Fingers Row" in brick. §10.4: the corner take is the ONE new faucet (`deed:corner`,
+// character_id'd); the shakedown moves control, not money.
+const backdate = (acct, hours) =>
+  pool.query("UPDATE street_deeds SET corner_at = now() - ($2 || ' hours')::interval WHERE account_id=$1", [acct, String(hours)]);
+const cashOf = async (id) => Number((await pool.query('SELECT cash FROM characters WHERE id=$1', [id])).rows[0].cash);
+const deedRows = async (reason) => Number((await pool.query(
+  "SELECT COUNT(*) n FROM transactions WHERE reason=$1", [reason])).rows[0].n);
+
+// the corner take accrues — backdate 6h, the board shows the owed take
+await backdate(a.acct, 6);
+const cA = (await call('GET', '/v1/deeds', { token: a.token })).body.corner;
+assert.equal(cA.iControl, true, 'the owner controls their own corner');
+assert.equal(cA.owed, DEEDS.CORNER_PER_HR * 6, 'the corner take accrues at the per-hour rate');
+assert.equal(cA.collectable, DEEDS.CORNER_PER_HR * 6, 'collectable == owed when you hold only your own corner');
+
+// COLLECT — a bounded cash faucet, ledgered `deed:corner`, and the clock resets
+const cashA0 = await cashOf(a.id), rows0 = await deedRows('deed:corner');
+const col = await call('POST', '/v1/deeds/corner', { token: a.token });
+assert.equal(col.code, 200, 'the collect lands');
+assert.equal(col.body.total, DEEDS.CORNER_PER_HR * 6, 'the whole owed take is paid');
+assert.equal(await cashOf(a.id), cashA0 + DEEDS.CORNER_PER_HR * 6, 'the cash lands in pocket');
+assert.equal(await deedRows('deed:corner'), rows0 + 1, 'exactly one deed:corner ledger row — the faucet is character_id\'d');
+// the clock reset — nothing to collect a second time
+assert.equal((await call('POST', '/v1/deeds/corner', { token: a.token })).body.error, 'nothing', 'the clock resets on collect');
+
+// THE CAP — an absent controller banks ≤ 24h however long it's been
+await backdate(a.acct, 48);
+assert.equal((await call('GET', '/v1/deeds', { token: a.token })).body.corner.owed,
+  DEEDS.CORNER_PER_HR * (DEEDS.CORNER_CAP_MS / 3600000), 'the corner take caps at CORNER_CAP_MS');
+
+// THE SHAKEDOWN — `b` muscles in on `a`'s corner. Put b on the block, past the level floor, funded.
+await pool.query("UPDATE characters SET loc='neon', respect=1000, muscle=40, cunning=40, energy=100 WHERE id=$1", [b.id]);
+const cashBpre = await cashOf(b.id);
+process.env.DEEDS_SHAKE_P = '1'; // force the roll to land
+const shake = await call('POST', `/v1/deeds/shakedown/${a.id}`, { token: b.token });
+assert.equal(shake.code, 200, 'the shakedown resolves');
+assert.equal(shake.body.won, true, 'the forced roll lands the corner');
+assert.equal(shake.body.reclaim, false, 'a rival muscling in is a seizure, not a reclaim');
+assert.equal(await cashOf(b.id), cashBpre, 'the shakedown moved NO cash — it moves control, not money');
+// b now controls a's corner; a sees it seized
+const bBoard = (await call('GET', '/v1/deeds', { token: b.token })).body.corner;
+assert(bBoard.rivalCorners.some((r) => r.name === 'Corvino Way'), 'b now controls Corvino Way');
+const aSeized = (await call('GET', '/v1/deeds', { token: a.token })).body.corner;
+assert.equal(aSeized.iControl, false, 'a no longer controls their own corner');
+assert.equal(aSeized.seized, true, 'a sees the corner seized');
+assert.equal(aSeized.owed, 0, 'a can collect nothing off a corner a rival holds');
+
+// b collects the seized corner (backdate it — the seize reset the clock)
+await backdate(a.acct, 5);
+const cashB0 = await cashOf(b.id);
+const bcol = await call('POST', '/v1/deeds/corner', { token: b.token });
+assert.equal(bcol.code, 200, 'b collects the corner they muscled in on');
+assert.equal(await cashOf(b.id), cashB0 + DEEDS.CORNER_PER_HR * 5, 'b banks the seized corner take');
+
+// RECLAIM — `a` takes their own corner back. Clear the cooldown, put a on the block, fund them.
+await pool.query("UPDATE street_deeds SET shakedown_at = now() - interval '7 hours' WHERE account_id=$1", [a.acct]);
+await pool.query("UPDATE characters SET loc='neon', respect=1000, muscle=40, cunning=40, energy=100 WHERE id=$1", [a.id]);
+const reclaim = await call('POST', `/v1/deeds/shakedown/${a.id}`, { token: a.token });
+assert.equal(reclaim.body.reclaim, true, 'the owner taking their own corner back is a reclaim');
+const aBack = (await call('GET', '/v1/deeds', { token: a.token })).body.corner;
+assert.equal(aBack.iControl, true, 'the owner controls their corner again');
+delete process.env.DEEDS_SHAKE_P;
+
+// CONTROL LAPSES — a rival's window expires and control falls back to the owner with no action.
+process.env.DEEDS_SHAKE_P = '1';
+await pool.query("UPDATE characters SET loc='neon', respect=1000, muscle=40, cunning=40, energy=100 WHERE id=$1", [b.id]);
+await pool.query("UPDATE street_deeds SET shakedown_at = now() - interval '7 hours' WHERE account_id=$1", [a.acct]);
+await call('POST', `/v1/deeds/shakedown/${a.id}`, { token: b.token }); // b re-seizes
+await pool.query("UPDATE street_deeds SET control_until = now() - interval '1 hour' WHERE account_id=$1", [a.acct]); // window lapses
+const aLapsed = (await call('GET', '/v1/deeds', { token: a.token })).body.corner;
+assert.equal(aLapsed.iControl, true, 'once the window lapses, control falls back to the owner with no action');
+delete process.env.DEEDS_SHAKE_P;
+
+// SHAKEDOWN GATES
+process.env.DEEDS_SHAKE_P = '1';
+await pool.query("UPDATE characters SET loc='docks' WHERE id=$1", [b.id]);
+assert.equal((await call('POST', `/v1/deeds/shakedown/${a.id}`, { token: b.token })).body.error,
+  'district', 'you have to be on the block to lean on the corner');
+await pool.query("UPDATE characters SET loc='neon', respect=1 WHERE id=$1", [b.id]);
+assert.equal((await call('POST', `/v1/deeds/shakedown/${a.id}`, { token: b.token })).body.error,
+  'rookie', 'a rookie under the level floor can\'t muscle a corner');
+delete process.env.DEEDS_SHAKE_P;
+
 // ════════════ SURVIVES DEATH — the heir inherits the deed; the bloodline leaves its mark ════════════
 const kill = await call('POST', '/v1/mod/kill', { mod: true, body: { characterId: a.id } });
 assert.equal(kill.code, 200, 'the mod-kill runs the estate');

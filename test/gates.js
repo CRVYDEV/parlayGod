@@ -167,7 +167,7 @@ const FAMILIES = [
     why: 'BALANCE D2, SIGNED — collecting is an EXPOSED act; a man to ground does not walk the district. '
        + 'This is the exact gate collectFrontier was shipped without (AUDIT-world-frontier F1).',
     require: ['safeHoused'],
-    members: ['collectBusiness', 'collectTerritory', 'collectFrontier', 'collectSov', 'collectSpeakeasy', 'collectRun', 'collectFamilyTribute'] },
+    members: ['collectBusiness', 'collectTerritory', 'collectFrontier', 'collectSov', 'collectSpeakeasy', 'collectRun', 'collectFamilyTribute', 'collectCorner'] },
 
   { name: 'debt enforcement',
     why: 'a lender leaning on a defaulter is doing street work, so the ACTOR needs the street-work '
