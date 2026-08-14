@@ -18,6 +18,7 @@ import * as Loans from '../loans.js';
 import * as Ops from '../ops.js';
 import { opsEngagement } from '../engagement.js';
 import * as Treasury from '../treasury.js';
+import * as StockDeliver from '../stockdeliver.js';
 import * as S from '../social.js';
 import * as Store from '../store.js';
 import * as Router from '../router.js';
@@ -189,6 +190,18 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
       Treasury.recordStockBuy(pool, { ref: req.body?.ref, ticker: req.body?.ticker,
         units: req.body?.units, ethSpent: req.body?.ethSpent, txHash: modRealTxHash(req),
         bootstrap: req.body?.bootstrap === true }));
+    // THE STOCK DELIVERY RAIL (brokers §3.4) — owed stock lands in the player's on-chain STREET DEED's
+    // ERC-6551 TBA. `/deliveries` is the board (owed vs delivered per ticker, accounts waiting on a
+    // deed). `/deliver` drives ONE delivery: it resolves the deed TBA and records it — with a real
+    // txHash from the Delivered watcher it flips the allocation; a comp records `simulated` and flips
+    // nothing (a comp must never assert a player received stock it did not — the same gate as the buy
+    // ingest, one asset over). Chain-dormant: `/deliver` refuses (`no_target`) when the account has no
+    // extracted deed or the chain is unconfigured.
+    app.get('/v1/mod/treasury/deliveries', { preHandler: modAuth }, async () => ({
+      board: await StockDeliver.stockDeliveryBoard(pool), plan: await StockDeliver.planStockDeliveries(pool) }));
+    app.post('/v1/mod/treasury/deliver', { preHandler: modAuth }, async (req) =>
+      StockDeliver.deliverStock(pool, { epochId: req.body?.epochId, accountId: req.body?.accountId,
+        ticker: req.body?.ticker, units: req.body?.units, txHash: modRealTxHash(req) }));
     // ingest a DEX sell-tax episode (a `SellTaxTaken` log on mainnet). The modRealTxHash gate stands:
     // a simulate records the episode for QA but books ZERO revenue, so a comp can never assert the
     // treasury received ETH it did not.

@@ -1540,6 +1540,14 @@ ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS sale_price BIGINT;            
 -- `onchain_token_id` = uint256(keccak256(name)) as a decimal string, the deterministic re-import lookup.
 ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS onchain_token_id TEXT;                -- non-null = extracted (held on-chain, inert in-game)
 CREATE INDEX IF NOT EXISTS ix_street_deeds_token ON street_deeds (onchain_token_id);
+-- STOCK DELIVERY target link (brokers §3.4): the account that extracted this deed on-chain. Set at
+-- markDeedExtracted, which re-keys `account_id` to `onchain:<tokenId>` (inert-in-game) and thereby
+-- SEVERS the account->deed link — so the delivery keeper needs this to find "the account's on-chain
+-- deed" and push its stock allocation into that deed's ERC-6551 TBA. Cleared on re-import is unneeded
+-- (the resolver filters on `onchain_token_id IS NOT NULL`, so a re-imported deed drops out anyway).
+ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS extracted_by_account TEXT;             -- who extracted it (survives the account_id re-key)
+ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS extracted_at TIMESTAMPTZ;              -- when — the delivery keeper targets the most-recent
+CREATE INDEX IF NOT EXISTS ix_street_deeds_extractor ON street_deeds (extracted_by_account);
 -- THE LEGEND ENGINE — the provenance record of everything that happened on a deed (§4). Account-keyed
 -- like the deed (survives death — the record is the value). Pure-status append log; never a currency.
 CREATE TABLE IF NOT EXISTS street_deed_history (
@@ -2195,10 +2203,13 @@ CREATE TABLE IF NOT EXISTS stock_buys (
 );
 
 -- What the treasury OWES — units promised out, per (epoch, ticker, account). ACCOUNT-keyed, so an
--- allocation survives death exactly like the ETH vault line beside it. Delivery (step 7) resolves
--- account -> Dynasty NFT -> its ERC-6551 account; keying the OWED side on the account rather than on
--- a token id keeps this table meaningful before the NFT exists, and keeps an allocation attached to
--- the player whose PLAY earned it rather than to whoever holds a token at delivery time.
+-- allocation survives death exactly like the ETH vault line beside it. Delivery (step 7, brokers §3.4,
+-- founder-directed 2026-08-14) resolves account -> the player's on-chain STREET DEED -> its ERC-6551
+-- token-bound account (NOT the Dynasty NFT — the deed is the real-estate front that holds the family's
+-- book, and keeping stock off the identity NFT leaves its balanceOf-gates-nothing entitlement wall
+-- intact); keying the OWED side on the account rather than on a token id keeps this table meaningful
+-- before the deed is extracted, and keeps an allocation attached to the player whose PLAY earned it
+-- rather than to whoever holds a token at delivery time.
 --   `account_id` IS **TEXT**, and that is not a style choice. This schema's account ids are mixed —
 -- `characters`, `account_persistent`, `broker_activations` and `activity_log` are all TEXT; the
 -- `eth_vault` row right above is one of the few UUID columns, so copying its declaration here (which
@@ -2217,6 +2228,27 @@ CREATE TABLE IF NOT EXISTS stock_allocations (
 );
 CREATE INDEX IF NOT EXISTS ix_stock_alloc_ticker ON stock_allocations(ticker);
 CREATE INDEX IF NOT EXISTS ix_stock_alloc_account ON stock_allocations(account_id);
+
+-- THE STOCK DELIVERY LEDGER (brokers §3.4) — one row per delivery of an allocation into the player's
+-- on-chain Street Deed's ERC-6551 token-bound account, via StockVault.deliver. `delivery_id` is the
+-- StockVault idempotency key (usedDeliveryId on-chain); the backend PK backstops a re-scan. A REAL
+-- delivery (tx_hash non-null, from the Delivered watcher) is what flips the allocation's `delivered`
+-- flag; a mod/QA record (tx_hash null, status='simulated') is booked for reconciliation but NEVER
+-- flips an allocation — a comp must never be able to assert a player received stock it did not (the
+-- treasury.js txHash-gate discipline). `delivered <= allocated` is the nightly wall (runTreasuryInvariants).
+CREATE TABLE IF NOT EXISTS stock_deliveries (
+  delivery_id  TEXT PRIMARY KEY,                 -- StockVault deliveryId (reused across a re-scan → no-op)
+  epoch_id     TEXT NOT NULL,                    -- the stock_allocations row this fulfils
+  account_id   TEXT NOT NULL,
+  ticker       TEXT NOT NULL,
+  units        NUMERIC NOT NULL DEFAULT 0,
+  deed_token_id TEXT NOT NULL,                   -- the Street Deed onchain_token_id whose TBA received it
+  tba          TEXT,                             -- the resolved ERC-6551 token-bound account
+  tx_hash      TEXT,                             -- non-null = a REAL on-chain delivery; null = a comp/QA record
+  status       TEXT NOT NULL DEFAULT 'delivered',-- 'delivered' (real) | 'simulated' (comp)
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_stock_deliveries_acct ON stock_deliveries(account_id, ticker);
 
 -- THE CELLPHONE (founder-directed): a personal inbox + player-to-player DIRECT MESSAGES. Pure
 -- talk — zero §10.4 surface (no currency ever rides a DM). ACCOUNT-keyed on BOTH sides (the

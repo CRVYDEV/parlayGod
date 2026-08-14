@@ -338,9 +338,18 @@ PHASE 1 for the exact calls/args.
       straight into the player's ERC-6551 token-bound account, so the NFT sells self-contained; the accepted
       risk is that Robinhood's tokenized stocks are issuer-restricted (EU-facing) and a gateless push has no
       on-chain control over who receives them. Any operational eligibility is a backend/keeper concern.
-      **Backend activation:** set **`STOCK_VAULT_ADDRESS`** on the delivery keeper. Dormant until wired.
-      §10.4-NEUTRAL (out-of-band real value — zero `transactions` rows; the backend's `allocateStock` clamp
-      + nightly `runTreasuryInvariants` are the owed-side half of the wall).
+      **DELIVERY TARGET REDIRECTED to the STREET DEED (`omerta-brokers-design.md` §3.4, founder-directed
+      2026-08-14):** stock lands in the player's on-chain **Street Deed's** ERC-6551 TBA, not the Dynasty
+      NFT's — so a player must own AND extract a Street Deed to receive stock (an account with none accrues
+      its allocation as owed and waits). The identity NFT holds no stock, so its `balanceOf`-gates-nothing
+      entitlement wall is intact. **Backend activation:** set **`STOCK_VAULT_ADDRESS`** on the delivery
+      keeper AND API, and **`STREET_DEED_ADDRESS`** + the ERC-6551 env (`ERC6551_REGISTRY` /
+      `ERC6551_ACCOUNT_IMPL` / `ERC6551_SALT`, defaulting to the canonical registry singleton) so
+      `src/stockdeliver.js` can resolve the deed's TBA; the worker runs the two watchers
+      (`Delivered` → `confirmStockDelivered`, the deed's `Extracted` → `markDeedExtracted`). Dormant until
+      wired. §10.4-NEUTRAL (out-of-band real value — zero `transactions` rows; the backend's
+      `allocateStock` clamp + the nightly `allocated ≤ held` AND `delivered ≤ allocated` checks in
+      `runTreasuryInvariants` are the owed-side half of the wall).
 
 ### 2b. THE BANK — the Denari (DNR) market (only when it ships; not part of the first cut)
 Order matters more here than anywhere else in this file, because **two of these steps fail SILENTLY**:

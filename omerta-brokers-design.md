@@ -136,6 +136,70 @@ treasury and a bad delivery. It stops being one check among several and becomes 
 built FIRST, in per-ticker UNITS (a cash-value version silently permits owing more units than exist
 the moment a price moves), and watched nightly by `alertDrift` rather than merely asserted in a test.
 
+### 3.4 AMENDED — stock lands in the STREET DEED, not the identity NFT (founder-directed 2026-08-14)
+
+§3.3 chose the ERC-6551 bound account of the **Dynasty (identity) NFT** as the container. The founder
+redirected delivery to the **Street Deed** NFT: the treasury-bought tokenized stock is delivered into
+the player's on-chain Street Deed's ERC-6551 token-bound account. The deed becomes a self-contained
+real-estate-plus-portfolio NFT — *own the street, and the street holds your legit book; sell the
+street, sell the book with it.*
+
+**Why the deed is the better container (the redirect is a strict improvement, not a lateral move):**
+
+1. **It fits the fiction exactly.** The mob's legit front is real estate; the deed IS the real estate.
+   Stock sitting under a deed reads as "the family's holdings on that street," where stock in an
+   identity PFP read as nothing in particular.
+2. **The deed already IS a tradeable, self-contained asset** (Phase 3 secondary market + the
+   extract/re-import lifecycle). A deed that also contains a stock portfolio is a stronger
+   secondary-market object than an identity PFP; §3.3's "the NFT sells self-contained" argument lands
+   harder on an NFT that was already built to be sold.
+3. **The identity NFT's entitlement wall SURVIVES.** §3.3 argument 3 said the container decision
+   *"does not survive"* the identity-NFT rule that "the token is a tradeable trophy; the game
+   entitlement is account-bound and never read off a balance" — because stock in the identity NFT
+   makes it a bearer instrument. Moving the stock to the deed removes that contradiction: the Dynasty
+   NFT holds no stock, so `balanceOf` still gates nothing and the entitlement stays account-bound.
+   The identity-NFT design's wall is now intact rather than amended. (`DynastyNFT.sol` already gates
+   nothing on `balanceOf` — this keeps it that way.)
+
+**The rule that follows, and the utility it creates.** A Street Deed is an on-chain ERC-721 only once
+EXTRACTED (`street_deeds.onchain_token_id` non-null). So: **to RECEIVE delivered tokenized stock
+on-chain, a player must own and EXTRACT a Street Deed.** An account with no deed, or an un-extracted
+one, accrues its `stock_allocations` as owed and waits — nothing is lost, delivery just has no target
+yet. This gives the deed a powerful new reason to exist (claim a street, extract it, and it becomes
+your investment vault) without changing any of the wall math.
+
+**§3.3's accepted risks (1 and 4) still apply, now on the deed, and are RE-flagged here rather than
+re-discovered later:**
+- **Bearer instrument (arg 1).** A deed's marketplace buyer acquires the stock inside it with no
+  on-chain eligibility check — the same accepted, legal-cleared risk, now on an NFT already built to
+  trade. Unchanged in kind.
+- **Floor-as-contents (arg 4).** A deed's secondary price now partly reflects the stock in its TBA;
+  the cheap end of the deed order book becomes drained deeds. Same dynamic §3.3 accepted.
+- **Drain-before-sale.** The canonical ERC-6551 account lets the NFT owner control the TBA, so a
+  seller CAN drain the stock before selling the deed. This is inherent to gateless push into any
+  tradeable NFT's TBA (`omerta-identity-nft-design.md` flags the mitigations — a listing lock, or a
+  voucher-gated TBA outflow — as launch-review items). Recorded, not built.
+
+**What this changes in the build (and what it does NOT):** the `allocated ≤ held` wall (per ticker, in
+units) is UNCHANGED — the delivery TARGET moving from the Dynasty TBA to the Deed TBA does not touch
+what may be owed or how it is bounded. The only new surface is the DELIVERY rail (`src/stockdeliver.js`):
+resolve each owed allocation to the account's extracted-deed ERC-6551 TBA and drive `StockVault.deliver`
+there, idempotently, with a new `delivered ≤ allocated` nightly check so a delivery can never exceed
+what was allocated. Because the `Delivered` event carries only a `deliveryId`, the rail is two-phase —
+STAGE records what the keeper is about to send (deterministic `deliveryId` = keccak of
+`stockdeliver:<epoch>:<account>:<TICKER>`, so a re-drive maps to the same on-chain id), and only the
+`Delivered` watcher CONFIRMS it and flips the `stock_allocations.delivered` flag (a comp/simulated
+stage is never confirmed — the treasury.js `txHash` gate). Built chain-dormant (the established
+discipline — the day the market deploys, the rail exists), §10.4-NEUTRAL by construction (out-of-band
+real value — zero `transactions` rows). One subtlety the build turns on: `chain.js:markDeedExtracted`
+re-keys the extracted deed's `account_id` to `onchain:<tokenId>`, severing the account→deed link, so
+the re-key also stamps `extracted_by_account` — which is what the delivery rail JOINs on to find an
+account's on-chain deed.
+
+**Deferred, flagged (not built):** re-targeting delivery to a deed's SECONDARY owner (the rail keys on
+the extractor, and there is no `Transfer` watcher on the deed NFT), the real keeper TX send that drives
+`StockVault.deliver`, and the drain-before-sale mitigation above.
+
 ---
 
 ## 4. What this does NOT touch

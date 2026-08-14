@@ -12421,3 +12421,51 @@ docs guard green. Deferred (backend, mainnet-gated): the `PackagePaid` watcher (
 idempotently on `nonce`, the `recordFeePayment` twin), the stock buy keeper (`runStockBuyback`) +
 `allocateStock` ledger + the delivery keeper that drives `StockVault.deliver`, and the DynastyNFT
 `Transfer`-watcher metadata freeze — each behind the third-party contract audit + the launch review.
+
+**STOCKS INTO THE DEEDS — treasury-bought stock lands in the Street Deed's TBA (founder-directed
+2026-08-14: "I also want the stocks bought dropped into the Deed NFTs") — the DELIVERY RAIL BUILT,
+chain-dormant** (`src/stockdeliver.js` — the 143rd module, `test/stockdeliver.js` — the 100th suite;
+`stock_deliveries` — the 226th table + `street_deeds.extracted_by_account`/`extracted_at`, the outage-
+lesson ALTERs; `GET`/`POST /v1/mod/treasury/deliver{ies}`; the worker's `syncStockDeliveredEvents` +
+the nightly `delivered <= allocated` wall; design `omerta-brokers-design.md` §3.4). The brokers §3.3
+container decision (stock into the DYNASTY identity NFT's ERC-6551 account) redirected to the STREET
+DEED — *own the street, and the street holds your legit book; sell the street, sell the book with it.*
+**No new CONTRACT** — `StockVault.deliver` sends to ANY address and ERC-6551 is the canonical registry
+(unmodified), so "stocks into the deeds" is a BACKEND delivery rail retargeted at the deed's TBA, not
+Solidity. **The redirect is a strict improvement**: the deed is ALREADY a tradeable, self-contained
+real-estate NFT with a secondary market + extract/re-import lifecycle (§3.3's "sells self-contained"
+lands harder on an NFT built to be sold), and — the load-bearing win — **the identity NFT's entitlement
+wall SURVIVES**: with no stock on the Dynasty token, `balanceOf` still gates nothing and `minted` stays
+account-bound, so §3.3 argument 3's contradiction is REMOVED (the identity-NFT doc's 2026-08-10
+"standing pipe / bearer instrument" amendment is now SUPERSEDED — the token is a tradeable trophy
+again, whole). **THE RULE:** a Street Deed is an on-chain ERC-721 only once EXTRACTED, so **to RECEIVE
+delivered stock on-chain you must own AND extract a deed** — an account with none accrues its
+`stock_allocations` as owed and WAITS (nothing lost; delivery has no target yet). **TWO-PHASE
+stage→confirm**, because the `Delivered(deliveryId,token,to,units)` event carries only a `deliveryId`:
+`stageStockDelivery` resolves the account's extracted-deed TBA (the ERC-6551 registry `account()` read
+through the `__setTbaResolver` seam, chain-dormant null), computes a DETERMINISTIC `deliveryIdFor`
+(keccak of `stockdeliver:<epoch>:<account>:<TICKER>`, so a re-drive maps to the same on-chain id) and
+INSERTs a `pending` (or `simulated` comp) row — but does NOT flip the allocation; only the `Delivered`
+watcher's `confirmStockDelivered` upgrades a `pending` row → `delivered` + txHash and flips
+`stock_allocations.delivered` (the treasury.js **txHash comp gate** — a `simulated` comp is refused
+`notPending` and flips nothing). **The subtlety the build turns on:** `chain.js:markDeedExtracted`
+re-keys the deed's `account_id` to `onchain:<tokenId>`, severing the account→deed link, so the re-key
+now also stamps `extracted_by_account` — which the rail JOINs on to find an account's on-chain deed
+(dedup most-recent per epoch/account/ticker in JS — the /v1/gangs flat-query posture; pg-mem also
+mis-evaluates two `IS NOT NULL` AND-ed on ALTER columns, so the board filters the token side in JS).
+**§10.4-NEUTRAL by construction** — out-of-band real value, the whole rail writes ZERO `transactions`
+rows (test-pinned); the new **`delivered <= allocated (<ticker>, units)`** nightly check joins
+`runTreasuryInvariants`'s `alertDrift` beside `allocated <= held`, so a delivery can never exceed what
+was allocated (a bug that double-booked trips it). Routes: `GET /v1/mod/treasury/deliveries` (the board
++ the plan) + `POST /v1/mod/treasury/deliver` (with the `modRealTxHash` gate — a comp books simulated).
+`test/stockdeliver.js` proves the deed-required gate in the plan (A with an extracted deed is a target,
+B without one waits), `deedTbaFor`/`deliveryIdFor` determinism, stage→confirm (a CONFIRMED delivery
+flips the allocation, a `pending` stage does not) + idempotency both ways, the comp gate (a `simulated`
+row is never upgraded), `deliverStock`, the `no_target` refusal, the `delivered <= allocated` wall (a
+forced over-delivery trips it), the board (owed/delivered/pending + `waitingOnADeed`), and §10.4-
+neutrality — TWO mutations each caught by name (the comp gate opened → the `pending`-only assertion
+fails; the plan's JOIN → LEFT JOIN → "B is NOT a target" fails). Chain-DORMANT until `STOCK_VAULT_ADDRESS`
++ `STREET_DEED_ADDRESS` + the ERC-6551 env are set on the worker (the two watchers) + API. Deferred
+(flagged): re-targeting delivery to a deed's SECONDARY owner (the rail keys on the extractor — no
+`Transfer` watcher on the deed NFT), the real keeper TX that drives `StockVault.deliver`, and the
+drain-before-sale mitigation. Suite 100 files + sim drift-0.

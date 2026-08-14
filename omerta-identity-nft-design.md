@@ -48,6 +48,16 @@
 > with the brokers §3.3 note beside it: once the token carries contents, the cheap end of the order
 > book becomes drained tokens and contents-versus-floor arbitrage, which is a different market from
 > the one a portrait alone would have.
+>
+> **SUPERSEDED 2026-08-14 by `omerta-brokers-design.md` §3.4 — the stock moved OFF this token, and the
+> wall is intact again.** The founder redirected treasury-bought stock into the **Street Deed** NFT's
+> token-bound account, not this identity NFT's. So the "standing pipe" the 2026-08-10 amendment
+> described is gone from this token: the Dynasty NFT holds **no** stock, `balanceOf` still gates
+> nothing, and the one-line summary — **a tradeable trophy; the entitlement is not transferable** —
+> is once again true of the whole token, with no bearer-instrument caveat. The contents-vs-floor and
+> bearer-instrument concerns now live entirely on the Street Deed (`omerta-brokers-design.md` §3.4),
+> which was already a tradeable, self-contained asset built to be sold. `DynastyNFT.sol` gates nothing
+> on `balanceOf` — this decision keeps it that way, and it is the reason it was written that way.
 
 ---
 

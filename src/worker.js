@@ -55,7 +55,7 @@ import { sweepTournaments, sweepTrackEntries, sweepFuturity } from './casino.js'
 import { sweepRingTables } from './ring.js';
 import { sweepGrandPrix } from './races.js';
 import { sweepStakes } from './stable.js';
-import { syncFeeEvents, syncClaimedEvents, syncBondEvents, syncHarvestFees, syncRedeemedEvents, syncDeedExtractedEvents, syncDeedRedeemedEvents, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
+import { syncFeeEvents, syncClaimedEvents, syncBondEvents, syncHarvestFees, syncRedeemedEvents, syncDeedExtractedEvents, syncDeedRedeemedEvents, syncStockDeliveredEvents, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
 
 const BUYBACK_PERIOD_MS = 12 * 3600 * 1000;
 
@@ -663,6 +663,12 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
             if (de.processed) console.log(`🏙️  deed sync: ${de.processed} street(s) extracted on-chain (blocks ${de.from}–${de.to})`);
             const dr = await syncDeedRedeemedEvents(pool, source, { startBlock });
             if (dr.processed) console.log(`🏙️  deed sync: ${dr.processed} street(s) burned back to the city (blocks ${dr.from}–${dr.to})`);
+          }
+          // STOCK DELIVERY (StockVault Delivered → confirm a staged delivery into a deed's TBA, flip
+          // the allocation). Brokers §3.4. Dormant unless STOCK_VAULT_ADDRESS is set.
+          if (process.env.STOCK_VAULT_ADDRESS) {
+            const sd = await syncStockDeliveredEvents(pool, source, { startBlock });
+            if (sd.processed) console.log(`📈 stock delivery: confirmed ${sd.processed} delivery(ies) into deed TBAs (blocks ${sd.from}–${sd.to})`);
           }
         } catch (e) { console.error('chain sync error', e.message); }
       };
