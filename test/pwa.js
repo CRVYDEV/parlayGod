@@ -67,6 +67,18 @@ assert.ok(html.includes('name="theme-color"'), 'a theme-color');
   assert.equal(bad.statusCode, 416, 'an unsatisfiable range is refused, not crashed');
   assert.equal((await get('/art/hype/no-such-clip.mp4')).statusCode, 404, 'an unknown clip 404s (allowlist)');
   assert.equal((await get('/art/hype/..%2F..%2Fpackage.json')).statusCode, 404, 'traversal is a key not in the Map');
+  // the AMBIENT BEDS ride the same allowlist + range machinery as the clips (an <audio> element
+  // wants seekability exactly like <video>), typed audio/mp4 — and the client learns what shipped
+  // from the motion manifest instead of hardcoding a list that would drift from this directory
+  const bed = await get('/art/hype/bed-streets.m4a');
+  assert.equal(bed.statusCode, 200, 'an ambient bed serves');
+  assert.ok(/audio\/mp4/.test(bed.headers['content-type']), 'as audio/mp4');
+  assert.equal(bed.headers['accept-ranges'], 'bytes', 'with range support');
+  const mo = await get('/v1/art/motion');
+  assert.equal(mo.statusCode, 200, 'the motion manifest serves');
+  const moj = JSON.parse(mo.body);
+  assert.ok(Array.isArray(moj.clips) && moj.clips.includes('hero-poster'), 'the manifest lists the clips (by plate name, no extension)');
+  assert.ok(Array.isArray(moj.beds) && moj.beds.includes('bed-streets'), 'and the beds');
 }
 
 console.log('pwa: PASS');

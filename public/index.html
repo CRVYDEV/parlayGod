@@ -611,6 +611,11 @@
   .vg-card { position: relative; width: min(400px, 86vw); border-radius: 10px; overflow: hidden;
     border: 1px solid var(--line2); box-shadow: 0 18px 60px rgba(0,0,0,.6); background: var(--panel); }
   .vg-card img { width: 100%; height: 190px; object-fit: cover; display: block; filter: saturate(.8) contrast(1.05); }
+  .vg-card video { width: 100%; height: 190px; object-fit: cover; display: block; filter: saturate(.8) contrast(1.05); }
+  .death-vid { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .22; z-index: 0; pointer-events: none; }
+  [data-mkey] { position: relative; overflow: hidden; }
+  .cardvid { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .45; z-index: 0; pointer-events: none; }
+  [data-mkey] > *:not(.cardvid) { position: relative; z-index: 1; }
   .vg-stamp { position: absolute; top: 40%; left: 50%; transform: translate(-50%,-50%) rotate(-7deg);
     font-size: 32px; letter-spacing: 6px; color: var(--ok); border: 3px solid var(--ok); padding: 2px 14px;
     border-radius: 6px; background: rgba(0,0,0,.4); animation: vgStamp .22s cubic-bezier(.2,1.6,.4,1); }
@@ -884,6 +889,8 @@
     color: var(--accent, var(--neon)); font-size: 19px; letter-spacing: 4px; text-transform: uppercase;
     text-shadow: 0 2px 16px #000, 0 0 34px rgba(0,0,0,.9); }
   @media (max-width: 760px) { #tabart { height: 92px; } #tabart span { font-size: 15px; letter-spacing: 2px; left: 12px; bottom: 8px; } }
+  /* THE LIVING PLATE — the screen header's ambient clip, dimmed under the same scrim as the still */
+  #tabart .tabvid { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .55; }
 
   /* ── the mobile bottom nav: one thumb-bar of the seven groups (hidden on desktop) ── */
   #bnav { display: none; }
@@ -1371,6 +1378,50 @@
   // ── polish layer: haptics + tactile feedback (progressive enhancement — silent no-ops where unsupported;
   // iOS Safari has no Vibration API, Android/Chrome does; reduced-motion users get none by choice) ──
   const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // THE MOTION SET — which art plates have a living ambient clip, and which ambient beds shipped.
+  // Fetched from the server's own boot allowlist (/v1/art/motion), so the client hardcodes nothing
+  // and a clip added tomorrow is alive the day it ships. Empty until the fetch lands = stills only.
+  const MOTION = { clips: new Set(), beds: new Set() };
+  const motionOK = () => !REDUCED && !navigator.connection?.saveData;
+  (async () => { try { const r = await fetch('/v1/art/motion'); const j = await r.json();
+    (j.clips || []).forEach((c) => MOTION.clips.add(c)); (j.beds || []).forEach((b) => MOTION.beds.add(b)); } catch { /* stills stand in */ } })();
+  // mount a living clip over a still — shared by the tab plate, card art and the vignette. The
+  // still stays as the poster, so a clip that never loads/plays leaves the photograph (fail-safe).
+  const liveVideo = (key, cls, poster) => {
+    const v = document.createElement('video');
+    v.className = cls; v.muted = true; v.loop = true; v.playsInline = true; v.autoplay = true;
+    if (poster) v.poster = poster;
+    v.src = `/art/hype/${key}.mp4`;
+    v.onerror = () => v.remove();
+    v.play?.()?.catch?.(() => {});
+    return v;
+  };
+  // HOVER-TO-LIVE — any card art (img.ico) whose plate has a motion clip swaps to the clip the
+  // moment the pointer (or a finger) lands on it, poster = the still, capped at 5 concurrent so a
+  // wandering pointer can't leave a dozen videos running. A re-render naturally resets everything.
+  const liveCards = [];
+  document.addEventListener('pointerover', (e) => {
+    if (!motionOK()) return;
+    const img = e.target;
+    // an element that DECLARES its motion key (a card whose art is a CSS background) mounts a
+    // backdrop clip instead of a swap — same cap, same fail-safe
+    const host = (img.closest?.('[data-mkey]'));
+    if (host && !host.querySelector('.cardvid') && MOTION.clips.has(host.dataset.mkey)) {
+      const bv = liveVideo(host.dataset.mkey, 'cardvid');
+      host.prepend(bv); liveCards.push(bv);
+      while (liveCards.length > 5) { const old = liveCards.shift(); if (old.isConnected) (old._still ? old.replaceWith(old._still) : old.remove()); }
+      return;
+    }
+    if (!(img instanceof HTMLImageElement) || !img.classList.contains('ico')) return;
+    const key = (/\/v1\/art\/([a-z]+)\/([a-z0-9_-]+)/i.exec(img.src) || []).slice(1).join('-') ||
+                (/\/art\/([a-z0-9_-]+)\.jpg/i.exec(img.src) || [])[1];
+    if (!key || !MOTION.clips.has(key)) return;
+    const v = liveVideo(key, img.className, img.src);
+    v._still = img;
+    img.replaceWith(v);
+    liveCards.push(v);
+    while (liveCards.length > 5) { const old = liveCards.shift(); if (old.isConnected) old.replaceWith(old._still); }
+  }, { passive: true });
   const HAPTIC = { tap: 8, success: [12, 30, 14], error: [40, 60, 40], big: [18, 40, 18, 40, 70] };
   const haptic = (kind) => { if (REDUCED) return; try { navigator.vibrate?.(HAPTIC[kind] || 8); } catch {} };
   // ── THE SOUNDTRACK (task #307, founder: "addition of sounds when playing and when clicking …
@@ -1434,11 +1485,48 @@
       jail:  (t) => { [187, 463, 747, 1123].forEach((f) => tone(t, { f, dur: 0.55, g: 0.06, type: 'triangle' })); noise(t, { dur: 0.08, g: 0.13, hp: 700 }); },
       ring:  (t) => { tone(t, { f: 1046.5, dur: 0.12, g: 0.08 }); tone(t + 0.15, { f: 1046.5, dur: 0.12, g: 0.06 }); },
     };
+    // HAPTICS — the client already has an explicit haptic() vocabulary at the chosen sites
+    // (tap/success/error/big), so the per-sound buzz covers ONLY the sounds no site pairs with a
+    // haptic() call — ok (an action landed), cash (money moved), jail, ring — or the two systems
+    // would double-fire on the same beat (the champion moment pairs sfx('win') + haptic('big')).
+    const BUZZ = { ok: [12], cash: [12, 40, 12], jail: [70, 50, 70], ring: [30, 80, 30] };
     const play = (name) => {
       if (!enabled() || !SOUNDS[name]) return;
+      try { if (BUZZ[name]) navigator.vibrate?.(BUZZ[name]); } catch { /* not supported */ }
       try { if (!ensure()) return; SOUNDS[name](ctx.currentTime); } catch { /* silence, never an error */ }
     };
     return { play, enabled, toggle() { localStorage.setItem('omerta_sfx', enabled() ? 'off' : 'on'); return enabled(); } };
+  })();
+  // THE AMBIENT ENGINE — a low generated bed under each part of town (rain over the streets, brushed
+  // jazz in the den, a foghorn at the docks), crossfaded when you move. Same switch as the SFX (one
+  // "game feel" toggle), gated behind the first gesture (autoplay policy), paused with a hidden tab,
+  // and silence — never an error — when a bed didn't ship or won't play.
+  const AMBIENT = (() => {
+    const TAB_BED = { den: 'bed-den', speakeasy: 'bed-speakeasy', port: 'bed-docks', law: 'bed-law', pen: 'bed-pen', portfolio: 'bed-legit' };
+    const GROUP_BED = { streets: 'bed-streets', earners: 'bed-streets', city: 'bed-streets', start: 'bed-streets',
+      vice: 'bed-den', blood: 'bed-law', family: 'bed-family', legit: 'bed-legit' };
+    let cur = null, curKey = null, wantKey = null, gestured = false, fadeT = null;
+    const VOL = 0.11;
+    const fadeTo = (a, target, ms, done) => { clearInterval(fadeT); const step = (target - a.volume) / (ms / 60);
+      fadeT = setInterval(() => { try { a.volume = Math.max(0, Math.min(1, a.volume + step)); } catch {}
+        if ((step > 0 && a.volume >= target) || (step < 0 && a.volume <= Math.max(0, target))) { clearInterval(fadeT); done?.(); } }, 60); };
+    const stop = () => { if (cur) { const dying = cur; fadeTo(dying, 0, 900, () => { dying.pause(); dying.src = ''; }); cur = null; curKey = null; } };
+    const start = (key) => {
+      const a = new Audio(`/art/hype/${key}.m4a`);
+      a.loop = true; a.preload = 'auto'; a.volume = 0;
+      const p = a.play?.();
+      p?.then?.(() => fadeTo(a, VOL, 1400))?.catch?.(() => { /* pre-gesture — retried on the next pointerdown */ });
+      cur = a; curKey = key;
+    };
+    const sync = () => {
+      const ok = SFX.enabled() && !navigator.connection?.saveData && !document.hidden && gestured;
+      const key = ok && wantKey && MOTION.beds.has(wantKey) ? wantKey : null;
+      if (key === curKey) { if (cur && cur.paused && key) cur.play?.()?.catch?.(() => {}); return; }
+      stop(); if (key) start(key);
+    };
+    document.addEventListener('pointerdown', () => { if (!gestured) { gestured = true; sync(); } }, { capture: true, passive: true });
+    document.addEventListener('visibilitychange', () => { if (document.hidden) cur?.pause(); else sync(); });
+    return { set(tabId, grp) { wantKey = TAB_BED[tabId] || GROUP_BED[grp] || null; sync(); }, sync };
   })();
   const sfx = (n) => SFX.play(n);
   // every button press gets the felt-damped click (pointerdown so it lands on the GESTURE — which
@@ -1504,11 +1592,11 @@
   // same tag that picks the sting), with a couple of context overrides; anything unmapped gets no
   // video, which is most things, on purpose — the rarity rule that keeps the big moments big.
   const CINE_CLIPS = {
-    violent: ['hitman-professional.mp4', 'hitman-legbreaker.mp4', 'crime-torch.mp4'],   // a kill / the first-blood beat
-    payday: ['crime-counting.mp4', 'crime-diamond.mp4', 'heist-goldvault.mp4', 'crime-vaultjob.mp4'], // money in hand
-    jail: ['interior-law.mp4'],            // the pinch
+    violent: ['cine-whacked.mp4', 'hitman-professional.mp4', 'hitman-legbreaker.mp4', 'crime-torch.mp4'],   // a kill / the first-blood beat
+    payday: ['cine-payday.mp4', 'crime-counting.mp4', 'crime-diamond.mp4', 'heist-goldvault.mp4', 'crime-vaultjob.mp4'], // money in hand
+    jail: ['interior-law.mp4', 'interior-pen.mp4'],            // the pinch
     escape: ['district-docks.mp4'],        // over the wall
-    title: ['hero-backdrop.mp4', 'crest.mp4'],  // the belt / a crowned moment
+    title: ['cine-champion.mp4', 'hero-backdrop.mp4', 'crest.mp4'],  // the belt / a crowned moment
   };
   let cineClipN = 0; // rotate within a moment's set so back-to-back cinematics don't repeat a clip
   function cine(spec) {
@@ -2359,8 +2447,15 @@
   function playVignette({ art, stamp, sub, good }) {
     if (REDUCED) return;
     document.querySelector('.vignette')?.remove();
+    // when the scene plate has a motion clip, the vignette PLAYS it (the still is the poster, so a
+    // failed load shows the photograph — same fail-safe as everywhere else motion mounts)
+    const mkey = (/\/v1\/art\/([a-z]+)\/([a-z0-9_-]+)/i.exec(art) || []).slice(1).join('-') ||
+                 (/\/art\/([a-z0-9_-]+)\.jpg/i.exec(art) || [])[1];
+    const media = (motionOK() && mkey && MOTION.clips.has(mkey))
+      ? `<video autoplay muted playsinline poster="${art}" src="/art/hype/${mkey}.mp4"></video>`
+      : `<img alt="" src="${art}">`;
     const v = el(`<div class="vignette${good ? '' : ' bad'}">
-      <div class="vg-card"><img alt="" src="${art}">
+      <div class="vg-card">${media}
         <div class="vg-stamp">${esc(stamp)}</div><div class="vg-sub">${esc(sub || '')}</div></div></div>`);
     document.body.appendChild(v);
     const gone = () => v.remove();
@@ -2765,7 +2860,7 @@
   { const sb = $('#btn-sfx');
     const paint = () => { sb.innerHTML = SFX.enabled() ? ic('sndon') : ic('sndoff'); };
     paint();
-    sb.onclick = () => { const on = SFX.toggle(); paint(); if (on) sfx('ok'); toast(on ? 'the city has a soundtrack again' : 'silence — the professional’s choice', false); }; }
+    sb.onclick = () => { const on = SFX.toggle(); paint(); AMBIENT.sync(); if (on) sfx('ok'); toast(on ? 'the city has a soundtrack again' : 'silence — the professional’s choice', false); }; }
   $('#glossary-close').onclick = () => $('#glossary').classList.add('hidden');
   $('#glossary-tour').onclick = () => { $('#glossary').classList.add('hidden'); openTour(); };
   $('#glossary').onclick = (e) => { if (e.target.id === 'glossary') $('#glossary').classList.add('hidden'); };
@@ -3151,6 +3246,10 @@
     const k = rep.kept || {}, l = rep.lost || {};
     const line = (v, s) => (v ? `${s}<br>` : '');
     const body = $('#death-body'); if (!body) return;
+    // the funeral procession plays behind the words (generated t2v clip; absent = the plain modal)
+    body.parentElement?.querySelector('.death-vid')?.remove();
+    if (motionOK() && MOTION.clips.has('cine-funeral'))
+      body.parentElement?.prepend(liveVideo('cine-funeral', 'death-vid'));
     body.innerHTML = `
       <h2 style="color:var(--blood)">YOUR STREET IS DEAD</h2>
       <p class="dim">${rep.by ? `Put in the ground by <b>${esc(rep.by)}</b>.` : 'The city took its due.'} But the name lives on — your bloodline rises again as <b>${esc(me.name)}</b>, generation ${me.generation}.</p>
@@ -3698,11 +3797,18 @@
     if (art) {
       const file = TAB_ART[id];
       art.classList.toggle('hidden', !file);
-      if (file) { art.style.setProperty('--art', `url(/art/${file}.jpg)`); art.firstElementChild.textContent = TABS[id] || id; }
+      if (file) {
+        art.style.setProperty('--art', `url(/art/${file}.jpg)`); art.firstElementChild.textContent = TABS[id] || id;
+        // THE LIVING PLATE — when this screen's art has an ambient clip, it breathes. The still is
+        // the poster underneath (::before), so a failed load leaves the photograph untouched.
+        art.querySelector('.tabvid')?.remove();
+        if (motionOK() && MOTION.clips.has(file)) art.prepend(liveVideo(file, 'tabvid'));
+      }
     }
     // the per-screen accent + the bottom nav's lit stop follow the tab's group
     const grp = groupOf(id);
     document.body.dataset.group = grp;
+    AMBIENT.set(id, grp);   // the part of town decides the bed under it
     const bn = $('#bnav');
     if (bn) for (const b of bn.children) b.classList.toggle('on', groupOf(b.dataset.go) === grp);
     renderIntro(id);   // the one-time "first time here" banner (outside the tab body — re-render-proof)
@@ -5600,7 +5706,7 @@
         <div class="d">goods run <b>cheapest in ${cheap[0]}</b> (×${cheap[1].toFixed(2)}) and <b>richest in ${rich[0]}</b> (×${rich[1].toFixed(2)})
         — a ~${spreadPct}% spread. Buy where it's cheap, haul, sell where it's rich. Prices hold until midnight.</div></div>` : ''}
       <div class="grid">${shocks.map(([d, x]) =>
-        `<div class="card distcard"${DISTRICT_ART[d] ? ` style="--art:url(/art/${DISTRICT_ART[d]}.jpg)"` : ''}><span class="t">${d}</span><div class="d">${x < 0.97 ? '<span style="color:var(--ok)">cheap — buy here</span>' : x > 1.03 ? '<span style="color:var(--gold, #d4af37)">rich — sell here</span>' : 'fair prices'} (×${x.toFixed(2)})</div></div>`).join('')}</div>
+        `<div class="card distcard"${DISTRICT_ART[d] ? ` style="--art:url(/art/${DISTRICT_ART[d]}.jpg)" data-mkey="${DISTRICT_ART[d]}"` : ''}><span class="t">${d}</span><div class="d">${x < 0.97 ? '<span style="color:var(--ok)">cheap — buy here</span>' : x > 1.03 ? '<span style="color:var(--gold, #d4af37)">rich — sell here</span>' : 'fair prices'} (×${x.toFixed(2)})</div></div>`).join('')}</div>
       <h2 style="margin-top:12px">The Forecast <span class="d" style="font-size:11px">— the next days are knowable. Plan around them.</span></h2>
       <div class="grid">${(c.forecast || []).map((f) => {
         const dd = f.day - c.day;
@@ -8431,7 +8537,7 @@
     if (channel === 'me' && ev && championCine(ev.type, ev.payload || {})) {
       const c = championCine(ev.type, ev.payload || {});
       haptic('big'); sfx('win');
-      playCine({ kicker: c.kicker, title: c.title, sub: c.sub, accent: 'var(--gold)', fx: 'payday', clip: 'hero-backdrop.mp4', hold: 2400 });
+      playCine({ kicker: c.kicker, title: c.title, sub: c.sub, accent: 'var(--gold)', fx: 'payday', clip: 'cine-champion.mp4', hold: 2400 });
     }
     // THE CONVERGENCE NUDGE — a real human walked into a district. Only act on it when it's YOUR
     // district and it isn't you: a quiet presence toast (not a feed line — for everyone else it's

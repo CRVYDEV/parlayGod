@@ -1,0 +1,174 @@
+{
+  "model": "bytedance/seedance-2.5/image-to-video",
+  "spentUsd": 66.35999999999997,
+  "clips": [
+    {
+      "plate": "hero-poster",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa64958/i-4d43Y1JjawHB0bylqqe_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "district-neon",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa6496a/NLeyy0zoBGj2MZdii-GKv_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "interior-speakeasy",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa6496b/luRiXRTntoYBzskcZeJnP_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "interior-market",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa64958/cQaTNxIWeI7bbV1xAaZJM_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "crime-armored",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa6496a/uzkBIwlqpyLw9WH6erxYm_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "crime-torch",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa64958/tQPFE8UcKMy3D3j1O13is_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "car-spectre",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa64958/0jKbbnxImfFnp-u--koom_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "crime-counting",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa6496a/GQd37XGbp5N7IDpGgNV1x_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "interior-estate",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa64959/dEJZOkpDjjhquMW2D22j7_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "interior-den",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa6495a/Tt8I6g7BAWWIOJeFKqWOl_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "car-sovereign",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa6496c/HJfFaq1fUCWxh61yZ_KU5_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "crime-torch",
+      "ar": "9:16",
+      "url": "https://v3b.fal.media/files/b/0aa6496c/HXyVYsxachBdfV-wnA-4z_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "citymap",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa6495a/Jog-Io06bwHvmnfOA7wjT_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "outfit-volkov",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa6495b/16d_L99piXG4mZIbxxONP_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "hero-backdrop",
+      "ar": "9:16",
+      "url": "https://v3b.fal.media/files/b/0aa6495c/g9ckQc9lDeYORbfSNpb73_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "interior-law",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa6495c/WacY7qGB0HbN-1oelQRgm_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "district-docks",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa64961/GzZH3eSBXyqmhHA7yEhoS_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "hitman-legbreaker",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa64975/FV3o5ntxxiY0GZynwYAEf_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "hero-backdrop",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa64964/DLwxTRLgq7urpEAWiAP0j_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "crime-counting",
+      "ar": "9:16",
+      "url": "https://v3b.fal.media/files/b/0aa64963/KHfZeHFITGBPY7vNUH-eR_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "crime-mint",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa64966/hourz4ifJTiFkI1RQgFLu_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "interior-estate",
+      "ar": "9:16",
+      "url": "https://v3b.fal.media/files/b/0aa64979/tZP-g9ka29mi47zdnufoX_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "crime-diamond",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa6497a/hUww_7sDYxpSdQrB5PxKq_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "hitman-professional",
+      "ar": "9:16",
+      "url": "https://v3b.fal.media/files/b/0aa6497b/s_Gg_acbY9MAmTkkKJa6D_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "crime-vaultjob",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa6496b/rHWjeQYPWU8En04fw7TVC_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "heist-goldvault",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa6496b/Rz2PtMqZd16yK-xBzNdZX_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "crest",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa6496d/-1D7s30kuFCVZnPpuyTRf_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "interior-empire",
+      "ar": "16:9",
+      "url": "https://v3b.fal.media/files/b/0aa64971/ww_jMRuJfJrZBM1jVvLFp_video.mp4",
+      "est": 2.37
+    }
+  ]
+}

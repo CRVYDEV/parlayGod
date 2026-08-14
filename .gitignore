@@ -17,16 +17,6 @@ omerta-contracts/cache/
 omerta-contracts/broadcast/
 baselines/
 .hype-tmp/
-public/art/hype/*
-!public/art/hype/hero-poster.mp4
-!public/art/hype/hero-backdrop.mp4
-!public/art/hype/hitman-professional.mp4
-!public/art/hype/hitman-legbreaker.mp4
-!public/art/hype/crime-torch.mp4
-!public/art/hype/crime-counting.mp4
-!public/art/hype/crime-diamond.mp4
-!public/art/hype/heist-goldvault.mp4
-!public/art/hype/crime-vaultjob.mp4
-!public/art/hype/interior-law.mp4
-!public/art/hype/district-docks.mp4
-!public/art/hype/crest.mp4
+# the motion library ships whole — every clip is wired by plate NAME through the /v1/art/motion
+# manifest, so a clip in this directory IS in the game (the gitignored-directory CI 404 of
+# 2026-08-14 is the reason this is stated rather than assumed)
