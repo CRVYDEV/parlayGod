@@ -422,6 +422,70 @@ contract OmertaTest is Test {
         assertEq(address(f).balance, 0);
     }
 
+    // ── the on-chain STORE paywall: payForPackage (Safe-priced SKUs, fail-closed, dev/vig split) ──
+    function test_package_exact_value_forwards_and_emits() public {
+        (OmertaFees f, address payable dev) = _fees();
+        vm.prank(safe);
+        f.setPackagePrice(42, 0.05 ether);                    // Safe prices sku 42
+        assertEq(f.packagePrice(42), 0.05 ether);
+        vm.deal(player, 1 ether);
+        vm.expectEmit(true, true, true, true, address(f));
+        emit OmertaFees.PackagePaid(player, 1, 42, 0.05 ether);
+        vm.prank(player);
+        f.payForPackage{value: 0.05 ether}(42);
+        assertEq(dev.balance, 0.05 ether, "package ETH forwarded to dev");
+        assertEq(address(f).balance, 0, "contract custodies nothing");
+        assertEq(f.nonce(), 1, "nonce advanced");
+    }
+
+    function test_unpriced_package_fails_closed() public {
+        (OmertaFees f, ) = _fees();
+        vm.deal(player, 1 ether);
+        // an unset sku is UNBUYABLE — a player can never buy a package the Safe has not priced (or has retired)
+        vm.prank(player);
+        vm.expectRevert(OmertaFees.ZeroFee.selector);
+        f.payForPackage{value: 0.05 ether}(99);
+    }
+
+    function test_package_wrong_value_reverts() public {
+        (OmertaFees f, ) = _fees();
+        vm.prank(safe);
+        f.setPackagePrice(7, 0.02 ether);
+        vm.deal(player, 1 ether);
+        vm.prank(player);
+        vm.expectRevert(abi.encodeWithSelector(OmertaFees.WrongFee.selector, 0.03 ether, 0.02 ether));
+        f.payForPackage{value: 0.03 ether}(7);                // exact-value only
+    }
+
+    function test_package_price_owner_only_and_retire() public {
+        (OmertaFees f, ) = _fees();
+        vm.prank(player);
+        vm.expectRevert();                                    // Ownable: not the owner
+        f.setPackagePrice(1, 0.01 ether);
+        vm.startPrank(safe);
+        f.setPackagePrice(1, 0.03 ether);
+        f.setPackagePrice(1, 0);                              // price 0 RETIRES the sku (unbuyable again)
+        vm.stopPrank();
+        vm.deal(player, 1 ether);
+        vm.prank(player);
+        vm.expectRevert(OmertaFees.ZeroFee.selector);
+        f.payForPackage{value: 0.03 ether}(1);               // retired → fail closed
+    }
+
+    function test_package_splits_dev_and_vig() public {
+        address payable dev = payable(makeAddr("dev"));
+        address payable vig = payable(makeAddr("vig"));
+        OmertaFees f = new OmertaFees(safe, dev, vig, 6000, 0.01 ether, 0.10 ether); // 60% Vig / 40% dev
+        vm.prank(safe);
+        f.setPackagePrice(3, 0.10 ether);
+        vm.deal(player, 1 ether);
+        vm.prank(player);
+        f.payForPackage{value: 0.10 ether}(3);
+        assertEq(vig.balance, 0.06 ether, "Vig share of the package");
+        assertEq(dev.balance, 0.04 ether, "dev share of the package");
+        assertEq(address(f).balance, 0, "contract custodies nothing");
+    }
+
     function test_reentrant_recipient_is_blocked() public {
         ReentrantDev bad = new ReentrantDev();
         OmertaFees f = new OmertaFees(safe, payable(address(bad)), payable(address(bad)), 0, 0.01 ether, 0.10 ether);

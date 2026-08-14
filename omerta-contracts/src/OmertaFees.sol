@@ -32,12 +32,21 @@ contract OmertaFees is Ownable2Step, ReentrancyGuard {
     ///         `mintFee` at deploy (0.01 ETH) — a player pays it (again) each time they re-roll
     ///         their build off-chain, so it's an unbounded repeat fee, not a one-time entitlement.
     uint256 public rerollFee;
+    /// @notice The on-chain STORE paywall: the exact price (in wei) of each package SKU. Owner-settable and
+    ///         FAIL-CLOSED — a sku with price 0 is UNBUYABLE (an unset/retired sku reverts), so a player can
+    ///         never underpay and an off-chain-retired package cannot be purchased on-chain. The four-way Store
+    ///         earmark (founder/buyback/rwa/community) is a BACKEND concern computed from the gross `amount`;
+    ///         on-chain this splits dev/vig exactly like the other fees and forwards, custodying nothing.
+    mapping(uint256 => uint256) public packagePrice; // sku => wei (0 = not for sale)
+
     /// @notice Monotonic id stamped on every payment — the off-chain idempotency key.
     uint256 public nonce;
 
     event MintFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount);
     event RespawnFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount);
     event RerollFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount);
+    event PackagePaid(address indexed payer, uint256 indexed nonce, uint256 indexed sku, uint256 amount);
+    event PackagePriceSet(uint256 indexed sku, uint256 price);
     event RerollFeeChanged(uint256 rerollFee);
     /// @dev On-chain transparency of each split; the backend does NOT rely on it (it computes the
     ///      Vig share from the gross `amount` in MintFeePaid/RespawnFeePaid × VIG_BPS == vigBps).
@@ -100,6 +109,17 @@ contract OmertaFees is Ownable2Step, ReentrancyGuard {
         emit RerollFeePaid(msg.sender, n, msg.value);
     }
 
+    /// @notice Pay for a Store package (SKU). Exact-value only; fail-closed on an unpriced sku. The backend
+    ///         watches `PackagePaid` and grants the package's (non-§10.4) entitlement idempotently on `nonce`.
+    function payForPackage(uint256 sku) external payable nonReentrant {
+        uint256 price = packagePrice[sku];
+        if (price == 0) revert ZeroFee();                 // sku not for sale (unset/retired) — fail closed
+        if (msg.value != price) revert WrongFee(msg.value, price);
+        uint256 n = ++nonce;                              // effect before interaction (CEI + guard)
+        _forward(n, msg.value);
+        emit PackagePaid(msg.sender, n, sku, msg.value);
+    }
+
     /// @dev Splits `amount` into a Vig share (vigBps) forwarded to `vigRecipient` and the remainder
     ///      to `feeRecipient` (dev), in the same tx — the contract still custodies NOTHING and mints
     ///      NOTHING. INVARIANT: both recipients MUST accept ETH (an EOA or a trivial receiver); if
@@ -145,6 +165,13 @@ contract OmertaFees is Ownable2Step, ReentrancyGuard {
         if (rerollFee_ == 0) revert ZeroFee();
         rerollFee = rerollFee_;
         emit RerollFeeChanged(rerollFee_);
+    }
+
+    /// @notice Set (or retire) a Store package's on-chain price. `price == 0` RETIRES the sku (unbuyable) —
+    ///         intentional, so the Safe can pull a package on-chain the way the backend retires one off-chain.
+    function setPackagePrice(uint256 sku, uint256 price) external onlyOwner {
+        packagePrice[sku] = price;
+        emit PackagePriceSet(sku, price);
     }
 
     /// @notice Rescue any ETH that somehow lands here outside the pay* paths (e.g. a

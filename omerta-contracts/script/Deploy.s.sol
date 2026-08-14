@@ -8,6 +8,8 @@ import {VoucherClaim, IGearVault} from "../src/VoucherClaim.sol";
 import {OMRStaking} from "../src/OMRStaking.sol";
 import {OmertaFees} from "../src/OmertaFees.sol";
 import {StreetDeed} from "../src/StreetDeed.sol";
+import {DynastyNFT} from "../src/DynastyNFT.sol";
+import {StockVault} from "../src/StockVault.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// Deploy order: OMR -> GearVault -> VoucherClaim -> Staking -> OmertaFees -> wire minter.
@@ -34,18 +36,41 @@ contract Deploy is Script {
         // owned by the Safe. VIG_BPS MUST equal the backend's VIG_BPS (src/vig.js) so on- and
         // off-chain revenue accounting never drift. VIG_WALLET defaults to the dev wallet with a
         // 0-bps split (100% dev) so a deploy without Phase-2 config keeps the pre-split behaviour.
-        address payable devWallet = payable(vm.envAddress("DEV_WALLET"));
-        address payable vigWallet = payable(vm.envOr("VIG_WALLET", devWallet));
-        uint256 vigBps = vm.envOr("VIG_BPS", uint256(0));
-        uint256 mintFee = vm.envOr("MINT_FEE_WEI", uint256(0.01 ether));
-        uint256 respawnFee = vm.envOr("RESPAWN_FEE_WEI", uint256(0.10 ether));
-        OmertaFees fees = new OmertaFees(safe, devWallet, vigWallet, vigBps, mintFee, respawnFee);
+        // (Env reads are block-scoped so their locals drop off the stack — Deploy.s.sol is stack-tight.)
+        OmertaFees fees;
+        {
+            address payable devWallet = payable(vm.envAddress("DEV_WALLET"));
+            address payable vigWallet = payable(vm.envOr("VIG_WALLET", devWallet));
+            fees = new OmertaFees(
+                safe, devWallet, vigWallet,
+                vm.envOr("VIG_BPS", uint256(0)),
+                vm.envOr("MINT_FEE_WEI", uint256(0.01 ether)),
+                vm.envOr("RESPAWN_FEE_WEI", uint256(0.10 ether))
+            );
+        }
         // StreetDeed — the on-chain tradeable Street Deed NFT (omerta-street-deeds-design.md §2/§3).
         // Self-minting ERC-721 on the SAME server signer as VoucherClaim (no owner-mint), Safe-owned.
         // deedImageBase → the game's block-plate route; deedExternalBase → the deed's legend page.
-        string memory deedImg = vm.envOr("DEED_IMAGE_BASE", string("https://www.omerta.fun/v1/deeds/plate/"));
-        string memory deedExt = vm.envOr("DEED_EXTERNAL_BASE", string("https://www.omerta.fun/deed/"));
-        StreetDeed deed = new StreetDeed(safe, signer, deedImg, deedExt);
+        StreetDeed deed = new StreetDeed(
+            safe, signer,
+            vm.envOr("DEED_IMAGE_BASE", string("https://www.omerta.fun/v1/deeds/plate/")),
+            vm.envOr("DEED_EXTERNAL_BASE", string("https://www.omerta.fun/deed/"))
+        );
+        // DynastyNFT — the uncapped identity NFT (omerta-dynasty-machine-design.md §4). Self-minting
+        // ERC-721 on the SAME server signer (no owner-mint), Safe-owned. tokenURI resolves to the
+        // account's metadata endpoint off-chain; the game entitlement stays account-bound (no balanceOf
+        // gate on-chain). EIP-2981 royalty pays the treasury Safe by default.
+        DynastyNFT dynasty = new DynastyNFT(
+            safe, signer,
+            vm.envOr("DYNASTY_BASE_URI", string("https://www.omerta.fun/v1/identity/")),
+            vm.envOr("DYNASTY_ROYALTY_RECIPIENT", safe),
+            uint96(vm.envOr("DYNASTY_ROYALTY_BPS", uint256(500))) // 5%
+        );
+        // StockVault — the gateless keeper-push tokenized-stock delivery vault (omerta-brokers-design.md
+        // §3.3). NEVER mints (pre-held transfer only). Keeper unset (0) at deploy = deliveries OFF until
+        // the Safe wires the push bot; the Safe pre-funds the vault with bought stock and sets per-token
+        // daily caps before arming the keeper.
+        StockVault vault = new StockVault(safe, vm.envOr("STOCK_KEEPER", address(0)));
         vm.stopBroadcast();
 
         console.log("OMR:         ", address(omr));
@@ -54,8 +79,12 @@ contract Deploy is Script {
         console.log("OMRStaking:  ", address(staking));
         console.log("OmertaFees:  ", address(fees));
         console.log("StreetDeed:  ", address(deed));
+        console.log("DynastyNFT:  ", address(dynasty));
+        console.log("StockVault:  ", address(vault));
         console.log("NEXT (all Safe txs): gear.setMinter(VoucherClaim); vc.setGearSupplyCap(id,cap) per class;");
         console.log("  fund VoucherClaim OMR tranche; omr.approve(staking) + staking.fundRewards(...).");
         console.log("  StreetDeed: no wiring needed (self-minting on SIGNER); set deed.setDailyMintCap(n) to rate-cap.");
+        console.log("  DynastyNFT: self-minting on SIGNER; set dynasty.setDailyMintCap(n) as a leaked-signer rate wall.");
+        console.log("  StockVault: pre-fund with bought stock, vault.setDailyCap(token,cap) per ticker, THEN vault.setKeeper(bot).");
     }
 }

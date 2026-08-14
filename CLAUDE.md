@@ -12373,3 +12373,51 @@ the extractor (idempotent), `reimportDeed` handing the deed to a deedless burner
 control reset, "sold" line, idempotent on ref), and §10.4-neutrality (zero ledger rows). Suite green + sim
 drift-0 + client wiring/mirror (the `canExtract` singleton gate waived in check 7's `canX` family) + gates +
 levers + preflight + docs + pgquery + pgcheck 43/43 on real Postgres + `forge test` 249/249.
+
+**THE ON-CHAIN BATCH IS COMPLETE — the identity NFT, the stock-delivery vault, and the Store paywall leg
+(founder-directed 2026-08-14: "Write all of the on chain contracts. Prompt me with options if you need
+founder call") — BUILT** (`omerta-contracts/src/DynastyNFT.sol` + `StockVault.sol`, `OmertaFees.payForPackage`;
+tests `DynastyNFT.t.sol`/`StockVault.t.sol` + the payForPackage block in `Omerta.t.sol`; `forge test`
+**284/284**, both 512-run fuzzes). The three genuine founder calls were put up as options rather than
+guessed, because each is structure-determining: **(1) StockVault delivery — GATELESS PUSH** (§3.3, chosen
+over a voucher-gated pull): the keeper pushes pre-held stock straight into a player's ERC-6551 token-bound
+account with NO claim process and NO on-chain eligibility gate, so the NFT sells self-contained — the
+accepted risk (Robinhood's tokenized stocks are issuer-restricted/EU-facing, so a gateless push has no
+on-chain control over who receives them) is written into the NatSpec **so the audit sees a decision, not an
+omission**. This flipped the contract from a VoucherClaim-fork (signer/voucher/claim) into a keeper-driven
+distributor with no signer. **(2) Airdrop D1 = in-game SIWE credit** (variant b) → **no `MerkleDistributor`
+is written at all** (variant a's contract simply does not exist for us). **(3) Royalty 5% to the treasury**
+(EIP-2981) and **(4) ERC-6551 = the reference implementation UNMODIFIED** (the canonical registry singleton
+`0x000000006551c19487814612e58FE06813775758` + the ecosystem account impl are deploy config, not a fork —
+nothing new to audit there). **DynastyNFT** is the EIP-712 self-mint (the OmertaBond/StreetDeed precedent —
+server-signed `MintVoucher`, nonce replay + deadline + `MAX_VOUCHER_TTL` 30d + a daily-cap rate wall,
+**NO owner-mint path at all**), uncapped sequential `tokenId`, and — THE WALL — **it gates NOTHING on
+`balanceOf`**: the game entitlement (`account_persistent.minted`) stays account-bound OFF-CHAIN, so the
+token is a freely transferable trophy carrying no on-chain power (the load-bearing identity-NFT split; the
+regression asserts a transferred token moves the entitlement not at all). **StockVault** NEVER mints —
+every `deliver`/`deliverBatch` is a pre-held `SafeERC20.transfer`, so `balanceOf(this)` per token is the
+PHYSICAL half of `allocated ≤ held` (the ERC-20 reverts on over-delivery; the fuzz proves delivered +
+remaining == funded, units conserved); keeper-only, idempotent on `deliveryId`, per-token daily cap +
+pause + `setKeeper` + `sweep` bound a leaked keeper (it can only move HELD units, never conjure them). The
+owed-side ledger half (`allocateStock` clamp + nightly `runTreasuryInvariants`) deliberately stays in the
+backend — a stateless distributor should not hold a per-account owed ledger. **`OmertaFees.payForPackage`**
+is the on-chain Store leg on the existing tollbooth pattern: fail-closed on an unpriced sku (`packagePrice[sku]
+== 0` reverts — an unset/off-chain-retired package is unbuyable), exact-value, forwards dev/Vig and custodies
+nothing; `setPackagePrice(sku, wei)` prices/retires per sku. §10.4-NEUTRAL across all three (out-of-band real
+value / status — the NFTs and the vault write zero `transactions` rows; the Store's entitlement was always
+outside the conservation set — the fees.js precedent). Wired into `script/Deploy.s.sol` (env-driven, block-
+scoped to dodge stack-too-deep: `DYNASTY_BASE_URI`/`DYNASTY_ROYALTY_*`, `STOCK_KEEPER` unset=off; deploy
+NEXT-notes carry the arm order — StockVault: pre-fund → per-ticker `setDailyCap` → `setKeeper`). **Three
+mutations, each caught at its own named assertion** (DynastyNFT daily cap neutered → `test_daily_cap_enforced_
+and_resets` fails; StockVault replay guard dropped → `test_delivery_is_idempotent_on_deliveryId` fails;
+OmertaFees fail-closed removed → `test_unpriced_package_fails_closed` fails). **The whole on-chain surface is
+now in ONE audit batch** — 17 contracts + 1 interface, `DynastyNFT`/`StockVault`/`OmertaFees.payForPackage`
+added 2026-08-14, so it is a single engagement rather than the dribble the "batch, not dribble" discipline
+warns against (CHAIN-DEPLOY §THE BATCH + §2c + the deploy order + env vars all updated; SPEC counts 16→18
+contracts / 249→284 tests). The founder lifted the launch-schedule + audit-clock holds that had kept
+DynastyNFT/StockVault out ("legal has approved all design choices … we will launch when I feel we are
+complete"), which is what let them be written now. `forge test` 284/284 + full JS suite green + sim drift-0 +
+docs guard green. Deferred (backend, mainnet-gated): the `PackagePaid` watcher (credits the entitlement
+idempotently on `nonce`, the `recordFeePayment` twin), the stock buy keeper (`runStockBuyback`) +
+`allocateStock` ledger + the delivery keeper that drives `StockVault.deliver`, and the DynastyNFT
+`Transfer`-watcher metadata freeze — each behind the third-party contract audit + the launch review.
