@@ -17,4 +17,16 @@ omerta-contracts/cache/
 omerta-contracts/broadcast/
 baselines/
 .hype-tmp/
-public/art/hype/
+public/art/hype/*
+!public/art/hype/hero-poster.mp4
+!public/art/hype/hero-backdrop.mp4
+!public/art/hype/hitman-professional.mp4
+!public/art/hype/hitman-legbreaker.mp4
+!public/art/hype/crime-torch.mp4
+!public/art/hype/crime-counting.mp4
+!public/art/hype/crime-diamond.mp4
+!public/art/hype/heist-goldvault.mp4
+!public/art/hype/crime-vaultjob.mp4
+!public/art/hype/interior-law.mp4
+!public/art/hype/district-docks.mp4
+!public/art/hype/crest.mp4

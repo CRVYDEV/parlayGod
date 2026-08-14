@@ -36,7 +36,7 @@ export async function publicDossier(pool, name) {
     `SELECT COALESCE(SUM(amount),0) AS s FROM bounty_contributors WHERE target_character=$1 AND kind='kill'`, [row.id])).rows[0].s) || 0; } catch { /* pre-schema */ }
   const wanted = row.wanted_until && new Date(row.wanted_until) > new Date();
   return {
-    found: true, name: row.name, level: levelOf(Number(row.respect) || 0), alive: !!row.alive,
+    found: true, id: row.id, name: row.name, level: levelOf(Number(row.respect) || 0), alive: !!row.alive,
     gang: row.gang || null, tag: row.tag || null, crew: row.crew || null,
     kills: Number(row.kills) || 0, hitmanRank: hitmanRankOf(Number(row.hitman_rep) || 0).title,
     wanted: !!wanted, welsher: !!row.welsher, bounty,
@@ -237,8 +237,14 @@ h1{font-family:Georgia,serif;font-size:15px;letter-spacing:.3em;color:${GOLD};te
 .dtile{border:1px solid #2a2d37;border-radius:5px;padding:9px 15px;min-width:78px;background:rgba(20,16,10,.45)}
 .dtile .v{font-family:Georgia,serif;font-size:21px;color:${GOLD};line-height:1.1}
 .dtile .l{font-size:10px;letter-spacing:.18em;color:${DIM};text-transform:uppercase;margin-top:3px}
-.dtile.warn .v{color:#d98a3a}</style>
+.dtile.warn .v{color:#d98a3a}
+/* THE FACE — a small circular mugshot identity mark above the fold. Deliberately SUBORDINATE (the
+   legend card below is the page's hero); it gives the profile a face without competing. The avatar
+   route is public + keyless + hash-only (no injection surface). */
+.pfp{width:96px;height:96px;border-radius:50%;border:2px solid ${GOLD};box-shadow:0 8px 28px #000a;
+  margin:0 auto 16px;display:block;background:#0c0d11}</style>
 </head><body><div class="wrap">
+${d.found && d.id ? `<img class="pfp" alt="" width="96" height="96" src="/v1/avatar/${encodeURIComponent(d.id)}">` : ''}
 <h1>Omertà · the wire</h1>
 <div class="card">${inline}</div>
 ${d.found ? `<div class="dossier">

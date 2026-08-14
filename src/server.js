@@ -131,7 +131,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, OPERATIONS, BUSINESS_EMPIRE, PACING, MASTERY,
          PATH_FX, PATH_XP_HOME, PATH_XP_RIVAL, PATH_SWITCH_CD_MS, REGIMEN, HUSTLE, CAREER, RIVALS,
          CORNER, CONTACTS, FAVOR, DISCOVERY, MENTOR, STREAK, MADE, MADE_LADDER, ACCESS_STAKE, ROSTER_POSTS, jailed, hospitalized } from './rules.js';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, createReadStream, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -284,11 +284,45 @@ export async function buildServer() {
       if (type) ART_FILES.set(name, { body: readFileSync(join(artDir, name)), type });
     }
   } catch { /* no art shipped — the flat fills stand in */ }
+  // THE MOTION LIBRARY — the generated ambient clips (public/art/hype/*.mp4 + the root hype cuts).
+  // Same boot-time ALLOWLIST discipline (a request is only ever a Map lookup — no traversal surface by
+  // construction), but videos are ~40MB total so they are NOT loaded into RAM: the Map stores the
+  // resolved PATH and the route streams from disk. Only files the boot scan found are reachable.
+  const ART_VIDEOS = new Map();
+  try {
+    for (const name of readdirSync(artDir))
+      if (name.toLowerCase().endsWith('.mp4')) ART_VIDEOS.set(name, { path: join(artDir, name), size: statSync(join(artDir, name)).size });
+    const hypeDir = join(artDir, 'hype');
+    for (const name of readdirSync(hypeDir))
+      if (name.toLowerCase().endsWith('.mp4')) ART_VIDEOS.set('hype/' + name, { path: join(hypeDir, name), size: statSync(join(hypeDir, name)).size });
+  } catch { /* no motion shipped — the still plates stand in */ }
+  // RANGE support is not optional for <video>: Chromium's media stack refuses a source it cannot seek
+  // (a chunked stream with no Content-Length/Accept-Ranges fires the element's error event and the
+  // client's fail-safe removes the clip) — found live by the motion probe, not by reading specs.
+  const sendVideo = (key, req, reply) => {
+    const hit = ART_VIDEOS.get(key);
+    if (!hit) return reply.code(404).send({ error: 'not_found' });
+    reply.header('accept-ranges', 'bytes').header('cache-control', 'public, max-age=604800, immutable');
+    const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+    if (m && (m[1] !== '' || m[2] !== '')) {
+      const start = m[1] === '' ? Math.max(0, hit.size - Number(m[2])) : Number(m[1]);
+      const end = (m[1] !== '' && m[2] !== '') ? Math.min(Number(m[2]), hit.size - 1) : hit.size - 1;
+      if (start >= hit.size || start > end)
+        return reply.code(416).header('content-range', `bytes */${hit.size}`).send();
+      return reply.code(206).type('video/mp4')
+        .header('content-range', `bytes ${start}-${end}/${hit.size}`)
+        .header('content-length', String(end - start + 1))
+        .send(createReadStream(hit.path, { start, end }));
+    }
+    return reply.type('video/mp4').header('content-length', String(hit.size)).send(createReadStream(hit.path));
+  };
   app.get('/art/:file', async (req, reply) => {
     const hit = ART_FILES.get(req.params.file);
-    if (!hit) return reply.code(404).send({ error: 'not_found' });
-    return reply.type(hit.type).header('cache-control', 'public, max-age=604800, immutable').send(hit.body);
+    if (hit) return reply.type(hit.type).header('cache-control', 'public, max-age=604800, immutable').send(hit.body);
+    if (ART_VIDEOS.has(req.params.file)) return sendVideo(req.params.file, req, reply);
+    return reply.code(404).send({ error: 'not_found' });
   });
+  app.get('/art/hype/:file', async (req, reply) => sendVideo('hype/' + req.params.file, req, reply));
   // ── ITEM ART: a generated photo per catalog entry when one shipped (public/art/<kind>-<id>.jpg —
   // the tools/art.js catalog pass covers every car/boat/drug/gun/vest/good), else the procedural SVG
   // (cosmetic; no ledger surface). Public + keyless, heavily cacheable — the same id always renders
