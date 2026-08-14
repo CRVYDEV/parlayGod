@@ -147,7 +147,7 @@ function toVoucherMessage(row) {
 }
 // Gear class id → on-chain uint256. The game's gear are string ids (MARKET table); the
 // on-chain tokenId is their 1-based index (matches "one tokenId per gear class").
-import { MARKET, BONDS, bondPayout, TAX, withdrawTaxBps, nftTokenId, dayOf } from './rules.js';
+import { MARKET, BONDS, bondPayout, TAX, withdrawTaxBps, nftTokenId, nftDecode, dayOf } from './rules.js';
 import { earlySurcharge, creditTollBuckets, splitToll } from './tax.js';
 import { nftKind } from './nft.js';
 // A car/boat voucher stores `<kind>:<catalogId>:<rarity>:<itemId>` in `gear_id` (no schema change).
@@ -524,6 +524,107 @@ export async function reclaimExpiredVouchers(pool, reader = undefined) {
     }
     return { omrReclaimed, gearRestored, reconciled, skipped };
   } finally { client.release(); }
+}
+
+// ── NFT RE-IMPORT (Option A, omerta-nft-reimport-design.md): a burned car/boat NFT re-created in-game ──
+// The inverse of requestItemWithdraw. Extraction flags `minted_onchain=true` on the ORIGINAL row and
+// mints the token; re-import BURNS the token (GearVault.redeem, on-chain) and re-creates a FRESH live
+// row on whoever burned it. It creates a NEW row (never un-flags an existing one) because the burner is
+// usually a DIFFERENT account — a buyer on a secondary market — and un-flagging the original extractor's
+// row would double-count (their flagged row stays inert, follows their bloodline, and can never be
+// re-imported since they no longer hold the token). §10.4-NEUTRAL: a car/boat is ownership, conserved by
+// ROW COUNT, never a currency — this writes ZERO ledger rows (each burned token is a −1 matched by a +1
+// row). Trim/tune/damage are NOT encoded in the tokenId (only model + rarity), so a re-imported car is a
+// clean STOCK instance — the NFT represents the class and rarity, never the tune.
+async function insertReimportRows(client, characterId, kind, catalogId, rarity, amount) {
+  for (let i = 0; i < amount; i++) {
+    const rowId = uid();
+    if (kind === 'car')
+      await client.query('INSERT INTO cars (id, character_id, model_id, trim_id, dmg, rarity) VALUES ($1,$2,$3,$4,0,$5)',
+        [rowId, characterId, catalogId, 'stock', rarity]);
+    else
+      await client.query('INSERT INTO boats (id, character_id, kind, rarity) VALUES ($1,$2,$3,$4)',
+        [rowId, characterId, catalogId, rarity]);
+  }
+}
+
+// Apply ONE recorded re-import (called both inline from reimportItem and from the worker sweep). Locks
+// the reimport row, re-checks it's still pending, resolves the burner's wallet → account → LIVING
+// character, and creates the item row(s). No living character yet → returns null (stays pending; the
+// sweep retries). Deliberately does NOT gate on GARAGE_CAP/FLEET_MAX: a burned NFT must never be
+// stranded because a garage is full, exactly as the market-win / pink-slip / loan-seize transfers can
+// push a fleet over cap (the "conserve by row count" precedent). Only the reimport row is FOR UPDATE'd
+// (a leaf); account/character are plain reads → no lock-order edge.
+async function applyReimport(client, ref, wallet, kind, catalogId, rarity, amount) {
+  const r = (await client.query("SELECT status FROM nft_reimports WHERE id=$1 FOR UPDATE", [ref])).rows[0];
+  if (!r || r.status !== 'pending') return null; // already applied / gone
+  const acct = (await client.query(
+    'SELECT account_id FROM account_persistent WHERE lower(wallet_address)=lower($1)', [wallet])).rows[0];
+  if (!acct) return null; // wallet not linked to any account yet — wait
+  const ch = (await client.query(
+    'SELECT id FROM characters WHERE account_id=$1 AND alive ORDER BY created_at LIMIT 1', [acct.account_id])).rows[0];
+  if (!ch) return null; // no living street — wait (you can't put a car in a dead man's garage)
+  await insertReimportRows(client, ch.id, kind, catalogId, rarity, Number(amount));
+  await client.query("UPDATE nft_reimports SET status='applied', applied_character=$2, applied_at=now() WHERE id=$1", [ref, ch.id]);
+  return ch.id;
+}
+
+// Redeemed(from, tokenId, amount) → record + apply. Idempotent on the log ref (txHash:logIndex): a
+// re-delivered log (restart / overlapping re-scan) is a clean no-op. The confirmation depth is the
+// watcher's (§3 guard: a reorg that un-burns must never leave a live in-game row behind); the burn is
+// the ONLY authority (no server signature — unlike a mint). Malformed / undecodable (e.g. a gear token
+// the contract shouldn't have let through) → logged and skipped WITHOUT throwing, so the watcher cursor
+// still advances past a log that can never succeed (a real DB fault DOES throw → cursor holds, re-scan).
+export async function reimportItem(pool, { ref, from, tokenId, amount }) {
+  const amt = Number(amount);
+  if (!ref || !from || !isAddress(from) || !Number.isInteger(amt) || amt <= 0) {
+    console.error('reimport: malformed Redeemed event', ref, from, tokenId, amount); return { skipped: true };
+  }
+  let dec;
+  try { dec = nftDecode(tokenId); } // car/boat only — gear/unknown throws (the contract already rejects gear)
+  catch (e) { console.error('reimport: undecodable token', tokenId, e.message); return { skipped: true }; }
+  const wallet = getAddress(from);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // idempotent on the log ref (txHash:logIndex). SELECT-then-INSERT, not ON CONFLICT: pg-mem does not
+    // report a suppressed conflict's rowCount (the recordCommunityRevenue precedent), and the single
+    // worker process serialises event delivery, so there is no concurrent-insert race beyond this. On
+    // real Postgres the `id` PK is the backstop — a lost race throws 23505, the tick re-scans, and the
+    // SELECT then finds the row (duplicate).
+    if ((await client.query('SELECT 1 FROM nft_reimports WHERE id=$1', [ref])).rows[0]) {
+      await client.query('ROLLBACK'); return { duplicate: true };
+    }
+    await client.query(
+      `INSERT INTO nft_reimports (id, wallet_address, token_id, amount, kind, catalog_id, rarity)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [ref, wallet, String(tokenId), amt, dec.kind, dec.catalogId, dec.rarity]);
+    // apply in the SAME txn so record + rows commit atomically; no living character → left pending.
+    const character = await applyReimport(client, ref, wallet, dec.kind, dec.catalogId, dec.rarity, amt);
+    await client.query('COMMIT');
+    return character ? { applied: true, character } : { pending: true };
+  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  finally { client.release(); }
+}
+
+// Worker sweep: apply any re-imports still WAITING for a living character (the burner hadn't linked a
+// wallet, or had no living street, when the event landed). Per-row txn; each re-check resolves the
+// wallet under the current state. The reclaimExpiredVouchers worker precedent.
+export async function sweepReimports(pool) {
+  const pend = (await pool.query(
+    "SELECT id, wallet_address, kind, catalog_id, rarity, amount FROM nft_reimports WHERE status='pending' ORDER BY created_at LIMIT 200")).rows;
+  let applied = 0;
+  for (const p of pend) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const ch = await applyReimport(client, p.id, p.wallet_address, p.kind, p.catalog_id, p.rarity, Number(p.amount));
+      await client.query('COMMIT');
+      if (ch) applied++;
+    } catch (e) { await client.query('ROLLBACK'); console.error('reimport sweep failed', p.id, e?.code || e?.message || e); }
+    finally { client.release(); }
+  }
+  return { applied, pending: pend.length };
 }
 
 // ── SIWE wallet link (§4, EVM) — proves the player controls the address ──

@@ -13,7 +13,7 @@
 import { recordFeePayment } from './fees.js';
 import { recordBond } from './bonds.js';
 import { recordHarvestFee } from './treasury.js';
-import { markClaimed } from './chain.js';
+import { markClaimed, reimportItem } from './chain.js';
 
 export const DEFAULT_CONFIRMATIONS = Number(process.env.CHAIN_CONFIRMATIONS || 5);
 
@@ -88,6 +88,25 @@ export async function syncClaimedEvents(pool, source, opts = {}) {
   return { processed, from: w.from, to: w.to };
 }
 
+// Sync GearVault Redeemed(from, tokenId, amount) → reimportItem (Option A, NFT re-import). Stays
+// `confirmations` behind head so a reorged burn can't leave a live in-game row behind (§3 guard). The
+// event carries no nonce, so the ref is txHash:logIndex (the harvest-fee discipline); reimportItem is
+// idempotent on it. `source.redeemedLogs(from,to)` → [{ ref, from, tokenId, amount, txHash }]. Dormant
+// unless GEARVAULT_ADDRESS is set. Per-log isolation: a malformed/undecodable event is handled inside
+// reimportItem (logged, no throw → cursor advances); a real DB fault re-throws → cursor holds, re-scan.
+export async function syncRedeemedEvents(pool, source, opts = {}) {
+  const confirmations = opts.confirmations ?? DEFAULT_CONFIRMATIONS;
+  const w = await windowFor(pool, source, 'redeemed', confirmations, opts.startBlock);
+  if (!w) return { processed: 0 };
+  const logs = await source.redeemedLogs(w.from, w.to);
+  let processed = 0;
+  for (const l of logs) {
+    if (await isolate('redeemed', () => reimportItem(pool, { ref: l.ref, from: l.from, tokenId: l.tokenId, amount: l.amount }))) processed++;
+  }
+  await setCursor(pool, 'redeemed', w.to);
+  return { processed, from: w.from, to: w.to };
+}
+
 // (The afterSwap→Vig trade-fee stream is RETIRED — founder-directed 2026-08-11. Two hooks wanted
 // one canonical pool and the four-slice sell tax won; the payer is deleted rather than dormant.
 // See the retirement note in rules.tail.js. `'trade'` stays a declared VIG_SOURCE for history.)
@@ -150,6 +169,7 @@ export async function makeViemSource() {
   const feesAddr = process.env.OMERTA_FEES_ADDRESS;
   const claimAddr = process.env.VOUCHER_CLAIM_ADDRESS;
   const bondAddr = process.env.OMERTA_BOND_ADDRESS;    // the OmertaBond contract (Bonded events)
+  const gearVaultAddr = process.env.GEARVAULT_ADDRESS; // GearVault (Redeemed events — NFT re-import)
   const alchAddr = process.env.ALCHEMIST_ADDRESS;      // THE BANK's Alchemist (HarvestFeeTaken)
   const alchAsset = process.env.ALCHEMIST_ASSET || 'USDC';       // the market's underlying symbol
   const alchDecimals = Number(process.env.ALCHEMIST_ASSET_DECIMALS || 6); // USDC is 6, not 18
@@ -159,6 +179,7 @@ export async function makeViemSource() {
   const claimedEv = parseAbiItem('event Claimed(uint256 indexed nonce, address indexed to, uint8 kind, uint256 amount, uint256 gearId)');
   const harvestEv = parseAbiItem('event HarvestFeeTaken(address indexed user, address indexed recipient, uint256 amount)');
   const bondEv = parseAbiItem('event Bonded(uint256 indexed bondId, address indexed payer, uint256 indexed nonce, uint256 principal, uint256 payout, uint256 toPol, uint256 toDev, uint256 toRwa, uint256 toVig)');
+  const redeemedEv = parseAbiItem('event Redeemed(address indexed from, uint256 indexed tokenId, uint256 amount)');
   const range = (from, to) => ({ fromBlock: BigInt(from), toBlock: BigInt(to) });
   // wei / 1e18-decimal-OMR → ETH / in-game $OMR units, via viem's decimal-exact formatter (Number() alone
   // on a >2^53 wei bigint loses low-order digits; formatUnits keeps full precision, then recordBond round6's).
@@ -204,6 +225,14 @@ export async function makeViemSource() {
         polEth: w18(l.args.toPol), devEth: w18(l.args.toDev), rwaEth: w18(l.args.toRwa), vigEth: w18(l.args.toVig),
         txHash: l.transactionHash,
       }));
+    },
+    redeemedLogs: async (from, to) => {
+      if (!gearVaultAddr) return [];
+      const logs = await client.getLogs({ address: gearVaultAddr, event: redeemedEv, ...range(from, to) });
+      // no nonce → ref is the log key (the harvest-fee discipline). amount is small (a car/boat count),
+      // so Number() is exact; tokenId can exceed 2^53, so keep it a string.
+      return logs.map((l) => ({ ref: `${l.transactionHash}:${l.logIndex}`, from: l.args.from,
+        tokenId: l.args.tokenId?.toString(), amount: Number(l.args.amount), txHash: l.transactionHash }));
     },
   };
 }

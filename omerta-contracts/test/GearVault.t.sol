@@ -20,6 +20,8 @@ contract GearVaultTest is Test {
 
     GearVault gear;
     address safe = makeAddr("safe");
+    address minter = makeAddr("minter");
+    address holder = makeAddr("holder");
     string constant IMG = "ipfs://CID/";
 
     // The three constants that MUST mirror RARITY.TOKEN in rules.tail.js — asserted below so a drift
@@ -154,5 +156,102 @@ contract GearVaultTest is Test {
             '"attributes":[{"trait_type":"Type","value":"Gear"},{"trait_type":"Class","value":1}]}'
         );
         assertEq(got, string.concat("data:application/json;base64,", Base64.encode(bytes(json))), "new base");
+    }
+
+    // ── NFT RE-IMPORT (Option A, omerta-nft-reimport-design.md): the redeem/burn-back path ──────────
+    // The on-chain half of turning an extracted car/boat back into a live in-game item. The invariant
+    // that matters is that LIVE on-chain supply (`minted - redeemed`) never exceeds the cap, and that a
+    // redeem vacates EXACTLY one slot — no more, no fewer — so scarcity is conserved across round-trips.
+
+    function _arm(uint256 id, uint256 c) internal {
+        vm.startPrank(safe);
+        gear.setMinter(minter);
+        gear.setGearCap(id, c);
+        vm.stopPrank();
+    }
+
+    function _mintTo(address to, uint256 id, uint256 amount) internal {
+        vm.prank(minter);
+        gear.mint(to, id, amount);
+    }
+
+    function test_redeem_burns_the_token_emits_and_does_NOT_decrement_minted() public {
+        uint256 id = CAR_BASE + 1 * STRIDE + 0; // a common car
+        _arm(id, 5);
+        _mintTo(holder, id, 1);
+        assertEq(gear.balanceOf(holder, id), 1, "minted to holder");
+
+        vm.expectEmit(true, true, false, true, address(gear));
+        emit GearVault.Redeemed(holder, id, 1);
+        vm.prank(holder);
+        gear.redeem(id, 1);
+
+        assertEq(gear.balanceOf(holder, id), 0, "token burned");
+        assertEq(gear.redeemed(id), 1, "redeemed counter incremented");
+        assertEq(gear.minted(id), 1, "minted (lifetime) is NOT decremented");
+    }
+
+    function test_redeem_reverts_without_the_token() public {
+        uint256 id = CAR_BASE + 2 * STRIDE + 0;
+        _arm(id, 5);
+        // holder holds nothing → _burn reverts (ERC1155InsufficientBalance). The burn IS the proof.
+        vm.prank(holder);
+        vm.expectRevert();
+        gear.redeem(id, 1);
+    }
+
+    function test_redeem_zero_reverts() public {
+        vm.prank(holder);
+        vm.expectRevert(bytes("GearVault: zero"));
+        gear.redeem(CAR_BASE, 0);
+    }
+
+    function test_gear_is_NOT_redeemable_it_is_one_way() public {
+        // A gear id (< CAR_BASE): rejected BEFORE the burn, so a player can never burn gear for nothing.
+        vm.prank(holder);
+        vm.expectRevert(bytes("GearVault: not redeemable"));
+        gear.redeem(7, 1);
+    }
+
+    function test_redeem_credit_lets_EXACTLY_one_re_extraction_bypass_the_cap() public {
+        uint256 id = CAR_BASE + 4 * STRIDE + 3; // an epic car
+        _arm(id, 2); // cap 2
+        _mintTo(holder, id, 2); // at cap: minted 2, live 2
+
+        // with no credit, a third mint reverts — live supply cannot exceed the cap
+        vm.prank(minter);
+        vm.expectRevert(bytes("GearVault: cap"));
+        gear.mint(holder, id, 1);
+
+        // holder redeems one → one slot of re-extract credit (minted 2, redeemed 1, live 1)
+        vm.prank(holder);
+        gear.redeem(id, 1);
+
+        // now EXACTLY one more mint succeeds, reusing the slot the redeem vacated (live back to 2 ≤ 2)
+        _mintTo(holder, id, 1); // minted 3, live 3-1 = 2
+        assertEq(gear.balanceOf(holder, id), 2, "two live on-chain, never more than the cap");
+
+        // and a further mint reverts: the credit was exactly one slot, live can never exceed the cap
+        vm.prank(minter);
+        vm.expectRevert(bytes("GearVault: cap"));
+        gear.mint(holder, id, 1);
+    }
+
+    function test_setGearCap_floor_is_LIVE_supply_not_lifetime_minted() public {
+        uint256 id = CAR_BASE + 6 * STRIDE + 1;
+        _arm(id, 2);
+        _mintTo(holder, id, 2); // minted 2
+        vm.prank(holder);
+        gear.redeem(id, 1); // redeemed 1, live 1
+
+        // the cap can be TIGHTENED down to live supply (1) even though lifetime-minted is 2...
+        vm.prank(safe);
+        gear.setGearCap(id, 1);
+        assertEq(gear.cap(id), 1, "cap tightened to live supply");
+
+        // ...but not below it — 0 would strand the one live token above the cap
+        vm.prank(safe);
+        vm.expectRevert(bytes("GearVault: below live"));
+        gear.setGearCap(id, 0);
     }
 }

@@ -6040,3 +6040,28 @@ mechanisms are compatible; whether players show up is a retention question the b
 **If holding ever does win** the dial is `M3.OMR_LOOT_COMMITTED` (20% today against 50% idle — raise
 it and a staked hoard stops being the cheaper shelter), then the rung minimums. Both are signed
 levers and P9.36 re-measures on either.
+
+## THE NFT RE-IMPORT — Option A, a signed pay-for-power pivot (founder-directed 2026-08-13, BUILT dormant 2026-08-14)
+
+`omerta-nft-reimport-design.md`. Extraction turns an in-game car/boat into a tradeable ERC-1155 that is
+**inert** (safe, survives death, but no game power). Option A adds the inverse — the on-chain owner burns
+the NFT (`GearVault.redeem`) and the backend re-creates a live in-game row — which **deletes the inert
+safety property ON PURPOSE**: the secondary market becomes a **pay-for-power channel** (a buyer can
+purchase a rare/maxed car on OpenSea, re-import it, and hold power they did not earn). A deliberate pivot
+away from the otherwise anti-pay-to-win posture, recorded here as such; the standing
+no-earnings-promise / no-appreciation-language rules apply with MORE force because the asset now conveys
+power. The half that stays: an item is inert *while on-chain*, so "buy power" is always a two-step act
+the buyer chooses (own → re-import), never a passive property of holding.
+
+**§10.4-NEUTRAL.** A car/boat is ownership, conserved by ROW COUNT (the chop/market/pink-slip precedent),
+never a currency — re-import writes ZERO ledger rows (a −1 on-chain token exactly matched by a +1 in-game
+row). Scarcity is conserved on-chain by the `redeemed[]` counter: `mint`'s bound is on LIVE on-chain
+supply (`minted - redeemed <= cap`), so a re-imported item is re-extractable to the same slot without
+inflating true scarcity past the signed `SUPPLY_CAP`.
+
+**THE DIAL, at 0.** The re-import cost (an $OMR/ETH sink at re-import — the original scoping's Option D)
+ships at **0**: pure Option A, the marketplace as a free power buy. Raise it only if bought-power distorts
+the car/racing/hauling ladder the sim balanced against EARNED rarity. The scope is cars + boats (instance
+rows); gear is deliberately one-way (its in-game form is account-level set membership — the contract's
+`redeem` rejects gear). Chain-dormant in production (no `GEARVAULT_ADDRESS`); the `redeem` burn is new
+audit surface, so it goes into the on-chain-items audit batch before mainnet.

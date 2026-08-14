@@ -92,6 +92,8 @@ export const OPERATIONAL_ENV = [
   // the chain layer — every one dormant unless set (mainnet is launch + audit gated regardless)
   'CHAIN_CONFIRMATIONS', 'CHAIN_ID', 'CHAIN_POLL_MS', 'CHAIN_RPC_URL', 'CHAIN_START_BLOCK',
   'DAILY_CAP_OMR', 'OMERTA_BOND_ADDRESS', 'OMERTA_FEES_ADDRESS',
+  // GearVault (Redeemed events) — the NFT re-import watcher (Option A). Dormant unless set on the worker.
+  'GEARVAULT_ADDRESS',
   // THE BANK's Alchemist — the harvest-fee stream. Dormant unless set; the asset symbol + decimals
   // are config because the market's underlying is not always 18-decimal (USDC is 6).
   'ALCHEMIST_ADDRESS', 'ALCHEMIST_ASSET', 'ALCHEMIST_ASSET_DECIMALS',

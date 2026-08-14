@@ -38,8 +38,15 @@ contract GearVault is ERC1155, Ownable2Step {
     // count and let every id mint its cap AGAIN (2x+ the intended lifetime supply). GearVault
     // persists across bridge upgrades, so tracking `minted` here makes "gear is fail-closed and
     // bounded by a per-id supply cap" (CLAUDE.md #5) actually hold. cap 0 => class can't mint.
-    mapping(uint256 => uint256) public cap;    // tokenId => max LIFETIME supply (0 = mint blocked)
+    mapping(uint256 => uint256) public cap;    // tokenId => max LIVE on-chain supply (0 = mint blocked)
     mapping(uint256 => uint256) public minted; // tokenId => minted so far (survives a minter swap)
+    // NFT RE-IMPORT (Option A, omerta-nft-reimport-design.md): tokenId => burned-back-to-game so far.
+    // A `redeem` (burn back into the game) does NOT decrement `minted` — it increments `redeemed`, so
+    // the cap bounds LIVE on-chain supply (`minted - redeemed`), not lifetime mints. That vacates
+    // exactly one slot of headroom per burn, which a re-extraction of a re-imported item may reuse
+    // WITHOUT ever letting live supply exceed the cap, and without inflating true scarcity. Net item
+    // count across chain + game is conserved (a −1 token matched by a +1 in-game row, and vice versa).
+    mapping(uint256 => uint256) public redeemed;
 
     // OPTIONAL marketplace readability: a Safe-set display name per CLASS (rarity-independent), keyed
     // by the class's base tokenId (rarity digit stripped — see _classKey). Unset falls back to a
@@ -52,6 +59,7 @@ contract GearVault is ERC1155, Ownable2Step {
     event ImageBaseSet(string base);
     event GearCapSet(uint256 indexed tokenId, uint256 cap);
     event ClassNameSet(uint256 indexed classKey, string name);
+    event Redeemed(address indexed from, uint256 indexed tokenId, uint256 amount);
 
     constructor(address owner_, string memory imageBase_) ERC1155("") Ownable(owner_) {
         _imageBase = imageBase_;
@@ -70,7 +78,12 @@ contract GearVault is ERC1155, Ownable2Step {
     ///         raised or held — never lowered below what's already minted — so the bound is monotone
     ///         and a swapped-in minter inherits the real remaining headroom.
     function setGearCap(uint256 tokenId, uint256 c) external onlyOwner {
-        require(c >= minted[tokenId], "GearVault: below minted");
+        // Never below LIVE on-chain supply (`minted - redeemed`). With re-import a token can leave the
+        // chain (redeem), so the floor is what's actually held on-chain, not what was ever minted —
+        // this lets the Safe TIGHTEN a cap as items come back to the game, while still never stranding
+        // a live token above the cap. (`minted >= redeemed` always, so `c + redeemed >= minted` is the
+        // underflow-safe form of `c >= minted - redeemed`.)
+        require(c + redeemed[tokenId] >= minted[tokenId], "GearVault: below live");
         cap[tokenId] = c;
         emit GearCapSet(tokenId, c);
     }
@@ -99,11 +112,37 @@ contract GearVault is ERC1155, Ownable2Step {
 
     function mint(address to, uint256 tokenId, uint256 amount) external {
         require(msg.sender == minter, "GearVault: not minter");
-        // asset-layer lifetime cap — fail-closed (cap 0 blocks) and survives a minter swap (G-MED-1)
+        // asset-layer cap on LIVE on-chain supply — fail-closed (cap 0 blocks) and survives a minter
+        // swap (G-MED-1). A redeem frees exactly one slot (`redeemed`), so the bound is
+        // `minted - redeemed <= cap`, i.e. the number of tokens ACTUALLY on-chain never exceeds the
+        // cap. A re-extraction of a re-imported item reuses the slot its earlier redeem vacated,
+        // rather than drawing fresh lifetime supply.
         uint256 m = minted[tokenId] + amount;
-        require(cap[tokenId] != 0 && m <= cap[tokenId], "GearVault: cap");
+        require(cap[tokenId] != 0 && m <= cap[tokenId] + redeemed[tokenId], "GearVault: cap");
         minted[tokenId] = m;
         _mint(to, tokenId, amount, "");
+    }
+
+    /// @notice Burn an extracted CAR or BOAT back toward the game — the on-chain half of re-import
+    ///         (omerta-nft-reimport-design.md). The burn IS the ownership proof: only the holder can
+    ///         call it (`_burn` reverts otherwise), so only they can trigger a re-import to their own
+    ///         linked account, and no server signature is needed (unlike a mint — the event is the
+    ///         authority). The backend watcher re-creates the in-game row on the burner's living
+    ///         character after CHAIN_CONFIRMATIONS.
+    ///
+    ///         GEAR IS DELIBERATELY NOT REDEEMABLE. Gear's in-game form is account-level SET MEMBERSHIP
+    ///         (account_gear), not an instance row, so "re-create the row" is ambiguous the same way it
+    ///         is for character_assets — and chain.js already documents gear as one-way. Rejecting it
+    ///         here means a player can never burn a gear NFT expecting a re-import that will not happen.
+    ///
+    ///         `minted` is NOT decremented; `redeemed` is incremented, so the token vacates one
+    ///         live-supply slot without ever letting live supply exceed the cap (see `mint`).
+    function redeem(uint256 tokenId, uint256 amount) external {
+        require(amount != 0, "GearVault: zero");
+        require(_isCar(tokenId) || _isBoat(tokenId), "GearVault: not redeemable");
+        _burn(msg.sender, tokenId, amount); // reverts if the caller doesn't hold `amount` — the proof
+        redeemed[tokenId] += amount;
+        emit Redeemed(msg.sender, tokenId, amount);
     }
 
     // ── on-chain metadata ────────────────────────────────────────────────────────────────────────

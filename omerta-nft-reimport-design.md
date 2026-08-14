@@ -1,9 +1,21 @@
-# NFT re-import — reactivating an extracted item for in-game use (Option A, design only)
+# NFT re-import — reactivating an extracted item for in-game use (Option A)
 
-**Status: DESIGN ONLY, founder-directed (2026-08-13 — "Option A for this"). A DELIBERATE PIVOT, not
-a bug fix.** Nothing here is built; it rides behind the same chain gates as the rest of the on-chain
-items rail (`omerta-onchain-items-design.md`), and the one contract change it needs (a GearVault burn
-path) resets the third-party-audit clock, so it batches with that work — never a hot-fix.
+**Status: BUILT off-chain + on-chain contract, CHAIN-DORMANT (founder-directed — "Option A for this"
+2026-08-13; built 2026-08-14). A DELIBERATE PIVOT, not a bug fix.** The mechanism is complete: the
+GearVault `redeem` burn path (contract + forge tests), the JS `nftDecode`, the `Redeemed` watcher, the
+`reimportItem`/`sweepReimports` backend, and `test/reimport.js`. It rides behind the same chain gates as
+the rest of the on-chain items rail (`omerta-onchain-items-design.md`) — **dormant in production** (no
+`GEARVAULT_ADDRESS`, no live chain) — and the contract change (the burn path) resets the third-party-audit
+clock, so it goes into that audit batch before mainnet, never a hot-fix.
+
+**WHAT WAS BUILT vs the sketch below.** The scope was CARS and BOATS (the instance-row classes this design
+foregrounds). **Gear is deliberately one-way** — the contract's `redeem` rejects a gear token — because
+gear's in-game form is account-level SET MEMBERSHIP (`account_gear`), the same reason `character_assets`
+are deferred (§1); rejecting it at the contract means a player can never burn a gear NFT expecting a
+re-import that will not happen. The cap accounting (§2/§4) landed as a `redeemed[tokenId]` counter so the
+bound is on LIVE on-chain supply (`minted - redeemed <= cap`) rather than lifetime mints — see §2. The
+re-import CREATES a fresh row keyed to the burner (never un-flags an existing one — §1). Over-cap is
+allowed (the market-win precedent) rather than refused, so a burned NFT is never stranded — see §3.
 
 ## 0. What this changes, stated first so it can't be missed
 
