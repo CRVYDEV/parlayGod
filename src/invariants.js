@@ -66,6 +66,10 @@ const KNOWN_REASONS = {
     // WORD ON THE STREET: `corner:job` — the district quest board's envelope (character_id'd;
     // hard-bounded CORNER.MAX_DAY claims per street per day — a petty located faucet, BALANCE.md)
     'corner:',
+    // STREET DEEDS (Phase 2): `deed:corner` — the corner take on every deed you CONTROL (your own, or a
+    // rival's you muscled in on). Character_id'd → the per-character cash check reconciles it; bounded by
+    // CORNER_CAP_MS (≤24h banked) × the deeds one controls. A located, contestable faucet, BALANCE.md.
+    'deed:',
     // THE CALL: `contact:freight` / `contact:visit` — a contact's request settled from THEIR OWN
     // pocket (both legs character_id'd with counterparty — a pure transfer, the recycle-only rule)
     'contact:',

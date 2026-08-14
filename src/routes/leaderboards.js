@@ -13,6 +13,7 @@ import * as Convoy from '../convoy.js';
 import * as Duels from '../duels.js';
 import * as E from '../economy.js';
 import * as Estate from '../estate.js';
+import * as Deeds from '../deeds.js';
 import * as G from '../game.js';
 import * as Heists from '../heists.js';
 import * as Honor from '../honor.js';
@@ -57,6 +58,7 @@ export function register(app, { pool, auth, modAuth }) {
     app.get('/v1/leaderboard/foundation', { preHandler: auth }, async () => V.foundationLeaderboard(pool));
     app.get('/v1/leaderboard/estates', { preHandler: auth }, async () => Estate.estateLeaderboard(pool));
     app.get('/v1/leaderboard/collectors', { preHandler: auth }, async () => Estate.collectorLeaderboard(pool)); // the survives-death Collector legend + the Patron
+    app.get('/v1/leaderboard/streets', { preHandler: auth }, async () => Deeds.greatStreetsLeaderboard(pool)); // THE GREAT STREETS — deeds ranked by their legend
     app.get('/v1/leaderboard/wire', { preHandler: auth }, async () => Wire.wireLeaderboard(pool));
     // Wire step three: DISINFORMATION (feed your tappers lies) + THE INFORMANT (a standing human source)
     app.get('/v1/leaderboard/convoy', { preHandler: auth }, async () => Convoy.convoyLeaderboard(pool));

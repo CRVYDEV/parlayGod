@@ -18,6 +18,7 @@ import { wipeSpeakeasyAtDeath } from '../speakeasy.js';
 import { wipeRingAtDeath } from '../ring.js';
 import { wipeFighterAtDeath, cancelMainEventsAtDeath } from '../boxing.js';
 import { recordDeath } from '../bloodline.js';
+import { recordDeedEvent } from '../deeds.js';
 import { checkScandal } from '../dynasty.js';
 import { fire, huntWanted, npcHit } from './combat.js';
 import { claimBounty, postBounty, refundPot } from './contracts.js';
@@ -146,7 +147,9 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
             gear: h.victimOwned.gear.length, prestige: acct.prestige,
             // THE ESTATE — account-level (keyed on account_id), never in the wipe: the heir inherits the
             // compound. Report the tier name the bloodline keeps.
-            estate: h.victimOwned.estate ? (estateTierOf(Number(h.victimOwned.estate.tier || 0))?.name || null) : null },
+            estate: h.victimOwned.estate ? (estateTierOf(Number(h.victimOwned.estate.tier || 0))?.name || null) : null,
+            // STREET DEEDS — account-level (survives death): the heir keeps the deed. Report the street name.
+            deed: h.victimOwned.deed ? h.victimOwned.deed.name : null },
     lost: { cash: lostCash, cars: h.victimOwned.cars.length, guns: h.victimOwned.guns.length,
             rackets: h.victimOwned.rackets.length, assets: h.victimOwned.assets.length, lvl },
   };
@@ -170,6 +173,11 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // written BEFORE the wipe, idempotent per generation — the ancestral hall + dynasty score read it).
   await recordDeath(client, victim, {
     cause: killerName, level: lvl, kills: Number(victim.season_kills || 0), honor: Number(victim.honor || 0) });
+  // STREET DEEDS — THE LEGEND ENGINE (§4): a bloodline that dies holding the deed leaves its mark on the
+  // street. No-op if this account holds no deed (the record is tied to a real deed). Pure status — no
+  // §10.4. Keyed to victim.account_id, so it follows the deed the heir inherits.
+  await recordDeedEvent(client, victim.account_id,
+    'fell', `${victim.name} fell here — Gen ${Number(victim.generation)}, taken by ${killerName}`);
   // THE SCANDAL (dynastic marriage) — a direct player kill on your IN-LAW: the marriage dissolves and
   // the killer eats MARRIAGE.SCANDAL honor. Runs under the killer's held char lock (fire/shank/npc-hit
   // all pass killerCh); mod-kills and NPC hunters carry no killer → no scandal. Never a kill-BLOCK.

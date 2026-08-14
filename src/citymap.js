@@ -28,6 +28,13 @@ export async function cityMap(client, ch, myGangId = null) {
   const bidCounts = new Map();
   for (const b of (await client.query('SELECT district_id FROM district_bids')).rows)
     bidCounts.set(b.district_id, (bidCounts.get(b.district_id) || 0) + 1);
+  // STREET DEEDS — how built-up each district is (the growing-world texture) + the caller's own deed,
+  // so the map can flag "your street is here". Pure status; a deed grants no turf control (that's the
+  // holder layer above). Two flat reads (the pg-mem posture).
+  const deedCounts = new Map();
+  for (const dd of (await client.query('SELECT district FROM street_deeds')).rows)
+    deedCounts.set(dd.district, (deedCounts.get(dd.district) || 0) + 1);
+  const myDeed = (await client.query('SELECT name, district FROM street_deeds WHERE account_id=$1', [ch.account_id])).rows[0] || null;
 
   const now = Date.now();
   const districts = [];
@@ -46,6 +53,9 @@ export async function cityMap(client, ch, myGangId = null) {
       occupier: null, contest: null, watch: null, racket: null, sov: null,
       // a one-word state for the client to colour the tile by
       state: 'open',
+      // STREET DEEDS — the address count here, and your own street if it sits in this district
+      deeds: deedCounts.get(cat.id) || 0,
+      myDeed: myDeed && myDeed.district === cat.id ? myDeed.name : null,
     };
     if (d.npc_holder) {
       const fx = worldNpcOf(d.npc_holder);
@@ -95,6 +105,7 @@ export async function cityMap(client, ch, myGangId = null) {
     districts, powers,
     season: { id: phase.id, name: phase.name, reckoning: phase.id === 'reckoning' },
     mine: { gangId: myGangId, districts: myGangId ? (held[myGangId] || 0) : 0 },
+    deed: myDeed ? { name: myDeed.name, district: myDeed.district } : null, // your street, for the map header
     total: DISTRICTS.length,
   };
 }

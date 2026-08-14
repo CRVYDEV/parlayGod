@@ -26,7 +26,7 @@ export const TEST_ONLY_ENV = [
   'BUSINESS_RAID_P', 'BUSINESS_TAKEOVER_P', 'CAR_THEFT_P', 'CLUE_DROP_P', 'CLUE_RELIC_P', 'FAMILY_RAID_P', 'FAMILY_COUNTER', 'FAMILY_RETAL_P', 'GEAR_LOOT_CHANCE',
   'HEIST_P', 'LAW_BUST_P', 'PEN_BREAK_P', 'PORT_INTERDICT_P', 'PORT_PIRATE_WIN', 'PORT_SINK', 'SHANK_P', 'STAT_USE_P',
   'SOLDIER_DEATH_P', 'SOV_SIEGE_P', 'SPEAKEASY_RAID_P', 'SPEAKEASY_STANDOVER_P', 'TERRITORY_RAID_P',
-  'TERRITORY_RIVAL_RAID_P', 'WANTED_HUNT_P', 'WORLD_RAID_P',
+  'TERRITORY_RIVAL_RAID_P', 'WANTED_HUNT_P', 'WORLD_RAID_P', 'DEEDS_SHAKE_P',
   // forced draws — a seed-drawn event pinned to a chosen outcome
   'PEN_YARD_EVENT', 'SEASON_MOD', 'SEASON_PHASE', 'BULLETIN_THEME', 'SOV_WINDOW_OPEN', 'WORLD_UPRISING', 'WORLD_UPRISING_FORCE',
   // PRIME TIME — the nightly synchronous window: force the window live / the mechanic / the mode for tests
@@ -94,6 +94,8 @@ export const OPERATIONAL_ENV = [
   'DAILY_CAP_OMR', 'OMERTA_BOND_ADDRESS', 'OMERTA_FEES_ADDRESS',
   // GearVault (Redeemed events) — the NFT re-import watcher (Option A). Dormant unless set on the worker.
   'GEARVAULT_ADDRESS',
+  // StreetDeed (Extracted/Redeemed events) — the on-chain tradeable deed NFT. Dormant unless set.
+  'STREET_DEED_ADDRESS',
   // THE BANK's Alchemist — the harvest-fee stream. Dormant unless set; the asset symbol + decimals
   // are config because the market's underlying is not always 18-decimal (USDC is 6).
   'ALCHEMIST_ADDRESS', 'ALCHEMIST_ASSET', 'ALCHEMIST_ASSET_DECIMALS',

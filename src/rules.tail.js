@@ -5352,3 +5352,90 @@ export const COMMUNITY = {
   HARVEST_BPS: () => Number(process.env.HARVEST_COMMUNITY_BPS ?? 0),  // of each harvest fee (in the market's underlying)
   POLFEES_VIG_BPS: () => Number(process.env.POL_FEES_VIG_BPS ?? 0),   // POL fees diverted to the Vig (not community — the same locked package)
 };
+
+// ── STREET DEEDS (omerta-street-deeds-design.md) — the Monopoly layer. A named, mapped plot of the
+// world a player OWNS and builds a legend on. Phase 1 is PURE STATUS (account-level → survives death,
+// the estate/portfolio precedent; ZERO §10.4 — no currency, no faucet, no new reason). The deed is
+// the permanent property; CONTROL (rent/turf, Phase 2) is earned and defended in-game; the on-chain
+// tradeable token is Phase 3 (audit + counsel gated). These numbers are display/scope only — never a
+// balance lever, so they are NOT tabled in BALANCE.md and carry no test/levers.js pin.
+export const DEEDS = {
+  NAME_MIN: 3, NAME_MAX: 28,        // a street name: "Corvino Way", "Ash Street", "Nine Fingers Row"
+  HISTORY_MAX: 40,                  // events on a deed's dossier (the legend, newest first)
+  // renown = Σ event weights. A deed's legend is the RECORD OF REAL PLAY on it — unforgeable, unfarmable,
+  // the driver of what one street is worth over another (§4/§5). Weighted by how notable the event is.
+  EVENT_WEIGHT: { claim: 1, fell: 5, blood: 4, empire: 3, title: 4, war: 6, sold: 2 },
+  RANKS: [
+    { min: 0, name: 'A Nameless Block' }, { min: 5, name: 'Known Ground' },
+    { min: 20, name: 'A Storied Corner' }, { min: 50, name: 'Bloody Ground' },
+    { min: 120, name: 'A Legend of the City' },
+  ],
+};
+export const deedRankOf = (renown) => { let r = DEEDS.RANKS[0]; for (const t of DEEDS.RANKS) if (Number(renown) >= t.min) r = t; return r; };
+export const deedRenown = (history) => (history || []).reduce((a, e) => a + (DEEDS.EVENT_WEIGHT[e.kind] || 1), 0);
+// ── STREET DEEDS Phase 2 — CONTROL + THE CORNER TAKE (omerta-street-deeds-design.md §2/§3). The deed
+// is permanent property (A, Phase 1); CONTROL is the contestable RENT layer (B). THE CORNER TAKE is a
+// small, HARD-CAPPED, lazy cash faucet (`deed:corner`, character_id'd → the per-character cash check
+// reconciles; ONE deed per account → the base-wide ceiling is (deed holders) × PER_HR × 24h, petty vs
+// the passive stack) collected only by whoever CONTROLS the deed. THE SHAKEDOWN moves control, not
+// money (§10.4-neutral). Turf perks (C) touch the SIGNED district-perk surface → deferred to a
+// separate founder sign-off. Every number here is a founder SIM sign-off lever (BALANCE.md), NOT a
+// signed value — the design's "redirect not faucet" ideal is a genuine small faucet in engineering
+// terms (a true redirect needs a cross-character lock on a hot path or a new §10.4 bucket; the
+// bounded-faucet-measured-and-flagged precedent — territory/business/port/world — is cleaner), so the
+// corner take is measured in tools/sim.js and kept petty.
+DEEDS.CORNER_PER_HR = 2000;                 // cash/hr the corner take accrues (sign-off lever)
+DEEDS.CORNER_CAP_MS = 24 * 3600 * 1000;     // hard cap (an absent controller earns ≤ 24h)
+DEEDS.CONTROL_MS = 12 * 3600 * 1000;        // a rival's control window before it lapses back to the owner
+DEEDS.SHAKEDOWN_CD_MS = 6 * 3600 * 1000;    // per-deed cooldown (bounds spam/grief)
+DEEDS.SHAKEDOWN_ENERGY = 15;
+DEEDS.SHAKEDOWN_HEAT = 10;                  // exposure win or lose (leaning on a corner is exposure)
+DEEDS.SHAKEDOWN_MIN_LVL = 8;                // anti-alt floor (the RIVALS/npcHit precedent)
+DEEDS.SHAKE_BASE_P = 0.5; DEEDS.SHAKE_MIN_P = 0.15; DEEDS.SHAKE_MAX_P = 0.85; DEEDS.SHAKE_STAT_SCALE = 200;
+// the corner take owed on a deed (capped) — a pure function of its accrual clock
+export const deedCornerOwed = (deed, now = Date.now()) => {
+  if (!deed || !deed.corner_at) return 0;
+  const ms = Math.min(Math.max(0, now - new Date(deed.corner_at).getTime()), DEEDS.CORNER_CAP_MS);
+  return Math.floor(DEEDS.CORNER_PER_HR * ms / 3600000);
+};
+// who currently CONTROLS a deed (collects its corner take): a rival inside their window, else the owner
+export const deedController = (deed, now = Date.now()) =>
+  (deed && deed.controller_account && deed.control_until && new Date(deed.control_until).getTime() > now)
+    ? deed.controller_account : (deed ? deed.account_id : null);
+// ── STREET DEEDS Phase 3 — THE SECONDARY MARKET (off-chain core; the on-chain tradeable NFT is
+// AUDIT + securities-counsel gated, design-only). A deed holder LISTS their street for sale; a DEEDLESS
+// buyer buys it → the deed + its whole PROVENANCE (the legend) transfer to the buyer, and CONTROL RESETS
+// (the identity-NFT lesson: the paper + the legend travel, the corner-take control does NOT — the buyer
+// must shake for the corner). §10.4: `deed:sale` is the audited bodyguard:hire non-escrow taxed transfer
+// (seller nets 98%, 1% dev off-ledger + 1% street tax → buyback), riding the existing `deed:` cash prefix.
+DEEDS.MARKET_MIN = 10000;               // floor sale price (a street is a real asset, not a $1 flip)
+DEEDS.SALE_FEE_BPS = 100;               // 1% dev (off-ledger — the bodyguard:hire pattern)
+DEEDS.SALE_TAX_BPS = 100;               // 1% street tax → buyback (the standard 2% house take)
+// ── STREET DEEDS Phase 4 — THE GROWING MAP (§10.4-ZERO — pure render off the living-player count). The
+// city EXPANDS as users join: each district's neighborhoods OPEN in order as the population crosses
+// EXPANSION_STEP thresholds. Late joiners get FRESH GROUND on the frontier. Marketed as a living, growing
+// world — NEVER as scarce/appreciating land (design §6). A deed's neighborhood is DERIVED (stable, no
+// column); a not-yet-open one reads as the FRONTIER (you claimed ground before it was even a neighborhood).
+DEEDS.NEIGHBORHOODS = {
+  docks:     ['Wharf Side', 'The Cannery', 'Saltwater Row', "Dead Man's Pier", 'The Breakwater'],
+  neon:      ['The Strip', 'Ruby Lane', 'Midnight Row', 'The Velvet Blocks', 'Chinatown Gate'],
+  foundry:   ['The Slag', 'Ironside', 'Furnace Row', 'The Coke Yards', 'Cinder Flats'],
+  brick:     ['The Kilns', 'Mortar Row', 'Red Hollow', 'The Claypits', 'Bricktown'],
+  canal:     ['Lockgate', 'The Towpath', 'Barge End', 'Willow Bend', 'The Cut'],
+  cathedral: ['The Spire', 'Rosary Row', "Saint's Rest", 'The Cloisters', 'Gallows Hill'],
+};
+DEEDS.EXPANSION_STEP = 8;               // living players per new neighborhood opening (per district)
+// how many of a district's neighborhoods are OPEN at a given living-player population (the first is always
+// open; one more per EXPANSION_STEP players, capped at the district's neighborhood count)
+export const deedNeighborhoodsOpen = (population, district) => {
+  const list = DEEDS.NEIGHBORHOODS[district] || [];
+  return Math.max(1, Math.min(list.length, 1 + Math.floor(Math.max(0, Number(population) || 0) / DEEDS.EXPANSION_STEP)));
+};
+// a deed's neighborhood — DERIVED from its name (stable, no column). Returns { name, index, frontier }
+// where `frontier` = not-yet-open at this population (a pioneer on the edge of the growing city).
+export const deedNeighborhoodOf = (name, district, population) => {
+  const list = DEEDS.NEIGHBORHOODS[district] || [];
+  if (!list.length) return null;
+  const idx = Math.floor(hash01('deednbr:' + String(name)) * list.length) % list.length;
+  return { name: list[idx], index: idx, frontier: idx >= deedNeighborhoodsOpen(population, district) };
+};

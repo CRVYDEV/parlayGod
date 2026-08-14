@@ -32,7 +32,7 @@ import { sweepStaleBreaks } from './pen.js';
 import { sweepStaleRaids, sweepUprisings } from './world.js';
 import { sweepFamilyAggro, sweepNpcWars, sweepNpcAggression } from './npcwar.js';
 import { sweepWire, sweepWireAlerts, sweepStandingWatches } from './wire.js';
-import { reclaimExpiredVouchers, sweepReimports, assertChainId, bondOracleHealth } from './chain.js';
+import { reclaimExpiredVouchers, sweepReimports, sweepDeedReimports, sweepDeedVouchers, assertChainId, bondOracleHealth } from './chain.js';
 import { sweepMarket } from './market.js';
 import { sweepDiplomacy, sweepNpcDiplomacy } from './diplomacy.js';
 import { settleProposals, activeDecree, seatedGangs, sweepTickerBallot } from './commission.js';
@@ -55,7 +55,7 @@ import { sweepTournaments, sweepTrackEntries, sweepFuturity } from './casino.js'
 import { sweepRingTables } from './ring.js';
 import { sweepGrandPrix } from './races.js';
 import { sweepStakes } from './stable.js';
-import { syncFeeEvents, syncClaimedEvents, syncBondEvents, syncHarvestFees, syncRedeemedEvents, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
+import { syncFeeEvents, syncClaimedEvents, syncBondEvents, syncHarvestFees, syncRedeemedEvents, syncDeedExtractedEvents, syncDeedRedeemedEvents, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
 
 const BUYBACK_PERIOD_MS = 12 * 3600 * 1000;
 
@@ -474,6 +474,13 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     // have a living character (unlinked wallet / dead street when the Redeemed event landed).
     const rir = await safe('reimport sweep', () => sweepReimports(pool));
     if (rir && rir.applied > 0) console.log(`🔁 re-import: brought ${rir.applied} burned NFT(s) back into play`);
+    // STREET DEEDS on-chain: apply deed re-imports WAITING for a linked/deedless burner, and clear any
+    // signed-but-never-claimed deed voucher's inert flag (or reconcile a missed Extracted). Dormant
+    // unless the deed chain is configured (both are no-ops with no signed deed vouchers / pending rows).
+    const dre = await safe('deed reimport sweep', () => sweepDeedReimports(pool));
+    if (dre && dre.applied > 0) console.log(`🏙️  deed re-import: brought ${dre.applied} street(s) back into the city`);
+    const dvs = await safe('deed voucher sweep', () => sweepDeedVouchers(pool));
+    if (dvs && (dvs.cleared > 0 || dvs.extracted > 0)) console.log(`♻️  deed vouchers: ${dvs.cleared} cleared, ${dvs.extracted} reconciled on-chain`);
     // ARE THE BACKUPS ACTUALLY RUNNING? Checked EVERY tick, not nightly, because this is the one
     // failure that is invisible from inside the game: the database serves perfectly while its
     // point-in-time-recovery chain rots. It broke twice on 2026-07-25 and the only evidence was in
@@ -648,6 +655,14 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
           if (process.env.GEARVAULT_ADDRESS) {
             const rd = await syncRedeemedEvents(pool, source, { startBlock });
             if (rd.processed) console.log(`🔁 re-import sync: processed ${rd.processed} Redeemed event(s) (blocks ${rd.from}–${rd.to})`);
+          }
+          // STREET DEEDS (StreetDeed): Extracted → free the extractor (deed genuinely on-chain);
+          // Redeemed → re-import the burned deed. Dormant unless STREET_DEED_ADDRESS is set.
+          if (process.env.STREET_DEED_ADDRESS) {
+            const de = await syncDeedExtractedEvents(pool, source, { startBlock });
+            if (de.processed) console.log(`🏙️  deed sync: ${de.processed} street(s) extracted on-chain (blocks ${de.from}–${de.to})`);
+            const dr = await syncDeedRedeemedEvents(pool, source, { startBlock });
+            if (dr.processed) console.log(`🏙️  deed sync: ${dr.processed} street(s) burned back to the city (blocks ${dr.from}–${dr.to})`);
           }
         } catch (e) { console.error('chain sync error', e.message); }
       };

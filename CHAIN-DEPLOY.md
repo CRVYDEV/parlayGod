@@ -49,35 +49,42 @@ touches mainnet** until §0 is satisfied.
 
    ### THE BATCH — what goes out, and why it is drawn here
    *"Batch, not dribble" (`omerta-dynasty-machine-design.md`) means the scope must be KNOWN before it
-   is sent. Enumerated 2026-08-11; `forge test` **185/185** green on this exact set.*
+   is sent. Enumerated 2026-08-11; `forge test` **284/284** green on this exact set (StreetDeed added
+   2026-08-14; `DynastyNFT` + `StockVault` + `OmertaFees.payForPackage` added 2026-08-14 — see below).*
 
-   **In the batch — 14 contracts + 1 interface, 2,584 lines, every one carrying tests:**
+   **In the batch — 17 contracts + 1 interface, every one carrying tests:**
 
    | subsystem | contracts | the thing to attack |
    |---|---|---|
-   | the $OMR rail | `OMR`, `VoucherClaim`, `GearVault`, `OMRStaking`, `OmertaFees` | the mint path (rule 2) and the two supply caps that survive a minter swap |
+   | the $OMR rail | `OMR`, `VoucherClaim`, `GearVault`, `OMRStaking`, `OmertaFees` | the mint path (rule 2) and the two supply caps that survive a minter swap; **plus `OmertaFees.payForPackage`** — the on-chain Store leg: fail-closed on an unpriced sku, exact-value, forwards dev/Vig, custodies nothing |
    | issuance | `OmertaBond`, `OmrTwapOracle`, `GenesisOracle`, `IOmrOracle` | the four walls, and specifically that 3 and 4 COMPOSE rather than substitute |
    | the market | `OmertaHook` | the pool gate, the `afterSwap` delta, the absence of a pause |
    | THE BANK | `Denari` (the DNR debt token, né `nUSD`), `CollateralEscrow`, `Alchemist`, `Transmuter`, `FlashGuard` | that no oracle sits on the borrow path and no `liquidate()` exists anywhere — the design's central claim, and the class that cost Inverse ~$21M twice |
+   | Street Deeds | `StreetDeed` | the EIP-712 self-mint (name↔tokenId bijection, the daily cap, replay/deadline; NO owner mint), and that `redeem` (the burn-to-re-import) is never pausable so a paused contract can never trap a holder's asset |
+   | the identity NFT | `DynastyNFT` | the EIP-712 self-mint (NO owner mint, nonce/deadline/daily-cap walls), that it gates **NOTHING on `balanceOf`** (the entitlement is account-bound off-chain — the token is a transferable trophy), and the uncapped sequential supply + EIP-2981 royalty |
+   | the stock delivery | `StockVault` | that it **NEVER mints** (pre-held transfer only — the physical half of `allocated ≤ held`), the keeper-only gateless push (no on-chain eligibility, a DELIBERATE §3.3 decision), and the leaked-keeper bounds (per-token daily cap, pause, `setKeeper`, `sweep`) |
 
-   **NOT in the batch, each for a different reason** — worth stating, because "we forgot it" and "we
-   deliberately held it" look identical from outside:
-   - **`DynastyNFT` + the ERC-6551 wiring** — *written? no.* Held on an OPEN launch-checklist row: the
-     published tranche schedule changed what that row is about, and its answer can change a
-     contract-level constant (whether an uncapped collection with published escalating pricing holds
-     up). Writing it first risks auditing the wrong contract.
-   - **`StockVault` (delivery)** — *written? no.* Brokers step 7, gated on the **claim-rail parameters**
-     (the eligibility list + verification depth), which are still owed even though the surface itself is cleared.
-   - **`MerkleDistributor`** — *written? no.* Only exists under launch **D1 variant (a)**; variant (b)
-     (in-game SIWE credit, the recommendation) needs no contract at all. Do not write it before D1.
+   **NOW IN THE BATCH (added 2026-08-14, founder-directed).** `DynastyNFT`, `StockVault` and
+   `OmertaFees.payForPackage` were previously held out; the founder cleared every design choice and lifted
+   the launch-schedule constraint ("we will launch when I feel we are complete"), which removed each hold:
+   - **`DynastyNFT`** — the tranche-schedule question that its "uncapped + escalating pricing" hinged on
+     is settled (the published five-wave schedule with a hard 0.05-ETH ceiling; the mint fee lives in
+     `OmertaFees`, not this contract, so it carries no pricing constant to audit).
+   - **`StockVault`** — the founder chose the **GATELESS PUSH** (§3.3): there is no claim rail and no
+     on-chain eligibility gate, so the claim-rail parameters it was gated on no longer exist. The
+     accepted risk (Robinhood's tokenized stocks are EU-restricted; a gateless push has no on-chain
+     control over who receives them) is documented in the contract NatSpec so the audit sees a decision.
+   - **`ERC-6551` account contract** — NOT written and correctly so: the canonical registry singleton
+     (`0x000000006551c19487814612e58FE06813775758`) + the ecosystem reference account implementation are
+     used unmodified (deploy config, not a fork). Nothing to audit here beyond wiring.
+   - **`MerkleDistributor`** — still NOT written, and still correctly so: launch **D1** resolved to
+     variant (b) (in-game SIWE credit), which needs no contract at all.
 
-   **The boundary this draws, and the founder's call:** that row is externally blocked, so holding the whole
-   batch for `DynastyNFT` holds the chain rail — withdrawals, bonds, fees, the hook, the Bank — behind
-   a question only the launch review can answer. Sending what is written now and the NFT later is **two**
-   engagements, which is the minimum reachable given that block; it is not the dribble the discipline
-   warns about. **`GenesisOracle` was written specifically so it would not become a third** — it is
-   launch-blocking (the genesis window bonds before the pool its TWAP would read exists), it carries no
-   launch gate at all, and it was the one contract the launch plan needed that nobody had enumerated.
+   **`GenesisOracle` was written specifically so it would not become a straggler** — it is launch-blocking
+   (the genesis window bonds before the pool its TWAP would read exists), carries no launch gate at all,
+   and was the one contract the launch plan needed that nobody had enumerated. With the two NFTs and the
+   Store leg now in, the batch is the WHOLE on-chain surface — a single engagement, which is what the
+   "batch, not dribble" discipline asks for.
 3. **Launch review sign-off** on the Risk-to-Earn line (see the "Sensitive design notes" in `CLAUDE.md`).
    **✅ CLEARED 2026-08-12; scope WIDENED to the whole checklist 2026-08-13** — the founder reports
    the tokenomics are approved and the on-chain details; on 2026-08-13 the founder further stated the
@@ -152,7 +159,8 @@ makes co-mingling it with a spending key strictly worse than before.
 
 ## 1. Build + test the contracts
 - [ ] `cd omerta-contracts && ./run-forge-test.sh` → all `[PASS]` (Gate 0.1). Suite: OMR, VoucherClaim,
-      GearVault, OMRStaking, OmertaFees, OmertaBond, OmrTwapOracle, GenesisOracle, OmertaHook + THE BANK (185 tests, seven fuzzes).
+      GearVault, OMRStaking, OmertaFees (incl. `payForPackage`), OmertaBond, OmrTwapOracle, GenesisOracle,
+      OmertaHook + THE BANK + StreetDeed + DynastyNFT + StockVault (284 tests, seven fuzzes).
       The hook's tests deploy a REAL Uniswap v4 `PoolManager`, which the emscripten solc cannot compile —
       **use native solc** (`./run-forge-test.sh`, or the sandboxed runner, which now fetches the native
       binary and says so if it cannot).
@@ -281,6 +289,59 @@ PHASE 1 for the exact calls/args.
       `_update` path anyway, ARMED AT ZERO: a hook tax is a property of ONE pool and anyone may open an
       unhooked one, so the token tax is the universal backstop the Safe arms if that starts to matter.
 
+### 2a. STREET DEEDS — the on-chain tradeable deed (only when it ships; dormant until env-set)
+- [ ] **`StreetDeed(safe, signer, imageBase, externalBase)`** — the ERC-721 Street Deed
+      (`omerta-street-deeds-design.md` §2/§3). SELF-MINTING on the SAME `signer` as VoucherClaim (no owner
+      mint — a deed mints only against a server-signed EIP-712 `DeedVoucher`), Safe-owned. `imageBase` →
+      the game's block-plate route (`https://<host>/v1/deeds/plate/`), `externalBase` → the deed's legend
+      page (`https://<host>/deed/`); both take `<tokenId>` appended. **NO wiring needed** (it verifies its
+      own voucher — the OmertaBond precedent, since a deed voucher carries name+district strings the
+      fixed VoucherClaim struct can't). Optional rate-cap: `setDailyMintCap(n)` (0 = unlimited).
+      **Backend activation:** set **`STREET_DEED_ADDRESS`** on BOTH the API (so `POST /v1/deeds/extract`
+      signs the DeedVoucher — needs `CHAIN_ID` + the shared `VOUCHER_SIGNER_PK` too) AND the WORKER (so the
+      `Extracted` watcher `syncDeedExtractedEvents` → `markDeedExtracted` frees the extractor, and the
+      `Redeemed` watcher `syncDeedRedeemedEvents` → `reimportDeed` brings a burned deed back into the game;
+      the worker also needs `CHAIN_RPC_URL`). Dormant until set. The deed goes INERT in-game while
+      extracted (no rent/control — the car/boat v3-step-7 precedent); a holder RE-IMPORTS by calling
+      `redeem(tokenId)` (burn), which the `Redeemed` watcher hands to a deedless linked account.
+      §10.4-NEUTRAL: a deed is ownership, never a currency — zero `transactions` rows. `tokenId =
+      uint256(keccak256(bytes(name)))` (a name↔id bijection enforced on-chain), so a name mints at most
+      once; a re-import (burn) frees the same id for re-extraction. `redeem` is NEVER pausable — a paused
+      contract must never trap a holder's asset.
+
+### 2c. THE IDENTITY NFT + THE STOCK DELIVERY VAULT (only when they ship; dormant until env-set)
+- [ ] **`DynastyNFT(safe, signer, baseUri, royaltyRecipient, royaltyBps)`** — the uncapped identity NFT
+      (`omerta-dynasty-machine-design.md` §4). SELF-MINTING on the SAME `signer` as VoucherClaim/StreetDeed
+      (no owner mint — a token exists ONLY against a server-signed EIP-712 `MintVoucher`), Safe-owned.
+      `baseUri` → the account's metadata endpoint (`https://<host>/v1/identity/`, `<tokenId>` appended);
+      `royaltyRecipient` = the treasury Safe, `royaltyBps` = **500** (5%, EIP-2981). **THE WALL: the
+      contract gates NOTHING on `balanceOf`** — the game entitlement (`account_persistent.minted`) stays
+      account-bound OFF-CHAIN, so the token is a freely transferable trophy carrying no on-chain power.
+      **NO wiring needed** (it verifies its own voucher). Optional rate-cap: `setDailyMintCap(n)` — with no
+      supply cap this is the entire blast radius of a leaked signer key, so **set it** (0 = unlimited).
+      **Backend activation:** set **`DYNASTY_NFT_ADDRESS`** on the API (so the mint-voucher route signs —
+      needs `CHAIN_ID` + the shared `VOUCHER_SIGNER_PK`) and, when the metadata/portrait freeze-on-transfer
+      is wired, the WORKER's `Transfer` watcher. Dormant until set. §10.4-NEUTRAL (art/status only).
+      *ERC-6551:* the canonical registry singleton (`0x000000006551c19487814612e58FE06813775758`) + the
+      ecosystem reference **account implementation** are used UNMODIFIED — deploy config, not a fork. A
+      player's token-bound account is `registry.account(accountImpl, salt, chainId, DynastyNFT, tokenId)`;
+      nothing here is a new contract to deploy.
+- [ ] **`StockVault(safe, keeper)`** — the gateless keeper-push tokenized-stock delivery vault
+      (`omerta-brokers-design.md` §3.3). **NEVER mints** — every `deliver`/`deliverBatch` is a pre-held
+      `SafeERC20.transfer`, so `balanceOf(this)` per token is the physical `allocated ≤ held` wall. Pass
+      **`keeper = address(0)` at deploy** (deliveries OFF). **⚠ ORDER (fail-safe):** the Safe (1) pre-funds
+      the vault with the tokenized-stock ERC-20s the treasury keeper bought (`runStockBuyback`), (2) sets a
+      per-ticker `setDailyCap(token, cap)` (the leaked-keeper rate wall — a compromised keeper can only move
+      HELD units, never mint, and the Safe can `sweep` unspent stock at any time), THEN (3) `setKeeper(bot)`
+      to arm it. **GATELESS is a DELIBERATE §3.3 decision** (recorded in the NatSpec so the audit sees a
+      decision, not an omission): there is no claim process and no on-chain eligibility gate — stock accrues
+      straight into the player's ERC-6551 token-bound account, so the NFT sells self-contained; the accepted
+      risk is that Robinhood's tokenized stocks are issuer-restricted (EU-facing) and a gateless push has no
+      on-chain control over who receives them. Any operational eligibility is a backend/keeper concern.
+      **Backend activation:** set **`STOCK_VAULT_ADDRESS`** on the delivery keeper. Dormant until wired.
+      §10.4-NEUTRAL (out-of-band real value — zero `transactions` rows; the backend's `allocateStock` clamp
+      + nightly `runTreasuryInvariants` are the owed-side half of the wall).
+
 ### 2b. THE BANK — the Denari (DNR) market (only when it ships; not part of the first cut)
 Order matters more here than anywhere else in this file, because **two of these steps fail SILENTLY**:
 omit them and the market looks healthy from the outside and is not.
@@ -333,6 +394,7 @@ Each rail is OFF until its address/config is present. Set on BOTH processes.
 | `DAILY_CAP_OMR` | per-day withdrawal cap (wei) | mirrors the contract's `dailyCapOMR` |
 | `OMERTA_FEES_ADDRESS` | fee sync (`MintFeePaid`/`RespawnFeePaid`/`RerollFeePaid` → credits) | — |
 | `OMERTA_BOND_ADDRESS` | **the `Bonded` → `recordBond` bond sync (NEW — now wired)** | books the event's authoritative payout + POL/Vig split; idempotent on nonce |
+| `STREET_DEED_ADDRESS` | API: `POST /v1/deeds/extract` signs the DeedVoucher (needs `CHAIN_ID` + `VOUCHER_SIGNER_PK`) + it's the deed `verifyingContract`. WORKER: `Extracted` → `markDeedExtracted` (frees the extractor) + `Redeemed` → `reimportDeed` (burn brings the deed back) | set on BOTH processes; dormant until set. §10.4-neutral (ownership, not currency) |
 | `ALCHEMIST_ADDRESS` (+ `ALCHEMIST_ASSET`, `ALCHEMIST_ASSET_DECIMALS`) | THE BANK's harvest-fee sync → `bank_revenue` | only when the bank market ships |
 | `MINT_FEE_ETH` / `RESPAWN_FEE_ETH` | the PLEX price quote | ETH-denominated; keep == the contract fees |
 | `WALLETCONNECT_PROJECT_ID` | the console's **WalletConnect (mobile)** option — the ONLY way a phone can link a wallet (desktop browser wallets are auto-discovered via EIP-6963 and need nothing) | a PUBLIC WalletConnect/Reown project id, free from https://dashboard.reown.com; unset ⇒ the console hides the option. Surfaced in `/v1/rules`. Not chain-gated: linking is a signature, so the chain is requested as OPTIONAL and a wallet that has never heard of the OMERTÀ chain still connects |
@@ -421,12 +483,20 @@ The backend keeps its own reserve records; they must track the on-chain balances
     against it as it stands.
 - **The POL-pairing bot** (pairs the bonded ETH into the OMR-ETH pool) and **the DEX buyback bot** (the real
   TWAP source that replaces the manual `mod/vig/buyback` price).
-- **The on-chain Store** — `OmertaFees.payForPackage` + a `StorePaid` watcher. The Store is off-chain/mod-driven
-  today; the on-chain paywall is the mainnet Store milestone.
-- **Liquidity bonds** (LP-token deposits) — launch-gated (§0.3). **R2/R3 (the real-stock buy bot, the
-  reserve backing Dynasty shares, and the verified on-chain extraction) are RETIRED, not deferred** — the
-  founder removed the stock layer 2026-07-31 (`omerta-stock-layer-retirement.md`); the treasury holds ETH
-  and nothing in the game owes anybody a share.
+- **The on-chain Store** — `OmertaFees.payForPackage` is **BUILT** (2026-08-14, in the audit batch:
+  fail-closed on an unpriced sku, exact-value, forwards dev/Vig, custodies nothing; `setPackagePrice(sku,
+  wei)` prices a package on-chain, `0` retires it). The remaining work is the BACKEND: a `PackagePaid`
+  watcher that credits the paying account its (non-§10.4) entitlement idempotently on `nonce`, mirroring
+  `recordFeePayment`. Until that ships the Store stays off-chain/mod-driven. **Deploy:** the Safe calls
+  `setPackagePrice` per live sku in lockstep with the backend `STORE.PACKAGES` prices.
+- **Liquidity bonds** (LP-token deposits) — launch-gated (§0.3).
+- **The tokenized-stock layer** — RETIRED 2026-07-31 (`omerta-stock-layer-retirement.md`) and
+  **REINSTATED 2026-08-10** (`omerta-brokers-design.md`, founder decision). The treasury BUYS tokenized
+  stock, `allocated ≤ held` (per ticker, in units) holds, and `StockVault` (now in the audit batch, §2c)
+  is the GATELESS delivery leg. Still owed on the BACKEND: the buy keeper (`runStockBuyback`), the
+  per-account allocation ledger (`allocateStock` + nightly `runTreasuryInvariants`), and the delivery
+  keeper that drives `StockVault.deliver`. The ETH VAULT is the same shape one asset over
+  (`omerta-stock-layer-retirement.md`) — allocation-only, same asset both sides.
 
 ## 7b. Standing duty — reconcile the treasury Safe against what the vault owes
 

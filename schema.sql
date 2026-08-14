@@ -661,8 +661,8 @@ CREATE TABLE IF NOT EXISTS invite_codes (
 CREATE TABLE IF NOT EXISTS vouchers (
   id TEXT PRIMARY KEY,
   account_id TEXT NOT NULL,
-  kind TEXT NOT NULL,                          -- 'omr' | 'gear'
-  amount NUMERIC NOT NULL DEFAULT 0,           -- whole $OMR for omr; 1 for gear
+  kind TEXT NOT NULL,                          -- 'omr' | 'gear' | 'car' | 'boat' | 'deed'
+  amount NUMERIC NOT NULL DEFAULT 0,           -- whole $OMR for omr; 1 for an NFT (gear/car/boat/deed)
   gear_id TEXT,                                -- gear class id (gear kind)
   nonce BIGINT NOT NULL UNIQUE,                -- server-unique uint256 nonce (replay guard)
   to_address TEXT NOT NULL,                    -- recipient EVM address
@@ -1500,6 +1500,68 @@ CREATE TABLE IF NOT EXISTS estates (
   tier INT NOT NULL DEFAULT 0,
   features TEXT NOT NULL DEFAULT '',        -- comma-joined feature ids (pg-mem-safe; avoid arrays)
   spent_omr NUMERIC NOT NULL DEFAULT 0      -- lifetime $OMR sunk into the estate (a status figure)
+);
+
+-- ── STREET DEEDS (omerta-street-deeds-design.md) — the map as property (the Monopoly layer) ──
+-- A named, mapped plot of the world a player OWNS and builds a legend on. ACCOUNT-level (keyed on
+-- account_id) so it SURVIVES DEATH — the heir inherits the deed (the estate/portfolio precedent,
+-- outside the runEstate wipe BY CONSTRUCTION; a character_id-keyed table would be scanned by the
+-- death-disposition guard, an account_id-keyed one is not). Phase 1 is PURE STATUS: no `transactions`
+-- row is ever written, so the §10.4 sweep stays drift-0. CONTROL (rent/turf) is earned in-game
+-- (Phase 2); the on-chain tradeable token is Phase 3 (audit + counsel gated). One deed per account.
+CREATE TABLE IF NOT EXISTS street_deeds (
+  account_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  name_lc TEXT NOT NULL,                     -- lower-cased, for the city-wide uniqueness index
+  district TEXT NOT NULL,                    -- the core district the street sits inside
+  claimed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_street_deeds_name ON street_deeds (name_lc);
+CREATE INDEX IF NOT EXISTS ix_street_deeds_district ON street_deeds (district);
+-- Phase 2 — CONTROL + THE CORNER TAKE. The deed (owner) is permanent; CONTROL (who collects the corner
+-- take) is contestable: a rival muscles in for a window, then it lapses back to the owner. `corner_at`
+-- is the corner-take lazy clock (a small bounded cash faucet `deed:corner`); a seizure forfeits pending
+-- (the territory-seize precedent, so `corner_at` resets). All account_id-keyed → survive death by
+-- construction (a dead usurper's control simply lapses on `control_until`; the deed's owner heir keeps it).
+ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS controller_account TEXT;              -- a rival who shook the corner (null = owner controls)
+ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS control_until TIMESTAMPTZ;            -- when the rival's control lapses back to the owner
+ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS corner_at TIMESTAMPTZ;               -- the corner-take accrual clock (reset on claim + on a seizure/collect)
+ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS shakedown_at TIMESTAMPTZ;            -- per-deed cooldown on a corner shakedown
+-- Phase 3 — THE SECONDARY MARKET (off-chain core). A deed holder LISTS their street for sale; a DEEDLESS
+-- buyer buys it → the deed + its provenance transfer to the buyer's account, control resets (the buyer
+-- earns the corner). §10.4: `deed:sale` a taxed cash transfer (the bodyguard:hire pattern). No escrow.
+ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS sale_price BIGINT;                    -- listed for this cash price (null = not for sale)
+-- Phase 3 — THE ON-CHAIN TRADEABLE NFT (omerta-street-deeds-design.md §2/§3). A minted account with a
+-- linked wallet EXTRACTS its deed as a StreetDeed ERC-721 (chain.js requestDeedWithdraw). The in-game
+-- row is re-keyed to a synthetic `onchain:<tokenId>` owner — freeing the account to claim anew, RESERVING
+-- the name (the row persists so the unique index holds), and PRESERVING the legend (re-keyed too). The
+-- deed is INERT while extracted (the car/boat precedent — no rent/control): to play the rent/turf game
+-- with it again its holder RE-IMPORTS (burns → the Redeemed watcher re-keys it to the burner's account).
+-- `onchain_token_id` = uint256(keccak256(name)) as a decimal string, the deterministic re-import lookup.
+ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS onchain_token_id TEXT;                -- non-null = extracted (held on-chain, inert in-game)
+CREATE INDEX IF NOT EXISTS ix_street_deeds_token ON street_deeds (onchain_token_id);
+-- THE LEGEND ENGINE — the provenance record of everything that happened on a deed (§4). Account-keyed
+-- like the deed (survives death — the record is the value). Pure-status append log; never a currency.
+CREATE TABLE IF NOT EXISTS street_deed_history (
+  id BIGSERIAL PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  kind TEXT NOT NULL,                        -- claim | fell | empire | title | war | blood
+  detail TEXT NOT NULL DEFAULT '',           -- a pre-humanized, markup-stripped one-liner
+  at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_deed_history_acct ON street_deed_history (account_id, at DESC);
+-- Deed RE-IMPORT: a StreetDeed NFT burned back into the game (chain.js reimportDeed). The pending store
+-- + idempotency guard (the nft_reimports twin): the burner's wallet is resolved to a deedless account
+-- and the on-chain deed re-keyed to them; if they have no linked account (or already hold a street) the
+-- re-import WAITS. Dormant unless STREET_DEED_ADDRESS is set. §10.4-neutral (ownership, not currency).
+CREATE TABLE IF NOT EXISTS deed_reimports (
+  ref TEXT PRIMARY KEY,                             -- txHash:logIndex (idempotency)
+  wallet_address TEXT NOT NULL,                     -- the burner (Redeemed.from), checksummed
+  token_id TEXT NOT NULL,                           -- the burned deed tokenId (keccak(name), decimal string)
+  status TEXT NOT NULL DEFAULT 'pending',           -- 'pending' | 'applied'
+  applied_account TEXT,                             -- the account the deed was re-keyed to
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  applied_at TIMESTAMPTZ
 );
 
 -- ── THE AUCTION HOUSE ("the sit-down"): the competitive, recurring $OMR sink ──

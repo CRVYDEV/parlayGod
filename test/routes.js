@@ -59,6 +59,7 @@ const PUBLIC = {
   'GET /v1/yield': 'TOKENOMICS v2 family-yield board — a public status board (the /v1/gangs precedent)',
   'GET /v1/desk': 'ECONOMY v3 the desk\'s shelf — published on purpose: a player told that every $OMR they '
     + 'spend comes back to the desk to be sold again is entitled to read the shelf and the sink list',
+  'GET /v1/deeds/plate/:tokenId': 'STREET DEEDS — the on-chain deed\'s block-plate SVG, the ERC-721 tokenURI image a marketplace/crawler fetches with no token; the untrusted street name is escaped (the /v1/art precedent)',
   'POST /v1/auth/guest': 'an auth entry point — there is no token to present yet',
   'POST /v1/auth/privy': 'an auth entry point — there is no token to present yet',
   'POST /v1/auth/x': 'an auth entry point — there is no token to present yet',

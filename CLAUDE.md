@@ -12207,3 +12207,217 @@ immediately before every commit**. The durable lesson is the one already written
 trap, in a harsher form: **a green suite proves nothing about the tree you are about to push if you
 have not just confirmed which tree that is** — and under a flaky container the answer is to commit
 each fix the moment it passes rather than batching.
+
+**STREET DEEDS — the map as property (founder-directed 2026-08-14: "mint a 'Street Name' mapped onto the
+world instead of a PFP — a Monopoly aspect where you sell your STREET, and the map grows as users join";
+then "A+B+C together so it's valuable as an NFT on secondary markets"; design `omerta-street-deeds-design.md`)
+— PHASE 1 BUILT** (`src/deeds.js` — the 143rd src module, `src/routes/deeds.js`, `test/deeds.js` — the
+102nd suite; `street_deeds`/`street_deed_history` — the 224th/225th tables; the `DEEDS` rules-tail block +
+`deedRankOf`/`deedRenown`; `GET /v1/deeds` + `POST /v1/deeds/claim` + `GET /v1/leaderboard/streets`; a
+"Street Deeds" tab under the Family group). The founder's reframe of the identity mint from a character PFP
+into a mintable, mapped Street — the Monopoly layer. **The one structural idea that lets collectible (A) +
+rent (B) + productive turf (C) coexist without breaking the sim-audited war economy, turning minting into
+pay-to-win, or shipping a security: SEPARATE THE DEED FROM CONTROL.** The deed is permanent, tradeable
+PROPERTY (a named street, mapped, with a record of everything that happened on it — nobody takes it off you);
+CONTROL — the rent + the turf power — is earned and defended IN-GAME (you own Boardwalk, but a rival with
+muscle on it collects while you hold only the paper). That split is what keeps it (1) not pay-to-win (money
+buys the deed + a head start; income is capped at what a free player reaches by seizing turf in a war),
+(2) war-economy-safe (the income is FOUGHT OVER, not passively piped, so turf/territory/sovereignty are
+untouched), and (3) on the right side of the securities line (returns require the holder's own effort; the
+team promises no value — §7, needs counsel before any Phase-3 mint). **Phase 1 is the deed + THE LEGEND
+ENGINE, and it is PURE STATUS, §10.4-ZERO by construction** (the whole flow writes not one `transactions`
+row — test-pinned; the portrait/dynasty/estate precedent). Claim ONE named deed (the identity/Sybil model —
+a Monopoly PORTFOLIO of many streets is a Phase-3 secondary-market behavior, not a mint primitive) mapped to
+a core district: the name is validated like a living-street name (`cleanText` markup-strip → stored-XSS;
+`DEEDS.NAME_MIN`/`MAX` length; city-wide unique on `name_lc`, race-safe on the unique index → a clean 400,
+never a 500), FREE in Phase 1 (the ETH mint fee attaches at Phase 3). **ACCOUNT-keyed → SURVIVES DEATH**
+(outside the runEstate wipe BY CONSTRUCTION — the death-disposition guard scans character_id-keyed tables,
+never account_id-keyed ones, so a new such table needs no disposition entry; the heir inherits the deed,
+`report.kept.deed` names the street). **THE LEGEND ENGINE** (`street_deed_history`, the value driver §4/§5):
+a deed accrues a provenance RECORD of real play — Phase 1 hooks the CLAIM + a "the line fell here" mark when
+a bloodline dies holding the deed (`recordDeedEvent` in `runEstate`, best-effort under a SAVEPOINT — the
+logCollect discipline; a no-op if the account holds no deed). renown = Σ event weights (`deedRenown`) → a
+rank ladder (`deedRankOf`); `GET /v1/leaderboard/streets` ranks the great streets by their legend
+(unforgeable, unfarmable — it is a record of real play, and THAT is what makes one Street outsell another on
+a secondary market). Surfaced on `GET /v1/map` (per-district deed count + your street flagged on its tile) +
+a "Street Deeds" console tab (your deed + its record + the map's build-up + the great-streets board).
+**Deliberately NOT wired into the live mint / the `minted` extraction flag** (design §8) — additive and
+independent of the identity/extraction machinery, which is untouched. `DEEDS` numbers are display/scope only
+(no balance lever → no BALANCE.md table, no test/levers.js pin). `test/deeds.js` proves the claim + every
+gate (bad district / short name / one-per-account / city-wide uniqueness), the legend engine + renown/rank,
+the great-streets leaderboard (agents excluded), SURVIVES DEATH (a mod-kill's heir inherits; the estate
+report names the deed; the death leaves a "fell here" mark on the record), and §10.4-neutrality (zero ledger
+rows across the whole flow). Suite green + sim drift-0 + mobile 77/77 + client wiring/mirror + pgquery +
+pgcheck 43/43 on real Postgres. **Phases 2–3 are DESIGNED, gated:** control — B (rent) REDIRECTS a bounded
+existing faucet (the shakedown/territory pattern — owner keeps the rest, the shared clock bounds total
+emission by the signed curve → §10.4-neutral, sim + founder sign-off) + C (a racket slot + turf perks capped
+at free-player parity); the on-chain TRADEABLE deed with an account-bound extraction entitlement (the
+identity-NFT lesson — the deed transfers, the entitlement does not, or the secondary floor becomes the Sybil
+cost) is audit + securities-counsel gated. Phase 4 (the growing map — new blocks open off the §7.11 world
+seed as the playerbase crosses thresholds) ships design-only with Phase 1's map render, **marketed as a
+living, growing world, NEVER as scarce/appreciating land** (§6, the project's highest-scrutiny copy surface).
+**PHASE 2 (CONTROL — the rent layer) BUILT** (`src/deeds.js` + `src/routes/deeds.js` + `test/deeds.js`; the
+`DEEDS` Phase-2 constants + `deedCornerOwed`/`deedController` in rules.tail.js; four `ALTER TABLE street_deeds
+ADD COLUMN IF NOT EXISTS` — controller_account/control_until/corner_at/shakedown_at, the outage-lesson way).
+The design's load-bearing **deed-vs-control split** made real: you own the deed forever, but a rival with
+muscle on the block collects while you hold only the paper. **THE CORNER TAKE** (`collectCorner`, `POST
+/v1/deeds/corner`) — a small HARD-CAPPED lazy cash faucet (`deed:corner`, `CORNER_PER_HR` $2k × up to
+`CORNER_CAP_MS` 24h) collected only by whoever CONTROLS a deed (your own if a rival hasn't muscled in, PLUS
+any rival corner you've seized); safehouse-gated (the signed **D2** "shield not bunker" income rule its
+`collectTerritory` sibling enforces — classified in the gate matrix's collect-income family). **THE
+SHAKEDOWN** (`shakedownCorner`, `POST /v1/deeds/shakedown/:targetCharacterId`) — a muscle+cunning/2 stat
+contest (the territory/npcHit pattern, `DEEDS_SHAKE_P` a TEST-ONLY roll knob) that SEIZES control for
+`CONTROL_MS` 12h (a rival muscles in — pending take forfeits, the seize precedent) OR lets the owner
+RECLAIM their own corner; location-pinned (`ch.loc === deed.district`, the district-refusal payload so the
+console offers "go there →"), level-floored (`SHAKEDOWN_MIN_LVL` 8, anti-alt), energy/heat/per-deed-cooldown
+bounded. **Lock-clean** — the shakedown mutates ONLY the deed row (a leaf `FOR UPDATE`); the defender is read
+UNLOCKED (no cross-character lock, no AB-BA), so only the attacker's own char is held (withCharacter).
+Control LAPSES on its own clock (`deedController` reads the window → falls back to the owner with no action).
+**§10.4: the shakedown moves CONTROL, not money** (zero ledger rows); `deed:corner` is the ONE new cash
+faucet — `deed:` joined the cash `KNOWN_REASONS`, character_id'd → the per-character check reconciles it,
+measured in `tools/sim.js` **P9.37** (~$48k/day/deed cap; base-wide linear in the playerbase, ONE deed per
+account; contesting a corner only moves WHO collects, never widens the faucet — petty per deed, ~a
+territory-racket rung). **The design's "pure redirect" ideal was corrected honestly** (design §2/§3 + the
+module comment): a true redirect needs a cross-character lock on a hot path or a new §10.4 bucket, so the
+cleaner engineering answer is the **bounded-faucet-measured-and-flagged** precedent (territory/business/
+port/world) — every `DEEDS` Phase-2 number is a founder sim sign-off lever (BALANCE.md § THE STREET DEEDS
+CORNER TAKE, pinned in `test/levers.js`). Client: THE CORNER card on the Street Deeds tab (collect the take,
+take your corner back if seized, lean on rival corners at your location — the board's `here` field lists the
+marks you could shake down and `canReclaim`/`myTargetId` drive the reclaim); `corner_seized`/`corner_defended`
+notifications humanized in `feedText`; `describe()` covers the collect + shakedown responses.
+`test/deeds.js` (Phase 2 block) proves the corner accrual + collect + the 24h cap, the clock reset on
+collect, the shakedown seize (a rival muscles in, NO cash moves) + the seized owner's board, a rival
+collecting the seized corner, the owner's RECLAIM, control lapsing back on its window, and the shakedown
+gates (district/rookie). Turf perks (C) touch the signed district-perk surface → **deferred** to a separate
+founder sign-off; the on-chain tradeable deed stays Phase 3 (audit + counsel gated). Suite green + sim
+drift-0 + client wiring/mirror + gate matrix + levers + docs; pgquery + pgcheck on real Postgres (the four
+ALTERs apply).
+**PHASE 3 (THE SECONDARY MARKET, off-chain) + PHASE 4 (THE GROWING MAP) BUILT** (`src/deeds.js` +
+`src/routes/deeds.js` + `test/deeds.js`; `DEEDS.MARKET_*`/`SALE_*_BPS`/`NEIGHBORHOODS`/`EXPANSION_STEP` +
+`deedNeighborhoodsOpen`/`deedNeighborhoodOf` in rules.tail.js; one `ALTER TABLE street_deeds ADD COLUMN IF
+NOT EXISTS sale_price`, the outage-lesson way). **Phase 3 — THE DEED MARKET:** a deed holder LISTS their
+street for cash (`listDeed`, `POST /v1/deeds/list`; `sale_price`, NO escrow — the car-auction row-stays
+precedent, you keep collecting the corner while listed), a **DEEDLESS** buyer BUYS it (`buyDeed`, `POST
+/v1/deeds/buy/:sellerCharacterId`, two-party `withTwoCharacters`). **The identity-NFT lesson made real:**
+the deed + its **whole PROVENANCE** (the legend/`street_deed_history`, re-keyed to the buyer) transfer, and
+**CONTROL RESETS** (`controller_account`/`corner_at` cleared — the paper + legend travel, the corner-take
+control does NOT; the buyer must shake for the corner). §10.4: `deed:sale` is the audited **bodyguard:hire**
+non-escrow taxed transfer — seller nets 98% (1% dev off-ledger + 1% street tax → buyback) — riding the
+existing `deed:` cash prefix (**no new reason, no mint, no faucet** — a pure redistribution; the test asserts
+EXACTLY two `deed:sale` rows). One deed per account (`have_deed` gate), so only a deedless buyer buys — the
+"acquire a storied street instead of a fresh block" entry; a multi-deed PORTFOLIO is a deferred step (the
+`account_id`-PK refactor). The seller becomes deedless (can claim/buy again); a `sold` event marks the
+record; the seller is `deed_sold`-notified. Jail-gated. **The on-chain tradeable ERC-721 is DESIGN-ONLY**
+(a new contract resets the third-party audit clock the founder is closing for launch, and §7 needs
+securities counsel — NOT built). **Phase 4 — THE GROWING MAP (§10.4-ZERO — pure render):** each district's
+NEIGHBORHOODS (`DEEDS.NEIGHBORHOODS`, ~5 authored noir names/district) OPEN in order as the **living-player
+population** crosses `EXPANSION_STEP` (8) thresholds (the "as users join" framing — deterministic off the
+count, not a mint); a deed's neighborhood is DERIVED from its name (stable, no column), a not-yet-open one
+reads as the **FRONTIER** ("you claimed ground before it was even a neighborhood"). Surfaced on `GET
+/v1/deeds` (a `city` summary — population / open-vs-total neighborhoods / next-expansion threshold — +
+per-district `neighborhoods {open, coming}`) + the map render; late joiners get fresh ground. Marketed as a
+living, GROWING world — NEVER as scarce/appreciating land (§6, the highest-scrutiny copy surface). Client:
+THE MARKET card (list/pull your street; a deedless buyer browses the streets for sale WITH their legend +
+buys with a confirm) + a city banner + open/coming neighborhoods on the district cards + the deed's
+neighborhood; `describe()` + `deed_sold` feed line. `test/deeds.js` (Phase 3+4 block) proves the
+neighborhoods-open formula (1 → +1/step → capped) + the board's city/neighborhood surface, the list gates
+(no_deed/min_price), the market board (a deedless buyer sees the listing WITH its renown), the buy gates
+(self/have_deed), and the sale (buyer −price / seller +98% / street-tax half / exactly two `deed:sale` rows
+/ the legend + control transferred / seller now deedless). All `DEEDS` Phase-3/4 numbers are founder
+sign-off levers (BALANCE.md § THE STREET DEEDS MARKET + THE GROWING MAP, pinned in `test/levers.js`). Suite
+green + sim drift-0 + client wiring/mirror + gate matrix + mobile 77/77 + pgquery + pgcheck 43/43 on real
+Postgres.
+**THE ON-CHAIN TRADEABLE DEED — Phase 3's audit-gated piece, BUILT (founder-directed 2026-08-14: "Make on
+the onchain tradeable NFT. legal has approved all design choices and no longer worry about meeting a launch
+schedule … we will launch when I feel we are complete based on your guidance").** The three blockers that
+held this DESIGN-ONLY are all removed (legal cleared every design choice; no launch-schedule constraint; a
+new contract resetting the third-party audit clock is now acceptable). `omerta-contracts/src/StreetDeed.sol`
+— an **ERC-721 that verifies its OWN EIP-712 `DeedVoucher`** (the OmertaBond self-mint precedent, NOT routed
+through VoucherClaim, because a deed voucher carries name+district STRINGS the fixed VoucherClaim struct
+can't hold): `EIP712("OmertaStreetDeed","1")`, Ownable2Step/Pausable/ReentrancyGuard, **NO owner-mint** (a
+deed mints only against a server-signed voucher — the Sybil bound). `tokenId = uint256(keccak256(bytes(name)))`
+is a **name↔id bijection enforced on-chain** — `_safeMint` reverts on an existing id, so a name mints at most
+once, and a re-import (burn) frees the same id for re-extraction. `claim(voucher,sig)` runs the replay/
+deadline/daily-cap/bad-sig gates; `redeem(tokenId)` burns (the ownership proof, no server signature) and is
+**NEVER pausable** — a paused contract must never trap a holder's asset. 21 Foundry tests, part of the
+pre-mainnet audit batch (CHAIN-DEPLOY §0.5/§2a); **`forge test` 249/249** on the whole suite. **THE
+LOAD-BEARING SPLIT (design §0, unchanged): the deed transfers, the extraction entitlement (`minted`) and the
+corner CONTROL do NOT.** Provenance travels with the token (it IS the value — the legend re-keys with the
+deed); control resets (the identity-NFT lesson — the buyer/re-importer earns the corner). **INERT-while-
+extracted** (the car/boat v3-step-7 precedent — no rent/control on-chain, no Transfer watcher; the strongest
+securities posture: a pure collectible with a history, not passive yield). **The three-state model** on
+`street_deeds` (one `ALTER TABLE ADD COLUMN IF NOT EXISTS onchain_token_id` — the outage lesson): state 1
+in-game (account_id real, token NULL) → state 2 extract-PENDING (`requestDeedWithdraw` signs the voucher,
+sets onchain_token_id + clears control; the account can't claim a new street) → state 3 on-chain
+(`markDeedExtracted` off the `Extracted` watcher re-keys the deed + legend to a synthetic `onchain:<token>`
+owner, freeing the extractor). State 2 (not signing-then-re-keying) is what prevents **double-disposal**
+(can't off-chain-sell AND mint the same street) and the **expiry-PK-collision** (a stale voucher clears the
+inert flag [2→1] with no re-key). Re-import: `reimportDeed` off the `Redeemed` watcher (idempotent on the log
+ref — the harvest-fee discipline) hands a burned deed to a DEEDLESS linked account, control reset + a "sold"
+lineage line on the legend. `sweepDeedVouchers` is the expiry fail-safe (consults the contract's `usedNonce`:
+claimed → transition on-chain; not → clear the inert flag; **no reader → SKIP, never clear blind** — the
+reclaimExpiredVouchers posture). §10.4-NEUTRAL by construction — a deed is ownership, never a currency; the
+whole on-chain lifecycle (extract → confirm → re-import) writes **ZERO `transactions` rows** (test-pinned).
+Chain-DORMANT until `STREET_DEED_ADDRESS` is set on BOTH the API (signs) + WORKER (the two watchers). Routes:
+`POST /v1/deeds/extract`, keyless `GET /v1/deeds/plate/:tokenId` (the block-plate SVG, escaped — a public
+route rendering the untrusted street name) + `GET /deed/:tokenId` (the legend page). Client: an "On-Chain"
+card on the Street Deeds tab (extract when made+wallet-linked+unlisted; the reason disclosed when not).
+**THE PARITY TEST WENT VACUOUS FIRST, and that is the lesson** (the recorded "a check that cannot fail reads
+exactly like a clean bill of health" class): the first cut recovered the signer against `deedChainConfig()` —
+the SAME function the server signs with — so a mutation to the domain NAME left both sides agreeing and
+`deeds: PASS`; the fix recovers against a HARDCODED domain literal mirroring the contract's own
+`EIP712("OmertaStreetDeed","1")`, and now the domain-drift mutation fails BY NAME. `test/deeds.js` (chain
+block) proves the parity (against the contract domain), the tokenId keccak parity, the gates (not_minted/
+wallet/listed/already/have_deed), extract→pending INERT (no list/claim/shake), `markDeedExtracted` freeing
+the extractor (idempotent), `reimportDeed` handing the deed to a deedless burner (legend + name travelled,
+control reset, "sold" line, idempotent on ref), and §10.4-neutrality (zero ledger rows). Suite green + sim
+drift-0 + client wiring/mirror (the `canExtract` singleton gate waived in check 7's `canX` family) + gates +
+levers + preflight + docs + pgquery + pgcheck 43/43 on real Postgres + `forge test` 249/249.
+
+**THE ON-CHAIN BATCH IS COMPLETE — the identity NFT, the stock-delivery vault, and the Store paywall leg
+(founder-directed 2026-08-14: "Write all of the on chain contracts. Prompt me with options if you need
+founder call") — BUILT** (`omerta-contracts/src/DynastyNFT.sol` + `StockVault.sol`, `OmertaFees.payForPackage`;
+tests `DynastyNFT.t.sol`/`StockVault.t.sol` + the payForPackage block in `Omerta.t.sol`; `forge test`
+**284/284**, both 512-run fuzzes). The three genuine founder calls were put up as options rather than
+guessed, because each is structure-determining: **(1) StockVault delivery — GATELESS PUSH** (§3.3, chosen
+over a voucher-gated pull): the keeper pushes pre-held stock straight into a player's ERC-6551 token-bound
+account with NO claim process and NO on-chain eligibility gate, so the NFT sells self-contained — the
+accepted risk (Robinhood's tokenized stocks are issuer-restricted/EU-facing, so a gateless push has no
+on-chain control over who receives them) is written into the NatSpec **so the audit sees a decision, not an
+omission**. This flipped the contract from a VoucherClaim-fork (signer/voucher/claim) into a keeper-driven
+distributor with no signer. **(2) Airdrop D1 = in-game SIWE credit** (variant b) → **no `MerkleDistributor`
+is written at all** (variant a's contract simply does not exist for us). **(3) Royalty 5% to the treasury**
+(EIP-2981) and **(4) ERC-6551 = the reference implementation UNMODIFIED** (the canonical registry singleton
+`0x000000006551c19487814612e58FE06813775758` + the ecosystem account impl are deploy config, not a fork —
+nothing new to audit there). **DynastyNFT** is the EIP-712 self-mint (the OmertaBond/StreetDeed precedent —
+server-signed `MintVoucher`, nonce replay + deadline + `MAX_VOUCHER_TTL` 30d + a daily-cap rate wall,
+**NO owner-mint path at all**), uncapped sequential `tokenId`, and — THE WALL — **it gates NOTHING on
+`balanceOf`**: the game entitlement (`account_persistent.minted`) stays account-bound OFF-CHAIN, so the
+token is a freely transferable trophy carrying no on-chain power (the load-bearing identity-NFT split; the
+regression asserts a transferred token moves the entitlement not at all). **StockVault** NEVER mints —
+every `deliver`/`deliverBatch` is a pre-held `SafeERC20.transfer`, so `balanceOf(this)` per token is the
+PHYSICAL half of `allocated ≤ held` (the ERC-20 reverts on over-delivery; the fuzz proves delivered +
+remaining == funded, units conserved); keeper-only, idempotent on `deliveryId`, per-token daily cap +
+pause + `setKeeper` + `sweep` bound a leaked keeper (it can only move HELD units, never conjure them). The
+owed-side ledger half (`allocateStock` clamp + nightly `runTreasuryInvariants`) deliberately stays in the
+backend — a stateless distributor should not hold a per-account owed ledger. **`OmertaFees.payForPackage`**
+is the on-chain Store leg on the existing tollbooth pattern: fail-closed on an unpriced sku (`packagePrice[sku]
+== 0` reverts — an unset/off-chain-retired package is unbuyable), exact-value, forwards dev/Vig and custodies
+nothing; `setPackagePrice(sku, wei)` prices/retires per sku. §10.4-NEUTRAL across all three (out-of-band real
+value / status — the NFTs and the vault write zero `transactions` rows; the Store's entitlement was always
+outside the conservation set — the fees.js precedent). Wired into `script/Deploy.s.sol` (env-driven, block-
+scoped to dodge stack-too-deep: `DYNASTY_BASE_URI`/`DYNASTY_ROYALTY_*`, `STOCK_KEEPER` unset=off; deploy
+NEXT-notes carry the arm order — StockVault: pre-fund → per-ticker `setDailyCap` → `setKeeper`). **Three
+mutations, each caught at its own named assertion** (DynastyNFT daily cap neutered → `test_daily_cap_enforced_
+and_resets` fails; StockVault replay guard dropped → `test_delivery_is_idempotent_on_deliveryId` fails;
+OmertaFees fail-closed removed → `test_unpriced_package_fails_closed` fails). **The whole on-chain surface is
+now in ONE audit batch** — 17 contracts + 1 interface, `DynastyNFT`/`StockVault`/`OmertaFees.payForPackage`
+added 2026-08-14, so it is a single engagement rather than the dribble the "batch, not dribble" discipline
+warns against (CHAIN-DEPLOY §THE BATCH + §2c + the deploy order + env vars all updated; SPEC counts 16→18
+contracts / 249→284 tests). The founder lifted the launch-schedule + audit-clock holds that had kept
+DynastyNFT/StockVault out ("legal has approved all design choices … we will launch when I feel we are
+complete"), which is what let them be written now. `forge test` 284/284 + full JS suite green + sim drift-0 +
+docs guard green. Deferred (backend, mainnet-gated): the `PackagePaid` watcher (credits the entitlement
+idempotently on `nonce`, the `recordFeePayment` twin), the stock buy keeper (`runStockBuyback`) +
+`allocateStock` ledger + the delivery keeper that drives `StockVault.deliver`, and the DynastyNFT
+`Transfer`-watcher metadata freeze — each behind the third-party contract audit + the launch review.

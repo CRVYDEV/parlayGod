@@ -13,7 +13,7 @@
 import { recordFeePayment } from './fees.js';
 import { recordBond } from './bonds.js';
 import { recordHarvestFee } from './treasury.js';
-import { markClaimed, reimportItem } from './chain.js';
+import { markClaimed, reimportItem, markDeedExtracted, reimportDeed } from './chain.js';
 
 export const DEFAULT_CONFIRMATIONS = Number(process.env.CHAIN_CONFIRMATIONS || 5);
 
@@ -107,6 +107,41 @@ export async function syncRedeemedEvents(pool, source, opts = {}) {
   return { processed, from: w.from, to: w.to };
 }
 
+// Sync StreetDeed Extracted(nonce, to, tokenId, name, district) → markDeedExtracted (deed minted
+// on-chain: state 2→3, free the extractor to claim a new street). Idempotent (re-key by state). Its OWN
+// cursor stream + address (STREET_DEED_ADDRESS), distinct from the OMR VoucherClaim `claimed` stream.
+// Dormant unless STREET_DEED_ADDRESS is set. `source.deedExtractedLogs(from,to)` → [{ nonce, tokenId }].
+export async function syncDeedExtractedEvents(pool, source, opts = {}) {
+  const confirmations = opts.confirmations ?? DEFAULT_CONFIRMATIONS;
+  const w = await windowFor(pool, source, 'deed_extracted', confirmations, opts.startBlock);
+  if (!w) return { processed: 0 };
+  const logs = await source.deedExtractedLogs(w.from, w.to);
+  let processed = 0;
+  for (const l of logs) {
+    if (await isolate('deed_extracted', () => markDeedExtracted(pool, { nonce: l.nonce, tokenId: l.tokenId }))) processed++;
+  }
+  await setCursor(pool, 'deed_extracted', w.to);
+  return { processed, from: w.from, to: w.to };
+}
+
+// Sync StreetDeed Redeemed(from, tokenId) → reimportDeed (a deed burned back into the game: state 3→1
+// on the burner's deedless account). The burn is the ownership proof (no server signature); the ref is
+// txHash:logIndex (reimportDeed is idempotent on it). Its own cursor stream + address. Stays
+// `confirmations` behind head (a reorged burn must not leave a live in-game deed). Dormant unless
+// STREET_DEED_ADDRESS is set. `source.deedRedeemedLogs(from,to)` → [{ ref, from, tokenId }].
+export async function syncDeedRedeemedEvents(pool, source, opts = {}) {
+  const confirmations = opts.confirmations ?? DEFAULT_CONFIRMATIONS;
+  const w = await windowFor(pool, source, 'deed_redeemed', confirmations, opts.startBlock);
+  if (!w) return { processed: 0 };
+  const logs = await source.deedRedeemedLogs(w.from, w.to);
+  let processed = 0;
+  for (const l of logs) {
+    if (await isolate('deed_redeemed', () => reimportDeed(pool, { ref: l.ref, from: l.from, tokenId: l.tokenId }))) processed++;
+  }
+  await setCursor(pool, 'deed_redeemed', w.to);
+  return { processed, from: w.from, to: w.to };
+}
+
 // (The afterSwap→Vig trade-fee stream is RETIRED — founder-directed 2026-08-11. Two hooks wanted
 // one canonical pool and the four-slice sell tax won; the payer is deleted rather than dormant.
 // See the retirement note in rules.tail.js. `'trade'` stays a declared VIG_SOURCE for history.)
@@ -170,6 +205,7 @@ export async function makeViemSource() {
   const claimAddr = process.env.VOUCHER_CLAIM_ADDRESS;
   const bondAddr = process.env.OMERTA_BOND_ADDRESS;    // the OmertaBond contract (Bonded events)
   const gearVaultAddr = process.env.GEARVAULT_ADDRESS; // GearVault (Redeemed events — NFT re-import)
+  const streetDeedAddr = process.env.STREET_DEED_ADDRESS; // StreetDeed (Extracted/Redeemed — the deed NFT)
   const alchAddr = process.env.ALCHEMIST_ADDRESS;      // THE BANK's Alchemist (HarvestFeeTaken)
   const alchAsset = process.env.ALCHEMIST_ASSET || 'USDC';       // the market's underlying symbol
   const alchDecimals = Number(process.env.ALCHEMIST_ASSET_DECIMALS || 6); // USDC is 6, not 18
@@ -180,6 +216,8 @@ export async function makeViemSource() {
   const harvestEv = parseAbiItem('event HarvestFeeTaken(address indexed user, address indexed recipient, uint256 amount)');
   const bondEv = parseAbiItem('event Bonded(uint256 indexed bondId, address indexed payer, uint256 indexed nonce, uint256 principal, uint256 payout, uint256 toPol, uint256 toDev, uint256 toRwa, uint256 toVig)');
   const redeemedEv = parseAbiItem('event Redeemed(address indexed from, uint256 indexed tokenId, uint256 amount)');
+  const deedExtractedEv = parseAbiItem('event Extracted(uint256 indexed nonce, address indexed to, uint256 indexed tokenId, string name, string district)');
+  const deedRedeemedEv = parseAbiItem('event Redeemed(address indexed from, uint256 indexed tokenId)');
   const range = (from, to) => ({ fromBlock: BigInt(from), toBlock: BigInt(to) });
   // wei / 1e18-decimal-OMR → ETH / in-game $OMR units, via viem's decimal-exact formatter (Number() alone
   // on a >2^53 wei bigint loses low-order digits; formatUnits keeps full precision, then recordBond round6's).
@@ -233,6 +271,18 @@ export async function makeViemSource() {
       // so Number() is exact; tokenId can exceed 2^53, so keep it a string.
       return logs.map((l) => ({ ref: `${l.transactionHash}:${l.logIndex}`, from: l.args.from,
         tokenId: l.args.tokenId?.toString(), amount: Number(l.args.amount), txHash: l.transactionHash }));
+    },
+    deedExtractedLogs: async (from, to) => {
+      if (!streetDeedAddr) return [];
+      const logs = await client.getLogs({ address: streetDeedAddr, event: deedExtractedEv, ...range(from, to) });
+      // nonce fits in 2^53 (a monotonic counter); tokenId is keccak(name) > 2^53 → keep it a string.
+      return logs.map((l) => ({ nonce: Number(l.args.nonce), tokenId: l.args.tokenId?.toString() }));
+    },
+    deedRedeemedLogs: async (from, to) => {
+      if (!streetDeedAddr) return [];
+      const logs = await client.getLogs({ address: streetDeedAddr, event: deedRedeemedEv, ...range(from, to) });
+      return logs.map((l) => ({ ref: `${l.transactionHash}:${l.logIndex}`, from: l.args.from,
+        tokenId: l.args.tokenId?.toString(), txHash: l.transactionHash }));
     },
   };
 }
