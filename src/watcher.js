@@ -13,6 +13,7 @@
 import { recordFeePayment } from './fees.js';
 import { recordBond } from './bonds.js';
 import { recordHarvestFee } from './treasury.js';
+import { confirmStockDelivered } from './stockdeliver.js';
 import { markClaimed, reimportItem, markDeedExtracted, reimportDeed } from './chain.js';
 
 export const DEFAULT_CONFIRMATIONS = Number(process.env.CHAIN_CONFIRMATIONS || 5);
@@ -169,6 +170,26 @@ export async function syncHarvestFees(pool, source, opts = {}) {
   return { processed, from: w.from, to: w.to };
 }
 
+// Sync StockVault Delivered(deliveryId, token, to, units) → confirmStockDelivered (brokers §3.4): a
+// staged stock delivery into a player's Street Deed TBA is now confirmed on-chain, so flip the row to
+// 'delivered' + flip the allocation. The event carries only deliveryId (the reverse-map to
+// epoch/account/ticker is the pre-staged row), so a Delivered log for a delivery this backend never
+// staged (an out-of-band send) is a clean no-op. Idempotent on the deliveryId. Same cursor +
+// confirmation-depth + per-log isolation. Dormant unless STOCK_VAULT_ADDRESS is set.
+// `source.stockDeliveredLogs(from,to)` → [{ deliveryId, txHash }].
+export async function syncStockDeliveredEvents(pool, source, opts = {}) {
+  const confirmations = opts.confirmations ?? DEFAULT_CONFIRMATIONS;
+  const w = await windowFor(pool, source, 'stock_delivered', confirmations, opts.startBlock);
+  if (!w) return { processed: 0 };
+  const logs = await source.stockDeliveredLogs(w.from, w.to);
+  let processed = 0;
+  for (const l of logs) {
+    if (await isolate('stock_delivered', () => confirmStockDelivered(pool, { deliveryId: l.deliveryId, txHash: l.txHash }))) processed++;
+  }
+  await setCursor(pool, 'stock_delivered', w.to);
+  return { processed, from: w.from, to: w.to };
+}
+
 // Sync Bonded(bondId, payer, nonce, principal, payout, toPol, toDev, toRwa, toVig) → recordBond (idempotent on
 // nonce), booking the on-chain-AUTHORITATIVE payout + the FOUR-WAY split (the event carries no price/discount, so the
 // watcher books what the contract actually did — the `onchainPayout` path in recordBond). Same cursor +
@@ -207,6 +228,7 @@ export async function makeViemSource() {
   const gearVaultAddr = process.env.GEARVAULT_ADDRESS; // GearVault (Redeemed events — NFT re-import)
   const streetDeedAddr = process.env.STREET_DEED_ADDRESS; // StreetDeed (Extracted/Redeemed — the deed NFT)
   const alchAddr = process.env.ALCHEMIST_ADDRESS;      // THE BANK's Alchemist (HarvestFeeTaken)
+  const stockVaultAddr = process.env.STOCK_VAULT_ADDRESS; // StockVault (Delivered — stock into a deed TBA)
   const alchAsset = process.env.ALCHEMIST_ASSET || 'USDC';       // the market's underlying symbol
   const alchDecimals = Number(process.env.ALCHEMIST_ASSET_DECIMALS || 6); // USDC is 6, not 18
   const mintEv = parseAbiItem('event MintFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount)');
@@ -218,6 +240,7 @@ export async function makeViemSource() {
   const redeemedEv = parseAbiItem('event Redeemed(address indexed from, uint256 indexed tokenId, uint256 amount)');
   const deedExtractedEv = parseAbiItem('event Extracted(uint256 indexed nonce, address indexed to, uint256 indexed tokenId, string name, string district)');
   const deedRedeemedEv = parseAbiItem('event Redeemed(address indexed from, uint256 indexed tokenId)');
+  const deliveredEv = parseAbiItem('event Delivered(uint256 indexed deliveryId, address indexed token, address indexed to, uint256 units)');
   const range = (from, to) => ({ fromBlock: BigInt(from), toBlock: BigInt(to) });
   // wei / 1e18-decimal-OMR → ETH / in-game $OMR units, via viem's decimal-exact formatter (Number() alone
   // on a >2^53 wei bigint loses low-order digits; formatUnits keeps full precision, then recordBond round6's).
@@ -263,6 +286,13 @@ export async function makeViemSource() {
         polEth: w18(l.args.toPol), devEth: w18(l.args.toDev), rwaEth: w18(l.args.toRwa), vigEth: w18(l.args.toVig),
         txHash: l.transactionHash,
       }));
+    },
+    stockDeliveredLogs: async (from, to) => {
+      if (!stockVaultAddr) return [];
+      const logs = await client.getLogs({ address: stockVaultAddr, event: deliveredEv, ...range(from, to) });
+      // deliveryId can exceed 2^53 (it is a keccak) — keep it a decimal string, exactly as it was
+      // stored at stage time (`deliveryIdFor`), so the reverse-map lookup matches.
+      return logs.map((l) => ({ deliveryId: l.args.deliveryId?.toString(), txHash: l.transactionHash }));
     },
     redeemedLogs: async (from, to) => {
       if (!gearVaultAddr) return [];

@@ -748,7 +748,12 @@ export async function markDeedExtracted(pool, { nonce, tokenId }) {
       "SELECT account_id FROM street_deeds WHERE onchain_token_id=$1 AND account_id NOT LIKE 'onchain:%' FOR UPDATE", [String(tokenId)])).rows[0];
     if (deed) {
       await client.query('UPDATE street_deed_history SET account_id=$2 WHERE account_id=$1', [deed.account_id, owner]);
-      await client.query('UPDATE street_deeds SET account_id=$2 WHERE account_id=$1', [deed.account_id, owner]);
+      // Re-key to the inert on-chain owner AND stamp who extracted it — the stock-delivery keeper
+      // (brokers §3.4) reads `extracted_by_account` to find this account's on-chain deed after the
+      // account_id link is gone, and pushes its stock allocation into the deed's ERC-6551 TBA.
+      await client.query(
+        'UPDATE street_deeds SET account_id=$2, extracted_by_account=$3, extracted_at=now() WHERE account_id=$1',
+        [deed.account_id, owner, deed.account_id]);
     }
     if (nonce != null)
       await client.query("UPDATE vouchers SET status='claimed', claimed_onchain=true WHERE nonce=$1 AND kind='deed' AND status='signed'", [Number(nonce)]);

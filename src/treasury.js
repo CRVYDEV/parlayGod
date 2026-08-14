@@ -30,8 +30,11 @@
 //
 // WHAT IT IS, PRECISELY. An ALLOCATION ledger, exactly as the float was: a claim moves ETH from the
 // treasury's unallocated pool into the player's account-level line. **Nothing here delivers ETH to a
-// player** — no transfer, no withdrawal, no on-chain path. Delivery is a separate decision with its
-// own open question, and it is deliberately unbuilt (R3 was the same shape).
+// player** — no transfer, no withdrawal, no on-chain path; the ETH VAULT is allocation-only by design.
+// STOCK delivery, by contrast, IS built (chain-dormant) in `stockdeliver.js` (brokers §3.4,
+// founder-directed 2026-08-14): owed stock is pushed into the player's on-chain STREET DEED's ERC-6551
+// token-bound account via StockVault. `delivered <= allocated` (per ticker, units) is added to
+// `runTreasuryInvariants` below as that rail's own wall.
 //
 // The four slices keep their bps and their sources (Store 20% / gameplay fees FEE_TREASURY_BPS / the
 // DEX sell tax's SELL_TAX.RWA_BPS / bond ETH's BONDS.RWA_BPS). The table is still named
@@ -617,6 +620,16 @@ export async function runTreasuryInvariants(pool) {
   // wired into the worker's `alertDrift`, so these checks inherit the alarm the moment they exist.
   for (const s of await stockPerTicker(pool))
     push(`allocated <= held (${s.ticker}, units)`, s.allocated, s.held, 'lte');
+  // THE DELIVERY wall (brokers §3.4): a delivery into a player's Street Deed TBA can never exceed what
+  // was allocated to that account. Per ticker, `Σ delivered <= Σ allocated` — `planStockDeliveries`
+  // only ever delivers undelivered allocation rows, so this is the DETECTOR for a bug that let a
+  // delivery double-book (a comp booking `simulated` never flips an allocation and never counts here).
+  {
+    const alloc = new Map((await pool.query('SELECT ticker, COALESCE(SUM(units),0) u FROM stock_allocations GROUP BY ticker')).rows
+      .map((r) => [String(r.ticker).toUpperCase(), Number(r.u)]));
+    for (const r of (await pool.query("SELECT ticker, COALESCE(SUM(units),0) u FROM stock_deliveries WHERE status='delivered' GROUP BY ticker")).rows)
+      push(`delivered <= allocated (${String(r.ticker).toUpperCase()}, units)`, Number(r.u), alloc.get(String(r.ticker).toUpperCase()) || 0, 'lte');
+  }
   // each sell-tax episode's three slices sum to its gross, and the treasury slice reached the ledger.
   // A silent mismatch means the books disagree with what the tax actually took.
   const tax = (await pool.query(

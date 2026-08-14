@@ -96,6 +96,11 @@ export const OPERATIONAL_ENV = [
   'GEARVAULT_ADDRESS',
   // StreetDeed (Extracted/Redeemed events) — the on-chain tradeable deed NFT. Dormant unless set.
   'STREET_DEED_ADDRESS',
+  // THE STOCK DELIVERY RAIL (brokers §3.4) — deliver treasury-bought stock into the player's on-chain
+  // Street Deed's ERC-6551 TBA. Dormant unless STOCK_VAULT_ADDRESS is set (the Delivered watcher) +
+  // the ERC-6551 config (the canonical registry is the default; the account impl + salt are deploy
+  // config; the TBA resolver reads all three). None of it moves value; all launch + audit gated.
+  'STOCK_VAULT_ADDRESS', 'ERC6551_REGISTRY', 'ERC6551_ACCOUNT_IMPL', 'ERC6551_SALT',
   // THE BANK's Alchemist — the harvest-fee stream. Dormant unless set; the asset symbol + decimals
   // are config because the market's underlying is not always 18-decimal (USDC is 6).
   'ALCHEMIST_ADDRESS', 'ALCHEMIST_ASSET', 'ALCHEMIST_ASSET_DECIMALS',
