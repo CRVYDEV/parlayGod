@@ -3416,3 +3416,34 @@ CREATE TABLE IF NOT EXISTS family_buybacks (
 -- ALTER — on a live DB the CREATE TABLE IF NOT EXISTS above it is a no-op and an inline column never
 -- lands (the 2026-08-06 boot-crash lesson).
 ALTER TABLE sell_tax_events ADD COLUMN IF NOT EXISTS community_eth NUMERIC NOT NULL DEFAULT 0;
+
+-- ═══════════════ THE COMMUNITY DROP — G-3's claim rail (D1 variant b: in-game credit) ═══════════════
+-- The allocation dataset (built off-chain by tools/snapshot.js + tools/allocate-drop.js from
+-- snapshots taken at HISTORICAL blocks, loaded by a mod, published for reproducibility). One row per
+-- snapshotted wallet: the $OMR envelope + the one-time free-mint waiver + the numeric community ids
+-- (numbers, never names — the guessability rule; the future provenance stamp reads them). The claim
+-- is ONCE per wallet EVER (`claimed` is the latch, taken atomically), and an unclaimed row simply
+-- lapses when the window closes — the clawback IS closing the window (design b: the $OMR never left
+-- the Safe, so there is nothing to sweep). Wallet addresses are stored LOWERCASE (the loader
+-- normalizes; SIWE stores what the signer sent, so the claim compares lower() on both sides).
+CREATE TABLE IF NOT EXISTS drop_allocations (
+  wallet_address TEXT PRIMARY KEY,             -- lowercase 0x…
+  omr            NUMERIC NOT NULL DEFAULT 0,   -- the envelope (in-game $OMR credit at claim)
+  free_mint      BOOLEAN NOT NULL DEFAULT false, -- the whitelist: one free identity mint, ever
+  communities    TEXT NOT NULL DEFAULT '[]',   -- JSON int array of community ids (numeric — never names)
+  claimed        BOOLEAN NOT NULL DEFAULT false,
+  claimed_by     TEXT,                          -- account_id
+  claimed_at     TIMESTAMPTZ
+);
+-- The window singleton: NULL/NULL = nothing announced; both set = the claim window (opens..closes).
+-- The clawback (founder-directed 90–180 day band) is `closes_at` passing — server-side, no function.
+CREATE TABLE IF NOT EXISTS drop_state (
+  id        INT PRIMARY KEY,
+  opens_at  TIMESTAMPTZ,
+  closes_at TIMESTAMPTZ
+);
+INSERT INTO drop_state (id) VALUES (1) ON CONFLICT DO NOTHING;
+-- The mint-source distinction the tranche schedule needs (launch doc G-3 rule 2): a whitelist free
+-- mint must NOT advance the published PAID price — ops.js's tranche counter excludes these accounts.
+-- account_persistent is an EXISTING table, so the column MUST be an ALTER (the boot-crash lesson).
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS drop_free_mint BOOLEAN NOT NULL DEFAULT false;

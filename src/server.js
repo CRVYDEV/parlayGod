@@ -27,6 +27,7 @@ import * as Prime from './primetime.js';
 import * as CityMap from './citymap.js';
 import * as Day from './day.js';
 import * as Payroll from './payroll.js';
+import * as Drop from './drop.js';
 import * as Vouch from './vouch.js';
 import * as Push from './push.js';
 import * as Dispatch from './dispatch.js';
@@ -1798,6 +1799,14 @@ export async function buildServer() {
   // obligations: a pure read reusing each module's own board readers, pay via the existing tills.
   app.get('/v1/payroll', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client, h) => Payroll.payrollBoard(ch, client, h)));
+
+  // THE COMMUNITY DROP (G-3, D1 variant b) — the claim rail: a snapshotted wallet SIWE-links,
+  // claims once, and takes its envelope as IN-GAME $OMR (+ the whitelist's one free identity mint).
+  // The board is sealed until the window opens; the clawback is the window closing (drop.js).
+  app.get('/v1/drop', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Drop.dropBoard(ch, client, h)));
+  app.post('/v1/drop/claim', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Drop.claimDrop(ch, client, h)));
 
   // ── M3: the streets (§5.2) ──
   app.get('/v1/streets', { preHandler: auth }, async () => {

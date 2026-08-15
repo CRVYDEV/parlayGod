@@ -81,7 +81,11 @@ export async function opsOverview(pool) {
     // EXECUTED by hand — one Safe setFees tx, and the $OMR rail follows on its own now that it
     // DERIVES from the fee at the genesis rate. This line is the instrument.
     mintTier: await (async () => {
-      const minted = await one('SELECT COUNT(*) n FROM account_persistent WHERE minted');
+      // PAID mints only (G-3 rule 2): a whitelist free mint must never advance the published
+      // schedule — drop_free_mint marks the GRANT, so an account made through the drop is out of
+      // the count (a free-granted account that ALSO paid is accepted noise, like the comps already
+      // sitting in this figure — the design doc's own note).
+      const minted = await one('SELECT COUNT(*) n FROM account_persistent WHERE minted AND NOT drop_free_mint');
       const t = mintTierOf(minted);
       // ETH ONLY — the mint has one rail, so there is one number to compare and a boundary is one
       // Safe setFees transaction.

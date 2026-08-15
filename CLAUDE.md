@@ -12680,6 +12680,53 @@ the position), router/PM/state-view/pool-param addresses + the ops dials, all pr
 bots read them directly for the pool key). Dormant unless the full env is set on the WORKER. Suite
 green + pgquery + pgcheck 43/43 on real Postgres (+ the new suite run directly against real PG).
 
+**G-3 LAUNCH TOOLING — the snapshot, the allocation builder, and the claim rail (founder-directed
+2026-08-15: "Let's work on G3 Launch tooling") — BUILT** (`tools/snapshot.js` + `tools/allocate-drop.js`,
+`src/drop.js` — the 149th src module, `test/drop.js` — the 106th suite; `drop_allocations`/`drop_state`
+tables + `account_persistent.drop_free_mint` (ALTER-added — the outage lesson); `GET /v1/drop` +
+`POST /v1/drop/claim` + three mod routes; THE ENVELOPE card on Going Legit). The community drop's three
+pieces (`omerta-launch-sequence-design.md` G-0/G-3), built as D1 **variant (b)** — the recommended,
+thrice-strengthened in-game rail — while RUNNING a drop stays gated on the launch checklist's row.
+**(1) THE SNAPSHOT** (`tools/snapshot.js`) — the G-0 "real, currently-unowned engineering task":
+holder enumeration at a fixed historical block by Transfer-log replay (ERC-20 balances and ERC-721
+ownership are the SAME replay with different event indexing — tokenId is indexed, value is not, and
+decoding silently mangles the third field if the signature doesn't say which), chunked getLogs, a
+CANONICAL sorted dataset + a sha256 `commitment` (the publishable artifact — a root is only verifiable
+if outsiders can reproduce the set), and PARTIAL-REPLAY HONESTY: a `--from-block > 0` replay can go
+negative, so negatives are counted into meta rather than silently dropped — a dataset built on a
+partial replay says so. CLI flags only (nothing for preflight to classify). **(2) THE ALLOCATION
+BUILDER** (`tools/allocate-drop.js`) — the RULED shapes as code: coins NEVER flat-per-wallet
+(proportional among dust-floor-clearing wallets with a hard per-wallet cap, µ-share BigInt arithmetic,
+6dp floor, a capped whale's surplus NOT redistributed — deterministic + conservative, it stays in the
+Safe), NFTs per-NFT, and the merge summing a multi-community wallet's envelopes while recording every
+NUMERIC community id (the guessability rule) with freeMint the OR across them. **(3) THE CLAIM RAIL**
+(`src/drop.js`) — the conversion story in one SIWE pass: a snapshotted wallet links, claims ONCE EVER
+(`UPDATE … WHERE NOT claimed RETURNING`, the atomic claim-then-credit discipline — latch and credit
+share the txn), and takes in-game $OMR (`drop:claim` — an ENUMERATED §10.4 mint, the mission:% shape,
+backed by the Safe's genesis reserve) plus the WHITELIST's one free identity mint (`mint_credits += 1`,
+the fees.js entitlement — no ledger row). **G-3 rule 2 made real**: the grant marks
+`account_persistent.drop_free_mint` (direct SQL, off persistAccount's positional list) and ops.js's
+tranche counter now reads `WHERE minted AND NOT drop_free_mint` — a whitelist wave can never advance
+the published PAID price. An already-minted claimant gets the $OMR and NO dead credit (the
+payPackagePlex lesson). The board is SEALED until the window opens (announced-but-closed reveals
+nothing; a stable key set in every state — the dormantView lesson); **THE CLAWBACK is nothing but
+`closes_at` passing** (design b's own argument: unclaimed never left the Safe — `GET /v1/mod/drop` is
+the report, and the founder's 90–180d window is two timestamps on `drop_state`). §10.4: `drop:` joined
+the omr vocabulary, `drop:claim` the mint term, and a NEW **`drop claims ledgered`** check reconciles
+the minted total against the claimed allocation rows (a credit with no claimed row trips the sweep —
+proven by planting one); conservation is asserted UNCHANGED across a claim. A claimed row is HISTORY
+(a corrected dataset re-load skips it — it can never un-claim or re-price what already paid); a
+zero-$OMR whitelist-only row claims cleanly with no ledger row. pg-mem postures honored (no FILTER —
+the status report is a JS fold; SELECT-then-write, not ON CONFLICT). **Three mutations, each caught at
+its own named assertion** (the once-latch dropped; `drop:claim` out of the mint term; the tranche
+exclusion dropped). Client: THE ENVELOPE on Going Legit under Your Wallet (hidden until announced;
+sealed countdown → open with the amount + free-mint chip + claim → claimed receipt; `eligible` is a
+check-5 GATE the renderer reads) + a `describe()` receipt. The suite also runs green directly against
+real Postgres, and the allocation CLI was smoked end to end (a two-community wallet summing with the
+cap binding, dust excluded). All weights/floors/caps/window figures stay UNPINNED founder levers
+(tabled in the launch doc §6 — none is a constant yet, so there is nothing for test/levers.js to pin);
+the drop itself remains gated on the launch checklist row.
+
 **THE PAYROLL — every crew you owe, on one page, in one vocabulary (tester-reported 2026-08-15:
 "paying the guys in the kitchen is not the same as paying the guys in the empire etc. it's not
 consistent"; the founder: "good feedback, applying some fixes to smooth this out") — BUILT**

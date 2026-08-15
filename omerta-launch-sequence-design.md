@@ -136,6 +136,16 @@ the cap bounds whales. NFT communities may be per-NFT (the NFT itself is the Syb
     the game, the claimed value is extractable only through the audited rail (mint gate → toll →
     surcharge), and "unclaimed" never left the Safe at all. A hybrid (a small on-chain tranche
     for the headline + the larger tranche in-game) buys both stories.
+- **G-3 TOOLING — BUILT 2026-08-15** (`tools/snapshot.js` holder enumeration + `tools/allocate-drop.js`
+  the allocation builder + `src/drop.js` the claim rail, `test/drop.js`): the holder-set enumeration
+  task above is now owned (Transfer-log replay, canonical sorted dataset + sha256 commitment,
+  partial-replay honesty), the RULED coin shape + per-NFT + the multi-community merge are code with
+  the shapes test-pinned, and D1 variant (b) is the LIVE rail — `GET /v1/drop` (sealed until open) +
+  `POST /v1/drop/claim` (SIWE wallet, once ever, `drop:claim` an enumerated §10.4 mint reconciled by
+  the `drop claims ledgered` check), the whitelist free mint granted at claim WITHOUT advancing the
+  paid tranche counter (rule 2's mint-source distinction: `account_persistent.drop_free_mint`), and
+  the clawback being nothing but `drop_state.closes_at` passing. Running an actual drop stays gated
+  on §4's row — the tooling existing changes nothing about the gate.
 - **THE WHITELIST — the one-time free mint (founder-directed 2026-08-10: whitelist the top
   NFT + coin communities' wallets for a free mint; "one time free mint, rest of the time have to
   pay").** Snapshotted wallets mint their identity FREE, once — and it rests on an inversion
