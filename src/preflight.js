@@ -106,6 +106,20 @@ export const OPERATIONAL_ENV = [
   // STOCK_TOKEN_ADDRESSES is a JSON ticker→ERC-20 map; decimals default 18. Dormant unless all of
   // CHAIN_RPC_URL + STOCK_VAULT_ADDRESS + STOCK_KEEPER_PK are set on the worker.
   'STOCK_KEEPER_PK', 'STOCK_TOKEN_ADDRESSES', 'STOCK_TOKEN_DECIMALS',
+  // THE TWO DEX BOTS (src/dexbot.js) — the buyback bot (swaps unspent Vig revenue for hard OMR on
+  // the canonical v4 pool, books the ACHIEVED price through the audited runVigBuyback) + the
+  // POL-pairing bot (pairs bond-delivered POL ETH into the pool, root-capped at bond_reserve.pol_eth).
+  // DEX_BOT_PK is a SECRET (the hot bot key — it holds the POL ETH the bond forwards + the swap
+  // budget; a leak is bounded by the module's own caps + the Safe owning the LP position via
+  // POL_POSITION_OWNER). The router/position-manager/pool params are deploy addresses; the dials
+  // (max per-run ETH, slippage floor, TWAP max age, cadence) default sanely and are ops knobs.
+  // Both bots dormant unless the full env is set on the WORKER.
+  // OMR_ADDRESS + OMERTA_HOOK_ADDRESS were previously only chainparams DATA strings; the bots read
+  // them directly (the pool key), so they classify here — deploy addresses, dormant until set.
+  'OMR_ADDRESS', 'OMERTA_HOOK_ADDRESS',
+  'DEX_BOT_PK', 'UNIVERSAL_ROUTER_ADDRESS', 'POSITION_MANAGER_ADDRESS', 'STATE_VIEW_ADDRESS',
+  'POL_POSITION_OWNER', 'DEX_POOL_FEE', 'DEX_POOL_TICK_SPACING',
+  'DEX_BUYBACK_MAX_ETH', 'POL_PAIR_MAX_ETH', 'DEX_MAX_SLIPPAGE_BPS', 'DEX_TWAP_MAX_AGE_S', 'DEX_BOT_EVERY_MS',
   // DynastyNFT (Minted/Transfer events) — the identity token registry + the portrait FREEZE at first
   // transfer. Dormant unless set on the worker.
   'DYNASTY_NFT_ADDRESS',

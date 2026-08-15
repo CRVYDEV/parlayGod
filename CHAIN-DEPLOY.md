@@ -510,8 +510,33 @@ The backend keeps its own reserve records; they must track the on-chain balances
     gameplay fees + Store + bonds only (sim P9.15 prints it). **Nothing to configure and nothing left
     to build here** — `OmertaHook` already IS the canonical pool's hook, so the address may be mined
     against it as it stands.
-- **The POL-pairing bot** (pairs the bonded ETH into the OMR-ETH pool) and **the DEX buyback bot** (the real
-  TWAP source that replaces the manual `mod/vig/buyback` price).
+- **The two DEX bots are BUILT (2026-08-15, `src/dexbot.js`)** — chain-dormant keepers on the worker's
+  chain-sync tick (their own cadence, `DEX_BOT_EVERY_MS`, default 12h):
+  - **The DEX buyback bot** (`runDexBuyback`) swaps unspent Vig revenue for hard OMR on the canonical v4
+    pool via the Universal Router and books the **ACHIEVED** price through the audited `runVigBuyback`
+    (inheriting its continuity wall, root cap, reserve split + fundReserve). The price comes from the
+    SAME oracle the bond reads (resolved from `OmertaBond.oracle()` — the setOracle cutover repoints the
+    bot automatically), FAIL-CLOSED on no/zero/stale readings, and every swap carries a hard `minOmrOut`
+    slippage floor (`DEX_MAX_SLIPPAGE_BPS`, default 3%). Two-phase swap-then-book (`dex_swaps` journal,
+    idempotent on the tx hash): a crash between the real swap and the accounting loses nothing and never
+    re-swaps. The manual `mod/vig/buyback` price stays as the QA/fallback rail.
+  - **The POL-pairing bot** (`runPolPairing`) pairs the bond-delivered POL ETH into the OMR-ETH pool as a
+    full-range v4 position minted to the SAFE (`POL_POSITION_OWNER` — POL belongs to the treasury, never
+    the hot bot key). Root cap: Σ real `pol_pairings` ≤ `bond_reserve.pol_eth` — the bot can never pair
+    ETH the bond programme did not deliver. The OMR side is the bot wallet's own hard OMR
+    (Safe-allocated genesis supply — nothing mints).
+  - **Activation (worker):** `DEX_BOT_PK` (SECRET — fund it with the POL ETH stream + Safe-allocated OMR
+    for the pairing side) + `UNIVERSAL_ROUTER_ADDRESS` + `POSITION_MANAGER_ADDRESS` +
+    `STATE_VIEW_ADDRESS` + `POL_POSITION_OWNER` (the Safe) + the pool params (`DEX_POOL_FEE` /
+    `DEX_POOL_TICK_SPACING` — must match the initialized pool EXACTLY) on top of the existing
+    `CHAIN_RPC_URL` + `OMERTA_BOND_ADDRESS` + `OMR_ADDRESS` + `OMERTA_HOOK_ADDRESS`. Nightly invariants
+    (`runDexBotInvariants` → alertDrift: the POL root cap, orphan-fill freshness, comps-book-nothing,
+    the swaps↔buybacks reconciliation); ops board + run-now triggers at `GET/POST /v1/mod/dexbot*`.
+  - **⚠ VERIFY AT LAUNCH (the chain-e2e precedent):** the raw v4 encodings (Universal Router `V4_SWAP`
+    command bytes; PositionManager `modifyLiquidities` MINT_POSITION actions) cannot be tested here — no
+    v4 pool exists to swap against. Before real ETH rides them, exercise BOTH senders on a devnet/fork
+    pool (a small swap + a small pairing, then read the position + the fill back). The orchestration,
+    walls, journals and §10.4 posture are suite-proven (`test/dexbot.js`, 3 mutations by name).
 - **The on-chain Store** — `OmertaFees.payForPackage` is **BUILT** (2026-08-14, in the audit batch:
   fail-closed on an unpriced sku, exact-value, forwards dev/Vig, custodies nothing; `setPackagePrice(sku,
   wei)` prices a package on-chain, `0` retires it). **The BACKEND watcher is BUILT (2026-08-15):**
