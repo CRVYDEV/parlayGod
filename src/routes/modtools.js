@@ -13,6 +13,7 @@ import * as ChainParams from '../chainparams.js';
 import * as Community from '../community.js';
 import * as TokenHealth from '../tokenhealth.js';
 import * as Desk from '../desk.js';
+import * as DexBot from '../dexbot.js';
 import * as Fees from '../fees.js';
 import * as G from '../game.js';
 import * as Loans from '../loans.js';
@@ -312,6 +313,17 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
     app.post('/v1/mod/vig/buyback', { preHandler: modAuth }, async (req) =>
       Vig.runVigBuyback(pool, { priceOmrPerEth: req.body?.priceOmrPerEth, maxEth: req.body?.maxEth }));
     app.post('/v1/mod/vig/prizes', { preHandler: modAuth }, async (req) => Vig.payPrizes(pool, req.body?.winners));
+    // THE TWO DEX BOTS (src/dexbot.js) — the board + run-now triggers. The bots are real-only:
+    // dormant unless the chain env is configured, every skip named, every wall inside the module
+    // (oracle fail-closed, slippage floor, root caps) — so the routes carry no figures to fabricate
+    // and need no ALLOW_MOD_REAL_REVENUE gate (nothing here books revenue; the buyback's accounting
+    // rides the already-audited runVigBuyback).
+    app.get('/v1/mod/dexbot', { preHandler: modAuth }, async () =>
+      ({ board: await DexBot.dexBotBoard(pool), invariants: await DexBot.runDexBotInvariants(pool) }));
+    app.post('/v1/mod/dexbot/buyback', { preHandler: modAuth }, async (req) =>
+      DexBot.runDexBuyback(pool, { maxEth: req.body?.maxEth }));
+    app.post('/v1/mod/dexbot/pol', { preHandler: modAuth }, async (req) =>
+      DexBot.runPolPairing(pool, { maxEth: req.body?.maxEth }));
     // Mod/ops: the founder's three-way revenue split (founder / buyback / RWA), and the comp/simulate
     // path — drives recordStorePurchase with a synthetic nonce (for comps, QA, and until the paywall
     // ships). `nonce` must be unique; a duplicate is the idempotent no-op.

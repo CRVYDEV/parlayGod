@@ -12629,3 +12629,53 @@ errors), with the screenshot READ, not just taken (the art-pass discipline). Pro
 `setTab` is module-scoped — a probe navigates like the mobile harness does, through the REAL
 `#grouprail`/`#tabs` buttons, and a fresh player is in SIMPLE mode, so full-nav probes set
 `omerta_alltabs` first.
+
+**THE TWO DEX BOTS — the buyback + POL-pairing keepers (founder-directed 2026-08-15: "Let's build out
+the two DEx Bots") — BUILT, chain-dormant** (`src/dexbot.js` — the 146th src module, `test/dexbot.js` —
+the 104th suite; `dex_swaps`/`pol_pairings` — the 229th/230th tables; `GET/POST /v1/mod/dexbot*`; worker
+chain-sync wiring on a `DEX_BOT_EVERY_MS` 12h cadence + `runDexBotInvariants` in the nightly alertDrift).
+CHAIN-DEPLOY's still-owed pair. **(1) THE DEX BUYBACK BOT** (`runDexBuyback`) — the real TWAP source that
+replaces the manual `mod/vig/buyback` price (which stays as the QA/fallback rail): it swaps unspent Vig
+revenue for hard $OMR on the canonical v4 pool via the Universal Router and books the **ACHIEVED** price
+(omrReceived/ethSpent, never the TWAP) through the audited `runVigBuyback` — so the singleton lock, the
+`VIG_MAX_PRICE_JUMP` continuity wall, the `ethToSpend ≤ unspent` root cap, the RESERVE_BPS split and
+`fundReserve` all apply to the bot's fills unchanged. The bot ADDS the walls only reality supplies: the
+price resolves from **`OmertaBond.oracle()`** (the bondOracleHealth posture — no new address env to
+drift; the Safe's setOracle cutover repoints the bot automatically), **FAIL-CLOSED** on no/zero/stale
+readings (never a fallback number — "we don't know what OMR costs" must never become "swap at the
+default"), and every swap carries a hard `minOmrOut` slippage floor (`DEX_MAX_SLIPPAGE_BPS` 3%) so a
+sandwiched fill reverts on-chain rather than booking a bad price into the game's canonical print.
+**TWO-PHASE SWAP-THEN-BOOK** (the stage→confirm discipline): a real fill is journaled in `dex_swaps`
+(idempotent on the tx hash) the moment it lands, and booking is a separate pass over unbooked rows — a
+crash between swap and accounting loses nothing and NEVER re-swaps (the recovery pass runs FIRST each
+tick); a booking the revenue no longer covers (a concurrent manual buyback) is flagged `bookedShort`,
+never silent. **(2) THE POL-PAIRING BOT** (`runPolPairing`) — pairs the bond-delivered POL ETH
+(`OmertaBond` forwards each bond's POL slice to the bot wallet in-tx; `bond_reserve.pol_eth` is the BOOK
+of what arrived) into the OMR-ETH pool as a full-range v4 position **minted to the SAFE**
+(`POL_POSITION_OWNER` — POL belongs to the treasury, never the hot bot key). **THE ROOT CAP IS THE
+BOOK**: Σ real `pol_pairings.eth_paired` ≤ `bond_reserve.pol_eth` — the bot can never pair ETH the bond
+programme did not deliver, a top-up pairs ONLY the remainder, and a comp/QA row (real=false) neither
+consumes nor frees budget. The OMR side is sized at the same fail-closed oracle price (pairing off-price
+donates value to arbitrageurs the moment the position opens) and comes from the bot wallet's own hard
+OMR (Safe-allocated genesis supply — nothing mints). **§10.4: ZERO SURFACE BY CONSTRUCTION** — journals
++ bond_reserve reads + the already-audited runVigBuyback (whose own writes never touch `transactions`);
+the suite pins the whole flow to zero ledger rows. `runDexBotInvariants` (nightly + the mod board): the
+POL root cap, orphan-fill freshness (a real swap unbooked > 1h = a broken recovery pass or a dead
+worker), comps-book-nothing, and the one-sided swaps↔buybacks reconciliation. Every skip is NAMED
+(no_revenue/no_budget/no_price/stale_price/wrong_chain/swap_failed — the community-keeper lesson), the
+RPC legs sit behind `__setPriceReader`/`__setSwapper`/`__setPairer` seams, and the wrong-chain guard
+applies to every sender. **⚠ VERIFY AT LAUNCH** (CHAIN-DEPLOY carries the step): the raw v4 encodings
+(Universal Router `V4_SWAP` command bytes; PositionManager `modifyLiquidities` MINT_POSITION) cannot be
+tested here — no v4 pool exists to swap against — so both senders must be exercised on a devnet/fork
+pool before real ETH rides them; the orchestration, walls, journals and §10.4 posture are what the suite
+proves. **Three mutations, each caught at its own named assertion** (the POL root cap's `− paired` term
+dropped → "a fully-paired book must refuse"; the crash-recovery booking dropped → "the fill is journaled
+real + booked"; the stale-price gate dropped → "a stale print refuses BY NAME") — and the first M1 run
+taught the recorded lesson twice over: the failure surfaced as a raw TypeError (the
+"failure-that-teaches-nothing" shape → the skip reads are null-safe and name what broke), and the first
+verification run was pipe-masked (`node | grep` reporting grep's exit — pipefail on every mutation run).
+Env: `DEX_BOT_PK` (SECRET — the hot bot key, blast radius bounded by the module's caps + the Safe owning
+the position), router/PM/state-view/pool-param addresses + the ops dials, all preflight-classified
+(`OMR_ADDRESS`/`OMERTA_HOOK_ADDRESS` classified here too — previously only chainparams DATA strings, the
+bots read them directly for the pool key). Dormant unless the full env is set on the WORKER. Suite
+green + pgquery + pgcheck 43/43 on real Postgres (+ the new suite run directly against real PG).

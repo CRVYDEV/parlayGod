@@ -57,6 +57,7 @@ import { sweepGrandPrix } from './races.js';
 import { sweepStakes } from './stable.js';
 import { syncFeeEvents, syncClaimedEvents, syncBondEvents, syncHarvestFees, syncRedeemedEvents, syncDeedExtractedEvents, syncDeedRedeemedEvents, syncDeedTransferEvents, syncStockDeliveredEvents, syncStorePaidEvents, syncDynastyMintEvents, syncDynastyTransferEvents, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
 import { runStockDeliveryKeeper, deliveryKeeperReady } from './stockdeliver.js';
+import { runDexBuyback, runPolPairing, runDexBotInvariants, dexBuybackReady, polPairingReady } from './dexbot.js';
 
 const BUYBACK_PERIOD_MS = 12 * 3600 * 1000;
 
@@ -597,6 +598,10 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
       // failure mode this block exists to prevent.
       const finv = await safe('family buyback invariants', () => runFamilyBuybackInvariants(pool));
       if (finv && !finv.ok) await safe('family buyback alert', () => alertDrift(pool, finv.checks.filter((c) => !c.ok), 'familybuyback'));
+      // THE TWO DEX BOTS (src/dexbot.js) — the POL root cap, the orphan-fill freshness check, the
+      // comps-book-nothing rule, and the swaps↔buybacks reconciliation. Same alarm channel.
+      const xinv = await safe('dex bot invariants', () => runDexBotInvariants(pool));
+      if (xinv && !xinv.ok) await safe('dex bot alert', () => alertDrift(pool, xinv.checks.filter((c) => !c.ok), 'dexbot'));
       if (vinv && binv) console.log((vinv.ok && binv.ok) ? '✅ vig + bond (real-value) invariants hold' : '🚨 VIG/BOND DRIFT — see alert above');
     }
   };
@@ -629,6 +634,7 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     catch (e) { chainOk = false; console.error('🚨 CHAIN SYNC DISABLED — ', e.message); }
     if (chainOk) {
       const startBlock = process.env.CHAIN_START_BLOCK ? Number(process.env.CHAIN_START_BLOCK) : undefined;
+      let lastDexBotRun = 0;                     // the DEX bots' cadence gate (pacing — the root caps are the safety)
       const syncTick = async () => {
         try {
           if (process.env.OMERTA_FEES_ADDRESS) {
@@ -694,6 +700,26 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
             if (dm.processed) console.log(`👤 dynasty sync: ${dm.processed} identity mint(s) recorded (blocks ${dm.from}–${dm.to})`);
             const dtx = await syncDynastyTransferEvents(pool, source, { startBlock });
             if (dtx.processed) console.log(`👤 dynasty sync: ${dtx.processed} transfer(s) — portraits freeze at first sale (blocks ${dtx.from}–${dtx.to})`);
+          }
+          // THE TWO DEX BOTS (src/dexbot.js) — real-money keepers on their own cadence (the Vig's
+          // 12h buyback beat, not the 30s poll). Both dormant unless their env is set; every skip
+          // is named inside the module; a double-run across a deploy overlap is bounded by the
+          // module's own root caps (unspent revenue / unpaired POL), so the in-memory cadence gate
+          // is pacing, not safety.
+          if (Date.now() - lastDexBotRun >= Number(process.env.DEX_BOT_EVERY_MS || 12 * 3600 * 1000)) {
+            lastDexBotRun = Date.now();
+            if (dexBuybackReady()) {
+              const bb = await runDexBuyback(pool);
+              if (bb?.swap) console.log(`💱 dex buyback: swapped ${bb.swap.ethSpent} ETH → ${bb.swap.omrReceived} OMR @ ${bb.swap.priceOmrPerEth}`);
+              for (const s of bb?.skipped || []) if (s.why !== 'no_revenue')
+                console.error(`💱 dex buyback: skipped — ${s.why}${s.error ? ` (${s.error})` : ''}`);
+            }
+            if (polPairingReady()) {
+              const pp = await runPolPairing(pool);
+              if (pp?.paired) console.log(`💧 pol pairing: paired ${pp.paired.ethPaired} ETH + ${pp.paired.omrPaired} OMR into the pool (${pp.paired.remaining} ETH left to pair)`);
+              for (const s of pp?.skipped || []) if (s.why !== 'no_budget')
+                console.error(`💧 pol pairing: skipped — ${s.why}${s.error ? ` (${s.error})` : ''}`);
+            }
           }
         } catch (e) { console.error('chain sync error', e.message); }
       };

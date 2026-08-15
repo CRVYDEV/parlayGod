@@ -1667,6 +1667,31 @@ CREATE TABLE IF NOT EXISTS bond_reserve (
   next_nonce BIGINT NOT NULL DEFAULT 1        -- monotonic quote-nonce allocator (OmertaBond's usedNonce space; independent of chain_reserve)
 );
 INSERT INTO bond_reserve (id) SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM bond_reserve);
+-- THE TWO DEX BOTS (src/dexbot.js, 2026-08-15) — out-of-band real-value journals, zero §10.4 rows.
+-- dex_swaps: the buyback bot's fill journal (two-phase swap-then-book — a crash between the real
+-- swap and the runVigBuyback accounting loses nothing; the next run books the orphan WITHOUT
+-- re-swapping). ref = the swap tx hash (idempotency). A real=false row is a QA record that the
+-- booking leg must never touch ('no comp swap is booked' in runDexBotInvariants).
+CREATE TABLE IF NOT EXISTS dex_swaps (
+  ref TEXT PRIMARY KEY,
+  eth_spent NUMERIC NOT NULL,
+  omr_received NUMERIC NOT NULL,
+  price_omr_per_eth NUMERIC NOT NULL,  -- the ACHIEVED price (omr_received / eth_spent) — what gets booked
+  real BOOLEAN NOT NULL DEFAULT false,
+  booked BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- pol_pairings: the POL bot's books. The root cap is Σ real eth_paired ≤ bond_reserve.pol_eth —
+-- the bot can never pair ETH the bond programme did not deliver. No booking leg: the journal IS
+-- the books (POL moves no in-game value; the position is minted to the Safe).
+CREATE TABLE IF NOT EXISTS pol_pairings (
+  ref TEXT PRIMARY KEY,
+  eth_paired NUMERIC NOT NULL,
+  omr_paired NUMERIC NOT NULL,
+  price_omr_per_eth NUMERIC NOT NULL,
+  real BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 -- THE DAILY OFFERING (founder-directed: "I only want to issue 100000 OMR to be offered to be
 -- bonded this day"). The GM's per-day issuance window ON TOP of the lifetime tranche: quoteBond
 -- signs nothing on a day with no offering row (FAIL-CLOSED), and a signed quote CONSUMES the
