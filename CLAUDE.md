@@ -12551,3 +12551,41 @@ claimed in-flight delivery"; the retired-sku hold opened → the cursor-held ass
 (secret) + `STOCK_TOKEN_ADDRESSES`/`_DECIMALS` + `DYNASTY_NFT_ADDRESS` classified in preflight;
 CHAIN-DEPLOY §2c + the on-chain Store bullet + §7's still-owed list all carry the resolution. Suite
 green + pgquery + pgcheck 43/43 on real Postgres.
+
+**THE DISTRIBUTION — the one missing link in the brokers chain (founder-directed 2026-08-15: "Yes"
+to building the activation model's remaining piece) — BUILT** (`src/brokers.js` `distributeBuy`,
+`POST /v1/mod/treasury/distribute`, `stock_buys.distributed` — ALTER-added, the outage lesson;
+`test/brokers.js` THE DISTRIBUTION block). The survey that preceded it corrected ITSELF twice — the
+GenesisOracle lesson in immediate replay: "the activation burn" I had described to the founder was
+the dynasty-machine §8 sketch (daily pure pro-rata `activation:share`), which the founder-directed
+BROKERS design (2026-08-10) had already superseded AND built — the burn (`brokers:activate`, tiers ×
+activity weights), the epoch allocator, the buy keeper, and the delivery rail all existed. **What
+nothing did was write `stock_allocations` from the weights side** — the table was only ever written
+by tests, so the chain had a published NUMBER on one end and a delivery rail with nothing to deliver
+on the other. `distributeBuy` closes it: ONE real buy's units split `u_a = U × w_a / Σw` over an
+epoch's published weights, each share floored at the 6dp grid (the remainder stays unallocated in
+held — never rounded up into somebody's line) and written through the audited `allocateStock` so the
+`allocated ≤ held` clamp applies to every row it ever writes. **Two rules are load-bearing.** (1)
+**THE FROZEN-WEIGHTS RULE** — a buy distributes ONLY to the latest epoch published BEFORE it
+(`computed_at <= buy.created_at`): the allocator reads LIVE activations at publish time, so an epoch
+published after a buy could include someone who saw the buy land and activated to catch it — the
+retroactive windfall §8's no-roll-forward rule forbids; the ops order (publish → buy → distribute) is
+stated on the mod route. (2) **THE SILENT-EPOCH RULE** — a buy with no frozen epoch (or a weightless
+one) CONSUMES its latch with zero allocations: the units sit in held, claimable by nobody, rather
+than becoming tomorrow's jackpot. The buy row IS the latch (`distributed`, claimed under FOR UPDATE)
+— without it a re-run double-books, and the clamp would only stop it after eating OTHER buys'
+unallocated units, which is the over-allocation the wall exists to catch, not absorb. **Deliberately
+NO `allocated ≤ Σ distributed` nightly check** (the design's "allocations grow only from the split"
+invariant): the treasury suite's wall tests seed allocations DIRECTLY (that is how you test a clamp)
+and an alarm that fires on expected states is one people learn to ignore (the desk-dark lesson) —
+the single-writer discipline is enforced where it can be exact (the latch, the clamp, `allocated ≤
+held` nightly). **§10.4: ZERO** (an allocation is ownership bookkeeping — the test pins the whole
+block, buys + three distributions + two refusals, to zero `transactions` rows). Dormant by
+construction pre-mainnet (only a REAL buy's units exist to split; a comp refuses `not_real` by
+name). **Three mutations, each caught at its own named assertion** (the latch dropped → "a second
+distribution is refused"; the frozen rule dropped → "never one published after"; pro-rata → equal
+split → "EXACTLY units × his weight share" — the fixture's two holders carry DIFFERENT weights, the
+precondition asserted, or that mutation would pass vacuously). **The chain from activation burn to a
+share landing in a Street Deed's TBA is now code-complete end to end**, gated only on the
+third-party audit + the launch review. Suite green + pgquery 2745 statements + pgcheck 43/43 on real
+Postgres.

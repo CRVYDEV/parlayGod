@@ -2207,6 +2207,12 @@ CREATE TABLE IF NOT EXISTS stock_buys (
   real BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- THE DISTRIBUTION LATCH (2026-08-15): a real buy's units are split across the epoch's published
+-- weights EXACTLY ONCE (`brokers.js:distributeBuy`). Without the latch a re-run would double-book
+-- allocations — the clamp (`allocated <= held`) would only stop it once it had eaten OTHER buys'
+-- unallocated units, which is exactly the over-allocation the wall exists to catch, not absorb.
+-- ALTER, never inline — stock_buys exists on live databases (the 2026-08-06 boot-crash lesson).
+ALTER TABLE stock_buys ADD COLUMN IF NOT EXISTS distributed BOOLEAN NOT NULL DEFAULT false;
 
 -- What the treasury OWES — units promised out, per (epoch, ticker, account). ACCOUNT-keyed, so an
 -- allocation survives death exactly like the ETH vault line beside it. Delivery (step 7, brokers §3.4,

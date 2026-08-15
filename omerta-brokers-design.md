@@ -252,12 +252,23 @@ The founder's funding decision keeps every existing wall intact, and that is wor
    D11). The suite now asserts it is gone, so the frame cannot be re-sourced back to a dead symbol.
 7. Delivery. **Last**, and only after 1.
 
-Steps 2–5 are done, and step 6's off-chain half with them. What remains is step 6's CONTRACT (gated
-on that open row and on assembling the audit batch) and delivery (step 7) — and step 7 is the one
-gated on the launch checklist, which is why the order was arranged this way: everything above it moves real ETH
-into real holdings without a single share changing hands or being promised to anybody. The portrait
-is the clearest case for that ordering: it is the whole player-visible half of the flagship asset,
-and it shipped without touching a gate.
+Steps 2–5 are done, and step 6's off-chain half with them. **THE DISTRIBUTION landed 2026-08-15**
+(`brokers.js:distributeBuy`, `POST /v1/mod/treasury/distribute`) — the link steps 4 and 5 left
+implicit: a REAL buy's units split pro-rata over an epoch's published weights into
+`stock_allocations`, exactly once (a `distributed` latch on the buy row), every share written
+through the audited `allocateStock` clamp. Two rules are load-bearing: **the frozen-weights rule**
+(a buy distributes only to the latest epoch published BEFORE it — the allocator reads LIVE
+activations at publish time, so a post-buy epoch could include someone who activated after seeing
+the buy land, the retroactive windfall §8's no-roll-forward rule forbids; ops order is publish →
+buy → distribute) and **the silent-epoch rule** (a buy with no frozen epoch, or a weightless one,
+CONSUMES its latch with zero allocations — the units sit unallocated in held forever, never
+tomorrow's jackpot). Dormant by construction pre-mainnet: only a real buy's units exist to split,
+and comps book zero. What remains is step 6's CONTRACT half of the on-chain batch — **now written**
+(`DynastyNFT.sol`, 2026-08-14, in the audit batch) — and delivery (step 7), whose backend
+(`src/stockdeliver.js`: plan/stage/keeper/watcher) is also built and chain-dormant; the chain from
+activation burn to a share landing in a Street Deed's TBA is code-complete end to end, gated only
+on the audit + the launch review. The portrait is the clearest case for that ordering: it is the
+whole player-visible half of the flagship asset, and it shipped without touching a gate.
 
 ### 5.1 What step 2 actually built, and the one thing it found
 

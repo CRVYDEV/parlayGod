@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import { runLedgerInvariants, alertDrift } from '../invariants.js';
 import { TAX, withdrawTaxBps } from '../rules.js';
 import * as Bank from '../bank.js';
+import * as Brokers from '../brokers.js';
 import * as Bonds from '../bonds.js';
 import * as Chain from '../chain.js';
 import * as ChainParams from '../chainparams.js';
@@ -190,6 +191,13 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
       Treasury.recordStockBuy(pool, { ref: req.body?.ref, ticker: req.body?.ticker,
         units: req.body?.units, ethSpent: req.body?.ethSpent, txHash: modRealTxHash(req),
         bootstrap: req.body?.bootstrap === true }));
+    // THE DISTRIBUTION (brokers.js:distributeBuy) — split ONE real buy's units pro-rata across the
+    // latest epoch published BEFORE the buy (the frozen-weights rule; ops order is publish → buy →
+    // distribute), exactly once (the buy row's latch). A comp refuses `not_real`; a buy with no
+    // frozen epoch consumes its latch with zero allocations (the silent-epoch rule — units stay
+    // unallocated in held, never a retroactive jackpot).
+    app.post('/v1/mod/treasury/distribute', { preHandler: modAuth }, async (req) =>
+      Brokers.distributeBuy(pool, { ref: req.body?.ref }));
     // THE STOCK DELIVERY RAIL (brokers §3.4) — owed stock lands in the player's on-chain STREET DEED's
     // ERC-6551 TBA. `/deliveries` is the board (owed vs delivered per ticker, accounts waiting on a
     // deed). `/deliver` drives ONE delivery: it resolves the deed TBA and records it — with a real
