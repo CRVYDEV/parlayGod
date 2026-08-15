@@ -59,11 +59,25 @@ export async function deliveryIdFor(epochId, accountId, ticker) {
 // deed — either way there is no delivery target yet, so the allocation waits.
 export async function deedTbaFor(pool, accountId) {
   const row = (await pool.query(
-    "SELECT onchain_token_id, name FROM street_deeds WHERE extracted_by_account=$1 AND onchain_token_id IS NOT NULL ORDER BY extracted_at DESC NULLS LAST LIMIT 1",
+    "SELECT onchain_token_id, name, onchain_owner FROM street_deeds WHERE extracted_by_account=$1 AND onchain_token_id IS NOT NULL ORDER BY extracted_at DESC NULLS LAST LIMIT 1",
     [accountId])).rows[0];
   if (!row) return null;                                  // the account holds no extracted deed
+  // THE SECONDARY-MARKET EXCLUSION (the Transfer watcher's whole point): a deed the extractor SOLD
+  // must stop being their delivery target — its ERC-6551 vault belongs to the buyer now, and pushing
+  // the extractor's stock into it would hand their assets to a stranger. Checked in JS, not SQL (the
+  // pg-mem ALTER-column quirk this file documents), against the extractor's SIWE-linked wallet;
+  // NULL owner = no transfer ever observed = still theirs (the pre-watcher state fails OPEN on
+  // purpose — a chain-dormant server must keep delivering exactly as before).
+  if (row.onchain_owner && !(await heldByExtractor(pool, accountId, row.onchain_owner))) return null;
   const tba = await resolveTba(row.onchain_token_id);
   return tba ? { tba, deedTokenId: String(row.onchain_token_id), deedName: row.name } : null;
+}
+
+// Does this observed on-chain owner match the extractor's linked wallet? Case-insensitive (0x
+// addresses arrive in mixed case from logs and SIWE alike).
+async function heldByExtractor(pool, accountId, onchainOwner) {
+  const w = (await pool.query('SELECT wallet_address FROM account_persistent WHERE account_id=$1', [accountId])).rows[0];
+  return !!w?.wallet_address && String(w.wallet_address).toLowerCase() === String(onchainOwner).toLowerCase();
 }
 
 // The TBA resolver, behind a test seam (the push.js/citywire `__setDeliver` discipline): the on-chain
@@ -112,15 +126,21 @@ export async function planStockDeliveries(pool) {
   // out. If an account holds several extracted deeds the JOIN yields one row per deed, so we order by
   // `extracted_at` and keep the FIRST (most recent) per (epoch,account,ticker).
   const ordered = (await pool.query(
-    `SELECT a.epoch_id, a.account_id, a.ticker, a.units, d.onchain_token_id, d.name, d.extracted_at
+    `SELECT a.epoch_id, a.account_id, a.ticker, a.units, d.onchain_token_id, d.name, d.extracted_at,
+            d.onchain_owner, ap.wallet_address
        FROM stock_allocations a
        JOIN street_deeds d
          ON d.extracted_by_account = a.account_id AND d.onchain_token_id IS NOT NULL
+       LEFT JOIN account_persistent ap ON ap.account_id = a.account_id
       WHERE NOT a.delivered AND a.units > 0
       ORDER BY d.extracted_at DESC NULLS LAST`)).rows;
   const seen = new Set();
   const plan = [];
   for (const r of ordered) {
+    // the secondary-market exclusion (see deedTbaFor): a deed whose observed on-chain owner is no
+    // longer the extractor's wallet is NOT their delivery target — the allocation stays owed and the
+    // account reads as waiting-on-a-deed again (extract another street, or buy the deed back)
+    if (r.onchain_owner && String(r.onchain_owner).toLowerCase() !== String(r.wallet_address || '').toLowerCase()) continue;
     const key = `${r.epoch_id}|${r.account_id}|${String(r.ticker).toUpperCase()}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -226,8 +246,14 @@ export async function stockDeliveryBoard(pool) {
   // rows — filter the token side in JS. Both are set together at re-key, so `extracted_by_account`
   // alone is the real gate; the JS filter is the defensive both-set check the SQL AND would express.)
   const withDeed = new Set((await pool.query(
-    'SELECT DISTINCT extracted_by_account a, onchain_token_id t FROM street_deeds WHERE extracted_by_account IS NOT NULL')).rows
-    .filter((r) => r.t != null).map((r) => r.a));
+    `SELECT DISTINCT d.extracted_by_account a, d.onchain_token_id t, d.onchain_owner o, ap.wallet_address w
+       FROM street_deeds d LEFT JOIN account_persistent ap ON ap.account_id = d.extracted_by_account
+      WHERE d.extracted_by_account IS NOT NULL`)).rows
+    .filter((r) => r.t != null)
+    // the plan's ownership exclusion, mirrored EXACTLY (a board/plan disagreement is the check-5
+    // class): a deed SOLD on a secondary market is no longer its extractor's delivery target
+    .filter((r) => !(r.o && String(r.o).toLowerCase() !== String(r.w || '').toLowerCase()))
+    .map((r) => r.a));
   const waiting = owedAccts.filter((a) => !withDeed.has(a)).length;
   return { tickers, waitingOnADeed: waiting, chain: !!(process.env.CHAIN_RPC_URL && process.env.STREET_DEED_ADDRESS) };
 }

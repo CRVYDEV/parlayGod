@@ -12469,3 +12469,36 @@ fails; the plan's JOIN → LEFT JOIN → "B is NOT a target" fails). Chain-DORMA
 (flagged): re-targeting delivery to a deed's SECONDARY owner (the rail keys on the extractor — no
 `Transfer` watcher on the deed NFT), the real keeper TX that drives `StockVault.deliver`, and the
 drain-before-sale mitigation. Suite 100 files + sim drift-0.
+
+**THE DEED TRANSFER WATCHER + THE LISTING LOCK — the stock-delivery rail's two flagged deferrals, closed
+(founder-directed 2026-08-14: "Build the deed Transfer watcher + listing-lock pair") — BUILT**
+(`omerta-contracts/src/StreetDeed.sol` `transferLocked`/`setTransferLock` + 4 Foundry tests, forge
+**288/288**; `src/chain.js` `recordDeedTransfer`, `src/watcher.js` `syncDeedTransferEvents` (cursor
+`deed_transfer`) wired in worker.js; `street_deeds.onchain_owner` — an ALTER-added column, the outage
+lesson; `src/stockdeliver.js` `heldByExtractor` + the plan/board exclusion; `test/stockdeliver.js`
+SECONDARY-MARKET block; `test/deeds.js` green). **(1) THE TRANSFER WATCHER** — the `Transfer` log stream
+maintains `street_deeds.onchain_owner` (lowercased; read-compare-write under `FOR UPDATE`, because
+pg-mem cannot parse `IS DISTINCT FROM` — replay-safe either way), and a deed **SOLD on a secondary
+market stops being its extractor's stock-delivery target**: `deedTbaFor` refuses when `onchain_owner`
+no longer matches the extractor's SIWE `wallet_address` (case-insensitive — logs arrive checksummed,
+SIWE stores lowercase), `planStockDeliveries` applies the same rule, and — the check-5 board/plan
+mirror — `stockDeliveryBoard`'s `waitingOnADeed` applies it too, so an account whose deed sold counts
+as WAITING on both surfaces (a board/plan disagreement is a control that lies). A **NULL owner fails
+OPEN** (chain-dormant deploys keep delivering — the watcher populates the column only once the chain is
+live), a mint transfer records the first owner with NO legend line, and a real sale lands a `sold` line
+on the deed's public legend (provenance is the value) + a `deed_transferred` notify to the extractor's
+living street. A buy-back restores the target. **(2) THE LISTING LOCK** (`StreetDeed.sol`) — the
+drain-before-sale mitigation the launch-doc amendment preferred: a **default-ON per-token
+`transferLocked`** — mint locks, **every transfer arrival RE-LOCKS** (each new owner starts protected),
+only the token's OWNER may unlock (`setTransferLock` — an approved marketplace operator deliberately
+CANNOT, because operator-unlock IS the drain vector), `_update` blocks only owner→owner moves (mint +
+burn exempt — `redeem` is NEVER blocked, the never-trap rule), and the unlock emits `TransferLockSet` —
+the public "listing" act a buyer anchors a TBA-contents check against ("unlocked = check the vault
+NOW"). Residual, stated rather than smoothed: the lock forces the drain BEFORE the unlock — it cannot
+stop an owner draining then unlocking, which no on-chain rule can. **§10.4-NEUTRAL by construction**
+(ownership + a lock, never currency — the rail's zero-`transactions`-rows pin still covers the whole
+flow). Three mutations each caught at their own named assertion (the delivery exclusion dropped → "a
+SOLD deed stops being its extractor's delivery target"; the board's mirror filter dropped → "the board
+counts A as waiting after the sale"; a replayed transfer double-writing → "a replayed transfer is a
+no-op"). Suite green + pgquery + pgcheck 43/43 on real Postgres; CHAIN-DEPLOY §2a + the batch row and
+the deeds design doc Phase-3 section carry the resolution.

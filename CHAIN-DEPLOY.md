@@ -49,7 +49,7 @@ touches mainnet** until §0 is satisfied.
 
    ### THE BATCH — what goes out, and why it is drawn here
    *"Batch, not dribble" (`omerta-dynasty-machine-design.md`) means the scope must be KNOWN before it
-   is sent. Enumerated 2026-08-11; `forge test` **284/284** green on this exact set (StreetDeed added
+   is sent. Enumerated 2026-08-11; `forge test` **288/288** green on this exact set (StreetDeed added
    2026-08-14; `DynastyNFT` + `StockVault` + `OmertaFees.payForPackage` added 2026-08-14 — see below).*
 
    **In the batch — 17 contracts + 1 interface, every one carrying tests:**
@@ -60,7 +60,7 @@ touches mainnet** until §0 is satisfied.
    | issuance | `OmertaBond`, `OmrTwapOracle`, `GenesisOracle`, `IOmrOracle` | the four walls, and specifically that 3 and 4 COMPOSE rather than substitute |
    | the market | `OmertaHook` | the pool gate, the `afterSwap` delta, the absence of a pause |
    | THE BANK | `Denari` (the DNR debt token, né `nUSD`), `CollateralEscrow`, `Alchemist`, `Transmuter`, `FlashGuard` | that no oracle sits on the borrow path and no `liquidate()` exists anywhere — the design's central claim, and the class that cost Inverse ~$21M twice |
-   | Street Deeds | `StreetDeed` | the EIP-712 self-mint (name↔tokenId bijection, the daily cap, replay/deadline; NO owner mint), and that `redeem` (the burn-to-re-import) is never pausable so a paused contract can never trap a holder's asset |
+   | Street Deeds | `StreetDeed` | the EIP-712 self-mint (name↔tokenId bijection, the daily cap, replay/deadline; NO owner mint), that `redeem` (the burn-to-re-import) is never pausable so a paused contract can never trap a holder's asset, and the **default-ON per-token transfer lock** (added 2026-08-14, the drain-before-sale mitigation): mint locks, every transfer arrival RE-LOCKS, only the OWNER may unlock (an approved operator deliberately cannot — operator-unlock IS the drain vector), `redeem` is never blocked by it, and the unlock emits `TransferLockSet` — the public "listing" act a buyer anchors TBA-content checks on |
    | the identity NFT | `DynastyNFT` | the EIP-712 self-mint (NO owner mint, nonce/deadline/daily-cap walls), that it gates **NOTHING on `balanceOf`** (the entitlement is account-bound off-chain — the token is a transferable trophy), and the uncapped sequential supply + EIP-2981 royalty |
    | the stock delivery | `StockVault` | that it **NEVER mints** (pre-held transfer only — the physical half of `allocated ≤ held`), the keeper-only gateless push (no on-chain eligibility, a DELIBERATE §3.3 decision), and the leaked-keeper bounds (per-token daily cap, pause, `setKeeper`, `sweep`) |
 
@@ -160,7 +160,7 @@ makes co-mingling it with a spending key strictly worse than before.
 ## 1. Build + test the contracts
 - [ ] `cd omerta-contracts && ./run-forge-test.sh` → all `[PASS]` (Gate 0.1). Suite: OMR, VoucherClaim,
       GearVault, OMRStaking, OmertaFees (incl. `payForPackage`), OmertaBond, OmrTwapOracle, GenesisOracle,
-      OmertaHook + THE BANK + StreetDeed + DynastyNFT + StockVault (284 tests, seven fuzzes).
+      OmertaHook + THE BANK + StreetDeed + DynastyNFT + StockVault (288 tests, seven fuzzes).
       The hook's tests deploy a REAL Uniswap v4 `PoolManager`, which the emscripten solc cannot compile —
       **use native solc** (`./run-forge-test.sh`, or the sandboxed runner, which now fetches the native
       binary and says so if it cannot).
@@ -299,9 +299,17 @@ PHASE 1 for the exact calls/args.
       fixed VoucherClaim struct can't). Optional rate-cap: `setDailyMintCap(n)` (0 = unlimited).
       **Backend activation:** set **`STREET_DEED_ADDRESS`** on BOTH the API (so `POST /v1/deeds/extract`
       signs the DeedVoucher — needs `CHAIN_ID` + the shared `VOUCHER_SIGNER_PK` too) AND the WORKER (so the
-      `Extracted` watcher `syncDeedExtractedEvents` → `markDeedExtracted` frees the extractor, and the
-      `Redeemed` watcher `syncDeedRedeemedEvents` → `reimportDeed` brings a burned deed back into the game;
-      the worker also needs `CHAIN_RPC_URL`). Dormant until set. The deed goes INERT in-game while
+      `Extracted` watcher `syncDeedExtractedEvents` → `markDeedExtracted` frees the extractor, the
+      `Redeemed` watcher `syncDeedRedeemedEvents` → `reimportDeed` brings a burned deed back into the game,
+      and the **`Transfer` watcher `syncDeedTransferEvents`** (cursor stream `deed_transfer`) →
+      `recordDeedTransfer` maintains `street_deeds.onchain_owner` — a deed SOLD on a secondary market
+      stops being its extractor's STOCK-DELIVERY target (the plan + board both apply the exclusion,
+      case-insensitive vs the SIWE wallet; a NULL owner fails OPEN so a chain-dormant deploy keeps
+      delivering) and the sale lands on the deed's public legend; the worker also needs
+      `CHAIN_RPC_URL`). The **default-ON per-token transfer lock** (`transferLocked`) is the
+      drain-before-sale mitigation: a freshly minted or freshly received deed cannot move until its
+      OWNER calls `setTransferLock(tokenId, false)` — the emitted `TransferLockSet` is the public
+      "listing" moment a buyer checks TBA contents against. Dormant until set. The deed goes INERT in-game while
       extracted (no rent/control — the car/boat v3-step-7 precedent); a holder RE-IMPORTS by calling
       `redeem(tokenId)` (burn), which the `Redeemed` watcher hands to a deedless linked account.
       §10.4-NEUTRAL: a deed is ownership, never a currency — zero `transactions` rows. `tokenId =

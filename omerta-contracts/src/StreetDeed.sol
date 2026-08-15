@@ -61,6 +61,18 @@ contract StreetDeed is ERC721, EIP712, Ownable2Step, Pausable, ReentrancyGuard {
 
     // ── on-chain identity (immutable per token; survives the game server being down) ──
     mapping(uint256 => string) public deedName;
+    /// @notice THE LISTING LOCK (design 5, drain-before-sale) — every deed is NON-TRANSFERABLE by
+    ///         default: minted locked, and RE-LOCKED on every transfer, so each new owner starts
+    ///         locked too. Selling is a deliberate two-step — the OWNER (never an approved operator:
+    ///         a marketplace approval must not be able to unlock, that is the drain vector) calls
+    ///         setTransferLock(id, false), which emits a public event a buyer can anchor on: check
+    ///         the deed's ERC-6551 vault CONTENTS after the unlock block — anything drained between
+    ///         unlock and sale is visible on-chain in that window. Not an escrow and not airtight
+    ///         (an unlocked deed can still be drained pre-sale — the event makes it VISIBLE, which
+    ///         is the design's stated preference over a custody scheme); redeem() is NEVER blocked
+    ///         by the lock — a lock that trapped the holder's own burn-back would violate the
+    ///         never-trap rule the pause already honors.
+    mapping(uint256 => bool) public transferLocked;
     mapping(uint256 => string) public deedDistrict;
 
     // Off-chain pointers for the rich, LIVE parts (the block plate + the legend page). Set by the Safe.
@@ -73,6 +85,7 @@ contract StreetDeed is ERC721, EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     event DailyMintCapSet(uint256 cap);
     event ImageBaseSet(string base);
     event ExternalBaseSet(string base);
+    event TransferLockSet(uint256 indexed tokenId, bool locked, address indexed by);
     event Extracted(uint256 indexed nonce, address indexed to, uint256 indexed tokenId, string name, string district);
     event Redeemed(address indexed from, uint256 indexed tokenId);
 
@@ -156,12 +169,34 @@ contract StreetDeed is ERC721, EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     ///         event is the authority, exactly like GearVault.redeem). The backend watcher re-creates
     ///         the in-game deed on whoever burned it after CHAIN_CONFIRMATIONS. After the burn the token
     ///         no longer exists, so the same street can be re-extracted later with a fresh voucher.
+    /// @notice Lock or unlock a deed for transfer. Owner-only — deliberately NOT approved
+    ///         operators (see transferLocked). Unlocking is the public "listing" act.
+    function setTransferLock(uint256 tokenId, bool locked) external {
+        require(ownerOf(tokenId) == msg.sender, "SD: not owner");
+        transferLocked[tokenId] = locked;
+        emit TransferLockSet(tokenId, locked, msg.sender);
+    }
+
     function redeem(uint256 tokenId) external {
         require(ownerOf(tokenId) == msg.sender, "SD: not owner"); // reverts if nonexistent — clean
         _burn(tokenId);
         // Keep the name/district for a possible re-extraction's metadata; they are immutable and
         // re-derive identically from the same name anyway, so leaving them is harmless and cheaper.
         emit Redeemed(msg.sender, tokenId);
+    }
+
+    /// @dev The lock's enforcement point. Mint (from == 0) and burn (to == 0) pass — a claim must
+    ///      land and redeem() must never be blocked — but an owner-to-owner transfer requires the
+    ///      current owner to have unlocked first, and the deed RE-LOCKS the moment it arrives so
+    ///      the default-ON invariant holds for every owner, not just the first.
+    function _update(address to, uint256 tokenId, address auth) internal override returns (address) {
+        address from = _ownerOf(tokenId);
+        if (from != address(0) && to != address(0))
+            require(!transferLocked[tokenId], "SD: locked - unlock before transfer");
+        address prev = super._update(to, tokenId, auth);
+        if (to == address(0)) delete transferLocked[tokenId];          // burn: clear the slot
+        else transferLocked[tokenId] = true;                            // mint OR arrival: locked
+        return prev;
     }
 
     // ── on-chain metadata ────────────────────────────────────────────────────────────────────────

@@ -125,6 +125,20 @@ mint, Safe-owned; 21 Foundry tests, part of the pre-mainnet audit batch — CHAI
   stays **account-bound** (or the secondary floor becomes the Sybil cost and dead-alt streets flood the
   order book). Provenance travels with the token; control does not. Gated on the launch checklist + a
   third-party audit + securities counsel.
+- **The Transfer watcher + the listing lock (BUILT 2026-08-14 — resolves this doc's two flagged
+  deferrals):** **(1)** `syncDeedTransferEvents` (worker, cursor `deed_transfer`) → `recordDeedTransfer`
+  maintains `street_deeds.onchain_owner`, so a deed **sold on a secondary market stops being its
+  extractor's stock-delivery target** — the delivery rail's plan AND board both apply the exclusion
+  (case-insensitive vs the extractor's SIWE wallet; a NULL owner fails OPEN so chain-dormant deploys
+  keep delivering) and the sale lands on the deed's public legend (`sold` — provenance is the value).
+  **(2)** the **default-ON per-token `transferLocked`** in `StreetDeed.sol` is the drain-before-sale
+  mitigation this section called for: a mint locks, EVERY transfer arrival re-locks (each new owner
+  starts protected), only the token's OWNER may unlock (an approved marketplace operator deliberately
+  cannot — operator-unlock IS the drain vector), `redeem` is never blocked (the never-trap rule), and
+  the unlock emits `TransferLockSet` — the public "listing" act a buyer anchors a TBA-contents check
+  against. Residual, accepted: the lock forces the drain to happen BEFORE the unlock, making
+  "unlocked = check the vault NOW" the buyer's one legible rule; it cannot stop an owner draining then
+  unlocking, which no on-chain rule can.
 
 ### Phase 4 — the growing map (BUILT · §10.4-ZERO — pure render)
 **BUILT** (`src/deeds.js` deedBoard + `DEEDS.NEIGHBORHOODS`/`deedNeighborhoodsOpen`/`deedNeighborhoodOf`).

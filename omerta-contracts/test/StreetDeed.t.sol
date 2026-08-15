@@ -40,6 +40,59 @@ contract StreetDeedTest is Test {
         return abi.encodePacked(r, s, vv);
     }
 
+    // ── THE LISTING LOCK (design 5, drain-before-sale) ──────────────────────────────────────────
+    function _mintTo(address to, string memory name, uint256 nonce) internal returns (uint256 id) {
+        StreetDeed.DeedVoucher memory v = _voucher(to, name, "The Docks", nonce);
+        bytes memory sig = _sign(v);
+        deed.claim(v, sig);
+        return deed.tokenIdFor(name);
+    }
+
+    function test_a_fresh_deed_is_locked_by_default_and_cannot_transfer() public {
+        uint256 id = _mintTo(alice, "Locked Lane", 900);
+        assertTrue(deed.transferLocked(id), "minted locked");
+        vm.prank(alice);
+        vm.expectRevert(bytes("SD: locked - unlock before transfer"));
+        deed.transferFrom(alice, bob, id);
+    }
+
+    function test_the_owner_unlocks_then_the_transfer_works_and_it_relocks_on_arrival() public {
+        uint256 id = _mintTo(alice, "Unlock Ave", 901);
+        vm.prank(alice);
+        deed.setTransferLock(id, false);
+        assertFalse(deed.transferLocked(id), "unlocked by the owner");
+        vm.prank(alice);
+        deed.transferFrom(alice, bob, id);
+        assertEq(deed.ownerOf(id), bob, "moved");
+        // the default-ON invariant holds for EVERY owner: it re-locks the moment it arrives, so the
+        // buyer is protected from an instant drain-and-reflip without lifting a finger
+        assertTrue(deed.transferLocked(id), "re-locked on arrival");
+        vm.prank(bob);
+        vm.expectRevert(bytes("SD: locked - unlock before transfer"));
+        deed.transferFrom(bob, alice, id);
+    }
+
+    function test_an_approved_operator_cannot_unlock() public {
+        // owner-only ON PURPOSE: a marketplace approval must never be able to unlock — approving a
+        // listing contract and having it silently unlock the deed IS the drain vector
+        uint256 id = _mintTo(alice, "Operator St", 902);
+        vm.prank(alice);
+        deed.setApprovalForAll(bob, true);
+        vm.prank(bob);
+        vm.expectRevert(bytes("SD: not owner"));
+        deed.setTransferLock(id, false);
+    }
+
+    function test_redeem_is_never_blocked_by_the_lock() public {
+        // the never-trap rule: a lock that blocked the holder's own burn-back would trap the asset
+        uint256 id = _mintTo(alice, "Burn Court", 903);
+        assertTrue(deed.transferLocked(id), "locked");
+        vm.prank(alice);
+        deed.redeem(id);
+        vm.expectRevert();
+        deed.ownerOf(id); // gone
+    }
+
     // ── the extraction ──────────────────────────────────────────────────────────────────────────
     function test_claim_mints_the_named_deed_to_the_recipient() public {
         StreetDeed.DeedVoucher memory v = _voucher(alice, "Corvino Way", "The Docks", 1);

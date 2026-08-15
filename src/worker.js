@@ -55,7 +55,7 @@ import { sweepTournaments, sweepTrackEntries, sweepFuturity } from './casino.js'
 import { sweepRingTables } from './ring.js';
 import { sweepGrandPrix } from './races.js';
 import { sweepStakes } from './stable.js';
-import { syncFeeEvents, syncClaimedEvents, syncBondEvents, syncHarvestFees, syncRedeemedEvents, syncDeedExtractedEvents, syncDeedRedeemedEvents, syncStockDeliveredEvents, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
+import { syncFeeEvents, syncClaimedEvents, syncBondEvents, syncHarvestFees, syncRedeemedEvents, syncDeedExtractedEvents, syncDeedRedeemedEvents, syncDeedTransferEvents, syncStockDeliveredEvents, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
 
 const BUYBACK_PERIOD_MS = 12 * 3600 * 1000;
 
@@ -662,6 +662,8 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
             const de = await syncDeedExtractedEvents(pool, source, { startBlock });
             if (de.processed) console.log(`🏙️  deed sync: ${de.processed} street(s) extracted on-chain (blocks ${de.from}–${de.to})`);
             const dr = await syncDeedRedeemedEvents(pool, source, { startBlock });
+            const dt = await syncDeedTransferEvents(pool, source, { startBlock });
+            if (dt.processed) log(`deed transfers: ${dt.processed} ownership move(s) recorded`);
             if (dr.processed) console.log(`🏙️  deed sync: ${dr.processed} street(s) burned back to the city (blocks ${dr.from}–${dr.to})`);
           }
           // STOCK DELIVERY (StockVault Delivered → confirm a staged delivery into a deed's TBA, flip

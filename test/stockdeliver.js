@@ -133,5 +133,52 @@ const tx0 = await txCount();
 // ════════════ §10.4-NEUTRALITY: the whole rail moves no in-game currency ════════════
 assert.equal(await txCount(), tx0, 'the stock delivery rail writes ZERO transactions rows (out-of-band real value)');
 
+
+// ════════════ THE SECONDARY-MARKET EXCLUSION (the deed Transfer watcher's teeth) ════════════
+// A extracted Mott Street and SELLS the deed NFT on a marketplace. The Transfer watcher records the
+// new on-chain owner; from that moment A's allocations must STOP targeting the deed — its ERC-6551
+// vault belongs to the buyer, and pushing A's stock into it would hand A's assets to a stranger.
+{
+  const { recordDeedTransfer } = await import('../src/chain.js');
+  // A's SIWE-linked wallet (the exclusion compares against THIS)
+  // the fixture never made an account_persistent row for accA (the rail itself doesn't need one) —
+  // the exclusion compares against the SIWE-linked wallet stored there, so seed it
+  await q("INSERT INTO account_persistent (account_id, wallet_address) VALUES ('accA','0xAAAA00000000000000000000000000000000aaaa')");
+  // the MINT transfer records the FIRST owner = A's wallet (mixed case on purpose — logs arrive
+  // checksummed, SIWE stores lowercase; the comparison must not care)
+  const mint = await recordDeedTransfer(pool, { tokenId: '777', from: '0x0000000000000000000000000000000000000000', to: '0xAAAA00000000000000000000000000000000AAAA' });
+  assert.ok(mint.changed, 'the mint records the first owner');
+  assert.ok(await deedTbaFor(pool, 'accA'), 'held by the extractor: still the delivery target');
+  assert.equal((await q("SELECT COUNT(*) c FROM street_deed_history WHERE account_id='onchain:777' AND kind='sold'")).rows[0].c, '0',
+    'a MINT is not a sale — no legend line');
+
+  // the SALE: the deed moves to a stranger's wallet
+  const sale = await recordDeedTransfer(pool, { tokenId: '777', from: '0xAAAA00000000000000000000000000000000aaaa', to: '0xB0B0000000000000000000000000000000000b0b' });
+  assert.ok(sale.changed, 'the sale records the new owner');
+  assert.equal((await q("SELECT onchain_owner FROM street_deeds WHERE onchain_token_id='777'")).rows[0].onchain_owner,
+    '0xb0b0000000000000000000000000000000000b0b', 'owner stored lowercased');
+  assert.equal((await q("SELECT COUNT(*) c FROM street_deed_history WHERE account_id='onchain:777' AND kind='sold'")).rows[0].c, '1',
+    'the sale is on the deed\'s public legend — provenance is the value');
+  // REPLAY-SAFETY: a re-scanned log window delivers the same event again — nothing may duplicate
+  const replay = await recordDeedTransfer(pool, { tokenId: '777', from: '0xAAAA00000000000000000000000000000000aaaa', to: '0xB0B0000000000000000000000000000000000b0b' });
+  assert.equal(replay.changed, false, 'a replayed transfer is a no-op');
+  assert.equal((await q("SELECT COUNT(*) c FROM street_deed_history WHERE account_id='onchain:777' AND kind='sold'")).rows[0].c, '1',
+    'no duplicate legend line on replay');
+
+  // THE EXCLUSION: A is no longer a delivery target — the allocation waits again
+  assert.equal(await deedTbaFor(pool, 'accA'), null, 'a SOLD deed stops being its extractor\'s delivery target');
+  const plan = await planStockDeliveries(pool);
+  assert.ok(!plan.some((p) => p.accountId === 'accA'), 'the plan drops A — their stock stays OWED, never pushed into a stranger\'s vault');
+  // and the BOARD agrees with the plan (a board/plan disagreement is the check-5 "control that lies"
+  // class): A still holds an undelivered allocation (the e2 comp), so they now count as waiting too
+  assert.equal((await stockDeliveryBoard(pool)).waitingOnADeed, 2,
+    'the board counts A as waiting after the sale — board and plan apply the SAME exclusion');
+
+  // A BUYS IT BACK (or the buyer is A on another day): the target returns
+  await recordDeedTransfer(pool, { tokenId: '777', from: '0xB0B0000000000000000000000000000000000b0b', to: '0xAAAA00000000000000000000000000000000AAAA' });
+  assert.ok(await deedTbaFor(pool, 'accA'), 'bought back: the delivery target returns');
+  assert.equal((await stockDeliveryBoard(pool)).waitingOnADeed, 1, 'bought back: the board returns to B alone');
+}
+
 console.log('✅ stock delivery rail: the deed-required gate, stage→confirm (real flips / comp never), idempotency, the delivered<=allocated wall, the board, and §10.4-neutrality');
 await pool.end?.();

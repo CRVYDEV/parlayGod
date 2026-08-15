@@ -1540,6 +1540,12 @@ ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS sale_price BIGINT;            
 -- `onchain_token_id` = uint256(keccak256(name)) as a decimal string, the deterministic re-import lookup.
 ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS onchain_token_id TEXT;                -- non-null = extracted (held on-chain, inert in-game)
 CREATE INDEX IF NOT EXISTS ix_street_deeds_token ON street_deeds (onchain_token_id);
+-- `onchain_owner` = the deed NFT's CURRENT on-chain holder (lowercased 0x), maintained by the
+-- Transfer watcher. NULL until the first observed transfer/mint. The stock-delivery rail reads it:
+-- an extracted deed is a delivery target only while its on-chain owner IS the extractor's linked
+-- wallet — a deed sold on a secondary market must stop receiving its extractor's allocations, or
+-- account A's stock would land in a vault the buyer now owns.
+ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS onchain_owner TEXT;
 -- STOCK DELIVERY target link (brokers §3.4): the account that extracted this deed on-chain. Set at
 -- markDeedExtracted, which re-keys `account_id` to `onchain:<tokenId>` (inert-in-game) and thereby
 -- SEVERS the account->deed link — so the delivery keeper needs this to find "the account's on-chain
