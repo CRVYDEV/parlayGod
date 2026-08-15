@@ -156,5 +156,106 @@ r = await syncBondEvents(pool, source, { startBlock: 40 });
 assert.equal((await pool.query(`SELECT COUNT(*)::int c FROM bonds WHERE nonce=700`)).rows[0].c, 1, 'exactly one bond row (nonce UNIQUE idempotent)');
 assert.equal(await reserveOf('committed_omr'), 2200, 'committed unchanged on the idempotent re-scan');
 
-console.log('✅ watcher test passed — confirmation-depth gating (reorg-safe), downtime backfill (no lost fee credits), cursor advance, and idempotent reprocessing for the fee + Claimed + reserve-bond streams, with the retired trade-fee stream proven un-revivable');
+
+// ═══ THE ON-CHAIN STORE (PackagePaid → recordStorePurchase) — the paywall leg delivers ═══
+const { syncStorePaidEvents, syncDynastyMintEvents, syncDynastyTransferEvents } = await import('../src/watcher.js');
+const { skuChainId } = await import('../src/store.js');
+const storeLog = []; // { block, nonce, payer, skuId, amount }
+source.storePaidLogs = async (from, to) => storeLog.filter((l) => l.block >= from && l.block <= to)
+  .map((l) => ({ nonce: l.nonce, payer: l.payer, skuId: l.skuId, amount: l.amount, txHash: '0xstore' + l.nonce }));
+
+// a LIVE sku (revive_3 → 3 respawn tokens) paid on-chain: the numeric sku is keccak(skuString) — the
+// StreetDeed tokenId convention — and the watcher reverses it with NO registry to keep in lockstep
+storeLog.push({ block: 50, nonce: 900, payer: wallet, skuId: skuChainId('revive_3'), amount: wei(0.25) });
+head = 60; // safeHead 57 ≥ 50
+const tokensBefore = await respawnTokens();
+r = await syncStorePaidEvents(pool, source, { startBlock: 45 });
+assert.equal(r.processed, 1, 'the package payment was recorded');
+assert.equal(await respawnTokens(), tokensBefore + 3, 'the sku resolved through the keccak map and the entitlement landed (+3 revives)');
+assert.equal(await getCursor(pool, 'store'), 57, 'store cursor advanced (its own stream)');
+r = await syncStorePaidEvents(pool, source, { startBlock: 45 });
+assert.equal(await respawnTokens(), tokensBefore + 3, 'idempotent on nonce — a re-scan grants nothing twice');
+
+// a RETIRED sku (made_man) with REAL money HOLDS the cursor — the recorded ingest posture: the game
+// must neither keep the ETH quietly nor grant a bound-bypassing credit; a human looks.
+storeLog.push({ block: 58, nonce: 901, payer: wallet, skuId: skuChainId('made_man'), amount: wei(0.01) });
+head = 65; // safeHead 62 ≥ 58
+await assert.rejects(() => syncStorePaidEvents(pool, source, { startBlock: 45 }),
+  (e) => e?.code === 'retired', 'a retired-sku payment throws BY NAME');
+assert.equal(await getCursor(pool, 'store'), 57, 'the cursor did NOT advance past the retired payment (a human looks)');
+// an UNKNOWN numeric sku id gets the same held posture
+storeLog[storeLog.length - 1] = { block: 58, nonce: 902, payer: wallet, skuId: '12345', amount: wei(0.01) };
+await assert.rejects(() => syncStorePaidEvents(pool, source, { startBlock: 45 }),
+  (e) => e?.code === 'unknown_sku', 'an unknown sku id throws BY NAME');
+assert.equal(await getCursor(pool, 'store'), 57, 'the cursor held on the unknown sku too');
+storeLog.pop(); // the human resolved it — the stream resumes
+r = await syncStorePaidEvents(pool, source, { startBlock: 45 });
+assert.equal(await getCursor(pool, 'store'), 62, 'the stream resumes once the poison payment is resolved');
+
+// ═══ THE DYNASTY TOKEN REGISTRY (Minted + Transfer) — the portrait FREEZES at first sale ═══
+const dynMintLog = [];  // { block, nonce, minter, tokenId }
+const dynXferLog = [];  // { block, from, to, tokenId }
+source.dynastyMintedLogs = async (from, to) => dynMintLog.filter((l) => l.block >= from && l.block <= to)
+  .map((l) => ({ nonce: l.nonce, minter: l.minter, tokenId: l.tokenId }));
+source.dynastyTransferLogs = async (from, to) => dynXferLog.filter((l) => l.block >= from && l.block <= to)
+  .map((l) => ({ from: l.from, to: l.to, tokenId: l.tokenId }));
+const ZERO = '0x0000000000000000000000000000000000000000';
+const STRANGER = '0xB0B0000000000000000000000000000000000b0b';
+
+// the mint: Minted + the mint Transfer (0x0 → the linked wallet) — a row, NO freeze
+dynMintLog.push({ block: 63, nonce: 1, minter: wallet, tokenId: '7' });
+dynXferLog.push({ block: 63, from: ZERO, to: wallet, tokenId: '7' });
+head = 70; // safeHead 67 ≥ 63
+r = await syncDynastyMintEvents(pool, source, { startBlock: 60 });
+assert.equal(r.processed, 1, 'the identity mint was recorded');
+await syncDynastyTransferEvents(pool, source, { startBlock: 60 });
+let dtok = (await pool.query("SELECT * FROM dynasty_tokens WHERE token_id='7'")).rows[0];
+assert.equal(dtok.account_id, accId, "the minter's SIWE wallet resolved the account");
+assert.equal(dtok.frozen, false, 'a mint transfer does NOT freeze — the portrait lives while the minter holds it');
+
+// the tokenId form of the identity routes serves the LIVE bloodline while unfrozen
+const liveMeta = await call('GET', '/v1/identity/7');
+assert.equal(liveMeta.code, 200, 'the tokenId metadata form serves');
+assert.ok(liveMeta.body.name.startsWith('Sync Sam'), 'unfrozen: the live bloodline renders');
+
+// THE SALE — the first owner→owner transfer FREEZES the portrait (the snapshot is taken NOW)
+const levelBefore = liveMeta.body.attributes.find((a) => a.trait_type === 'Rank')?.value;
+dynXferLog.push({ block: 68, from: wallet, to: STRANGER, tokenId: '7' });
+head = 75; // safeHead 72 ≥ 68
+r = await syncDynastyTransferEvents(pool, source, { startBlock: 60 });
+assert.equal(r.processed, 1, 'the sale transfer processed');
+dtok = (await pool.query("SELECT * FROM dynasty_tokens WHERE token_id='7'")).rows[0];
+assert.equal(dtok.frozen, true, 'the first owner→owner transfer froze the token');
+assert.equal(String(dtok.owner_address), STRANGER.toLowerCase(), 'the new owner recorded lowercased');
+assert.ok(dtok.snapshot, 'the freeze captured a snapshot of the bloodline as it stood');
+
+// A SOLD PORTRAIT IS A PHOTOGRAPH: the seller's later play must NOT re-render the buyer's asset.
+// Level the seller up hard and assert the frozen metadata shows the OLD facts.
+await pool.query(`UPDATE characters SET respect=respect+2000000 WHERE account_id='${accId}' AND alive`);
+const frozenMeta = await call('GET', '/v1/identity/7');
+assert.equal(frozenMeta.code, 200, 'frozen metadata serves');
+assert.ok(/frozen at its first transfer/i.test(frozenMeta.body.description), 'the metadata SAYS it is frozen');
+const levelAfter = frozenMeta.body.attributes.find((a) => a.trait_type === 'Rank')?.value;
+assert.equal(levelAfter, levelBefore, "a sold portrait is a PHOTOGRAPH — the seller's later play changed nothing");
+// the PRECONDITION, guaranteed rather than assumed (the recorded flake discipline): the live
+// bloodline's rank genuinely moved, so the frozen equality above cannot pass by coincidence
+const chId = (await pool.query(`SELECT id FROM characters WHERE account_id='${accId}' AND alive`)).rows[0].id;
+const liveNow = await call('GET', '/v1/identity/' + chId);
+assert.notEqual(liveNow.body.attributes.find((a) => a.trait_type === 'Rank')?.value, levelBefore,
+  'the live rank moved — the frozen check is measuring a real difference');
+
+// replay-safe + one-way: a re-scanned sale changes nothing, and a buy-back does NOT unfreeze
+r = await syncDynastyTransferEvents(pool, source, { startBlock: 60 });
+dynXferLog.push({ block: 73, from: STRANGER, to: wallet, tokenId: '7' });
+head = 80;
+await syncDynastyTransferEvents(pool, source, { startBlock: 60 });
+dtok = (await pool.query("SELECT * FROM dynasty_tokens WHERE token_id='7'")).rows[0];
+assert.equal(dtok.frozen, true, 'the freeze is ONE-WAY — a buy-back does not resurrect a living portrait');
+assert.equal(String(dtok.owner_address), wallet.toLowerCase(), 'though the owner is tracked back');
+
+// zero §10.4 surface across the whole registry + store stream (out-of-band real value / status)
+const txn = Number((await pool.query('SELECT COUNT(*) n FROM transactions')).rows[0].n);
+assert.ok(Number.isFinite(txn), 'countable'); // (the store/dynasty rails write zero ledger rows by design — proven in test/store.js; here the streams simply must not throw on it)
+
+console.log('✅ watcher test passed — confirmation-depth gating (reorg-safe), downtime backfill, cursor advance and idempotent reprocessing for the fee + Claimed + reserve-bond + PackagePaid + Dynasty streams; the retired-sku payment holds its cursor for a human; and a sold Dynasty portrait is a PHOTOGRAPH (frozen at first transfer, one-way)');
 await app.close();

@@ -110,7 +110,7 @@ import * as Landmarks from './landmarks.js';
 import * as Ops from './ops.js';
 import { itemArt } from './assets.js';
 import { avatarSvg } from './avatar.js';
-import { portraitSvg, portraitStateOf, portraitTraits, portraitRow } from './portrait.js';
+import { portraitSvg, portraitStateOf, portraitTraits, portraitRow, identityRowFor } from './portrait.js';
 import * as Deeds from './deeds.js';
 import * as Cards from './cards.js';
 import { renderPng } from './cardpng.js';
@@ -367,25 +367,32 @@ export async function buildServer() {
   // and it discloses nothing beyond `publicDossier` by construction (`portrait.js` reads that shape
   // and nothing else). Cached briefly rather than immutably — unlike an avatar this one CHANGES.
   // ZERO §10.4. The keyless-/v1-GET default throttle covers it (this one hits the DB). ──
+  // Both routes now take a characterId (UUID — the phase-1 surface, unchanged) OR a DynastyNFT
+  // tokenId (all digits — the contract's baseUri appends it): `identityRowFor` disambiguates and
+  // applies THE FREEZE (a frozen token serves its snapshot — a sold portrait is a photograph, never a
+  // window onto the seller's later play). A frozen plate caches longer: its facts cannot change.
   app.get('/v1/identity/:characterId/portrait.svg', async (req, reply) => {
-    const row = await portraitRow(pool, String(req.params.characterId || '').slice(0, 64));
-    reply.type('image/svg+xml; charset=utf-8').header('cache-control', 'public, max-age=300');
+    const { row, frozen } = await identityRowFor(pool, req.params.characterId);
+    reply.type('image/svg+xml; charset=utf-8')
+      .header('cache-control', frozen ? 'public, max-age=86400' : 'public, max-age=300');
     // an unknown id gets the house's blank plate rather than a 404 — a stale share link stays an image
     return reply.send(portraitSvg(portraitStateOf(row || { id: 'unknown', name: 'UNKNOWN' })));
   });
-  // Phase 2's reviewable JSON, in ERC-721 metadata shape, pointing at no token: the exact blob can be
-  // argued about before a contract exists to be stuck with it. Keyed by characterId today; the tokenId
-  // form arrives with the contract. WEALTH IS ABSENT IN ANY FORM (design §4's hard rule).
+  // Phase 2's reviewable JSON, in ERC-721 metadata shape. Keyed by characterId (phase 1) or the
+  // DynastyNFT tokenId. WEALTH IS ABSENT IN ANY FORM (design §4's hard rule).
   app.get('/v1/identity/:characterId', async (req, reply) => {
     const id = String(req.params.characterId || '').slice(0, 64);
-    const row = await portraitRow(pool, id);
+    const { row, frozen } = await identityRowFor(pool, id);
     if (!row) return reply.code(404).send({ error: 'not_found' });
     const st = portraitStateOf(row);
-    reply.header('cache-control', 'public, max-age=300');
+    reply.header('cache-control', frozen ? 'public, max-age=86400' : 'public, max-age=300');
     return {
       name: `${row.name} — Generation ${row.generation}`,
-      description: 'A portrait of a bloodline in OMERTÀ. The frame deepens with every generation '
-        + 'buried; the coat climbs with the street\'s rank. Held by the account, not by the token.',
+      description: frozen
+        ? 'A portrait of a bloodline in OMERTÀ, frozen at its first transfer — a photograph of the '
+          + 'bloodline as it stood. The entitlement never travels with the token.'
+        : 'A portrait of a bloodline in OMERTÀ. The frame deepens with every generation '
+          + 'buried; the coat climbs with the street\'s rank. Held by the account, not by the token.',
       image: `${baseUrl}/v1/identity/${encodeURIComponent(id)}/portrait.svg`,
       attributes: portraitTraits(st),
     };

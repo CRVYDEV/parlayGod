@@ -12502,3 +12502,52 @@ SOLD deed stops being its extractor's delivery target"; the board's mirror filte
 counts A as waiting after the sale"; a replayed transfer double-writing → "a replayed transfer is a
 no-op"). Suite green + pgquery + pgcheck 43/43 on real Postgres; CHAIN-DEPLOY §2a + the batch row and
 the deeds design doc Phase-3 section carry the resolution.
+
+**THE LAST DORMANT RAILS — the PackagePaid watcher, the StockVault delivery keeper, and the DynastyNFT
+portrait freeze (founder-directed 2026-08-15: "Yes" to closing the three remaining chain-dormant
+backends) — BUILT** (`src/store.js` `skuChainId`/`skuFromChainId`, `src/watcher.js` three new syncs,
+`src/stockdeliver.js` `runStockDeliveryKeeper`, `src/chain.js` `recordDynastyMint`/`recordDynastyTransfer`,
+`src/portrait.js` `identityRowFor`, `dynasty_tokens` — the 228th table + `stock_deliveries.sent_at`
+(ALTER-added, the outage lesson); `test/watcher.js` + `test/stockdeliver.js`). After this drop **every
+on-chain contract has its complete backend** — mainnet go-live is the third-party audit + env vars, with
+no code left to write on the rails. **(1) THE PACKAGEPAID WATCHER** (`syncStorePaidEvents`, cursor
+`store`, dormant until `OMERTA_FEES_ADDRESS`): credits a real on-chain Store purchase through the audited
+`recordStorePurchase` (idempotent on nonce, pay-before-link reconciled). The on-chain sku is
+**`uint256(keccak256(bytes(skuString)))`** — the StreetDeed tokenId convention, so there is NO lockstep
+registry to drift (`skuChainId` computes it; `skuFromChainId` reverses it over live + RETIRED skus via a
+lazy Map). **A real payment for a retired/unknown sku HOLDS THE CURSOR** (re-thrown with a named code,
+never poison-skipped — the recordStorePurchase ingest decision): money arrived for something we don't
+sell, so a human looks; later payments queuing behind it is the accepted price. **(2) THE DELIVERY
+KEEPER** (`runStockDeliveryKeeper` — worker tick + `POST /v1/mod/treasury/deliveries/run`; dormant unless
+`CHAIN_RPC_URL` + `STOCK_VAULT_ADDRESS` + `STOCK_KEEPER_PK`): the real tx sender that drives
+`StockVault.deliver` into the Street Deed's TBA. **CLAIM-then-send** (the push-C1 discipline): `sent_at`
+stamped atomically BEFORE the tx (`WHERE status='pending' AND (sent_at IS NULL OR sent_at < cutoff)` —
+the cutoff computed in JS since pg-mem parses no interval arithmetic), released on a failed send,
+`RESEND_MS` (10min) retry reusing the SAME deterministic `deliveryId` so the contract's `usedDeliveryId`
+bounds any lost race to a clean revert. **The keeper NEVER confirms** — only the `Delivered` watcher
+flips `stock_allocations.delivered` (send and settle stay two authorities). Every skip is NAMED
+(`no_token_address`/`simulated`/`in_flight_or_done`/`send_failed`/`no_target` — the community-keeper
+no_budget lesson: silence reads as fine); `STOCK_TOKEN_ADDRESSES` is the ticker→ERC-20 JSON map,
+`STOCK_TOKEN_DECIMALS` defaults 18, the viem wallet client carries the wrong-chain guard. **(3) THE
+PORTRAIT FREEZE** (`syncDynastyMintEvents`/`syncDynastyTransferEvents`, cursors
+`dynasty_minted`/`dynasty_transfer`, dormant until `DYNASTY_NFT_ADDRESS`): the `dynasty_tokens` registry
+(minter resolved via the SIWE wallet — the Store pay-before-link pattern, no mint-request signer needed;
+an out-of-order Transfer-before-Minted creates a STUB row the mint later fills). **The identity-NFT
+design's freeze rule made real**: the portrait is DYNAMIC while the minting wallet holds the token and
+**FREEZES at the first owner→owner transfer** — the snapshot stores the portrait ROW (the render input),
+not rendered SVG, so compositor improvements still apply while the FACTS are a photograph of the
+bloodline as it stood; **one-way** (a buy-back tracks the owner but never unfreezes), and a mint/burn
+never freezes. `identityRowFor` disambiguates `/v1/identity/:param` by shape (all-digits = tokenId, else
+characterId), so the deployed `baseUri` contract holds untouched; a frozen token's metadata gets a
+day-long cache + the "photograph… the entitlement never travels with the token" description.
+**§10.4-NEUTRAL across all three** (entitlements/status/ownership — zero `transactions` rows,
+test-pinned). **The vacuity lesson paid again**: the keeper's 'simulated'-skip assertion was UNREACHABLE
+on its first cut (the fixture's TSLA had no token address, so `no_token_address` fired first and the
+assertion never tested what it claimed) — fixed in the FIXTURE; and the photograph assertion also
+asserts the LIVE rank genuinely moved (+2M respect, level 4→448) so the frozen-trait check cannot pass
+vacuously. **Three mutations, each caught at its own named assertion** (the freeze dropped → "the first
+owner→owner transfer froze the token"; the claim guard dropped → "a second run does not re-send a
+claimed in-flight delivery"; the retired-sku hold opened → the cursor-held assertion). `STOCK_KEEPER_PK`
+(secret) + `STOCK_TOKEN_ADDRESSES`/`_DECIMALS` + `DYNASTY_NFT_ADDRESS` classified in preflight;
+CHAIN-DEPLOY §2c + the on-chain Store bullet + §7's still-owed list all carry the resolution. Suite
+green + pgquery + pgcheck 43/43 on real Postgres.

@@ -101,6 +101,14 @@ export const OPERATIONAL_ENV = [
   // the ERC-6551 config (the canonical registry is the default; the account impl + salt are deploy
   // config; the TBA resolver reads all three). None of it moves value; all launch + audit gated.
   'STOCK_VAULT_ADDRESS', 'ERC6551_REGISTRY', 'ERC6551_ACCOUNT_IMPL', 'ERC6551_SALT',
+  // THE DELIVERY KEEPER — the tx sender that drives StockVault.deliver. STOCK_KEEPER_PK is a SECRET
+  // (the vault's Safe-set keeper key; leaked-key blast radius bounded by the vault's own walls);
+  // STOCK_TOKEN_ADDRESSES is a JSON ticker→ERC-20 map; decimals default 18. Dormant unless all of
+  // CHAIN_RPC_URL + STOCK_VAULT_ADDRESS + STOCK_KEEPER_PK are set on the worker.
+  'STOCK_KEEPER_PK', 'STOCK_TOKEN_ADDRESSES', 'STOCK_TOKEN_DECIMALS',
+  // DynastyNFT (Minted/Transfer events) — the identity token registry + the portrait FREEZE at first
+  // transfer. Dormant unless set on the worker.
+  'DYNASTY_NFT_ADDRESS',
   // THE BANK's Alchemist — the harvest-fee stream. Dormant unless set; the asset symbol + decimals
   // are config because the market's underlying is not always 18-decimal (USDC is 6).
   'ALCHEMIST_ADDRESS', 'ALCHEMIST_ASSET', 'ALCHEMIST_ASSET_DECIMALS',

@@ -202,6 +202,11 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
     app.post('/v1/mod/treasury/deliver', { preHandler: modAuth }, async (req) =>
       StockDeliver.deliverStock(pool, { epochId: req.body?.epochId, accountId: req.body?.accountId,
         ticker: req.body?.ticker, units: req.body?.units, txHash: modRealTxHash(req) }));
+    // run THE DELIVERY KEEPER once on demand (the worker also ticks it when configured): walk the
+    // plan, stage + claim + send StockVault.deliver for every allocation with a token address.
+    // Dormant → { dormant: true }; a planned ticker with no address skips BY NAME, never silently.
+    app.post('/v1/mod/treasury/deliveries/run', { preHandler: modAuth }, async () =>
+      StockDeliver.runStockDeliveryKeeper(pool));
     // ingest a DEX sell-tax episode (a `SellTaxTaken` log on mainnet). The modRealTxHash gate stands:
     // a simulate records the episode for QA but books ZERO revenue, so a comp can never assert the
     // treasury received ETH it did not.

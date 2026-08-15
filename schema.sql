@@ -2255,6 +2255,32 @@ CREATE TABLE IF NOT EXISTS stock_deliveries (
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ix_stock_deliveries_acct ON stock_deliveries(account_id, ticker);
+-- THE DELIVERY KEEPER's claim stamp (2026-08-14): the keeper claims a pending row atomically
+-- (sent_at) before sending, so overlapping workers can't both submit; a send the Delivered watcher
+-- never confirms retries once sent_at ages out of the resend window. ALTER, never inline — a column
+-- added inside CREATE TABLE IF NOT EXISTS never lands on an existing table (the 2026-08-06 outage).
+ALTER TABLE stock_deliveries ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ;
+
+-- THE DYNASTY TOKEN REGISTRY (2026-08-14) — the DynastyNFT's backend half. A row per minted identity
+-- token, written by the Minted/Transfer watchers. The load-bearing column set is the FREEZE (the
+-- identity-NFT design's "dynamic while held by the minting wallet, a PHOTOGRAPH after the first
+-- transfer" rule): `snapshot` stores the portrait ROW (the render input, not the rendered SVG) taken
+-- at the first owner→owner transfer, and the identity metadata/portrait routes serve it instead of
+-- live state from then on — a sold portrait must not re-render on the seller's later play.
+-- account_id resolves from the MINTER's SIWE wallet (the Store pay-before-link pattern); NULL for an
+-- unlinked minter (the token is a pure trophy either way — it gates nothing).
+CREATE TABLE IF NOT EXISTS dynasty_tokens (
+  token_id      TEXT PRIMARY KEY,                -- sequential uint256, stored as a decimal string
+  nonce         BIGINT,                          -- the mint voucher nonce (from the Minted event)
+  minter_address TEXT NOT NULL,                  -- the wallet that claimed the mint (lowercased)
+  owner_address TEXT,                            -- current observed owner (lowercased; Transfer watcher)
+  account_id    TEXT,                            -- the minter's account, if their wallet was linked
+  frozen        BOOLEAN NOT NULL DEFAULT false,  -- true after the first owner→owner transfer
+  frozen_at     TIMESTAMPTZ,
+  snapshot      JSONB,                           -- the portrait row frozen at transfer (render input)
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_dynasty_tokens_acct ON dynasty_tokens(account_id);
 
 -- THE CELLPHONE (founder-directed): a personal inbox + player-to-player DIRECT MESSAGES. Pure
 -- talk — zero §10.4 surface (no currency ever rides a DM). ACCOUNT-keyed on BOTH sides (the

@@ -11,10 +11,11 @@
 // The chain specifics (viem getLogs + ABI decode) live in a `source` adapter the caller passes,
 // so the cursor / confirmation / idempotency logic here is unit-testable with a mock source.
 import { recordFeePayment } from './fees.js';
+import { recordStorePurchase, skuFromChainId } from './store.js';
 import { recordBond } from './bonds.js';
 import { recordHarvestFee } from './treasury.js';
 import { confirmStockDelivered } from './stockdeliver.js';
-import { markClaimed, reimportItem, markDeedExtracted, reimportDeed, recordDeedTransfer } from './chain.js';
+import { markClaimed, reimportItem, markDeedExtracted, reimportDeed, recordDeedTransfer, recordDynastyMint, recordDynastyTransfer } from './chain.js';
 
 export const DEFAULT_CONFIRMATIONS = Number(process.env.CHAIN_CONFIRMATIONS || 5);
 
@@ -162,6 +163,67 @@ export async function syncDeedTransferEvents(pool, source, opts = {}) {
   return { processed, from: w.from, to: w.to };
 }
 
+// Sync OmertaFees PackagePaid(payer, nonce, sku, amount) → recordStorePurchase (idempotent on nonce —
+// the recordFeePayment twin, so the on-chain Store leg finally DELIVERS: a paid package credits its
+// non-§10.4 entitlement, or parks for reconcileStore at SIWE link). The numeric sku reverses through
+// skuFromChainId (uint256(keccak256(skuString)) — the StreetDeed tokenId convention). DELIBERATE
+// cursor posture, per the recorded ingest decision: a RETIRED sku, an UNKNOWN sku id, or any other
+// deterministic refusal on a REAL payment is NOT poison-skipped — the throw holds the cursor so a
+// human looks (real money arrived for a package we no longer sell; the game must neither keep the
+// ETH quietly nor grant a bound-bypassing credit). The cost — later payments queue behind it — is
+// the accepted price of that alarm. Dormant unless OMERTA_FEES_ADDRESS is set.
+// `source.storePaidLogs(from,to)` → [{ nonce, payer, skuId, amount, txHash }].
+export async function syncStorePaidEvents(pool, source, opts = {}) {
+  const confirmations = opts.confirmations ?? DEFAULT_CONFIRMATIONS;
+  const w = await windowFor(pool, source, 'store', confirmations, opts.startBlock);
+  if (!w) return { processed: 0 };
+  const logs = await source.storePaidLogs(w.from, w.to);
+  let processed = 0;
+  for (const l of logs) {
+    if (await isolate('store', () => {
+      const sku = skuFromChainId(l.skuId);
+      if (!sku) { const e = new Error(`PackagePaid for an unknown sku id ${l.skuId} — held for a human`); e.code = 'unknown_sku'; throw e; }
+      return recordStorePurchase(pool, { nonce: l.nonce, sku, payer: l.payer, amountWei: l.amount, txHash: l.txHash });
+    })) processed++;
+  }
+  await setCursor(pool, 'store', w.to);
+  return { processed, from: w.from, to: w.to };
+}
+
+// Sync DynastyNFT Minted(nonce, minter, tokenId) → recordDynastyMint (the token registry row; the
+// account resolves from the minter's SIWE wallet). Idempotent on token_id. Dormant unless
+// DYNASTY_NFT_ADDRESS is set. `source.dynastyMintedLogs(from,to)` → [{ nonce, minter, tokenId }].
+export async function syncDynastyMintEvents(pool, source, opts = {}) {
+  const confirmations = opts.confirmations ?? DEFAULT_CONFIRMATIONS;
+  const w = await windowFor(pool, source, 'dynasty_minted', confirmations, opts.startBlock);
+  if (!w) return { processed: 0 };
+  const logs = await source.dynastyMintedLogs(w.from, w.to);
+  let processed = 0;
+  for (const l of logs) {
+    if (await isolate('dynasty_minted', () => recordDynastyMint(pool, { nonce: l.nonce, minter: l.minter, tokenId: l.tokenId }))) processed++;
+  }
+  await setCursor(pool, 'dynasty_minted', w.to);
+  return { processed, from: w.from, to: w.to };
+}
+
+// Sync DynastyNFT Transfer(from, to, tokenId) → recordDynastyTransfer — THE PORTRAIT FREEZE stream:
+// the first owner→owner transfer snapshots the bloodline's portrait row, so a sold portrait is a
+// photograph rather than a window onto the seller's later play (the identity-NFT design's 2026-08-10
+// correction). Replay-safe (owner compare + the frozen latch). Its own cursor. Dormant unless
+// DYNASTY_NFT_ADDRESS is set. `source.dynastyTransferLogs(from,to)` → [{ from, to, tokenId }].
+export async function syncDynastyTransferEvents(pool, source, opts = {}) {
+  const confirmations = opts.confirmations ?? DEFAULT_CONFIRMATIONS;
+  const w = await windowFor(pool, source, 'dynasty_transfer', confirmations, opts.startBlock);
+  if (!w) return { processed: 0 };
+  const logs = await source.dynastyTransferLogs(w.from, w.to);
+  let processed = 0;
+  for (const l of logs) {
+    if (await isolate('dynasty_transfer', () => recordDynastyTransfer(pool, { tokenId: l.tokenId, from: l.from, to: l.to }))) processed++;
+  }
+  await setCursor(pool, 'dynasty_transfer', w.to);
+  return { processed, from: w.from, to: w.to };
+}
+
 // (The afterSwap→Vig trade-fee stream is RETIRED — founder-directed 2026-08-11. Two hooks wanted
 // one canonical pool and the four-slice sell tax won; the payer is deleted rather than dormant.
 // See the retirement note in rules.tail.js. `'trade'` stays a declared VIG_SOURCE for history.)
@@ -246,6 +308,7 @@ export async function makeViemSource() {
   const bondAddr = process.env.OMERTA_BOND_ADDRESS;    // the OmertaBond contract (Bonded events)
   const gearVaultAddr = process.env.GEARVAULT_ADDRESS; // GearVault (Redeemed events — NFT re-import)
   const streetDeedAddr = process.env.STREET_DEED_ADDRESS; // StreetDeed (Extracted/Redeemed — the deed NFT)
+  const dynastyAddr = process.env.DYNASTY_NFT_ADDRESS;    // DynastyNFT (Minted/Transfer — the identity trophy)
   const alchAddr = process.env.ALCHEMIST_ADDRESS;      // THE BANK's Alchemist (HarvestFeeTaken)
   const stockVaultAddr = process.env.STOCK_VAULT_ADDRESS; // StockVault (Delivered — stock into a deed TBA)
   const alchAsset = process.env.ALCHEMIST_ASSET || 'USDC';       // the market's underlying symbol
@@ -254,12 +317,14 @@ export async function makeViemSource() {
   const respawnEv = parseAbiItem('event RespawnFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount)');
   const rerollEv = parseAbiItem('event RerollFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount)');
   const claimedEv = parseAbiItem('event Claimed(uint256 indexed nonce, address indexed to, uint8 kind, uint256 amount, uint256 gearId)');
+  const packagePaidEv = parseAbiItem('event PackagePaid(address indexed payer, uint256 indexed nonce, uint256 indexed sku, uint256 amount)');
   const harvestEv = parseAbiItem('event HarvestFeeTaken(address indexed user, address indexed recipient, uint256 amount)');
   const bondEv = parseAbiItem('event Bonded(uint256 indexed bondId, address indexed payer, uint256 indexed nonce, uint256 principal, uint256 payout, uint256 toPol, uint256 toDev, uint256 toRwa, uint256 toVig)');
   const redeemedEv = parseAbiItem('event Redeemed(address indexed from, uint256 indexed tokenId, uint256 amount)');
   const deedExtractedEv = parseAbiItem('event Extracted(uint256 indexed nonce, address indexed to, uint256 indexed tokenId, string name, string district)');
   const deedRedeemedEv = parseAbiItem('event Redeemed(address indexed from, uint256 indexed tokenId)');
   const erc721TransferEv = parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)');
+  const dynastyMintedEv = parseAbiItem('event Minted(uint256 indexed nonce, address indexed minter, uint256 indexed tokenId)');
   const deliveredEv = parseAbiItem('event Delivered(uint256 indexed deliveryId, address indexed token, address indexed to, uint256 units)');
   const range = (from, to) => ({ fromBlock: BigInt(from), toBlock: BigInt(to) });
   // wei / 1e18-decimal-OMR → ETH / in-game $OMR units, via viem's decimal-exact formatter (Number() alone
@@ -277,6 +342,14 @@ export async function makeViemSource() {
       const norm = (kind) => (l) => ({ kind, nonce: Number(l.args.nonce), payer: l.args.payer,
         amount: l.args.amount?.toString(), txHash: l.transactionHash });
       return [...mints.map(norm('mint')), ...respawns.map(norm('respawn')), ...rerolls.map(norm('reroll'))];
+    },
+    storePaidLogs: async (from, to) => {
+      if (!feesAddr) return [];
+      const logs = await client.getLogs({ address: feesAddr, event: packagePaidEv, ...range(from, to) });
+      // sku is uint256(keccak256(skuString)) — far beyond 2^53, so it stays a decimal string for the
+      // skuFromChainId reverse map (the deliveryId/tokenId discipline).
+      return logs.map((l) => ({ nonce: Number(l.args.nonce), payer: l.args.payer,
+        skuId: l.args.sku?.toString(), amount: l.args.amount?.toString(), txHash: l.transactionHash }));
     },
     claimedLogs: async (from, to) => {
       if (!claimAddr) return [];
@@ -337,6 +410,18 @@ export async function makeViemSource() {
     deedTransferLogs: async (from, to) => {
       if (!streetDeedAddr) return [];
       const logs = await client.getLogs({ address: streetDeedAddr, event: erc721TransferEv, ...range(from, to) });
+      return logs.map((l) => ({ from: l.args.from, to: l.args.to, tokenId: l.args.tokenId?.toString() }));
+    },
+    dynastyMintedLogs: async (from, to) => {
+      if (!dynastyAddr) return [];
+      const logs = await client.getLogs({ address: dynastyAddr, event: dynastyMintedEv, ...range(from, to) });
+      // nonce is a monotonic counter (2^53-safe); tokenId is sequential today but stays a string for
+      // uniformity with every other token-id in the tree.
+      return logs.map((l) => ({ nonce: Number(l.args.nonce), minter: l.args.minter, tokenId: l.args.tokenId?.toString() }));
+    },
+    dynastyTransferLogs: async (from, to) => {
+      if (!dynastyAddr) return [];
+      const logs = await client.getLogs({ address: dynastyAddr, event: erc721TransferEv, ...range(from, to) });
       return logs.map((l) => ({ from: l.args.from, to: l.args.to, tokenId: l.args.tokenId?.toString() }));
     },
   };
