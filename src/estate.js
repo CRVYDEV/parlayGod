@@ -72,6 +72,18 @@ function trophies(h) {
 }
 
 // The board: your compound, the tier ladder, the feature catalog (owned / locked-by-tier), the trophies.
+// THE PAYROLL's thin accessor: just the household wage state, without the full board's galas/
+// auctions/parties. Same `wageState` formula as the board's household block — the FORMULA stays
+// single-source, this only skips the reads the payroll does not need.
+export async function staffWagesOf(client, accountId) {
+  const e = await loadEstate(client, accountId);
+  const staff = await staffRows(client, accountId);
+  const w = wageState(e, staff);
+  return { staffCount: staff.length, perDay: w.perDay, owed: w.owed, walked: w.walked,
+    walkInSeconds: staff.length && e.staff_paid_at
+      ? Math.max(0, Math.ceil((new Date(e.staff_paid_at).getTime() + ESTATE.STAFF_WALK_MS - Date.now()) / 1000)) : null };
+}
+
 export async function estateBoard(ch, client, h) {
   const e = await loadEstate(client, ch.account_id);
   const owned = featureSet(e.features);

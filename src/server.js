@@ -26,6 +26,7 @@ import * as Explore from './explore.js';
 import * as Prime from './primetime.js';
 import * as CityMap from './citymap.js';
 import * as Day from './day.js';
+import * as Payroll from './payroll.js';
 import * as Vouch from './vouch.js';
 import * as Push from './push.js';
 import * as Dispatch from './dispatch.js';
@@ -1791,6 +1792,12 @@ export async function buildServer() {
   // drills), each ready/todo/done with a jump. Consolidates the seven scattered daily surfaces. Pure read.
   app.get('/v1/day', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client, h) => Day.dayBoard(client, ch, h)));
+
+  // THE PAYROLL — every crew you owe (the kitchen nut, the fronts' pad, the household, the family's
+  // books) on one page, in one vocabulary, each row saying HOW it pays. THE DAY's shape applied to
+  // obligations: a pure read reusing each module's own board readers, pay via the existing tills.
+  app.get('/v1/payroll', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Payroll.payrollBoard(ch, client, h)));
 
   // ── M3: the streets (§5.2) ──
   app.get('/v1/streets', { preHandler: auth }, async () => {

@@ -12679,3 +12679,42 @@ the position), router/PM/state-view/pool-param addresses + the ops dials, all pr
 (`OMR_ADDRESS`/`OMERTA_HOOK_ADDRESS` classified here too — previously only chainparams DATA strings, the
 bots read them directly for the pool key). Dormant unless the full env is set on the WORKER. Suite
 green + pgquery + pgcheck 43/43 on real Postgres (+ the new suite run directly against real PG).
+
+**THE PAYROLL — every crew you owe, on one page, in one vocabulary (tester-reported 2026-08-15:
+"paying the guys in the kitchen is not the same as paying the guys in the empire etc. it's not
+consistent"; the founder: "good feedback, applying some fixes to smooth this out") — BUILT**
+(`src/payroll.js` — the 147th src module, `test/payroll.js` — the 105th suite; `GET /v1/payroll`; a
+💼 THE PAYROLL card on Home + three tab-button normalizations). The tester is right, and the
+inconsistency is STRUCTURAL: four separate "pay your people" surfaces — the kitchen crew's NUT, the
+business fronts' PAD, the family's territory/sovereignty upkeep, the estate's household wages — each
+on its own tab, each with its own vocabulary, and (deliberately, per each system's signed design)
+different settlement semantics. **The MECHANICS are not the bug** — all-or-nothing for the nut vs
+greedy for the pad vs treasury-paid for the family are each documented, tested decisions this drop
+does NOT touch. What was missing is ONE surface showing them all the same way and SAYING how each
+pays. So this is **THE DAY's shape applied to obligations** (the day.js precedent verbatim): a PURE
+READ that REUSES each module's own board readers — `businessesOf`, `territoryOf`, `sovBoard`, a new
+thin `staffWagesOf` accessor on estate.js (the same `wageState` formula as the board's household
+block, so the FORMULA stays single-source), the view's own crew helpers — so the number here and the
+number on each tab structurally CANNOT disagree. **ONE SHAPE, test-pinned**: every row carries the
+exact same key set (what / flavor / till / rate — perHr AND perDay, null where N/A, never absent /
+owed / cold state + countdown + each book's own cold WORD / HOW it settles, stated not hidden / the
+pay route + the jump); the suite asserts the key-set equality across all rows, so no renderer can
+meet a book whose row is missing a field. **THE AGREEMENT is the load-bearing test**: the payroll's
+crew/fronts/territory/household figures are asserted EQUAL to /v1/me, /v1/business, /v1/territory
+and /v1/estate to the dollar — the "board and till can never disagree" claim asserted directly, and
+the mutation target (a re-derived crew formula fails it by name). **ZERO §10.4** (a pure read; the
+pay buttons route to the EXISTING audited tills — the suite pins zero transactions rows + an
+unchanged cash-drift delta). Client: the 💼 card leads Home under 📋 Today (per-currency totals, a
+SOMETHING-WENT-COLD chip, per-row pay buttons title-tipped with each book's settlement semantics,
+family rows shown to every made man with the pay button rank-gated — you should know the family's
+books; hidden entirely when nothing is owed, the empty-state rule), and the three tab buttons
+normalize to one structure — "pay the nut — $X owed", "pay the pad — $X owed", "pay the upkeep —
+$X owed (treasury)" (the estate's already carried its figure). Check 7's sweep caught the four new
+field names on its first run (the catalog-or-declare discipline working): `canPay` ENFORCED as a
+per-row gate, the three cold-display companions waived with reasons. **A live probe found a
+PRE-EXISTING display bug by READING the card** (the art-pass discipline): `minsTxt` rendered 66h−ε
+as **"65h60m"** (the minute half ceil'd to 60 without carrying) — on every h+m countdown in the
+game; fixed with the carry. Three mutations each fail at their own named assertion (the re-derived
+formula → the agreement; the empty-state gate dropped → "a fresh street owes nobody"; a key dropped
+from one book → the one-shape assertion). Suite green + mobile 77/77 + client wiring/mirror (144
+boards) + pgquery + pgcheck 43/43 on real Postgres. No lever, no faucet, no schema.

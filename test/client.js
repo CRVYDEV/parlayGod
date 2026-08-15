@@ -1615,6 +1615,12 @@ const REVIEWED_NOT_ENFORCED = new Map([
   ['canThrow', 'action gate — estate gala control; discloses the tier/Butler/square-book requirement when false.'],
   ['canClaim', 'action gate — Street Deeds claim control (renderDeeds), shown only when true (one deed per account).'],
   ['canExtract', 'action gate — the Street Deed on-chain extract button (renderDeeds chainCard), shown only when true (made + wallet-linked + unlisted + chain configured); the reason is disclosed when false.'],
+  // THE PAYROLL (/v1/payroll) — the one-page obligations surface. Its `owed`/`cold`/`coldSeconds`
+  // ride the ENFORCED names; these three are its display companions:
+  ['canPay', 'THE PAYROLL per-row pay gate (family rows are boss/underboss-only) — the renderer gates the pay button on it and the till enforces regardless; the row itself is always shown (you should know the family\'s books).'],
+  ['anyCold', 'THE PAYROLL summary chip (SOMETHING WENT COLD vs all warm) — the per-row cold state is the enforced `cold` name.'],
+  ['coldCount', 'THE PAYROLL — how many fronts/operations in a summed row are cold; the state itself is the enforced `cold`.'],
+  ['coldWord', 'THE PAYROLL — each book\'s own noir word for its cold state (downed tools / gone cold / they walk), display vocabulary only.'],
 ]);
 const shapeFlags = [];
 for (const f of allFieldsSeen) {
