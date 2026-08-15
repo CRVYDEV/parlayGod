@@ -14,7 +14,7 @@ import { BONDS, bondPayout } from '../src/rules.js';
 const PATRON_MIN = BONDS.BACKER_TIERS[1].min;      // the second rung: 'Patron'
 const CH1 = BONDS.CHARTER_TIERS[0].omr, CH2 = BONDS.CHARTER_TIERS[1].omr;
 import { runLedgerInvariants } from '../src/invariants.js';
-import { runBondInvariants, reconcileBonds, recordBond } from '../src/bonds.js';
+import { runBondInvariants, reconcileBonds, recordBond, syncLpDepth, __setLpReader } from '../src/bonds.js';
 import { runVigInvariants } from '../src/vig.js';
 
 const app = await buildServer();
@@ -273,6 +273,71 @@ await pool.query("DELETE FROM bonds WHERE nonce=991");
 await pool.query("DELETE FROM vig_revenue WHERE source='bond' AND ref='991'");
 await pool.query('UPDATE bond_reserve SET committed_omr = committed_omr - 100, pol_eth = pol_eth - 0.75, dev_eth = dev_eth - 0.3 WHERE id=1');
 assert((await runBondInvariants(pool)).ok, 'and with the float-starving bond removed the book is healthy again');
+
+// ═══ THE LP LEAGUE — depth held over time joins the underwriter score (the hook-blocks deferred block) ═══
+{
+  const ledgerRows = async () => Number((await pool.query('SELECT count(*) c FROM transactions')).rows[0].c);
+  const tx0 = await ledgerRows();
+
+  // dormant without a reader — the production state until the PositionManager reader lands with the pool
+  assert.deepEqual(await syncLpDepth(pool), { dormant: true }, 'no reader installed → the sync is DORMANT');
+
+  const larry = await mk('Liquidity Larry');
+  const LW = '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b';
+  await pool.query('UPDATE account_persistent SET wallet_address=$2 WHERE account_id=$1', [larry.aid, LW]);
+
+  // the reader reports CHECKSUMMED addresses; SIWE stores lowercase — case-insensitivity is the deed lesson
+  let positions = [{ wallet: '0x1A2B3C4D5E6F7A8B9C0D1E2F3A4B5C6D7E8F9A0B', liquidityEth: 2 }];
+  __setLpReader(async () => positions);
+
+  const T0 = Date.now();
+  await syncLpDepth(pool, T0); // first sight: liquidity stored, zero eth-days yet
+  let row = (await pool.query('SELECT * FROM lp_depth WHERE wallet_address=$1', [LW])).rows[0];
+  assert(row, 'the wallet is on the depth books (stored lowercase)');
+  assert.equal(Number(row.eth_days), 0, 'a first sighting has accrued nothing yet');
+
+  // TWO DAYS pass (the clock-warp pattern), and Larry TENS UP his position JUST BEFORE the next sync.
+  // The accrual must use the STORED 2 ETH over the elapsed window — 2 × 2d = 4 eth-days — never the
+  // fresh 10 (a whale who deposits just before a sync earns nothing for the window they were not there).
+  await pool.query(`UPDATE lp_depth SET updated_at = now() - interval '2 days' WHERE wallet_address=$1`, [LW]);
+  positions = [{ wallet: LW, liquidityEth: 10 }];
+  await syncLpDepth(pool);
+  row = (await pool.query('SELECT * FROM lp_depth WHERE wallet_address=$1', [LW])).rows[0];
+  assert(Math.abs(Number(row.eth_days) - 4) < 0.01,
+    `depth-time accrues STORED liquidity × elapsed (2 ETH × 2d = 4 eth-days) — got ${row.eth_days}, and 20 here means the fresh deposit was back-paid`);
+  assert.equal(Number(row.liquidity_eth), 10, 'and the fresh read is what earns from now on');
+
+  // the score fold: standing carries the eth-days at LP_SCORE_PER_ETH_DAY (+ a millisecond tail ≈ 0)
+  const st = (await call('GET', '/v1/bonds', { token: larry.token })).body.yourStanding;
+  assert(Math.abs(st.lpEthDays - 4) < 0.01, 'the board surfaces the accrued depth-time');
+  assert(Math.abs(st.score - 4 * BONDS.LP_SCORE_PER_ETH_DAY) < 0.01 * BONDS.LP_SCORE_PER_ETH_DAY,
+    `standing liquidity IS backing — score ≈ ethDays × LP_SCORE_PER_ETH_DAY (${st.score} vs ${4 * BONDS.LP_SCORE_PER_ETH_DAY})`);
+
+  // ...which puts Larry on the league, LP-only (no bond, no pledge)
+  const lb2 = (await call('GET', '/v1/leaderboard/underwriters', { token: larry.token })).body;
+  const le = lb2.league.find((e) => e.name === 'Liquidity Larry');
+  assert(le, 'an LP-only backer earns a league seat');
+  assert(Math.abs(le.lpEthDays - 4) < 0.01, 'and the league row carries the depth-time axis');
+
+  // pulling the liquidity: what was earned KEEPS, and earning STOPS
+  positions = [];
+  await syncLpDepth(pool);
+  await pool.query(`UPDATE lp_depth SET updated_at = now() - interval '3 days' WHERE wallet_address=$1`, [LW]);
+  const st2 = (await call('GET', '/v1/bonds', { token: larry.token })).body.yourStanding;
+  assert(Math.abs(st2.lpEthDays - st.lpEthDays) < 0.01,
+    'a pulled position keeps its earned eth-days and accrues no more (3 idle days added nothing)');
+
+  // an lp_depth wallet NO account has linked scores nobody (depth without an identity is just depth)
+  await pool.query(`INSERT INTO lp_depth (wallet_address, liquidity_eth, eth_days, updated_at)
+                    VALUES ('0x9999999999999999999999999999999999999999', 50, 5000, now())`);
+  const lb3 = (await call('GET', '/v1/leaderboard/underwriters', { token: larry.token })).body;
+  assert(!lb3.league.some((e) => e.lpEthDays >= 5000), 'an unlinked wallet appears on no league row');
+
+  // STATUS ONLY — the whole layer wrote not one ledger row
+  assert.equal(await ledgerRows(), tx0, 'the LP league writes ZERO transactions rows — §10.4 untouched by construction');
+  __setLpReader(null);
+}
+console.log('✅ THE LP LEAGUE test passed — the dormant-without-a-reader posture, the two-tick depth-time accrual (STORED liquidity × elapsed, so a deposit just before a sync earns nothing for the window it missed), the underwriter-score fold + the board/league surfaces (an LP-only backer earns a seat), a pulled position keeping what it earned and earning no more, an unlinked wallet scoring nobody, and zero ledger rows (status only)');
 
 console.log('✅ THE UNDERWRITER (Reserve Bond Tier-4) test passed — THE PLEDGE (min gate, ledgered bond:pledge burn, over-pledge → omr), THE CHARTER (sequential Bronze→Silver seals, not_backer gate, ledgered bond:charter), backer-tier derivation (pledge + bondedEth×ETH_SCORE_OMR → Financier), THE UNDERWRITERS LEAGUE + the read-derived Financier crown (agent excluded, the crown flips on a bigger pledge), THE FAMILY SYNDICATE (summed roster score), §10.4 (bond: enumerated + every burn reconciles + the only drift is the SQL seed), and DEATH SURVIVAL (pledged_omr/bond_charter/bonded_eth all survive the estate)');
 

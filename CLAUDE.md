@@ -12765,3 +12765,56 @@ game; fixed with the carry. Three mutations each fail at their own named asserti
 formula → the agreement; the empty-state gate dropped → "a fresh street owes nobody"; a key dropped
 from one book → the one-shape assertion). Suite green + mobile 77/77 + client wiring/mirror (144
 boards) + pgquery + pgcheck 43/43 on real Postgres. No lever, no faucet, no schema.
+
+**THE FOUR SMALLER DEFERRALS CLOSED — provenance traits, the delivery retarget, the four-way sell
+tax, the LP league (founder-directed 2026-08-15: "Let's build out the smaller deferred items") —
+ALL FOUR BUILT.** **(1) DYNASTY PROVENANCE TRAITS** (`src/drop.js` claimColors/colorsBoard,
+`PROVENANCE.WARDS` rules tail + `wardOf`, `drop_allocations.stamped` + `account_persistent.provenance/
+provenance_pick`, `GET/POST /v1/provenance`, the YOUR COLORS card on Going Legit; dynasty §9 made
+real off the G-3 snapshots — one dataset, two uses). The five §9 walls all enforced: **OPT-IN** (the
+POST is the consent; default = clean portrait), **once per snapshot WALLET ever** (the `stamped`
+latch on the allocation row — an atomic `AND NOT stamped RETURNING`, so the same wallet re-linked to
+a second account gets `already`; SIWE uniqueness means the test unlinks the first holder before the
+second links, the realistic wallet-moves-on shape), **DISPLAY-ONLY FOREVER** (zero ledger rows,
+test-pinned), **fictional ward names** (the §9.5 guessability posture — the eight wards pass a
+no-punk/ape/pepe/frog/pixel/stonk/cat lexeme scan in-test; the whole map pinned in test/levers.js so
+a rename toward a real collection fails the register), and the metadata field is
+**`genesis_provenance`** (never tier/rank/rarity; the portrait gains a boutonnière in the ward's
+color — portraitRow carries the SAME field publicDossier discloses, so the bright-line guard stays
+structural). The visible pick = the SCARCEST claimed community computed ONCE at stamp, stored AS the
+pick — and the test's own first expectation was WRONG about which community was scarcest (it forgot
+the clawback block's fourth wallet), the code right; corrected with the wallet count in the comment.
+**(2) THE DELIVERY RETARGET** (`src/stockdeliver.js` `deedTargetRows` — ONE shared predicate for
+deedTbaFor/plan/board, the extortFront one-core discipline): a Street Deed SOLD on a secondary
+market now delivers to its BUYER — the deed follows its owner (`onchain_owner` joined to the SIWE
+wallet, case-insensitive; NULL fails OPEN so chain-dormant deploys keep delivering to the
+extractor). The prior behavior ("a sold deed just stops being a target") survives only where the
+buyer never links a wallet; the sharpened mutation reproduces exactly the pre-fix predicate and
+fails at "the secondary BUYER is now the delivery target". **(3) THE FOUR-WAY SELL TAX** (treasury-
+to-family §8 step 3): `OmertaHook.sol` + `OMR.sol` both split FOUR ways —
+`setSellTax(bps, devBps, rwaBps, communityBps)` / recipients gain the **community wallet** (the
+family-buyback keeper's key, a SEPARATE key from the treasury's — the custody rule now in both
+contracts' NatSpec), LP still the remainder so the four sum EXACTLY; events/sweep/zero-address
+guards/the conservation fuzz all widened; both ship `communityBps = 0` (Phase-1 byte-identity, the
+fixture proves the community wallet gets NOTHING at 0). The flip shape (dev 200 / rwa 160 /
+community 240 of 900) is pinned by test in BOTH layers, mutation-verified BOTH layers (the hook
+folding community into LP; OMR paying the community slice to the treasury — each fails by name).
+The **bond reweight needs NO contract change** (constructor args = deploy config; the fee-splits
+validator + CHAIN-DEPLOY's three arm-step sites rewritten from "a backend carve" to the on-chain
+recipient). `chainparams.js`'s two sell-tax panels widened to the four-arg signature (the ABI is
+synthesized from the args list, so the control room followed for free). forge **293/293** (+5).
+**(4) THE LP LEAGUE** (`src/bonds.js` syncLpDepth/`__setLpReader`/lpEthDaysFor, the `lp_depth`
+table, `BONDS.LP_SCORE_PER_ETH_DAY` (300) — the hook-blocks design's deferred status block): LP
+depth held OVER TIME in the canonical pool joins the underwriter score
+(`underwriterScore(bondedEth, pledgedOmr, lpEthDays)` — depth is the binding bond-cap constraint,
+so the players providing it earn the axis that already honors backers). **The reader stays a SEAM
+deliberately** — converting a v4 position to ETH-side depth needs a live pool's sqrtPrice, the
+exact reason the item was deferred — so the accrual machinery/score fold/board+league surfaces are
+live and the reader is ONE function at launch (CHAIN-DEPLOY's v4 step lists it beside the DEX
+bots' verify-at-launch). The accrual is deposit-timing-proof BY CONSTRUCTION: the sync accrues the
+STORED liquidity over the elapsed window, so a whale depositing just before a sync earns nothing
+for the window they missed (the mutation back-pays it and fails 4-vs-20 by name); a pulled
+position keeps what it earned and stops earning; an unlinked wallet's depth scores nobody. STATUS
+ONLY — zero transactions rows (test-pinned), worker-synced on the DEX-bot cadence, dormant in
+production until the reader lands. All numbers founder sign-off levers (BALANCE.md § THE LP LEAGUE
+— the 300 is a PROPOSED default, sized once a pool exists).

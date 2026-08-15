@@ -5,12 +5,13 @@ import {Test} from "forge-std/Test.sol";
 import {OMR} from "../src/OMR.sol";
 
 /// THE DEX SELL TAX — a flat, hard-capped, owner-armed tax on transfers INTO registered AMM
-/// pairs, split THREE ways (dev / rwa float / LP) in the same transfer. Everything else moves 1:1.
+/// pairs, split FOUR ways (dev / rwa float / community / LP) in the same transfer. Everything else moves 1:1.
 contract OMRTaxTest is Test {
     OMR omr;
     address safe = makeAddr("safe");
     address dev = makeAddr("taxdev");
     address rwa = makeAddr("taxrwa");
+    address community = makeAddr("taxcommunity");
     address lp = makeAddr("taxlp");
     address pool = makeAddr("pool");          // a registered AMM pair
     address otherPool = makeAddr("otherPool"); // NOT registered
@@ -23,7 +24,7 @@ contract OMRTaxTest is Test {
         vm.startPrank(safe);
         omr.transfer(seller, 10_000e18);
         omr.transfer(polManager, 10_000e18);
-        omr.setTaxRecipients(dev, rwa, lp);
+        omr.setTaxRecipients(dev, rwa, community, lp);
         omr.setPair(pool, true);
         vm.stopPrank();
     }
@@ -32,7 +33,7 @@ contract OMRTaxTest is Test {
     /// split here mirrors the backend's SELL_TAX (2 / 4 / 3 of 9) proportionally.
     function _arm(uint256 bps) internal {
         vm.prank(safe);
-        omr.setSellTax(bps, (bps * 200) / 900, (bps * 400) / 900);
+        omr.setSellTax(bps, (bps * 200) / 900, (bps * 400) / 900, 0);
     }
 
     function test_default_off_sell_moves_1to1() public {
@@ -53,6 +54,24 @@ contract OMRTaxTest is Test {
         assertEq(omr.balanceOf(lp), 50e18 - (50e18 * 111) / 500 - (50e18 * 222) / 500, "LP takes the remainder");
         assertEq(omr.balanceOf(dev) + omr.balanceOf(rwa) + omr.balanceOf(lp), 50e18, "and the three sum to the tax EXACTLY");
         assertEq(omr.balanceOf(seller), 9_000e18, "the seller paid exactly the transfer amount");
+    }
+
+    /// The four-way split at the locked flip shape (dev 200 / rwa 160 / community 240 / lp remainder
+    /// of 900) — the community slice lands in ITS OWN wallet (the family keeper's key), never the
+    /// treasury's, and the four still sum to the tax exactly.
+    function test_the_flip_shape_pays_the_community_wallet_its_own_slice() public {
+        vm.prank(safe);
+        omr.setSellTax(900, 200, 160, 240);
+        vm.prank(seller);
+        omr.transfer(pool, 1000e18); // a 90e18 tax
+        assertEq(omr.balanceOf(dev), (90e18 * 200) / 900, "dev");
+        assertEq(omr.balanceOf(rwa), (90e18 * 160) / 900, "the treasury slice shrank to make room");
+        assertEq(omr.balanceOf(community), (90e18 * 240) / 900, "the community slice reaches its own wallet");
+        assertEq(
+            omr.balanceOf(dev) + omr.balanceOf(rwa) + omr.balanceOf(community) + omr.balanceOf(lp),
+            90e18,
+            "the four sum to the tax EXACTLY"
+        );
     }
 
     function test_buy_and_wallet_transfers_untaxed() public {
@@ -88,48 +107,52 @@ contract OMRTaxTest is Test {
     function test_hard_cap_and_recipients_required() public {
         vm.startPrank(safe);
         vm.expectRevert(OMR.BadBps.selector);
-        omr.setSellTax(1001, 0, 0); // > MAX_SELL_TAX_BPS
+        omr.setSellTax(1001, 0, 0, 0); // > MAX_SELL_TAX_BPS
         vm.expectRevert(OMR.BadBps.selector);
-        omr.setSellTax(900, 500, 500); // the slices cannot exceed the total
-        omr.setSellTax(1000, 200, 400); // the cap itself is fine
+        omr.setSellTax(900, 500, 500, 0); // the slices cannot exceed the total
+        omr.setSellTax(1000, 200, 400, 0); // the cap itself is fine
         vm.stopPrank();
         // a fresh token with no recipients cannot arm
         OMR bare = new OMR(safe);
         vm.prank(safe);
         vm.expectRevert(OMR.ZeroAddress.selector);
-        bare.setSellTax(100, 20, 40);
+        bare.setSellTax(100, 20, 40, 0);
     }
 
     function test_only_owner_configures() public {
         vm.startPrank(seller);
         vm.expectRevert();
-        omr.setSellTax(100, 20, 40);
+        omr.setSellTax(100, 20, 40, 0);
         vm.expectRevert();
         omr.setPair(otherPool, true);
         vm.expectRevert();
         omr.setExempt(seller, true);
         vm.expectRevert();
-        omr.setTaxRecipients(seller, seller, seller);
+        omr.setTaxRecipients(seller, seller, seller, seller);
         vm.expectRevert();
         omr.setMinter(seller); // v2 §4: the mint path is owner-only too
         vm.stopPrank();
     }
 
-    /// fuzz: at any armed rate, SPLIT and amount, pool + the three tax receipts always sum to the
+    /// fuzz: at any armed rate, SPLIT and amount, pool + the four tax receipts always sum to the
     /// amount sent — the tax redirects, it never mints or burns, and the remainder rule means the
-    /// three slices leave no wei behind however the bps divide.
-    function testFuzz_conservation(uint256 bps, uint256 devBps, uint256 rwaBps, uint256 amount) public {
+    /// four slices leave no wei behind however the bps divide.
+    function testFuzz_conservation(uint256 bps, uint256 devBps, uint256 rwaBps, uint256 communityBps, uint256 amount)
+        public
+    {
         bps = bound(bps, 1, 1000);
         devBps = bound(devBps, 0, bps);
         rwaBps = bound(rwaBps, 0, bps - devBps);
+        communityBps = bound(communityBps, 0, bps - devBps - rwaBps);
         amount = bound(amount, 1, 10_000e18);
         vm.prank(safe);
-        omr.setSellTax(bps, devBps, rwaBps);
+        omr.setSellTax(bps, devBps, rwaBps, communityBps);
         uint256 before = omr.balanceOf(seller);
         uint256 supplyBefore = omr.totalSupply();
         vm.prank(seller);
         omr.transfer(pool, amount);
-        uint256 received = omr.balanceOf(pool) + omr.balanceOf(dev) + omr.balanceOf(rwa) + omr.balanceOf(lp);
+        uint256 received = omr.balanceOf(pool) + omr.balanceOf(dev) + omr.balanceOf(rwa) + omr.balanceOf(community)
+            + omr.balanceOf(lp);
         assertEq(received, amount, "redirected, never minted/burned");
         assertEq(omr.balanceOf(seller), before - amount, "the seller pays exactly the amount");
         assertEq(omr.totalSupply(), supplyBefore, "a sell never moves total supply -- only the mint path can");

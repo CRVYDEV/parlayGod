@@ -2445,6 +2445,13 @@ export const SELL_TAX = {
 // alpha via THE PLEDGE while the ETH axis lights up at mainnet. All numbers are sign-off levers.
 BONDS.ETH_SCORE_OMR = Number(process.env.BOND_ETH_SCORE_OMR || 30000);  // $OMR-equiv per bonded ETH for the STATUS score (deterministic, NOT the live oracle — the R1-Portfolio precedent)
 BONDS.PLEDGE_MIN = Number(process.env.BOND_PLEDGE_MIN || 60);          // min in-game $OMR pledge
+// THE LP LEAGUE (hook-blocks design, the deferred status block): LP depth held OVER TIME in the
+// canonical OMR pool joins the underwriter score — depth is the binding constraint on the bond
+// daily cap (tools/bond-dials.js), so the players providing it earn the status axis that already
+// honors backers. An ETH-DAY of depth scores 1% of a bonded ETH (≈100 days of 1 ETH depth ≈ one
+// bonded ETH) — a PROPOSED default, sized properly once a real pool exists (BALANCE.md § THE LP
+// LEAGUE). Status-only: no payout attaches, the Sybil posture holds.
+BONDS.LP_SCORE_PER_ETH_DAY = Number(process.env.BOND_LP_SCORE_PER_ETH_DAY || 300);
 BONDS.BACKER_TIERS = [
   { min: 0, name: 'Depositor' }, { min: 600, name: 'Patron' }, { min: 6000, name: 'Underwriter' },
   { min: 60000, name: 'Financier' }, { min: 300000, name: 'Kingmaker' }, { min: 1500000, name: 'The Reserve' },
@@ -2454,8 +2461,9 @@ BONDS.CHARTER_TIERS = [
   { tier: 3, name: 'Gold Charter', omr: 1200 }, { tier: 4, name: 'Platinum Charter', omr: 3600 },
   { tier: 5, name: 'The Founding Charter', omr: 9000 },
 ];
-export const underwriterScore = (bondedEth, pledgedOmr) =>
-  Math.round((Number(bondedEth || 0) * BONDS.ETH_SCORE_OMR + Number(pledgedOmr || 0)) * 1e6) / 1e6;
+export const underwriterScore = (bondedEth, pledgedOmr, lpEthDays = 0) =>
+  Math.round((Number(bondedEth || 0) * BONDS.ETH_SCORE_OMR + Number(pledgedOmr || 0)
+    + Number(lpEthDays || 0) * BONDS.LP_SCORE_PER_ETH_DAY) * 1e6) / 1e6;
 export const backerTierOf = (score) => {
   let t = BONDS.BACKER_TIERS[0];
   for (const r of BONDS.BACKER_TIERS) if (Number(score || 0) >= r.min) t = r;
@@ -5439,3 +5447,25 @@ export const deedNeighborhoodOf = (name, district, population) => {
   const idx = Math.floor(hash01('deednbr:' + String(name)) * list.length) % list.length;
   return { name: list[idx], index: idx, frontier: idx >= deedNeighborhoodsOpen(population, district) };
 };
+
+// ── THE PROVENANCE COLORS (dynasty §9, built off the G-3 snapshots — the wards are FICTIONAL noir
+// inventions, the §9.5 two-vocabularies rule: the community→ward mapping is server-side only, the
+// numeric ids never surface with a real collection's name anywhere in game copy or metadata, and
+// every name below must pass the GUESSABILITY TEST (a reviewer who has not seen the mapping must be
+// unable to identify the source community from name + art — no pixel/ape/frog/broker/cat lexemes).
+// DISPLAY-ONLY FOREVER (§9.4, the wall): a ward moves NOTHING — no stat, no cap, no discount, no
+// access, no activation weight — it is a birthmark on the portrait and a `genesis_provenance`
+// metadata attribute, nothing else, ever. Names + colors are founder levers (pinned whole).
+export const PROVENANCE = {
+  WARDS: {
+    1: { name: 'the Meridian Rooms',   color: '#c9a24b' },
+    2: { name: 'the Ironbridge Club',  color: '#4fd6c2' },
+    3: { name: 'the Old Harbor Ward',  color: '#5a8fd6' },
+    4: { name: 'the Lantern Quarter',  color: '#b8504a' },
+    5: { name: 'the Granite Row',      color: '#9aa4ad' },
+    6: { name: 'the Velvet Stair',     color: '#8a5ac2' },
+    7: { name: 'the Corniche',         color: '#c98a4b' },
+    8: { name: 'the Winter Garden',    color: '#7fc24f' },
+  },
+};
+export const wardOf = (id) => PROVENANCE.WARDS[Number(id)] || null;

@@ -25,6 +25,7 @@
 // agent/level gate here — eligibility is the wallet, once, ever. Amounts stay SEALED until the
 // window opens (the board reveals your row only while claims are open, or after you claimed).
 import { GameError } from './game.js';
+import { PROVENANCE, wardOf } from './rules.js';
 
 const num = (v) => Number(v || 0);
 const isWallet = (w) => /^0x[0-9a-f]{40}$/.test(w);
@@ -103,6 +104,65 @@ export async function claimDrop(ch, client, h) {
     freeMint = true;
   }
   return { drop: 'claimed', omr, freeMint, communities: parseCommunities(row.communities) };
+}
+
+// ── THE PROVENANCE COLORS (dynasty §9) — the portrait carries the colors of the tribe you came
+// from, derived from the SAME snapshots the drop pays from (one dataset, two uses). The rules, each
+// load-bearing: OPT-IN (§9.2 — this POST is the consent; the default is a clean portrait), ONE stamp
+// per snapshot WALLET EVER (§9.3 — the `stamped` latch, per wallet-event never per community; the
+// minter chooses WHICH qualifying communities to record, anything unclaimed at the event is forfeit),
+// DISPLAY-ONLY FOREVER (§9.4 — the account columns are read by the portrait/dossier and nothing
+// else; the whole flow writes ZERO ledger rows, test-pinned), and FICTIONAL vocabulary (§9.5 — the
+// response and every surface speak ward names, never a community's). The visible pick defaults to
+// the SCARCEST claimed community (fewest snapshotted wallets), computed ONCE at stamp and stored AS
+// the pick (a live-scarcest would flip cached art — the design's own warning).
+export async function claimColors(ch, client, h, { communities, pick } = {}) {
+  const wallet = h.acct.wallet_address;
+  if (!wallet) throw new GameError('wallet', 'Link your wallet first — the colors belong to the wallet the snapshot saw.');
+  // consume the wallet's ONE stamp event (atomic — the claim-then-record discipline)
+  const row = (await client.query(
+    `UPDATE drop_allocations SET stamped=true WHERE wallet_address=lower($1) AND NOT stamped RETURNING communities`,
+    [wallet])).rows[0];
+  if (!row) {
+    const exists = (await client.query(
+      'SELECT 1 FROM drop_allocations WHERE wallet_address=lower($1)', [wallet])).rows.length;
+    if (!exists) throw new GameError('not_snapshotted', 'That wallet is not in any snapshot — the blocks are history.');
+    throw new GameError('already', 'That wallet already claimed its colors — a birth certificate is issued once.');
+  }
+  const qualifying = parseCommunities(row.communities).filter((c) => wardOf(c));
+  if (!qualifying.length) throw new GameError('no_colors', 'No colors ride that wallet.');
+  // the minter chooses WHICH to record (per-community consent); default = all qualifying
+  const want = Array.isArray(communities) && communities.length
+    ? communities.map(Number).filter((c) => qualifying.includes(c)) : qualifying;
+  if (!want.length) throw new GameError('no_colors', 'None of those colors ride that wallet.');
+  // the scarcest claimed community: fewest snapshotted wallets carry it (a JS fold — pg-mem/FILTER)
+  let visible = Number(pick);
+  if (!want.includes(visible)) {
+    const rows = (await client.query('SELECT communities FROM drop_allocations')).rows;
+    const counts = new Map(want.map((c) => [c, 0]));
+    for (const r of rows) for (const c of parseCommunities(r.communities)) if (counts.has(c)) counts.set(c, counts.get(c) + 1);
+    visible = [...want].sort((a, b) => counts.get(a) - counts.get(b) || a - b)[0];
+  }
+  // account-level, direct SQL (both columns are off persistAccount's positional list — clobber-safe)
+  await client.query('UPDATE account_persistent SET provenance=$2, provenance_pick=$3 WHERE account_id=$1',
+    [h.accountId, JSON.stringify(want), visible]);
+  return { colors: 'claimed', communities: want, pick: visible, ward: wardOf(visible).name };
+}
+
+// the colors board (GET /v1/provenance) — a stable key set (the dormantView lesson)
+export async function colorsBoard(ch, client, h) {
+  const base = { wallet: !!h.acct.wallet_address, stamped: false, eligible: false, wards: [], ward: null };
+  const mine = h.acct.provenance_pick != null ? wardOf(h.acct.provenance_pick) : null;
+  if (mine) { base.stamped = true; base.ward = mine.name; return base; }
+  if (!h.acct.wallet_address) return base;
+  const row = (await client.query(
+    'SELECT communities, stamped FROM drop_allocations WHERE wallet_address=lower($1)', [h.acct.wallet_address])).rows[0];
+  if (!row) return base;
+  const qualifying = parseCommunities(row.communities).filter((c) => wardOf(c));
+  if (row.stamped || !qualifying.length) { base.stamped = !!row.stamped; return base; }
+  base.eligible = true;
+  base.wards = qualifying.map((c) => ({ id: c, name: wardOf(c).name }));
+  return base;
 }
 
 // ── MOD: load the published allocation dataset (idempotent by wallet; a CLAIMED row is history and

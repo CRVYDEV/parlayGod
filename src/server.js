@@ -1808,6 +1808,14 @@ export async function buildServer() {
   app.post('/v1/drop/claim', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Drop.claimDrop(ch, client, h)));
 
+  // THE PROVENANCE COLORS (dynasty §9) — opt-in, once per snapshot wallet ever, display-only: the
+  // portrait carries the colors of the tribe you came from. The POST is the consent (§9.2).
+  app.get('/v1/provenance', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Drop.colorsBoard(ch, client, h)));
+  app.post('/v1/provenance', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) =>
+      Drop.claimColors(ch, client, h, { communities: req.body?.communities, pick: req.body?.pick })));
+
   // ── M3: the streets (§5.2) ──
   app.get('/v1/streets', { preHandler: auth }, async () => {
     const r = await pool.query(`SELECT c.id, c.name, c.respect, c.loc, c.jail_until, c.hosp_until, c.guard_price, c.is_npc, g.tag

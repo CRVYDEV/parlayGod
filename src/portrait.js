@@ -51,7 +51,7 @@
 //
 // ZERO §10.4: art moves no value and writes no ledger row.
 import { hashId } from './assets.js';
-import { RANKS, rankIdxOf, levelOf, hitmanRankOf } from './rules.js';
+import { RANKS, rankIdxOf, levelOf, hitmanRankOf, PROVENANCE } from './rules.js';
 // the ONE escape, shared with the profile page rather than copied (see cards.js)
 import { esc } from './cards.js';
 
@@ -132,6 +132,11 @@ export function portraitStateOf(d = {}) {
     welsher: !!d.welsher,
     hitman: d.hitmanRank || null,
     alive: d.alive !== false,
+    // THE PROVENANCE COLORS (dynasty §9): the opt-in birthmark — resolved by the FICTIONAL ward
+    // name the dossier carries (the numeric id never reaches a public surface). Its own composition
+    // slot, painted WITH the bust so the reputation effects (wanted/welsher/the dead wash) always
+    // render OVER it — the colors can never suppress a shame marker (§9.4's ordering rule).
+    colors: d.provenance ? (Object.values(PROVENANCE.WARDS).find((w) => w.name === d.provenance) || null) : null,
   };
 }
 
@@ -169,6 +174,8 @@ export function portraitSvg(state, size = 300) {
     `<path d="M50 83 L46 100 L54 100 Z" fill="${s.acc}"/>`,
     at.tiepin ? `<rect x="47" y="92" width="6" height="1.6" fill="#e6d9a8"/>` : '',
     at.pocketSquare ? `<rect x="70" y="80" width="7" height="4" fill="${s.acc}" opacity="0.85"/>` : '',
+    // the provenance boutonnière — the colors of the ward you came from, worn on the lapel
+    s.colors ? `<circle cx="36" cy="79" r="2.4" fill="${s.colors.color}"/><circle cx="36" cy="79" r="3.6" fill="none" stroke="${s.colors.color}" stroke-width="0.7" opacity="0.55"/>` : '',
     `<rect x="44" y="59" width="12" height="14" fill="${s.skin}"/>`,
     `<path d="M44 59 h12 v6 h-12 Z" fill="#000" opacity="0.4"/>`, // the collar's shadow on the throat
     `<path d="M${50 - jaw} 44 Q${50 - jaw} 66 50 68 Q${50 + jaw} 66 ${50 + jaw} 44 Q${50 + jaw} 29 50 29 Q${50 - jaw} 29 ${50 - jaw} 44 Z" fill="${s.skin}"/>`,
@@ -260,6 +267,9 @@ export function portraitTraits(state) {
   ];
   if (s.hitman) out.push({ trait_type: 'Assassin', value: s.hitman });
   if (s.dynasty) out.push({ trait_type: 'Dynasty', value: s.dynasty });
+  // dynasty §9: the metadata field is `genesis_provenance` — never tier/rank/rarity — and the value
+  // is the FICTIONAL ward name (the §9.5 vocabulary split; the community id never reaches metadata)
+  if (s.colors) out.push({ trait_type: 'genesis_provenance', value: s.colors.name });
   if (s.tag) out.push({ trait_type: 'Family', value: s.tag });
   // One value per trait_type — ERC-721 metadata consumers keep only one entry per type, so a
   // wanted welsher must not emit two 'Notoriety' rows (one flag would silently disappear).
@@ -275,7 +285,7 @@ export function portraitTraits(state) {
 export async function portraitRow(pool, characterId) {
   const row = (await pool.query(
     `SELECT c.id, c.name, c.respect, c.alive, c.wanted_until, c.welsher,
-            ap.hitman_rep, ap.dynasty_name, ap.deaths,
+            ap.hitman_rep, ap.dynasty_name, ap.deaths, ap.provenance_pick,
             g.tag AS tag
        FROM characters c
        LEFT JOIN account_persistent ap ON ap.account_id = c.account_id
@@ -294,6 +304,8 @@ export async function portraitRow(pool, characterId) {
     dynasty: row.dynasty_name || null,
     tag: row.tag || null,
     generation: (Number(row.deaths) || 0) + 1,
+    // the claimed ward's fictional name — the SAME field publicDossier discloses (the bright line)
+    provenance: row.provenance_pick != null ? (PROVENANCE.WARDS[Number(row.provenance_pick)]?.name || null) : null,
   };
 }
 

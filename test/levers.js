@@ -53,6 +53,9 @@ const SIGNED = [
   ['BONDS.POL_BPS', 3750],   // 5000 -> 3750: the remainder after the float slice, at the signed 5:3 POL:VIG
   ['BONDS.RWA_BPS', 2500],   // bond ETH's TREASURY slice (design 4; the stock float it once funded was retired 2026-07-31)
   ['BONDS.VIG_BPS', 2250],   // 3000 -> 2250: same remainder, ratio preserved rather than zeroed
+  // THE LP LEAGUE — an ETH-DAY of canonical-pool depth scores 1% of a bonded ETH on the underwriter
+  // axis. A PROPOSED default: size it properly once a real pool exists (BALANCE.md § THE LP LEAGUE).
+  ['BONDS.LP_SCORE_PER_ETH_DAY', 300],
   ['BOXING.BET_MAX', 250000],
   ['BOXING.BET_RAKE_BPS', 800],
   ['BOXING.DEFENSE_MS', 604800000],
@@ -267,6 +270,11 @@ const SIGNED = [
   // invisible to the reader check, so the PARENT is the pin — the MASTERY.PERKS precedent).
   ['MADE_LADDER.RUNGS', [{"min":60,"name":"Earner","trunk":1,"energy":5,"nerve":1,"garage":1,"fenceBps":0},{"min":180,"name":"Operator","trunk":2,"energy":10,"nerve":2,"garage":2,"fenceBps":0},{"min":450,"name":"Capo","trunk":3,"energy":15,"nerve":3,"garage":3,"fenceBps":250},{"min":900,"name":"Kingmaker","trunk":4,"energy":20,"nerve":4,"garage":4,"fenceBps":500}]],
   ['MADE_LADDER.MADE_RUNGS', 1],
+  // DYNASTY §9 — THE PROVENANCE WARDS. Fictional community names (the §9.5 guessability posture —
+  // a renamed ward that starts identifying a real collection is a copy violation, so the whole map
+  // is the pin; bracket-accessed leaves are invisible to the reader check, the MADE_LADDER.RUNGS
+  // precedent). Display-only forever (§9.4) — no ward carries a gameplay number.
+  ['PROVENANCE.WARDS', {"1":{"name":"the Meridian Rooms","color":"#c9a24b"},"2":{"name":"the Ironbridge Club","color":"#4fd6c2"},"3":{"name":"the Old Harbor Ward","color":"#5a8fd6"},"4":{"name":"the Lantern Quarter","color":"#b8504a"},"5":{"name":"the Granite Row","color":"#9aa4ad"},"6":{"name":"the Velvet Stair","color":"#8a5ac2"},"7":{"name":"the Corniche","color":"#c98a4b"},"8":{"name":"the Winter Garden","color":"#7fc24f"}}],
   // ECONOMY v3 step 7 — THE RARITY NFTs (design §7/§9.7). The tier weights decide how scarce a
   // legendary is (and therefore what one is worth on a secondary market); the upgrade ladder is the
   // only price money pays here, and it is DETERMINISTIC by design — see the RARITY block.

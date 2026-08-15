@@ -8,7 +8,7 @@
 // PUBLIC + keyless + read-only; ZERO §10.4 surface (status/marketing only). Wealth is never exact
 // (the anti-precise-kill-EV rule) — a card flexes rank/level/kills/family, never a dollar figure.
 import { readFileSync } from 'node:fs';
-import { levelOf, hitmanRankOf, SOCIAL_X_HANDLE } from './rules.js';
+import { levelOf, hitmanRankOf, SOCIAL_X_HANDLE , PROVENANCE } from './rules.js';
 
 const GOLD = '#c9a24b', DIM = '#8f7433', TEAL = '#4fd6c2', BLOOD = '#9b2f2f', INK = '#e8e2d4', BG = '#0c0d11';
 // ONE escape for every public surface. Exported because `portrait.js` engraves untrusted names
@@ -20,7 +20,7 @@ export const esc = (s) => String(s == null ? '' : s).replace(/[<>&"']/g, (c) => 
 export async function publicDossier(pool, name) {
   const row = (await pool.query(
     `SELECT c.id, c.name, c.respect, c.alive, c.wanted_until, c.welsher, c.season_kills, c.bio,
-            ap.hitman_rep, ap.kills, ap.dynasty_name, ap.deaths,
+            ap.hitman_rep, ap.kills, ap.dynasty_name, ap.deaths, ap.provenance_pick,
             g.name AS gang, g.tag AS tag, cr.name AS crew
        FROM characters c
        LEFT JOIN account_persistent ap ON ap.account_id = c.account_id
@@ -44,6 +44,10 @@ export async function publicDossier(pool, name) {
     bio: row.bio || null,   // IDENTITY — the free "about me" blurb (status text; the profile funnel)
     // the bloodline's depth (generations before this street) — a status flex, never a currency
     generation: (Number(row.deaths) || 0) + 1,
+    // THE PROVENANCE COLORS (dynasty §9): the FICTIONAL ward name of the account's claimed pick —
+    // opt-in public by construction (the claim IS the consent, §9.2), display-only forever (§9.4),
+    // never a community's real name (§9.5 — the numeric id stays server-side).
+    provenance: row.provenance_pick != null ? (PROVENANCE.WARDS[Number(row.provenance_pick)]?.name || null) : null,
   };
 }
 

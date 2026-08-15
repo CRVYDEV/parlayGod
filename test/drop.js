@@ -80,6 +80,7 @@ const drift = async () => Number((await runLedgerInvariants(pool, { alert: false
   .find((x) => x.name === '$OMR conservation').drift);
 const dropCheck = async () => (await runLedgerInvariants(pool, { alert: false })).checks
   .find((x) => x.name === 'drop claims ledgered');
+const txnCount = async () => Number((await pool.query('SELECT count(*) c FROM transactions')).rows[0].c);
 
 const W1 = '0x' + '11'.repeat(20);   // the snapshotted claimant
 const W2 = '0x' + '22'.repeat(20);   // snapshotted, already-minted account (no dead credit)
@@ -228,6 +229,55 @@ await call('POST', '/v1/mod/drop/window', { mod: true, body: {
   assert.equal(st.body.window.open, false);
   assert.equal(st.body.omrClaimed, 350, 'the books: 250 + 100 claimed');
   assert.equal(st.body.omrUnclaimed, 500, 'the lapsed envelope never left the Safe — the clawback report');
+}
+
+// ════════════ THE PROVENANCE COLORS (dynasty §9) — opt-in, once per wallet EVER, display-only ════════════
+{
+  const { portraitRow, portraitSvg, portraitTraits } = await import('../src/portrait.js');
+  // restore Alice's snapshotted wallet (the clawback block above moved it)
+  await pool.query('UPDATE account_persistent SET wallet_address=$2 WHERE account_id=$1', [alice.acct, W1]);
+  const tx0 = await txnCount();
+
+  // OPT-IN (§9.2): nothing was recorded by the DROP claim itself — the default is a clean portrait
+  const pre = (await pool.query('SELECT provenance, provenance_pick FROM account_persistent WHERE account_id=$1', [alice.acct])).rows[0];
+  assert.equal(pre.provenance, null, 'the drop claim alone records NO colors — opt-in means a separate consent');
+  let b = (await call('GET', '/v1/provenance', { token: alice.token })).body;
+  assert.equal(b.eligible, true, 'the board offers the claim');
+  assert.ok(b.wards.every((w) => typeof w.name === 'string' && !/punk|ape|pepe|frog|pixel|stonk|broker|cat/i.test(w.name)),
+    'every ward name is FICTIONAL — the §9.5 guessability posture holds on the board');
+
+  // the CLAIM — the consent; the pick defaults to the SCARCEST claimed community. By this point
+  // community 1 rides THREE snapshot wallets (W1, W2, and the clawback block's 0x44 row) while
+  // community 4 rides two (W1, W3) → 4 is scarcer.
+  const c = await call('POST', '/v1/provenance', { token: alice.token });
+  assert.equal(c.code, 200, JSON.stringify(c.body));
+  assert.deepEqual(c.body.communities, [1, 4]);
+  assert.equal(c.body.pick, 4, 'the visible pick defaults to the SCARCEST claimed community, computed once at stamp');
+  assert.ok(typeof c.body.ward === 'string');
+
+  // the portrait carries the birthmark — dossier-shaped row, the boutonnière, the §9 metadata field
+  const chRow = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [alice.acct])).rows[0];
+  const row = await portraitRow(pool, chRow.id);
+  assert.equal(row.provenance, c.body.ward, 'the portrait row carries the fictional ward name (the same field the dossier discloses)');
+  const svg = portraitSvg(row);
+  assert.ok(svg.includes('circle cx="36" cy="79"'), 'the boutonnière renders on the lapel');
+  const traits = portraitTraits(row);
+  const gp = traits.find((t) => t.trait_type === 'genesis_provenance');
+  assert.ok(gp && gp.value === c.body.ward, 'metadata carries genesis_provenance — the §9-required field, the fictional name');
+
+  // ONCE PER WALLET, EVER (§9.3): the same wallet on ANOTHER account cannot re-stamp
+  const again = await call('POST', '/v1/provenance', { token: alice.token });
+  assert.equal(again.body.error, 'already', 'a birth certificate is issued once');
+  const eve = await mk('Drop Eve');
+  // the wallet moves on (SIWE uniqueness means alice must unlink before eve can hold it) —
+  // the latch rides the WALLET row in drop_allocations, so the new holder still gets nothing
+  await pool.query('UPDATE account_persistent SET wallet_address=NULL WHERE account_id=$1', [alice.acct]);
+  await pool.query('UPDATE account_persistent SET wallet_address=$2 WHERE account_id=$1', [eve.acct, W1]);
+  const steal = await call('POST', '/v1/provenance', { token: eve.token });
+  assert.equal(steal.body.error, 'already', 'the consumption unit is the WALLET — a second account re-linking it gets nothing');
+
+  // DISPLAY-ONLY (§9.4): the whole colors flow moved no value
+  assert.equal(await txnCount(), tx0, 'claiming colors writes ZERO ledger rows — display-only forever');
 }
 
 // the drop check FAILS BY NAME when a credit has no claimed row behind it (the §10.4 tripwire)

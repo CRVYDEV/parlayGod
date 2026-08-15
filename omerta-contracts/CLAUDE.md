@@ -69,12 +69,12 @@ Solidity suite for OMERTÀ on Robinhood Chain. Rules for future sessions:
    design), or add an OWNER mint path to OMR — these are audit-surface decisions for humans. The bond mint is the one
    sanctioned exception and it goes through `minter`, never through `onlyOwner`.
 6. OMR carries a founder-directed DEX SELL TAX: flat, owner-armed, applies ONLY to transfers into
-   registered `ammPairs`, default 0, split **three ways in-transfer — dev / rwa / lp** (founder revenue,
-   the treasury — historically the stock float, retired 2026-07-31 — and liquidity depth), which must
+   registered `ammPairs`, default 0, split **four ways in-transfer — dev / rwa / community / lp** (founder revenue,
+   the treasury — historically the stock float, retired 2026-07-31 — the family buyback (the community-buyback keeper wallet, a SEPARATE key: the custody rule), and liquidity depth), which must
    stay in lockstep with the backend's `SELL_TAX`
    constants (`src/rules.tail.js`) so the two layers can never disagree about where the money went. The
-   remainder rule sits on the LP slice so the three shares sum to the tax EXACTLY — do not "naturalise"
-   it into three independent bps divisions or a wei goes unowned. Do NOT raise `MAX_SELL_TAX_BPS` (10%
+   remainder rule sits on the LP slice so the four shares sum to the tax EXACTLY — do not "naturalise"
+   it into independent bps divisions or a wei goes unowned. Do NOT raise `MAX_SELL_TAX_BPS` (10%
    hard cap — the anti-rug/anti-honeypot wall), tax buys or wallet transfers, or remove the exempt list
    (protocol flows must move 1:1). Canonical liquidity must be Uniswap V2-COMPATIBLE (V3 rejects
    fee-on-transfer tokens) — a deploy-time requirement in CHAIN-DEPLOY.md, and one that DIES if the
@@ -95,12 +95,12 @@ Solidity suite for OMERTÀ on Robinhood Chain. Rules for future sessions:
      gate trusts. The gate (one side OMR, the other a Safe-approved quote) is what makes every event
      this contract emits mean something.
    - **The fee ACCRUES and `sweep` pushes it, deliberately** — do NOT "simplify" it into an in-tx
-     forward like `OmertaFees`. That precedent is right for a tollbooth and wrong here: three pushes
+     forward like `OmertaFees`. That precedent is right for a tollbooth and wrong here: four pushes
      inside a swap means one reverting recipient BRICKS THE POOL. Pool liveness must not depend on a
      wallet's behaviour. `sweep` is permissionless on purpose (a stalled Safe must not strand fees)
      and can only ever pay the Safe-set recipients.
    - **There is no pause, and there must not be.** A hook that can revert `beforeSwap` can halt a
-     public market. The off switch is `setSellTax(0,0,0)` — the fee stops, the pool keeps trading.
+     public market. The off switch is `setSellTax(0,0,0,0)` — the fee stops, the pool keeps trading.
    - The unused `beforeSwap` / fee-override slot and the `observer` seam are NOT dead code: with an
      immutable permission set and immutable logic, a callback the roadmap needs later cannot be added
      later. Removing either means the hook-native oracle (design step 3) needs a NEW HOOK and a full
