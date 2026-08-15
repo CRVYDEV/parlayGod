@@ -12,7 +12,8 @@
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { BROKERS, ACTIVITY, MASTERY, brokerWeight, activityScore, activityQualifies, dayOf } from '../src/rules.js';
-import { allocateEpoch, epochBoard, gainsFor } from '../src/brokers.js';
+import { allocateEpoch, epochBoard, gainsFor, distributeBuy } from '../src/brokers.js';
+import { recordStockBuy, runTreasuryInvariants } from '../src/treasury.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -161,8 +162,113 @@ const inv = await runLedgerInvariants(pool, { alert: false });
 const vocab = inv.checks.find((c) => /vocabulary/i.test(c.name));
 assert(vocab.ok, `brokers:activate must be a recognised reason: ${JSON.stringify(vocab)}`);
 
+// ═══ THE DISTRIBUTION (2026-08-15) — buy units × epoch weights → stock_allocations, exactly once ═══
+// The link the chain was missing: activation burns, the allocator publishes, the keeper buys, the
+// delivery rail consumes stock_allocations — and nothing wrote that table from the weights side.
+{
+  // A SECOND qualified holder, so pro-rata is distinguishable from an equal split (a one-holder
+  // fixture would pass under `share = U / holders` and the exact-math assertion would be vacuous).
+  const vera = await mk('Vera Calzone');
+  await pool.query(`UPDATE account_persistent SET omr=6000 WHERE account_id='${vera.aid}'`);
+  let vr = await call('POST', '/v1/brokers/activate', { token: vera.token, body: { tier: 1 } });
+  assert.equal(vr.code, 200, JSON.stringify(vr.body));
+  await pool.query(
+    `INSERT INTO activity_log (account_id, day, tag, n) VALUES
+     ('${vera.aid}', ${today}, 'crime', 50),
+     ('${vera.aid}', ${today}, 'jump', 5),
+     ('${vera.aid}', ${today}, 'heist', 1)`);
+
+  // Publish the epoch the buys will freeze against (a distinct window from the first epoch), then
+  // pin BOTH epochs' computed_at explicitly — pg-mem's now() can tie within a millisecond, and the
+  // frozen-selection is an ORDER BY over exactly these timestamps, so a tie must not decide a test.
+  // ep (the first epoch) goes EARLIER than ep2, so ep2 is the latest frozen epoch for the buys below.
+  const ep2 = await allocateEpoch(pool, { endDay: today, days: 2 });
+  assert.equal(ep2.holders, 2, 'both players qualify for the distribution epoch');
+  await pool.query('UPDATE broker_epochs SET computed_at=$2 WHERE id=$1',
+    [ep.epochId, new Date(Date.now() - 7200e3)]);
+  await pool.query('UPDATE broker_epochs SET computed_at=$2 WHERE id=$1',
+    [ep2.epochId, new Date(Date.now() - 3600e3)]);
+  const w2 = (await pool.query(
+    `SELECT account_id, weight FROM broker_weights WHERE epoch_id='${ep2.epochId}'`)).rows;
+  const wSal = Number(w2.find((r) => r.account_id === sal.aid).weight);
+  const wVera = Number(w2.find((r) => r.account_id === vera.aid).weight);
+  assert(wSal !== wVera, 'precondition: the two weights DIFFER, so pro-rata != equal split');
+  const total = wSal + wVera;
+
+  // §10.4 baseline BEFORE any distribution: everything below is ownership bookkeeping and must
+  // write ZERO transactions rows (recordStockBuy is out-of-band real value — zero rows too).
+  const txn0 = Number((await pool.query('SELECT COUNT(*) c FROM transactions')).rows[0].c);
+
+  // A REAL buy on a fresh ticker (bootstrap — the first fill has no print to be continuous with).
+  await recordStockBuy(pool, { ref: 'dbuy1', ticker: 'NVDA', units: 100, ethSpent: 1,
+    txHash: '0xdist1', bootstrap: true });
+
+  const floor6 = (n) => Math.floor(n * 1e6) / 1e6;
+  const d = await distributeBuy(pool, { ref: 'dbuy1' });
+  assert.equal(d.epochId, ep2.epochId, 'the buy lands on the frozen epoch');
+  assert.equal(d.holders, 2, 'both weighted holders got a line');
+  const expSal = floor6(100 * wSal / total);
+  const expVera = floor6(100 * wVera / total);
+  const arow = async (aid) => Number((await pool.query(
+    `SELECT units FROM stock_allocations WHERE epoch_id='${ep2.epochId}' AND account_id='${aid}' AND ticker='NVDA'`)).rows[0]?.units || 0);
+  assert.equal(await arow(sal.aid), expSal, 'Sal took EXACTLY units × his weight share, floored at 6dp');
+  assert.equal(await arow(vera.aid), expVera, 'Vera took exactly hers — pro-rata, not an equal split');
+  assert(d.allocated <= 100 + 1e-9, 'the split can never sum past the buy');
+  assert.equal(d.unallocated, Math.round((100 - expSal - expVera) * 1e6) / 1e6,
+    'the flooring remainder stays unallocated in held, never rounded up into a line');
+
+  // ── exactly once: the latch ──
+  await assert.rejects(() => distributeBuy(pool, { ref: 'dbuy1' }),
+    (e) => e.code === 'already' || /already/.test(String(e.message)),
+    'a second distribution of the same buy is refused');
+  assert.equal(await arow(sal.aid), expSal, 'and the refusal allocated NOTHING more');
+
+  // ── a comp cannot distribute — it booked zero units, and it refuses BY NAME ──
+  await recordStockBuy(pool, { ref: 'dcomp', ticker: 'NVDA', units: 5, ethSpent: 0.05 });
+  await assert.rejects(() => distributeBuy(pool, { ref: 'dcomp' }),
+    (e) => e.code === 'not_real', 'a comp refuses by name');
+
+  // ── THE FROZEN-WEIGHTS RULE: an epoch published AFTER the buy can never receive it ──
+  // (The allocator reads LIVE activations at publish time, so a post-buy epoch could include
+  // someone who saw the buy land and activated to catch it — the windfall §8 forbids.)
+  await recordStockBuy(pool, { ref: 'dbuy2', ticker: 'NVDA', units: 50, ethSpent: 0.5,
+    txHash: '0xdist2' });
+  const ep3 = await allocateEpoch(pool, { endDay: today, days: 3 });
+  await pool.query('UPDATE broker_epochs SET computed_at=$2 WHERE id=$1',
+    [ep3.epochId, new Date(Date.now() + 3600e3)]);
+  const d2 = await distributeBuy(pool, { ref: 'dbuy2' });
+  assert.equal(d2.epochId, ep2.epochId,
+    'the buy distributes to the LATEST epoch published BEFORE it — never one published after');
+
+  // ── the silent-epoch rule: a buy predating every epoch consumes its latch with zero ──
+  await recordStockBuy(pool, { ref: 'dbuy0', ticker: 'NVDA', units: 10, ethSpent: 0.1,
+    txHash: '0xdist0' });
+  await pool.query('UPDATE stock_buys SET created_at=$2 WHERE ref=$1',
+    ['dbuy0', new Date(Date.now() - 60 * 86400e3)]);
+  const d0 = await distributeBuy(pool, { ref: 'dbuy0' });
+  assert.equal(d0.allocated, 0, 'no frozen epoch → zero allocations');
+  assert.equal(d0.reason, 'no_frozen_epoch', 'and it says why');
+  await assert.rejects(() => distributeBuy(pool, { ref: 'dbuy0' }),
+    (e) => e.code === 'already' || /already/.test(String(e.message)),
+    'the latch is CONSUMED — those units stay unallocated forever, never a retroactive jackpot');
+
+  // ── §10.4: distribution is ownership bookkeeping — zero transactions rows across ALL of it ──
+  assert.equal(Number((await pool.query('SELECT COUNT(*) c FROM transactions')).rows[0].c), txn0,
+    'buys + three distributions + two refusals wrote not one ledger row');
+  const inv2 = await runLedgerInvariants(pool, { alert: false });
+  assert(inv2.checks.find((c) => /vocabulary/i.test(c.name)).ok, 'the vocabulary stays closed');
+
+  // ── and the nightly wall still holds with the distribution's rows in it ──
+  const tinv = await runTreasuryInvariants(pool);
+  const nvda = tinv.checks.find((c) => c.name === 'allocated <= held (NVDA, units)');
+  assert(nvda && nvda.ok, `allocated <= held holds after distribution: ${JSON.stringify(nvda)}`);
+}
+
 await app.close();
 console.log('✅ brokers test passed — the weight is tier x play, activation alone buys NOTHING (the '
   + 'wealth-weighted case this design deliberately does not pay), the burn recycles to the desk, the '
-  + 'allocator publishes and delivers nothing, and the recorder logs COUNTS so no progression '
-  + 'multiplier can ever reach the distribution key.');
+  + 'allocator publishes and delivers nothing, the recorder logs COUNTS so no progression multiplier '
+  + 'can ever reach the distribution key, and THE DISTRIBUTION splits a real buy pro-rata over the '
+  + 'FROZEN epoch exactly once (a post-buy epoch can never receive it, a comp refuses by name, a '
+  + 'buy with no frozen epoch consumes its latch with zero, and the whole thing writes not one '
+  + 'ledger row).');

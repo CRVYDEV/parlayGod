@@ -24,19 +24,17 @@
 // refuses. The DB half (the plan, the deed-required gate, the idempotent ingest, the invariant) is
 // fully exercised off-chain.
 //
-// DEFERRED, and flagged rather than hidden (launch-review items, the same class as the DynastyNFT
-// Transfer-watcher metadata freeze):
-//   • Secondary-ownership re-targeting. The backend delivers to the deed an account EXTRACTED
-//     (`extracted_by_account`); it does NOT run a Transfer watcher on the deed NFT, so if that deed is
-//     sold on-chain before its stock is delivered, a later allocation to the seller's account would
-//     land in the deed the buyer now owns. The delivery keeper should therefore run only where the
-//     extractor is still the on-chain holder (a Transfer watcher supplies that), OR delivery is
-//     triggered close enough to allocation that a sale in between is not the common case. Recorded.
-//   • The real keeper TX (build + sign + send `StockVault.deliver`) is the external/mainnet edge, the
-//     same shape as the DEX buyback bot — the mod route RECORDS a delivery (a real one carries a
-//     txHash from the Delivered watcher; a comp records `simulated` and flips no allocation).
+// The two former deferrals are CLOSED (2026-08-14):
+//   • Secondary-ownership exclusion — the StreetDeed Transfer watcher maintains `onchain_owner`, and
+//     a deed the extractor SOLD stops being their delivery target (deedTbaFor / the plan / the board
+//     all apply the same case-insensitive exclusion vs the SIWE wallet; NULL fails OPEN).
+//   • The real keeper TX — `runStockDeliveryKeeper` below stages + CLAIMS + sends
+//     `StockVault.deliver` (dormant unless CHAIN_RPC_URL + STOCK_VAULT_ADDRESS + STOCK_KEEPER_PK);
+//     the Delivered watcher is still the only thing that confirms/flips.
+// STILL open, flagged rather than hidden (brokers §3.4, launch-review):
 //   • Drain-before-sale: a deed's owner controls its TBA, so a seller can empty it before selling —
-//     inherent to gateless push into any tradeable NFT's TBA (brokers §3.4, launch-review).
+//     inherent to gateless push into any tradeable NFT's TBA; the StreetDeed listing lock forces the
+//     drain BEFORE the unlock, which is the most any on-chain rule can do.
 
 import { GameError } from './game.js';
 
@@ -214,10 +212,9 @@ export async function confirmStockDelivered(pool, { deliveryId, txHash } = {}) {
   finally { client.release(); }
 }
 
-// The mod/keeper driver for ONE delivery. `txHash` present ⇒ a REAL send already done (stage then
-// confirm in one call — the mainnet keeper, having sent, passes the hash). No txHash ⇒ a QA comp
-// (stages 'simulated', flips nothing). The real keeper's build+sign+send of StockVault.deliver is the
-// external/mainnet edge (the DEX-buyback-bot shape); this records the two-phase result.
+// The mod driver for ONE delivery. `txHash` present ⇒ a REAL send already done (stage then confirm
+// in one call — an operator who sent by hand passes the hash). No txHash ⇒ a QA comp (stages
+// 'simulated', flips nothing). The automated path is `runStockDeliveryKeeper` below.
 export async function deliverStock(pool, { epochId, accountId, ticker, units, txHash = null } = {}) {
   const staged = await stageStockDelivery(pool, { epochId, accountId, ticker, units, simulate: !txHash });
   if (txHash && staged.deliveryId) {
@@ -225,6 +222,102 @@ export async function deliverStock(pool, { epochId, accountId, ticker, units, tx
     return { ...staged, ...c };
   }
   return staged;
+}
+
+// ═══ THE DELIVERY KEEPER — the tx sender that drives StockVault.deliver (chain-dormant) ═══
+// The last leg the rail was missing: the plan existed, the Delivered watcher confirmed, and NOTHING
+// sent the transaction. The keeper walks the plan, STAGES each delivery (two-phase, above), CLAIMS it
+// (an atomic sent_at stamp — the push.js C1 claim-then-send discipline, so two overlapping workers
+// cannot both send; and even a lost race is bounded by the contract's usedDeliveryId, which makes the
+// second send a clean revert), and hands the send to `_sendDeliver`. It NEVER confirms — the
+// Delivered watcher is the only thing that flips an allocation, so a tx that never lands leaves a
+// claimed-pending row the resend window retries (sent_at older than RESEND_MS ⇒ eligible again).
+// Ticker → ERC-20 address comes from STOCK_TOKEN_ADDRESSES (JSON env, e.g. '{"AAPL":"0x…"}'); a
+// planned ticker with no address is SKIPPED BY NAME, never silently (the community-keeper no_budget
+// lesson — a stranded delivery must not read like an empty plan).
+const RESEND_MS = 10 * 60 * 1000;                        // a claimed-but-unconfirmed send retries after this
+
+let _sendDeliver = sendDeliverOnchain;                   // the test seam (the __setTbaResolver discipline)
+export function __setTxSender(fn) { _sendDeliver = fn || sendDeliverOnchain; }
+
+export function stockTokenAddresses() {
+  try {
+    const raw = JSON.parse(process.env.STOCK_TOKEN_ADDRESSES || '{}');
+    const map = {};
+    for (const [k, v] of Object.entries(raw || {})) map[String(k).toUpperCase()] = v;
+    return map;
+  } catch { return {}; }                                 // a malformed env reads as "no addresses" — every ticker skips by name
+}
+export const deliveryKeeperReady = () =>
+  !!(process.env.CHAIN_RPC_URL && process.env.STOCK_VAULT_ADDRESS && process.env.STOCK_KEEPER_PK);
+
+export async function runStockDeliveryKeeper(pool, opts = {}) {
+  const seamed = _sendDeliver !== sendDeliverOnchain;
+  if (!seamed && !deliveryKeeperReady()) return { dormant: true };
+  const tokens = opts.tokens || stockTokenAddresses();
+  const plan = await planStockDeliveries(pool);
+  const out = { dormant: false, sent: [], skipped: [] };
+  for (const p of plan) {
+    const token = tokens[p.ticker];
+    if (!token) { out.skipped.push({ ticker: p.ticker, accountId: p.accountId, why: 'no_token_address' }); continue; }
+    let staged;
+    try { staged = await stageStockDelivery(pool, p); }
+    catch (e) {
+      if (e?.code === 'no_target') { out.skipped.push({ ticker: p.ticker, accountId: p.accountId, why: 'no_target' }); continue; }
+      throw e;
+    }
+    const deliveryId = staged.deliveryId;
+    // CLAIM-then-send: only a 'pending' row whose last send attempt is outside the resend window may
+    // go out; a 'simulated' comp or an already-'delivered' row matches nothing and skips by name.
+    const cutoff = new Date(Date.now() - (opts.resendMs ?? RESEND_MS));
+    const claimed = await pool.query(
+      `UPDATE stock_deliveries SET sent_at=now()
+        WHERE delivery_id=$1 AND status='pending' AND (sent_at IS NULL OR sent_at < $2)
+        RETURNING tba, units, ticker`, [deliveryId, cutoff]);
+    if (!claimed.rowCount) {
+      out.skipped.push({ deliveryId, ticker: p.ticker, why: staged.status === 'simulated' ? 'simulated' : 'in_flight_or_done' });
+      continue;
+    }
+    try {
+      const txHash = await _sendDeliver({
+        deliveryId, token, to: claimed.rows[0].tba,
+        units: round6(num(claimed.rows[0].units)), ticker: p.ticker,
+      });
+      out.sent.push({ deliveryId, ticker: p.ticker, accountId: p.accountId, units: p.units, txHash: txHash || null });
+    } catch (e) {
+      // a FAILED send releases the claim so the next tick retries immediately (safe: a racing double
+      // send is a clean on-chain revert via usedDeliveryId); the skip is named, never silent.
+      await pool.query("UPDATE stock_deliveries SET sent_at=NULL WHERE delivery_id=$1 AND status='pending'", [deliveryId]);
+      out.skipped.push({ deliveryId, ticker: p.ticker, why: 'send_failed', error: e?.message });
+    }
+  }
+  return out;
+}
+
+// The real send: build + sign + submit StockVault.deliver from the keeper key. The Safe set this key
+// as the vault's `keeper`; a leaked key is bounded by the vault's own walls (per-token daily cap,
+// pause, setKeeper rotation, pre-held-only transfers). Wrong-chain guarded like every other sender.
+async function sendDeliverOnchain({ deliveryId, token, to, units }) {
+  const rpc = process.env.CHAIN_RPC_URL;
+  const vault = process.env.STOCK_VAULT_ADDRESS;
+  const pk = process.env.STOCK_KEEPER_PK;
+  if (!rpc || !vault || !pk) throw new Error('delivery keeper unconfigured');
+  const { createWalletClient, createPublicClient, http, parseUnits, getAddress } = await import('viem');
+  const { privateKeyToAccount } = await import('viem/accounts');
+  const pub = createPublicClient({ transport: http(rpc) });
+  const chainId = Number(process.env.CHAIN_ID || 0);
+  if (chainId && chainId !== Number(await pub.getChainId()))
+    throw new Error('delivery keeper: RPC chain does not match CHAIN_ID — refusing to send');
+  const decimals = Number(process.env.STOCK_TOKEN_DECIMALS || 18);
+  const chain = { id: chainId || Number(await pub.getChainId()), name: 'omerta-chain',
+    nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+    rpcUrls: { default: { http: [rpc] } } };
+  const wallet = createWalletClient({ account: privateKeyToAccount(pk), chain, transport: http(rpc) });
+  const abi = [{ type: 'function', name: 'deliver', stateMutability: 'nonpayable',
+    inputs: [{ name: 'deliveryId', type: 'uint256' }, { name: 'token', type: 'address' },
+      { name: 'to', type: 'address' }, { name: 'units', type: 'uint256' }], outputs: [] }];
+  return wallet.writeContract({ address: getAddress(vault), abi, functionName: 'deliver',
+    args: [BigInt(deliveryId), getAddress(token), getAddress(to), parseUnits(String(units), decimals)] });
 }
 
 // The ops board: owed vs delivered per ticker, and how many accounts are waiting on a deed. Read-only.

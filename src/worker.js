@@ -55,7 +55,8 @@ import { sweepTournaments, sweepTrackEntries, sweepFuturity } from './casino.js'
 import { sweepRingTables } from './ring.js';
 import { sweepGrandPrix } from './races.js';
 import { sweepStakes } from './stable.js';
-import { syncFeeEvents, syncClaimedEvents, syncBondEvents, syncHarvestFees, syncRedeemedEvents, syncDeedExtractedEvents, syncDeedRedeemedEvents, syncDeedTransferEvents, syncStockDeliveredEvents, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
+import { syncFeeEvents, syncClaimedEvents, syncBondEvents, syncHarvestFees, syncRedeemedEvents, syncDeedExtractedEvents, syncDeedRedeemedEvents, syncDeedTransferEvents, syncStockDeliveredEvents, syncStorePaidEvents, syncDynastyMintEvents, syncDynastyTransferEvents, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
+import { runStockDeliveryKeeper, deliveryKeeperReady } from './stockdeliver.js';
 
 const BUYBACK_PERIOD_MS = 12 * 3600 * 1000;
 
@@ -633,6 +634,11 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
           if (process.env.OMERTA_FEES_ADDRESS) {
             const f = await syncFeeEvents(pool, source, { startBlock });
             if (f.processed) console.log(`💰 fee sync: credited ${f.processed} payment(s) (blocks ${f.from}–${f.to})`);
+            // THE ON-CHAIN STORE (PackagePaid → recordStorePurchase): the paywall leg finally
+            // delivers — same contract, its own cursor. A retired/unknown sku HOLDS the cursor by
+            // design (real money for a package we no longer sell → a human looks).
+            const sp = await syncStorePaidEvents(pool, source, { startBlock });
+            if (sp.processed) console.log(`🛒 store sync: recorded ${sp.processed} package payment(s) (blocks ${sp.from}–${sp.to})`);
           }
           if (process.env.VOUCHER_CLAIM_ADDRESS) {
             const c = await syncClaimedEvents(pool, source, { startBlock });
@@ -671,6 +677,23 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
           if (process.env.STOCK_VAULT_ADDRESS) {
             const sd = await syncStockDeliveredEvents(pool, source, { startBlock });
             if (sd.processed) console.log(`📈 stock delivery: confirmed ${sd.processed} delivery(ies) into deed TBAs (blocks ${sd.from}–${sd.to})`);
+            // THE DELIVERY KEEPER — the tx sender the rail was missing: stage + claim + send
+            // StockVault.deliver for every planned allocation; the Delivered sync above confirms on a
+            // later tick. Needs the keeper key too (STOCK_KEEPER_PK) — sync-only deploys stay read-only.
+            if (deliveryKeeperReady()) {
+              const dk = await runStockDeliveryKeeper(pool);
+              if (dk.sent?.length) console.log(`📦 delivery keeper: sent ${dk.sent.length} StockVault.deliver tx(s)`);
+              for (const s of dk.skipped || []) if (s.why === 'no_token_address' || s.why === 'send_failed')
+                console.error(`📦 delivery keeper: skipped ${s.ticker || s.deliveryId} — ${s.why}${s.error ? ` (${s.error})` : ''}`);
+            }
+          }
+          // THE DYNASTY TOKEN REGISTRY (DynastyNFT Minted + Transfer → the portrait freeze). Dormant
+          // unless DYNASTY_NFT_ADDRESS is set.
+          if (process.env.DYNASTY_NFT_ADDRESS) {
+            const dm = await syncDynastyMintEvents(pool, source, { startBlock });
+            if (dm.processed) console.log(`👤 dynasty sync: ${dm.processed} identity mint(s) recorded (blocks ${dm.from}–${dm.to})`);
+            const dtx = await syncDynastyTransferEvents(pool, source, { startBlock });
+            if (dtx.processed) console.log(`👤 dynasty sync: ${dtx.processed} transfer(s) — portraits freeze at first sale (blocks ${dtx.from}–${dtx.to})`);
           }
         } catch (e) { console.error('chain sync error', e.message); }
       };

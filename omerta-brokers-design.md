@@ -102,6 +102,30 @@ weight(nft) = activationMult(tier) × activityScore(owner, epoch)
    holdings — the anti-fabrication gate that already guards the Vig, the Store, bonds and the desk.
    Fabricated backing is invisible to precisely the check that is supposed to catch it.
 
+### 3.2b DECIDED (founder, 2026-08-15) — play-weighted distribution stands; burn-to-redeem is REJECTED
+
+The founder asked whether a simpler **burn-to-redeem** counter (burn X $OMR → X-worth of stock at an
+oracle price) would beat the built play-weighted distribution, and chose to **keep the distribution**
+after the trade was laid out. Recorded here so the fork is not re-litigated — this is the THIRD time
+the same underlying call has been made (the stock-layer retirement rejected stock-denominated claims;
+the 2026-08-10 brokers directive chose play-weighted rewards; this confirms both against the sharper
+alternative). The four costs of burn-to-redeem, for the record: **(1)** a quoted price + consideration
++ a specific security delivered on demand is the shape of operating a DEALER — the sharp form of the
+launch-checklist row the activation leg already carries in soft form, and a redemption counter anyone
+holding $OMR can draw on surrenders the delivery control the issuer restriction requires; **(2)** it
+puts an ORACLE on the player path — every lag is a free option against the treasury (the retired RWA
+float's #1 flagged economics item), and it breaks the same-asset-both-sides wall that made the ETH
+vault safe (owing stock priced through two markets while holding it through one), where the built
+distribution has NO price on the player side at all and is structurally immune to price manipulation;
+**(3)** a redemption board publishes a value-per-$OMR figure, which the standing copy rule forbids and
+which changes what the TOKEN is, not just the stock rail; **(4)** it is a shop, not a loop — one-shot
+wealth-shaped demand, where activation is recurring and gated on PLAY (an activated idler earns
+nothing, the design's own anti-yield-product assertion). The legibility burn-to-redeem would have
+bought is answered elsewhere: **the ETH vault IS the burn-to-redeem rail**, live today, in the one
+asset where same-asset-both-sides holds — the two rails coexist and serve different roles. The
+residual cost of the distribution (it is harder to explain than a redemption counter) is a
+client/copy problem, not a mechanism problem.
+
 ### 3.3 DECIDED — stock lands in the bound account, and there is no claim gate
 
 **Founder decision, 2026-08-10, taken after the alternatives and their costs were put in front of
@@ -252,12 +276,23 @@ The founder's funding decision keeps every existing wall intact, and that is wor
    D11). The suite now asserts it is gone, so the frame cannot be re-sourced back to a dead symbol.
 7. Delivery. **Last**, and only after 1.
 
-Steps 2–5 are done, and step 6's off-chain half with them. What remains is step 6's CONTRACT (gated
-on that open row and on assembling the audit batch) and delivery (step 7) — and step 7 is the one
-gated on the launch checklist, which is why the order was arranged this way: everything above it moves real ETH
-into real holdings without a single share changing hands or being promised to anybody. The portrait
-is the clearest case for that ordering: it is the whole player-visible half of the flagship asset,
-and it shipped without touching a gate.
+Steps 2–5 are done, and step 6's off-chain half with them. **THE DISTRIBUTION landed 2026-08-15**
+(`brokers.js:distributeBuy`, `POST /v1/mod/treasury/distribute`) — the link steps 4 and 5 left
+implicit: a REAL buy's units split pro-rata over an epoch's published weights into
+`stock_allocations`, exactly once (a `distributed` latch on the buy row), every share written
+through the audited `allocateStock` clamp. Two rules are load-bearing: **the frozen-weights rule**
+(a buy distributes only to the latest epoch published BEFORE it — the allocator reads LIVE
+activations at publish time, so a post-buy epoch could include someone who activated after seeing
+the buy land, the retroactive windfall §8's no-roll-forward rule forbids; ops order is publish →
+buy → distribute) and **the silent-epoch rule** (a buy with no frozen epoch, or a weightless one,
+CONSUMES its latch with zero allocations — the units sit unallocated in held forever, never
+tomorrow's jackpot). Dormant by construction pre-mainnet: only a real buy's units exist to split,
+and comps book zero. What remains is step 6's CONTRACT half of the on-chain batch — **now written**
+(`DynastyNFT.sol`, 2026-08-14, in the audit batch) — and delivery (step 7), whose backend
+(`src/stockdeliver.js`: plan/stage/keeper/watcher) is also built and chain-dormant; the chain from
+activation burn to a share landing in a Street Deed's TBA is code-complete end to end, gated only
+on the audit + the launch review. The portrait is the clearest case for that ordering: it is the
+whole player-visible half of the flagship asset, and it shipped without touching a gate.
 
 ### 5.1 What step 2 actually built, and the one thing it found
 

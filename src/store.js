@@ -11,7 +11,7 @@
 // character). The chain layer (a StorePaid watcher) is DORMANT — until it ships, the mod comp route
 // and the test drive recordStorePurchase directly (the test/chain.js fee precedent).
 import crypto from 'node:crypto';
-import { getAddress } from 'viem';
+import { getAddress, keccak256, toBytes } from 'viem';
 import { GameError, notify } from './game.js';
 import { recordCommunityRevenue } from './community.js';
 import { STORE, PASS, PATRON, COMMUNITY, packageOf, RETIRED_PACKAGES, passActive, patronTierOf, patronTierName, passPrestigeOf } from './rules.js';
@@ -132,6 +132,24 @@ export async function claimPendingWire(client, accountId, characterId) {
   await client.query('UPDATE characters SET wire_until=$2 WHERE id=$1', [characterId, until]);
   await client.query('UPDATE account_persistent SET wire_pending_days=0 WHERE account_id=$1', [accountId]);
   return days;
+}
+
+// ── the on-chain sku id convention (the StreetDeed tokenId precedent) ──
+// OmertaFees.payForPackage takes a uint256 sku; the backend's skus are STRINGS. The numeric id is
+// uint256(keccak256(bytes(skuString))) — deterministic, so there is NO registry to keep in lockstep:
+// the Safe prices `skuChainId('revive_3')` and the watcher reverses it through this map. The map
+// covers LIVE + RETIRED skus (a retired sku must resolve so the ingest can refuse it BY NAME with
+// the cursor held — "unknown package" would be a lie about a package somebody paid for). An id that
+// resolves to nothing is genuinely unknown → the ingest's bad_sku throw, same cursor-held posture.
+export const skuChainId = (sku) => BigInt(keccak256(toBytes(String(sku)))).toString();
+let SKU_BY_CHAIN_ID = null; // lazy: STORE.PACKAGES is a const, so the map never goes stale
+export function skuFromChainId(id) {
+  if (!SKU_BY_CHAIN_ID) {
+    SKU_BY_CHAIN_ID = new Map();
+    for (const s of [...STORE.PACKAGES.map((p) => p.sku), ...Object.keys(RETIRED_PACKAGES)])
+      SKU_BY_CHAIN_ID.set(skuChainId(s), s);
+  }
+  return SKU_BY_CHAIN_ID.get(String(id)) || null;
 }
 
 // ── ingestion: record one on-chain Store purchase (the recordFeePayment twin) ──

@@ -296,3 +296,29 @@ export async function portraitRow(pool, characterId) {
     generation: (Number(row.deaths) || 0) + 1,
   };
 }
+
+// ── the TOKEN-keyed identity resolver (the DynastyNFT rail, 2026-08-14) ──
+// The contract's baseUri is `/v1/identity/` + a SEQUENTIAL tokenId; the off-chain phase-1 routes key
+// on characterId (a UUID). One resolver disambiguates: an all-digits param is a token lookup through
+// dynasty_tokens, anything else is the phase-1 character path. THE FREEZE RULE lives here: a frozen
+// token serves its SNAPSHOT row (the facts as they stood at first transfer — a sold portrait is a
+// photograph), an unfrozen one serves the minting account's LIVE bloodline (latest character, living
+// preferred). Returns { row, frozen, token } — row null when nothing resolves (the routes fall back
+// to the blank plate / 404 exactly as before).
+export async function identityRowFor(pool, param) {
+  const p = String(param || '').slice(0, 64);
+  if (!/^[0-9]+$/.test(p)) return { row: await portraitRow(pool, p), frozen: false, token: null };
+  const t = (await pool.query('SELECT * FROM dynasty_tokens WHERE token_id=$1', [p])).rows[0];
+  if (!t) return { row: null, frozen: false, token: null };
+  if (t.frozen) {
+    // a frozen token with a NULL snapshot (minter never linked / no character at freeze time) has no
+    // facts to show — the blank plate, never the seller's live state
+    const snap = typeof t.snapshot === 'string' ? JSON.parse(t.snapshot) : t.snapshot;
+    return { row: snap || null, frozen: true, token: t };
+  }
+  if (!t.account_id) return { row: null, frozen: false, token: t }; // unlinked minter — nothing to render yet
+  const ch = (await pool.query(
+    'SELECT id FROM characters WHERE account_id=$1 ORDER BY alive DESC, created_at DESC LIMIT 1',
+    [t.account_id])).rows[0];
+  return { row: ch ? await portraitRow(pool, ch.id) : null, frozen: false, token: t };
+}

@@ -14,6 +14,7 @@ import { GameError, ledger } from './game.js';
 import { reconcileFees } from './fees.js';
 import { reconcileStore } from './store.js';
 import { reconcileBonds } from './bonds.js';
+import { portraitRow } from './portrait.js'; // the freeze snapshot (portrait.js is a leaf — no cycle)
 
 const uid = () => crypto.randomUUID();
 const round6 = (x) => Math.round(Number(x) * 1e6) / 1e6;
@@ -803,6 +804,103 @@ export async function recordDeedTransfer(pool, { tokenId, to, from }) {
     }
     await client.query('COMMIT');
     return { changed: !!row };
+  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  finally { client.release(); }
+}
+
+// ═══ THE DYNASTY TOKEN REGISTRY — the DynastyNFT's backend half (Minted + Transfer) ═══
+// The identity NFT gates NOTHING (the entitlement wall), so this registry exists for exactly one
+// product rule: the portrait is DYNAMIC while the minting wallet holds the token and FREEZES at the
+// first owner→owner transfer — a sold living portrait would re-render on the SELLER's later play (a
+// post-sale rat degrading the buyer's asset), so a sold portrait is a PHOTOGRAPH
+// (omerta-identity-nft-design.md, the 2026-08-10 correction both audit lenses converged on).
+// The snapshot stores the portrait ROW (the render INPUT, portraitRow's shape) rather than rendered
+// SVG, so a compositor improvement still applies to frozen plates while the FACTS stay frozen.
+// §10.4-NEUTRAL: a token row is status/ownership, never currency — zero `transactions` rows.
+
+// Record ONE Minted(nonce, minter, tokenId) — idempotent on the token_id PK (SELECT-then-INSERT
+// inside the txn, never ON CONFLICT DO NOTHING: pg-mem lies about the suppressed rowCount, the
+// recordReckoning lesson). The account resolves from the minter's SIWE wallet (the Store
+// pay-before-link pattern); an unlinked minter leaves account_id NULL — the token is a pure trophy
+// either way. A Transfer-created stub (see recordDynastyTransfer's ordering note) is UPDATEd with
+// the nonce rather than duplicated.
+export async function recordDynastyMint(pool, { nonce, tokenId, minter }) {
+  if (!tokenId || !minter) return { recorded: false };
+  const addr = String(minter).toLowerCase();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const cur = (await client.query('SELECT nonce FROM dynasty_tokens WHERE token_id=$1 FOR UPDATE', [String(tokenId)])).rows[0];
+    if (cur) { // a re-scan, or the Transfer stream got here first (the stub) — fill the nonce in, once
+      if (cur.nonce == null && nonce != null)
+        await client.query('UPDATE dynasty_tokens SET nonce=$2 WHERE token_id=$1', [String(tokenId), Number(nonce)]);
+      await client.query('COMMIT');
+      return { recorded: false, duplicate: true };
+    }
+    const acct = (await client.query(
+      'SELECT account_id FROM account_persistent WHERE lower(wallet_address)=lower($1)', [addr])).rows[0];
+    await client.query(
+      `INSERT INTO dynasty_tokens (token_id, nonce, minter_address, owner_address, account_id)
+       VALUES ($1,$2,$3,$3,$4)`,
+      [String(tokenId), nonce == null ? null : Number(nonce), addr, acct?.account_id || null]);
+    await client.query('COMMIT');
+    return { recorded: true, tokenId: String(tokenId), accountId: acct?.account_id || null };
+  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  finally { client.release(); }
+}
+
+// Record ONE ERC-721 Transfer on the DynastyNFT. A mint transfer (from 0x0) just confirms the first
+// owner; the FIRST owner→owner transfer FREEZES the portrait (snapshot = the account's latest
+// character's portrait row, captured in the same transaction). Replay-safe: a re-delivered event
+// finds the owner already recorded and the frozen flag already set, and changes nothing. ORDERING
+// NOTE: Minted and Transfer ride two cursor streams, so a sale can arrive before its mint was
+// processed — a missing row is created as a STUB from what the transfer knows (minter := from, the
+// closest owner on record) so the freeze is never lost; recordDynastyMint later fills the nonce.
+export async function recordDynastyTransfer(pool, { tokenId, from, to }) {
+  if (!tokenId || !to) return { changed: false };
+  const owner = String(to).toLowerCase();
+  const ZERO = '0x0000000000000000000000000000000000000000';
+  if (owner === ZERO) return { changed: false };          // a burn — DynastyNFT has none today; future-proof skip
+  const isMint = !from || String(from).toLowerCase() === ZERO;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    let row = (await client.query(
+      'SELECT token_id, owner_address, account_id, frozen FROM dynasty_tokens WHERE token_id=$1 FOR UPDATE',
+      [String(tokenId)])).rows[0];
+    if (!row) {
+      const seedMinter = isMint ? owner : String(from).toLowerCase();
+      const acct = (await client.query(
+        'SELECT account_id FROM account_persistent WHERE lower(wallet_address)=lower($1)', [seedMinter])).rows[0];
+      await client.query(
+        `INSERT INTO dynasty_tokens (token_id, minter_address, owner_address, account_id)
+         VALUES ($1,$2,$2,$3)`, [String(tokenId), seedMinter, acct?.account_id || null]);
+      row = { token_id: String(tokenId), owner_address: seedMinter, account_id: acct?.account_id || null, frozen: false };
+    }
+    let changed = false;
+    if (String(row.owner_address || '').toLowerCase() !== owner) {
+      await client.query('UPDATE dynasty_tokens SET owner_address=$2 WHERE token_id=$1', [String(tokenId), owner]);
+      changed = true;
+    }
+    // THE FREEZE — first owner→owner move, exactly once. The snapshot is the bloodline's CURRENT
+    // portrait row (latest character, living preferred), so the plate the buyer paid for is the
+    // plate they keep; if the account is unknown/characterless the facts to freeze don't exist and
+    // the row freezes with a NULL snapshot (the route falls back to the blank plate — honest, and
+    // strictly better than letting a stranger's asset keep tracking the seller).
+    if (!isMint && !row.frozen && changed) {
+      let snapshot = null;
+      if (row.account_id) {
+        const ch = (await client.query(
+          'SELECT id FROM characters WHERE account_id=$1 ORDER BY alive DESC, created_at DESC LIMIT 1',
+          [row.account_id])).rows[0];
+        if (ch) snapshot = await portraitRow(client, ch.id);
+      }
+      await client.query(
+        'UPDATE dynasty_tokens SET frozen=true, frozen_at=now(), snapshot=$2 WHERE token_id=$1',
+        [String(tokenId), snapshot ? JSON.stringify(snapshot) : null]);
+    }
+    await client.query('COMMIT');
+    return { changed, frozen: !isMint && !row.frozen && changed };
   } catch (e) { await client.query('ROLLBACK'); throw e; }
   finally { client.release(); }
 }

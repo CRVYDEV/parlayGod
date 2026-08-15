@@ -325,11 +325,15 @@ PHASE 1 for the exact calls/args.
       `royaltyRecipient` = the treasury Safe, `royaltyBps` = **500** (5%, EIP-2981). **THE WALL: the
       contract gates NOTHING on `balanceOf`** — the game entitlement (`account_persistent.minted`) stays
       account-bound OFF-CHAIN, so the token is a freely transferable trophy carrying no on-chain power.
-      **NO wiring needed** (it verifies its own voucher). Optional rate-cap: `setDailyMintCap(n)` — with no
-      supply cap this is the entire blast radius of a leaked signer key, so **set it** (0 = unlimited).
-      **Backend activation:** set **`DYNASTY_NFT_ADDRESS`** on the API (so the mint-voucher route signs —
-      needs `CHAIN_ID` + the shared `VOUCHER_SIGNER_PK`) and, when the metadata/portrait freeze-on-transfer
-      is wired, the WORKER's `Transfer` watcher. Dormant until set. §10.4-NEUTRAL (art/status only).
+      **NO wiring needed on the CONTRACT side** (it verifies its own voucher). Optional rate-cap:
+      `setDailyMintCap(n)` — with no supply cap this is the entire blast radius of a leaked signer key, so
+      **set it** (0 = unlimited). **Backend activation (BUILT 2026-08-15):** set **`DYNASTY_NFT_ADDRESS`**
+      on the **WORKER** — the `Minted` + `Transfer` watchers (cursors `dynasty_minted`/`dynasty_transfer`)
+      maintain the token registry (`dynasty_tokens`, minter resolved via the SIWE wallet) and **FREEZE the
+      portrait at the first owner→owner transfer** (the snapshot stores the portrait ROW, so a sold token
+      is a photograph of the bloodline as it stood — one-way; a buy-back does not unfreeze). The identity
+      metadata routes (`/v1/identity/:param`) take the all-digits tokenId form, so the deployed `baseUri`
+      contract holds. Dormant until set. §10.4-NEUTRAL (art/status only).
       *ERC-6551:* the canonical registry singleton (`0x000000006551c19487814612e58FE06813775758`) + the
       ecosystem reference **account implementation** are used UNMODIFIED — deploy config, not a fork. A
       player's token-bound account is `registry.account(accountImpl, salt, chainId, DynastyNFT, tokenId)`;
@@ -350,14 +354,22 @@ PHASE 1 for the exact calls/args.
       2026-08-14):** stock lands in the player's on-chain **Street Deed's** ERC-6551 TBA, not the Dynasty
       NFT's — so a player must own AND extract a Street Deed to receive stock (an account with none accrues
       its allocation as owed and waits). The identity NFT holds no stock, so its `balanceOf`-gates-nothing
-      entitlement wall is intact. **Backend activation:** set **`STOCK_VAULT_ADDRESS`** on the delivery
-      keeper AND API, and **`STREET_DEED_ADDRESS`** + the ERC-6551 env (`ERC6551_REGISTRY` /
+      entitlement wall is intact. **Backend activation:** set **`STOCK_VAULT_ADDRESS`** on the WORKER +
+      API, and **`STREET_DEED_ADDRESS`** + the ERC-6551 env (`ERC6551_REGISTRY` /
       `ERC6551_ACCOUNT_IMPL` / `ERC6551_SALT`, defaulting to the canonical registry singleton) so
       `src/stockdeliver.js` can resolve the deed's TBA; the worker runs the two watchers
-      (`Delivered` → `confirmStockDelivered`, the deed's `Extracted` → `markDeedExtracted`). Dormant until
-      wired. §10.4-NEUTRAL (out-of-band real value — zero `transactions` rows; the backend's
-      `allocateStock` clamp + the nightly `allocated ≤ held` AND `delivered ≤ allocated` checks in
-      `runTreasuryInvariants` are the owed-side half of the wall).
+      (`Delivered` → `confirmStockDelivered`, the deed's `Extracted` → `markDeedExtracted`). **The
+      delivery KEEPER is BUILT (2026-08-15):** `runStockDeliveryKeeper` (worker tick + `POST
+      /v1/mod/treasury/deliveries/run`) stages each owed allocation, CLAIMS it atomically
+      (claim-then-send — `sent_at` stamped before the tx, released on a failed send, `RESEND_MS` 10min
+      retry with the SAME deterministic `deliveryId` so the contract's `usedDeliveryId` bounds any lost
+      race to a clean revert), and sends the real `StockVault.deliver` tx; it NEVER confirms — only the
+      `Delivered` watcher flips `stock_allocations.delivered`. Arm it with **`STOCK_KEEPER_PK`** (a
+      SECRET — the on-chain `keeper` bot key) + **`STOCK_TOKEN_ADDRESSES`** (JSON ticker→ERC-20 map;
+      a ticker missing from it is a NAMED `no_token_address` skip, never a silent one) +
+      `STOCK_TOKEN_DECIMALS` (default 18). Dormant until wired. §10.4-NEUTRAL (out-of-band real value —
+      zero `transactions` rows; the backend's `allocateStock` clamp + the nightly `allocated ≤ held` AND
+      `delivered ≤ allocated` checks in `runTreasuryInvariants` are the owed-side half of the wall).
 
 ### 2b. THE BANK — the Denari (DNR) market (only when it ships; not part of the first cut)
 Order matters more here than anywhere else in this file, because **two of these steps fail SILENTLY**:
@@ -502,17 +514,23 @@ The backend keeps its own reserve records; they must track the on-chain balances
   TWAP source that replaces the manual `mod/vig/buyback` price).
 - **The on-chain Store** — `OmertaFees.payForPackage` is **BUILT** (2026-08-14, in the audit batch:
   fail-closed on an unpriced sku, exact-value, forwards dev/Vig, custodies nothing; `setPackagePrice(sku,
-  wei)` prices a package on-chain, `0` retires it). The remaining work is the BACKEND: a `PackagePaid`
-  watcher that credits the paying account its (non-§10.4) entitlement idempotently on `nonce`, mirroring
-  `recordFeePayment`. Until that ships the Store stays off-chain/mod-driven. **Deploy:** the Safe calls
-  `setPackagePrice` per live sku in lockstep with the backend `STORE.PACKAGES` prices.
+  wei)` prices a package on-chain, `0` retires it). **The BACKEND watcher is BUILT (2026-08-15):**
+  `syncStorePaidEvents` (worker, cursor `store`, dormant until `OMERTA_FEES_ADDRESS`) credits the paying
+  account through the audited `recordStorePurchase` (idempotent on `nonce`, pay-before-link reconciled).
+  The on-chain sku is **`uint256(keccak256(bytes(skuString)))`** (the StreetDeed tokenId convention — no
+  lockstep registry; `skuChainId(sku)` in store.js computes it, `skuFromChainId` reverses it over live +
+  RETIRED skus). A REAL payment for a retired/unknown sku **HOLDS THE CURSOR** (re-thrown, not
+  poison-skipped) so a human looks — money arrived for something we don't sell. **Deploy:** the Safe
+  calls `setPackagePrice(skuChainId(sku), wei)` per live sku in lockstep with the backend
+  `STORE.PACKAGES` prices, and sets `OMERTA_FEES_ADDRESS` on the worker.
 - **Liquidity bonds** (LP-token deposits) — launch-gated (§0.3).
 - **The tokenized-stock layer** — RETIRED 2026-07-31 (`omerta-stock-layer-retirement.md`) and
   **REINSTATED 2026-08-10** (`omerta-brokers-design.md`, founder decision). The treasury BUYS tokenized
   stock, `allocated ≤ held` (per ticker, in units) holds, and `StockVault` (now in the audit batch, §2c)
-  is the GATELESS delivery leg. Still owed on the BACKEND: the buy keeper (`runStockBuyback`), the
+  is the GATELESS delivery leg. The BACKEND is now COMPLETE: the buy keeper (`runStockBuyback`), the
   per-account allocation ledger (`allocateStock` + nightly `runTreasuryInvariants`), and the delivery
-  keeper that drives `StockVault.deliver`. The ETH VAULT is the same shape one asset over
+  keeper (`runStockDeliveryKeeper`, 2026-08-15 — §2c) that drives `StockVault.deliver` are all built
+  and chain-dormant. The ETH VAULT is the same shape one asset over
   (`omerta-stock-layer-retirement.md`) — allocation-only, same asset both sides.
 
 ## 7b. Standing duty — reconcile the treasury Safe against what the vault owes

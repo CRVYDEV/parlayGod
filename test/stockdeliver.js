@@ -180,5 +180,78 @@ assert.equal(await txCount(), tx0, 'the stock delivery rail writes ZERO transact
   assert.equal((await stockDeliveryBoard(pool)).waitingOnADeed, 1, 'bought back: the board returns to B alone');
 }
 
-console.log('✅ stock delivery rail: the deed-required gate, stage→confirm (real flips / comp never), idempotency, the delivered<=allocated wall, the board, and §10.4-neutrality');
+
+// ════════════ THE DELIVERY KEEPER — the tx sender the rail was missing ════════════
+// Stage + CLAIM + send, through the __setTxSender seam; the Delivered watcher (not the keeper)
+// confirms. Claim-then-send (the push.js C1 discipline) is the mutation target: without the atomic
+// sent_at claim, every keeper tick re-sends every pending delivery.
+{
+  const { runStockDeliveryKeeper, __setTxSender } = await import('../src/stockdeliver.js');
+  const txBefore = await txCount();
+  const sends = [];
+  __setTxSender(async (d) => { sends.push(d); return '0xkeeper' + sends.length; });
+
+  // a fresh owed allocation for A (deed bought back above, so A is a live target) + one for a ticker
+  // with NO configured token address (the named-skip path)
+  await q("INSERT INTO stock_allocations (epoch_id, account_id, ticker, units) VALUES ('e4','accA','AAPL',7)");
+  const tokens = { AAPL: '0x1111111111111111111111111111111111111111',
+    TSLA: '0x2222222222222222222222222222222222222222' }; // TSLA priced so the e2 comp row is REACHED (and skipped by name)
+
+  let run = await runStockDeliveryKeeper(pool, { tokens });
+  assert.equal(run.dormant, false, 'the seam arms the keeper (no env needed in the suite)');
+  assert.equal(run.sent.length, 1, 'exactly ONE send — the e4/AAPL allocation');
+  assert.equal(sends.length, 1, 'the seam saw the send');
+  assert.equal(sends[0].token, tokens.AAPL, 'the ticker resolved to its ERC-20 address');
+  assert.equal(sends[0].units, 7, 'the owed units rode the send');
+  assert.ok(sends[0].to && sends[0].to.startsWith('0x'), 'the deed TBA is the destination');
+  // the TSLA allocation (e2) has a SIMULATED comp row — the keeper must skip it BY NAME, and the
+  // ticker-with-no-address path must also be named, never silent (the no_budget lesson)
+  assert.ok(run.skipped.some((k) => k.why === 'simulated'), 'a comp-staged delivery is skipped by name');
+  const row = (await q("SELECT status, sent_at FROM stock_deliveries WHERE epoch_id='e4'")).rows[0];
+  assert.equal(row.status, 'pending', 'the keeper never confirms — the Delivered watcher owns that');
+  assert.ok(row.sent_at, 'the claim stamped sent_at');
+
+  // CLAIM-THEN-SEND: a second keeper tick inside the resend window must NOT re-send
+  run = await runStockDeliveryKeeper(pool, { tokens });
+  assert.equal(run.sent.length, 0, 'a second run does not re-send a claimed in-flight delivery');
+  assert.equal(sends.length, 1, 'the seam saw no second send');
+  assert.ok(run.skipped.some((k) => k.why === 'in_flight_or_done'), 'the in-flight skip is named');
+
+  // ...but a send the watcher never confirms RETRIES once the claim ages out of the resend window
+  run = await runStockDeliveryKeeper(pool, { tokens, resendMs: 0 });
+  assert.equal(sends.length, 2, 'an unconfirmed send retries after the resend window');
+  // the retry reused the SAME deliveryId — on-chain usedDeliveryId makes the duplicate a clean revert
+  assert.equal(sends[0].deliveryId, sends[1].deliveryId, 'the retry reuses the deterministic deliveryId');
+
+  // the watcher confirms → the keeper stops touching it for good
+  await confirmStockDelivered(pool, { deliveryId: sends[0].deliveryId, txHash: '0xkeeper-final' });
+  run = await runStockDeliveryKeeper(pool, { tokens, resendMs: 0 });
+  assert.equal(sends.length, 2, 'a confirmed delivery is never re-sent');
+
+  // a FAILED send releases the claim so the very next tick retries
+  await q("INSERT INTO stock_allocations (epoch_id, account_id, ticker, units) VALUES ('e5','accA','AAPL',3)");
+  __setTxSender(async () => { throw new Error('rpc down'); });
+  run = await runStockDeliveryKeeper(pool, { tokens });
+  assert.ok(run.skipped.some((k) => k.why === 'send_failed'), 'a failed send is named');
+  const failedRow = (await q("SELECT sent_at FROM stock_deliveries WHERE epoch_id='e5'")).rows[0];
+  assert.equal(failedRow.sent_at, null, 'the failed claim was RELEASED — the next tick retries immediately');
+  __setTxSender(async (d) => { sends.push(d); return '0xretry'; });
+  run = await runStockDeliveryKeeper(pool, { tokens });
+  assert.equal(run.sent.length, 1, 'the released delivery went out on the next tick');
+
+  // a planned ticker with NO token address skips BY NAME (never reads as an empty plan)
+  await q("INSERT INTO stock_allocations (epoch_id, account_id, ticker, units) VALUES ('e6','accA','TSLA',2)");
+  run = await runStockDeliveryKeeper(pool, { tokens: { AAPL: tokens.AAPL } }); // no TSLA address this run
+  assert.ok(run.skipped.some((k) => k.ticker === 'TSLA' && k.why === 'no_token_address'),
+    'a ticker with no configured address is skipped by NAME');
+
+  // DORMANT without the seam or the env — and the whole keeper wrote ZERO transactions rows
+  __setTxSender(null);
+  run = await runStockDeliveryKeeper(pool);
+  assert.equal(run.dormant, true, 'without the seam or env the keeper is dormant');
+  assert.equal(await txCount(), txBefore, 'the delivery keeper writes ZERO transactions rows (out-of-band)');
+  __setTxSender(null);
+}
+
+console.log('✅ stock delivery rail: the deed-required gate, stage→confirm (real flips / comp never), idempotency, the delivered<=allocated wall, the board, the secondary-market exclusion, THE DELIVERY KEEPER (claim-then-send, named skips, retry-on-release), and §10.4-neutrality');
 await pool.end?.();

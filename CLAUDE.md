@@ -12502,3 +12502,104 @@ SOLD deed stops being its extractor's delivery target"; the board's mirror filte
 counts A as waiting after the sale"; a replayed transfer double-writing → "a replayed transfer is a
 no-op"). Suite green + pgquery + pgcheck 43/43 on real Postgres; CHAIN-DEPLOY §2a + the batch row and
 the deeds design doc Phase-3 section carry the resolution.
+
+**THE LAST DORMANT RAILS — the PackagePaid watcher, the StockVault delivery keeper, and the DynastyNFT
+portrait freeze (founder-directed 2026-08-15: "Yes" to closing the three remaining chain-dormant
+backends) — BUILT** (`src/store.js` `skuChainId`/`skuFromChainId`, `src/watcher.js` three new syncs,
+`src/stockdeliver.js` `runStockDeliveryKeeper`, `src/chain.js` `recordDynastyMint`/`recordDynastyTransfer`,
+`src/portrait.js` `identityRowFor`, `dynasty_tokens` — the 228th table + `stock_deliveries.sent_at`
+(ALTER-added, the outage lesson); `test/watcher.js` + `test/stockdeliver.js`). After this drop **every
+on-chain contract has its complete backend** — mainnet go-live is the third-party audit + env vars, with
+no code left to write on the rails. **(1) THE PACKAGEPAID WATCHER** (`syncStorePaidEvents`, cursor
+`store`, dormant until `OMERTA_FEES_ADDRESS`): credits a real on-chain Store purchase through the audited
+`recordStorePurchase` (idempotent on nonce, pay-before-link reconciled). The on-chain sku is
+**`uint256(keccak256(bytes(skuString)))`** — the StreetDeed tokenId convention, so there is NO lockstep
+registry to drift (`skuChainId` computes it; `skuFromChainId` reverses it over live + RETIRED skus via a
+lazy Map). **A real payment for a retired/unknown sku HOLDS THE CURSOR** (re-thrown with a named code,
+never poison-skipped — the recordStorePurchase ingest decision): money arrived for something we don't
+sell, so a human looks; later payments queuing behind it is the accepted price. **(2) THE DELIVERY
+KEEPER** (`runStockDeliveryKeeper` — worker tick + `POST /v1/mod/treasury/deliveries/run`; dormant unless
+`CHAIN_RPC_URL` + `STOCK_VAULT_ADDRESS` + `STOCK_KEEPER_PK`): the real tx sender that drives
+`StockVault.deliver` into the Street Deed's TBA. **CLAIM-then-send** (the push-C1 discipline): `sent_at`
+stamped atomically BEFORE the tx (`WHERE status='pending' AND (sent_at IS NULL OR sent_at < cutoff)` —
+the cutoff computed in JS since pg-mem parses no interval arithmetic), released on a failed send,
+`RESEND_MS` (10min) retry reusing the SAME deterministic `deliveryId` so the contract's `usedDeliveryId`
+bounds any lost race to a clean revert. **The keeper NEVER confirms** — only the `Delivered` watcher
+flips `stock_allocations.delivered` (send and settle stay two authorities). Every skip is NAMED
+(`no_token_address`/`simulated`/`in_flight_or_done`/`send_failed`/`no_target` — the community-keeper
+no_budget lesson: silence reads as fine); `STOCK_TOKEN_ADDRESSES` is the ticker→ERC-20 JSON map,
+`STOCK_TOKEN_DECIMALS` defaults 18, the viem wallet client carries the wrong-chain guard. **(3) THE
+PORTRAIT FREEZE** (`syncDynastyMintEvents`/`syncDynastyTransferEvents`, cursors
+`dynasty_minted`/`dynasty_transfer`, dormant until `DYNASTY_NFT_ADDRESS`): the `dynasty_tokens` registry
+(minter resolved via the SIWE wallet — the Store pay-before-link pattern, no mint-request signer needed;
+an out-of-order Transfer-before-Minted creates a STUB row the mint later fills). **The identity-NFT
+design's freeze rule made real**: the portrait is DYNAMIC while the minting wallet holds the token and
+**FREEZES at the first owner→owner transfer** — the snapshot stores the portrait ROW (the render input),
+not rendered SVG, so compositor improvements still apply while the FACTS are a photograph of the
+bloodline as it stood; **one-way** (a buy-back tracks the owner but never unfreezes), and a mint/burn
+never freezes. `identityRowFor` disambiguates `/v1/identity/:param` by shape (all-digits = tokenId, else
+characterId), so the deployed `baseUri` contract holds untouched; a frozen token's metadata gets a
+day-long cache + the "photograph… the entitlement never travels with the token" description.
+**§10.4-NEUTRAL across all three** (entitlements/status/ownership — zero `transactions` rows,
+test-pinned). **The vacuity lesson paid again**: the keeper's 'simulated'-skip assertion was UNREACHABLE
+on its first cut (the fixture's TSLA had no token address, so `no_token_address` fired first and the
+assertion never tested what it claimed) — fixed in the FIXTURE; and the photograph assertion also
+asserts the LIVE rank genuinely moved (+2M respect, level 4→448) so the frozen-trait check cannot pass
+vacuously. **Three mutations, each caught at its own named assertion** (the freeze dropped → "the first
+owner→owner transfer froze the token"; the claim guard dropped → "a second run does not re-send a
+claimed in-flight delivery"; the retired-sku hold opened → the cursor-held assertion). `STOCK_KEEPER_PK`
+(secret) + `STOCK_TOKEN_ADDRESSES`/`_DECIMALS` + `DYNASTY_NFT_ADDRESS` classified in preflight;
+CHAIN-DEPLOY §2c + the on-chain Store bullet + §7's still-owed list all carry the resolution. Suite
+green + pgquery + pgcheck 43/43 on real Postgres.
+
+**THE DISTRIBUTION — the one missing link in the brokers chain (founder-directed 2026-08-15: "Yes"
+to building the activation model's remaining piece) — BUILT** (`src/brokers.js` `distributeBuy`,
+`POST /v1/mod/treasury/distribute`, `stock_buys.distributed` — ALTER-added, the outage lesson;
+`test/brokers.js` THE DISTRIBUTION block). The survey that preceded it corrected ITSELF twice — the
+GenesisOracle lesson in immediate replay: "the activation burn" I had described to the founder was
+the dynasty-machine §8 sketch (daily pure pro-rata `activation:share`), which the founder-directed
+BROKERS design (2026-08-10) had already superseded AND built — the burn (`brokers:activate`, tiers ×
+activity weights), the epoch allocator, the buy keeper, and the delivery rail all existed. **What
+nothing did was write `stock_allocations` from the weights side** — the table was only ever written
+by tests, so the chain had a published NUMBER on one end and a delivery rail with nothing to deliver
+on the other. `distributeBuy` closes it: ONE real buy's units split `u_a = U × w_a / Σw` over an
+epoch's published weights, each share floored at the 6dp grid (the remainder stays unallocated in
+held — never rounded up into somebody's line) and written through the audited `allocateStock` so the
+`allocated ≤ held` clamp applies to every row it ever writes. **Two rules are load-bearing.** (1)
+**THE FROZEN-WEIGHTS RULE** — a buy distributes ONLY to the latest epoch published BEFORE it
+(`computed_at <= buy.created_at`): the allocator reads LIVE activations at publish time, so an epoch
+published after a buy could include someone who saw the buy land and activated to catch it — the
+retroactive windfall §8's no-roll-forward rule forbids; the ops order (publish → buy → distribute) is
+stated on the mod route. (2) **THE SILENT-EPOCH RULE** — a buy with no frozen epoch (or a weightless
+one) CONSUMES its latch with zero allocations: the units sit in held, claimable by nobody, rather
+than becoming tomorrow's jackpot. The buy row IS the latch (`distributed`, claimed under FOR UPDATE)
+— without it a re-run double-books, and the clamp would only stop it after eating OTHER buys'
+unallocated units, which is the over-allocation the wall exists to catch, not absorb. **Deliberately
+NO `allocated ≤ Σ distributed` nightly check** (the design's "allocations grow only from the split"
+invariant): the treasury suite's wall tests seed allocations DIRECTLY (that is how you test a clamp)
+and an alarm that fires on expected states is one people learn to ignore (the desk-dark lesson) —
+the single-writer discipline is enforced where it can be exact (the latch, the clamp, `allocated ≤
+held` nightly). **§10.4: ZERO** (an allocation is ownership bookkeeping — the test pins the whole
+block, buys + three distributions + two refusals, to zero `transactions` rows). Dormant by
+construction pre-mainnet (only a REAL buy's units exist to split; a comp refuses `not_real` by
+name). **Three mutations, each caught at its own named assertion** (the latch dropped → "a second
+distribution is refused"; the frozen rule dropped → "never one published after"; pro-rata → equal
+split → "EXACTLY units × his weight share" — the fixture's two holders carry DIFFERENT weights, the
+precondition asserted, or that mutation would pass vacuously). **The chain from activation burn to a
+share landing in a Street Deed's TBA is now code-complete end to end**, gated only on the
+third-party audit + the launch review. Suite green + pgquery 2745 statements + pgcheck 43/43 on real
+Postgres.
+
+**BURN-TO-REDEEM REJECTED — the play-weighted distribution stands (founder-directed 2026-08-15:
+"Let's keep A").** The founder weighed replacing the built brokers distribution with a simpler
+burn-X-$OMR → X-worth-of-stock redemption counter and kept the distribution; the decision + the four
+costs of the alternative are recorded in `omerta-brokers-design.md` §3.2b so the fork is not
+re-litigated (the THIRD confirmation of the same underlying call — the stock-layer retirement and the
+2026-08-10 brokers directive were the first two). The short form: a redemption counter is a DEALER's
+shape (a price, consideration, a security on demand — the sharp form of the open launch-checklist
+row), puts an oracle on the player path (the retired float's #1 flagged free option; it also breaks
+same-asset-both-sides), publishes the value-per-$OMR figure the copy rule forbids, and is one-shot
+wealth-shaped demand where activation is recurring play-gated demand. The legibility it would have
+bought is already answered by the ETH vault, which IS the burn-to-redeem rail in the one asset where
+the wall holds. No code moved — the record is the deliverable (the D13/D15 lesson: a decision made
+and not recorded gets made twice).
