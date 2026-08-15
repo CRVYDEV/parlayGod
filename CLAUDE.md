@@ -12589,3 +12589,17 @@ precondition asserted, or that mutation would pass vacuously). **The chain from 
 share landing in a Street Deed's TBA is now code-complete end to end**, gated only on the
 third-party audit + the launch review. Suite green + pgquery 2745 statements + pgcheck 43/43 on real
 Postgres.
+
+**BURN-TO-REDEEM REJECTED — the play-weighted distribution stands (founder-directed 2026-08-15:
+"Let's keep A").** The founder weighed replacing the built brokers distribution with a simpler
+burn-X-$OMR → X-worth-of-stock redemption counter and kept the distribution; the decision + the four
+costs of the alternative are recorded in `omerta-brokers-design.md` §3.2b so the fork is not
+re-litigated (the THIRD confirmation of the same underlying call — the stock-layer retirement and the
+2026-08-10 brokers directive were the first two). The short form: a redemption counter is a DEALER's
+shape (a price, consideration, a security on demand — the sharp form of the open launch-checklist
+row), puts an oracle on the player path (the retired float's #1 flagged free option; it also breaks
+same-asset-both-sides), publishes the value-per-$OMR figure the copy rule forbids, and is one-shot
+wealth-shaped demand where activation is recurring play-gated demand. The legibility it would have
+bought is already answered by the ETH vault, which IS the burn-to-redeem rail in the one asset where
+the wall holds. No code moved — the record is the deliverable (the D13/D15 lesson: a decision made
+and not recorded gets made twice).

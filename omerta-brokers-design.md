@@ -102,6 +102,30 @@ weight(nft) = activationMult(tier) × activityScore(owner, epoch)
    holdings — the anti-fabrication gate that already guards the Vig, the Store, bonds and the desk.
    Fabricated backing is invisible to precisely the check that is supposed to catch it.
 
+### 3.2b DECIDED (founder, 2026-08-15) — play-weighted distribution stands; burn-to-redeem is REJECTED
+
+The founder asked whether a simpler **burn-to-redeem** counter (burn X $OMR → X-worth of stock at an
+oracle price) would beat the built play-weighted distribution, and chose to **keep the distribution**
+after the trade was laid out. Recorded here so the fork is not re-litigated — this is the THIRD time
+the same underlying call has been made (the stock-layer retirement rejected stock-denominated claims;
+the 2026-08-10 brokers directive chose play-weighted rewards; this confirms both against the sharper
+alternative). The four costs of burn-to-redeem, for the record: **(1)** a quoted price + consideration
++ a specific security delivered on demand is the shape of operating a DEALER — the sharp form of the
+launch-checklist row the activation leg already carries in soft form, and a redemption counter anyone
+holding $OMR can draw on surrenders the delivery control the issuer restriction requires; **(2)** it
+puts an ORACLE on the player path — every lag is a free option against the treasury (the retired RWA
+float's #1 flagged economics item), and it breaks the same-asset-both-sides wall that made the ETH
+vault safe (owing stock priced through two markets while holding it through one), where the built
+distribution has NO price on the player side at all and is structurally immune to price manipulation;
+**(3)** a redemption board publishes a value-per-$OMR figure, which the standing copy rule forbids and
+which changes what the TOKEN is, not just the stock rail; **(4)** it is a shop, not a loop — one-shot
+wealth-shaped demand, where activation is recurring and gated on PLAY (an activated idler earns
+nothing, the design's own anti-yield-product assertion). The legibility burn-to-redeem would have
+bought is answered elsewhere: **the ETH vault IS the burn-to-redeem rail**, live today, in the one
+asset where same-asset-both-sides holds — the two rails coexist and serve different roles. The
+residual cost of the distribution (it is harder to explain than a redemption counter) is a
+client/copy problem, not a mechanism problem.
+
 ### 3.3 DECIDED — stock lands in the bound account, and there is no claim gate
 
 **Founder decision, 2026-08-10, taken after the alternatives and their costs were put in front of
