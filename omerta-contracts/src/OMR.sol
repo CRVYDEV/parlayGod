@@ -32,8 +32,9 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 ///         no owner mint, no mint-to-self, no second path.
 ///
 ///         THE DEX SELL TAX (founder-directed): transfers INTO a registered AMM pair
-///         (a sell, or a non-exempt LP add) pay `sellTaxBps`, split THREE ways — dev
-///         (founder revenue), rwa (the treasury — a stock float until 2026-07-31) and lp (depth/buybacks) — IN THE
+///         (a sell, or a non-exempt LP add) pay `sellTaxBps`, split FOUR ways — dev
+///         (founder revenue), rwa (the treasury — a stock float until 2026-07-31), community
+///         (the family buyback, treasury-to-family Phase 3) and lp (depth/buybacks) — IN THE
 ///         SAME TRANSFER, in lockstep with the backend's `SELL_TAX` constants so the two
 ///         layers can never disagree about where the money went. Everything else is clean:
 ///         buys (pair -> wallet), wallet -> wallet transfers, and every protocol flow
@@ -74,20 +75,25 @@ contract OMR is ERC20Permit, Ownable {
     uint256 public sellTaxBps;                    // 0 = off (the deploy default). the TOTAL rate
     address public taxDevRecipient;               // founder revenue
     address public taxRwaRecipient;               // the treasury (v2 §6; was the stock float)
+    /// @notice The family buyback (treasury-to-family Phase 3). Must be the community-buyback keeper
+    ///         wallet — a SEPARATE key from the treasury's (the custody rule: booking family backing
+    ///         against OMR the family keeper does not hold is the class `allocated <= held` prevents).
+    address public taxCommunityRecipient;
     address public taxLpRecipient;                // LP depth / buybacks
-    /// @notice How the total rate splits. dev + rwa must be <= sellTaxBps; LP takes the remainder,
-    ///         so the three shares always sum to the tax EXACTLY and no dust is stranded.
+    /// @notice How the total rate splits. dev + rwa + community must be <= sellTaxBps; LP takes the
+    ///         remainder, so the four shares always sum to the tax EXACTLY and no dust is stranded.
     uint256 public taxDevBps;
     uint256 public taxRwaBps;
+    uint256 public taxCommunityBps;
     mapping(address => bool) public ammPairs;     // registered pools (sell detection)
     mapping(address => bool) public taxExempt;    // protocol contracts / the POL manager
 
     event MinterSet(address indexed minter);
     event Minted(address indexed to, uint256 amount);
-    event SellTaxSet(uint256 bps, uint256 devBps, uint256 rwaBps);
+    event SellTaxSet(uint256 bps, uint256 devBps, uint256 rwaBps, uint256 communityBps);
     event PairSet(address indexed pair, bool isPair);
     event ExemptSet(address indexed account, bool exempt);
-    event TaxRecipientsSet(address indexed dev, address indexed rwa, address indexed lp);
+    event TaxRecipientsSet(address indexed dev, address indexed rwa, address indexed community, address lp);
     event SellTaxTaken(address indexed from, address indexed pair, uint256 tax);
 
     error BadBps();
@@ -123,23 +129,25 @@ contract OMR is ERC20Permit, Ownable {
     // ── the sell tax ─────────────────────────────────────────────────────────────────────────────
 
     /// @notice Arm/tune the DEX sell tax (<= 10% total) and how it splits. Recipients must be set
-    ///         first. `devBps + rwaBps <= bps`; LP takes the remainder.
-    function setSellTax(uint256 bps, uint256 devBps, uint256 rwaBps) external onlyOwner {
+    ///         first. `devBps + rwaBps + communityBps <= bps`; LP takes the remainder.
+    function setSellTax(uint256 bps, uint256 devBps, uint256 rwaBps, uint256 communityBps) external onlyOwner {
         if (bps > MAX_SELL_TAX_BPS) revert BadBps();
-        if (devBps + rwaBps > bps) revert BadBps();
-        if (bps > 0 && (taxDevRecipient == address(0) || taxRwaRecipient == address(0) || taxLpRecipient == address(0))) revert ZeroAddress();
+        if (devBps + rwaBps + communityBps > bps) revert BadBps();
+        if (bps > 0 && (taxDevRecipient == address(0) || taxRwaRecipient == address(0) || taxCommunityRecipient == address(0) || taxLpRecipient == address(0))) revert ZeroAddress();
         sellTaxBps = bps;
         taxDevBps = devBps;
         taxRwaBps = rwaBps;
-        emit SellTaxSet(bps, devBps, rwaBps);
+        taxCommunityBps = communityBps;
+        emit SellTaxSet(bps, devBps, rwaBps, communityBps);
     }
 
-    function setTaxRecipients(address dev, address rwa, address lp) external onlyOwner {
-        if (sellTaxBps > 0 && (dev == address(0) || rwa == address(0) || lp == address(0))) revert ZeroAddress();
+    function setTaxRecipients(address dev, address rwa, address community, address lp) external onlyOwner {
+        if (sellTaxBps > 0 && (dev == address(0) || rwa == address(0) || community == address(0) || lp == address(0))) revert ZeroAddress();
         taxDevRecipient = dev;
         taxRwaRecipient = rwa;
+        taxCommunityRecipient = community;
         taxLpRecipient = lp;
-        emit TaxRecipientsSet(dev, rwa, lp);
+        emit TaxRecipientsSet(dev, rwa, community, lp);
     }
 
     /// @notice Register/unregister an AMM pool. Only transfers INTO registered pools are taxed.
@@ -161,15 +169,17 @@ contract OMR is ERC20Permit, Ownable {
         if (sellTaxBps > 0 && ammPairs[to] && from != address(0) && !taxExempt[from]) {
             uint256 tax = (value * sellTaxBps) / 10000;
             if (tax > 0) {
-                // The remainder rule sits on the LP slice, so dev + rwa + lp == tax EXACTLY however
-                // the bps divide — the same discipline the backend's sell-tax ingest uses, for the
-                // same reason: two of three shares round down, and a "natural" third slice would
-                // leave a wei belonging to nobody stranded in the seller's balance.
+                // The remainder rule sits on the LP slice, so dev + rwa + community + lp == tax
+                // EXACTLY however the bps divide — the same discipline the backend's sell-tax ingest
+                // uses, for the same reason: three of four shares round down, and a "natural" last
+                // slice would leave a wei belonging to nobody stranded in the seller's balance.
                 uint256 dev = (tax * taxDevBps) / sellTaxBps;
                 uint256 rwa = (tax * taxRwaBps) / sellTaxBps;
-                uint256 lp = tax - dev - rwa;
+                uint256 community = (tax * taxCommunityBps) / sellTaxBps;
+                uint256 lp = tax - dev - rwa - community;
                 if (dev > 0) super._update(from, taxDevRecipient, dev);
                 if (rwa > 0) super._update(from, taxRwaRecipient, rwa);
+                if (community > 0) super._update(from, taxCommunityRecipient, community);
                 if (lp > 0) super._update(from, taxLpRecipient, lp);
                 emit SellTaxTaken(from, to, tax);
                 value -= tax;

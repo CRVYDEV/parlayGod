@@ -14,6 +14,7 @@ import * as Community from '../community.js';
 import * as TokenHealth from '../tokenhealth.js';
 import * as Desk from '../desk.js';
 import * as DexBot from '../dexbot.js';
+import * as Drop from '../drop.js';
 import * as Fees from '../fees.js';
 import * as G from '../game.js';
 import * as Loans from '../loans.js';
@@ -324,6 +325,14 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
       DexBot.runDexBuyback(pool, { maxEth: req.body?.maxEth }));
     app.post('/v1/mod/dexbot/pol', { preHandler: modAuth }, async (req) =>
       DexBot.runPolPairing(pool, { maxEth: req.body?.maxEth }));
+    // THE COMMUNITY DROP (G-3): load the published allocation dataset (idempotent by wallet — a
+    // claimed row is history and is never rewritten), set the claim window (closing early IS the
+    // clawback — design b: unclaimed never left the Safe), and read the books.
+    app.post('/v1/mod/drop/load', { preHandler: modAuth }, async (req) =>
+      Drop.loadAllocations(pool, req.body?.rows));
+    app.post('/v1/mod/drop/window', { preHandler: modAuth }, async (req) =>
+      Drop.setDropWindow(pool, req.body?.opensAt, req.body?.closesAt));
+    app.get('/v1/mod/drop', { preHandler: modAuth }, async () => Drop.dropStatus(pool));
     // Mod/ops: the founder's three-way revenue split (founder / buyback / RWA), and the comp/simulate
     // path — drives recordStorePurchase with a synthetic nonce (for comps, QA, and until the paywall
     // ships). `nonce` must be unique; a duplicate is the idempotent no-op.

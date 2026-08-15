@@ -269,15 +269,20 @@ PHASE 1 for the exact calls/args.
       Safe into `VoucherClaim` to back signed withdrawal vouchers. Its `balanceOf` IS its cap.
       **OmertaBond no longer needs funding** — it mints each payout at bond time, which is what keeps
       `committedOMR ≤ balanceOf(this)` true at every instant so `sweep` can never strand a bonder.
-- [ ] **Arm the DEX sell tax (after the pool exists):** `OMR.setTaxRecipients(devWallet, rwaWallet, lpWallet)` →
+- [ ] **Arm the DEX sell tax (after the pool exists):**
+      `OMR.setTaxRecipients(devWallet, rwaWallet, communityWallet, lpWallet)` →
       `setExempt` for the POL manager + OmertaBond + VoucherClaim + the Safe → `setPair(pool, true)` →
-      `setSellTax(bps, devBps, rwaBps)` — the total is hard-capped at 10% and defaults to 0 = off; LP takes
-      the remainder after dev + rwa. **Path A: ship `setSellTax(900, 200, 160)`** (dev 200 / rwa 160 / lp
-      remainder), matching `deploy/fee-splits.env`'s `SELL_TAX_RWA_BPS=160`. The **community slice (240 bps
-      of trade) is a BACKEND carve** in `recordSellTax` — it is NOT a 4th on-chain recipient, so the
-      community's ETH physically sits in the LP wallet and is drawn by the family-buyback keeper; wire that
-      keeper's source wallet as part of the wallet topology (same class as the treasury/Vig key separation
-      in §0.5). Only transfers INTO registered pools are taxed; buys and wallet transfers are clean. **HARD REQUIREMENT: the canonical pool must be
+      `setSellTax(bps, devBps, rwaBps, communityBps)` — the total is hard-capped at 10% and defaults to
+      0 = off; LP takes the remainder after dev + rwa + community. **Path A: ship
+      `setSellTax(900, 200, 160, 240)`** (dev 200 / rwa 160 / community 240 / lp remainder), matching
+      `deploy/fee-splits.env`'s `SELL_TAX_RWA_BPS=160` + `SELL_TAX_COMMUNITY_BPS=240`. The **community
+      slice is now a 4th ON-CHAIN recipient** (2026-08-15 — it was a backend carve before the contracts
+      gained it): its wallet MUST be the **community-buyback keeper's** — a SEPARATE key from the
+      treasury's and the Vig's (the §0.5 custody rule: `runFamilyBuybackInvariants` publishes
+      `walletMustHold` against THAT wallet, so pointing the slice anywhere else books family backing
+      against ETH the family keeper does not hold). The backend `recordSellTax` carve
+      (`SELL_TAX_COMMUNITY_BPS`) covers only the mod-ingest rail until the SellTaxTaken watcher lands —
+      keep the two numbers in lockstep. Only transfers INTO registered pools are taxed; buys and wallet transfers are clean. **HARD REQUIREMENT: the canonical pool must be
       Uniswap V2-COMPATIBLE** (sell-taxed tokens need the *SupportingFeeOnTransferTokens router path;
       Uniswap V3 does not support them). RESOLVED (verified July 2026): Uniswap deployed **v2, v3, v4 +
       UniswapX on Robinhood Chain at its July 1, 2026 mainnet launch** — so a V2 pool is available. Still
@@ -444,8 +449,9 @@ unbacked reserve. (Red-team D-MED2.)
       slices 0), so this file IS the "env flip with sign-off" (`omerta-treasury-to-family-design.md` §8
       Phase 2); do NOT set these in the pre-chain render.yaml. The three IMMUTABLE contract args that must
       match — `OmertaFees.vigBps=2500`, `OmertaBond(polBps=7500,devBps=1500,rwaBps=500)` — are in the deploy
-      steps above; the sell-tax `setSellTax(900,200,160)` matches too, with the 240-bps community as a
-      backend carve.
+      steps above; the sell-tax `setSellTax(900,200,160,240)` matches too — the 240-bps community slice
+      is a 4th ON-CHAIN recipient as of 2026-08-15 (the community-buyback keeper's wallet; it was a
+      backend carve before the contracts gained it).
 
 ## 5. Fund + reconcile the backend accounting to MIRROR the chain
 The backend keeps its own reserve records; they must track the on-chain balances, or the invariants flag a gap.
@@ -492,11 +498,21 @@ The backend keeps its own reserve records; they must track the on-chain balances
     the constructor refuses to exist anywhere that does not carry exactly `HOOK_FLAGS` (`0x30CC`). So the
     deploy is a CREATE2 salt search, and the permission set can NEVER be extended afterwards — a missing
     flag is a new hook plus a full liquidity migration.
-  - **Wire before arming:** `setRecipients(dev, rwa, lp)` → `setAllowedQuote(quote, true)` for each quote
-    currency the Safe is willing to HOLD (the empty allow-list is the deploy default, and until it is set
-    NO pool can be created on this hook at all) → `initialize` the pool → `setSellTax(900, 200, 160)`
-    (Path A — rwa 400→160; the 240-bps community slice is a backend carve, see the OMR sell-tax step above).
+  - **Wire before arming:** `setRecipients(dev, rwa, community, lp)` → `setAllowedQuote(quote, true)` for
+    each quote currency the Safe is willing to HOLD (the empty allow-list is the deploy default, and until
+    it is set NO pool can be created on this hook at all) → `initialize` the pool →
+    `setSellTax(900, 200, 160, 240)` (Path A — rwa 400→160 with the 240-bps community slice a 4th ON-CHAIN
+    recipient; the community wallet is the family-buyback keeper's, per the OMR sell-tax step above).
     `setObserver` once the hook-native oracle exists.
+  - **THE LP LEAGUE reader (one function, at pool launch):** the depth-time status axis
+    (`src/bonds.js:syncLpDepth`, the `lp_depth` books, the underwriter-score fold) is BUILT and
+    dormant behind the `__setLpReader` seam. At launch, install a reader that enumerates the
+    canonical pool's PositionManager positions (Transfer-log replay for tokenId→owner, liquidity +
+    slot0 sqrtPrice for the ETH-side depth — the `addLiquidityOnchain` math in reverse) and returns
+    `[{ wallet, liquidityEth }]`; the worker's DEX-bot cadence already calls the sync. Verify the
+    position enumeration on the devnet pool alongside the DEX bots' ⚠ verify-at-launch step; then
+    size `BOND_LP_SCORE_PER_ETH_DAY` (BALANCE.md § THE LP LEAGUE — the shipped 300 is a proposed
+    default, not a sized one).
   - **Sequencing that is not optional** (§9.2): deploy the hook-native oracle → let it accumulate a FULL
     window → `OmertaBond.setOracle` → *then* migrate liquidity. Doing the migration first points wall 4 at
     a pool where price is no longer discovered, which is worse than an outage because it still returns a

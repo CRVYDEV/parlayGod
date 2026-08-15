@@ -6116,3 +6116,25 @@ neighborhoods open in order as the population crosses `DEEDS.EXPANSION_STEP` (8)
 users join, late joiners get fresh ground on the frontier. Marketed as a living, growing world — NEVER as
 scarce/appreciating land. `DEEDS.EXPANSION_STEP` + the `DEEDS.NEIGHBORHOODS` catalog are founder sign-off
 levers (display/pacing only — no economy surface). All pinned in `test/levers.js`.
+
+## THE LP LEAGUE — depth-time joins the underwriter score (built dormant 2026-08-15)
+
+The hook-blocks design's deferred status block (`omerta-hook-blocks-design.md` — "the strongest
+strategic fit since depth is the binding bond-cap constraint, but the reader needs a live pool to
+read"). Liquidity held OVER TIME in the canonical OMR pool now joins the underwriter score:
+`underwriterScore(bondedEth, pledgedOmr, lpEthDays)` folds accrued ETH-DAYS of depth at
+`BONDS.LP_SCORE_PER_ETH_DAY`. **STATUS ONLY** — no payout attaches (the Sybil posture holds), the
+whole layer writes ZERO `transactions` rows (test-pinned), and the sync is **chain-dormant** until
+the PositionManager reader lands with the live pool (the `__setLpReader` seam; CHAIN-DEPLOY's v4
+migration step lists the reader as a launch task).
+
+| Lever | Ships | What it prices |
+| --- | --- | --- |
+| `BONDS.LP_SCORE_PER_ETH_DAY` | **300** | An ETH-DAY of canonical-pool depth = 1% of a bonded ETH (`BONDS.ETH_SCORE_OMR` 30000) on the status axis — ~100 days of 1 ETH of standing depth ≈ one bonded ETH. |
+
+**A PROPOSED default, not a sized one** — the right ratio between "bonded an ETH once" and "stood an
+ETH of depth for N days" depends on real pool economics (LP fee income, impermanent loss at the
+live volatility) that do not exist until mainnet. **Size it once a pool is live**, the same watch
+posture as the DEX bots' verify-at-launch step. The accrual is deposit-timing-proof by construction:
+the sync accrues the STORED liquidity over the elapsed window, so a whale who deposits just before a
+sync earns nothing for the window they were not there (mutation-verified).

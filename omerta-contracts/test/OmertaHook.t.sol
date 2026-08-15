@@ -84,14 +84,18 @@ contract OmertaHookTest is Test {
     int24 constant MIN_TICK = -887220;
     int24 constant MAX_TICK = 887220;
 
-    // The shipped rates (tokenomics v2 §4 / rules.tail.js SELL_TAX), 9% split 2/4/3.
+    // The shipped rates (tokenomics v2 §4 / rules.tail.js SELL_TAX), 9% split 2/4/3. COMMUNITY ships
+    // ZERO (treasury-to-family Phase 1 byte-identity) — the flip that arms it lowers rwa in the same
+    // change, which is deploy config, not a contract change. The four-way tests re-arm below.
     uint256 constant TAX_BPS = 900;
     uint256 constant DEV_BPS = 200;
     uint256 constant RWA_BPS = 400;
+    uint256 constant COMM_BPS = 0;
 
     address safe = address(0x5AFE);
     address dev = address(0xD3F);
     address rwa = address(0x67A);
+    address community = address(0xC0117);
     address lp = address(0x1BB);
     address trader = address(0x7EAD);
 
@@ -114,9 +118,9 @@ contract OmertaHookTest is Test {
         hook = OmertaHook(payable(hookAddr));
 
         vm.startPrank(safe);
-        hook.setRecipients(dev, rwa, lp);
+        hook.setRecipients(dev, rwa, community, lp);
         hook.setAllowedQuote(eth, true);
-        hook.setSellTax(TAX_BPS, DEV_BPS, RWA_BPS);
+        hook.setSellTax(TAX_BPS, DEV_BPS, RWA_BPS, COMM_BPS);
         omr.transfer(address(this), 10_000_000e18);
         omr.transfer(trader, 1_000_000e18);
         vm.stopPrank();
@@ -173,8 +177,14 @@ contract OmertaHookTest is Test {
         return _swap(true, -int256(ethIn));
     }
 
+    /// The fixture ships COMM_BPS = 0 (Phase-1 byte-identity), so every three-slice assertion below
+    /// stays exact with the community slot skipped; the four-way tests read `hook.owed` directly.
     function _owed(Currency c) internal view returns (uint256 d, uint256 r, uint256 l) {
-        (d, r, l) = hook.owed(c);
+        (d, r,, l) = hook.owed(c);
+    }
+
+    function _owedCommunity(Currency c) internal view returns (uint256 cm) {
+        (,, cm,) = hook.owed(c);
     }
 
     // ── the permission set lives in the address ──────────────────────────────────────────────────
@@ -297,7 +307,7 @@ contract OmertaHookTest is Test {
 
     function test_the_fee_is_off_until_the_safe_arms_it() public {
         vm.prank(safe);
-        hook.setSellTax(0, 0, 0);
+        hook.setSellTax(0, 0, 0, 0);
         _sellExactIn(100e18);
         (uint256 d, uint256 r, uint256 l) = _owed(eth);
         assertEq(d + r + l, 0, "a disarmed hook still charged");
@@ -308,14 +318,14 @@ contract OmertaHookTest is Test {
     function test_the_safe_can_never_set_a_confiscatory_rate() public {
         vm.startPrank(safe);
         vm.expectRevert(OmertaHook.BadBps.selector);
-        hook.setSellTax(1001, 200, 400);
+        hook.setSellTax(1001, 200, 400, 0);
 
-        hook.setSellTax(1000, 200, 400); // exactly at the cap is allowed
+        hook.setSellTax(1000, 200, 400, 0); // exactly at the cap is allowed
         assertEq(hook.sellTaxBps(), 1000);
 
         // The slices can never exceed the total either — LP's remainder can be zero, never negative.
         vm.expectRevert(OmertaHook.BadBps.selector);
-        hook.setSellTax(900, 600, 400);
+        hook.setSellTax(900, 600, 400, 0);
         vm.stopPrank();
 
         assertEq(hook.MAX_SELL_TAX_BPS(), 1000, "the compile-time cap moved");
@@ -323,9 +333,9 @@ contract OmertaHookTest is Test {
 
     function test_only_the_safe_can_tune_it() public {
         vm.expectRevert();
-        hook.setSellTax(0, 0, 0);
+        hook.setSellTax(0, 0, 0, 0);
         vm.expectRevert();
-        hook.setRecipients(address(1), address(2), address(3));
+        hook.setRecipients(address(1), address(2), address(3), address(4));
         vm.expectRevert();
         hook.setAllowedQuote(eth, false);
         vm.expectRevert();
@@ -334,7 +344,7 @@ contract OmertaHookTest is Test {
 
     // ── the sweep ────────────────────────────────────────────────────────────────────────────────
 
-    function test_sweep_pays_the_three_wallets_and_nobody_else() public {
+    function test_sweep_pays_the_four_wallets_and_nobody_else() public {
         _sellExactIn(100e18);
         (uint256 d, uint256 r, uint256 l) = _owed(eth);
 
@@ -345,6 +355,7 @@ contract OmertaHookTest is Test {
 
         assertEq(dev.balance, d, "dev");
         assertEq(rwa.balance, r, "rwa");
+        assertEq(community.balance, 0, "at COMM_BPS 0 the community wallet gets NOTHING (Phase-1 byte-identity)");
         assertEq(lp.balance, l, "lp");
         assertEq(address(hook).balance, 0, "the hook kept something");
 
@@ -354,11 +365,65 @@ contract OmertaHookTest is Test {
         hook.sweep(eth);
     }
 
+    // ── the COMMUNITY slice (treasury-to-family Phase 3) ─────────────────────────────────────────
+
+    /// The four-way split at the LOCKED flip shape (dev 200 / rwa 160 / community 240 / lp remainder
+    /// 300 of 900) — every slice lands, the remainder rule still leaves no dust, and the community
+    /// ETH reaches ITS OWN wallet (the custody rule: the family keeper's key, never the treasury's).
+    function test_the_flip_shape_splits_four_ways_and_the_community_eth_reaches_its_own_wallet() public {
+        vm.prank(safe);
+        hook.setSellTax(900, 200, 160, 240);
+
+        _sellExactIn(100e18);
+        (uint256 d, uint256 r, uint256 cm, uint256 l) = hook.owed(eth);
+        uint256 total = d + r + cm + l;
+        assertGt(total, 0, "the sell was not taxed");
+        assertEq(d, (total * 200) / 900, "dev slice");
+        assertEq(r, (total * 160) / 900, "rwa slice");
+        assertEq(cm, (total * 240) / 900, "community slice");
+        assertEq(l, total - d - r - cm, "the remainder rule sits on LP");
+
+        hook.sweep(eth);
+        assertEq(community.balance, cm, "the community wallet did not receive its slice");
+        assertEq(rwa.balance, r, "the treasury took the community's money -- the custody rule broken");
+    }
+
+    /// Three of four slices round down; the remainder must absorb ALL the dust. Driven at a gross
+    /// chosen to actually produce dust on every rounded slice (the OMR dust-fuzz discipline).
+    function test_the_four_way_split_leaves_no_dust() public {
+        vm.prank(safe);
+        hook.setSellTax(900, 199, 161, 239); // deliberately ragged bps
+
+        _sellExactIn(33_333_333_333_333_333_333); // a gross that divides nothing cleanly
+        (uint256 d, uint256 r, uint256 cm, uint256 l) = hook.owed(eth);
+        assertGt(d + r + cm + l, 0, "nothing accrued");
+        // the identity IS the assertion: whatever the total, the four sum to it exactly, so sweep
+        // can never strand a wei in the hook
+        hook.sweep(eth);
+        assertEq(address(hook).balance, 0, "dust stranded in the hook");
+        assertEq(dev.balance + rwa.balance + community.balance + lp.balance, d + r + cm + l, "the wallets do not sum to the take");
+    }
+
+    function test_the_community_bps_count_against_the_total() public {
+        vm.prank(safe);
+        vm.expectRevert(OmertaHook.BadBps.selector);
+        hook.setSellTax(900, 400, 400, 200); // 1000 of a 900 total — community is not free room
+    }
+
+    function test_arming_a_community_slice_needs_a_community_wallet() public {
+        // a fresh hook with no recipients set: arming any rate fails closed on the zero address
+        address bare = address(uint160((uint256(0xBEE0) << 144) | uint256(FLAGS)));
+        deployCodeTo("OmertaHook.sol:OmertaHook", abi.encode(manager, address(omr), safe), bare);
+        vm.prank(safe);
+        vm.expectRevert(OmertaHook.ZeroAddress.selector);
+        OmertaHook(payable(bare)).setSellTax(900, 200, 160, 240);
+    }
+
     /// The reason the fee accrues instead of being pushed to three addresses mid-swap.
     function test_a_recipient_that_reverts_cannot_brick_the_pool() public {
         Deadbeat bad = new Deadbeat();
         vm.prank(safe);
-        hook.setRecipients(address(bad), rwa, lp);
+        hook.setRecipients(address(bad), rwa, community, lp);
 
         // Swaps keep working — a broken wallet is a treasury problem, not a market outage.
         _sellExactIn(100e18);
@@ -370,7 +435,7 @@ contract OmertaHookTest is Test {
 
         // ...and the Safe repoints and the money moves. Nothing was lost in the meantime.
         vm.prank(safe);
-        hook.setRecipients(dev, rwa, lp);
+        hook.setRecipients(dev, rwa, community, lp);
         hook.sweep(eth);
         assertEq(dev.balance, d, "the repointed sweep did not pay");
     }
@@ -381,7 +446,7 @@ contract OmertaHookTest is Test {
         // A hook that could revert `beforeSwap` could halt a public market. This one cannot: the
         // only lever is the rate, and setting it to zero stops the fee, not the pool.
         vm.prank(safe);
-        hook.setSellTax(0, 0, 0);
+        hook.setSellTax(0, 0, 0, 0);
         uint256 before = trader.balance;
         _sellExactIn(50e18);
         assertGt(trader.balance, before, "an unarmed hook stopped a trade");

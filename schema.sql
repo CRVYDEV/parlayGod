@@ -1692,6 +1692,18 @@ CREATE TABLE IF NOT EXISTS pol_pairings (
   real BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- lp_depth: THE LP LEAGUE's books — per-wallet liquidity depth-over-time in the canonical OMR pool
+-- (the hook-blocks design's deferred status block). eth_days is the ACCRUED depth-time (an ETH-day
+-- = 1 ETH of depth held for a day); the sync accrues the STORED liquidity over the elapsed window
+-- before writing a fresh read (the lazy-accrual shape), so a wallet that pulls its liquidity keeps
+-- what it earned and stops earning. STATUS ONLY: it feeds the underwriter score, no payout attaches.
+-- Chain-dormant — nothing writes it until the PositionManager reader lands with the live pool.
+CREATE TABLE IF NOT EXISTS lp_depth (
+  wallet_address TEXT PRIMARY KEY,
+  liquidity_eth NUMERIC NOT NULL DEFAULT 0,
+  eth_days NUMERIC NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 -- THE DAILY OFFERING (founder-directed: "I only want to issue 100000 OMR to be offered to be
 -- bonded this day"). The GM's per-day issuance window ON TOP of the lifetime tranche: quoteBond
 -- signs nothing on a day with no offering row (FAIL-CLOSED), and a signed quote CONSUMES the
@@ -3416,3 +3428,46 @@ CREATE TABLE IF NOT EXISTS family_buybacks (
 -- ALTER — on a live DB the CREATE TABLE IF NOT EXISTS above it is a no-op and an inline column never
 -- lands (the 2026-08-06 boot-crash lesson).
 ALTER TABLE sell_tax_events ADD COLUMN IF NOT EXISTS community_eth NUMERIC NOT NULL DEFAULT 0;
+
+-- ═══════════════ THE COMMUNITY DROP — G-3's claim rail (D1 variant b: in-game credit) ═══════════════
+-- The allocation dataset (built off-chain by tools/snapshot.js + tools/allocate-drop.js from
+-- snapshots taken at HISTORICAL blocks, loaded by a mod, published for reproducibility). One row per
+-- snapshotted wallet: the $OMR envelope + the one-time free-mint waiver + the numeric community ids
+-- (numbers, never names — the guessability rule; the future provenance stamp reads them). The claim
+-- is ONCE per wallet EVER (`claimed` is the latch, taken atomically), and an unclaimed row simply
+-- lapses when the window closes — the clawback IS closing the window (design b: the $OMR never left
+-- the Safe, so there is nothing to sweep). Wallet addresses are stored LOWERCASE (the loader
+-- normalizes; SIWE stores what the signer sent, so the claim compares lower() on both sides).
+CREATE TABLE IF NOT EXISTS drop_allocations (
+  wallet_address TEXT PRIMARY KEY,             -- lowercase 0x…
+  omr            NUMERIC NOT NULL DEFAULT 0,   -- the envelope (in-game $OMR credit at claim)
+  free_mint      BOOLEAN NOT NULL DEFAULT false, -- the whitelist: one free identity mint, ever
+  communities    TEXT NOT NULL DEFAULT '[]',   -- JSON int array of community ids (numeric — never names)
+  claimed        BOOLEAN NOT NULL DEFAULT false,
+  claimed_by     TEXT,                          -- account_id
+  claimed_at     TIMESTAMPTZ,
+  -- THE PROVENANCE STAMP (dynasty §9.3): a snapshot wallet stamps its colors onto exactly ONE
+  -- identity, EVER — the first claim consumes it (per WALLET-EVENT, never per community). Recorded
+  -- beside the claim state, exactly where the design says it lives. (Inline, not an ALTER — this
+  -- table is born on the same branch, so no live DB predates the column.)
+  stamped        BOOLEAN NOT NULL DEFAULT false
+);
+-- The window singleton: NULL/NULL = nothing announced; both set = the claim window (opens..closes).
+-- The clawback (founder-directed 90–180 day band) is `closes_at` passing — server-side, no function.
+CREATE TABLE IF NOT EXISTS drop_state (
+  id        INT PRIMARY KEY,
+  opens_at  TIMESTAMPTZ,
+  closes_at TIMESTAMPTZ
+);
+INSERT INTO drop_state (id) VALUES (1) ON CONFLICT DO NOTHING;
+-- The mint-source distinction the tranche schedule needs (launch doc G-3 rule 2): a whitelist free
+-- mint must NOT advance the published PAID price — ops.js's tranche counter excludes these accounts.
+-- account_persistent is an EXISTING table, so the column MUST be an ALTER (the boot-crash lesson).
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS drop_free_mint BOOLEAN NOT NULL DEFAULT false;
+-- THE PROVENANCE COLORS (dynasty §9): the communities CLAIMED at the wallet's one stamp event (a
+-- JSON int array — numeric ids, never names) + the VISIBLE pick (the ward the portrait shows —
+-- §9's "scarcest computed once at stamp and stored AS the pick"). Account-level → survives death
+-- (the bloodline keeps its colors); OPT-IN only (§9.2 — default is a clean portrait); DISPLAY-ONLY
+-- FOREVER (§9.4). Both are ALTERs — account_persistent is an existing table (the boot-crash lesson).
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS provenance TEXT;
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS provenance_pick INT;

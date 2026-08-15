@@ -174,10 +174,24 @@ assert.equal(await txCount(), tx0, 'the stock delivery rail writes ZERO transact
   assert.equal((await stockDeliveryBoard(pool)).waitingOnADeed, 2,
     'the board counts A as waiting after the sale — board and plan apply the SAME exclusion');
 
-  // A BUYS IT BACK (or the buyer is A on another day): the target returns
+  // THE RETARGET (the deed FOLLOWS ITS OWNER): the buyer links the wallet that now holds the deed —
+  // from that moment THEIR allocations deliver into the vault of the deed they bought (mixed-case
+  // wallet on purpose: the rule must not care). The seller's stock never moves into it.
+  await q("INSERT INTO account_persistent (account_id, wallet_address) VALUES ('accS','0xB0B0000000000000000000000000000000000B0B')");
+  await q("INSERT INTO stock_allocations (epoch_id, account_id, ticker, units) VALUES ('e3','accS','TSLA',4)");
+  assert.ok(await deedTbaFor(pool, 'accS'), 'the secondary BUYER (wallet linked) is now the delivery target');
+  const plan2 = await planStockDeliveries(pool);
+  const sRow = plan2.find((p) => p.accountId === 'accS');
+  assert.ok(sRow && sRow.deedTokenId === '777', "the plan delivers the buyer's stock into the deed they bought");
+  assert.ok(!plan2.some((p) => p.accountId === 'accA'), "and still never the seller's");
+  assert.equal((await stockDeliveryBoard(pool)).waitingOnADeed, 2,
+    'the board through the SAME target rule: A + B wait, the buyer does not');
+
+  // A BUYS IT BACK (or the buyer is A on another day): the target returns — and leaves the buyer
   await recordDeedTransfer(pool, { tokenId: '777', from: '0xB0B0000000000000000000000000000000000b0b', to: '0xAAAA00000000000000000000000000000000AAAA' });
   assert.ok(await deedTbaFor(pool, 'accA'), 'bought back: the delivery target returns');
-  assert.equal((await stockDeliveryBoard(pool)).waitingOnADeed, 1, 'bought back: the board returns to B alone');
+  assert.equal(await deedTbaFor(pool, 'accS'), null, 'and the former buyer\'s allocations wait again');
+  assert.equal((await stockDeliveryBoard(pool)).waitingOnADeed, 2, 'bought back: B and the former buyer wait');
 }
 
 

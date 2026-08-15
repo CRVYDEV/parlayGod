@@ -12680,6 +12680,53 @@ the position), router/PM/state-view/pool-param addresses + the ops dials, all pr
 bots read them directly for the pool key). Dormant unless the full env is set on the WORKER. Suite
 green + pgquery + pgcheck 43/43 on real Postgres (+ the new suite run directly against real PG).
 
+**G-3 LAUNCH TOOLING — the snapshot, the allocation builder, and the claim rail (founder-directed
+2026-08-15: "Let's work on G3 Launch tooling") — BUILT** (`tools/snapshot.js` + `tools/allocate-drop.js`,
+`src/drop.js` — the 149th src module, `test/drop.js` — the 106th suite; `drop_allocations`/`drop_state`
+tables + `account_persistent.drop_free_mint` (ALTER-added — the outage lesson); `GET /v1/drop` +
+`POST /v1/drop/claim` + three mod routes; THE ENVELOPE card on Going Legit). The community drop's three
+pieces (`omerta-launch-sequence-design.md` G-0/G-3), built as D1 **variant (b)** — the recommended,
+thrice-strengthened in-game rail — while RUNNING a drop stays gated on the launch checklist's row.
+**(1) THE SNAPSHOT** (`tools/snapshot.js`) — the G-0 "real, currently-unowned engineering task":
+holder enumeration at a fixed historical block by Transfer-log replay (ERC-20 balances and ERC-721
+ownership are the SAME replay with different event indexing — tokenId is indexed, value is not, and
+decoding silently mangles the third field if the signature doesn't say which), chunked getLogs, a
+CANONICAL sorted dataset + a sha256 `commitment` (the publishable artifact — a root is only verifiable
+if outsiders can reproduce the set), and PARTIAL-REPLAY HONESTY: a `--from-block > 0` replay can go
+negative, so negatives are counted into meta rather than silently dropped — a dataset built on a
+partial replay says so. CLI flags only (nothing for preflight to classify). **(2) THE ALLOCATION
+BUILDER** (`tools/allocate-drop.js`) — the RULED shapes as code: coins NEVER flat-per-wallet
+(proportional among dust-floor-clearing wallets with a hard per-wallet cap, µ-share BigInt arithmetic,
+6dp floor, a capped whale's surplus NOT redistributed — deterministic + conservative, it stays in the
+Safe), NFTs per-NFT, and the merge summing a multi-community wallet's envelopes while recording every
+NUMERIC community id (the guessability rule) with freeMint the OR across them. **(3) THE CLAIM RAIL**
+(`src/drop.js`) — the conversion story in one SIWE pass: a snapshotted wallet links, claims ONCE EVER
+(`UPDATE … WHERE NOT claimed RETURNING`, the atomic claim-then-credit discipline — latch and credit
+share the txn), and takes in-game $OMR (`drop:claim` — an ENUMERATED §10.4 mint, the mission:% shape,
+backed by the Safe's genesis reserve) plus the WHITELIST's one free identity mint (`mint_credits += 1`,
+the fees.js entitlement — no ledger row). **G-3 rule 2 made real**: the grant marks
+`account_persistent.drop_free_mint` (direct SQL, off persistAccount's positional list) and ops.js's
+tranche counter now reads `WHERE minted AND NOT drop_free_mint` — a whitelist wave can never advance
+the published PAID price. An already-minted claimant gets the $OMR and NO dead credit (the
+payPackagePlex lesson). The board is SEALED until the window opens (announced-but-closed reveals
+nothing; a stable key set in every state — the dormantView lesson); **THE CLAWBACK is nothing but
+`closes_at` passing** (design b's own argument: unclaimed never left the Safe — `GET /v1/mod/drop` is
+the report, and the founder's 90–180d window is two timestamps on `drop_state`). §10.4: `drop:` joined
+the omr vocabulary, `drop:claim` the mint term, and a NEW **`drop claims ledgered`** check reconciles
+the minted total against the claimed allocation rows (a credit with no claimed row trips the sweep —
+proven by planting one); conservation is asserted UNCHANGED across a claim. A claimed row is HISTORY
+(a corrected dataset re-load skips it — it can never un-claim or re-price what already paid); a
+zero-$OMR whitelist-only row claims cleanly with no ledger row. pg-mem postures honored (no FILTER —
+the status report is a JS fold; SELECT-then-write, not ON CONFLICT). **Three mutations, each caught at
+its own named assertion** (the once-latch dropped; `drop:claim` out of the mint term; the tranche
+exclusion dropped). Client: THE ENVELOPE on Going Legit under Your Wallet (hidden until announced;
+sealed countdown → open with the amount + free-mint chip + claim → claimed receipt; `eligible` is a
+check-5 GATE the renderer reads) + a `describe()` receipt. The suite also runs green directly against
+real Postgres, and the allocation CLI was smoked end to end (a two-community wallet summing with the
+cap binding, dust excluded). All weights/floors/caps/window figures stay UNPINNED founder levers
+(tabled in the launch doc §6 — none is a constant yet, so there is nothing for test/levers.js to pin);
+the drop itself remains gated on the launch checklist row.
+
 **THE PAYROLL — every crew you owe, on one page, in one vocabulary (tester-reported 2026-08-15:
 "paying the guys in the kitchen is not the same as paying the guys in the empire etc. it's not
 consistent"; the founder: "good feedback, applying some fixes to smooth this out") — BUILT**
@@ -12718,3 +12765,56 @@ game; fixed with the carry. Three mutations each fail at their own named asserti
 formula → the agreement; the empty-state gate dropped → "a fresh street owes nobody"; a key dropped
 from one book → the one-shape assertion). Suite green + mobile 77/77 + client wiring/mirror (144
 boards) + pgquery + pgcheck 43/43 on real Postgres. No lever, no faucet, no schema.
+
+**THE FOUR SMALLER DEFERRALS CLOSED — provenance traits, the delivery retarget, the four-way sell
+tax, the LP league (founder-directed 2026-08-15: "Let's build out the smaller deferred items") —
+ALL FOUR BUILT.** **(1) DYNASTY PROVENANCE TRAITS** (`src/drop.js` claimColors/colorsBoard,
+`PROVENANCE.WARDS` rules tail + `wardOf`, `drop_allocations.stamped` + `account_persistent.provenance/
+provenance_pick`, `GET/POST /v1/provenance`, the YOUR COLORS card on Going Legit; dynasty §9 made
+real off the G-3 snapshots — one dataset, two uses). The five §9 walls all enforced: **OPT-IN** (the
+POST is the consent; default = clean portrait), **once per snapshot WALLET ever** (the `stamped`
+latch on the allocation row — an atomic `AND NOT stamped RETURNING`, so the same wallet re-linked to
+a second account gets `already`; SIWE uniqueness means the test unlinks the first holder before the
+second links, the realistic wallet-moves-on shape), **DISPLAY-ONLY FOREVER** (zero ledger rows,
+test-pinned), **fictional ward names** (the §9.5 guessability posture — the eight wards pass a
+no-punk/ape/pepe/frog/pixel/stonk/cat lexeme scan in-test; the whole map pinned in test/levers.js so
+a rename toward a real collection fails the register), and the metadata field is
+**`genesis_provenance`** (never tier/rank/rarity; the portrait gains a boutonnière in the ward's
+color — portraitRow carries the SAME field publicDossier discloses, so the bright-line guard stays
+structural). The visible pick = the SCARCEST claimed community computed ONCE at stamp, stored AS the
+pick — and the test's own first expectation was WRONG about which community was scarcest (it forgot
+the clawback block's fourth wallet), the code right; corrected with the wallet count in the comment.
+**(2) THE DELIVERY RETARGET** (`src/stockdeliver.js` `deedTargetRows` — ONE shared predicate for
+deedTbaFor/plan/board, the extortFront one-core discipline): a Street Deed SOLD on a secondary
+market now delivers to its BUYER — the deed follows its owner (`onchain_owner` joined to the SIWE
+wallet, case-insensitive; NULL fails OPEN so chain-dormant deploys keep delivering to the
+extractor). The prior behavior ("a sold deed just stops being a target") survives only where the
+buyer never links a wallet; the sharpened mutation reproduces exactly the pre-fix predicate and
+fails at "the secondary BUYER is now the delivery target". **(3) THE FOUR-WAY SELL TAX** (treasury-
+to-family §8 step 3): `OmertaHook.sol` + `OMR.sol` both split FOUR ways —
+`setSellTax(bps, devBps, rwaBps, communityBps)` / recipients gain the **community wallet** (the
+family-buyback keeper's key, a SEPARATE key from the treasury's — the custody rule now in both
+contracts' NatSpec), LP still the remainder so the four sum EXACTLY; events/sweep/zero-address
+guards/the conservation fuzz all widened; both ship `communityBps = 0` (Phase-1 byte-identity, the
+fixture proves the community wallet gets NOTHING at 0). The flip shape (dev 200 / rwa 160 /
+community 240 of 900) is pinned by test in BOTH layers, mutation-verified BOTH layers (the hook
+folding community into LP; OMR paying the community slice to the treasury — each fails by name).
+The **bond reweight needs NO contract change** (constructor args = deploy config; the fee-splits
+validator + CHAIN-DEPLOY's three arm-step sites rewritten from "a backend carve" to the on-chain
+recipient). `chainparams.js`'s two sell-tax panels widened to the four-arg signature (the ABI is
+synthesized from the args list, so the control room followed for free). forge **293/293** (+5).
+**(4) THE LP LEAGUE** (`src/bonds.js` syncLpDepth/`__setLpReader`/lpEthDaysFor, the `lp_depth`
+table, `BONDS.LP_SCORE_PER_ETH_DAY` (300) — the hook-blocks design's deferred status block): LP
+depth held OVER TIME in the canonical pool joins the underwriter score
+(`underwriterScore(bondedEth, pledgedOmr, lpEthDays)` — depth is the binding bond-cap constraint,
+so the players providing it earn the axis that already honors backers). **The reader stays a SEAM
+deliberately** — converting a v4 position to ETH-side depth needs a live pool's sqrtPrice, the
+exact reason the item was deferred — so the accrual machinery/score fold/board+league surfaces are
+live and the reader is ONE function at launch (CHAIN-DEPLOY's v4 step lists it beside the DEX
+bots' verify-at-launch). The accrual is deposit-timing-proof BY CONSTRUCTION: the sync accrues the
+STORED liquidity over the elapsed window, so a whale depositing just before a sync earns nothing
+for the window they missed (the mutation back-pays it and fails 4-vs-20 by name); a pulled
+position keeps what it earned and stops earning; an unlinked wallet's depth scores nobody. STATUS
+ONLY — zero transactions rows (test-pinned), worker-synced on the DEX-bot cadence, dormant in
+production until the reader lands. All numbers founder sign-off levers (BALANCE.md § THE LP LEAGUE
+— the 300 is a PROPOSED default, sized once a pool exists).

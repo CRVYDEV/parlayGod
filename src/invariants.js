@@ -95,7 +95,10 @@ const KNOWN_REASONS = {
     // ECONOMY v3 step 7 — `rarity:upgrade` is the deterministic one-tier NFT upgrade: a $OMR SINK
     // in DESK.SINK_REASONS, so it recycles to the shelf. No new bucket and no faucet — the item's
     // rarity is status, not currency.
-    'window:', 'yield:', 'desk:', 'made:', 'rarity:', 'brokers:'],
+    'window:', 'yield:', 'desk:', 'made:', 'rarity:', 'brokers:',
+    // THE COMMUNITY DROP (G-3): drop:claim is an enumerated MINT (the mission:% shape — backed by
+    // the Safe's genesis reserve, reconciled by the 'drop claims ledgered' check below).
+    'drop:'],
   cb: ['crime:', 'craft:', 'gun:buy:', 'jump:', 'death:', 'exchange:', 'onboard:', 'cook:'],
   ammo: ['melt', 'melt:tithe', 'craft:ammo', 'ammo:buy', 'jump', 'fire', 'death:', 'exchange:', 'gang:dissolved', 'convoy:', 'world:', 'port:', 'contract:', 'family:'],
 };
@@ -286,7 +289,7 @@ async function collectLedgerChecks(pool) {
   // exactly to the extent the hard token arrived — which runFamilyBuybackInvariants asserts
   // (credited == bought, real rows only). The EXACT reason, never the yield:% prefix: yield:window
   // and yield:family are genuine transfers and must stay out of both terms.
-  const omrMints = await sum(pool, "currency='omr' AND (reason LIKE 'mission:%' OR reason='prize:omr' OR reason LIKE 'emission:%' OR reason='desk:buyback' OR reason='yield:buyback')");
+  const omrMints = await sum(pool, "currency='omr' AND (reason LIKE 'mission:%' OR reason='prize:omr' OR reason LIKE 'emission:%' OR reason='desk:buyback' OR reason='yield:buyback' OR reason='drop:claim')");
   // plex:* was a Phase-2 burn: a player paid a real-money fee from earned $OMR instead of ETH (the
   // PLEX bridge). RETIRED 2026-08-10 (fees are ETH only) — the rows are real, so the reason stays in
   // the burn term forever; only new writes stopped ('plex bridge retired' below asserts that).
@@ -473,6 +476,14 @@ async function collectLedgerChecks(pool) {
   // the escrow-side outflow (the rest of the escrow burns as loan:death). The market:loot precedent.
   const loanLoot = -(await sum(pool, "currency='cash' AND reason='loan:loot'"));
   push('loan escrow', loanEscrow, loanOffered - loanTaken - loanRefunded - loanDeath - loanLoot);
+
+  // THE COMMUNITY DROP (G-3) — every `drop:claim` mint must be matched by a CLAIMED allocation row:
+  // the dataset is the authority on what a wallet was owed, so a credit with no claimed row behind
+  // it (or a claimed row whose credit never landed) trips the sweep. Zero-$OMR whitelist-only rows
+  // claim without a ledger row and sum identically on both sides.
+  const dropMinted = await sum(pool, "currency='omr' AND reason='drop:claim'");
+  const dropClaimed = await one(pool, 'SELECT COALESCE(SUM(omr),0) s FROM drop_allocations WHERE claimed');
+  push('drop claims ledgered', dropMinted, dropClaimed, 0.001);
 
   // (f4b) THE FAVOR ESCROW (Street Life step two) — the market-escrow twin. A player's posted pay
   // sits in the row, not a pocket, so the open pot must equal what was posted minus everything that

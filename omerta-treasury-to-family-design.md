@@ -187,6 +187,13 @@ one custody.
    slice move is on the record).
 3. **The two contracts** (§5) — bond reweight + the four-way sell-tax hook with the community recipient;
    `forge test` green; into the audit batch.
+   **✅ BUILT 2026-08-15** — `OmertaHook.sol` + `OMR.sol` both split FOUR ways
+   (`setSellTax(bps, devBps, rwaBps, communityBps)` / `setRecipients(dev, rwa, community, lp)`, LP the
+   remainder; events + sweep + the conservation fuzz widened; the flip-shape 200/160/240 and the custody
+   rule — the community wallet is the family-buyback keeper's — pinned by test, mutation-verified both
+   layers; forge 293/293). The **bond reweight needs NO contract change** — `polBps/devBps/rwaBps` are
+   CONSTRUCTOR args, so 7500/500/500/1500 is deploy config (`deploy/fee-splits.env` + the CHAIN-DEPLOY
+   arm step carry the values). Phase-1 byte-identity holds: both contracts ship `communityBps = 0`.
 4. **The DEX keeper + custody wiring** — mainnet, behind the audit + launch gates.
    Two operational requirements the red-team (`AUDIT-family-buyback.md`) put on the bot, because
    nothing downstream reads this keeper's price and a wrong one mints silently: (a) the price it

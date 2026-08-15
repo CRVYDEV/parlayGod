@@ -37,7 +37,7 @@ interface IOmrHookObserver {
 ///         each of those sales is itself sell pressure on the very pool being taxed. The tax was
 ///         reflexive: we taxed a sell, then sold to realise the tax. A v4 hook charges its fee
 ///         inside the swap and can charge it in EITHER currency, so pointing it at the quote side
-///         makes the three slices arrive as ETH already. The bracketed step disappears.
+///         makes the slices arrive as ETH already. The bracketed step disappears.
 ///
 ///         ── WHAT IS TAXED, EXACTLY ───────────────────────────────────────────────────────────
 ///         A SELL (OMR in, quote out) — the swap-direction expression of the old `ammPairs[to]`
@@ -53,7 +53,7 @@ interface IOmrHookObserver {
 ///             is the INPUT, so the fee is taken in OMR — at the same rate, on the actual input
 ///             consumed. That is EXACTLY what the ERC-20 tax does today, so this path is at parity
 ///             with the status quo rather than a regression, and it is not a bypass: it is taxed,
-///             just in the worse currency. Both accrue and both sweep to the same three wallets.
+///             just in the worse currency. Both accrue and both sweep to the same four wallets.
 ///
 ///         `afterSwap` is deliberately the charging point rather than `beforeSwap`: it sees the
 ///         BalanceDelta the swap actually produced, so a partially-filled swap (one that hits a
@@ -82,13 +82,17 @@ interface IOmrHookObserver {
 ///         ── ANTI-RUG POSTURE, for the auditor and the token scanners ─────────────────────────
 ///         - `MAX_SELL_TAX_BPS` (1000 = 10%) is a COMPILE-TIME cap, mirroring `OMR.sol`. The Safe
 ///           can never set a confiscatory rate.
-///         - The remainder rule sits on the LP slice, so dev + rwa + lp == total EXACTLY however the
-///           bps divide. Two of three round down; a "natural" third slice would strand wei belonging
-///           to nobody. Same discipline as `OMR.sol`, `OmertaBond` and the backend's ingest.
+///         - The remainder rule sits on the LP slice, so dev + rwa + community + lp == total EXACTLY
+///           however the bps divide. Three of four round down; a "natural" last slice would strand
+///           wei belonging to nobody. Same discipline as `OMR.sol`, `OmertaBond` and the backend's
+///           ingest. The COMMUNITY slice (treasury-to-family Phase 3) funds the family buyback —
+///           its recipient must be the community-buyback keeper wallet, a SEPARATE key from the
+///           treasury's (the custody rule: booking family backing against ETH the family keeper
+///           does not hold is the class `allocated <= held` exists to prevent).
 ///         - **There is no pause.** A hook that can revert `beforeSwap` can halt a public market,
 ///           and that is a power this contract deliberately does not take. The off switch is
-///           `setSellTax(0, 0, 0)`: the fee stops, the pool keeps trading.
-///         - The fee ACCRUES here and is swept in a separate transaction. It is not pushed to three
+///           `setSellTax(0, 0, 0, 0)`: the fee stops, the pool keeps trading.
+///         - The fee ACCRUES here and is swept in a separate transaction. It is not pushed to four
 ///           external addresses mid-swap, because then any one of them reverting on receipt would
 ///           brick the pool. Pool liveness must not depend on a recipient's behaviour.
 ///         - `sweep` is permissionless and pays ONLY the Safe-set recipients. Nobody can redirect
@@ -144,10 +148,14 @@ contract OmertaHook is IHooks, Ownable {
     uint256 public sellTaxBps; // 0 = off (the deploy default). The TOTAL rate.
     uint256 public taxDevBps; // of the total; founder revenue
     uint256 public taxRwaBps; // of the total; the treasury
-    // LP takes the remainder — never stored, so it can never disagree with the other two.
+    uint256 public taxCommunityBps; // of the total; the family buyback (treasury-to-family Phase 3)
+    // LP takes the remainder — never stored, so it can never disagree with the other three.
 
     address public devRecipient;
     address public rwaRecipient;
+    /// @notice The community-buyback keeper wallet — a SEPARATE key from the treasury's (the custody
+    ///         rule; see the header). Community ETH funds the family yield pool off-chain.
+    address public communityRecipient;
     address public lpRecipient;
 
     /// @notice Quote currencies the Safe permits to be paired with OMR on this hook. The empty map
@@ -183,11 +191,12 @@ contract OmertaHook is IHooks, Ownable {
     ///      the transaction and must not cost a cold SSTORE on every trade.
     bytes32 private constant PRE_PRICE_SLOT = keccak256("omerta.hook.prePrice");
 
-    /// @notice Fees taken and not yet swept, per currency. Three counters rather than one total, so
+    /// @notice Fees taken and not yet swept, per currency. Four counters rather than one total, so
     ///         the split that the event reports is exactly the split that gets transferred.
     struct Owed {
         uint256 dev;
         uint256 rwa;
+        uint256 community;
         uint256 lp;
     }
 
@@ -204,11 +213,12 @@ contract OmertaHook is IHooks, Ownable {
         uint256 total,
         uint256 dev,
         uint256 rwa,
+        uint256 community,
         uint256 lp
     );
-    event Swept(Currency indexed currency, uint256 dev, uint256 rwa, uint256 lp);
-    event SellTaxSet(uint256 bps, uint256 devBps, uint256 rwaBps);
-    event RecipientsSet(address dev, address rwa, address lp);
+    event Swept(Currency indexed currency, uint256 dev, uint256 rwa, uint256 community, uint256 lp);
+    event SellTaxSet(uint256 bps, uint256 devBps, uint256 rwaBps, uint256 communityBps);
+    event RecipientsSet(address dev, address rwa, address community, address lp);
     event QuoteAllowed(Currency indexed currency, bool allowed);
     event ObserverSet(address observer);
     event AntiSnipeSet(uint256 blocks_, uint256 buyBps, uint256 maxBuy);
@@ -246,25 +256,33 @@ contract OmertaHook is IHooks, Ownable {
 
     /// @notice Arm/tune the sell tax and how it splits. Signature mirrors `OMR.setSellTax` exactly so
     ///         the two layers stay in lockstep and neither can be tuned by habit into disagreement.
-    ///         `devBps + rwaBps <= bps`; LP takes the remainder.
-    function setSellTax(uint256 bps, uint256 devBps, uint256 rwaBps) external onlyOwner {
+    ///         `devBps + rwaBps + communityBps <= bps`; LP takes the remainder.
+    function setSellTax(uint256 bps, uint256 devBps, uint256 rwaBps, uint256 communityBps) external onlyOwner {
         if (bps > MAX_SELL_TAX_BPS) revert BadBps();
-        if (devBps + rwaBps > bps) revert BadBps();
-        if (bps > 0 && (devRecipient == address(0) || rwaRecipient == address(0) || lpRecipient == address(0))) {
+        if (devBps + rwaBps + communityBps > bps) revert BadBps();
+        if (
+            bps > 0
+                && (
+                    devRecipient == address(0) || rwaRecipient == address(0) || communityRecipient == address(0)
+                        || lpRecipient == address(0)
+                )
+        ) {
             revert ZeroAddress();
         }
         sellTaxBps = bps;
         taxDevBps = devBps;
         taxRwaBps = rwaBps;
-        emit SellTaxSet(bps, devBps, rwaBps);
+        taxCommunityBps = communityBps;
+        emit SellTaxSet(bps, devBps, rwaBps, communityBps);
     }
 
-    function setRecipients(address dev, address rwa, address lp) external onlyOwner {
-        if (dev == address(0) || rwa == address(0) || lp == address(0)) revert ZeroAddress();
+    function setRecipients(address dev, address rwa, address community, address lp) external onlyOwner {
+        if (dev == address(0) || rwa == address(0) || community == address(0) || lp == address(0)) revert ZeroAddress();
         devRecipient = dev;
         rwaRecipient = rwa;
+        communityRecipient = community;
         lpRecipient = lp;
-        emit RecipientsSet(dev, rwa, lp);
+        emit RecipientsSet(dev, rwa, community, lp);
     }
 
     /// @notice Allow (or revoke) a quote currency for OMR pools on this hook. Revoking does not close
@@ -289,7 +307,13 @@ contract OmertaHook is IHooks, Ownable {
         // The extra buy fee lives under the same compile-time cap as the sell tax. The window must
         // not become a way to charge a rate the anti-rug wall forbids everywhere else.
         if (buyBps > MAX_SELL_TAX_BPS) revert BadBps();
-        if (buyBps > 0 && (devRecipient == address(0) || rwaRecipient == address(0) || lpRecipient == address(0))) {
+        if (
+            buyBps > 0
+                && (
+                    devRecipient == address(0) || rwaRecipient == address(0) || communityRecipient == address(0)
+                        || lpRecipient == address(0)
+                )
+        ) {
             revert ZeroAddress();
         }
         antiSnipeBlocks = blocks_;
@@ -314,18 +338,19 @@ contract OmertaHook is IHooks, Ownable {
 
     // ── the sweep ────────────────────────────────────────────────────────────────────────────────
 
-    /// @notice Push accrued fees to the three wallets. Permissionless — it cannot send anywhere but
+    /// @notice Push accrued fees to the four wallets. Permissionless — it cannot send anywhere but
     ///         the Safe-set recipients, and keeping it open means a stalled Safe cannot strand fees.
     ///         Deliberately NOT done inside the swap: a recipient that reverts on receipt would then
     ///         brick the pool. Here it only fails this sweep, and the Safe can repoint and retry.
     function sweep(Currency currency) external {
         Owed memory o = owed[currency];
-        if (o.dev == 0 && o.rwa == 0 && o.lp == 0) revert NothingToSweep();
+        if (o.dev == 0 && o.rwa == 0 && o.community == 0 && o.lp == 0) revert NothingToSweep();
         delete owed[currency]; // effects before interactions
         if (o.dev > 0) currency.transfer(devRecipient, o.dev);
         if (o.rwa > 0) currency.transfer(rwaRecipient, o.rwa);
+        if (o.community > 0) currency.transfer(communityRecipient, o.community);
         if (o.lp > 0) currency.transfer(lpRecipient, o.lp);
-        emit Swept(currency, o.dev, o.rwa, o.lp);
+        emit Swept(currency, o.dev, o.rwa, o.community, o.lp);
     }
 
     /// @notice Native fees arrive here when the hook `take`s them out of the PoolManager.
@@ -512,18 +537,20 @@ contract OmertaHook is IHooks, Ownable {
         return antiSnipeBuyBps;
     }
 
-    /// @dev Book the three slices. The remainder rule sits on LP, so they sum to `total` exactly.
+    /// @dev Book the four slices. The remainder rule sits on LP, so they sum to `total` exactly.
     function _accrue(address sender, PoolKey calldata key, Currency feeCurrency, uint256 total) private {
         uint256 dev = (total * taxDevBps) / sellTaxBps;
         uint256 rwa = (total * taxRwaBps) / sellTaxBps;
-        uint256 lp = total - dev - rwa;
+        uint256 community = (total * taxCommunityBps) / sellTaxBps;
+        uint256 lp = total - dev - rwa - community;
 
         Owed storage o = owed[feeCurrency];
         o.dev += dev;
         o.rwa += rwa;
+        o.community += community;
         o.lp += lp;
 
-        emit SellTaxTaken(sender, key.toId(), feeCurrency, total, dev, rwa, lp);
+        emit SellTaxTaken(sender, key.toId(), feeCurrency, total, dev, rwa, community, lp);
     }
 
     /// @dev Fail-safe by construction: a reverting or gas-hungry observer must never be able to stop

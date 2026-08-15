@@ -185,17 +185,80 @@ async function derivedBondedEth(pool, accountId) {
   return round6(Number(s || 0));
 }
 
+// ── THE LP LEAGUE (the hook-blocks design's deferred status block) — liquidity depth held OVER TIME
+// in the canonical OMR pool joins the underwriter score. Depth is the binding constraint on the bond
+// daily cap (tools/bond-dials.js sized it on POOL DEPTH, not supply), so the players providing it earn
+// the status axis that already honors backers. STATUS ONLY — no payout attaches (the Sybil posture),
+// and the whole layer writes ZERO `transactions` rows.
+//
+// The READER is a seam (`__setLpReader`), deliberately: converting a v4 PositionManager position into
+// an ETH-side depth figure needs a live pool's sqrtPrice and cannot be verified before one exists —
+// the exact reason this block was deferred. The accrual machinery, the score fold and the league are
+// all live now; the reader is one function at launch (CHAIN-DEPLOY's v4 migration step lists it).
+// The reader returns [{ wallet, liquidityEth }] — the CURRENT full position set, canonical pool only.
+let lpReader = null;
+export function __setLpReader(fn) { lpReader = fn; }
+
+const DAY_MS = 24 * 3600 * 1000;
+
+// Accrue depth-time, then store the fresh read. The accrual uses the STORED liquidity over the
+// elapsed window (what was actually held since the last sync), never the new figure — so a whale who
+// deposits just before a sync earns nothing for the window they were not there.
+export async function syncLpDepth(pool, now = Date.now()) {
+  if (!lpReader) return { dormant: true };
+  const positions = await lpReader();
+  const byWallet = new Map();
+  for (const p of positions || []) {
+    const w = String(p.wallet || '').toLowerCase();
+    if (!/^0x[0-9a-f]{40}$/.test(w)) continue;
+    byWallet.set(w, (byWallet.get(w) || 0) + Math.max(0, Number(p.liquidityEth) || 0));
+  }
+  const stored = (await pool.query('SELECT wallet_address, liquidity_eth, eth_days, updated_at FROM lp_depth')).rows;
+  const seen = new Set();
+  let touched = 0;
+  for (const row of stored) {
+    const w = String(row.wallet_address).toLowerCase();
+    seen.add(w);
+    const elapsedDays = Math.max(0, (now - new Date(row.updated_at).getTime()) / DAY_MS);
+    const accrued = round6(Number(row.eth_days || 0) + Number(row.liquidity_eth || 0) * elapsedDays);
+    const liq = round6(byWallet.get(w) || 0); // absent from the read = pulled their liquidity
+    await pool.query('UPDATE lp_depth SET liquidity_eth=$2, eth_days=$3, updated_at=$4 WHERE wallet_address=$1',
+      [row.wallet_address, liq, accrued, new Date(now)]);
+    touched++;
+  }
+  for (const [w, liq] of byWallet) {
+    if (seen.has(w)) continue;
+    await pool.query('INSERT INTO lp_depth (wallet_address, liquidity_eth, eth_days, updated_at) VALUES ($1,$2,0,$3)',
+      [w, round6(liq), new Date(now)]);
+    touched++;
+  }
+  return { touched };
+}
+
+// The account's accrued ETH-days — the STORED figure plus the live tail since the last sync (the
+// lazy-accrual read shape), keyed on the SIWE wallet, case-insensitive (logs arrive checksummed,
+// SIWE stores lowercase — the deed lesson).
+async function lpEthDaysFor(pool, wallet, now = Date.now()) {
+  if (!wallet) return 0;
+  const row = (await pool.query('SELECT liquidity_eth, eth_days, updated_at FROM lp_depth WHERE wallet_address = lower($1)',
+    [String(wallet)])).rows[0];
+  if (!row) return 0;
+  const elapsedDays = Math.max(0, (now - new Date(row.updated_at).getTime()) / DAY_MS);
+  return round6(Number(row.eth_days || 0) + Number(row.liquidity_eth || 0) * elapsedDays);
+}
+
 // the caller's backer standing — the combined score, tier, next-tier delta, and charter badge.
 async function standingOf(pool, accountId) {
-  const ap = (await pool.query('SELECT pledged_omr, bond_charter FROM account_persistent WHERE account_id=$1', [accountId])).rows[0] || {};
+  const ap = (await pool.query('SELECT pledged_omr, bond_charter, wallet_address FROM account_persistent WHERE account_id=$1', [accountId])).rows[0] || {};
   const pledgedOmr = round6(Number(ap.pledged_omr || 0));
   const bondedEth = await derivedBondedEth(pool, accountId);
-  const score = underwriterScore(bondedEth, pledgedOmr);
+  const lpEthDays = await lpEthDaysFor(pool, ap.wallet_address);
+  const score = underwriterScore(bondedEth, pledgedOmr, lpEthDays);
   const tier = backerTierOf(score);
   const nxt = nextBackerTier(score);
   const charterTier = Number(ap.bond_charter || 0);
   return {
-    bondedEth, pledgedOmr, score, tier: tier.name, tierMin: tier.min,
+    bondedEth, pledgedOmr, lpEthDays, score, tier: tier.name, tierMin: tier.min,
     nextTier: nxt ? { name: nxt.name, min: nxt.min, delta: round6(nxt.min - score) } : null,
     charter: charterTier, charterName: charterTier ? (charterOf(charterTier) || {}).name || null : null,
     nextCharter: charterOf(charterTier + 1) || null,
@@ -224,8 +287,9 @@ export async function commissionCharter(ch, client, h) {
   const next = charterOf(cur + 1);
   if (!next) throw new GameError('maxed', 'You already hold The Founding Charter.');
   const bondedEth = await derivedBondedEth(client, h.accountId);
-  const score = underwriterScore(bondedEth, Number(h.acct?.pledged_omr || 0));
-  if (!(score > 0)) throw new GameError('not_backer', 'Back the treasury first — pledge $OMR or bond.');
+  const lpEthDays = await lpEthDaysFor(client, h.acct?.wallet_address);
+  const score = underwriterScore(bondedEth, Number(h.acct?.pledged_omr || 0), lpEthDays);
+  if (!(score > 0)) throw new GameError('not_backer', 'Back the treasury first — pledge $OMR, bond, or stand liquidity.');
   await spendOmr(client, h, next.omr, 'bond:charter'); // throws 'omr' if short
   await client.query('UPDATE account_persistent SET bond_charter = $1 WHERE account_id=$2', [next.tier, h.accountId]);
   if (h.acct) h.acct.bond_charter = next.tier;
@@ -237,7 +301,7 @@ export async function commissionCharter(ch, client, h) {
 // pg-mem precedent — never a correlated subquery), score computed, the top backer crowned 'The Financier'. ──
 export async function underwriterLeaderboard(pool, limit = 25) {
   const rows = (await pool.query(
-    `SELECT a.account_id, a.pledged_omr, a.bond_charter, c.name, g.name AS gang, g.tag
+    `SELECT a.account_id, a.pledged_omr, a.bond_charter, a.wallet_address, c.name, g.name AS gang, g.tag
        FROM account_persistent a
        JOIN characters c ON c.account_id = a.account_id AND c.alive
        LEFT JOIN gang_members gm ON gm.character_id = c.id
@@ -246,14 +310,20 @@ export async function underwriterLeaderboard(pool, limit = 25) {
   const bondRows = (await pool.query('SELECT account_id, principal_eth FROM bonds WHERE account_id IS NOT NULL')).rows;
   const ethByAcct = {};
   for (const b of bondRows) ethByAcct[b.account_id] = (ethByAcct[b.account_id] || 0) + Number(b.principal_eth);
+  // the LP league join — flat query + JS (the /v1/gangs pg-mem posture), stored + live tail per wallet
+  const lpRows = (await pool.query('SELECT wallet_address, liquidity_eth, eth_days, updated_at FROM lp_depth')).rows;
+  const now = Date.now();
+  const lpByWallet = new Map(lpRows.map((r) => [String(r.wallet_address).toLowerCase(),
+    round6(Number(r.eth_days || 0) + Number(r.liquidity_eth || 0) * Math.max(0, (now - new Date(r.updated_at).getTime()) / (24 * 3600 * 1000)))]));
   const scored = [];
   const gangTally = {};
   for (const r of rows) {
     const bondedEth = round6(Number(ethByAcct[r.account_id] || 0));
     const pledgedOmr = round6(Number(r.pledged_omr || 0));
-    const score = underwriterScore(bondedEth, pledgedOmr);
+    const lpEthDays = r.wallet_address ? (lpByWallet.get(String(r.wallet_address).toLowerCase()) || 0) : 0;
+    const score = underwriterScore(bondedEth, pledgedOmr, lpEthDays);
     if (!(score > 0)) continue;
-    scored.push({ name: r.name, gang: r.gang || null, tag: r.tag || null, bondedEth, pledgedOmr, score,
+    scored.push({ name: r.name, gang: r.gang || null, tag: r.tag || null, bondedEth, pledgedOmr, lpEthDays, score,
       tier: backerTierOf(score).name, charter: Number(r.bond_charter || 0),
       charterName: r.bond_charter ? (charterOf(Number(r.bond_charter)) || {}).name || null : null });
     if (r.gang) { const gk = r.gang; (gangTally[gk] = gangTally[gk] || { name: r.gang, tag: r.tag || null, score: 0, backers: 0 });

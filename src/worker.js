@@ -17,7 +17,7 @@ import { runVigInvariants } from './vig.js';
 import { carveExchange, mergeLegacyYieldPools, payFamilyYield, runExchangeInvariants } from './exchange.js';
 import { runRouterInvariants } from './router.js';
 import { runFamilyBuybackInvariants } from './community.js';
-import { runBondInvariants } from './bonds.js';
+import { runBondInvariants, syncLpDepth } from './bonds.js';
 import { runCityLeg, runBankInvariants } from './bank.js';
 import { runTreasuryInvariants } from './treasury.js';
 import { openAuction, closeExpired, runDeskInvariants } from './desk.js';
@@ -708,6 +708,11 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
           // is pacing, not safety.
           if (Date.now() - lastDexBotRun >= Number(process.env.DEX_BOT_EVERY_MS || 12 * 3600 * 1000)) {
             lastDexBotRun = Date.now();
+            // THE LP LEAGUE (src/bonds.js) — accrue depth-time off the PositionManager reader.
+            // Dormant until the reader is installed (a live pool is what makes the read meaningful);
+            // status-only, so a missed tick just delays a score, never money.
+            const lp = await safe('lp depth sync', () => syncLpDepth(pool));
+            if (lp?.touched) console.log(`💧 lp league: depth-time accrued for ${lp.touched} wallet(s)`);
             if (dexBuybackReady()) {
               const bb = await runDexBuyback(pool);
               if (bb?.swap) console.log(`💱 dex buyback: swapped ${bb.swap.ethSpent} ETH → ${bb.swap.omrReceived} OMR @ ${bb.swap.priceOmrPerEth}`);

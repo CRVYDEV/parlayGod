@@ -2007,6 +2007,12 @@
     // THE STREAK — the daily check-in (best/rank are unique to the claim response, not the view)
     if (body && body.ok && body.streak != null && body.best != null && body.cash != null && typeof body.rank === 'string')
       return `\u{1F525} checked in — day ${body.streak}, +$${fmt(body.cash)}${body.milestone ? ` · 🏅 ${body.milestone.day}-DAY MILESTONE — you're ${esc(body.milestone.title)}, +$${fmt(body.milestone.bonus)}` : (body.streak >= body.best ? ` · best yet (${esc(body.rank)})` : '')}`;
+    // THE PROVENANCE COLORS — the birthmark claimed
+    if (body && body.colors === 'claimed' && body.ward)
+      return `\u{1F396} you wear the colors of ${esc(body.ward)} — stamped on the bloodline's portrait, once ever`;
+    // THE COMMUNITY DROP — the envelope opened (the claim response's unique conjunction)
+    if (body && body.drop === 'claimed')
+      return `\u{1F4E9} the envelope: +${fmt(body.omr)} $OMR${body.freeMint ? ' — and a FREE made-man credit (mint your identity on this screen)' : ''}`;
     // THE BROKERS' DESK — activated a window ({tier,name,omr,mult,until,spentOmr} is the activate shape)
     if (body && body.mult != null && body.spentOmr != null && body.until)
       return `\u{1F3A9} you're an activated broker — ${esc(body.name)} (×${body.mult}). Now PLAY: the split pays the men who did.`;
@@ -7686,16 +7692,19 @@
     // response and the next request, and the keyless boards genuinely do run in parallel.
     // (D11 2026-08-05: the stock book retired — /v1/portfolio and its boards are tombstones now;
     // this screen is the REAL money arc: made → ladder → wallet → extraction → window → vault → bonds)
-    const [vaultR, bdR, winR, yldR, wdR, bkR, bkrR] = await Promise.all([
+    const [vaultR, bdR, winR, yldR, wdR, bkR, bkrR, drR, pvR] = await Promise.all([
       api('GET', '/v1/vault'), api('GET', '/v1/bonds'),
       api('GET', '/v1/window'), api('GET', '/v1/yield'),
       api('GET', '/v1/withdraw/status'), api('GET', '/v1/bank'),
-      api('GET', '/v1/brokers'),
+      api('GET', '/v1/brokers'), api('GET', '/v1/drop'),
+      api('GET', '/v1/provenance'),
     ]);
     const vault = vaultR.body || {}, bd = bdR.body || {};
     const win = winR.body || {}, yld = yldR.body || {};
     const wd = wdR.body || {}, bk = bkR.body || {};
     const bkr = bkrR.body || {};
+    const dr = drR.body || {};
+    const pv = pvR.body || {};
     t.innerHTML = `
       <h2>Going Legit <span class="d" style="font-size:11px">(what your $OMR does: the ladder, the vault, the window — and the on-chain way out)</span></h2>
       <div class="card" style="border-color:var(--neon)"><span class="t" style="color:var(--neon)">Where $OMR Comes From</span>
@@ -7786,6 +7795,34 @@
         ? `<span class="t">Linked <span class="chip good">${me.wallet.slice(0, 6)}…${me.wallet.slice(-4)}</span></span><div class="d">on-chain extraction is unlocked (mainnet rail is dormant until launch)</div>`
         : `<span class="t">No wallet linked</span><div class="d">sign a one-time challenge to link it — MetaMask, Coinbase, Trust, Rabby, Phantom, Crypto.com, Robinhood Wallet or any other browser wallet${rules?.walletConnect ? ', or scan the QR with a wallet on your phone (WalletConnect)' : ''}. Nothing leaves your wallet; it just proves the address.</div>
            <button class="act" id="wallet-link" style="border-color:var(--neon)">connect &amp; sign</button>`}</div>
+
+      ${dr.announced ? `
+      <h2 style="margin-top:12px">The Envelope <span class="d" style="font-size:11px">(the community drop — wallets the snapshots saw claim in-game $OMR, once, ever)</span></h2>
+      <div class="card">
+        ${dr.claimed
+          ? `<span class="t" style="color:var(--ok)">✓ envelope opened</span><div class="d">${fmt(dr.amount)} $OMR landed in your account${dr.freeMint ? ' — and the free made-man credit came with it' : ''}.</div>`
+          : !dr.open
+            ? `<div class="d">${dr.opensSeconds > 0
+                ? `The claim window opens in <b>${mins(dr.opensSeconds)}</b>. If a snapshot saw your wallet, your envelope will be waiting.`
+                : 'The claim window has closed. What went unclaimed never left the vault.'}</div>`
+            : !dr.wallet
+              ? `<div class="d"><b>The claim window is OPEN.</b> Link your wallet above first — the envelope pays the wallet the snapshot saw.</div>`
+              : dr.eligible === false
+                ? `<div class="d">This wallet is not in any snapshot — the blocks are history.</div>`
+                : `<span class="t">Your envelope: <b style="color:var(--neon)">${fmt(dr.amount)} $OMR</b>${dr.freeMint ? ' <span class="chip good">+ one FREE identity mint</span>' : ''}</span>
+                   <div class="d">closes in ${mins(dr.closesSeconds)} — claims, never pushes; unclaimed lapses back to the vault</div>
+                   <button class="act" id="drop-claim" style="border-color:var(--neon)">open the envelope</button>`}
+      </div>` : ''}
+
+      ${pv.stamped || pv.eligible ? `
+      <h2 style="margin-top:12px">Your Colors <span class="d" style="font-size:11px">(where your wallet came from — a birthmark on the portrait, cosmetic only, once ever)</span></h2>
+      <div class="card">
+        ${pv.stamped
+          ? `<span class="t">You wear the colors of <b>${pv.ward}</b></span><div class="d">stamped on your bloodline's portrait — display only, forever.</div>`
+          : `<div class="d">A snapshot saw your wallet in ${pv.wards.length === 1 ? `<b>${pv.wards[0].name}</b>` : `${pv.wards.length} circles`}.
+             Claiming stamps the colors onto your portrait — <b>public, cosmetic only, once ever</b>. The default is a clean portrait; nothing is recorded unless you claim.</div>
+             <button class="act" id="colors-claim">claim your colors</button>`}
+      </div>` : ''}
 
       <h2 style="margin-top:12px">Extraction <span class="d" style="font-size:11px">(mint your identity, then withdraw your $OMR on-chain to your own wallet — a small exit toll applies, steeper on fresh tokens)</span></h2>
       <div class="card">
@@ -7920,6 +7957,8 @@
         act('POST', '/v1/vault/claim', { omr: Number($('#vault-amt').value) }).then(() => renderPortfolio()); }
     { const wl = $('#wallet-link'); if (wl) wl.onclick = () => linkWallet(); }
     { const mg = $('#mint-go'); if (mg) mg.onclick = () => act('POST', '/v1/character/mint').then(() => renderPortfolio()); }
+    { const dc = $('#drop-claim'); if (dc) dc.onclick = () => act('POST', '/v1/drop/claim').then(() => renderPortfolio()); }
+    { const cc = $('#colors-claim'); if (cc) cc.onclick = () => act('POST', '/v1/provenance').then(() => renderPortfolio()); }
     { const wd = $('#withdraw-go'); if (wd) wd.onclick = () =>
         act('POST', '/v1/withdraw', { amount: Number($('#wd-amt').value), address: me.wallet }).then(() => renderPortfolio()); }
     // cancel a QUEUED voucher — debited-but-unsigned only; the reversal is the audited net-0 reclaim
