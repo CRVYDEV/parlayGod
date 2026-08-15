@@ -12603,3 +12603,29 @@ wealth-shaped demand where activation is recurring play-gated demand. The legibi
 bought is already answered by the ETH vault, which IS the burn-to-redeem rail in the one asset where
 the wall holds. No code moved — the record is the deliverable (the D13/D15 lesson: a decision made
 and not recorded gets made twice).
+
+**THE BROKERS' DESK CARD — the deck-only activation gets a plain-language home (founder-directed
+2026-08-15: "Do the plainer broker cards") — BUILT** (`public/index.html` renderPortfolio; client-only,
+ZERO server/§10.4 surface). The brokers activation — the stock machine's demand engine — had NO client
+surface at all (deck-only, the class every UX audit flags), so the "keep A" decision's one honest cost
+(the distribution is harder to explain than a redemption counter) was still unpaid. The card sits on
+Going Legit between the Bank and the Wallet and says the whole design in one sentence — *"the families
+vote a ticker, the treasury buys it with its own revenue, every buy is split among activated brokers
+weighted by how much you PLAYED — a rich man who doesn't play takes nothing"* — then YOUR standing as a
+sentence, not a number: NOT ACTIVATED (with "your play already counts" when it does), ACTIVATED-NOT-IN
+(the play gate in concrete words — "work N different rackets and score M+", reading the board's own
+minTracks/minScore so card and server can never disagree), or IN THE SPLIT (tier ×mult + days left +
+weight). Five tier buttons priced off the live catalog (`data-brokertier` → the audited
+`/v1/brokers/activate`; tiers BELOW a live window render disabled since the server refuses a downgrade),
+the 30-day window/extend/upgrade note, and — the copy-rules line — **straight talk: no stock moves yet**
+(the treasury's buying opens with the chain; your window and play are real today, the splits land in
+your Street Deed's vault when the buys do) — no value promise, no earnings language. A `describe()`
+branch (`mult`+`spentOmr`+`until` — the activate response's unique conjunction) toasts "🎩 you're an
+activated broker — now PLAY: the split pays the men who did." Verified the recorded way: the client
+wiring+mirror guard green (143 boards / 765 top-level fields — `/v1/brokers` joined the mirror), mobile
+77/77, and a REAL Chromium probe through the live nav (fresh player reads NOT ACTIVATED with the qualify
+hint → click a tier → the line flips to ACTIVATED-NOT-IN with the play gate explained → zero page
+errors), with the screenshot READ, not just taken (the art-pass discipline). Probe lesson re-recorded:
+`setTab` is module-scoped — a probe navigates like the mobile harness does, through the REAL
+`#grouprail`/`#tabs` buttons, and a fresh player is in SIMPLE mode, so full-nav probes set
+`omerta_alltabs` first.

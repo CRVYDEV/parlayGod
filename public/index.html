@@ -2007,6 +2007,9 @@
     // THE STREAK — the daily check-in (best/rank are unique to the claim response, not the view)
     if (body && body.ok && body.streak != null && body.best != null && body.cash != null && typeof body.rank === 'string')
       return `\u{1F525} checked in — day ${body.streak}, +$${fmt(body.cash)}${body.milestone ? ` · 🏅 ${body.milestone.day}-DAY MILESTONE — you're ${esc(body.milestone.title)}, +$${fmt(body.milestone.bonus)}` : (body.streak >= body.best ? ` · best yet (${esc(body.rank)})` : '')}`;
+    // THE BROKERS' DESK — activated a window ({tier,name,omr,mult,until,spentOmr} is the activate shape)
+    if (body && body.mult != null && body.spentOmr != null && body.until)
+      return `\u{1F3A9} you're an activated broker — ${esc(body.name)} (×${body.mult}). Now PLAY: the split pays the men who did.`;
     // THE WEEKLY BULLETIN — claimed the week's title
     if (body && body.title && body.theme) return `\u{1F4F0} ${esc(body.theme)} — you took the title: ${esc(body.title)}`;
     // PRIME TIME — answered tonight's call
@@ -7658,14 +7661,16 @@
     // response and the next request, and the keyless boards genuinely do run in parallel.
     // (D11 2026-08-05: the stock book retired — /v1/portfolio and its boards are tombstones now;
     // this screen is the REAL money arc: made → ladder → wallet → extraction → window → vault → bonds)
-    const [vaultR, bdR, winR, yldR, wdR, bkR] = await Promise.all([
+    const [vaultR, bdR, winR, yldR, wdR, bkR, bkrR] = await Promise.all([
       api('GET', '/v1/vault'), api('GET', '/v1/bonds'),
       api('GET', '/v1/window'), api('GET', '/v1/yield'),
       api('GET', '/v1/withdraw/status'), api('GET', '/v1/bank'),
+      api('GET', '/v1/brokers'),
     ]);
     const vault = vaultR.body || {}, bd = bdR.body || {};
     const win = winR.body || {}, yld = yldR.body || {};
     const wd = wdR.body || {}, bk = bkR.body || {};
+    const bkr = bkrR.body || {};
     t.innerHTML = `
       <h2>Going Legit <span class="d" style="font-size:11px">(what your $OMR does: the ladder, the vault, the window — and the on-chain way out)</span></h2>
       <div class="card" style="border-color:var(--neon)"><span class="t" style="color:var(--neon)">Where $OMR Comes From</span>
@@ -7720,6 +7725,28 @@
                liquidated — the debt only ever falls.${pr.payoffDays == null ? ' It has not paid down enough yet to say how long it will take, and we will not guess.' : ''}</div>`)}
         <div class="d" style="color:var(--dim);font-size:11.5px;margin-top:4px">The Bank keeps its own books. City money never becomes collateral and collateral never becomes city money — the only thing that crosses is the profit above, and it only goes one way.</div>
       </div>`; })()}
+
+      ${bkr.activation ? (() => {
+        const cat = bkr.catalog || {}, act2 = bkr.activation || {}, play = bkr.activity || {};
+        // The whole design in one plain sentence, then YOUR standing, then the buy-in. The blocked
+        // line does the explaining — a weight number alone means nothing to a person.
+        const standing = act2.active
+          ? (bkr.blocked === 'not_enough_play'
+            ? `<span class="chip cold">ACTIVATED, NOT IN</span> you're paid up (${esc(act2.name || '')}, ${Math.max(1, Math.floor((act2.secondsLeft || 0) / 86400))}d left) but haven't played enough this week — work <b>${cat.minTracks}</b> different rackets and score <b>${cat.minScore}</b>+, and you're in.`
+            : `<span class="chip good">IN THE SPLIT</span> ${esc(act2.name || '')} (×${act2.mult}) with ${Math.max(1, Math.floor((act2.secondsLeft || 0) / 86400))}d on the window — your cut scales with your play, weight <b>${fmt(Math.floor(bkr.weight || 0))}</b>.`)
+          : `<span class="chip cold">NOT ACTIVATED</span> your play this week already counts (score ${fmt(Math.floor(play.score || 0))} across ${play.tracks || 0} trades${play.qualifies ? ' — enough to qualify' : ''}) — activate below and you're in the next split.`;
+        return `
+      <h2 style="margin-top:12px">The Brokers' Desk <span class="d" style="font-size:11px">(the treasury buys stock with the city's own revenue — activated brokers who PLAY split every buy)</span></h2>
+      <div class="card"${act2.active && !bkr.blocked ? ' style="border-color:var(--ok)"' : ''}>
+        <div class="d">The families vote a ticker each day, and the treasury buys it with its own revenue.
+          Every buy is split among <b>activated brokers</b> — weighted by how much you actually <b>played</b>
+          that week, never by how much you burned. A rich man who doesn't play takes <b>nothing</b>.</div>
+        <div class="d" style="margin-top:6px;border-top:1px solid rgba(255,255,255,.06);padding-top:6px"><b>You:</b> ${standing}</div>
+        <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">${(cat.tiers || []).map((tr) =>
+          `<button class="act" data-brokertier="${tr.id}"${act2.active && Number(act2.tier) > tr.id ? ' disabled' : ''}>${esc(tr.name)} — ${fmt(tr.omr)} $OMR (×${tr.mult})</button>`).join('')}</div>
+        <div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">A window runs ${cat.windowDays} days; paying again extends it, and a higher tier raises your multiplier. You can't downgrade mid-window.</div>
+        <div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">Straight talk: <b>no stock moves yet</b> — the treasury's buying opens with the chain at launch. Your window and your play are real today; the splits start when the buys do, and land in your Street Deed's vault.</div>
+      </div>`; })() : ''}
 
       <div class="card"><span class="t">THE LADDER — ${me.ladder?.name || 'off the ladder'}${me.ladder?.rung ? ` (rung ${me.ladder.rung}/${me.ladder.of})` : ''}</span>
         <div class="d">Power runs on $OMR you <b>HOLD</b>, not what you spend — ${fmt(Math.floor(me.ladder?.staked || 0))} staked.
@@ -7901,6 +7928,9 @@
     } }
     $('#lad-go').onclick = () =>
       act('POST', '/v1/stake', { amount: Number($('#lad-amt').value) }).then(() => renderPortfolio());
+    // the brokers' desk — activate (or extend/upgrade) a window at the picked tier
+    t.querySelectorAll('[data-brokertier]').forEach((b) => b.onclick = () =>
+      act('POST', '/v1/brokers/activate', { tier: Number(b.dataset.brokertier) }).then(() => renderPortfolio()));
   }
 
   // ── THE ESTATE: the compound — a tiered, furnishable home that displays your legend ──
