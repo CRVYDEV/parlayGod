@@ -206,10 +206,42 @@ itself — no targets, no projections, no appreciation language (the standing ru
 eyes on the claim page and the window copy specifically). And no phase starts before the gates:
 the third-party audit, and the launch checklist.
 
-## 6. Open founder levers (tabled at decision time, none pinned yet)
+## 6. Open founder levers — ANSWERED (founder sign-off, 2026-08-16)
 
-Window length (1–3 days) · per-day offering sizes · THE GENESIS PRICE · desk-rail on/off ·
-airdrop reserve total · per-community weights + floors/caps · per-NFT amounts (coin drops are
-RULED: proportional + floor + cap, never flat-per-wallet) · D1 (on-chain vs in-game vs hybrid) ·
-the funnel-bonus size · the claim window's exact figure inside the founder's 90–180 day band ·
-whether the provenance-stamp window couples to the claim window (recommended: no).
+The 2026-08-16 questionnaire closed this table. The decisions, each now the standing answer:
+
+- **Window length: 3 days.** The 120h bond vest still outlasts it, so nobody dumps at the bell.
+- **Per-day offering sizes: an even split** (≈1.47M $OMR/day at the confirmed price against the
+  21.38 ETH raise), with the live daily-offering control kept as the GM's mid-window trim.
+- **THE GENESIS PRICE: confirmed at 205,882 $OMR/ETH** (the locked genesis-raise parameter —
+  ≈$0.017/OMR, $1.7M fully-diluted on the 100M supply). Window price == the pool's opening price.
+- **Desk rail during the window: OPEN** (the second door into the same anchored price — a buyer
+  who arrives through the game converts to a player; in-game credit still exits only through the
+  audited mint-gate + withdrawal rail).
+- **Airdrop reserve: 20M $OMR (20% of supply) — as a MULTI-CAMPAIGN BUDGET, not one drop.** The
+  founder's own framing: "we may not airdrop it all at once and leaves some in reserve for future
+  campaigns." The GENESIS drop's slice within it is a sub-lever, sized when the real allocations
+  are built (the working proposal is ~5M — roughly the paid window's own size — with the remainder
+  banked for later campaigns, each with its own snapshot-before-announce).
+- **The community list: CryptoPunks + BAYC + MAYC + the $PEPE-class coin (mainnet), StonkBrokers +
+  the $CASHCAT-class coin (Robinhood Chain), PLUS Milady Maker (mainnet — trivially snapshottable,
+  added 2026-08-16) and the $ANSEM-class Solana community.** Solana is a real build (the snapshot
+  tool replays EVM logs and the claim rail verifies EVM signatures, so it needs a Solana
+  enumeration tool + an ed25519 claim leg) — **founder chose to build it for launch.**
+- **Per-community weights + floors/caps + per-NFT amounts:** still sized at allocation-build time
+  within the genesis slice (the coin shape stays RULED: proportional + floor + cap, never
+  flat-per-wallet).
+- **D1: in-game credit via the SIWE rail — CONFIRMED.** No MerkleDistributor is written; unclaimed
+  never leaves the Safe.
+- **The funnel bonus: retired** (absorbed by the whitelist's one free identity mint — G-3 rule 4;
+  this row was already superseded and is recorded closed).
+- **Claim window: 120 days.**
+- **Provenance-stamp coupling: DECOUPLED** — a wallet that misses the money window can still mint
+  later and claim its ward colors ("the city still remembers where you came from").
+- **The legal read: the founder confirmed counsel's approval covers the free distribution** — the
+  open row on the launch checklist closes on that word.
+- **Stock-delivery verification depth (the claim-rail parameter owed since the Stock Machine
+  design): wallet + paid mint + SELF-ATTESTATION** — one eligibility confirm at deed extraction,
+  recorded on the row; revisit before volumes grow.
+- **Launch-night doors: OPEN** (INVITE_MODE stays off — the airdrop, the posts and the agent
+  funnel all point strangers at the door; the paid mint stays the Sybil bound on extraction).

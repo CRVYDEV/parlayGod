@@ -586,6 +586,14 @@ and the choice is the founder's because it turns on wallet topology, not on code
    fold; the accrue-don't-forward discipline and the partial-fill/`beforeSwap` design problem
    recorded above still govern how it is built.
 
+   > **SUPERSEDED ON THE BUY LEG (founder sign-off, 2026-08-16): BUYS STAY FREE FOREVER.** Put to
+   > the founder as the one immutable pre-audit choice, and answered: no permanent buy-side rate —
+   > the 30 bps buy-side trade fee this paragraph carried is retired and never ships. The dormant
+   > `recordTradeFee`/`syncTradeFees` backend stays as dead dormant code (nothing arms it); the
+   > sell tax's slices and the treasury-slice-as-stock-budget fold are unchanged. The windowed
+   > anti-snipe buy fee (`omerta-hook-blocks-design.md`) is a launch guard, not a rate, and ships
+   > armed at zero.
+
 Also decided in passing: **the cut is taken in ETH** (§2.1 — the core move), and **OMR may become an
 inert ERC-20** with its tax path armed at zero (§7.1).
 
