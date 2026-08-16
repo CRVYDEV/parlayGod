@@ -498,6 +498,38 @@ const SIGNED = [
   // Phase 2C — THE CONTROLLER'S PERKS: the district turf perk follows corner CONTROL (OR with family
   // turf by set-union, never stacks — the perk VALUES are the signed district perks unchanged) + one
   // extra op seat for your OWN corner, capped at SLOTS_MAX (parity). 0 disables each. Sim P9.38.
+  // ═══ SCARCITY (omerta-scarcity-design.md) — three ways to make the city ITEM-scarce, not just
+  // POSITION-scarce. None of them is a faucet: firsts are status, runs are ownership, and the
+  // shipment's material gates a SINK. Setting any of these to 0/[] disables its feature cleanly.
+  // §2 LIMITED RUNS — the caps are the scarcity; the roll is the drop (TEST-ONLY override).
+  ['LIMITED_RUN_P', 0.004],
+  ['LIMITED_RUNS', [
+    { id: 'midnight',  model: 'nocturne',  cap: 25, name: 'The Midnight Series',
+      blurb: 'Twenty-five left the coachbuilder in black. Nobody wrote down who ordered them.' },
+    { id: 'ghostline', model: 'spectre',   cap: 12, name: 'The Ghost Line',
+      blurb: 'Twelve chassis, twelve dead registrations. The paperwork was the point.' },
+    { id: 'coronation', model: 'sovereign', cap: 9, name: 'The Coronation Nine',
+      blurb: 'Nine were built for a coronation that never happened. They still gleam.' },
+    { id: 'lastrun',   model: 'tsarina',   cap: 3,  name: "The Tsarina's Last Run",
+      blurb: 'Three. The factory burned the week after, and the moulds with it.' },
+  ]],
+  // §3 THE SHIPMENT — the contested daily material. CITY_CAP is the contention (one shared quantity
+  // for the whole town); PER_PLAYER stops a whale taking the lot; ROUT_UNITS is the apex-cartel drop;
+  // LOOT_RATE is what a fire-kill takes off a stockpile. The COMMISSIONS are the sink it gates.
+  ['SHIPMENT.CITY_CAP', 40],
+  ['SHIPMENT.PER_PLAYER', 4],
+  ['SHIPMENT.ROUT_UNITS', 6],
+  ['SHIPMENT.LOOT_RATE', 0.5],
+  ['SHIPMENT.COMMISSIONS', [
+    { id: 'case',   units: 2,  cash: 120000,  name: 'A Gold Cigarette Case',
+      blurb: 'Monogrammed, and heavy enough to stop a small calibre. It has, once.' },
+    { id: 'watch',  units: 4,  cash: 400000,  name: 'A Perpetual Wristwatch',
+      blurb: 'Swiss, and older than the family. It has not been wound since 1931 and keeps perfect time.' },
+    { id: 'bust',   units: 8,  cash: 1200000, name: 'A Marble Bust of Yourself',
+      blurb: 'Commissioned from a sculptor who does headstones. He said he saw no difference.' },
+    { id: 'service', units: 16, cash: 4000000, name: 'The Silver Service',
+      blurb: 'Fifty-two pieces for a table nobody in this city is brave enough to sit at.' },
+  ]],
   ['DEEDS.PERK_TURF', 1],
   ['DEEDS.PERK_OP_SLOTS', 1],
   // Phase 3 — the deed market (a taxed cash transfer, the bodyguard:hire pattern) + Phase 4 — the growing map

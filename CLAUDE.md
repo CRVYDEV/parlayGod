@@ -12935,3 +12935,65 @@ rival corner). Every claim in `test/deeds.js` is proven at a REAL TILL (a goods 
 bill, a racket seat), never by reading a flag back — three mutations, each caught at its own named
 assertion. `DEEDS.PERK_TURF`/`PERK_OP_SLOTS` are founder sign-off levers (0 disables each), pinned in
 `test/levers.js`.
+
+**SCARCITY — THE FIRSTS, LIMITED RUNS, THE SHIPMENT (founder-directed 2026-08-16: "Begin executing
+on all your recommendations", from an agent-only-RuneScape-server observation about cheap labour
+making commodities abundant while rate-limited contested resources become the store of value) —
+BUILT** (design `omerta-scarcity-design.md`; `src/firsts.js` + `src/shipment.js` — the 152nd/153rd
+src modules, `test/firsts.js`/`test/runs.js`/`test/shipment.js` — the 107th–109th suites;
+`firsts`/`limited_runs`/`shipment_days`/`shipment_takes`/`bespoke_pieces` tables + `cars.run_id`/
+`serial` + `characters.shipment`, all ALTER-added on existing tables per the boot-crash rule; sim
+**P9.39**). **THE DIAGNOSIS, which is the durable half:** this city is **POSITION-scarce and
+ITEM-abundant.** Districts, belts, the five Commission seats, 12 op slots, unique deed names,
+auction serials `W<week>-<n>` and provenance wards are all genuinely contested — but every ITEM is
+infinite-supply at a deterministic price, the §7.11 hash never responds to demand, and the one
+rate-limited contested resource (the World cartel reservoirs) pays **CASH**, the abundant thing. So
+when the city gets rich there is nothing for the rich to want, and the luxury layer (clue trails,
+140 collection items, 35+ boards) has plenty to DO and nothing scarce to WIN — two players can hold
+the same complete collection. Three additions, and **none is a faucet**. **(1) THE FIRSTS** — the
+first ACCOUNT in the server's life to complete a collection category, take a trade to mastery 50,
+earn a grandmastery or dig a master casket holds that trophy and nobody can hold it again; everyone
+else can still finish everything, only the FIRST is gone. **25 permanent uniques**, all off content
+that already ships, so it re-prices "a thing to finish" into "a race that ends" for one table.
+Claimed at the crossing in the same txn (three hooks: `logCollect`'s completion check, `bumpMastery`'s
+level crossing, `learnSkill` diffed against a pre-insert grandmastery snapshot). Account-keyed →
+survives death; **ZERO §10.4** (test-pinned by counting). `firsts.js` is a LEAF (rules.js only) with
+an INJECTED announcer (the `__setDeliver` seam — game.js imports collection.js imports firsts.js, so
+importing back would close the cycle). **The mutation lesson: the SELECT-taken guard is a fast path,
+NOT the latch** — deleting it leaves the suite green because the PK still refuses the second write;
+only "simplifying" the insert to `ON CONFLICT DO NOTHING` (which pg-mem reports as a success) hands
+a second claimant the trophy, and that mutation fails by name. **(2) LIMITED RUNS** — numbered cars,
+**49 across 4 runs, ever**. A run is a NAMED VARIANT on an existing catalog model, never a new model
+(CARS is machine-owned), so the car is mechanically identical — value, melt, race power all read
+`model_id` — and adds **ZERO balance surface**, asserted against the pricing functions rather than
+argued (a raw-SQL twin would also have broken car conservation, which counts cars against their
+grants — the invariant working). **Minted by a rare roll on a successful boost and NEVER sold** (the
+standing rule: *sell deterministic, drop random*); the cap enforcement and the serial allocation are
+the SAME atomic statement, and **the counter never decrements**, so melting one takes it out of the
+world permanently — which goes on the city wire, because scarcity is only felt if the city sees
+supply fall. **(3) THE SHIPMENT** — the runite-ore answer, built as a **MATERIAL and never a
+currency**: an owned quantity on the character (the contraband/heist-loot precedent), so it is
+LOOTABLE on a fire-kill, dies with the street, and never enters the §10.4 set. It lands at a
+seed-drawn district (forecastable, unmanufacturable) first-come against a **city-wide** daily cap
+(40) with a per-player cap (4) — the day is exhausted by 10 distinct players, so being THERE and
+being EARLY beats being rich. Its **only** use is commissioning a numbered, account-level, purely
+cosmetic piece — a cash SINK — so the drop is **emission-safe by construction** and the suite
+asserts the identity directly: *no `shipment%` reason has ever paid out.* Routing an APEX cartel
+outfit drops units, so the reservoir loop finally pays in the scarce thing rather than the abundant
+one. **`shipment:` joined the cash vocabulary as a SINK; `firsts`/`bespoke_pieces` are ACCOUNT-keyed
+so the death-disposition guard never sees them, and `shipment_takes` is classified 'wiped'.** Two
+guards caught real things: the read-path guard refused `shipmentBoard`'s first-touch INSERT (a read
+that materializes state is a write wearing a read's clothes — split into `readDay`/`dayRow`), and
+the client mirror demanded a seeded `bespoke` row (an empty list is never a pass). **A 10% flake I
+introduced and then caught by a mutation failing at the WRONG assertion:** a FAILED boost jails you
+15–30s, so the run-mint walk's later iterations were all refused and one unlucky first roll burned
+the loop — the recorded deterministic-assertion-on-a-probabilistic-precondition class, fixed by
+GUARANTEEING the precondition (clear `jail_until` too), 8 consecutive green runs. Eight mutations
+across the three drops, each caught at its own named assertion. All `LIMITED_RUNS`/`LIMITED_RUN_P`/
+`SHIPMENT.*` numbers are founder sign-off levers (pinned, tabled in BALANCE.md § SCARCITY); the
+FIRSTS catalog derives from the live catalogs, so new content brings its own FIRST the day it ships.
+Deferred with reasons in the design doc §4: death-minted mementos, the season crown as an ITEM, an
+estate trophy-room tie-in, and retiring old catalog models (a prototype edit that silently re-prices
+every existing holder's fleet). Rejected and recorded: supply-responsive goods prices (it would
+break the arbitrage board, convoy manifest values and a signed §7.11 surface) and any
+scarce-land/appreciation framing (the deeds §6 rule stands).

@@ -1093,6 +1093,9 @@ async function seedLists() {
   // empty list is never a pass — the mirror rule; a null `deed` would leave its fields unverifiable).
   await q(`INSERT INTO street_deeds (account_id, name, name_lc, district) VALUES ($1,'Corvino Way','corvino way','neon') ON CONFLICT DO NOTHING`, [acct]);
   await q(`INSERT INTO street_deed_history (account_id, kind, detail) VALUES ($1,'claim','claimed by you'),($1,'fell','a bloodline fell here')`, [acct]);
+  // THE SHIPMENT — a commissioned piece, so /v1/shipment's `mine` has a row (an empty list is not a
+  // pass; the piece is account-keyed, so seeding it here is exactly what a real commission writes).
+  await q(`INSERT INTO bespoke_pieces (account_id, commission_id, serial, holder_name) VALUES ($1,'case',1,'You') ON CONFLICT DO NOTHING`, [acct]);
 
   // ── THE CAST (/v1/people): a nemesis (recorded malice + a kill), a worked-for bond, and a
   // guarded principal, so the Situation card's lists and the nemesis fields all have rows

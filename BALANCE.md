@@ -6173,3 +6173,59 @@ live volatility) that do not exist until mainnet. **Size it once a pool is live*
 posture as the DEX bots' verify-at-launch step. The accrual is deposit-timing-proof by construction:
 the sync accrues the STORED liquidity over the elapsed window, so a whale who deposits just before a
 sync earns nothing for the window they were not there (mutation-verified).
+
+---
+
+## SCARCITY — THE FIRSTS, LIMITED RUNS, THE SHIPMENT (2026-08-16)
+
+Built from `omerta-scarcity-design.md`, whose diagnosis is the thing to keep: **this city is
+POSITION-scarce and ITEM-abundant.** Districts, belts, Commission seats, op slots, deed names and
+auction serials are all genuinely contested — but every ITEM is infinite-supply at a deterministic
+price, the §7.11 hash never responds to demand, and the one rate-limited contested resource (the
+cartel reservoirs) pays CASH, the abundant thing. So when the city gets rich there is nothing for
+the rich to want. These three add items you can hold and lose, and **none of them is a faucet.**
+
+| | New emission? | New §10.4 reason? | Buyable? |
+|---|---|---|---|
+| The Firsts | none — pure status | none | no (unwinnable with money) |
+| Limited runs | none — cars conserve by ROW COUNT | none | no (drop-only, by rule) |
+| The shipment | **negative** — it gates a sink | `shipment:` (a SINK) | no (drawn + capped) |
+
+**THE FIRSTS** re-price content that already ships. 9 collection categories + 10 trades + 3
+grandmasteries + the master trail = **23 permanent uniques**, each claimed by the first ACCOUNT in
+the server's life to cross the line and never again. Account-keyed → survives death. The trophy has
+no gameplay effect and no price, so there is nothing here to tune: the catalog IS the lever, and it
+derives from the live catalogs, so a new mastery track brings its own FIRST the day it ships.
+
+**LIMITED RUNS** — a numbered car is a NAMED VARIANT on an existing catalog model, so it is
+mechanically identical (value, melt, race power all read `model_id`) and adds **zero balance
+surface**; the test asserts that against the pricing functions rather than arguing it. What it adds
+is a serial and a hard cap. It is **minted by a rare roll on a successful boost and never sold** —
+the standing rarity rule (*sell deterministic, drop random*) — and the counter never decrements, so
+melting one takes it out of the world permanently.
+
+| Lever | Ships | What it prices |
+| --- | --- | --- |
+| `LIMITED_RUN_P` | **0.004** | The drop chance on a successful boost when a run is open for that model. Small on purpose — a run should be a story, not a grind target. TEST-ONLY override (preflight-classified). |
+| `LIMITED_RUNS[].cap` | **25 / 12 / 9 / 3** | How many of each will ever exist. This is the scarcity: raise a cap and the object is worth less to everyone already holding one. |
+
+**THE SHIPMENT** is the runite-ore answer, built as a **material and never a currency**: an owned
+quantity on the character (the contraband/heist-loot precedent), so it is LOOTABLE on a fire-kill,
+dies with the street, and never enters the §10.4 set. It lands at a seed-drawn district (forecastable,
+unmanufacturable), first-come against a city-wide daily cap. Its **only** use is commissioning a
+numbered, account-level, purely cosmetic piece — a cash SINK — so the drop is emission-safe by
+construction, and the suite asserts the identity directly: *no `shipment%` reason has ever paid out.*
+
+| Lever | Ships | What it prices |
+| --- | --- | --- |
+| `SHIPMENT.CITY_CAP` | **40/day** | THE CONTENTION — one shared quantity for the whole town. What one player takes, another cannot; this is the only number here that makes being *there* and being *early* beat being rich. |
+| `SHIPMENT.PER_PLAYER` | **4/day** | So one whale cannot take the lot. At 40/4 the day is exhausted by 10 distinct players. |
+| `SHIPMENT.ROUT_UNITS` | **6** | What routing an APEX cartel outfit yields — the reservoir loop finally paying in the scarce thing rather than the abundant one. Bounded by the rout's own crossing guard: earnable exactly as often as an apex outfit can fall. |
+| `SHIPMENT.LOOT_RATE` | **0.5** | What a fire-kill takes off a stockpile. It is what makes holding a pile a decision (the P1.1 loot-surface twin). |
+| `SHIPMENT.COMMISSIONS[].cash` | **$120k → $4M** | The SINK the material gates. Pure status, no edge — deliberately, because a contested drop that bought POWER would be pay-to-win for whoever can camp a district. |
+
+**The two things NOT done, and why.** Making the goods price respond to demand would create real
+scarcity and would also break the arbitrage board, convoy manifest values, the Trade Winds forecast
+and a signed §7.11 surface. And nothing here is ever marketed as scarce-and-appreciating — the deeds
+doc's §6 rule stands: the map grows, the objects are described as what they are, never as what they
+might be worth.

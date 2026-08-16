@@ -16,6 +16,7 @@
 import { GameError, notify } from './game.js';
 import { CLUES, clueStepOf, clueRankOf, clueTierOf, cityHourOf , jailed, safeHoused } from './rules.js';
 import { logCollect } from './collection.js';
+import { claimFirst } from './firsts.js';
 
 
 // ── the board: your scroll + the riddle + the legend ──
@@ -84,6 +85,11 @@ export async function dig(ch, client, h) {
   await client.query('UPDATE characters SET clue_at=$2 WHERE id=$1', [ch.id, new Date(Date.now() + CLUES.CLUE_CD_MS)]);
   ch.clue_at = new Date(Date.now() + CLUES.CLUE_CD_MS);
   await client.query('UPDATE account_persistent SET caskets = caskets + 1 WHERE account_id=$1', [ch.account_id]);
+  // THE FIRSTS — the hardest trail in the city, dug once. The tier id is the gate (a master casket
+  // is the only one that counts), so an easier trail can never claim it.
+  if (tier.id === CLUES.TIERS[CLUES.TIERS.length - 1].id) {
+    await claimFirst(client, ch.account_id, 'clue:master', { name: ch.name });
+  }
   await h.track(client, ch.account_id, 'clue_casket', { take, tier: tier.id, steps: Number(s.steps), relic: relic?.id });
   const caskets = Number((await client.query(
     'SELECT caskets FROM account_persistent WHERE account_id=$1', [ch.account_id])).rows[0]?.caskets || 0);

@@ -89,6 +89,11 @@ const DISPOSITION = {
   futurity_runners: 'escrow', grand_prix_entries: 'escrow', poker_entries: 'escrow', stakes_entries: 'escrow', track_entries: 'escrow',
   transactions: 'ledger', rng_audit: 'ledger', notifications: 'log',
   clue_scrolls: 'wiped', // the treasure trail dies with the street (the heir starts a fresh hunt)
+  // THE SHIPMENT (scarcity §3): the per-player daily take. The MATERIAL is a character column, so it
+  // dies with the street by construction; this is the counter that gated it, and it dies with it —
+  // the heir is a new id and takes their own share. (bespoke_pieces + firsts are ACCOUNT-keyed and
+  // survive death on purpose, so the guard never sees them.)
+  shipment_takes: 'wiped',
   masteries: 'wiped', // THE TRADES die with the street (the estate echoes HEIR_KEEP_BPS of each track's XP to the heir); mastery_legend is account-keyed and survives by construction
   character_traits: 'wiped', // the level-50 trait dies with the street (the DYNAST echo is read BEFORE the wipe)
   character_disciplines: 'wiped', // THE REGIMEN: discipline XP dies with the street (the heir hits the gym fresh)

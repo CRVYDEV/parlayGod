@@ -1983,6 +1983,13 @@
     // v3 step 7 — the rarity NFTs. The extraction line says the tradeoff out loud, because it is the
     // one action in the game with no way back.
     if (body && body.rarityName && body.was) return `\u2728 ${body.name} is ${body.rarityName} now — ${body.spent} $OMR`;
+    // LIMITED RUNS — the two moments worth stopping for: one found, one destroyed forever.
+    if (body && body.car && body.car.run) return `\uD83D\uDE97 ${body.car.run.name} — NUMBER ${body.car.run.serial} OF ${body.car.run.cap}. Only ${body.car.run.cap} will ever exist.`;
+    if (body && body.melted && body.rounds != null) return `\uD83D\uDD25 ${body.melted.name} #${body.melted.serial} is gone for good — ${body.rounds} rounds`;
+    // THE SHIPMENT — the take and the commission. The take says how much of the CITY'S day is left,
+    // because that's the number a player is actually racing.
+    if (body && body.took != null && body.material) return `\uD83D\uDCE6 took ${body.took} of ${body.material} — ${body.cityLeft} left in the whole city today`;
+    if (body && body.piece && body.piece.serial) return `\u2726 ${body.piece.name} — number ${body.piece.serial}. Commissioned, and yours.`;
     if (body && body.tokenId && body.nonce != null)
       return `\u26D3 ${body.name || 'it'} is on-chain — token #${body.tokenId}. Safe forever, and out of the game.`;
     if (body && body.referrer && body.ok) return `on the record — ${body.referrer} gets credit as you come up`;
@@ -5684,12 +5691,36 @@
     const rd = (await api('GET', '/v1/world/raids')).body || { raids: [] };
     const bw = (await api('GET', '/v1/npcfamily')).body || { families: [] };
     const mega = (await api('GET', '/v1/megaproject')).body || {};
+    const shp = (await api('GET', '/v1/shipment')).body || {};
     // the trade-winds read: turn raw shock multipliers into the one actionable sentence
     const shocks = Object.entries(c.weather || {}).map(([d, x]) => [d, Number(x)]).sort((a, b) => a[1] - b[1]);
     const cheap = shocks[0], rich = shocks[shocks.length - 1];
     const spreadPct = cheap && rich ? Math.round((rich[1] / cheap[1] - 1) * 100) : 0;
     const tkb = c.tickerBallot;
     t.innerHTML = `
+      ${shp.material ? `<div class="card"><span class="t" style="color:var(--neon)">📦 THE SHIPMENT — ${esc(shp.material)}</span>
+        <div class="d">It lands at <b>${esc(shp.districtName || shp.district || '')}</b> today. First come — the whole city shares
+          ${shp.cityCap} crates a day and nobody takes more than ${shp.perPlayer}. It's the one thing money can't just buy:
+          you have to be there, and you have to be early.</div>
+        <div class="d" style="margin-top:4px">
+          <span class="chip ${shp.cityLeft > 0 ? 'good' : 'cold'}">${shp.cityLeft} left in the city</span>
+          <span class="chip">your take today: ${shp.yourTakeToday}/${shp.perPlayer}</span>
+          <span class="chip">holding: ${shp.held}</span>
+          ${shp.here ? '<span class="chip good">YOU\'RE STANDING IN IT</span>' : ''}</div>
+        ${shp.cityLeft > 0 && shp.yourTakeLeft > 0
+          ? (shp.here ? '<button class="act" data-do="POST /v1/shipment/take">take your share</button>'
+            : `<button class="act" data-do="POST /v1/travel/${shp.district}">go to ${esc(shp.districtName || '')}</button>`)
+          : `<span class="d" style="color:var(--dim)">${shp.cityLeft > 0 ? "you've had your share today" : "today's shipment is gone — the whole city's worth"}</span>`}
+        <div class="d" style="margin-top:6px;font-size:10.5px;color:var(--dim)">next few days: ${(shp.forecast || []).slice(1).map((f) => esc(f.district)).join(' · ')}</div>
+        <div class="d" style="margin-top:8px"><b>The commissions</b> — what it's for. A craftsman turns it into something
+          numbered and yours. Pure standing, no edge: ${shp.lootRate ? `and a killer takes ${Math.round(shp.lootRate * 100)}% of what you're carrying, so don't sit on a pile.` : ''}</div>
+        <div class="grid">${(shp.commissions || []).map((cm) => `
+          <div class="card"><span class="t">${esc(cm.name)}</span>
+            <span class="chip ${cm.afford ? 'good' : ''}">${cm.units} × material · $${cm.cash.toLocaleString()}</span>
+            <div class="d">${esc(cm.blurb)}</div>
+            ${cm.afford ? `<button class="act" data-do="POST /v1/shipment/commission/${cm.id}">commission it</button>` : ''}</div>`).join('')}</div>
+        ${(shp.mine || []).length ? `<div class="d" style="margin-top:6px">yours: ${shp.mine.map((p) => `${esc(p.name)} #${p.serial}`).join(' · ')}</div>` : ''}
+      </div>` : ''}
       ${tkb ? `<div class="card"><span class="t" style="color:var(--neon)">📈 THE DAY'S BUY — the Commission's stock ballot</span>
         <div class="d">The seated families vote daily on which stock the city treasury buys with its tax slice.
         ${tkb.leading ? `Today's ballot leads <b>${tkb.leading}</b>` : `No family has voted yet today — silence buys <b>${tkb.defaultTicker}</b>`}${(tkb.votes || []).length ? ` · votes: ${tkb.votes.map((v) => `${v.family} → ${v.ticker}`).join(' · ')}` : ''}.
@@ -6826,6 +6857,7 @@
       ${(me.cars || []).length ? `<div class="grid">${me.cars.map((c) => `
         <div class="card">${ico('car', c.model)}<span class="t">${c.model}${c.trim ? ' · ' + c.trim : ''}</span>
           ${c.rarity && c.rarity !== 'common' ? `<span class="chip good">${esc(c.rarity.toUpperCase())}</span>` : ''}
+          ${c.run ? `<span class="chip warn" title="only ${c.runCap} will ever exist — melting one takes it out of the world for good">${esc(c.runName)} · ${c.serial}/${c.runCap}</span>` : ''}
           ${c.plate ? `<span class="chip">[${c.plate}]</span>` : ''}${c.listed ? '<span class="chip cold">ON THE BLOCK</span>' : ''}${c.pledged ? '<span class="chip cold">PLEDGED</span>' : ''}
           <div class="d">damage ${c.dmg}%</div>
           ${c.listed || c.pledged ? '' : `<button class="act" data-cardo="repair:${c.id}" title="a repair can botch on badly-damaged iron — you pay either way">repair${c.dmg > 50 ? ' ⚠' : ''}</button>
@@ -8024,6 +8056,7 @@
     const e = (await api('GET', '/v1/estate')).body || {};
     const auc = (await api('GET', '/v1/auction')).body || {};
     const col = (await api('GET', '/v1/collection')).body || {};
+    const fst = (await api('GET', '/v1/firsts')).body || {};
     const tr = e.trophies || {};
     t.innerHTML = `
       ${e.tier === 0 ? coachCard('Buy a place worthy of the name', 'The don\'s compound — a tiered, furnishable home you build with earned $OMR. Pure legend: it displays your rarest iron, your book, your body count. It\'s account-level, so it OUTLIVES YOUR STREET — the heir inherits it.') : ''}
@@ -8112,7 +8145,15 @@
           <div class="d colgrid">${c.items.map((it) => `<span class="col-i${it.got ? ' got' : ''}" title="${esc(it.name)}">${it.got ? '◆' : '◇'}</span>`).join('​')}</div>
           ${c.have < c.total ? `<div class="d" style="font-size:10.5px;color:var(--dim)">missing: ${c.items.filter((it) => !it.got).slice(0, 4).map((it) => it.name).join(', ')}${c.total - c.have > 4 ? ` +${c.total - c.have - 4} more` : ''}</div>` : ''}</div>`).join('')}</div>
       <div class="d" style="margin-top:4px"><a href="#" id="col-lb-link">the completionist board →</a></div>
-      <div id="col-lb"></div>`;
+      <div id="col-lb"></div>
+      <h2 style="margin-top:14px">The Firsts <span class="d" style="font-size:11px">(won once in this city's life — ${fst.taken || 0} of ${fst.total || 0} are gone forever${fst.mine ? ` · you hold ${fst.mine}` : ''})</span></h2>
+      <div class="d" style="margin-bottom:6px">Everyone can finish everything. Only the FIRST is gone — and it stays with your bloodline through every heir.</div>
+      <div class="grid">${(fst.firsts || []).map((f) => `
+        <div class="card"${f.mine ? ' style="border-color:var(--accent)"' : ''}><span class="t">${esc(f.name)}</span>
+          ${f.taken ? `<span class="chip ${f.mine ? 'good' : ''}">${f.mine ? '✦ YOURS' : esc(f.holder || 'taken')}</span>` : '<span class="chip warn">OPEN</span>'}
+          <div class="d">${esc(f.blurb)}</div>
+          ${f.taken && !f.mine ? `<div class="d" style="font-size:10.5px;color:var(--dim)">gone — ${esc(f.holder || 'somebody')} got there first${f.steward && f.steward !== f.holder ? `, carried now by ${esc(f.steward)}` : ''}</div>`
+            : (f.taken ? '' : '<div class="d" style="font-size:10.5px;color:var(--dim)">nobody has done this yet</div>')}</div>`).join('')}</div>`;
     const up = $('#est-up');
     if (up) up.onclick = () => act('POST', '/v1/estate/upgrade', {}).then(() => renderEstate());
     const nb = $('#est-name-go');
@@ -8617,6 +8658,10 @@
       crew_objective_done: () => `🤝 YOUR CREW CRACKED THE WEEK'S JOB — collect your cut${d.reward ? ` ($${fmt(d.reward)})` : ''} on The Crew screen`,
       streak_milestone: () => `🏅 ${d.day}-DAY STREAK — you're now ${d.title}${d.bonus ? ` (+$${fmt(d.bonus)})` : ''}`,
       mastery_up: () => `your ${d.name || d.track} trade hit L${d.lvl}${d.rank ? ` — ${d.rank}` : ''}`,
+      first_claimed: () => d.name && d.blurb === undefined && !d.id ? `${d.who || 'somebody'} took ${d.first}` : `✦ ${d.name} — you were FIRST in this city, and nobody can take it`,
+      limited_run: () => `🚗 ${d.name} — number ${d.serial} of ${d.cap}. Only ${d.cap} will ever exist.`,
+      commissioned: () => `✦ ${d.name} — number ${d.serial}, made for you and nobody else`,
+      run_melted: () => `🔥 ${d.run} number ${d.serial} went to the smelter — one fewer in the world`,
       stat_use: () => `the work is paying off — +1 ${d.stat} (${d.value}) from your ${d.track} trade`,
       chat: () => `${d.who}: ${d.text}`,
     };

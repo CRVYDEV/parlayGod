@@ -31,7 +31,8 @@ import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
          CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES, BUSINESSES, PACING, POPULATION, boatResale, CORNER, CONTACTS, FAMILY_WAR,
          EXCHANGE, ESTATE, WIRE, GANG_SEALS, FOUNDATION, RIVALS, RACKETS, ASSETS, M4, DRUGS,
          MADE, MADE_LADDER, ACCESS_STAKE, OPERATIONS, opSlotsOf, SOV, DESK_AUCTION,
-         TREASURY, STORE, SELL_TAX, BONDS, MISSIONS, DEEDS } from '../src/rules.js';
+         TREASURY, STORE, SELL_TAX, BONDS, MISSIONS, DEEDS,
+         firstsCatalog, LIMITED_RUNS, LIMITED_RUN_P, SHIPMENT, carVal } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -1619,6 +1620,39 @@ phase("P9.38 street deeds 2C — the controller's perks (neon ceiling + the op s
   }
   note('deeds 2C', 'op seat max marginal', `+$${fmt(Math.floor(worst))}/day @ lvl ${worstLvl}`,
     `the (seats+1)-th best level-gated rung's metered day; EXACTLY $0/day at level ≥ ${capLvl} (SLOTS_MAX binds — the parity cap, test-pinned). PERK_OP_SLOTS: 0 disables`);
+}
+
+// ════════ P9.39 SCARCITY — the three item-scarcity drops, sized ════════
+// The design's whole claim is that none of these is a faucet, so what is measured here is the
+// CEILING on each and the direction of the one that touches cash. Analytic off the LIVE levers (the
+// P9.8/P9.38 precedent — no value seeded, §10.4 untouched).
+phase('P9.39 scarcity — the firsts, the runs, the shipment');
+{
+  // THE FIRSTS: 23-ish permanent uniques, zero currency. The only number worth printing is HOW MANY
+  // exist, because once they are gone the race is over for the life of the server.
+  const firsts = Object.keys(firstsCatalog()).length;
+  note('scarcity', 'the firsts', `${firsts} permanent uniques`,
+    'pure status — no currency, no ledger row, unbuyable by construction. Each is claimed ONCE in the server\'s life. The catalog derives from the live catalogs, so new content brings its own FIRST');
+
+  // LIMITED RUNS: the total number of numbered cars that will EVER exist, and what one is worth if
+  // melted — the melt yield is the only cash a run car ever touches, and it is identical to its
+  // plain twin's, so the run adds nothing to the faucet.
+  const totalRuns = LIMITED_RUNS.reduce((a, r) => a + r.cap, 0);
+  const dearest = LIMITED_RUNS.reduce((a, r) => Math.max(a, carVal(r.model, 'base')), 0);
+  note('scarcity', 'limited runs', `${totalRuns} numbered cars, ever (${LIMITED_RUNS.length} runs)`,
+    `mechanically identical to their catalog models (dearest base $${fmt(dearest)}), so ZERO balance surface; drop-only at LIMITED_RUN_P ${LIMITED_RUN_P}. The counter never decrements — melting one takes it out of the world`);
+
+  // THE SHIPMENT: the material pays nothing, so the only cash number is the SINK it gates. Print the
+  // ceiling on the material (what the whole city can hold per day) beside the cheapest and dearest
+  // things it buys, because that ratio is the actual pacing decision.
+  const perDay = SHIPMENT.CITY_CAP;
+  const cheapest = SHIPMENT.COMMISSIONS.reduce((a, c) => (c.units < a.units ? c : a));
+  const dearestC = SHIPMENT.COMMISSIONS.reduce((a, c) => (c.units > a.units ? c : a));
+  const daysForDearest = Math.ceil(dearestC.units / SHIPMENT.PER_PLAYER);
+  note('scarcity', 'the shipment', `${perDay} units/day city-wide, ${SHIPMENT.PER_PLAYER}/player`,
+    `the day is exhausted by ${Math.ceil(perDay / SHIPMENT.PER_PLAYER)} distinct players — CONTENTION is the feature. A rout of an apex outfit adds ${SHIPMENT.ROUT_UNITS}`);
+  note('scarcity', 'the shipment sink', `$${fmt(cheapest.cash)} → $${fmt(dearestC.cash)} per piece`,
+    `EMISSION-NEGATIVE: the material pays nothing and gates a cash SINK. The dearest piece takes ${dearestC.units} units = ${daysForDearest} perfect days of showing up, so the pacing is the MATERIAL, not the money`);
 }
 
 phase('P10 §10.4 ledger invariants over the ENTIRE sim (nothing was seeded)');

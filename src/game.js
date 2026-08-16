@@ -15,10 +15,11 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS, RANKS,
          KITCHENS, labModuleCost, recyclesToDesk, DESK_RECYCLE_REASON, isMade, madeSeconds,
          MADE_LADDER, madeRungIdx, madeRungOf, ladderFx,
          ASSETS, OPERATIONS, opSlotsOf, nextOpSlotLevel, MISSIONS, dailyLiveFor, jailed, safeHoused,
-         STABLE, SPEAKEASY, ESTATE, MADE, CREW, crewObjectiveOf, DEEDS, deedController } from './rules.js';
+         STABLE, SPEAKEASY, ESTATE, MADE, CREW, crewObjectiveOf, DEEDS, deedController , runOf } from './rules.js';
 import { dbCaps } from './db.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
+import { claimFirst, firstTaken, __setAnnouncer } from './firsts.js';
 import { businessesOf } from './business.js';
 import { speakeasyOwnedOf } from './speakeasy.js';
 import { fightersOf } from './boxing.js';
@@ -94,6 +95,17 @@ export async function notifyOnce(client, characterId, type, payload = {}) {
   bus.emit(`me:${characterId}`, { type, payload });
   return true;
 }
+
+// THE FIRSTS — the announcer the leaf module calls when a trophy is claimed once, forever. Injected
+// (not imported) because firsts.js sits outside this module's import graph on purpose; see its seam
+// comment. A first is news the whole city should hear: the winner is told, and the streets carry it
+// — this is the one achievement class where "somebody else got there" is itself the content.
+__setAnnouncer(async (client, first, accountId) => {
+  const who = (await client.query(
+    'SELECT id, name FROM characters WHERE account_id=$1 AND alive', [accountId])).rows[0];
+  if (who) await notify(client, who.id, 'first_claimed', { id: first.id, name: first.name, blurb: first.blurb });
+  bus.emit('streets', { type: 'first_claimed', who: who?.name || 'somebody', first: first.name });
+});
 
 // §5.5 weekly family contracts — the same actions that call bumpFamilyTask in v24
 // (tribute $, crime, melt rounds, gta, jump, deal, recruit) progress the gang's task.
@@ -346,6 +358,10 @@ export async function loadOwned(client, ch) {
   // non-aggression gate in combat (h.owned.crewId / h.victimOwned.crewId) + the board; carried on
   // victimOwned wherever a PvP verb already reads it for family omertà.
   const crewId = grp.get('crew')?.[0]?.k || null; // folded into the UNION above (was its own query)
+  // THE SHIPMENT (scarcity §3) — the bespoke pieces this bloodline has commissioned. Account-keyed,
+  // so they outlive the street; read here so the board and the estate trophies see the same list.
+  const bespoke = (await client.query(
+    'SELECT commission_id, serial FROM bespoke_pieces WHERE account_id=$1 ORDER BY made_at', [ch.account_id])).rows;
   let gang = null, held = [];
   if (gangId) {
     gang = (await client.query('SELECT * FROM gangs WHERE id=$1', [gangId])).rows[0] || null;
@@ -399,6 +415,7 @@ export async function loadOwned(client, ch) {
     gangId, gangRole: gm.rows[0]?.role || null, gangJoinedAt: gm.rows[0]?.joined_at || null, gang, held,
     deedPerk, deedSeat, // STREET DEEDS 2C — controlled-corner districts (turf perk) + the own-corner op seat
     crewId,   // THE CREW — the non-aggression gate reads this off owned/victimOwned (combat.js)
+    bespoke,  // THE SHIPMENT — commissioned pieces (account-level status, survives death)
     makings: Object.fromEntries(mk.rows.map((r) => [r.drug_id, Number(r.qty)])),
     stash: st.rows.map((r) => ({ drug_id: r.drug_id, qty: Number(r.qty), quality: Number(r.quality) })),
     batch: batch.rows[0] || null,
@@ -623,6 +640,12 @@ export async function bumpMastery(client, h, ch, trackId, action) {
   const after = masteryLvlOf(next);
   if (after > before) {
     await notify(client, ch.id, 'mastery_up', { track: trackId, name: track.name, lvl: after, rank: masteryRankOf(after) });
+    // THE FIRSTS — the top of a trade is a race that ends. Hooked at the CROSSING (not at every
+    // bump past the cap) so it costs one PK read on the single tick that reaches MAX_LVL, and never
+    // again. Best-effort by construction: claimFirst can never fail the action that earned it.
+    if (after >= MASTERY.MAX_LVL && ch.account_id) {
+      await claimFirst(client, ch.account_id, `mastery:${trackId}`, { name: ch.name });
+    }
   }
   // THE BROKERS — record the raw ACTION COUNT for the epoch allocator (omerta-brokers-design.md).
   //
@@ -1192,7 +1215,8 @@ async function persistCharacter(client, ch) {
       crew_paid_at=$46, heat_exposure=$47, indicted_at=$48, retainer_until=$49, jury_bought=$50, witpro_until=$51,
       world_raid_at=$52, pen_safe_until=$53, hole_until=$54, welsher=$55, wanted_until=$56,
       rwa_used=$57, rwa_at=$58, envelope_until=$59, wire_until=$60, poker_limit=$61,
-      safehouse_used=$62, safehouse_at=$63, refill_used=$64, refill_at=$65, family_raid_at=$66 WHERE id=$1`,
+      safehouse_used=$62, safehouse_at=$63, refill_used=$64, refill_at=$65, family_raid_at=$66,
+      shipment=$67 WHERE id=$1`,
     [ch.id, ch.respect, ch.energy, ch.nerve, ch.health, ch.cash, ch.bank,
      ch.muscle, ch.cunning, ch.speed, ch.jail_until, ch.loc, ch.streak, ch.checkin_day,
      ch.lc_crime, ch.ammo, ch.cb, ch.heat, ch.trade_rep, ch.gta_at, ch.path,
@@ -1205,7 +1229,8 @@ async function persistCharacter(client, ch) {
      ch.world_raid_at ?? null, ch.pen_safe_until ?? null, ch.hole_until ?? null, ch.welsher ?? false, ch.wanted_until ?? null,
      ch.rwa_used ?? 0, ch.rwa_at ?? null, ch.envelope_until ?? null, ch.wire_until ?? null,
      ch.poker_limit ?? null, ch.safehouse_used ?? 0, ch.safehouse_at ?? null,
-     ch.refill_used ?? 0, ch.refill_at ?? null, ch.family_raid_at ?? null]);
+     ch.refill_used ?? 0, ch.refill_at ?? null, ch.family_raid_at ?? null,
+     ch.shipment ?? 0]);
 }
 
 // THE COACH — the single highest-value next step for THIS player, server-authoritative so the client
@@ -1635,9 +1660,12 @@ export function view(ch, acct = {}, owned = {}) {
     statesman: { statecraft: Number(acct?.statecraft || 0), rank: statesmanRankOf(acct?.statecraft).name },
     // `value` is the SAME damage-adjusted book figure loans.js checks a pledge against, so the
     // client's collateral picker and the server's floor can never disagree about what a car is worth.
-    cars: (owned.cars || []).map((c) => ({ id: c.id, model: c.model_id, trim: c.trim_id, dmg: c.dmg, plate: c.plate || null, listed: !!c.listed, pledged: !!c.pledged, tune: Number(c.tune || 0), raceLimit: c.race_limit != null ? Math.floor(Number(c.race_limit)) : null, value: carCollateralValue(c.model_id, c.trim_id, c.dmg), rarity: String(c.rarity || 'common') })),
+    cars: (owned.cars || []).map((c) => ({ id: c.id, model: c.model_id, trim: c.trim_id, dmg: c.dmg, plate: c.plate || null, listed: !!c.listed, pledged: !!c.pledged, tune: Number(c.tune || 0), raceLimit: c.race_limit != null ? Math.floor(Number(c.race_limit)) : null, value: carCollateralValue(c.model_id, c.trim_id, c.dmg), rarity: String(c.rarity || 'common'), run: c.run_id || null, runName: c.run_id ? (runOf(c.run_id)?.name || c.run_id) : null, serial: c.serial != null ? Number(c.serial) : null, runCap: c.run_id ? (runOf(c.run_id)?.cap || null) : null })),
     // v3 step 7: extracted cars are NOT in `cars` (loadOwned filters them so they are inert) — the
     // sheet still names them, because a player who paid to take one on-chain should see it.
+    // THE SHIPMENT (scarcity §3) — the contested material you're holding, and the pieces it bought
+    shipment: Number(ch.shipment || 0),
+    bespoke: (owned.bespoke || []).map((b) => ({ id: b.commission_id, serial: Number(b.serial) })),
     nftCars: (owned.nftCars || []).map((c) => ({ id: c.id, model: c.model_id, name: carOf(c.model_id)?.name || c.model_id, rarity: String(c.rarity || 'common') })),
     gang: owned.gang ? { id: owned.gang.id, name: owned.gang.name, tag: owned.gang.tag, role: owned.gangRole,
       color: owned.gang.color || null, seal: sealOf(owned.gang.seal)?.name || null,
