@@ -12,6 +12,11 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 /// @notice Holds tokenized-stock ERC-20s the treasury keeper PRE-BOUGHT (runStockBuyback) and PUSHES the
 ///         allocated units straight into a player's ERC-6551 token-bound account.
 ///
+///         WHICH token-bound account is a backend decision this contract deliberately knows nothing
+///         about (`deliver` takes a plain address), and the shipped answer is the STREET DEED's —
+///         own the street, and the street holds your legit book. NOT the identity NFT: keeping stock
+///         off `DynastyNFT` is what preserves its entitlement wall (see that contract's header).
+///
 ///         GATELESS PUSH (founder decision, §3.3): delivery is automatic and there is NO claim process and
 ///         NO on-chain eligibility gate — stock accrues straight into the token-bound account, so the NFT
 ///         sells self-contained. This is a DELIBERATE decision, recorded here rather than omitted: the design
@@ -42,7 +47,20 @@ contract StockVault is Ownable2Step, Pausable, ReentrancyGuard {
     ///         VoucherClaim.dailyCapOMR discipline applied per stock so one key can't drain a whole ticker
     ///         in a block. The Safe sets it per token.
     mapping(address => uint256) public dailyCap;                 // token => max units/UTC day (0 = unlimited)
+    mapping(address => bool) public capConfigured;               // token => the Safe has SET a cap (even 0)
     mapping(address => mapping(uint256 => uint256)) public deliveredOnDay; // token => day => units delivered
+
+    /// @notice The wall a token inherits when the Safe has never set one (0 = unlimited).
+    ///
+    ///         Sibling contracts read `0 = unlimited` off a single constructor argument, so forgetting
+    ///         it is one visible mistake at deploy. This cap is a MAPPING and the set of tickers GROWS:
+    ///         the Commission votes a ticker daily from a list the operator extends by adding a token
+    ///         address, and nothing in that process forces a `setDailyCap` for the new one. So the
+    ///         default had to be safe rather than infinite — otherwise a freshly-added ticker is the
+    ///         one stock a leaked keeper key can drain in a single block, silently, while every
+    ///         configured ticker holds (red-team C2). An EXPLICIT `setDailyCap(token, 0)` still means
+    ///         unlimited: the convention survives, only the never-set case changes.
+    uint256 public defaultDailyCap;
 
     /// @notice Idempotency: the backend stamps each allocation a unique deliveryId; a re-driven delivery
     ///         (retry, reorg re-scan) is a clean no-op, so a delivery lands AT MOST once.
@@ -50,6 +68,7 @@ contract StockVault is Ownable2Step, Pausable, ReentrancyGuard {
 
     event KeeperSet(address indexed keeper);
     event DailyCapSet(address indexed token, uint256 cap);
+    event DefaultDailyCapSet(uint256 cap);
     event Delivered(uint256 indexed deliveryId, address indexed token, address indexed to, uint256 units);
     event Swept(address indexed token, address indexed to, uint256 amount);
 
@@ -58,9 +77,11 @@ contract StockVault is Ownable2Step, Pausable, ReentrancyGuard {
         _;
     }
 
-    constructor(address owner_, address keeper_) Ownable(owner_) {
+    constructor(address owner_, address keeper_, uint256 defaultDailyCap_) Ownable(owner_) {
         keeper = keeper_; // may be 0 at deploy (deliveries off until the Safe wires the bot)
+        defaultDailyCap = defaultDailyCap_;
         emit KeeperSet(keeper_);
+        emit DefaultDailyCapSet(defaultDailyCap_);
     }
 
     // ── admin (the Safe) ──
@@ -72,7 +93,19 @@ contract StockVault is Ownable2Step, Pausable, ReentrancyGuard {
     function setDailyCap(address token, uint256 cap) external onlyOwner {
         require(token != address(0), "SV: zero token");
         dailyCap[token] = cap;
+        capConfigured[token] = true; // an EXPLICIT 0 means unlimited; never-set falls back below
         emit DailyCapSet(token, cap);
+    }
+
+    function setDefaultDailyCap(uint256 cap) external onlyOwner {
+        defaultDailyCap = cap;
+        emit DefaultDailyCapSet(cap);
+    }
+
+    /// @notice The wall actually applied to `token` — its own cap once the Safe has set one, else the
+    ///         default. Public so an operator can see at a glance which tickers are on the fallback.
+    function effectiveDailyCap(address token) public view returns (uint256) {
+        return capConfigured[token] ? dailyCap[token] : defaultDailyCap;
     }
 
     // Pausing stops NEW deliveries. It can never trap a player's stock — delivered stock already sits in the
@@ -121,7 +154,7 @@ contract StockVault is Ownable2Step, Pausable, ReentrancyGuard {
         require(!usedDeliveryId[deliveryId], "SV: replay");
         usedDeliveryId[deliveryId] = true;
 
-        uint256 cap = dailyCap[token];
+        uint256 cap = effectiveDailyCap(token);
         if (cap != 0) {
             uint256 day = block.timestamp / 1 days;
             uint256 newTotal = deliveredOnDay[token][day] + units;

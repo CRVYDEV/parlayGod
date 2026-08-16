@@ -456,6 +456,24 @@ assert.equal(brBoard.corner.iControl, true, 'control RESET to the re-importer �
 assert.equal((await reimportDeed(pool, { ref: 'tx1:0', from: burnerWallet, tokenId: ext.body.tokenId })).duplicate, true,
   're-import is idempotent on the log ref (txHash:logIndex)');
 
+// THE ON-CHAIN LIFE IS OVER — every field that described it is cleared with the token id (red-team C4).
+// This is not tidiness: the STOCK-DELIVERY rail (brokers §3.4) resolves a deed's delivery target from
+// `onchain_owner` first and `extracted_by_account` second. Leave either set and a deed that is
+// re-imported, then re-extracted by SOMEBODY ELSE, spends its extract-pending window carrying the
+// PREVIOUS life's owner — so that owner's allocations are delivered into the ERC-6551 vault of a deed
+// the new extractor is about to control. Asserted through the delivery rail's own predicate, not just
+// on the columns, because the columns are only a defect through what reads them.
+const backHome = (await pool.query(
+  'SELECT onchain_token_id, extracted_by_account, extracted_at, onchain_owner FROM street_deeds WHERE name=$1',
+  ['Enzo Alley'])).rows[0];
+assert.equal(backHome.onchain_token_id, null, 'the token id is cleared — the deed is in-game again');
+assert.equal(backHome.extracted_by_account, null, 'and the extractor with it');
+assert.equal(backHome.extracted_at, null, 'and when they did it');
+assert.equal(backHome.onchain_owner, null, 'and the last on-chain owner — nothing survives to mis-route the next extraction');
+const { deedTargetRows } = await import('../src/stockdeliver.js');
+assert.equal((await deedTargetRows(pool)).some((t) => t.name === 'Enzo Alley'), false,
+  'and the delivery rail no longer sees a re-imported street as anyone\'s stock target');
+
 // §10.4-NEUTRALITY: the whole on-chain lifecycle (extract → confirm → re-import) wrote ZERO ledger rows
 assert.equal(await txCount(), chainTx0, 'the on-chain deed lifecycle moves NO §10.4 value — a deed is ownership, not a currency');
 

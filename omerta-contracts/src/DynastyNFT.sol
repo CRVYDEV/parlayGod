@@ -11,16 +11,22 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
 /// @title DynastyNFT — OMERTÀ's identity NFT (omerta-dynasty-machine-design.md §4, omerta-identity-nft-design.md §5).
-/// @notice The player's on-chain bloodline identity: the tradeable trophy an account mints, and the future
-///         host for an ERC-6551 token-bound account that stock is DELIVERED into (StockVault). Deliberately
-///         "the plainest possible ERC-721" — 6551 layers onto any already-deployed NFT, so this contract
-///         carries no 6551 code and needs none.
+/// @notice The player's on-chain bloodline identity: the tradeable trophy an account mints. Deliberately
+///         "the plainest possible ERC-721" — it holds no value, gates nothing, and carries no 6551 code.
+///
+///         NO STOCK IS DELIVERED HERE, and that is a decision rather than an omission (red-team C5).
+///         An earlier cut of this header named this token as the host for the ERC-6551 account
+///         `StockVault` pushes tokenized stock into; the shipped rail targets the STREET DEED's
+///         token-bound account instead (`src/stockdeliver.js` — own the street, and the street holds
+///         your legit book). Keeping stock OFF the identity token is what preserves the wall below: a
+///         token that held real assets would be a bearer instrument, and its floor would become a
+///         function of its contents rather than of the bloodline it commemorates.
 ///
 ///         THE WALL (identity §1, dynasty §2.2): the game ENTITLEMENT (`account_persistent.minted`, the
 ///         wage/withdraw gates) stays ACCOUNT-BOUND in the backend and is NEVER read off `balanceOf`. This
 ///         contract therefore gates NOTHING on a balance — the trophy transfers, the entitlement does not.
-///         Selling this token sells the delivered contents of its token-bound account + the portrait; it
-///         never sells the account, the login, the legends, or the extraction entitlement.
+///         Selling this token sells the portrait and the record; it never sells the account, the login,
+///         the legends, or the extraction entitlement.
 ///
 ///         SUPPLY IS UNCAPPED (founder rule 1: a cap on the identity would cap the player count). tokenId is
 ///         a plain sequential counter — a dynasty is not named at mint, and the backend maps tokenId → the
@@ -109,8 +115,8 @@ contract DynastyNFT is ERC721, ERC2981, EIP712, Ownable2Step, Pausable, Reentran
         _setDefaultRoyalty(recipient, bps); // ERC2981 reverts if bps > 10000
     }
 
-    // Pausing stops new MINTS only; it can never trap a holder's token (there is no vault here — the token
-    // lives in the holder's wallet, and its 6551 account's contents are the account's, not this contract's).
+    // Pausing stops new MINTS only; it can never trap a holder's token (there is no vault here and nothing
+    // is delivered here — the token simply lives in the holder's wallet).
     function pause() external onlyOwner { _pause(); }
     function unpause() external onlyOwner { _unpause(); }
 

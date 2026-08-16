@@ -26,7 +26,7 @@ contract StockVaultTest is Test {
     uint256 constant FUNDED = 1_000_000e18;
 
     function setUp() public {
-        vault = new StockVault(safe, keeper);
+        vault = new StockVault(safe, keeper, 0); // 0 default = the pre-C2 posture, so every existing test is unchanged
         stock = new MockStock();
         stock.mint(address(vault), FUNDED); // the treasury pre-funds the vault
     }
@@ -101,6 +101,50 @@ contract StockVaultTest is Test {
         vm.prank(keeper);
         vault.deliver(3, address(stock), tbaA, 40e18);
         assertEq(stock.balanceOf(tbaA), 140e18, "cap resumes the next day");
+    }
+
+    // ── C2: A NEVER-CONFIGURED TICKER INHERITS THE DEFAULT WALL, NOT INFINITY ─────────────────────
+    // The ticker set GROWS (the Commission votes one daily off a list the operator extends by adding a
+    // token address), and nothing in that process forces a setDailyCap for the new one — so a mapping
+    // that defaults to "unlimited" makes the newest stock the one a leaked keeper drains in a block,
+    // silently, while every configured ticker holds. The default is what closes that.
+    function test_an_unconfigured_ticker_inherits_the_default_cap() public {
+        StockVault walled = new StockVault(safe, keeper, 50e18);
+        MockStock fresh = new MockStock();
+        fresh.mint(address(walled), FUNDED);
+        assertEq(walled.effectiveDailyCap(address(fresh)), 50e18, "a ticker nobody configured is walled by the default");
+        vm.startPrank(keeper);
+        walled.deliver(1, address(fresh), tbaA, 50e18);
+        vm.expectRevert("SV: daily cap");
+        walled.deliver(2, address(fresh), tbaA, 1e18); // the fresh ticker is NOT a free drain
+        vm.stopPrank();
+    }
+
+    // and the `0 = unlimited` convention the sibling contracts share still holds when it is CHOSEN:
+    // an explicit setDailyCap(token, 0) is a decision, a never-set token is not.
+    function test_an_explicit_zero_still_means_unlimited() public {
+        StockVault walled = new StockVault(safe, keeper, 50e18);
+        MockStock fresh = new MockStock();
+        fresh.mint(address(walled), FUNDED);
+        vm.prank(safe);
+        walled.setDailyCap(address(fresh), 0);
+        assertTrue(walled.capConfigured(address(fresh)), "the Safe has spoken for this ticker");
+        assertEq(walled.effectiveDailyCap(address(fresh)), 0, "explicit 0 = unlimited, as everywhere else");
+        vm.prank(keeper);
+        walled.deliver(1, address(fresh), tbaA, 500e18); // far past the default — deliberately uncapped
+        assertEq(fresh.balanceOf(tbaA), 500e18, "an explicit unlimited is honoured");
+    }
+
+    function test_default_cap_is_safe_settable_and_evented() public {
+        vm.expectEmit(false, false, false, true, address(vault));
+        emit StockVault.DefaultDailyCapSet(7e18);
+        vm.prank(safe);
+        vault.setDefaultDailyCap(7e18);
+        assertEq(vault.effectiveDailyCap(address(stock)), 7e18, "the fallback moved for every unconfigured ticker");
+        address stranger = makeAddr("stranger");
+        vm.prank(stranger);
+        vm.expectRevert();
+        vault.setDefaultDailyCap(0);
     }
 
     function test_pause_stops_deliveries_but_traps_nothing() public {

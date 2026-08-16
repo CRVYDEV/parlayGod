@@ -13077,3 +13077,65 @@ scope, stated in the harness: it counts REQUESTS, not their cost — a board tha
 and one that scans a table both count 1 — which is the right unit for the ceiling question because the
 server figure is also in requests, but a heavy board is invisible to it. **The remaining dials, in order:
 the DATABASE plan (+50% per doubling), then Home's 18-board fan-out itself.**
+
+**THE RED TEAM OVER TODAY'S DROPS AND THE CONTRACT GRAPH (founder-directed 2026-08-16: "Run a
+comprehensive thorough red team of all the work done today. Make sure to red team the smart contracts
+and all the interactions between them all") — `AUDIT-session-scarcity-poll-contracts.md`.** First-hand,
+no fan-out; every finding reproduced against a running engine before being called one. **No CRITICAL.
+Nine fixes, eleven mutations, all failing at their own named assertion — and two of those mutations
+SURVIVED their first cut, which is the more useful half.** **THE HEADLINE (F2) is a production bug that
+destroyed value on every kill**: the shipment loot block copied its `contraband`/`heist_loot` neighbours
+verbatim, and `shipment` differs from both on the two axes that decide how a column may be written —
+it is **INT** (so `col = col - $n` hits the documented pg-mem sign-flip: `8−4 = −4` measured) **and it
+is PERSISTED** ($67), where they are direct-SQL columns (so the killer's SQL credit is overwritten by
+the persist that ends the action). Axis 2 is real-Postgres, not a test artifact: **the victim lost the
+material and the killer banked nothing**, i.e. the scarce contested resource was destroyed at exactly
+the moment the design says it changes hands — with **no test covering the loot at all**, though the
+suite header claimed it as proven. Fixed (victim absolute-in-JS, killer in-memory), regression asserts
+BOTH sides because either half alone still reads plausible. **F1** — `mintLimitedRun`'s
+`catch { return null }` (*"a mint failure can never fail a boost"*) **cannot keep that promise inside a
+transaction**: the failed statement has already aborted the txn, so the swallow moved the failure one
+statement later to a **25P02** that `deadlockToRetry` does not map — reproduced, a raw 500 where the
+catch was meant to buy silence; letting the 23505 through becomes a clean `contention`, the `dayRow`
+posture. **F6** — today's own board-poll decoupling left cooldown BUTTONS stale up to 2 minutes while
+the ticker painted READY beside them (**the control-that-lies class arriving through TIME rather than a
+missing field**); a zero crossing now re-renders the screen, promoted into `tools/mobile.js` as **check
+H** (78 checks). Plus F4 (an announcement derived from the pre-claim read instead of the claim's own
+`RETURNING`), F5 (an N+1 on a polled board → one IN list; pgquery ceiling 71→72 with the reason
+recorded) and F3 (a module-wide cached SAVEPOINT probe → per-call; the two pre-existing sites are
+recorded as unreachable rather than churned). **THE CONTRACTS, read as a GRAPH** — shared keys, token
+flows, walls that span contracts, rather than each in isolation. **C4 (MED)**: a re-imported Street Deed
+kept `extracted_by_account`/`onchain_owner`, and the stock rail resolves a delivery target from exactly
+those — so a deed re-imported then re-extracted **by somebody else** would deliver the PREVIOUS owner's
+real stock into the new extractor's ERC-6551 vault, with every invariant green (the vault's wall is
+`allocated ≤ held` in UNITS; who received them is not a quantity). Both return-to-game paths now clear
+the whole on-chain identity, asserted through the delivery rail's own predicate rather than on the
+columns. **C2 (MED)**: five contracts read `0 = unlimited`, but `StockVault`'s is a **mapping** and the
+ticker set GROWS (the Commission votes one daily off a list the operator extends), so a freshly-added
+stock was the one a leaked keeper could drain in a block — added `defaultDailyCap` (an EXPLICIT
+`setDailyCap(token,0)` still means unlimited, so the convention survives; only the never-set case
+changes), 3 Foundry tests, **forge 296/296**. **C1 (MED, ops)**: one `VOUCHER_SIGNER_PK` signs FOUR
+contracts, each storing its own `signer`, and CHAIN-DEPLOY had **no rotation runbook at all** — added
+the ordered one (pause four → `setSigner` four → rotate the key → unpause) plus the sizing note that
+the key's blast radius is the SUM of four daily caps, and **guarded it**: `test/docs.js` fails if a
+signer-bearing contract is missing from the `setSigner` step. **C5**: `DynastyNFT` still claimed to be
+the container stock is delivered into, which the shipped rail redirected to the Street Deed precisely to
+keep the identity token's entitlement wall — an auditor would have modelled the wrong contract as a
+bearer instrument (**the NatSpec IS the spec** for an audit batch). **C3**: `MAX_SELL_TAX_BPS` is a
+ceiling per LAYER and `OMR`/`OmertaHook` cannot see each other, so a seller pays the SUM — stated as
+**one venue, one layer** in both headers and CHAIN-DEPLOY, since coupling two immutable contracts is
+worse than the problem. Verified clean and recorded so the sweep is not repeated: the four voucher
+domains are properly separated (distinct EIP-712 names + `verifyingContract`, independent nonce spaces,
+TTL backstops), `OmertaFees` uses ONE nonce counter across all four fee kinds so its two consumer tables
+can never collide on an idempotency key, the mint graph (one minter, no owner mint, `setMinter(0)` as a
+one-tx stop), and the Bank cluster's trust edges. **THE TWO VACUOUS-FIRST-CUT MUTATIONS**: the F6 probe
+asserted "a request happened at the crossing" — but a live page always has background traffic, so
+removing the fix still passed (now quiet-window vs crossing-window: **17 vs 0** with the fix, 0 vs 0
+without); and the C1 guard asserted the contract NAME appears in the runbook, which passed because every
+one of them is also named in the PAUSE step one line up — **pausing is not rotating**, so it now reads
+the `setSigner` line specifically. Flagged, not changed: a burned deed's token-bound account still
+exists, so re-import → in-game sale → re-extract hands the buyer whatever sat in that vault, and the
+in-game market prices a deed with no visibility of it (the on-chain half has `transferLocked`; a
+database row is not an ERC-721 transfer) — the cheap disclosure is that the game already knows what it
+delivered without any RPC read, a founder call and moot until mainnet. Suite 109 files + mobile 78/78 +
+pgquery 2942 statements + pgcheck 43/43 on real Postgres + forge 296/296.

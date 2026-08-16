@@ -180,6 +180,18 @@ assert.equal(killed.code, 200, 'the mod-kill runs the estate');
 assert.equal(await heldBy(killed.body.heirId), 0,
   'the heir holds none of it — the material dies with the street');
 
+// ═══ 3c. THE CLAIM'S OWN RETURNING IS THE TRUTH (red-team F4) ═══
+// What's left is derived from the UPDATE that claimed the crates, never from the row read before it:
+// under contention that read is already stale, and deriving from it either cries "the shipment is
+// gone" while crates remain or misses the announcement entirely. A SOURCE tripwire and labelled as
+// one — the divergence needs two players inside one claim, which pg-mem (single-caller) cannot stage.
+const takeSrc = (await import('node:fs')).readFileSync('src/shipment.js', 'utf8')
+  .split('export async function takeShipment')[1].split('export async function')[0];
+assert(/nowTaken\s*=\s*Number\(up\.rows\[0\]\.taken\)/.test(takeSrc),
+  "the take reads what it actually claimed out of the UPDATE's RETURNING");
+assert(!/cap\s*-\s*Number\(row\.taken/.test(takeSrc),
+  'and never re-derives what is left from the pre-claim read');
+
 // ═══ §10.4 ═══
 const inv = await runLedgerInvariants(pool, { alert: false });
 assert(inv.checks.find((c) => c.name === 'reason vocabulary').ok, 'shipment: is a known reason');

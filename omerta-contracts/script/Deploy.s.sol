@@ -69,8 +69,12 @@ contract Deploy is Script {
         // StockVault — the gateless keeper-push tokenized-stock delivery vault (omerta-brokers-design.md
         // §3.3). NEVER mints (pre-held transfer only). Keeper unset (0) at deploy = deliveries OFF until
         // the Safe wires the push bot; the Safe pre-funds the vault with bought stock and sets per-token
-        // daily caps before arming the keeper.
-        StockVault vault = new StockVault(safe, vm.envOr("STOCK_KEEPER", address(0)));
+        // daily caps before arming the keeper. STOCK_DEFAULT_DAILY_CAP is the wall a ticker inherits
+        // before anyone sets its own — the ticker set GROWS (the Commission votes one daily off a list
+        // the operator extends), and nothing in adding a token forces a setDailyCap, so this is what
+        // keeps a freshly-added stock from being the one a leaked keeper drains in a block.
+        StockVault vault = new StockVault(
+            safe, vm.envOr("STOCK_KEEPER", address(0)), vm.envOr("STOCK_DEFAULT_DAILY_CAP", uint256(0)));
         vm.stopBroadcast();
 
         console.log("OMR:         ", address(omr));

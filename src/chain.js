@@ -934,8 +934,16 @@ async function applyDeedReimport(client, ref, wallet, tokenId) {
     return null; // they already hold a street in-game — must offload it first (wait)
   // re-key the deed + its legend to the burner, clear the on-chain flag, RESET control (they earn the corner)
   await client.query('UPDATE street_deed_history SET account_id=$2 WHERE account_id=$1', [onchainOwner, acct.account_id]);
+  // The deed's ON-CHAIN LIFE IS OVER, so every field that describes it goes with the token id —
+  // `extracted_by_account`, `extracted_at` and `onchain_owner` too (red-team C4). Leaving them set is
+  // the stale-state-survives-a-lifecycle-reset class, and it mis-routes REAL STOCK: the delivery rail
+  // resolves a deed's target from `onchain_owner` first (a secondary buyer who linked that wallet) and
+  // falls back to `extracted_by_account`. A deed re-imported and then re-extracted by SOMEBODY ELSE
+  // sits in extract-pending carrying the PREVIOUS life's owner, so the previous owner's allocations
+  // would be delivered into the ERC-6551 vault of a deed the new extractor is about to control.
   await client.query(
-    `UPDATE street_deeds SET account_id=$2, onchain_token_id=NULL, controller_account=NULL, control_until=NULL,
+    `UPDATE street_deeds SET account_id=$2, onchain_token_id=NULL, extracted_by_account=NULL,
+       extracted_at=NULL, onchain_owner=NULL, controller_account=NULL, control_until=NULL,
        corner_at=now(), shakedown_at=NULL, sale_price=NULL WHERE account_id=$1`, [onchainOwner, acct.account_id]);
   // append a lineage line to the legend (fixed string, no user input → a plain insert, no cleanText/SAVEPOINT)
   await client.query("INSERT INTO street_deed_history (account_id, kind, detail) VALUES ($1,'sold','brought back into the city from on-chain')", [acct.account_id]);
@@ -1009,8 +1017,12 @@ export async function sweepDeedVouchers(pool, reader = undefined) {
       await client.query('BEGIN');
       const cur = (await client.query("SELECT status FROM vouchers WHERE id=$1 FOR UPDATE", [v.id])).rows[0];
       if (cur && cur.status === 'signed') {
+        // the same full reset as a re-import (red-team C4): this deed is back in the game, so every
+        // field describing an on-chain life goes with the token id or the NEXT extraction inherits a
+        // previous owner and mis-routes its stock deliveries.
         await client.query(
-          "UPDATE street_deeds SET onchain_token_id=NULL WHERE onchain_token_id=$1 AND account_id NOT LIKE 'onchain:%'", [String(v.gear_id)]);
+          `UPDATE street_deeds SET onchain_token_id=NULL, extracted_by_account=NULL, extracted_at=NULL,
+             onchain_owner=NULL WHERE onchain_token_id=$1 AND account_id NOT LIKE 'onchain:%'`, [String(v.gear_id)]);
         await client.query("UPDATE vouchers SET status='expired' WHERE id=$1", [v.id]);
         cleared++;
       }

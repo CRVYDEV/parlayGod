@@ -149,7 +149,11 @@ if (failures.length) {
 // persistKitchen's two multi-row `INSERT ... VALUES (...),(...)` batches (placeholders built from the
 // row count, values bound). All four are exercised by the suite; none can be literal (the shape is
 // dynamic), which is exactly when a ceiling raise is warranted.
-const CEILING = { interpolated: 71, unreadable: 40 };
+// 71 → 72 (2026-08-16, red-team F5): firstsBoard's steward lookup, a per-holder N+1 folded into ONE
+// parameterized IN list (`$1,$2,…` built from the holder count, every value bound). Same shape and
+// same reason as the /v1/streets fronts scan above — pg-mem returns zero rows for `= ANY($1::text[])`
+// (the MY PROFILE lesson), so an IN list is the only portable form, and it is not preparable.
+const CEILING = { interpolated: 72, unreadable: 40 };
 const overflow = [];
 if (interpolated.length > CEILING.interpolated)
   overflow.push(`interpolated queries grew to ${interpolated.length} (ceiling ${CEILING.interpolated}) — these are UNCHECKED by this guard`);

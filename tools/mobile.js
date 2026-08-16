@@ -382,6 +382,60 @@ for (const vp of VIEWPORTS) {
   await browser.close();
 }
 
+// ── H — A COOLDOWN REACHING ZERO FLIPS THE CONTROL, NOT JUST THE TEXT ───────────────────────────
+// The 1s ticker repaints countdown TEXT, but whether the button beside it is disabled (or drawn at
+// all) was decided by the render that drew it. Decoupling the board poll from the sheet poll made
+// that gap up to BOARD_EVERY ticks wide, so the clock would read READY next to a dead button — a
+// control that lies, and the exact class the wiring guard's checks 5/6 exist for, arriving through
+// TIME rather than through a missing field. So the crossing re-renders the open screen.
+//
+// The signal has to DISCRIMINATE: a live page always has some background traffic, so "a request
+// happened" passes with the fix removed (proven — that mutation survived the first cut of this
+// probe). Compare the quiet window while the clock still counts against the window straddling zero.
+{
+  const browser = await chromium.launch({ executablePath: exe });
+  const ctx = await browser.newContext({ viewport: { width: 375, height: 667 }, isMobile: true, hasTouch: true, locale: 'en-US' });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', (e) => errs.push(String(e).split('\n')[0]));
+  const vp = { w: 375, h: 667 };
+  await page.goto(BASE, { waitUntil: 'domcontentloaded' });
+  await page.click('#btn-guest');
+  await page.waitForSelector('#screen-create:not(.hidden)', { timeout: 20000 });
+  await page.fill('#new-name', 'Cooldown Probe');
+  await page.click('#btn-create');
+  await page.waitForSelector('#screen-main:not(.hidden)', { timeout: 20000 });
+  await page.evaluate(() => {
+    localStorage.setItem('omerta_tour2', '1'); localStorage.setItem('omerta_welcomed', '1');
+    document.querySelectorAll('.modal-bg:not(.hidden)').forEach((m) => m.classList.add('hidden'));
+  });
+  await page.waitForTimeout(3000);   // let the landing fan-out settle, so the baseline is really quiet
+  const cd = await page.evaluate(() => new Promise((done) => {
+    const hits = [];
+    const of = window.fetch;
+    window.fetch = (...a) => { if (String(a[0]).includes('/v1/')) hits.push(Date.now()); return of(...a); };
+    const t0 = Date.now(), expiry = t0 + 4000;
+    const el = document.createElement('span');
+    el.className = 'cdt'; el.dataset.until = String(expiry); el.dataset.ready = 'READY';
+    (document.querySelector('#tabbodies') || document.body).appendChild(el);
+    setTimeout(() => done({
+      text: el.textContent, ready: el.classList.contains('cd-ready'),
+      quiet: hits.filter((h) => h >= t0 + 500 && h < t0 + 3000).length,
+      crossing: hits.filter((h) => h >= expiry && h < expiry + 2500).length,
+    }), 7000);
+  }));
+  if (!cd.ready || cd.text !== 'READY') fail('(cooldown)', vp, `a countdown never reached READY (read ${JSON.stringify(cd.text)})`);
+  else if (cd.crossing <= cd.quiet) {
+    fail('(cooldown)', vp, `a countdown hit zero and re-rendered nothing — ${cd.crossing} requests in the `
+      + `crossing window against a quiet baseline of ${cd.quiet}. The clock reads READY beside a control `
+      + `still disabled by the render that drew it, for up to BOARD_EVERY ticks.`);
+  }
+  if (errs.length) fail('(cooldown)', vp, `${errs.length} page error(s): ${errs.slice(0, 3).join(' | ')}`);
+  screensChecked++;
+  console.log(`   cooldown-freshness check done (quiet ${cd.quiet} → crossing ${cd.crossing}), ${failures.length} failure(s)`);
+  await browser.close();
+}
+
 await app.close();
 
 if (failures.length) {

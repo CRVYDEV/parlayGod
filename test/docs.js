@@ -445,6 +445,37 @@ assert.deepEqual([...new Set(phantom)], [], `docs/AUDITS.md lists reports that d
   }
 }
 
+// ── EVERY SIGNER-BEARING CONTRACT IS IN THE ROTATION RUNBOOK (red-team C1) ──────────────────────
+// One backend key (`VOUCHER_SIGNER_PK`) signs for several contracts, and each stores its own
+// `signer` that must be rotated separately. There is deliberately no shared registry on-chain, so
+// the ONLY containment is the ordered list in CHAIN-DEPLOY §8 — and a partial rotation leaves a door
+// open with nothing on-chain to say which. A fifth signer-bearing contract that ships without
+// joining that list is therefore a silent hole in the incident response, so this is
+// catalog-or-declare: carry a `setSigner`, be named in the runbook.
+{
+  const dir = 'omerta-contracts/src';
+  const bearers = fs.readdirSync(dir).filter((f) => f.endsWith('.sol'))
+    .filter((f) => /function setSigner\s*\(/.test(read(`${dir}/${f}`)))
+    .map((f) => f.replace(/\.sol$/, ''));
+  assert(bearers.length >= 4,
+    `expected at least 4 signer-bearing contracts, found ${bearers.join(', ') || 'none'} — if the extractor `
+    + 'stopped matching, this check is passing while covering nothing.');
+  const runbook = read('CHAIN-DEPLOY.md');
+  const rotation = runbook.slice(runbook.indexOf('ROTATING THE VOUCHER SIGNER'));
+  assert(rotation, 'CHAIN-DEPLOY.md has no signer-rotation runbook at all');
+  // The `setSigner` STEP specifically, not the runbook at large: every one of these is also named in
+  // the pause step one line up, so "the name appears in the runbook" passes for the wrong reason —
+  // which is exactly what a first cut of this check did, and pausing a contract does not rotate it.
+  const step = rotation.split('\n').filter((l) => l.includes('setSigner')).join('\n');
+  assert(step, "the rotation runbook never says setSigner — pausing is not rotating");
+  for (const c of bearers) {
+    assert(step.includes(c),
+      `${c}.sol stores its own signer and CHAIN-DEPLOY's rotation runbook never names it — on a leak it `
+      + 'would be the contract nobody rotates, and its pre-signed vouchers stay valid, bounded only by '
+      + 'its own daily cap. Add it to the ordered list in §8.');
+  }
+}
+
 console.log(`✅ docs test passed — every number in SPEC.md's size table checked against the tree `
   + `(${srcFiles.length} src files / ${countLines(srcFiles)} lines, ${testFiles.length} suites, `
   + `${tables} tables, ${mdFiles.length} markdown files), the rules-seam figures are current, the false `

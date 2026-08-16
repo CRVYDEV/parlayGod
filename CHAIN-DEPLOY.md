@@ -293,6 +293,12 @@ PHASE 1 for the exact calls/args.
       lives in the pool, not in `_update`, and V3/V4 routers and every aggregator work normally. Keep the
       `_update` path anyway, ARMED AT ZERO: a hook tax is a property of ONE pool and anyone may open an
       unhooked one, so the token tax is the universal backstop the Safe arms if that starts to matter.
+      **ONE VENUE, ONE LAYER (red-team C3).** `MAX_SELL_TAX_BPS` (10%) is a ceiling on EACH layer and
+      neither contract can see the other, so a seller pays the SUM of what is armed on the venue they
+      traded. Registering the v4 PoolManager as an `ammPairs` entry while the hook is armed doubles the
+      rate past the ceiling both contracts advertise AND taxes protocol flows into the pool (the
+      POL-pairing bot's LP add) unless each is `taxExempt`. So: arm the hook for the canonical pool and
+      leave `_update` at zero; arm `_update` only for a venue the hook does not cover.
 
 ### 2a. STREET DEEDS — the on-chain tradeable deed (only when it ships; dormant until env-set)
 - [ ] **`StreetDeed(safe, signer, imageBase, externalBase)`** — the ERC-721 Street Deed
@@ -603,6 +609,19 @@ a failed payment — which is exactly the window in which it is cheap to fix.
   neither of which touches a balance or a bonder's vested claim: `OMR.setMinter(address(0))` revokes the mint
   privilege at the token, and `OmertaBond.setMaxRate(0)` fails every new bond closed at the bond contract. Use
   the token-side one if the bond contract itself is what you distrust.
+- **ROTATING THE VOUCHER SIGNER IS FOUR TRANSACTIONS, NOT ONE (red-team C1).** `VOUCHER_SIGNER_PK` is a
+  single backend key and it signs for **four** contracts, each of which stores its own `signer` and must be
+  rotated separately. There is no shared registry on purpose (one more contract, one more audit surface, one
+  more single point of failure), so the containment is this list — and a PARTIAL rotation silently leaves a
+  door open, with nothing on-chain to tell you which. On any suspicion, in this order:
+  1. `VoucherClaim.pause()` · `OmertaBond.pause()` · `DynastyNFT.pause()` · `StreetDeed.pause()` — stops new
+     issuance everywhere first, so the rotation is not a race. (`StreetDeed.redeem()` deliberately still works;
+     a pause must never trap a holder's asset.)
+  2. `setSigner(newSigner)` on **all four**: `VoucherClaim`, `OmertaBond`, `DynastyNFT`, `StreetDeed`.
+  3. Rotate `VOUCHER_SIGNER_PK` on the API (the worker does not sign), redeploy, then unpause.
+  Until step 2 completes on every one, pre-signed vouchers stay valid at whichever contract was missed, bounded
+  only by that contract's own `dailyCap*` and `MAX_*_TTL` — so the blast radius of the key is the SUM of the
+  four daily caps, which is the number to size them against rather than each in isolation.
 - **VESTING IS A PRODUCT FEATURE, NOT A SECURITY CONTROL — do not count it as one.** There is deliberately no
   minimum `vestSeconds`, and adding one would buy nothing: `claim()` is intentionally NOT `whenNotPaused`, so
   pausing stops new bonds but never stops already-vested OMR being claimed — a vest is therefore not a window in

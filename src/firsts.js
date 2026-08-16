@@ -19,9 +19,18 @@ import { firstsCatalog, firstOf } from './rules.js';
 // best-effort, exactly like logCollect and for the same reason: a trophy must NEVER fail the
 // action that earned it. In real Postgres a bare try/catch can't deliver that — an errored
 // statement (here: the 23505 two claimants race into) aborts the ENCLOSING transaction — so the
-// insert runs under a SAVEPOINT. pg-mem can't parse SAVEPOINT (probed once, cached) and doesn't
-// poison a txn on a failed statement, so the bare insert is safe there.
-let savepointsWork = null; // null = unprobed
+// insert runs under a SAVEPOINT. pg-mem can't parse SAVEPOINT and doesn't poison a txn on a failed
+// statement, so the bare insert is safe there.
+//
+// The probe is PER CALL and never cached module-wide (AUDIT-street-life F2, red-team F3): real
+// Postgres refuses SAVEPOINT in autocommit, so a cache set by whichever context called first makes
+// every later call in the OTHER context take the wrong branch — and the direction that costs you is
+// a cached `false` silently dropping every claim forever, invisible to pg-mem, which cannot parse
+// either branch.
+async function savepointsWork(client) {
+  try { await client.query('SAVEPOINT firsts_probe'); await client.query('RELEASE SAVEPOINT firsts_probe'); return true; }
+  catch { return false; }
+}
 
 // THE ANNOUNCER is injected (the push.js `__setDeliver` / bonds.js `__setLpReader` seam) rather
 // than imported: a first is announced to the winner AND to the city, and both live in game.js —
@@ -49,16 +58,13 @@ export async function claimFirst(client, accountId, firstId, meta = {}) {
   const entry = firstOf(firstId);
   if (!entry) return null;                       // an unknown id is never a trophy
   try {
-    if (savepointsWork === null) {
-      try { await client.query('SAVEPOINT firsts_probe'); await client.query('RELEASE SAVEPOINT firsts_probe'); savepointsWork = true; }
-      catch { savepointsWork = false; }
-    }
+    const sp = await savepointsWork(client);
     const taken = (await client.query('SELECT 1 FROM firsts WHERE first_id=$1', [firstId])).rows[0];
     if (taken) return null;
     const ins = () => client.query(
       'INSERT INTO firsts (first_id, account_id, holder_name) VALUES ($1,$2,$3)',
       [firstId, accountId, meta.name || null]);
-    if (!savepointsWork) { await ins(); }
+    if (!sp) { await ins(); }
     else {
       await client.query('SAVEPOINT firsts_claim');
       try { await ins(); await client.query('RELEASE SAVEPOINT firsts_claim'); }
@@ -85,11 +91,17 @@ export async function firstsBoard(client, accountId) {
     'SELECT first_id, account_id, holder_name, claimed_at FROM firsts')).rows;
   const by = Object.fromEntries(rows.map((r) => [r.first_id, r]));
   // the holder's CURRENT living street (a first outlives the man who won it — show who carries it now)
+  // ONE query, not one per holder: this is a board, and a board sits on a polled screen — the
+  // client's tick re-renders whatever is open, so a per-row lookup here runs (holders × players)
+  // times a minute forever (red-team F5). A parameterized IN list rather than `= ANY($1::text[])`,
+  // which pg-mem returns zero rows for (the MY PROFILE lesson).
   const stewards = {};
-  for (const r of rows) {
-    if (stewards[r.account_id] !== undefined) continue;
-    stewards[r.account_id] = (await client.query(
-      'SELECT name FROM characters WHERE account_id=$1 AND alive', [r.account_id])).rows[0]?.name || null;
+  const holders = [...new Set(rows.map((r) => r.account_id))];
+  if (holders.length) {
+    const q = await client.query(
+      `SELECT account_id, name FROM characters WHERE alive AND account_id IN (${holders.map((_, i) => `$${i + 1}`).join(',')})`,
+      holders);
+    for (const s of q.rows) stewards[s.account_id] = s.name;
   }
   const firsts = Object.entries(cat).map(([id, c]) => {
     const r = by[id];

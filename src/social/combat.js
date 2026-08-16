@@ -437,15 +437,27 @@ export async function fire(ch, victim, client, h, rounds) {
       }
     }
     // THE SHIPMENT (scarcity §3) — the contested material is LOOTABLE, and that is deliberate: it is
-    // what makes holding a stockpile a decision rather than a formality. Same shape as the two above
-    // — an owned quantity, NOT a §10.4 currency, so no ledger row; the remainder dies with the street.
+    // what makes holding a stockpile a decision rather than a formality. An owned quantity, NOT a
+    // §10.4 currency, so no ledger row; the remainder dies with the street.
+    //
+    // It looks like the two blocks above and is written UNLIKE them, because `shipment` differs from
+    // `contraband`/`heist_loot` on BOTH axes that decide how a column may be written (red-team F2):
+    //   1. it is INT, not NUMERIC — so `shipment = shipment - $2` hits the documented pg-mem quirk
+    //      (INT column + SUBTRACTION + bound parameter SIGN-FLIPS: 8 − 4 reads −4). The victim's side
+    //      is therefore an ABSOLUTE value computed in JS (the setCargo precedent).
+    //   2. it is PERSISTED (persistCharacter $67), where they are direct-SQL columns — so an SQL
+    //      credit to the KILLER is written and then immediately CLOBBERED by the persist that ends
+    //      the action, writing the unchanged in-memory value back over it. The killer's side is
+    //      therefore an in-memory bump, which persistCharacter carries.
+    // Getting either wrong destroys the material instead of moving it: the victim loses it to the
+    // grave and the killer banks nothing.
     let matLoot = 0;
     const vMat = lootable ? Math.floor(Number(victim.shipment) || 0) : 0;
     if (vMat > 0) {
       matLoot = Math.floor(vMat * SHIPMENT.LOOT_RATE);
       if (matLoot > 0) {
-        await client.query('UPDATE characters SET shipment = shipment - $2 WHERE id=$1', [victim.id, matLoot]);
-        await client.query('UPDATE characters SET shipment = shipment + $2 WHERE id=$1', [ch.id, matLoot]);
+        await client.query('UPDATE characters SET shipment = $2 WHERE id=$1', [victim.id, vMat - matLoot]);
+        ch.shipment = Number(ch.shipment || 0) + matLoot;   // persisted by the caller — never SQL here
       }
     }
     // HEIST TIER-4 — HOT LOOT LOOT (the same P1.1 twin): a marked thief risks the score he took HOT to
