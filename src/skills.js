@@ -12,6 +12,7 @@
 import { GameError } from './game.js';
 import { SKILLS, skillOf, activeOf, ultimateOf, grandmasteriesFor, activeCdFor, levelOf, assetEnergyCap, M8, jailed } from './rules.js';
 import { spendOmr } from './vanity.js';
+import { claimFirst } from './firsts.js';
 
 // STEP THREE — PRESTIGE POINTS: a long-lived bloodline gets a small bonus point budget on top of the
 // level-derived one (capped). Pure build power, no currency, no §10.4 surface. Prestige is account-level.
@@ -37,9 +38,16 @@ export async function learnSkill(ch, skillId, client, h) {
   const pts = pointsOf(ch, h.owned, h.acct?.prestige);
   if (s.cost > pts.available)
     throw new GameError('points', `${s.name} takes ${s.cost} point(s) — you have ${pts.available}. Points come with levels.`);
+  const before = new Set(grandmasteriesFor(h.owned.skills).map((g) => g.id));
   await client.query('INSERT INTO character_skills (character_id, skill_id) VALUES ($1,$2)', [ch.id, s.id]);
   h.owned.skills.add(s.id); // the view (and any same-txn touchpoint) sees it immediately
   await h.track(client, ch.account_id, 'skill_learned', { skill: s.id });
+  // THE FIRSTS — a grandmastery is DERIVED on read, so the only event is the capstone that
+  // completes the pair. Diffed against a pre-insert snapshot rather than tested on the capstone id,
+  // so a fourth pairing added to the catalog is covered the day it ships.
+  for (const g of grandmasteriesFor(h.owned.skills)) {
+    if (!before.has(g.id) && ch.account_id) await claimFirst(client, ch.account_id, `grandmastery:${g.id}`, { name: ch.name });
+  }
   return { ok: true, learned: s.id, name: s.name, points: pointsOf(ch, h.owned, h.acct?.prestige) };
 }
 

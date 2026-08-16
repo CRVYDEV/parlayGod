@@ -7,7 +7,7 @@
 // Split out of the 2,003-line src/social.js; every function below is byte-identical to what was
 // there. Import from '../social.js' — it re-exports this package's public surface unchanged.
 import { GameError, bumpFamilyTask, bus, ledger, notify, track, loadOwned, skillMult, npcMult, npcTier, bumpStanding, bumpMastery, masteryFx, trunkCap, gainRespect, bumpCrewObjective } from '../game.js';
-import { M3, CONSTANTS, LOAN, levelOf, rankIdxOf, cityEventOf, dayOf, btkOf, gunObjOf, vestMultOf, fleetValue, effStat, npcHitmanOf, VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, PORT, witproActive, penSafe, inHole, HONOR, HEIST_LOOT_RATE, BUSINESSES, seasonModOf, pathFx, RIVALS, carVal, boatOf } from '../rules.js';
+import { M3, CONSTANTS, LOAN, levelOf, rankIdxOf, cityEventOf, dayOf, btkOf, gunObjOf, vestMultOf, fleetValue, effStat, npcHitmanOf, VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, PORT, witproActive, penSafe, inHole, HONOR, HEIST_LOOT_RATE, BUSINESSES, seasonModOf, pathFx, RIVALS, carVal, boatOf , SHIPMENT } from '../rules.js';
 import { activeDecree } from '../commission.js';
 import { bumpHonor } from '../honor.js';
 import { recordRival, revengeOwed } from '../rivals.js';
@@ -436,6 +436,18 @@ export async function fire(ch, victim, client, h, rounds) {
         await client.query('UPDATE characters SET contraband = contraband + $2 WHERE id=$1', [ch.id, contraLoot]);
       }
     }
+    // THE SHIPMENT (scarcity §3) — the contested material is LOOTABLE, and that is deliberate: it is
+    // what makes holding a stockpile a decision rather than a formality. Same shape as the two above
+    // — an owned quantity, NOT a §10.4 currency, so no ledger row; the remainder dies with the street.
+    let matLoot = 0;
+    const vMat = lootable ? Math.floor(Number(victim.shipment) || 0) : 0;
+    if (vMat > 0) {
+      matLoot = Math.floor(vMat * SHIPMENT.LOOT_RATE);
+      if (matLoot > 0) {
+        await client.query('UPDATE characters SET shipment = shipment - $2 WHERE id=$1', [victim.id, matLoot]);
+        await client.query('UPDATE characters SET shipment = shipment + $2 WHERE id=$1', [ch.id, matLoot]);
+      }
+    }
     // HEIST TIER-4 — HOT LOOT LOOT (the same P1.1 twin): a marked thief risks the score he took HOT to
     // fence later. heist_loot is a cash-book-value commodity, NOT a §10.4 currency (no ledger row); the
     // remainder dies with the street. Absolute reads (NUMERIC, arith-safe).
@@ -519,7 +531,7 @@ export async function fire(ch, victim, client, h, rounds) {
     const estate = await runEstate(client, h, victim, ch.name, { killerCh: ch, vendetta: true, loot: true, bloodOathMult: bloodOath });
     await alertMentor(client, victim.account_id, victim.name, ch.name, 'killed'); // THE MENTOR — the had-my-back moment: the protégé's mentor hears of the killing
     bus.emit('streets', { type: 'kill', by: ch.name, victim: victim.name });
-    return { ok: true, kill: true, rep, chop, loot, omrLoot, gearLoot, contraLoot, orderLoot: estate.orderLoot || 0, bounty, jammed, warKill, hitman: hit,
+    return { ok: true, kill: true, rep, chop, loot, omrLoot, gearLoot, contraLoot, matLoot, orderLoot: estate.orderLoot || 0, bounty, jammed, warKill, hitman: hit,
       ...(empireLoot ? { empireLoot } : {}), ...(ammoBack ? { ammoBack } : {}), vendetta: !!vend, ...(grudges.length ? { grudges } : {}), estate: { heirId: estate.heirId } };
   }
   // ── THE MISS ──

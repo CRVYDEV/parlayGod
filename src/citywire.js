@@ -26,6 +26,17 @@ const WIRE = {
   frontier_seized: (e) => e.gang ? `🌆 The **${e.gang}** family routed the ${e.npc} and planted their flag.`
     : `🌆 The ${e.npc} cartel was routed on the frontier.`,
   megaproject_complete: (e) => `🏛️ The city raised **${e.monument}** — its architect: **${e.architect}**. It stands forever.`,
+  // THE FIRSTS — the one class of achievement where "somebody else got there" is itself the content:
+  // it tells the whole channel a race just ENDED and can never be entered again.
+  first_claimed: (e) => e.first ? `🏆 **${e.who}** is the FIRST in this city to earn *${e.first}* — nobody can take it now.` : null,
+  // LIMITED RUNS — a numbered car found, and a numbered car destroyed. The second is the sharper
+  // line: the counter never decrements, so the city just got permanently poorer by one.
+  limited_run: (e) => e.run ? `🚗 **${e.who}** boosted *${e.run}* — number ${e.serial} of ${e.cap}. Only ${e.cap} will ever exist.` : null,
+  run_melted: (e) => e.run ? `🔥 *${e.run}* number ${e.serial} went to the smelter. ${e.cap - 1 >= 0 ? 'One fewer in the world, forever.' : ''}` : null,
+  // THE SHIPMENT — the city's day is one shared quantity, so both ends of it are news: the piece
+  // somebody commissioned out of it, and the moment it runs out.
+  commissioned: (e) => e.piece ? `✦ **${e.who}** had *${e.piece}* made — number ${e.serial}.` : null,
+  shipment_gone: (e) => e.district ? `📦 The day's shipment is gone. **${e.who}** took the last of it off the ${e.district}.` : null,
   sov_built: (e) => `🏰 The **${e.gang}** family raised a stronghold over ${e.district}.`,
   breakout: (e) => e.crew > 1 ? `🚨 ${e.crew} inmates went over the wall together — a jailbreak.`
     : `🚨 Somebody went over the wall — a prison break.`,

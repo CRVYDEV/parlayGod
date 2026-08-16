@@ -3662,7 +3662,122 @@ export const collectionCatalog = () => ({
   goods:     { name: 'The Trade',          items: GOODS.map((g) => ({ id: g.id, name: g.name })) },
   fixtures:  { name: 'The Underworld',     items: Object.entries(UNDERWORLD.NPCS).map(([id, n]) => ({ id, name: n.name })) },
   relics:    { name: 'The Relics',         items: CLUES.RELICS.map((r) => ({ id: r.id, name: r.name })) }, // Tier-4 §C — casket trophies
+  runs:      { name: 'The Limited Runs',   items: LIMITED_RUNS.map((r) => ({ id: r.id, name: r.name })) }, // scarcity §2 — N of each, ever
+  bespoke:   { name: 'The Bespoke',        items: SHIPMENT.COMMISSIONS.map((c) => ({ id: c.id, name: c.name })) }, // scarcity §3 — commissioned from the shipment
 })
+
+// ═══ THE FIRSTS (omerta-scarcity-design.md §1) — the one trophy that can only ever be won once.
+// The luxury layer had quantity (140 collection items, 10 trades, 35+ boards) and no SCARCITY: two
+// players can hold the same complete collection, so a completionist's trophy says "I did the work"
+// and never "and you cannot have it". A FIRST is claimed by the first ACCOUNT in the server's life
+// to cross the line, and nobody can take it or earn it again — everyone else can still finish
+// everything, only the FIRST is gone. Account-keyed → survives death (the deed/legend posture).
+//
+// PURE STATUS: no currency, no reason, no ledger row, no gameplay power. It is unbuyable BY
+// CONSTRUCTION — every crossing below is earned play, and there is no path that sells one.
+//
+// The catalog DERIVES from the live catalogs (content, never stored — the collectionCatalog rule),
+// so adding a mastery track or a collection category adds its FIRST the day it ships.
+export const firstsCatalog = () => {
+  const out = {};
+  for (const [id, c] of Object.entries(collectionCatalog()))
+    out[`collection:${id}`] = { kind: 'collection', name: `The Complete ${c.name}`,
+      blurb: `First in the city to own every last one — all ${c.items.length}.` };
+  for (const t of MASTERY.TRACKS)
+    out[`mastery:${t.id}`] = { kind: 'mastery', name: `Master of ${t.name}`,
+      blurb: `First to take ${t.name} all the way to ${MASTERY.MAX_LVL}.` };
+  for (const g of SKILLS.GRANDMASTERIES)
+    out[`grandmastery:${g.id}`] = { kind: 'grandmastery', name: g.name,
+      blurb: `First to walk two branches to the end and earn ${g.name}.` };
+  out['clue:master'] = { kind: 'clue', name: 'The Master Trail',
+    blurb: 'First to dig up a master casket at the end of the hardest trail in the city.' };
+  return out;
+};
+export const firstOf = (id) => firstsCatalog()[id] || null;
+
+// ═══ LIMITED RUNS (omerta-scarcity-design.md §2) — N of them exist, ever ═══
+// Every item in this game is infinite-supply at a deterministic price: two players wanting the same
+// car both get one, and nobody has ever queued for anything. A limited run is the first object whose
+// price is set by other players WANTING it rather than by a hash.
+//
+// A run is a NAMED VARIANT layered on an existing catalog model, never a new model: the car is
+// mechanically identical (value, melt, race power, insurance — all read `model_id`), so a run adds
+// ZERO balance surface and needs no prototype edit (CARS is MACHINE-OWNED — ground rule #2). What it
+// adds is a serial and a hard city-wide cap.
+//
+// ⚠ MINTED BY A RARE ROLL ON A SUCCESSFUL BOOST — never sold, and there is no purchase path anywhere.
+// That is the standing rarity rule and it binds here with full force: **sell deterministic, drop
+// random.** Money may buy exactly what it is quoted; a random outcome may be DROPPED, never SOLD.
+// You steal cars; sometimes the car you steal turns out to be one of twenty-five.
+//
+// The cap is real and one-directional: a melted run car is DESTROYED and the counter never
+// decrements, so supply only ever falls. That makes the melt decision a real one and hands the
+// remaining holders something they did not have before.
+export const LIMITED_RUNS = [
+  { id: 'midnight',  model: 'nocturne',  cap: 25, name: 'The Midnight Series',
+    blurb: 'Twenty-five left the coachbuilder in black. Nobody wrote down who ordered them.' },
+  { id: 'ghostline', model: 'spectre',   cap: 12, name: 'The Ghost Line',
+    blurb: 'Twelve chassis, twelve dead registrations. The paperwork was the point.' },
+  { id: 'coronation', model: 'sovereign', cap: 9, name: 'The Coronation Nine',
+    blurb: 'Nine were built for a coronation that never happened. They still gleam.' },
+  { id: 'lastrun',   model: 'tsarina',   cap: 3,  name: "The Tsarina's Last Run",
+    blurb: 'Three. The factory burned the week after, and the moulds with it.' },
+];
+export const runOf = (id) => LIMITED_RUNS.find((r) => r.id === id) || null;
+// The drop chance on a SUCCESSFUL boost, per run still open. Deliberately small — a run should be
+// a story, not a grind target. TEST-ONLY override (the BUSINESS_RAID_P / CAR_THEFT_P precedent).
+export const LIMITED_RUN_P = 0.004;
+export const limitedRunP = () =>
+  (process.env.LIMITED_RUN_P != null ? Number(process.env.LIMITED_RUN_P) : LIMITED_RUN_P);
+
+// ═══ THE SHIPMENT (omerta-scarcity-design.md §3) — the contested material ═══
+// The runite-ore answer, built as a MATERIAL and never a currency. Once a day the city gets a
+// shipment of something the catalogs cannot produce, landing at a seed-drawn district (forecastable
+// like every §7.11 draw — you can plan for it, you cannot manufacture it), first-come against a
+// CITY-WIDE daily cap with a per-player cap so one whale cannot take the lot.
+//
+// Every part of this is chosen against the failure it would otherwise cause:
+//  · NOT A CURRENCY — an owned quantity on the character, like trunk cargo or contraband: LOOTABLE
+//    on a fire-kill, dies with the street, never touches §10.4.
+//  · AN INPUT, NEVER AN OUTPUT — it pays no cash. Its only use is COMMISSIONING a bespoke piece,
+//    which is a cash SINK. So the drop is emission-safe BY CONSTRUCTION: nothing about it can
+//    inflate anything, and the material's whole economic role is to gate a sink.
+//  · CONTENTION IS THE FEATURE — a city-wide cap plus a drawn location is the "swarm contention on a
+//    limited respawn" this was designed from, and the first thing here where being THERE and being
+//    EARLY beats being rich.
+//  · THE APEX CARTELS DROP IT — routing an apex outfit yields units, so the reservoir loop finally
+//    pays in the scarce thing rather than the abundant one.
+//
+// The commissions are BESPOKE PIECES: numbered, account-level, purely cosmetic status objects. That
+// is deliberate — a material that bought POWER would make a contested drop pay-to-win for whoever
+// can camp a district, and the whole point of a luxury layer is that surplus wealth buys standing,
+// never advantage.
+export const SHIPMENT = {
+  NAME: 'the shipment',
+  MATERIAL: 'Cut Swiss steel',      // what the crates hold — flavour, used in every player-facing line
+  CITY_CAP: 40,                     // units the whole city can take in a day
+  PER_PLAYER: 4,                    // one player's daily take
+  ROUT_UNITS: 6,                    // what routing an APEX cartel outfit yields (coop fixtures only)
+  LOOT_RATE: 0.5,                   // a fire-kill takes half the victim's held units (the contraband twin)
+  // THE COMMISSIONS — the sink. Cash is the §10.4 sink; the units are the gate. Pure status.
+  COMMISSIONS: [
+    { id: 'case',   units: 2,  cash: 120000,  name: 'A Gold Cigarette Case',
+      blurb: 'Monogrammed, and heavy enough to stop a small calibre. It has, once.' },
+    { id: 'watch',  units: 4,  cash: 400000,  name: 'A Perpetual Wristwatch',
+      blurb: 'Swiss, and older than the family. It has not been wound since 1931 and keeps perfect time.' },
+    { id: 'bust',   units: 8,  cash: 1200000, name: 'A Marble Bust of Yourself',
+      blurb: 'Commissioned from a sculptor who does headstones. He said he saw no difference.' },
+    { id: 'service', units: 16, cash: 4000000, name: 'The Silver Service',
+      blurb: 'Fifty-two pieces for a table nobody in this city is brave enough to sit at.' },
+  ],
+};
+export const commissionOf = (id) => SHIPMENT.COMMISSIONS.find((c) => c.id === id) || null;
+// WHERE it lands today — the §7.11 seed, so the whole town reads the same answer and can forecast it.
+export const shipmentDistrictOf = (day = dayOf()) =>
+  DISTRICTS[Math.floor(hash01(`shipment:${day}:${MARKET_SEED}`) * DISTRICTS.length) % DISTRICTS.length].id;
+// the next few days, so a player can plan a trip (the cityForecast precedent)
+export const shipmentForecast = (days = 5, day = dayOf()) =>
+  Array.from({ length: days }, (_, i) => ({ day: day + i, district: shipmentDistrictOf(day + i) }));
 
 // ═══ THE MEGAPROJECT (founder pick #1 — the collective monument). ALL numbers are founder
 // sign-off levers. Targets are sized for the alpha base (a shared weeks-long goal, not an

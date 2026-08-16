@@ -8,7 +8,7 @@
 // in this pillar — numbers are founder SIM sign-off levers (ground rule #1).
 import crypto from 'node:crypto';
 import { GameError, bus, assignedSoldier, soldierResult } from './game.js';
-import { WORLD_NPCS, worldNpcOf, worldRankOf, WORLD, LIVING, PACING, levelOf, effStat, cityHourOf, frontierTributePerHr, cartelUprisingOf, dayOf, soldierFxOf , jailed, hospitalized, safeHoused } from './rules.js';
+import { WORLD_NPCS, worldNpcOf, worldRankOf, WORLD, LIVING, PACING, levelOf, effStat, cityHourOf, frontierTributePerHr, cartelUprisingOf, dayOf, soldierFxOf , jailed, hospitalized, safeHoused , SHIPMENT } from './rules.js';
 import { dbCaps } from './db.js';
 
 const uid = () => crypto.randomUUID();
@@ -294,7 +294,7 @@ export async function raidNpc(ch, npcId, client, h) {
   // (audit: without the `strength > floorVal` guard, every raid while the shared reservoir sits
   // pinned below the floor re-paid the flat bonus — an unbounded mint not backed by regen).
   const floorVal = fixture.max * WORLD.ROUT_FLOOR_BPS / 10000;
-  let routed = false, routBonus = 0, newEnraged = enragedUntil;
+  let routed = false, routBonus = 0, newEnraged = enragedUntil, routUnits = 0;
   if (strength > floorVal && after <= floorVal) {
     routed = true; routBonus = fixture.routBonus;
     ch.cash = Number(ch.cash) + routBonus;
@@ -302,6 +302,14 @@ export async function raidNpc(ch, npcId, client, h) {
     await client.query('UPDATE account_persistent SET cartel_damage = cartel_damage + $2 WHERE account_id=$1', [ch.account_id, routBonus]);
     newEnraged = new Date(now.getTime() + WORLD.ENRAGE_MS); // the cartel goes to high alert — harder to raid for a window
     bus.emit('streets', { type: 'world_routed', who: ch.name, npc: fixture.name });
+    // THE SHIPMENT (scarcity §3) — routing an APEX outfit yields the contested material, so the
+    // reservoir loop finally pays in the scarce thing rather than the abundant one. A pure ownership
+    // move (the material is not a §10.4 currency — no ledger row), and only on the crossing, so it
+    // inherits the rout's own bound: it can be earned exactly as often as an apex outfit can fall.
+    if (fixture.coop && SHIPMENT.ROUT_UNITS > 0) {
+      routUnits = SHIPMENT.ROUT_UNITS;
+      ch.shipment = Number(ch.shipment || 0) + routUnits;
+    }
   }
   // THE FRONTIER (step three): a ROUT topples the incumbent and plants the router's FAMILY flag
   // (pure status; a gangless router leaves it UNHELD/open). Only changes on the crossing.
@@ -319,7 +327,7 @@ export async function raidNpc(ch, npcId, client, h) {
   }
   await h.track(client, ch.account_id, 'world_raid', { npc: fixture.id, success: true, loot, routed });
   const soldier = second ? await soldierResult(client, h, ch, second, { success: true }) : null;
-  return { ok: true, success: true, npc: fixture.id, loot, routed, routBonus, enraged, frontier: routed && !!h.owned.gangId, strengthPct: Math.round(Math.max(0, after) / fixture.max * 100), soldier };
+  return { ok: true, success: true, npc: fixture.id, loot, routed, routBonus, routUnits, material: routUnits ? SHIPMENT.MATERIAL : null, enraged, frontier: routed && !!h.owned.gangId, strengthPct: Math.round(Math.max(0, after) / fixture.max * 100), soldier };
 }
 
 // ── STEP THREE — CO-OP CREW RAIDS on the apex outfits (the crew-heist machinery) ──

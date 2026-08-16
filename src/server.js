@@ -50,6 +50,8 @@ import * as Dynasty from './dynasty.js';
 import * as Soldiers from './soldiers.js';
 import * as Secrets from './secrets.js';
 import * as Collection from './collection.js';
+import * as Firsts from './firsts.js';
+import * as Shipment from './shipment.js';
 import * as Business from './business.js';
 import * as Speakeasy from './speakeasy.js';
 import * as Boxing from './boxing.js';
@@ -2497,6 +2499,17 @@ export async function buildServer() {
   });
   // THE COLLECTION — the account-level completion ledger (pure status)
   app.get('/v1/collection', { preHandler: auth }, async (req) => Collection.collectionBoard(pool, req.user.sub));
+  // THE FIRSTS — one per server, forever (omerta-scarcity-design.md §1). The OPEN ones are the
+  // point, so they're listed too: a race nobody has won yet is the only kind worth entering.
+  app.get('/v1/firsts', { preHandler: auth }, async (req) => Firsts.firstsBoard(pool, req.user.sub));
+  // THE SHIPMENT — the contested daily material (scarcity §3). Non-currency ownership: the take
+  // writes no ledger row; the COMMISSION is the cash sink the material gates.
+  app.get('/v1/shipment', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Shipment.shipmentBoard(ch, client, h)));
+  app.post('/v1/shipment/take', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Shipment.takeShipment(ch, client, h)));
+  app.post('/v1/shipment/commission/:id', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Shipment.commissionPiece(ch, req.params.id, client, h)));
   app.post('/v1/onboard/:taskId/claim', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => W.claimOnboard(ch, req.params.taskId, client, h)));
   // DAILY SOCIAL TASKS ("Spread the Word") — the organic word-of-mouth / referral petty-cash faucet

@@ -5,9 +5,10 @@ import crypto from 'node:crypto';
 import { logCollect } from './collection.js';
 // (tokenomics v2 step 2) the early-exit surcharge + toll split now live only on the WITHDRAWAL
 // boundary in chain.js — the AMM sell that used to carry them here is retired with the pool.
-import { GameError, bumpFamilyTask, skillMult, trunkCap, npcMult, bumpStanding, bumpMastery } from './game.js';
+import { GameError, bumpFamilyTask, skillMult, trunkCap, npcMult, bumpStanding, bumpMastery, bus, notify } from './game.js';
 import {
   CONSUMABLES, RACKETS, ASSETS, GOODS, GUNS, VESTS, CONSTANTS, SKILLS, UNDERWORLD,
+  LIMITED_RUNS, runOf, limitedRunP,
   levelOf, cityEventOf, dayOf, carOf, carVal, carMelt, rollCar, rollTrim,
   effStat, cargoCapacity, goodPriceOf, gearOf, gunObjOf, RACKET_EMPIRE, racketUpgradeCost, racketIncomeLeveled, tycoonRankOf,
   seasonModOf, pathFx, rollRarity, ladderFx, ladderFenceMult,
@@ -34,6 +35,33 @@ async function setItem(client, charId, itemId, qty) {
 }
 
 // ═══════════════════ THE GARAGE (§7.5) ═══════════════════
+// LIMITED RUNS — mint at most one numbered car per boost. The cap enforcement and the serial
+// allocation are the SAME statement: `minted = minted + 1 WHERE minted < cap RETURNING minted` is
+// atomic, so two concurrent boosts on the last slot cannot both take it and the returned count IS
+// the serial. (Addition with a bound param is pg-mem-safe; the documented quirk is INT SUBTRACTION.)
+// Nothing here can fail a boost: an exhausted run simply doesn't fire, and any error returns null.
+export async function mintLimitedRun(client, modelId, roll) {
+  const open = LIMITED_RUNS.filter((r) => r.model === modelId);
+  if (!open.length || !(roll < limitedRunP())) return null;
+  // one model can carry more than one run; pick deterministically off the same die so the draw
+  // stays replayable from the rng_audit row
+  const r = open[Math.floor((roll / Math.max(limitedRunP(), Number.EPSILON)) * open.length) % open.length];
+  try {
+    const up = await client.query(
+      'UPDATE limited_runs SET minted = minted + 1 WHERE run_id=$1 AND minted < $2 RETURNING minted',
+      [r.id, r.cap]);
+    if (!up.rowCount) {
+      // first touch of this run — materialize at serial 1 (the world_npcs first-touch precedent;
+      // a 23505 from a concurrent first touch means somebody else got serial 1, so we take none)
+      const has = (await client.query('SELECT minted FROM limited_runs WHERE run_id=$1', [r.id])).rows[0];
+      if (has) return null;   // the run is EXHAUSTED — it never fires again, for anybody
+      await client.query('INSERT INTO limited_runs (run_id, minted) VALUES ($1, 1)', [r.id]);
+      return { runId: r.id, name: r.name, serial: 1, cap: r.cap };
+    }
+    return { runId: r.id, name: r.name, serial: Number(up.rows[0].minted), cap: r.cap };
+  } catch { return null; }
+}
+
 export async function boostCar(ch, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No boosting from lockup.');
   const cd = CONSTANTS.GTA_CD_MS;
@@ -58,16 +86,30 @@ export async function boostCar(ch, client, h) {
     // audit's Street-War lesson: reusing one die for two decisions correlates them silently).
     const rrRoll = Math.random();
     const rarity = rollRarity(rrRoll);
-    await client.query('INSERT INTO cars (id, character_id, model_id, trim_id, dmg, rarity) VALUES ($1,$2,$3,$4,$5,$6)',
-      [carId, ch.id, model.id, trim.id, dmg, rarity]);
+    // LIMITED RUNS (scarcity §2) — its OWN die, for the reason the rarity roll has its own: reusing
+    // one for two decisions correlates them silently. A run mint is a pure ownership event (cars
+    // conserve by ROW COUNT and are not a §10.4 currency), so it writes no ledger row; the boost's
+    // faucet is unchanged whether the car turns out to be numbered or not.
+    const runRoll = Math.random();
+    const run = await mintLimitedRun(client, model.id, runRoll);
+    await client.query('INSERT INTO cars (id, character_id, model_id, trim_id, dmg, rarity, run_id, serial) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+      [carId, ch.id, model.id, trim.id, dmg, rarity, run?.runId || null, run?.serial || null]);
     await h.rngLog(client, ch.id, 'rarity:car', rrRoll, rarity);
-    h.owned.cars.push({ id: carId, model_id: model.id, trim_id: trim.id, dmg, rarity });
+    h.owned.cars.push({ id: carId, model_id: model.id, trim_id: trim.id, dmg, rarity,
+      run_id: run?.runId || null, serial: run?.serial || null });
+    if (run) {
+      await h.rngLog(client, ch.id, 'limited:run', runRoll, `${run.runId} ${run.serial}/${run.cap}`);
+      await logCollect(client, ch.account_id, 'runs', run.runId);
+      bus.emit('streets', { type: 'limited_run', who: ch.name, run: run.name, serial: run.serial, cap: run.cap });
+      await notify(client, ch.id, 'limited_run', { run: run.runId, name: run.name, serial: run.serial, cap: run.cap });
+    }
     await logCollect(client, ch.account_id, 'cars', model.id); // THE COLLECTION
     await h.rngLog(client, ch.id, 'gta', roll, 'success');
     await h.bumpDaily(client, ch.id, 'gta');
     await bumpFamilyTask(client, h, 'gta', 1);
     await bumpMastery(client, h, ch, 'wheels', 'boost'); // THE TRADES — a clean boost is the wheelman's craft
-    return { ok: true, success: true, car: { id: carId, model: model.id, trim: trim.id, dmg, rare: !!model.rare, rarity } };
+    return { ok: true, success: true, car: { id: carId, model: model.id, trim: trim.id, dmg, rare: !!model.rare, rarity,
+      run: run ? { id: run.runId, name: run.name, serial: run.serial, cap: run.cap } : null } };
   }
   const stint = 15 + Math.floor(Math.random() * 16); // 15–30s
   ch.jail_until = new Date(Date.now() + stint * 1000);
@@ -106,6 +148,10 @@ export async function meltCar(ch, carId, client, h) {
   const tithe = h.owned.gangId ? Math.floor(yieldRounds * CONSTANTS.MELT_TITHE) : 0;
   const keep = yieldRounds - tithe;
   ch.ammo = Number(ch.ammo || 0) + keep;
+  // LIMITED RUNS — DESTRUCTION IS NEWS (scarcity §4c). The counter never decrements, so melting a
+  // numbered car takes it out of the world permanently: the run's live supply falls and can never
+  // recover. Scarcity is only FELT if the city sees supply fall, so this goes on the wire.
+  const melted = car.run_id ? runOf(car.run_id) : null;
   await removeCar(client, h, carId);
   await h.ledger(client, { characterId: ch.id, currency: 'ammo', amount: keep, reason: 'melt' });
   if (tithe > 0) {
@@ -116,9 +162,13 @@ export async function meltCar(ch, carId, client, h) {
     await h.ledger(client, { currency: 'ammo', amount: tithe, reason: 'melt:tithe', counterparty: h.owned.gangId });
     await h.ledger(client, { currency: 'cash', amount: titheValue, reason: 'melt:tithe', counterparty: h.owned.gangId });
   }
+  if (melted) {
+    bus.emit('streets', { type: 'run_melted', who: ch.name, run: melted.name,
+      serial: car.serial != null ? Number(car.serial) : null, cap: melted.cap });
+  }
   await h.bumpDaily(client, ch.id, 'melt');
   await bumpFamilyTask(client, h, 'melt', yieldRounds);
-  return { ok: true, rounds: keep, tithe };
+  return { ok: true, rounds: keep, tithe, melted: melted ? { run: car.run_id, name: melted.name, serial: car.serial } : null };
 }
 
 export async function repairCar(ch, carId, client, h) {

@@ -2192,6 +2192,59 @@ CREATE TABLE IF NOT EXISTS collection_log (
   PRIMARY KEY (account_id, category, item_id)
 );
 
+-- THE FIRSTS (omerta-scarcity-design.md §1) — one per server, forever. The PK on first_id IS the
+-- latch: a trophy is claimed once in the city's life and can never be won again. ACCOUNT-keyed, so
+-- it survives death by construction (no character_id → outside the estate wipe + the disposition
+-- guard, the deed/dynasty posture). Pure status: no currency, no ledger row, no power.
+CREATE TABLE IF NOT EXISTS firsts (
+  first_id TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  holder_name TEXT,
+  claimed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_firsts_account ON firsts(account_id);
+
+-- LIMITED RUNS (omerta-scarcity-design.md §2) — N of each named variant exist, ever. The counter is
+-- the CAP: minted only ever rises (a melted run car is destroyed and never freed), so supply falls
+-- and never recovers. The atomic `minted = minted + 1 WHERE minted < cap RETURNING minted` is both
+-- the cap enforcement and the serial allocation, in one statement.
+CREATE TABLE IF NOT EXISTS limited_runs (
+  run_id TEXT PRIMARY KEY,
+  minted INT NOT NULL DEFAULT 0
+);
+-- the run + its serial ride the CAR row: a run car is mechanically an ordinary catalog model (value,
+-- melt, race power all read model_id), so this adds no balance surface — only identity.
+ALTER TABLE cars ADD COLUMN IF NOT EXISTS run_id TEXT;
+ALTER TABLE cars ADD COLUMN IF NOT EXISTS serial INT;
+
+-- THE SHIPMENT (omerta-scarcity-design.md §3) — the contested daily material. `taken` is the
+-- CITY-WIDE cap, claimed by a conditional UPDATE so two players racing the last crates cannot both
+-- take them. The material itself is an owned quantity on the character (NOT a currency): lootable
+-- on a fire-kill, dies with the street, never in the §10.4 set.
+CREATE TABLE IF NOT EXISTS shipment_days (
+  day INT PRIMARY KEY,
+  district TEXT NOT NULL,
+  taken INT NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS shipment_takes (
+  day INT NOT NULL,
+  character_id TEXT NOT NULL,
+  n INT NOT NULL DEFAULT 0,
+  PRIMARY KEY (day, character_id)
+);
+-- the SINK the material gates: numbered, ACCOUNT-level, purely cosmetic pieces. Account-keyed →
+-- survives death by construction (the deed/estate posture; no character_id to wipe).
+CREATE TABLE IF NOT EXISTS bespoke_pieces (
+  account_id TEXT NOT NULL,
+  commission_id TEXT NOT NULL,
+  serial INT NOT NULL,
+  holder_name TEXT,
+  made_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (commission_id, serial)
+);
+CREATE INDEX IF NOT EXISTS ix_bespoke_account ON bespoke_pieces(account_id);
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS shipment INT NOT NULL DEFAULT 0;
+
 -- ═══ THE VAULT (omerta-stock-layer-retirement.md) — the full-reserve ETH layer. Out-of-band REAL
 -- value (the vig/bond/fees precedent): these tables move no §10.4 currency except the rwa:vault $OMR
 -- burn, which rides the existing rwa:% vocabulary.

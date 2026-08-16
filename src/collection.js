@@ -5,6 +5,7 @@
 // the one write primitive: an idempotent INSERT called from each acquisition touchpoint; this
 // module imports NOTHING from game.js (acyclic — the callers import us).
 import { collectionCatalog } from './rules.js';
+import { claimFirst, firstTaken } from './firsts.js';
 
 // best-effort by design: a collection entry must never fail the underlying action. In real
 // Postgres a bare try/catch can't deliver that — an errored statement aborts the ENCLOSING txn
@@ -23,11 +24,33 @@ export async function logCollect(client, accountId, category, itemId) {
       try { await client.query('SAVEPOINT collect_probe'); await client.query('RELEASE SAVEPOINT collect_probe'); savepointsWork = true; }
       catch { savepointsWork = false; }
     }
-    if (!savepointsWork) { await insert(); return; }
-    await client.query('SAVEPOINT collect_log');
-    try { await insert(); await client.query('RELEASE SAVEPOINT collect_log'); }
-    catch { await client.query('ROLLBACK TO SAVEPOINT collect_log').catch(() => {}); }
+    let landed = false;
+    if (!savepointsWork) { landed = (await insert()).rowCount > 0; }
+    else {
+      await client.query('SAVEPOINT collect_log');
+      try { landed = (await insert()).rowCount > 0; await client.query('RELEASE SAVEPOINT collect_log'); }
+      catch { await client.query('ROLLBACK TO SAVEPOINT collect_log').catch(() => {}); }
+    }
+    // THE FIRSTS — only a genuinely NEW entry can complete a category, so the (dearer) completion
+    // check runs at most ~140 times per account, ever, and never on the dup path that most call
+    // sites take. The cheap PK read comes first: once a first is gone, this is one lookup forever.
+    if (landed) await maybeCompleteCategory(client, accountId, String(category));
   } catch { /* the ledger of flexes never blocks the flex */ }
+}
+
+// a category is complete when the account holds every CATALOG member of it — counted against the
+// catalog rather than against the log, so an off-catalog row (a retired item, a future bad call
+// site) can never falsely complete it (the collectionLeaderboard F1 rule).
+async function maybeCompleteCategory(client, accountId, category) {
+  const cat = collectionCatalog()[category];
+  if (!cat) return null;
+  const firstId = `collection:${category}`;
+  if (await firstTaken(client, firstId)) return null;
+  const got = new Set((await client.query(
+    'SELECT item_id FROM collection_log WHERE account_id=$1 AND category=$2',
+    [accountId, category])).rows.map((r) => r.item_id));
+  if (!cat.items.every((it) => got.has(String(it.id)))) return null;
+  return claimFirst(client, accountId, firstId);
 }
 
 // car transfers happen at six sites that hold a character id + a car id but not always the model
