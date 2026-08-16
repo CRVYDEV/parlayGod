@@ -120,6 +120,10 @@ export const OPERATIONAL_ENV = [
   'DEX_BOT_PK', 'UNIVERSAL_ROUTER_ADDRESS', 'POSITION_MANAGER_ADDRESS', 'STATE_VIEW_ADDRESS',
   'POL_POSITION_OWNER', 'DEX_POOL_FEE', 'DEX_POOL_TICK_SPACING',
   'DEX_BUYBACK_MAX_ETH', 'POL_PAIR_MAX_ETH', 'DEX_MAX_SLIPPAGE_BPS', 'DEX_TWAP_MAX_AGE_S', 'DEX_BOT_EVERY_MS',
+  // THE LP LEAGUE reader (dexbot.js:readLpPositions) — read-only, no key. Its log scan starts at the
+  // pool's deploy block; 0 works and just re-scans the chain every tick, so this is a cost knob, not
+  // a correctness one. LP_LOG_CHUNK is the getLogs page size (RPC providers cap the range).
+  'DEX_POOL_FROM_BLOCK', 'LP_LOG_CHUNK',
   // DynastyNFT (Minted/Transfer events) — the identity token registry + the portrait FREEZE at first
   // transfer. Dormant unless set on the worker.
   'DYNASTY_NFT_ADDRESS',

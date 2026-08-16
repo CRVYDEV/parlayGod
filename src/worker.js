@@ -17,7 +17,7 @@ import { runVigInvariants } from './vig.js';
 import { carveExchange, mergeLegacyYieldPools, payFamilyYield, runExchangeInvariants } from './exchange.js';
 import { runRouterInvariants } from './router.js';
 import { runFamilyBuybackInvariants } from './community.js';
-import { runBondInvariants, syncLpDepth } from './bonds.js';
+import { runBondInvariants, syncLpDepth, __setLpReader } from './bonds.js';
 import { runCityLeg, runBankInvariants } from './bank.js';
 import { runTreasuryInvariants } from './treasury.js';
 import { openAuction, closeExpired, runDeskInvariants } from './desk.js';
@@ -57,7 +57,14 @@ import { sweepGrandPrix } from './races.js';
 import { sweepStakes } from './stable.js';
 import { syncFeeEvents, syncClaimedEvents, syncBondEvents, syncHarvestFees, syncRedeemedEvents, syncDeedExtractedEvents, syncDeedRedeemedEvents, syncDeedTransferEvents, syncStockDeliveredEvents, syncStorePaidEvents, syncDynastyMintEvents, syncDynastyTransferEvents, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
 import { runStockDeliveryKeeper, deliveryKeeperReady } from './stockdeliver.js';
-import { runDexBuyback, runPolPairing, runDexBotInvariants, dexBuybackReady, polPairingReady } from './dexbot.js';
+import { runDexBuyback, runPolPairing, runDexBotInvariants, dexBuybackReady, polPairingReady,
+  readLpPositions, lpReaderReady } from './dexbot.js';
+
+// THE LP LEAGUE reader — installed once at boot, and on a WEAKER condition than the bots: it is a
+// read-only path that needs no bot key, so a box that never sends a transaction can still accrue
+// the league's depth-time. Without the pool config `syncLpDepth` stays dormant (status only, so a
+// dormant league costs a score, never money).
+if (lpReaderReady()) __setLpReader(readLpPositions);
 
 const BUYBACK_PERIOD_MS = 12 * 3600 * 1000;
 
@@ -708,9 +715,9 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
           // is pacing, not safety.
           if (Date.now() - lastDexBotRun >= Number(process.env.DEX_BOT_EVERY_MS || 12 * 3600 * 1000)) {
             lastDexBotRun = Date.now();
-            // THE LP LEAGUE (src/bonds.js) — accrue depth-time off the PositionManager reader.
-            // Dormant until the reader is installed (a live pool is what makes the read meaningful);
-            // status-only, so a missed tick just delays a score, never money.
+            // THE LP LEAGUE (src/bonds.js) — accrue depth-time off the PositionManager reader
+            // installed at boot above. Dormant without the pool config; status-only, so a missed
+            // tick just delays a score, never money.
             const lp = await safe('lp depth sync', () => syncLpDepth(pool));
             if (lp?.touched) console.log(`💧 lp league: depth-time accrued for ${lp.touched} wallet(s)`);
             if (dexBuybackReady()) {

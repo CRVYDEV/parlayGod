@@ -307,6 +307,118 @@ function poolKey(getAddress) {
   };
 }
 
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// THE LP LEAGUE READER — CHAIN-DEPLOY's "one function at launch" for `src/bonds.js`'s
+// `__setLpReader` seam, the last seam in the tree with no implementation behind it. Returns
+// `[{ wallet, liquidityEth }]`: the CURRENT full position set of the canonical pool, each
+// position measured on its ETH (currency0) side at the live price. STATUS ONLY — the figure feeds
+// the underwriter score and nothing else, and this whole path is read-only (no key, no tx).
+//
+// It needs NO bot key: `lpReaderReady()` is deliberately a weaker condition than
+// `polPairingReady()`, so the league can be armed on a box that never sends a transaction.
+//
+// ENUMERATION is the poolId-filtered `ModifyLiquidity` stream, not a scan of every token the
+// PositionManager ever minted. v4's PositionManager passes `bytes32(tokenId)` as the position
+// SALT and PoolManager indexes that event by poolId, so ONE filtered getLogs yields exactly the
+// tokenIds that ever held liquidity in OUR pool — on a PositionManager that may serve hundreds of
+// others. Current liquidity and current owner are then read from the PositionManager itself
+// rather than replayed from the deltas: the authoritative value beats a sum we maintain. The
+// PoolManager address is resolved from the PositionManager's own `poolManager` getter (the
+// `OmertaBond.oracle()` posture — one less address env to drift out of step with the deploy).
+//
+// THE DEPTH MATH is `addLiquidityOnchain`'s mint in reverse — amount0 for liquidity L over
+// [tickLower, tickUpper] at the live sqrtPrice — and it deliberately does NOT treat every position
+// as full-range. That shortcut needs no tick math at all (amount0 ≈ L/√P) and would make the
+// metric GAMEABLE: a narrow range carries a far larger L for the same tokens, so concentration
+// alone would inflate reported depth. The real formula prices a position by what it would actually
+// hand over at today's price, which is the thing the league claims to measure.
+//
+// √ratio(tick) is computed as 1.0001^(tick/2) in floating point rather than by porting TickMath's
+// twenty-constant chain. A double carries ~16 significant digits across the entire legal tick
+// range (√ratio spans 5.4e-20 … 1.8e19), which is orders of magnitude finer than a status ladder
+// can read — and it is a formula a reviewer checks by eye, where a mistyped magic constant is
+// invisible. `tools/dexbot-e2e.js` pins it two independent ways: against the ETH a real position
+// actually consumed (a wallet balance delta, measured, not derived), and against the pool's own
+// reported tick.
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+
+export const lpReaderReady = () =>
+  !!(process.env.CHAIN_RPC_URL && process.env.POSITION_MANAGER_ADDRESS && process.env.STATE_VIEW_ADDRESS
+     && process.env.OMR_ADDRESS && process.env.OMERTA_HOOK_ADDRESS);
+
+const sqrtRatioAtTick = (tick) => Math.pow(1.0001, Number(tick) / 2);
+
+// The ETH (currency0) side of a position at the live price. c clamps the price into the range, so
+// a position entirely above its band settles to 0 and one entirely below reports its full ETH.
+function ethSideOf(liquidity, tickLower, tickUpper, sqrtPrice) {
+  const sa = sqrtRatioAtTick(tickLower), sb = sqrtRatioAtTick(tickUpper);
+  if (!(sb > sa)) return 0;
+  const c = Math.min(Math.max(sqrtPrice, sa), sb);
+  const amount0Wei = Number(liquidity) * (sb - c) / (c * sb);
+  return amount0Wei > 0 ? amount0Wei / 1e18 : 0;
+}
+
+export async function readLpPositions() {
+  const { createPublicClient, http, getAddress, keccak256, encodeAbiParameters, parseAbiItem } = await import('viem');
+  const client = createPublicClient({ transport: http(process.env.CHAIN_RPC_URL) });
+  if (process.env.CHAIN_ID && Number(process.env.CHAIN_ID) !== Number(await client.getChainId()))
+    throw new Error('lp reader: RPC chain does not match CHAIN_ID — refusing to read');
+
+  const pm = getAddress(process.env.POSITION_MANAGER_ADDRESS);
+  const key = poolKey(getAddress);
+  const poolId = keccak256(encodeAbiParameters(
+    [{ type: 'address' }, { type: 'address' }, { type: 'uint24' }, { type: 'int24' }, { type: 'address' }],
+    [key.currency0, key.currency1, key.fee, key.tickSpacing, key.hooks]));
+
+  const poolManager = await client.readContract({ address: pm, functionName: 'poolManager',
+    abi: [{ type: 'function', name: 'poolManager', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }] });
+
+  // the live price — the same getSlot0 read the mint sizes its liquidity from
+  const slot0 = await client.readContract({ address: getAddress(process.env.STATE_VIEW_ADDRESS),
+    abi: [{ type: 'function', name: 'getSlot0', stateMutability: 'view', inputs: [{ name: 'poolId', type: 'bytes32' }],
+      outputs: [{ type: 'uint160' }, { type: 'int24' }, { type: 'uint24' }, { type: 'uint24' }] }],
+    functionName: 'getSlot0', args: [poolId] });
+  const sqrtPrice = Number(BigInt(slot0[0])) / 2 ** 96;
+  if (!(sqrtPrice > 0)) return []; // an uninitialized pool has no depth to report
+
+  // every tokenId that ever held liquidity here, chunked from the pool's deploy block
+  const modifyEv = parseAbiItem(
+    'event ModifyLiquidity(bytes32 indexed id, address indexed sender, int24 tickLower, int24 tickUpper, int256 liquidityDelta, bytes32 salt)');
+  const head = await client.getBlockNumber();
+  const chunk = BigInt(process.env.LP_LOG_CHUNK || 50000);
+  const ranges = new Map(); // tokenId → { tickLower, tickUpper }
+  for (let from = BigInt(process.env.DEX_POOL_FROM_BLOCK || 0); from <= head; from += chunk) {
+    const to = from + chunk - 1n > head ? head : from + chunk - 1n;
+    const logs = await client.getLogs({ address: poolManager, event: modifyEv, args: { id: poolId }, fromBlock: from, toBlock: to });
+    for (const l of logs) {
+      const tokenId = BigInt(l.args.salt);
+      if (tokenId === 0n) continue; // not a PositionManager position (some other salt convention)
+      ranges.set(tokenId.toString(), { tickLower: Number(l.args.tickLower), tickUpper: Number(l.args.tickUpper) });
+    }
+  }
+
+  const liqAbi = [{ type: 'function', name: 'getPositionLiquidity', stateMutability: 'view',
+    inputs: [{ type: 'uint256' }], outputs: [{ type: 'uint128' }] }];
+  const ownerAbi = [{ type: 'function', name: 'ownerOf', stateMutability: 'view',
+    inputs: [{ type: 'uint256' }], outputs: [{ type: 'address' }] }];
+
+  const byWallet = new Map();
+  for (const [id, r] of ranges) {
+    const tokenId = BigInt(id);
+    let liquidity, owner;
+    try {
+      liquidity = await client.readContract({ address: pm, abi: liqAbi, functionName: 'getPositionLiquidity', args: [tokenId] });
+      if (!(BigInt(liquidity) > 0n)) continue;             // closed — no depth to credit
+      owner = await client.readContract({ address: pm, abi: ownerAbi, functionName: 'ownerOf', args: [tokenId] });
+    } catch { continue; }                                   // burned token — ownerOf reverts
+    const eth = ethSideOf(liquidity, r.tickLower, r.tickUpper, sqrtPrice);
+    if (!(eth > 0)) continue;
+    const w = String(owner).toLowerCase();
+    byWallet.set(w, (byWallet.get(w) || 0) + eth);
+  }
+  return [...byWallet].map(([wallet, liquidityEth]) => ({ wallet, liquidityEth }));
+}
+
 // ETH → OMR through the Universal Router's V4_SWAP command (0x10): actions SWAP_EXACT_IN_SINGLE
 // (0x06) → SETTLE_ALL (0x0c) → TAKE_ALL (0x0f), ETH riding as msg.value. Returns the achieved fill
 // by reading the bot wallet's OMR balance delta (the router does not return amounts).

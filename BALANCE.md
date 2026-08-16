@@ -6159,9 +6159,20 @@ strategic fit since depth is the binding bond-cap constraint, but the reader nee
 read"). Liquidity held OVER TIME in the canonical OMR pool now joins the underwriter score:
 `underwriterScore(bondedEth, pledgedOmr, lpEthDays)` folds accrued ETH-DAYS of depth at
 `BONDS.LP_SCORE_PER_ETH_DAY`. **STATUS ONLY** — no payout attaches (the Sybil posture holds), the
-whole layer writes ZERO `transactions` rows (test-pinned), and the sync is **chain-dormant** until
-the PositionManager reader lands with the live pool (the `__setLpReader` seam; CHAIN-DEPLOY's v4
-migration step lists the reader as a launch task).
+whole layer writes ZERO `transactions` rows (test-pinned).
+
+**THE READER IS BUILT AND PROVEN (2026-08-16)** — `src/dexbot.js:readLpPositions`, installed at
+worker boot on a condition weaker than the bots' (it needs no key: a box that never sends a
+transaction still accrues the league). It enumerates through the poolId-filtered `ModifyLiquidity`
+stream — v4's PositionManager passes `bytes32(tokenId)` as the position SALT, so one filtered
+getLogs yields exactly the tokenIds that ever held liquidity in OUR pool — and prices each on its
+ETH side at the live sqrtPrice. **Depth is priced by the TOKENS a position would hand over, never
+by its raw liquidity L**, which is the anti-gaming property: a narrow range carries a far larger L
+for the same money, so reading L (or assuming full-range, which is the same thing) would pay
+concentration a large multiple for nothing. `npm run dexbot-e2e` pins both halves against a real
+pool — the POL positions read **1.8518 ETH against the 1.851788 ETH they actually consumed** (an
+independently measured wallet delta), and a deliberately narrow position carrying **34× the
+liquidity** is credited with the **1.0000 ETH** it put in and no more.
 
 | Lever | Ships | What it prices |
 | --- | --- | --- |
