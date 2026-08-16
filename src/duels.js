@@ -19,7 +19,7 @@
 // the ELO_FLOOR, and every feed paying the 5% rake. Flagged in BALANCE.md.
 import crypto from 'crypto';
 import { GameError, notify, bumpMastery } from './game.js';
-import { DUELS, duelRankOf, duelDivisionOf, duelStyleOf, duelTitleRankOf, levelOf, dayOf, effStat, pathFx, REGIMEN, disciplineLvlOf , jailed, hospitalized } from './rules.js';
+import { DUELS, duelRankOf, duelDivisionOf, duelStyleOf, duelTitleRankOf, levelOf, dayOf, effStat, pathFx, REGIMEN, disciplineLvlOf , jailed, hospitalized, PG_INT4_MAX } from './rules.js';
 
 const rand = (lo, hi) => lo + Math.random() * (hi - lo);
 
@@ -42,6 +42,10 @@ export async function listDuel(ch, limit, client) {
   const cap = Math.floor(Number(limit));
   if (!Number.isFinite(cap) || cap < DUELS.STAKE_MIN)
     throw new GameError('amount', `List a stake cap of at least $${DUELS.STAKE_MIN}.`);
+  // `duel_limit` is an int4 and `Number.isFinite` does not bound it — 3,000,000,000 is a number a
+  // player could plausibly type, and it reached Postgres as a 22003 that surfaced as a 500 on a
+  // request the server should simply have refused. See PG_INT4_MAX.
+  if (cap > PG_INT4_MAX) throw new GameError('amount', 'Name a stake cap a person could cover.');
   if (levelOf(Number(ch.respect)) < DUELS.MIN_LVL)
     throw new GameError('level', `The circuit takes duelists at level ${DUELS.MIN_LVL}.`);
   await client.query('UPDATE characters SET duel_limit=$2 WHERE id=$1', [ch.id, cap]);

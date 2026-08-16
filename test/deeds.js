@@ -306,6 +306,16 @@ await pool.query('UPDATE characters SET cash=200000 WHERE id=$1', [cc.id]);
 // LIST gates: a deedless account can't list; a price under the floor is refused
 assert.equal((await call('POST', '/v1/deeds/list', { token: cc.token, body: { price: 50000 } })).body.error, 'no_deed', 'a deedless account has no street to sell');
 assert.equal((await call('POST', '/v1/deeds/list', { token: b.token, body: { price: 1 } })).body.error, 'min_price', 'a street has a real floor price');
+// THE STORED-NOT-SPENT BOUND (red-team, found by driving the route): `sale_price` is a bigint and
+// `Number.isFinite` does not bound it, so 1e308 reached Postgres as a 22P02 and surfaced as a 500
+// on a request the server should simply have refused. Asserted as the REFUSAL rather than as
+// "not a 500", because pg-mem is more permissive than Postgres and would store the value happily —
+// a not-a-500 assertion would pass here with no fix at all.
+for (const huge of [1e308, Number.MAX_SAFE_INTEGER + 2, 9.9e18]) {
+  const r = await call('POST', '/v1/deeds/list', { token: b.token, body: { price: huge } });
+  assert.equal(r.body.error, 'max_price', `a price of ${huge} is refused, not stored (nor 500'd)`);
+  assert.ok(r.code < 500, `${huge} is a clean refusal, never an internal error`);
+}
 // b lists their street
 const sellerStreet = (await call('GET', '/v1/deeds', { token: b.token })).body.deed.name;
 const list = await call('POST', '/v1/deeds/list', { token: b.token, body: { price: 50000 } });
@@ -435,6 +445,17 @@ assert.equal((await call('POST', '/v1/deeds/list', { token: e.token, body: { pri
   'an inert street cannot be listed on the in-game market');
 assert.equal((await call('POST', '/v1/deeds/claim', { token: e.token, body: { name: 'New Row', district: 'canal' } })).body.error,
   'have_deed', 'a pending extraction still counts as holding a street (one deed per account)');
+// (red team) INERT means inert on the BOARD too, not only at the till. `collectCorner` excludes an
+// extracted deed (`AND onchain_token_id IS NULL`) but extraction deliberately does NOT reset `corner_at`,
+// so a board without the same test kept quoting a corner take that climbed to the full 24h cap and then
+// refused on press — the control-that-lies class. Backdate the clock so a LIVE deed would show a day's
+// take, and assert both ends read the same nothing.
+await pool.query('UPDATE street_deeds SET corner_at=$1 WHERE onchain_token_id IS NOT NULL', [new Date(Date.now() - 20 * 3600e3)]);
+const eInert = (await call('GET', '/v1/deeds', { token: e.token })).body;
+assert.equal(eInert.corner.owed, 0, 'an extracted deed accrues no corner take on the board');
+assert.equal(eInert.corner.collectable, 0, 'and nothing reads as collectable');
+assert.equal((await call('POST', '/v1/deeds/corner', { token: e.token })).body.error, 'nothing',
+  'and the till agrees — the board and the button say the same nothing');
 
 // CONFIRM ON-CHAIN (the Extracted watcher): state 2→3 — re-key to onchain:<token>, freeing the extractor
 await markDeedExtracted(pool, { nonce: ext.body.nonce, tokenId: ext.body.tokenId });

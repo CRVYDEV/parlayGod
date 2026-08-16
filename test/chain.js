@@ -269,6 +269,40 @@ await pool.query(`UPDATE vouchers SET deadline = ${Math.floor(Date.now() / 1000)
 assert.equal((await reclaimExpiredVouchers(pool, { usedNonce: async () => false })).omrReclaimed, 4, 'an unclaimed expired voucher still refunds');
 assert.equal((await meOf(token)).omr, omrPreLegit, 'the burned $OMR came back');
 
+// ── (red-team HIGH) A DEED VOUCHER BELONGS TO ANOTHER CONTRACT — the reclaim must not touch it ──
+// `vouchers` is shared: VoucherClaim signs omr/gear/car/boat, StreetDeed signs 'deed', and the two
+// have INDEPENDENT nonce spaces. The reclaim asks VoucherClaim `usedNonce`, which answers false for a
+// deed nonce whatever really happened — indistinguishable from "never claimed". With no kind filter it
+// expired the row (miscounting it as restored GEAR via a no-op account_gear UPDATE), after which
+// sweepDeedVouchers — the one function that reads the right contract — selects status='signed' and
+// finds nothing. The street then sits extraction-pending FOREVER: inert in game, unsellable,
+// un-shakedownable, un-re-extractable, and blocking its owner from ever claiming another. This runs
+// the worker's real order (reclaim first, worker.js:480; the deed sweep after, :491) on the ordinary
+// abandoned-extraction path — a player who signs a voucher and never submits the tx.
+{
+  const { sweepDeedVouchers } = await import('../src/chain.js');
+  await pool.query(`INSERT INTO accounts (id, auth_provider, auth_subject) VALUES ('deedAcc','guest','sub-deedAcc') ON CONFLICT DO NOTHING`);
+  await pool.query(`INSERT INTO street_deeds (account_id, name, name_lc, district, onchain_token_id, extracted_by_account, extracted_at)
+                    VALUES ('deedAcc','Vine Street','vine street','docks','9911','deedAcc', now())`);
+  const deedNonce = 987654;
+  await pool.query(`INSERT INTO vouchers (id, account_id, kind, amount, gear_id, nonce, to_address, deadline, status, signed_payload)
+                    VALUES ('dv1','deedAcc','deed',1,'9911',$1,'0xabc',$2,'signed','{}')`,
+  [deedNonce, Math.floor(Date.now() / 1000) - 99999]);
+  const rec = await reclaimExpiredVouchers(pool, { usedNonce: async () => false });
+  assert.equal(rec.gearRestored, 0, 'the reclaim does not mistake a deed voucher for a piece of gear');
+  assert.equal((await pool.query(`SELECT status FROM vouchers WHERE id='dv1'`)).rows[0].status, 'signed',
+    'the deed voucher is left SIGNED for the sweep that reads the right contract');
+  // the mod /reserve/claimed route reaches markClaimed directly — a deed nonce typed there used to flip
+  // the row to 'claimed', which the deed sweep skips just as surely as 'expired'. Same brick, same fix.
+  await call('POST', '/v1/mod/reserve/claimed', { headers: modH, body: { nonce: deedNonce } });
+  assert.equal((await pool.query(`SELECT status FROM vouchers WHERE id='dv1'`)).rows[0].status, 'signed',
+    'and the mod claimed-route cannot reach it either — a deed claim has its own watcher');
+  const sw = await sweepDeedVouchers(pool, { usedNonce: async () => false });
+  assert.equal(sw.cleared, 1, 'the deed sweep still finds it and clears the inert flag');
+  assert.equal((await pool.query(`SELECT onchain_token_id FROM street_deeds WHERE account_id='deedAcc'`)).rows[0].onchain_token_id, null,
+    'the street came back into the game (state 2 → 1) instead of being bricked forever');
+}
+
 // MED — chainConfig fails CLOSED: no chainId / verifyingContract → throw, never sign a wrong domain
 const savedChainId = process.env.CHAIN_ID;
 delete process.env.CHAIN_ID;
@@ -597,6 +631,40 @@ const d0Toll = await driftOf('$OMR conservation');
   assert(bs.body.oracle && bs.body.oracle.state, 'and carries the oracle keeper verdict (dormant here — pg-mem has no chain)');
   assert.equal(bs.body.oracle.state, 'dormant', 'which is dormant on an unconfigured server');
   console.log('  ✓ oracle keeper watchdog: unset/ok/boundary/keeper-late/down/skew classified + dormant end-to-end + the mod view carries it');
+}
+
+// ════════ THE ORACLE READ STAYS OUTSIDE THE TRANSACTION (RED TEAM 2026-08-16) ════════
+// A SOURCE tripwire, labelled as one: pg-mem is a single caller and nothing here can make an RPC
+// hang, so the property — "a player-facing route must not hold a pooled connection and a row lock
+// across a network call" — is not observable behaviourally in this suite.
+//
+// `quoteBond` did exactly that: `makeBondPriceReader()` and `.ceiling()` sat between an
+// `account_persistent FOR UPDATE` and the `bond_reserve` singleton, so a slow or hanging node pinned
+// an API-pool connection AND blocked that player's every other authed action behind their own row
+// lock, for as long as the node took. It is the pool-exhaustion shape `bankPosition` and the
+// deed-vault disclosure are both deliberately written to avoid, arriving on a WRITE path.
+//
+// Scope, stated rather than implied: this covers the ROUTE-reached function only. The two worker
+// sweeps (`reclaimExpiredVouchers`, `sweepDeedVouchers`) also call their reader while holding a
+// connection, and that is left alone on purpose — the worker's pool is its own, its jobs are serial,
+// no player is waiting behind them, and pre-fetching every nonce before opening the txn is a real
+// restructuring for no user-visible gain. A guard that flagged them would be crying wolf on two
+// sites to protect one, and an advisory that is mostly wrong gets ignored.
+{
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/chain.js', import.meta.url), 'utf8');
+  const start = src.indexOf('export async function quoteBond(');
+  assert.ok(start > 0, 'quoteBond is where the tripwire says it is');
+  const body = src.slice(start, src.indexOf('\nexport ', start + 10));
+  const iReader = body.indexOf('makeBondPriceReader()');
+  const iCeiling = body.indexOf('.ceiling()');
+  const iConnect = body.indexOf('pool.connect()');
+  assert.ok(iReader > 0 && iCeiling > 0 && iConnect > 0, 'all three landmarks are present in quoteBond');
+  assert.ok(iReader < iConnect,
+    'quoteBond builds its price reader BEFORE it takes a pooled connection');
+  assert.ok(iCeiling < iConnect,
+    'and it makes the oracle RPC before the transaction opens — never while holding a row lock');
+  console.log('  ✓ quoteBond reads the oracle before it opens a transaction (no RPC under a held row lock)');
 }
 
 console.log('✅ M6-B chain test passed — SIWE wallet link, EIP-712 voucher signing parity (recovers the signer), full-reserve withdrawal queue (debit→queue→fund→drain→sign), $OMR ledger conservation, gear-mint vouchers, Claimed reserve release, expired-voucher reclaim (OMR refund + reserve free + gear restore, §10.4 exact), §11 mint-gate + fee reconcile + concurrent-credit safety, bond-quote signing parity (recovers the signer) + watcher enrichment + wallet-submit calldata (server-encoded bond() for MetaMask/Robinhood Wallet), and THE EXIT TOLL (gross debit → net voucher, tax:dev/tax:buyback transfers, dev-fund claim, conservation exact)');

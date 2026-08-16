@@ -23,6 +23,12 @@
 // §10.4: none — pure arithmetic over published snapshots, writing a JSON file.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+// The SAME normalizer the loader (`src/drop.js`) matches a claim against — EVM lowercases, base58
+// stays VERBATIM. Shared rather than restated: the red team of 2026-08-16 found this builder
+// lowercasing every wallet, which silently orphaned an entire Solana community's envelopes (no
+// ed25519 key can sign for a lowercased base58 address) while every count and the commitment read
+// perfectly correct. One implementation is what makes the two ends of the dataset agree.
+import { normalizeWallet } from '../src/sol.js';
 
 const floor6 = (v) => Math.floor(v * 1e6) / 1e6;
 const byWallet = (a, b) => (a.wallet < b.wallet ? -1 : 1);
@@ -37,13 +43,13 @@ export function allocateCoin({ holders, pool, dustFloor, cap }) {
   return eligible.map((h) => {
     const shareMicro = Number((BigInt(h.balance) * 1000000n) / total); // µ-shares, exact in BigInt
     const omr = floor6(Math.min(Number(cap ?? Infinity), floor6((Number(pool) * shareMicro) / 1e6)));
-    return { wallet: h.wallet.toLowerCase(), omr };
+    return { wallet: normalizeWallet(h.wallet), omr };
   }).filter((r) => r.omr > 0).sort(byWallet);
 }
 
 // ── NFT: per-NFT × held count (the token is the Sybil bound — no floor or cap needed). ──
 export function allocateNft({ holders, perNft }) {
-  return holders.map((h) => ({ wallet: h.wallet.toLowerCase(), omr: floor6(Number(perNft) * Number(h.count)) }))
+  return holders.map((h) => ({ wallet: normalizeWallet(h.wallet), omr: floor6(Number(perNft) * Number(h.count)) }))
     .filter((r) => r.omr > 0).sort(byWallet);
 }
 
@@ -83,7 +89,16 @@ function main() {
     const rows = c.kind === 'coin'
       ? allocateCoin({ holders: snap.holders, pool: c.pool, dustFloor: c.dustFloor, cap: c.cap })
       : allocateNft({ holders: snap.holders, perNft: c.perNft });
-    perCommunity.push({ id: Number(c.id), freeMint: c.freeMint !== false, rows });
+    // freeMint WAIVES THE IDENTITY MINT FEE, so it is stated, never defaulted (red team 2026-08-16).
+    // It read `c.freeMint !== false`, i.e. a config that simply forgot the key handed a whole
+    // community a free pass through the Sybil bound that gates extraction. Defaulting it the other
+    // way is no better — that silently withholds a waiver a community was promised. Both answers are
+    // wrong to guess at, and the operator knows which one they meant, so the config has to say.
+    if (typeof c.freeMint !== 'boolean') {
+      console.error(`[allocate] community ${c.id}: "freeMint" must be stated true or false — it waives the identity mint fee, so it is never assumed`);
+      process.exit(1);
+    }
+    perCommunity.push({ id: Number(c.id), freeMint: c.freeMint, rows });
     summary.push({ community: Number(c.id), kind: c.kind, snapshotHolders: snap.holders.length,
       eligible: rows.length, omr: floor6(rows.reduce((a, r) => a + r.omr, 0)) });
   }

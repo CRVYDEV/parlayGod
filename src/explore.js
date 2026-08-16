@@ -44,7 +44,7 @@ export const SYSTEMS = [
     seen: (c) => (c.owned.fighters || []).length > 0 || num(c.acct.boxing_wins) > 0 || mastery(c.owned, 'fists') > 0 },
   { id: 'races',     name: 'Street Races',    at: 14, tab: 'races',     hook: 'Tune a car and run the circuit — fee up front, purse on a win. Fast iron finally earns.',
     seen: (c) => num(c.acct.race_wins) > 0 || mastery(c.owned, 'wheels') > 0 },
-  { id: 'front',     name: 'Legit Fronts',    at: 15, tab: 'empire',    hook: 'Open a front — a business that farms cash around the clock and launders through its own books.',
+  { id: 'front',     name: 'Legit Fronts',    at: 15, tab: 'empire',    hook: 'Open a front — a business that farms cash around the clock whether you are online or not. It draws the Bureau, so somebody has to mind it.',
     seen: (c) => (c.owned.businesses || []).length > 0 },
   { id: 'legit',     name: 'Going Legit',     at: 15, tab: 'portfolio', hook: 'Stake your $OMR for the Made ladder — a bigger trunk, deeper tanks, and looted at the safe rate when you die.',
     seen: (c) => num(c.acct.staked) > 0 || !!c.acct.minted || isMade(c.acct) },

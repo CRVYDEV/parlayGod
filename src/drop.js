@@ -27,7 +27,7 @@
 import crypto from 'node:crypto';
 import { GameError } from './game.js';
 import { PROVENANCE, wardOf } from './rules.js';
-import { isSolAddress, verifySolSig } from './sol.js';
+import { isSolAddress, verifySolSig, normalizeWallet } from './sol.js';
 
 const num = (v) => Number(v || 0);
 const isWallet = (w) => /^0x[0-9a-f]{40}$/.test(w);
@@ -267,9 +267,9 @@ export async function loadAllocations(pool, rows) {
     let loaded = 0, skippedClaimed = 0;
     for (const r of rows) {
       // EVM addresses normalize to lowercase; Solana addresses (base58, 32-byte) are CASE-SENSITIVE
-      // and stored VERBATIM — lowercasing one would orphan the allocation forever.
-      const raw = String(r.wallet || '');
-      const wallet = /^0x/i.test(raw) ? raw.toLowerCase() : raw;
+      // and stored VERBATIM — lowercasing one would orphan the allocation forever. The BUILDER
+      // shares this exact function (sol.js) so the two ends of the dataset cannot disagree.
+      const wallet = normalizeWallet(r.wallet);
       if (!isWallet(wallet) && !isSolAddress(wallet)) throw new GameError('wallet', `Bad wallet address: ${r.wallet}`);
       const omr = Number(r.omr);
       if (!Number.isFinite(omr) || omr < 0) throw new GameError('amount', `Bad omr amount for ${wallet}`);

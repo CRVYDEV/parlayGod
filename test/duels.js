@@ -43,6 +43,15 @@ let r = await call('POST', '/v1/duels/list', { token: runt.token, body: { limit:
 assert.equal(r.body.error, 'level', 'a rookie cannot enter the circuit');
 r = await call('POST', '/v1/duels/list', { token: pigeon.token, body: { limit: 50 } });
 assert.equal(r.body.error, 'amount', 'the stake-cap floor holds');
+// THE STORED-NOT-SPENT BOUND (red-team, found by driving the route): `duel_limit` is an int4 and
+// `Number.isFinite` does not bound it, so 3,000,000,000 — a number an ordinary player could type —
+// reached Postgres as a 22003 and surfaced as a 500. Asserted as the REFUSAL rather than as
+// "not a 500": pg-mem stores it happily, so a not-a-500 assertion would pass with no fix at all.
+for (const huge of [3e9, 2 ** 53, 1e308]) {
+  const big = await call('POST', '/v1/duels/list', { token: pigeon.token, body: { limit: huge } });
+  assert.equal(big.body.error, 'amount', `a stake cap of ${huge} is refused, not stored (nor 500'd)`);
+  assert.ok(big.code < 500, `${huge} is a clean refusal, never an internal error`);
+}
 r = await call('POST', '/v1/duels/list', { token: pigeon.token, body: { limit: 20000 } });
 assert.equal(r.code, 200, 'the pigeon lists');
 r = await call('POST', '/v1/duels/list', { token: bruiser.token, body: { limit: 50000 } });

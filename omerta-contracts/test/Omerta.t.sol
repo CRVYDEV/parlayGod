@@ -97,6 +97,58 @@ contract OmertaTest is Test {
         vm.prank(player); vc.claim(v2, s2);
     }
 
+    // ── RED TEAM 2026-08-16: the bridge's pre-flight cap must bound LIVE on-chain supply, exactly as
+    // GearVault does — NOT lifetime mints. A lifetime bound here is STRICTER than the asset layer's,
+    // and the gap kills the shipped re-import round trip (omerta-nft-reimport-design.md §4): once a
+    // class had ever hit its cap, a re-imported car could never be re-extracted, even with every one
+    // burned back and zero live on-chain. Caps here are per (model, rarity), and an epic class caps
+    // at 10, so the wall is reachable in ordinary play. Fail-closed either way — nothing over-mints —
+    // which is exactly why it would have gone unnoticed until a player hit it. ──
+    function test_reimport_frees_a_slot_the_bridge_can_re_extract() public {
+        uint256 CAR = 100000 + 3 * 10 + 2; // car catalog idx 3, rarity 2 — redeemable, unlike gear
+        vm.prank(safe); gear.setGearCap(CAR, 1);
+        vm.prank(safe); vc.setGearSupplyCap(CAR, 1);
+
+        VoucherClaim.Voucher memory v1 = _voucher(player, 1, 1, CAR, 501);
+        vm.prank(player); vc.claim(v1, _sign(v1, signerPk));
+        assertEq(gear.balanceOf(player, CAR), 1, "extracted");
+
+        // A second extraction while it is still live must fail — the cap is 1.
+        VoucherClaim.Voucher memory vDup = _voucher(player, 1, 1, CAR, 502);
+        bytes memory sDup = _sign(vDup, signerPk);
+        vm.expectRevert("VC: gear cap");
+        vm.prank(player); vc.claim(vDup, sDup);
+
+        // Re-import: the burn vacates the live slot at the asset layer.
+        vm.prank(player); gear.redeem(CAR, 1);
+        assertEq(gear.minted(CAR) - gear.redeemed(CAR), 0, "LIVE on-chain supply is back to zero");
+
+        // …so the bridge must let the SAME item be re-extracted. This is the regression.
+        VoucherClaim.Voucher memory v2 = _voucher(player, 1, 1, CAR, 503);
+        vm.prank(player); vc.claim(v2, _sign(v2, signerPk));
+        assertEq(gear.balanceOf(player, CAR), 1, "re-extracted into the slot the burn vacated");
+        assertEq(gear.minted(CAR) - gear.redeemed(CAR), 1, "and live supply never exceeds the cap");
+
+        // The freed slot is ONE slot, not a reset: a third live token is still refused.
+        VoucherClaim.Voucher memory v3 = _voucher(player, 1, 1, CAR, 504);
+        bytes memory s3 = _sign(v3, signerPk);
+        vm.expectRevert("VC: gear cap");
+        vm.prank(player); vc.claim(v3, s3);
+    }
+
+    // Gear proper is NOT redeemable (GearVault.redeem rejects it), so its `redeemed` stays 0 and the
+    // pre-flight is a lifetime bound for gear regardless — the change above cannot loosen that class.
+    function test_gear_class_has_no_slot_to_free() public {
+        vm.prank(safe); gear.setGearCap(9, 1);
+        vm.prank(safe); vc.setGearSupplyCap(9, 1);
+        VoucherClaim.Voucher memory v1 = _voucher(player, 1, 1, 9, 511);
+        vm.prank(player); vc.claim(v1, _sign(v1, signerPk));
+        vm.prank(player);
+        vm.expectRevert("GearVault: not redeemable");
+        gear.redeem(9, 1);
+        assertEq(gear.redeemed(9), 0, "gear can never vacate a slot");
+    }
+
     function test_set_gear_cap_only_owner() public {
         vm.expectRevert();
         vc.setGearSupplyCap(1, 100);

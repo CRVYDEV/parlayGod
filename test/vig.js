@@ -49,7 +49,7 @@ await call('POST', '/v1/mod/fees/record', { headers: modH, body: { nonce: 9001, 
 assert(near((await vigOf()).status.vigRevenueEth, 0.066), 'a re-delivered fee is idempotent — no double-count');
 
 // ── (2) the buyback: the Vig's ETH buys hard $OMR, split 50/50 reserve/prize ──
-r = await call('POST', '/v1/mod/vig/buyback', { headers: modH, body: { priceOmrPerEth: 2000 } });
+r = await call('POST', '/v1/mod/vig/buyback', { headers: modH, body: { priceOmrPerEth: 2000 , txHash: '0xvigqa01' } });
 assert.equal(r.code, 200, 'buyback ran');
 assert(near(r.body.ethSpent, 0.066), 'spent exactly the Vig revenue');
 assert(near(r.body.omrBought, 132), 'bought 132 $OMR (0.066 ETH × 2000)');
@@ -57,7 +57,7 @@ assert(near(r.body.toReserve, 66) && near(r.body.toPrize, 66), 'split 50/50 to r
 // (R41 regression) once a reference buyback exists (2000), a wildly inflated manual price (a fat-finger or
 // a leaked mod key) is REFUSED — 200× (400000) would mint 200× the $OMR into the reserve/prize pool past
 // real ETH inflow, invisible to BOTH the §10.4 sweep and runVigInvariants (neither price-checks omrBought).
-r = await call('POST', '/v1/mod/vig/buyback', { headers: modH, body: { priceOmrPerEth: 400000 } });
+r = await call('POST', '/v1/mod/vig/buyback', { headers: modH, body: { priceOmrPerEth: 400000 , txHash: '0xvigqa02' } });
 assert.equal(r.body.error, 'price_sanity', 'a 200x price jump off the last buyback is refused (the leaked-key mint guard)');
 // …and the wall must anchor on the LATEST price, not an arbitrary one. `vig_buyback.id` is a random
 // UUID, so the original `ORDER BY id DESC LIMIT 1` read a RANDOM historical row — measured: after 12
@@ -70,14 +70,14 @@ await pool.query(`INSERT INTO vig_buyback (id, eth_spent, omr_bought, price_omr_
 await pool.query(`INSERT INTO vig_buyback (id, eth_spent, omr_bought, price_omr_per_eth, to_reserve, to_prize, created_at)
   VALUES ('00000000-0000-4000-8000-000000000000', 0, 0, 200, 0, 0, now() + interval '1 minute')`);
 await pool.query("INSERT INTO vig_revenue (source, ref, gross_eth, vig_eth) VALUES ('fee','anchor-probe',1,1)");
-r = await call('POST', '/v1/mod/vig/buyback', { headers: modH, body: { priceOmrPerEth: 50000 } });
+r = await call('POST', '/v1/mod/vig/buyback', { headers: modH, body: { priceOmrPerEth: 50000 , txHash: '0xvigqa03' } });
 assert.equal(r.body.error, 'price_sanity',
   '250x off the LATEST print (200) is refused — the wall reads created_at, not a random UUID '
   + `(got ${JSON.stringify(r.body)})`);
 await pool.query("DELETE FROM vig_buyback WHERE eth_spent = 0"); // clear the synthetic prints
 await pool.query("DELETE FROM vig_revenue WHERE ref='anchor-probe'");
 // the anti-death-spiral cap: a second buyback with no new revenue spends NOTHING
-r = await call('POST', '/v1/mod/vig/buyback', { headers: modH, body: { priceOmrPerEth: 2000 } });
+r = await call('POST', '/v1/mod/vig/buyback', { headers: modH, body: { priceOmrPerEth: 2000 , txHash: '0xvigqa04' } });
 assert(near((await vigOf()).status.omrBought, 132), 'the bot never spends more ETH than came in (no-op when nothing unspent)');
 
 // ── (3) the extraction-≤-inflow invariant holds after the buyback ──
@@ -217,7 +217,7 @@ assert(near(vig.status.unspentEth, 0.048), 'A1: the trade revenue is unspent, aw
 // A5: §10.4 in-game untouched — trade ETH is out-of-band real value (zero transactions rows)
 assert.equal(Number((await pool.query("SELECT COUNT(*) n FROM transactions WHERE reason LIKE 'trade%'")).rows[0].n), 0, 'A5: trade revenue writes ZERO in-game transactions rows');
 // A2: the buyback converts the trade revenue to hard $OMR (0.048 ETH × 2000 = 96), split 48 reserve/48 prize
-r = await call('POST', '/v1/mod/vig/buyback', { headers: modH, body: { priceOmrPerEth: 2000 } });
+r = await call('POST', '/v1/mod/vig/buyback', { headers: modH, body: { priceOmrPerEth: 2000 , txHash: '0xvigqa05' } });
 assert(near(r.body.ethSpent, 0.048) && near(r.body.omrBought, 96), 'A2: the buyback spends exactly the trade revenue');
 assert(near(r.body.toReserve, 48) && near(r.body.toPrize, 48), 'A2: split 50/50 like any buyback');
 // A3: every Vig check stays green with a 'trade' source mixed in with 'fee'
@@ -232,6 +232,50 @@ assert(vig.invariants.summary.extracted <= vig.invariants.summary.funded + 1e-9,
 
 // ── (7) §10.4 in-game conservation holds with the prize mint + PLEX/withdraw burns + the trade source in the mix ──
 assert((await runLedgerInvariants(pool, { alert: false })).ok, '§10.4 in-game ledger still balances (prize:omr mint offset by plex:* + withdraw:omr burns; trade revenue is out-of-band)');
+
+// ── (A7) THE ANTI-FABRICATION GATE — a comp buyback books NOTHING (red team 2026-08-16) ──────────
+// Every other real-value ingest (desk, bank, community, treasury) carries a `txHash`/`real` pair so a
+// mod key can never assert "hard value arrived". The Vig is the OLDEST and never got one — and it is
+// the most amplified, because a buyback credits `chain_reserve.funded_omr` (the number `signVoucher`
+// reads before signing a REAL withdrawal), credits the prize pool (whose only exit is a `prize:omr`
+// mint to players), and sets the canonical price print the desk band / bond oracle / PLEX / the ETH
+// vault all anchor on. Neither half of the two-sided sandwich could see it: `toReserve` summed
+// `vig_buyback.to_reserve` unfiltered, so a fabricated row moved `funded` and `toReserve` together and
+// both checks stayed green — while the sibling term one line below already read `WHERE real`.
+{
+  // fresh real revenue so there is a live budget to fabricate against
+  await call('POST', '/v1/mod/fees/record', { headers: modH,
+    body: { nonce: 990001, kind: 'mint', payer: player.address, amountWei: '200000000000000000', txHash: '0xcompgate' } });
+  const before = await vigOf();
+  const fundedBefore2 = before.invariants.summary.funded;
+  const prizeBefore = Number((await pool.query('SELECT balance FROM vig_prize_pool WHERE id=1')).rows[0].balance);
+  const anchorBefore = Number((await pool.query(
+    'SELECT price_omr_per_eth p FROM vig_buyback WHERE real ORDER BY created_at DESC LIMIT 1')).rows[0].p);
+
+  // a COMP: the mod route with no txHash. It succeeds (QA still exercises the path) and books zero.
+  const comp = await call('POST', '/v1/mod/vig/buyback', { headers: modH, body: { priceOmrPerEth: 3000 } });
+  assert.equal(comp.body.real, false, 'A7: a buyback with no txHash is a comp');
+  assert.equal(comp.body.omrBought, 0, 'A7: a comp buys NOTHING — the mod key cannot assert hard $OMR arrived');
+  assert.equal(comp.body.toReserve, 0, 'A7: and credits no withdrawal reserve');
+
+  const after = await vigOf();
+  assert(near(after.invariants.summary.funded, fundedBefore2),
+    'A7: the reserve — what signVoucher checks before signing a REAL withdrawal — did not move');
+  assert.equal(Number((await pool.query('SELECT balance FROM vig_prize_pool WHERE id=1')).rows[0].balance), prizeBefore,
+    'A7: and the prize pool, whose only exit is a prize:omr mint to players, did not move');
+  assert(after.invariants.ok, `A7: every Vig check still green: ${JSON.stringify(after.invariants.checks.filter((c) => !c.ok))}`);
+
+  // and the comp did NOT become the canonical price print every other system anchors on
+  assert.equal(Number((await pool.query(
+    'SELECT price_omr_per_eth p FROM vig_buyback WHERE real ORDER BY created_at DESC LIMIT 1')).rows[0].p), anchorBefore,
+    'A7: a comp never sets the canonical anchor the desk, the bond oracle and PLEX all read');
+
+  // the comp consumed no real budget either — the same revenue is still there for a real buyback
+  const real = await call('POST', '/v1/mod/vig/buyback', { headers: modH,
+    body: { priceOmrPerEth: 3000, txHash: '0xreal-after-comp' } });
+  assert(real.body.omrBought > 0, 'A7: the real buyback still has the whole budget — a comp spends nothing');
+  assert.equal(real.body.real, true, 'A7: and it books real');
+}
 
 console.log('✅ Vig test passed — real revenue → 60/40 split → buyback (spend ≤ inflow) → reserve+prize → prize payout → the PLEX bridge (the MINT is ETH only — and the Store door beside it is shut; the respawn pays in earned $OMR, and the freshness check is narrowed to the dead rail so it cannot fire on the live one) → real Vig-funded withdrawal + TIER A: a TRADE-fee source (the afterSwap→Vig hook rail) splits/buys/reconciles end-to-end and WIDENS extraction≤inflow, §10.4 untouched — the extraction-≤-inflow invariant + §10.4 conservation holding throughout');
 await app.close();

@@ -542,10 +542,25 @@ contract OmertaHook is IHooks, Ownable {
     }
 
     /// @dev Book the four slices. The remainder rule sits on LP, so they sum to `total` exactly.
+    ///
+    ///      The divisor is `sellTaxBps` because each slice is defined as its share OF THE RATE — but
+    ///      the BUY path's rate is `antiSnipeBuyBps`, an INDEPENDENT lever, and both ship at 0. The
+    ///      window is armed for a pool's OPENING, which is precisely the moment the sell tax may not be
+    ///      armed yet, so dividing unconditionally panicked (0x12) and refused every buy inside the
+    ///      window — the launch guard closing the market it was written to protect, on a contract with
+    ///      no proxy to fix it. With no split configured the fee goes wholly to LP, which is already
+    ///      where the remainder rule sends whatever the three named slices don't claim: it deepens the
+    ///      pool rather than paying anyone, which is the right default for an unconfigured rate.
     function _accrue(address sender, PoolKey calldata key, Currency feeCurrency, uint256 total) private {
-        uint256 dev = (total * taxDevBps) / sellTaxBps;
-        uint256 rwa = (total * taxRwaBps) / sellTaxBps;
-        uint256 community = (total * taxCommunityBps) / sellTaxBps;
+        uint256 denom = sellTaxBps;
+        uint256 dev;
+        uint256 rwa;
+        uint256 community;
+        if (denom > 0) {
+            dev = (total * taxDevBps) / denom;
+            rwa = (total * taxRwaBps) / denom;
+            community = (total * taxCommunityBps) / denom;
+        }
         uint256 lp = total - dev - rwa - community;
 
         Owed storage o = owed[feeCurrency];

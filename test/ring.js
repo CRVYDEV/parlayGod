@@ -274,6 +274,40 @@ assert.equal(trCheck.drift, 0, `the tourney escrow identity holds through the br
   await sleep(10); await sweepTournaments(pool); // settle the final so the one-open slot frees
 }
 
+// ── (red-team MED) EVERY FINALIST DIES IN ONE ROUND WINDOW. The empty-final branch used to flip
+// status='resolved' on the reasoning that the pool was fully burned by the death reductions — true
+// only at round 0, and round 0 can never REACH it (a 0-live field is < MIN_ENTRANTS, so the
+// short-field refund fires first). From round 1 the death loop skips `eliminated` runners, whose
+// buy-ins stay in the pool as the pot the finalists play for — so the branch resolved holding a
+// non-zero pool, wrote NO ledger row, and the escrow identity drifted by exactly the cut runners'
+// stakes for good (status<>'open' drops the pool off the check's LHS while the RHS still carries the
+// buy-ins). Seed 8 → round 0 cuts 4 → kill all 4 survivors → the empty final must BURN the residue. ──
+{
+  const R = [];
+  for (let i = 0; i < 8; i++) R.push(await mk(`Wiped-Bracket ${i}`));
+  const wbid = (await call('POST', '/v1/casino/tournament', { token: R[0].token, body: { bracket: true } })).body.tournament;
+  for (let i = 1; i < 8; i++) await call('POST', '/v1/casino/tournament', { token: R[i].token, body: {} });
+  await closeReg(wbid);
+  assert.equal((await sweepTournaments(pool)).resolved, 1, 'round zero ran');
+  const survivors = (await pool.query(
+    `SELECT character_id FROM poker_entries WHERE tournament_id='${wbid}' AND NOT eliminated`)).rows.map((x) => x.character_id);
+  const cutCount = 8 - survivors.length;
+  assert(cutCount > 0, `round zero eliminated somebody — their stake is the residue at stake (${cutCount} cut)`);
+  assert.equal((await pool.query(`SELECT status FROM poker_tournaments WHERE id='${wbid}'`)).rows[0].status, 'open', 'the bracket is still open going into the final');
+  for (const cid of survivors) // the whole final table dies inside the round window
+    await app.inject({ method: 'POST', url: '/v1/mod/kill', headers: { 'x-mod-key': 'test-mod-key' }, payload: { characterId: cid } });
+  await sleep(10);
+  assert.equal((await sweepTournaments(pool)).resolved, 1, 'the empty final ran');
+  const wst = (await pool.query(`SELECT status, pool FROM poker_tournaments WHERE id='${wbid}'`)).rows[0];
+  assert.equal(wst.status, 'resolved', 'the empty bracket settled');
+  assert.equal(Number(wst.pool), 0, 'and it settled EMPTY — the eliminated runners\' stakes were not left stranded in the row');
+  const wBurn = -Number((await pool.query(
+    `SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='casino:tourney:death' AND counterparty='${wbid}'`)).rows[0].s);
+  assert.equal(wBurn, 8 * CASINO.TOURNEY.BUYIN, 'every buy-in left through the ledger: the finalists\' deaths plus the cut runners\' residue');
+  const wCheck = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'poker tourney escrow');
+  assert.equal(wCheck.drift, 0, `the escrow identity holds after an all-dead final (${wCheck.drift})`);
+}
+
 // ── ALL-IN: a player with no chips is never asked to act, so the clock cannot fold him off a pot ──
 // `advance()` used to pick the next actor from every un-acted seat REGARDLESS of stack, so on the
 // street after an all-in the action landed on a player holding zero chips — no decision to make and

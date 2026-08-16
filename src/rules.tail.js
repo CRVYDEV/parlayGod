@@ -41,6 +41,25 @@ export const PLEX_GENESIS_OMR_PER_ETH = Number(process.env.PLEX_GENESIS_OMR_PER_
 export const genesisOmrFor = (feeEth, premiumBps = 12000) =>
   Math.round(Number(feeEth) * PLEX_GENESIS_OMR_PER_ETH * Number(premiumBps) / 10000);
 
+// ── THE STORED-NOT-SPENT BOUND ──────────────────────────────────────────────────────────────────
+// A number the player SPENDS is bounded by their balance. A number they merely NAME — a listing
+// price, a consent limit — is bounded by nothing but its own guard, and `Number.isFinite` is the
+// wrong tool for that job: 3,000,000,000 and 1e308 are both perfectly finite, and both are past
+// what the column holds. Found by DRIVING the routes, not by reading them: two live 500s where a
+// clean refusal belonged (the deed's asking price on a bigint column, the duelling ladder's stake
+// cap on an int4 one), and 3e9 is a number an ordinary player could type.
+//
+// The bound is a STORAGE fact, not a balance dial — a gameplay ceiling (the way SPEAKEASY.SALE_MAX
+// caps a club at $50M) is a separate founder decision, and these deliberately do not make one:
+// every value that works today still works.
+//
+// SAFE_STORED is MAX_SAFE_INTEGER rather than the bigint maximum on purpose, and the reason is
+// stronger than the column: past 2^53 a JS number has already lost integer precision, so what
+// would be stored is no longer the number the player typed. Refusing it is correct on its own
+// terms — the column error is the symptom, not the argument.
+export const PG_INT4_MAX = 2147483647;
+export const SAFE_STORED = Number.MAX_SAFE_INTEGER;
+
 export const CONSTANTS = {
   // Randomized starting build — every fresh character rolls a UNIQUE distribution of the SAME
   // fixed budget (no two the same, but the total is constant → zero power creep, so the
@@ -2516,7 +2535,22 @@ export const passPrestigeOf = (seasons) => {
 };
 // validate the split sums to 10000 at load — a misconfig would silently mis-earmark real revenue
 (() => { const s = STORE.SPLIT_BPS; const t = s.founder + s.buyback + s.rwa;
-  if (t !== 10000) throw new Error(`REVENUE_SPLIT_BPS must sum to 10000 (got ${t})`); })();
+  if (t !== 10000) throw new Error(`REVENUE_SPLIT_BPS must sum to 10000 (got ${t})`);
+  // (red team 2026-08-16) …AND the community carve must fit inside the share it comes out of. The
+  // Store's community slice is carved from the FOUNDER remainder, which nothing validated: the sum
+  // check above cannot catch it because the remainder is computed as `founder - carve` and therefore
+  // sums to 10000 for ANY carve, including a negative one. Measured with STORE_COMMUNITY_BPS=5000:
+  // the module boots clean and the store row reads `[vig 4000, treasury 2000, community 5000,
+  // operations -1000] sum 10000` — real ETH earmarked to the dev wallet booked as another system's
+  // spendable budget. The fee split (above) already guards its own three-way sum; this is the same
+  // guard for the shape that hides behind an implicit remainder.
+  const commStore = Number(process.env.STORE_COMMUNITY_BPS ?? 0);
+  if (commStore > s.founder)
+    throw new Error(`STORE_COMMUNITY_BPS (${commStore}) exceeds the founder share it is carved from (${s.founder}) — the operations remainder would go negative and real revenue would be double-booked.`);
+  const commHarvest = Number(process.env.HARVEST_COMMUNITY_BPS ?? 0);
+  if (commHarvest > 10000)
+    throw new Error(`HARVEST_COMMUNITY_BPS (${commHarvest}) exceeds 10000 — the treasury remainder in recordHarvestFee would go negative.`);
+})();
 
 // ── NAMED LANDMARKS — one dedicable plaque per district (a deflationary $OMR STATUS sink). Dedicate
 // by burning $OMR; a bigger flex takes the plaque. The name borne is the account's dynasty (or street).

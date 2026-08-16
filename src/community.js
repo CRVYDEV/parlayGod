@@ -134,7 +134,7 @@ export async function runFamilyBuyback(pool, { currency = 'eth', priceOmr, maxSp
     // itself be the absurd one): REFUSE, and make the operator seed it deliberately.
     if (!(ref > 0) && ccy.toLowerCase() === 'eth') {
       ref = num((await client.query(
-        'SELECT price_omr_per_eth FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0]?.price_omr_per_eth);
+        'SELECT price_omr_per_eth FROM vig_buyback WHERE real ORDER BY created_at DESC LIMIT 1')).rows[0]?.price_omr_per_eth);
       if (ref > 0) anchor = 'vig';
     }
     if (ref > 0 && (price > ref * jump || price < ref / jump))

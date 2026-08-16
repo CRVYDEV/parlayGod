@@ -13329,3 +13329,73 @@ CHAIN-DEPLOY rather than smoothed over: each prover configures the thing it then
 wrong `DEX_POOL_FEE`/`DEX_POOL_TICK_SPACING` or `ERC6551_REGISTRY`/`_ACCOUNT_IMPL`/`_SALT` at deploy
 is a CONFIG error no prover can see** — resolve one real deed's TBA, and do one small live swap and
 pairing, by hand before the first real value moves.
+
+**THE FULL RED TEAM — game + contracts, and the two findings that dissolved (founder-directed
+2026-08-16: "run a red team over the entire game & smart contracts. Max effort search for bugs &
+exploits") — `AUDIT-full-red-team.md`.** First-hand throughout: **every finding reproduced against a
+running engine or the contract source before it was called one**. No CRITICAL; two HIGH, four MED,
+four LOW, all fixed with regressions that fail by name under mutation. **H1 — a StreetDeed voucher was
+reclaimable by the VoucherClaim rail.** `vouchers` is ONE table shared by TWO contracts with
+INDEPENDENT nonce spaces, and neither `reclaimExpiredVouchers` nor `markClaimed` filtered by kind — so
+the consequence was not a lost voucher but a **street bricked FOREVER** in extraction-pending, its
+owner unable to use it or claim another, on the ORDINARY abandoned-extraction path, with nothing
+anywhere reporting a problem. Fixed with an **allowlist, never a denylist** (`VOUCHER_CLAIM_KINDS`) so
+the third contract to share that table is invisible to the old rail by default, plus a fail-closed
+unknown-kind branch. **H2 — only the FIRST delivery of each stock allocation ever landed.**
+`allocateStock` ACCUMULATES into its PK, so the same (epoch, account, ticker) legitimately owes a
+second tranche the next day — but `deliveryIdFor` was keyed on the PK alone, so tranche two computed
+an id StockVault had already consumed and was unsendable forever. The **default operating shape**, not
+an edge. Fixed with a running total (`delivered_units`) folded into the id derivation, and the
+migration **BACKFILLS** it: without the backfill every already-delivered row re-plans in full after
+deploy, which is a double delivery of real stock. A new exact `allocation delivery ledger agrees`
+identity means the two sides can never drift silently again. **M1 — the bridge's gear cap outlived the
+re-import round trip.** `GearVault` bounds LIVE supply (`minted − redeemed ≤ cap`) so a burn vacates
+exactly one slot — the entire mechanism behind re-import — while `VoucherClaim`'s pre-flight still
+enforced a LIFETIME counter, so once a class had ever hit its cap a re-imported item could never be
+re-extracted, with every one of them burned back and zero live on-chain. Fail-closed either way,
+nothing over-mints, **which is precisely why it was invisible**; what it killed was a shipped feature,
+and an epic class caps at 10, so the wall is reachable in ordinary play. Fixed by writing the vault's
+own expression verbatim so the two layers measure the same quantity rather than merely agreeing today.
+**M2 — the allocation builder destroyed every Solana address it touched.** It lowercased every wallet;
+EVM is hex and case-insensitive so that is right for them, but **base58 is case-sensitive**, so the
+$ANSEM-class community's envelopes were orphaned FOREVER, silently, with the row count, the $OMR total
+and the published commitment all reading perfectly correct. The LOADER had the rule right and said so
+in a comment — the builder sits UPSTREAM of it and lowercased first, so the loader's correct rule ran
+on an already-destroyed address; fixed by sharing ONE `normalizeWallet` between the two ends, because
+two implementations of one rule is exactly how they came to disagree. **M3 —`quoteBond` held a row
+lock across an oracle RPC** (between `account_persistent FOR UPDATE` and the `bond_reserve` singleton):
+the `bankPosition` pool-exhaustion shape arriving on a WRITE path, where it also blocks that player's
+every other authed action behind their own lock; hoisted above `pool.connect()` (it needs nothing from
+the DB, and a TWAP moves on the order of its PERIOD). **M4 — the documented 200,000-row drop batch was
+unreachable** behind fastify's 1MB default (~10,000 rows), surfacing on launch night, once, under time
+pressure, on the one operation that hands a community its envelopes — the limit was raised on that one
+mod-gated route rather than the documented batch lowered, since splitting a snapshot into twenty pieces
+by hand is twenty chances to load nineteen. LOWs: a bracket round that killed every survivor stranded
+its escrow; the stock buy keeper had no single-writer lock; **`freeMint` defaulted to ON** — it waives
+the identity mint fee, so a config that forgot the key handed a community a free pass through the Sybil
+bound, and since defaulting it the other way silently withholds a promised waiver, both answers are
+wrong to guess at and the config must now STATE it.
+**THE TWO THAT DISSOLVED ARE WRITTEN UP AT LENGTH, because a red team that publishes only its hits
+cannot be audited.** (1) **The track's player-entry economics.** Reported as a "+8.0% mean" edge —
+which was the mean **of the subset where the sign had already flipped**, a statistic about the tail
+quoted as though it described the distribution; my own unconditional measure was **−7.19%**. Then my
+first correction was itself wrong twice: 730 race-days missed the tail, and widening to 20,000 gave a
+133% edge that rested on weight 0.2 — a form-0 runner, which **is not fieldable**. With the real
+minimums it is **0 of 20,000 profitable**. Answered with a lever-relation guard, not a code change.
+*Do not adopt a statistic you did not compute, and check your own measurement's inputs are reachable
+in the game before believing its answer.* (2) **The "stale delivery target".** The keeper stores the
+vault resolved at staging and a resend can be ten minutes later, so a deed selling in that window
+looked like it would send the seller's units into the buyer's vault. **I wrote the fix before proving
+the bug** — probing afterwards showed the plan already drops the account the moment the deed's on-chain
+owner stops matching its linked wallet, AND `stageStockDelivery` re-resolves and refuses `no_target`
+even when called directly. Two independent walls I had not looked for; my third could never fire, and
+**a wall that cannot fire reads exactly like a wall that works**, so it was removed rather than kept
+for comfort. What WAS missing was a test — neither wall had one at the keeper level — so a scenario
+walk replaced it, labelled as a scenario walk, pinning the end-to-end shape the unit assertions each
+cover only half of: a delivery caught mid-flight is HELD, not lost or silently cancelled, and goes out
+under its own id once a target exists again. Verified clean and recorded so the sweep is not repeated:
+the four voucher domains' separation, `OmertaFees`' single nonce counter across all four fee kinds, the
+mint graph, and the comp/`txHash` posture ladder. **Process note:** two untracked `ZZ*` scratch files
+were inflating the Foundry count — one was a genuine probe and was deleted, and **the other was a live
+finding I had reproduced and left unresolved** (M1). A scratch file named to sort last is easy to leave
+behind, and one of them was the most interesting thing in the pass.

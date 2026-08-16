@@ -730,6 +730,13 @@ export async function bumpCrewObjective(client, h, ch, deltas) {
   }
   const add = Math.floor(Number(deltas[obj.kind] || 0));
   if (!(add > 0)) return null;   // this hook doesn't feed the drawn kind
+  // The week's job is CRACKED — work done after it doesn't buy a share of it. A cut is earned by a
+  // `crew_objective_progress` row, and that row was minted by ANY qualifying action, `done` or not: so a crew
+  // could crack the objective shorthanded, fill the roster afterwards, and each arrival's single crime would
+  // mint them a row and therefore a full REWARD share of a job they did nothing to finish. The claim gate
+  // ("you didn't work this week's job") is what this restores — it was true only until the moment it stopped
+  // being enforceable. Existing contributors keep the rows they earned.
+  if (obj.done) return { kind: obj.kind, total: Number(obj.progress), target: Number(obj.target), done: true };
   // credit the member's contribution (the texture the board shows) — absolute-safe upsert
   const up = await client.query('UPDATE crew_objective_progress SET n = n + $4 WHERE crew_id=$1 AND week=$2 AND account_id=$3', [crewId, week, ch.account_id, add]);
   if (!up.rowCount) await client.query('INSERT INTO crew_objective_progress (crew_id, week, account_id, n) VALUES ($1,$2,$3,$4) ON CONFLICT (crew_id, week, account_id) DO UPDATE SET n = crew_objective_progress.n + $4', [crewId, week, ch.account_id, add]);

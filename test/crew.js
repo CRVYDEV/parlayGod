@@ -271,6 +271,16 @@ assert.equal((await sweepCrewInvites(pool)).swept >= 2, true, 'the worker sweeps
   // the per-member contribution texture ("what your crew did")
   assert.equal(obj.contributions.length, 2, 'both contributors listed');
   assert.equal(obj.mine, 1, 'the caller sees their own contribution');
+  // (red team) the week's job is CRACKED — work done after it doesn't buy a share of it. A cut is earned by
+  // a `crew_objective_progress` row, and that row used to be minted by ANY qualifying action, done or not:
+  // so a crew could crack the objective shorthanded, fill the roster afterwards, and each arrival's single
+  // crime would mint a row and therefore a full REWARD share of a job they did nothing to finish. `idle` is
+  // a member who never contributed — working now must leave them exactly as empty-handed as before.
+  await bumpCrewObjective(pool, { owned: { crewId: cid } }, { id: idle.id, account_id: idleA }, { crimes: 99 });
+  assert.equal(await one('SELECT COUNT(*) n FROM crew_objective_progress WHERE crew_id=$1 AND week=$2 AND account_id=$3', [cid, wk, idleA]), 0,
+    'a post-completion contribution mints no claimant row');
+  assert.equal(await one('SELECT progress n FROM crew_objectives WHERE crew_id=$1 AND week=$2', [cid, wk]), 2,
+    'and the cracked total is not inflated by it');
   // (red-team R28 F1) agents don't draw the crew cash faucet — its siblings streak:daily / mentor:protege
   // exclude agents, and this one didn't. A contributing agent member is refused at claim.
   await pool.query('UPDATE account_persistent SET agent_flag=true WHERE account_id=$1', [handA]);

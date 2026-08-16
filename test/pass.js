@@ -86,7 +86,7 @@ assert.equal((await meOf(alice.token)).omr, 0, 'nothing paid yet');
 // ── fund the pool via the pass's OWN buyback share, then the worker sweep pays the owed stipend ──
 // price the buyback off the TRACK's own stipends: 0.05 ETH × 40% = 0.02 ETH is bought, half of it
 // lands in the prize pool, so this covers the whole track with headroom whatever the stipends are.
-await runVigBuyback(pool, { priceOmrPerEth: STIPEND_TOTAL * 200 });
+await runVigBuyback(pool, { priceOmrPerEth: STIPEND_TOTAL * 200, txHash: '0xpassqa01' });
 assert(Number((await pool.query('SELECT balance FROM vig_prize_pool WHERE id=1')).rows[0].balance) >= STIPEND_TOTAL,
   'the pool is funded by the pass buyback');
 await sweepPassStipends(pool); // the worker net: pays down owed as the pool funds

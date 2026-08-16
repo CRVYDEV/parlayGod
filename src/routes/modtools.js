@@ -320,7 +320,8 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
     app.get('/v1/mod/vig', { preHandler: modAuth }, async () =>
       ({ status: await Vig.vigStatus(pool), invariants: await Vig.runVigInvariants(pool) }));
     app.post('/v1/mod/vig/buyback', { preHandler: modAuth }, async (req) =>
-      Vig.runVigBuyback(pool, { priceOmrPerEth: req.body?.priceOmrPerEth, maxEth: req.body?.maxEth }));
+      Vig.runVigBuyback(pool, { priceOmrPerEth: req.body?.priceOmrPerEth, maxEth: req.body?.maxEth,
+        txHash: modRealTxHash(req) }));
     app.post('/v1/mod/vig/prizes', { preHandler: modAuth }, async (req) => Vig.payPrizes(pool, req.body?.winners));
     // THE TWO DEX BOTS (src/dexbot.js) — the board + run-now triggers. The bots are real-only:
     // dormant unless the chain env is configured, every skip named, every wall inside the module
@@ -336,7 +337,15 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
     // THE COMMUNITY DROP (G-3): load the published allocation dataset (idempotent by wallet — a
     // claimed row is history and is never rewritten), set the claim window (closing early IS the
     // clawback — design b: unclaimed never left the Safe), and read the books.
-    app.post('/v1/mod/drop/load', { preHandler: modAuth }, async (req) =>
+    // THE DROP DATASET IS THE ONE GENUINELY LARGE UPLOAD IN THE GAME (red team 2026-08-16). The
+    // loader documents and enforces batches of up to 200,000 rows — ~20MB of JSON — while fastify's
+    // default body limit is 1MB, so the documented instruction stopped working somewhere around
+    // 10,000 rows and returned a payload-too-large with no hint of the real ceiling. That surfaces on
+    // launch night, once, under time pressure, on the one operation that hands a whole community its
+    // envelopes. Raised here rather than lowering the documented batch, because an operator splitting
+    // a snapshot into twenty pieces by hand is twenty chances to load nineteen. It is mod-gated and
+    // throttled, so the memory this admits is bounded by possession of MOD_KEY, not by the internet.
+    app.post('/v1/mod/drop/load', { preHandler: modAuth, bodyLimit: 48 * 1024 * 1024 }, async (req) =>
       Drop.loadAllocations(pool, req.body?.rows));
     app.post('/v1/mod/drop/window', { preHandler: modAuth }, async (req) =>
       Drop.setDropWindow(pool, req.body?.opensAt, req.body?.closesAt));

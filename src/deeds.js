@@ -15,7 +15,7 @@ import { GameError, cleanText } from './game.js';
 import { vaultHistoryFor, vaultLiveBalances } from './stockdeliver.js';
 import { DEEDS, DISTRICTS, deedRankOf, deedRenown, deedCornerOwed, deedController,
   deedNeighborhoodsOpen, deedNeighborhoodOf,
-  effStat, levelOf, jailed, hospitalized, safeHoused } from './rules.js';
+  effStat, levelOf, jailed, hospitalized, safeHoused, SAFE_STORED } from './rules.js';
 
 // living-player population (drives the growing map — Phase 4). NPCs/dead excluded (the ops.js count).
 async function livingPlayers(client) {
@@ -123,7 +123,11 @@ export async function deedBoard(ch, client, h) {
       // 2C — controlling a rival's corner carries that district's turf perk too (the control split)
       perk: DEEDS.PERK_TURF ? ((DISTRICTS.find((d) => d.id === r.district) || {}).perk || null) : null,
       controlSeconds: Math.max(0, Math.ceil((new Date(r.control_until).getTime() - now) / 1000)) }));
-  const myOwed = deed && iControl ? deedCornerOwed(deed, now) : 0;
+  // `!onchain_token_id` — an extracted (or extraction-pending) deed is INERT in-game, and the collect till
+  // enforces that (`AND onchain_token_id IS NULL`). Without the same test here the board advertised a corner
+  // take climbing to the full 24h cap on a deed the till then refuses with `nothing` — the control-that-lies
+  // class. `perkActive`/`seatActive` below already carry it; this line was the one that didn't.
+  const myOwed = deed && iControl && !deed.onchain_token_id ? deedCornerOwed(deed, now) : 0;
   // RIVAL corners on the block you're standing on — the marks you could lean on (the shakedown targets the
   // deed's OWNER, whose living character id the client passes). Excludes your own; flags ones you already run.
   const here = (await client.query(
@@ -310,6 +314,9 @@ export async function listDeed(ch, price, client, h) {
   const p = Math.floor(Number(price) || 0);
   if (!Number.isFinite(p) || p < DEEDS.MARKET_MIN)
     throw new GameError('min_price', `The floor for a street is $${DEEDS.MARKET_MIN.toLocaleString()}.`);
+  // `sale_price` is a bigint and `Number.isFinite` does not bound it — 1e308 reached Postgres as a
+  // 22P02 and surfaced as a 500 on a request the server should simply have refused. See SAFE_STORED.
+  if (p > SAFE_STORED) throw new GameError('max_price', 'Name a real price.');
   await client.query('UPDATE street_deeds SET sale_price=$2 WHERE account_id=$1', [ch.account_id, p]);
   return { ok: true, name: deed.name, price: p };
 }

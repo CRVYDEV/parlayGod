@@ -77,7 +77,7 @@ export async function deskInventory(client) {
 // off the same read the open path refuses on — one source of truth for both.
 export async function bandAnchor(db, now = Date.now()) {
   const last = (await db.query(
-    'SELECT price_omr_per_eth, created_at FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0];
+    'SELECT price_omr_per_eth, created_at FROM vig_buyback WHERE real ORDER BY created_at DESC LIMIT 1')).rows[0];
   if (!last) return { anchor: null, stale: true, reason: 'no_price' };
   const omrPerEth = Number(last.price_omr_per_eth);
   if (!(omrPerEth > 0)) return { anchor: null, stale: true, reason: 'no_price' };

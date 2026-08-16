@@ -11,6 +11,10 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 
 interface IGearVault {
     function mint(address to, uint256 gearId, uint256 amount) external;
+    /// @notice Burned back toward the game so far (GearVault's re-import counter). Read on the
+    ///         gear path so this bridge's pre-flight bounds the same quantity the asset layer
+    ///         does — LIVE on-chain supply — instead of lifetime mints. See `claim`.
+    function redeemed(uint256 tokenId) external view returns (uint256);
 }
 
 /// @title VoucherClaim — the ONLY bridge between OMERTÀ's game server and the chain.
@@ -51,11 +55,11 @@ contract VoucherClaim is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     uint256 public dailyCapOMR;               // max OMR claimable per UTC day, 0 = unlimited
     mapping(uint256 => bool) public usedNonce;
     mapping(uint256 => uint256) public claimedOnDay; // day => OMR total
-    // Gear is bounded the same way OMR is bounded by the tranche: a per-gearId
-    // lifetime supply cap the Safe sets. FAIL-CLOSED — a gearId with cap 0 cannot
-    // be minted at all, so a compromised signer can't mint unlimited/unknown gear.
-    mapping(uint256 => uint256) public gearSupplyCap;  // gearId => max lifetime supply (0 = mint blocked)
-    mapping(uint256 => uint256) public gearMinted;     // gearId => minted so far
+    // Gear is bounded the same way OMR is bounded by the tranche: a per-gearId cap on LIVE
+    // on-chain supply the Safe sets, mirroring GearVault's own bound. FAIL-CLOSED — a gearId
+    // with cap 0 cannot be minted at all, so a compromised signer can't mint unknown gear.
+    mapping(uint256 => uint256) public gearSupplyCap;  // gearId => max LIVE on-chain supply (0 = mint blocked)
+    mapping(uint256 => uint256) public gearMinted;     // gearId => minted through THIS bridge so far
 
     event SignerSet(address indexed signer);
     event DailyCapSet(uint256 cap);
@@ -86,9 +90,10 @@ contract VoucherClaim is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
         emit DailyCapSet(cap);
     }
 
-    /// @notice Per-gearId lifetime supply cap. Must be set (> 0) before any gear of
-    ///         that class can be claimed. Lowering below already-minted just blocks
-    ///         further mints of that class.
+    /// @notice Per-gearId cap on LIVE on-chain supply — the same quantity GearVault bounds, so
+    ///         a re-imported (burned-back) item can be re-extracted into the slot it vacated.
+    ///         Must be set (> 0) before any gear of that class can be claimed. Lowering below
+    ///         what is already live just blocks further mints of that class.
     function setGearSupplyCap(uint256 gearId, uint256 cap) external onlyOwner {
         require(gearId != 0, "VC: zero gear");
         gearSupplyCap[gearId] = cap;
@@ -130,11 +135,18 @@ contract VoucherClaim is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
             omr.safeTransfer(v.to, v.amount); // transfers pre-funded balance; NEVER mints
         } else if (v.kind == KIND_GEAR) {
             require(v.gearId != 0, "VC: zero gear");
-            // fail-closed per-gearId lifetime cap — bounds a compromised signer's gear
-            // blast radius the way the tranche bounds OMR (cap 0 => class can't mint)
+            // Fail-closed per-gearId cap — bounds a compromised signer's gear blast radius the way
+            // the tranche bounds OMR (cap 0 => class can't mint). The bound is `minted - redeemed
+            // <= cap`, written as `minted <= cap + redeemed`: the EXACT expression GearVault.mint
+            // enforces, so the bridge's pre-flight and the asset layer measure the same quantity —
+            // LIVE on-chain supply. A lifetime bound here would be STRICTER than the vault's and
+            // would permanently kill the re-import round trip (omerta-nft-reimport-design.md §4):
+            // once a class had ever hit its cap, a re-imported item could never be re-extracted,
+            // even with every one of them burned back and zero live on-chain. Fail-closed either
+            // way — nothing over-mints — but the shipped feature dies, so the two must agree.
             uint256 cap = gearSupplyCap[v.gearId];
             uint256 minted = gearMinted[v.gearId] + v.amount;
-            require(cap != 0 && minted <= cap, "VC: gear cap");
+            require(cap != 0 && minted <= cap + gear.redeemed(v.gearId), "VC: gear cap");
             gearMinted[v.gearId] = minted;
             gear.mint(v.to, v.gearId, v.amount);
         } else {

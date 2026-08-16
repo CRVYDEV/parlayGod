@@ -49,11 +49,19 @@ const ZERO_SALT = '0x00000000000000000000000000000000000000000000000000000000000
 const num = (n) => Number(n || 0);
 const round6 = (n) => Math.round(n * 1e6) / 1e6;
 
-// The StockVault delivery id for an allocation — deterministic from its PK, so a re-drive maps to the
+// The StockVault delivery id for one TRANCHE of an allocation — deterministic from its PK plus how
+// much of that allocation had already been delivered, so a re-drive of the same tranche maps to the
 // SAME on-chain deliveryId (StockVault.usedDeliveryId → a clean no-op) and the same backend PK.
-export async function deliveryIdFor(epochId, accountId, ticker) {
+//
+// `offset` exists because an allocation row is not delivered once: `allocateStock` accumulates into
+// the PK, so the same (epoch, account, ticker) can owe a second tranche the next day. Keyed on the PK
+// alone, that second tranche computed an id the vault had already consumed and could never be sent.
+// The offset is the delivered-so-far figure, which is exactly what makes each tranche distinct while
+// keeping a retry of one tranche idempotent.
+export async function deliveryIdFor(epochId, accountId, ticker, offset = 0) {
   const { keccak256, toBytes } = await import('viem');
-  return BigInt(keccak256(toBytes(`stockdeliver:${epochId}:${accountId}:${String(ticker).toUpperCase()}`))).toString();
+  return BigInt(keccak256(toBytes(
+    `stockdeliver:${epochId}:${accountId}:${String(ticker).toUpperCase()}:${round6(Number(offset) || 0)}`))).toString();
 }
 
 // Resolve an account's on-chain STREET DEED's ERC-6551 token-bound account. Reads the account's
@@ -228,8 +236,11 @@ export async function planStockDeliveries(pool) {
   const targets = await deedTargetRows(pool);
   const best = new Map();
   for (const t of targets) if (!best.has(t.accountId)) best.set(t.accountId, t); // rows arrive most-recent-first
+  // OUTSTANDING, not "undelivered": the row accumulates, so what is owed is `units - delivered_units`.
+  // The old `NOT delivered` filter dropped the whole row the moment its FIRST tranche landed, which
+  // silently stranded every later distribution into the same epoch (see the schema note).
   const rows = (await pool.query(
-    'SELECT epoch_id, account_id, ticker, units FROM stock_allocations WHERE NOT delivered AND units > 0')).rows;
+    'SELECT epoch_id, account_id, ticker, units, delivered_units FROM stock_allocations WHERE units > delivered_units')).rows;
   const seen = new Set();
   const plan = [];
   for (const r of rows) {
@@ -238,9 +249,12 @@ export async function planStockDeliveries(pool) {
     const key = `${r.epoch_id}|${r.account_id}|${String(r.ticker).toUpperCase()}`;
     if (seen.has(key)) continue;
     seen.add(key);
+    const done = round6(num(r.delivered_units));
+    const outstanding = round6(num(r.units) - done);
+    if (!(outstanding > 0)) continue;
     plan.push({
       epochId: r.epoch_id, accountId: r.account_id, ticker: String(r.ticker).toUpperCase(),
-      units: round6(num(r.units)), deedTokenId: tgt.tokenId, deedName: tgt.name,
+      units: outstanding, deliveredUnits: done, deedTokenId: tgt.tokenId, deedName: tgt.name,
     });
   }
   return plan;
@@ -265,7 +279,13 @@ export async function stageStockDelivery(pool, { epochId, accountId, ticker, uni
   const tgt = await deedTbaFor(pool, accountId);
   if (!tgt) throw new GameError('no_target',
     'No delivery target: the account has no extracted Street Deed on-chain (or the chain is unconfigured). The allocation waits until a deed is extracted.');
-  const deliveryId = await deliveryIdFor(epochId, accountId, tk);
+  // the tranche offset: how much of this allocation has already been delivered. Keyed on the PK alone
+  // a second tranche would collide with the first's consumed on-chain deliveryId and be unsendable.
+  const alloc = (await pool.query(
+    'SELECT delivered_units FROM stock_allocations WHERE epoch_id=$1 AND account_id=$2 AND ticker=$3',
+    [epochId, accountId, tk])).rows[0];
+  const offset = round6(num(alloc?.delivered_units || 0));
+  const deliveryId = await deliveryIdFor(epochId, accountId, tk, offset);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -300,8 +320,20 @@ export async function confirmStockDelivered(pool, { deliveryId, txHash } = {}) {
     if (row.status === 'delivered') { await client.query('COMMIT'); return { confirmed: false, duplicate: true }; }
     if (row.status !== 'pending') { await client.query('COMMIT'); return { confirmed: false, notPending: true, status: row.status }; }
     await client.query("UPDATE stock_deliveries SET status='delivered', tx_hash=$2 WHERE delivery_id=$1", [id, txHash]);
-    await client.query('UPDATE stock_allocations SET delivered=true WHERE epoch_id=$1 AND account_id=$2 AND ticker=$3',
-      [row.epoch_id, row.account_id, String(row.ticker).toUpperCase()]);
+    // INCREMENT the running total, never flip a flag: the row keeps accumulating after this delivery,
+    // and a boolean set here is invalidated by the very next distribution into the same epoch. Read
+    // under the lock and write an ABSOLUTE value computed in JS (the pg-mem arithmetic-UPDATE
+    // discipline); `delivered` is maintained as the derived "nothing left owed" convenience.
+    const tkU = String(row.ticker).toUpperCase();
+    const a = (await client.query(
+      'SELECT units, delivered_units FROM stock_allocations WHERE epoch_id=$1 AND account_id=$2 AND ticker=$3 FOR UPDATE',
+      [row.epoch_id, row.account_id, tkU])).rows[0];
+    if (a) {
+      const done = round6(num(a.delivered_units) + num(row.units));
+      await client.query(
+        'UPDATE stock_allocations SET delivered_units=$4, delivered=$5 WHERE epoch_id=$1 AND account_id=$2 AND ticker=$3',
+        [row.epoch_id, row.account_id, tkU, done, done >= num(a.units)]);
+    }
     await client.query('COMMIT');
     return { confirmed: true, ticker: String(row.ticker).toUpperCase(), units: round6(num(row.units)) };
   } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; }
@@ -431,7 +463,7 @@ export async function stockDeliveryBoard(pool) {
   // read through the SAME target rule the plan uses, so board and plan structurally cannot disagree
   // (the check-5 board/plan mirror; secondary owners count as targeted exactly as the plan counts them)
   const owedAccts = (await pool.query(
-    'SELECT DISTINCT account_id FROM stock_allocations WHERE NOT delivered AND units > 0')).rows.map((r) => r.account_id);
+    'SELECT DISTINCT account_id FROM stock_allocations WHERE units > delivered_units')).rows.map((r) => r.account_id);
   const withDeed = new Set((await deedTargetRows(pool)).map((r) => r.accountId));
   const waiting = owedAccts.filter((a) => !withDeed.has(a)).length;
   return { tickers, waitingOnADeed: waiting, chain: !!(process.env.CHAIN_RPC_URL && process.env.STREET_DEED_ADDRESS) };

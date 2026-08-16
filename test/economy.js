@@ -1300,6 +1300,21 @@ await pool.query(`UPDATE account_persistent SET agent_flag=false WHERE account_i
     'and nothing else moved either — the frozen clock means no accrual can be mistaken for the retire');
   assert.equal((await meOf(token)).cash, cashPreRetire, 'and the pocket is untouched');
   assert.equal((await meOf(token)).ops.free, 1, 'the seat is free');
+  // (red team) `racket:retire:<id>` is the reason the refund WOULD write the day RACKET_RETIRE_BPS is raised
+  // off 0 — and it was outside `KNOWN_REASONS.cash`, which enumerates racket:income / racket:upgrade /
+  // racket:buy: individually with no blanket `racket:`. Check (g) has ZERO tolerance and reads the whole
+  // ledger, so the first refund would have latched the vocabulary alarm red forever and buried a real drift
+  // under it (the recorded `path:` precedent). The lever is a plain literal, so rather than move it, plant
+  // the row it would produce and prove the real matcher accepts it.
+  {
+    const { runLedgerInvariants: rli } = await import('../src/invariants.js');
+    const vocabDrift = async () => Number((await rli(pool, { alert: false })).checks.find((c) => c.name === 'reason vocabulary').drift);
+    assert.equal(await vocabDrift(), 0, 'the vocabulary is clean before the plant');
+    await pool.query(
+      "INSERT INTO transactions (id, character_id, currency, amount, reason) VALUES ($1,$2,'cash',0,'racket:retire:laundro')",
+      ['rr-' + Date.now(), cid]);
+    assert.equal(await vocabDrift(), 0, 'racket:retire: is a recognized cash reason — raising the lever cannot poison the alarm');
+  }
 
   // …and the seat is really usable — the gate was a count, not a latch
   assert.equal((await call('POST', `/v1/rackets/${spare.id}/buy`, { token })).code, 200,

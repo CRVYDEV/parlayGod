@@ -274,7 +274,7 @@ export async function plexPackageQuote(db, sku) {
   const pkg = packageOf(sku);
   if (!pkg) return null;
   const floor = round6(pkg.priceEth * STORE.PLEX_FLOOR_OMR_PER_ETH);
-  const last = (await db.query('SELECT price_omr_per_eth FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0];
+  const last = (await db.query('SELECT price_omr_per_eth FROM vig_buyback WHERE real ORDER BY created_at DESC LIMIT 1')).rows[0];
   const oracle = last ? Number(last.price_omr_per_eth) : null;
   // defense-in-depth (audit LOW-1): a non-finite/≤0 oracle (only reachable via a hand-corrupted buyback
   // row — runVigBuyback guards price>0) must never propagate NaN into the price → the spend → §10.4.
@@ -350,7 +350,7 @@ export async function storeBoard(pool, accountId) {
   const nextT = PATRON.TIERS[tierIdx + 1] || null;
   const seasons = Number(a.pass_seasons || 0);
   const prIdx = passPrestigeOf(seasons);
-  const oracleRow = (await pool.query('SELECT price_omr_per_eth FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0];
+  const oracleRow = (await pool.query('SELECT price_omr_per_eth FROM vig_buyback WHERE real ORDER BY created_at DESC LIMIT 1')).rows[0];
   const oracle = oracleRow ? Number(oracleRow.price_omr_per_eth) : null;
   // `plexOmr: null` on a SKU is the POSITIVE claim that this one has a single rail and it is ETH —
   // which is now true of exactly one thing, anything that would MAKE you. Everything else quotes.

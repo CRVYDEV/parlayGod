@@ -12,7 +12,7 @@ import {
   deliveryIdFor, deedTbaFor, planStockDeliveries, stageStockDelivery, confirmStockDelivered,
   deliverStock, stockDeliveryBoard, __setTbaResolver,
 } from '../src/stockdeliver.js';
-import { runTreasuryInvariants } from '../src/treasury.js';
+import { runTreasuryInvariants, allocateStock } from '../src/treasury.js';
 
 const pool = await makeDb();
 // a deterministic TBA resolver (the test seam) — production reads the ERC-6551 registry on-chain.
@@ -128,6 +128,50 @@ const tx0 = await txCount();
   const aapl = b.tickers.find((t) => t.ticker === 'AAPL');
   assert(aapl && aapl.allocated === 15 && aapl.delivered === 10 && aapl.pending === 5, 'board: AAPL owed 15 / delivered 10 / pending 5');
   assert.equal(b.waitingOnADeed, 1, 'B is counted as waiting on a deed (owed stock, no extracted deed)');
+}
+
+// ════ (red-team HIGH) AN ALLOCATION IS DELIVERED IN TRANCHES, and the second one must still land ════
+// `allocateStock` ACCUMULATES into the (epoch, account, ticker) PK, and BROKERS.EPOCH_DAYS is 7 against
+// a DAILY ticker ballot — so up to seven buys of the same ticker distribute into the SAME row. The plan
+// used to filter a row-level `NOT delivered`, which the first tranche's confirm set forever: every
+// later distribution into that epoch became permanently undeliverable real stock, while the board went
+// on reporting it pending and `delivered <= allocated` passed at 100 <= 200. This is the default
+// operating shape, not an edge, so it is driven end to end: deliver, allocate again, deliver again.
+{
+  await q("INSERT INTO stock_allocations (epoch_id, account_id, ticker, units) VALUES ('eT','accA','AAPL',4)");
+  const first = await deliverStock(pool, { epochId: 'eT', accountId: 'accA', ticker: 'AAPL', units: 4, txHash: '0xtranche1' });
+  assert(first.confirmed, 'the first tranche delivers');
+  assert.equal(await allocDelivered('eT', 'accA', 'AAPL'), true, 'and the row reads fully delivered while nothing more is owed');
+  // the next day's buy distributes into the SAME frozen epoch
+  const c = await pool.connect();
+  try { await allocateStock(c, { epochId: 'eT', accountId: 'accA', ticker: 'AAPL', units: 3 }); } finally { c.release(); }
+  assert.equal(await allocDelivered('eT', 'accA', 'AAPL'), false,
+    'accumulating re-opens the derived flag — the row owes again, and no surface may call that settled');
+  const plan = await planStockDeliveries(pool);
+  const line = plan.find((p) => p.epochId === 'eT' && p.ticker === 'AAPL');
+  assert(line, 'the second tranche is PLANNED — it used to vanish the moment the first one landed');
+  assert.equal(line.units, 3, 'and it plans exactly what is OUTSTANDING (units - delivered_units), not the whole row again');
+  const second = await deliverStock(pool, { epochId: 'eT', accountId: 'accA', ticker: 'AAPL', units: 3, txHash: '0xtranche2' });
+  assert(second.confirmed, 'the second tranche delivers — its deliveryId is keyed on the tranche offset, so it cannot collide with the first');
+  const rowT = (await pool.query(
+    "SELECT units, delivered_units, delivered FROM stock_allocations WHERE epoch_id='eT' AND account_id='accA' AND ticker='AAPL'")).rows[0];
+  assert.equal(Number(rowT.delivered_units), 7, 'the running total carries both tranches');
+  assert.equal(Number(rowT.units), 7, 'and nothing is left owed');
+  assert.equal(rowT.delivered, true, 'so the derived flag settles again');
+  assert.equal((await planStockDeliveries(pool)).filter((p) => p.epochId === 'eT').length, 0, 'a fully-delivered allocation plans nothing');
+  const agree = await checkOf('allocation delivery ledger agrees (AAPL, units)');
+  assert(agree && agree.ok, 'the allocation ledger and the delivery ledger agree exactly — the bound above cannot see a stalled total');
+
+  // …and the plan must read the RUNNING TOTAL, not the flag, INDEPENDENTLY of anyone remembering to
+  // clear it. `allocateStock` does clear it, which is why the assertions above pass either way — so
+  // this drives the state that separates them: a row whose flag says settled while units are still
+  // owed. That is every row migrated from before this fix, and every row a future writer forgets. A
+  // plan that trusts the boolean goes blind here; one that computes `units - delivered_units` does not.
+  await q("UPDATE stock_allocations SET units = 9, delivered = true WHERE epoch_id='eT' AND account_id='accA' AND ticker='AAPL'");
+  const stale = (await planStockDeliveries(pool)).find((p) => p.epochId === 'eT' && p.ticker === 'AAPL');
+  assert(stale, 'a stale `delivered` flag cannot hide outstanding units from the plan');
+  assert.equal(stale.units, 2, 'and it still plans exactly what is outstanding (9 owed − 7 delivered)');
+  await q("UPDATE stock_allocations SET units = 7, delivered = true WHERE epoch_id='eT' AND account_id='accA' AND ticker='AAPL'"); // restore
 }
 
 // ════════════ §10.4-NEUTRALITY: the whole rail moves no in-game currency ════════════
@@ -258,6 +302,42 @@ assert.equal(await txCount(), tx0, 'the stock delivery rail writes ZERO transact
   run = await runStockDeliveryKeeper(pool, { tokens: { AAPL: tokens.AAPL } }); // no TSLA address this run
   assert.ok(run.skipped.some((k) => k.ticker === 'TSLA' && k.why === 'no_token_address'),
     'a ticker with no configured address is skipped by NAME');
+
+  // ── A DEED THAT CHANGES HANDS WITH A DELIVERY IN FLIGHT (red team 2026-08-16) ──
+  // A SCENARIO WALK, and labelled as one: it adds no wall, it composes the existing ones across a
+  // lifecycle event the unit assertions each cover only half of. The question was fair — the row
+  // stores the vault resolved when it was STAGED and a resend can be RESEND_MS later, so a blind
+  // send would put the seller's units in the BUYER's vault (the vault travels WITH the deed),
+  // against THE TARGET RULE's own promise that a sold Street sends its former owner's allocations
+  // back to waiting. The answer is that TWO independent walls already stop it: the plan drops the
+  // account, and `stageStockDelivery` re-resolves and refuses `no_target` even when called directly.
+  // A third wall was written before that was checked, and it could never fire — a wall that cannot
+  // fire reads exactly like a wall that works, so it was removed rather than kept for comfort. What
+  // was genuinely missing is the end-to-end shape: that a delivery caught mid-flight is HELD rather
+  // than lost or silently cancelled, and goes out under its own id once a target exists again.
+  await q("INSERT INTO stock_allocations (epoch_id, account_id, ticker, units) VALUES ('e7','accA','AAPL',4)");
+  __setTxSender(async () => { throw new Error('rpc down'); });
+  await runStockDeliveryKeeper(pool, { tokens });                       // stages the row, then fails → claim released
+  const before = sends.length;
+  // the Street sells: the Transfer watcher records an owner who is not this account's linked wallet
+  await q("UPDATE street_deeds SET onchain_owner='0xstranger0000000000000000000000000000beef' WHERE extracted_by_account='accA'");
+  __setTxSender(async (d) => { sends.push(d); return '0xshouldnothappen'; });
+  run = await runStockDeliveryKeeper(pool, { tokens });
+  assert.equal(sends.length, before, 'nothing goes out once the deed has changed hands');
+  assert.ok(!run.sent.length, 'and the keeper reports no send at all — the account left the plan');
+  await assert.rejects(
+    () => stageStockDelivery(pool, { epochId: 'e7', accountId: 'accA', ticker: 'AAPL', units: 4 }),
+    (e) => e.code === 'no_target',
+    'the second wall holds too: staging re-resolves, so even a direct call refuses');
+  const held2 = (await q("SELECT delivery_id, status, sent_at FROM stock_deliveries WHERE epoch_id='e7'")).rows[0];
+  assert.equal(held2.status, 'pending', 'the delivery is still OWED — waiting, never lost');
+  assert.equal(held2.sent_at, null, 'its claim was released, so it resumes the moment a target exists again');
+  const heldId = held2.delivery_id;
+  await q("UPDATE street_deeds SET onchain_owner=NULL WHERE extracted_by_account='accA'"); // the deed comes home
+  run = await runStockDeliveryKeeper(pool, { tokens });
+  const resumed = sends.find((s) => s.deliveryId === heldId);
+  assert.ok(resumed, 'with the target back, the held delivery goes out — waiting is not losing');
+  assert.equal(resumed.to, FAKE_TBA('777'), 'to the deed vault, re-resolved on the way out');
 
   // DORMANT without the seam or the env — and the whole keeper wrote ZERO transactions rows
   __setTxSender(null);

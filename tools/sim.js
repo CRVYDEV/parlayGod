@@ -355,7 +355,7 @@ note('collusion', 'one shakedown transfer', `$${fmt(transferred)}`, `30% of 24h 
 phase('P9 vig — fees → buyback → reserve, the ETH-only mint');
 await call('POST', '/v1/mod/fees/record', { headers: modH, body: { nonce: 900001, kind: 'mint', payer: '0x' + '11'.repeat(20), amountWei: '10000000000000000', txHash: '0x' + 'aa'.repeat(32) } });
 await call('POST', '/v1/mod/fees/record', { headers: modH, body: { nonce: 900002, kind: 'respawn', payer: '0x' + '22'.repeat(20), amountWei: '100000000000000000', txHash: '0x' + 'bb'.repeat(32) } });
-r = await call('POST', '/v1/mod/vig/buyback', { headers: modH, body: { priceOmrPerEth: 1000 } });
+r = await call('POST', '/v1/mod/vig/buyback', { headers: modH, body: { priceOmrPerEth: 1000 , txHash: '0xsimqa01' } });
 note('vig', 'vig buyback', r.code === 200 ? `${fmt(r.body.omrBought ?? 0)} hard $OMR bought (${fmt(r.body.ethSpent ?? 0)} ETH)` : `error ${JSON.stringify(r.body)}`, '');
 const vigStatus = await call('GET', '/v1/mod/vig', { headers: modH });
 const vigOk = vigStatus.body.ok ?? vigStatus.body.invariants?.ok ?? (vigStatus.body.checks || []).every?.((c) => c.ok);

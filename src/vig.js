@@ -72,7 +72,7 @@ export const PLEX_RESPAWN_OMR = Number(process.env.PLEX_RESPAWN_OMR
 export async function plexQuote(db, kind) {
   if (kind !== 'respawn') return null;
   const last = (await db.query(
-    'SELECT price_omr_per_eth FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0];
+    'SELECT price_omr_per_eth FROM vig_buyback WHERE real ORDER BY created_at DESC LIMIT 1')).rows[0];
   if (!last) return { price: PLEX_RESPAWN_OMR, oracle: null };
   const oracle = Number(last.price_omr_per_eth);
   const price = Math.max(PLEX_RESPAWN_OMR, round6(RESPAWN_FEE_ETH * oracle * PLEX_PREMIUM_BPS / 10000));
@@ -138,8 +138,18 @@ const sumEth = async (pool, table, col, where = '') =>
 // the real DEX swap (TWAP, slippage-capped) and passes the achieved price; here the price is a
 // parameter so the accounting is deterministic and testable. Never spends more ETH than came in —
 // that hard cap (`ethToSpend ≤ unspent`) is the root of "extraction ≤ inflow".
-export async function runVigBuyback(pool, { priceOmrPerEth, maxEth } = {}) {
+// THE ANTI-FABRICATION GATE (red team 2026-08-16). `txHash` is the claim that a real DEX swap
+// happened; without one this is a comp/QA call and books ZERO — the desk/bank/community/treasury
+// posture, arrived at here last because this is the oldest ingest. It matters more here than
+// anywhere: a buyback credits `chain_reserve.funded_omr` (what `signVoucher` reads before signing a
+// REAL withdrawal) AND the prize pool (whose only exit is a `prize:omr` mint to players), and its
+// price is the canonical print the desk band, the bond oracle, PLEX, the exit toll and the ETH vault
+// all anchor on. A comp booking amounts would let a mod key assert hard $OMR arrived; a comp setting
+// the PRINT would let it move every one of those consumers at once. So a comp books zero AND is
+// excluded from every anchor read (`WHERE real`), and the real bot passes its swap hash.
+export async function runVigBuyback(pool, { priceOmrPerEth, maxEth, txHash } = {}) {
   const price = Number(priceOmrPerEth);
+  const real = !!txHash;
   if (!(Number.isFinite(price) && price > 0)) throw new GameError('price', 'A buyback needs a positive $OMR/ETH price.');
   const client = await pool.connect();
   try {
@@ -162,7 +172,7 @@ export async function runVigBuyback(pool, { priceOmrPerEth, maxEth } = {}) {
     // price (measured: after 12 buybacks it read the 7th, and a 50× call sailed through by anchoring
     // on a stale high print). Every CONSUMER of this price — the ETH vault, bond quotes, PLEX, the
     // exit toll — reads `created_at DESC`, so the wall must guard the same number they read.
-    const last = Number((await client.query('SELECT price_omr_per_eth FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0]?.price_omr_per_eth || 0);
+    const last = Number((await client.query('SELECT price_omr_per_eth FROM vig_buyback WHERE real ORDER BY created_at DESC LIMIT 1')).rows[0]?.price_omr_per_eth || 0);
     if (last > 0 && (price > last * jump || price < last / jump))
       throw new GameError('price_sanity', `Buyback price ${price} is more than ${jump}× off the last (${last}) — refusing (set VIG_MAX_PRICE_JUMP to override).`);
     const revenueIn = await sumEth(client, 'vig_revenue', 'vig_eth');
@@ -173,14 +183,21 @@ export async function runVigBuyback(pool, { priceOmrPerEth, maxEth } = {}) {
     const omrBought = round6(ethToSpend * price);
     const toReserve = round6(omrBought * RESERVE_BPS / 10000);
     const toPrize = round6(omrBought - toReserve);
+    // A comp books the ROW (the journal of what was asked for) with every AMOUNT zeroed — so it
+    // consumes no real revenue, credits nothing, and needs no `WHERE real` on the amount sums to stay
+    // honest. The community/bank precedent verbatim.
+    const spentBooked = real ? ethToSpend : 0;
+    const boughtBooked = real ? omrBought : 0;
+    const reserveBooked = real ? toReserve : 0;
+    const prizeBooked = real ? toPrize : 0;
     await client.query(
-      'INSERT INTO vig_buyback (id, eth_spent, omr_bought, price_omr_per_eth, to_reserve, to_prize) VALUES ($1,$2,$3,$4,$5,$6)',
-      [uid(), ethToSpend, omrBought, price, toReserve, toPrize]);
-    await client.query('UPDATE vig_prize_pool SET balance = balance + $1 WHERE id=1', [toPrize]);
+      'INSERT INTO vig_buyback (id, eth_spent, omr_bought, price_omr_per_eth, to_reserve, to_prize, tx_hash, real) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+      [uid(), spentBooked, boughtBooked, price, reserveBooked, prizeBooked, txHash || null, real]);
+    if (prizeBooked > 0) await client.query('UPDATE vig_prize_pool SET balance = balance + $1 WHERE id=1', [prizeBooked]);
     await client.query('COMMIT');
     // fund the reserve OUTSIDE this txn (fundReserve opens its own) — it's the bridge to the queue
-    if (toReserve > 0) await fundReserve(pool, toReserve);
-    return { ethSpent: ethToSpend, omrBought, toReserve, toPrize };
+    if (reserveBooked > 0) await fundReserve(pool, reserveBooked);
+    return { ethSpent: spentBooked, omrBought: boughtBooked, toReserve: reserveBooked, toPrize: prizeBooked, real };
   } catch (e) { await client.query('ROLLBACK'); throw e; }
   finally { client.release(); }
 }
@@ -220,9 +237,9 @@ export async function payPrizes(pool, winners) {
 export async function vigStatus(pool) {
   const revenueIn = await sumEth(pool, 'vig_revenue', 'vig_eth');
   const grossIn = await sumEth(pool, 'vig_revenue', 'gross_eth');
-  const ethSpent = await sumEth(pool, 'vig_buyback', 'eth_spent');
-  const omrBought = await sumEth(pool, 'vig_buyback', 'omr_bought');
-  const toReserve = await sumEth(pool, 'vig_buyback', 'to_reserve');
+  const ethSpent = await sumEth(pool, 'vig_buyback', 'eth_spent', 'WHERE real');
+  const omrBought = await sumEth(pool, 'vig_buyback', 'omr_bought', 'WHERE real');
+  const toReserve = await sumEth(pool, 'vig_buyback', 'to_reserve', 'WHERE real');
   const pp = (await pool.query('SELECT balance, paid_total FROM vig_prize_pool WHERE id=1')).rows[0] || {};
   return {
     grossRevenueEth: round6(grossIn), vigRevenueEth: round6(revenueIn),
@@ -245,10 +262,10 @@ export async function runVigInvariants(pool) {
   const push = (name, ok, detail = {}) => checks.push({ name, ok, ...detail });
 
   const revenueIn = round6(await sumEth(pool, 'vig_revenue', 'vig_eth'));
-  const ethSpent = round6(await sumEth(pool, 'vig_buyback', 'eth_spent'));
-  const omrBought = round6(await sumEth(pool, 'vig_buyback', 'omr_bought'));
-  const toReserve = round6(await sumEth(pool, 'vig_buyback', 'to_reserve'));
-  const toPrize = round6(await sumEth(pool, 'vig_buyback', 'to_prize'));
+  const ethSpent = round6(await sumEth(pool, 'vig_buyback', 'eth_spent', 'WHERE real'));
+  const omrBought = round6(await sumEth(pool, 'vig_buyback', 'omr_bought', 'WHERE real'));
+  const toReserve = round6(await sumEth(pool, 'vig_buyback', 'to_reserve', 'WHERE real'));
+  const toPrize = round6(await sumEth(pool, 'vig_buyback', 'to_prize', 'WHERE real'));
   const pp = (await pool.query('SELECT balance, paid_total FROM vig_prize_pool WHERE id=1')).rows[0] || {};
   const prizePaid = round6(num(pp.paid_total));
   const prizeBalance = round6(num(pp.balance));
