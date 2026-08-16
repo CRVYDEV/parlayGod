@@ -13277,3 +13277,55 @@ superseded, so the sweep can never split-brain the street"*; the burn requiremen
 recorded burn → no recovery: a voucher for a street somebody still owns is a confiscation"*). Suite
 green (99 files, 0 assertion errors) + pgquery 2952 statements (interpolated ceiling 73 → 74, the
 stranded board's IN list, reason recorded) + pgcheck 43/43 on real Postgres.
+
+**THE LAST TWO UNPROVEN RAILS — the LP league reader, and the stock delivery (2026-08-16).** Two
+different gaps, closed the same way. **(1) THE LP LEAGUE READER** was the only `__set*` seam in the
+tree with NOTHING behind it (`src/bonds.js:199`, `lpReader = null`) — the accrual, the underwriter-score
+fold and the league board all shipped and read from a function that did not exist. Its deferral said
+it "cannot be verified before a live pool exists", and the dexbot prover merged hours earlier stands
+one up, so the reason had expired. `src/dexbot.js:readLpPositions` enumerates through the
+**poolId-filtered `ModifyLiquidity` stream** — v4's PositionManager passes `bytes32(tokenId)` as the
+position SALT and PoolManager indexes that event by poolId, so ONE filtered getLogs yields exactly the
+tokenIds that ever held liquidity in OUR pool, on a PositionManager that may serve hundreds of others
+— then reads current liquidity and owner from the PositionManager itself (the authoritative value
+beats a sum we maintain) and resolves the PoolManager from its own `poolManager` getter (one less
+address env to drift). Installed at worker boot on `lpReaderReady()`, a **weaker** condition than the
+bots': it is read-only and needs no key, so a box that never sends a transaction still accrues the
+league. **THE DESIGN DECISION THAT MATTERS is pricing depth by the TOKENS a position would hand over,
+never by its raw liquidity L.** The shortcut — treat every position as full-range, `amount0 ≈ L/√P` —
+needs no tick math at all and is GAMEABLE: a narrow range carries a far larger L for the same money,
+so concentration alone would inflate reported depth. Measured on the real pool: **34× the liquidity,
+and the correct formula credits exactly the 1 ETH it put in.** √ratio(tick) is `1.0001^(tick/2)` in
+floating point rather than a port of TickMath's twenty-constant chain — a double carries ~16
+significant digits across the whole legal tick range (√ratio spans 5.4e-20 … 1.8e19), orders of
+magnitude finer than a status ladder reads, and it is a formula a reviewer checks by eye where a
+mistyped magic constant is invisible. It is pinned two independent ways in `tools/dexbot-e2e.js`
+(23 steps now): against the ETH the POL positions actually consumed — **1.8518 read vs 1.851788
+measured**, a wallet balance delta, not a re-derivation — and against a narrow position's own consumed
+ETH. **The narrow case is load-bearing**: the full-range assertion alone PASSES under the gameable
+shortcut (for a full-range position the shortcut is correct), so without it the mutation survives.
+**(2) THE STOCK RAIL** (`tools/stock-e2e.js`, the 12th harness, 14 steps) — `resolveTbaOnchain` and
+`sendDeliverOnchain` were built, dormant, and had never touched a chain; nothing in `tools/` covered
+StreetDeed, StockVault or ERC-6551. It is the sharper gap, because §3.3's gateless push makes the
+ADDRESS the only thing between the treasury and a permanent loss, and a wrong one is **invisible to
+every wall we have** — they are denominated in UNITS, and who received them is not a quantity. The
+prover deploys the REAL ERC-6551 registry (the reference implementation, **vendored unmodified** at
+`omerta-contracts/test/vendor` from npm `erc6551@0.3.1` — not part of the audit batch, nothing in
+`src` imports it) plus StreetDeed/StockVault/OMR off the forge build, mints a deed from a
+**server-signed EIP-712 voucher** (so `StreetDeed.claim` executes from JS too), and asserts the
+backend's computed TBA **is** the registry's answer — then deploys the account there and checks it
+reports THIS deed as its token. Downstream: the units land in it, the keeper **sends but never
+settles**, and the `Delivered` log flips the allocation. Two properties worth keeping: an ERC-20
+delivery lands at a **counterfactual** address (the account need not exist first, so an undeployed
+TBA is no reason to withhold), and the watcher deliberately stays `CHAIN_CONFIRMATIONS` behind head,
+which the prover has to mine past — a fresh viem client each time, because **viem caches the block
+number per client** and two syncs seconds apart otherwise land inside one cache window (a worker tick
+is minutes apart, so it never bites in production). Four mutations across the two, each caught at its
+own named assertion (the full-range shortcut; a wei-unit slip; a wrong tokenId into the registry
+call; the keeper settling its own send). Both wired into the FORGE job — they need exactly what it
+has, anvil and `out/` — with `test/docs.js` failing if either step, either path filter, or the
+vendored registry disappears. **The residual is the same shape for both and is stated in
+CHAIN-DEPLOY rather than smoothed over: each prover configures the thing it then checks against, so a
+wrong `DEX_POOL_FEE`/`DEX_POOL_TICK_SPACING` or `ERC6551_REGISTRY`/`_ACCOUNT_IMPL`/`_SALT` at deploy
+is a CONFIG error no prover can see** — resolve one real deed's TBA, and do one small live swap and
+pairing, by hand before the first real value moves.

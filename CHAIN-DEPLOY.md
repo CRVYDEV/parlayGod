@@ -381,6 +381,20 @@ PHASE 1 for the exact calls/args.
       `STOCK_TOKEN_DECIMALS` (default 18). Dormant until wired. §10.4-NEUTRAL (out-of-band real value —
       zero `transactions` rows; the backend's `allocateStock` clamp + the nightly `allocated ≤ held` AND
       `delivered ≤ allocated` checks in `runTreasuryInvariants` are the owed-side half of the wall).
+      **✅ BOTH ON-CHAIN LEGS ARE PROVEN (2026-08-16)** — `npm run stock-e2e` (the forge CI job, beside
+      dexbot-e2e) stands the whole rail up on anvil and runs `resolveTbaOnchain` + `sendDeliverOnchain`
+      UNSEAMED against the REAL ERC-6551 registry (the reference implementation, vendored unmodified at
+      `omerta-contracts/test/vendor`) plus StreetDeed and StockVault off the forge build. 14 asserted
+      steps: a deed minted from a server-signed EIP-712 voucher, the backend's computed TBA equal to the
+      registry's own answer (and the account deployed there reporting THIS deed as its token), the units
+      landing in that account, the keeper sending but never settling, and the `Delivered` log — not the
+      keeper — flipping the allocation. **Why this leg gets its own prover:** with §3.3's gateless push
+      the ADDRESS is the only thing between the treasury and a permanent loss, and a wrong one is
+      invisible to every wall we have (they are denominated in UNITS; who received them is not a
+      quantity). **Residual, as with the DEX bots:** the prover deploys the registry it then checks
+      against, so a MISCONFIGURED `ERC6551_REGISTRY` / `ERC6551_ACCOUNT_IMPL` / `ERC6551_SALT` at deploy
+      is a config error it cannot see — resolve one real deed's TBA against the live registry by hand
+      before the first delivery.
 
 ### 2b. THE BANK — the Denari (DNR) market (only when it ships; not part of the first cut)
 Order matters more here than anywhere else in this file, because **two of these steps fail SILENTLY**:
@@ -510,15 +524,22 @@ The backend keeps its own reserve records; they must track the on-chain balances
     `setSellTax(900, 200, 160, 240)` (Path A — rwa 400→160 with the 240-bps community slice a 4th ON-CHAIN
     recipient; the community wallet is the family-buyback keeper's, per the OMR sell-tax step above).
     `setObserver` once the hook-native oracle exists.
-  - **THE LP LEAGUE reader (one function, at pool launch):** the depth-time status axis
-    (`src/bonds.js:syncLpDepth`, the `lp_depth` books, the underwriter-score fold) is BUILT and
-    dormant behind the `__setLpReader` seam. At launch, install a reader that enumerates the
-    canonical pool's PositionManager positions (Transfer-log replay for tokenId→owner, liquidity +
-    slot0 sqrtPrice for the ETH-side depth — the `addLiquidityOnchain` math in reverse) and returns
-    `[{ wallet, liquidityEth }]`; the worker's DEX-bot cadence already calls the sync. Verify the
-    position enumeration on the devnet pool alongside the DEX bots' ⚠ verify-at-launch step; then
-    size `BOND_LP_SCORE_PER_ETH_DAY` (BALANCE.md § THE LP LEAGUE — the shipped 300 is a proposed
-    default, not a sized one).
+  - **✅ THE LP LEAGUE reader is BUILT AND PROVEN (2026-08-16)** — `src/dexbot.js:readLpPositions`,
+    installed at worker boot (`lpReaderReady()`, a WEAKER condition than the bots': it is read-only
+    and needs no `DEX_BOT_PK`, so a box that never sends a transaction still accrues the league).
+    It enumerates through the poolId-filtered `ModifyLiquidity` stream rather than scanning every
+    token the PositionManager ever minted — v4 passes `bytes32(tokenId)` as the position SALT and
+    PoolManager indexes that event by poolId — and resolves the PoolManager from the
+    PositionManager's own `poolManager` getter (one less address env to drift). `npm run dexbot-e2e`
+    pins it against a real pool: the POL positions read 1.8518 ETH against the 1.851788 ETH they
+    actually consumed, and a narrow position carrying 34× the liquidity is credited only the 1 ETH
+    it put in (the anti-gaming property — depth is priced by TOKENS, never by raw L).
+    **Config at launch:** `POSITION_MANAGER_ADDRESS` + `STATE_VIEW_ADDRESS` + `OMR_ADDRESS` +
+    `OMERTA_HOOK_ADDRESS` + the pool params on the WORKER, plus `DEX_POOL_FROM_BLOCK` (the pool's
+    deploy block — the log scan starts there; leaving it 0 works but re-scans the whole chain every
+    12h tick). Then size `BOND_LP_SCORE_PER_ETH_DAY` (BALANCE.md § THE LP LEAGUE — the shipped 300
+    is a proposed default; the ratio depends on LP fee income and impermanent loss at the live
+    volatility, so it cannot be sized before there are real LPs).
   - **Sequencing that is not optional** (§9.2): deploy the hook-native oracle → let it accumulate a FULL
     window → `OmertaBond.setOracle` → *then* migrate liquidity. Doing the migration first points wall 4 at
     a pool where price is no longer discovered, which is worse than an outage because it still returns a

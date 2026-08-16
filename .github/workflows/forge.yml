@@ -13,12 +13,16 @@ on:
       - '.github/workflows/forge.yml'
       - 'src/dexbot.js'                # the v4 encodings the fork prover below executes
       - 'tools/dexbot-e2e.js'
+      - 'src/stockdeliver.js'          # the 6551 + StockVault legs the second prover executes
+      - 'tools/stock-e2e.js'
   pull_request:
     paths:
       - 'omerta-contracts/**'
       - '.github/workflows/forge.yml'
       - 'src/dexbot.js'
       - 'tools/dexbot-e2e.js'
+      - 'src/stockdeliver.js'
+      - 'tools/stock-e2e.js'
   workflow_dispatch: {}
 
 jobs:
@@ -75,3 +79,16 @@ jobs:
           npm i --no-save --prefix /tmp/v4deps \
             @uniswap/v4-periphery@1.0.3 @uniswap/universal-router@2.1.0
           V4_DEPS=/tmp/v4deps/node_modules npm run dexbot-e2e
+
+      # THE STOCK RAIL, ON A REAL CHAIN. `test/stockdeliver.js` proves the orchestration behind the
+      # `__setTbaResolver` / `__setTxSender` seams; this proves the BYTES — `resolveTbaOnchain` and
+      # `sendDeliverOnchain` execute against the REAL ERC-6551 registry (the reference
+      # implementation, vendored unmodified under omerta-contracts/test/vendor) plus our own
+      # StreetDeed and StockVault. Same job, same reason: it needs anvil and the `out/` artifacts.
+      #
+      # The stakes are higher here than for the DEX bots. §3.3's gateless push means the ADDRESS is
+      # the only thing between the treasury and a permanent loss: get it wrong and real tokenized
+      # stock lands somewhere nothing recovers it from, with every units-denominated invariant green.
+      - name: the stock rail on a real chain (stock-e2e)
+        working-directory: .
+        run: npm run stock-e2e

@@ -104,7 +104,7 @@ const anvil = startAnvil();
 process.on('exit', () => { try { anvil.kill(); } catch {} });
 
 const { createPublicClient, createWalletClient, http, parseEther, parseUnits, formatEther, formatUnits,
-  getAddress, getContractAddress, encodeAbiParameters, keccak256 } = await import('viem');
+  getAddress, getContractAddress, encodeAbiParameters, encodePacked, keccak256 } = await import('viem');
 const { privateKeyToAccount, generatePrivateKey } = await import('viem/accounts');
 
 const chain = { id: CHAIN_ID, name: 'anvil', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
@@ -187,6 +187,9 @@ const FEE = 3000, TICK_SPACING = 60;
 const key = { currency0: '0x0000000000000000000000000000000000000000', currency1: getAddress(omr),
   fee: FEE, tickSpacing: TICK_SPACING, hooks: hookAddr };
 assert(BigInt(key.currency0) < BigInt(key.currency1), 'currency ordering: ETH must sort below OMR');
+const poolId = keccak256(encodeAbiParameters(
+  [{ type: 'address' }, { type: 'address' }, { type: 'uint24' }, { type: 'int24' }, { type: 'address' }],
+  [key.currency0, key.currency1, key.fee, key.tickSpacing, key.hooks]));
 
 // 1 ETH = 1000 OMR  →  sqrtPriceX96 = sqrt(price1/price0) · 2^96
 const PRICE = 1000;                                     // OMR per ETH, the whole run's anchor
@@ -323,6 +326,101 @@ assert(inv.ok, `dex bot invariants failed over real fills: ${JSON.stringify(inv.
 const ledger = Number((await pool.query('SELECT COUNT(*)::int n FROM transactions')).rows[0].n);
 assert(ledger === 0, `the chain layer wrote ${ledger} ledger rows — it must write none`);
 step('invariants hold over real fills; §10.4 untouched', `${inv.checks.length} checks, 0 ledger rows`);
+
+// ══ 4. THE LP LEAGUE READER — depth-time off the real PositionManager ═════════════════════════════
+// The reader was the last seam in the tree with no implementation, deferred with the note that it
+// "cannot be verified before a live pool exists". This is that pool.
+assert(Dex.lpReaderReady(), 'the LP reader read as unconfigured — it needs no bot key, only the pool');
+
+// Its arithmetic is checked against a number measured independently: the ETH the POL positions
+// actually consumed (a wallet balance delta, net of gas — not derived from the same formula).
+let positions = await Dex.readLpPositions();
+const safeDepth = positions.find((p) => p.wallet === SAFE.toLowerCase())?.liquidityEth || 0;
+assert(Math.abs(safeDepth - bookedPaired) / bookedPaired < 0.02,
+  `the reader reports ${safeDepth} ETH of depth for the Safe, but the positions consumed ${bookedPaired} ETH — ` +
+  'the tick math or the amount0 formula is wrong');
+step('the reader prices the real POL positions', `${safeDepth.toFixed(4)} ETH vs ${bookedPaired} ETH consumed`);
+
+// The pool's seed liquidity was added straight through PoolManager (salt 0, no PositionManager
+// token), so it belongs to nobody the league can credit — 2000 ETH of it must not appear.
+assert(!positions.some((p) => p.liquidityEth > 100),
+  `a position of ${Math.max(...positions.map((p) => p.liquidityEth))} ETH appeared — the un-tokenized seed ` +
+  'liquidity is being credited to someone; only PositionManager positions belong to a wallet');
+step('un-tokenized pool liquidity credits nobody', `${positions.length} wallet(s) with a position`);
+
+// ── THE ANTI-GAMING PROPERTY ──
+// Depth must be priced by the TOKENS a position would hand over, never by its raw liquidity L. A
+// narrow range carries a far larger L for the same money, so a metric that read L (or assumed every
+// position is full-range, which is the same thing) would pay concentration a huge multiple for
+// nothing. Mint a tight-range position and check it reports what it actually put in.
+const LP_PK = generatePrivateKey();
+const LP = privateKeyToAccount(LP_PK).address;
+await rpc('anvil_setBalance', [LP, '0x' + parseEther('20').toString(16)]);
+await send(deployer, omr, omrArt.abi, 'transfer', [LP, parseUnits('50000', 18)]);
+const lp = createWalletClient({ chain, transport: http(RPC), account: privateKeyToAccount(LP_PK) });
+await send(lp, omr, omrArt.abi, 'approve', [PERMIT2, 2n ** 255n]);
+await send(lp, PERMIT2, permit2Abi, 'approve', [omr, posm, (1n << 160n) - 1n, 2 ** 48 - 1]);
+
+const slot0Now = await pub.readContract({ address: stateView,
+  abi: [{ type: 'function', name: 'getSlot0', stateMutability: 'view', inputs: [{ name: 'poolId', type: 'bytes32' }],
+    outputs: [{ type: 'uint160' }, { type: 'int24' }, { type: 'uint24' }, { type: 'uint24' }] }],
+  functionName: 'getSlot0', args: [poolId] });
+const spNow = Number(BigInt(slot0Now[0])) / 2 ** 96;
+const curTick = Number(slot0Now[1]);
+const nLower = Math.floor((curTick - 10 * TICK_SPACING) / TICK_SPACING) * TICK_SPACING;
+const nUpper = Math.ceil((curTick + 10 * TICK_SPACING) / TICK_SPACING) * TICK_SPACING;
+const nSa = Math.pow(1.0001, nLower / 2), nSb = Math.pow(1.0001, nUpper / 2);
+// L sized so the ETH side lands near 1 ETH — the inverse of the amount0 formula the reader uses
+const narrowL = BigInt(Math.floor(1e18 * spNow * nSb / (nSb - spNow)));
+const keyComponents = [
+  { name: 'currency0', type: 'address' }, { name: 'currency1', type: 'address' },
+  { name: 'fee', type: 'uint24' }, { name: 'tickSpacing', type: 'int24' }, { name: 'hooks', type: 'address' }];
+const narrowMint = encodeAbiParameters(
+  [{ type: 'tuple', components: keyComponents }, { type: 'int24' }, { type: 'int24' },
+   { type: 'uint256' }, { type: 'uint128' }, { type: 'uint128' }, { type: 'address' }, { type: 'bytes' }],
+  [key, nLower, nUpper, narrowL, parseEther('10'), parseUnits('40000', 18), LP, '0x']);
+const narrowData = encodeAbiParameters([{ type: 'bytes' }, { type: 'bytes[]' }], [
+  encodePacked(['uint8', 'uint8', 'uint8'], [0x02, 0x0d, 0x14]),
+  [narrowMint,
+   encodeAbiParameters([{ type: 'address' }, { type: 'address' }], [key.currency0, key.currency1]),
+   encodeAbiParameters([{ type: 'address' }, { type: 'address' }], [key.currency0, LP])]]);
+const lpEthBefore = await pub.getBalance({ address: LP });
+const nRcpt = await send(lp, posm, posmArt.abi, 'modifyLiquidities',
+  [narrowData, BigInt(Math.floor(Date.now() / 1000) + 600)], { value: parseEther('10') });
+const lpEthAfter = await pub.getBalance({ address: LP });
+const narrowSpent = Number(formatEther(
+  lpEthBefore - lpEthAfter - BigInt(nRcpt.gasUsed) * BigInt(nRcpt.effectiveGasPrice ?? 0n)));
+
+positions = await Dex.readLpPositions();
+const narrowDepth = positions.find((p) => p.wallet === LP.toLowerCase())?.liquidityEth || 0;
+assert(narrowDepth > 0, 'the reader missed the narrow position entirely');
+assert(Math.abs(narrowDepth - narrowSpent) / narrowSpent < 0.02,
+  `the narrow position put in ${narrowSpent} ETH but reads as ${narrowDepth} ETH of depth — a position must be ` +
+  'priced by the tokens it would hand over, never by its raw liquidity');
+
+// and state the property the numbers demonstrate: L is enormously larger, the credited depth is not
+const wideL = await pub.readContract({ address: posm, abi: posmArt.abi, functionName: 'getPositionLiquidity', args: [1n] });
+const lRatio = Number(narrowL) / Number(wideL);
+assert(lRatio > 5, `the narrow position's L is only ${lRatio.toFixed(1)}× the full-range one — the fixture is too wide to prove anything`);
+assert(narrowDepth < safeDepth * lRatio / 5,
+  `raw liquidity is ${lRatio.toFixed(0)}× larger but the credited depth scaled with it — concentration is buying depth for free`);
+step('depth is priced by tokens, not liquidity', `${lRatio.toFixed(0)}× the L, ${narrowDepth.toFixed(4)} ETH credited`);
+
+// ── the accrual the league actually scores ──
+const Bonds = await import('../src/bonds.js');
+Bonds.__setLpReader(Dex.readLpPositions);
+const t0 = Date.now();
+assert((await Bonds.syncLpDepth(pool, t0)).touched > 0, 'the first sync recorded no wallet');
+const after = await Bonds.syncLpDepth(pool, t0 + 2 * 24 * 3600 * 1000);   // two days later
+assert(after.touched > 0, 'the second sync touched nothing');
+const days = Number((await pool.query('SELECT eth_days FROM lp_depth WHERE wallet_address=$1', [LP.toLowerCase()])).rows[0].eth_days);
+assert(Math.abs(days - narrowDepth * 2) / (narrowDepth * 2) < 0.02,
+  `two days at ${narrowDepth} ETH should accrue ~${(narrowDepth * 2).toFixed(3)} ETH-days, got ${days}`);
+step('depth-time accrues off the real read', `${days.toFixed(3)} ETH-days over two days`);
+
+const ledger2 = Number((await pool.query('SELECT COUNT(*)::int n FROM transactions')).rows[0].n);
+assert(ledger2 === 0, `the LP league wrote ${ledger2} ledger rows — it is status only`);
+step('the league moved no value', '§10.4 untouched');
 
 console.log(`\n✅ dexbot-e2e passed — ${steps.length} asserted steps. The v4 encodings are real:\n` +
   '   the Universal Router accepted V4_SWAP and filled on the canonical pool, PositionManager accepted\n' +

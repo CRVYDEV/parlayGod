@@ -421,6 +421,20 @@ assert.deepEqual([...new Set(phantom)], [], `docs/AUDITS.md lists reports that d
   assert(forge.includes("'src/dexbot.js'"),
     ".github/workflows/forge.yml no longer triggers on 'src/dexbot.js' — the encodings it proves live "
     + 'there, so a change to them would ship without the prover ever running.');
+  // and its sibling: the stock rail's two on-chain legs (the 6551 address, the vault delivery)
+  assert(forge.includes('npm run stock-e2e'),
+    '.github/workflows/forge.yml no longer runs `npm run stock-e2e` — that harness is the only thing '
+    + 'that executes resolveTbaOnchain against a real ERC-6551 registry. A wrong address there delivers '
+    + 'real stock somewhere unrecoverable, with every units-denominated invariant still green.');
+  assert(forge.includes("'src/stockdeliver.js'"),
+    ".github/workflows/forge.yml no longer triggers on 'src/stockdeliver.js' — the legs it proves live "
+    + 'there, so a change to them would ship without the prover ever running.');
+  // the vendored 6551 reference implementation is what makes that proof mean anything
+  for (const f of ['ERC6551Registry.sol', 'ERC6551Account.sol'])
+    assert(fs.existsSync(`omerta-contracts/test/vendor/${f}`),
+      `omerta-contracts/test/vendor/${f} is gone — stock-e2e proves the backend's token-bound-account `
+      + 'address against the REAL registry; without it the prover would be checking our arithmetic '
+      + 'against our own arithmetic.');
 }
 
 // ── and neither does a gate that fails on its own dependency list ────────────────────────────────

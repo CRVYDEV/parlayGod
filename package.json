@@ -28,7 +28,8 @@
     "keeper-dials": "node tools/keeper-dials.js",
     "backup": "bash tools/backup.sh ${BACKUP_DIR:-./backups}",
     "backup:selftest": "bash tools/backup-selftest.sh",
-    "dexbot-e2e": "node tools/dexbot-e2e.js"
+    "dexbot-e2e": "node tools/dexbot-e2e.js",
+    "stock-e2e": "node tools/stock-e2e.js"
   },
   "dependencies": {
     "@fastify/jwt": "^10.2.0",
