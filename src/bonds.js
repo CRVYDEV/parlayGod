@@ -22,7 +22,7 @@ const norm = (addr) => { try { return getAddress(addr); } catch { return null; }
 // no price has ever printed — bonding needs a price, so recordBond takes one explicitly (the watcher/mod
 // supplies the TWAP), and the board falls back to this read for display.
 async function oraclePrice(db) {
-  const last = (await db.query('SELECT price_omr_per_eth FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0];
+  const last = (await db.query('SELECT price_omr_per_eth FROM vig_buyback WHERE real ORDER BY created_at DESC LIMIT 1')).rows[0];
   const p = last ? Number(last.price_omr_per_eth) : null;
   return (p != null && Number.isFinite(p) && p > 0) ? p : null;
 }

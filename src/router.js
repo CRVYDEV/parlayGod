@@ -145,6 +145,16 @@ export const BANK_HARVEST_FEE_BPS = 2000;
 for (const src of waterfall()) {
   const sum = src.splits.reduce((a, s) => a + s.bps, 0);
   if (sum !== src.totalBps) throw new Error(`money router: source '${src.id}' splits sum to ${sum}, not ${src.totalBps}`);
+  // (red team 2026-08-16) …and no slice may be NEGATIVE. The sum check alone is vacuous for a
+  // remainder-shaped row: an implicit slice is computed as `total - carves`, so it absorbs any carve
+  // and the row sums correctly even when the carve exceeds what it was carved from. Measured with
+  // STORE_COMMUNITY_BPS=5000: `[vig 4000, treasury 2000, community 5000, operations -1000] sum 10000`
+  // — a clean boot, with real ETH earmarked to the dev wallet claimed as another system's budget.
+  // A per-lever guard catches the two levers that exist today; this catches the SHAPE, so a future
+  // remainder row cannot reintroduce the class quietly.
+  for (const s of src.splits) {
+    if (!(s.bps >= 0)) throw new Error(`money router: source '${src.id}' slice '${s.dest}' is ${s.bps} bps — a negative slice means a carve exceeded the share it comes out of, and the sum check cannot see it.`);
+  }
 }
 
 // ── 2. THE VERIFICATION ───────────────────────────────────────────────────────────────────────────

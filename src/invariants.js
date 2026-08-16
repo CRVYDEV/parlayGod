@@ -9,7 +9,13 @@ import { DESK, DESK_RECYCLE_REASON } from './rules.js';
 // prefix here is an unenumerated faucet/sink — the loudest possible §10.4 alarm.
 const KNOWN_REASONS = {
   cash: ['crime:', 'racket:income', 'racket:upgrade', 'bank:interest', 'bank:', 'heal', 'checkin', 'travel', 'heist',
-    'melt:tithe', 'fence', 'repair', 'craft:', 'goods:', 'racket:buy:', 'asset:', 'swap:', 'gun:buy:',
+    // `racket:retire:` is the walk-away refund (economy.js `retireRacket`, the `business:shutter` twin). It
+    // ships behind RACKET_RETIRE_BPS 0 and so has never written a row — but the day that lever is raised the
+    // first refund would be an unknown reason, and check (g) has ZERO tolerance and reads the whole ledger,
+    // so the alarm would latch red forever and bury a real drift under it (the recorded `path:` precedent).
+    // Kept as its own entry rather than collapsing the four into a blanket `racket:` — the individual
+    // entries are what make an unexpected `racket:*` loud.
+    'melt:tithe', 'fence', 'repair', 'craft:', 'goods:', 'racket:buy:', 'racket:retire:', 'asset:', 'swap:', 'gun:buy:',
     'ammo:buy', 'gang:found', 'gang:tribute', 'gang:war', 'gang:dissolved', 'turf:seize:', 'turf:claim', 'jump:',
     'bounty:', 'bust:reward', 'whack:chop', 'whack:loot', 'death:', 'exchange:', 'crew:sales', 'deal:', 'makings:',
     'lab:', 'crew:hire', 'crew:wages', 'crew:objective', 'crew:bringone', 'laylow', 'kitchen:', 'mission:', 'daily:', 'onboard:', 'social:', 'referral:', 'firstblood:', 'mod:confiscate', 'npchit:', 'safehouse',

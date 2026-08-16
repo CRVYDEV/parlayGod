@@ -1158,12 +1158,23 @@ async function resolveBracketRound(client, t, entries) {
     return { tournament: tid, refunded: live.length };
   }
   if (live.length <= CASINO.BRACKET.HEAT_SIZE) {
-    // (red-team MED) every runner died — no finalist to pay. The pool was fully burned by the death
-    // reductions above (poolNow == 0), so the escrow identity holds; just settle the empty bracket.
+    // (red-team MED) every runner died — no finalist to pay. The residue is NOT zero: this branch is
+    // only ever REACHABLE from round 1 up (a 0-live field at round 0 is < MIN_ENTRANTS, so the
+    // short-field refund above fires first), and from round 1 the death loop skips `eliminated`
+    // runners — their buy-ins stay in the pool as the pot the finalists were playing for. Nobody is
+    // left to win it, so it BURNS (the same casino:tourney:death the scratches take, one NULL-character
+    // row) and the pool is zeroed BEFORE the status flip. Settling on the old `poolNow == 0` premise
+    // destroyed that cash with no ledger row, and status<>'open' then drops the pool off the escrow
+    // check's LHS while the RHS still carries the buy-ins — a permanent drift for the bracket's life.
     if (live.length === 0) {
+      if (poolNow > 0) {
+        await ledger(client, { currency: 'cash', amount: -poolNow, reason: 'casino:tourney:death', counterparty: tid });
+        // ABSOLUTE write (the pg-mem arithmetic-UPDATE quirk) — the row settles empty, matching the burn.
+        await client.query('UPDATE poker_tournaments SET pool = 0 WHERE id=$1', [tid]);
+      }
       await client.query("UPDATE poker_tournaments SET status='resolved' WHERE id=$1", [tid]);
       await clearCurrent();
-      return { tournament: tid, round: Number(t.round), finalists: 0 };
+      return { tournament: tid, round: Number(t.round), finalists: 0, stranded: poolNow };
     }
     // ═ THE FINAL ═ rank everyone left; the live pool (poolNow — dead stakes already burned + subtracted,
     // eliminated stakes stay in the pot the finalists play for) pays PAYOUTS net of the rake.

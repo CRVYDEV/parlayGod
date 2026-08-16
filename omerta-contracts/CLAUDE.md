@@ -42,10 +42,18 @@ Solidity suite for OMERTÀ on Robinhood Chain. Rules for future sessions:
      can never fail for want of balance.
    Everything else in the suite still mints nothing and that has NOT changed: VoucherClaim transfers
    pre-funded OMR only (bounded by tranche + daily cap); GearVault mints gear only via VoucherClaim AND
-   enforces its OWN per-gearId lifetime supply cap at the asset layer (`GearVault.cap`/`minted` +
+   enforces its OWN per-gearId cap at the asset layer (`GearVault.cap`/`minted`/`redeemed` +
    `setGearCap`, fail-closed at 0) — the cap survives a minter swap because the count lives on the
    durable asset, not the swappable bridge (audit G-MED-1; VoucherClaim keeps a matching
-   `gearSupplyCap` pre-flight for a clean revert, but GearVault is the authoritative bound); Staking
+   `gearSupplyCap` pre-flight for a clean revert, but GearVault is the authoritative bound).
+   **BOTH bound LIVE on-chain supply (`minted - redeemed <= cap`), never lifetime mints, and they
+   must keep measuring the SAME quantity** — a redeem (re-import) vacates exactly one slot, and the
+   red team of 2026-08-16 found the bridge still holding a lifetime counter while the vault had
+   moved to live supply. Fail-closed either way, nothing over-mints — which is why it was invisible:
+   what it killed was the shipped re-import round trip (`omerta-nft-reimport-design.md` §4), since
+   once a class had ever hit its cap a re-imported item could never be re-extracted, with every one
+   of them burned back and zero live on-chain. An epic class caps at 10, so the wall was reachable
+   in ordinary play. Pinned by `test_reimport_frees_a_slot_the_bridge_can_re_extract`; Staking
    pays only from its funded pool; OmertaFees mints/holds nothing — it forwards each exact fee straight
    to the dev wallet in the same tx and emits a nonce'd event; OmertaBond forwards each bond's ETH
    split in-tx and custodies no ETH. Preserve these invariants and their fuzz/regression tests. Do NOT

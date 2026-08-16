@@ -116,9 +116,19 @@ export async function recordBankBuy(pool, { ref, asset = 'USDC', spent, omrBough
       await client.query('COMMIT');
       return { already: true, ref };
     }
+    // (red team 2026-08-16) TAKE THE SINGLETON LOCK FIRST. The root-cap read below used to sit above
+    // this, and the comment claimed the runVigBuyback discipline while doing something weaker: at READ
+    // COMMITTED, being inside a transaction does not serialize a read — only a lock does. So two
+    // overlapping buys (two worker replicas across a deploy, a retried keeper, a double-clicked mod
+    // call) each read the same budget, each pass the cap, and each insert — and every $OMR that
+    // over-spend credits leaves as a `prize:omr` mint to players plus `fundReserve`. The three correct
+    // siblings all lock first: runVigBuyback on vig_prize_pool, runDeskBuyback on desk_inventory,
+    // runFamilyBuyback on family_yield_pool. pg-mem is single-caller, so no suite can exercise this —
+    // it is a real-Postgres-only property, like the recorded `uuid = text` class.
+    const pool0 = await poolRow(client);
     // THE ROOT CAP. Never spend more of an asset than actually arrived as revenue — the same shape
-    // as the Vig's `spend ≤ revenue` and the keeper's budget. Read inside the transaction so two
-    // concurrent buys cannot each see the whole budget (the runVigBuyback discipline).
+    // as the Vig's `spend ≤ revenue` and the keeper's budget. Read UNDER the lock above, so two
+    // concurrent buys cannot each see the whole budget (the runVigBuyback discipline, now actually).
     if (real) {
       const rev = (await revenueByAsset(client))[asset] || 0;
       const already = (await spentByAsset(client))[asset] || 0;
@@ -161,7 +171,7 @@ export async function recordBankBuy(pool, { ref, asset = 'USDC', spent, omrBough
     await client.query(
       'INSERT INTO bank_buys (ref, asset, spent, omr_bought, tx_hash, real) VALUES ($1,$2,$3,$4,$5,$6)',
       [ref, asset, real ? sp : 0, booked, txHash, real]);
-    const p = await poolRow(client);
+    const p = pool0; // already locked above — re-reading would drop the row lock's whole point
     await client.query(
       'UPDATE bank_city_pool SET balance = $1, bought_total = $2 WHERE id=1',
       [round6(num(p.balance) + booked), round6(num(p.bought_total) + booked)]);

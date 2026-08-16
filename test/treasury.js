@@ -14,6 +14,7 @@
 process.env.MOD_KEY = 'test-mod-key';
 process.env.ALLOW_MOD_REAL_REVENUE = 'on'; // QA: let the mod route book a REAL fill (the D-MED2 gate)
 import assert from 'node:assert';
+import { readFileSync as _readSrc } from 'node:fs';
 import { buildServer } from '../src/server.js';
 import { allocateStock, runTreasuryInvariants, stockBudget } from '../src/treasury.js';
 import { runLedgerInvariants } from '../src/invariants.js';
@@ -333,6 +334,28 @@ assert.equal(await ledgerRows(), rows0,
   'the whole stock layer moved real value and wrote NOT ONE ledger row');
 const led = await runLedgerInvariants(pool, { alert: false });
 assert(led.checks.find((c) => /vocabulary/i.test(c.name)).ok, 'and the reason vocabulary is untouched');
+
+// ── (red-team) THE SPEND SIDE IS SINGLE-WRITER TOO ──────────────────────────────────────────────
+// `stockBudget` is a plain READ and `recordStockBuy` carries no budget gate on purpose (the ingest
+// must book what the chain did — the recordBond lesson), so with nothing between them two keepers
+// overlapping on a deploy both see the same `spendableEth` and both spend it: real treasury ETH,
+// straight through wall 4. `allocated + spent <= held` catches it that night, but that is the
+// DETECTOR — the owed side is PREVENTED under an advisory lock and the spend side is the larger
+// half. pg-mem is single-caller, so this is a labelled SOURCE tripwire (the bumpCrewObjective
+// precedent); Postgres is what exercises the serialization.
+{
+  const src = _readSrc(new URL('../src/treasury.js', import.meta.url), 'utf8');
+  const i = src.indexOf('export async function runStockBuyback');
+  const keeper = src.slice(i, src.indexOf('async function runStockBuybackInner'));
+  assert(/pg_try_advisory_lock/.test(keeper), 'runStockBuyback takes an advisory lock before reading the budget');
+  assert(/pg_advisory_unlock/.test(keeper) && /finally/.test(keeper), 'and releases it in a finally, so a throwing run cannot wedge the keeper');
+  const cls = /KEEPER_LOCK_CLASS\s*=\s*(0x[0-9a-fA-F]+)/.exec(src);
+  const owed = /pg_advisory_xact_lock\(\$1\)', \[(0x[0-9a-fA-F]+)\]\); \/\/ 'STK'/.exec(src);
+  assert(cls && owed, 'both lock classes are declared where a reader can find them');
+  assert.notEqual(cls[1].toLowerCase(), owed[1].toLowerCase(),
+    'the SPEND lock is a DISTINCT class from the OWED lock — sharing one would make a keeper run and an '
+    + 'allocation block each other for no reason, and they guard different numbers');
+}
 
 await app.close();
 console.log('✅ treasury test passed — `allocated <= held` is back, PER TICKER in UNITS, it can '

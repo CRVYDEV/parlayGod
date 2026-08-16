@@ -137,7 +137,7 @@ export async function runDexBuyback(pool, opts = {}) {
   // PHASE A — the swap. Budget = the unspent Vig revenue (the same numbers runVigBuyback re-derives
   // under its own lock; this read only SIZES the swap — the booking's root cap is authoritative).
   const revenueIn = num((await pool.query('SELECT COALESCE(SUM(vig_eth),0) s FROM vig_revenue')).rows[0].s);
-  const alreadySpent = num((await pool.query('SELECT COALESCE(SUM(eth_spent),0) s FROM vig_buyback')).rows[0].s);
+  const alreadySpent = num((await pool.query('SELECT COALESCE(SUM(eth_spent),0) s FROM vig_buyback WHERE real')).rows[0].s);
   let eth = round6(revenueIn - alreadySpent);
   eth = Math.min(eth, maxRunEth());
   if (opts.maxEth != null) eth = Math.min(eth, Number(opts.maxEth));
@@ -184,7 +184,9 @@ async function bookUnbookedSwaps(pool, out) {
     'SELECT ref, eth_spent, omr_received, price_omr_per_eth FROM dex_swaps WHERE real AND NOT booked ORDER BY created_at')).rows;
   for (const r of rows) {
     const eth = round6(num(r.eth_spent));
-    const booked = await runVigBuyback(pool, { priceOmrPerEth: num(r.price_omr_per_eth), maxEth: eth });
+    // `r.ref` IS the swap's tx hash — the real bot's claim that hard $OMR was actually bought. It was
+    // available here and dropped; passing it is what makes the real rail book real while a comp books zero.
+    const booked = await runVigBuyback(pool, { priceOmrPerEth: num(r.price_omr_per_eth), maxEth: eth, txHash: r.ref });
     await pool.query('UPDATE dex_swaps SET booked=true WHERE ref=$1', [r.ref]);
     const entry = { ref: r.ref, ethSpent: eth, omrBought: booked?.omrBought || 0 };
     if (!booked || round6(booked.ethSpent) < eth) entry.bookedShort = true; // the revenue moved under us — flagged, not hidden
@@ -272,7 +274,7 @@ export async function runDexBotInvariants(pool) {
   // booked short — the manual rail also inserts vig_buyback rows, so this is one-sided (≥), and a
   // shortfall (a fill the accounting could not absorb) is exactly what it exists to surface.
   const swapEth = num((await pool.query('SELECT COALESCE(SUM(eth_spent),0) s FROM dex_swaps WHERE real AND booked')).rows[0].s);
-  const buybackEth = num((await pool.query('SELECT COALESCE(SUM(eth_spent),0) s FROM vig_buyback')).rows[0].s);
+  const buybackEth = num((await pool.query('SELECT COALESCE(SUM(eth_spent),0) s FROM vig_buyback WHERE real')).rows[0].s);
   push('booked swaps ≤ buybacks recorded (eth)', swapEth, buybackEth, swapEth <= buybackEth + 1e-6);
   return { ok: checks.every((c) => c.ok), checks };
 }

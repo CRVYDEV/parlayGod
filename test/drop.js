@@ -373,6 +373,37 @@ await call('POST', '/v1/mod/drop/window', { mod: true, body: {
   const rewear = await call('POST', '/v1/provenance', { token: dave.token });
   assert.equal(rewear.body.error, 'already',
     'an already-stamped Solana-only claimant hears the true refusal, not "link your wallet"');
+
+  // ── RED TEAM 2026-08-16: THE BUILDER MUST NOT DESTROY THE ADDRESS IT IS ALLOCATING TO ──
+  // Everything above proves the LOADER and the CLAIM keep base58 verbatim. The builder sits
+  // UPSTREAM of both and was lowercasing every wallet, so by the time the loader applied its own
+  // (correct) rule the address was already a string no ed25519 key can sign for — the whole
+  // community's envelopes orphaned FOREVER, silently, with the row count, the $OMR total and the
+  // published commitment all reading perfectly correct. Both ends now share one normalizer; this
+  // walks a snapshot through the REAL builder and then claims it with a REAL signature, which is
+  // the only assertion that can tell the two ends still agree.
+  const { allocateCoin, allocateNft, mergeAllocations } = await import('../tools/allocate-drop.js');
+  const { publicKey: pk2, privateKey: sk2 } = cryptoMod.generateKeyPairSync('ed25519');
+  const SOL2 = base58Encode(pk2.export({ format: 'der', type: 'spki' }).subarray(-32));
+  assert.ok(/[A-Z]/.test(SOL2), 'the fixture address carries upper-case — or this check is vacuous');
+
+  const built = mergeAllocations([{ id: 8, freeMint: true, rows: allocateCoin({
+    holders: [{ wallet: SOL2, balance: '1000' }], pool: 40, dustFloor: '1', cap: 1000 }) }]);
+  assert.equal(built[0].wallet, SOL2, 'the coin allocator hands back the address it was given, byte for byte');
+  assert.equal(allocateNft({ holders: [{ wallet: SOL2, count: 1 }], perNft: 1 })[0].wallet, SOL2,
+    'and so does the NFT allocator');
+  // an EVM address still normalizes — the rule is per-chain, not "leave everything alone"
+  assert.equal(allocateNft({ holders: [{ wallet: '0xAABBCCDDEEFF0011223344556677889900AABBCC', count: 1 }], perNft: 1 })[0].wallet,
+    '0xaabbccddeeff0011223344556677889900aabbcc', 'an EVM address still lowercases (one address, one row)');
+
+  const loaded = await call('POST', '/v1/mod/drop/load', { mod: true, body: { rows: built } });
+  assert.equal(loaded.code, 200, JSON.stringify(loaded.body));
+  const erin = await mk('Drop Erin');
+  const c3 = (await call('POST', '/v1/drop/solana/challenge', { token: erin.token })).body;
+  const claim3 = await call('POST', '/v1/drop/solana', { token: erin.token, body: {
+    address: SOL2, signature: cryptoMod.sign(null, Buffer.from(c3.message, 'utf8'), sk2).toString('base64') } });
+  assert.equal(claim3.code, 200, JSON.stringify(claim3.body));
+  assert.equal(claim3.body.omr, 40, 'a wallet routed through the BUILDER can still be claimed by its own key');
 }
 
 // the drop check FAILS BY NAME when a credit has no claimed row behind it (the §10.4 tripwire)

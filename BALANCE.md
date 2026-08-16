@@ -5174,6 +5174,23 @@ per-member contribution list is the "what your crew did this week" texture. `CRE
 faucet dial (`0` disables the cash; the goal + the ping still work as a pure coordination hook); the KIND
 `base` targets tune the grind. Founder sign-off levers.
 
+**FLAGGED, NOT CHANGED (red team 2026-08-16) — the target is frozen at materialization, the payout is
+counted at claim.** `crewObjectiveOf` sizes the week's job `base × members` read ONCE, at the moment the
+first bump creates the row; `claimObjective` then pays a flat `REWARD` to every member holding a
+contribution row. So a crew that materializes its objective with one member and FILLS afterwards faces a
+one-man target and collects a four-man payout — 40 crimes for $20,000 where an already-full crew owes 160
+for the same money, a 4× efficiency. The sharper variant WAS fixed in the same pass and is not a lever:
+contributions used to be credited after `done` too, so a crew could crack the job shorthanded, fill the
+roster, and each arrival's SINGLE crime bought a full share — `bumpCrewObjective` now stops crediting once
+the job is cracked, which is a plain bound rather than a balance call (a cut is earned by helping finish
+the work). What is left is genuinely a design choice, because all three fixes dock somebody different:
+raise the target when the roster grows (the bar moves under people mid-week, and it would break a seeded
+target); cap claimants at the drawn headcount (an honest fourth member who worked gets nothing); or scale
+the payout `drawn/current` (docks the honest late joiner and the originals alike). Magnitude is small and
+non-extractable — ~$15,000 per crew per week in cash, which since tokenomics v2 cannot become $OMR — so it
+is recorded rather than guessed at. The dial if it bites: `CREW.OBJECTIVE.REWARD`, or re-reading the
+headcount at claim.
+
 ## THE STREAK MILESTONES — the run-unlock ladder (founder-directed 2026-08-07)
 
 THE STREAK's only reward was petty daily cash, so breaking a run cost ~$4k — nothing you couldn't rebuy.

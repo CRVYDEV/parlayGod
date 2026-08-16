@@ -53,6 +53,22 @@ export const isSolAddress = (s) => {
   return !!raw && raw.length === 32;
 };
 
+// ── THE ONE WALLET NORMALIZER (RED TEAM 2026-08-16) ──
+// EVM addresses are hex and case-insensitive, so they normalize to lowercase (checksummed and
+// unchecksummed forms of one address must not become two rows). Solana addresses are base58 and
+// CASE-SENSITIVE — lowercasing one produces a string no ed25519 key can ever sign for, so the
+// allocation is orphaned FOREVER, silently, with every count reading correct.
+//
+// It lives here — a leaf both `src/drop.js` (the loader, matching a claim VERBATIM) and
+// `tools/allocate-drop.js` (the builder, which writes the rows the loader ingests) import —
+// because the bug this closes was the two ends disagreeing: the loader had the rule right and
+// said so in a comment, while the builder lowercased every wallet upstream, before the loader
+// could ever apply it. Two implementations of one rule is how that happens; there is now one.
+export const normalizeWallet = (raw) => {
+  const s = String(raw || '');
+  return /^0x/i.test(s) ? s.toLowerCase() : s;
+};
+
 // ed25519 raw public key → node KeyObject (the fixed SPKI DER prefix for OID 1.3.101.112)
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 

@@ -5,7 +5,7 @@
 // and the vocabulary knows the new reasons. Runs on pg-mem — zero infra.
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { CASINO, UNDERWORLD, ACCESS_STAKE, numbersDrawOf, dayOf, weekOf, hash01, MARKET_SEED, PACING } from '../src/rules.js';
+import { CASINO, STABLE, UNDERWORLD, ACCESS_STAKE, numbersDrawOf, dayOf, weekOf, hash01, MARKET_SEED, PACING } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { sweepTournaments, trackFieldOf, sweepTrackEntries, sweepFuturity } from '../src/casino.js';
 
@@ -632,6 +632,45 @@ await pool.query(`DELETE FROM track_entries WHERE character_id IN ('${owners[0].
   assert.equal(scratchClaim.body.won, 500, 'the stake is REFUNDED 1:1 — never paid at the locked longshot odds');
   assert.equal((await meOf(bTok)).cash, scratchPre + 500, 'exactly the stake came back');
   await pool.query(`DELETE FROM track_entries WHERE character_id='${sId}'`); // don't disturb the §10.4 sweep below
+}
+
+// ── (red-team) THE NOMINATION FEE IS WHAT MAKES FIXED ODDS SAFE. A track ticket locks its price at bet
+// time, but `p = w/Σw` is NORMALISED over the whole field — so ANY later entry re-weights every earlier
+// ticket's true chance while its odds stand. The scratch check above covers the one case where the runner
+// you BACKED is replaced; it cannot cover the field moving around it, and it is not meant to: fixed-odds
+// bookmaking means the price you took is the price you get, whatever else comes onto the board after.
+// What keeps that from being an exploit is purely a LEVER RELATION — entering costs ENTRY_FEE, and the
+// most a bettor can win by deliberately shrinking Σw is capped by MAX_BET. Measured over 20,000 race-days
+// with perfect foresight (fill every player slot with the weakest animal that can actually be fielded —
+// a fresh statMin racer — then back the best remaining post at its pre-entry price): the best day of ~27
+// years still loses money, in BOTH slot configurations. ENTRY_FEE and MAX_BET are founder sign-off levers,
+// so the relation is asserted from the LIVE constants rather than remembered — halve the fee or raise the
+// cap and this fires by name instead of the attack quietly going live. (The sample sweeps `day`, which is
+// what varies the seeded weight draw; a different MARKET_SEED redraws the same distribution.)
+{
+  const minForm = { dogs: 3 * STABLE.KINDS.dog.statMin, horses: 3 * STABLE.KINDS.horse.statMin };
+  const { FIELD, MAX_BET, ENTRY_FEE, PLAYER_SLOTS } = CASINO.TRACK;
+  assert(PLAYER_SLOTS < FIELD, 'the card always keeps NPC posts a bettor could back');
+  for (let slots = 1; slots <= PLAYER_SLOTS; slots++) {
+    let bestNet = -Infinity, at = null;
+    for (const race of ['dogs', 'horses']) {
+      for (let day = 20000; day < 30000; day++) {
+        const before = trackFieldOf(race, day, []);
+        const ent = [];
+        for (let s = 0; s < slots; s++)
+          ent.push({ post: FIELD - 1 - s, form: minForm[race], racer_name: 'x', character_id: `c${s}`, racer_id: `r${s}` });
+        const after = trackFieldOf(race, day, ent);
+        for (let k = 0; k < FIELD - slots; k++) {         // the untouched posts — the ones still bettable at a stale price
+          const net = (after[k].p * before[k].odds - 1) * MAX_BET - slots * ENTRY_FEE;
+          if (net > bestNet) { bestNet = net; at = { race, day, post: k + 1 }; }
+        }
+      }
+    }
+    assert(bestNet < 0,
+      `filling ${slots} player slot(s) to move the field must never pay for itself: the best of 20,000 race-days nets `
+      + `$${Math.round(bestNet)} (${JSON.stringify(at)}). TRACK.ENTRY_FEE ($${ENTRY_FEE}) vs TRACK.MAX_BET ($${MAX_BET}) `
+      + 'is the whole defence — a bettor who can profit by nominating a runner is running the book.');
+  }
 }
 
 // ══════════ THE FUTURITY (Track step four): the crowd-bet marquee for player-owned racers ══════════

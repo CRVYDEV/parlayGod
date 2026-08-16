@@ -40,6 +40,21 @@ const WITHDRAW_TTL_SEC = 24 * 3600;                 // short deadline, well unde
 // reclaimed. 1h default is generously past any realistic lag.
 const RECLAIM_GRACE_SEC = Number(process.env.VOUCHER_RECLAIM_GRACE_SEC || 3600);
 
+// ── WHICH CONTRACT OWNS A VOUCHER ROW (red-team HIGH, 2026-08-16) ────────────────────────────────
+// `vouchers` is shared by TWO contracts with INDEPENDENT nonce spaces: VoucherClaim signs 'omr' /
+// 'gear' / 'car' / 'boat'; StreetDeed signs 'deed'. Anything that resolves a voucher by asking a
+// chain whether its nonce was used MUST first know which chain to ask — a deed nonce read against
+// VoucherClaim answers `false` every time, which is indistinguishable from "the player never
+// claimed it" and is how a signed deed voucher got expired out from under `sweepDeedVouchers` (the
+// one function that reads the right contract), leaving the street inert, unsellable and un-re-
+// extractable forever, and blocking its owner from ever claiming another.
+//
+// An ALLOWLIST, deliberately, not `kind <> 'deed'`: the denylist fixes today and re-opens the moment
+// a third contract shares this table, which is the forgotten-gate class this codebase keeps paying
+// for. A kind nobody claims is SKIPPED and logged — an unrecognised voucher is somebody else's to
+// resolve, and the fail-closed direction is to leave it alone.
+export const VOUCHER_CLAIM_KINDS = ['omr', 'gear', 'car', 'boat'];
+
 // Chain config from env (never hardcode chainId — see the F-3 audit note).
 export function chainConfig() {
   // AUDIT (chain trust lens F1 + OMR lens F-5): NO defaults. A chainId or verifyingContract that
@@ -443,7 +458,13 @@ export async function markClaimed(pool, nonce) {
   // (status<>'expired' AND <>'cancelled') let the mod /reserve/claimed route flip a QUEUED (never-signed)
   // voucher to claimed on an operator typo → its burned $OMR permanently stranded (drainQueue/cancel both
   // require status='queued'). 'signed' also gives idempotency (a re-claim finds status='claimed'≠'signed').
-  const r = await pool.query("UPDATE vouchers SET claimed_onchain=true, status='claimed' WHERE nonce=$1 AND status='signed' RETURNING id", [nonce]);
+  // …and only over VoucherClaim's OWN kinds: this is reached by its `Claimed` watcher and by the mod
+  // /reserve/claimed route, and a deed nonce typed into that route would flip a signed deed voucher to
+  // 'claimed' — after which sweepDeedVouchers (which selects status='signed') skips it and the street is
+  // bricked exactly as the reclaim used to brick it. A deed claim has its own watcher (markDeedExtracted).
+  const r = await pool.query(
+    `UPDATE vouchers SET claimed_onchain=true, status='claimed' WHERE nonce=$1 AND status='signed' AND kind = ANY($2) RETURNING id`,
+    [nonce, VOUCHER_CLAIM_KINDS]);
   // AUDIT detector (reserve lens F4): a real Claimed event for a voucher we ALREADY refunded (expired or
   // cancelled) is the exact double-resolution the reserve model forbids (the player would hold the tokens
   // AND the refunded $OMR). With the reclaim on-chain check below this should be impossible; if it ever
@@ -478,8 +499,11 @@ export async function reclaimExpiredVouchers(pool, reader = undefined) {
   let omrReclaimed = 0, gearRestored = 0, reconciled = 0, skipped = 0;
   try {
     const cutoff = Math.floor(Date.now() / 1000) - RECLAIM_GRACE_SEC;
+    // VoucherClaim's kinds only — `chain` below is VoucherClaim's reader, and a nonce from another
+    // contract's space reads `false` there whatever really happened on-chain (see VOUCHER_CLAIM_KINDS).
     const expired = (await client.query(
-      "SELECT id, account_id, kind, amount, gear_id, nonce FROM vouchers WHERE status='signed' AND NOT claimed_onchain AND deadline < $1", [cutoff])).rows;
+      `SELECT id, account_id, kind, amount, gear_id, nonce FROM vouchers
+        WHERE status='signed' AND NOT claimed_onchain AND deadline < $1 AND kind = ANY($2)`, [cutoff, VOUCHER_CLAIM_KINDS])).rows;
     // AUDIT (full-system v3, chain lens F1): a `signed` voucher exists ONLY because the chain was
     // configured enough to sign it (chainConfig + signer) — signing does NOT require CHAIN_RPC_URL,
     // but the on-chain reader DOES. So "no reader" is NOT proof the chain is dormant: it can mean a
@@ -513,9 +537,18 @@ export async function reclaimExpiredVouchers(pool, reader = undefined) {
           // row is the heir's now (extracted property follows the bloodline — runEstate).
           await client.query(`UPDATE ${v.kind === 'car' ? 'cars' : 'boats'} SET minted_onchain=false WHERE id=$1`, [itemId]);
           gearRestored++;
-        } else {
+        } else if (v.kind === 'gear') {
           await client.query('UPDATE account_gear SET minted_onchain=false WHERE account_id=$1 AND gear_id=$2', [v.account_id, v.gear_id]);
           gearRestored++;
+        } else {
+          // BELT AND BRACES on the allowlist above. This used to be a bare `else`, and that is exactly
+          // how a 'deed' row got here: it ran a no-op UPDATE against account_gear, counted itself as a
+          // restored piece of gear, and expired a voucher belonging to another contract. Never expire
+          // what we did not recognise — leave the row for whoever owns it and say so out loud.
+          await client.query('ROLLBACK');
+          console.error(`reclaim: voucher ${v.id} has unrecognised kind '${v.kind}' — skipped (add it to VOUCHER_CLAIM_KINDS or give it its own sweep)`);
+          skipped++;
+          continue;
         }
         await client.query("UPDATE vouchers SET status='expired' WHERE id=$1", [v.id]);
         await client.query('COMMIT');
@@ -1228,6 +1261,26 @@ export async function quoteBond(pool, accountId, principalEth) {
   if (!(eth >= BONDS.MIN_PRINCIPAL_ETH)) throw new GameError('min', `A bond takes at least ${BONDS.MIN_PRINCIPAL_ETH} ETH.`);
   const domain = bondChainConfig();  // throws chain_unconfigured if the bond chain isn't configured
   const signer = signerAccount();    // throws chain_unconfigured if the signer PK is missing
+
+  // THE ORACLE READ HAPPENS BEFORE THE TRANSACTION OPENS (RED TEAM 2026-08-16). It needs nothing
+  // from the database, and an RPC inside a held transaction pins a pooled connection for as long as
+  // the node takes — the pool-exhaustion shape `bankPosition` and the deed-vault disclosure are both
+  // written to avoid. Here it was worse than the read-only case those describe: the call sat between
+  // an `account_persistent FOR UPDATE` and the `bond_reserve` singleton, so a slow or hanging node
+  // also blocked that player's every other authed action behind their own row lock. A TWAP moves on
+  // the order of its PERIOD, so a price fetched microseconds before the transaction opens is exactly
+  // as current as one fetched inside it — there is nothing to buy by holding the lock across it.
+  const priceReader = await makeBondPriceReader();
+  let onchainPrice = null;
+  if (priceReader) {
+    let onchain = null;
+    try { onchain = await priceReader.ceiling(); } catch {
+      throw new GameError('oracle', 'The on-chain price oracle is not reporting — bonding is paused until it recovers.');
+    }
+    if (!(onchain?.oraclePrice > 0)) throw new GameError('oracle', 'The on-chain price oracle has no usable reading — bonding is paused.');
+    onchainPrice = onchain.oraclePrice;
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -1236,7 +1289,7 @@ export async function quoteBond(pool, accountId, principalEth) {
     const payer = acct.wallet_address;
     if (!payer || !isAddress(payer)) throw new GameError('wallet', 'Link a wallet (SIWE) first — a bond quote is bound to your wallet.');
     // the live OMR-per-ETH oracle (the latest Vig buyback TWAP off-chain; the DEX TWAP on mainnet).
-    const last = (await client.query('SELECT price_omr_per_eth FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0];
+    const last = (await client.query('SELECT price_omr_per_eth FROM vig_buyback WHERE real ORDER BY created_at DESC LIMIT 1')).rows[0];
     let price = last ? round6(Number(last.price_omr_per_eth)) : null;
     if (!(price != null && Number.isFinite(price) && price > 0))
       throw new GameError('price', 'No live OMR-ETH price yet — bonding opens once the buyback prints one.');
@@ -1246,13 +1299,7 @@ export async function quoteBond(pool, accountId, principalEth) {
     // ETH than our own feed thought was fair, so the safe direction is the automatic one — and a
     // chain that is currently refusing every bond (unset/stale/broken oracle) is reported plainly
     // rather than papered over with a quote that cannot land.
-    const priceReader = await makeBondPriceReader();
-    if (priceReader) {
-      let onchain = null;
-      try { onchain = await priceReader.ceiling(); } catch {
-        throw new GameError('oracle', 'The on-chain price oracle is not reporting — bonding is paused until it recovers.');
-      }
-      if (!(onchain?.oraclePrice > 0)) throw new GameError('oracle', 'The on-chain price oracle has no usable reading — bonding is paused.');
+    if (onchainPrice != null) {
       // CLAMP TO THE ORACLE PRICE, NOT THE CEILING (red-team F1). Two reasons, both decisive:
       //
       // 1. CORRECTNESS. `round6` ROUNDS, and it rounds UP half the time — measured at 50.0% over
@@ -1264,7 +1311,7 @@ export async function quoteBond(pool, accountId, principalEth) {
       // 2. DIRECTION. The ceiling is the most GENEROUS quote the wall permits, so clamping there made
       //    every disagreement between our feed and the chain's resolve toward MORE OMR per ETH. The
       //    conservative direction is the right default for a mint path.
-      if (price > onchain.oraclePrice) price = round6(onchain.oraclePrice);
+      if (price > onchainPrice) price = round6(onchainPrice);
       if (!(price > 0)) throw new GameError('oracle', 'The on-chain oracle price is below the minimum quotable price.');
     }
     const disc = BONDS.DISCOUNT_BPS;

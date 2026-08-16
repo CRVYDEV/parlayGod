@@ -70,7 +70,7 @@ const round6 = (n) => Math.round(n * 1e6) / 1e6;
 // CLAIM refuses — one source of truth for both.
 async function ethPrice(db) {
   const last = (await db.query(
-    'SELECT price_omr_per_eth, created_at FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0];
+    'SELECT price_omr_per_eth, created_at FROM vig_buyback WHERE real ORDER BY created_at DESC LIMIT 1')).rows[0];
   if (!last) return { spot: null, price: null, stale: true, reason: 'no_price' };
   const spot = Number(last.price_omr_per_eth);
   const ageMs = Date.now() - new Date(last.created_at).getTime();
@@ -221,7 +221,35 @@ export async function recordStockBuy(pool, { ref, ticker, units, ethSpent, txHas
 ///   • Wall 1 (`allocated ≤ held`) is the ALLOCATOR's and the invariant's. It is worth saying plainly
 ///     that wall 1 cannot catch what wall 3 catches: buying 1 unit for the whole budget leaves
 ///     `allocated ≤ held` perfectly true. A check on units is blind to a bad price by construction.
-export async function runStockBuyback(pool, { ticker, priceEthPerUnit, maxEth, ref, txHash = null } = {}) {
+const KEEPER_LOCK_CLASS = 0x53544b01;  // 'STK'+1 — the SPEND side; allocateStock's 0x53544b00 is the OWED side
+export async function runStockBuyback(pool, opts = {}) {
+  // SINGLE-WRITER over the spend side. `stockBudget` is a plain READ and `recordStockBuy` deliberately
+  // carries no budget gate (the ingest must book what the chain did — the recordBond lesson), so with
+  // nothing between them two concurrent keepers both see the same `spendableEth` and both spend it:
+  // real ETH out of the treasury, past wall 4, on the ordinary deploy-overlap threat model that already
+  // justified this posture for the wage epoch, the population, the city leg and the two locks in this
+  // very file. `allocated + spent <= held` catches it the same night — but that is the DETECTOR, and
+  // the money has left; the owed side is PREVENTED under 'STK' for exactly this reason and the spend
+  // side is the larger half. A losing caller skips rather than queues: a keeper run is a periodic
+  // sweep, so the next tick is the retry, and blocking would just stack bots on a busy lock.
+  // pg-mem (no DATABASE_URL) is single-caller, so the suite exercises the arithmetic and Postgres the
+  // serialization — the same split as allocateStock's lock two hundred lines down.
+  let lockConn = null;
+  if (process.env.DATABASE_URL) {
+    lockConn = await pool.connect();
+    const got = (await lockConn.query('SELECT pg_try_advisory_lock($1,$2) AS ok', [KEEPER_LOCK_CLASS, 0])).rows[0].ok;
+    if (!got) { lockConn.release(); return { bought: false, reason: 'locked' }; }
+  }
+  try {
+    return await runStockBuybackInner(pool, opts);
+  } finally {
+    if (lockConn) {
+      await lockConn.query('SELECT pg_advisory_unlock($1,$2)', [KEEPER_LOCK_CLASS, 0]).catch(() => {});
+      lockConn.release();
+    }
+  }
+}
+async function runStockBuybackInner(pool, { ticker, priceEthPerUnit, maxEth, ref, txHash = null } = {}) {
   const tk = String(ticker || '').trim().toUpperCase();
   if (!tk) throw new GameError('ticker', 'A buy needs a ticker.');
   const price = Number(priceEthPerUnit);
@@ -284,8 +312,12 @@ export async function allocateStock(client, { epochId, accountId, ticker, units 
   const free = round6(Math.max(0, held - owed));
   const give = round6(Math.min(want, free));
   if (!(give > 0)) return { units: 0, clamped: true, available: free };
+  // `delivered=false` alongside the accumulation: this row now owes again, and leaving the derived
+  // flag reading true would misreport a live debt as settled on every surface that trusts it. The
+  // PLAN reads `units > delivered_units`, not this flag, so the stranding is already fixed — but a
+  // convenience column that can be stale is the next reader's trap.
   const upd = await client.query(
-    'UPDATE stock_allocations SET units = units + $4 WHERE epoch_id=$1 AND account_id=$2 AND ticker=$3',
+    'UPDATE stock_allocations SET units = units + $4, delivered=false WHERE epoch_id=$1 AND account_id=$2 AND ticker=$3',
     [epochId, accountId, tk, give]);
   if (!upd.rowCount) {
     await client.query(
@@ -345,7 +377,7 @@ export async function recordSellTax(pool, { ref, omrTaxed, priceOmrPerEth, txHas
     let anchor = ref0 > 0 ? 'tax' : null;
     if (!(ref0 > 0)) {
       ref0 = Number((await pool.query(
-        'SELECT price_omr_per_eth p FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0]?.p || 0);
+        'SELECT price_omr_per_eth p FROM vig_buyback WHERE real ORDER BY created_at DESC LIMIT 1')).rows[0]?.p || 0);
       if (ref0 > 0) anchor = 'vig';
     }
     if (ref0 > 0 && (price > ref0 * jump || price < ref0 / jump))
@@ -629,6 +661,21 @@ export async function runTreasuryInvariants(pool) {
       .map((r) => [String(r.ticker).toUpperCase(), Number(r.u)]));
     for (const r of (await pool.query("SELECT ticker, COALESCE(SUM(units),0) u FROM stock_deliveries WHERE status='delivered' GROUP BY ticker")).rows)
       push(`delivered <= allocated (${String(r.ticker).toUpperCase()}, units)`, Number(r.u), alloc.get(String(r.ticker).toUpperCase()) || 0, 'lte');
+    // …and the two ledgers must AGREE, not merely fit. The `lte` above is a bound, and a bound is blind
+    // to the failure that actually happened here: a confirmed delivery that did not advance its
+    // allocation's running total left the row owing units nobody would ever send, and 100 <= 200 passed
+    // the whole time. This is the EXACT identity — every confirmed delivery is booked against exactly
+    // one allocation, so per ticker `Σ stock_allocations.delivered_units == Σ confirmed deliveries`.
+    const done = new Map((await pool.query(
+      'SELECT ticker, COALESCE(SUM(delivered_units),0) u FROM stock_allocations GROUP BY ticker')).rows
+      .map((r) => [String(r.ticker).toUpperCase(), Number(r.u)]));
+    const tickers = new Set([...done.keys()]);
+    for (const r of (await pool.query("SELECT ticker, COALESCE(SUM(units),0) u FROM stock_deliveries WHERE status='delivered' GROUP BY ticker")).rows)
+      tickers.add(String(r.ticker).toUpperCase());
+    const sent = new Map((await pool.query("SELECT ticker, COALESCE(SUM(units),0) u FROM stock_deliveries WHERE status='delivered' GROUP BY ticker")).rows
+      .map((r) => [String(r.ticker).toUpperCase(), Number(r.u)]));
+    for (const t of [...tickers].sort())
+      push(`allocation delivery ledger agrees (${t}, units)`, done.get(t) || 0, sent.get(t) || 0);
   }
   // each sell-tax episode's three slices sum to its gross, and the treasury slice reached the ledger.
   // A silent mismatch means the books disagree with what the tax actually took.

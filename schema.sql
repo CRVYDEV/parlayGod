@@ -1634,6 +1634,15 @@ CREATE TABLE IF NOT EXISTS vig_buyback (
   to_prize NUMERIC NOT NULL,          -- $OMR routed to the season prize pool
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- THE ANTI-FABRICATION GATE (red team 2026-08-16). Every other real-value ingest — desk, bank,
+-- community, treasury — carries a `tx_hash`/`real` pair so a mod/QA call can never assert "hard value
+-- arrived". The Vig is the OLDEST and never got one, and it is the most amplified: a buyback credits
+-- `chain_reserve.funded_omr` (the number `signVoucher` reads before signing a REAL withdrawal) AND the
+-- prize pool (whose exit is a `prize:omr` mint to players), and its price print is the canonical anchor
+-- the desk, the bond oracle, PLEX and the ETH vault all read. ALTER, never inline — the table exists.
+-- `real` DEFAULTs true so historical rows stay counted (the drop:claim history discipline).
+ALTER TABLE vig_buyback ADD COLUMN IF NOT EXISTS tx_hash TEXT;
+ALTER TABLE vig_buyback ADD COLUMN IF NOT EXISTS real BOOLEAN NOT NULL DEFAULT true;
 CREATE TABLE IF NOT EXISTS vig_prize_pool (
   id INT PRIMARY KEY,
   balance NUMERIC NOT NULL DEFAULT 0, -- unpaid hard $OMR available for season prizes
@@ -2341,6 +2350,19 @@ CREATE TABLE IF NOT EXISTS stock_allocations (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (epoch_id, account_id, ticker)
 );
+-- (red-team HIGH, 2026-08-16) DELIVERY IS A RUNNING TOTAL, NOT A FLAG. `allocateStock` ACCUMULATES
+-- into this row's PK (a 7-day epoch against a DAILY ticker ballot means up to seven buys of the same
+-- ticker land on the same row), so a row-level `delivered` boolean is invalidated by the very next
+-- distribution: the row read `units=200, delivered=true` and the delivery plan — which filtered
+-- `NOT delivered` — went permanently blind to the second 100 units of real, treasury-held stock. The
+-- board (reading the delivery ledger) went on reporting them pending, and `delivered <= allocated`
+-- passed at 100 <= 200, so nothing anywhere noticed. `delivered` is kept and maintained as the
+-- derived "fully delivered" convenience; `delivered_units` is the truth the plan reads.
+ALTER TABLE stock_allocations ADD COLUMN IF NOT EXISTS delivered_units NUMERIC NOT NULL DEFAULT 0;
+-- BACKFILL, and it is load-bearing: without it every row already marked delivered would read
+-- `delivered_units = 0` after the migration and be re-planned in full — a double delivery of stock
+-- that already left the vault. Idempotent (a re-run finds nothing left at 0).
+UPDATE stock_allocations SET delivered_units = units WHERE delivered AND delivered_units = 0;
 CREATE INDEX IF NOT EXISTS ix_stock_alloc_ticker ON stock_allocations(ticker);
 CREATE INDEX IF NOT EXISTS ix_stock_alloc_account ON stock_allocations(account_id);
 

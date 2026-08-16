@@ -578,6 +578,42 @@ contract OmertaHookTest is Test {
         assertGt(d.amount1(), 0, "an exact-input buy clears a fee-only window");
     }
 
+    /// (red team 2026-08-16) THE LAUNCH LANDMINE. `_accrue` splits the fee with
+    /// `total * taxDevBps / sellTaxBps` — but the BUY path never touches `sellTaxBps`: its rate is
+    /// `antiSnipeBuyBps`, an independent lever. Both ship at 0, and the window is armed for the pool's
+    /// OPENING, which is exactly the moment the sell tax may not be armed yet. In that configuration
+    /// every buy inside the window divided by zero and reverted — so the guard written to protect the
+    /// launch would instead have closed the market to buyers for its whole window, on an IMMUTABLE
+    /// contract, and looked like a honeypot while doing it. Invisible to every other test here because
+    /// the fixture arms the tax in `setUp`.
+    function test_a_fee_window_with_the_sell_tax_still_disarmed_does_not_brick_buys() public {
+        vm.prank(safe);
+        hook.setSellTax(0, 0, 0, 0); // the DEPLOY DEFAULT — the Safe arms the tax later
+        _armWindow(50, 500, 0); // and the window is armed for the pool's birth
+        BalanceDelta d = _buyExactIn(0.5 ether);
+        assertGt(d.amount1(), 0, "a buy must clear a fee-only window before the sell tax is armed");
+        // and the fee it charged is still booked — to LP, the remainder, since no split is configured
+        (,,, uint256 lpOwed) = hook.owed(omrC);
+        assertGt(lpOwed, 0, "the window fee still accrues with no split configured");
+    }
+
+    /// (red team 2026-08-16) THE SAME DEFECT ON THE SELL SIDE, and the worse half. `_sellRate` proceeds
+    /// whenever `surgeMaxBps > sellTaxBps` — which a disarmed tax (0) satisfies for ANY armed surge — so
+    /// the surge alone can charge a sell while the divisor its split uses is still zero. A reverting SELL
+    /// is precisely the honeypot `MAX_SELL_TAX_BPS` and "refusing sells would be a honeypot" exist to make
+    /// impossible, reached here by arithmetic rather than by policy. `setSurge` does not require the tax
+    /// to be armed first, so this is a plain ordering of two Safe calls.
+    function test_a_surge_armed_before_the_sell_tax_does_not_brick_sells() public {
+        vm.startPrank(safe);
+        hook.setSellTax(0, 0, 0, 0); // the deploy default
+        hook.setSurge(500, 300); // and the surge armed first
+        vm.stopPrank();
+        BalanceDelta d = _sellExactIn(100e18);
+        // amount0 is the ETH the seller receives (native sorts first), the same side
+        // `test_sells_are_NEVER_refused_by_the_window` reads.
+        assertGt(d.amount0(), 0, "a sell must NEVER be refused: that is the honeypot the cap forbids");
+    }
+
     function test_sells_are_NEVER_refused_by_the_window() public {
         // A window that blocks exits is a honeypot. Cap at 1 wei so ANY buy would refuse — and a
         // sell far over it still clears.

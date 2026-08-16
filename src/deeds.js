@@ -123,7 +123,11 @@ export async function deedBoard(ch, client, h) {
       // 2C — controlling a rival's corner carries that district's turf perk too (the control split)
       perk: DEEDS.PERK_TURF ? ((DISTRICTS.find((d) => d.id === r.district) || {}).perk || null) : null,
       controlSeconds: Math.max(0, Math.ceil((new Date(r.control_until).getTime() - now) / 1000)) }));
-  const myOwed = deed && iControl ? deedCornerOwed(deed, now) : 0;
+  // `!onchain_token_id` — an extracted (or extraction-pending) deed is INERT in-game, and the collect till
+  // enforces that (`AND onchain_token_id IS NULL`). Without the same test here the board advertised a corner
+  // take climbing to the full 24h cap on a deed the till then refuses with `nothing` — the control-that-lies
+  // class. `perkActive`/`seatActive` below already carry it; this line was the one that didn't.
+  const myOwed = deed && iControl && !deed.onchain_token_id ? deedCornerOwed(deed, now) : 0;
   // RIVAL corners on the block you're standing on — the marks you could lean on (the shakedown targets the
   // deed's OWNER, whose living character id the client passes). Excludes your own; flags ones you already run.
   const here = (await client.query(

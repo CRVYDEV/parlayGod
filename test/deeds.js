@@ -445,6 +445,17 @@ assert.equal((await call('POST', '/v1/deeds/list', { token: e.token, body: { pri
   'an inert street cannot be listed on the in-game market');
 assert.equal((await call('POST', '/v1/deeds/claim', { token: e.token, body: { name: 'New Row', district: 'canal' } })).body.error,
   'have_deed', 'a pending extraction still counts as holding a street (one deed per account)');
+// (red team) INERT means inert on the BOARD too, not only at the till. `collectCorner` excludes an
+// extracted deed (`AND onchain_token_id IS NULL`) but extraction deliberately does NOT reset `corner_at`,
+// so a board without the same test kept quoting a corner take that climbed to the full 24h cap and then
+// refused on press — the control-that-lies class. Backdate the clock so a LIVE deed would show a day's
+// take, and assert both ends read the same nothing.
+await pool.query('UPDATE street_deeds SET corner_at=$1 WHERE onchain_token_id IS NOT NULL', [new Date(Date.now() - 20 * 3600e3)]);
+const eInert = (await call('GET', '/v1/deeds', { token: e.token })).body;
+assert.equal(eInert.corner.owed, 0, 'an extracted deed accrues no corner take on the board');
+assert.equal(eInert.corner.collectable, 0, 'and nothing reads as collectable');
+assert.equal((await call('POST', '/v1/deeds/corner', { token: e.token })).body.error, 'nothing',
+  'and the till agrees — the board and the button say the same nothing');
 
 // CONFIRM ON-CHAIN (the Extracted watcher): state 2→3 — re-key to onchain:<token>, freeing the extractor
 await markDeedExtracted(pool, { nonce: ext.body.nonce, tokenId: ext.body.tokenId });
