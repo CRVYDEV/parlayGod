@@ -4522,6 +4522,12 @@
         <div class="d" style="font-size:11px;color:var(--dim);margin-bottom:3px">the rent layer — you own the deed, but control (and its take) is fought over. Muscling a corner takes level ${c.shakedownMinLvl} + ${c.shakedownEnergy} energy, and you have to be on the block.</div>
         ${parts.join('')}</div>`;
     };
+    // THE VAULT'S RECORD — a street's on-chain vault is keyed on its NAME, so it survives a burn and
+    // travels with the deed: buy a street and its vault comes too. Say so on every listing, in the only
+    // words the server can stand behind — RECEIVED, never "holds" (the owner can empty it; the live
+    // figure is the buy-confirm read). Silent when nothing was ever delivered.
+    const vaultChip = (v) => !v || !(v.received || []).length ? ''
+      : `<span class="chip good" title="delivered into this street's on-chain vault — the owner may since have moved it out">🏦 vault received ${v.received.map((r) => esc(r.ticker) + ' ' + r.units).join(' · ')}</span>`;
     // THE MARKET (Phase 3) — sell your street, or (if you hold none) buy an established one. The deed +
     // its whole legend travel to the buyer; control resets (they must earn the corner). A taxed transfer.
     const market = b.market || {};
@@ -4535,6 +4541,7 @@
       } else if (m.canBuy && (m.forSale || []).length) {   // deedless — buy an established street
         rows.push(`<div class="d" style="margin-bottom:3px">Streets for sale — you get the name and its legend; the corner you'll have to earn:</div>` +
           m.forSale.map((s) => `<div class="d" style="margin-top:3px">${esc(s.street)} <span class="chip">${esc(s.districtName)}</span> <span class="chip">${s.renown} renown · ${esc(s.rank)}</span> — <b>$${s.price.toLocaleString()}</b>
+            ${vaultChip(s.vault)}
             <button class="act" data-buydeed="${s.sellerId}" data-price="${s.price}">buy it</button></div>`).join(''));
       } else if (m.canBuy) {
         rows.push(`<div class="d" style="color:var(--dim)">No streets are for sale right now — claim a fresh one below, or wait for a seller.</div>`);
@@ -4547,10 +4554,20 @@
     // ON-CHAIN (Phase 3) — extract your street as a tradeable StreetDeed ERC-721. It carries its legend
     // and is yours to sell on any marketplace; INERT in-game until re-imported. `minted` never travels.
     const chain = b.chain || {};
+    // THE BURN WARNING. Re-importing is a `redeem()` — the NFT BURNS and the street comes home. What
+    // does NOT come home is the vault: it is keyed on the street's NAME, so it survives the burn, keeps
+    // whatever sits in it, and the NEXT extraction (yours or a buyer's, after an in-game sale) resolves
+    // the same account. Said before the irreversible act, in the words that make it actionable: empty
+    // it first if you don't mean to hand it over.
+    const burnWarning = `<div class="d" style="margin-top:4px;color:var(--warn,var(--gold));font-size:11px">
+      <b>Before you re-import:</b> burning the NFT brings the street home — it does <b>not</b> empty its vault.
+      That vault is keyed on the street's name, so anything left in it survives the burn and travels with the
+      deed to whoever extracts it next, including a buyer if you sell in-game. Move what's yours out first.</div>`;
     const chainCard = () => {
       if (!deed || !chain.configured) return '';   // only when you hold a street + the deed chain is live
       if (chain.extractPending) return `<div class="card" style="border-color:var(--gold);margin-top:10px"><span class="t">On-Chain</span>
         <div class="d">Your street is being taken on-chain — submit the signed claim to your wallet to mint the NFT. It's <b>inert in-game</b> (no corner, no in-game sale) until you re-import it.</div>
+        ${burnWarning}
         ${chain.tokenId ? `<div class="d" style="margin-top:3px"><a href="/deed/${esc(chain.tokenId)}" target="_blank">its NFT page →</a></div>` : ''}</div>`;
       let row = '';
       if (chain.canExtract) row = `<button class="act" id="deed-extract">take your street on-chain (mint the NFT)</button>`;
@@ -4559,7 +4576,7 @@
       else row = `<div class="d" style="color:var(--dim)">Pull the street off the in-game market first to extract it.</div>`;
       return `<div class="card" style="border-color:var(--gold);margin-top:10px"><span class="t">On-Chain</span>
         <div class="d" style="font-size:11px;color:var(--dim);margin-bottom:3px">turn your street into a tradeable ERC-721 you own in your own wallet — it carries its whole legend and sells on any marketplace. While on-chain it's a collectible (inert in-game) until you or a buyer re-import it to play the corner game with it again. The deed transfers; your extraction entitlement doesn't.</div>
-        ${row}</div>`;
+        ${row}${burnWarning}</div>`;
     };
     // THE GROWING MAP (Phase 4) — the city expands as users join
     const cityBanner = b.city ? `<div class="card" style="margin-top:8px"><span class="t">The City</span>
@@ -4575,7 +4592,8 @@
       ${deed ? `<h2>${esc(deed.name)} <span class="d" style="font-size:12.5px">· ${esc(deed.districtName)} · ${esc(b.rank)}</span></h2>
         <div class="card" style="border-color:var(--gold)"><span class="t">The Deed</span>
           <div class="d">You hold the deed to <b>${esc(deed.name)}</b>, on ${esc(deed.districtName)}${deed.neighborhood ? ' — ' + esc(deed.neighborhood) + (deed.frontier ? ' (the frontier)' : '') : ''}. It's yours — nobody takes it off you, and it outlives your street: the heir inherits it.</div>
-          <div class="d" style="margin-top:3px">Legend: <b>${b.renown}</b> renown · <span class="chip good">${esc(b.rank)}</span></div></div>
+          <div class="d" style="margin-top:3px">Legend: <b>${b.renown}</b> renown · <span class="chip good">${esc(b.rank)}</span> ${vaultChip(deed.vault)}</div>
+          ${deed.vault && (deed.vault.received || []).length ? `<div class="d" style="margin-top:3px;font-size:11px;color:var(--dim)">Its on-chain vault has received ${deed.vault.received.map((r) => r.units + ' ' + esc(r.ticker)).join(', ')}. That vault is keyed on the street's NAME, so it travels with the deed — sell the street and it goes with it${deed.vault.tba ? ` (<code>${esc(deed.vault.tba)}</code>)` : ''}.</div>` : ''}</div>
         <h2 style="margin-top:12px">The Record <span class="d" style="font-size:11px">(everything that ever happened here — the legend, and it can't be faked)</span></h2>
         <div class="card">${history.length
           ? history.map((h) => `<div class="d" style="margin-top:2px">${evLabel(h.kind)}${h.detail ? ' — ' + esc(h.detail) : ''}</div>`).join('')
@@ -4611,9 +4629,26 @@
     { const el = $('#deed-extract'); if (el) el.onclick = () =>
       ask('Take your street on-chain as a tradeable NFT? It goes inert in-game (no corner, no in-game sale) until you re-import it — but you keep the deed and its whole legend, and it sells on any marketplace.\n\nBy continuing you also ATTEST that you may lawfully hold the instruments this deed’s vault can receive — treasury-bought stock is delivered into it with no further check.', 'I attest — take it on-chain')
         .then((ok) => { if (ok) act('POST', '/v1/deeds/extract', { attest: true }).then(() => renderDeeds()); }); }
-    t.querySelectorAll('[data-buydeed]').forEach((btn) => btn.onclick = () =>
-      ask(`Buy this street for $${Number(btn.dataset.price).toLocaleString()}? You get the name and its legend — the corner you'll have to fight for.`, 'Buy it')
-        .then((ok) => { if (ok) act('POST', '/v1/deeds/buy/' + btn.dataset.buydeed).then(() => renderDeeds()); }));
+    // BUY = a CONFIRM STEP, not a one-tap. A street carries an on-chain vault keyed on its name, so
+    // before the money moves we read what that vault RECEIVED (the record) and — when the chain is
+    // live — what it HOLDS right now (one RPC, here rather than on the polled board). A buyer who
+    // can't be shown the live figure is told that, never a fabricated zero.
+    t.querySelectorAll('[data-buydeed]').forEach((btn) => btn.onclick = async () => {
+      const price = Number(btn.dataset.price).toLocaleString();
+      let vaultLine = '';
+      const r = await api('GET', '/v1/deeds/vault/' + btn.dataset.buydeed);
+      if (r.code < 400 && r.body) {
+        const rec = (r.body.vault && r.body.vault.received) || [], live = r.body.live || {};
+        if (live.live && (live.holds || []).length)
+          vaultLine = `\n\nITS VAULT HOLDS RIGHT NOW: ${live.holds.map((h) => (h.units == null ? '?' : h.units) + ' ' + h.ticker).join(', ')} — that comes with the street.`;
+        else if (live.live && rec.length)
+          vaultLine = `\n\nITS VAULT IS EMPTY right now. (${rec.map((h) => h.units + ' ' + h.ticker).join(', ')} was delivered into it — the seller has since moved it out.)`;
+        else if (rec.length)
+          vaultLine = `\n\nITS VAULT HAS RECEIVED: ${rec.map((h) => h.units + ' ' + h.ticker).join(', ')}. We can't read the live balance right now, and the owner can move it out — check the account yourself before you pay${r.body.vault && r.body.vault.tba ? ': ' + r.body.vault.tba : '.'}`;
+      }
+      const ok = await ask(`Buy this street for $${price}? You get the name and its legend — the corner you'll have to fight for.${vaultLine}`, 'Buy it');
+      if (ok) act('POST', '/v1/deeds/buy/' + btn.dataset.buydeed).then(() => renderDeeds());
+    });
     { const el = $('#streets-lb-link'); if (el) el.onclick = async (ev) => { ev.preventDefault();
       const lb = (await api('GET', '/v1/leaderboard/streets')).body || {};
       $('#streets-lb').innerHTML = `<div class="grid" style="margin-top:4px">${(lb.streets || []).map((s) => `

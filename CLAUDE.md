@@ -13139,3 +13139,47 @@ in-game market prices a deed with no visibility of it (the on-chain half has `tr
 database row is not an ERC-721 transfer) — the cheap disclosure is that the game already knows what it
 delivered without any RPC read, a founder call and moot until mainnet. Suite 109 files + mobile 78/78 +
 pgquery 2942 statements + pgcheck 43/43 on real Postgres + forge 296/296.
+
+**THE VAULT SURVIVES THE BURN — the flagged item, answered by disclosure (founder-directed 2026-08-16:
+"Build 1-3") — BUILT** (`src/stockdeliver.js` `vaultHistoryFor`/`vaultLiveBalances`, `src/deeds.js`
+`deedVaultRecord`/`deedVaultLive`, `GET /v1/deeds/vault/:sellerCharacterId`, `public/index.html`;
+`omerta-brokers-design.md` §3.4a). `tokenId = keccak256(bytes(name))`, so a Street Deed's ERC-6551
+account is a function of its NAME and survives a burn: re-import a street, sell it IN-GAME, and the
+buyer's next extraction resolves the SAME vault — while the in-game market priced the street with no
+sight of it. The on-chain half has `transferLocked`; **a database row is not an ERC-721 transfer**, so
+no on-chain rule was ever going to reach that sale. **THREE FIXES WERE RULED OUT BEFORE THE FOURTH WAS
+BUILT, and the reasons are the durable part:** (1) *make the tokenId unique per extraction* is WORSE
+than the gap — the bijection is load-bearing precisely because it makes a burned deed's vault
+**recoverable** rather than orphaned at an address nobody can ever reach again; (2) *refuse the
+re-import* is not available — it runs off the `Redeemed` watcher and the burn has already happened, so
+refusing strands the deed in-game too; (3) *a live balance on the market board* is the poll-cost shape
+that pass spent a session removing (`/v1/deeds` is polled). So: **DISCLOSURE** (the terms ride with the
+price — the pad, the nut, the Port lane). **The constraint that shapes it:** the game knows what was
+DELIVERED (`stock_deliveries`), never what REMAINS — the owner controls the account and can move tokens
+out — so every figure is phrased **RECEIVED, never "holds"**, and a delivered total presented as a
+balance would be a false claim on a purchase screen, **strictly worse than silence**. Real deliveries
+only (`tx_hash IS NOT NULL`, the txHash comp gate — counting a comp would fabricate exactly what that
+gate exists to prevent). Three pieces: **(1)** the RECORD on the deed card + every market listing (a
+pure DB read, chain-dormant-safe, publishing the recorded TBA so anyone can verify it themselves);
+**(2)** a WARNING before the burn on the client's re-import copy — burning brings the street home, it
+does **not** empty the vault, so move what's yours out first; **(3)** the LIVE balance at the
+buy-CONFIRM step (`GET /v1/deeds/vault/:sellerCharacterId` — keyed on the SELLER exactly like the buy,
+so the confirm can never describe a different deed than the purchase), the record read inside the txn
+and the RPC **outside** it (an RPC inside a held read txn pins a pooled connection — the `bankPosition`
+posture). Chain-dormant answers `live:false`, never a fabricated zero: *"we can't see the vault"* and
+*"the vault is empty"* are different answers and only one is true. §10.4-FREE (reading what a vault
+received moves nothing — test-pinned). `test/deeds.js` proves it on the suite's OWN burned-and-
+re-imported street: the record resolves for a deed whose `onchain_token_id` is NULL (keyed on the name
+that survived), the two real deliveries fold into one line and the comp is not a line at all, the
+listing carries it for a deedless shopper, and the confirm read quotes the same price the buy charges.
+**Three mutations, each caught at its own named assertion** (the comp gate dropped → the comp shows as
+received; the vault keyed on the live token-id column → the re-imported street loses its vault and the
+gap re-opens; a dormant chain reporting an empty vault → the fabricated zero). pgquery's interpolated
+ceiling 72 → 73, with a note on HOW the new IN list first showed up: a trailing comment on the
+`client.query(` line made the argument unreadable, so it landed in the *unreadable* bucket instead —
+counted either way (the honesty rule held), but filed under "we couldn't read this" rather than "this
+is an IN list", which is a worse record; the comment moved above the call. Suite green + sim drift-0 +
+mobile 78/78 + client wiring/mirror (a fixture seeds a listed street WITH a delivery on it — an empty
+vault would leave its fields unchecked) + pgquery 2944 statements + pgcheck 43/43 on real Postgres.
+**Still flagged (founder call):** whether stock-bearing deeds should trade on the in-game market at all,
+or only on-chain where `transferLocked` gives a buyer the "unlocked = check the vault now" anchor.

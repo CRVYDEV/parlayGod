@@ -153,7 +153,15 @@ if (failures.length) {
 // parameterized IN list (`$1,$2,…` built from the holder count, every value bound). Same shape and
 // same reason as the /v1/streets fronts scan above — pg-mem returns zero rows for `= ANY($1::text[])`
 // (the MY PROFILE lesson), so an IN list is the only portable form, and it is not preparable.
-const CEILING = { interpolated: 72, unreadable: 40 };
+// 72 → 73 (2026-08-16, the deed-vault disclosure): `vaultHistoryFor`'s lookup of what a street's
+// on-chain vault has received, an IN list over the deed token ids derived from the names on the board
+// (`$1,$2,…` built from the count, every value bound). The SAME shape and the same reason as the two
+// above — `= ANY($1::text[])` returns zero rows on pg-mem, so an IN list is the only portable form.
+// Worth recording HOW it first showed up: a trailing comment on the `client.query(` line made the
+// argument unreadable, so it landed in the *unreadable* bucket instead — counted either way (the
+// honesty rule held), but filed under "we couldn't read this" rather than "this is an IN list", which
+// is a worse record. The comment moved above the call so it is catalogued as what it actually is.
+const CEILING = { interpolated: 73, unreadable: 40 };
 const overflow = [];
 if (interpolated.length > CEILING.interpolated)
   overflow.push(`interpolated queries grew to ${interpolated.length} (ceiling ${CEILING.interpolated}) — these are UNCHECKED by this guard`);

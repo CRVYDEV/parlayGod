@@ -474,7 +474,54 @@ const { deedTargetRows } = await import('../src/stockdeliver.js');
 assert.equal((await deedTargetRows(pool)).some((t) => t.name === 'Enzo Alley'), false,
   'and the delivery rail no longer sees a re-imported street as anyone\'s stock target');
 
-// §10.4-NEUTRALITY: the whole on-chain lifecycle (extract → confirm → re-import) wrote ZERO ledger rows
+// ════════════ THE VAULT'S RECORD — what travels with the street (the red-team follow-up) ════════════
+//
+// A deed's ERC-6551 vault is keyed on tokenId = keccak(NAME), so it SURVIVES THE BURN: 'Enzo Alley' was
+// extracted, burned and re-imported above, and its vault is the same account it always was. Anything in
+// it travels with the name to whoever extracts it next — including an in-game BUYER, who was pricing
+// the street with no sight of it. That bijection is load-bearing (it is what makes a burned deed's vault
+// recoverable rather than stranded forever), so the fix is DISCLOSURE, asserted here.
+const enzoToken = deedTokenId('Enzo Alley');
+await pool.query(
+  `INSERT INTO stock_deliveries (delivery_id, epoch_id, account_id, ticker, units, deed_token_id, tba, tx_hash, status)
+     VALUES ('vd-real','ep-v',$1,'TSLA',4.5,$2,'0xVAULT','0xrealtx','delivered'),
+            ('vd-real2','ep-v',$1,'TSLA',0.5,$2,'0xVAULT','0xrealtx2','delivered'),
+            ('vd-comp','ep-v',$1,'NVDA',99,$2,'0xVAULT',NULL,'simulated')`, [e.acct, enzoToken]);
+
+// THE OWNER SEES IT — and note WHOSE board this is: the burner, who never extracted anything. The
+// record resolves off the NAME, so a re-imported deed (onchain_token_id NULL) still carries its vault.
+const brVault = (await call('GET', '/v1/deeds', { token: burner.token })).body.deed.vault;
+assert(brVault, 'a re-imported street still carries its vault record — it is keyed on the NAME, which survived the burn');
+assert.equal(brVault.received.length, 1, 'ONE line — the two real TSLA deliveries fold into one, and the comp is not a line at all');
+assert.equal(brVault.received[0].ticker, 'TSLA', 'the ticker that was really delivered');
+assert.equal(brVault.received[0].units, 5, 'summed across deliveries (4.5 + 0.5)');
+assert.equal(brVault.received.some((r) => r.ticker === 'NVDA'), false,
+  'a COMP delivery books no stock, so it is NEVER shown as received — showing one would fabricate exactly what the txHash gate prevents');
+assert.equal(brVault.tba, '0xVAULT', 'the account is published so a buyer can check it themselves — no RPC needed to say where it is');
+
+// THE BUYER SEES IT TOO — the whole point. A deedless buyer browsing the market gets the vault on the
+// listing, so the street is priced with it rather than around it.
+await call('POST', '/v1/deeds/list', { token: burner.token, body: { price: 50000 } });
+const shopper = await mk('Nico');
+const listing = ((await call('GET', '/v1/deeds', { token: shopper.token })).body.market.forSale || [])
+  .find((s) => s.street === 'Enzo Alley');
+assert(listing, 'the street is on the market');
+assert(listing.vault && listing.vault.received[0].units === 5,
+  'and its listing states the vault — a buyer prices the street WITH what comes with it');
+
+// THE BUY-CONFIRM READ — the record inside the read txn, the live balance outside it. Chain-dormant
+// here, so `live:false` — never a fabricated zero, because "we can't see the vault" and "the vault is
+// empty" are different answers and only one of them is true.
+const vr = await call('GET', '/v1/deeds/vault/' + burner.id, { token: shopper.token });
+assert.equal(vr.code, 200, 'the confirm read answers');
+assert.equal(vr.body.street, 'Enzo Alley', 'keyed on the SELLER exactly like the buy — the confirm can never describe a different deed than the purchase');
+assert.equal(vr.body.price, 50000, 'and quotes the price the buy will charge');
+assert.equal(vr.body.vault.received[0].units, 5, 'the record');
+assert.equal(vr.body.live.live, false, 'the live half is honestly UNAVAILABLE with no chain — not an empty vault');
+await call('POST', '/v1/deeds/unlist', { token: burner.token });
+
+// §10.4-NEUTRALITY: the whole on-chain lifecycle (extract → confirm → re-import) + the vault disclosure
+// wrote ZERO ledger rows — reading what a vault received moves nothing.
 assert.equal(await txCount(), chainTx0, 'the on-chain deed lifecycle moves NO §10.4 value — a deed is ownership, not a currency');
 
 console.log('deeds: PASS');

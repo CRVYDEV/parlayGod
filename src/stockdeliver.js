@@ -31,10 +31,16 @@
 //   • The real keeper TX — `runStockDeliveryKeeper` below stages + CLAIMS + sends
 //     `StockVault.deliver` (dormant unless CHAIN_RPC_URL + STOCK_VAULT_ADDRESS + STOCK_KEEPER_PK);
 //     the Delivered watcher is still the only thing that confirms/flips.
+//   • The vault SURVIVING A BURN — tokenId is keccak(NAME), so a re-imported street sold IN-GAME
+//     hands its vault to the buyer, and a database row is not an ERC-721 transfer (nothing on that
+//     path could warn anybody). Answered by DISCLOSURE rather than a mechanism change, because the
+//     name↔id bijection is what makes a burned deed's vault recoverable at all: `vaultHistoryFor`
+//     below (the record, on the card and every listing) + `vaultLiveBalances` (the buy-confirm read).
 // STILL open, flagged rather than hidden (brokers §3.4, launch-review):
 //   • Drain-before-sale: a deed's owner controls its TBA, so a seller can empty it before selling —
 //     inherent to gateless push into any tradeable NFT's TBA; the StreetDeed listing lock forces the
-//     drain BEFORE the unlock, which is the most any on-chain rule can do.
+//     drain BEFORE the unlock, which is the most any on-chain rule can do, and the buy-confirm live
+//     read is what lets an in-game buyer see the result of it before they pay.
 
 import { GameError } from './game.js';
 
@@ -131,6 +137,85 @@ async function resolveTbaOnchain(tokenId) {
       args: [getAddress(impl), salt, BigInt(chainId), getAddress(deedAddr), BigInt(tokenId)] });
     return addr;
   } catch { return null; }
+}
+
+// ══ THE VAULT'S RECORD — what a street's token-bound account has RECEIVED (red-team follow-up) ══
+//
+// tokenId = keccak256(bytes(name)) (StreetDeed.tokenIdFor), so a deed's ERC-6551 account is a function
+// of its NAME and SURVIVES A BURN: re-import a street, sell it in-game, and the buyer's extraction
+// resolves the SAME vault — whatever sits in it travels with the name, while the in-game market priced
+// the street with no sight of it. That bijection is load-bearing rather than a bug (it is what makes a
+// burned deed's vault RECOVERABLE instead of stranded at an address nobody can ever reach again), so
+// the answer is DISCLOSURE: the deed card and every market listing state what the vault has received,
+// and a buyer prices it. The terms ride with the price — the pad, the nut, the Port lane.
+//
+// "RECEIVED", NEVER "HOLDS". This reads `stock_deliveries` — the record of what was PUSHED IN — and
+// the account's owner controls that account and can move tokens out of it at any time. A delivered
+// total presented as a balance would be a false claim on a purchase screen, which is strictly worse
+// than saying nothing; the live figure needs an RPC read and rides the buy-CONFIRM step
+// (`vaultLiveBalances`), never the polled board.
+//
+// REAL deliveries only (`tx_hash IS NOT NULL` — the txHash comp gate): a comp/QA row books no stock,
+// so counting one as received would fabricate exactly what that gate exists to prevent.
+export async function vaultHistoryFor(client, names = []) {
+  const out = new Map();
+  const uniq = [...new Set((names || []).filter(Boolean).map(String))];
+  if (!uniq.length) return out;
+  const { keccak256, toBytes } = await import('viem');
+  const byToken = new Map();                              // tokenId → the street name that derives it
+  for (const n of uniq) byToken.set(BigInt(keccak256(toBytes(n))).toString(), n);
+  const ids = [...byToken.keys()];
+  // an IN list, never `= ANY` (the pg-mem lesson) — the comment sits ABOVE the call so pgquery reads
+  // the argument and catalogues this where it belongs (interpolated), not as an unreadable one
+  const rows = (await client.query(
+    `SELECT deed_token_id, ticker, units, tba FROM stock_deliveries
+       WHERE tx_hash IS NOT NULL AND deed_token_id IN (${ids.map((_, i) => `$${i + 1}`).join(',')})`,
+    ids)).rows;
+  for (const r of rows) {
+    const name = byToken.get(String(r.deed_token_id));
+    if (!name) continue;
+    const v = out.get(name) || { tokenId: String(r.deed_token_id), tba: null, received: [] };
+    if (r.tba && !v.tba) v.tba = r.tba;                   // the recorded TBA — no RPC needed to publish it
+    const line = v.received.find((x) => x.ticker === r.ticker);
+    if (line) line.units = round6(line.units + num(r.units));
+    else v.received.push({ ticker: r.ticker, units: round6(num(r.units)) });
+    out.set(name, v);
+  }
+  for (const v of out.values()) v.received.sort((a, b) => b.units - a.units);
+  return out;
+}
+
+// THE LIVE READ — what the vault actually holds RIGHT NOW, for the buy-CONFIRM step only.
+//
+// Deliberately not on the board: `/v1/deeds` is polled, and one RPC round-trip per listing per render
+// is the shape the poll-cost pass just spent a session removing. A buyer asks for this once, at the
+// moment the money moves, which is also the only moment the number is worth its latency.
+//
+// Chain-dormant → `{ live: false }` (never a fabricated zero, which would read as "the vault is
+// empty" — the dormant-is-a-state-not-a-grade rule). A token that fails to read is reported as null
+// rather than 0, for the same reason.
+export async function vaultLiveBalances(name) {
+  const { keccak256, toBytes } = await import('viem');
+  const tokenId = BigInt(keccak256(toBytes(String(name)))).toString();
+  const tba = await resolveTba(tokenId);                  // null when unconfigured/unreachable/wrong-chain
+  const tokens = stockTokenAddresses();
+  if (!tba || !Object.keys(tokens).length) return { live: false, tokenId, tba: tba || null, holds: [] };
+  const { createPublicClient, http, isAddress, getAddress, formatUnits } = await import('viem');
+  const client = createPublicClient({ transport: http(process.env.CHAIN_RPC_URL) });
+  const abi = [{ type: 'function', name: 'balanceOf', stateMutability: 'view',
+    inputs: [{ name: 'a', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] }];
+  const dec = Number(process.env.STOCK_TOKEN_DECIMALS || 18);
+  const holds = [];
+  for (const [ticker, addr] of Object.entries(tokens)) {
+    if (!isAddress(addr)) continue;
+    try {
+      const bal = await client.readContract({ address: getAddress(addr), abi, functionName: 'balanceOf', args: [tba] });
+      const units = Number(formatUnits(bal, dec));
+      if (units > 0) holds.push({ ticker, units: round6(units) });
+    } catch { holds.push({ ticker, units: null }); }      // unreadable ≠ empty
+  }
+  holds.sort((a, b) => (b.units || 0) - (a.units || 0));
+  return { live: true, tokenId, tba, holds };
 }
 
 // THE PLAN — the undelivered allocation rows whose account has an extracted deed. Pure DB, so it is

@@ -965,6 +965,25 @@ const PARAM_FIXTURES = new Map([
   ['/v1/gangs/:p', async () => (await inject('POST', '/v1/gangs', token,
     { name: 'Mirror Family ' + Math.random().toString(36).slice(2, 6), tag: 'MR' + Math.floor(Math.random() * 90 + 10) })).body?.gangId],
   ['/v1/feud/:p', async () => charId],
+  // THE DEED VAULT CONFIRM READ is keyed on the SELLER's character (exactly like the buy it precedes),
+  // so the fixture is a second player holding a LISTED street — with a real delivery on it, or the
+  // vault half of the response would be null and its fields would go unchecked (the empty-list rule).
+  ['/v1/deeds/vault/:p', async () => {
+    const t = (await inject('POST', '/v1/auth/guest')).body.token;
+    await inject('POST', '/v1/character', t, { name: 'Mirror Steward ' + Math.random().toString(36).slice(2, 6) });
+    const cid = (await inject('GET', '/v1/me', t)).body.character.id;
+    const acc = (await app.pool.query('SELECT account_id FROM characters WHERE id=$1', [cid])).rows[0].account_id;
+    const street = 'Mirror Row ' + Math.random().toString(36).slice(2, 6);
+    await app.pool.query(
+      'INSERT INTO street_deeds (account_id, name, name_lc, district, sale_price) VALUES ($1,$2,$3,$4,$5)',
+      [acc, street, street.toLowerCase(), 'docks', 50000]);
+    const { deedTokenId } = await import('../src/chain.js');
+    await app.pool.query(
+      `INSERT INTO stock_deliveries (delivery_id, epoch_id, account_id, ticker, units, deed_token_id, tba, tx_hash, status)
+         VALUES ($1,'mirror-ep',$2,'TSLA',2,$3,'0xMIRRORVAULT','0xmirrortx','delivered')`,
+      ['mirror-' + street, acc, deedTokenId(street)]);
+    return cid;
+  }],
   // The den's gates are covered in test/casino.js; here they are only a PRECONDITION, so they are
   // GUARANTEED rather than left likely — CI caught this failing once (`produced no id`) against ten
   // clean local runs, which is the recorded flake shape: a deterministic assertion resting on a
