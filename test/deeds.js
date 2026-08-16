@@ -306,6 +306,16 @@ await pool.query('UPDATE characters SET cash=200000 WHERE id=$1', [cc.id]);
 // LIST gates: a deedless account can't list; a price under the floor is refused
 assert.equal((await call('POST', '/v1/deeds/list', { token: cc.token, body: { price: 50000 } })).body.error, 'no_deed', 'a deedless account has no street to sell');
 assert.equal((await call('POST', '/v1/deeds/list', { token: b.token, body: { price: 1 } })).body.error, 'min_price', 'a street has a real floor price');
+// THE STORED-NOT-SPENT BOUND (red-team, found by driving the route): `sale_price` is a bigint and
+// `Number.isFinite` does not bound it, so 1e308 reached Postgres as a 22P02 and surfaced as a 500
+// on a request the server should simply have refused. Asserted as the REFUSAL rather than as
+// "not a 500", because pg-mem is more permissive than Postgres and would store the value happily —
+// a not-a-500 assertion would pass here with no fix at all.
+for (const huge of [1e308, Number.MAX_SAFE_INTEGER + 2, 9.9e18]) {
+  const r = await call('POST', '/v1/deeds/list', { token: b.token, body: { price: huge } });
+  assert.equal(r.body.error, 'max_price', `a price of ${huge} is refused, not stored (nor 500'd)`);
+  assert.ok(r.code < 500, `${huge} is a clean refusal, never an internal error`);
+}
 // b lists their street
 const sellerStreet = (await call('GET', '/v1/deeds', { token: b.token })).body.deed.name;
 const list = await call('POST', '/v1/deeds/list', { token: b.token, body: { price: 50000 } });

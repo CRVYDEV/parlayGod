@@ -15,7 +15,7 @@ import { GameError, cleanText } from './game.js';
 import { vaultHistoryFor, vaultLiveBalances } from './stockdeliver.js';
 import { DEEDS, DISTRICTS, deedRankOf, deedRenown, deedCornerOwed, deedController,
   deedNeighborhoodsOpen, deedNeighborhoodOf,
-  effStat, levelOf, jailed, hospitalized, safeHoused } from './rules.js';
+  effStat, levelOf, jailed, hospitalized, safeHoused, SAFE_STORED } from './rules.js';
 
 // living-player population (drives the growing map — Phase 4). NPCs/dead excluded (the ops.js count).
 async function livingPlayers(client) {
@@ -310,6 +310,9 @@ export async function listDeed(ch, price, client, h) {
   const p = Math.floor(Number(price) || 0);
   if (!Number.isFinite(p) || p < DEEDS.MARKET_MIN)
     throw new GameError('min_price', `The floor for a street is $${DEEDS.MARKET_MIN.toLocaleString()}.`);
+  // `sale_price` is a bigint and `Number.isFinite` does not bound it — 1e308 reached Postgres as a
+  // 22P02 and surfaced as a 500 on a request the server should simply have refused. See SAFE_STORED.
+  if (p > SAFE_STORED) throw new GameError('max_price', 'Name a real price.');
   await client.query('UPDATE street_deeds SET sale_price=$2 WHERE account_id=$1', [ch.account_id, p]);
   return { ok: true, name: deed.name, price: p };
 }

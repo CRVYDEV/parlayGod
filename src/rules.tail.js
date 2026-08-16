@@ -41,6 +41,25 @@ export const PLEX_GENESIS_OMR_PER_ETH = Number(process.env.PLEX_GENESIS_OMR_PER_
 export const genesisOmrFor = (feeEth, premiumBps = 12000) =>
   Math.round(Number(feeEth) * PLEX_GENESIS_OMR_PER_ETH * Number(premiumBps) / 10000);
 
+// ── THE STORED-NOT-SPENT BOUND ──────────────────────────────────────────────────────────────────
+// A number the player SPENDS is bounded by their balance. A number they merely NAME — a listing
+// price, a consent limit — is bounded by nothing but its own guard, and `Number.isFinite` is the
+// wrong tool for that job: 3,000,000,000 and 1e308 are both perfectly finite, and both are past
+// what the column holds. Found by DRIVING the routes, not by reading them: two live 500s where a
+// clean refusal belonged (the deed's asking price on a bigint column, the duelling ladder's stake
+// cap on an int4 one), and 3e9 is a number an ordinary player could type.
+//
+// The bound is a STORAGE fact, not a balance dial — a gameplay ceiling (the way SPEAKEASY.SALE_MAX
+// caps a club at $50M) is a separate founder decision, and these deliberately do not make one:
+// every value that works today still works.
+//
+// SAFE_STORED is MAX_SAFE_INTEGER rather than the bigint maximum on purpose, and the reason is
+// stronger than the column: past 2^53 a JS number has already lost integer precision, so what
+// would be stored is no longer the number the player typed. Refusing it is correct on its own
+// terms — the column error is the symptom, not the argument.
+export const PG_INT4_MAX = 2147483647;
+export const SAFE_STORED = Number.MAX_SAFE_INTEGER;
+
 export const CONSTANTS = {
   // Randomized starting build — every fresh character rolls a UNIQUE distribution of the SAME
   // fixed budget (no two the same, but the total is constant → zero power creep, so the
