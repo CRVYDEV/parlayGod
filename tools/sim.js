@@ -32,7 +32,7 @@ import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
          EXCHANGE, ESTATE, WIRE, GANG_SEALS, FOUNDATION, RIVALS, RACKETS, ASSETS, M4, DRUGS,
          MADE, MADE_LADDER, ACCESS_STAKE, OPERATIONS, opSlotsOf, SOV, DESK_AUCTION,
          TREASURY, STORE, SELL_TAX, BONDS, MISSIONS, DEEDS,
-         firstsCatalog, LIMITED_RUNS, LIMITED_RUN_P, SHIPMENT, carVal } from '../src/rules.js';
+         firstsCatalog, LIMITED_RUNS, LIMITED_RUN_P, SHIPMENT, shipmentCityCap, carVal } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -1645,12 +1645,24 @@ phase('P9.39 scarcity — the firsts, the runs, the shipment');
   // THE SHIPMENT: the material pays nothing, so the only cash number is the SINK it gates. Print the
   // ceiling on the material (what the whole city can hold per day) beside the cheapest and dearest
   // things it buys, because that ratio is the actual pacing decision.
-  const perDay = SHIPMENT.CITY_CAP;
   const cheapest = SHIPMENT.COMMISSIONS.reduce((a, c) => (c.units < a.units ? c : a));
   const dearestC = SHIPMENT.COMMISSIONS.reduce((a, c) => (c.units > a.units ? c : a));
   const daysForDearest = Math.ceil(dearestC.units / SHIPMENT.PER_PLAYER);
-  note('scarcity', 'the shipment', `${perDay} units/day city-wide, ${SHIPMENT.PER_PLAYER}/player`,
-    `the day is exhausted by ${Math.ceil(perDay / SHIPMENT.PER_PLAYER)} distinct players — CONTENTION is the feature. A rout of an apex outfit adds ${SHIPMENT.ROUT_UNITS}`);
+  // THE SCALING CURVE — the whole point of the cap being a function rather than a number. What must
+  // hold at every size is that the day is exhausted by a FRACTION of the city (never trivially unmet,
+  // never brutally starved), so print the takers-as-a-share-of-population at each rung.
+  const curve = [3, 10, 25, 50, 100, 250, 500, 1000].map((pop) => {
+    const cap = shipmentCityCap(pop);
+    const takers = Math.floor(cap / SHIPMENT.PER_PLAYER);
+    return { pop, cap, takers, share: takers / pop };
+  });
+  note('scarcity', 'the shipment cap scales', curve.map((c) => `${c.pop}p→${c.cap}`).join(' '),
+    `units/day = max(${SHIPMENT.CITY_BASE}, +${SHIPMENT.CITY_PER_STEP}/${SHIPMENT.CITY_STEP} players, ceiling ${SHIPMENT.CITY_MAX}). Full shares as a share of the city: ` +
+    curve.map((c) => `${c.pop}p ${(c.share * 100).toFixed(0)}%`).join(', ') +
+    ` — the FLOOR carries a thin city (nobody to contend with), the STEP carries a full one. PER_PLAYER stays ${SHIPMENT.PER_PLAYER} on purpose, so one whale's share shrinks relative to the city as it grows`);
+  const capped = curve.find((c) => c.cap >= SHIPMENT.CITY_MAX);
+  note('scarcity', 'the shipment ceiling', capped ? `binds at ~${capped.pop} players` : 'not reached in range',
+    `CITY_MAX ${SHIPMENT.CITY_MAX} is the one number that puts the fixed-cap problem back at very high population (${capped ? `${(curve[curve.length - 1].share * 100).toFixed(0)}% at ${curve[curve.length - 1].pop}p` : 'n/a'}) — the founder lever to revisit if the city ever gets there`);
   note('scarcity', 'the shipment sink', `$${fmt(cheapest.cash)} → $${fmt(dearestC.cash)} per piece`,
     `EMISSION-NEGATIVE: the material pays nothing and gates a cash SINK. The dearest piece takes ${dearestC.units} units = ${daysForDearest} perfect days of showing up, so the pacing is the MATERIAL, not the money`);
 }

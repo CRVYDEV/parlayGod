@@ -10,27 +10,42 @@
 // (`shipment:commission`) that check (a) reconciles. There is no faucet here at all: the material
 // pays nothing and exists only to gate a sink.
 import { GameError, notify, bus } from './game.js';
-import { SHIPMENT, DISTRICTS, commissionOf, shipmentDistrictOf, shipmentForecast, dayOf, jailed } from './rules.js';
+import { SHIPMENT, DISTRICTS, commissionOf, shipmentDistrictOf, shipmentForecast, shipmentCityCap,
+  dayOf, jailed } from './rules.js';
 import { logCollect } from './collection.js';
 
 const districtName = (id) => DISTRICTS.find((d) => d.id === id)?.name || id;
 
+// living-player population — what the day's stock is sized against. NPCs and the dead excluded, or
+// the population worker inflates the drop by spawning scenery (the deeds.js livingPlayers twin).
+async function livingPlayers(client) {
+  return Number((await client.query('SELECT COUNT(*) n FROM characters WHERE alive AND NOT is_npc')).rows[0].n);
+}
+// the day's stock, once. Counting the city on every board read would put a scan on a polled screen,
+// so the cap is STAMPED when the day materializes and read back from the row thereafter — one count
+// per day, and a cap that cannot move under a player mid-day. A row written before the scaling
+// shipped carries cap 0 and falls back to the floor.
+const capOf = (row) => Number(row?.cap) > 0 ? Number(row.cap) : SHIPMENT.CITY_BASE;
+
 // today's city stock. Two readers on purpose: the BOARD must never write (the read-path guard is
-// right to refuse — a read that materializes state is a write wearing a read's clothes), and the
-// district is a pure function of the day anyway, so an un-materialized day reads perfectly well as
-// "nothing taken yet". Only the TAKE materializes, on the write path where it belongs.
+// right to refuse — a read that materializes state is a write wearing a read's clothes), and both
+// the district and the cap are computable without the row, so an un-materialized day reads perfectly
+// well as "the whole stock, nothing taken". Only the TAKE materializes, on the write path.
 async function readDay(client, day) {
-  const got = (await client.query('SELECT day, district, taken FROM shipment_days WHERE day=$1', [day])).rows[0];
-  return got || { day, district: shipmentDistrictOf(day), taken: 0 };
+  const got = (await client.query('SELECT day, district, taken, cap FROM shipment_days WHERE day=$1', [day])).rows[0];
+  if (got) return got;
+  // un-materialized: quote what the first take WILL stamp, so board and till agree (the check-5 rule)
+  return { day, district: shipmentDistrictOf(day), taken: 0, cap: shipmentCityCap(await livingPlayers(client)) };
 }
 // materialize for the write path. A deterministic PK on the day makes a concurrent first touch a
 // 23505 the caller retries into (the world_npcs / megaproject first-touch precedent).
 async function dayRow(client, day) {
-  const got = (await client.query('SELECT day, district, taken FROM shipment_days WHERE day=$1', [day])).rows[0];
+  const got = (await client.query('SELECT day, district, taken, cap FROM shipment_days WHERE day=$1', [day])).rows[0];
   if (got) return got;
-  await client.query('INSERT INTO shipment_days (day, district, taken) VALUES ($1,$2,0)',
-    [day, shipmentDistrictOf(day)]);
-  return { day, district: shipmentDistrictOf(day), taken: 0 };
+  const cap = shipmentCityCap(await livingPlayers(client));
+  await client.query('INSERT INTO shipment_days (day, district, taken, cap) VALUES ($1,$2,0,$3)',
+    [day, shipmentDistrictOf(day), cap]);
+  return { day, district: shipmentDistrictOf(day), taken: 0, cap };
 }
 
 export async function shipmentBoard(ch, client, h) {
@@ -38,14 +53,23 @@ export async function shipmentBoard(ch, client, h) {
   const row = await readDay(client, day);
   const mine = Number((await client.query(
     'SELECT n FROM shipment_takes WHERE day=$1 AND character_id=$2', [day, ch.id])).rows[0]?.n || 0);
-  const left = Math.max(0, SHIPMENT.CITY_CAP - Number(row.taken || 0));
+  const cap = capOf(row);
+  const left = Math.max(0, cap - Number(row.taken || 0));
+  const population = await livingPlayers(client);
+  const step = SHIPMENT.CITY_STEP;
   return {
     material: SHIPMENT.MATERIAL,
     district: row.district,
     districtName: districtName(row.district),
     here: ch.loc === row.district,
     cityLeft: left,
-    cityCap: SHIPMENT.CITY_CAP,
+    cityCap: cap,
+    // the city grows the stock: what it is sized against, and where the next step lands
+    population,
+    capStep: step,
+    capPerStep: SHIPMENT.CITY_PER_STEP,
+    capMax: SHIPMENT.CITY_MAX,
+    nextCapAt: cap >= SHIPMENT.CITY_MAX ? null : (population - (population % step)) + step,
     perPlayer: SHIPMENT.PER_PLAYER,
     yourTakeToday: mine,
     yourTakeLeft: Math.max(0, SHIPMENT.PER_PLAYER - mine),
@@ -75,13 +99,16 @@ export async function takeShipment(ch, client, h) {
     'SELECT n FROM shipment_takes WHERE day=$1 AND character_id=$2', [day, ch.id])).rows[0]?.n || 0);
   const room = SHIPMENT.PER_PLAYER - mine;
   if (room <= 0) throw new GameError('taken', "You've had your share of today's shipment. Somebody else gets the rest.");
-  // the city cap is the contention: claim it atomically, and take whatever the claim actually got
+  // the city cap is the contention: claim it atomically against THE DAY'S OWN stamped cap (never the
+  // live constant — a cap that moved mid-day would let a late signup hand out crates already counted
+  // as gone), and take whatever the claim actually got.
+  const cap = capOf(row);
   const want = room;
   let got = 0;
   for (let n = want; n >= 1 && !got; n--) {
     const up = await client.query(
       'UPDATE shipment_days SET taken = taken + $2 WHERE day=$1 AND taken + $2 <= $3 RETURNING taken',
-      [day, n, SHIPMENT.CITY_CAP]);
+      [day, n, cap]);
     if (up.rowCount) got = n;
   }
   if (!got) throw new GameError('gone', `Today's ${SHIPMENT.MATERIAL} is gone — the whole city's worth. Try the next one.`);
@@ -91,7 +118,7 @@ export async function takeShipment(ch, client, h) {
     'INSERT INTO shipment_takes (day, character_id, n) VALUES ($1,$2,$3)', [day, ch.id, got]);
   // the material rides the character row (an owned quantity, never a currency — no ledger row)
   ch.shipment = Number(ch.shipment || 0) + got;
-  const left = Math.max(0, SHIPMENT.CITY_CAP - Number(row.taken || 0) - got);
+  const left = Math.max(0, cap - Number(row.taken || 0) - got);
   if (left === 0) bus.emit('streets', { type: 'shipment_gone', who: ch.name, district: row.district });
   return { ok: true, took: got, held: ch.shipment, cityLeft: left, material: SHIPMENT.MATERIAL };
 }

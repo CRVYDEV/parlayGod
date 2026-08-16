@@ -3755,8 +3755,21 @@ export const limitedRunP = () =>
 export const SHIPMENT = {
   NAME: 'the shipment',
   MATERIAL: 'Cut Swiss steel',      // what the crates hold — flavour, used in every player-facing line
-  CITY_CAP: 40,                     // units the whole city can take in a day
-  PER_PLAYER: 4,                    // one player's daily take
+  // THE CITY STOCK SCALES WITH THE CITY. A fixed daily quantity is wrong at BOTH ends: at three
+  // players it never empties, so contention — the entire feature — never happens; at five hundred it
+  // is gone in the first minute of the landing hour and everybody else learns to stop looking. So the
+  // day's stock is a FLOOR plus a step off the living-player count (the deedNeighborhoodsOpen /
+  // EXPANSION_STEP precedent). The shape is deliberate: the FLOOR dominates a thin city (so the loop
+  // is playable when there is nobody to contend with) and the STEP dominates a full one (so the day
+  // is exhausted by a fraction of the base, whatever the base is).
+  CITY_BASE: 40,                    // the floor — a thin city's day, at any population
+  CITY_STEP: 10,                    // living players per step
+  CITY_PER_STEP: 8,                 // units added per step (0.8/player ⇒ ~20% of the city gets a full share)
+  CITY_MAX: 400,                    // the ceiling. HONEST FLAG: this is the one number that puts the
+                                    // fixed-cap problem back at very high population — revisit it there.
+  PER_PLAYER: 4,                    // one player's daily take — deliberately NOT scaled. This is what
+                                    // stops one whale taking the lot, and it should get RELATIVELY
+                                    // tighter as the city grows, which a fixed number does by itself.
   ROUT_UNITS: 6,                    // what routing an APEX cartel outfit yields (coop fixtures only)
   LOOT_RATE: 0.5,                   // a fire-kill takes half the victim's held units (the contraband twin)
   // THE COMMISSIONS — the sink. Cash is the §10.4 sink; the units are the gate. Pure status.
@@ -3772,6 +3785,11 @@ export const SHIPMENT = {
   ],
 };
 export const commissionOf = (id) => SHIPMENT.COMMISSIONS.find((c) => c.id === id) || null;
+// the day's city stock at a given living-player population. Stamped onto the day row when the day
+// materializes, so it is STABLE for the whole day — a player who reads "12 left" and then takes can
+// never find the cap moved under them by a signup.
+export const shipmentCityCap = (population) => Math.max(SHIPMENT.CITY_BASE, Math.min(SHIPMENT.CITY_MAX,
+  SHIPMENT.CITY_BASE + Math.floor(Math.max(0, Number(population) || 0) / SHIPMENT.CITY_STEP) * SHIPMENT.CITY_PER_STEP));
 // WHERE it lands today — the §7.11 seed, so the whole town reads the same answer and can forecast it.
 export const shipmentDistrictOf = (day = dayOf()) =>
   DISTRICTS[Math.floor(hash01(`shipment:${day}:${MARKET_SEED}`) * DISTRICTS.length) % DISTRICTS.length].id;

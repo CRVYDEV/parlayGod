@@ -14,7 +14,7 @@ process.env.MOD_KEY = 'test-mod-key';
 process.env.RATE_LIMIT = 'off';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { SHIPMENT, shipmentDistrictOf, dayOf, collectionCatalog } from '../src/rules.js';
+import { SHIPMENT, shipmentDistrictOf, shipmentCityCap, dayOf, collectionCatalog } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -50,7 +50,9 @@ const elsewhere = ['docks', 'canal', 'neon', 'brick', 'foundry', 'cathedral'].fi
 let r = await call('GET', '/v1/shipment', { token: ace.token });
 assert.equal(r.code, 200, 'the shipment board is readable');
 assert.equal(r.body.district, where, 'the board names where the seed put it');
-assert.equal(r.body.cityLeft, SHIPMENT.CITY_CAP, 'a fresh day holds the whole city cap');
+const capToday = r.body.cityCap;
+assert.equal(r.body.cityLeft, capToday, 'a fresh day holds the whole city cap');
+assert.equal(capToday, shipmentCityCap(r.body.population), 'and that cap is the one the city size buys');
 assert.equal(r.body.yourTakeLeft, SHIPMENT.PER_PLAYER, 'and your whole daily take');
 assert.equal(r.body.forecast.length, 5, 'the next few days are forecastable — you can plan a trip');
 assert(r.body.commissions.length && r.body.commissions.every((c) => c.units > 0 && c.cash > 0),
@@ -83,7 +85,9 @@ assert.equal(r.body.error, 'taken', 'ONE PLAYER cannot take the lot — the dail
 // drain the day down to less than one full share, then prove the next player gets the REMAINDER and
 // the one after that gets nothing at all.
 const day = dayOf();
-await pool.query(`UPDATE shipment_days SET taken=${SHIPMENT.CITY_CAP - 1} WHERE day=${day}`);
+const dayCap = Number((await pool.query(`SELECT cap FROM shipment_days WHERE day=${day}`)).rows[0].cap);
+assert.equal(dayCap, capToday, 'the day STAMPED its cap when it materialized — it cannot move mid-day');
+await pool.query(`UPDATE shipment_days SET taken=${dayCap - 1} WHERE day=${day}`);
 await standAt(bo.id, where);
 r = await call('POST', '/v1/shipment/take', { token: bo.token });
 assert.equal(r.code, 200, 'the next player takes what is left');
@@ -131,6 +135,35 @@ r = await call('POST', `/v1/shipment/commission/${piece.id}`, { token: ace.token
 assert.equal(r.body.error, 'units', 'no material, no piece');
 r = await call('POST', '/v1/shipment/commission/nonesuch', { token: ace.token });
 assert.equal(r.body.error, 'bad_piece', 'and nobody makes what nobody makes');
+
+// ═══ 5. THE CITY STOCK SCALES WITH THE CITY ═══
+// A fixed daily quantity is wrong at both ends: at three players it never empties (contention, the
+// whole feature, never happens) and at five hundred it is gone in a minute. What must hold at EVERY
+// size is that the day is exhausted by a FRACTION of the city — never trivially unmet, never starved.
+assert.equal(shipmentCityCap(0), SHIPMENT.CITY_BASE, 'an empty city still gets the floor — the loop is playable');
+assert.equal(shipmentCityCap(3), SHIPMENT.CITY_BASE, 'and a thin one, where there is nobody to contend with');
+assert.equal(shipmentCityCap(SHIPMENT.CITY_STEP), SHIPMENT.CITY_BASE + SHIPMENT.CITY_PER_STEP,
+  'one step of players buys one step of stock');
+assert.equal(shipmentCityCap(SHIPMENT.CITY_STEP * 5), SHIPMENT.CITY_BASE + SHIPMENT.CITY_PER_STEP * 5,
+  'and it keeps pace — the stock GROWS with the city');
+assert.equal(shipmentCityCap(1e9), SHIPMENT.CITY_MAX, 'up to the ceiling, which is the flagged lever');
+// the property, stated as a relation rather than a number: past the floor, a bigger city can never
+// have a SMALLER share of itself served, and the whale's fixed share shrinks against the city.
+for (const [lo, hi] of [[25, 50], [50, 100], [100, 250]]) {
+  assert(shipmentCityCap(hi) > shipmentCityCap(lo), `a city of ${hi} takes more than one of ${lo}`);
+  assert(SHIPMENT.PER_PLAYER / shipmentCityCap(hi) < SHIPMENT.PER_PLAYER / shipmentCityCap(lo),
+    `and ONE player's share of the day is relatively smaller at ${hi} — PER_PLAYER does not scale, on purpose`);
+}
+
+// THE STAMP: the day's cap is fixed when the day opens, so a signup cannot move it under a player who
+// has already read "N left". Grow the city mid-day and today's stock must not budge.
+const before = (await call('GET', '/v1/shipment', { token: ace.token })).body;
+for (let i = 0; i < SHIPMENT.CITY_STEP; i++) await mk(`Filler ${i} Rossi`);
+const after = (await call('GET', '/v1/shipment', { token: ace.token })).body;
+assert(after.population > before.population, 'the city grew');
+assert(shipmentCityCap(after.population) > before.cityCap, 'enough that a fresh day would be bigger');
+assert.equal(after.cityCap, before.cityCap,
+  "TODAY'S stock did not move — the cap is stamped at the day, not read live");
 
 // ═══ 3b. IT DIES WITH THE STREET ═══
 // It lives on the CHARACTER row, so the estate takes it by construction — the heir starts clean.

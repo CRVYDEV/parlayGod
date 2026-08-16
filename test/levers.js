@@ -513,10 +513,15 @@ const SIGNED = [
     { id: 'lastrun',   model: 'tsarina',   cap: 3,  name: "The Tsarina's Last Run",
       blurb: 'Three. The factory burned the week after, and the moulds with it.' },
   ]],
-  // §3 THE SHIPMENT — the contested daily material. CITY_CAP is the contention (one shared quantity
-  // for the whole town); PER_PLAYER stops a whale taking the lot; ROUT_UNITS is the apex-cartel drop;
-  // LOOT_RATE is what a fire-kill takes off a stockpile. The COMMISSIONS are the sink it gates.
-  ['SHIPMENT.CITY_CAP', 40],
+  // §3 THE SHIPMENT — the contested daily material. The city stock is the contention (one shared
+  // quantity for the whole town) and SCALES with the living-player count: a floor plus a step, so the
+  // day is exhausted by a fraction of the city whatever the city's size. PER_PLAYER stops a whale
+  // taking the lot and is deliberately fixed; ROUT_UNITS is the apex-cartel drop; LOOT_RATE is what a
+  // fire-kill takes off a stockpile. The COMMISSIONS are the sink it gates.
+  ['SHIPMENT.CITY_BASE', 40],
+  ['SHIPMENT.CITY_STEP', 10],
+  ['SHIPMENT.CITY_PER_STEP', 8],
+  ['SHIPMENT.CITY_MAX', 400],
   ['SHIPMENT.PER_PLAYER', 4],
   ['SHIPMENT.ROUT_UNITS', 6],
   ['SHIPMENT.LOOT_RATE', 0.5],
