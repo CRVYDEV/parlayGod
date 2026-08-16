@@ -934,8 +934,16 @@ async function applyDeedReimport(client, ref, wallet, tokenId) {
     return null; // they already hold a street in-game — must offload it first (wait)
   // re-key the deed + its legend to the burner, clear the on-chain flag, RESET control (they earn the corner)
   await client.query('UPDATE street_deed_history SET account_id=$2 WHERE account_id=$1', [onchainOwner, acct.account_id]);
+  // The deed's ON-CHAIN LIFE IS OVER, so every field that describes it goes with the token id —
+  // `extracted_by_account`, `extracted_at` and `onchain_owner` too (red-team C4). Leaving them set is
+  // the stale-state-survives-a-lifecycle-reset class, and it mis-routes REAL STOCK: the delivery rail
+  // resolves a deed's target from `onchain_owner` first (a secondary buyer who linked that wallet) and
+  // falls back to `extracted_by_account`. A deed re-imported and then re-extracted by SOMEBODY ELSE
+  // sits in extract-pending carrying the PREVIOUS life's owner, so the previous owner's allocations
+  // would be delivered into the ERC-6551 vault of a deed the new extractor is about to control.
   await client.query(
-    `UPDATE street_deeds SET account_id=$2, onchain_token_id=NULL, controller_account=NULL, control_until=NULL,
+    `UPDATE street_deeds SET account_id=$2, onchain_token_id=NULL, extracted_by_account=NULL,
+       extracted_at=NULL, onchain_owner=NULL, controller_account=NULL, control_until=NULL,
        corner_at=now(), shakedown_at=NULL, sale_price=NULL WHERE account_id=$1`, [onchainOwner, acct.account_id]);
   // append a lineage line to the legend (fixed string, no user input → a plain insert, no cleanText/SAVEPOINT)
   await client.query("INSERT INTO street_deed_history (account_id, kind, detail) VALUES ($1,'sold','brought back into the city from on-chain')", [acct.account_id]);
@@ -984,6 +992,118 @@ export async function sweepDeedReimports(pool) {
   return { applied, pending: pend.length };
 }
 
+// ══ THE STRANDED-VAULT RECOVERY — a burned deed nobody can re-mint (founder-directed 2026-08-16) ══
+//
+// Burning a deed FREEZES its ERC-6551 vault, it never empties it: the account's address is a pure
+// function of the tokenId, the tokenId is keccak(NAME), and nothing ever deletes a `street_deeds` row
+// or frees its unique `name_lc` — so the id is permanently reserved and re-minting that same street
+// restores control with the contents intact (`StreetDeed.t.sol` proves the same-id re-mint). In the
+// ORDINARY case this needs nobody: `applyDeedReimport` leaves the row `pending` when the burner has no
+// linked wallet or already holds a street, and `sweepDeedReimports` retries it every tick, forever.
+//
+// The case that never resolves is a burn from a wallet that will NEVER link — a lost key, a redeem
+// sent from the wrong address, a player who does not come back. The re-import waits indefinitely,
+// nobody in-game holds the deed, so nothing re-mints the id and real stock sits frozen at a known
+// address with no route to it. This is that route, and it needs NO contract change: `claim()` accepts
+// any server-signed DeedVoucher and derives the tokenId from the name.
+//
+// FOUR WALLS, because the lever is strong (the signer can already mint any name anywhere — this adds
+// no authority, but a routed, documented path makes it USABLE, which is the part that needs bounding):
+//   1. THE DESTINATION IS FIXED. It recovers to `DEED_RECOVERY_ADDRESS` — a treasury holding address —
+//      and takes no address from the caller (founder decision). So the route cannot be talked into
+//      "I lost my key, mint my street to this new wallet": returning a recovered deed to a player is a
+//      separate, deliberate act by whoever holds the treasury, not something this can be aimed.
+//   2. ONLY A GENUINELY STRANDED DEED. There must be a `deed_reimports` row still `pending` for the
+//      token — that row IS the evidence the burn happened and the re-import cannot land — and the deed
+//      must still be in the on-chain state. A live, owned deed is not recoverable, i.e. this can never
+//      be a confiscation. (The contract backstops it anyway: `_safeMint` reverts on an existing id, so
+//      a voucher for a deed that was NOT burned is unclaimable.)
+//   3. NOT BEFORE `RECOVER_AFTER_MS`. A burn minutes old is not stranded, it is in flight — the sweep
+//      may still land it. The wait is what distinguishes the two.
+//   4. IT SUPERSEDES THE PENDING RE-IMPORT. Otherwise the sweep could later re-key the deed to the
+//      burner while the treasury holds the NFT — a split brain where two parties each believe they
+//      own the street (the stale-state-survives-a-lifecycle-reset class the C4 fix was about).
+// Mod-gated, so it lands in `mod_actions` like every other mod mutation. §10.4-NEUTRAL: a voucher and
+// an ownership move, zero `transactions` rows.
+export const DEED_RECOVER_AFTER_MS = Number(process.env.DEED_RECOVER_AFTER_MS || 30 * 24 * 3600 * 1000);
+
+export async function recoverStrandedDeed(pool, { street, tokenId } = {}) {
+  const to = process.env.DEED_RECOVERY_ADDRESS;
+  if (!to || !isAddress(to))
+    throw new GameError('no_recovery_address', 'Set DEED_RECOVERY_ADDRESS (the treasury holding address) before recovering a deed.');
+  const domain = deedChainConfig();                       // throws chain_unconfigured if not configured
+  const signer = signerAccount();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // resolve the deed by street name or token id — either way we end up on the SAME row
+    const token = tokenId != null ? String(tokenId) : (street ? deedTokenId(String(street)) : null);
+    if (!token) throw new GameError('no_deed', 'Name the street (or its token id) to recover.');
+    const onchainOwner = 'onchain:' + token;
+    const deed = (await client.query(
+      'SELECT * FROM street_deeds WHERE onchain_token_id=$1 AND account_id=$2 FOR UPDATE', [token, onchainOwner])).rows[0];
+    // WALL 2 — still in the on-chain state. A deed that came home (or never left) is not stranded.
+    if (!deed) throw new GameError('not_stranded', 'That street is not sitting in the on-chain state — nothing to recover.');
+    // WALL 2 + 3 — a pending re-import old enough to be genuinely stuck rather than in flight
+    const pend = (await client.query(
+      "SELECT ref, created_at FROM deed_reimports WHERE token_id=$1 AND status='pending' ORDER BY created_at LIMIT 1", [token])).rows[0];
+    if (!pend) throw new GameError('not_burned',
+      'No burn was ever recorded for that street — it may still be owned on-chain, and a voucher for a live deed cannot be claimed.');
+    const waited = Date.now() - new Date(pend.created_at).getTime();
+    if (waited < DEED_RECOVER_AFTER_MS) throw new GameError('too_soon',
+      `That burn is ${Math.floor(waited / 3600000)}h old — the re-import may still land. Recovery opens at ${Math.round(DEED_RECOVER_AFTER_MS / 3600000)}h.`);
+
+    const districtDisp = (DISTRICTS.find((d) => d.id === deed.district) || {}).name || deed.district;
+    const res = (await client.query('SELECT * FROM chain_reserve WHERE id=1 FOR UPDATE')).rows[0];
+    const nonce = Number(res.next_nonce);
+    await client.query('UPDATE chain_reserve SET next_nonce = next_nonce + 1 WHERE id=1');
+    const deadline = Math.floor(Date.now() / 1000) + WITHDRAW_TTL_SEC;
+    const message = { to: getAddress(to), name: deed.name, district: districtDisp, nonce: BigInt(nonce), deadline: BigInt(deadline) };
+    const signature = await signer.signTypedData({ domain, types: DEED_VOUCHER_TYPES, primaryType: 'DeedVoucher', message });
+    const voucher = Object.fromEntries(Object.entries(message).map(([k, v]) => [k, typeof v === 'bigint' ? v.toString() : v]));
+    const id = uid();
+    await client.query(
+      'INSERT INTO vouchers (id, account_id, kind, amount, gear_id, nonce, to_address, deadline, status, signed_payload) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+      [id, onchainOwner, 'deed', 1, token, nonce, getAddress(to), deadline, 'signed', JSON.stringify({ voucher, signature })]);
+    // WALL 4 — the pending re-import is SUPERSEDED, so the sweep can never later hand this street to
+    // the burner while the treasury holds the NFT. Every pending row for the token, not just the one
+    // we read: a re-scan can record several refs for the same burn.
+    await client.query(
+      "UPDATE deed_reimports SET status='superseded', applied_at=now() WHERE token_id=$1 AND status='pending'", [token]);
+    await client.query(
+      "INSERT INTO street_deed_history (account_id, kind, detail) VALUES ($1,'sold','recovered from a stranded burn — the vault was held for the city')",
+      [onchainOwner]);
+    await client.query('COMMIT');
+    return { id, nonce, status: 'signed', street: deed.name, district: deed.district, tokenId: token,
+      to: getAddress(to), strandedForHours: Math.floor(waited / 3600000),
+      contract: domain.verifyingContract, chainId: domain.chainId, voucher, signature,
+      note: 'Submit claim(voucher, signature) from the treasury holding wallet. It re-mints the SAME tokenId, which unfreezes the deed\'s ERC-6551 vault with its contents intact.' };
+  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  finally { client.release(); }
+}
+
+// The stranded set — what an operator can see before deciding to recover anything (the /admin read).
+export async function strandedDeeds(pool) {
+  const pend = (await pool.query(
+    "SELECT ref, token_id, wallet_address, created_at FROM deed_reimports WHERE status='pending' ORDER BY created_at LIMIT 100")).rows;
+  if (!pend.length) return { recoverAfterHours: Math.round(DEED_RECOVER_AFTER_MS / 3600000), stranded: [] };
+  const ids = [...new Set(pend.map((p) => String(p.token_id)))];
+  const deeds = (await pool.query(
+    `SELECT name, district, onchain_token_id FROM street_deeds WHERE onchain_token_id IN (${ids.map((_, i) => `$${i + 1}`).join(',')})`,
+    ids)).rows;
+  const byToken = new Map(deeds.map((d) => [String(d.onchain_token_id), d]));
+  return {
+    recoverAfterHours: Math.round(DEED_RECOVER_AFTER_MS / 3600000),
+    recoveryAddress: process.env.DEED_RECOVERY_ADDRESS || null,
+    stranded: pend.map((p) => {
+      const d = byToken.get(String(p.token_id));
+      const hours = Math.floor((Date.now() - new Date(p.created_at).getTime()) / 3600000);
+      return { tokenId: String(p.token_id), street: d ? d.name : null, district: d ? d.district : null,
+        burnedBy: p.wallet_address, waitingHours: hours, ready: hours * 3600000 >= DEED_RECOVER_AFTER_MS };
+    }),
+  };
+}
+
 // Fallback for signed deed vouchers past deadline+grace (the Extracted watcher may be down / the player
 // never submitted the tx). Consults the deed contract's usedNonce: CLAIMED → transition on-chain (a
 // missed Extracted); NOT claimed → clear the inert flag (the deed never left the game → state 2→1). No
@@ -1009,8 +1129,12 @@ export async function sweepDeedVouchers(pool, reader = undefined) {
       await client.query('BEGIN');
       const cur = (await client.query("SELECT status FROM vouchers WHERE id=$1 FOR UPDATE", [v.id])).rows[0];
       if (cur && cur.status === 'signed') {
+        // the same full reset as a re-import (red-team C4): this deed is back in the game, so every
+        // field describing an on-chain life goes with the token id or the NEXT extraction inherits a
+        // previous owner and mis-routes its stock deliveries.
         await client.query(
-          "UPDATE street_deeds SET onchain_token_id=NULL WHERE onchain_token_id=$1 AND account_id NOT LIKE 'onchain:%'", [String(v.gear_id)]);
+          `UPDATE street_deeds SET onchain_token_id=NULL, extracted_by_account=NULL, extracted_at=NULL,
+             onchain_owner=NULL WHERE onchain_token_id=$1 AND account_id NOT LIKE 'onchain:%'`, [String(v.gear_id)]);
         await client.query("UPDATE vouchers SET status='expired' WHERE id=$1", [v.id]);
         cleared++;
       }

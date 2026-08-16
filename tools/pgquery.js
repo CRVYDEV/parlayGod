@@ -149,7 +149,23 @@ if (failures.length) {
 // persistKitchen's two multi-row `INSERT ... VALUES (...),(...)` batches (placeholders built from the
 // row count, values bound). All four are exercised by the suite; none can be literal (the shape is
 // dynamic), which is exactly when a ceiling raise is warranted.
-const CEILING = { interpolated: 71, unreadable: 40 };
+// 71 → 72 (2026-08-16, red-team F5): firstsBoard's steward lookup, a per-holder N+1 folded into ONE
+// parameterized IN list (`$1,$2,…` built from the holder count, every value bound). Same shape and
+// same reason as the /v1/streets fronts scan above — pg-mem returns zero rows for `= ANY($1::text[])`
+// (the MY PROFILE lesson), so an IN list is the only portable form, and it is not preparable.
+// 72 → 73 (2026-08-16, the deed-vault disclosure): `vaultHistoryFor`'s lookup of what a street's
+// on-chain vault has received, an IN list over the deed token ids derived from the names on the board
+// (`$1,$2,…` built from the count, every value bound). The SAME shape and the same reason as the two
+// above — `= ANY($1::text[])` returns zero rows on pg-mem, so an IN list is the only portable form.
+// Worth recording HOW it first showed up: a trailing comment on the `client.query(` line made the
+// argument unreadable, so it landed in the *unreadable* bucket instead — counted either way (the
+// honesty rule held), but filed under "we couldn't read this" rather than "this is an IN list", which
+// is a worse record. The comment moved above the call so it is catalogued as what it actually is.
+// 73 → 74 (2026-08-16, the stranded-vault recovery): `strandedDeeds`' street lookup, an IN list over the
+// token ids of the pending re-imports (`$1,$2,…` built from the count, every value bound). Same shape
+// and same reason as the three above — a read-only operator board, so the alternative (`= ANY`) would
+// return zero rows on pg-mem and the board would silently report every stranded deed as nameless.
+const CEILING = { interpolated: 74, unreadable: 40 };
 const overflow = [];
 if (interpolated.length > CEILING.interpolated)
   overflow.push(`interpolated queries grew to ${interpolated.length} (ceiling ${CEILING.interpolated}) — these are UNCHECKED by this guard`);

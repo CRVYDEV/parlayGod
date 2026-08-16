@@ -12,6 +12,7 @@
 // Deliberately NOT wired into the live mint / the `minted` extraction flag,
 // so the Sybil/extraction machinery is untouched (design §8).
 import { GameError, cleanText } from './game.js';
+import { vaultHistoryFor, vaultLiveBalances } from './stockdeliver.js';
 import { DEEDS, DISTRICTS, deedRankOf, deedRenown, deedCornerOwed, deedController,
   deedNeighborhoodsOpen, deedNeighborhoodOf,
   effStat, levelOf, jailed, hospitalized, safeHoused } from './rules.js';
@@ -163,9 +164,16 @@ export async function deedBoard(ch, client, h) {
   const forHist = new Map();
   for (const r of (await client.query('SELECT account_id, kind FROM street_deed_history')).rows)
     (forHist.get(r.account_id) || forHist.set(r.account_id, []).get(r.account_id)).push({ kind: r.kind });
+  // THE VAULT'S RECORD — a street's ERC-6551 account is keyed on its NAME (tokenId = keccak(name)), so
+  // it survives a burn and travels with the name: re-import a street, sell it, and the buyer's next
+  // extraction resolves the SAME vault. So every listing states what that vault has RECEIVED, and a
+  // buyer prices it (the terms ride with the price). Never "holds" — the owner controls the account and
+  // can empty it; the live figure is the buy-CONFIRM read (`deedVault`), never this polled board.
+  const vaults = await vaultHistoryFor(client, [...forSaleRows.map((r) => r.name), ...(deed ? [deed.name] : [])]);
   const forSale = forSaleRows.map((r) => ({ street: r.name, district: r.district, districtName: districtName(r.district),
     price: Number(r.sale_price), sellerId: r.seller_id, seller: r.seller,
     renown: deedRenown(forHist.get(r.acct) || []), rank: deedRankOf(deedRenown(forHist.get(r.acct) || [])).name,
+    vault: vaults.get(r.name) || null,
     neighborhood: (deedNeighborhoodOf(r.name, r.district, population) || {}).name || null }));
   const market = {
     minPrice: DEEDS.MARKET_MIN,
@@ -189,7 +197,7 @@ export async function deedBoard(ch, client, h) {
   return {
     deed: deed ? { name: deed.name, district: deed.district, districtName: districtName(deed.district),
       claimedAt: deed.claimed_at, neighborhood: myHood ? myHood.name : null, frontier: myHood ? myHood.frontier : false,
-      onChain: !!deed.onchain_token_id } : null,
+      onChain: !!deed.onchain_token_id, vault: vaults.get(deed.name) || null } : null,
     renown, rank: deedRankOf(renown).name, ranks: DEEDS.RANKS,
     history, corner, market, chain,
     // Phase 4 — the growing map: how big the city is, and how much more opens as it grows
@@ -313,6 +321,30 @@ export async function unlistDeed(ch, client, h) {
   await client.query('UPDATE street_deeds SET sale_price=NULL WHERE account_id=$1', [ch.account_id]);
   return { ok: true, name: deed.name };
 }
+// THE BUY-CONFIRM VAULT READ — what a listed street's vault has received, and (chain live) what it
+// holds RIGHT NOW. Two halves on purpose: the RECORD is a DB read the board already carries, and the
+// LIVE balance is an RPC round-trip that must run OUTSIDE the read transaction (an RPC inside a held
+// txn pins a pooled connection for as long as the node takes — the bankPosition posture), which is
+// also why it sits at the confirm step and not on the polled board.
+//
+// Keyed on the SELLER's character exactly like `buyDeed`, so the number a buyer confirms against and
+// the street they actually buy are resolved by the same lookup — a confirm screen that could describe
+// a different deed than the purchase is the control-that-lies class.
+export async function deedVaultRecord(client, ch, sellerCharacterId) {
+  const seller = (await client.query('SELECT account_id, name FROM characters WHERE id=$1', [String(sellerCharacterId)])).rows[0];
+  if (!seller) throw new GameError('gone', 'That street has no living steward.');
+  const deed = (await client.query('SELECT name, sale_price FROM street_deeds WHERE account_id=$1', [seller.account_id])).rows[0];
+  if (!deed) throw new GameError('no_deed', "They don't hold a street.");
+  const vault = (await vaultHistoryFor(client, [deed.name])).get(deed.name) || null;
+  return { street: deed.name, seller: seller.name,
+    price: deed.sale_price == null ? null : Number(deed.sale_price), vault };
+}
+// The live half, run outside the transaction (see above). Chain-dormant → `live: false`, never a
+// fabricated zero — "we can't see the vault" and "the vault is empty" are different answers.
+export async function deedVaultLive(street) {
+  return vaultLiveBalances(street).catch(() => ({ live: false, holds: [] }));
+}
+
 // BUY a listed street. Two-party (withTwoCharacters buyer+seller). The buyer must be DEEDLESS (one deed
 // per account — the identity/Sybil model; a portfolio of many streets is a deferred Phase-3 step needing
 // the PK refactor). The deed + its whole PROVENANCE (the legend) transfer to the buyer; CONTROL RESETS

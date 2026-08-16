@@ -39,27 +39,33 @@ async function setItem(client, charId, itemId, qty) {
 // allocation are the SAME statement: `minted = minted + 1 WHERE minted < cap RETURNING minted` is
 // atomic, so two concurrent boosts on the last slot cannot both take it and the returned count IS
 // the serial. (Addition with a bound param is pg-mem-safe; the documented quirk is INT SUBTRACTION.)
-// Nothing here can fail a boost: an exhausted run simply doesn't fire, and any error returns null.
+// An exhausted run simply doesn't fire.
+//
+// Errors are NOT swallowed, and that is a correction rather than a looseness (red-team F1). The
+// first cut caught the 23505 a concurrent first touch raises and returned null "so a mint failure
+// can never fail a boost" — a promise that cannot be kept inside a transaction: in real Postgres an
+// errored statement ABORTS the enclosing txn, so the caught 23505 left the boost's own car INSERT
+// dying one statement later with 25P02, which `deadlockToRetry` does not map — a raw 500 where the
+// swallow was meant to buy silence. Letting the 23505 through instead reaches deadlockToRetry and
+// becomes a clean retryable `contention`, which is the shipment dayRow posture exactly.
 export async function mintLimitedRun(client, modelId, roll) {
   const open = LIMITED_RUNS.filter((r) => r.model === modelId);
   if (!open.length || !(roll < limitedRunP())) return null;
   // one model can carry more than one run; pick deterministically off the same die so the draw
   // stays replayable from the rng_audit row
   const r = open[Math.floor((roll / Math.max(limitedRunP(), Number.EPSILON)) * open.length) % open.length];
-  try {
-    const up = await client.query(
-      'UPDATE limited_runs SET minted = minted + 1 WHERE run_id=$1 AND minted < $2 RETURNING minted',
-      [r.id, r.cap]);
-    if (!up.rowCount) {
-      // first touch of this run — materialize at serial 1 (the world_npcs first-touch precedent;
-      // a 23505 from a concurrent first touch means somebody else got serial 1, so we take none)
-      const has = (await client.query('SELECT minted FROM limited_runs WHERE run_id=$1', [r.id])).rows[0];
-      if (has) return null;   // the run is EXHAUSTED — it never fires again, for anybody
-      await client.query('INSERT INTO limited_runs (run_id, minted) VALUES ($1, 1)', [r.id]);
-      return { runId: r.id, name: r.name, serial: 1, cap: r.cap };
-    }
-    return { runId: r.id, name: r.name, serial: Number(up.rows[0].minted), cap: r.cap };
-  } catch { return null; }
+  const up = await client.query(
+    'UPDATE limited_runs SET minted = minted + 1 WHERE run_id=$1 AND minted < $2 RETURNING minted',
+    [r.id, r.cap]);
+  if (!up.rowCount) {
+    // first touch of this run — materialize at serial 1 (the world_npcs first-touch precedent; a
+    // concurrent first touch raises 23505, which the caller retries into)
+    const has = (await client.query('SELECT minted FROM limited_runs WHERE run_id=$1', [r.id])).rows[0];
+    if (has) return null;   // the run is EXHAUSTED — it never fires again, for anybody
+    await client.query('INSERT INTO limited_runs (run_id, minted) VALUES ($1, 1)', [r.id]);
+    return { runId: r.id, name: r.name, serial: 1, cap: r.cap };
+  }
+  return { runId: r.id, name: r.name, serial: Number(up.rows[0].minted), cap: r.cap };
 }
 
 export async function boostCar(ch, client, h) {

@@ -109,12 +109,15 @@ export async function takeShipment(ch, client, h) {
   // as gone), and take whatever the claim actually got.
   const cap = capOf(row);
   const want = room;
-  let got = 0;
+  let got = 0, nowTaken = Number(row.taken || 0);
   for (let n = want; n >= 1 && !got; n--) {
     const up = await client.query(
       'UPDATE shipment_days SET taken = taken + $2 WHERE day=$1 AND taken + $2 <= $3 RETURNING taken',
       [day, n, cap]);
-    if (up.rowCount) got = n;
+    // the claim's OWN RETURNING is the truth, never the pre-claim read: under contention `row.taken`
+    // is already stale by the time we get here, and deriving what's left from it either announces
+    // "the shipment is gone" while crates remain or misses the announcement entirely (red-team F4).
+    if (up.rowCount) { got = n; nowTaken = Number(up.rows[0].taken); }
   }
   if (!got) throw new GameError('gone', `Today's ${SHIPMENT.MATERIAL} is gone — the whole city's worth. Try the next one.`);
   const upd = await client.query(
@@ -123,7 +126,7 @@ export async function takeShipment(ch, client, h) {
     'INSERT INTO shipment_takes (day, character_id, n) VALUES ($1,$2,$3)', [day, ch.id, got]);
   // the material rides the character row (an owned quantity, never a currency — no ledger row)
   ch.shipment = Number(ch.shipment || 0) + got;
-  const left = Math.max(0, cap - Number(row.taken || 0) - got);
+  const left = Math.max(0, cap - nowTaken);
   if (left === 0) bus.emit('streets', { type: 'shipment_gone', who: ch.name, district: row.district });
   return { ok: true, took: got, held: ch.shipment, cityLeft: left, material: SHIPMENT.MATERIAL };
 }

@@ -202,7 +202,41 @@ re-discovered later:**
 - **Drain-before-sale.** The canonical ERC-6551 account lets the NFT owner control the TBA, so a
   seller CAN drain the stock before selling the deed. This is inherent to gateless push into any
   tradeable NFT's TBA (`omerta-identity-nft-design.md` flags the mitigations — a listing lock, or a
-  voucher-gated TBA outflow — as launch-review items). Recorded, not built.
+  voucher-gated TBA outflow — as launch-review items). On-chain, `StreetDeed.transferLocked` is the
+  most any rule can do: it forces the drain BEFORE the unlock, so an unlock is the public "check the
+  vault now" moment. Off-chain, the answer is disclosure — see §3.4a.
+
+### 3.4a The vault survives the burn — and the IN-GAME market had to be told (2026-08-16)
+
+`tokenId = keccak256(bytes(name))`, so a deed's ERC-6551 account is a function of its NAME. Burn the
+NFT (`redeem`) and re-import the street, sell it **in-game**, and the buyer's next extraction resolves
+the SAME vault — whatever sits in it travels with the name, while the in-game deed market priced the
+street with no sight of it. The on-chain half has a listing lock; **a database row is not an ERC-721
+transfer**, so nothing on that path warned anybody.
+
+**Three fixes were ruled out before the fourth was built, and the reasons matter more than the fix:**
+
+1. *Make the tokenId unique per extraction so the vault does not follow the name.* Worse than the gap:
+   the bijection is load-bearing precisely BECAUSE it makes a burned deed's vault **recoverable**.
+   Break it and every re-import orphans real stock at an address nobody can ever reach again.
+2. *Refuse the re-import.* Not available — `applyDeedReimport` runs off the `Redeemed` watcher, and by
+   then the burn has already happened on-chain. Refusing strands the deed in-game as well.
+3. *Show a live balance on the market board.* `/v1/deeds` is polled; one RPC per listing per render is
+   the shape the poll-cost pass spent a session removing.
+
+**What shipped is DISCLOSURE** (the terms ride with the price — the pad, the nut, the Port lane):
+- The **record** (`vaultHistoryFor`) on the deed card and every market listing — a pure DB read of
+  `stock_deliveries`, so it costs nothing and works chain-dormant.
+- Phrased **RECEIVED, never "holds"**. The game knows what was pushed IN; the owner controls the
+  account and can move tokens out. A delivered total presented as a balance is a false claim on a
+  purchase screen, which is strictly worse than silence. Comps are excluded (`tx_hash IS NOT NULL`) —
+  counting one would fabricate exactly what that gate exists to prevent.
+- The **live balance at the buy-CONFIRM step** (`vaultLiveBalances`), one RPC at the moment the money
+  moves, run OUTSIDE the read transaction (an RPC inside a held txn pins a pooled connection — the
+  `bankPosition` posture). Chain-dormant → the buyer is told the live figure is unavailable, never
+  shown a fabricated zero: "we can't see the vault" and "the vault is empty" are different answers.
+- A **warning before the burn** on the client's re-import copy: burning brings the street home, it does
+  not empty the vault; move what's yours out first.
 
 **What this changes in the build (and what it does NOT):** the `allocated ≤ held` wall (per ticker, in
 units) is UNCHANGED — the delivery TARGET moving from the Dynasty TBA to the Deed TBA does not touch
@@ -220,9 +254,23 @@ re-keys the extracted deed's `account_id` to `onchain:<tokenId>`, severing the a
 the re-key also stamps `extracted_by_account` — which is what the delivery rail JOINs on to find an
 account's on-chain deed.
 
-**Deferred, flagged (not built):** re-targeting delivery to a deed's SECONDARY owner (the rail keys on
-the extractor, and there is no `Transfer` watcher on the deed NFT), the real keeper TX send that drives
-`StockVault.deliver`, and the drain-before-sale mitigation above.
+**The same bijection is what makes an accidental burn RECOVERABLE (2026-08-16).** Because the id is
+`keccak(NAME)` and nothing ever deletes a `street_deeds` row or frees its unique name, a burn FREEZES
+the vault rather than emptying it — re-minting that street restores control with the contents intact.
+In the ordinary case nobody acts: the re-import stays `pending` and the worker sweep retries forever.
+The one case that never resolves is a burn from a wallet that will never link, and it needs no
+contract change — `POST /v1/mod/deeds/recover {street}` signs a `DeedVoucher` for that street to the
+TREASURY HOLDING address (`DEED_RECOVERY_ADDRESS`), bounded by four walls: a fixed destination (never
+caller-supplied), a recorded burn still in the on-chain state (so it can never be a confiscation — the
+contract backstops it, since `_safeMint` reverts on a live id), a 30-day wait that distinguishes
+stranded from in-flight, and superseding the pending re-import so the sweep cannot later hand the
+street to the burner while the treasury holds the NFT. Runbook in CHAIN-DEPLOY §8.
+
+**Deferred, flagged (not built):** the drain-before-sale mitigation beyond the listing lock + the
+disclosure in §3.4a — a voucher-gated TBA outflow is the only stronger form, and it costs the
+"self-contained NFT" property the gateless push was chosen for. (The other two former deferrals are
+CLOSED: the deed `Transfer` watcher re-targets delivery to a SECONDARY owner, and
+`runStockDeliveryKeeper` is the real TX send.)
 
 ---
 

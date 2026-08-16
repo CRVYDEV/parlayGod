@@ -25,4 +25,14 @@ export function register(app, { pool, auth }) {
   app.post('/v1/deeds/buy/:sellerCharacterId', { preHandler: auth }, async (req) =>
     G.withTwoCharacters(pool, req.user.sub, req.params.sellerCharacterId, (ch, seller, client, h) =>
       Deeds.buyDeed(ch, seller, client, h)));
+  // THE BUY-CONFIRM VAULT READ. A street's ERC-6551 vault is keyed on its NAME, so it survives a burn
+  // and travels with the deed — a buyer is entitled to see it before the money moves. Two halves: the
+  // delivery RECORD inside the read txn, then the LIVE balance OUTSIDE it (an RPC inside a held
+  // transaction pins a pooled connection — the /v1/bank posture), which is also why this is a confirm
+  // step rather than a field on the polled board.
+  app.get('/v1/deeds/vault/:sellerCharacterId', { preHandler: auth }, async (req) => {
+    const rec = await G.readCharacter(pool, req.user.sub, (ch, client) =>
+      Deeds.deedVaultRecord(client, ch, req.params.sellerCharacterId));
+    return { ...rec, live: await Deeds.deedVaultLive(rec.street) };
+  });
 }

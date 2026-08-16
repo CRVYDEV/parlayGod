@@ -13077,3 +13077,203 @@ scope, stated in the harness: it counts REQUESTS, not their cost — a board tha
 and one that scans a table both count 1 — which is the right unit for the ceiling question because the
 server figure is also in requests, but a heavy board is invisible to it. **The remaining dials, in order:
 the DATABASE plan (+50% per doubling), then Home's 18-board fan-out itself.**
+
+**THE RED TEAM OVER TODAY'S DROPS AND THE CONTRACT GRAPH (founder-directed 2026-08-16: "Run a
+comprehensive thorough red team of all the work done today. Make sure to red team the smart contracts
+and all the interactions between them all") — `AUDIT-session-scarcity-poll-contracts.md`.** First-hand,
+no fan-out; every finding reproduced against a running engine before being called one. **No CRITICAL.
+Nine fixes, eleven mutations, all failing at their own named assertion — and two of those mutations
+SURVIVED their first cut, which is the more useful half.** **THE HEADLINE (F2) is a production bug that
+destroyed value on every kill**: the shipment loot block copied its `contraband`/`heist_loot` neighbours
+verbatim, and `shipment` differs from both on the two axes that decide how a column may be written —
+it is **INT** (so `col = col - $n` hits the documented pg-mem sign-flip: `8−4 = −4` measured) **and it
+is PERSISTED** ($67), where they are direct-SQL columns (so the killer's SQL credit is overwritten by
+the persist that ends the action). Axis 2 is real-Postgres, not a test artifact: **the victim lost the
+material and the killer banked nothing**, i.e. the scarce contested resource was destroyed at exactly
+the moment the design says it changes hands — with **no test covering the loot at all**, though the
+suite header claimed it as proven. Fixed (victim absolute-in-JS, killer in-memory), regression asserts
+BOTH sides because either half alone still reads plausible. **F1** — `mintLimitedRun`'s
+`catch { return null }` (*"a mint failure can never fail a boost"*) **cannot keep that promise inside a
+transaction**: the failed statement has already aborted the txn, so the swallow moved the failure one
+statement later to a **25P02** that `deadlockToRetry` does not map — reproduced, a raw 500 where the
+catch was meant to buy silence; letting the 23505 through becomes a clean `contention`, the `dayRow`
+posture. **F6** — today's own board-poll decoupling left cooldown BUTTONS stale up to 2 minutes while
+the ticker painted READY beside them (**the control-that-lies class arriving through TIME rather than a
+missing field**); a zero crossing now re-renders the screen, promoted into `tools/mobile.js` as **check
+H** (78 checks). Plus F4 (an announcement derived from the pre-claim read instead of the claim's own
+`RETURNING`), F5 (an N+1 on a polled board → one IN list; pgquery ceiling 71→72 with the reason
+recorded) and F3 (a module-wide cached SAVEPOINT probe → per-call; the two pre-existing sites are
+recorded as unreachable rather than churned). **THE CONTRACTS, read as a GRAPH** — shared keys, token
+flows, walls that span contracts, rather than each in isolation. **C4 (MED)**: a re-imported Street Deed
+kept `extracted_by_account`/`onchain_owner`, and the stock rail resolves a delivery target from exactly
+those — so a deed re-imported then re-extracted **by somebody else** would deliver the PREVIOUS owner's
+real stock into the new extractor's ERC-6551 vault, with every invariant green (the vault's wall is
+`allocated ≤ held` in UNITS; who received them is not a quantity). Both return-to-game paths now clear
+the whole on-chain identity, asserted through the delivery rail's own predicate rather than on the
+columns. **C2 (MED)**: five contracts read `0 = unlimited`, but `StockVault`'s is a **mapping** and the
+ticker set GROWS (the Commission votes one daily off a list the operator extends), so a freshly-added
+stock was the one a leaked keeper could drain in a block — added `defaultDailyCap` (an EXPLICIT
+`setDailyCap(token,0)` still means unlimited, so the convention survives; only the never-set case
+changes), 3 Foundry tests, **forge 296/296**. **C1 (MED, ops)**: one `VOUCHER_SIGNER_PK` signs FOUR
+contracts, each storing its own `signer`, and CHAIN-DEPLOY had **no rotation runbook at all** — added
+the ordered one (pause four → `setSigner` four → rotate the key → unpause) plus the sizing note that
+the key's blast radius is the SUM of four daily caps, and **guarded it**: `test/docs.js` fails if a
+signer-bearing contract is missing from the `setSigner` step. **C5**: `DynastyNFT` still claimed to be
+the container stock is delivered into, which the shipped rail redirected to the Street Deed precisely to
+keep the identity token's entitlement wall — an auditor would have modelled the wrong contract as a
+bearer instrument (**the NatSpec IS the spec** for an audit batch). **C3**: `MAX_SELL_TAX_BPS` is a
+ceiling per LAYER and `OMR`/`OmertaHook` cannot see each other, so a seller pays the SUM — stated as
+**one venue, one layer** in both headers and CHAIN-DEPLOY, since coupling two immutable contracts is
+worse than the problem. Verified clean and recorded so the sweep is not repeated: the four voucher
+domains are properly separated (distinct EIP-712 names + `verifyingContract`, independent nonce spaces,
+TTL backstops), `OmertaFees` uses ONE nonce counter across all four fee kinds so its two consumer tables
+can never collide on an idempotency key, the mint graph (one minter, no owner mint, `setMinter(0)` as a
+one-tx stop), and the Bank cluster's trust edges. **THE TWO VACUOUS-FIRST-CUT MUTATIONS**: the F6 probe
+asserted "a request happened at the crossing" — but a live page always has background traffic, so
+removing the fix still passed (now quiet-window vs crossing-window: **17 vs 0** with the fix, 0 vs 0
+without); and the C1 guard asserted the contract NAME appears in the runbook, which passed because every
+one of them is also named in the PAUSE step one line up — **pausing is not rotating**, so it now reads
+the `setSigner` line specifically. Flagged, not changed: a burned deed's token-bound account still
+exists, so re-import → in-game sale → re-extract hands the buyer whatever sat in that vault, and the
+in-game market prices a deed with no visibility of it (the on-chain half has `transferLocked`; a
+database row is not an ERC-721 transfer) — the cheap disclosure is that the game already knows what it
+delivered without any RPC read, a founder call and moot until mainnet. Suite 109 files + mobile 78/78 +
+pgquery 2942 statements + pgcheck 43/43 on real Postgres + forge 296/296.
+
+**THE VAULT SURVIVES THE BURN — the flagged item, answered by disclosure (founder-directed 2026-08-16:
+"Build 1-3") — BUILT** (`src/stockdeliver.js` `vaultHistoryFor`/`vaultLiveBalances`, `src/deeds.js`
+`deedVaultRecord`/`deedVaultLive`, `GET /v1/deeds/vault/:sellerCharacterId`, `public/index.html`;
+`omerta-brokers-design.md` §3.4a). `tokenId = keccak256(bytes(name))`, so a Street Deed's ERC-6551
+account is a function of its NAME and survives a burn: re-import a street, sell it IN-GAME, and the
+buyer's next extraction resolves the SAME vault — while the in-game market priced the street with no
+sight of it. The on-chain half has `transferLocked`; **a database row is not an ERC-721 transfer**, so
+no on-chain rule was ever going to reach that sale. **THREE FIXES WERE RULED OUT BEFORE THE FOURTH WAS
+BUILT, and the reasons are the durable part:** (1) *make the tokenId unique per extraction* is WORSE
+than the gap — the bijection is load-bearing precisely because it makes a burned deed's vault
+**recoverable** rather than orphaned at an address nobody can ever reach again; (2) *refuse the
+re-import* is not available — it runs off the `Redeemed` watcher and the burn has already happened, so
+refusing strands the deed in-game too; (3) *a live balance on the market board* is the poll-cost shape
+that pass spent a session removing (`/v1/deeds` is polled). So: **DISCLOSURE** (the terms ride with the
+price — the pad, the nut, the Port lane). **The constraint that shapes it:** the game knows what was
+DELIVERED (`stock_deliveries`), never what REMAINS — the owner controls the account and can move tokens
+out — so every figure is phrased **RECEIVED, never "holds"**, and a delivered total presented as a
+balance would be a false claim on a purchase screen, **strictly worse than silence**. Real deliveries
+only (`tx_hash IS NOT NULL`, the txHash comp gate — counting a comp would fabricate exactly what that
+gate exists to prevent). Three pieces: **(1)** the RECORD on the deed card + every market listing (a
+pure DB read, chain-dormant-safe, publishing the recorded TBA so anyone can verify it themselves);
+**(2)** a WARNING before the burn on the client's re-import copy — burning brings the street home, it
+does **not** empty the vault, so move what's yours out first; **(3)** the LIVE balance at the
+buy-CONFIRM step (`GET /v1/deeds/vault/:sellerCharacterId` — keyed on the SELLER exactly like the buy,
+so the confirm can never describe a different deed than the purchase), the record read inside the txn
+and the RPC **outside** it (an RPC inside a held read txn pins a pooled connection — the `bankPosition`
+posture). Chain-dormant answers `live:false`, never a fabricated zero: *"we can't see the vault"* and
+*"the vault is empty"* are different answers and only one is true. §10.4-FREE (reading what a vault
+received moves nothing — test-pinned). `test/deeds.js` proves it on the suite's OWN burned-and-
+re-imported street: the record resolves for a deed whose `onchain_token_id` is NULL (keyed on the name
+that survived), the two real deliveries fold into one line and the comp is not a line at all, the
+listing carries it for a deedless shopper, and the confirm read quotes the same price the buy charges.
+**Three mutations, each caught at its own named assertion** (the comp gate dropped → the comp shows as
+received; the vault keyed on the live token-id column → the re-imported street loses its vault and the
+gap re-opens; a dormant chain reporting an empty vault → the fabricated zero). pgquery's interpolated
+ceiling 72 → 73, with a note on HOW the new IN list first showed up: a trailing comment on the
+`client.query(` line made the argument unreadable, so it landed in the *unreadable* bucket instead —
+counted either way (the honesty rule held), but filed under "we couldn't read this" rather than "this
+is an IN list", which is a worse record; the comment moved above the call. Suite green + sim drift-0 +
+mobile 78/78 + client wiring/mirror (a fixture seeds a listed street WITH a delivery on it — an empty
+vault would leave its fields unchecked) + pgquery 2944 statements + pgcheck 43/43 on real Postgres.
+**Still flagged (founder call):** whether stock-bearing deeds should trade on the in-game market at all,
+or only on-chain where `transferLocked` gives a buyer the "unlocked = check the vault now" anchor.
+
+**THE v4 ENCODINGS, PROVEN ON A REAL POOL — and the bonded ETH they were quietly losing
+(founder-directed 2026-08-16: "Work on #1") — BUILT** (`tools/dexbot-e2e.js` — the 11th harness,
+`npm run dexbot-e2e`; the fix in `src/dexbot.js:addLiquidityOnchain`; wired into the forge
+workflow + guarded in `test/docs.js`). `src/dexbot.js` shipped with a warning in its own header:
+the raw Uniswap v4 encodings (the Universal Router's `V4_SWAP` command bytes; PositionManager's
+`MINT_POSITION` actions) "cannot be tested against a real pool in this environment." Everything
+AROUND them was covered — the fail-closed oracle, the slippage floor, the swap-then-book journal,
+the POL root cap, the §10.4 posture — because those run behind the `__set*` seams. **The bytes
+themselves had never executed, and real ETH rides them**, which is the one place this project's own
+standard (every chain rail devnet-proven end to end before it is trusted — `tools/chain-e2e.js`,
+27 asserted steps) had not been met.
+**IT ALL TURNED OUT TO BE AVAILABLE, which is why the flag was closable at all**: `@uniswap/v4-periphery`
+ships PREBUILT artifacts for PoolManager / PositionManager / StateView / PoolModifyLiquidityTest,
+`@uniswap/universal-router` ships its own, Permit2's precompiled runtime sits in v4-periphery's OWN
+test helper (etched at the canonical address exactly as that helper does it), and anvil comes from
+Foundry or npm. So the prover stands up a REAL v4 — not a mock — initializes the canonical OMR/ETH
+pool behind the REAL OmertaHook, seeds it with real liquidity, and runs BOTH bots **with their
+senders UNSEAMED**, so `src/dexbot.js`'s own encoders build the calldata that executes. **A hook
+carries its permissions in the low 14 bits of its address**, so it cannot merely be deployed; real
+deployments mine a CREATE2 salt, and here a throwaway DEPLOYER is mined instead (its nonce-0 address
+is a pure keccak of sender+nonce) — no factory, no cheatcode, ~15k hashes.
+**THE FOUR DECODERS WERE READ BEFORE ANYTHING WAS RUN, and all four matched** (`SWAP_EXACT_IN_SINGLE`
+0x06 / `SETTLE_ALL` 0x0c / `SETTLE_PAIR` 0x0d / `TAKE_ALL` 0x0f / `MINT_POSITION` 0x02 / `V4_SWAP`
+0x10, the struct field order, and the assembly offset layout `decodeMintParams` reads) — so the
+encodings were right and a careful reading would have stopped there. **The run found what reading
+could not.** `modifyLiquidities` is payable and v4's `DeltaResolver` settles native ETH out of the
+periphery contract's OWN balance — **it never refunds the remainder**, which simply stays in the
+PositionManager, unreachable by anyone. And over-sending is the ORDINARY case rather than an edge:
+the OMR side is priced at the ORACLE while liquidity is derived from the pool's LIVE `sqrtPrice`,
+and a TWAP lags spot by design, so whenever the OMR side binds the ETH side is under-consumed by
+exactly that gap. **Measured on the real pool: 0.148 ETH of 1 ETH lost at a 15% oracle-vs-spot gap**
+— bonded POL money, gone — **and the journal still booked the full 1 ETH as paired**, so
+`pol_pairings` (the root cap's only book) retired budget that never became liquidity. Both halves
+fixed: a `SWEEP` action (0x14) returning the remainder to the bot wallet, and reporting what the
+position actually CONSUMED (balance delta net of gas) rather than what was sent. No OMR sweep — the
+mint pulls OMR through Permit2 for exactly what it consumes, so the unused side is never taken.
+**Two mutations, each caught at its own named assertion** (the SWEEP removed → the stranded-ETH
+assertion; the books reverted to the sent amount → "the swept remainder must not be booked as
+paired"). 18 asserted steps end to end, incl. the fill clearing its slippage floor (995.95 vs a
+1000 oracle), the position owned by the SAFE and never the hot bot key, `runDexBotInvariants`
+holding over REAL fills, and **zero `transactions` rows** (the whole layer is out-of-band real
+value — the fees.js precedent). Wired into the FORGE workflow rather than ci.yml, because it needs
+exactly what that job already has (a Foundry toolchain for anvil + the `out/` artifacts `forge
+build` just produced), with the workflow's path filter extended to `src/dexbot.js` so a change to
+the encodings cannot ship without the prover running — and `test/docs.js` now fails if either the
+step or that path filter is removed (mutation-verified), because a harness that does not run is not
+a guard. CHAIN-DEPLOY's ⚠ VERIFY AT LAUNCH row is now ✅, **with the honest residual kept**: this
+proves the ENCODINGS, not a deploy — a wrong `DEX_POOL_FEE`/`DEX_POOL_TICK_SPACING` misses the pool
+entirely and is a config error the prover cannot see, so a small live swap + pairing on the real
+chain stays a launch step.
+
+**THE STRANDED-VAULT RECOVERY — "can we clawback stocks in Deeds in case they get burned accidentally"
+(founder-directed 2026-08-16; the destination answered "Treasury Holding address") — BUILT**
+(`src/chain.js` `recoverStrandedDeed`/`strandedDeeds`, `GET /v1/mod/deeds/stranded` +
+`POST /v1/mod/deeds/recover`, `DEED_RECOVERY_ADDRESS`/`DEED_RECOVER_AFTER_MS`; `test/deeds.js`;
+CHAIN-DEPLOY §8 beside the signer-rotation runbook). **The question was answered by READING the
+contract and the sweep rather than reasoning about them, and most of the worry dissolved:** burning a
+deed **FREEZES** its ERC-6551 vault, it never empties it — the account address is a pure function of
+the tokenId, the tokenId is `keccak(NAME)`, and **nothing ever deletes a `street_deeds` row or frees
+its unique `name_lc`**, so the id is permanently reserved and re-minting the same street restores
+control with the contents intact (the Foundry suite already proved the same-id re-mint). In the
+ORDINARY accident **nobody has to act at all**: `applyDeedReimport` returns null when the burner has
+no linked wallet or already holds a street, the row stays `pending`, and `sweepDeedReimports` retries
+it every worker tick, **forever** — so "I burned it by mistake" resolves itself the moment they link
+or free their slot. **ONE case never resolves** — a burn from a wallet that will never link (a lost
+key, a redeem sent from the wrong address, a player who does not come back): the re-import waits
+indefinitely, nobody in-game holds the street, so nothing re-mints the id and real stock sits frozen
+at a known address with no route. That is what this closes, and — the useful half — **it needs NO
+contract change**: `claim()` accepts any server-signed `DeedVoucher` and derives the tokenId from the
+name, so the recovery is a routed, documented path over authority the signer already has. **THE FOUR
+WALLS, because a usable lever is the part that needs bounding:** (1) **the destination is FIXED** —
+`DEED_RECOVERY_ADDRESS`, the treasury holding address, never an address the caller supplies (the
+founder's call), so the route cannot be talked into *"I lost my key, mint my street to this new
+wallet"*; returning a recovered street to a player is a separate deliberate act by whoever holds the
+treasury. (2) **Only a genuinely stranded deed** — a `deed_reimports` row still `pending` is the
+EVIDENCE the burn happened, and the deed must still be in the on-chain state, so a live owned deed is
+never recoverable, i.e. this can never be a confiscation (and the contract backstops it anyway:
+`_safeMint` reverts on an existing id, so a voucher for an unburned deed is unclaimable). (3) **Not
+before `DEED_RECOVER_AFTER_MS`** (30d) — a burn minutes old is in flight, not stranded; the wait is
+what distinguishes them. (4) **It SUPERSEDES the pending re-import**, or the sweep could later re-key
+the street to the burner while the treasury holds the NFT — a split brain where two parties each
+believe they own it (the stale-state-survives-a-lifecycle-reset class the red team's C4 was about).
+Mod-gated, so every recovery lands in `mod_actions`; §10.4-NEUTRAL (a voucher and an ownership move —
+zero `transactions` rows). Unset `DEED_RECOVERY_ADDRESS` = the route refuses, which is the right
+default: with nowhere agreed to send a recovered street, not recovering beats guessing.
+`GET /v1/mod/deeds/stranded` is the operator's read (what is stuck, how long it has waited, whether it
+is ready) so recovery is a decision made on evidence. **Three mutations, each caught at its own named
+assertion** (the destination taken from the caller → *"it recovers to the TREASURY HOLDING address,
+never anywhere the caller could aim it"*; the supersede dropped → *"the pending re-import is
+superseded, so the sweep can never split-brain the street"*; the burn requirement dropped → *"no
+recorded burn → no recovery: a voucher for a street somebody still owns is a confiscation"*). Suite
+green (99 files, 0 assertion errors) + pgquery 2952 statements (interpolated ceiling 73 → 74, the
+stranded board's IN list, reason recorded) + pgcheck 43/43 on real Postgres.

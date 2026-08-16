@@ -14,7 +14,8 @@ import { buildServer } from '../src/server.js';
 import { DEEDS, deedRankOf, deedRenown, deedNeighborhoodsOpen,
          GOODS, goodPriceOf, CONSUMABLES, cityEventOf, dayOf, seasonModOf,
          OPERATIONS, opSlotsOf, RACKETS, ASSETS } from '../src/rules.js';
-import { deedChainConfig, DEED_VOUCHER_TYPES, deedTokenId, markDeedExtracted, reimportDeed } from '../src/chain.js';
+import { deedChainConfig, DEED_VOUCHER_TYPES, deedTokenId, markDeedExtracted, reimportDeed,
+         sweepDeedReimports } from '../src/chain.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -456,7 +457,143 @@ assert.equal(brBoard.corner.iControl, true, 'control RESET to the re-importer �
 assert.equal((await reimportDeed(pool, { ref: 'tx1:0', from: burnerWallet, tokenId: ext.body.tokenId })).duplicate, true,
   're-import is idempotent on the log ref (txHash:logIndex)');
 
-// §10.4-NEUTRALITY: the whole on-chain lifecycle (extract → confirm → re-import) wrote ZERO ledger rows
+// THE ON-CHAIN LIFE IS OVER — every field that described it is cleared with the token id (red-team C4).
+// This is not tidiness: the STOCK-DELIVERY rail (brokers §3.4) resolves a deed's delivery target from
+// `onchain_owner` first and `extracted_by_account` second. Leave either set and a deed that is
+// re-imported, then re-extracted by SOMEBODY ELSE, spends its extract-pending window carrying the
+// PREVIOUS life's owner — so that owner's allocations are delivered into the ERC-6551 vault of a deed
+// the new extractor is about to control. Asserted through the delivery rail's own predicate, not just
+// on the columns, because the columns are only a defect through what reads them.
+const backHome = (await pool.query(
+  'SELECT onchain_token_id, extracted_by_account, extracted_at, onchain_owner FROM street_deeds WHERE name=$1',
+  ['Enzo Alley'])).rows[0];
+assert.equal(backHome.onchain_token_id, null, 'the token id is cleared — the deed is in-game again');
+assert.equal(backHome.extracted_by_account, null, 'and the extractor with it');
+assert.equal(backHome.extracted_at, null, 'and when they did it');
+assert.equal(backHome.onchain_owner, null, 'and the last on-chain owner — nothing survives to mis-route the next extraction');
+const { deedTargetRows } = await import('../src/stockdeliver.js');
+assert.equal((await deedTargetRows(pool)).some((t) => t.name === 'Enzo Alley'), false,
+  'and the delivery rail no longer sees a re-imported street as anyone\'s stock target');
+
+// ════════════ THE STRANDED-VAULT RECOVERY — a burn nobody can re-mint ════════════
+//
+// Burning FREEZES a deed's ERC-6551 vault, it never empties it — the address is a function of the
+// tokenId, the tokenId is keccak(NAME), and nothing deletes a street_deeds row or frees its unique
+// name, so re-minting the same street restores control with the contents intact. Ordinarily nobody
+// has to act: the re-import stays `pending` and the sweep retries forever. The case that never
+// resolves is a burn from a wallet that will NEVER link — then real stock sits frozen with no route.
+// This is that route, and it recovers to a TREASURY HOLDING address (founder call, 2026-08-16), never
+// to an address the caller supplies.
+{
+  const st = 'Stranded Row';
+  const stToken = deedTokenId(st);
+  const lost = await mk('Ghost');   // burned it, then vanished — no wallet ever links
+  await pool.query('INSERT INTO street_deeds (account_id,name,name_lc,district,onchain_token_id) VALUES ($1,$2,$3,$4,$5)',
+    ['onchain:' + stToken, st, st.toLowerCase(), 'docks', stToken]);
+  const recover = (body) => call('POST', '/v1/mod/deeds/recover', { mod: true, body });
+
+  // GATE: no treasury address configured → refuse. With nowhere agreed to send a recovered street,
+  // not recovering is safer than guessing, so unset must FAIL rather than fall back to anything.
+  assert.equal((await recover({ street: st })).body.error, 'no_recovery_address',
+    'with no treasury holding address configured, recovery refuses rather than guessing a destination');
+  process.env.DEED_RECOVERY_ADDRESS = '0x000000000000000000000000000000000000dead';
+
+  // WALL 2 — a burn must actually have been RECORDED. Without it the street may still be owned
+  // on-chain, and recovering a live deed would be a confiscation.
+  assert.equal((await recover({ street: st })).body.error, 'not_burned',
+    'no recorded burn → no recovery: a voucher for a street somebody still owns is a confiscation');
+
+  // record the burn from a wallet that is not linked to any account (the stranding condition)
+  await pool.query("INSERT INTO deed_reimports (ref, wallet_address, token_id) VALUES ($1,$2,$3)",
+    ['lostburn:0', '0x000000000000000000000000000000000000bEEF', stToken]);
+  // WALL 3 — a fresh burn is IN FLIGHT, not stranded. The sweep may still land it.
+  assert.equal((await recover({ street: st })).body.error, 'too_soon',
+    'a burn minutes old is in flight — the wait is what distinguishes stranded from in-flight');
+  await pool.query("UPDATE deed_reimports SET created_at = now() - interval '60 days' WHERE ref='lostburn:0'");
+
+  // WALL 2 again — a street that is NOT in the on-chain state is not recoverable at all
+  assert.equal((await recover({ street: 'Corvino Way' })).body.error, 'not_stranded',
+    'a street sitting in the game is not stranded — only the on-chain state is recoverable');
+
+  const rec = await recover({ street: st });
+  assert.equal(rec.code, 200, 'a genuinely stranded street recovers');
+  // WALL 1 — the destination is FIXED. The caller named no address and cannot: a recovery can never be
+  // talked into "I lost my key, mint my street to this new wallet".
+  assert.equal(rec.body.to.toLowerCase(), '0x000000000000000000000000000000000000dead',
+    'it recovers to the TREASURY HOLDING address, never anywhere the caller could aim it');
+  assert.equal(rec.body.tokenId, stToken, 'and to the SAME token id — which is what unfreezes the vault');
+  // the voucher is real: it recovers to the server signer against the CONTRACT's own domain
+  const rsig = await recoverTypedDataAddress({ domain: contractDomain, types: DEED_VOUCHER_TYPES,
+    primaryType: 'DeedVoucher', message: { to: rec.body.voucher.to, name: rec.body.voucher.name,
+      district: rec.body.voucher.district, nonce: BigInt(rec.body.voucher.nonce), deadline: BigInt(rec.body.voucher.deadline) },
+    signature: rec.body.signature });
+  assert.equal(rsig.toLowerCase(), privateKeyToAccount(process.env.VOUCHER_SIGNER_PK).address.toLowerCase(),
+    'the recovery voucher is signed by the server signer against the contract domain');
+
+  // WALL 4 — the pending re-import is SUPERSEDED. Without this the sweep could later hand the street
+  // to the burner while the treasury holds the NFT: two parties each believing they own it.
+  assert.equal((await pool.query("SELECT status FROM deed_reimports WHERE ref='lostburn:0'")).rows[0].status,
+    'superseded', 'the pending re-import is superseded, so the sweep can never split-brain the street');
+  await sweepDeedReimports(pool);
+  assert.equal((await pool.query('SELECT account_id FROM street_deeds WHERE name=$1', [st])).rows[0].account_id,
+    'onchain:' + stToken, 'and the sweep leaves it alone — the treasury holds it now');
+
+  // the operator board names what is stuck, and only what is stuck
+  const board = (await call('GET', '/v1/mod/deeds/stranded', { mod: true })).body;
+  assert.equal(board.stranded.some((s) => s.street === st), false, 'a recovered street leaves the stranded list');
+  assert.equal((await call('GET', '/v1/mod/deeds/stranded')).code, 401, 'the board is mod-gated');
+  delete process.env.DEED_RECOVERY_ADDRESS;
+  void lost;
+}
+
+// ════════════ THE VAULT'S RECORD — what travels with the street (the red-team follow-up) ════════════
+//
+// A deed's ERC-6551 vault is keyed on tokenId = keccak(NAME), so it SURVIVES THE BURN: 'Enzo Alley' was
+// extracted, burned and re-imported above, and its vault is the same account it always was. Anything in
+// it travels with the name to whoever extracts it next — including an in-game BUYER, who was pricing
+// the street with no sight of it. That bijection is load-bearing (it is what makes a burned deed's vault
+// recoverable rather than stranded forever), so the fix is DISCLOSURE, asserted here.
+const enzoToken = deedTokenId('Enzo Alley');
+await pool.query(
+  `INSERT INTO stock_deliveries (delivery_id, epoch_id, account_id, ticker, units, deed_token_id, tba, tx_hash, status)
+     VALUES ('vd-real','ep-v',$1,'TSLA',4.5,$2,'0xVAULT','0xrealtx','delivered'),
+            ('vd-real2','ep-v',$1,'TSLA',0.5,$2,'0xVAULT','0xrealtx2','delivered'),
+            ('vd-comp','ep-v',$1,'NVDA',99,$2,'0xVAULT',NULL,'simulated')`, [e.acct, enzoToken]);
+
+// THE OWNER SEES IT — and note WHOSE board this is: the burner, who never extracted anything. The
+// record resolves off the NAME, so a re-imported deed (onchain_token_id NULL) still carries its vault.
+const brVault = (await call('GET', '/v1/deeds', { token: burner.token })).body.deed.vault;
+assert(brVault, 'a re-imported street still carries its vault record — it is keyed on the NAME, which survived the burn');
+assert.equal(brVault.received.length, 1, 'ONE line — the two real TSLA deliveries fold into one, and the comp is not a line at all');
+assert.equal(brVault.received[0].ticker, 'TSLA', 'the ticker that was really delivered');
+assert.equal(brVault.received[0].units, 5, 'summed across deliveries (4.5 + 0.5)');
+assert.equal(brVault.received.some((r) => r.ticker === 'NVDA'), false,
+  'a COMP delivery books no stock, so it is NEVER shown as received — showing one would fabricate exactly what the txHash gate prevents');
+assert.equal(brVault.tba, '0xVAULT', 'the account is published so a buyer can check it themselves — no RPC needed to say where it is');
+
+// THE BUYER SEES IT TOO — the whole point. A deedless buyer browsing the market gets the vault on the
+// listing, so the street is priced with it rather than around it.
+await call('POST', '/v1/deeds/list', { token: burner.token, body: { price: 50000 } });
+const shopper = await mk('Nico');
+const listing = ((await call('GET', '/v1/deeds', { token: shopper.token })).body.market.forSale || [])
+  .find((s) => s.street === 'Enzo Alley');
+assert(listing, 'the street is on the market');
+assert(listing.vault && listing.vault.received[0].units === 5,
+  'and its listing states the vault — a buyer prices the street WITH what comes with it');
+
+// THE BUY-CONFIRM READ — the record inside the read txn, the live balance outside it. Chain-dormant
+// here, so `live:false` — never a fabricated zero, because "we can't see the vault" and "the vault is
+// empty" are different answers and only one of them is true.
+const vr = await call('GET', '/v1/deeds/vault/' + burner.id, { token: shopper.token });
+assert.equal(vr.code, 200, 'the confirm read answers');
+assert.equal(vr.body.street, 'Enzo Alley', 'keyed on the SELLER exactly like the buy — the confirm can never describe a different deed than the purchase');
+assert.equal(vr.body.price, 50000, 'and quotes the price the buy will charge');
+assert.equal(vr.body.vault.received[0].units, 5, 'the record');
+assert.equal(vr.body.live.live, false, 'the live half is honestly UNAVAILABLE with no chain — not an empty vault');
+await call('POST', '/v1/deeds/unlist', { token: burner.token });
+
+// §10.4-NEUTRALITY: the whole on-chain lifecycle (extract → confirm → re-import) + the vault disclosure
+// wrote ZERO ledger rows — reading what a vault received moves nothing.
 assert.equal(await txCount(), chainTx0, 'the on-chain deed lifecycle moves NO §10.4 value — a deed is ownership, not a currency');
 
 console.log('deeds: PASS');

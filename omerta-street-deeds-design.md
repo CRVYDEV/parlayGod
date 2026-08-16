@@ -149,6 +149,19 @@ mint, Safe-owned; 21 Foundry tests, part of the pre-mainnet audit batch — CHAI
   against. Residual, accepted: the lock forces the drain to happen BEFORE the unlock, making
   "unlocked = check the vault NOW" the buyer's one legible rule; it cannot stop an owner draining then
   unlocking, which no on-chain rule can.
+- **THE VAULT SURVIVES THE BURN — and the IN-GAME market is told (BUILT 2026-08-16).** The lock above
+  protects an ON-CHAIN buyer. It protects nobody on the path this game's own market runs: `tokenId =
+  keccak(NAME)`, so burning a deed and re-importing it does not retire its ERC-6551 vault — sell the
+  street in-game and the buyer's next extraction resolves the same account, with whatever is in it.
+  **A database row is not an ERC-721 transfer**, so no on-chain rule was ever going to reach that sale.
+  The bijection is not the bug (it is what makes a burned deed's vault RECOVERABLE rather than stranded
+  forever), so the answer is disclosure: the deed card and every market listing state what the vault has
+  **received** (`vaultHistoryFor` — a pure DB read of real, `tx_hash`-gated deliveries; never "holds",
+  because the owner can empty it and a delivered total shown as a balance is a false claim on a purchase
+  screen), the buy-CONFIRM step reads the **live** balance once at the moment the money moves
+  (`vaultLiveBalances`, run outside the read txn; chain-dormant answers "unavailable", never a
+  fabricated zero), and the client's re-import copy warns before the burn that the vault does not empty
+  itself. Full reasoning + the three ruled-out alternatives: `omerta-brokers-design.md` §3.4a.
 
 ### Phase 4 — the growing map (BUILT · §10.4-ZERO — pure render)
 **BUILT** (`src/deeds.js` deedBoard + `DEEDS.NEIGHBORHOODS`/`deedNeighborhoodsOpen`/`deedNeighborhoodOf`).

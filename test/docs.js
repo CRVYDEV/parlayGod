@@ -412,6 +412,15 @@ assert.deepEqual([...new Set(phantom)], [], `docs/AUDITS.md lists reports that d
     'npm run scale'])
     assert(ci.includes(script), `.github/workflows/ci.yml no longer runs \`${script}\` — a harness that `
       + 'does not run is not a guard, it is a file. Re-add it or delete the harness honestly.');
+  // dexbot-e2e lives in the FORGE workflow rather than ci.yml, because it needs what that job
+  // already has — a Foundry toolchain (anvil) and the `out/` artifacts forge just built. Same rule.
+  const forge = read('.github/workflows/forge.yml');
+  assert(forge.includes('npm run dexbot-e2e'),
+    '.github/workflows/forge.yml no longer runs `npm run dexbot-e2e` — that harness is the only thing '
+    + 'that executes the raw v4 encodings against a real pool; without it they are unverified again.');
+  assert(forge.includes("'src/dexbot.js'"),
+    ".github/workflows/forge.yml no longer triggers on 'src/dexbot.js' — the encodings it proves live "
+    + 'there, so a change to them would ship without the prover ever running.');
 }
 
 // ── and neither does a gate that fails on its own dependency list ────────────────────────────────
@@ -442,6 +451,37 @@ assert.deepEqual([...new Set(phantom)], [], `docs/AUDITS.md lists reports that d
       `.github/workflows/forge.yml never fetches lib/${dep}, which the contracts need — forge build `
       + 'will fail to PARSE on CI and skip the ENTIRE contract suite, not just whatever needs it. '
       + 'Keep the workflow in lockstep with run-forge-test.sh.');
+  }
+}
+
+// ── EVERY SIGNER-BEARING CONTRACT IS IN THE ROTATION RUNBOOK (red-team C1) ──────────────────────
+// One backend key (`VOUCHER_SIGNER_PK`) signs for several contracts, and each stores its own
+// `signer` that must be rotated separately. There is deliberately no shared registry on-chain, so
+// the ONLY containment is the ordered list in CHAIN-DEPLOY §8 — and a partial rotation leaves a door
+// open with nothing on-chain to say which. A fifth signer-bearing contract that ships without
+// joining that list is therefore a silent hole in the incident response, so this is
+// catalog-or-declare: carry a `setSigner`, be named in the runbook.
+{
+  const dir = 'omerta-contracts/src';
+  const bearers = fs.readdirSync(dir).filter((f) => f.endsWith('.sol'))
+    .filter((f) => /function setSigner\s*\(/.test(read(`${dir}/${f}`)))
+    .map((f) => f.replace(/\.sol$/, ''));
+  assert(bearers.length >= 4,
+    `expected at least 4 signer-bearing contracts, found ${bearers.join(', ') || 'none'} — if the extractor `
+    + 'stopped matching, this check is passing while covering nothing.');
+  const runbook = read('CHAIN-DEPLOY.md');
+  const rotation = runbook.slice(runbook.indexOf('ROTATING THE VOUCHER SIGNER'));
+  assert(rotation, 'CHAIN-DEPLOY.md has no signer-rotation runbook at all');
+  // The `setSigner` STEP specifically, not the runbook at large: every one of these is also named in
+  // the pause step one line up, so "the name appears in the runbook" passes for the wrong reason —
+  // which is exactly what a first cut of this check did, and pausing a contract does not rotate it.
+  const step = rotation.split('\n').filter((l) => l.includes('setSigner')).join('\n');
+  assert(step, "the rotation runbook never says setSigner — pausing is not rotating");
+  for (const c of bearers) {
+    assert(step.includes(c),
+      `${c}.sol stores its own signer and CHAIN-DEPLOY's rotation runbook never names it — on a leak it `
+      + 'would be the contract nobody rotates, and its pre-signed vouchers stay valid, bounded only by '
+      + 'its own daily cap. Add it to the ordered list in §8.');
   }
 }
 

@@ -41,6 +41,16 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 ///         (VoucherClaim payouts, staking deposits, bond funding) move 1:1 — the
 ///         minimum possible honeypot-scanner surface for a sell-taxed token.
 ///
+///         ONE VENUE, ONE LAYER (red-team C3). `OmertaHook` taxes the SAME kind of sale inside the v4
+///         swap, and neither contract can see the other — so `MAX_SELL_TAX_BPS` is a ceiling on THIS
+///         layer, and a seller pays the SUM of whatever is armed on the venue they traded. Registering
+///         the v4 PoolManager as an `ammPairs` entry while the hook is armed therefore doubles the
+///         rate past the ceiling both contracts advertise, and taxes protocol flows into the pool
+///         (the POL-pairing bot's LP add) unless every one of them is `taxExempt`. The intended
+///         configuration is the one CHAIN-DEPLOY states: the hook taxes the canonical pool, this path
+///         stays armed at ZERO, and it is armed only for a venue the hook does NOT cover — which is
+///         exactly what it exists for, since anyone may open an unhooked pool.
+///
 ///         WHY FLAT (not age-based): every Uniswap trade routes through a router, so
 ///         the token only ever sees `router -> pool` — the real seller's identity and
 ///         holding time are invisible at the ERC-20 level. The 48h linearly-decaying

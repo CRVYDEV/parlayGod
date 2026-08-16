@@ -293,6 +293,12 @@ PHASE 1 for the exact calls/args.
       lives in the pool, not in `_update`, and V3/V4 routers and every aggregator work normally. Keep the
       `_update` path anyway, ARMED AT ZERO: a hook tax is a property of ONE pool and anyone may open an
       unhooked one, so the token tax is the universal backstop the Safe arms if that starts to matter.
+      **ONE VENUE, ONE LAYER (red-team C3).** `MAX_SELL_TAX_BPS` (10%) is a ceiling on EACH layer and
+      neither contract can see the other, so a seller pays the SUM of what is armed on the venue they
+      traded. Registering the v4 PoolManager as an `ammPairs` entry while the hook is armed doubles the
+      rate past the ceiling both contracts advertise AND taxes protocol flows into the pool (the
+      POL-pairing bot's LP add) unless each is `taxExempt`. So: arm the hook for the canonical pool and
+      leave `_update` at zero; arm `_update` only for a venue the hook does not cover.
 
 ### 2a. STREET DEEDS — the on-chain tradeable deed (only when it ships; dormant until env-set)
 - [ ] **`StreetDeed(safe, signer, imageBase, externalBase)`** — the ERC-721 Street Deed
@@ -548,11 +554,19 @@ The backend keeps its own reserve records; they must track the on-chain balances
     `CHAIN_RPC_URL` + `OMERTA_BOND_ADDRESS` + `OMR_ADDRESS` + `OMERTA_HOOK_ADDRESS`. Nightly invariants
     (`runDexBotInvariants` → alertDrift: the POL root cap, orphan-fill freshness, comps-book-nothing,
     the swaps↔buybacks reconciliation); ops board + run-now triggers at `GET/POST /v1/mod/dexbot*`.
-  - **⚠ VERIFY AT LAUNCH (the chain-e2e precedent):** the raw v4 encodings (Universal Router `V4_SWAP`
-    command bytes; PositionManager `modifyLiquidities` MINT_POSITION actions) cannot be tested here — no
-    v4 pool exists to swap against. Before real ETH rides them, exercise BOTH senders on a devnet/fork
-    pool (a small swap + a small pairing, then read the position + the fill back). The orchestration,
-    walls, journals and §10.4 posture are suite-proven (`test/dexbot.js`, 3 mutations by name).
+  - **✅ THE v4 ENCODINGS ARE PROVEN (2026-08-16).** `npm run dexbot-e2e` stands up a REAL Uniswap v4 on
+    anvil — the actual PoolManager / PositionManager / StateView / Universal Router / Permit2 bytecode,
+    the canonical OMR/ETH pool behind the REAL OmertaHook — and runs BOTH bots with their senders
+    UNSEAMED, so `src/dexbot.js`'s own encoders build the calldata that executes (18 asserted steps).
+    **It found a real defect:** the mint over-sent ETH and v4 never refunds it (`DeltaResolver` settles
+    native ETH out of the periphery contract's own balance), so the remainder was stranded in the
+    PositionManager — unreachable by anyone, in bonded POL money, **0.148 ETH of 1 ETH at a 15%
+    oracle-vs-spot gap**, with the journal still booking the full ETH as paired. Fixed (a `SWEEP`
+    action + booking what the position actually consumed), both halves mutation-pinned.
+    **Still do a live smoke on the real chain before the first real run** — this proves the encodings,
+    not your deploy: one small swap and one small pairing, then read the position and the fill back.
+    A wrong `DEX_POOL_FEE`/`DEX_POOL_TICK_SPACING` misses the pool entirely and is a config error the
+    prover cannot see.
 - **The on-chain Store** — `OmertaFees.payForPackage` is **BUILT** (2026-08-14, in the audit batch:
   fail-closed on an unpriced sku, exact-value, forwards dev/Vig, custodies nothing; `setPackagePrice(sku,
   wei)` prices a package on-chain, `0` retires it). **The BACKEND watcher is BUILT (2026-08-15):**
@@ -603,6 +617,39 @@ a failed payment — which is exactly the window in which it is cheap to fix.
   neither of which touches a balance or a bonder's vested claim: `OMR.setMinter(address(0))` revokes the mint
   privilege at the token, and `OmertaBond.setMaxRate(0)` fails every new bond closed at the bond contract. Use
   the token-side one if the bond contract itself is what you distrust.
+- **ROTATING THE VOUCHER SIGNER IS FOUR TRANSACTIONS, NOT ONE (red-team C1).** `VOUCHER_SIGNER_PK` is a
+  single backend key and it signs for **four** contracts, each of which stores its own `signer` and must be
+  rotated separately. There is no shared registry on purpose (one more contract, one more audit surface, one
+  more single point of failure), so the containment is this list — and a PARTIAL rotation silently leaves a
+  door open, with nothing on-chain to tell you which. On any suspicion, in this order:
+  1. `VoucherClaim.pause()` · `OmertaBond.pause()` · `DynastyNFT.pause()` · `StreetDeed.pause()` — stops new
+     issuance everywhere first, so the rotation is not a race. (`StreetDeed.redeem()` deliberately still works;
+     a pause must never trap a holder's asset.)
+  2. `setSigner(newSigner)` on **all four**: `VoucherClaim`, `OmertaBond`, `DynastyNFT`, `StreetDeed`.
+  3. Rotate `VOUCHER_SIGNER_PK` on the API (the worker does not sign), redeploy, then unpause.
+  Until step 2 completes on every one, pre-signed vouchers stay valid at whichever contract was missed, bounded
+  only by that contract's own `dailyCap*` and `MAX_*_TTL` — so the blast radius of the key is the SUM of the
+  four daily caps, which is the number to size them against rather than each in isolation.
+- **RECOVERING A STRANDED DEED VAULT (founder-directed 2026-08-16).** Burning a Street Deed **freezes** its
+  ERC-6551 vault, it never empties it: the account's address is a pure function of the tokenId, the tokenId is
+  `keccak(NAME)`, and nothing ever deletes a `street_deeds` row or frees its unique name — so re-minting the
+  same street restores control with the contents intact (`test_the_same_street_re_extracts_to_the_same_id_after_a_burn`).
+  In the ordinary case **nobody has to act**: the re-import stays `pending` and `sweepDeedReimports` retries it
+  every worker tick, forever, until the burner links a wallet or frees their deed slot.
+  The case that never resolves is a burn from a wallet that will **never** link — a lost key, a redeem from the
+  wrong address, a player who does not come back. Then real stock sits frozen at a known address with no route.
+  - `GET /v1/mod/deeds/stranded` lists what is genuinely stuck (and how long it has waited).
+  - `POST /v1/mod/deeds/recover {street}` signs a `DeedVoucher` for that street to **`DEED_RECOVERY_ADDRESS`**,
+    the treasury holding address. Claim it from that wallet: it re-mints the SAME tokenId, which unfreezes the
+    vault. Returning a recovered street to a player is a **separate, deliberate act** by whoever holds the
+    treasury — deliberately not something this route can be aimed at.
+  - Four walls, because the lever is strong: the destination is fixed (never caller-supplied), only a deed with
+    a **recorded burn** still in the on-chain state qualifies (so it can never be a confiscation — and the
+    contract backstops it, since `_safeMint` reverts on a live id), not before `DEED_RECOVER_AFTER_MS` (30d
+    default — the wait is what distinguishes stranded from in-flight), and it **supersedes** the pending
+    re-import so the sweep can never later hand the street to the burner while the treasury holds the NFT.
+  - It is mod-gated, so every recovery lands in `mod_actions`. **Set `DEED_RECOVERY_ADDRESS` before you need
+    it**; unset, the route refuses rather than guessing a destination.
 - **VESTING IS A PRODUCT FEATURE, NOT A SECURITY CONTROL — do not count it as one.** There is deliberately no
   minimum `vestSeconds`, and adding one would buy nothing: `claim()` is intentionally NOT `whenNotPaused`, so
   pausing stops new bonds but never stops already-vested OMR being claimed — a vest is therefore not a window in

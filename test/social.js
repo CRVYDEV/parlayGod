@@ -24,7 +24,7 @@ import { buildServer } from '../src/server.js';
 import { payFamilyYield } from '../src/exchange.js';
 import { runBuyback } from '../src/worker.js';
 import { huntWanted, sweepContests } from '../src/social.js';
-import { familyTaskOf, weekOf, M3, BLACK_MARKET, bustProbOf, TERRITORY_RACKETS, territoryRankOf, territoryBuildCost, PORT, cityHourOf, DISTRICTS, DISTRICT_ADJ, MAP, CHARTERS, FAMILY_CHARTER, FAMILY_CHARTER_FX, VANITY, M8, GANG_SEALS, FOUNDATION } from '../src/rules.js';
+import { familyTaskOf, weekOf, M3, BLACK_MARKET, bustProbOf, TERRITORY_RACKETS, territoryRankOf, territoryBuildCost, PORT, SHIPMENT, cityHourOf, DISTRICTS, DISTRICT_ADJ, MAP, CHARTERS, FAMILY_CHARTER, FAMILY_CHARTER_FX, VANITY, M8, GANG_SEALS, FOUNDATION } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -1176,6 +1176,26 @@ assert(ks.kill, 'the smuggler went down');
 assert.equal(ks.contraLoot, Math.floor(100000 * PORT.STEP5.CONTRA_LOOT_RATE), 'the killer seized CONTRA_LOOT_RATE of the warehoused contraband');
 assert.equal(Number((await pool.query(`SELECT contraband c FROM characters WHERE id='${don.id}'`)).rows[0].c), donContraBefore + Math.floor(100000 * PORT.STEP5.CONTRA_LOOT_RATE), "the looted contraband is now the killer's (a pure ownership move — no ledger)");
 assert.equal(Number((await pool.query(`SELECT contraband c FROM characters WHERE id='${smuggler.id}'`)).rows[0].c), 100000 - Math.floor(100000 * PORT.STEP5.CONTRA_LOOT_RATE), 'the victim lost exactly the looted share (the remainder dies with the street)');
+
+// ── SCARCITY §3: THE SHIPMENT is a LOOT surface too — and it is written UNLIKE its neighbours ──
+// (red-team F2) The material sits beside contraband and heist_loot in the same loot block and cannot
+// be written the same way, because `shipment` is INT (not NUMERIC) and PERSISTED (not direct-SQL):
+//   · `shipment = shipment - $2` hits the pg-mem INT-subtraction sign-flip, and
+//   · an SQL credit to the KILLER is clobbered by the persist that ends the action.
+// Either mistake DESTROYS the material rather than moving it — the victim loses it to the grave and
+// the killer banks nothing — so this asserts BOTH SIDES of the transfer, which is what catches it.
+const stocked = await mk('Stocked Stan'); await seedCh(stocked.id, "respect=1000, muscle=1, speed=1, loc='docks'");
+await seedCh(stocked.id, 'shipment = 8');
+const donMatBefore = Number((await pool.query(`SELECT shipment s FROM characters WHERE id='${don.id}'`)).rows[0].s);
+const kmat = await whack(stocked.id);
+assert(kmat.kill, 'the stockpiler went down');
+const matCut = Math.floor(8 * SHIPMENT.LOOT_RATE);
+assert(matCut > 0, 'the fixture holds enough that a share is a whole unit — or this asserts nothing');
+assert.equal(kmat.matLoot, matCut, 'the killer seized LOOT_RATE of the stockpile');
+assert.equal(Number((await pool.query(`SELECT shipment s FROM characters WHERE id='${don.id}'`)).rows[0].s), donMatBefore + matCut,
+  "the material really landed on the KILLER'S ROW — an SQL credit here is overwritten by the persist that ends the action");
+assert.equal(Number((await pool.query(`SELECT shipment s FROM characters WHERE id='${stocked.id}'`)).rows[0].s), 8 - matCut,
+  'and the victim lost exactly that share, not a sign-flipped negative (the remainder dies with the street)');
 
 // ── Risk-to-Earn Phase 3: TERRITORY RACKETS — productive, seizable capital ──
 // gangA (DON) holds 'docks' (seized at the top). Establish an operation, earn from it, upgrade it,

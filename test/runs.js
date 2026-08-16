@@ -145,6 +145,19 @@ assert(inv.checks.find((c) => c.name === 'car conservation').ok,
   'car conservation holds with numbered cars in the world');
 assert(beforeLedger <= await ledgerRows(), 'the boosts wrote their own faucet rows and nothing else');
 
+// ═══ 5. A DB ERROR PROPAGATES — it is not swallowed (red-team F1) ═══
+// The first cut wrapped the whole mint in `catch { return null }` so "a mint failure can never fail a
+// boost". That promise cannot be kept inside a transaction: in real Postgres the failed statement has
+// ALREADY aborted the txn, so returning null only moves the failure one statement later — to the
+// boost's own car INSERT dying with 25P02, which deadlockToRetry does not map, i.e. a raw 500 where
+// the swallow was meant to buy silence. Letting it through reaches deadlockToRetry and becomes a
+// clean retryable `contention` (the shipment dayRow posture). Engine-independent by construction.
+const detonator = { query: async () => { const e = new Error('boom from the run table'); e.code = '23505'; throw e; } };
+await assert.rejects(() => mintLimitedRun(detonator, LIMITED_RUNS[0].model, 0),
+  /boom from the run table/,
+  'a DB error out of the run table PROPAGATES to the caller — swallowing it hides a retryable ' +
+  'contention behind an unmapped 25P02 one statement later');
+
 delete process.env.LIMITED_RUN_P;
 await app.close();
 console.log('runs: PASS');

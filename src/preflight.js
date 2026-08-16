@@ -123,6 +123,13 @@ export const OPERATIONAL_ENV = [
   // DynastyNFT (Minted/Transfer events) — the identity token registry + the portrait FREEZE at first
   // transfer. Dormant unless set on the worker.
   'DYNASTY_NFT_ADDRESS',
+  // THE STRANDED-VAULT RECOVERY (chain.js). A deed burned from a wallet that never links leaves its
+  // ERC-6551 vault frozen with no route to re-mint the id. DEED_RECOVERY_ADDRESS is the TREASURY
+  // HOLDING address a recovery voucher is signed to — the founder's call, and the reason the route
+  // takes no address from its caller. Unset = the recovery refuses, which is the right default: with
+  // nowhere agreed to send a recovered street, not recovering is safer than guessing.
+  // DEED_RECOVER_AFTER_MS is the wait that distinguishes "stranded" from "in flight" (30d default).
+  'DEED_RECOVERY_ADDRESS', 'DEED_RECOVER_AFTER_MS',
   // THE BANK's Alchemist — the harvest-fee stream. Dormant unless set; the asset symbol + decimals
   // are config because the market's underlying is not always 18-decimal (USDC is 6).
   'ALCHEMIST_ADDRESS', 'ALCHEMIST_ASSET', 'ALCHEMIST_ASSET_DECIMALS',

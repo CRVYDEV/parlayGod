@@ -81,7 +81,11 @@ interface IOmrHookObserver {
 ///
 ///         ── ANTI-RUG POSTURE, for the auditor and the token scanners ─────────────────────────
 ///         - `MAX_SELL_TAX_BPS` (1000 = 10%) is a COMPILE-TIME cap, mirroring `OMR.sol`. The Safe
-///           can never set a confiscatory rate.
+///           can never set a confiscatory rate. It is a ceiling on THIS LAYER: `OMR.sol` taxes the
+///           same sale from inside `_update` and the two contracts cannot see each other, so a seller
+///           pays the SUM of whatever is armed on their venue (red-team C3). One venue, one layer —
+///           this hook taxes the canonical pool and the token path stays at zero, which is also what
+///           keeps the POL-pairing bot's LP add into this pool from being taxed on arrival.
 ///         - The remainder rule sits on the LP slice, so dev + rwa + community + lp == total EXACTLY
 ///           however the bps divide. Three of four round down; a "natural" last slice would strand
 ///           wei belonging to nobody. Same discipline as `OMR.sol`, `OmertaBond` and the backend's
