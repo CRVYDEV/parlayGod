@@ -227,7 +227,11 @@ The 2026-08-16 questionnaire closed this table. The decisions, each now the stan
   the $CASHCAT-class coin (Robinhood Chain), PLUS Milady Maker (mainnet — trivially snapshottable,
   added 2026-08-16) and the $ANSEM-class Solana community.** Solana is a real build (the snapshot
   tool replays EVM logs and the claim rail verifies EVM signatures, so it needs a Solana
-  enumeration tool + an ed25519 claim leg) — **founder chose to build it for launch.**
+  enumeration tool + an ed25519 claim leg) — **founder chose to build it for launch. ✅ BUILT
+  2026-08-16** (`tools/snapshot-solana.js` + `src/sol.js` + the drop rail's verify-at-claim leg;
+  note the honest reproducibility difference: the Solana snapshot is the FINALIZED state at run
+  time keyed by slot, not a historical replay — so it must run BEFORE any announcement names the
+  target, the same adversarial posture enforced by operational order instead of block height).
 - **Per-community weights + floors/caps + per-NFT amounts:** still sized at allocation-build time
   within the genesis slice (the coin shape stays RULED: proportional + floor + cap, never
   flat-per-wallet).

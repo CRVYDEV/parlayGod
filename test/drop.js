@@ -10,6 +10,9 @@
 //     but the window closing.
 import assert from 'node:assert';
 process.env.MOD_KEY = 'test-mod-key';
+// a real DATABASE_URL arms the rate limiter (ratelimit.js:52) and the Solana leg drives one account
+// through a burst of gate probes — the limiter has its own suite (hardening/security), not this one
+process.env.RATE_LIMIT = 'off';
 import { buildServer } from '../src/server.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { foldTransfers, commitmentOf } from '../tools/snapshot.js';
@@ -278,6 +281,98 @@ await call('POST', '/v1/mod/drop/window', { mod: true, body: {
 
   // DISPLAY-ONLY (§9.4): the whole colors flow moved no value
   assert.equal(await txnCount(), tx0, 'claiming colors writes ZERO ledger rows — display-only forever');
+}
+
+// ════════════ THE SOLANA LEG — verify-at-claim, never linked (founder-directed 2026-08-16) ════════════
+{
+  const cryptoMod = await import('node:crypto');
+  const { base58Encode, base58Decode, verifySolSig, isSolAddress } = await import('../src/sol.js');
+  const { parseTokenAccount, foldTokenAccounts } = await import('../tools/snapshot-solana.js');
+
+  // 1) the snapshot tool's pure halves: the 165-byte SPL account parse + the per-OWNER fold
+  const mkAcct = (ownerBuf, amt) => {
+    const b = Buffer.alloc(165);
+    ownerBuf.copy(b, 32);
+    b.writeBigUInt64LE(BigInt(amt), 64);
+    return b.toString('base64');
+  };
+  const o1 = Buffer.alloc(32, 7), o2 = Buffer.alloc(32, 9);
+  const parsed = parseTokenAccount(mkAcct(o1, 40));
+  assert.equal(parsed.owner, base58Encode(o1), 'the owner is read at offset 32 and base58-encoded');
+  assert.equal(parsed.amount, '40', 'the amount is the u64 LE at offset 64');
+  assert.equal(parseTokenAccount(Buffer.alloc(10).toString('base64')), null, 'a non-token-account length parses to null');
+  const fold = foldTokenAccounts([
+    parseTokenAccount(mkAcct(o1, 40)), parseTokenAccount(mkAcct(o1, 60)), // two token accounts, ONE owner
+    parseTokenAccount(mkAcct(o2, 0)),                                     // a rent-exempt empty — dropped
+  ]);
+  assert.deepEqual(fold.holders, [{ wallet: base58Encode(o1), balance: '100' }],
+    'balances aggregate BY OWNER across token accounts; zero-balance accounts drop');
+  assert.ok(base58Decode(base58Encode(o2)).equals(o2), 'base58 round-trips');
+  assert.equal(verifySolSig('not!an!address', 'msg', 'sig'), false, 'hostile inputs to the verifier are false, never a throw');
+
+  // 2) a real ed25519 wallet (node stdlib — the same primitive Phantom signs with)
+  const { publicKey, privateKey } = cryptoMod.generateKeyPairSync('ed25519');
+  const rawPub = publicKey.export({ format: 'der', type: 'spki' }).subarray(-32);
+  const SOL = base58Encode(rawPub);
+  assert.ok(isSolAddress(SOL), 'a base58 32-byte key is a Solana address');
+  const sign = (msg) => cryptoMod.sign(null, Buffer.from(msg, 'utf8'), privateKey).toString('base64');
+
+  // the loader keeps base58 VERBATIM — lowercasing a case-sensitive address orphans it forever
+  const r = await call('POST', '/v1/mod/drop/load', { mod: true, body: { rows: [
+    { wallet: SOL, omr: 60, freeMint: true, communities: [8] } ] } });
+  assert.equal(r.code, 200, JSON.stringify(r.body));
+  const stored = (await pool.query('SELECT 1 FROM drop_allocations WHERE wallet_address=$1', [SOL])).rows.length;
+  assert.equal(stored, 1, 'the base58 address is stored VERBATIM — never lowercased');
+  const junk = await call('POST', '/v1/mod/drop/load', { mod: true, body: { rows: [{ wallet: 'not-a-wallet-at-all-0', omr: 5 }] } });
+  assert.equal(junk.body.error, 'wallet', 'a non-EVM, non-base58 wallet refuses the whole batch');
+
+  // re-open the window (the clawback block above closed it; its book assertions are already made)
+  await call('POST', '/v1/mod/drop/window', { mod: true, body: {
+    opensAt: new Date(Date.now() - 60e3).toISOString(), closesAt: new Date(Date.now() + 7200e3).toISOString() } });
+
+  const dave = await mk('Drop Dave');
+  const noChal = await call('POST', '/v1/drop/solana', { token: dave.token, body: { address: SOL, signature: sign('anything') } });
+  assert.equal(noChal.body.error, 'no_challenge', 'no challenge → the gate names the fix');
+
+  const chal = (await call('POST', '/v1/drop/solana/challenge', { token: dave.token })).body;
+  assert.ok(chal.message.includes(dave.acct),
+    'the challenge binds the ACCOUNT — a signature cannot be replayed to claim into someone else\'s');
+  const { privateKey: wrongKey } = cryptoMod.generateKeyPairSync('ed25519');
+  const forged = cryptoMod.sign(null, Buffer.from(chal.message, 'utf8'), wrongKey).toString('base64');
+  const bad = await call('POST', '/v1/drop/solana', { token: dave.token, body: { address: SOL, signature: forged } });
+  assert.equal(bad.body.error, 'bad_signature', 'a signature from the wrong key refuses cleanly');
+  const garbage = await call('POST', '/v1/drop/solana', { token: dave.token, body: { address: SOL, signature: '!!not-a-signature!!' } });
+  assert.equal(garbage.body.error, 'bad_signature', 'hostile garbage is a clean refusal, never a 500');
+
+  // THE HAPPY PATH — the SAME enumerated mint + free mint + tranche mark as the EVM leg (one settle)
+  const d0 = await drift();
+  const ok = await call('POST', '/v1/drop/solana', { token: dave.token, body: { address: SOL, signature: sign(chal.message) } });
+  assert.equal(ok.code, 200, JSON.stringify(ok.body));
+  assert.equal(ok.body.omr, 60);
+  assert.equal(ok.body.freeMint, true);
+  const ap = (await pool.query('SELECT omr, mint_credits, drop_free_mint FROM account_persistent WHERE account_id=$1', [dave.acct])).rows[0];
+  assert.equal(Number(ap.omr), 60, 'the envelope landed');
+  assert.equal(Number(ap.mint_credits), 1, 'the whitelist free mint came with it');
+  assert.ok(ap.drop_free_mint, 'a Solana free mint is excluded from the paid tranche count too');
+  assert.equal(await drift(), d0, 'conservation holds — the Solana leg mints through the same enumerated reason');
+  assert.ok((await dropCheck()).ok, 'the drop check reconciles with a Solana claim in the books');
+
+  // ONCE, EVER — the latch holds on the verbatim address (a fresh challenge cannot re-open it)
+  const chal2 = (await call('POST', '/v1/drop/solana/challenge', { token: dave.token })).body;
+  const again = await call('POST', '/v1/drop/solana', { token: dave.token, body: { address: SOL, signature: sign(chal2.message) } });
+  assert.equal(again.body.error, 'already', 'one envelope per wallet, ever — the Solana latch holds');
+
+  // THE COLORS for a Solana-ONLY claimant (no linked EVM wallet): the CLAIMED row is the proof of
+  // control — the ed25519 claim already proved it, so the community is not silently excluded from
+  // its own ward colors.
+  const cb = (await call('GET', '/v1/provenance', { token: dave.token })).body;
+  assert.equal(cb.eligible, true, 'a Solana-only claimant is offered its colors (the claimed-row proof source)');
+  const colors = await call('POST', '/v1/provenance', { token: dave.token });
+  assert.equal(colors.code, 200, JSON.stringify(colors.body));
+  assert.deepEqual(colors.body.communities, [8], 'the Solana community stamps its own ward');
+  const rewear = await call('POST', '/v1/provenance', { token: dave.token });
+  assert.equal(rewear.body.error, 'already',
+    'an already-stamped Solana-only claimant hears the true refusal, not "link your wallet"');
 }
 
 // the drop check FAILS BY NAME when a credit has no claimed row behind it (the §10.4 tripwire)

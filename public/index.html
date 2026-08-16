@@ -7812,6 +7812,8 @@
                 : `<span class="t">Your envelope: <b style="color:var(--neon)">${fmt(dr.amount)} $OMR</b>${dr.freeMint ? ' <span class="chip good">+ one FREE identity mint</span>' : ''}</span>
                    <div class="d">closes in ${mins(dr.closesSeconds)} — claims, never pushes; unclaimed lapses back to the vault</div>
                    <button class="act" id="drop-claim" style="border-color:var(--neon)">open the envelope</button>`}
+        ${dr.open && !dr.claimed ? `<div class="d" style="margin-top:8px">Hold it in a <b>Solana</b> wallet? Sign once with Phantom — no linking, the envelope claims straight into this account.
+           <button class="act" id="drop-solana">claim with a Solana wallet</button></div>` : ''}
       </div>` : ''}
 
       ${pv.stamped || pv.eligible ? `
@@ -7958,6 +7960,21 @@
     { const wl = $('#wallet-link'); if (wl) wl.onclick = () => linkWallet(); }
     { const mg = $('#mint-go'); if (mg) mg.onclick = () => act('POST', '/v1/character/mint').then(() => renderPortfolio()); }
     { const dc = $('#drop-claim'); if (dc) dc.onclick = () => act('POST', '/v1/drop/claim').then(() => renderPortfolio()); }
+    { const ds = $('#drop-solana'); if (ds) ds.onclick = async () => {
+        try {
+          const ph = window.phantom?.solana || window.solana;
+          if (!ph?.connect) { toast('No Solana wallet found — install Phantom (phantom.app) and reload.'); return; }
+          await ph.connect();
+          const address = ph.publicKey.toString();
+          const c = await api('POST', '/v1/drop/solana/challenge');
+          if (c.code >= 400) { toast(c.body?.message || 'Could not get a challenge.'); return; }
+          const signed = await ph.signMessage(new TextEncoder().encode(c.body.message), 'utf8');
+          const sigBytes = signed.signature || signed; // Phantom returns {signature: Uint8Array}
+          const signature = btoa(String.fromCharCode(...new Uint8Array(sigBytes)));
+          await act('POST', '/v1/drop/solana', { address, signature });
+          renderPortfolio();
+        } catch (e) { toast('Solana claim cancelled or failed.'); }
+      }; }
     { const cc = $('#colors-claim'); if (cc) cc.onclick = () => act('POST', '/v1/provenance').then(() => renderPortfolio()); }
     { const wd = $('#withdraw-go'); if (wd) wd.onclick = () =>
         act('POST', '/v1/withdraw', { amount: Number($('#wd-amt').value), address: me.wallet }).then(() => renderPortfolio()); }

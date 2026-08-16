@@ -1807,6 +1807,14 @@ export async function buildServer() {
     G.readCharacter(pool, req.user.sub, (ch, client, h) => Drop.dropBoard(ch, client, h)));
   app.post('/v1/drop/claim', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Drop.claimDrop(ch, client, h)));
+  // THE SOLANA LEG (founder-directed 2026-08-16): a base58 wallet has no SIWE home, so it proves
+  // control AT the claim — a server challenge signed ed25519, verified dependency-free (sol.js),
+  // then the same latch + settle as the EVM leg. Challenge first, then claim.
+  app.post('/v1/drop/solana/challenge', { preHandler: auth }, async (req) =>
+    Drop.solanaChallenge(pool, req.user.sub));
+  app.post('/v1/drop/solana', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) =>
+      Drop.claimDropSolana(ch, client, h, { address: req.body?.address, signature: req.body?.signature })));
 
   // THE PROVENANCE COLORS (dynasty §9) — opt-in, once per snapshot wallet ever, display-only: the
   // portrait carries the colors of the tribe you came from. The POST is the consent (§9.2).

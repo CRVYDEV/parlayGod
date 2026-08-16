@@ -12842,3 +12842,42 @@ sim + lever table — it touches the signed district-perk surface); launch-night
 launch doc §6 (answers replace "none pinned yet"), identity doc §7, both hook docs, SIGN-OFF (the
 full seventeen-row record). Three directed builds tracked: Solana drop support, the deed-extraction
 attestation, deeds 2C.
+
+**THE SOLANA LEG — the $ANSEM community's drop support (founder-directed 2026-08-16: "Build Solana
+support for launch") — BUILT** (`src/sol.js` — the 149th src module, `tools/snapshot-solana.js`,
+`src/drop.js`, `POST /v1/drop/solana/challenge` + `POST /v1/drop/solana`, a claim-with-Phantom
+button on THE ENVELOPE card; `test/drop.js` THE SOLANA LEG block). The community drop's one
+non-EVM community, built WITHOUT a new dependency: **node's own crypto verifies ed25519** (the raw
+32-byte pubkey wrapped in the fixed SPKI DER prefix), so the new signature-verification surface is
+~40 auditable stdlib lines (`sol.js` — base58 encode/decode + `verifySolSig`, every hostile input a
+clean `false`, never a throw). **THE SNAPSHOT** (`tools/snapshot-solana.js`): SPL token holders by
+`getProgramAccounts` over the token program filtered by mint — the pure halves exported for tests
+(the 165-byte account-layout parse: owner at offset 32, amount u64 LE at 64; the per-OWNER fold
+summing across token accounts, zeros dropped) — with the HONEST reproducibility difference stated
+in the dataset itself (`meta.liveSnapshot: true`): Solana public RPC cannot replay a historical
+slot, so the snapshot is the finalized state AT RUN TIME keyed by slot, and the
+snapshot-before-announce rule is enforced by OPERATIONAL ORDER rather than block height. **THE
+CLAIM is verify-at-claim, never linked** — a base58 wallet has no home on
+`account_persistent.wallet_address` (that column is the EVM extraction identity), so the Solana leg
+proves control at the claim: a server challenge (the wallet_challenges machinery, its OWN message
+string `OMERTÀ drop claim` so it can never be confused with a SIWE link; binds the ACCOUNT so a
+signature cannot claim into someone else's; consumed on success, 10-min TTL), signed ed25519,
+then **the SAME latch + settle as the EVM leg** — `settleEnvelope` was extracted as the one core
+(the extortFront discipline), so the enumerated `drop:claim` mint, the free-mint waiver, and the
+tranche exclusion structurally cannot drift between rails. **Base58 is CASE-SENSITIVE**: the loader
+stores it VERBATIM (lowercasing orphans the allocation forever — mutation-verified) and the latch
+matches verbatim, never `lower()`. One account may claim several Solana envelopes (a holder with
+three wallets) — each its own once-ever latch, multiplying nothing. **THE COLORS reach the Solana
+community too**: `claimColors`/`colorsBoard` gained a second proof source — an allocation row this
+account CLAIMED (the ed25519 claim was the proof) — so a Solana-only claimant isn't silently
+excluded from its own ward; the refusal messages name the true state (`already` for a stamped
+wallet, never "link your wallet" — its own regression). §10.4: ZERO new surface (the claim rides
+the existing enumerated `drop:claim` mint; the suite proves conservation unmoved + the
+`drop claims ledgered` check reconciling with a Solana claim in the books). **Three mutations,
+each caught at its own named assertion** (the signature check disabled → "a signature from the
+wrong key refuses cleanly"; the loader lowercasing → the batch refuses naming the address; the
+once-ever latch dropped → "one envelope per wallet, ever — the Solana latch holds"). Two lessons
+re-paid: a real `DATABASE_URL` ARMS the rate limiter (`ratelimit.js:52`), so the suite pins
+`RATE_LIMIT=off` like its siblings (the limiter has its own suites); and the real-PG re-run on a
+REUSED database failed on rows the first run had claimed — the dirty-database trap, fresh DB per
+run. Suite green on pg-mem AND real Postgres + pgquery + pgcheck 43/43.
