@@ -799,12 +799,13 @@ as the shipped watcher enforces); retrofit for every existing minted account con
   three petty in-game-cash faucets (corner jobs / the nightly hustle / the first-blood bonus,
   ~$8,500/day combined, no extraction path) stay agent-payable; the asymmetry with the four
   excluding siblings is now a decision, not an oversight.
-- **Street Deeds turf perks (phase 2C): BUILD NOW** — a directed build; ships with its own sim
-  measurement + lever table since it touches the signed district-perk surface, capped at
-  free-player parity per the deeds design.
+- **Street Deeds turf perks (phase 2C): BUILD NOW — ✅ BUILT 2026-08-16** (the controller's perks:
+  the district perk follows corner CONTROL, OR'd with family turf by set-union so it never stacks,
+  + one own-corner op seat capped at `SLOTS_MAX` — free-player parity made literal; sim P9.38,
+  BALANCE.md § STREET DEEDS 2C, levers `DEEDS.PERK_TURF`/`PERK_OP_SLOTS` pinned).
 - **Launch-night doors: open** (`INVITE_MODE` stays off — the paid mint remains the extraction-side
   Sybil bound). Note this supersedes the older "INVITE_MODE=on for the closed alpha" line above for
   launch itself; the invite tooling remains available if a gated wave is ever wanted.
 
-**Directed builds created by these answers (tracked):** the Solana snapshot + ed25519 claim leg;
-the deed-extraction self-attestation; Street Deeds phase-2C turf perks (sim + sign-off pass).
+**Directed builds created by these answers (all three ✅ BUILT 2026-08-16):** the Solana snapshot +
+ed25519 claim leg; the deed-extraction self-attestation; Street Deeds phase-2C turf perks.

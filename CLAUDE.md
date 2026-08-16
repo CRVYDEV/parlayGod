@@ -12881,3 +12881,57 @@ re-paid: a real `DATABASE_URL` ARMS the rate limiter (`ratelimit.js:52`), so the
 `RATE_LIMIT=off` like its siblings (the limiter has its own suites); and the real-PG re-run on a
 REUSED database failed on rows the first run had claimed — the dirty-database trap, fresh DB per
 run. Suite green on pg-mem AND real Postgres + pgquery + pgcheck 43/43.
+
+**THE ATTESTATION — extraction carries the holder's own word (founder-directed 2026-08-16, the
+verification-depth answer: "wallet + paid mint + self-attestation") — BUILT** (`src/chain.js`
+`requestDeedWithdraw`, `src/server.js`, `schema.sql` `street_deeds.attested_at` (ALTER-added — the
+boot-crash lesson), `public/index.html`, `test/deeds.js`). The claim rail's eligibility posture made
+concrete at the ONE gate where a deed becomes a real-asset container: extracting a Street Deed (whose
+TBA receives treasury-bought stock with no further check — the gateless-push decision) now requires
+the player to ATTEST they may lawfully hold the instruments the vault can receive. **Strict-read at
+the route** (`attest: req.body?.attest === true` — a truthy accident, `'yes'`, `1`, can never pass;
+the gate itself is `attest !== true`), placed AFTER the listed gate so refusals arrive in a sensible
+order, and **the record survives the extraction**: `attested_at` is stamped on the street_deeds row in
+the SAME state-1→2 UPDATE that signs the voucher, so the re-key to `onchain:<token>` carries it — who
+attested, and when, is answerable later for any token. The client confirm dialog carries the
+attestation sentence and the button says what it does ("I attest — take it on-chain") — consent is a
+sentence read, not a flag defaulted. ZERO §10.4 (a gate + a timestamp; no value moves).
+`test/deeds.js` proves the refusal (`attestation`, before any signing), the strict read (`attest:
+'yes'` refuses), the happy path with `attest: true`, and the stamped record — mutation-verified (the
+gate dropped → the refusal assertion fails by name).
+
+**STREET DEEDS 2C — THE CONTROLLER'S PERKS (founder-directed 2026-08-16 "Build it now" — the sign-off
+the phase-2 deferral waited for) — BUILT** (`src/rules.tail.js` `DEEDS.PERK_TURF`/`PERK_OP_SLOTS` +
+`opSlotsOf(lvl, deedSeat)`, `src/game.js` loadOwned/`deedPerk`+`deedSeat` + the doCrime union + the
+view's ops block, `src/accrual.js`, `src/economy.js` (buy/sell goods, the workshop, `opsSlots(ch,h)`),
+`src/deeds.js` board fields, `public/index.html`, `tools/sim.js` **P9.38**, `test/deeds.js`;
+BALANCE.md § STREET DEEDS 2C). The deed-vs-control split applied to TURF POWER: whoever **CONTROLS a
+corner** (the owner when nobody has muscled in, or the usurper inside their 12h window — the SAME
+`deedController` the corner till reads, so board and till cannot disagree) personally enjoys that
+district's **SIGNED turf perk**, and controlling your OWN corner seats **one extra operation**.
+**The two parity walls are the design, and both are test-pinned:** (1) **OR by SET-UNION, never
+stacks** — every perk site is an `.includes(x)`, so the sites read the UNION of family-held +
+corner-controlled districts and a district counted twice applies its perk EXACTLY once (the
+never-stack mutation — the perk applied as a second multiplier — fails by name at a real goods till:
+0.95, never 0.95²); in a world where families already hold the districts, 2C adds ZERO base-wide
+emission by construction. (2) **The seat caps at `SLOTS_MAX`** — `opSlotsOf(lvl, deedSeat)` is ONE
+implementation for the till (`assertSlot`) and the board (the view's ops block), and at level ≥ 40 the
+seat adds NOTHING (the cap mutation fails by name): a deed ACCELERATES the seat curve, it can never
+exceed what any player reaches by level alone — free-player parity made literal. The perk VALUES are
+the signed district perks unchanged (brick +0.02 crime success, canal ×1.1 crime cash, docks ×1.5
+crates, cathedral ×2 nerve regen, neon ×1.15 racket income, foundry ×0.75 craft, the ±5% goods edge at
+the corner); **the perk follows CONTROL** — a shakedown takes the edge and the seat with the corner
+(the dropped-controller-check mutation fails by name: the dispossessed owner pays full freight while
+the usurper buys at 0.95 through the corner they muscled), and an on-chain/extraction-pending deed
+perks NOBODY (inert — the car/boat rule, enforced at the ONE loadOwned filter). Deliberately EXCLUDED:
+convoy TURF_DEF, the neon fight fix, the harbormaster toll, sovereignty — those key on the GANG
+holding the district, which a deed never is. §10.4: ZERO new reason (the perks scale existing signed
+faucets exactly as family turf does; the sim stays drift-0). **Measured (sim P9.38, prints every
+run):** the one money-touching widening is a NEON corner in a family-less world — ceiling +15% of ONE
+operator's metered racket day (≈ +$4.98M/day fully-maxed, $0 when any family holds neon); the op
+seat's max marginal is the (seats+1)-th best level-gated rung's metered day, exactly $0/day at level ≥
+40. Client: "your corner's edge" on the deed card (active / gone-with-the-seizure / riding a muscled
+rival corner). Every claim in `test/deeds.js` is proven at a REAL TILL (a goods price, a workshop
+bill, a racket seat), never by reading a flag back — three mutations, each caught at its own named
+assertion. `DEEDS.PERK_TURF`/`PERK_OP_SLOTS` are founder sign-off levers (0 disables each), pinned in
+`test/levers.js`.

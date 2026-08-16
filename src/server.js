@@ -2550,7 +2550,8 @@ export async function buildServer() {
   // STREET DEEDS on-chain — extract your street as a tradeable StreetDeed ERC-721 (design §2/§3). The
   // deed goes INERT in-game until re-imported; the `minted` extraction entitlement never travels with it.
   app.post('/v1/deeds/extract', { preHandler: auth }, async (req) =>
-    Chain.requestDeedWithdraw(pool, req.user.sub, req.body?.address));
+    // attest is read STRICTLY (=== true): the eligibility self-attestation must be an explicit act
+    Chain.requestDeedWithdraw(pool, req.user.sub, req.body?.address, { attest: req.body?.attest === true }));
   app.get('/v1/withdraw/status', { preHandler: auth }, async (req) => {
     const mine = (await pool.query(
       'SELECT id, kind, amount, gear_id, nonce, status, claimed_onchain, signed_payload FROM vouchers WHERE account_id=$1 ORDER BY created_at DESC LIMIT 50',

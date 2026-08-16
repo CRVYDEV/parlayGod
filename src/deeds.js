@@ -6,9 +6,10 @@
 //
 // ACCOUNT-level (keyed on account_id) → SURVIVES DEATH: your characters die, the street stays yours;
 // the heir inherits it (outside the runEstate wipe by construction — the death-disposition guard scans
-// character_id-keyed tables, never account_id-keyed ones). CONTROL — rent (B) and turf (C) — is earned
-// and defended IN-GAME (Phase 2, sim + founder sign-off); the on-chain tradeable token is Phase 3
-// (audit + counsel gated). Deliberately NOT wired into the live mint / the `minted` extraction flag,
+// character_id-keyed tables, never account_id-keyed ones). CONTROL — rent (B, the corner take) and
+// turf (C, the controller's perks — Phase 2C, loaded in game.js/loadOwned and OR'd with family turf
+// at the perk sites) — is earned and defended IN-GAME; the on-chain tradeable token is Phase 3.
+// Deliberately NOT wired into the live mint / the `minted` extraction flag,
 // so the Sybil/extraction machinery is untouched (design §8).
 import { GameError, cleanText } from './game.js';
 import { DEEDS, DISTRICTS, deedRankOf, deedRenown, deedCornerOwed, deedController,
@@ -118,6 +119,8 @@ export async function deedBoard(ch, client, h) {
     'SELECT district, name, corner_at, control_until FROM street_deeds WHERE controller_account=$1 AND control_until > now()',
     [ch.account_id])).rows.map((r) => ({ district: r.district, districtName: districtName(r.district),
       name: r.name, owed: deedCornerOwed(r, now),
+      // 2C — controlling a rival's corner carries that district's turf perk too (the control split)
+      perk: DEEDS.PERK_TURF ? ((DISTRICTS.find((d) => d.id === r.district) || {}).perk || null) : null,
       controlSeconds: Math.max(0, Math.ceil((new Date(r.control_until).getTime() - now) / 1000)) }));
   const myOwed = deed && iControl ? deedCornerOwed(deed, now) : 0;
   // RIVAL corners on the block you're standing on — the marks you could lean on (the shakedown targets the
@@ -140,6 +143,13 @@ export async function deedBoard(ch, client, h) {
     canReclaim: !!seized && deed && String(ch.loc) === String(deed.district),
     myTargetId: ch.id,                     // the client targets this to reclaim your own corner
     shakedownMinLvl: DEEDS.SHAKEDOWN_MIN_LVL, shakedownEnergy: DEEDS.SHAKEDOWN_ENERGY,
+    // Phase 2C — THE CONTROLLER'S PERKS. While YOU run your own corner: the district's signed turf
+    // perk (OR'd with family turf — never stacks) + one extra operation seat (capped at SLOTS_MAX).
+    // A rival who muscles in takes the perk with the corner; an on-chain deed perks nobody (inert).
+    perkText: DEEDS.PERK_TURF && deed ? ((DISTRICTS.find((d) => d.id === deed.district) || {}).perk || null) : null,
+    perkActive: !!(DEEDS.PERK_TURF && deed && iControl && !deed.onchain_token_id),
+    seatBonus: DEEDS.PERK_OP_SLOTS,
+    seatActive: !!(DEEDS.PERK_OP_SLOTS && deed && iControl && !deed.onchain_token_id),
   };
   // Phase 3 — THE MARKET: your own listing state + the streets currently for sale (a deedless buyer
   // browses these). One deed per account, so only a deedless account can buy — the "acquire a storied

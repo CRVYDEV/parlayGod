@@ -584,8 +584,15 @@ export const OPERATIONS = {
   // sign-off), and because at 0 nothing can pay for itself by churning through the catalog.
   RACKET_RETIRE_BPS: 0,
 };
-export const opSlotsOf = (lvl) =>
-  Math.min(OPERATIONS.SLOTS_MAX, OPERATIONS.SLOTS_BASE + Math.floor(Number(lvl || 0) / OPERATIONS.SLOTS_PER_LEVEL));
+// `deedSeat` — STREET DEEDS Phase 2C: controlling your OWN corner seats one more operation
+// (DEEDS.PERK_OP_SLOTS), still under the SAME SLOTS_MAX hard cap — free-player parity: the deed
+// ACCELERATES the seat curve, it can never exceed what any player reaches by level alone. ONE
+// implementation for the till (economy.assertSlot) and the board (the view's ops block), so the
+// Empire card can never advertise a seat buyRacket refuses. (DEEDS is declared later in this file;
+// the ternary only reads it when deedSeat is true, which never happens during module evaluation.)
+export const opSlotsOf = (lvl, deedSeat = false) =>
+  Math.min(OPERATIONS.SLOTS_MAX, OPERATIONS.SLOTS_BASE + Math.floor(Number(lvl || 0) / OPERATIONS.SLOTS_PER_LEVEL)
+    + (deedSeat ? DEEDS.PERK_OP_SLOTS : 0));
 // the level at which the NEXT slot opens — null once capped (the board says "that's all of them")
 export const nextOpSlotLevel = (lvl) => {
   const cur = opSlotsOf(lvl);
@@ -5386,8 +5393,9 @@ export const deedRenown = (history) => (history || []).reduce((a, e) => a + (DEE
 // small, HARD-CAPPED, lazy cash faucet (`deed:corner`, character_id'd → the per-character cash check
 // reconciles; ONE deed per account → the base-wide ceiling is (deed holders) × PER_HR × 24h, petty vs
 // the passive stack) collected only by whoever CONTROLS the deed. THE SHAKEDOWN moves control, not
-// money (§10.4-neutral). Turf perks (C) touch the SIGNED district-perk surface → deferred to a
-// separate founder sign-off. Every number here is a founder SIM sign-off lever (BALANCE.md), NOT a
+// money (§10.4-neutral). Turf perks (C) are Phase 2C below (founder-signed 2026-08-16 — the perk
+// VALUES are the signed district perks unchanged; only WHO carries them widened, OR never stacking).
+// Every number here is a founder SIM sign-off lever (BALANCE.md), NOT a
 // signed value — the design's "redirect not faucet" ideal is a genuine small faucet in engineering
 // terms (a true redirect needs a cross-character lock on a hot path or a new §10.4 bucket; the
 // bounded-faucet-measured-and-flagged precedent — territory/business/port/world — is cleaner), so the
@@ -5410,6 +5418,18 @@ export const deedCornerOwed = (deed, now = Date.now()) => {
 export const deedController = (deed, now = Date.now()) =>
   (deed && deed.controller_account && deed.control_until && new Date(deed.control_until).getTime() > now)
     ? deed.controller_account : (deed ? deed.account_id : null);
+// ── STREET DEEDS Phase 2C — THE CONTROLLER'S PERKS (founder-directed 2026-08-16 "Build it now").
+// The deed-vs-control split applied to TURF POWER: whoever CONTROLS a corner (the owner when no
+// rival has muscled in, or the usurper inside their window) personally enjoys that district's
+// SIGNED turf perk — OR'd with family turf by SET-UNION at every perk site, so a district counted
+// twice (family holds it AND you control a corner there) adds NOTHING (never stacks; free-player
+// parity: the perk VALUES are the signed district perks, unchanged). PERK_TURF: 0 disables the
+// turf half; PERK_OP_SLOTS: 0 disables the seat. Both are founder SIM sign-off levers (BALANCE.md
+// § STREET DEEDS 2C). Deliberately EXCLUDED (family machinery, not district perks): convoy
+// TURF_DEF, the neon fight fix, the docks harbormaster toll, sovereignty — those key on the GANG
+// holding the district, which a deed never is.
+DEEDS.PERK_TURF = 1;      // 1 = the controller enjoys the district perk (OR, never stacks); 0 = off
+DEEDS.PERK_OP_SLOTS = 1;  // extra operation seats while you control your OWN corner (capped at SLOTS_MAX)
 // ── STREET DEEDS Phase 3 — THE SECONDARY MARKET (off-chain core; the on-chain tradeable NFT is
 // AUDIT + securities-counsel gated, design-only). A deed holder LISTS their street for sale; a DEEDLESS
 // buyer buys it → the deed + its whole PROVENANCE (the legend) transfer to the buyer, and CONTROL RESETS

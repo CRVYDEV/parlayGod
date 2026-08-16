@@ -6092,7 +6092,42 @@ faucet**. Collecting is safehouse-gated (the signed D2 income rule); the shakedo
 level-floored + energy/heat/cooldown-bounded. All numbers are founder sim sign-off levers, pinned in
 `test/levers.js`; the design's "pure redirect" ideal proved to need a cross-character lock on a hot path,
 so the bounded-faucet-measured-and-flagged precedent (territory/business/port/world) was used instead.
-Turf perks (C) touch the SIGNED district-perk surface → deferred to a separate founder sign-off.
+Turf perks (C) got that separate founder sign-off 2026-08-16 and are BUILT — the next section.
+
+## § STREET DEEDS 2C — THE CONTROLLER'S PERKS (founder-directed 2026-08-16 "Build it now"; sim P9.38)
+
+Phase 2C gives whoever CONTROLS a corner (the deed-vs-control split — the owner when nobody has
+muscled in, or the usurper inside their window) the district's SIGNED turf perk, plus one extra
+operation seat for controlling your OWN corner. **No signed perk VALUE moved** — the perk numbers are
+the district perks as signed (brick +0.02 crime success, canal ×1.1 crime cash, docks ×1.5 crates,
+cathedral ×2 nerve regen, neon ×1.15 racket income, foundry ×0.75 craft cost, ±5% goods prices at the
+corner) — what changed is WHO can carry them: one extra operator per controlled corner.
+
+| Lever | Value | What it is |
+|---|---|---|
+| `DEEDS.PERK_TURF` | 1 | 1 = the controller enjoys the district perk; 0 = off |
+| `DEEDS.PERK_OP_SLOTS` | 1 | extra operation seats while you control your OWN corner, capped at `SLOTS_MAX` |
+
+**The parity walls (each test-pinned):** (1) **OR by set-union, never stacks** — every perk site reads
+the UNION of family-held + corner-controlled districts through the same `.includes(x)`, so a district
+counted twice applies its perk EXACTLY once; in a world where families already hold the districts,
+2C adds zero base-wide emission by construction. (2) **The seat is capped at `SLOTS_MAX`** — at level ≥
+40 it adds NOTHING; the deed accelerates the seat curve, it can never exceed what level alone reaches.
+(3) **The perk follows CONTROL** — lose your corner to a shakedown, lose the edge AND the seat until
+you take it back (contested through the audited Phase-2 shakedown: level floor, energy, heat, per-deed
+cooldown, location-pinned). An on-chain/extraction-pending deed perks nobody (inert — the car/boat rule).
+
+**Measured (sim P9.38, prints every run):** the one money-touching widening is a NEON corner in a world
+where no family holds neon — ceiling = +15% of ONE operator's metered racket day (≈ +$4.98M/day for a
+fully-maxed 12-seat operator; a mid-game holder far less), zero when any family holds neon. The op
+seat's max marginal is the (seats+1)-th best level-gated rung's metered day (measured ≈ +$1.16M/day,
+peaking at level 1 because income ASSETS carry no level gate — their PRICE is the gate, the recorded
+buyAsset posture, so a low-level holder still needs the millions the rung costs; exactly $0/day at
+level ≥ 40). The rest (brick/docks/cathedral/
+foundry/±5% goods) are variance/pacing/sink-discount surfaces bounded by the player's own nerve/energy —
+the same argument as the family perk itself. Deliberately EXCLUDED: convoy `TURF_DEF`, the neon fight
+fix, the docks harbormaster toll, sovereignty — those key on the GANG holding the district, which a deed
+never is (family machinery, not district perks). Both levers are founder SIM sign-off levers.
 
 ## § THE STREET DEEDS MARKET (Phase 3) + THE GROWING MAP (Phase 4)
 

@@ -159,9 +159,11 @@ export async function fenceCar(ch, carId, client, h) {
 export async function craft(ch, itemId, client, h) {
   const c = CONSUMABLES.find((x) => x.id === itemId);
   if (!c) throw new GameError('bad_item', 'No such craftable.');
-  // Old Foundry turf: crafts cost 25% less cash for the holding family.
+  // Old Foundry turf: crafts cost 25% less cash for the holding family — OR a controller of a
+  // foundry CORNER (STREET DEEDS 2C; OR by set-union, applies once whichever list carries it).
   // BELLA T2 (underworld) stacks ×0.9 on top — both discounts are what's ledgered.
-  const cost = Math.floor(c.cost * ((h.owned.held || []).includes('foundry') ? 0.75 : 1)
+  const cost = Math.floor(c.cost
+    * ([...(h.owned.held || []), ...(h.owned.deedPerk || [])].includes('foundry') ? 0.75 : 1)
     * npcMult(h, 'armorer', 2, UNDERWORLD.FX.CRAFT_MULT));
   if (Number(ch.cb || 0) < c.cb) throw new GameError('cb', `Need ${c.cb} crates of contraband.`);
   if (Number(ch.cash) < cost) throw new GameError('cash', 'Not enough pocket cash for materials.');
@@ -217,7 +219,8 @@ export async function buyGood(ch, goodId, qty, client, h) {
   const n = Math.max(1, Math.floor(Number(qty) || 0));
   const cap = trunkCap(h);
   if (cargoCount(h.owned.cargo) + n > cap) throw new GameError('cargo', `The trunk holds ${cap} units. Better Wheels carry more.`);
-  const unit = Math.round(goodPriceOf(goodId, ch.loc) * turfMult(h.owned.held || [], ch.loc, 'buy'));
+  // STREET DEEDS 2C — controlled corners count for the ±5% turf price edge (set-union → OR, once)
+  const unit = Math.round(goodPriceOf(goodId, ch.loc) * turfMult([...(h.owned.held || []), ...(h.owned.deedPerk || [])], ch.loc, 'buy'));
   const cost = unit * n, fee = Math.ceil(cost * 0.01), tax = Math.ceil(cost * 0.01);
   if (Number(ch.cash) < cost + fee + tax) throw new GameError('cash', `That runs $${cost + fee + tax} with the 2% house take.`);
   ch.cash = Number(ch.cash) - cost - fee - tax;
@@ -242,7 +245,7 @@ export async function sellGood(ch, goodId, qty, client, h) {
   if (n <= 0) throw new GameError('none', 'Nothing of that in the trunk.');
   const ev = cityEventOf(dayOf());
   // SEASONAL MODIFIER (slate #6): THE GOLD RUSH lifts every sale (composes like the city event)
-  const unit = Math.round(goodPriceOf(goodId, ch.loc) * turfMult(h.owned.held || [], ch.loc, 'sell') * (ev.tradeMult || 1) * pathFx(ch, 'goodsSell') * (seasonModOf().tradeSellMult || 1)); // PATHS v2 — ledger keeps 1.05; the Gun sells at 0.95 (the soldier's-no-merchant handicap)
+  const unit = Math.round(goodPriceOf(goodId, ch.loc) * turfMult([...(h.owned.held || []), ...(h.owned.deedPerk || [])], ch.loc, 'sell') * (ev.tradeMult || 1) * pathFx(ch, 'goodsSell') * (seasonModOf().tradeSellMult || 1)); // PATHS v2 — ledger keeps 1.05; the Gun sells at 0.95 (the soldier's-no-merchant handicap); deed corners count (2C)
   const gross = unit * n, fee = Math.ceil(gross * 0.01), tax = Math.ceil(gross * 0.01);
   const net = gross - fee - tax;
   ch.cash = Number(ch.cash) + net;
@@ -266,9 +269,12 @@ export const incomeAssetIds = (assets = []) =>
 export function opsUsed(h) {
   return (h?.owned?.rackets?.length || 0) + incomeAssetIds(h?.owned?.assets || []).length;
 }
-export function opsSlots(ch) { return opSlotsOf(levelOf(Number(ch.respect))); }
+// STREET DEEDS 2C — controlling your OWN corner seats one more operation (the deedSeat arg on the
+// SAME rules-level opSlotsOf the view's ops block reads, still capped at SLOTS_MAX — the deed
+// accelerates the seat curve, never exceeds it). Lose your corner to a rival, lose the seat.
+export function opsSlots(ch, h) { return opSlotsOf(levelOf(Number(ch.respect)), !!h?.owned?.deedSeat); }
 function assertSlot(ch, h) {
-  const used = opsUsed(h), slots = opsSlots(ch);
+  const used = opsUsed(h), slots = opsSlots(ch, h);
   if (used < slots) return;
   const next = nextOpSlotLevel(levelOf(Number(ch.respect)));
   throw new GameError('slots', next
@@ -308,7 +314,7 @@ export async function retireRacket(ch, racketId, client, h) {
     ch.cash = Number(ch.cash) + back;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: back, reason: `racket:retire:${r.id}` });
   }
-  return { ok: true, racket: r.id, back, slotsUsed: opsUsed(h), slots: opsSlots(ch) };
+  return { ok: true, racket: r.id, back, slotsUsed: opsUsed(h), slots: opsSlots(ch, h) };
 }
 
 // ASSETS & RACKETS → Tier 4 — RACKET UPGRADES: buy the next level of a racket you run; its accrual

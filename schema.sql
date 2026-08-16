@@ -1553,6 +1553,11 @@ ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS onchain_owner TEXT;
 -- (the resolver filters on `onchain_token_id IS NOT NULL`, so a re-imported deed drops out anyway).
 ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS extracted_by_account TEXT;             -- who extracted it (survives the account_id re-key)
 ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS extracted_at TIMESTAMPTZ;              -- when — the delivery keeper targets the most-recent
+-- THE ELIGIBILITY SELF-ATTESTATION (founder sign-off 2026-08-16: stock-delivery verification depth =
+-- wallet + paid mint + self-attestation). Stamped at extraction — the deed's TBA is where treasury
+-- stock lands, so the extractor attests they may hold the instruments it can receive. ON THE ROW so
+-- it survives the on-chain re-key (the record travels with the deed the delivery targets).
+ALTER TABLE street_deeds ADD COLUMN IF NOT EXISTS attested_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS ix_street_deeds_extractor ON street_deeds (extracted_by_account);
 -- THE LEGEND ENGINE — the provenance record of everything that happened on a deed (§4). Account-keyed
 -- like the deed (survives death — the record is the value). Pure-status append log; never a currency.

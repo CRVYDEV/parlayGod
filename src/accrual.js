@@ -34,7 +34,9 @@ export function accrue(ch, acct = null, ctx = {}, now = new Date()) {
   const rackets = ctx.rackets || [];
   const ev = cityEventOf(dayOf());
 
-  const held = ctx.held || [];
+  // STREET DEEDS 2C — controlled-corner districts (ctx.deedHeld) count like family turf at this
+  // file's two perk reads (cathedral nerve regen, neon racket income). SET-UNION → OR, never stacks.
+  const held = [...(ctx.held || []), ...(ctx.deedHeld || [])];
   // THE REGIMEN — stamina/composure raise the CAPS (pool, not rate: the pacing pass's regen
   // numbers are untouched). Same helpers as view/coachOf, so the three sites cannot disagree.
   // THE LADDER (D8=D) raises the caps too — `acct` is already this function's second parameter, so

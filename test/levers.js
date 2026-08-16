@@ -159,6 +159,9 @@ const SIGNED = [
   ['CONSTANTS.UNSTAKE_CD_MS', 21600000],
   ['CONVOY.GUARD_WEAR_BPS', 2500],
   ['CONVOY.INSURE_BPS', 1000],
+  // pinned when STREET DEEDS 2C's exclusion list named it in BALANCE — the register-complete guard
+  // caught the prose citing a lever nothing pinned (the WAR_MS/SEIZE_OUTBID class, third instance)
+  ['CONVOY.TURF_DEF', 15],
   ['CONVOY.INSURE_PAYOUT_BPS', 5000],
   ['CONVOY.LEGEND_MIN_LVL', 10],
   ['CONVOY.MAX_AMBUSHES', 3],
@@ -492,6 +495,11 @@ const SIGNED = [
   ['DEEDS.SHAKE_MIN_P', 0.15],
   ['DEEDS.SHAKE_MAX_P', 0.85],
   ['DEEDS.SHAKE_STAT_SCALE', 200],
+  // Phase 2C — THE CONTROLLER'S PERKS: the district turf perk follows corner CONTROL (OR with family
+  // turf by set-union, never stacks — the perk VALUES are the signed district perks unchanged) + one
+  // extra op seat for your OWN corner, capped at SLOTS_MAX (parity). 0 disables each. Sim P9.38.
+  ['DEEDS.PERK_TURF', 1],
+  ['DEEDS.PERK_OP_SLOTS', 1],
   // Phase 3 — the deed market (a taxed cash transfer, the bodyguard:hire pattern) + Phase 4 — the growing map
   ['DEEDS.MARKET_MIN', 10000],
   ['DEEDS.SALE_FEE_BPS', 100],
