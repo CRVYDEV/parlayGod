@@ -14,7 +14,8 @@ import { buildServer } from '../src/server.js';
 import { DEEDS, deedRankOf, deedRenown, deedNeighborhoodsOpen,
          GOODS, goodPriceOf, CONSUMABLES, cityEventOf, dayOf, seasonModOf,
          OPERATIONS, opSlotsOf, RACKETS, ASSETS } from '../src/rules.js';
-import { deedChainConfig, DEED_VOUCHER_TYPES, deedTokenId, markDeedExtracted, reimportDeed } from '../src/chain.js';
+import { deedChainConfig, DEED_VOUCHER_TYPES, deedTokenId, markDeedExtracted, reimportDeed,
+         sweepDeedReimports } from '../src/chain.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -473,6 +474,77 @@ assert.equal(backHome.onchain_owner, null, 'and the last on-chain owner — noth
 const { deedTargetRows } = await import('../src/stockdeliver.js');
 assert.equal((await deedTargetRows(pool)).some((t) => t.name === 'Enzo Alley'), false,
   'and the delivery rail no longer sees a re-imported street as anyone\'s stock target');
+
+// ════════════ THE STRANDED-VAULT RECOVERY — a burn nobody can re-mint ════════════
+//
+// Burning FREEZES a deed's ERC-6551 vault, it never empties it — the address is a function of the
+// tokenId, the tokenId is keccak(NAME), and nothing deletes a street_deeds row or frees its unique
+// name, so re-minting the same street restores control with the contents intact. Ordinarily nobody
+// has to act: the re-import stays `pending` and the sweep retries forever. The case that never
+// resolves is a burn from a wallet that will NEVER link — then real stock sits frozen with no route.
+// This is that route, and it recovers to a TREASURY HOLDING address (founder call, 2026-08-16), never
+// to an address the caller supplies.
+{
+  const st = 'Stranded Row';
+  const stToken = deedTokenId(st);
+  const lost = await mk('Ghost');   // burned it, then vanished — no wallet ever links
+  await pool.query('INSERT INTO street_deeds (account_id,name,name_lc,district,onchain_token_id) VALUES ($1,$2,$3,$4,$5)',
+    ['onchain:' + stToken, st, st.toLowerCase(), 'docks', stToken]);
+  const recover = (body) => call('POST', '/v1/mod/deeds/recover', { mod: true, body });
+
+  // GATE: no treasury address configured → refuse. With nowhere agreed to send a recovered street,
+  // not recovering is safer than guessing, so unset must FAIL rather than fall back to anything.
+  assert.equal((await recover({ street: st })).body.error, 'no_recovery_address',
+    'with no treasury holding address configured, recovery refuses rather than guessing a destination');
+  process.env.DEED_RECOVERY_ADDRESS = '0x000000000000000000000000000000000000dead';
+
+  // WALL 2 — a burn must actually have been RECORDED. Without it the street may still be owned
+  // on-chain, and recovering a live deed would be a confiscation.
+  assert.equal((await recover({ street: st })).body.error, 'not_burned',
+    'no recorded burn → no recovery: a voucher for a street somebody still owns is a confiscation');
+
+  // record the burn from a wallet that is not linked to any account (the stranding condition)
+  await pool.query("INSERT INTO deed_reimports (ref, wallet_address, token_id) VALUES ($1,$2,$3)",
+    ['lostburn:0', '0x000000000000000000000000000000000000bEEF', stToken]);
+  // WALL 3 — a fresh burn is IN FLIGHT, not stranded. The sweep may still land it.
+  assert.equal((await recover({ street: st })).body.error, 'too_soon',
+    'a burn minutes old is in flight — the wait is what distinguishes stranded from in-flight');
+  await pool.query("UPDATE deed_reimports SET created_at = now() - interval '60 days' WHERE ref='lostburn:0'");
+
+  // WALL 2 again — a street that is NOT in the on-chain state is not recoverable at all
+  assert.equal((await recover({ street: 'Corvino Way' })).body.error, 'not_stranded',
+    'a street sitting in the game is not stranded — only the on-chain state is recoverable');
+
+  const rec = await recover({ street: st });
+  assert.equal(rec.code, 200, 'a genuinely stranded street recovers');
+  // WALL 1 — the destination is FIXED. The caller named no address and cannot: a recovery can never be
+  // talked into "I lost my key, mint my street to this new wallet".
+  assert.equal(rec.body.to.toLowerCase(), '0x000000000000000000000000000000000000dead',
+    'it recovers to the TREASURY HOLDING address, never anywhere the caller could aim it');
+  assert.equal(rec.body.tokenId, stToken, 'and to the SAME token id — which is what unfreezes the vault');
+  // the voucher is real: it recovers to the server signer against the CONTRACT's own domain
+  const rsig = await recoverTypedDataAddress({ domain: contractDomain, types: DEED_VOUCHER_TYPES,
+    primaryType: 'DeedVoucher', message: { to: rec.body.voucher.to, name: rec.body.voucher.name,
+      district: rec.body.voucher.district, nonce: BigInt(rec.body.voucher.nonce), deadline: BigInt(rec.body.voucher.deadline) },
+    signature: rec.body.signature });
+  assert.equal(rsig.toLowerCase(), privateKeyToAccount(process.env.VOUCHER_SIGNER_PK).address.toLowerCase(),
+    'the recovery voucher is signed by the server signer against the contract domain');
+
+  // WALL 4 — the pending re-import is SUPERSEDED. Without this the sweep could later hand the street
+  // to the burner while the treasury holds the NFT: two parties each believing they own it.
+  assert.equal((await pool.query("SELECT status FROM deed_reimports WHERE ref='lostburn:0'")).rows[0].status,
+    'superseded', 'the pending re-import is superseded, so the sweep can never split-brain the street');
+  await sweepDeedReimports(pool);
+  assert.equal((await pool.query('SELECT account_id FROM street_deeds WHERE name=$1', [st])).rows[0].account_id,
+    'onchain:' + stToken, 'and the sweep leaves it alone — the treasury holds it now');
+
+  // the operator board names what is stuck, and only what is stuck
+  const board = (await call('GET', '/v1/mod/deeds/stranded', { mod: true })).body;
+  assert.equal(board.stranded.some((s) => s.street === st), false, 'a recovered street leaves the stranded list');
+  assert.equal((await call('GET', '/v1/mod/deeds/stranded')).code, 401, 'the board is mod-gated');
+  delete process.env.DEED_RECOVERY_ADDRESS;
+  void lost;
+}
 
 // ════════════ THE VAULT'S RECORD — what travels with the street (the red-team follow-up) ════════════
 //

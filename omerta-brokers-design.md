@@ -254,6 +254,18 @@ re-keys the extracted deed's `account_id` to `onchain:<tokenId>`, severing the a
 the re-key also stamps `extracted_by_account` — which is what the delivery rail JOINs on to find an
 account's on-chain deed.
 
+**The same bijection is what makes an accidental burn RECOVERABLE (2026-08-16).** Because the id is
+`keccak(NAME)` and nothing ever deletes a `street_deeds` row or frees its unique name, a burn FREEZES
+the vault rather than emptying it — re-minting that street restores control with the contents intact.
+In the ordinary case nobody acts: the re-import stays `pending` and the worker sweep retries forever.
+The one case that never resolves is a burn from a wallet that will never link, and it needs no
+contract change — `POST /v1/mod/deeds/recover {street}` signs a `DeedVoucher` for that street to the
+TREASURY HOLDING address (`DEED_RECOVERY_ADDRESS`), bounded by four walls: a fixed destination (never
+caller-supplied), a recorded burn still in the on-chain state (so it can never be a confiscation — the
+contract backstops it, since `_safeMint` reverts on a live id), a 30-day wait that distinguishes
+stranded from in-flight, and superseding the pending re-import so the sweep cannot later hand the
+street to the burner while the treasury holds the NFT. Runbook in CHAIN-DEPLOY §8.
+
 **Deferred, flagged (not built):** the drain-before-sale mitigation beyond the listing lock + the
 disclosure in §3.4a — a voucher-gated TBA outflow is the only stronger form, and it costs the
 "self-contained NFT" property the gateless push was chosen for. (The other two former deferrals are

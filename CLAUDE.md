@@ -13183,3 +13183,46 @@ mobile 78/78 + client wiring/mirror (a fixture seeds a listed street WITH a deli
 vault would leave its fields unchecked) + pgquery 2944 statements + pgcheck 43/43 on real Postgres.
 **Still flagged (founder call):** whether stock-bearing deeds should trade on the in-game market at all,
 or only on-chain where `transferLocked` gives a buyer the "unlocked = check the vault now" anchor.
+
+**THE STRANDED-VAULT RECOVERY — "can we clawback stocks in Deeds in case they get burned accidentally"
+(founder-directed 2026-08-16; the destination answered "Treasury Holding address") — BUILT**
+(`src/chain.js` `recoverStrandedDeed`/`strandedDeeds`, `GET /v1/mod/deeds/stranded` +
+`POST /v1/mod/deeds/recover`, `DEED_RECOVERY_ADDRESS`/`DEED_RECOVER_AFTER_MS`; `test/deeds.js`;
+CHAIN-DEPLOY §8 beside the signer-rotation runbook). **The question was answered by READING the
+contract and the sweep rather than reasoning about them, and most of the worry dissolved:** burning a
+deed **FREEZES** its ERC-6551 vault, it never empties it — the account address is a pure function of
+the tokenId, the tokenId is `keccak(NAME)`, and **nothing ever deletes a `street_deeds` row or frees
+its unique `name_lc`**, so the id is permanently reserved and re-minting the same street restores
+control with the contents intact (the Foundry suite already proved the same-id re-mint). In the
+ORDINARY accident **nobody has to act at all**: `applyDeedReimport` returns null when the burner has
+no linked wallet or already holds a street, the row stays `pending`, and `sweepDeedReimports` retries
+it every worker tick, **forever** — so "I burned it by mistake" resolves itself the moment they link
+or free their slot. **ONE case never resolves** — a burn from a wallet that will never link (a lost
+key, a redeem sent from the wrong address, a player who does not come back): the re-import waits
+indefinitely, nobody in-game holds the street, so nothing re-mints the id and real stock sits frozen
+at a known address with no route. That is what this closes, and — the useful half — **it needs NO
+contract change**: `claim()` accepts any server-signed `DeedVoucher` and derives the tokenId from the
+name, so the recovery is a routed, documented path over authority the signer already has. **THE FOUR
+WALLS, because a usable lever is the part that needs bounding:** (1) **the destination is FIXED** —
+`DEED_RECOVERY_ADDRESS`, the treasury holding address, never an address the caller supplies (the
+founder's call), so the route cannot be talked into *"I lost my key, mint my street to this new
+wallet"*; returning a recovered street to a player is a separate deliberate act by whoever holds the
+treasury. (2) **Only a genuinely stranded deed** — a `deed_reimports` row still `pending` is the
+EVIDENCE the burn happened, and the deed must still be in the on-chain state, so a live owned deed is
+never recoverable, i.e. this can never be a confiscation (and the contract backstops it anyway:
+`_safeMint` reverts on an existing id, so a voucher for an unburned deed is unclaimable). (3) **Not
+before `DEED_RECOVER_AFTER_MS`** (30d) — a burn minutes old is in flight, not stranded; the wait is
+what distinguishes them. (4) **It SUPERSEDES the pending re-import**, or the sweep could later re-key
+the street to the burner while the treasury holds the NFT — a split brain where two parties each
+believe they own it (the stale-state-survives-a-lifecycle-reset class the red team's C4 was about).
+Mod-gated, so every recovery lands in `mod_actions`; §10.4-NEUTRAL (a voucher and an ownership move —
+zero `transactions` rows). Unset `DEED_RECOVERY_ADDRESS` = the route refuses, which is the right
+default: with nowhere agreed to send a recovered street, not recovering beats guessing.
+`GET /v1/mod/deeds/stranded` is the operator's read (what is stuck, how long it has waited, whether it
+is ready) so recovery is a decision made on evidence. **Three mutations, each caught at its own named
+assertion** (the destination taken from the caller → *"it recovers to the TREASURY HOLDING address,
+never anywhere the caller could aim it"*; the supersede dropped → *"the pending re-import is
+superseded, so the sweep can never split-brain the street"*; the burn requirement dropped → *"no
+recorded burn → no recovery: a voucher for a street somebody still owns is a confiscation"*). Suite
+green (99 files, 0 assertion errors) + pgquery 2952 statements (interpolated ceiling 73 → 74, the
+stranded board's IN list, reason recorded) + pgcheck 43/43 on real Postgres.

@@ -622,6 +622,26 @@ a failed payment — which is exactly the window in which it is cheap to fix.
   Until step 2 completes on every one, pre-signed vouchers stay valid at whichever contract was missed, bounded
   only by that contract's own `dailyCap*` and `MAX_*_TTL` — so the blast radius of the key is the SUM of the
   four daily caps, which is the number to size them against rather than each in isolation.
+- **RECOVERING A STRANDED DEED VAULT (founder-directed 2026-08-16).** Burning a Street Deed **freezes** its
+  ERC-6551 vault, it never empties it: the account's address is a pure function of the tokenId, the tokenId is
+  `keccak(NAME)`, and nothing ever deletes a `street_deeds` row or frees its unique name — so re-minting the
+  same street restores control with the contents intact (`test_the_same_street_re_extracts_to_the_same_id_after_a_burn`).
+  In the ordinary case **nobody has to act**: the re-import stays `pending` and `sweepDeedReimports` retries it
+  every worker tick, forever, until the burner links a wallet or frees their deed slot.
+  The case that never resolves is a burn from a wallet that will **never** link — a lost key, a redeem from the
+  wrong address, a player who does not come back. Then real stock sits frozen at a known address with no route.
+  - `GET /v1/mod/deeds/stranded` lists what is genuinely stuck (and how long it has waited).
+  - `POST /v1/mod/deeds/recover {street}` signs a `DeedVoucher` for that street to **`DEED_RECOVERY_ADDRESS`**,
+    the treasury holding address. Claim it from that wallet: it re-mints the SAME tokenId, which unfreezes the
+    vault. Returning a recovered street to a player is a **separate, deliberate act** by whoever holds the
+    treasury — deliberately not something this route can be aimed at.
+  - Four walls, because the lever is strong: the destination is fixed (never caller-supplied), only a deed with
+    a **recorded burn** still in the on-chain state qualifies (so it can never be a confiscation — and the
+    contract backstops it, since `_safeMint` reverts on a live id), not before `DEED_RECOVER_AFTER_MS` (30d
+    default — the wait is what distinguishes stranded from in-flight), and it **supersedes** the pending
+    re-import so the sweep can never later hand the street to the burner while the treasury holds the NFT.
+  - It is mod-gated, so every recovery lands in `mod_actions`. **Set `DEED_RECOVERY_ADDRESS` before you need
+    it**; unset, the route refuses rather than guessing a destination.
 - **VESTING IS A PRODUCT FEATURE, NOT A SECURITY CONTROL — do not count it as one.** There is deliberately no
   minimum `vestSeconds`, and adding one would buy nothing: `claim()` is intentionally NOT `whenNotPaused`, so
   pausing stops new bonds but never stops already-vested OMR being claimed — a vest is therefore not a window in

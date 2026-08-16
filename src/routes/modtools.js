@@ -302,6 +302,14 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
     app.post('/v1/mod/reserve/fund', { preHandler: modAuth }, async (req) => Chain.fundReserve(pool, req.body?.amount));
     app.get('/v1/mod/reserve', { preHandler: modAuth }, async () => Chain.reserveStatus(pool));
     app.post('/v1/mod/reserve/claimed', { preHandler: modAuth }, async (req) => Chain.markClaimed(pool, Number(req.body?.nonce)));
+    // THE STRANDED-VAULT RECOVERY. A deed burned from a wallet that will never link leaves its
+    // ERC-6551 vault frozen with real stock in it and no route to re-mint the id. The board lists what
+    // is genuinely stuck; the recovery signs a voucher for that street to the TREASURY HOLDING address
+    // (never an address the caller supplies — see the four walls in chain.js). Mod-gated, so it lands
+    // in `mod_actions` like every other mod mutation.
+    app.get('/v1/mod/deeds/stranded', { preHandler: modAuth }, async () => Chain.strandedDeeds(pool));
+    app.post('/v1/mod/deeds/recover', { preHandler: modAuth }, async (req) =>
+      Chain.recoverStrandedDeed(pool, { street: req.body?.street, tokenId: req.body?.tokenId }));
     // Ops/manual reconciliation of an on-chain payment (the worker's watcher does this live from
     // MintFeePaid/RespawnFeePaid events; this endpoint is the manual + test path for the same call).
     app.post('/v1/mod/fees/record', { preHandler: modAuth }, async (req) =>

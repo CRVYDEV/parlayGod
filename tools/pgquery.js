@@ -161,7 +161,11 @@ if (failures.length) {
 // argument unreadable, so it landed in the *unreadable* bucket instead — counted either way (the
 // honesty rule held), but filed under "we couldn't read this" rather than "this is an IN list", which
 // is a worse record. The comment moved above the call so it is catalogued as what it actually is.
-const CEILING = { interpolated: 73, unreadable: 40 };
+// 73 → 74 (2026-08-16, the stranded-vault recovery): `strandedDeeds`' street lookup, an IN list over the
+// token ids of the pending re-imports (`$1,$2,…` built from the count, every value bound). Same shape
+// and same reason as the three above — a read-only operator board, so the alternative (`= ANY`) would
+// return zero rows on pg-mem and the board would silently report every stranded deed as nameless.
+const CEILING = { interpolated: 74, unreadable: 40 };
 const overflow = [];
 if (interpolated.length > CEILING.interpolated)
   overflow.push(`interpolated queries grew to ${interpolated.length} (ceiling ${CEILING.interpolated}) — these are UNCHECKED by this guard`);
