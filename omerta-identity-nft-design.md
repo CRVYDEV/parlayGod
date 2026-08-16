@@ -304,19 +304,21 @@ an in-game entitlement. That is a different thing to sell, and the standing copy
 
 ---
 
-## 7. Open questions for the founder
+## 7. Open questions for the founder — ANSWERED (founder sign-off, 2026-08-16)
 
-1. **§1 — confirm shape A** (tradeable trophy, non-transferable entitlement). Everything above assumes it.
-2. **Faces or silhouettes?** Faces are stronger art and carry more identity; silhouettes sidestep the
-   likeness question entirely and composite far more cleanly. My lean is **silhouette-forward with
-   face-adjacent framing** (hat brim, turned collar, shadow) — noir does this anyway, and it is the
-   genre's signature rather than a dodge.
-3. **Does the portrait survive death, or does the heir get a new one?** My lean: **the token persists
-   and the portrait ages** — generation is engraved on the plate, so the token becomes a record of the
-   whole bloodline rather than one street. That is the stronger collectible *and* the stronger fit
-   with a game whose central rule is that the account survives while the street dies.
-4. **Retrofit?** Everyone already minted paid the same 0.01 ETH for strictly less. Granting them a
-   portrait costs nothing and is obviously right; worth confirming.
+All four questions were put to the founder as explicit options and answered. The standing decisions:
+
+1. **§1 shape A CONFIRMED** — layered composition (~38 reviewed parts assembled live), tradeable
+   trophy, non-transferable entitlement. Per-mint generated images rejected (unreviewable at scale,
+   per-render cost, a content-safety surface on every mint).
+2. **Silhouette-forward CONFIRMED** — the brim's shadow doing the work, matching the shipped
+   off-chain portrait and the genre; also sidesteps the same-face-syndrome risk a drawn-face part
+   library carries at thousands of mints.
+3. **Bloodline-continuous CONFIRMED** — the portrait is the dynasty, not the street: it keeps living
+   as the heir plays (generation deepens the frame) and freezes only at the token's first
+   owner→owner transfer, exactly as the shipped Transfer watcher already enforces.
+4. **Retrofit CONFIRMED** — every existing minted account gets a Dynasty NFT in the retrofit batch
+   the stamp-eligibility window already assumes.
 
 ---
 

@@ -757,3 +757,54 @@ Suite green + `node tools/sim.js` drift-0 after the package.
 - **Deploy config:** production must run `SOCIAL_VERIFY_MODE=live`, `INVITE_MODE=on` for the closed alpha,
   and must **not** set any `*_P` / `*_MS` test knob (`SHANK_P`, `LAW_BUST_P`, `SEARCH_MS`, `PEN_SHANK_CD_MS`,
   `TERRITORY_RAID_P`, `GEAR_LOOT_CHANCE`, …).
+
+---
+
+## THE 2026-08-16 QUESTIONNAIRE — every open decision put to the founder as options, all answered
+
+Seventeen decisions across five rounds (the launch-sequence levers, the airdrop, the identity NFT,
+and the standing economy calls). Each row below is now the standing answer; the edits landing in the
+same commit as this section: the launch doc §6 (rewritten from "none pinned yet" to the answers),
+the identity doc §7 (all four answered), and the hook docs (the buy-rate question closed).
+
+**The chain / launch set:**
+1. **Hook permanent buy-side rate: REJECTED — buys stay free forever.** The one immutable pre-audit
+   choice, made with the immutability stated. The windowed anti-snipe guard ships armed at zero; the
+   dormant trade-fee backend never arms. The audit batch goes out as-is.
+2. **The genesis price: confirmed at 205,882 $OMR/ETH** (the locked genesis-raise parameter; window
+   price == pool opening price).
+3. **Window: 3 days, even split** (≈1.47M $OMR/day), the live daily-offering control kept as the
+   mid-window trim. **Desk rail open during the window.**
+4. **Airdrop delivery (D1): in-game credit via the SIWE rail — confirmed.** No merkle contract.
+5. **Airdrop legal: covered** — the founder confirmed counsel's approval extends to the free
+   distribution; the launch checklist's open row closes on that word.
+6. **Airdrop reserve: 20M $OMR (20% of supply) as a multi-campaign budget** — the founder's framing:
+   not dropped at once; the genesis slice is a sub-lever sized at allocation-build time (working
+   proposal ~5M, the paid window's own scale).
+7. **Communities: the named six PLUS Milady Maker (mainnet) PLUS the $ANSEM-class Solana community —
+   and Solana support is a directed launch build** (a Solana enumeration tool + an ed25519 leg on the
+   claim rail; its own red-team pass, since it is a new signature-verification surface).
+8. **Claim window: 120 days. Provenance colors decoupled** (claimable after the money window lapses).
+9. **Stock-delivery verification depth: wallet + paid mint + self-attestation** — one eligibility
+   confirm recorded at deed extraction (a small directed build); revisit before volumes grow.
+
+**The identity NFT set (all four §7 questions):** layered composition confirmed; silhouette-forward
+confirmed; bloodline-continuous confirmed (freezes only at the token's first owner→owner transfer,
+as the shipped watcher enforces); retrofit for every existing minted account confirmed.
+
+**The standing economy set:**
+- **Unification: keep the separate signed splits** (folding rates silently moves real money between
+  destinations; the money router keeps the whole map legible).
+- **Agent participation faucets: leave open to agents — recorded as the deliberate posture.** The
+  three petty in-game-cash faucets (corner jobs / the nightly hustle / the first-blood bonus,
+  ~$8,500/day combined, no extraction path) stay agent-payable; the asymmetry with the four
+  excluding siblings is now a decision, not an oversight.
+- **Street Deeds turf perks (phase 2C): BUILD NOW** — a directed build; ships with its own sim
+  measurement + lever table since it touches the signed district-perk surface, capped at
+  free-player parity per the deeds design.
+- **Launch-night doors: open** (`INVITE_MODE` stays off — the paid mint remains the extraction-side
+  Sybil bound). Note this supersedes the older "INVITE_MODE=on for the closed alpha" line above for
+  launch itself; the invite tooling remains available if a gated wave is ever wanted.
+
+**Directed builds created by these answers (tracked):** the Solana snapshot + ed25519 claim leg;
+the deed-extraction self-attestation; Street Deeds phase-2C turf perks (sim + sign-off pass).

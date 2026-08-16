@@ -184,6 +184,11 @@ than a safety one. It should be decided on its own merits, not smuggled in behin
 It does, however, share the audit. **If the four-slice buy rate is wanted, decide it before the batch
 goes out** — a second buy-side change on an immutable contract is a second audit.
 
+> **DECIDED (founder sign-off, 2026-08-16): BUYS STAY FREE FOREVER.** No permanent buy-side rate,
+> ever — the founder chose it explicitly with the immutability stated ("this is the one immutable
+> choice"). The windowed anti-snipe machinery stays as built (armed at zero, a launch guard only).
+> The audit batch goes out with the contract exactly as it stands; the §10.8 question is closed.
+
 ## 4. Levers this introduces
 
 All Safe-set, all defaulting to **off**, all bounded by a compile-time constant that the Safe cannot
@@ -206,7 +211,8 @@ behaviour, which is the property that makes them safe to ship armed at zero and 
    Deferred (needs a live pool to watch).
 3. **The liquidity league** — extend `underwriterScore` with LP depth-time once a pool exists.
    Deferred with a reason (§2.3).
-4. **Open, needs a decision before the audit batch** — the permanent four-slice buy rate (§3).
+4. ~~Open, needs a decision before the audit batch~~ — **CLOSED 2026-08-16: buys stay free forever**
+   (the permanent four-slice buy rate is rejected; see §3).
 
 ## 6. What must survive, and is asserted by test
 

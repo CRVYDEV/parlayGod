@@ -12818,3 +12818,27 @@ position keeps what it earned and stops earning; an unlinked wallet's depth scor
 ONLY — zero transactions rows (test-pinned), worker-synced on the DEX-bot cadence, dormant in
 production until the reader lands. All numbers founder sign-off levers (BALANCE.md § THE LP LEAGUE
 — the 300 is a PROPOSED default, sized once a pool exists).
+
+**THE 2026-08-16 QUESTIONNAIRE — every open founder decision put up as options and ANSWERED, recorded
+same-commit (the D13/D15 rule).** Seventeen decisions across five rounds. The launch set: hook
+permanent buy-side rate REJECTED — **buys stay free forever** (the one immutable pre-audit choice;
+the 2026-08-09 "30 bps buy-side trade fee joins as its own rate" line in the v4-hook doc is
+SUPERSEDED on the buy leg — the dormant `recordTradeFee`/`syncTradeFees` backend never arms; the
+windowed anti-snipe guard ships armed at zero); the genesis price CONFIRMED at the locked 205,882
+$OMR/ETH; window 3 days / even split / desk rail OPEN; airdrop delivery D1 = in-game SIWE credit
+CONFIRMED (no merkle contract, ever); airdrop legal COVERED (counsel's approval extends to the free
+distribution — the launch checklist's open row closes); **airdrop reserve 20M $OMR as a
+multi-campaign BUDGET** (the genesis slice is a sub-lever, working proposal ~5M); communities = the
+named six + **Milady Maker** + **the $ANSEM-class Solana community, with Solana support a DIRECTED
+LAUNCH BUILD** (a Solana enumeration tool + an ed25519 leg on the claim rail — a new
+signature-verification surface, so it gets its own red-team); claim window **120 days**; provenance
+colors DECOUPLED; stock-delivery verification = wallet + paid mint + **self-attestation at deed
+extraction** (a small directed build). The identity-NFT set: all four §7 questions answered —
+layered composition, silhouette-forward, bloodline-continuous, retrofit every existing minter. The
+standing set: unification KEEP-SEPARATE; the three agent-payable participation faucets stay OPEN
+(now a recorded posture, not an oversight); **Street Deeds phase-2C turf perks: BUILD NOW** (its own
+sim + lever table — it touches the signed district-perk surface); launch-night doors OPEN
+(INVITE_MODE stays off; the paid mint is the extraction-side Sybil bound). Docs updated same-commit:
+launch doc §6 (answers replace "none pinned yet"), identity doc §7, both hook docs, SIGN-OFF (the
+full seventeen-row record). Three directed builds tracked: Solana drop support, the deed-extraction
+attestation, deeds 2C.
