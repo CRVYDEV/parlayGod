@@ -413,7 +413,7 @@ looks superlinear and produces deadlocks). So capacity here is bought with CPU, 
 rewrite. D6 stays accepted-as-is; the convention is now known to hold under load, not just under review.
 
 ### D7 — Documentation mass **(LOW-MEDIUM, partly addressed)**
-151 markdown files, 37k lines, with CLAUDE.md alone 9759 lines of dense prose. Two codices already
+196 markdown files, 54k lines, with CLAUDE.md alone 13038 lines of dense prose. Two codices already
 drifted once (a test now guards it). Onboarding a second developer means reading a novel.
 
 **Addressed: the prose that a reader could ACT on is now machine-checked.** Stale prose does not fail

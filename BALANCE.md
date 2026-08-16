@@ -6212,14 +6212,20 @@ melting one takes it out of the world permanently.
 **THE SHIPMENT** is the runite-ore answer, built as a **material and never a currency**: an owned
 quantity on the character (the contraband/heist-loot precedent), so it is LOOTABLE on a fire-kill,
 dies with the street, and never enters the §10.4 set. It lands at a seed-drawn district (forecastable,
-unmanufacturable), first-come against a city-wide daily cap. Its **only** use is commissioning a
+unmanufacturable), first-come against a city-wide daily cap **that scales with the living-player
+count** (see the table — the cap is a function, not a number, because contention is only felt when
+the day's stock sits near the number of people who would credibly turn up). The cap is STAMPED on the
+day when the day opens, so it cannot move under a player who has already read "N left"; it is one
+population count per day rather than one per board read. Its **only** use is commissioning a
 numbered, account-level, purely cosmetic piece — a cash SINK — so the drop is emission-safe by
 construction, and the suite asserts the identity directly: *no `shipment%` reason has ever paid out.*
 
 | Lever | Ships | What it prices |
 | --- | --- | --- |
-| `SHIPMENT.CITY_CAP` | **40/day** | THE CONTENTION — one shared quantity for the whole town. What one player takes, another cannot; this is the only number here that makes being *there* and being *early* beat being rich. |
-| `SHIPMENT.PER_PLAYER` | **4/day** | So one whale cannot take the lot. At 40/4 the day is exhausted by 10 distinct players. |
+| `SHIPMENT.CITY_BASE` | **40/day** | THE CONTENTION — one shared quantity for the whole town, and the FLOOR of it. What one player takes, another cannot; this is the only number here that makes being *there* and being *early* beat being rich. |
+| `SHIPMENT.CITY_STEP` / `CITY_PER_STEP` | **+8 per 10 living players** | The city stock SCALES with the city (the `deedNeighborhoodsOpen` / `EXPANSION_STEP` precedent). A fixed daily quantity is wrong at both ends: at 3 players it never empties, so contention — the entire feature — never happens; at 500 it is gone in the first minute of the landing hour. 0.8 units/player ⇒ **~20% of the city gets a full share** at any size. The floor carries a thin city, the step carries a full one. |
+| `SHIPMENT.CITY_MAX` | **400/day** | The ceiling — 100 full shares. **HONEST FLAG:** this is the one number that puts the fixed-cap problem back at very high population (at 1,000 players it is 10% served, at 5,000 it is 2%). Revisit it if the city ever gets there; it is a lever, not a law. |
+| `SHIPMENT.PER_PLAYER` | **4/day** | So one whale cannot take the lot — and deliberately **NOT** scaled: a fixed per-player take gets *relatively* tighter as the city grows, which is the direction it should move. |
 | `SHIPMENT.ROUT_UNITS` | **6** | What routing an APEX cartel outfit yields — the reservoir loop finally paying in the scarce thing rather than the abundant one. Bounded by the rout's own crossing guard: earnable exactly as often as an apex outfit can fall. |
 | `SHIPMENT.LOOT_RATE` | **0.5** | What a fire-kill takes off a stockpile. It is what makes holding a pile a decision (the P1.1 loot-surface twin). |
 | `SHIPMENT.COMMISSIONS[].cash` | **$120k → $4M** | The SINK the material gates. Pure status, no edge — deliberately, because a contested drop that bought POWER would be pay-to-win for whoever can camp a district. |

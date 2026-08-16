@@ -12997,3 +12997,42 @@ estate trophy-room tie-in, and retiring old catalog models (a prototype edit tha
 every existing holder's fleet). Rejected and recorded: supply-responsive goods prices (it would
 break the arbitrage board, convoy manifest values and a signed §7.11 surface) and any
 scarce-land/appreciation framing (the deeds §6 rule stands).
+
+**THE SHIPMENT'S CAP SCALES WITH THE CITY (founder-directed 2026-08-16: "can we have the amount of
+these types of items scale as user count goes up?") — BUILT** (`src/rules.tail.js`
+`SHIPMENT.CITY_BASE/_STEP/_PER_STEP/_MAX` + `shipmentCityCap`, `src/shipment.js`, `schema.sql`
+`shipment_days.cap` (ALTER-added — the boot-crash lesson), `tools/sim.js` P9.39, `test/shipment.js`).
+**The question was answered one system at a time, because the right answer differs for each — and
+two of the three should NOT scale.** **THE FIRSTS already scale, on the right axis**: a first is
+one-per-server BY DEFINITION, so scaling it with users would be incoherent (several people each being
+the first), but the catalog derives from the live catalogs, so growth in CONTENT brings its own
+trophies while growth in USERS just makes the race harder to win — which is the point. **LIMITED RUNS
+must NOT scale, and scaling would destroy the feature**: "49 ever" IS the value proposition, so a cap
+that rises with signups makes every existing holder's car worth less the day somebody else registers
+and converts a numbered object into a participation trophy; it would also break the one property that
+makes a melt newsworthy (supply can only fall). What scales there is NEW sealed runs — a fresh name, a
+fresh cap, a fresh serial sequence, the old run sealed forever — which is how car marques actually
+work and adds collectibles without diluting anybody. **THE SHIPMENT is the one that should**, and it
+is now built: a fixed daily quantity is wrong at BOTH ends — at three players it never empties, so
+contention (the entire feature) never happens; at five hundred it is gone in the first minute of the
+landing hour and everybody else learns to stop looking. The city stock is now a FLOOR plus a step off
+the LIVING-PLAYER count (`shipmentCityCap` — the `deedNeighborhoodsOpen`/`EXPANSION_STEP` precedent),
+sized at 0.8 units/player so the day is exhausted by a FRACTION of the city whatever its size (sim
+P9.39 prints the whole curve every run: 3p→40, 25p→56, 100p→120, 500p→400, converging to ~20% of the
+city served, then the ceiling). Two decisions inside it, both test-pinned: **`PER_PLAYER` deliberately
+does NOT scale** (it is what stops one whale taking the lot, and a fixed per-player take gets
+RELATIVELY tighter as the city grows — the direction it should move; the suite asserts the ratio
+`PER_PLAYER/cap` strictly falls between city sizes), and **the cap is STAMPED on the day row when the
+day materializes** rather than read live — so it cannot move under a player who has already read "N
+left", and it costs ONE population count per day instead of one per board read on a polled screen (the
+board and the till read the same stamp, the check-5 mirror). The living count excludes residents and
+agents, or the population worker would inflate the drop by spawning scenery. `CITY_MAX` (400) is the
+**honest flag**, stated in the code, BALANCE and the sim probe alike: it is the one number that puts
+the fixed-cap problem BACK at very high population (10% served at 1,000 players), so it is a lever to
+revisit rather than a law. §10.4 UNTOUCHED (the material was never a currency; a bigger cap means more
+of a SINK's input, so the drop stays emission-negative). Migration proven on real Postgres against a
+PRE-SCALING `shipment_days` table: the schema applies clean, the existing row keeps its data and reads
+back `cap 0`, which `capOf` falls back to the floor for. Two mutations, each caught at its own named
+assertion (the cap stops scaling → "one step of players buys one step of stock"; the cap read live
+instead of stamped → "TODAY'S stock did not move"). All four `CITY_*` numbers are founder sign-off
+levers (pinned, tabled in BALANCE.md § SCARCITY).

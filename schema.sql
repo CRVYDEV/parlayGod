@@ -2226,6 +2226,10 @@ CREATE TABLE IF NOT EXISTS shipment_days (
   district TEXT NOT NULL,
   taken INT NOT NULL DEFAULT 0
 );
+-- the day's city stock, STAMPED at materialization from the then-current living-player count (an
+-- existing table, so a new column is an ALTER — a CREATE TABLE IF NOT EXISTS is a no-op on a live DB
+-- and would leave the column missing, which is the 2026-08-06 boot crash). 0 = a pre-scaling day.
+ALTER TABLE shipment_days ADD COLUMN IF NOT EXISTS cap INT NOT NULL DEFAULT 0;
 CREATE TABLE IF NOT EXISTS shipment_takes (
   day INT NOT NULL,
   character_id TEXT NOT NULL,

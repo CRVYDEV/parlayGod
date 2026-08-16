@@ -119,10 +119,27 @@ The market consequence is the point: a numbered car is the first thing in this g
 
 The runite-ore answer, built as a **material, not a currency.**
 
-Once a day the city gets a shipment: a fixed quantity of something the catalogs cannot produce, landing at
+Once a day the city gets a shipment: a quantity of something the catalogs cannot produce, landing at
 a **seed-drawn district** (forecastable like every other §7.11 draw — you can plan for it, you cannot
 manufacture it). It is **first-come against a city-wide daily cap**, with a per-player cap so one whale
 cannot take the lot.
+
+**The city cap SCALES with the city** (added 2026-08-16, founder-directed). A fixed daily quantity is
+wrong at both ends: at three players it never empties, so contention — the entire feature — never
+happens; at five hundred it is gone in the first minute of the landing hour and everybody else learns
+to stop looking. So the day's stock is a **floor plus a step off the living-player count** (the
+`deedNeighborhoodsOpen` / `EXPANSION_STEP` precedent), sized so the day is exhausted by a *fraction* of
+the city whatever the city's size. Two decisions inside that:
+
+- **`PER_PLAYER` does not scale.** It is what stops one whale taking the lot, and a fixed per-player
+  take gets *relatively* tighter as the city grows — the direction it should move.
+- **The cap is STAMPED on the day when the day opens**, not read live. That makes it stable for the
+  whole day (a signup cannot move it under a player who has already read "N left") and costs one
+  population count per day rather than one per board read, which matters because the board sits on a
+  polled screen.
+
+The ceiling (`CITY_MAX`) is the honest flag: it is the one number that puts the fixed-cap problem back
+at very high population, and it is a lever rather than a law.
 
 This is the piece that answers the tweet directly, and every part of it is chosen against the failure it
 would otherwise cause:
@@ -207,6 +224,8 @@ built. Setting any of them to `0`/`[]` disables its feature cleanly.
 | `FIRSTS.*` | which crossings mint a first (the catalog itself) |
 | `LIMITED_RUNS[].cap` | how many of each numbered model exist, ever |
 | `LIMITED_RUNS_P` | the boost roll that mints one (TEST-ONLY override classified in preflight) |
-| `SHIPMENT.CITY_CAP` | the city-wide daily quantity |
-| `SHIPMENT.PER_PLAYER` | one player's daily take |
+| `SHIPMENT.CITY_BASE` | the floor of the city-wide daily quantity |
+| `SHIPMENT.CITY_STEP` / `CITY_PER_STEP` | how fast the day's stock grows with the living-player count |
+| `SHIPMENT.CITY_MAX` | the ceiling (the flagged one — a fixed number again at very high population) |
+| `SHIPMENT.PER_PLAYER` | one player's daily take (deliberately unscaled) |
 | `SHIPMENT.ROUT_UNITS` | what an apex rout yields |

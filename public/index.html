@@ -5712,6 +5712,7 @@
             : `<button class="act" data-do="POST /v1/travel/${shp.district}">go to ${esc(shp.districtName || '')}</button>`)
           : `<span class="d" style="color:var(--dim)">${shp.cityLeft > 0 ? "you've had your share today" : "today's shipment is gone — the whole city's worth"}</span>`}
         <div class="d" style="margin-top:6px;font-size:10.5px;color:var(--dim)">next few days: ${(shp.forecast || []).slice(1).map((f) => esc(f.district)).join(' · ')}</div>
+        ${shp.population ? `<div class="d" style="margin-top:4px;font-size:10.5px;color:var(--dim)">The city runs ${shp.population} made men, so the docks bring in ${shp.cityCap} a day${shp.nextCapAt ? ` — ${shp.nextCapAt} on the street and it goes to ${shp.cityCap + shp.capPerStep}` : ' (as much as they ever ship)'}. More men, more crates — never more each.</div>` : ''}
         <div class="d" style="margin-top:8px"><b>The commissions</b> — what it's for. A craftsman turns it into something
           numbered and yours. Pure standing, no edge: ${shp.lootRate ? `and a killer takes ${Math.round(shp.lootRate * 100)}% of what you're carrying, so don't sit on a pile.` : ''}</div>
         <div class="grid">${(shp.commissions || []).map((cm) => `
