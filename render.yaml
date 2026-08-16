@@ -165,12 +165,24 @@ services:
       # latency starts climbing. Two caveats, both pushing the real number DOWN: that ran against a small
       # database (query cost grows with data) and with the rate limiter off.
       #
-      # THE CHEAPEST CAPACITY WIN IS NOT A PLAN. An idle player costs almost as much as a playing one
-      # (0.56 vs 0.72 req/s) because the 30s tick re-renders the open screen, and Home fans out 13 board
-      # GETs in one Promise.all. The poll IS the load. Making that tick cheaper — refresh the sheet
-      # always, re-render the boards less often, or only on a websocket event — would raise the ceiling
-      # in PLAYERS without buying anything. Deliberately NOT done here: it is a client behaviour change
-      # with staleness consequences, and this file is not the place to make it quietly.
+      # THE CHEAPEST CAPACITY WIN IS NOT A PLAN — and it has now been TAKEN (2026-08-16, asked for
+      # directly: "what happens if we get 1000 users on the first day?"). An idle player used to cost
+      # almost as much as a playing one because the 30s tick re-rendered the whole open screen, and
+      # Home fans out EIGHTEEN board GETs in one Promise.all — on the screen a returning player LANDS
+      # on. The poll was the load. Measured in a real browser (`npm run pollcost`, the harness written
+      # for this question) and re-measured after:
+      #
+      #     idle player on Home   BEFORE 19 req/tick = 0.63 req/s   →  ~457 concurrent at 290 req/s
+      #                           AFTER               0.18 req/s    →  ~1,580 concurrent
+      #
+      # The change is in public/index.html: the SHEET (one request — vitals, money, cooldowns, coach)
+      # still refreshes every 30s; the BOARDS re-render every 4th tick. Nothing a player can SEE happen
+      # got slower, because the websocket already re-renders the open board on every event and every
+      # action re-renders through act(); what is delayed is only time-drift on a screen nobody touched.
+      # 3.5x the player ceiling for no infrastructure spend, so the plans below are unchanged.
+      #
+      # If it needs to go further: the database is still the dial (+50% per doubling, above), and the
+      # remaining client win is Home's fan-out itself — 18 boards is the widest in the game.
       - key: PG_POOL_MAX
         value: "40"
       - key: DATABASE_URL

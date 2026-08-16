@@ -21,10 +21,12 @@ const districtName = (id) => DISTRICTS.find((d) => d.id === id)?.name || id;
 async function livingPlayers(client) {
   return Number((await client.query('SELECT COUNT(*) n FROM characters WHERE alive AND NOT is_npc')).rows[0].n);
 }
-// the day's stock, once. Counting the city on every board read would put a scan on a polled screen,
-// so the cap is STAMPED when the day materializes and read back from the row thereafter — one count
-// per day, and a cap that cannot move under a player mid-day. A row written before the scaling
-// shipped carries cap 0 and falls back to the floor.
+// the day's stock, once. THE COUNT IS THE EXPENSIVE PART, and this board sits on a polled screen —
+// the client's 30s tick re-renders whatever is open, so anything here runs once per player per half
+// minute, forever. So the cap AND the population it was sized against are STAMPED when the day
+// materializes and read back from the row thereafter: one count per DAY rather than one per read,
+// and a cap that cannot move under a player mid-day either. A row written before the scaling shipped
+// carries 0 and falls back to the floor.
 const capOf = (row) => Number(row?.cap) > 0 ? Number(row.cap) : SHIPMENT.CITY_BASE;
 
 // today's city stock. Two readers on purpose: the BOARD must never write (the read-path guard is
@@ -32,20 +34,23 @@ const capOf = (row) => Number(row?.cap) > 0 ? Number(row.cap) : SHIPMENT.CITY_BA
 // the district and the cap are computable without the row, so an un-materialized day reads perfectly
 // well as "the whole stock, nothing taken". Only the TAKE materializes, on the write path.
 async function readDay(client, day) {
-  const got = (await client.query('SELECT day, district, taken, cap FROM shipment_days WHERE day=$1', [day])).rows[0];
+  const got = (await client.query('SELECT day, district, taken, cap, pop FROM shipment_days WHERE day=$1', [day])).rows[0];
   if (got) return got;
-  // un-materialized: quote what the first take WILL stamp, so board and till agree (the check-5 rule)
-  return { day, district: shipmentDistrictOf(day), taken: 0, cap: shipmentCityCap(await livingPlayers(client)) };
+  // un-materialized: quote what the first take WILL stamp, so board and till agree (the check-5 rule).
+  // This is the ONE read that counts, and it happens at most until the day's first take.
+  const pop = await livingPlayers(client);
+  return { day, district: shipmentDistrictOf(day), taken: 0, cap: shipmentCityCap(pop), pop };
 }
 // materialize for the write path. A deterministic PK on the day makes a concurrent first touch a
 // 23505 the caller retries into (the world_npcs / megaproject first-touch precedent).
 async function dayRow(client, day) {
-  const got = (await client.query('SELECT day, district, taken, cap FROM shipment_days WHERE day=$1', [day])).rows[0];
+  const got = (await client.query('SELECT day, district, taken, cap, pop FROM shipment_days WHERE day=$1', [day])).rows[0];
   if (got) return got;
-  const cap = shipmentCityCap(await livingPlayers(client));
-  await client.query('INSERT INTO shipment_days (day, district, taken, cap) VALUES ($1,$2,0,$3)',
-    [day, shipmentDistrictOf(day), cap]);
-  return { day, district: shipmentDistrictOf(day), taken: 0, cap };
+  const pop = await livingPlayers(client);
+  const cap = shipmentCityCap(pop);
+  await client.query('INSERT INTO shipment_days (day, district, taken, cap, pop) VALUES ($1,$2,0,$3,$4)',
+    [day, shipmentDistrictOf(day), cap, pop]);
+  return { day, district: shipmentDistrictOf(day), taken: 0, cap, pop };
 }
 
 export async function shipmentBoard(ch, client, h) {
@@ -55,7 +60,7 @@ export async function shipmentBoard(ch, client, h) {
     'SELECT n FROM shipment_takes WHERE day=$1 AND character_id=$2', [day, ch.id])).rows[0]?.n || 0);
   const cap = capOf(row);
   const left = Math.max(0, cap - Number(row.taken || 0));
-  const population = await livingPlayers(client);
+  const population = Number(row.pop || 0);   // stamped with the cap — no count on this path
   const step = SHIPMENT.CITY_STEP;
   return {
     material: SHIPMENT.MATERIAL,
@@ -69,7 +74,7 @@ export async function shipmentBoard(ch, client, h) {
     capStep: step,
     capPerStep: SHIPMENT.CITY_PER_STEP,
     capMax: SHIPMENT.CITY_MAX,
-    nextCapAt: cap >= SHIPMENT.CITY_MAX ? null : (population - (population % step)) + step,
+    nextCapAt: cap >= SHIPMENT.CITY_MAX || !population ? null : (population - (population % step)) + step,
     perPlayer: SHIPMENT.PER_PLAYER,
     yourTakeToday: mine,
     yourTakeLeft: Math.max(0, SHIPMENT.PER_PLAYER - mine),

@@ -3221,8 +3221,29 @@
   $('#phone').onclick = (e) => { if (e.target.id === 'phone') { $('#phone').classList.add('hidden'); phoneOpenThread = null; } };
   $('#death-go').onclick = () => { $('#deathmodal').classList.add('hidden'); setTab('streets'); };
 
-  // the sheet stays honest on its own: countdowns and accrual don't wait for a click
-  setInterval(() => { if (me && !document.hidden) { refresh(); renderActive(); pollOnline(); } }, 30000);
+  // The sheet stays honest on its own: countdowns and accrual don't wait for a click.
+  //
+  // THE POLL IS THE LOAD, and it is what sets the player ceiling rather than any plan. Measured in a
+  // real browser (`npm run pollcost`): an IDLE player on Home cost 19 requests a tick — 0.63 req/s —
+  // because `renderActive()` re-fans-out every board on the open screen and Home is the widest fan-out
+  // in the game (18 boards) AND the screen a returning player lands on. Against a measured ~290 req/s
+  // that is ~457 concurrent players, which is under a good launch night.
+  //
+  // So the two halves are decoupled. The SHEET (`refresh()` — one request, and the one carrying
+  // vitals, money, cooldowns and the coach) still runs every tick, because that is what has to be
+  // live. The BOARDS re-render every BOARD_EVERY ticks instead of every tick — and the staleness that
+  // buys is small and bounded, because anything that HAPPENS already re-renders immediately: the
+  // websocket calls renderActive() on every event on your own channel, on the streets and on your
+  // gang's, and every action you take re-renders through act(). What is delayed is only time-DRIFT on
+  // a board nobody touched — an accrual ticking up, a cooldown expiring — on a screen you are staring
+  // at without doing anything. Returning to the tab is always a full render (below).
+  const BOARD_EVERY = 4;                       // ×30s ⇒ boards at most 2 minutes stale, sheet at 30s
+  let _tick = 0;
+  setInterval(() => {
+    if (!me || document.hidden) return;
+    refresh();
+    if (++_tick % BOARD_EVERY === 0) { renderActive(); pollOnline(); }
+  }, 30000);
   document.addEventListener('visibilitychange', () => {
     document.body.classList.toggle('paused', document.hidden); // stop the ambient loops off-screen (battery)
     if (!document.hidden && me) { refresh(); renderActive(); }

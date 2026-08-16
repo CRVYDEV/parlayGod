@@ -21,6 +21,7 @@
     "concurrency": "node tools/concurrency.js",
     "graph": "node tools/graph.js build",
     "mobile": "node tools/mobile.js",
+    "pollcost": "node tools/pollcost.js",
     "chaos": "node tools/chaos.js",
     "scale": "node tools/scale.js",
     "dials": "node tools/bond-dials.js",
