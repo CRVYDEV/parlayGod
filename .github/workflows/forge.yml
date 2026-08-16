@@ -11,10 +11,14 @@ on:
     paths:
       - 'omerta-contracts/**'
       - '.github/workflows/forge.yml'
+      - 'src/dexbot.js'                # the v4 encodings the fork prover below executes
+      - 'tools/dexbot-e2e.js'
   pull_request:
     paths:
       - 'omerta-contracts/**'
       - '.github/workflows/forge.yml'
+      - 'src/dexbot.js'
+      - 'tools/dexbot-e2e.js'
   workflow_dispatch: {}
 
 jobs:
@@ -54,3 +58,20 @@ jobs:
 
       - name: forge test (unit + fuzz)
         run: forge test -vvv
+
+      # THE v4 ENCODINGS, ON A REAL POOL. `test/dexbot.js` proves the bots' orchestration behind
+      # their `__set*` seams; this proves the BYTES — it runs both bots UNSEAMED against a real
+      # PoolManager / PositionManager / Universal Router / Permit2 on anvil. It belongs in this job
+      # because it needs exactly what this job already has: a Foundry toolchain (anvil) and the
+      # `out/` artifacts `forge build` just produced. Everything else comes from npm.
+      #
+      # It is a REAL gate, not decoration: the first run found bonded POL ETH being stranded in the
+      # PositionManager (v4 never refunds over-sent msg.value) — 0.148 ETH of 1 ETH at a 15%
+      # oracle-vs-spot gap, invisible to every other check because the journal booked the full ETH.
+      - name: v4 encodings on a real pool (dexbot-e2e)
+        working-directory: .
+        run: |
+          npm ci --omit=dev
+          npm i --no-save --prefix /tmp/v4deps \
+            @uniswap/v4-periphery@1.0.3 @uniswap/universal-router@2.1.0
+          V4_DEPS=/tmp/v4deps/node_modules npm run dexbot-e2e

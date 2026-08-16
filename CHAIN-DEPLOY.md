@@ -554,11 +554,19 @@ The backend keeps its own reserve records; they must track the on-chain balances
     `CHAIN_RPC_URL` + `OMERTA_BOND_ADDRESS` + `OMR_ADDRESS` + `OMERTA_HOOK_ADDRESS`. Nightly invariants
     (`runDexBotInvariants` → alertDrift: the POL root cap, orphan-fill freshness, comps-book-nothing,
     the swaps↔buybacks reconciliation); ops board + run-now triggers at `GET/POST /v1/mod/dexbot*`.
-  - **⚠ VERIFY AT LAUNCH (the chain-e2e precedent):** the raw v4 encodings (Universal Router `V4_SWAP`
-    command bytes; PositionManager `modifyLiquidities` MINT_POSITION actions) cannot be tested here — no
-    v4 pool exists to swap against. Before real ETH rides them, exercise BOTH senders on a devnet/fork
-    pool (a small swap + a small pairing, then read the position + the fill back). The orchestration,
-    walls, journals and §10.4 posture are suite-proven (`test/dexbot.js`, 3 mutations by name).
+  - **✅ THE v4 ENCODINGS ARE PROVEN (2026-08-16).** `npm run dexbot-e2e` stands up a REAL Uniswap v4 on
+    anvil — the actual PoolManager / PositionManager / StateView / Universal Router / Permit2 bytecode,
+    the canonical OMR/ETH pool behind the REAL OmertaHook — and runs BOTH bots with their senders
+    UNSEAMED, so `src/dexbot.js`'s own encoders build the calldata that executes (18 asserted steps).
+    **It found a real defect:** the mint over-sent ETH and v4 never refunds it (`DeltaResolver` settles
+    native ETH out of the periphery contract's own balance), so the remainder was stranded in the
+    PositionManager — unreachable by anyone, in bonded POL money, **0.148 ETH of 1 ETH at a 15%
+    oracle-vs-spot gap**, with the journal still booking the full ETH as paired. Fixed (a `SWEEP`
+    action + booking what the position actually consumed), both halves mutation-pinned.
+    **Still do a live smoke on the real chain before the first real run** — this proves the encodings,
+    not your deploy: one small swap and one small pairing, then read the position and the fill back.
+    A wrong `DEX_POOL_FEE`/`DEX_POOL_TICK_SPACING` misses the pool entirely and is a config error the
+    prover cannot see.
 - **The on-chain Store** — `OmertaFees.payForPackage` is **BUILT** (2026-08-14, in the audit batch:
   fail-closed on an unpriced sku, exact-value, forwards dev/Vig, custodies nothing; `setPackagePrice(sku,
   wei)` prices a package on-chain, `0` retires it). **The BACKEND watcher is BUILT (2026-08-15):**

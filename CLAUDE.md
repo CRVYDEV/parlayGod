@@ -13184,6 +13184,57 @@ vault would leave its fields unchecked) + pgquery 2944 statements + pgcheck 43/4
 **Still flagged (founder call):** whether stock-bearing deeds should trade on the in-game market at all,
 or only on-chain where `transferLocked` gives a buyer the "unlocked = check the vault now" anchor.
 
+**THE v4 ENCODINGS, PROVEN ON A REAL POOL — and the bonded ETH they were quietly losing
+(founder-directed 2026-08-16: "Work on #1") — BUILT** (`tools/dexbot-e2e.js` — the 11th harness,
+`npm run dexbot-e2e`; the fix in `src/dexbot.js:addLiquidityOnchain`; wired into the forge
+workflow + guarded in `test/docs.js`). `src/dexbot.js` shipped with a warning in its own header:
+the raw Uniswap v4 encodings (the Universal Router's `V4_SWAP` command bytes; PositionManager's
+`MINT_POSITION` actions) "cannot be tested against a real pool in this environment." Everything
+AROUND them was covered — the fail-closed oracle, the slippage floor, the swap-then-book journal,
+the POL root cap, the §10.4 posture — because those run behind the `__set*` seams. **The bytes
+themselves had never executed, and real ETH rides them**, which is the one place this project's own
+standard (every chain rail devnet-proven end to end before it is trusted — `tools/chain-e2e.js`,
+27 asserted steps) had not been met.
+**IT ALL TURNED OUT TO BE AVAILABLE, which is why the flag was closable at all**: `@uniswap/v4-periphery`
+ships PREBUILT artifacts for PoolManager / PositionManager / StateView / PoolModifyLiquidityTest,
+`@uniswap/universal-router` ships its own, Permit2's precompiled runtime sits in v4-periphery's OWN
+test helper (etched at the canonical address exactly as that helper does it), and anvil comes from
+Foundry or npm. So the prover stands up a REAL v4 — not a mock — initializes the canonical OMR/ETH
+pool behind the REAL OmertaHook, seeds it with real liquidity, and runs BOTH bots **with their
+senders UNSEAMED**, so `src/dexbot.js`'s own encoders build the calldata that executes. **A hook
+carries its permissions in the low 14 bits of its address**, so it cannot merely be deployed; real
+deployments mine a CREATE2 salt, and here a throwaway DEPLOYER is mined instead (its nonce-0 address
+is a pure keccak of sender+nonce) — no factory, no cheatcode, ~15k hashes.
+**THE FOUR DECODERS WERE READ BEFORE ANYTHING WAS RUN, and all four matched** (`SWAP_EXACT_IN_SINGLE`
+0x06 / `SETTLE_ALL` 0x0c / `SETTLE_PAIR` 0x0d / `TAKE_ALL` 0x0f / `MINT_POSITION` 0x02 / `V4_SWAP`
+0x10, the struct field order, and the assembly offset layout `decodeMintParams` reads) — so the
+encodings were right and a careful reading would have stopped there. **The run found what reading
+could not.** `modifyLiquidities` is payable and v4's `DeltaResolver` settles native ETH out of the
+periphery contract's OWN balance — **it never refunds the remainder**, which simply stays in the
+PositionManager, unreachable by anyone. And over-sending is the ORDINARY case rather than an edge:
+the OMR side is priced at the ORACLE while liquidity is derived from the pool's LIVE `sqrtPrice`,
+and a TWAP lags spot by design, so whenever the OMR side binds the ETH side is under-consumed by
+exactly that gap. **Measured on the real pool: 0.148 ETH of 1 ETH lost at a 15% oracle-vs-spot gap**
+— bonded POL money, gone — **and the journal still booked the full 1 ETH as paired**, so
+`pol_pairings` (the root cap's only book) retired budget that never became liquidity. Both halves
+fixed: a `SWEEP` action (0x14) returning the remainder to the bot wallet, and reporting what the
+position actually CONSUMED (balance delta net of gas) rather than what was sent. No OMR sweep — the
+mint pulls OMR through Permit2 for exactly what it consumes, so the unused side is never taken.
+**Two mutations, each caught at its own named assertion** (the SWEEP removed → the stranded-ETH
+assertion; the books reverted to the sent amount → "the swept remainder must not be booked as
+paired"). 18 asserted steps end to end, incl. the fill clearing its slippage floor (995.95 vs a
+1000 oracle), the position owned by the SAFE and never the hot bot key, `runDexBotInvariants`
+holding over REAL fills, and **zero `transactions` rows** (the whole layer is out-of-band real
+value — the fees.js precedent). Wired into the FORGE workflow rather than ci.yml, because it needs
+exactly what that job already has (a Foundry toolchain for anvil + the `out/` artifacts `forge
+build` just produced), with the workflow's path filter extended to `src/dexbot.js` so a change to
+the encodings cannot ship without the prover running — and `test/docs.js` now fails if either the
+step or that path filter is removed (mutation-verified), because a harness that does not run is not
+a guard. CHAIN-DEPLOY's ⚠ VERIFY AT LAUNCH row is now ✅, **with the honest residual kept**: this
+proves the ENCODINGS, not a deploy — a wrong `DEX_POOL_FEE`/`DEX_POOL_TICK_SPACING` misses the pool
+entirely and is a config error the prover cannot see, so a small live swap + pairing on the real
+chain stays a launch step.
+
 **THE STRANDED-VAULT RECOVERY — "can we clawback stocks in Deeds in case they get burned accidentally"
 (founder-directed 2026-08-16; the destination answered "Treasury Holding address") — BUILT**
 (`src/chain.js` `recoverStrandedDeed`/`strandedDeeds`, `GET /v1/mod/deeds/stranded` +

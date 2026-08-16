@@ -412,6 +412,15 @@ assert.deepEqual([...new Set(phantom)], [], `docs/AUDITS.md lists reports that d
     'npm run scale'])
     assert(ci.includes(script), `.github/workflows/ci.yml no longer runs \`${script}\` — a harness that `
       + 'does not run is not a guard, it is a file. Re-add it or delete the harness honestly.');
+  // dexbot-e2e lives in the FORGE workflow rather than ci.yml, because it needs what that job
+  // already has — a Foundry toolchain (anvil) and the `out/` artifacts forge just built. Same rule.
+  const forge = read('.github/workflows/forge.yml');
+  assert(forge.includes('npm run dexbot-e2e'),
+    '.github/workflows/forge.yml no longer runs `npm run dexbot-e2e` — that harness is the only thing '
+    + 'that executes the raw v4 encodings against a real pool; without it they are unverified again.');
+  assert(forge.includes("'src/dexbot.js'"),
+    ".github/workflows/forge.yml no longer triggers on 'src/dexbot.js' — the encodings it proves live "
+    + 'there, so a change to them would ship without the prover ever running.');
 }
 
 // ── and neither does a gate that fails on its own dependency list ────────────────────────────────

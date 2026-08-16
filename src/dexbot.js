@@ -42,12 +42,23 @@
 // sit behind `__set*` seams so the orchestration + walls + accounting are fully testable, and the
 // wrong-chain guard applies to every sender (a colliding deploy on another chain must refuse).
 //
-// ⚠ VERIFY AT LAUNCH (the chain-e2e precedent): the raw Uniswap v4 encodings (Universal Router
-// V4_SWAP command bytes; PositionManager modifyLiquidities MINT_POSITION actions) cannot be tested
-// against a real pool in this environment — no v4 pool exists to swap against. The encoders below
-// follow the documented v4 periphery formats and MUST be exercised on a devnet/fork pool before
-// real ETH rides them (CHAIN-DEPLOY carries the step). The orchestration, walls, journals and
-// §10.4 posture are what the suite proves.
+// THE v4 ENCODINGS ARE PROVEN (2026-08-16) — `npm run dexbot-e2e` (tools/dexbot-e2e.js) stands up a
+// REAL Uniswap v4 (actual PoolManager / PositionManager / StateView / Universal Router / Permit2
+// bytecode) on anvil, initializes the canonical OMR/ETH pool behind the REAL OmertaHook, and runs
+// both bots with their senders UNSEAMED, so the encoders below build the calldata that executes.
+// This header used to say the opposite, and the run is what closed it — 18 asserted steps.
+//
+// It found a real one, and it is the reason a fork test earns its keep over a careful reading: the
+// mint over-sent ETH and v4 NEVER refunds it. `DeltaResolver` settles native ETH out of the
+// PositionManager's own balance, so the unused remainder simply stays there, unreachable by anyone.
+// Over-sending is the ORDINARY case rather than an edge — the OMR side is priced at the oracle
+// while the liquidity is derived from the pool's live sqrtPrice, and a TWAP lags spot by design —
+// so at a 15% oracle-vs-spot gap the run measured 0.148 ETH of 1 ETH LOST, in bonded POL money,
+// with the journal still booking the full 1 ETH as paired. Both halves are fixed below (a SWEEP
+// action, and booking what the position actually consumed) and both are mutation-pinned.
+//
+// The seamed suite (`test/dexbot.js`) remains where the orchestration, walls, journals and §10.4
+// posture are asserted; the fork run is for the bytes.
 
 import { GameError } from './game.js';
 import { runVigBuyback } from './vig.js';
@@ -346,7 +357,7 @@ async function swapEthForOmrOnchain({ ethIn, minOmrOut }) {
 // slippage headroom so a moved pool reverts rather than over-consuming.
 async function addLiquidityOnchain({ ethIn, omrIn }) {
   const { pub, wallet } = await botWallet();
-  const { getAddress, parseEther, parseUnits, encodeAbiParameters, encodePacked } = await import('viem');
+  const { getAddress, parseEther, parseUnits, formatEther, encodeAbiParameters, encodePacked } = await import('viem');
   const pm = getAddress(process.env.POSITION_MANAGER_ADDRESS);
   const safe = getAddress(process.env.POL_POSITION_OWNER || wallet.account.address);
   const key = poolKey(getAddress);
@@ -385,13 +396,32 @@ async function addLiquidityOnchain({ ethIn, omrIn }) {
      { type: 'uint256' }, { type: 'uint128' }, { type: 'uint128' }, { type: 'address' }, { type: 'bytes' }],
     [key, tickLower, tickUpper, liquidity, amountEth, amountOmr, safe, '0x']);
   const settleParams = encodeAbiParameters([{ type: 'address' }, { type: 'address' }], [key.currency0, key.currency1]);
-  const actions = encodePacked(['uint8', 'uint8'], [0x02, 0x0d]);                 // MINT_POSITION, SETTLE_PAIR
-  const unlockData = encodeAbiParameters([{ type: 'bytes' }, { type: 'bytes[]' }], [actions, [mintParams, settleParams]]);
+  // SWEEP the ETH remainder back. This is NOT belt-and-braces — v4's DeltaResolver settles native
+  // ETH out of the PositionManager's OWN balance and never refunds what it did not need, so any
+  // over-sent msg.value stays there permanently, reachable by nobody. And over-sending is the
+  // NORMAL case, not an edge: the OMR side is sized at the ORACLE price while the liquidity is
+  // derived from the pool's LIVE sqrtPrice, and a TWAP lags spot by design — whenever the OMR side
+  // is the binding one, the ETH side is under-consumed by exactly that gap. `tools/dexbot-e2e.js`
+  // measured 0.148 ETH of 1 ETH lost at a 15% oracle-vs-spot gap, on a real pool, before this
+  // action existed. (No SWEEP for OMR: `_pay` pulls exactly what the mint consumes through Permit2,
+  // so the unused OMR is never taken from the wallet in the first place.)
+  const sweepParams = encodeAbiParameters([{ type: 'address' }, { type: 'address' }], [key.currency0, wallet.account.address]);
+  const actions = encodePacked(['uint8', 'uint8', 'uint8'], [0x02, 0x0d, 0x14]);  // MINT_POSITION, SETTLE_PAIR, SWEEP
+  const unlockData = encodeAbiParameters([{ type: 'bytes' }, { type: 'bytes[]' }], [actions, [mintParams, settleParams, sweepParams]]);
   const deadline = BigInt(Math.floor(Date.now() / 1000) + 600);
+  const me = wallet.account.address;
+  const ethBefore = await pub.getBalance({ address: me });
   const txHash = await wallet.writeContract({ address: pm,
     abi: [{ type: 'function', name: 'modifyLiquidities', stateMutability: 'payable',
       inputs: [{ name: 'unlockData', type: 'bytes' }, { name: 'deadline', type: 'uint256' }], outputs: [] }],
     functionName: 'modifyLiquidities', args: [unlockData, deadline], value: amountEth });
-  await pub.waitForTransactionReceipt({ hash: txHash });
-  return { txHash, ethPaired: ethIn, omrPaired: omrIn };
+  const rcpt = await pub.waitForTransactionReceipt({ hash: txHash });
+  // Report what the position actually CONSUMED, not what was sent — the swept remainder is still
+  // the bond programme's to pair, so booking it as paired would retire budget that never became
+  // liquidity (and `pol_pairings` is the root cap's only book).
+  const ethAfter = await pub.getBalance({ address: me });
+  const gas = BigInt(rcpt.gasUsed) * BigInt(rcpt.effectiveGasPrice ?? 0n);
+  const consumed = ethBefore - ethAfter - gas;
+  const ethPaired = consumed > 0n && consumed <= amountEth ? Number(formatEther(consumed)) : ethIn;
+  return { txHash, ethPaired, omrPaired: omrIn };
 }
