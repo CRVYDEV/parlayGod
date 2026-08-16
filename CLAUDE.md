@@ -13036,3 +13036,44 @@ back `cap 0`, which `capOf` falls back to the floor for. Two mutations, each cau
 assertion (the cap stops scaling → "one step of players buys one step of stock"; the cap read live
 instead of stamped → "TODAY'S stock did not move"). All four `CITY_*` numbers are founder sign-off
 levers (pinned, tabled in BALANCE.md § SCARCITY).
+
+**THE POLL WAS THE LOAD — 457 → ~1,580 concurrent players for no infrastructure spend (founder-directed
+2026-08-16: "what happens if we get 1000 users playing on the first day? how do we scale to handle that
+load?") — BUILT** (`tools/pollcost.js` — the 10th harness, `npm run pollcost`; `public/index.html` the
+30s tick; `render.yaml` the record). **The question was answered by MEASURING, and the measurement moved
+the answer from "buy a bigger database" to "the client is the bottleneck".** Every capacity figure this
+project had was in REQUESTS (`npm run loadtest`: ~290 req/s at the current plans, and the database — not
+the web plan — is the dial: +50% per doubling of DB CPU vs +2% for the API's). Translating that into
+PLAYERS needs the other half, and **that half is a CLIENT behaviour, not a server property**: the console
+re-renders the open screen every 30s, and a screen is a fan-out of board GETs. `tools/pollcost.js` counts
+what one idle player actually costs in a real browser (Chromium, the real nav, the client's own
+visibility-return handler firing the tick rather than a `window.__tick` test hook — so the probe rides a
+real code path and production grows no surface for it). **Measured: 19 requests per tick on HOME =
+0.63 req/s idle** — independently confirming the recorded 0.56–0.72 — which is **~457 concurrent players**,
+i.e. **1,000 on day one is 2.2× over the ceiling** and would degrade exactly like the pool cliff did
+(requests queue, hit the connect timeout, and the player is told the database is unreachable). Home is
+the worst screen at **18 boards** AND the screen a returning player LANDS on (the THE HOME drop made it
+so). **THE FIX is the one `render.yaml` had flagged and deliberately deferred** ("a client behaviour
+change with staleness consequences") — now the right time, and safe because of something already true:
+**the websocket already calls `renderActive()` on every event** on your own channel, the streets and your
+gang's, and every action re-renders through `act()`. So the tick's two halves are decoupled: the SHEET
+(`refresh()` — ONE request, and the one carrying vitals, money, cooldowns and the coach) still runs every
+30s; the BOARDS re-render every `BOARD_EVERY` (4) ticks. What is delayed is ONLY time-drift on a board
+nobody touched (an accrual ticking up, a cooldown expiring) on a screen you are staring at without acting;
+returning to the tab is still a full render. **Re-measured: 0.63 → 0.18 req/s, ~457 → ~1,580 concurrent —
+3.5× the player ceiling for zero spend.** The probe does not merely DERIVE that (peak amortised over
+`BOARD_EVERY`, read out of the client's own source rather than restated — the preflight-restatement
+lesson): it then **sits on the worst screen for a real 124s window and counts what actually goes out**,
+because derived is not measured — **observed 11.1/min against 11.0 derived, 1% apart**, and it exits
+non-zero if the client's real cadence ever diverges from its stated constant. Two mutations, each caught
+by name (`BOARD_EVERY` back to 1 → 0.87 req/s / 334 players; the constant left at 4 while the tick
+re-renders every time → the verification fires at 252% apart). **Shipped with it, a regression THE SAME
+SESSION'S OWN drop had introduced**: the population-scaled shipment cap put a `COUNT(*) FROM characters`
+in `shipmentBoard`, i.e. on a polled screen — so the population is now STAMPED on the day row beside the
+cap (`shipment_days.pop`, ALTER-added — the boot-crash lesson), one count per DAY rather than one per
+read; the migration is proven on real Postgres over BOTH the pre-scaling and the cap-but-no-pop table
+shapes. §10.4 untouched throughout (a render cadence and a stamped display figure move no value). Honest
+scope, stated in the harness: it counts REQUESTS, not their cost — a board that runs one indexed lookup
+and one that scans a table both count 1 — which is the right unit for the ceiling question because the
+server figure is also in requests, but a heavy board is invisible to it. **The remaining dials, in order:
+the DATABASE plan (+50% per doubling), then Home's 18-board fan-out itself.**

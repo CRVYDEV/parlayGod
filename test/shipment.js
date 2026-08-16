@@ -157,13 +157,19 @@ for (const [lo, hi] of [[25, 50], [50, 100], [100, 250]]) {
 
 // THE STAMP: the day's cap is fixed when the day opens, so a signup cannot move it under a player who
 // has already read "N left". Grow the city mid-day and today's stock must not budge.
+const realPop = async () => Number((await pool.query(
+  'SELECT COUNT(*) n FROM characters WHERE alive AND NOT is_npc')).rows[0].n);
 const before = (await call('GET', '/v1/shipment', { token: ace.token })).body;
+const popBefore = await realPop();
 for (let i = 0; i < SHIPMENT.CITY_STEP; i++) await mk(`Filler ${i} Rossi`);
+assert(await realPop() > popBefore, 'the city really grew');
+assert(shipmentCityCap(await realPop()) > before.cityCap, 'enough that a fresh day would be bigger');
 const after = (await call('GET', '/v1/shipment', { token: ace.token })).body;
-assert(after.population > before.population, 'the city grew');
-assert(shipmentCityCap(after.population) > before.cityCap, 'enough that a fresh day would be bigger');
 assert.equal(after.cityCap, before.cityCap,
   "TODAY'S stock did not move — the cap is stamped at the day, not read live");
+assert.equal(after.population, before.population,
+  'and neither did the figure the board quotes it against — one count per DAY, not one per read, '
+  + 'because this board sits on a screen the client re-renders every 30 seconds');
 
 // ═══ 3b. IT DIES WITH THE STREET ═══
 // It lives on the CHARACTER row, so the estate takes it by construction — the heir starts clean.
