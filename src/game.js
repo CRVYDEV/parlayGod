@@ -15,7 +15,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS, RANKS,
          KITCHENS, labModuleCost, recyclesToDesk, DESK_RECYCLE_REASON, isMade, madeSeconds,
          MADE_LADDER, madeRungIdx, madeRungOf, ladderFx,
          ASSETS, OPERATIONS, opSlotsOf, nextOpSlotLevel, MISSIONS, dailyLiveFor, jailed, safeHoused,
-         STABLE, SPEAKEASY, ESTATE, MADE, CREW, crewObjectiveOf } from './rules.js';
+         STABLE, SPEAKEASY, ESTATE, MADE, CREW, crewObjectiveOf, DEEDS, deedController } from './rules.js';
 import { dbCaps } from './db.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
@@ -351,6 +351,22 @@ export async function loadOwned(client, ch) {
     gang = (await client.query('SELECT * FROM gangs WHERE id=$1', [gangId])).rows[0] || null;
     held = idList((await client.query('SELECT id FROM districts WHERE holder_gang=$1', [gangId])).rows, 'id');
   }
+  // STREET DEEDS Phase 2C — the districts whose CORNER this account controls (the deed-vs-control
+  // split: turf power follows CONTROL, not the paper — a rival who muscled in enjoys the perk, the
+  // dispossessed owner does not). Fetched flat and filtered in JS with the SAME `deedController`
+  // the corner till uses (board and till can never disagree about who runs a corner); an extracted
+  // / extraction-pending deed is INERT (the car/boat rule) so it perks nobody. `deedPerk` is OR'd
+  // with family turf by SET-UNION at every perk site — a district in both lists adds NOTHING —
+  // and `deedSeat` (you control your OWN corner) is the +1 operation seat, capped at SLOTS_MAX.
+  let deedPerk = [], deedSeat = false;
+  if (DEEDS.PERK_TURF || DEEDS.PERK_OP_SLOTS) {
+    const now = Date.now();
+    const drows = (await client.query(
+      'SELECT district, account_id, controller_account, control_until, onchain_token_id FROM street_deeds WHERE account_id=$1 OR controller_account=$1',
+      [ch.account_id])).rows.filter((d) => !d.onchain_token_id && deedController(d, now) === ch.account_id);
+    deedPerk = DEEDS.PERK_TURF ? [...new Set(drows.map((d) => d.district))] : [];
+    deedSeat = drows.some((d) => d.account_id === ch.account_id);
+  }
   const businesses = await businessesOf(client, ch.id); // late-game personal fronts (usually empty)
   const speakeasy = await speakeasyOwnedOf(client, ch.id); // the district's club, if this man runs one
   const fighters = await fightersOf(client, ch.id); // the fight-circuit STABLE, if this man manages one
@@ -381,6 +397,7 @@ export async function loadOwned(client, ch) {
     cargo: cargoMap(cargo.rows), items: itemMap(items.rows),
     gear: idList(gear.rows, 'gear_id'), guns: idList(guns.rows, 'gun_id'),
     gangId, gangRole: gm.rows[0]?.role || null, gangJoinedAt: gm.rows[0]?.joined_at || null, gang, held,
+    deedPerk, deedSeat, // STREET DEEDS 2C — controlled-corner districts (turf perk) + the own-corner op seat
     crewId,   // THE CREW — the non-aggression gate reads this off owned/victimOwned (combat.js)
     makings: Object.fromEntries(mk.rows.map((r) => [r.drug_id, Number(r.qty)])),
     stash: st.rows.map((r) => ({ drug_id: r.drug_id, qty: Number(r.qty), quality: Number(r.quality) })),
@@ -787,6 +804,7 @@ export const trunkCap = (h) => cargoCapacity(h.owned.assets)
 // result, whether it has anything worth persisting at all.
 export function accrueInMemory(ch, acct, owned) {
   accrue(ch, acct, { rackets: owned.rackets, assets: owned.assets, held: owned.held, stash: owned.stash,
+    deedHeld: owned.deedPerk, // STREET DEEDS 2C — controlled corners count at accrual's two perk reads (cathedral nerve, neon income)
     racketLevels: owned.racketLevels, // Tier-4 — per-racket upgrade levels multiply the drip
     disciplines: owned.disciplines, // THE REGIMEN — stamina/composure raise the regen CAPS (pool, not rate)
     foundationTier: owned.gang?.foundation || 0 }); // THE FOUNDATION step two: the family charity speeds the exposure bleed
@@ -1604,7 +1622,8 @@ export function view(ch, acct = {}, owned = {}) {
     // the income-asset category), so the Empire card can never advertise a seat buyRacket refuses.
     ops: (() => {
       const incomeAssets = assets.filter((id) => ASSETS.find((a) => a.id === id)?.cat === OPERATIONS.INCOME_ASSET_CAT);
-      const slots = opSlotsOf(lvl);
+      // STREET DEEDS 2C — the own-corner op seat rides the SAME opSlotsOf the till gates on
+      const slots = opSlotsOf(lvl, !!owned.deedSeat);
       const used = (owned.rackets || []).length + incomeAssets.length;
       return { used, slots, free: Math.max(0, slots - used), nextAt: nextOpSlotLevel(lvl),
         max: OPERATIONS.SLOTS_MAX, incomeAssets, meteredCat: OPERATIONS.INCOME_ASSET_CAT };
@@ -1762,7 +1781,11 @@ export function doCrime(ch, crimeId, client, h, approach) {
   if (ap.heat) ch.heat = Math.min(100, Number(ch.heat || 0) + ap.heat);
   const ev = cityEventOf(dayOf());
   const rIdx = rankIdxOf(lvl);
-  const held = h.owned?.held || [];
+  // STREET DEEDS 2C — the controller's turf perk: districts whose corner you control count like
+  // family turf at the three PERK reads below (brick success / canal cash / docks crates). OR by
+  // SET-UNION — every site is an `.includes(x)`, so a district in both lists applies its perk
+  // exactly once (never stacks). Family-only machinery (war, seizure, boards) never reads this.
+  const held = [...(h.owned?.held || []), ...(h.owned?.deedPerk || [])];
   const eff = (s) => effStat(ch[s], s, h.owned?.assets || [], h.owned?.gear || []);
   // §7.2 full chance: stats + gang level (treasury tiers) + Brick Yards turf + rank, then the approach
   // (quiet safer / loud riskier), all under the same 0.97 ceiling so quiet's edge tapers for a maxed street.

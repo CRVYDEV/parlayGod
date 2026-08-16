@@ -1588,6 +1588,39 @@ phase('P9.37 street deeds — the corner take (the one Phase-2 faucet, bounded)'
     'a single corner is ~a territory-racket rung; the shakedown only moves WHO collects (control), never mints — so the faucet cannot be widened by contesting it. Sign-off levers: DEEDS.CORNER_PER_HR / CORNER_CAP_MS');
 }
 
+// ════════ P9.38 STREET DEEDS 2C — the controller's perks (OR with family turf, never stacks) ════════
+// Phase 2C gives whoever CONTROLS a corner the district's SIGNED turf perk, OR'd with family turf by
+// SET-UNION at every perk site — so a district counted twice adds NOTHING, and base-wide emission in a
+// world where families already hold the districts is UNCHANGED by construction. The measurable widening
+// is the no-family case: one extra operator per controlled corner can now run a signed perk. The two
+// that touch money are measured here off the LIVE levers; the rest (brick +2% success, docks ×1.5
+// crates, cathedral ×2 nerve regen, foundry −25% craft, ±5% goods at the corner) are variance/pacing/
+// sink-discount surfaces bounded by the player's own nerve/energy — the same argument as the family perk.
+phase("P9.38 street deeds 2C — the controller's perks (neon ceiling + the op seat)");
+{
+  const meteredMin = CONSTANTS.RACKET_DAILY_CAP_MS / 60000; // racket income is per MINUTE (the units trap)
+  const incomeAssets = ASSETS.filter((a) => a.cat === OPERATIONS.INCOME_ASSET_CAT);
+  const allIncomes = [...RACKETS.map((r) => r.income), ...incomeAssets.map((a) => a.income)].sort((a, b) => b - a);
+  // (1) NEON: +15% racket/asset income for ONE operator controlling a neon corner (zero when any
+  // family holds neon — OR). Ceiling = 15% of one maxed operator's metered day (SLOTS_MAX seats).
+  const bestDay = allIncomes.slice(0, OPERATIONS.SLOTS_MAX).reduce((s, x) => s + x, 0) * meteredMin;
+  note('deeds 2C', 'neon corner ceiling (one operator)', `≤ +$${fmt(Math.floor(bestDay * 0.15))}/day`,
+    `15% of a maxed ${OPERATIONS.SLOTS_MAX}-seat metered racket day ($${fmt(Math.floor(bestDay))}); applies to at most ONE extra operator per controlled neon corner, and to NOBODY new when a family holds neon (set-union OR). PERK_TURF: 0 disables`);
+  // (2) THE OP SEAT: +PERK_OP_SLOTS while you control your OWN corner, capped at SLOTS_MAX — so at
+  // level ≥ (SLOTS_MAX−SLOTS_BASE)×SLOTS_PER_LEVEL it adds NOTHING (parity: the deed accelerates the
+  // seat curve, never exceeds it). Below the cap the marginal seat runs the next-best LEVEL-GATED rung.
+  const capLvl = (OPERATIONS.SLOTS_MAX - OPERATIONS.SLOTS_BASE) * OPERATIONS.SLOTS_PER_LEVEL;
+  let worst = 0, worstLvl = 0;
+  for (let lvl = 1; lvl < capLvl; lvl++) {
+    const gated = [...RACKETS.filter((r) => (r.lvl || 0) <= lvl).map((r) => r.income),
+      ...incomeAssets.map((a) => a.income)].sort((a, b) => b - a); // buyAsset has no level gate (recorded)
+    const marg = (gated[opSlotsOf(lvl)] || 0) * meteredMin; // the rung the extra seat runs at this level
+    if (marg > worst) { worst = marg; worstLvl = lvl; }
+  }
+  note('deeds 2C', 'op seat max marginal', `+$${fmt(Math.floor(worst))}/day @ lvl ${worstLvl}`,
+    `the (seats+1)-th best level-gated rung's metered day; EXACTLY $0/day at level ≥ ${capLvl} (SLOTS_MAX binds — the parity cap, test-pinned). PERK_OP_SLOTS: 0 disables`);
+}
+
 phase('P10 §10.4 ledger invariants over the ENTIRE sim (nothing was seeded)');
 const inv = await runLedgerInvariants(pool);
 for (const c of inv.checks) console.log(`  ${c.ok ? '✅' : '🚨'} ${c.name}: drift ${c.drift}`);

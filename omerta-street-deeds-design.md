@@ -76,10 +76,10 @@ The A layer and the value driver, buildable correctly today with zero economy ri
 Pure status, like the portrait/dynasty/estate: no currency moves, no new faucet, the nightly §10.4
 sweep stays drift-0 by construction.
 
-### Phase 2 — control: rent (B) BUILT · turf (C) deferred (sim-measured + founder sign-off levers)
+### Phase 2 — control: rent (B) BUILT · turf (C) BUILT 2026-08-16 (sim-measured + founder sign-off levers)
 The income layer touches §10.4, so it gets the full treatment. **B (rent) is BUILT** as THE CORNER
-TAKE; **C (turf perks) is deferred** — it touches the SIGNED district-perk surface, so it wants its own
-founder sign-off, not a slam.
+TAKE; **C (turf perks) is BUILT as Phase 2C** (founder-directed 2026-08-16 "Build it now" — the
+sign-off the deferral waited for; see the 2C bullet below).
 - **B (rent) — THE CORNER TAKE + THE SHAKEDOWN (`src/deeds.js`, `test/deeds.js`):** a small, HARD-CAPPED
   lazy cash faucet (`deed:corner`, `DEEDS.CORNER_PER_HR` × up to `CORNER_CAP_MS` 24h) collected only by
   whoever **controls** a deed. Control is contestable: `shakedownCorner` is a stat contest (muscle +
@@ -98,10 +98,20 @@ founder sign-off, not a slam.
     (BALANCE.md, pinned in `test/levers.js`). Base-wide ceiling = (deed holders) × PER_HR × 24h — ONE
     deed per account, so it is linear in the playerbase and petty per deed (~a territory-racket rung).
     The shakedown only moves WHO collects, so contesting a corner can never **widen** the faucet.
-- **C (turf) — DEFERRED:** owning a street granting a **racket slot + turf perks in that district**
-  touches the sim-audited district-perk surface, so it is a separate founder sign-off (capped at what a
-  free player earns by seizing turf), not shipped with B.
-- B is sim-measured (P9.37), tabled in BALANCE.md, all numbers founder sign-off levers.
+- **C (turf) — BUILT as Phase 2C (2026-08-16, founder-directed):** THE CONTROLLER'S PERKS. Whoever
+  CONTROLS a corner (the deed-vs-control split — control, never the paper) personally enjoys that
+  district's SIGNED turf perk, **OR'd with family turf by SET-UNION at every perk site** (a district
+  counted twice adds NOTHING — never stacks, so a world where families hold the districts sees zero
+  new emission by construction), plus **one extra operation seat** while you control your OWN corner —
+  **capped at `OPERATIONS.SLOTS_MAX`**, which is the free-player-parity bound made literal: the deed
+  accelerates the seat curve, it can never exceed what any player reaches by level alone. The perk
+  VALUES are the signed district perks unchanged (brick/canal/docks/cathedral/neon/foundry + the ±5%
+  goods edge); the perk follows control, so a shakedown takes the edge and the seat with the corner,
+  and an on-chain deed perks nobody (inert). Deliberately excluded: convoy TURF_DEF, the neon fight
+  fix, the harbormaster toll, sovereignty — gang machinery, not district perks. Levers
+  `DEEDS.PERK_TURF` / `PERK_OP_SLOTS` (0 disables each); measured in sim **P9.38**; BALANCE.md
+  § STREET DEEDS 2C.
+- B is sim-measured (P9.37), C in P9.38; both tabled in BALANCE.md, all numbers founder sign-off levers.
 
 ### Phase 3 — the secondary market (off-chain core BUILT · the on-chain tradeable NFT BUILT, chain-dormant)
 **Both the off-chain SECONDARY MARKET and the on-chain ERC-721 are BUILT** (2026-08-14; the founder

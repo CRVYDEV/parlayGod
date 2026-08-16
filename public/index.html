@@ -4479,9 +4479,12 @@
       if (c.collectable > 0)
         parts.push(`<button class="act" id="deed-collect">collect the corner take — $${(c.collectable).toLocaleString()}</button>`);
       if (c.iControl && deed) parts.push(`<div class="d">You run your corner — it's yours to collect. It banks up to ${c.capHours}h ($${(c.perHr * c.capHours).toLocaleString()}) while you're away.</div>`);
+      // 2C — THE CONTROLLER'S PERKS: your corner carries its district's turf perk + an extra op seat
+      if (c.perkActive && c.perkText) parts.push(`<div class="d" style="color:var(--gold)">Your corner's edge: <b>${esc(c.perkText)}</b>${c.seatActive ? ` — and it seats +${c.seatBonus} operation.` : '.'} A rival who muscles in takes the edge with the corner.</div>`);
+      else if (c.perkText && c.seized) parts.push(`<div class="d" style="color:var(--bad)">The corner's edge (${esc(c.perkText)}) went with it — take it back to get it back.</div>`);
       if (c.seized) parts.push(`<div class="d" style="color:var(--bad)">A rival muscled in on your corner${c.seizedForSeconds ? ' — they run it for ' + Math.ceil(c.seizedForSeconds / 3600) + 'h more' : ''}. You keep the deed; they collect the take until you take it back.</div>`);
       if (c.canReclaim) parts.push(`<button class="act" data-shake="${c.myTargetId}" data-reclaim="1">take your corner back</button>`);
-      if ((c.rivalCorners || []).length) parts.push(`<div class="d">Corners you run: ${c.rivalCorners.map((r) => esc(r.name) + ' ($' + r.owed.toLocaleString() + ')').join(', ')}.</div>`);
+      if ((c.rivalCorners || []).length) parts.push(`<div class="d">Corners you run: ${c.rivalCorners.map((r) => esc(r.name) + ' ($' + r.owed.toLocaleString() + (r.perk ? ' · ' + esc(r.perk) : '') + ')').join(', ')}.</div>`);
       const marks = (c.here || []).filter((h) => !h.mine);
       if (marks.length) parts.push(`<div class="d" style="margin-top:3px">On this block you could lean on:</div>` +
         marks.map((m) => `<button class="act" data-shake="${m.targetId}">lean on ${esc(m.street)} <span class="d">(${esc(m.steward)})</span></button>`).join(''));
@@ -4577,8 +4580,8 @@
       act('POST', '/v1/deeds/list', { price: p }).then(() => renderDeeds()); }; }
     { const el = $('#deed-unlist'); if (el) el.onclick = () => act('POST', '/v1/deeds/unlist').then(() => renderDeeds()); }
     { const el = $('#deed-extract'); if (el) el.onclick = () =>
-      ask('Take your street on-chain as a tradeable NFT? It goes inert in-game (no corner, no in-game sale) until you re-import it — but you keep the deed and its whole legend, and it sells on any marketplace.', 'Take it on-chain')
-        .then((ok) => { if (ok) act('POST', '/v1/deeds/extract').then(() => renderDeeds()); }); }
+      ask('Take your street on-chain as a tradeable NFT? It goes inert in-game (no corner, no in-game sale) until you re-import it — but you keep the deed and its whole legend, and it sells on any marketplace.\n\nBy continuing you also ATTEST that you may lawfully hold the instruments this deed’s vault can receive — treasury-bought stock is delivered into it with no further check.', 'I attest — take it on-chain')
+        .then((ok) => { if (ok) act('POST', '/v1/deeds/extract', { attest: true }).then(() => renderDeeds()); }); }
     t.querySelectorAll('[data-buydeed]').forEach((btn) => btn.onclick = () =>
       ask(`Buy this street for $${Number(btn.dataset.price).toLocaleString()}? You get the name and its legend — the corner you'll have to fight for.`, 'Buy it')
         .then((ok) => { if (ok) act('POST', '/v1/deeds/buy/' + btn.dataset.buydeed).then(() => renderDeeds()); }));

@@ -11,7 +11,9 @@ import assert from 'node:assert';
 import { recoverTypedDataAddress } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { buildServer } from '../src/server.js';
-import { DEEDS, deedRankOf, deedRenown, deedNeighborhoodsOpen } from '../src/rules.js';
+import { DEEDS, deedRankOf, deedRenown, deedNeighborhoodsOpen,
+         GOODS, goodPriceOf, CONSUMABLES, cityEventOf, dayOf, seasonModOf,
+         OPERATIONS, opSlotsOf, RACKETS, ASSETS } from '../src/rules.js';
 import { deedChainConfig, DEED_VOUCHER_TYPES, deedTokenId, markDeedExtracted, reimportDeed } from '../src/chain.js';
 
 const app = await buildServer();
@@ -183,6 +185,105 @@ assert.equal((await call('POST', `/v1/deeds/shakedown/${a.id}`, { token: b.token
   'rookie', 'a rookie under the level floor can\'t muscle a corner');
 delete process.env.DEEDS_SHAKE_P;
 
+// ════════════ PHASE 2C — THE CONTROLLER'S PERKS (the turf perk + the op seat) ════════════
+// The deed-vs-control split applied to TURF POWER: whoever CONTROLS a corner personally enjoys the
+// district's SIGNED turf perk — OR'd with family turf by SET-UNION, so a district counted twice adds
+// NOTHING — and controlling your OWN corner seats one extra operation, capped at SLOTS_MAX (parity:
+// the deed accelerates the seat curve, never exceeds it). Every claim below is proven at a REAL TILL
+// (a goods price, a workshop bill, a racket seat), never by reading a flag back.
+{
+  // `a` controls their own neon corner (the lapse above handed it back). Fund + place them.
+  await pool.query("UPDATE characters SET cash=100000000, loc='neon', respect=1000, energy=100 WHERE id=$1", [a.id]);
+  const gid = GOODS[0].id;
+  const base = goodPriceOf(gid, 'neon');
+  // (1) THE TURF PRICE EDGE — the controller buys at the held-district 0.95; a deedless twin at 1.0
+  const dd = await mk('Tessio');
+  await pool.query("UPDATE characters SET cash=1000000, loc='neon' WHERE id=$1", [dd.id]);
+  const buyA = await call('POST', '/v1/goods/buy', { token: a.token, body: { goodId: gid, qty: 1 } });
+  assert.equal(buyA.code, 200, 'the controller buys goods on their corner');
+  assert.equal(buyA.body.unit, Math.round(base * 0.95),
+    'the corner controller buys at the held-district 0.95 — the signed turf price edge follows control');
+  const buyD = await call('POST', '/v1/goods/buy', { token: dd.token, body: { goodId: gid, qty: 1 } });
+  assert.equal(buyD.body.unit, Math.round(base), 'a deedless player in the same district pays full freight');
+  // …and the SELL side of the same edge — mirroring the till's own composition exactly, INCLUDING the
+  // live seasonModOf() read: a SEASON_MOD pin would be date-proof too, but it is a TEST_ONLY knob and
+  // preflight refuses it the moment a real DATABASE_URL makes the box read as production (verified).
+  const evT = cityEventOf(dayOf()).tradeMult || 1, seasonT = seasonModOf().tradeSellMult || 1;
+  const sellA = await call('POST', '/v1/goods/sell', { token: a.token, body: { goodId: gid, qty: 1 } });
+  assert.equal(sellA.body.unit, Math.round(base * 1.05 * evT * seasonT),
+    'the controller sells at the held-district 1.05 (deed corners count at the sell till too)');
+  // (2) NEVER STACKS — put `a` in a family that HOLDS neon: the price must be UNCHANGED (OR, not ×²).
+  await pool.query("INSERT INTO gangs (id, name, tag) VALUES ('g2c','The 2C Family','2CF')");
+  await pool.query("INSERT INTO gang_members (gang_id, character_id, role) VALUES ('g2c',$1,'boss')", [a.id]);
+  await pool.query("UPDATE districts SET holder_gang='g2c' WHERE id='neon'");
+  const buyBoth = await call('POST', '/v1/goods/buy', { token: a.token, body: { goodId: gid, qty: 1 } });
+  assert.equal(buyBoth.body.unit, Math.round(base * 0.95),
+    'MUTATION never-stack: family turf + a controlled corner in the SAME district apply the perk ONCE (set-union OR, never 0.95²)');
+  await pool.query("UPDATE districts SET holder_gang=NULL WHERE id='neon'");
+  await pool.query("DELETE FROM gang_members WHERE gang_id='g2c'");
+  await pool.query("DELETE FROM gangs WHERE id='g2c'");
+  // (3) THE FOUNDRY BILL — repoint b's OWN deed to foundry: their workshop bill drops to 0.75×.
+  await pool.query('UPDATE characters SET cash=10000000, cb=20 WHERE id=$1', [b.id]);
+  const c0 = CONSUMABLES[0];
+  const cashPre = await cashOf(b.id);
+  await call('POST', `/v1/workshop/craft/${c0.id}`, { token: b.token });
+  assert.equal(await cashOf(b.id), cashPre - c0.cost, "a brick corner buys no foundry discount — the bill is full");
+  await pool.query("UPDATE street_deeds SET district='foundry' WHERE account_id=$1", [b.acct]);
+  const cashPre2 = await cashOf(b.id);
+  await call('POST', `/v1/workshop/craft/${c0.id}`, { token: b.token });
+  assert.equal(await cashOf(b.id), cashPre2 - Math.floor(c0.cost * 0.75),
+    'a foundry corner controller crafts at the signed 0.75 — the workshop till reads the corner');
+  // (4) THE OP SEAT — the board AND the till: level 11 seats opSlotsOf(11); the corner seats one more.
+  const lvlA = 11; // respect 1000
+  const meA = (await call('GET', '/v1/me', { token: a.token })).body.character;
+  assert.equal(meA.ops.slots, opSlotsOf(lvlA) + DEEDS.PERK_OP_SLOTS,
+    'the board shows the corner seat (the same opSlotsOf the till gates on)');
+  const seats = opSlotsOf(lvlA) + DEEDS.PERK_OP_SLOTS;
+  // rackets AND income assets share the ONE seat pool (the strategy package), so the till walk mixes
+  // them — only 3 rackets sit at level ≤ 11, the rest of the seats take the cheapest income assets.
+  const seatables = [
+    ...RACKETS.filter((r) => (r.lvl || 0) <= lvlA).map((r) => ({ url: `/v1/rackets/${r.id}/buy`, cost: r.cost })),
+    ...ASSETS.filter((x) => x.cat === OPERATIONS.INCOME_ASSET_CAT).map((x) => ({ url: `/v1/assets/${x.id}/buy`, cost: x.cost })),
+  ].sort((p, q) => p.cost - q.cost);
+  assert(seatables.length > seats, 'the catalog has more level-open rungs than seats (or the refusal below is vacuous)');
+  for (let i = 0; i < seats; i++)
+    assert.equal((await call('POST', seatables[i].url, { token: a.token })).code, 200,
+      `the till seats operation ${i + 1} of ${seats} — the corner's extra seat is real at the till`);
+  assert.equal((await call('POST', seatables[seats].url, { token: a.token })).body.error,
+    'slots', 'one past the corner-boosted seat count still refuses — the seat is +1, not unlimited');
+  // (5) THE PARITY CAP — at level ≥ 40 the seat adds NOTHING (SLOTS_MAX binds; the deed accelerates
+  // the curve, never exceeds it — free-player parity, the load-bearing bound).
+  await pool.query('UPDATE characters SET respect=20000 WHERE id=$1', [a.id]); // level 45
+  assert.equal((await call('GET', '/v1/me', { token: a.token })).body.character.ops.slots, OPERATIONS.SLOTS_MAX,
+    'MUTATION cap: the corner seat NEVER exceeds SLOTS_MAX — a deed accelerates the seat curve, it cannot exceed what level alone reaches');
+  await pool.query('UPDATE characters SET respect=1000 WHERE id=$1', [a.id]);
+  // (6) THE PERK FOLLOWS CONTROL — b re-seizes a's corner: a loses the price edge AND the seat;
+  // b (whose own deed is in foundry) now enjoys the NEON edge through the corner they muscled.
+  process.env.DEEDS_SHAKE_P = '1';
+  await pool.query("UPDATE characters SET loc='neon', respect=1000, muscle=40, cunning=40, energy=100, cash=1000000 WHERE id=$1", [b.id]);
+  await pool.query("UPDATE street_deeds SET shakedown_at = now() - interval '7 hours' WHERE account_id=$1", [a.acct]);
+  assert.equal((await call('POST', `/v1/deeds/shakedown/${a.id}`, { token: b.token })).body.won, true, 'b re-seizes the corner');
+  delete process.env.DEEDS_SHAKE_P;
+  const buySeized = await call('POST', '/v1/goods/buy', { token: a.token, body: { goodId: gid, qty: 1 } });
+  assert.equal(buySeized.body.unit, Math.round(base),
+    'MUTATION control: the dispossessed OWNER pays full freight — the turf perk follows CONTROL, not the paper');
+  const meSeized = (await call('GET', '/v1/me', { token: a.token })).body.character;
+  assert.equal(meSeized.ops.slots, opSlotsOf(lvlA),
+    'the seized owner loses the op seat too (over-seated operations keep running; buying more refuses)');
+  const buyUsurper = await call('POST', '/v1/goods/buy', { token: b.token, body: { goodId: gid, qty: 1 } });
+  assert.equal(buyUsurper.body.unit, Math.round(base * 0.95),
+    'the USURPER enjoys the neon edge through the corner they muscled — control carries the perk');
+  // the board discloses the perk state both ways (the terms-ride-with-the-price rule)
+  const aPk = (await call('GET', '/v1/deeds', { token: a.token })).body.corner;
+  assert.equal(aPk.perkActive, false, 'the seized owner sees the edge is gone');
+  assert(aPk.perkText, 'and what it was');
+  const bPk = (await call('GET', '/v1/deeds', { token: b.token })).body.corner;
+  assert(bPk.rivalCorners.find((r) => r.name === 'Corvino Way' && r.perk),
+    "the usurper's board names the perk riding the corner they run");
+  // restore: lapse b's window so `a` controls their corner again for the blocks below
+  await pool.query("UPDATE street_deeds SET control_until = now() - interval '1 hour' WHERE account_id=$1", [a.acct]);
+}
+
 // ════════════ PHASE 4 — THE GROWING MAP (§10.4-zero — pure render off the population) ════════════
 // the helper: the first neighborhood is always open, one more per EXPANSION_STEP living players, capped
 assert.equal(deedNeighborhoodsOpen(0, 'neon'), 1, 'a fresh city opens the first neighborhood only');
@@ -293,9 +394,20 @@ assert.equal(eBoard.chain.configured, true, 'the deed chain reads configured');
 assert.equal(eBoard.chain.canExtract, true, 'a made, wallet-linked, unlisted holder can extract');
 assert.equal(eBoard.chain.extractPending, false, 'nothing pending yet');
 
+// GATE: the eligibility SELF-ATTESTATION (founder sign-off 2026-08-16 — the stock-delivery
+// verification depth): no attestation, no voucher — and a merely-truthy value never passes
+assert.equal((await call('POST', '/v1/deeds/extract', { token: e.token })).body.error, 'attestation',
+  'extraction without the eligibility attestation refuses by name');
+assert.equal((await call('POST', '/v1/deeds/extract', { token: e.token, body: { attest: 'yes' } })).body.error, 'attestation',
+  'the attestation is read STRICTLY — a truthy accident is not an attestation');
+
 // EXTRACT — the voucher signs and the deed goes extraction-pending (state 1→2, INERT)
-const ext = await call('POST', '/v1/deeds/extract', { token: e.token });
+const ext = await call('POST', '/v1/deeds/extract', { token: e.token, body: { attest: true } });
 assert.equal(ext.code, 200, 'the extract signs a voucher');
+{
+  const att = (await pool.query('SELECT attested_at FROM street_deeds WHERE onchain_token_id IS NOT NULL')).rows[0];
+  assert.ok(att?.attested_at, 'the attestation is RECORDED on the row (it survives the on-chain re-key)');
+}
 assert.equal(ext.body.street, 'Enzo Alley', 'the voucher carries the street name');
 // PARITY: recover the signer against a domain HARDCODED to mirror the CONTRACT's EIP712("OmertaStreetDeed","1").
 // Recovering with deedChainConfig() would be vacuous (any consistent-but-wrong domain agrees with itself) —

@@ -692,7 +692,7 @@ export async function makeDeedReader() {
 // EXTRACT a named street on-chain: sign a DeedVoucher, and flag the deed EXTRACTION-PENDING (state 1→2).
 // Gates mirror requestItemWithdraw: a MADE account (the Sybil bound — `minted` never travels with the
 // token) + a linked wallet + the account owns a NOT-already-on-chain, NOT-listed deed. ZERO §10.4.
-export async function requestDeedWithdraw(pool, accountId, toAddress) {
+export async function requestDeedWithdraw(pool, accountId, toAddress, { attest } = {}) {
   const domain = deedChainConfig();  // throws chain_unconfigured if not configured
   const signer = signerAccount();    // throws chain_unconfigured if the signer PK is missing
   const client = await pool.connect();
@@ -706,6 +706,13 @@ export async function requestDeedWithdraw(pool, accountId, toAddress) {
     if (!deed) throw new GameError('no_deed', "You don't hold a street to take on-chain.");
     if (deed.onchain_token_id) throw new GameError('already', "It's already on-chain (or an extraction is pending).");
     if (deed.sale_price != null) throw new GameError('listed', 'Pull the street off the in-game market before extracting it.');
+    // THE ELIGIBILITY SELF-ATTESTATION (founder sign-off 2026-08-16 — the stock-delivery
+    // verification depth: wallet + paid mint + self-attestation). The deed's ERC-6551 vault is
+    // where treasury stock lands with no claim gate, so the extractor must attest — explicitly,
+    // strict `=== true` at the route so a truthy accident never passes — that they may hold the
+    // instruments it can receive. Recorded on the row (it survives the on-chain re-key).
+    if (attest !== true) throw new GameError('attestation',
+      'Confirm the eligibility attestation first — by extracting you attest you may lawfully hold the instruments this deed’s vault can receive.');
     const districtDisp = (DISTRICTS.find((d) => d.id === deed.district) || {}).name || deed.district;
     const token = deedTokenId(deed.name);
 
@@ -723,7 +730,7 @@ export async function requestDeedWithdraw(pool, accountId, toAddress) {
     // state 1 → 2: INERT (onchain_token_id set), account_id unchanged so the account can't claim a new
     // street until this resolves; control cleared (a rival's grip lapses — the deed is leaving the game).
     await client.query(
-      'UPDATE street_deeds SET onchain_token_id=$2, controller_account=NULL, control_until=NULL WHERE account_id=$1', [accountId, token]);
+      'UPDATE street_deeds SET onchain_token_id=$2, controller_account=NULL, control_until=NULL, attested_at=now() WHERE account_id=$1', [accountId, token]);
     const id = uid();
     await client.query(
       'INSERT INTO vouchers (id, account_id, kind, amount, gear_id, nonce, to_address, deadline, status, signed_payload) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
