@@ -1042,7 +1042,46 @@ if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actual
   assert(h.body.worker && typeof h.body.worker.beatAgoSeconds === 'number' && h.body.worker.stale === false,
     '/health carries worker liveness (fresh heartbeat → not stale)');
 
+  // R32 F2 — /health is KEYLESS and touches the database twice, and it sits outside `/v1`, so the
+  // BLUE-TEAM H4 default-throttle never saw it: measured accepting 400 hits where a keyless
+  // /v1/city is cut off after 30, two round trips each. Unauthenticated DB amplification on the one
+  // endpoint nobody has to guess. A 429 would be the wrong fix (a monitor reading it as "down"
+  // raises a false alarm; reading it as "not down" teaches it to ignore a real 503), so the answer
+  // keeps flowing and the LEVERAGE goes: a short TTL + single-flight means a flood of any size costs
+  // one check, while the monitor's own hit after the window still does the real thing.
+  {
+    let dbHits = 0;
+    const q = pool.query.bind(pool);
+    // The overlap has to be MADE, not assumed: pg-mem answers a query before the next injected
+    // request reaches the handler, so a naive burst is served entirely from the TTL and the
+    // single-flight is never exercised — the shape that let a mutation removing it survive. A few
+    // milliseconds of latency per query is what a real database has and what makes the burst real.
+    pool.query = async (...a) => { dbHits++; await new Promise((r) => setTimeout(r, 5)); return q(...a); };
+    try {
+      // (a) SINGLE-FLIGHT, proven with the cache deliberately unable to help: a 1ms window plus a
+      // beat means every one of the 200 finds it stale, so the only thing between them and 200
+      // checks is that they share the one in flight. Asserted separately from the TTL because a
+      // combined assertion passes on whichever mechanism happens to fire — the earlier /health
+      // assertions in this file leave the cache WARM, and a burst inside that window never reaches
+      // the branch at all, which is exactly how a mutation removing single-flight first survived.
+      process.env.HEALTH_TTL_MS = '1';
+      await new Promise((r) => setTimeout(r, 5));
+      const burst = await Promise.all(Array.from({ length: 200 }, () => call('GET', '/health')));
+      assert(burst.every((r) => r.code === 200), 'every hit in the flood still gets a real answer — never a 429');
+      assert(dbHits <= 4, `200 OVERLAPPING /health hits must cost ONE check, not 200 — they all arrive `
+        + `before the first result lands, so only single-flight can do this (got ${dbHits} db queries)`);
+      // (b) THE TTL, on its own: a serial flood inside the window never reaches the database.
+      delete process.env.HEALTH_TTL_MS;
+      await call('GET', '/health');
+      dbHits = 0;
+      for (let i = 0; i < 50; i++) await call('GET', '/health');
+      assert.equal(dbHits, 0, 'and a serial flood inside the window costs nothing at all');
+    } finally { pool.query = q; delete process.env.HEALTH_TTL_MS; }
+  }
+
   // and when the database is NOT reachable it reports 503 with a retry hint, not 200 and not 500
+  // (the cache is switched off for this leg, so what is asserted is the CHECK, not a stale answer)
+  process.env.HEALTH_TTL_MS = '0';
   const realQuery = pool.query.bind(pool);
   pool.query = async () => { throw Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }); };
   try {
@@ -1057,6 +1096,7 @@ if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actual
   } finally { pool.query = realQuery; }
   const back = await call('GET', '/health');
   assert(back.code === 200 && back.body.ok === true, '/health recovers when the database does');
+  delete process.env.HEALTH_TTL_MS;
 
   // THE PROCESS MUST SURVIVE THE DATABASE RESTARTING. node-pg emits 'error' on the Pool when an idle
   // connection dies, and an EventEmitter with no 'error' listener THROWS — an uncaught exception that

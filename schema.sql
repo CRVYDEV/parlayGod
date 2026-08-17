@@ -3402,6 +3402,19 @@ ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS streak_milestone INT NOT
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS email TEXT;
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS digest_optin BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS digest_at TIMESTAMPTZ;
+-- ⚠ THE ADDRESS MUST BE PROVED, NOT TYPED (red-team R32 F1). An address a player TYPES is not an
+-- address they OWN: reproduced three free guest accounts pointing at one third-party address and the
+-- sweep delivering three unsolicited digests to somebody who never opted in, multiplying with the
+-- number of free accounts a spammer opens. `email_verified` is the gate the sweep reads; the
+-- confirmation click is the only thing that sets it.
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT false;
+
+-- One confirmation per ADDRESS per cooldown, ACROSS accounts. Without this the double opt-in just
+-- moves the abuse one message down: N accounts each trigger a confirmation to the same victim.
+CREATE TABLE IF NOT EXISTS email_confirm_sent (
+  email TEXT PRIMARY KEY,
+  at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 -- THE CAPO'S LICENSE: worker-computed count of an agent's minted+retained+levelled human recruits
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS capo_recruits INT NOT NULL DEFAULT 0;
 

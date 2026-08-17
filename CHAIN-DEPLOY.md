@@ -307,7 +307,13 @@ PHASE 1 for the exact calls/args.
       the game's block-plate route (`https://<host>/v1/deeds/plate/`), `externalBase` → the deed's legend
       page (`https://<host>/deed/`); both take `<tokenId>` appended. **NO wiring needed** (it verifies its
       own voucher — the OmertaBond precedent, since a deed voucher carries name+district strings the
-      fixed VoucherClaim struct can't). Optional rate-cap: `setDailyMintCap(n)` (0 = unlimited).
+      fixed VoucherClaim struct can't). **RATE WALL — pass `DEED_DAILY_MINT_CAP` (0 = unlimited).** It is a
+      CONSTRUCTOR argument, so a deploy must STATE it: this contract self-mints on the SAME signer key as
+      VoucherClaim/OmertaBond/DynastyNFT, so that key's blast radius is the SUM of the four daily caps.
+      (Before R33 this read "optional" and the field was setter-only, so a fresh deploy minted unbounded
+      deeds per day with nobody doing anything wrong — and a deed's ERC-6551 vault is where real tokenized
+      stock lands. Both siblings that take their cap at construction could never be forgotten; these two
+      could, and the runbook said not to bother.)
       **Backend activation:** set **`STREET_DEED_ADDRESS`** on BOTH the API (so `POST /v1/deeds/extract`
       signs the DeedVoucher — needs `CHAIN_ID` + the shared `VOUCHER_SIGNER_PK` too) AND the WORKER (so the
       `Extracted` watcher `syncDeedExtractedEvents` → `markDeedExtracted` frees the extractor, the
@@ -337,8 +343,8 @@ PHASE 1 for the exact calls/args.
       contract gates NOTHING on `balanceOf`** — the game entitlement (`account_persistent.minted`) stays
       account-bound OFF-CHAIN, so the token is a freely transferable trophy carrying no on-chain power.
       **NO wiring needed on the CONTRACT side** (it verifies its own voucher). Optional rate-cap:
-      `setDailyMintCap(n)` — with no supply cap this is the entire blast radius of a leaked signer key, so
-      **set it** (0 = unlimited). **Backend activation (BUILT 2026-08-15):** set **`DYNASTY_NFT_ADDRESS`**
+      **pass `DYNASTY_DAILY_MINT_CAP`** — with no supply cap this is the entire blast radius of a leaked
+      signer key, so **set it**. It is a CONSTRUCTOR argument (0 = unlimited), so a deploy must state it. **Backend activation (BUILT 2026-08-15):** set **`DYNASTY_NFT_ADDRESS`**
       on the **WORKER** — the `Minted` + `Transfer` watchers (cursors `dynasty_minted`/`dynasty_transfer`)
       maintain the token registry (`dynasty_tokens`, minter resolved via the SIWE wallet) and **FREEZE the
       portrait at the first owner→owner transfer** (the snapshot stores the portrait ROW, so a sold token

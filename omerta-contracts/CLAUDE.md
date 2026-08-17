@@ -72,7 +72,14 @@ Solidity suite for OMERTÀ on Robinhood Chain. Rules for future sessions:
    independent bps divisions or a wei goes unowned (the OMR sell-tax LP-slice precedent).
 3. No hardcoded chainIds/addresses — env-driven; Arbitrum One/Base are fallback targets.
 4. M6-B lives in the backend at the repo root (src/, test/…) — the chain service on viem. The signing snippet in README here must stay in exact parity with VOUCHER_TYPEHASH.
-5. Do not raise MAX_APY_BPS, remove either daily cap (VoucherClaim's or OmertaBond's), remove the
+5. **ONE signer key signs FOUR self-minting contracts** (VoucherClaim, OmertaBond, StreetDeed,
+   DynastyNFT), so its blast radius is the SUM of their four daily caps. All four take that cap as a
+   CONSTRUCTOR argument — do not demote any of them to setter-only. `0` still means unlimited, so the
+   constructor arg does not force a number; it forces a DECISION at deploy, which is exactly what was
+   missing: the two NFTs were setter-only until R33 (2026-08-17), so a fresh deploy minted unbounded
+   deeds and identities per day with nobody doing anything wrong, and the runbook called one of the two
+   walls "optional". A wall that lives only in a deploy checklist is one a deploy can forget.
+   Do not raise MAX_APY_BPS, remove any daily cap, remove the
    per-gearId gear cap, OmertaBond's `maxOmrPerEth` or its accretion `oracle` (all fail-closed by
    design), or add an OWNER mint path to OMR — these are audit-surface decisions for humans. The bond mint is the one
    sanctioned exception and it goes through `minter`, never through `onlyOwner`.

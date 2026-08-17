@@ -54,7 +54,9 @@ contract Deploy is Script {
         StreetDeed deed = new StreetDeed(
             safe, signer,
             vm.envOr("DEED_IMAGE_BASE", string("https://www.omerta.fun/v1/deeds/plate/")),
-            vm.envOr("DEED_EXTERNAL_BASE", string("https://www.omerta.fun/deed/"))
+            vm.envOr("DEED_EXTERNAL_BASE", string("https://www.omerta.fun/deed/")),
+            // The leaked-signer rate wall. Constructor-bound so a deploy must STATE it (0 = unlimited).
+            vm.envOr("DEED_DAILY_MINT_CAP", uint256(0))
         );
         // DynastyNFT — the uncapped identity NFT (omerta-dynasty-machine-design.md §4). Self-minting
         // ERC-721 on the SAME server signer (no owner-mint), Safe-owned. tokenURI resolves to the
@@ -64,7 +66,10 @@ contract Deploy is Script {
             safe, signer,
             vm.envOr("DYNASTY_BASE_URI", string("https://www.omerta.fun/v1/identity/")),
             vm.envOr("DYNASTY_ROYALTY_RECIPIENT", safe),
-            uint96(vm.envOr("DYNASTY_ROYALTY_BPS", uint256(500))) // 5%
+            uint96(vm.envOr("DYNASTY_ROYALTY_BPS", uint256(500))), // 5%
+            // The leaked-signer rate wall. With NO supply cap here an unset wall is unbounded, so this is
+            // constructor-bound: a deploy must STATE it (0 = unlimited).
+            vm.envOr("DYNASTY_DAILY_MINT_CAP", uint256(0))
         );
         // StockVault — the gateless keeper-push tokenized-stock delivery vault (omerta-brokers-design.md
         // §3.3). NEVER mints (pre-held transfer only). Keeper unset (0) at deploy = deliveries OFF until
@@ -87,8 +92,9 @@ contract Deploy is Script {
         console.log("StockVault:  ", address(vault));
         console.log("NEXT (all Safe txs): gear.setMinter(VoucherClaim); vc.setGearSupplyCap(id,cap) per class;");
         console.log("  fund VoucherClaim OMR tranche; omr.approve(staking) + staking.fundRewards(...).");
-        console.log("  StreetDeed: no wiring needed (self-minting on SIGNER); set deed.setDailyMintCap(n) to rate-cap.");
-        console.log("  DynastyNFT: self-minting on SIGNER; set dynasty.setDailyMintCap(n) as a leaked-signer rate wall.");
+        console.log("  StreetDeed/DynastyNFT: self-minting on SIGNER. Their daily mint caps are now CONSTRUCTOR");
+        console.log("    args (DEED_DAILY_MINT_CAP / DYNASTY_DAILY_MINT_CAP) - if you left them 0 they are UNCAPPED,");
+        console.log("    and the shared signer key's blast radius is the SUM of all four contracts' daily caps.");
         console.log("  StockVault: pre-fund with bought stock, vault.setDailyCap(token,cap) per ticker, THEN vault.setKeeper(bot).");
     }
 }

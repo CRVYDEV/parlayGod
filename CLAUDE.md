@@ -13588,3 +13588,73 @@ copies (`cp` out, `cp` back), never `git checkout`, with uncommitted work in the
 F2 and F3 mutations initially failed as **uncaught throws** rather than at an assertion — the
 "a failure that teaches nothing" shape — so both regressions now catch the throw and NAME the
 property. Suite green + sim drift-0 + pgquery + pgcheck 43/43 on real Postgres.
+
+**RED TEAM #5 — the two uncovered surfaces, and a contract default nobody had to get wrong
+(`AUDIT-red-team-five.md`, 2026-08-17).** One game half, one contract half, aimed like RT#4 at what the
+prior reports leave open by construction. First-hand throughout; **two of the three findings needed real
+infrastructure** (real Postgres for the meter's concurrency, a real Foundry VM for the Solidity default —
+a contract's shipped behaviour cannot be reasoned about from prose). **No CRITICAL; three MED**, eight
+mutations each failing at its own named assertion.
+**F1 — THE DISPATCH mailed addresses nobody had proved they owned.** The opt-in digest treated a TYPED
+string as proved: type an address, tick a box, and the worker mails it on a lapse — with **no confirmation
+step anywhere in the flow**. Reproduced: three free guest accounts, one third-party address, **three
+unsolicited digests to somebody who had never touched the game**, the multiplier bounded only by how many
+accounts a spammer opens (guest accounts are free by design — the paid mint is the *extraction*-side Sybil
+bound, not the signup-side one). The one-click unsubscribe makes it worse rather than better: it confirms
+to the recipient that the address is live. Fixed with real double opt-in, in four walls because one is not
+enough: **`email_verified` gates the SWEEP** (the load-bearing half — everything else is about making the
+proof hard to forge or spam); the token is an **HMAC bound over the account AND the address**, so retyping
+the field drops the proof by construction (bound to the account alone, a stale link silently re-verifies a
+*changed* address); a **per-ADDRESS confirmation meter across accounts**, claimed before the send (the push
+C1 discipline), because otherwise the confirmation mail is itself the spam vector; and **one proved owner
+per address, enforced on BOTH the set and the confirm path** (set-time only leaves the race open at confirm
+time). Four mutations, four named failures. *Test note worth keeping: the existing suite broke on the new
+gate correctly, and would have made a **real network call**, because the delivery seam was installed after
+the first prefs set — a test that reaches the network on a path the author did not expect is a test that
+will one day mail a real person.*
+**F2 — `/health` was keyless, DB-heavy and unthrottled.** The BLUE-TEAM H4 fix made the keyless throttle a
+denylist-by-default precisely so a new keyless route could never ship unthrottled by omission — and it is
+scoped to `/v1`, which `/health` is not; it runs two DB queries a hit. Reproduced: a 400-request burst that
+`/v1/city` cut at 30 served **all 400**. Fixed with a **2s TTL + single-flight, deliberately NOT a 429**:
+the audience is a monitor, and **a 429 misleads it in both directions** — it reads as an outage when the
+service is fine, and a monitor taught to ignore 429 will ignore the one that matters. Caching answers the
+real problem (unbounded DB work per hit) while every caller still gets a truthful answer at most 2s stale;
+single-flight bounds the concurrent case a TTL alone does not. Measured: 200 concurrent → **2** queries, a
+serial flood → **0**, past the TTL → a real check. **The vacuity lesson twice in one finding:** the
+single-flight mutation SURVIVED two runs (the second after adding 5ms of query latency), and a direct probe
+showed it costs **400 queries against 2** — so the fix was plainly load-bearing and the *test* was wrong:
+earlier `/health` assertions in the same file leave the cache **WARM**, so the burst landed inside the TTL
+and never reached the branch. Split into two independent assertions, each pinning one mechanism. *A
+mutation that survives is a claim about the test before it is a claim about the code.*
+**F3 — two of the four contracts sharing one signer key deployed with NO rate wall, and the runbook called
+one of them "Optional".** RT#2 established the shape (one `VOUCHER_SIGNER_PK` signs four contracts, so its
+blast radius is the SUM of their four daily caps) and added a rotation runbook plus a guard; following it to
+its edge asks whether those four caps are actually SET. Two are constructor arguments and cannot be
+forgotten (`VoucherClaim`, `OmertaBond`); two were **setter-only, defaulting to 0 = unlimited**
+(`StreetDeed`, `DynastyNFT`) — walls living only in a deploy checklist, one of which said not to bother.
+Reproduced on a real Foundry VM with fresh deploys and no operator error: **500 deeds and 500 identities
+minted in ONE day**, the loop bound arbitrary. It bites harder than a raw number suggests on both —
+`DynastyNFT` has **no supply cap at all**, so an unset wall there is unbounded by construction, and a
+`StreetDeed`'s ERC-6551 vault is where real tokenized stock lands, on a token that trades on a secondary
+market. Fixed by making the cap a **CONSTRUCTOR argument on both**, matching the siblings: 0 is still legal
+and still means unlimited, so it does not force a NUMBER — it forces a **DECISION at deploy**, which is
+exactly what was missing (the `freeMint` precedent: when both defaults are wrong to guess at, the config
+must state it). Free to do now only because the audit batch has not run — after it the same change costs a
+re-audit (the bond fourth-slice argument). **Guarded**, since this is the second finding from the
+shared-key class: `test/docs.js`'s existing signer-rotation block (which already extracts the bearer set
+with an anti-vacuity floor) now also requires each bearer to take its cap in the constructor, so a fifth
+signer-bearing contract shipping setter-only fails the build. Two mutations (both contracts demoted; the
+guard's own), each failing by name. Runbook, deploy script, both NatSpec headers and the subtree
+`CLAUDE.md` rule list all carry it. **forge 303/303.**
+**Three lenses came back CLEAN and are recorded, because a red team that publishes only its hits cannot be
+audited:** `brokers.js`'s activation burn (the classic nonexistent-row `FOR UPDATE` gap is UNREACHABLE
+here — `withCharacter` holds the account's single living character, so two activations from one account
+serialize on that lock, the `giveVouch` argument from RT#3; the residual PK collision maps to a clean
+`contention` and the loser's burn rolls back with it); **every non-`/v1` route** (all 22 enumerated — the
+five that touch the DB are throttled by explicit prefix and every keyless `/v1` GET by the H4 default, so
+`/health` was the only one in neither set, which is what confirms F2's scoping was COMPLETE rather than
+merely plausible); and the `OMR` sell-tax zero-address guards (the RT#2 burn-on-sweep class, closed and
+holding) plus the `0 = unlimited` cap convention, which was consistent and documented — the defect was that
+two of the caps had no deploy-time home, not that the convention disagreed. Probe files written and
+DELETED before committing; all mutations on scratchpad copies, never `git checkout`. Suite green + sim
+drift-0 + pgquery + pgcheck 43/43 on real Postgres.

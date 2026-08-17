@@ -41,6 +41,7 @@ const PUBLIC = {
   'GET /v1/commission': 'public politics: seats, votes and the decree in force are on the record',
   'GET /v1/commission/ticker': 'THE TICKER BALLOT — the daily stock vote is public politics like the decree board above (the call-to-action is everyone reading it; a cast still needs a seated boss)',
   'GET /v1/districts': 'the map, incl. NPC occupation + liberation cost — shown pre-sign-in',
+  'GET /v1/digest/confirm': 'THE DISPATCH — the double-opt-in confirmation link; keyless by the same argument as unsubscribe (an HMAC over account AND address is the auth). It is the ONLY thing that makes an address deliverable, so an address a player merely typed can never receive a digest (R32 F1)',
   'GET /v1/digest/unsubscribe': 'THE DISPATCH — the one-click email-unsubscribe link; keyless by design (an HMAC token is the auth, so a lapsed player unsubscribes without logging in)',
   'GET /v1/events': 'TONIGHT IN THE CITY — the live scheduled events, shown as anticipation before sign-in (the /v1/city precedent)',
   'GET /v1/results': 'THE RESULTS SHOW — the public "what just happened" board of marquee results; no private data (a payout rides the notification stream), so keyless like the events board',

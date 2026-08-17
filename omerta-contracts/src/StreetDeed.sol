@@ -89,7 +89,19 @@ contract StreetDeed is ERC721, EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     event Extracted(uint256 indexed nonce, address indexed to, uint256 indexed tokenId, string name, string district);
     event Redeemed(address indexed from, uint256 indexed tokenId);
 
-    constructor(address owner_, address signer_, string memory imageBase_, string memory externalBase_)
+    /// @dev `dailyMintCap_` is a CONSTRUCTOR argument rather than a setter-only field on purpose: this
+    ///      contract self-mints on the SAME signer key as VoucherClaim/OmertaBond/DynastyNFT, so that key's
+    ///      blast radius is the SUM of the four daily caps — and a wall that lives only in a deploy
+    ///      checklist is one a deploy can forget. Both siblings that take theirs at construction cannot be
+    ///      forgotten; these two could, and were. 0 still means unlimited (the suite-wide convention), so
+    ///      this forces a DECISION at deploy, not a particular number.
+    constructor(
+        address owner_,
+        address signer_,
+        string memory imageBase_,
+        string memory externalBase_,
+        uint256 dailyMintCap_
+    )
         ERC721("OMERTA Street Deed", "STREET")
         EIP712("OmertaStreetDeed", "1")
         Ownable(owner_)
@@ -98,6 +110,8 @@ contract StreetDeed is ERC721, EIP712, Ownable2Step, Pausable, ReentrancyGuard {
         signer = signer_;
         _imageBase = imageBase_;
         _externalBase = externalBase_;
+        dailyMintCap = dailyMintCap_;
+        emit DailyMintCapSet(dailyMintCap_);
     }
 
     // ── admin (the Safe) ──

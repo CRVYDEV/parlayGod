@@ -27,7 +27,7 @@ contract DynastyNFTTest is Test {
 
     function setUp() public {
         signerAddr = vm.addr(signerPk);
-        nft = new DynastyNFT(safe, signerAddr, BASE, treasury, ROYALTY_BPS);
+        nft = new DynastyNFT(safe, signerAddr, BASE, treasury, ROYALTY_BPS, 0);
     }
 
     function _voucher(address to, uint256 nonce) internal view returns (DynastyNFT.MintVoucher memory) {
@@ -124,6 +124,23 @@ contract DynastyNFTTest is Test {
         assertEq(nft.ownerOf(3), alice, "mint resumes the next day");
     }
 
+    /// R33: the wall must be CONSTRUCTOR-bound, not setter-only. This contract self-mints on the SAME
+    /// signer key as VoucherClaim/OmertaBond/StreetDeed and has NO supply cap, so an unset wall is
+    /// unbounded — and a wall that lives only in a deploy checklist is one a deploy can forget (a fresh
+    /// deploy minted 500 identities in a day with nobody doing anything wrong). A deployer must now STATE
+    /// the cap; 0 still means unlimited.
+    function test_the_cap_is_constructor_bound_and_holds_with_no_setter_call() public {
+        DynastyNFT capped = new DynastyNFT(safe, signerAddr, BASE, treasury, ROYALTY_BPS, 1);
+        assertEq(capped.dailyMintCap(), 1, "the constructor arg IS the wall");
+        DynastyNFT.MintVoucher memory v1 = _voucher(alice, 1);
+        (uint8 a, bytes32 b, bytes32 c) = vm.sign(signerPk, capped.hashVoucher(v1));
+        capped.claim(v1, abi.encodePacked(b, c, a));
+        DynastyNFT.MintVoucher memory v2 = _voucher(bob, 2);
+        (uint8 d, bytes32 e, bytes32 f) = vm.sign(signerPk, capped.hashVoucher(v2));
+        vm.expectRevert("DN: daily cap");
+        capped.claim(v2, abi.encodePacked(e, f, d));
+    }
+
     function test_pause_blocks_mints_but_transfers_still_work() public {
         bytes memory s1 = _sign(_voucher(alice, 1));
         nft.claim(_voucher(alice, 1), s1);
@@ -186,9 +203,9 @@ contract DynastyNFTTest is Test {
 
     function test_ctor_rejects_zero_signer_and_zero_royalty_recipient() public {
         vm.expectRevert("DN: zero signer");
-        new DynastyNFT(safe, address(0), BASE, treasury, ROYALTY_BPS);
+        new DynastyNFT(safe, address(0), BASE, treasury, ROYALTY_BPS, 0);
         vm.expectRevert("DN: zero royalty recipient");
-        new DynastyNFT(safe, signerAddr, BASE, address(0), ROYALTY_BPS);
+        new DynastyNFT(safe, signerAddr, BASE, address(0), ROYALTY_BPS, 0);
     }
 
     function test_only_owner_admin() public {

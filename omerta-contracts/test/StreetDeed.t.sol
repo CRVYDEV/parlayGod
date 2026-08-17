@@ -25,7 +25,7 @@ contract StreetDeedTest is Test {
 
     function setUp() public {
         signerAddr = vm.addr(signerPk);
-        deed = new StreetDeed(safe, signerAddr, IMG, EXT);
+        deed = new StreetDeed(safe, signerAddr, IMG, EXT, 0);
     }
 
     function _voucher(address to, string memory name, string memory district, uint256 nonce)
@@ -187,6 +187,25 @@ contract StreetDeedTest is Test {
         bytes memory s3 = _sign(v3);
         deed.claim(v3, s3);
         assertEq(deed.ownerOf(deed.tokenIdFor("Mortar Row")), bob, "next day mints");
+    }
+
+    /// R33: the wall must be CONSTRUCTOR-bound, not setter-only. This contract self-mints on the SAME
+    /// signer key as VoucherClaim/OmertaBond/DynastyNFT, so that key's blast radius is the SUM of the four
+    /// daily caps — and a wall that lives only in a deploy checklist is one a deploy can forget (it was:
+    /// the runbook called this one "Optional", and a fresh deploy minted 500 deeds in a day with nobody
+    /// doing anything wrong). A deployer must now STATE the cap; 0 still means unlimited.
+    function test_the_cap_is_constructor_bound_and_holds_with_no_setter_call() public {
+        StreetDeed capped = new StreetDeed(safe, signerAddr, IMG, EXT, 1);
+        assertEq(capped.dailyMintCap(), 1, "the constructor arg IS the wall");
+        StreetDeed.DeedVoucher memory v1 =
+            StreetDeed.DeedVoucher(alice, "First Cut", "Bricktown", 1, block.timestamp + 1 hours);
+        (uint8 a, bytes32 b, bytes32 c) = vm.sign(signerPk, capped.hashVoucher(v1));
+        capped.claim(v1, abi.encodePacked(b, c, a));
+        StreetDeed.DeedVoucher memory v2 =
+            StreetDeed.DeedVoucher(bob, "Second Cut", "Bricktown", 2, block.timestamp + 1 hours);
+        (uint8 d, bytes32 e, bytes32 f) = vm.sign(signerPk, capped.hashVoucher(v2));
+        vm.expectRevert(bytes("SD: daily cap"));
+        capped.claim(v2, abi.encodePacked(e, f, d));
     }
 
     // ── the burn (re-import proof) ──────────────────────────────────────────────────────────────

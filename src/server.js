@@ -543,7 +543,23 @@ export async function buildServer() {
   // alert on status alone. DEPLOY.md covers the one judgement call: point an UPTIME MONITOR at this, and
   // think twice before making it the platform's own health check — restarting the API does not fix a
   // database, it just adds a restart loop to an outage.
-  app.get('/health', async (req, reply) => {
+  //
+  // ⚠ IT IS KEYLESS AND IT TOUCHES THE DATABASE TWICE, which is the exact pair the BLUE-TEAM H4
+  // default-throttle closed for every keyless `/v1` GET — and this route sits outside `/v1`, so it
+  // took zero buckets (measured: a keyless `/v1/city` is cut off after 30 hits a window, `/health`
+  // accepted 400 and would have accepted any number, each costing two round trips). Unauthenticated
+  // DB amplification on the one endpoint an attacker does not have to guess.
+  //
+  // A 429 is the WRONG fix here, and that is the whole reason this is a cache instead: a monitor
+  // that reads 429 as "down" raises a false alarm, and one that reads it as "not down" learns to
+  // ignore a real 503. So the answer keeps flowing and the AMPLIFICATION goes: a short TTL plus
+  // single-flight means a flood of any size costs at most one check per `HEALTH_TTL_MS`, while the
+  // monitor's once-a-minute hit always does the real thing. Liveness is preserved; the leverage is not.
+  // Read PER CALL, not at import (the ratelimit.js discipline), so a test can drop it to zero for the
+  // outage leg without giving up the amplification assertion earlier in the same file.
+  const healthTtl = () => Number(process.env.HEALTH_TTL_MS ?? 2000);
+  let healthAt = 0, healthBody = null, healthCode = 200, healthInFlight = null;
+  const checkHealth = async () => {
     const db = await pingDb(pool);
     const body = {
       ok: db.ok,
@@ -552,7 +568,8 @@ export async function buildServer() {
       uptimeSeconds: Math.round(process.uptime()),
       at: new Date().toISOString(),
     };
-    if (!db.ok) { body.error = db.error; reply.code(503).header('retry-after', '15'); }
+    const code = db.ok ? 200 : 503;
+    if (!db.ok) body.error = db.error;
     // BLUE-TEAM C2: surface the WORKER's liveness. It is a separate process and the sole source of every
     // proactive alarm + timed settlement, so a monitor pointed here can alarm on `worker.stale` (or a
     // red /health) when it goes dark. Kept off the 503 (the API itself is healthy even if the worker is
@@ -564,7 +581,21 @@ export async function buildServer() {
         body.worker = { beatAgoSeconds: ageSec, stale: ageSec > 5400 };
       }
     } catch { /* the worker_heartbeat read failing is itself a DB issue, already covered by body.db */ }
-    return body;
+    return { body, code };
+  };
+  app.get('/health', async (req, reply) => {
+    if (Date.now() - healthAt >= healthTtl()) {
+      // single-flight: a burst that arrives while a check is running WAITS for that one rather than
+      // each opening its own. Without it the TTL alone leaves the whole first-hit window uncovered,
+      // which is precisely the shape a flood produces.
+      healthInFlight ||= checkHealth()
+        .then((r) => { healthAt = Date.now(); healthBody = r.body; healthCode = r.code; })
+        .catch(() => { healthAt = Date.now(); healthBody = { ok: false, db: 'error' }; healthCode = 503; })
+        .finally(() => { healthInFlight = null; });
+      await healthInFlight;
+    }
+    if (healthCode !== 200) reply.code(healthCode).header('retry-after', '15');
+    return healthBody;
   });
   const auth = async (req, reply) => {
     await req.jwtVerify();
@@ -2410,6 +2441,17 @@ export async function buildServer() {
   app.get('/v1/digest', { preHandler: auth }, async (req) => Dispatch.getDigestPrefs(pool, req.user.sub));
   app.post('/v1/digest', { preHandler: auth }, async (req) =>
     Dispatch.setDigestPrefs(pool, req.user.sub, { email: req.body?.email, optin: req.body?.optin }));
+  // the confirmation link — public + keyless (an HMAC token over account AND address is the auth).
+  // Nothing is delivered to an address until this is clicked (red-team R32 F1).
+  app.get('/v1/digest/confirm', async (req, reply) => {
+    const ok = (await Dispatch.confirmEmail(pool, req.query?.a, req.query?.e, req.query?.t)).ok;
+    return reply.type('text/html').send(`<!doctype html><meta charset="utf-8"><title>OMERTÀ</title>
+      <body style="background:#0c0b0d;color:#e9e3d6;font-family:Georgia,serif;text-align:center;padding:64px 24px">
+      <h1 style="color:${ok ? '#c9a24a' : '#b02a30'}">${ok ? "You're on the list." : 'That link is no longer valid.'}</h1>
+      <p style="color:#a89e90">${ok ? "We'll write when the city moves without you. One click to stop, any time."
+        : 'The address may have changed since it was sent. Set it again in the game.'}</p>
+      <p><a href="/" style="color:#c9a24a">← back to OMERTÀ</a></p></body>`);
+  });
   // the unsubscribe link in every email — public + keyless (an HMAC token is the auth). Returns a tiny page.
   app.get('/v1/digest/unsubscribe', async (req, reply) => {
     const ok = (await Dispatch.unsubscribe(pool, req.query?.a, req.query?.t)).ok;

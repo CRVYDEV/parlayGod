@@ -35,6 +35,15 @@ const setActive = (acct, daysAgo) => pool.query('INSERT INTO telemetry (id, acco
   [uid(), acct, 'crime', new Date(Date.now() - daysAgo * 86400000)]);
 const addNote = (charId, type) => pool.query('INSERT INTO notifications (id, character_id, type, payload, created_at) VALUES ($1,$2,$3,$4,$5)',
   [uid(), charId, type, '{}', new Date(Date.now() - 2 * 86400000)]);
+// The address is PROVED, not typed (R32 F1) — every deliverable address in this file goes through the
+// same click the real confirmation link does.
+const confirm = (acct, email) => Dispatch.confirmEmail(pool, acct, email, Dispatch.confirmToken(acct, email));
+
+// The seam is installed FIRST, before any prefs are set: setting an address now sends a confirmation,
+// and an unseamed one would reach for the real provider over the network.
+const sent = [];
+Dispatch.__setSender(async (to, subject, html, text) => { sent.push({ to, subject, html, text }); return true; });
+const digests = () => sent.filter((s) => !/^Confirm your/.test(s.subject));
 
 // ════════════ configured — the availability flag is surfaced ════════════
 assert.equal(Dispatch.digestConfigured(), true, 'the provider is armed');
@@ -48,6 +57,8 @@ let prefs = (await call('POST', '/v1/digest', { token: p.token, body: { email: '
 assert.equal(prefs.optin, true, 'opt-in stored');
 assert.equal(prefs.email, 'player@example.com', 'the address is normalized (lowercased)');
 assert.equal((await call('GET', '/v1/digest', { token: p.token })).body.optin, true, 'the prefs read back');
+assert.equal(prefs.verified, false, 'a freshly-typed address is UNVERIFIED — nothing is deliverable to it yet');
+await confirm(p.acct, 'player@example.com');
 
 // ════════════ the unsubscribe token round-trips (stateless HMAC), and a bad one is rejected ════════════
 const tok = Dispatch.unsubToken(p.acct);
@@ -55,8 +66,7 @@ assert.ok(Dispatch.verifyUnsub(p.acct, tok), 'the account\'s own token verifies'
 assert.ok(!Dispatch.verifyUnsub(p.acct, 'wrong-token'), 'a forged token does not');
 
 // ════════════ THE SWEEP — email exactly the lapsed, opted-in player ════════════
-const sent = [];
-Dispatch.__setSender(async (to, subject, html, text) => { sent.push({ to, subject, html, text }); return true; });
+sent.length = 0;
 
 // p is lapsed (last active 5 days ago) with something in the window → EMAILED
 await setActive(p.acct, 5);
@@ -65,11 +75,13 @@ await addNote(p.id, 'bounty_on_you');
 // an ACTIVE opted-in player (active 1 day ago) → SKIPPED (not away)
 const act1 = await mk('Active Guy');
 await call('POST', '/v1/digest', { token: act1.token, body: { email: 'a@b.com', optin: true } });
+await confirm(act1.acct, 'a@b.com');
 await setActive(act1.acct, 1);
 await addNote(act1.id, 'robbed');
 // a LONG-gone opted-in player (active 60 days ago) → SKIPPED (past max lapse; we stop nagging)
 const gone = await mk('Ghost');
 await call('POST', '/v1/digest', { token: gone.token, body: { email: 'g@b.com', optin: true } });
+await confirm(gone.acct, 'g@b.com');
 await setActive(gone.acct, 60);
 await addNote(gone.id, 'indicted');
 // an OPTED-OUT lapsed player → SKIPPED
@@ -79,16 +91,16 @@ await addNote(out.id, 'sacked');
 
 const n = await Dispatch.sweepDispatch(pool);
 assert.equal(n, 1, 'exactly one email sent — only the lapsed, opted-in, recently-enough player');
-assert.equal(sent.length, 1, 'the sender saw exactly one message');
-assert.equal(sent[0].to, 'player@example.com', 'to the right address');
-assert.ok(/while you were gone/i.test(sent[0].subject) || /moved without you/i.test(sent[0].subject) || sent[0].subject.length > 0, 'the subject is set');
-assert.ok(/seized one of your fronts|contract/i.test(sent[0].html), 'the body carries the window headlines');
-assert.ok(sent[0].html.includes('/v1/digest/unsubscribe'), 'every email carries an unsubscribe link');
+assert.equal(digests().length, 1, 'the sender saw exactly one DIGEST');
+assert.equal(digests()[0].to, 'player@example.com', 'to the right address');
+assert.ok(/while you were gone/i.test(digests()[0].subject) || /moved without you/i.test(digests()[0].subject), 'the subject is set');
+assert.ok(/seized one of your fronts|contract/i.test(digests()[0].html), 'the body carries the window headlines');
+assert.ok(digests()[0].html.includes('/v1/digest/unsubscribe'), 'every email carries an unsubscribe link');
 
 // ════════════ COOLDOWN + claim-then-send: a second sweep re-emails nobody ════════════
 sent.length = 0;
 assert.equal(await Dispatch.sweepDispatch(pool), 0, 'the cooldown (digest_at just stamped) blocks a re-send');
-assert.equal(sent.length, 0, 'no second buzz');
+assert.equal(digests().length, 0, 'no second buzz');
 
 // ════════════ DORMANT without a key — nothing sends, availability off ════════════
 delete process.env.EMAIL_API_KEY;
@@ -98,7 +110,7 @@ assert.equal((await call('GET', '/v1/rules')).body.digest.available, false, 'ava
 await pool.query('UPDATE account_persistent SET digest_at=NULL WHERE account_id=$1', [p.acct]);
 sent.length = 0;
 assert.equal(await Dispatch.sweepDispatch(pool), 0, 'a dormant sweep sends nothing');
-assert.equal(sent.length, 0, 'nothing sent while dormant');
+assert.equal(digests().length, 0, 'nothing sent while dormant');
 process.env.EMAIL_API_KEY = 'test-key';
 
 // ════════════ the unsubscribe route flips it off (keyless, token-authed) ════════════
@@ -110,6 +122,53 @@ assert.equal((await call('GET', '/v1/digest', { token: p.token })).body.optin, f
 await call('POST', '/v1/digest', { token: act1.token, body: { optin: true, email: 'a@b.com' } });
 await call('GET', `/v1/digest/unsubscribe?a=${encodeURIComponent(act1.acct)}&t=bad`);
 assert.equal((await pool.query('SELECT digest_optin FROM account_persistent WHERE account_id=$1', [act1.acct])).rows[0].digest_optin, true, 'a forged unsubscribe link does nothing');
+
+// ════════════ R32 F1 — THE ADDRESS MUST BE PROVED, NOT TYPED ════════════
+// Reproduced before the fix: three free guest accounts naming one third-party address, three
+// unsolicited digests delivered to somebody who never opted in, and nothing bounding the multiplier
+// but how many accounts a spammer cares to open. So: the sweep refuses an unverified address, the
+// confirmation is the ONE message an unverified address can receive, and it is metered PER ADDRESS
+// across accounts — without that meter the double opt-in only moves the abuse one message down.
+const VICTIM = 'stranger@example.com';
+const ring = [];
+sent.length = 0;
+for (let i = 0; i < 3; i++) {
+  const a = await mk('Ringer ' + 'XYZ'[i]);
+  await call('POST', '/v1/digest', { token: a.token, body: { email: VICTIM, optin: true } });
+  await addNote(a.id, 'attack');
+  await setActive(a.acct, 5);
+  ring.push(a);
+}
+assert.equal(sent.filter((s) => /^Confirm your/.test(s.subject)).length, 1,
+  'three accounts naming one address produce ONE confirmation — the meter is per ADDRESS, not per account');
+assert.equal(await Dispatch.sweepDispatch(pool), 0,
+  'NOTHING is delivered to an address nobody proved they own — three lapsed opted-in accounts, zero digests');
+assert.equal(digests().length, 0, 'the sender saw no digest at all');
+
+// a forged token proves nothing, and neither does a token minted for a DIFFERENT address
+assert.equal((await Dispatch.confirmEmail(pool, ring[0].acct, VICTIM, 'forged')).ok, false, 'a forged confirmation does nothing');
+assert.equal((await Dispatch.confirmEmail(pool, ring[0].acct, VICTIM, Dispatch.confirmToken(ring[0].acct, 'other@x.com'))).ok, false,
+  'a token minted for another address cannot confirm this one — the address is bound into the HMAC');
+
+// the real click, through the public keyless route, is what makes it deliverable
+const okPage = await call('GET', `/v1/digest/confirm?a=${encodeURIComponent(ring[0].acct)}&e=${encodeURIComponent(VICTIM)}&t=${Dispatch.confirmToken(ring[0].acct, VICTIM)}`);
+assert.equal(okPage.code, 200, 'the confirmation page renders');
+assert.ok(/on the list/i.test(String(okPage.body)), 'and it confirms');
+assert.equal((await call('GET', '/v1/digest', { token: ring[0].token })).body.verified, true, 'the address is now proved');
+sent.length = 0;
+assert.equal(await Dispatch.sweepDispatch(pool), 1, 'exactly the ONE proved account is now deliverable — the other two still are not');
+
+// one address, one proved owner: the reservation is enforced on the CONFIRM path too, because the
+// set-time check can be walked past by an account that stored the address before anybody proved it
+assert.equal((await Dispatch.confirmEmail(pool, ring[1].acct, VICTIM, Dispatch.confirmToken(ring[1].acct, VICTIM))).ok, false,
+  'a second account cannot confirm an address another account has already proved');
+assert.equal((await call('POST', '/v1/digest', { token: ring[2].token, body: { email: VICTIM, optin: true } })).body.email, VICTIM,
+  'storing a proved address is not itself refused (it was already stored) — the wall is verification, not storage');
+assert.equal((await call('GET', '/v1/digest', { token: ring[2].token })).body.verified, false, 'but it stays unproved, so it stays undeliverable');
+
+// changing the address DROPS the proof — a new address is a new claim
+await call('POST', '/v1/digest', { token: ring[0].token, body: { email: 'moved@example.com', optin: true } });
+assert.equal((await call('GET', '/v1/digest', { token: ring[0].token })).body.verified, false, 'retyping the address drops the proof');
 
 // ════════════ §10.4 — the digest moves no value ════════════
 assert.equal(Number((await pool.query('SELECT COUNT(*) n FROM transactions')).rows[0].n), 0, 'THE DISPATCH writes no ledger rows — it is pure notification');

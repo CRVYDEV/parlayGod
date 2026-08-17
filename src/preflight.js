@@ -36,6 +36,9 @@ export const TEST_ONLY_ENV = [
   'MAIN_EVENT_MS', 'MISSION_CD_MS', 'NPC_AGGRO_MS', 'NPC_WAR_MS', 'PASS_CLAIM_MS', 'PEN_SHANK_CD_MS', 'PORT_RUN_MS', 'RACE_CD_MS',
   'RING_TURN_MS', 'SEARCH_MS', 'SHOOT_CD_MS', 'SOCIAL_MATURE_MS', 'STAKES_MS', 'TOURNEY_MS',
   'TRAIN_CD_MS',
+  // /health's cache window. It is what stops a keyless flood amplifying into DB work (R32 F2);
+  // zero disables the cache, so it belongs here rather than in an operator's hands.
+  'HEALTH_TTL_MS',
   // QA escape hatches — these let a mod route fabricate value or bypass an auth check
   'ALLOW_MOD_REAL_REVENUE', 'X_TRUST_USER_TOKEN',
   // TOKENOMICS v2 — opens the redemption window while cash can still BUY $OMR, which is a money
