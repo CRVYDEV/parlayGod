@@ -807,12 +807,17 @@ export async function stealCar(ch, victim, client, h) {
   await h.rngLog(client, ch.id, `cartheft:${victim.id}`, roll, roll < p ? `stole ${car.model_id} (P ${p.toFixed(3)})` : `caught (P ${p.toFixed(3)})`);
   if (roll < p) {
     // the transfer clears the consent flags (the AUDIT-street-races-step-two class — a stolen car
-    // must not arrive still listed on the strip or offered for pinks)
-    await client.query('UPDATE cars SET character_id=$2, race_limit=NULL, pink_slip=false WHERE id=$1', [car.id, ch.id]);
+    // must not arrive still listed on the strip or offered for pinks) AND the nitrous, which is the
+    // rule its five sibling handovers already follow: a car changes hands stock, and the new owner
+    // buys their own charges. This one clause was the outlier (red team #6) — it read as deliberate
+    // because the comment above it names only the consent flags, so the fix is to say the rule out
+    // loud rather than to leave a sixth transfer site quietly diverging.
+    await client.query(
+      'UPDATE cars SET character_id=$2, race_limit=NULL, pink_slip=false, nos=0 WHERE id=$1', [car.id, ch.id]);
     // the victim's shield — direct SQL on the LOCKED victim row (outside persistCharacter's
     // positional list, the active_at discipline)
     await client.query('UPDATE characters SET car_stolen_at=now() WHERE id=$1', [victim.id]);
-    h.owned.cars.push({ ...car, character_id: ch.id, race_limit: null, pink_slip: false });
+    h.owned.cars.push({ ...car, character_id: ch.id, race_limit: null, pink_slip: false, nos: 0 });
     h.victimOwned.cars = (h.victimOwned.cars || []).filter((c) => c.id !== car.id); // keep the in-memory fleet honest
     await logCarCollect(client, ch.id, car.id); // THE COLLECTION — the sixth car-transfer site
     await h.notify(client, victim.id, 'car_stolen', { from: ch.name, model: car.model_id });

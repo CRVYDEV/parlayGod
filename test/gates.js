@@ -505,6 +505,60 @@ console.log('✅ THE GATE MATRIX passed — every verb in a family enforces the 
   console.log(`✓ all ${seen} pooled connections are released before their function returns`);
 }
 
+// ═══ THE HANDOVER LEDGER — a car changes hands STOCK ═════════════════════════════════════════════
+//
+// Six places move a car between characters: a market buy-now, an auction settle, a loan collect, the
+// grace-forfeit sweep, a pink-slip race, and a theft. A car carries two kinds of flag that must not
+// survive the handover — CONSENT (`race_limit`, `pink_slip`: the owner offered THIS car on the strip
+// or for pinks, and the new owner never agreed to either) and a CONSUMABLE (`nos`: charges the old
+// owner paid for). Five sites clear all three. The theft cleared only the two consent flags, and it
+// read as deliberate because its own comment named only "the consent flags" — which is exactly how a
+// sixth site diverges quietly (red team #6; the consent half of the same class was found by
+// AUDIT-street-races-step-two, so this is the second finding here and the reason it gets a check).
+//
+// The rule is narrow on purpose: it applies to a statement that RE-POINTS `character_id`, which is
+// what a handover is. A waiver must say why. Scope: it proves the clause is PRESENT, not that the
+// surrounding gate logic is right.
+{
+  const HANDOVER_WAIVED = {
+    // The estate re-points only EXTRACTED cars/boats at the heir. Extraction already refuses a
+    // listed or pledged row and clears the consent flags itself (`nft.js:KINDS[*].clear`), and an
+    // extracted row is filtered out of `owned.cars` entirely — so there is no flag left to clear and
+    // nothing that reads one.
+    'social/estate.js': 'the estate moves only minted_onchain rows, which extraction already cleared',
+  };
+  const MUST_CLEAR = { cars: ['race_limit', 'pink_slip', 'nos'], boats: ['rendezvous'] };
+  const files = [];
+  const walk = (d) => { for (const e of fs.readdirSync(d)) {
+    const p2 = path.join(d, e);
+    if (fs.statSync(p2).isDirectory()) walk(p2); else if (p2.endsWith('.js')) files.push(p2);
+  } };
+  walk(SRC);
+  const bad = [];
+  let handovers = 0;
+  for (const f of files) {
+    const rel = path.relative(SRC, f);
+    const lines = fs.readFileSync(f, 'utf8').split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const m = /UPDATE (cars|boats) SET character_id\s*=/.exec(lines[i]);
+      if (!m) continue;
+      handovers++;
+      if (HANDOVER_WAIVED[rel]) continue;
+      const stmt = lines[i];
+      const missing = MUST_CLEAR[m[1]].filter((c) => !new RegExp(`\\b${c}\\s*=`).test(stmt));
+      if (missing.length) bad.push(`${rel}:${i + 1} keeps ${missing.join(', ')}`);
+    }
+  }
+  assert(handovers >= 6,
+    `the handover scan found only ${handovers} ownership transfer(s) — the extractor has stopped `
+    + 'seeing them, so this check is vacuous rather than clean');
+  assert.equal(bad.length, 0,
+    'ownership transfer(s) that leave a flag behind. A car arrives on the strip its new owner never\n'
+    + '      put it on, offered for pinks they never offered, or carrying nitrous somebody else paid for:\n'
+    + `   - ${bad.join('\n   - ')}`);
+  console.log(`✓ all ${handovers} vehicle handovers clear the consent flags and the consumable`);
+}
+
 // ═══ THE WATCHER POISON LEDGER — a malformed log must never wedge a stream ════════════════════════
 // The chain watchers share ONE isolation rule (`src/watcher.js:isolate`): a DETERMINISTIC data fault
 // in a log is skipped so the cursor advances past it, and anything else re-throws so the cursor does

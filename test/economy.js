@@ -299,6 +299,36 @@ assert.equal(released.unbonding, 0, 'the unbond window passed — released');
 assert(released.omr >= omrPreRelease + unbondingAmt - 1e-6, 'principal whole, now liquid');
 assert.equal(await runBuyback(pool, { force: true }), null, 'nothing to buy back twice');
 
+// ── THE 12h TIMER, re-checked UNDER the lock (red team #6 F1) ──────────────────────────────────
+// Every other buyback assertion in this suite passes `force`, which bypasses the timer entirely —
+// so the cadence itself had no coverage at all. The peek at the top of runBuyback is a cheap
+// not-due EXIT, not a decision: two overlapping workers (the deploy-overlap threat model) both
+// clear it, then queue on the street_tax lock in turn, and the loser carves a SECOND time inside
+// one period. Measured on real Postgres with a third connection holding the lock so both workers
+// park on it: 51,000 funded against a 30,000 period at EXCHANGE.FUND_BPS 3000. Inert at the shipped
+// 10000 (the winner drains the pool, so the loser's take rounds to nothing and it returns on the
+// take<=0 guard) — which is the shape to fix rather than lean on: a cadence gate that holds only at
+// one setting of an unrelated founder lever is not a gate.
+await pool.query('UPDATE street_tax SET pool = 4000, last_buyback = now() WHERE id=1');
+assert.equal(await runBuyback(pool), null, 'a fresh last_buyback is not due — the timer holds');
+await pool.query("UPDATE street_tax SET last_buyback = now() - interval '13 hours' WHERE id=1");
+assert.equal((await runBuyback(pool))?.toWindow, 4000, 'past the window it carves, once');
+assert.equal(await runBuyback(pool), null, 'and the SAME period funds nothing more');
+// pg-mem is a single caller and cannot make two writers race, so the concurrent half is a SOURCE
+// tripwire, LABELLED as one: the authoritative read must carry last_buyback, and the gate must be
+// re-applied between that read and the carve.
+{
+  const src = (await import('node:fs')).readFileSync(new URL('../src/worker.js', import.meta.url), 'utf8');
+  const iLock = src.indexOf('FROM street_tax WHERE id=1 FOR UPDATE');
+  assert(iLock > 0, 'runBuyback still locks street_tax');
+  const iCarve = src.indexOf('carveExchange(client', iLock);
+  assert(iCarve > iLock, 'and still carves after taking the lock');
+  assert(src.slice(src.lastIndexOf('SELECT', iLock), iLock).includes('last_buyback'),
+    'the LOCKED read of street_tax must carry last_buyback — the peek above it is not authoritative');
+  assert(src.slice(iLock, iCarve).includes('BUYBACK_PERIOD_MS'),
+    're-check the 12h window under the lock, or two overlapping workers both carve in one period');
+}
+
 // Make Risk Pay: fresh deposits ride IN TRANSIT for BANK_CLEAR_MS (lootable), then clear
 await seed("cash=50000, bank=0, bank_intransit=0");
 r = await call('POST', '/v1/bank/deposit', { token, body: { amount: 30000 } });
