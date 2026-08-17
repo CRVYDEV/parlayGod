@@ -461,7 +461,8 @@ export async function robBusiness(ch, victim, businessId, client, h) {
 // burn (deflationary sink). Three defensive/risk-shaping branches (NOT a faucet — income + launder
 // throughput untouched). Re-specializing overwrites (a fresh $OMR burn). §10.4: `business:spec` omr burn. ──
 export async function specializeBusiness(ch, businessId, spec, client, h) {
-  if (!BUSINESS_EMPIRE.SPECS[spec]) throw new GameError('bad_spec', 'Pick The Fortress.');
+  // `Object.hasOwn`, not truthiness (a prototype key indexes truthy — red team #8)
+  if (!Object.hasOwn(BUSINESS_EMPIRE.SPECS, spec)) throw new GameError('bad_spec', 'Pick The Fortress.');
   // (v2 knock-on RESOLVED) THE ACCOUNTANT (income scrutiny ×0.5) and THE FIXER (raid fine ×0.5,
   // scrutiny decay ×2) were REFUSED while the Bureau layer had no feed (v2 step 2 retired
   // laundering, its only source) — selling a dead effect for real $OMR would have been worse than

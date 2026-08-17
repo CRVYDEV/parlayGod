@@ -5,6 +5,7 @@ import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/interfaces/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {FlashGuard} from "./FlashGuard.sol";
 import {Denari} from "./Denari.sol";
@@ -56,7 +57,7 @@ import {Denari} from "./Denari.sol";
 ///         This is deliberately NOT fixed by exempting early borrows in code. An exemption is a
 ///         window in which the protocol issues claims it cannot honour, which is the exact
 ///         ordering §2.4 exists to forbid; requiring real backing up front is the honest version.
-contract Transmuter is Ownable, ReentrancyGuard, FlashGuard {
+contract Transmuter is Ownable2Step, ReentrancyGuard, FlashGuard {
     using SafeERC20 for IERC20;
 
     /// @notice Compile-time floor on the buffer floor. The Safe may set the floor ANYWHERE AT OR

@@ -524,3 +524,44 @@ console.log(`✅ docs test passed — every number in SPEC.md's size table check
   + `${tables} tables, ${mdFiles.length} markdown files), the rules-seam figures are current, the false `
   + `"re-apply by hand" warning cannot come back, no doc misstates its own size by more than 25%, and all `
   + `${audits.length} audit reports are indexed as point-in-time with none phantom.`);
+
+// ── OWNERSHIP IS TWO-STEP EVERYWHERE (red-team #8) ─────────────────────────────────────────────
+// Ten of the sixteen contracts inherited `Ownable2Step`; six inherited plain `Ownable`, for no
+// stated reason anywhere — an accident of authoring order, which is this project's most productive
+// bug shape (N sites, N−1 following a rule). Single-step `transferOwnership` to a typo'd address is
+// unrecoverable, and for OMR that means `setMinter` — the ONLY mint, and its emergency stop — could
+// never be touched again. The owner is a Safe, so the realistic failure is a wrong address that N
+// signers approve, which is exactly what a nominate-then-accept handshake exists to catch.
+//
+// Renouncing deliberately stays ONE step (Ownable2Step overrides `transferOwnership`, never
+// `renounceOwnership`), so OMR's documented "the Safe can renounce to freeze the configuration
+// forever" survives the change untouched.
+//
+// Catalog-or-declare: inherit Ownable2Step, or be waived with a reason that is a property of the
+// contract. Scope: it proves the BASE, not that every privileged path is behind `onlyOwner`.
+{
+  const dir = 'omerta-contracts/src';
+  const OWNER_WAIVED = {};    // none — every ownable contract in the tree is two-step
+  const single = [];
+  let ownable = 0;
+  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.sol'))) {
+    const src = read(`${dir}/${f}`);
+    const decl = /\n(?:abstract )?contract\s+\w+\s+is\s+([^{]+)\{/.exec(src);
+    if (!decl || !/\bOwnable\b|\bOwnable2Step\b/.test(decl[1])) continue;
+    ownable++;
+    const name = f.replace(/\.sol$/, '');
+    if (/\bOwnable2Step\b/.test(decl[1]) || OWNER_WAIVED[name]) continue;
+    single.push(`${f}  (contract … is ${decl[1].trim()})`);
+  }
+  assert(ownable >= 12,
+    `the ownership scan found only ${ownable} ownable contract(s) — the extractor has stopped seeing `
+    + 'them, so this check is vacuous rather than clean');
+  assert.equal(single.length, 0,
+    'contract(s) inherit single-step `Ownable`. `transferOwnership` to a wrong address is then\n'
+    + '      irreversible in one Safe transaction, with no nominee step to catch it — and for the\n'
+    + '      token that means the minter can never be rotated or zeroed again:\n'
+    + `   - ${single.join('\n   - ')}`);
+  const stale = Object.keys(OWNER_WAIVED).filter((k) => !fs.existsSync(`${dir}/${k}.sol`));
+  assert.equal(stale.length, 0, `ownership waiver(s) for a contract that no longer exists: ${stale.join(', ')}`);
+  console.log(`✓ all ${ownable} ownable contracts hand ownership over in two steps`);
+}

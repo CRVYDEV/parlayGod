@@ -10,15 +10,15 @@ Written 2026-07-25. Every number below was measured from the tree, not recalled.
 
 | | |
 |---|---|
-| Backend modules | **151** files, **51385** lines (`src/`, incl. `src/routes/` and `src/social/`) |
-| Test suites | **109** files, **36926** lines (`test/`) — ratio 0.72 test:src |
+| Backend modules | **151** files, **51739** lines (`src/`, incl. `src/routes/` and `src/social/`) |
+| Test suites | **109** files, **37733** lines (`test/`) — ratio 0.72 test:src |
 | HTTP routes | **688** registrations |
 | Database tables | **239** (`schema.sql`, 3532 lines) |
 | Client | **8890** lines (`public/index.html`, single file, zero dependencies) |
 | Ops dashboard + wiki | `public/admin.html`, `public/wiki.html` |
-| Smart contracts | **18** contracts, **3813** lines Solidity, **303** Foundry tests passing |
+| Smart contracts | **18** contracts, **3821** lines Solidity, **305** Foundry tests passing |
 | Harnesses | `tools/sim.js` (economy), `tools/playthrough.js` (player experience), `tools/pgcheck.js` (real Postgres), `tools/loadtest.js` (concurrency), `tools/chaos.js` (interruption), `tools/mobile.js` (the screens, at phone size), `tools/scale.js` (market liquidity at population scale), `tools/bond-dials.js` (sizing the on-chain mint walls), `tools/keeper-dials.js` (sizing the stock keeper's price-continuity wall), `tools/pgquery.js` (every SQL string parses on real Postgres), `tools/concurrency.js` (lost-update correctness on real Postgres) |
-| Design + audit docs | **204** markdown files, **57717** lines — indexed in `docs/AUDITS.md`, which states they are point-in-time |
+| Design + audit docs | **205** markdown files, **57982** lines — indexed in `docs/AUDITS.md`, which states they are point-in-time |
 | Ledger invariants | 18 named escrow/identity checks + per-currency conservation, **drift-0** |
 
 Roughly **55,000 lines** of code, tests, schema and contracts.
@@ -413,7 +413,7 @@ looks superlinear and produces deadlocks). So capacity here is bought with CPU, 
 rewrite. D6 stays accepted-as-is; the convention is now known to hold under load, not just under review.
 
 ### D7 — Documentation mass **(LOW-MEDIUM, partly addressed)**
-204 markdown files, 57k lines, with CLAUDE.md alone 13590 lines of dense prose. Two codices already
+205 markdown files, 58k lines, with CLAUDE.md alone 13590 lines of dense prose. Two codices already
 drifted once (a test now guards it). Onboarding a second developer means reading a novel.
 
 **Addressed: the prose that a reader could ACT on is now machine-checked.** Stale prose does not fail

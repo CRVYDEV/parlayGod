@@ -13800,3 +13800,78 @@ re-paid); and `commissionPiece`'s `COUNT(*)+1` serial (the classic concurrent-du
 the PK backstop, so the loser takes a `23505` that `deadlockToRetry` maps to a clean `contention`: working
 as designed, not a finding). Suite 99 ✅ + sim drift-0 + pgquery 2971 statements + pgcheck 43/43 on a
 FRESH real-Postgres database.
+
+**RED TEAM #8 — an object index is not an allowlist, and the alarm was asked whether it can fail
+(`AUDIT-red-team-eight.md`, 2026-08-17).** Three more of the shape RT#7 named — a class established,
+applied where it was discovered, never swept to its edge — plus the question nobody had put directly:
+**can the §10.4 sweep actually fail?** First-hand; two lenses needed a booted server driving real routes
+and the contract lens a real Foundry VM. **No CRITICAL, no HIGH; one MED, two LOW-MED, three lenses
+clean**, seven mutations each failing at its own named assertion.
+**F1 (MED) — `if (!CATALOG[userInput]) throw` reads like a membership test and is not one.** Every
+JavaScript object inherits `__proto__`, `constructor`, `toString`, `valueOf` and `hasOwnProperty`, and
+each indexes TRUTHY, so the gate passes for exactly those five keys. Eleven such gates exist, five take
+user input, and **two were live defects, both reproduced through the real route**: `KITCHEN.MODULES[modId]`
+reached the `lab_${modId}` **column name** and 500'd, and `MASTERY.TRAITS[traitId]` returned **200 and
+WROTE `trait_id='__proto__'`** — silent, permanent loss of the once-ever level-50 capstone of an entire
+mastery track, after which the `chosen` gate blocks the real choice forever and the stored trait matches
+neither `virtuoso` nor `dynast`, so it grants nothing. **Injection was never possible** (a quoted payload
+is not a prototype key, so the gate catches it) — which is precisely what made the gate look adequate; the
+reachable damage is a 500 and a bad write, never a database. The other three were saved by a *different*
+gate happening to run first, which is an accident rather than a design, so all five now use
+**`Object.hasOwn`** — the predicate the code meant all along. Guarded by a new **THE CATALOG LEDGER**
+(catalogue-or-declare, six waivers each a property of the key), **whose extractor had to learn BOTH
+forms**: a scanner that only knows the broken shape stops counting a site the moment it is fixed, so the
+guard shrinks silently to nothing as the tree gets healthier — it saw 6 gates before that was fixed and
+11 after.
+**F2 (LOW-MED) — one poison stream starved the other ten, and defeated RT#4's own fix.** The worker's
+main tick isolates ~60 jobs with `safe()`; the CHAIN-SYNC tick wrapped eleven watcher syncs, the stock
+delivery keeper and the two DEX bots in ONE try/catch. **An outer catch defeats an inner one it
+encloses**, so RT#4's per-bot wraps — added for exactly this failure — were bypassed, and a throw in the
+first sync skipped every job below it, every tick, quietly. Provable by control flow rather than repro
+(no seam; the viem source is built inside the worker's start block) and chain-dormant today, which is why
+fixing it pre-mainnet is free. **The fix has a second half that is easy to get wrong, and the first cut
+got it wrong**: `safe()` returns `null`, and eleven call sites immediately dereference the result, so a
+*contained* failure became an uncontained `TypeError` in the next statement — landing in the same outer
+catch the wrap exists to avoid. Both halves guarded by **THE ISOLATION LEDGER** (76 jobs), whose deref
+check is scoped from the binding to the read rather than to one line, because a guard takes four shapes
+here and a narrower rule reported all four as findings.
+**F3 (LOW-MED) — six contracts hand ownership over in one step.** Ten inherit `Ownable2Step`; `OMR`,
+`OmertaHook`, `Alchemist`, `Transmuter`, `Denari` and `GenesisOracle` inherited plain `Ownable` with **no
+reason stated anywhere** — an accident of authoring order, the forgotten-sibling shape. Single-step
+`transferOwnership` to a wrong address is unrecoverable in one transaction; the owner is a Safe, so the
+realistic failure is a typo'd address that N signers approve, which is exactly what a nominate-then-accept
+handshake catches. **`OMR` is the one that matters**: its owner holds `setMinter` — the only mint in the
+system and its own emergency stop (`setMinter(0)`) — so losing it means the minter can never be rotated or
+zeroed again. **The deliberate "renounce = freeze the configuration forever" hatch SURVIVES** (Ownable2Step
+overrides `transferOwnership` and `_transferOwnership`, never `renounceOwnership`), which is what made the
+change safe to make; both halves are now behavioural Foundry tests rather than a claim (**forge 305/305**).
+Free now, a re-audit later — the bond-fourth-slice argument, third use. `test/docs.js` fails if a
+seventeenth ownable contract ships single-step.
+**Clean lenses, recorded because a red team that publishes only its hits cannot be audited.**
+(1) **INVARIANT VACUITY — the check every other check leans on, never asked as a sweep.** For each of the
+31 §10.4 checks emitted on an empty server the minimal violation it claims to catch was planted (a balance
+bumped with no ledger row; a ledger row with no balance; a bogus reason; a fresh row under a retired
+reason; an extra car) and then undone: **31 of 31 fired and 31 of 31 restored**, and a second probe crossed
+the emitted set against the `push()` sites in source — 31 declared, 31 emitted — so no check is silently
+skipped on a quiet server either. The alarm is load-bearing, not decorative. (2) **Client stored XSS** —
+the console has no escape helper and 103 `innerHTML` sites, so safety rests entirely on write-time
+`cleanText`; sixteen player-controlled fields driven through their real routes with `<img src=x
+onerror=…>`, **14 of 16 reached the string guard and 0 stored raw markup** (the two unreached covered by
+source with their guards cited). **The probe's FIRST run was vacuous and was rebuilt** — 11 of 13 fields
+bounced at a precondition without ever reaching the validation, the recorded RT#4 lesson hit again.
+Recorded as a fragility rather than a finding: one missed `cleanText` on a new field is stored XSS and
+nothing would catch it. (3) **Interpolated SQL** — `pgquery` prepares 2,971 static statements and
+structurally cannot see the rest, so all **95 interpolations inside a query template** were enumerated and
+traced to their assignment: every one is a placeholder list, a ternary over two literals, a module
+constant or an allowlisted column name — **no user string reaches SQL text**. The three that build a
+COLUMN NAME from a request field are each gated by a catalog membership test first, which is what turned
+this lens into F1: the gates were right in intent and wrong in predicate.
+**Two process notes.** **M6 first appeared to survive on ORDER, not on the check** — renaming a waiver
+removes protection from a real gate, so the bare-index assertion fires before the stale-waiver one ever
+runs; a stale-waiver check can only be verified by ADDING a bogus waiver, never by renaming a live one.
+And **M1's anti-vacuity floor was verified organically**: the isolation ledger first anchored on
+`export async function startWorker`, which does not exist (the ticks live inside a main-module guard), and
+the floor caught it — `found only 1 job call(s)` — rather than passing over code it never read. Six probe
+files written and deleted before committing; every mutation on a scratchpad copy, never `git checkout`.
+Suite 99 files ✅ + sim drift-0 + forge 305/305 + pgquery 2971 statements + pgcheck 43/43 on a fresh
+real-Postgres database.

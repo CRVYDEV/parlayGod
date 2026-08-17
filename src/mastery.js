@@ -70,7 +70,10 @@ export async function masteryBoard(ch, client, h) {
 export async function chooseTrait(ch, trackId, traitId, client, h) {
   const track = MASTERY.TRACKS.find((t) => t.id === trackId);
   if (!track) throw new GameError('bad_track', 'No such trade.');
-  if (!MASTERY.TRAITS[traitId]) throw new GameError('bad_trait', 'Pick virtuoso or dynast.');
+  // `Object.hasOwn`, not truthiness: `TRAITS['__proto__']` is Object.prototype and therefore TRUTHY,
+  // so a bare index gate lets a prototype key through — and this one WRITES, permanently consuming
+  // the once-ever level-50 choice with a trait that then grants nothing (red team #8).
+  if (!Object.hasOwn(MASTERY.TRAITS, traitId)) throw new GameError('bad_trait', 'Pick virtuoso or dynast.');
   const lvl = masteryLvlOf(Number(h.owned.mastery?.[trackId] || 0));
   if (lvl < MASTERY.MAX_LVL) throw new GameError('level', `Master the trade first (L${MASTERY.MAX_LVL}).`);
   if (h.owned.traits?.[trackId]) throw new GameError('chosen', 'That die is already cast.');

@@ -4,6 +4,7 @@ pragma solidity 0.8.26;
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
 /// @title Denari (DNR) — the debt token of THE BANK's USD market
 /// @notice Design: `omerta-bank-protocol-design.md` §2.1 / §5. Founder-named 2026-08-13
@@ -39,7 +40,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 ///         • **No rebasing, no fee-on-transfer.** Integrators may assume `transfer(x)` moves
 ///           exactly `x`; a debt token that lies about its own transfers breaks every downstream
 ///           accounting assumption, including our own Transmuter's.
-contract Denari is ERC20, ERC20Permit, Ownable {
+contract Denari is ERC20, ERC20Permit, Ownable2Step {
     /// @notice The only address that may mint. `address(0)` = issuance off.
     address public minter;
     /// @notice The only address that may burn. `address(0)` = redemption off.

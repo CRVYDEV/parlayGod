@@ -199,6 +199,16 @@ assert.equal((await call('POST', '/v1/mastery/trait/juggling', { token: pia.toke
 await setXp(pia.id, 'wheels', masteryXpFor(50));
 assert.equal((await call('POST', '/v1/mastery/trait/wheels', { token: pia.token, body: { trait: 'showoff' } })).body.error,
   'bad_trait', 'virtuoso or dynast only');
+// …and a PROTOTYPE KEY is not a trait either (red team #8). `MASTERY.TRAITS['__proto__']` is
+// Object.prototype and therefore TRUTHY, so a bare index gate let it through — and this route WRITES,
+// so the once-ever level-50 choice was permanently consumed by a trait that grants nothing. Driven
+// through the real route because the damage is what it STORES, not what it returns.
+for (const k of ['__proto__', 'constructor', 'toString', 'hasOwnProperty']) {
+  const bad = await call('POST', '/v1/mastery/trait/wheels', { token: pia.token, body: { trait: k } });
+  assert.equal(bad.body.error, 'bad_trait', `a prototype key (${k}) is refused like any other non-trait`);
+}
+assert.equal((await pool.query('SELECT count(*)::int n FROM character_traits WHERE character_id=$1',
+  [pia.id])).rows[0].n, 0, 'and it wrote NOTHING — the level-50 choice is still there to make');
 r = await call('POST', '/v1/mastery/trait/wheels', { token: pia.token, body: { trait: 'virtuoso' } });
 assert.equal(r.code, 200, 'the die is cast');
 assert.equal((await call('POST', '/v1/mastery/trait/wheels', { token: pia.token, body: { trait: 'dynast' } })).body.error,

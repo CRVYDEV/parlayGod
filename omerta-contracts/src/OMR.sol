@@ -4,6 +4,7 @@ pragma solidity 0.8.26;
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
 /// @title OMR — OMERTÀ's utility token.
 /// @notice An initial supply minted once to the treasury Safe, plus ONE mint path: a single
@@ -63,14 +64,16 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 ///         - The tax defaults to 0 and applies only to pools the owner explicitly
 ///           registers; unregistered venues and plain transfers are never touched.
 ///         - Every knob emits an event; the Safe can renounce ownership to freeze the
-///           configuration forever.
+///           configuration forever. Renouncing stays ONE step (Ownable2Step overrides only
+///           `transferOwnership`, not `renounceOwnership`), so that escape hatch is intact;
+///           HANDING ownership to a new address takes two (red team #8).
 ///
 ///         COMPOSABILITY (deploy-time requirement, see CHAIN-DEPLOY.md): a token that
 ///         taxes transfers into a pool is "fee-on-transfer" from that pool's view.
 ///         Uniswap V2-style pools support this (swaps must use the
 ///         *SupportingFeeOnTransferTokens router functions); Uniswap V3 does NOT —
 ///         canonical liquidity must live on a V2-compatible DEX (or a V4 hook pool).
-contract OMR is ERC20Permit, Ownable {
+contract OMR is ERC20Permit, Ownable2Step {
     /// @notice The founding mint to the treasury Safe. NO LONGER the total supply — bonds mint on
     ///         top of it (see the header). Kept under its original name so deploy scripts, the
     ///         explorer and every prior audit note still resolve; `totalSupply()` is the live number.
