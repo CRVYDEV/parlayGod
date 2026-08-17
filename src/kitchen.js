@@ -329,7 +329,7 @@ export async function kingpinLeaderboard(pool) {
   const rows = (await pool.query(
     `SELECT c.name, ap.product_moved FROM account_persistent ap
        JOIN characters c ON c.account_id = ap.account_id AND c.alive
-      WHERE NOT ap.agent_flag AND ap.product_moved > 0
+      WHERE NOT ap.agent_flag AND NOT c.is_npc AND ap.product_moved > 0
       ORDER BY ap.product_moved DESC, c.name LIMIT 20`)).rows;
   return { kingpins: rows.map((r, i) => ({ pos: i + 1, name: r.name, moved: Number(r.product_moved),
     rank: kingpinRankOf(r.product_moved).name })) };

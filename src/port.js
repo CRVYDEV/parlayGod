@@ -477,6 +477,6 @@ export async function portBoard(ch, client, h) {
 export async function portLeaderboard(pool) {
   const rows = (await pool.query(
     `SELECT a.smuggled, c.name FROM account_persistent a JOIN characters c ON c.account_id=a.account_id AND c.alive
-      WHERE a.smuggled > 0 AND NOT a.agent_flag ORDER BY a.smuggled DESC LIMIT 15`)).rows;
+      WHERE a.smuggled > 0 AND NOT a.agent_flag AND NOT c.is_npc ORDER BY a.smuggled DESC LIMIT 15`)).rows;
   return { smugglers: rows.map((r) => ({ name: r.name, smuggled: Number(r.smuggled), rank: portRankOf(r.smuggled).title })) };
 }

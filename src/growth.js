@@ -354,7 +354,7 @@ export async function recruiterLeaderboard(pool, limit = 20) {
        JOIN characters c ON c.account_id = a.account_id AND c.alive
        LEFT JOIN gang_members gm ON gm.character_id = c.id
        LEFT JOIN gangs g ON g.id = gm.gang_id
-      WHERE a.recruits > 0 AND NOT a.agent_flag
+      WHERE a.recruits > 0 AND NOT a.agent_flag AND NOT c.is_npc
       ORDER BY a.recruits DESC LIMIT $1`, [limit])).rows;
   return rows.map((r) => ({ name: r.name, gang: r.gang || null, tag: r.tag || null,
     recruits: Number(r.recruits), rank: recruitRankOf(Number(r.recruits)), agent: !!r.agent_flag }));
@@ -369,8 +369,8 @@ export async function recruitingFamilyLeaderboard(pool, limit = 20) {
     `SELECT gm.gang_id, g.name, g.tag, a.recruits
        FROM gang_members gm
        JOIN gangs g ON g.id = gm.gang_id
-       JOIN characters c ON c.id = gm.character_id AND c.alive
-       JOIN account_persistent a ON a.account_id = c.account_id`)).rows;
+       JOIN characters c ON c.id = gm.character_id AND c.alive AND NOT c.is_npc
+       JOIN account_persistent a ON a.account_id = c.account_id AND NOT a.agent_flag`)).rows;
   const byGang = new Map();
   for (const r of rows) {
     const e = byGang.get(r.gang_id) || { name: r.name, tag: r.tag, members: 0, recruits: 0 };

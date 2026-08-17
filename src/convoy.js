@@ -447,7 +447,7 @@ export async function convoyLeaderboard(pool) {
   const q = async (col) => (await pool.query(
     `SELECT a.${col} v, c.name FROM account_persistent a
        JOIN characters c ON c.account_id = a.account_id AND c.alive
-      WHERE a.${col} > 0 AND NOT a.agent_flag ORDER BY a.${col} DESC, c.name LIMIT 15`)).rows;
+      WHERE a.${col} > 0 AND NOT a.agent_flag AND NOT c.is_npc ORDER BY a.${col} DESC, c.name LIMIT 15`)).rows;
   const teamsters = (await q('freight_delivered')).map((r, i) => ({ pos: i + 1, name: r.name, value: Number(r.v), rank: haulerRankOf(r.v).title }));
   const highwaymen = (await q('freight_hijacked')).map((r, i) => ({ pos: i + 1, name: r.name, value: Number(r.v), rank: banditRankOf(r.v).title }));
   return { teamsters, highwaymen };

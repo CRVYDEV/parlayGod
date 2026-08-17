@@ -103,7 +103,7 @@ export async function clueLeaderboard(pool) {
     `SELECT ap.account_id, ap.caskets, c.name, c.respect
        FROM account_persistent ap
        JOIN characters c ON c.account_id = ap.account_id AND c.alive
-      WHERE ap.caskets > 0 AND NOT ap.agent_flag
+      WHERE ap.caskets > 0 AND NOT ap.agent_flag AND NOT c.is_npc
       ORDER BY ap.caskets DESC, c.name LIMIT 15`)).rows;
   // TIER-4 §D — the relic tally per digger (the collector's axis; two flat queries, pg-mem-safe)
   const relicRows = (await pool.query("SELECT account_id, COUNT(*) n FROM collection_log WHERE category='relics' GROUP BY account_id")).rows;

@@ -509,13 +509,16 @@ export async function acceptPeace(ch, targetId, client, h) {
 
 // GET /v1/leaderboard/feuds — the deadliest ACTIVE blood feuds across the base (by kills). Pure status:
 // each side is the bloodline's CURRENT living street; a line with no living character is skipped.
+// (red-team R31 F1) RESIDENTS excluded on BOTH sides — this board had NEITHER exclusion. Nothing in
+// the vendetta swear consults `is_npc`, so a fire-kill on a resident swears a real feud and puts
+// scenery on the blood-debt board as an avenger that will never avenge anything.
 export async function feudLeaderboard(pool) {
   const rows = (await pool.query(
     `SELECT v.avenger_account, v.target_account, v.kills, v.expires_at,
             av.name AS avenger, tg.name AS target
        FROM vendettas v
-       JOIN characters av ON av.account_id = v.avenger_account AND av.alive
-       JOIN characters tg ON tg.account_id = v.target_account AND tg.alive
+       JOIN characters av ON av.account_id = v.avenger_account AND av.alive AND NOT av.is_npc
+       JOIN characters tg ON tg.account_id = v.target_account AND tg.alive AND NOT tg.is_npc
       WHERE v.expires_at > now()
       ORDER BY v.kills DESC, v.expires_at DESC LIMIT 15`)).rows;
   return { feuds: rows.map((r) => ({ avenger: r.avenger, target: r.target, kills: Number(r.kills),

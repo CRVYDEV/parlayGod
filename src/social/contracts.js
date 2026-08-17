@@ -579,11 +579,11 @@ export async function hitmanLeaderboard(pool, limit = 20) {
   const legend = (await pool.query(
     `SELECT a.hitman_rep, a.kills, a.agent_flag, c.name FROM account_persistent a
        JOIN characters c ON c.account_id = a.account_id AND c.alive
-      WHERE a.hitman_rep > 0 ORDER BY a.hitman_rep DESC LIMIT $1`, [limit])).rows;
+      WHERE a.hitman_rep > 0 AND NOT c.is_npc ORDER BY a.hitman_rep DESC LIMIT $1`, [limit])).rows;
   const season = (await pool.query(
     `SELECT c.name, c.season_kills, a.agent_flag FROM characters c
        JOIN account_persistent a ON a.account_id = c.account_id
-      WHERE c.alive AND c.season_kills > 0 AND NOT a.agent_flag
+      WHERE c.alive AND c.season_kills > 0 AND NOT a.agent_flag AND NOT c.is_npc
       ORDER BY c.season_kills DESC LIMIT $1`, [limit])).rows;
   return {
     legend: legend.map((r) => ({ name: r.name, rep: Number(r.hitman_rep), kills: Number(r.kills),

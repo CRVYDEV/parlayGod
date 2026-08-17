@@ -476,11 +476,11 @@ export async function nightlifeLeaderboard(pool, characterId) {
   // GATES renown-earned cosmetic decor, so consistency matters); join the account to filter agent_flag.
   const patrons = (await pool.query(
     `SELECT p.character_id, p.spent_cash, p.spent_omr, c.name FROM speakeasy_patrons p
-       JOIN characters c ON c.id = p.character_id AND c.alive
+       JOIN characters c ON c.id = p.character_id AND c.alive AND NOT c.is_npc
        JOIN account_persistent a ON a.account_id = c.account_id AND NOT a.agent_flag`)).rows;
   const clubs = (await pool.query(
     `SELECT s.owner_character, s.prestige, c.name FROM speakeasies s
-       JOIN characters c ON c.id = s.owner_character AND c.alive
+       JOIN characters c ON c.id = s.owner_character AND c.alive AND NOT c.is_npc
        JOIN account_persistent a ON a.account_id = c.account_id AND NOT a.agent_flag`)).rows;
   const agg = new Map();
   const bump = (id, name, f) => { const e = agg.get(id) || { name, cash: 0, omr: 0, ownPrestige: 0 }; f(e); if (name && !e.name) e.name = name; agg.set(id, e); };

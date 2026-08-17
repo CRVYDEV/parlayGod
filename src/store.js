@@ -395,7 +395,7 @@ export async function benefactorLeaderboard(pool, limit = 25) {
        JOIN characters c ON c.account_id = a.account_id AND c.alive
        LEFT JOIN gang_members gm ON gm.character_id = c.id
        LEFT JOIN gangs g ON g.id = gm.gang_id
-      WHERE a.patron_spent > 0 AND NOT a.agent_flag`)).rows;
+      WHERE a.patron_spent > 0 AND NOT a.agent_flag AND NOT c.is_npc`)).rows;
   const patrons = []; const gangTally = {};
   for (const r of rows) {
     const spentEth = round6(Number(r.patron_spent || 0));

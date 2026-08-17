@@ -398,7 +398,7 @@ export async function tycoonLeaderboard(pool) {
   const rows = (await pool.query(
     `SELECT c.name, ap.tycoon_earned FROM account_persistent ap
        JOIN characters c ON c.account_id = ap.account_id AND c.alive
-      WHERE NOT ap.agent_flag AND ap.tycoon_earned > 0
+      WHERE NOT ap.agent_flag AND NOT c.is_npc AND ap.tycoon_earned > 0
       ORDER BY ap.tycoon_earned DESC, c.name LIMIT 20`)).rows;
   return { tycoons: rows.map((r, i) => ({ pos: i + 1, name: r.name, earned: Number(r.tycoon_earned),
     rank: tycoonRankOf(r.tycoon_earned).name })) };

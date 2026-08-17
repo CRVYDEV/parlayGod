@@ -352,7 +352,7 @@ export async function wireBoard(ch, client, h) {
 export async function wireLeaderboard(pool) {
   const rows = (await pool.query(
     `SELECT a.intel_ops, c.name FROM account_persistent a JOIN characters c ON c.account_id=a.account_id AND c.alive
-      WHERE a.intel_ops > 0 ORDER BY a.intel_ops DESC LIMIT 15`)).rows;
+      WHERE a.intel_ops > 0 AND NOT c.is_npc ORDER BY a.intel_ops DESC LIMIT 15`)).rows;
   return { spies: rows.map((r) => ({ name: r.name, ops: Number(r.intel_ops), rank: spyRankOf(r.intel_ops).name })) };
 }
 

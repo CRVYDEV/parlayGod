@@ -13736,3 +13736,67 @@ configured anywhere. Two mutations, each caught by name (a reintroduced `|| 6` f
 THROWS — it must never fall back to a guessed decimals"*; the scale conversion dropped → the USDC assertion
 printing `1e-9` against `1000`). Probe files written and DELETED before committing; all mutations on
 scratchpad copies, never `git checkout`.
+
+**RED TEAM #7 — the rule this project wrote down and applied one board at a time
+(`AUDIT-red-team-seven.md`, 2026-08-17).** RT#4 through RT#6 each closed their own scope well, and the
+shape they leave open is the same each time: **a class already established, applied where it was
+discovered, and never swept to its edge.** So the primary lens was one such class — the population
+layer's OWN recorded rule — and the rest were the mechanical sweeps nobody had run as a sweep. First-hand;
+the headline needed a **booted server driving real routes**, because the boards are read-only aggregates
+and the question is what they *contain* with scenery in the database. **No CRITICAL, no HIGH; one MED
+across 27 boards, five lenses clean**, three mutations each failing at its own named assertion.
+**F1 — human status boards rank NPC SCENERY.** The population layer's design is deliberate ("a resident
+is a REAL character … every interaction runs the same audited code that runs against a player") and
+CLAUDE.md states the consequence in the same entry: *a future step that gives residents a legend must
+exclude them on that board at the same time.* That rule is right, and it was applied **per board as each
+was discovered** (boxing, stable, races, hitmen, Trades, the Firsts) and **never as a class** — while
+residents kept accruing legends: Street War step two gave them fighters and racers, step three stables,
+the population steps duels, deaths and heirs. **Reproduced end to end.** The **duelling ladder** is the
+sharpest case precisely because it has **no threshold at all** — it ranks every living character on raw
+`duel_elo`, and a resident's `duel_elo` **DEFAULTS to `ELO_START`**, so it needs no kills, no duels and no
+play of any kind to fill with bots: **6 of 7 entries residents, with the server's only human sitting
+SIXTH behind five NPCs on an identical rating.** The **ancestral hall** is the second, and it follows from
+the population layer's most deliberate decision — *death is deliberately not special*, so a killed
+resident runs the ORDINARY `runEstate`, writes a `bloodline` row and raises an heir; at
+`RETIRE_GENERATIONS` 6 one boss-band line accrues six generations of level-and-kill score, and four
+mod-kills put a resident house on the great-houses board at **score 520** while the only human was not on
+it at all, because he had not died yet. The assassin and blood-feud boards are the same shape lower down
+(the vendetta swear in `runEstate` never consults `is_npc`, so a resident killed by a player is sworn
+against exactly like a person). **Not a leak** — no §10.4 surface, nothing farmable; what it damages is
+what a status board is FOR, and it is worst on a thin launch-night server, which is the only condition
+under which residents outnumber players. Fixed at all 27 **and guarded**, because the class has now
+been rediscovered three times and the 26th board will be written by somebody who has not read the report:
+a new **THE SCENERY LEDGER** in `test/gates.js` — the catalogue-or-declare shape of the connection,
+handover and watcher-poison ledgers — discovering every exported `*Leaderboard` from the source, requiring
+each to exclude residents or be waived **with a board-property reason** (11 are: gang boards where NPC
+families hold nothing, two retired boards, the agent board whose whole population is agents), with an
+anti-vacuity floor and a stale-waiver check. Two boards deliberately keep INCLUDING agents by a decision
+already recorded here (`wireLeaderboard`, `worldLeaderboard` — a $OMR-bought, payout-free status axis);
+residents are excluded from both. **The guard checks per RANKING STATEMENT, not per board body, and that
+is the whole reason it works.** **M1 survived its first TWO runs and both causes are worth keeping:**
+first, a body-level check asked *"does this body mention `is_npc` anywhere?"* — and `duelLeaderboard` runs
+TWO queries, so stripping one left the other's mention and the guard read a **half-guarded board as
+protected**, which is exactly the state a partial fix leaves behind; second, the mutation still survived
+and the code was not the reason — **I had written SQL `--` comments containing BACKTICKS inside JS
+template literals**, which terminate them, breaking three files at parse time (`node --check` →
+*SyntaxError: missing ) after argument list*; `pgquery` reads SQL as text and structurally cannot see it).
+**That trap is already recorded in CLAUDE.md and this is the second time it has been hit**, so: SQL
+comments never carry backticks, and `node --check` runs after any edit touching a template literal.
+**Clean lenses, recorded because a red team that publishes only its hits cannot be audited:** the **pause
+matrix** across all five pausable contracts, asking the only question a pause has to answer — *can a
+paused contract trap a holder's asset?* — and every one exempts the exit (`StreetDeed.redeem` explicitly
+not `whenNotPaused`, `OmertaBond.claim` deliberately unpausable, `VoucherClaim`'s reclaim a server sweep,
+`StockVault.sweep` Safe-only), so none can be paused into a state where value is unreachable by anybody;
+a **persist-clobber RE-sweep** after ~15 new columns (66 persisted character / 18 account columns against
+every direct `UPDATE`, narrowed to actor-row writes inside a held transaction → 4 hits, all legitimate) —
+**whose extractor first reported "0 columns" and nearly went into the report as a clean sweep** (it
+searched by function name; the persist statement is one long template literal, so it matched nothing — a
+zero that reads exactly like a clean bill of health, fixed by anchoring on the literal `UPDATE characters
+SET respect=$2`); keyless-route throttle scoping re-checked after this session's new routes (every one is
+under `/v1` and covered by the H4 denylist-default, or static/no-DB); the three **zero-coverage money
+modules** (`made.js`/`career.js`/`hustle.js`, in no audit report — all ledger-helper writes, gates before
+credits, and the career latch checked BEFORE `not_done` so an heir is told "already collected" rather than
+re-paid); and `commissionPiece`'s `COUNT(*)+1` serial (the classic concurrent-duplicate shape — traced to
+the PK backstop, so the loser takes a `23505` that `deadlockToRetry` maps to a clean `contention`: working
+as designed, not a finding). Suite 99 ✅ + sim drift-0 + pgquery 2971 statements + pgcheck 43/43 on a
+FRESH real-Postgres database.

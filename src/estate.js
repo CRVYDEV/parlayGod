@@ -146,7 +146,7 @@ export async function collectorLeaderboard(pool) {
   const rows = (await pool.query(
     `SELECT ap.prestige_sunk, ap.season_sunk, c.name AS steward FROM account_persistent ap
        JOIN characters c ON c.account_id = ap.account_id AND c.alive
-      WHERE NOT ap.agent_flag AND ap.prestige_sunk > 0 ORDER BY ap.prestige_sunk DESC LIMIT 15`)).rows;
+      WHERE NOT ap.agent_flag AND NOT c.is_npc AND ap.prestige_sunk > 0 ORDER BY ap.prestige_sunk DESC LIMIT 15`)).rows;
   return {
     collectors: rows.map((r, i) => ({ pos: i + 1, steward: r.steward, sunk: Math.floor(Number(r.prestige_sunk)),
       rank: collectorRankOf(r.prestige_sunk).name })),
@@ -356,7 +356,7 @@ export async function estateLeaderboard(pool) {
     `SELECT e.account_id, e.name, e.tier, e.spent_omr, e.galas_hosted, e.gala_best, c.name AS steward
        FROM estates e
        JOIN account_persistent ap ON ap.account_id = e.account_id AND NOT ap.agent_flag
-       JOIN characters c ON c.account_id = e.account_id AND c.alive
+       JOIN characters c ON c.account_id = e.account_id AND c.alive AND NOT c.is_npc
       WHERE e.spent_omr > 0
       ORDER BY e.spent_omr DESC, e.account_id LIMIT 15`)).rows;
   const staffCounts = {}; // counted in JS over a flat read (the pg-mem GROUP-BY-aggregate precedent)

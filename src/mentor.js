@@ -219,7 +219,7 @@ export async function mentorLeaderboard(pool) {
     `SELECT ap.account_id, ap.proteges_raised, c.name
        FROM account_persistent ap
        LEFT JOIN characters c ON c.account_id=ap.account_id AND c.alive
-      WHERE ap.proteges_raised > 0 AND NOT ap.agent_flag
+      WHERE ap.proteges_raised > 0 AND NOT ap.agent_flag AND NOT ap.npc_flag
       ORDER BY ap.proteges_raised DESC LIMIT 25`)).rows;
   return rows.map((r) => ({ name: r.name || 'a retired don', raised: Number(r.proteges_raised), rank: mentorRankOf(Number(r.proteges_raised)).name }));
 }

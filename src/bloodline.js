@@ -43,16 +43,21 @@ export async function bloodlineBoard(ch, client, h) {
 }
 
 // the great houses of the city — ranked by dynasty score (pure status; shown under the F4 dynasty
-// name with the living steward beneath, the portfolio-board pattern; agents excluded like every board)
+// name with the living steward beneath, the portfolio-board pattern).
+// (red-team R31 F1) AGENTS **and RESIDENTS** excluded. Residents die through the ORDINARY runEstate —
+// that is the population layer's whole design ("death is deliberately not special") — so every killed
+// resident writes a `bloodline` row, and with RETIRE_GENERATIONS 6 a boss-band line accrues six
+// generations of level+kills score. REPRODUCED: four mod-kills put a resident house on the board at
+// score 520 while the only human on the server was absent, because he had not died yet.
 export async function bloodlineLeaderboard(pool) {
   // flat queries + JS aggregate — pg-mem chokes on a GROUP BY aggregate with joined aliases
   // (the /v1/gangs precedent); the dataset is small (one row per generation).
-  const agents = new Set((await pool.query('SELECT account_id FROM account_persistent WHERE agent_flag')).rows.map((a) => a.account_id));
+  const excluded = new Set((await pool.query('SELECT account_id FROM account_persistent WHERE agent_flag OR npc_flag')).rows.map((a) => a.account_id));
   const names = Object.fromEntries((await pool.query(
     'SELECT account_id, dynasty_name FROM account_persistent')).rows.map((a) => [a.account_id, a.dynasty_name]));
   const tally = {};
   for (const g of (await pool.query('SELECT account_id, generation, level, kills, honor FROM bloodline')).rows) {
-    if (agents.has(g.account_id)) continue;
+    if (excluded.has(g.account_id)) continue;
     const t = tally[g.account_id] || (tally[g.account_id] = { score: 0, generations: 0 });
     t.score += Number(g.level) * BLOODLINE.SCORE.LEVEL + Number(g.kills) * BLOODLINE.SCORE.KILL
       + Math.abs(Number(g.honor)) * BLOODLINE.SCORE.HONOR_ABS;
