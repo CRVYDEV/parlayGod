@@ -13467,3 +13467,59 @@ it matched exactly where the real check uses `startsWith`), and all 13 dissolved
 database reads exactly like a code defect (a probe failed on a prior run's rows), and a duplicate
 `import` ten lines from an existing one surfaces only at runtime — `node --check` after every import
 edit. Suite green + sim drift-0 + pgquery + pgcheck 43/43 on real Postgres.
+
+**RED TEAM #3 — the four ways in, and the two clean sweeps that are part of the result
+(`AUDIT-red-team-three.md`, 2026-08-17).** Aimed deliberately away from what the first two covered, at
+the two kinds of gap those reports leave open by construction: **modules that appear in ZERO audit
+report** (`grep -l` across all eighty-odd of them returns nothing for `citywire`, `dexbot` or
+`stockdeliver` — two of which move real value), and **classes the earlier passes established but did
+not sweep to their edges**. First-hand throughout; nothing called a finding before it was reproduced
+against a running engine, nothing fixed before it was reproduced. **No CRITICAL; one HIGH, two MED,
+four mutations each failing at its own named assertion.**
+**F1 (HIGH) — a revoked token still opened a live websocket.** There are FOUR ways a bearer is
+accepted — the `auth` preHandler, the guarded-mutation path, `x/start` (fixed by the previous pass),
+and the **websocket** — and `token_version` was checked in three. The two halves each defeated the
+other's remedy: `logout-all`, the self-serve answer to *"someone has my session"*, bumped the version
+and killed REST while **the thief's already-open `me` socket streamed on indefinitely** (every
+notification, kill and payday); `mod/revoke` DID cut live sockets, but with no connect-time check the
+same dead token reconnected in one call. Reproduced end to end — REST 401ing while a second socket
+opened on the revoked token and received its hello frame — and fixed at both halves, because either
+alone is defeated by the other.
+**F2 (MED) — the street deed name accepted homoglyphs, zero-width and bidi.** Every other name field
+in the game carries the R8 charset guard `/^[\w .,'&-]+$/`; this one did not, and **the function's own
+comment claimed it did**. It matters MORE here than on a display name, for reasons specific to the
+asset: `tokenId = keccak256(bytes(name))` makes the name the permanent on-chain identity, uniqueness
+is `name_lc` and case-folding does nothing to a Cyrillic `е` (reproduced: with `Mulberry Row` claimed,
+`Mulbеrry Row` claimed cleanly as a second visually identical street), and the deed trades on a
+secondary market with real stock deliverable into its vault — where a buyer compares a NAME. **The
+pre-existing markup test then broke on the new guard, and the guard was NOT weakened to accommodate
+it**: the test now asserts the stronger property the change actually buys — markup is REFUSED rather
+than silently mangled into a name the player never chose and can never change.
+**F3 (MED-HIGH) — a staged delivery outlived its deed.** `stageStockDelivery` re-resolves the target
+correctly and then, on the **duplicate** path, threw that answer away — so the keeper's claim read a
+STALE `tba` off the row and sent there. The window is ordinary, not exotic: a send that doesn't land
+leaves the row `pending` BY DESIGN (`send_failed` releases the claim so it retries), and a deed can be
+sold in that window. Reproduced end to end: **real stock delivered into the vault of a deed its
+recipient had already SOLD** — the buyer receives it, the seller's allocation is marked delivered, and
+every wall reads green because they are denominated in UNITS and *who received them is not a
+quantity*. **This is the class the PREVIOUS pass examined and dissolved, and that write-up is still
+correct about what it checked**: it checked the resend-within-window path, where two independent walls
+hold (the plan drops the account; staging refuses `no_target`), and did not check the
+**re-target-after-a-sale** path, which re-enters the same pending row with a *valid new* target — both
+walls pass and the row is stale. A dissolved finding closes the scenario it was reproduced against,
+never the class.
+**Three lenses came back CLEAN and are recorded as such, because a red team that publishes only its
+hits cannot be audited:** a mechanical persist-clobber sweep (67 `persistCharacter` columns + 18
+`persistAccount` against every direct `UPDATE` in `src/` — every overlap headless, worker-owned, or
+deliberately off the positional list); 13 keyless HTML/SVG surfaces probed with `"><script>` in every
+path segment and `?ref` (all escaped — the portrait and plate routes render untrusted player strings
+through the SHARED `esc`, which is why it is shared rather than copied); and the Solana ed25519 leg
+(challenge bound to account + nonce, TTL, consumed on success, verbatim base58 latch; 256 hostile
+input pairs → 0 throws, 0 non-boolean, no false TRUE). `citywire` verified public-safe too — every
+`WIRE` type maps to an already-broadcast streets event, no formatter emits a dollar figure, and
+`@everyone` is unreachable because every name charset in the game blocks `@`.
+**Process:** five `zz*.mjs` probes written and DELETED before committing — the previous pass left a
+reproduced HIGH in an untracked scratch file for a whole session and found it only by reading `git
+status`, so that is a fixed step now rather than a lesson; and all four mutations ran on scratchpad
+copies (`cp` out, `cp` back), never `git checkout`, with uncommitted work in the same files. Suite
+green + sim drift-0 + pgquery + pgcheck 43/43 on real Postgres.
