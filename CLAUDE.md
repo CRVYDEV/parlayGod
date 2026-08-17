@@ -13658,3 +13658,68 @@ holding) plus the `0 = unlimited` cap convention, which was consistent and docum
 two of the caps had no deploy-time home, not that the convention disagreed. Probe files written and
 DELETED before committing; all mutations on scratchpad copies, never `git checkout`. Suite green + sim
 drift-0 + pgquery + pgcheck 43/43 on real Postgres.
+
+**RED TEAM #6 — the timer that only held by accident, and the sweep that had never been swept
+(`AUDIT-red-team-six.md`, 2026-08-17).** The sixth pass, aimed where the founder pointed it: **edges the
+game has not been combed through, and interactions — within the game, and between the contracts.**
+First-hand throughout; F1 needed **real Postgres** (a two-writer race pg-mem cannot drive) and the wealth
+lens needed a **booted server with two real characters**, because "does any board hand a stranger an exact
+figure?" cannot be answered by reading 172 handlers. **No CRITICAL, no HIGH; two findings, six clean
+lenses, four mutations each failing at its own named assertion.**
+**F1 (MED, LATENT) — the 12h buyback timer was never re-checked under the lock.** `runBuyback` opens with
+a cheap unlocked peek at `street_tax`, exits if the period is not up, and only then takes `FOR UPDATE`.
+Its own comment is careful and is **half the story**: it says the POOL is re-read authoritatively under the
+lock, and says nothing about `last_buyback`, which is never re-read. So two overlapping workers (the
+deploy-overlap threat model that already justified an advisory lock for the wage epoch, the population, the
+city leg, the NPC sweeps, the stock keeper and both DEX bots) clear the peek together, queue on the lock in
+turn, and the loser carves a **second time inside one period**. Reproduced with a third connection holding
+the lock so both workers are guaranteed to park on it rather than interleave by luck: **51,000 funded
+against a 30,000 period at `EXCHANGE.FUND_BPS` 3000.** **Inert at the shipped 10000** — the winner drains
+the pool and the loser's take rounds to nothing — i.e. a cadence gate holding by an accident of an
+*unrelated founder lever* that sat at 3000 until tokenomics v2 moved it and can move again. That is the
+**third** defect here a later lever change would arm (the family-yield lock cycle step 2's own dial would
+have opened; the `runBuyback`-gated legacy pool merge). Fixed by reading BOTH halves under the lock — and
+the regression gave the cadence its **first coverage at all**, since every prior buyback assertion in the
+suite passes `force`, which bypasses the timer; the concurrent half is a **labelled** source tripwire
+(the locked read must carry `last_buyback`; `BUYBACK_PERIOD_MS` must be re-applied before the carve).
+**F2 (LOW) — the sixth vehicle handover kept the nitrous.** Six statements re-point a car's
+`character_id`; a car carries CONSENT flags (`race_limit`/`pink_slip` — the old owner offered *this car*
+on the strip or for pinks and the new one agreed to neither) and a CONSUMABLE (`nos`, up to 3 × $8k).
+Five clear all three; `stealCar` cleared only the consent half — and it **read deliberate**, because its
+own comment names just "the consent flags", which is exactly how a sixth site diverges quietly. The
+consent half of the same class was found by AUDIT-street-races-step-two, so this is the second finding in
+one place, which is why it earned a guard rather than a note: **THE HANDOVER LEDGER** in `test/gates.js`
+(nine handovers, one waiver — the estate moves only `minted_onchain` rows, which extraction already
+cleared — plus an anti-vacuity floor). Both readings of the right behaviour are defensible; six sites and
+five rules is not.
+**THE SIX CLEAN LENSES, recorded because a red team that publishes only its hits cannot be audited.**
+(1) **The exact-wealth sweep** — the anti-precise-kill-EV rule has been enforced per-surface at build time
+and **never swept as a sweep**: two real characters, the mark given five collision-proof figures, then
+every authed non-mod `GET /v1` route called as the STRANGER and scanned. **164 of 172 answered 200, 12
+genuinely CONTAINED the mark** (the streets roster, discovery, `/v1/live`, two leaderboards, the identity
+portrait and its metadata, the feud ledger, the people history, the phone thread — and, once the probe was
+extended to buy them, the **paid** wiretap, dossier and Street Wire, where an exact figure would be most
+tempting), **zero leaked**; every 4xx a legitimate refusal, three unsynthesisable params named rather than
+silently skipped. Two vacuity controls, because a clean sweep of boards that never contained the mark
+proves nothing. (2) **The Bank cluster read as a GRAPH** (`Denari`/`Transmuter`/`Alchemist`/
+`CollateralEscrow`/`FlashGuard` — the least-audited group at 1–4 reports each): two singular fail-closed
+authorities, `Denari.burn`'s missing allowance check safe **because** the Transmuter provably pulls tokens
+in before burning its own balance, the §2.4 issue-before-pay ordering, and a **chased-and-DISSOLVED**
+suspicion that the harvest fee bills a user's principal after they withdraw yield — `totalAssets −
+principalOf` is **invariant** under a withdrawal, so the lifetime fee is the same 20% of the same yield in
+either order, and the equity figures agree to the unit. (3) Every ownership transfer excludes an
+**extracted** item (races guards both sides explicitly; market/loans read through the filtered
+`owned.cars`; both thefts filter in SQL; `requestItemWithdraw` refuses a listed or pledged row).
+(4) Absolute writes to `account_persistent` from an unlocked read — the NPC-families F1 class — all
+either single-party behind the character lock or, for `maybeQualifyReferral`, sorted-`FOR UPDATE` on both
+accounts with `recruits` computed from the locked row. (5) The shared `vouchers` table (one globally
+unique nonce space, every reader kind-scoped) — **including a FALSE POSITIVE from my own grep**, whose
+3-line SQL window could not see a JS guard one line below the query; recorded, because a finding produced
+by a tool you wrote and did not check is not a finding. (6) All 52 `$OMR` reason literals classified: mint
+term, generated burn term, or a transfer between two COUNTED buckets — no `kitchen:module`-class orphan.
+**Flagged, not changed:** `ALCHEMIST_ASSET_DECIMALS` defaults to 6 and is **trusted from env** while both
+contracts read decimals **off the token** — an 18dp market deployed without setting it books the harvest
+fee 1e12 too large, and the family-buyback budget is denominated in the same wrong unit, so the ledger
+stays self-consistent while disagreeing with reality (the `DEX_POOL_FEE` class; the cheap hardening is to
+read `decimals()` at boot and refuse a mismatch, which deletes the knob). Probe files written and DELETED
+before committing; all mutations on scratchpad copies, never `git checkout`.

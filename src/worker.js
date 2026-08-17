@@ -83,8 +83,21 @@ export async function runBuyback(pool, opts = {}) {
       await client.query('COMMIT');
       return null;
     }
-    // now the singleton, authoritative under lock
-    const tax = (await client.query('SELECT pool FROM street_tax WHERE id=1 FOR UPDATE')).rows[0];
+    // Now the singleton, authoritative under lock — and BOTH halves are re-read, not just the pool.
+    // The peek above is a cheap not-due exit; it is not a decision. Two overlapping workers (the
+    // deploy-overlap threat model) both clear the unlocked peek, then queue here in turn, and the
+    // second one carves a SECOND time inside one 12h period. Re-checking `last_buyback` under the
+    // lock is what makes the timer a timer. This is inert at the shipped `EXCHANGE.FUND_BPS` (10000
+    // drains the pool, so the loser's take rounds to nothing and it returns on the guard below) —
+    // which is exactly the shape to fix rather than rely on: the wall is a founder lever, and at any
+    // value under 10000 the second carve lands (measured 51,000 funded against a 30,000 period at
+    // 3000 bps). A cadence gate that only holds at one setting of an unrelated lever is not a gate.
+    const tax = (await client.query(
+      'SELECT pool, last_buyback FROM street_tax WHERE id=1 FOR UPDATE')).rows[0];
+    if (!opts.force && now.getTime() - new Date(tax.last_buyback).getTime() < BUYBACK_PERIOD_MS) {
+      await client.query('COMMIT');
+      return null;
+    }
     // THE WINDOW takes the take. With the AMM retired (tokenomics v2 step 2) there is no longer any
     // way to convert cash into $OMR, so this tick no longer buys anything — the street tax's only
     // destination is the redemption window, and `EXCHANGE.FUND_BPS` is 10000 so the whole take goes
