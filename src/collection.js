@@ -86,13 +86,13 @@ export async function collectionLeaderboard(pool) {
   // count only catalog members — the board and the leaderboard must agree, and an off-catalog
   // log row (a retired item, a future bad call site) can never push have > total (AUDIT F1)
   const inCatalog = new Set(Object.entries(cat).flatMap(([id, c]) => c.items.map((it) => `${id}:${it.id}`)));
-  const agents = new Set((await pool.query(
-    'SELECT account_id FROM account_persistent WHERE agent_flag')).rows.map((a) => a.account_id));
+  const excluded = new Set((await pool.query(
+    'SELECT account_id FROM account_persistent WHERE agent_flag OR npc_flag')).rows.map((a) => a.account_id));
   const names = Object.fromEntries((await pool.query(
     'SELECT account_id, dynasty_name FROM account_persistent')).rows.map((a) => [a.account_id, a.dynasty_name]));
   const tally = {};
   for (const r of (await pool.query('SELECT account_id, category, item_id FROM collection_log')).rows) {
-    if (agents.has(r.account_id)) continue;
+    if (excluded.has(r.account_id)) continue;
     if (!inCatalog.has(`${r.category}:${r.item_id}`)) continue;
     tally[r.account_id] = (tally[r.account_id] || 0) + 1;
   }

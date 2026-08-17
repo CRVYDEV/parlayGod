@@ -41,7 +41,7 @@ export async function honorLeaderboard(pool) {
     `SELECT ap.account_id, ap.${col} AS v, ap.dynasty_name, c.name
        FROM account_persistent ap
        LEFT JOIN characters c ON c.account_id = ap.account_id AND c.alive
-      WHERE NOT ap.agent_flag AND ${cond} ORDER BY ap.${col} ${dir}, ap.account_id LIMIT 15`)).rows;
+      WHERE NOT ap.agent_flag AND NOT ap.npc_flag AND ${cond} ORDER BY ap.${col} ${dir}, ap.account_id LIMIT 15`)).rows;
   const nm = (r) => r.name || (r.dynasty_name ? `House ${r.dynasty_name}` : 'a fallen name');
   const menRows = await board('honor_peak', 'DESC', 'ap.honor_peak > 0');
   const fearedRows = await board('honor_low', 'ASC', 'ap.honor_low < 0');

@@ -90,7 +90,7 @@ export async function commanderLeaderboard(pool) {
   const rows = (await pool.query(
     `SELECT c.name, ap.soldiers_led FROM account_persistent ap
        JOIN characters c ON c.account_id = ap.account_id AND c.alive
-      WHERE NOT ap.agent_flag AND ap.soldiers_led > 0
+      WHERE NOT ap.agent_flag AND NOT c.is_npc AND ap.soldiers_led > 0
       ORDER BY ap.soldiers_led DESC, c.name LIMIT 20`)).rows;
   return { commanders: rows.map((r, i) => ({ pos: i + 1, name: r.name, led: Number(r.soldiers_led),
     rank: commanderRankOf(r.soldiers_led).name })) };

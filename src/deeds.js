@@ -524,7 +524,7 @@ export async function greatStreetsLeaderboard(pool) {
   const deeds = (await pool.query(
     `SELECT d.account_id, d.name, d.district, c.name AS steward FROM street_deeds d
        JOIN account_persistent ap ON ap.account_id = d.account_id AND NOT ap.agent_flag
-       JOIN characters c ON c.account_id = d.account_id AND c.alive`)).rows;
+       JOIN characters c ON c.account_id = d.account_id AND c.alive AND NOT c.is_npc`)).rows;
   const hist = new Map();
   for (const r of (await pool.query('SELECT account_id, kind FROM street_deed_history')).rows)
     (hist.get(r.account_id) || hist.set(r.account_id, []).get(r.account_id)).push({ kind: r.kind });

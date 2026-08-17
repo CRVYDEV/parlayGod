@@ -265,7 +265,7 @@ export async function overrideVeto(ch, client, h) {
 export async function statesmenLeaderboard(pool) {
   const rows = (await pool.query(
     `SELECT a.statecraft, c.name FROM account_persistent a JOIN characters c ON c.account_id = a.account_id AND c.alive
-      WHERE a.statecraft > 0 AND NOT a.agent_flag ORDER BY a.statecraft DESC LIMIT 25`)).rows;
+      WHERE a.statecraft > 0 AND NOT a.agent_flag AND NOT c.is_npc ORDER BY a.statecraft DESC LIMIT 25`)).rows;
   return { statesmen: rows.map((r) => ({ name: r.name, statecraft: Number(r.statecraft), rank: statesmanRankOf(r.statecraft).name })) };
 }
 

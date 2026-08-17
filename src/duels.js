@@ -182,19 +182,23 @@ export async function challenge(ch, opponent, amount, client, h) {
 }
 
 // ── the ladder — top living duelists (agents excluded, the status-board posture) ──
+// (red-team R31 F1) RESIDENTS are excluded from BOTH queries. This is the one board with no `> 0`
+// threshold — it ranks every living character on raw elo, and a resident's `duel_elo` DEFAULTS to
+// ELO_START — so the ladder needs no kills and no duels to fill with scenery: REPRODUCED at 6 of 7
+// entries, with the server's only human sitting sixth behind five NPCs on an identical rating.
 export async function duelLeaderboard(pool) {
   const rows = (await pool.query(
     `SELECT c.name, c.respect, c.duel_elo, ap.duel_wins, ap.duel_titles
        FROM characters c
        JOIN account_persistent ap ON ap.account_id = c.account_id
-      WHERE c.alive AND NOT ap.agent_flag
+      WHERE c.alive AND NOT ap.agent_flag AND NOT c.is_npc
       ORDER BY c.duel_elo DESC, c.name LIMIT 20`)).rows;
   // THE TITLES BOARD — a second, DEATH-PROOF ranking on lifetime season championships (the boxing-
   // belt/hitman-rep legend twin — a career axis the raw seasonal ELO can't capture).
   const titled = (await pool.query(
     `SELECT c.name, ap.duel_titles FROM account_persistent ap
        JOIN characters c ON c.account_id = ap.account_id AND c.alive
-      WHERE NOT ap.agent_flag AND ap.duel_titles > 0
+      WHERE NOT ap.agent_flag AND NOT c.is_npc AND ap.duel_titles > 0
       ORDER BY ap.duel_titles DESC, c.name LIMIT 10`)).rows;
   return {
     ladder: rows.map((r, i) => ({ pos: i + 1, name: r.name, level: levelOf(Number(r.respect)),

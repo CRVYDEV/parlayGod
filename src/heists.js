@@ -452,11 +452,15 @@ export async function heistBoard(pool, characterId) {
 }
 
 // THE CREW LEADERBOARD (Tier-4 §D) — the most notorious thieves by lifetime scores (agents excluded).
+// (red-team R31 F1) RESIDENTS excluded — reachable through THE FILL: `fillHeist` hires resident hands
+// so a solo player can run crew content, and the success loop bumps `heists_pulled` for EVERY member
+// row, hired ones included. The feature that makes the crew loop soloable was feeding scenery onto
+// the crew legend.
 export async function heistLeaderboard(pool) {
   const rows = (await pool.query(
     `SELECT c.name, ap.heists_pulled FROM account_persistent ap
        JOIN characters c ON c.account_id = ap.account_id AND c.alive
-      WHERE NOT ap.agent_flag AND ap.heists_pulled > 0
+      WHERE NOT ap.agent_flag AND NOT c.is_npc AND ap.heists_pulled > 0
       ORDER BY ap.heists_pulled DESC, c.name LIMIT 20`)).rows;
   return { crews: rows.map((r, i) => ({ pos: i + 1, name: r.name, pulled: Number(r.heists_pulled),
     rank: heistRankOf(r.heists_pulled).name })) };

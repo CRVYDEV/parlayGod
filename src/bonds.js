@@ -306,7 +306,7 @@ export async function underwriterLeaderboard(pool, limit = 25) {
        JOIN characters c ON c.account_id = a.account_id AND c.alive
        LEFT JOIN gang_members gm ON gm.character_id = c.id
        LEFT JOIN gangs g ON g.id = gm.gang_id
-      WHERE NOT a.agent_flag`)).rows;
+      WHERE NOT a.agent_flag AND NOT c.is_npc`)).rows;
   const bondRows = (await pool.query('SELECT account_id, principal_eth FROM bonds WHERE account_id IS NOT NULL')).rows;
   const ethByAcct = {};
   for (const b of bondRows) ethByAcct[b.account_id] = (ethByAcct[b.account_id] || 0) + Number(b.principal_eth);

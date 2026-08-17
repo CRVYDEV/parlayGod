@@ -565,7 +565,7 @@ export async function laundererLeaderboard(pool, limit = 20) {
        JOIN characters c ON c.account_id = a.account_id AND c.alive
        LEFT JOIN gang_members gm ON gm.character_id = c.id
        LEFT JOIN gangs g ON g.id = gm.gang_id
-      WHERE a.laundered_lifetime > 0 AND NOT a.agent_flag
+      WHERE a.laundered_lifetime > 0 AND NOT a.agent_flag AND NOT c.is_npc
       ORDER BY a.laundered_lifetime DESC LIMIT $1`, [limit])).rows;
   return rows.map((r, i) => ({ rank: i + 1, name: r.name, gang: r.gang || null, tag: r.tag || null,
     washed: Math.floor(Number(r.laundered_lifetime)), title: launderRankOf(r.laundered_lifetime).name }));

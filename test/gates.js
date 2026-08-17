@@ -559,6 +559,84 @@ console.log('✅ THE GATE MATRIX passed — every verb in a family enforces the 
   console.log(`✓ all ${handovers} vehicle handovers clear the consent flags and the consumable`);
 }
 
+// ═══ THE SCENERY LEDGER — a human status board must not rank NPCs ═════════════════════════════════
+//
+// The population layer makes a resident a REAL character: real `accounts`, real `characters`, real
+// legends, dying through the ORDINARY estate. That is what lights up every board at once, and it is
+// also what puts scenery on the boards meant to rank PEOPLE. The rule was already written down —
+// "a future step that gives residents a legend must exclude them on that board at the same time" —
+// and it was followed on five boards and forgotten on the rest, of which four were reachable:
+//
+//   • duels     — the ONE board with no `> 0` threshold: it ranks every living character on raw elo,
+//                 and a resident's `duel_elo` DEFAULTS to ELO_START. Reproduced at 6 of 7 entries.
+//   • bloodline — residents die normally, so each death writes a `bloodline` row; six generations of
+//                 a boss-band line out-scored the only human on the server. Reproduced at score 520.
+//   • heists    — `fillHeist` hires resident hands so a solo player can run crew content, and the
+//                 success loop bumps `heists_pulled` for EVERY member row, hired ones included.
+//   • feuds     — had NEITHER exclusion, and nothing in the vendetta swear consults `is_npc`.
+//
+// So this is catalogue-or-declare on the class rather than four patches: every exported *Leaderboard
+// must exclude residents (`is_npc` / `npc_flag`), or be waived HERE with the reason it cannot rank
+// one. It proves the exclusion is REACHED, not that the whole query is right — the same scope as the
+// gate matrix. Agents are deliberately NOT part of this check: wire/world include them by a recorded
+// decision, so folding the two rules together would make this one fire on a settled question.
+const SCENERY_WAIVED = {
+  // ranks GANGS, never characters — an NPC family is the scenery here, and each of these is already
+  // bounded by a quantity a resident-run family cannot accrue (standing, turf, strongholds, $OMR).
+  'sov.js:sovLeaderboard': 'ranks gangs by stronghold points; NPC families build none',
+  'territory.js:territoryLeaderboard': 'ranks gangs by territory income; NPC families hold no turf',
+  'world.js:frontierLeaderboard': 'ranks gangs by outposts held; NPC families hold none',
+  'vanity.js:foundationLeaderboard': 'ranks gangs by foundation tier; NPC families hold no $OMR',
+  'megaproject.js:familyBuildLeaderboard': 'ranks gangs by monument value; NPC families build none',
+  'npcwar.js:conquestLeaderboard': 'ranks player gangs BY conquering NPC outfits — the NPCs are the subject',
+  // account-only boards with no character join and no resident-reachable quantity
+  'megaproject.js:builderLeaderboard': 'ranks accounts by monument value laid; residents contribute none',
+  'crew.js:crewLeaderboard': 'ranks crews by member kills; residents never join a crew',
+  'portfolio.js:portfolioLeaderboard': 'retired with D11 — the paper book no longer exists',
+  'portfolio.js:familyPortfolioLeaderboard': 'retired with D11 — the paper book no longer exists',
+  // the agent board's POSITIVE filter is the exclusion: a resident is not agent-flagged
+  'growth.js:agentLeaderboard': 'ranks agent_flag accounts only, so a resident cannot appear',
+};
+
+{
+  const bad = [], boards = [];
+  for (const f of files) {
+    const rel = path.relative(SRC, f);
+    const src = fs.readFileSync(f, 'utf8');
+    for (const m of src.matchAll(/export async function (\w*[Ll]eaderboard)\s*\(/g)) {
+      const name = `${rel}:${m[1]}`;
+      boards.push(name);
+      if (SCENERY_WAIVED[name]) continue;
+      const body = bodyOf(src, m.index);
+      // PER RANKING STATEMENT, not per body — the first cut asked only whether the exclusion appeared
+      // ANYWHERE in the function, and a board with two queries (duels ranks an elo ladder AND a titles
+      // board) passed with one of them guarded. That is the exact shape of the bug being fixed, so the
+      // check has to be at least as fine-grained as the defect. A RANKING statement is one that reads
+      // `characters` and ORDERs — which excludes the per-account steward lookups the JS-aggregating
+      // boards do inside a loop over an already-filtered set, where demanding the clause is noise.
+      const stmts = [...body.matchAll(/`([^`]+)`/g)].map((q) => q[1])
+        .filter((q) => /\b(FROM|JOIN)\s+characters\b/i.test(q) && /ORDER\s+BY/i.test(q));
+      const unguarded = stmts.filter((q) => !/is_npc|npc_flag/.test(q));
+      if (unguarded.length) bad.push(`${name} (${unguarded.length} of ${stmts.length} ranking queries)`);
+      else if (!stmts.length && !/is_npc|npc_flag/.test(body)) bad.push(name);
+    }
+  }
+  // the waiver list is data too: a waived board that no longer exists is a stale exemption, and a
+  // stale exemption is how a real board later inherits somebody else's reason.
+  const stale = Object.keys(SCENERY_WAIVED).filter((k) => !boards.includes(k));
+  assert.equal(stale.length, 0,
+    `waived board(s) that no longer exist — stale exemption(s):\n   - ${stale.join('\n   - ')}`);
+  assert(boards.length >= 40,
+    `the leaderboard scan found only ${boards.length} board(s) — the extractor has stopped seeing them, `
+    + 'so this check is vacuous rather than clean');
+  assert.equal(bad.length, 0,
+    'human status board(s) that do not exclude residents. The population layer makes a resident a real\n'
+    + '      character with real legends, so scenery ranks on a board meant for people:\n'
+    + `   - ${bad.join('\n   - ')}`);
+  console.log(`✓ all ${boards.length - Object.keys(SCENERY_WAIVED).length} human status boards exclude `
+    + `residents (${Object.keys(SCENERY_WAIVED).length} waived with a stated reason)`);
+}
+
 // ═══ THE WATCHER POISON LEDGER — a malformed log must never wedge a stream ════════════════════════
 // The chain watchers share ONE isolation rule (`src/watcher.js:isolate`): a DETERMINISTIC data fault
 // in a log is skipped so the cursor advances past it, and anything else re-throws so the cursor does

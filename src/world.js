@@ -214,7 +214,7 @@ export async function frontierLeaderboard(pool) {
 export async function worldLeaderboard(pool) {
   const rows = (await pool.query(
     `SELECT a.cartel_damage, c.name FROM account_persistent a JOIN characters c ON c.account_id=a.account_id AND c.alive
-      WHERE a.cartel_damage > 0 ORDER BY a.cartel_damage DESC LIMIT 15`)).rows;
+      WHERE a.cartel_damage > 0 AND NOT c.is_npc ORDER BY a.cartel_damage DESC LIMIT 15`)).rows;
   return { hunters: rows.map((r) => ({ name: r.name, damage: Number(r.cartel_damage), rank: worldRankOf(r.cartel_damage).name })) };
 }
 
