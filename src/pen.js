@@ -510,6 +510,13 @@ export async function shank(ch, victim, client, h) {
   // shield-not-bunker (P1.3, audit): the yard boss's protection is a SHIELD — you can't hunt from
   // under it. Mirrors the street safeHoused(ch) actor-guards on fire/jump.
   if (penSafe(ch)) throw new GameError('safe', "You're under the yard boss's protection — take it or hunt, not both.");
+  // (red team 2026-08-16) …and not from a hospital bed either. `hospitalized(victim)` is refused three
+  // lines down ("They're in the infirmary — out of reach"), so the game already holds that the infirmary
+  // is off the yard — it just never said you can't walk OUT of one to kill somebody. The actor gate is
+  // near-universal (boxing, business, casino, convoy, deeds, duels, heists all carry it) and the game's
+  // most lethal verb was the one without it. Reachable with no exploit: `sweepLaw` force-busts an
+  // offline player whatever condition he's in, and a lost break is a beating. Reproduced.
+  if (hospitalized(ch)) throw new GameError('hosp_self', "You're on the infirmary cot — you're not walking the yard tonight.");
   if (!jailed(victim)) throw new GameError('target_free', "They've walked — you can't reach them out there.");
   // family omertà holds inside too — VOID for a rat OR a WANTED target (the street fire/jump/npcHit
   // precedent; red-team R28 F2 — the isWanted exception was missing here, shielding a must-kill man

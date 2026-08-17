@@ -220,8 +220,51 @@ const pool = await makeDb();
   assert(Array.isArray(log.body.actions) && log.body.actions.length >= 1, 'and returns the recorded actions');
   assert.equal(Number((await app.pool.query('SELECT COUNT(*) n FROM mod_actions')).rows[0].n), before, 'M2: reading the log did NOT log itself');
 
+  // M3 (red team 2026-08-16): A VERIFIED SIGNATURE IS NOT A USABLE TOKEN.
+  // `POST /v1/auth/x/start` cannot take the `auth` preHandler — an unauthed start is the ordinary
+  // fresh sign-in — so it verifies in-band, and in-band verification originally checked only that we
+  // had signed the JWT. It skipped the ban and the revocation `auth` enforces from the DATABASE, and
+  // an AUTHED start is an `upgrade`: it BINDS an X identity to that account permanently. So a leaked
+  // token the owner had already killed with logout-all could still attach the thief's own X account
+  // to the victim's — a takeover that survives the control built to stop it. Reproduced before the
+  // fix: `GET /v1/me` answered 401 token_revoked while this answered 200 and wrote `purpose:upgrade`
+  // bound to the victim. A dead token now DEMOTES to a fresh sign-in (a stale bearer in localStorage
+  // must not lock a returning player out), so the assertion is on the state row's PURPOSE + binding.
+  const stateFor = async (t) => {
+    await call('POST', '/v1/auth/x/start', { token: t, body: {} });
+    return (await app.pool.query(
+      'SELECT account_id, purpose FROM oauth_states ORDER BY created_at DESC LIMIT 1')).rows[0];
+  };
+  { // GUARANTEE the precondition rather than gate on it: an earlier block above deliberately
+    // `delete`s X_CLIENT_ID to prove the flow is dormant without it, so `if (process.env.X_CLIENT_ID)`
+    // here skipped this whole block and the first cut passed with the fix REMOVED — vacuous, the
+    // house's most-repeated lesson. Set it, and the mutation now fails by name.
+    process.env.X_CLIENT_ID = 'test-client';
+    process.env.PUBLIC_URL = process.env.PUBLIC_URL || 'https://example.test';
+    const live = (await call('POST', '/v1/auth/guest')).body.token;
+    await call('POST', '/v1/character', { token: live, body: { name: 'Oauth Live' } });
+    const liveAcct = (await app.pool.query('SELECT account_id FROM characters WHERE name=$1', ['Oauth Live'])).rows[0].account_id;
+    const okState = await stateFor(live);
+    assert.equal(okState.purpose, 'upgrade', 'a LIVE token still starts a legitimate account upgrade');
+    assert.equal(okState.account_id, liveAcct, 'bound to its own account');
+
+    await call('POST', '/v1/auth/logout-all', { token: live }); // the victim kills every outstanding token
+    const deadState = await stateFor(live);
+    assert.equal(deadState.purpose, 'login',
+      'M3: a REVOKED token may not start an upgrade — that would bind an attacker X identity to the victim');
+    assert.notEqual(deadState.account_id, liveAcct, 'and it is bound to no account at all');
+
+    const banned = (await call('POST', '/v1/auth/guest')).body.token;
+    await call('POST', '/v1/character', { token: banned, body: { name: 'Oauth Banned' } });
+    const banAcct = (await app.pool.query('SELECT account_id FROM characters WHERE name=$1', ['Oauth Banned'])).rows[0].account_id;
+    await app.pool.query("UPDATE accounts SET status='banned' WHERE id=$1", [banAcct]);
+    const banState = await stateFor(banned);
+    assert.equal(banState.purpose, 'login', 'a BANNED account may not bind a new identity either');
+    assert.notEqual(banState.account_id, banAcct, 'and it is bound to no account at all');
+  }
+
   await app.pool.end?.();
-  console.log('✅ BLUE-TEAM M3 token revocation (tv claim, logout-all, grandfather, mod revoke) + M2 mod audit log passed');
+  console.log('✅ BLUE-TEAM M3 token revocation (tv claim, logout-all, grandfather, mod revoke, the OAuth-start bypass) + M2 mod audit log passed');
 }
 
 global.fetch = realFetch;

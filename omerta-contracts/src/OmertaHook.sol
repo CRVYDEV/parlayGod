@@ -335,6 +335,19 @@ contract OmertaHook is IHooks, Ownable {
         // A zero `fullBps` would mean "reach the ceiling at zero impact", i.e. a flat raise wearing a
         // surge's name. Require a real ramp whenever the surge is armed.
         if (maxBps > 0 && fullBps == 0) revert BadBps();
+        // (red team 2026-08-16) …and never arm a fee into unset wallets. `setSellTax` and `setAntiSnipe`
+        // both refuse on this exact state; this one did not, and the deploy order arms the surge before
+        // the recipients. Reproduced: 4.75 ETH accrued on a fresh hook and the permissionless `sweep`
+        // paid every wei of it to address(0), irrecoverably.
+        if (
+            maxBps > 0
+                && (
+                    devRecipient == address(0) || rwaRecipient == address(0) || communityRecipient == address(0)
+                        || lpRecipient == address(0)
+                )
+        ) {
+            revert ZeroAddress();
+        }
         surgeMaxBps = maxBps;
         surgeFullBps = fullBps;
         emit SurgeSet(maxBps, fullBps);
@@ -349,6 +362,19 @@ contract OmertaHook is IHooks, Ownable {
     function sweep(Currency currency) external {
         Owed memory o = owed[currency];
         if (o.dev == 0 && o.rwa == 0 && o.community == 0 && o.lp == 0) revert NothingToSweep();
+        // (red team 2026-08-16) THE WALL AT THE POINT OF IRREVERSIBLE LOSS — and it is deliberately
+        // UNREACHABLE defence in depth, which is worth saying rather than leaving a reader to wonder.
+        // The three fee setters now refuse while any recipient is address(0), and `setRecipients`
+        // refuses a zero, so no armed fee can accrue unwired. This holds anyway, because a sweep is
+        // permissionless and `currency.transfer` to address(0) BURNS: a reverting sweep leaves the fees
+        // where they are, recoverable the moment the Safe sets the wallets — the conservative direction,
+        // and the one guard that does not depend on having enumerated every accrual path.
+        if (
+            devRecipient == address(0) || rwaRecipient == address(0) || communityRecipient == address(0)
+                || lpRecipient == address(0)
+        ) {
+            revert ZeroAddress();
+        }
         delete owed[currency]; // effects before interactions
         if (o.dev > 0) currency.transfer(devRecipient, o.dev);
         if (o.rwa > 0) currency.transfer(rwaRecipient, o.rwa);

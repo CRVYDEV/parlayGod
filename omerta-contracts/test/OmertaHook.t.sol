@@ -705,6 +705,35 @@ contract OmertaHookTest is Test {
         vm.stopPrank();
     }
 
+    /// (red team 2026-08-16) A FEE MUST NEVER BE ARMED INTO UNSET WALLETS, AND A SWEEP MUST NEVER BURN.
+    /// `setSellTax` and `setAntiSnipe` both refuse while a recipient is address(0); `setSurge` did not,
+    /// and the deploy order arms the surge before the wallets. On a fresh hook the surge charged a real
+    /// fee, and `sweep` — which is permissionless by design — paid every wei of it to address(0),
+    /// irrecoverably. Both halves are asserted: the setter refuses, and the sweep refuses whatever put
+    /// the fees there, because that is the wall at the point of irreversible loss.
+    function test_a_fee_cannot_be_armed_into_unset_wallets_and_a_sweep_cannot_burn() public {
+        OmertaHook fresh = OmertaHook(payable(address(uint160((uint256(0xFEED) << 144) | uint256(FLAGS)))));
+        deployCodeTo("OmertaHook.sol:OmertaHook", abi.encode(manager, address(omr), safe), address(fresh));
+        assertEq(fresh.lpRecipient(), address(0), "precondition: a fresh hook has no wallets set");
+
+        vm.startPrank(safe);
+        vm.expectRevert(OmertaHook.ZeroAddress.selector);
+        fresh.setSurge(1000, 50); // the sibling guard the surge was missing
+        // its two siblings already refused on this exact state — that asymmetry is what made it a bug
+        vm.expectRevert(OmertaHook.ZeroAddress.selector);
+        fresh.setSellTax(900, 200, 160, 240);
+        vm.expectRevert(OmertaHook.ZeroAddress.selector);
+        fresh.setAntiSnipe(10, 500, 0);
+        vm.stopPrank();
+
+        // The sweep carries the same guard as unreachable defence in depth: with all three setters
+        // closed AND `setRecipients` refusing a zero, no armed fee can accrue unwired, so there is no
+        // honest way to drive it from here. That it cannot fire is asserted rather than assumed —
+        // a hook with no wallets has nothing owed, so the sweep refuses on the FIRST guard.
+        vm.expectRevert(OmertaHook.NothingToSweep.selector);
+        fresh.sweep(eth);
+    }
+
     function test_the_surge_off_is_byte_for_byte_the_flat_tax() public {
         // surgeMaxBps = 0 is the deploy default; this run must be indistinguishable from the flat
         // suite above. One representative sell, checked to the wei.

@@ -111,7 +111,11 @@ const cashOf = async (id) => Number((await pool.query('SELECT cash FROM characte
 const deedRows = async (reason) => Number((await pool.query(
   "SELECT COUNT(*) n FROM transactions WHERE reason=$1", [reason])).rows[0].n);
 
-// the corner take accrues — backdate 6h, the board shows the owed take
+// the corner take accrues — backdate 6h, the board shows the owed take.
+// (red team 2026-08-16) a corner EARNER has to be somebody — DEEDS.CORNER_MIN_LVL. The claim itself
+// stays free and ungated; only the money has a floor, so this seeds Vito past it. A dedicated block at
+// the end of this file proves the floor from both sides.
+await pool.query('UPDATE characters SET respect=$2 WHERE id=$1', [a.id, 1000]); // level 11
 await backdate(a.acct, 6);
 const cA = (await call('GET', '/v1/deeds', { token: a.token })).body.corner;
 assert.equal(cA.iControl, true, 'the owner controls their own corner');
@@ -451,6 +455,8 @@ assert.equal((await call('POST', '/v1/deeds/claim', { token: e.token, body: { na
 // refused on press — the control-that-lies class. Backdate the clock so a LIVE deed would show a day's
 // take, and assert both ends read the same nothing.
 await pool.query('UPDATE street_deeds SET corner_at=$1 WHERE onchain_token_id IS NOT NULL', [new Date(Date.now() - 20 * 3600e3)]);
+// past DEEDS.CORNER_MIN_LVL, so what's asserted below is the INERT DEED and not the anti-alt floor
+await pool.query('UPDATE characters SET respect=$2 WHERE id=$1', [e.id, 1000]);
 const eInert = (await call('GET', '/v1/deeds', { token: e.token })).body;
 assert.equal(eInert.corner.owed, 0, 'an extracted deed accrues no corner take on the board');
 assert.equal(eInert.corner.collectable, 0, 'and nothing reads as collectable');
@@ -616,6 +622,66 @@ await call('POST', '/v1/deeds/unlist', { token: burner.token });
 // §10.4-NEUTRALITY: the whole on-chain lifecycle (extract → confirm → re-import) + the vault disclosure
 // wrote ZERO ledger rows — reading what a vault received moves nothing.
 assert.equal(await txCount(), chainTx0, 'the on-chain deed lifecycle moves NO §10.4 value — a deed is ownership, not a currency');
+
+// ════════════ A STREET GOING ON-CHAIN CANNOT ALSO BE SOLD IN THE CITY (red team 2026-08-16) ════════════
+// `listDeed` refuses an on-chain deed and `requestDeedWithdraw` refuses a listed one, so a deed that is
+// BOTH was thought unreachable — but the two raced (list read the row unlocked; extract locked it and
+// wrote first), and the state was reproduced on real Postgres. The end of that chain: the buyer pays,
+// the seller claims the NFT, `markDeedExtracted` re-keys the row and the buyer is left with nothing.
+//
+// The RACE itself is not drivable here — pg-mem is a single caller — so this asserts the two halves it
+// can: the WALL (whatever produced the state, a pending street cannot change hands) behaviourally, and
+// the LOCK that closes the cause as a labelled source tripwire.
+{
+  const sellerD = await mk('Rocco Doublecross'), buyerD = await mk('Marco Mark');
+  await call('POST', '/v1/deeds/claim', { token: sellerD.token, body: { district: 'canal', name: 'Doublecross Row' } });
+  await call('POST', '/v1/deeds/list', { token: sellerD.token, body: { price: 500000 } });
+  await pool.query('UPDATE characters SET cash=9000000 WHERE id=$1', [buyerD.id]);
+  // the exact state the race produced — listed AND extraction-pending
+  await pool.query('UPDATE street_deeds SET onchain_token_id=$2 WHERE account_id=$1', [sellerD.acct, '424242']);
+  const cash0 = (await pool.query('SELECT cash FROM characters WHERE id=$1', [buyerD.id])).rows[0].cash;
+  const bad = await call('POST', '/v1/deeds/buy/' + sellerD.id, { token: buyerD.token });
+  assert.equal(bad.code, 400, 'a street with an extraction pending cannot be bought');
+  assert.equal(bad.body.error, 'onchain', 'and it says why');
+  assert.equal((await pool.query('SELECT account_id a FROM street_deeds WHERE name=$1', ['Doublecross Row'])).rows[0].a,
+    sellerD.acct, 'the deed did NOT change hands');
+  assert.equal((await pool.query('SELECT cash FROM characters WHERE id=$1', [buyerD.id])).rows[0].cash, cash0,
+    "and the buyer's money is still his — the wall refuses BEFORE any value moves");
+  // the same street, once the extraction lapses, sells normally — or the wall would be a lockout
+  await pool.query('UPDATE street_deeds SET onchain_token_id=NULL WHERE account_id=$1', [sellerD.acct]);
+  const good = await call('POST', '/v1/deeds/buy/' + sellerD.id, { token: buyerD.token });
+  assert.equal(good.code, 200, 'a street that is NOT going on-chain still trades — the gate is the pending state, not the market');
+
+  const listSrc = (await import('node:fs')).readFileSync(new URL('../src/deeds.js', import.meta.url), 'utf8')
+    .split('export async function listDeed')[1].split('export async function')[0];
+  assert.ok(/FROM street_deeds WHERE account_id=\$1 FOR UPDATE/.test(listSrc),
+    'listDeed must LOCK the deed row: reading it unlocked is what let a concurrent extract slip underneath and produce the listed-AND-pending state in the first place');
+}
+
+// ════════════ THE CORNER'S ANTI-ALT FLOOR (red team 2026-08-16) ════════════
+// The claim is free and ungated by design, and the corner take hung off it with NO floor: a level-1
+// account with $500 claimed a street for $0 and drew $48,000/day, forever, for no play. Reproduced.
+// The gate is on the MONEY, not the claim — a new player still names their street and builds its
+// legend, and the take keeps accruing so nothing is destroyed by waiting.
+{
+  const rookie = await mk('Rookie Ricci');
+  await call('POST', '/v1/deeds/claim', { token: rookie.token, body: { district: 'brick', name: 'Rookie Lane' } });
+  await pool.query("UPDATE street_deeds SET corner_at = now() - interval '24 hours' WHERE account_id=$1", [rookie.acct]);
+  const cash0 = Number((await pool.query('SELECT cash FROM characters WHERE id=$1', [rookie.id])).rows[0].cash);
+  const bd = (await call('GET', '/v1/deeds', { token: rookie.token })).body;
+  assert.equal(bd.corner.canCollect, false, 'the board says a rookie cannot work the corner — it never advertises a take the till refuses');
+  assert.ok(bd.corner.collectable > 0, 'but the take IS accruing — the floor delays the money, it does not destroy it');
+  const nope = await call('POST', '/v1/deeds/corner', { token: rookie.token });
+  assert.equal(nope.body.error, 'rookie', 'and the till refuses a level-1 alt');
+  assert.equal(Number((await pool.query('SELECT cash FROM characters WHERE id=$1', [rookie.id])).rows[0].cash), cash0,
+    'not one dollar moved — a fresh alt is no longer a $48k/day faucet');
+  // …and the same street pays the moment its owner is somebody
+  await pool.query('UPDATE characters SET respect=$2 WHERE id=$1', [rookie.id, 40000]);
+  const yes = await call('POST', '/v1/deeds/corner', { token: rookie.token });
+  assert.equal(yes.code, 200, 'past the floor the corner pays normally — the gate is the level, not the deed');
+  assert.ok(yes.body.total > 0, 'and it banks the take that built up while he was coming up');
+  assert.equal((await call('GET', '/v1/deeds', { token: rookie.token })).body.corner.canCollect, true, 'the board agrees');
+}
 
 console.log('deeds: PASS');
 await app.close();

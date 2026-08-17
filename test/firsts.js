@@ -17,6 +17,7 @@ import { buildServer } from '../src/server.js';
 import { MASTERY, SKILLS, collectionCatalog, firstsCatalog, masteryXpFor } from '../src/rules.js';
 import { claimFirst, firstsBoard } from '../src/firsts.js';
 import { logCollect } from '../src/collection.js';
+import { bumpMastery } from '../src/game.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -153,6 +154,44 @@ assert.equal((await pool.query(
 const bd = await firstsBoard(pool, bo.aid);
 assert.equal(bd.taken + bd.open, bd.total, 'taken + open == the whole catalog');
 assert.equal(bd.taken, 4, 'four firsts have been won: the trail, the marina, larceny, the Boss');
+
+// ═══ 2d. NOT SCENERY, AND NOT A BOT (red team 2026-08-16) ═══
+// `claimFirst` excluded nobody, while every sibling status axis — including `mastery.js`'s own
+// Trades leaderboard, which ranks this exact achievement one rung down — excludes NPC residents and
+// agent accounts by name. A first is CONSUMED: a leaderboard place is re-taken tomorrow, a first is
+// gone from the human game forever, so it is the worse one to lose. Both halves were reproduced
+// against a booted server before the fix (a resident took `mastery:wetwork` through a real duel;
+// an agent took `mastery:larceny` with one ordinary crime).
+// The assertion is two-sided ON PURPOSE: "nobody claimed it" would also pass if claiming were
+// broken outright, so a HUMAN must still take the same first straight afterwards.
+{
+  const trk = MASTERY.TRACKS.find((t) => !['larceny'].includes(t.id)) || MASTERY.TRACKS[1];
+  const fid = `mastery:${trk.id}`;
+  const crossOver = async (who) => {
+    await pool.query(`INSERT INTO masteries (character_id, track_id, xp) VALUES ('${who.id}','${trk.id}',${capXp - 1})
+      ON CONFLICT (character_id, track_id) DO UPDATE SET xp=${capXp - 1}`);
+    await bumpMastery(pool, null, (await pool.query(`SELECT * FROM characters WHERE id='${who.id}'`)).rows[0], trk.id, 'duel');
+  };
+
+  const bot = await mk('Botto Malone');
+  await pool.query(`UPDATE account_persistent SET agent_flag=true WHERE account_id='${bot.aid}'`);
+  await crossOver(bot);
+  assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM firsts WHERE first_id='${fid}'`)).rows[0].n), 0,
+    'an AGENT crossing the cap takes no first — agents earn everything and consume no trophy');
+
+  const npc = await mk('Silvio Bruno');
+  await pool.query(`UPDATE account_persistent SET npc_flag=true WHERE account_id='${npc.aid}'`);
+  await pool.query(`UPDATE characters SET is_npc=true WHERE id='${npc.id}'`);
+  await crossOver(npc);
+  assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM firsts WHERE first_id='${fid}'`)).rows[0].n), 0,
+    'nor does an NPC RESIDENT — scenery the server spawned must never hold a one-per-server trophy');
+
+  const human = await mk('Rea Lucci');
+  await crossOver(human);
+  const won = (await pool.query(`SELECT account_id FROM firsts WHERE first_id='${fid}'`)).rows[0];
+  assert(won && won.account_id === human.aid,
+    'and the race is still WINNABLE — a human crossing the same cap takes it (without this the block is vacuous)');
+}
 
 await app.close();
 console.log('firsts: PASS');

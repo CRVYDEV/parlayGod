@@ -57,6 +57,25 @@ export async function claimFirst(client, accountId, firstId, meta = {}) {
   if (!accountId || !firstId) return null;
   const entry = firstOf(firstId);
   if (!entry) return null;                       // an unknown id is never a trophy
+  // (red team 2026-08-16) NOT SCENERY, AND NOT A BOT. Every sibling status axis in the tree excludes
+  // NPC residents and agent accounts by name — including `mastery.js`'s own Trades leaderboard, which
+  // ranks the SAME achievement one rung down. This module excluded nobody, and a FIRST is strictly
+  // worse to lose than a leaderboard place: a board position is re-taken tomorrow, a first is
+  // CONSUMED and gone from the human game forever.
+  //   • A RESIDENT can reach a claim: `duels.js` bumps the WINNER's mastery headlessly when the
+  //     passive lister wins (`bumpMastery(client, null, winner, …)`, documented in population.js),
+  //     and `heists.js` bumps every crew member, residents included. Reproduced — a resident took
+  //     `mastery:wetwork` through a real duel and the board reads `holder: <resident>` permanently.
+  //     Expensive to drive on purpose, but it is a GRIEF that nobody can undo, and the trophy would
+  //     be held by a character the server itself spawned and later retires.
+  //   • An AGENT is the reachable half: agents are first-class players who may automate 24/7, so
+  //     they cross MAX_LVL long before a human. Reproduced with one ordinary crime.
+  // Both still EARN everything — xp, levels, ranks, their own agent board. They just do not consume
+  // a one-per-server-ever trophy. (Founder call if an agents-vs-humans race is ever wanted: this is
+  // the one line to delete.)
+  const holder = (await client.query(
+    'SELECT agent_flag, npc_flag FROM account_persistent WHERE account_id=$1', [accountId])).rows[0];
+  if (!holder || holder.agent_flag || holder.npc_flag) return null;
   try {
     const sp = await savepointsWork(client);
     const taken = (await client.query('SELECT 1 FROM firsts WHERE first_id=$1', [firstId])).rows[0];

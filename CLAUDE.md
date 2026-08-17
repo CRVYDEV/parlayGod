@@ -13399,3 +13399,71 @@ mint graph, and the comp/`txHash` posture ladder. **Process note:** two untracke
 were inflating the Foundry count — one was a genuine probe and was deleted, and **the other was a live
 finding I had reproduced and left unresolved** (M1). A scratch file named to sort last is easy to leave
 behind, and one of them was the most interesting thing in the pass.
+
+**RED TEAM #2 — six more, and the two that were nearly a seventh (`AUDIT-red-team-two.md`,
+2026-08-16).** The second max-effort pass, run immediately after the first merged. First-hand
+throughout, and **three of the six needed real Postgres because pg-mem cannot exercise them at all**.
+No CRITICAL; three HIGH, two MED, one LOW-MED, every fix mutation-verified by name.
+**H1 — a street could be sold in the city AND taken on-chain by the same man.** `listDeed` refuses an
+on-chain deed and `requestDeedWithdraw` refuses a listed one; both gates are individually correct and
+**neither could see the other**, because list read the deed row UNLOCKED while extract read it
+`FOR UPDATE`. Driving both routes concurrently on real Postgres produced the state believed
+unreachable, and `buyDeed` — which had no guard, for exactly that reason — then sold it: the buyer paid
+**$500,000**, the seller kept a signed voucher, claimed the NFT, and `markDeedExtracted` re-keyed the
+row to `onchain:<token>`, leaving the buyer with **no street, no legend and no cash**. Fixed at BOTH
+ends deliberately: the lock closes the cause, and the wall goes at the **point of disposal**, because a
+wall at the cause alone trusts that no future writer of `sale_price` ever gets it wrong.
+**H2 — a revoked token could still bind an attacker's X identity to the victim's account.**
+`POST /v1/auth/x/start` called `req.jwtVerify()` directly rather than going through the `auth`
+preHandler — and **a verified signature is not a usable token**: the ban check and the `token_version`
+revocation check live in the preHandler. An authed start is an `upgrade`, i.e. a permanent binding, so
+a session already killed by `logout-all` (the self-serve answer to "someone has my session") could
+still be used to take the account for good. A dead token now DEMOTES to an unauthed start rather than
+401ing — a stale bearer in localStorage must not lock a returning player out of signing in.
+**H3 — two of 109 `pool.connect()` sites leaked their client**, in `sweepNpcWars`/`sweepFamilyAggro`,
+beside three siblings in the same file that release correctly. A leaked pooled connection is
+**permanent and cumulative**, so the damage is not proportional to the mistake: measured on real
+Postgres at `max=3`, three leaked, the fourth threw `timeout exceeded`, and a following job died the
+same way — the worker going dark, taking the nightly §10.4 sweep, the drift alarm, the backup watchdog
+and every timed settlement with it, indistinguishably from a quiet night. Closed as a CLASS, not two
+lines: `test/gates.js` gained **THE CONNECTION LEDGER** (every connect releases before its function
+ends; deliberately NOT requiring a `finally`, since some sites legitimately hold across a job; with an
+anti-vacuity floor so a broken extractor reports as a failure rather than as zero problems).
+**H4 — the yard boss's protection followed you onto the street.** `penSafe` gates fire/jump/npcHit/
+shank/the wanted-hunter, bounded only by the wall clock, so **$15,000 bought 2h untouchable with NO
+actor restriction** — reproduced with a 3-minute sentence, walking out, and pulling jobs while immune —
+against a safehouse's $25,000 floor that also stops you acting (the signed P1.3 "shield, not bunker"
+rule). Its sibling `inHole` had ALREADY been capped at the sentence by an earlier audit for exactly
+this reason; this one was missed. Scoping the PREDICATE rather than shortening the stored window keeps
+what a player paid for and can never reach the street.
+**H5 — a free level-1 alt was a $48,000/day faucet.** The deed claim is free and ungated by design
+(Phase 1 is pure status), and nothing gated the take: a new account holding $500 drew 96× its starting
+cash on day one, forever, for no play. Two things make it a defect rather than the accepted
+petty-faucet posture — the system contradicted itself (level 8 to MUSCLE a corner, level 1 to OWN one),
+and **the sim's own P9.37 model assumes one deed per PLAYER when it is one per ACCOUNT**. The floor
+(`DEEDS.CORNER_MIN_LVL` 8, pinned + tabled) went on the MONEY, not the claim, so a newcomer still names
+their street and the take keeps accruing — the `LOAN.WANTED_MIN_LVL` shape exactly.
+**H6 — a shank thrown from a hospital bed**: the game already refuses a shank ON a man in the infirmary
+("out of reach") and had no gate on the ATTACKER being in one, on the one verb where the near-universal
+actor gate was missing. **H7 — THE FIRSTS admitted scenery and bots** to a trophy that is CONSUMED
+rather than re-taken; reproduced both halves (a resident took one through a real duel; an agent through
+one crime).
+**C1 (contracts) — a fee armed into unset wallets, and the sweep burned it.** `OmertaHook.setSurge`
+could arm while every recipient was still `address(0)`; its two siblings (`setSellTax`/`setAntiSnipe`)
+refuse on that exact state, and the deploy order arms the surge FIRST. `sweep` is permissionless by
+design and `currency.transfer` to `address(0)` BURNS — reproduced on a real `PoolManager` with a real
+pool and a real swap: **4.75 ETH accrued and every wei went to `address(0)`, irrecoverably**, from a
+hook armed in the ordinary order with nobody doing anything wrong. Fixed at the setter (the guard its
+siblings had) and at the sweep (the wall at the point of irreversible loss) — the sweep guard is
+UNREACHABLE defence in depth once the setters are closed, and the contract SAYS so rather than leaving
+a reader to wonder (the desk shelf-clamp precedent). **It is also the worse kind of process finding:
+it was reproduced in the PREVIOUS session, left in an untracked `ZZRefute.t.sol`, and found only
+because `git status` was read before committing — which is precisely what that pass's own process note
+had warned about, and it was quietly inflating the Foundry count (301 vs SPEC's 300) in the meantime.**
+**Recorded because a red team that publishes only its hits cannot be audited: my own §10.4 classifier
+reported 13 false orphans** — two bugs in the tool (apostrophes in comments broke its literal pairing;
+it matched exactly where the real check uses `startsWith`), and all 13 dissolved on a corrected re-run.
+**A finding produced by a tool you wrote and did not check is not a finding.** Also re-learned: a dirty
+database reads exactly like a code defect (a probe failed on a prior run's rows), and a duplicate
+`import` ten lines from an existing one surfaces only at runtime — `node --check` after every import
+edit. Suite green + sim drift-0 + pgquery + pgcheck 43/43 on real Postgres.

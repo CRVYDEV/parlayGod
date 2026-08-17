@@ -446,3 +446,61 @@ console.log('✅ THE GATE MATRIX passed — every verb in a family enforces the 
     + `      wall against the last REAL print, or waive it here with the bound that replaces it:\n   - ${unwalled.join('\n   - ')}`);
   console.log(`✓ all ${scanned} real-value price surfaces are walled or waived with a stated bound`);
 }
+
+// ═══ THE CONNECTION LEDGER — a pooled client that is taken must be given back ═══
+//
+// Found by the red team of 2026-08-16, and it is this file's own class exactly: `sweepNpcWars` and
+// `sweepFamilyAggro` each took a connection per due row and never released it, while the three
+// sibling sweeps a few hundred lines DOWN THE SAME FILE all release in a `finally` — and so do the
+// other 105 `pool.connect()` sites in src/. Two of 109.
+//
+// Why it earns a hard check rather than a note. A leaked pooled client is not one slow request: it
+// is PERMANENT and CUMULATIVE for the life of the process, so the damage is not proportional to the
+// mistake. Measured on real Postgres (pool max 3, five due rows): three connections leaked, the
+// sweep then threw `timeout exceeded when trying to connect` ON ITSELF at row four, and the next
+// job to ask for a connection failed the same way. In production the worker's pool is 20, and the
+// worker is the process that owns the nightly §10.4 sweep, the drift alarm, the backup watchdog and
+// every timed settlement — so the failure mode is the whole background half of the game stopping,
+// silently, with the alarms that would have told you about it stopped too.
+//
+// The rule is deliberately narrow so it stays true: every `const x = await pool.connect()` must
+// have an `x.release()` before its enclosing function ends. It does NOT check that the release is
+// in a `finally` — a few sites legitimately hold a connection across a whole job (the advisory-lock
+// pattern) and release it on a later path — because a rule that flagged those would be noise, and
+// noise gets deleted. Taking one and never giving it back is the thing that has no defensible form.
+{
+  const files = [];
+  const walk = (d) => { for (const e of fs.readdirSync(d)) {
+    const p = path.join(d, e);
+    if (fs.statSync(p).isDirectory()) walk(p); else if (p.endsWith('.js')) files.push(p);
+  } };
+  walk(SRC);
+  const leaked = [];
+  let seen = 0;
+  for (const f of files) {
+    const lines = fs.readFileSync(f, 'utf8').split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const m = /(?:const|let)\s+(\w+)\s*=\s*await\s+pool\.connect\(\)/.exec(lines[i]);
+      if (!m) continue;
+      seen++;
+      const v = m[1];
+      let released = false;
+      // scan to the end of the enclosing top-level function: the next line that CLOSES at column 0
+      for (let j = i + 1; j < lines.length && !/^\}/.test(lines[j]); j++) {
+        if (new RegExp(`\\b${v}\\.release\\(\\)`).test(lines[j])) { released = true; break; }
+      }
+      if (!released) leaked.push(`${path.relative(SRC, f)}:${i + 1} (${v})`);
+    }
+  }
+  // Anti-vacuity: an empty `leaked` is also what a broken scanner looks like. The tree has >100 of
+  // these, so if the extractor stops finding them the guard is passing over code it never read.
+  assert(seen >= 100,
+    `the pooled-connection scan found only ${seen} \`pool.connect()\` site(s) — the extractor has `
+    + 'stopped seeing them, so this check is vacuous rather than clean');
+  assert.equal(leaked.length, 0,
+    'pooled connection(s) taken and never released. This is permanent and cumulative: once the pool\n'
+    + '      is exhausted the process can never open another transaction, and for the WORKER that means\n'
+    + '      the §10.4 sweep, the drift alarm and every timed settlement stop — silently.\n'
+    + `      Add a \`finally { ${'${client}'}.release(); }\`:\n   - ${leaked.join('\n   - ')}`);
+  console.log(`✓ all ${seen} pooled connections are released before their function returns`);
+}

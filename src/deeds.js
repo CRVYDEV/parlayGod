@@ -148,6 +148,11 @@ export async function deedBoard(ch, client, h) {
     canReclaim: !!seized && deed && String(ch.loc) === String(deed.district),
     myTargetId: ch.id,                     // the client targets this to reclaim your own corner
     shakedownMinLvl: DEEDS.SHAKEDOWN_MIN_LVL, shakedownEnergy: DEEDS.SHAKEDOWN_ENERGY,
+    // the MONEY's anti-alt floor, mirrored from the till so the card can never advertise a take the
+    // server then refuses (the control-that-lies class). `owed` stays honest — it really is accruing,
+    // and it is banked the first time the floor is cleared — `canCollect` is what the button reads.
+    cornerMinLvl: DEEDS.CORNER_MIN_LVL,
+    canCollect: levelOf(Number(ch.respect)) >= DEEDS.CORNER_MIN_LVL,
     // Phase 2C — THE CONTROLLER'S PERKS. While YOU run your own corner: the district's signed turf
     // perk (OR'd with family turf — never stacks) + one extra operation seat (capped at SLOTS_MAX).
     // A rival who muscles in takes the perk with the corner; an on-chain deed perks nobody (inert).
@@ -223,6 +228,11 @@ export async function collectCorner(ch, client, h) {
   // work his corner (the collectTerritory/collectBusiness/collectFrontier gate — a safehouse is a shield,
   // not a bunker). No jail/hosp gate: the corner take is passive and you can't safehouse from lockup.
   if (safeHoused(ch)) throw new GameError('safe', "Can't work the corner from a safehouse — it's a shield, not a bunker.");
+  // (red team 2026-08-16) the anti-alt floor — see DEEDS.CORNER_MIN_LVL. The claim stays free and open;
+  // the money waits. The take keeps ACCRUING on the deed's own clock (capped), so nothing is destroyed
+  // by waiting for the level — it is banked the first time you can legally collect.
+  if (levelOf(Number(ch.respect)) < DEEDS.CORNER_MIN_LVL)
+    throw new GameError('rookie', `Working a corner takes level ${DEEDS.CORNER_MIN_LVL} — the street is yours, the take isn't yet.`);
   const now = Date.now();
   // every deed I effectively control: my own (when not seized) or a rival's inside my window
   // `onchain_token_id IS NULL` excludes a deed that's extracted or extraction-pending — an on-chain deed
@@ -308,7 +318,13 @@ export async function shakedownCorner(ch, targetCharacterId, client, h) {
 // row-stays precedent); you keep collecting the corner while listed. Jail-gated (no dealing from lockup).
 export async function listDeed(ch, price, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No dealing from lockup.');
-  const deed = await loadDeed(client, ch.account_id);
+  // (red team 2026-08-16) LOCK, don't just read. `loadDeed` is unlocked, and `requestDeedWithdraw`
+  // reads the same row FOR UPDATE — so the two interleaved: list read a clean deed, extract locked it
+  // and set `onchain_token_id`, and list's later UPDATE wrote `sale_price` on top of a row that was
+  // by then extraction-pending. Reproduced on real Postgres. Both gates were individually correct
+  // (extract refuses `listed`, list refuses `onchain`) and neither could see the other. Same lock
+  // order as every other writer here (characters → street_deeds), so no new edge.
+  const deed = (await client.query('SELECT * FROM street_deeds WHERE account_id=$1 FOR UPDATE', [ch.account_id])).rows[0];
   if (!deed) throw new GameError('no_deed', "You don't hold a street to sell.");
   if (deed.onchain_token_id) throw new GameError('onchain', "That street is on-chain — trade the NFT on a marketplace, or re-import it first.");
   const p = Math.floor(Number(price) || 0);
@@ -364,6 +380,14 @@ export async function buyDeed(buyer, seller, client, h) {
   if (await loadDeed(client, buyer.account_id)) throw new GameError('have_deed', 'You already hold a street — sell it before buying another.');
   const deed = (await client.query('SELECT * FROM street_deeds WHERE account_id=$1 FOR UPDATE', [seller.account_id])).rows[0];
   if (!deed || deed.sale_price == null) throw new GameError('not_listed', "That street isn't for sale.");
+  // (red team 2026-08-16) THE WALL AT THE POINT OF DISPOSAL. `listDeed` refuses an on-chain deed and
+  // `requestDeedWithdraw` refuses a listed one, so this state was thought unreachable — a race between
+  // them produced it anyway (see listDeed). The gate belongs HERE too, because this is the irreversible
+  // act: the buyer paid, and the seller still held a signed voucher. Reproduced end to end — buyer pays
+  // $500k, seller claims the NFT, `markDeedExtracted` re-keys the row to `onchain:<token>` and the buyer
+  // is left with no street, no legend and no cash. A wall at the cause alone would trust that no future
+  // writer of `sale_price` ever gets it wrong; this one holds however the row got here.
+  if (deed.onchain_token_id) throw new GameError('onchain', "That street is going on-chain — it can't change hands in the city until it comes back.");
   const price = Number(deed.sale_price);
   if (Number(buyer.cash) < price) throw new GameError('cash', `That street runs $${price.toLocaleString()}.`);
   // the standard 2% house take (1% dev off-ledger + 1% street tax → buyback) — the bodyguard:hire pattern

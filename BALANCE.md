@@ -6100,6 +6100,7 @@ in `tools/sim.js` P9.37, re-measured every run):
 | `DEEDS.SHAKEDOWN_ENERGY` | 15 | energy per shakedown attempt |
 | `DEEDS.SHAKEDOWN_HEAT` | 10 | exposure win or lose |
 | `DEEDS.SHAKEDOWN_MIN_LVL` | 8 | anti-alt floor (the RIVALS/npcHit precedent) |
+| `DEEDS.CORNER_MIN_LVL` | 8 | **the same floor on the MONEY** (red team 2026-08-16 — see below) |
 | `DEEDS.SHAKE_BASE_P` / `MIN_P` / `MAX_P` / `STAT_SCALE` | 0.5 / 0.15 / 0.85 / 200 | the muscle+cunning/2 stat contest |
 
 **Posture:** one corner ≈ a territory-racket rung ($48k/day cap). ONE deed per account, so the base-wide
@@ -6110,6 +6111,23 @@ level-floored + energy/heat/cooldown-bounded. All numbers are founder sim sign-o
 `test/levers.js`; the design's "pure redirect" ideal proved to need a cross-character lock on a hot path,
 so the bounded-faucet-measured-and-flagged precedent (territory/business/port/world) was used instead.
 Turf perks (C) got that separate founder sign-off 2026-08-16 and are BUILT — the next section.
+
+**THE ANTI-ALT FLOOR ON THE MONEY (red team 2026-08-16 — `DEEDS.CORNER_MIN_LVL` 8, NEW).** The
+"linear in the playerbase" posture above assumed one deed per *player*. It is one deed per *account*,
+the claim is free and was ungated, and nothing else gated the take — so a brand-new level-1 account
+holding $500 claimed a street for $0 and drew **$48,000/day**, 96× its starting cash, forever, for no
+play; ten alts, $480,000/day. Reproduced. Two things made it a defect rather than the accepted
+petty-faucet posture (cash is non-extractable since the severance, so it is not a real-money hole):
+the system contradicted itself — level 8 to MUSCLE a corner, level 1 to OWN one and collect from it,
+while every sibling income system carries a floor (speakeasy 15, business fronts 15, boxing 8, port 6,
+races 3) — and the sim's own model was wrong under it.
+
+The floor is on the **money, not the claim**: a new player still names their street and builds its
+legend (Phase 1 is pure status, and that day-one moment is worth keeping), and the take keeps accruing
+on the deed's own capped clock, so nothing is destroyed by waiting — it banks the first time the floor
+is cleared. Exactly the `LOAN.WANTED_MIN_LVL` shape: below the floor a defaulter is still WANTED, just
+with no pool cash on his head. `CORNER_MIN_LVL: 0` reverts. The board mirrors the till (`canCollect`),
+so a card can never advertise a take the server refuses.
 
 ## § STREET DEEDS 2C — THE CONTROLLER'S PERKS (founder-directed 2026-08-16 "Build it now"; sim P9.38)
 
