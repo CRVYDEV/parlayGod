@@ -13875,3 +13875,91 @@ the floor caught it — `found only 1 job call(s)` — rather than passing over 
 files written and deleted before committing; every mutation on a scratchpad copy, never `git checkout`.
 Suite 99 files ✅ + sim drift-0 + forge 305/305 + pgquery 2971 statements + pgcheck 43/43 on a fresh
 real-Postgres database.
+
+**RED TEAM #9 — the contract boundary, and the two candidates that dissolved
+(`AUDIT-red-team-nine.md`, 2026-08-17).** Aimed at the SEAM rather than either side of it — what the
+backend encodes, decodes, signs, restates and configures against what the contracts actually declare.
+RT#1–#8 read the contracts (signer rotation, cap mappings, the pause matrix, the Bank cluster as a graph,
+the shared `vouchers` table, ownership handover); **none of them crossed the two sides field by field.**
+First-hand throughout. **No CRITICAL, no HIGH; three MED, four lenses clean**, four mutations each failing
+at its own named assertion.
+**F1 (MED) — the chain performs a split the backend restates, and nothing ever compared them.**
+`OmertaFees.vigBps` and `OmertaBond.polBps/devBps/rwaBps` are **`immutable`**, hand-set at a deploy the
+script does not cover (**8 of 16 contracts are hand-deployed**; `OmertaBond` alone takes TWELVE
+constructor args — three adjacent same-typed bps, four adjacent same-typed `address payable` recipients),
+and the backend carries its own copy. The two halves fail differently, which is why the fix reports them
+separately: **the fee half is the sharp one** — `MintFeePaid` carries the **gross alone**, so
+`recordFeePayment` → `recordVigRevenue` **DERIVES** the share from `VIG_BPS`, and a divergence directly
+mis-books `vig_revenue`, i.e. what `runVigBuyback` spends and `fundReserve` credits — **the withdrawal
+reserve's funding source** — with every existing check summing either way because they all compare figures
+derived from the same restated number; the bond half is event-authoritative (`Bonded` carries all four
+slices) so the ACCOUNTING is safe and only the router's DECLARED waterfall diverges. The realistic trigger
+is not a typo but **the env flip**: `deploy/fee-splits.env` is the signed Path A configuration and the code
+defaults are the pre-flip values, so the two agree only if that file is applied **on both the api and the
+worker** in lockstep with the constructor args — miss it on the worker (where the ingest runs, off the
+watcher) and the contract forwards 25% while the backend books 60%, permanently, immutably, with nothing
+red. Fixed: `chain.js:onchainSplits()` reads the contract's own public immutables (no lever knowledge, so
+that file stays free of the economy constants — a restatement there is the class preflight's own ledger
+exists to stop), `vig.js:splitParity()` compares where the levers live, the worker checks it hourly beside
+the oracle-keeper watchdog and alarms through `alertDrift` (dormant/unreachable never alarm), and the
+`chainparams` control-room entry that mirrored the backend bps against `read: null` now reads `polBps`.
+It can only fire once per deploy — the contract side cannot move — and that once is the whole point.
+**F2 (MED) — the identity NFT had no entrance.** `DynastyNFT` mints **only** against a server-signed
+EIP-712 `MintVoucher` and has **no owner mint**, and nothing in `src/`/`test/`/`tools/` signed one (zero
+hits for `OmertaDynasty` or `MintVoucher`) — the forgotten-sibling class across the four contracts sharing
+one signer key: `VoucherClaim`→`signVoucher`, `StreetDeed`→`requestDeedWithdraw`, `OmertaBond`→`quoteBond`,
+`DynastyNFT`→**nothing**. It fails CLOSED (the product simply does not work, nothing is stealable), and
+what makes it worth finding now is that **the exit half was complete and looked complete** — the `Minted`
+and `Transfer` watchers, the token registry, the portrait freeze, the metadata route, EIP-2981 royalties —
+while both the runbook (*"Backend activation (BUILT 2026-08-15)"*) and this log (*"every on-chain contract
+has its complete backend … no code left to write on the rails"*) said so, so an audit would be paid for
+and a contract deployed that nobody can ever use. Fixed: `chain.js:requestDynastyMint` +
+`POST /v1/identity/mint` mirroring `requestDeedWithdraw`, on the founder's own recorded gate (2026-08-16,
+*"retrofit every existing minter"*) — a made account with a SIWE-proven wallet, **one token per account
+ever**, enforced on BOTH horizons (a token the watcher recorded, and a voucher signed but unclaimed)
+because the contract has no per-account cap; a lapsed voucher needs no sweep since nothing was debited.
+**RT#8's `VOUCHER_CLAIM_KINDS` allowlist earned its keep one drop later** — the new `dynasty` kind is
+invisible to the VoucherClaim reclaim rail BY CONSTRUCTION, which is exactly why that fix was an allowlist
+and not a denylist (asserted, not assumed). Guarded: `test/docs.js` already required every signer-bearing
+contract to be in the rotation runbook and to take its daily cap as a constructor arg; it now also requires
+each to have a backend route signing **in its EIP-712 domain name** — the one string a signing path cannot
+avoid naming, where the type name and the route path are both free choices.
+**F3 (MED) — the stock keeper guessed a token's decimals, and the quiet direction is the dangerous one.**
+`STOCK_TOKEN_DECIMALS || 18`, used to read a deed vault's balances AND to size the real
+`StockVault.deliver` — one number for a ticker→token **MAP**, so wrong the moment two tickers disagreed,
+on assets that are not reliably 18dp. **This is the class AUDIT-red-team-six established and did not
+sweep** (that pass deleted `ALCHEMIST_ASSET_DECIMALS` for exactly this reason and `watcher.js` still
+carries the correct implementation verbatim; this instance survived beside it). The failure is asymmetric
+and the survivor is the bad one: **over-sending REVERTS** at the ERC-20 (loud), **under-sending SUCCEEDS**
+— `parseUnits('5', 6)` against an 18dp token moves five millionths of a millionth of a share while
+`confirmStockDelivered` books the STAGED `row.units`, so the ledger says five shares were delivered and
+`allocated ≤ held` / `delivered ≤ allocated` both stay green because both compare ledger numbers to ledger
+numbers, with §3.3's gateless push meaning no claim step where anyone would notice. Fixed with
+`tokenDecimals(client, address)` — per-token, cached case-insensitively, bounded `[0,18]` (the contracts'
+own `require`), **throwing** on a read failure rather than falling back (a fallback is the guessed number
+wearing a hat); on the read path the throw joins the existing per-token catch (`unreadable ≠ empty`), on
+the send path it releases the keeper's claim and retries. The knob is **DELETED**, not merely unread.
+**Clean lenses, recorded because a red team that publishes only its hits cannot be audited:** all 14
+backend event signatures crossed against the ~80 the contracts declare on **type, indexed-ness AND
+positional parameter name** — the positional-name half being what makes the lens worth running, since the
+sharp risk is a **same-typed adjacent swap** invisible to a type comparison (`Bonded` has six adjacent
+non-indexed `uint256`, `Delivered` two adjacent `address indexed`, `Extracted` two adjacent `string`), and
+exactly one drift exists in a field that is not one (`HarvestFeeTaken`'s `assets`/`amount`, inert — names
+do not enter the topic hash); the two signatures matching no contract verified against their REAL sources
+rather than waved through (`ModifyLiquidity` against `v4-core`'s `IPoolManager`, whose `PoolId` is a
+`bytes32` value type, and `Transfer` against OZ's `IERC721`); every `new X(...)` in `Deploy.s.sol` correct
+on arity and semantically aligned on order; and the four EIP-712 domains all distinct with three matching
+field-for-field (the fourth is F2). **THE TWO THAT DISSOLVED.** *The runbook's bond split "contradicts
+itself"* — it says deploy `7500/1500/500` and eight lines later "keep them in lockstep with the backend
+`BONDS.*`" (`3750/1500/2500`); checking rather than stopping there, `BONDS.*` are **env-backed**,
+`deploy/fee-splits.env` is the signed Path A flip setting exactly those numbers, and
+`tools/validate-fee-splits.js` holds it to `fee-splits.json` — consistent by design, and what survives is
+not the contradiction but its shadow, which is F1. *"`polBps` is read by the backend"* — my own sweep
+reported `✓ read` for all three bond bps and it was a **false CLEAN from my own tool**: the regex matched
+the string anywhere in `src/`, and `bonds.js:387` has `polBps: BONDS.POL_BPS`, an object KEY on the board;
+enumerating the real `functionName:` reads showed the truth. *A finding produced by a tool you wrote and
+did not check is not a finding — and neither is a clean bill of health.* **Process:** my
+constructor-parity probe reported two false arity mismatches because its comment-stripper ate `https://`
+**inside a string literal** (every URL default in the deploy script) — replaced with a string-aware
+stripper before a single result was read. Five `zz*` probes written and deleted before committing; every
+mutation on a scratchpad copy, never `git checkout`.

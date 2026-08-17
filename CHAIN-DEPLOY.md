@@ -344,8 +344,12 @@ PHASE 1 for the exact calls/args.
       account-bound OFF-CHAIN, so the token is a freely transferable trophy carrying no on-chain power.
       **NO wiring needed on the CONTRACT side** (it verifies its own voucher). Optional rate-cap:
       **pass `DYNASTY_DAILY_MINT_CAP`** — with no supply cap this is the entire blast radius of a leaked
-      signer key, so **set it**. It is a CONSTRUCTOR argument (0 = unlimited), so a deploy must state it. **Backend activation (BUILT 2026-08-15):** set **`DYNASTY_NFT_ADDRESS`**
-      on the **WORKER** — the `Minted` + `Transfer` watchers (cursors `dynasty_minted`/`dynasty_transfer`)
+      signer key, so **set it**. It is a CONSTRUCTOR argument (0 = unlimited), so a deploy must state it. **Backend activation:** the ENTRANCE is `POST /v1/identity/mint`
+      (`chain.js:requestDynastyMint` — a made account with a SIWE-proven wallet gets one signed
+      MintVoucher, one per account ever; added 2026-08-17 by red team #9, which found the contract
+      deployable, watchable and **unusable** — three of the four contracts sharing this signer key had
+      a signing route and this one did not, while this step said the rail was done). Set
+      **`DYNASTY_NFT_ADDRESS`** on the **API** (signs) and the **WORKER** — the `Minted` + `Transfer` watchers (cursors `dynasty_minted`/`dynasty_transfer`)
       maintain the token registry (`dynasty_tokens`, minter resolved via the SIWE wallet) and **FREEZE the
       portrait at the first owner→owner transfer** (the snapshot stores the portrait ROW, so a sold token
       is a photograph of the bloodline as it stood — one-way; a buy-back does not unfreeze). The identity
@@ -384,7 +388,8 @@ PHASE 1 for the exact calls/args.
       `Delivered` watcher flips `stock_allocations.delivered`. Arm it with **`STOCK_KEEPER_PK`** (a
       SECRET — the on-chain `keeper` bot key) + **`STOCK_TOKEN_ADDRESSES`** (JSON ticker→ERC-20 map;
       a ticker missing from it is a NAMED `no_token_address` skip, never a silent one) +
-      `STOCK_TOKEN_DECIMALS` (default 18). Dormant until wired. §10.4-NEUTRAL (out-of-band real value —
+      each token's decimals are read off the token itself (never configured — a tokenized stock is not
+      reliably 18dp and the map holds several). Dormant until wired. §10.4-NEUTRAL (out-of-band real value —
       zero `transactions` rows; the backend's `allocateStock` clamp + the nightly `allocated ≤ held` AND
       `delivered ≤ allocated` checks in `runTreasuryInvariants` are the owed-side half of the wall).
       **✅ BOTH ON-CHAIN LEGS ARE PROVEN (2026-08-16)** — `npm run stock-e2e` (the forge CI job, beside

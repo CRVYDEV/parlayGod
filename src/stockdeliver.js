@@ -202,6 +202,28 @@ export async function vaultHistoryFor(client, names = []) {
 // Chain-dormant → `{ live: false }` (never a fabricated zero, which would read as "the vault is
 // empty" — the dormant-is-a-state-not-a-grade rule). A token that fails to read is reported as null
 // rather than 0, for the same reason.
+// THE TOKEN'S OWN DECIMALS, read off the chain — never a configured guess (red team #9 F3, the class
+// AUDIT-red-team-six established for the Alchemist and this instance survived). A tokenized stock is
+// NOT reliably 18dp and `STOCK_TOKEN_ADDRESSES` is a MAP, so ONE env number was wrong the moment two
+// tickers disagreed. The failure is asymmetric and the quiet direction is the dangerous one:
+// over-sending reverts at the ERC-20 (loud), while under-sending SUCCEEDS and the ledger books the
+// staged units, so a player is told they received N shares and receives a millionth of one — with
+// `allocated <= held` and `delivered <= allocated` both green, because both compare ledger numbers.
+// No fallback, for the reason the sibling states: a fallback is the guessed number wearing a hat.
+const DECIMALS_ABI = [{ type: 'function', name: 'decimals', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint8' }] }];
+const decCache = new Map();
+export async function tokenDecimals(client, address) {
+  const key = String(address).toLowerCase();
+  if (decCache.has(key)) return decCache.get(key);
+  const d = Number(await client.readContract({ address, abi: DECIMALS_ABI, functionName: 'decimals' }));
+  if (!Number.isInteger(d) || d < 0 || d > 18) {
+    throw new Error(`stock token ${address} reports ${d} decimals — refusing to move stock in a unit we cannot trust`);
+  }
+  decCache.set(key, d);
+  return d;
+}
+export function __clearDecimalsCache() { decCache.clear(); }   // tests only
+
 export async function vaultLiveBalances(name) {
   const { keccak256, toBytes } = await import('viem');
   const tokenId = BigInt(keccak256(toBytes(String(name)))).toString();
@@ -212,11 +234,13 @@ export async function vaultLiveBalances(name) {
   const client = createPublicClient({ transport: http(process.env.CHAIN_RPC_URL) });
   const abi = [{ type: 'function', name: 'balanceOf', stateMutability: 'view',
     inputs: [{ name: 'a', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] }];
-  const dec = Number(process.env.STOCK_TOKEN_DECIMALS || 18);
   const holds = [];
   for (const [ticker, addr] of Object.entries(tokens)) {
     if (!isAddress(addr)) continue;
     try {
+      // the decimals read joins the SAME per-token catch below: unreadable is reported as `null`,
+      // never as a balance in a unit we guessed (`unreadable !== empty`, one line down).
+      const dec = await tokenDecimals(client, getAddress(addr));
       const bal = await client.readContract({ address: getAddress(addr), abi, functionName: 'balanceOf', args: [tba] });
       const units = Number(formatUnits(bal, dec));
       if (units > 0) holds.push({ ticker, units: round6(units) });
@@ -456,7 +480,9 @@ async function sendDeliverOnchain({ deliveryId, token, to, units }) {
   const chainId = Number(process.env.CHAIN_ID || 0);
   if (chainId && chainId !== Number(await pub.getChainId()))
     throw new Error('delivery keeper: RPC chain does not match CHAIN_ID — refusing to send');
-  const decimals = Number(process.env.STOCK_TOKEN_DECIMALS || 18);
+  // read off the token itself; a failure THROWS (the keeper's claim releases and it retries) rather
+  // than sending real stock in a unit nobody confirmed.
+  const decimals = await tokenDecimals(pub, getAddress(token));
   const chain = { id: chainId || Number(await pub.getChainId()), name: 'omerta-chain',
     nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
     rpcUrls: { default: { http: [rpc] } } };

@@ -377,5 +377,39 @@ assert.equal(await txCount(), tx0, 'the stock delivery rail writes ZERO transact
   __setTxSender(null);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// THE TOKEN'S DECIMALS (red team #9 F3) — the class AUDIT-red-team-six established for the Alchemist,
+// with this instance surviving: ONE configured `STOCK_TOKEN_DECIMALS` for a MAP of tickers, defaulting
+// to 18. A tokenized stock is not reliably 18dp, so it was wrong the moment two tickers disagreed, and
+// the failure is asymmetric — over-sending REVERTS at the ERC-20 (loud), under-sending SUCCEEDS and the
+// ledger books the staged units, so a player is told they received N shares and receives a millionth of
+// one, with `allocated <= held` and `delivered <= allocated` both green because both compare ledger
+// numbers. Now read off the token itself, with NO fallback (a fallback is the guess wearing a hat).
+{
+  const { tokenDecimals, __clearDecimalsCache } = await import('../src/stockdeliver.js');
+  __clearDecimalsCache();
+  let calls = 0;
+  const reader = (d) => ({ readContract: async () => { calls++; return d; } });
+
+  assert.equal(await tokenDecimals(reader(6), '0xAAaAaAaaAaAaAaaAaAAAAAAAAaaAaAaAaAaAaaAa'), 6,
+    'the decimals come off the token, not off an env var');
+  assert.equal(await tokenDecimals(reader(6), '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'), 6,
+    'and are cached case-insensitively — one read per token, not one per delivery');
+  assert.equal(calls, 1, 'the cache actually caches');
+
+  await assert.rejects(() => tokenDecimals(reader(77), '0xBBbBbBbbBbBbBBbBbbbBBBbBBbBbBbbBBbBbbbBb'),
+    /refusing to move stock/, 'a token outside [0,18] is one whose amount is not interpretable — refuse');
+  await assert.rejects(() => tokenDecimals({ readContract: async () => { throw new Error('rpc down'); } },
+    '0xCcCCCcccccCCcCcCCCCCCcCcCcccCcCCcCCcCCCc'), /rpc down/,
+    'a failed read THROWS — it never falls back to a guessed 18, which is the whole finding');
+
+  // the knob is GONE, not merely unread: a stale env value must not be able to come back
+  const src = (await import('node:fs')).readFileSync(new URL('../src/stockdeliver.js', import.meta.url), 'utf8');
+  assert.ok(!/STOCK_TOKEN_DECIMALS/.test(src),
+    'the configured-decimals knob is deleted, so nothing can quietly start reading it again');
+  __clearDecimalsCache();
+  console.log('  ✓ a stock token\'s decimals are read off the token, bounded, cached, and never guessed');
+}
+
 console.log('✅ stock delivery rail: the deed-required gate, stage→confirm (real flips / comp never), idempotency, the delivered<=allocated wall, the board, the secondary-market exclusion, THE DELIVERY KEEPER (claim-then-send, named skips, retry-on-release), and §10.4-neutrality');
 await pool.end?.();

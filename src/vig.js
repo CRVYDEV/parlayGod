@@ -14,8 +14,8 @@
 // here — the PLEX bridge, which used to burn IN-GAME $OMR, is retired; see below).
 import crypto from 'node:crypto';
 import { GameError, ledger } from './game.js';
-import { genesisOmrFor } from './rules.js';
-import { fundReserve } from './chain.js';
+import { genesisOmrFor, BONDS } from './rules.js';
+import { fundReserve, onchainSplits } from './chain.js';
 
 const uid = () => crypto.randomUUID();
 const num = (x) => Number(x || 0);
@@ -257,6 +257,37 @@ export async function vigStatus(pool) {
 
 // ── the extraction ≤ inflow invariant (the second §10.4, on the REAL-value side) ──
 // Proves the whole chain end-to-end. Any failure is a real-MONEY alarm, not a game-balance one.
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// SPLIT PARITY (red team #9 F1) — does the chain perform the split this backend restates?
+//
+// Both contract-side numbers are IMMUTABLE and hand-set at a deploy no script covers, and both have a
+// backend counterpart nothing ever compared them to. The two failures differ, which is why they are
+// reported separately rather than summed:
+//   * `OmertaFees.vigBps` vs VIG_BPS - the fee event carries the GROSS alone, so `recordVigRevenue`
+//     DERIVES the share. A divergence directly over- or under-books `vig_revenue`, which is what
+//     `runVigBuyback` spends and `fundReserve` credits, and every invariant sums either way because
+//     they all compare figures derived from the same restated number.
+//   * `OmertaBond.polBps/devBps/rwaBps` vs BONDS.* - the booking is event-authoritative, so the
+//     ACCOUNTING is safe; what diverges is the router's DECLARED waterfall, silently.
+// Dormant states never alarm (`unreachable` is not knowing, which is not the same as broken - the
+// archiver/oracle watchdog split).
+let splitsReader = null;   // tests inject the on-chain side; production reads the chain
+export function __setSplitsReader(fn) { splitsReader = fn; }
+export async function splitParity() {
+  const chain = await (splitsReader || onchainSplits)();
+  if (chain.state !== 'ok') return { state: chain.state, note: chain.note, mismatches: [] };
+  const mismatches = [];
+  const cmp = (what, onchain, backend) => {
+    if (onchain === undefined || onchain === null) return;
+    if (Number(onchain) !== Number(backend)) mismatches.push({ what, onchain: Number(onchain), backend: Number(backend) });
+  };
+  cmp('OmertaFees.vigBps', chain.feeVigBps, VIG_BPS);
+  cmp('OmertaBond.polBps', chain.bondPolBps, BONDS.POL_BPS);
+  cmp('OmertaBond.devBps', chain.bondDevBps, BONDS.DEV_BPS);
+  cmp('OmertaBond.rwaBps', chain.bondRwaBps, BONDS.RWA_BPS);
+  return { state: mismatches.length ? 'mismatch' : 'ok', mismatches, chain };
+}
+
 export async function runVigInvariants(pool) {
   const checks = [];
   const push = (name, ok, detail = {}) => checks.push({ name, ok, ...detail });

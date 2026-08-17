@@ -2640,6 +2640,11 @@ export async function buildServer() {
   app.post('/v1/deeds/extract', { preHandler: auth }, async (req) =>
     // attest is read STRICTLY (=== true): the eligibility self-attestation must be an explicit act
     Chain.requestDeedWithdraw(pool, req.user.sub, req.body?.address, { attest: req.body?.attest === true }));
+  // THE IDENTITY NFT — take your bloodline's portrait on-chain as a DynastyNFT (red team #9 F2: the
+  // contract self-mints against a signed MintVoucher and nothing signed one). A transferable trophy:
+  // the `minted` entitlement stays account-bound and never travels with the token.
+  app.post('/v1/identity/mint', { preHandler: auth }, async (req) =>
+    Chain.requestDynastyMint(pool, req.user.sub, req.body?.address));
   app.get('/v1/withdraw/status', { preHandler: auth }, async (req) => {
     const mine = (await pool.query(
       'SELECT id, kind, amount, gear_id, nonce, status, claimed_onchain, signed_payload FROM vouchers WHERE account_id=$1 ORDER BY created_at DESC LIMIT 50',

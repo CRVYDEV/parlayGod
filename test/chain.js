@@ -667,5 +667,104 @@ const d0Toll = await driftOf('$OMR conservation');
   console.log('  ✓ quoteBond reads the oracle before it opens a transaction (no RPC under a held row lock)');
 }
 
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// THE IDENTITY NFT'S ENTRANCE (red team #9 F2). DynastyNFT self-mints ONLY against a server-signed
+// MintVoucher and has no owner mint, and NOTHING in the backend signed one — so the contract was
+// deployable, watchable (Minted + Transfer watchers, metadata route, royalties) and unusable. Three
+// of the four contracts sharing one signer key had a signing route; this one did not.
+{
+  process.env.DYNASTY_NFT_ADDRESS = '0x4444444444444444444444444444444444444444';
+  const { MINT_VOUCHER_TYPES, dynastyChainConfig } = await import('../src/chain.js');
+
+  // the gate is the founder's recorded answer — a made account with a proven wallet, one per account
+  const { body: { token: freshTok } } = await call('POST', '/v1/auth/guest');
+  await call('POST', '/v1/character', { token: freshTok, body: { name: `Nino Dyn${Date.now() % 100000}` } });
+  assert.equal((await call('POST', '/v1/identity/mint', { token: freshTok })).body.error, 'not_minted',
+    'an account that never paid the identity fee cannot take a portrait on-chain');
+
+  const mint = await call('POST', '/v1/identity/mint', { token });
+  assert.equal(mint.code, 200, 'a made account with a linked wallet gets a signed MintVoucher');
+  assert.equal(mint.body.voucher.to.toLowerCase(), player.address.toLowerCase(), 'the voucher names the proven wallet');
+
+  // PARITY against a domain HARDCODED to mirror DynastyNFT.sol's own EIP712("OmertaDynasty","1").
+  // Recovering with dynastyChainConfig() would be vacuous — any consistent-but-wrong domain agrees
+  // with itself; pinning the literal is what catches the server drifting from the contract.
+  const dom = { name: 'OmertaDynasty', version: '1', chainId: 46630, verifyingContract: process.env.DYNASTY_NFT_ADDRESS };
+  assert.deepEqual(dynastyChainConfig(), dom, 'the server domain matches the contract domain field-for-field');
+  const rec = await recoverTypedDataAddress({ domain: dom, types: MINT_VOUCHER_TYPES, primaryType: 'MintVoucher',
+    message: { to: mint.body.voucher.to, nonce: BigInt(mint.body.voucher.nonce), deadline: BigInt(mint.body.voucher.deadline) },
+    signature: mint.body.signature });
+  assert.equal(rec.toLowerCase(), signerAddr.toLowerCase(),
+    'the MintVoucher recovers to the server signer under the CONTRACT domain — DynastyNFT will accept it');
+
+  // one out at a time: the contract has no per-account cap (its walls are nonce/deadline/daily rate),
+  // so the window between signing and the mint landing must not issue a second voucher
+  assert.equal((await call('POST', '/v1/identity/mint', { token })).body.error, 'pending',
+    'a second request while one voucher is live refuses by name');
+
+  // and the RT#8 allowlist earns its keep one drop later: the new kind is invisible to the
+  // VoucherClaim reclaim rail by construction, so nothing tries to "refund" a $OMR-less voucher
+  const { VOUCHER_CLAIM_KINDS, reclaimExpiredVouchers } = await import('../src/chain.js');
+  assert.ok(!VOUCHER_CLAIM_KINDS.includes('dynasty'),
+    'a dynasty voucher is not a VoucherClaim voucher — the shared table is read through an allowlist');
+  const before = (await pool.query("SELECT status FROM vouchers WHERE kind='dynasty'")).rows[0].status;
+  await reclaimExpiredVouchers(pool);
+  assert.equal((await pool.query("SELECT status FROM vouchers WHERE kind='dynasty'")).rows[0].status, before,
+    'the VoucherClaim reclaim sweep leaves the dynasty voucher alone');
+
+  // once the token is on-chain the account is done — the Minted watcher records it, and the entrance closes
+  await pool.query("UPDATE vouchers SET status='claimed' WHERE kind='dynasty'");
+  const acctId = (await pool.query("SELECT account_id FROM vouchers WHERE kind='dynasty'")).rows[0].account_id;
+  await pool.query("INSERT INTO dynasty_tokens (token_id, minter_address, account_id) VALUES ('7', $1, $2)",
+    [player.address.toLowerCase(), acctId]);
+  assert.equal((await call('POST', '/v1/identity/mint', { token })).body.error, 'already',
+    'one portrait per bloodline, ever');
+  console.log('  ✓ the identity NFT has an entrance: a made account signs one MintVoucher, EIP-712 parity holds, and the reclaim rail ignores it');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// SPLIT PARITY (red team #9 F1). `OmertaFees.vigBps` and `OmertaBond.polBps/devBps/rwaBps` are
+// IMMUTABLE, hand-set at a deploy no script covers, and the backend RESTATES them — the fee event
+// carries the gross ALONE, so `recordVigRevenue` DERIVES the share and a divergence directly
+// mis-books the withdrawal reserve's funding source, with every invariant summing either way
+// because they all compare figures derived from the same restated number. Nothing compared them.
+{
+  const { splitParity, __setSplitsReader, VIG_BPS } = await import('../src/vig.js');
+  const { BONDS } = await import('../src/rules.js');
+
+  __setSplitsReader(async () => ({ state: 'dormant' }));
+  assert.equal((await splitParity()).state, 'dormant', 'no chain, nothing to compare — dormant never alarms');
+  __setSplitsReader(async () => ({ state: 'unreachable', note: 'rpc down' }));
+  assert.equal((await splitParity()).state, 'unreachable',
+    'not knowing is not the same as broken — an unreachable RPC is reported, never alarmed on');
+
+  // a chain that performs exactly the split the backend books is SILENT
+  const agree = { state: 'ok', feeVigBps: VIG_BPS, bondPolBps: BONDS.POL_BPS, bondDevBps: BONDS.DEV_BPS, bondRwaBps: BONDS.RWA_BPS };
+  __setSplitsReader(async () => agree);
+  assert.equal((await splitParity()).state, 'ok', 'agreement is silent');
+
+  // THE FEE CASE — the sharp one: the contract forwards 25% and the backend books 60%, so
+  // `vig_revenue` (what runVigBuyback spends and fundReserve credits) is 2.4x the ETH that arrived
+  __setSplitsReader(async () => ({ ...agree, feeVigBps: 2500 }));
+  let p = await splitParity();
+  assert.equal(p.state, 'mismatch', 'a fee split the chain does not perform is caught');
+  assert.deepEqual(p.mismatches, [{ what: 'OmertaFees.vigBps', onchain: 2500, backend: VIG_BPS }],
+    'and it names the contract, the on-chain value and the lever it disagrees with');
+
+  // THE BOND CASE — two same-typed adjacent immutables swapped at a hand-deploy. The booking is
+  // event-authoritative so the ACCOUNTING stays right; what diverges silently is the declared waterfall.
+  __setSplitsReader(async () => ({ ...agree, bondDevBps: BONDS.RWA_BPS, bondRwaBps: BONDS.DEV_BPS }));
+  p = await splitParity();
+  assert.equal(p.mismatches.length, 2, 'a swapped pair is caught as two mismatches, not silently summed away');
+  assert.ok(p.mismatches.every((m) => m.what.startsWith('OmertaBond.')), 'both name the bond contract');
+
+  // a contract the deploy has not reached yet is simply absent — never compared against 0
+  __setSplitsReader(async () => ({ state: 'ok', feeVigBps: VIG_BPS }));
+  assert.equal((await splitParity()).state, 'ok', 'an un-deployed sibling is absent, not a mismatch');
+
+  __setSplitsReader(null);
+  console.log('  ✓ split parity: the chain\'s IMMUTABLE splits are crossed against the levers the backend restates');
+}
+
 console.log('✅ M6-B chain test passed — SIWE wallet link, EIP-712 voucher signing parity (recovers the signer), full-reserve withdrawal queue (debit→queue→fund→drain→sign), $OMR ledger conservation, gear-mint vouchers, Claimed reserve release, expired-voucher reclaim (OMR refund + reserve free + gear restore, §10.4 exact), §11 mint-gate + fee reconcile + concurrent-credit safety, bond-quote signing parity (recovers the signer) + watcher enrichment + wallet-submit calldata (server-encoded bond() for MetaMask/Robinhood Wallet), and THE EXIT TOLL (gross debit → net voucher, tax:dev/tax:buyback transfers, dev-fund claim, conservation exact)');
 await app.close();

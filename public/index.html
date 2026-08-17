@@ -5397,6 +5397,11 @@
           ${me?.id ? `<img src="/v1/identity/${encodeURIComponent(me.id)}/portrait.svg" alt="Your bloodline portrait" style="width:100%;max-width:220px;border-radius:2px">` : ''}
           <div class="t" style="margin-top:6px;line-height:1.5">The coat climbs with your rank. The frame
           deepens every time your bloodline buries someone. It is yours by playing — nothing to buy.</div>
+          <div class="d" style="margin-top:8px;line-height:1.5">Made men can take the portrait on-chain as a
+          tradeable trophy — one per bloodline, ever. It carries <b>no power</b>: your standing stays with the
+          account and never travels with the token.</div>
+          <button class="btn" style="margin-top:6px" data-do="POST /v1/identity/mint"
+            data-confirm="Take your bloodline's portrait on-chain? One per bloodline, ever. The token is a trophy — it carries no standing and no entitlement.">take it on-chain</button>
         </div>
         <div class="msp-h">General</div>
         <div class="msp-box" style="padding:0"><table class="msp-tbl">
