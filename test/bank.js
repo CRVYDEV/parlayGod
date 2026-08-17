@@ -345,6 +345,25 @@ const checkOf = async (runner, name) => {
     'and NO payoff projection, because none has been realised — the rule, not a gap');
   assert.equal(live.liquidation, 'none',
     'the one forward-looking claim it does make is structural: matching denominations removes the mechanism');
+  // COLLATERAL IS NOT 18dp, and reading it as though it were is the second instance of the class red
+  // team #6 flagged (an off-chain copy of a decimals figure the chain already knows). The Alchemist
+  // returns `collateralOf` in ASSET units and `debtOf`/`maxDebtOf` in DEBT units, bridging them with
+  // its own immutable `scale` — which it derived by reading `decimals()` off the token in its
+  // constructor. The documented market is USDC, so the shipped configuration is exactly the one the
+  // 1e18 assumption got wrong: a player holding $1,000 of collateral read `0.000000001` on their own
+  // Bank screen. `borrowable` was unaffected (both its terms are debt units), which is why nothing
+  // else looked odd.
+  const usdc = Bank.positionView({
+    wallet: '0x0000000000000000000000000000000000000001',
+    collateral: 1000n * 10n ** 6n,                 // 1,000 USDC — ASSET units, 6dp
+    debt: 400n * 10n ** 18n, maxDebt: 500n * 10n ** 18n, ltvBps: 5000,
+    scale: 10n ** 12n,                             // 10^(18-6), read off the Alchemist itself
+  });
+  assert.equal(usdc.collateral, 1000,
+    'a 6-decimal market reports the collateral a player actually holds — read through the market\'s OWN scale, never a hardcoded 1e18');
+  assert.equal(usdc.debt, 400, 'while the debt stays 18dp, because DNR always is');
+  assert.equal(usdc.borrowable, 100, 'and the ceiling arithmetic is untouched — both its terms were already debt units');
+
   const text = JSON.stringify(live) + JSON.stringify(body.protocol);
   for (const banned of ['APY', 'apy', 'guaranteed', 'per year', 'per day', 'earn', 'yield']) {
     assert(!text.includes(banned), `neither the live nor the dormant surface says "${banned}" (§3 rule one)`);

@@ -427,7 +427,7 @@ omit them and the market looks healthy from the outside and is not.
       `MAX_HARVEST_FEE_BPS`. A ZERO recipient disables the fee (fail-safe: an unset recipient
       under-charges rather than burning a borrower's yield), so this is the one bank setter whose
       omission costs revenue and nothing else.
-- [ ] Backend: set `ALCHEMIST_ADDRESS` + `ALCHEMIST_ASSET` + `ALCHEMIST_ASSET_DECIMALS` so the worker
+- [ ] Backend: set `ALCHEMIST_ADDRESS` + `ALCHEMIST_ASSET` so the worker (the market's DECIMALS are read off the chain — never configured)
       syncs `HarvestFeeTaken` into `bank_revenue`. The decimals matter: the fee is denominated in the
       market's UNDERLYING (6dp for USDC), and `bank_revenue` is deliberately NOT mirrored into the
       ETH-denominated `rwa_revenue`, whose sum is the vault's `allocated <= held` wall.
@@ -455,7 +455,7 @@ Each rail is OFF until its address/config is present. Set on BOTH processes.
 | `OMERTA_FEES_ADDRESS` | fee sync (`MintFeePaid`/`RespawnFeePaid`/`RerollFeePaid` → credits) | — |
 | `OMERTA_BOND_ADDRESS` | **the `Bonded` → `recordBond` bond sync (NEW — now wired)** | books the event's authoritative payout + POL/Vig split; idempotent on nonce |
 | `STREET_DEED_ADDRESS` | API: `POST /v1/deeds/extract` signs the DeedVoucher (needs `CHAIN_ID` + `VOUCHER_SIGNER_PK`) + it's the deed `verifyingContract`. WORKER: `Extracted` → `markDeedExtracted` (frees the extractor) + `Redeemed` → `reimportDeed` (burn brings the deed back) | set on BOTH processes; dormant until set. §10.4-neutral (ownership, not currency) |
-| `ALCHEMIST_ADDRESS` (+ `ALCHEMIST_ASSET`, `ALCHEMIST_ASSET_DECIMALS`) | THE BANK's harvest-fee sync → `bank_revenue` | only when the bank market ships |
+| `ALCHEMIST_ADDRESS` (+ `ALCHEMIST_ASSET`, the label only — decimals come from the chain) | THE BANK's harvest-fee sync → `bank_revenue` | only when the bank market ships |
 | `MINT_FEE_ETH` / `RESPAWN_FEE_ETH` | the PLEX price quote | ETH-denominated; keep == the contract fees |
 | `WALLETCONNECT_PROJECT_ID` | the console's **WalletConnect (mobile)** option — the ONLY way a phone can link a wallet (desktop browser wallets are auto-discovered via EIP-6963 and need nothing) | a PUBLIC WalletConnect/Reown project id, free from https://dashboard.reown.com; unset ⇒ the console hides the option. Surfaced in `/v1/rules`. Not chain-gated: linking is a signature, so the chain is requested as OPTIONAL and a wallet that has never heard of the OMERTÀ chain still connects |
 | `PLEX_RESPAWN_OMR` | the respawn's PLEX floor price (pre-market) | a sign-off lever. **There is no `PLEX_MINT_OMR`** — the mint is ETH only (it is the Sybil bound and the extraction gate, so it gets one rail and one published price); setting it does nothing |

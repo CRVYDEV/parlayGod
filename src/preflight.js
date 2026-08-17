@@ -139,7 +139,7 @@ export const OPERATIONAL_ENV = [
   'DEED_RECOVERY_ADDRESS', 'DEED_RECOVER_AFTER_MS',
   // THE BANK's Alchemist — the harvest-fee stream. Dormant unless set; the asset symbol + decimals
   // are config because the market's underlying is not always 18-decimal (USDC is 6).
-  'ALCHEMIST_ADDRESS', 'ALCHEMIST_ASSET', 'ALCHEMIST_ASSET_DECIMALS',
+  'ALCHEMIST_ADDRESS', 'ALCHEMIST_ASSET',
   'VOUCHER_CLAIM_ADDRESS', 'VOUCHER_RECLAIM_GRACE_SEC', 'VOUCHER_SIGNER_PK',
   // economy levers — founder sign-off dials, deliberately operator-settable (BALANCE.md)
   'BOND_DEV_BPS', 'BOND_DISCOUNT_BPS', 'BOND_ETH_SCORE_OMR', 'BOND_LP_SCORE_PER_ETH_DAY', 'BOND_PLEDGE_MIN', 'BOND_POL_BPS',
