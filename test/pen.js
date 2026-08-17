@@ -9,7 +9,7 @@ process.env.PEN_YARD_EVENT = 'quiet'; // baseline: no yard incident perturbs the
 process.env.PEN_SHANK_CD_MS = '1';    // TEST-ONLY: shrink the per-attacker shank cooldown (SEARCH_MS precedent) — a dedicated block below restores it to assert the gate
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { PEN, NPC_HITMEN, yardEventOf, yardCharacterOf, dayOf, MASTERY } from '../src/rules.js';
+import { PEN, NPC_HITMEN, yardEventOf, yardCharacterOf, dayOf, MASTERY, penSafe } from '../src/rules.js';
 import { sweepStaleBreaks } from '../src/pen.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
@@ -109,6 +109,13 @@ await seedCh(mark.id, 'pen_safe_until=NULL');
 await seedCh(killer.id, "pen_safe_until = now() + interval '1 hour'");
 assert.equal((await call('POST', `/v1/pen/shank/${mark.id}`, { token: killer.token })).body.error, 'safe', 'no hunting from under protection');
 await seedCh(killer.id, 'pen_safe_until=NULL');
+// (red team 2026-08-16) …and not from a hospital bed. The gate on the VICTIM's infirmary was already
+// here ("out of reach") — the game's most lethal verb was the only one missing the near-universal
+// actor half. Reachable with no exploit: sweepLaw force-busts an offline player in any condition.
+await seedCh(killer.id, "hosp_until = now() + interval '2 hours'");
+assert.equal((await call('POST', `/v1/pen/shank/${mark.id}`, { token: killer.token })).body.error, 'hosp_self',
+  'a man on the infirmary cot is not walking the yard tonight');
+await seedCh(killer.id, 'hosp_until=NULL');
 
 // paid revive insurance still absorbs a landed shank (the shiv is spent, the mark lives)
 await seedCh(mark.id, `${jailFuture}`);
@@ -577,6 +584,34 @@ assert(blockDays / 300 < 0.25, `hard-block days (lockdown/toss) are diluted belo
   const crew = /crewId === h\.owned\.crewId && !h\.victimAcct\.rat && !isWanted\(victim\)/.test(penSrc);
   assert(fam, 'the shank FAMILY omertà gate voids for a WANTED target (!isWanted(victim))');
   assert(crew, 'the shank CREW omertà gate voids for a WANTED target (!isWanted(victim))');
+}
+
+// ════════════ THE YARD BOSS'S MEN ARE IN THE YARD (red team 2026-08-16) ════════════
+// `penSafe` gates fire/jump/npcHit/shank/the wanted-hunter/the NPC-family strike, and the window was
+// bounded only by the wall clock — so PROTECTION_COST bought a STREET shield that outlived the
+// sentence, cheaper than a safehouse and without the safehouse's "shield, not bunker" cost. Its
+// sibling `inHole` was already capped at `jail_until` for exactly this reason; this one was missed.
+// Both directions are asserted: it must still cover you inside, and it must be worth nothing outside.
+{
+  const inmate = await mk('Shielded Sid'), thug = await mk('Yard Rival');
+  await pool.query('UPDATE characters SET cash=$2 WHERE id=$1', [inmate.id, PEN.PROTECTION_COST * 2]);
+  await pool.query("UPDATE characters SET jail_until = now() + interval '3 minutes' WHERE id=$1", [inmate.id]);
+  r = await call('POST', '/v1/pen/protection', { token: inmate.token });
+  assert.equal(r.code, 200, 'the yard boss takes the money');
+  const sid = async () => (await pool.query('SELECT * FROM characters WHERE id=$1', [inmate.id])).rows[0];
+  assert.equal(penSafe(await sid()), true, 'INSIDE, the cover is real — that is what was paid for');
+  // the window deliberately OUTLIVES a short sentence (nobody is short-changed on what they bought)
+  const row = await sid();
+  assert.ok(new Date(row.pen_safe_until) > new Date(row.jail_until),
+    'the stored window still runs past this sentence — the fix scopes the shield, it does not shorten it');
+  // …but the moment he walks out it is worth nothing on the street
+  await pool.query('UPDATE characters SET jail_until = NULL WHERE id=$1', [inmate.id]);
+  assert.equal(penSafe(await sid()), false, 'OUTSIDE, the yard boss reaches nobody — the shield does not follow him out');
+  const jr = await call('POST', `/v1/streets/${inmate.id}/jump`, { token: thug.token, body: { intent: 'standard' } });
+  assert.notEqual(jr.body.error, 'protected', 'and a released man is fair game again — no cut-price safehouse');
+  // re-jailed inside the window, the cover he paid for is still his
+  await pool.query("UPDATE characters SET jail_until = now() + interval '5 minutes' WHERE id=$1", [inmate.id]);
+  assert.equal(penSafe(await sid()), true, 'back inside within the window, the cover still holds');
 }
 
 console.log('✅ test/pen.js — the prison meta-game + step two (the hole, yard incidents, the burner phone) + step three THE BREAKOUT (cutkit sink, free/no-kit/lockdown gates, forced fail → the hole + longer stretch + beating + kit spent + NOT wanted, forced win → sentence cleared + WANTED fugitive + heat spike) + step four THE CO-OP BREAKOUT (plan stakes a cutkit, crew joins, crew_short/not_leader gates, forced win → the whole crew out + WANTED, forced fail → the whole crew in the hole + longer stretch, leader-disband + stale-sweep refund the staked kit) + step five PRISON FACTIONS (join/leave, free/bad/already gates, the board cover + SHOT-CALLER derivation moving to the most-feared, yard omertà blocking a same-crew shank while a rival stays fair game) + THE BREAK RAT (a crew member tips the guards → the break blows, the honest crew eats the hole + a longer stretch, the rat cuts a deal for time OFF but is holed WITH the crew so the roster never outs them, the feed only says somebody talked) + step six THE YARD LIVES (the iron pile trains the physical disciplines on the SHARED gym clock with the street gym still jail-gated, cards with the crew pays gambling mastery XP for energy, the daily seed-drawn yard character talks once a day with the seed\'s own effect — and the whole step writes ZERO ledger rows)');

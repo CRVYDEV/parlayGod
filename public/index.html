@@ -4505,7 +4505,9 @@
     const cornerCard = (c) => {
       if (!c) return '';
       const parts = [];
-      if (c.collectable > 0)
+      if (c.collectable > 0 && c.canCollect === false)
+        parts.push(`<div class="t">The take is building — $${(c.collectable).toLocaleString()} banked. Working a corner takes level ${c.cornerMinLvl}; the street stays yours until then.</div>`);
+      else if (c.collectable > 0)
         parts.push(`<button class="act" id="deed-collect">collect the corner take — $${(c.collectable).toLocaleString()}</button>`);
       if (c.iControl && deed) parts.push(`<div class="d">You run your corner — it's yours to collect. It banks up to ${c.capHours}h ($${(c.perHr * c.capHours).toLocaleString()}) while you're away.</div>`);
       // 2C — THE CONTROLLER'S PERKS: your corner carries its district's turf perk + an extra op seat

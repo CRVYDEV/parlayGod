@@ -309,6 +309,16 @@ export async function sweepNpcWars(pool) {
       if (row) { await client.query('UPDATE npc_wars SET resolved=true WHERE attacker_gang=$1 AND npc_gang=$2', [w.attacker_gang, w.npc_gang]); lapsed++; }
       await client.query('COMMIT');
     } catch (e) { await client.query('ROLLBACK'); console.error('[sweepNpcWars]', w.attacker_gang, e?.message || e); }
+    // (red team 2026-08-16) RELEASE, in a `finally` — this loop and sweepFamilyAggro below were the
+    // only two of 109 `pool.connect()` sites in src/ that leaked their client, including the three
+    // siblings a few hundred lines down in this same file. A leak here is not one lost connection:
+    // it is PERMANENT and CUMULATIVE, so once the worker's pool (20) has seen that many due rows the
+    // sweep starts failing on ITSELF mid-loop and every later job in the process — the nightly §10.4
+    // sweep, the backup watchdog, every timed settlement — can never get a connection again. The
+    // worker goes dark silently, which is the worst possible failure for the process that owns every
+    // alarm. Measured on real Postgres at max=3 with 5 due rows: 3 leaked, the 4th threw
+    // `timeout exceeded when trying to connect`, and a following job then failed the same way.
+    finally { client.release(); }
   }
   return { lapsed, due: due.length };
 }
@@ -399,6 +409,7 @@ export async function sweepFamilyAggro(pool) {
       }
       await client.query('COMMIT');
     } catch (e) { await client.query('ROLLBACK'); console.error('[sweepFamilyAggro]', a.gang_id, e?.message || e); }
+    finally { client.release(); } // see sweepNpcWars — the same leak, the same permanent consequence
   }
   return { struck, due: due.length };
 }

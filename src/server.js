@@ -811,6 +811,26 @@ export async function buildServer() {
   app.post('/v1/auth/x/start', async (req, reply) => {
     let accountId = null;
     try { await req.jwtVerify(); accountId = req.user.sub; } catch { /* unauthed start = a fresh sign-in */ }
+    // (red team 2026-08-16) A VERIFIED SIGNATURE IS NOT A USABLE TOKEN. This route cannot take the
+    // `auth` preHandler — an unauthed start is the ordinary fresh sign-in — so it verifies in-band,
+    // and in-band verification checked only that the JWT was signed by us. It skipped the two things
+    // `auth` and the guarded-mutation path both enforce from the DATABASE: the ban, and BLUE-TEAM M3
+    // token revocation. That mattered here more than almost anywhere else, because an authed start
+    // is an `upgrade` (server.js: `A.upgradeAccount(pool, r.accountId, r.identity)`) — it BINDS an X
+    // identity to that account permanently. So a leaked token that the owner had already killed with
+    // `logout-all` could still be used to attach the thief's own X account to the victim's, after
+    // which they sign in legitimately, forever: a takeover that survives the exact control built to
+    // stop it. Reproduced — `GET /v1/me` answered 401 token_revoked while this route answered 200 and
+    // wrote an upgrade-purpose state row bound to the victim.
+    // A dead token DEMOTES to an unauthed start rather than 401ing: a stale bearer left in
+    // localStorage must not lock a returning player out of signing in, and a fresh sign-in through
+    // their real X identity reaches the same account anyway.
+    if (accountId) {
+      const a = (await pool.query(
+        'SELECT status, token_version FROM accounts WHERE id=$1', [accountId])).rows[0];
+      const revoked = req.user.tv !== undefined && Number(req.user.tv) !== Number(a?.token_version);
+      if (!a || a.status === 'banned' || revoked) accountId = null;
+    }
     const { url, state } = await A.xOAuthStart(pool, { accountId, invite: req.body?.inviteCode });
     // BROWSER-BIND the state (anti account-linking CSRF): the callback must present the same cookie,
     // so an attacker who leaks their authorize URL can't have a victim's X identity bound to the

@@ -1539,7 +1539,17 @@ export const yardEventOf = (day = dayOf()) => {
 // seconds left on a sentence (0 if free) — the Pen's clock
 export const jailSecondsLeft = (ch, now = Date.now()) =>
   ch.jail_until ? Math.max(0, Math.ceil((new Date(ch.jail_until).getTime() - now) / 1000)) : 0;
-export const penSafe = (ch, now = Date.now()) => !!ch.pen_safe_until && new Date(ch.pen_safe_until).getTime() > now;
+// (red team 2026-08-16) THE YARD BOSS'S MEN ARE IN THE YARD. `penSafe` gates `fire`, `jump`, `npcHit`,
+// `shank`, the wanted-hunter and the NPC-family strike — so an unbounded window was a STREET shield:
+// $15,000 (PROTECTION_COST) bought 2h untouchable, against a safehouse's $25,000 floor for 4h that ALSO
+// stops you acting (the signed D2/P1.3 "shield, not bunker" rule). Reproduced: a 3-minute sentence, buy
+// protection, walk out, and jump/npcHit both refuse `protected` while the mark pulls jobs freely — a
+// cheaper safehouse with none of its cost. Its sibling `inHole` was already capped at `jail_until` by an
+// earlier audit for exactly this reason; this one was missed. Scoping the PREDICATE (rather than
+// shortening the stored window) keeps what a player paid for — re-jailed inside it, they are still
+// covered — and can never reach the street. `payProtection`'s own actor guard still reads true inside.
+export const penSafe = (ch, now = Date.now()) =>
+  !!ch.pen_safe_until && new Date(ch.pen_safe_until).getTime() > now && jailed(ch, now);
 export const inHole = (ch, now = Date.now()) => !!ch.hole_until && new Date(ch.hole_until).getTime() > now;
 
 // THE THREE UNIVERSAL STATUS PREDICATES — and why they live HERE rather than in the social package.
@@ -5574,6 +5584,17 @@ DEEDS.SHAKEDOWN_CD_MS = 6 * 3600 * 1000;    // per-deed cooldown (bounds spam/gr
 DEEDS.SHAKEDOWN_ENERGY = 15;
 DEEDS.SHAKEDOWN_HEAT = 10;                  // exposure win or lose (leaning on a corner is exposure)
 DEEDS.SHAKEDOWN_MIN_LVL = 8;                // anti-alt floor (the RIVALS/npcHit precedent)
+// (red team 2026-08-16) THE SAME ANTI-ALT FLOOR ON THE MONEY. Claiming a deed is free and ungated by
+// design (Phase 1 is pure status — naming your street is a good day-one moment), but the CORNER TAKE
+// hung off it with no floor at all: a brand-new level-1 account with $500 claimed a street for $0 and
+// drew $48,000/day — 96× its starting cash, forever, for no play. Reproduced. Two things make it a
+// defect rather than the accepted petty-faucet posture: the system contradicted itself (level 8 to
+// MUSCLE a corner, level 1 to OWN one and collect from it), and the sim's own model (P9.37) sizes this
+// as "ONE deed per account, linear in the playerbase" — an assumption Sybil multiplication breaks.
+// The gate is on the MONEY, not the claim, so a new player still names their street and builds its
+// legend; the income waits until they're somebody. Exactly the WANTED_MIN_LVL shape — below the floor a
+// defaulter is still WANTED, just with no pool cash on his head.
+DEEDS.CORNER_MIN_LVL = 8;                   // == SHAKEDOWN_MIN_LVL: you can earn a corner when you could take one
 DEEDS.SHAKE_BASE_P = 0.5; DEEDS.SHAKE_MIN_P = 0.15; DEEDS.SHAKE_MAX_P = 0.85; DEEDS.SHAKE_STAT_SCALE = 200;
 // the corner take owed on a deed (capped) — a pure function of its accrual clock
 export const deedCornerOwed = (deed, now = Date.now()) => {

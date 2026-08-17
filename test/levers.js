@@ -491,6 +491,7 @@ const SIGNED = [
   ['DEEDS.SHAKEDOWN_ENERGY', 15],
   ['DEEDS.SHAKEDOWN_HEAT', 10],
   ['DEEDS.SHAKEDOWN_MIN_LVL', 8],
+  ['DEEDS.CORNER_MIN_LVL', 8],       // the same anti-alt floor on the MONEY (red team 2026-08-16)
   ['DEEDS.SHAKE_BASE_P', 0.5],
   ['DEEDS.SHAKE_MIN_P', 0.15],
   ['DEEDS.SHAKE_MAX_P', 0.85],
