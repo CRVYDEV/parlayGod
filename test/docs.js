@@ -497,6 +497,26 @@ assert.deepEqual([...new Set(phantom)], [], `docs/AUDITS.md lists reports that d
       + 'would be the contract nobody rotates, and its pre-signed vouchers stay valid, bounded only by '
       + 'its own daily cap. Add it to the ordered list in §8.');
   }
+  // …and that daily cap is the SUM this key's blast radius is measured in, so every one of them must
+  // take it as a CONSTRUCTOR argument (red-team R33). A setter-only cap defaults to 0 = unlimited, which
+  // means the wall lives only in a deploy checklist — and two of these four were exactly that, with the
+  // runbook calling one of them "optional", so a fresh deploy minted unbounded NFTs per day with nobody
+  // doing anything wrong. 0 is still legal; what the constructor buys is that a deploy must STATE it.
+  for (const c of bearers) {
+    const src = read(`${dir}/${c}.sol`);
+    const at = src.indexOf('constructor');
+    assert(at > 0, `${c}.sol has no constructor — this check can no longer see its arguments`);
+    let depth = 0, end = at;
+    for (let i = src.indexOf('(', at); i < src.length; i++) {
+      if (src[i] === '(') depth++;
+      else if (src[i] === ')' && --depth === 0) { end = i; break; }
+    }
+    const params = src.slice(at, end);
+    assert(/dailyCap|dailyMintCap/i.test(params),
+      `${c}.sol takes no daily cap in its constructor, so it deploys UNCAPPED unless somebody remembers a `
+      + "setter. It self-mints on the shared voucher signer, whose blast radius is the SUM of these "
+      + 'contracts\' caps — make the cap a constructor argument (0 = unlimited is still allowed).');
+  }
 }
 
 console.log(`✅ docs test passed — every number in SPEC.md's size table checked against the tree `

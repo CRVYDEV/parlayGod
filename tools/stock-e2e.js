@@ -107,7 +107,7 @@ const accountImpl = await deploy(acctArt);
 step('the real ERC-6551 registry deployed', `${registry.slice(0, 10)}… impl ${accountImpl.slice(0, 10)}…`);
 
 const deedArt = ours('StreetDeed');
-const deed = await deploy(deedArt, [SAFE, SIGNER.address, 'https://omerta.fun/v1/deeds/plate/', 'https://omerta.fun/deed/']);
+const deed = await deploy(deedArt, [SAFE, SIGNER.address, 'https://omerta.fun/v1/deeds/plate/', 'https://omerta.fun/deed/', 0n]);
 const vaultArt = ours('StockVault');
 const vault = await deploy(vaultArt, [SAFE, KEEPER, 0n]);   // 0 = no default cap; set a real one below
 const omrArt = ours('OMR');

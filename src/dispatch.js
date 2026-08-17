@@ -39,28 +39,121 @@ export function verifyUnsub(accountId, token) {
   catch { return false; }
 }
 
+// ── THE CONFIRMATION TOKEN — HMAC over (account, ADDRESS), which is what makes it a proof of that
+// ADDRESS rather than a proof of the account. Binding the address in means a token minted for
+// a@x is worthless once the player retypes b@y: the link cannot confirm an address it did not
+// name, so a stale click can never verify whatever happens to be stored now. ──
+export function confirmToken(accountId, email) {
+  const secret = process.env.JWT_SECRET || 'dev-secret';
+  return crypto.createHmac('sha256', secret)
+    .update(`digest-confirm:${accountId}:${String(email).trim().toLowerCase()}`).digest('base64url').slice(0, 24);
+}
+export function verifyConfirm(accountId, email, token) {
+  const want = confirmToken(accountId, email);
+  try { return crypto.timingSafeEqual(Buffer.from(want), Buffer.from(String(token || ''))); }
+  catch { return false; }
+}
+
 // ── SET / READ preferences (the player's own account, via withCharacter's account row) ──
+//
+// ⚠ AN ADDRESS A PLAYER TYPES IS NOT AN ADDRESS THEY OWN (red-team R32 F1). Before this, entering
+// somebody else's address and opting in was enough to have the game mail them a recurring digest
+// they never asked for — reproduced with three free guest accounts pointing at one third-party
+// address, three deliveries, and nothing bounding the multiplier but how many accounts a spammer
+// cares to open. So the address is now PROVED: a change stores it UNVERIFIED, the sweep refuses to
+// send to an unverified address, and the only thing that verifies one is a click on a link sent to
+// it. The confirmation is the single message an unverified address can ever receive, and it is
+// metered PER ADDRESS across accounts (`email_confirm_sent`) — without that meter the double
+// opt-in just moves the abuse one message down.
+const CONFIRM_COOLDOWN_MS = 24 * 3600 * 1000;
+
 export async function setDigestPrefs(pool, accountId, { email, optin }) {
   const on = !!optin;
   let addr = email == null ? undefined : String(email).trim().toLowerCase();
   if (addr !== undefined && addr !== '' && !EMAIL_RE.test(addr)) throw new GameError('bad_email', "That doesn't look like an email address.");
+  const cur = (await pool.query(
+    'SELECT email, email_verified FROM account_persistent WHERE account_id=$1', [accountId])).rows[0] || {};
   if (on && (addr === undefined || addr === '')) {
     // turning ON without giving an address: keep whatever's stored, but there must be one
-    const cur = (await pool.query('SELECT email FROM account_persistent WHERE account_id=$1', [accountId])).rows[0];
-    if (!cur?.email) throw new GameError('no_email', 'Add an email address to turn on the digest.');
+    if (!cur.email) throw new GameError('no_email', 'Add an email address to turn on the digest.');
+  }
+  // An address somebody has already PROVED is theirs cannot be claimed by another account. Only
+  // verified addresses are reserved: an unverified claim must not let one account lock a real
+  // player out of their own inbox forever.
+  if (addr !== undefined && addr !== '' && addr !== cur.email) {
+    const taken = (await pool.query(
+      'SELECT 1 FROM account_persistent WHERE email=$1 AND email_verified AND account_id <> $2 LIMIT 1',
+      [addr, accountId])).rowCount;
+    if (taken) throw new GameError('email_taken', 'That address is already confirmed on another account.');
   }
   // build the update from only the fields provided (email optional on a plain toggle)
   if (addr !== undefined) {
-    await pool.query('UPDATE account_persistent SET email=$2, digest_optin=$3 WHERE account_id=$1',
-      [accountId, addr === '' ? null : addr, on && addr !== '']);
+    // A NEW address is unverified by construction; re-submitting the same one keeps whatever proof
+    // it already has, so a player toggling the switch does not have to click a link again.
+    const same = addr !== '' && addr === cur.email;
+    await pool.query('UPDATE account_persistent SET email=$2, digest_optin=$3, email_verified=$4 WHERE account_id=$1',
+      [accountId, addr === '' ? null : addr, on && addr !== '', same ? !!cur.email_verified : false]);
   } else {
     await pool.query('UPDATE account_persistent SET digest_optin=$2 WHERE account_id=$1', [accountId, on]);
   }
+  const after = await getDigestPrefs(pool, accountId);
+  if (after.optin && after.email && !after.verified) await sendConfirmation(pool, accountId, after.email);
   return getDigestPrefs(pool, accountId);
 }
 export async function getDigestPrefs(pool, accountId) {
-  const r = (await pool.query('SELECT email, digest_optin FROM account_persistent WHERE account_id=$1', [accountId])).rows[0] || {};
-  return { available: digestConfigured(), email: r.email || null, optin: !!r.digest_optin };
+  const r = (await pool.query(
+    'SELECT email, digest_optin, email_verified FROM account_persistent WHERE account_id=$1', [accountId])).rows[0] || {};
+  return { available: digestConfigured(), email: r.email || null, optin: !!r.digest_optin, verified: !!r.email_verified };
+}
+
+/// Send the ONE message an unverified address may receive, at most once per address per cooldown.
+/// Best-effort: a provider failure must never fail the player's own settings save.
+export async function sendConfirmation(pool, accountId, email) {
+  if (!digestConfigured()) return false;
+  const addr = String(email).trim().toLowerCase();
+  // CLAIM the meter before sending (the push/dispatch claim-then-send discipline), so two overlapping
+  // requests — or two accounts naming the same victim — cannot each get a message out.
+  const cutoff = new Date(Date.now() - CONFIRM_COOLDOWN_MS);
+  const upd = await pool.query('UPDATE email_confirm_sent SET at=now() WHERE email=$1 AND at < $2', [addr, cutoff]);
+  if (!upd.rowCount) {
+    try { await pool.query('INSERT INTO email_confirm_sent (email) VALUES ($1)', [addr]); }
+    catch { return false; }   // a row exists and is inside the cooldown — already asked, recently
+  }
+  const base = cfg.base();
+  const link = `${base}/v1/digest/confirm?a=${encodeURIComponent(accountId)}&e=${encodeURIComponent(addr)}&t=${confirmToken(accountId, addr)}`;
+  const subject = 'Confirm your OMERTÀ digest';
+  const html = `<!doctype html><html><body style="margin:0;background:#0c0b0d;color:#e9e3d6;font-family:Georgia,serif">
+    <div style="max-width:520px;margin:0 auto;padding:32px 24px">
+      <div style="font-family:monospace;font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:#a89e90">OMERTÀ</div>
+      <h1 style="font-size:26px;margin:10px 0 8px">Confirm this address</h1>
+      <p style="color:#a89e90">Somebody asked us to send the OMERTÀ digest here. If that was you, confirm below.
+        If it wasn't, ignore this — nothing is sent until you do, and you won't hear from us again.</p>
+      <div style="margin:24px 0">
+        <a href="${link}" style="display:inline-block;background:#b02a30;color:#fff;text-decoration:none;padding:12px 22px;border-radius:3px;font-family:monospace;letter-spacing:.1em;text-transform:uppercase;font-size:13px">Confirm →</a>
+      </div>
+      <p style="font-family:monospace;font-size:11px;color:#6f675d">You are not subscribed until you click.</p>
+    </div></body></html>`;
+  const text = `Somebody asked us to send the OMERTÀ digest to this address.\n\nIf that was you, confirm: ${link}\n\nIf it wasn't, ignore this — nothing is sent until you do, and you won't hear from us again.`;
+  try { return !!(await sender(addr, subject, html, text)); } catch { return false; }
+}
+
+/// The confirmation landing (public, keyless — the link in the confirmation email).
+export async function confirmEmail(pool, accountId, email, token) {
+  const addr = String(email || '').trim().toLowerCase();
+  if (!accountId || !addr || !verifyConfirm(accountId, addr, token)) return { ok: false };
+  // The reservation is enforced HERE as well as at set-time, because that check can be walked past:
+  // an account that stored the address BEFORE anybody proved it keeps it stored, and re-submitting
+  // an unchanged address never re-runs the check. Verification is the thing worth guarding, so it
+  // guards itself — one address, one proved owner.
+  const taken = (await pool.query(
+    'SELECT 1 FROM account_persistent WHERE email=$1 AND email_verified AND account_id <> $2 LIMIT 1',
+    [addr, accountId])).rowCount;
+  if (taken) return { ok: false };
+  // Only confirms the address the token NAMES and only while it is still the stored one, so a link
+  // clicked after the player retyped their address verifies nothing.
+  const upd = await pool.query(
+    'UPDATE account_persistent SET email_verified=true WHERE account_id=$1 AND email=$2', [accountId, addr]);
+  return { ok: !!upd.rowCount };
 }
 
 // ── the unsubscribe landing (public, keyless — the link in every email) ──
@@ -153,13 +246,15 @@ export async function sweepDispatch(pool) {
   const activeSince = new Date(now - cfg.maxLapseDays() * day);   // not gone TOO long
   const lapsedBefore = new Date(now - cfg.lapseDays() * day);     // gone at least this long
 
-  // opted-in accounts with an address, a living non-npc/agent street, not banned, cooldown elapsed.
+  // opted-in accounts with a PROVED address (R32 F1 — an address a player typed is not one they
+  // own), a living non-npc/agent street, not banned, cooldown elapsed.
   const cands = (await pool.query(
     `SELECT ap.account_id, ap.email, c.id char_id, c.name
        FROM account_persistent ap
        JOIN characters c ON c.account_id = ap.account_id AND c.alive AND NOT c.is_npc
        JOIN accounts a ON a.id = ap.account_id AND a.status <> 'banned'
-      WHERE ap.digest_optin AND ap.email IS NOT NULL AND NOT ap.agent_flag AND NOT ap.npc_flag
+      WHERE ap.digest_optin AND ap.email IS NOT NULL AND ap.email_verified
+        AND NOT ap.agent_flag AND NOT ap.npc_flag
         AND (ap.digest_at IS NULL OR ap.digest_at < $1)
       LIMIT 500`, [cooldownBefore])).rows;
   if (!cands.length) return 0;

@@ -79,7 +79,20 @@ contract DynastyNFT is ERC721, ERC2981, EIP712, Ownable2Step, Pausable, Reentran
     // owner still equals `minter`, frozen once it transfers away). `nonce` ties the mint to the backend request.
     event Minted(uint256 indexed nonce, address indexed minter, uint256 indexed tokenId);
 
-    constructor(address owner_, address signer_, string memory baseUri_, address royaltyRecipient_, uint96 royaltyBps_)
+    /// @dev `dailyMintCap_` is a CONSTRUCTOR argument rather than a setter-only field on purpose: this
+    ///      contract self-mints on the SAME signer key as VoucherClaim/OmertaBond/StreetDeed, so that key's
+    ///      blast radius is the SUM of the four daily caps — and with NO supply cap here, an unset wall is
+    ///      unbounded. A wall that lives only in a deploy checklist is one a deploy can forget; both
+    ///      siblings that take theirs at construction cannot be. 0 still means unlimited (the suite-wide
+    ///      convention), so this forces a DECISION at deploy, not a particular number.
+    constructor(
+        address owner_,
+        address signer_,
+        string memory baseUri_,
+        address royaltyRecipient_,
+        uint96 royaltyBps_,
+        uint256 dailyMintCap_
+    )
         ERC721("OMERTA Dynasty", "OMERTA")
         EIP712("OmertaDynasty", "1")
         Ownable(owner_)
@@ -89,6 +102,8 @@ contract DynastyNFT is ERC721, ERC2981, EIP712, Ownable2Step, Pausable, Reentran
         signer = signer_;
         _baseUri = baseUri_;
         _setDefaultRoyalty(royaltyRecipient_, royaltyBps_); // EIP-2981; ERC2981 caps bps at 10000
+        dailyMintCap = dailyMintCap_;
+        emit DailyMintCapSet(dailyMintCap_);
     }
 
     // ── admin (the Safe) ──

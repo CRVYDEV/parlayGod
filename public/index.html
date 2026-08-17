@@ -2119,7 +2119,9 @@
     if (body.favor === 'ran') bits.push(`🤝 ran the favor — ${fmt(body.qty)} ${goodName(body.good)} delivered, +$${fmt(body.net)} (house took $${fmt(body.take)})`);
     if (body.favor === 'pulled') bits.push(`🤝 pulled it back — $${fmt(body.refund)} returned`);
     // THE DISPATCH — the email digest opt-in response is {available, email, optin}
-    if ('available' in body && 'optin' in body && 'email' in body) bits.push(body.optin ? "📬 digest on — we'll email you what you missed while you're away" : '📭 digest off');
+    if ('available' in body && 'optin' in body && 'email' in body) bits.push(!body.optin ? '📭 digest off'
+      : body.verified ? "📬 digest on — we'll email you what you missed while you're away"
+      : '✉ check your inbox — confirm the address and the digest starts');
     if (body.win === true && !spec) bits.push(`WIN — +$${fmt(Math.abs(body.net ?? 0))}`);
     if (body.win === false && !spec) bits.push(`the house keeps it (−$${fmt(Math.abs(body.net ?? 0))})`);
     // street jump / extortion / convoy hijack — carry a `win` but no cash `net`, so each gets its own line
@@ -5368,7 +5370,7 @@
             <input id="prof-digest-email" type="email" placeholder="you@email.com" value="${esc(dg.email || '')}" style="flex:1;min-width:140px;background:#100b07;color:var(--fg);border:1px solid #3a2a1a;border-radius:4px;padding:6px;font-size:12.5px">
             <button class="act" id="prof-digest-save" style="border-color:var(--neon)">${dg.optin ? 'update' : 'turn on'}</button>
           </div>
-          ${dg.optin ? `<div class="d" style="font-size:11px;color:var(--neon);margin-top:4px">✓ digest ON${dg.email ? ` — to ${esc(dg.email)}` : ''} · <a id="prof-digest-off" style="color:var(--dim);cursor:pointer">turn off</a></div>` : '<div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">off · one email at most a week · unsubscribe any time</div>'}
+          ${dg.optin && dg.verified ? `<div class="d" style="font-size:11px;color:var(--neon);margin-top:4px">✓ digest ON${dg.email ? ` — to ${esc(dg.email)}` : ''} · <a id="prof-digest-off" style="color:var(--dim);cursor:pointer">turn off</a></div>` : dg.optin ? `<div class="d" style="font-size:11px;color:var(--warn);margin-top:4px">✉ check ${dg.email ? esc(dg.email) : 'your inbox'} and click the link — we don't send to an address until somebody confirms it's theirs · <a id="prof-digest-off" style="color:var(--dim);cursor:pointer">cancel</a></div>` : '<div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">off · one email at most a week · unsubscribe any time</div>'}
         </div>` : '';
     const link = location.origin + p.profilePath;
     const FACES = ['🕵️', '🎩', '🚬', '🃏', '💼', '🥃', '🔫', '🐕']; // the Top 8 gets faces, not photos
