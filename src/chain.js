@@ -725,6 +725,76 @@ export async function makeDeedReader() {
 // EXTRACT a named street on-chain: sign a DeedVoucher, and flag the deed EXTRACTION-PENDING (state 1→2).
 // Gates mirror requestItemWithdraw: a MADE account (the Sybil bound — `minted` never travels with the
 // token) + a linked wallet + the account owns a NOT-already-on-chain, NOT-listed deed. ZERO §10.4.
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// THE IDENTITY NFT'S ENTRANCE (red team #9 F2). DynastyNFT self-mints against a server-signed
+// EIP-712 MintVoucher and has NO owner mint, so with nothing signing one the contract was deployable,
+// watchable and unusable — the forgotten-sibling class across the four contracts that share one
+// signer key: VoucherClaim, StreetDeed and OmertaBond each had a signing route and this one did not,
+// while the runbook and the log both said the rail was complete.
+//
+// THE GATE is the founder's recorded answer (2026-08-16, "retrofit every existing minter"): an account
+// that PAID the identity fee, with a wallet it proved through SIWE, may take its portrait on-chain —
+// ONE token per account. The token carries NO entitlement (the wall: nothing gates on `balanceOf`),
+// so this mints a trophy, never a power.
+export const MINT_VOUCHER_TYPES = {
+  MintVoucher: [
+    { name: 'to', type: 'address' },
+    { name: 'nonce', type: 'uint256' },
+    { name: 'deadline', type: 'uint256' },
+  ],
+};
+// Its own contract → its own verifyingContract and its own domain name; the four domains are
+// deliberately distinct so a voucher for one can never be replayed against another.
+export function dynastyChainConfig() {
+  const chainId = Number(process.env.CHAIN_ID);
+  const verifyingContract = process.env.DYNASTY_NFT_ADDRESS;
+  if (!chainId || !verifyingContract || !isAddress(verifyingContract))
+    throw new GameError('chain_unconfigured', 'Minting the identity NFT is not enabled on this server yet (chain config missing).');
+  return { name: 'OmertaDynasty', version: '1', chainId, verifyingContract: getAddress(verifyingContract) };
+}
+
+export async function requestDynastyMint(pool, accountId, toAddress) {
+  const domain = dynastyChainConfig();  // throws chain_unconfigured if not configured
+  const signer = signerAccount();       // throws chain_unconfigured if the signer PK is missing
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const acct = (await client.query('SELECT * FROM account_persistent WHERE account_id=$1 FOR UPDATE', [accountId])).rows[0];
+    if (!acct?.minted) throw new GameError('not_minted', 'Only a made account can take its portrait on-chain — pay the identity mint fee first.');
+    const to = toAddress || acct?.wallet_address;
+    if (!to || !isAddress(to)) throw new GameError('wallet', 'Link a wallet (SIWE) or pass a valid address first.');
+    // ONE per account, on both horizons: a token the Minted watcher has already recorded, and a
+    // voucher signed but not yet claimed. Without the second the window between signing and the mint
+    // landing would issue a second voucher for the same account (the contract has no per-account cap
+    // — its walls are the nonce, the deadline and the daily rate).
+    const have = (await client.query('SELECT token_id FROM dynasty_tokens WHERE account_id=$1', [accountId])).rows[0];
+    if (have) throw new GameError('already', 'Your bloodline already has its portrait on-chain.');
+    const pending = (await client.query(
+      "SELECT id FROM vouchers WHERE account_id=$1 AND kind='dynasty' AND status='signed' AND deadline > $2",
+      [accountId, Math.floor(Date.now() / 1000)])).rows[0];
+    if (pending) throw new GameError('pending', 'A mint voucher is already out — claim it, or wait for it to lapse.');
+
+    // nonce from the shared chain_reserve counter (unique across ALL vouchers; this contract's own
+    // usedNonce only ever sees this subset, all distinct). NOT reserve-bounded — no $OMR moves.
+    const res = (await client.query('SELECT * FROM chain_reserve WHERE id=1 FOR UPDATE')).rows[0];
+    const nonce = Number(res.next_nonce);
+    await client.query('UPDATE chain_reserve SET next_nonce = next_nonce + 1 WHERE id=1');
+    const deadline = Math.floor(Date.now() / 1000) + WITHDRAW_TTL_SEC;
+
+    const message = { to: getAddress(to), nonce: BigInt(nonce), deadline: BigInt(deadline) };
+    const signature = await signer.signTypedData({ domain, types: MINT_VOUCHER_TYPES, primaryType: 'MintVoucher', message });
+    const voucher = Object.fromEntries(Object.entries(message).map(([k, v]) => [k, typeof v === 'bigint' ? v.toString() : v]));
+
+    const id = uid();
+    await client.query(
+      'INSERT INTO vouchers (id, account_id, kind, amount, gear_id, nonce, to_address, deadline, status, signed_payload) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+      [id, accountId, 'dynasty', 1, null, nonce, getAddress(to), deadline, 'signed', JSON.stringify({ voucher, signature })]);
+    await client.query('COMMIT');
+    return { id, nonce, status: 'signed', contract: domain.verifyingContract, chainId: domain.chainId, voucher, signature };
+  } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; }
+  finally { client.release(); }
+}
+
 export async function requestDeedWithdraw(pool, accountId, toAddress, { attest } = {}) {
   const domain = deedChainConfig();  // throws chain_unconfigured if not configured
   const signer = signerAccount();    // throws chain_unconfigured if the signer PK is missing
@@ -1467,5 +1537,46 @@ export async function bondOracleHealth() {
     let ceilingOk = true;
     try { await client.readContract({ address: bond, abi: bondAbi, functionName: 'priceCeiling' }); } catch { ceilingOk = false; }
     return classifyOracleHealth({ oracleAddr, periodS, lastUpdateS, ceilingOk });
+  } catch (e) { return { state: 'unreachable', note: e.message }; }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// THE ON-CHAIN SPLITS (red team #9 F1) — the raw numbers, no lever knowledge, so this file stays free
+// of the economy constants. `vig.js:splitParity` does the comparison, because that is where the
+// levers live and a restatement here is the class preflight's own ledger exists to stop.
+//
+// WHY IT MATTERS: `OmertaFees.vigBps` and `OmertaBond.polBps/devBps/rwaBps` are IMMUTABLE, hand-set at
+// a deploy that no script covers — and the backend RESTATES them. For a bond the booking is
+// event-authoritative (`toPol`/`toDev`/`toRwa`/`toVig` all ride `Bonded`), so a divergence corrupts
+// only the DECLARED waterfall; for a gameplay fee the event carries the gross ALONE, so
+// `recordVigRevenue` derives the share from `VIG_BPS` and a divergence directly mis-books the
+// withdrawal reserve's funding source. Nothing anywhere compared the two.
+export async function onchainSplits() {
+  const rpc = process.env.CHAIN_RPC_URL;
+  if (!rpc) return { state: 'dormant' };
+  const fees = process.env.OMERTA_FEES_ADDRESS;
+  const bond = process.env.OMERTA_BOND_ADDRESS;
+  if (!(fees && isAddress(fees)) && !(bond && isAddress(bond))) return { state: 'dormant' };
+  try {
+    const { createPublicClient, http } = await import('viem');
+    const client = createPublicClient({ transport: http(rpc) });
+    // the wrong-chain guard (the bondOracleHealth posture): a reading off a colliding deploy on
+    // another chain is worse than none, because it looks authoritative
+    if (process.env.CHAIN_ID && Number(process.env.CHAIN_ID) !== Number(await client.getChainId())) return { state: 'dormant' };
+    const u = (name) => ({ type: 'function', name, stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] });
+    const out = { state: 'ok' };
+    if (fees && isAddress(fees)) {
+      out.feeVigBps = Number(await client.readContract({ address: getAddress(fees), abi: [u('vigBps')], functionName: 'vigBps' }));
+    }
+    if (bond && isAddress(bond)) {
+      const abi = [u('polBps'), u('devBps'), u('rwaBps')];
+      const [pol, dev, rwa] = await Promise.all([
+        client.readContract({ address: getAddress(bond), abi, functionName: 'polBps' }),
+        client.readContract({ address: getAddress(bond), abi, functionName: 'devBps' }),
+        client.readContract({ address: getAddress(bond), abi, functionName: 'rwaBps' }),
+      ]);
+      out.bondPolBps = Number(pol); out.bondDevBps = Number(dev); out.bondRwaBps = Number(rwa);
+    }
+    return out;
   } catch (e) { return { state: 'unreachable', note: e.message }; }
 }

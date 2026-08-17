@@ -108,7 +108,7 @@ export const OPERATIONAL_ENV = [
   // (the vault's Safe-set keeper key; leaked-key blast radius bounded by the vault's own walls);
   // STOCK_TOKEN_ADDRESSES is a JSON ticker→ERC-20 map; decimals default 18. Dormant unless all of
   // CHAIN_RPC_URL + STOCK_VAULT_ADDRESS + STOCK_KEEPER_PK are set on the worker.
-  'STOCK_KEEPER_PK', 'STOCK_TOKEN_ADDRESSES', 'STOCK_TOKEN_DECIMALS',
+  'STOCK_KEEPER_PK', 'STOCK_TOKEN_ADDRESSES',
   // THE TWO DEX BOTS (src/dexbot.js) — the buyback bot (swaps unspent Vig revenue for hard OMR on
   // the canonical v4 pool, books the ACHIEVED price through the audited runVigBuyback) + the
   // POL-pairing bot (pairs bond-delivered POL ETH into the pool, root-capped at bond_reserve.pol_eth).

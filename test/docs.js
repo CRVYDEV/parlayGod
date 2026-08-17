@@ -497,6 +497,26 @@ assert.deepEqual([...new Set(phantom)], [], `docs/AUDITS.md lists reports that d
       + 'would be the contract nobody rotates, and its pre-signed vouchers stay valid, bounded only by '
       + 'its own daily cap. Add it to the ordered list in §8.');
   }
+  // THE ENTRANCE (red team #9 F2). A signer-bearing contract exists to mint against a voucher, so a
+  // deployed one with nothing SIGNING for it is a contract nobody can use — and it fails silently,
+  // because the exit half (a watcher, a metadata route, royalties) can be complete and look complete.
+  // DynastyNFT shipped exactly that way while both the runbook and the log called the rail done, so
+  // this is catalog-or-declare on the other side of the same key: carry a `setSigner`, have a backend
+  // route that signs for you. Matched on the DOMAIN NAME, which is the one string a signing path
+  // cannot avoid naming (the type name and the route path are both free choices).
+  {
+    const backend = fs.readdirSync('src').filter((f) => f.endsWith('.js'))
+      .map((f) => read(`src/${f}`)).join('\n');
+    for (const c of bearers) {
+      const src = read(`${dir}/${c}.sol`);
+      const dom = /EIP712\(\s*"([^"]+)"/.exec(src);
+      assert(dom, `${c}.sol carries a setSigner but declares no EIP712 domain — it cannot verify a voucher.`);
+      assert(backend.includes(`'${dom[1]}'`) || backend.includes(`"${dom[1]}"`),
+        `${c}.sol self-mints against a signed voucher in the EIP-712 domain "${dom[1]}" and NOTHING in `
+        + 'src/ signs one — the contract is deployable, watchable and unusable. Build the signing route '
+        + '(the requestDeedWithdraw shape) or the deploy ships a door with no key.');
+    }
+  }
   // …and that daily cap is the SUM this key's blast radius is measured in, so every one of them must
   // take it as a CONSTRUCTOR argument (red-team R33). A setter-only cap defaults to 0 = unlimited, which
   // means the wall lives only in a deploy checklist — and two of these four were exactly that, with the

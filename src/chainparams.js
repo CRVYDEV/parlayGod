@@ -82,11 +82,13 @@ export const CHAIN_PARAMS = [
   {
     key: 'bond.recipients', contract: 'OmertaBond', env: 'OMERTA_BOND_ADDRESS',
     label: 'ETH split recipients (POL / dev / treasury / vig)', unit: 'addresses',
-    read: null, write: { fn: 'setRecipients', args: ['pol', 'dev', 'rwa', 'vig'] },
+    read: 'polBps', write: { fn: 'setRecipients', args: ['pol', 'dev', 'rwa', 'vig'] },
     wall: 'No zero addresses. The treasury and Vig recipients MUST be different keys — setting them '
       + 'equal silently re-creates the custody defect the four-way split was built to fix.',
     why: 'The bps themselves are IMMUTABLE on purpose (on-chain/off-chain drift), so this is the only '
-      + 'part of the split that can move. The backend books four slices; the contract forwards four.',
+      + 'part of the split that can move. The backend books four slices; the contract forwards four. '
+      + 'The read shows polBps so the immutable side is VISIBLE beside the mirror; the worker checks '
+      + 'all four hourly (vig.js:splitParity) because an eyeball nobody uses is not a check.',
     mirror: () => ({
       label: 'backend BONDS.*_BPS (the split these addresses receive)',
       value: `POL ${BONDS.POL_BPS} / dev ${BONDS.DEV_BPS} / treasury ${BONDS.RWA_BPS} / vig ${
