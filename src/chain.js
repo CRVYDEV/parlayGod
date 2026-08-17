@@ -1541,22 +1541,38 @@ export async function bondOracleHealth() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
-// THE ON-CHAIN SPLITS (red team #9 F1) — the raw numbers, no lever knowledge, so this file stays free
-// of the economy constants. `vig.js:splitParity` does the comparison, because that is where the
-// levers live and a restatement here is the class preflight's own ledger exists to stop.
+// THE ON-CHAIN PARAMETERS (red team #9 F1, widened by #10) — the raw numbers, no lever knowledge, so
+// this file stays free of the economy constants. `vig.js:chainParity` does the comparison, because
+// that is where the levers live and a restatement here is the class preflight's own ledger exists to
+// stop.
 //
-// WHY IT MATTERS: `OmertaFees.vigBps` and `OmertaBond.polBps/devBps/rwaBps` are IMMUTABLE, hand-set at
-// a deploy that no script covers — and the backend RESTATES them. For a bond the booking is
-// event-authoritative (`toPol`/`toDev`/`toRwa`/`toVig` all ride `Bonded`), so a divergence corrupts
-// only the DECLARED waterfall; for a gameplay fee the event carries the gross ALONE, so
-// `recordVigRevenue` derives the share from `VIG_BPS` and a divergence directly mis-books the
-// withdrawal reserve's funding source. Nothing anywhere compared the two.
-export async function onchainSplits() {
+// THE CLASS: a value the CHAIN holds authoritatively and the backend keeps its own copy of. RT#6 hit
+// it once (`ALCHEMIST_ASSET_DECIMALS`, deleted), RT#9 hit it again (`STOCK_TOKEN_DECIMALS`, deleted)
+// and found F1's two splits; enumerating the whole class turned up five instances, so the fix is one
+// crossing that reads them all rather than a sixth ad-hoc guard:
+//
+//   • `OmertaFees.vigBps` — the SHARP one. `MintFeePaid` carries the gross ALONE, so
+//     `recordVigRevenue` DERIVES the share from `VIG_BPS`: a divergence directly mis-books the
+//     withdrawal reserve's funding source, and every downstream check sums either way because they
+//     all descend from the same restated number.
+//   • `OmertaBond.polBps/devBps/rwaBps` — IMMUTABLE, so a typo is permanent. The booking here is
+//     event-authoritative (`Bonded` carries all four), so what diverges is the DECLARED waterfall.
+//   • `OmertaFees.mintFee` / `respawnFee` — settable, and they move at a tranche boundary. The
+//     respawn one prices a LIVE rail (plexQuote), so a stale copy sets a price nobody chose.
+//   • `VoucherClaim.dailyCapOMR` — a stale-HIGH copy signs exactly the voucher its own guard exists
+//     to prevent: burned $OMR behind a `claim()` that reverts every day until the reclaim sweep.
+//   • `OMR` / `OmertaHook` sell-tax bps — `recordSellTax` derives all four slices from the levers.
+//
+// Everything is read through `opt()` so a getter missing on an older deploy costs one comparison
+// rather than the whole sweep.
+export async function onchainParams() {
   const rpc = process.env.CHAIN_RPC_URL;
   if (!rpc) return { state: 'dormant' };
   const fees = process.env.OMERTA_FEES_ADDRESS;
   const bond = process.env.OMERTA_BOND_ADDRESS;
-  if (!(fees && isAddress(fees)) && !(bond && isAddress(bond))) return { state: 'dormant' };
+  const claim = process.env.VOUCHER_CLAIM_ADDRESS;
+  const any = [fees, bond, claim, process.env.OMR_ADDRESS, process.env.OMERTA_HOOK_ADDRESS];
+  if (!any.some((a) => a && isAddress(a))) return { state: 'dormant' };
   try {
     const { createPublicClient, http } = await import('viem');
     const client = createPublicClient({ transport: http(rpc) });
@@ -1565,8 +1581,42 @@ export async function onchainSplits() {
     if (process.env.CHAIN_ID && Number(process.env.CHAIN_ID) !== Number(await client.getChainId())) return { state: 'dormant' };
     const u = (name) => ({ type: 'function', name, stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] });
     const out = { state: 'ok' };
+    // read a getter that MAY not exist on an older deploy without failing the whole sweep: a missing
+    // one leaves its field undefined, and `cmp` skips undefined. Losing one comparison beats losing
+    // all of them, which is what a single Promise.all over a reverting call would do.
+    const opt = async (addr, name) => {
+      try { return await client.readContract({ address: getAddress(addr), abi: [u(name)], functionName: name }); }
+      catch { return undefined; }
+    };
     if (fees && isAddress(fees)) {
       out.feeVigBps = Number(await client.readContract({ address: getAddress(fees), abi: [u('vigBps')], functionName: 'vigBps' }));
+      // the two fee PRICES. Unlike vigBps these are settable, so they move at a tranche boundary —
+      // and the backend restates them (vig.js MINT_FEE_ETH/RESPAWN_FEE_ETH) to price the PLEX rail.
+      // Wei, not ether: the comparison converts, because a float ether value cannot be compared to a
+      // uint256 without one side rounding.
+      const [mintW, respW] = await Promise.all([opt(fees, 'mintFee'), opt(fees, 'respawnFee')]);
+      if (mintW !== undefined) out.mintFeeWei = String(mintW);
+      if (respW !== undefined) out.respawnFeeWei = String(respW);
+    }
+    if (claim && isAddress(claim)) {
+      // the withdrawal daily cap. A stale-HIGH backend copy is the dangerous direction: chain.js
+      // burns the $OMR and signs a voucher whose claim() then reverts "VC: daily cap" every day
+      // forever, stranding the player until the reclaim sweep.
+      const capW = await opt(claim, 'dailyCapOMR');
+      if (capW !== undefined) out.claimDailyCapWei = String(capW);
+    }
+    // the sell tax, on BOTH layers. Each is settable, each holds the same four numbers, and the
+    // backend restates them in SELL_TAX.* — which `recordSellTax` uses to DERIVE all four slices
+    // from a gross. Nothing else crosses them.
+    for (const [addr, prefix] of [[process.env.OMR_ADDRESS, 'omr'], [process.env.OMERTA_HOOK_ADDRESS, 'hook']]) {
+      if (!(addr && isAddress(addr))) continue;
+      const [total, dev, rwa, community] = await Promise.all([
+        opt(addr, 'sellTaxBps'), opt(addr, 'taxDevBps'), opt(addr, 'taxRwaBps'), opt(addr, 'taxCommunityBps'),
+      ]);
+      if (total !== undefined) out[`${prefix}SellTaxBps`] = Number(total);
+      if (dev !== undefined) out[`${prefix}TaxDevBps`] = Number(dev);
+      if (rwa !== undefined) out[`${prefix}TaxRwaBps`] = Number(rwa);
+      if (community !== undefined) out[`${prefix}TaxCommunityBps`] = Number(community);
     }
     if (bond && isAddress(bond)) {
       const abi = [u('polBps'), u('devBps'), u('rwaBps')];

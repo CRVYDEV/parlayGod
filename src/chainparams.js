@@ -88,7 +88,7 @@ export const CHAIN_PARAMS = [
     why: 'The bps themselves are IMMUTABLE on purpose (on-chain/off-chain drift), so this is the only '
       + 'part of the split that can move. The backend books four slices; the contract forwards four. '
       + 'The read shows polBps so the immutable side is VISIBLE beside the mirror; the worker checks '
-      + 'all four hourly (vig.js:splitParity) because an eyeball nobody uses is not a check.',
+      + 'all four hourly (vig.js:chainParity) because an eyeball nobody uses is not a check.',
     mirror: () => ({
       label: 'backend BONDS.*_BPS (the split these addresses receive)',
       value: `POL ${BONDS.POL_BPS} / dev ${BONDS.DEV_BPS} / treasury ${BONDS.RWA_BPS} / vig ${

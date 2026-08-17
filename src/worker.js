@@ -13,7 +13,7 @@ import { pingDb, archiverHealth } from './dbhealth.js';
 import { levelOf, dayOf, CONSTANTS, DUELS, COMMISSION, POPULATION, FAMILY_YIELD, recapTitleOf } from './rules.js';
 import { recordReckoning } from './season.js';
 import { runLedgerInvariants, alertDrift } from './invariants.js';
-import { runVigInvariants, splitParity } from './vig.js';
+import { runVigInvariants, chainParity } from './vig.js';
 import { carveExchange, mergeLegacyYieldPools, payFamilyYield, runExchangeInvariants } from './exchange.js';
 import { runRouterInvariants } from './router.js';
 import { runFamilyBuybackInvariants } from './community.js';
@@ -260,7 +260,7 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
   // episode alerts again (two separate outages in one day is exactly the pattern that matters).
   let archiverAlerted = false;
   let oracleKeeperAlerted = false; // the bond-oracle keeper watchdog, same latch discipline
-  let splitParityAlerted = false;  // the contract-vs-lever split check, same latch discipline
+  let chainParityAlerted = false;  // the contract-vs-lever split check, same latch discipline
   let deskDarkAlerted = false;     // the desk's anchor went stale — same latch, same reason
   const tick = async () => {
     // A tick fans out to ~60 independent jobs. `safe()` isolates them so one poison row cannot starve
@@ -556,23 +556,27 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
         console.log(`✅ bond oracle recovered — keeper poked ${oh.ageS}s ago (period ${oh.periodS}s)`);
       }
     }
-    // SPLIT PARITY (red team #9 F1) — the contract's IMMUTABLE splits against the levers the backend
-    // restates. Same hourly cadence and latch as the oracle watchdog; dormant/unreachable never
-    // alarm. It can only ever fire once per deploy (the contract side cannot move), but that once is
-    // the whole point: an immutable typo is permanent, and every other check sums either way.
-    const sp = await safe('split parity', () => splitParity());
-    if (sp && sp.state === 'mismatch' && !splitParityAlerted) {
-      splitParityAlerted = true;
+    // CHAIN PARITY (red team #9 F1, widened by #10) — every value the chain holds authoritatively
+    // against the copy the backend restates: the two splits, the two fee prices, the withdrawal
+    // daily cap and the sell tax on both layers. Same hourly cadence and latch as the oracle
+    // watchdog; dormant/unreachable never alarm. The immutable half can only fire once per deploy
+    // (the contract side cannot move), and that once is the whole point — an immutable typo is
+    // permanent, and every other check sums either way because they all descend from the same
+    // restated number. The settable half (fees, cap, tax) can drift at any Safe transaction, which
+    // is why it is checked hourly rather than at boot.
+    const sp = await safe('chain parity', () => chainParity());
+    if (sp && sp.state === 'mismatch' && !chainParityAlerted) {
+      chainParityAlerted = true;
       const lines = sp.mismatches.map((m) => `${m.what} on-chain ${m.onchain} vs backend ${m.backend}`).join('; ');
-      console.error(`🚨 SPLIT PARITY — ${lines}. The chain is not performing the split this backend books.`);
-      await safe('split parity alert', () => alertDrift(pool, [{
-        name: 'split parity', mismatches: sp.mismatches,
-        note: 'A contract split and its backend lever disagree. The bond bps are IMMUTABLE, so the fix '
+      console.error(`🚨 CHAIN PARITY — ${lines}. The chain and the backend disagree about a value the chain holds.`);
+      await safe('chain parity alert', () => alertDrift(pool, [{
+        name: 'chain parity', mismatches: sp.mismatches,
+        note: 'A value the chain holds and the backend restates disagree. The bond bps are IMMUTABLE, so the fix '
           + 'is the ENV (fee-splits.env on BOTH api and worker) unless the deploy itself was wrong.',
       }], 'split'));
-    } else if (sp && sp.state === 'ok' && splitParityAlerted) {
-      splitParityAlerted = false;
-      console.log('✅ split parity restored — the chain and the levers agree');
+    } else if (sp && sp.state === 'ok' && chainParityAlerted) {
+      chainParityAlerted = false;
+      console.log('✅ chain parity restored — the chain and the levers agree');
     }
     if (dayOf() !== lastInvariantDay) {
       lastInvariantDay = dayOf();

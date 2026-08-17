@@ -369,7 +369,7 @@ export async function makeViemSource() {
   const rerollEv = parseAbiItem('event RerollFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount)');
   const claimedEv = parseAbiItem('event Claimed(uint256 indexed nonce, address indexed to, uint8 kind, uint256 amount, uint256 gearId)');
   const packagePaidEv = parseAbiItem('event PackagePaid(address indexed payer, uint256 indexed nonce, uint256 indexed sku, uint256 amount)');
-  const harvestEv = parseAbiItem('event HarvestFeeTaken(address indexed user, address indexed recipient, uint256 amount)');
+  const harvestEv = parseAbiItem('event HarvestFeeTaken(address indexed user, address indexed recipient, uint256 assets)');
   const bondEv = parseAbiItem('event Bonded(uint256 indexed bondId, address indexed payer, uint256 indexed nonce, uint256 principal, uint256 payout, uint256 toPol, uint256 toDev, uint256 toRwa, uint256 toVig)');
   const redeemedEv = parseAbiItem('event Redeemed(address indexed from, uint256 indexed tokenId, uint256 amount)');
   const deedExtractedEv = parseAbiItem('event Extracted(uint256 indexed nonce, address indexed to, uint256 indexed tokenId, string name, string district)');
@@ -418,7 +418,11 @@ export async function makeViemSource() {
       return logs.map((l) => ({
         ref: `${l.transactionHash}:${l.logIndex}`,
         asset: alchAsset,
-        amount: Number(formatUnits(l.args.amount, dec)),
+        // `l.args.assets` — the parameter NAME the contract declares. viem decodes positionally, so
+        // the old `amount` spelling worked; it worked only because both sides were wrong together,
+        // which is the drift THE ABI LEDGER (test/gates.js) now refuses. Rename one without the
+        // other and this reads `undefined` → NaN, and every harvest fee books as a bad amount.
+        amount: Number(formatUnits(l.args.assets, dec)),
         payer: l.args.user,
         txHash: l.transactionHash,
       }));
