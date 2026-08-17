@@ -504,3 +504,62 @@ console.log('✅ THE GATE MATRIX passed — every verb in a family enforces the 
     + `      Add a \`finally { ${'${client}'}.release(); }\`:\n   - ${leaked.join('\n   - ')}`);
   console.log(`✓ all ${seen} pooled connections are released before their function returns`);
 }
+
+// ═══ THE WATCHER POISON LEDGER — a malformed log must never wedge a stream ════════════════════════
+// The chain watchers share ONE isolation rule (`src/watcher.js:isolate`): a DETERMINISTIC data fault
+// in a log is skipped so the cursor advances past it, and anything else re-throws so the cursor does
+// NOT advance past a good event. That rule is only as good as the POISON list, and the list had been
+// grown once, for the stream that prompted it — so `recordHarvestFee`'s codes sat outside it while
+// `syncHarvestFees`' own comment promised the protection. Reproduced (red-team R31 F3): a dust
+// harvest whose fee rounds to zero re-threw every tick, the cursor never moved, the good fee behind
+// it never booked, and the Bank's revenue stopped permanently.
+//
+// So the list is catalogued rather than remembered: every GameError code a watcher recorder can
+// throw is either POISON (skip it — it can never succeed) or waived HERE with the reason it must
+// re-throw. A new recorder, or a new code on an existing one, fails this until somebody decides
+// which it is. Scope: it proves each code is CLASSIFIED, not that the classification is right.
+{
+  const WATCHER = fs.readFileSync(path.join(SRC, 'watcher.js'), 'utf8');
+  const poison = new Set(
+    (WATCHER.match(/const POISON = new Set\(\[([\s\S]*?)\]\)/)?.[1] || '')
+      .replace(/\/\/[^\n]*/g, '').match(/'([a-z_]+)'/g)?.map((s) => s.slice(1, -1)) || []);
+  assert(poison.size >= 6, 'the POISON set could not be read out of src/watcher.js — this check is vacuous');
+
+  // A code that MUST re-throw, with the reason. These are not data faults: retrying is the point.
+  const WAIVED = {
+    // recordStorePurchase deliberately HOLDS the cursor on a sku we no longer sell: real money
+    // arrived for something unknown, so a human looks rather than the payment being skipped past.
+    retired: 'a real payment for a retired sku must stop the stream, not be skipped',
+    bad_sku: 'same — money arrived for a package this build does not know',
+    // recordBond guards BOTH of these on `!onchain`, and the watcher always passes `onchainPayout`
+    // (the chain is the source of truth for a real bond, and bypassing the backend tranche cap is
+    // deliberately what stops a real bond stalling this very cursor). Unreachable from a log.
+    price: 'recordBond: !onchain only — the watcher books the event\'s own payout',
+    over_capacity: 'recordBond: !onchain only — a real bond deliberately bypasses the backend tranche cap',
+  };
+
+  // the recorders each stream hands to isolate(), then every GameError code in their bodies
+  const recorders = [...WATCHER.matchAll(/isolate\('[^']+',\s*\(\)\s*=>\s*([A-Za-z_]+)\(/g)].map((m) => m[1]);
+  assert(recorders.length >= 10, `only ${recorders.length} watcher recorders found — the extractor is broken`);
+  const unclassified = [];
+  for (const fn of new Set(recorders)) {
+    let src = null;
+    for (const f of files) {                  // the tree-wide list built at the top of this file
+      const text = fs.readFileSync(f, 'utf8');
+      const at = text.search(new RegExp(`(export\\s+)?async function ${fn}\\s*\\(`));
+      if (at >= 0) { src = bodyOf(text, at); break; }
+    }
+    assert(src, `watcher recorder ${fn} could not be located — the extractor is broken, not the code`);
+    for (const m of src.matchAll(/GameError\('([a-z_]+)'/g)) {
+      const code = m[1];
+      if (!poison.has(code) && !WAIVED[code]) unclassified.push(`${fn} → '${code}'`);
+    }
+  }
+  assert.equal(unclassified.length, 0,
+    'watcher recorder(s) can throw a code that is neither POISON nor waived. Whichever it is, decide:\n'
+    + '      POISON = the log can never succeed, skip it and advance the cursor;\n'
+    + '      waived = it must re-throw, and the stream stalls until a human looks.\n'
+    + '      Leaving it unclassified means it re-throws by default, which wedges the stream forever:\n'
+    + `   - ${unclassified.join('\n   - ')}`);
+  console.log(`✓ every code ${new Set(recorders).size} watcher recorders can throw is classified poison or waived`);
+}

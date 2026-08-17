@@ -25,7 +25,22 @@ export const DEFAULT_CONFIRMATIONS = Number(process.env.CHAIN_CONFIRMATIONS || 5
 // would be permanently stuck (a DoS on the whole fee pipeline). Skip a poison log (it can never
 // succeed) but RE-THROW a transient error (a DB timeout / serialization failure) so the cursor
 // does NOT advance and the block window re-scans idempotently next tick — never losing a real fee.
-const POISON = new Set(['bad_fee_kind', 'bad_payer', 'bad_nonce', 'min', 'discount', 'payout']);
+// (red-team R31 F3) The set is the CLASS, not one stream's list — and it had only ever been grown
+// for the stream that prompted it. `syncHarvestFees`' own comment already promised this protection
+// ("a deterministically poison log is skipped so the cursor is not stalled forever by one bad row")
+// while `recordHarvestFee`'s codes sat outside the set, so the promise was false: reproduced with a
+// dust harvest whose fee rounds to zero — `amount` re-threw every tick, the cursor never moved off
+// 0, the GOOD fee behind it was never booked, and the Bank's revenue (which is the city leg's
+// budget) stopped permanently with nothing but a repeating log line. Every code below is a fault in
+// the LOG's own data: it cannot succeed on any retry, so re-scanning forever only blocks the good
+// events queued behind it. `test/gates.js` now fails if a watcher recorder gains a GameError code
+// that is neither classified poison nor waived, so this cannot fall behind a third time.
+const POISON = new Set([
+  'bad_fee_kind', 'bad_payer', 'bad_nonce',   // recordFeePayment
+  'min', 'discount', 'payout',                // recordBond
+  'ref', 'asset', 'amount',                   // recordHarvestFee
+  'delivery_id', 'tx',                        // confirmStockDelivered
+]);
 async function isolate(label, apply) {
   try { await apply(); return true; }
   catch (e) {

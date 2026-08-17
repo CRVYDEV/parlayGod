@@ -10,6 +10,7 @@
 // transactions rows).
 process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
+import fs from 'node:fs';
 import { makeDb } from '../src/db.js';
 import {
   runDexBuyback, runPolPairing, dexBotBoard, runDexBotInvariants,
@@ -151,6 +152,51 @@ const tx0 = await txCount();
   await q("DELETE FROM dex_swaps WHERE ref='0xcompbooked'");
   inv = await runDexBotInvariants(pool);
   assert.ok(inv.ok, 'green again once the forced breaches are removed');
+}
+
+// ════════════ red-team R31 F1/F2 — SINGLE-WRITER, and one poison fill must not wedge the bot ═══════
+// F1: both keepers read an UNLOCKED budget and then SEND real ETH, and the send is the irreversible
+// half. The worker's cadence gate is in-memory, so two replicas across a deploy overlap both read the
+// same budget and both send — reproduced on real Postgres at 2 ETH of revenue: TWO swaps, 4 ETH out,
+// 2 booked. pg-mem is single-caller so the LOCK itself is Postgres's to prove (the runStockBuyback
+// split); what this pins is that the lock is TAKEN, and that a losing caller SKIPS rather than
+// double-sending. F2: `bookUnbookedSwaps` runs FIRST, so a fill the price wall legitimately refuses
+// used to throw out of every future run — wedging the buyback AND, unwrapped in the worker, the POL
+// pairing behind it.
+{
+  const src = fs.readFileSync(new URL('../src/dexbot.js', import.meta.url), 'utf8');
+  assert.match(src, /pg_try_advisory_lock/,
+    'F1: both DEX keepers must take a single-writer lock BEFORE reading the budget they then spend — '
+    + 'the root caps bound the booking, never the send');
+  assert.match(src, /runDexBuybackInner/, 'the buyback runs inside the lock');
+  assert.match(src, /runPolPairingInner/, 'the pairing runs inside the lock');
+
+  // F2, behaviourally: a fill whose achieved price is outside VIG_MAX_PRICE_JUMP is REFUSED by the
+  // accounting (correctly — that wall is the fraud bound). It must stay unbooked and NAMED, while
+  // the bot keeps working; booking past the wall would defeat the wall.
+  await q("INSERT INTO vig_revenue (source, ref, kind, gross_eth, vig_eth) VALUES ('fee','r31-1','fee',2,1)");
+  swapImpl = async ({ ethIn }) => ({ txHash: '0xr31good', ethSpent: ethIn, omrReceived: ethIn * 500 });
+  await runDexBuyback(pool);                                   // establishes the 500/ETH reference
+  await q("INSERT INTO vig_revenue (source, ref, kind, gross_eth, vig_eth) VALUES ('fee','r31-2','fee',2,1)");
+  swapImpl = async ({ ethIn }) => ({ txHash: '0xr31wild', ethSpent: ethIn, omrReceived: ethIn * 20 });
+  priceNow = { price: 20, updatedAt: Math.floor(Date.now() / 1000) };
+  let wild = null, escaped = null;
+  try { wild = await runDexBuyback(pool); } catch (e) { escaped = e.code || e.message; }
+  assert.equal(escaped, null,
+    `F2: the accounting's refusal ESCAPED the bot ('${escaped}'). bookUnbookedSwaps runs FIRST, so a `
+    + 'throw here wedges every future swap — and, unwrapped in the worker, the POL pairing behind it');
+  assert.ok(wild.bookFailed?.some((f) => f.ref === '0xr31wild' && f.why === 'price_sanity'),
+    'F2: the refused fill is NAMED in the output, not swallowed');
+  assert.equal(Number((await q("SELECT booked FROM dex_swaps WHERE ref='0xr31wild'")).rows[0].booked), 0,
+    'F2: it stays UNBOOKED — booking past the price wall would defeat the wall');
+
+  // …and the bot is not wedged: the next run (which re-runs the recovery pass FIRST) still works.
+  await q("INSERT INTO vig_revenue (source, ref, kind, gross_eth, vig_eth) VALUES ('fee','r31-3','fee',2,1)");
+  swapImpl = async ({ ethIn }) => ({ txHash: '0xr31after', ethSpent: ethIn, omrReceived: ethIn * 20 });
+  const after = await runDexBuyback(pool);
+  assert.equal(after.swap?.ref, '0xr31after',
+    'F2: one poison fill must not block every FUTURE swap — the recovery pass runs first');
+  priceNow = { price: 500, updatedAt: Math.floor(Date.now() / 1000) };
 }
 
 // ════════════ §10.4 — the whole flow writes ZERO transactions rows ════════════

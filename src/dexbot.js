@@ -124,10 +124,47 @@ async function freshPrice() {
   return price;
 }
 
+// ── SINGLE-WRITER over both bots (red-team R31 F1) ───────────────────────────────────────────────
+// Both keepers read an UNLOCKED budget and then SEND real ETH, and the send is the irreversible
+// half. The worker's in-memory `lastDexBotRun` is per-process, so two replicas across a deploy
+// overlap — the threat model that already justified this posture for the wage epoch, the
+// population, the city leg and the stock keeper — both read the same budget and both send.
+// Reproduced on real Postgres: 2 ETH of unspent Vig revenue produced TWO swaps, 4 ETH out and 2
+// booked (the OMR from the second sits unaccounted in the bot wallet); 1 ETH of delivered POL
+// produced TWO pairings and tripped `paired <= booked`. The root caps bound the BOOKING, never the
+// send — `runVigBuyback` re-derives under its own lock and simply books the second one SHORT — so
+// the worker's claim that a double-run "is bounded by the module's own root caps" was true of the
+// accounting and false of the money. The invariants catch it the same night; that is the DETECTOR,
+// and this is the prevention. A losing caller SKIPS rather than queues: a keeper run is a periodic
+// sweep, so the next tick is the retry. pg-mem (no DATABASE_URL) is single-caller, so the suite
+// exercises the arithmetic and Postgres the serialization — the runStockBuyback split verbatim.
+const DEXBOT_LOCK_CLASS = 0x44455801;  // 'DEX'+1 — the swap side
+const POL_LOCK_CLASS = 0x44455802;     // 'DEX'+2 — the pairing side (independent: one bot must not block the other)
+async function singleWriter(pool, lockClass, run, locked) {
+  let lockConn = null;
+  if (process.env.DATABASE_URL) {
+    lockConn = await pool.connect();
+    const got = (await lockConn.query('SELECT pg_try_advisory_lock($1,$2) AS ok', [lockClass, 0])).rows[0].ok;
+    if (!got) { lockConn.release(); return locked; }
+  }
+  try {
+    return await run();
+  } finally {
+    if (lockConn) {
+      await lockConn.query('SELECT pg_advisory_unlock($1,$2)', [lockClass, 0]).catch(() => {});
+      lockConn.release();
+    }
+  }
+}
+
 // ── THE DEX BUYBACK BOT ──
 export async function runDexBuyback(pool, opts = {}) {
   const seamed = _swap !== swapEthForOmrOnchain || _readPrice !== readOraclePrice;
   if (!seamed && !dexBuybackReady()) return { dormant: true };
+  return singleWriter(pool, DEXBOT_LOCK_CLASS, () => runDexBuybackInner(pool, opts),
+    { dormant: false, booked: [], skipped: [{ why: 'locked' }] });
+}
+async function runDexBuybackInner(pool, opts = {}) {
   const out = { dormant: false, booked: [], skipped: [] };
 
   // PHASE B FIRST — crash recovery: book any real fill the last run journaled but never booked
@@ -184,9 +221,22 @@ async function bookUnbookedSwaps(pool, out) {
     'SELECT ref, eth_spent, omr_received, price_omr_per_eth FROM dex_swaps WHERE real AND NOT booked ORDER BY created_at')).rows;
   for (const r of rows) {
     const eth = round6(num(r.eth_spent));
-    // `r.ref` IS the swap's tx hash — the real bot's claim that hard $OMR was actually bought. It was
-    // available here and dropped; passing it is what makes the real rail book real while a comp books zero.
-    const booked = await runVigBuyback(pool, { priceOmrPerEth: num(r.price_omr_per_eth), maxEth: eth, txHash: r.ref });
+    // (red-team R31 F2) ONE POISON ROW MUST NOT STARVE THE REST — the worker's own `safe()`
+    // discipline, applied inside the loop. `runVigBuyback` legitimately REFUSES a fill whose
+    // achieved price is more than VIG_MAX_PRICE_JUMP off the last real print (the fraud/fat-finger
+    // wall, doing its job), and that refusal used to escape: this pass runs FIRST, so a single
+    // unbookable fill wedged every FUTURE swap as well as its own, forever. Reproduced on real
+    // Postgres — a 25× move between beats (a thin new pool over a 12h beat is enough) threw
+    // `price_sanity` on every subsequent run. The row is left UNBOOKED on purpose: booking past
+    // the wall would defeat the wall, and `no real swap unbooked > 1h` is already the alarm that
+    // fetches a human. What changes is that the bot keeps working while they come.
+    let booked = null, failed = null;
+    try {
+      // `r.ref` IS the swap's tx hash — the real bot's claim that hard $OMR was actually bought. It was
+      // available here and dropped; passing it is what makes the real rail book real while a comp books zero.
+      booked = await runVigBuyback(pool, { priceOmrPerEth: num(r.price_omr_per_eth), maxEth: eth, txHash: r.ref });
+    } catch (e) { failed = e.code || e.message; }
+    if (failed) { out.bookFailed = (out.bookFailed || []).concat({ ref: r.ref, ethSpent: eth, why: failed }); continue; }
     await pool.query('UPDATE dex_swaps SET booked=true WHERE ref=$1', [r.ref]);
     const entry = { ref: r.ref, ethSpent: eth, omrBought: booked?.omrBought || 0 };
     if (!booked || round6(booked.ethSpent) < eth) entry.bookedShort = true; // the revenue moved under us — flagged, not hidden
@@ -198,6 +248,10 @@ async function bookUnbookedSwaps(pool, out) {
 export async function runPolPairing(pool, opts = {}) {
   const seamed = _pair !== addLiquidityOnchain || _readPrice !== readOraclePrice;
   if (!seamed && !polPairingReady()) return { dormant: true };
+  return singleWriter(pool, POL_LOCK_CLASS, () => runPolPairingInner(pool, opts),
+    { dormant: false, skipped: [{ why: 'locked' }] });
+}
+async function runPolPairingInner(pool, opts = {}) {
   const out = { dormant: false, skipped: [] };
 
   // THE ROOT CAP — the book of POL ETH the bond programme actually delivered, minus what is

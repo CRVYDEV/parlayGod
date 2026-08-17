@@ -710,9 +710,10 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
           }
           // THE TWO DEX BOTS (src/dexbot.js) — real-money keepers on their own cadence (the Vig's
           // 12h buyback beat, not the 30s poll). Both dormant unless their env is set; every skip
-          // is named inside the module; a double-run across a deploy overlap is bounded by the
-          // module's own root caps (unspent revenue / unpaired POL), so the in-memory cadence gate
-          // is pacing, not safety.
+          // is named inside the module. `lastDexBotRun` is IN-MEMORY, so it paces THIS process and
+          // nothing else — safety across a deploy overlap is the advisory lock each keeper takes
+          // inside the module (red-team R31 F1). This comment used to claim the root caps covered
+          // it; they bound the BOOKING, never the send, which is the irreversible half.
           if (Date.now() - lastDexBotRun >= Number(process.env.DEX_BOT_EVERY_MS || 12 * 3600 * 1000)) {
             lastDexBotRun = Date.now();
             // THE LP LEAGUE (src/bonds.js) — accrue depth-time off the PositionManager reader
@@ -721,13 +722,23 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
             const lp = await safe('lp depth sync', () => syncLpDepth(pool));
             if (lp?.touched) console.log(`💧 lp league: depth-time accrued for ${lp.touched} wallet(s)`);
             if (dexBuybackReady()) {
-              const bb = await runDexBuyback(pool);
+              // (red-team R31 F2) safe()-wrapped like the lp sync above it: the two bots are
+              // independent real-money keepers, and one throwing must not stop the other. It used
+              // to — a fill the price wall refused to book took the POL pairing down with it on
+              // every tick, so bond-delivered ETH silently stopped reaching the pool.
+              const bb = await safe('dex buyback', () => runDexBuyback(pool));
               if (bb?.swap) console.log(`💱 dex buyback: swapped ${bb.swap.ethSpent} ETH → ${bb.swap.omrReceived} OMR @ ${bb.swap.priceOmrPerEth}`);
               for (const s of bb?.skipped || []) if (s.why !== 'no_revenue')
                 console.error(`💱 dex buyback: skipped — ${s.why}${s.error ? ` (${s.error})` : ''}`);
+              // a fill the accounting REFUSED (the price wall) stays unbooked and alarms nightly —
+              // it must also be loud here, or the first anyone hears of it is the invariant.
+              for (const f of bb?.bookFailed || [])
+                console.error(`💱 dex buyback: fill ${f.ref} (${f.ethSpent} ETH) could NOT be booked — ${f.why}`);
+              for (const b of bb?.booked || []) if (b.bookedShort)
+                console.error(`💱 dex buyback: fill ${b.ref} booked SHORT — the revenue moved under it`);
             }
             if (polPairingReady()) {
-              const pp = await runPolPairing(pool);
+              const pp = await safe('pol pairing', () => runPolPairing(pool));
               if (pp?.paired) console.log(`💧 pol pairing: paired ${pp.paired.ethPaired} ETH + ${pp.paired.omrPaired} OMR into the pool (${pp.paired.remaining} ETH left to pair)`);
               for (const s of pp?.skipped || []) if (s.why !== 'no_budget')
                 console.error(`💧 pol pairing: skipped — ${s.why}${s.error ? ` (${s.error})` : ''}`);
