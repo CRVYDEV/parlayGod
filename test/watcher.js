@@ -253,9 +253,50 @@ dtok = (await pool.query("SELECT * FROM dynasty_tokens WHERE token_id='7'")).row
 assert.equal(dtok.frozen, true, 'the freeze is ONE-WAY — a buy-back does not resurrect a living portrait');
 assert.equal(String(dtok.owner_address), wallet.toLowerCase(), 'though the owner is tracked back');
 
+// ── red-team R31 F3: A MALFORMED LOG MUST NOT WEDGE A STREAM ────────────────────────────────────
+// `isolate` skips a DETERMINISTIC data fault so the cursor advances past it, and re-throws anything
+// transient so it does not. That rule is only as good as the POISON list — which had been grown once,
+// for the stream that prompted it, while `syncHarvestFees`' own comment already promised the
+// protection. Reproduced: a dust harvest whose fee rounds to zero threw `amount` on every tick, the
+// cursor never left 0, the GOOD fee queued behind it was never booked, and the Bank's revenue (which
+// IS the city leg's budget) stopped permanently with nothing but a repeating log line.
+{
+  const { syncHarvestFees } = await import('../src/watcher.js');
+  let hHead = 0;
+  const hLogs = [];
+  const hSource = {
+    head: async () => hHead,
+    harvestFeeLogs: async (from, to) => hLogs.filter((l) => l.block >= from && l.block <= to),
+  };
+  const booked = async () => Number((await pool.query(
+    "SELECT COALESCE(SUM(amount),0) s FROM bank_revenue WHERE source='harvest'")).rows[0].s);
+
+  hLogs.push({ block: 10, ref: '0xh1:0', asset: 'DNR', amount: 5, txHash: '0xh1' });
+  hLogs.push({ block: 11, ref: '0xh2:0', asset: 'DNR', amount: 0, txHash: '0xh2' });  // the dust harvest
+  hLogs.push({ block: 12, ref: '0xh3:0', asset: 'DNR', amount: 7, txHash: '0xh3' });
+  hHead = 30;
+
+  let r = null, wedged = null;
+  try { r = await syncHarvestFees(pool, hSource, { startBlock: 0, confirmations: 5 }); }
+  catch (e) { wedged = e.code || e.message; }
+  assert.equal(wedged, null,
+    `a malformed log ('${wedged}') re-threw out of the stream. It can never succeed, so the cursor `
+    + 'never advances and every good event behind it is stuck FOREVER — classify it in watcher.js\'s '
+    + 'POISON set (test/gates.js enumerates what each recorder can throw)');
+  assert.equal(r.processed, 2, 'the two GOOD fees are booked; the malformed one is skipped, not fatal');
+  assert.equal(await booked(), 12,
+    'the fee QUEUED BEHIND the bad log is booked — that is the whole point: one bad row must not '
+    + 'strand the revenue behind it');
+  assert.ok(await getCursor(pool, 'harvest') >= 12,
+    'and the cursor moved past it, so the stream is not re-scanning the same poison forever');
+  // idempotent on a re-poll, exactly like every other stream
+  assert.equal((await syncHarvestFees(pool, hSource, { startBlock: 0, confirmations: 5 })).processed, 0);
+  assert.equal(await booked(), 12, 'no double-booking on the re-poll');
+}
+
 // zero §10.4 surface across the whole registry + store stream (out-of-band real value / status)
 const txn = Number((await pool.query('SELECT COUNT(*) n FROM transactions')).rows[0].n);
 assert.ok(Number.isFinite(txn), 'countable'); // (the store/dynasty rails write zero ledger rows by design — proven in test/store.js; here the streams simply must not throw on it)
 
-console.log('✅ watcher test passed — confirmation-depth gating (reorg-safe), downtime backfill, cursor advance and idempotent reprocessing for the fee + Claimed + reserve-bond + PackagePaid + Dynasty streams; the retired-sku payment holds its cursor for a human; and a sold Dynasty portrait is a PHOTOGRAPH (frozen at first transfer, one-way)');
+console.log('✅ watcher test passed — confirmation-depth gating (reorg-safe), downtime backfill, cursor advance and idempotent reprocessing for the fee + Claimed + reserve-bond + PackagePaid + Dynasty streams; the retired-sku payment holds its cursor for a human while a MALFORMED log is skipped so it can never wedge a stream; and a sold Dynasty portrait is a PHOTOGRAPH (frozen at first transfer, one-way)');
 await app.close();

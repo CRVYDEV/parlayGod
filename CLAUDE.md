@@ -13523,3 +13523,68 @@ reproduced HIGH in an untracked scratch file for a whole session and found it on
 status`, so that is a fixed step now rather than a lesson; and all four mutations ran on scratchpad
 copies (`cp` out, `cp` back), never `git checkout`, with uncommitted work in the same files. Suite
 green + sim drift-0 + pgquery + pgcheck 43/43 on real Postgres.
+
+**RED TEAM #4 — the last unaudited module happens to be the one that sends real ETH
+(`AUDIT-red-team-four.md`, 2026-08-17).** The previous pass named `citywire`, `dexbot` and
+`stockdeliver` as the modules appearing in ZERO audit report and then swept only two of them;
+`dexbot.js` was still open. The second target was a class the earlier passes established without
+sweeping to its edge — the watchers' per-log isolation rule, grown once for the stream that prompted
+it. First-hand throughout; **two of the three findings needed real Postgres, because pg-mem is
+single-caller and cannot drive them at all.** **No CRITICAL; one HIGH, two MED**, four mutations each
+failing at its own named assertion.
+**F1 (HIGH) — two overlapping workers each SEND real ETH.** Both keepers read an **unlocked** budget
+and then send, and the send is the irreversible half. The worker's `lastDexBotRun` cadence gate is
+IN-MEMORY, so it paces one process and nothing else — the deploy-overlap threat model that already
+justified an advisory lock for the wage epoch, the population, the city leg, the NPC sweeps and the
+stock keeper. Reproduced on real Postgres: **2 ETH of unspent revenue → 2 swaps, 4 ETH out, 2 booked**;
+**1 ETH of delivered POL → 2 pairings, 2 ETH paired**. So real ETH left the wallet with no accounting
+at all — the OMR it bought sits there, never split to the reserve and prize pool. Both invariants
+fired the same night, which is the **detector**, and the money has already gone. **The worker comment
+asserted the opposite** (*"bounded by the module's own root caps … the in-memory cadence gate is
+pacing, not safety"*) — the caps bound the **BOOKING** (`runVigBuyback` re-derives under its own
+singleton lock and books the second fill SHORT), never the send: true of the accounting, false of the
+money, and a wrong claim in a comment licenses the next reader. Fixed with the `runStockBuyback`
+pattern verbatim — `pg_try_advisory_lock` taken BEFORE the budget read and held across the send, one
+lock class per bot so neither blocks the other, the loser SKIPPING rather than queueing (a keeper run
+is a periodic sweep; the next tick is the retry).
+**F2 (MED) — one poison fill wedged BOTH bots, forever.** `bookUnbookedSwaps` runs FIRST (crash
+recovery), and `runVigBuyback` legitimately REFUSES a fill more than `VIG_MAX_PRICE_JUMP` (10×) off
+the last real print — the fat-finger wall doing its job on a real fill. That refusal escaped, so one
+unbookable fill blocked every FUTURE swap as well as its own; and because neither keeper was
+`safe()`-wrapped in the worker (one line below an `lp depth sync` that is), the wedge took POL pairing
+down with it every tick — bond-delivered ETH silently stopped reaching the pool. Fixed in two halves:
+per-row isolation inside the loop (the row stays **UNBOOKED on purpose** — booking past the wall
+defeats the wall, and `no real swap unbooked > 1h` is already the alarm that fetches a human; what
+changes is that the bot keeps working while they come, and the refusal is NAMED), plus `safe()` on
+both keepers with `bookFailed`/`bookedShort` logged — a fill the accounting refused must be loud
+there, not first heard of from a nightly invariant.
+**F3 (MED) — a malformed log wedged a stream, and the comment promised otherwise.** The twelve
+watchers share one rule: a DETERMINISTIC data fault is skipped so the cursor advances past it,
+anything else re-throws so the cursor does not advance past a good event — and that rule is only as
+good as the `POISON` list, which had been grown once for the fee stream that prompted it.
+`recordHarvestFee` throws `ref`/`asset`/`amount`; none were in the set, while `syncHarvestFees`' own
+comment already promised the protection. Reproduced with a dust harvest whose fee rounds to zero: the
+cursor stuck at 0 across every tick, the good fee queued behind it never booking — and the Bank's
+revenue **is** the city leg's budget, the pool that pays players. Fixed by listing the CLASS (every
+deterministic data fault any watched recorder can throw, grouped by recorder) and — because this is
+the third time the class has surfaced — guarded: `test/gates.js` gained **THE WATCHER POISON LEDGER**,
+catalogue-or-declare, so a new recorder or a new code fails until somebody decides which it is. **It
+found two more on its first run** (`recordBond` → `price`/`over_capacity`, both guarded on `!onchain`
+and therefore unreachable from a log, waived with that reason). Scope stated in the guard: it proves
+each code is CLASSIFIED, not that the classification is right.
+**Three lenses came back CLEAN and are recorded, because a red team that publishes only its hits
+cannot be audited.** `nft.js` (`upgradeRarity` has no escrow gate where `requestItemWithdraw` does,
+which looks asymmetric until you check what rarity IS — display-only in-game, absent from `carVal`,
+race power, melt and fence — so upgrading a listed or pledged car can mislead nobody, and the one
+path where it becomes real does carry the gate); 180 hostile-input calls over the newest money routes
+(0 500s, no §10.4 drift) — **and the vacuity correction is the part worth keeping**: the first run
+reported the same clean result, and printing the refusal codes showed **8 of the 10 probes bouncing
+at a precondition** without ever reaching the numeric validation, one testing nothing at all
+(`good:'booze'` is not a good id, so 36 of 36 calls answered `bad_good`); and cursor discipline
+across all twelve watchers (every one advances once, after the loop; the store watcher's deliberate
+hold on an unknown sku is the one intentional exception and is waived by name).
+**Process:** four `zz*.mjs` probes written and DELETED before committing; all mutations on scratchpad
+copies (`cp` out, `cp` back), never `git checkout`, with uncommitted work in the same files. Both the
+F2 and F3 mutations initially failed as **uncaught throws** rather than at an assertion — the
+"a failure that teaches nothing" shape — so both regressions now catch the throw and NAME the
+property. Suite green + sim drift-0 + pgquery + pgcheck 43/43 on real Postgres.
