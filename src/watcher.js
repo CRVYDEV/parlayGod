@@ -49,6 +49,39 @@ async function isolate(label, apply) {
   }
 }
 
+// ── THE MARKET'S DECIMALS COME FROM THE CHAIN, NOT FROM CONFIG ───────────────────────────────────
+// `ALCHEMIST_ASSET_DECIMALS` used to supply this and defaulted to 6. Both Bank contracts derive their
+// own `scale` by reading `decimals()` off the token in their CONSTRUCTORS — so an env value was a
+// second, unchecked copy of a number the chain already knows, and the failure it enables is silent:
+// an 18-decimal market deployed without setting it books every harvest fee 1e12 too large, the
+// family-buyback keeper's per-currency budget inherits the same wrong unit, and the ledger stays
+// internally consistent while disagreeing with reality. No invariant can see that, because every
+// figure it compares is denominated in the same wrong unit. It is the `DEX_POOL_FEE` class — a
+// config error no prover can catch — and the answer to that class is to DELETE THE CONFIG.
+//
+// Resolved once and cached (the value is immutable on-chain: `Alchemist.asset` and the token's own
+// decimals are both fixed at deploy). A read failure THROWS rather than falling back, and that is
+// the load-bearing half: a fallback would reintroduce exactly the guessed number being removed. The
+// throw is transient by the `isolate` contract, so the tick stops and the cursor holds — booking
+// nothing beats booking an amount in a unit we could not confirm.
+const ASSET_ABI = [{ type: 'function', name: 'asset', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }];
+const DECIMALS_ABI = [{ type: 'function', name: 'decimals', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint8' }] }];
+export function makeAssetDecimals(client, alchemistAddress) {
+  let cached = null;
+  return async () => {
+    if (cached !== null) return cached;
+    const asset = await client.readContract({ address: alchemistAddress, abi: ASSET_ABI, functionName: 'asset' });
+    const d = Number(await client.readContract({ address: asset, abi: DECIMALS_ABI, functionName: 'decimals' }));
+    // mirrors the contracts' own `require(d <= 18)`: a token outside that range is one whose `scale`
+    // the market could not have been constructed against, so the amount is not interpretable.
+    if (!Number.isInteger(d) || d < 0 || d > 18) {
+      throw new Error(`alchemist asset reports ${d} decimals — refusing to book a harvest fee in a unit we cannot trust`);
+    }
+    cached = d;
+    return cached;
+  };
+}
+
 export async function getCursor(pool, stream, initIfMissing) {
   const row = (await pool.query('SELECT last_block FROM chain_cursor WHERE stream=$1', [stream])).rows[0];
   if (row) return Number(row.last_block);
@@ -327,7 +360,10 @@ export async function makeViemSource() {
   const alchAddr = process.env.ALCHEMIST_ADDRESS;      // THE BANK's Alchemist (HarvestFeeTaken)
   const stockVaultAddr = process.env.STOCK_VAULT_ADDRESS; // StockVault (Delivered — stock into a deed TBA)
   const alchAsset = process.env.ALCHEMIST_ASSET || 'USDC';       // the market's underlying symbol
-  const alchDecimals = Number(process.env.ALCHEMIST_ASSET_DECIMALS || 6); // USDC is 6, not 18
+  // The DECIMALS are read off the chain, not configured — see `makeAssetDecimals`. The SYMBOL stays
+  // config because it is only a LABEL (the per-currency key the family-buyback budget is grouped by):
+  // getting it wrong mislabels a bucket, where getting decimals wrong corrupts every amount in it.
+  const alchDecimals = makeAssetDecimals(client, alchAddr);
   const mintEv = parseAbiItem('event MintFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount)');
   const respawnEv = parseAbiItem('event RespawnFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount)');
   const rerollEv = parseAbiItem('event RerollFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount)');
@@ -374,13 +410,15 @@ export async function makeViemSource() {
     harvestFeeLogs: async (from, to) => {
       if (!alchAddr) return [];
       const logs = await client.getLogs({ address: alchAddr, event: harvestEv, ...range(from, to) });
-      // The event carries no nonce, so the ref is the log key. Decimals come from config because the
-      // market's underlying is not always 18 — reading a 6-decimal USDC amount as 18 would understate
-      // the fee by a factor of a trillion, which is the sort of thing that looks like "no revenue yet".
+      if (!logs.length) return []; // resolve nothing on a quiet market — no RPC call per idle tick
+      // The event carries no nonce, so the ref is the log key. The market's underlying is not always
+      // 18 decimals, and reading a 6-decimal USDC amount as 18 understates the fee by a factor of a
+      // trillion — the sort of thing that looks like "no revenue yet" rather than like a bug.
+      const dec = await alchDecimals();
       return logs.map((l) => ({
         ref: `${l.transactionHash}:${l.logIndex}`,
         asset: alchAsset,
-        amount: Number(formatUnits(l.args.amount, alchDecimals)),
+        amount: Number(formatUnits(l.args.amount, dec)),
         payer: l.args.user,
         txHash: l.transactionHash,
       }));

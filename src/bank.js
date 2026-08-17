@@ -397,14 +397,15 @@ export async function bankPosition(pool, accountId) {
   const address = getAddress(addr); const user = getAddress(wallet);
   const u256 = (name) => ({ type: 'function', name, stateMutability: 'view',
     inputs: [{ name: 'user', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] });
+  const nullary = (name, out) => ({ type: 'function', name, stateMutability: 'view', inputs: [], outputs: [{ name: '', type: out }] });
   const abi = [u256('collateralOf'), u256('debtOf'), u256('maxDebtOf'),
-    { type: 'function', name: 'ltvBps', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'uint16' }] }];
+    nullary('ltvBps', 'uint16'), nullary('scale', 'uint256')];
   try {
-    const [collateral, debt, maxDebt, ltvBps] = await Promise.all(
+    const [collateral, debt, maxDebt, ltvBps, scale] = await Promise.all(
       ['collateralOf', 'debtOf', 'maxDebtOf'].map((fn) =>
         client.readContract({ address, abi, functionName: fn, args: [user] }))
-        .concat(client.readContract({ address, abi, functionName: 'ltvBps' })));
-    return positionView({ wallet: user, collateral, debt, maxDebt, ltvBps });
+        .concat(['ltvBps', 'scale'].map((fn) => client.readContract({ address, abi, functionName: fn }))));
+    return positionView({ wallet: user, collateral, debt, maxDebt, ltvBps, scale });
   } catch { return dormantView({ note: 'unreachable' }); }
 }
 
@@ -413,11 +414,21 @@ export async function bankPosition(pool, accountId) {
 /// the object a LIVE position produces, and with the market undeployed every test sees the dormant
 /// one. A banned-word scan over `{dormant:true}` passes whatever the live path says, which is a
 /// check that cannot fail reading as a clean bill of health. Pure, so the test reaches it directly.
-export function positionView({ wallet, collateral, debt, maxDebt, ltvBps }) {
-  const n = (x) => Number(x) / 1e18;
+export function positionView({ wallet, collateral, debt, maxDebt, ltvBps, scale }) {
+  const n = (x) => Number(x) / 1e18;                    // DEBT units — DNR is 18dp, always
+  // COLLATERAL IS NOT 18dp, and reading it as though it were is the second instance of the class
+  // red team #6 flagged (an off-chain copy of a decimals figure the chain already knows). The
+  // Alchemist returns `collateralOf` in ASSET units and `maxDebtOf`/`debtOf` in DEBT units — it
+  // bridges them with its own immutable `scale` (10^(18-assetDecimals)), which it derived by reading
+  // `decimals()` off the token in its constructor. So the honest conversion reads that same number
+  // rather than assuming one: asset units → human is `× scale / 1e18`, exact at any decimals, and
+  // identical to `n()` on an 18dp market. Assuming 1e18 understated a USDC position by a TRILLION —
+  // a player holding $1,000 of collateral would have read `0.000000001` on their own Bank screen
+  // (`borrowable` was unaffected: both its terms are debt units).
+  const asset = (x) => (scale ? Number(x) * Number(scale) / 1e18 : n(x));
   return {
     dormant: false, market: 'Denari', linked: true, wallet,
-    collateral: n(collateral), debt: n(debt),
+    collateral: asset(collateral), debt: n(debt),
     borrowable: Math.max(0, n(maxDebt) - n(debt)),
     ltvBps: Number(ltvBps),
     // NO PROJECTION WITHOUT REALISED YIELD. The design's wording is exact — the payoff date is

@@ -13717,9 +13717,22 @@ unique nonce space, every reader kind-scoped) — **including a FALSE POSITIVE f
 3-line SQL window could not see a JS guard one line below the query; recorded, because a finding produced
 by a tool you wrote and did not check is not a finding. (6) All 52 `$OMR` reason literals classified: mint
 term, generated burn term, or a transfer between two COUNTED buckets — no `kitchen:module`-class orphan.
-**Flagged, not changed:** `ALCHEMIST_ASSET_DECIMALS` defaults to 6 and is **trusted from env** while both
-contracts read decimals **off the token** — an 18dp market deployed without setting it books the harvest
-fee 1e12 too large, and the family-buyback budget is denominated in the same wrong unit, so the ledger
-stays self-consistent while disagreeing with reality (the `DEX_POOL_FEE` class; the cheap hardening is to
-read `decimals()` at boot and refuse a mismatch, which deletes the knob). Probe files written and DELETED
-before committing; all mutations on scratchpad copies, never `git checkout`.
+**Flagged, then FIXED the same day on the founder's call — and applying it found the same class one layer
+up, which is the argument for sweeping a class rather than patching an instance.** `ALCHEMIST_ASSET_DECIMALS`
+defaulted to 6 and was **trusted from env** while both contracts read decimals **off the token** — an 18dp
+market deployed without setting it books the harvest fee 1e12 too large, and the family-buyback budget is
+denominated in the same wrong unit, so the ledger stays self-consistent while disagreeing with reality (the
+`DEX_POOL_FEE` class: a value copied off-chain that the chain already knows). The knob is **deleted** —
+`makeAssetDecimals` resolves `asset()` then `decimals()` off the chain, caches, refuses anything outside
+`[0,18]` (the contracts' own bound), and **throws on a read failure rather than falling back**, since a
+fallback is the guessed number wearing a different hat; `harvestFeeLogs` early-returns on an empty batch so
+an idle market pays no RPC round trip. **The second instance was a live display bug on a screen a player
+reads about their own money**: `Alchemist.collateralOf` returns **ASSET** units while `debtOf`/`maxDebtOf`
+are 18dp DNR, and `positionView` divided all three by `1e18` — so on the documented USDC market a player
+holding $1,000 of collateral read **`0.000000001`**, while `borrowable` was correct (both its terms are
+debt units), which is exactly why it survived review: two of the three numbers were right. `bankPosition`
+now reads the market's own immutable `scale()` and converts, correct at any decimals with nothing
+configured anywhere. Two mutations, each caught by name (a reintroduced `|| 6` fallback → *"a failed read
+THROWS — it must never fall back to a guessed decimals"*; the scale conversion dropped → the USDC assertion
+printing `1e-9` against `1000`). Probe files written and DELETED before committing; all mutations on
+scratchpad copies, never `git checkout`.

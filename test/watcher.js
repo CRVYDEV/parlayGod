@@ -295,6 +295,47 @@ assert.equal(String(dtok.owner_address), wallet.toLowerCase(), 'though the owner
 }
 
 // zero §10.4 surface across the whole registry + store stream (out-of-band real value / status)
+// ── THE MARKET'S DECIMALS COME FROM THE CHAIN, NOT FROM CONFIG (red team #6) ────────────────────
+// `ALCHEMIST_ASSET_DECIMALS` was an off-chain COPY of a number both Bank contracts read off the token
+// in their own constructors, defaulting to 6. Deploy an 18-decimal market without setting it and every
+// harvest fee books 1e12 too large; the family-buyback keeper's per-currency budget inherits the same
+// wrong unit, so the ledger stays internally consistent while disagreeing with reality — a config
+// error no invariant can see, because every figure it compares is in the same wrong unit. The knob is
+// gone. What replaces it is asserted here rather than trusted, on a stub client (the real path needs
+// a deployed market, which is what `tools/*-e2e.js` is for).
+{
+  const { makeAssetDecimals } = await import('../src/watcher.js');
+  const reads = [];
+  const stub = (dec) => ({ readContract: async ({ functionName }) => {
+    reads.push(functionName);
+    return functionName === 'asset' ? '0xToken' : dec;
+  } });
+
+  const six = makeAssetDecimals(stub(6), '0xAlch');
+  assert.equal(await six(), 6, 'the decimals are resolved from the CHAIN — asset() then decimals()');
+  assert.deepEqual(reads, ['asset', 'decimals'], 'via the Alchemist\'s own asset(), not a configured address');
+  await six(); await six();
+  assert.equal(reads.length, 2,
+    'and cached: the value is immutable on-chain, so an idle-but-busy market must not pay an RPC round trip per log batch');
+
+  // an 18dp market resolves to 18 — the case the deleted default got wrong by a factor of a trillion
+  assert.equal(await makeAssetDecimals(stub(18), '0xAlch')(), 18, 'an 18-decimal underlying reads as 18, not as the old default');
+
+  // THE LOAD-BEARING HALF: a read failure must PROPAGATE. A fallback here would reintroduce exactly
+  // the guessed number being removed, and it would do it silently — the throw is transient by the
+  // `isolate` contract, so the tick stops and the cursor holds rather than booking an unknown unit.
+  const dead = makeAssetDecimals({ readContract: async () => { throw new Error('rpc down'); } }, '0xAlch');
+  await assert.rejects(() => dead(), /rpc down/,
+    'a failed read THROWS — it must never fall back to a guessed decimals');
+
+  // and a value the market could not have been constructed against is refused (the contracts' own
+  // `require(d <= 18)`), rather than silently producing an amount nobody can interpret
+  await assert.rejects(() => makeAssetDecimals(stub(19), '0xAlch')(), /19 decimals/,
+    'a token outside the contracts\' own range is refused, not booked');
+  assert.equal(process.env.ALCHEMIST_ASSET_DECIMALS, undefined,
+    'the knob is deleted, not merely defaulted — nothing in the tree reads it');
+}
+
 const txn = Number((await pool.query('SELECT COUNT(*) n FROM transactions')).rows[0].n);
 assert.ok(Number.isFinite(txn), 'countable'); // (the store/dynasty rails write zero ledger rows by design — proven in test/store.js; here the streams simply must not throw on it)
 

@@ -197,14 +197,24 @@ likewise owned by a check (the gang-treasuries check, one of the escrow checks, 
 
 ## Flagged, not changed
 
-* **`ALCHEMIST_ASSET_DECIMALS` defaults to 6 and is trusted.** The contracts read decimals **off the
-  token** (`IERC20Metadata(asset).decimals()`, checked in both constructors); the backend takes it from
-  env. A market on an 18-decimal underlying deployed without setting it books the harvest fee **1e12 too
-  large**, and the family-buyback keeper's per-currency budget is denominated in the same wrong unit, so
-  the ledger stays self-consistent while disagreeing with reality. It is a config error no prover can see
-  — the same class as `DEX_POOL_FEE`. The cheap hardening is to read `decimals()` off the configured asset
-  at boot and refuse a mismatch, which would delete the knob; left as a note because it changes a startup
-  path on a dormant rail.
+* **`ALCHEMIST_ASSET_DECIMALS` was trusted from env — FIXED 2026-08-17, and it had a second instance.**
+  The contracts read decimals **off the token** (`IERC20Metadata(asset).decimals()`, checked in both
+  constructors); the backend took it from env, defaulting to 6. A market on an 18-decimal underlying
+  deployed without setting it books the harvest fee **1e12 too large**, and the family-buyback keeper's
+  per-currency budget is denominated in the same wrong unit, so the ledger stays self-consistent while
+  disagreeing with reality — a config error no prover can see, the `DEX_POOL_FEE` class. Filed as a note
+  because it changes a startup path on a dormant rail; the founder called it, and the knob is gone:
+  `makeAssetDecimals` resolves `asset()` then `decimals()` off the chain, caches, refuses anything
+  outside `[0,18]` (mirroring the contracts' own bound), and — the load-bearing half — **throws on a read
+  failure rather than falling back**, since a fallback is just the guessed number wearing a different
+  hat. `harvestFeeLogs` early-returns on an empty batch, so an idle market pays no RPC round trip.
+  **Applying it found the same class one layer up**, which is the argument for sweeping a class rather
+  than patching an instance: `Alchemist.collateralOf` returns **ASSET** units while `debtOf`/`maxDebtOf`
+  are 18dp DNR, and `positionView` divided all three by `1e18` — so on the documented USDC market a
+  player holding $1,000 of collateral read **`0.000000001`** on their own Bank screen. `borrowable` was
+  unaffected (both its terms are debt units), which is exactly why it survived review: two of the three
+  numbers were right. `bankPosition` now also reads the market's own immutable `scale()` and converts,
+  so the figure is correct at any decimals with nothing configured anywhere.
 * **`stealCar` inherits its sibling's rule by fiat.** Clearing the nitrous is now consistent, but whether
   a *theft* should destroy the charges or hand them over is a design call, not a correctness one. The
   guard enforces consistency, not a particular answer.
