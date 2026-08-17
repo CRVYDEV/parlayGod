@@ -339,6 +339,36 @@ assert.equal(await txCount(), tx0, 'the stock delivery rail writes ZERO transact
   assert.ok(resumed, 'with the target back, the held delivery goes out — waiting is not losing');
   assert.equal(resumed.to, FAKE_TBA('777'), 'to the deed vault, re-resolved on the way out');
 
+  // ── red-team R30 F3: A STAGED DELIVERY MUST NOT OUTLIVE ITS DEED ──────────────────────────────
+  // A pending row records where the keeper is ABOUT to send, so it has to carry the target as it
+  // stands NOW. `stageStockDelivery` re-resolves it correctly and the duplicate path used to throw
+  // that answer away, leaving the keeper's claim to read a STALE tba off the row. The window is
+  // ordinary, not exotic: a send that didn't land leaves the row pending BY DESIGN (send_failed
+  // releases the claim), and a deed can be sold in that window. The result was real stock delivered
+  // into the vault of a deed its recipient had already SOLD — the buyer gets it, the seller's
+  // allocation is marked delivered.
+  await q("INSERT INTO stock_allocations (epoch_id, account_id, ticker, units) VALUES ('e8','accA','AAPL',3)");
+  __setTxSender(async () => { throw new Error('rpc down'); });      // the send doesn't land …
+  await runStockDeliveryKeeper(pool, { tokens });
+  const staleRow = (await q("SELECT delivery_id, tba FROM stock_deliveries WHERE epoch_id='e8'")).rows[0];
+  assert.equal(staleRow.tba, FAKE_TBA('777'), 'staged against the deed A held at the time');
+
+  // … A SELLS deed 777 on-chain (the Transfer watcher records the buyer) and extracts a NEW one
+  await q("UPDATE account_persistent SET wallet_address='0xbuyer' WHERE account_id='accB'");
+  await q("UPDATE street_deeds SET onchain_owner='0xBUYER' WHERE onchain_token_id='777'");
+  await q("INSERT INTO street_deeds (account_id, name, name_lc, district, onchain_token_id, extracted_by_account, extracted_at) VALUES ('onchain:888','Bleecker Row','bleecker row','brick','888','accA', now())");
+  assert.equal((await deedTbaFor(pool, 'accA')).deedTokenId, '888', "A's target is their NEW deed");
+
+  sends.length = 0;
+  __setTxSender(async (a) => { sends.push(a); return '0xtxFresh'; });
+  await runStockDeliveryKeeper(pool, { tokens, resendMs: 0 });
+  const out = sends.find((s) => s.deliveryId === staleRow.delivery_id);
+  assert.ok(out, 'the held delivery goes out once a target exists again');
+  assert.equal(out.to, FAKE_TBA('888'), 'to the deed A NOW holds — never the one they sold');
+  assert.notEqual(out.to, FAKE_TBA('777'), "the buyer's vault receives nothing that was never theirs");
+  assert.equal((await q("SELECT tba FROM stock_deliveries WHERE delivery_id=$1", [staleRow.delivery_id])).rows[0].tba,
+    FAKE_TBA('888'), 'and the row itself was refreshed, so the record matches where it went');
+
   // DORMANT without the seam or the env — and the whole keeper wrote ZERO transactions rows
   __setTxSender(null);
   run = await runStockDeliveryKeeper(pool);

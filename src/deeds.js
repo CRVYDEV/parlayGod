@@ -69,6 +69,15 @@ export async function claimDeed(ch, body, client, h) {
   const name = cleanText(body?.name || '').replace(/\s+/g, ' ').trim().slice(0, DEEDS.NAME_MAX);
   if (name.length < DEEDS.NAME_MIN)
     throw new GameError('name', `Name your street (${DEEDS.NAME_MIN}–${DEEDS.NAME_MAX} characters, no < > " markup).`);
+  // (red-team R30 F2) The R8 homoglyph guard — the one every other name in the game carries, and the
+  // one this function's own comment claimed it already had. It matters MORE here than on a display
+  // name: `tokenId = keccak256(bytes(name))`, so the name IS this asset's permanent on-chain identity;
+  // uniqueness is `name_lc`, which non-ASCII defeats by construction (Cyrillic 'а' never collides with
+  // ASCII 'a'); the street renders on public keyless surfaces and trades on a secondary market. Without
+  // this, "Раrk Avenue" mints as a DISTINCT, visually identical token forever — the classic marketplace
+  // impersonation, on an asset that now receives real stock into its vault.
+  if (!/^[\w .,'&-]+$/.test(name))
+    throw new GameError('name', 'Street names: letters, numbers and simple punctuation only (no look-alike unicode).');
   const nameLc = name.toLowerCase();
   if ((await client.query('SELECT 1 FROM street_deeds WHERE name_lc=$1', [nameLc])).rowCount)
     throw new GameError('taken', 'That street is already on the map. Pick another name.');

@@ -879,6 +879,10 @@ export async function buildServer() {
   // caller's own current token is invalidated too, so the client must sign in again; that is the point.
   app.post('/v1/auth/logout-all', { preHandler: auth }, async (req) => {
     await pool.query('UPDATE accounts SET token_version = token_version + 1 WHERE id=$1', [req.user.sub]);
+    // (red-team R30 F1) …and cut the live sockets NOW, matching `mod/revoke`. "Someone has my session"
+    // is exactly the moment the intel feed must die rather than run until the thief closes the tab;
+    // the connect-time `tv` check above is what stops them simply reconnecting.
+    closeAccountSockets(req.user.sub, 4008, 'token_revoked');
     return { ok: true };
   });
 
@@ -2045,7 +2049,7 @@ export async function buildServer() {
   // 'streets' bus listener, so N sockets make every streets emit O(N) server-wide; 8 covers legit multi-tab.
   const WS_PING_MS = Number(process.env.WS_PING_MS || 30_000); // heartbeat: reap half-open/dead sockets
   app.get('/v1/ws', { websocket: true }, async (socket, req) => {
-    let accountId;
+    let accountId, tokenTv;
     // (red-team R12 F2) The session JWT is the same full bearer used on every REST call. Passing it in
     // the WS URL query (`?token=`) leaks it into web-server/proxy/CDN access logs + browser history →
     // token theft → account takeover. Read it from the Sec-WebSocket-Protocol header instead (the client
@@ -2059,7 +2063,7 @@ export async function buildServer() {
     const headerBearer = sub[0] === 'bearer' ? sub[1] : null;
     const allowQuery = process.env.WS_ALLOW_QUERY_TOKEN === 'on';
     const bearer = headerBearer || (allowQuery ? req.query?.token : null);
-    try { accountId = app.jwt.verify(String(bearer || '')).sub; }
+    try { const claims = app.jwt.verify(String(bearer || '')); accountId = claims.sub; tokenTv = claims.tv; }
     catch { socket.close(4001, 'auth'); return; }
     // (red-team R9 WS) The per-account cap was a TOCTOU: it read the Set size but only ADDED the socket
     // after three awaited queries, so concurrent connects for one token all observed size<MAX and all
@@ -2075,8 +2079,17 @@ export async function buildServer() {
     try {
       // banned accounts must not keep a live intel feed (REST re-checks per request;
       // the socket is long-lived, so check status at connect)
-      const acct = (await pool.query('SELECT status FROM accounts WHERE id=$1', [accountId])).rows[0];
+      // (red-team R30 F1) …and REVOKED tokens must not either. The WS is the FOURTH authenticated
+      // path (after the `auth` preHandler, the guarded-mutation path and the OAuth start) and was the
+      // only one not checking `token_version` — so a token already killed by `logout-all` (the
+      // self-serve answer to "someone has my session") still opened a live `me` feed: contracts on
+      // your head, indictments, DMs, kills. `mod/revoke` DID cut live sockets, but with no check here
+      // the same token reconnected instantly, so that half was defeated by one reconnect. Same
+      // grandfathering rule as both preHandlers — a token with NO `tv` claim predates the feature and
+      // ages out within its TTL, so a deploy never mass-disconnects.
+      const acct = (await pool.query('SELECT status, token_version FROM accounts WHERE id=$1', [accountId])).rows[0];
       if (!acct || acct.status === 'banned') { socket.close(4003, 'banned'); return; }
+      if (tokenTv !== undefined && Number(tokenTv) !== Number(acct.token_version)) { socket.close(4008, 'token_revoked'); return; }
       const me = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [accountId])).rows[0];
       if (!me) { socket.close(4004, 'no_character'); return; }
       const gm = (await pool.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [me.id])).rows[0];

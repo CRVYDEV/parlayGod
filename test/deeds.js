@@ -80,10 +80,27 @@ assert.equal((await call('POST', '/v1/deeds/claim', { token: a.token, body: { na
 assert.equal((await call('POST', '/v1/deeds/claim', { token: b.token, body: { name: 'corvino WAY', district: 'docks' } })).body.error,
   'taken', 'a street name is unique across the whole city (case-insensitive)');
 
-// markup is stripped (stored-XSS) — a second player claims a name with markup, and it comes back clean
-const cx = await call('POST', '/v1/deeds/claim', { token: b.token, body: { name: 'Nine <b>Fingers</b> Row', district: 'brick' } });
-assert.equal(cx.code, 200, 'the second player claims their own street');
-assert(!/[<>]/.test(cx.body.name), 'markup is stripped from the stored name');
+// ── red-team R30 F2: THE NAME IS THE ASSET, so it carries the R8 homoglyph guard ────────────────
+// Every other name in the game is ASCII-only; this one was not, while its own comment claimed it was.
+// It matters more here than on a display name: `tokenId = keccak256(bytes(name))`, so the name IS this
+// asset's permanent on-chain identity; uniqueness is `name_lc`, which non-ASCII defeats by construction;
+// and the street trades on a secondary market with real stock deliverable into its vault. Without the
+// guard, a Cyrillic "Раrk Avenue" mints as a DISTINCT, visually identical token — forever.
+assert.equal((await call('POST', '/v1/deeds/claim', { token: b.token, body: { name: 'Cоrvino Way', district: 'brick' } })).body.error,
+  'name', 'a Cyrillic look-alike of a claimed street is refused, not minted as a second identical one');
+for (const [label, bad] of [['zero-width', 'Corvino​Way'], ['bidi', 'Corvino ‮Way'], ['emoji', 'Corvino 💀 Way']]) {
+  assert.equal((await call('POST', '/v1/deeds/claim', { token: b.token, body: { name: bad, district: 'brick' } })).body.error,
+    'name', `${label} is refused too — same class`);
+}
+// markup is REFUSED outright now, not silently mangled: stripping < > out of "Nine <b>Fingers</b> Row"
+// used to store "Nine bFingers/b Row", a name the player never chose. A clean refusal beats that, and
+// the stored-XSS property it was guarding holds either way.
+assert.equal((await call('POST', '/v1/deeds/claim', { token: b.token, body: { name: 'Nine <b>Fingers</b> Row', district: 'brick' } })).body.error,
+  'name', 'markup is refused rather than stripped into a mangled name');
+// …and an ordinary street name with real punctuation still claims fine
+const cx = await call('POST', '/v1/deeds/claim', { token: b.token, body: { name: "St. Mark's Row & Vine", district: 'brick' } });
+assert.equal(cx.code, 200, 'the second player claims their own street (punctuation is legitimate)');
+assert(!/[<>]/.test(cx.body.name), 'no markup can reach the stored name');
 
 // ════════════ §10.4 — the whole deed flow moved no value ════════════
 assert.equal(await txCount(), txBefore, 'STREET DEEDS writes ZERO ledger rows — pure status, never value');

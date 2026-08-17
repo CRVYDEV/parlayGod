@@ -289,8 +289,28 @@ export async function stageStockDelivery(pool, { epochId, accountId, ticker, uni
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const existing = (await client.query('SELECT status FROM stock_deliveries WHERE delivery_id=$1', [deliveryId])).rows[0];
-    if (existing) { await client.query('COMMIT'); return { staged: false, duplicate: true, deliveryId, status: existing.status }; }
+    const existing = (await client.query(
+      'SELECT status, tba, deed_token_id FROM stock_deliveries WHERE delivery_id=$1 FOR UPDATE', [deliveryId])).rows[0];
+    if (existing) {
+      // (red-team R30 F3) A pending row records where the keeper is ABOUT to send — so it must carry
+      // the target as it stands NOW, not as it stood when the row was first staged. We have just
+      // re-resolved it; the old code threw that answer away and the keeper's claim then read the STALE
+      // `tba` off the row. Reproduced end to end: a send that didn't land (an RPC blip leaves the row
+      // pending by design), the deed SOLD on-chain in that window, the seller extracts another deed →
+      // the plan resumes, the id is unchanged so this path returns duplicate, and the keeper delivers
+      // real stock into the vault of the deed they SOLD. The buyer receives it; the seller's allocation
+      // is marked delivered. Refresh only a still-'pending' row: 'delivered' is history and 'simulated'
+      // is a comp. An in-flight send is unaffected — it already captured its address via the claim's
+      // RETURNING — and only one send can ever land anyway (StockVault's usedDeliveryId).
+      if (existing.status === 'pending'
+        && (String(existing.tba || '') !== String(tgt.tba) || String(existing.deed_token_id || '') !== String(tgt.deedTokenId))) {
+        await client.query(
+          "UPDATE stock_deliveries SET tba=$2, deed_token_id=$3 WHERE delivery_id=$1 AND status='pending'",
+          [deliveryId, tgt.tba, tgt.deedTokenId]);
+      }
+      await client.query('COMMIT');
+      return { staged: false, duplicate: true, deliveryId, status: existing.status, tba: tgt.tba, deedTokenId: tgt.deedTokenId };
+    }
     await client.query(
       `INSERT INTO stock_deliveries (delivery_id, epoch_id, account_id, ticker, units, deed_token_id, tba, tx_hash, status)
        VALUES ($1,$2,$3,$4,$5,$6,$7,NULL,$8)`,

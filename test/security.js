@@ -423,5 +423,53 @@ const addsNoDrift = async (name, action, label) => {
   if (savedDb === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = savedDb;
 }
 
-console.log('✅ security regression suite passed — exchange escrow §10.4, sub-cent bank interest, swap-sell dust, bounty-funder self-pay, mission $OMR re-mint, wallet validation, idempotency (concurrency/release/body-bind), invite race, identity race, agent throttle, banned websocket, gang-leave socket drop, name uniqueness, JWT/seed/DATABASE_URL boot guards');
+// ── red-team R30 F1: A REVOKED TOKEN MUST NOT OPEN A LIVE FEED ──────────────────────────────────
+// The websocket is the FOURTH authenticated path (after the `auth` preHandler, the guarded-mutation
+// path and the OAuth start) and was the only one not checking `token_version`. So `logout-all` — the
+// self-serve answer to "someone has my session" — killed REST and left the thief's live `me` feed
+// (contracts on your head, indictments, DMs, kills) streaming, re-openable at will. `mod/revoke` did
+// cut live sockets, but with no connect-time check the same token reconnected instantly, so that half
+// was defeated by one reconnect. Both halves are asserted here: the live socket DIES, and the dead
+// token cannot open a new one.
+{
+  const victim = await mk('Session Stolen');
+  const acctId = (await pool.query(`SELECT account_id FROM characters WHERE id='${victim.id}'`)).rows[0].account_id;
+  const port = app.server.address().port;   // the suite is already listening (the banned-socket block)
+
+  const open = () => new WebSocket(`ws://127.0.0.1:${port}/v1/ws`, ['bearer', victim.token]);
+  const settle = (ws) => new Promise((res) => {
+    ws.onmessage = (e) => { if (JSON.parse(e.data).channel === 'hello') res({ ok: true }); };
+    ws.onclose = (e) => res({ ok: false, code: e.code });
+    setTimeout(() => res({ ok: false, code: 0 }), 4000);
+  });
+
+  const live = open();
+  assert.equal((await settle(live)).ok, true, 'the live token opens a socket');
+  const cut = new Promise((res) => { live.onclose = (e) => res(e.code); setTimeout(() => res(0), 4000); });
+
+  assert.equal((await call('POST', '/v1/auth/logout-all', { token: victim.token })).code, 200, 'logout-all accepted');
+  assert.equal(await cut, 4008, 'logout-all CUTS the already-open socket — the thief\'s feed dies now, not at their leisure');
+
+  // REST is dead (the pre-existing half) …
+  assert.equal((await call('GET', '/v1/me', { token: victim.token })).code, 401, 'the revoked token is refused on REST');
+  // … and so is a fresh socket, which is what makes cutting the live one worth anything
+  const after = await settle(open());
+  assert.equal(after.ok, false, 'a REVOKED token cannot open a new websocket');
+  assert.equal(after.code, 4008, 'and it is refused as token_revoked, not as a malformed token');
+
+  // a mod revoke closes the same door (the heavier tool, same wall)
+  const other = await mk('Mod Revoked');
+  const otherAcct = (await pool.query(`SELECT account_id FROM characters WHERE id='${other.id}'`)).rows[0].account_id;
+  await call('POST', '/v1/mod/revoke', { body: { accountId: otherAcct }, headers: modH });
+  const modWs = new WebSocket(`ws://127.0.0.1:${port}/v1/ws`, ['bearer', other.token]);
+  const modRes = await new Promise((res) => {
+    modWs.onmessage = (e) => { if (JSON.parse(e.data).channel === 'hello') res({ ok: true }); };
+    modWs.onclose = (e) => res({ ok: false, code: e.code });
+    setTimeout(() => res({ ok: false, code: 0 }), 4000);
+  });
+  assert.equal(modRes.ok, false, 'a mod-revoked token cannot reconnect either');
+  assert.ok(acctId && otherAcct, 'both accounts resolved');
+}
+
+console.log('✅ security regression suite passed — exchange escrow §10.4, sub-cent bank interest, swap-sell dust, bounty-funder self-pay, mission $OMR re-mint, wallet validation, idempotency (concurrency/release/body-bind), invite race, identity race, agent throttle, banned websocket, revoked-token websocket, gang-leave socket drop, name uniqueness, JWT/seed/DATABASE_URL boot guards');
 await app.close();
