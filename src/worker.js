@@ -658,68 +658,68 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
       const syncTick = async () => {
         try {
           if (process.env.OMERTA_FEES_ADDRESS) {
-            const f = await syncFeeEvents(pool, source, { startBlock });
-            if (f.processed) console.log(`💰 fee sync: credited ${f.processed} payment(s) (blocks ${f.from}–${f.to})`);
+            const f = await safe('fee sync', () => syncFeeEvents(pool, source, { startBlock }));
+            if (f?.processed) console.log(`💰 fee sync: credited ${f.processed} payment(s) (blocks ${f.from}–${f.to})`);
             // THE ON-CHAIN STORE (PackagePaid → recordStorePurchase): the paywall leg finally
             // delivers — same contract, its own cursor. A retired/unknown sku HOLDS the cursor by
             // design (real money for a package we no longer sell → a human looks).
-            const sp = await syncStorePaidEvents(pool, source, { startBlock });
-            if (sp.processed) console.log(`🛒 store sync: recorded ${sp.processed} package payment(s) (blocks ${sp.from}–${sp.to})`);
+            const sp = await safe('store sync', () => syncStorePaidEvents(pool, source, { startBlock }));
+            if (sp?.processed) console.log(`🛒 store sync: recorded ${sp.processed} package payment(s) (blocks ${sp.from}–${sp.to})`);
           }
           if (process.env.VOUCHER_CLAIM_ADDRESS) {
-            const c = await syncClaimedEvents(pool, source, { startBlock });
-            if (c.processed) console.log(`👁  claimed sync: freed ${c.processed} voucher(s) (blocks ${c.from}–${c.to})`);
+            const c = await safe('claimed sync', () => syncClaimedEvents(pool, source, { startBlock }));
+            if (c?.processed) console.log(`👁  claimed sync: freed ${c.processed} voucher(s) (blocks ${c.from}–${c.to})`);
           }
           // THE BANK (Alchemist): HarvestFeeTaken → recordHarvestFee. Dormant unless ALCHEMIST_ADDRESS
           // is set. Booked in the market's underlying — see recordHarvestFee for why not in ETH.
           if (process.env.ALCHEMIST_ADDRESS) {
-            const hv = await syncHarvestFees(pool, source, { startBlock });
-            if (hv.processed) console.log(`🏛  bank sync: booked ${hv.processed} harvest fee(s) to the treasury (blocks ${hv.from}–${hv.to})`);
+            const hv = await safe('bank harvest sync', () => syncHarvestFees(pool, source, { startBlock }));
+            if (hv?.processed) console.log(`🏛  bank sync: booked ${hv.processed} harvest fee(s) to the treasury (blocks ${hv.from}–${hv.to})`);
           }
           // THE RESERVE BOND (OmertaBond): Bonded → recordBond (POL + the Vig buyback basis). Dormant
           // unless OMERTA_BOND_ADDRESS is set; the on-chain event is authoritative + idempotent on nonce.
           if (process.env.OMERTA_BOND_ADDRESS) {
-            const b = await syncBondEvents(pool, source, { startBlock });
-            if (b.processed) console.log(`🏦 bond sync: booked ${b.processed} bond(s) → reserve/POL/Vig (blocks ${b.from}–${b.to})`);
+            const b = await safe('bond sync', () => syncBondEvents(pool, source, { startBlock }));
+            if (b?.processed) console.log(`🏦 bond sync: booked ${b.processed} bond(s) → reserve/POL/Vig (blocks ${b.from}–${b.to})`);
           }
           // NFT RE-IMPORT (Option A): GearVault Redeemed → re-create the burned car/boat in-game.
           // Dormant unless GEARVAULT_ADDRESS is set; idempotent on the log ref; applies now or waits.
           if (process.env.GEARVAULT_ADDRESS) {
-            const rd = await syncRedeemedEvents(pool, source, { startBlock });
-            if (rd.processed) console.log(`🔁 re-import sync: processed ${rd.processed} Redeemed event(s) (blocks ${rd.from}–${rd.to})`);
+            const rd = await safe('gear re-import sync', () => syncRedeemedEvents(pool, source, { startBlock }));
+            if (rd?.processed) console.log(`🔁 re-import sync: processed ${rd.processed} Redeemed event(s) (blocks ${rd.from}–${rd.to})`);
           }
           // STREET DEEDS (StreetDeed): Extracted → free the extractor (deed genuinely on-chain);
           // Redeemed → re-import the burned deed. Dormant unless STREET_DEED_ADDRESS is set.
           if (process.env.STREET_DEED_ADDRESS) {
-            const de = await syncDeedExtractedEvents(pool, source, { startBlock });
-            if (de.processed) console.log(`🏙️  deed sync: ${de.processed} street(s) extracted on-chain (blocks ${de.from}–${de.to})`);
-            const dr = await syncDeedRedeemedEvents(pool, source, { startBlock });
-            const dt = await syncDeedTransferEvents(pool, source, { startBlock });
-            if (dt.processed) log(`deed transfers: ${dt.processed} ownership move(s) recorded`);
-            if (dr.processed) console.log(`🏙️  deed sync: ${dr.processed} street(s) burned back to the city (blocks ${dr.from}–${dr.to})`);
+            const de = await safe('deed extracted sync', () => syncDeedExtractedEvents(pool, source, { startBlock }));
+            if (de?.processed) console.log(`🏙️  deed sync: ${de.processed} street(s) extracted on-chain (blocks ${de.from}–${de.to})`);
+            const dr = await safe('deed redeemed sync', () => syncDeedRedeemedEvents(pool, source, { startBlock }));
+            const dt = await safe('deed transfer sync', () => syncDeedTransferEvents(pool, source, { startBlock }));
+            if (dt?.processed) log(`deed transfers: ${dt.processed} ownership move(s) recorded`);
+            if (dr?.processed) console.log(`🏙️  deed sync: ${dr.processed} street(s) burned back to the city (blocks ${dr.from}–${dr.to})`);
           }
           // STOCK DELIVERY (StockVault Delivered → confirm a staged delivery into a deed's TBA, flip
           // the allocation). Brokers §3.4. Dormant unless STOCK_VAULT_ADDRESS is set.
           if (process.env.STOCK_VAULT_ADDRESS) {
-            const sd = await syncStockDeliveredEvents(pool, source, { startBlock });
-            if (sd.processed) console.log(`📈 stock delivery: confirmed ${sd.processed} delivery(ies) into deed TBAs (blocks ${sd.from}–${sd.to})`);
+            const sd = await safe('stock delivered sync', () => syncStockDeliveredEvents(pool, source, { startBlock }));
+            if (sd?.processed) console.log(`📈 stock delivery: confirmed ${sd.processed} delivery(ies) into deed TBAs (blocks ${sd.from}–${sd.to})`);
             // THE DELIVERY KEEPER — the tx sender the rail was missing: stage + claim + send
             // StockVault.deliver for every planned allocation; the Delivered sync above confirms on a
             // later tick. Needs the keeper key too (STOCK_KEEPER_PK) — sync-only deploys stay read-only.
             if (deliveryKeeperReady()) {
-              const dk = await runStockDeliveryKeeper(pool);
-              if (dk.sent?.length) console.log(`📦 delivery keeper: sent ${dk.sent.length} StockVault.deliver tx(s)`);
-              for (const s of dk.skipped || []) if (s.why === 'no_token_address' || s.why === 'send_failed')
+              const dk = await safe('stock delivery keeper', () => runStockDeliveryKeeper(pool));
+              if (dk?.sent?.length) console.log(`📦 delivery keeper: sent ${dk.sent.length} StockVault.deliver tx(s)`);
+              for (const s of dk?.skipped || []) if (s.why === 'no_token_address' || s.why === 'send_failed')
                 console.error(`📦 delivery keeper: skipped ${s.ticker || s.deliveryId} — ${s.why}${s.error ? ` (${s.error})` : ''}`);
             }
           }
           // THE DYNASTY TOKEN REGISTRY (DynastyNFT Minted + Transfer → the portrait freeze). Dormant
           // unless DYNASTY_NFT_ADDRESS is set.
           if (process.env.DYNASTY_NFT_ADDRESS) {
-            const dm = await syncDynastyMintEvents(pool, source, { startBlock });
-            if (dm.processed) console.log(`👤 dynasty sync: ${dm.processed} identity mint(s) recorded (blocks ${dm.from}–${dm.to})`);
-            const dtx = await syncDynastyTransferEvents(pool, source, { startBlock });
-            if (dtx.processed) console.log(`👤 dynasty sync: ${dtx.processed} transfer(s) — portraits freeze at first sale (blocks ${dtx.from}–${dtx.to})`);
+            const dm = await safe('dynasty mint sync', () => syncDynastyMintEvents(pool, source, { startBlock }));
+            if (dm?.processed) console.log(`👤 dynasty sync: ${dm.processed} identity mint(s) recorded (blocks ${dm.from}–${dm.to})`);
+            const dtx = await safe('dynasty transfer sync', () => syncDynastyTransferEvents(pool, source, { startBlock }));
+            if (dtx?.processed) console.log(`👤 dynasty sync: ${dtx.processed} transfer(s) — portraits freeze at first sale (blocks ${dtx.from}–${dtx.to})`);
           }
           // THE TWO DEX BOTS (src/dexbot.js) — real-money keepers on their own cadence (the Vig's
           // 12h buyback beat, not the 30s poll). Both dormant unless their env is set; every skip

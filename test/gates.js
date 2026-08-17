@@ -695,3 +695,167 @@ const SCENERY_WAIVED = {
     + `   - ${unclassified.join('\n   - ')}`);
   console.log(`✓ every code ${new Set(recorders).size} watcher recorders can throw is classified poison or waived`);
 }
+
+// ═══ THE ISOLATION LEDGER — one poison stream must not starve the other ten ══════════════════════
+//
+// The worker tick fans out to ~60 independent jobs and isolates each one with `safe()`, so a poison
+// row in one cannot starve the rest. The CHAIN-SYNC tick did not: eleven watcher syncs, the stock
+// delivery keeper, and the two DEX bots all sat inside ONE try/catch. A throw in the first sync
+// skipped every job below it — including the two bots that RT#4 had individually `safe()`-wrapped
+// for exactly this reason, so that fix was silently bypassed by an outer catch one level up (red
+// team #8). The failure mode is the recorded one: the fee stream wedges, and the bond sync, the
+// deed transfers, the delivery keeper and both real-money keepers stop with it, every tick, quietly.
+//
+// The rule is narrow so it stays true: inside `startWorker`, every awaited call to a `sync*` /
+// `run*` / `sweep*` job must be wrapped in `safe(...)`. It says nothing about what a job does with
+// its own errors — only that ONE job's throw cannot take its siblings down with it.
+//
+// The second half is what makes the first half real: `safe()` returns NULL on failure, so a caller
+// that immediately dereferences the result (`c.processed`) turns a contained failure back into an
+// uncontained TypeError, landing in the same outer catch the wrap was meant to avoid. Every read of
+// a wrapped result must be optional-chained.
+{
+  const src = fs.readFileSync(path.join(SRC, 'worker.js'), 'utf8');
+  // the worker's two ticks live inside the main-module guard, not a named export
+  const at = src.search(/if \(process\.argv\[1\] && process\.argv\[1\]\.endsWith\('worker\.js'\)\)/);
+  assert(at >= 0, 'the worker main-module block could not be located — the extractor is broken, not the code');
+  const body = bodyOf(src, at);
+
+  // the tick harnesses themselves (`syncTick`, `guardedTick`, …) are declared IN this block; a job
+  // is imported from a module, so anything locally declared is the harness and not a job.
+  const local = new Set([...body.matchAll(/(?:const|let)\s+(\w+)\s*=/g)].map((m) => m[1]));
+  const bare = [];
+  let jobs = 0;
+  for (const line of body.split('\n')) {
+    if (!/\bawait\b/.test(line)) continue;
+    for (const m of line.matchAll(/\b((?:sync|run|sweep)[A-Z]\w*)\s*\(/g)) {
+      if (local.has(m[1])) continue;
+      jobs++;
+      if (!/\bsafe\(/.test(line)) bare.push(`${m[1]}()`);
+    }
+  }
+  assert(jobs >= 60,
+    `the worker-job scan found only ${jobs} job call(s) — the extractor has stopped seeing them, so `
+    + 'this check is vacuous rather than clean');
+  assert.equal(bare.length, 0,
+    'worker job(s) run outside `safe()`. One throw then skips every job BELOW it in the same tick —\n'
+    + '      which is how a wedged stream silently stops the settlements and keepers that follow it:\n'
+    + `   - ${bare.join('\n   - ')}`);
+
+  // and the null-deref half: a `safe()`-wrapped result read without `?.`
+  const unsafeRead = [];
+  const lines = body.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const m = /(?:const|let)\s+(\w+)\s*=\s*await\s+safe\(/.exec(lines[i]);
+    if (!m) continue;
+    const v = m[1];
+    for (let j = i + 1; j < Math.min(i + 8, lines.length); j++) {
+      if (new RegExp(`(?:const|let)\\s+${v}\\s*=`).test(lines[j])) break;   // rebound
+      const hit = new RegExp(`\\b${v}\\.\\w`).exec(lines[j]);
+      if (!hit) continue;
+      // What is unsafe is a deref that runs UNCONDITIONALLY. `?.` is one way to be safe; a
+      // truthiness test between the binding and the read is the other, and it takes several shapes
+      // here (`if (r) …r.toWindow`, `if (s?.converted > 0) …s.season`, `arch && arch.state`,
+      // and multi-line `if (pop && …)`). So scope to the enclosing statement — walk back to the
+      // and multi-line `if (pop && …)`, and derefs inside an `if (oh && …) {` block). So look at
+      // everything between the binding and the read: if the code tested `v` anywhere in that span
+      // it cannot be null at the deref. Scope limit: a deref that falls OUTSIDE an earlier guard's
+      // block reads as guarded — the shape this catches is bind-then-deref, which is the one that
+      // shipped.
+      const stmt = lines.slice(i + 1, j).join('\n') + lines[j].slice(0, hit.index);
+      const guarded = new RegExp(`\\b${v}\\s*(?:\\?\\.|&&)`).test(stmt)
+        || new RegExp(`if\\s*\\(\\s*${v}\\s*[)&?]`).test(stmt);
+      if (!guarded) unsafeRead.push(`${v} at line ${j + 1} of the worker main block`);
+    }
+  }
+  assert.equal(unsafeRead.length, 0,
+    '`safe()` returns NULL on failure, and these read the result without `?.` — so a CONTAINED\n'
+    + '      failure becomes an uncontained TypeError in the very next statement, landing in the\n'
+    + '      outer catch the wrap exists to avoid:\n'
+    + `   - ${unsafeRead.join('\n   - ')}`);
+  console.log(`✓ all ${jobs} worker jobs are isolated and every wrapped result is read null-safely`);
+}
+
+// ═══ THE CATALOG LEDGER — an object index is not an allowlist ════════════════════════════════════
+//
+// `if (!CATALOG[userInput]) throw` reads like a membership test and is not one: every JavaScript
+// object inherits `__proto__`, `constructor`, `toString`, `valueOf` and `hasOwnProperty`, and each
+// of those indexes TRUTHY. So the gate passes for exactly those keys and the value flows on.
+//
+// Found by the red team of 2026-08-17, driven through the real routes. Two of the five
+// user-reachable gates were live defects: `KITCHEN.MODULES[modId]` reached a `lab_${modId}` COLUMN
+// NAME and 500'd on it, and `MASTERY.TRAITS[traitId]` returned 200 and WROTE `trait_id='__proto__'`
+// — permanently consuming the once-ever level-50 choice with a trait that then grants nothing.
+// Injection was never possible (a quoted payload is not a prototype key, so the gate catches it),
+// which is precisely what made the gate look adequate.
+//
+// The rule: a gate of the form `CATALOG[key]` where CATALOG is a module-level (SHOUTY) catalog and
+// `key` is a variable must use `Object.hasOwn`. A waiver must say why the key cannot be
+// user-supplied — a numeric index, a column read back out of our own database, a route name we
+// generated. Scope: it proves the PREDICATE is right, not that the surrounding logic is.
+{
+  const CATALOG_WAIVED = {
+    // key is a loop index over our own array, never a request field
+    'chainparams.js:CHAIN_PARAMS': 'the key is a numeric index into our own array',
+    // tier is an integer column read back out of account_persistent
+    'pass.js:PASS.TRACK': 'the key is an integer tier read out of our own row',
+    // district ids are validated upstream against DISTRICTS; the `|| []` fallback is already safe
+    'rules.tail.js:DEEDS.NEIGHBORHOODS': 'district is validated upstream and the || [] fallback is safe',
+    // the key is the route name WE registered, never a request field
+    'server.js:ACTIVITY_WIRE': 'the key is a route name the server itself emitted',
+    // trackId comes from MASTERY.TRACKS.find() at every call site; returns a neutral 1 either way
+    'game.js:MASTERY.PERKS': 'trackId is resolved from the TRACKS catalog before it reaches here, and the miss path returns a neutral 1',
+    // taskId is gated by the ONBOARD_TASKS lookup above it; returns a boolean, touches no SQL
+    'verify.js:TASK_PROVIDER': 'taskId is gated upstream and the result is a boolean, never a column or a write',
+  };
+  const bare = [];
+  const seenKeys = new Set();
+  let gates = 0;
+  for (const f of files) {                       // the tree-wide list built at the top of this file
+    const rel = path.relative(SRC, f);
+    // line-based, so drop whole-line comments: prose about a gate is not a gate (the gate-matrix
+    // extractor learned this the expensive way — an over-read is the permissive direction).
+    const lines = fs.readFileSync(f, 'utf8').split('\n').map((l) => (/^\s*(\/\/|\*)/.test(l) ? '' : l));
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
+      // A gate reads one of two ways, and the extractor must see BOTH — a scanner that only knows
+      // the broken form stops counting a site the moment it is fixed, so the guard silently shrinks
+      // to nothing as the tree gets healthier. That is the vacuity trap wearing a new hat.
+      const safe = [...l.matchAll(/Object\.hasOwn\(\s*([A-Z][\w.]*)\s*,\s*([a-z]\w*)\s*\)/g)];
+      for (const m of safe) {
+        gates++;
+        seenKeys.add(`${path.basename(rel)}:${m[1]}`);
+      }
+      // …and the bare index form: `const x = CAT[key]` with an `if (!x)` in the next three lines,
+      // or an inline `if (!CAT[key])`.
+      const decl = /(?:const|let)\s+(\w+)\s*=\s*([A-Z][\w.]*)\[([a-z]\w*)\]/.exec(l);
+      const inline = /if\s*\(\s*!\s*([A-Z][\w.]*)\[([a-z]\w*)\]/.exec(l);
+      let cat = null; let key = null;
+      if (inline) { cat = inline[1]; key = inline[2]; }
+      else if (decl && new RegExp(`if\\s*\\(\\s*!\\s*${decl[1]}\\b`).test(lines.slice(i + 1, i + 4).join('\n'))) {
+        cat = decl[2]; key = decl[3];
+      }
+      if (!cat) continue;
+      const id = `${path.basename(rel)}:${cat}`;
+      if (safe.some((m) => m[1] === cat)) continue;   // already counted above, and it IS the fix
+      gates++;
+      seenKeys.add(id);
+      if (CATALOG_WAIVED[id]) continue;
+      bare.push(`${rel}:${i + 1}  ${cat}[${key}]`);
+    }
+  }
+  assert(gates >= 8,
+    `the catalog-gate scan found only ${gates} gate(s) — the extractor has stopped seeing them, so `
+    + 'this check is vacuous rather than clean');
+  assert.equal(bare.length, 0,
+    'catalog membership tested by INDEX rather than `Object.hasOwn`. `__proto__`, `constructor`,\n'
+    + '      `toString`, `valueOf` and `hasOwnProperty` all index truthy, so the gate is decorative for\n'
+    + '      exactly those keys — and what flows past it has reached a column name (a 500) and a write\n'
+    + '      (permanent data corruption) before:\n'
+    + `   - ${bare.join('\n   - ')}`);
+  const stale = Object.keys(CATALOG_WAIVED).filter((k) => !seenKeys.has(k));
+  assert.equal(stale.length, 0,
+    `catalog gate waiver(s) for a gate that no longer exists — drop them: ${stale.join(', ')}`);
+  console.log(`✓ all ${gates} catalog gates test membership, not truthiness `
+    + `(${Object.keys(CATALOG_WAIVED).length} waived with a stated reason)`);
+}

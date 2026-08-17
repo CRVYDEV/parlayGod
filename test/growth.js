@@ -311,6 +311,15 @@ await seedCh(chef.id, 'cash=5000000, jail_until=NULL');
 await pool.query(`UPDATE account_persistent SET omr=300 WHERE account_id=(SELECT account_id FROM characters WHERE id='${chef.id}')`);
 // (A) LAB MODULES — a bad module id is refused; a level-1 buy is a ledgered cash sink surfaced in the view
 assert.equal((await call('POST', '/v1/kitchen/module/nope', { token: chef.token })).body.error, 'bad_module', 'no such module');
+// …and neither is a PROTOTYPE KEY (red team #8): `KITCHEN.MODULES['__proto__']` is Object.prototype
+// and therefore TRUTHY, so a bare index gate let it through to the `lab_${modId}` COLUMN NAME below
+// and 500'd on it. Injection was never possible (a quoted payload is not a prototype key), but the
+// gate was decorative for exactly the keys that index truthy.
+for (const k of ['__proto__', 'constructor', 'toString', 'hasOwnProperty']) {
+  const bad = await call('POST', `/v1/kitchen/module/${encodeURIComponent(k)}`, { token: chef.token });
+  assert.equal(bad.code, 400, `a prototype key (${k}) is a clean refusal, never a 500`);
+  assert.equal(bad.body.error, 'bad_module', `${k} is refused like any other non-module`);
+}
 r = await call('POST', '/v1/kitchen/module/purity', { token: chef.token });
 assert.equal(r.code, 200, 'bought the purity rig'); assert.equal(r.body.level, 1); assert.equal(r.body.omr, 0, 'level 1 is cash-only');
 assert.equal((await meOf(chef.token)).labModules.purity, 1, 'the view shows the module level');

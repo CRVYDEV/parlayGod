@@ -700,7 +700,8 @@ export async function claimOnboard(ch, taskId, client, h) {
   if (t.social && (process.env.SOCIAL_VERIFY_MODE || 'off') === 'live')
     await throttleXCheck(client, h.accountId, 'follow', h.pool);
   if (t.social) await verifySocial(taskId, ident);          // §4: verifies once
-  else if (!CHECKS[taskId] || !CHECKS[taskId](ch, h)) throw new GameError('unfinished', 'Not done yet — the checklist pays on completion.');
+  // `Object.hasOwn`, not truthiness (a prototype key indexes truthy — red team #8)
+  else if (!Object.hasOwn(CHECKS, taskId) || !CHECKS[taskId](ch, h)) throw new GameError('unfinished', 'Not done yet — the checklist pays on completion.');
   onboard[taskId] = true;
   h.acct.onboard = JSON.stringify(onboard);
   // the same list the board showed — see offeredTasks. `onboard` already carries THIS claim, so a

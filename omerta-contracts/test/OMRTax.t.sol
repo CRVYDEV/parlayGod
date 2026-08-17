@@ -192,4 +192,37 @@ contract OMRTaxTest is Test {
         vm.expectRevert(OMR.NotMinter.selector);
         omr.mint(friend, 1e18);
     }
+
+    // RED TEAM #8 — OWNERSHIP IS TWO-STEP. OMR's owner holds `setMinter` (the ONLY mint) and every
+    // sell-tax knob, so a single-step `transferOwnership` to a typo'd address is unrecoverable: the
+    // minter could never be rotated or zeroed again, and the emergency stop would be gone with it.
+    // Ten of the sixteen contracts already inherited Ownable2Step; six did not, for no stated reason.
+    function test_ownership_transfer_is_two_step() public {
+        address newOwner = address(0xBEEF);
+        vm.prank(safe);
+        omr.transferOwnership(newOwner);
+        // …the handover has NOT happened yet: the Safe is still in charge
+        assertEq(omr.owner(), safe, "transferOwnership only nominates");
+        assertEq(omr.pendingOwner(), newOwner, "the nominee is pending");
+        // the old owner can still act, and a wrong nominee can still be corrected
+        vm.prank(safe);
+        omr.transferOwnership(address(0xCAFE));
+        assertEq(omr.pendingOwner(), address(0xCAFE), "a typo is recoverable");
+        // only the nominee can complete it
+        vm.expectRevert();
+        vm.prank(newOwner);
+        omr.acceptOwnership();
+        vm.prank(address(0xCAFE));
+        omr.acceptOwnership();
+        assertEq(omr.owner(), address(0xCAFE), "the nominee accepted");
+    }
+
+    // …and the deliberate escape hatch survives: renouncing to freeze the configuration forever is
+    // still ONE step (Ownable2Step overrides `transferOwnership`, not `renounceOwnership`).
+    function test_renounce_is_still_one_step() public {
+        vm.prank(safe);
+        omr.renounceOwnership();
+        assertEq(omr.owner(), address(0), "renounce still takes effect immediately");
+    }
+
 }

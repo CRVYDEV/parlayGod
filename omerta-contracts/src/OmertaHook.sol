@@ -2,6 +2,7 @@
 pragma solidity 0.8.26;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {IHooks} from "v4-core/interfaces/IHooks.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
@@ -112,7 +113,7 @@ interface IOmrHookObserver {
 ///         Pool-local enforcement is the accepted cost (design §4): anyone may open an unhooked OMR
 ///         pool and trade untaxed. The defence is depth (protocol-owned liquidity), backed by
 ///         `OMR.sol`'s transfer tax retained ARMED AT ZERO as a universal backstop.
-contract OmertaHook is IHooks, Ownable {
+contract OmertaHook is IHooks, Ownable2Step {
     // ── permissions (immutable, encoded in this contract's address) ──────────────────────────────
     /// @notice The exact flag set this hook implements. The constructor refuses to deploy anywhere
     ///         that does not carry it, which is what makes the CREATE2 salt search part of the

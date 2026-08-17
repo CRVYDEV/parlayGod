@@ -110,7 +110,9 @@ export async function claimCareer(ch, taskId, client, h) {
   // street) must hear "already collected", never be asked to prove it again
   if (claimed.has(taskId)) throw new GameError('claimed', 'Already collected.');
   const x = await extraSignals(client, ch);
-  if (!CHECKS[taskId]?.(ch, h, x)) throw new GameError('not_done', `Not yet — ${task.how}`);
+  // `Object.hasOwn`, not truthiness: a prototype key indexes truthy and `?.()` would then TypeError
+  // on a non-function (red team #8). The task lookup above already gates it; this is the class fix.
+  if (!Object.hasOwn(CHECKS, taskId) || !CHECKS[taskId](ch, h, x)) throw new GameError('not_done', `Not yet — ${task.how}`);
   // atomic latch: the PK is the once-ever (the account survives death, so does the claim)
   const ins = await client.query(
     'INSERT INTO career_claims (account_id, task_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',

@@ -2,6 +2,7 @@
 pragma solidity 0.8.26;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {IOmrOracle} from "./IOmrOracle.sol";
 
 /// @title GenesisOracle — the administered feed the genesis bonding window runs on.
@@ -45,7 +46,7 @@ import {IOmrOracle} from "./IOmrOracle.sol";
 ///
 ///         The kill switch is `setPrice(0)`: zero is already the interface's "unavailable", so the
 ///         Safe can stop the window instantly without a pause flag and without a second code path.
-contract GenesisOracle is IOmrOracle, Ownable {
+contract GenesisOracle is IOmrOracle, Ownable2Step {
     /// @notice OMR (18dp) per 1 ETH. 0 means the window is closed — never a free pass.
     uint256 public price;
     /// @notice Unix seconds past which this feed reports no usable reading, whatever `price` says.

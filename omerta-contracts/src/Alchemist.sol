@@ -6,6 +6,7 @@ import {IERC20Metadata} from "@openzeppelin/contracts/interfaces/IERC20Metadata.
 import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {FlashGuard} from "./FlashGuard.sol";
 import {CollateralEscrow} from "./CollateralEscrow.sol";
@@ -36,7 +37,7 @@ import {Denari} from "./Denari.sol";
 ///         ── THE INVARIANT THIS FILE EXISTS TO HOLD ───────────────────────────────────────────
 ///             Σ DNR supply ≤ Σ collateral × LTV
 ///         Enforced per-user at every issuance and every withdrawal, and fuzzed in the tests.
-contract Alchemist is Ownable, ReentrancyGuard, FlashGuard {
+contract Alchemist is Ownable2Step, ReentrancyGuard, FlashGuard {
     using SafeERC20 for IERC20;
 
     /// @notice Compile-time hard ceiling on loan-to-value. The Safe sets `ltvBps` beneath this and

@@ -282,7 +282,9 @@ export async function cleanPapers(ch, client, h) {
 // direct SQL (the column is off the persistCharacter positional UPDATE → clobber-safe). One touchpoint
 // each: purity→collect quality, yield→cook cap, stealth→the accrual raid probability.
 export async function upgradeModule(ch, modId, client, h) {
-  const mod = KITCHEN.MODULES[modId];
+  // `Object.hasOwn`, not truthiness — a prototype key ('__proto__', 'constructor', …) indexes as
+  // TRUTHY and would reach the `lab_${modId}` column name below as a 500 (red team #8).
+  const mod = Object.hasOwn(KITCHEN.MODULES, modId) ? KITCHEN.MODULES[modId] : null;
   if (!mod) throw new GameError('bad_module', 'No such lab module.');
   if (!ch.lab) throw new GameError('no_lab', 'Fit a Kitchen before you soup it up.');
   const col = `lab_${modId}`;
