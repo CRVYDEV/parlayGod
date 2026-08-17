@@ -13898,9 +13898,9 @@ is not a typo but **the env flip**: `deploy/fee-splits.env` is the signed Path A
 defaults are the pre-flip values, so the two agree only if that file is applied **on both the api and the
 worker** in lockstep with the constructor args — miss it on the worker (where the ingest runs, off the
 watcher) and the contract forwards 25% while the backend books 60%, permanently, immutably, with nothing
-red. Fixed: `chain.js:onchainSplits()` reads the contract's own public immutables (no lever knowledge, so
+red. Fixed: `chain.js:onchainParams()` reads the contract's own public immutables (no lever knowledge, so
 that file stays free of the economy constants — a restatement there is the class preflight's own ledger
-exists to stop), `vig.js:splitParity()` compares where the levers live, the worker checks it hourly beside
+exists to stop), `vig.js:chainParity()` compares where the levers live, the worker checks it hourly beside
 the oracle-keeper watchdog and alarms through `alertDrift` (dormant/unreachable never alarm), and the
 `chainparams` control-room entry that mirrored the backend bps against `read: null` now reads `polBps`.
 It can only fire once per deploy — the contract side cannot move — and that once is the whole point.
@@ -13963,3 +13963,117 @@ constructor-parity probe reported two false arity mismatches because its comment
 **inside a string literal** (every URL default in the deploy script) — replaced with a string-aware
 stripper before a single result was read. Five `zz*` probes written and deleted before committing; every
 mutation on a scratchpad copy, never `git checkout`.
+**RT#9's OPEN ITEMS, CLOSED — the restated-chain-value class swept, and the ABI names made a check
+(2026-08-17).** F1 shipped a crossing for TWO values, which is the shape RT#7 named and RT#10 went
+looking for; enumerating the CLASS — *a value the chain holds authoritatively that the backend keeps
+its own copy of* — turned up **five instances**, so `onchainSplits`/`splitParity` widened into
+`onchainParams`/`chainParity` rather than growing a sixth ad-hoc guard. Beyond F1's two splits:
+**`OmertaFees.mintFee`/`respawnFee`** (settable, and they MOVE at a published tranche boundary — the
+respawn one prices a LIVE rail through `plexQuote`, so a stale-cheap copy makes $OMR the cheaper rail
+at a price nobody chose, which is the cheapest-rail rule that sent the mint ETH-only in the first
+place; compared in WEI, converting our float UP, the only direction that does not lose the comparison
+to rounding), **`VoucherClaim.dailyCapOMR`** (chain.js refuses a withdrawal whose NET exceeds it
+precisely so it never signs a voucher `claim()` will reject forever — but it refuses against the ENV
+copy, so a stale-HIGH copy signs exactly that voucher and the player's $OMR is burned and stranded
+until the reclaim sweep), and **the sell tax on BOTH layers** (`recordSellTax` DERIVES all four slices
+from the levers, so a divergence mis-books the treasury's stock budget and the family-buyback inflow
+at once — and, the recurring shape, every downstream check sums correctly because they all descend
+from the same restated number). Every getter is read through an `opt()` wrapper so one missing on an
+older deploy costs ONE comparison rather than the whole sweep. **THE ABI LEDGER** (`test/gates.js`,
+the eighth catalogue-or-declare guard) is the other half: RT#9 crossed the 14 backend event signatures
+against the contracts BY HAND and found one drift in a field that did not matter
+(`HarvestFeeTaken.assets` vs our `amount`) — inert only because viem decodes POSITIONALLY, so both
+sides were wrong together, and the moment either is renamed alone the read is `undefined` → NaN and
+every harvest fee books a bad amount. The name is corrected and the crossing is now a test, so the
+sharp case a type comparison cannot see — a **same-typed adjacent swap** (`Bonded` has six adjacent
+non-indexed `uint256`) — fails by name instead of waiting for the next hand pass.
+
+**RED TEAM #10 — the two classes fixed four times each and never swept, plus the guard for both
+(`AUDIT-red-team-ten.md`, 2026-08-17).** RT#7 named the shape these passes keep leaving behind — *a
+class established, applied where it was discovered, never swept to its edge* — and two of its own
+instances were still open: **lock order**, fixed four separate times at four separate sites
+(`pvpDice`, `refundPot`, `payFamilyYield`, the poker tournament), and **error mapping**, fixed at
+three. Each fix stated the canonical rule in a comment, which is exactly as durable as the next
+person reading it. First-hand throughout; two lenses needed real Postgres. **No CRITICAL, no HIGH;
+two MED, seven lenses CLEAN, two permanent guards**, seven mutations each failing at its own named
+assertion.
+**F1 (MED) — a lock pair with two orders, and the safety argument was FALSE.** `callOutChamp` locked
+`boxing_title`→`fighters` and carried a careful comment arguing that was safe on a stated
+precondition — *"any counter-path that would lock this fighter must first block on the held caller
+char"* — which `acceptCallout`, **a function the same comment NAMES as canonical**, violates in its
+own explicit words (*"another player's row we don't hold the char lock for"*). Both were right about
+themselves and wrong about each other, which is the shape a per-site comment cannot catch.
+Reachability is narrow (the callout must clear between acceptCallout's unlocked read and its locked
+one — the belt-defence sweep does exactly that) and the outcome is bounded to a 40P01 → `contention`
+retry, so no money was ever at risk: **the defect is the ARGUMENT**, since a comment asserting a
+precondition its own sibling violates is what licenses the next edit. Fixed by taking the order
+rather than reasoning about it (fighter → title, then re-verify under the lock — the belt changing
+hands changes WHO the contender is, because `contenderOf` excludes the champ's own fighter).
+**THE LOCK LEDGER** (`test/gates.js`) is the guard, in the shape of its six siblings: **two rules**,
+the second existing because the first is blind to it — (1) no pair locked in both orders by any two
+transactions, (2) no SINGLETON locked before a `characters` row, since every player action already
+holds its own character via `withCharacter` and rule 1 cannot see a lock the wrapper took. **Splitting
+on transaction boundaries is what makes it usable, and that is measured rather than assumed**: a
+function may open several independent transactions (the ring sweep has two, a route-registration
+function has dozens), and without the split the sweep reported **two false positives out of three** —
+a mostly-wrong advisory being worse than none. Result: 74 multi-lock transactions agree on one order
+for each of 46 pairs; none of 237 lock-holding segments takes a singleton before a character row. Two
+anti-vacuity floors, because they fail differently — one catches an extractor that has stopped seeing
+`FOR UPDATE`, the other a SINGLETON list drifted off the real table names, which would make rule 2
+pass over every pot in the game while looking exactly as clean as it does when it holds (52 singleton
+lock sites across 20 pots confirm it bites).
+**F2 (MED) — transient contention reported itself as a server bug.** The wrappers map
+40P01/23505/55P03 to a retryable `contention`, but **89 functions open their own transaction** and
+eight are reachable straight from a player route (the whole withdraw/gear/item/deed/dynasty rail, the
+bond quote and claim), so those answered `500 internal`. **A `55P03` there needs no deadlock at all** —
+it is the pool's own `lock_timeout` valve after 8s of ordinary contention on a singleton like
+`chain_reserve`, which every withdrawal takes. Nothing is corrupted; what is wrong is the answer.
+**The fourth instance of a class the same handler already argues twice in its own words** — `db_down`
+(*"an outage and a null-dereference produced byte-identical responses"*) and Fastify's 4xx
+(*"blanket-500ing those says 'the server is broken' about a request the server correctly refused …
+it matters more for agents than for us — they read these codes, and 500 means 'retry later' when the
+honest instruction is 'fix your request'"*). Fixed ONCE at the handler rather than at 89 call sites,
+so a route that hand-rolls a transaction can no longer ship this by omission (the H4
+denylist-by-default shape) and the per-site catches become harmless redundancy; the code set is read
+from `deadlockToRetry` itself rather than restated, so the two cannot drift. The regression drives the
+REAL handler through routes the TEST registers (never shipped) for all three codes — a fix mapping
+only the famous one would leave the two that actually reach these routes reporting as bugs — plus the
+half that keeps it a legibility fix rather than a blanket swallow: a genuine error must still report
+as one.
+**CLEAN LENSES, recorded because a red team that publishes only its hits cannot be audited.**
+**(1) THE MIGRATION CLASS** — the 2026-08-06 boot outage is defeated by the derived
+`ADD COLUMN IF NOT EXISTS` pass, and **every suite is structurally blind to it** (pg-mem always starts
+EMPTY), with `pgcheck` §7 blind one step further (re-applying the CURRENT schema twice means the first
+application already made the table right). **`pgcheck` §7b** now applies the OLDEST `schema.sql` in the
+history and boots the current build on top, which is what a deploy does — and it established two
+things nobody knew: **the deriver contributes NOTHING today** (disable it entirely and all 1,587
+columns are still present, because the hand-written ALTER discipline covers the lot — so it is the
+belt to those braces, and its whole value is the day somebody forgets), and therefore **a green here
+means "nothing has been forgotten yet", not "the deriver ran"** — guarded on exactly that: an
+inline-only column on a pre-existing table lands with the deriver intact (1,468 statements) and FAILS
+naming `gang_members.zzprobe_only` without it. The assertion's shape was reached by discarding two
+wrong ones: naming the outage column is unfalsifiable (this repository's history begins AFTER that
+fix), and hand-parsing `schema.sql` reported **17 phantom missing columns** because a one-line table
+(`stakes_state`) has no `\n);` terminator so the match ran into its neighbour. It compares two
+DATABASES and parses nothing — the reference produced by CREATE TABLE, the subject by ALTER, sharing
+no code path. **(2) Day/week boundaries** (31 keyed tables; the only multi-`dayOf()` write path can
+produce a spurious fail-closed refusal at midnight). **(3) Unit boundaries**, the class with a 2/2 hit
+rate, swept three ways — `_BPS` arithmetic, `_MS` conversions, and every chain `parseUnits`/
+`formatUnits`/`1e18` (the lossy `Number(bigint)/1e18` sites are all cap COMPARISONS where ULPs cannot
+flip a result, and `watcher.js` uses `formatUnits` exactly where precision is load-bearing).
+**(4) The idempotency perimeter** — the sharp question is what mutates outside POST/DELETE, and
+**there are no PUT or PATCH routes at all**; ban and revocation are checked on BOTH paths, so an
+authed GET is covered too. **(5) Two-party transfers with independent legs** — worth a lens because
+**§10.4 is structurally BLIND to it** (debit 100 / credit 101 moves Σcash and Σledger equally and
+balances); 402 of 404 `ledger()` calls parsed, and every same-reason pair credits the pool or burns,
+directly or through `payVig`.
+**THREE OF MY OWN TOOLS GAVE WRONG ANSWERS AND ALL THREE WERE CAUGHT BEFORE ANYTHING WAS REPORTED.**
+The lock sweep's 2-in-3 false positives (fixed by the transaction split, now the guard's own
+documented reason for it); **a transfer sweep that matched 0 debits out of 404 calls** because it
+assumed positional `ledger()` args when the real signature is a named object — it reported "0
+asymmetric pairs", a clean-looking result that meant nothing, caught only by instrumenting the match
+count rather than reading the verdict; and a take-accounting sweep blind to delegation through
+`payVig` (2 false positives of 19). Plus the schema-parsing §7b, which produced 17 confident,
+specific, reproducible phantom findings before being replaced. *A finding produced by a tool you wrote
+and did not check is not a finding — and neither is a clean bill of health*, for the fourth session
+running.

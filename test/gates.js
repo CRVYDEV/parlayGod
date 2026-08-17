@@ -859,3 +859,276 @@ const SCENERY_WAIVED = {
   console.log(`✓ all ${gates} catalog gates test membership, not truthiness `
     + `(${Object.keys(CATALOG_WAIVED).length} waived with a stated reason)`);
 }
+
+// ═══ THE ABI LEDGER — the backend's event signatures must match the contracts' ════════════════════
+//
+// Every watcher decodes a log through a `parseAbiItem('event …')` string written by hand, against a
+// declaration that lives in a different language in a different directory. Nothing crossed them
+// until RT#9 did it once, by eye, and found a drift: `HarvestFeeTaken`'s third parameter is `assets`
+// on-chain and was `amount` in the backend. That one was inert — viem decodes POSITIONALLY, so both
+// sides being wrong together still worked — which is exactly why it survived: it could only be
+// caught by comparing the two declarations, never by running either.
+//
+// WHY THE PARAMETER NAME IS THE POINT. A type-only comparison passes the drift that actually hurts:
+// a SAME-TYPED ADJACENT SWAP. `Bonded` has six adjacent non-indexed `uint256` (principal, payout,
+// toPol, toDev, toRwa, toVig); `Delivered` has two adjacent `address indexed`; `Extracted` has two
+// adjacent `string`. Swap any neighbouring pair and every type still lines up, the topic hash is
+// unchanged, viem decodes without complaint — and the backend books the POL slice as the dev slice,
+// or delivers stock to the token instead of the recipient. Only the names disagree, so the names are
+// what this checks.
+//
+// The indexed flag is checked for a different reason: it decides whether a field arrives in `topics`
+// or in `data`, so getting it wrong is not a mis-labelling, it is a decode that silently yields the
+// wrong value for every field after it.
+//
+// AND THE READER, which is the half a declaration check cannot see. `parseAbiItem` says what the
+// log contains; the mapper below it says which field to take. Fix one and not the other and the
+// read is `undefined` — silently, since viem returns no such key rather than throwing. So the
+// second half binds every `l.args.X` to the event its own `getLogs({ event: … })` names, and
+// requires X to be a parameter that event declares. That is what makes the rename above safe to
+// have done: the ABI and its reader are now checked against each other, not merely each against
+// itself.
+{
+  // an event the backend watches that no contract in this repo declares. Each must name its real
+  // source, because "not ours" is the only honest reason a signature has nothing to be checked
+  // against — and an unexplained miss is how a typo'd event name would hide here forever.
+  const ABI_EXTERNAL = {
+    ModifyLiquidity: 'Uniswap v4-core IPoolManager — vendored dependency, not a contract of ours',
+    Transfer: 'the ERC-721 standard event (OpenZeppelin IERC721), not declared in our sources',
+  };
+
+  const SOL = new URL('../omerta-contracts/src/', import.meta.url).pathname;
+  const walkSol = (d) => fs.readdirSync(d, { withFileTypes: true })
+    .flatMap((e) => (e.isDirectory() ? walkSol(path.join(d, e.name)) : [path.join(d, e.name)]));
+
+  // "event Name(type indexed name, …)" → a comparable shape. Solidity and the viem string use the
+  // same grammar here, so ONE parser reads both — which is the point: two parsers could disagree
+  // about the thing they exist to compare.
+  const parseEvt = (sig) => {
+    const m = /^\s*event\s+(\w+)\s*\(([\s\S]*)\)\s*;?\s*$/.exec(sig);
+    if (!m) return null;
+    const body = m[2].trim();
+    const params = body ? body.split(',').map((p) => {
+      const t = p.trim().split(/\s+/);
+      return { type: t[0], indexed: t.includes('indexed'), pname: t[t.length - 1] === 'indexed' ? '' : (t.length > 1 ? t[t.length - 1] : '') };
+    }) : [];
+    return { name: m[1], params };
+  };
+  const fmt = (e) => `${e.name}(${e.params.map((p) => `${p.type}${p.indexed ? ' indexed' : ''} ${p.pname}`).join(', ')})`;
+
+  const backendEvents = [];
+  for (const f of files) {                       // the tree-wide src list built at the top of this file
+    const s = fs.readFileSync(f, 'utf8');
+    for (const m of s.matchAll(/parseAbiItem\(\s*'(event [^']+)'\s*\)/g)) {
+      const e = parseEvt(m[1]);
+      if (e) backendEvents.push({ file: path.relative(SRC, f), ...e });
+    }
+  }
+  const onchain = new Map();
+  for (const f of walkSol(SOL).filter((f) => f.endsWith('.sol'))) {
+    // strip line comments: a commented-out event declaration is not a declaration
+    const s = fs.readFileSync(f, 'utf8').replace(/\/\/[^\n]*/g, '');
+    for (const m of s.matchAll(/\bevent\s+\w+\s*\([\s\S]*?\)\s*;/g)) {
+      const e = parseEvt(m[0]);
+      if (!e) continue;
+      if (!onchain.has(e.name)) onchain.set(e.name, []);
+      onchain.get(e.name).push({ file: path.basename(f), ...e });
+    }
+  }
+
+  assert(backendEvents.length >= 12,
+    `the ABI scan found only ${backendEvents.length} backend event signature(s) — the extractor has `
+    + 'stopped seeing them, so this check is vacuous rather than clean');
+  assert(onchain.size >= 40,
+    `the ABI scan found only ${onchain.size} contract event declaration(s) — it is not reading the `
+    + 'Solidity sources, so every comparison below is against nothing');
+
+  const drift = [];
+  const unexplained = [];
+  const seenExternal = new Set();
+  for (const b of backendEvents) {
+    const cands = onchain.get(b.name) || [];
+    if (!cands.length) {
+      if (ABI_EXTERNAL[b.name]) { seenExternal.add(b.name); continue; }
+      unexplained.push(`${b.file}  ${fmt(b)}`);
+      continue;
+    }
+    if (cands.some((c) => fmt(c) === fmt(b))) continue;
+    drift.push(`${b.file}\n       backend: ${fmt(b)}\n       onchain: ${cands.map((c) => `${fmt(c)}  [${c.file}]`).join('\n       onchain: ')}`);
+  }
+
+  assert.equal(drift.length, 0,
+    'a watcher decodes a log against a signature the contract does not declare. viem decodes\n'
+    + '      POSITIONALLY, so a name drift is silent until somebody renames one side and the reader\n'
+    + '      destructures `undefined`; a same-typed ADJACENT SWAP is silent forever and books the\n'
+    + '      wrong field:\n'
+    + `   - ${drift.join('\n   - ')}`);
+  assert.equal(unexplained.length, 0,
+    'a watched event matches no contract declaration and is not listed as external. Either the name\n'
+    + '      is a typo (in which case the stream is dead and nothing says so) or it belongs to a\n'
+    + '      dependency and must say which:\n'
+    + `   - ${unexplained.join('\n   - ')}`);
+  const staleExternal = Object.keys(ABI_EXTERNAL).filter((k) => !seenExternal.has(k));
+  assert.equal(staleExternal.length, 0,
+    `external-event waiver(s) for an event nothing watches — drop them: ${staleExternal.join(', ')}`);
+
+  console.log(`✓ all ${backendEvents.length - seenExternal.size} watched event signatures match their `
+    + `contract declaration on type, indexed-ness AND parameter name (${seenExternal.size} external)`);
+
+  // ── the reader half: every `l.args.X` must be a field the event it decodes actually declares ────
+  // Both decoders in the tree share one idiom — `getLogs({ …, event: someEv })` and then `l.args.X`
+  // below it — so a read binds to the nearest event named before it.
+  const argDrift = [];
+  let argReads = 0;
+  for (const f of files) {
+    const src = fs.readFileSync(f, 'utf8');
+    const declared = new Map();                  // local var → the params its event declares
+    for (const m of src.matchAll(/(?:const|let)\s+(\w+)\s*=\s*parseAbiItem\(\s*'event \w+\(([^']*)\)'\s*\)/g)) {
+      const ps = m[2].trim() ? m[2].split(',').map((p) => p.trim().split(/\s+/).pop()) : [];
+      declared.set(m[1], ps);
+    }
+    if (!declared.size) continue;
+    const lines = src.split('\n').map((l) => (/^\s*(\/\/|\*)/.test(l) ? '' : l));
+    let bound = null;
+    for (let i = 0; i < lines.length; i++) {
+      const e = /event:\s*(\w+)/.exec(lines[i]);
+      if (e && declared.has(e[1])) bound = e[1];
+      for (const m of lines[i].matchAll(/\b\w+\.args\.(\w+)/g)) {
+        if (!bound) continue;                    // nothing named an event yet — not a decode we can bind
+        argReads++;
+        if (!declared.get(bound).includes(m[1]))
+          argDrift.push(`${path.relative(SRC, f)}:${i + 1}  reads .args.${m[1]}, but ${bound} declares (${declared.get(bound).join(', ')})`);
+      }
+    }
+  }
+  assert(argReads >= 20,
+    `the log-reader scan found only ${argReads} \`.args.\` read(s) — the extractor has stopped seeing `
+    + 'them, so the reader half of this ledger is vacuous rather than clean');
+  assert.equal(argDrift.length, 0,
+    'a log mapper reads a field its own event does not declare. viem returns no such key rather than\n'
+    + '      throwing, so the value is `undefined` and books as NaN — a stream that looks quiet, not broken:\n'
+    + `   - ${argDrift.join('\n   - ')}`);
+  console.log(`✓ all ${argReads} decoded-log field reads name a parameter their own event declares`);
+}
+
+// ═══ THE LOCK LEDGER — one pair of rows, one order, everywhere ═══════════════════════════════════
+//
+// The most productive deadlock class in this project, and the only one that has been fixed the same
+// way four separate times: two code paths take the same two `FOR UPDATE` locks in opposite orders.
+// `pvpDice` locked street_tax before den_volume where the rest of the den locked them the other way;
+// `refundPot` iterated funders unsorted; `payFamilyYield` locked the pool before the gangs while
+// `runBuyback` writes it after them; the poker tournament locked its row before `poker_state`. Each
+// was found by a person noticing an asymmetry, and each fix stated the canonical order in a comment —
+// which is exactly as durable as the next person reading that comment.
+//
+// The sweep that produced this ledger found ONE surviving pair on a tree that had already had nine
+// red teams over it: `callOutChamp` locked boxing_title→fighters where `acceptCallout` locks
+// fighters→title. Its comment argued that was safe, on a precondition — "any counter-path that would
+// lock this fighter must first block on the held caller char" — that `acceptCallout`, a function the
+// same comment NAMED as canonical, violates in its own explicit words. Both were right about
+// themselves and wrong about each other, which is the shape a per-site comment cannot catch.
+//
+// TWO RULES, and the second exists because the first is blind to it. (1) No pair of tables may be
+// locked in both orders by any two transactions. (2) No SINGLETON may be locked before a `characters`
+// row — because every player action already holds its own character via withCharacter before it ever
+// reaches a pot, that implicit lock makes characters→singleton the universal order, and rule (1)
+// cannot see a lock the enclosing wrapper took.
+//
+// SPLITTING ON TRANSACTION BOUNDARIES IS WHAT MAKES IT USABLE. A function may open several
+// independent transactions — the ring sweep has two, a route-registration function has dozens — and
+// concatenating them invents pairs no single transaction ever holds together. Without the split this
+// sweep reported two false positives out of three, and a mostly-wrong advisory is worse than none.
+{
+  const files = [];
+  (function walk(d) {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p); else if (p.endsWith('.js')) files.push(p);
+    }
+  })(SRC);
+
+  // the global pots and singletons a player path reaches while already holding its own character row
+  const SINGLETON = /^(street_tax|den_volume|desk_inventory|chain_reserve|bond_reserve|family_yield_pool|vig_prize_pool|stake_pool|event_fund|dev_fund|world_npcs|poker_state|stakes_state|futurity_state|population_state|loan_house|convoy_insurance|megaprojects|boxing_title|rwa_dividend_pool|rwa_family_dividend_pool|community_revenue|exchange_pool)$/;
+
+  // A pair may be waived only with a reason that is a PROPERTY of the pair — never "it's rare" or
+  // "the retry catches it", which are true of every deadlock and would waive the whole ledger.
+  const WAIVED = new Map([]);
+
+  const order = new Map();          // "a|b" → Set(sites that lock a before b)
+  let segments = 0, singletonSites = 0, sequences = 0;
+  const singletonFirst = [];
+
+  for (const f of files) {
+    const src = fs.readFileSync(f, 'utf8');
+    const marks = [];
+    for (const m of src.matchAll(/(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(/g)) marks.push({ name: m[1], at: m.index });
+    for (let i = 0; i < marks.length; i++) {
+      const body = src.slice(marks[i].at, i + 1 < marks.length ? marks[i + 1].at : src.length);
+      for (const part of body.split(/query\(\s*['"`]BEGIN/)) {
+        const seg = part.split(/query\(\s*['"`](?:COMMIT|ROLLBACK)/)[0];
+        const locks = [];
+        for (const q of seg.matchAll(/FROM\s+([a-z_]+)[^'`"]*?FOR\s+UPDATE/gi)) locks.push(q[1].toLowerCase());
+        if (!locks.length) continue;
+        segments++;
+        singletonSites += locks.filter((t) => SINGLETON.test(t)).length;
+        const site = `${path.relative(SRC, f)}:${marks[i].name}`;
+        // rule 2 — a pot taken before a character row, inside one transaction
+        const firstChar = locks.indexOf('characters');
+        if (firstChar > 0) {
+          const early = [...new Set(locks.slice(0, firstChar).filter((t) => SINGLETON.test(t)))];
+          if (early.length) singletonFirst.push(`${site} — ${early.join(', ')} before characters (${locks.join(' → ')})`);
+        }
+        // rule 1 — every ordered pair this transaction establishes
+        if (locks.length < 2) continue;
+        sequences++;
+        const seen = [];
+        for (const t of locks) {
+          for (const p of seen) if (p !== t) {
+            const k = `${p}|${t}`;
+            if (!order.has(k)) order.set(k, new Set());
+            order.get(k).add(site);
+          }
+          seen.push(t);
+        }
+      }
+    }
+  }
+
+  // ANTI-VACUITY. Both floors matter and they fail differently: the first catches an extractor that
+  // has stopped seeing `FOR UPDATE` at all, the second catches a SINGLETON list that has drifted off
+  // the real table names — which would make rule 2 pass over every pot in the game while looking
+  // exactly as clean as it does when it holds.
+  assert(sequences >= 40,
+    `the lock scan found only ${sequences} transaction(s) holding two or more locks — the extractor has `
+    + 'stopped reading them, so this ledger is vacuous rather than clean');
+  assert(singletonSites >= 30,
+    `the lock scan matched only ${singletonSites} singleton lock site(s) — the SINGLETON list has drifted `
+    + 'off the real table names, so rule 2 is checking nothing');
+
+  const conflicts = [];
+  for (const k of order.keys()) {
+    const [a, b] = k.split('|');
+    if (a >= b) continue;                                  // report each pair once
+    const rev = `${b}|${a}`;
+    if (!order.has(rev)) continue;
+    if (WAIVED.has(`${a}|${b}`)) continue;
+    conflicts.push(`${a} ↔ ${b}\n       ${a} first: ${[...order.get(k)].join(', ')}`
+      + `\n       ${b} first: ${[...order.get(rev)].join(', ')}`);
+  }
+  assert.equal(conflicts.length, 0,
+    'two transactions take the same pair of locks in opposite orders — an AB-BA deadlock. Postgres\n'
+    + '      catches it and `deadlockToRetry` maps it to a retryable `contention`, so it costs a retry\n'
+    + '      rather than money; what it costs for certain is that the canonical order is no longer one\n'
+    + '      thing anybody can state. Take the order rather than argue for it — read the second row\n'
+    + '      unlocked, lock in the canonical order, then re-verify under the lock:\n'
+    + `   - ${conflicts.join('\n   - ')}`);
+
+  assert.equal(singletonFirst.length, 0,
+    'a singleton pot is locked BEFORE a character row. Every player action already holds its own\n'
+    + '      character via withCharacter before it reaches a pot, so this inverts against every one of\n'
+    + '      them at once — and the wrapper\'s lock is invisible to the pairwise rule above:\n'
+    + `   - ${singletonFirst.join('\n   - ')}`);
+
+  console.log(`✓ all ${sequences} multi-lock transactions agree on one order for each of ${order.size} pairs`
+    + `, and no singleton (${singletonSites} lock sites) is taken before a character row`);
+}

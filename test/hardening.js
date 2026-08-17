@@ -36,6 +36,12 @@ import * as Ops from '../src/ops.js';
 }
 
 const app = await buildServer();
+// Registered HERE, before the first inject() — Fastify locks the route tree on ready(), and inject()
+// readies the instance. These are TEST-ONLY (never shipped); the assertions that drive them are
+// further down under "TRANSIENT CONTENTION SAYS SO TOO".
+for (const code of ['40P01', '23505', '55P03'])
+  app.post(`/v1/__contention_${code}`, async () => { const e = new Error('boom'); e.code = code; throw e; });
+app.post('/v1/__genuine_bug', async () => { throw new Error('a real null-dereference'); });
 const pool = app.pool;
 const modH = { 'x-mod-key': 'test-mod-key' };
 const call = async (method, url, { token, body, headers } = {}) => {
@@ -998,6 +1004,31 @@ if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actual
   const good = await call('POST', '/v1/auth/guest');
   assert.equal(good.code, 200, 'guest auth itself is fine — the 400 was about the request, not the route');
   assert(good.body.token, 'and hands back a token');
+}
+
+// ── TRANSIENT CONTENTION SAYS SO TOO — a retryable `contention`, never 500 internal ──
+// The FOURTH instance of the same class (red team #10). `withCharacter`/`withTwoCharacters` map
+// 40P01/23505/55P03 to a retryable `contention`, but 89 functions open their own transaction and
+// eight are reachable straight from a player route — the whole withdraw/gear/item/deed/dynasty rail
+// plus the bond quote and claim. A `55P03` there needs no AB-BA deadlock at all, just 8s of ordinary
+// contention on a singleton like `chain_reserve`, and it arrived as `500 internal`: the server
+// calling itself broken about the one condition the caller should simply retry.
+//
+// Driven through the REAL error handler, because that is the thing under test — a route registered
+// by the TEST (never shipped) throws each pg-shaped error in turn. All three codes are checked
+// rather than one: they come from `deadlockToRetry`'s own set, and a fix that mapped only the
+// famous one would leave the two that actually reach these routes reporting as bugs.
+{
+  for (const code of ['40P01', '23505', '55P03']) {
+    const r = await call('POST', `/v1/__contention_${code}`);
+    assert.equal(r.code, 400, `${code} is transient contention — a 400 the caller retries, not a 500 (got ${r.code})`);
+    assert.equal(r.body.error, 'contention', `${code} says contention in a word a client (and an agent) can act on`);
+  }
+  // …and the half that keeps it a legibility fix rather than a blanket swallow: a real bug is still
+  // a real bug. Without this the branch could be widened to catch everything and nothing would notice.
+  const bug = await call('POST', '/v1/__genuine_bug');
+  assert.equal(bug.code, 500, 'a genuine error still reports as a server bug');
+  assert.equal(bug.body.error, 'internal', 'and lands in the bug pile where somebody looks at it');
 }
 
 // ── AN UNREACHABLE DATABASE SAYS SO — 503 db_down, never 500 internal ──

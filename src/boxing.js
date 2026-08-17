@@ -101,24 +101,41 @@ export async function enforceBeltDefense(pool) {
 // main event) or DUCKS it (the worker forfeits the belt to the challenger past the deadline). No §10.4.
 export async function callOutChamp(ch, fighterId, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No callouts from a cell.');
-  // (red-team R11 Note A) This locks boxing_title (a singleton) BEFORE a fighter row (line 107) — the
-  // INVERSE of the canonical boxing fighter→title order (fightBout/acceptCallout/resolveMainEvent). It's
-  // SAFE ONLY because the fighter locked here is always the caller's OWN contender (line 106 re-checks
-  // `top.character_id === ch.id`), whose char is already exclusively held by withCharacter — so any
-  // counter-path that would lock this fighter must first block on the held caller char (it locks the
-  // owner's char before the fighter). ⚠️ If a future edit makes this (or any title-first path) touch a
-  // fighter the actor does NOT already char-hold, it becomes a real AB-BA vs fightBout/resolveMainEvent —
-  // lock the fighter's owner char first, or the fighter before the title.
-  const title = (await client.query('SELECT * FROM boxing_title WHERE id=1 FOR UPDATE')).rows[0];
-  if (!title || !title.holder_fighter) throw new GameError('no_champ', 'There is no champion to call out.');
-  if (title.holder_char === ch.id) throw new GameError('self', "You hold the belt — you can't call yourself out.");
-  if (title.callout_fighter) throw new GameError('callout_exists', "The champ's already been called out.");
+  // FIGHTER → TITLE, the canonical boxing order (fightBout/acceptCallout/resolveMainEvent). This used
+  // to lock the boxing_title singleton FIRST and argue that was safe because the only fighter it locks
+  // is the caller's OWN contender, whose char withCharacter already holds — so "any counter-path that
+  // would lock this fighter must first block on the held caller char".
+  //
+  // (red-team #10) That premise is FALSE, and the counterexample is a function the old comment named
+  // as canonical: `acceptCallout` locks the CHALLENGER's fighter — this very row — without holding the
+  // challenger's char, and says so in its own comment. So the pair was genuinely lockable both ways:
+  // a contender here holding the title and reaching for their fighter, against a champ in acceptCallout
+  // holding that fighter and reaching for the title. Narrow (the callout must clear between
+  // acceptCallout's unlocked read and its locked one — the belt-defence sweep does that) and bounded to
+  // a 40P01 → `contention` retry, so no money was ever at risk. The defect is the ARGUMENT: a comment
+  // asserting a safety precondition its own named sibling violates is what licenses the next edit.
+  //
+  // So take the order rather than reason about it: read the title UNLOCKED to learn who the champ is
+  // and therefore who the contender is, lock the caller's fighter, THEN lock the singleton and
+  // re-verify nothing shifted (the acceptCallout/executeHeist TOCTOU pattern).
+  const t0 = (await client.query('SELECT * FROM boxing_title WHERE id=1')).rows[0];
+  if (!t0 || !t0.holder_fighter) throw new GameError('no_champ', 'There is no champion to call out.');
+  if (t0.holder_char === ch.id) throw new GameError('self', "You hold the belt — you can't call yourself out.");
+  if (t0.callout_fighter) throw new GameError('callout_exists', "The champ's already been called out.");
   // the challenger must own the #1 CONTENDER (top living non-champ fighter with a record)
   const rows = (await client.query(
     'SELECT f.*, c.is_npc FROM fighters f JOIN characters c ON c.id=f.character_id AND c.alive')).rows;
-  const top = contenderOf(rows, title.holder_fighter);
+  const top = contenderOf(rows, t0.holder_fighter);
   if (!top || top.character_id !== ch.id || top.id !== String(fighterId)) throw new GameError('not_contender', 'Only the #1 contender can call out the champ.');
   const f = (await client.query('SELECT * FROM fighters WHERE id=$1 FOR UPDATE', [top.id])).rows[0];
+  const title = (await client.query('SELECT * FROM boxing_title WHERE id=1 FOR UPDATE')).rows[0];
+  // re-verify under the lock: the belt may have changed hands (which changes WHO the contender is —
+  // contenderOf excludes the champ's own fighter) or someone else may have called the champ out first
+  if (!title || !title.holder_fighter) throw new GameError('no_champ', 'There is no champion to call out.');
+  if (title.holder_char === ch.id) throw new GameError('self', "You hold the belt — you can't call yourself out.");
+  if (title.callout_fighter) throw new GameError('callout_exists', "The champ's already been called out.");
+  if (title.holder_fighter !== t0.holder_fighter)
+    throw new GameError('contention', 'The belt changed hands under you — try again.');
   if (injured(f)) throw new GameError('injured', 'Your fighter is laid up — heal before you call anybody out.');
   if (booked(f)) throw new GameError('booked', 'Your fighter is already on a card.');
   const deadline = new Date(Date.now() + calloutMs());

@@ -729,41 +729,91 @@ const d0Toll = await driftOf('$OMR conservation');
 // mis-books the withdrawal reserve's funding source, with every invariant summing either way
 // because they all compare figures derived from the same restated number. Nothing compared them.
 {
-  const { splitParity, __setSplitsReader, VIG_BPS } = await import('../src/vig.js');
+  const { chainParity, __setChainParamsReader, VIG_BPS } = await import('../src/vig.js');
   const { BONDS } = await import('../src/rules.js');
 
-  __setSplitsReader(async () => ({ state: 'dormant' }));
-  assert.equal((await splitParity()).state, 'dormant', 'no chain, nothing to compare — dormant never alarms');
-  __setSplitsReader(async () => ({ state: 'unreachable', note: 'rpc down' }));
-  assert.equal((await splitParity()).state, 'unreachable',
+  __setChainParamsReader(async () => ({ state: 'dormant' }));
+  assert.equal((await chainParity()).state, 'dormant', 'no chain, nothing to compare — dormant never alarms');
+  __setChainParamsReader(async () => ({ state: 'unreachable', note: 'rpc down' }));
+  assert.equal((await chainParity()).state, 'unreachable',
     'not knowing is not the same as broken — an unreachable RPC is reported, never alarmed on');
 
   // a chain that performs exactly the split the backend books is SILENT
   const agree = { state: 'ok', feeVigBps: VIG_BPS, bondPolBps: BONDS.POL_BPS, bondDevBps: BONDS.DEV_BPS, bondRwaBps: BONDS.RWA_BPS };
-  __setSplitsReader(async () => agree);
-  assert.equal((await splitParity()).state, 'ok', 'agreement is silent');
+  __setChainParamsReader(async () => agree);
+  assert.equal((await chainParity()).state, 'ok', 'agreement is silent');
 
   // THE FEE CASE — the sharp one: the contract forwards 25% and the backend books 60%, so
   // `vig_revenue` (what runVigBuyback spends and fundReserve credits) is 2.4x the ETH that arrived
-  __setSplitsReader(async () => ({ ...agree, feeVigBps: 2500 }));
-  let p = await splitParity();
+  __setChainParamsReader(async () => ({ ...agree, feeVigBps: 2500 }));
+  let p = await chainParity();
   assert.equal(p.state, 'mismatch', 'a fee split the chain does not perform is caught');
   assert.deepEqual(p.mismatches, [{ what: 'OmertaFees.vigBps', onchain: 2500, backend: VIG_BPS }],
     'and it names the contract, the on-chain value and the lever it disagrees with');
 
   // THE BOND CASE — two same-typed adjacent immutables swapped at a hand-deploy. The booking is
   // event-authoritative so the ACCOUNTING stays right; what diverges silently is the declared waterfall.
-  __setSplitsReader(async () => ({ ...agree, bondDevBps: BONDS.RWA_BPS, bondRwaBps: BONDS.DEV_BPS }));
-  p = await splitParity();
+  __setChainParamsReader(async () => ({ ...agree, bondDevBps: BONDS.RWA_BPS, bondRwaBps: BONDS.DEV_BPS }));
+  p = await chainParity();
   assert.equal(p.mismatches.length, 2, 'a swapped pair is caught as two mismatches, not silently summed away');
   assert.ok(p.mismatches.every((m) => m.what.startsWith('OmertaBond.')), 'both name the bond contract');
 
   // a contract the deploy has not reached yet is simply absent — never compared against 0
-  __setSplitsReader(async () => ({ state: 'ok', feeVigBps: VIG_BPS }));
-  assert.equal((await splitParity()).state, 'ok', 'an un-deployed sibling is absent, not a mismatch');
+  __setChainParamsReader(async () => ({ state: 'ok', feeVigBps: VIG_BPS }));
+  assert.equal((await chainParity()).state, 'ok', 'an un-deployed sibling is absent, not a mismatch');
 
-  __setSplitsReader(null);
-  console.log('  ✓ split parity: the chain\'s IMMUTABLE splits are crossed against the levers the backend restates');
+  // ── THE REST OF THE CLASS (red team #10) ──────────────────────────────────────────────────────
+  // Enumerating "a value the chain holds and the backend restates" turned up five instances, not
+  // two. The three below were uncrossed by anything.
+  const { SELL_TAX, COMMUNITY } = await import('../src/rules.js');
+  const wei = (eth) => String(BigInt(Math.round(eth * 1e18)));
+  const MINT_ETH = Number(process.env.MINT_FEE_ETH || 0.01);
+  const RESPAWN_ETH = Number(process.env.RESPAWN_FEE_ETH || 0.10);
+  const full = {
+    state: 'ok', feeVigBps: VIG_BPS,
+    bondPolBps: BONDS.POL_BPS, bondDevBps: BONDS.DEV_BPS, bondRwaBps: BONDS.RWA_BPS,
+    mintFeeWei: wei(MINT_ETH), respawnFeeWei: wei(RESPAWN_ETH),
+    claimDailyCapWei: String(process.env.DAILY_CAP_OMR || '0'),
+    omrSellTaxBps: SELL_TAX.BPS, omrTaxDevBps: SELL_TAX.DEV_BPS,
+    omrTaxRwaBps: SELL_TAX.RWA_BPS, omrTaxCommunityBps: COMMUNITY.TAX_BPS(),
+    hookSellTaxBps: SELL_TAX.BPS, hookTaxDevBps: SELL_TAX.DEV_BPS,
+    hookTaxRwaBps: SELL_TAX.RWA_BPS, hookTaxCommunityBps: COMMUNITY.TAX_BPS(),
+  };
+  __setChainParamsReader(async () => full);
+  assert.equal((await chainParity()).state, 'ok', 'a fully-deployed chain that agrees on every value is silent');
+
+  // THE FEE PRICE — settable, moves at a tranche boundary, and `respawnFee` prices a LIVE rail:
+  // plexQuote sells the respawn at fee-ETH x oracle x premium, so a stale-cheap copy makes $OMR the
+  // cheaper rail at a price nobody chose. Compared in WEI so a float ether value cannot round the
+  // comparison away.
+  __setChainParamsReader(async () => ({ ...full, respawnFeeWei: wei(RESPAWN_ETH * 2) }));
+  p = await chainParity();
+  assert.deepEqual(p.mismatches.map((m) => m.what), ['OmertaFees.respawnFee'],
+    'a fee price the chain charges and the backend does not is caught, and named');
+
+  // THE DAILY CAP — the dangerous direction is stale-HIGH: chain.js checks a withdrawal against the
+  // ENV copy, so a copy above the contract's signs exactly the voucher that guard exists to prevent
+  // — burned $OMR behind a claim() that reverts every day until the reclaim sweep.
+  __setChainParamsReader(async () => ({ ...full, claimDailyCapWei: '5000000000000000000000' }));
+  p = await chainParity();
+  assert.deepEqual(p.mismatches.map((m) => m.what), ['VoucherClaim.dailyCapOMR'],
+    'a withdrawal cap the backend believes is higher than the contract enforces is caught');
+
+  // THE SELL TAX — `recordSellTax` DERIVES all four slices from the levers (the hook's event carries
+  // them, but nothing reads it yet), so a divergence mis-books the treasury's stock budget and the
+  // family-buyback inflow at once. Both layers are checked because a seller pays whichever is armed.
+  __setChainParamsReader(async () => ({ ...full, hookTaxRwaBps: SELL_TAX.RWA_BPS + 100 }));
+  p = await chainParity();
+  assert.deepEqual(p.mismatches.map((m) => m.what), ['OmertaHook.taxRwaBps'],
+    'a sell-tax slice the hook takes and the backend does not book is caught on the hook layer');
+  __setChainParamsReader(async () => ({ ...full, omrSellTaxBps: 500 }));
+  p = await chainParity();
+  assert.deepEqual(p.mismatches.map((m) => m.what), ['OMR.sellTaxBps'],
+    '…and on the ERC-20 layer, which is armed independently');
+
+  __setChainParamsReader(null);
+  console.log('  ✓ chain parity: all five values the chain holds and the backend restates are crossed '
+    + '(the two splits, the two fee prices, the withdrawal cap and the sell tax on both layers)');
 }
 
 console.log('✅ M6-B chain test passed — SIWE wallet link, EIP-712 voucher signing parity (recovers the signer), full-reserve withdrawal queue (debit→queue→fund→drain→sign), $OMR ledger conservation, gear-mint vouchers, Claimed reserve release, expired-voucher reclaim (OMR refund + reserve free + gear restore, §10.4 exact), §11 mint-gate + fee reconcile + concurrent-credit safety, bond-quote signing parity (recovers the signer) + watcher enrichment + wallet-submit calldata (server-encoded bond() for MetaMask/Robinhood Wallet), and THE EXIT TOLL (gross debit → net voucher, tax:dev/tax:buyback transfers, dev-fund claim, conservation exact)');

@@ -19,6 +19,7 @@
 //   DATABASE_URL=postgres://localhost/omerta_check JWT_SECRET=x MOD_KEY=yyyyyyyyyyyy \
 //     MARKET_SEED='<32 random chars>' SOCIAL_VERIFY_MODE=off node tools/pgcheck.js
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import { TREASURY } from '../src/rules.js'; // read the claim floor, never restate it
 
 if (!process.env.DATABASE_URL) {
@@ -405,6 +406,84 @@ console.log('\n7. THE SCHEMA IS RE-APPLIABLE (in-place upgrade)');
   try { const p2 = await makeDb(); await p2.query('SELECT 1'); await p2.end(); }
   catch (e) { ok = false; err = e.message; }
   check(ok, 'schema + column migration re-apply cleanly to an existing database', err);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+console.log('\n7b. THE BUILD BOOTS AGAINST A DATABASE OLDER THAN ITSELF');
+// THE OUTAGE THIS PINS (2026-08-06): `CREATE TABLE IF NOT EXISTS` is a NO-OP on a live database, so
+// three columns added INLINE to the already-existing `gang_members` never landed — and the very next
+// statement, an index over one of them, crash-looped the container at boot. Every suite was green:
+// they run on pg-mem, which always starts EMPTY, so the table is created WITH the new columns and
+// the class is structurally invisible. §7 above cannot see it either, for the same reason one step
+// removed — re-applying the CURRENT schema twice means the FIRST application already made the table
+// right.
+//
+// TWO mechanisms stand between us and a repeat, and the mutation pair below establishes which is
+// actually doing the work. schema.sql carries HAND-WRITTEN `ALTER TABLE … ADD COLUMN IF NOT EXISTS`
+// blocks per the discipline that outage taught; db.js then runs a DERIVED pass emitting one for
+// every column of every CREATE TABLE, trusting nobody to remember. Measured: disable the deriver
+// entirely and this check still passes — 0 statements, every column present — because the
+// hand-written blocks currently cover the lot. So the deriver is not today's load-bearing half; it
+// is the belt to that discipline's braces, and its whole value is the day somebody forgets.
+//
+// Which is exactly what this check is for, and it is guarded on that: add an inline-only column to a
+// pre-existing table and, with the deriver intact, it lands (the deriver caught the omission); with
+// the deriver removed the check FAILS naming `gang_members.zzprobe_only` and the outage class. Note
+// what that pair means for the assertion's shape — it can only ever fire on the FUTURE forgotten
+// ALTER, never on today's tree, so a green here is not "the deriver ran" but "nothing has been
+// forgotten yet".
+//
+// So: apply the OLDEST schema.sql in the history — the shape a database that has existed since M1
+// really has — and then boot the CURRENT build on top of it, which is what a deploy does.
+{
+  const { execSync } = await import('node:child_process');
+  const ROOT = new URL('..', import.meta.url).pathname;
+  const oldDb = `pgcheck_old_${process.pid}`;
+  const swap = (u) => u.replace(/\/[^/?]+(\?|$)/, `/${oldDb}$1`);
+  let ok = true; let err = ''; let added = 0;
+  try {
+    const first = execSync('git log --format=%H -- schema.sql', { cwd: ROOT }).toString().trim().split('\n').pop();
+    const oldSchema = execSync(`git show ${first}:schema.sql`, { cwd: ROOT, maxBuffer: 32 * 1024 * 1024 }).toString();
+    // CREATE DATABASE cannot run inside a transaction, so it goes through the live pool directly
+    await pool.query(`DROP DATABASE IF EXISTS ${oldDb}`);
+    await pool.query(`CREATE DATABASE ${oldDb}`);
+    // now boot the current build against it, exactly as a deploy would
+    const before = process.env.DATABASE_URL;
+    process.env.DATABASE_URL = swap(before);
+    // the database as it stood at the first commit — applied raw, so it is genuinely the OLD shape
+    // and not something the current build has already had a chance to fix
+    const { default: pg } = await import('pg');
+    const legacy = new pg.Pool({ connectionString: swap(before) });
+    await legacy.query(oldSchema);
+    await legacy.end();
+    const mod = await import(`../src/db.js?old=${process.pid}`);
+    const p3 = await mod.makeDb();
+    // THE ASSERTION, and why it is shaped this way. Not "the outage column is present": this
+    // repository's history begins AFTER that fix, so `gang_members.post` is in every historical
+    // schema and naming it is an assertion that cannot fail. And not a hand-parse of schema.sql
+    // either — the first attempt did exactly that and reported 17 phantom missing columns, because
+    // a one-line table (`stakes_state`) has no `\n);` terminator so the match ran on into its
+    // neighbour and stole its columns.
+    //
+    // So compare two DATABASES, and parse nothing: whatever this build produces on an EMPTY database
+    // is the reference, and an UPGRADED one must be a superset of it. Independent of any parser, and
+    // it cannot be satisfied by the deriver and the check making the same mistake together — the
+    // reference is produced by CREATE TABLE, the subject by ALTER, so they share no code path.
+    const COLS = "SELECT table_name||'.'||column_name k FROM information_schema.columns WHERE table_schema='public'";
+    const fresh = new Set((await pool.query(COLS)).rows.map((r) => r.k));       // this build, on the pgcheck db
+    const upgraded = new Set((await p3.query(COLS)).rows.map((r) => r.k));      // this build, on the OLD db
+    const missing = [...fresh].filter((k) => !upgraded.has(k)).sort();
+    added = upgraded.size;
+    if (missing.length) {
+      ok = false;
+      err = `${missing.length} declared column(s) never landed on the upgraded database — the 2026-08-06 `
+        + `outage class is live again: ${missing.slice(0, 6).join(', ')}${missing.length > 6 ? ' …' : ''}`;
+    }
+    await p3.end();
+    process.env.DATABASE_URL = before;
+  } catch (e) { ok = false; err = e.message; }
+  try { await pool.query(`DROP DATABASE IF EXISTS ${oldDb}`); } catch { /* best effort */ }
+  check(ok, `the current build boots against the ORIGINAL schema (${added} columns present after migration)`, err);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

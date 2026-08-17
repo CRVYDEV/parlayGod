@@ -535,6 +535,23 @@ export async function buildServer() {
     if (err.statusCode >= 400 && err.statusCode < 500) {
       return reply.code(err.statusCode).send({ error: 'bad_request', code: err.code || null, message: err.message });
     }
+    // TRANSIENT CONTENTION IS NOT A BUG EITHER — the third instance of the class the two branches
+    // above argue. `withCharacter`/`withTwoCharacters` map 40P01/23505/55P03 to a retryable
+    // `contention`, but 89 functions open their OWN transaction, and eight of those are reachable
+    // straight from a player route (the withdraw/gear/item/deed/dynasty rail, the bond quote and
+    // claim). A lock_timeout there needs no AB-BA at all — just 8s of ordinary contention on a
+    // singleton like `chain_reserve` — and it arrived as `500 internal`, telling a client the server
+    // is broken about the one condition it should simply retry. Costly for agents especially: they
+    // read these codes, and 500 means "back off", where the honest instruction is "try again now".
+    //
+    // Fixing it once here rather than at 89 call sites is the point — a route that hand-rolls a
+    // transaction can no longer ship this by omission (the H4 denylist-by-default shape), and the
+    // per-site catches become harmless redundancy instead of a thing to remember. The code set comes
+    // from `deadlockToRetry` itself rather than being restated, so the two can never drift: if it
+    // hands back something other than what we gave it, that something is the retryable error.
+    const retry = G.deadlockToRetry(err);
+    if (retry !== err && retry instanceof G.GameError)
+      return reply.code(400).send({ error: retry.code, message: retry.message });
     req.log?.error?.(err); console.error(err);
     return reply.code(500).send({ error: 'internal' });
   });

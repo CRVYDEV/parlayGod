@@ -14,8 +14,8 @@
 // here — the PLEX bridge, which used to burn IN-GAME $OMR, is retired; see below).
 import crypto from 'node:crypto';
 import { GameError, ledger } from './game.js';
-import { genesisOmrFor, BONDS } from './rules.js';
-import { fundReserve, onchainSplits } from './chain.js';
+import { genesisOmrFor, BONDS, SELL_TAX, COMMUNITY } from './rules.js';
+import { fundReserve, onchainParams } from './chain.js';
 
 const uid = () => crypto.randomUUID();
 const num = (x) => Number(x || 0);
@@ -271,10 +271,10 @@ export async function vigStatus(pool) {
 //     ACCOUNTING is safe; what diverges is the router's DECLARED waterfall, silently.
 // Dormant states never alarm (`unreachable` is not knowing, which is not the same as broken - the
 // archiver/oracle watchdog split).
-let splitsReader = null;   // tests inject the on-chain side; production reads the chain
-export function __setSplitsReader(fn) { splitsReader = fn; }
-export async function splitParity() {
-  const chain = await (splitsReader || onchainSplits)();
+let paramsReader = null;   // tests inject the on-chain side; production reads the chain
+export function __setChainParamsReader(fn) { paramsReader = fn; }
+export async function chainParity() {
+  const chain = await (paramsReader || onchainParams)();
   if (chain.state !== 'ok') return { state: chain.state, note: chain.note, mismatches: [] };
   const mismatches = [];
   const cmp = (what, onchain, backend) => {
@@ -285,6 +285,41 @@ export async function splitParity() {
   cmp('OmertaBond.polBps', chain.bondPolBps, BONDS.POL_BPS);
   cmp('OmertaBond.devBps', chain.bondDevBps, BONDS.DEV_BPS);
   cmp('OmertaBond.rwaBps', chain.bondRwaBps, BONDS.RWA_BPS);
+
+  // THE TWO FEE PRICES. Compared in WEI, because the chain's side is a uint256 and ours is a float
+  // ether value — converting the float up is the only direction that does not lose the comparison to
+  // rounding. `respawnFee` is the one that prices a LIVE rail: plexQuote sells the respawn for
+  // fee-ETH × oracle × premium, so a stale-cheap copy makes $OMR the cheaper rail at a price nobody
+  // chose (the cheapest-rail rule, which is why the mint went ETH-only in the first place).
+  const wei = (eth) => BigInt(Math.round(Number(eth) * 1e18));
+  const cmpWei = (what, onchainWei, backendEth) => {
+    if (onchainWei === undefined || onchainWei === null) return;
+    if (BigInt(onchainWei) !== wei(backendEth))
+      mismatches.push({ what, onchain: String(onchainWei), backend: String(wei(backendEth)) });
+  };
+  cmpWei('OmertaFees.mintFee', chain.mintFeeWei, MINT_FEE_ETH);
+  cmpWei('OmertaFees.respawnFee', chain.respawnFeeWei, RESPAWN_FEE_ETH);
+
+  // THE WITHDRAWAL DAILY CAP. chain.js refuses a withdrawal whose NET exceeds this so it never signs
+  // a voucher that `claim()` will reject forever — but it refuses against the ENV copy, so a
+  // stale-high copy signs exactly the voucher the guard exists to prevent, and the player's $OMR is
+  // burned and stranded until the reclaim sweep. Both sides are wei here, so no conversion.
+  if (chain.claimDailyCapWei !== undefined) {
+    const backendCap = String(process.env.DAILY_CAP_OMR || '0');
+    if (BigInt(chain.claimDailyCapWei) !== BigInt(backendCap))
+      mismatches.push({ what: 'VoucherClaim.dailyCapOMR', onchain: String(chain.claimDailyCapWei), backend: backendCap });
+  }
+
+  // THE SELL TAX, on both layers. `recordSellTax` DERIVES all four slices from these levers — the
+  // hook's event carries them, but nothing reads it yet — so a divergence mis-books the treasury's
+  // stock budget and the family-buyback inflow at once, with every downstream check summing
+  // correctly because they all descend from the same restated number.
+  for (const [prefix, label] of [['omr', 'OMR'], ['hook', 'OmertaHook']]) {
+    cmp(`${label}.sellTaxBps`, chain[`${prefix}SellTaxBps`], SELL_TAX.BPS);
+    cmp(`${label}.taxDevBps`, chain[`${prefix}TaxDevBps`], SELL_TAX.DEV_BPS);
+    cmp(`${label}.taxRwaBps`, chain[`${prefix}TaxRwaBps`], SELL_TAX.RWA_BPS);
+    cmp(`${label}.taxCommunityBps`, chain[`${prefix}TaxCommunityBps`], COMMUNITY.TAX_BPS());
+  }
   return { state: mismatches.length ? 'mismatch' : 'ok', mismatches, chain };
 }
 
