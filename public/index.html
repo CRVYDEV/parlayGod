@@ -2450,7 +2450,18 @@
     if (body.foundation && body.foundation.name) bits.push(`the family endowed the ${body.foundation.name} — softer trials for everyone`);
     if (body.gainMult !== undefined && body.envelopeSeconds) bits.push("the envelope's current — the cops will look the other way");
     if (body.expiresSeconds && body.target) bits.push("wire's live — you'll hear everything");
-    if (body.bugsFound !== undefined) bits.push(body.bugsFound ? `swept ${body.bugsFound} bug(s) off your line` : 'lines are clean — nothing to sweep');
+    // THE TRACE IS NOT THE SWEEP, and reading them as one was three wrongs in a line. Both come back
+    // {spent, bugsFound} — the trace adds `watchers`, and nothing else in the game sends that — so
+    // the client answered "swept 1 bug(s) off your line" to a 90 $OMR TRACE that (a) is the other
+    // action, (b) THREW AWAY the watcher's name, which is the entire thing the 90 bought, and (c)
+    // told the player their line was clear while the tap was still live (driven and confirmed: taps
+    // on the line 1 after a trace, 0 after a sweep). The layered intel economy is deliberate — the
+    // sweep clears cheaply and anonymously, the trace names but LEAVES them — so the two lines have
+    // to say which one you just did. Ordered first: `watchers` is the discriminator.
+    if (body.watchers !== undefined) bits.push(body.watchers.length
+      ? `\u{1F50C} traced ${body.watchers.length} on your line — ${body.watchers.map((w) => esc(w.name)).join(', ')}. They're STILL listening: a trace names them, it doesn't cut them. Sweep to clear.`
+      : 'nobody\u2019s on your line — nothing to trace, no charge');
+    else if (body.bugsFound !== undefined) bits.push(body.bugsFound ? `swept ${body.bugsFound} bug(s) off your line` : 'lines are clean — nothing to sweep');
     if (body.wireSeconds) bits.push(`subscribed to ${body.tierName || 'the Street Wire'} — the intelligence is flowing${body.watchSlots ? ` (${body.watchSlots} standing watch slot${body.watchSlots > 1 ? 's' : ''})` : ''}`);
     if (body.standing === true) bits.push("standing watch set — the wire renews itself while you're away");
     if (body.standing === false && body.target) bits.push('standing watch dropped');

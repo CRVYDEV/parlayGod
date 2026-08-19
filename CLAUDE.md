@@ -14174,7 +14174,20 @@ Wire dossier go through the SILENT `api()` and render their own payload, which i
 this sweep turns on. Across all 50 driven responses: **12 improved, 0 regressed**; the driven list
 is 26 → 35. One process note: three of the four mutations were written inline in shell, the quoting
 ate them, and the runs came back green over an UNMUTATED file — a mutation that does not apply reads
-exactly like a fix that holds, so they were redone as a script that asserts its own anchor first.
+exactly like a fix that holds, so they were redone as a script that asserts its own anchor first. **A THIRD wave then found the worst
+line in the sweep, and it is not a silence — it is a false all-clear on a paid action.** THE TRACE
+and THE SWEEP are deliberately different products (the design's layered intel economy: the sweep
+clears cheaply and anonymously, the trace NAMES the watchers and leaves the taps live), and both
+answer `{spent, bugsFound}` — so the client rendered a 90 $OMR trace as **"swept 1 bug(s) off your
+line"**: the wrong action, the watcher's NAME — the entire thing the 90 bought — discarded, and a
+player told their line was clear while it was still tapped. Driven and confirmed against a real
+watcher: **1 tap on the line after a trace, 0 after a sweep.** The trace's `watchers` field is a
+discriminator nothing else in the game sends, so the fix needed no server change, only reading what
+was already there — the byte-shape collision class for the third time (tribute currencies, the
+monument's three rails, this). Its regression seeds a real tap so the guard drives the PAID shape
+rather than the empty one, and the mutation that collapses it back fails printing the false
+all-clear verbatim. The other twelve responses in that wave all read well — which is the useful
+negative result: the sweep is reaching the end of what it can find by driving.
 
 
 **THE PROBE HAD TO BE FIXED THREE TIMES BEFORE ITS RESULT MEANT ANYTHING, which is most of the

@@ -1852,6 +1852,19 @@ const mark = (await app.pool.query(
 if (mark) ACTIONS.push(
   ['POST', `/v1/streets/${mark.id}/bounty`, { amount: 6000, kind: 'kill' }],
   ['POST', `/v1/streets/${mark.id}/search`, null]);
+// A TAP ON OUR OWN LINE, so the TRACE runs in its paid shape rather than its empty one. The trace
+// and the sweep both answer {spent, bugsFound} and the client read them as one line, so a 90 $OMR
+// trace — which NAMES the watcher and deliberately leaves the tap live — reported "swept 1 bug(s)
+// off your line": the wrong action, the paid-for name thrown away, and a false all-clear over a tap
+// that was still listening (driven: 1 on the line after a trace, 0 after a sweep). Seeded directly
+// because placing it through the route needs the other player's token, which is scoped elsewhere.
+if (mark) {
+  await app.pool.query(
+    `INSERT INTO wiretaps (watcher_character, target_character, expires_at) VALUES ($1,$2, now() + interval '12 hours')
+       ON CONFLICT (watcher_character, target_character) DO UPDATE SET expires_at = EXCLUDED.expires_at`,
+    [mark.id, charId]);
+  ACTIONS.push(['POST', '/v1/wire/trace', null]);
+}
 
 const mute = [];
 const said = new Map();   // url → the line a player reads, so a WRONG one can be asserted, not just a missing one
@@ -1875,6 +1888,10 @@ for (const [m, url, payload] of ACTIONS) {
 // A WRONG line is invisible to the two silence patterns above: "laid $830" is a real sentence, it is
 // simply not true of a 10 $OMR spend. The monument takes cash, freight and $OMR and credits all three
 // in dollars, so the rail that is not cash has to name what actually left the player.
+const traceLine = said.get('/v1/wire/trace');
+if (traceLine) assert(/still listening/i.test(traceLine) && !/swept/i.test(traceLine),
+  `the trace must say the taps are still live and name who is on the line — it is not the sweep, and it costs three times as much: ${JSON.stringify(traceLine)}`);
+
 const megaLine = said.get('/v1/megaproject/omr');
 if (megaLine) assert(/\$OMR/.test(megaLine) && /\b10\b/.test(megaLine),
   `the $OMR rail into the monument must name the $OMR that left, not the wall's dollar credit — got: ${JSON.stringify(megaLine)}`);
