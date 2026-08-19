@@ -302,14 +302,13 @@ export async function raidNpc(ch, npcId, client, h) {
     await client.query('UPDATE account_persistent SET cartel_damage = cartel_damage + $2 WHERE account_id=$1', [ch.account_id, routBonus]);
     newEnraged = new Date(now.getTime() + WORLD.ENRAGE_MS); // the cartel goes to high alert — harder to raid for a window
     bus.emit('streets', { type: 'world_routed', who: ch.name, npc: fixture.name });
-    // THE SHIPMENT (scarcity §3) — routing an APEX outfit yields the contested material, so the
-    // reservoir loop finally pays in the scarce thing rather than the abundant one. A pure ownership
-    // move (the material is not a §10.4 currency — no ledger row), and only on the crossing, so it
-    // inherits the rout's own bound: it can be earned exactly as often as an apex outfit can fall.
-    if (fixture.coop && SHIPMENT.ROUT_UNITS > 0) {
-      routUnits = SHIPMENT.ROUT_UNITS;
-      ch.shipment = Number(ch.shipment || 0) + routUnits;
-    }
+    // THE SHIPMENT's rout award does NOT live here, and cannot: an apex outfit is `coop`, and this
+    // function refuses every coop fixture ~70 lines above, so a `fixture.coop` branch down here is
+    // unreachable by construction. It was written here and never moved when the coop path was built,
+    // which left SHIPMENT.ROUT_UNITS unpayable in both directions — the award in the function that
+    // can't rout an apex, and no award in the one that can. It now lives in executeRaid's rout
+    // branch, the only place a coop crossing actually happens. `routUnits` stays on this return as a
+    // constant 0 so the two raid shapes still agree field-for-field.
   }
   // THE FRONTIER (step three): a ROUT topples the incumbent and plants the router's FAMILY flag
   // (pure status; a gangless router leaves it UNHELD/open). Only changes on the crossing.
@@ -562,6 +561,34 @@ export async function executeRaid(ch, raidId, client, h) {
       await client.query('UPDATE account_persistent SET cartel_damage = cartel_damage + $2 WHERE account_id=$1', [m.account_id, share]);
     }
   }
+  // THE SHIPMENT (scarcity §3) — a rout yields the contested material, so the reservoir loop finally
+  // pays in the scarce thing rather than the abundant one. A pure ownership move (the material is not
+  // a §10.4 currency — no ledger row), and only on the CROSSING, so it inherits the rout's own bound:
+  // it can be earned exactly as often as an apex outfit can fall.
+  //
+  // ROUT_UNITS is what the ROUT yields, not what each raider yields — the constant's own words, and it
+  // was written for a one-man rout. Handing every raider the full 6 would multiply a deliberately
+  // scarce faucet by the crew size, which is a balance change nobody signed; so the units are dealt
+  // ROUND-ROBIN from the leader, total exactly ROUT_UNITS. A hired gun takes no cut of the pot and
+  // takes none of this either. Leader in memory (shipment rides persistCharacter, $67); crew by
+  // absolute UPDATE under the lock we already hold, beside their cash share.
+  const routUnits = {};
+  if (routed && SHIPMENT.ROUT_UNITS > 0) {
+    for (let i = 0; i < SHIPMENT.ROUT_UNITS; i++) {
+      const m = realCrew[i % realCrew.length];
+      routUnits[m.id] = (routUnits[m.id] || 0) + 1;
+    }
+    for (const m of realCrew) {
+      const units = routUnits[m.id] || 0;
+      if (!units) continue;
+      if (m.id === ch.id) ch.shipment = Number(ch.shipment || 0) + units;
+      else {
+        await setMember(m.id, 'shipment=$2', [Number(m.shipment || 0) + units]);
+        await h.notify(client, m.id, 'world_raid_material', { npc: fixture.id, units, material: SHIPMENT.MATERIAL });
+      }
+    }
+  }
+
   // THE FRONTIER — a rout plants the LEADER's family flag (pure status; gangless leader leaves it open)
   const heldGang = routed ? (h.owned.gangId || null) : undefined;
   if (routed) {
@@ -576,6 +603,7 @@ export async function executeRaid(ch, raidId, client, h) {
   }
   await h.track(client, ch.account_id, 'world_raid', { npc: fixture.id, success: true, pot, routed, crew: crewRows.length });
   return { ok: true, success: true, npc: fixture.id, crew: crewRows.length, pot, share: shares[ch.id], routed,
+    routUnits: routUnits[ch.id] || 0, material: routUnits[ch.id] ? SHIPMENT.MATERIAL : null,
     frontier: routed && !!heldGang, strengthPct: Math.round(Math.max(0, after) / fixture.max * 100) };
 }
 

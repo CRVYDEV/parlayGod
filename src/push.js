@@ -54,7 +54,10 @@ export const PUSH_TITLES = {
   whacked: 'You were killed',
   indicted: 'The Bureau indicted you',
   bounty_on_you: 'A contract is out on you',
-  sacked: 'Your empire was seized',
+  // the only `sacked` notify goes to the KILLER (combat.js — `notify(client, ch.id, …)`), so a
+  // victim-side title buzzed the winner's phone with the opposite of what happened, and `p.by` is
+  // never in that payload so it always read the generic "A rival". Address who actually receives it.
+  sacked: 'You took over their front',
   extortion: "You're being extorted",
   protege_attacked: 'Your protégé needs you',
   npc_aggression: 'An outfit opened hostilities',
@@ -71,7 +74,7 @@ function bodyFor(type, p) {
     case 'bounty_on_you': return p.amount
       ? `$${Number(p.amount).toLocaleString('en-US')} on your head. Lie low or square your name.`
       : `There's a price on your head. Lie low or square your name.`;
-    case 'sacked': return `${p.by || 'A rival'} took over one of your fronts.`;
+    case 'sacked': return `You seized ${p.name || 'a front'} off ${p.from || 'them'} — the ${p.kind || 'business'} is yours.`;
     case 'extortion': return `${p.from || 'Someone'} wants a cut — pay up or expose it.`;
     case 'protege_attacked': return `${p.protege || 'Your protégé'} got ${p.what || 'hit'} by ${p.from || 'someone'}.`;
     case 'npc_aggression': return `${p.family || 'An outfit'} sent their guns at your family.`;

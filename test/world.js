@@ -11,7 +11,8 @@
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { LIVING, WORLD, WORLD_NPCS, worldNpcOf, worldRankOf, cityHourOf, cityForecast, regionShockOf, cityLawEventOf,
-         cityEventOf, goodPriceOf, bustProbOf, priceBlock, dayOf, GOODS, DISTRICTS, hash01, MARKET_SEED, cartelUprisingOf } from '../src/rules.js';
+         cityEventOf, goodPriceOf, bustProbOf, priceBlock, dayOf, GOODS, DISTRICTS, hash01, MARKET_SEED, cartelUprisingOf,
+         SHIPMENT } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { sweepUprisings } from '../src/world.js';
 
@@ -239,6 +240,19 @@ assert.equal(Number((await rawCh(boss.id)).cash) - Number(bBefore.cash), bShare,
 assert.equal(Number((await rawCh(soldier.id)).cash) - Number(sBefore.cash), sShare, 'the soldier banks exactly his share');
 assert.equal(await ledgerOf(boss.id, 'ammo', 'world:raid'), -WORLD.RAID_AMMO, 'the leader’s ammo is a ledgered sink');
 assert.equal(await ledgerOf(soldier.id, 'ammo', 'world:raid'), -WORLD.RAID_AMMO, 'the crew’s ammo is a ledgered sink');
+// THE SHIPMENT — the rout pays the contested material. This block already forced a rout and checked
+// the cash, the ammo, the war effort and the flag; nobody ever asked what it paid in the ONE thing a
+// rout uniquely yields, which is how SHIPMENT.ROUT_UNITS came to be unpayable in BOTH directions (the
+// award sat in raidNpc, which refuses every coop fixture 70 lines earlier, and executeRaid — the only
+// function that can rout an apex — had none). Driven live before the fix: routed:true, 0 units paid,
+// the board still advertising 6. So: the crew holds exactly ROUT_UNITS between them, and the split is
+// asserted as a TOTAL — handing every raider the full 6 would multiply a deliberately scarce faucet by
+// the crew size, which is the mutation this catches.
+const bUnits = Number((await rawCh(boss.id)).shipment || 0), sUnits = Number((await rawCh(soldier.id)).shipment || 0);
+assert.equal(bUnits + sUnits, SHIPMENT.ROUT_UNITS, `the rout pays the crew exactly ROUT_UNITS of the material between them (got ${bUnits}+${sUnits})`);
+assert(bUnits > 0 && sUnits > 0, 'every man who went in gets some of it — not just the leader');
+assert.equal(go.body.routUnits, bUnits, 'the response tells the leader his own share of the material');
+assert.equal(go.body.material, SHIPMENT.MATERIAL, 'and names what it is, so the toast can say so');
 // the war effort is banked to BOTH accounts (== their co-op world:raid cash)
 board = (await call('GET', '/v1/world', { token: boss.token })).body;
 assert.equal(board.warEffort.damage, bShare, 'the boss’s war effort == his co-op loot');
@@ -298,6 +312,13 @@ for (const gid of gunIds) {
   assert.equal(await ledgerOf(gid, 'cash', 'world:raid'), 0, 'a hired gun forfeits its cut — no world:raid faucet row');
   assert.equal(await ledgerOf(gid, 'ammo', 'world:raid'), 0, 'a hired gun brought its own tools — no ammo sink');
 }
+// …and the material is paid on the CROSSING alone, never on an ordinary landed hit. The block above
+// already broke Kryl, so this raid lands on a floored reservoir and cannot rout — asserted rather than
+// assumed, or the check below is vacuous (a first cut asserted the merc's forfeit here instead and
+// passed under every mutation, because with no rout there was no material for anyone to forfeit).
+assert.equal(mgo.body.routed, false, 'the reservoir is already floored — this hit lands but cannot rout');
+assert.equal(Number((await rawCh(merc.id)).shipment || 0), 0, 'a landed hit that does not ROUT pays no material');
+assert.equal(mgo.body.routUnits, 0, 'and the response says so');
 // the leader still paid his own ammo (a real raider's §10.4 sink)
 assert.equal(await ledgerOf(merc.id, 'ammo', 'world:raid'), -WORLD.RAID_AMMO, 'the leader paid his own rounds');
 delete process.env.WORLD_RAID_P;

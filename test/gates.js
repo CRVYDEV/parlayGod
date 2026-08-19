@@ -1207,3 +1207,106 @@ const SCENERY_WAIVED = {
     + `the request's transaction, and N connections per request is the pool-exhaustion shape):\n   - ${offenders.join('\n   - ')}`);
   console.log(`✓ no Promise.all shares one pg client across concurrent queries (${scanned} sites scanned)`);
 }
+
+// ═══ THE WIRE LEDGER — a notification a player cannot read is a notification they never got ═══════
+//
+// `feedText` renders the wire, and its fallback prints the TYPE NAME: an unmapped `extortion` (a
+// money demand with a deadline, on the URGENT tier) rendered as the literal word "extortion", and
+// `witpro` as "witpro". Ninety-eight types were dark. Worse than dark is WRONG: several types are
+// emitted with TWO shapes — the `me` NOTIFY (what happened to YOU) and the `streets` shout (what the
+// town hears) — and a template written for one renders the other as `undefined`. `busted {from}` is
+// somebody springing you from lockup; against the streets template it read "undefined got hauled in",
+// telling a freed player they had been arrested.
+//
+// Two rules, and the second exists because the first is blind to it:
+//   1. every notify() type has a feedText entry (catalogue-or-declare);
+//   2. a type emitted with two DIFFERENT key sets must BRANCH — one template cannot honestly render
+//      two shapes, and the failure is silent.
+// Scope: it proves an entry EXISTS and BRANCHES, not that the sentence is right. That still needs a
+// person reading the wire — which is how these were found.
+{
+  const CLIENT = new URL('../public/index.html', import.meta.url).pathname;
+  const html = fs.readFileSync(CLIENT, 'utf8');
+  const start = html.indexOf('function feedText(');
+  assert(start > 0, 'feedText not found in the client — this check cannot run');
+  const body = html.slice(start, html.indexOf('\n  }', html.indexOf('    };', start)));
+  const known = new Set([...body.matchAll(/^\s{6}([a-z_0-9]+):\s*\(\)/gm)].map((m) => m[1]));
+  assert(known.size > 150, `feedText yielded only ${known.size} templates — the extractor has stopped `
+    + 'reading the client, so a green run here would mean nothing');
+
+  // every notify(client, <who>, '<type>', <payload>) in src/, with its payload key set
+  const files = [];
+  const walk = (d) => { for (const e of fs.readdirSync(d)) {
+    const p2 = path.join(d, e);
+    if (fs.statSync(p2).isDirectory()) walk(p2); else if (p2.endsWith('.js')) files.push(p2);
+  } };
+  walk(SRC);
+  const keysOf = (lit) => {
+    let depth = 0, cur = '', parts = [];
+    for (const ch of lit.replace(/^\{/, '')) {
+      if ('([{'.includes(ch)) depth++;
+      else if (')]}'.includes(ch)) { if (depth === 0) break; depth--; }
+      if (ch === ',' && depth === 0) { parts.push(cur); cur = ''; continue; }
+      cur += ch;
+    }
+    parts.push(cur);
+    return parts.map((p2) => (p2.match(/^\s*([a-zA-Z_$][\w$]*)\s*(?::|$)/) || [])[1]).filter(Boolean).sort();
+  };
+  const shapes = new Map();   // type -> Set of "k1,k2" key signatures (both channels)
+  const personal = new Set();  // types that reach the `me` channel — these MUST have a template
+  let sites = 0;
+  for (const f of files) {
+    const src = fs.readFileSync(f, 'utf8');
+    const scan = (re, mine) => {
+      let m;
+      while ((m = re.exec(src))) {
+        sites++;
+        if (mine) personal.add(m[1]);
+        const raw = m[2].startsWith('{') ? m[2] : '{' + m[2];
+        const sig = keysOf(raw).filter((k) => k !== 'type').join(',');
+        if (!shapes.has(m[1])) shapes.set(m[1], new Set());
+        shapes.get(m[1]).add(sig);
+        re.lastIndex = m.index + m[0].indexOf(m[1]) + m[1].length;   // never run past a later call
+      }
+    };
+    scan(/notify\(\s*[a-zA-Z_$][\w$]*\s*,[^,]+,\s*'([a-z_0-9]+)'\s*,\s*(\{[\s\S]{0,400})/g, true);
+    scan(/bus\.emit\(\s*'streets'\s*,\s*\{\s*type:\s*'([a-z_0-9]+)'([\s\S]{0,300})/g, false);
+  }
+  assert(sites >= 200, `the emit scan found only ${sites} sites — the extractor has stopped reading `
+    + 'src/, so a green run here would mean nothing');
+
+  // Rule 1 is scoped to the `me` channel ON PURPOSE. The field-stitcher (`who + type + target`) is
+  // the DESIGNED renderer for ambient street news and reads acceptably there ("Vella seized docks").
+  // It does not for a notification ABOUT YOU, where there is no who/target to stitch and the player
+  // is simply shown the type name — which is how "extortion", "witpro" and "flipped" shipped.
+  const dark = [...personal].filter((t) => !known.has(t)).sort();
+  assert.deepEqual(dark, [], 'notification type(s) sent to a PLAYER that the wire cannot render — '
+    + 'they are shown the literal type name instead of a sentence about what happened to them:'
+    + `\n   - ${dark.join('\n   - ')}`);
+
+  // rule 2: two distinct shapes need a branching template
+  const MULTI_WAIVED = {
+    // one shape carries a superset of the other's keys and the template reads only the shared ones,
+    // so both render the same true sentence.
+    world_raid_fail: 'both shapes carry npc; the template reads nothing else',
+    heist_blown: 'both shapes carry job; the template reads nothing else',
+    belt_ducked: 'both shapes carry challenger; the template reads nothing else',
+    market_sold: 'both shapes carry kind and net; the template reads nothing else',
+    family_retaliation: 'both shapes carry family; the template reads nothing else',
+    vendetta_settled: 'the template reads no field at all',
+    npc_pact_signed: "the template already falls back (`d.npc || 'an outfit'`)",
+  };
+  const unbranched = [];
+  for (const [t, sigs] of shapes) {
+    if (sigs.size < 2 || MULTI_WAIVED[t]) continue;
+    if (!known.has(t)) continue;   // no template → the stitcher handles it, which is its job
+    const tpl = (body.match(new RegExp(`^\\s{6}${t}:\\s*\\(\\)[\\s\\S]*?(?=\\n\\s{6}[a-z_0-9]+:\\s*\\(\\)|\\n\\s{4}\\};)`, 'm')) || [''])[0];
+    if (!tpl.includes('?')) unbranched.push(`${t} — ${[...sigs].map((s) => `{${s}}`).join(' vs ')}`);
+  }
+  assert.deepEqual(unbranched, [], 'type(s) emitted with two DIFFERENT payload shapes whose feedText '
+    + 'template does not branch. One template cannot render both, and the loser renders `undefined` '
+    + '(`busted {from}` — somebody springing you from lockup — read as "undefined got hauled in"). '
+    + `Branch on a key unique to each shape, or waive with the reason both are the same sentence:\n   - ${unbranched.join('\n   - ')}`);
+  console.log(`✓ all ${personal.size} personal notification types render a sentence, and every `
+    + `multi-shape type branches (${sites} emit sites, ${shapes.size} types)`);
+}

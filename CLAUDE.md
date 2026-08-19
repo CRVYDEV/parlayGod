@@ -13994,6 +13994,89 @@ every harvest fee books a bad amount. The name is corrected and the crossing is 
 sharp case a type comparison cannot see — a **same-typed adjacent swap** (`Bonded` has six adjacent
 non-indexed `uint256`) — fails by name instead of waiting for the next hand pass.
 
+**THE PLAY SESSION — the wire could not say what happened (2026-08-19).** Not a red team: a real
+play session, driven through real routes and a real browser as a person would, plus the class sweep
+it turned into. Every finding was reproduced against a running engine before it was called one.
+**Four findings, one of them a mechanic that had never once paid, and one guard.**
+
+**F7 (the headline) — the apex rout paid no material, in BOTH directions.** `SHIPMENT.ROUT_UNITS`
+(6) is the scarce contested material a routed apex cartel is supposed to drop, and it was
+**unreachable by construction**: the award sat in `raidNpc`, which throws `crew` on any `coop`
+fixture ~70 lines earlier, and `executeRaid` — the ONLY function that can rout an apex — had no
+award at all. So the board advertised `routUnits: 6` on an outfit whose rout could never pay it, and
+the one code path that CAN rout paid nothing. Proven by driving a real 2-man co-op rout: `routed:
+true`, `characters.shipment` `0,0` before and after. Moved to the rout branch of `executeRaid`,
+split across the crew (ROUT_UNITS is what the ROUT yields, not what each raider yields — handing
+every raider 6 would multiply a scarce faucet by crew size, an unsigned balance change), with
+`routUnits` kept on the solo return as a constant 0 so the two raid shapes still agree field-for-field.
+After: `routUnits: 3` each, DB `3,3`, total exactly 6.
+
+**F8 — the co-op raid and the crew heist were invisible.** `describe()` is a pure function of the
+response, so a real browser click against a real response proves exactly what a player reads. Solo
+raid returns `loot`; **co-op returns `pot`/`share`** — the forgotten sibling — so a raid that paid
+$400,000, dropped the material and planted the family's flag rendered **"done."**. A crew heist was
+the same: solo returns `take`/`success`, the crew score returns `score`/`share`/`pot`/`hot`, so a
+SCORE, a HOT score and a BUSTED job all read "done." Both fixed and read back in the browser.
+
+**F9 — 124 notification types the wire could not render, and 6 it rendered for the WRONG SHAPE.**
+`feedText`'s fallback prints the TYPE NAME, so a player was shown the literal word **"extortion"**
+for a money demand with a deadline on it (an URGENT-tier type), **"witpro"** for the state that makes
+them untouchable, **"flipped"**, and — to a player who had just been MURDERED — **"whacked"**. The
+template table went 98 → 222. All of them **planted and READ in a real browser** — because a template
+with a wrong key renders `undefined`, which is worse than the type name it replaced. That read is
+what found the second half: several types are emitted with TWO shapes — the `me` NOTIFY (what
+happened to YOU) and the `streets` shout (what the town hears) — and a template written for one
+renders the other as `undefined`. **`busted {from}` is somebody SPRINGING YOU from lockup, and
+against the streets template it read "undefined got hauled in" — telling a freed player they had been
+arrested.** A crewman who did a job and got PAID read "a crew of undefined pulled off Payroll Van —"
+with his own cut missing. Six pre-existing templates were rewritten to branch on shape and 36 of the
+new ones were written branching from the start — 42 in all (`market_outbid` has FOUR shapes, three of
+which are not outbids at all — a buy-now, a cancellation, a void). **The guard then beat my own
+probe**: mine required `notify(\s*client` and the ledger takes `notify(\s*<ident>`, which found 23
+more types — including `whacked` and `bounty_on_you`, two of the loudest things that can happen to
+you.
+
+**F10 — the phone told a winner he had been robbed.** The same class in a THIRD surface. `push.js`
+titles `sacked` **"Your empire was seized"** and bodies it `${p.by} took over one of your fronts` —
+but the only `sacked` notify goes to the **KILLER** (`notify(client, ch.id, …)` with `{kind, name,
+from: victim.name}`, which has no `by`), so a player who had just seized a rival's business got a
+phone buzz reading *"Your empire was seized · A rival took over one of your fronts."* Worse than the
+wire cases, because a push arrives when you are away and cannot check. Writing the branch also caught
+that my own new wire template for `sacked` was **backwards** for the same reason. `sacked` also left
+`URGENT_TYPES`, whose own comment says victim-side threats only — it is a win, not a threat.
+
+**THE WIRE LEDGER** (`test/gates.js`, the ninth catalogue-or-declare guard) is the durable half, and
+it carries TWO rules because the first is blind to the second: (1) every notify type reaching a
+PLAYER has a template — scoped to the `me` channel on purpose, since the field-stitcher is the
+DESIGNED renderer for ambient street news and reads acceptably there but not for a notification about
+you; (2) a type emitted with two DIFFERENT key sets must BRANCH, with waivers for the five where one
+shape is a superset the template does not read into. Two anti-vacuity floors, because they fail
+differently — one catches an extractor that has stopped reading the client, the other one that has
+stopped reading `src/`. **171 personal notification types, 321 emit sites.** Five mutations, each
+caught at its own named assertion.
+
+**THE PROBE HAD TO BE FIXED THREE TIMES BEFORE ITS RESULT MEANT ANYTHING, which is most of the
+lesson.** It first missed **shorthand** payload keys (`{ npc, units, material }`), planting
+`undefined` for each and producing lines that read exactly like client bugs; then it guessed values
+from key NAMES, so `outbid`'s `by` — which is an AMOUNT, not a person — got a name and rendered
+`$NaN`; then its multiline capture **ran past later `notify()` calls in the same file** and the regex
+resumed after them, silently losing 13 types while still printing a confident total. Fixed by
+inferring from the value EXPRESSION rather than the key name, and by rewinding `lastIndex` to just
+past the type name. Of eleven "broken" lines in the first run, **seven were the probe and four were
+real** — and the only way to tell was to check each against its actual payload. *A finding produced
+by a tool you wrote and did not check is not a finding.*
+
+**Clean lenses, recorded because a session that publishes only its hits cannot be audited:** the Port
+loop end to end (including a real interdiction that sank the boat and reported it correctly); the
+whole client prose-vs-lever sweep (14 candidates, one instance); the shipment take/cap/district-refusal
+loop; and a suspected `[data-go]` nav-vs-action collision that **dissolved on checking** — nav
+`data-go` exists only in `#bnav`, outside the tab bodies, and tab jumps use `data-go-tab`.
+
+**Flagged, not changed:** the victim of a sacking gets no personal notification at all (the streets
+shout names them and the estate report covers the loss, so this is a design call, not a defect); and
+`PAPER_LINES` in THE MORNING PAPER already described several of the types the wire could not render,
+which is how one surface could narrate an event the other could only name.
+
 **RED TEAM #10 — the two classes fixed four times each and never swept, plus the guard for both
 (`AUDIT-red-team-ten.md`, 2026-08-17).** RT#7 named the shape these passes keep leaving behind — *a
 class established, applied where it was discovered, never swept to its edge* — and two of its own
