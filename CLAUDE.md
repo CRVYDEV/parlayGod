@@ -14186,8 +14186,57 @@ discriminator nothing else in the game sends, so the fix needed no server change
 was already there — the byte-shape collision class for the third time (tribute currencies, the
 monument's three rails, this). Its regression seeds a real tap so the guard drives the PAID shape
 rather than the empty one, and the mutation that collapses it back fails printing the false
-all-clear verbatim. The other twelve responses in that wave all read well — which is the useful
-negative result: the sweep is reaching the end of what it can find by driving.
+all-clear verbatim. The other twelve responses in that wave all read well — which read like the
+useful negative result, and was wrong: it was the end of what RANDOM driving finds, not the end of
+the defects. **A FOURTH wave took the trace's shape as a CLASS instead of an instance and found
+twelve more, most of a screen at a time.** The class is one sentence: `describe()` is a flat chain of
+`if`s over field NAMES, so a branch guarded on a field that several systems send fires for whichever
+reaches it first. Enumerating describe()'s 137 top-level guards found **41 resting on a single
+condition**, and cross-referencing those field names against every `return {` in `src/` predicts the
+collisions without driving anything — then each candidate was DRIVEN before being called a defect,
+which is what separated the three real inversions from the guards that only looked risky.
+**The three inversions each said the opposite of what happened.** SELLING an asset answers
+`{ok, asset, earned}` and BUYING one answers `{ok, asset}` — one field apart — so selling the pawn
+shop read **"the pawn shop is yours"**, the buy line, with the sale price discarded. Posting a loan
+OFFER and TAKING one both answer `{principal, owed}`, so the LENDER — who has just escrowed $50,000
+of their own money and is owed $60,000 — was told **"took the loan — $50,000 now, owe $60,000"**: the
+two sides of the table, one line, naming the wrong one. And HIRING household staff answers
+`{staff, name, wageOmrDay, walked:false}`, which landed on the crew-FIRING branch and read
+**"settled $undefined and let one go — undefined left on the corner"** — inverted AND printing the
+literal word `undefined` at the player twice, because that branch reads two fields the estate never
+sends. **`body.paid > 0` was the widest collision**: six unrelated obligations use the word, and the
+branch claimed it for the business pad — so repaying a $60,000 loan shark, buying a car outright at
+auction, buying goods on the market, settling hush money and paying the estate's staff all read
+**"the pad is square"**, a bill on a screen the player was nowhere near. **And the Black Market was
+mute nearly end to end** — list-a-car, list-goods, post-a-WTB-order, fill, claim and pull all said
+"done.", discarding a listing fee, a 48h expiry, the delivered/remaining split, and — the biggest —
+that posting an order ESCROWS the whole ask out of your pocket. Melting a car said "done." while 152
+rounds went into the trunk, and in a family the tithe hands a slice of them to the family's ammo
+bank, a TERM nobody was told; its own sibling on the same screen, fence, names both its numbers,
+which is the comparison that makes the silence indefensible. **Two things about the FIXING are worth
+more than the list.** First, driving caught a regression I introduced: `fronts` on the pad's reply is
+an ARRAY of objects, not a count, so my own new line rendered `[object Object]` — the exact class
+being fixed, and unreachable by reading, since the server line reads `fronts: settled`. Second, four
+of the six fixes SURVIVED their first mutation, and the cause was in the fixture rather than the
+guard: `/v1/safehouse` is deliberately LAST in ACTIONS because going to ground refuses every
+offensive and extractive action (the signed D2 rule) — and `ACTIONS.push` appends AFTER it, so four
+newly-added actions never drove and their fixes read as held. The fixture now splices before the
+safehouse, two more were refused as duplicates of what the seed already owns (a refused action is
+skipped, which reads identically), and the pad's rescoping is proven through the estate's staff
+wages — the one of its five siblings this fixture can reach on its own token. Driven count 36 → 41,
+floor 26 → 33, and the guard gained the blanket rule that **no line a player reads may contain the
+literal word "undefined"**. Six mutations, six named failures. **A THIRTEENTH, found last and the
+sharpest unit error of the set: `seized` is sent by two systems in two different UNITS** — a lender
+collecting a defaulted marker sends dollars, an interdicted smuggling run sends CARGO — so a bust
+that took the whole hold read **"collected $20"** (a real number, a real currency symbol, and the
+wrong quantity entirely) before the Coast Guard's own line, which was correct, ran directly after
+it. **Its regression is the one that had to be built rather than declared**, and it took three
+corrections: the collect never drove at all on the first cut (the seed's dinghy is flagged
+`minted_onchain` for the Collection's on-chain list, and an EXTRACTED boat is inert by the v3-step-7
+rule — so the launch that would have put it at sea silently failed and the assertion passed over
+nothing, the vacuity class in its newest costume); the replacement hull then ordered by a column the
+table does not have; and only once a fresh boat really sailed and really got busted did the mutation
+fail by name. Driven count 41 → 47, floor 33 → 40.
 
 
 **THE PROBE HAD TO BE FIXED THREE TIMES BEFORE ITS RESULT MEANT ANYTHING, which is most of the

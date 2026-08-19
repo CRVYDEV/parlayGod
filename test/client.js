@@ -44,7 +44,7 @@ import vm from 'node:vm';
 import { readFileSync, readdirSync } from 'node:fs';
 import { buildServer } from '../src/server.js';
 import { M3, M4, PATHS, NPC_HITMEN, HEIST_ROLES, HEIST_JOBS, DRUGS, GOODS, DISTRICTS,
-  COMMISSION, CONVOY, DUELS, TERRITORY_TYPES } from '../src/rules.js';
+  COMMISSION, CONVOY, DUELS, TERRITORY_TYPES, CARS, TRIMS, ASSETS, BUSINESSES, ESTATE } from '../src/rules.js';
 
 // A COMMENT IS NOT CODE, and this guard used to read it as if it were. The mirror resolves a field
 // access as `<binding>.<name>`, and this file's comments are dense and name source files constantly
@@ -1836,6 +1836,12 @@ const ACTIONS = [
   // so anywhere earlier it would silently skip its own neighbours.
   ['POST', '/v1/safehouse', null],
 ];
+// GOING TO GROUND IS LAST FOR A REASON (see above) — so anything pushed later runs AFTER it and is
+// refused by the very rule that entry exists to exercise. Four of the actions below were appended
+// and silently never drove; their fixes then survived mutation, which reads exactly like a fix that
+// holds. Everything added from here splices in BEFORE the safehouse instead of appending after it.
+const SAFEHOUSE_AT = ACTIONS.length - 1;
+const addAction = (...rows) => ACTIONS.splice(SAFEHOUSE_AT, 0, ...rows);
 // The fixture must be able to AFFORD what it drives. The first cut left it on a fresh guest's $500
 // and five of the money actions 4xx'd, so they were skipped — and a mutation that stripped a fixture's
 // name off the gift response SURVIVED, because that action had never once run. A declared-but-never-
@@ -1849,7 +1855,7 @@ await app.pool.query('UPDATE account_persistent SET omr=1000 WHERE account_id=(S
 // is kept, the MARK IS TOLD), the second is the most expensive prerequisite in the game.
 const mark = (await app.pool.query(
   "SELECT id FROM characters WHERE alive AND id <> $1 AND NOT is_npc ORDER BY created_at LIMIT 1", [charId])).rows[0];
-if (mark) ACTIONS.push(
+if (mark) addAction(
   ['POST', `/v1/streets/${mark.id}/bounty`, { amount: 6000, kind: 'kill' }],
   ['POST', `/v1/streets/${mark.id}/search`, null]);
 // A TAP ON OUR OWN LINE, so the TRACE runs in its paid shape rather than its empty one. The trace
@@ -1863,7 +1869,77 @@ if (mark) {
     `INSERT INTO wiretaps (watcher_character, target_character, expires_at) VALUES ($1,$2, now() + interval '12 hours')
        ON CONFLICT (watcher_character, target_character) DO UPDATE SET expires_at = EXCLUDED.expires_at`,
     [mark.id, charId]);
-  ACTIONS.push(['POST', '/v1/wire/trace', null]);
+  addAction(['POST', '/v1/wire/trace', null]);
+}
+
+// THE DISPOSE-AND-TRADE FAMILY. describe() is a flat chain over field NAMES, and as the game grew the
+// names collided — so a whole screen's verbs landed on a branch written for a different system. Driven,
+// every one of these: SELLING an asset said "the beater is yours" (the BUY line — the exact inverse,
+// price discarded); a $50,000 buy-now and a $60,000 loan repayment both said "the pad is square"
+// (a bill on a screen the player was nowhere near); posting a loan OFFER told the LENDER they had
+// "taken" the loan and owed $60,000; HIRING household staff read as FIRING a kitchen hand and printed
+// the word "undefined" at the player twice; filling a market order read as dealing drugs on a corner;
+// and listing, ordering, claiming, pulling and melting all said "done." — discarding a listing fee, a
+// 48h expiry, a $4,500 ESCROW, and 152 rounds of ammo plus the family's tithe on them.
+// Driven here so check 8 owns the silences; the INVERSIONS are asserted by name below, because a
+// wrong line is a real sentence and every silence pattern reads straight past it.
+{
+  const asset = ASSETS.find((a) => a.price < 200000) || ASSETS[0];
+  const good = GOODS[0];
+  // the seed fixture already runs a laundromat and already hired the first staffer, and a REFUSED
+  // action is skipped — which is exactly how two of these fixes survived their own mutation. Pick
+  // ones nothing else has claimed, and prove they drove by their line appearing in `said`.
+  const owned = new Set((await app.pool.query('SELECT kind FROM businesses WHERE character_id=$1', [charId])).rows.map((r) => r.kind));
+  const front = BUSINESSES.find((b) => !owned.has(b.kind));
+  const hired = new Set((await app.pool.query(
+    'SELECT staff_id FROM estate_staff WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)', [charId])).rows.map((r) => r.staff_id));
+  const staff = (ESTATE.STAFF || []).find((x) => !hired.has(x.id));
+  await app.pool.query(`INSERT INTO character_cargo (character_id, good_id, qty) VALUES ($1,$2,8)
+     ON CONFLICT (character_id, good_id) DO UPDATE SET qty=8`, [charId, good.id]);
+  const carId = 'guardcar' + Date.now();
+  await app.pool.query('INSERT INTO cars (id, character_id, model_id, trim_id) VALUES ($1,$2,$3,$4)',
+    [carId, charId, CARS.find((c) => c.val > 20000).id, TRIMS[1].id]);
+  if (asset) addAction(['POST', `/v1/assets/${asset.id}/buy`, null], ['POST', `/v1/assets/${asset.id}/sell`, null]);
+  addAction(['POST', `/v1/garage/${carId}/melt`, null]);
+  if (good) addAction(['POST', '/v1/market', { kind: 'good', goodId: good.id, qty: 3, price: 800 }],
+                         ['POST', '/v1/market/order', { goodId: good.id, qty: 4, price: 900 }]);
+  if (front) addAction(['POST', `/v1/business/${front.kind}/buy`, null]);
+  if (staff) addAction(['POST', '/v1/estate/upgrade', null], ['POST', `/v1/estate/staff/${staff.id}`, null]);
+  addAction(['POST', '/v1/loans', { amount: 5000, rate: 0.2, hours: 24 }]);
+  // THE PAD is the branch `paid` was taken away from, so it has to be driven with a real bill owed —
+  // otherwise the rescoping is unproven and five other obligations quietly claim its line back.
+  await app.pool.query("UPDATE businesses SET upkeep_at = now() - interval '30 hours' WHERE character_id=$1", [charId]);
+  addAction(['POST', '/v1/business/upkeep', null]);
+  // STAFF WAGES is one of the five obligations `paid` was being claimed from, and the only one this
+  // fixture can reach on its own token — so it is what makes the rescoping mutation-provable: take
+  // the pad's `fronts` guard away and this reply matches the pad's branch first and reads an array
+  // it never sends. Backdated so there is really something owed.
+  await app.pool.query("UPDATE estates SET staff_paid_at = now() - interval '3 days' WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)", [charId]);
+  addAction(['POST', '/v1/estate/wages', null]);
+}
+
+// THE COAST GUARD, because `seized` is sent by two systems in two DIFFERENT UNITS. A lender collecting
+// a defaulted marker sends it in DOLLARS; an interdicted smuggling run sends it in UNITS OF CARGO — so
+// a bust that took the whole hold read "collected $20", a real sentence, a real number, and the wrong
+// quantity entirely (driven: {"interdicted":true,"seized":20,"fine":1200}). The knob pins the roll so
+// the bust is the shape under test; nothing else in the game reads it, and the collect runs after the
+// travel entry above, so the captain is on the dock.
+{
+  // a FRESH hull: the seed's own dinghy is flagged minted_onchain for the Collection's on-chain list,
+  // and an extracted boat is inert by the v3-step-7 rule — so reusing it launches nothing and the
+  // collect never drives, which is exactly how this assertion first passed while proving nothing.
+  await app.pool.query("UPDATE characters SET loc='docks', cash=5000000, jail_until=NULL, hosp_until=NULL WHERE id=$1", [charId]);
+  await inject('POST', '/v1/port/boat/dinghy', token, {});
+  const boat = (await app.pool.query(
+    'SELECT id FROM boats WHERE character_id=$1 AND NOT minted_onchain ORDER BY created_at DESC LIMIT 1', [charId])).rows[0];
+  if (boat) {
+    const launched = await inject('POST', `/v1/port/run/${boat.id}`, token, { route: 'coastal' });
+    if (launched.code < 400) {
+      await app.pool.query("UPDATE boats SET run_until = now() - interval '1 minute' WHERE id=$1", [boat.id]);
+      process.env.PORT_INTERDICT_P = '1';
+      addAction(['POST', `/v1/port/collect/${boat.id}`, null]);
+    }
+  }
 }
 
 const mute = [];
@@ -1892,12 +1968,31 @@ const traceLine = said.get('/v1/wire/trace');
 if (traceLine) assert(/still listening/i.test(traceLine) && !/swept/i.test(traceLine),
   `the trace must say the taps are still live and name who is on the line — it is not the sweep, and it costs three times as much: ${JSON.stringify(traceLine)}`);
 
+// The four INVERSIONS. Each is a real sentence about a real system — just not the one the player is
+// looking at — so both silence patterns read straight past them and only a named claim can hold them.
+const invert = [
+  [/\/v1\/assets\/[^/]+\/sell$/, /is yours/i, 'selling an asset must not say it is YOURS — that is the buy line, and the sale price goes with it'],
+  ['/v1/loans', /took the loan/i, 'posting an offer is the LENDER escrowing their own money — it must not tell them they took a loan and owe it back'],
+  [/\/v1\/estate\/staff\/[^/]+$/, /let one go|walks/i, 'hiring household staff must not read as firing a kitchen hand'],
+  [/\/v1\/port\/collect\//, /collected \$/i, 'a Coast Guard interdiction seizes CARGO — reporting it as dollars collected is the loan shark\'s line and the wrong unit'],
+];
+for (const [key, wrong, why] of invert) {
+  for (const [url, line] of said) {
+    if (typeof key === 'string' ? url !== key : !key.test(url)) continue;
+    assert(!wrong.test(line), `${why} — got: ${JSON.stringify(line)}`);
+  }
+}
+// Nothing a player reads may ever contain the literal word "undefined". Hiring staff printed it twice,
+// because the branch it landed on read two fields that shape never sends.
+for (const [url, line] of said) assert(!/undefined/.test(line),
+  `describe() rendered the literal word "undefined" to the player for ${url}: ${JSON.stringify(line)}`);
+
 const megaLine = said.get('/v1/megaproject/omr');
 if (megaLine) assert(/\$OMR/.test(megaLine) && /\b10\b/.test(megaLine),
   `the $OMR rail into the monument must name the $OMR that left, not the wall's dollar credit — got: ${JSON.stringify(megaLine)}`);
 
 const describedCount = described;
-assert(described >= 26, `only ${described} of ${ACTIONS.length} actions succeeded — the ledger is measuring almost nothing`);
+assert(described >= 40, `only ${described} of ${ACTIONS.length} actions succeeded — the ledger is measuring almost nothing`);
 assert.deepEqual(mute, [], `${mute.length} action(s) a player PRESSES say nothing about what just happened ` +
   `(describe() fell through to "done." or rendered a hole). Every one of these moves money, an asset or a ` +
   `status — write the line, or the game is keeping its own result from the player:\n  ${mute.join('\n  ')}`);

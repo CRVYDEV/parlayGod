@@ -1996,7 +1996,15 @@
     if (body && body.rarityName && body.was) return `\u2728 ${body.name} is ${body.rarityName} now — ${body.spent} $OMR`;
     // LIMITED RUNS — the two moments worth stopping for: one found, one destroyed forever.
     if (body && body.car && body.car.run) return `\uD83D\uDE97 ${body.car.run.name} — NUMBER ${body.car.run.serial} OF ${body.car.run.cap}. Only ${body.car.run.cap} will ever exist.`;
-    if (body && body.melted && body.rounds != null) return `\uD83D\uDD25 ${body.melted.name} #${body.melted.serial} is gone for good — ${body.rounds} rounds`;
+    // MELTING A CAR is irreversible and pays real rounds, and this branch only ever spoke for the
+    // rare numbered one — `melted` is the LIMITED-RUN field, null for every ordinary car, so the
+    // everyday melt said "done." while 152 rounds went into the trunk (driven). Worse in a family:
+    // the tithe hands a slice of them to the family's ammo bank, a TERM nobody was told. Its own
+    // sibling on the same screen — fence — names both its numbers, which is the comparison that
+    // makes the silence indefensible.
+    if (body && body.rounds != null && body.tithe !== undefined) return body.melted
+      ? `\uD83D\uDD25 ${body.melted.name} #${body.melted.serial} is gone for good — ${body.rounds} rounds${body.tithe > 0 ? `, and ${body.tithe} tithed to the family` : ''}`
+      : `\uD83D\uDD25 stripped her for parts — ${body.rounds} rounds${body.tithe > 0 ? `, and ${body.tithe} tithed to the family's ammo bank` : ''}. The car's gone for good.`;
     // THE SHIPMENT — the take and the commission. The take says how much of the CITY'S day is left,
     // because that's the number a player is actually racing.
     if (body && body.took != null && body.material) return `\uD83D\uDCE6 took ${body.took} of ${body.material} — ${body.cityLeft} left in the whole city today`;
@@ -2153,6 +2161,10 @@
     if (body && body.ok && body.vest && body.mult !== undefined) return `strapped into the ${String(body.vest).replace(/_/g, ' ')} — it soaks ${Math.round((body.mult - 1) * 100)}% more punishment`;
     if (body && body.ok && body.racket && body.income !== undefined)
       return `the ${String(body.racket).replace(/_/g, ' ')} is yours — about $${fmt(Math.round(body.income * 60))} an hour while you're not looking`;
+    // SELLING an asset answers {ok, asset, earned}; BUYING one answers {ok, asset}. One field apart,
+    // and this branch read only the shared half — so selling the pawn shop said "the pawn shop is
+    // yours": the exact inverse of what happened, with the price thrown away. Driven.
+    if (body && body.ok && body.asset && body.earned !== undefined) return `sold the ${String(body.asset).replace(/_/g, ' ')} on — $${fmt(body.earned)} back in your pocket`;
     if (body && body.ok && body.asset && body.income === undefined) return `the ${String(body.asset).replace(/_/g, ' ')} is yours`;
     if (body && body.ok && body.omrSpent !== undefined && body.kind)
       return body.kind === 'respawn'
@@ -2345,7 +2357,7 @@
       : `the hit is OFF — ${body.name || 'they'} ${body.calledOff === 'family' ? 'is family now' : 'runs with your crew now'}. Your search is cleared.`);
     if (body.reserve !== undefined && body.fee !== undefined && body.serial) bits.push(`🔨 ${body.name} #${body.serial} on the block — reserve ${fmt(body.reserve)} $OMR (−${body.fee} fee)`);
     if (body.gain) bits.push(`+${body.gain} ${body.stat || ''}`);
-    if (body.earned) bits.push(`${body.play === 'flood' ? '🔥 moved WEIGHT' : body.play === 'careful' ? '🤫 worked the regulars' : 'moved product'} — +$${fmt(body.earned)}${body.cornerPremium ? ' (corner premium)' : ''}${body.heat ? ` · +${body.heat} heat` : ''}`);
+    if (body.earned && body.delivered === undefined) bits.push(`${body.play === 'flood' ? '🔥 moved WEIGHT' : body.play === 'careful' ? '🤫 worked the regulars' : 'moved product'} — +$${fmt(body.earned)}${body.cornerPremium ? ' (corner premium)' : ''}${body.heat ? ` · +${body.heat} heat` : ''}`);
     // THE FREIGHT lands in CRATES, not dollars, and it comes off a trunk-load at a time — so the
     // convoy's `collected` is a COUNT and must be read before the business collect's dollars below,
     // or a three-crate landing renders as "collected $3". `remaining` is the convoy shape's tell.
@@ -2368,9 +2380,25 @@
     if (body.paid !== undefined && body.stillOwed) bits.push(body.paid > 0
       ? `paid $${fmt(body.paid)} of the pad — still $${fmt(body.stillOwed)} owed, so those fronts stay cold`
       : `couldn't cover the pad — $${fmt(body.stillOwed)} owed and you don't have it. Earn it elsewhere; the fronts stay cold until it's square.`);
-    else if (body.paid > 0) bits.push(`paid $${fmt(body.paid)} — the pad is square`);
+    // `paid` is a word six different obligations use, and this branch claimed it for one of them —
+    // so repaying a $60,000 loan shark, settling hush money, paying the estate's staff, buying goods
+    // on the Black Market and buying a car outright all read "the pad is square", naming a bill on a
+    // screen the player was nowhere near. `fronts` is what the pad's own reply carries and nothing
+    // else does; the five below get the line their own money deserves, ordered above the fallback.
+    else if (body.paid > 0 && Array.isArray(body.fronts)) bits.push(`paid $${fmt(body.paid)} of the pad across ${body.fronts.length} front${body.fronts.length === 1 ? '' : 's'} — square, and they keep earning`);
+    else if (body.paid > 0 && body.toLender !== undefined) bits.push(`squared the marker — $${fmt(body.paid)} out, $${fmt(body.toLender)} to the shark and $${fmt(body.vig)} vig to the house. Your name's clean.`);
+    else if (body.paid > 0 && body.interest !== undefined) bits.push(`paid the window back — $${fmt(body.paid)}, $${fmt(body.interest)} of it interest`);
+    else if (body.paid > 0 && body.perDay !== undefined) bits.push(`staff wages settled — ${fmt(body.paid)} $OMR${body.staff ? ` for ${body.staff} on the household` : ''} (${fmt(body.perDay)} $OMR a day)`);
+    else if (body.paid > 0 && body.kind && body.omrSpent === undefined) bits.push(`paid the hush — $${fmt(body.paid)}. The ${esc(body.kind)} stays buried, for now.`);
+    else if (body.paid > 0 && body.bought === undefined) bits.push(`paid $${fmt(body.paid)}`);
     if (body.shuttered) bits.push(`closed up the ${body.shuttered} — the pad on it stops${body.back > 0 ? `, $${fmt(body.back)} back` : ', nothing back'}`);
-    if (body.walked !== undefined) bits.push(body.walked
+    // `walked` means two different things: a kitchen hand let go, and the estate's staff downing
+    // tools over unpaid wages. HIRING a groundskeeper answers {staff, name, wageOmrDay, walked:false}
+    // and landed in the crew-firing line — so a hire read as a firing AND printed the word
+    // "undefined" twice at the player, because the crew line reads `settled` and `crew`, which the
+    // estate never sends. Scope the crew line to `crew`, and give the hire its own.
+    if (body.wageOmrDay !== undefined && body.staff) bits.push(`${esc(body.name)} is on the household — ${fmt(body.wageOmrDay)} $OMR a day, and they down tools if the wages go unpaid`);
+    else if (body.walked !== undefined && body.crew !== undefined) bits.push(body.walked
       ? `they'd already downed tools — one hand walks, ${body.crew} left on the corner`
       : `settled $${fmt(body.settled)} and let one go — ${body.crew} left on the corner`);
     // the circuit already sends YOUR power and the FIELD's; printing neither made a $25k tune a
@@ -2384,7 +2412,11 @@
     if (body.forPinks) bits.push(body.win ? `🎀 PINKS — you won their ${body.wonCar?.model || 'car'}` : `🎀 PINKS — you lost your ${body.lostCar?.model || 'car'}`);
     if (body.grandPrix && body.buyin !== undefined && body.pool !== undefined) bits.push(`🏁 on the grid — $${fmt(body.buyin)} in · pool $${fmt(body.pool)}, ${body.entrants} runner${body.entrants > 1 ? 's' : ''}`);
     if (body.tune != null && body.power != null) bits.push(`tuned up — engine at ${body.tune}, power ${body.power}`);
-    if (body.seized) bits.push(`collected $${fmt(body.seized)}${body.carSeized ? ' + their car' : ''}`);
+    // `seized` is a lender collecting a defaulted marker AND the Coast Guard taking your cargo, and
+    // this line — written for the lender, in DOLLARS — fired for the interdiction too, where the field
+    // counts UNITS: 20 units of contraband and a $1,200 fine read "collected $20" ahead of the real
+    // line. `toLender` is on the collect and nothing else. Driven.
+    if (body.seized && body.toLender !== undefined) bits.push(`collected $${fmt(body.seized)}${body.carSeized ? ' + their car' : ''}${body.shortfall > 0 ? ` — still $${fmt(body.shortfall)} short, and they're marked` : ''}`);
     // `pay` is the generic "what it paid" field, but a FAVOR's pay is the poster's gross — the
     // runner nets it minus the house cut, and the favor branch above already says so. Appending the
     // gross here would report a bigger number than the pocket actually moved.
@@ -2468,7 +2500,13 @@
     if (body.reward !== undefined && body.tier) bits.push(`Ledger tier ${body.tier} claimed — ${body.reward}${body.stipendPaid ? ` (${body.stipendPaid} $OMR paid)` : ''}`);
     if (body.verified && body.wallet) bits.push(`wallet linked — ${body.wallet.slice(0, 6)}…${body.wallet.slice(-4)}${body.feesCredited ? ` · ${body.feesCredited} fee credit(s) applied` : ''}`);
     // two-party handoffs that otherwise fell through to a bare "done."
-    if (body.principal !== undefined && body.owed !== undefined) bits.push(`took the loan — $${fmt(body.principal)} now, owe $${fmt(body.owed)}${body.collateral ? ' (car pledged)' : ''}`);
+    // POSTING an offer and TAKING one both answer {principal, owed}, so the LENDER — who has just
+    // escrowed $50,000 out of their own pocket and is owed $60,000 — was told "took the loan —
+    // $50,000 now, owe $60,000": the two sides of the table, one line, and it named the wrong one.
+    // `dueSeconds` is on the borrower's reply only; `hours` and `directed` are the poster's.
+    if (body.principal !== undefined && body.owed !== undefined && body.dueSeconds === undefined)
+      bits.push(`\uD83E\uDD1D money's on the street — $${fmt(body.principal)} out of your pocket and into escrow, $${fmt(body.owed)} owed back inside ${body.hours}h${body.directed ? ' (spoken for)' : ''}${body.collateralMin > 0 ? `, secured against a car worth $${fmt(body.collateralMin)}+` : ''}. Nobody's on the hook until somebody takes it.`);
+    else if (body.principal !== undefined && body.owed !== undefined) bits.push(`took the loan — $${fmt(body.principal)} now, owe $${fmt(body.owed)}${body.collateral ? ' (car pledged)' : ''}${body.dueSeconds ? ` inside ${minsTxt(body.dueSeconds)}` : ''}`);
     if (body.guard !== undefined && body.price !== undefined) bits.push(`hired protection — $${fmt(body.price)} up front`);
     if (body.hired === true && body.fee !== undefined) bits.push(`hired a hand for the ${body.role} seat — $${fmt(body.fee)}. A body fills the crew, but takes a cut and earns you nothing extra.`);
     if (body.family !== undefined && body.success !== undefined && (body.loot !== undefined || body.hospSeconds !== undefined)) {
@@ -2479,6 +2517,28 @@
     if (body.tributes !== undefined && body.collected !== undefined) { if (body.collected > 0) bits.push(`collected $${fmt(body.collected)} in vassal tribute → the treasury.`);
     }
     if (body.bid !== undefined && body.id !== undefined && body.name === undefined && !body.youLead) bits.push(`bid $${fmt(body.bid)} placed${body.extended ? ' (clock reset)' : ''}`);
+    // THE BLACK MARKET — five of its six verbs said nothing, and the sixth said something else.
+    // Every one of these carries TERMS: a listing fee, an expiry after which it lapses, and — the
+    // biggest — a WTB order ESCROWS the whole ask out of your pocket the moment you post it. Driven:
+    // list-a-car / list-goods / post-an-order / fill / claim / pull all read "done.", and a $50,000
+    // buy-now read "the pad is square" (see the `paid` note below). `kind` is the discriminator on
+    // the three posting shapes; `delivered`, `claimed`, `cancelled` and `bought` on the rest.
+    if (body.kind === 'car' && body.minBid !== undefined)
+      bits.push(`🏷 on the block — bidding opens at $${fmt(body.minBid)}${body.buyNow ? `, buy-now $${fmt(body.buyNow)}` : ''}${body.reserve ? ' (reserve set)' : ''}. Listing fee $${fmt(body.fee)}; it runs ${minsTxt(body.expiresSeconds)}, then comes back to you.`);
+    if (body.kind === 'good' && body.qty !== undefined && body.price !== undefined)
+      bits.push(`🏷 ${body.qty} × ${esc(body.good)} up at $${fmt(body.price)} a unit in ${esc(body.district)} — buyers collect in person. Fee $${fmt(body.fee)}; it runs ${minsTxt(body.expiresSeconds)}.`);
+    if (body.kind === 'order' && body.wanted !== undefined)
+      bits.push(`📇 WANTED: ${body.wanted} × ${esc(body.good)} at $${fmt(body.price)} in ${esc(body.district)} — $${fmt(body.escrow)} is ESCROWED out of your pocket until it fills or you pull it (fee $${fmt(body.fee)}). Sellers deliver to that dock; you claim it from there.`);
+    if (body.delivered !== undefined && body.earned !== undefined)
+      bits.push(`🚚 delivered ${body.delivered} — $${fmt(body.earned)} in${body.remaining > 0 ? `, the order still wants ${body.remaining}` : ' (order filled)'}`);
+    if (body.claimed !== undefined && body.awaiting !== undefined)
+      bits.push(`picked up ${body.claimed} into the trunk${body.awaiting > 0 ? ` — ${body.awaiting} still waiting at the dock` : ''}`);
+    if (body.cancelled !== undefined) bits.push(body.refunded !== undefined
+      ? `pulled it off the board — $${fmt(body.refunded)} escrow back${body.awaiting > 0 ? `, and ${body.awaiting} delivered units still wait for you at the dock` : ''}`
+      : 'pulled it off the board — what was on it comes back to you');
+    if (body.bought !== undefined && body.paid !== undefined) bits.push(body.bought === 'car'
+      ? `🚗 bought outright — $${fmt(body.paid)}. It's in your garage.`
+      : `bought ${body.qty} × ${esc(body.bought)} — $${fmt(body.paid)} out of pocket${body.remaining > 0 ? ` (${body.remaining} left on the lot)` : ''}`);
     // a demanded RICO trial — the conviction gets the cinematic; the acquittal deserves a line too
     if (body.convicted === false && body.forfeited !== undefined) bits.push('ACQUITTED — the case fell apart. Walk out clean.');
     if (body.convicted === true && body.forfeited !== undefined) bits.push(`CONVICTED — they seized $${fmt(body.forfeited)}${body.jailSeconds ? ` and you're in for ${minsTxt(body.jailSeconds)}` : ''}`);
