@@ -196,6 +196,15 @@ let a, b;
   assert.equal(r.code, 200, `assign: ${JSON.stringify(r.body)}`);
   let board = (await call('GET', '/v1/soldiers', { token: s.token })).body;
   assert.equal(board.roster.filter((x) => x.onJob).length, 1, 'exactly one second on the job');
+  // standing him down NAMES him: a bare {ok:true} reached the toast as the word "done." — the same
+  // nothing whether you had a second riding with you or not (test/client.js check 8, the action ledger)
+  const down = await call('POST', '/v1/soldiers/unassign', { token: s.token });
+  assert.equal(down.code, 200, `unassign: ${JSON.stringify(down.body)}`);
+  assert.equal(down.body.standDown, r.body?.name || board.roster.find((x) => x.id === soldierId)?.name,
+    'the response names WHO stood down');
+  const none = await call('POST', '/v1/soldiers/unassign', { token: s.token });
+  assert.equal(none.body.standDown, null, 'and says plainly when nobody was riding with you');
+  await call('POST', `/v1/soldiers/${soldierId}/assign`, { token: s.token });   // put him back for the assist below
   // the crime assist: on a SUCCESS the soldier takes the cut off the top and earns xp.
   // Pin death off so the loop can't kill him while we farm a success.
   process.env.SOLDIER_DEATH_P = '0';

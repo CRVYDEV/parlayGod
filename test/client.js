@@ -1730,6 +1730,87 @@ assert.deepEqual(shapeFlags, [], `${shapeFlags.length} field name(s) read like a
   `UNCHECKED until someone adds it. Either enforce it (add to GATE_FIELDS/OBLIGATION_FIELDS and read it in ` +
   `the client) or waive it in REVIEWED_NOT_ENFORCED with a reason:\n  ${shapeFlags.join('\n  ')}`);
 
+// ── CHECK 8 — THE ACTION LEDGER ────────────────────────────────────────────────────────────────
+// The EIGHTH way a button lies, and the quietest: it works, and then says nothing about what it did.
+// `act()` toasts describe(r.body) with no override, so every one of the ~380 routes a player presses
+// reads back exactly what describe() makes of the response — and describe()'s fallback is the bare
+// word "done." A play session drove these for real and found 26 of them saying it, among them a
+// stake, an unstake that had just started a SIX-HOUR window in which that $OMR can be looted off
+// you, a bank deposit that rides in transit and is lootable until it clears, founding a family,
+// signing a fighter, buying a racket, selling a car, and going MADE. Two of those are withheld
+// TERMS, not missing flavour — the same class as the pad and the nut.
+//
+// So: DRIVE each route against the real server and require describe() to say something. The route
+// list is declared (catalogue-or-declare) but every RESPONSE is real, so a shape that changes
+// server-side fails here rather than drifting. describe() is hosted from the client's own source
+// with its real helpers — a missing dependency surfaces as a throw, not a silent pass. `rules` is
+// SUPPLIED because describe()'s regimen branch legitimately reads it (hosting it standalone without
+// it reads as a page bug and is a probe bug — that mistake cost a false finding while writing this).
+const rulesBody = (await inject('GET', '/v1/rules', token)).body;
+const describeFn = (() => {
+  const L = html.split('\n');
+  const one = (re) => { const i = L.findIndex((l) => re.test(l)); assert(i >= 0, `describe() helper not found: ${re}`); return L[i]; };
+  const blk = (re, n) => { const i = L.findIndex((l) => re.test(l)); assert(i >= 0, `describe() helper not found: ${re}`); return L.slice(i, i + n).join('\n'); };
+  const s = L.findIndex((l) => l.includes('function describe(body, code)'));
+  assert(s >= 0, 'describe() not found in the client — the action ledger cannot run');
+  let e = s; for (let i = s + 1; i < L.length; i++) if (L[i] === '  }') { e = i; break; }
+  const src = `((rules) => { ${one(/^  const fmt = /)}\n${one(/^  const esc = /)}\n${one(/^  const nth = /)}\n` +
+    `${blk(/^  const minsTxt = /, 4)}\n${L.slice(s, e + 1).join('\n')}\n return describe; })`;
+  return vm.runInNewContext(src)(rulesBody);
+})();
+
+// each entry is a route a player PRESSES (act()/data-do) whose success shape must read as something.
+// Bodies are whatever makes the call succeed for a fresh character; a 4xx is skipped, not asserted —
+// this check is about what a WORKING action says, and the gates have their own suites.
+const ACTIONS = [
+  ['POST', '/v1/travel/neon', null],
+  ['POST', '/v1/bank/deposit', { amount: 100 }],
+  ['POST', '/v1/bank/withdraw', { amount: 50 }],
+  ['POST', '/v1/armory/ammo', null],
+  ['POST', '/v1/armory/unequip', null],
+  ['POST', '/v1/goods/buy', { goodId: GOODS[0].id, qty: 1 }],
+  ['POST', '/v1/goods/sell', { goodId: GOODS[0].id, qty: 1 }],
+  ['POST', '/v1/gangs', { name: 'Ledger ' + Math.random().toString(36).slice(2, 7), tag: 'LDG' }],
+  ['POST', '/v1/gangs/leave', null],
+  ['POST', '/v1/path', { path: PATHS[0].id }],
+  ['POST', '/v1/identity/bio', { bio: 'a quiet man' }],
+  ['POST', '/v1/vanity/title', { title: 'The Quiet Man' }],
+  ['POST', '/v1/duels/list', { limit: 0 }],
+  ['POST', '/v1/casino/fade', { limit: 0 }],
+  ['POST', '/v1/casino/poker/deal', { limit: 0 }],
+  ['POST', '/v1/casino/numbers/claim', null],
+  ['POST', '/v1/paper/read', null],
+  ['POST', '/v1/soldiers/unassign', null],
+  ['POST', '/v1/business/collect', null],
+];
+const mute = [];
+let described = 0;
+for (const [m, url, payload] of ACTIONS) {
+  const r = await inject(m, url, token, payload);
+  if (r.code >= 400 || !r.body) continue;              // a refusal is another suite's business
+  described++;
+  let line;
+  try { line = String(describeFn(r.body, r.code)); } catch (e) { line = 'THREW: ' + e.message; }
+  if (line === 'done.' || /undefined|NaN|\[object|^THREW/.test(line)) mute.push(`${m} ${url} → ${JSON.stringify(line)}`);
+}
+const describedCount = described;
+assert(described >= 12, `only ${described} of ${ACTIONS.length} actions succeeded — the ledger is measuring almost nothing`);
+assert.deepEqual(mute, [], `${mute.length} action(s) a player PRESSES say nothing about what just happened ` +
+  `(describe() fell through to "done." or rendered a hole). Every one of these moves money, an asset or a ` +
+  `status — write the line, or the game is keeping its own result from the player:\n  ${mute.join('\n  ')}`);
+// the TERM this check exists to keep on screen: a deposit rides in transit and is LOOTABLE until it
+// clears. Asserted UNCONDITIONALLY — the first cut guarded it behind `if (dep.code < 400)` and by
+// this point the fixture has spent its cash, so it skipped in silence and a mutation that stripped
+// the warning SURVIVED. A check that can decline to run reads exactly like a check that passed.
+const depositor = (await inject('POST', '/v1/auth/guest')).body.token;
+await inject('POST', '/v1/character', depositor, { name: 'Ledger Dep ' + Math.random().toString(36).slice(2, 7) });
+const dep = await inject('POST', '/v1/bank/deposit', depositor, { amount: 100 });
+assert.equal(dep.code, 200, `the terms check could not bank $100 on a fresh character (${JSON.stringify(dep.body)}) — ` +
+  'fix the fixture rather than letting this skip, or the assertion below never runs');
+assert.match(String(describeFn(dep.body, 200)), /transit/i,
+  'a deposit must say the money rides IN TRANSIT and can be looted until it clears — that is a TERM, not flavour, ' +
+  'and it is the reason this ledger exists');
+
 await app.close();
 console.log(`✅ client wiring test passed — across the console AND /admin: of ${refs.size} routes they can ` +
   `call, ${refs.size - dynamic.length} resolve to a really-mounted route (segment-wise, so ` +
@@ -1756,6 +1837,11 @@ console.log(`✅ client wiring test passed — across the console AND /admin: of
   `sweep flags every field across all ${reads.size} boards whose NAME reads like a gate or an ongoing ` +
   `cost — each must be enforced above or waived here with a reason (${REVIEWED_NOT_ENFORCED.size} are), ` +
   `so a new one is a decision on the record, not a silent regression. ` +
+  `And the EIGHTH, which is not a lie but a shrug: a button that works and then says nothing. ` +
+  `act() toasts describe() with no override, so ${describedCount} driven actions must each read back ` +
+  `as something a player can act on — a play session found 26 saying the bare word "done.", among them ` +
+  `an unstake that had just opened a six-hour window in which that $OMR can be looted off you, and a ` +
+  `bank deposit that rides in transit and is lootable until it clears. Both are TERMS, not flavour. ` +
   `${Object.keys(CATALOGS).length} fields have ` +
   `catalogs and every other literal field is either an i18n key or declared not-an-API-value, so a ` +
   `new one forces that decision instead of being skipped in silence.`);

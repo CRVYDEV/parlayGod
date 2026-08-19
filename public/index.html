@@ -2075,6 +2075,76 @@
     // THE OPERATION SLOTS — retiring a racket. Leads with the freed seat, which is the whole point.
     if (body && body.slotsUsed !== undefined && body.slots !== undefined && body.racket)
       return `\u{1F91D} you're out of the ${String(body.racket).replace(/_/g, ' ')}${body.back ? ` — $${fmt(body.back)} back` : ''} — ${body.slotsUsed} of ${body.slots} seats running`;
+    // district ids are what the wire speaks; a player reads NAMES. The typeof guard keeps this
+    // callable before /v1/rules has landed (and from a probe that hosts describe() on its own).
+    const $dist = (id) => ((typeof rules !== 'undefined' && rules && rules.districts) || []).find((x) => x.id === id)?.name || String(id);
+    // ── THE ACTION LEDGER ──────────────────────────────────────────────────────────────────────
+    // Every one of these was pressed for real and read back "done." — the same class as the wire's
+    // type-name fallback, one surface over: `act()` toasts describe() with no override, so a route
+    // whose shape nothing recognises tells a player nothing about what just happened to their money.
+    // The unstake line is the sharpest and the reason this block leads: unbonding principal is
+    // LOOTABLE for the whole window (Make-Risk-Pay), and the game was not saying so — a withheld
+    // term, exactly like the pad and the nut. Keyed tightly on each shape's own marker fields.
+    if (body && body.ok && body.gross !== undefined && body.net !== undefined && body.street === undefined)
+      return `sold her on — $${fmt(body.net)} in hand${body.gross > body.net ? ` (the fence took $${fmt(body.gross - body.net)})` : ''}`;
+    if (body && body.ok && 'standDown' in body)
+      return body.standDown ? `${esc(body.standDown)} stands down — nobody's riding with you` : 'nobody was riding with you';
+    if (body && body.ok && body.stable !== undefined && body.power !== undefined && body.chin !== undefined)
+      return `\u{1F94A} signed ${esc(body.name)} — ${body.power} power / ${body.chin} chin / ${body.speed} speed. ${body.stable} in the stable.`;
+    if (body && body.ok && body.collected === 0 && body.total === undefined)
+      return 'nothing in the till yet — come back when the day has run';
+    if (body && body.banked !== undefined && body.clearSeconds !== undefined)
+      return `banked $${fmt(body.banked)} — it rides IN TRANSIT for ${minsTxt(body.clearSeconds)}, and a killer can loot it off you until it clears${body.intransit > body.banked ? ` (${'$' + fmt(body.intransit)} in transit now — deposits stack and reset the clock)` : ''}`;
+    if (body && body.withdrew !== undefined) return `drew $${fmt(body.withdrew)} out — $${fmt(body.bank)} still banked`;
+    if (body && body.ok && body.loc && Object.keys(body).filter((k) => k !== 'events' && k !== 'ok' && k !== 'character' && k !== 'owned').length === 1)
+      return `you're in ${esc($dist(body.loc))} now`;
+    if (body && body.ok && body.qty !== undefined && body.unit !== undefined && (body.spent !== undefined || body.earned !== undefined))
+      return body.spent !== undefined
+        ? `bought ${body.qty} at $${fmt(body.unit)} a unit — $${fmt(body.spent)} out of pocket`
+        : `sold ${body.qty} at $${fmt(body.unit)} a unit — $${fmt(body.earned)} in`;
+    if (body && body.ok && body.vest && body.mult !== undefined) return `strapped into the ${String(body.vest).replace(/_/g, ' ')} — it soaks ${Math.round((body.mult - 1) * 100)}% more punishment`;
+    if (body && body.ok && body.racket && body.income !== undefined)
+      return `the ${String(body.racket).replace(/_/g, ' ')} is yours — about $${fmt(Math.round(body.income * 60))} an hour while you're not looking`;
+    if (body && body.ok && body.asset && body.income === undefined) return `the ${String(body.asset).replace(/_/g, ' ')} is yours`;
+    if (body && body.ok && body.omrSpent !== undefined && body.kind)
+      return body.kind === 'respawn'
+        ? `\u{1F489} revive insurance paid — ${fmt(body.omrSpent)} $OMR. One killing blow gets walked off; you hold ${body.respawnTokens}.`
+        : `paid ${fmt(body.omrSpent)} $OMR — the ${body.kind} is settled`;
+    if (body && body.unbonding !== undefined && body.unbondSeconds !== undefined)
+      return `unstaking ${fmt(body.unbonding)} $OMR — it unbonds over ${minsTxt(body.unbondSeconds)}, and it can be LOOTED off you the whole time${body.rewards ? ` · ${fmt(body.rewards)} $OMR rewards paid` : ''}${body.stillPending ? ` (${fmt(body.stillPending)} still owed — the pool refills)` : ''}`;
+    if (body && body.staked !== undefined && body.ok && body.unbonding === undefined)
+      return `staked — ${fmt(body.staked)} $OMR at work, and safe from a killer's hands`;
+    if (body && body.ok && body.ammo !== undefined && body.gun === undefined) return `rounds in the box — ${body.ammo} on you`;
+    if (body && body.ok && 'gun' in body && body.gun === null) return 'piece put away — you\'re carrying nothing';
+    if (body && body.ok && body.gangId && body.name === undefined) return '\u{1F3B4} the family is founded — you\'re the boss. Bring people in.';
+    if (body && body.ok && body.dissolved !== undefined)
+      return body.dissolved ? 'you walked, and the family went with you — nobody left to hold it' : 'you\'re out of the family';
+    if (body && body.ok && Array.isArray(body.unlearned) && body.points)
+      return `unlearned ${body.unlearned.join(', ')} — ${body.points.available} point${body.points.available === 1 ? '' : 's'} back to spend${body.omr !== undefined ? ` · ${fmt(body.omr)} $OMR left` : ''}`;
+    if (body && body.ok && body.disinfoSeconds !== undefined)
+      return `\u{1F5DE} the books are cooked for ${minsTxt(body.disinfoSeconds)} — anyone tapping your line reads lies${body.spent !== undefined ? ` · ${fmt(body.spent)} $OMR` : ''}`;
+    if (body && body.ok && body.settled !== undefined && body.won !== undefined)
+      return body.settled ? (body.won ? `\u{1F4B0} ${body.settled} ticket${body.settled === 1 ? '' : 's'} settled — $${fmt(body.won)} collected` : `${body.settled} ticket${body.settled === 1 ? '' : 's'} settled — nothing came in`)
+        : 'nothing to collect — no tickets have come up yet';
+    if (body && body.ok && 'fadeLimit' in body)
+      return body.fadeLimit ? `you're taking bets up to $${fmt(body.fadeLimit)} in the back room` : 'you\'re off the back-room board — no more fades';
+    if (body && body.ok && 'pokerLimit' in body)
+      return body.pokerLimit ? `your table is open — up to $${fmt(body.pokerLimit)} a hand` : 'table closed — you\'re not dealing';
+    if (body && body.ok && 'listed' in body && body.listed !== undefined && body.street === undefined)
+      return body.listed ? 'you\'re on the duelling ladder — anyone can call you out now' : 'off the ladder — no more challenges';
+    if (body && body.ok && body.folded) return 'paper folded — you\'re caught up';
+    if (body && body.ok && body.referralCodeChanged) return `the street knows you as ${esc(body.name)} now — your referral link changed with the name`;
+    if (body && body.ok && 'title' in body && body.tier === undefined)
+      return body.title ? `they call you ${esc(body.title)} now` : 'title dropped — just your name from here';
+    if (body && body.ok && body.lab && body.cap !== undefined) return `\u{1F9EA} the lab is a ${String(body.lab).replace(/_/g, ' ')} now — ${body.cap} units a batch`;
+    if (body && body.ok && body.path && body.spent === undefined)
+      return `you're walking the ${String(body.path).replace(/_/g, ' ')} path now — it shapes what you're good at`;
+    if (body && body.ok && 'bio' in body)
+      return body.bio ? 'your story is on your profile — anyone who looks you up reads it' : 'story cleared — the sheet speaks for itself';
+    if (body && body.minted && body.alreadyMinted) return 'you\'re already made — the credit stays in your pocket';
+    if (body && body.minted && !body.alreadyMinted) return '\u{1F396} you\'re MADE. The extraction rail is open to you now.';
+    if (body && body.ok && body.name && body.estate === undefined && body.district === undefined && body.price === undefined && body.tier === undefined && Object.keys(body).filter((k) => k !== 'events' && k !== 'ok' && k !== 'character' && k !== 'owned').length === 1)
+      return `the place has a name now — ${esc(body.name)}`;
     if (!body || typeof body !== 'object') return code < 400 ? 'done.' : 'no dice.';
     if (code >= 400) { const e = body.error; return body.message || (e && ERRMAP[e]) || (e ? e.replace(/_/g, ' ') : `the city said no (${code})`); }
     const bits = [];
@@ -2098,10 +2168,25 @@
     // needs its own line or the generic crime bit reads "clean job — $0" over a real result
     if (body.success === true && body.car) bits.push(`boosted a${body.car.rarity && body.car.rarity !== 'common' ? ` ${body.car.rarity}` : ''} ride — she's in the garage${body.car.dmg ? ` (took some dents: ${body.car.dmg} dmg)` : ''}`);
     if (body.success === true && body.npc && body.loot !== undefined && body.family === undefined) bits.push(`raided the ${body.npc} — took $${fmt(body.loot)}${body.routBonus ? ` + a $${fmt(body.routBonus)} rout bonus` : ''}${body.routed ? ' · ROUTED' : ''}`);
+    // THE CO-OP RAID has its OWN shape — a crew splits a `pot` into a `share` where a soloist takes
+    // `loot` — so the line above (keyed on `loot`) never fired for it and the deepest co-operative
+    // content in the game reported "done." for a rout and "it went sideways" for a repel that put the
+    // whole crew in hospital. Keyed on the pair only this path returns: an npc + a numeric crew.
+    const coop = body.npc && typeof body.crew === 'number';
+    if (coop && body.success === true) bits.push(`cracked the ${body.npc} ${body.crew}-handed — your cut $${fmt(body.share)}${body.routed ? ' · ROUTED — the outfit is broken' : ''}${body.routUnits ? ` · ${body.routUnits} of ${body.material} out of the hold` : ''}${body.frontier ? ' · your family plants its flag on their turf' : ''}`);
+    if (coop && body.success === false) bits.push(`the ${body.npc} held — their guns put the whole crew in hospital${body.hospSeconds ? ` for ${minsTxt(body.hospSeconds)}` : ''}`);
+    // THE CREW HEIST is the same class again: the SOLO score returns `take`/`success` (the line above),
+    // the crew job returns `score`/`share`/`pot`/`hot` — so the flagship co-op content reported "done."
+    // for a score AND for a bust that jails the whole crew. `hot` matters most of all: a hot job pays
+    // no cash at all, it parks loot with the fence, which the player has to know to go and collect.
+    if (body.score === true) bits.push(body.hot
+      ? `🧤 the ${body.job} came off HOT — $${fmt(body.hot)} of it is with the fence, not in your pocket (pot $${fmt(body.pot)})${body.rep ? `, +${body.rep} respect` : ''}`
+      : `💼 the ${body.job} came off — your cut $${fmt(body.share)} of a $${fmt(body.pot)} pot${body.rep ? `, +${body.rep} respect` : ''}`);
+    if (body.score === false) bits.push(`the ${body.job} went wrong — the whole crew is in lockup${body.jailSeconds ? ` for ${minsTxt(body.jailSeconds)}` : ''}`);
     // the §7.8 bust — success frees them and pays; a miss is the guards taking YOU (falls through
     // to the generic BUSTED line below, which is exactly what happened)
     if (body.busts !== undefined && body.success) bits.push(`🔓 sprung them from lockup — +$${fmt(body.reward)} (${body.busts} lifetime bust${body.busts === 1 ? '' : 's'})`);
-    if (body.success === false) bits.push((body.jailSeconds ? `BUSTED${body.approach === 'loud' ? ' (went loud)' : ''} — ${minsTxt(body.jailSeconds)} in lockup` : 'it went sideways') + (body.victim ? ` · the mark got away: ${body.victim}` : ''));
+    if (body.success === false && !coop) bits.push((body.jailSeconds ? `BUSTED${body.approach === 'loud' ? ' (went loud)' : ''} — ${minsTxt(body.jailSeconds)} in lockup` : 'it went sideways') + (body.victim ? ` · the mark got away: ${body.victim}` : ''));
     // THE HUSTLE — a checked-in stop vs the payoff (the `contact` field is the chain's marker)
     if (body.contact && body.step !== undefined && body.of === 3)
       bits.push(body.pay ? `🤝 THE PAYOFF — $${fmt(body.pay)}. That's a day's hustle done.` : `🤝 checked in (${body.step}/3) — next: ${body.what || 'keep moving'}`);
@@ -2248,7 +2333,10 @@
     if (body.qty && body.quality) bits.push(`pulled ${body.qty} units at q${body.quality}`);
     if (body.fire) bits.push('THE BATCH BURNED — you got out with your skin');
     if (body.readyAt) bits.push('the batch is on the burner');
-    if (body.heat) bits.push(`heat +${body.heat}`);
+    // a corner deal already states its heat inside its own line, so the generic push made every deal
+    // read "+0.1 heat · heat +0.1". Skip when some earlier bit has already said it — written as a
+    // scan rather than a shape test so a future branch that mentions heat can't reintroduce the echo.
+    if (body.heat && !bits.some((b) => /heat/.test(b))) bits.push(`heat +${body.heat}`);
     if (body.kind === 'social' && body.pending) bits.push(body.registered
       ? 'the clock is running — your post has to STAND before it pays. Come back and collect.'
       : `still standing — it pays in ${minsTxt(body.matureSeconds || 0)}.`);
@@ -5795,11 +5883,22 @@
         ${shp.population ? `<div class="d" style="margin-top:4px;font-size:10.5px;color:var(--dim)">The city runs ${shp.population} made men, so the docks bring in ${shp.cityCap} a day${shp.nextCapAt ? ` — ${shp.nextCapAt} on the street and it goes to ${shp.cityCap + shp.capPerStep}` : ' (as much as they ever ship)'}. More men, more crates — never more each.</div>` : ''}
         <div class="d" style="margin-top:8px"><b>The commissions</b> — what it's for. A craftsman turns it into something
           numbered and yours. Pure standing, no edge: ${shp.lootRate ? `and a killer takes ${Math.round(shp.lootRate * 100)}% of what you're carrying, so don't sit on a pile.` : ''}</div>
-        <div class="grid">${(shp.commissions || []).map((cm) => `
-          <div class="card"><span class="t">${esc(cm.name)}</span>
+        <div class="grid">${(shp.commissions || []).map((cm) => {
+          // a card you can't act on has to say WHY, and in the only currency that matters here: DAYS.
+          // The material can't be bought — it's ${shp.perPlayer}/day, in the right district, early — so
+          // 16 units is four separate days of showing up, which is the whole term of the purchase and
+          // the only way to price the "don't sit on a pile" warning directly above.
+          const shortUnits = Math.max(0, cm.units - (shp.held || 0));
+          const shortCash = Math.max(0, cm.cash - (me.cash || 0));
+          const days = shp.perPlayer > 0 ? Math.ceil(cm.units / shp.perPlayer) : 0;
+          const need = [shortUnits ? `${shortUnits} more crate${shortUnits > 1 ? 's' : ''}` : '', shortCash ? `$${fmt(shortCash)} more` : ''].filter(Boolean).join(' + ');
+          return `<div class="card"><span class="t">${esc(cm.name)}</span>
             <span class="chip ${cm.afford ? 'good' : ''}">${cm.units} × material · $${cm.cash.toLocaleString()}</span>
+            ${days > 1 ? `<span class="chip">${days} days of showing up</span>` : ''}
             <div class="d">${esc(cm.blurb)}</div>
-            ${cm.afford ? `<button class="act" data-do="POST /v1/shipment/commission/${cm.id}">commission it</button>` : ''}</div>`).join('')}</div>
+            ${cm.afford ? `<button class="act" data-do="POST /v1/shipment/commission/${cm.id}">commission it</button>`
+              : `<div class="d" style="color:var(--dim)">you need ${need || 'more'} — the crates only come ${shp.perPlayer} a day, and only to whoever's standing there.</div>`}</div>`;
+        }).join('')}</div>
         ${(shp.mine || []).length ? `<div class="d" style="margin-top:6px">yours: ${shp.mine.map((p) => `${esc(p.name)} #${p.serial}`).join(' · ')}</div>` : ''}
       </div>` : ''}
       ${tkb ? `<div class="card"><span class="t" style="color:var(--neon)">📈 THE DAY'S BUY — the Commission's stock ballot</span>
@@ -8685,6 +8784,7 @@
     const d = ev.payload && typeof ev.payload === 'object' ? { ...ev.payload, type: ev.type } : ev;
     const t = String(d.type || '');
     const $c = (n) => (n == null ? '' : '$' + fmt(n));
+    const $d = (id) => (rules?.districts || []).find((x) => x.id === id)?.name || id;
     const T = {
       act: () => `${d.who} ${d.text}`,
       kill: () => `${d.by} whacked ${d.victim}`,
@@ -8711,7 +8811,13 @@
       deed_sold: () => `you sold ${d.street} to ${d.to} for ${$c(d.price)}`,
       bounty: () => `a ${$c(d.amount)} ${d.kind === 'kill' ? 'KILL' : 'hospital'} contract is out on ${d.on}`,
       bust: () => `${d.by} busted ${d.freed} out of lockup`,
-      busted: () => `${d.who} got hauled in`,
+      // THREE shapes on one type — the streets shout `{who}`, a RICO conviction `{forfeited,
+      // jailSeconds}`, and a JAILBREAK `{from}`, which is somebody springing YOU. Written for the
+      // streets shape alone it told a freed player "undefined got hauled in" — the opposite of what
+      // happened. Branch on the shape, never on the channel (feedText doesn't get one).
+      busted: () => (d.from ? `${d.from} sprang you out of lockup — you're on the street`
+        : d.forfeited != null ? `CONVICTED — ${$c(d.forfeited)} forfeited, ${minsTxt(d.jailSeconds)} inside`
+        : `${d.who} got hauled in`),
       seize: () => `${d.gang || 'a family'} seized ${d.district || 'turf'}`,
       tribute: () => `${d.who || 'someone'} kicked tribute up to the family`,
       war_declared: () => `WAR: ${d.attacker || d.by || 'a family'} declared on ${d.defender || d.on || 'a rival'}`,
@@ -8742,9 +8848,15 @@
       revive: () => `${d.who || 'a made man'} got back up — paid protection`,
       convoy: () => `a convoy is rolling ${d.from || ''} → ${d.to || ''} (${d.band || 'unknown value'})`,
       convoy_hijacked: () => `${d.by} hijacked a convoy on the ${d.from || ''}–${d.to || ''} road`,
-      heist_score: () => `a crew of ${d.crew} pulled off ${d.job} — ${$c(d.pot)}`,
+      // the crewman's OWN cut (`share`, or `hot` when it came off hot and sits with the fence) vs the
+      // town's shout (`crew`/`pot`). Written for the shout alone, the man who did the job and got PAID
+      // was told "a crew of undefined pulled off Payroll Van —" with his own cut missing entirely.
+      heist_score: () => (d.hot != null ? `🧤 the ${d.job} came off HOT — your ${$c(d.hot)} is with the fence`
+        : d.share != null ? `💼 the ${d.job} came off — your cut ${$c(d.share)}`
+        : `a crew of ${d.crew} pulled off ${d.job} — ${$c(d.pot)}`),
       heist_blown: () => `a ${d.job} job got blown — somebody talked`,
-      heist_bust: () => `a crew of ${d.crew} went down on a ${d.job} job`,
+      heist_bust: () => (d.jailS != null ? `the ${d.job} went wrong — the whole crew is in lockup for ${minsTxt(d.jailS)}`
+        : `a crew of ${d.crew} went down on a ${d.job} job`),
       highroller: () => `${d.who} is betting big at the den${d.amount ? ` — ${$c(d.amount)}` : ''}`,
       market_sale: () => `a ${d.kind === 'car' ? 'car' : d.kind === 'order' ? 'buy order' : 'shipment'} moved on the Black Market`,
       gala: () => `${d.host} threw open the doors${d.estate ? ` at ${d.estate}` : ''} — a gala is ON tonight`,
@@ -8768,7 +8880,15 @@
       escape: () => `${d.who} escaped the Pen — WANTED`,
       liberated: () => `${d.gang || 'a family'} liberated ${d.district || 'a district'} from the cartels`,
       frontier_seized: () => `${d.gang} planted their flag on ${d.npc}'s turf`,
-      errand_done: () => `${d.who} did right by ${d.npc}`,
+      // the co-op raid's OTHER two surfaces: the crew member's own cut (the leader gets a toast, the
+      // rest of the crew only ever get this) and the shout when an apex outfit finally falls. Both
+      // used to fall through to the generic renderer, which turned a crewman's share of an apex score
+      // into the words "world raid score".
+      world_raid_score: () => `your cut of the ${d.npc} raid — ${$c(d.share)}${d.routed ? ' · the outfit is BROKEN' : ''}`,
+      world_raid_material: () => `${d.units} of ${d.material} came out of the ${d.npc}'s hold — your share of the score`,
+      world_routed: () => `${d.who}'s crew broke the ${d.npc}${d.crew ? ` — ${d.crew} of them went in` : ''}`,
+      errand_done: () => (d.bonus != null ? `you finished ${d.npc}'s errand — +${d.bonus} standing`
+        : `${d.who} did right by ${d.npc}`),
       vendetta_settled: () => `a vendetta was settled in blood`,
       ticker_ballot: () => `📈 the Commission ${d.decidedBy === 'chamber' ? 'set' : 'defaulted'} the day's buy: ${d.ticker}`,
       vendetta_peace: () => `two bloodlines sat down and made peace`,
@@ -8792,10 +8912,169 @@
       streak_milestone: () => `🏅 ${d.day}-DAY STREAK — you're now ${d.title}${d.bonus ? ` (+$${fmt(d.bonus)})` : ''}`,
       mastery_up: () => `your ${d.name || d.track} trade hit L${d.lvl}${d.rank ? ` — ${d.rank}` : ''}`,
       first_claimed: () => d.name && d.blurb === undefined && !d.id ? `${d.who || 'somebody'} took ${d.first}` : `✦ ${d.name} — you were FIRST in this city, and nobody can take it`,
-      limited_run: () => `🚗 ${d.name} — number ${d.serial} of ${d.cap}. Only ${d.cap} will ever exist.`,
-      commissioned: () => `✦ ${d.name} — number ${d.serial}, made for you and nobody else`,
+      limited_run: () => (d.who ? `🚗 ${d.who} took delivery of ${d.run} — number ${d.serial} of ${d.cap}`
+        : `🚗 ${d.name} — number ${d.serial} of ${d.cap}. Only ${d.cap} will ever exist.`),
+      commissioned: () => (d.who ? `✦ ${d.who} commissioned ${d.piece} — number ${d.serial}`
+        : `✦ ${d.name} — number ${d.serial}, made for you and nobody else`),
       run_melted: () => `🔥 ${d.run} number ${d.serial} went to the smelter — one fewer in the world`,
       stat_use: () => `the work is paying off — +1 ${d.stat} (${d.value}) from your ${d.track} trade`,
+      // ── THE CLASS, swept ── every notify() type in src/ has a line here, because the fallback
+      // prints the TYPE NAME: a player was being shown the literal word "extortion" for a money
+      // demand with a deadline on it, and "witpro" for the state that makes them untouchable.
+      // Guarded by THE WIRE LEDGER in test/gates.js — a 99th type fails the build until it has one.
+      // ── the law
+      indicted: () => `THE BUREAU FILED ON YOU — ${d.graceHours}h before they come for it`,
+      acquitted: () => `the case collapsed — you walk out clean`,
+      raid: () => `the Bureau turned the place over — ${$c(d.lost)} gone, you kept ${d.keptPct}%`,
+      named: () => `${d.by} gave the Bureau your name — the file on you just got thicker`,
+      flipped: () => `you took the deal — ${d.named} is the one holding the bag now`,
+      witpro: () => `witness protection — nobody can touch you for ${d.hours}h, and everybody knows why`,
+      // ── secrets & blackmail
+      extortion: () => `SOMEBODY HAS YOUR ${String(d.kind || '').toUpperCase()} — ${$c(d.demand)} to keep it quiet, ${d.hours}h to decide`,
+      exposed: () => (d.on ? `${d.on}'s ${d.kind} is all over the wire`
+        : `your ${d.kind} is all over ${d.by} — the heat lands on you`),
+      hush_paid: () => `${d.by} paid to keep it quiet — ${$c(d.net)} in your pocket`,
+      // ── the pen
+      shanked: () => `${d.from} put a shiv in you in the yard`,
+      shank_survived: () => `${d.from} came at you in the yard — the insurance pulled you back`,
+      revived: () => `${d.from} left you for dead — the insurance pulled you back`,
+      target_revived: () => `you put ${d.victim} down and somebody paid to bring them back`,
+      escaped: () => `OVER THE WALL — you're out, and WANTED for ${d.wantedHours}h`,
+      break_failed: () => `the break went wrong — the hole${d.addSeconds ? `, and ${minsTxt(d.addSeconds)} more on your stretch` : d.reason === 'ratted' ? ', somebody talked' : ''}`,
+      // ── the empire & the street war
+      business_raid: () => `the Bureau raided your ${d.kind} — ${$c(d.seized)} seized, ${$c(d.fine)} fine`,
+      shakedown_failed: () => `${d.from} tried to lean on your ${d.kind} — your people saw them off`,
+      takeover: () => `${d.from} took your ${d.kind} out from under you — ${$c(d.net)} for the paper`,
+      takeover_failed: () => `${d.from} moved on your ${d.kind} and came up short`,
+      inside_job: () => `a crew went through your ${d.kind} from the inside — ${$c(d.pot)} gone`,
+      inside_job_failed: () => `somebody cased your ${d.kind} for a crew job and blew it`,
+      // ── the club
+      speakeasy_raid: () => `the law came through ${$d(d.district)} — ${$c(d.seized)} seized, ${$c(d.fine)} fine, doors shut`,
+      speakeasy_round: () => (d.at ? `${d.by} was seen buying a round at ${d.at}`
+        : `${d.from} bought a round at your house — ${$c(d.net)} over the bar`),
+      speakeasy_sold: () => `your ${$d(d.district)} house changed hands — ${$c(d.net)} to you`,
+      standover_repelled: () => `${d.from} tried to stand over your ${$d(d.district)} house — you held it`,
+      standover_lost: () => `${d.from} stood over your ${$d(d.district)} house — ${$c(d.net)} and it's theirs`,
+      // ── the port
+      port_bust: () => `the Coast Guard took the ${d.route} run — ${$c(d.fine)} fine${d.sunk ? ' and they impounded the boat' : ''}`,
+      port_pirated: () => `pirates took ${d.taken} off your ${d.route} run`,
+      port_defended: () => `somebody came at your ${d.route} run — your guns saw them off`,
+      port_handoff: () => `a ${d.route} run came over the side to you — ${d.hold} in the hold`,
+      // ── the convoy
+      convoy_hit: () => `your ${d.from}→${d.to} shipment was hijacked — ${d.taken} off the back`,
+      convoy_defended: () => `somebody hit your ${d.from}→${d.to} shipment and your guards held`,
+      // ── the market
+      market_outbid: () => (d.buyNow ? `somebody bought it outright — your bid is off the lot`
+        : d.cancelled ? `the seller pulled the lot — your bid came back`
+        : d.voided ? `that lot is void — your bid came back`
+        : `you've been outbid — ${$c(d.bid)} on the block now`),
+      market_won: () => `the hammer fell your way — ${$c(d.bid)} and the keys are yours`,
+      market_sold: () => `your ${d.kind} sold — ${$c(d.net)} after the house`,
+      market_reserve: () => (d.seller ? `your reserve wasn't met — the lot comes back to you`
+        : `the reserve wasn't met — top bid ${$c(d.bid)}, your money is back`),
+      order_filled: () => `somebody filled ${d.qty} ${d.good} against your order`,
+      order_expired: () => `your buy order lapsed — ${$c(d.refunded)} back${d.awaiting ? `, ${d.awaiting} still waiting in the warehouse` : ''}`,
+      // ── the auction block
+      outbid: () => `${$c(d.by)} on the ${d.name} — you're no longer top bid`,
+      auction_won: () => `${d.name} (${d.serial}) is yours — ${$c(d.price)} burned`,
+      consign_won: () => `you took ${d.name} (${d.serial}) off the block — ${$c(d.price)}`,
+      consign_sold: () => `your ${d.name} sold at the block — ${$c(d.net)} after the house`,
+      consign_lost: () => `nobody bid on your ${d.name} — it comes back to you`,
+      // ── the shylock
+      loan_offered: () => `${d.by} put ${$c(d.principal)} on the table at ${Math.round((d.rate || 0) * 100)}%${d.collateralMin ? ' — secured' : ''}`,
+      loan_taken: () => `${d.by} took your ${$c(d.principal)}${d.collateral ? ' and pledged a car against it' : ''}`,
+      loan_repaid: () => `${d.by} squared up — ${$c(d.amount)} back to you`,
+      loan_collected: () => `${d.by} collected — ${$c(d.seized)} seized${d.car ? ' and your car with it' : ''}, and you're WANTED`,
+      loan_defaulted: () => `the debt died with the borrower — nothing to collect`,
+      loan_inherited: () => `your lender's street fell — the paper passed to their heir, the debt stands`,
+      loan_voided: () => `your lender's line ended — the debt dies with them`,
+      paper_sold: () => `you sold the paper to ${d.to} — ${$c(d.price)}`,
+      paper_transferred: () => `your debt was sold — ${d.to} holds the paper now`,
+      // ── the den
+      backroom_dice: () => `${d.from} faded you in the back room — ${d.theyWon ? 'they took' : 'you took'} ${$c(d.amount)}`,
+      poker_hand: () => `${d.from} sat down heads-up — ${d.theyWon ? 'they took' : 'you took'} ${$c(d.amount)}`,
+      numbers_hit: () => `YOUR NUMBER CAME UP — ${String(d.pick).padStart(3, '0')} paid ${$c(d.payout)}`,
+      tourney_result: () => `${d.place} of ${d.of} at the ${d.bracket ? 'bracket' : 'tournament'} — ${d.hand}${d.payout ? ` · ${$c(d.payout)}` : ' · nothing'}`,
+      tourney_refund: () => `the tournament was short a field — ${$c(d.buyin)} back`,
+      bracket_advance: () => `you're through to round ${d.round} — ${d.hand}`,
+      bracket_out: () => `knocked out before round ${d.round} — ${d.hand}`,
+      track_result: () => `${d.racer} ran the ${d.race} — ${d.won ? 'FIRST' : 'nowhere'}`,
+      // ── the fights
+      boxing_bout: () => `${d.from} matched ${d.yours} against your ${d.mine} — ${d.theyWon ? 'they took' : 'you took'} ${$c(d.amount)}${d.belt ? ' AND THE BELT' : ''}`,
+      boxing_callout: () => `${d.by} called out ${d.acceptWithinSeconds ? 'your champion' : 'the champion'} — ${d.challenger} v ${d.champion}${d.acceptWithinSeconds ? `, ${minsTxt(d.acceptWithinSeconds)} to answer` : ''}`,
+      boxing_callout_accepted: () => `${d.champion} answered — the title fight is booked against ${d.challenger}`,
+      boxing_main_event: () => (d.card ? `${d.by} booked a main event — ${d.card}`
+        : `${d.from} booked ${d.yours} against your ${d.mine} — the crowd's money is on it`),
+      boxing_main_result: () => `${d.card} — ${d.won ? 'YOUR MAN TOOK IT' : 'your man lost it'}${d.belt ? ' · THE BELT' : ''}${d.purse ? ` · ${$c(d.purse)}` : ''}`,
+      belt_won_callout: () => `${d.fighter} took the belt off ${d.was} without a punch thrown — they ducked`,
+      belt_ducked: () => `you ducked ${d.challenger} — the belt is theirs`,
+      belt_stripped: () => `${d.fighter} was stripped after ${d.defenses} defence${d.defenses === 1 ? '' : 's'} — the belt is vacant`,
+      // ── the strip & the stable
+      race_pvp: () => `${d.from} raced you for ${$c(d.amount)} — ${d.theyWon ? 'they took it' : 'you took it'}`,
+      race_pink: () => `${d.from} raced you for pinks — ${d.theyWon ? `your ${d.car} is theirs` : `their ${d.car} is yours`}`,
+      gp_refund: () => `the Grand Prix was short a grid — ${$c(d.buyin)} back`,
+      stable_race: () => `${d.from} matched ${d.yours} against your ${d.mine} — ${d.theyWon ? 'they took' : 'you took'} ${$c(d.amount)}`,
+      stakes_result: () => `${d.racer} ran ${d.place} of ${d.of} in the Stakes${d.payout ? ` — ${$c(d.payout)}` : ' — nothing'}`,
+      stakes_refund: () => `the Stakes was short a field — ${$c(d.buyin)} back`,
+      // ── the family & the bloodline
+      family_retaliation: () => `${d.family} sent guns back at you`,
+      marriage_proposed: () => `${d.from} proposed an alliance between your lines`,
+      marriage_sealed: () => `your line and ${d.with}'s are joined — the feud between you is buried`,
+      marriage_withdrawn: () => `${d.by} withdrew the proposal`,
+      marriage_ended: () => `${d.by} ended the alliance`,
+      consigliere_offer: () => `${d.from} wants you as their consigliere`,
+      consigliere_sworn: () => `${d.adviser} is your consigliere now`,
+      crew_accepted: () => `you're in — ${d.crew} runs together`,
+      crew_kicked: () => `you're out of ${d.crew}`,
+      // ── the work
+      hustle_paid: () => `the hustle paid off — ${$c(d.pay)}`,
+      career_claim: () => `${d.task} — ${$c(d.pay)}${d.capstone ? ` · you cleared the rank of ${d.tier}` : ''}`,
+      favor_posted: () => `${d.from} wants ${d.qty} ${d.good} at ${$d(d.district)} — ${$c(d.pay)}`,
+      favor_filled: () => `${d.by} ran your ${d.qty} ${d.good} — ${$c(d.pay)} out of escrow`,
+      favor_expired: () => `nobody ran your favor — ${$c(d.refund)} back`,
+      // ── the underworld & the regimen
+      lead_done: () => `you're their lead today — +${d.bonus} standing${d.streak > 1 ? ` (${d.streak} days running)` : ''}`,
+      errand_step: () => `${d.step} of ${d.of} done for ${d.npc}`,
+      drill_done: () => `${d.npc}'s drill is done — +${d.xp} ${d.discipline}`,
+      discipline_up: () => `your ${d.discipline} is level ${d.level} now`,
+      soldier_down: () => `${d.name} is gone — ${d.cause}`,
+      // ── the chain & the store
+      made: () => `YOU'RE MADE — the city knows your name now`,
+      rerolled: () => `a new hand dealt — your build is re-rolled`,
+      fee_credited: () => `your ${String(d.kind || '').replace(/_/g, ' ')} payment landed`,
+      store_grant: () => `${d.name} is yours`,
+      // ── the world
+      world_raid_fail: () => `the ${d.npc} held — their guns put you in hospital`,
+      // ── the ones the field-stitcher could not reach. It stitches `who`/`by`/`on`/`victim`, and
+      // these carry `from`/`guard`/`killer` instead — so a MURDERED player's wire read the single
+      // word "whacked", and a kill contract on your head read "bounty on you". (Several already had
+      // a sentence in THE MORNING PAPER's own map, which is how one surface could describe an event
+      // the other could not.)
+      whacked: () => `${d.from} PUT YOU IN THE GROUND — your line goes on without you`,
+      attack: () => `${d.from} jumped you${d.stolen ? ` — took ${$c(d.stolen)}` : ''}${d.cb ? ` and ${d.cb} crates` : ''}`,
+      attempt: () => `${d.from} came at you and got nothing but knuckles`,
+      took_bullet: () => `you took the bullet meant for ${d.for}`,
+      guard_saved_you: () => `${d.guard} stepped in front of it — you're still standing`,
+      target_guarded: () => `${d.victim} had ${d.guard} on them — the shot went into the bodyguard`,
+      bodyguard_hired: () => `${d.by} put you on the payroll — ${$c(d.price)} for ${d.hours}h`,
+      bounty_on_you: () => `THERE'S A ${d.kind === 'kill' ? 'KILL' : 'HOSPITAL'} CONTRACT ON YOUR HEAD — ${$c(d.amount)}`,
+      contract_offer: () => `you've been named on a ${d.kind === 'kill' ? 'kill' : 'hospital'} contract for ${d.target} — ${$c(d.amount)}`,
+      npchit_survived: () => `somebody paid to have you killed and the shooter missed — insure yourself`,
+      witness: () => `you saw ${d.killer} put ${d.victim} down`,
+      witness_down: () => `the witness against you is gone`,
+      hitman_rank: () => `they call you ${d.title} now — ${d.rep} in the book`,
+      sacked: () => (d.by ? `${d.by} took ${d.on}'s ${d.front} off the corpse`
+        : `you took ${d.name} off ${d.from}'s corpse — the ${d.kind} is yours now`),
+      sale: () => `${d.what} sold to ${d.to} — ${$c(d.amt)}`,
+      post_given: () => `you're the family's ${d.name} now`,
+      contest_resolved: () => (d.won ? `you took ${$d(d.district)} — ${$c(d.staked)} staked`
+        : `${d.winner || 'another family'} took ${$d(d.district)} — ${$c(d.back)} of your ${$c(d.staked)} came back`),
+      feud_peace_offer: () => `${d.from}'s line is suing for peace`,
+      feud_peace_made: () => `the blood between you and ${d.with}'s line is settled`,
+      wire_alert: () => `your wire on ${d.name} — ${d.event === 'hunting_you' ? "they're hunting YOU" : d.event === 'wanted' ? "they've gone WANTED" : 'the Bureau indicted them'}`,
+      heist_abandoned: () => `the ${d.job} is off — ${d.reason === 'leader_dead' ? 'the man running it is dead' : 'it fell apart'}`,
+      break_abandoned: () => `the break is off — ${d.reason === 'leader_dead' ? 'the man running it is dead' : 'it fell apart'}`,
+      raid_abandoned: () => `the raid is off — ${d.reason === 'leader_dead' ? 'the man running it is dead' : 'it fell apart'}`,
       chat: () => `${d.who}: ${d.text}`,
     };
     if (T[t]) { try { return T[t](); } catch { /* fall through */ } }
@@ -8806,8 +9085,10 @@
   // THE URGENT TIER — threats and money-at-risk get a distinct rendering so the one channel a player
   // actually watches means something (a kill order and a tribute tick used to arrive at equal volume).
   // Curated VICTIM-side types only (things happening TO you that want a response), never ambient news.
+  // `sacked` is deliberately NOT here: this set's own rule is victim-side threats that want a
+  // response, and the only `sacked` notify goes to the KILLER — it is a win, not a threat.
   const URGENT_TYPES = new Set(['bounty_on_you', 'indicted', 'extortion', 'npc_aggression',
-    'family_retaliation', 'sacked', 'robbed', 'car_stolen', 'trunk_robbed', 'boat_stolen', 'sabotaged',
+    'family_retaliation', 'robbed', 'car_stolen', 'trunk_robbed', 'boat_stolen', 'sabotaged',
     'inside_job', 'loan_defaulted', 'loan_forfeited', 'vendetta', 'exposed', 'whacked', 'pact_broken',
     'protege_attacked']);
   function feedLine(channel, ev) {

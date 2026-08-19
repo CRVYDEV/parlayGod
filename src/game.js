@@ -2122,7 +2122,14 @@ export async function bank(ch, dir, amount, client, h) {
     ch.bank_intransit = Math.min(Number(ch.bank_intransit || 0), Number(ch.bank));
   }
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: 0, reason: `bank:${dir}:${amount}` });
-  return { ok: true };
+  // A bare {ok:true} told the player nothing — and on a DEPOSIT the thing it withheld is a TERM, not
+  // a nicety: the money rides in transit and is lootable off a corpse for the whole window (the
+  // comment above says so; the player was never told). Same class as the pad and the nut. Return the
+  // figures so the client can say it; `banked`/`withdrew` are distinct names so nothing else's
+  // describe() branch can cross-fire on a generic `amount`.
+  return dir === 'deposit'
+    ? { ok: true, banked: amount, bank: Number(ch.bank), intransit: Number(ch.bank_intransit || 0), clearSeconds: Math.ceil(CONSTANTS.BANK_CLEAR_MS / 1000) }
+    : { ok: true, withdrew: amount, bank: Number(ch.bank) };
 }
 export async function travel(ch, district, client, h) {
   if (!DISTRICTS.find((d) => d.id === district)) throw new GameError('bad_district', 'No such district.');

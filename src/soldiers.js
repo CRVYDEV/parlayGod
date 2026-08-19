@@ -47,8 +47,11 @@ export async function assignSoldier(ch, soldierId, client) {
 }
 
 export async function unassignSoldier(ch, client) {
-  await client.query('UPDATE soldiers SET on_job=false WHERE character_id=$1', [ch.id]);
-  return { ok: true };
+  // RETURNING the name so the client can say WHO stood down — a bare {ok:true} reached the toast as
+  // "done.", which is the same nothing whether you had a second or not (the action-ledger class).
+  const r = await client.query(
+    'UPDATE soldiers SET on_job=false WHERE character_id=$1 AND on_job RETURNING name', [ch.id]);
+  return { ok: true, standDown: r.rows[0]?.name || null };
 }
 
 // dismiss a LIVING soldier (free — they walk; the memorial keeps only the dead)

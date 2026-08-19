@@ -334,6 +334,15 @@ await seed("cash=50000, bank=0, bank_intransit=0");
 r = await call('POST', '/v1/bank/deposit', { token, body: { amount: 30000 } });
 assert.equal(r.code, 200, 'deposited');
 assert.equal((await meOf(token)).bankInTransit, 30000, 'the deposit rides in transit');
+// the RESPONSE has to carry the term, not just the state: the client toasts describe(body), and a
+// bare {ok:true} reached the player as the word "done." while their money sat lootable. The figures
+// are what let the console say so (test/client.js check 8 asserts it reaches the screen).
+assert.equal(r.body.banked, 30000, 'the deposit response names what was banked');
+assert.equal(r.body.intransit, 30000, 'and how much is riding in transit');
+assert(r.body.clearSeconds > 0, 'and how long until it clears — the window in which it can be looted');
+const wd = await call('POST', '/v1/bank/withdraw', { token, body: { amount: 5000 } });
+assert.equal(wd.body.withdrew, 5000, 'a withdrawal names what came out');
+assert.equal(wd.body.bank, 25000, 'and what is left banked');
 await seed("bank_intransit_at = now() - interval '3 hours'");
 assert.equal((await meOf(token)).bankInTransit, 0, 'cleared after the window — out of loot reach');
 

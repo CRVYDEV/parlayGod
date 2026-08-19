@@ -150,6 +150,26 @@ Push.__setDeliver(async (_pool, s, payload) => { sent.push({ endpoint: s.endpoin
   assert.equal(sent.length, 0, 'a second sweep re-buzzes nothing');
 }
 
+// ════════════ THE PUSH ADDRESSES WHOEVER ACTUALLY RECEIVES IT ════════════
+// `sacked` is sent to the KILLER (combat.js: `notify(client, ch.id, 'sacked', {kind, name, from})`)
+// and the copy was written for a VICTIM — so a player who had just seized a rival's front got a
+// phone buzz reading "Your empire was seized · A rival took over one of your fronts." It also read
+// `p.by`, which that payload has never carried, so the name was always the generic "A rival". A push
+// arrives when you are away and cannot check, which is what makes a wrong one worse than a silent one.
+{
+  const k = await mk('Sack Winner');
+  await call('POST', '/v1/push/subscribe', { token: k.token, body: { subscription: { endpoint: 'https://push.example/sk', keys: { p256dh: 'k', auth: 'a' } } } });
+  await addNote(k.id, 'sacked', { kind: 'casino', name: 'The Blue Room', from: 'Aldo Pace' });
+  sent.length = 0; await Push.sweepPush(pool);
+  assert.equal(sent.length, 1, 'the sack buzzes once');
+  const { title, body } = sent[0].payload;
+  assert.ok(!/your empire|your front/i.test(title + ' ' + body),
+    `the push must not tell the WINNER they were robbed — got "${title} · ${body}"`);
+  assert.ok(/The Blue Room/.test(body) && /Aldo Pace/.test(body),
+    `it names what was taken and off whom — got "${body}"`);
+  assert.ok(!/A rival/.test(body), 'and never falls back to a name the payload cannot carry');
+}
+
 // ════════════ §10.4 — push moves no value ════════════
 assert.equal(Number((await pool.query('SELECT COUNT(*) n FROM transactions')).rows[0].n), 0, 'web push writes no ledger rows — it is pure notification');
 
