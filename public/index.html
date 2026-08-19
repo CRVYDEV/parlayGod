@@ -2493,6 +2493,28 @@
     // unit price.
     if (body.unit !== undefined && body.qty !== undefined && body.cost !== undefined && !body.credited)
       bits.push(`\u{1F9EA} ${fmt(body.qty)} lot${body.qty === 1 ? '' : 's'} of makings — $${fmt(body.cost)} ($${fmt(body.unit)} each)`);
+    // PUTTING A PRICE ON SOMEBODY. The escrow is posted, the take is kept, and the MARK IS TOLD —
+    // it is the loudest thing you can do to another player, and it said "done."
+    if (body.total !== undefined && body.expiresHours !== undefined && body.kind)
+      bits.push(`\u{1F4B0} the contract is on the board — $${fmt(body.total)} to ${body.kind === 'kill' ? 'put them down' : 'put them in hospital'}, good for ${body.expiresHours}h. They've been told somebody wants them.`);
+    // THE HUNT. `placedAt` is misnamed — the server sends the moment the SHOT becomes takeable
+    // (now + hunterSearchMs), and that clock is stacked by four different modifiers, so the client
+    // cannot honestly state it from a constant. It had the figure all along and said "done." over it,
+    // on the most expensive prerequisite in the game — burned on any resolved shot.
+    if (body.placedAt && body.ok && bits.length === 0)
+      bits.push(`\u{1F50E} your people are out looking — the shot is takeable in ${minsTxt(Math.max(0, Math.round((new Date(body.placedAt) - Date.now()) / 1000)))}. Call it off and you lose the legwork.`);
+    // CONSENT-BY-LISTING, both directions: the price IS the offer, and pulling it is the whole
+    // difference between being for hire and not.
+    if (body.offering !== undefined && body.price !== undefined)
+      bits.push(body.offering ? `\u{1F576} you're for hire — $${fmt(body.price)} to ride with somebody` : 'you\u2019re off the market — nobody can hire you');
+    // The style triangle is the skill in duelling and the counter is public, so name what you now
+    // beat. `rules` is in scope here (describe() already reads it for the regimen), so the catalog
+    // resolves client-side — no server field needed.
+    if (body.style && body.name && !body.learned) {
+      const st = (rules?.duels?.styles || []).find((x) => x.id === body.style);
+      const beat = st && (rules.duels.styles.find((x) => x.id === st.beats) || {}).name;
+      bits.push(`\u{1F94A} you fight as ${esc(body.name)}${beat ? ` \u2014 you have the edge on a ${esc(beat)}, and give it to whoever counters you` : ''}`);
+    }
     if (body.cost && body.fixed === undefined && !bits.length) bits.push(`paid $${fmt(body.cost)}`);
     return bits.length ? bits.join(' · ') : (body.message || 'done.');
   }

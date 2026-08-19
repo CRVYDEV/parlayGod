@@ -14160,7 +14160,21 @@ helper as ONE LINE — so the day `fmt` grew a body it threw (the good failure),
 is a fixed line count, which is the window class this repo has been bitten by twice. Hand-rolling a
 tokenizer failed too (`esc` holds a regex literal containing both quote characters — a false "never
 terminates"). It now grows the slice until it **COMPILES**, using the real parser as the oracle, with
-a load-bearing token pinned per helper so a truncation that happens to parse still fails.
+a load-bearing token pinned per helper so a truncation that happens to parse still fails. **Then a
+second pass with TWO real players** (the first drives that reach the PvP layer at all) found four
+more, all `act()`-pressed: putting a **$60,000 price on another player's head** said "done." — the
+escrow posts, the take is kept and the MARK IS TOLD, which makes it the loudest thing one player can
+do to another; starting the **3h hunt** said "done." over a response that carried the ready moment
+all along (`placedAt` is misnamed — it is `now + hunterSearchMs`, and that clock is stacked by four
+modifiers, so the client could not have stated it from a constant); listing yourself as a bodyguard,
+where the price IS the offer; and picking a duel STYLE, whose whole point is a public
+rock-paper-scissors counter the response never named (the catalog was already on `/v1/rules`, so
+that one needed no server field). Two more read "done." and are NOT findings — `phone/dm` and the
+Wire dossier go through the SILENT `api()` and render their own payload, which is the discrimination
+this sweep turns on. Across all 50 driven responses: **12 improved, 0 regressed**; the driven list
+is 26 → 35. One process note: three of the four mutations were written inline in shell, the quoting
+ate them, and the runs came back green over an UNMUTATED file — a mutation that does not apply reads
+exactly like a fix that holds, so they were redone as a script that asserts its own anchor first.
 
 
 **THE PROBE HAD TO BE FIXED THREE TIMES BEFORE ITS RESULT MEANT ANYTHING, which is most of the

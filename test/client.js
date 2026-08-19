@@ -1823,6 +1823,10 @@ const ACTIONS = [
                                                          // for real (the fixture starts at neon)
   ['POST', '/v1/soldiers/hire', null],
   ['POST', '/v1/law/retainer', null],
+  // consent-by-listing: the price IS the offer
+  ['POST', '/v1/bodyguard/offer', { price: 25000 }],
+  // the duel style triangle, where the counter is public and picking is the skill
+  ['POST', '/v1/duels/style', { style: 'brawler' }],
   // three rails feed one monument and all three come back with the same dollar-valued `credited`,
   // so the $OMR rail read "laid $830" for a 10 $OMR burn — the wrong unit AND the wrong number
   ['POST', '/v1/megaproject/omr', { amount: 10 }],
@@ -1838,6 +1842,16 @@ const ACTIONS = [
 // driven entry is worse than no entry: it reads on the summary line as covered.
 await app.pool.query("UPDATE characters SET cash=5000000, respect=500000, jail_until=NULL, hosp_until=NULL WHERE id=$1", [charId]);
 await app.pool.query('UPDATE account_persistent SET omr=1000 WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)', [charId]);
+// The two loudest PvP actions need somebody to aim at, and the fixture's second street is scoped to
+// the seed block — so resolve one here rather than restructure the file. Found by playing: putting a
+// price on another player's head, and starting the 3h hunt that every shot is gated on, BOTH said
+// "done." — the first is the loudest thing you can do to another player (the escrow posts, the take
+// is kept, the MARK IS TOLD), the second is the most expensive prerequisite in the game.
+const mark = (await app.pool.query(
+  "SELECT id FROM characters WHERE alive AND id <> $1 AND NOT is_npc ORDER BY created_at LIMIT 1", [charId])).rows[0];
+if (mark) ACTIONS.push(
+  ['POST', `/v1/streets/${mark.id}/bounty`, { amount: 6000, kind: 'kill' }],
+  ['POST', `/v1/streets/${mark.id}/search`, null]);
 
 const mute = [];
 const said = new Map();   // url → the line a player reads, so a WRONG one can be asserted, not just a missing one
