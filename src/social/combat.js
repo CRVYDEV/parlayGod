@@ -6,7 +6,7 @@
 //
 // Split out of the 2,003-line src/social.js; every function below is byte-identical to what was
 // there. Import from '../social.js' — it re-exports this package's public surface unchanged.
-import { GameError, bumpFamilyTask, bus, ledger, notify, track, loadOwned, skillMult, npcMult, npcTier, bumpStanding, bumpMastery, masteryFx, trunkCap, gainRespect, bumpCrewObjective } from '../game.js';
+import { GameError, bumpFamilyTask, bus, ledger, notify, track, loadOwned, skillMult, npcMult, npcTier, bumpStanding, bumpMastery, masteryFx, trunkCap, gainRespect, bumpCrewObjective, hunterSearchMs } from '../game.js';
 import { M3, CONSTANTS, LOAN, levelOf, rankIdxOf, cityEventOf, dayOf, btkOf, gunObjOf, vestMultOf, fleetValue, effStat, npcHitmanOf, VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, PORT, witproActive, penSafe, inHole, HONOR, HEIST_LOOT_RATE, BUSINESSES, seasonModOf, pathFx, RIVALS, carVal, boatOf , SHIPMENT } from '../rules.js';
 import { activeDecree } from '../commission.js';
 import { bumpHonor } from '../honor.js';
@@ -176,20 +176,18 @@ export async function startSearch(ch, targetCharacterId, client, h) {
 
 // §9 production timers: search 3 h, failed-shot cooldown 2 h.
 // Tests may shrink them via env — never set these in production configs.
-const searchMs = () => Number(process.env.SEARCH_MS || CONSTANTS.SEARCH_MS);
-
-const hunterSearchMs = (h, ch) => Math.floor(searchMs()
-  * skillMult(h, 'executioner', SKILLS.FX.SEARCH_MULT)
-  * npcMult(h, 'fixer', 3, UNDERWORLD.FX.SEARCH_MULT)
-  * masteryFx(h, 'wetwork') // TRADES perk — a third stack on the clock (0.72 → 0.54 fully built; flagged)
-  * pathFx(ch, 'searchClock')); // PATHS v2 — the Shadow's perk is a FOURTH stack (0.46 fully built; flagged)
+// `hunterSearchMs` lives in game.js, not here: the character VIEW has to quote the same countdown
+// the two sites below enforce, and game.js cannot import this file (combat imports game, one way).
+// Restating a four-way stack in a second place is the class the preflight ledger exists to catch,
+// so the formula moved to where all four of its terms already live and both readers import it.
 
 const shootCdMs = () => Number(process.env.SHOOT_CD_MS || (2 * 3600 * 1000));
 
 
-export async function callOffSearch(ch, client) {
+export async function callOffSearch(ch, client, h) {
   await client.query('DELETE FROM searches WHERE hunter=$1', [ch.id]);
-  return { ok: true };
+  if (h?.owned) h.owned.hunt = null; // the sheet ships in this response — don't send back a hunt we just dropped
+  return { ok: true, calledOff: 'you', name: null };
 }
 
 // L3a — THE SACKING: on a PLAYER fire-kill the killer SEIZES one of the victim's business fronts (the
@@ -281,16 +279,24 @@ export async function fire(ch, victim, client, h, rounds) {
   // family omertà — VOID for a rat (an informant has forfeited the family's protection; audit:
   // the rat badge must actually make them fair game, or a rat hiding in a strong family defeats
   // the contract-magnet the waiver promises).
-  if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId && !h.victimAcct.rat && !isWanted(victim)) {
+  // Both branches below CANCEL the contract, and that is why they RETURN rather than throw: a
+  // GameError rolls the transaction back, so the DELETE that was meant to make "it's off" true was
+  // undone by the very refusal that announced it — the game said the hit was off while the search
+  // sat there holding the player's one slot, and startSearch went on refusing "Your people are
+  // already out looking." (Reproduced by playing. The recorded burner rule: a side-effect that must
+  // survive the refusal has to COMMIT — same shape as fulfillCall's broke-void.) Nothing has been
+  // spent at this point (energy/ammo/heat come further down), so calling it off costs the search
+  // and not the magazine, which is the right price for a contract the city cancelled on you.
+  const callOff = async (why, message) => {
     await client.query('DELETE FROM searches WHERE hunter=$1', [ch.id]);
-    throw new GameError('family', "They've been made family since you took the contract. It's off.");
-  }
-  // THE CREW — you don't put a body on your own crew (the omertà twin; rat/WANTED forfeit it). Clear
-  // the search like the family branch, so a crewmate you searched before crewing up doesn't stick.
-  if (h.owned.crewId && h.victimOwned.crewId === h.owned.crewId && !h.victimAcct.rat && !isWanted(victim)) {
-    await client.query('DELETE FROM searches WHERE hunter=$1', [ch.id]);
-    throw new GameError('crew', "They run with your crew now. The hit's off.");
-  }
+    if (h.owned) h.owned.hunt = null; // keep the loaded view honest — the sheet ships in this response
+    return { ok: true, kill: false, calledOff: why, name: victim.name, message };
+  };
+  if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId && !h.victimAcct.rat && !isWanted(victim))
+    return callOff('family', "They've been made family since you took the contract. It's off.");
+  // THE CREW — you don't put a body on your own crew (the omertà twin; rat/WANTED forfeit it).
+  if (h.owned.crewId && h.victimOwned.crewId === h.owned.crewId && !h.victimAcct.rat && !isWanted(victim))
+    return callOff('crew', "They run with your crew now. The hit's off.");
   if (victim.loc !== ch.loc) throw new GameError('district', `They were placed in ${victim.loc} — you're in ${ch.loc}. Travel there, then fire.`, { district: victim.loc });
 
   ch.energy = Number(ch.energy) - M3.FIRE_ENERGY;
@@ -305,6 +311,10 @@ export async function fire(ch, victim, client, h, rounds) {
   const effective = Math.floor(fired * (0.7 + (gun.fp || 0) / 50) * (jammed ? 0.75 : 1) * pathFx(ch, 'hitEff')); // PATHS v2 (gun keeps its exact 1.15)
   await h.rngLog(client, ch.id, `fire:${victim.id}`, jamRoll, effective >= btk ? `kill (eff ${effective} vs btk ${btk})` : `miss (eff ${effective} vs btk ${btk})`);
   await client.query('DELETE FROM searches WHERE hunter=$1', [ch.id]);
+  // ...and out of the loaded view, which was read before this line and ships with this response.
+  // Without it the sheet returned by the shot still names a mark whose search was just burned —
+  // the same contradiction, one request wide (the in-memory owned.gear/victimOwned discipline).
+  if (h.owned) h.owned.hunt = null;
 
   if (effective >= btk) {
     // ── THE BODYGUARD (M7 Phase 4) — the earnable shield burns BEFORE real-ETH insurance ──

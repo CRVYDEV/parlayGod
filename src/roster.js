@@ -53,8 +53,11 @@ export async function rosterBoard(client, gangId) {
 // consequence of an empty chair rather than a name and a shrug. Mirrors the same helpers the tills
 // read, so the board and the game can never disagree about what a post is doing.
 export async function rosterEffects(client, gangId) {
-  const [enforcer, capo, streetboss, quartermaster, bagman] = await Promise.all(
-    ROSTER_POSTS.map((p) => postPower(client, gangId, p.id)));
+  // SEQUENTIAL: these share ONE pooled client, which cannot run concurrent queries (node-pg queues
+  // them behind a deprecation warning and THROWS from pg@9) — so the parallel form bought no speed.
+  const powers = [];
+  for (const p of ROSTER_POSTS) powers.push(await postPower(client, gangId, p.id));
+  const [enforcer, capo, streetboss, quartermaster, bagman] = powers;
   return {
     enforcer: { power: enforcer, turfPremium: enforcer * M3.ROSTER_ENFORCER_GARRISON },
     capo: { power: capo, scrutinyMult: rosterMult(capo, M3.ROSTER_CAPO_SCRUTINY_PER) },

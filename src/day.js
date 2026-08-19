@@ -14,14 +14,18 @@ import { regimenBoard } from './regimen.js';
 import { dailyLiveFor } from './rules.js';
 
 export async function dayBoard(client, ch, h) {
-  // reuse the real board readers (DRY — the day-checklist and each tab read the same source)
-  const [streak, daily, hustle, corner, regimen] = await Promise.all([
-    streakBoard(ch, client),
-    getDaily(client, ch.id),
-    hustleBoard(ch, client),
-    cornerBoard(ch, client),
-    regimenBoard(ch, client, h),
-  ]);
+  // reuse the real board readers (DRY — the day-checklist and each tab read the same source).
+  // SEQUENTIAL, not Promise.all: these all share ONE pooled client, and node-pg cannot run
+  // concurrent queries on a single connection — it queues them behind a DeprecationWarning today
+  // and THROWS from pg@9. So the parallel form bought no speed at all (the connection serializes
+  // them either way) while carrying a latent break; the honest shape is to say so. Giving each
+  // reader its own connection is the wrong fix twice over: it would read outside this request's
+  // transaction snapshot, and acquiring N connections per request is the pool-exhaustion shape.
+  const streak = await streakBoard(ch, client);
+  const daily = await getDaily(client, ch.id);
+  const hustle = await hustleBoard(ch, client);
+  const corner = await cornerBoard(ch, client);
+  const regimen = await regimenBoard(ch, client, h);
   const items = [];
 
   // 1) the login streak — the habit anchor

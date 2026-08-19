@@ -365,6 +365,77 @@ assert.deepEqual([...new Set(phantom)], [], `docs/AUDITS.md lists reports that d
   assert(recycling.length >= DESK.SINK_REASONS.length - DESK.NOT_RECYCLED.length - 1,
     'essentially every $OMR sink must still recycle to the desk — if that changed, the copy rules '
     + 'above are the thing to revisit, not this assertion');
+
+  // ── AND THE MOST CONSEQUENTIAL PROMISE OF ALL: what death costs ─────────────────────────────────
+  // Found by PLAYING, not by reading: both codices listed "cleared bank cash" under "What is safest
+  // when you die", and it is false. Two different mechanics were conflated, and each is true on its
+  // own — a KILLER's whack:loot reaches pocket + in-transit only, so a cleared balance really is out
+  // of their reach; but runEstate then burns `cash + bank` together and the heir stands up on $500.
+  // Reproduced with a $60,000 fully-cleared balance: heir bank $0. So the game was advising players
+  // to bank for safety on the one screen that explains what dying costs, and they lose all of it.
+  //
+  // Same per-file, loose-about-wording shape as the extraction guard: a surface may describe what
+  // survives death however it likes, so long as it also says the bank does not.
+  const LISTS_DEATH_SURVIVORS = /safest when you die/i;
+  const CAVEATS_THE_BANK = /bank is not one of them|bank (does not|doesn't|never) survive|not survive (your )?death/i;
+  const misleading = [];
+  for (const f of ALL_SURFACES) {
+    let text;
+    try { text = surfaceText(f); } catch { continue; }
+    if (!LISTS_DEATH_SURVIVORS.test(text)) continue;
+    if (!CAVEATS_THE_BANK.test(text)) misleading.push(f);
+  }
+  assert.deepEqual(misleading, [], 'a surface lists what survives death without saying the bank does '
+    + 'not. Banking stops a KILLER taking a cut; the estate still takes pocket and bank together, so '
+    + `"bank it and it is safe" is the most expensive wrong thing the game could tell a player:\n  ${misleading.join('\n  ')}`);
+
+  // …and the positive half, so a stale prohibition cannot outlive the mechanic it describes: if the
+  // estate is ever changed to SPARE the bank, this fails and the copy above is what to revisit.
+  const estateSrc = read('src/social/estate.js');
+  assert(/Number\(victim\.cash\)\s*\+\s*Number\(victim\.bank\)/.test(estateSrc),
+    'the estate no longer burns pocket AND bank together — if that is deliberate, the death copy in '
+    + 'both codices (and this guard) is what to revisit, not this assertion');
+
+  // ── AND THE PROMISE A RETUNE LEFT BEHIND: the pad against the till ──────────────────────────────
+  // Found by PLAYING. The Empire catalog's THE TERMS card told every buyer "stay away past 3 days
+  // and you owe more than the place can hand you" — the sentence written for the tester who asked
+  // how he could owe more in wages than his laundromat brought in. SIGN-OFF D6=B then moved
+  // BUSINESS_UPKEEP_CAP_MS 7d → 2d expressly so "the pad can no longer outrun the till", and the
+  // sentence did not move with it. Driven day by day at 3/4/5/7/10 days away, the till held $288,000
+  // and the pad wanted $115,200 EVERY time: false at every absence, for every front, permanently.
+  //
+  // Why nothing caught it, and why the guard belongs HERE rather than in test/economy.js: the
+  // numbers in that card are live (the catalog serves upkeepCapHours, upkeepBps, coldHours), so only
+  // the CLAIM rotted; and test/economy.js was updated WITH the retune — its 6-days-away assertion
+  // carries a comment saying it "is now the OPPOSITE of what it was, because D6=B removed the
+  // crossover it used to prove". So the behavioural guard moved and the sentence a player reads did
+  // not, which is exactly the gap a lever-vs-lever check cannot see. This crosses the LEVERS against
+  // the COPY, which is the thing nothing did.
+  const CLAIMS_THE_PAD_OUTRUNS = /owe more than (the place|it|the front|the business) can (hand|give|pay|bring)/i;
+  const claiming = [];
+  for (const f of ALL_SURFACES) {
+    let text;
+    try { text = surfaceText(f); } catch { continue; }
+    if (CLAIMS_THE_PAD_OUTRUNS.test(text)) claiming.push(f);
+  }
+  const { CONSTANTS: C, BUSINESSES: BZ } = await import('../src/rules.js');
+  // The worst case is a full empire, where the progressive pad is steepest. The front's own income
+  // rate cancels from both sides, so this one comparison covers every front in the catalog.
+  const padHours = (C.BUSINESS_UPKEEP_CAP_MS / 3600000)
+    * ((C.BUSINESS_UPKEEP_BPS + (BZ.length - 1) * C.BUSINESS_UPKEEP_PROG_BPS) / 10000);
+  const tillHours = C.BUSINESS_CAP_MS / 3600000;
+  if (padHours < tillHours) {
+    assert.deepEqual(claiming, [], 'a surface still tells a buyer they will owe more than the front can '
+      + `hand back, but the levers say otherwise: a full envelope is ${padHours.toFixed(1)}h of income `
+      + `against a till holding ${tillHours}h, so an absent owner is ALWAYS covered on their return `
+      + `(SIGN-OFF D6=B). Say what neglect really costs — the place goes COLD:\n  ${claiming.join('\n  ')}`);
+  } else {
+    // …the positive half. If a retune ever restores the crossover, the copy has to come BACK rather
+    // than leaving players told they are always covered when they are not.
+    assert(claiming.length, `a full envelope is now ${padHours.toFixed(1)}h of income against a till `
+      + `holding ${tillHours}h, so the pad CAN outrun the till again — no surface warns a buyer of it. `
+      + 'Restore that sentence in the Empire catalog (public/index.html) or shorten the envelope.');
+  }
 }
 
 // ── §6 must not send anyone back to finished work ────────────────────────────────────────────────

@@ -1132,3 +1132,78 @@ const SCENERY_WAIVED = {
   console.log(`✓ all ${sequences} multi-lock transactions agree on one order for each of ${order.size} pairs`
     + `, and no singleton (${singletonSites} lock sites) is taken before a character row`);
 }
+
+// ═══ THE CONNECTION-SHARING LEDGER — one client cannot run two queries at once ═══════════════════
+//
+// Found by PLAYING (2026-08-18): the hustle card offered a CHECK IN that always refused, and adding
+// the missing gate to `hustleBoard` surfaced a DeprecationWarning that traced straight into
+// `dayBoard`'s `Promise.all` — five board readers issued CONCURRENTLY on ONE pooled client.
+//
+// node-pg cannot execute concurrent queries on a single connection. It queues them today behind
+// `Calling client.query() when the client is already executing a query is deprecated`, and it
+// THROWS from pg@9. So the parallel form is a false optimisation in both directions: it buys no
+// speed (the one connection serializes them regardless) and it carries a latent hard break. It is
+// also self-disguising — `career.js`'s own comment called it "one batched pass", which is precisely
+// the belief that makes somebody write the next one.
+//
+// The fix is never "give each reader its own connection": these run inside a request's transaction,
+// so a second connection reads outside its snapshot, and acquiring N per request is the
+// pool-exhaustion shape this project has already been bitten by twice (`bankPosition`, `/v1/bank`).
+// Sequential is correct AND identical in speed.
+//
+// Scope, stated honestly: this matches a `Promise.all` whose ELEMENTS mention an identifier the
+// enclosing function takes as a pg client. A viem client (`watcher.js`'s `getLogs` batch) is
+// genuinely concurrent and is not matched — it is not a pg connection. A `pool` is not matched
+// either: `pool.query()` acquires its own connection per call, so that form is safe by design.
+{
+  // catalogue-or-declare: a `client` that is NOT a pg connection. viem batches real network reads
+  // concurrently and is the whole point of a Promise.all there, so each is waived BY SITE with the
+  // reason — a new one has to be classified rather than silently inheriting the exemption.
+  const VIEM_CLIENTS = [
+    'src/bank.js:404',        // client.readContract — viem, reading the Alchemist market
+    'src/watcher.js:388',     // client.getLogs — viem, three fee-event streams over one range
+    'src/chain.js:1533',      // client.readContract — viem, the oracle's PERIOD + lastUpdate
+    'src/chain.js:1623',      // client.readContract — viem, OmertaBond's three immutable bps
+    'src/chainparams.js:289', // client.readContract — viem, the control-room live-value sweep
+  ];
+  const offenders = [];
+  let scanned = 0;
+  // balanced-paren extraction, not a fixed window: a `.slice(+N)` runs past the call into the next
+  // statement and reads as a finding, and a short one truncates the argument and reads as a pass.
+  const argOf = (src, i) => {
+    let d = 0;
+    for (let j = i; j < src.length; j++) {
+      if (src[j] === '(') d++;
+      else if (src[j] === ')') { d--; if (!d) return src.slice(i + 1, j); }
+    }
+    return '';
+  };
+  for (const f of files) {
+    // deliberately NOT comment-stripped: a string-aware stripper is its own trap here (backticks in
+    // SQL comments, `https://` inside a literal — both have bitten this repo), and the pattern being
+    // matched is a call, which prose does not contain.
+    const src = fs.readFileSync(f, 'utf8');
+    const re = /Promise\.all\s*\(/g;
+    let m;
+    while ((m = re.exec(src))) {
+      scanned++;
+      const arg = argOf(src, m.index + m[0].length - 1);
+      const site = `${f.replace(/^.*\/src\//, 'src/')}:${src.slice(0, m.index).split('\n').length}`;
+      // ANY mention of the identifier, not just `client.query(` or a literal `f(client, …)` argument.
+      // The narrow forms were the first cut and they had THREE false negatives — `roster.js` hands
+      // the client to a reader inside a `.map`, and `dynasty.js` calls a closure that captures it —
+      // and a guard that misses the sites it exists for is worse than no guard.
+      if (!/\bclient\b/.test(arg)) continue;
+      if (VIEM_CLIENTS.includes(site)) continue;                 // a viem client IS genuinely concurrent
+      offenders.push(site);
+    }
+  }
+  assert(scanned >= 8, `the Promise.all scan found only ${scanned} sites — the extractor has stopped `
+    + 'reading src/, so a green run here would mean nothing');
+  assert.deepEqual(offenders, [], 'a Promise.all issues CONCURRENT queries on a SHARED pg client. One '
+    + 'connection cannot do that: node-pg queues them behind a deprecation warning today and THROWS '
+    + 'from pg@9, and the parallel form buys no speed because the connection serializes them either '
+    + 'way. Await them in sequence — do NOT hand each one its own connection (it would read outside '
+    + `the request's transaction, and N connections per request is the pool-exhaustion shape):\n   - ${offenders.join('\n   - ')}`);
+  console.log(`✓ no Promise.all shares one pg client across concurrent queries (${scanned} sites scanned)`);
+}

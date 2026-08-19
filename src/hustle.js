@@ -34,13 +34,27 @@ function stepOf(h, row) {
   return { step: 3, district: null, what: 'Done for the day — fresh work tomorrow.' };
 }
 
+// the legwork gate, computed the SAME way `advanceHustle` enforces it — one implementation, so the
+// card and the till can never disagree about whether CHECK IN will be refused (found by playing: the
+// board published `here` (the location gate) and NOT this one, so the client had no way to know and
+// offered a CHECK IN that always refused at stop 2 until the job was pulled).
+function legworkSatisfied(h, row, counters) {
+  const base = JSON.parse(row?.baseline || '{}');
+  const need = h.leg.kind;
+  return Number(counters[need] || 0) > Number(base[need] || 0);
+}
+
 // ── the board: today's chain + where you are on it ──
 export async function hustleBoard(ch, client) {
   const day = dayOf();
   const h = hustleOf(ch.id, day);
   const row = await rowOf(client, ch.id, day);
   const cur = stepOf(h, row);
+  // only the legwork stop carries the second gate — every other stop needs no extra read on what is
+  // a polled screen (the poll-cost discipline)
+  const legworkDone = cur.step === 1 ? legworkSatisfied(h, row, await countersOf(client, ch.id, day)) : true;
   return {
+    legworkDone,
     day,
     contact: h.contact,
     stops: h.stops.map((id) => ({ id, name: districtName(id) })),
@@ -68,12 +82,8 @@ export async function advanceHustle(ch, client, h2) {
   if (ch.loc !== cur.district)
     throw new GameError('district', `Not here — this stop is at ${districtName(cur.district)}. Travel there first.`, { district: cur.district });
   const counters = await countersOf(client, ch.id, day);
-  if (cur.step === 1) {
-    const base = JSON.parse(row?.baseline || '{}');
-    const need = h.leg.kind;
-    if (Number(counters[need] || 0) <= Number(base[need] || 0))
-      throw new GameError('legwork', `The contact wants the work done first — ${h.leg.how}.`);
-  }
+  if (cur.step === 1 && !legworkSatisfied(h, row, counters))
+    throw new GameError('legwork', `The contact wants the work done first — ${h.leg.how}.`);
   const next = cur.step + 1;
   // the baseline snapshots the counters at the moment the LEGWORK stop opens, so only work done
   // AFTER meeting the contact counts (a morning's stockpiled jobs can't pre-pay the chain)

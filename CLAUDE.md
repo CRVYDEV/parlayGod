@@ -588,7 +588,8 @@ cooldown, and the owner's ~70% remainder. Step-two numbers are founder sign-off 
 `omerta-recurring-sinks-design.md`; the economy's first recurring, wealth-scaling drain, closing
 the sim-audit's safehoused-landlord passive-stack gap). Every front owes protection + wages =
 `BUSINESS_UPKEEP_BPS` (2000 = 20%) of its `incomePerHr`, accrued lazily on its OWN clock
-(`businesses.upkeep_at`) up to `BUSINESS_UPKEEP_CAP_MS` (7d) — distinct from the 24h income cap, so
+(`businesses.upkeep_at`) up to `BUSINESS_UPKEEP_CAP_MS` (7d AS BUILT; SIGN-OFF D6=B later cut it to
+**2d**, which is what ships) — distinct from the 24h income cap, so
 an ABSENT owner earns ≤24h but owes ≤7d (neglect bleeds). `payBusinessUpkeep`
 (`POST /v1/business/upkeep`) settles the pad on every front you can afford (greedy) — a §10.4 cash
 SINK `business:upkeep` riding the existing `business:` vocabulary (zero invariant changes,
@@ -600,7 +601,7 @@ resets `upkeep_at` (squares the books, no retroactive rate bump). View surfaces 
 the cold gate (no income/launder/upgrade) + thaw. All numbers founder sign-off levers.
 **THE PAD MADE LEGIBLE, AND AN EXIT (founder-directed 2026-08-01, from tester feedback: "how can I
 owe more in wages than my laundromat brings in?").** Two things were true at once. The FICTION is
-sound — the till holds a DAY's take (`BUSINESS_CAP_MS`) while the envelope runs a WEEK
+sound — the till holds a DAY's take (`BUSINESS_CAP_MS`) while the envelope ran a WEEK
 (`BUSINESS_UPKEEP_CAP_MS`), so past the ~5-day break-even an absent owner genuinely owes more than
 the place can hand back, which is exactly what happens to an absentee owner and is a better mechanic
 than a risk-free drip. But the game never SAID so before the purchase, never warned as it slid, and —
@@ -622,7 +623,12 @@ the lever is raised above 0). `test/economy.js` covers the catalog terms, the co
 slide, the crossover, `not_yours`, the close, and the freed slot (all mutation-verified); the coach
 rung is walked in `test/growth.js`; the whole flow is browser-probed through the real UI. The economic
 levers that would remove the crossover ITSELF (`BUSINESS_UPKEEP_CAP_MS` 7d→2d, capping the pad at the
-pending take) remain OPEN and unretuned — BALANCE.md § THE PAD OUTRUNS THE TILL.
+pending take) were OPEN at the time of this drop and **were subsequently SIGNED and shipped** —
+SIGN-OFF D6=B, BALANCE.md § THE PAD OUTRUNS THE TILL. So the crossover described above no longer
+happens to an ABSENT owner at any absence: the envelope stops at 2d × 20% = 9.6h of income against a
+till holding 24h. What survived the retune is the per-front `padOutran` warning, which compares the
+pad to what is IN the till RIGHT NOW — collecting empties the till without touching the pad, so a
+player who collects and never pays still crosses it (driven: till $4 against a pad of $115,200).
 **Step two — TERRITORY-RACKET upkeep — BUILT** (`src/territory.js`): the same pattern at the GANG
 level — every operation owes `TERRITORY_UPKEEP_BPS` (20%) of its income, accrued on
 `territory_rackets.upkeep_at` up to 7d; a boss/underboss pays it from the TREASURY
@@ -14077,3 +14083,146 @@ count rather than reading the verdict; and a take-accounting sweep blind to dele
 specific, reproducible phantom findings before being replaced. *A finding produced by a tool you wrote
 and did not check is not a finding — and neither is a clean bill of health*, for the fourth session
 running.
+
+**THE PLAY SESSION — five real bugs, four of them in the game's heaviest verb (2026-08-19).** Not an
+audit: an actual session, playing as a person, pressing the buttons a player presses. Every finding
+was PROVEN BY DRIVING before it was called one, and three candidates dissolved on checking — which
+is the point, because a play session that only publishes its hits is a testimonial rather than a
+test.
+
+**F1 (the headline) — the console's FIRE button could not kill anybody, at any level, with any gun,
+ever.** `fire` takes a `rounds` count and floors it (`Math.max(50, Math.floor(Number(rounds) || 0))`),
+and the button sent **no body at all** — so every shot the console has ever fired was exactly 50
+rounds. `btkOf` puts a level-1 mark at ~390 and the best iron in the game (`undertaker`, fp 60) turns
+50 rounds into **95 effective**. Computed from the formula, then PROVEN by firing the button's exact
+shot: *six shots, zero kills; the same shot with 400 rounds, instant kill.* This is the most expensive
+verb in the game — a 3h search, the energy, the ammo, a 2h trigger cooldown — and it was inert, on
+every server, since the control shipped. Fixed with an `askNum` step (the existing dialog), and the
+whole path re-driven in a real browser afterwards: FIRE → confirm → rounds → `kill (eff 7600 vs btk
+378)`, mark dead, zero page errors. **Its regression is a NAMED one, deliberately not a sweep**: the
+population is ONE. Every other floored quantity in `src/` either REFUSES loudly (`Number(x) || 0` → a
+validation error the player sees) or defaults to something usable (`Math.max(1, …)` on a qty means
+"buy one"); `Math.max(50, …)` on rounds is the only substitution that neither refuses nor works,
+which is exactly why it hid, and a guard for a class of one is a regression with extra steps. Check
+3b in `test/client.js` keeps **existence and field as SEPARATE failures on purpose** — `sends` only
+carries calls with a non-empty body literal, so a control that regressed to `{}` (the actual bug)
+vanishes from it and would otherwise fail the anti-vacuity line with "find where the control moved
+to", teaching the wrong thing about the one shape it exists to catch. Three mutations, three distinct
+named failures. Shipped with it: the prompt now states the term, because the server spends **every
+round you name whether it needed them or not** — "How many rounds?" reads like a ceiling and is a
+bill, the same silence that put the pad and the nut in front of a tester.
+
+**F2 — THE DEATH RACE, and it is a Postgres semantic no suite here can reach.** Get killed with the
+tab open and the very next request comes back `400 no_character — "Create a character first."` to a
+player whose heir is standing right there. Not logic — READ COMMITTED: a `SELECT … AND alive FOR
+UPDATE` that **BLOCKS** on the dying row re-evaluates its WHERE against the NEW row version when the
+killer commits (`alive` is now false, so the row drops out), and the heir INSERTed by that same commit
+is not in this statement's snapshot either. **Zero rows.** It fires at the worst possible moment — the
+client refreshes ON the `whacked` event, straight into the window — and it LIES in the way this
+codebase has now corrected three times (db_down, the blanket Fastify-4xx→500, this): an ordinary game
+state reported as a broken one, on the one path where `boot()` renders any non-2xx as THE LINE'S DEAD,
+so a player who reloads there is told the city's records are unreachable, and an agent is told to
+create a character it already has. A 120ms API poll missed it across 36 tries; the browser hit it
+3-for-3, because the thing that reaches the window is a request that BLOCKS. The remedy for the
+artifact is to look again — a second statement takes a fresh snapshot and finds the heir; nothing has
+happened in the transaction yet (it is the first statement), so an action in flight when you die lands
+on your heir, exactly as if it had been clicked a moment later with every gate still applying.
+**Reproduced deterministically before the fix and re-run after** (`400` → `200`, generation 2), and the
+regression is **pgcheck §9b**, in §9's own idiom and for §9's stated reason: it HOLDS the row rather
+than racing a real kill, because a race depends on two injects overlapping in a millisecond-wide window
+and *timing luck reads exactly like a proof*. Both assertions fail by name under mutation. pg-mem is
+single-caller, so no suite could ever have seen this.
+
+**F3–F5, from the same session, all in the fire path.** A **missed or revived hit reported `"✓
+done."`** — three of the four fire outcomes fell through to the generic success line after the game's
+most expensive action; `describe()` now renders each ("he's still standing — 40 rounds told and he can
+take 13,030 · your search is burned and the trigger cools"), which is also where the player learns the
+number the next magazine needs. **"It's off" was a lie**: `fire`'s family/crew branches DELETE the
+search and then THROW, and the rollback resurrected it — so the game announced the hit was cancelled
+while the search sat there holding the hunter's one slot and `startSearch` went on refusing "Your
+people are already out looking", with the one button that calls it off living on the card that no
+longer rendered. Converted to a 200 RETURN (the recorded burner rule: a side-effect that must survive
+a refusal has to COMMIT — `fulfillCall`'s broke-void precedent). And **the hunt lived only in
+localStorage**, so a player on a second device, or one who cleared storage, or who opened the installed
+PWA after searching on desktop, saw "nobody in the crosshairs" while the server refused to let them
+start another — two surfaces flatly contradicting each other. The search now rides the sheet from the
+server with a countdown that reads the SAME `hunterSearchMs` the fire gate enforces (moved into
+game.js rather than copied — three readers must agree, and a second copy of a four-way stack is how two
+clocks come to disagree).
+
+**THREE CANDIDATES DISSOLVED ON CHECKING, and they are recorded because that is the discipline.**
+(1) *"The death modal never fires"* — it fires on the client's own 30s refresh, which backfills; my
+6-second observation window was the error, not the code. The WS channel really is keyed on the
+character id, so the heir's live events go to a channel nobody listens on — but the poll's backfill
+self-heals it, which the +40s modal proves. (2) *"The deed board never quotes the corner take"* — it
+quotes `owed` and `collectable` correctly; **I read a key that does not exist**. (3) *A sweep of my own
+for "handlers that read a body field the client never sends" returned **28 hits and was unusable***:
+three independent extraction bugs (shorthand keys `{ trait }`, a 200-char truncation, and two distinct
+controls collapsed onto one route) meant nearly every hit had the field right there in the client.
+Reported none of it. *A finding produced by a tool you wrote and did not check is not a finding* — for
+the fifth session running.
+
+**Verified clean by playing, and worth recording so the sweep is not repeated:** all six property
+crimes (jump / rob / shakedown / steal the car / take the trunk / sabotage) gate a hospitalized mark
+identically and their cuts are exact (rob 15%, shakedown 30%, goods conserved, cash zero-sum); the
+kitchen loop end to end with `earned` matching the ledger to the dollar; the deed claim's charset guard
+refusing a Cyrillic homoglyph and a case-variant duplicate; the shipment's per-player cap; and all 28
+console screens rendering with zero 500s, zero page errors and no `undefined`/`NaN`.
+
+**F6 — a retune moved the lever, updated the test, and left the sentence a player reads.** Playing the
+returning-owner loop (five days away, owing everybody), THE PAYROLL and each system's own tab agreed to
+the dollar — but the Empire catalog's THE TERMS card told the buyer *"stay away past 3 days and you owe
+more than the place can hand you."* Driven day by day at 3/4/5/7/10 days away, the till held **$288,000**
+and the pad wanted **$115,200** every single time: false at every absence, for every front, permanently.
+It is false BY DESIGN — `SIGN-OFF D6=B` moved `BUSINESS_UPKEEP_CAP_MS` 7d → 2d expressly so *"the pad can
+no longer outrun the till"* — and the sentence, written for the tester who asked how he could owe more in
+wages than his laundromat brought in, was never moved with it. The same passage in `docs/WIKI.md` and the
+console GLOSSARY were worse: both still stated the retired **7-day** envelope as a fact.
+**Why nothing caught it is the useful half.** The numbers on that card are LIVE (the catalog serves
+`upkeepCapHours`/`upkeepBps`/`coldHours`, so the player was shown 48h beside a sentence describing 168h),
+so only the CLAIM rotted; and `test/economy.js` WAS updated with the retune — its six-days-away assertion
+carries a comment saying it *"is now the OPPOSITE of what it was, because D6=B removed the crossover it
+used to prove."* The behavioural guard moved and the copy did not, which is precisely the gap a
+lever-vs-lever check cannot see. So the guard crosses the LEVERS against the COPY (`test/docs.js`, beside
+the death-promise and extraction guards): while the envelope caps below a full till no surface may claim
+otherwise, and — the positive half — if a retune ever restores the crossover the warning has to come BACK
+rather than leaving players told they are always covered. **It found two more surfaces on its first run**
+(the codex and the glossary), which is the catalogue-or-declare shape working. Mutation-verified in both
+directions by name. What is deliberately KEPT is the per-front `padOutran` warning: it compares the pad to
+what is IN the till right now, and collecting empties the till without touching the pad — driven to
+confirm it still fires (till $4 against a pad of $115,200) before touching its copy. CLAUDE.md's own
+account of the pad was corrected in the same commit, since it still described the retune as *"OPEN and
+unretuned"* — a decision made, shipped, and recorded as not made.
+
+**Also played, and clean:** the Den's whole stateful surface — five real blackjack hands to their end with
+the ledger matching the cash to the dollar and the house book exact (`profit == bets − wins`), doubling
+with only $1,000 behind a $4,000 bet refused `cash` with the balance never going negative, no double after
+a hit (and `canDouble` correctly false in the response so the button can grey), no second live hand, no
+acting on an empty table, and a wrong-district deal refused with its `district` payload attached so the
+console can offer "go there →". A night at the tables moved **zero $OMR** — the den's CASH-ONLY line
+holding. THE DAY's checklist read true against every one of its five sources.
+
+**AND THE CLASS BEHIND F1 WAS SWEPT, which is the more useful result than the fix.** `test/client.js`
+check 3 asserts every field the client SENDS is read by its handler; the FIRE bug was the other
+direction — a field the handler READS that no control sends, so the server substitutes its own default
+and the button does something the player never chose. Nothing checked that direction, so all 269 client
+sends were crossed against the 697 route registrations. **18 candidates, and every one dissolved**: the
+optional override that correctly falls back to something safer (`/v1/deeds/extract`'s `address` → the
+proven SIWE wallet), the second control on the same route (`referralCode` on create, `inviteCode` on the
+X start, `email` on the digest, the full contract form's `hitman`/`anon`/`hours`), the sibling control
+that needs no such field (buy-NOW on a car auction takes no `qty`), and one genuine server capability
+the console deliberately does not expose (`/v1/exchange/list` accepts `kind:'item'` with an `itemId`, and
+the picker offers only ammo and crates — an unexposed capability, not a control that lies). So **FIRE was
+the only one**, which is a far stronger statement than "a button was fixed" — and it is why the
+regression is scoped to that control rather than generalised into a rule that would have to waive
+seventeen legitimate cases. *Honest scope: the sweep reads inline object literals, so 18 controls that
+pass a variable as their body are outside it.*
+**And the tool was checked before it was believed, which is the fourth session running that has mattered:**
+its first run reported 18 findings including `/v1/port/run` sending NOTHING to a handler reading `route`
+and `escort` — a smuggling run whose lane the server would pick for you, which is the FIRE bug exactly.
+It was my extractor: `{ route, escort }` is SHORTHAND, and the key regex only matched the `key:` form, so
+every shorthand body read as empty. Fixed, the count fell 18 → 8 and then to zero on inspection. *A
+finding produced by a tool you wrote and did not check is not a finding.*
+
+Suite green · pgcheck 47/47 on a fresh real-Postgres database (§9b, the death-race regression, passing) ·
+client wiring/mirror · mobile · pgquery · sim drift-0.

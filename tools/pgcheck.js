@@ -575,6 +575,55 @@ console.log('\n9. THE VAULT SERIALIZES ON ITS ADVISORY LOCK');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// THE DEATH RACE. Found by playing: get killed with the tab open and the very next request comes
+// back `400 no_character — "Create a character first."` to a player whose heir is standing there.
+// It is READ COMMITTED, not logic: a `SELECT … AND alive FOR UPDATE` that BLOCKS on the dying row
+// re-evaluates its WHERE against the NEW row version when the killer commits — `alive` is now false
+// so the row drops out — and the heir INSERTed by that same commit is not in this statement's
+// snapshot either. Zero rows. It lies in the way this codebase has corrected three times already
+// (db_down, the blanket 4xx→500, this): an ordinary game state reported as a broken one, on the one
+// path where the client renders any non-2xx as THE LINE'S DEAD.
+//
+// pg-mem is single-caller, so no suite can reach this — which is exactly why it belongs here. And
+// like §9 it is driven by HOLDING the row rather than by racing a real kill: a race would depend on
+// two in-process injects overlapping inside a millisecond-wide window, and timing luck reads exactly
+// like a proof. The holder does what runEstate does — alive=false plus the heir, one atomic commit —
+// while the victim's own request sits blocked on that row.
+console.log('\n9b. A REQUEST IN FLIGHT WHEN THE STREET ENDS IS SERVED THE HEIR');
+{
+  const { body: { token } } = await call('POST', '/v1/auth/guest');
+  await call('POST', '/v1/character', { token, body: { name: `Racer ${Date.now() % 100000}` } });
+  const me = (await call('GET', '/v1/me', { token })).body.character;
+  const acct = (await pool.query('SELECT account_id a FROM characters WHERE id=$1', [me.id])).rows[0].a;
+  // force the read down the LOCKING path: readCharacter only falls through to withCharacter when
+  // accrual moved, and withCharacterRead's single unlocked statement is atomic by construction.
+  await pool.query("UPDATE characters SET last_accrued_at = now() - interval '2 hours' WHERE id=$1", [me.id]);
+
+  const holder = await pool.connect();
+  let inflight;
+  try {
+    await holder.query('BEGIN');
+    await holder.query('SELECT * FROM characters WHERE id=$1 FOR UPDATE', [me.id]);
+    inflight = call('GET', '/v1/me', { token });          // blocks on the row the holder owns
+    await new Promise((r) => setTimeout(r, 400));
+    await holder.query('UPDATE characters SET alive=false WHERE id=$1', [me.id]);
+    await holder.query(
+      `INSERT INTO characters (id, account_id, name, generation, season, cash, minted, honor, is_npc, npc_seed)
+       SELECT $2, account_id, name, generation+1, season, 4400, minted, 0, is_npc, npc_seed
+       FROM characters WHERE id=$1`, [me.id, `pgcheck-heir-${Date.now()}`]);
+    await holder.query('COMMIT');
+  } catch (e) { await holder.query('ROLLBACK').catch(() => {}); throw e; } finally { holder.release(); }
+
+  const r = await inflight;
+  const living = Number((await pool.query('SELECT count(*) n FROM characters WHERE account_id=$1 AND alive', [acct])).rows[0].n);
+  check(living === 1, 'the heir really is standing there', `${living} living characters`);
+  check(r.code === 200, 'a request that blocked on the dying row is NOT told to create a character',
+    `got ${r.code} ${r.body?.error || ''} — "${r.body?.message || ''}"`);
+  check(r.body?.character?.generation === me.generation + 1, 'and it is served the HEIR, not a corpse',
+    `generation ${r.body?.character?.generation} (was ${me.generation})`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 console.log('\n10. NO node-pg DEPRECATIONS');
 await app.close();
 await new Promise((r) => setTimeout(r, 200));                // let any late warning land

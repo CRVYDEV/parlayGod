@@ -530,6 +530,41 @@ assert.deepEqual(unread, [],
 assert.deepEqual(unresolvable, [], `${unresolvable.length} route(s) the client posts a body to hand ` +
   `that body to a module this cannot follow, so their fields go unchecked — teach followBody() the shape`);
 
+// ── 3b. A QUANTITY THE PLAYER CHOOSES MUST BE ASKED FOR ─────────────────────────────────────────
+// Check 3's exact inverse, and it made the game's heaviest verb INERT. `fire` takes a `rounds` count
+// and floors it: `Math.max(50, Math.floor(Number(rounds) || 0))`. The console's FIRE button sent no
+// body at all, so every shot it ever fired was exactly 50 rounds — and the best gun in the game turns
+// 50 into 95 effective against a floor of ~390 for a LEVEL-1 mark. The button could not kill anybody,
+// at any level, with any gun, ever: 3h of search, the energy, the ammo, a 2h trigger cooldown, and a
+// success toast on a man still standing. Found by pressing it.
+//
+// Deliberately a NAMED regression rather than a general sweep, because the population is ONE and a
+// guard for a class of one is a regression with extra steps. Every other floored quantity in src/
+// either REFUSES loudly (`Number(x) || 0` → a validation error the player sees) or defaults to
+// something usable (`Math.max(1, …)` on a qty means "buy one"). `Math.max(50, …)` on rounds is the
+// only substitution that neither refuses nor works, which is exactly why it hid. If a second one is
+// ever written, list it here beside this one.
+const ASK_THE_PLAYER = [
+  ['POST', '/v1/streets/:p/fire', 'rounds',
+    'the server floors it to 50, which cannot kill a level-1 mark with the best gun in the game'],
+];
+// The two failures are kept DISTINCT on purpose. `sends` only carries calls with a non-empty body
+// literal, so a control that regressed to `{}` — which is exactly what the bug was — simply vanishes
+// from it and would fail the anti-vacuity line with "find where the control moved to", teaching the
+// wrong thing about the one shape this exists to catch. So existence is proven against the client
+// SOURCE and the field against the parsed body, and each says what really happened.
+for (const [method, path, field, why] of ASK_THE_PLAYER) {
+  const live = new RegExp(`'${method}'\\s*,\\s*[\`']${path.replace(/:p/g, '\\$\\{[^}]*\\}').replace(/\//g, '\\/')}[\`']`).test(html);
+  assert(live, `no client control calls ${method} ${path} at all — this regression is vacuous. Find where ` +
+    `the control moved to and point this at it (it must still send '${field}': ${why})`);
+  const hits = sends.filter(([m, p]) => m === method && p.replace(/\$\{[^}]*\}/g, ':p').split('?')[0] === path);
+  assert(hits.length, `the ${method} ${path} control sends NO body at all — so the server substitutes its ` +
+    `own '${field}', and ${why}. The player has to be asked; a silent default here is a button that ` +
+    `spends the search, the energy, the ammo and the cooldown, and does nothing.`);
+  for (const [, , keys] of hits) assert(keys.includes(field),
+    `the ${method} ${path} control sends ${JSON.stringify(keys)} and NOT '${field}' — ${why}.`);
+}
+
 // ── 4. every field the client READS must be one its route actually returns ───────────────────────
 // The mirror of check 3, and the class the other three cannot see: the client reads `b.book` off a
 // board that returns `active`. Nothing throws — the screen renders undefined, or quietly falls back
@@ -747,7 +782,16 @@ const collectList = (src, v, key, fn) => {
 // markup that reads the board — and taking that block as the scope finds zero reads while looking
 // exactly like a pass. (Third member of this family, after the raw-bind and promise-callback holes:
 // a bare `x =` is scoped to x's DECLARATION, which is the variable's real scope.)
-const GETBIND = /(?:(const|let|var)\s+)?([a-zA-Z_$][\w$]*)\s*=\s*\(await api\(\s*'GET'\s*,\s*([`'"])([^`'"]+)\3\s*\)\)\s*\.body(\s*\?\.\s*([a-zA-Z_$][\w$]*))?/g;
+// FIFTH member of the family, found by playing: a renderer that narrows the board as it binds wraps
+// the whole unwrap in one more paren —
+//   const streets = ((await api('GET','/v1/streets')).body?.streets || []).filter((s) => s.id !== me.id);
+// — and the leading `(` meant the binding was not recognised AT ALL, so `streets` bound to no route
+// and every field the row rendered went unchecked. That hid the four busiest rosters in the game
+// (Wet Work, the Blood War, the Family and the Deeds board all narrow this way) plus two more, and
+// it is the same shape as the 2026-08-08 `.filter(...).map(...)` fix one position earlier: there the
+// chain sat on a bound list, here it sits on the binding itself. `\(*` with backtracking takes the
+// extra parens and leaves the one that belongs to `(await`.
+const GETBIND = /(?:(const|let|var)\s+)?([a-zA-Z_$][\w$]*)\s*=\s*\(*\(await api\(\s*'GET'\s*,\s*([`'"])([^`'"]+)\3\s*\)\)\s*\.body(\s*\?\.\s*([a-zA-Z_$][\w$]*))?/g;
 const reads = new Map(), readWhere = new Map();
 let unscoped = 0, shadowUnresolved = 0;
 for (const m of html.matchAll(/\b(?:async\s+)?function\s+([a-zA-Z_$][\w$]*)\s*\(/g)) {
@@ -1536,7 +1580,35 @@ const listMissing = [], listEmpty = [], listUngated = [];
 // requirement) is never mistaken for a gate.
 // `unlocked` was ADDED here by check 7's completeness sweep (below): skills' actives + grandmasteries
 // gate a per-row control on it, so it belongs in check 5's enforced set — the sweep is what found it.
-const GATE_FIELDS = new Set(['minLvl', 'minLevel', 'locked', 'canRaid', 'eligible', 'unlocked']);
+// `jailed`/`hospitalized` were ADDED by a play session: /v1/streets sends both on every row, the Wet
+// Work roster rendered them as CHIPS and then hung ten live attack buttons beside them that the server
+// refuses on exactly those flags. Neither name is gate-SHAPED, so check 7's sweep could not see them
+// either — a gate reads like a gate only if you already know its vocabulary, which is why this list
+// grows from play as well as from the sweep.
+//   AND THE LIMIT, because it would otherwise read as more protection than it is: this check could
+//   NOT have caught that bug and cannot catch its shape. The rule is "read it somewhere", and the
+//   CHIPS on the same row read both flags — mutation-verified: strip the gating from all ten buttons,
+//   leave the chips, and this passes. What it does catch is the narrower case of a clickable row that
+//   reads them NOWHERE. Reading a gate for DECORATION while the control stays live is invisible to a
+//   static check (the link runs through a computed variable, and "did that variable reach a disabled
+//   attribute" is rendering semantics this guard deliberately does not model); it needs eyes, or a
+//   behavioural probe that presses each control against a seeded mark and compares.
+const GATE_FIELDS = new Set(['minLvl', 'minLevel', 'locked', 'canRaid', 'eligible', 'unlocked',
+  'jailed', 'hospitalized']);
+// …and the waiver, because those last two are not gates the way the others are. `minLvl` gates ANY
+// control on the row; `jailed`/`hospitalized` gate only controls that REACH THE PERSON. A picker
+// that merely NAMES somebody is not reaching them, and gating it would hide a legitimate move — the
+// over-gating failure, which is as much a lie as the under-gating one. So a renderer may waive a
+// (renderer|board|field) here WITH the reason, and anything not waived must be read: catalogue-or-
+// declare, so the next roster that hangs an attack on these flags fails rather than passing quietly.
+const GATE_WAIVED = {
+  // The Life tab reads /v1/streets only to fill the marriage + consigliere target pickers. Checked
+  // at the source: proposeMarriage and nameConsigliere gate mad-dog, self, already-wed, pending, the
+  // annulment cooldown and cash — and NOTHING about where the target is. You can propose to someone
+  // in lockup, which is both correct and in character.
+  'renderLife|/v1/streets|streets||jailed': 'a marriage/consigliere proposal never reaches the target — the server does not gate it on their state',
+  'renderLife|/v1/streets|streets||hospitalized': 'a marriage/consigliere proposal never reaches the target — the server does not gate it on their state',
+};
 for (const [key, fields] of listReads) {
   const [rawPath, sub, listField] = key.split('|');
   let path = rawPath;
@@ -1569,7 +1641,7 @@ for (const [key, fields] of listReads) {
   // nothing (nothing to refuse), and a board that never sends a gate is not this check's business.
   if (listActs.has(key)) {
     const gates = [...have].filter((f) => GATE_FIELDS.has(f));
-    const blind = gates.filter((g) => !fields.has(g));
+    const blind = gates.filter((g) => !fields.has(g) && !GATE_WAIVED[`${listWhere.get(key)}|${key}|${g}`]);
     if (blind.length) listUngated.push(`${listWhere.get(key)} renders a control per row of ${key} but never reads ` +
       `${blind.join(',')} — the row's own elements carry it, so the button looks live and refuses on press`);
   }

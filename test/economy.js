@@ -968,7 +968,7 @@ assert(((await call('POST', '/v1/business/collect', { token })).body.collected) 
   // BUSINESS_UPKEEP_CAP_MS — and this fails by name instead of unwinding the pad in silence.
   {
     const capH = CONSTANTS.BUSINESS_CAP_MS / 3600000;                       // the till: one day
-    const padH = CONSTANTS.BUSINESS_UPKEEP_CAP_MS / 3600000;                // the envelope: one week
+    const padH = CONSTANTS.BUSINESS_UPKEEP_CAP_MS / 3600000;                // the envelope: two days (D6=B)
     const rate = CONSTANTS.BUSINESS_UPKEEP_BPS / 10000;
     for (const b of BUSINESSES) {
       const t1 = b.tiers[0];

@@ -66,8 +66,9 @@ speed. The increase becomes smaller as the stat becomes higher. **Heal** (`POST 
 return to full health. The cost increases with your injury. **Check in** (`POST /v1/checkin`) — do this one
 time each day. A daily streak pays `250×lvl + 100×lvl×min(streak,7)` plus 20 energy.
 
-**The Bank** (`POST /v1/bank/deposit|withdraw`) — **another player can steal the cash in your pocket when you
-die. The cash in your bank is safe.** But a new deposit is **"in transit" for 2 hours** before it is safe.
+**The Bank** (`POST /v1/bank/deposit|withdraw`) — **another player who kills you can steal the cash in your
+pocket. They cannot touch your bank.** (The bank stops your *killer*; it does not survive your death — see
+"What is safest when you die".) But a new deposit is **"in transit" for 2 hours** before it is safe.
 Another player can steal it during this time. A new deposit resets the 2-hour clock. The bank pays about 2%
 interest each 12 hours. The interest has a limit (12 hours of interest each day). The interest is smaller
 above $10M. **You cannot use the bank from a safehouse.**
@@ -384,14 +385,15 @@ Loop: **buy** (`/v1/business/:kind/buy`) → **collect** (income accrues, 24-hou
 ### The pad, and why a front can owe you money
 
 **A front wants an owner who shows up, and the terms say so.** The till only holds a **day** of
-takings (income stops banking after 24 hours) but the pad — protection and wages, 20% of the
-hourly income — keeps running for a **week** whether you are there or not. So an absent owner can
-genuinely owe more than the place can hand back. That is the deal working as written, not a
-fault: it is what happens to an absentee owner. Collect every day or two and a front is an engine;
-buy one and forget it and it is a debt.
+takings (income stops banking after 24 hours) and the pad — protection and wages, 20% of the
+hourly income — keeps running for **two days** whether you are there or not. The envelope stops
+below a full till, so coming back always covers it: what an absence actually costs you is the
+front going **cold** and earning nothing at all until you square up, plus every hour of takings
+the till was too full to hold. Collect every day or two and a front is an engine; buy one and
+forget it and it sits dark.
 
 - **Upkeep** (also called "the pad," `/business/upkeep`) — 20% of the hourly income, and it climbs
-  5% for every extra front you run, on *all* of them. It accrues to a 7-day limit. Unpaid for
+  5% for every extra front you run, on *all* of them. It accrues to a 2-day limit. Unpaid for
   3 days the business goes **cold** — no income, no upgrades, no specialization — until you square
   it out of pocket.
 - **Closing up** (`DELETE /v1/business/:id`) — the way out. A cold front you cannot carry does not
@@ -1223,9 +1225,14 @@ safehouse, and a killer takes a quarter of every open favor you were holding.
 | Cathedral Hill | Nerve increases two times faster |
 
 ### What is safest when you die
-Cleared **bank** cash · **minted (on-chain)** gear · your account-level **estate,
-and prestige**. Staked $OMR is looted LIGHTER (a fifth vs half of a loose balance) — cheaper cover,
-never safe. Everything else in your pocket is at risk when you die.
+Your **$OMR** (liquid and staked — a killer takes a cut, the rest carries to your heir) ·
+**minted (on-chain)** gear · your account-level **estate, deeds and prestige**. Staked $OMR is
+looted LIGHTER (a fifth vs half of a loose balance) — cheaper cover, never safe.
+
+**Your bank is not one of them.** Banking puts cash out of a *killer's* reach — a killer's cut only
+touches your pocket and any deposit still in transit — but when the street falls the estate takes
+**pocket and bank together**, and your heir starts on $500 either way. Bank to deny your killer,
+never to save it for yourself. Everything else you were carrying dies with the street.
 
 ### Status marks on your sheet
 **wanted** (hunted, even by family — square it) · **welsher** (defaulted, cannot borrow — square it) ·

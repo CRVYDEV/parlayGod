@@ -54,14 +54,15 @@ const CHECKS = {
   dn_name:    (ch) => levelOf(n(ch.respect)) >= 40,
 };
 
-// the few signals loadOwned doesn't carry — one batched pass, PK/index lookups only
+// the few signals loadOwned doesn't carry — PK/index lookups only. SEQUENTIAL, not Promise.all:
+// these share ONE pooled client and node-pg cannot run concurrent queries on a single connection,
+// so the parallel form was never "one batched pass" — it queued behind a DeprecationWarning and
+// THROWS from pg@9. Same speed, minus the latent break.
 async function extraSignals(client, ch) {
-  const [hustle, racer, shield, monument] = await Promise.all([
-    client.query('SELECT 1 FROM hustles WHERE character_id=$1 AND step>=3 LIMIT 1', [ch.id]),
-    client.query('SELECT 1 FROM racers WHERE character_id=$1 LIMIT 1', [ch.id]),
-    client.query(`SELECT 1 FROM transactions WHERE character_id=$1 AND reason IN ('safehouse','bodyguard:hire') AND amount < 0 LIMIT 1`, [ch.id]),
-    client.query('SELECT 1 FROM megaproject_contributions WHERE account_id=$1 LIMIT 1', [ch.account_id]),
-  ]);
+  const hustle = await client.query('SELECT 1 FROM hustles WHERE character_id=$1 AND step>=3 LIMIT 1', [ch.id]);
+  const racer = await client.query('SELECT 1 FROM racers WHERE character_id=$1 LIMIT 1', [ch.id]);
+  const shield = await client.query(`SELECT 1 FROM transactions WHERE character_id=$1 AND reason IN ('safehouse','bodyguard:hire') AND amount < 0 LIMIT 1`, [ch.id]);
+  const monument = await client.query('SELECT 1 FROM megaproject_contributions WHERE account_id=$1 LIMIT 1', [ch.account_id]);
   return { hustleDone: !!hustle.rows[0], hasRacer: !!racer.rows[0],
     boughtShield: !!shield.rows[0], builtMonument: !!monument.rows[0] };
 }
