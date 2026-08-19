@@ -15,7 +15,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS, RANKS,
          KITCHENS, labModuleCost, recyclesToDesk, DESK_RECYCLE_REASON, isMade, madeSeconds,
          MADE_LADDER, madeRungIdx, madeRungOf, ladderFx,
          ASSETS, OPERATIONS, opSlotsOf, nextOpSlotLevel, MISSIONS, dailyLiveFor, jailed, safeHoused,
-         STABLE, SPEAKEASY, ESTATE, MADE, CREW, crewObjectiveOf, DEEDS, deedController , runOf } from './rules.js';
+         STABLE, SPEAKEASY, ESTATE, MADE, CREW, crewObjectiveOf, DEEDS, deedController , runOf, npcOf } from './rules.js';
 import { dbCaps } from './db.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
@@ -565,11 +565,11 @@ export async function bumpStanding(client, h, ch, npcId, pts, { business = true,
       if (step >= UNDERWORLD.STEP5.CHAIN_STEPS) {
         await client.query('DELETE FROM npc_errands WHERE character_id=$1', [ch.id]);
         pts += UNDERWORLD.STEP5.CHAIN_BONUS;
-        await notify(client, ch.id, 'errand_done', { npc: npcId, bonus: UNDERWORLD.STEP5.CHAIN_BONUS });
-        bus.emit('streets', { type: 'errand_done', who: ch.name, npc: npcId }); // the town hears who did right by whom
+        await notify(client, ch.id, 'errand_done', { npc: npcOf(npcId)?.name || npcId, bonus: UNDERWORLD.STEP5.CHAIN_BONUS });
+        bus.emit('streets', { type: 'errand_done', who: ch.name, npc: npcOf(npcId)?.name || npcId }); // the town hears who did right by whom
       } else {
         await client.query('UPDATE npc_errands SET step=$2, last_day=$3 WHERE character_id=$1', [ch.id, step, day]);
-        await notify(client, ch.id, 'errand_step', { npc: npcId, step, of: UNDERWORLD.STEP5.CHAIN_STEPS });
+        await notify(client, ch.id, 'errand_step', { npc: npcOf(npcId)?.name || npcId, step, of: UNDERWORLD.STEP5.CHAIN_STEPS });
       }
     }
   }

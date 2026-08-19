@@ -1771,18 +1771,38 @@ const ACTIONS = [
   ['POST', '/v1/goods/buy', { goodId: GOODS[0].id, qty: 1 }],
   ['POST', '/v1/goods/sell', { goodId: GOODS[0].id, qty: 1 }],
   ['POST', '/v1/gangs', { name: 'Ledger ' + Math.random().toString(36).slice(2, 7), tag: 'LDG' }],
+  ['POST', '/v1/gangs/tribute', { amount: 5000 }],       // cash and $OMR tribute share one shape —
+  ['POST', '/v1/gangs/tribute/omr', { amount: 10 }],      // the currency marker is what tells them apart
+  ['POST', '/v1/gangs/vanity/color', { color: '#3a5f7d' }],
   ['POST', '/v1/gangs/leave', null],
   ['POST', '/v1/path', { path: PATHS[0].id }],
   ['POST', '/v1/identity/bio', { bio: 'a quiet man' }],
   ['POST', '/v1/vanity/title', { title: 'The Quiet Man' }],
-  ['POST', '/v1/duels/list', { limit: 0 }],
+  ['POST', '/v1/duels/list', { limit: 1000 }],
   ['POST', '/v1/casino/fade', { limit: 0 }],
   ['POST', '/v1/casino/poker/deal', { limit: 0 }],
   ['POST', '/v1/casino/numbers/claim', null],
   ['POST', '/v1/paper/read', null],
   ['POST', '/v1/soldiers/unassign', null],
   ['POST', '/v1/business/collect', null],
+  // the deeper drive: the four fixture buttons all route through one act() handler, the two
+  // tributes are different currencies behind one shape, and a front / a berth / a soldier / a
+  // retainer are all real money leaving the pocket
+  ['POST', '/v1/underworld/fixer/gift', null],
+  ['POST', '/v1/business/restaurant/buy', null],
+  ['POST', '/v1/travel/docks', null],                    // the harbormaster is at the docks, and this
+  ['POST', '/v1/port/berth', null],                      // is also the only entry that drives travel
+                                                         // for real (the fixture starts at neon)
+  ['POST', '/v1/soldiers/hire', null],
+  ['POST', '/v1/law/retainer', null],
 ];
+// The fixture must be able to AFFORD what it drives. The first cut left it on a fresh guest's $500
+// and five of the money actions 4xx'd, so they were skipped — and a mutation that stripped a fixture's
+// name off the gift response SURVIVED, because that action had never once run. A declared-but-never-
+// driven entry is worse than no entry: it reads on the summary line as covered.
+await app.pool.query("UPDATE characters SET cash=5000000, respect=500000, jail_until=NULL, hosp_until=NULL WHERE id=$1", [charId]);
+await app.pool.query('UPDATE account_persistent SET omr=1000 WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)', [charId]);
+
 const mute = [];
 let described = 0;
 for (const [m, url, payload] of ACTIONS) {
@@ -1839,9 +1859,10 @@ console.log(`✅ client wiring test passed — across the console AND /admin: of
   `so a new one is a decision on the record, not a silent regression. ` +
   `And the EIGHTH, which is not a lie but a shrug: a button that works and then says nothing. ` +
   `act() toasts describe() with no override, so ${describedCount} driven actions must each read back ` +
-  `as something a player can act on — a play session found 26 saying the bare word "done.", among them ` +
+  `as something a player can act on — a play session found 34 saying the bare word "done.", among them ` +
   `an unstake that had just opened a six-hour window in which that $OMR can be looted off you, and a ` +
-  `bank deposit that rides in transit and is lootable until it clears. Both are TERMS, not flavour. ` +
+  `bank deposit that rides in transit and is lootable until it clears — both TERMS, not flavour — and an ` +
+  `errand that signs a player up for a THREE-DAY job while carrying the very task it would not name. ` +
   `${Object.keys(CATALOGS).length} fields have ` +
   `catalogs and every other literal field is either an i18n key or declared not-an-API-value, so a ` +
   `new one forces that decision instead of being skipped in silence.`);

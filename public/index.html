@@ -2089,6 +2089,43 @@
       return `sold her on — $${fmt(body.net)} in hand${body.gross > body.net ? ` (the fence took $${fmt(body.gross - body.net)})` : ''}`;
     if (body && body.ok && 'standDown' in body)
       return body.standDown ? `${esc(body.standDown)} stands down — nobody's riding with you` : 'nobody was riding with you';
+    // THE FIXTURES — all four Underworld buttons (gift / penance / favor / errand) go through one
+    // act() handler and every one of them read "done.". The errand is the sharpest: it signs you up
+    // for a THREE-DAY job and the response carries the drawn task, so saying nothing withholds the
+    // one thing the player needs. Ordered most-specific first; npcName/taskLabel come from the
+    // server (the client has no catalog of the cast, and the ids are keys, not names).
+    if (body && body.ok && body.npcName && body.taskLabel)
+      return `${esc(body.npcName)} has work for you: ${esc(body.taskLabel)}, on ${body.steps} separate days — finish it and they warm to you (+${body.bonus} standing)${body.replacedName ? ` · you walked off ${esc(body.replacedName)}'s job to take it` : ''}`;
+    if (body && body.ok && body.npcName && body.squared !== undefined)
+      return body.squared
+        ? `squared with ${esc(body.npcName)} — $${fmt(body.cost)}, and they'll do favors again`
+        : `paid $${fmt(body.cost)} toward ${esc(body.npcName)} — ${body.remaining} more to square`;
+    if (body && body.ok && body.npcName && body.standing !== undefined)
+      return `the envelope lands — ${esc(body.npcName)} is at ${body.standing}${body.tier ? ` (tier ${body.tier})` : ''}`;
+    if (body && body.ok && body.npcName)
+      return `${esc(body.npcName)} does you a favor — ${body.health !== undefined ? 'patched up, back to full'
+        : body.energy !== undefined ? `you're rested (${body.energy} energy)`
+        : body.nerve !== undefined ? `nerve back up (${body.nerve})`
+        : body.repaired !== undefined ? 'her boys straightened out your worst iron'
+        : body.healedFighters !== undefined ? `${body.healedFighters} of your fighters are off the shelf`
+        : 'the favor is yours'} · one a week`;
+    // TRIBUTE — cash and $OMR return the same {ok, amount} but for different currencies; the
+    // server now marks which, so the toast names the right one instead of guessing wrong.
+    if (body && body.ok && body.amount !== undefined && body.currency)
+      return body.currency === 'omr'
+        ? `${fmt(body.amount)} $OMR into the family reserve — that's what seals and the Foundation are bought with`
+        : `$${fmt(body.amount)} into the family treasury`;
+    if (body && body.ok && body.color && body.name === undefined) return `the family flies ${esc(body.color)} now`;
+    if (body && body.ok && body.id && body.kind && body.name && body.tier !== undefined)
+      return body.tier > 1
+        ? `the ${esc(body.name)} moves up to tier ${body.tier}${body.collected ? ` — $${fmt(body.collected)} banked at the old rate first` : ''}`
+        : `the ${esc(body.name)} is yours — collect the till, and mind the pad`;
+    if (body && body.ok && body.berths !== undefined && body.fleetMax !== undefined)
+      return `slip rented — $${fmt(body.spent)}, ${body.berths} berth${body.berths > 1 ? 's' : ''} held, room for ${body.fleetMax} boats`;
+    if (body && body.ok && body.traitName && body.desc)
+      return `${esc(body.name)} signs on — ${esc(body.traitName)}: ${esc(body.desc)}. $${fmt(body.cost)}.`;
+    if (body && body.ok && body.retainerSeconds !== undefined)
+      return `the lawyer's on retainer — $${fmt(body.cost)}, good for ${minsTxt(body.retainerSeconds)}`;
     if (body && body.ok && body.stable !== undefined && body.power !== undefined && body.chin !== undefined)
       return `\u{1F94A} signed ${esc(body.name)} — ${body.power} power / ${body.chin} chin / ${body.speed} speed. ${body.stable} in the stable.`;
     if (body && body.ok && body.collected === 0 && body.total === undefined)
@@ -8483,8 +8520,8 @@
         ${(sk.grandmasteries || []).map((g) => `${g.unlocked ? '◆' : '◇'} <b>${g.name}</b> (${g.reqs.join(' + ')})`).join(' · ')}</div>` : ''}
 
       <h2 style="margin-top:12px">The Underworld
-        ${uw.lead ? `<span class="chip good">today's lead: ${uw.lead.npc} — ${uw.lead.task || 'any business'}</span>` : ''}
-        ${uw.errand ? `<span class="chip">errand: ${uw.errand.npc} ${uw.errand.step}/${uw.errand.of} — ${uw.errand.task}</span>` : ''}</h2>
+        ${uw.lead ? `<span class="chip good">today's lead: ${esc(uw.lead.npcName || uw.lead.npc)} — ${esc(uw.lead.taskLabel || uw.lead.task || 'any business')}</span>` : ''}
+        ${uw.errand ? `<span class="chip">errand: ${esc(uw.errand.npcName || uw.errand.npc)} ${uw.errand.step}/${uw.errand.of} — ${esc(uw.errand.taskLabel || uw.errand.task)}</span>` : ''}</h2>
       <div class="grid">${(uw.npcs || []).map((n) => `
         <div class="card">${aart('npc', n.id)}<span class="t">${n.name}</span> <span class="chip ${n.tier >= 3 ? 'good' : ''}">standing ${n.standing} · tier ${n.tier}</span>
           ${n.grudge ? `<span class="chip bad">${n.grudge} grudge${n.grudge > 1 ? 's' : ''}</span>` : ''}

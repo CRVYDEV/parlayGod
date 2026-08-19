@@ -14088,6 +14088,43 @@ skipped in silence and the mutation that stripped the warning SURVIVED. It now b
 character and asserts the deposit SUCCEEDED before asserting the wording. Three mutations, each
 caught at its own named assertion.
 
+**F12 — the same sweep taken DEEPER, and it found the class had a second half: raw KEYS reaching
+the player, and two currencies behind one shape.** Driving another ~60 routes past F11's reach (the
+whole fixture layer, the family treasury, the empire, the port, the roster, the law) turned up
+**eight more mute buttons and three that named a price without naming what it bought**. The
+Underworld four are the sharpest — gift / penance / favor / errand all go through ONE `act()`
+handler on the Life tab, and the errand is the worst thing found in either sweep: it **signs a
+player up for a THREE-DAY job**, the response **carries the very task they must go and do**, and the
+toast said *"done."* The favor is the terms class again — the weekly, once-only favor healed the
+player to full and told them nothing. The mute rest: family tribute in both currencies, the crest
+burn, buying a business front, renting a berth. The three that undersold themselves said only
+*"paid $25,000"* / *"paid $150,000"* while the response carried the soldier's NAME AND TRAIT, the
+retainer's DURATION, and the grudge count still outstanding.
+**Two of these were SERVER defects, not copy, and were fixed at the source.** (1) `tribute` and
+`tributeOmr` both returned a bare `{ok, amount}` — **byte-identical shapes for two different
+currencies**, so no consumer could tell $25,000 of cash from 25 $OMR and the toast could only guess
+wrong; they now carry `currency`. This is the goods-vs-drug-deal cross-fire from F11 in its purer
+form: **two shapes colliding on one field, where the honest fix is a marker at the source rather
+than a cleverer guess at the client.** (2) The fixture id (`doc`) and the terse task verb (`heal`)
+were reaching the player RAW — the Life-tab chip read *"errand: armorer 1/3 — craft"*, the feed read
+*"1 of 3 done for armorer"* — and the client has **no catalog of the cast** to resolve either from,
+so it could not have fixed this alone. The server now sends `npcName` on every fixture response and
+a `taskLabel` (a display-only `UNDERWORLD.TASK_LABELS` map, read by BOTH the board and the errand
+response so the chip and the toast can never describe the same drawn task differently), and the two
+errand notifications carry the name instead of the key. Old-vs-new over the whole corpus: **0
+regressions, 11 newly rendered**, and six lines that improved from a bare figure to what was bought.
+**My own guard went vacuous AGAIN, in a new way, and the mutation is what caught it.** Adding the
+eight new actions to check 8 looked like coverage; a mutation stripping `npcName` off the gift
+**SURVIVED**, because the ledger's fixture is a fresh guest holding $500 — the gift costs $5,000, so
+that action had 4xx'd and been skipped for the whole run. Instrumenting the skips showed the fixture
+was also **JAILED** by an earlier part of the suite, standing in the wrong district for the
+harbormaster, and already owned the front it was told to buy. Funded, un-jailed and routed to the
+docks, **19 → 24 driven actions**, the floor raised to match, and the same mutation now fails by
+name. *A declared-but-never-driven entry is worse than no entry: it reads on the summary line as
+covered.* Five mutations, each caught at its own named assertion — the fifth against the FEED
+payload, which the action ledger structurally cannot see, so it is pinned in `test/underworld.js`
+against the real notification instead.
+
 **THE PROBE HAD TO BE FIXED THREE TIMES BEFORE ITS RESULT MEANT ANYTHING, which is most of the
 lesson.** It first missed **shorthand** payload keys (`{ npc, units, material }`), planting
 `undefined` for each and producing lines that read exactly like client bugs; then it guessed values

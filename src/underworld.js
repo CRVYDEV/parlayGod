@@ -13,7 +13,7 @@
 // anchor), heat deterrents, loot-exposure windows, extraction caps, income curves. All
 // numbers are founder sign-off levers.
 import { GameError, npcTier, bumpStanding, bestNpc } from './game.js';
-import { UNDERWORLD, npcOf, GUNS, dayOf, weekOf, leadTaskOf, levelOf, assetEnergyCap , jailed } from './rules.js';
+import { UNDERWORLD, npcOf, GUNS, dayOf, weekOf, leadTaskOf, taskLabelOf, levelOf, assetEnergyCap , jailed } from './rules.js';
 
 
 // The board — the cast, your standing with each, what the next tier buys, plus step two:
@@ -25,7 +25,9 @@ export async function underworldBoard(ch, client, h) {
   // step three: the lead is a rotating TASK — the same draw for the whole town, claimable
   // only by doing THAT piece of business with your best fixture today
   const lead = best ? {
-    npc: best, task: leadTaskOf(dayOf(), best), bonus: UNDERWORLD.STEP2.LEAD_BONUS,
+    npc: best, npcName: npcOf(best)?.name || best,
+    task: leadTaskOf(dayOf(), best), taskLabel: taskLabelOf(leadTaskOf(dayOf(), best)),
+    bonus: UNDERWORLD.STEP2.LEAD_BONUS,
     done: !!(await client.query('SELECT 1 FROM npc_leads WHERE character_id=$1 AND day=$2', [ch.id, dayOf()])).rowCount,
   } : null;
   const whispers = npcTier(h, 'madame') >= 3
@@ -36,8 +38,10 @@ export async function underworldBoard(ch, client, h) {
   // step five: the active errand chain, if any
   const er = (await client.query('SELECT * FROM npc_errands WHERE character_id=$1', [ch.id])).rows[0];
   const errand = er ? {
-    npc: er.npc_id, step: Number(er.step), of: UNDERWORLD.STEP5.CHAIN_STEPS,
-    task: leadTaskOf(dayOf(), er.npc_id), doneToday: Number(er.last_day ?? -1) === dayOf(),
+    npc: er.npc_id, npcName: npcOf(er.npc_id)?.name || er.npc_id,
+    step: Number(er.step), of: UNDERWORLD.STEP5.CHAIN_STEPS,
+    task: leadTaskOf(dayOf(), er.npc_id), taskLabel: taskLabelOf(leadTaskOf(dayOf(), er.npc_id)),
+    doneToday: Number(er.last_day ?? -1) === dayOf(),
   } : null;
   return {
     errand,
@@ -71,7 +75,9 @@ export async function giftNpc(ch, npcId, client, h) {
   const pts = Math.min(UNDERWORLD.GIFT_CAP, cur + UNDERWORLD.GIFT_STANDING) - cur;
   await bumpStanding(client, h, ch, npcId, pts, { business: false });
   await h.track(client, ch.account_id, 'underworld_gift', { npc: npcId });
-  return { ok: true, npc: npcId, standing: Number(h.owned.npc[npcId]), tier: npcTier(h, npcId) };
+  // npcName rides every fixture response: the id ('doc') is a key, the name ('Doc Moretti') is
+  // what a player is owed — and the client has no catalog of the cast to resolve it from.
+  return { ok: true, npc: npcId, npcName: n.name, standing: Number(h.owned.npc[npcId]), tier: npcTier(h, npcId) };
 }
 
 // EARLY DISCHARGE — Doc T2 halves a hospital stay, T3 releases in full. Priced per remaining
@@ -133,7 +139,7 @@ export async function payPenance(ch, npcId, client, h) {
   await client.query('UPDATE npc_grudges SET count=$3, since=now() WHERE character_id=$1 AND npc_id=$2', [ch.id, npcId, count - 1]);
   if (count - 1 > 0) h.owned.grudges[npcId] = count - 1; else delete h.owned.grudges[npcId];
   await h.track(client, ch.account_id, 'underworld_penance', { npc: npcId, remaining: count - 1 });
-  return { ok: true, npc: npcId, cost, remaining: count - 1, squared: count - 1 === 0 };
+  return { ok: true, npc: npcId, npcName: n.name, cost, remaining: count - 1, squared: count - 1 === 0 };
 }
 
 // THE WEEKLY FAVOR (step four) — the top of a relationship finally gives something back: one
@@ -178,7 +184,7 @@ export async function claimFavor(ch, npcId, client, h) {
   }
   await client.query('INSERT INTO npc_favors (character_id, week, npc_id) VALUES ($1,$2,$3)', [ch.id, week, npcId]);
   await h.track(client, ch.account_id, 'underworld_favor', { npc: npcId, ...favor });
-  return { ok: true, npc: npcId, ...favor };
+  return { ok: true, npc: npcId, npcName: n.name, ...favor };
 }
 
 // THE ERRAND CHAIN (step five) — a fixture's storyline: do their DRAWN daily task on
@@ -196,6 +202,8 @@ export async function startErrand(ch, npcId, client, h) {
   if (existing) await client.query('UPDATE npc_errands SET npc_id=$2, step=0, started_day=$3, last_day=NULL WHERE character_id=$1', [ch.id, npcId, day]);
   else await client.query('INSERT INTO npc_errands (character_id, npc_id, step, started_day) VALUES ($1,$2,0,$3)', [ch.id, npcId, day]);
   await h.track(client, ch.account_id, 'underworld_errand', { npc: npcId, replaced: existing?.npc_id });
-  return { ok: true, npc: npcId, steps: UNDERWORLD.STEP5.CHAIN_STEPS, bonus: UNDERWORLD.STEP5.CHAIN_BONUS,
-    task: leadTaskOf(day, npcId), ...(existing ? { replaced: existing.npc_id } : {}) };
+  const task = leadTaskOf(day, npcId);
+  return { ok: true, npc: npcId, npcName: n.name, steps: UNDERWORLD.STEP5.CHAIN_STEPS, bonus: UNDERWORLD.STEP5.CHAIN_BONUS,
+    task, taskLabel: taskLabelOf(task),
+    ...(existing ? { replaced: existing.npc_id, replacedName: npcOf(existing.npc_id)?.name || existing.npc_id } : {}) };
 }

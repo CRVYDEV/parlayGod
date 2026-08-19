@@ -242,14 +242,11 @@ export async function tribute(ch, amount, client, h) {
   await h.bumpDaily(client, ch.id, 'tribute');
   await bumpFamilyTask(client, h, 'tribute', amt);
   bus.emit(`gang:${h.owned.gangId}`, { type: 'tribute', amount: amt });
-  return { ok: true, amount: amt };
+  // `currency` is what tells the two tributes apart. Both returned a bare {ok, amount}, so
+  // $25,000 of cash and 25 $OMR were byte-identical on the wire and the toast could only guess
+  // — it said "done." for both rather than name the wrong one.
+  return { ok: true, amount: amt, currency: 'cash' };
 }
-
-// M8 — $OMR TRIBUTE: any member pools tokens into the family's $OMR RESERVE (the bucket the
-// buyback split + weekly bonuses feed), so a seal is a cooperative purchase, not a boss's
-// wallet flex. A pure §10.4 bucket TRANSFER (account → reserve, both counted in conservation —
-// the total moves nothing), same 'gang:tribute' reason as cash tribute, split by currency.
-// It does NOT bump the weekly tribute task (that counts dollars, v24 rule).
 
 // M8 — $OMR TRIBUTE: any member pools tokens into the family's $OMR RESERVE (the bucket the
 // buyback split + weekly bonuses feed), so a seal is a cooperative purchase, not a boss's
@@ -265,7 +262,7 @@ export async function tributeOmr(ch, amount, client, h) {
   await client.query('UPDATE gangs SET omr_reserve = omr_reserve + $2 WHERE id=$1', [h.owned.gangId, amt]);
   await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -amt, reason: 'gang:tribute', counterparty: h.owned.gangId });
   bus.emit(`gang:${h.owned.gangId}`, { type: 'tribute_omr', amount: amt });
-  return { ok: true, amount: amt };
+  return { ok: true, amount: amt, currency: 'omr' };
 }
 
 // ═══════════════════ WARS (§5.5) ═══════════════════

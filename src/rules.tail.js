@@ -1965,7 +1965,19 @@ export const UNDERWORLD = {
     CHAIN_STEPS: 3, CHAIN_BONUS: 15,  // the errand chain: the fixture's drawn task on 3 separate days → +15
     FIX_LOSS: 5,                      // rivalry #3: buying the fight referee costs the Madame's book its pride
   },
+  // DISPLAY ONLY — the human phrase for each drawn lead/errand task. The task ids are terse verbs
+  // ('heal', 'post', 'dice') and were reaching the player raw on the Life tab, the feed and the
+  // errand toast: "errand: doc 1/3 — heal" tells nobody what to go and do. Not a lever (no number,
+  // no gameplay surface) — the board and the errand response both read it so the chip and the
+  // toast can never describe the same drawn task differently.
+  TASK_LABELS: {
+    heal: 'get patched up at the hospital', post: 'post a contract', hire: 'hire an NPC hitman',
+    craft: 'craft something in the workshop', ammo: 'buy a box of ammo', depart: 'send a convoy out',
+    list: 'list something on the Black Market', dice: 'roll the bones at the den',
+    numbers: 'play the numbers', train: 'put a fighter through the gym',
+  },
 };
+export const taskLabelOf = (task) => UNDERWORLD.TASK_LABELS[task] || task || null;
 export const npcOf = (id) => UNDERWORLD.NPCS.find((n) => n.id === id) || null;
 // The daily lead TASK for a fixture — deterministic off the §7.11 seed machinery, same for
 // everyone (the whole town hears what the Doc needs today).
