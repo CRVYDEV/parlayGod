@@ -752,14 +752,24 @@ const cday = dayOf();
 assert.equal(await coachOf(), 'A job came in from the family',
   'a mission off cooldown is the biggest respect on the board, so it leads the work board');
 await pool.query(`UPDATE characters SET mission_at = now() WHERE id='${rook.id}'`);
-assert.equal(await coachOf(), '3 of today\'s contracts unclaimed', 'then the day\'s contracts, counted');
+// The counts are DERIVED, not hardcoded at 3/1. The pool draws a gang-gated kind (tribute) on some
+// days and a family-less street can never clear it, so the rung counts `dailyLiveFor` — which is 2,
+// not 3, on those days. Hardcoding made this a deterministic assertion resting on a seed-drawn
+// precondition: green most days, red on the ~6 in 31 the tribute is drawn (the population
+// duel-ladder / Doc-drill / kitchen-raid class — this one was live on main, found by a play session).
+const { dailyJobsOf, dailyLiveFor } = await import('../src/rules.js');
+const cliveIds = dailyLiveFor([], { gangId: null }).map((j) => j.id);
+assert(cliveIds.length >= 2, 'the pool must always leave a solo player at least two live contracts — '
+  + 'if that ever stops being true this walk is measuring nothing');
+assert.equal(await coachOf(), `${cliveIds.length} of today's contracts unclaimed`, 'then the day\'s contracts, counted');
 // the REAL drawn ids — the count subtracts what this player has actually claimed, so a placeholder
-// id would be silently ignored and the assertion below would pass for the wrong reason
-const cjobs = (await import('../src/rules.js')).dailyJobsOf(cday).map((j) => j.id);
-// rook already HAS a daily row (he pulled jobs above, which bumps the counters) — upsert, don't insert
-await pool.query(`INSERT INTO daily_progress (character_id, day, counters, claimed) VALUES ('${rook.id}', ${cday}, '{}', '${JSON.stringify(cjobs.slice(0, 2))}')
+// id would be silently ignored and the assertion below would pass for the wrong reason. Claim all
+// but one of the LIVE ones, so "one left" is true whatever the day drew (claiming two of the three
+// DRAWN ids could leave only the blocked one, and then the rung correctly does not fire at all).
+const cjobs = dailyJobsOf(cday).map((j) => j.id);
+await pool.query(`INSERT INTO daily_progress (character_id, day, counters, claimed) VALUES ('${rook.id}', ${cday}, '{}', '${JSON.stringify(cliveIds.slice(0, -1))}')
   ON CONFLICT (character_id, day) DO UPDATE SET claimed = EXCLUDED.claimed`);
-assert.equal(await coachOf(), '1 of today\'s contracts unclaimed', 'and the count is REAL — two claimed leaves one');
+assert.equal(await coachOf(), '1 of today\'s contracts unclaimed', 'and the count is REAL — the claims are subtracted');
 await pool.query(`UPDATE daily_progress SET claimed='${JSON.stringify(cjobs)}' WHERE character_id='${rook.id}' AND day=${cday}`);
 assert.equal(await coachOf(), 'Tonight\'s hustle is waiting', 'then tonight\'s hustle, unstarted');
 await pool.query(`INSERT INTO hustles (character_id, day, step, baseline) VALUES ('${rook.id}', ${cday}, 1, '{}')`);

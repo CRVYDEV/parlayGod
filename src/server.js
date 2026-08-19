@@ -2046,7 +2046,7 @@ export async function buildServer() {
   app.post('/v1/streets/:targetId/search', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.startSearch(ch, req.params.targetId, client, h)));
   app.delete('/v1/streets/search', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client) => S.callOffSearch(ch, client)));
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.callOffSearch(ch, client, h)));
   app.post('/v1/streets/:targetId/fire', { preHandler: auth }, async (req) => {
     const r = await G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => S.fire(ch, victim, client, h, req.body?.rounds));
     await closeSocketsOnKill(r, req.params.targetId); // a kill left the victim's account gangless — cut its stale gang: feed

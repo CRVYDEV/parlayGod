@@ -223,13 +223,17 @@ export async function dynastyBoard(ch, client) {
   const consOffers = (await client.query(
     'SELECT * FROM consiglieri WHERE adviser_account=$1 AND NOT accepted', [ch.account_id])).rows;
   const otherOf = (m) => (m.account_a === ch.account_id ? m.account_b : m.account_a);
+  // SEQUENTIAL: every houseView runs two queries on the ONE shared client, and node-pg cannot run
+  // concurrent queries on a single connection (queued behind a deprecation warning today, a THROW
+  // from pg@9). Promise.all over them bought no speed — the connection serialized them regardless.
+  const each = async (rows, fn) => { const out = []; for (const r of rows) out.push(await fn(r)); return out; };
   return {
     marriage: marriage ? { ...(await houseView(otherOf(marriage))), since: marriage.created_at } : null,
-    proposals: await Promise.all(pending.map(async (m) => ({
-      ...(await houseView(otherOf(m))), mine: m.proposed_by === ch.account_id }))),
+    proposals: await each(pending, async (m) => ({
+      ...(await houseView(otherOf(m))), mine: m.proposed_by === ch.account_id })),
     consigliere: cons ? { ...(await houseView(cons.adviser_account)), accepted: cons.accepted } : null,
-    advising: await Promise.all(advising.map((c) => houseView(c.dynasty_account))),
-    consigliereOffers: await Promise.all(consOffers.map((c) => houseView(c.dynasty_account))),
+    advising: await each(advising, (c) => houseView(c.dynasty_account)),
+    consigliereOffers: await each(consOffers, (c) => houseView(c.dynasty_account)),
     costs: { propose: MARRIAGE.PROPOSE_COST, accept: MARRIAGE.ACCEPT_COST, consigliere: MARRIAGE.CONSIGLIERE_COST },
   };
 }

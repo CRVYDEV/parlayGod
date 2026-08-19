@@ -331,6 +331,25 @@ await pool.query(`UPDATE account_persistent SET omr = 7 WHERE account_id = (SELE
 assert.equal((await call('POST', `/v1/streets/${rocco.id}/fire`, { token: don.token, body: { rounds: 2200 } })).code, 400, 'no fire without a search');
 assert.equal((await call('POST', `/v1/streets/${rocco.id}/search`, { token: don.token })).code, 200, 'search started');
 assert.equal((await call('POST', `/v1/streets/${mook.id}/search`, { token: don.token })).code, 400, 'one active search');
+// YOUR OWN TAIL — the search has to be on the SHEET, not only in the browser that placed it.
+// Found by playing: the hunt card read localStorage alone, so a second device (or cleared
+// storage) was told "nobody in the crosshairs — start a search" while the line above is exactly
+// what the server answers instead. The card carries the ONLY call-it-off button, so the way out
+// of that contradiction was the thing that had stopped rendering.
+{
+  const sheet = await meOf(don.token);
+  assert.equal(sheet.hunt?.targetId, rocco.id, 'the sheet names the mark this street has a search out on');
+  // ...and the countdown is the SAME clock the trigger is gated on (one hunterSearchMs, three
+  // readers). This suite runs SEARCH_MS=0, so a fresh search is placed the instant it is made and
+  // "still counting" is structurally unreachable — the knob is read PER CALL, so raise it for the
+  // one assertion that needs a clock rather than assume a precondition the suite denies.
+  assert.equal(sheet.hunt.placedSeconds, 0, 'at SEARCH_MS=0 the mark is placed on arrival');
+  process.env.SEARCH_MS = '3600000';
+  assert.ok((await meOf(don.token)).hunt.placedSeconds > 3500,
+    'the sheet counts down the real search clock — the same one fire refuses on');
+  process.env.SEARCH_MS = '0';
+  assert.equal((await meOf(don.token)).hunt.placedSeconds, 0, 'and stops counting exactly when fire stops refusing');
+}
 await seedCh(don.id, "energy=200, jail_until=NULL, loc='docks'");
 await seedCh(rocco.id, "hosp_until=NULL, loc='docks', health=100");
 
@@ -356,6 +375,13 @@ assert.equal((await call('POST', `/v1/streets/${rocco.id}/search`, { token: don.
 const donCashPreKill = (await meOf(don.token)).cash;
 const donOmrPreKill = (await meOf(don.token)).omr;
 const roccoCashPreKill = (await meOf(rocco.token)).cash;
+// THE BANK STOPS THE KILLER, NOT THE STREET. Give the victim a fully CLEARED bank balance
+// (bank_intransit=0) so the two mechanics separate: a killer's whack:loot reaches pocket + IN-TRANSIT
+// only, so the cleared bank survives the LOOT — and then runEstate burns cash+bank together, so it does
+// NOT survive the DEATH. Nothing asserted this either way, and both codices had listed "cleared bank
+// cash" under WHAT IS SAFEST WHEN YOU DIE (found by playing; reproduced with a $60k cleared balance,
+// heir bank $0). Both halves are pinned below.
+await seedCh(rocco.id, 'bank=8000, bank_intransit=0');
 r = await call('POST', `/v1/streets/${rocco.id}/fire`, { token: don.token, body: { rounds: 2200 } });
 assert.equal(r.code, 200, 'shots fired');
 assert(r.body.kill, `level-11 target with 2200 rounds is a kill (eff vs btk: ${JSON.stringify(r.body)})`);
@@ -364,7 +390,8 @@ assert.equal(r.body.bounty, 5000, "the completed hit collects Mook's open kill c
 // Risk-to-Earn P1.1 — the killer loots 25% of the victim's POCKET cash and, since economy v3 step 5,
 // the TIERED $OMR rate: a loose balance is IDLE and is looted deepest (§11.1 — exposure is
 // proportional to idleness, not wealth).
-assert.equal(r.body.loot, Math.floor(roccoCashPreKill * 0.25), 'looted 25% of the victim pocket cash');
+// the loot is 25% of POCKET alone — the $8,000 CLEARED bank is out of the killer's reach
+assert.equal(r.body.loot, Math.floor(roccoCashPreKill * 0.25), 'looted 25% of the victim pocket cash — the cleared bank is out of a killer\'s reach');
 assert.equal(r.body.omrLoot, Math.floor(7 * 0.50), 'looted 50% of the victim IDLE (loose) $OMR (floor(7×0.5)=3)');
 assert.equal((await meOf(don.token)).omr, donOmrPreKill + 3, 'the looted $OMR landed in the killer\'s account');
 assert.equal((await meOf(don.token)).cash, donCashPreKill + r.body.chop + r.body.bounty + r.body.loot, 'chop + bounty + cash loot all paid to the killer');
@@ -374,6 +401,11 @@ const heir = await meOf(rocco.token);
 assert.equal(heir.generation, 2, 'heir generation');
 assert.equal(heir.name, 'Rocco Two-Knives', 'the bloodline keeps the name');
 assert.equal(heir.cash, 500 + 100 * 5, 'legacy stake: $500 + $100 × prestige (floor(11/2))');
+// ...and the OTHER half of the bank's story: the $8,000 the killer could not touch dies with the street.
+// asserted on the DEAD row, not the heir's: the heir is a fresh INSERT with no `bank` column, so
+// `heir.bank === 0` is true whatever the estate does and could never fail.
+assert.equal(Number((await pool.query(`SELECT bank FROM characters WHERE id='${rocco.id}'`)).rows[0].bank), 0,
+  'the cleared bank does NOT survive death — the estate zeroes pocket and bank together');
 assert.equal(heir.omr, 3, 'liquid $OMR survives death MINUS the 50% IDLE loot (7→4) MINUS the L2a 25% death duty (floor(4×0.25)=1 → 3)');
 assert.equal(heir.cars.length, 0, 'fleet died');
 assert(!heir.gang, 'gang seat vacated');
@@ -381,6 +413,11 @@ assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM cars WHERE charact
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM gangs WHERE id='${gangB}'`)).rows[0].n), 0, 'one-man family dissolved with its boss');
 const heirNotes = (await call('GET', '/v1/notifications', { token: rocco.token })).body.notifications;
 assert(heirNotes.some((n) => n.type === 'estate' && n.payload.legacy === 5), 'estate report delivered to the heir');
+// the figure the death modal prints: pocket-after-loot PLUS the whole bank. The client labelled it
+// "pocket cash" while it silently included the bank — so a player who banked $8,000 read a loss $8,000
+// larger than the number they thought it described, on the one screen that explains what death costs.
+assert.equal(heirNotes.find((n) => n.type === 'estate').payload.lost.cash, (roccoCashPreKill - r.body.loot) + 8000,
+  'the report\'s lost.cash sums pocket AND bank — the label must say so');
 const mookNotes = (await call('GET', '/v1/notifications', { token: mook.token })).body.notifications;
 // the kill notifies 3 RANDOM living witnesses — assert 3 were delivered globally (robust to which
 // ones the RNG picks from the now-larger cast), not that a specific character was chosen
@@ -1145,8 +1182,29 @@ assert.equal((await call('POST', `/v1/streets/${jmember.id}/search`, { token: jb
 const jmAcct = (await pool.query(`SELECT account_id a FROM characters WHERE id='${jmember.id}'`)).rows[0].a;
 await pool.query(`UPDATE account_persistent SET rat=true WHERE account_id='${jmAcct}'`);
 assert.equal((await call('POST', `/v1/streets/${jmember.id}/search`, { token: jboss.token })).code, 200, 'startSearch: a RAT in your own family forfeits omertà — the search IS placed (the fire rat-waiver is now reachable to same-family hunters)');
+// ...and while a search IS out on that rat, the moment they stop being one the contract must
+// genuinely come OFF. Found by playing: fire's family/crew branches DELETEd the search and then
+// THREW, and a GameError rolls the transaction back — so the game announced "It's off" while the
+// row sat there holding the hunter's one search slot, and startSearch went on refusing "Your
+// people are already out looking. Call them off first." (The recorded burner rule: a side-effect
+// that must survive the refusal has to COMMIT.) Nothing is spent to reach this branch, so calling
+// it off costs the search and not the magazine.
+await pool.query(`UPDATE account_persistent SET rat=false WHERE account_id='${jmAcct}'`); // family again
+{
+  // fire's earlier gates (iron, ammo, energy, same district) come first, so arm the hunter — the
+  // branch under test is the LAST one before the shot resolves
+  await seedCh(jboss.id, `gun='orchestra', ammo=500, energy=200, health=100, loc=(SELECT loc FROM characters WHERE id='${jmember.id}'), jail_until=NULL, hosp_until=NULL, shoot_cd_until=NULL`);
+  await seedCh(jmember.id, "hosp_until=NULL, jail_until=NULL, health=100"); // the mark has to be reachable
+  const off = await call('POST', `/v1/streets/${jmember.id}/fire`, { token: jboss.token, body: { rounds: 50 } });
+  assert.equal(off.body.calledOff, 'family', 'the hit on a man who is family again is CALLED OFF, not merely refused');
+  assert.equal((await pool.query(`SELECT count(*)::int n FROM searches WHERE hunter='${jboss.id}'`)).rows[0].n, 0,
+    'and the search is really gone — "it\'s off" has to be true, not just said');
+  assert.equal((await meOf(jboss.token)).hunt, null, 'the sheet that ships with the refusal agrees — no hunt');
+  assert.equal((await call('POST', `/v1/streets/${mook.id}/search`, { token: jboss.token })).code, 200,
+    'so the slot is free — the hunter can take a new contract instead of being told they already have one');
+  await pool.query(`DELETE FROM searches WHERE hunter='${jboss.id}'`);
+}
 await pool.query(`DELETE FROM searches WHERE hunter='${jboss.id}'`); // clean up so it doesn't leak into later tests
-await pool.query(`UPDATE account_persistent SET rat=false WHERE account_id='${jmAcct}'`);
 
 
 // ── Phase 3 remainder: GEAR LOOT on a fire-kill — in-game gear is losable, on-chain gear is safe ──

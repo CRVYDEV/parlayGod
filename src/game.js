@@ -253,6 +253,15 @@ export async function loadOwned(client, ch) {
     UNION ALL SELECT 'est', name, NULL::text, tier::numeric, spent_omr::numeric, NULL::timestamptz FROM estates WHERE account_id=$2
     UNION ALL SELECT 'deed', name, district, NULL::numeric, NULL::numeric, claimed_at FROM street_deeds WHERE account_id=$2
     UNION ALL SELECT 'disc', discipline, NULL::text, xp::numeric, NULL::numeric, NULL::timestamptz FROM character_disciplines WHERE character_id=$1
+    -- YOUR OWN TAIL. Found by playing: a placed search lived ONLY in the browser's localStorage, so a
+    -- player on a second device — or one who cleared storage, or opened the installed PWA after
+    -- searching on desktop — saw "nobody in the crosshairs — start a search", and starting one was
+    -- refused "Your people are already out looking. Call them off first." Two surfaces flatly
+    -- contradicting each other, with the one button that calls it off living on the card that no
+    -- longer rendered. searches.hunter is the PK, so this branch is a free lookup; the LEFT JOIN
+    -- keeps the row (and the way out) even if the mark somehow went missing.
+    UNION ALL SELECT 'hunt', s.target, c.name, NULL::numeric, NULL::numeric, s.started_at
+      FROM searches s LEFT JOIN characters c ON c.id = s.target WHERE s.hunter=$1
     UNION ALL SELECT 'rival', aggressor_account::text, NULL::text, NULL::numeric, NULL::numeric, at FROM rival_events WHERE victim_account=$3 AND at > now() - interval '48 hours'
     -- ...and MY OWN strikes in the same window, so the coach can tell "somebody moved on you" from
     -- "somebody moved on you AND YOU HAVE NOT ANSWERED". The rung's own hint promises that settling
@@ -318,6 +327,8 @@ export async function loadOwned(client, ch) {
   const deed = of('deed', (r) => ({ name: r.k, district: r.k2, claimed_at: r.ts }));
   // THE REGIMEN — discipline xp per id (dies with the street; levels derived, never stored)
   const disc = of('disc', (r) => ({ discipline: r.k, xp: n(r.n) }));
+  // YOUR OWN TAIL — the search you have out, read from the SERVER rather than the browser
+  const hunt = of('hunt', (r) => ({ target: r.k, name: r.k2, started_at: r.ts }));
   // STREET WAR step two — fresh malice against this bloodline (last 48h): the coach's
   // someone-moved-on-you rung reads the COUNT (self-clears as the window rolls — the harness-F1
   // rule; a bounded read: shields/cooldowns bound how often anyone can be wronged in 48h)
@@ -422,6 +433,10 @@ export async function loadOwned(client, ch) {
     skills: new Set(sk.rows.map((r) => r.skill_id)), // the build — dies with the street
     // THE REGIMEN — discipline xp map (id → xp); the cap helpers read it (dies with the street)
     disciplines: Object.fromEntries(disc.rows.map((r) => [r.discipline, Number(r.xp)])),
+    // YOUR OWN TAIL — the one search you have out (searches.hunter is the PK, so at most one row).
+    // The mark's name is a display convenience; a NULL one means the street is gone, and the card
+    // still has to render, because the way to call the search off lives on it.
+    hunt: hunt.rows[0] || null,
     // THE TRADES — use-XP per track (omerta-mastery-design.md). Dies with the street (a
     // HEIR_KEEP_BPS echo carries); XP is not a currency, so nothing here touches §10.4.
     mastery: Object.fromEntries(my.rows.map((r) => [r.track_id, Number(r.xp)])),
@@ -822,6 +837,19 @@ export async function soldierResult(client, h, ch, s, { success, cause = 'a job 
 // Skill touchpoint helpers — every effect is a NEW single-touchpoint modifier (sign-off lever).
 export const hasSkill = (h, id) => !!h?.owned?.skills?.has(id);
 export const skillMult = (h, id, mult) => (hasSkill(h, id) ? mult : 1);
+// §9 search clock — how long the hunter's people take to place a mark, the FOUR stacks and all.
+// Lives here rather than in combat.js because THREE readers need it and one of them is the
+// character view: startSearch quotes it back, fire enforces it, and the sheet counts it down.
+// game.js cannot import combat.js (combat imports game, one way), and a second copy of a
+// four-way stack is exactly how two clocks come to disagree — so the formula is here, where
+// every term it multiplies already lives, and all three readers import the one implementation.
+// SEARCH_MS is read per call: a TEST-ONLY knob, never set in production (preflight refuses it).
+export const hunterSearchMs = (h, ch) => Math.floor(Number(process.env.SEARCH_MS || CONSTANTS.SEARCH_MS)
+  * skillMult(h, 'executioner', SKILLS.FX.SEARCH_MULT)
+  * npcMult(h, 'fixer', 3, UNDERWORLD.FX.SEARCH_MULT)
+  * masteryFx(h, 'wetwork') // TRADES perk — a third stack on the clock (0.72 → 0.54 fully built; flagged)
+  * pathFx(ch, 'searchClock')); // PATHS v2 — the Shadow's perk is a FOURTH stack (0.46 fully built; flagged)
+
 // trunk capacity incl. the Pack Mule bonus — use this, not cargoCapacity(), on player paths
 export const trunkCap = (h) => cargoCapacity(h.owned.assets)
   + (hasSkill(h, 'pack_mule') ? SKILLS.FX.TRUNK_BONUS : 0)
@@ -982,7 +1010,39 @@ export async function withCharacter(pool, accountId, fn) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const r = await client.query('SELECT * FROM characters WHERE account_id = $1 AND alive FOR UPDATE', [accountId]);
+    // THE DEATH RACE. Found by playing: get killed with the tab open and the very next request
+    // comes back `400 no_character — "Create a character first."` to a player whose heir is
+    // standing right there. It is not a logic bug, it is READ COMMITTED: a `SELECT … FOR UPDATE`
+    // that BLOCKS on the dying row re-evaluates its WHERE against the NEW row version when the
+    // killer commits — `alive` is now false so the row drops out — and the heir INSERTed by that
+    // same commit is not in this statement's snapshot, so it is not picked up either. Zero rows.
+    //
+    // It fires at the worst moment (the client refreshes ON the `whacked` event, straight into the
+    // window) and it LIES in the way this codebase has now corrected three times: an ordinary game
+    // state reported as a broken one. `boot()` renders any non-2xx as THE LINE'S DEAD, so a player
+    // who reloads there is told the city's records are unreachable; an agent is told to create a
+    // character it already has. No suite can see it — pg-mem is single-caller.
+    //
+    // The remedy for the artifact is simply to look again: a second statement takes a fresh
+    // snapshot and finds the heir. Nothing has happened in this transaction yet (this is its first
+    // statement), so re-running is clean, and an action in flight when you die lands on your heir —
+    // exactly as if it had been clicked a moment later, with every gate still applying. Only a
+    // genuinely characterless account reaches the throw.
+    //
+    // THE CLASS WAS SWEPT, and this is its only instance (RT#7's rule — a class fixed only where it
+    // was discovered is half-fixed). ~40 other `FOR UPDATE` selects in src/ carry a MUTABLE predicate
+    // and could take the same artifact; every one is fail-safe, in three shapes. (a) The zero-row
+    // answer is simply TRUE — the target really is dead (`id=$1 AND alive`), the lot really did
+    // settle (`status='live'`), the pot really did expire (`expires_at > now()`) — so a correct
+    // refusal, and a false negative is impossible: a blocker that rolls back leaves the pre-image,
+    // which the re-evaluation sees. (b) The zero-row path PARKS the value rather than dropping it
+    // (store.js's wire days → `wire_pending_days`, applied at the heir's birth). (c) It rolls back
+    // with nothing consumed (mintCharacter/rerollCharacter leave the paid credit on the ACCOUNT, so
+    // a retry works), or it is a worker sweep whose skipped row comes round again next tick. What
+    // made THIS one a defect rather than a message is that withCharacter is the wrapper every authed
+    // request passes through, so the artifact took the whole app to boot()'s dead-end screen.
+    let r = await client.query('SELECT * FROM characters WHERE account_id = $1 AND alive FOR UPDATE', [accountId]);
+    if (!r.rows.length) r = await client.query('SELECT * FROM characters WHERE account_id = $1 AND alive FOR UPDATE', [accountId]);
     if (!r.rows.length) throw new GameError('no_character', 'Create a character first.');
     const ch = r.rows[0];
     const acct = (await client.query('SELECT * FROM account_persistent WHERE account_id = $1 FOR UPDATE', [accountId])).rows[0];
@@ -1567,6 +1627,18 @@ export function view(ch, acct = {}, owned = {}) {
       retainerSeconds: retainerActive(ch) ? Math.max(0, Math.ceil((new Date(ch.retainer_until) - Date.now()) / 1000)) : 0,
       witproSeconds: witproActive(ch) ? Math.max(0, Math.ceil((new Date(ch.witpro_until) - Date.now()) / 1000)) : 0,
       rat: !!acct.rat },
+    // YOUR OWN TAIL — the search you have out, from the SERVER. The browser used to be the only
+    // place this was written down, so a second device (or cleared storage, or the installed PWA
+    // after searching on desktop) showed "nobody in the crosshairs" while startSearch refused with
+    // "Your people are already out looking. Call them off first." — and the only button that calls
+    // it off lived on the card that no longer rendered. `placedSeconds` counts down the SAME
+    // hunterSearchMs the shot is gated on, so the sheet and the trigger can never disagree.
+    hunt: owned.hunt ? {
+      targetId: owned.hunt.target,
+      name: owned.hunt.name || null, // NULL if the mark's street is gone — the card still renders
+      placedSeconds: Math.max(0, Math.ceil((new Date(owned.hunt.started_at).getTime()
+        + hunterSearchMs({ owned, acct }, ch) - Date.now()) / 1000)),
+    } : null,
     tradeRep: Number(ch.trade_rep || 0), busts: Number(ch.busts || 0),
     gun: ch.gun || null, vest: ch.vest || null, guns: owned.guns || [],
     jailSeconds: ch.jail_until ? Math.max(0, Math.ceil((new Date(ch.jail_until) - Date.now()) / 1000)) : 0,

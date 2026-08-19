@@ -1297,7 +1297,7 @@
     <dt>The Family / Turf / Commission</dt><dd>Join a family for backup, <b>turf</b> income, and <b>wars</b>. <b>Tribute</b> is what you kick up; the <b>Commission</b> is the five biggest families setting the week's rules.</dd>
     <dt>Vendetta</dt><dd>Kill a man and his bloodline swears a blood feud against yours. Settle it with revenge inside the window for feared respect. Kill them again and it DEEPENS (Vendetta → Blood Feud → War of Extinction — a longer window). Or hold a <b>sit-down</b> and both lines bury it in peace.</dd>
     <dt>The Underworld</dt><dd>Named fixers — the Doc, Vinnie, Bella, Big Tuna, the Madame. Earn their <b>standing</b> by working their corner of the game for discounts and favors. Cross them and they hold a grudge.</dd>
-    <dt>The Pad / Cold</dt><dd>A front's upkeep — protection and wages, owed every hour whether the place earns or not. The till only holds a <b>day's</b> take; the pad keeps running for a <b>week</b>. Stay away too long and you owe more than the front can hand you and it goes <b>cold</b> — no income until you square it out of pocket. That's the deal, not a fault: a business wants an owner who shows up. If you can't carry it, <b>close it up</b> and the pad stops.</dd>
+    <dt>The Pad / Cold</dt><dd>A front's upkeep — protection and wages, owed every hour whether the place earns or not. The till only holds a <b>day's</b> take; the pad keeps running for <b>two days</b>. Stay away too long and it goes <b>cold</b> — no income at all until you square it out of pocket, though the envelope stops below a full till so coming back always covers it. That's the deal, not a fault: a business wants an owner who shows up. If you can't carry it, <b>close it up</b> and the pad stops.</dd>
     <dt>Renown · Notoriety · Scrutiny</dt><dd>Reputations that follow you: <b>renown</b> is your nightlife legend; <b>notoriety</b> heats a club toward a raid; <b>scrutiny</b> is the Bureau's file on you. Watched heat — you can't just wait it out.</dd>
     <dt>The Wire</dt><dd>Information you buy with $OMR: <b>tap</b> a rival to see what they're holding and whether they're hunting you; <b>sweep</b> your own lines clean; <b>subscribe</b> to the Street Wire for forecasts and threat chatter.</dd>
   </dl>
@@ -2184,6 +2184,20 @@
     if (body.kill) bits.push(`THEY'RE DONE.${body.loot ? ` looted $${fmt(body.loot)}` : ''}${body.contraLoot ? ` · seized $${fmt(body.contraLoot)} in contraband` : ''}${body.empireLoot ? ` · 🏢 TOOK OVER their ${body.empireLoot.name}` : ''}${body.bounty ? ` · contract paid $${fmt(body.bounty)}` : ''}${body.ammoBack ? ` · the contract covered ${fmt(body.ammoBack)} rounds` : ''}${body.hitman?.blood?.ours > 1 ? ` · that's ${nth(body.hitman.blood.ours)} body between your bloodlines` : ''}`);
     if (body.hospitalized && !body.kill) bits.push('they went down — hospital job');
     if (body.absorbed) bits.push('their cover took the hit');
+    // THE SHOT THAT DIDN'T LAND. Found by playing: a hit is the most expensive action in the game —
+    // a 3h search (BURNED on any resolved shot), the energy, the rounds, and a 2h trigger cooldown —
+    // and every outcome but the kill fell through to the generic "✓ done.", which does not merely
+    // fail to explain, it reads as a WIN. The server has always sent the whole story (`effective`
+    // rounds against the `btk` he can take); nothing rendered it. `btk` is the miss's tell — the
+    // bodyguard and revive branches carry their own flags and are named separately above/below.
+    if (body.kill === false && body.btk !== undefined && !body.absorbed && !body.revived)
+      bits.push(`he's still standing — ${fmt(body.effective)} rounds told and he can take ${fmt(body.btk)}`
+        + `${body.jammed ? ' · YOUR PIECE JAMMED' : ''} · your search is burned and the trigger cools`);
+    if (body.revived) bits.push('they were carried out and patched up — pre-paid insurance. Still breathing.');
+    // ...and the contract the city cancelled on you: family or crew now, so the hit is off and the
+    // search is gone with it (the server clears it for real — it used to say so and not do it).
+    if (body.calledOff) bits.push(body.calledOff === 'you' ? 'called your people off — the mark is yours to pick again'
+      : `the hit is OFF — ${body.name || 'they'} ${body.calledOff === 'family' ? 'is family now' : 'runs with your crew now'}. Your search is cleared.`);
     if (body.reserve !== undefined && body.fee !== undefined && body.serial) bits.push(`🔨 ${body.name} #${body.serial} on the block — reserve ${fmt(body.reserve)} $OMR (−${body.fee} fee)`);
     if (body.gain) bits.push(`+${body.gain} ${body.stat || ''}`);
     if (body.earned) bits.push(`${body.play === 'flood' ? '🔥 moved WEIGHT' : body.play === 'careful' ? '🤫 worked the regulars' : 'moved product'} — +$${fmt(body.earned)}${body.cornerPremium ? ' (corner premium)' : ''}${body.heat ? ` · +${body.heat} heat` : ''}`);
@@ -3297,9 +3311,9 @@
         <div style="flex:1;min-width:150px"><div class="t" style="color:var(--ok)">the heir KEEPS</div>
           <div class="dim" style="font-size:13px">${line(k.omr, `${fmt(Math.floor(k.omr || 0))} $OMR liquid`)}${line(k.staked, `${fmt(Math.floor(k.staked || 0))} staked`)}${line(k.gear, `${k.gear} on-chain gear`)}${line(k.prestige, `prestige ${k.prestige}`)}${line(k.estate, `the ${esc(String(k.estate))}`)}the account, always</div></div>
         <div style="flex:1;min-width:150px"><div class="t" style="color:var(--blood)">the street LOST</div>
-          <div class="dim" style="font-size:13px">${line(l.cash, `$${fmt(l.cash || 0)} pocket cash`)}${line(l.cars, `${l.cars} car(s)`)}${line(l.guns, `${l.guns} gun(s)`)}${line(l.rackets, `${l.rackets} racket(s)`)}${line(l.assets, `${l.assets} asset(s)`)}level ${l.lvl || '?'} — you start again at 1</div></div>
+          <div class="dim" style="font-size:13px">${line(l.cash, `$${fmt(l.cash || 0)} cash — pocket AND bank`)}${line(l.cars, `${l.cars} car(s)`)}${line(l.guns, `${l.guns} gun(s)`)}${line(l.rackets, `${l.rackets} racket(s)`)}${line(l.assets, `${l.assets} asset(s)`)}level ${l.lvl || '?'} — you start again at 1</div></div>
       </div>
-      <p class="dim" style="margin-top:8px">Play like it counts. Bank your cash. Don't carry a body you can't answer for.</p>`;
+      <p class="dim" style="margin-top:8px">Play like it counts. The bank stops a <i>killer</i> taking a cut — it never survives the street. Spend it, sink it into the things that outlive you, and don't carry a body you can't answer for.</p>`;
     $('#deathmodal').classList.remove('hidden');
   }
 
@@ -5662,7 +5676,7 @@
         <span class="d" style="margin-left:6px">${['◉', '◉', '◉'].map((d, i) => `<span style="color:${i < hu.step ? 'var(--ok)' : 'var(--dim)'}">${d}</span>`).join('​')}</span>
         <div class="d">${esc(hu.what || '')}</div>
         ${hu.done ? '' : `<div style="margin-top:6px">
-          ${hu.here ? `<button class="act prime" id="hu-go">CHECK IN${hu.step === 2 ? ` — collect $${fmt(hu.pay || 0)}` : ''}</button>`
+          ${hu.here ? `<button class="act prime" id="hu-go"${hu.legworkDone === false ? ' disabled' : ''}>CHECK IN${hu.step === 2 ? ` — collect $${fmt(hu.pay || 0)}` : ''}</button>${hu.legworkDone === false ? ` <span class="d" style="font-size:11px">the contact wants the work done first — ${esc(hu.legwork || 'pull a job')}</span>` : ''}`
             : `<button class="act" data-do="POST /v1/travel/${hu.district}">travel to ${esc(hu.districtName || '')}</button> <span class="d" style="font-size:11px">then check in there</span>`}
         </div>`}
       </div>` : ''}
@@ -6278,7 +6292,19 @@
     await refresh();
     const board = (await api('GET', '/v1/contracts')).body?.contracts || [];
     const streets = ((await api('GET', '/v1/streets')).body?.streets || []).filter((s) => s.id !== me.id);
-    const hunt = JSON.parse(localStorage.getItem(huntKey()) || 'null');
+    // YOUR OWN TAIL — the SERVER is the source of truth now. This used to read localStorage alone,
+    // so a second device (or cleared storage, or the installed PWA after searching on desktop) was
+    // told "nobody in the crosshairs — start a search" while startSearch refused "Your people are
+    // already out looking. Call them off first." — and CALL IT OFF is a button on this very card,
+    // so the way out of the contradiction was the thing that had stopped rendering. localStorage
+    // survives as the fallback for a client older than the field, and still carries the mark's name
+    // when the server has no living street to name.
+    const stored = JSON.parse(localStorage.getItem(huntKey()) || 'null');
+    const hunt = me.hunt
+      ? { targetId: me.hunt.targetId,
+          name: me.hunt.name || (stored && stored.targetId === me.hunt.targetId ? stored.name : null) || 'a mark',
+          placedAt: new Date(Date.now() + me.hunt.placedSeconds * 1000).toISOString() }
+      : (me.hunt === undefined ? stored : null); // undefined = an older server; null = no search
     const huntReadyS = hunt ? Math.ceil((new Date(hunt.placedAt) - Date.now()) / 1000) : 0;
     const npcs = [['legbreaker', 'Leg-Breaker $50k'], ['journeyman', 'Journeyman $250k'], ['professional', 'The Professional $1M']];
 
@@ -6417,31 +6443,51 @@
           <button class="act" data-story="${r.street.id}" data-story-name="${esc(r.street.name)}" title="everything recorded between your bloodlines">the story</button>
           ${dmBtn(r.street.id)}` : ''}</div>`).join('')}</div>` : ''}
       <h2 style="margin-top:12px">The Streets (${streets.length})</h2>
-      <div class="grid">${streets.map((s) => `
+      <div class="grid">${streets.map((s) => {
+        // The mark's own state decides what the server will even entertain, and it SENDS both flags
+        // (jailed/hospitalized) on every row — so read them here rather than letting the player find
+        // out on press. This row already disables `steal their ride`/`steal boat` on MY state; the
+        // Pen roster does the same on the target's ("the button disables itself with the reason").
+        // The two are NOT the same blanket, and the difference is a rule worth teaching: HOSPITAL
+        // puts the whole street out of reach, while LOCKUP takes the PERSON and whatever is ON them
+        // — their car, boat, stable and fronts stay put and stay reachable while the owner is away.
+        // The split follows the server exactly: `robTrunk` gates jailed(victim) too ("the freight
+        // went in with them"), which is why it sits with the body rather than the property.
+        const away = s.hospitalized ? "under the Doc's care — even we have rules"
+          : s.jailed ? 'in lockup — out of your reach' : null;
+        const noBody = away ? ` disabled title="${away}"` : '';                    // them, and what they carry
+        const noStuff = s.hospitalized ? ` disabled title="${away}"` : '';         // what they leave behind
+        return `
         <div class="card">${av(s.id, 30)}<span class="t">${esc(s.name)}</span> <span class="d">lvl ${s.level}${s.gangTag ? ' · ' + s.gangTag : ''}</span>
           ${s.jailed ? '<span class="chip cold">LOCKUP</span>' : ''}${s.hospitalized ? '<span class="chip cold">HOSPITAL</span>' : ''}${s.npc ? '<span class="chip" title="a resident of the city — a real target on every board, but not another player">RESIDENT</span>' : ''}${rivalIds.has(s.id) ? '<span class="chip bad" title="this bloodline has moved against you — the rivals ledger remembers">RIVAL</span>' : ''}
           <div class="d">${s.loc}${s.guardPrice != null ? ` · guards for $${fmt(s.guardPrice)}` : ''}</div>
           ${dmBtn(s.id)}
           ${s.jailed ? `<button class="act prime" data-pbust="${s.id}" title="spring them from lockup — a success frees them and PAYS you (more time left = bigger reward, worse odds; the sweet spot is near the end of a stretch). A miss puts YOU inside for a few minutes.">bust them out</button>` : ''}
-          <button class="act" data-jump="${s.id}" data-intent="rob" title="you're there for the wallet — a bigger cut, but nobody's impressed">roll them</button>
-          <button class="act prime" data-jump="${s.id}" data-intent="standard">jump</button>
-          <button class="act risk" data-jump="${s.id}" data-intent="message" title="you're there to be SEEN — big respect + a real beating, but you're not there to rob them, it costs half again the energy, and it draws the Law">send a message</button>
+          <button class="act" data-jump="${s.id}" data-intent="rob"${noBody || ' title="you\'re there for the wallet — a bigger cut, but nobody\'s impressed"'}>roll them</button>
+          <button class="act prime" data-jump="${s.id}" data-intent="standard"${noBody}>jump</button>
+          <button class="act risk" data-jump="${s.id}" data-intent="message"${noBody || ' title="you\'re there to be SEEN — big respect + a real beating, but you\'re not there to rob them, it costs half again the energy, and it draws the Law"'}>send a message</button>
           <button class="act" data-search="${s.id}" data-name="${esc(s.name)}">search</button>
-          ${me.gtaSeconds > 0
+          ${noStuff
+            ? `<button class="act risk"${noStuff}>steal their ride</button>`
+            : me.gtaSeconds > 0
             ? `<button class="act risk" disabled title="the heat's still on from your last job — the boost/theft window is shared">steal their ride 🔥 ${minsTxt(me.gtaSeconds)}</button>`
             : `<button class="act risk" data-psteal="${s.id}" data-confirm="Boost one of their cars? A win takes the car for keeps — a miss is a stretch in lockup, and either way it burns your boost window." title="grand theft, PvP — the server picks a random car off their street; expensive iron has alarms. A miss is lockup.">steal their ride</button>`}
-          ${(s.fronts || []).map((f) => `<button class="act risk" data-prob="${f.id}" data-confirm="Hit the register at their ${f.kind}? A win skims the take — a miss is a short stretch in lockup." title="rob their ${f.kind} — a cut of its uncollected take; stealth (cunning + speed). A miss is lockup.">rob ${f.kind}</button>`).join('')}
-          <button class="act risk" data-ptrunk="${s.id}" title="mug the freight off their back — one crate of trade goods, capped by your own trunk space; stealth. A miss is lockup.">rob trunk</button>
-          ${me.gtaSeconds > 0
+          ${(s.fronts || []).map((f) => noStuff
+            ? `<button class="act risk"${noStuff}>rob ${f.kind}</button>`
+            : `<button class="act risk" data-prob="${f.id}" data-confirm="Hit the register at their ${f.kind}? A win skims the take — a miss is a short stretch in lockup." title="rob their ${f.kind} — a cut of its uncollected take; stealth (cunning + speed). A miss is lockup.">rob ${f.kind}</button>`).join('')}
+          <button class="act risk" data-ptrunk="${s.id}"${noBody || ' title="mug the freight off their back — one crate of trade goods, capped by your own trunk space; stealth. A miss is lockup."'}>rob trunk</button>
+          ${noStuff
+            ? `<button class="act risk"${noStuff}>steal boat</button>`
+            : me.gtaSeconds > 0
             ? `<button class="act risk" disabled title="the heat's still on — the boost/theft window is shared">steal boat 🔥 ${minsTxt(me.gtaSeconds)}</button>`
             : me.loc !== 'docks'
             ? `<button class="act risk" disabled title="boats are stolen where they float — travel to the docks first">steal boat ⚓ docks only</button>`
             : `<button class="act risk" data-pboat="${s.id}" data-confirm="Steal a boat off their berth? A win takes the boat, a miss is a stretch in lockup, and it burns your boost window." title="boat theft at the docks — the server picks a docked boat; a big hull has watchmen. A miss is lockup.">steal boat</button>`}
-          <button class="act risk" data-psab="${s.id}" title="wreck their stable — one random racer or fighter laid up for hours; stealth. A miss is lockup.">sabotage</button>
-          <select data-npctier="${s.id}" style="font-size:11px">${npcs.map(([id, n]) => `<option value="${id}">${n}</option>`).join('')}</select>
-          <button class="act risk" data-npchit="${s.id}">NPC hit</button>
-          ${s.guardPrice != null ? `<button class="act" data-hire="${s.id}">hire guard</button>` : ''}
-          <button class="act" data-feud="${s.id}">feud</button></div>`).join('')}</div>`;
+          <button class="act risk" data-psab="${s.id}"${noStuff || ' title="wreck their stable — one random racer or fighter laid up for hours; stealth. A miss is lockup."'}>sabotage</button>
+          <select data-npctier="${s.id}" style="font-size:11px"${noBody}>${npcs.map(([id, n]) => `<option value="${id}">${n}</option>`).join('')}</select>
+          <button class="act risk" data-npchit="${s.id}"${noBody}>NPC hit</button>
+          ${s.guardPrice != null ? `<button class="act" data-hire="${s.id}"${noBody || ''}>hire guard</button>` : ''}
+          <button class="act" data-feud="${s.id}">feud</button></div>`; }).join('')}</div>`;
 
     t.querySelectorAll('[data-psteal]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/streets/${b.dataset.psteal}/steal`, {}).then(() => renderPvp()));
@@ -6547,7 +6593,26 @@
       // Every other irreversible act in the game asks first; this one — the heaviest — did not.
       if (!await ask('Take the shot?', `${b.dataset.name || 'This man'} does not get back up. Their heir will swear a vendetta on your line, and the street will know it was you.`,
         { yes: 'take the shot', no: 'let him walk', danger: true })) return;
-      const r = await act('POST', `/v1/streets/${b.dataset.fire}/fire`, {});
+      // HOW MANY ROUNDS. Found by playing, and it made the whole verb inert: the server takes a
+      // `rounds` count and floors it at the §7.7 minimum of 50, and this button sent NONE — so
+      // every shot the console has ever fired was exactly 50 rounds. The best iron in the game
+      // turns 50 into 95 effective, against a floor of ~390 for a LEVEL-1 mark, so the button
+      // could not kill anybody, at any level, with any gun, ever — after a 3h search, the energy,
+      // the ammo and a 2h trigger cooldown. It is the player's decision (the API always said so),
+      // and the miss line now teaches the number: "40 rounds told and he can take 13,030" is what
+      // you spend the next magazine on. Default what the game itself calls a magazine, capped by
+      // what's in the drawer, so pressing enter is a real shot rather than a wasted contract.
+      // And the TERMS ride with the number, because the server spends every round you name whether
+      // it needed them or not (`ch.ammo -= fired`). "How many rounds?" reads like a ceiling and is
+      // a bill — the same silence that put the pad and the nut in front of a tester. Say which way
+      // the mistake cuts, too: over-spending costs $40 a round, under-spending costs the contract.
+      const held = Number(me.ammo || 0);
+      const rounds = await askNum('How many rounds?',
+        `You hold ${fmt(held)}. Every round you call for is SPENT — hit or miss, needed or not — at $40 a round to replace. `
+        + `Under-spend and he walks, and your search burns with him. Spend over and you have only bought brass. The floor is 50.`,
+        { placeholder: String(Math.max(50, Math.min(held, 2000))), yes: 'open up' });
+      if (rounds === null) return;
+      const r = await act('POST', `/v1/streets/${b.dataset.fire}/fire`, { rounds: rounds || Math.max(50, Math.min(held, 2000)) });
       // the server consumes the search on every resolved shot (kill or miss) — clear the local
       // hunt on any 2xx, and on a stale no_search too
       if (r.code < 400 || r.body?.error === 'no_search') localStorage.removeItem(huntKey());
@@ -7081,9 +7146,10 @@
       ${cat.length ? `<div class="card" style="border-color:var(--warn)"><span class="t" style="color:var(--warn)">THE TERMS, BEFORE YOU BUY</span>
         <div class="d">A front earns while you're away — but only the first <b>${cat[0].incomeCapHours}h</b> of it banks in the till,
         and the pad (protection, wages) is <b>${(cat[0].upkeepBps / 100).toFixed(0)}% of the take</b> and keeps running for <b>${cat[0].upkeepCapHours}h</b>
-        whether you're there or not. Stay away past <b>${Math.round(cat[0].coldHours / 24)} days</b> and you owe more than the place can hand you and it goes
-        <b>COLD</b> — no income until you square it out of pocket. Every extra front you own raises the pad on <i>all</i> of them
-        by ${(cat[0].progBps / 100).toFixed(0)}%. Collect every day or two and it's an engine; buy one and forget it and it's a debt.</div></div>` : ''}
+        whether you're there or not. The envelope caps below a full till, so coming back always covers it —
+        what neglect really costs you is the place going <b>COLD</b> past <b>${Math.round(cat[0].coldHours / 24)} days</b>:
+        no income at all until you square the pad out of pocket. Every extra front you own raises the pad on <i>all</i> of them
+        by ${(cat[0].progBps / 100).toFixed(0)}%. Collect every day or two and it's an engine; buy one and forget it and it sits dark.</div></div>` : ''}
       <div class="grid">${cat.map((c) => `
         <div class="card">${aart('business', c.kind)}<span class="t">${c.name}</span>${ownedKinds.has(c.kind) ? '<span class="chip good">owned</span>' : ''}
           <div class="d">level ${c.lvl}+ · t1 $${fmt(c.tiers[0].cost)} → $${fmt(c.tiers[0].incomePerHr)}/hr <span style="color:var(--warn)">− $${fmt(c.upkeepPerHr)}/hr pad</span></div>
