@@ -2127,9 +2127,15 @@ export async function bank(ch, dir, amount, client, h) {
   // comment above says so; the player was never told). Same class as the pad and the nut. Return the
   // figures so the client can say it; `banked`/`withdrew` are distinct names so nothing else's
   // describe() branch can cross-fire on a generic `amount`.
+  // FLOORED, because the character sheet floors it (view(), `bank: Math.floor(...)`) and bank interest
+  // is genuinely sub-cent. Sent raw, the same balance read two ways depending on which surface you
+  // looked at — the sheet said $5,005,565 while the toast said $5,005,065.955 — and a toast is what
+  // you read right after moving money. The ledger keeps the exact figure; the display agrees with
+  // itself. (board and till can never disagree.)
+  const shown = Math.floor(Number(ch.bank));
   return dir === 'deposit'
-    ? { ok: true, banked: amount, bank: Number(ch.bank), intransit: Number(ch.bank_intransit || 0), clearSeconds: Math.ceil(CONSTANTS.BANK_CLEAR_MS / 1000) }
-    : { ok: true, withdrew: amount, bank: Number(ch.bank) };
+    ? { ok: true, banked: amount, bank: shown, intransit: Number(ch.bank_intransit || 0), clearSeconds: Math.ceil(CONSTANTS.BANK_CLEAR_MS / 1000) }
+    : { ok: true, withdrew: amount, bank: shown };
 }
 export async function travel(ch, district, client, h) {
   if (!DISTRICTS.find((d) => d.id === district)) throw new GameError('bad_district', 'No such district.');

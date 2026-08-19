@@ -1749,13 +1749,34 @@ assert.deepEqual(shapeFlags, [], `${shapeFlags.length} field name(s) read like a
 const rulesBody = (await inject('GET', '/v1/rules', token)).body;
 const describeFn = (() => {
   const L = html.split('\n');
-  const one = (re) => { const i = L.findIndex((l) => re.test(l)); assert(i >= 0, `describe() helper not found: ${re}`); return L[i]; };
-  const blk = (re, n) => { const i = L.findIndex((l) => re.test(l)); assert(i >= 0, `describe() helper not found: ${re}`); return L.slice(i, i + n).join('\n'); };
-  const s = L.findIndex((l) => l.includes('function describe(body, code)'));
-  assert(s >= 0, 'describe() not found in the client — the action ledger cannot run');
-  let e = s; for (let i = s + 1; i < L.length; i++) if (L[i] === '  }') { e = i; break; }
-  const src = `((rules) => { ${one(/^  const fmt = /)}\n${one(/^  const esc = /)}\n${one(/^  const nth = /)}\n` +
-    `${blk(/^  const minsTxt = /, 4)}\n${L.slice(s, e + 1).join('\n')}\n return describe; })`;
+  // Take each helper as a WHOLE DECLARATION rather than a line, or a fixed count of them. All the
+  // shapes it must handle are live in the client right now: `esc`/`nth` are one line, `minsTxt` is a
+  // four-line ternary, and `fmt` is a six-line block. A one-line grab silently truncates the block
+  // ones (it threw the day `fmt` grew a body, which is the good failure); a fixed slice is worse,
+  // because it goes on "working" while quietly taking a neighbour's code with it — the fixed-window
+  // class this repo has been bitten by twice. Don't hand-roll a tokenizer either: `esc` holds a
+  // regex literal containing both quote characters, which defeats naive quote tracking (that cost a
+  // false "never terminates" here). Use the real parser as the oracle — grow the slice until it
+  // COMPILES, which is exactly the question being asked.
+  const decl = (re) => {
+    const i = L.findIndex((l) => re.test(l));
+    assert(i >= 0, `describe() helper not found: ${re}`);
+    for (let n = i; n < Math.min(L.length, i + 40); n++) {
+      const src = L.slice(i, n + 1).join('\n');
+      try { new vm.Script(src); return src; } catch { /* still an incomplete statement */ }
+    }
+    assert(false, `describe() helper never parses as a complete statement: ${re}`);
+  };
+  const dStart = L.findIndex((l) => l.includes('function describe(body, code)'));
+  assert(dStart >= 0, 'describe() not found in the client — the action ledger cannot run');
+  let dEnd = dStart; for (let i = dStart + 1; i < L.length; i++) if (L[i] === '  }') { dEnd = i; break; }
+  const helpers = [/^  const fmt = /, /^  const esc = /, /^  const nth = /, /^  const minsTxt = /].map(decl);
+  // anti-vacuity: a truncated grab is still valid JS often enough to run and quietly answer wrong,
+  // so pin one load-bearing token per helper. (`fmt` reads back its own rounding, which is what a
+  // sub-cent bank balance and a dust $OMR payment both depend on.)
+  for (const [i, tok] of [[0, 'toLocaleString'], [1, 'replace'], [2, 'th'], [3, 'Math.ceil']])
+    assert(helpers[i].includes(tok), `describe() helper ${i} came out truncated (no ${tok})`);
+  const src = `((rules) => { ${helpers.join('\n')}\n${L.slice(dStart, dEnd + 1).join('\n')}\n return describe; })`;
   return vm.runInNewContext(src)(rulesBody);
 })();
 
@@ -1764,6 +1785,13 @@ const describeFn = (() => {
 // this check is about what a WORKING action says, and the gates have their own suites.
 const ACTIONS = [
   ['POST', '/v1/travel/neon', null],
+  // found by playing: the numbers ticket said "done." — neither the number taken, the stake, nor the
+  // odds, on a bet whose stake is gone the moment it is placed
+  ['POST', '/v1/casino/numbers', { pick: 123, amount: 50 }],
+  // "paid $140" — the price with the purchase left off, on the buy that feeds every cook
+  ['POST', '/v1/kitchen/makings/vim', { qty: 1 }],
+  // a permanent build decision that said "done."
+  ['POST', '/v1/skills/bruiser', null],
   ['POST', '/v1/bank/deposit', { amount: 100 }],
   ['POST', '/v1/bank/withdraw', { amount: 50 }],
   ['POST', '/v1/armory/ammo', null],
@@ -1795,6 +1823,14 @@ const ACTIONS = [
                                                          // for real (the fixture starts at neon)
   ['POST', '/v1/soldiers/hire', null],
   ['POST', '/v1/law/retainer', null],
+  // three rails feed one monument and all three come back with the same dollar-valued `credited`,
+  // so the $OMR rail read "laid $830" for a 10 $OMR burn — the wrong unit AND the wrong number
+  ['POST', '/v1/megaproject/omr', { amount: 10 }],
+  // "paid $924,759" — a six-figure sum with no mention that it also stops you hitting, dealing,
+  // laundering or collecting for as long as it lasts. LAST in this list on purpose: going to ground
+  // refuses every offensive and extractive action above it (the signed D2 shield-not-bunker rule),
+  // so anywhere earlier it would silently skip its own neighbours.
+  ['POST', '/v1/safehouse', null],
 ];
 // The fixture must be able to AFFORD what it drives. The first cut left it on a fresh guest's $500
 // and five of the money actions 4xx'd, so they were skipped — and a mutation that stripped a fixture's
@@ -1804,6 +1840,7 @@ await app.pool.query("UPDATE characters SET cash=5000000, respect=500000, jail_u
 await app.pool.query('UPDATE account_persistent SET omr=1000 WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)', [charId]);
 
 const mute = [];
+const said = new Map();   // url → the line a player reads, so a WRONG one can be asserted, not just a missing one
 let described = 0;
 for (const [m, url, payload] of ACTIONS) {
   const r = await inject(m, url, token, payload);
@@ -1811,10 +1848,25 @@ for (const [m, url, payload] of ACTIONS) {
   described++;
   let line;
   try { line = String(describeFn(r.body, r.code)); } catch (e) { line = 'THREW: ' + e.message; }
-  if (line === 'done.' || /undefined|NaN|\[object|^THREW/.test(line)) mute.push(`${m} ${url} → ${JSON.stringify(line)}`);
+  // Two shapes count as silence, not one. "done." is the obvious fallback; the other is describe()'s
+  // LAST-RESORT `paid $N` — a price with the purchase left off, which reads as an answer and is not
+  // one. Both of the routes that taught me this survived a mutation of their own fix while this
+  // check watched, because removing their branch dropped them into that fallback rather than into
+  // "done." — a guard that cannot see half the class it was written for. The pattern is exact (a
+  // money figure and nothing else), so it matches the catch-all's own output and no real line.
+  said.set(url, line);
+  if (line === 'done.' || /^paid \$[\d,.]+$/.test(line) || /undefined|NaN|\[object|^THREW/.test(line))
+    mute.push(`${m} ${url} → ${JSON.stringify(line)}`);
 }
+// A WRONG line is invisible to the two silence patterns above: "laid $830" is a real sentence, it is
+// simply not true of a 10 $OMR spend. The monument takes cash, freight and $OMR and credits all three
+// in dollars, so the rail that is not cash has to name what actually left the player.
+const megaLine = said.get('/v1/megaproject/omr');
+if (megaLine) assert(/\$OMR/.test(megaLine) && /\b10\b/.test(megaLine),
+  `the $OMR rail into the monument must name the $OMR that left, not the wall's dollar credit — got: ${JSON.stringify(megaLine)}`);
+
 const describedCount = described;
-assert(described >= 12, `only ${described} of ${ACTIONS.length} actions succeeded — the ledger is measuring almost nothing`);
+assert(described >= 26, `only ${described} of ${ACTIONS.length} actions succeeded — the ledger is measuring almost nothing`);
 assert.deepEqual(mute, [], `${mute.length} action(s) a player PRESSES say nothing about what just happened ` +
   `(describe() fell through to "done." or rendered a hole). Every one of these moves money, an asset or a ` +
   `status — write the line, or the game is keeping its own result from the player:\n  ${mute.join('\n  ')}`);
@@ -1859,7 +1911,7 @@ console.log(`✅ client wiring test passed — across the console AND /admin: of
   `so a new one is a decision on the record, not a silent regression. ` +
   `And the EIGHTH, which is not a lie but a shrug: a button that works and then says nothing. ` +
   `act() toasts describe() with no override, so ${describedCount} driven actions must each read back ` +
-  `as something a player can act on — a play session found 34 saying the bare word "done.", among them ` +
+  `as something a player can act on — a play session found 40 saying the bare word "done.", among them ` +
   `an unstake that had just opened a six-hour window in which that $OMR can be looted off you, and a ` +
   `bank deposit that rides in transit and is lootable until it clears — both TERMS, not flavour — and an ` +
   `errand that signs a player up for a THREE-DAY job while carrying the very task it would not name. ` +

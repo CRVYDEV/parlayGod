@@ -343,6 +343,20 @@ assert(r.body.clearSeconds > 0, 'and how long until it clears — the window in 
 const wd = await call('POST', '/v1/bank/withdraw', { token, body: { amount: 5000 } });
 assert.equal(wd.body.withdrew, 5000, 'a withdrawal names what came out');
 assert.equal(wd.body.bank, 25000, 'and what is left banked');
+// ...AT THE SAME PRECISION THE SHEET USES. Bank interest accrues sub-cent, and view() floors the
+// balance while these two responses sent it raw — so one quantity read two ways depending on which
+// surface you looked at, and the one showing "$1,246,906.578" was the TOAST, i.e. what a player
+// reads in the second after moving their money. Found by playing. The ledger keeps the exact figure
+// (asserted below); only the DISPLAY agrees with itself.
+await seed('bank = 1234567.891234');
+const frac = await call('POST', '/v1/bank/withdraw', { token, body: { amount: 7 } });
+assert(Number.isInteger(frac.body.bank), `the withdrawal's balance must arrive at the sheet's precision — got ${frac.body.bank}`);
+assert.equal(frac.body.bank, (await meOf(token)).bank, 'and the toast and the sheet must not disagree about one balance');
+const dep2 = await call('POST', '/v1/bank/deposit', { token, body: { amount: 1 } });
+assert(Number.isInteger(dep2.body.bank), `the deposit's balance too — got ${dep2.body.bank}`);
+assert(Number((await pool.query(`SELECT bank FROM characters WHERE id='${cid}'`)).rows[0].bank) % 1 !== 0,
+  'and the LEDGER still holds the exact sub-cent figure — this is a display fix, not a rounding of the books');
+await seed('bank = 25000');
 await seed("bank_intransit_at = now() - interval '3 hours'");
 assert.equal((await meOf(token)).bankInTransit, 0, 'cleared after the window — out of loot reach');
 

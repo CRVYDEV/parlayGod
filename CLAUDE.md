@@ -14125,6 +14125,44 @@ covered.* Five mutations, each caught at its own named assertion — the fifth a
 payload, which the action ledger structurally cannot see, so it is pinned in `test/underworld.js`
 against the real notification instead.
 
+**F13 — the play session's SECOND class, and the guard that could not see it (2026-08-19).** Kept
+playing: 55 more routes driven, the 31 that answered 200 read back through the client's REAL
+`describe()` in a browser. Twelve read well. **Six did not, and only two of them were the mute class
+F11/F12 chased** — learning a permanent skill said "done.", and buying a numbers ticket said "done."
+(neither the number taken, the stake, nor the 600:1 odds, on a bet whose stake is gone the instant it
+is placed). The other four are a class those passes never named. **(a) A PRICE WITH THE PURCHASE LEFT
+OFF.** `describe()`'s last-resort branch renders `paid $N`, and going to ground fell into it: *"paid
+$924,759"* — six figures, no mention that the safehouse also stops you hitting, dealing, laundering
+or collecting for as long as it lasts (the signed D2 shield-not-bunker rule). The CARD states those
+terms before you pay; the TOAST, which is what you read in the second after the money leaves, did
+not. Buying makings fell into the same branch (*"paid $140"*). **(b) A WRONG UNIT, which is worse
+than silence because it reads as an answer.** Three rails feed one monument — cash, freight and $OMR
+— and all three return the same dollar-valued `credited`, so burning **10 $OMR** was reported as
+*"laid $830"*: neither the currency spent nor the amount. The shapes already told the rails apart
+(`omr` on one, `qty`/`unit` on the other); the client simply never read them — the tribute-currency
+collision from F12, one system over. **(c) ONE QUANTITY, TWO PRECISIONS.** `view()` floors the bank
+balance and the deposit/withdraw responses sent it raw, so with sub-cent interest accrued the sheet
+said `$1,246,906` while the toast said `$1,246,906.578`. Fixed at the SERVER (the ledger keeps the
+exact figure — asserted; only the display agrees with itself). **(d) `fmt` misrepresented both ends
+of what it formats.** `toLocaleString` with no options runs to THREE fraction digits: three decimals
+on money at one end, and at the other a real 6dp $OMR dust balance of `0.00021` rendered as a flat
+**"0"** — a non-zero payment reported as nothing, on the unstake line. Two decimals, and two
+significant figures below a cent. Old-vs-new across both corpora: **8 improved, 0 regressed** (the
+cash rail's line is byte-identical, which is the point — its spend and its credit are the same
+number). **THE GUARD WAS HALF-BLIND AND THE MUTATIONS PROVED IT.** Check 8 flags a line only when it
+is exactly `"done."`, so mutations removing the safehouse and makings fixes **SURVIVED** — dropping
+into `paid $N` is not `"done."`, and the check was written for the silence class alone. It now treats
+the catch-all's own output as silence too (an exact `^paid \$[\d,.]+$` — the literal shape of "no
+branch matched, here is a number"), and the wrong-unit case gets its own assertion, since neither
+pattern can see a line that is fluent and false. All six mutation-verified by name. **A second guard
+bug, found the same way:** check 8 hosts `describe()` from the client's own source and grabbed each
+helper as ONE LINE — so the day `fmt` grew a body it threw (the good failure), and the tempting fix
+is a fixed line count, which is the window class this repo has been bitten by twice. Hand-rolling a
+tokenizer failed too (`esc` holds a regex literal containing both quote characters — a false "never
+terminates"). It now grows the slice until it **COMPILES**, using the real parser as the oracle, with
+a load-bearing token pinned per helper so a truncation that happens to parse still fails.
+
+
 **THE PROBE HAD TO BE FIXED THREE TIMES BEFORE ITS RESULT MEANT ANYTHING, which is most of the
 lesson.** It first missed **shorthand** payload keys (`{ npc, units, material }`), planting
 `undefined` for each and producing lines that read exactly like client bugs; then it guessed values

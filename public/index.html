@@ -1368,7 +1368,18 @@
     host.appendChild(pick);
   }
   const el = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d.firstElementChild; };
-  const fmt = (n) => Number(n).toLocaleString('en-US');
+  // `toLocaleString` with no options runs to THREE fraction digits, which is wrong at both ends of
+  // what this formats. Cash: bank interest accrues sub-cent, so a balance rendered "$5,005,065.955"
+  // — three decimals on money, and a precision the sheet never shows. $OMR: it is a 6dp token, so
+  // a real dust balance of 0.00021 rendered as a flat "0" — a non-zero payment reported as nothing.
+  // Two decimals is right for money and fine for the token; below a cent, show two significant
+  // figures so dust reads as dust instead of as zero.
+  const fmt = (n) => {
+    const v = Number(n);
+    if (!Number.isFinite(v)) return String(n);
+    if (v !== 0 && Math.abs(v) < 0.01) return Number(v.toPrecision(2)).toString();
+    return v.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  };
   // Module scope on purpose: renderStart AND renderMap both print watch/prime-time hours — a copy
   // local to one renderer is a ReferenceError in the other (The Map went blank the moment any
   // district declared a watch hour; fixtures never declare one, which is why guards stayed green).
@@ -2299,9 +2310,21 @@
     if (body.charter !== undefined && body.name && body.spent !== undefined) bits.push(`✦ commissioned the ${body.name} (−${body.spent} $OMR)`);
     if (body.restored !== undefined && body.need !== undefined) bits.push(body.restored ? `the floor OVERRODE the head veto — the decree is RESTORED (${body.weight}/${body.need})` : `moved to override — the floor musters ${body.weight}/${body.need}`);
     if (body.vetoed && body.week !== undefined) bits.push(`VETOED ${body.vetoed} at the table`);
-    if (body.credited !== undefined && body.monument) bits.push(body.completed
-      ? `🏛 YOUR BRICK FINISHED IT — ${body.monument} STANDS. The city will remember.`
-      : `laid $${fmt(body.credited)} into ${body.monument} (your total: $${fmt(body.yourTotal)})`);
+    // Three rails feed one wall — cash, freight and $OMR — and all three come back with the same
+    // `credited` field, which is the wall's DOLLAR-VALUED progress, not what left your pocket. So a
+    // player who burned 10 $OMR was told "laid $830", naming neither the currency they spent nor the
+    // amount. The shapes already tell the rails apart (`omr` on one, `qty`/`unit` on the other), so
+    // name the SPEND and keep the wall's own figure as the credit — the tribute-currency fix, one
+    // system over.
+    if (body.credited !== undefined && body.monument) {
+      const paid = body.omr !== undefined ? `${fmt(body.omr)} $OMR`
+        : body.qty !== undefined ? `${fmt(body.qty)} units of freight`
+        : `$${fmt(body.credited)}`;
+      const worth = (body.omr !== undefined || body.qty !== undefined) ? ` — worth $${fmt(body.credited)} to the wall` : '';
+      bits.push(body.completed
+        ? `🏛 YOUR BRICK FINISHED IT — ${body.monument} STANDS. The city will remember.`
+        : `laid ${paid} into ${body.monument}${worth} (your total: $${fmt(body.yourTotal)})`);
+    }
     if (body.win === false && body.hospSeconds !== undefined) bits.push(`the guards drove you off — ${Math.ceil(body.hospSeconds / 60)}m in the hospital`);
     if (body.kill) bits.push(`THEY'RE DONE.${body.loot ? ` looted $${fmt(body.loot)}` : ''}${body.contraLoot ? ` · seized $${fmt(body.contraLoot)} in contraband` : ''}${body.empireLoot ? ` · 🏢 TOOK OVER their ${body.empireLoot.name}` : ''}${body.bounty ? ` · contract paid $${fmt(body.bounty)}` : ''}${body.ammoBack ? ` · the contract covered ${fmt(body.ammoBack)} rounds` : ''}${body.hitman?.blood?.ours > 1 ? ` · that's ${nth(body.hitman.blood.ours)} body between your bloodlines` : ''}`);
     if (body.hospitalized && !body.kill) bits.push('they went down — hospital job');
@@ -2454,6 +2477,22 @@
     // failed repair reads as "the shop botched it," never as a silent charge that looks like fraud
     if (body.fixed === true && body.cost !== undefined) bits.push(`the shop fixed her up — good as new, $${fmt(body.cost)}`);
     if (body.fixed === false && body.cost !== undefined) bits.push(`the shop botched it — $${fmt(body.cost)} gone and she's still banged up (a bad repair job; try again)`);
+    // GOING TO GROUND. The card states the terms before you pay ("no offense/extraction inside");
+    // the toast — what you read AFTER a six-figure sum has left — fell through to the generic
+    // "paid $924,759": a price with no purchase attached, on the one action that also takes away your
+    // ability to hit anyone, deal, launder or collect for as long as it lasts. Name both halves.
+    if (body.safeUntil && body.cost !== undefined) bits.push(`🏠 off the grid — untargetable for ${minsTxt(Math.max(0, Math.round((new Date(body.safeUntil) - Date.now()) / 1000)))}, but no hits, deals, laundering or collecting while you're under · $${fmt(body.cost)}`);
+    // A skill is permanent and a point is finite — and learning one said "done."
+    if (body.learned && body.name && body.points) bits.push(`🎓 learned ${esc(body.name)}${body.points.available !== undefined ? ` — ${fmt(body.points.available)} point${body.points.available === 1 ? '' : 's'} left` : ''}`);
+    // THE NUMBERS. One ticket per street per day, drawn off the seed at the roll — and buying one
+    // said "done.", naming neither the number you took, what you staked, nor what it pays. The
+    // stake is gone either way; the least the game owes you is the ticket.
+    if (body.game === 'numbers' && body.pick !== undefined) bits.push(`\u{1F3AF} took ${body.pick} for $${fmt(body.stake)} — pays $${fmt(Number(body.stake) * Number(body.payout || 0))} if it comes in. Drawn tomorrow; claim it here.`);
+    // MAKINGS. `cost` alone fell to the generic "paid $140" — the price with the purchase left off,
+    // on the buy that feeds every cook. The response already carries the line, the count and the
+    // unit price.
+    if (body.unit !== undefined && body.qty !== undefined && body.cost !== undefined && !body.credited)
+      bits.push(`\u{1F9EA} ${fmt(body.qty)} lot${body.qty === 1 ? '' : 's'} of makings — $${fmt(body.cost)} ($${fmt(body.unit)} each)`);
     if (body.cost && body.fixed === undefined && !bits.length) bits.push(`paid $${fmt(body.cost)}`);
     return bits.length ? bits.join(' · ') : (body.message || 'done.');
   }
