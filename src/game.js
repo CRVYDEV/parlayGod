@@ -15,7 +15,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS, RANKS,
          KITCHENS, labModuleCost, recyclesToDesk, DESK_RECYCLE_REASON, isMade, madeSeconds,
          MADE_LADDER, madeRungIdx, madeRungOf, ladderFx,
          ASSETS, OPERATIONS, opSlotsOf, nextOpSlotLevel, MISSIONS, dailyLiveFor, jailed, safeHoused,
-         STABLE, SPEAKEASY, ESTATE, MADE, CREW, crewObjectiveOf, DEEDS, deedController , runOf } from './rules.js';
+         STABLE, SPEAKEASY, ESTATE, MADE, CREW, crewObjectiveOf, DEEDS, deedController , runOf, npcOf } from './rules.js';
 import { dbCaps } from './db.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
@@ -565,11 +565,11 @@ export async function bumpStanding(client, h, ch, npcId, pts, { business = true,
       if (step >= UNDERWORLD.STEP5.CHAIN_STEPS) {
         await client.query('DELETE FROM npc_errands WHERE character_id=$1', [ch.id]);
         pts += UNDERWORLD.STEP5.CHAIN_BONUS;
-        await notify(client, ch.id, 'errand_done', { npc: npcId, bonus: UNDERWORLD.STEP5.CHAIN_BONUS });
-        bus.emit('streets', { type: 'errand_done', who: ch.name, npc: npcId }); // the town hears who did right by whom
+        await notify(client, ch.id, 'errand_done', { npc: npcOf(npcId)?.name || npcId, bonus: UNDERWORLD.STEP5.CHAIN_BONUS });
+        bus.emit('streets', { type: 'errand_done', who: ch.name, npc: npcOf(npcId)?.name || npcId }); // the town hears who did right by whom
       } else {
         await client.query('UPDATE npc_errands SET step=$2, last_day=$3 WHERE character_id=$1', [ch.id, step, day]);
-        await notify(client, ch.id, 'errand_step', { npc: npcId, step, of: UNDERWORLD.STEP5.CHAIN_STEPS });
+        await notify(client, ch.id, 'errand_step', { npc: npcOf(npcId)?.name || npcId, step, of: UNDERWORLD.STEP5.CHAIN_STEPS });
       }
     }
   }
@@ -2127,9 +2127,15 @@ export async function bank(ch, dir, amount, client, h) {
   // comment above says so; the player was never told). Same class as the pad and the nut. Return the
   // figures so the client can say it; `banked`/`withdrew` are distinct names so nothing else's
   // describe() branch can cross-fire on a generic `amount`.
+  // FLOORED, because the character sheet floors it (view(), `bank: Math.floor(...)`) and bank interest
+  // is genuinely sub-cent. Sent raw, the same balance read two ways depending on which surface you
+  // looked at — the sheet said $5,005,565 while the toast said $5,005,065.955 — and a toast is what
+  // you read right after moving money. The ledger keeps the exact figure; the display agrees with
+  // itself. (board and till can never disagree.)
+  const shown = Math.floor(Number(ch.bank));
   return dir === 'deposit'
-    ? { ok: true, banked: amount, bank: Number(ch.bank), intransit: Number(ch.bank_intransit || 0), clearSeconds: Math.ceil(CONSTANTS.BANK_CLEAR_MS / 1000) }
-    : { ok: true, withdrew: amount, bank: Number(ch.bank) };
+    ? { ok: true, banked: amount, bank: shown, intransit: Number(ch.bank_intransit || 0), clearSeconds: Math.ceil(CONSTANTS.BANK_CLEAR_MS / 1000) }
+    : { ok: true, withdrew: amount, bank: shown };
 }
 export async function travel(ch, district, client, h) {
   if (!DISTRICTS.find((d) => d.id === district)) throw new GameError('bad_district', 'No such district.');

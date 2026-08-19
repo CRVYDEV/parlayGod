@@ -67,6 +67,11 @@ assert.equal((await call('POST', '/v1/gangs/kick', { token: don.token, body: { c
 // ── tribute + weekly contract progress ──
 r = await call('POST', '/v1/gangs/tribute', { token: don.token, body: { amount: 100000 } });
 assert.equal(r.code, 200, 'tribute paid');
+// THE TWO TRIBUTES ARE DIFFERENT CURRENCIES AND RETURNED THE SAME SHAPE. Both answered a bare
+// {ok, amount}, so $100,000 of cash and 100 $OMR were byte-identical on the wire — no consumer
+// could tell which had been paid, and the toast could only guess. `currency` is the marker.
+assert.equal(r.body.currency, 'cash', 'the cash tribute says it moved cash');
+assert.equal(r.body.amount, 100000, 'and how much');
 assert.equal((await call('POST', '/v1/gangs/tribute', { token: rocco.token, body: { amount: 5000 } })).code, 200, 'rocco tribute');
 let gA = (await call('GET', `/v1/gangs/${gangA}`, {})).body.gang;
 assert.equal(gA.treasury, 100000, 'treasury credited');
@@ -1103,7 +1108,9 @@ assert.equal((await call('POST', '/v1/gangs/vanity/seal', { token: barry.token }
 await seedOmr(mook.id, 3000);
 assert.equal((await call('POST', '/v1/gangs/tribute/omr', { token: mook.token, body: { amount: 0 } })).body.error, 'min', 'zero tribute rejected');
 const reserve0 = (await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.omrReserve;
-assert.equal((await call('POST', '/v1/gangs/tribute/omr', { token: mook.token, body: { amount: 2000 } })).code, 200, 'mook pooled tokens for the family');
+r = await call('POST', '/v1/gangs/tribute/omr', { token: mook.token, body: { amount: 2000 } });
+assert.equal(r.code, 200, 'mook pooled tokens for the family');
+assert.equal(r.body.currency, 'omr', 'and the $OMR tribute says it moved tokens — the two are no longer indistinguishable');
 assert.equal((await meOf(mook.token)).omr, 1000, "the tribute left mook's vault");
 assert(close((await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.omrReserve, reserve0 + 2000), 'and landed in the family reserve (a §10.4 bucket transfer)');
 // the ladder climbs sequentially: Wax then Brass — each burn ledgered against the reserve

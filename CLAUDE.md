@@ -14088,6 +14088,157 @@ skipped in silence and the mutation that stripped the warning SURVIVED. It now b
 character and asserts the deposit SUCCEEDED before asserting the wording. Three mutations, each
 caught at its own named assertion.
 
+**F12 — the same sweep taken DEEPER, and it found the class had a second half: raw KEYS reaching
+the player, and two currencies behind one shape.** Driving another ~60 routes past F11's reach (the
+whole fixture layer, the family treasury, the empire, the port, the roster, the law) turned up
+**eight more mute buttons and three that named a price without naming what it bought**. The
+Underworld four are the sharpest — gift / penance / favor / errand all go through ONE `act()`
+handler on the Life tab, and the errand is the worst thing found in either sweep: it **signs a
+player up for a THREE-DAY job**, the response **carries the very task they must go and do**, and the
+toast said *"done."* The favor is the terms class again — the weekly, once-only favor healed the
+player to full and told them nothing. The mute rest: family tribute in both currencies, the crest
+burn, buying a business front, renting a berth. The three that undersold themselves said only
+*"paid $25,000"* / *"paid $150,000"* while the response carried the soldier's NAME AND TRAIT, the
+retainer's DURATION, and the grudge count still outstanding.
+**Two of these were SERVER defects, not copy, and were fixed at the source.** (1) `tribute` and
+`tributeOmr` both returned a bare `{ok, amount}` — **byte-identical shapes for two different
+currencies**, so no consumer could tell $25,000 of cash from 25 $OMR and the toast could only guess
+wrong; they now carry `currency`. This is the goods-vs-drug-deal cross-fire from F11 in its purer
+form: **two shapes colliding on one field, where the honest fix is a marker at the source rather
+than a cleverer guess at the client.** (2) The fixture id (`doc`) and the terse task verb (`heal`)
+were reaching the player RAW — the Life-tab chip read *"errand: armorer 1/3 — craft"*, the feed read
+*"1 of 3 done for armorer"* — and the client has **no catalog of the cast** to resolve either from,
+so it could not have fixed this alone. The server now sends `npcName` on every fixture response and
+a `taskLabel` (a display-only `UNDERWORLD.TASK_LABELS` map, read by BOTH the board and the errand
+response so the chip and the toast can never describe the same drawn task differently), and the two
+errand notifications carry the name instead of the key. Old-vs-new over the whole corpus: **0
+regressions, 11 newly rendered**, and six lines that improved from a bare figure to what was bought.
+**My own guard went vacuous AGAIN, in a new way, and the mutation is what caught it.** Adding the
+eight new actions to check 8 looked like coverage; a mutation stripping `npcName` off the gift
+**SURVIVED**, because the ledger's fixture is a fresh guest holding $500 — the gift costs $5,000, so
+that action had 4xx'd and been skipped for the whole run. Instrumenting the skips showed the fixture
+was also **JAILED** by an earlier part of the suite, standing in the wrong district for the
+harbormaster, and already owned the front it was told to buy. Funded, un-jailed and routed to the
+docks, **19 → 24 driven actions**, the floor raised to match, and the same mutation now fails by
+name. *A declared-but-never-driven entry is worse than no entry: it reads on the summary line as
+covered.* Five mutations, each caught at its own named assertion — the fifth against the FEED
+payload, which the action ledger structurally cannot see, so it is pinned in `test/underworld.js`
+against the real notification instead.
+
+**F13 — the play session's SECOND class, and the guard that could not see it (2026-08-19).** Kept
+playing: 55 more routes driven, the 31 that answered 200 read back through the client's REAL
+`describe()` in a browser. Twelve read well. **Six did not, and only two of them were the mute class
+F11/F12 chased** — learning a permanent skill said "done.", and buying a numbers ticket said "done."
+(neither the number taken, the stake, nor the 600:1 odds, on a bet whose stake is gone the instant it
+is placed). The other four are a class those passes never named. **(a) A PRICE WITH THE PURCHASE LEFT
+OFF.** `describe()`'s last-resort branch renders `paid $N`, and going to ground fell into it: *"paid
+$924,759"* — six figures, no mention that the safehouse also stops you hitting, dealing, laundering
+or collecting for as long as it lasts (the signed D2 shield-not-bunker rule). The CARD states those
+terms before you pay; the TOAST, which is what you read in the second after the money leaves, did
+not. Buying makings fell into the same branch (*"paid $140"*). **(b) A WRONG UNIT, which is worse
+than silence because it reads as an answer.** Three rails feed one monument — cash, freight and $OMR
+— and all three return the same dollar-valued `credited`, so burning **10 $OMR** was reported as
+*"laid $830"*: neither the currency spent nor the amount. The shapes already told the rails apart
+(`omr` on one, `qty`/`unit` on the other); the client simply never read them — the tribute-currency
+collision from F12, one system over. **(c) ONE QUANTITY, TWO PRECISIONS.** `view()` floors the bank
+balance and the deposit/withdraw responses sent it raw, so with sub-cent interest accrued the sheet
+said `$1,246,906` while the toast said `$1,246,906.578`. Fixed at the SERVER (the ledger keeps the
+exact figure — asserted; only the display agrees with itself). **(d) `fmt` misrepresented both ends
+of what it formats.** `toLocaleString` with no options runs to THREE fraction digits: three decimals
+on money at one end, and at the other a real 6dp $OMR dust balance of `0.00021` rendered as a flat
+**"0"** — a non-zero payment reported as nothing, on the unstake line. Two decimals, and two
+significant figures below a cent. Old-vs-new across both corpora: **8 improved, 0 regressed** (the
+cash rail's line is byte-identical, which is the point — its spend and its credit are the same
+number). **THE GUARD WAS HALF-BLIND AND THE MUTATIONS PROVED IT.** Check 8 flags a line only when it
+is exactly `"done."`, so mutations removing the safehouse and makings fixes **SURVIVED** — dropping
+into `paid $N` is not `"done."`, and the check was written for the silence class alone. It now treats
+the catch-all's own output as silence too (an exact `^paid \$[\d,.]+$` — the literal shape of "no
+branch matched, here is a number"), and the wrong-unit case gets its own assertion, since neither
+pattern can see a line that is fluent and false. All six mutation-verified by name. **A second guard
+bug, found the same way:** check 8 hosts `describe()` from the client's own source and grabbed each
+helper as ONE LINE — so the day `fmt` grew a body it threw (the good failure), and the tempting fix
+is a fixed line count, which is the window class this repo has been bitten by twice. Hand-rolling a
+tokenizer failed too (`esc` holds a regex literal containing both quote characters — a false "never
+terminates"). It now grows the slice until it **COMPILES**, using the real parser as the oracle, with
+a load-bearing token pinned per helper so a truncation that happens to parse still fails. **Then a
+second pass with TWO real players** (the first drives that reach the PvP layer at all) found four
+more, all `act()`-pressed: putting a **$60,000 price on another player's head** said "done." — the
+escrow posts, the take is kept and the MARK IS TOLD, which makes it the loudest thing one player can
+do to another; starting the **3h hunt** said "done." over a response that carried the ready moment
+all along (`placedAt` is misnamed — it is `now + hunterSearchMs`, and that clock is stacked by four
+modifiers, so the client could not have stated it from a constant); listing yourself as a bodyguard,
+where the price IS the offer; and picking a duel STYLE, whose whole point is a public
+rock-paper-scissors counter the response never named (the catalog was already on `/v1/rules`, so
+that one needed no server field). Two more read "done." and are NOT findings — `phone/dm` and the
+Wire dossier go through the SILENT `api()` and render their own payload, which is the discrimination
+this sweep turns on. Across all 50 driven responses: **12 improved, 0 regressed**; the driven list
+is 26 → 35. One process note: three of the four mutations were written inline in shell, the quoting
+ate them, and the runs came back green over an UNMUTATED file — a mutation that does not apply reads
+exactly like a fix that holds, so they were redone as a script that asserts its own anchor first. **A THIRD wave then found the worst
+line in the sweep, and it is not a silence — it is a false all-clear on a paid action.** THE TRACE
+and THE SWEEP are deliberately different products (the design's layered intel economy: the sweep
+clears cheaply and anonymously, the trace NAMES the watchers and leaves the taps live), and both
+answer `{spent, bugsFound}` — so the client rendered a 90 $OMR trace as **"swept 1 bug(s) off your
+line"**: the wrong action, the watcher's NAME — the entire thing the 90 bought — discarded, and a
+player told their line was clear while it was still tapped. Driven and confirmed against a real
+watcher: **1 tap on the line after a trace, 0 after a sweep.** The trace's `watchers` field is a
+discriminator nothing else in the game sends, so the fix needed no server change, only reading what
+was already there — the byte-shape collision class for the third time (tribute currencies, the
+monument's three rails, this). Its regression seeds a real tap so the guard drives the PAID shape
+rather than the empty one, and the mutation that collapses it back fails printing the false
+all-clear verbatim. The other twelve responses in that wave all read well — which read like the
+useful negative result, and was wrong: it was the end of what RANDOM driving finds, not the end of
+the defects. **A FOURTH wave took the trace's shape as a CLASS instead of an instance and found
+twelve more, most of a screen at a time.** The class is one sentence: `describe()` is a flat chain of
+`if`s over field NAMES, so a branch guarded on a field that several systems send fires for whichever
+reaches it first. Enumerating describe()'s 137 top-level guards found **41 resting on a single
+condition**, and cross-referencing those field names against every `return {` in `src/` predicts the
+collisions without driving anything — then each candidate was DRIVEN before being called a defect,
+which is what separated the three real inversions from the guards that only looked risky.
+**The three inversions each said the opposite of what happened.** SELLING an asset answers
+`{ok, asset, earned}` and BUYING one answers `{ok, asset}` — one field apart — so selling the pawn
+shop read **"the pawn shop is yours"**, the buy line, with the sale price discarded. Posting a loan
+OFFER and TAKING one both answer `{principal, owed}`, so the LENDER — who has just escrowed $50,000
+of their own money and is owed $60,000 — was told **"took the loan — $50,000 now, owe $60,000"**: the
+two sides of the table, one line, naming the wrong one. And HIRING household staff answers
+`{staff, name, wageOmrDay, walked:false}`, which landed on the crew-FIRING branch and read
+**"settled $undefined and let one go — undefined left on the corner"** — inverted AND printing the
+literal word `undefined` at the player twice, because that branch reads two fields the estate never
+sends. **`body.paid > 0` was the widest collision**: six unrelated obligations use the word, and the
+branch claimed it for the business pad — so repaying a $60,000 loan shark, buying a car outright at
+auction, buying goods on the market, settling hush money and paying the estate's staff all read
+**"the pad is square"**, a bill on a screen the player was nowhere near. **And the Black Market was
+mute nearly end to end** — list-a-car, list-goods, post-a-WTB-order, fill, claim and pull all said
+"done.", discarding a listing fee, a 48h expiry, the delivered/remaining split, and — the biggest —
+that posting an order ESCROWS the whole ask out of your pocket. Melting a car said "done." while 152
+rounds went into the trunk, and in a family the tithe hands a slice of them to the family's ammo
+bank, a TERM nobody was told; its own sibling on the same screen, fence, names both its numbers,
+which is the comparison that makes the silence indefensible. **Two things about the FIXING are worth
+more than the list.** First, driving caught a regression I introduced: `fronts` on the pad's reply is
+an ARRAY of objects, not a count, so my own new line rendered `[object Object]` — the exact class
+being fixed, and unreachable by reading, since the server line reads `fronts: settled`. Second, four
+of the six fixes SURVIVED their first mutation, and the cause was in the fixture rather than the
+guard: `/v1/safehouse` is deliberately LAST in ACTIONS because going to ground refuses every
+offensive and extractive action (the signed D2 rule) — and `ACTIONS.push` appends AFTER it, so four
+newly-added actions never drove and their fixes read as held. The fixture now splices before the
+safehouse, two more were refused as duplicates of what the seed already owns (a refused action is
+skipped, which reads identically), and the pad's rescoping is proven through the estate's staff
+wages — the one of its five siblings this fixture can reach on its own token. Driven count 36 → 41,
+floor 26 → 33, and the guard gained the blanket rule that **no line a player reads may contain the
+literal word "undefined"**. Six mutations, six named failures. **A THIRTEENTH, found last and the
+sharpest unit error of the set: `seized` is sent by two systems in two different UNITS** — a lender
+collecting a defaulted marker sends dollars, an interdicted smuggling run sends CARGO — so a bust
+that took the whole hold read **"collected $20"** (a real number, a real currency symbol, and the
+wrong quantity entirely) before the Coast Guard's own line, which was correct, ran directly after
+it. **Its regression is the one that had to be built rather than declared**, and it took three
+corrections: the collect never drove at all on the first cut (the seed's dinghy is flagged
+`minted_onchain` for the Collection's on-chain list, and an EXTRACTED boat is inert by the v3-step-7
+rule — so the launch that would have put it at sea silently failed and the assertion passed over
+nothing, the vacuity class in its newest costume); the replacement hull then ordered by a column the
+table does not have; and only once a fresh boat really sailed and really got busted did the mutation
+fail by name. Driven count 41 → 47, floor 33 → 40.
+
+
 **THE PROBE HAD TO BE FIXED THREE TIMES BEFORE ITS RESULT MEANT ANYTHING, which is most of the
 lesson.** It first missed **shorthand** payload keys (`{ npc, units, material }`), planting
 `undefined` for each and producing lines that read exactly like client bugs; then it guessed values

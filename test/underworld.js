@@ -8,7 +8,7 @@ process.env.SEARCH_MS = '10000';    // 10s search (TEST-ONLY knob)
 process.env.CONVOY_MS = '600000';   // 10-min road (TEST-ONLY knob)
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { UNDERWORLD, BLACK_MARKET, CONVOY, CASINO, ACCESS_STAKE, GUNS, CONSUMABLES, NPC_HITMEN, leadTaskOf, dayOf } from '../src/rules.js';
+import { UNDERWORLD, BLACK_MARKET, CONVOY, CASINO, ACCESS_STAKE, GUNS, CONSUMABLES, NPC_HITMEN, leadTaskOf, taskLabelOf, dayOf } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -213,7 +213,7 @@ const doArmorer = (t) => t === 'craft'
   ? call('POST', '/v1/workshop/craft/espresso', { token: lee.token })
   : call('POST', '/v1/armory/ammo', { token: lee.token });
 r = await call('GET', '/v1/underworld', { token: lee.token });
-assert.deepEqual(r.body.lead, { npc: 'armorer', task: aTask, bonus: UNDERWORLD.STEP2.LEAD_BONUS, done: false }, 'a gift is not business — the lead (with its drawn task) still stands');
+assert.deepEqual(r.body.lead, { npc: 'armorer', npcName: 'Bella Bang-Bang', task: aTask, taskLabel: taskLabelOf(aTask), bonus: UNDERWORLD.STEP2.LEAD_BONUS, done: false }, 'a gift is not business — the lead (with its drawn task) still stands, and it names the fixture rather than its id');
 assert.equal((await doArmorer(aOther)).code, 200, 'business with the right fixture, WRONG job');
 assert.equal((await standingOf(lee.token, 'armorer')).standing, 36, 'off-task business pays flat (+1) — the lead is a specific ask');
 assert.equal((await call('GET', '/v1/underworld', { token: lee.token })).body.lead.done, false, 'still unclaimed');
@@ -445,19 +445,30 @@ assert.equal((await call('POST', '/v1/underworld/madame/errand', { token: erin.t
 r = await call('POST', '/v1/underworld/armorer/errand', { token: erin.token });
 assert.equal(r.code, 200, 'Bella hands over a job');
 assert.equal(r.body.task, sTask, "the errand rides the day's drawn task");
+// THE PLAYER IS OWED A NAME AND A SENTENCE. The id ('armorer') and the terse task verb ('craft')
+// were reaching the toast, the Life-tab chip and the feed raw — "errand: armorer 1/3 — craft"
+// tells nobody what to go and do, and the client has no catalog of the cast to resolve either.
+assert.equal(r.body.npcName, 'Bella Bang-Bang', 'the errand names the fixture, not its key');
+assert.equal(r.body.taskLabel, taskLabelOf(sTask), 'and says the job in words a player can act on');
+assert.ok(/ /.test(r.body.taskLabel), 'the label is a phrase, not the terse verb id');
 const doErin = () => sTask === 'craft'
   ? call('POST', '/v1/workshop/craft/espresso', { token: erin.token })
   : call('POST', '/v1/armory/ammo', { token: erin.token });
 assert.equal((await doErin()).code, 200, 'day one of the job');
 assert.equal((await standingOf(erin.token, 'armorer')).standing, 36, 'step one pays the normal bump + the lead (+1+5)');
 r = await call('GET', '/v1/underworld', { token: erin.token });
-assert.deepEqual(r.body.errand, { npc: 'armorer', step: 1, of: UNDERWORLD.STEP5.CHAIN_STEPS, task: sTask, doneToday: true }, 'the board tracks the chain');
+assert.deepEqual(r.body.errand, { npc: 'armorer', npcName: 'Bella Bang-Bang', step: 1, of: UNDERWORLD.STEP5.CHAIN_STEPS, task: sTask, taskLabel: taskLabelOf(sTask), doneToday: true }, 'the board tracks the chain');
 assert.equal((await doErin()).code, 200, 'more of the same, same day');
 assert.equal((await standingOf(erin.token, 'armorer')).standing, 37, 'no double-step in a day (+1 flat)');
 assert.equal((await call('GET', '/v1/underworld', { token: erin.token })).body.errand.step, 1, 'still step one');
 await pool.query(`UPDATE npc_errands SET last_day=${dayOf() - 1} WHERE character_id='${erin.id}'`); // the sun sets
 assert.equal((await doErin()).code, 200, 'day two');
 assert.equal((await call('GET', '/v1/underworld', { token: erin.token })).body.errand.step, 2, 'step two');
+// the FEED carries the fixture too, and it carried the raw id — "1 of 3 done for armorer".
+{ const notes = (await call('GET', '/v1/notifications', { token: erin.token })).body.notifications;
+  const step = notes.find((n) => n.type === 'errand_step');
+  assert(step, 'a step advance rings the player');
+  assert.equal(step.payload.npc, 'Bella Bang-Bang', 'and the feed names the fixture rather than its key'); }
 await pool.query(`UPDATE npc_errands SET last_day=${dayOf() - 1} WHERE character_id='${erin.id}'`);
 assert.equal((await doErin()).code, 200, 'day three — the job is done');
 assert.equal((await standingOf(erin.token, 'armorer')).standing, 38 + 1 + UNDERWORLD.STEP5.CHAIN_BONUS, 'the finished chain pays +15 on top of the bump');
