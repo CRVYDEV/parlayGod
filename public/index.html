@@ -2075,6 +2075,76 @@
     // THE OPERATION SLOTS — retiring a racket. Leads with the freed seat, which is the whole point.
     if (body && body.slotsUsed !== undefined && body.slots !== undefined && body.racket)
       return `\u{1F91D} you're out of the ${String(body.racket).replace(/_/g, ' ')}${body.back ? ` — $${fmt(body.back)} back` : ''} — ${body.slotsUsed} of ${body.slots} seats running`;
+    // district ids are what the wire speaks; a player reads NAMES. The typeof guard keeps this
+    // callable before /v1/rules has landed (and from a probe that hosts describe() on its own).
+    const $dist = (id) => ((typeof rules !== 'undefined' && rules && rules.districts) || []).find((x) => x.id === id)?.name || String(id);
+    // ── THE ACTION LEDGER ──────────────────────────────────────────────────────────────────────
+    // Every one of these was pressed for real and read back "done." — the same class as the wire's
+    // type-name fallback, one surface over: `act()` toasts describe() with no override, so a route
+    // whose shape nothing recognises tells a player nothing about what just happened to their money.
+    // The unstake line is the sharpest and the reason this block leads: unbonding principal is
+    // LOOTABLE for the whole window (Make-Risk-Pay), and the game was not saying so — a withheld
+    // term, exactly like the pad and the nut. Keyed tightly on each shape's own marker fields.
+    if (body && body.ok && body.gross !== undefined && body.net !== undefined && body.street === undefined)
+      return `sold her on — $${fmt(body.net)} in hand${body.gross > body.net ? ` (the fence took $${fmt(body.gross - body.net)})` : ''}`;
+    if (body && body.ok && 'standDown' in body)
+      return body.standDown ? `${esc(body.standDown)} stands down — nobody's riding with you` : 'nobody was riding with you';
+    if (body && body.ok && body.stable !== undefined && body.power !== undefined && body.chin !== undefined)
+      return `\u{1F94A} signed ${esc(body.name)} — ${body.power} power / ${body.chin} chin / ${body.speed} speed. ${body.stable} in the stable.`;
+    if (body && body.ok && body.collected === 0 && body.total === undefined)
+      return 'nothing in the till yet — come back when the day has run';
+    if (body && body.banked !== undefined && body.clearSeconds !== undefined)
+      return `banked $${fmt(body.banked)} — it rides IN TRANSIT for ${minsTxt(body.clearSeconds)}, and a killer can loot it off you until it clears${body.intransit > body.banked ? ` (${'$' + fmt(body.intransit)} in transit now — deposits stack and reset the clock)` : ''}`;
+    if (body && body.withdrew !== undefined) return `drew $${fmt(body.withdrew)} out — $${fmt(body.bank)} still banked`;
+    if (body && body.ok && body.loc && Object.keys(body).filter((k) => k !== 'events' && k !== 'ok' && k !== 'character' && k !== 'owned').length === 1)
+      return `you're in ${esc($dist(body.loc))} now`;
+    if (body && body.ok && body.qty !== undefined && body.unit !== undefined && (body.spent !== undefined || body.earned !== undefined))
+      return body.spent !== undefined
+        ? `bought ${body.qty} at $${fmt(body.unit)} a unit — $${fmt(body.spent)} out of pocket`
+        : `sold ${body.qty} at $${fmt(body.unit)} a unit — $${fmt(body.earned)} in`;
+    if (body && body.ok && body.vest && body.mult !== undefined) return `strapped into the ${String(body.vest).replace(/_/g, ' ')} — it soaks ${Math.round((body.mult - 1) * 100)}% more punishment`;
+    if (body && body.ok && body.racket && body.income !== undefined)
+      return `the ${String(body.racket).replace(/_/g, ' ')} is yours — about $${fmt(Math.round(body.income * 60))} an hour while you're not looking`;
+    if (body && body.ok && body.asset && body.income === undefined) return `the ${String(body.asset).replace(/_/g, ' ')} is yours`;
+    if (body && body.ok && body.omrSpent !== undefined && body.kind)
+      return body.kind === 'respawn'
+        ? `\u{1F489} revive insurance paid — ${fmt(body.omrSpent)} $OMR. One killing blow gets walked off; you hold ${body.respawnTokens}.`
+        : `paid ${fmt(body.omrSpent)} $OMR — the ${body.kind} is settled`;
+    if (body && body.unbonding !== undefined && body.unbondSeconds !== undefined)
+      return `unstaking ${fmt(body.unbonding)} $OMR — it unbonds over ${minsTxt(body.unbondSeconds)}, and it can be LOOTED off you the whole time${body.rewards ? ` · ${fmt(body.rewards)} $OMR rewards paid` : ''}${body.stillPending ? ` (${fmt(body.stillPending)} still owed — the pool refills)` : ''}`;
+    if (body && body.staked !== undefined && body.ok && body.unbonding === undefined)
+      return `staked — ${fmt(body.staked)} $OMR at work, and safe from a killer's hands`;
+    if (body && body.ok && body.ammo !== undefined && body.gun === undefined) return `rounds in the box — ${body.ammo} on you`;
+    if (body && body.ok && 'gun' in body && body.gun === null) return 'piece put away — you\'re carrying nothing';
+    if (body && body.ok && body.gangId && body.name === undefined) return '\u{1F3B4} the family is founded — you\'re the boss. Bring people in.';
+    if (body && body.ok && body.dissolved !== undefined)
+      return body.dissolved ? 'you walked, and the family went with you — nobody left to hold it' : 'you\'re out of the family';
+    if (body && body.ok && Array.isArray(body.unlearned) && body.points)
+      return `unlearned ${body.unlearned.join(', ')} — ${body.points.available} point${body.points.available === 1 ? '' : 's'} back to spend${body.omr !== undefined ? ` · ${fmt(body.omr)} $OMR left` : ''}`;
+    if (body && body.ok && body.disinfoSeconds !== undefined)
+      return `\u{1F5DE} the books are cooked for ${minsTxt(body.disinfoSeconds)} — anyone tapping your line reads lies${body.spent !== undefined ? ` · ${fmt(body.spent)} $OMR` : ''}`;
+    if (body && body.ok && body.settled !== undefined && body.won !== undefined)
+      return body.settled ? (body.won ? `\u{1F4B0} ${body.settled} ticket${body.settled === 1 ? '' : 's'} settled — $${fmt(body.won)} collected` : `${body.settled} ticket${body.settled === 1 ? '' : 's'} settled — nothing came in`)
+        : 'nothing to collect — no tickets have come up yet';
+    if (body && body.ok && 'fadeLimit' in body)
+      return body.fadeLimit ? `you're taking bets up to $${fmt(body.fadeLimit)} in the back room` : 'you\'re off the back-room board — no more fades';
+    if (body && body.ok && 'pokerLimit' in body)
+      return body.pokerLimit ? `your table is open — up to $${fmt(body.pokerLimit)} a hand` : 'table closed — you\'re not dealing';
+    if (body && body.ok && 'listed' in body && body.listed !== undefined && body.street === undefined)
+      return body.listed ? 'you\'re on the duelling ladder — anyone can call you out now' : 'off the ladder — no more challenges';
+    if (body && body.ok && body.folded) return 'paper folded — you\'re caught up';
+    if (body && body.ok && body.referralCodeChanged) return `the street knows you as ${esc(body.name)} now — your referral link changed with the name`;
+    if (body && body.ok && 'title' in body && body.tier === undefined)
+      return body.title ? `they call you ${esc(body.title)} now` : 'title dropped — just your name from here';
+    if (body && body.ok && body.lab && body.cap !== undefined) return `\u{1F9EA} the lab is a ${String(body.lab).replace(/_/g, ' ')} now — ${body.cap} units a batch`;
+    if (body && body.ok && body.path && body.spent === undefined)
+      return `you're walking the ${String(body.path).replace(/_/g, ' ')} path now — it shapes what you're good at`;
+    if (body && body.ok && 'bio' in body)
+      return body.bio ? 'your story is on your profile — anyone who looks you up reads it' : 'story cleared — the sheet speaks for itself';
+    if (body && body.minted && body.alreadyMinted) return 'you\'re already made — the credit stays in your pocket';
+    if (body && body.minted && !body.alreadyMinted) return '\u{1F396} you\'re MADE. The extraction rail is open to you now.';
+    if (body && body.ok && body.name && body.estate === undefined && body.district === undefined && body.price === undefined && body.tier === undefined && Object.keys(body).filter((k) => k !== 'events' && k !== 'ok' && k !== 'character' && k !== 'owned').length === 1)
+      return `the place has a name now — ${esc(body.name)}`;
     if (!body || typeof body !== 'object') return code < 400 ? 'done.' : 'no dice.';
     if (code >= 400) { const e = body.error; return body.message || (e && ERRMAP[e]) || (e ? e.replace(/_/g, ' ') : `the city said no (${code})`); }
     const bits = [];
@@ -2263,7 +2333,10 @@
     if (body.qty && body.quality) bits.push(`pulled ${body.qty} units at q${body.quality}`);
     if (body.fire) bits.push('THE BATCH BURNED — you got out with your skin');
     if (body.readyAt) bits.push('the batch is on the burner');
-    if (body.heat) bits.push(`heat +${body.heat}`);
+    // a corner deal already states its heat inside its own line, so the generic push made every deal
+    // read "+0.1 heat · heat +0.1". Skip when some earlier bit has already said it — written as a
+    // scan rather than a shape test so a future branch that mentions heat can't reintroduce the echo.
+    if (body.heat && !bits.some((b) => /heat/.test(b))) bits.push(`heat +${body.heat}`);
     if (body.kind === 'social' && body.pending) bits.push(body.registered
       ? 'the clock is running — your post has to STAND before it pays. Come back and collect.'
       : `still standing — it pays in ${minsTxt(body.matureSeconds || 0)}.`);

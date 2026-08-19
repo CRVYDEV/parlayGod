@@ -14055,6 +14055,39 @@ differently — one catches an extractor that has stopped reading the client, th
 stopped reading `src/`. **171 personal notification types, 321 emit sites.** Five mutations, each
 caught at its own named assertion.
 
+**F11 — 26 buttons that worked and then said nothing, and two of them were withholding a TERM.**
+The same class as F9 one surface over, and the one the two earlier fixes (co-op raid, crew heist)
+were instances of without anyone sweeping it: **`act()` toasts `describe(r.body)` with no override**,
+so every one of the ~380 routes a player presses reads back exactly what describe() makes of the
+response — and describe()'s fallback is the bare word **"done."** Driving them for real (95 captured
+200s from the actual routes, then describe() hosted from the client's own source with its real
+helpers and read in a browser) found 26 saying it. The severity is not uniform and the two that
+matter are TERMS, not flavour: **`/v1/unstake` had just opened a SIX-HOUR window in which that $OMR
+can be looted off you** (Make-Risk-Pay's own design) **and said "done."**, and **a bank DEPOSIT rides
+in transit and is lootable until it clears** — the handler's own comment says so, the player was
+never told, and the response did not even carry the amount. Both are the pad-and-nut class: the game
+knowing a condition of the player's money and not saying it. The rest were merely mute — staking,
+founding a family, signing a fighter, buying a racket or an income asset, **selling a car** (the
+response carries gross AND net and the toast said nothing), buying goods, travelling, going MADE, and
+**`/v1/plex/respawn`, which burns 20,588 $OMR**. Three server responses were too thin to say anything
+with, so they were widened (`bank` now returns `banked`/`intransit`/`clearSeconds` or
+`withdrew`/`bank`; `unassignSoldier` RETURNs the name that stood down) — additive, distinct field
+names so nothing else's branch can cross-fire on a generic `amount`.
+**Reading the output found two more nobody was looking for:** selling trade goods rendered the
+KITCHEN's drug-dealing copy (*"moved product — +$127"*) because both shapes carry `earned` and the
+deal branch was keyed loosely — so a legitimate goods sale spoke in the wrong system's voice; and a
+corner deal stated its heat **twice** (*"+0.1 heat · heat +0.1"*), the generic push firing after the
+deal line had already said it. The heat guard is written as a scan of what has already been said
+rather than a shape test, so a future branch that mentions heat cannot reintroduce the echo.
+**THE ACTION LEDGER** (`test/client.js` check 8) is the durable half and it DRIVES rather than
+assumes: the route list is declared, but every response is fetched from the real server, so a shape
+that changes server-side fails here instead of drifting. Plus one assertion for the reason it exists
+— a deposit's line must say the money is in transit. **My own check was vacuous on its first cut**:
+the terms assertion sat behind `if (dep.code < 400)`, the fixture had spent its cash by then, so it
+skipped in silence and the mutation that stripped the warning SURVIVED. It now banks on a fresh
+character and asserts the deposit SUCCEEDED before asserting the wording. Three mutations, each
+caught at its own named assertion.
+
 **THE PROBE HAD TO BE FIXED THREE TIMES BEFORE ITS RESULT MEANT ANYTHING, which is most of the
 lesson.** It first missed **shorthand** payload keys (`{ npc, units, material }`), planting
 `undefined` for each and producing lines that read exactly like client bugs; then it guessed values
@@ -14063,8 +14096,12 @@ from key NAMES, so `outbid`'s `by` — which is an AMOUNT, not a person — got 
 resumed after them, silently losing 13 types while still printing a confident total. Fixed by
 inferring from the value EXPRESSION rather than the key name, and by rewinding `lastIndex` to just
 past the type name. Of eleven "broken" lines in the first run, **seven were the probe and four were
-real** — and the only way to tell was to check each against its actual payload. *A finding produced
-by a tool you wrote and did not check is not a finding.*
+real** — and the only way to tell was to check each against its actual payload. The F11 probe then
+made the same class of mistake twice more: it pinned its helper extraction to LINE NUMBERS, which
+every edit above shifted (so the next run reported a syntax error in code that was fine), and it
+hosted describe() **without `rules`**, which an existing branch legitimately reads — reported as
+`ReferenceError: rules is not defined` and looking exactly like a live page bug until it was traced
+to the eval scope. *A finding produced by a tool you wrote and did not check is not a finding.*
 
 **Clean lenses, recorded because a session that publishes only its hits cannot be audited:** the Port
 loop end to end (including a real interdiction that sank the boat and reported it correctly); the
