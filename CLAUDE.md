@@ -15277,3 +15277,74 @@ literal, because a synthetic throw never poisons a transaction and so would test
 leaving the thing the savepoint exists for unproven. Browser-verified: Home renders all seven cards
 with no `undefined`/`NaN` and the render fires exactly `/v1/me /v1/home /v1/bulletin`. Suite 110 files
 + sim drift-0 + mobile 79/79 + client wiring/mirror + pgquery + pgcheck on a fresh real Postgres.
+
+**THE BLOCK AND CITYWIDE — the same cut, twice more, and the ceiling finally moved (2026-08-20).** The
+Home aggregate took the landing screen from 19 requests a tick to 5, which left **streets** worst at 9 —
+and streets is where a player actually lives, so it was the largest remaining share of what one idle
+player costs. Cutting it went exactly as the pattern predicts (9 → 3, the cheapest screen in the game)
+and **the ceiling did not move at all**, because `city` sat at 0.10 req/s, precisely the cost streets
+used to be. That is the number the measurement is FOR: the player ceiling is a WORST-SCREEN figure, so
+halving the most-used screen improves the average without touching the bound. Delivering "streets is
+twice as cheap and the number you care about is unchanged" would have been a worse outcome than doing
+the one more screen that makes it move, so city was cut too. **Measured: streets 9 → 3 req/tick
+(0.10 → 0.05), city 9 → 5 (0.10 → 0.07), and the worst screen is now `start` at 0.07 — the ceiling
+~2,900 → ~4,350 concurrent players, for zero infrastructure spend.** With the Home cut earlier the same
+day that is **~457 → ~4,350, a 9.5× player ceiling from three client-side reads**, no plan change.
+
+**THE CORE IS SHARED, and that was the first decision.** A second aggregate reproducing twenty subtle
+lines of savepoint handling by hand is the shape this project keeps paying for — `sackEmpire` copied a
+column list instead of calling the helper and the rake cursor drifted; three gate predicates ended up
+with sixty-nine private copies because writing the comparison locally was the reasonable thing at each
+site. So `src/aggregate.js` owns `runBoards` and carries the whole argument (why it exists, what cannot
+ride along, sequential-not-parallel, the per-path isolation mechanics), and `home.js`/`streets.js`/
+`citywide.js` are MAPS and nothing else. Home was refactored onto it in the same commit rather than
+left as the odd one out.
+
+**WHAT IS DELIBERATELY LEFT OUT is where the thinking went.** `/v1/city` stays its own fetch — it is
+**keyless** and already carries two 30-second server-side caches (the skyline, the ticker ballot), so
+folding it in would either duplicate those (the drift above) or recompute per player what is currently
+computed once for everybody, and it would close the door on edge-caching a public board, which is
+strictly better than any per-player aggregate can be. That is a decision somebody could undo by
+"finishing the job", so `test/citywide.js` PINS it: `/v1/city` must not be a key, and it must still
+answer with no token. The city screen is two fetches and that is the right shape, not a shortfall.
+Two boards also do not arrive through `readCharacter` and both are deliberate: `/v1/market/prices` is
+keyless and pure (in the map because the ceiling is measured in REQUESTS, so it is a whole round trip
+saved for no server cost), and `/v1/daily` + `megaBoard` take their querier as an argument — handing
+them the request's own client is **stricter** than the routes they mirror, since that client is the one
+that refuses writes.
+
+**THE PRICE BOARD GOT ONE IMPLEMENTATION.** `/v1/market/prices` built its response inline in the route;
+a second caller makes that two implementations of one board, which is how the two ends of a mirror come
+to disagree. `marketPrices()` is now shared and the route calls it — and the test asserts the equality
+by VALUE rather than by reading the source, since a refactor could satisfy a source check while
+changing what either one returns.
+
+**TWO MUTATIONS SURVIVED FIRST, and both were right to.** Mutating the shared `marketPrices` moved BOTH
+sides, so they still agreed — which is the one-implementation property working, not a hole; the
+mutation that matters makes them DIVERGE (`{...marketPrices(), makings: {}}` in the map), and that fails
+naming the exact drifted values. And removing the SAVEPOINT from the shared core passed all three suites
+under pg-mem, because pg-mem cannot parse one at all — it can only fail where it matters, so it was
+re-run against a fresh real Postgres, where it fails at its own named assertion (*"one broken board must
+not 500 the whole screen (locked path)"*). A mutation that survives is a claim about the test before it
+is a claim about the code; here it was a claim about the ENGINE.
+
+**The client-mirror waiver is keyed on the BINDING, so folding a board re-keys it** — `renderCity`'s
+`world|npcs|minLvl` waiver (correctly gated on the server's own `canRaid`) stopped matching and check 9
+failed. That is the guard working rather than a nuisance: a waiver is a decision about one board on one
+screen and should have to be re-stated rather than following a field around by name. Also folded in: THE
+TREASURE TRAIL rode in its own `.then` AFTER the render and patched a slot in a beat late — it is a
+board in the map now, so it arrives with the screen.
+
+**A pre-existing drift the routes guard caught on the way:** SPEC claimed 688 registrations against a
+real 702 — 1.99% against a 2% band, so it had been sitting just inside for some time and one new route
+tipped it. Restated to the true figure rather than widening the tolerance, which is the whole point of
+a guard that cries wolf being one people route around.
+
+`test/streets.js` (111th) and `test/citywide.js` (112th) are `test/home.js`'s siblings and assert the
+same three properties — the contract value-for-value against every route in the map (a ticking
+`*Seconds` leaf held to a few seconds, since two fetches are two moments), isolation on BOTH paths, and
+read-only proven by the write-refusing path answering. Four mutations, each failing at its own named
+assertion; a board dropped from a map fails twice over (the suite on the count, the client mirror on the
+field the screen then reads off nothing). Browser-verified: streets renders 51,608 chars on ONE `/v1/`
+request and city on two, no `undefined`/`NaN`, zero page errors. Suite 112 files + sim drift-0 + mobile
++ client wiring/mirror + pgquery + pgcheck 47/47 on a fresh real Postgres.

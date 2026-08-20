@@ -1828,9 +1828,12 @@ const LVL_WAIVED = new Map([
   // (plus the coop/solo split, which the client cannot derive), so the renderer swaps the raid button
   // for a "need lvl N" chip on it. Named rather than accepted by a blanket "some gate is present"
   // rule, which is what let the M1 mutation through the first cut.
-  ['renderCity|/v1/world||npcs|minLvl', 'gated on the server-sent canRaid, which worldBoard derives '
-    + 'from this exact minLvl (and the solo/coop split the client cannot compute) — the row renders a '
-    + '"need lvl N" chip in place of the button when it is false.'],
+  // The key names the BINDING, so folding a board into an aggregate re-keys its waiver — which is
+  // the guard working: a waiver is a decision about one board on one screen, and it should have to
+  // be re-stated rather than following a field around by name.
+  ['renderCity|/v1/citywide|world|npcs|minLvl', 'gated on the server-sent canRaid, which worldBoard '
+    + 'derives from this exact minLvl (and the solo/coop split the client cannot compute) — the row '
+    + 'renders a "need lvl N" chip in place of the button when it is false.'],
 ]);
 const lvlUngated = [];
 let lvlChecked = 0;

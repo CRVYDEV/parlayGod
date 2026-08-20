@@ -28,6 +28,8 @@ import * as CityMap from './citymap.js';
 import * as Day from './day.js';
 import * as Payroll from './payroll.js';
 import * as Home from './home.js';
+import * as Block from './streets.js';
+import * as Citywide from './citywide.js';
 import * as Drop from './drop.js';
 import * as Vouch from './vouch.js';
 import * as Push from './push.js';
@@ -1883,6 +1885,14 @@ export async function buildServer() {
   app.get('/v1/home', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client, h) =>
       Home.homeBoard(ch, client, h, { online: [...wsClients.keys()] })));
+  // THE BLOCK — the streets screen's own boards in one read (see src/streets.js for why it is not
+  // hung under /v1/streets, which is the ROSTER and a different thing entirely).
+  app.get('/v1/block', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Block.streetsBoard(ch, client, h)));
+  // CITYWIDE — the city screen's five AUTHED boards in one read. /v1/city stays its own fetch on
+  // purpose: it is keyless and already cached (see src/citywide.js).
+  app.get('/v1/citywide', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Citywide.citywideBoard(ch, client, h)));
 
   // THE COMMUNITY DROP (G-3, D1 variant b) — the claim rail: a snapshotted wallet SIWE-links,
   // claims once, and takes its envelope as IN-GAME $OMR (+ the whitelist's one free identity mint).
@@ -2732,17 +2742,9 @@ export async function buildServer() {
   // ── Risk-to-Earn Phase 4: BACKED EMISSION (the staking reward pool) ──
 
   // ── M2: deterministic market board (§7.11) — public, server-computed ──
-  app.get('/v1/market/prices', async () => {
-    const block = priceBlock();
-    return {
-      block,
-      goods: Object.fromEntries(DISTRICTS.map((d) =>
-        [d.id, Object.fromEntries(GOODS.map((g) => [g.id, goodPriceOf(g.id, d.id, block)]))])),
-      demand: Object.fromEntries(DISTRICTS.map((d) =>
-        [d.id, Object.fromEntries(DRUGS.map((dr) => [dr.id, Math.round(demandOf(dr.id, d.id, block) * 100) / 100]))])),
-      makings: Object.fromEntries(DRUGS.map((dr) => [dr.id, makingsPriceOf(dr.id, block)])),
-    };
-  });
+  // ONE implementation, shared with the /v1/block aggregate that also serves this board — two copies
+  // is how the two ends of a mirror come to disagree.
+  app.get('/v1/market/prices', async () => Block.marketPrices());
 
   // THE SEASON HAS AN ENDING — the clock and the roll of past seasons. Keyless like /v1/city: a
   // deadline nobody can read is not a deadline, and the record is the whole point of the arc.
