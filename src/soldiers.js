@@ -43,7 +43,7 @@ export async function assignSoldier(ch, soldierId, client) {
   if (!fit(s)) throw new GameError('injured', `${s.name} is laid up — give it time.`);
   await client.query('UPDATE soldiers SET on_job=false WHERE character_id=$1', [ch.id]);
   await client.query('UPDATE soldiers SET on_job=true WHERE id=$1', [soldierId]);
-  return { ok: true, name: s.name };
+  return { ok: true, name: s.name, soldier: true };
 }
 
 export async function unassignSoldier(ch, client) {
@@ -59,7 +59,7 @@ export async function dismissSoldier(ch, soldierId, client) {
   const r = await client.query(
     'DELETE FROM soldiers WHERE id=$1 AND character_id=$2 AND alive', [soldierId, ch.id]);
   if (!r.rowCount) throw new GameError('no_soldier', 'No such soldier on your payroll.');
-  return { ok: true };
+  return { ok: true, dismissed: true };
 }
 
 export async function soldierBoard(ch, client, acct) {

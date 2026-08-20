@@ -171,7 +171,7 @@ export async function leaveCoalition(ch, coalitionId, client, h) {
   if (!h.owned.gangId || !canCommand(h)) throw new GameError('rank', 'Only the boss or underboss walks the family out.');
   const r = await client.query('DELETE FROM coalition_members WHERE coalition_id=$1 AND gang_id=$2', [coalitionId, h.owned.gangId]);
   if (!r.rowCount) throw new GameError('no_coalition', 'You weren\'t in it.');
-  return { ok: true };
+  return { ok: true, leftCoalition: true };
 }
 
 // ── the public board ──

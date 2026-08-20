@@ -374,7 +374,7 @@ export async function unsellPaper(ch, loanId, client, h) {
   if (!loan || loan.lender_character !== ch.id) throw new GameError('not_yours', 'That’s not your book.');
   if (loan.for_sale == null) throw new GameError('not_listed', 'That paper isn’t on the market.');
   await client.query('UPDATE loans SET for_sale=NULL WHERE id=$1', [loanId]);
-  return { ok: true };
+  return { ok: true, unsold: true };
 }
 
 // POST /v1/loans/:id/buy — two-party: ch=buyer (actor, the NEW lender), seller=current lender. The buyer

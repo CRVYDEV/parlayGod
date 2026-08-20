@@ -2741,6 +2741,50 @@ if (traceLine) assert(/still listening/i.test(traceLine) && !/swept/i.test(trace
   const hitMiss = String(describeFn({ ok: true, hit: false, success: 0.5, cost: 50000 }, 200));
   assert(/contractor missed/.test(hitMiss) && !/^paid \$/.test(hitMiss),
     `an npc-hire MISS read the bare "paid $N" catch-all. Got: ${JSON.stringify(hitMiss)}`);
+
+  // WAVE 20 — the MED/LOW mutes + lies across the prestige/family/pen/estate layer. Each shape below
+  // is the verified real server return; the assertion is the fix by name, so reverting a branch fails
+  // here rather than shipping the OTHER system's sentence (or "done.") over the most consequential
+  // actions in the game. LIES first (the OTHER system's line — worse than silence):
+  const soldierAssign = String(describeFn({ ok: true, name: 'Paulie from Canal', soldier: true }, 200));
+  assert(/your second now/.test(soldierAssign) && !/place has a name/.test(soldierAssign),
+    `assigning a soldier read the DEED-RENAME line (byte collision on {ok,name}). Got: ${JSON.stringify(soldierAssign)}`);
+  const calloutAccept = String(describeFn({ ok: true, card: 'Champ vs Bee', title: true, closesSeconds: 600 }, 200));
+  assert(/title fight ON/.test(calloutAccept) && !/call you true/i.test(calloutAccept),
+    `accepting a title-fight callout read "they call you TRUE now" (title:true hit the vanity title branch). Got: ${JSON.stringify(calloutAccept)}`);
+  const piracy = String(describeFn({ ok: true, win: true, take: 1200, route: 'openwater' }, 200));
+  assert(/lifted off their deck/.test(piracy) && !/\+\$0\b/.test(piracy),
+    `a PIRACY hijack read the casino "WIN — +$0" line. Got: ${JSON.stringify(piracy)}`);
+  const frontier = String(describeFn({ ok: true, collected: 2400, tributes: [{}] }, 200));
+  assert((frontier.match(/collected/g) || []).length === 1 && /vassal tribute/.test(frontier),
+    `frontier tribute collect DOUBLED (the corner-take line + the tribute line). Got: ${JSON.stringify(frontier)}`);
+  const wagesPay = String(describeFn({ ok: true, paid: 2400, perDay: 1200, staff: 2 }, 200));
+  assert(!/paid \$2,400/.test(wagesPay) && /staff wages settled/.test(wagesPay),
+    `paying estate staff wages DOUBLED (the wages line + the "paid $N" catch-all). Got: ${JSON.stringify(wagesPay)}`);
+  // DOUBLES where a later mute-line and the "paid $N" catch-all both fired:
+  const fence = String(describeFn({ ok: true, loot: 250000, mult: 0.852, paid: 212920 }, 200));
+  assert((fence.match(/212,920/g) || []).length === 1 && /fenced the take/.test(fence),
+    `heist FENCE printed the figure twice (a mute-line + the "paid $N" catch-all). Got: ${JSON.stringify(fence)}`);
+  const sovUpkeep = String(describeFn({ ok: true, paid: 6250, overextension: 2, settled: [{}] }, 200));
+  assert((sovUpkeep.match(/6,250/g) || []).length === 1 && /sovereignty upkeep/.test(sovUpkeep),
+    `sovereignty upkeep printed the figure twice. Got: ${JSON.stringify(sovUpkeep)}`);
+  // the prestige POLITICAL layer — the mutest layer in the game — now narrates its most consequential verbs:
+  const decree = String(describeFn({ ok: true, week: 5, decree: 'pax', deposit: 100000, takesEffectWeek: 6 }, 200));
+  assert(/Commission/.test(decree) && decree !== 'done.',
+    `proposing a Commission decree read "done." — the most consequential action in the game. Got: ${JSON.stringify(decree)}`);
+  const pactOffer = String(describeFn({ ok: true, pending: true, to: 'The Rival' }, 200));
+  assert(/pact/.test(pactOffer) && !/the The Rival/.test(pactOffer),
+    `offering a pact read "done." or double-articled a "The"-prefixed family. Got: ${JSON.stringify(pactOffer)}`);
+  const breakPlan = String(describeFn({ ok: true, id: 'x', crewNeeded: 2, crewMax: 4 }, 200));
+  assert(/planning a break/.test(breakPlan), `planning a pen breakout read "done.". Got: ${JSON.stringify(breakPlan)}`);
+  const dailyClaim = String(describeFn({ ok: true, payout: 44800, rep: 1120, all: false, omrBonus: 0 }, 200));
+  assert(/daily contract done/.test(dailyClaim), `claiming a daily contract read "done.". Got: ${JSON.stringify(dailyClaim)}`);
+  const square = String(describeFn({ ok: true, cost: 50000, cleared: true }, 200));
+  assert(/WANTED lifted/.test(square) && !/^paid \$/.test(square),
+    `squaring a WANTED name read the bare "paid $N" — the terms (WANTED + welsher cleared) withheld. Got: ${JSON.stringify(square)}`);
+  const gala = String(describeFn({ ok: true, cost: 180, until: 'x', hoursOpen: 4 }, 200));
+  assert(/180 \$OMR/.test(gala) && !/\$180\b/.test(gala),
+    `throwing a gala read "paid $180" — a $OMR cost shown as dollars (unit error). Got: ${JSON.stringify(gala)}`);
 }
 
 // The four INVERSIONS. Each is a real sentence about a real system — just not the one the player is
