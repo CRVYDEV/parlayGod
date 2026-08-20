@@ -75,7 +75,7 @@ export async function openConvoy(ch, to, goodId, qty, client, h) {
   const id = uid();
   await client.query('INSERT INTO convoys (id, owner_character, origin, destination) VALUES ($1,$2,$3,$4)', [id, ch.id, ch.loc, to]);
   const r = await loadConvoyRow(ch, { id, origin: ch.loc, status: 'loading' }, goodId, qty, client, h);
-  return { ok: true, id, origin: ch.loc, destination: to, loaded: r.loaded };
+  return { ok: true, id, origin: ch.loc, destination: to, loaded: r.loaded, good: r.good, units: r.units, minUnits: r.minUnits };
 }
 
 async function loadConvoyRow(ch, convoy, goodId, qty, client, h) {
@@ -91,7 +91,12 @@ async function loadConvoyRow(ch, convoy, goodId, qty, client, h) {
   else await client.query('INSERT INTO convoy_cargo (convoy_id, good_id, qty) VALUES ($1,$2,$3)', [convoy.id, goodId, n]);
   h.owned.cargo[goodId] = have - n;
   await setCargo(client, ch.id, goodId, have - n);
-  return { ok: true, loaded: n, good: goodId };
+  // THE MINIMUM IS A TERM, and departure is where a player used to first hear it: a convoy is for
+  // BULK (CONVOY.MIN_QTY) and refuses to roll under it. The manifest total lives on the convoy, not
+  // on the character, so only the server can say how far short the load is — the withheld-terms
+  // class (the pad, the nut, the Port lane picker) on the one screen that spends a whole trunk.
+  const units = Number((await client.query('SELECT COALESCE(SUM(qty),0) n FROM convoy_cargo WHERE convoy_id=$1', [convoy.id])).rows[0].n);
+  return { ok: true, loaded: n, good: goodId, units, minUnits: CONVOY.MIN_QTY };
 }
 
 // LOAD MORE — trunk → manifest while still loading (refill the trunk from the market between loads).
