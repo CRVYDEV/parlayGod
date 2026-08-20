@@ -15415,4 +15415,9 @@ the crossing can fire), so one re-render can never be counted in both — and th
 mutation-verified in the direction that matters: with the client's crossing re-render removed the check
 still fails by name, so the window was corrected rather than widened until it went green. **A guard that
 passes because of how long something takes is measuring the wrong thing, and only a change to that
-duration will ever tell you.**
+duration will ever tell you.** `TICK` is now READ out of the client rather than restated in the harness
+(the preflight-restatement class), and **the class was then swept and came back CLEAN** — recorded
+because a sweep that publishes only its hits cannot be audited: check H was the ONLY two-window
+comparison in any harness, and `tools/pollcost.js` already guards the same hazard in its own words
+(*"derived is not measured, so sit on the worst screen for a real window … and count what actually goes
+out"*), which is why its figures survived the very change that broke this one.
