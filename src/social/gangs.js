@@ -143,11 +143,15 @@ export async function leaveGang(ch, client, h) {
 export async function kickMember(ch, targetCharacterId, client, h) {
   if (!canCommand(h)) throw new GameError('rank', 'Only the boss or underboss kicks members.');
   if (targetCharacterId === ch.id) throw new GameError('self', 'Use leave for that.');
-  const m = (await client.query('SELECT role FROM gang_members WHERE gang_id=$1 AND character_id=$2', [h.owned.gangId, targetCharacterId])).rows[0];
+  // the NAME comes back with the row: a boss kicking one of five soldiers was told "done." and had to
+  // go and re-read the roster to learn which one he had just put on the street.
+  const m = (await client.query(`SELECT gm.role, c.name FROM gang_members gm
+      JOIN characters c ON c.id = gm.character_id
+     WHERE gm.gang_id=$1 AND gm.character_id=$2`, [h.owned.gangId, targetCharacterId])).rows[0];
   if (!m) throw new GameError('no_member', 'Not one of yours.');
   if (m.role === 'boss') throw new GameError('rank', 'Nobody kicks the boss.');
   await removeMember(client, h.owned.gangId, targetCharacterId);
-  return { ok: true };
+  return { ok: true, op: 'kick', name: m.name, was: m.role };
 }
 
 
@@ -155,14 +159,18 @@ export async function promoteMember(ch, targetCharacterId, role, client, h) {
   if (h.owned.gangRole !== 'boss') throw new GameError('rank', 'Only the boss hands out buttons.');
   if (!['underboss', 'capo', 'soldier'].includes(role)) throw new GameError('bad_role', 'Roles: underboss, capo, soldier.');
   if (targetCharacterId === ch.id) throw new GameError('self', 'The boss stays the boss.');
-  const m = (await client.query('SELECT role FROM gang_members WHERE gang_id=$1 AND character_id=$2', [h.owned.gangId, targetCharacterId])).rows[0];
+  const m = (await client.query(`SELECT gm.role, c.name FROM gang_members gm
+      JOIN characters c ON c.id = gm.character_id
+     WHERE gm.gang_id=$1 AND gm.character_id=$2`, [h.owned.gangId, targetCharacterId])).rows[0];
   if (!m) throw new GameError('no_member', 'Not one of yours.');
   if (role === 'underboss') {
     const existing = (await client.query("SELECT character_id FROM gang_members WHERE gang_id=$1 AND role='underboss'", [h.owned.gangId])).rows[0];
     if (existing && existing.character_id !== targetCharacterId) throw new GameError('underboss', 'A family has exactly one underboss.');
   }
   await client.query('UPDATE gang_members SET role=$3 WHERE gang_id=$1 AND character_id=$2', [h.owned.gangId, targetCharacterId, role]);
-  return { ok: true, role };
+  // a promotion is a CHANGE, so the line states both ends of it — a bare role reads the same whether
+  // the man went up or down, and demotion uses this identical route.
+  return { ok: true, op: 'promote', name: m.name, role, was: m.role };
 }
 
 // ── THE ROSTER (the strategy package's SCARCE PEOPLE) ──

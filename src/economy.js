@@ -232,7 +232,10 @@ export async function craft(ch, itemId, client, h) {
   await h.ledger(client, { characterId: ch.id, currency: 'cb', amount: -c.cb, reason: `craft:${itemId}` });
   await bumpStanding(client, h, ch, 'armorer', 1, { action: 'craft' }); // workshop business is Bella's business
   await h.bumpDaily(client, ch.id, 'craft');
-  return { ok: true, item: itemId };
+  // the DISCOUNTED cost is what was charged, so it is what the receipt states (the foundry/Bella
+  // stack is already folded in above). Crates are the second currency — guns and ammo are the only
+  // other purchases that spend one, and both now say so.
+  return { ok: true, op: 'craft', item: itemId, cost, crates: c.cb };
 }
 
 export async function craftAmmo(ch, client, h) {
@@ -244,7 +247,11 @@ export async function craftAmmo(ch, client, h) {
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -400, reason: 'craft:ammo' });
   await h.ledger(client, { characterId: ch.id, currency: 'cb', amount: -1, reason: 'craft:ammo' });
   await h.ledger(client, { characterId: ch.id, currency: 'ammo', amount: 30, reason: 'craft:ammo' });
-  return { ok: true, ammo: 30 };
+  // `rolled` is what this box ADDED and `ammo` is what you are CARRYING. They were one field, and the
+  // line renders it as a total ("N on you"), so a player holding 55 rounds was told 30 — the number
+  // you check before a hit, wrong in the direction that gets somebody killed. `op` names the SYSTEM
+  // so the branch stops discriminating on `gun === undefined`: absence is not a discriminator.
+  return { ok: true, op: 'ammo', rolled: 30, ammo: Number(ch.ammo), cost: 400, crates: 1 };
 }
 
 export function useItem(ch, itemId, client, h) {
@@ -561,7 +568,7 @@ export async function buyAmmo(ch, client, h) {
   await h.ledger(client, { characterId: ch.id, currency: 'ammo', amount: 50, reason: 'ammo:buy' });
   // ammo PRICE is the D1-signed kill-EV anchor — Bella never discounts it, only remembers you
   await bumpStanding(client, h, ch, 'armorer', 1, { action: 'ammo' });
-  return { ok: true, ammo: 50 };
+  return { ok: true, op: 'ammo', rolled: 50, ammo: Number(ch.ammo), cost: 2000 };
 }
 
 // ═══════════════════ NFT GEAR MINT (§5.4) ═══════════════════
