@@ -43,7 +43,14 @@ export async function assignSoldier(ch, soldierId, client) {
   if (!fit(s)) throw new GameError('injured', `${s.name} is laid up — give it time.`);
   await client.query('UPDATE soldiers SET on_job=false WHERE character_id=$1', [ch.id]);
   await client.query('UPDATE soldiers SET on_job=true WHERE id=$1', [soldierId]);
-  return { ok: true, name: s.name };
+  // `soldier`, not `name`. A bare {ok, name} is byte-identical to what nameEstate returns, and the
+  // estate's branch guards on "exactly one field besides ok" — so putting a man on a job read back
+  // "the place has a name now — Vinny the Ghost", which is fluent and false about a different system
+  // entirely. A marker only disambiguates if it names the SYSTEM rather than the STATE (the deed
+  // unlist paid for that twice). The trait and the cut ride with it because they are what makes
+  // assigning THIS man rather than that one a decision: he takes a share of every job, and he can die.
+  return { ok: true, soldier: s.name, traitName: SOLDIERS.TRAITS[s.trait]?.name || s.trait,
+    desc: SOLDIERS.TRAITS[s.trait]?.desc || '', cutBps: SOLDIERS.CUT_BPS };
 }
 
 export async function unassignSoldier(ch, client) {
@@ -56,10 +63,16 @@ export async function unassignSoldier(ch, client) {
 
 // dismiss a LIVING soldier (free — they walk; the memorial keeps only the dead)
 export async function dismissSoldier(ch, soldierId, client) {
+  // RETURNING the name for the same reason unassign does: a bare {ok:true} reaches the toast as
+  // "done." over the one action that ENDS a paid relationship — the hire is forfeit, his levels go
+  // with him, and a rehire starts a new man at the first rung.
   const r = await client.query(
-    'DELETE FROM soldiers WHERE id=$1 AND character_id=$2 AND alive', [soldierId, ch.id]);
+    'DELETE FROM soldiers WHERE id=$1 AND character_id=$2 AND alive RETURNING name', [soldierId, ch.id]);
   if (!r.rowCount) throw new GameError('no_soldier', 'No such soldier on your payroll.');
-  return { ok: true };
+  // `soldierGone`, not `dismissed`: the world raid's hired-gun dismissal already owns that word, and
+  // it reads `crew`/`crewMax` alongside — so a soldier answering `dismissed` matched the raid's line
+  // and printed "crew undefined/undefined" at the player. The marker names the system, not the state.
+  return { ok: true, soldierGone: r.rows[0].name };
 }
 
 export async function soldierBoard(ch, client, acct) {

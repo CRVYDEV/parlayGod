@@ -177,7 +177,10 @@ export async function nameConsigliere(ch, targetCharacterId, client, h) {
   await client.query('INSERT INTO consiglieri (dynasty_account, adviser_account) VALUES ($1,$2)',
     [ch.account_id, target.account_id]);
   await notify(client, target.id, 'consigliere_offer', { from: ch.name });
-  return { ok: true, to: target.name, cost: MARRIAGE.CONSIGLIERE_COST };
+  // `consigliere: true` because a bare {ok, to, cost} is the MARRIAGE proposal's shape exactly, and
+  // the toast read "a marriage ties the BLOODLINES" over an adviser's appointment. Two offers that
+  // differ only in what they mean need a marker that names which — the shape cannot say it.
+  return { ok: true, consigliere: true, to: target.name, cost: MARRIAGE.CONSIGLIERE_COST };
 }
 
 export async function acceptConsigliere(ch, dynastyAccountId, client, h) {
@@ -197,12 +200,16 @@ export async function acceptConsigliere(ch, dynastyAccountId, client, h) {
 export async function endConsigliere(ch, client, role = null) {
   if (role !== 'adviser') {
     const own = await client.query('DELETE FROM consiglieri WHERE dynasty_account=$1', [ch.account_id]);
-    if (own.rowCount) return { ok: true, dismissed: true };
+    // `consigliere`, not a bare `dismissed`: the world raid's hired-gun dismissal already owns that
+    // word and reads `crew`/`crewMax` alongside it, so ending an arrangement printed "sent a gun home
+    // — crew undefined/undefined" at the player. The FOURTH instance of this collision in one wave,
+    // and the same answer each time — the marker names the SYSTEM, not the state.
+    if (own.rowCount) return { ok: true, consigliere: 'dismissed' };
     if (role === 'house') throw new GameError('nothing', 'Your house keeps no adviser.');
   }
   const posts = await client.query('DELETE FROM consiglieri WHERE adviser_account=$1', [ch.account_id]);
   if (!posts.rowCount) throw new GameError('nothing', 'No arrangement to end.');
-  return { ok: true, resigned: posts.rowCount };
+  return { ok: true, consigliere: 'resigned', resigned: posts.rowCount };
 }
 
 // the public board — your marriage, pending proposals both ways, your consigliere + houses you counsel

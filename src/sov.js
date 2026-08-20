@@ -191,6 +191,14 @@ export async function siegeSov(ch, districtId, client, h) {
     'SELECT cd_until FROM sov_siege_cooldowns WHERE district_id=$1 AND gang_id=$2 FOR UPDATE', [districtId, g.id])).rows[0];
   if (cd && new Date(cd.cd_until) > new Date()) throw new GameError('cooldown', 'Your family already moved on those walls today.');
   const tier = Number(s.tier);
+  // Both returns below carry `siegeCost` — the figure DEBITED and LEDGERED — and NOT the flat
+  // `SOV.SIEGE_COST` they used to quote. The chest scales with the target's build cost, so from tier
+  // 4 the two diverge and the reply understated what left the treasury by up to 24x (an Iron Capital
+  // takes $1,200,000 and the reply said $50,000). It survived because the line never printed it: the
+  // losing reply matched the JUMP-failure branch and the winning one fell to the catch-all, so a mute
+  // line was hiding a wrong number — which is the argument for reading every reply back, not just
+  // the ones that look empty. They also carry `district`: the player needs to know WHICH walls, and
+  // it is the field the jump branch already excludes on, so the collision closes with the same fact.
   // VALUE-AT-STAKE: the assault chest scales with the target stronghold's BUILD COST (what you tear
   // down), floored at SIEGE_COST so the low-tier on-ramp is unchanged. `s` is FOR UPDATE-locked above.
   const tierCost = Number((SOV.TIERS[tier - 1] || SOV.TIERS[0]).cost);
@@ -221,10 +229,11 @@ export async function siegeSov(ch, districtId, client, h) {
       await client.query('DELETE FROM sov_siege_cooldowns WHERE district_id=$1', [districtId]);
     } else await client.query('UPDATE sov_structures SET tier=$2 WHERE district_id=$1', [districtId, tier - 1]);
     bus.emit('streets', { type: 'sov_breached', gang: g.name, district: districtId, razed: tier <= 1 });
-    return { ok: true, win: true, razed: tier <= 1, newTier: tier - 1, sovPoints: points, cost: SOV.SIEGE_COST };
+    return { ok: true, win: true, district: districtId, razed: tier <= 1, newTier: tier - 1,
+      sovPoints: points, cost: siegeCost };
   }
   ch.health = Math.max(1, Number(ch.health) - SOV.SIEGE_FAIL_DMG);
-  return { ok: true, win: false, dmg: SOV.SIEGE_FAIL_DMG, cost: SOV.SIEGE_COST };
+  return { ok: true, win: false, district: districtId, dmg: SOV.SIEGE_FAIL_DMG, cost: siegeCost };
 }
 
 // the public sov map (EVE: sovereignty is VISIBLE — windows and all; the timer is the content)

@@ -2072,7 +2072,7 @@
     if (body && body.pulled) return `pulled your name back from ${txt(body.pulled)}`;
     // THE HIRED GUNS — a merc's firepower counts, but takes no cut. The toast says the crew grew.
     if (body && body.hired && body.fee != null) return `\u{1F52B} a gun's on the crew — $${fmt(body.fee)} up front, no cut of the score. crew ${body.crew}/${body.crewMax}`;
-    if (body && body.dismissed) return `sent a gun home — a slot's open for a real crewman. crew ${body.crew}/${body.crewMax}`;
+    if (body && body.dismissed && body.crewMax !== undefined) return `sent a gun home — a slot's open for a real crewman. crew ${body.crew}/${body.crewMax}`;
     // THE CREW (the account-level social pact) — the lifecycle toasts. `crew` is a string status here,
     // distinct from the hired-guns branches above where it's a member count.
     if (body && typeof body.crew === 'string') {
@@ -2146,6 +2146,19 @@
     // term, exactly like the pad and the nut. Keyed tightly on each shape's own marker fields.
     if (body && body.ok && body.gross !== undefined && body.net !== undefined && body.street === undefined)
       return `sold her on — $${fmt(body.net)} in hand${body.gross > body.net ? ` (the fence took $${fmt(body.gross - body.net)})` : ''}`;
+    // …and the two either side of stand-down, which had been left behind it. ASSIGNING a second read
+    // the ESTATE's own line ("the place has a name now"), because {ok, name} is what nameEstate
+    // returns too — fixed at the server with a marker that names the system, so the line here can
+    // state the terms instead: he takes a cut of every job, and he can be killed for good.
+    if (body && body.ok && body.soldier && body.cutBps !== undefined)
+      return `\u{1F576} ${txt(body.soldier)} rides with you — ${txt(body.traitName)}: ${txt(body.desc)}. `
+        + `He takes ${(body.cutBps / 100).toFixed(0)}% of every job he's on, and a bad one can kill him for good.`;
+    if (body && body.ok && body.soldierGone)
+      return `${txt(body.soldierGone)} is off the payroll — the hire money's gone with him, and so are his levels`;
+    // the household's own version of the same verb — and the same collision: it answered a bare
+    // `dismissed` too, so letting a staff member go read as sending a hired gun home from a raid
+    if (body && body.ok && body.staffGone)
+      return `${txt(body.staffGone)} has left the household — the wages stop, and rehiring starts the fee again`;
     if (body && body.ok && 'standDown' in body)
       return body.standDown ? `${txt(body.standDown)} stands down — nobody's riding with you` : 'nobody was riding with you';
     // THE FIXTURES — all four Underworld buttons (gift / penance / favor / errand) go through one
@@ -2250,6 +2263,33 @@
       return `\u{2694} war with ${txt(body.rival)} — $${fmt(body.cost)} out of the war chest. It runs `
         + `${minsTxt(Math.max(0, Math.round((new Date(body.until) - Date.now()) / 1000)))}, and the `
         + `winner takes ${Math.round(body.spoilsPct * 100)}% of the loser's treasury.`;
+    // SOVEREIGNTY — a whole SYSTEM reading as a bare price. Five verbs, two of them six-figure, and
+    // every one of them fell to the catch-all or to "done." while the replies carried the facts all
+    // along. The WINDOW is the one that matters most: a stronghold is only vulnerable in the hour its
+    // boss picks, so that hour IS the defence, and it was never said out loud after being chosen.
+    if (body && body.ok && body.district && body.tier === 1 && body.windowHour !== undefined)
+      return `\u{1F3F0} an ${txt(body.name)} stands on ${$dist(body.district)} — $${fmt(body.cost)} out of the treasury. `
+        + `It can only be stormed in its window: ${String(body.windowHour).padStart(2, '0')}:00 UTC. Every other hour, the walls hold.`;
+    if (body && body.ok && body.district && body.tier > 1 && body.windowHour === undefined && body.cost !== undefined)
+      return `\u{1F3F0} the walls on ${$dist(body.district)} rise to tier ${body.tier} — ${txt(body.name)}, $${fmt(body.cost)}. Harder to storm, dearer to keep.`;
+    if (body && body.ok && body.income !== undefined && Array.isArray(body.banked))
+      return body.income
+        ? `\u{1F3F0} $${fmt(body.income)} from ${body.banked.length} stronghold${body.banked.length === 1 ? '' : 's'} into the treasury`
+        : 'the strongholds have nothing banked yet';
+    // OVEREXTENSION is the term a boss has to know and could not read anywhere: every extra district
+    // inflates the whole empire's upkeep superlinearly, so the bill is not the sum of its parts.
+    if (body && body.ok && body.paid !== undefined && Array.isArray(body.settled) && body.overextension !== undefined)
+      return body.paid
+        ? `\u{1F3F0} ${body.settled.length} stronghold${body.settled.length === 1 ? '' : 's'} kept — $${fmt(body.paid)} from the treasury`
+          + `${body.overextension > 0 ? `, +${body.overextension}% of it overextension for holding so much ground` : ''}`
+        : 'nothing owed on the walls right now';
+    if (body && body.ok && body.win === true && body.district && body.sovPoints !== undefined)
+      return body.razed
+        ? `\u{1F3F0} the walls on ${$dist(body.district)} are RAZED — $${fmt(body.cost)} out of the war chest, +${body.sovPoints} sovereignty. They rebuild from nothing.`
+        : `\u{1F3F0} you breached ${$dist(body.district)} — knocked to tier ${body.newTier} for $${fmt(body.cost)}, +${body.sovPoints} sovereignty.`;
+    if (body && body.ok && body.win === false && body.district && body.dmg !== undefined)
+      return `\u{1F6E1} the walls on ${$dist(body.district)} held — $${fmt(body.cost)} out of the war chest and you took ${body.dmg} damage. `
+        + `Your family can't move on them again today.`;
     if (body && body.ok && body.against && body.needed !== undefined)
       return `\u{2694} the coalition against ${txt(body.against)} is open — ${body.needed} families in and it arms: half the war chest and a cheaper price on their ground.`;
     if (body && body.ok && body.members !== undefined && body.armed !== undefined)
@@ -2258,6 +2298,41 @@
         : `\u{2694} you're in — ${body.members} so far, not enough to arm it yet`;
     if (body && body.ok && body.leftCoalition)
       return `\u{1F6B6} the family is out of the coalition${body.against ? ` against ${txt(body.against)}` : ''} — you fight them at full price now`;
+    // THE MARRIAGE. Every one of these fell to the catch-all `paid $N` — a five-figure price with the
+    // purchase left off, on a tie that binds two BLOODLINES rather than two streets: it outlives both
+    // of you, it buries whatever feud stood between the lines, and killing an in-law is the SCANDAL,
+    // which dissolves it on the spot and brands the killer. Terms, not flavour. Ordered before the
+    // crew's `to` map, which is keyed on `body.crew` and cannot reach these.
+    if (body && body.ok && body.consigliere && body.to)
+      return `\u{1F3A9} the envoy is with ${txt(body.to)} — $${fmt(body.cost)} down. An adviser counsels your house; ` +
+        `they decide whether to take the chair.`;
+    if (body && body.ok && body.to && body.cost !== undefined && !body.consigliere)
+      return `\u{1F48D} the offer is with ${txt(body.to)} — $${fmt(body.cost)} down, and nothing binds until they accept. `
+        + `A marriage ties the BLOODLINES: it outlives you both.`;
+    if (body && body.ok && 'with' in body && body.cost !== undefined && body.until === undefined)
+      return `\u{1F48D} it's done — you and ${txt(body.with || 'them')} are family now, $${fmt(body.cost)}. `
+        + `Whatever blood stood between the lines is buried, and killing one of theirs is a scandal that ends it.`;
+    if (body && body.ok && body.divorced)
+      return `\u{1F494} it's over — you called it, so you wear it: ${body.honor} honor. The lines are strangers again.`;
+    if (body && body.ok && body.withdrawn) return 'the offer is off the table — nothing was signed';
+    if (body && body.ok && body.advising !== undefined)
+      return body.advising ? `\u{1F3A9} you counsel ${txt(body.advising)}'s house now` : 'you advise nobody now';
+    if (body && body.ok && (body.consigliere === 'dismissed' || body.consigliere === 'resigned'))
+      return body.consigliere === 'dismissed'
+        ? 'your house keeps no adviser now'
+        : `you stepped down from ${body.resigned === 1 ? 'the house you counselled' : `${body.resigned} houses`}`;
+    // THE CAMPAIGNS. Taking on a fixer's storyline said "done." — and the reply carried the fixer's
+    // own opening words the whole time, which is the entire reason to have written them.
+    if (body && body.ok && body.campaign && body.say)
+      return `\u{1F4DC} ${txt(body.campaign)} — "${txt(body.say)}"`;
+    if (body && body.ok && body.chose)
+      return `\u{1F4DC} you chose: ${txt(body.chose)}${body.honor ? ` — ${body.honor > 0 ? '+' : ''}${body.honor} honor` : ''}`
+        + `${body.completed ? '. That closes it.' : ''}`;
+    if (body && body.ok && body.campaign && body.standing !== undefined)
+      return `\u{1F4DC} ${txt(body.campaign)} is finished — ${[body.cash ? `$${fmt(body.cash)}` : null,
+        body.honor ? `${body.honor > 0 ? '+' : ''}${body.honor} honor` : null,
+        body.standing ? `+${body.standing} with them` : null,
+        body.title ? `they call you ${txt(body.title)}` : null].filter(Boolean).join(' · ')}`;
     // THE LAW. A bribe is the price with the purchase left off: what it BUYS is a lower file.
     if (body && body.ok && body.exposure !== undefined && body.stage)
       return `\u{1F4B0} $${fmt(body.cost)} to the man — the file drops to ${body.exposure} (${txt(String(body.stage).replace(/_/g, ' '))})`;

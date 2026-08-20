@@ -3644,6 +3644,250 @@ assert(offLine && /\$10,000|stake/i.test(offLine),
   `disbanding hands the fronted stake BACK, and the plan line PROMISES exactly that — so the game ` +
   `made the promise and then never confirmed it was kept. Got: ${JSON.stringify(offLine)}`);
 
+// ── WAVE 43 — SOVEREIGNTY END TO END, and the mute line that was hiding a WRONG NUMBER.
+// Every stronghold verb was mute or worse: build read `paid $100,000`, upgrade `paid $400,000`,
+// collect and the upkeep settle said nothing, and a failed siege rendered the JUMP-failure line
+// (both replies carry `dmg`, so the flat if-chain took whichever came first). Two of the four
+// facts they withhold are the whole mechanic: `windowHour` is the ONE hour a day the walls can be
+// stormed, and `overextension` is the EU4 empire tax that makes holding more ground cost more per
+// stronghold.
+//
+// The sharpest finding is underneath the silence. `siegeSov` DEBITS and LEDGERS a tier-scaled cost
+// and returned the flat base — at tier 6 that is $50,000 reported against $1,200,000 actually
+// taken, a 24× understatement — and it survived only because the line never printed it. That is
+// the strongest argument in this file for reading every reply back rather than only the empty ones:
+// a mute line was hiding a wrong number, and no silence pattern can see a figure nobody prints.
+//
+// Its own block because sovereignty needs a family HOLDING a district, and the siege needs a
+// SECOND family standing on it — neither is a thing the shared fixture is or can become.
+{
+  const mk43 = async (n) => { const t = (await inject('POST', '/v1/auth/guest')).body.token;
+    await inject('POST', '/v1/character', t, { name: n + Math.random().toString(36).slice(2, 6) });
+    const id = (await inject('GET', '/v1/me', t)).body.character.id;
+    await app.pool.query('UPDATE characters SET cash=90000000, respect=3000000, muscle=90, cunning=90, ' +
+      'speed=90, energy=300, health=100 WHERE id=$1', [id]);
+    return { t, id }; };
+  const L43 = new Map();
+  const drive43 = async (t, m, url, payload, label) => {
+    const r = await inject(m, url, t, payload);
+    assert.equal(r.code, 200, `WAVE 43 could not drive ${label} (${JSON.stringify(r.body)}) — fix the ` +
+      'fixture rather than letting it skip, because a skipped action reads on the summary line as covered');
+    described++;
+    let line; try { line = String(describeFn(r.body, r.code)); } catch (e) { line = 'THREW: ' + e.message; }
+    L43.set(label, line); said.set(`${url}#${label}`, line);
+    if (line === 'done.' || /^paid \$[\d,.]+$/.test(line) || /undefined|NaN|\[object|^THREW/.test(line))
+      mute.push(`${m} ${url} (${label}) → ${JSON.stringify(line)}`);
+    return r; };
+
+  const hold = await mk43('Ledger Wall '), storm = await mk43('Ledger Storm ');
+  const freeD = (await app.pool.query(
+    'SELECT id FROM districts WHERE holder_gang IS NULL AND npc_holder IS NULL ORDER BY id LIMIT 1')).rows[0];
+  assert(freeD, 'WAVE 43: no unheld district to build a stronghold on');
+  const D = freeD.id;
+  for (const p of [hold, storm]) await app.pool.query('UPDATE characters SET loc=$2 WHERE id=$1', [p.id, D]);
+  const rnd = () => Math.random().toString(36).slice(2, 5).toUpperCase();
+  await inject('POST', '/v1/gangs', hold.t, { name: 'Ledger Wall ' + rnd(), tag: 'W' + rnd() });
+  const hg = (await app.pool.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [hold.id])).rows[0];
+  assert(hg, 'WAVE 43: the holding family never founded');
+  await app.pool.query('UPDATE gangs SET treasury=900000000 WHERE id=$1', [hg.gang_id]);
+  const seized = await inject('POST', `/v1/districts/${D}/seize`, hold.t, null);
+  assert.equal(seized.code, 200, `WAVE 43: could not take ${D} (${JSON.stringify(seized.body)})`);
+
+  // the window hour is the DEFENSIVE mechanic — pinned to now so the siege below is inside it
+  const nowHour = new Date().getUTCHours();
+  await drive43(hold.t, 'POST', `/v1/sov/${D}/build`, { windowHour: nowHour }, 'raise the walls');
+  await drive43(hold.t, 'POST', `/v1/sov/${D}/upgrade`, null, 'raise them higher');
+  await app.pool.query("UPDATE sov_structures SET income_at = now() - interval '20 hours' WHERE district_id=$1", [D]);
+  await drive43(hold.t, 'POST', '/v1/sov/collect', null, 'bank the strongholds');
+  await app.pool.query("UPDATE sov_structures SET upkeep_at = now() - interval '40 hours' WHERE district_id=$1", [D]);
+  await drive43(hold.t, 'POST', '/v1/sov/upkeep', null, 'keep the walls');
+
+  const built = L43.get('raise the walls');
+  assert(/\$[\d,]/.test(built) && /\d\d:00/.test(built),
+    `raising a stronghold is a six-figure TREASURY purchase whose defining term is the one hour a day ` +
+    `it can be stormed — the reply carries windowHour and the line read "paid $100,000". ` +
+    `Got: ${JSON.stringify(built)}`);
+  const higher = L43.get('raise them higher');
+  assert(/\$[\d,]/.test(higher) && /tier 2|\btier\b/i.test(higher),
+    `an upgrade names the tier it bought, or the player cannot tell it from the build. ` +
+    `Got: ${JSON.stringify(higher)}`);
+  const banked = L43.get('bank the strongholds');
+  assert(/\$[\d,]/.test(banked) && /treasur/i.test(banked),
+    `collecting names the money and where it went — it is TREASURY income, not the player's own ` +
+    `pocket, which is the half a member cannot see on their sheet. Got: ${JSON.stringify(banked)}`);
+  const kept = L43.get('keep the walls');
+  assert(/\$[\d,]/.test(kept) && /stronghold/i.test(kept),
+    `the upkeep settle says what was kept standing for the money. Got: ${JSON.stringify(kept)}`);
+  // district NAMES, not ids: `$dist` is declared at the top of describe()'s body for exactly this,
+  // and the first cut of these five lines printed the raw id ("cathedral") at the player
+  for (const [label, line] of L43)
+    assert(!/\b(docks|canal|brick|neon|cathedral|foundry)\b/.test(line),
+      `WAVE 43: "${label}" printed a raw district id — every sibling renders the district's NAME ` +
+      `through $dist(). Got: ${JSON.stringify(line)}`);
+
+  // ── THE SIEGE, both ways, at the top tier where the cost error is largest. The roll is not pinned
+  // (SOV_SIEGE_P is TEST-ONLY and preflight refuses it beside a DATABASE_URL) so both outcomes are
+  // driven by retrying with the per-family cooldown cleared — and the TREASURY DELTA is measured on
+  // each, because the claim is not "the line mentions money" but "the number it states is the number
+  // that left". A literal would pass while the two drifted, which is the class being fixed.
+  await inject('POST', '/v1/gangs', storm.t, { name: 'Ledger Storm ' + rnd(), tag: 'S' + rnd() });
+  const sg = (await app.pool.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [storm.id])).rows[0];
+  assert(sg, 'WAVE 43: the storming family never founded');
+  await app.pool.query('UPDATE gangs SET treasury=900000000 WHERE id=$1', [sg.gang_id]);
+  const outcomes = new Map();
+  for (let i = 0; i < 40 && outcomes.size < 2; i++) {
+    await app.pool.query('UPDATE sov_structures SET tier=6 WHERE district_id=$1', [D]);
+    await app.pool.query('DELETE FROM sov_siege_cooldowns WHERE district_id=$1', [D]);
+    await app.pool.query('UPDATE characters SET health=100, energy=300 WHERE id=$1', [storm.id]);
+    const before = Number((await app.pool.query('SELECT treasury FROM gangs WHERE id=$1', [sg.gang_id])).rows[0].treasury);
+    const r = await inject('POST', `/v1/sov/${D}/siege`, storm.t, null);
+    if (r.code >= 400) continue;
+    const after = Number((await app.pool.query('SELECT treasury FROM gangs WHERE id=$1', [sg.gang_id])).rows[0].treasury);
+    const key = r.body.win ? 'won' : 'lost';
+    if (outcomes.has(key)) continue;
+    described++;
+    let line; try { line = String(describeFn(r.body, r.code)); } catch (e) { line = 'THREW: ' + e.message; }
+    outcomes.set(key, { line, moved: before - after, said: Number(r.body.cost) });
+    said.set(`/v1/sov/${D}/siege#${key}`, line);
+    if (line === 'done.' || /^paid \$[\d,.]+$/.test(line) || /undefined|NaN|\[object|^THREW/.test(line))
+      mute.push(`POST /v1/sov/:d/siege (${key}) → ${JSON.stringify(line)}`);
+  }
+  assert(outcomes.size === 2, `WAVE 43: both siege outcomes have to drive — a win-only or loss-only ` +
+    `run leaves half the cost fix unexercised and its mutation survives. Got: ${[...outcomes.keys()]}`);
+  // the LOSS is the collision: both a failed siege and a failed jump carry `dmg`, and the jump's
+  // branch came first, so storming a fortified district read "the jump went bad"
+  const lost = outcomes.get('lost').line;
+  // `/wall/`, not `/held/`: the fall-through the collision produces is "they held the block", which a
+  // loose test for "held" accepts word for word — an assertion that accepts the exact wrong output is
+  // not an assertion. The WALLS are the system, and no line in the jump family names them.
+  assert(/wall/i.test(lost) && !/jump|the block/i.test(lost),
+    `a failed SIEGE is not a failed jump — both replies carry \`dmg\` and the jump's line came first ` +
+    `in the chain, so a six-figure assault on a fortified district read as a mugging gone wrong. ` +
+    `Got: ${JSON.stringify(lost)}`);
+
+  for (const [key, o] of outcomes) {
+    // the finding itself: the reply must state the cost that was actually taken, not the flat base
+    assert.equal(o.said, o.moved, `WAVE 43: a siege ${key} reported ${o.said} against a war chest that ` +
+      `actually fell by ${o.moved} — the cost is tier-SCALED and the reply returned the flat base, so a ` +
+      `family reading its own toast was told a fraction of what a siege cost them`);
+    assert(/\$[\d,]/.test(o.line), `a siege ${key} names what it cost the war chest. Got: ${JSON.stringify(o.line)}`);
+  }
+  assert(/razed|breach|tier/i.test(outcomes.get('won').line) && /sovereign/i.test(outcomes.get('won').line),
+    `a won siege says what it did to the walls and what it scored. Got: ${JSON.stringify(outcomes.get('won').line)}`);
+
+  // ── THE SECOND, the third and the fourth: three byte-shape collisions in one wave.
+  // A soldier ASSIGN answered a bare {ok, name} — byte-identical to what naming your estate returns,
+  // and the estate's branch guards on "exactly one field besides ok" — so putting a man on a job read
+  // "the place has a name now". Dismissing him said "done." over the one action that ENDS a paid
+  // relationship. And a CONSIGLIERE offer is {ok, to, cost}, which is the MARRIAGE proposal's shape
+  // exactly, so hiring an adviser proposed marriage. Each fix names the SYSTEM rather than the state,
+  // which is the lesson the deed unlist paid for twice.
+  await drive43(storm.t, 'POST', '/v1/soldiers/hire', null, 'hire a soldier');
+  const roster = (await inject('GET', '/v1/soldiers', storm.t)).body?.roster || [];
+  assert(roster[0], 'WAVE 43: no soldier on the payroll — the two assertions below would skip in silence');
+  await drive43(storm.t, 'POST', `/v1/soldiers/${roster[0].id}/assign`, null, 'put him on the job');
+  await drive43(storm.t, 'DELETE', `/v1/soldiers/${roster[0].id}`, null, 'off the payroll');
+  const onJob = L43.get('put him on the job');
+  assert(!/the place has a name/i.test(onJob) && /%/.test(onJob),
+    `assigning a second is not naming your estate — and his CUT is the term that makes assigning THIS ` +
+    `man a decision. Got: ${JSON.stringify(onJob)}`);
+  const gone = L43.get('off the payroll');
+  assert(/payroll|walked|gone/i.test(gone) && !/crew/i.test(gone),
+    `dismissing a soldier is not dismissing a hired gun from a world raid — that branch reads ` +
+    `crew/crewMax alongside and printed "crew undefined/undefined" at the player. ` +
+    `Got: ${JSON.stringify(gone)}`);
+
+  await drive43(storm.t, 'POST', `/v1/dynasty/propose/${hold.id}`, null, 'propose a marriage');
+  const stormAcc = (await app.pool.query('SELECT account_id FROM characters WHERE id=$1', [storm.id])).rows[0].account_id;
+  await drive43(hold.t, 'POST', `/v1/dynasty/accept/${stormAcc}`, null, 'accept it');
+  await drive43(storm.t, 'POST', `/v1/dynasty/consigliere/${hold.id}`, null, 'name a consigliere');
+  await drive43(storm.t, 'POST', '/v1/dynasty/divorce', null, 'call it off');
+  const proposed = L43.get('propose a marriage');
+  assert(/nothing binds|accept/i.test(proposed) && /\$[\d,]/.test(proposed),
+    `a proposal costs money NOW and binds nothing until the other side takes it — both halves are ` +
+    `terms. Got: ${JSON.stringify(proposed)}`);
+  const consig = L43.get('name a consigliere');
+  assert(/advis|counsel|envoy/i.test(consig) && !/marriage|bloodline/i.test(consig),
+    `hiring an adviser is {ok, to, cost} — byte-identical to a MARRIAGE proposal — so it proposed ` +
+    `marriage to them. The marker has to name the system. Got: ${JSON.stringify(consig)}`);
+  const divorced = L43.get('call it off');
+  assert(/honor|-\d/.test(divorced),
+    `walking away from a marriage costs the initiator honor, and that is the whole decision. ` +
+    `Got: ${JSON.stringify(divorced)}`);
+
+  // ENDING the arrangement is the FOURTH instance of the same collision, and it is the one that made
+  // the fix above unreachable: `endConsigliere` answered a bare {ok, dismissed:true}, and the world
+  // raid's hired-gun line fires on ANY truthy `dismissed` and reads crew/crewMax alongside — so a
+  // house dismissing its adviser was told "sent a gun home — crew undefined/undefined". Fixed at BOTH
+  // halves, the way the previous waves did it: the source names the system, AND the hired-gun branch
+  // now requires the crew count it prints, so the NEXT system to answer `dismissed` is not claimed by
+  // it either. Both senses are driven, because a branch that renders only one of them is the same bug
+  // facing the other way — and `resigned` is reached only from a house that keeps no adviser itself.
+  await drive43(hold.t, 'POST', `/v1/dynasty/consigliere/accept/${stormAcc}`, null, 'take the chair');
+  await drive43(storm.t, 'DELETE', '/v1/dynasty/consigliere', null, 'dismiss the adviser');
+  const third = await mk43('Ledger House ');
+  await drive43(third.t, 'POST', `/v1/dynasty/consigliere/${storm.id}`, null, 'a third house asks');
+  const thirdAcc = (await app.pool.query('SELECT account_id FROM characters WHERE id=$1', [third.id])).rows[0].account_id;
+  await drive43(storm.t, 'POST', `/v1/dynasty/consigliere/accept/${thirdAcc}`, null, 'counsel them');
+  await drive43(storm.t, 'DELETE', '/v1/dynasty/consigliere', null, 'step down');
+  for (const label of ['dismiss the adviser', 'step down']) {
+    const line = L43.get(label);
+    assert(/advis|chair|counsel|house/i.test(line) && !/gun|crew/i.test(line),
+      `"${label}" is not sending a hired gun home from a world raid — that branch fires on any truthy ` +
+      `\`dismissed\` and prints a crew count this reply has never had. Got: ${JSON.stringify(line)}`);
+  }
+  assert(L43.get('dismiss the adviser') !== L43.get('step down'),
+    `dismissing YOUR adviser and resigning a post you hold in somebody else's house are opposite ` +
+    `directions and must not read as the same sentence`);
+
+  // …and the FIFTH: the ESTATE answered `dismissed` too — a staff SLUG, with no crew count — so
+  // letting the groundskeeper go read "sent a gun home — crew undefined/undefined".
+  const house = await mk43('Ledger Staff ');
+  await app.pool.query("UPDATE account_persistent SET omr=900000 WHERE account_id=" +
+    '(SELECT account_id FROM characters WHERE id=$1)', [house.id]);
+  await drive43(house.t, 'POST', '/v1/estate/upgrade', null, 'buy a place');
+  await drive43(house.t, 'POST', '/v1/estate/staff/groundskeeper', null, 'take on a groundskeeper');
+  await drive43(house.t, 'DELETE', '/v1/estate/staff/groundskeeper', null, 'let him go');
+  const letGo = L43.get('let him go');
+  assert(/household/i.test(letGo) && !/gun|crew/i.test(letGo),
+    `letting household staff go is not sending a hired gun home from a world raid — the estate sent ` +
+    `a bare \`dismissed\` slug and the raid branch claims any truthy one. Got: ${JSON.stringify(letGo)}`);
+
+  // THE DEFENSIVE HALF, and it is honestly UNREACHABLE today. Each of the three collisions above was
+  // fixed at its SOURCE, so nothing in the tree sends a truthy `dismissed` without a crew count any
+  // more and the guard on the raid branch can no longer fire — a mutation removing it is silent
+  // against all three drives above, which is exactly what a first run of it showed. It is kept as
+  // defence in depth (the desk's shelf clamp is the precedent: an unreachable guard is worth keeping,
+  // an untested one that READS as tested is not), so it is exercised against a labelled SYNTHETIC
+  // shape rather than left to look covered by drives that cannot reach it.
+  {
+    const synthetic = describeFn({ ok: true, dismissed: 'somebody' }, 200);
+    assert(!/gun|crew/i.test(synthetic),
+      `SYNTHETIC (no route sends this today): a reply carrying \`dismissed\` with no crew count must ` +
+      `not be claimed by the world raid's hired-gun line, which prints a crew count it does not have. ` +
+      `Three systems shipped that shape and all three were fixed at the source; this holds the branch ` +
+      `for the fourth. Got: ${JSON.stringify(synthetic)}`);
+  }
+
+  // and the fixers' storylines: STARTING one said "done." while the reply carried the fixer's own
+  // opening words verbatim
+  // one row at a time, and DELETE-then-INSERT rather than ON CONFLICT: pg-mem parses neither
+  // `unnest(ARRAY[...])` nor an upsert reliably (the recorded posture — it reports a conflicting
+  // insert as a success), and a seed that silently does nothing leaves the campaign board empty
+  await app.pool.query('DELETE FROM npc_standing WHERE character_id=$1', [storm.id]);
+  for (const npc of ['doc', 'fixer', 'armorer', 'harbor', 'madame', 'corner'])
+    await app.pool.query('INSERT INTO npc_standing (character_id, npc_id, standing, touched_at) ' +
+      'VALUES ($1,$2,100,now())', [storm.id, npc]);
+  const camp = ((await inject('GET', '/v1/campaigns', storm.t)).body?.campaigns || [])[0];
+  assert(camp, 'WAVE 43: no campaign on offer — the assertion below would skip in silence');
+  await drive43(storm.t, 'POST', `/v1/campaigns/${camp.id}/start`, null, 'take the fixer\'s job');
+  const started = L43.get('take the fixer\'s job');
+  assert(started.length > 40 && /"/.test(started),
+    `a fixer's storyline opens with what he SAYS — the reply carries it verbatim and the line said ` +
+    `"done." Got: ${JSON.stringify(started)}`);
+}
+
+
 const describedCount = described;
 assert(described >= 100, `only ${described} of ${ACTIONS.length} actions succeeded — the ledger is measuring almost nothing`);
 assert.deepEqual(mute, [], `${mute.length} action(s) a player PRESSES say nothing about what just happened ` +
