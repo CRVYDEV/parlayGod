@@ -436,6 +436,62 @@ for (const vp of VIEWPORTS) {
   await browser.close();
 }
 
+// ── I — A COLD LOAD IN LOCKUP LANDS IN THE PEN ──────────────────────────────────────────────────
+// "Going to jail takes you to jail" is a founder-asked feature, and its own comment claimed to cover
+// "a page that LOADS jailed". It did not, and three things had to be true at once for it to fail:
+// renderSheet() runs BEFORE buildTabs(), so the latch's setTab('pen') fired when #tab-pen did not
+// exist — renderPen() threw on the null panel (an ASYNC throw, so boot()'s try/catch never saw it) —
+// and the latch was spent on the way past, so it never fired again for that sentence. Even had it
+// worked, buildTabs()'s own setTab('streets') and the login hook's async setTab('start') would each
+// have overridden it. Played it: a cold load in a cell gave a page error, an EMPTY Pen panel, and
+// the player left on Home for the whole stretch.
+//
+// Only a browser can see this — it is an ordering bug between three boot steps, and every one of its
+// symptoms is a DOM fact. The jail is set through app.pool directly rather than by playing until a
+// bust lands, because a probe whose precondition is a dice roll is the recorded flake shape.
+{
+  const browser = await chromium.launch({ executablePath: exe });
+  const ctx = await browser.newContext({ viewport: { width: 375, height: 667 }, isMobile: true, hasTouch: true, locale: 'en-US' });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', (e) => errs.push(String(e).split('\n')[0]));
+  const vp = { w: 375, h: 667 };
+  await page.goto(BASE, { waitUntil: 'domcontentloaded' });
+  await page.click('#btn-guest');
+  await page.waitForSelector('#screen-create:not(.hidden)', { timeout: 20000 });
+  await page.fill('#new-name', 'Lockup Probe');
+  await page.click('#btn-create');
+  await page.waitForSelector('#screen-main:not(.hidden)', { timeout: 20000 });
+  await page.evaluate(() => {
+    localStorage.setItem('omerta_tour2', '1'); localStorage.setItem('omerta_welcomed', '1');
+    localStorage.setItem('omerta_alltabs', '1');
+  });
+  const r = await app.pool.query(
+    "UPDATE characters SET jail_until = now() + interval '25 minutes' WHERE name = $1 AND alive RETURNING id", ['Lockup Probe']);
+  if (!r.rowCount) fail('(lockup)', vp, 'the probe could not put its own character in a cell — the seed moved, so this check proves nothing');
+  else {
+    errs.length = 0;                       // only the COLD LOAD's errors are this check's business
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('#screen-main:not(.hidden)', { timeout: 20000 });
+    await page.waitForTimeout(3500);
+    const o = await page.evaluate(() => ({
+      lit: document.querySelector('#tabs button.on')?.dataset.tab || null,
+      penText: (document.querySelector('#tab-pen')?.innerText || '').trim(),
+    }));
+    if (o.lit !== 'pen')
+      fail('(lockup)', vp, `a cold load in a cell landed on ${JSON.stringify(o.lit)}, not the Pen — `
+        + 'the jail jump fires before the panels exist and is then overridden by the landing, and the '
+        + 'latch is spent, so the player never gets taken to their cell at all');
+    if (!/INSIDE/i.test(o.penText))
+      fail('(lockup)', vp, `the Pen panel rendered nothing for a jailed player (read ${JSON.stringify(o.penText.slice(0, 60))}) — `
+        + 'renderPen() writes innerHTML on a panel captured before buildTabs() created it');
+    if (errs.length) fail('(lockup)', vp, `${errs.length} page error(s) on a cold load in a cell: ${errs.slice(0, 3).join(' | ')}`);
+    screensChecked++;
+    console.log(`   lockup cold-load check done (landed on ${o.lit}), ${failures.length} failure(s)`);
+  }
+  await browser.close();
+}
+
 await app.close();
 
 if (failures.length) {
