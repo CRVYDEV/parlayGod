@@ -431,7 +431,7 @@ export async function buyRig(ch, kind, client, h) {
   ch.cash = Number(ch.cash) - cfg.cost;
   await client.query('INSERT INTO rigs (character_id, kind) VALUES ($1,$2)', [ch.id, cfg.id]);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cfg.cost, reason: 'convoy:rig' });
-  return { ok: true, rig: cfg.id, name: cfg.name, cost: cfg.cost };
+  return { ok: true, op: 'rig', rig: cfg.id, name: cfg.name, cost: cfg.cost, armor: cfg.armor };
 }
 
 export async function upgradeRig(ch, track, client, h) {
@@ -447,7 +447,10 @@ export async function upgradeRig(ch, track, client, h) {
   ch.cash = Number(ch.cash) - cost;
   await client.query(`UPDATE rigs SET ${lvlCol}=$2 WHERE character_id=$1`, [ch.id, cur + 1]); // ABSOLUTE write (pg-mem INT-arith quirk)
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'convoy:rig:up' });
-  return { ok: true, track: t, level: cur + 1, cost };
+  // `track` is a CHOICE the player made (armor or engine) and anything that is not exactly 'engine'
+  // falls to armor — so the receipt has to name which one it bought, or a mistyped track upgrades the
+  // other half of the truck and reads identical.
+  return { ok: true, op: 'rig:up', track: t, level: cur + 1, max: CONVOY.RIG_UPGRADE_MAX, cost };
 }
 
 // THE TWO LEADERBOARDS (Tier-4) — the biggest lifetime haulers + highwaymen (agents excluded). Status.

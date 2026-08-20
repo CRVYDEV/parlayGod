@@ -65,7 +65,7 @@ export async function cook(ch, drugId, qty, client, h) {
   const cap = Math.floor(k.cap * (1 + Number(ch.lab_yield || 0) * KITCHEN.MODULES.yield.step));
   const n = Math.max(1, Math.min(Math.floor(Number(qty) || 0) || cap, cap, have));
   const crates = Math.ceil(n / M4.BATCH_CRATE_UNITS);
-  if ((Number(ch.cb) || 0) < crates) throw new GameError('cb', `Packaging a batch of ${n} takes ${crates} crates.`);
+  if ((Number(ch.cb) || 0) < crates) throw new GameError('cb', `Packaging a batch of ${n} takes ${crates} crate${crates === 1 ? '' : 's'}.`);
   ch.cb = Number(ch.cb) - crates;
   h.owned.makings[drugId] = have - n;
   await h.ledger(client, { characterId: ch.id, currency: 'cb', amount: -crates, reason: `cook:${drugId}` });
@@ -77,7 +77,10 @@ export async function cook(ch, drugId, qty, client, h) {
     [id, ch.id, drugId, n, doneAt]);
   h.owned.batch = { id, character_id: ch.id, drug_id: drugId, qty: n, done_at: doneAt };
   await logCollect(client, ch.account_id, 'drugs', drugId); // THE COLLECTION — first cook of each line
-  return { ok: true, qty: n, crates, readyAt: doneAt };
+  // `op` names the SYSTEM, and the drug rides along because the line has nothing else to name what
+  // is on the burner. `crates` is the second currency this action debits (the only other one that
+  // does is the armory), so a receipt that omits it under-reports what the cook actually cost.
+  return { ok: true, op: 'cook', drug: drugId, name: d.name, qty: n, crates, readyAt: doneAt };
 }
 
 // ── COLLECT (§7.10): fire roll first, then quality; stash merges weighted-average ──
@@ -94,7 +97,7 @@ export async function collect(ch, client, h) {
     ch.health = Math.max(1, Number(ch.health) - 20);
     ch.heat = Math.min(100, Number(ch.heat || 0) + 5);
     await h.rngLog(client, ch.id, 'cook:fire', fireRoll, 'batch lost');
-    return { ok: true, fire: true, qty: 0 };
+    return { ok: true, op: 'collect', fire: true, qty: 0 };
   }
   const cunning = effStat(ch.cunning, 'cunning', h.owned.assets, h.owned.gear);
   // LAB MODULE (Tier-4) — the Purity Rig lifts the quality floor
@@ -112,7 +115,10 @@ export async function collect(ch, client, h) {
   await h.rngLog(client, ch.id, 'cook:collect', fireRoll, `q ${q.toFixed(2)}`);
   await h.bumpDaily(client, ch.id, 'cook');
   await bumpMastery(client, h, ch, 'chemistry', 'cook'); // THE TRADES — a collected batch is the cook's craft
-  return { ok: true, fire: false, qty: Number(b.qty), quality: Math.round(q * 100) / 100 };
+  // Marked for the same reason the cut is: pulling a batch off the burner and CUTTING the stash both
+  // answer with a qty and a quality, so a client keyed on those two fields renders whichever branch
+  // it reaches first — and the two actions mean opposite things about where the quality went.
+  return { ok: true, op: 'collect', fire: false, qty: Number(b.qty), quality: Math.round(q * 100) / 100 };
 }
 
 // ── DEAL (§7.10): demand × quality × event × trade-rank bonus; heat; nerve 1/10 ──
@@ -322,7 +328,11 @@ export async function cutStash(ch, drugId, client, h) {
   s.qty = Number(s.qty) + added;
   s.quality = Math.max(KITCHEN.CUT_FLOOR, Number(s.quality) * (1 - KITCHEN.CUT_QUALITY));
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -KITCHEN.CUT_COST, reason: 'kitchen:cut' });
-  return { ok: true, drug: drugId, added, qty: Number(s.qty), quality: Math.round(s.quality * 100) / 100, cost: KITCHEN.CUT_COST };
+  // `op` names the SYSTEM. A cut and a COLLECT both answer with a qty and a quality, and they mean
+  // opposite things about that quality — one is what came off the burner, the other is what stepping
+  // on it cost you. The whole point of the mechanic is the trade (more units, weaker product), so a
+  // line that reports only the totals hides the decision the player just made.
+  return { ok: true, op: 'cut', drug: drugId, name: d.name, added, qty: Number(s.qty), quality: Math.round(s.quality * 100) / 100, cost: KITCHEN.CUT_COST };
 }
 
 // THE KINGPIN LEADERBOARD (Tier-4) — the biggest lifetime distributors by product moved (agents

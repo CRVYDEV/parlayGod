@@ -2458,6 +2458,15 @@
     // the road. A hammered lane also sheds guard defence, which is the one number a shipper can act on.
     if (body && body.ok && body.arrivesSeconds !== undefined && body.band && body.units !== undefined)
       return `\u{1F6E3} rolling — ${body.units} units, ${minsTxt(body.arrivesSeconds)} on the road. The streets know a ${txt(body.band)} load is moving this route${body.guardCut ? `, and the lane's hot: your guards are ${body.guardCut} down` : ''}. Bandits get up to three cracks at it${body.premium ? ' — the freight is insured' : ''}.`;
+    // THE RIG — a truck and its two upgrade tracks. Both fell to the catch-all `paid $N`, which is a
+    // price with the purchase left off: buying a $2m Semi and a $40k Panel Van read the same but for
+    // the figure, and the UPGRADE named neither which half of the truck it built nor how far. That
+    // one matters most — armor and engine are a CHOICE, and anything not exactly 'engine' falls to
+    // armor, so a mistyped track spends the money on the other half and reads identical.
+    if (body && body.ok && body.op === 'rig')
+      return `\u{1F69A} the ${txt(body.name)} is in the yard — $${fmt(body.cost)}, ${body.armor} armour`;
+    if (body && body.ok && body.op === 'rig:up')
+      return `\u{1F527} ${txt(body.track)} up to ${body.level}${body.max ? `/${body.max}` : ''} — $${fmt(body.cost)}`;
     // CALLED IT OFF — the manifest comes back off the truck into the trunk and nothing is on the
     // road. Both halves matter to the player, and a bare {ok, returned} said neither.
     if (body && body.convoy === 'cancelled')
@@ -2581,6 +2590,16 @@
       return `unlearned ${body.unlearned.join(', ')} — ${body.points.available} point${body.points.available === 1 ? '' : 's'} back to spend${body.omr !== undefined ? ` · ${fmt(body.omr)} $OMR left` : ''}`;
     if (body && body.ok && body.disinfoSeconds !== undefined)
       return `\u{1F5DE} the books are cooked for ${minsTxt(body.disinfoSeconds)} — anyone tapping your line reads lies${body.spent !== undefined ? ` · ${fmt(body.spent)} $OMR` : ''}`;
+    // THE DOSSIER. The Wire's own card renders this as a case file and never calls describe() on the
+    // way through — but the raw console posts the same route and toasts whatever this makes of it,
+    // so the priciest read on the screen answered "done." there. A summary, not the file: money
+    // stays BANDED (the server sends no figure and one here would hand a hunter exact kill-EV).
+    if (body && body.ok && body.dossier && body.dossier.name) {
+      const d = body.dossier;
+      const marks = [d.flags && d.flags.wanted && 'WANTED', d.flags && d.flags.welsher && 'WELSHER',
+        d.flags && d.flags.rat && 'RAT', d.flags && d.flags.indicted && 'INDICTED'].filter(Boolean);
+      return `\u{1F5C2} the file on ${txt(d.name)} — ${txt(d.law && d.law.stage)} with the law, ${txt(d.wealth)}, ${d.record ? d.record.kills : 0} on the record${marks.length ? ` · ${marks.join(' · ')}` : ''}${body.spent !== undefined ? ` · ${fmt(body.spent)} $OMR` : ''}`;
+    }
     if (body && body.ok && body.settled !== undefined && body.won !== undefined)
       return body.settled ? (body.won ? `\u{1F4B0} ${body.settled} ticket${body.settled === 1 ? '' : 's'} settled — $${fmt(body.won)} collected` : `${body.settled} ticket${body.settled === 1 ? '' : 's'} settled — nothing came in`)
         : 'nothing to collect — no tickets have come up yet';
@@ -2664,7 +2683,9 @@
     if (body && body.ok && body.op === 'raid' && body.crewMin !== undefined)
       return `\u{1F52B} the hit on ${txt(body.name)} is on the board — ${body.crewMin} guns minimum, ${body.crewMax} max. Get the crew up, then call the go.`;
     if (body && body.ok && body.op === 'raid' && body.crew !== undefined)
-      return `\u{1F52B} you're in on the ${txt(body.npc)} job — ${body.crew} of ${body.crewMax} on the crew`;
+      // phrased like the PLAN line above it ("the hit on X"): every outfit's name already carries its
+      // own article, so "the ${name} job" reads "the The Volkov Bratva job".
+      return `\u{1F52B} you're in on the hit on ${txt(body.name || body.npc)} — ${body.crew} of ${body.crewMax} on the crew`;
     if (coop && body.success === true) bits.push(`cracked the ${body.npc} ${body.crew}-handed — your cut $${fmt(body.share)}${body.routed ? ' · ROUTED — the outfit is broken' : ''}${body.routUnits ? ` · ${body.routUnits} of ${body.material} out of the hold` : ''}${body.frontier ? ' · your family plants its flag on their turf' : ''}`);
     if (coop && body.success === false) bits.push(`the ${body.npc} held — their guns put the whole crew in hospital${body.hospSeconds ? ` for ${minsTxt(body.hospSeconds)}` : ''}`);
     // THE CREW HEIST is the same class again: the SOLO score returns `take`/`success` (the line above),
@@ -2974,9 +2995,18 @@
     // gross here would report a bigger number than the pocket actually moved.
     if (body.pay && !body.favor && !body.call && !body.contact) bits.push(`+$${fmt(body.pay)}${body.streak ? ` (day ${body.streak})` : ''}`);
     if (body.won !== undefined && body.settled) bits.push(body.won > 0 ? `settled — +$${fmt(body.won)}` : 'settled — nothing hit');
-    if (body.qty && body.quality) bits.push(`pulled ${body.qty} units at q${body.quality}`);
+    // CUTTING the stash and COLLECTING a batch both answer with a qty and a quality, so the cut has
+    // to be claimed FIRST and by its own `op` — and it says what it ADDED and what the quality fell
+    // to, because that trade is the entire mechanic. A line reporting only the new totals is a
+    // receipt for a decision it never mentions you made.
+    if (body.op === 'cut') bits.push(`stepped on the ${body.name || body.drug} — +${body.added} units, now ${body.qty} at q${body.quality} · $${fmt(body.cost)}`);
+    else if (body.qty && body.quality) bits.push(`pulled ${body.qty} units at q${body.quality}`);
     if (body.fire) bits.push('THE BATCH BURNED — you got out with your skin');
-    if (body.readyAt) bits.push('the batch is on the burner');
+    // The cook debits a SECOND currency (crates) and the only thing a player needs back is when to
+    // return for it, so the old line — which named neither, nor even what was cooking — reported the
+    // least useful third of the action.
+    if (body.op === 'cook' && body.readyAt) bits.push(`🧪 ${body.qty} × ${body.name || body.drug} on the burner — ${body.crates} crate${body.crates === 1 ? '' : 's'} packed, ready in ${minsTxt(Math.max(0, Math.round((new Date(body.readyAt) - Date.now()) / 1000)))}`);
+    else if (body.readyAt) bits.push('the batch is on the burner');
     // a corner deal already states its heat inside its own line, so the generic push made every deal
     // read "+0.1 heat · heat +0.1". Skip when some earlier bit has already said it — written as a
     // scan rather than a shape test so a future branch that mentions heat can't reintroduce the echo.

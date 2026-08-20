@@ -15050,3 +15050,42 @@ Every wave shipped with its guard block in `test/client.js` and every fix was mu
 name — wave 44's six mutations each failed at a distinct assertion, and the one that reverted the
 break's join to field-keying was caught by a **real drive** of the raid join rather than by its own
 synthetic, which is the stronger result. The driven-action ledger stands at 198.
+
+**WAVE 45 — the kitchen's two ends, a receipt with the purchase left off, and two guards of my own
+that could not fail.** The core drug loop had the same defect at BOTH ends of the burner. COOKING a
+batch — which debits a second currency (crates), the only other action that does being the armory —
+answered *"the batch is on the burner"* and named none of it: not what was cooking, not how much, not
+the crates, and not WHEN, which is the one thing you need in order to come back for it. And CUTTING
+the stash rendered the COLLECT's line, because both answer with a `qty` and a `quality` — the
+byte-shape collision class, with the sting that the two mean OPPOSITE things about where that quality
+went. Cutting is a TRADE (more units, weaker product), so a line reporting only the new totals is a
+receipt for a decision it never mentions you made. The convoy's RIG is the catch-all `paid $N` — a
+price with the purchase left off, so a $2m Semi and a $40k Panel Van read identically but for the
+figure — and the UPGRADE named neither which half of the truck it built nor how far, which matters
+most there because armor and engine are a CHOICE and anything not exactly `engine` falls to armor, so
+a mistyped track spends the money on the other half and reads the same. Two more only a drive would
+find: the Wire's DOSSIER is rendered as a case file on its own card and never passes through
+`describe()` there — but the raw console posts the same route and toasts whatever this makes of it, so
+the priciest read on the screen answered *"done."* for a player using it; and a world raid's JOIN
+carried the outfit's ID where its NAME belongs (*"a district id where a name belongs"*, the recorded
+class, one system over), so the same screen read "The Volkov Bratva" when you opened the raid and the
+raw `volkov` when you joined it. All six replies now name their own `op` at the SOURCE and every
+branch keys on that.
+
+**The more useful half of this wave is the two guards it caught in itself, both of the same class the
+project keeps paying for.** (1) `new RegExp(undefined)` is `/(?:)/` — the EMPTY pattern, which matches
+EVERYTHING — so an assertion shaped `new RegExp(server.field).test(line)` passes SILENTLY the moment
+that field goes missing, which is the exact mutation it exists to catch; stripping the rig's `name`
+left the whole block green and the failure fell through to check 8. Fixed with ONE shared `carries()`
+helper that asserts the server SENT it before asserting the line says it, so the shape cannot be
+reintroduced at a new site. (2) The raid-join assertion was a SYNTHETIC against a literal object, so
+the mutation stripping the server's `name` **survived** — a literal passes while the two drift, which
+is the whole reason the rule is *assert against what the SERVER sent, never a literal*; replaced with
+a real two-player drive (a leader plans on `kryl`, the cheapest co-op outfit at level 20, and a second
+man joins). Seven mutations, seven distinct named failures once both guards were repaired.
+
+**Also in this wave: the branch was restarted from `main`.** Wave 43 had been squash-merged as #93
+while the branch still carried the unsquashed original, so PR #94 read `mergeable_state: "dirty"` and
+**no CI ran at all** — a PR that looks open and is silently untested. Resolved the recorded way (the
+merged-PR rule): save the unmerged work, `checkout -B` from `origin/main`, re-apply, re-verify on the
+correct base. Driven actions 198 → 204.

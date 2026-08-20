@@ -377,7 +377,10 @@ export async function joinRaid(ch, raidId, client, h) {
   if (crew >= WORLD.COOP_MAX_CREW) throw new GameError('full', 'The crew is set.');
   await client.query('INSERT INTO world_raid_members (raid_id, character_id) VALUES ($1,$2)', [raidId, ch.id]);
   await h.track(client, ch.account_id, 'world_raid_join', { npc: fixture.id });
-  return { ok: true, op: 'raid', id: raidId, npc: fixture.id, crew: crew + 1, crewMax: WORLD.COOP_MAX_CREW };
+  // `name` rides along because the line names the outfit, and the id is not its name — the PLAN
+  // reply carries both and reads "The Volkov Bratva" while this one carried only `npc` and rendered
+  // the raw `volkov` at the player, on the same screen, for the same outfit.
+  return { ok: true, op: 'raid', id: raidId, npc: fixture.id, name: fixture.name, crew: crew + 1, crewMax: WORLD.COOP_MAX_CREW };
 }
 
 // POST /v1/world/raids/:id/hire — THE HIRED GUNS (the fillHeist twin). The leader hires an NPC resident
