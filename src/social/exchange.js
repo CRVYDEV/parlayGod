@@ -13,6 +13,18 @@ import { takeHouse, uid } from './shared.js';
 // cb, ammo, and crafted consumables only; product (drugs) is rejected as item_kind.
 const KIND_OK = ['cb', 'ammo', 'item'];
 
+// WHAT THE LOT ACTUALLY IS. All three verbs (list, pull, buy) answered without ever naming the
+// goods, so listing 50 rounds and pulling 10 crates read the same as each other and as everything
+// else in the game — and buying either read `paid $6,000`, a price with the purchase left off.
+// The client cannot supply the name either: `item_kind` is the storage word (`cb`), never the one
+// a player reads, and for a crafted lot the name lives in a catalog keyed by an id the reply did
+// not carry. Server sends the NAME, client composes the sentence — the kindName/tierName/taskLabel
+// precedent. One helper, not three copies: three verbs naming the same lot three ways is how they
+// come to disagree.
+const lotName = (kind, itemId) => kind === 'ammo' ? 'rounds'
+  : kind === 'cb' ? 'crates'
+  : (CONSUMABLES.find((c) => c.id === itemId)?.name || itemId);
+
 
 export async function listItem(ch, kind, itemId, qty, unitPrice, client, h) {
   if (!KIND_OK.includes(kind)) throw new GameError('bad_kind', 'Sellable: cb, ammo, item. Product moves on the street, not the board.');
@@ -46,7 +58,10 @@ export async function listItem(ch, kind, itemId, qty, unitPrice, client, h) {
   const id = uid();
   await client.query('INSERT INTO listings (id, seller_character, item_kind, item_id, qty, unit_price) VALUES ($1,$2,$3,$4,$5,$6)',
     [id, ch.id, kind, kind === 'item' ? itemId : kind, n, price]);
-  return { ok: true, listingId: id };
+  // `exchange` is the discriminator, and it names the SYSTEM rather than the state — the crew's own
+  // `crew: 'formed' | 'recruiting'` precedent. A bare state marker (`listed: false`) is what made a
+  // pulled deed read as leaving the duelling ladder.
+  return { ok: true, exchange: 'listed', listingId: id, kind, qty: n, unitPrice: price, total: price * n, itemName: lotName(kind, itemId) };
 }
 
 
@@ -55,7 +70,7 @@ export async function cancelListing(ch, listingId, client, h) {
   if (!l || l.seller_character !== ch.id) throw new GameError('no_listing', 'Not your listing.');
   await client.query('DELETE FROM listings WHERE id=$1', [listingId]);
   await returnEscrow(ch, l, client, h);
-  return { ok: true };
+  return { ok: true, exchange: 'pulled', kind: l.item_kind, qty: Number(l.qty), itemName: lotName(l.item_kind, l.item_id) };
 }
 
 
@@ -107,6 +122,6 @@ export async function buyListing(ch, seller, client, h, listingId) {
   }
   await h.bumpDaily(client, ch.id, 'trade');
   await h.notify(client, seller.id, 'sale', { what: `${n}× ${l.item_id}`, amt: net, to: ch.name });
-  return { ok: true, qty: n, paid: total };
+  return { ok: true, exchange: 'bought', qty: n, paid: total, kind: l.item_kind, itemName: lotName(l.item_kind, l.item_id) };
 }
 

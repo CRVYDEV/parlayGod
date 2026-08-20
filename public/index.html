@@ -2086,6 +2086,18 @@
         objective_claimed: `you took your cut of the week's job — $${fmt(body.reward || 0)}` };
       if (m[body.crew] !== undefined && m[body.crew] !== '') return `\u{1F465} ${m[body.crew]}`;
     }
+    // THE EXCHANGE (the M3 barter board — crates, rounds and crafted goods between players). All
+    // three verbs were mute or half-mute: listing and pulling read "done.", and buying read the
+    // catch-all "paid $6,000" — so a buyer of rounds and a buyer of crates got the same sentence.
+    // Listing is also the terms class: the goods LEAVE your hands into escrow the moment you post,
+    // and nothing said so. `exchange` names the system (the crew's own status-string precedent).
+    if (body && typeof body.exchange === 'string') {
+      const lot = `${fmt(body.qty || 0)}${body.kind === 'item' ? '× ' : ' '}${txt(body.itemName || 'the lot')}`;
+      if (body.exchange === 'listed')
+        return `\u{1F4CB} on the board — ${lot} at $${fmt(body.unitPrice)} apiece, $${fmt(body.total)} the lot · they're out of your hands until it sells or you pull it`;
+      if (body.exchange === 'pulled') return `\u{1F4CB} pulled the lot — ${lot} back in your hands`;
+      if (body.exchange === 'bought') return `\u{1F4CB} bought ${lot} — $${fmt(body.paid)}`;
+    }
     // THE ROLODEX — the "looking for a crew" flag
     if (body && typeof body.discovery === 'string')
       return body.discovery === 'looking' ? '\u{1F465} the word\'s out — you\'re looking for a crew' : '\u{1F465} flag down — no longer looking';
@@ -2096,15 +2108,19 @@
     // THE CHARTER — the toast says BOTH halves, because a charter announced as an upgrade is a lie
     if (body && body.charter && body.charter.good)
       return `\u{1F4DC} the family runs as ${body.charter.name} — ${body.charter.good}, but ${body.charter.bad}${body.free ? ' (free — the first is on the house)' : ` (${body.cost} $OMR)`}`;
+    // district ids are what the wire speaks; a player reads NAMES. The typeof guard keeps this
+    // callable before /v1/rules has landed (and from a probe that hosts describe() on its own).
+    // DECLARED HERE, above every use: it sat BELOW the sealed-bid branch, so that branch was in the
+    // TDZ and could not have called it — which is why one line printed a raw id while three
+    // siblings printed names. A helper declared after its first would-be caller is a helper that
+    // silently is not available to it.
+    const $dist = (id) => ((typeof rules !== 'undefined' && rules && rules.districts) || []).find((x) => x.id === id)?.name || String(id);
     // THE SEALED BID — a stake is secret, so the toast reports YOUR number and nobody else's.
     if (body && body.staked !== undefined && body.families !== undefined)
-      return `\u{1F576} $${fmt(body.staked)} on ${body.district}${body.defending ? ' \u2014 defending' : ''} \u2014 ${body.families} in, ${minsTxt(body.resolvesSeconds)} to go`;
+      return `\u{1F576} $${fmt(body.staked)} on ${txt($dist(body.district))}${body.defending ? ' \u2014 defending' : ''} \u2014 ${body.families} in, ${minsTxt(body.resolvesSeconds)} to go`;
     // THE OPERATION SLOTS — retiring a racket. Leads with the freed seat, which is the whole point.
     if (body && body.slotsUsed !== undefined && body.slots !== undefined && body.racket)
       return `\u{1F91D} you're out of the ${String(body.racket).replace(/_/g, ' ')}${body.back ? ` — $${fmt(body.back)} back` : ''} — ${body.slotsUsed} of ${body.slots} seats running`;
-    // district ids are what the wire speaks; a player reads NAMES. The typeof guard keeps this
-    // callable before /v1/rules has landed (and from a probe that hosts describe() on its own).
-    const $dist = (id) => ((typeof rules !== 'undefined' && rules && rules.districts) || []).find((x) => x.id === id)?.name || String(id);
     // ── THE ACTION LEDGER ──────────────────────────────────────────────────────────────────────
     // Every one of these was pressed for real and read back "done." — the same class as the wire's
     // type-name fallback, one surface over: `act()` toasts describe() with no override, so a route
@@ -2225,6 +2241,10 @@
     // the road. A hammered lane also sheds guard defence, which is the one number a shipper can act on.
     if (body && body.ok && body.arrivesSeconds !== undefined && body.band && body.units !== undefined)
       return `\u{1F6E3} rolling — ${body.units} units, ${minsTxt(body.arrivesSeconds)} on the road. The streets know a ${txt(body.band)} load is moving this route${body.guardCut ? `, and the lane's hot: your guards are ${body.guardCut} down` : ''}. Bandits get up to three cracks at it${body.premium ? ' — the freight is insured' : ''}.`;
+    // CALLED IT OFF — the manifest comes back off the truck into the trunk and nothing is on the
+    // road. Both halves matter to the player, and a bare {ok, returned} said neither.
+    if (body && body.convoy === 'cancelled')
+      return `\u{1F69B} called it off \u2014 ${fmt(body.returned)} unit${body.returned === 1 ? '' : 's'} back in the trunk, nothing on the road`;
     if (body && body.ok && body.units !== undefined && body.minUnits !== undefined)
       return `\u{1F69B} ${body.loaded} × ${txt(body.good || 'freight')} aboard${body.destination ? ` for ${txt($dist(body.destination))}` : ''} — ${body.units} on the manifest. ${body.units < body.minUnits ? `A convoy needs ${body.minUnits} units to roll: ${body.minUnits - body.units} short.` : 'Heavy enough to roll — pick your guards and go.'}`;
     // THE CLUB. Three verbs on one screen, all mute or wrong: opening a house — the single biggest
@@ -2291,6 +2311,24 @@
     if (body && body.ok && 'title' in body && body.tier === undefined)
       return body.title ? `they call you ${txt(body.title)} now` : 'title dropped — just your name from here';
     if (body && body.ok && body.lab && body.cap !== undefined) return `\u{1F9EA} the lab is a ${String(body.lab).replace(/_/g, ' ')} now — ${body.cap} units a batch`;
+    // A LAB MODULE is $60k+ of bench and read "done." — no level, no price, and above all no word on
+    // what it buys. The effect comes from `rules.kitchen.modules` rather than a new server field:
+    // the catalog is already published, so there is nothing to keep in lockstep.
+    if (body && body.ok && body.module && body.level !== undefined) {
+      const d = (rules?.kitchen?.modules || []).find((m) => m.id === body.module);
+      return `\u{1F9EA} ${txt(body.name || body.module)} fitted — level ${body.level}${d ? ` · ${txt(d.desc).replace(/\.$/, '')}` : ''} · $${fmt(body.cash || 0)}${body.omr ? ` + ${fmt(body.omr)} $OMR` : ''}`;
+    }
+    // THE NUT. Hiring a corner man read the catch-all "paid $50,000" — the up-front price with no
+    // word on the WAGE it starts, which is the whole tradeoff: every hand draws whether the stash
+    // moves or not, and three days unpaid they down tools and the offline sales stop. The rate and
+    // the cold window are published levers (`rules.crew`), so the line can never drift from the till.
+    // A firing already has its own line below; this is the hire the comment there asked for.
+    if (body && body.ok && typeof body.crew === 'number' && body.cost !== undefined) {
+      const w = rules?.crew || {};
+      const nut = Number(w.wagePerHr || 0) * body.crew;
+      return `\u{1F465} a hand on the corner — $${fmt(body.cost)} up front, crew ${body.crew}${w.max ? `/${w.max}` : ''}`
+        + (nut ? ` · the nut is now $${fmt(nut)}/hr whether the stash moves or not${w.coldHours ? `, and ${fmt(w.coldHours)}h unpaid they down tools` : ''}` : '');
+    }
     if (body && body.ok && body.path && body.spent === undefined)
       return `you're walking the ${String(body.path).replace(/_/g, ' ')} path now — it shapes what you're good at`;
     if (body && body.ok && 'bio' in body)
@@ -2356,7 +2394,7 @@
     else if (body.call === true && body.from) bits.push(body.kind === 'freight'
       ? `📞 delivered ${fmt(body.qty)} ${goodName(body.good)} to ${body.from} — they paid $${fmt(body.pay)}`
       : `📞 paid ${body.from} a visit — worth $${fmt(body.pay)}`);
-    if (body.favor === 'posted') bits.push(`🤝 the word's out — ${fmt(body.qty)} ${goodName(body.good)} wanted at ${body.district}, $${fmt(body.pay)} held up front`);
+    if (body.favor === 'posted') bits.push(`🤝 the word's out — ${fmt(body.qty)} ${goodName(body.good)} wanted at ${txt($dist(body.district))}, $${fmt(body.pay)} held up front`);
     if (body.favor === 'ran') bits.push(`🤝 ran the favor — ${fmt(body.qty)} ${goodName(body.good)} delivered, +$${fmt(body.net)} (house took $${fmt(body.take)})`);
     if (body.favor === 'pulled') bits.push(`🤝 pulled it back — $${fmt(body.refund)} returned`);
     // THE DISPATCH — the email digest opt-in response is {available, email, optin}

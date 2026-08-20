@@ -183,7 +183,10 @@ export async function cancelConvoy(ch, client, h) {
   }
   await client.query("UPDATE convoys SET status='done' WHERE id=$1", [convoy.id]);
   await client.query('DELETE FROM convoy_cargo WHERE convoy_id=$1', [convoy.id]);
-  return { ok: true, returned: units };
+  // `convoy:` NAMES THE SYSTEM, not the state — the exchange:'listed'|'pulled'|'bought' precedent.
+  // A bare {ok, returned} read "done." at the player: they called off a shipment, the whole manifest
+  // came back off the truck into the trunk, and the game said nothing about either half.
+  return { ok: true, convoy: 'cancelled', returned: units };
 }
 
 // AMBUSH — once per convoy, win or lose. The owner's character row is never touched.
