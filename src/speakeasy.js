@@ -336,7 +336,11 @@ export async function unlistSpeakeasy(ch, client, h) {
   if (!row) throw new GameError('no_club', "You don't run a house.");
   if (row.sale_price == null) throw new GameError('not_listed', "The club isn't on the market.");
   await client.query('UPDATE speakeasies SET sale_price=NULL WHERE district_id=$1', [row.district_id]);
-  return { ok: true, district: row.district_id };
+  // `salePrice: null` rather than an absent field, so the ONE client branch that renders the
+  // listing renders both senses of it (the pinkSlip / boutLimit / raceLimit shape). Returning
+  // `{ok, district}` alone left the reply indistinguishable from any other district-scoped
+  // acknowledgement, and pulling a nine-figure listing off the market read "done."
+  return { ok: true, district: row.district_id, salePrice: null };
 }
 
 // BUY OUT a listed club — a taxed cash transfer buyer → seller (the round/bodyguard pattern: seller nets

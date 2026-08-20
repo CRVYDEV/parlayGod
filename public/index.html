@@ -2086,6 +2086,22 @@
         objective_claimed: `you took your cut of the week's job — $${fmt(body.reward || 0)}` };
       if (m[body.crew] !== undefined && m[body.crew] !== '') return `\u{1F465} ${m[body.crew]}`;
     }
+    // THE MENTOR — the whole arc was mute, all six routes, and it is the one system built to make a
+    // newcomer's FIRST contact with a real player a good one. Two of the six move money and said
+    // "done.": a milestone claim pays cash, and the graduation claim pays cash AND ends the tie (the
+    // mentor's legend +1). `mentor` is a KEYWORD in three of the shapes and the mentor's NAME in the
+    // fourth, so the map is checked first and anything left over is the name — the crew block's own
+    // idiom one line up.
+    if (body && body.ok && typeof body.mentor === 'string') {
+      const k = { seeking: "the word's out — you're looking for someone to show you the ropes",
+        not_seeking: 'you took the flag down — no longer looking for a mentor',
+        offered: `you offered to bring ${txt(body.to || 'them')} up — it's theirs to accept` };
+      return `\u{1F393} ${k[body.mentor] || `${txt(body.mentor)} is your mentor now — they'll be told, and they earn a name for every rung you climb`}`;
+    }
+    if (body && body.ok && body.gifted !== undefined)
+      return `\u{1F393} sent ${txt(body.to || 'your protégé')} a care package — $${fmt(body.gifted)} out of your own pocket. Once a day.`;
+    if (body && body.ok && body.milestones !== undefined && body.cash !== undefined)
+      return `\u{1F393} your mentor's cut of the climb — $${fmt(body.cash)} for ${body.milestones.length === 1 ? 'reaching level ' + body.milestones[0] : `levels ${body.milestones.join(', ')}`}${body.graduated ? ". You've GRADUATED — the tie's done, and it's a name on their record forever." : ''}`;
     // THE EXCHANGE (the M3 barter board — crates, rounds and crafted goods between players). All
     // three verbs were mute or half-mute: listing and pulling read "done.", and buying read the
     // catch-all "paid $6,000" — so a buyer of rounds and a buyer of crates got the same sentence.
@@ -2283,7 +2299,21 @@
     // prepending one read "the The Backroom". Only reading the output catches that.)
     if (body && body.ok && body.opened && body.district && body.name)
       return `\u{1F37E} ${txt(body.name)} is open in ${txt($dist(body.district))} — $${fmt(body.spent)}. Patrons buy rounds off you; build the decor up and they'll pay more.`;
-    if (body && body.ok && body.tier !== undefined && body.name && body.district && body.collected !== undefined)
+    // THE TERRITORY OPERATION — the family's racket, and it sits ABOVE the club's line because the
+    // two upgrade replies are one field apart: the club sends {district,tier,name,collected,spent}
+    // and the racket {district,tier,name,collected,KIND}, so the club's guard matched BOTH and a
+    // numbers racket rendered "built out to Neighborhood Numbers Game — $undefined", the club's own
+    // copy printing a field the racket never sends. `kind` is the discriminator (the club has no
+    // business type); `district` keeps a personal FRONT's upgrade — {id,kind,name,tier,collected},
+    // no district — on its own line two hundred lines up.
+    if (body && body.ok && body.district && body.kind && body.tier !== undefined && body.name)
+      return `\u{1F3D9} ${body.tier > 1 ? `the ${txt(body.name)} moves up to tier ${body.tier}` : `the ${txt(body.name)} is running in ${txt($dist(body.district))}`}${body.spent !== undefined ? ` — $${fmt(body.spent)} out of the treasury` : ''}${body.collected > 0 ? `, $${fmt(body.collected)} banked at the old rate first` : ''}${body.incomePerHr ? `. It earns $${fmt(body.incomePerHr)}/hr into the treasury, and owes a pad against it.` : '.'}`;
+    // …and the club's own line is made MUTUALLY EXCLUSIVE with it rather than merely later. Giving
+    // the racket the `spent` it was missing fixes the "$undefined" but NOT the collision — the club's
+    // guard still matches a racket, and the two would then be separated only by which line happens to
+    // sit higher, which is not a property anybody can see while editing. `!body.kind` is the real
+    // discrimination (a club has no business type); `spent` is required because the line prints it.
+    if (body && body.ok && body.tier !== undefined && body.name && body.district && !body.kind && body.collected !== undefined && body.spent !== undefined)
       return `\u{1F37E} built out to ${txt(body.name)} — $${fmt(body.spent)}${body.collected > 0 ? `, and $${fmt(body.collected)} swept out of the till first` : ''}. The room draws a better class of patron now.`;
     if (body && body.ok && body.district && body.name && body.currency === 'omr' && body.spent !== undefined)
       return `\u{1F37E} the house goes by ${txt(body.name)} now — ${fmt(body.spent)} $OMR`;
@@ -2315,8 +2345,29 @@
     if (body && body.staked !== undefined && body.ok && body.unbonding === undefined)
       return `staked — ${fmt(body.staked)} $OMR at work, and safe from a killer's hands`;
     if (body && body.ok && body.ammo !== undefined && body.gun === undefined) return `rounds in the box — ${body.ammo} on you`;
+    // THE WORKSHOP, and its own sibling one line up got it right. Rolling ammo names the rounds;
+    // crafting a consumable returned `{ok, item}` and read "done." — no name, no effect, no hint
+    // that the thing is now sitting in your kit waiting to be used. `rules.consumables` is already
+    // in scope (The Garage renders the whole catalog from it), so the name and the effect resolve
+    // client-side with no server field. USING one is worse: the reply carries the effect verbatim
+    // and the player was told nothing at all.
+    if (body && body.ok && body.item && body.used === undefined) {
+      const c = (rules?.consumables || []).find((x) => x.id === body.item);
+      return `\u{1F527} rolled a ${txt(c?.name || body.item)}${c?.effect ? ` — ${txt(c.effect)}` : ''}. It's in your kit until you use it.`;
+    }
+    if (body && body.ok && body.used) {
+      const c = (rules?.consumables || []).find((x) => x.id === body.used);
+      return `\u{1F48A} used the ${txt(c?.name || body.used)}${body.effect ? ` — ${txt(body.effect)}` : ''}`;
+    }
     if (body && body.ok && 'gun' in body && body.gun === null) return 'piece put away — you\'re carrying nothing';
     if (body && body.ok && body.gangId && body.name === undefined) return '\u{1F3B4} the family is founded — you\'re the boss. Bring people in.';
+    // …and JOINING one, which the guard above excludes by name and nothing then picked up. The
+    // founding line has shipped since M3; the join — a one-way move that puts you under omertà,
+    // makes the treasury and the tribute yours to pay into, and counts your standing to the family
+    // — read "done." Omertà is the term worth leading with: it is a rule about what you can no
+    // longer do, and nothing else on the screen says it.
+    if (body && body.ok && body.gangId && body.name)
+      return `\u{1F3B4} you're made in ${txt(body.name)}. Omertà holds now — you can't move on your own people, and they can't move on you. Tribute goes to the treasury; what you earn counts to the family's standing.`;
     if (body && body.ok && body.dissolved !== undefined)
       return body.dissolved ? 'you walked, and the family went with you — nobody left to hold it' : 'you\'re out of the family';
     if (body && body.ok && Array.isArray(body.unlearned) && body.points)
@@ -2455,6 +2506,21 @@
     if (body.district && body.win === true && body.cut !== undefined && !body.kind) bits.push(`muscled the block — grabbed $${fmt(body.cut)} from their operation`);
     if (body.district && body.win === false && body.dmg !== undefined && body.field === undefined) bits.push(`they held the block — you took ${body.dmg} damage`);
     if (body.fortitude !== undefined && body.cost !== undefined) bits.push(`dug in — defense at level ${body.fortitude} ($${fmt(body.cost)})`);
+    // TAKING TURF, which said nothing at all — and the reply carried four terms the whole time.
+    // The two figures are NOT a whole and its part, which is what driving it caught: `cost` is the
+    // base PLUS the war premium, then multiplied by every discount you brought (a coalition, a
+    // foothold next door, the Outfit charter, the reckoning phase) — while the `garrison` installed
+    // is the UNDISCOUNTED base, because a discount prices the conquest and not the ground. So a
+    // cheap liberation genuinely installs a garrison larger than it paid, and the first draft's
+    // "$45,000 of that" read against a $33,750 cost. Two facts, stated as two facts; and when the
+    // discounts bite, say so plainly — coming in under the standing price is the good news.
+    if (body.garrison !== undefined && body.cost !== undefined && body.district && body.premium !== undefined)
+      bits.push(`\u{1F6A9} ${txt($dist(body.district))} is ${body.liberated ? 'LIBERATED' : 'yours'} — $${fmt(body.cost)} out of the treasury${body.premium > 0 ? `, $${fmt(body.premium)} of it the war premium on its operation (burned)` : ''}${body.razedStronghold ? '; their stronghold was razed with it' : ''}. It now stands behind a $${fmt(body.garrison)} garrison — what a rival has to outbid to take it back${body.garrison > body.cost ? ', so you took it under the odds' : ''}. Name your watch hour: outside it, coming for this ground costs them more.`);
+    // …and NAMING that hour, the commitment half of the same pair. The premium is the whole point
+    // and the reply carries it, so a line that stops at "watch set" withholds the one number that
+    // makes the decision a decision.
+    if (body.watchHour !== undefined && body.district && body.surpriseMult !== undefined)
+      bits.push(`\u{1F551} the family stands ready at ${String(body.watchHour).padStart(2, '0')}:00 UTC for ${body.windowH}h${body.onWatchNow ? ' — that window is open NOW' : ''}. Take a run at this ground outside it and a rival pays ${body.surpriseMult}× to catch you cold. It's a commitment: you can't move the hour once somebody stakes a claim.`);
     if (body.taken !== undefined) bits.push(`hijacked the load — took ${fmt(body.taken)} unit${body.taken === 1 ? '' : 's'}${body.trunkFull ? ' (trunk full — the rest rolled on)' : ''}`);
     if (body.casket) bits.push(`⛏ THE CASKET — $${fmt(body.take)} dug up${body.relic ? ` + ${body.relic.name}!` : ''} (${body.caskets} lifetime — ${body.rank})`);
     // `riddle`, not bare `cold`: the clue dig owns this phrasing but not the field name, and a cold
@@ -2673,7 +2739,9 @@
         : (body.win ? ` — ${body.game === 'circuit' ? `+$${fmt(Math.abs(body.net))} purse` : `took $${fmt(Math.abs(body.net))}`}` : ` — −$${fmt(Math.abs(body.net))}`);
       bits.push(`${body.you.name} ${body.win ? 'WINS at the wire' : 'got beat'}${m}${rec ? ` (${rec})` : ''}`); }
     if (body.decor !== undefined && body.district) bits.push(body.decor ? `re-decorated in ${body.decorName}` : 'stripped the club back to stock');
-    if (body.salePrice !== undefined && body.district) bits.push(`listed the club for $${fmt(body.salePrice)}`);
+    if (body.salePrice !== undefined && body.district)
+      bits.push(body.salePrice ? `\u{1F37E} the club is on the market for $${fmt(body.salePrice)} — you keep the till until somebody buys it`
+                               : '\u{1F37E} the club is off the market — it stays yours');
     if (body.escaped === true) bits.push("OVER THE WALL — you're out, but WANTED now (no family cover, hunters coming)");
     if (body.escaped === false) bits.push('caught at the fence — the hole, a longer stretch, and a beating');
     if (body.interdicted === false && body.landed !== undefined) bits.push(`⚓ slipped the Coast Guard — landed the haul, +$${fmt(body.landed)} (net $${fmt(body.net)})`);
@@ -2811,8 +2879,11 @@
     if (body.placedAt && body.ok && bits.length === 0)
       bits.push(`\u{1F50E} your people are out looking — the shot is takeable in ${minsTxt(Math.max(0, Math.round((new Date(body.placedAt) - Date.now()) / 1000)))}. Call it off and you lose the legwork.`);
     // CONSENT-BY-LISTING, both directions: the price IS the offer, and pulling it is the whole
-    // difference between being for hire and not.
-    if (body.offering !== undefined && body.price !== undefined)
+    // difference between being for hire and not. The guard once also required `price`, which the
+    // OFF reply does not carry (`{ok, offering:false}`) — so the comment claimed both directions
+    // while the code admitted one, and pulling yourself off the market read "done." The `fade`
+    // pair four lines down had it right the whole time.
+    if (body.offering !== undefined)
       bits.push(body.offering ? `\u{1F576} you're for hire — $${fmt(body.price)} to ride with somebody` : 'you\u2019re off the market — nobody can hire you');
     // The style triangle is the skill in duelling and the counter is public, so name what you now
     // beat. `rules` is in scope here (describe() already reads it for the regimen), so the catalog
@@ -4595,6 +4666,7 @@
         <div class="card"><span class="t">${op.district}: ${op.name || op.tier}</span>${op.raidRisk ? ' <span class="chip bad">FEDS WATCHING</span>' : ''}${op.fortitude ? ` <span class="chip">🛡️ ${op.fortitude}/${op.fortMax}</span>` : ''}${op.specialist ? ` <span class="chip good">specialist +${op.specFortBonus}🛡️</span>` : ''}${op.ghostSeconds > 0 ? ' <span class="chip">👻 ghosted</span>' : ''}
           <div class="d">$${fmt(op.incomePerHr || 0)}/hr · pending $${fmt(op.pending || 0)} · <span style="color:var(--warn)">the pad $${fmt(op.upkeepPerHr || 0)}/hr</span>${op.upkeepOwed ? `, owed $${fmt(op.upkeepOwed)}` : ''}${op.cold ? ' · COLD (pay the upkeep)' : ''}</div>
           ${op.scrutiny > 0 ? `<div class="d" style="color:var(--dim)">Bureau heat ${op.scrutiny}/${op.raidThreshold} — a crackdown seizes the pending + fines the treasury</div>` : ''}
+          ${boss && op.nextTier ? `<button class="act" data-do="POST /v1/territory/${op.district}/upgrade">move up to the ${esc(op.nextTier.name)} ($${fmt(op.nextTier.cost)} → $${fmt(op.nextTier.incomePerHr)}/hr)</button>` : (boss && op.tier ? '<span class="d" style="color:var(--dim)">running at full strength</span>' : '')}
           ${boss && op.fortCost != null ? `<button class="act" data-do="POST /v1/territory/${op.district}/fortify">fortify → lvl ${op.fortitude + 1} ($${fmt(op.fortCost)})</button>` : ''}
           ${boss ? `<div style="margin-top:4px">
             ${op.specialist
