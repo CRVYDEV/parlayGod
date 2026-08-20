@@ -2020,6 +2020,12 @@
     if (body && body.tokenId && body.nonce != null)
       return `\u26D3 ${body.name || 'it'} is on-chain — token #${body.tokenId}. Safe forever, and out of the game.`;
     if (body && body.referrer && body.ok) return `on the record — ${body.referrer} gets credit as you come up`;
+    // GETTING MADE — the buy returns {made:true, until, message}; without this it fell straight into
+    // the diplomacy pact branch below (both key on `until` with no hoursOpen/cost/pending), so a
+    // newly-made man read "🤝 pact sealed — no war between your families" (driven, wave 16). `made:true`
+    // is the discriminator the pact reply never carries; the reply's own message is surfaced here.
+    if (body && body.ok && body.made === true && body.until && body.message !== undefined)
+      return `\u{1F3A9} ${txt(body.message)} — ${body.omr} $OMR down.`;
     // STREET DEEDS — you claimed a named plot of the world (the claim response is {ok,name,district,districtName})
     if (body && body.ok && body.districtName && body.district && body.name && !body.tier)
       return `\u{1F3F7} the deed to ${txt(body.name)} is yours — on ${txt(body.districtName)}. It's yours forever, and it outlives your street.`;

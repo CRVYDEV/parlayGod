@@ -2785,6 +2785,13 @@ if (traceLine) assert(/still listening/i.test(traceLine) && !/swept/i.test(trace
   const gala = String(describeFn({ ok: true, cost: 180, until: 'x', hoursOpen: 4 }, 200));
   assert(/180 \$OMR/.test(gala) && !/\$180\b/.test(gala),
     `throwing a gala read "paid $180" — a $OMR cost shown as dollars (unit error). Got: ${JSON.stringify(gala)}`);
+  // WAVE 21 (driven wave 16) — GETTING MADE keys on `until` with no hoursOpen/cost/pending, exactly
+  // like the diplomacy pact-sealed reply, so a newly-made man read "🤝 pact sealed — no war between
+  // your families". `made:true` is the discriminator the pact reply never carries; the branch now
+  // surfaces the reply's own message. Revert the branch and this fails naming the pact line.
+  const gotMade = String(describeFn({ ok: true, omr: 120, made: true, madeSeconds: 2592000, until: new Date(Date.now() + 2592000000).toISOString(), message: "You're made. The room knows your name." }, 200));
+  assert(!/pact sealed|no war between/.test(gotMade) && /made|room knows/i.test(gotMade),
+    `getting made read as a diplomacy pact (both key on body.until). Got: ${JSON.stringify(gotMade)}`);
 }
 
 // The four INVERSIONS. Each is a real sentence about a real system — just not the one the player is
