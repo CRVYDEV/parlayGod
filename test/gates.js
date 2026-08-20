@@ -1324,26 +1324,51 @@ const SCENERY_WAIVED = {
 // mirrors the client's own `fmt` so the two surfaces cannot disagree about the same number. 158
 // copies of a formatting rule is how they came to disagree in the first place (the jailed/penSafe
 // collapse, at 69 copies of three predicates).
+//
+// The first cut of this guard matched `GameError\('reason',\s*\`([^`]*)\`` — a backtick immediately
+// after the reason, captured up to the NEXT backtick — and it had two blind spots that shipped three
+// raw-money refusals right past it (a play session found them by reading the lines): (1) `[^`]*`
+// TRUNCATES at the first NESTED template literal, so `$${premium}` inside `${cond ? \` … $${premium}\` : ''}`
+// was never scanned; and (2) a message that is a TERNARY or any expression rather than a bare backtick
+// (`GameError('treasury', occupied ? \`…\` : \`…\`)`) is not matched at all — and the tree has many
+// such messages (drop.js, gangs.js, dynasty.js, economy.js). Both are closed by extracting the FULL
+// balanced-paren argument list of every GameError call and scanning THAT for `$${...}` — which also
+// keeps the ~65 legitimate `$${i+1}` SQL-placeholder builders out (they live outside GameError calls).
 {
   const raw = [];
-  let messages = 0;
+  let calls = 0;
   for (const f of files) {
     const s = fs.readFileSync(f, 'utf8');
-    for (const m of s.matchAll(/GameError\('[a-z_]+',\s*`([^`]*)`/g)) {
-      messages++;
-      for (const d of m[1].matchAll(/\$\$\{([^}]*)\}/g))
+    for (const m of s.matchAll(/\bGameError\(/g)) {
+      // walk balanced parens (skipping string/template bodies so a `)` inside a message doesn't
+      // miscount) to the close of this call's argument list, then scan the whole span.
+      let i = m.index + m[0].length, depth = 1, str = null;
+      const start = i;
+      while (i < s.length && depth > 0) {
+        const c = s[i];
+        if (str) {
+          if (c === '\\') { i += 2; continue; }
+          if (c === str) str = null;
+        } else if (c === "'" || c === '"' || c === '`') str = c;
+        else if (c === '(') depth++;
+        else if (c === ')') depth--;
+        i++;
+      }
+      calls++;
+      const args = s.slice(start, i - 1);
+      for (const d of args.matchAll(/\$\$\{([^}]*)\}/g))
         raw.push(`${f}:${s.slice(0, m.index).split('\n').length} — $\${${d[1]}}`);
     }
   }
-  // anti-vacuity: an extractor that has stopped seeing GameError messages reports zero problems and
+  // anti-vacuity: an extractor that has stopped seeing GameError calls reports zero problems and
   // reads exactly like a clean bill of health (the fourth time that shape has cost this project a
-  // session). The tree carries hundreds; a handful means the reader broke, not that the code got tidy.
-  assert(messages > 300, `THE MONEY LEDGER read only ${messages} GameError messages — the extractor is broken, `
+  // session). The tree carries ~2,000; a handful means the reader broke, not that the code got tidy.
+  assert(calls > 1000, `THE MONEY LEDGER read only ${calls} GameError calls — the extractor is broken, `
     + 'not the tree. A scan that sees nothing passes for a clean sweep.');
   assert.deepEqual(raw, [], 'refusal message(s) interpolating a RAW money figure. A player reads this '
     + 'sentence — "$150000" is debug output, and at that many digits it is hard to tell from $1,500,000 '
     + `at a glance. Use \`usd(x)\` (one helper, mirroring the client's fmt) instead of \`$\${x}\`:
    - ${raw.join('\n   - ')}`);
-  console.log(`✓ every money figure in all ${messages} refusal messages is formatted for a player`);
+  console.log(`✓ every money figure across all ${calls} GameError refusals is formatted for a player`);
 }
 

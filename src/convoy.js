@@ -126,7 +126,7 @@ export async function departConvoy(ch, guardTier, insure, client, h) {
   // muscle (tier.def) is unchanged, only the fee. Discounted amount is what's ledgered.
   const guardFee = Math.floor(tier.fee * npcMult(h, 'harbor', 1, UNDERWORLD.FX.GUARD_MULT));
   if (Number(ch.cash) < guardFee + premium)
-    throw new GameError('cash', `${tier.id} guards run ${usd(guardFee)}${premium ? ` and the policy $${premium}` : ''}.`);
+    throw new GameError('cash', `${tier.id} guards run ${usd(guardFee)}${premium ? ` and the policy ${usd(premium)}` : ''}.`);
   if (guardFee > 0) {
     ch.cash = Number(ch.cash) - guardFee;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -guardFee, reason: 'convoy:guards' });

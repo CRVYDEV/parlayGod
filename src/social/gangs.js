@@ -532,8 +532,8 @@ export async function seizeDistrict(ch, districtId, client, h) {
   const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
   if (Number(g.treasury) < cost)
     throw new GameError('treasury', occupied
-      ? `Liberating that district from the ${worldNpcOf(d.npc_holder)?.name || 'occupiers'} takes $${cost} from the treasury (beat the outfit down to cheapen it).`
-      : `Seizing that district takes $${cost} from the treasury${premium ? ` ($${premium} of it the war premium on its operation)` : ''}.`);
+      ? `Liberating that district from ${worldNpcOf(d.npc_holder)?.name || 'the occupiers'} takes ${usd(cost)} from the treasury (beat the outfit down to cheapen it).`
+      : `Seizing that district takes ${usd(cost)} from the treasury${premium ? ` (${usd(premium)} of it the war premium on its operation)` : ''}.`);
   // the garrison burns — turf costs the family real money (§10.4 sink); only the garrison part becomes the
   // new defense budget (the premium burned taking the operation). Liberation clears the NPC occupier.
   await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [h.owned.gangId, cost]);
