@@ -587,6 +587,7 @@ const SIGNED = [
   ['DISCOVERY.BAND', 10],
   ['DISCOVERY.LIMIT', 24],
   ['DISCOVERY.LFG_TTL_MS', 7 * 24 * 3600 * 1000],
+  ['DISCOVERY.SEEN_DAYS', 30],
   // IDENTITY — the free "about me" blurb length cap (pure scope/status, no faucet)
   ['IDENTITY.BIO_MAX', 200],
   // THE AHA MOMENT (src/firstblood.js) — the guaranteed early conflict beat. REWARD_CASH is the one

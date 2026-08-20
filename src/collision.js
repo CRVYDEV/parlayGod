@@ -21,7 +21,15 @@
 // `online` is surfaced as a FLAG, not a hard filter: a real human in your district who isn't socketed
 // this second is still a real collision target (they'll be back; you can contract/DM them), and the ●
 // lights when they're live — more robust than a filter that flickers with socket state.
-import { DISTRICTS, DISCOVERY, levelOf, PACING } from './rules.js';
+//
+// STILL AROUND is the one hard filter, and it exists because the paragraph above is true of a player
+// and false of an abandoned account. "They'll be back" is the whole argument for listing someone who
+// is offline; somebody who made a character a month ago and never returned will not be back, cannot
+// meaningfully be contracted, and crowds out the one board built to cut through noise. The residents
+// filter knows about ONE kind of scenery; this is the second kind. See DISCOVERY.SEEN_DAYS for why the
+// discriminator is recency rather than level or activity — the wrong choice there hides the whole
+// launch-night cohort, who are by definition brand new and have done nothing yet.
+import { DISTRICTS, DISCOVERY, levelOf, PACING, seenSince } from './rules.js';
 
 const districtName = (id) => (DISTRICTS.find((d) => d.id === id) || {}).name || id;
 // the respect a level costs (respect(L) = D·(L−1)²) — the inverse of levelOf, to turn a LEVEL band into a
@@ -53,27 +61,35 @@ export async function collisionBoard(client, ch, onlineIds = []) {
   // ONLINE-FIRST: a real human on the wire leads the list (the live collision), then closest by level.
   const onlineFirst = (a, b) => (b.online - a.online) || (Math.abs(a.level - myLevel) - Math.abs(b.level - myLevel));
 
+  const since = seenSince();
+
   // HERE — real humans in YOUR district (any level): the reachable collision.
   let here = [];
   if (ch.loc) {
     here = (await client.query(
       `${HUMAN_COLS} WHERE c.alive AND NOT c.is_npc AND NOT a.agent_flag AND c.id <> $1 AND c.loc = $2
-        ORDER BY c.respect DESC LIMIT 12`, [ch.id, ch.loc])).rows.map(card).sort(onlineFirst);
+        AND c.last_accrued_at > $3
+        ORDER BY c.respect DESC LIMIT 12`, [ch.id, ch.loc, since])).rows.map(card).sort(onlineFirst);
   }
   // NEARBY — real humans near your level, in OTHER districts: findable (travel / DM).
   const lo = respectAtLevel(Math.max(1, myLevel - DISCOVERY.BAND));
   const hi = respectAtLevel(myLevel + DISCOVERY.BAND + 1);
-  const nearParams = ch.loc ? [ch.id, lo, hi, Number(ch.respect), ch.loc] : [ch.id, lo, hi, Number(ch.respect)];
+  const nearParams = ch.loc
+    ? [ch.id, lo, hi, Number(ch.respect), since, ch.loc]
+    : [ch.id, lo, hi, Number(ch.respect), since];
   const nearby = (await client.query(
     `${HUMAN_COLS} WHERE c.alive AND NOT c.is_npc AND NOT a.agent_flag AND c.id <> $1
-        AND c.respect BETWEEN $2 AND $3${ch.loc ? ' AND (c.loc IS NULL OR c.loc <> $5)' : ''}
+        AND c.respect BETWEEN $2 AND $3 AND c.last_accrued_at > $5${ch.loc ? ' AND (c.loc IS NULL OR c.loc <> $6)' : ''}
       ORDER BY (c.respect - $4) * (c.respect - $4) LIMIT 8`, nearParams)).rows.map(card).sort(onlineFirst);
 
   // HOT DISTRICTS — real humans per OTHER district (the convergence nudge: go where the action is).
+  // Same gate: a district is only "hot" if the people in it are actually around. Counting the dormant
+  // sends a lonely player TO the emptiest room in the city, which is the exact opposite of the nudge.
   const hotRows = (await client.query(
     `SELECT c.loc, COUNT(*)::int n FROM characters c JOIN account_persistent a ON a.account_id = c.account_id
-      WHERE c.alive AND NOT c.is_npc AND NOT a.agent_flag AND c.loc IS NOT NULL${ch.loc ? ' AND c.loc <> $1' : ''}
-      GROUP BY c.loc ORDER BY n DESC LIMIT 6`, ch.loc ? [ch.loc] : [])).rows;
+      WHERE c.alive AND NOT c.is_npc AND NOT a.agent_flag AND c.loc IS NOT NULL
+        AND c.last_accrued_at > $1${ch.loc ? ' AND c.loc <> $2' : ''}
+      GROUP BY c.loc ORDER BY n DESC LIMIT 6`, ch.loc ? [since, ch.loc] : [since])).rows;
   const hotDistricts = hotRows.map((r) => ({ district: r.loc, districtName: districtName(r.loc), count: Number(r.n) }));
 
   const onlineNow = here.filter((p) => p.online).length + nearby.filter((p) => p.online).length;

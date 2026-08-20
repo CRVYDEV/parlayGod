@@ -5144,7 +5144,27 @@ export const DISCOVERY = {
   BAND: 10,                          // ± levels: a fresh player sees PEERS, not the whales the streets roster shows
   LIMIT: 24,                         // rows per list
   LFG_TTL_MS: 7 * 24 * 3600 * 1000,  // a "looking for a crew" flag older than a week is stale — dropped from the recruit list
+  // STILL AROUND — how long since a character was last touched before they stop counting as a real
+  // human you could find and play with. The collision boards excluded residents and agents and knew
+  // only that ONE kind of scenery; an ABANDONED account is a second kind, and on a live box it is the
+  // majority (a launch-night arrival opened "real players near you" and read a wall of dead level-1
+  // accounts from old smoke tests). 30 days matches the digest's own DIGEST_MAX_LAPSE_DAYS — the game
+  // already decided that past a month of silence a player is gone, and this is the same judgement
+  // about the same person. Set 0 to disable the gate entirely.
+  SEEN_DAYS: 30,
 };
+
+// The cutoff the collision boards filter on. `characters.last_accrued_at` is the signal because §7.1
+// accrual stamps it on EVERY authed request, so it means "a person was here", and it is already on the
+// row those queries select — no join, no `= ANY` (which pg-mem returns zero rows for), and it goes in
+// the WHERE so there is no filter-after-limit bug.
+//
+// The discriminator is RECENCY and deliberately not level, job count, or online-ness. Each of those
+// looks reasonable and is wrong in the same fatal way: on launch night ten people arrive together, all
+// level 1, none of whom has done anything yet — filtering on activity would hide exactly the cohort
+// these boards exist to introduce. An arrival is maximally recent (it is stamped at creation), so
+// recency passes them on their first second and still ages out an account nobody has opened in a month.
+export const seenSince = () => new Date(Date.now() - Math.max(0, Number(DISCOVERY.SEEN_DAYS)) * 86400000);
 
 // ═══ THE MENTOR (omerta-first-contact-and-events-design.md, MOVE 1) ═══
 // The positive first interaction: a veteran takes a newcomer under their wing. The mentor's reward is

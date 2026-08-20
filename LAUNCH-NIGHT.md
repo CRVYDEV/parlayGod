@@ -28,6 +28,20 @@ instruments were built for exactly this weekend; the whole document is pointers 
       tells us nothing without week one — this file IS week zero.
 - [ ] `INVITE_MODE` decided and set. For a seeded first night, **on**: a controlled cohort and a
       real Sybil bound. Mint codes ahead of time (`tools/invites.md` has the exact commands).
+- [ ] **Sweep the test debris out of the player population.** Every smoke run, probe and deploy
+      check that ever created a character left one behind, and they are indistinguishable from
+      players to anything that counts heads. The 2026-08-20 rehearsal found the live box carrying
+      enough of them that a brand-new player's "real players near you" board was **10 of 12 dead
+      accounts**. `DISCOVERY.SEEN_DAYS` now hides anyone untouched for 30 days from the discovery
+      and collision boards, so this is no longer visible to players — but the debris still inflates
+      every population figure the baseline is about to freeze, and the baseline is the one thing
+      that cannot be redone later. Needs `MOD_KEY`. Then make it a policy: a smoke run that creates
+      a character deletes it, or names it so it can be swept in one query.
+- [ ] **Walk the funnel yourself, as a first player, on the real box.** Not the suite — the suite
+      proves the code does what it says; this asks whether a stranger arriving cold has a good
+      first ten minutes. Sign up fresh, read what you are shown, pull a job, open the ten screens
+      the coach points at. Every defect this has found was invisible to green tests, because each
+      was a screen telling the truth about the wrong thing.
 
 ## The night
 

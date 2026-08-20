@@ -15154,3 +15154,52 @@ message named the nominal it EXPECTED to meet rather than the figure it got — 
 failure that names the wrong number is the thing this whole wave is about. Seven mutations, seven
 named failures. Suite 8/8, pgquery, **pgcheck 47/47 on a fresh real Postgres**, mobile 79/79, sim
 drift-0. Driven actions 213 → 219.
+
+**THE LAUNCH-NIGHT DRESS REHEARSAL — the second kind of scenery (founder-directed 2026-08-20: "Launch
+dress rehearsal").** The runbook existed; nobody had walked it. The value was in executing it as a
+FIRST PLAYER against the live box rather than reading it: the door, signup, the first ten minutes, and
+then ten screens — 26 asserted steps, production healthy throughout (db 11ms, worker beating, every
+route sub-350ms). **It found one defect, and it is a launch-night defect specifically.**
+**`/v1/live` — the board whose entire purpose is "make the RARE moment a real human is around
+VISIBLE" — had no recency filter.** Its human filters knew about ONE kind of scenery (NPC residents
+and agents); an **ABANDONED ACCOUNT is a second kind**, and on the live box it was the MAJORITY: the
+walkthrough's brand-new player opened it and read **10 of 12 entries that were dead level-1 accounts
+from old smoke tests** (`Smoke*`, `Probe*`, `Launch Check*`, `Deploy*`). So the one screen built to
+cut through noise was 83% noise, on exactly the night it matters most. Reproduced independently on a
+FRESH local database, then swept as a CLASS rather than patched as an instance (the RT#7 lesson): the
+same shape sits on the ROLODEX's `peers` and `newcomers`, so the gate went on all four query sites at
+once — three in `collision.js` (HERE, NEARBY, **HOT DISTRICTS**, where counting the dormant sends a
+lonely player TO the emptiest room in the city, the exact opposite of the nudge) and two in
+`discovery.js`.
+**The signal is `characters.last_accrued_at`**, and it was chosen by PROBING its three properties on a
+fresh database rather than assuming them: §7.1 lazy accrual stamps it on every authed request, so (1)
+it is stamped at CREATION — an arrival is visible before they act; (2) it advances on a plain READ —
+a player sitting at the tab stays visible without doing anything; (3) it does NOT advance untouched —
+debris ages out. It is already on the row those queries select, so no join, no `= ANY` (which pg-mem
+returns zero rows for), and it goes in the `WHERE` so there is no filter-after-limit bug.
+**THE DISCRIMINATOR IS RECENCY, AND DELIBERATELY NOT LEVEL, ACTIVITY OR ONLINE-NESS** — each of those
+looks reasonable and is wrong in the same fatal way: on launch night ten people arrive together, all
+level 1, none of whom has done anything yet, and every one of those filters would hide **exactly the
+cohort these boards exist to introduce, from itself.** `DISCOVERY.SEEN_DAYS` (30) matches the
+digest's own `DIGEST_MAX_LAPSE_DAYS` — the game already decided that past a month of silence a player
+is gone, and this is the same judgement about the same person. **`LOOKING` is deliberately UNGATED**:
+a fresh LFG flag inside `LFG_TTL_MS` is an affirmative *"I am here and want a crew"*, a stronger
+statement of being around than any timestamp — and the suite PINS that decision, so somebody sweeping
+the class one step further cannot silently take it away.
+**Six mutations across the two boards, each failing at its own named assertion** — and the shape of
+one is the lesson: **M2's first cut failed at the WRONG assertion.** Replacing the gate with
+`c.respect > 0` left the ghost (respect 185) filtered, so it tripped the *ghost* assertion — which
+proves nothing about whether the launch-night assertion is load-bearing. Reshaped to recency PLUS an
+activity floor (which keeps the ghost out and hides the zero-respect arrival), it fails by name at
+*"a brand-new arrival who has done NOTHING is visible immediately — the gate is recency, not
+activity"*. Each fixture moves `last_accrued_at` itself, never a proxy: **ground truth is the
+DATABASE, never the reply under test.**
+**Two probe "failures" were checked before being reported and were NOT defects** — `GET /v1/me`
+before a character exists returns 400 `no_character` (correct; the client renders the create screen on
+it), and there is no `GET /v1/garage` route at all (the fleet rides on `/v1/me`). *Check before
+reporting* held twice in one walkthrough.
+**Flagged for the founder, not fixable from here:** production carries that test debris in its
+player population. The gate hides it from the boards, which is the right permanent fix, but a
+one-time clean still wants doing and needs `MOD_KEY` — so it is a runbook step, plus a policy that
+smoke runs stop leaving characters behind. Suite green, sim drift-0, pgquery + **pgcheck 47/47 on a
+fresh real Postgres**, mobile green, levers 704.

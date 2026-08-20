@@ -7,6 +7,7 @@ import { buildServer } from '../src/server.js';
 import { spawnResident } from '../src/population.js';
 import { collisionBoard } from '../src/collision.js';
 import { runLedgerInvariants } from '../src/invariants.js';
+import { DISCOVERY } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -75,6 +76,45 @@ try {
 
   // ── NO account UUID ever leaves (the rivals/cast discipline) ──
   for (const p of [...b.here, ...b.nearby]) assert.ok(!('account_id' in p), 'no account UUID surfaces on a card');
+
+  // ══ STILL AROUND — the SECOND kind of scenery ══════════════════════════════════════════════════
+  // The residents filter above knows about NPCs. An ABANDONED account is scenery too, and on a live
+  // box it is the majority: a launch-night arrival opened this board and read a wall of dead level-1
+  // accounts left by old smoke tests. Driven from BOTH ends, because a filter that hid everyone would
+  // pass a one-sided test — and because the wrong discriminator here (level, or activity, or online)
+  // hides exactly the cohort this board exists to introduce.
+  const ghost = await mk('Ghost of Docks');
+  await seedCh(ghost.id, "respect=185, loc='docks'");
+  const ghostBefore = await collisionBoard(client, await chRow(me.id), []);
+  assert.ok(ghostBefore.here.some((p) => p.id === ghost.id),
+    'PRECONDITION: a character touched just now IS a real player near you — otherwise the gate below proves nothing');
+
+  // age them out: untouched since well past the window. GROUND TRUTH IS THE DATABASE — the gate reads
+  // last_accrued_at, so the fixture moves last_accrued_at, not some proxy the board might not consult.
+  const past = new Date(Date.now() - (DISCOVERY.SEEN_DAYS + 5) * 86400000);
+  await pool.query('UPDATE characters SET last_accrued_at=$2 WHERE id=$1', [ghost.id, past]);
+  const ghostAfter = await collisionBoard(client, await chRow(me.id), []);
+  assert.ok(!ghostAfter.here.some((p) => p.id === ghost.id),
+    `a character nobody has touched in ${DISCOVERY.SEEN_DAYS + 5} days is NOT "a real player near you" — ` +
+    'they will not be back, cannot be contracted, and crowd out the one board built to cut through noise');
+  assert.ok(ghostAfter.here.some((p) => p.id === here1.id),
+    'and the live human beside them is untouched by the gate (it filters the dormant, not the board)');
+
+  // THE LAUNCH-NIGHT CASE, which is the whole reason the discriminator is recency and not activity:
+  // ten people arrive together, all level 1, none of whom has done anything yet. They must see each
+  // other IMMEDIATELY. last_accrued_at is stamped at creation, so a brand-new arrival passes on their
+  // first second — where a filter on level, job count or online-ness would have hidden the cohort.
+  const arrival = await mk('Just Arrived');
+  await seedCh(arrival.id, "loc='docks'");   // level 1, zero respect, has done nothing at all
+  const arrivalBoard = await collisionBoard(client, await chRow(me.id), []);
+  assert.ok(arrivalBoard.here.some((p) => p.id === arrival.id),
+    'a brand-new arrival who has done NOTHING is visible immediately — the gate is recency, not activity');
+
+  // HOT DISTRICTS take the same gate: counting the dormant sends a lonely player TO the emptiest room.
+  await pool.query('UPDATE characters SET last_accrued_at=$2 WHERE id=$1', [far1.id, past]);
+  const hot = await collisionBoard(client, await chRow(me.id), []);
+  assert.ok(!hot.hotDistricts.some((h) => h.district === 'neon'),
+    'a district whose only human went dormant is no longer HOT — the nudge points at people who are there');
 } finally { client.release(); }
 
 // ── the route wires it (readCharacter + the online set) ──
