@@ -362,7 +362,7 @@ export async function planRaid(ch, npcId, client, h) {
   await client.query('INSERT INTO world_raids (id, npc_id, leader_character) VALUES ($1,$2,$3)', [id, fixture.id, ch.id]);
   await client.query('INSERT INTO world_raid_members (raid_id, character_id) VALUES ($1,$2)', [id, ch.id]);
   await h.track(client, ch.account_id, 'world_raid_plan', { npc: fixture.id });
-  return { ok: true, id, npc: fixture.id, name: fixture.name, crewMin: WORLD.COOP_MIN, crewMax: WORLD.COOP_MAX_CREW };
+  return { ok: true, op: 'raid', id, npc: fixture.id, name: fixture.name, crewMin: WORLD.COOP_MIN, crewMax: WORLD.COOP_MAX_CREW };
 }
 
 // POST /v1/world/raids/:id/join — off the open board; the outfit's gates apply to every raider.
@@ -377,7 +377,7 @@ export async function joinRaid(ch, raidId, client, h) {
   if (crew >= WORLD.COOP_MAX_CREW) throw new GameError('full', 'The crew is set.');
   await client.query('INSERT INTO world_raid_members (raid_id, character_id) VALUES ($1,$2)', [raidId, ch.id]);
   await h.track(client, ch.account_id, 'world_raid_join', { npc: fixture.id });
-  return { ok: true, id: raidId, npc: fixture.id, crew: crew + 1, crewMax: WORLD.COOP_MAX_CREW };
+  return { ok: true, op: 'raid', id: raidId, npc: fixture.id, crew: crew + 1, crewMax: WORLD.COOP_MAX_CREW };
 }
 
 // POST /v1/world/raids/:id/hire — THE HIRED GUNS (the fillHeist twin). The leader hires an NPC resident
@@ -448,13 +448,17 @@ export async function leaveRaid(ch, raidId, client, h) {
   if (!row) throw new GameError('no_raid', 'That raid is gone.');
   const mine = (await client.query('SELECT 1 FROM world_raid_members WHERE raid_id=$1 AND character_id=$2', [raidId, ch.id])).rows[0];
   if (!mine) throw new GameError('not_crew', "You're not on that raid.");
+  // `op` names WHICH co-op op this was. Three systems answer a bare `disbanded`/`left` — a crew raid,
+  // a crew heist and a PRISON BREAK — so one line was claiming all three and telling a man who had just
+  // called off a jailbreak that he called off a raid. The marker names the SYSTEM, not the state (the
+  // soldier/consigliere/estate `dismissed` cluster is the precedent, one wave earlier).
   if (row.leader_character === ch.id) {
     await client.query("UPDATE world_raids SET status='abandoned' WHERE id=$1", [raidId]);
     await client.query('DELETE FROM world_raid_members WHERE raid_id=$1', [raidId]);
-    return { ok: true, disbanded: true };
+    return { ok: true, op: 'raid', disbanded: true };
   }
   await client.query('DELETE FROM world_raid_members WHERE raid_id=$1 AND character_id=$2', [raidId, ch.id]);
-  return { ok: true, left: true };
+  return { ok: true, op: 'raid', left: true };
 }
 
 // POST /v1/world/raids/:id/go — leader-only, crew ready. ONE roll on COMBINED firepower for everyone.

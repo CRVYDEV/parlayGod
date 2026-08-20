@@ -85,7 +85,11 @@ export async function planHeist(ch, jobId, opts, client, h) {
   await client.query('INSERT INTO crew_heist_members (heist_id, character_id, role) VALUES ($1,$2,$3)', [id, ch.id, role]);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -job.stake, reason: 'heist:crew:stake' });
   await h.track(client, ch.account_id, 'heist_plan', { job: job.id });
-  return { ok: true, id, job: job.id, name: job.name, role, crewNeeded: job.crew - 1, stake: job.stake, fenced };
+  // `op` names the SYSTEM, because three of them (a crew heist, a world raid, a prison break) all
+  // answer plan/join with an id and a crew count, and a client keyed on the FIELDS renders whichever
+  // branch it reaches first. Absence is not a discriminator: it holds only until a sibling adds the
+  // field you were relying on being missing. The disband/leave replies below already carry it.
+  return { ok: true, op: 'heist', id, job: job.id, name: job.name, role, crewNeeded: job.crew - 1, stake: job.stake, fenced };
 }
 
 // JOIN — off the open board; the job's gates apply to every member. `role` picks your seat.
@@ -105,7 +109,7 @@ export async function joinHeist(ch, heistId, wantRole, client, h) {
   const role = pickRole(job, wantRole, taken);
   await client.query('INSERT INTO crew_heist_members (heist_id, character_id, role) VALUES ($1,$2,$3)', [heistId, ch.id, role]);
   await h.track(client, ch.account_id, 'heist_join', { job: job.id });
-  return { ok: true, id: heistId, job: job.id, role, crew: taken.length + 1, crewNeeded: job.crew - taken.length - 1 };
+  return { ok: true, op: 'heist', id: heistId, job: job.id, role, crew: taken.length + 1, crewNeeded: job.crew - taken.length - 1 };
 }
 
 // FILL — the leader hires an NPC RESIDENT into an open seat (residents-in-crews). A hired hand is a
@@ -167,10 +171,10 @@ export async function leaveHeist(ch, heistId, client, h) {
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: job.stake, reason: 'heist:crew:stake' });
     await client.query("UPDATE crew_heists SET status='abandoned' WHERE id=$1", [heistId]);
     await client.query('DELETE FROM crew_heist_members WHERE heist_id=$1', [heistId]);
-    return { ok: true, disbanded: true, refunded: job.stake };
+    return { ok: true, op: 'heist', disbanded: true, refunded: job.stake };
   }
   await client.query('DELETE FROM crew_heist_members WHERE heist_id=$1 AND character_id=$2', [heistId, ch.id]);
-  return { ok: true, left: true };
+  return { ok: true, op: 'heist', left: true };
 }
 
 // THE RAT — a silent flag during planning. Never surfaced by name, not even after.
