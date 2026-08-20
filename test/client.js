@@ -1770,12 +1770,41 @@ const describeFn = (() => {
   const dStart = L.findIndex((l) => l.includes('function describe(body, code)'));
   assert(dStart >= 0, 'describe() not found in the client — the action ledger cannot run');
   let dEnd = dStart; for (let i = dStart + 1; i < L.length; i++) if (L[i] === '  }') { dEnd = i; break; }
-  const helpers = [/^  const fmt = /, /^  const esc = /, /^  const nth = /, /^  const minsTxt = /].map(decl);
-  // anti-vacuity: a truncated grab is still valid JS often enough to run and quietly answer wrong,
-  // so pin one load-bearing token per helper. (`fmt` reads back its own rounding, which is what a
+  // WHICH helpers to host is DERIVED, not hand-listed. A hand-list is a second copy of describe()'s
+  // dependencies, and it went stale exactly the way a second copy always does: `goodName` was added
+  // to three branches (the call-fulfil line and both favor lines) and never to the list, so any
+  // ACTIONS row reaching one of them threw `goodName is not defined` — which does not read as a
+  // missing helper, it reads as a client bug, and it made those three branches structurally
+  // UNDRIVABLE by the very ledger that exists to drive them.
+  //
+  // Do NOT hand-roll a tokenizer to work out which identifiers are "free" — that is the trap this
+  // file already records one screen up, and it sprang again while this was being written: a
+  // string-stripper that looks correct desynced on one nested template and swallowed 86,000 of
+  // describe()'s 88,000 characters, reporting a confident, clean, empty sweep. The direction of the
+  // error is what decides the design: hosting a helper describe() never calls costs nothing, while
+  // MISSING one is the defect. So be deliberately over-inclusive — take every sibling helper the
+  // client declares at describe()'s own scope and host the ones whose name appears as a call in
+  // describe()'s text. `html` is already decommented at the top of this file, so a name that appears
+  // only in prose is not even visible here — which is how this scan established that describe()
+  // deliberately does NOT call `esc` (it uses its own `txt`, and says so). The old hand-list was
+  // both: it hosted `esc`, which is never called, and missed `goodName`, which is.
+  const rawBody = L.slice(dStart, dEnd + 1).join('\n');
+  const siblings = [...new Set(L.flatMap((l) => {
+    const m = /^  const ([A-Za-z_$][\w$]*) = (?:\(|[A-Za-z_$][\w$]*\s*=>)/.exec(l);   // arrow helpers only:
+    return m ? [m[1]] : [];                                                            // inert to declare
+  }))];
+  const needed = siblings.filter((n) => new RegExp(`(?<![\\w$.])${n.replace('$', '\\$')}\\s*\\(`).test(rawBody));
+  // anti-vacuity: if the sibling scan or the call scan breaks, `needed` empties and every helper
+  // silently stops being hosted while this reads exactly as green. These five are load-bearing in
+  // describe() today and cannot go away without the lines that use them going away first.
+  for (const must of ['fmt', 'nth', 'minsTxt', 'goodName'])
+    assert(needed.includes(must), `the helper sweep lost ${must} — the scan is broken, not describe()`);
+  const helpers = needed.map((n) => decl(new RegExp(`^  const ${n.replace('$', '\\$')} = `)));
+  // a truncated grab is still valid JS often enough to run and quietly answer wrong, so pin one
+  // load-bearing token per known helper. (`fmt` reads back its own rounding, which is what a
   // sub-cent bank balance and a dust $OMR payment both depend on.)
-  for (const [i, tok] of [[0, 'toLocaleString'], [1, 'replace'], [2, 'th'], [3, 'Math.ceil']])
-    assert(helpers[i].includes(tok), `describe() helper ${i} came out truncated (no ${tok})`);
+  for (const [name, tok] of [['fmt', 'toLocaleString'], ['nth', 'th'], ['minsTxt', 'Math.ceil']])
+    assert(helpers[needed.indexOf(name)].includes(tok), `describe() helper ${name} came out truncated (no ${tok})`);
   const src = `((rules) => { ${helpers.join('\n')}\n${L.slice(dStart, dEnd + 1).join('\n')}\n return describe; })`;
   return vm.runInNewContext(src)(rulesBody);
 })();
@@ -1952,6 +1981,12 @@ if (mark) {
   if (front) addAction(['POST', `/v1/business/${front.kind}/buy`, null]);
   if (staff) addAction(['POST', '/v1/estate/upgrade', null], ['POST', `/v1/estate/staff/${staff.id}`, null]);
   addAction(['POST', '/v1/loans', { amount: 5000, rate: 0.2, hours: 24 }]);
+  // THE KITCHEN'S TWO PURCHASES. The lab MODULE ($60k of bench, and $OMR at the top levels) said
+  // "done."; hiring a corner man landed on the catch-all `paid $50,000` — the up-front price with no
+  // word on the WAGE it starts, which is the whole tradeoff. The lab has to climb first: a module is
+  // fitted to a bench, so without this row the module SKIPS and reads as covered.
+  addAction(['POST', '/v1/kitchen/lab/upgrade', null], ['POST', '/v1/kitchen/module/purity', null],
+    ['POST', '/v1/kitchen/crew/hire', null]);
   // THE PAD is the branch `paid` was taken away from, so it has to be driven with a real bill owed —
   // otherwise the rescoping is unproven and five other obligations quietly claim its line back.
   await app.pool.query("UPDATE businesses SET upkeep_at = now() - interval '30 hours' WHERE character_id=$1", [charId]);
@@ -2021,6 +2056,13 @@ if (mark) {
   const freight = GOODS[1] || GOODS[0];
   await app.pool.query(`INSERT INTO character_cargo (character_id, good_id, qty) VALUES ($1,$2,9)
      ON CONFLICT (character_id, good_id) DO UPDATE SET qty=9`, [charId, freight.id]);
+  // ROOM TO TAKE IT BACK. A convoy's manifest is deliberately allowed to beat the trunk cap (that is
+  // the bulk unlock), so CANCELLING is refused when the freight has nowhere to return to — correct
+  // game behaviour, and it would have left the cancel below refused and silently SKIPPED, which
+  // reads on the summary line exactly like a covered action. `muscle71` is granted rather than the
+  // `beater` the asset rows below BUY, or that buy would answer "already owned" and skip in turn.
+  await app.pool.query(`INSERT INTO character_assets (character_id, asset_id) VALUES ($1,'muscle71')
+     ON CONFLICT DO NOTHING`, [charId]);
   addAction(
     ['POST', '/v1/boxing/recruit', { name: 'Kid Second' }],
     ...(fighter ? [['POST', '/v1/boxing/train', { fighter: fighter.id, stat: 'power' }],
@@ -2037,11 +2079,21 @@ if (mark) {
     ['POST', `/v1/races/unlist/${raceCar}`, null],
     ['POST', `/v1/races/pinkslip/${raceCar}`, { on: true }],
     ['POST', '/v1/heists/plan', { job: 'payroll', role: 'muscle' }],
+    // CALLING IT OFF comes FIRST so the under-minimum open below is the one `said` keeps (the map is
+    // keyed by url, so a second open would overwrite the "how far short" line asserted further down).
+    // Cancelling put the whole manifest back in the trunk and said "done." — neither half.
+    ['POST', '/v1/convoy', { to: 'neon', goodId: freight.id, qty: 4 }],
+    ['POST', '/v1/convoy/cancel', null],
     // the manifest minimum is only sayable by the server (the total lives on the convoy, not the
     // character), so open BELOW it and load ABOVE it — both halves of the term in one drive
     ['POST', '/v1/convoy', { to: 'neon', goodId: freight.id, qty: 2 }],
     ['POST', '/v1/convoy/load', { goodId: freight.id, qty: 5 }],
-    ['POST', '/v1/convoy/depart', { guards: 'crew' }]);
+    ['POST', '/v1/convoy/depart', { guards: 'crew' }],
+    // PUTTING WORK OUT — the pay is escrowed out of pocket the moment it posts, and the line names
+    // the good and the district. It is also the branch that proved this block's own host was
+    // incomplete: it calls goodName(), which the hand-written helper list had never carried, so
+    // driving it threw `goodName is not defined` — a missing dependency reading as a client bug.
+    ['POST', '/v1/favors', { goodId: freight.id, qty: 2, pay: 3000, district: 'neon' }]);
 }
 
 const mute = [];
@@ -2128,6 +2180,60 @@ for (const [m, url, payload] of ACTIONS) {
     if (line === 'done.' || /^paid \$[\d,.]+$/.test(line) || /undefined|NaN|\[object|^THREW/.test(line))
       mute.push(`${m} ${url} → ${JSON.stringify(line)}`);
   }
+}
+
+// WAVE 13 — THE EXCHANGE (the M3 barter board), which needs a BUYER and so cannot sit in ACTIONS at
+// all. All three of its verbs were mute or half-mute: listing and pulling read "done.", and buying
+// read the catch-all `paid $6,000`, so a buyer of rounds and a buyer of crates got the same sentence.
+// Listing is the terms class as well as the silence class — the goods LEAVE your hands into escrow
+// the moment you post, and nothing said so.
+{
+  const mkEx = async (n) => { const t = (await inject('POST', '/v1/auth/guest')).body.token;
+    await inject('POST', '/v1/character', t, { name: n + Math.random().toString(36).slice(2, 6) });
+    const id = (await inject('GET', '/v1/me', t)).body.character.id;
+    await app.pool.query('UPDATE characters SET cash=9000000, ammo=400 WHERE id=$1', [id]);
+    return t; };
+  const sell = await mkEx('Ledger Ex '), buy = await mkEx('Ledger Buy ');
+  const drive = async (t, m, url, payload) => {
+    const r = await inject(m, url, t, payload);
+    assert.equal(r.code, 200, `the wave-13 ledger could not drive ${url} (${JSON.stringify(r.body)}) — fix the ` +
+      'fixture rather than letting it skip, because a skipped action reads on the summary line as covered');
+    described++;
+    let line; try { line = String(describeFn(r.body, r.code)); } catch (e) { line = 'THREW: ' + e.message; }
+    said.set(url, line); paidBody.set(url, r.body);
+    if (line === 'done.' || /^paid \$[\d,.]+$/.test(line) || /undefined|NaN|\[object|^THREW/.test(line))
+      mute.push(`${m} ${url} → ${JSON.stringify(line)}`);
+    return r; };
+  const l1 = await drive(sell, 'POST', '/v1/exchange/list', { kind: 'ammo', qty: 50, unitPrice: 120 });
+  await drive(sell, 'DELETE', `/v1/exchange/${l1.body.listingId}`, null);
+  const l2 = await drive(sell, 'POST', '/v1/exchange/list', { kind: 'ammo', qty: 50, unitPrice: 120 });
+  await drive(buy, 'POST', `/v1/exchange/${l2.body.listingId}/buy`, null);
+  // the three named claims. `said` is keyed by URL and the buy/cancel URLs carry an id, so they are
+  // read back by prefix rather than by key.
+  const at = (pre) => [...said].filter(([u]) => u.startsWith(pre)).map(([, l]) => l);
+  const listed = said.get('/v1/exchange/list');
+  assert(/\brounds\b/.test(listed) && /escrow|out of your hands/i.test(listed),
+    'listing on the Exchange must name the goods AND say they leave your hands into escrow — the ' +
+    `terms ride with the price: ${JSON.stringify(listed)}`);
+  const pulled = at('/v1/exchange/').find((l) => /back in your hands/i.test(l));
+  assert(pulled && /\b50 rounds\b/.test(pulled),
+    `pulling a lot must say what came back out of escrow: ${JSON.stringify(at('/v1/exchange/'))}`);
+  const bought = at('/v1/exchange/').find((l) => /^\u{1F4CB} bought/u.test(l));
+  assert(bought && /\b50 rounds\b/.test(bought),
+    'buying a lot must name what ARRIVED, not just the price — rounds and crates read identically ' +
+    `while it was the catch-all: ${JSON.stringify(at('/v1/exchange/'))}`);
+}
+// THE KITCHEN'S TWO PURCHASES, driven in ACTIONS above. Both are named claims because both silence
+// patterns read straight past a line that is fluent: a hire that says only what it cost is a true
+// sentence about an ongoing obligation it never mentions.
+{
+  const hire = said.get('/v1/kitchen/crew/hire');
+  assert(hire && /nut/i.test(hire) && /\/hr/.test(hire),
+    'hiring a corner man must name the NUT it starts — the wage runs whether the stash moves or ' +
+    `not, and three days unpaid they down tools: ${JSON.stringify(hire)}`);
+  const mod = said.get('/v1/kitchen/module/purity');
+  assert(mod && /cook quality/i.test(mod),
+    `a lab module must say what it buys, not just what it cost: ${JSON.stringify(mod)}`);
 }
 
 // A WRONG line is invisible to the two silence patterns above: "laid $830" is a real sentence, it is
@@ -2247,6 +2353,21 @@ const loadLine = said.get('/v1/convoy');
 assert(loadLine && /\b5\b/.test(loadLine) && /short|needs/i.test(loadLine),
   `a convoy refuses to roll under the BULK minimum, and the manifest total lives on the convoy — only ` +
   `the server can say how far short a load is, so it has to. Got: ${JSON.stringify(loadLine)}`);
+// CALLED IT OFF. Two things happen and the player was told neither: the whole manifest comes back
+// off the truck into the trunk, and nothing is on the road any more.
+const cancelLine = said.get('/v1/convoy/cancel');
+assert(cancelLine && /\b4\b/.test(cancelLine) && /trunk/i.test(cancelLine),
+  `calling off a shipment puts the manifest back in the trunk — the line has to say how much came ` +
+  `back, not "done." Got: ${JSON.stringify(cancelLine)}`);
+// A DISTRICT ID IS NOT A DISTRICT. describe() resolves ids to names through $dist() at three sites
+// and printed a raw one here — because $dist was DECLARED BELOW this branch, so it sat in the TDZ
+// and could not have been called from it. A helper declared after its first would-be caller is a
+// helper that silently is not available to it.
+const favorLine = said.get('/v1/favors');
+assert(favorLine && new RegExp(GOODS[1] ? GOODS[1].name : GOODS[0].name).test(favorLine),
+  `putting work out must name the GOOD, which only the catalog knows. Got: ${JSON.stringify(favorLine)}`);
+assert(favorLine && /Neon/i.test(favorLine) && !/\bneon\b/.test(favorLine),
+  `a player reads district NAMES — "The Neon Mile", never the wire's id. Got: ${JSON.stringify(favorLine)}`);
 // A RACE IS NOT A FIGHT, AND THE PURSE IS ONE NUMBER. The score line is shared across three sports
 // (deliberately — it carries the margin, which is what a manager acts on), so it stamped a
 // greyhound's win with a boxing glove; and the sport's own line then repeated the same money, so the
@@ -2316,7 +2437,7 @@ assert(planLine && /fronted|stake/i.test(planLine) && /crew|more/i.test(planLine
   `pays for at that moment. Got: ${JSON.stringify(planLine)}`);
 
 const describedCount = described;
-assert(described >= 71, `only ${described} of ${ACTIONS.length} actions succeeded — the ledger is measuring almost nothing`);
+assert(described >= 75, `only ${described} of ${ACTIONS.length} actions succeeded — the ledger is measuring almost nothing`);
 assert.deepEqual(mute, [], `${mute.length} action(s) a player PRESSES say nothing about what just happened ` +
   `(describe() fell through to "done." or rendered a hole). Every one of these moves money, an asset or a ` +
   `status — write the line, or the game is keeping its own result from the player:\n  ${mute.join('\n  ')}`);

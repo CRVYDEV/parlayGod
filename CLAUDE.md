@@ -14767,3 +14767,93 @@ than discovered by a surviving mutation. One mutation, caught at its own named a
 
 84 → 85 driven actions. Suite green · sim drift-0 · mobile 78/78 · pgquery + pgcheck 47/47 on a
 FRESH real-Postgres database.
+
+**THE EXCHANGE COULD NOT SAY WHAT WAS ON THE BOARD — wave 13 (2026-08-20).** Kept playing: ~100
+more routes driven across four batches, every 200 read back through the client's REAL `describe()`.
+Most read well — earlier waves had covered them — and **five did not, all in two systems nobody had
+driven end to end.** The M3 barter EXCHANGE (crates, rounds and crafted goods traded between
+players) was mute or half-mute in **all three of its verbs**: listing said `"done."`, pulling a lot
+back said `"done."`, and buying read the catch-all `paid $6,000` — so **a buyer of rounds and a
+buyer of crates got the same sentence**, and the goods were never named on any of the three. Listing
+is the terms class as well as the silence class: **the goods LEAVE your hands into escrow the moment
+you post**, and nothing said so. The client could not have fixed it alone either — `item_kind` is
+the storage word (`cb`), never the one a player reads, and for a crafted lot the name lives in a
+catalog keyed by an id the reply did not carry — so the server sends the NAME and the client composes
+the sentence (the `kindName`/`tierName`/`taskLabel` precedent), through **one `lotName` helper rather
+than three copies**, since three verbs naming the same lot three ways is exactly how they come to
+disagree. The discriminator is `exchange: 'listed' | 'pulled' | 'bought'`, which **names the SYSTEM
+rather than the state** — the crew's own `crew: 'formed' | 'recruiting'` precedent, and the lesson
+the deed unlist paid for twice one wave earlier.
+
+**THE KITCHEN'S TWO PURCHASES, the second of which a previous wave had already asked for.** A LAB
+MODULE — $60k of bench, and $OMR at the top levels — said `"done."`: no level, no price, and above
+all no word on what it buys. And **hiring a corner man landed on the catch-all `paid $50,000`** — the
+up-front price with no mention of the WAGE it starts, which is the whole tradeoff (every hand draws
+`$1,200/hr` whether the stash moves or not, and three days unpaid they down tools and the offline
+sales stop). That one is the more interesting find, because **the fix had been requested in a comment
+and never written**: the wave that rescoped the crew-FIRING line ends *"…and give the hire its own"*,
+three lines above a hire that still had none. Neither needed a server field — `rules.crew.wagePerHr`/
+`coldHours` and `rules.kitchen.modules[].desc` are already published, so the lines read the live
+levers and can never drift from the till.
+
+**Guarded** in `test/client.js`: the Exchange trio needs a BUYER, so like the Pen and the club it
+gets its own tokens and cannot sit in `ACTIONS` at all; the two kitchen purchases go through
+`addAction`, with the lab climbing FIRST because a module is fitted to a bench and without that row
+it would SKIP and read on the summary line as covered. Five named claims (the goods named, the escrow
+stated, what came back, what ARRIVED, the nut, the effect); driven count **85 → 92**. Five mutations,
+each failing at its own named assertion.
+
+**One anomaly chased and dissolved, and it was mine.** A mutation run reported the BUY rendering the
+catch-all while only the PULL had been mutated — which reads exactly like a hidden branch collision.
+It was not: **two mutation scripts were running against the same file at once**, so the second one's
+"finding" was the first one's mutation. Settled by reproducing the whole loop deterministically with
+the guard's own host and its `code` argument — all three lines correct. *Never run two mutation
+scripts against one file concurrently, and when a mutation reports something the clean run does not,
+suspect the harness before the product.* Two smaller probe bugs paid for on the way in, both the
+recorded class: a `const` helper run through `vm.runInContext` creates a LEXICAL binding that does
+not attach to the context, so `describe` compiled separately could not see `fmt` and every line read
+`THREW: fmt is not defined` — a probe failure wearing a product failure's clothes, fixed by adopting
+the guard's own proven extractor rather than hand-rolling a third one; and a seed written against
+`account_persistent.id`, a column that does not exist (the key is `account_id`).
+
+**THE HELPER THE GUARD NEVER HOSTED — wave 14 (2026-08-20).** The play session continued into the
+routes the ledger had never driven: 30 more `act()`-pressed verbs (checkin, streak, boxing, convoy,
+crew, casino extras, estate, bonds, brokers, clues, favors), each fired for real and read back
+through the client's own `describe()`. Three findings, and the sharpest is in the GUARD rather than
+the game. **(1) THE LEDGER COULD NOT DRIVE ITS OWN FAVOR BRANCHES.** `test/client.js` hosts
+`describe()` from the client's source with a HAND-WRITTEN list of four helpers — and `goodName` was
+added to three branches (the call-fulfil line and both favor lines) and never to the list, so any
+ACTIONS row reaching one of them threw `goodName is not defined`. That does not read as a missing
+dependency, it reads as a client bug, and it made those three branches **structurally undrivable by
+the very ledger that exists to drive them** — the second-copy class, in the guard. The list is
+DERIVED now: every sibling helper the client declares at describe()'s own scope, hosted if its name
+appears as a call in describe()'s text. **The direction of the error is the whole design** — hosting
+a helper describe() never calls costs nothing, while missing one is the defect, so the scan is
+deliberately over-inclusive rather than clever. It also settled a second question on its own:
+describe() does NOT call `esc` (the only occurrence is a comment saying it deliberately uses its own
+`txt`), so the hand-list was both missing a helper it needed and carrying one it never did.
+**A tokenizer was written first and thrown away, which is the recorded lesson arriving on schedule:**
+a string-stripper that looked correct desynced on one nested template and swallowed **86,000 of
+describe()'s 88,000 characters**, reporting a confident, clean, EMPTY sweep — caught only because the
+anti-vacuity floor named `fmt`. The guard's own comment one screen up already says not to hand-roll
+one. The replacement needs no tokenizer at all: `html` is decommented at the top of the file, so a
+name that appears only in prose is not even visible. **(2) A DISTRICT ID IS NOT A DISTRICT.** The
+favor line printed `wanted at neon` where three sibling branches print "The Neon Mile" through
+`$dist()` — and the sealed-bid line printed a raw id too. The cause is worth keeping: **`$dist` was
+DECLARED BELOW the sealed-bid branch**, so that branch sat in the TDZ and could not have called it.
+A helper declared after its first would-be caller is a helper that silently is not available to it;
+hoisted, and both sites now resolve. **(3) CALLING OFF A SHIPMENT SAID "done."** `cancelConvoy`
+returns `{ok, returned}` — the manifest comes off the truck back into the trunk and nothing is on the
+road — and the player was told neither half. `convoy: 'cancelled'` NAMES the system (the
+`exchange:'listed'|'pulled'|'bought'` precedent) and the line states both.
+**One anomaly dissolved and one fixture bug is worth recording.** A `THREW: goodName is not defined`
+looked like a live client crash until the scope was checked: `goodName` sits at `fmt`'s own brace
+depth, so the real browser resolves it and only the probe's host was short — the fifth session
+running in which a tool I wrote produced a confident finding about the game. And driving the cancel
+in the ledger was REFUSED (`cargo`) three times before it drove: a convoy's manifest is deliberately
+allowed to beat the trunk cap — that is the bulk unlock — so a fixture seeded above the cap opens a
+shipment that **cannot be cancelled**, and the ledger skips a 4xx in silence, which on the summary
+line reads exactly like a covered action. Correct game behaviour, wrong fixture; the trunk now has
+room to take it back. Driven actions 92 → 96, floor 71 → 75. Three mutations, each caught at its own
+named assertion (the bare `{ok, returned}`; the raw district id; `goodName` dropped from the hosted
+set). Suite green + sim drift-0 + pgquery + pgcheck 47/47 on a fresh real-Postgres database.
