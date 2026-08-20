@@ -1768,6 +1768,13 @@ export function view(ch, acct = {}, owned = {}) {
     // price — the per-head rate, the countdown to downed tools, and the door out.
     crewWageOwed: crewWageOwed(ch), crewWagePerHr: Number(ch.crew || 0) * M4.CREW_WAGE_PER_HR, crewCold: crewCold(ch),
     crewWagePerHead: M4.CREW_WAGE_PER_HR, crewMax: M4.CREW_MAX, crewCostStep: M4.CREW_COST_STEP,
+    // WHAT THE NEXT HAND COSTS, from the side that charges it. The hire price CLIMBS with headcount,
+    // and the board published only the STEP — so the console restated the ladder (`step × (crew+1)`)
+    // with a hardcoded `|| 50000` under it, and an agent reading the view could not know the formula
+    // at all. Two restatements of one rule, which is how they come to disagree (the jailed/penSafe
+    // collapse); and a hardcoded price behind a missing field is the guessed number wearing a hat
+    // (the ALCHEMIST_ASSET_DECIMALS fallback RT#6 deleted). One field, computed where it is charged.
+    crewNextCost: Number(ch.crew || 0) >= M4.CREW_MAX ? null : M4.CREW_COST_STEP * (Number(ch.crew || 0) + 1),
     crewColdSeconds: Number(ch.crew || 0) > 0 && ch.crew_paid_at
       ? Math.max(0, Math.ceil((new Date(ch.crew_paid_at).getTime() + M4.CREW_WAGE_COLD_MS - Date.now()) / 1000)) : null,
     makings: owned.makings || {},

@@ -14295,6 +14295,21 @@ would pass proving nothing). Mutation-verified: quoting the garrison as the pric
 trusted from JSON — *"a sealed stake starts at $337,500 · stake it on The Family"*, zero page errors
 — which also corrected my own comment, since the tile had rendered no figure at all rather than the
 garrison I first wrote down.
+**F18 — the crew's price was a formula the CLIENT restated, with a hardcoded number under it.** The
+board/till parity sweep F17 prompted came back MATCH wherever both sides could be read — and turned
+up one board with no price field at all. The Kitchen's crew hire CLIMBS with headcount
+(`step × (crew+1)`), and the view published only `crewCostStep`, so the console restated the ladder
+AND carried `|| 50000` beneath it: two restatements of one rule, which is how they come to disagree
+(the `jailed`/`penSafe` collapse), and a hardcoded price behind a missing field is the guessed number
+wearing a hat (the `ALCHEMIST_ASSET_DECIMALS` fallback RT#6 deleted). **An agent reading `/v1/me`
+could not know the formula at all** — and agents are first-class players here. It was not WRONG
+today, which is why it is a fragility rather than a defect, and the fix is one field computed where
+the money is charged: `crewNextCost`, `null` at a full crew (the button disables and SAYS why rather
+than quoting a sixth hand the till refuses). Driven at every rung — board and till agree 50k → 250k,
+and at max the board's `null` matches the till's `max` refusal. Mutation-verified: quoting the flat
+step fails by name at 50,000 against 100,000. **The regression's own last assertion was VACUOUS on
+the first cut** (it re-asserted the line above it), so it now captures the quote BEFORE the hire and
+compares it to what was charged — which is the property, rather than a second literal.
 **A candidate DISSOLVED on checking, recorded because a session that publishes only its hits cannot
 be audited:** `GET /v1/map` 500'd on a null gang (`citymap.js:71`) — traced not to the game but to a
 **pg-mem artifact in my own fixture**, where `UPDATE … SET col = (SELECT …)` stores the value as a

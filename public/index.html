@@ -4252,7 +4252,7 @@
         <div class="d">wages owed $${fmt(me.crewWageOwed || 0)}${me.crewCold ? ' · COLD: nothing moves until the nut is paid' : ''}</div>
         <div class="d">the nut runs <b>$${fmt(me.crewWagePerHead || rules?.crew?.wagePerHr || 1200)}/hr each</b> — $${fmt(me.crewWagePerHr || 0)}/hr for ${me.crew || 0} — whether the stash moves or not. They only earn while you keep them stocked.</div>
         ${!me.crewCold && me.crewColdSeconds != null ? `<div class="d" style="color:var(--warn)">they down tools in ${minsTxt(me.crewColdSeconds)} unless the nut is squared</div>` : ''}
-        <button class="act" data-do="POST /v1/kitchen/crew/hire">hire (next: $${fmt((rules?.crew?.costStep || 50000) * ((me.crew || 0) + 1))})</button>
+        ${me.crewNextCost != null ? `<button class="act" data-do="POST /v1/kitchen/crew/hire">hire (next: $${fmt(me.crewNextCost)})</button>` : `<button class="act" disabled>the crew is full — ${me.crewMax} hands</button>`}
         <button class="act" data-do="POST /v1/kitchen/crew/wages">pay the nut${Number(me.crewWageOwed || 0) > 0 ? ` — $${fmt(me.crewWageOwed)} owed` : ''}</button>
         ${(me.crew || 0) > 0 ? `<button class="act" data-do="DELETE /v1/kitchen/crew" data-confirm="Let one hand go? ${me.crewCold ? 'They downed tools — they walk for nothing.' : `You settle the $${fmt(me.crewWageOwed || 0)} owed first. Their buy-in is gone for good.`}">let one go</button>` : ''}</div>`,
         !!me.crewCold || Number(me.crewWageOwed || 0) > 0 || (me.crew || 0) > 0)}
