@@ -2326,7 +2326,8 @@
       return `\u{1F48D} it's done — you and ${txt(body.with || 'them')} are family now, $${fmt(body.cost)}. `
         + `Whatever blood stood between the lines is buried, and killing one of theirs is a scandal that ends it.`;
     if (body && body.ok && body.divorced)
-      return `\u{1F494} it's over — you called it, so you wear it: ${body.honor} honor. The lines are strangers again.`;
+      return `\u{1F494} it's over — you called it, so you wear it: ${body.honor} honor${
+        body.honorNow !== undefined ? ` (you're at ${body.honorNow})` : ''}. The lines are strangers again.`;
     if (body && body.ok && body.withdrawn) return 'the offer is off the table — nothing was signed';
     if (body && body.ok && body.advising !== undefined)
       return body.advising ? `\u{1F3A9} you counsel ${txt(body.advising)}'s house now` : 'you advise nobody now';
@@ -2339,7 +2340,11 @@
     if (body && body.ok && body.campaign && body.say)
       return `\u{1F4DC} ${txt(body.campaign)} — "${txt(body.say)}"`;
     if (body && body.ok && body.chose)
-      return `\u{1F4DC} you chose: ${txt(body.chose)}${body.honor ? ` — ${body.honor > 0 ? '+' : ''}${body.honor} honor` : ''}`
+      // `honor` is what LANDED. When a branch offered honor and none of it landed, the clamp ate it
+      // — say so, rather than rendering nothing and leaving the player to wonder what the choice did.
+      return `\u{1F4DC} you chose: ${txt(body.chose)}${body.honor
+        ? ` — ${body.honor > 0 ? '+' : ''}${body.honor} honor`
+        : (body.honorAsked ? ` — no further: your honor is already ${body.honorNow}` : '')}`
         + `${body.completed ? '. That closes it.' : ''}`;
     if (body && body.ok && body.campaign && body.standing !== undefined)
       return `\u{1F4DC} ${txt(body.campaign)} is finished — ${[body.cash ? `$${fmt(body.cash)}` : null,

@@ -126,14 +126,16 @@ export async function divorceMarriage(ch, client, h) {
   await client.query('DELETE FROM dynasty_marriages WHERE account_a=$1 AND account_b=$2', [m.account_a, m.account_b]);
   const other = m.account_a === ch.account_id ? m.account_b : m.account_a;
   if (m.accepted) {
-    await bumpHonor(client, ch, MARRIAGE.DIVORCE);
+    const hit = await bumpHonor(client, ch, MARRIAGE.DIVORCE);
     // the tombstone (audit MED-2): the scandal still fires for SCANDAL_GRACE_MS, and the pair
     // can't re-marry inside the window — divorce is no longer a free one-action scandal dodge
     await writeTombstone(client, ch.account_id, other);
     const ex = (await client.query('SELECT id, name FROM characters WHERE account_id=$1 AND alive', [other])).rows[0];
     if (ex) await notify(client, ex.id, 'marriage_ended', { by: ch.name });
     bus.emit('streets', { type: 'divorce', by: ch.name });
-    return { ok: true, divorced: true, honor: MARRIAGE.DIVORCE };
+    // what LANDED, not what was nominally charged — honor clamps at HONOR.MIN, so calling it off at
+    // -98 costs 2, and reporting the flat -10 tells a man a thing the game did not do to him.
+    return { ok: true, divorced: true, honor: hit.applied, honorNow: hit.honor };
   }
   // withdrawing/declining a pending offer — tell the other side their envoy came back empty (LOW-2)
   const counterpart = (await client.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [other])).rows[0];
