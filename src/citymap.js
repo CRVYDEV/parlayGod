@@ -69,6 +69,17 @@ export async function cityMap(client, ch, myGangId = null) {
       tile.watch = { hour: d.watch_hour == null ? null : Number(d.watch_hour),
         windowH: M3.WATCH_WINDOW_H, open: S.onWatch(d) };
       tile.state = tile.holder.mine ? 'mine' : 'held';
+      // WHAT IT COSTS TO COME FOR IT. The map priced the NPC path (`liberationCost`, rendered on the
+      // tile) and priced the PLAYER path nowhere — it sent a raw `garrison`, which is not the price
+      // and is off by the outbid and every modifier on top: at a 200,000 garrison the door is 337,500.
+      // This is the one screen built for reading the power structure at a glance, so pricing one of
+      // the two ways a district changes hands and not the other is the asymmetry, not the omission.
+      // The PUBLIC quote (no gang, respect 0 — the /v1/districts precedent at server.js), so it never
+      // leaks a rival's charter or coalition; a specific attacker's own floor still comes from the
+      // stake control on the Family tab, which is where you actually act.
+      try {
+        tile.claimFloor = (await S.turfQuote(client, { respect: 0 }, d, null)).cost;
+      } catch { tile.claimFloor = null; }   // a level-gated quote is not a price this viewer can be shown
     }
     // THE SEALED BID — a live contest. The COUNT of families in is public (the tension); no amount is.
     if (d.contest_until && new Date(d.contest_until).getTime() > now) {

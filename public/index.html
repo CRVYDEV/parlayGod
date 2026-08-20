@@ -4745,6 +4745,7 @@
         <div class="d" style="font-size:11px;color:var(--dim);margin-top:2px">${esc(d.perk || '')}</div>
         ${d.contest ? `<div class="d" style="color:#e0a800;margin-top:3px">🎯 ${d.contest.families} famil${d.contest.families === 1 ? 'y' : 'ies'} bidding — settles ${mins(d.contest.resolvesSeconds)}</div>` : ''}
         ${d.occupier ? `<div class="d" style="margin-top:3px">liberate for <b>$${fmt(d.occupier.liberationCost)}</b> <span class="chip">World raid loop</span></div>` : ''}
+        ${d.claimFloor ? `<div class="d" style="margin-top:3px">a sealed stake starts at <b>$${fmt(d.claimFloor)}</b> <span class="chip">stake it on The Family</span></div>` : ''}
         ${d.watch && d.watch.hour != null ? `<div class="d" style="font-size:11px;margin-top:2px">🕯 stands ready ${ptHour(d.watch.hour)}${d.watch.open ? ' <span class="chip good">on watch now</span>' : ''}</div>` : ''}
         ${d.racket ? `<div class="d" style="font-size:11px;margin-top:2px">💰 ${esc(d.racket.typeName)} (t${d.racket.tier})${d.racket.ownerTag ? ' · ' + esc(d.racket.ownerTag) : ''}</div>` : ''}
         ${d.sov ? `<div class="d" style="font-size:11px;margin-top:2px">🏰 ${esc(d.sov.name || 'stronghold')}${d.sov.ownerTag ? ' · ' + esc(d.sov.ownerTag) : ''}</div>` : ''}
