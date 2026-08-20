@@ -2065,6 +2065,59 @@ for (const [m, url, payload] of ACTIONS) {
   if (line === 'done.' || /^paid \$[\d,.]+$/.test(line) || /undefined|NaN|\[object|^THREW/.test(line))
     mute.push(`${m} ${url} → ${JSON.stringify(line)}`);
 }
+// WAVE 10 — the three screens the main fixture structurally cannot reach, on their own tokens (the
+// hush-line precedent below). The PEN needs a sentence, and jail refuses nearly everything, so a
+// jailed character cannot sit in ACTIONS at all: it would silence every row after it and those rows
+// would then read on the summary line as covered. The CLUB needs `made` and one district's only club
+// slot. Their lines are folded into `said` rather than asserted in isolation, so the class sweeps
+// below (no "undefined", no stacked article) cover them for free — a sweep is a net, and a line that
+// never enters it is a line nobody is checking.
+{
+  const mk10 = async (n) => { const t = (await inject('POST', '/v1/auth/guest')).body.token;
+    await inject('POST', '/v1/character', t, { name: n + Math.random().toString(36).slice(2, 6) });
+    const id = (await inject('GET', '/v1/me', t)).body.character.id; return { t, id }; };
+  const club = await mk10('Ledger Club '), con = await mk10('Ledger Con '), dd = await mk10('Ledger Deed ');
+  for (const p of [club, con, dd]) {
+    await app.pool.query("UPDATE characters SET cash=90000000, respect=3000000, energy=900, loc='cathedral' WHERE id=$1", [p.id]);
+    await app.pool.query("UPDATE account_persistent SET omr=9000, minted=true, made_until=now() + interval '30 days' " +
+      'WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)', [p.id]);
+  }
+  await app.pool.query("UPDATE characters SET jail_until=now() + interval '40 minutes' WHERE id=$1", [con.id]);
+  const w10 = [
+    // the club: the biggest single purchase on that screen said "done.", and the decor UPGRADE carried
+    // `collected` so it landed on the empty-till line and reported a $600k renovation as nothing coming in
+    [club.t, 'POST', '/v1/speakeasy/cathedral/open', null],
+    [club.t, 'POST', '/v1/speakeasy/name', { name: 'Ledger Room' }],
+    [club.t, 'POST', '/v1/speakeasy/upgrade', null],
+    // the yard: a sentence is where a player has the least to do and the most to read
+    [con.t, 'POST', '/v1/pen/work', null],
+    [con.t, 'POST', '/v1/pen/buy/shiv', null],
+    [con.t, 'POST', '/v1/pen/protection', null],
+    [con.t, 'POST', '/v1/pen/bribe', { seconds: 300 }],
+    [con.t, 'POST', '/v1/pen/faction/northside', null],
+    // the Law's own escape, which fell into the catch-all `paid $N` — a price with the purchase left off
+    [club.t, 'POST', '/v1/law/bribe', null],
+    // and the deed's own market. Pulling a street off it answered a BARE {ok, name} — which is the
+    // shape a RENAME answers with — so it told the player they had just named the place; the marker
+    // that fixed it then had to name the SYSTEM rather than the state, because a bare `listed:false`
+    // is what a duel DE-listing sends ("off the ladder"). Two collisions, one verb.
+    [dd.t, 'POST', '/v1/deeds/claim', { district: 'docks', name: 'Ledger Row ' + Math.random().toString(36).slice(2, 6) }],
+    [dd.t, 'POST', '/v1/deeds/list', { price: 400000 }],
+    [dd.t, 'POST', '/v1/deeds/unlist', null],
+  ];
+  await app.pool.query('UPDATE characters SET heat_exposure=800, heat=70 WHERE id=$1', [club.id]);
+  for (const [t, m, url, payload] of w10) {
+    const r = await inject(m, url, t, payload);
+    assert.equal(r.code, 200, `the wave-10 ledger could not drive ${url} (${JSON.stringify(r.body)}) — fix the ` +
+      'fixture rather than letting it skip, because a skipped action reads on the summary line as covered');
+    described++;
+    let line; try { line = String(describeFn(r.body, r.code)); } catch (e) { line = 'THREW: ' + e.message; }
+    said.set(url, line); paidBody.set(url, r.body);
+    if (line === 'done.' || /^paid \$[\d,.]+$/.test(line) || /undefined|NaN|\[object|^THREW/.test(line))
+      mute.push(`${m} ${url} → ${JSON.stringify(line)}`);
+  }
+}
+
 // A WRONG line is invisible to the two silence patterns above: "laid $830" is a real sentence, it is
 // simply not true of a 10 $OMR spend. The monument takes cash, freight and $OMR and credits all three
 // in dollars, so the rail that is not cash has to name what actually left the player.
@@ -2079,6 +2132,12 @@ const invert = [
   ['/v1/loans', /took the loan/i, 'posting an offer is the LENDER escrowing their own money — it must not tell them they took a loan and owe it back'],
   [/\/v1\/estate\/staff\/[^/]+$/, /let one go|walks/i, 'hiring household staff must not read as firing a kitchen hand'],
   [/\/v1\/port\/collect\//, /collected \$/i, 'a Coast Guard interdiction seizes CARGO — reporting it as dollars collected is the loan shark\'s line and the wrong unit'],
+  // TWO wrong lines on one verb, in sequence — which is why both are pinned rather than just the
+  // second: pulling a street off the market first read as a RENAME (a bare {ok, name}), and the
+  // obvious fix (a bare `listed:false`) then read as leaving the DUELLING LADDER. A marker only
+  // disambiguates if it names the system, not the state.
+  ['/v1/deeds/unlist', /has a name now|off the ladder/i,
+    'pulling a deed off the market is neither a rename nor leaving the duelling ladder — it collided with both'],
 ];
 for (const [key, wrong, why] of invert) {
   for (const [url, line] of said) {
@@ -2184,13 +2243,39 @@ assert(circuitLine && /WON/.test(circuitLine),
     `the purse is stated once — the shared score line already carries it, so the sport's own line must ` +
     `not repeat the same figure. Got: ${JSON.stringify(circuitLine)}`);
 }
+// WAVE 10's OWN TERMS. Each is fluent-and-incomplete rather than silent, so only a named claim holds it.
+// Protection is the sharpest: it is the yard's safehouse, and it carries the same shield-NOT-bunker rule
+// the street one does — six figures buys immunity AND takes your own shank away, which a player has to
+// be told before they press it, not after they try to use the shiv they just bought.
+const protLine = said.get('/v1/pen/protection');
+assert(protLine && /can'?t shank|not shank/i.test(protLine),
+  `the yard boss's protection is shield-not-bunker — it stops you shanking anybody too, the same rule ` +
+  `the street safehouse carries. Got: ${JSON.stringify(protLine)}`);
+// Working the yard pays money AND time, and the TIME is the whole point of good behaviour — the line
+// stated the cash alone, which is the half a player already sees on their sheet.
+const yardLine = said.get('/v1/pen/work');
+assert(yardLine && /off the stretch|off the sentence/i.test(yardLine) && /left/i.test(yardLine),
+  `working the yard shaves the sentence — the money is the half a player can already see, the clock is ` +
+  `the half only the server knows. Got: ${JSON.stringify(yardLine)}`);
+// The club's decor upgrade sweeps the till at the OLD rate before it charges. Both halves are terms,
+// and this is the one that landed on the collect branch and read as an empty till.
+const decorLine = said.get('/v1/speakeasy/upgrade');
+assert(decorLine && /\$/.test(decorLine) && !/nothing in the till/i.test(decorLine),
+  `a decor build-out is a six-figure purchase, not a collect — it carries \`collected\` (the pending ` +
+  `swept at the old rate) and fell into the empty-till line. Got: ${JSON.stringify(decorLine)}`);
+// and the club NAME burns $OMR while every other `spent` in the game is dollars — the unit rides with it
+const clubNameLine = said.get('/v1/speakeasy/name');
+assert(clubNameLine && /\$OMR/.test(clubNameLine),
+  `naming the house is a $OMR burn and "spent" is DOLLARS everywhere else it appears — the line has to ` +
+  `name the unit, or it reads as a 48-dollar spend. Got: ${JSON.stringify(clubNameLine)}`);
+
 const planLine = said.get('/v1/heists/plan');
 assert(planLine && /fronted|stake/i.test(planLine) && /crew|more/i.test(planLine),
   `planning a score fronts the stake and cannot go until the crew fills — both are terms the leader ` +
   `pays for at that moment. Got: ${JSON.stringify(planLine)}`);
 
 const describedCount = described;
-assert(described >= 55, `only ${described} of ${ACTIONS.length} actions succeeded — the ledger is measuring almost nothing`);
+assert(described >= 67, `only ${described} of ${ACTIONS.length} actions succeeded — the ledger is measuring almost nothing`);
 assert.deepEqual(mute, [], `${mute.length} action(s) a player PRESSES say nothing about what just happened ` +
   `(describe() fell through to "done." or rendered a hole). Every one of these moves money, an asset or a ` +
   `status — write the line, or the game is keeping its own result from the player:\n  ${mute.join('\n  ')}`);
@@ -2259,7 +2344,7 @@ console.log(`✅ client wiring test passed — across the console AND /admin: of
   `so a new one is a decision on the record, not a silent regression. ` +
   `And the EIGHTH, which is not a lie but a shrug: a button that works and then says nothing. ` +
   `act() toasts describe() with no override, so ${describedCount} driven actions must each read back ` +
-  `as something a player can act on — a play session found 53 saying the bare word "done.", among them ` +
+  `as something a player can act on — a play session found 65 that said nothing usable, among them ` +
   `an unstake that had just opened a six-hour window in which that $OMR can be looted off you, and a ` +
   `bank deposit that rides in transit and is lootable until it clears — both TERMS, not flavour — and an ` +
   `errand that signs a player up for a THREE-DAY job while carrying the very task it would not name. ` +

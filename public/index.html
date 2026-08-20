@@ -2158,6 +2158,34 @@
       return body.value >= body.cap
         ? `\u{1F3CB} ${esc(body.fighter || body.name || 'they')} maxed out ${esc(body.stat)} — ${body.value}/${body.cap}${body.spent ? `, $${fmt(body.spent)}` : ''}. Nothing more to win there.`
         : `\u{1F3CB} worked ${esc(body.fighter || body.name || 'them')} — ${esc(body.stat)} up to ${body.value}/${body.cap}${body.spent ? `, $${fmt(body.spent)}` : ''}`;
+    // THE PEN. A sentence is where a player has the least to do and the most to read, and the whole
+    // yard was mute or bare: working it stated the money and never the TIME (which is the point of
+    // good behaviour), and protection — six figures — never said it also stops you shanking, which
+    // is the same shield-not-bunker rule the street safehouse carries.
+    if (body && body.ok && body.pay !== undefined && body.cutSeconds !== undefined)
+      return `\u{1F528} worked the yard — $${fmt(body.pay)} and ${minsTxt(body.cutSeconds)} off the stretch. ${minsTxt(body.sentenceSeconds)} left.`;
+    if (body && body.ok && body.cutSeconds !== undefined && body.cost !== undefined)
+      return `\u{1F4B5} squared the guard — $${fmt(body.cost)} for ${minsTxt(body.cutSeconds)} off. ${body.sentenceSeconds ? `${minsTxt(body.sentenceSeconds)} left.` : "You're out."}`;
+    if (body && body.ok && body.protectedSeconds !== undefined)
+      return `\u{1F6E1} the yard boss has your back for ${minsTxt(body.protectedSeconds)} — $${fmt(body.cost)}. Nobody shanks you, and you can't shank anybody either.`;
+    if (body && body.ok && body.item && body.cost !== undefined)
+      return `\u{1F5DD} the guard slips you a ${esc(String(body.item).replace(/_/g, ' '))} — $${fmt(body.cost)}${
+        body.item === 'shiv' ? '. A shank spends it, win or lose.'
+        : body.item === 'burner' ? '. One call to the street, then it’s gone.'
+        : body.item === 'cutkit' ? '. It burns on the wall attempt whether you make it or not.' : '.'}`;
+    if (body && body.ok && body.faction && body.name)
+      return `\u{1F91D} you run with ${esc(body.name)} now — your crew watches your back on the yard, and you can't shank one of your own`;
+    // THE LAW. A bribe is the price with the purchase left off: what it BUYS is a lower file.
+    if (body && body.ok && body.exposure !== undefined && body.stage)
+      return `\u{1F4B0} $${fmt(body.cost)} to the man — the file drops to ${body.exposure} (${esc(String(body.stage).replace(/_/g, ' '))})`;
+    // THE PORT. An upgrade is permanent capability on a hull, and a rendezvous is CONSENT: another
+    // captain can take your run off you mid-sea, which is the whole reason to flag it.
+    if (body && body.ok && body.part && body.level !== undefined)
+      return `\u{1F6A2} ${esc(body.part)} up to ${body.level} — $${fmt(body.spent)}. She carries ${body.hold} and runs ${body.speed} knots now.`;
+    if (body && body.ok && body.rendezvous !== undefined)
+      return body.rendezvous
+        ? '\u{1F6A4} she’s taking handoffs — another captain can meet your run at sea and carry it in for you'
+        : 'no more handoffs — she rides alone';
     // THE STRIP. Tuning read well and every other verb on the screen said "done." — including PINKS,
     // which is the highest-stakes consent in the game: agree to it and a loss hands over the car.
     if (body && body.ok && body.pinkSlip !== undefined)
@@ -2191,6 +2219,20 @@
       return `\u{1F6E3} rolling — ${body.units} units, ${minsTxt(body.arrivesSeconds)} on the road. The streets know a ${esc(body.band)} load is moving this route${body.guardCut ? `, and the lane's hot: your guards are ${body.guardCut} down` : ''}. Bandits get up to three cracks at it${body.premium ? ' — the freight is insured' : ''}.`;
     if (body && body.ok && body.units !== undefined && body.minUnits !== undefined)
       return `\u{1F69B} ${body.loaded} × ${esc(body.good || 'freight')} aboard${body.destination ? ` for ${esc($dist(body.destination))}` : ''} — ${body.units} on the manifest. ${body.units < body.minUnits ? `A convoy needs ${body.minUnits} units to roll: ${body.minUnits - body.units} short.` : 'Heavy enough to roll — pick your guards and go.'}`;
+    // THE CLUB. Three verbs on one screen, all mute or wrong: opening a house — the single biggest
+    // purchase there — said "done." over $750k, naming it said "done." over a $OMR burn, and the
+    // decor UPGRADE carried `collected` (the pending swept at the old rate) so it fell into the
+    // empty-till line below and reported a $600k renovation as nothing coming in. These sit ABOVE
+    // that branch on purpose: the upgrade's `collected` is a term to state, not a shape to match on.
+    // (no article before the name in any of the three — every rung of the decor ladder is already
+    // called "The Backroom"/"The Lounge"/…, and a player's own club name may carry one too, so
+    // prepending one read "the The Backroom". Only reading the output catches that.)
+    if (body && body.ok && body.opened && body.district && body.name)
+      return `\u{1F37E} ${esc(body.name)} is open in ${esc($dist(body.district))} — $${fmt(body.spent)}. Patrons buy rounds off you; build the decor up and they'll pay more.`;
+    if (body && body.ok && body.tier !== undefined && body.name && body.district && body.collected !== undefined)
+      return `\u{1F37E} built out to ${esc(body.name)} — $${fmt(body.spent)}${body.collected > 0 ? `, and $${fmt(body.collected)} swept out of the till first` : ''}. The room draws a better class of patron now.`;
+    if (body && body.ok && body.district && body.name && body.currency === 'omr' && body.spent !== undefined)
+      return `\u{1F37E} the house goes by ${esc(body.name)} now — ${fmt(body.spent)} $OMR`;
     if (body && body.ok && body.collected === 0 && body.total === undefined)
       return 'nothing in the till yet — come back when the day has run';
     if (body && body.banked !== undefined && body.clearSeconds !== undefined)
@@ -2247,6 +2289,8 @@
       return body.bio ? 'your story is on your profile — anyone who looks you up reads it' : 'story cleared — the sheet speaks for itself';
     if (body && body.minted && body.alreadyMinted) return 'you\'re already made — the credit stays in your pocket';
     if (body && body.minted && !body.alreadyMinted) return '\u{1F396} you\'re MADE. The extraction rail is open to you now.';
+    if (body && body.ok && body.listed === false && body.street)
+      return `\u{1F3F7} ${esc(body.street)} is off the market — the deed stays yours`;
     if (body && body.ok && body.name && body.estate === undefined && body.district === undefined && body.price === undefined && body.tier === undefined && Object.keys(body).filter((k) => k !== 'events' && k !== 'ok' && k !== 'character' && k !== 'owned').length === 1)
       return `the place has a name now — ${esc(body.name)}`;
     if (!body || typeof body !== 'object') return code < 400 ? 'done.' : 'no dice.';
