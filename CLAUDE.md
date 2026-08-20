@@ -15203,3 +15203,77 @@ player population. The gate hides it from the boards, which is the right permane
 one-time clean still wants doing and needs `MOD_KEY` — so it is a runbook step, plus a policy that
 smoke runs stop leaving characters behind. Suite green, sim drift-0, pgquery + **pgcheck 47/47 on a
 fresh real Postgres**, mobile green, levers 704.
+
+**THE HOME AGGREGATE — the poll was the load, and Home was the load's worst screen (2026-08-20).**
+`tools/pollcost.js` measures what one IDLE player costs, because the server ceiling is in requests
+and the player ceiling is that divided by the per-player cost. It named **Home at 19 requests a
+tick** — the worst screen in the game, and the one a returning player is deliberately sent to (THE
+HOME drop made it the landing screen). Sixteen of those nineteen were authed board GETs fired from
+one render, and **twelve of them each called `readCharacter`**, so a single Home render acquired
+twelve pooled connections, opened twelve transactions and read the same character row twelve times —
+and on the locked path took that row `FOR UPDATE`, so the client's own `Promise.all` had them
+**queueing on each other's lock**. `/v1/home` (`src/home.js`) is a pure fan-in over the same board
+readers. **Measured: 19 req/tick → 5, 0.18 → 0.07 req/s, and Home is no longer the worst screen** —
+`streets` is, at 0.10 — which moves the ceiling **~1,581 → ~2,900 concurrent players for zero
+infrastructure spend.**
+
+**THE ARCHITECTURE IS DECIDED BY ONE PROPERTY OF `readCharacter`, and it is worth knowing before
+anybody extends this.** It prefers a **no-BEGIN path whose client REFUSES writes** (`readOnlyClient`),
+falling back to the locked `withCharacter` only when accrual moved. So: **a writing board cannot ride
+in the aggregate at all.** Fifteen of the sixteen are read-only (twelve provably so — they already run
+under `readCharacter`, which enforces it); `bulletinBoard` WRITES, because it materialises the week's
+snapshot the first time a player picks it up. So `/v1/bulletin` stays its own fetch and **16 becomes
+2, not 1** — the honest number, stated rather than rounded. That property is also the TEST: the read
+path answering at all is what proves every board in the map is side-effect free, which is a claim
+about all fifteen rather than a comment about one.
+
+**EVERY ROUTE IT FANS IN STAYS MOUNTED.** Agents poll them (AGENTS.md), the wiring guard fetches them
+one at a time, `/v1/screens` beacons them. This is a second door onto the same rooms, never a
+replacement — and the suite holds the two in agreement: every key the aggregate returns must be what
+that board's own route serves, **value for value**, because the two halves are checked by different
+things (the client mirror checks the screen's reads against `/v1/home|<key>`; the agent manual points
+at `/v1/<key>`), so a drift would leave one audience reading a board nothing has ever checked.
+
+**THREE THINGS THE BUILD TURNED ON.** (1) **Sequential, never parallel** — these share ONE connection
+and node-pg cannot run two queries at once on it (`test/gates.js` THE CONNECTION-SHARING LEDGER), and
+handing each board its own connection is the other wrong answer (it reads outside the request's
+transaction, and N per request is the pool-exhaustion shape). (2) **Per-board isolation, with
+different mechanics per path** — today a board that throws 500s only its own request and the other
+fifteen cards still render, so consolidating without isolation would make one broken board blank the
+landing screen. The read path has no BEGIN, so a plain catch is the whole mechanism; the LOCKED path
+(taken after any gap, i.e. the common one) runs in a transaction where a failed statement aborts
+**every board after it** (25P02), so it needs a SAVEPOINT. (3) **The savepoint is attempted per call
+and never assumed** — pg-mem cannot parse one, and taking it OUTSIDE the try is the same mistake one
+level up: the probe itself throws there and the throw escapes the isolation it exists to provide.
+Measured, not reasoned: that version 500'd the whole board. The per-call form is the recorded
+`recordContact` discipline (a module-wide "do savepoints work here" cache is the bug
+AUDIT-street-life fixed — whichever context ran first decided it for every later caller).
+
+**The client needed NO guard change**, which was the pleasant surprise: the mirror already resolves a
+sub-alias one level deep off a sub-less binding (`const ob = hm.onboard || {}` → key
+`/v1/home|onboard`), so all fifteen boards stay individually checked — proven by planting a bogus
+field on one and watching it fail by name. The one constraint it imposes is that the default must be
+`{}`/`[]`, so the three rich defaults moved to their read sites, matching the guard on `sw.tasks` and
+`cr.tiers` that was already there.
+
+**A FLAKE CAUGHT IN MY OWN ASSERTION, and the fix is the interesting half.** The contract was written
+as byte equality and failed intermittently on `events`/`primetime`. Found by LOOPING the comparison
+rather than guessing: `events.primetime.opensSeconds` — **a countdown**, and the two fetches are two
+different moments. That is the recorded flake shape (a deterministic assertion resting on a timing
+precondition) so it was not loosened into meaninglessness: a `*Seconds` leaf is now held to a
+tolerance instead of being DROPPED — the key must still be present on both sides and the values must
+still agree within seconds, which is orders of magnitude tighter than any real drift, since a wrong
+board is a different number entirely or absent. **My own success line then claimed "byte for byte"
+after that change and was corrected** — an inaccurate claim in a summary is the class this sweep
+keeps fixing, and writing one is no better than shipping one.
+
+`test/home.js` (the 110th suite) proves the map is complete, the contract holds against all fifteen
+routes, the read path answers (⇒ nothing in it writes), the whole set builds inside the locked
+transaction, one broken board is isolated + NAMED + leaves the other fourteen standing **on both
+paths**, and the read moves no value. Four mutations, four distinct named failures — including a board
+DROPPED from the map, which fails twice over: `test/home.js` on the count and the client mirror on the
+field the screen then reads off nothing. The isolation break is a real failing query, not a thrown
+literal, because a synthetic throw never poisons a transaction and so would test the catch while
+leaving the thing the savepoint exists for unproven. Browser-verified: Home renders all seven cards
+with no `undefined`/`NaN` and the render fires exactly `/v1/me /v1/home /v1/bulletin`. Suite 110 files
++ sim drift-0 + mobile 79/79 + client wiring/mirror + pgquery + pgcheck on a fresh real Postgres.

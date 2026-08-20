@@ -5903,28 +5903,34 @@
   // ── START HERE: the guided First-Week funnel — the new-player on-ramp over the /v1/onboard board ──
   async function renderStart() {
     const t = $('#tab-start');
-    // two serial round trips before a single pixel painted — the tab showed nothing for both
-    const [obR, swR, crR, ppR, prR, cwR, dwR, evR, stR, reR, blR, exR, ptR] = await Promise.all([api('GET', '/v1/onboard'), api('GET', '/v1/social'), api('GET', '/v1/career'), api('GET', '/v1/people'), api('GET', '/v1/paper'), api('GET', '/v1/crew'), api('GET', '/v1/discovery'), api('GET', '/v1/events'), api('GET', '/v1/streak'), api('GET', '/v1/results'), api('GET', '/v1/bulletin'), api('GET', '/v1/explore'), api('GET', '/v1/primetime')]);
-    // A TIGHT alias run — one `const X = XR.body` per board, no comments — so ALL 13 stay inside the
-    // client mirror's 900-char alias window (a comment here would push the last board out of scope).
+    // ONE read for the whole screen. Home was measured at 19 requests a tick — the worst screen in
+    // the game, and the one a returning player LANDS on — because sixteen boards each fetched
+    // themselves and twelve of those each opened their own transaction and took this character's row
+    // FOR UPDATE, so they queued on each other inside their own Promise.all. `/v1/home` is a pure
+    // fan-in over the same board readers (src/home.js). `/v1/bulletin` stays its own fetch because it
+    // WRITES (it materialises the week's snapshot) and the read path refuses writes — 16 becomes 2,
+    // not 1, and that is the honest number. Every route it folds in is still mounted for agents.
+    const [hmR, blR] = await Promise.all([api('GET', '/v1/home'), api('GET', '/v1/bulletin')]);
+    const hm = hmR.body || {};
     const bl = blR.body || {};
-    const ex = exR.body || {};
-    const ev = evR.body || {};
-    const pt = ptR.body || {};
-    const ob = obR.body || { tasks: [], total: 0, claimed: 0 };
-    const sw = swR.body || { tasks: [] };
-    const cr = crR.body || { tiers: [] };
-    const pp = ppR.body || {};
-    const pr = prR.body || {};
-    const cw = cwR.body || {};
-    const dw = dwR.body || {};
-    const st = stR.body || {};
-    const rez = reR.body || {};
-    // THE DAY — the one-glance daily checklist (streak/contracts/hustle/corner/drills). A separate
-    // fetch (the GETBIND idiom) so the Promise.all alias window above stays intact.
-    const dy = (await api('GET', '/v1/day')).body || {};
-    // THE COLLISION — who's a REAL human, online, reachable RIGHT NOW (GETBIND, off the alias window).
-    const lv = (await api('GET', '/v1/live')).body || {};
+    // One `const X = hm.<board>` per board — the shape the client mirror resolves one level deep, so
+    // each still checks its reads against the route that serves it alone. The `|| {}` default is not
+    // decoration: a board that throws comes back null (src/home.js isolates per board) and the card
+    // renders empty, exactly as it did when a failed fetch gave `{}`.
+    const ex = hm.explore || {};
+    const ev = hm.events || {};
+    const pt = hm.primetime || {};
+    const ob = hm.onboard || {};
+    const sw = hm.social || {};
+    const cr = hm.career || {};
+    const pp = hm.people || {};
+    const pr = hm.paper || {};
+    const cw = hm.crew || {};
+    const dw = hm.discovery || {};
+    const st = hm.streak || {};
+    const rez = hm.results || {};
+    const dy = hm.day || {};
+    const lv = hm.live || {};
     const DAY_ICON = { done: '<span style="color:var(--dim)">✓</span>', ready: '<span style="color:var(--neon)">●</span>', todo: '<span style="color:var(--dim)">○</span>' };
     const dayCard = (dy.items && dy.items.length) ? `
       <div class="card" style="margin-bottom:12px"><span class="t">📋 Today</span> <span class="chip ${dy.ready ? 'good' : ''}">${dy.ready} ready · ${dy.done}/${dy.total} done</span>
@@ -5936,8 +5942,8 @@
     // THE PAYROLL — every crew you owe (the kitchen nut, the fronts' pad, the household, the family's
     // books) on ONE page in ONE vocabulary, each row saying HOW it pays (tester feedback: "paying the
     // guys in the kitchen is not the same as paying the guys in the empire — it's not consistent").
-    // GETBIND, off the alias window; hidden when nothing is owed (the empty-state rule).
-    const pr2 = (await api('GET', '/v1/payroll')).body || {};
+    // Folded into the Home aggregate above; hidden when nothing is owed (the empty-state rule).
+    const pr2 = hm.payroll || {};
     const PAY_CUR = { cash: '$', omr: '', treasury: '$' };
     const payrollCard = (pr2.items && pr2.items.length && (pr2.owedCash > 0 || pr2.owedOmr > 0 || pr2.owedTreasury > 0 || pr2.anyCold)) ? `
       <div class="card" style="margin-bottom:12px"><span class="t">💼 The Payroll</span>
@@ -6136,7 +6142,10 @@
     };
     const reward = (r) => `$${fmt(r.cash || 0)}${r.cb ? ` + ${r.cb} crate${r.cb > 1 ? 's' : ''}` : ''}${r.en ? ` + ${r.en} energy` : ''}`;
     // the single most actionable step: a reward that's ready to claim, else the first thing to go do
-    const next = ob.tasks.find((x) => !x.claimed && x.ready) || ob.tasks.find((x) => !x.claimed && !x.social) || ob.tasks.find((x) => !x.claimed);
+    // `ob` now defaults to `{}` (a board the aggregate could not build comes back null), so the
+    // list is guarded at the read — the same shape `sw.tasks` and `cr.tiers` already use.
+    const obTasks = ob.tasks || [];
+    const next = obTasks.find((x) => !x.claimed && x.ready) || obTasks.find((x) => !x.claimed && !x.social) || obTasks.find((x) => !x.claimed);
     // a background re-render (WS event / 30s poll) fires the moment focus moves from the
     // who-sent-you input to its button — the focus guard doesn't cover that instant, and the
     // rebuilt card would wipe the half-typed name. Carry the draft across the rebuild.
@@ -6160,7 +6169,7 @@
       ${next ? `<div class="coachbox"><div class="cl">▸ DO THIS NEXT: ${next.name}</div><div class="ch">${next.ready ? 'The reward\'s waiting — claim it below.' : next.desc}</div>
         ${next.ready ? `<button class="act prime" data-obclaim="${next.id}" style="padding:5px 12px;font-size:12.5px">claim ${reward(next.reward)}</button>` : `<button class="act" data-obgo="${next.id}" style="padding:5px 12px;font-size:12.5px">${(go[next.id] || [, 'go do it'])[1]} →</button>`}</div>` : ''}
       <div class="d" style="color:var(--dim);font-size:13.5px;margin-bottom:6px">Work down the list. Green means the reward is waiting — claim it. Grey means do the thing first; tap it to jump there.</div>
-      <div class="grid">${ob.tasks.map((x) => `
+      <div class="grid">${(ob.tasks || []).map((x) => `
         <div class="card" ${!x.claimed && x.ready ? 'style="border-color:var(--neon)"' : ''}>
           <span class="t">${x.claimed ? '✓ ' : ''}${x.name}</span>
           ${x.claimed ? '<span class="chip good">claimed</span>' : x.ready ? '<span class="chip good">reward ready</span>' : ''}
