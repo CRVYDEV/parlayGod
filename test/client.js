@@ -1813,6 +1813,11 @@ const describeFn = (() => {
 // each entry is a route a player PRESSES (act()/data-do) whose success shape must read as something.
 // Bodies are whatever makes the call succeed for a fresh character; a 4xx is skipped, not asserted —
 // this check is about what a WORKING action says, and the gates have their own suites.
+// A formatted-money matcher. Assertions here compare a rendered LINE against the figure the SERVER
+// actually sent, never against a literal — a literal passes while the two drift, which is the whole
+// class this file exists to catch. `fmt` groups thousands, so the raw number never appears verbatim.
+const fmtLike = (n) => String(Math.round(Number(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ',').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const ACTIONS = [
   ['POST', '/v1/travel/neon', null],
   // found by playing: the numbers ticket said "done." — neither the number taken, the stake, nor the
@@ -2529,6 +2534,230 @@ for (const [m, url0, payload] of ACTIONS) {
   assert(/coalition/i.test(L34.get('walk out of it')),
     'walking out of a coalition answered a bare {ok} — indistinguishable from every other bare ' +
     `acknowledgement in the game — so it needed a marker at the source: ${JSON.stringify(L34.get('walk out of it'))}`);
+}
+// WAVE 35 — THE CHAMBER'S THREE GOVERNING VERBS, and the raid that put you in hospital without
+// saying so. Both halves are here because both are the same failure seen from opposite sides: a
+// reply that carries the fact and a line that does not read it.
+//
+// The chamber needs a SEATED family (top-N by standing) and the raid needs a pinned roll, so neither
+// can sit in ACTIONS — a seat is a fixture, and a raid left to the dice is the recorded flake class
+// (a deterministic assertion resting on a probabilistic precondition). The rolls are pinned with the
+// module's own TEST-ONLY knobs rather than by retrying until the wanted outcome turns up.
+{
+  const L35 = new Map();
+  const mk35 = async (n) => { const t = (await inject('POST', '/v1/auth/guest')).body.token;
+    await inject('POST', '/v1/character', t, { name: n + Math.random().toString(36).slice(2, 6) });
+    const id = (await inject('GET', '/v1/me', t)).body.character.id;
+    await app.pool.query('UPDATE characters SET cash=90000000, respect=800000, health=100, loc=$2 WHERE id=$1', [id, 'neon']);
+    const acc = (await app.pool.query('SELECT account_id FROM characters WHERE id=$1', [id])).rows[0].account_id;
+    await app.pool.query('UPDATE account_persistent SET omr=200000 WHERE account_id=$1', [acc]);
+    return { t, id, acc }; };
+  const drive35 = async (m, u, t, p, label) => {
+    const r = await inject(m, u, t, p);
+    if (r.code >= 400 || !r.body) return r;
+    described++;
+    let line; try { line = String(describeFn(r.body, r.code)); } catch (e) { line = 'THREW: ' + e.message; }
+    L35.set(label, line);
+    if (line === 'done.' || /^paid \$[\d,.]+$/.test(line) || /undefined|NaN|\[object|^THREW/.test(line))
+      mute.push(`${m} ${u} (${label}) → ${JSON.stringify(line)}`);
+    return r; };
+
+  const boss = await mk35('Chamber');
+  await inject('POST', '/v1/gangs', boss.t, { name: 'Ledger Chamber ' + Math.random().toString(36).slice(2, 5), tag: 'LCH' });
+  const cg = (await app.pool.query('SELECT id FROM gangs ORDER BY created_at DESC LIMIT 1')).rows[0];
+  // seat it: `seatedGangs` ranks on THIS season's showing, so both columns are set (the econ-pass fix
+  // made the ladder seasonal precisely so a seat has to be re-bought — seeding only the lifetime one
+  // leaves the family unseated and all three verbs 4xx into a silent skip)
+  await app.pool.query('UPDATE gangs SET treasury=50000000, lifetime_tribute=90000000, season_tribute=90000000, wars_won=9, season_wars=9 WHERE id=$1', [cg.id]);
+  await drive35('POST', '/v1/commission/vote', boss.t, { decree: 'pax' }, 'the ballot');
+  await drive35('POST', '/v1/commission/ticker', boss.t, { ticker: 'AAPL' }, 'the stock pick');
+  await drive35('POST', '/v1/commission/propose', boss.t, { decree: 'amnesty' }, 'move a motion');
+
+  const ballot = L35.get('the ballot');
+  // The timing is the load-bearing half: the chamber tallies THIS week to govern the NEXT, so a
+  // player who votes and then reads the decree in force sees the old one and concludes it did not
+  // land. The seat WEIGHT is the other fact a bare acknowledgement cannot carry.
+  assert(/pax/.test(ballot) && /next week/i.test(ballot) && /weight/i.test(ballot),
+    'the ballot must name the decree, the seat weight it carries, and that it governs NEXT week — ' +
+    `all three are in the reply and none of them were read: ${JSON.stringify(ballot)}`);
+  const pick = L35.get('the stock pick');
+  assert(/AAPL/.test(pick) && /tomorrow|buys/i.test(pick),
+    `the daily stock ballot must name the pick and when the treasury acts on it: ${JSON.stringify(pick)}`);
+  const motion = L35.get('move a motion');
+  // A six-figure TREASURY stake with a forfeit condition, and — the part invisible from the button —
+  // once any motion is on the table the tally filters ballots to what was MOVED, so proposing sets
+  // the ballot rather than merely adding to it.
+  assert(/\$[\d,]/.test(motion) && /treasury/i.test(motion) && /forfeit/i.test(motion) && /moved/i.test(motion),
+    'moving a motion stakes the TREASURY and only comes back if this motion is the one enacted — and ' +
+    `it sets the ballot. A cash figure must also carry its $: ${JSON.stringify(motion)}`);
+
+  // THE REPEL. Three shapes, one generic fallback. The solo world raid dropped the hospital term its
+  // own CO-OP sibling states; the NPC-family repel had that fallback stapled in front of its real
+  // sentence; and a successful counter-raid ran two sentences together with no stop between them.
+  const raider = await mk35('Repelled');
+  process.env.WORLD_RAID_P = '0';
+  await drive35('POST', '/v1/world/dockrats/raid', raider.t, null, 'the raid that failed');
+  delete process.env.WORLD_RAID_P;
+  const solo = L35.get('the raid that failed');
+  assert(/hospital/i.test(solo) && /\d+m/.test(solo) && !/it went sideways/.test(solo),
+    'a repelled raid puts you in hospital for twenty minutes — the reply says so and the line said ' +
+    `only "it went sideways", so you found out when the next thing you tried refused: ${JSON.stringify(solo)}`);
+
+  const warrior = await mk35('Warlike');
+  await inject('POST', '/v1/gangs', warrior.t, { name: 'Ledger War ' + Math.random().toString(36).slice(2, 5), tag: 'LWR' });
+  const wg = (await app.pool.query('SELECT id FROM gangs ORDER BY created_at DESC LIMIT 1')).rows[0];
+  await app.pool.query('UPDATE gangs SET treasury=9000000 WHERE id=$1', [wg.id]);
+  // An NPC family is a WORKER artifact (runPopulation founds them), and the worker never runs here,
+  // so one is seeded when the fixture has none — otherwise both drives below 404 and both assertions
+  // skip in SILENCE, which is exactly what happened: the first cut of this block also had the route
+  // wrong (/v1/npcwar/ where the server mounts /v1/npcfamily/), and BOTH mutations survived a green
+  // run, because a skipped assertion reads on the summary line exactly like a covered one. Nothing
+  // in this block is conditional now — a drive that does not land is a failure, not a shrug.
+  const npcFam = (await app.pool.query('SELECT id FROM gangs WHERE npc_flag LIMIT 1')).rows[0]
+    || await (async () => {
+      const ghost = await mk35('Ghostfam');
+      await inject('POST', '/v1/gangs', ghost.t, { name: 'The Ledger Ghosts ' + Math.random().toString(36).slice(2, 5), tag: 'LGH' });
+      const row = (await app.pool.query('SELECT id FROM gangs ORDER BY created_at DESC LIMIT 1')).rows[0];
+      await app.pool.query('UPDATE gangs SET npc_flag=true, treasury=9000000 WHERE id=$1', [row.id]);
+      return row;
+    })();
+  assert(npcFam, 'no NPC family to raid — both repel assertions below would skip in silence');
+  process.env.FAMILY_RAID_P = '0';
+  await drive35('POST', `/v1/npcfamily/${npcFam.id}/raid`, warrior.t, null, 'repelled by the family');
+  process.env.FAMILY_RAID_P = '1'; process.env.FAMILY_COUNTER = 'on';
+  // the raid charges energy, ammo and a per-crew COOLDOWN win or lose, so a second drive is
+  // refused unless all three are put back — and a refusal here is a silent skip, which is the whole
+  // reason this block stopped being conditional
+  await app.pool.query('UPDATE characters SET hosp_until=NULL, energy=50, health=100, ammo=500, family_raid_at=NULL WHERE id=$1', [warrior.id]);
+  await drive35('POST', `/v1/npcfamily/${npcFam.id}/raid`, warrior.t, null, 'raided and caught leaving');
+  delete process.env.FAMILY_RAID_P; delete process.env.FAMILY_COUNTER;
+  const rep = L35.get('repelled by the family');
+  assert(rep, 'the repelled raid never drove — a skipped drive reads exactly like a covered one');
+  // Assert the PROPERTY, not the wording. The first cut tested for the old filler text — but the
+  // OTHER half of this fix changed what that branch emits, so the echo came back saying something
+  // else and the check read clean over it. What is wrong is that one event is narrated TWICE, so
+  // count the hospital: a repel says it once.
+  assert((rep.match(/hospital/gi) || []).length === 1 && /repelled/i.test(rep) && /\d+m/.test(rep),
+    'an NPC-family repel has its OWN sentence, so the generic filler was stapled in front of it ' +
+    '("it went sideways · X repelled the raid") — the hospital must be narrated ONCE, and with the ' +
+    `number the reply already carries: ${JSON.stringify(rep)}`);
+  const caught = L35.get('raided and caught leaving');
+  assert(caught, 'the counter-raid never drove — a skipped drive reads exactly like a covered one');
+  // the run-on: the `countered` clause opens with a space and what precedes it ends with no stop,
+  // so the ordinary success reads "…off their war chest Their guns caught you leaving"
+  assert(!/chest Their/.test(caught) && /hospital/i.test(caught),
+    `a successful raid whose counter caught you must not run two sentences together: ${JSON.stringify(caught)}`);
+}
+
+// ── WAVE 36 — THE SPEAKEASY'S FOUR, THE TUNE, AND THE THREE ESCROWS THAT CAME BACK IN SILENCE.
+// Everything here was found by opening a club and running it for a night. It sits in its own block
+// rather than in ACTIONS because the cluster is TWO-PARTY (a patron is not the owner, and the owner
+// cannot buy a round at his own joint) and needs a second funded, MADE token — ACTIONS drives one.
+//
+// The four in the club are one class each. The bar take is NET of a twenty-percent cut for
+// protection and wages that the reply has always carried and the line never said — the pad and the
+// nut exactly, on the button an owner presses daily. The round and the bottle are prices left off a
+// purchase. And the round, the standover and the buyout were all ECHOES: the bare-figure catch-all
+// fired alongside a branch that had already spoken, so the standover and the buyout each printed
+// the same number twice in one sentence. That catch-all is now guarded on `!bits.length` at the very
+// end of describe(), which is why this block asserts the SHAPE ("no line may open with a bare price
+// followed by a separator") rather than three separate wordings: the guard is against the class.
+{
+  const L36 = new Map();
+  const mk36 = async (name) => {
+    const g = await inject('POST', '/v1/auth/guest', null, {});
+    const c = await inject('POST', '/v1/character', g.body.token, { name });
+    return { t: g.body.token, id: c.body?.character?.id || c.body?.id };
+  };
+  const drive36 = async (m, p, t, body, label) => {
+    const r = await inject(m, p, t, body);
+    assert(r.code < 400, `WAVE 36: ${label} did not drive (${r.code} ${r.body?.error || ''}) — a skipped drive reads exactly like a covered one`);
+    const line = describeFn(r.body, r.code);
+    L36.set(label, line); described++;
+    if (line === '\u2713 done.' || /^paid \$[\d,.]+$/.test(line)) mute.push(`${m} ${p}`);
+    return r;
+  };
+  // `neon` and `cathedral` already have clubs by the time this block runs (two earlier blocks open
+  // them), and a district holds ONE — so a fixed district here answers `taken` and the whole block
+  // skips. Take the first district still free rather than hard-coding a fourth guess that the next
+  // block to open a club will invalidate.
+  const CLUB_D = (await (async () => {
+    const held = new Set((await app.pool.query('SELECT district_id FROM speakeasies')).rows.map((r) => r.district_id));
+    return ['foundry', 'brick', 'canal', 'docks', 'neon', 'cathedral'].find((d) => !held.has(d));
+  })());
+  assert(CLUB_D, 'WAVE 36: every district already has a club — nowhere to open one');
+  const owner = await mk36('Club ' + Math.random().toString(36).slice(2, 7));
+  const patron = await mk36('Patron ' + Math.random().toString(36).slice(2, 7));
+  // A club needs a MADE owner (the D8=D door), so the subscription is seeded rather than bought —
+  // buying it is its own tested path and is not what this block is about.
+  for (const who of [owner, patron]) {
+    await app.pool.query('UPDATE characters SET cash=90000000, respect=9000000, energy=200, nerve=200, health=100, loc=$2 WHERE id=$1', [who.id, CLUB_D]);
+    await app.pool.query('UPDATE account_persistent SET omr=90000, minted=true, made_until=$2 WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)', [who.id, new Date(Date.now() + 60 * 864e5)]);
+  }
+  await drive36('POST', `/v1/speakeasy/${CLUB_D}/open`, owner.t, null, 'open the club');
+  // ten hours of takings, so the cut is a real number rather than a rounding artifact
+  await app.pool.query("UPDATE speakeasies SET income_at=now() - interval '10 hours' WHERE district_id=$1", [CLUB_D]);
+  const take = await drive36('POST', '/v1/speakeasy/collect', owner.t, null, 'collect the bar take');
+  assert(take.body.upkeep > 0 && take.body.gross > take.body.collected,
+    'WAVE 36 precondition: the club must actually owe a cut on this take, or the assertion below is vacuous');
+  assert(new RegExp(fmtLike(take.body.upkeep)).test(L36.get('collect the bar take')) &&
+         new RegExp(fmtLike(take.body.gross)).test(L36.get('collect the bar take')),
+    'the bar take is NET of a standing cut for protection and wages, and the owner was shown only ' +
+    'the net — the same withheld term as the pad and the nut, on a daily button: ' + JSON.stringify(L36.get('collect the bar take')));
+  const round = await drive36('POST', `/v1/speakeasy/${CLUB_D}/round`, patron.t, { round: 'topshelf' }, 'buy a round');
+  assert(new RegExp(fmtLike(round.body.paid)).test(L36.get('buy a round')),
+    `a round must name what LEFT YOUR POCKET, not only the owner's cut: ${JSON.stringify(L36.get('buy a round'))}`);
+  const bottle = await drive36('POST', `/v1/speakeasy/${CLUB_D}/bottle`, patron.t, { bottle: 'magnum' }, 'bottle service');
+  assert(new RegExp(`${fmtLike(bottle.body.spent)}\\s*\\$OMR`).test(L36.get('bottle service')),
+    `bottle service is a $OMR burn and named no price at all: ${JSON.stringify(L36.get('bottle service'))}`);
+  // THE ECHO, asserted as a class. Every line in this block goes through the same check: a bare
+  // price followed by a separator is the catch-all having spoken over a branch that already had.
+  for (const [label, line] of L36)
+    assert(!/^paid \$[\d,]+ \u00b7 /.test(line), `WAVE 36: "${label}" opens with the bare-figure catch-all ` +
+      `stapled in front of a line that already spoke — that fallback must be a LAST resort: ${JSON.stringify(line)}`);
+
+  // THE TUNE — the one buy in the racing system that named no price, while its own neighbours (the
+  // nitrous, the boat refit) both do. It is not a constant either: the Wheelman mastery discounts it.
+  const driver = await mk36('Driver ' + Math.random().toString(36).slice(2, 7));
+  await app.pool.query('UPDATE characters SET cash=90000000, respect=9000000, energy=200, nerve=200, health=100, loc=$2 WHERE id=$1', [driver.id, 'docks']);
+  for (let i = 0; i < 30 && !(await app.pool.query('SELECT 1 FROM cars WHERE character_id=$1', [driver.id])).rowCount; i++) {
+    await inject('POST', '/v1/garage/boost', driver.t, null);
+    await app.pool.query('UPDATE characters SET gta_at=NULL, jail_until=NULL, energy=200 WHERE id=$1', [driver.id]);
+  }
+  const wheels = (await app.pool.query('SELECT id FROM cars WHERE character_id=$1 LIMIT 1', [driver.id])).rows[0];
+  assert(wheels, 'WAVE 36: no car to tune — the assertion below would skip in silence');
+  const tuned = await drive36('POST', `/v1/races/tune/${wheels.id}`, driver.t, null, 'tune the car');
+  assert(new RegExp(fmtLike(tuned.body.spent)).test(L36.get('tune the car')),
+    `a tune is a repeatable cash sink whose price climbs, and it named none: ${JSON.stringify(L36.get('tune the car'))}`);
+
+  // THREE ESCROWS COMING BACK. The market's was the only one that spoke; the shark's offer and a hit
+  // contract's stake each said "done." over five and six figures, and a queued $OMR withdrawal was
+  // WORSE than silent — `cancelled` reads as truthy, so the market's branch claimed it and rendered
+  // TOKENS as DOLLARS in the market's own words. Each is asserted for its own currency and voice.
+  const offer = await inject('POST', '/v1/loans', owner.t, { amount: 50000, rate: 0.2, hours: 24 });
+  assert(offer.code < 400 && offer.body.id, 'WAVE 36: the loan offer never posted');
+  const pulled = await drive36('POST', `/v1/loans/${offer.body.id}/cancel`, owner.t, null, 'pull a loan offer');
+  assert(new RegExp(fmtLike(pulled.body.refunded)).test(L36.get('pull a loan offer')),
+    `pulling a loan offer returns the whole escrowed principal and said nothing: ${JSON.stringify(L36.get('pull a loan offer'))}`);
+  const mark = await mk36('Mark ' + Math.random().toString(36).slice(2, 7));
+  await app.pool.query('UPDATE characters SET respect=900000 WHERE id=$1', [mark.id]);
+  const posted = await inject('POST', `/v1/streets/${mark.id}/bounty`, owner.t, { amount: 60000, kind: 'kill' });
+  assert(posted.code < 400, `WAVE 36: the contract never posted (${posted.body?.error})`);
+  const stake = await drive36('POST', `/v1/contracts/${mark.id}/kill/cancel`, owner.t, null, 'pull a contract stake');
+  assert(new RegExp(fmtLike(stake.body.refunded)).test(L36.get('pull a contract stake')),
+    `pulling your stake off a hit contract said nothing about the money: ${JSON.stringify(L36.get('pull a contract stake'))}`);
+  // The withdrawal is seeded as a row rather than driven through /v1/withdraw, which needs a live
+  // chain — the route under test only reads the row, and what is being asserted is the SENTENCE.
+  const acct = (await app.pool.query('SELECT account_id FROM characters WHERE id=$1', [owner.id])).rows[0].account_id;
+  await app.pool.query(
+    `INSERT INTO vouchers (id, account_id, kind, amount, nonce, deadline, status, to_address)
+     VALUES ($1,$2,'omr',12,987654,$3,'queued','0x0000000000000000000000000000000000000001')`,
+    ['wave36-voucher', acct, new Date(Date.now() + 864e5)]);
+  await drive36('POST', '/v1/withdraw/wave36-voucher/cancel', owner.t, null, 'cancel a queued withdrawal');
+  const wd = L36.get('cancel a queued withdrawal');
+  assert(/\$OMR/.test(wd) && !/\$12\b/.test(wd) && !/off the board/.test(wd),
+    'a cancelled $OMR withdrawal rendered its TOKENS as DOLLARS, in the Black Market\'s words, ' +
+    `because \`cancelled\` is truthy and the market's branch claimed the shape: ${JSON.stringify(wd)}`);
 }
 // THE KITCHEN'S TWO PURCHASES, driven in ACTIONS above. Both are named claims because both silence
 // patterns read straight past a line that is fluent: a hire that says only what it cost is a true
