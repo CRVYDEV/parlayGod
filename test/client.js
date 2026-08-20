@@ -2420,6 +2420,115 @@ if (traceLine) assert(/still listening/i.test(traceLine) && !/swept/i.test(trace
     `naming a consigliere must name the chair, not read "paid $N": ${JSON.stringify(named)}`);
 }
 
+// WAVE 17 — THE KITCHEN AND THE EMPIRE. Fourteen verbs a player presses that read "done.", a price
+// with no purchase, a GAIN as a payment, or the SAME figure twice. Laying low was the sharpest: it
+// read "heat +65" while heat DROPPED (the generic heat push reads any `heat` as a +delta, and laylow
+// sends the new ABSOLUTE); cutting product masqueraded as a fresh cook and hid the $8k cost; the
+// business upkeep printed its own figure twice; a warehoused haul read "paid $2,400" for a gain. Each
+// is folded into `said` so the silence + double sweeps cover the mutes, and the LYING/WITHHELD ones
+// are pinned by name below. Territory needs a family with a held operation, so it is seeded here.
+{
+  const mk17 = async (n, loc = 'brick') => { const t = (await inject('POST', '/v1/auth/guest')).body.token;
+    await inject('POST', '/v1/character', t, { name: n + Math.random().toString(36).slice(2, 6) });
+    const id = (await inject('GET', '/v1/me', t)).body.character.id;
+    await app.pool.query("UPDATE characters SET cash=90000000, respect=3000000, energy=900, nerve=100, ammo=600, jail_until=NULL, hosp_until=NULL, loc=$2 WHERE id=$1", [id, loc]);
+    return { t, id }; };
+  const boss = await mk17('Ledger Boss '), spec = await mk17('Ledger Spec ');
+  // a family with a held district and a protection operation (kind fixed so the special op is the
+  // deterministic 'show_of_force' — no RNG in a client-wording test)
+  const gid = 'w17gang' + Math.floor(Math.random() * 1e9).toString(36);
+  await app.pool.query('INSERT INTO gangs (id, name, tag, treasury) VALUES ($1,$2,$3,50000000)',
+    [gid, 'Ledger Fam ' + gid, ('L' + gid).slice(0, 6)]);
+  await app.pool.query("INSERT INTO gang_members (gang_id, character_id, role) VALUES ($1,$2,'boss')", [gid, boss.id]);
+  await app.pool.query("INSERT INTO gang_members (gang_id, character_id, role) VALUES ($1,$2,'soldier')", [gid, spec.id]);
+  await app.pool.query("UPDATE districts SET holder_gang=$1, garrison=100000 WHERE id='brick'", [gid]);
+  await app.pool.query("INSERT INTO territory_rackets (district_id, owner_gang, kind, tier) VALUES ('brick',$1,'protection',1)", [gid]);
+  // the kitchen state: a bench and a stash to CUT, real HEAT to lay low and clean papers over (both
+  // in that order — laylow only cools, so heat stays >0 for cleanpapers), and a backdated crew nut.
+  await app.pool.query("UPDATE characters SET lab='crackhouse', heat=200, crew=3, crew_paid_at=now() - interval '30 hours' WHERE id=$1", [boss.id]);
+  await app.pool.query('UPDATE account_persistent SET omr=9000 WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)', [boss.id]);
+  await app.pool.query('INSERT INTO stash (character_id, drug_id, qty, quality) VALUES ($1,$2,20,0.9)', [boss.id, DRUGS[0].id]);
+  const RK = rulesBody.rackets[0].id, KIND = BUSINESSES[0].kind;
+  const drive17 = async (m, url, payload) => {
+    const r = await inject(m, url, boss.t, payload);
+    assert.equal(r.code, 200, `the wave-17 ledger could not drive ${m} ${url} (${JSON.stringify(r.body)}) — ` +
+      'fix the fixture, because a skipped action reads on the summary line as covered');
+    described++;
+    let line; try { line = String(describeFn(r.body, r.code)); } catch (e) { line = 'THREW: ' + e.message; }
+    said.set(url, line); paidBody.set(url, r.body);
+    if (line === 'done.' || /^paid \$[\d,.]+$/.test(line) || /undefined|NaN|\[object|^THREW/.test(line))
+      mute.push(`${m} ${url} → ${JSON.stringify(line)}`);
+    return r; };
+  await drive17('POST', `/v1/kitchen/cut/${DRUGS[0].id}`, {});
+  await drive17('POST', '/v1/kitchen/laylow', {});
+  await drive17('POST', '/v1/kitchen/cleanpapers', {});
+  await drive17('POST', '/v1/kitchen/crew/wages', {});
+  await drive17('POST', `/v1/rackets/${RK}/buy`, {});
+  await drive17('POST', `/v1/rackets/${RK}/upgrade`, {});
+  await drive17('POST', `/v1/business/${KIND}/buy`, {});
+  const biz = (await app.pool.query('SELECT id FROM businesses WHERE character_id=$1 LIMIT 1', [boss.id])).rows[0];
+  await drive17('POST', `/v1/business/${biz.id}/upgrade`, {});
+  await app.pool.query("UPDATE businesses SET upkeep_at = now() - interval '30 hours' WHERE character_id=$1", [boss.id]);
+  await drive17('POST', '/v1/business/upkeep', {});
+  await drive17('POST', '/v1/convoy/rig/van', {});
+  await drive17('POST', '/v1/convoy/rig/upgrade', { track: 'engine' });
+  // the ASSIGN and the UNASSIGN share a URL, and `said` is keyed by URL — so the DELETE overwrites the
+  // POST's line. Capture the assign line here, before the unassign runs, or the assertion reads the
+  // wrong verb ("pulled your man off …").
+  const specAssignLine = String(describeFn((await drive17('POST', '/v1/territory/brick/specialist', { memberId: spec.id })).body, 200));
+  await drive17('POST', '/v1/territory/brick/op', {});
+  await drive17('DELETE', '/v1/territory/brick/specialist', null);
+  await app.pool.query("UPDATE territory_rackets SET upkeep_at = now() - interval '40 hours' WHERE district_id='brick'");
+  await drive17('POST', '/v1/territory/upkeep', {});
+  // the port, on the dock: a CLEAN landing warehoused (a gain that read "paid $2,400") and the fence
+  // that sells it (read "done."). PORT_INTERDICT_P forces the clean landing so this is the shape tested.
+  await app.pool.query("UPDATE characters SET loc='docks' WHERE id=$1", [boss.id]);
+  await inject('POST', '/v1/port/boat/dinghy', boss.t, {});
+  const boat = (await app.pool.query('SELECT id FROM boats WHERE character_id=$1 AND NOT minted_onchain ORDER BY created_at DESC LIMIT 1', [boss.id])).rows[0];
+  const launched = await inject('POST', `/v1/port/run/${boat.id}`, boss.t, { route: 'coastal' });
+  assert.equal(launched.code, 200, `wave-17 could not launch the run: ${JSON.stringify(launched.body)}`);
+  await app.pool.query("UPDATE boats SET run_until = now() - interval '1 minute' WHERE id=$1", [boat.id]);
+  process.env.PORT_INTERDICT_P = '0';
+  await drive17('POST', `/v1/port/collect/${boat.id}`, { warehouse: true });
+  await drive17('POST', '/v1/port/fence', {});
+  process.env.PORT_INTERDICT_P = '1';   // restore the interdiction knob for any later port drive
+
+  // ── the named claims. The mutes (cleanpapers, fence, rig, unassign, op, specialist) are covered by
+  // the silence sweep once driven; these are the ones that LIED or withheld a term.
+  const laylowLine = said.get('/v1/kitchen/laylow');
+  assert(laylowLine && /down to/i.test(laylowLine) && !/heat \+/.test(laylowLine),
+    `laying low DROPS heat — the line said "heat +N" because the generic push reads the new absolute as a ` +
+    `delta. It must read the drop, not a phantom rise. Got: ${JSON.stringify(laylowLine)}`);
+  const cutLine = said.get(`/v1/kitchen/cut/${DRUGS[0].id}`);
+  assert(cutLine && /cut the/i.test(cutLine) && /\$/.test(cutLine),
+    `cutting product is a $8k STRETCH, not a fresh cook — it read "pulled N units at q" (the cook-collect ` +
+    `line) and hid the cost and the quality drop. Got: ${JSON.stringify(cutLine)}`);
+  const wagesLine = said.get('/v1/kitchen/crew/wages');
+  assert(wagesLine && /nut/i.test(wagesLine) && /\d/.test(wagesLine),
+    `paying the nut is not a bare "paid $N" — it names the crew back on the corner, and it was DOUBLE-` +
+    `printing the figure with the catch-all. Got: ${JSON.stringify(wagesLine)}`);
+  const rkUpLine = said.get(`/v1/rackets/${RK}/upgrade`);
+  assert(rkUpLine && /level/i.test(rkUpLine) && /\/hr/.test(rkUpLine),
+    `a racket upgrade buys a LEVEL and more income — it read the catch-all "paid $N". Got: ${JSON.stringify(rkUpLine)}`);
+  const bizUpLine = said.get(`/v1/business/${biz.id}/upgrade`);
+  assert(bizUpLine && /−\$|-\$/.test(bizUpLine) && /tier/i.test(bizUpLine),
+    `a business upgrade is a six-figure LOSS that read like a gain — it showed only the pending banked, ` +
+    `never the cost. Got: ${JSON.stringify(bizUpLine)}`);
+  // the upkeep DOUBLE: the pad line states its figure and the catch-all appended "· paid $N" again,
+  // printing the same figure twice — invisible to the silence sweep because it is not a bare "paid $N".
+  const upkLine = said.get('/v1/business/upkeep');
+  assert(upkLine && /pad/i.test(upkLine) && !/· paid \$/.test(upkLine),
+    `the pad's own line already states what was paid — the catch-all was appending "· paid $N" and ` +
+    `printing the figure twice. Got: ${JSON.stringify(upkLine)}`);
+  const whLine = said.get(`/v1/port/collect/${boat.id}`);
+  assert(whLine && /warehouse/i.test(whLine) && !/^paid \$/.test(whLine),
+    `warehousing a clean haul is a GAIN parked to fence — it read "paid $N" as if it cost money. ` +
+    `Got: ${JSON.stringify(whLine)}`);
+  assert(specAssignLine && /fortitude/i.test(specAssignLine),
+    `assigning a specialist puts a made man on an operation for a fortitude bonus — it read "done." ` +
+    `Got: ${JSON.stringify(specAssignLine)}`);
+}
+
 // The four INVERSIONS. Each is a real sentence about a real system — just not the one the player is
 // looking at — so both silence patterns read straight past them and only a named claim can hold them.
 const invert = [

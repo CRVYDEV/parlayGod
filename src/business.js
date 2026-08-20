@@ -331,8 +331,10 @@ export async function upgradeBusiness(ch, businessId, client, h) {
   if (pending > 0) await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: pending, reason: 'business:income' });
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -next.cost, reason: 'business:upgrade' });
   h.owned.businesses = await businessesOf(client, ch.id);
+  // `cost` is the six-figure spend the tier costs — the line showed only `collected` (the pending
+  // banked, a GAIN), so a $312k upgrade read like money coming in. The price is a term.
   return { ok: true, id: businessId, kind: r.kind, name: cat.name, tier: next.tier, collected: pending,
-    ...(raid.raided ? { raid } : {}) };
+    cost: next.cost, ...(raid.raided ? { raid } : {}) };
 }
 
 // PRIVATE laundering — RETIRED (tokenomics v2 step 2). Cash no longer converts to $OMR by any

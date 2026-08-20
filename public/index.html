@@ -2201,7 +2201,7 @@
       return `\u{1F3F4} the family is ${txt(body.name)} [${txt(body.tag)}] now — the name changes everywhere it's written`;
     if (body && body.ok && body.id && body.kind && body.name && body.tier !== undefined)
       return body.tier > 1
-        ? `the ${txt(body.name)} moves up to tier ${body.tier}${body.collected ? ` — $${fmt(body.collected)} banked at the old rate first` : ''}`
+        ? `the ${txt(body.name)} moves up to tier ${body.tier}${body.cost ? ` — −$${fmt(body.cost)}` : ''}${body.collected ? `, $${fmt(body.collected)} banked at the old rate first` : ''}`
         : `the ${txt(body.name)} is yours — collect the till, and mind the pad`;
     if (body && body.ok && body.berths !== undefined && body.fleetMax !== undefined)
       return `slip rented — $${fmt(body.spent)}, ${body.berths} berth${body.berths > 1 ? 's' : ''} held, room for ${body.fleetMax} boats`;
@@ -2665,7 +2665,10 @@
     // The Second Ledger — all four), so the article this line added read "The The Wash Records" on
     // every hush payment ever made, not on an edge case. Found by reading the line, not the code.
     else if (body.paid > 0 && body.kind && body.omrSpent === undefined) bits.push(`paid the hush — $${fmt(body.paid)}. ${txt(body.kind)} stays buried, for now.`);
-    else if (body.paid > 0 && body.bought === undefined) bits.push(`paid $${fmt(body.paid)}`);
+    // the pad (business/territory upkeep, `fronts`) and the nut (crew wages, `crew`) each ALREADY get
+    // their own line in a separate `if`-chain above/below — this last-resort `paid $N` was firing
+    // ALONGSIDE them and printing the same figure twice ("…across 1 front · paid $168,000").
+    else if (body.paid > 0 && body.bought === undefined && body.fronts === undefined && body.crew === undefined) bits.push(`paid $${fmt(body.paid)}`);
     if (body.shuttered) bits.push(`closed up the ${body.shuttered} — the pad on it stops${body.back > 0 ? `, $${fmt(body.back)} back` : ', nothing back'}`);
     // `walked` means two different things: a kitchen hand let go, and the estate's staff downing
     // tools over unpaid wages. HIRING a groundskeeper answers {staff, name, wageOmrDay, walked:false}
@@ -2697,13 +2700,24 @@
     // gross here would report a bigger number than the pocket actually moved.
     if (body.pay && !body.favor && !body.call && !body.contact) bits.push(`+$${fmt(body.pay)}${body.streak ? ` (day ${body.streak})` : ''}`);
     if (body.won !== undefined && body.settled) bits.push(body.won > 0 ? `settled — +$${fmt(body.won)}` : 'settled — nothing hit');
-    if (body.qty && body.quality) bits.push(`pulled ${body.qty} units at q${body.quality}`);
+    // CUTTING AGENTS ({drug, added, qty, quality, cost}) masqueraded as a fresh cook because the cook-
+    // collect line below reads `qty && quality` too — so it read "pulled N units" and hid the $8k cost
+    // and the quality DROP. Named first, and cook-collect gated to its own `fire` field.
+    if (body.added && body.drug && body.quality !== undefined)
+      bits.push(`\u{1F9C2} cut the ${txt(rules.drugs?.find((d) => d.id === body.drug)?.name || body.drug)} — +${body.added} units, now q${body.quality} · −$${fmt(body.cost)}`);
+    else if (body.fire !== undefined && body.qty && body.quality) bits.push(`pulled ${body.qty} units at q${body.quality}`);
     if (body.fire) bits.push('THE BATCH BURNED — you got out with your skin');
     if (body.readyAt) bits.push('the batch is on the burner');
+    // LAYING LOW read "heat +65" when heat DROPPED to 65 — the generic heat push below reads any `heat`
+    // as a +delta, but laylow sends the new ABSOLUTE. `laid`/`cleaned` name the system and state the drop.
+    if (body.laid) bits.push(`laid low — heat down to ${body.heat}, −$${fmt(body.cost)}${body.amnesty ? ' (amnesty)' : ''}`);
+    if (body.cleaned) bits.push(`clean papers — heat wiped, −${body.omr} $OMR`);
+    if (body.crew !== undefined && body.paid !== undefined && body.fronts === undefined)
+      bits.push(`squared the nut — $${fmt(body.paid)} to the ${body.crew} on the corner, back to selling`);
     // a corner deal already states its heat inside its own line, so the generic push made every deal
     // read "+0.1 heat · heat +0.1". Skip when some earlier bit has already said it — written as a
     // scan rather than a shape test so a future branch that mentions heat can't reintroduce the echo.
-    if (body.heat && !bits.some((b) => /heat/.test(b))) bits.push(`heat +${body.heat}`);
+    if (body.heat && !body.laid && !bits.some((b) => /heat/.test(b))) bits.push(`heat +${body.heat}`);
     if (body.kind === 'social' && body.pending) bits.push(body.registered
       ? 'the clock is running — your post has to STAND before it pays. Come back and collect.'
       : `still standing — it pays in ${minsTxt(body.matureSeconds || 0)}.`);
@@ -2765,7 +2779,13 @@
     if (body.escaped === true) bits.push("OVER THE WALL — you're out, but WANTED now (no family cover, hunters coming)");
     if (body.escaped === false) bits.push('caught at the fence — the hole, a longer stretch, and a beating');
     if (body.interdicted === false && body.landed !== undefined) bits.push(`⚓ slipped the Coast Guard — landed the haul, +$${fmt(body.landed)} (net $${fmt(body.net)})`);
+    // WAREHOUSING a clean landing carries `warehoused` (its book value) not `landed` — so it had no
+    // branch and fell into the catch-all `paid $cost`, reporting a GAIN as a payment.
+    if (body.interdicted === false && body.warehoused !== undefined) bits.push(`⚓ slipped the Coast Guard — the haul's in the warehouse, $${fmt(body.warehoused)} on the books to fence when the price is right`);
     if (body.interdicted === true) bits.push(`⚓ BUSTED AT SEA — the Coast Guard seized the cargo, fined $${fmt(body.fine)}${body.sunk ? ' and SANK her' : ''}`);
+    // FENCING the warehouse ({book, proceeds, rate, toll, net}) read "done." — the whole point (what
+    // you got, and whether the market was up or down) never reached the player.
+    if (body.proceeds !== undefined && body.rate !== undefined) bits.push(`fenced the warehouse — +$${fmt(body.net)} (book $${fmt(body.book)} at ${body.rate}×${body.toll ? `, −$${fmt(body.toll)} toll` : ''})`);
     if (body.arrivesSeconds !== undefined && body.route) bits.push(`⚓ cast off on the ${body.route} run — back in ${Math.ceil(body.arrivesSeconds / 60)}m`);
     if (body.boat && body.boat.name && body.spent !== undefined) bits.push(`bought the ${body.boat.name} — $${fmt(body.spent)}`);
     if (body.refund !== undefined && body.boat === undefined && body.landed === undefined && !bits.length) bits.push(`sold her back to the yard — +$${fmt(body.refund)}`);
@@ -2913,6 +2933,22 @@
       const beat = st && (rules.duels.styles.find((x) => x.id === st.beats) || {}).name;
       bits.push(`\u{1F94A} you fight as ${txt(body.name)}${beat ? ` \u2014 you have the edge on a ${txt(beat)}, and give it to whoever counters you` : ''}`);
     }
+    // ROUND 2 empire mutes — each fell into the `paid $cost` catch-all or "done.", hiding the thing
+    // the purchase bought (a level, an income, a rig, an operation's status).
+    if (body.racket && body.level && body.incomePerHr !== undefined && body.cost !== undefined)
+      bits.push(`muscled the ${String(body.racket).replace(/_/g, ' ')} up to level ${body.level} — −$${fmt(body.cost)}, now $${fmt(body.incomePerHr)}/hr`);
+    if (body.rig && body.name && body.cost !== undefined && body.track === undefined)
+      bits.push(`bought the ${txt(body.name)} — $${fmt(body.cost)}, room to run bulk`);
+    if (body.track && body.level !== undefined && body.cost !== undefined && body.rig === undefined)
+      bits.push(`upgraded the ${body.track} to level ${body.level} — −$${fmt(body.cost)}`);
+    // $dist() names already carry "The" (The Docks, The Neon Mile), so no leading article — else the
+    // "The The" sweep catches "the The Docks". The name stands alone, as the existing territory lines do.
+    if (body.specialist && body.fortBonus !== undefined)
+      bits.push(`\u{1F4BC} ${txt(body.specialist)} is your man in ${txt($dist(body.district))} now — +${body.fortBonus} fortitude, and the Bureau looks the other way`);
+    if (body.unassigned) bits.push(`pulled your man off ${txt($dist(body.district))} — he's free for another operation`);
+    if (body.op && body.district !== undefined) bits.push(body.op === 'show_of_force' ? `SHOW OF FORCE in ${txt($dist(body.district))} — the operation's dug in (fortitude ${body.fortitude})`
+      : body.op === 'ghost_route' ? `GHOSTED the run out of ${txt($dist(body.district))} — the Bureau loses the scent for a while`
+      : `COOKED THE BOOKS in ${txt($dist(body.district))} — the heat's off the operation`);
     if (body.cost && body.fixed === undefined && !bits.length) bits.push(`paid $${fmt(body.cost)}`);
     return bits.length ? bits.join(' · ') : (body.message || 'done.');
   }

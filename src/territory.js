@@ -367,7 +367,8 @@ export async function unassignSpecialist(ch, districtId, client, h) {
   if (!r || r.owner_gang !== h.owned.gangId) throw new GameError('no_racket', "Your family doesn't run that operation.");
   if (!r.specialist) throw new GameError('none', 'No specialist runs that operation.');
   await client.query('UPDATE territory_rackets SET specialist=NULL, spec_power=0 WHERE district_id=$1', [districtId]);
-  return { ok: true, district: districtId };
+  // a bare {ok, district} is indistinguishable from any district-scoped ack — the marker names the act
+  return { ok: true, district: districtId, unassigned: true };
 }
 
 // Run the operation's TYPE-specific special operation (requires a specialist), on a per-racket cooldown.

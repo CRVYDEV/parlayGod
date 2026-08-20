@@ -263,7 +263,10 @@ export async function layLow(ch, client, h) {
   ch.energy = Number(ch.energy) - M4.LAYLOW_ENERGY;
   ch.heat = Math.max(0, Number(ch.heat) - M4.LAYLOW_COOL);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'laylow' });
-  return { ok: true, heat: Math.round(Number(ch.heat)), cost, ...(amnesty ? { amnesty: true } : {}) };
+  // `laid` names the SYSTEM: `heat` here is the new ABSOLUTE, and the generic heat push reads any
+  // `heat` field as a +delta, so laying low read "heat +65" while heat DROPPED. A marker so describe()
+  // states the drop instead of a phantom rise.
+  return { ok: true, laid: true, heat: Math.round(Number(ch.heat)), cost, ...(amnesty ? { amnesty: true } : {}) };
 }
 
 export async function cleanPapers(ch, client, h) {
@@ -272,7 +275,8 @@ export async function cleanPapers(ch, client, h) {
   h.acct.omr = Number(h.acct.omr) - M4.CLEANPAPERS_OMR;
   ch.heat = 0;
   await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -M4.CLEANPAPERS_OMR, reason: 'cleanpapers' });
-  return { ok: true, heat: 0 };
+  // `heat: 0` is falsy, so this read "done." — the whole point (heat WIPED) never reached the player.
+  return { ok: true, cleaned: true, heat: 0, omr: M4.CLEANPAPERS_OMR };
 }
 
 // ═══ THE KITCHEN → Tier 4 ═══
