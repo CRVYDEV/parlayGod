@@ -1833,7 +1833,38 @@ const ACTIONS = [
   ['POST', '/v1/armory/unequip', null],
   ['POST', '/v1/goods/buy', { goodId: GOODS[0].id, qty: 1 }],
   ['POST', '/v1/goods/sell', { goodId: GOODS[0].id, qty: 1 }],
+  // JOINING a family, which the FOUNDING line below excludes by name (`name === undefined`) and
+  // nothing then picked up. It is a one-way move that puts you under omertà, and it read "done."
+  // THREE rows, and the order is the whole reason it drives at all: the fixture arrives here ALREADY
+  // in a family (seeded upstream), so the first cut's join answered 400 `in_gang`, was skipped, and
+  // its assertion read `undefined` — the declared-but-never-driven class this list has now been
+  // bitten by three times. Leave what we're in, join something else, leave that, then found our own,
+  // because every row below wants us as a boss.
+  ['POST', '/v1/gangs/leave', null],
+  ['POST', async () => {
+    const g = (await app.pool.query(
+      `SELECT id FROM gangs WHERE id NOT IN (SELECT gang_id FROM gang_members WHERE character_id=$1) LIMIT 1`,
+      [charId])).rows[0];
+    return g ? `/v1/gangs/${g.id}/join` : null;
+  }, null],
+  ['POST', '/v1/gangs/leave', null],
   ['POST', '/v1/gangs', { name: 'Ledger ' + Math.random().toString(36).slice(2, 7), tag: 'LDG' }],
+  // TAKING TURF, NAMING THE WATCH, and the whole TERRITORY LADDER — five family verbs that moved
+  // six and seven figures out of the treasury and said nothing, and one (the upgrade) that said the
+  // CLUB's line and printed "$undefined" for the price. The treasury is funded in the first row's
+  // resolver rather than in the pre-seed because the family does not exist until the row above runs
+  // — the same drive-time resolution every dynamic row in this list uses, with the side effect
+  // stated rather than hidden. Order is the order written: hold the ground, then name the hour,
+  // then put an operation on it, then climb.
+  ['POST', async () => {
+    const g = (await app.pool.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [charId])).rows[0];
+    if (!g) return null;
+    await app.pool.query('UPDATE gangs SET treasury=50000000 WHERE id=$1', [g.gang_id]);
+    return '/v1/districts/docks/seize';
+  }, null],
+  ['POST', '/v1/districts/docks/watch', { hour: 3 }],
+  ['POST', '/v1/territory/docks/establish', { kind: 'protection' }],
+  ['POST', '/v1/territory/docks/upgrade', null],
   ['POST', '/v1/gangs/tribute', { amount: 5000 }],       // cash and $OMR tribute share one shape —
   ['POST', '/v1/gangs/tribute/omr', { amount: 10 }],      // the currency marker is what tells them apart
   ['POST', '/v1/gangs/vanity/color', { color: '#3a5f7d' }],
@@ -2199,11 +2230,20 @@ for (const [m, url0, payload] of ACTIONS) {
     await inject('POST', '/v1/character', t, { name: n + Math.random().toString(36).slice(2, 6) });
     const id = (await inject('GET', '/v1/me', t)).body.character.id; return { t, id }; };
   const club = await mk10('Ledger Club '), con = await mk10('Ledger Con '), dd = await mk10('Ledger Deed ');
+  // THE PROTÉGÉ is deliberately OUTSIDE the levelling loop below: the mentor arc only exists for a
+  // player under MENTOR.PROTEGE_MAX_LVL, so a fixture raised to level 3000000 with the others would
+  // 4xx every mentor row and read on the summary line as covered.
+  const prot = await mk10('Ledger New ');
   for (const p of [club, con, dd]) {
     await app.pool.query("UPDATE characters SET cash=90000000, respect=3000000, energy=900, loc='cathedral' WHERE id=$1", [p.id]);
     await app.pool.query("UPDATE account_persistent SET omr=9000, minted=true, made_until=now() + interval '30 days' " +
       'WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)', [p.id]);
   }
+  // crates for the workshop bench, and a protégé seeded at LEVEL 6 — inside the newcomer window so
+  // the tie can form, and past the first milestone so the CLAIM has cash to pay. Both halves matter:
+  // a claim with nothing owed 4xxs, and a skipped row reads on the summary line as covered.
+  await app.pool.query('UPDATE characters SET cb=40 WHERE id=$1', [club.id]);
+  await app.pool.query('UPDATE characters SET respect=300, cash=200000 WHERE id=$1', [prot.id]);
   // hurt on purpose: the Doc refuses a healthy man, so a full-health fixture would SKIP the heal
   // and it would read on the summary line as covered
   await app.pool.query("UPDATE characters SET jail_until=now() + interval '40 minutes', health=60 WHERE id=$1", [con.id]);
@@ -2213,6 +2253,27 @@ for (const [m, url0, payload] of ACTIONS) {
     [club.t, 'POST', '/v1/speakeasy/cathedral/open', null],
     [club.t, 'POST', '/v1/speakeasy/name', { name: 'Ledger Room' }],
     [club.t, 'POST', '/v1/speakeasy/upgrade', null],
+    // LISTING the club read fine and PULLING IT BACK said "done." — the reply was `{ok, district}`,
+    // indistinguishable from any other district-scoped acknowledgement, so the server now sends
+    // `salePrice: null` and ONE branch renders both senses (the pinkSlip / boutLimit shape).
+    [club.t, 'POST', '/v1/speakeasy/list', { price: 900000 }],
+    [club.t, 'POST', '/v1/speakeasy/unlist', null],
+    // THE MENTOR — the whole arc was mute, and it is the system built to make a newcomer's first
+    // contact with a real player a good one. Both claims MOVE MONEY and both said "done.". Driven in
+    // order: the newcomer flags, the veteran offers, the newcomer accepts, the veteran gifts.
+    [prot.t, 'POST', '/v1/mentor/seeking', { on: true }],
+    [club.t, 'POST', `/v1/mentor/offer/${prot.id}`, null],
+    [prot.t, 'POST', `/v1/mentor/accept/${club.id}`, null],
+    [club.t, 'POST', `/v1/mentor/gift/${prot.id}`, null],
+    [prot.t, 'POST', '/v1/mentor/claim', null],
+    // THE WORKSHOP: rolling ammo named the rounds and crafting a consumable said "done." — and USING
+    // one is worse, because the reply carries the effect verbatim and the player was told nothing.
+    [club.t, 'POST', '/v1/workshop/craft/medkit', null],
+    [club.t, 'POST', '/v1/items/medkit/use', null],
+    // CONSENT-BY-LISTING, the off direction: the branch required a `price` the OFF reply does not
+    // carry, so its own comment claimed both directions while the code admitted one.
+    [club.t, 'POST', '/v1/bodyguard/offer', { price: 40000 }],
+    [club.t, 'POST', '/v1/bodyguard/offer', { price: 0 }],
     // the yard: a sentence is where a player has the least to do and the most to read
     [con.t, 'POST', '/v1/pen/work', null],
     [con.t, 'POST', '/v1/pen/buy/shiv', null],
@@ -2475,6 +2536,96 @@ const decorLine = said.get('/v1/speakeasy/upgrade');
 assert(decorLine && /\$/.test(decorLine) && !/nothing in the till/i.test(decorLine),
   `a decor build-out is a six-figure purchase, not a collect — it carries \`collected\` (the pending ` +
   `swept at the old rate) and fell into the empty-till line. Got: ${JSON.stringify(decorLine)}`);
+// PULLING THE CLUB OFF THE MARKET. Listing it read fine; the reply to the pull was `{ok, district}`
+// and nothing else, so the branch could not tell it from any other district-scoped acknowledgement
+// and a nine-figure listing came off the market reading "done." The fix is at the SOURCE — the
+// server sends `salePrice: null` so one branch renders both senses — and BOTH are asserted, because
+// a branch that renders only the off direction is the same bug facing the other way.
+const clubOn = said.get('/v1/speakeasy/list'), clubOff = said.get('/v1/speakeasy/unlist');
+assert(clubOn && /on the market/i.test(clubOn) && /\$/.test(clubOn),
+  `listing the club has to name the price it is listed at. Got: ${JSON.stringify(clubOn)}`);
+assert(clubOff && /off the market/i.test(clubOff) && !/\$[0-9]/.test(clubOff),
+  `pulling the club back is the opposite of listing it and must read that way, with no price left ` +
+  `standing in the line. Got: ${JSON.stringify(clubOff)}`);
+// THE MENTOR — the arc that exists to make a newcomer's first contact with a real player a good one,
+// and every route in it said "done." The two that MOVE MONEY are asserted hardest: a claim pays cash
+// and a graduation ends the tie, and both were reporting nothing at all.
+const mSeek = said.get('/v1/mentor/seeking'), mAcc = [...said].find(([u]) => u.startsWith('/v1/mentor/accept/'));
+const mGift = [...said].find(([u]) => u.startsWith('/v1/mentor/gift/')), mClaim = said.get('/v1/mentor/claim');
+assert(mSeek && /looking/i.test(mSeek), `flagging for a mentor has to say the word is out. Got: ${JSON.stringify(mSeek)}`);
+assert(mAcc && /mentor/i.test(mAcc[1]) && !/^\W*done/i.test(mAcc[1]),
+  `accepting a mentor forms a permanent account-level tie and names who it is with. Got: ${JSON.stringify(mAcc && mAcc[1])}`);
+assert(mGift && /\$/.test(mGift[1]),
+  `a care package is the mentor's OWN cash — the line names what left their pocket. Got: ${JSON.stringify(mGift && mGift[1])}`);
+assert(mClaim && /\$/.test(mClaim) && /level/i.test(mClaim),
+  `the protégé's claim PAYS, and says which rung it paid for — it was reporting a real payment as ` +
+  `"done." Got: ${JSON.stringify(mClaim)}`);
+// THE WORKSHOP. Rolling ammo named the rounds; crafting a consumable and USING one both said "done.",
+// and the use reply carries the effect verbatim — the player was told nothing while holding the answer.
+const craftLine = said.get('/v1/workshop/craft/medkit'), useLine = said.get('/v1/items/medkit/use');
+assert(craftLine && /field kit/i.test(craftLine) && /heal/i.test(craftLine),
+  `crafting names what was made and what it does — the catalog is already client-side. Got: ${JSON.stringify(craftLine)}`);
+assert(useLine && /heal/i.test(useLine),
+  `using a consumable states the effect the reply already carries. Got: ${JSON.stringify(useLine)}`);
+// CONSENT-BY-LISTING, both directions — the guard once required a `price` the OFF reply does not
+// carry, so the comment claimed both and the code admitted one.
+const bgOff = paidBody.get('/v1/bodyguard/offer') && said.get('/v1/bodyguard/offer');
+assert(bgOff && /off the market|nobody can hire/i.test(bgOff),
+  `taking yourself off the protection market is the whole difference between being for hire and not, ` +
+  `and it read "done." Got: ${JSON.stringify(bgOff)}`);
+// THE FAMILY VERBS. Joining is a ONE-WAY move under omertà; taking turf and naming the watch each
+// moved six figures and carried four terms apiece; and the territory ladder both said nothing at
+// tier 1 and, at tier 2, said the SPEAKEASY's line — the two upgrade replies are one field apart
+// ({district,tier,name,collected} + `spent` for the club, + `kind` for the racket), so the club's
+// guard matched both and printed the club's own `spent` as "$undefined" over a racket.
+// the client's own `fmt` — grouped, at most two decimals — so a figure is crossed against the line
+// in the shape the player actually reads, not the raw integer
+const asMoney = (n) => Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
+const joinLine = said.get([...said.keys()].find((u) => /^\/v1\/gangs\/[^/]+\/join$/.test(u)) || '');
+assert(joinLine && /omert/i.test(joinLine),
+  `joining a family puts you under omertà — a rule about what you can no longer do, and the one term ` +
+  `nothing else on that screen states. It read "done." Got: ${JSON.stringify(joinLine)}`);
+const seizeLine = said.get('/v1/districts/docks/seize'), seizeBody = paidBody.get('/v1/districts/docks/seize');
+assert(seizeLine && /garrison/i.test(seizeLine) && seizeLine.includes(asMoney(seizeBody.cost)),
+  `taking turf states what left the treasury AND the garrison that now stands behind it. Got: ${JSON.stringify(seizeLine)}`);
+// …and states them as TWO FACTS. `cost` is the base+premium AFTER every discount the attacker
+// brought; `garrison` is the UNDISCOUNTED base, so a cheap liberation installs a garrison LARGER
+// than it paid and the first draft's "$45,000 of that" read against a $33,750 cost. Fluent and
+// false is worse than silent, and only driving it catches the arithmetic.
+assert(!/of (that|it)\b/i.test(seizeLine),
+  `the garrison is not a PART of what was paid — a discount prices the conquest, not the ground, so ` +
+  `the two figures are independent and "of that" is false whenever any discount applied. ` +
+  `Got: ${JSON.stringify(seizeLine)} over cost ${seizeBody.cost} / garrison ${seizeBody.garrison}`);
+const turfWatchLine = said.get('/v1/districts/docks/watch'), watchBody = paidBody.get('/v1/districts/docks/watch');
+assert(turfWatchLine && turfWatchLine.includes(String(watchBody.surpriseMult)),
+  `the watch is a COMMITMENT and the surprise premium is the whole point of making it — a line that ` +
+  `stops at "watch set" withholds the number that makes it a decision. Got: ${JSON.stringify(turfWatchLine)}`);
+const estLine = said.get('/v1/territory/docks/establish'), estBody = paidBody.get('/v1/territory/docks/establish');
+assert(estLine && estLine.includes(asMoney(estBody.spent)) && estLine.includes(asMoney(estBody.incomePerHr)),
+  `establishing an operation is a five-figure treasury spend and the income is the thing bought — ` +
+  `both ride with the price. Got: ${JSON.stringify(estLine)}`);
+const upgLine = said.get('/v1/territory/docks/upgrade'), upgBody = paidBody.get('/v1/territory/docks/upgrade');
+assert(upgLine && /\u{1F3D9}/u.test(upgLine) && upgLine.includes(asMoney(upgBody.spent)),
+  `the racket upgrade must read as the RACKET, not the club — the club's branch matched it and ` +
+  `printed a price the racket never sends. Got: ${JSON.stringify(upgLine)}`);
+// and the CLUB's own line, driven on its own token in the wave-10 block, must still read as the club
+assert((said.get('/v1/speakeasy/upgrade') || '').includes('\u{1F37E}'),
+  `…and the fix must not have taken the club's own upgrade line with it. Got: ${JSON.stringify(said.get('/v1/speakeasy/upgrade'))}`);
+// MUTUALLY EXCLUSIVE, not merely ordered. Giving the racket the `spent` it was missing fixes the
+// "$undefined" and NOT the collision: the club's guard still matches a racket reply, so the two
+// would be separated only by which line sits higher — a property nobody can see while editing one of
+// them. Asserted at the source because line order is exactly what a future edit moves.
+assert(/body\.district && !body\.kind && body\.collected !== undefined && body\.spent !== undefined/.test(html),
+  "the club's upgrade branch must EXCLUDE a business `kind` — a racket reply matches every other " +
+  'clause it tests, so without that the two lines are one reordering away from colliding again');
+// THE LADDER HAS A CONTROL AT ALL. `fortify` was priced on the family card and `upgrade` reachable
+// only through the raw API deck, so a family that established at tier 1 had no way in the game to
+// climb. A priced button needs its price from the SAME ladder the till charges from.
+assert(/data-do="POST \/v1\/territory\/\$\{op\.district\}\/upgrade"/.test(html),
+  'the territory tier ladder has no client control — the operation can be established and fortified but never climbed');
+assert(/op\.nextTier\.cost/.test(html),
+  'the upgrade button must quote the price the server publishes on the same board, not a constant');
+
 // and the club NAME burns $OMR while every other `spent` in the game is dollars — the unit rides with it
 const clubNameLine = said.get('/v1/speakeasy/name');
 assert(clubNameLine && /\$OMR/.test(clubNameLine),

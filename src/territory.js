@@ -135,7 +135,13 @@ export async function establishRacket(ch, districtId, kind, client, h) {
   await client.query('INSERT INTO territory_rackets (district_id, owner_gang, tier, kind) VALUES ($1,$2,1,$3)', [districtId, h.owned.gangId, type.id]);
   await h.ledger(client, { currency: 'cash', amount: -tier.cost, reason: 'territory:establish', counterparty: h.owned.gangId });
   if (h.owned.gang) h.owned.gang.treasury = Number(g.treasury) - tier.cost;
-  return { ok: true, district: districtId, tier: 1, kind: type.id, name: `${tier.name} ${type.name}` };
+  // …and SAY what it cost and what it earns. The reply named neither, so the console's own
+  // establish button — a five-figure spend out of the family treasury — read back "done." The
+  // income is the thing bought, so it rides with the price (the terms-with-the-price rule the pad
+  // and the nut both reached a tester by breaking); `incomePerHr` is derived HERE off the same
+  // tier × type the till charged from, so the reply and the board cannot quote different rates.
+  return { ok: true, district: districtId, tier: 1, kind: type.id, name: `${tier.name} ${type.name}`,
+    spent: tier.cost, incomePerHr: Math.floor(tier.incomePerHr * type.incomeMult) };
 }
 
 // Upgrade the operation on a district you hold to the next tier — collects the pending income at
@@ -178,6 +184,7 @@ export async function upgradeRacket(ch, districtId, client, h) {
   if (pending > 0) await h.ledger(client, { currency: 'cash', amount: pending, reason: 'territory:income', counterparty: h.owned.gangId });
   if (h.owned.gang) h.owned.gang.treasury = Number(g.treasury) - next.cost + pending - raidFine;
   return { ok: true, district: districtId, tier: next.tier, kind: r.kind, name: `${next.name} ${territoryTypeOf(r.kind).name}`, collected: pending,
+    spent: next.cost, incomePerHr: Math.floor(next.incomePerHr * territoryTypeOf(r.kind).incomeMult),
     ...(raid.raided ? { raided: { seized: raid.seized, fine: raid.fine } } : {}) };
 }
 
@@ -430,6 +437,11 @@ export async function territoryOf(pool, gangId) {
   return rows.map((r) => {
     const t = territoryTierOf(r.tier);
     const type = territoryTypeOf(r.kind);
+    // THE LADDER, published. The tier ladder had no client control at all — `fortify` was priced on
+    // the card and `upgrade` reachable only through the raw API deck, so a family that established
+    // at tier 1 had no way in the game to climb. A priced button needs the price from the SAME
+    // ladder `upgradeRacket` charges from, or the card and the till disagree the day a rung moves.
+    const nx = territoryTierOf(Number(r.tier) + 1);
     const scr = decayedScrutiny(r, Date.now(), heatMult);
     return { district: r.district_id, tier: Number(r.tier), kind: type.id, typeName: type.name,
       name: `${t?.name || '—'} ${type.name}`, incomePerHr: Math.floor((t?.incomePerHr || 0) * type.incomeMult), pending: accrued(r),
@@ -441,6 +453,8 @@ export async function territoryOf(pool, gangId) {
       // step four — the racket-wars layer: defense level + the next fortify cost + rival-raid cooldown
       fortitude: Number(r.fortitude), fortMax: CONSTANTS.TERRITORY_FORT_MAX,
       fortCost: Number(r.fortitude) < CONSTANTS.TERRITORY_FORT_MAX ? territoryFortCost(Number(r.fortitude), Number(r.tier)) : null,
+      nextTier: nx ? { tier: nx.tier, name: `${nx.name} ${type.name}`, cost: nx.cost,
+        incomePerHr: Math.floor(nx.incomePerHr * type.incomeMult) } : null,
       raidCdSeconds: r.raid_cd_until ? Math.max(0, Math.ceil((new Date(r.raid_cd_until) - Date.now()) / 1000)) : 0,
       // step five — the crew: the assigned specialist (+ their fortitude bonus) and the special-op cooldown
       specialist: r.specialist || null, specFortBonus: specFort(r),

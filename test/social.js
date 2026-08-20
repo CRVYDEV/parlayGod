@@ -24,7 +24,7 @@ import { buildServer } from '../src/server.js';
 import { payFamilyYield } from '../src/exchange.js';
 import { runBuyback } from '../src/worker.js';
 import { huntWanted, sweepContests } from '../src/social.js';
-import { familyTaskOf, weekOf, M3, BLACK_MARKET, bustProbOf, TERRITORY_RACKETS, territoryRankOf, territoryBuildCost, PORT, SHIPMENT, cityHourOf, DISTRICTS, DISTRICT_ADJ, MAP, CHARTERS, FAMILY_CHARTER, FAMILY_CHARTER_FX, VANITY, M8, GANG_SEALS, FOUNDATION } from '../src/rules.js';
+import { familyTaskOf, weekOf, M3, BLACK_MARKET, bustProbOf, TERRITORY_RACKETS, territoryTypeOf, territoryRankOf, territoryBuildCost, PORT, SHIPMENT, cityHourOf, DISTRICTS, DISTRICT_ADJ, MAP, CHARTERS, FAMILY_CHARTER, FAMILY_CHARTER_FX, VANITY, M8, GANG_SEALS, FOUNDATION } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -1422,6 +1422,18 @@ assert.equal((await call('POST', '/v1/gangs/tribute', { token: raider.token, bod
 await pool.query(`UPDATE territory_rackets SET upkeep_at=now(), last_income_at=now() WHERE district_id='docks'`);
 let terr = (await call('GET', '/v1/territory', { token: raider.token })).body.territory.find((t) => t.district === 'docks');
 assert.equal(terr.upkeepPerHr, 3200, 'the operation owes upkeep at 20% of its $16k/hr income');
+// THE LADDER, PUBLISHED. The tier ladder had no client control at all — fortify was priced on the
+// family card and upgrade reachable only through the raw API deck, so a family that established at
+// tier 1 had no way in the game to climb. A priced button needs its price from the SAME ladder the
+// till charges from, and that means the BOARD has to carry it. Asserted here rather than in the
+// client guard because a source check on the markup passes while the field is null — the button
+// simply never renders, the mirror sees the key present, and the whole thing reads as covered
+// (which is exactly what a mutation nulling this field did before this assertion existed).
+{ const nx = TERRITORY_RACKETS.find((t) => t.tier === Number(terr.tier) + 1);
+  assert(terr.nextTier && terr.nextTier.tier === nx.tier, 'the board publishes the next rung of the tier ladder');
+  assert.equal(terr.nextTier.cost, nx.cost, 'and quotes the price upgradeRacket really charges — one ladder, not two');
+  assert.equal(terr.nextTier.incomePerHr, Math.floor(nx.incomePerHr * territoryTypeOf(terr.kind).incomeMult),
+    "and what it would earn, at this operation's own business multiplier — read from the type it really runs, never a restated constant"); }
 assert.equal(terr.upkeepOwed, 0, 'a squared op owes nothing'); assert.equal(terr.cold, false, 'and runs warm');
 // a soldier can't pay the pad (boss/underboss only, the establish gate)
 const grunt = await mk('Grunt Gary');
