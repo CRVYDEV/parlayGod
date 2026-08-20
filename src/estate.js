@@ -277,7 +277,11 @@ export async function dismissStaff(ch, staffId, client, h) {
   const remaining = r.staff.length - 1;
   if (!remaining) await upsertEstate(client, ch.account_id, { staff_paid_at: null });
   await h.track(client, ch.account_id, 'estate_staff_dismiss', { staff: staffId });
-  return { ok: true, dismissed: staffId };
+  // `staffGone` and the DISPLAY name, not a bare `dismissed` id. Same collision the consigliere and
+  // the soldier hit in this wave: the world raid's hired-gun line fires on any truthy `dismissed` and
+  // reads a crew count alongside, so letting the groundskeeper go read "sent a gun home — crew
+  // undefined/undefined". The catalog name because `staffId` is a slug the player never sees.
+  return { ok: true, staffGone: estateStaffOf(staffId)?.name || staffId };
 }
 
 // Settle the household — ALL-OR-NOTHING (the crew-nut pattern). A `estate:staff` $OMR burn.
