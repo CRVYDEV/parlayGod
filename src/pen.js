@@ -137,7 +137,11 @@ export async function workYard(ch, client, h) {
   const cutMs = PEN.WORK_CUT_S * 1000;
   const left = new Date(ch.jail_until).getTime() - Date.now();
   ch.jail_until = new Date(Date.now() + Math.max(0, left - cutMs));
-  return { ok: true, pay, cutSeconds: PEN.WORK_CUT_S, sentenceSeconds: jailSecondsLeft(ch) };
+  // report what was ACTUALLY shaved, not the nominal — the shave is clamped at "just walked", so a
+  // man with 40s left is told a full minute came off a stretch that only had 40s in it. bribeGuard,
+  // in this same file, already reports its clamped `cut`; these two sites did not.
+  const cutSeconds = Math.min(PEN.WORK_CUT_S, Math.max(0, Math.round(left / 1000)));
+  return { ok: true, pay, cutSeconds, sentenceSeconds: jailSecondsLeft(ch) };
 }
 
 // ── STEP SIX — THE YARD LIVES (founder: jail was Work-or-nothing) ── three in-sentence
@@ -179,7 +183,9 @@ export async function yardTalk(ch, client, h) {
   } else if (c.effect === 'shortcut') {
     const left = new Date(ch.jail_until).getTime() - Date.now();
     ch.jail_until = new Date(Date.now() + Math.max(0, left - PEN.TALK_CUT_S * 1000));
-    Object.assign(out, { cutSeconds: PEN.TALK_CUT_S, sentenceSeconds: jailSecondsLeft(ch) });
+    // the shaved time is clamped at "just walked" — report what came off, not what was offered
+    Object.assign(out, { cutSeconds: Math.min(PEN.TALK_CUT_S, Math.max(0, Math.round(left / 1000))),
+      sentenceSeconds: jailSecondsLeft(ch) });
   } else {
     await bumpMastery(client, h, ch, c.track, 'yardtale');
     Object.assign(out, { track: c.track, xp: MASTERY.XP.yardtale });

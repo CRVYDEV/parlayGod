@@ -15124,3 +15124,33 @@ first — so the direction only wave 46 covers (the commissary losing its own ma
 separately, and falls to the catch-all `paid $5,000`, a price with the purchase left off.
 Full verification on the correct base: suite 8/8, pgquery, **pgcheck 47/47 on a FRESH real Postgres**
 (mandatory — `gangs.js` gained two JOINs), mobile 79/79, sim drift-0. Driven actions 204 → 213.
+
+**WAVE 47 — THE NOMINAL AND THE ACTUAL (`src/honor.js` + `src/pen.js` + `src/dynasty.js` +
+`src/campaigns.js`, 2026-08-20).** Wave 46 found the first line in this sweep that was not silent but
+WRONG, and the shape it found turned out to be a CLASS rather than an instance: **a reply field that
+reports what was ASKED FOR rather than what LANDED.** Two systems clamp, and three sites reported the
+constant they clamped — the yard shave (a stretch shaves at most to "just walked", so a man with 40
+seconds left is told a full minute came off a sentence that never had a minute in it), the divorce
+(honor clamps at `HONOR.MIN`, so calling it off at −98 costs 2 and the line said you wore 10), and a
+campaign vow (the same clamp at the other end: a branch offering +10 honor at 96 moves you 4).
+**The correct pattern was already in the tree twice over**, which is what makes this the
+forgotten-sibling shape rather than an oversight: `bribeGuard` — in the SAME FILE as the yard shave —
+reports the clamped `cut` it actually took, and `breakPact` reports `ch.honor`, the true post-state.
+So the fix went in the SHARED function: **`bumpHonor` now returns `{ honor, applied }`** — where you
+landed and what actually landed on you — so the truthful pair is the default at all 18 call sites and
+a nineteenth cannot get it wrong by omission. Nothing read the old numeric return, which is what made
+that safe. The lines state both halves now, and a vow whose honor the ceiling ate says so rather than
+rendering nothing.
+**Wave 46's own lesson was applied to this block from the start, and then earned twice more.** Ground
+truth is the DATABASE, never the reply under test — and each fix is driven from BOTH ends of its
+clamp, at it and clear of it, because **a fix that reported zero everywhere would pass a one-sided
+test** (mutation M4 is exactly that, and fails). Two of my own fixture errors are recorded because
+both produced a refusal that read like a broken fix: an **unasserted setup step** (the campaign start
+needs standing with its fixer; without it the drive refused `no_choice`, which looks like the fix and
+is a missing fixture — the block now asserts its own setup), and a **body field the route does not
+read** (`branchId` where the handler takes `branch`). A third was mine in the assertion: `\b` does not
+apply before a minus sign, so `\b-100\b` failed against a line that plainly said −100. And M4's first
+message named the nominal it EXPECTED to meet rather than the figure it got — corrected, because a
+failure that names the wrong number is the thing this whole wave is about. Seven mutations, seven
+named failures. Suite 8/8, pgquery, **pgcheck 47/47 on a fresh real Postgres**, mobile 79/79, sim
+drift-0. Driven actions 213 → 219.

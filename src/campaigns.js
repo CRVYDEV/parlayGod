@@ -44,8 +44,11 @@ export async function chooseCampaign(ch, campaignId, branchId, client, h) {
   await client.query(
     'UPDATE campaign_progress SET step=$3, done=0, branch=$4, completed=$5 WHERE character_id=$1 AND campaign_id=$2',
     [ch.id, campaignId, nextStep, pick.id, finished]);
-  if (pick.honor) await bumpHonor(client, ch, pick.honor);
-  return { ok: true, chose: pick.label, honor: pick.honor || 0, completed: finished,
+  // the APPLIED honor, not the nominal — honor clamps at [MIN, MAX], so a +10 choice at 96 moves you
+  // 4 and a reader told "+10" is told something the game did not do. (bumpHonor returns the pair.)
+  const hit = pick.honor ? await bumpHonor(client, ch, pick.honor) : null;
+  return { ok: true, chose: pick.label, honor: hit ? hit.applied : 0,
+    honorNow: hit ? hit.honor : Number(ch.honor || 0), honorAsked: pick.honor || 0, completed: finished,
     say: finished ? null : stepOf(c, nextStep)?.say };
 }
 
@@ -69,10 +72,11 @@ export async function claimCampaign(ch, campaignId, client, h) {
     ch.cash = Number(ch.cash) + cash;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: cash, reason: 'campaign:reward', counterparty: c.npc });
   }
-  if (c.reward.honor) await bumpHonor(client, ch, c.reward.honor);
+  const hit = c.reward.honor ? await bumpHonor(client, ch, c.reward.honor) : null;
   if (c.reward.standing) await bumpStanding(client, h, ch, c.npc, c.reward.standing, { business: false });
   if (c.reward.title) ch.title = c.reward.title;
-  return { ok: true, campaign: c.name, cash, honor: c.reward.honor || 0,
+  return { ok: true, campaign: c.name, cash, honor: hit ? hit.applied : 0,
+    honorNow: hit ? hit.honor : Number(ch.honor || 0), honorAsked: c.reward.honor || 0,
     standing: c.reward.standing || 0, title: c.reward.title || null };
 }
 

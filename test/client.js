@@ -45,7 +45,9 @@ import vm from 'node:vm';
 import { readFileSync, readdirSync } from 'node:fs';
 import { buildServer } from '../src/server.js';
 import { M3, M4, PATHS, NPC_HITMEN, HEIST_ROLES, HEIST_JOBS, DRUGS, GOODS, DISTRICTS,
-  COMMISSION, CONVOY, DUELS, TERRITORY_TYPES, CARS, TRIMS, ASSETS, RACKETS, BUSINESSES, ESTATE, WIRE, SECRETS, STABLE, WORLD, WORLD_NPCS } from '../src/rules.js';
+  COMMISSION, CONVOY, DUELS, TERRITORY_TYPES, CARS, TRIMS, ASSETS, RACKETS, BUSINESSES, ESTATE, WIRE, SECRETS, STABLE, WORLD, WORLD_NPCS,
+  PEN, HONOR, MARRIAGE, CAMPAIGNS } from '../src/rules.js';
+import { bumpHonor } from '../src/honor.js';
 
 // A COMMENT IS NOT CODE, and this guard used to read it as if it were. The mirror resolves a field
 // access as `<binding>.<name>`, and this file's comments are dense and name source files constantly
@@ -4354,6 +4356,167 @@ assert(offLine && /\$10,000|stake/i.test(offLine),
     `the kick names the man the fixture actually removed (${solName}). Got: ${JSON.stringify(kickLine)}`);
   assert(promLine !== kickLine,
     `raising a man and putting him on the street rendered the SAME line. Got: ${JSON.stringify(kickLine)}`);
+}
+
+// ── WAVE 47 — THE NOMINAL AND THE ACTUAL.
+// Wave 46 found the first line in this sweep that was not silent but WRONG, and the shape it found —
+// a reply field that reports what was ASKED FOR rather than what LANDED — turns out to be a class.
+// Two systems clamp, and three sites reported the constant they clamped:
+//
+//   the yard shave  — a stretch shaves at most to "just walked", so a man with 40 seconds left is
+//                     told a full minute came off a sentence that never had a minute in it;
+//   the divorce     — honor clamps at HONOR.MIN, so calling it off at -98 costs 2 and the line said
+//                     you wore 10; and
+//   a campaign vow  — same clamp at the other end: a branch offering +10 honor at 96 moves you 4.
+//
+// The correct pattern was already in the tree twice over, which is what makes this the forgotten-
+// sibling shape rather than an oversight: `bribeGuard` — in the SAME FILE as the yard shave — reports
+// the clamped `cut` it actually took, and `breakPact` reports `ch.honor`, the true post-state. So the
+// fix goes in the shared function: bumpHonor now returns { honor, applied } — where you landed and
+// what actually landed on you — so the truthful pair is the default at all 18 call sites and a
+// nineteenth cannot get it wrong by omission. Nothing read the old numeric return.
+//
+// Two things this block does deliberately. It measures against the DATABASE, never the reply under
+// test, because wave 46's first cut checked its own precondition against the reply and the mutation
+// that restored the bug tripped the PRECONDITION — blaming the fixture for a belt that was in fact
+// full. And it drives each fix from BOTH ends: at the clamp, where the nominal is a lie, and clear of
+// it, where the nominal is the truth — a fix that reports zero everywhere would pass a one-sided test.
+{
+  const mk47 = async (n) => { const t = (await inject('POST', '/v1/auth/guest')).body.token;
+    await inject('POST', '/v1/character', t, { name: n + Math.random().toString(36).slice(2, 6) });
+    const id = (await inject('GET', '/v1/me', t)).body.character.id;
+    await app.pool.query('UPDATE characters SET cash=900000000, respect=5000000, muscle=90, cunning=90, ' +
+      "speed=90, energy=300, health=100, cb=900, loc='docks' WHERE id=$1", [id]);
+    return { t, id }; };
+  const drive47 = async (t, m, url, payload, label) => {
+    const r = await inject(m, url, t, payload);
+    assert.equal(r.code, 200, `WAVE 47 could not drive ${label} (${JSON.stringify(r.body)}) — fix the ` +
+      'fixture rather than letting it skip, because a skipped action reads on the summary line as covered');
+    described++;
+    let line; try { line = String(describeFn(r.body, r.code)); } catch (e) { line = 'THREW: ' + e.message; }
+    said.set(`${url}#${label}`, line);
+    if (line === 'done.' || /^paid \$[\d,.]+$/.test(line) || /undefined|NaN|\[object|^THREW/.test(line))
+      mute.push(`${m} ${url} (${label}) → ${JSON.stringify(line)}`);
+    return { r, line }; };
+  const jailLeft = async (id) => {
+    const row = (await app.pool.query('SELECT jail_until FROM characters WHERE id=$1', [id])).rows[0];
+    return Math.max(0, Math.round((new Date(row.jail_until).getTime() - Date.now()) / 1000)); };
+
+  // ── THE YARD SHAVE, at the clamp. A 40-second stretch cannot give up a full minute.
+  const shortCon = await mk47('Nominal Con ');
+  await app.pool.query("UPDATE characters SET jail_until = now() + interval '40 seconds' WHERE id=$1", [shortCon.id]);
+  const wasLeft = await jailLeft(shortCon.id);
+  assert(wasLeft > 0 && wasLeft < PEN.WORK_CUT_S,
+    `WAVE 47 fixture: the stretch (${wasLeft}s) must be SHORTER than a work session's nominal cut ` +
+    `(${PEN.WORK_CUT_S}s), or the clamp never binds and this block proves nothing`);
+  const { r: workR, line: workLine } = await drive47(shortCon.t, 'POST', '/v1/pen/work', null, 'work the yard, nearly out');
+  const nowLeft = await jailLeft(shortCon.id);
+  const reallyCut = wasLeft - nowLeft;
+  assert.equal(Number(workR.body.cutSeconds), reallyCut,
+    `the yard shave reports what it ACTUALLY took off — the stretch went ${wasLeft}s → ${nowLeft}s, so ` +
+    `${reallyCut}s came off, and it reported ${workR.body.cutSeconds}s. (The nominal is ` +
+    `${PEN.WORK_CUT_S}s; reporting THAT tells a man a minute came off a sentence that never had a ` +
+    `minute in it — but any other figure is wrong too, which is why this names what it got.)`);
+  assert(!/\bTHREW|undefined/.test(workLine), `the yard line rendered a hole. Got: ${JSON.stringify(workLine)}`);
+
+  // ── and clear of the clamp, where the nominal IS the truth. Without this half, a fix that always
+  // reported 0 would pass the assertion above.
+  const longCon = await mk47('Nominal Con2 ');
+  await app.pool.query("UPDATE characters SET jail_until = now() + interval '2 hours' WHERE id=$1", [longCon.id]);
+  const { r: work2 } = await drive47(longCon.t, 'POST', '/v1/pen/work', null, 'work the yard, long stretch');
+  assert.equal(Number(work2.body.cutSeconds), PEN.WORK_CUT_S,
+    `a full stretch gives up the full shave (${PEN.WORK_CUT_S}s) — the clamp must only bite when there ` +
+    `is less time left than the shave, never otherwise`);
+
+  // ── THE DIVORCE, at the honor floor and clear of it.
+  const marry47 = async (a, b) => {
+    const acct = (await app.pool.query('SELECT account_id FROM characters WHERE id=$1', [a.id])).rows[0].account_id;
+    const p = await inject('POST', `/v1/dynasty/propose/${b.id}`, a.t, null);
+    assert.equal(p.code, 200, `WAVE 47 could not propose (${JSON.stringify(p.body)})`);
+    const acc = await inject('POST', `/v1/dynasty/accept/${acct}`, b.t, null);
+    assert.equal(acc.code, 200, `WAVE 47 could not accept (${JSON.stringify(acc.body)})`);
+  };
+  const honorOf = async (id) =>
+    Number((await app.pool.query('SELECT honor FROM characters WHERE id=$1', [id])).rows[0].honor);
+
+  const sunk = await mk47('Nominal Wed '), sunkTo = await mk47('Nominal Bride ');
+  await marry47(sunk, sunkTo);
+  const nearFloor = HONOR.MIN - MARRIAGE.DIVORCE - 2; // two points of room against a ten-point hit
+  await app.pool.query('UPDATE characters SET honor=$2 WHERE id=$1', [sunk.id, nearFloor]);
+  const hWas = await honorOf(sunk.id);
+  assert(hWas + MARRIAGE.DIVORCE < HONOR.MIN,
+    `WAVE 47 fixture: honor ${hWas} with a ${MARRIAGE.DIVORCE} hit must cross HONOR.MIN (${HONOR.MIN}), ` +
+    `or the clamp never binds and this block proves nothing`);
+  const { r: divR, line: divLine } = await drive47(sunk.t, 'POST', '/v1/dynasty/divorce', null, 'call it off, already sunk');
+  const hNow = await honorOf(sunk.id);
+  assert.equal(Number(divR.body.honor), hNow - hWas,
+    `the divorce reports the honor that ACTUALLY landed (${hWas} → ${hNow}, so ${hNow - hWas}) — the ` +
+    `flat ${MARRIAGE.DIVORCE} is a thing the game did not do to them`);
+  assert.equal(Number(divR.body.honorNow), hNow,
+    `the divorce says where they LANDED (database says ${hNow}) — a bare delta at the floor tells you ` +
+    `nothing about why it was small`);
+  // `\b` does not apply before a minus sign (both sides are non-word), so a negative honor needs an
+  // explicit boundary — the first cut asserted \b-100\b against a line that plainly said -100.
+  assert(new RegExp(`(^|[^\\d-])${hNow}(?![\\d])`).test(divLine),
+    `the line carries where they stand now (${hNow}). Got: ${JSON.stringify(divLine)}`);
+
+  const clear = await mk47('Nominal W2 '), clearTo = await mk47('Nominal B2 ');
+  await marry47(clear, clearTo);
+  const { r: div2 } = await drive47(clear.t, 'POST', '/v1/dynasty/divorce', null, 'call it off, room to fall');
+  assert.equal(Number(div2.body.honor), MARRIAGE.DIVORCE,
+    `an unsunk man wears the FULL ${MARRIAGE.DIVORCE} — the clamp must only bite at the floor`);
+
+  // ── THE CAMPAIGN VOW, at the CEILING — the other end of the same clamp, and a different system,
+  // so the fix is held at both signs rather than only where it was found. The chain is walked to its
+  // choice step directly: reaching it through play needs standing bumps this block has no business
+  // manufacturing, and the property under test is what the branch REPORTS, not how you got there.
+  {
+    const oath = CAMPAIGNS.find((c) => c.steps.some((s) => s.choice && s.choice.some((b) => b.honor > 0)));
+    assert(oath, 'WAVE 47: no campaign offers honor on a branch — this block would prove nothing');
+    const stepIx = oath.steps.findIndex((s) => s.choice);
+    const good = oath.steps[stepIx].choice.find((b) => b.honor > 0);
+    const vow = await mk47('Nominal Vow ');
+    // the story opens at a standing with its fixer — seed it, and ASSERT the start, because an
+    // unasserted setup step that quietly fails leaves the drive below refusing for the wrong reason
+    // (it did: `no_choice`, which reads like the fix is broken and is really a missing fixture).
+    await app.pool.query(
+      'INSERT INTO npc_standing (character_id, npc_id, standing, touched_at) VALUES ($1,$2,100,now()) ' +
+      'ON CONFLICT (character_id, npc_id) DO UPDATE SET standing=100', [vow.id, oath.npc]);
+    const started = await inject('POST', `/v1/campaigns/${oath.id}/start`, vow.t, null);
+    assert.equal(started.code, 200, `WAVE 47 could not start ${oath.id} (${JSON.stringify(started.body)})`);
+    const moved = await app.pool.query(
+      'UPDATE campaign_progress SET step=$3, done=0 WHERE character_id=$1 AND campaign_id=$2',
+      [vow.id, oath.id, stepIx]);
+    assert.equal(moved.rowCount, 1, 'WAVE 47: no campaign progress row to walk to the fork');
+    // one point of room against a branch worth more than one
+    await app.pool.query('UPDATE characters SET honor=$2 WHERE id=$1', [vow.id, HONOR.MAX - 1]);
+    assert(good.honor > 1, `WAVE 47 fixture: the branch must offer more honor (${good.honor}) than the ` +
+      'single point of room left, or the clamp never binds');
+    const hBefore = await honorOf(vow.id);
+    const { r: choseR, line: choseLine } = await drive47(vow.t, 'POST',
+      `/v1/campaigns/${oath.id}/choose`, { branch: good.id }, 'take the honourable branch, already at the top');
+    const hAfter = await honorOf(vow.id);
+    assert.equal(hAfter, HONOR.MAX, 'the vow lands you at the ceiling, not past it');
+    assert.equal(Number(choseR.body.honor), hAfter - hBefore,
+      `the vow reports the honor that ACTUALLY landed (${hBefore} → ${hAfter}, so ${hAfter - hBefore}) — ` +
+      `the branch offered ${good.honor}, and it reported ${choseR.body.honor}`);
+    assert(!/\+?${good.honor} honor/.test(choseLine) || Number(choseR.body.honor) === good.honor,
+      `the line must not advertise the branch's nominal when less landed. Got: ${JSON.stringify(choseLine)}`);
+  }
+
+  // ── and the shared function itself, which is where the class was actually fixed: the applied
+  // delta and the landing point, from one call, so a nineteenth caller cannot get it wrong.
+  {
+    const probe = await mk47('Nominal Probe ');
+    await app.pool.query('UPDATE characters SET honor=$2 WHERE id=$1', [probe.id, HONOR.MAX - 1]);
+    const row = (await app.pool.query('SELECT * FROM characters WHERE id=$1', [probe.id])).rows[0];
+    const client = await app.pool.connect();
+    try {
+      const hit = await bumpHonor(client, row, 50);
+      assert.equal(hit.honor, HONOR.MAX, 'bumpHonor lands you at the ceiling, not past it');
+      assert.equal(hit.applied, 1, 'bumpHonor reports the ONE point that landed, not the 50 asked for');
+    } finally { client.release(); }
+  }
 }
 
 const describedCount = described;

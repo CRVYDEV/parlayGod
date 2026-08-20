@@ -17,8 +17,15 @@ const clamp = (v) => Math.max(HONOR.MIN, Math.min(HONOR.MAX, v));
 // so an absolute write from the in-memory value is race-free AND keeps `ch.honor` honest for the
 // rest of the turn (view/persist read it). honor is NOT in persistCharacter's positional UPDATE —
 // this direct write is the only writer (the active_at discipline), so no clobber either way.
+// Returns { honor, applied } — where the character LANDED, and what actually LANDED ON THEM, which
+// are not the same thing as the delta you asked for: honor is clamped to [MIN, MAX], so a divorce
+// (-10) at -98 moves the man by -2. Every site that reports the nominal constant instead is telling
+// a player a number the game did not do to them — the wave-46 class (a line that reads well and is
+// false). Nothing read the old numeric return, so the truthful pair is the default at all 18 call
+// sites and a nineteenth cannot get it wrong by omission.
 export async function bumpHonor(client, ch, delta) {
-  const next = clamp(Number(ch.honor || 0) + delta);
+  const was = Number(ch.honor || 0);
+  const next = clamp(was + delta);
   await client.query('UPDATE characters SET honor=$2 WHERE id=$1', [ch.id, next]);
   ch.honor = next;
   // THE HONOR LEGEND (Tier-4) — the bloodline's high-water mark of honor + its deepest infamy
@@ -27,7 +34,7 @@ export async function bumpHonor(client, ch, delta) {
   await client.query(
     'UPDATE account_persistent SET honor_peak = GREATEST(honor_peak, $2), honor_low = LEAST(honor_low, $2) WHERE account_id=$1',
     [ch.account_id, next]);
-  return next;
+  return { honor: next, applied: next - was };
 }
 
 // THE REPUTATION BOARDS (Tier-4) — MEN OF HONOR (highest honor the bloodline ever reached) and THE
