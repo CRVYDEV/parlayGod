@@ -2354,6 +2354,182 @@ for (const [m, url0, payload] of ACTIONS) {
     'buying a lot must name what ARRIVED, not just the price — rounds and crates read identically ' +
     `while it was the catch-all: ${JSON.stringify(at('/v1/exchange/'))}`);
 }
+// WAVE 30 — THE PAYROLL'S TOASTS. Six recurring obligations share one board (THE PAYROLL unified
+// them there); their TOASTS were never swept, and driving them found the family split three ways.
+//
+// (1) Four of the six ECHOED. The bare catch-all `paid $N` was `else if`-chained to the EXPOSE line,
+//     a different chain entirely — so it fired a SECOND time after the pad, the shark, the window and
+//     the estate's staff had each already named the figure ("…square, and they keep earning · paid
+//     $41,500"). Every one of those four lines was written in an earlier wave of this same session
+//     and verified with `.includes()`, which cannot see a trailing echo. Worse on the estate, whose
+//     money is $OMR: twelve tokens echoed back as "$12".
+// (2) Two shapes of `payStaffWages` pay NOTHING, so every guard in the obligations chain (all
+//     `paid > 0`) skips them — including THE WALK, the loudest thing the household can do.
+// (3) The nut and the gala fell to that same catch-all: a price with the purchase left off, and for
+//     the gala the wrong CURRENCY on top (the catch-all assumes cash).
+//
+// Driven on its own tokens because `said` is keyed by URL and the walk needs THREE presses of
+// `/v1/estate/wages` against different arrears — so the lines are captured locally and asserted
+// directly, while still counting into `described` and the mute sweep like every other row.
+{
+  const mkP = async (n, sql) => { const t = (await inject('POST', '/v1/auth/guest')).body.token;
+    await inject('POST', '/v1/character', t, { name: n + Math.random().toString(36).slice(2, 6) });
+    const c = (await inject('GET', '/v1/me', t)).body.character;
+    await app.pool.query('UPDATE characters SET cash=9000000, respect=3000000 WHERE id=$1', [c.id]);
+    await app.pool.query('UPDATE account_persistent SET omr=9000 WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)', [c.id]);
+    if (sql) await app.pool.query(sql, [c.id]);
+    return { t, id: c.id }; };
+  const lines = [];
+  const drive = async (t, m, url, payload, label) => {
+    const r = await inject(m, url, t, payload);
+    assert.equal(r.code, 200, `the wave-30 ledger could not drive ${label} (${JSON.stringify(r.body)}) — fix the ` +
+      'fixture rather than letting it skip, because a skipped action reads on the summary line as covered');
+    described++;
+    let line; try { line = String(describeFn(r.body, r.code)); } catch (e) { line = 'THREW: ' + e.message; }
+    lines.push([label, line]);
+    if (line === 'done.' || /^paid \$[\d,.]+$/.test(line) || /undefined|NaN|\[object|^THREW/.test(line))
+      mute.push(`${m} ${url} (${label}) → ${JSON.stringify(line)}`);
+    return r; };
+  const est = await mkP('Ledger Est ');
+  const back = (d) => app.pool.query(
+    `UPDATE estates SET staff_paid_at = now() - interval '${d}' WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)`, [est.id]);
+  await drive(est.t, 'POST', '/v1/estate/upgrade', null, 'estate tier 1');
+  await drive(est.t, 'POST', '/v1/estate/upgrade', null, 'estate tier 2');   // the gala needs GALA_MIN_TIER
+  await drive(est.t, 'POST', '/v1/estate/staff/butler', null, 'hire the butler');
+  await drive(est.t, 'POST', '/v1/estate/wages', null, 'wages: nothing owed');
+  await back('2 days');
+  await drive(est.t, 'POST', '/v1/estate/wages', null, 'wages: settled');
+  await back('9 days');                                                      // past ESTATE.STAFF_WALK_MS
+  await drive(est.t, 'POST', '/v1/estate/wages', null, 'wages: THE WALK');
+  await drive(est.t, 'POST', '/v1/estate/staff/butler', null, 'rehire the butler');
+  const galaR = await drive(est.t, 'POST', '/v1/estate/gala', null, 'the gala');
+  const nut = await mkP('Ledger Nut ');
+  await drive(nut.t, 'POST', '/v1/kitchen/crew/hire', null, 'hire a hand');
+  await app.pool.query("UPDATE characters SET crew_paid_at = now() - interval '2 days' WHERE id=$1", [nut.id]);
+  await drive(nut.t, 'POST', '/v1/kitchen/crew/wages', null, 'the nut');
+  const L30 = new Map(lines);
+  // THE WALK. The card's own chip warns, but the toast is the moment the player is looking, and the
+  // money NOT moving is exactly what needs explaining — so the line has to say they are gone AND
+  // that nothing was charged, or "your staff walked" reads as a bill.
+  const walk = L30.get('wages: THE WALK');
+  assert(/walked|gone/i.test(walk) && /nothing charged|no(thing)? (was )?charged/i.test(walk),
+    'the household walking out must say they are GONE and that nothing was charged — it is the one ' +
+    `branch that pays nothing, so every paid-above-zero guard skips it: ${JSON.stringify(walk)}`);
+  assert(!/let one go|corner/i.test(walk),
+    `the estate walk must not read as the kitchen's crew-dismiss line — one field name, two systems: ${JSON.stringify(walk)}`);
+  // THE ECHO, asserted on the one obligation this guard can drive end to end. The pattern is the
+  // catch-all's own output appended to a line that already named the figure.
+  const settled = L30.get('wages: settled');
+  assert(/\$OMR/.test(settled) && !/ · paid \$[\d,.]+$/.test(settled),
+    'the estate wage line must state the figure ONCE, in $OMR — the catch-all was chained to the ' +
+    `wrong if-chain and echoed it back in dollars: ${JSON.stringify(settled)}`);
+  const square = L30.get('wages: nothing owed') || '';
+  assert(/square|nothing owed/i.test(square) && /\$OMR/.test(square),
+    'a square book must SAY it is square and name the daily rate — reachable by pressing twice, or ' +
+    `off a card that rendered before somebody else paid: ${JSON.stringify(square)}`);
+  // THE GALA and THE NUT — both fluent-and-incomplete under the catch-all, so only a named claim
+  // holds them: the gala's purchase is the open-doors WINDOW (and it is billed in tokens, not cash),
+  // the nut's is the crew WORKING.
+  const gala = L30.get('the gala'), galaBody = galaR.body;   // the reply itself: this block keeps its own, since `paidBody` is keyed by URL and wave 30 presses one URL three times
+  assert(/\$OMR/.test(gala) && !/\$\d/.test(gala),
+    `the gala is billed in $OMR — the catch-all assumed cash and printed a dollar sign: ${JSON.stringify(gala)}`);
+  assert(gala.includes(String(galaBody?.hoursOpen ?? -1)),
+    `the gala must name the window it bought, not just the price: ${JSON.stringify(gala)}`);
+  const theNut = L30.get('the nut');
+  assert(/nut/i.test(theNut) && /work|corner/i.test(theNut),
+    `paying the nut must name what it buys — the crew working: ${JSON.stringify(theNut)}`);
+}
+// WAVE 34 — THE COURTROOM and THE TREATY TABLE, two whole screens on their own tokens. Neither can
+// sit in ACTIONS: the courtroom needs a live indictment (and three of its five verbs END the case,
+// so each press needs the case re-armed), and a treaty needs three families with two commanders.
+//
+// Every one of the nine was silent, and they are the two surfaces where silence costs most, because
+// none of them is really about money: a plea forfeits a share of pocket AND bank — driven at
+// $13,500,000 — and what it BUYS is the case being dropped; a verdict is the arc's whole point and
+// read "done." either way; turning rat is a one-way, bloodline-deep brand; and a pact CHANGES THE
+// RULES between two families for a week, with an honor price for breaking it early.
+{
+  const mkC = async (n, cash) => { const t = (await inject('POST', '/v1/auth/guest')).body.token;
+    await inject('POST', '/v1/character', t, { name: n + Math.random().toString(36).slice(2, 6) });
+    const c = (await inject('GET', '/v1/me', t)).body.character;
+    await app.pool.query('UPDATE characters SET cash=$2, respect=3000000, energy=900, health=100 WHERE id=$1', [c.id, cash ?? 9000000]);
+    await app.pool.query('UPDATE account_persistent SET omr=9000 WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)', [c.id]);
+    return { t, id: c.id }; };
+  const lines = [];
+  const drive = async (t, m, url, payload, label) => {
+    const r = await inject(m, url, t, payload);
+    assert.equal(r.code, 200, `the wave-34 ledger could not drive ${label} (${JSON.stringify(r.body)}) — fix the ` +
+      'fixture rather than letting it skip, because a skipped action reads on the summary line as covered');
+    described++;
+    let line; try { line = String(describeFn(r.body, r.code)); } catch (e) { line = 'THREW: ' + e.message; }
+    lines.push([label, line]);
+    if (line === 'done.' || /^paid \$[\d,.]+$/.test(line) || /undefined|NaN|\[object|^THREW/.test(line))
+      mute.push(`${m} ${url} (${label}) → ${JSON.stringify(line)}`);
+    return r; };
+  // ── the courtroom ──
+  const acc = await mkC('Ledger Acc '), rival = await mkC('Ledger Rival ');
+  const indict = () => app.pool.query(
+    'UPDATE characters SET heat_exposure=3200, indicted_at=now(), jail_until=NULL, jury_bought=false WHERE id=$1', [acc.id]);
+  await indict();
+  await drive(acc.t, 'POST', '/v1/law/jury', null, 'buy the jury');
+  await drive(acc.t, 'POST', '/v1/law/plea', null, 'take the plea');
+  // BOTH verdicts, because the acquittal is what caught the collision the plea line introduced: the
+  // trial answers the SAME {forfeited, jailSeconds} pair, so before `convicted` was made the
+  // discriminator an acquittal read "you took the deal — $0 forfeited and 0s inside".
+  await indict(); process.env.LAW_BUST_P = '0';
+  await drive(acc.t, 'POST', '/v1/law/trial', null, 'the verdict: ACQUITTED');
+  await indict(); process.env.LAW_BUST_P = '1';
+  await drive(acc.t, 'POST', '/v1/law/trial', null, 'the verdict: CONVICTED');
+  delete process.env.LAW_BUST_P;
+  await indict();
+  await drive(acc.t, 'POST', `/v1/law/flip/${rival.id}`, null, 'turn rat');
+  // ── the treaty table ──
+  const bossA = await mkC('Ledger Dip A '), bossB = await mkC('Ledger Dip B '), bossC = await mkC('Ledger Dip C ');
+  const found = async (b, tag) => { await inject('POST', '/v1/gangs', b.t,
+    { name: 'Ledger ' + tag + ' ' + Math.random().toString(36).slice(2, 6), tag });
+    return (await app.pool.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [b.id])).rows[0]?.gang_id; };
+  const gA = await found(bossA, 'DPA'), gB = await found(bossB, 'DPB'), gC = await found(bossC, 'DPC');
+  await app.pool.query('UPDATE gangs SET treasury=90000000, omr_reserve=90000');
+  await drive(bossA.t, 'POST', `/v1/diplomacy/pact/${gB}`, null, 'offer a pact');
+  await drive(bossB.t, 'POST', `/v1/diplomacy/pact/${gA}/accept`, null, 'sign the pact');
+  // the COALITION is driven BEFORE the break, because breaking a sworn pact marks the family an
+  // oathbreaker and an oathbreaker cannot rally the city — found by driving them the other way round.
+  await app.pool.query('UPDATE gangs SET lifetime_tribute=90000000, wars_won=500 WHERE id=$1', [gC]);
+  const co = await drive(bossA.t, 'POST', `/v1/diplomacy/coalition/${gC}`, null, 'form a coalition');
+  await drive(bossB.t, 'POST', `/v1/diplomacy/coalition/${co.body.id}/join`, null, 'join the coalition');
+  await drive(bossB.t, 'DELETE', `/v1/diplomacy/coalition/${co.body.id}`, null, 'walk out of it');
+  await drive(bossA.t, 'DELETE', `/v1/diplomacy/pact/${gB}`, null, 'break the pact');
+  const L34 = new Map(lines);
+  // THE PLEA — the money is only half of it, and the half a player cannot see is the case dropping.
+  const plea = L34.get('take the plea');
+  assert(/forfeit/i.test(plea) && /\$[\d,]{7,}/.test(plea) && /case|dropped|file/i.test(plea),
+    `the plea must name the forfeiture AND that it buys the case being dropped: ${JSON.stringify(plea)}`);
+  // THE VERDICT, both ways — and the acquittal must NOT read as the plea, which is the collision.
+  const acq = L34.get('the verdict: ACQUITTED'), con = L34.get('the verdict: CONVICTED');
+  assert(/acquit/i.test(acq) && !/took the deal/i.test(acq),
+    'an acquittal must read as an acquittal — the trial answers the same {forfeited, jailSeconds} as ' +
+    `the plea, so without a discriminator the best outcome in the arc reads as a plea deal: ${JSON.stringify(acq)}`);
+  assert(/convicted/i.test(con) && /\$[\d,]/.test(con),
+    `a conviction must name what it cost: ${JSON.stringify(con)}`);
+  assert(acq !== con, 'the two verdicts must not read identically');
+  // TURNING RAT — a one-way brand, and the brand is the part worth stating.
+  const rat = L34.get('turn rat');
+  assert(/rat/i.test(rat) && /omert|price on your head/i.test(rat),
+    `flipping must name the permanent brand and what it costs you, not just that it happened: ${JSON.stringify(rat)}`);
+  // THE PACT — a rule change with a term and an exit price. The accept line is the one that had no
+  // counterparty at all in its reply (a bare {ok, until}), so it also pins that the NAME arrives.
+  const signed = L34.get('sign the pact');
+  assert(/Ledger DPA/.test(signed) && /declare|war/i.test(signed) && /oathbreak/i.test(signed),
+    'signing a pact must name WHO it is with, what it forbids, and the price of breaking it — the ' +
+    `reply carried only a date until the name was added at the source: ${JSON.stringify(signed)}`);
+  const broke = L34.get('break the pact');
+  assert(/broke|sworn/i.test(broke) && /honor/i.test(broke),
+    'breaking a sworn treaty must say it was broken AND name the honor it cost — the oathbreak is a ' +
+    `public, permanent mark, not a cancellation: ${JSON.stringify(broke)}`);
+  assert(/coalition/i.test(L34.get('walk out of it')),
+    'walking out of a coalition answered a bare {ok} — indistinguishable from every other bare ' +
+    `acknowledgement in the game — so it needed a marker at the source: ${JSON.stringify(L34.get('walk out of it'))}`);
+}
 // THE KITCHEN'S TWO PURCHASES, driven in ACTIONS above. Both are named claims because both silence
 // patterns read straight past a line that is fluent: a hire that says only what it cost is a true
 // sentence about an ongoing obligation it never mentions.
