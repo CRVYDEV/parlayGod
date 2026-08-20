@@ -85,6 +85,17 @@ that screen.
 - [ ] Decide and write down: who is on call, and what they do when the §10.4 alarm fires at 3am. The
       answer is "read `/admin → invariants`, find the check that is red, and page the developer" —
       but it needs to be written before it is needed.
+- [ ] **Sweep the test debris out of the player population** (needs `MOD_KEY`). Every smoke run and
+      deploy check that created a character left one behind, and nothing counting heads can tell them
+      from players. `DISCOVERY.SEEN_DAYS` now hides anyone untouched for 30 days from the discovery
+      and collision boards ✅ — so players never see them — but they still inflate every population
+      figure the baseline is about to freeze, and the baseline cannot be redone later. Then the
+      policy: a smoke run that creates a character deletes it, or names it sweepably.
+- [ ] **Walk the funnel yourself, as a first player, on the real box.** The suite proves the code
+      does what it says; this asks whether a stranger arriving cold has a good first ten minutes.
+      Every defect it has found was invisible to green tests — the 2026-08-20 rehearsal found the
+      "real players near you" board reading 10 of 12 dead accounts, with nothing broken and every row
+      correctly listed. `LAUNCH-NIGHT.md` carries it as a T-minus step.
 
 ## 1.4 Content and copy ⬜
 
