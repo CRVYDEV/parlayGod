@@ -6672,10 +6672,14 @@
         <div class="d" style="margin-top:3px">${(w.myRaid.members || []).map((m) => `${m.leader ? '★ ' : ''}${esc(m.name)}${m.hired ? ' <span style="color:var(--dim)">(hired gun — no cut)</span>' : m.leader ? '' : ' <span style="color:var(--neon)">(crew)</span>'}`).join(' · ')}</div>
         ${w.myRaid.needMore > 0 ? `<div class="d" style="color:var(--warn)">needs ${w.myRaid.needMore} more ${w.myRaid.needMore === 1 ? 'body' : 'bodies'} before the go — join up a friend or hire a gun</div>` : '<div class="d" style="color:var(--good)">crew is ready — call the go</div>'}
         <div style="margin-top:4px">${w.myRaid.leader ? `<button class="act" data-go="${w.myRaid.id}">call the go</button>` : ''}${w.myRaid.canHire ? `<button class="act" data-hireraid="${w.myRaid.id}" title="a merc's firepower helps crack the outfit, but takes no cut of the pot">hire a gun ($${fmt(w.myRaid.hireFee)})</button>` : ''}${w.myRaid.leader && w.myRaid.hired ? `<button class="act" data-dismissgun="${w.myRaid.id}" title="send a hired gun home to free a slot for a real crewman — the fee's already spent">send a gun home</button>` : ''}<button class="act" data-leaveraid="${w.myRaid.id}">${w.myRaid.leader ? 'disband' : 'walk away'}</button></div></div>` : ''}
-      <div class="grid">${(rd.raids || []).filter((x) => !w.myRaid).map((x) => `
-        <div class="card"><span class="t">${x.name}</span> <span class="chip">crew ${x.crew}/${x.crewMax}</span>
+      <div class="grid">${(rd.raids || []).filter((x) => !w.myRaid).map((x) => { const lvlOk = (me.level || 0) >= x.minLvl;
+        // The outfit's own level wall applies to every gun on the raid, not just the leader who planned
+        // it — joinRaid enforces it. The card stated "lvl 20+" beside a live [join the crew], so a
+        // rookie who found a crew forming was refused on press.
+        return `<div class="card"><span class="t">${x.name}</span> <span class="chip">crew ${x.crew}/${x.crewMax}</span>
           <div class="d">led by ${x.leader} · lvl ${x.minLvl}+</div>
-          <button class="act" data-joinraid="${x.id}">join the crew</button></div>`).join('') || (w.myRaid ? '' : '<span class="d" style="color:var(--dim)">no crew raids forming — plan one on an apex outfit above</span>')}</div>
+          ${lvlOk ? `<button class="act" data-joinraid="${x.id}">join the crew</button>`
+            : `<span class="chip">🔒 you need level ${x.minLvl}</span>`}</div>`; }).join('') || (w.myRaid ? '' : '<span class="d" style="color:var(--dim)">no crew raids forming — plan one on an apex outfit above</span>')}</div>
       <h2 style="margin-top:12px">The Blood War <span class="d" style="font-size:11px">(rival NPC families — raid them for a cut of their war chest; ROUT one to hold it as a vassal; they hit back)</span></h2>
       ${bw.you ? `<div class="card" style="border-color:var(--blood)"><span class="t">🩸 ${bw.you.rank}</span> <span class="d">$${fmt(bw.you.war)} lifetime taken off rival families — <a href="#" id="bw-lb">the blood-war board →</a> · <a href="#" id="bw-clb">the conquest board →</a>${bw.you.raidCdSeconds > 0 ? ` · next raid in ${mins(bw.you.raidCdSeconds)}` : ''}</span></div>` : ''}
       ${bw.you ? `<div class="card"><span class="t">⚔️ ${bw.you.warChief}</span> <span class="d">${bw.you.warsWon} family war${bw.you.warsWon === 1 ? '' : 's'} won — <a href="#" id="fw-lb">the war-chief board →</a>. Declare a campaign ($${fmt(bw.you.warCost)} war chest) and land ${bw.you.warWinScore} raids inside a day to win a trophy. ${bw.you.activeWars > 0 ? '<b>A campaign is running.</b>' : ''}</span></div>` : ''}
@@ -7941,10 +7945,14 @@
         what neglect really costs you is the place going <b>COLD</b> past <b>${Math.round(cat[0].coldHours / 24)} days</b>:
         no income at all until you square the pad out of pocket. Every extra front you own raises the pad on <i>all</i> of them
         by ${(cat[0].progBps / 100).toFixed(0)}%. Collect every day or two and it's an engine; buy one and forget it and it sits dark.</div></div>` : ''}
-      <div class="grid">${cat.map((c) => `
-        <div class="card">${aart('business', c.kind)}<span class="t">${c.name}</span>${ownedKinds.has(c.kind) ? '<span class="chip good">owned</span>' : ''}
+      <div class="grid">${cat.map((c) => { const lvlOk = (me.level || 0) >= c.lvl;
+        // Gate the BUTTON on the level, not just the label. The rackets grid 60 lines below computes
+        // `locked = me.level < r.lvl` and greys itself out; this card stated "level 15+" and rendered a
+        // live [buy] anyway, so buying a Laundromat at level 1 refused on press. Forgotten sibling, two
+        // sections apart in one renderer.
+        return `<div class="card">${aart('business', c.kind)}<span class="t">${c.name}</span>${ownedKinds.has(c.kind) ? '<span class="chip good">owned</span>' : lvlOk ? '' : `<span class="chip">🔒 lvl ${c.lvl}+</span>`}
           <div class="d">level ${c.lvl}+ · t1 $${fmt(c.tiers[0].cost)} → $${fmt(c.tiers[0].incomePerHr)}/hr <span style="color:var(--warn)">− $${fmt(c.upkeepPerHr)}/hr pad</span></div>
-          ${ownedKinds.has(c.kind) ? '' : `<button class="act" data-bizbuy="${c.kind}">buy</button>`}</div>`).join('')}</div>
+          ${ownedKinds.has(c.kind) ? '' : `<button class="act" data-bizbuy="${c.kind}"${lvlOk ? '' : ' disabled'}>buy</button>`}</div>`; }).join('')}</div>
 
       ${(() => { const o = me.ops; if (!o) return '';
         const full = o.free <= 0;
@@ -8439,17 +8447,27 @@
           <button class="act" data-heistdo="rat:${my.id}" style="opacity:.55">…talk to the badges</button></div>` : `
         <div class="d" style="color:var(--dim);font-size:13.5px;margin-bottom:4px">plan one (you front the stake) or crew up off the board:</div>
         <img id="hj-preview" class="ico wide" alt="" src="/v1/art/heist/${(hb.jobs || [])[0]?.id || ''}" style="max-width:420px">
-        <select id="hj-job">${(hb.jobs || []).map((jb) => `<option value="${jb.id}"${jb.locked ? ' disabled' : ''}>${jb.name} — ${jb.crew} crew, lvl ${jb.lvl}, stake $${fmt(jb.stake)}${jb.locked ? ` (needs ${jb.minPulled} scores)` : ''}</option>`).join('')}</select>
+        <select id="hj-job">${(hb.jobs || []).map((jb) => { const lvlOk = (me?.level || 0) >= jb.lvl;
+          // TWO gates, not one. `locked` is the notoriety soft-gate; `lvl` is the level wall the server
+          // enforces in planHeist — and reading a requirement into the LABEL is not enforcing it. Every
+          // sibling picker in the client (races tiers, convoy routes and rigs, port lanes) disables on
+          // level with a 🔒; this one stated "lvl 4" beside a live option, so a level-1 player picked
+          // The Corner Store, pressed plan it, and got refused. A control that looks live and only
+          // refuses once pressed is the game withholding its own rule.
+          return `<option value="${jb.id}"${jb.locked || !lvlOk ? ' disabled' : ''}>${lvlOk ? '' : '🔒 '}${jb.name} — ${jb.crew} crew, lvl ${jb.lvl}, stake $${fmt(jb.stake)}${jb.locked ? ` (needs ${jb.minPulled} scores)` : ''}</option>`; }).join('')}</select>
         <select id="hj-role">${(hb.jobs?.[0]?.roles || []).map((ro) => `<option>${ro}</option>`).join('')}</select>
         <input id="hj-biz" placeholder="mark's business id (inside job)" size="24" style="display:none">
         <label id="hj-fencelbl" style="font-size:12.5px;color:var(--dim)"><input type="checkbox" id="hj-fence"> 🔥 take it HOT (fence later — a gamble, loot-able)</label>
         <button class="act" id="hj-plan">plan it</button>
         <div class="d" style="font-size:11.5px;margin-top:2px">🏆 <a href="#" id="hj-lb">the most notorious crews →</a></div>`}
-      ${(hb.open || []).length ? `<div class="grid" style="margin-top:6px">${hb.open.map((o) => `
-        <div class="card">${aart('heist', (hb.jobs || []).find((jj) => jj.name === o.name)?.id)}<span class="t">${o.name}</span>
+      ${(hb.open || []).length ? `<div class="grid" style="margin-top:6px">${hb.open.map((o) => { const lvlOk = (me?.level || 0) >= o.lvl;
+        // Same wall as the picker above, on the other way in: joinHeist enforces the job's level, so a
+        // rookie who reads "lvl 4+" on somebody's open job and presses crew up gets refused. State it
+        // as a wall, not as trivia.
+        return `<div class="card">${aart('heist', (hb.jobs || []).find((jj) => jj.name === o.name)?.id)}<span class="t">${o.name}</span>
           <div class="d">${o.leader}'s job · ${o.crew} in, ${o.crewNeeded} needed · lvl ${o.lvl}+</div>
-          ${!my && o.rolesOpen.length ? `<select data-joinrole="${o.id}">${o.rolesOpen.map((ro) => `<option>${ro}</option>`).join('')}</select>
-          <button class="act" data-joinheist="${o.id}">crew up</button>` : ''}</div>`).join('')}</div>` : ''}
+          ${!my && o.rolesOpen.length ? (lvlOk ? `<select data-joinrole="${o.id}">${o.rolesOpen.map((ro) => `<option>${ro}</option>`).join('')}</select>
+          <button class="act" data-joinheist="${o.id}">crew up</button>` : `<span class="chip">🔒 you need level ${o.lvl}</span>`) : ''}</div>`; }).join('')}</div>` : ''}
 
       <h2 style="margin-top:12px">Smuggling Convoys</h2>
       ${cb.legend ? `<div class="card" style="border-color:var(--gold,#c9a227)"><span class="t">🚚 ${cb.legend.hauler} · 🔫 ${cb.legend.bandit}</span>

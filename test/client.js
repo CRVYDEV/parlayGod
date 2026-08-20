@@ -664,6 +664,12 @@ const blankShadows = (src, v) => {            // blank every region where `v` is
 const listReads = new Map(), listWhere = new Map();
 // list keys whose row renders a clickable control (check 5 — a gate only matters on an ACTION)
 const listActs = new Set();
+// CHECK 9 needs the row TEMPLATE, not just the set of fields it reads — because the two defects it
+// exists for both READ the level and simply do nothing with it, which check 5 is satisfied by. The
+// region and the callback's param are already computed here; recording them costs nothing and means
+// check 9 reuses this extractor rather than hand-rolling a third one (the shape that gave the mirror
+// three separate blind spots).
+const listRegion = new Map(), listParam = new Map(), listFn = new Map(), listSrc = new Map();
 let listUnresolved = 0;
 const bodyAfter = (src, from) => {             // extent of a lambda body starting at `from`
   let k = from;
@@ -737,6 +743,11 @@ const collectList = (src, v, key, fn) => {
     if (!ext) { listUnresolved++; return; }
     const k = `${key}|${listField}`;
     let region = src.slice(ext[0], ext[1]);
+    // …and a VERBATIM copy for check 9. `region` is deliberately lossy past the first hop — a chained
+    // body is collapsed to a ` data-x=` marker so check 5 can see "this row acts" without the source
+    // confusing the field scan. Check 9 has to READ the comparison, so it needs the text; keeping both
+    // is cheaper than making `region` lossless and re-teaching check 5 to ignore the extra.
+    let regionFull = region;
     for (let end = ext[1], hops = 0; hops < 6; hops++) {
       const m2 = CHAIN.exec(src.slice(end, end + 200));
       if (!m2) break;
@@ -749,6 +760,7 @@ const collectList = (src, v, key, fn) => {
         if (!BUILTIN.has(r[1])) region += `\n${param}.${r[1]}`;   // re-expressed in this hop's param
       }
       region += src.slice(next[0], next[1]).replace(/[^]*/, (t) => (/data-[a-z]+\s*=|onclick\s*=|<option/.test(t) ? ' data-x=' : ''));
+      regionFull += '\n' + src.slice(next[0], next[1]);
       end = next[1];
     }
     // check 5 needs to know whether this row RENDERS AN ACTION — a purely informational row has
@@ -758,6 +770,20 @@ const collectList = (src, v, key, fn) => {
     // IS the choice — picking a locked one and pressing the neighbouring button is exactly the
     // "looks live, refuses on press" the tester reported.
     if (/data-[a-z]+\s*=|onclick\s*=|<option/.test(region)) listActs.add(k);
+    // ACCUMULATE, never overwrite. A binding can be mapped in several places in one renderer (the
+    // port's `routes` is mapped twice: once into the lane <select>, once into a notoriety line), and
+    // `listReads` already UNIONs their fields under one key. Setting the region would keep only the
+    // last map — which for the port is the notoriety line, so the lane picker's `canRun(r)` gate
+    // vanished and check 9 reported a correctly-gated picker as a defect. The guard's granularity is
+    // the key, so the region has to be the key's whole source too.
+    listRegion.set(k, (listRegion.get(k) || '') + '\n' + regionFull);
+    // the PARAM accumulates for the same reason the region does, and it bit twice: `hb.jobs` is mapped
+    // into the picker as `jb` AND `.find()`-ed inside the open card as `jj`, so last-wins left check 9
+    // hunting for `jj.lvl` in a region whose gate is written `jb.lvl` — reporting a freshly-fixed
+    // picker as still broken. One key, every binding that iterates it.
+    if (!listParam.has(k)) listParam.set(k, new Set());
+    listParam.get(k).add(param);
+    listFn.set(k, fn); listSrc.set(k, src);
     for (const r of region
       .matchAll(new RegExp(`(?<![\\w$.])${param.replace('$', '\\$')}\\s*\\??\\.\\s*([a-zA-Z_$][\\w$]*)`, 'g'))) {
       if (BUILTIN.has(r[1])) continue;
@@ -1730,6 +1756,91 @@ assert.deepEqual(shapeFlags, [], `${shapeFlags.length} field name(s) read like a
   `are neither ENFORCED (checks 5/6) nor explicitly REVIEWED — a new gate/cost under an unknown name ships ` +
   `UNCHECKED until someone adds it. Either enforce it (add to GATE_FIELDS/OBLIGATION_FIELDS and read it in ` +
   `the client) or waive it in REVIEWED_NOT_ENFORCED with a reason:\n  ${shapeFlags.join('\n  ')}`);
+
+// ── CHECK 9: THE LEVEL LEDGER — reading a wall is not enforcing it ──────────────────────────────
+// Check 5's rule is that the renderer must READ the gate; what it then does is the renderer's
+// business. That is the right rule for gates whose shape varies (a chip, a filter, a disable) — and
+// it is exactly why it cannot see this: the two defects found by playing BOTH read the level and did
+// nothing with it, because they printed it in the LABEL. A level-1 player picked "The Corner Store —
+// 2 crew, lvl 4" out of a live <select>, pressed plan it, and was refused; the Empire catalog stated
+// "level 15+" over a live [buy] and refused the same way. Requirement stated, control live — which is
+// worse than silence, because the player reads the number as information rather than as a wall.
+//
+// A LEVEL gate is the one kind narrow enough to demand more of, and that narrowness is the whole
+// reason this can be a hard check rather than an advisory: it is permanent (not "come back with
+// money"), it is one number, and it is compared one way. So: where a clickable row's elements carry
+// a level requirement, the row must COMPARE it against the player's level — directly, or through a
+// helper its own renderer defines.
+//
+// It deliberately does NOT accept "the row carries some other gate field, so presumably that covers
+// it". A first cut did, and the M1 mutation walked straight through: the heist row carries `locked`,
+// which is the NOTORIETY wall, so neutering the level gate still passed on an unrelated one. Two
+// walls on one row are two walls. The one row that genuinely defers to a server-derived boolean is
+// waived below by name, which turns a loophole into a decision on the record.
+//
+// Four families already do this and are what the two broken ones were measured against: the races
+// tiers, the convoy routes and rigs, and the port lanes all disable with a 🔒. The gate rides under
+// two different names (`lvl` and `minLvl`), which is precisely how the two instances slipped the
+// tight allowlist — so the ledger keys on the SHAPE of the requirement, not on one spelling.
+const LVL_FIELDS = new Set(['lvl', 'minLvl', 'minLevel']);
+// Waived: a clickable row that carries a level field which is NOT a wall on THIS control. Each needs
+// a property of the row, not a promise to look later.
+const LVL_WAIVED = new Map([
+  // `lvl` is the ONE ambiguous spelling in this client: on a catalog row it is the requirement, on a
+  // progression row it is the level ATTAINED. The mastery tracks are the second kind — the row carries
+  // `xp`/`rank`/`nextAt` beside it and `lvl` is what the player has reached in that trade, so there is
+  // no wall to enforce and the control (choose your legacy) is gated by the server's own
+  // `canChooseTrait`. Waived here rather than by narrowing the field set, because the narrowing that
+  // would exclude it (drop `lvl`) is exactly what let two of the four real instances through.
+  ['renderLife|/v1/mastery||tracks|lvl', 'the trade level ATTAINED, not a requirement — the row is a '
+    + 'progress card (xp/rank/nextAt) and its control is gated by the server-sent canChooseTrait.'],
+  // The one row that genuinely defers to the server. `worldBoard` computes canRaid from THIS level
+  // (plus the coop/solo split, which the client cannot derive), so the renderer swaps the raid button
+  // for a "need lvl N" chip on it. Named rather than accepted by a blanket "some gate is present"
+  // rule, which is what let the M1 mutation through the first cut.
+  ['renderCity|/v1/world||npcs|minLvl', 'gated on the server-sent canRaid, which worldBoard derives '
+    + 'from this exact minLvl (and the solo/coop split the client cannot compute) — the row renders a '
+    + '"need lvl N" chip in place of the button when it is false.'],
+]);
+const lvlUngated = [];
+let lvlChecked = 0;
+for (const [k, fields] of listReads) {
+  if (!listActs.has(k)) continue;                       // nothing to refuse
+  const region = listRegion.get(k), params = listParam.get(k), fn = listFn.get(k);
+  if (!region || !params) continue;
+  for (const f of fields) {
+    if (!LVL_FIELDS.has(f)) continue;
+    // the field has to be a REQUIREMENT, not the row's own level. A roster row carrying `level` is
+    // describing the man, not gating the button — `lvl`/`minLvl`/`minLevel` are the requirement
+    // spellings this client uses, and `level` is deliberately absent from the set for that reason.
+    lvlChecked++;
+    if (LVL_WAIVED.has(`${fn}|${k}|${f}`)) continue;
+    const F = f.replace('$', '\\$');
+    const fnSrc = listSrc.get(k);
+    let direct = false, helper = false;
+    for (const param of params) {
+      const P = param.replace('$', '\\$');
+      // (a) compared against the player's level right here, either order
+      if (new RegExp(`me\\s*\\??\\.\\s*level[^;{}]{0,80}${P}\\s*\\??\\.\\s*${F}\\b`
+        + `|${P}\\s*\\??\\.\\s*${F}\\b[^;{}]{0,80}me\\s*\\??\\.\\s*level`).test(region)) { direct = true; break; }
+      // (b) compared inside a helper THIS renderer defines and the row calls — the commonest shape
+      // (`const canRun = (r) => (me.level || 0) >= (r.minLvl || 0)` sits above the map that uses it),
+      // and a region-only scan would report both of those correct pickers as defects.
+      for (const c of region.matchAll(new RegExp(`([a-zA-Z_$][\\w$]*)\\s*\\(\\s*${P}\\s*\\)`, 'g'))) {
+        const h = new RegExp(`${c[1].replace('$', '\\$')}\\s*=\\s*\\(?[^)]*\\)?\\s*=>[^;]{0,160}\\.\\s*${F}\\b`);
+        if (fnSrc && h.test(fnSrc) && /me\s*\??\.\s*level/.test(fnSrc)) { helper = true; break; }
+      }
+      if (helper) break;
+    }
+    if (!direct && !helper) lvlUngated.push(
+      `${fn} renders a control per row of ${k} and states the row's ${f}, but never compares it to the `
+      + `player's level — the requirement is shown and the control stays live, so it refuses on press`);
+  }
+}
+assert(lvlChecked >= 6, `THE LEVEL LEDGER found only ${lvlChecked} level-gated clickable row(s) — the `
+  + 'extractor has stopped seeing them, so a green run here means nothing. Fix the scan, not the floor.');
+assert.deepEqual(lvlUngated, [], `${lvlUngated.length} clickable row(s) STATE a level requirement and do not `
+  + `enforce it, so the control looks usable at any level and only refuses once pressed:\n  ${lvlUngated.join('\n  ')}`);
 
 // ── CHECK 8 — THE ACTION LEDGER ────────────────────────────────────────────────────────────────
 // The EIGHTH way a button lies, and the quietest: it works, and then says nothing about what it did.
@@ -3201,4 +3312,11 @@ console.log(`✅ client wiring test passed — across the console AND /admin: of
   `errand that signs a player up for a THREE-DAY job while carrying the very task it would not name. ` +
   `${Object.keys(CATALOGS).length} fields have ` +
   `catalogs and every other literal field is either an i18n key or declared not-an-API-value, so a ` +
-  `new one forces that decision instead of being skipped in silence.`);
+  `new one forces that decision instead of being skipped in silence. And the NINTH, which check 5 is ` +
+  `satisfied by and cannot see: reading a wall is not enforcing it. ${lvlChecked} clickable rows state a ` +
+  `LEVEL requirement, and each must compare it to the player's level — directly, through a helper its ` +
+  `renderer defines, or by deferring to a boolean the server derived from it. Printing the number in the ` +
+  `label satisfies "the renderer reads the gate" while leaving the control live, which is worse than ` +
+  `silence because the player reads a wall as trivia: a play session found four that way — the heist ` +
+  `picker, the open crew board, the world crew raid and the Empire catalog all stated a level over a ` +
+  `live button and refused on press.`);
