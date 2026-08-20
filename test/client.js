@@ -39,12 +39,13 @@
 // were each traced to the correct HANDLER by hand), whether a REQUIRED field is missing rather than
 // misnamed, or whether the action then behaves correctly. Those need the gameplay suites, which exist.
 process.env.MOD_KEY = 'test-mod-key';
+process.env.WORLD_RAID_P = '1';   // the rout driven below must land every run, not most runs
 import assert from 'node:assert';
 import vm from 'node:vm';
 import { readFileSync, readdirSync } from 'node:fs';
 import { buildServer } from '../src/server.js';
 import { M3, M4, PATHS, NPC_HITMEN, HEIST_ROLES, HEIST_JOBS, DRUGS, GOODS, DISTRICTS,
-  COMMISSION, CONVOY, DUELS, TERRITORY_TYPES, CARS, TRIMS, ASSETS, BUSINESSES, ESTATE, WIRE, SECRETS, STABLE } from '../src/rules.js';
+  COMMISSION, CONVOY, DUELS, TERRITORY_TYPES, CARS, TRIMS, ASSETS, BUSINESSES, ESTATE, WIRE, SECRETS, STABLE, WORLD, WORLD_NPCS } from '../src/rules.js';
 
 // A COMMENT IS NOT CODE, and this guard used to read it as if it were. The mirror resolves a field
 // access as `<binding>.<name>`, and this file's comments are dense and name source files constantly
@@ -1817,6 +1818,11 @@ const ACTIONS = [
   // found by playing: the numbers ticket said "done." — neither the number taken, the stake, nor the
   // odds, on a bet whose stake is gone the moment it is placed
   ['POST', '/v1/casino/numbers', { pick: 123, amount: 50 }],
+  // the weekly fight is the numbers ticket's neighbour and read "done." — a stake on a NAMED fighter
+  // at stated odds, every field already in the reply
+  ['POST', '/v1/casino/fight', { side: 'a', amount: 2000 }],
+  // the standing graft: a RECURRING $OMR sink that named neither its price nor when it lapses
+  ['POST', '/v1/law/envelope', null],
   // "paid $140" — the price with the purchase left off, on the buy that feeds every cook
   ['POST', '/v1/kitchen/makings/vim', { qty: 1 }],
   // a permanent build decision that said "done."
@@ -1831,6 +1837,41 @@ const ACTIONS = [
   ['POST', '/v1/gangs/tribute', { amount: 5000 }],       // cash and $OMR tribute share one shape —
   ['POST', '/v1/gangs/tribute/omr', { amount: 10 }],      // the currency marker is what tells them apart
   ['POST', '/v1/gangs/vanity/color', { color: '#3a5f7d' }],
+  // THE SEAL AND THE RENAME sat on that same card and both said "done." — the crest one line up is
+  // the sibling that got it right. Both are $OMR: the seal from the family's POOLED reserve (so the
+  // tribute below fills it first — the ladder's first rung is 150), the rename from the boss's own.
+  ['POST', '/v1/gangs/tribute/omr', { amount: 200 }],
+  ['POST', '/v1/gangs/vanity/seal', null],
+  ['POST', '/v1/gangs/vanity/name', { name: 'Ledger Two ' + Math.random().toString(36).slice(2, 5), tag: 'LD2' }],
+  // OPENING and JOINING a crew raid on an APEX outfit both said "done." — on the game's hardest
+  // targets, where the crew MINIMUM is the number that decides whether the op can go at all. Both
+  // are driven here: JOIN the open raid the seed planted on another token, LEAVE it, then open one
+  // of our own — a character may only be on one crew op at a time, so the order is what makes all
+  // three land. They come BEFORE the rout below, which is what puts the raid cooldown on.
+  ['POST', async () => {
+    const r = (await app.pool.query("SELECT id FROM world_raids WHERE status='planning' AND leader_character <> $1 LIMIT 1", [charId])).rows[0];
+    return r ? `/v1/world/raids/${r.id}/join` : null;
+  }, null],
+  ['POST', async () => {
+    const r = (await app.pool.query(
+      "SELECT raid_id FROM world_raid_members WHERE character_id=$1 LIMIT 1", [charId])).rows[0];
+    return r ? `/v1/world/raids/${r.raid_id}/leave` : null;
+  }, null],
+  ['POST', '/v1/world/kryl/plan', null],
+  // ...and then CALL OFF OUR OWN, because a LEADER disbanding sends {disbanded} where a member sends
+  // {left} — the two senses that collide with the heist's disband. Without this row the collision
+  // path is never driven and its mutation SURVIVES, which is how it was caught.
+  ['POST', async () => {
+    const r = (await app.pool.query(
+      "SELECT id FROM world_raids WHERE leader_character=$1 AND status='planning' LIMIT 1", [charId])).rows[0];
+    return r ? `/v1/world/raids/${r.id}/leave` : null;
+  }, null],
+  // A ROUT THAT TAKES THE OUTFIT'S TURF, driven from INSIDE the family — `frontier` is only ever true
+  // for a raider who has one, which is exactly the term the solo line dropped: a rout that planted the
+  // family's flag read byte-for-byte like a rout by a man with no family at all. The outfit's strength
+  // is parked just above the rout floor in the seed so this raid CROSSES it (a raid at or below the
+  // floor pays nothing and routs nothing — the audit's own crossing guard).
+  ['POST', '/v1/world/dockrats/raid', null],
   ['POST', '/v1/gangs/leave', null],
   ['POST', '/v1/path', { path: PATHS[0].id }],
   ['POST', '/v1/identity/bio', { bio: 'a quiet man' }],
@@ -1876,6 +1917,12 @@ const addAction = (...rows) => ACTIONS.splice(SAFEHOUSE_AT, 0, ...rows);
 // name off the gift response SURVIVED, because that action had never once run. A declared-but-never-
 // driven entry is worse than no entry: it reads on the summary line as covered.
 await app.pool.query("UPDATE characters SET cash=5000000, respect=500000, jail_until=NULL, hosp_until=NULL WHERE id=$1", [charId]);
+await app.pool.query('UPDATE characters SET ammo=600, energy=100 WHERE id=$1', [charId]);
+{ const dr = WORLD_NPCS.find((f) => f.id === 'dockrats');
+  await app.pool.query(
+    `INSERT INTO world_npcs (npc_id, strength, strength_at) VALUES ('dockrats', $1, now())
+       ON CONFLICT (npc_id) DO UPDATE SET strength = $1, strength_at = now(), enraged_until = NULL`,
+    [Math.ceil(dr.max * WORLD.ROUT_FLOOR_BPS / 10000) + 20]); }
 await app.pool.query('UPDATE account_persistent SET omr=1000 WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)', [charId]);
 // The two loudest PvP actions need somebody to aim at, and the fixture's second street is scoped to
 // the seed block — so resolve one here rather than restructure the file. Found by playing: putting a
@@ -1997,6 +2044,18 @@ if (mark) {
   // it never sends. Backdated so there is really something owed.
   await app.pool.query("UPDATE estates SET staff_paid_at = now() - interval '3 days' WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)", [charId]);
   addAction(['POST', '/v1/estate/wages', null]);
+  // CASING and DISBANDING the score. Resolved here rather than written as static rows because both
+  // need the planned job's id, and the plan lands earlier in this same list — addAction splices in
+  // BEFORE the safehouse, so these run after it. The disband is the one that matters: it hands the
+  // fronted stake back, and the plan line PROMISES exactly that ("the stake comes back only if you
+  // disband first"), so the game made the promise and then never confirmed it was kept.
+  const openJob = (verb) => async () => {
+    const row = (await app.pool.query(
+      "SELECT id FROM crew_heists WHERE leader_character=$1 AND status='planning' ORDER BY created_at DESC LIMIT 1",
+      [charId])).rows[0];
+    return row ? `/v1/heists/${row.id}/${verb}` : null;
+  };
+  addAction(['POST', openJob('case'), null], ['POST', openJob('leave'), null]);
 }
 
 // THE COAST GUARD, because `seized` is sent by two systems in two DIFFERENT UNITS. A lender collecting
@@ -2079,6 +2138,10 @@ if (mark) {
     ['POST', `/v1/races/unlist/${raceCar}`, null],
     ['POST', `/v1/races/pinkslip/${raceCar}`, { on: true }],
     ['POST', '/v1/heists/plan', { job: 'payroll', role: 'muscle' }],
+    // CASING spends energy for a per-member bump on the roll and said "done."; DISBANDING refunded
+    // the whole $10,000 stake and said "done." too — while the plan line one row up PROMISES that
+    // refund ("the stake comes back only if you disband first"), so the game made the promise and
+    // never confirmed it was kept. The id is resolved after the plan lands, below.
     // CALLING IT OFF comes FIRST so the under-minimum open below is the one `said` keeps (the map is
     // keyed by url, so a second open would overwrite the "how far short" line asserted further down).
     // Cancelling put the whole manifest back in the trunk and said "done." — neither half.
@@ -2100,7 +2163,14 @@ const mute = [];
 const said = new Map();   // url → the line a player reads, so a WRONG one can be asserted, not just a missing one
 const paidBody = new Map();  // url → the reply that produced it
 let described = 0;
-for (const [m, url, payload] of ACTIONS) {
+// A row may name its path LAZILY. Most can be written flat, but a follow-on whose id is created by
+// an EARLIER ROW IN THIS LIST cannot: resolving it at setup time reads a row that the drive then
+// replaces, and the stale id 4xx's — which is a skip, and a skip reads on the summary line exactly
+// like a covered action. (Found doing precisely that: the seeded heist was resolved up front, the
+// list's own plan row then created a new one, and casing it silently never ran.)
+for (const [m, url0, payload] of ACTIONS) {
+  const url = typeof url0 === 'function' ? await url0() : url0;
+  if (!url) continue;
   const r = await inject(m, url, token, payload);
   if (r.code >= 400 || !r.body) continue;              // a refusal is another suite's business
   described++;
@@ -2436,8 +2506,71 @@ assert(planLine && /fronted|stake/i.test(planLine) && /crew|more/i.test(planLine
   `planning a score fronts the stake and cannot go until the crew fills — both are terms the leader ` +
   `pays for at that moment. Got: ${JSON.stringify(planLine)}`);
 
+// ── the wave-15 lines, each pinned rather than counted: a row that 4xx'd is SKIPPED, and a skip
+// reads on the summary line exactly like a covered action (the recorded declared-but-never-driven
+// lesson). Every one of these was found saying "done." while a sibling on the same card said it right.
+const sealLine = said.get('/v1/gangs/vanity/seal');
+assert(sealLine && /Wax Seal/.test(sealLine) && /reserve/i.test(sealLine),
+  `the seal is bought from the family's POOLED $OMR reserve — it names the seal and what is left, ` +
+  `the way the Foundation one line under it in describe() always has. Got: ${JSON.stringify(sealLine)}`);
+const gnameLine = said.get('/v1/gangs/vanity/name');
+assert(gnameLine && /LD2/.test(gnameLine),
+  `renaming the family costs 150 $OMR and changes the name and TAG on every surface — the crest, ` +
+  `same card and same till, has always said its own. Got: ${JSON.stringify(gnameLine)}`);
+const envLine = said.get('/v1/law/envelope');
+assert(envLine && /\$OMR/.test(envLine) && /\dd|\dh/.test(envLine),
+  `the envelope is a RECURRING sink: what it cost and when it LAPSES are the two things a player has ` +
+  `to know to renew it, and five siblings in that block state one or both. Got: ${JSON.stringify(envLine)}`);
+const fightLine = said.get('/v1/casino/fight');
+assert(fightLine && /pays \$/.test(fightLine) && /\$2,000/.test(fightLine),
+  `a stake on a NAMED fighter at stated odds — the payout is what the bettor is deciding on, and the ` +
+  `track bet one line up in describe() has stated its own all along. Got: ${JSON.stringify(fightLine)}`);
+const planRaidLine = said.get('/v1/world/kryl/plan');
+assert(planRaidLine && /\bcrew|guns|minimum\b/i.test(planRaidLine),
+  `opening a crew raid on an apex outfit says the target and the crew MINIMUM — the number that ` +
+  `decides whether the op can go at all. Got: ${JSON.stringify(planRaidLine)}`);
+const joinRaidLine = [...said].find(([u]) => /world\/raids\/.*\/join$/.test(u))?.[1];
+assert(joinRaidLine && /\d of \d/.test(joinRaidLine),
+  `joining one says how far the crew has left to fill. Got: ${JSON.stringify(joinRaidLine)}`);
+// `disbanded` is sent by two systems in OPPOSITE senses — a raid leader's kills the op for everyone,
+// a heist member's leaves it standing — so both are pinned, or reading them as one says the reverse.
+const raidLeaves = [...said].filter(([u]) => /world\/raids\/.*\/leave$/.test(u)).map(([, l]) => l);
+assert(raidLeaves.length === 2, `both senses of leaving a raid have to drive — a MEMBER walking off ` +
+  `({left}) and the LEADER calling it off ({disbanded}) — or the half that collides with the heist's ` +
+  `own disband is never exercised and its mutation survives. Got: ${JSON.stringify(raidLeaves)}`);
+// The two senses must read OPPOSITE, and the first cut of this assertion did not test that: it
+// asked only for /raid|crew/ and no /stake/, which the collided heist line ("you walked away from
+// the job — the crew goes on without you") satisfies word for word — so the mutation that
+// reintroduced the collision PASSED. An assertion that accepts the exact wrong output is not an
+// assertion. Driven in order, so [0] is the member walking and [1] is the leader calling it off.
+assert(/goes on without you/i.test(raidLeaves[0]),
+  `a MEMBER walking off leaves the raid standing. Got: ${JSON.stringify(raidLeaves[0])}`);
+assert(/stood down|op is gone/i.test(raidLeaves[1]),
+  `a LEADER calling it off ends the op for the whole crew — the opposite of a member walking, and ` +
+  `exactly what the heist's own disband line says in reverse. Got: ${JSON.stringify(raidLeaves[1])}`);
+for (const l of raidLeaves) assert(!/stake|the job/i.test(l),
+  `a crew raid has no stake and is not "the job" — those are the heist's words, and borrowing them ` +
+  `is the collision itself. Got: ${JSON.stringify(l)}`);
+const leftRaidLine = raidLeaves[0];
+assert(leftRaidLine && /raid|crew/i.test(leftRaidLine) && !/stake/i.test(leftRaidLine),
+  `walking off a crew raid is not disbanding a heist — a raid carries no stake, and reading the two ` +
+  `as one line tells the wrong man the wrong thing. Got: ${JSON.stringify(leftRaidLine)}`);
+const routLine = said.get('/v1/world/dockrats/raid');
+assert(routLine && /ROUTED/.test(routLine) && /flag|turf/i.test(routLine),
+  `a rout by a man WITH a family plants its flag on the outfit's turf — that starts tribute and can ` +
+  `be invaded, and without it the line reads byte-for-byte like a rout by a man with none. The co-op ` +
+  `sibling seven lines down has read that field all along. Got: ${JSON.stringify(routLine)}`);
+const caseLine = [...said].find(([u]) => /\/case$/.test(u))?.[1];
+assert(caseLine && /\+\d/.test(caseLine),
+  `casing spends energy for the one number it buys — the bump every man on the crew rolls. ` +
+  `Got: ${JSON.stringify(caseLine)}`);
+const offLine = [...said].find(([u]) => /heists\/.*\/leave$/.test(u))?.[1];
+assert(offLine && /\$10,000|stake/i.test(offLine),
+  `disbanding hands the fronted stake BACK, and the plan line PROMISES exactly that — so the game ` +
+  `made the promise and then never confirmed it was kept. Got: ${JSON.stringify(offLine)}`);
+
 const describedCount = described;
-assert(described >= 75, `only ${described} of ${ACTIONS.length} actions succeeded — the ledger is measuring almost nothing`);
+assert(described >= 100, `only ${described} of ${ACTIONS.length} actions succeeded — the ledger is measuring almost nothing`);
 assert.deepEqual(mute, [], `${mute.length} action(s) a player PRESSES say nothing about what just happened ` +
   `(describe() fell through to "done." or rendered a hole). Every one of these moves money, an asset or a ` +
   `status — write the line, or the game is keeping its own result from the player:\n  ${mute.join('\n  ')}`);

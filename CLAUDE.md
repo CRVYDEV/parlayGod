@@ -14857,3 +14857,57 @@ line reads exactly like a covered action. Correct game behaviour, wrong fixture;
 room to take it back. Driven actions 92 → 96, floor 71 → 75. Three mutations, each caught at its own
 named assertion (the bare `{ok, returned}`; the raw district id; `goodName` dropped from the hosted
 set). Suite green + sim drift-0 + pgquery + pgcheck 47/47 on a fresh real-Postgres database.
+
+**TEN MORE MUTE BUTTONS, AND A COLLISION THAT SAID THE OPPOSITE — wave 15 (2026-08-20).** Another
+play session, driving further into the surfaces the ledger had never reached: the family's vanity
+card, the Law's standing graft, the crew heist's follow-ons, the weekly fight, and the whole World
+raid arc solo and co-op. **Ten findings, all of the same class the last four waves have been
+chasing** — `act()` toasts `describe(r.body)` with no override, so any reply matching no branch reads
+`"done."` — and **eight of the ten had a SIBLING one line away in the same block that got it right**,
+which is what makes the class worth sweeping rather than patching.
+
+**The two that are more than silence.** (1) **The solo rout dropped `frontier`.** A rout by a man
+in a family plants its flag on the outfit's turf — that starts tribute accruing to the treasury and
+makes the outpost invadable — and the line read byte-for-byte like a rout by a man with no family at
+all. Its **co-op sibling seven lines down has read that field all along**, along with `routUnits` and
+`material`; the solo line read none of the three. (2) **`disbanded` is sent by two systems in
+OPPOSITE senses.** A crew-raid LEADER calling it off ends the op for everyone; a heist MEMBER walking
+away leaves the job standing. Reading them as one line tells the leader *"the crew goes on without
+you"* about a raid that no longer exists. The heist always carries `refunded` (the stake it hands
+back) and a raid has no stake to carry, so that is the discriminator — the byte-shape collision class
+(tribute currencies, the monument's three rails, the trace-vs-sweep), and **it was found by the
+guard**: adding the raid-leave row to the ledger surfaced it as a fresh mute the same run.
+
+The rest: **the family SEAL** (150 $OMR out of the pooled reserve every member tributed into — no
+seal named, no reserve left, no next rung, while `foundation` one line down names its institution),
+**the family RENAME** (150 $OMR, name and tag changed on every surface in the game, beside a crest
+that has always said its own), **the ENVELOPE** (a RECURRING sink naming neither its price nor when
+it LAPSES, in a block where five siblings state one or both — and the lapse is the thing a player
+must track to renew it), **the weekly FIGHT** (a $2,000 stake on a named fighter at stated odds, one
+line under the track bet that renders all three), **CASING** a job (energy for the one number it
+buys), **DISBANDING** one (the $10,000 refund the plan line *promises* in so many words), and
+**opening and joining a crew raid** on the game's hardest targets, where `crewMin` is the number that
+decides whether the op can go at all.
+
+**THE LEDGER GREW A LAZY URL, and the reason is a trap worth keeping.** A follow-on whose id is
+created by an *earlier row in the same list* cannot be written flat: resolving it at setup time reads
+a row the drive then replaces, the stale id 4xx's, and **a skip reads on the summary line exactly
+like a covered action** (the recorded declared-but-never-driven lesson). Found doing precisely that —
+the seeded heist was resolved up front, the list's own plan row created a new one, and casing it
+silently never ran. A row may now name its path with a resolver called at drive time. Driven actions
+96 → 108, floor raised to 100.
+
+**TWO OF MY OWN CHECKS WERE WRONG BEFORE THE CODE WAS, both caught by mutation.** The raid-leave
+assertion asked only for `/raid|crew/` and no `/stake/` — which the *collided heist line* ("you
+walked away from the job — the crew goes on without you") satisfies word for word, so the mutation
+that reintroduced the collision PASSED. **An assertion that accepts the exact wrong output is not an
+assertion**; it now tests the property that matters (the two senses must read opposite) and fails by
+name. And the leader-disband path was not being driven at all — the fixture left as a *member* — so
+that half of the collision had no coverage until a second leave row was added after the fixture plans
+its own raid. Ten mutations, ten distinct named failures. Two more shell traps re-paid: a mutation
+written inline with `\&\&` was literalised into the file (a syntax error, so it failed loudly rather
+than passing — the better direction), and a multi-line anchor spanning two differing lines missed
+silently. **Mutations go in a heredoc, on a scratchpad copy, never `git checkout`.**
+
+Suite green + sim drift-0 + mobile 78/78 + client wiring/mirror (647 routes, 149 boards, 108 driven
+actions) + pgquery + pgcheck 47/47 on a FRESH real-Postgres database.
