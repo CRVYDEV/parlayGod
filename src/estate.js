@@ -178,7 +178,11 @@ export async function upgradeEstate(ch, client, h) {
   const spent = Number(cur.spent_omr || 0) + next.omr;
   await upsertEstate(client, ch.account_id, { tier: next.tier, spent_omr: spent });
   await h.track(client, ch.account_id, 'estate_tier', { tier: next.tier, omr: next.omr });
-  return { ok: true, tier: next.tier, name: next.name, spent,
+  // `spent` here is the LIFETIME $OMR sunk into the compound, not what this rung cost — and every
+  // other `spent` in the game is what the action just charged. A client line printing it as the
+  // price would state a running total as a purchase (the monument's `credited` class, one system
+  // over), so the rung's own price rides separately and the two are never one field.
+  return { ok: true, tier: next.tier, name: next.name, spent, omr: next.omr,
     nextTier: estateTierOf(next.tier + 1) ? { name: estateTierOf(next.tier + 1).name, omr: estateTierOf(next.tier + 1).omr } : null };
 }
 

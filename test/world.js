@@ -368,6 +368,19 @@ process.env.WORLD_UPRISING = 'none'; // step-four frontier/tribute tests run upr
 // the step-three rout left the Frontier Mob (FRM, gangId) holding Kryl — now it's REAL turf.
 const kf = worldNpcOf('kryl');
 const kTributePerHr = Math.floor(kf.regenPerHr * WORLD.FRONTIER.TRIBUTE_BPS / 10000);
+// The tribute is a pure function of the WALL CLOCK: warp `tribute_at` back N hours and every
+// millisecond before the collect's own `Date.now()` adds to it. At $800/hr the floor crosses a dollar
+// every 4.5 seconds, and warping back a WHOLE number of hours lands the expectation exactly ON a
+// dollar boundary — so `assert.equal(collected, rate * 5)` holds only while the intervening round
+// trips finish inside 4.5s. That is the class that failed `test/deeds.js` at 10501 vs 10500 under a
+// loaded full-suite run while passing three of three standalone; this is the same shape at 2.5x the
+// slack, which is why it has not fired YET rather than why it cannot. Bounded rather than widened:
+// time only moves forward, so the lower edge stays EXACT (a rate that is too low still fails
+// immediately) and the upper edge allows 30 seconds of accrual, far below any rate change. The CAP
+// assertion below needs none of this — the clamp pins it.
+const TRIB_DRIFT = Math.ceil(kTributePerHr * 30000 / 3600000); // 30s of accrual, in dollars
+const nearTribute = (got, want, msg) => assert(got >= want && got <= want + TRIB_DRIFT,
+  `${msg}: got ${got}, expected ${want} (+ up to $${TRIB_DRIFT} of clock drift)`);
 // (1) the rout installed a base GARRISON + started the TRIBUTE clock
 let kRow = (await pool.query(`SELECT garrison, tribute_at, held_by_gang FROM world_npcs WHERE npc_id='kryl'`)).rows[0];
 assert.equal(Number(kRow.garrison), WORLD.FRONTIER.ROUT_GARRISON, 'the rout installed the base garrison');
@@ -385,12 +398,12 @@ await pool.query(`UPDATE world_npcs SET tribute_at = now() - interval '5 hours' 
 const treas0 = Number((await pool.query(`SELECT treasury FROM gangs WHERE id='${gangId}'`)).rows[0].treasury);
 const col = await call('POST', '/v1/world/collect', { token: soldier.token });   // any member collects → treasury
 assert.equal(col.code, 200, 'a member collects the frontier tribute');
-assert.equal(col.body.collected, kTributePerHr * 5, 'tribute == rate × hours held');
+nearTribute(col.body.collected, kTributePerHr * 5, 'tribute == rate × hours held');
 const treas1 = Number((await pool.query(`SELECT treasury FROM gangs WHERE id='${gangId}'`)).rows[0].treasury);
-assert.equal(treas1 - treas0, kTributePerHr * 5, 'the treasury banks exactly the tribute');
+assert.equal(treas1 - treas0, col.body.collected, 'the treasury banks exactly what the collect reported');
 assert.equal(await ledgerOf(soldier.id, 'cash', 'world:tribute'), 0, 'the tribute is character_id NULL (gang-level) — not on the collector');
 const tributeLedgered = Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='cash' AND reason='world:tribute'`)).rows[0].s);
-assert.equal(tributeLedgered, kTributePerHr * 5, 'the tribute is ledgered world:tribute (a treasury faucet)');
+assert.equal(tributeLedgered, col.body.collected, 'the tribute is ledgered world:tribute for exactly what was reported (a treasury faucet)');
 // the 24h CAP — warp back 48h, collect only a day's worth
 await pool.query(`UPDATE world_npcs SET tribute_at = now() - interval '48 hours' WHERE npc_id='kryl'`);
 const cap = await call('POST', '/v1/world/collect', { token: soldier.token });
@@ -400,7 +413,7 @@ await pool.query(`UPDATE world_npcs SET tribute_at = now() - interval '3 hours' 
 await seedCh(soldier.id, "safe_until = now() + interval '1 hour'");
 assert.equal((await call('POST', '/v1/world/collect', { token: soldier.token })).body.error, 'safe', 'no collecting the frontier from a safehouse (shield, not bunker)');
 await seedCh(soldier.id, 'safe_until = NULL');
-assert.equal((await call('POST', '/v1/world/collect', { token: soldier.token })).body.collected, kTributePerHr * 3, 'once he surfaces, the tribute is still there to collect');
+nearTribute((await call('POST', '/v1/world/collect', { token: soldier.token })).body.collected, kTributePerHr * 3, 'once he surfaces, the tribute is still there to collect');
 
 // (3) invasion gates
 assert.equal((await call('POST', '/v1/world/kryl/invade', { token: soldier.token })).body.error, 'rank', 'only the boss/underboss marches on the frontier');

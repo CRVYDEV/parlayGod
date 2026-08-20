@@ -14911,3 +14911,64 @@ silently. **Mutations go in a heredoc, on a scratchpad copy, never `git checkout
 
 Suite green + sim drift-0 + mobile 78/78 + client wiring/mirror (647 routes, 149 boards, 108 driven
 actions) + pgquery + pgcheck 47/47 on a FRESH real-Postgres database.
+
+**THE ECHO, THE BAR TAKE, AND THREE ESCROWS THAT CAME BACK IN SILENCE — wave 36 (2026-08-20).** Kept
+playing: opened a club and ran it for a night, tuned a car, and pulled money back out of three
+different escrows. **Eight findings, and the first is a CLASS the previous waves had been fixing one
+instance at a time without seeing.**
+
+**THE ECHO.** `describe()` builds `bits` as an accumulator joined with ` · `, and the bare-figure
+`paid $N` catch-all had been moved to the tail of the obligation chain to stop it firing over
+branches that had already spoken. That only half-worked, and the half it missed is the whole point:
+**an `else if` binds to the chain it sits in and NOTHING else**, so the catch-all still fired
+alongside every branch in the **fourteen independent `if` blocks below it**. Driven, three in the
+speakeasy alone: buying a round read *"paid $40,000 · bought top-shelf all night — $39,200 to the
+house"* — two figures side by side, one the price and one the owner's cut, with nothing saying which
+was which — and the standover and the club buyout each printed the **same number twice in one
+sentence**. A true last resort cannot be a chain member: it belongs at the END guarded on nothing
+else having spoken, which is what `!bits.length` does and what the `cost` fallback beside it had been
+doing correctly all along. That makes it safe against the fifteenth branch somebody writes tomorrow,
+rather than against an exclusion list that has to be maintained forever.
+
+**THE BAR TAKE WAS NET OF A CUT NOBODY WAS TOLD ABOUT.** The club owes protection and wages at
+`SPEAKEASY.UPKEEP_BPS` — a fifth off the top, so an $80,000 night pays $64,000 — and the reply has
+carried `gross` and `upkeep` since the day that cut shipped while the line printed the net alone.
+The pad and the nut exactly, on the button an owner presses every day. With it: **the round** named
+only the owner's cut and never the price that left your pocket, **bottle service** was a $OMR burn
+with no price on the line at all, and **the tune-up** was the one buy in the whole racing system
+that never named what it charged — and it is not a constant a player could have read off a card,
+because the Wheelman mastery discounts it and the discounted figure is the one the server ledgers.
+
+**THREE ESCROWS COME BACK AND ONLY ONE OF THEM SPOKE.** Pulling a loan offer said "done." over
+$50,000; pulling a contract stake said "done." over $60,000. The third was worse than silent: a
+cancelled $OMR withdrawal was CLAIMED by the Black Market's branch — `cancelled` reads as truthy —
+so it rendered **tokens as dollars** in a system the player was nowhere near. The discrimination is
+on `cancelled === true` rather than on truthiness, because the market sends a listing id there and
+the chain sends a boolean: the two shapes were never ambiguous, only the test was.
+
+**AND THE MERGE RUN FOUND A FLAKE THAT HAD BEEN SITTING IN `test/deeds.js` ALL ALONG.** It failed at
+**10501 vs 10500** — one dollar — while passing three of three standalone. `backdate(acct, 5)` sets
+`corner_at` to `now() - 5h`, and every millisecond before the collect's own `Date.now()` adds to the
+take; at `CORNER_PER_HR` the floor crosses a dollar every 1.8 seconds, and **backdating a whole
+number of hours lands the expectation exactly ON a dollar boundary** — the most fragile place it
+could sit. So the equality held only while the intervening sequence finished inside 1.8s: true
+running the file alone, false under a loaded full-suite run. Five assertions share the shape; only
+the one with the most work in front of it lost the race. Fixed by guaranteeing what can be
+guaranteed and bounding what cannot: **time only moves forward, so the lower edge stays EXACT** (a
+rate that is too low still fails immediately) and the upper edge allows 30 seconds of accrual,
+orders of magnitude below any rate change, which moves these figures by thousands. **Two of the five
+needed no bound at all** and are now exact against a figure the run itself produced — `collectable`
+against `owed`, and the cash that lands against what the collect REPORTED, which is the property
+that actually matters and was never about the rate. The cap assertion is untouched: the clamp pins
+it, so it was never in this class. Measured on real Postgres afterwards, the drift is **$0**, so the
+allowance is headroom rather than a crutch.
+
+Guarded by a WAVE 36 block in `test/client.js` (162 driven actions, up from 154) that asserts the
+SHAPE for the echo class — no line may open with a bare price followed by a separator — rather than
+three separate wordings, because the guard is against the class and not the three instances that
+happened to surface. Mutation-verified: restoring the echo fails by name, and docking the corner
+accrual $20 fails by name with both figures and the allowance stated (a 0.17% error caught, so the
+bound is tighter than a tolerance rather than looser).
+
+Suite green (99 files) + mobile 78/78 + client wiring/mirror + deeds green three-for-three on a
+FRESH real-Postgres database.

@@ -101,7 +101,11 @@ export async function acceptPact(ch, targetGangId, client, h) {
   const until = new Date(Date.now() + DIPLOMACY.PACT_MS);
   await client.query('UPDATE gang_relations SET accepted=true, until=$3 WHERE gang_a=$1 AND gang_b=$2', [id1, id2, until]);
   bus.emit('streets', { type: 'pact_signed', a: h.owned.gangName, b: targetGangId });
-  return { ok: true, until };
+  // …and say WHO it is with. A bare {ok, until} is a date with no counterparty, so the toast could
+  // only ever be a timestamp — and `until` alone is too generic to discriminate on anyway. The name
+  // is both the fact the player needs and the marker the line keys off.
+  const them = (await client.query('SELECT name FROM gangs WHERE id=$1', [targetGangId])).rows[0];
+  return { ok: true, until, with: them?.name || null };
 }
 
 export async function breakPact(ch, targetGangId, client, h) {
@@ -169,9 +173,14 @@ export async function joinCoalition(ch, coalitionId, client, h) {
 
 export async function leaveCoalition(ch, coalitionId, client, h) {
   if (!h.owned.gangId || !canCommand(h)) throw new GameError('rank', 'Only the boss or underboss walks the family out.');
+  const co = (await client.query(
+    'SELECT g.name FROM coalitions c LEFT JOIN gangs g ON g.id=c.target_gang WHERE c.id=$1', [coalitionId])).rows[0];
   const r = await client.query('DELETE FROM coalition_members WHERE coalition_id=$1 AND gang_id=$2', [coalitionId, h.owned.gangId]);
   if (!r.rowCount) throw new GameError('no_coalition', 'You weren\'t in it.');
-  return { ok: true };
+  // a bare {ok} is indistinguishable from every other bare acknowledgement in the game, so walking
+  // out of a coalition read "done." Name what was walked out OF — read before the DELETE, since the
+  // row it joins through is the one being removed.
+  return { ok: true, leftCoalition: true, against: co?.name || null };
 }
 
 // ── the public board ──

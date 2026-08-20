@@ -2220,9 +2220,66 @@
         : body.item === 'cutkit' ? '. It burns on the wall attempt whether you make it or not.' : '.'}`;
     if (body && body.ok && body.faction && body.name)
       return `\u{1F91D} you run with ${txt(body.name)} now — your crew watches your back on the yard, and you can't shank one of your own`;
+    // …and STANDING DOWN from one, which said "done." while the join one line up got it right — the
+    // forgotten-sibling shape with its own good sibling in frame. What it costs is the whole point:
+    // a yard crew is COVER (mates on the yard lower a shank's odds against you, and the shot-caller
+    // more), so walking away is the moment that protection ends. `left` is a SHAPE COLLISION — the
+    // crew-break's leave sends `left: true` — so the type is the discrimination, not the key.
+    if (body && body.ok && typeof body.left === 'string')
+      return `\u{1F91D} you're on your own on the yard now — no crew watching your back, and anybody in here can come at you`;
+    // DIPLOMACY — the family's entire diplomatic surface was silent, all six verbs, and every one of
+    // them CHANGES A RULE rather than moving money: a pact BLOCKS war between the families for its
+    // term and breaking it is the oathbreak (a permanent honor hit and a public mark), a coalition
+    // halves the war chest and the seize price against a hegemon. None of that is guessable from
+    // "done." Two of the six answered shapes that cannot be discriminated at all — a bare `until`
+    // and a bare `{ok}` — so those got their marker (and the counterparty's NAME, which is the fact
+    // a player actually needs) added at the SOURCE rather than guessed at here.
+    if (body && body.ok && body.pending === true && body.to && body.kind === undefined)
+      return `\u{1F91D} the offer is on ${txt(body.to)}'s table — nothing binds until they sign it. While it stands neither family can declare on the other.`;
+    if (body && body.ok && body.until && body.with !== undefined)
+      return `\u{1F54A} the treaty stands with ${txt(body.with || 'them')} — neither family can declare on the other until ${new Date(body.until).toLocaleDateString()}. Breaking it early is the oathbreak: a public mark and a hit to your honor.`;
+    if (body && body.ok && body.oathbreak !== undefined)
+      return body.oathbreak
+        ? `\u{1F5E1} you broke a sworn treaty — the city knows, and your honor is ${body.honor}. You can declare on them again, and they on you.`
+        : '\u{1F91D} the offer is off the table — nothing was sworn, so nothing was broken';
+    if (body && body.ok && body.against && body.needed !== undefined)
+      return `\u{2694} the coalition against ${txt(body.against)} is open — ${body.needed} families in and it arms: half the war chest and a cheaper price on their ground.`;
+    if (body && body.ok && body.members !== undefined && body.armed !== undefined)
+      return body.armed
+        ? `\u{2694} you're in, and the coalition is ARMED — ${body.members} families, half the war chest and a cheaper seize against them`
+        : `\u{2694} you're in — ${body.members} so far, not enough to arm it yet`;
+    if (body && body.ok && body.leftCoalition)
+      return `\u{1F6B6} the family is out of the coalition${body.against ? ` against ${txt(body.against)}` : ''} — you fight them at full price now`;
     // THE LAW. A bribe is the price with the purchase left off: what it BUYS is a lower file.
     if (body && body.ok && body.exposure !== undefined && body.stage)
       return `\u{1F4B0} $${fmt(body.cost)} to the man — the file drops to ${body.exposure} (${txt(String(body.stage).replace(/_/g, ' '))})`;
+    // THE PLEA, which read "done." over the largest single charge in the game: it forfeits a share of
+    // EVERYTHING (pocket and bank both) and hands you a short stretch — driven at $134,300,923 and a
+    // four-minute sentence, reported as a no-op. It is also the terms class at its worst, because the
+    // money is only half of it: pleading DROPS THE CASE (the indictment is voided and the file wiped
+    // to zero), which is the entire thing that fortune bought and the reply never said. Discriminated
+    // on its own pair — `forfeited` with a sentence attached is this reply and nothing else.
+    // …and `convicted` is the discrimination, because DEMANDING TRIAL answers with the same two
+    // fields — so the first cut of this line rendered an ACQUITTAL as "you took the deal — $0
+    // forfeited and 0s inside", which is fluent and false about the best outcome in the arc. Driven,
+    // not reasoned: the collision showed up the moment the trial was pressed.
+    if (body && body.ok && body.forfeited !== undefined && body.jailSeconds !== undefined && body.convicted === undefined)
+      return `\u{2696} you took the deal — $${fmt(body.forfeited)} forfeited and ${minsTxt(body.jailSeconds)} inside. The case is DROPPED and your file wiped clean; the Bureau starts over from nothing.`;
+    // THE VERDICT is deliberately NOT rewritten here, and the reason is worth keeping: driving it
+    // showed "done." and it looked like a fourth mute — but that was MY OWN collision, not the game.
+    // Both verdicts already read correctly at origin/main; the plea line above had simply captured
+    // them on its way past. Checked before claiming it, and the honest fix is the guard, not a
+    // replacement — an early `return` here would also shadow the accumulator's line below.
+    // TURNING RAT, which read "done." over a permanent, bloodline-deep brand: your own case drops,
+    // the man you name wears the exposure you were carrying, and RAT follows your line forever —
+    // family omertà stops protecting you, and a kill contract on your head no longer needs the
+    // directed floor. All of it silent, on a one-way door.
+    if (body && body.ok && body.named && body.namedIndicted !== undefined)
+      return `\u{1F42D} you gave them ${txt(body.named)} — your case is dropped and the file goes on them${body.namedIndicted ? ', enough to indict them on the spot' : ''}. You wear RAT for good now: omertà stops covering you, and anyone can put a price on your head.`;
+    // BUYING THE JURY — a $OMR burn you get exactly ONE of per case, and the reply carries the one
+    // number it bought (the new conviction odds). Silent, it was 120 tokens for a feeling.
+    if (body && body.ok && body.convictionOdds !== undefined && body.spent !== undefined)
+      return `\u{1F91D} the jury's seen to — ${fmt(body.spent)} $OMR. Conviction odds are ${body.convictionOdds}% if this goes to trial, and you only get to do this once per case.`;
     // THE PORT. An upgrade is permanent capability on a hull, and a rendezvous is CONSENT: another
     // captain can take your run off you mid-sea, which is the whole reason to flag it.
     if (body && body.ok && body.part && body.level !== undefined)
@@ -2471,7 +2528,21 @@
     // the §7.8 bust — success frees them and pays; a miss is the guards taking YOU (falls through
     // to the generic BUSTED line below, which is exactly what happened)
     if (body.busts !== undefined && body.success) bits.push(`🔓 sprung them from lockup — +$${fmt(body.reward)} (${body.busts} lifetime bust${body.busts === 1 ? '' : 's'})`);
-    if (body.success === false && !coop) bits.push((body.jailSeconds ? `BUSTED${body.approach === 'loud' ? ' (went loud)' : ''} — ${minsTxt(body.jailSeconds)} in lockup` : 'it went sideways') + (body.victim ? ` · the mark got away: ${body.victim}` : ''));
+    // THE SOLO RAID'S REPEL, and the generic filler firing on top of a line that already said it.
+    // Two defects, one line. (1) The solo world raid answers {success:false, npc, hospSeconds} where
+    // its own CO-OP sibling one screen up answers {…, crew, hospSeconds} — so the crew version names
+    // the 20 minutes in hospital and the SOLO version, reaching this fallback, said only "it went
+    // sideways". You learned you were laid up when the next thing you tried refused, which is how it
+    // was found: a port run straight after came back "you're in no shape to captain a run".
+    // (2) An NPC-family raid ALSO carries `success:false`, and that shape has its own line further
+    // down — so a repel read "it went sideways · The Moreau repelled the raid", the meaningless
+    // filler stapled to the real sentence. That is the echo class the payroll chain had, arriving
+    // from the other direction: not one `else` too few, but one branch too many. Scope it to the
+    // shapes nobody else owns and let the hospital term ride when it is there.
+    if (body.success === false && !coop && body.family === undefined)
+      bits.push((body.jailSeconds ? `BUSTED${body.approach === 'loud' ? ' (went loud)' : ''} — ${minsTxt(body.jailSeconds)} in lockup`
+        : body.hospSeconds ? `driven off — ${minsTxt(body.hospSeconds)} in the hospital`
+        : 'it went sideways') + (body.victim ? ` · the mark got away: ${body.victim}` : ''));
     // THE HUSTLE — a checked-in stop vs the payoff (the `contact` field is the chain's marker)
     if (body.contact && body.step !== undefined && body.of === 3)
       bits.push(body.pay ? `🤝 THE PAYOFF — $${fmt(body.pay)}. That's a day's hustle done.` : `🤝 checked in (${body.step}/3) — next: ${body.what || 'keep moving'}`);
@@ -2565,6 +2636,28 @@
     if (body.charter !== undefined && body.name && body.spent !== undefined) bits.push(`✦ commissioned the ${body.name} (−${body.spent} $OMR)`);
     if (body.restored !== undefined && body.need !== undefined) bits.push(body.restored ? `the floor OVERRODE the head veto — the decree is RESTORED (${body.weight}/${body.need})` : `moved to override — the floor musters ${body.weight}/${body.need}`);
     if (body.vetoed && body.week !== undefined) bits.push(`VETOED ${body.vetoed} at the table`);
+    // THE CHAMBER'S THREE SILENT VERBS. The veto and the override above read; the three acts that
+    // actually GOVERN did not — all three said "done." over a rule change, and one of them over a
+    // six-figure stake. None of it is guessable, and the timing least of all: the chamber tallies
+    // THIS week's ballots to govern the NEXT one, so a player who votes and then checks the decree
+    // in force sees the old one and reasonably concludes the vote did not land.
+    //
+    // MOVING A MOTION is the sharpest, and it is deliberately stated first because it is the fact
+    // a boss most needs: the deposit comes out of the TREASURY and is refunded only if this motion
+    // is the one ENACTED — every other proposal that week forfeits to the pool. And the part that
+    // is invisible from the button: once ANY motion is on the table, `tallyWinner` filters the
+    // ballots to proposed decrees only, so moving a motion does not merely add an option, it SETS
+    // the ballot — a decree nobody moved cannot win. `deposit` is unique to this reply across all
+    // of src/, so the guard is the reply's own marker rather than which line sits higher.
+    if (body.deposit !== undefined && body.decree && body.takesEffectWeek !== undefined)
+      bits.push(`\u{1F3DB} the family moves ${txt(body.decree)} — $${fmt(body.deposit)} of the treasury staked. It comes back only if ${txt(body.decree)} is the decree enacted; every other motion forfeits. While motions are on the table, only what was MOVED can win.`);
+    // THE BALLOT. `weight` is the seat the family speaks from today (the head chair carries the
+    // most), and `decree` is what separates this from the override above, which also sends `weight`.
+    if (body.decree && body.weight !== undefined && body.takesEffectWeek !== undefined)
+      bits.push(`\u{1F5F3} the family voted ${txt(body.decree)} — weight ${body.weight} at the table. This week's majority governs NEXT week; you can change the vote until the week freezes.`);
+    // THE DAILY STOCK BALLOT, whose whole content is WHICH stock the treasury buys and WHEN.
+    if (body.ticker && body.buysOnDay !== undefined)
+      bits.push(`\u{1F4C8} the family picks ${txt(body.ticker)} — the chamber's weighted pick is what the treasury buys tomorrow. Changeable all day.`);
     // Three rails feed one wall — cash, freight and $OMR — and all three come back with the same
     // `credited` field, which is the wall's DOLLAR-VALUED progress, not what left your pocket. So a
     // player who burned 10 $OMR was told "laid $830", naming neither the currency they spent nor the
@@ -2609,7 +2702,21 @@
         + (body.remaining ? ` — ${body.remaining} still on it, come back with room` : ' — the load is clear'));
       if (body.toll) bits.push(`the docks took $${fmt(body.toll)}`);
       if (body.insurance) bits.push(`insurance paid $${fmt(body.insurance)}`);
-    } else if (body.collected) bits.push(`collected $${fmt(body.collected)}${body.rakeback ? ` + $${fmt(body.rakeback)} rakeback` : ''}`);
+    // THE BAR TAKE IS NET OF A CUT THE PLAYER WAS NEVER TOLD ABOUT. The club owes protection and
+    // wages at SPEAKEASY.UPKEEP_BPS — a fifth of every take, off the top, so a $80,000 night pays
+    // $64,000 — and the reply has carried `gross` and `upkeep` since the day the cut shipped while
+    // the line printed the net alone. That is the pad and the nut exactly: the game knowing a
+    // standing charge against the player's money and not saying it, on the button an owner presses
+    // every day. Only the club's reply carries these two fields, so the clause is scoped by them
+    // and nothing else's collect line moves.
+    // THE BAR TAKE IS NET OF A CUT THE PLAYER WAS NEVER TOLD ABOUT. The club owes protection and
+    // wages at SPEAKEASY.UPKEEP_BPS — a fifth of every take, off the top, so an $80,000 night pays
+    // $64,000 — and the reply has carried `gross` and `upkeep` since the day that cut shipped while
+    // the line printed the net alone. That is the pad and the nut exactly: the game knowing a
+    // standing charge against the player's money and not saying it, on the button an owner presses
+    // every day. Only the club's reply carries these two fields, so the clause is scoped by them
+    // and no other collect line moves.
+    } else if (body.collected) bits.push(`collected $${fmt(body.collected)}${body.upkeep > 0 ? ` — $${fmt(body.gross)} over the bar, $${fmt(body.upkeep)} of it to protection and wages` : ''}${body.rakeback ? ` + $${fmt(body.rakeback)} rakeback` : ''}`);
     // A NO-OP MUST NOT READ AS A SUCCESS. The server has always answered honestly here — a COLD
     // front is skipped and reported as `cold`, an unaffordable pad pays nothing and reports
     // `stillOwed` — but describe() read neither, so both landed as a bare "ok". A tester hit exactly
@@ -2632,6 +2739,33 @@
     else if (body.paid > 0 && body.toLender !== undefined) bits.push(`squared the marker — $${fmt(body.paid)} out, $${fmt(body.toLender)} to the shark and $${fmt(body.vig)} vig to the house. Your name's clean.`);
     else if (body.paid > 0 && body.interest !== undefined) bits.push(`paid the window back — $${fmt(body.paid)}, $${fmt(body.interest)} of it interest`);
     else if (body.paid > 0 && body.perDay !== undefined) bits.push(`staff wages settled — ${fmt(body.paid)} $OMR${body.staff ? ` for ${body.staff} on the household` : ''} (${fmt(body.perDay)} $OMR a day)`);
+    // THE NUT, the last of the six obligations and the only one still falling to the bare catch-all
+    // below — a six-figure charge that read "paid $115,200" and named nothing it bought. What it buys
+    // is the crew WORKING: the wage runs on the wall clock whether the stash moves or not, and a nut
+    // unpaid past the cold window downs their tools, so squaring it is also what THAWS them. `crew`
+    // is the discrimination (hiring a hand answers {crew, cost} and never `paid`).
+    else if (body.paid > 0 && typeof body.crew === 'number') bits.push(`the nut is covered — $${fmt(body.paid)} to ${body.crew} hand${body.crew === 1 ? '' : 's'}. They work the corner again; the wage runs whether the stash moves or not.`);
+    // THE HUSH and THE BARE FIGURE, moved up into this chain from the secrets chain below — and the
+    // move is the whole fix. The catch-all was `else if`-chained to the EXPOSE line, which is a
+    // different chain entirely, so it fired a SECOND time after any obligation line above had already
+    // named the figure: the pad, the shark, the window and the estate's staff each read their own
+    // sentence and then "· paid $N" again (driven, four of six). Worse for the estate, whose money is
+    // $OMR — the catch-all assumes cash, so twelve tokens echoed back as "$12". One `else`, four
+    // echoes. Nothing is lost by moving them: a reply carrying a bare `paid` and matching none of the
+    // above still lands here, which is what a catch-all is for.
+    // EVERY SECRET NAME ALREADY STARTS WITH "The" (The Wash Records, The Bodies, The Kitchen Books,
+    // The Second Ledger — all four), so the article this line added read "The The Wash Records" on
+    // every hush payment ever made, not on an edge case. Found by reading the line, not the code.
+    else if (body.paid > 0 && body.kind && body.omrSpent === undefined) bits.push(`paid the hush — $${fmt(body.paid)}. ${txt(body.kind)} stays buried, for now.`);
+    // ...and the bare figure is NOT one of them any more — it moved to the very end of this function,
+    // because chaining it here only half-fixed the echo it was moved here to fix. An `else if` binds
+    // to the chain it sits in and nothing else, so the catch-all still fired alongside every branch
+    // in the FOURTEEN `if` blocks below it. Driven, three in the speakeasy alone: buying a round read
+    // "paid $40,000 · bought top-shelf all night — $39,200 to the house" (two figures side by side,
+    // one the price and one the owner's cut, and nothing saying which is which); the standover and
+    // the club buyout each printed the SAME number twice in one sentence. A true last resort has to
+    // be guarded on nothing else having spoken, which is what `!bits.length` at the end does — the
+    // shape the `cost` fallback down there already uses.
     // DIRTY LAUNDRY — the shovel, the demand and the burn, all three of which read "done." The dig is
     // a 60 $OMR burn that lands EITHER WAY, so the one thing a player needs back from it is whether
     // the money bought anything; the extort is the moment the mark FINDS OUT (an un-extorted secret
@@ -2641,17 +2775,25 @@
     else if (body.found === false) bits.push(`nothing in their trash${body.spent ? ` — ${fmt(body.spent)} $OMR gone` : ''}. Clean, or somebody swept it first; give it a day before you look again.`);
     if (body.demand !== undefined && body.deadlineSeconds !== undefined) bits.push(`\u{1F4B0} the demand is out — $${fmt(body.demand)}, ${minsTxt(body.deadlineSeconds)} to pay. They know you have it now, and they know what it is.`);
     if (body.exposeHeat !== undefined && body.kind) bits.push(`\u{1F4E2} you handed ${txt(body.kind)} to the Bureau — +${body.exposeHeat} on their file, and the leverage is spent`);
-    // EVERY SECRET NAME ALREADY STARTS WITH "The" (The Wash Records, The Bodies, The Kitchen Books,
-    // The Second Ledger — all four), so the article this line added read "The The Wash Records" on
-    // every hush payment ever made, not on an edge case. Found by reading the line, not the code.
-    else if (body.paid > 0 && body.kind && body.omrSpent === undefined) bits.push(`paid the hush — $${fmt(body.paid)}. ${txt(body.kind)} stays buried, for now.`);
-    else if (body.paid > 0 && body.bought === undefined) bits.push(`paid $${fmt(body.paid)}`);
     if (body.shuttered) bits.push(`closed up the ${body.shuttered} — the pad on it stops${body.back > 0 ? `, $${fmt(body.back)} back` : ', nothing back'}`);
     // `walked` means two different things: a kitchen hand let go, and the estate's staff downing
     // tools over unpaid wages. HIRING a groundskeeper answers {staff, name, wageOmrDay, walked:false}
     // and landed in the crew-firing line — so a hire read as a firing AND printed the word
     // "undefined" twice at the player, because the crew line reads `settled` and `crew`, which the
     // estate never sends. Scope the crew line to `crew`, and give the hire its own.
+    // THE STAFF WALKING OUT, which is the loudest thing the household can do and read "done." — the
+    // one branch of `payStaffWages` that pays NOTHING, so every guard in the obligations chain above
+    // (all of them `paid > 0`) skips it and the fallback has nothing to say. Driven: the card offers
+    // "pay the household (42 $OMR)", the press resolves a walk seven days in arrears, the staff row
+    // is DELETED, the arrears die with the insult — and the toast said "done." The card's own chip
+    // does warn, but the toast is the moment the player is looking, and the money not moving is
+    // exactly what needs explaining. `paid` distinguishes it from the kitchen's `walked` (a hand let
+    // go, {walked, crew, settled}) — one field name, two systems, the collision this file keeps
+    // meeting; scope to the reply's own marker rather than to which line sits higher.
+    if (body.walked === true && body.paid !== undefined && body.crew === undefined)
+      bits.push(`\u{1F6AA} the household walked — you were too far behind on the wages, and they've gone. The back pay went with them (nothing charged), but the house is empty: hire again from scratch.`);
+    else if (body.paid === 0 && body.perDay !== undefined)
+      bits.push(`the book was already square — nothing owed. The household runs ${fmt(body.perDay)} $OMR a day.`);
     if (body.wageOmrDay !== undefined && body.staff) bits.push(`${txt(body.name)} is on the household — ${fmt(body.wageOmrDay)} $OMR a day, and they down tools if the wages go unpaid`);
     else if (body.walked !== undefined && body.crew !== undefined) bits.push(body.walked
       ? `they'd already downed tools — one hand walks, ${body.crew} left on the corner`
@@ -2666,7 +2808,12 @@
     }
     if (body.forPinks) bits.push(body.win ? `🎀 PINKS — you won their ${body.wonCar?.model || 'car'}` : `🎀 PINKS — you lost your ${body.lostCar?.model || 'car'}`);
     if (body.grandPrix && body.buyin !== undefined && body.pool !== undefined) bits.push(`🏁 on the grid — $${fmt(body.buyin)} in · pool $${fmt(body.pool)}, ${body.entrants} runner${body.entrants > 1 ? 's' : ''}`);
-    if (body.tune != null && body.power != null) bits.push(`tuned up — engine at ${body.tune}, power ${body.power}`);
+    // The tune is a repeatable cash sink and was the one buy in the whole racing system that never
+    // named its price — the nitrous line two screens up states `spent`, and so does the boat refit,
+    // which is the same shape. It also MOVES: the Wheelman mastery discounts it, so the figure the
+    // player is charged is not a constant they could have read off a card, and the DISCOUNTED number
+    // is the one the server ledgers. Say what left the pocket.
+    if (body.tune != null && body.power != null) bits.push(`tuned up — engine at ${body.tune}, power ${body.power}${body.spent ? ` · $${fmt(body.spent)}` : ''}`);
     // `seized` is a lender collecting a defaulted marker AND the Coast Guard taking your cargo, and
     // this line — written for the lender, in DOLLARS — fired for the interdiction too, where the field
     // counts UNITS: 20 units of contraband and a $1,200 fine read "collected $20" ahead of the real
@@ -2692,12 +2839,31 @@
     if (body.tier && body.tierOf !== undefined && body.pay !== undefined)
       bits.push(`📜 ${body.task} — +$${fmt(body.pay)}${body.capstone ? ` (incl. the ${body.tier} capstone $${fmt(body.capstone)})` : ''} · ${body.tier} ${body.tierDone}/${body.tierOf}`);
     if (body.task && body.cash !== undefined && body.kind !== 'social') bits.push(`reward: +$${fmt(body.cash)}${body.cb ? ` +${body.cb} crates` : ''}${body.en ? ` +${body.en} energy` : ''}${body.capstone ? ' — THE FIRST WEEK IS DONE!' : ''}`);
-    if (body.spent !== undefined && body.tier && body.name) bits.push(`moved up to the ${body.name}`);
+    // THE COMPOUND, which said only "moved up to the Safe House" over a $OMR burn and named no
+    // figure at all — while the reply carried three. The trap is that its `spent` is the LIFETIME
+    // total sunk into the place, where every other `spent` in the game is what the action just
+    // charged; printing it as a price would have been fluent and wrong rather than merely silent,
+    // which is why the rung's own `omr` is a separate field. `nextTier` is the discriminator (no
+    // other action REPLY carries the key) and it survives the top rung, where it is null.
+    if ('nextTier' in body && body.tier && body.name && !body.district)
+      bits.push(`\u{1F3DB} the place is a ${body.name} now — ${fmt(body.omr)} $OMR${body.spent ? `, ${fmt(body.spent)} sunk into it all told` : ''}${body.nextTier ? `. Next up: the ${body.nextTier.name}, ${fmt(body.nextTier.omr)} $OMR` : '. Nothing above it — that is the top of the ladder'}`);
+    else if (body.spent !== undefined && body.tier && body.name) bits.push(`moved up to the ${body.name}`);
+    // THE GALA — a $OMR burn that fell to the bare catch-all and read "paid $360", which names a
+    // price, leaves the purchase off, and gets the CURRENCY wrong on top (the catch-all assumes cash;
+    // the gala is billed in tokens). What the money buys is the open-doors WINDOW: for the next few
+    // hours anyone alive can come be seen, the streets are told, and every guest lands on a permanent
+    // guest list that feeds the house's turnout record — none of which a figure alone conveys.
+    // `hoursOpen` is unique to this reply across the whole of src/.
+    if (body.hoursOpen !== undefined && body.cost !== undefined)
+      bits.push(`\u{1F942} the doors are open — ${fmt(body.cost)} $OMR, and the city has ${body.hoursOpen}h to come be seen. Every guest signs the book.`);
     if (body.feature && body.name) bits.push(`built the ${body.name}`);
     if (body.bid !== undefined && body.name && body.youLead) bits.push(`bid ${fmt(body.bid)} $OMR on ${body.name} — you lead`);
     if (body.place && body.amount !== undefined) bits.push(`dedicated ${body.place} to ${body.name} (${fmt(body.amount)} $OMR)`);
-    if (body.toOwner !== undefined && body.round) bits.push(`bought ${body.round} — $${fmt(body.toOwner)} to the house${body.regular ? ' (you\'re a regular now)' : ''}`);
-    if (body.bottle && body.spent !== undefined) bits.push(`${body.bottle} — the room turned to look`);
+    // The price leads, because it is what LEFT YOUR POCKET — this line used to state only the
+    // owner's cut, and the bare-figure catch-all stapled the price in front of it, which is how two
+    // figures came to sit side by side with nothing saying which was which. Say both, in order.
+    if (body.toOwner !== undefined && body.round) bits.push(`\u{1F942} bought ${body.round} — $${fmt(body.paid)}, $${fmt(body.toOwner)} of it to the house${body.regular ? '. You\'re a regular here now.' : ''}`);
+    if (body.bottle && body.spent !== undefined) bits.push(`${body.bottle} — ${fmt(body.spent)} $OMR, and the room turned to look`);
     if (body.game && typeof body.win === 'boolean' && body.bet !== undefined) bits.push(body.win ? `the table paid — +$${fmt(Math.abs(body.net ?? 0))}` : `the house keeps it — −$${fmt(Math.abs(body.net ?? body.bet))}`);
     if (body.game === 'blackjack' && !body.done) bits.push(`dealt ${body.playerTotal} — dealer shows ${body.dealerUp === 1 ? 'an ace' : body.dealerUp}`);
     if (body.game === 'blackjack' && body.done) bits.push(
@@ -2804,8 +2970,14 @@
     if (body.guard !== undefined && body.price !== undefined) bits.push(`hired protection — $${fmt(body.price)} up front`);
     if (body.hired === true && body.fee !== undefined) bits.push(`hired a hand for the ${body.role} seat — $${fmt(body.fee)}. A body fills the crew, but takes a cut and earns you nothing extra.`);
     if (body.family !== undefined && body.success !== undefined && (body.loot !== undefined || body.hospSeconds !== undefined)) {
-      if (body.success) bits.push(`hit ${body.family} — took $${fmt(body.loot)} off their war chest${body.conquered ? '. ROUTED — your family now holds them as a vassal.' : ''}${body.warWon ? ' \u{2694}\u{FE0F} CAMPAIGN WON — a war-chief trophy for the family.' : ''}${body.countered ? ' Their guns caught you leaving — you\'re in the hospital.' : ''}`);
-      else bits.push(`${body.family} repelled the raid — their guns put you in the hospital.`);
+      // The `countered` clause opened with a space and the clause before it ends with no stop, so
+      // whenever neither `conquered` nor `warWon` fired the sentence ran together: "took $50,000 off
+      // their war chest Their guns caught you leaving". That is the ordinary shape of a successful
+      // raid, not an edge case. And BOTH halves knew you were hospitalised and neither said for how
+      // long — the number is right there in the reply, and being off the board for half an hour is
+      // the thing you plan the next move around.
+      if (body.success) bits.push(`hit ${body.family} — took $${fmt(body.loot)} off their war chest${body.conquered ? '. ROUTED — your family now holds them as a vassal.' : ''}${body.warWon ? ' \u{2694}\u{FE0F} CAMPAIGN WON — a war-chief trophy for the family.' : ''}${body.countered ? `. Their guns caught you leaving — ${body.hospSeconds ? minsTxt(body.hospSeconds) : 'a spell'} in the hospital.` : ''}`);
+      else bits.push(`${body.family} repelled the raid — their guns put you in the hospital${body.hospSeconds ? ` for ${minsTxt(body.hospSeconds)}` : ''}.`);
     }
     if (body.winScore !== undefined && body.endsSeconds !== undefined) bits.push(`\u{2694}\u{FE0F} war declared on ${body.family} — land ${body.winScore} raids inside ${minsTxt(body.endsSeconds)} to win the campaign`);
     if (body.tributes !== undefined && body.collected !== undefined) { if (body.collected > 0) bits.push(`collected $${fmt(body.collected)} in vassal tribute → the treasury.`);
@@ -2827,9 +2999,28 @@
       bits.push(`🚚 delivered ${body.delivered} — $${fmt(body.earned)} in${body.remaining > 0 ? `, the order still wants ${body.remaining}` : ' (order filled)'}`);
     if (body.claimed !== undefined && body.awaiting !== undefined)
       bits.push(`picked up ${body.claimed} into the trunk${body.awaiting > 0 ? ` — ${body.awaiting} still waiting at the dock` : ''}`);
-    if (body.cancelled !== undefined) bits.push(body.refunded !== undefined
+    // THREE ESCROWS COME BACK AND ONLY ONE OF THEM SPOKE. `refunded` is what the game says when
+    // money it was holding for you is released, and four systems send it: the crew heist (its own
+    // line, further up), the Black Market (this one), the loan shark and a hit contract (both of
+    // which said "done." over five and six figures), and a queued $OMR withdrawal — which was WORSE
+    // than silent, because `cancelled` reads as truthy and this branch claimed it, so pulling a
+    // 12-token withdrawal read "pulled it off the board — $12 escrow back": the market's words for
+    // a system the player was nowhere near, and TOKENS printed as DOLLARS. That last one is why the
+    // discrimination is on `cancelled === true` rather than on truthiness — the market sends a
+    // listing ID there and the chain sends a boolean, so the two shapes were never ambiguous.
+    if (body.cancelled === true && body.refunded !== undefined)
+      bits.push(`\u{1F517} the withdrawal is off the queue — ${fmt(body.refunded)} $OMR back in your balance. Nothing was signed, so nothing was ever claimable on-chain.`);
+    else if (body.cancelled !== undefined) bits.push(body.refunded !== undefined
       ? `pulled it off the board — $${fmt(body.refunded)} escrow back${body.awaiting > 0 ? `, and ${body.awaiting} delivered units still wait for you at the dock` : ''}`
       : 'pulled it off the board — what was on it comes back to you');
+    // The shark's own offer and a hit contract's stake, both of which read "done." while real money
+    // moved back. Each is scoped by a field only its own reply carries: the contract names what is
+    // LEFT on the mark's head (a pot several funders share, so pulling your share does not
+    // necessarily clear it), the shark's has neither and is the plainer sentence.
+    else if (body.refunded !== undefined && body.potRemaining !== undefined)
+      bits.push(`pulled your stake off the contract — $${fmt(body.refunded)} back${body.potRemaining > 0 ? `. There's still $${fmt(body.potRemaining)} on their head from other funders.` : `, and there's nothing left on their head.`}`);
+    else if (body.refunded !== undefined && body.ok)
+      bits.push(`\u{1F91D} took the offer off the street — $${fmt(body.refunded)} out of escrow and back in your pocket`);
     if (body.bought !== undefined && body.paid !== undefined) bits.push(body.bought === 'car'
       ? `🚗 bought outright — $${fmt(body.paid)}. It's in your garage.`
       : `bought ${body.qty} × ${txt(body.bought)} — $${fmt(body.paid)} out of pocket${body.remaining > 0 ? ` (${body.remaining} left on the lot)` : ''}`);
@@ -2894,6 +3085,12 @@
       bits.push(`\u{1F94A} you fight as ${txt(body.name)}${beat ? ` \u2014 you have the edge on a ${txt(beat)}, and give it to whoever counters you` : ''}`);
     }
     if (body.cost && body.fixed === undefined && !bits.length) bits.push(`paid $${fmt(body.cost)}`);
+    // THE BARE FIGURE, and it belongs HERE rather than in the obligation chain it used to end: it is
+    // a last resort, so its guard is that no other branch spoke. `bought` stays in the condition —
+    // a purchase that names what it bought does not want a price stapled in front of it — but the
+    // real guard is `!bits.length`, which is what makes this safe against the fifteenth branch
+    // somebody adds tomorrow instead of against the exclusion list this would otherwise become.
+    if (body.paid > 0 && body.bought === undefined && !bits.length) bits.push(`paid $${fmt(body.paid)}`);
     return bits.length ? bits.join(' · ') : (body.message || 'done.');
   }
 
