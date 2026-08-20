@@ -141,7 +141,7 @@ export async function takeHouseLoan(ch, amount, client, h) {
     [id, ch.id, amt, LOAN.HOUSE_RATE, LOAN.HOUSE_TERM_H, new Date(Date.now() + LOAN.HOUSE_TERM_H * 3600000)]);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: amt, reason: 'loan:house:take' });
   await track(client, ch.account_id, 'loan_house_take', { amount: amt });
-  return { ok: true, id, principal: amt, rate: LOAN.HOUSE_RATE,
+  return { ok: true, id, principal: amt, rate: LOAN.HOUSE_RATE, house: true,
     owed: loanOwed(amt, LOAN.HOUSE_RATE), dueHours: LOAN.HOUSE_TERM_H };
 }
 
@@ -404,7 +404,7 @@ export async function buyPaper(ch, seller, loanId, client, h) {
   await h.ledger(client, { currency: 'cash', amount: -take, reason: 'loan:paper' }); // NULL-char take → pool (the market-take precedent)
   await h.notify(client, seller.id, 'paper_sold', { to: ch.name, price: toSeller });
   if (loan.borrower_character) await h.notify(client, loan.borrower_character, 'paper_transferred', { to: ch.name });
-  return { ok: true, price, toSeller, take };
+  return { ok: true, price, toSeller, take, paper: true };
 }
 
 // POST /v1/loans/square — pay to square your name: clears WANTED (calls off the NPC hunters + the pool

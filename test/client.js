@@ -2643,6 +2643,106 @@ if (traceLine) assert(/still listening/i.test(traceLine) && !/swept/i.test(trace
     `repaying a loan read "squared the marker … · paid $N" — the catch-all doubled the figure. Got: ${JSON.stringify(repayLine)}`);
 }
 
+// WAVE 19 — THE HIGH-SEVERITY BYTE-SHAPE COLLISIONS & MUTES a completed 9-cluster play-through
+// surfaced. Buying a loan's paper on the secondary market read "took over the club — $undefined
+// paid" (it collided with a speakeasy buyout — both send `toSeller`); borrowing from the house read
+// the LENDER's "money's on the street … undefinedh" line; joining a crew heist read the LEADER's
+// "$undefined fronted" plan line with an empty job name; redeeming $OMR at the window, copping a
+// plea, and flipping informant all read "done."; a completed mission read the VANITY custom-title
+// line ("title dropped — just your name from here") and threw its reward away; an outpost INVASION
+// read a garrison REINFORCEMENT's line (and a real reinforce read "done."); and an npc-hire KILL and
+// MISS were byte-identical "paid $N". Each server return now carries a system discriminator
+// (`paper`/`house`/`sov`, join now sends `name`); the light seven are DRIVEN live so the silence
+// sweep covers them, the state-heavy four (siege win/loss, invade/reinforce — driven live by
+// test/expansion.js & test/world.js, which fail if a core field is renamed) are pinned by shape.
+{
+  const mk19 = async (n) => { const t = (await inject('POST', '/v1/auth/guest')).body.token;
+    await inject('POST', '/v1/character', t, { name: n + Math.random().toString(36).slice(2, 6) });
+    const id = (await inject('GET', '/v1/me', t)).body.character.id;
+    await app.pool.query("UPDATE characters SET cash=50000000, respect=800000, energy=100, nerve=100, ammo=600, muscle=10, jail_until=NULL, hosp_until=NULL, loc='docks' WHERE id=$1", [id]);
+    const acct = (await app.pool.query('SELECT account_id FROM characters WHERE id=$1', [id])).rows[0].account_id;
+    await app.pool.query("UPDATE account_persistent SET omr=5000, made_until=now()+interval '30 days' WHERE account_id=$1", [acct]);
+    return { t, id, acct }; };
+  const fold19 = (m, url, r) => { described++;
+    let line; try { line = String(describeFn(r.body, r.code)); } catch (e) { line = 'THREW: ' + e.message; }
+    said.set(url, line); paidBody.set(url, r.body);
+    if (line === 'done.' || /^paid \$[\d,.]+$/.test(line) || /undefined|NaN|\[object|^THREW/.test(line)) mute.push(`${m} ${url} → ${JSON.stringify(line)}`);
+    return line; };
+  const a = await mk19('W19 Ace '), b = await mk19('W19 Mark '), c = await mk19('W19 Buyer ');
+
+  // THE LOAN HOUSE — borrowing from the always-open backed pool. Read the LENDER's escrow line with
+  // `undefinedh` where the offer's `hours` would be (the house sends `dueHours`).
+  await app.pool.query('UPDATE loan_house SET pool = 100000000 WHERE id=1');
+  const houseLine = fold19('POST', '/v1/loans/house', await inject('POST', '/v1/loans/house', a.t, { amount: 5000 }));
+  assert(/the house lent you/.test(houseLine) && !/on the street|undefined/.test(houseLine),
+    `borrowing from the house read the lender's offer line ("money's on the street … undefinedh"). Got: ${JSON.stringify(houseLine)}`);
+
+  // THE PAPER MARKET — buying an active loan's marker. Read the SPEAKEASY buyout line: "took over the
+  // club — $undefined paid". `paper` names the system; the buyout branch is gated on `paid`.
+  await inject('POST', '/v1/loans', a.t, { amount: 100000, rate: 0.2, hours: 24 });
+  const plid = (await app.pool.query('SELECT id FROM loans WHERE lender_character=$1 ORDER BY id DESC LIMIT 1', [a.id])).rows[0].id;
+  await inject('POST', `/v1/loans/${plid}/take`, b.t, {});
+  await inject('POST', `/v1/loans/${plid}/sell`, a.t, { price: 60000 });
+  const paperLine = fold19('POST', `/v1/loans/${plid}/buy`, await inject('POST', `/v1/loans/${plid}/buy`, c.t, {}));
+  assert(/bought the paper/.test(paperLine) && !/took over|undefined/.test(paperLine),
+    `buying loan paper read the speakeasy buyout line ("took over the club — $undefined paid"). Got: ${JSON.stringify(paperLine)}`);
+
+  // THE CREW HEIST — JOINING a plan (not fronting the stake). Read the LEADER's plan line: "$undefined
+  // fronted" with an empty job name. `name` now rides the join reply; plan is gated on `stake`.
+  const planR = await inject('POST', '/v1/heists/plan', a.t, { job: 'corner', role: 'muscle' });
+  assert.equal(planR.code, 200, `wave-19 heist plan failed: ${JSON.stringify(planR.body)}`);
+  const hid = planR.body.id;
+  const joinLine = fold19('POST', `/v1/heists/${hid}/join`, await inject('POST', `/v1/heists/${hid}/join`, b.t, { role: 'wheelman' }));
+  assert(/you're in on The Corner Store/.test(joinLine) && !/is planned|\$undefined|fronted/.test(joinLine),
+    `joining a heist read the leader's plan line ("$undefined fronted", empty job name). Got: ${JSON.stringify(joinLine)}`);
+
+  // THE WINDOW — redeem earned $OMR for cash out of the till (one way). Read "done."
+  await app.pool.query('UPDATE exchange_pool SET balance = 100000000 WHERE id=1');
+  const redeemLine = fold19('POST', '/v1/window/redeem', await inject('POST', '/v1/window/redeem', a.t, { amount: 50 }));
+  assert(/redeemed .* \$OMR at the window/.test(redeemLine),
+    `redeeming $OMR at the window read "done." Got: ${JSON.stringify(redeemLine)}`);
+
+  // THE LAW — a plea (certain forfeiture + short jail) and flipping informant, both "done." Flip is
+  // two-party (names a rival, seeds their case); indict via SQL. Do flip first (it clears indicted),
+  // then re-indict for the plea.
+  await app.pool.query("UPDATE characters SET indicted_at=now(), heat_exposure=5000 WHERE id=$1", [a.id]);
+  const flipLine = fold19('POST', `/v1/law/flip/${b.id}`, await inject('POST', `/v1/law/flip/${b.id}`, a.t, {}));
+  assert(/you flipped — named/.test(flipLine),
+    `flipping informant read "done." Got: ${JSON.stringify(flipLine)}`);
+  await app.pool.query("UPDATE characters SET indicted_at=now(), heat_exposure=5000, jail_until=NULL WHERE id=$1", [a.id]);
+  const pleaLine = fold19('POST', '/v1/law/plea', await inject('POST', '/v1/law/plea', a.t, {}));
+  assert(/copped a plea/.test(pleaLine),
+    `copping a plea read "done." Got: ${JSON.stringify(pleaLine)}`);
+
+  // A COMPLETED MISSION — carries `title` (null here) AND a `reward`; it read the vanity custom-title
+  // line "title dropped — just your name from here" as if the player had CLEARED their title.
+  await app.pool.query("UPDATE characters SET muscle=15, mission_at=NULL WHERE id=$1", [c.id]);
+  const misLine = fold19('POST', '/v1/missions/m1', await inject('POST', '/v1/missions/m1', c.t, {}));
+  assert(/mission done/.test(misLine) && !/title dropped|just your name/.test(misLine),
+    `a completed mission read the vanity title line ("title dropped — just your name"). Got: ${JSON.stringify(misLine)}`);
+
+  // STATE-HEAVY (shapes pinned to src; driven live by test/expansion.js siege + test/world.js invade,
+  // which fail if a core field of these returns is renamed).
+  const siegeWin = String(describeFn({ ok: true, sov: true, win: true, razed: false, newTier: 2, sovPoints: 5, cost: 100000 }, 200));
+  assert(/stronghold falls to tier 2/.test(siegeWin) && !/^WIN — \+\$0|the house keeps/.test(siegeWin),
+    `a sovereignty siege WIN read the casino win line "WIN — +$0". Got: ${JSON.stringify(siegeWin)}`);
+  const siegeLoss = String(describeFn({ ok: true, sov: true, win: false, dmg: 20, cost: 100000 }, 200));
+  assert(/siege was thrown back/.test(siegeLoss) && !/jump went bad/.test(siegeLoss),
+    `a repelled siege read the street-jump loss line "the jump went bad". Got: ${JSON.stringify(siegeLoss)}`);
+  const invadeLine = String(describeFn({ ok: true, npc: 'kryl', name: 'The Kryl Syndicate', cost: 75000, garrison: 75000 }, 200));
+  assert(/took The Kryl Syndicate's outpost/.test(invadeLine) && !/reinforced/.test(invadeLine),
+    `invading a rival outpost read a garrison REINFORCEMENT's line. Got: ${JSON.stringify(invadeLine)}`);
+  const reinforceLine = String(describeFn({ ok: true, npc: 'kryl', name: 'The Kryl Syndicate', spent: 50000, garrison: 75000 }, 200));
+  assert(/reinforced The Kryl Syndicate's garrison/.test(reinforceLine),
+    `reinforcing your own garrison read "done." (its branch was gated on the invade field). Got: ${JSON.stringify(reinforceLine)}`);
+  const hitKill = String(describeFn({ ok: true, hit: true, killed: true, success: 0.5, cost: 1000000 }, 200));
+  assert(/contractor put him down/.test(hitKill) && !/^paid \$/.test(hitKill),
+    `an npc-hire KILL read the bare "paid $N" catch-all. Got: ${JSON.stringify(hitKill)}`);
+  const hitMiss = String(describeFn({ ok: true, hit: false, success: 0.5, cost: 50000 }, 200));
+  assert(/contractor missed/.test(hitMiss) && !/^paid \$/.test(hitMiss),
+    `an npc-hire MISS read the bare "paid $N" catch-all. Got: ${JSON.stringify(hitMiss)}`);
+}
+
 // The four INVERSIONS. Each is a real sentence about a real system — just not the one the player is
 // looking at — so both silence patterns read straight past them and only a named claim can hold them.
 const invert = [

@@ -221,10 +221,10 @@ export async function siegeSov(ch, districtId, client, h) {
       await client.query('DELETE FROM sov_siege_cooldowns WHERE district_id=$1', [districtId]);
     } else await client.query('UPDATE sov_structures SET tier=$2 WHERE district_id=$1', [districtId, tier - 1]);
     bus.emit('streets', { type: 'sov_breached', gang: g.name, district: districtId, razed: tier <= 1 });
-    return { ok: true, win: true, razed: tier <= 1, newTier: tier - 1, sovPoints: points, cost: SOV.SIEGE_COST };
+    return { ok: true, sov: true, win: true, razed: tier <= 1, newTier: tier - 1, sovPoints: points, cost: SOV.SIEGE_COST };
   }
   ch.health = Math.max(1, Number(ch.health) - SOV.SIEGE_FAIL_DMG);
-  return { ok: true, win: false, dmg: SOV.SIEGE_FAIL_DMG, cost: SOV.SIEGE_COST };
+  return { ok: true, sov: true, win: false, dmg: SOV.SIEGE_FAIL_DMG, cost: SOV.SIEGE_COST };
 }
 
 // the public sov map (EVE: sovereignty is VISIBLE — windows and all; the timer is the content)

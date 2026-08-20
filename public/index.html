@@ -2275,8 +2275,13 @@
         : `\u{1F4CB} ${txt(body.name)} is off the strip — no new match races`;
     // THE SCORE. The stake is FRONTED — it comes back only on a pre-execution disband — and the job
     // cannot go until the crew is filled, so both terms ride the line the leader reads when they pay.
-    if (body && body.ok && body.crewNeeded !== undefined && body.role)
+    // PLAN fronts a stake (only the leader does); JOIN takes an open seat on an existing plan and
+    // fronts nothing — it was reading the plan line as "$undefined fronted" with an empty job name.
+    // Name the system: plan is gated on `stake`; join reads `crew` (the current headcount).
+    if (body && body.ok && body.crewNeeded !== undefined && body.role && body.stake !== undefined)
       return `\u{1F5FA} ${txt(body.name)} is planned — you're ${txt(body.role)}, $${fmt(body.stake)} fronted${body.fenced ? ', taking it HOT (fenceable loot, not cash)' : ''}. ${body.crewNeeded ? `Needs ${body.crewNeeded} more on the crew before it goes; the stake comes back only if you disband first.` : 'Ready to go.'}`;
+    if (body && body.ok && body.crew !== undefined && body.role && body.crewNeeded !== undefined && body.name)
+      return `\u{1F5FA} you're in on ${txt(body.name)} as ${txt(body.role)} — the crew's ${body.crew}${body.crewNeeded ? `, ${body.crewNeeded} more before it goes` : ' and ready to roll'}`;
     // CASING the job spends energy for a per-member bump on the roll, and said "done." — so the one
     // number it buys went unread. Guarded on `cased`, which nothing else sends.
     if (body && body.cased) return `\u{1F50D} cased the job — every man on the crew rolls +${Math.round(body.bonusStep * 100)} on the score. Case it again for more, up to the cap.`;
@@ -2407,7 +2412,13 @@
       return body.listed ? 'you\'re on the duelling ladder — anyone can call you out now' : 'off the ladder — no more challenges';
     if (body && body.ok && body.folded) return 'paper folded — you\'re caught up';
     if (body && body.ok && body.referralCodeChanged) return `the street knows you as ${txt(body.name)} now — your referral link changed with the name`;
-    if (body && body.ok && 'title' in body && body.tier === undefined)
+    // A completed MISSION carries a `title` field (null or a string) AND a `reward` object — it was
+    // reading the vanity custom-title line, so a mission with title:null read "title dropped — just
+    // your name from here" as if you'd CLEARED your title. Name the system: the vanity branch is
+    // gated on `reward === undefined`; a mission reads its own reward.
+    if (body && body.ok && body.reward && 'title' in body)
+      return `\u{1F396} mission done — +${fmt(body.reward.respect)} respect${body.reward.cash ? `, +$${fmt(body.reward.cash)}` : ''}${body.reward.omr ? `, +${body.reward.omr} $OMR` : ''}${body.reward.mintCredit ? ', a mint credit' : ''}${body.title ? `. They call you ${txt(body.title)} now.` : ''}`;
+    if (body && body.ok && 'title' in body && body.tier === undefined && body.reward === undefined)
       return body.title ? `they call you ${txt(body.title)} now` : 'title dropped — just your name from here';
     if (body && body.ok && body.lab && body.cap !== undefined) return `\u{1F9EA} the lab is a ${String(body.lab).replace(/_/g, ' ')} now — ${body.cap} units a batch`;
     // A LAB MODULE is $60k+ of bench and read "done." — no level, no price, and above all no word on
@@ -2453,6 +2464,7 @@
       body.opponent !== undefined || body.yourFighter !== undefined || body.record !== undefined ||
       body.stolen !== undefined || body.cut !== undefined || body.taken !== undefined || body.hospSeconds !== undefined ||
       body.elo !== undefined ||  // a duel result — its own line (elo/stake/scores) reads the win; the generic casino WIN/LOSS below was cross-firing "the house keeps it (−$0)" over it.
+      body.sov !== undefined ||   // a sovereignty siege — win/loss below; the casino WIN line read "WIN — +$0" over a stronghold razing, and the jump-loss line read "you took 20 damage" for a repelled siege.
       (body.win === false && body.dmg !== undefined);
     if (body.rerolled && body.stats) bits.push(`new build rolled — muscle ${body.stats.muscle} / cunning ${body.stats.cunning} / speed ${body.stats.speed}`);
     if (body.proposedTo) bits.push(`🕊 you offered a sit-down to the ${body.proposedTo} bloodline`);
@@ -2519,7 +2531,10 @@
     if (body.win === false && !spec) bits.push(`the house keeps it (−$${fmt(Math.abs(body.net ?? 0))})`);
     // street jump / extortion / convoy hijack — carry a `win` but no cash `net`, so each gets its own line
     if (body.win === true && body.stolen !== undefined) bits.push(`${body.intent === 'message' ? '📢 THE STREET SAW IT' : body.intent === 'rob' ? 'rolled them' : 'they went down'} — lifted $${fmt(body.stolen)}${body.crates ? `, ${body.crates} crate${body.crates > 1 ? 's' : ''}` : ''}${body.rep ? `, +${body.rep} respect` : ''}${body.war ? ' (war point)' : ''}${body.bounty ? ` · contract paid $${fmt(body.bounty)}` : ''}`);
-    if (body.win === false && body.dmg !== undefined && body.field === undefined && body.wager === undefined && body.district === undefined) bits.push(`the jump went bad — you took ${body.dmg} damage`);
+    if (body.win === false && body.dmg !== undefined && body.field === undefined && body.wager === undefined && body.district === undefined && body.sov === undefined) bits.push(`the jump went bad — you took ${body.dmg} damage`);
+    // a SOVEREIGNTY siege: win razes/downgrades the stronghold and scores sov points; loss is a repel.
+    if (body.sov && body.win === true) bits.push(`\u{1F3F0} ${body.razed ? 'the stronghold is RAZED to the ground' : `the stronghold falls to tier ${body.newTier}`} — +${body.sovPoints} sovereignty`);
+    if (body.sov && body.win === false) bits.push(`\u{1F3F0} the siege was thrown back — their garrison held and you took ${body.dmg} damage`);
     if (body.robbed) bits.push(body.win ? `hit the register — skimmed $${fmt(body.cut)} off their ${body.kind}` : `pinched at the register — ${body.jailedS ? Math.round(body.jailedS / 60) + 'm in' : ''} lockup`);
     else if (body.theft) bits.push(body.win ? `🚗 GONE IN SIXTY — took their ${body.car.model}` : `caught mid-hotwire — ${body.jailedS ? Math.round(body.jailedS / 60) + 'm in' : ''} lockup`);
     else if (body.trunk) bits.push(body.win ? `mugged the freight — ${fmt(body.qty)} ${body.good} off their back${body.revenge ? ' · 🗡 payback' : ''}` : `pinched mid-mugging — ${body.jailedS ? Math.round(body.jailedS / 60) + 'm in' : ''} lockup`);
@@ -2775,7 +2790,12 @@
       bits.push(`\u{1F0A2} you ${txt(body.action)} — pot $${fmt(body.table.pot)}`);
     if (body.cashedOut !== undefined)
       bits.push(`\u{1F6AA} up from the table — $${fmt(body.cashedOut)} cashed out`);
-    if (body.cost !== undefined && body.garrison !== undefined && body.name && body.npc) bits.push(`reinforced ${body.name}'s garrison to $${fmt(body.garrison)} (−$${fmt(body.cost)} from the treasury)`);
+    // reinforce sends `spent`, invade sends `cost` — the reinforce branch was gated on `cost`, so it
+    // fired for an INVASION (reading "reinforced …") while a real reinforce fell to "done.". Two
+    // distinct outposts acts: reinforce = pour money into a garrison you HOLD; invade = take a
+    // rival-held one. Gate each on the field it uniquely sends.
+    if (body.spent !== undefined && body.garrison !== undefined && body.name && body.npc) bits.push(`reinforced ${body.name}'s garrison to $${fmt(body.garrison)} (−$${fmt(body.spent)} from the treasury)`);
+    if (body.cost !== undefined && body.garrison !== undefined && body.name && body.npc && body.district === undefined && body.premium === undefined) bits.push(`\u{1F6A9} took ${txt(body.name)}'s outpost — $${fmt(body.cost)} out of the treasury, now behind a $${fmt(body.garrison)} garrison a rival has to outbid to take it back`);
     if (body.settled !== undefined && Array.isArray(body.results) && body.results[0]?.winner !== undefined && body.results[0]?.race) bits.push(
       body.won > 0 ? `it came in — +$${fmt(body.won)} at the window` : `the tickets tore up — better luck at the next post`);
     if (body.game === 'tourney') bits.push(`seated at the big table — $${fmt(body.buyin)} in, pool $${fmt(body.pool)} (${body.entrants} runner${body.entrants === 1 ? '' : 's'})`);
@@ -2784,8 +2804,13 @@
       body.result === 'win' ? `${body.yourHand} takes it — +$${fmt(body.net)}` :
       `their ${body.theirHand} beat your ${body.yourHand} — −$${fmt(Math.abs(body.net))}`);
     if (body.raid && body.raid.raided) bits.push(`RAIDED — the Prohibition boys took $${fmt(body.raid.seized)} + fined $${fmt(body.raid.fine)}, club dark`);
-    if (body.toSeller !== undefined) bits.push(`took over the ${body.name || 'club'} — $${fmt(body.paid)} paid ($${fmt(body.toSeller)} to the old owner)`);
-    if (body.won !== undefined && body.feePaid !== undefined) bits.push(body.won ? `STOOD OVER the ${body.name || 'club'} — forced the sale, it's yours ($${fmt(body.paid)})` : `the standover was repelled — the $${fmt(body.feePaid)} fee's gone`);
+    // `toSeller` is sent by TWO systems — a speakeasy buyout (with `paid`+`name`) AND buying a
+    // loan's paper on the Shylock's secondary market (`price`+`take`, no `paid`). buyPaper hit the
+    // buyout line and read "took over the club — $undefined paid". Name the SYSTEM: buyPaper carries
+    // a `paper` flag; the buyout branch is gated on `paid`, which only it sends.
+    if (body.paper && body.toSeller !== undefined) bits.push(`💵 bought the paper — $${fmt(body.price)} for the marker (house took $${fmt(body.take)}); $${fmt(body.toSeller)} to the seller. The debt's yours to collect now.`);
+    else if (body.toSeller !== undefined && body.paid !== undefined) bits.push(`took over ${body.name || 'the club'} — $${fmt(body.paid)} paid ($${fmt(body.toSeller)} to the old owner)`);
+    if (body.won !== undefined && body.feePaid !== undefined) bits.push(body.won ? `STOOD OVER ${body.name || 'the club'} — forced the sale, it's yours ($${fmt(body.paid)})` : `the standover was repelled — the $${fmt(body.feePaid)} fee's gone`);
     // A bout and a race BOTH land the shared score line above, which already states the money — so
     // the result read "+$6,000 · … took $6,000", the same figure twice in one toast. Written as a
     // SCAN of what has already been said rather than a shape test (the heat-echo precedent), so a
@@ -2864,7 +2889,12 @@
     // escrowed $50,000 out of their own pocket and is owed $60,000 — was told "took the loan —
     // $50,000 now, owe $60,000": the two sides of the table, one line, and it named the wrong one.
     // `dueSeconds` is on the borrower's reply only; `hours` and `directed` are the poster's.
-    if (body.principal !== undefined && body.owed !== undefined && body.dueSeconds === undefined)
+    // Borrowing from the HOUSE pool carries principal+owed but is a TAKE, not a lender's offer — it
+    // was reading the "money's on the street" offer line, with `undefinedh` where the offer's `hours`
+    // would be (the house sends `dueHours`). Name the system: `house` gates its own line, and the
+    // offer branch is gated on `hours`, which only a poster's reply carries.
+    if (body.house && body.principal !== undefined) bits.push(`\uD83C\uDFE6 the house lent you $${fmt(body.principal)} — owe $${fmt(body.owed)} back inside ${body.dueHours}h. Miss it and you're a welsher.`);
+    else if (body.principal !== undefined && body.owed !== undefined && body.dueSeconds === undefined && body.hours !== undefined)
       bits.push(`\uD83E\uDD1D money's on the street — $${fmt(body.principal)} out of your pocket and into escrow, $${fmt(body.owed)} owed back inside ${body.hours}h${body.directed ? ' (spoken for)' : ''}${body.collateralMin > 0 ? `, secured against a car worth $${fmt(body.collateralMin)}+` : ''}. Nobody's on the hook until somebody takes it.`);
     else if (body.principal !== undefined && body.owed !== undefined) bits.push(`took the loan — $${fmt(body.principal)} now, owe $${fmt(body.owed)}${body.collateral ? ' (car pledged)' : ''}${body.dueSeconds ? ` inside ${minsTxt(body.dueSeconds)}` : ''}`);
     if (body.guard !== undefined && body.price !== undefined) bits.push(`hired protection — $${fmt(body.price)} up front`);
@@ -2975,6 +3005,18 @@
     if (body.op && body.district !== undefined) bits.push(body.op === 'show_of_force' ? `SHOW OF FORCE in ${txt($dist(body.district))} — the operation's dug in (fortitude ${body.fortitude})`
       : body.op === 'ghost_route' ? `GHOSTED the run out of ${txt($dist(body.district))} — the Bureau loses the scent for a while`
       : `COOKED THE BOOKS in ${txt($dist(body.district))} — the heat's off the operation`);
+    // THE WINDOW — burn earned $OMR for cash out of the till (one way). Read "done." before.
+    if (body.burned !== undefined && body.cash !== undefined && body.spent !== undefined)
+      bits.push(`\u{1F4B5} redeemed ${fmt(body.spent)} $OMR at the window — +$${fmt(body.cash)}${body.familyCut ? ` (${fmt(body.familyCut)} to your family's reserve)` : ''}`);
+    // THE LAW — a plea copped (certain forfeiture + short jail) and flipping informant. Both read
+    // "done." — plea has forfeited+jailSeconds but NOT the bust's convicted/roll; flip has `named`.
+    if (body.forfeited !== undefined && body.jailSeconds !== undefined && body.convicted === undefined && body.roll === undefined)
+      bits.push(`⚖ copped a plea — forfeited $${fmt(body.forfeited)}, ${minsTxt(body.jailSeconds)} in lockup. It's over.`);
+    if (body.named !== undefined) bits.push(`\u{1F400} you flipped — named ${txt(body.named)}${body.namedIndicted ? ", and the case landed on them" : ''}. You wear the rat brand now, and your own family can come for you.`);
+    // NPC HIT — the contractor's kill vs miss (the fee burns either way). Both fell to "paid $cost".
+    // absorbed/revived have their own lines above (guard/insurance ate the blow).
+    if (body.killed === true && body.cost !== undefined) bits.push(`\u{1F3AF} the contractor put him down — $${fmt(body.cost)} well spent`);
+    if (body.hit === false && body.cost !== undefined && body.absorbed === undefined && body.revived === undefined) bits.push(`\u{1F3AF} the contractor missed — $${fmt(body.cost)} gone and the mark's still breathing`);
     if (body.cost && body.fixed === undefined && !bits.length) bits.push(`paid $${fmt(body.cost)}`);
     return bits.length ? bits.join(' · ') : (body.message || 'done.');
   }

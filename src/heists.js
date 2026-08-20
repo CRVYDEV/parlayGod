@@ -105,7 +105,7 @@ export async function joinHeist(ch, heistId, wantRole, client, h) {
   const role = pickRole(job, wantRole, taken);
   await client.query('INSERT INTO crew_heist_members (heist_id, character_id, role) VALUES ($1,$2,$3)', [heistId, ch.id, role]);
   await h.track(client, ch.account_id, 'heist_join', { job: job.id });
-  return { ok: true, id: heistId, job: job.id, role, crew: taken.length + 1, crewNeeded: job.crew - taken.length - 1 };
+  return { ok: true, id: heistId, job: job.id, name: job.name, role, crew: taken.length + 1, crewNeeded: job.crew - taken.length - 1 };
 }
 
 // FILL — the leader hires an NPC RESIDENT into an open seat (residents-in-crews). A hired hand is a
