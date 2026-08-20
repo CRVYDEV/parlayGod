@@ -61,6 +61,34 @@ import { M3, M4, PATHS, NPC_HITMEN, HEIST_ROLES, HEIST_JOBS, DRUGS, GOODS, DISTR
 // anything it misses stays checked rather than silently dropped.
 const decomment = (s) => s.replace(/^[ \t]*\/\/.*$/gm, '');
 const html = decomment(readFileSync(new URL('../public/index.html', import.meta.url), 'utf8'));
+
+// A gate is a CONDITION, so test conditions — not a byte window. Walk out through the enclosing
+// `${...}` interpolations and at each level read only the HEAD: the text from `${` to where the
+// branch body starts (its first backtick). That is exactly the expression that decided whether to
+// draw this control, and nothing else. Two coarser cuts were tried and both were wrong in opposite
+// directions: a fixed 1200-char window passed a mutation stripping the war button's rank test
+// because the pact button one line above still carried one, and stopping at the innermost
+// interpolation flagged seven controls correctly drawn inside an outer `${boss ? ...}` block.
+// MODULE scope, shared by checks 10 and 11: it lived inside check 10's block and check 11's fallback
+// path therefore threw ReferenceError instead of walking out — which the clean tree never reached, so
+// the check passed while half of it was dead code. A mutation is what surfaced it.
+// Same story, same mutation: `lineAt` was block-local to check 10 too, so check 11's FAILURE
+// message — the only thing that names which line is ungated — threw instead of naming it. A
+// failure that teaches nothing is barely better than no check at all.
+const lineAt = (at) => html.slice(0, at).split('\n').length;
+const enclosing = (at) => {
+  const levels = []; let depth = 0;
+  for (let i = at; i > 1 && levels.length < 8; i--) {
+    if (html[i] === '}') depth++;
+    else if (html[i] === '{') {
+      // EVERY brace closes the counter, not just `${` — a `${(() => { ... })()}` IIFE in the middle
+      // of a template carries plain braces, and counting only `${` let them swallow the enclosing
+      // `${boss ? ...}` and flag two controls that are correctly drawn inside it.
+      if (depth === 0 && html[i - 1] === '$') levels.push(i + 1); else depth--;
+    }
+  }
+  return levels;
+};
 const admin = decomment(readFileSync(new URL('../public/admin.html', import.meta.url), 'utf8'));
 
 // ── 0. THE CLIENT SCRIPT MUST PARSE ─────────────────────────────────────────────────────────────
@@ -1843,6 +1871,7 @@ assert.deepEqual(lvlUngated, [], `${lvlUngated.length} clickable row(s) STATE a 
   + `enforce it, so the control looks usable at any level and only refuses once pressed:\n  ${lvlUngated.join('\n  ')}`);
 
 const rankStats = { routes: 0, markup: 0, wired: 0 };
+const shieldStats = { routes: 0, markup: 0, wired: 0 };
 // ── CHECK 10: THE RANK LEDGER — the same class on the family's other axis ───────────────────────
 // Check 9 covers the LEVEL wall. Playing found the identical shape on RANK, and in the sharpest
 // possible place: `renderCity` gates the frontier's reinforce/invade on the server's own
@@ -1930,32 +1959,11 @@ const rankStats = { routes: 0, markup: 0, wired: 0 };
   //    kept pairing an input read inside one handler with the next handler's `.onclick`, reporting
   //    four gated controls as ungated. A finding produced by a tool you did not check is not a finding.
   const RANK_TEST = /role\s*===\s*'boss'|role\s*===\s*'underboss'|canCommand|\bboss\b|\bcityBoss\b/;
-  // A gate is a CONDITION, so test conditions — not a byte window. Walk out through the enclosing
-  // `${...}` interpolations and at each level read only the HEAD: the text from `${` to where the
-  // branch body starts (its first backtick). That is exactly the expression that decided whether to
-  // draw this control, and nothing else. Two coarser cuts were tried and both were wrong in opposite
-  // directions: a fixed 1200-char window passed a mutation stripping the war button's rank test
-  // because the pact button one line above still carried one, and stopping at the innermost
-  // interpolation flagged seven controls correctly drawn inside an outer `${boss ? ...}` block.
-  const enclosing = (at) => {
-    const levels = []; let depth = 0;
-    for (let i = at; i > 1 && levels.length < 8; i--) {
-      if (html[i] === '}') depth++;
-      else if (html[i] === '{') {
-        // EVERY brace closes the counter, not just `${` — a `${(() => { ... })()}` IIFE in the middle
-        // of a template carries plain braces, and counting only `${` let them swallow the enclosing
-        // `${boss ? ...}` and flag two controls that are correctly drawn inside it.
-        if (depth === 0 && html[i - 1] === '$') levels.push(i + 1); else depth--;
-      }
-    }
-    return levels;
-  };
   const gatedAt = (at) => enclosing(at).some((start) => {
     const head = html.slice(start, at);
     const body = head.indexOf('`');
     return RANK_TEST.test(body >= 0 ? head.slice(0, body) : head);
   });
-  const lineAt = (at) => html.slice(0, at).split('\n').length;
   const routeRe = (path) => new RegExp(path.split('/').filter(Boolean).filter((x) => !x.startsWith(':'))
     .map((x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join("/(?:[^'\"`\\s]*/)?"));
   const rankUngated = []; let rankDo = 0, rankWired = 0;
@@ -1996,6 +2004,187 @@ const rankStats = { routes: 0, markup: 0, wired: 0 };
   assert.deepEqual(rankUngated, [], `${rankUngated.length} control(s) reach a route that can refuse \`rank\` `
     + `without being rendered behind a rank test, so a soldier is shown a boss-only button and learns it is `
     + `not his only by pressing it:\n  ${rankUngated.join('\n  ')}`);
+}
+
+// ── CHECK 11: THE SHIELD LEDGER — a take-button offered to a man who is to ground ───────────────
+// Checks 9 and 10 cover walls a player can't cross YET (level, rank). This is the same class on a
+// wall they put up THEMSELVES: the signed D2 rule — a safehouse is "a shield, not a bunker" — freezes
+// every verb that turns something you already own into money in your pocket.
+//
+// Played it. Went to ground with a laundromat running, opened The Empire, and the screen read
+//   "$120,017 READY TO COLLECT · collect before the pad or a raid eats it"
+// over a LIVE button, and the server answered 400 `safe`. The same screen's own warning advises
+// "defend yourself (a safehouse, a bodyguard)" — so it urges the state that freezes the take, urges
+// the take, and never connects the two. Driven and confirmed across five modules: the front, the
+// corner, the club, the port, the fence.
+//
+// The state was never hidden (the SAFEHOUSE chip counts down on the sheet) and the refusals read
+// well — what was missing is that TWELVE take-buttons never asked. And the shape is the familiar
+// one: `renderPvp`'s own "go to ground" button ALREADY reads `me.safeSeconds`, and it was the only
+// thing in the whole client that did.
+//
+// The set is DERIVED, not listed: an exported function that (a) gates on `safeHoused(ch)` — the
+// ACTOR's own row, never `safeHoused(victim)`, which is a different rule about somebody else — and
+// (b) is named collect*/claim*/fence*, i.e. turns what you own into money. That is a principled
+// subset with a stated edge: the OFFENSE half of the D2 rule (fire, jump, raid, a round at the club)
+// is deliberately out of scope here — those live on screens that carry the safehouse card itself,
+// and gating them unplayed would be speculation. A future wave that plays them can widen the name
+// filter and the guard will name whatever it finds.
+{
+  const srcFiles = ['src/server.js', ...readdirSync('src/routes').map((f) => 'src/routes/' + f)];
+  const safeFns = new Map();                                  // module path -> Set(fn)
+  const scanSafe = (dir) => {
+    for (const f of readdirSync(dir)) {
+      if (!f.endsWith('.js')) continue;
+      const src = readFileSync(dir + '/' + f, 'utf8');
+      const re = /export\s+async\s+function\s+([A-Za-z0-9_$]+)\s*\(/g;
+      const idx = []; let m;
+      while ((m = re.exec(src))) idx.push([m[1], m.index]);
+      for (let i = 0; i < idx.length; i++) {
+        const body = src.slice(idx[i][1], i + 1 < idx.length ? idx[i + 1][1] : src.length);
+        if (!/safeHoused\(ch\)/.test(body) || !/^(collect|claim|fence)/.test(idx[i][0])) continue;
+        const key = dir + '/' + f;
+        if (!safeFns.has(key)) safeFns.set(key, new Set());
+        safeFns.get(key).add(idx[i][0]);
+      }
+    }
+  };
+  scanSafe('src'); scanSafe('src/social');
+
+  // Every route in the registry, and which of them reach one of those functions. BOTH lists matter:
+  // resolving a client path against the GATED subset alone lets a non-gated route lose a match it
+  // would really win (`/v1/convoy/rig/${id}` resolved to `/v1/convoy/:id/collect` because
+  // `/v1/convoy/rig/:id` was not a candidate at all).
+  const allRoutes = [], safeRoutes = [];
+  for (const f of srcFiles) {
+    const src = readFileSync(f, 'utf8');
+    const alias = new Map();
+    for (const im of src.matchAll(/import\s+(?:\*\s+as\s+([A-Za-z0-9_$]+)|\{([^}]*)\})\s+from\s+'([^']+)'/g)) {
+      const mod = 'src/' + im[3].replace(/^\.\//, '').replace(/^\.\.\//, '');
+      if (im[1]) alias.set(im[1], mod);
+      else for (const n of im[2].split(',')) { const nm = n.trim().split(/\s+as\s+/).pop().trim(); if (nm) alias.set(nm, mod); }
+    }
+    const re = /\.(get|post|delete|put)\(\s*['"](\/v1\/[^'"]*)['"]/g;
+    const marks = []; let m;
+    while ((m = re.exec(src))) marks.push([m[1].toUpperCase(), m[2], m.index]);
+    for (let i = 0; i < marks.length; i++) {
+      const body = src.slice(marks[i][2], i + 1 < marks.length ? marks[i + 1][2] : Math.min(src.length, marks[i][2] + 2500));
+      let hit = null;
+      for (const [mod, fns] of safeFns) for (const fn of fns) {
+        for (const call of body.matchAll(new RegExp('(?:([A-Za-z0-9_$]+)\\.)?' + fn + '\\s*\\(', 'g')))
+          if (alias.get(call[1] || fn) === mod) { hit = fn; break; }
+        if (hit) break;
+      }
+      allRoutes.push([marks[i][0], marks[i][1]]);
+      if (hit) safeRoutes.push([marks[i][0], marks[i][1], hit]);
+    }
+  }
+  assert(safeRoutes.length >= 10, `THE SHIELD LEDGER found only ${safeRoutes.length} safe-gated take-route(s) — `
+    + 'the extractor has stopped seeing them, so a green run here means nothing. Fix the scan, not the floor.');
+
+  // Segment-wise most-specific-wins, scored by what a client `${}` actually IS: a runtime value, so
+  // a route :param facing one beats a route LITERAL facing one. Without that ranking
+  // `/v1/loans/house/repay` outranks `/v1/loans/:id/collect` for `/v1/loans/${id}/${what}`, which is
+  // not how fastify would route it.
+  const segScore = (meth, path, r) => {
+    if (r[0] !== meth) return 0;
+    const a = r[1].split('/'), b = path.split('/');
+    if (a.length !== b.length) return 0;
+    let score = 1;
+    for (let i = 0; i < a.length; i++) {
+      const wild = b[i] === '*', par = a[i].startsWith(':');
+      if (!wild && !par) { if (a[i] !== b[i]) return 0; score += 4; continue; }
+      if (par && wild) { score += 3; continue; }
+      if (par) { score += 2; continue; }
+      score += 1;                                             // a route literal facing a `${}`
+    }
+    return score;
+  };
+  const resolveSafe = (meth, path) => {
+    let bs = 0; const tied = [];
+    for (const r of allRoutes) { const sc = segScore(meth, path, r); if (!sc) continue; if (sc > bs) { bs = sc; tied.length = 0; } if (sc === bs) tied.push(r); }
+    // a `${}` in the ACTION segment genuinely reaches several routes at one specificity, so every
+    // tied winner counts — flag if ANY of them is safe-gated
+    for (const t of tied) { const hit = safeRoutes.find((r) => r[0] === t[0] && r[1] === t[1]); if (hit) return hit; }
+    return null;
+  };
+
+  const SAFE_TEST = /safeSeconds|safeHoused|toGround|groundOff/;
+  const shieldGated = (at) => {
+    // The control's OWN tag counts. A take-button reads the state in its attributes, not in a
+    // condition deciding whether to draw it at all: the figure STAYS on screen (it is the reason to
+    // surface), the button just stops being pressable — the Port-lane precedent.
+    const tag = html.lastIndexOf('<button', at);
+    if (tag >= 0 && at - tag < 600 && SAFE_TEST.test(html.slice(tag, at + 400))) return true;
+    return enclosing(at).some((start) => {
+      const head = html.slice(start, at); const b = head.indexOf('`');
+      return SAFE_TEST.test(b >= 0 ? head.slice(0, b) : head);
+    });
+  };
+
+  const shieldUngated = []; let shieldDo = 0, shieldWired = 0;
+  for (const m of html.matchAll(/data-do="(GET|POST|DELETE|PUT) (\/v1\/[^"]*)"/g)) {
+    const hit = resolveSafe(m[1], m[2].replace(/\$\{[^}]*\}/g, '*'));
+    if (!hit) continue;
+    shieldDo++;
+    if (!shieldGated(m.index)) shieldUngated.push(`line ${lineAt(m.index)}  ${m[1]} ${hit[1]} -> ${hit[2]}() (data-do)`);
+  }
+  const shieldWire = [];
+  for (const w of html.matchAll(/const\s+(\w+)\s*=\s*\$\(\s*'#([\w-]+)'\s*\)[\s\S]{0,120}?\b\1\.onclick\s*=(?=((?:(?!\.onclick)[\s\S]){0,700}))/g))
+    shieldWire.push([`id="${w[2]}"`, w[3] || '']);
+  for (const w of html.matchAll(/querySelectorAll\(\s*'\[([\w-]+)\]'\s*\)\s*\.forEach\(\s*\(?\s*(\w+)[^)]*\)?\s*=>\s*\2\.onclick\s*=(?=((?:(?!\.onclick)[\s\S]){0,700}))/g))
+    shieldWire.push([`${w[1]}=`, w[3] || '']);
+  for (const [sel, body] of shieldWire) {
+    const seen = new Set();
+    for (const c of body.matchAll(/act\(\s*'(GET|POST|DELETE|PUT)'\s*,\s*[`']([^`']*\/v1\/[^`']*)[`']/g)) {
+      const hit = resolveSafe(c[1], c[2].replace(/\$\{[^}]*\}/g, '*'));
+      if (!hit) continue;
+      const k = hit[0] + hit[1]; if (seen.has(k)) continue; seen.add(k);
+      // One attribute can draw SEVERAL buttons (`data-loando` draws cancel/repay/collect/unsell/buy)
+      // and only some reach a safe-gated route. Prefer the occurrence whose attribute VALUE names the
+      // route's own action segment, so the guard checks the button that really goes there rather than
+      // whichever happens to sit first in the file.
+      const act0 = hit[1].split('/').filter((x) => x && !x.startsWith(':')).pop();
+      let drawn = -1;
+      for (let k2 = html.indexOf(sel); k2 >= 0; k2 = html.indexOf(sel, k2 + 1)) {
+        if (drawn < 0) drawn = k2;
+        if (html.slice(k2, k2 + 60).includes(act0)) { drawn = k2; break; }
+      }
+      if (drawn < 0) continue;
+      shieldWired++;
+      if (!shieldGated(drawn)) shieldUngated.push(`line ${lineAt(drawn)}  ${hit[0]} ${hit[1]} -> ${hit[2]}() (wired via ${sel})`);
+    }
+  }
+  assert(shieldDo + shieldWired >= 10, `THE SHIELD LEDGER matched only ${shieldDo + shieldWired} client control(s) `
+    + `against ${safeRoutes.length} safe-gated take-routes — a pass has drifted. Fix the scan, not the floor.`);
+  Object.assign(shieldStats, { routes: safeRoutes.length, markup: shieldDo, wired: shieldWired });
+  assert.deepEqual(shieldUngated, [], `${shieldUngated.length} take-control(s) reach a route that refuses \`safe\` `
+    + `without reading the state, so a man who is to ground is shown a live button over money he cannot have, `
+    + `and learns it by pressing:\n  ${shieldUngated.join('\n  ')}`);
+
+  // The sweep above covers the CONTROL. The other half of what was played is COPY: the Empire's hero
+  // band read "$120,017 READY TO COLLECT · collect before the pad or a raid eats it" — a call to action
+  // for a button the server was refusing, on the same screen. That is a class of ONE (heroBand is used
+  // on three screens and only this one urges a take-verb), and the FIRE precedent says a class of one
+  // gets a NAMED regression rather than a sweep that would have to waive every other sub-line.
+  // Lazy TO THE CLOSING BRACE, not to a newline: `[\s\S]{0,400}?\n` matches zero characters and stops
+  // at the newline right after the label, so it never reaches the `sub:` line it is about — the check
+  // failed on the CLEAN tree, which is the good direction to get a regex wrong in.
+  // And one control the derivable subset deliberately EXCLUDES: banking. `bank()` is gated on
+  // `safeHoused(ch)` like the take-verbs, but it is not a take — the D2 comment at the gate calls a
+  // deposit an EXPOSED act ("the courier walks"), and its name matches no collect/claim/fence rule.
+  // So the sweep cannot reach it and it is pinned by name, which is also what keeps the safehouse
+  // card honest: that card promises "no banking a deposit", and a promise nothing enforces rots.
+  const dep = html.match(/id="bank-dep"[^>]*>/);
+  assert(dep && SAFE_TEST.test(dep[0]),
+    `the deposit button never asks whether the player is to ground, while bank() refuses \`safe\` on a `
+    + `deposit and the safehouse card promises exactly that:\n  ${dep ? dep[0] : '(the button moved)'}`);
+
+  const heroSub = html.match(/label: 'ready to collect'[\s\S]*?\},/);
+  assert(heroSub && SAFE_TEST.test(heroSub[0]),
+    `the Empire hero band's "ready to collect" sub urges the take without reading whether the player is to `
+    + `ground — a call to action must be answerable, and while you are under, that button is refused:\n  `
+    + `${heroSub ? heroSub[0].trim() : '(the band moved — find it and re-point this)'}`);
 }
 
 // ── CHECK 8 — THE ACTION LEDGER ────────────────────────────────────────────────────────────────
@@ -3481,4 +3670,10 @@ console.log(`✅ client wiring test passed — across the console AND /admin: of
   `CONDITION that drew them, walking out through the enclosing interpolations, because a byte window `+
   `reads the neighbouring button's gate as this one's. A soldier was offered "sue for peace" and `+
   `"declare a family war (boss only)" thirty lines below the frontier controls that read the `+
-  `server's own canCommand, and both answered 400 rank.`);
+  `server's own canCommand, and both answered 400 rank. And the ELEVENTH, the same class on a wall `+
+  `a player raises themselves: a safehouse is a shield, not a bunker, so ${shieldStats.routes} routes `+
+  `that turn what you own into money refuse while you are to ground — and the ${shieldStats.markup} `+
+  `data-do plus ${shieldStats.wired} wired take-controls reaching one now each read that state, the `+
+  `figure still on screen because it is the reason to surface. The Empire read "$120,017 READY TO `+
+  `COLLECT - collect before the pad or a raid eats it" over a live button while the server answered `+
+  `safe, on a screen whose own warning advises going to ground.`);
