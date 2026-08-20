@@ -15277,3 +15277,147 @@ literal, because a synthetic throw never poisons a transaction and so would test
 leaving the thing the savepoint exists for unproven. Browser-verified: Home renders all seven cards
 with no `undefined`/`NaN` and the render fires exactly `/v1/me /v1/home /v1/bulletin`. Suite 110 files
 + sim drift-0 + mobile 79/79 + client wiring/mirror + pgquery + pgcheck on a fresh real Postgres.
+
+**THE BLOCK AND CITYWIDE — the same cut, twice more, and the ceiling finally moved (2026-08-20).** The
+Home aggregate took the landing screen from 19 requests a tick to 5, which left **streets** worst at 9 —
+and streets is where a player actually lives, so it was the largest remaining share of what one idle
+player costs. Cutting it went exactly as the pattern predicts (9 → 3, the cheapest screen in the game)
+and **the ceiling did not move at all**, because `city` sat at 0.10 req/s, precisely the cost streets
+used to be. That is the number the measurement is FOR: the player ceiling is a WORST-SCREEN figure, so
+halving the most-used screen improves the average without touching the bound. Delivering "streets is
+twice as cheap and the number you care about is unchanged" would have been a worse outcome than doing
+the one more screen that makes it move, so city was cut too. **Measured: streets 9 → 3 req/tick
+(0.10 → 0.05), city 9 → 5 (0.10 → 0.07), and the worst screen is now `start` at 0.07 — the ceiling
+~2,900 → ~4,350 concurrent players, for zero infrastructure spend.** With the Home cut earlier the same
+day that is **~457 → ~4,350, a 9.5× player ceiling from three client-side reads**, no plan change.
+
+**THE CORE IS SHARED, and that was the first decision.** A second aggregate reproducing twenty subtle
+lines of savepoint handling by hand is the shape this project keeps paying for — `sackEmpire` copied a
+column list instead of calling the helper and the rake cursor drifted; three gate predicates ended up
+with sixty-nine private copies because writing the comparison locally was the reasonable thing at each
+site. So `src/aggregate.js` owns `runBoards` and carries the whole argument (why it exists, what cannot
+ride along, sequential-not-parallel, the per-path isolation mechanics), and `home.js`/`streets.js`/
+`citywide.js` are MAPS and nothing else. Home was refactored onto it in the same commit rather than
+left as the odd one out.
+
+**WHAT IS DELIBERATELY LEFT OUT is where the thinking went.** `/v1/city` stays its own fetch — it is
+**keyless** and already carries two 30-second server-side caches (the skyline, the ticker ballot), so
+folding it in would either duplicate those (the drift above) or recompute per player what is currently
+computed once for everybody, and it would close the door on edge-caching a public board, which is
+strictly better than any per-player aggregate can be. That is a decision somebody could undo by
+"finishing the job", so `test/citywide.js` PINS it: `/v1/city` must not be a key, and it must still
+answer with no token. The city screen is two fetches and that is the right shape, not a shortfall.
+Two boards also do not arrive through `readCharacter` and both are deliberate: `/v1/market/prices` is
+keyless and pure (in the map because the ceiling is measured in REQUESTS, so it is a whole round trip
+saved for no server cost), and `/v1/daily` + `megaBoard` take their querier as an argument — handing
+them the request's own client is **stricter** than the routes they mirror, since that client is the one
+that refuses writes.
+
+**THE PRICE BOARD GOT ONE IMPLEMENTATION.** `/v1/market/prices` built its response inline in the route;
+a second caller makes that two implementations of one board, which is how the two ends of a mirror come
+to disagree. `marketPrices()` is now shared and the route calls it — and the test asserts the equality
+by VALUE rather than by reading the source, since a refactor could satisfy a source check while
+changing what either one returns.
+
+**TWO MUTATIONS SURVIVED FIRST, and both were right to.** Mutating the shared `marketPrices` moved BOTH
+sides, so they still agreed — which is the one-implementation property working, not a hole; the
+mutation that matters makes them DIVERGE (`{...marketPrices(), makings: {}}` in the map), and that fails
+naming the exact drifted values. And removing the SAVEPOINT from the shared core passed all three suites
+under pg-mem, because pg-mem cannot parse one at all — it can only fail where it matters, so it was
+re-run against a fresh real Postgres, where it fails at its own named assertion (*"one broken board must
+not 500 the whole screen (locked path)"*). A mutation that survives is a claim about the test before it
+is a claim about the code; here it was a claim about the ENGINE.
+
+**AND THE ENVELOPE'S NAMES WERE NOT RESERVED — found by reading a PRODUCTION response and counting.**
+Smoke-testing the merged Home aggregate on the live box, the reply said `boards: 15` and carried
+**14 keys**. `readCharacter` returns `{ character, events: h.events, ...board }` with the spread LAST,
+and the Home map was keyed **`events`** — so the board silently REPLACED the envelope's own field, on
+that one screen, invisibly to every check: the contract block compares the key against its own route,
+where both sides are the board and agree perfectly. It was harmless only by luck — **`h.events` has no
+writer anywhere in `src/`** (three sites initialise it to `[]`, three return it, nothing ever pushes),
+so the field it shadowed was already empty. The moment anything pushes "what just happened to you"
+into the handle every module is given, that array would vanish on exactly the screens that fold
+boards and nowhere else. Fixed as a CLASS rather than a rename: `runBoards` refuses a key in
+`{character, events, boards, failed}` (and any duplicate), validated **once per map** through a
+`WeakSet` rather than on every request — it is a static property of the map, and a hot-path check for
+something that cannot change between requests is just a slower request. The Home board is now keyed
+`cityEvents` (a key need not match its route's last segment — several already do not). Three
+mutations, each by name: the guard stripped, the colliding key restored (which now fails LOUDLY on the
+first request instead of shadowing), and a bogus read planted off the renamed binding to prove the
+client mirror re-keyed with it. **The dead `h.events` field is left in place and RECORDED rather than
+deleted** — removing a field from every authed response in the game is its own change, not a tail-end
+edit to an unrelated PR.
+**THEN THE CLASS WAS SWEPT, because the structural guard only covers the aggregate path** — a handler
+that returns `{character: …}` or `{events: …}` directly through `readCharacter` shadows exactly the
+same way and `runBoards` never sees it. A source scan found four candidates and all four DISSOLVED on
+checking (two are mod-gated and take `pool`, `/v1/session` and `/v1/events` never go through the
+envelope at all), so the sweep is EMPIRICAL and lives in `test/routes.js`: boot, make a character, call
+every authed `GET /v1`, and assert `character` is still a character and `events` still the
+envelope array. Its FIRST run reported *"0 routes checked — CLEAN"* because it read a registry field that does
+not exist (`app.routeRegistry`; fastify's onRoute output is decorated as `app.routes`) — **a sweep that
+reaches nothing reads exactly like a sweep that passes**, for the fifth session running — so it carries
+an anti-vacuity floor, and BOTH mutations fail by name: the collision restored with the guard off names
+`/v1/home`, and a broken registry read names the count instead of reporting clean.
+**THEN THE SWEEP ITSELF WAS CAUGHT OVER-CLAIMING, which is the more useful half.** Its first cut said
+*"the envelope survives all 60 enveloped routes"* and was wrong on two counts, both found while chasing
+a stray `.events` reader to confirm the `cityEvents` rename had left none. It filtered out EVERY param
+route (`!url.includes(':')`) — and the whole param surface is just 12 routes of which exactly ONE is
+enveloped, so the single live instance outside the aggregates sat in the one route the sweep could not
+reach. And it type-checked `events` with `Array.isArray`, **which a board's own timeline satisfies too**.
+`/v1/people/history/:characterId` returns a top-level `events` (the pair's recorded history) and is
+authed, so it shadows the envelope exactly as the Home map did. Both halves are real now: params are
+SUBSTITUTED where an id can be synthesised and COUNTED where it cannot (5 named, never silently
+skipped), and `events` is held to deep-equality with the empty envelope, with a board that legitimately
+owns the name DECLARED and its reason stated — catalogue-or-declare, the same shape as the seven other
+ledgers. The declaration must also be EXERCISED: the probe seeds a real strike between its two
+characters so that board returns a NON-EMPTY `events`, because on an empty board the shadowing is
+invisible and the check would pass for the wrong reason. **61 routes, 1 of them a param route, 1
+declared.** Two mutations, and the second is the one that matters: dropping the declaration names the
+route and prints the shadowing payload, and reverting to `Array.isArray` makes a genuine, OBSERVED
+shadowing pass **GREEN** — the over-claim demonstrated rather than argued. The history board is
+deliberately NOT renamed: `events` is the right word for a timeline, agents read that board, and what
+it shadows is the dead slot.
+
+**The client-mirror waiver is keyed on the BINDING, so folding a board re-keys it** — `renderCity`'s
+`world|npcs|minLvl` waiver (correctly gated on the server's own `canRaid`) stopped matching and check 9
+failed. That is the guard working rather than a nuisance: a waiver is a decision about one board on one
+screen and should have to be re-stated rather than following a field around by name. Also folded in: THE
+TREASURE TRAIL rode in its own `.then` AFTER the render and patched a slot in a beat late — it is a
+board in the map now, so it arrives with the screen.
+
+**A pre-existing drift the routes guard caught on the way:** SPEC claimed 688 registrations against a
+real 702 — 1.99% against a 2% band, so it had been sitting just inside for some time and one new route
+tipped it. Restated to the true figure rather than widening the tolerance, which is the whole point of
+a guard that cries wolf being one people route around.
+
+`test/streets.js` (111th) and `test/citywide.js` (112th) are `test/home.js`'s siblings and assert the
+same three properties — the contract value-for-value against every route in the map (a ticking
+`*Seconds` leaf held to a few seconds, since two fetches are two moments), isolation on BOTH paths, and
+read-only proven by the write-refusing path answering. Four mutations, each failing at its own named
+assertion; a board dropped from a map fails twice over (the suite on the count, the client mirror on the
+field the screen then reads off nothing). Browser-verified: streets renders 51,608 chars on ONE `/v1/`
+request and city on two, no `undefined`/`NaN`, zero page errors. Suite 112 files + sim drift-0 + mobile
++ client wiring/mirror + pgquery + pgcheck 47/47 on a fresh real Postgres.
+**AND THE IMPROVEMENT TURNED A GUARD RED — because that guard had been passing on the wrong quantity.**
+CI's mobile job failed on `check H` (RT#6's cooldown-freshness probe: a countdown hitting zero must
+re-render the open screen, so the clock cannot read READY beside a control the last render left
+disabled). It reported `quiet 0 → crossing 0` and reproduced locally on the first try, on the AGGREGATES
+commit — so not a flake, and worth chasing rather than re-running. Instrumenting instead of guessing
+found the client entirely innocent: the re-render fired, `/v1/home` went out **310ms BEFORE** nominal
+expiry and the whole burst finished 95ms later. The probe was measuring `[expiry, expiry+2500)` and
+looking straight past it, because **the ticker floors to seconds** — `Math.floor((until − now)/1000)`
+reads 0 the moment fewer than 1000ms remain, which is correct for a clock that must not sit on "0s",
+and means the crossing always lands in `[expiry−TICK, expiry)`. **It had passed for four sessions on the
+DURATION of a request burst**: Home's old ~19-request fan-out ran long enough that its tail spilled past
+expiry into the window by accident. Cutting the fan-out to 4 made the burst finish before the window
+opened. The two windows now ABUT at `expiry − TICK` (before it the clock genuinely still counts; from it
+the crossing can fire), so one re-render can never be counted in both — and the fix is
+mutation-verified in the direction that matters: with the client's crossing re-render removed the check
+still fails by name, so the window was corrected rather than widened until it went green. **A guard that
+passes because of how long something takes is measuring the wrong thing, and only a change to that
+duration will ever tell you.** `TICK` is now READ out of the client rather than restated in the harness
+(the preflight-restatement class), and **the class was then swept and came back CLEAN** — recorded
+because a sweep that publishes only its hits cannot be audited: check H was the ONLY two-window
+comparison in any harness, and `tools/pollcost.js` already guards the same hazard in its own words
+(*"derived is not measured, so sit on the worst screen for a real window … and count what actually goes
+out"*), which is why its figures survived the very change that broke this one.

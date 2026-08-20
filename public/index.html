@@ -5918,7 +5918,7 @@
     // decoration: a board that throws comes back null (src/home.js isolates per board) and the card
     // renders empty, exactly as it did when a failed fetch gave `{}`.
     const ex = hm.explore || {};
-    const ev = hm.events || {};
+    const ev = hm.cityEvents || {};
     const pt = hm.primetime || {};
     const ob = hm.onboard || {};
     const sw = hm.social || {};
@@ -6504,17 +6504,19 @@
 
   async function renderStreets() {
     const t = $('#tab-streets');
-    const prices = (await api('GET', '/v1/market/prices')).body || {};
+    // THE BLOCK — this screen's seven boards in ONE read (see src/streets.js). Streets is where a
+    // player lives, so it was the largest remaining share of what one idle player costs once Home
+    // was folded. Every route below is still mounted and still answers on its own; this is a second
+    // door. Bound in the `(await api(...)).body` shape ON PURPOSE (the mirror-guard idiom; a
+    // `.then((r) => r.body)` slot loader passed the guard VACUOUSLY — planted mutations survived).
+    const blk = (await api('GET', '/v1/block')).body || {};
+    const prices = blk.prices || {};
     const spot = prices.goods?.[me?.loc] || {};
-    const daily = (await api('GET', '/v1/daily')).body || {};
-    const sq = (await api('GET', '/v1/soldiers')).body || {};
-    // THE REGIMEN — bound in the `(await api(...)).body` shape ON PURPOSE (the mirror-guard idiom;
-    // a `.then((r) => r.body)` slot loader passed the guard VACUOUSLY — planted mutations survived)
-    const gym = (await api('GET', '/v1/regimen')).body || {};
-    // THE HUSTLE — the daily three-stop chain (same covered idiom)
-    const hu = (await api('GET', '/v1/hustle')).body || {};
-    // WORD ON THE STREET — this district's daily quest board (same covered idiom)
-    const cn = (await api('GET', '/v1/corner')).body || {};
+    const daily = blk.daily || {};
+    const sq = blk.soldiers || {};
+    const gym = blk.regimen || {};
+    const hu = blk.hustle || {};
+    const cn = blk.corner || {};
     // the density fix: don't wall a player with all 43 jobs — lead with the BEST ones they can
     // actually pull (the highest-level unlocked, up to 8) and fold the full book behind a drawer
     // D6a — THE APPROACH: every job takes a risk/reward choice. Case It = safer, low-heat, soft bust
@@ -6755,10 +6757,11 @@
     t.querySelectorAll('[data-gdsell]').forEach((b) => b.onclick = () => act('POST', '/v1/goods/sell', { goodId: b.dataset.gdsell, qty: gq(b.dataset.gdsell) }).then(renderStreets));
     t.querySelectorAll('[data-daily]').forEach((b) => b.onclick = () => act('POST', `/v1/daily/${b.dataset.daily}/claim`, {}).then(renderStreets));
     t.querySelectorAll('[data-dailygo]').forEach((b) => b.onclick = () => { setTab(b.dataset.dailygo); spotlight(SPOT[b.dataset.dailygo]); });
+    // THE TREASURE TRAIL — arrives WITH the screen now (it rode in its own fetch after the render
+    // and patched this slot in a beat late; it is a board in /v1/block like the rest).
     { const slot = t.querySelector('#clue-slot');
-      if (slot) api('GET', '/v1/clues').then((r) => {
-        if (r.code >= 400 || !slot.isConnected) return;
-        const c = r.body;
+      const c = blk.clues;
+      if (slot && c) {
         slot.innerHTML = c.scroll ? `<div class="card" style="border-color:var(--gold,#c9a227);margin-top:8px">
             <span class="t" style="color:var(--gold,#c9a227)">🗺 THE TREASURE TRAIL</span> <span class="chip">${esc(c.scroll.tierName || 'a Scroll')}</span> <span class="d">step ${c.scroll.step} of ${c.scroll.of}${c.scroll.kind && c.scroll.kind !== 'riddle' ? ` · ${c.scroll.kind}` : ''}</span>
             <div class="d" style="font-style:italic">“${esc(c.scroll.riddle)}”</div>
@@ -6769,7 +6772,7 @@
           : (c.legend.caskets > 0 ? `<div class="card" style="margin-top:8px"><span class="t">🗺 ${c.legend.caskets} casket${c.legend.caskets > 1 ? 's' : ''} dug</span> <span class="d">${esc(c.legend.rank)}${c.legend.relics ? ` · ${c.legend.relics}/${c.legend.relicsMax} relics` : ''} — the next scroll turns up on a job${c.cooldownSeconds > 0 ? ' (the streets are quiet a while yet)' : ''}</span></div>` : '');
         const dg = slot.querySelector('#clue-dig');
         if (dg) dg.onclick = () => act('POST', '/v1/clues/dig', {}).then(() => renderStreets());
-      }); }
+      } }
     // THE HUSTLE — check in at the current stop
     { const hg = t.querySelector('#hu-go'); if (hg) hg.onclick = () => act('POST', '/v1/hustle/advance', {}).then(() => renderStreets()); }
     t.querySelectorAll('[data-corner-take]').forEach((b) => b.onclick = () =>
@@ -6789,17 +6792,21 @@
     const r = await api('GET', '/v1/city');
     if (r.code >= 400) { t.innerHTML = '<p class="d">the city is quiet.</p>'; return; }
     const c = r.body;
-    const w = (await api('GET', '/v1/world')).body || {};
-    const rd = (await api('GET', '/v1/world/raids')).body || { raids: [] };
-    const bw = (await api('GET', '/v1/npcfamily')).body || { families: [] };
+    // CITYWIDE — this screen's five authed boards in ONE read (see src/citywide.js). /v1/city above
+    // stays its own fetch: it is keyless and already cached for everybody, which no per-player
+    // aggregate can beat. Every route folded in here is still mounted and still answers on its own.
+    const cw = (await api('GET', '/v1/citywide')).body || {};
+    const w = cw.world || {};
+    const rd = cw.raids || { raids: [] };
+    const bw = cw.npcfamily || { families: [] };
     // The three Blood-War treaty/war buttons are boss-or-underboss, exactly like the frontier's
     // reinforce/invade thirty lines further down — which read the server's own `canCommand`. This
     // board doesn't publish one, so read the role off the sheet, the shape renderFamily uses ten
     // times. Stating "Boss or underboss only" in a confirm dialog is not enforcing it: the button
     // looks live to a soldier and the server answers 400 rank once he presses it.
     const cityBoss = me?.gang && (me.gang.role === 'boss' || me.gang.role === 'underboss');
-    const mega = (await api('GET', '/v1/megaproject')).body || {};
-    const shp = (await api('GET', '/v1/shipment')).body || {};
+    const mega = cw.mega || {};
+    const shp = cw.shipment || {};
     // the trade-winds read: turn raw shock multipliers into the one actionable sentence
     const shocks = Object.entries(c.weather || {}).map(([d, x]) => [d, Number(x)]).sort((a, b) => a[1] - b[1]);
     const cheap = shocks[0], rich = shocks[shocks.length - 1];
