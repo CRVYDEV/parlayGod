@@ -14310,6 +14310,22 @@ and at max the board's `null` matches the till's `max` refusal. Mutation-verifie
 step fails by name at 50,000 against 100,000. **The regression's own last assertion was VACUOUS on
 the first cut** (it re-asserted the line above it), so it now captures the quote BEFORE the hire and
 compares it to what was charged — which is the property, rather than a second literal.
+**F19 — the same shape as a CLASS, and the honest scope is that it is LATENT.** F18's hardcoded
+`|| 50000` prompted a sweep: the console carries **26 numeric fallbacks** standing in for a
+server-published lever. Most are harmless — `x || 0` differs from `x ?? 0` for nothing — and a
+blanket conversion came out at **248 sites**, which is churn against an 800KB single file for zero
+behavioural change, so it was NOT done. The subset that can actually go wrong is small and specific:
+**a `|| <non-zero>` on a CHARGED RATE fires when the real value is legitimately ZERO**, and this
+project ships bps levers at 0 deliberately (`BUSINESS_SHUTTER_BPS` and `RACKET_RETIRE_BPS` are at 0
+in the tree today). Seven such sites render a percentage the player is being told they pay — the
+favor take, the market take and list fee, the soldier's cut, the ring rake, the speakeasy table rake,
+the loan vig — every one a founder sign-off lever a retune could zero, after which the card would
+state a take that is not taken, with every guard green. Converted to `??`, which keeps the defensive
+behaviour for a missing field and stops firing on a real 0. **Stated plainly because it matters to
+how this is read: no live instance exists** — neither zeroed lever sits behind one of these
+fallbacks, and the levers are not env-overridable, so the reachable class could not be driven end to
+end. This is hardening on the recorded precedent (*a fallback is the guessed number wearing a hat* —
+RT#6 deleted the decimals fallback for the same reason), not a bug that was firing.
 **A candidate DISSOLVED on checking, recorded because a session that publishes only its hits cannot
 be audited:** `GET /v1/map` 500'd on a null gang (`citymap.js:71`) — traced not to the game but to a
 **pg-mem artifact in my own fixture**, where `UPDATE … SET col = (SELECT …)` stores the value as a
