@@ -27,6 +27,7 @@ import * as Prime from './primetime.js';
 import * as CityMap from './citymap.js';
 import * as Day from './day.js';
 import * as Payroll from './payroll.js';
+import * as Home from './home.js';
 import * as Drop from './drop.js';
 import * as Vouch from './vouch.js';
 import * as Push from './push.js';
@@ -1873,6 +1874,15 @@ export async function buildServer() {
   // obligations: a pure read reusing each module's own board readers, pay via the existing tills.
   app.get('/v1/payroll', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client, h) => Payroll.payrollBoard(ch, client, h)));
+
+  // THE HOME AGGREGATE — one read for the landing screen's fifteen read-only boards. Measured: Home
+  // was the worst screen in the game at 19 requests a tick, twelve of them each opening their own
+  // transaction and taking the same character row FOR UPDATE, so they queued on each other. Every
+  // route it fans in stays mounted (agents poll them; the wiring guard fetches them one at a time);
+  // `/v1/bulletin` is deliberately NOT here because it WRITES and the read path refuses writes.
+  app.get('/v1/home', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client, h) =>
+      Home.homeBoard(ch, client, h, { online: [...wsClients.keys()] })));
 
   // THE COMMUNITY DROP (G-3, D1 variant b) — the claim rail: a snapshotted wallet SIWE-links,
   // claims once, and takes its envelope as IN-GAME $OMR (+ the whitelist's one free identity mint).
