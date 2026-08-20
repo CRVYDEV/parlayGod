@@ -2085,10 +2085,16 @@ export async function heal(ch, client, h) {
     * pathFx(ch, 'healCost')); // PATHS v2 — the Ring's handicap (a brawler's medical bills)
   if (cost <= 0) throw new GameError('healthy', 'Already healthy.');
   if (Number(ch.cash) < cost) throw new GameError('cash', `The Doc wants ${usd(cost)}.`);
+  // WHAT THE BILL BOUGHT. The reply carried the price alone, so the toast read a bare "paid $540" —
+  // a price with the purchase left off, on the one screen a player reaches while bleeding. The client
+  // cannot supply the missing half either way: the bill is scaled by FIVE independent modifiers
+  // (street rank, doctors_friend, the Doc's own standing, Iron Chin, the Ring's handicap), so only
+  // the server knows both what was restored and what it really charged for it.
+  const healed = 100 - Math.floor(Number(ch.health));
   ch.cash = Number(ch.cash) - cost; ch.health = 100;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'heal' });
   await bumpStanding(client, h, ch, 'doc', 2, { action: 'heal' }); // doing business with the Doc
-  return { ok: true, cost };
+  return { ok: true, cost, healed, health: 100 };
 }
 
 // ── §7.4 CHECK-IN ──

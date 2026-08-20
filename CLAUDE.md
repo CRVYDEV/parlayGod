@@ -14741,3 +14741,29 @@ with its own direct assertion beside the sweep. Two mutations, each caught at it
 (txt escaping again → the entity sweep names the line verbatim; the unlearn branch dropped → "done.").
 
 68 → 84 driven actions. Suite green · sim drift-0 · mobile 78/78 · client wiring/mirror.
+
+**AND THE DOC HANDED YOU A BILL WITH NO PURCHASE ON IT — wave 12 (2026-08-20).** The last untouched
+clusters (the garage, the armory, vanity, the phone, the chat, the Doc), driven with the **raw reply
+printed beside every line** so a fluent-but-wrong sentence would be visible rather than merely absent.
+
+**Four candidates, and three dissolved on checking — which is the point.** The phone's block and
+unblock and the chat's own send all go through the SILENT `api()` and toast their own wording
+(*"line blocked — they get a dead tone now"*, *"the line is open again"*); `describe()` is never
+invoked on any of them, so their `"done."` is a probe artifact rather than a defect. That
+discrimination — *is this actually `act()`-pressed?* — is what separates this sweep's findings from
+its noise, and it is worth stating that it removed three quarters of them.
+
+**The one that survived is the sharpest kind: `POST /v1/heal` read `"paid $540"`.** The catch-all —
+a price with the purchase left off — on the one screen a player reaches while bleeding. The reply
+was `{ok, cost}` and nothing else, so the client could not have said more; and it could not have
+computed the price either, because the bill is scaled by **five independent modifiers** (street rank,
+`doctors_friend`, the Doc's own Underworld standing, Iron Chin, and the Ring path's handicap). So
+only the server knows both halves, and it now sends both: *"patched up — 40 back, 100/100 — $540."*
+
+Its guard needed the fixture seeded **hurt**, because the Doc refuses a healthy man — a full-health
+fixture would have skipped the action, and a skipped action reads on the summary line as covered.
+That is the same vacuity this file has now been bitten by three times, headed off at the seed rather
+than discovered by a surviving mutation. One mutation, caught at its own named assertion.
+
+84 → 85 driven actions. Suite green · sim drift-0 · mobile 78/78 · pgquery + pgcheck 47/47 on a
+FRESH real-Postgres database.

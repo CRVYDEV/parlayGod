@@ -2082,7 +2082,9 @@ for (const [m, url, payload] of ACTIONS) {
     await app.pool.query("UPDATE account_persistent SET omr=9000, minted=true, made_until=now() + interval '30 days' " +
       'WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)', [p.id]);
   }
-  await app.pool.query("UPDATE characters SET jail_until=now() + interval '40 minutes' WHERE id=$1", [con.id]);
+  // hurt on purpose: the Doc refuses a healthy man, so a full-health fixture would SKIP the heal
+  // and it would read on the summary line as covered
+  await app.pool.query("UPDATE characters SET jail_until=now() + interval '40 minutes', health=60 WHERE id=$1", [con.id]);
   const w10 = [
     // the club: the biggest single purchase on that screen said "done.", and the decor UPGRADE carried
     // `collected` so it landed on the empty-till line and reported a $600k renovation as nothing coming in
@@ -2101,6 +2103,9 @@ for (const [m, url, payload] of ACTIONS) {
     // 24h respec clock, burning $OMR — said "done." The pair also keeps the entity sweep below honest:
     // "The Doc's Friend" is a catalog name with an apostrophe in it, and it was reaching the player as
     // "The Doc&#39;s Friend" because describe() HTML-escaped a string bound for textContent.
+    // the Doc's bill, which landed on the catch-all `paid $N` — a price with the purchase left off,
+    // on the one screen a player reaches while bleeding. Driven on the CON, who is seeded hurt.
+    [con.t, 'POST', '/v1/heal', null],
     [club.t, 'POST', '/v1/skills/bruiser', null],
     [club.t, 'POST', '/v1/skills/doctors_friend', null],
     [club.t, 'POST', '/v1/skills/respec/doctors_friend', null],
@@ -2288,6 +2293,13 @@ assert(clubNameLine && /\$OMR/.test(clubNameLine),
 // The entity sweep above is only a net over what was DRIVEN, so it needs one line that really carries
 // an escapable character — otherwise it passes over a tree where every name happens to be plain and
 // reads exactly like a clean bill of health. This is that line, asserted directly.
+// The Doc states BOTH halves or neither is useful: the bill is scaled by five independent modifiers
+// (street rank, doctors_friend, the Doc's standing, Iron Chin, the Ring's handicap), so a player who
+// only sees the number cannot tell a discount from a rise, and the health restored is the purchase.
+const healLine = said.get('/v1/heal');
+assert(healLine && /\$/.test(healLine) && /\b100\b/.test(healLine),
+  `getting patched up must name what it restored, not just what it cost — it landed on the catch-all ` +
+  `"paid $N", a price with the purchase left off. Got: ${JSON.stringify(healLine)}`);
 const skillLine = said.get('/v1/skills/doctors_friend');
 assert(skillLine && /Doc's Friend/.test(skillLine),
   `the catalog name is "The Doc's Friend" and it must reach the player with an apostrophe in it — ` +
@@ -2304,7 +2316,7 @@ assert(planLine && /fronted|stake/i.test(planLine) && /crew|more/i.test(planLine
   `pays for at that moment. Got: ${JSON.stringify(planLine)}`);
 
 const describedCount = described;
-assert(described >= 70, `only ${described} of ${ACTIONS.length} actions succeeded — the ledger is measuring almost nothing`);
+assert(described >= 71, `only ${described} of ${ACTIONS.length} actions succeeded — the ledger is measuring almost nothing`);
 assert.deepEqual(mute, [], `${mute.length} action(s) a player PRESSES say nothing about what just happened ` +
   `(describe() fell through to "done." or rendered a hole). Every one of these moves money, an asset or a ` +
   `status — write the line, or the game is keeping its own result from the player:\n  ${mute.join('\n  ')}`);

@@ -2683,6 +2683,11 @@
     // "paid $924,759": a price with no purchase attached, on the one action that also takes away your
     // ability to hit anyone, deal, launder or collect for as long as it lasts. Name both halves.
     if (body.safeUntil && body.cost !== undefined) bits.push(`🏠 off the grid — untargetable for ${minsTxt(Math.max(0, Math.round((new Date(body.safeUntil) - Date.now()) / 1000)))}, but no hits, deals, laundering or collecting while you're under · $${fmt(body.cost)}`);
+    // THE DOC'S BILL. It landed on the catch-all `paid $N` — a price with the purchase left off, on
+    // the one screen a player reaches while bleeding. Both halves are the server's to say: the bill is
+    // scaled by five independent modifiers, so nobody else can state the rate they actually got.
+    if (body.healed && body.cost !== undefined && body.health !== undefined)
+      bits.push(`\u{1FA79} patched up — ${body.healed} back, ${body.health}/100 — $${fmt(body.cost)}`);
     // A skill is permanent and a point is finite — and learning one said "done."
     if (body.learned && body.name && body.points) bits.push(`🎓 learned ${txt(body.name)}${body.points.available !== undefined ? ` — ${fmt(body.points.available)} point${body.points.available === 1 ? '' : 's'} left` : ''}`);
     // AND ITS SIBLING, three lines away and mute: unlearning ONE skill burns $OMR on the same shared
