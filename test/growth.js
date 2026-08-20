@@ -6,6 +6,7 @@ process.env.SOCIAL_VERIFY_MODE = 'trust';   // alpha honor system; production ru
 process.env.MOD_KEY = 'test-mod-key';
 
 import assert from 'node:assert';
+import fs from 'node:fs';
 import { buildServer } from '../src/server.js';
 import { SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS, CONSTANTS, DISTRICTS, HUSTLE, CORNER, cornerTasksOf, dayOf, M4, levelOf, PACING, MASTERY, masteryXpFor, CRIMES, MISSIONS, M8 } from '../src/rules.js';
 import { socialRewardsLive } from '../src/growth.js';
@@ -423,6 +424,39 @@ assert.equal((await call('POST', '/v1/heist', { token: chef.token })).code, 400,
 
 // ── missions (§5.1): req validation, pay once, $OMR faucet, title ──
 assert.equal((await call('POST', '/v1/missions/m9', { token: chef.token })).code, 400, 'reqs enforced');
+
+// THE REFUSAL NAMES WHAT IS SHORT, and the card states every requirement the gate reads.
+// Found by playing: `m3` wants `fp 10` (a gun's firepower) and the mission CARD listed only
+// muscle/cunning/speed — so the card stated a requirement list that was missing a term AND left the
+// button ENABLED for a job the server refuses on press, which then answered "You're not ready" and
+// named nothing. Sixteen of the 36 missions carry an `fp` or `trade` requirement, and the sharpest
+// is m4 The Dockside Heist: it needs `fp 18` and carries the free MINT CREDIT the coach's "you can
+// get made for free" rung points at, so the one promise this file pins elsewhere routed a player
+// into a silent wall. Assert BOTH halves — the words a player reads and the payload an agent reads
+// (agents are first-class players here, and a figure that lives only inside a sentence can only be
+// acted on by parsing English).
+{
+  const short = await call('POST', '/v1/missions/m3', { token: chef.token });
+  assert.equal(short.code, 400, 'm3 is refused with no gun');
+  assert.equal(short.body.error, 'reqs');
+  assert(/firepower/i.test(short.body.message),
+    `the refusal must NAME the requirement, not just "you're not ready": got ${JSON.stringify(short.body.message)}`);
+  assert(/\b10\b/.test(short.body.message) && /carrying 0/.test(short.body.message),
+    `the refusal must state what the job wants AND what you have: got ${JSON.stringify(short.body.message)}`);
+  assert.equal(short.body.need?.fp, 10, 'the refusal carries the machine-readable requirement');
+  assert.equal(short.body.have?.fp, 0, 'the refusal carries what the caller actually has');
+  // …and the CARD must name every requirement KIND the gate reads, or the button lies on press.
+  // Crossed source-to-source rather than restated: the gate's key list is derived from the live
+  // MISSIONS catalog, so a 7th requirement kind added tomorrow fails here until the card shows it.
+  const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  const card = html.slice(html.indexOf('(rules?.missions || []).filter'));
+  const cardKeys = card.slice(0, card.indexOf(".join('') ||"));
+  for (const k of [...new Set(MISSIONS.flatMap((m) => Object.keys(m.req || {})))]) {
+    if (k === 'lvl') continue;                            // the card renders `needs lvl N` separately
+    assert(new RegExp(`'${k}'`).test(cardKeys),
+      `the mission card never mentions the '${k}' requirement — it will show an incomplete needs-line and enable a button the server refuses`);
+  }
+}
 await seedCh(chef.id, 'muscle=10');
 r = await call('POST', '/v1/missions/m1', { token: chef.token });
 assert.equal(r.code, 200, 'mission cleared'); assert.equal(r.body.reward.cash, 1000);

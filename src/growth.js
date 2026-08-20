@@ -100,12 +100,34 @@ export async function doMission(ch, missionId, client, h) {
   if (done) throw new GameError('done', 'That chapter is closed.');
   const eff = (s) => effStat(ch[s], s, h.owned.assets, h.owned.gear);
   const gunFp = gunObjOf(ch.gun)?.fp || 0;
-  const meets = Object.entries(m.req).every(([k, v]) =>
-    k === 'lvl' ? levelOf(Number(ch.respect)) >= v
-    : k === 'fp' ? gunFp >= v
-    : k === 'trade' ? Number(ch.trade_rep || 0) >= v
-    : eff(k) >= v);
-  if (!meets) throw new GameError('reqs', "You're not ready. The family doesn't hand out second chances.");
+  const have = (k) =>
+    k === 'lvl' ? levelOf(Number(ch.respect))
+    : k === 'fp' ? gunFp
+    : k === 'trade' ? Number(ch.trade_rep || 0)
+    : eff(k);
+  // NAME WHAT IS SHORT. This gate knows exactly which requirement failed and by how much, and used
+  // to throw "You're not ready" — a refusal that hands the player nothing to act on and a machine
+  // nothing at all (the F16 class: a figure that exists only inside a sentence can only be acted on
+  // by parsing English, which agents are first-class players here and would have to do too). Two of
+  // the six requirement kinds — `fp` and `trade` — are ALSO invisible on the mission card, so for 16
+  // of 36 missions this was the only place the requirement was ever stated, and it stated nothing.
+  // The `need` payload rides the GameError's third argument (the district-refusal precedent) so the
+  // client and an agent read the same numbers the server enforced, rather than re-deriving them.
+  const label = { lvl: 'level', fp: 'a gun with', trade: 'trade reputation' };
+  const short = Object.entries(m.req)
+    .map(([k, v]) => ({ k, need: v, got: have(k) }))
+    .filter((s) => s.got < s.need);
+  if (short.length) {
+    const parts = short.map(({ k, need, got }) =>
+      k === 'fp' ? `a gun with ${need} firepower (you're carrying ${got})`
+      : k === 'trade' ? `${need.toLocaleString('en-US')} trade reputation (you have ${got.toLocaleString('en-US')})`
+      : `${label[k] || k} ${need} (you're at ${got})`);
+    // a missing job can be short on three counts at once; "a and b and c" reads badly, so comma the
+    // list and keep "and" for the last clause the way a person would say it out loud.
+    const say = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0];
+    throw new GameError('reqs', `You're not ready — that job wants ${say}. The family doesn't hand out second chances.`,
+      { need: Object.fromEntries(short.map(({ k, need }) => [k, need])), have: Object.fromEntries(short.map(({ k, got }) => [k, got])) });
+  }
   // PACING (founder-directed, from live alpha): the ladder SELF-UNLOCKS — from ~m6 on each reward
   // overshoots the next mission's level gate by 30-100 levels — so with no cooldown all 28 could be
   // claimed back to back for 239,200 respect (level 245) in one sitting. A cooldown between claims

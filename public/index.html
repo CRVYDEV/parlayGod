@@ -6026,8 +6026,19 @@
       <h2 style="margin-top:14px">Missions <span class="d" style="font-size:11px">— the family's story, one job at a time (cash + respect, sometimes $OMR &amp; a title)</span></h2>
       <div class="grid">${(rules?.missions || []).filter((m) => (m.req?.lvl || 0) <= (me?.level || 1)).map((m) => {
         const missionCd = Number(me?.missionSeconds || 0); // PACING: one job at a time
-        const statReq = ['muscle', 'cunning', 'speed'].map((s) => m.req?.[s] ? `${s} ${m.req[s]}` : null).filter(Boolean).join(', ');
-        const meets = ['muscle', 'cunning', 'speed'].every((s) => !m.req?.[s] || (me?.stats?.[s] || 0) >= m.req[s]);
+        // Read EVERY requirement kind the server enforces, not just the three stats. `fp` (a gun's
+        // firepower) and `trade` (trade reputation) gate 16 of the 36 missions, and showing/gating
+        // on only muscle/cunning/speed meant the card stated a requirement list that was missing a
+        // term AND left the button enabled for a job the server refuses on press — including m4 The
+        // Dockside Heist, which carries the free mint credit the coach's "you can get made for free"
+        // rung points at. Both are derivable here: `me.gun` is the gun id and rules.guns carries fp.
+        const myFp = (rules?.guns || []).find((gn) => gn.id === me?.gun)?.fp || 0;
+        const reqHave = { fp: myFp, trade: Number(me?.tradeRep || 0) };
+        const reqTxt = { fp: (v) => `a gun with ${v} firepower`, trade: (v) => `${fmt(v)} trade rep` };
+        const statReq = ['muscle', 'cunning', 'speed', 'fp', 'trade']
+          .map((s) => m.req?.[s] ? (reqTxt[s] ? reqTxt[s](m.req[s]) : `${s} ${m.req[s]}`) : null).filter(Boolean).join(', ');
+        const meets = ['muscle', 'cunning', 'speed', 'fp', 'trade'].every((s) => !m.req?.[s]
+          || (s in reqHave ? reqHave[s] : (me?.stats?.[s] || 0)) >= m.req[s]);
         return `<div class="card"><span class="t">${m.name}</span>
           <div class="d">${m.brief || ''}</div>
           <div class="d">needs lvl ${m.req?.lvl || 1}${statReq ? ` · ${statReq}` : ''} · pays $${fmt(m.reward?.cash || 0)}${m.reward?.omr ? ` + ${m.reward.omr} $OMR` : ''}${m.reward?.title ? ' + a title' : ''}</div>
