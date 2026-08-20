@@ -15,6 +15,7 @@
 process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import { readFileSync, readdirSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { buildServer } from '../src/server.js';
 
 const app = await buildServer();
@@ -211,32 +212,86 @@ console.log(`✅ Mounted-surface test passed — ${app.routes.length} registrati
   };
   const { body: { token } } = await call('POST', '/v1/auth/guest');
   await call('POST', '/v1/character', { token, body: { name: 'Envelope Probe' } });
+  const meId = (await call('GET', '/v1/me', { token })).body.character.id;
+  // A SECOND street, so the `:characterId` routes resolve a real counterparty rather than 404ing —
+  // a param route that answers 404 is a route this sweep never actually looked at.
+  const { body: { token: token2 } } = await call('POST', '/v1/auth/guest');
+  await call('POST', '/v1/character', { token: token2, body: { name: 'Envelope Mark' } });
+  const themId = (await call('GET', '/v1/me', { token: token2 })).body.character.id;
+  // and a REAL recorded strike between them, so the one board that owns `events` actually returns a
+  // NON-EMPTY one. Without this the declaration below is never exercised and the whole check passes
+  // for the wrong reason — an empty board's `events` is indistinguishable from the envelope's.
+  const accOf = async (id) => (await app.pool.query('SELECT account_id FROM characters WHERE id=$1', [id])).rows[0].account_id;
+  await app.pool.query(
+    "INSERT INTO rival_events (id, victim_account, aggressor_account, kind, detail) VALUES ($1,$2,$3,'jump','{}')",
+    [randomUUID(), await accOf(meId), await accOf(themId)]);
 
+  // THE ENVELOPE'S `events` IS ALWAYS `[]`. It is initialised at three sites in game.js and has NO
+  // writer anywhere in src/, so a route whose `events` is anything else has had it replaced by a
+  // board's own key of that name. Type-checking it as an array is far too weak to see that: a board
+  // whose `events` is a list of history rows is an array too, and passes. Deep equality against the
+  // empty envelope is the real check — and a board that legitimately owns the name is DECLARED here
+  // with its reason, catalogue-or-declare, so it is a decision on the record rather than a silent
+  // pass. (Renaming those is the wrong fix: `events` is the right word for a timeline, agents read
+  // these boards, and the envelope slot being shadowed is dead.)
+  const EVENTS_OWNED_BY_BOARD = new Map([
+    ['/v1/people/history/:characterId', "the pair-history board's own timeline — the client renders it "
+      + 'as the story of two bloodlines, and what it shadows is the dead envelope slot'],
+  ]);
+
+  // Param routes were the other half of the gap, and the bigger one: the first cut of this sweep
+  // filtered them out wholesale, so the one live shadowing instance outside the aggregates sat in a
+  // route the check could not reach. Substitute what we can and COUNT what we cannot — a param this
+  // cannot synthesise is reported, never silently skipped.
+  const FILL = { ':characterId': themId, ':targetId': themId, ':id': meId, ':accountId': themId };
+  const unfillable = [];
   const urls = [...new Set(app.routes
-    .filter((r) => r.method === 'GET' && r.url.startsWith('/v1/') && !r.url.includes(':'))
+    .filter((r) => r.method === 'GET' && r.url.startsWith('/v1/'))
     .map((r) => r.url))].sort();
 
   let checked = 0;
+  let paramChecked = 0;
+  const declaredSeen = new Set();     // a declaration only counts once it has actually been exercised
   const shadowed = [];
   for (const u of urls) {
-    const r = await call('GET', u, { token });
+    let target = u;
+    for (const [p, v] of Object.entries(FILL)) target = target.split(p).join(v);
+    if (target.includes(':')) { unfillable.push(u); continue; }
+    const r = await call('GET', target, { token });
     if (r.code !== 200 || !r.body || typeof r.body !== 'object') continue;
-    const hasChar = Object.prototype.hasOwnProperty.call(r.body, 'character');
-    const hasEvents = Object.prototype.hasOwnProperty.call(r.body, 'events');
-    if (!hasChar) continue;            // keyless / non-enveloped routes are not this check's business
+    if (!Object.prototype.hasOwnProperty.call(r.body, 'character')) continue;  // keyless / non-enveloped
     checked++;
+    if (u !== target) paramChecked++;
     if (!r.body.character || typeof r.body.character !== 'object' || !r.body.character.id) {
       shadowed.push(`${u}: \`character\` is not a character — ${JSON.stringify(r.body.character).slice(0, 70)}`);
     }
-    if (hasEvents && !Array.isArray(r.body.events)) {
-      shadowed.push(`${u}: \`events\` is not the envelope array — ${JSON.stringify(r.body.events).slice(0, 70)}`);
+    if (Object.prototype.hasOwnProperty.call(r.body, 'events') && JSON.stringify(r.body.events) !== '[]') {
+      if (EVENTS_OWNED_BY_BOARD.has(u)) declaredSeen.add(u);
+      else {
+        shadowed.push(`${u}: \`events\` is the BOARD's, not the envelope's — ${JSON.stringify(r.body.events).slice(0, 70)}`
+          + '\n      (if the board legitimately owns that name, declare it in EVENTS_OWNED_BY_BOARD with the reason)');
+      }
     }
   }
-  // ANTI-VACUITY. A sweep that reaches nothing reports exactly like a clean sweep — this probe's own
-  // first run said "0 routes checked, CLEAN" because it read a registry field that does not exist.
+  // ANTI-VACUITY, both halves. A sweep that reaches nothing reports exactly like a clean sweep —
+  // this probe's own first run said "0 routes checked, CLEAN" because it read a registry field that
+  // does not exist. The param floor is here for the same reason one level down: the param half is
+  // where the one real instance lives, so "it ran" is not the same as "it ran over params".
   assert(checked >= 40, `the envelope sweep only reached ${checked} enveloped routes — it is not looking at the surface it claims to`);
+  assert(paramChecked >= 1, `the sweep reached ${paramChecked} PARAM routes — the one shadowing instance outside the aggregates lives in a param route, so a sweep that filters them out (as the first cut did) is exactly the gap that let it ship`);
+  // A declaration must be REAL and EXERCISED. Real, or a stale waiver quietly re-opens the hole it
+  // documents; exercised, or the whole check passes on an empty board and proves nothing — which is
+  // what it did before the seed above, in the same shape as this probe's first vacuous run.
+  for (const [u] of EVENTS_OWNED_BY_BOARD) {
+    assert(urls.includes(u), `EVENTS_OWNED_BY_BOARD declares ${u}, which is not a mounted route — a stale waiver`);
+    assert(declaredSeen.has(u), `EVENTS_OWNED_BY_BOARD declares ${u}, but this run never saw it return a non-empty `
+      + '`events` — so the declaration is untested and the check would pass even if the board stopped shadowing '
+      + '(or never started). Seed the state that makes that board answer.');
+  }
   assert.deepEqual(shadowed, [], 'a route\'s own response REPLACES a readCharacter envelope field:\n  ' + shadowed.join('\n  '));
-  console.log(`✅ the envelope survives all ${checked} enveloped routes — none replaces \`character\` or \`events\``);
+  console.log(`✅ the envelope survives all ${checked} enveloped routes (${paramChecked} of them param routes; `
+    + `${unfillable.length} params this cannot synthesise are named, not skipped) — none replaces \`character\`, and `
+    + `\`events\` is the envelope's empty slot everywhere except ${EVENTS_OWNED_BY_BOARD.size} board that owns the name by declaration`);
 }
 
 await app.close();

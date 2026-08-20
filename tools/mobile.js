@@ -410,7 +410,34 @@ for (const vp of VIEWPORTS) {
     document.querySelectorAll('.modal-bg:not(.hidden)').forEach((m) => m.classList.add('hidden'));
   });
   await page.waitForTimeout(3000);   // let the landing fan-out settle, so the baseline is really quiet
-  const cd = await page.evaluate(() => new Promise((done) => {
+  // THE CROSSING HAPPENS UP TO A FULL TICK BEFORE NOMINAL EXPIRY, and the window has to allow for
+  // it. The ticker reads `Math.floor((until - now) / 1000)`, so the moment fewer than 1000ms remain
+  // it floors to 0, paints READY and fires the re-render — correct for a seconds-resolution clock
+  // (it must not sit on "0s" for a second), but it means the crossing lands in [expiry-TICK, expiry),
+  // never at expiry. This measured `[expiry, expiry+2500)` and so looked PAST the re-render.
+  //
+  // It passed anyway until the screens were folded into one read, and the reason is worth keeping:
+  // Home used to fan out to ~19 requests, whose tail ran long enough to spill past expiry into the
+  // window by accident. Cutting the fan-out to 4 made the burst finish before the window even
+  // opened, and the check went red on an IMPROVEMENT — it had been passing on the DURATION of a
+  // request burst rather than on the thing it claims to measure. (Measured, not reasoned: the
+  // re-render's `/v1/home` went out 310ms before expiry and the whole burst was done 95ms later.)
+  //
+  // CROSSED, not copied. The period below is the client's own, and a restatement of a value that
+  // lives somewhere else is the class this project keeps a ledger for — so it is READ out of the
+  // client rather than written down here, and a client that changes its period moves this window
+  // with it instead of silently drifting out from under it.
+  const readTick = await page.evaluate(() => {
+    const m = String(document.documentElement.innerHTML).match(/setInterval\(\s*tickCooldowns\s*,\s*(\d+)\s*\)/);
+    return m ? Number(m[1]) : null;
+  });
+  // A failure to read it is reported ONCE, here, and the run continues on the value it would have
+  // had — otherwise the window below is built from `undefined`, the check fails a SECOND time, and
+  // the message a human reads blames the client for a broken probe.
+  if (!readTick) fail('(cooldown)', vp, "could not read the client's cooldown ticker period (setInterval(tickCooldowns, N)) "
+    + "— this probe's window is derived from it, so it is measuring against a guess");
+  const TICK_MS = readTick || 1000;
+  const cd = await page.evaluate((TICK) => new Promise((done) => {
     const hits = [];
     const of = window.fetch;
     window.fetch = (...a) => { if (String(a[0]).includes('/v1/')) hits.push(Date.now()); return of(...a); };
@@ -420,10 +447,12 @@ for (const vp of VIEWPORTS) {
     (document.querySelector('#tabbodies') || document.body).appendChild(el);
     setTimeout(() => done({
       text: el.textContent, ready: el.classList.contains('cd-ready'),
-      quiet: hits.filter((h) => h >= t0 + 500 && h < t0 + 3000).length,
-      crossing: hits.filter((h) => h >= expiry && h < expiry + 2500).length,
+      // the two windows ABUT at `expiry - TICK`: before it the clock genuinely still counts, from it
+      // the crossing can fire. No overlap, so a single re-render can never be counted in both.
+      quiet: hits.filter((h) => h >= t0 + 500 && h < expiry - TICK).length,
+      crossing: hits.filter((h) => h >= expiry - TICK && h < expiry + 2500).length,
     }), 7000);
-  }));
+  }), TICK_MS);
   if (!cd.ready || cd.text !== 'READY') fail('(cooldown)', vp, `a countdown never reached READY (read ${JSON.stringify(cd.text)})`);
   else if (cd.crossing <= cd.quiet) {
     fail('(cooldown)', vp, `a countdown hit zero and re-rendered nothing — ${cd.crossing} requests in the `

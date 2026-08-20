@@ -15352,13 +15352,31 @@ that returns `{character: …}` or `{events: …}` directly through `readCharact
 same way and `runBoards` never sees it. A source scan found four candidates and all four DISSOLVED on
 checking (two are mod-gated and take `pool`, `/v1/session` and `/v1/events` never go through the
 envelope at all), so the sweep is EMPIRICAL and lives in `test/routes.js`: boot, make a character, call
-every param-free authed `GET /v1`, and assert `character` is still a character and `events` still the
-envelope array — **60 enveloped routes, clean**. Two things about it are the point rather than the
-result. Its FIRST run reported *"0 routes checked — CLEAN"* because it read a registry field that does
+every authed `GET /v1`, and assert `character` is still a character and `events` still the
+envelope array. Its FIRST run reported *"0 routes checked — CLEAN"* because it read a registry field that does
 not exist (`app.routeRegistry`; fastify's onRoute output is decorated as `app.routes`) — **a sweep that
 reaches nothing reads exactly like a sweep that passes**, for the fifth session running — so it carries
 an anti-vacuity floor, and BOTH mutations fail by name: the collision restored with the guard off names
 `/v1/home`, and a broken registry read names the count instead of reporting clean.
+**THEN THE SWEEP ITSELF WAS CAUGHT OVER-CLAIMING, which is the more useful half.** Its first cut said
+*"the envelope survives all 60 enveloped routes"* and was wrong on two counts, both found while chasing
+a stray `.events` reader to confirm the `cityEvents` rename had left none. It filtered out EVERY param
+route (`!url.includes(':')`) — and the whole param surface is just 12 routes of which exactly ONE is
+enveloped, so the single live instance outside the aggregates sat in the one route the sweep could not
+reach. And it type-checked `events` with `Array.isArray`, **which a board's own timeline satisfies too**.
+`/v1/people/history/:characterId` returns a top-level `events` (the pair's recorded history) and is
+authed, so it shadows the envelope exactly as the Home map did. Both halves are real now: params are
+SUBSTITUTED where an id can be synthesised and COUNTED where it cannot (5 named, never silently
+skipped), and `events` is held to deep-equality with the empty envelope, with a board that legitimately
+owns the name DECLARED and its reason stated — catalogue-or-declare, the same shape as the seven other
+ledgers. The declaration must also be EXERCISED: the probe seeds a real strike between its two
+characters so that board returns a NON-EMPTY `events`, because on an empty board the shadowing is
+invisible and the check would pass for the wrong reason. **61 routes, 1 of them a param route, 1
+declared.** Two mutations, and the second is the one that matters: dropping the declaration names the
+route and prints the shadowing payload, and reverting to `Array.isArray` makes a genuine, OBSERVED
+shadowing pass **GREEN** — the over-claim demonstrated rather than argued. The history board is
+deliberately NOT renamed: `events` is the right word for a timeline, agents read that board, and what
+it shadows is the dead slot.
 
 **The client-mirror waiver is keyed on the BINDING, so folding a board re-keys it** — `renderCity`'s
 `world|npcs|minLvl` waiver (correctly gated on the server's own `canRaid`) stopped matching and check 9
@@ -15380,3 +15398,21 @@ assertion; a board dropped from a map fails twice over (the suite on the count, 
 field the screen then reads off nothing). Browser-verified: streets renders 51,608 chars on ONE `/v1/`
 request and city on two, no `undefined`/`NaN`, zero page errors. Suite 112 files + sim drift-0 + mobile
 + client wiring/mirror + pgquery + pgcheck 47/47 on a fresh real Postgres.
+**AND THE IMPROVEMENT TURNED A GUARD RED — because that guard had been passing on the wrong quantity.**
+CI's mobile job failed on `check H` (RT#6's cooldown-freshness probe: a countdown hitting zero must
+re-render the open screen, so the clock cannot read READY beside a control the last render left
+disabled). It reported `quiet 0 → crossing 0` and reproduced locally on the first try, on the AGGREGATES
+commit — so not a flake, and worth chasing rather than re-running. Instrumenting instead of guessing
+found the client entirely innocent: the re-render fired, `/v1/home` went out **310ms BEFORE** nominal
+expiry and the whole burst finished 95ms later. The probe was measuring `[expiry, expiry+2500)` and
+looking straight past it, because **the ticker floors to seconds** — `Math.floor((until − now)/1000)`
+reads 0 the moment fewer than 1000ms remain, which is correct for a clock that must not sit on "0s",
+and means the crossing always lands in `[expiry−TICK, expiry)`. **It had passed for four sessions on the
+DURATION of a request burst**: Home's old ~19-request fan-out ran long enough that its tail spilled past
+expiry into the window by accident. Cutting the fan-out to 4 made the burst finish before the window
+opened. The two windows now ABUT at `expiry − TICK` (before it the clock genuinely still counts; from it
+the crossing can fire), so one re-render can never be counted in both — and the fix is
+mutation-verified in the direction that matters: with the client's crossing re-render removed the check
+still fails by name, so the window was corrected rather than widened until it went green. **A guard that
+passes because of how long something takes is measuring the wrong thing, and only a change to that
+duration will ever tell you.**
