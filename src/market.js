@@ -17,7 +17,7 @@
 // races fall back to the 40P01→contention mapping.
 import crypto from 'node:crypto';
 import { GameError, bus, ledger, notify, skillMult, trunkCap, npcTier, bumpStanding, bumpMastery, masteryFx } from './game.js';
-import { BLACK_MARKET as MARKET, GOODS, SKILLS, UNDERWORLD , jailed, safeHoused } from './rules.js';
+import { BLACK_MARKET as MARKET, GOODS, SKILLS, UNDERWORLD , jailed, safeHoused, usd } from './rules.js';
 import { logCarCollect } from './collection.js';
 
 const uid = () => crypto.randomUUID();
@@ -70,7 +70,7 @@ export async function listItem(ch, opts, client, h) {
     // NOTE: a race-flagged car MAY be listed — the transfer sinks clear race_limit/pink_slip on sale
     // (races step-two, the buyer gets a clean car), so no flag-time reject here (test/races.js:191).
     const minBid = Math.floor(Number(opts.minBid) || 0);
-    if (minBid < MARKET.MIN_PRICE) throw new GameError('min_price', `The Market floor is $${MARKET.MIN_PRICE}.`);
+    if (minBid < MARKET.MIN_PRICE) throw new GameError('min_price', `The Market floor is ${usd(MARKET.MIN_PRICE)}.`);
     const buyNow = opts.buyNow != null ? Math.floor(Number(opts.buyNow)) : null;
     if (buyNow != null && buyNow < minBid) throw new GameError('bad_buy_now', 'Buy-now under the minimum bid makes no sense.');
     // step two: an optional HIDDEN reserve — bids under it never hammer (the auction lapses and
@@ -79,7 +79,7 @@ export async function listItem(ch, opts, client, h) {
     if (reserve != null && (reserve < minBid || (buyNow != null && reserve > buyNow)))
       throw new GameError('bad_reserve', 'A reserve sits between the minimum bid and buy-now.');
     const fee = Math.max(MARKET.LIST_FEE_MIN, Math.floor(listFee(buyNow ?? reserve ?? minBid) * skillMult(h, 'broker', SKILLS.FX.BROKER_FEE_MULT) * masteryFx(h, 'commerce'))); // BROKER (skills) + TRADES stack; the floor re-asserts
-    if (Number(ch.cash) < fee) throw new GameError('cash', `Listing runs $${fee} (1% of the ask).`);
+    if (Number(ch.cash) < fee) throw new GameError('cash', `Listing runs ${usd(fee)} (1% of the ask).`);
     ch.cash = Number(ch.cash) - fee;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -fee, reason: 'market:list' });
     await client.query('UPDATE cars SET listed=true WHERE id=$1', [opts.carId]);
@@ -98,9 +98,9 @@ export async function listItem(ch, opts, client, h) {
   if (qty < 1 || qty > have) throw new GameError('qty', 'Not that much in the trunk.');
   const price = Math.floor(Number(opts.price) || 0);
   if (price < 1) throw new GameError('min_price', 'Unit price must be at least $1.');
-  if (qty * price < MARKET.MIN_PRICE) throw new GameError('min_price', `The Market floor is $${MARKET.MIN_PRICE} an ask.`);
+  if (qty * price < MARKET.MIN_PRICE) throw new GameError('min_price', `The Market floor is ${usd(MARKET.MIN_PRICE)} an ask.`);
   const fee = Math.max(MARKET.LIST_FEE_MIN, Math.floor(listFee(qty * price) * skillMult(h, 'broker', SKILLS.FX.BROKER_FEE_MULT) * masteryFx(h, 'commerce')));
-  if (Number(ch.cash) < fee) throw new GameError('cash', `Listing runs $${fee} (1% of the ask).`);
+  if (Number(ch.cash) < fee) throw new GameError('cash', `Listing runs ${usd(fee)} (1% of the ask).`);
   ch.cash = Number(ch.cash) - fee;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -fee, reason: 'market:list' });
   h.owned.cargo[opts.goodId] = have - qty; // escrow OUT of the trunk (frees space — priced by the fee, bounded by MAX_LISTINGS)
@@ -132,7 +132,7 @@ export async function bidListing(ch, listingId, amount, client, h) {
   const floor = l.bid != null
     ? Math.ceil(Number(l.bid) * (1 + MARKET.MIN_RAISE_BPS / 10000))
     : Number(l.price);
-  if (amt < floor) throw new GameError('low', `The book wants $${floor} or better.`);
+  if (amt < floor) throw new GameError('low', `The book wants ${usd(floor)} or better.`);
   if (Number(ch.cash) < amt) throw new GameError('cash', 'Your pocket is lighter than your mouth.');
 
   // refund whoever held it (self-raise refunds in-memory — never SQL-touch the actor's own row)
@@ -179,9 +179,9 @@ export async function postOrder(ch, opts, client, h) {
   if (qty > MARKET.ORDER_MAX_QTY) throw new GameError('qty', `An order tops out at ${MARKET.ORDER_MAX_QTY} units.`);
   if (price < 1) throw new GameError('min_price', 'Unit price must be at least $1.');
   const escrow = qty * price;
-  if (escrow < MARKET.MIN_PRICE) throw new GameError('min_price', `The Market floor is $${MARKET.MIN_PRICE} an ask.`);
+  if (escrow < MARKET.MIN_PRICE) throw new GameError('min_price', `The Market floor is ${usd(MARKET.MIN_PRICE)} an ask.`);
   const fee = Math.max(MARKET.LIST_FEE_MIN, Math.floor(listFee(escrow) * skillMult(h, 'broker', SKILLS.FX.BROKER_FEE_MULT) * masteryFx(h, 'commerce')));
-  if (Number(ch.cash) < escrow + fee) throw new GameError('cash', `The order escrows $${escrow} plus a $${fee} fee.`);
+  if (Number(ch.cash) < escrow + fee) throw new GameError('cash', `The order escrows ${usd(escrow)} plus a ${usd(fee)} fee.`);
   const hours = Math.min(maxTtlH(h), Math.max(1, Math.floor(Number(opts.hours) || MARKET.MAX_TTL_H)));
   ch.cash = Number(ch.cash) - fee;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -fee, reason: 'market:list' });
@@ -262,7 +262,7 @@ export async function buyListing(ch, listingId, qty, client, h) {
   if (l.kind === 'car') {
     if (l.buy_now == null) throw new GameError('no_buy_now', 'That one goes to the hammer — bid.');
     const price = Number(l.buy_now);
-    if (Number(ch.cash) < price) throw new GameError('cash', `Buy-now is $${price}.`);
+    if (Number(ch.cash) < price) throw new GameError('cash', `Buy-now is ${usd(price)}.`);
     const car = (await client.query('SELECT id FROM cars WHERE id=$1', [l.car_id])).rows[0];
     if (!car) throw new GameError('again', 'The board moved — try again.');
     // refund the standing bidder — their auction just got bought out from over them
@@ -299,7 +299,7 @@ export async function buyListing(ch, listingId, qty, client, h) {
   const n = Math.min(want, Number(l.qty), space);
   if (n <= 0) throw new GameError('cargo', 'No room in the trunk.');
   const gross = n * Number(l.price);
-  if (Number(ch.cash) < gross) throw new GameError('cash', `${n} units run $${gross}.`);
+  if (Number(ch.cash) < gross) throw new GameError('cash', `${n} units run ${usd(gross)}.`);
   ch.cash = Number(ch.cash) - gross;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -gross, reason: 'market:bid' });
   const { net } = await paySeller(client, h, l.seller_character, gross);

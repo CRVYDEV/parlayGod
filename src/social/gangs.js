@@ -7,7 +7,7 @@
 // Split out of the 2,003-line src/social.js; every function below is byte-identical to what was
 // there. Import from '../social.js' — it re-exports this package's public surface unchanged.
 import { GameError, bumpFamilyTask, bus, ledger, cleanText, notify } from '../game.js';
-import { DISTRICTS, M3, M8, MAP, districtNeighbours, ROSTER_POSTS, rosterPostOf, rosterMult, levelOf, dayOf, territoryBuildCost, worldNpcOf, liberationCost, DIPLOMACY, cityHourOf, seasonFx, CHARTERS, familyCharterOf, charterFx, FAMILY_CHARTER } from '../rules.js';
+import { DISTRICTS, M3, M8, MAP, districtNeighbours, ROSTER_POSTS, rosterPostOf, rosterMult, levelOf, dayOf, territoryBuildCost, worldNpcOf, liberationCost, DIPLOMACY, cityHourOf, seasonFx, CHARTERS, familyCharterOf, charterFx, FAMILY_CHARTER, usd } from '../rules.js';
 import { seizeTerritoryRackets, releaseTerritoryRackets } from '../territory.js';
 import { releaseFrontierHolds, outfitStrengthFrac } from '../world.js';
 import { releaseFamilyHolds } from '../npcwar.js';
@@ -28,7 +28,7 @@ export async function createGang(ch, name, tag, client, h) {
   // that renders like another's impersonates it across the streets feed, leaderboards, and gang board.
   if (!/^[\w .,'&-]+$/.test(name)) throw new GameError('name', 'Family name: letters, numbers and simple punctuation only (no look-alike unicode).');
   if (!/^[A-Z0-9]{2,4}$/.test(tag)) throw new GameError('tag', 'Tag must be 2–4 letters or numbers.');
-  if (Number(ch.cash) < M3.GANG_FOUND_COST) throw new GameError('cash', `Founding a family costs $${M3.GANG_FOUND_COST}.`);
+  if (Number(ch.cash) < M3.GANG_FOUND_COST) throw new GameError('cash', `Founding a family costs ${usd(M3.GANG_FOUND_COST)}.`);
   const clash = await client.query('SELECT id FROM gangs WHERE name=$1 OR tag=$2', [name, tag]);
   if (clash.rows.length) throw new GameError('taken', 'That name or tag is already claimed.');
   ch.cash = Number(ch.cash) - M3.GANG_FOUND_COST;
@@ -231,7 +231,7 @@ export async function rosterOf(client, gangId) {
 export async function tribute(ch, amount, client, h) {
   if (!h.owned.gangId) throw new GameError('no_gang', "You're not in a family.");
   const amt = Math.floor(Number(amount) || 0);
-  if (amt < M3.TRIBUTE_MIN) throw new GameError('min', `Minimum tribute is $${M3.TRIBUTE_MIN}.`);
+  if (amt < M3.TRIBUTE_MIN) throw new GameError('min', `Minimum tribute is ${usd(M3.TRIBUTE_MIN)}.`);
   if (Number(ch.cash) < amt) throw new GameError('cash', 'Not that much in pocket.');
   await resolveWarIfDue(client, h.owned.gangId);
   ch.cash = Number(ch.cash) - amt;
@@ -332,7 +332,7 @@ export async function declareWar(ch, targetGangId, client, h) {
   // discounted number is what burns AND is ledgered — the decree/amnesty discipline, so gang:war reconciles).
   const warBase = Math.max(M3.WAR_COST, Math.floor(Number(them.treasury) * M3.WAR_COST_BPS / 10000));
   const warCost = Math.floor((coalition ? warBase * DIPLOMACY.COALITION_WAR_MULT : warBase) * warMult);
-  if (Number(us.treasury) < warCost) throw new GameError('treasury', `War takes a $${warCost} war chest in the treasury.`);
+  if (Number(us.treasury) < warCost) throw new GameError('treasury', `War takes a ${usd(warCost)} war chest in the treasury.`);
   const until = new Date(Date.now() + M3.WAR_MS);
   // the war chest burns — a §10.4 cash sink out of the treasury bucket
   await client.query('UPDATE gangs SET treasury = treasury - $2, war_with=$3, war_until=$4, war_score_us=0, war_score_them=0 WHERE id=$1',
@@ -588,7 +588,11 @@ export async function stakeClaim(ch, districtId, amount, client, h) {
     : 'Nobody holds that district. Take it outright.');
   const gangId = h.owned.gangId;
   const q = await turfQuote(client, ch, d, gangId);
-  if (total < q.cost) throw new GameError('floor', `A stake on that district starts at $${q.cost}.`);
+  // The floor rides as DATA as well as prose (the district-refusal payload precedent). It is a price
+  // the caller must meet exactly, and until now it existed only inside a sentence — so the only way to
+  // act on it was to parse English, which the suite was doing in three places and an agent would have
+  // had to do too. Formatting the figure for a player is what surfaced that: `$501,393` parses as 501.
+  if (total < q.cost) throw new GameError('floor', `A stake on that district starts at ${usd(q.cost)}.`, { floor: q.cost });
   const nowMs = Date.now();
   const open = contestLive(d, nowMs);
   // THE RECKONING shortens the window, so several contests can land in a night and the map genuinely
@@ -599,10 +603,10 @@ export async function stakeClaim(ch, districtId, amount, client, h) {
   const prior = Number((await client.query('SELECT amount FROM district_bids WHERE district_id=$1 AND gang_id=$2',
     [districtId, gangId])).rows[0]?.amount || 0);
   // a stake only ever goes UP — you cannot pull money out of a contest you are losing your nerve on
-  if (total <= prior) throw new GameError('raise', `You already have $${Math.floor(prior)} on that district. A stake only goes up.`);
+  if (total <= prior) throw new GameError('raise', `You already have ${usd(Math.floor(prior))} on that district. A stake only goes up.`);
   const delta = total - prior;
   const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [gangId])).rows[0];
-  if (Number(g.treasury) < delta) throw new GameError('treasury', `Raising that stake takes $${delta} more from the treasury.`);
+  if (Number(g.treasury) < delta) throw new GameError('treasury', `Raising that stake takes ${usd(delta)} more from the treasury.`);
   await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [gangId, delta]);
   if (prior) await client.query('UPDATE district_bids SET amount=$3, at=$4 WHERE district_id=$1 AND gang_id=$2', [districtId, gangId, total, now()]);
   else await client.query('INSERT INTO district_bids (district_id, gang_id, amount, at) VALUES ($1,$2,$3,$4)', [districtId, gangId, total, now()]);

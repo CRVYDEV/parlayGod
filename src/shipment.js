@@ -11,7 +11,7 @@
 // pays nothing and exists only to gate a sink.
 import { GameError, notify, bus } from './game.js';
 import { SHIPMENT, DISTRICTS, commissionOf, shipmentDistrictOf, shipmentForecast, shipmentCityCap,
-  dayOf, jailed } from './rules.js';
+  dayOf, jailed, usd } from './rules.js';
 import { logCollect } from './collection.js';
 
 const districtName = (id) => DISTRICTS.find((d) => d.id === id)?.name || id;
@@ -140,7 +140,7 @@ export async function commissionPiece(ch, id, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'Not from a cell.');
   if (Number(ch.shipment || 0) < c.units)
     throw new GameError('units', `${c.name} takes ${c.units} of ${SHIPMENT.MATERIAL} — you hold ${Number(ch.shipment || 0)}.`);
-  if (Number(ch.cash) < c.cash) throw new GameError('cash', `The craftsman wants $${c.cash.toLocaleString()}.`);
+  if (Number(ch.cash) < c.cash) throw new GameError('cash', `The craftsman wants ${usd(c.cash)}.`);
   ch.shipment = Number(ch.shipment || 0) - c.units;
   ch.cash = Number(ch.cash) - c.cash;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -c.cash, reason: 'shipment:commission' });

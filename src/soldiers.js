@@ -9,7 +9,7 @@
 // char lock serializes everything (no second lock, no AB-BA surface).
 import crypto from 'node:crypto';
 import { GameError } from './game.js';
-import { SOLDIERS, soldierLevelOf, soldierFxOf, soldierRankOf, commanderRankOf, rollSoldierName } from './rules.js';
+import { SOLDIERS, soldierLevelOf, soldierFxOf, soldierRankOf, commanderRankOf, rollSoldierName, usd } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const fit = (s) => s.alive && (!s.injured_until || new Date(s.injured_until) <= new Date());
@@ -20,7 +20,7 @@ export async function hireSoldier(ch, client, h) {
   if (Number(living.c) >= SOLDIERS.MAX)
     throw new GameError('full', `You run ${SOLDIERS.MAX} soldiers, tops. Somebody has to go first.`);
   if (Number(ch.cash) < SOLDIERS.HIRE_COST)
-    throw new GameError('cash', `Good muscle costs $${SOLDIERS.HIRE_COST} up front.`);
+    throw new GameError('cash', `Good muscle costs ${usd(SOLDIERS.HIRE_COST)} up front.`);
   ch.cash = Number(ch.cash) - SOLDIERS.HIRE_COST;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -SOLDIERS.HIRE_COST, reason: 'soldier:hire' });
   const traits = Object.keys(SOLDIERS.TRAITS);

@@ -19,7 +19,7 @@ import crypto from 'node:crypto';
 import { GameError, ledger, rngLog, notify, track, bus } from './game.js';
 import { bumpHonor } from './honor.js';
 import { LAW, rapStageOf, bribeCostOf, retainerActive, witproActive, envelopeActive, bustProbOf,
-         cityEventOf, dayOf, cityHourOf , HONOR , jailed, safeHoused } from './rules.js';
+         cityEventOf, dayOf, cityHourOf , HONOR , jailed, safeHoused, usd } from './rules.js';
 import { spendOmr } from './vanity.js';
 
 
@@ -96,7 +96,7 @@ export async function bribe(ch, client, h) {
   const exposure = Number(ch.heat_exposure || 0);
   if (exposure < LAW.WATCH) throw new GameError('clean', "Nothing to bribe away — you're not on anyone's radar.");
   const cost = bribeCostOf(exposure);
-  if (Number(ch.cash) < cost) throw new GameError('cash', `The envelope needs $${cost}.`);
+  if (Number(ch.cash) < cost) throw new GameError('cash', `The envelope needs ${usd(cost)}.`);
   ch.cash = Number(ch.cash) - cost;
   ch.heat_exposure = Math.max(0, exposure - LAW.BRIBE_CLEAR);
   await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [cost]); // seized cash → the buyback pool
@@ -107,7 +107,7 @@ export async function bribe(ch, client, h) {
 // ── Phase 1 — the lawyer (a time-boxed retainer that softens the bust) ──
 export async function retainer(ch, client, h) {
   const cost = LAW.RETAINER_COST;
-  if (Number(ch.cash) < cost) throw new GameError('cash', `The retainer is $${cost}.`);
+  if (Number(ch.cash) < cost) throw new GameError('cash', `The retainer is ${usd(cost)}.`);
   ch.cash = Number(ch.cash) - cost;
   // extend from the later of now / the current retainer end (paying twice buys two windows)
   const base = retainerActive(ch) ? new Date(ch.retainer_until).getTime() : Date.now();

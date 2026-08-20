@@ -14238,6 +14238,101 @@ nothing, the vacuity class in its newest costume); the replacement hull then ord
 table does not have; and only once a fresh boat really sailed and really got busted did the mutation
 fail by name. Driven count 41 → 47, floor 33 → 40.
 
+**F14 — THE REFUSAL PATH, and the class it turned into: money written for a debugger, not a player
+(2026-08-19).** Two more lenses, and the first came back CLEAN in a way worth recording: a **SCREEN
+RENDER sweep** drove all 30 tabs in a real browser looking for `undefined` / `NaN` / `[object
+Object]` / a bare `$` in rendered text and found **none** — the F11–F13 waves really had reached the
+end of that class. So the next lens went at the surface nobody had swept as a surface: **THE REFUSAL
+PATH.** A refusal is the most-read line in the game — every time you cannot afford something, the
+server's own sentence is what the client shows (`describe()` takes `body.message` FIRST) — and 80 of
+them were driven and READ. **A machine scan passed all 80.** Reading them found the class: **158 of
+163 money figures in refusal messages were raw** — the Law retainer read *"The retainer is
+$150000."*, a fighter cost *"$25000"*, the safehouse quoted seven digits unbroken — debug output in a
+game that formats money on every other surface, in the one place a player is already annoyed. Fixed
+with **ONE helper** (`usd` in `rules.tail.js`), not 158 `.toLocaleString()` calls, because 158 copies
+of a rule is exactly how they come to disagree — the `jailed`/`penSafe` collapse precedent — and it
+deliberately MIRRORS the client's own `fmt`, including its two-significant-figures rule below a cent
+so a dust figure never reads as a flat "0". 162 interpolations across 38 modules. **THE MONEY
+LEDGER** (`test/gates.js`, the tenth catalogue-or-declare guard) reads every `GameError` template in
+`src/` and fails on any raw money interpolation, with an anti-vacuity floor — because an extractor
+that has stopped reading the tree passes for a clean sweep — both mutation-verified.
+**F15 — a refusal that was fluent, confident and FALSE about ownership.** `collectCorner` checked the
+level floor first and stated it in words written for somebody who HOLDS a corner (*"the street is
+yours, the take isn't yet"*), so a caller who owned no street at all was told they owned one. The
+console hides the button behind `collectable > 0`, so this reaches the raw API and the agents who
+read these lines. **The first cut reintroduced the same class one case over** and the existing
+extracted-deed assertion caught it: filtering the ownership count on `onchain_token_id IS NULL` would
+have told the owner of an EXTRACTED street to go and claim a street — it is still theirs, merely
+inert in-game — so the gate was narrowed and they fall through to the ordinary `nothing`.
+**F16 — the fix that surfaced a withheld machine value.** Formatting the district-claim floor broke
+three assertions that were parsing the figure out of the prose (`$501,393` captures as `501`) — and
+the test comment said so out loud: *"the refusal message carries the floor the server would
+enforce"*. The number existed ONLY in a sentence, so the only way to act on it was to parse English,
+which an agent would have had to do too — while **the SUCCESS response on the same route already
+returned `floor` as a field**. Fixed at the source (the `GameError` third-argument payload — the
+district-refusal precedent), so the refusal now matches its own success shape; the three tests read
+the field. Mutation-verified: dropping the payload fails by name (`theirs NaN`).
+**F17 — THE MAP priced one of the two ways a district changes hands.** The F16 fix raised the
+general question (which refusals name a number the caller must supply and hand a machine nothing?),
+and sweeping it produced 404 candidates — **far too broad to be a finding**, because a fixed catalog
+price in prose is fine when the same figure is also on `/v1/rules`. Narrowing to the shape that
+actually bites — a figure COMPUTED at request time from state the caller cannot see — left 77, and
+checking those against the boards closed the class rather than opening it: `/v1/districts` already
+publishes `claimFloor`, matching the refusal to the dollar. **`/v1/map` did not.** It rendered
+*"liberate for $45,000"* on an NPC-occupied tile and, for a district a PLAYER family holds, **no
+price at all** — sending a raw `garrison` that is off the outbid and every modifier stacked on top
+(a 200,000 garrison is a 337,500 door). That is the one screen built for reading the power structure
+at a glance, so pricing the NPC path and not the player path is an asymmetry with no reason behind
+it. `citymap.js` already imports `* as S from './social/gangs.js'`, so the fix is `S.turfQuote` at
+the PUBLIC quote (no gang, respect 0 — the `server.js` precedent), which leaks no rival's charter or
+coalition; a specific attacker's own floor still comes from the stake control on the Family tab,
+where you actually act. **The regression asserts against `turfQuote`'s own answer, never a restated
+formula** — the point is that the map and the till agree, and a literal would pass while the two
+drifted, which is the class being fixed — and it is measured against a district carrying a REAL
+garrison, because on a bare one the floor is the base and the two differ trivially (the assertion
+would pass proving nothing). Mutation-verified: quoting the garrison as the price fails by name at
+**45,000 against 244,687**, an 82% understatement. Read in a real browser afterwards rather than
+trusted from JSON — *"a sealed stake starts at $337,500 · stake it on The Family"*, zero page errors
+— which also corrected my own comment, since the tile had rendered no figure at all rather than the
+garrison I first wrote down.
+**F18 — the crew's price was a formula the CLIENT restated, with a hardcoded number under it.** The
+board/till parity sweep F17 prompted came back MATCH wherever both sides could be read — and turned
+up one board with no price field at all. The Kitchen's crew hire CLIMBS with headcount
+(`step × (crew+1)`), and the view published only `crewCostStep`, so the console restated the ladder
+AND carried `|| 50000` beneath it: two restatements of one rule, which is how they come to disagree
+(the `jailed`/`penSafe` collapse), and a hardcoded price behind a missing field is the guessed number
+wearing a hat (the `ALCHEMIST_ASSET_DECIMALS` fallback RT#6 deleted). **An agent reading `/v1/me`
+could not know the formula at all** — and agents are first-class players here. It was not WRONG
+today, which is why it is a fragility rather than a defect, and the fix is one field computed where
+the money is charged: `crewNextCost`, `null` at a full crew (the button disables and SAYS why rather
+than quoting a sixth hand the till refuses). Driven at every rung — board and till agree 50k → 250k,
+and at max the board's `null` matches the till's `max` refusal. Mutation-verified: quoting the flat
+step fails by name at 50,000 against 100,000. **The regression's own last assertion was VACUOUS on
+the first cut** (it re-asserted the line above it), so it now captures the quote BEFORE the hire and
+compares it to what was charged — which is the property, rather than a second literal.
+**F19 — the same shape as a CLASS, and the honest scope is that it is LATENT.** F18's hardcoded
+`|| 50000` prompted a sweep: the console carries **26 numeric fallbacks** standing in for a
+server-published lever. Most are harmless — `x || 0` differs from `x ?? 0` for nothing — and a
+blanket conversion came out at **248 sites**, which is churn against an 800KB single file for zero
+behavioural change, so it was NOT done. The subset that can actually go wrong is small and specific:
+**a `|| <non-zero>` on a CHARGED RATE fires when the real value is legitimately ZERO**, and this
+project ships bps levers at 0 deliberately (`BUSINESS_SHUTTER_BPS` and `RACKET_RETIRE_BPS` are at 0
+in the tree today). Seven such sites render a percentage the player is being told they pay — the
+favor take, the market take and list fee, the soldier's cut, the ring rake, the speakeasy table rake,
+the loan vig — every one a founder sign-off lever a retune could zero, after which the card would
+state a take that is not taken, with every guard green. Converted to `??`, which keeps the defensive
+behaviour for a missing field and stops firing on a real 0. **Stated plainly because it matters to
+how this is read: no live instance exists** — neither zeroed lever sits behind one of these
+fallbacks, and the levers are not env-overridable, so the reachable class could not be driven end to
+end. This is hardening on the recorded precedent (*a fallback is the guessed number wearing a hat* —
+RT#6 deleted the decimals fallback for the same reason), not a bug that was firing.
+**A candidate DISSOLVED on checking, recorded because a session that publishes only its hits cannot
+be audited:** `GET /v1/map` 500'd on a null gang (`citymap.js:71`) — traced not to the game but to a
+**pg-mem artifact in my own fixture**, where `UPDATE … SET col = (SELECT …)` stores the value as a
+ROW (`(uuid)`) rather than a scalar; real Postgres was verified to yield a scalar, `src/` has zero
+such sites, and dissolution clears `holder_gang` before `DELETE FROM gangs` in the same transaction
+and is the only gang delete. No guard added for an unreachable state.
+
 
 **THE PROBE HAD TO BE FIXED THREE TIMES BEFORE ITS RESULT MEANT ANYTHING, which is most of the
 lesson.** It first missed **shorthand** payload keys (`{ npc, units, material }`), planting

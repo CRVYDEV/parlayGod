@@ -12,7 +12,7 @@ import {
   levelOf, cityEventOf, dayOf, carOf, carVal, carMelt, rollCar, rollTrim,
   effStat, cargoCapacity, goodPriceOf, gearOf, gunObjOf, RACKET_EMPIRE, racketUpgradeCost, racketIncomeLeveled, tycoonRankOf,
   seasonModOf, pathFx, rollRarity, ladderFx, ladderFenceMult,
-  OPERATIONS, opSlotsOf, nextOpSlotLevel , jailed } from './rules.js';
+  OPERATIONS, opSlotsOf, nextOpSlotLevel , jailed, usd } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const cargoCount = (cargo) => Object.values(cargo).reduce((a, n) => a + (n || 0), 0);
@@ -182,7 +182,7 @@ export async function repairCar(ch, carId, client, h) {
   if ((car.dmg || 0) <= 0) throw new GameError('clean', 'Not a scratch on it.');
   const model = carOf(car.model_id);
   const cost = Math.max(50, Math.floor((car.dmg / 100) * carVal(car.model_id, car.trim_id) * 0.2));
-  if (Number(ch.cash) < cost) throw new GameError('cash', `The shop wants $${cost}.`);
+  if (Number(ch.cash) < cost) throw new GameError('cash', `The shop wants ${usd(cost)}.`);
   const chance = Math.max(0.05, ((model?.rare ? 50 : 100) - car.dmg) / 100); // rare iron repairs badly
   const roll = Math.random();
   ch.cash = Number(ch.cash) - cost;
@@ -278,7 +278,7 @@ export async function buyGood(ch, goodId, qty, client, h) {
   // STREET DEEDS 2C — controlled corners count for the ±5% turf price edge (set-union → OR, once)
   const unit = Math.round(goodPriceOf(goodId, ch.loc) * turfMult([...(h.owned.held || []), ...(h.owned.deedPerk || [])], ch.loc, 'buy'));
   const cost = unit * n, fee = Math.ceil(cost * 0.01), tax = Math.ceil(cost * 0.01);
-  if (Number(ch.cash) < cost + fee + tax) throw new GameError('cash', `That runs $${cost + fee + tax} with the 2% house take.`);
+  if (Number(ch.cash) < cost + fee + tax) throw new GameError('cash', `That runs ${usd(cost + fee + tax)} with the 2% house take.`);
   ch.cash = Number(ch.cash) - cost - fee - tax;
   const have = (h.owned.cargo[goodId] || 0) + n;
   h.owned.cargo[goodId] = have;
@@ -383,7 +383,7 @@ export async function upgradeRacket(ch, racketId, client, h) {
   const level = Number(h.owned.racketLevels?.[r.id] || 0);
   if (level >= RACKET_EMPIRE.UP_MAX) throw new GameError('maxed', `The ${r.name} is running as hard as it can.`);
   const cost = racketUpgradeCost(r.id, level);
-  if (Number(ch.cash) < cost) throw new GameError('cash', `Muscling the ${r.name} up a level runs $${cost}.`);
+  if (Number(ch.cash) < cost) throw new GameError('cash', `Muscling the ${r.name} up a level runs ${usd(cost)}.`);
   ch.cash = Number(ch.cash) - cost;
   await client.query('UPDATE character_rackets SET level=$1 WHERE character_id=$2 AND racket_id=$3', [level + 1, ch.id, r.id]);
   if (h.owned.racketLevels) h.owned.racketLevels[r.id] = level + 1;

@@ -7,7 +7,7 @@
 // Split out of the 2,003-line src/social.js; every function below is byte-identical to what was
 // there. Import from '../social.js' — it re-exports this package's public surface unchanged.
 import { GameError, bus, ledger, track, npcTier, bumpStanding, cleanText } from '../game.js';
-import { M3, M8, LOAN, hitmanRankOf, VENDETTA, LAW } from '../rules.js';
+import { M3, M8, LOAN, hitmanRankOf, VENDETTA, LAW, usd } from '../rules.js';
 import { spendOmr } from '../vanity.js';
 import { fire, jump } from './combat.js';
 import { canCommand, isWanted, now, takeHouse, uid } from './shared.js';
@@ -41,11 +41,11 @@ export async function postBounty(ch, targetCharacterId, amount, client, h, opts 
     if (tcrew === h.owned.crewId && !targetRat && !isWanted(t)) throw new GameError('crew', "They run with your crew — no contracts on your own.");
   }
   const amt = Math.floor(Number(amount) || 0);
-  if (amt < M3.BOUNTY_MIN) throw new GameError('min', `Minimum contract is $${M3.BOUNTY_MIN}.`);
+  if (amt < M3.BOUNTY_MIN) throw new GameError('min', `Minimum contract is ${usd(M3.BOUNTY_MIN)}.`);
   // VINNIE T2 (underworld): the Match waives HIS 1% posting fee for friends — the street
   // tax always stands. The discounted total is what's ledgered (decree/skill precedent).
   const fee = npcTier(h, 'fixer') >= 2 ? 0 : Math.ceil(amt * 0.01), tax = Math.ceil(amt * 0.01);
-  if (Number(ch.cash) < amt + fee + tax) throw new GameError('cash', `That contract costs $${amt + fee + tax} with the take.`);
+  if (Number(ch.cash) < amt + fee + tax) throw new GameError('cash', `That contract costs ${usd(amt + fee + tax)} with the take.`);
   const ttlH = Math.min(M3.BOUNTY_MAX_TTL_H, Math.max(1, Math.floor(Number(opts.hours) || M3.BOUNTY_DEFAULT_TTL_H)));
   // directed contract: name a hitman who gets an exclusive window before it opens to all. Only
   // set on a FRESH pot (a top-up inherits the original's direction — you fund the standing job).
@@ -73,7 +73,7 @@ export async function postBounty(ch, targetCharacterId, amount, client, h, opts 
     // consequence, not a clawback — no money returns to any lender). Their family still shields
     // them from OPEN contracts (unlike a rat) — a welsher is a lesser offense than an informant.
     const welsherWaiver = kind === 'kill' && !!t.welsher;
-    if (!vendetta && !ratWaiver && !welsherWaiver && amt < M3.DIRECTED_MIN) throw new GameError('directed_min', `Naming a hitman takes a serious stake — $${M3.DIRECTED_MIN} minimum.`);
+    if (!vendetta && !ratWaiver && !welsherWaiver && amt < M3.DIRECTED_MIN) throw new GameError('directed_min', `Naming a hitman takes a serious stake — ${usd(M3.DIRECTED_MIN)} minimum.`);
     hitmanId = hm.id;
     const exH = Math.min(ttlH, M3.DIRECTED_MAX_H, Math.max(1, Math.floor(Number(opts.exclusiveHours) || 24)));
     opensAt = new Date(Date.now() + exH * 3600 * 1000);
@@ -223,7 +223,7 @@ export async function postFamilyContract(ch, targetCharacterId, amount, client, 
   const tg = (await client.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [targetCharacterId])).rows[0];
   if (tg?.gang_id && tg.gang_id === gangId) throw new GameError('family', "They're family. Omertà.");
   const amt = Math.floor(Number(amount) || 0);
-  if (amt < M3.BOUNTY_MIN) throw new GameError('min', `Minimum contract is $${M3.BOUNTY_MIN}.`);
+  if (amt < M3.BOUNTY_MIN) throw new GameError('min', `Minimum contract is ${usd(M3.BOUNTY_MIN)}.`);
   const fee = Math.ceil(amt * 0.01), tax = Math.ceil(amt * 0.01);
   const ttlH = Math.min(M3.BOUNTY_MAX_TTL_H, Math.max(1, Math.floor(Number(opts.hours) || M3.BOUNTY_DEFAULT_TTL_H)));
   // pot row locked FIRST, THEN the gang — the stable pot → gang order every other pot path uses
@@ -243,7 +243,7 @@ export async function postFamilyContract(ch, targetCharacterId, amount, client, 
   const potAnon = live ? !!existing.anon : !!opts.anon;
   // gang row AFTER the pot (and after character/account rows) — the global lock order
   const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [gangId])).rows[0];
-  if (Number(g.treasury) < amt + fee + tax) throw new GameError('treasury', `That contract takes $${amt + fee + tax} from the treasury (2% take included).`);
+  if (Number(g.treasury) < amt + fee + tax) throw new GameError('treasury', `That contract takes ${usd(amt + fee + tax)} from the treasury (2% take included).`);
   await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [gangId, amt + fee + tax]);
   if (live) {
     await client.query('UPDATE bounties SET amount = amount + $3 WHERE target_character=$1 AND kind=$2', [targetCharacterId, kind, amt]);

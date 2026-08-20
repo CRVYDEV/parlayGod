@@ -26,7 +26,7 @@
 // precedent, in runEstate). All CASINO.RING numbers are founder sign-off levers.
 import crypto from 'node:crypto';
 import { GameError, ledger, notify } from './game.js';
-import { CASINO, levelOf , jailed } from './rules.js';
+import { CASINO, levelOf , jailed, usd } from './rules.js';
 import { best7, cmpHand, handName } from './casino.js';
 
 const uid = () => crypto.randomUUID();
@@ -186,7 +186,7 @@ async function settleFinish(client, t) {
 // ── player actions (all under withCharacter → the table lock) ──
 export async function openTable(ch, body, client, h) {
   const bb = Math.floor(Number(body?.bb) || 0);
-  if (!CASINO.RING.BLINDS.includes(bb)) throw new GameError('stakes', `Tables run at $${CASINO.RING.BLINDS.join(' / $')} a hand.`);
+  if (!CASINO.RING.BLINDS.includes(bb)) throw new GameError('stakes', `Tables run at ${CASINO.RING.BLINDS.map(usd).join(' / ')} a hand.`);
   const t = { id: uid(), bb };
   await client.query('INSERT INTO poker_tables (id, bb) VALUES ($1,$2)', [t.id, bb]);
   const sat = await sitAt(ch, t.id, body?.buyin, client, h);
@@ -204,7 +204,7 @@ export async function sitAt(ch, tableId, buyin, client, h) {
   if (seats.length >= CASINO.RING.SEATS) throw new GameError('full', 'The table is full.');
   const amt = Math.floor(Number(buyin) || 0);
   const lo = t.bb * CASINO.RING.BUYIN_MIN_BB, hi = t.bb * CASINO.RING.BUYIN_MAX_BB;
-  if (!(amt >= lo && amt <= hi)) throw new GameError('buyin', `Buy in for $${lo}–$${hi} at this table.`);
+  if (!(amt >= lo && amt <= hi)) throw new GameError('buyin', `Buy in for ${usd(lo)}–${usd(hi)} at this table.`);
   if (Number(ch.cash) < amt) throw new GameError('cash', 'Not that much in pocket.');
   ch.cash = Number(ch.cash) - amt;
   const seat = [...Array(CASINO.RING.SEATS).keys()].find((i) => !seats.some((s) => s.seat === i));
@@ -298,7 +298,7 @@ export async function actAt(ch, tableId, body, client, h) {
   if (action === 'fold') {
     mine.in_hand = false; mine.acted = true;
   } else if (action === 'check') {
-    if (myBet !== cur) throw new GameError('bet', `There's $${cur - myBet} to you — call, raise, or fold.`);
+    if (myBet !== cur) throw new GameError('bet', `There's ${usd(cur - myBet)} to you — call, raise, or fold.`);
     mine.acted = true;
   } else if (action === 'call') {
     const need = cur - myBet;
@@ -312,7 +312,7 @@ export async function actAt(ch, tableId, body, client, h) {
     let target = Math.floor(Number(body?.amount) || 0);
     target = Math.min(target, cap);
     const minTo = cur > 0 ? cur + Number(t.bb) : Number(t.bb);
-    if (target < Math.min(minTo, cap)) throw new GameError('amount', `The table minimum raise is to $${Math.min(minTo, cap)}.`);
+    if (target < Math.min(minTo, cap)) throw new GameError('amount', `The table minimum raise is to ${usd(Math.min(minTo, cap))}.`);
     if (target <= cur) throw new GameError('amount', 'A raise has to raise.');
     const pay = target - myBet;
     mine.stack = Number(mine.stack) - pay; t.pot = Number(t.pot) + pay;

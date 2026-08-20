@@ -6,6 +6,7 @@
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { runLedgerInvariants } from '../src/invariants.js';
+import * as S from '../src/social/gangs.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -58,6 +59,26 @@ assert.ok(b.powers.length >= 2 && b.powers[0].tag === 'MAP' && b.powers[0].distr
   'the power ranking ranks families by core districts held, and flags mine');
 assert.equal(b.powers[1].tag, 'RU2', 'a family holding fewer districts ranks BELOW — the ranking is by control, not insertion');
 assert.equal(b.powers[1].mine, false, 'another family is not flagged mine');
+
+// WHAT IT COSTS TO COME FOR IT. The map priced the NPC path and showed the player path a raw
+// GARRISON — which is not the price and reads exactly like one. Asserted against turfQuote's OWN
+// answer rather than a restated formula, because the point is that the map and the till agree; a
+// literal here would pass while the two drifted, which is the whole class this is fixing.
+{
+  // measured against a district carrying a REAL garrison — on a bare one the floor is the base and
+  // the two differ trivially, so the assertion would pass while proving nothing about the outbid
+  const priced = b.districts.find((d) => d.id === 'docks');
+  assert.ok(priced.garrison > 0, 'the precondition: a garrison to be understated by');
+  const truth = (await S.turfQuote(pool, { respect: 0 },
+    (await pool.query("SELECT * FROM districts WHERE id='docks'")).rows[0], null)).cost;
+  assert.equal(priced.claimFloor, truth, 'the map quotes what a stake really costs, not the garrison');
+  assert.ok(priced.claimFloor > priced.garrison,
+    `and it is DEARER than the garrison the map used to show alone (${priced.garrison} → ${priced.claimFloor})`);
+  assert.ok(b.districts.find((d) => d.id === 'foundry').claimFloor > 0, 'a rival-held district is priced too');
+  const occupied = b.districts.find((d) => d.occupier);
+  assert.equal(occupied.claimFloor, undefined,
+    'an OCCUPIED district quotes liberation, not a stake — you free it, you do not bid for it');
+}
 
 // ════════════ §10.4 — the whole read moves NO value ════════════
 const txBefore = await txnCount();

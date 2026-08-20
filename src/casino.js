@@ -9,7 +9,7 @@
 import crypto from 'node:crypto';
 import { recordEventResult } from './events.js';
 import { GameError, bus, npcTier, bumpStanding, bumpMastery, masteryFx, ledger, notify, rngLog } from './game.js';
-import { CASINO, UNDERWORLD, MASTERY, POPULATION, numbersDrawOf, dayOf, weekOf, levelOf, hash01, MARKET_SEED, ACCESS_STAKE , jailed, hospitalized } from './rules.js';
+import { CASINO, UNDERWORLD, MASTERY, POPULATION, numbersDrawOf, dayOf, weekOf, levelOf, hash01, MARKET_SEED, ACCESS_STAKE , jailed, hospitalized, usd } from './rules.js';
 
 const d6 = () => 1 + Math.floor(Math.random() * 6);
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1)); // inclusive (the stable.js form-roll)
@@ -76,8 +76,8 @@ function gateBet(ch, amount, min, max) {
   if (jailed(ch)) throw new GameError('jailed', 'No dice in lockup — yet.');
   if (ch.loc !== CASINO.DISTRICT) throw new GameError('district', `The den runs on the ${CASINO.DISTRICT} — the games are where the lights are.`, { district: CASINO.DISTRICT });
   const amt = Math.floor(Number(amount));
-  if (!(amt >= min)) throw new GameError('min', `Table minimum is $${min}.`);
-  if (amt > max) throw new GameError('max', `Table maximum is $${max} — the house knows variance.`);
+  if (!(amt >= min)) throw new GameError('min', `Table minimum is ${usd(min)}.`);
+  if (amt > max) throw new GameError('max', `Table maximum is ${usd(max)} — the house knows variance.`);
   if (Number(ch.cash) < amt) throw new GameError('cash', 'Not that much in pocket.');
   return amt;
 }
@@ -167,7 +167,7 @@ export async function playDice(ch, amount, client, h) {
 export function setFadeLimit(ch, limit) {
   const v = limit == null || Number(limit) === 0 ? null : Math.floor(Number(limit));
   if (v != null && !(v >= CASINO.MIN_BET && v <= CASINO.MAX_BET))
-    throw new GameError('limit', `Fade limits run $${CASINO.MIN_BET}–$${CASINO.MAX_BET} (0 clears).`);
+    throw new GameError('limit', `Fade limits run ${usd(CASINO.MIN_BET)}–${usd(CASINO.MAX_BET)} (0 clears).`);
   ch.fade_limit = v;
   return { ok: true, fadeLimit: v };
 }
@@ -185,8 +185,8 @@ export async function pvpDice(ch, fader, amount, client, h) {
   if (jailed(fader) || hospitalized(fader) || fader.loc !== CASINO.DISTRICT)
     throw new GameError('unavailable', "They're not at the den right now.");
   const amt = Math.floor(Number(amount));
-  if (!(amt >= CASINO.MIN_BET)) throw new GameError('min', `Table minimum is $${CASINO.MIN_BET}.`);
-  if (amt > limit) throw new GameError('limit', `They'll only fade up to $${limit}.`);
+  if (!(amt >= CASINO.MIN_BET)) throw new GameError('min', `Table minimum is ${usd(CASINO.MIN_BET)}.`);
+  if (amt > limit) throw new GameError('limit', `They'll only fade up to ${usd(limit)}.`);
   if (Number(ch.cash) < amt) throw new GameError('cash', 'Not that much in pocket.');
   if (Number(fader.cash) < amt) throw new GameError('their_cash', "They can't cover it right now.");
   // MADAME T1 comps the back room too — the challenger's nerve, actor-side like the standing
@@ -304,7 +304,7 @@ export async function fixFight(ch, winner, client, h) {
   const existing = (await client.query('SELECT 1 FROM fight_fixes WHERE week=$1', [week])).rows[0];
   if (existing) throw new GameError('fixed', "This bout's already been bought.");
   if (Number(g.treasury) < CASINO.FIGHT_FIX_COST)
-    throw new GameError('treasury', `A referee costs $${CASINO.FIGHT_FIX_COST} from the treasury.`);
+    throw new GameError('treasury', `A referee costs ${usd(CASINO.FIGHT_FIX_COST)} from the treasury.`);
   await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [h.owned.gangId, CASINO.FIGHT_FIX_COST]);
   try {
     await client.query('INSERT INTO fight_fixes (week, gang_id, winner) VALUES ($1,$2,$3)', [week, h.owned.gangId, winner]);
@@ -473,7 +473,7 @@ export async function enterTrackRace(ch, racerId, client, h) {
   await client.query('SELECT 1 FROM street_tax WHERE id=1 FOR UPDATE');
   const n = Number((await client.query('SELECT COUNT(*) n FROM track_entries WHERE day=$1 AND race=$2', [day, race])).rows[0].n);
   if (n >= CASINO.TRACK.PLAYER_SLOTS) throw new GameError('full', `The card's full — ${CASINO.TRACK.PLAYER_SLOTS} owner post${CASINO.TRACK.PLAYER_SLOTS === 1 ? '' : 's'} a race.`);
-  if (Number(ch.cash) < CASINO.TRACK.ENTRY_FEE) throw new GameError('cash', `The nomination fee is $${CASINO.TRACK.ENTRY_FEE}.`);
+  if (Number(ch.cash) < CASINO.TRACK.ENTRY_FEE) throw new GameError('cash', `The nomination fee is ${usd(CASINO.TRACK.ENTRY_FEE)}.`);
   const post = CASINO.TRACK.FIELD - 1 - n; // fill the outside posts
   const f = Number(r.speed) + Number(r.stamina) + Number(r.heart);
   ch.cash = Number(ch.cash) - CASINO.TRACK.ENTRY_FEE;
@@ -549,7 +549,7 @@ export async function nominateFuturity(ch, racerId, client, h) {
   const r = (await client.query('SELECT * FROM racers WHERE id=$1 FOR UPDATE', [racerId])).rows[0];
   if (!r || r.character_id !== ch.id) throw new GameError('no_racer', "That's not one of your racers.");
   if (r.injured_until && new Date(r.injured_until) > new Date()) throw new GameError('injured', 'That racer is laid up — let them heal.');
-  if (Number(ch.cash) < CASINO.FUTURITY.NOMINATE_FEE) throw new GameError('cash', `The nomination fee is $${CASINO.FUTURITY.NOMINATE_FEE}.`);
+  if (Number(ch.cash) < CASINO.FUTURITY.NOMINATE_FEE) throw new GameError('cash', `The nomination fee is ${usd(CASINO.FUTURITY.NOMINATE_FEE)}.`);
   if ((await client.query('SELECT 1 FROM futurity_runners WHERE futurity_id=$1 AND character_id=$2', [g.id, ch.id])).rows[0])
     throw new GameError('entered', "You've already got a runner in this futurity.");
   // INVARIANT: racer_id is unique within a card — resolveFuturity keys place-updates + bet buckets on it.
@@ -984,7 +984,7 @@ function dealPoker() { // a real 52-card shuffle — distinct cards matter for p
 export function setPokerLimit(ch, limit) {
   const v = limit == null || Number(limit) === 0 ? null : Math.floor(Number(limit));
   if (v != null && !(v >= CASINO.POKER_MIN && v <= CASINO.MAX_BET))
-    throw new GameError('limit', `Poker limits run $${CASINO.POKER_MIN}–$${CASINO.MAX_BET} (0 clears).`);
+    throw new GameError('limit', `Poker limits run ${usd(CASINO.POKER_MIN)}–${usd(CASINO.MAX_BET)} (0 clears).`);
   ch.poker_limit = v;
   return { ok: true, pokerLimit: v };
 }
@@ -999,8 +999,8 @@ export async function playPoker(ch, dealer, amount, client, h) {
   if (jailed(dealer) || hospitalized(dealer) || dealer.loc !== CASINO.DISTRICT)
     throw new GameError('unavailable', "They're not at the table right now.");
   const amt = Math.floor(Number(amount));
-  if (!(amt >= CASINO.POKER_MIN)) throw new GameError('min', `Table minimum is $${CASINO.POKER_MIN}.`);
-  if (amt > limit) throw new GameError('limit', `They'll only play up to $${limit}.`);
+  if (!(amt >= CASINO.POKER_MIN)) throw new GameError('min', `Table minimum is ${usd(CASINO.POKER_MIN)}.`);
+  if (amt > limit) throw new GameError('limit', `They'll only play up to ${usd(limit)}.`);
   if (Number(ch.cash) < amt) throw new GameError('cash', 'Not that much in pocket.');
   if (Number(dealer.cash) < amt) throw new GameError('their_cash', "They can't cover it right now.");
 
@@ -1052,7 +1052,7 @@ export async function enterTournament(ch, client, h, opts = {}) {
   if (jailed(ch)) throw new GameError('jailed', 'No cards in lockup.');
   if (ch.loc !== CASINO.DISTRICT) throw new GameError('district', `The big table is on the ${CASINO.DISTRICT}.`, { district: CASINO.DISTRICT });
   const buyin = CASINO.TOURNEY.BUYIN;
-  if (Number(ch.cash) < buyin) throw new GameError('cash', `The buy-in is $${buyin}.`);
+  if (Number(ch.cash) < buyin) throw new GameError('cash', `The buy-in is ${usd(buyin)}.`);
   // materialize/find the open tournament under the state singleton lock (LOCK ORDER: char → poker_state → tournament)
   const st = (await client.query('SELECT current FROM poker_state WHERE id=1 FOR UPDATE')).rows[0];
   let t = st.current ? (await client.query("SELECT * FROM poker_tournaments WHERE id=$1 AND status='open' FOR UPDATE", [st.current])).rows[0] : null;

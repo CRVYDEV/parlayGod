@@ -178,10 +178,19 @@ assert(Number(dealLedger.rows[0].n) >= 1, 'deal ledgered');
 }
 
 // ── crew (§5.3 + §7.1): hire, then lazy offline sales ──
+// WHAT THE NEXT HAND COSTS, from the side that charges it. The board published only the STEP, so the
+// console restated the ladder with a hardcoded price under it and an agent reading the view could not
+// know the formula at all. Asserted as an AGREEMENT at every rung — the board's quote against what the
+// till really takes — because a literal on either side would pass while the two drifted.
+const quotedHire = async () => (await meOf(chef.token)).crewNextCost;
+assert.equal(await quotedHire(), 50000, 'the board quotes the first hand before you press');
 r = await call('POST', '/v1/kitchen/crew/hire', { token: chef.token });
 assert.equal(r.code, 200); assert.equal(r.body.crew, 1); assert.equal(r.body.cost, 50000);
+const quotedSecond = await quotedHire();
+assert.equal(quotedSecond, 100000, 'and the quote CLIMBS with the headcount, as the till does');
 r = await call('POST', '/v1/kitchen/crew/hire', { token: chef.token });
 assert.equal(r.body.cost, 100000, 'second hire costs double');
+assert.equal(r.body.cost, quotedSecond, 'the till charged exactly what the board had quoted a moment earlier');
 me = await meOf(chef.token);
 const stashBefore = me.stash.find((s) => s.drug === 'vim')?.qty || 0;
 assert(stashBefore > 0, 'product on the shelf for the crew');

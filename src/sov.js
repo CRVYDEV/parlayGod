@@ -14,7 +14,7 @@
 // (the territory convention — the DEFENDER's gang is never locked; the structure row is the
 // contested object, exactly the convoy-manifest discipline).
 import { GameError, bus } from './game.js';
-import { SOV, sovRankOf, cityHourOf, DISTRICTS , jailed, hospitalized, safeHoused } from './rules.js';
+import { SOV, sovRankOf, cityHourOf, DISTRICTS , jailed, hospitalized, safeHoused, usd } from './rules.js';
 
 const canCommand = (h) => h.owned.gangRole === 'boss' || h.owned.gangRole === 'underboss';
 // actor-state gates (the raidRivalRacket/P1.3 set — you can't run a siege from lockup, a hospital
@@ -95,7 +95,7 @@ export async function buildSov(ch, districtId, windowHour, client, h) {
   const existing = (await client.query('SELECT 1 FROM sov_structures WHERE district_id=$1', [districtId])).rows[0];
   if (existing) throw new GameError('exists', 'A stronghold already stands there.');
   const cost = SOV.TIERS[0].cost;
-  if (Number(g.treasury) < cost) throw new GameError('treasury', `An ${SOV.TIERS[0].name} takes $${cost} from the treasury.`);
+  if (Number(g.treasury) < cost) throw new GameError('treasury', `An ${SOV.TIERS[0].name} takes ${usd(cost)} from the treasury.`);
   await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [g.id, cost]);
   await client.query('INSERT INTO sov_structures (district_id, gang_id, tier, window_hour) VALUES ($1,$2,1,$3)',
     [districtId, g.id, wh]);
@@ -114,7 +114,7 @@ export async function upgradeSov(ch, districtId, client, h) {
   const tier = Number(s.tier);
   if (tier >= SOV.TIERS.length) throw new GameError('maxed', 'The citadel is as tall as walls go.');
   const cost = SOV.TIERS[tier].cost;
-  if (Number(g.treasury) < cost) throw new GameError('treasury', `A ${SOV.TIERS[tier].name} takes $${cost} from the treasury.`);
+  if (Number(g.treasury) < cost) throw new GameError('treasury', `A ${SOV.TIERS[tier].name} takes ${usd(cost)} from the treasury.`);
   await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [g.id, cost]);
   await client.query('UPDATE sov_structures SET tier=$2 WHERE district_id=$1', [districtId, tier + 1]);
   await h.ledger(client, { currency: 'cash', amount: -cost, reason: 'sov:upgrade', counterparty: g.id });
@@ -195,7 +195,7 @@ export async function siegeSov(ch, districtId, client, h) {
   // down), floored at SIEGE_COST so the low-tier on-ramp is unchanged. `s` is FOR UPDATE-locked above.
   const tierCost = Number((SOV.TIERS[tier - 1] || SOV.TIERS[0]).cost);
   const siegeCost = Math.max(SOV.SIEGE_COST, Math.floor(tierCost * SOV.SIEGE_COST_BPS / 10000));
-  if (Number(g.treasury) < siegeCost) throw new GameError('treasury', `A siege on those walls takes a $${siegeCost} war chest.`);
+  if (Number(g.treasury) < siegeCost) throw new GameError('treasury', `A siege on those walls takes a ${usd(siegeCost)} war chest.`);
   // the chest burns WIN OR LOSE (the npchit-fee posture — aggression is never free)
   await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [g.id, siegeCost]);
   await h.ledger(client, { currency: 'cash', amount: -siegeCost, reason: 'sov:siege', counterparty: g.id });

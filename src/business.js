@@ -10,7 +10,7 @@
 import crypto from 'node:crypto';
 import { GameError, bus, skillMult, trunkCap, bumpMastery, masteryFx } from './game.js';
 import { CONSTANTS, M3, CASINO, BUSINESSES, SKILLS, BUSINESS_EMPIRE, RIVALS, POPULATION, businessOf, businessTierOf, businessMaxTier,
-  businessAssessedValue, launderRankOf, levelOf, effStat, pathFx, isMade , jailed, hospitalized, safeHoused } from './rules.js';
+  businessAssessedValue, launderRankOf, levelOf, effStat, pathFx, isMade , jailed, hospitalized, safeHoused, usd } from './rules.js';
 import { recordRival, revengeOwed } from './rivals.js';
 import { bumpHonor } from './honor.js';
 import { denAvailable, denDistribute } from './casino.js';
@@ -154,7 +154,7 @@ export async function buyBusiness(ch, kind, client, h) {
   const existing = (await client.query('SELECT id FROM businesses WHERE character_id=$1 AND kind=$2', [ch.id, kind])).rows[0];
   if (existing) throw new GameError('exists', `You already run a ${cat.name} — upgrade it instead.`);
   const tier = cat.tiers[0];
-  if (Number(ch.cash) < tier.cost) throw new GameError('cash', `The ${cat.name} costs $${tier.cost} to set up.`);
+  if (Number(ch.cash) < tier.cost) throw new GameError('cash', `The ${cat.name} costs ${usd(tier.cost)} to set up.`);
   ch.cash = Number(ch.cash) - tier.cost;
   const id = uid();
   await client.query('INSERT INTO businesses (id, character_id, kind, tier) VALUES ($1,$2,$3,1)', [id, ch.id, kind]);
@@ -320,7 +320,7 @@ export async function upgradeBusiness(ch, businessId, client, h) {
   if (isCold(r)) throw new GameError('cold', `The ${cat.name} is dark — pay the pad before you pour money into it.`);
   const raid = await resolveScrutiny(ch, r, client, h); // a raid seizes the pending before it banks
   const pending = raid.raided ? 0 : accrued(r);
-  if (Number(ch.cash) + pending < next.cost) throw new GameError('cash', `Upgrading the ${cat.name} costs $${next.cost}.`);
+  if (Number(ch.cash) + pending < next.cost) throw new GameError('cash', `Upgrading the ${cat.name} costs ${usd(next.cost)}.`);
   // bank the pending at the old rate, then debit the upgrade — net in one cash figure. The upgrade
   // also squares the pad (upkeep_at=now): a fresh clock at the new rate, no retroactive rate bump.
   ch.cash = Number(ch.cash) + pending - next.cost;
@@ -514,7 +514,7 @@ export async function takeoverBusiness(ch, owner, businessId, client, h) {
     throw new GameError('cooldown', 'That front just fought off a move — let it settle.');
   const fee = BUSINESS_EMPIRE.TAKEOVER.FEE;
   const price = businessAssessedValue(r.kind, r.tier);
-  if (Number(ch.cash) < fee + price) throw new GameError('cash', `A takeover runs $${fee} fee + $${price} to buy it out.`);
+  if (Number(ch.cash) < fee + price) throw new GameError('cash', `A takeover runs ${usd(fee)} fee + ${usd(price)} to buy it out.`);
   // the FEE burns win OR lose (a §10.4 cash sink) + the per-front cooldown is set either way
   ch.cash = Number(ch.cash) - fee;
   ch.heat = Math.min(100, Number(ch.heat || 0) + BUSINESS_EMPIRE.TAKEOVER.HEAT);

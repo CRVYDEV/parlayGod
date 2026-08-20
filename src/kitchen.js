@@ -6,7 +6,7 @@ import {
   DRUGS, KITCHENS, TRADE_RANKS, CONSTANTS, M4, COMMISSION, SKILLS, KITCHEN,
   drugOf, kitchenOf, tradeRankIdx, cityEventOf, dayOf,
   makingsPriceOf, demandOf, effStat, crewWageOwed, crewCold, HONOR,
-  labModuleCost, kingpinRankOf, seasonModOf, pathFx, pathAdd , jailed, safeHoused } from './rules.js';
+  labModuleCost, kingpinRankOf, seasonModOf, pathFx, pathAdd , jailed, safeHoused, usd } from './rules.js';
 import { activeDecree } from './commission.js';
 import { logCollect } from './collection.js';
 
@@ -25,7 +25,7 @@ export async function buyMakings(ch, drugId, qty, client, h) {
     throw new GameError('rank', `The Supplier doesn't show ${d.name} to a ${TRADE_RANKS[tradeRankIdx(Number(ch.trade_rep || 0))].name}. Move more product first.`);
   const unit = Math.round(makingsPriceOf(drugId) * (cityEventOf(dayOf()).mkMult || 1));
   const cost = unit * n;
-  if (Number(ch.cash) < cost) throw new GameError('cash', `${n} units of makings run $${cost} right now.`);
+  if (Number(ch.cash) < cost) throw new GameError('cash', `${n} units of makings run ${usd(cost)} right now.`);
   ch.cash = Number(ch.cash) - cost;
   h.owned.makings[drugId] = (h.owned.makings[drugId] || 0) + n;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: `makings:${drugId}` });
@@ -37,7 +37,7 @@ export async function upgradeLab(ch, client, h) {
   const curIdx = ch.lab ? KITCHENS.findIndex((k) => k.id === ch.lab) : -1;
   const next = KITCHENS[curIdx + 1];
   if (!next) throw new GameError('maxed', 'The Cathedral is as high as chemistry goes.');
-  if (Number(ch.cash) < next.cost) throw new GameError('cash', `The ${next.name} runs $${next.cost}.`);
+  if (Number(ch.cash) < next.cost) throw new GameError('cash', `The ${next.name} runs ${usd(next.cost)}.`);
   if (Number(h.acct.omr) < (next.omr || 0)) throw new GameError('omr', `The ${next.name} also takes ${next.omr} $OMR.`);
   ch.cash = Number(ch.cash) - next.cost;
   ch.lab = next.id;
@@ -182,7 +182,7 @@ export async function hireCrew(ch, client, h) {
   const crew = Number(ch.crew || 0);
   if (crew >= M4.CREW_MAX) throw new GameError('max', 'Five corners is all one person can keep honest.');
   const cost = M4.CREW_COST_STEP * (crew + 1);
-  if (Number(ch.cash) < cost) throw new GameError('cash', `The next crew member wants $${cost} up front.`);
+  if (Number(ch.cash) < cost) throw new GameError('cash', `The next crew member wants ${usd(cost)} up front.`);
   ch.cash = Number(ch.cash) - cost;
   ch.crew = crew + 1;
   // start (or reset) the wage clock on a hire — a fresh mouth doesn't retroactively raise the nut
@@ -200,7 +200,7 @@ export async function payCrewWages(ch, client, h) {
   if (crew <= 0) throw new GameError('none', 'You run no crew — no nut to cover.');
   const owed = crewWageOwed(ch);
   if (owed <= 0) return { ok: true, paid: 0, message: 'The nut is covered.' };
-  if (Number(ch.cash) < owed) throw new GameError('cash', `The nut runs $${owed} — the corner's short, and so are you.`);
+  if (Number(ch.cash) < owed) throw new GameError('cash', `The nut runs ${usd(owed)} — the corner's short, and so are you.`);
   ch.cash = Number(ch.cash) - owed;
   ch.crew_paid_at = new Date();
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -owed, reason: 'crew:wages' });
@@ -233,7 +233,7 @@ export async function layOffCrew(ch, client, h) {
   const cold = crewCold(ch);
   const owed = crewWageOwed(ch);
   if (!cold && owed > 0) {
-    if (Number(ch.cash) < owed) throw new GameError('nut', `Square the nut first — $${owed} for the time they worked.`);
+    if (Number(ch.cash) < owed) throw new GameError('nut', `Square the nut first — ${usd(owed)} for the time they worked.`);
     ch.cash = Number(ch.cash) - owed;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -owed, reason: 'crew:wages' });
   }
@@ -257,7 +257,7 @@ export async function layLow(ch, client, h) {
     * skillMult(h, 'fast_talker', SKILLS.FX.LAYLOW_MULT)
     * (Number(ch.honor || 0) >= HONOR.TRUSTED ? HONOR.LAYLOW_MULT : 1)
     * (seasonModOf().laylowMult || 1));
-  if (Number(ch.cash) < cost) throw new GameError('cash', `Laying low takes $${cost}.`);
+  if (Number(ch.cash) < cost) throw new GameError('cash', `Laying low takes ${usd(cost)}.`);
   if (Number(ch.energy) < M4.LAYLOW_ENERGY) throw new GameError('energy', `Laying low takes ${M4.LAYLOW_ENERGY} energy.`);
   ch.cash = Number(ch.cash) - cost;
   ch.energy = Number(ch.energy) - M4.LAYLOW_ENERGY;
@@ -292,7 +292,7 @@ export async function upgradeModule(ch, modId, client, h) {
   if (level >= KITCHEN.MODULE_MAX) throw new GameError('maxed', `The ${mod.name} is as far as it goes.`);
   const labIdx = KITCHENS.findIndex((k) => k.id === ch.lab);
   const { cash, omr } = labModuleCost(modId, level, labIdx);
-  if (Number(ch.cash) < cash) throw new GameError('cash', `The next ${mod.name} level runs $${cash}.`);
+  if (Number(ch.cash) < cash) throw new GameError('cash', `The next ${mod.name} level runs ${usd(cash)}.`);
   if (omr > 0 && Number(h.acct.omr) < omr) throw new GameError('omr', `It also takes ${omr} $OMR — bench chemistry isn't cheap.`);
   ch.cash = Number(ch.cash) - cash;
   ch[col] = level + 1;
@@ -316,7 +316,7 @@ export async function cutStash(ch, drugId, client, h) {
   if (!s || Number(s.qty) < 1) throw new GameError('stash', `No ${d.name} in the stash to cut.`);
   if (Number(s.quality) <= KITCHEN.CUT_FLOOR)
     throw new GameError('too_weak', `That ${d.name} is already cut to nothing — step on it more and it's baby powder.`);
-  if (Number(ch.cash) < KITCHEN.CUT_COST) throw new GameError('cash', `A cutting agent runs $${KITCHEN.CUT_COST}.`);
+  if (Number(ch.cash) < KITCHEN.CUT_COST) throw new GameError('cash', `A cutting agent runs ${usd(KITCHEN.CUT_COST)}.`);
   ch.cash = Number(ch.cash) - KITCHEN.CUT_COST;
   const added = Math.max(1, Math.floor(Number(s.qty) * KITCHEN.CUT_UNITS));
   s.qty = Number(s.qty) + added;

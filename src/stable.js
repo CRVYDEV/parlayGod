@@ -9,7 +9,7 @@
 import crypto from 'node:crypto';
 import { recordEventResult } from './events.js';
 import { GameError, bus, ledger, notify, rngLog, bumpStanding, npcMult, npcTier } from './game.js';
-import { STABLE, UNDERWORLD, POPULATION, stableKindOf, stableMeetOf, racerRankOf, racerLegendOf, levelOf , jailed, hospitalized } from './rules.js';
+import { STABLE, UNDERWORLD, POPULATION, stableKindOf, stableMeetOf, racerRankOf, racerLegendOf, levelOf , jailed, hospitalized, usd } from './rules.js';
 
 const stakesMs = () => Number(process.env.STAKES_MS) || STABLE.STAKES.REGISTER_MS; // TEST-ONLY env (SEARCH_MS pattern)
 
@@ -46,7 +46,7 @@ export async function buyRacer(ch, kind, name, client, h) {
   if (!/^[\w .,'&-]+$/.test(n)) throw new GameError('name', 'Letters, numbers and simple punctuation only.');
   const count = Number((await client.query('SELECT COUNT(*) n FROM racers WHERE character_id=$1', [ch.id])).rows[0].n);
   if (count >= STABLE.STABLE_MAX) throw new GameError('stable_full', `Your stable is full (${STABLE.STABLE_MAX} racers).`);
-  if (Number(ch.cash) < k.cost) throw new GameError('cash', `A ${k.name} runs $${k.cost}.`);
+  if (Number(ch.cash) < k.cost) throw new GameError('cash', `A ${k.name} runs ${usd(k.cost)}.`);
   ch.cash = Number(ch.cash) - k.cost;
   const id = crypto.randomUUID();
   const speed = rand(k.statMin, k.statMax), stamina = rand(k.statMin, k.statMax), heart = rand(k.statMin, k.statMax);
@@ -79,7 +79,7 @@ export async function trainRacer(ch, racerId, stat, client, h) {
   // bonus never lifts the STAT_CAP ceiling → the circuit faucet EV is unchanged).
   const cost = Math.round(STABLE.TRAIN_COST * npcMult(h, 'cornerman', 1, UNDERWORLD.FX.CORNER_TRAIN_MULT));
   const gain = STABLE.TRAIN_GAIN + (npcTier(h, 'cornerman') >= 3 ? UNDERWORLD.FX.CORNER_GAIN : 0);
-  if (Number(ch.cash) < cost) throw new GameError('cash', `A session runs $${cost}.`);
+  if (Number(ch.cash) < cost) throw new GameError('cash', `A session runs ${usd(cost)}.`);
   ch.cash = Number(ch.cash) - cost;
   ch.energy = Number(ch.energy) - STABLE.TRAIN_ENERGY;
   const nv = Math.min(STABLE.STAT_CAP, Number(r[s]) + gain); // absolute write (pg-mem INT-arith quirk)
@@ -95,7 +95,7 @@ export async function listRacer(ch, racerId, limit, client, h) {
   const r = await myRacer(client, ch, racerId);
   const v = limit == null || Number(limit) === 0 ? null : Math.floor(Number(limit));
   if (v != null && !(Number.isFinite(v) && v >= STABLE.MIN_STAKE && v <= STABLE.MAX_STAKE))
-    throw new GameError('stake', `Match wagers run $${STABLE.MIN_STAKE}–$${STABLE.MAX_STAKE} (0 clears).`);
+    throw new GameError('stake', `Match wagers run ${usd(STABLE.MIN_STAKE)}–${usd(STABLE.MAX_STAKE)} (0 clears).`);
   await client.query('UPDATE racers SET race_limit=$2 WHERE id=$1', [r.id, v]);
   return { ok: true, id: r.id, raceLimit: v };
 }
@@ -111,7 +111,7 @@ export async function raceCircuit(ch, racerId, meetId, client, h) {
   if (!meet) throw new GameError('bad_meet', 'No such meet on that card.');
   if (injured(r)) throw new GameError('injured', 'That racer is laid up — let them heal.');
   if (onCooldown(r)) throw new GameError('cooldown', `${r.name} needs to rest before another race.`);
-  if (Number(ch.cash) < meet.fee) throw new GameError('cash', `The ${meet.name} entry runs $${meet.fee}.`);
+  if (Number(ch.cash) < meet.fee) throw new GameError('cash', `The ${meet.name} entry runs ${usd(meet.fee)}.`);
   // the entry fee burns win or lose
   ch.cash = Number(ch.cash) - meet.fee;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -meet.fee, reason: 'stable:fee' });
@@ -144,7 +144,7 @@ export async function matchRace(ch, opponent, body, client, h) {
   if (opponent.id === ch.id) throw new GameError('self', "You don't race your own stable against itself.");
   if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId) throw new GameError('family', "They're family — no family matchups.");
   const amt = Math.floor(Number(body?.stake));
-  if (!(Number.isFinite(amt) && amt >= STABLE.MIN_STAKE)) throw new GameError('min', `The minimum wager is $${STABLE.MIN_STAKE}.`);
+  if (!(Number.isFinite(amt) && amt >= STABLE.MIN_STAKE)) throw new GameError('min', `The minimum wager is ${usd(STABLE.MIN_STAKE)}.`);
   if (jailed(opponent) || hospitalized(opponent)) throw new GameError('unavailable', "Their owner can't make a match right now.");
   // lock both racer rows in sorted id order (leaf ordering; the char rows are already locked by withTwoCharacters)
   const [first, second] = [String(body?.myRacer || ''), String(body?.theirRacer || '')].sort();
@@ -157,7 +157,7 @@ export async function matchRace(ch, opponent, body, client, h) {
   if (r.kind !== or.kind) throw new GameError('kind', `A ${r.kind} races ${r.kind}s — match the kind.`);
   const limit = or.race_limit != null ? Math.floor(Number(or.race_limit)) : 0;
   if (!(limit > 0)) throw new GameError('not_listed', "Their racer isn't taking match races.");
-  if (amt > limit) throw new GameError('limit', `Their racer takes matches up to $${limit}.`);
+  if (amt > limit) throw new GameError('limit', `Their racer takes matches up to ${usd(limit)}.`);
   if (injured(r)) throw new GameError('injured_self', 'Your racer is laid up — let them heal.');
   if (injured(or)) throw new GameError('injured_them', 'Their racer is laid up right now.');
   if (Number(ch.cash) < amt) throw new GameError('cash', 'Not that much in pocket for the wager.');
@@ -206,7 +206,7 @@ export async function breedRacers(ch, sireId, damId, name, client, h) {
   if (!sire || sire.character_id !== ch.id || !dam || dam.character_id !== ch.id)
     throw new GameError('no_racer', 'Both parents must be your own racers.');
   if (sire.kind !== dam.kind) throw new GameError('kind', 'A dog and a horse cannot be bred — match the kind.');
-  if (Number(ch.cash) < STABLE.BREED_COST) throw new GameError('cash', `The stud fee runs $${STABLE.BREED_COST}.`);
+  if (Number(ch.cash) < STABLE.BREED_COST) throw new GameError('cash', `The stud fee runs ${usd(STABLE.BREED_COST)}.`);
   const k = stableKindOf(sire.kind);
   const foal = (stat) => Math.max(k.statMin, Math.min(STABLE.STAT_CAP,
     Math.floor((Number(sire[stat]) + Number(dam[stat])) / 2 * STABLE.BREED_INHERIT) + rand(0, STABLE.BREED_VARIANCE)));
@@ -230,7 +230,7 @@ export async function enterStakes(ch, racerId, client, h) {
   const r = await myRacer(client, ch, racerId);
   if (injured(r)) throw new GameError('injured', 'That racer is laid up — let them heal.');
   const buyin = STABLE.STAKES.BUYIN;
-  if (Number(ch.cash) < buyin) throw new GameError('cash', `The stakes buy-in is $${buyin}.`);
+  if (Number(ch.cash) < buyin) throw new GameError('cash', `The stakes buy-in is ${usd(buyin)}.`);
   const f = form(r); // SNAPSHOT the form at entry (the racer isn't escrowed — race it, breed it, sell it after)
   // materialize/find the open stakes under the state singleton lock (LOCK ORDER: char → stakes_state → race)
   const st = (await client.query('SELECT current FROM stakes_state WHERE id=1 FOR UPDATE')).rows[0];

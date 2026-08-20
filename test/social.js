@@ -1862,7 +1862,7 @@ assert(Math.abs(escNow - rhsEsc) <= 1, `bounty/contract escrow reconciles: bucke
       WHERE id IN ('canal','docks','foundry','neon')`);
   const floorOf = async () => (await call('GET', '/v1/districts', {})).body.districts.find((d) => d.id === 'canal').claimFloor;
   const quoteFor = async (tok) => (await call('POST', '/v1/districts/canal/claim', { token: tok, body: { amount: 1 } })).body.error === 'floor'
-    ? Number((await call('POST', '/v1/districts/canal/claim', { token: tok, body: { amount: 1 } })).body.message.match(/\$(\d+)/)[1])
+    ? Number((await call('POST', '/v1/districts/canal/claim', { token: tok, body: { amount: 1 } })).body.floor)
     : null;
 
   // BASELINE: canal held, nothing around it
@@ -2160,7 +2160,7 @@ assert(Math.abs(escNow - rhsEsc) <= 1, `bounty/contract escrow reconciles: bucke
 
   const quoted = await call('POST', '/v1/districts/foundry/claim', { token: rTake.token, body: { amount: 1 } });
   assert.equal(quoted.body.error, 'floor', 'the floor is quoted');
-  const floor = Number(String(quoted.body.message).match(/\$(\d+)/)[1]);
+  const floor = Number(quoted.body.floor);
   // THE PRECONDITION, asserted rather than assumed: without a floor genuinely BELOW what the ground
   // was worth there is no ratchet to fix, and this whole block would pass on a no-op.
   assert(floor < WAS, `the stacked discounts really do price the door under the old garrison ($${floor} vs $${WAS})`);
@@ -2319,9 +2319,9 @@ assert(Math.abs(escNow - rhsEsc) <= 1, `bounty/contract escrow reconciles: bucke
   await pool.query(
     `UPDATE districts SET holder_gang=NULL, npc_holder=NULL, garrison=0, watch_hour=NULL, contest_until=NULL WHERE id IN ('cathedral','brick','neon')`);
   await pool.query(`UPDATE districts SET holder_gang='${hbg2}', garrison=100000 WHERE id='cathedral'`);
-  // the refusal message carries the floor the server would enforce — the same one turfQuote computes
+  // the refusal carries the floor the server would enforce AS DATA — the same one turfQuote computes
   const floorFor = async (tok) => Number((await call('POST', '/v1/districts/cathedral/claim',
-    { token: tok, body: { amount: 1 } })).body.message.match(/\$(\d+)/)[1]);
+    { token: tok, body: { amount: 1 } })).body.floor);
   const plainFloor = await floorFor(plainB.token);
   const outfitFloor = await floorFor(chB.token);
   const synFloor = await floorFor(synB.token);
