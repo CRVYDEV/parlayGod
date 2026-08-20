@@ -4207,6 +4207,155 @@ assert(offLine && /\$10,000|stake/i.test(offLine),
   }
 }
 
+// ── WAVE 46 — A WRONG NUMBER ON THE ONE FIGURE YOU CHECK BEFORE A HIT.
+// Every mute line so far has been a line that said nothing. This wave's headline says something and
+// it is FALSE: buying ammo answered `{ok, ammo: 30}` where 30 is what the BOX ADDED, and the line
+// renders it as a total — "30 on you" — so a player holding 55 rounds was told he had 30. Wrong in
+// the direction that gets somebody killed, and invisible to every mute sweep, because a line that
+// reads well is exactly what a sweep for silence walks past. The delta and the total were ONE field;
+// they are two now, and the fixture below buys twice so they DIFFER — with a fixture that starts at
+// zero the two are equal and the assertion passes under the mutation it exists to catch.
+//
+// Both ammo boxes and the workshop bench also spend CRATES, the second currency, and named neither
+// it nor the cash. And fixing the bench nearly shipped a collision: adding `cost` to the craft reply
+// makes it byte-identical to the Pen commissary's `{ok, item, cost}`, whose branch sits FIRST — so a
+// medkit rolled at the bench would have read "the guard slips you a medkit". Absence is not a
+// discriminator: the workshop reply had no `cost` only until it needed to state its price. Both key
+// on `op` now, and the assertion below holds the pair from BOTH sides.
+//
+// The family's two command verbs — promote and kick — both answered "done." A boss with five
+// soldiers pressed kick and had to go and re-read the roster to learn which one he had just put on
+// the street; a promotion named neither the man nor which way he moved, and demotion runs the same
+// route, so up and down read identically.
+{
+  const mk46 = async (n) => { const t = (await inject('POST', '/v1/auth/guest')).body.token;
+    await inject('POST', '/v1/character', t, { name: n + Math.random().toString(36).slice(2, 6) });
+    const id = (await inject('GET', '/v1/me', t)).body.character.id;
+    await app.pool.query('UPDATE characters SET cash=900000000, respect=5000000, muscle=90, cunning=90, ' +
+      "speed=90, energy=300, health=100, cb=900, loc='docks' WHERE id=$1", [id]);
+    return { t, id }; };
+  const L46 = new Map();
+  const carries46 = (line, value, what, why) => {
+    assert(value !== undefined && value !== null && String(value) !== '',
+      `WAVE 46: the server sent no ${what} — the line cannot name what was never returned, and an ` +
+      `assertion built from an absent value silently matches anything (new RegExp(undefined) is /(?:)/)`);
+    assert(new RegExp(String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(String(line)),
+      `${why} (server sent ${what}=${JSON.stringify(value)}). Got: ${JSON.stringify(line)}`);
+  };
+  // the same presence check for a FIGURE — the line thousands-separates, so a raw 2000 never matches
+  // the rendered "$2,000" and the assertion fails on its own formatting rather than on the claim.
+  const carriesNum46 = (line, value, what, why) => {
+    assert(value !== undefined && value !== null && Number.isFinite(Number(value)),
+      `WAVE 46: the server sent no ${what} — an assertion built from an absent figure matches anything`);
+    assert(new RegExp(fmtLike(value)).test(String(line)),
+      `${why} (server sent ${what}=${JSON.stringify(value)}). Got: ${JSON.stringify(line)}`);
+  };
+  const drive46 = async (t, m, url, payload, label) => {
+    const r = await inject(m, url, t, payload);
+    assert.equal(r.code, 200, `WAVE 46 could not drive ${label} (${JSON.stringify(r.body)}) — fix the ` +
+      'fixture rather than letting it skip, because a skipped action reads on the summary line as covered');
+    described++;
+    let line; try { line = String(describeFn(r.body, r.code)); } catch (e) { line = 'THREW: ' + e.message; }
+    L46.set(label, line); said.set(`${url}#${label}`, line);
+    if (line === 'done.' || /^paid \$[\d,.]+$/.test(line) || /undefined|NaN|\[object|^THREW/.test(line))
+      mute.push(`${m} ${url} (${label}) → ${JSON.stringify(line)}`);
+    return r; };
+
+  // ── THE ROUNDS. Buy at the armory FIRST so the bench's box lands on a non-empty belt: with a
+  // fixture starting at zero the delta and the total are the same number, and a line rendering the
+  // delta as a total passes. The fixture asserts they differ before asserting the line tells them
+  // apart — a guard whose precondition it never checked is the vacuity class in its own right.
+  const shooter = await mk46('Ledger Rounds ');
+  const boxA = await drive46(shooter.t, 'POST', '/v1/armory/ammo', null, 'buy a box at the armory');
+  const armLine = L46.get('buy a box at the armory');
+  carriesNum46(armLine, boxA.body.cost, 'cost', 'the armory box states what left the pocket');
+  const boxB = await drive46(shooter.t, 'POST', '/v1/workshop/ammo', null, 'roll rounds at the bench');
+  const benchLine = L46.get('roll rounds at the bench');
+  // GROUND TRUTH IS THE DATABASE, not the reply under test. The first cut checked the fixture's
+  // precondition against `body.ammo` — so the mutation that restores the bug (report the delta as the
+  // total) made the two equal and tripped the PRECONDITION, which then blamed the fixture for a belt
+  // that was in fact full. A failure that names the wrong thing is barely better than no failure.
+  const belt = Number((await app.pool.query('SELECT ammo FROM characters WHERE id=$1', [shooter.id])).rows[0].ammo);
+  assert(belt !== Number(boxB.body.rolled),
+    `WAVE 46 fixture: the belt holds exactly what this box added (${belt}), so a total and a delta ` +
+    `are the same number here and this block cannot tell them apart`);
+  assert.equal(Number(boxB.body.ammo), belt,
+    `the reply's total is not what the belt HOLDS (reply ammo=${boxB.body.ammo}, database=${belt}) — ` +
+    `the delta and the total were one field, and the line renders it as a total`);
+  assert(new RegExp(`\\b${fmtLike(belt)}\\b`).test(benchLine),
+    `the rounds line states what you are CARRYING (the belt holds ${belt}) — it renders as a total, ` +
+    `and rendering the box's delta there tells a man holding ${belt} rounds he has ` +
+    `${boxB.body.rolled}. Got: ${JSON.stringify(benchLine)}`);
+  assert(new RegExp(`\\+${fmtLike(boxB.body.rolled)}\\b`).test(benchLine),
+    `the rounds line also states what this box ADDED (server sent rolled=${boxB.body.rolled}) — the ` +
+    `delta is the receipt. Got: ${JSON.stringify(benchLine)}`);
+  assert(/crate/.test(benchLine),
+    `rolling rounds at the bench spends a CRATE as well as cash — the second currency, and a receipt ` +
+    `omitting it under-reports what the box cost. Got: ${JSON.stringify(benchLine)}`);
+  carriesNum46(benchLine, boxB.body.cost, 'cost', 'the bench box states the cash it spent too');
+
+  // ── THE BENCH, and the collision it now sits in front of. Both sides are DRIVEN: the synthetic
+  // half of this pair is what let the shape drift in the first place.
+  const smith = await mk46('Ledger Smith ');
+  const kitR = await drive46(smith.t, 'POST', '/v1/workshop/craft/medkit', null, 'roll a field kit');
+  const kitLine = L46.get('roll a field kit');
+  carriesNum46(kitLine, kitR.body.cost,
+    'cost', 'the bench receipt states the cash — and it is the DISCOUNTED figure, since foundry turf ' +
+    'and Bella both cut it before the charge');
+  assert(Number.isFinite(Number(kitR.body.crates)),
+    `WAVE 46: the bench sent no crate count — crates are the second currency it spends`);
+  assert(new RegExp(`\\b${kitR.body.crates}\\b.*crate`).test(kitLine),
+    `the bench receipt states the CRATES (server sent crates=${kitR.body.crates}). ` +
+    `Got: ${JSON.stringify(kitLine)}`);
+  assert(!/\b1 crates\b/.test(kitLine), `"1 crates" — the crate count is pluralised. Got: ${JSON.stringify(kitLine)}`);
+
+  const inmate = await mk46('Ledger Inmate ');
+  await app.pool.query("UPDATE characters SET jail_until = now() + interval '2 hours' WHERE id=$1", [inmate.id]);
+  const shivR = await drive46(inmate.t, 'POST', '/v1/pen/buy/shiv', null, 'buy from the commissary');
+  const shivLine = L46.get('buy from the commissary');
+  assert(/guard/i.test(shivLine),
+    `the commissary line is the GUARD's, not the bench's — {ok, item, cost} is byte-identical to a ` +
+    `crafted consumable and this branch sits first. Got: ${JSON.stringify(shivLine)}`);
+  assert(!/guard/i.test(kitLine),
+    `the BENCH read as the commissary — the two replies carry the same three fields, so a branch ` +
+    `keyed on the fields rather than on the system renders whichever it reaches first. ` +
+    `Got: ${JSON.stringify(kitLine)}`);
+  carriesNum46(shivLine, shivR.body.cost, 'cost', 'the commissary states the price the guard took');
+
+  // ── THE FAMILY'S TWO COMMAND VERBS, driven on a real two-man roster.
+  const don = await mk46('Ledger Don ');
+  const sol = await mk46('Ledger Sol ');
+  const founded = await inject('POST', '/v1/gangs', don.t,
+    { name: 'Ledger Family ' + Math.random().toString(36).slice(2, 6), tag: 'L' + Math.floor(Math.random() * 900 + 100) });
+  assert.equal(founded.code, 200, `WAVE 46 could not found the family (${JSON.stringify(founded.body)})`);
+  const joined = await inject('POST', `/v1/gangs/${founded.body.gangId}/join`, sol.t, null);
+  assert.equal(joined.code, 200, `WAVE 46 could not put a soldier on the roster (${JSON.stringify(joined.body)})`);
+  const solName = (await inject('GET', '/v1/me', sol.t)).body.character.name;
+
+  const promR = await drive46(don.t, 'POST', '/v1/gangs/promote',
+    { characterId: sol.id, role: 'underboss' }, 'raise a man');
+  const promLine = L46.get('raise a man');
+  carries46(promLine, promR.body.name, 'name',
+    'the promotion NAMES the man — a boss with five soldiers cannot tell which one moved otherwise');
+  assert(String(promLine).includes(solName),
+    `the promotion names the man the fixture actually raised (${solName}) — the server's own name ` +
+    `field is the one the roster shows. Got: ${JSON.stringify(promLine)}`);
+  carries46(promLine, promR.body.role, 'role', 'the promotion says what he is now');
+  carries46(promLine, promR.body.was, 'former role',
+    'the promotion states BOTH ends of the change — demotion runs this identical route, so a line ' +
+    'carrying only the new role reads the same whether the man went up or down');
+
+  const kickR = await drive46(don.t, 'POST', '/v1/gangs/kick', { characterId: sol.id }, 'put a man on the street');
+  const kickLine = L46.get('put a man on the street');
+  carries46(kickLine, kickR.body.name, 'name',
+    'the kick NAMES the man — this is the one action whose target you cannot re-read afterwards, ' +
+    'because the roster you would check it against is exactly what it just changed');
+  assert(String(kickLine).includes(solName),
+    `the kick names the man the fixture actually removed (${solName}). Got: ${JSON.stringify(kickLine)}`);
+  assert(promLine !== kickLine,
+    `raising a man and putting him on the street rendered the SAME line. Got: ${JSON.stringify(kickLine)}`);
+}
+
 const describedCount = described;
 assert(described >= 100, `only ${described} of ${ACTIONS.length} actions succeeded — the ledger is measuring almost nothing`);
 assert.deepEqual(mute, [], `${mute.length} action(s) a player PRESSES say nothing about what just happened ` +

@@ -199,7 +199,11 @@ export async function buyContraband(ch, itemId, client, h) {
   await setContraband(client, ch.id, itemId, (held[itemId] || 0) + 1);
   await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [item.cost]); // the guard's cut recycles into the pool
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -item.cost, reason: 'pen:commissary' });
-  return { ok: true, item: itemId, cost: item.cost };
+  // `op` names the SYSTEM. {ok, item, cost} is byte-identical to what the WORKSHOP returns for a
+  // crafted consumable, and this branch sits first — so a medkit rolled at the bench would read
+  // "the guard slips you a medkit". Absence is not a discriminator either: the workshop reply had
+  // no `cost` only until it needed to state its price.
+  return { ok: true, op: 'commissary', item: itemId, cost: item.cost };
 }
 
 // the yard boss prices cover off the man's liquid wealth (the SAFEHOUSE_NW_BPS pattern) — a flat rate

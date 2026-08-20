@@ -2226,7 +2226,20 @@
       return `\u{1F4B5} squared the guard — $${fmt(body.cost)} for ${minsTxt(body.cutSeconds)} off. ${body.sentenceSeconds ? `${minsTxt(body.sentenceSeconds)} left.` : "You're out."}`;
     if (body && body.ok && body.protectedSeconds !== undefined)
       return `\u{1F6E1} the yard boss has your back for ${minsTxt(body.protectedSeconds)} — $${fmt(body.cost)}. Nobody shanks you, and you can't shank anybody either.`;
-    if (body && body.ok && body.item && body.cost !== undefined)
+    // THE FAMILY'S COMMAND SURFACE. Both said "done." A boss with five soldiers who kicked one was
+    // told nothing at all and had to go re-read the roster to learn which man he had just put on the
+    // street; a promotion returned a bare `role`, which reads the same whether the man went up or
+    // down — and demotion uses this identical route, so the line states BOTH ends of the change.
+    if (body && body.ok && body.op === 'promote') {
+      const up = ['soldier', 'capo', 'underboss', 'boss'].indexOf(body.role)
+               > ['soldier', 'capo', 'underboss', 'boss'].indexOf(body.was);
+      return `\u{1F3B4} ${txt(body.name)} is ${txt(body.role)} now${body.was && body.was !== body.role
+        ? ` — ${up ? 'up' : 'down'} from ${txt(body.was)}` : ''}`;
+    }
+    if (body && body.ok && body.op === 'kick')
+      return `\u{1F3B4} ${txt(body.name)} is out — off the roster and back on the street${
+        body.was && body.was !== 'soldier' ? ` (was ${txt(body.was)})` : ''}`;
+    if (body && body.ok && body.op === 'commissary')
       return `\u{1F5DD} the guard slips you a ${txt(String(body.item).replace(/_/g, ' '))} — $${fmt(body.cost)}${
         body.item === 'shiv' ? '. A shank spends it, win or lose.'
         : body.item === 'burner' ? '. One call to the street, then it’s gone.'
@@ -2537,16 +2550,23 @@
       return `unstaking ${fmt(body.unbonding)} $OMR — it unbonds over ${minsTxt(body.unbondSeconds)}, and it can be LOOTED off you the whole time${body.rewards ? ` · ${fmt(body.rewards)} $OMR rewards paid` : ''}${body.stillPending ? ` (${fmt(body.stillPending)} still owed — the pool refills)` : ''}`;
     if (body && body.staked !== undefined && body.ok && body.unbonding === undefined)
       return `staked — ${fmt(body.staked)} $OMR at work, and safe from a killer's hands`;
-    if (body && body.ok && body.ammo !== undefined && body.gun === undefined) return `rounds in the box — ${body.ammo} on you`;
+    // ROLLED is what the box added; AMMO is what you are carrying. They were one field rendered as a
+    // total, so a player holding 55 was told 30 — the number you check before a hit. Both are stated,
+    // and so is the price: ammo and guns are the only two purchases that spend a second currency.
+    if (body && body.ok && body.op === 'ammo')
+      return `\u{1F52B} +${fmt(body.rolled)} rounds — ${fmt(body.ammo)} on you${
+        body.cost ? ` \u00b7 $${fmt(body.cost)}${body.crates ? ` + ${body.crates} crate${body.crates === 1 ? '' : 's'}` : ''}` : ''}`;
     // THE WORKSHOP, and its own sibling one line up got it right. Rolling ammo names the rounds;
     // crafting a consumable returned `{ok, item}` and read "done." — no name, no effect, no hint
     // that the thing is now sitting in your kit waiting to be used. `rules.consumables` is already
     // in scope (The Garage renders the whole catalog from it), so the name and the effect resolve
     // client-side with no server field. USING one is worse: the reply carries the effect verbatim
     // and the player was told nothing at all.
-    if (body && body.ok && body.item && body.used === undefined) {
+    if (body && body.ok && body.op === 'craft') {
       const c = (rules?.consumables || []).find((x) => x.id === body.item);
-      return `\u{1F527} rolled a ${txt(c?.name || body.item)}${c?.effect ? ` — ${txt(c.effect)}` : ''}. It's in your kit until you use it.`;
+      return `\u{1F527} rolled a ${txt(c?.name || body.item)}${c?.effect ? ` — ${txt(c.effect)}` : ''}${
+        body.cost !== undefined ? ` \u00b7 $${fmt(body.cost)}${body.crates ? ` + ${body.crates} crate${body.crates === 1 ? '' : 's'}` : ''}` : ''
+      }. It's in your kit until you use it.`;
     }
     if (body && body.ok && body.used) {
       const c = (rules?.consumables || []).find((x) => x.id === body.used);

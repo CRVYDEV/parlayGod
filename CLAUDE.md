@@ -15089,3 +15089,38 @@ while the branch still carried the unsquashed original, so PR #94 read `mergeabl
 **no CI ran at all** — a PR that looks open and is silently untested. Resolved the recorded way (the
 merged-PR rule): save the unmerged work, `checkout -B` from `origin/main`, re-apply, re-verify on the
 correct base. Driven actions 198 → 204.
+
+**WAVE 46 — THE FIRST LINE THAT WAS NOT SILENT BUT WRONG (`test/client.js`, 2026-08-20).** Forty-five
+waves of this sweep have hunted lines that say NOTHING. This one's headline says something and it is
+false: `POST /v1/workshop/ammo` answered `{ok, ammo: 30}` where 30 is what the BOX ADDED, and the line
+renders that field as a total — "30 on you" — so a player holding 55 rounds was told he had 30. **The
+one number you check before a hit, wrong in the direction that gets somebody killed**, and structurally
+invisible to every sweep so far, because a sweep for silence walks straight past a line that reads
+well. The delta and the total were ONE field; they are two now (`rolled` + `ammo`), and the armory box
+had the identical shape. Both also spend CRATES — the second currency — and named neither it nor the
+cash; so does the workshop BENCH, which named neither either.
+**Fixing the bench nearly shipped a collision, which is the class this sweep keeps finding**: adding
+`cost` to the craft reply makes it byte-identical to the Pen commissary's `{ok, item, cost}`, whose
+branch sits FIRST — a medkit rolled at the bench would have read *"the guard slips you a medkit"*.
+Caught by reading the neighbouring branches before running, not by a test. Both key on `op` now, and
+the rule is restated at the site: **absence is not a discriminator** — the workshop reply had no `cost`
+only until it needed to state its price.
+The family's two command verbs both answered **"done."** A boss with five soldiers pressed kick and had
+to go and re-read the roster to learn which one he had just put on the street — and the roster is the
+one thing the action just changed, so it cannot be checked afterwards. A promotion named neither the
+man nor which way he moved, and **demotion runs the identical route**, so up and down read the same.
+Both now name the man (a JOIN on the lookup that was already there) and the promotion states both ends.
+**THE GUARD'S OWN LESSON — ground truth is the DATABASE, not the reply under test.** The first cut
+checked its non-vacuity precondition against `body.ammo` ("the delta and the total must differ, or this
+block cannot tell them apart"). The mutation that restores the bug makes those two equal, so it tripped
+the PRECONDITION — which then blamed the fixture for a belt that was in fact full. **A failure that
+names the wrong thing is barely better than no failure**, and here it would have sent the next reader
+to fix a fixture instead of a lie. The precondition now reads `characters.ammo` straight from the
+database and the claim is asserted against that; the mutation fails with *"the reply's total is not
+what the belt HOLDS (reply ammo=30, database=105)"*. Ten mutations, ten named failures — including two
+client-side ones, because a server can send a field the line still drops. One instructive redundancy
+recorded: the craft-vs-commissary collision is caught by an EARLIER wave's craft guard, which fires
+first — so the direction only wave 46 covers (the commissary losing its own marker) was mutated
+separately, and falls to the catch-all `paid $5,000`, a price with the purchase left off.
+Full verification on the correct base: suite 8/8, pgquery, **pgcheck 47/47 on a FRESH real Postgres**
+(mandatory — `gangs.js` gained two JOINs), mobile 79/79, sim drift-0. Driven actions 204 → 213.
