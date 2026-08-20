@@ -14592,3 +14592,54 @@ finding produced by a tool you wrote and did not check is not a finding.*
 
 Suite green · pgcheck 47/47 on a fresh real-Postgres database (§9b, the death-race regression, passing) ·
 client wiring/mirror · mobile · pgquery · sim drift-0.
+
+**THE TRAINING CAMP, THE STRIP AND THE ROAD — fifteen more, and two of them were the wrong sport
+(2026-08-20).** The play session continued into the systems the earlier waves had not reached, and it
+found the SAME shape one more layer down: `act()` toasts `describe(r.body)` with no override, so a
+route with no branch reads the bare word **"done."** — and three whole screens were reading that way.
+**Boxing:** signing a fighter read beautifully (*"🥊 signed Kid Malone — 10 power / 6 chin / 8
+speed"*) and every OTHER verb on the screen said nothing, which is the **forgotten-sibling shape three
+lines apart in the same block**. **The stable** was worse — it is the boxing screen's twin and NONE of
+its verbs read, including BUYING an animal, whose reply carries a full sheet (kind, name, three stats,
+the stable count) that nobody ever saw. **The strip** read on tuning alone, so **PINKS — the only
+consent in the game where losing hands over the car — said "done."**, as did arming nitrous ($8k, one
+charge burned per race win or lose) and listing for wagers (whose asked-for stake is silently CLAMPED
+to the table maximum). Plus **planning a crew score** (the stake is FRONTED and comes back only on a
+pre-execution disband; the job cannot go until the crew fills) and **the whole convoy leg**.
+**THE CONVOY IS THE TERMS CASE, and it is the pad and the nut again.** A shipment refuses to roll under
+`CONVOY.MIN_QTY`, and a player used to first hear that at DEPARTURE — after the trunk was already
+spent. The manifest total lives on the convoy row, not on the character, so **only the server can say
+how far short a load is**: `loadConvoyRow` now returns `units` + `minUnits` and the line reads *"2 × gin
+aboard for The Neon Mile — 2 on the manifest. A convoy needs 5 units to roll: 3 short."* Departure was
+the other silence, and the loudest one on that screen: the run goes PUBLIC (the streets feed carries
+the route and a value band), guards are paid, and it can be ambushed three times.
+**FIVE SERVER FIELDS were added, and the reason is the recorded one: the client cannot fix what the
+server does not send.** The Cornerman DISCOUNTS a training session (and at T3 makes it build harder),
+so neither the boxing nor the stable gym could state its own price from a catalog — exactly the
+rank-discounted-tap class from the Wire drop. `trainRacer` did not even send the animal's NAME (a
+stable runs three), and `listRacer`/`pinkSlipList`/`buyNos`/`listRace` sent a bare id where the player
+sees a garage full of iron.
+**AND TWO OF THEM WERE NOT SILENCES BUT THE WRONG SPORT.** A race result lands the SHARED score line
+(deliberately shared — it carries the MARGIN, which is what a manager acts on) *plus* the sport's own,
+so a greyhound came back stamped with a **boxing glove**, and the purse was stated TWICE in one toast
+(*"+$4,000 · … +$4,000 purse"*). The icon now follows `body.game`; the echo is killed by a **scan of
+what has already been said** rather than a shape test — the heat-echo precedent, so a future branch
+that mentions the purse cannot bring it back.
+**The ledger grew by fifteen driven actions (53 → 68) and four of them did not drive on the first
+run.** Two answered `busy` — the fixture was already on a job and already had a shipment on the road,
+and both verbs allow one at a time — so the plan and the entire convoy leg were SKIPPED, which reads on
+the summary line as covered. *A declared-but-never-driven entry is worse than no entry*, for the second
+time in this file. The seat and the road are cleared in the fixture now, and the trace was the only way
+to see it. The **circuit assertion had the flake shape too**: it was guarded on the dog having WON, and
+a loss makes it vacuous — so the dog is seeded past the maiden's field (24 + rand(0..22) against two
+maxed stats) and the check is unconditional, with `speed` deliberately left short of the cap so the
+TRAIN action above it still has room to run. Five mutations, each failing at its own named assertion —
+including the two that need a result line rather than a silence, since **a silence pattern reads
+straight past a line that is fluent and wrong**.
+**A defect I introduced and the probe caught:** `car.model` does not exist on the loaded row — it is
+`model_id`, and `loadOwned` maps it for the VIEW — so my first cut sent `undefined` and the line fell
+back to *"the car"*. The exact class being fixed, produced while fixing it, and visible only by
+reading the output.
+
+Suite green · pgquery 2980 statements + pgcheck 47/47 on a FRESH real-Postgres database · client
+wiring/mirror (68 driven actions) · mobile 78/78 · docs · gates · levers 703 · sim drift-0.

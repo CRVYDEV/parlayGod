@@ -44,7 +44,7 @@ import vm from 'node:vm';
 import { readFileSync, readdirSync } from 'node:fs';
 import { buildServer } from '../src/server.js';
 import { M3, M4, PATHS, NPC_HITMEN, HEIST_ROLES, HEIST_JOBS, DRUGS, GOODS, DISTRICTS,
-  COMMISSION, CONVOY, DUELS, TERRITORY_TYPES, CARS, TRIMS, ASSETS, BUSINESSES, ESTATE } from '../src/rules.js';
+  COMMISSION, CONVOY, DUELS, TERRITORY_TYPES, CARS, TRIMS, ASSETS, BUSINESSES, ESTATE, WIRE, SECRETS, STABLE } from '../src/rules.js';
 
 // A COMMENT IS NOT CODE, and this guard used to read it as if it were. The mirror resolves a field
 // access as `<binding>.<name>`, and this file's comments are dense and name source files constantly
@@ -1869,7 +1869,53 @@ if (mark) {
     `INSERT INTO wiretaps (watcher_character, target_character, expires_at) VALUES ($1,$2, now() + interval '12 hours')
        ON CONFLICT (watcher_character, target_character) DO UPDATE SET expires_at = EXCLUDED.expires_at`,
     [mark.id, charId]);
-  addAction(['POST', '/v1/wire/trace', null]);
+  // FUNDED HERE, and that is a fix rather than a convenience. The trace entry below has been in this
+  // list since the trace/sweep discrimination shipped, and it has NEVER DRIVEN: by the time the loop
+  // reaches it the fixture's 1000 $OMR is spent, the route answers 400 `omr`, a 4xx is skipped, and
+  // the ledger prints ✅ over an entry proving nothing (checked against main before saying so). That
+  // is the declared-but-never-driven class this file has been bitten by twice already — it reads on
+  // the summary line as covered. The floor below now counts the trace, so it cannot go quiet again.
+  await app.pool.query('UPDATE account_persistent SET omr = omr + 2000 WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)', [charId]);
+  // A MARK WE HOLD NOTHING ON. An earlier block in this file already dug on `mark`, and one holder
+  // may hold one secret per house — so the dig 4xx'd `already` and skipped, which is the silence the
+  // floor below exists to break. Seeded with a laundering trail so the dig runs in its FOUND shape;
+  // the empty shape has its own line and its own coverage in test/wire.js.
+  // two flat queries and a JS filter, never a correlated subquery — pg-mem cannot parse one
+  const held = new Set((await app.pool.query('SELECT target_name FROM secrets WHERE holder_character=$1', [charId]))
+    .rows.map((r) => r.target_name));
+  const digMark = (await app.pool.query(
+    'SELECT id, name FROM characters WHERE alive AND NOT is_npc AND id <> $1 ORDER BY created_at DESC', [charId]))
+    .rows.find((c) => !held.has(c.name)) || mark;
+  await app.pool.query("UPDATE characters SET wash_used=500000, wash_at=now() WHERE id=$1", [digMark.id]);
+  // ONE CALL, and that matters: addAction SPLICES AT A FIXED INDEX, so a later call lands BEFORE an
+  // earlier one rather than after it. Split across two calls, the sweep below ran first and cleared
+  // the line, and the trace — the entry that exists to prove the paid shape — then found nobody and
+  // failed its own assertion. Within a single splice the order is the order written.
+  // THE REST OF THE WIRE, because six things on that screen cost $OMR and exactly ONE of them named
+  // its price. Driven: the informant (150) and the dig (60) both read "done."; the tap (48, 12h) read
+  // "wire's live — you'll hear everything", naming neither and OVERCLAIMING besides (a tap is foiled
+  // by cooked books; the informant is the one that hears everything, which is what the extra 100
+  // buys); the subscription and the standing watch named neither. `disinfo`, three lines away in the
+  // same describe() block, states both — the forgotten-sibling shape with its own good sibling in
+  // frame. The standing watch also needed a SERVER field: it charges on the spot and keeps charging
+  // every renewal, and its reply carried no `spent` at all, so the client could not have said so.
+  // Ordered after the trace so that still runs in its paid shape; the sweep then clears the line.
+  addAction(
+    ['POST', '/v1/wire/trace', null],
+    ['POST', '/v1/wire/subscribe', { tier: 2 }],
+    ['POST', `/v1/wire/tap/${mark.id}`, null],
+    ['POST', `/v1/wire/watch/${mark.id}`, null],
+    ['POST', `/v1/wire/informant/${mark.id}`, null],
+    ['POST', `/v1/wire/dig/${digMark.id}`, null],
+    ['POST', '/v1/wire/sweep', null]);
+  // THE DEMAND AND THE BURN, both of which read "done." An extortion is the moment the mark FINDS OUT
+  // (an un-extorted secret is invisible to them — the demand IS the reveal) and it starts a 24h clock;
+  // the expose spends the leverage for good and thickens their federal file. Dug here rather than in
+  // the list because the id is only known once it runs, and a second secret is inside MAX_HELD.
+  const dug = await inject('POST', `/v1/wire/dig/${mark.id}`, token, {});
+  if (dug.code < 400 && dug.body.id) addAction(
+    ['POST', `/v1/secrets/${dug.body.id}/extort`, { demand: 25000 }],
+    ['POST', `/v1/secrets/${dug.body.id}/expose`, null]);
 }
 
 // THE DISPOSE-AND-TRADE FAMILY. describe() is a flat chain over field NAMES, and as the game grew the
@@ -1942,8 +1988,65 @@ if (mark) {
   }
 }
 
+// THE TRAINING CAMP, THE STRIP AND THE ROAD. Signing a fighter read well and every OTHER verb on
+// both training screens said "done." — the forgotten-sibling shape three lines apart in the same
+// block. On the strip only tuning read; PINKS — the highest-stakes consent in the game, where a loss
+// hands over the car — said "done." too. And a convoy said nothing at the load (where the BULK
+// minimum is the term a player used to first hear at departure) or at the departure itself (which
+// puts the route and a value band on the public feed and opens the run to three ambushes).
+// ONE addAction call: it splices at a FIXED index, so a second call would land BEFORE this one.
+{
+  await app.pool.query(
+    "UPDATE characters SET cash=9000000, respect=2000000, energy=900, jail_until=NULL, hosp_until=NULL, loc='docks' WHERE id=$1", [charId]);
+  // an earlier block already put this fixture on a job and a shipment on the road, and BOTH verbs
+  // refuse one at a time — so the plan and the whole convoy leg answered `busy`/`no_convoy` and were
+  // SKIPPED, which is the same silence as covering them (four fixes survived their own mutation that
+  // way once already). Clear the seat and the road so these really drive.
+  await app.pool.query('DELETE FROM crew_heist_members WHERE character_id=$1', [charId]);
+  await app.pool.query("UPDATE convoys SET status='done' WHERE owner_character=$1 AND status IN ('loading','transit')", [charId]);
+  // seed-drive one of each so train/list have something to name; the BUY of each is driven below too
+  await inject('POST', '/v1/boxing/recruit', token, { name: 'Kid Ledger' });
+  await inject('POST', '/v1/stable/buy', token, { kind: 'dog', name: 'Ledger Lass' });
+  const fighter = (await app.pool.query('SELECT id FROM fighters WHERE character_id=$1 ORDER BY created_at DESC LIMIT 1', [charId])).rows[0];
+  const racer = (await app.pool.query('SELECT id FROM racers WHERE character_id=$1 ORDER BY created_at DESC LIMIT 1', [charId])).rows[0];
+  // GUARANTEE the circuit WIN rather than hope for it: the maiden's field is 24 and both rolls add
+  // rand(0..22), so two maxed stats put this dog past it every time. A win-only assertion behind a
+  // coin flip is the recorded flake class — a deterministic check resting on a probable precondition.
+  // `speed` is left short of the cap on purpose so the TRAIN action above it still has room to run.
+  if (racer) await app.pool.query('UPDATE racers SET stamina=$2, heart=$2 WHERE id=$1', [racer.id, STABLE.STAT_CAP]);
+  // a FRESH hull for the strip — the block above melts its own car, and a listed/pledged one is refused
+  const raceCar = 'ledgercar' + Date.now();
+  await app.pool.query('INSERT INTO cars (id, character_id, model_id, trim_id) VALUES ($1,$2,$3,$4)',
+    [raceCar, charId, CARS.find((c) => c.val > 20000).id, TRIMS[1].id]);
+  const freight = GOODS[1] || GOODS[0];
+  await app.pool.query(`INSERT INTO character_cargo (character_id, good_id, qty) VALUES ($1,$2,9)
+     ON CONFLICT (character_id, good_id) DO UPDATE SET qty=9`, [charId, freight.id]);
+  addAction(
+    ['POST', '/v1/boxing/recruit', { name: 'Kid Second' }],
+    ...(fighter ? [['POST', '/v1/boxing/train', { fighter: fighter.id, stat: 'power' }],
+                   ['POST', '/v1/boxing/list', { fighter: fighter.id, stake: 20000 }]] : []),
+    ['POST', '/v1/stable/buy', { kind: 'horse', name: 'Ledger Colt' }],
+    ...(racer ? [['POST', `/v1/stable/train/${racer.id}`, { stat: 'speed' }],
+                 ['POST', `/v1/stable/list/${racer.id}`, { limit: 20000 }],
+                 // a race result lands the SHARED score line plus the sport's own — so a greyhound
+                 // came back stamped with a boxing glove and the purse was stated twice
+                 ['POST', `/v1/stable/circuit/${racer.id}`, { meet: 'maiden' }]] : []),
+    ['POST', `/v1/races/tune/${raceCar}`, null],
+    ['POST', `/v1/races/nos/${raceCar}`, null],
+    ['POST', `/v1/races/list/${raceCar}`, { limit: 25000 }],
+    ['POST', `/v1/races/unlist/${raceCar}`, null],
+    ['POST', `/v1/races/pinkslip/${raceCar}`, { on: true }],
+    ['POST', '/v1/heists/plan', { job: 'payroll', role: 'muscle' }],
+    // the manifest minimum is only sayable by the server (the total lives on the convoy, not the
+    // character), so open BELOW it and load ABOVE it — both halves of the term in one drive
+    ['POST', '/v1/convoy', { to: 'neon', goodId: freight.id, qty: 2 }],
+    ['POST', '/v1/convoy/load', { goodId: freight.id, qty: 5 }],
+    ['POST', '/v1/convoy/depart', { guards: 'crew' }]);
+}
+
 const mute = [];
 const said = new Map();   // url → the line a player reads, so a WRONG one can be asserted, not just a missing one
+const paidBody = new Map();  // url → the reply that produced it
 let described = 0;
 for (const [m, url, payload] of ACTIONS) {
   const r = await inject(m, url, token, payload);
@@ -1958,6 +2061,7 @@ for (const [m, url, payload] of ACTIONS) {
   // "done." — a guard that cannot see half the class it was written for. The pattern is exact (a
   // money figure and nothing else), so it matches the catch-all's own output and no real line.
   said.set(url, line);
+  paidBody.set(url, r.body);   // the REPLY, so a price can be crossed against what was really charged
   if (line === 'done.' || /^paid \$[\d,.]+$/.test(line) || /undefined|NaN|\[object|^THREW/.test(line))
     mute.push(`${m} ${url} → ${JSON.stringify(line)}`);
 }
@@ -1986,13 +2090,107 @@ for (const [key, wrong, why] of invert) {
 // because the branch it landed on read two fields that shape never sends.
 for (const [url, line] of said) assert(!/undefined/.test(line),
   `describe() rendered the literal word "undefined" to the player for ${url}: ${JSON.stringify(line)}`);
+// Nor may a line stack an article on a name that already carries one. Every secret in the game is
+// called "The <something>" (The Wash Records, The Bodies, The Kitchen Books, The Second Ledger), so
+// the hush line's own "The ${kind}" read "The The Wash Records" on every payment ever made — not an
+// edge case, and invisible to every pattern above because it is fluent. Swept rather than pinned at
+// the one site: the catalogs that start with an article are not going to stop growing.
+for (const [url, line] of said) assert(!/\bThe The\b/i.test(line),
+  `describe() stacked an article on a name that already had one for ${url} — the catalog entry ` +
+  `already begins with "The": ${JSON.stringify(line)}`);
+
+// THE PRICE IS A TERM. Six Wire actions burn $OMR and five of them named nothing, so a player pressed
+// them without ever learning what a tap or a dig had just cost — the pad-and-nut shape on a screen
+// where every button spends. `disinfo` already did it right, which is what makes the other five a
+// drift rather than a design.
+//
+// Crossed against the REPLY'S OWN `spent`, never against the lever — and that distinction is not
+// pedantry, it is what the first cut of this assertion got wrong and what the run then taught me:
+// the spymaster's rank discount is live, so a tap billed at a list price of 48 actually charged 24
+// on a character who had already worked the wires. Pinning the lever would have demanded the line
+// state a price the till does not charge, which is the restatement class arriving inside the guard
+// meant to catch it. The line must name what LEFT, so the same regex holds at any rank.
+const priced = [
+  ['/v1/wire/subscribe', 'a Wire subscription'], ['/v1/wire/tap/', 'a wiretap'],
+  ['/v1/wire/informant/', 'an informant retainer'], ['/v1/wire/dig/', 'a dig through their trash'],
+  // the watch is here to pin the SERVER half: its reply carried no `spent` at all, so the client was
+  // structurally unable to name the price. Guarding only the client's wording left that mutation
+  // alive — the sentence still read fine with the number gone.
+  ['/v1/wire/watch/', 'a standing watch'],
+  ['/v1/wire/sweep', 'a sweep of your own lines'],
+  // the trace is here for the OTHER reason: it is the entry that was silently skipped, and counting
+  // it in the floor is what stops that recurring. Its own wrong-line assertion lives in `invert`.
+  ['/v1/wire/trace', 'a trace of who is listening'],
+];
+let pricedSeen = 0;
+for (const [key, what] of priced) {
+  for (const [url, line] of said) {
+    if (!url.startsWith(key)) continue;
+    const spent = Number(paidBody.get(url)?.spent);
+    assert(spent > 0, `${what} was expected to CHARGE and did not (spent=${JSON.stringify(paidBody.get(url)?.spent)}) — ` +
+      'a free action proves nothing about whether a paid one names its price');
+    pricedSeen++;
+    assert(new RegExp(`\\b${spent}\\b`).test(line),
+      `${what} just cost ${spent} $OMR and the line a player reads never says so — a price is a TERM, not ` +
+      `flavour, and its own sibling (disinfo) has stated both price and clock all along. Got: ${JSON.stringify(line)}`);
+  }
+}
+assert(pricedSeen >= priced.length, `only ${pricedSeen} of the ${priced.length} priced Wire actions drove — ` +
+  'a skipped action reads on the summary line as covered, which is how two fixes in this file survived their own mutation');
+// AND THE UNIT. minsTxt stopped at hours, so a 7-day informant retainer read "168h" and a 14-day
+// subscription "336h" — right numbers, in a unit nobody counts in at that scale (found by reading the
+// Wire's own toasts). Under 48h hours ARE how people think, so the tier starts there; this pins the
+// long end, where the whole point is that a player can tell a week from a fortnight at a glance.
+const infLine = [...said].find(([u]) => u.startsWith('/v1/wire/informant/'))?.[1];
+assert(infLine && /\d+d\b/.test(infLine) && !/\b1\d\dh\b/.test(infLine),
+  `a week-long retainer must read in DAYS, not in three digits of hours. Got: ${JSON.stringify(infLine)}`);
+// and the standing watch's own term: it is the only one that keeps spending after you press it
+const watchLine = [...said].find(([u]) => u.startsWith('/v1/wire/watch/'))?.[1];
+assert(watchLine && /keeps? spending|renew/i.test(watchLine),
+  `a standing watch burns the tap price again on every renewal — an ongoing cost the player has to be ` +
+  `told at the moment they take it on. Got: ${JSON.stringify(watchLine)}`);
 
 const megaLine = said.get('/v1/megaproject/omr');
 if (megaLine) assert(/\$OMR/.test(megaLine) && /\b10\b/.test(megaLine),
   `the $OMR rail into the monument must name the $OMR that left, not the wall's dollar credit — got: ${JSON.stringify(megaLine)}`);
 
+// THE TERMS on the three highest-stakes consents wave 9 found silent. A silence pattern reads
+// straight past a line that is fluent and INCOMPLETE, which is why each of these is named: pinks is
+// the one consent in the game where losing hands over the car, the manifest minimum is what a
+// shipper used to first hear at departure (after the trunk was already spent), and a crew score's
+// stake is fronted and comes back only on a pre-execution disband.
+const pinkLine = [...said].find(([u]) => u.includes('/races/pinkslip/'))?.[1];
+assert(pinkLine && /lose/i.test(pinkLine) && /THEIRS|title/i.test(pinkLine),
+  `putting a car up for PINKS is the only consent in the game where a loss hands the car over — the ` +
+  `line has to say so. Got: ${JSON.stringify(pinkLine)}`);
+const loadLine = said.get('/v1/convoy');
+assert(loadLine && /\b5\b/.test(loadLine) && /short|needs/i.test(loadLine),
+  `a convoy refuses to roll under the BULK minimum, and the manifest total lives on the convoy — only ` +
+  `the server can say how far short a load is, so it has to. Got: ${JSON.stringify(loadLine)}`);
+// A RACE IS NOT A FIGHT, AND THE PURSE IS ONE NUMBER. The score line is shared across three sports
+// (deliberately — it carries the margin, which is what a manager acts on), so it stamped a
+// greyhound's win with a boxing glove; and the sport's own line then repeated the same money, so the
+// toast read "+$4,000 · … +$4,000 purse". Both halves asserted, because the icon fix leaves the echo.
+const circuitLine = [...said].find(([u]) => u.includes('/stable/circuit/'))?.[1];
+assert(circuitLine && /WON/.test(circuitLine),
+  `the circuit action must have DRIVEN and WON — the dog is seeded past the maiden's field on purpose, ` +
+  `because a win-only assertion behind a coin flip is a check that can decline to run. Got: ${JSON.stringify(circuitLine)}`);
+{
+  assert(!/\u{1F94A}/u.test(circuitLine),
+    `a greyhound's race must not be stamped with a boxing glove — the score line is shared across ` +
+    `sports, so it has to follow the game. Got: ${JSON.stringify(circuitLine)}`);
+  const money = circuitLine.match(/\$[\d,]+/g) || [];
+  assert(new Set(money).size === money.length,
+    `the purse is stated once — the shared score line already carries it, so the sport's own line must ` +
+    `not repeat the same figure. Got: ${JSON.stringify(circuitLine)}`);
+}
+const planLine = said.get('/v1/heists/plan');
+assert(planLine && /fronted|stake/i.test(planLine) && /crew|more/i.test(planLine),
+  `planning a score fronts the stake and cannot go until the crew fills — both are terms the leader ` +
+  `pays for at that moment. Got: ${JSON.stringify(planLine)}`);
+
 const describedCount = described;
-assert(described >= 40, `only ${described} of ${ACTIONS.length} actions succeeded — the ledger is measuring almost nothing`);
+assert(described >= 55, `only ${described} of ${ACTIONS.length} actions succeeded — the ledger is measuring almost nothing`);
 assert.deepEqual(mute, [], `${mute.length} action(s) a player PRESSES say nothing about what just happened ` +
   `(describe() fell through to "done." or rendered a hole). Every one of these moves money, an asset or a ` +
   `status — write the line, or the game is keeping its own result from the player:\n  ${mute.join('\n  ')}`);
@@ -2000,6 +2198,30 @@ assert.deepEqual(mute, [], `${mute.length} action(s) a player PRESSES say nothin
 // clears. Asserted UNCONDITIONALLY — the first cut guarded it behind `if (dep.code < 400)` and by
 // this point the fixture has spent its cash, so it skipped in silence and a mutation that stripped
 // the warning SURVIVED. A check that can decline to run reads exactly like a check that passed.
+// THE HUSH PAYMENT, driven on BOTH tokens the way the deposit check below does — because the class
+// sweep above can only see lines that were driven, and this route needs the mark's own token, so the
+// mutation restoring "The The Wash Records" walked straight past it. A sweep is a net, not a proof of
+// the site it was written for.
+{
+  const mk = async (n) => { const t = (await inject('POST', '/v1/auth/guest')).body.token;
+    await inject('POST', '/v1/character', t, { name: n + Math.random().toString(36).slice(2, 6) });
+    const id = (await inject('GET', '/v1/me', t)).body.character.id; return { t, id }; };
+  const spy = await mk('Hush Spy '), tgt = await mk('Hush Mark ');
+  await app.pool.query("UPDATE characters SET cash=2000000, wash_used=500000, wash_at=now() WHERE id IN ($1,$2)", [spy.id, tgt.id]);
+  await app.pool.query('UPDATE account_persistent SET omr=500 WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)', [spy.id]);
+  const dig = await inject('POST', `/v1/wire/dig/${tgt.id}`, spy.t, {});
+  assert.equal(dig.code, 200, `the hush-line check could not dig (${JSON.stringify(dig.body)}) — fix the fixture rather than letting this skip`);
+  assert.equal(dig.body.found, true, 'the mark was seeded with a laundering trail — a clean dig proves nothing about the hush line');
+  await inject('POST', `/v1/secrets/${dig.body.id}/extort`, spy.t, { demand: 4000 });
+  const hush = await inject('POST', `/v1/secrets/${dig.body.id}/pay`, tgt.t, {});
+  assert.equal(hush.code, 200, `the hush-line check could not pay (${JSON.stringify(hush.body)})`);
+  const hushLine = String(describeFn(hush.body, 200));
+  assert(!/\bThe The\b/i.test(hushLine),
+    `every secret is named "The <something>", so an added article reads "The The Wash Records" — on ` +
+    `every hush payment in the game, not an edge case. Got: ${JSON.stringify(hushLine)}`);
+  assert(/\$4,000/.test(hushLine), `the hush line must name what was paid. Got: ${JSON.stringify(hushLine)}`);
+}
+
 const depositor = (await inject('POST', '/v1/auth/guest')).body.token;
 await inject('POST', '/v1/character', depositor, { name: 'Ledger Dep ' + Math.random().toString(36).slice(2, 7) });
 const dep = await inject('POST', '/v1/bank/deposit', depositor, { amount: 100 });
@@ -2037,7 +2259,7 @@ console.log(`✅ client wiring test passed — across the console AND /admin: of
   `so a new one is a decision on the record, not a silent regression. ` +
   `And the EIGHTH, which is not a lie but a shrug: a button that works and then says nothing. ` +
   `act() toasts describe() with no override, so ${describedCount} driven actions must each read back ` +
-  `as something a player can act on — a play session found 40 saying the bare word "done.", among them ` +
+  `as something a player can act on — a play session found 53 saying the bare word "done.", among them ` +
   `an unstake that had just opened a six-hour window in which that $OMR can be looted off you, and a ` +
   `bank deposit that rides in transit and is lootable until it clears — both TERMS, not flavour — and an ` +
   `errand that signs a player up for a THREE-DAY job while carrying the very task it would not name. ` +

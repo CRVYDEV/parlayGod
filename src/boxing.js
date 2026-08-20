@@ -239,7 +239,10 @@ export async function trainFighter(ch, fighterId, stat, client, h) {
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'boxing:train' });
   await bumpStanding(client, h, ch, 'cornerman', 1, { action: 'train' }); // gym work is the corner's business (the daily-lead task)
   await h.track(client, ch.account_id, 'boxing_train', { stat: s });
-  return { ok: true, fighter: f.name, stat: s, value: nv };
+  // WHAT THE SESSION COST, AND HOW CLOSE HE IS. The Cornerman discounts the fee (and at T3 builds
+  // harder), so the client CANNOT compute either from a catalog — the same class as the Wire's
+  // rank-discounted tap. Without them the toast could only say "done." over a real cash spend.
+  return { ok: true, fighter: f.name, stat: s, value: nv, spent: cost, cap: BOXING.STAT_CAP };
 }
 
 // List one of your fighters as TAKING BOUTS at a stake (consent-by-listing). null/0 clears.

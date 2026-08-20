@@ -251,10 +251,17 @@ export async function enrollWatch(ch, targetId, client, h) {
     const n = Number((await client.query('SELECT COUNT(*) n FROM wire_watches WHERE watcher_character=$1', [ch.id])).rows[0].n);
     if (n >= slots) throw new GameError('watch_full', `Your Wire runs ${slots} standing watch${slots === 1 ? '' : 'es'} — drop one first.`);
   }
-  await placeTap(ch, targetId, client, h);   // place/refresh the tap now (the normal intel:wiretap sink)
+  const tap = await placeTap(ch, targetId, client, h);   // place/refresh the tap now (the normal intel:wiretap sink)
   if (!already) await client.query('INSERT INTO wire_watches (watcher_character, target_character) VALUES ($1,$2)', [ch.id, targetId]);
   await h.track(client, ch.account_id, 'wire_watch', { target: targetId });
-  return { ok: true, target: targetId, standing: true, watchSlots: slots };
+  // WHAT IT COST, AND THAT IT KEEPS COSTING. Setting a watch CHARGES — placeTap burns the tap price
+  // right here — and it then goes on burning it every time the sweep renews the line, which is the
+  // whole mechanic. The reply carried neither, so the client could not have said either: an ongoing
+  // obligation invisible at the moment you take it on is the pad and the nut exactly (a tester found
+  // both by owing more than a laundromat brings in). `spent` comes from the tap so the spymaster's
+  // rank discount is the number reported, never a restated list price.
+  return { ok: true, target: targetId, standing: true, watchSlots: slots,
+    spent: tap.spent, expiresSeconds: tap.expiresSeconds, renews: true };
 }
 
 // DELETE /v1/wire/watch/:targetId — drop a standing watch (the tap lapses on its own; you keep the wire

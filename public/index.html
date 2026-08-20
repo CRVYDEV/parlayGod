@@ -2147,6 +2147,50 @@
       return `the lawyer's on retainer — $${fmt(body.cost)}, good for ${minsTxt(body.retainerSeconds)}`;
     if (body && body.ok && body.stable !== undefined && body.power !== undefined && body.chin !== undefined)
       return `\u{1F94A} signed ${esc(body.name)} — ${body.power} power / ${body.chin} chin / ${body.speed} speed. ${body.stable} in the stable.`;
+    // THE TRAINING CAMP. Signing a fighter read well and every other verb on both screens said
+    // "done." — the forgotten-sibling shape, three lines apart. A gym session and a stable workout
+    // BOTH cost real cash the Cornerman discounts, so the price rides the reply (see boxing.js).
+    // The stable's own sheet is guarded on `heart`, which a boxer never has, so it cannot cross-fire
+    // on the recruit branch above (both carry `stable`).
+    if (body && body.ok && body.heart !== undefined && body.stamina !== undefined && body.name)
+      return `\u{1F3C7} ${esc(body.kindName || 'a racer')} bought — ${esc(body.name)}, ${body.speed} speed / ${body.stamina} stamina / ${body.heart} heart. ${body.stable} in the stable${body.spent ? `, $${fmt(body.spent)}` : ''}.`;
+    if (body && body.ok && body.stat && body.value !== undefined && body.cap !== undefined)
+      return body.value >= body.cap
+        ? `\u{1F3CB} ${esc(body.fighter || body.name || 'they')} maxed out ${esc(body.stat)} — ${body.value}/${body.cap}${body.spent ? `, $${fmt(body.spent)}` : ''}. Nothing more to win there.`
+        : `\u{1F3CB} worked ${esc(body.fighter || body.name || 'them')} — ${esc(body.stat)} up to ${body.value}/${body.cap}${body.spent ? `, $${fmt(body.spent)}` : ''}`;
+    // THE STRIP. Tuning read well and every other verb on the screen said "done." — including PINKS,
+    // which is the highest-stakes consent in the game: agree to it and a loss hands over the car.
+    if (body && body.ok && body.pinkSlip !== undefined)
+      return body.pinkSlip
+        ? `\u{1F380} the ${esc(body.car || 'car')} is up for PINKS — a challenger can race you for the title, and if you lose it's THEIRS`
+        : `the ${esc(body.car || 'car')} is off pinks — no more racing for the title`;
+    if (body && body.ok && body.nos !== undefined && body.carId)
+      return `\u{1F4A8} nitrous loaded in the ${esc(body.car || 'car')} — ${body.nos}/${body.max} charges, $${fmt(body.spent)}. One burns per race, win or lose.`;
+    if (body && body.ok && body.carId && body.limit !== undefined)
+      return body.limit
+        ? `\u{1F4CB} the ${esc(body.car || 'car')} is on the strip — any driver can wager you up to $${fmt(body.limit)}${body.asked > body.limit ? ` (you asked $${fmt(body.asked)}; the table caps there)` : ''}`
+        : `\u{1F4CB} the ${esc(body.car || 'car')} is off the strip — no new wager races`;
+    if (body && body.ok && body.boutLimit !== undefined)
+      return body.boutLimit
+        ? `\u{1F4CB} ${esc(body.fighter)} is on the card — anyone can make a match up to $${fmt(body.boutLimit)}, and the loser gets laid up`
+        : `\u{1F4CB} ${esc(body.fighter)} is off the card — no new matches`;
+    if (body && body.ok && body.raceLimit !== undefined)
+      return body.raceLimit
+        ? `\u{1F4CB} ${esc(body.name)} is on the strip — any owner can match you up to $${fmt(body.raceLimit)}, and a loss lays them up`
+        : `\u{1F4CB} ${esc(body.name)} is off the strip — no new match races`;
+    // THE SCORE. The stake is FRONTED — it comes back only on a pre-execution disband — and the job
+    // cannot go until the crew is filled, so both terms ride the line the leader reads when they pay.
+    if (body && body.ok && body.crewNeeded !== undefined && body.role)
+      return `\u{1F5FA} ${esc(body.name)} is planned — you're ${esc(body.role)}, $${fmt(body.stake)} fronted${body.fenced ? ', taking it HOT (fenceable loot, not cash)' : ''}. ${body.crewNeeded ? `Needs ${body.crewNeeded} more on the crew before it goes; the stake comes back only if you disband first.` : 'Ready to go.'}`;
+    // THE CONVOY. A shipment is for BULK and refuses to roll under the minimum — a player who opened
+    // one with two crates used to hear that only at depart. The manifest total is the server's to say.
+    // ...and DEPARTURE said "done." over the loudest thing the screen does: the run goes PUBLIC (the
+    // streets feed carries the route and a value band), guards are paid, and it can be ambushed on
+    // the road. A hammered lane also sheds guard defence, which is the one number a shipper can act on.
+    if (body && body.ok && body.arrivesSeconds !== undefined && body.band && body.units !== undefined)
+      return `\u{1F6E3} rolling — ${body.units} units, ${minsTxt(body.arrivesSeconds)} on the road. The streets know a ${esc(body.band)} load is moving this route${body.guardCut ? `, and the lane's hot: your guards are ${body.guardCut} down` : ''}. Bandits get up to three cracks at it${body.premium ? ' — the freight is insured' : ''}.`;
+    if (body && body.ok && body.units !== undefined && body.minUnits !== undefined)
+      return `\u{1F69B} ${body.loaded} × ${esc(body.good || 'freight')} aboard${body.destination ? ` for ${esc($dist(body.destination))}` : ''} — ${body.units} on the manifest. ${body.units < body.minUnits ? `A convoy needs ${body.minUnits} units to roll: ${body.minUnits - body.units} short.` : 'Heavy enough to roll — pick your guards and go.'}`;
     if (body && body.ok && body.collected === 0 && body.total === undefined)
       return 'nothing in the till yet — come back when the day has run';
     if (body && body.banked !== undefined && body.clearSeconds !== undefined)
@@ -2313,7 +2357,10 @@
       const close = gap <= 4 ? ' — a close one' : gap >= 20 ? ' — not close' : '';
       const money = body.net !== undefined ? ` · ${body.net >= 0 ? '+' : '−'}$${fmt(Math.abs(body.net))}` : '';
       // the PvP race sends the same shape but no opponent NAME — say "them" rather than "undefined"
-      bits.push(`${body.win ? '🥊 WON' : 'lost'} ${body.you.score}–${body.them.score} vs ${body.them.name || 'them'}${close}${money}`
+      // ...and the same shape covers three sports, so the ICON follows the game: a greyhound's race
+      // came back stamped with a boxing glove, which is the shared-branch cost paid in the wrong unit.
+      const won = body.win ? ((body.game === 'circuit' || body.game === 'race') ? '\u{1F3C1} WON' : '\u{1F94A} WON') : 'lost';
+      bits.push(`${won} ${body.you.score}–${body.them.score} vs ${body.them.name || 'them'}${close}${money}`
         + (body.belt ? ' — AND THE BELT' : body.defended ? ' — title DEFENDED' : ''));
     }
     if (body.spec !== undefined && body.name && body.spent !== undefined) bits.push(`✦ your ${body.kind} is now ${body.name} (−${body.spent} $OMR)`);
@@ -2389,7 +2436,19 @@
     else if (body.paid > 0 && body.toLender !== undefined) bits.push(`squared the marker — $${fmt(body.paid)} out, $${fmt(body.toLender)} to the shark and $${fmt(body.vig)} vig to the house. Your name's clean.`);
     else if (body.paid > 0 && body.interest !== undefined) bits.push(`paid the window back — $${fmt(body.paid)}, $${fmt(body.interest)} of it interest`);
     else if (body.paid > 0 && body.perDay !== undefined) bits.push(`staff wages settled — ${fmt(body.paid)} $OMR${body.staff ? ` for ${body.staff} on the household` : ''} (${fmt(body.perDay)} $OMR a day)`);
-    else if (body.paid > 0 && body.kind && body.omrSpent === undefined) bits.push(`paid the hush — $${fmt(body.paid)}. The ${esc(body.kind)} stays buried, for now.`);
+    // DIRTY LAUNDRY — the shovel, the demand and the burn, all three of which read "done." The dig is
+    // a 60 $OMR burn that lands EITHER WAY, so the one thing a player needs back from it is whether
+    // the money bought anything; the extort is the moment the mark FINDS OUT (an un-extorted secret
+    // is invisible to them — the demand IS the reveal) and starts a 24h clock; the expose spends the
+    // leverage for good. Ordered above the `paid`/`kind` chain because the hush line reads `kind` too.
+    if (body.found === true && body.kindName) bits.push(`\u{1F5C3} you turned up ${esc(body.kindName)} on ${esc(body.on)} — worth up to $${fmt(body.hushCap)} in hush money, and it goes stale in ${minsTxt(body.ttlSeconds)}${body.spent ? ` (${fmt(body.spent)} $OMR)` : ''}`);
+    else if (body.found === false) bits.push(`nothing in their trash${body.spent ? ` — ${fmt(body.spent)} $OMR gone` : ''}. Clean, or somebody swept it first; give it a day before you look again.`);
+    if (body.demand !== undefined && body.deadlineSeconds !== undefined) bits.push(`\u{1F4B0} the demand is out — $${fmt(body.demand)}, ${minsTxt(body.deadlineSeconds)} to pay. They know you have it now, and they know what it is.`);
+    if (body.exposeHeat !== undefined && body.kind) bits.push(`\u{1F4E2} you handed ${esc(body.kind)} to the Bureau — +${body.exposeHeat} on their file, and the leverage is spent`);
+    // EVERY SECRET NAME ALREADY STARTS WITH "The" (The Wash Records, The Bodies, The Kitchen Books,
+    // The Second Ledger — all four), so the article this line added read "The The Wash Records" on
+    // every hush payment ever made, not on an edge case. Found by reading the line, not the code.
+    else if (body.paid > 0 && body.kind && body.omrSpent === undefined) bits.push(`paid the hush — $${fmt(body.paid)}. ${esc(body.kind)} stays buried, for now.`);
     else if (body.paid > 0 && body.bought === undefined) bits.push(`paid $${fmt(body.paid)}`);
     if (body.shuttered) bits.push(`closed up the ${body.shuttered} — the pad on it stops${body.back > 0 ? `, $${fmt(body.back)} back` : ', nothing back'}`);
     // `walked` means two different things: a kitchen hand let go, and the estate's staff downing
@@ -2465,11 +2524,18 @@
     if (body.raid && body.raid.raided) bits.push(`RAIDED — the Prohibition boys took $${fmt(body.raid.seized)} + fined $${fmt(body.raid.fine)}, club dark`);
     if (body.toSeller !== undefined) bits.push(`took over the ${body.name || 'club'} — $${fmt(body.paid)} paid ($${fmt(body.toSeller)} to the old owner)`);
     if (body.won !== undefined && body.feePaid !== undefined) bits.push(body.won ? `STOOD OVER the ${body.name || 'club'} — forced the sale, it's yours ($${fmt(body.paid)})` : `the standover was repelled — the $${fmt(body.feePaid)} fee's gone`);
-    if ((body.opponent !== undefined || body.yourFighter !== undefined) && body.you && typeof body.win === 'boolean') { const rec = body.record || body.yourFighter; bits.push(body.win ? `${body.you.name} WINS — took $${fmt(Math.abs(body.net))}${rec ? ` (${rec})` : ''}` : `${body.you.name} dropped it — lost $${fmt(Math.abs(body.net))}${rec ? ` (${rec})` : ''}`); }
+    // A bout and a race BOTH land the shared score line above, which already states the money — so
+    // the result read "+$6,000 · … took $6,000", the same figure twice in one toast. Written as a
+    // SCAN of what has already been said rather than a shape test (the heat-echo precedent), so a
+    // future branch that mentions the purse cannot reintroduce the echo.
+    const saidNet = () => body.net !== undefined && bits.some((b) => b.includes(`$${fmt(Math.abs(body.net))}`));
+    if ((body.opponent !== undefined || body.yourFighter !== undefined) && body.you && typeof body.win === 'boolean') { const rec = body.record || body.yourFighter; const m = saidNet() ? '' : ` — ${body.win ? 'took' : 'lost'} $${fmt(Math.abs(body.net))}`; bits.push(`${body.you.name} ${body.win ? 'WINS' : 'dropped it'}${m}${rec ? ` (${rec})` : ''}`); }
     if (body.sire && body.dam && body.speed !== undefined) bits.push(`🐎 ${body.name} is born — out of ${body.dam} by ${body.sire} (speed ${body.speed} / stamina ${body.stamina} / heart ${body.heart})`);
     if (body.stakes && body.form !== undefined && body.racer) bits.push(`${body.racer} is in the stakes (form ${body.form}) — $${fmt(body.buyin)} in, purse $${fmt(body.pool)} (${body.entrants} entered)`);
     if ((body.game === 'circuit' || body.game === 'race') && body.you && typeof body.win === 'boolean') { const rec = body.record || body.yourRacer;
-      bits.push(body.win ? `${body.you.name} WINS at the wire${body.game === 'circuit' ? ` — +$${fmt(Math.abs(body.net))} purse` : ` — took $${fmt(Math.abs(body.net))}`}${rec ? ` (${rec})` : ''}` : `${body.you.name} got beat — −$${fmt(Math.abs(body.net))}${rec ? ` (${rec})` : ''}`); }
+      const m = saidNet() ? (body.game === 'circuit' && body.win ? ' — the purse is yours' : '')
+        : (body.win ? ` — ${body.game === 'circuit' ? `+$${fmt(Math.abs(body.net))} purse` : `took $${fmt(Math.abs(body.net))}`}` : ` — −$${fmt(Math.abs(body.net))}`);
+      bits.push(`${body.you.name} ${body.win ? 'WINS at the wire' : 'got beat'}${m}${rec ? ` (${rec})` : ''}`); }
     if (body.decor !== undefined && body.district) bits.push(body.decor ? `re-decorated in ${body.decorName}` : 'stripped the club back to stock');
     if (body.salePrice !== undefined && body.district) bits.push(`listed the club for $${fmt(body.salePrice)}`);
     if (body.escaped === true) bits.push("OVER THE WALL — you're out, but WANTED now (no family cover, hunters coming)");
@@ -2481,7 +2547,16 @@
     if (body.refund !== undefined && body.boat === undefined && body.landed === undefined && !bits.length) bits.push(`sold her back to the yard — +$${fmt(body.refund)}`);
     if (body.foundation && body.foundation.name) bits.push(`the family endowed the ${body.foundation.name} — softer trials for everyone`);
     if (body.gainMult !== undefined && body.envelopeSeconds) bits.push("the envelope's current — the cops will look the other way");
-    if (body.expiresSeconds && body.target) bits.push("wire's live — you'll hear everything");
+    // THE WIRE'S PAID ACTIONS, WHICH ALL BUT ONE OF THEM DID NOT NAME. Six things on this screen cost
+    // $OMR; `disinfo` three lines down states its price AND its clock, and the other five stated
+    // neither — the forgotten-sibling shape with the sibling that gets it right in the same block.
+    // Driven: informant 150 and dig 60 both read "done."; tap 48/12h read "wire's live — you'll hear
+    // everything", which is also an OVERCLAIM (the layered intel economy is deliberate: a tap is
+    // FOILED by cooked books and reads banded — the informant is the one that hears everything, and
+    // it costs three times as much for exactly that reason). Ordered before the tap line because a
+    // standing watch answers with a tap's own fields plus `standing`, so it would otherwise take it.
+    if (body.standing === true) bits.push(`\u{1F4E1} standing watch set — the wire renews itself while you're away${body.spent ? `, ${fmt(body.spent)} $OMR a turn` : ''}. It KEEPS spending until you drop it.`);
+    else if (body.expiresSeconds && body.target) bits.push(`\u{1F50A} wire's on the line for ${minsTxt(body.expiresSeconds)}${body.spent ? ` — ${fmt(body.spent)} $OMR` : ''}. Cooked books beat a tap; a human source doesn't get fed lies.`);
     // THE TRACE IS NOT THE SWEEP, and reading them as one was three wrongs in a line. Both come back
     // {spent, bugsFound} — the trace adds `watchers`, and nothing else in the game sends that — so
     // the client answered "swept 1 bug(s) off your line" to a 90 $OMR TRACE that (a) is the other
@@ -2491,12 +2566,15 @@
     // sweep clears cheaply and anonymously, the trace names but LEAVES them — so the two lines have
     // to say which one you just did. Ordered first: `watchers` is the discriminator.
     if (body.watchers !== undefined) bits.push(body.watchers.length
-      ? `\u{1F50C} traced ${body.watchers.length} on your line — ${body.watchers.map((w) => esc(w.name)).join(', ')}. They're STILL listening: a trace names them, it doesn't cut them. Sweep to clear.`
+      ? `\u{1F50C} traced ${body.watchers.length} on your line — ${body.watchers.map((w) => esc(w.name)).join(', ')}${body.spent ? ` (${fmt(body.spent)} $OMR)` : ''}. They're STILL listening: a trace names them, it doesn't cut them. Sweep to clear.`
       : 'nobody\u2019s on your line — nothing to trace, no charge');
-    else if (body.bugsFound !== undefined) bits.push(body.bugsFound ? `swept ${body.bugsFound} bug(s) off your line` : 'lines are clean — nothing to sweep');
-    if (body.wireSeconds) bits.push(`subscribed to ${body.tierName || 'the Street Wire'} — the intelligence is flowing${body.watchSlots ? ` (${body.watchSlots} standing watch slot${body.watchSlots > 1 ? 's' : ''})` : ''}`);
-    if (body.standing === true) bits.push("standing watch set — the wire renews itself while you're away");
-    if (body.standing === false && body.target) bits.push('standing watch dropped');
+    else if (body.bugsFound !== undefined) bits.push(body.bugsFound
+      ? `swept ${body.bugsFound} bug${body.bugsFound === 1 ? '' : 's'} off your line${body.spent ? ` — ${fmt(body.spent)} $OMR` : ''}`
+      : 'lines are clean — nothing to sweep');
+    if (body.wireSeconds) bits.push(`subscribed to ${body.tierName || 'the Street Wire'} — ${fmt(body.spent)} $OMR, running ${minsTxt(body.wireSeconds)}${body.watchSlots ? ` (${body.watchSlots} standing watch slot${body.watchSlots > 1 ? 's' : ''})` : ''}`);
+    // the priciest standing source on the screen, and it read "done."
+    if (body.paidSeconds && body.target) bits.push(`\u{1F575} you've a man inside for ${minsTxt(body.paidSeconds)} — ${fmt(body.spent)} $OMR. He reads deeper than a tap and can't be fed cooked books.`);
+    if (body.standing === false && body.target) bits.push('standing watch dropped — the tap runs out and nothing renews it');
     if (body.reward !== undefined && body.tier) bits.push(`Ledger tier ${body.tier} claimed — ${body.reward}${body.stipendPaid ? ` (${body.stipendPaid} $OMR paid)` : ''}`);
     if (body.verified && body.wallet) bits.push(`wallet linked — ${body.wallet.slice(0, 6)}…${body.wallet.slice(-4)}${body.feesCredited ? ` · ${body.feesCredited} fee credit(s) applied` : ''}`);
     // two-party handoffs that otherwise fell through to a bare "done."
@@ -4154,6 +4232,12 @@
   // the control beside it flips with the clock rather than at the next board poll (red-team F6).
   // minsTxt is the plain-text variant for non-HTML contexts (alerts, titles).
   const minsTxt = (s) => s <= 0 ? '0s' : s < 60 ? Math.ceil(s) + 's' // sub-minute reads in SECONDS (a 10s jail is "10s", not a misleading "1m")
+    // PAST TWO DAYS NOBODY COUNTS IN HOURS. A 7-day informant retainer read "168h" and a 14-day
+    // Wire subscription "336h" — technically right, and not a unit anyone thinks in at that scale
+    // (found by reading the Wire's own toasts, not the code). Under 48h hours ARE how people think
+    // ("36h" beats "1d12h"), so the tier starts there. The hour half carries for the same reason
+    // the minute half below does.
+    : s > 172800 ? (() => { let d = Math.floor(s / 86400), h = Math.ceil((s % 86400) / 3600); if (h === 24) { d += 1; h = 0; } return d + 'd' + (h ? h + 'h' : ''); })()
     // the minute half CARRIES: 66h − ε used to render "65h60m" (ceil of 59.9m = 60) — found by
     // reading THE PAYROLL's countdown on a live probe; the same string rode every h+m countdown
     : s > 3600 ? (() => { let h = Math.floor(s / 3600), m = Math.ceil((s % 3600) / 60); if (m === 60) { h += 1; m = 0; } return h + 'h' + (m ? m + 'm' : ''); })() : Math.ceil(s / 60) + 'm';

@@ -55,7 +55,7 @@ export async function buyRacer(ch, kind, name, client, h) {
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -k.cost, reason: 'stable:buy' });
   await bumpStanding(client, h, ch, 'cornerman', 3, { action: 'sign' }); // Mickey trains your animals too (the Underworld tie-in)
   await h.track(client, ch.account_id, 'stable_buy', { kind });
-  return { ok: true, id, kind, name: n, speed, stamina, heart, stable: count + 1 };
+  return { ok: true, id, kind, kindName: k.name, name: n, speed, stamina, heart, stable: count + 1, spent: k.cost };
 }
 
 // fetch one of YOUR racers by id, locked (the ownership gate for train/list/race).
@@ -87,7 +87,9 @@ export async function trainRacer(ch, racerId, stat, client, h) {
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'stable:train' });
   await bumpStanding(client, h, ch, 'cornerman', 1, { action: 'train' }); // working the animals is the corner's business (his daily lead)
   await h.track(client, ch.account_id, 'stable_train', { stat: s });
-  return { ok: true, id: r.id, stat: s, value: nv };
+  // The NAME (a stable runs up to STABLE_MAX animals — an id names nothing to a player), the
+  // Cornerman-discounted COST the client cannot compute, and the cap the value is climbing toward.
+  return { ok: true, id: r.id, name: r.name, stat: s, value: nv, spent: cost, cap: STABLE.STAT_CAP };
 }
 
 // ── LIST one of your racers as TAKING MATCH RACES at a wager (consent-by-listing). null/0 clears. ──
@@ -97,7 +99,7 @@ export async function listRacer(ch, racerId, limit, client, h) {
   if (v != null && !(Number.isFinite(v) && v >= STABLE.MIN_STAKE && v <= STABLE.MAX_STAKE))
     throw new GameError('stake', `Match wagers run ${usd(STABLE.MIN_STAKE)}–${usd(STABLE.MAX_STAKE)} (0 clears).`);
   await client.query('UPDATE racers SET race_limit=$2 WHERE id=$1', [r.id, v]);
-  return { ok: true, id: r.id, raceLimit: v };
+  return { ok: true, id: r.id, name: r.name, raceLimit: v };
 }
 
 // ── THE CIRCUIT — your racer vs a server-rolled NPC field. The fee is a cash SINK win or lose; the

@@ -86,7 +86,9 @@ export async function buyNos(ch, carId, client, h) {
   await client.query('UPDATE cars SET nos=$2 WHERE id=$1', [car.id, nn]); // absolute write (pg-mem-safe)
   car.nos = nn;
   await h.track(client, ch.account_id, 'race', { mode: 'nos', charges: nn });
-  return { ok: true, carId: car.id, nos: nn, spent: RACES.NOS_COST };
+  // The NAME, because a garage holds several and a bare id names nothing to a player — and the
+  // charge is CONSUMED on one race win or lose, which is the term a $8k purchase has to state.
+  return { ok: true, carId: car.id, car: car.model_id, nos: nn, max: RACES.NOS_MAX, spent: RACES.NOS_COST };
 }
 
 // POST /v1/races/tune/:carId — spend cash to add a tune level (a §10.4 sink + car progression).
@@ -115,13 +117,15 @@ export async function listRace(ch, carId, limit, client, h) {
   const cap = Math.min(lim, RACES.WAGER_MAX);
   await client.query('UPDATE cars SET race_limit=$2 WHERE id=$1', [car.id, cap]);
   car.race_limit = cap;
-  return { ok: true, carId: car.id, limit: cap };
+  // `cap` may be BELOW what was asked (WAGER_MAX clamps it) — say the number that actually stands.
+  return { ok: true, carId: car.id, car: car.model_id, limit: cap, asked: lim };
 }
 export async function unlistRace(ch, carId, client, h) {
   const car = raceable(h, carId);
   await client.query('UPDATE cars SET race_limit=NULL WHERE id=$1', [car.id]);
   car.race_limit = null;
-  return { ok: true, carId: car.id };
+  // the same shape listRace answers with, so one client branch covers on and off
+  return { ok: true, carId: car.id, car: car.model_id, limit: null };
 }
 
 // POST /v1/races/pinkslip/:carId {on} — offer (or pull) a car for PINKS. When on, any challenger can
@@ -131,7 +135,7 @@ export async function pinkSlipList(ch, carId, on, client, h) {
   const flag = on !== false; // default on; explicit false pulls it
   await client.query('UPDATE cars SET pink_slip=$2 WHERE id=$1', [car.id, flag]);
   car.pink_slip = flag;
-  return { ok: true, carId: car.id, pinkSlip: flag };
+  return { ok: true, carId: car.id, car: car.model_id, pinkSlip: flag };
 }
 
 // POST /v1/races/challenge/:ownerId {myCar, theirCar, wager} — a PvP wager race (two-party, the
