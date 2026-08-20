@@ -117,7 +117,12 @@ export async function sellGunBack(ch, gunId, client, h) {
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: price, reason: 'underworld:gunsale' });
   await bumpStanding(client, h, ch, 'armorer', 1, { action: 'sale' });
   await h.track(client, ch.account_id, 'underworld_gunsale', { gun: gunId, price });
-  return { ok: true, gun: gunId, price, equipped: ch.gun };
+  // `sold` names the SYSTEM: this is a BUYBACK — she takes the piece and pays you — and the old shape
+  // {ok, gun, price, equipped} was byte-identical to buyGun's, i.e. selling iron and buying it read the
+  // same. Worse, `equipped` meant two different things: a BOOLEAN there ("did this one go on your hip")
+  // and a gunId-or-null here ("what she left you carrying"). Same name, two types, two systems. Nothing
+  // read it (zero consumers in src/, the client or the tests), so it is renamed rather than overloaded.
+  return { ok: true, sold: gunId, price, carrying: ch.gun };
 }
 
 // PENANCE (step four) — square ONE grudge with a fixture for PENANCE_COST (a ledgered cash

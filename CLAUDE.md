@@ -14987,3 +14987,66 @@ never how many times you have looked. And **a busy-wait is not free** — those 
 CPU, so on a shared box they slow the very suite you are waiting on, which then makes the run look
 even more stuck and reinforces the wrong conclusion. Use `Monitor` (or a backgrounded `sleep`) and
 wait for the notification instead.
+
+**EIGHT MORE WAVES OF THE SAME PLAY SESSION — waves 37–44 (2026-08-20).** The sweep continued
+past wave 36 into the surfaces no earlier wave had driven, and it produced one finding that is not
+a copy defect at all, one that had never worked since the day it shipped, and — twice — a class
+this file had already named and applied one instance at a time without sweeping it.
+
+**THE FEATURE THAT COULD NEVER HAVE WORKED (wave 41).** Got busted, reloaded the tab, and landed
+on Home with a page error and an EMPTY Pen panel. `renderSheet()` carries a jail latch whose own
+comment claims it covers *"a page that LOADS jailed"* — and it cannot, on ORDERING: the latch fires
+inside a render that has not yet built the tabs, so on a cold load it jumped to a screen that did
+not exist. A latch tested only against the busted-while-playing transition passes forever while the
+half it advertises has never run once.
+
+**A SIGNED RULE THAT TWELVE CONTROLS NEVER ASKED ABOUT (wave 40).** A safehouse is *"a shield, not
+a bunker"* — while you are to ground nothing pays out — and the STATE is charted (the chip counts
+down, the refusals read well) while twelve controls that turn what you already own into money were
+drawn live anyway. Played on real Postgres with a laundromat running: the Empire read
+*"$120,017 READY TO COLLECT — collect before the pad or a raid eats it"* over a live button, on a
+screen whose own warning advises going to ground, while the server answered `safe`. Waves 38–39 are
+the same shape on the other two axes (a level wall printed as trivia over a live button; three
+boss-only controls offered to a soldier), and each shipped with a guard so the axis cannot regress:
+checks 9, 10 and 11.
+
+**THE MUTE-LINE SWEEP KEPT PAYING, and wave 43's headline is why every reply gets read back rather
+than only the empty-looking ones.** `siegeSov` DEBITS and LEDGERS a TIER-SCALED war chest and
+returned the flat base — **$50,000 reported against $1,200,000 actually taken, a 24× understatement**
+— and it survived only because the line never printed it. *A mute line was hiding a wrong number,
+and no silence pattern can see a figure nobody prints.* The regression measures the TREASURY DELTA
+on both siege outcomes rather than testing that the line mentions money, because the claim is not
+"a number appears" but "the number it states is the number that left".
+
+**AND THE COLLISION CLASS, SWEPT TWICE MORE.** Wave 43 found three byte-shape collisions in one
+pass — a soldier ASSIGN reading as naming your estate, a CONSIGLIERE offer reading as a MARRIAGE
+proposal, and a bare `dismissed` from three different systems all claimed by the world raid's
+hired-gun line, which printed *"crew undefined/undefined"* at the player. Wave 44 then found the
+widest instance yet: a crew HEIST, a world RAID and a prison BREAK **all answer plan/join with an id
+and a crew count**, so the flat `if` chain gave all three to whichever branch came first — leaving
+a jailbreak reading *"you called the RAID off"*, and JOINING a heist rendering the heist PLAN line
+with **`$undefined fronted`** for an unnamed job, live since the plan line shipped and unnoticed
+because the join had never been driven.
+
+**The first cut of the wave-44 fix keyed on the FIELDS and read "you're in on the break" for a world
+RAID — the collision being fixed, reintroduced while fixing it, and caught only by driving the
+sibling shapes rather than re-reading the diff.** So all six replies now name their own `op` at the
+SOURCE. The rule this pays for, twice over now: **absence is not a discriminator — it holds only
+until a sibling adds the field you were relying on being missing**, and a marker only disambiguates
+if it names the SYSTEM rather than the STATE.
+
+**Wave 44's other half is the ARMORY, and one of them is an orphan in reverse.** Buying a gun did
+not even reach the catch-all, because the reply says `price` and the catch-all reads `cost` — so the
+loudest purchase on the screen reported nothing: not the iron, not the money, not the CRATES it also
+costs (iron is the one buy that debits two currencies), and not that the first piece you buy goes
+straight on your hip while the second does not. Equipping said *"done."* three lines from an unequip
+that has always read. And **Bella's tier-3 buyback — a perk her own card advertises — had no button
+anywhere in the game**: the route existed and was unreachable, the orphan-route class inverted. Its
+reply was also byte-identical to a gun BUY, so selling iron and buying it would have read the same
+line; `sold` names the system now, and `equipped` was renamed rather than left meaning a BOOLEAN in
+one reply and a gunId-or-null in the other (zero consumers, checked before renaming).
+
+Every wave shipped with its guard block in `test/client.js` and every fix was mutation-verified by
+name — wave 44's six mutations each failed at a distinct assertion, and the one that reverted the
+break's join to field-keying was caught by a **real drive** of the raid join rather than by its own
+synthetic, which is the stronger result. The driven-action ledger stands at 198.

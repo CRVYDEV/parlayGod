@@ -312,7 +312,7 @@ export async function planBreak(ch, client, h) {
   await client.query('INSERT INTO pen_breaks (id, leader_character) VALUES ($1,$2)', [id, ch.id]);
   await client.query('INSERT INTO pen_break_members (break_id, character_id) VALUES ($1,$2)', [id, ch.id]);
   await h.track(client, ch.account_id, 'pen_break_plan', {});
-  return { ok: true, id, crewNeeded: PEN.COOP_MIN - 1, crewMax: PEN.COOP_MAX };
+  return { ok: true, op: 'breakout', id, crewNeeded: PEN.COOP_MIN - 1, crewMax: PEN.COOP_MAX };
 }
 
 // POST /v1/pen/break/:id/join — a jailed inmate joins an open break
@@ -326,7 +326,7 @@ export async function joinBreak(ch, breakId, client, h) {
   if (crew.length >= PEN.COOP_MAX) throw new GameError('full', 'The crew is set — no room on this one.');
   await client.query('INSERT INTO pen_break_members (break_id, character_id) VALUES ($1,$2)', [breakId, ch.id]);
   await h.track(client, ch.account_id, 'pen_break_join', {});
-  return { ok: true, id: breakId, crew: crew.length + 1 };
+  return { ok: true, op: 'breakout', id: breakId, crew: crew.length + 1 };
 }
 
 // POST /v1/pen/break/:id/leave — a member walks; the LEADER walking disbands and takes the kit back
@@ -335,15 +335,20 @@ export async function leaveBreak(ch, breakId, client, h) {
   if (!row) throw new GameError('no_break', 'That break is gone.');
   const mine = (await client.query('SELECT 1 FROM pen_break_members WHERE break_id=$1 AND character_id=$2', [breakId, ch.id])).rows[0];
   if (!mine) throw new GameError('not_crew', "You're not in on that break.");
+  // `op: 'breakout'` names the SYSTEM. A bare {ok, disbanded} / {ok, left} is byte-identical to what a
+  // crew RAID answers, and that line owned the guard — so calling off a jailbreak read "you called the
+  // raid off" and walking away from one read "the raid goes on without you". Wrong system, both ways.
+  // `cutkit` is the other half: the staked kit really does come back, and the reply never said so, so a
+  // leader could not tell whether $50k of contraband had been forfeited or returned.
   if (row.leader_character === ch.id) {
     const held = await contrabandOf(client, ch.id);
     await setContraband(client, ch.id, 'cutkit', (held.cutkit || 0) + 1); // the staked kit comes back to a living leader
     await client.query("UPDATE pen_breaks SET status='abandoned' WHERE id=$1", [breakId]);
     await client.query('DELETE FROM pen_break_members WHERE break_id=$1', [breakId]);
-    return { ok: true, disbanded: true };
+    return { ok: true, op: 'breakout', disbanded: true, cutkit: 1 };
   }
   await client.query('DELETE FROM pen_break_members WHERE break_id=$1 AND character_id=$2', [breakId, ch.id]);
-  return { ok: true, left: true };
+  return { ok: true, op: 'breakout', left: true };
 }
 
 // POST /v1/pen/break/:id/go — leader-only. One roll for the whole crew.

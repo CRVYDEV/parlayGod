@@ -3887,6 +3887,157 @@ assert(offLine && /\$10,000|stake/i.test(offLine),
     `"done." Got: ${JSON.stringify(started)}`);
 }
 
+// ── WAVE 44 — THE ARMORY, AND THREE CO-OP SYSTEMS THAT ALL ANSWER "id + a crew count".
+// The armory half is the forgotten sibling at its plainest: UNEQUIPPING a piece has always read,
+// and EQUIPPING one three lines away said "done." — while BUYING one did not even reach the
+// catch-all, because the reply says `price` and the catch-all reads `cost`. So the loudest purchase
+// on the screen reported nothing: not the iron, not the money, not the CRATES it also costs (iron
+// is the one buy that debits two currencies), and not that the first piece you buy goes on your hip.
+//
+// The co-op half is the byte-shape collision class at its widest. A crew HEIST, a world RAID and a
+// prison BREAK all answer plan/join with an id and a crew count, and describe() is a flat if-chain,
+// so whichever branch comes first claims all three. Three separate defects fell out of that:
+//   · the break's plan and join said "done." — a plan STAKES a $50,000 cutkit and names the crew
+//     the wall needs; both are what a man in a cell wants to know;
+//   · leaving and disbanding a break read "the RAID goes on without you" / "you called the RAID
+//     off", wrong system both ways, with the staked kit's return unmentioned;
+//   · and JOINING a heist rendered the heist PLAN line — "$undefined fronted" for an unnamed job —
+//     because the plan branch guarded on `role`, which the join also carries. That one has been
+//     live since the plan line shipped, and it is here because the join had never been driven.
+//
+// The first cut of the break fix keyed on the FIELDS (a crew count and an id) and read
+// "you're in on the break" for a world RAID — the collision being fixed, reintroduced while fixing
+// it, and caught only by driving the sibling shapes. So all six replies now name their own `op` at
+// the SOURCE and every branch keys on that: absence is not a discriminator, it holds only until a
+// sibling adds the field you were relying on being missing.
+//
+// Its own block because the break needs two men in CELLS, and jail refuses nearly everything the
+// shared fixture goes on to drive.
+{
+  const mk44 = async (n) => { const t = (await inject('POST', '/v1/auth/guest')).body.token;
+    await inject('POST', '/v1/character', t, { name: n + Math.random().toString(36).slice(2, 6) });
+    const id = (await inject('GET', '/v1/me', t)).body.character.id;
+    await app.pool.query('UPDATE characters SET cash=90000000, respect=3000000, muscle=90, cunning=90, ' +
+      'speed=90, energy=300, health=100, cb=500 WHERE id=$1', [id]);
+    return { t, id }; };
+  const L44 = new Map();
+  const drive44 = async (t, m, url, payload, label) => {
+    const r = await inject(m, url, t, payload);
+    assert.equal(r.code, 200, `WAVE 44 could not drive ${label} (${JSON.stringify(r.body)}) — fix the ` +
+      'fixture rather than letting it skip, because a skipped action reads on the summary line as covered');
+    described++;
+    let line; try { line = String(describeFn(r.body, r.code)); } catch (e) { line = 'THREW: ' + e.message; }
+    L44.set(label, line); said.set(`${url}#${label}`, line);
+    if (line === 'done.' || /^paid \$[\d,.]+$/.test(line) || /undefined|NaN|\[object|^THREW/.test(line))
+      mute.push(`${m} ${url} (${label}) → ${JSON.stringify(line)}`);
+    return r; };
+
+  // ── THE ARMORY. Two guns, because the FIRST auto-equips and the second does not, and the line
+  // says which — a receipt that claims the wrong one is worse than the silence it replaced.
+  const shooter = await mk44('Ledger Iron ');
+  const rules44 = (await inject('GET', '/v1/rules')).body;
+  const guns44 = rules44.guns || [];
+  assert(guns44.length >= 2, 'WAVE 44: the gun catalog is too small to drive first-vs-second');
+  await drive44(shooter.t, 'POST', `/v1/armory/gun/${guns44[0].id}/buy`, null, 'buy the first piece');
+  await drive44(shooter.t, 'POST', `/v1/armory/gun/${guns44[1].id}/buy`, null, 'buy a second');
+  await drive44(shooter.t, 'POST', `/v1/armory/gun/${guns44[1].id}/equip`, null, 'carry the second');
+  await drive44(shooter.t, 'POST', '/v1/armory/unequip', null, 'put it away');
+  const bought1 = L44.get('buy the first piece');
+  assert(/\$[\d,]/.test(bought1) && /crate/i.test(bought1) && /hip/i.test(bought1),
+    `iron is the one purchase that debits TWO currencies, and the first piece you buy goes straight ` +
+    `on your hip — the reply carries price, crates and equipped, and the line read "done." because ` +
+    `the catch-all reads \`cost\` and this reply says \`price\`. Got: ${JSON.stringify(bought1)}`);
+  const bought2 = L44.get('buy a second');
+  assert(!/hip/i.test(bought2) && /carrying/i.test(bought2),
+    `the SECOND piece does not auto-equip — \`equipped\` is the difference between walking out armed ` +
+    `and walking out holding it, and a receipt that claims the wrong one is worse than silence. ` +
+    `Got: ${JSON.stringify(bought2)}`);
+  const carried = L44.get('carry the second');
+  assert(/carrying/i.test(carried) && /firepower|\bfp\b/i.test(carried),
+    `equipping said "done." while UNEQUIPPING three lines away has always read — and firepower is ` +
+    `the only reason to switch. Got: ${JSON.stringify(carried)}`);
+
+  // ── BELLA'S BUYBACK. Her card advertises the tier-3 perk and no button in the game collected it,
+  // so the route existed and was unreachable — the orphan-route class, inverted. The reply was also
+  // byte-identical to a gun BUY, so selling iron and buying it would have read the same line.
+  await app.pool.query(`INSERT INTO npc_standing (character_id, npc_id, standing, touched_at)
+    VALUES ($1,'armorer',95,now()) ON CONFLICT (character_id,npc_id)
+    DO UPDATE SET standing=95, touched_at=now()`, [shooter.id]);
+  await drive44(shooter.t, 'POST', `/v1/underworld/gun/${guns44[1].id}/sell`, null, 'sell it back to Bella');
+  const soldBack = L44.get('sell it back to Bella');
+  assert(/\$[\d,]/.test(soldBack) && /bella/i.test(soldBack) && !/crate/i.test(soldBack),
+    `Bella PAYS you — a buyback is not a purchase, and the two replies were byte-identical. ` +
+    `Got: ${JSON.stringify(soldBack)}`);
+
+  // ── THE CREW HEIST. The join is the pre-existing one: it carries a role and a crewNeeded, which
+  // is exactly what the PLAN branch guarded on, so it rendered the plan's sentence with the plan's
+  // fields missing — "$undefined fronted" for a job with no name.
+  const boss = await mk44('Ledger Score '), hand = await mk44('Ledger Hand ');
+  const jobs44 = (await inject('GET', '/v1/heists', boss.t)).body?.jobs || [];
+  const job44 = jobs44.find((j) => (j.crew || 0) >= 2) || jobs44[0];
+  assert(job44, 'WAVE 44: no crew job on the board — both heist assertions would skip in silence');
+  const planned = await drive44(boss.t, 'POST', '/v1/heists/plan', { job: job44.id }, 'plan a score');
+  await drive44(hand.t, 'POST', `/v1/heists/${planned.body.id}/join`, {}, 'get in on the score');
+  const planLine = L44.get('plan a score');
+  assert(/\$[\d,]/.test(planLine) && /fronted/i.test(planLine),
+    `the score's stake is FRONTED and that term rides the line the leader reads when they pay. ` +
+    `Got: ${JSON.stringify(planLine)}`);
+  const joinLine = L44.get('get in on the score');
+  assert(joinLine !== planLine && /in on the job/i.test(joinLine),
+    `JOINING a score is not planning one — the join carries a role and a crewNeeded, which is what ` +
+    `the plan branch guarded on, so it printed the plan's sentence with the plan's fields missing. ` +
+    `Got: ${JSON.stringify(joinLine)}`);
+
+  // ── THE BREAK, all four verbs, with a real cutkit staked so the disband's refund is real.
+  const lead = await mk44('Ledger Wall2 '), inmate = await mk44('Ledger Cell ');
+  for (const p of [lead, inmate])
+    await app.pool.query("UPDATE characters SET jail_until = now() + interval '1 hour' WHERE id=$1", [p.id]);
+  await app.pool.query(`INSERT INTO pen_contraband (character_id,item,qty) VALUES ($1,'cutkit',2)
+    ON CONFLICT (character_id,item) DO UPDATE SET qty=2`, [lead.id]);
+  const brk = await drive44(lead.t, 'POST', '/v1/pen/break/plan', null, 'plan the break');
+  await drive44(inmate.t, 'POST', `/v1/pen/break/${brk.body.id}/join`, null, 'get in on the break');
+  await drive44(inmate.t, 'POST', `/v1/pen/break/${brk.body.id}/leave`, null, 'walk off the break');
+  await drive44(lead.t, 'POST', `/v1/pen/break/${brk.body.id}/leave`, null, 'call the break off');
+  const brkPlan = L44.get('plan the break');
+  assert(/cutkit|kit/i.test(brkPlan) && /\d/.test(brkPlan),
+    `planning a break STAKES the cutkit and names the crew the wall needs — both are what a man in ` +
+    `a cell is deciding on. Got: ${JSON.stringify(brkPlan)}`);
+  // the collision, both verbs, both directions: a break is not a raid and is not a job
+  for (const label of ['plan the break', 'get in on the break', 'walk off the break', 'call the break off']) {
+    const line = L44.get(label);
+    assert(/break/i.test(line) && !/\braid\b/i.test(line) && !/\bthe job\b/i.test(line),
+      `"${label}" is a PRISON BREAK — three systems answer plan/join/leave with an id and a crew ` +
+      `count, and the flat if-chain gave all three to whichever branch came first, so a jailbreak ` +
+      `read as a world raid. Got: ${JSON.stringify(line)}`);
+  }
+  const called = L44.get('call the break off');
+  assert(/hacksaw|rope|kit/i.test(called),
+    `disbanding before the go returns the staked cutkit — $50,000 of contraband, unmentioned. ` +
+    `Got: ${JSON.stringify(called)}`);
+  assert(L44.get('walk off the break') !== called,
+    `a MEMBER walking off leaves the break standing and the LEADER calling it off ends it for ` +
+    `everyone — opposite senses that must not read as the same sentence`);
+
+  // ── THE DEFENSIVE HALF: the sibling shapes the break's first cut stole. These are SYNTHETIC on
+  // purpose — a world raid needs an apex outfit and a co-op crew, which this block is not — and each
+  // is the exact reply its route returns, so the guard holds the ordering that a fields-keyed branch
+  // broke once already. Without them the mutation that reverts to field-keying is silent here.
+  {
+    const raidJoin = describeFn({ ok: true, op: 'raid', id: 'r1', npc: 'volkov', crew: 2, crewMax: 4 }, 200);
+    assert(/\braid\b|volkov/i.test(raidJoin) && !/break/i.test(raidJoin),
+      `SYNTHETIC (the shape /v1/world/raids/:id/join returns): a world raid's join carries an id and ` +
+      `a crew count, which is what the break's first cut keyed on — so it read "you're in on the ` +
+      `break" for a raid. Got: ${JSON.stringify(raidJoin)}`);
+    const raidPlan = describeFn({ ok: true, op: 'raid', id: 'r1', npc: 'volkov', name: 'Volkov', crewMin: 2, crewMax: 4 }, 200);
+    assert(/volkov/i.test(raidPlan) && !/break/i.test(raidPlan),
+      `SYNTHETIC: opening a raid is not planning a break. Got: ${JSON.stringify(raidPlan)}`);
+    const heistJoinFull = describeFn({ ok: true, op: 'heist', id: 'h1', job: 'vault', role: 'muscle', crew: 3, crewNeeded: 0 }, 200);
+    assert(/ready to go/i.test(heistJoinFull) && !/undefined/.test(heistJoinFull),
+      `SYNTHETIC: the join that FILLS a crew says so — and never renders the plan's missing fields. ` +
+      `Got: ${JSON.stringify(heistJoinFull)}`);
+  }
+}
+
 
 const describedCount = described;
 assert(described >= 100, `only ${described} of ${ACTIONS.length} actions succeeded — the ledger is measuring almost nothing`);
