@@ -5,7 +5,7 @@
 // list. Prestige ranks the nightlife. §10.4: `speakeasy:` is a cash SINK/FAUCET/TRANSFER vocabulary (all
 // character_id'd → the per-character cash check reconciles); bottles/naming ride `vanity:%` (no omr change).
 import { GameError, bus, skillMult, bumpMastery } from './game.js';
-import { SPEAKEASY, DISTRICTS, speakeasyTierOf, speakeasyRoundOf, speakeasyBottleOf, levelOf, renownRankOf, decorStyleOf, styleUnlockOf, assessedValueOf, effStat, SKILLS, isMade , jailed, hospitalized, safeHoused } from './rules.js';
+import { SPEAKEASY, DISTRICTS, speakeasyTierOf, speakeasyRoundOf, speakeasyBottleOf, levelOf, renownRankOf, decorStyleOf, styleUnlockOf, assessedValueOf, effStat, SKILLS, isMade , jailed, hospitalized, safeHoused, usd } from './rules.js';
 import { spendOmr } from './vanity.js';
 
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
@@ -92,7 +92,7 @@ export async function openSpeakeasy(ch, districtId, client, h) {
   // lock the district's club slot (SELECT-then-INSERT; a concurrent open on the same district 23505s → contention)
   const existing = (await client.query('SELECT owner_character FROM speakeasies WHERE district_id=$1 FOR UPDATE', [districtId])).rows[0];
   if (existing) throw new GameError('taken', 'Someone already runs the club in that district.');
-  if (Number(ch.cash) < SPEAKEASY.OPEN_COST) throw new GameError('cash', `Opening a club runs $${SPEAKEASY.OPEN_COST}.`);
+  if (Number(ch.cash) < SPEAKEASY.OPEN_COST) throw new GameError('cash', `Opening a club runs ${usd(SPEAKEASY.OPEN_COST)}.`);
   ch.cash = Number(ch.cash) - SPEAKEASY.OPEN_COST;
   await client.query('INSERT INTO speakeasies (district_id, owner_character, tier, prestige) VALUES ($1,$2,0,$3)',
     [districtId, ch.id, speakeasyTierOf(0).prestige]);
@@ -141,7 +141,7 @@ export async function upgradeSpeakeasy(ch, client, h) {
   if (raid.raided) return { ok: true, district: row.district_id, raid };
   if (isShut(row)) throw new GameError('shut', 'The place is dark — wait out the shutter before you renovate.');
   const pending = accruedIncome(row);
-  if (Number(ch.cash) + pending < next.cost) throw new GameError('cash', `The ${next.name} runs $${next.cost} to build out.`);
+  if (Number(ch.cash) + pending < next.cost) throw new GameError('cash', `The ${next.name} runs ${usd(next.cost)} to build out.`);
   ch.cash = Number(ch.cash) + pending - next.cost;
   // the prestige floor climbs to the new tier (never drops below what rounds/bottles already earned)
   const prestige = Math.max(Number(row.prestige), next.prestige);
@@ -212,7 +212,7 @@ export async function visitSpeakeasy(ch, owner, districtId, roundId, client, h) 
   const row = (await client.query('SELECT * FROM speakeasies WHERE district_id=$1 FOR UPDATE', [districtId])).rows[0];
   if (!row || row.owner_character !== owner.id) throw new GameError('gone', 'The club changed hands — try again.');
   if (isShut(row)) throw new GameError('shut', 'The place is dark — the Prohibition boys shut it down. Come back later.');
-  if (Number(ch.cash) < round.cost) throw new GameError('cash', `That round runs $${round.cost}.`);
+  if (Number(ch.cash) < round.cost) throw new GameError('cash', `That round runs ${usd(round.cost)}.`);
   // cooldown FIRST (ch is locked by withTwoCharacters, so same-patron rounds serialize — no TOCTOU)
   const prior = (await client.query('SELECT last_at FROM speakeasy_patrons WHERE district_id=$1 AND character_id=$2', [districtId, ch.id])).rows[0];
   if (prior && Date.now() - new Date(prior.last_at).getTime() < SPEAKEASY.VISIT_CD_MS)
@@ -262,8 +262,8 @@ export async function bottleService(ch, districtId, bottleId, client, h) {
 // (patron + owner). CASH only (the Den's hard rule — no $OMR at the table). District-pinned.
 export async function playTable(ch, owner, districtId, stake, client, h) {
   const bet = Math.floor(Number(stake));
-  if (!Number.isFinite(bet) || bet < SPEAKEASY.TABLE.MIN_BET) throw new GameError('min', `The table takes $${SPEAKEASY.TABLE.MIN_BET} minimum.`);
-  if (bet > SPEAKEASY.TABLE.MAX_BET) throw new GameError('max', `The table caps at $${SPEAKEASY.TABLE.MAX_BET} a spin.`);
+  if (!Number.isFinite(bet) || bet < SPEAKEASY.TABLE.MIN_BET) throw new GameError('min', `The table takes ${usd(SPEAKEASY.TABLE.MIN_BET)} minimum.`);
+  if (bet > SPEAKEASY.TABLE.MAX_BET) throw new GameError('max', `The table caps at ${usd(SPEAKEASY.TABLE.MAX_BET)} a spin.`);
   if (jailed(ch)) throw new GameError('jailed', 'No table from lockup.');
   if (hospitalized(ch)) throw new GameError('hosp', "You're in no shape to be out on the town.");
   if (safeHoused(ch)) throw new GameError('safe', "You can't be seen at the table while you're supposed to be to ground.");
@@ -313,8 +313,8 @@ async function resetClubToNewOwner(client, districtId, newOwnerId, shut) {
 // buyer completes a consensual TAXED cash transfer (the round pattern) to take the keys. ──
 export async function listSpeakeasy(ch, price, client, h) {
   const p = Math.floor(Number(price));
-  if (!Number.isFinite(p) || p < SPEAKEASY.SALE_MIN) throw new GameError('price', `Ask at least $${SPEAKEASY.SALE_MIN} for the place.`);
-  if (p > SPEAKEASY.SALE_MAX) throw new GameError('price', `The most you can ask is $${SPEAKEASY.SALE_MAX}.`);
+  if (!Number.isFinite(p) || p < SPEAKEASY.SALE_MIN) throw new GameError('price', `Ask at least ${usd(SPEAKEASY.SALE_MIN)} for the place.`);
+  if (p > SPEAKEASY.SALE_MAX) throw new GameError('price', `The most you can ask is ${usd(SPEAKEASY.SALE_MAX)}.`);
   const row = (await client.query('SELECT district_id FROM speakeasies WHERE owner_character=$1 FOR UPDATE', [ch.id])).rows[0];
   if (!row) throw new GameError('no_club', "You don't run a house to sell.");
   await client.query('UPDATE speakeasies SET sale_price=$2 WHERE district_id=$1', [row.district_id, p]);
@@ -348,7 +348,7 @@ export async function buySpeakeasy(ch, seller, districtId, client, h) {
   if (!row || row.owner_character !== seller.id) throw new GameError('gone', 'The club changed hands — try again.');
   if (row.sale_price == null) throw new GameError('not_for_sale', "That club isn't on the market.");
   const price = Math.floor(Number(row.sale_price));
-  if (Number(ch.cash) < price) throw new GameError('cash', `That club runs $${price}.`);
+  if (Number(ch.cash) < price) throw new GameError('cash', `That club runs ${usd(price)}.`);
   // settle the SELLER's pending first (they earned it): resolve a pending raid, then bank pending income.
   // A raid at handover shutters the club (income_at → shut_until) — the buyer inherits the (shut) venue.
   const raid = await resolveRaid(seller, row, client, h);
@@ -428,7 +428,7 @@ export async function standoverSpeakeasy(ch, owner, districtId, client, h) {
     throw new GameError('cooldown', 'Someone leaned on this place recently — let it cool off.');
   const price = assessedValueOf(row.tier);
   if (Number(ch.cash) < S.FEE + price)
-    throw new GameError('cash', `A standover runs $${S.FEE} up front and you'd owe $${price} for the place on a win — bring $${S.FEE + price}.`);
+    throw new GameError('cash', `A standover runs ${usd(S.FEE)} up front and you'd owe ${usd(price)} for the place on a win — bring ${usd(S.FEE + price)}.`);
   // the FEE BURNS win or lose (a cash sink), heat lands either way, and the club goes on cooldown (set FIRST
   // so it holds regardless of outcome — resetClubToNewOwner never touches standover_cd_until)
   ch.cash = Number(ch.cash) - S.FEE;

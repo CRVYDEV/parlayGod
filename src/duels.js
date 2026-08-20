@@ -19,7 +19,7 @@
 // the ELO_FLOOR, and every feed paying the 5% rake. Flagged in BALANCE.md.
 import crypto from 'crypto';
 import { GameError, notify, bumpMastery } from './game.js';
-import { DUELS, duelRankOf, duelDivisionOf, duelStyleOf, duelTitleRankOf, levelOf, dayOf, effStat, pathFx, REGIMEN, disciplineLvlOf , jailed, hospitalized, PG_INT4_MAX } from './rules.js';
+import { DUELS, duelRankOf, duelDivisionOf, duelStyleOf, duelTitleRankOf, levelOf, dayOf, effStat, pathFx, REGIMEN, disciplineLvlOf , jailed, hospitalized, PG_INT4_MAX, usd } from './rules.js';
 
 const rand = (lo, hi) => lo + Math.random() * (hi - lo);
 
@@ -41,7 +41,7 @@ export async function listDuel(ch, limit, client) {
   }
   const cap = Math.floor(Number(limit));
   if (!Number.isFinite(cap) || cap < DUELS.STAKE_MIN)
-    throw new GameError('amount', `List a stake cap of at least $${DUELS.STAKE_MIN}.`);
+    throw new GameError('amount', `List a stake cap of at least ${usd(DUELS.STAKE_MIN)}.`);
   // `duel_limit` is an int4 and `Number.isFinite` does not bound it — 3,000,000,000 is a number a
   // player could plausibly type, and it reached Postgres as a 22003 that surfaced as a 500 on a
   // request the server should simply have refused. See PG_INT4_MAX.
@@ -106,8 +106,8 @@ export async function challenge(ch, opponent, amount, client, h) {
   const limit = opponent.duel_limit != null ? Math.floor(Number(opponent.duel_limit)) : 0;
   if (!(limit > 0)) throw new GameError('not_listed', "They're not taking duels.");
   const amt = Math.floor(Number(amount));
-  if (!(Number.isFinite(amt) && amt >= DUELS.STAKE_MIN)) throw new GameError('amount', `The minimum stake is $${DUELS.STAKE_MIN}.`);
-  if (amt > limit) throw new GameError('limit', `They take duels up to $${limit}.`);
+  if (!(Number.isFinite(amt) && amt >= DUELS.STAKE_MIN)) throw new GameError('amount', `The minimum stake is ${usd(DUELS.STAKE_MIN)}.`);
+  if (amt > limit) throw new GameError('limit', `They take duels up to ${usd(limit)}.`);
   if (Number(ch.cash) < amt) throw new GameError('cash', 'Not enough pocket cash for the stake.');
   if (Number(opponent.cash) < amt) throw new GameError('their_cash', "They can't cover that stake right now.");
 

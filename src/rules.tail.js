@@ -353,6 +353,21 @@ export const rankIdxOf=(lvl)=>{let i=0;RANKS.forEach((r,j)=>{if(lvl>=r.lvl)i=j;}
 export const cityEventOf=(day)=>CITY_EVENTS[((day%CITY_EVENTS.length)+CITY_EVENTS.length)%CITY_EVENTS.length];
 export const dayOf=(t=Date.now())=>Math.floor(t/86400000);
 
+// MONEY, AS A PLAYER READS IT. A refusal is the most-read line in the game — every time you can't
+// afford something, the server's own sentence is what the client shows (describe() takes body.message
+// first). 158 of them interpolated the raw number, so the retainer read "$150000" and a fighter cost
+// "$25000": debug output in a game that formats money on every other surface, and — at that many
+// digits — genuinely hard to tell an order of magnitude apart at a glance. ONE helper rather than 158
+// `.toLocaleString()` calls, because 158 copies of a rule is how they came to disagree in the first
+// place (the jailed/penSafe collapse), and it deliberately MIRRORS the client's own `fmt`: two
+// decimals, and two significant figures for a sub-cent dust value that would otherwise print as "0".
+export const usd = (n) => {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return '$' + String(n);
+  if (v !== 0 && Math.abs(v) < 0.01) return '$' + Number(v.toPrecision(2)).toString();
+  return '$' + v.toLocaleString('en-US', { maximumFractionDigits: 2 });
+};
+
 // ── §7.11 deterministic markets — FNV-1a hash, ported byte-for-byte from v24 ──
 // SEED is a per-season server secret so future price blocks can't be precomputed.
 // GET /market/prices returns the current block's numbers; the client never hashes.

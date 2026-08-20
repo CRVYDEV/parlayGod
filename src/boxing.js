@@ -8,7 +8,7 @@
 import crypto from 'node:crypto';
 import { GameError, bus, ledger, notify, rngLog, bumpStanding, bumpMastery, masteryFx, npcMult, npcTier } from './game.js';
 import { recordEventResult } from './events.js';
-import { BOXING, UNDERWORLD, boxerRankOf, boxerLegendOf, npcBoxerOf, levelOf, pathFx , jailed, hospitalized } from './rules.js';
+import { BOXING, UNDERWORLD, boxerRankOf, boxerLegendOf, npcBoxerOf, levelOf, pathFx , jailed, hospitalized, usd } from './rules.js';
 
 const injured = (f) => f.injured_until && new Date(f.injured_until) > new Date();
 const onCooldown = (f) => f.exhib_at && new Date(f.exhib_at) > new Date();
@@ -201,7 +201,7 @@ export async function recruitFighter(ch, name, client, h) {
   if (!/^[\w .,'&-]+$/.test(n)) throw new GameError('name', 'Letters, numbers and simple punctuation only.');
   const count = Number((await client.query('SELECT COUNT(*) n FROM fighters WHERE character_id=$1', [ch.id])).rows[0].n);
   if (count >= BOXING.STABLE_MAX) throw new GameError('stable_full', `Your stable is full (${BOXING.STABLE_MAX} fighters).`);
-  if (Number(ch.cash) < BOXING.RECRUIT_COST) throw new GameError('cash', `Signing a fighter runs $${BOXING.RECRUIT_COST}.`);
+  if (Number(ch.cash) < BOXING.RECRUIT_COST) throw new GameError('cash', `Signing a fighter runs ${usd(BOXING.RECRUIT_COST)}.`);
   ch.cash = Number(ch.cash) - BOXING.RECRUIT_COST;
   const id = crypto.randomUUID();
   const power = rand(BOXING.STAT_MIN, BOXING.STAT_MAX), chin = rand(BOXING.STAT_MIN, BOXING.STAT_MAX), speed = rand(BOXING.STAT_MIN, BOXING.STAT_MAX);
@@ -231,7 +231,7 @@ export async function trainFighter(ch, fighterId, stat, client, h) {
   // the Cornerman (Underworld): T1 discounts the session; T3 makes it build harder (actor-local pacing)
   const cost = Math.round(BOXING.TRAIN_COST * npcMult(h, 'cornerman', 1, UNDERWORLD.FX.CORNER_TRAIN_MULT));
   const gain = BOXING.TRAIN_GAIN + (npcTier(h, 'cornerman') >= 3 ? UNDERWORLD.FX.CORNER_GAIN : 0);
-  if (Number(ch.cash) < cost) throw new GameError('cash', `A training session runs $${cost}.`);
+  if (Number(ch.cash) < cost) throw new GameError('cash', `A training session runs ${usd(cost)}.`);
   ch.cash = Number(ch.cash) - cost;
   ch.energy = Number(ch.energy) - BOXING.TRAIN_ENERGY;
   const nv = Math.min(BOXING.STAT_CAP, Number(f[s]) + gain); // absolute write (pg-mem INT-arith quirk)
@@ -247,7 +247,7 @@ export async function listBout(ch, fighterId, stake, client, h) {
   const f = await myFighter(client, ch, fighterId);
   const v = stake == null || Number(stake) === 0 ? null : Math.floor(Number(stake));
   if (v != null && !(Number.isFinite(v) && v >= BOXING.MIN_STAKE && v <= BOXING.MAX_STAKE))
-    throw new GameError('stake', `Bout stakes run $${BOXING.MIN_STAKE}–$${BOXING.MAX_STAKE} (0 clears).`);
+    throw new GameError('stake', `Bout stakes run ${usd(BOXING.MIN_STAKE)}–${usd(BOXING.MAX_STAKE)} (0 clears).`);
   await client.query('UPDATE fighters SET bout_limit=$2 WHERE id=$1', [f.id, v]);
   return { ok: true, fighter: f.name, boutLimit: v };
 }
@@ -264,7 +264,7 @@ export async function exhibitionBout(ch, fighterId, tierId, client, h) {
   if (injured(f)) throw new GameError('injured', 'Your fighter is laid up — let them heal.');
   if (booked(f)) throw new GameError('booked', "That fighter is booked on a main event card.");
   if (onCooldown(f)) throw new GameError('cooldown', `${f.name} needs to rest before another exhibition.`);
-  if (Number(ch.cash) < tier.fee) throw new GameError('cash', `The ${tier.name} card runs a $${tier.fee} sanction fee.`);
+  if (Number(ch.cash) < tier.fee) throw new GameError('cash', `The ${tier.name} card runs a ${usd(tier.fee)} sanction fee.`);
   // the sanction fee burns win or lose
   ch.cash = Number(ch.cash) - tier.fee;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -tier.fee, reason: 'boxing:fee' });
@@ -300,7 +300,7 @@ export async function fightBout(ch, opponent, body, client, h) {
   if (opponent.id === ch.id) throw new GameError('self', "You don't fight your own stable.");
   if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId) throw new GameError('family', "They're family — no family matchups.");
   const amt = Math.floor(Number(body?.stake));
-  if (!(Number.isFinite(amt) && amt >= BOXING.MIN_STAKE)) throw new GameError('min', `The minimum purse is $${BOXING.MIN_STAKE}.`);
+  if (!(Number.isFinite(amt) && amt >= BOXING.MIN_STAKE)) throw new GameError('min', `The minimum purse is ${usd(BOXING.MIN_STAKE)}.`);
   if (jailed(opponent) || hospitalized(opponent)) throw new GameError('unavailable', "Their manager can't make a match right now.");
   // lock both fighter rows in sorted id order (leaf ordering; the char rows are already locked by withTwoCharacters)
   const [first, second] = [String(body?.myFighter || ''), String(body?.theirFighter || '')].sort();
@@ -312,7 +312,7 @@ export async function fightBout(ch, opponent, body, client, h) {
   if (!of || of.character_id !== opponent.id) throw new GameError('no_opponent', "That fighter isn't in their stable.");
   const limit = of.bout_limit != null ? Math.floor(Number(of.bout_limit)) : 0;
   if (!(limit > 0)) throw new GameError('not_listed', "Their fighter isn't taking bouts.");
-  if (amt > limit) throw new GameError('limit', `Their fighter takes bouts up to $${limit}.`);
+  if (amt > limit) throw new GameError('limit', `Their fighter takes bouts up to ${usd(limit)}.`);
   if (injured(f)) throw new GameError('injured_self', 'Your fighter is laid up — let them heal.');
   if (injured(of)) throw new GameError('injured_them', 'Their fighter is laid up right now.');
   if (booked(f)) throw new GameError('booked_self', 'Your fighter is booked on a main event card.');
@@ -411,7 +411,7 @@ export async function placeBoutBet(ch, boutId, body, client, h) {
   if (fighter !== bout.a_fighter && fighter !== bout.b_fighter) throw new GameError('bad_fighter', 'Bet on one of the two fighters.');
   const amt = Math.floor(Number(body?.amount));
   if (!(Number.isFinite(amt) && amt >= BOXING.BET_MIN && amt <= BOXING.BET_MAX))
-    throw new GameError('amount', `Bets run $${BOXING.BET_MIN}–$${BOXING.BET_MAX}.`);
+    throw new GameError('amount', `Bets run ${usd(BOXING.BET_MIN)}–${usd(BOXING.BET_MAX)}.`);
   if ((await client.query('SELECT 1 FROM boxing_bets WHERE bout_id=$1 AND bettor_char=$2', [boutId, ch.id])).rows[0])
     throw new GameError('already_bet', "You've already got action on this card.");
   if (Number(ch.cash) < amt) throw new GameError('cash', 'Not that much in pocket.');

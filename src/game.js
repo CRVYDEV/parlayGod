@@ -15,7 +15,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS, RANKS,
          KITCHENS, labModuleCost, recyclesToDesk, DESK_RECYCLE_REASON, isMade, madeSeconds,
          MADE_LADDER, madeRungIdx, madeRungOf, ladderFx,
          ASSETS, OPERATIONS, opSlotsOf, nextOpSlotLevel, MISSIONS, dailyLiveFor, jailed, safeHoused,
-         STABLE, SPEAKEASY, ESTATE, MADE, CREW, crewObjectiveOf, DEEDS, deedController , runOf, npcOf } from './rules.js';
+         STABLE, SPEAKEASY, ESTATE, MADE, CREW, crewObjectiveOf, DEEDS, deedController , runOf, npcOf, usd } from './rules.js';
 import { dbCaps } from './db.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
@@ -2077,7 +2077,7 @@ export async function heal(ch, client, h) {
     * chin
     * pathFx(ch, 'healCost')); // PATHS v2 — the Ring's handicap (a brawler's medical bills)
   if (cost <= 0) throw new GameError('healthy', 'Already healthy.');
-  if (Number(ch.cash) < cost) throw new GameError('cash', `The Doc wants $${cost}.`);
+  if (Number(ch.cash) < cost) throw new GameError('cash', `The Doc wants ${usd(cost)}.`);
   ch.cash = Number(ch.cash) - cost; ch.health = 100;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'heal' });
   await bumpStanding(client, h, ch, 'doc', 2, { action: 'heal' }); // doing business with the Doc
@@ -2141,7 +2141,7 @@ export async function travel(ch, district, client, h) {
   if (!DISTRICTS.find((d) => d.id === district)) throw new GameError('bad_district', 'No such district.');
   if (ch.loc === district) throw new GameError('there', 'You are already there.');
   if (jailed(ch)) throw new GameError('jailed', 'No travel from lockup.');
-  if (Number(ch.cash) < CONSTANTS.TRAVEL_COST) throw new GameError('cash', `A ride costs $${CONSTANTS.TRAVEL_COST}.`);
+  if (Number(ch.cash) < CONSTANTS.TRAVEL_COST) throw new GameError('cash', `A ride costs ${usd(CONSTANTS.TRAVEL_COST)}.`);
   ch.cash = Number(ch.cash) - CONSTANTS.TRAVEL_COST; ch.loc = district;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -CONSTANTS.TRAVEL_COST, reason: 'travel' });
   await logCollect(client, ch.account_id, 'districts', district); // THE COLLECTION — set foot everywhere

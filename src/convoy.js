@@ -15,7 +15,7 @@ import crypto from 'node:crypto';
 import { postPower } from './roster.js';
 import { GameError, bus, skillMult, trunkCap, npcMult, bumpStanding } from './game.js';
 import { CONVOY, COMMISSION, SKILLS, UNDERWORLD, NOTORIETY, guardTierOf, DISTRICTS, GOODS, goodPriceOf,
-  levelOf, rigOf, rigUpgradeCost, haulerRankOf, banditRankOf, haulerTierOf, smuggleRepPerks, pathFx, M3 , jailed, hospitalized, safeHoused } from './rules.js';
+  levelOf, rigOf, rigUpgradeCost, haulerRankOf, banditRankOf, haulerTierOf, smuggleRepPerks, pathFx, M3 , jailed, hospitalized, safeHoused, usd } from './rules.js';
 import { activeDecree } from './commission.js';
 import { laneHeat, heatLane } from './notoriety.js';
 
@@ -121,7 +121,7 @@ export async function departConvoy(ch, guardTier, insure, client, h) {
   // muscle (tier.def) is unchanged, only the fee. Discounted amount is what's ledgered.
   const guardFee = Math.floor(tier.fee * npcMult(h, 'harbor', 1, UNDERWORLD.FX.GUARD_MULT));
   if (Number(ch.cash) < guardFee + premium)
-    throw new GameError('cash', `${tier.id} guards run $${guardFee}${premium ? ` and the policy $${premium}` : ''}.`);
+    throw new GameError('cash', `${tier.id} guards run ${usd(guardFee)}${premium ? ` and the policy $${premium}` : ''}.`);
   if (guardFee > 0) {
     ch.cash = Number(ch.cash) - guardFee;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -guardFee, reason: 'convoy:guards' });
@@ -419,7 +419,7 @@ export async function buyRig(ch, kind, client, h) {
   if (levelOf(Number(ch.respect)) < cfg.minLvl) throw new GameError('level', `The ${cfg.name} is for level ${cfg.minLvl}+.`);
   if ((await client.query('SELECT 1 FROM rigs WHERE character_id=$1', [ch.id])).rows[0])
     throw new GameError('already', 'You run one rig — sell the old one first (well, you would if we let you; trade up later).');
-  if (Number(ch.cash) < cfg.cost) throw new GameError('cash', `The ${cfg.name} runs $${cfg.cost}.`);
+  if (Number(ch.cash) < cfg.cost) throw new GameError('cash', `The ${cfg.name} runs ${usd(cfg.cost)}.`);
   ch.cash = Number(ch.cash) - cfg.cost;
   await client.query('INSERT INTO rigs (character_id, kind) VALUES ($1,$2)', [ch.id, cfg.id]);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cfg.cost, reason: 'convoy:rig' });
@@ -435,7 +435,7 @@ export async function upgradeRig(ch, track, client, h) {
   const cur = Number(rig[lvlCol] || 0);
   if (cur >= CONVOY.RIG_UPGRADE_MAX) throw new GameError('maxed', `The ${t} is as built as it gets.`);
   const cost = rigUpgradeCost(rigOf(rig.kind), cur);
-  if (Number(ch.cash) < cost) throw new GameError('cash', `The next ${t} level runs $${cost}.`);
+  if (Number(ch.cash) < cost) throw new GameError('cash', `The next ${t} level runs ${usd(cost)}.`);
   ch.cash = Number(ch.cash) - cost;
   await client.query(`UPDATE rigs SET ${lvlCol}=$2 WHERE character_id=$1`, [ch.id, cur + 1]); // ABSOLUTE write (pg-mem INT-arith quirk)
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'convoy:rig:up' });

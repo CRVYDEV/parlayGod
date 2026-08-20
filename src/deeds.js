@@ -15,7 +15,7 @@ import { GameError, cleanText } from './game.js';
 import { vaultHistoryFor, vaultLiveBalances } from './stockdeliver.js';
 import { DEEDS, DISTRICTS, deedRankOf, deedRenown, deedCornerOwed, deedController,
   deedNeighborhoodsOpen, deedNeighborhoodOf,
-  effStat, levelOf, jailed, hospitalized, safeHoused, SAFE_STORED } from './rules.js';
+  effStat, levelOf, jailed, hospitalized, safeHoused, SAFE_STORED, usd } from './rules.js';
 
 // living-player population (drives the growing map — Phase 4). NPCs/dead excluded (the ops.js count).
 async function livingPlayers(client) {
@@ -240,6 +240,18 @@ export async function collectCorner(ch, client, h) {
   // (red team 2026-08-16) the anti-alt floor — see DEEDS.CORNER_MIN_LVL. The claim stays free and open;
   // the money waits. The take keeps ACCRUING on the deed's own clock (capped), so nothing is destroyed
   // by waiting for the level — it is banked the first time you can legally collect.
+  // The level floor is stated to somebody who HOLDS a corner ("the street is yours, the take isn't
+  // yet") — so it has to know that they do. Checked ahead of it: a caller with no corner at all was
+  // being told they owned a street, which is fluent and false. The console hides the button behind
+  // `collectable > 0`, so this reaches the raw API and the agents who read these lines.
+  // deliberately NOT filtered on `onchain_token_id IS NULL`: an EXTRACTED street is still a street
+  // you own, it is merely inert in-game, so telling its owner to "claim a street" would be the same
+  // false sentence one case over. They fall through to the ordinary `nothing` — which is what the
+  // board says too, and the existing extracted-deed test is what caught the first cut getting it wrong.
+  const holds = Number((await client.query(
+    `SELECT COUNT(*) c FROM street_deeds WHERE account_id=$1 OR (controller_account=$1 AND control_until > now())`,
+    [ch.account_id])).rows[0].c);
+  if (!holds) throw new GameError('no_corner', 'You work no corner — claim a street, or muscle in on somebody else\'s.');
   if (levelOf(Number(ch.respect)) < DEEDS.CORNER_MIN_LVL)
     throw new GameError('rookie', `Working a corner takes level ${DEEDS.CORNER_MIN_LVL} — the street is yours, the take isn't yet.`);
   const now = Date.now();
@@ -338,7 +350,7 @@ export async function listDeed(ch, price, client, h) {
   if (deed.onchain_token_id) throw new GameError('onchain', "That street is on-chain — trade the NFT on a marketplace, or re-import it first.");
   const p = Math.floor(Number(price) || 0);
   if (!Number.isFinite(p) || p < DEEDS.MARKET_MIN)
-    throw new GameError('min_price', `The floor for a street is $${DEEDS.MARKET_MIN.toLocaleString()}.`);
+    throw new GameError('min_price', `The floor for a street is ${usd(DEEDS.MARKET_MIN)}.`);
   // `sale_price` is a bigint and `Number.isFinite` does not bound it — 1e308 reached Postgres as a
   // 22P02 and surfaced as a 500 on a request the server should simply have refused. See SAFE_STORED.
   if (p > SAFE_STORED) throw new GameError('max_price', 'Name a real price.');
@@ -398,7 +410,7 @@ export async function buyDeed(buyer, seller, client, h) {
   // writer of `sale_price` ever gets it wrong; this one holds however the row got here.
   if (deed.onchain_token_id) throw new GameError('onchain', "That street is going on-chain — it can't change hands in the city until it comes back.");
   const price = Number(deed.sale_price);
-  if (Number(buyer.cash) < price) throw new GameError('cash', `That street runs $${price.toLocaleString()}.`);
+  if (Number(buyer.cash) < price) throw new GameError('cash', `That street runs ${usd(price)}.`);
   // the standard 2% house take (1% dev off-ledger + 1% street tax → buyback) — the bodyguard:hire pattern
   const fee = Math.ceil(price * DEEDS.SALE_FEE_BPS / 10000), tax = Math.ceil(price * DEEDS.SALE_TAX_BPS / 10000);
   const net = price - fee - tax;

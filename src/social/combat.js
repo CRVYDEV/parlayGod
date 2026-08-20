@@ -7,7 +7,7 @@
 // Split out of the 2,003-line src/social.js; every function below is byte-identical to what was
 // there. Import from '../social.js' — it re-exports this package's public surface unchanged.
 import { GameError, bumpFamilyTask, bus, ledger, notify, track, loadOwned, skillMult, npcMult, npcTier, bumpStanding, bumpMastery, masteryFx, trunkCap, gainRespect, bumpCrewObjective, hunterSearchMs } from '../game.js';
-import { M3, CONSTANTS, LOAN, levelOf, rankIdxOf, cityEventOf, dayOf, btkOf, gunObjOf, vestMultOf, fleetValue, effStat, npcHitmanOf, VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, PORT, witproActive, penSafe, inHole, HONOR, HEIST_LOOT_RATE, BUSINESSES, seasonModOf, pathFx, RIVALS, carVal, boatOf , SHIPMENT } from '../rules.js';
+import { M3, CONSTANTS, LOAN, levelOf, rankIdxOf, cityEventOf, dayOf, btkOf, gunObjOf, vestMultOf, fleetValue, effStat, npcHitmanOf, VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, PORT, witproActive, penSafe, inHole, HONOR, HEIST_LOOT_RATE, BUSINESSES, seasonModOf, pathFx, RIVALS, carVal, boatOf , SHIPMENT, usd } from '../rules.js';
 import { activeDecree } from '../commission.js';
 import { bumpHonor } from '../honor.js';
 import { recordRival, revengeOwed } from '../rivals.js';
@@ -610,7 +610,7 @@ export async function npcHit(ch, victim, client, h, tierId, opts = {}) {
   // VINNIE T1 (underworld): the Match brokers contractor work at a friend's rate — the
   // discounted fee is what's ledgered (decree/skill precedent). Sign-off lever.
   const cost = Math.floor(tier.cost * npcMult(h, 'fixer', 1, UNDERWORLD.FX.NPCHIT_MULT));
-  if (Number(ch.cash) < cost) throw new GameError('cash', `${tier.name} charges $${cost}.`);
+  if (Number(ch.cash) < cost) throw new GameError('cash', `${tier.name} charges ${usd(cost)}.`);
 
   // pay the contractor — cash BURNED (a §10.4 sink), win or lose — then heat + cooldown
   ch.cash = Number(ch.cash) - cost;

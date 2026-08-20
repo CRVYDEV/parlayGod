@@ -18,7 +18,7 @@ import { GameError, bus, bumpMastery, gainRespect } from './game.js';
 import { HEIST_JOBS, HEIST_ROLES, heistJobOf, HEIST_PLAN_TTL_MS, HEIST_RAT_BPS, HEIST_LEADER_WEIGHT,
          HEIST_INSIDE_CD_MS, HEIST_CASE_ENERGY, HEIST_CASE_STEP, HEIST_CASE_MAX, heistFenceMultOf,
          HEIST_FENCE_HEAT, HEIST_RANKS, heistRankOf, HEIST_FILL_MAX, HEIST_FILL_FEE,
-         CONSTANTS, M4, levelOf, jailed, hospitalized, safeHoused } from './rules.js';
+         CONSTANTS, M4, levelOf, jailed, hospitalized, safeHoused, usd } from './rules.js';
 import { accrued, decayedScrutiny, npcPendingScale } from './business.js';
 import { dbCaps } from './db.js';
 
@@ -66,7 +66,7 @@ export async function planHeist(ch, jobId, opts, client, h) {
   if (!job) throw new GameError('bad_job', 'No such job on the books.');
   gateJoiner(ch, job, await pulledOf(client, ch.account_id));
   if (await activeMembership(client, ch.id)) throw new GameError('busy', "You're already on a job.");
-  if (Number(ch.cash) < job.stake) throw new GameError('cash', `${job.name} takes $${job.stake} up front — tools and bribes.`);
+  if (Number(ch.cash) < job.stake) throw new GameError('cash', `${job.name} takes ${usd(job.stake)} up front — tools and bribes.`);
   let target = null;
   if (job.rateBps) { // the inside job wants a mark — a PLAYER's front (light checks now, the real gates at execute)
     if (!businessId) throw new GameError('no_mark', 'An inside job needs a mark — name the front.');
@@ -125,7 +125,7 @@ export async function fillHeist(ch, heistId, wantRole, client, h) {
   const hiredCount = members.filter((m) => m.hired).length;
   if (hiredCount >= HEIST_FILL_MAX)
     throw new GameError('fill_capped', `${job.name} takes at most ${HEIST_FILL_MAX} hired hand${HEIST_FILL_MAX === 1 ? '' : 's'} — the rest are real bodies.`);
-  if (Number(ch.cash) < HEIST_FILL_FEE) throw new GameError('cash', `A hand wants $${HEIST_FILL_FEE} up front — tools and their cut.`);
+  if (Number(ch.cash) < HEIST_FILL_FEE) throw new GameError('cash', `A hand wants ${usd(HEIST_FILL_FEE)} up front — tools and their cut.`);
   const role = pickRole(job, wantRole, members.map((m) => m.role));
   // pick a FREE resident — same readiness a real crewman needs at execute, so a hand can never be the
   // reason a go fails; and NOT already on a live plan (residentAct/retire skip committed residents).

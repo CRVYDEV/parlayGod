@@ -6,7 +6,7 @@
 // Split out of the 2,003-line src/social.js; every function below is byte-identical to what was
 // there. Import from '../social.js' — it re-exports this package's public surface unchanged.
 import { GameError, ledger } from '../game.js';
-import { CONSUMABLES } from '../rules.js';
+import { CONSUMABLES, usd } from '../rules.js';
 import { takeHouse, uid } from './shared.js';
 
 // ═══════════════════ THE EXCHANGE (§5.4 — escrowed order book) ═══════════════════
@@ -81,7 +81,7 @@ export async function buyListing(ch, seller, client, h, listingId) {
   if (!l) throw new GameError('gone', 'Too slow — someone else took that lot.');
   if (l.seller_character !== seller.id) throw new GameError('bad_seller', 'Listing/seller mismatch.');
   const total = Number(l.unit_price) * Number(l.qty);
-  if (Number(ch.cash) < total) throw new GameError('cash', `That lot costs $${total}.`);
+  if (Number(ch.cash) < total) throw new GameError('cash', `That lot costs ${usd(total)}.`);
   // the 2% house take is paid by the seller (v24); on a tiny lot the take can exceed
   // the price — clamp so the seller is never DEBITED on a completed sale, and split
   // the actual take (never more than the buyer paid) between street tax and dev burn

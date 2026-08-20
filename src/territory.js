@@ -9,7 +9,7 @@
 import { postPower } from './roster.js';
 import { GameError, bus } from './game.js';
 import { DISTRICTS, TERRITORY_RACKETS, TERRITORY_TYPES, territoryTierOf, territoryTypeOf, territoryBuildCost,
-         territoryFortCost, territoryRankOf, syndicateOf, TERRITORY_SYNDICATE_MIN, levelOf, CONSTANTS, rosterMult, charterFx, M3, jailed, hospitalized, safeHoused } from './rules.js';
+         territoryFortCost, territoryRankOf, syndicateOf, TERRITORY_SYNDICATE_MIN, levelOf, CONSTANTS, rosterMult, charterFx, M3, jailed, hospitalized, safeHoused, usd } from './rules.js';
 
 const canCommand = (h) => h.owned.gangRole === 'boss' || h.owned.gangRole === 'underboss';
 
@@ -130,7 +130,7 @@ export async function establishRacket(ch, districtId, kind, client, h) {
   const existing = (await client.query('SELECT district_id FROM territory_rackets WHERE district_id=$1', [districtId])).rows[0];
   if (existing) throw new GameError('exists', 'An operation already runs there — upgrade it instead.');
   const tier = TERRITORY_RACKETS[0];
-  if (Number(g.treasury) < tier.cost) throw new GameError('treasury', `Setting up an operation takes $${tier.cost} from the treasury.`);
+  if (Number(g.treasury) < tier.cost) throw new GameError('treasury', `Setting up an operation takes ${usd(tier.cost)} from the treasury.`);
   await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [h.owned.gangId, tier.cost]);
   await client.query('INSERT INTO territory_rackets (district_id, owner_gang, tier, kind) VALUES ($1,$2,1,$3)', [districtId, h.owned.gangId, type.id]);
   await h.ledger(client, { currency: 'cash', amount: -tier.cost, reason: 'territory:establish', counterparty: h.owned.gangId });
@@ -153,7 +153,7 @@ export async function upgradeRacket(ch, districtId, client, h) {
   const next = territoryTierOf(Number(r.tier) + 1);
   if (!next) throw new GameError('maxed', 'That operation already runs at full strength.');
   if (isCold(r)) throw new GameError('cold', 'That operation is dark — pay its pad before you pour money into it.');
-  if (Number(g.treasury) < next.cost) throw new GameError('treasury', `The ${next.name} takes $${next.cost} from the treasury.`);
+  if (Number(g.treasury) < next.cost) throw new GameError('treasury', `The ${next.name} takes ${usd(next.cost)} from the treasury.`);
   // SIGN-OFF Tier 5 (parity with the speakeasy's resolve-raid-before-upgrade fix): upgrading BANKS the
   // pending income, so without this a boss watching the Bureau heat climb could bank the take through an
   // upgrade and never face the crackdown roll that `collectTerritory` runs. Resolve it here on the same
@@ -256,7 +256,7 @@ export async function fortifyRacket(ch, districtId, client, h) {
   const level = Number(r.fortitude);
   if (level >= CONSTANTS.TERRITORY_FORT_MAX) throw new GameError('maxed', 'That operation is dug in as deep as it goes.');
   const cost = territoryFortCost(level, Number(r.tier));
-  if (Number(g.treasury) < cost) throw new GameError('treasury', `Fortifying to level ${level + 1} takes $${cost} from the treasury.`);
+  if (Number(g.treasury) < cost) throw new GameError('treasury', `Fortifying to level ${level + 1} takes ${usd(cost)} from the treasury.`);
   await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [h.owned.gangId, cost]);
   await client.query('UPDATE territory_rackets SET fortitude=$2 WHERE district_id=$1', [districtId, level + 1]);
   await h.ledger(client, { currency: 'cash', amount: -cost, reason: 'territory:fortify', counterparty: h.owned.gangId });

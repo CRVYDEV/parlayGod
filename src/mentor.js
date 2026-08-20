@@ -14,7 +14,7 @@
 // §10.4: one faucet, `mentor:protege` (character_id'd → the per-character cash check reconciles). The
 // legend, the seeking flag and graduation move no value. The test proves the vocabulary is closed.
 import { GameError, notify, notifyOnce } from './game.js';
-import { MENTOR, mentorRankOf, levelOf } from './rules.js';
+import { MENTOR, mentorRankOf, levelOf, usd } from './rules.js';
 
 const lvlOf = (respect) => levelOf(Number(respect));
 // resolve a character id → { account_id, name, respect, agent, human }. A plain read.
@@ -138,7 +138,7 @@ export async function mentorGift(ch, protege, client, h) {
   if (ms.graduated) throw new GameError('graduated', `${protege.name} has graduated — they're on their own now.`);
   if (ms.gift_at && Date.now() - new Date(ms.gift_at).getTime() < MENTOR.GIFT_CD_MS) throw new GameError('cooldown', 'You sent a care package recently — one a day.');
   const amt = MENTOR.GIFT_CASH;
-  if (Number(ch.cash) < amt) throw new GameError('cash', `A care package is $${amt.toLocaleString()}.`);
+  if (Number(ch.cash) < amt) throw new GameError('cash', `A care package is ${usd(amt)}.`);
   ch.cash = Number(ch.cash) - amt;
   protege.cash = Number(protege.cash) + amt;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'mentor:gift', counterparty: protege.id });

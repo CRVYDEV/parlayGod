@@ -700,6 +700,27 @@ assert.equal(await txCount(), chainTx0, 'the on-chain deed lifecycle moves NO §
   assert.equal((await call('GET', '/v1/deeds', { token: rookie.token })).body.corner.canCollect, true, 'the board agrees');
 }
 
+// A REFUSAL THAT ASSERTED SOMETHING FALSE. The level floor's message is written for somebody who HOLDS
+// a corner — "the street is yours, the take isn't yet" — but it ran ahead of any deed lookup, so a
+// player who has never claimed a street was told they owned one. Fluent, and false. Found by driving
+// every refusal in the game and READING them: the two silence patterns cannot see a wrong sentence.
+// (The console hides the button behind `collectable > 0`, so this reaches the raw API — and the agents
+// who read exactly these lines.)
+{
+  const nobody = await mk('Deedless Delvecchio');
+  const r = await call('POST', '/v1/deeds/corner', { token: nobody.token });
+  assert.equal(r.code, 400, 'a man with no street cannot collect a corner take');
+  assert.equal(r.body.error, 'no_corner', 'and he is told he works no corner');
+  assert.ok(!/street is yours/i.test(String(r.body.message)),
+    `a refusal must not tell a deedless player they own a street: ${JSON.stringify(r.body.message)}`);
+  // the level message still reaches the player it was WRITTEN for — the fix must not hide the rule
+  // from a deed-holding rookie, which is the withheld-terms class this project keeps closing.
+  await call('POST', '/v1/deeds/claim', { token: nobody.token, body: { district: 'canal', name: 'Delvecchio Alley' } });
+  const held = await call('POST', '/v1/deeds/corner', { token: nobody.token });
+  assert.equal(held.body.error, 'rookie', 'a rookie who DOES hold a street still gets the level rule');
+  assert.ok(/street is yours/i.test(String(held.body.message)), 'stated in the words it was written in');
+}
+
 console.log('deeds: PASS');
 await app.close();
 process.exit(0);

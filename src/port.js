@@ -9,7 +9,7 @@
 // the offshore RENDEZVOUS (a consensual mid-sea handoff of an active run to a partner's boat — §10.4-neutral).
 import crypto from 'node:crypto';
 import { GameError, bus, bumpMastery, masteryFx } from './game.js';
-import { PORT, COMMISSION, NOTORIETY, boatOf, portRouteOf, boatResale, interdictChance, effHold, effSpeed, boatUpgradeCost, portRankOf, fenceMultOf, levelOf, cityHourOf, smugglerTierOf, smuggleRepPerks, notorietyNow, rollRarity , jailed, hospitalized, safeHoused } from './rules.js';
+import { PORT, COMMISSION, NOTORIETY, boatOf, portRouteOf, boatResale, interdictChance, effHold, effSpeed, boatUpgradeCost, portRankOf, fenceMultOf, levelOf, cityHourOf, smugglerTierOf, smuggleRepPerks, notorietyNow, rollRarity , jailed, hospitalized, safeHoused, usd } from './rules.js';
 import { logCollect } from './collection.js';
 import { activeDecree } from './commission.js';
 import { laneHeat, heatLane } from './notoriety.js';
@@ -77,7 +77,7 @@ export async function buyBoat(ch, kind, client, h) {
   if (!spec) throw new GameError('bad_boat', 'No such vessel at the yard.');
   const n = Number((await client.query('SELECT COUNT(*) c FROM boats WHERE character_id=$1 AND NOT minted_onchain', [ch.id])).rows[0].c);
   if (n >= fleetCapOf(ch)) throw new GameError('fleet', `Your berths are full (${fleetCapOf(ch)}). Sell a boat or rent a slip.`);
-  if (Number(ch.cash) < spec.cost) throw new GameError('cash', `The ${spec.name} runs $${spec.cost}.`);
+  if (Number(ch.cash) < spec.cost) throw new GameError('cash', `The ${spec.name} runs ${usd(spec.cost)}.`);
   ch.cash = Number(ch.cash) - spec.cost;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -spec.cost, reason: 'port:boat' });
   const id = crypto.randomUUID();
@@ -122,7 +122,7 @@ export async function upgradeBoat(ch, boatId, part, client, h) {
   const spec = boatOf(boat.kind);
   // TRADES perk (seamanship): the dry dock cuts a real captain a deal — the discounted number is ledgered
   const cost = Math.floor(boatUpgradeCost(boat, spec, part) * masteryFx(h, 'seamanship'));
-  if (Number(ch.cash) < cost) throw new GameError('cash', `That refit runs $${cost}.`);
+  if (Number(ch.cash) < cost) throw new GameError('cash', `That refit runs ${usd(cost)}.`);
   ch.cash = Number(ch.cash) - cost;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'port:upgrade' });
   await client.query(`UPDATE boats SET ${part === 'hull' ? 'hull' : 'engine'}=$2 WHERE id=$1`, [boatId, lvl + 1]);
@@ -150,8 +150,8 @@ export async function launchRun(ch, boatId, routeId, escort, client, h) {
   const cost = hold * route.buy;
   const escortCost = escort ? PORT.ESCORT_COST : 0;
   const { used, left } = supplyState(ch);
-  if (used + cost > PORT.SUPPLY_CAP_DAY) throw new GameError('supply', `The supplier can only move $${left} more contraband today — sail a smaller boat or wait.`);
-  if (Number(ch.cash) < cost + escortCost) throw new GameError('cash', `The cargo + escort runs $${cost + escortCost}.`);
+  if (used + cost > PORT.SUPPLY_CAP_DAY) throw new GameError('supply', `The supplier can only move ${usd(left)} more contraband today — sail a smaller boat or wait.`);
+  if (Number(ch.cash) < cost + escortCost) throw new GameError('cash', `The cargo + escort runs ${usd(cost + escortCost)}.`);
   ch.cash = Number(ch.cash) - cost - escortCost;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'port:buy' });
   if (escortCost) await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -escortCost, reason: 'port:escort' });
@@ -279,7 +279,7 @@ export async function rentBerth(ch, client, h) {
   if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `The harbormaster's office is at the ${PORT.DISTRICT}.`, { district: PORT.DISTRICT });
   const berths = Number(ch.berths) || 0;
   if (berths >= PORT.STEP4.BERTH_MAX) throw new GameError('maxed', `You already lease the max (${PORT.STEP4.BERTH_MAX}) slips.`);
-  if (Number(ch.cash) < PORT.STEP4.BERTH_COST) throw new GameError('cash', `A slip runs $${PORT.STEP4.BERTH_COST}.`);
+  if (Number(ch.cash) < PORT.STEP4.BERTH_COST) throw new GameError('cash', `A slip runs ${usd(PORT.STEP4.BERTH_COST)}.`);
   ch.cash = Number(ch.cash) - PORT.STEP4.BERTH_COST;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -PORT.STEP4.BERTH_COST, reason: 'port:berth' });
   // (red-team R18) absolute INT write — `berths = berths + 1` is the pg-mem arithmetic-UPDATE quirk (mis-evaluates

@@ -1,7 +1,7 @@
 // M4 — growth systems: paths, the Daily Score, missions, daily contracts, and
 // the First Week (GRASSROOTS). Every formula cites spec §5.1/§7.3–7.4 / v24.
 import { GameError, cleanText, assignedSoldier, soldierResult, bumpMastery, masteryFx, gainRespect } from './game.js';
-import { soldierFxOf, SOLDIERS, PATH_SWITCH_CD_MS, referralXpBonus, CAPO, capoPerksOf } from './rules.js';
+import { soldierFxOf, SOLDIERS, PATH_SWITCH_CD_MS, referralXpBonus, CAPO, capoPerksOf, usd } from './rules.js';
 import {
   PATHS, MISSIONS, ONBOARD_TASKS, CAREER, CONSTANTS, M4, M8, SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS,
   levelOf, dayOf, dailyJobsOf, dailyBlockedFor, effStat, gunObjOf, assetEnergyCap, recruitRankOf, PACING,
@@ -21,7 +21,7 @@ export async function choosePath(ch, pathId, client, h) {
   if (ch.path && ch.path_at && Date.now() < new Date(ch.path_at).getTime() + PATH_SWITCH_CD_MS)
     throw new GameError('cooldown', 'You just changed careers — the street needs a week to take you seriously.');
   if (!ch.path) {
-    if (Number(ch.cash) < CONSTANTS.PATH_FIRST_COST) throw new GameError('cash', `Declaring a path costs $${CONSTANTS.PATH_FIRST_COST}.`);
+    if (Number(ch.cash) < CONSTANTS.PATH_FIRST_COST) throw new GameError('cash', `Declaring a path costs ${usd(CONSTANTS.PATH_FIRST_COST)}.`);
     ch.cash = Number(ch.cash) - CONSTANTS.PATH_FIRST_COST;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -CONSTANTS.PATH_FIRST_COST, reason: `path:${pathId}` });
   } else {

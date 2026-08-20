@@ -10,7 +10,7 @@
 // mutated by plain row-locked UPDATE/INSERT — the account rows themselves are never a second lock,
 // so no AB-BA surface (the feud_peace_offers precedent).
 import { GameError, bus, notify } from './game.js';
-import { MARRIAGE } from './rules.js';
+import { MARRIAGE, usd } from './rules.js';
 import { bumpHonor, isMadDog } from './honor.js';
 
 const pair = (a, b) => [a, b].sort();
@@ -66,7 +66,7 @@ export async function proposeMarriage(ch, targetCharacterId, client, h) {
   if (await recentSplit(client, ch.account_id, target.account_id))
     throw new GameError('cooling', 'The ink on that annulment is still wet — the houses need time.');
   if (Number(ch.cash) < MARRIAGE.PROPOSE_COST)
-    throw new GameError('cash', `The envoy, the flowers, the sit-down — $${MARRIAGE.PROPOSE_COST}.`);
+    throw new GameError('cash', `The envoy, the flowers, the sit-down — ${usd(MARRIAGE.PROPOSE_COST)}.`);
   ch.cash = Number(ch.cash) - MARRIAGE.PROPOSE_COST;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -MARRIAGE.PROPOSE_COST, reason: 'dynasty:ceremony' });
   const [a, b] = pair(ch.account_id, target.account_id);
@@ -91,7 +91,7 @@ export async function acceptMarriage(ch, fromAccountId, client, h) {
   if (await recentSplit(client, ch.account_id, fromAccountId))
     throw new GameError('cooling', 'The ink on that annulment is still wet — the houses need time.');
   if (Number(ch.cash) < MARRIAGE.ACCEPT_COST)
-    throw new GameError('cash', `Your half of the ceremony is $${MARRIAGE.ACCEPT_COST}.`);
+    throw new GameError('cash', `Your half of the ceremony is ${usd(MARRIAGE.ACCEPT_COST)}.`);
   ch.cash = Number(ch.cash) - MARRIAGE.ACCEPT_COST;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -MARRIAGE.ACCEPT_COST, reason: 'dynasty:ceremony' });
   const upd = await client.query(
@@ -171,7 +171,7 @@ export async function nameConsigliere(ch, targetCharacterId, client, h) {
   if (existing) throw new GameError(existing.accepted ? 'has_consigliere' : 'pending',
     existing.accepted ? 'Your house already keeps an adviser — dismiss them first.' : 'Your offer is already out.');
   if (Number(ch.cash) < MARRIAGE.CONSIGLIERE_COST)
-    throw new GameError('cash', `The envoy costs $${MARRIAGE.CONSIGLIERE_COST}.`);
+    throw new GameError('cash', `The envoy costs ${usd(MARRIAGE.CONSIGLIERE_COST)}.`);
   ch.cash = Number(ch.cash) - MARRIAGE.CONSIGLIERE_COST;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -MARRIAGE.CONSIGLIERE_COST, reason: 'dynasty:consigliere' });
   await client.query('INSERT INTO consiglieri (dynasty_account, adviser_account) VALUES ($1,$2)',

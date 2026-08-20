@@ -12,7 +12,7 @@
 // held); the worker's deadline sweep locks the mark's char row before the meter write.
 import crypto from 'node:crypto';
 import { GameError, bus, notify } from './game.js';
-import { SECRETS, secretKindOf, WIRE, intelCost, spyPerksOf, disinfoActive } from './rules.js';
+import { SECRETS, secretKindOf, WIRE, intelCost, spyPerksOf, disinfoActive, usd } from './rules.js';
 import { spendOmr } from './vanity.js';
 
 const uid = () => crypto.randomUUID();
@@ -79,7 +79,7 @@ export async function extortSecret(ch, secretId, demand, client, h) {
   const cap = secretKindOf(s.kind).hushCap;
   const amt = Math.floor(Number(demand));
   if (!(Number.isFinite(amt) && amt >= SECRETS.DEMAND_MIN && amt <= cap))
-    throw new GameError('amount', `Name a price between $${SECRETS.DEMAND_MIN} and $${cap} — that's what this dirt is worth.`);
+    throw new GameError('amount', `Name a price between ${usd(SECRETS.DEMAND_MIN)} and ${usd(cap)} — that's what this dirt is worth.`);
   const deadline = new Date(Date.now() + SECRETS.EXTORT_WINDOW_MS);
   await client.query('UPDATE secrets SET demand=$2, extort_deadline=$3 WHERE id=$1', [secretId, amt, deadline]);
   const mark = (await client.query(
@@ -98,7 +98,7 @@ export async function payHush(ch, holder, secretId, client, h) {
   if (s.target_account !== ch.account_id) throw new GameError('not_you', "That's not your dirt to buy.");
   if (!s.extort_deadline) throw new GameError('no_demand', 'Nobody has named a price.');
   const demand = Number(s.demand);
-  if (Number(ch.cash) < demand) throw new GameError('cash', `The hush money is $${demand} — in cash.`);
+  if (Number(ch.cash) < demand) throw new GameError('cash', `The hush money is ${usd(demand)} — in cash.`);
   const fee = Math.ceil(demand * 0.01), tax = Math.ceil(demand * 0.01);
   const net = demand - fee - tax;
   ch.cash = Number(ch.cash) - demand;

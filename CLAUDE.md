@@ -14238,6 +14238,47 @@ nothing, the vacuity class in its newest costume); the replacement hull then ord
 table does not have; and only once a fresh boat really sailed and really got busted did the mutation
 fail by name. Driven count 41 → 47, floor 33 → 40.
 
+**F14 — THE REFUSAL PATH, and the class it turned into: money written for a debugger, not a player
+(2026-08-19).** Two more lenses, and the first came back CLEAN in a way worth recording: a **SCREEN
+RENDER sweep** drove all 30 tabs in a real browser looking for `undefined` / `NaN` / `[object
+Object]` / a bare `$` in rendered text and found **none** — the F11–F13 waves really had reached the
+end of that class. So the next lens went at the surface nobody had swept as a surface: **THE REFUSAL
+PATH.** A refusal is the most-read line in the game — every time you cannot afford something, the
+server's own sentence is what the client shows (`describe()` takes `body.message` FIRST) — and 80 of
+them were driven and READ. **A machine scan passed all 80.** Reading them found the class: **158 of
+163 money figures in refusal messages were raw** — the Law retainer read *"The retainer is
+$150000."*, a fighter cost *"$25000"*, the safehouse quoted seven digits unbroken — debug output in a
+game that formats money on every other surface, in the one place a player is already annoyed. Fixed
+with **ONE helper** (`usd` in `rules.tail.js`), not 158 `.toLocaleString()` calls, because 158 copies
+of a rule is exactly how they come to disagree — the `jailed`/`penSafe` collapse precedent — and it
+deliberately MIRRORS the client's own `fmt`, including its two-significant-figures rule below a cent
+so a dust figure never reads as a flat "0". 162 interpolations across 38 modules. **THE MONEY
+LEDGER** (`test/gates.js`, the tenth catalogue-or-declare guard) reads every `GameError` template in
+`src/` and fails on any raw money interpolation, with an anti-vacuity floor — because an extractor
+that has stopped reading the tree passes for a clean sweep — both mutation-verified.
+**F15 — a refusal that was fluent, confident and FALSE about ownership.** `collectCorner` checked the
+level floor first and stated it in words written for somebody who HOLDS a corner (*"the street is
+yours, the take isn't yet"*), so a caller who owned no street at all was told they owned one. The
+console hides the button behind `collectable > 0`, so this reaches the raw API and the agents who
+read these lines. **The first cut reintroduced the same class one case over** and the existing
+extracted-deed assertion caught it: filtering the ownership count on `onchain_token_id IS NULL` would
+have told the owner of an EXTRACTED street to go and claim a street — it is still theirs, merely
+inert in-game — so the gate was narrowed and they fall through to the ordinary `nothing`.
+**F16 — the fix that surfaced a withheld machine value.** Formatting the district-claim floor broke
+three assertions that were parsing the figure out of the prose (`$501,393` captures as `501`) — and
+the test comment said so out loud: *"the refusal message carries the floor the server would
+enforce"*. The number existed ONLY in a sentence, so the only way to act on it was to parse English,
+which an agent would have had to do too — while **the SUCCESS response on the same route already
+returned `floor` as a field**. Fixed at the source (the `GameError` third-argument payload — the
+district-refusal precedent), so the refusal now matches its own success shape; the three tests read
+the field. Mutation-verified: dropping the payload fails by name (`theirs NaN`).
+**A candidate DISSOLVED on checking, recorded because a session that publishes only its hits cannot
+be audited:** `GET /v1/map` 500'd on a null gang (`citymap.js:71`) — traced not to the game but to a
+**pg-mem artifact in my own fixture**, where `UPDATE … SET col = (SELECT …)` stores the value as a
+ROW (`(uuid)`) rather than a scalar; real Postgres was verified to yield a scalar, `src/` has zero
+such sites, and dissolution clears `holder_gang` before `DELETE FROM gangs` in the same transaction
+and is the only gang delete. No guard added for an unreachable state.
+
 
 **THE PROBE HAD TO BE FIXED THREE TIMES BEFORE ITS RESULT MEANT ANYTHING, which is most of the
 lesson.** It first missed **shorthand** payload keys (`{ npc, units, material }`), planting

@@ -8,7 +8,7 @@
 // in this pillar — numbers are founder SIM sign-off levers (ground rule #1).
 import crypto from 'node:crypto';
 import { GameError, bus, assignedSoldier, soldierResult } from './game.js';
-import { WORLD_NPCS, worldNpcOf, worldRankOf, WORLD, LIVING, PACING, levelOf, effStat, cityHourOf, frontierTributePerHr, cartelUprisingOf, dayOf, soldierFxOf , jailed, hospitalized, safeHoused , SHIPMENT } from './rules.js';
+import { WORLD_NPCS, worldNpcOf, worldRankOf, WORLD, LIVING, PACING, levelOf, effStat, cityHourOf, frontierTributePerHr, cartelUprisingOf, dayOf, soldierFxOf , jailed, hospitalized, safeHoused , SHIPMENT, usd } from './rules.js';
 import { dbCaps } from './db.js';
 
 const uid = () => crypto.randomUUID();
@@ -397,7 +397,7 @@ export async function hireRaid(ch, raidId, client, h) {
   const hiredCount = members.filter((m) => m.hired).length;
   if (hiredCount >= WORLD.HIRE_MAX)
     throw new GameError('hire_capped', `${fixture.name} takes at most ${WORLD.HIRE_MAX} hired gun${WORLD.HIRE_MAX === 1 ? '' : 's'} — the rest are real bodies.`);
-  if (Number(ch.cash) < WORLD.HIRE_FEE) throw new GameError('cash', `A gun wants $${WORLD.HIRE_FEE} up front — tools and their silence.`);
+  if (Number(ch.cash) < WORLD.HIRE_FEE) throw new GameError('cash', `A gun wants ${usd(WORLD.HIRE_FEE)} up front — tools and their silence.`);
   // pick a FREE resident meeting the outfit's LEVEL floor (a hired gun really is one of the crew for the
   // roll, so it can't be a rookie), NOT already on a live raid. Prefer the leader's district, else any.
   // Two flat queries (pg-mem can't parse a CASE-in-ORDER-BY). FOR UPDATE SKIP LOCKED so two concurrent
@@ -686,7 +686,7 @@ export async function invadeOutpost(ch, npcId, client, h) {
   if (!row || !row.held_by_gang) throw new GameError('unheld', `Nobody holds ${fixture.name} — rout it to take the turf.`);
   if (row.held_by_gang === h.owned.gangId) throw new GameError('held', 'Your family already holds that outpost.');
   const cost = invadeCost(row.garrison, fixture.max);
-  if (Number(g.treasury) < cost) throw new GameError('treasury', `Marching on ${fixture.name} takes $${cost} from the treasury.`);
+  if (Number(g.treasury) < cost) throw new GameError('treasury', `Marching on ${fixture.name} takes ${usd(cost)} from the treasury.`);
   const now = new Date();
   await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [h.owned.gangId, cost]);
   // the invader installs a fresh garrison (their stake becomes the new defense budget); the old holder's
@@ -710,7 +710,7 @@ export async function reinforceOutpost(ch, npcId, amount, client, h) {
   const fixture = worldNpcOf(npcId);
   if (!fixture) throw new GameError('bad_npc', 'No outfit by that name.');
   const amt = Math.floor(Number(amount));
-  if (!(Number.isFinite(amt) && amt >= WORLD.UPRISING.REINFORCE_MIN)) throw new GameError('amount', `Reinforcing the garrison takes at least $${WORLD.UPRISING.REINFORCE_MIN}.`);
+  if (!(Number.isFinite(amt) && amt >= WORLD.UPRISING.REINFORCE_MIN)) throw new GameError('amount', `Reinforcing the garrison takes at least ${usd(WORLD.UPRISING.REINFORCE_MIN)}.`);
   const g = (await client.query('SELECT treasury FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
   const row = (await client.query('SELECT held_by_gang, garrison FROM world_npcs WHERE npc_id=$1 FOR UPDATE', [npcId])).rows[0];
   if (!row || row.held_by_gang !== h.owned.gangId) throw new GameError('not_held', "Your family doesn't hold that outpost.");

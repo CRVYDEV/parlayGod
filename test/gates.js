@@ -1310,3 +1310,40 @@ const SCENERY_WAIVED = {
   console.log(`✓ all ${personal.size} personal notification types render a sentence, and every `
     + `multi-shape type branches (${sites} emit sites, ${shapes.size} types)`);
 }
+
+// ═══ THE MONEY LEDGER — a refusal is the most-read line in the game ═══════════════════════════════
+// `describe()` shows `body.message` FIRST, so the server's own sentence is what a player reads every
+// time they cannot afford something — the single most common refusal there is. 158 of them
+// interpolated the raw number, so the retainer read "$150000" and signing a fighter "$25000": debug
+// output in a game that formats money on every other surface, and at that many digits genuinely hard
+// to tell an order of magnitude apart at a glance. Driven and read out of the real client before it
+// was called a defect.
+//
+// The rule is narrow on purpose: inside a GameError MESSAGE, a `$` immediately followed by an
+// interpolation is a figure the player reads, and it must go through `usd()` — the one helper, which
+// mirrors the client's own `fmt` so the two surfaces cannot disagree about the same number. 158
+// copies of a formatting rule is how they came to disagree in the first place (the jailed/penSafe
+// collapse, at 69 copies of three predicates).
+{
+  const raw = [];
+  let messages = 0;
+  for (const f of files) {
+    const s = fs.readFileSync(f, 'utf8');
+    for (const m of s.matchAll(/GameError\('[a-z_]+',\s*`([^`]*)`/g)) {
+      messages++;
+      for (const d of m[1].matchAll(/\$\$\{([^}]*)\}/g))
+        raw.push(`${f}:${s.slice(0, m.index).split('\n').length} — $\${${d[1]}}`);
+    }
+  }
+  // anti-vacuity: an extractor that has stopped seeing GameError messages reports zero problems and
+  // reads exactly like a clean bill of health (the fourth time that shape has cost this project a
+  // session). The tree carries hundreds; a handful means the reader broke, not that the code got tidy.
+  assert(messages > 300, `THE MONEY LEDGER read only ${messages} GameError messages — the extractor is broken, `
+    + 'not the tree. A scan that sees nothing passes for a clean sweep.');
+  assert.deepEqual(raw, [], 'refusal message(s) interpolating a RAW money figure. A player reads this '
+    + 'sentence — "$150000" is debug output, and at that many digits it is hard to tell from $1,500,000 '
+    + `at a glance. Use \`usd(x)\` (one helper, mirroring the client's fmt) instead of \`$\${x}\`:
+   - ${raw.join('\n   - ')}`);
+  console.log(`✓ every money figure in all ${messages} refusal messages is formatted for a player`);
+}
+

@@ -4,7 +4,7 @@
 // is a §10.4-ledgered transfer; only the house vig leaves the economy (a sink → the buyback pool).
 import crypto from 'node:crypto';
 import { GameError, ledger, notify, bus, track } from './game.js';
-import { LOAN, loanVig, loanOwed, paperTake, M3, carCollateralValue, levelOf, HONOR , jailed, hospitalized, safeHoused } from './rules.js';
+import { LOAN, loanVig, loanOwed, paperTake, M3, carCollateralValue, levelOf, HONOR , jailed, hospitalized, safeHoused, usd } from './rules.js';
 import { logCarCollect } from './collection.js';
 import { bumpHonor, sqlHonorDelta } from './honor.js';
 
@@ -126,7 +126,7 @@ export async function takeHouseLoan(ch, amount, client, h) {
   const amt = Math.floor(Number(amount) || 0);
   const cap = Math.min(LOAN.HOUSE_MAX, LOAN.HOUSE_MAX_PER_LVL * lvl);
   if (!(amt >= LOAN.HOUSE_MIN && amt <= cap))
-    throw new GameError('amount', `The window writes markers from $${LOAN.HOUSE_MIN} to $${cap} at your level.`);
+    throw new GameError('amount', `The window writes markers from ${usd(LOAN.HOUSE_MIN)} to ${usd(cap)} at your level.`);
   if ((await client.query("SELECT 1 FROM loans WHERE borrower_character=$1 AND status='active'", [ch.id])).rows[0])
     throw new GameError('maxed', 'One debt at a time — square what you owe first.');
   const house = (await client.query('SELECT pool FROM loan_house WHERE id=1 FOR UPDATE')).rows[0];
@@ -152,7 +152,7 @@ export async function repayHouseLoan(ch, client, h) {
     "SELECT * FROM loans WHERE borrower_character=$1 AND lender_character='HOUSE' AND status='active' FOR UPDATE", [ch.id])).rows[0];
   if (!loan) throw new GameError('no_loan', 'No marker at the window.');
   const owed = loanOwed(loan.principal, loan.rate);
-  if (Number(ch.cash) < owed) throw new GameError('cash', `Squaring the marker takes $${owed} in pocket.`);
+  if (Number(ch.cash) < owed) throw new GameError('cash', `Squaring the marker takes ${usd(owed)} in pocket.`);
   ch.cash = Number(ch.cash) - owed;
   await bumpHonor(client, ch, HONOR.REPAY);
   await client.query('UPDATE loan_house SET pool = pool + $1 WHERE id=1', [owed]);
@@ -192,10 +192,10 @@ export async function offerLoan(ch, body, client, h) {
   // audit (loot-proof vault): parking cash in an offer while safe-housed would be a loot-immune
   // vault (a killer can't reach escrow AND can't reach you) — the market order-post precedent.
   if (safeHoused(ch)) throw new GameError('safe', 'No fronting money from a safehouse — come out first.');
-  if (amount < LOAN.MIN || amount > LOAN.MAX) throw new GameError('amount', `A loan is $${LOAN.MIN}–$${LOAN.MAX}.`);
+  if (amount < LOAN.MIN || amount > LOAN.MAX) throw new GameError('amount', `A loan is ${usd(LOAN.MIN)}–${usd(LOAN.MAX)}.`);
   if (!(rate > 0) || rate > LOAN.RATE_MAX) throw new GameError('rate', `The vig runs up to ${Math.round(LOAN.RATE_MAX * 100)}%.`);
   if (hours < LOAN.TERM_MIN_H || hours > LOAN.TERM_MAX_H) throw new GameError('hours', `Terms run ${LOAN.TERM_MIN_H}–${LOAN.TERM_MAX_H} hours.`);
-  if (collateralMin > LOAN.COLLATERAL_MAX) throw new GameError('collateral', `Collateral tops out at $${LOAN.COLLATERAL_MAX}.`);
+  if (collateralMin > LOAN.COLLATERAL_MAX) throw new GameError('collateral', `Collateral tops out at ${usd(LOAN.COLLATERAL_MAX)}.`);
   // directed (trust line): name a living borrower who alone can take it (not yourself)
   let offeredTo = null;
   if (body?.to) {
@@ -235,7 +235,7 @@ export async function takeLoan(ch, loanId, carId, client, h) {
     if (car.listed) throw new GameError('listed', "That car's on the block — cancel the listing before pledging it.");
     if (car.pledged) throw new GameError('pledged', 'That car is already pledged against another debt.');
     const val = carCollateralValue(car.model_id, car.trim_id, car.dmg);
-    if (val < Number(loan.collateral_min)) throw new GameError('collateral', `The pledge must be worth $${Number(loan.collateral_min)} — that car books at $${val}.`);
+    if (val < Number(loan.collateral_min)) throw new GameError('collateral', `The pledge must be worth ${usd(Number(loan.collateral_min))} — that car books at ${usd(val)}.`);
     pledgedCar = car.id;
   }
   ch.cash = Number(ch.cash) + Number(loan.principal);
@@ -269,7 +269,7 @@ export async function repayLoan(ch, lender, loanId, client, h) {
   if (loan.borrower_character !== ch.id) throw new GameError('not_yours', 'That debt isn’t yours.');
   if (loan.lender_character !== lender.id) throw new GameError('mismatch', 'The book doesn’t match.');
   const owed = loanOwed(loan.principal, loan.rate);
-  if (Number(ch.cash) < owed) throw new GameError('cash', `Squaring it takes $${owed} in pocket.`);
+  if (Number(ch.cash) < owed) throw new GameError('cash', `Squaring it takes ${usd(owed)} in pocket.`);
   const vig = loanVig(owed), toLender = owed - vig;
   ch.cash = Number(ch.cash) - owed;
   await bumpHonor(client, ch, HONOR.REPAY); // #1: a squared debt is the everyday honorable deed
@@ -360,7 +360,7 @@ export async function collectLoan(ch, borrower, loanId, client, h) {
 export async function sellPaper(ch, loanId, body, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No trading paper from a cell.');
   const price = Math.floor(Number(body?.price) || 0);
-  if (price < LOAN.PAPER_MIN || price > LOAN.PAPER_MAX) throw new GameError('price', `A paper sells for $${LOAN.PAPER_MIN}–$${LOAN.PAPER_MAX}.`);
+  if (price < LOAN.PAPER_MIN || price > LOAN.PAPER_MAX) throw new GameError('price', `A paper sells for ${usd(LOAN.PAPER_MIN)}–${usd(LOAN.PAPER_MAX)}.`);
   const loan = (await client.query('SELECT * FROM loans WHERE id=$1 FOR UPDATE', [loanId])).rows[0];
   if (!loan || loan.status !== 'active') throw new GameError('no_loan', 'No such debt to sell.');
   if (loan.lender_character !== ch.id) throw new GameError('not_yours', 'That’s not your book to sell.');
@@ -393,7 +393,7 @@ export async function buyPaper(ch, seller, loanId, client, h) {
   if (loan.lender_character === ch.id) throw new GameError('own', 'You already hold that paper.');
   if (loan.borrower_character === ch.id) throw new GameError('own_debt', 'You can’t buy the paper on your own debt.');
   const price = Math.floor(Number(loan.for_sale));
-  if (Number(ch.cash) < price) throw new GameError('cash', `That paper costs $${price}.`);
+  if (Number(ch.cash) < price) throw new GameError('cash', `That paper costs ${usd(price)}.`);
   const take = paperTake(price), toSeller = price - take;
   ch.cash = Number(ch.cash) - price;
   seller.cash = Number(seller.cash) + toSeller;
@@ -418,7 +418,7 @@ export async function squareWanted(ch, client, h) {
   const stillOwed = (await client.query("SELECT 1 FROM loans WHERE borrower_character=$1 AND status='active' AND due_at < now()", [ch.id])).rows[0];
   if (stillOwed) throw new GameError('overdue', 'Settle the debt you welshed on first — repay it or let the shark collect. Then square your name.');
   const cost = LOAN.SQUARE_COST;
-  if (Number(ch.cash) < cost) throw new GameError('cash', `Squaring your name runs $${cost}.`);
+  if (Number(ch.cash) < cost) throw new GameError('cash', `Squaring your name runs ${usd(cost)}.`);
   // lock the POT (then the contributor) BEFORE any street_tax — the canonical characters→pots→
   // singletons order refundPot/cancelBounty/postBounty use, so a square can't AB-BA a concurrent
   // expiry sweep or postWantedBounty on the same pot (audit HIGH; the earlier F5 note only reordered

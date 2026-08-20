@@ -15,7 +15,7 @@
 // sending someone after you later (THE MANHUNT — sweepFamilyAggro, a worker-resolved, shield-honouring
 // strike; one pending per family). Chained so you're never double-punished. A raid is a real risk decision.
 import { GameError, bus, notify } from './game.js';
-import { FAMILY_WAR, familyWarRankOf, familyWarWinRankOf, levelOf, jailed, hospitalized, safeHoused, witproActive, penSafe, inHole } from './rules.js';
+import { FAMILY_WAR, familyWarRankOf, familyWarWinRankOf, levelOf, jailed, hospitalized, safeHoused, witproActive, penSafe, inHole, usd } from './rules.js';
 
 const cooling = (ch) => ch.family_raid_at && new Date(ch.family_raid_at) > new Date();
 // an ACTIVE peace pact between two families (inline read — a local one-liner dodges the diplomacy.js
@@ -274,7 +274,7 @@ export async function declareNpcWar(ch, gangId, client, h) {
     'SELECT npc_gang FROM npc_wars WHERE attacker_gang=$1 AND NOT resolved AND ends_at > now()', [h.owned.gangId])).rows;
   if (active.some((r) => r.npc_gang === gangId)) throw new GameError('at_war', "You're already at war with that outfit.");
   if (active.length >= W.MAX_PER_FAMILY) throw new GameError('at_war', 'Your family is already running a campaign — finish it first.');
-  if (Number(us.treasury) < W.COST) throw new GameError('treasury', `A family war takes a $${W.COST} war chest in the treasury.`);
+  if (Number(us.treasury) < W.COST) throw new GameError('treasury', `A family war takes a ${usd(W.COST)} war chest in the treasury.`);
   const now = new Date();
   const ms = process.env.NPC_WAR_MS != null ? Number(process.env.NPC_WAR_MS) : W.MS;
   const ends = new Date(now.getTime() + ms);

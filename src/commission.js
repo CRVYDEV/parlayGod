@@ -11,7 +11,7 @@
 // the public record. No decree moves money: effects are bounded one-week modifiers applied at
 // exactly one touchpoint each (safehouse / declareWar / laylow / convoy defense).
 import { GameError, bus, ledger } from './game.js';
-import { COMMISSION, decreeOf, weekOf, dayOf, statesmanRankOf, TICKER_BALLOT } from './rules.js';
+import { COMMISSION, decreeOf, weekOf, dayOf, statesmanRankOf, TICKER_BALLOT, usd } from './rules.js';
 
 // THE STATESMAN (Tier-4) — bump the account's lifetime political-capital legend by DIRECT SQL (additive,
 // NUMERIC → pg-mem-safe; OFF persistAccount's positional list → clobber-safe, the hitman_rep precedent).
@@ -142,7 +142,7 @@ export async function proposeDecree(ch, decreeId, client, h) {
   const g = (await client.query('SELECT id, treasury FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
   if (!g) throw new GameError('no_gang', 'The family is gone.');
   if (Number(g.treasury) < deposit)
-    throw new GameError('treasury', `A motion takes a $${deposit.toLocaleString()} deposit from the treasury.`);
+    throw new GameError('treasury', `A motion takes a ${usd(deposit)} deposit from the treasury.`);
   try {
     await client.query('INSERT INTO commission_proposals (week, gang_id, decree, deposit, proposer_account) VALUES ($1,$2,$3,$4,$5)',
       [week, h.owned.gangId, decreeId, deposit, ch.account_id]);

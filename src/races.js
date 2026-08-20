@@ -10,7 +10,7 @@
 import crypto from 'node:crypto';
 import { recordEventResult } from './events.js';
 import { GameError, bus, ledger, notify, rngLog, bumpMastery, masteryFx } from './game.js';
-import { RACES, POPULATION, raceTierOf, raceRankOf, carPower, carVal, levelOf , jailed, hospitalized } from './rules.js';
+import { RACES, POPULATION, raceTierOf, raceRankOf, carPower, carVal, levelOf , jailed, hospitalized, usd } from './rules.js';
 import { logCarCollect } from './collection.js';
 
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
@@ -47,7 +47,7 @@ export async function raceNpc(ch, carId, tierId, useNos, client, h) {
   const now = new Date();
   if (ch.race_at && new Date(ch.race_at) > now) throw new GameError('cooldown', 'Your ride needs to cool down before the next run.');
   const car = raceable(h, carId);
-  if (Number(ch.cash) < tier.fee) throw new GameError('cash', `The buy-in is $${tier.fee}.`);
+  if (Number(ch.cash) < tier.fee) throw new GameError('cash', `The buy-in is ${usd(tier.fee)}.`);
   // the fee burns (a §10.4 cash sink) win or lose; stamp the cooldown (direct SQL — outside persist)
   ch.cash = Number(ch.cash) - tier.fee;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -tier.fee, reason: 'race:fee' });
@@ -79,7 +79,7 @@ export async function buyNos(ch, carId, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No shop time from lockup.');
   const car = raceable(h, carId);
   if (Number(car.nos || 0) >= RACES.NOS_MAX) throw new GameError('maxed', `That car already holds ${RACES.NOS_MAX} charges.`);
-  if (Number(ch.cash) < RACES.NOS_COST) throw new GameError('cash', `A nitrous charge costs $${RACES.NOS_COST}.`);
+  if (Number(ch.cash) < RACES.NOS_COST) throw new GameError('cash', `A nitrous charge costs ${usd(RACES.NOS_COST)}.`);
   ch.cash = Number(ch.cash) - RACES.NOS_COST;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -RACES.NOS_COST, reason: 'race:nos' });
   const nn = Number(car.nos || 0) + 1;
@@ -96,7 +96,7 @@ export async function tuneCar(ch, carId, client, h) {
   if (Number(car.tune) >= RACES.TUNE_MAX) throw new GameError('maxed', `That engine is already maxed (${RACES.TUNE_MAX}).`);
   // TRADES perk (wheels): the shop knows a wheelman — the DISCOUNTED number is what's ledgered
   const tuneCost = Math.floor(RACES.TUNE_COST * masteryFx(h, 'wheels'));
-  if (Number(ch.cash) < tuneCost) throw new GameError('cash', `A tune costs $${tuneCost}.`);
+  if (Number(ch.cash) < tuneCost) throw new GameError('cash', `A tune costs ${usd(tuneCost)}.`);
   ch.cash = Number(ch.cash) - tuneCost;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -tuneCost, reason: 'race:tune' });
   const nt = Number(car.tune) + 1;
@@ -111,7 +111,7 @@ export async function tuneCar(ch, carId, client, h) {
 export async function listRace(ch, carId, limit, client, h) {
   const car = raceable(h, carId);
   const lim = Math.floor(Number(limit));
-  if (!(Number.isFinite(lim) && lim >= RACES.WAGER_MIN)) throw new GameError('limit', `The floor is $${RACES.WAGER_MIN}.`);
+  if (!(Number.isFinite(lim) && lim >= RACES.WAGER_MIN)) throw new GameError('limit', `The floor is ${usd(RACES.WAGER_MIN)}.`);
   const cap = Math.min(lim, RACES.WAGER_MAX);
   await client.query('UPDATE cars SET race_limit=$2 WHERE id=$1', [car.id, cap]);
   car.race_limit = cap;
@@ -143,8 +143,8 @@ export async function raceChallenge(ch, opponent, body, client, h) {
   if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId) throw new GameError('family', 'No racing family for money.');
   if (jailed(opponent) || hospitalized(opponent)) throw new GameError('unavailable', "They can't make the start line right now.");
   const amt = Math.floor(Number(body?.wager));
-  if (!(Number.isFinite(amt) && amt >= RACES.WAGER_MIN)) throw new GameError('min', `The minimum wager is $${RACES.WAGER_MIN}.`);
-  if (amt > RACES.WAGER_MAX) throw new GameError('max', `The strip caps wagers at $${RACES.WAGER_MAX}.`);
+  if (!(Number.isFinite(amt) && amt >= RACES.WAGER_MIN)) throw new GameError('min', `The minimum wager is ${usd(RACES.WAGER_MIN)}.`);
+  if (amt > RACES.WAGER_MAX) throw new GameError('max', `The strip caps wagers at ${usd(RACES.WAGER_MAX)}.`);
   const now = new Date();
   if (ch.race_at && new Date(ch.race_at) > now) throw new GameError('cooldown', 'Your ride needs to cool down before the next run.');
   // lock the two car rows in sorted id order (leaf ordering; the char rows are already locked)
@@ -164,7 +164,7 @@ export async function raceChallenge(ch, opponent, body, client, h) {
   if (their.minted_onchain) throw new GameError('their_extracted', "Their car is on-chain — it doesn't race.");
   const limit = their.race_limit != null ? Math.floor(Number(their.race_limit)) : 0;
   if (!(limit > 0)) throw new GameError('not_listed', "Their car isn't taking races.");
-  if (amt > limit) throw new GameError('limit', `They race that car up to $${limit}.`);
+  if (amt > limit) throw new GameError('limit', `They race that car up to ${usd(limit)}.`);
   if (Number(ch.cash) < amt) throw new GameError('cash', 'Not that much in pocket for the wager.');
   if (Number(opponent.cash) < amt) throw new GameError('their_cash', "They can't cover the wager right now.");
   let mine, theirs;
@@ -313,7 +313,7 @@ export async function enterGrandPrix(ch, carId, client, h) {
   if (levelOf(Number(ch.respect)) < RACES.GP.MIN_LEVEL) throw new GameError('level', `The Grand Prix runs at level ${RACES.GP.MIN_LEVEL}.`);
   const car = raceable(h, carId); // a car you own, not on the block / pledged
   const buyin = RACES.GP.BUYIN;
-  if (Number(ch.cash) < buyin) throw new GameError('cash', `The buy-in is $${buyin}.`);
+  if (Number(ch.cash) < buyin) throw new GameError('cash', `The buy-in is ${usd(buyin)}.`);
   const power = carPower(car.model_id, car.trim_id, car.tune, ch.speed, car.dmg); // SNAPSHOT the form at entry
   // materialize/find the open grand prix under the state singleton lock (LOCK ORDER: char → gp_state → gp)
   const st = (await client.query('SELECT current FROM grand_prix_state WHERE id=1 FOR UPDATE')).rows[0];

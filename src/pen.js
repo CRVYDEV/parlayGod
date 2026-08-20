@@ -7,7 +7,7 @@
 import crypto from 'node:crypto';
 import { GameError, bus, bumpMastery } from './game.js';
 import { PEN, penContrabandOf, penFactionOf, jailSecondsLeft, penSafe, inHole, levelOf, effStat, witproActive,
-         yardEventOf, yardEventById, dayOf, yardCharacterOf, MASTERY, disciplineLvlOf } from './rules.js';
+         yardEventOf, yardEventById, dayOf, yardCharacterOf, MASTERY, disciplineLvlOf, usd } from './rules.js';
 import { trainDiscipline, addXp } from './regimen.js';
 import { runEstate, claimBounty, npcHit } from './social.js';
 import { isWanted } from './social/shared.js';
@@ -193,7 +193,7 @@ export async function buyContraband(ch, itemId, client, h) {
   if (activeYardEvent().commissaryClosed) throw new GameError('toss', "Guards are tearing the block apart — the guard won't move contraband today.");
   const item = penContrabandOf(itemId);
   if (!item) throw new GameError('bad_item', 'The guard doesn’t move that.');
-  if (Number(ch.cash) < item.cost) throw new GameError('cash', `The guard wants $${item.cost}.`);
+  if (Number(ch.cash) < item.cost) throw new GameError('cash', `The guard wants ${usd(item.cost)}.`);
   ch.cash = Number(ch.cash) - item.cost;
   const held = await contrabandOf(client, ch.id);
   await setContraband(client, ch.id, itemId, (held[itemId] || 0) + 1);
@@ -214,7 +214,7 @@ export const protectionCostOf = (ch, mult = 1) => Math.round(
 export async function payProtection(ch, client, h) {
   insideOnly(ch);
   const cost = protectionCostOf(ch, activeYardEvent().protMult || 1); // a riot puts cover on sale
-  if (Number(ch.cash) < cost) throw new GameError('cash', `The yard boss wants $${cost}.`);
+  if (Number(ch.cash) < cost) throw new GameError('cash', `The yard boss wants ${usd(cost)}.`);
   ch.cash = Number(ch.cash) - cost;
   const base = penSafe(ch) ? new Date(ch.pen_safe_until).getTime() : Date.now();
   ch.pen_safe_until = new Date(base + PEN.PROTECTION_MS);
@@ -234,7 +234,7 @@ export async function bribeGuard(ch, seconds, client, h) {
   else { const n = Math.floor(Number(seconds)); if (!Number.isFinite(n) || n <= 0) throw new GameError('seconds', 'Ask for a positive number of seconds to cut.'); cut = Math.min(left, n); }
   const perSecond = Math.round(PEN.BRIBE_PER_S * (activeYardEvent().bribeMult || 1)); // a visit day, the guard takes less
   const cost = cut * perSecond;
-  if (Number(ch.cash) < cost) throw new GameError('cash', `Cutting ${cut}s costs $${cost}.`);
+  if (Number(ch.cash) < cost) throw new GameError('cash', `Cutting ${cut}s costs ${usd(cost)}.`);
   ch.cash = Number(ch.cash) - cost;
   ch.jail_until = new Date(new Date(ch.jail_until).getTime() - cut * 1000);
   await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [cost]);

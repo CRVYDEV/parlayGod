@@ -27,7 +27,7 @@
 // the pot: FOR UPDATE on it serializes two runners racing the same request.
 import crypto from 'node:crypto';
 import { GameError, bus, notify, trunkCap } from './game.js';
-import { FAVOR, GOODS, DISTRICTS, M3 , jailed, safeHoused } from './rules.js';
+import { FAVOR, GOODS, DISTRICTS, M3 , jailed, safeHoused, usd } from './rules.js';
 const districtName = (id) => (DISTRICTS.find((d) => d.id === id) || {}).name || id;
 
 const uid = () => crypto.randomUUID();
@@ -68,7 +68,7 @@ export async function postFavor(ch, opts, client, h) {
     throw new GameError('qty', `Ask for 1–${FAVOR.MAX_QTY} units.`);
   const pay = Math.floor(Number(opts.pay) || 0);
   if (!Number.isFinite(pay) || pay < FAVOR.MIN_PAY || pay > FAVOR.MAX_PAY)
-    throw new GameError('pay', `The pay runs $${FAVOR.MIN_PAY}–$${FAVOR.MAX_PAY}.`);
+    throw new GameError('pay', `The pay runs ${usd(FAVOR.MIN_PAY)}–${usd(FAVOR.MAX_PAY)}.`);
   const district = DISTRICTS.find((d) => d.id === (opts.district || ch.loc))?.id;
   if (!district) throw new GameError('bad_district', 'No such district.');
   // (audit F2) ask only for what you could actually CARRY. Every other path that puts goods in a
@@ -85,7 +85,7 @@ export async function postFavor(ch, opts, client, h) {
   const space = Math.max(0, trunkCap(h) - cargoCount(h.owned.cargo) - Number(book.q));
   if (qty > space)
     throw new GameError('room', `You've room for ${space} more in the trunk — ask for that or less.`);
-  if (Number(ch.cash) < pay) throw new GameError('cash', `You need $${pay} in your pocket to put it up front.`);
+  if (Number(ch.cash) < pay) throw new GameError('cash', `You need ${usd(pay)} in your pocket to put it up front.`);
 
   ch.cash = Number(ch.cash) - pay;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -pay, reason: 'favor:post' });

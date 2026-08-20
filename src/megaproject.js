@@ -30,7 +30,7 @@
 import { GameError, bus, notify } from './game.js';
 import { recordEventResult } from './events.js';
 import { spendOmr } from './vanity.js';
-import { MEGAPROJECT, megaMonumentAt, megaTierOf, builderRankOf, GOODS , jailed } from './rules.js';
+import { MEGAPROJECT, megaMonumentAt, megaTierOf, builderRankOf, GOODS , jailed, usd } from './rules.js';
 
 const round6 = (x) => Math.round(Number(x) * 1e6) / 1e6;
 
@@ -108,7 +108,7 @@ export async function giveCash(ch, amount, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No writing checks from lockup.');
   const amt = Math.floor(Number(amount));
   if (!Number.isFinite(amt) || amt < MEGAPROJECT.MIN_CASH)
-    throw new GameError('amount', `The smallest brick is $${MEGAPROJECT.MIN_CASH}.`);
+    throw new GameError('amount', `The smallest brick is ${usd(MEGAPROJECT.MIN_CASH)}.`);
   const p = await lockProject(client);
   const need = Number(p.target) - Number(p.progress);
   // clamp — nobody pays into a finished wall. (red-team A1, accepted) fractional $OMR progress can
@@ -139,7 +139,7 @@ export async function giveGoods(ch, goodId, qty, client, h) {
   // (~$40) used to buy a plaque row the $100 cash floor would refuse, so dust-spam could farm the
   // wall's contributor list. Freight worth less than a cash brick isn't a contribution.
   if (value < MEGAPROJECT.MIN_CASH)
-    throw new GameError('amount', `That freight is worth $${value} — the smallest brick is $${MEGAPROJECT.MIN_CASH}.`);
+    throw new GameError('amount', `That freight is worth ${usd(value)} — the smallest brick is ${usd(MEGAPROJECT.MIN_CASH)}.`);
   const left = have - n;
   h.owned.cargo[goodId] = left;
   // goods are not a §10.4 currency — deleting them from the trunk is a pure ownership sink

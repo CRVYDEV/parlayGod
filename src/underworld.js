@@ -13,7 +13,7 @@
 // anchor), heat deterrents, loot-exposure windows, extraction caps, income curves. All
 // numbers are founder sign-off levers.
 import { GameError, npcTier, bumpStanding, bestNpc } from './game.js';
-import { UNDERWORLD, npcOf, GUNS, dayOf, weekOf, leadTaskOf, taskLabelOf, levelOf, assetEnergyCap , jailed } from './rules.js';
+import { UNDERWORLD, npcOf, GUNS, dayOf, weekOf, leadTaskOf, taskLabelOf, levelOf, assetEnergyCap , jailed, usd } from './rules.js';
 
 
 // The board — the cast, your standing with each, what the next tier buys, plus step two:
@@ -67,7 +67,7 @@ export async function giftNpc(ch, npcId, client, h) {
   const cur = Number(h.owned.npc[npcId] || 0);
   if (cur >= UNDERWORLD.GIFT_CAP)
     throw new GameError('earned', `${n.name} doesn't want your money — the rest is earned.`);
-  if (Number(ch.cash) < UNDERWORLD.GIFT_COST) throw new GameError('cash', `A proper gift runs $${UNDERWORLD.GIFT_COST}.`);
+  if (Number(ch.cash) < UNDERWORLD.GIFT_COST) throw new GameError('cash', `A proper gift runs ${usd(UNDERWORLD.GIFT_COST)}.`);
   ch.cash = Number(ch.cash) - UNDERWORLD.GIFT_COST;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -UNDERWORLD.GIFT_COST, reason: 'underworld:gift' });
   // the bump is capped at GIFT_CAP — a gift can't vault you past the door. An envelope is
@@ -91,7 +91,7 @@ export async function discharge(ch, client, h) {
   if (until <= now) throw new GameError('healthy', "You're not in a hospital bed.");
   const remainingMs = until - now;
   const cost = Math.ceil(remainingMs / 60000) * UNDERWORLD.DISCHARGE_PER_MIN;
-  if (Number(ch.cash) < cost) throw new GameError('cash', `Doc's discretion runs $${cost}.`);
+  if (Number(ch.cash) < cost) throw new GameError('cash', `Doc's discretion runs ${usd(cost)}.`);
   ch.cash = Number(ch.cash) - cost;
   // T3: walk out now. T2: half the remaining stay is forgiven.
   ch.hosp_until = tier >= 3 ? new Date(now) : new Date(now + Math.floor(remainingMs / 2));
@@ -130,7 +130,7 @@ export async function payPenance(ch, npcId, client, h) {
   const count = Number(h.owned.grudges?.[npcId] || 0);
   if (!(count > 0)) throw new GameError('clean', `${n.name} holds nothing against you.`);
   const cost = UNDERWORLD.STEP4.PENANCE_COST;
-  if (Number(ch.cash) < cost) throw new GameError('cash', `Squaring it with ${n.name} runs $${cost}.`);
+  if (Number(ch.cash) < cost) throw new GameError('cash', `Squaring it with ${n.name} runs ${usd(cost)}.`);
   ch.cash = Number(ch.cash) - cost;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'underworld:penance' });
   // absolute write from the EFFECTIVE count (pg-mem INT-arithmetic quirk + step-five healing

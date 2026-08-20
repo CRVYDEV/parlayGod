@@ -6,7 +6,7 @@
 // Split out of the 2,003-line src/social.js; every function below is byte-identical to what was
 // there. Import from '../social.js' — it re-exports this package's public surface unchanged.
 import { GameError, bus, ledger } from '../game.js';
-import { M3, CONSTANTS, COMMISSION, HONOR, seasonModOf } from '../rules.js';
+import { M3, CONSTANTS, COMMISSION, HONOR, seasonModOf, usd } from '../rules.js';
 import { activeDecree } from '../commission.js';
 import { isMadDog } from '../honor.js';
 import { fire, npcHit } from './combat.js';
@@ -32,7 +32,7 @@ export async function enterSafehouse(ch, client, h) {
   const cost = Math.max(M3.SAFEHOUSE_COST, Math.floor(Math.max(M3.SAFEHOUSE_COST,
     Math.floor((Number(ch.cash) + Number(ch.bank)) * CONSTANTS.SAFEHOUSE_NW_BPS / 10000))
     * (seasonModOf().safehouseMult || 1)));
-  if (Number(ch.cash) < cost) throw new GameError('cash', `A safehouse runs $${cost} for a man of your means (1% of liquid wealth, $${M3.SAFEHOUSE_COST} minimum) — in pocket cash.`);
+  if (Number(ch.cash) < cost) throw new GameError('cash', `A safehouse runs ${usd(cost)} for a man of your means (1% of liquid wealth, ${usd(M3.SAFEHOUSE_COST)} minimum) — in pocket cash.`);
   // Commission decree: OPEN SEASON halves every stay — the knives are out this week
   const decree = await activeDecree(client);
   const ms = Math.floor(M3.SAFEHOUSE_MS * (decree?.id === 'open_season' ? COMMISSION.OPEN_SEASON_MULT : 1));
@@ -80,7 +80,7 @@ export async function offerBodyguard(ch, price, client, h) {
   const p = Math.floor(Number(price) || 0);
   if (p <= 0) { ch.guard_price = null; return { ok: true, offering: false }; }
   if (!Number.isFinite(p)) throw new GameError('price', 'Name a real number.'); // Infinity/NaN → NUMERIC write 500
-  if (p < M3.BODYGUARD_MIN_PRICE) throw new GameError('min', `Nobody stands in front of a bullet for less than $${M3.BODYGUARD_MIN_PRICE}.`);
+  if (p < M3.BODYGUARD_MIN_PRICE) throw new GameError('min', `Nobody stands in front of a bullet for less than ${usd(M3.BODYGUARD_MIN_PRICE)}.`);
   ch.guard_price = p;
   return { ok: true, offering: true, price: p };
 }
@@ -97,7 +97,7 @@ export async function hireBodyguard(ch, guard, client, h) {
   if (ch.guarded_by && ch.guarded_until && new Date(ch.guarded_until) > new Date())
     throw new GameError('guarded', 'You already have a shadow. One bullet-catcher at a time.');
   if (jailed(guard) || hospitalized(guard)) throw new GameError('unavailable', "They can't watch your back from where they are.");
-  if (Number(ch.cash) < price) throw new GameError('cash', `Their rate is $${price}.`);
+  if (Number(ch.cash) < price) throw new GameError('cash', `Their rate is ${usd(price)}.`);
   // the standard 2% house take (1% dev off-ledger + 1% street tax → buyback), at parity with the
   // exchange and the AMM — an untaxed unlimited P2P transfer was the cheapest value pipe in the
   // game (alt consolidation / referral net-worth pumping at 0%, audit F5). The guard nets 98%.
