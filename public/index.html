@@ -6550,6 +6550,12 @@
     const w = (await api('GET', '/v1/world')).body || {};
     const rd = (await api('GET', '/v1/world/raids')).body || { raids: [] };
     const bw = (await api('GET', '/v1/npcfamily')).body || { families: [] };
+    // The three Blood-War treaty/war buttons are boss-or-underboss, exactly like the frontier's
+    // reinforce/invade thirty lines further down — which read the server's own `canCommand`. This
+    // board doesn't publish one, so read the role off the sheet, the shape renderFamily uses ten
+    // times. Stating "Boss or underboss only" in a confirm dialog is not enforcing it: the button
+    // looks live to a soldier and the server answers 400 rank once he presses it.
+    const cityBoss = me?.gang && (me.gang.role === 'boss' || me.gang.role === 'underboss');
     const mega = (await api('GET', '/v1/megaproject')).body || {};
     const shp = (await api('GET', '/v1/shipment')).body || {};
     // the trade-winds read: turn raw shock multipliers into the one actionable sentence
@@ -6695,8 +6701,9 @@
           ${(f.allies || []).length ? `<div class="d" style="color:var(--dim)">🤝 allied with ${f.allies.map(esc).join(', ')}</div>` : ''}
           ${f.pact?.active ? '<div class="d" style="color:var(--good)">☮ at peace — they won\'t come for your family (and you can\'t raid them)</div>' : (f.pact?.pending && f.pact?.mine ? '<div class="d" style="color:var(--dim)">peace offer pending — they\'ll answer soon</div>' : '')}
           ${f.pact?.active ? '' : (f.canRaid ? `<button class="act" data-familyraid="${f.id}" style="border-color:var(--blood)">raid them (energy + ammo — they hit back)</button>` : `<span class="chip">need lvl ${bw.you?.minLvl || 8}</span>`)}
-          ${bw.you && !f.heldBy?.mine ? (f.pact?.active ? `<button class="act" data-do="DELETE /v1/diplomacy/pact/${f.id}" data-confirm="Breaking a sworn peace marks your family OATHBREAKER and costs the boss honor. Boss or underboss only.">break the peace (oathbreak)</button>` : (!f.pact?.pending && !f.atWar ? `<button class="act" data-do="POST /v1/diplomacy/pact/${f.id}" data-confirm="Sue this outfit for peace — while the pact stands they won't open hostilities on your family, and you agree not to raid them. Boss or underboss only.">sue for peace (a pact)</button>` : '')) : ''}
-          ${!f.atWar && !f.heldBy?.mine && !f.pact?.active && bw.you && bw.you.activeWars === 0 ? `<button class="act" data-do="POST /v1/npcfamily/${f.id}/war" data-confirm="A war chest of $${fmt(bw.you.warCost)} comes out of the family treasury. Land ${bw.you.warWinScore} raids on them inside a day to win a campaign trophy. Boss or underboss only.">declare a family war ($${fmt(bw.you.warCost)} — boss only)</button>` : ''}</div>`).join('') || '<span class="d" style="color:var(--dim)">no rival families on the map yet</span>'}</div>
+          ${bw.you && !f.heldBy?.mine && cityBoss ? (f.pact?.active ? `<button class="act" data-do="DELETE /v1/diplomacy/pact/${f.id}" data-confirm="Breaking a sworn peace marks your family OATHBREAKER and costs the boss honor.">break the peace (oathbreak)</button>` : (!f.pact?.pending && !f.atWar ? `<button class="act" data-do="POST /v1/diplomacy/pact/${f.id}" data-confirm="Sue this outfit for peace — while the pact stands they won't open hostilities on your family, and you agree not to raid them.">sue for peace (a pact)</button>` : '')) : ''}
+          ${!f.atWar && !f.heldBy?.mine && !f.pact?.active && bw.you && bw.you.activeWars === 0 && cityBoss ? `<button class="act" data-do="POST /v1/npcfamily/${f.id}/war" data-confirm="A war chest of $${fmt(bw.you.warCost)} comes out of the family treasury. Land ${bw.you.warWinScore} raids on them inside a day to win a campaign trophy.">declare a family war ($${fmt(bw.you.warCost)})</button>` : ''}</div>`).join('') || '<span class="d" style="color:var(--dim)">no rival families on the map yet</span>'}</div>
+      ${bw.you && !cityBoss ? '<div class="d" style="color:var(--dim);margin-top:6px">Treaties and war declarations are the boss\'s call — you can raid them, but suing for peace or opening a campaign takes the boss or underboss.</div>' : ''}
       <h2 style="margin-top:12px">Landmarks <span class="d" style="font-size:11px">(one dedicable plaque per district — the biggest $OMR flex holds it)</span></h2>
       <div id="landmark-slot"></div>`;
     { const gc = t.querySelector('#mg-give-cash');

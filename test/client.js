@@ -1842,6 +1842,162 @@ assert(lvlChecked >= 6, `THE LEVEL LEDGER found only ${lvlChecked} level-gated c
 assert.deepEqual(lvlUngated, [], `${lvlUngated.length} clickable row(s) STATE a level requirement and do not `
   + `enforce it, so the control looks usable at any level and only refuses once pressed:\n  ${lvlUngated.join('\n  ')}`);
 
+const rankStats = { routes: 0, markup: 0, wired: 0 };
+// ── CHECK 10: THE RANK LEDGER — the same class on the family's other axis ───────────────────────
+// Check 9 covers the LEVEL wall. Playing found the identical shape on RANK, and in the sharpest
+// possible place: `renderCity` gates the frontier's reinforce/invade on the server's own
+// `w.frontier.canCommand` — and THIRTY LINES BELOW, in the same renderer, shipped three
+// boss-or-underboss controls with no rank test at all, each stating "Boss or underboss only" inside
+// its own confirm dialog. A soldier in a family was offered "sue for peace" and "declare a family
+// war ($250,000 — boss only)"; both were driven and both answered 400 rank. Forgotten sibling,
+// one screen, thirty lines apart.
+//
+// The rule: a control whose route can refuse `rank` must be rendered behind a rank test. It is a
+// hard check for the same reason check 9's is — the wall is BINARY and PERMANENT-until-promoted,
+// so the honest render is to withhold the control and say who it belongs to, never to draw it live.
+// Derived from the tree on both sides (the routes from the handlers that throw, the call sites from
+// the client) so a new boss-only verb is covered the day it ships.
+{
+  const srcFiles = ['src/server.js', ...readdirSync('src/routes').map((f) => 'src/routes/' + f)];
+  // 1. every exported function that can throw GameError('rank') — the FAMILY-rank axis only. The
+  //    kitchen's cook/buyMakings throw 'rank' for TRADE rank, which is not a permission at all (it
+  //    rises by playing and has no holder), so they are excluded by name rather than by pattern.
+  const TRADE_RANK = new Set(['cook', 'buyMakings']);
+  //    Keyed MODULE:FN, not by bare name — `upgradeRacket` is exported by BOTH economy.js (a personal
+  //    racket, no rank gate at all) and territory.js (a family operation, boss-only), so a name-keyed
+  //    scan attributes territory's gate to the personal route and reports a control that is correctly
+  //    live. Driven to be sure: a player with no family upgrades a personal racket and gets 200.
+  const rankFns = new Map();                                  // module path -> Set(fn)
+  const scanDir = (dir) => {
+    for (const f of readdirSync(dir)) {
+      if (!f.endsWith('.js')) continue;
+      const src = readFileSync(dir + '/' + f, 'utf8');
+      const re = /export\s+async\s+function\s+([A-Za-z0-9_$]+)\s*\(/g;
+      const idx = []; let m;
+      while ((m = re.exec(src))) idx.push([m[1], m.index]);
+      for (let i = 0; i < idx.length; i++) {
+        const body = src.slice(idx[i][1], i + 1 < idx.length ? idx[i + 1][1] : src.length);
+        if (!/GameError\('rank'/.test(body) || TRADE_RANK.has(idx[i][0])) continue;
+        const key = dir + '/' + f;
+        if (!rankFns.has(key)) rankFns.set(key, new Set());
+        rankFns.get(key).add(idx[i][0]);
+      }
+    }
+  };
+  scanDir('src'); scanDir('src/social');
+
+  // 2. the routes those functions are reached through, resolved through each route file's OWN imports
+  //    so a namespace alias (`E.` vs `Territory.`) decides which module a call really lands in.
+  const rankRoutes = [];
+  for (const f of srcFiles) {
+    const src = readFileSync(f, 'utf8');
+    const alias = new Map();                                  // local name -> resolved module path
+    for (const im of src.matchAll(/import\s+(?:\*\s+as\s+([A-Za-z0-9_$]+)|\{([^}]*)\})\s+from\s+'([^']+)'/g)) {
+      const mod = 'src/' + im[3].replace(/^\.\//, '').replace(/^\.\.\//, '');
+      if (im[1]) alias.set(im[1], mod);
+      else for (const n of im[2].split(',')) { const nm = n.trim().split(/\s+as\s+/).pop().trim(); if (nm) alias.set(nm, mod); }
+    }
+    const re = /\.(get|post|delete|put)\(\s*['"](\/v1\/[^'"]*)['"]/g;
+    const marks = []; let m;
+    while ((m = re.exec(src))) marks.push([m[1].toUpperCase(), m[2], m.index]);
+    for (let i = 0; i < marks.length; i++) {
+      const body = src.slice(marks[i][2], i + 1 < marks.length ? marks[i + 1][2] : Math.min(src.length, marks[i][2] + 2500));
+      let hit = null;
+      for (const [mod, fns] of rankFns) for (const fn of fns) {
+        for (const call of body.matchAll(new RegExp('(?:([A-Za-z0-9_$]+)\\.)?' + fn + '\\s*\\(', 'g'))) {
+          // an unqualified call resolves through a named import; a qualified one through its namespace
+          if (alias.get(call[1] || fn) === mod) { hit = fn; break; }
+        }
+        if (hit) break;
+      }
+      if (hit) rankRoutes.push([marks[i][0], marks[i][1], hit]);
+    }
+  }
+  assert(rankRoutes.length >= 20, `THE RANK LEDGER found only ${rankRoutes.length} rank-gated route(s) — the `
+    + 'extractor has stopped seeing them, so a green run here means nothing. Fix the scan, not the floor.');
+
+  // 3. the client controls that reach one, and whether each is DRAWN behind a rank test.
+  //    Two passes, because the client draws a button two ways and only one of them names its route
+  //    in the markup:
+  //      A. `data-do="POST /v1/..."` — the route is IN the markup, so the site and the gate are one
+  //         window. This is where the three Blood-War defects lived.
+  //      B. `$('#id')` / `querySelectorAll('[data-x]')` + `.onclick` + act(...) — the route is in a
+  //         wiring block at the foot of the renderer, attached to an element the MARKUP already chose
+  //         whether to draw. Gating the wiring block would gate the wrong thing (a soldier's `$()`
+  //         returns null because the render withheld the button), so resolve the selector forward
+  //         from the lookup to its markup and test the gate THERE.
+  //    Pass B is built FORWARD from the selector — an earlier cut scanned backward from the route and
+  //    kept pairing an input read inside one handler with the next handler's `.onclick`, reporting
+  //    four gated controls as ungated. A finding produced by a tool you did not check is not a finding.
+  const RANK_TEST = /role\s*===\s*'boss'|role\s*===\s*'underboss'|canCommand|\bboss\b|\bcityBoss\b/;
+  // A gate is a CONDITION, so test conditions — not a byte window. Walk out through the enclosing
+  // `${...}` interpolations and at each level read only the HEAD: the text from `${` to where the
+  // branch body starts (its first backtick). That is exactly the expression that decided whether to
+  // draw this control, and nothing else. Two coarser cuts were tried and both were wrong in opposite
+  // directions: a fixed 1200-char window passed a mutation stripping the war button's rank test
+  // because the pact button one line above still carried one, and stopping at the innermost
+  // interpolation flagged seven controls correctly drawn inside an outer `${boss ? ...}` block.
+  const enclosing = (at) => {
+    const levels = []; let depth = 0;
+    for (let i = at; i > 1 && levels.length < 8; i--) {
+      if (html[i] === '}') depth++;
+      else if (html[i] === '{') {
+        // EVERY brace closes the counter, not just `${` — a `${(() => { ... })()}` IIFE in the middle
+        // of a template carries plain braces, and counting only `${` let them swallow the enclosing
+        // `${boss ? ...}` and flag two controls that are correctly drawn inside it.
+        if (depth === 0 && html[i - 1] === '$') levels.push(i + 1); else depth--;
+      }
+    }
+    return levels;
+  };
+  const gatedAt = (at) => enclosing(at).some((start) => {
+    const head = html.slice(start, at);
+    const body = head.indexOf('`');
+    return RANK_TEST.test(body >= 0 ? head.slice(0, body) : head);
+  });
+  const lineAt = (at) => html.slice(0, at).split('\n').length;
+  const routeRe = (path) => new RegExp(path.split('/').filter(Boolean).filter((x) => !x.startsWith(':'))
+    .map((x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join("/(?:[^'\"`\\s]*/)?"));
+  const rankUngated = []; let rankDo = 0, rankWired = 0;
+
+  // pass A — data-do markup
+  for (const m of html.matchAll(/data-do="(GET|POST|DELETE|PUT) (\/v1\/[^"]*)"/g)) {
+    const hit = rankRoutes.find(([meth, path]) => meth === m[1] && routeRe(path).test(m[2]));
+    if (!hit) continue;
+    rankDo++;
+    if (!gatedAt(m.index)) rankUngated.push(`line ${lineAt(m.index)}  ${m[1]} ${hit[1]} (data-do)`);
+  }
+
+  // pass B — the two wiring idioms the client really uses, each matched with its RECEIVER, because
+  // that is what makes a lookup and an `.onclick` the SAME handler. A looser pair-them-if-they-are-near
+  // version matched `$('#sov-lb')` (an innerHTML target with no handler of its own) against the NEXT
+  // handler's onclick and blamed the sovereignty board for the crest-colour route.
+  const wireHits = [];
+  for (const w of html.matchAll(/const\s+(\w+)\s*=\s*\$\(\s*'#([\w-]+)'\s*\)[\s\S]{0,120}?\b\1\.onclick\s*=(?=((?:(?!\.onclick)[\s\S]){0,700}))/g))
+    wireHits.push([`id="${w[2]}"`, w[3] || '']);
+  for (const w of html.matchAll(/querySelectorAll\(\s*'\[([\w-]+)\]'\s*\)\s*\.forEach\(\s*\(?\s*(\w+)[^)]*\)?\s*=>\s*\2\.onclick\s*=(?=((?:(?!\.onclick)[\s\S]){0,700}))/g))
+    wireHits.push([`${w[1]}=`, w[3] || '']);
+  for (const [sel, body] of wireHits) {
+    for (const [meth, path] of rankRoutes) {
+      if (!routeRe(path).test(body)) continue;
+      const drawn = html.indexOf(sel);
+      if (drawn < 0) break;                                  // nothing in the markup draws it
+      rankWired++;
+      if (!gatedAt(drawn)) rankUngated.push(`line ${lineAt(drawn)}  ${meth} ${path} (wired via ${sel})`);
+      break;
+    }
+  }
+  assert(rankDo >= 8, `THE RANK LEDGER matched only ${rankDo} data-do control(s) against `
+    + `${rankRoutes.length} rank-gated routes — the markup pass has drifted. Fix the scan, not the floor.`);
+  assert(rankWired >= 12, `THE RANK LEDGER resolved only ${rankWired} wired control(s) back to their markup — `
+    + 'the selector resolver has stopped working, which silently drops that whole half of the surface. '
+    + 'Fix the resolver, not the floor.');
+  Object.assign(rankStats, { routes: rankRoutes.length, markup: rankDo, wired: rankWired });
+  assert.deepEqual(rankUngated, [], `${rankUngated.length} control(s) reach a route that can refuse \`rank\` `
+    + `without being rendered behind a rank test, so a soldier is shown a boss-only button and learns it is `
+    + `not his only by pressing it:\n  ${rankUngated.join('\n  ')}`);
+}
+
 // ── CHECK 8 — THE ACTION LEDGER ────────────────────────────────────────────────────────────────
 // The EIGHTH way a button lies, and the quietest: it works, and then says nothing about what it did.
 // `act()` toasts describe(r.body) with no override, so every one of the ~380 routes a player presses
@@ -3319,4 +3475,10 @@ console.log(`✅ client wiring test passed — across the console AND /admin: of
   `label satisfies "the renderer reads the gate" while leaving the control live, which is worse than ` +
   `silence because the player reads a wall as trivia: a play session found four that way — the heist ` +
   `picker, the open crew board, the world crew raid and the Empire catalog all stated a level over a ` +
-  `live button and refused on press.`);
+  `live button and refused on press. And the TENTH, the same class on the family's other axis: ` +
+  `${rankStats.routes} routes can refuse rank, and the ${rankStats.markup} data-do controls and `+
+  `${rankStats.wired} wired controls reaching one are each drawn behind a rank test — checked at the `+
+  `CONDITION that drew them, walking out through the enclosing interpolations, because a byte window `+
+  `reads the neighbouring button's gate as this one's. A soldier was offered "sue for peace" and `+
+  `"declare a family war (boss only)" thirty lines below the frontier controls that read the `+
+  `server's own canCommand, and both answered 400 rank.`);
