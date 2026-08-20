@@ -189,4 +189,54 @@ console.log(`✅ Mounted-surface test passed — ${app.routes.length} registrati
     'an authed /v1 GET hits the account read limiter and a KEYLESS /v1 GET falls to the per-IP public limiter — every keyless /v1 GET throttled without being named');
 }
 
+// ── THE ENVELOPE SURVIVES EVERY ROUTE ──────────────────────────────────────────────────────────
+// `readCharacter` returns `{ character, events: h.events, ...result }` with the spread LAST, so a
+// handler whose own top-level key is `character` or `events` REPLACES the envelope's field — on that
+// route alone, silently, and invisibly to every per-route check, because those compare a board
+// against its own route where both sides are the board and agree perfectly.
+//
+// This is not hypothetical: the Home aggregate shipped keyed `events` and shadowed it for an hour.
+// It was found by reading a PRODUCTION response and counting (15 boards, 14 keys), and it was
+// harmless only because `h.events` has no writer anywhere in src/. `src/aggregate.js` now refuses a
+// reserved key, which closes the aggregate path structurally — this closes the REST of the class,
+// which that guard cannot see: any handler at all, by any mechanism, now or later.
+//
+// EMPIRICAL on purpose. The shape is built across many lines in many modules, so reading the source
+// for it is guesswork, and guesswork here reports confident nonsense. This asks the running server.
+{
+  const call = async (m, u, o = {}) => {
+    const r = await app.inject({ method: m, url: u, headers: o.token ? { authorization: `Bearer ${o.token}` } : {}, payload: o.body });
+    let b = null; try { b = r.json(); } catch { /* not JSON */ }
+    return { code: r.statusCode, body: b };
+  };
+  const { body: { token } } = await call('POST', '/v1/auth/guest');
+  await call('POST', '/v1/character', { token, body: { name: 'Envelope Probe' } });
+
+  const urls = [...new Set(app.routes
+    .filter((r) => r.method === 'GET' && r.url.startsWith('/v1/') && !r.url.includes(':'))
+    .map((r) => r.url))].sort();
+
+  let checked = 0;
+  const shadowed = [];
+  for (const u of urls) {
+    const r = await call('GET', u, { token });
+    if (r.code !== 200 || !r.body || typeof r.body !== 'object') continue;
+    const hasChar = Object.prototype.hasOwnProperty.call(r.body, 'character');
+    const hasEvents = Object.prototype.hasOwnProperty.call(r.body, 'events');
+    if (!hasChar) continue;            // keyless / non-enveloped routes are not this check's business
+    checked++;
+    if (!r.body.character || typeof r.body.character !== 'object' || !r.body.character.id) {
+      shadowed.push(`${u}: \`character\` is not a character — ${JSON.stringify(r.body.character).slice(0, 70)}`);
+    }
+    if (hasEvents && !Array.isArray(r.body.events)) {
+      shadowed.push(`${u}: \`events\` is not the envelope array — ${JSON.stringify(r.body.events).slice(0, 70)}`);
+    }
+  }
+  // ANTI-VACUITY. A sweep that reaches nothing reports exactly like a clean sweep — this probe's own
+  // first run said "0 routes checked, CLEAN" because it read a registry field that does not exist.
+  assert(checked >= 40, `the envelope sweep only reached ${checked} enveloped routes — it is not looking at the surface it claims to`);
+  assert.deepEqual(shadowed, [], 'a route\'s own response REPLACES a readCharacter envelope field:\n  ' + shadowed.join('\n  '));
+  console.log(`✅ the envelope survives all ${checked} enveloped routes — none replaces \`character\` or \`events\``);
+}
+
 await app.close();

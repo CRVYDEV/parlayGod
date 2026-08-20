@@ -15347,6 +15347,18 @@ first request instead of shadowing), and a bogus read planted off the renamed bi
 client mirror re-keyed with it. **The dead `h.events` field is left in place and RECORDED rather than
 deleted** — removing a field from every authed response in the game is its own change, not a tail-end
 edit to an unrelated PR.
+**THEN THE CLASS WAS SWEPT, because the structural guard only covers the aggregate path** — a handler
+that returns `{character: …}` or `{events: …}` directly through `readCharacter` shadows exactly the
+same way and `runBoards` never sees it. A source scan found four candidates and all four DISSOLVED on
+checking (two are mod-gated and take `pool`, `/v1/session` and `/v1/events` never go through the
+envelope at all), so the sweep is EMPIRICAL and lives in `test/routes.js`: boot, make a character, call
+every param-free authed `GET /v1`, and assert `character` is still a character and `events` still the
+envelope array — **60 enveloped routes, clean**. Two things about it are the point rather than the
+result. Its FIRST run reported *"0 routes checked — CLEAN"* because it read a registry field that does
+not exist (`app.routeRegistry`; fastify's onRoute output is decorated as `app.routes`) — **a sweep that
+reaches nothing reads exactly like a sweep that passes**, for the fifth session running — so it carries
+an anti-vacuity floor, and BOTH mutations fail by name: the collision restored with the guard off names
+`/v1/home`, and a broken registry read names the count instead of reporting clean.
 
 **The client-mirror waiver is keyed on the BINDING, so folding a board re-keys it** — `renderCity`'s
 `world|npcs|minLvl` waiver (correctly gated on the server's own `canRaid`) stopped matching and check 9
