@@ -36,7 +36,10 @@ export const HOME_BOARDS = [
   ['crew',      '/v1/crew',      (ch, client) => Crew.crewBoard(ch, client)],
   ['discovery', '/v1/discovery', (ch, client, h, ctx) =>
     Discovery.discoveryBoard(ch, client, ctx.online, { district: null, nofam: false, online: false })],
-  ['events',    '/v1/events',    (ch, client) => cityEventBoard(client)],
+  // KEYED `cityEvents`, not `events`: the envelope owns that name (src/aggregate.js RESERVED), and a
+  // board keyed on it replaces `h.events` silently on this screen alone. The key need not match the
+  // route's last segment — several here already do not.
+  ['cityEvents', '/v1/events',   (ch, client) => cityEventBoard(client)],
   ['streak',    '/v1/streak',    (ch, client) => Streak.streakBoard(ch, client)],
   ['results',   '/v1/results',   async (ch, client) => ({ results: await resultsBoard(client) })],
   ['explore',   '/v1/explore',   (ch, client, h) => Explore.exploreBoard(ch, h.acct, h.owned)],

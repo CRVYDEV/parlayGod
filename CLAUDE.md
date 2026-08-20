@@ -15328,6 +15328,26 @@ re-run against a fresh real Postgres, where it fails at its own named assertion 
 not 500 the whole screen (locked path)"*). A mutation that survives is a claim about the test before it
 is a claim about the code; here it was a claim about the ENGINE.
 
+**AND THE ENVELOPE'S NAMES WERE NOT RESERVED — found by reading a PRODUCTION response and counting.**
+Smoke-testing the merged Home aggregate on the live box, the reply said `boards: 15` and carried
+**14 keys**. `readCharacter` returns `{ character, events: h.events, ...board }` with the spread LAST,
+and the Home map was keyed **`events`** — so the board silently REPLACED the envelope's own field, on
+that one screen, invisibly to every check: the contract block compares the key against its own route,
+where both sides are the board and agree perfectly. It was harmless only by luck — **`h.events` has no
+writer anywhere in `src/`** (three sites initialise it to `[]`, three return it, nothing ever pushes),
+so the field it shadowed was already empty. The moment anything pushes "what just happened to you"
+into the handle every module is given, that array would vanish on exactly the screens that fold
+boards and nowhere else. Fixed as a CLASS rather than a rename: `runBoards` refuses a key in
+`{character, events, boards, failed}` (and any duplicate), validated **once per map** through a
+`WeakSet` rather than on every request — it is a static property of the map, and a hot-path check for
+something that cannot change between requests is just a slower request. The Home board is now keyed
+`cityEvents` (a key need not match its route's last segment — several already do not). Three
+mutations, each by name: the guard stripped, the colliding key restored (which now fails LOUDLY on the
+first request instead of shadowing), and a bogus read planted off the renamed binding to prove the
+client mirror re-keyed with it. **The dead `h.events` field is left in place and RECORDED rather than
+deleted** — removing a field from every authed response in the game is its own change, not a tail-end
+edit to an unrelated PR.
+
 **The client-mirror waiver is keyed on the BINDING, so folding a board re-keys it** — `renderCity`'s
 `world|npcs|minLvl` waiver (correctly gated on the server's own `canRaid`) stopped matching and check 9
 failed. That is the guard working rather than a nuisance: a waiver is a decision about one board on one

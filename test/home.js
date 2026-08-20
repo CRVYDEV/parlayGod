@@ -16,6 +16,7 @@
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { HOME_BOARDS } from '../src/home.js';
+import { runBoards } from '../src/aggregate.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -151,6 +152,31 @@ const me = (await call('GET', '/v1/me', { token })).body.character;
   assert.equal((await pool.query('SELECT count(*)::int n FROM transactions')).rows[0].n, before,
     'the Home aggregate is a pure read — it must write no ledger row');
   assert.equal(await drift(), driftBefore, 'the Home aggregate is §10.4-neutral');
+}
+
+// ── THE ENVELOPE'S NAMES ARE RESERVED ───────────────────────────────────────────────────────────
+// `readCharacter` returns `{ character, events: h.events, ...board }` and the spread is LAST, so a
+// board keyed on one of its fields REPLACES it — on that screen only, silently, and invisibly to the
+// contract block above, which compares the key against its own route where both sides are the board
+// and agree perfectly. This map really did ship keyed `events` for an hour; it was found by counting
+// a production response (15 boards, 14 keys) and it was harmless ONLY because `h.events` has no
+// writer anywhere in src/. The guard is what makes that a build failure instead of a coin flip on
+// whoever writes to `h.events` first.
+{
+  for (const bad of ['character', 'events', 'boards', 'failed']) {
+    await assert.rejects(
+      () => runBoards([[bad, '/v1/whatever', async () => ({})]], {}, {}, { readOnly: true }),
+      /collides with the readCharacter envelope/,
+      `a board keyed "${bad}" must be REFUSED — it would shadow the envelope field of the same name`);
+  }
+  await assert.rejects(
+    () => runBoards([['a', '/v1/a', async () => ({})], ['a', '/v1/b', async () => ({})]], {}, {}, { readOnly: true }),
+    /duplicate board key/, 'two boards on one key must be refused — one would shadow the other');
+  // And the guard must not refuse a LEGAL map, or it would simply be an outage with a good excuse.
+  const ok = await runBoards([['fine', '/v1/fine', async () => ({ n: 1 })]], {}, {}, { readOnly: true });
+  assert.deepEqual(ok.fine, { n: 1 }, 'a legal map still runs');
+  assert.deepEqual(HOME_BOARDS.map(([k]) => k).filter((k) => ['character', 'events', 'boards', 'failed'].includes(k)),
+    [], 'the live Home map uses no reserved key');
 }
 
 console.log(`✓ THE HOME AGGREGATE — ${HOME_BOARDS.length} boards in one read, each value for value what its own `

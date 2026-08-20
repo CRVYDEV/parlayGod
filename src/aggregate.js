@@ -29,11 +29,39 @@
 // read outside the request's transaction, and N connections per request is the pool-exhaustion shape
 // this project has been bitten by twice. Sequential is correct AND identical in speed.
 
+// THE ENVELOPE OWNS THESE NAMES. `readCharacter` returns `{ character, events: h.events, ...board }`,
+// and the spread is LAST — so a board keyed `character` or `events` SILENTLY replaces the envelope's
+// own field on that screen and no test can see it: the contract block compares the key against its
+// own route, where both sides are the board and agree perfectly. Found by reading a production
+// response and counting: 15 boards, 14 keys. It was harmless only because `h.events` has no writer
+// anywhere in src/ — the moment anything pushes "what just happened to you" into it, that array
+// vanishes on exactly the screens that fold boards, and nowhere else. `boards` and `failed` are ours
+// for the same reason. So the collision is refused rather than documented.
+const RESERVED = new Set(['character', 'events', 'boards', 'failed']);
+// Validated ONCE per map, not per request — it is a static property of the map, and a check that runs
+// on the hot path to prove something that cannot change between requests is just a slower request.
+const validated = new WeakSet();
+const assertMap = (boards) => {
+  if (validated.has(boards)) return;
+  const seen = new Set();
+  for (const [key, route] of boards) {
+    if (RESERVED.has(key)) {
+      throw new Error(`board key "${key}" (${route}) collides with the readCharacter envelope — `
+        + `it would silently replace that field on this screen. Rename the KEY (the route is free to `
+        + `keep its name; several keys already differ from their route's last segment).`);
+    }
+    if (seen.has(key)) throw new Error(`duplicate board key "${key}" (${route}) — one would shadow the other`);
+    seen.add(key);
+  }
+  validated.add(boards);
+};
+
 // A board map is `[key, route, call]` triples. The route is not decoration: the client mirror resolves
 // a read off `<aggregate>.<key>` against `<key>`'s own route, so the map is the CONTRACT between the
 // two — a key here whose route answers a different shape is exactly the drift the mirror exists to
 // catch, and each suite's contract block asserts value-for-value equality against it.
 export async function runBoards(boards, ch, client, h, ctx = {}) {
+  assertMap(boards);
   const out = { boards: boards.length, failed: [] };
   // PER-BOARD ISOLATION. Today a board that throws 500s its own request and the other cards still
   // render; consolidating without isolation would make one broken board blank the whole screen, which
