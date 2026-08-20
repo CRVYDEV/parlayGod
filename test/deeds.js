@@ -124,6 +124,21 @@ await pool.query('UPDATE account_persistent SET agent_flag=false WHERE account_i
 // character_id'd); the shakedown moves control, not money.
 const backdate = (acct, hours) =>
   pool.query("UPDATE street_deeds SET corner_at = now() - ($2 || ' hours')::interval WHERE account_id=$1", [acct, String(hours)]);
+// THE CORNER TAKE IS A PURE FUNCTION OF THE WALL CLOCK, and these assertions used to pretend it
+// wasn't. Backdate N hours and every millisecond between that UPDATE and the collect's own
+// `Date.now()` adds to the take: at CORNER_PER_HR the floor crosses a dollar every 1.8 seconds, and
+// backdating a WHOLE number of hours lands the expectation exactly ON a dollar boundary — the most
+// fragile place it could sit. So `assert.equal(..., PER_HR * 5)` held only while the whole
+// intervening sequence (a shakedown, two board reads, a backdate) finished inside 1.8s, which is
+// true running this file alone and false under a loaded full-suite run, where it failed 10501 vs
+// 10500. That is the recorded deterministic-assertion-on-a-timing-precondition class.
+// The bound below is TIGHTER than a tolerance, not looser: time only moves forward, so the lower
+// edge stays EXACT (a rate that is too low still fails immediately) and the upper edge allows 30
+// seconds of accrual — orders of magnitude below any rate change, which moves these figures by
+// thousands. The CAP assertion further down needs none of this: the clamp pins it.
+const DRIFT$ = Math.ceil(DEEDS.CORNER_PER_HR * 30000 / 3600000); // 30s of accrual, in dollars
+const nearTake = (got, want, msg) => assert(got >= want && got <= want + DRIFT$,
+  `${msg}: got ${got}, expected ${want} (+ up to $${DRIFT$} of clock drift)`);
 const cashOf = async (id) => Number((await pool.query('SELECT cash FROM characters WHERE id=$1', [id])).rows[0].cash);
 const deedRows = async (reason) => Number((await pool.query(
   "SELECT COUNT(*) n FROM transactions WHERE reason=$1", [reason])).rows[0].n);
@@ -136,15 +151,15 @@ await pool.query('UPDATE characters SET respect=$2 WHERE id=$1', [a.id, 1000]); 
 await backdate(a.acct, 6);
 const cA = (await call('GET', '/v1/deeds', { token: a.token })).body.corner;
 assert.equal(cA.iControl, true, 'the owner controls their own corner');
-assert.equal(cA.owed, DEEDS.CORNER_PER_HR * 6, 'the corner take accrues at the per-hour rate');
-assert.equal(cA.collectable, DEEDS.CORNER_PER_HR * 6, 'collectable == owed when you hold only your own corner');
+nearTake(cA.owed, DEEDS.CORNER_PER_HR * 6, 'the corner take accrues at the per-hour rate');
+assert.equal(cA.collectable, cA.owed, 'collectable == owed when you hold only your own corner');
 
 // COLLECT — a bounded cash faucet, ledgered `deed:corner`, and the clock resets
 const cashA0 = await cashOf(a.id), rows0 = await deedRows('deed:corner');
 const col = await call('POST', '/v1/deeds/corner', { token: a.token });
 assert.equal(col.code, 200, 'the collect lands');
-assert.equal(col.body.total, DEEDS.CORNER_PER_HR * 6, 'the whole owed take is paid');
-assert.equal(await cashOf(a.id), cashA0 + DEEDS.CORNER_PER_HR * 6, 'the cash lands in pocket');
+nearTake(col.body.total, DEEDS.CORNER_PER_HR * 6, 'the whole owed take is paid');
+assert.equal(await cashOf(a.id), cashA0 + col.body.total, 'the cash that lands is exactly what the collect reported');
 assert.equal(await deedRows('deed:corner'), rows0 + 1, 'exactly one deed:corner ledger row — the faucet is character_id\'d');
 // the clock reset — nothing to collect a second time
 assert.equal((await call('POST', '/v1/deeds/corner', { token: a.token })).body.error, 'nothing', 'the clock resets on collect');
@@ -176,7 +191,7 @@ await backdate(a.acct, 5);
 const cashB0 = await cashOf(b.id);
 const bcol = await call('POST', '/v1/deeds/corner', { token: b.token });
 assert.equal(bcol.code, 200, 'b collects the corner they muscled in on');
-assert.equal(await cashOf(b.id), cashB0 + DEEDS.CORNER_PER_HR * 5, 'b banks the seized corner take');
+nearTake(await cashOf(b.id) - cashB0, DEEDS.CORNER_PER_HR * 5, 'b banks the seized corner take');
 
 // RECLAIM — `a` takes their own corner back. Clear the cooldown, put a on the block, fund them.
 await pool.query("UPDATE street_deeds SET shakedown_at = now() - interval '7 hours' WHERE account_id=$1", [a.acct]);
