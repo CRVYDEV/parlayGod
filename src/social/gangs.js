@@ -340,7 +340,11 @@ export async function declareWar(ch, targetGangId, client, h) {
   await client.query('UPDATE gangs SET war_with=$2, war_until=$3, war_score_us=0, war_score_them=0 WHERE id=$1', [them.id, us.id, until]);
   await h.ledger(client, { currency: 'cash', amount: -warCost, reason: 'gang:war', counterparty: us.id });
   bus.emit(`gang:${them.id}`, { type: 'war_declared', by: us.name });
-  return { ok: true, until, spoilsPct: M3.WAR_SPOILS };
+  // `rival` and `cost` are for the LINE the player reads. Neither is derivable client-side: the war
+  // chest is `warBase` through the coalition discount, the family charter and the Streetboss post,
+  // so a client quoting a catalog figure would quote a price nobody paid (the rank-discounted-tap
+  // class). Played it — the toast read "done." over a treasury spend that starts a shooting war.
+  return { ok: true, rival: them.name, cost: warCost, until, spoilsPct: M3.WAR_SPOILS };
 }
 
 // ═══════════════════ TURF (§5.5) ═══════════════════

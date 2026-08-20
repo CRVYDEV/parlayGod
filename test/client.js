@@ -45,7 +45,7 @@ import vm from 'node:vm';
 import { readFileSync, readdirSync } from 'node:fs';
 import { buildServer } from '../src/server.js';
 import { M3, M4, PATHS, NPC_HITMEN, HEIST_ROLES, HEIST_JOBS, DRUGS, GOODS, DISTRICTS,
-  COMMISSION, CONVOY, DUELS, TERRITORY_TYPES, CARS, TRIMS, ASSETS, BUSINESSES, ESTATE, WIRE, SECRETS, STABLE, WORLD, WORLD_NPCS } from '../src/rules.js';
+  COMMISSION, CONVOY, DUELS, TERRITORY_TYPES, CARS, TRIMS, ASSETS, RACKETS, BUSINESSES, ESTATE, WIRE, SECRETS, STABLE, WORLD, WORLD_NPCS } from '../src/rules.js';
 
 // A COMMENT IS NOT CODE, and this guard used to read it as if it were. The mirror resolves a field
 // access as `<binding>.<name>`, and this file's comments are dense and name source files constantly
@@ -2335,6 +2335,23 @@ const ACTIONS = [
   ['POST', '/v1/gangs/tribute/omr', { amount: 200 }],
   ['POST', '/v1/gangs/vanity/seal', null],
   ['POST', '/v1/gangs/vanity/name', { name: 'Ledger Two ' + Math.random().toString(36).slice(2, 5), tag: 'LD2' }],
+  // DECLARING WAR said "done." — the loudest thing a boss can do, in a block where the pact, the
+  // treaty and the oathbreak all state their terms in full. Resolved at drive time because the
+  // TARGET has to be chosen against live state: the seeded rival is under a sworn pact with the
+  // family this fixture ARRIVED in (which it left four rows up), and a pact, an NPC family or a war
+  // already running each refuse — so the row picks a family that can actually be fought rather than
+  // naming one and hoping. The war chest comes from the treasury the seize row funded.
+  ['POST', async () => {
+    const g = (await app.pool.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [charId])).rows[0];
+    if (!g) return null;
+    const t = (await app.pool.query(
+      `SELECT id FROM gangs WHERE id <> $1 AND NOT npc_flag
+         AND (war_until IS NULL OR war_until < now())
+         AND id NOT IN (SELECT gang_b FROM gang_relations WHERE gang_a=$1)
+         AND id NOT IN (SELECT gang_a FROM gang_relations WHERE gang_b=$1) LIMIT 1`,
+      [g.gang_id])).rows[0];
+    return t ? `/v1/gangs/war/${t.id}` : null;
+  }, null],
   // OPENING and JOINING a crew raid on an APEX outfit both said "done." — on the game's hardest
   // targets, where the crew MINIMUM is the number that decides whether the op can go at all. Both
   // are driven here: JOIN the open raid the seed planted on another token, LEAVE it, then open one
@@ -2520,6 +2537,19 @@ if (mark) {
   if (front) addAction(['POST', `/v1/business/${front.kind}/buy`, null]);
   if (staff) addAction(['POST', '/v1/estate/upgrade', null], ['POST', `/v1/estate/staff/${staff.id}`, null]);
   addAction(['POST', '/v1/loans', { amount: 5000, rate: 0.2, hours: 24 }]);
+  // THE RACKET UPGRADE. The BUY has read an hourly rate since it shipped; the UPGRADE three lines
+  // below it landed on the bare catch-all `paid $6,250` — the forgotten sibling, and the worst of
+  // the pair to leave mute, because the whole POINT of an upgrade is the NEW number. Both are
+  // driven, and the buy MUST come first: an upgrade with no seat under it answers 400 and SKIPS,
+  // which reads on the summary line exactly like a covered action.
+  // The seat is cleared rather than hoped for — this fixture already runs a front and an asset, and
+  // the op-slot cap is level-derived, so a full board would have made the buy 400 and taken the
+  // upgrade's coverage with it. `character_rackets` is nothing else's fixture (the territory ladder
+  // above is a different table and a different system), so clearing it costs no other assertion.
+  const rack = RACKETS[0];                     // the cheapest rung — level 3, $12,500
+  await app.pool.query('DELETE FROM character_rackets WHERE character_id=$1', [charId]);
+  await app.pool.query('UPDATE characters SET cash = cash + 200000 WHERE id=$1', [charId]);
+  addAction(['POST', `/v1/rackets/${rack.id}/buy`, null], ['POST', `/v1/rackets/${rack.id}/upgrade`, null]);
   // THE KITCHEN'S TWO PURCHASES. The lab MODULE ($60k of bench, and $OMR at the top levels) said
   // "done."; hiring a corner man landed on the catch-all `paid $50,000` — the up-front price with no
   // word on the WAGE it starts, which is the whole tradeoff. The lab has to climb first: a module is
@@ -3469,6 +3499,39 @@ const upgLine = said.get('/v1/territory/docks/upgrade'), upgBody = paidBody.get(
 assert(upgLine && /\u{1F3D9}/u.test(upgLine) && upgLine.includes(asMoney(upgBody.spent)),
   `the racket upgrade must read as the RACKET, not the club — the club's branch matched it and ` +
   `printed a price the racket never sends. Got: ${JSON.stringify(upgLine)}`);
+// DECLARING WAR. The pact, the treaty and the oathbreak all state their terms four lines apart in
+// the same block; war — a treasury spend that starts a shooting match a rival is notified of — read
+// "done." The two facts a boss decides on are what it now carries: what it COST, and what the winner
+// takes. The cost is crossed against the SERVER's own figure rather than a catalog literal, because
+// the war chest is the base through the coalition discount, the family charter and the Streetboss
+// post — a line quoting a catalog price would quote a price nobody paid.
+{
+  const warUrl = [...said.keys()].find((u) => /^\/v1\/gangs\/war\//.test(u));
+  const warLine = said.get(warUrl || ''), warBody = paidBody.get(warUrl || '');
+  assert(warLine && warBody, 'the war row never drove — every family able to be fought was pacted, ' +
+    'NPC-run or already at war, so this assertion proves nothing. Free a target in the fixture.');
+  assert(warLine.includes(asMoney(warBody.cost)) && /war chest|treasury/i.test(warLine),
+    `war states what it took out of the war chest — and states the SERVER's figure, since every ` +
+    `discount a family brings moves it. Got: ${JSON.stringify(warLine)} over cost ${warBody.cost}`);
+  assert(new RegExp(`\\b${Math.round(warBody.spoilsPct * 100)}%`).test(warLine),
+    `…and what the winner takes, which is the whole reason to declare. Got: ${JSON.stringify(warLine)}`);
+}
+// THE RACKET UPGRADE — the forgotten sibling of a buy that has read an hourly rate since it shipped.
+// The NEW rate is the point of the purchase, so the line is crossed against `incomePerHr` (already
+// per-hour on the reply) and not against the buy's `income`, which is per-MINUTE: the two fields are
+// what keep the two branches from cross-firing, and asserting the wrong one would pass on either.
+{
+  const bUrl = `/v1/rackets/${RACKETS[0].id}/buy`, uUrl = `/v1/rackets/${RACKETS[0].id}/upgrade`;
+  const buyLine = said.get(bUrl), upLine = said.get(uUrl), upBody = paidBody.get(uUrl);
+  assert(buyLine && upLine && upBody, `the racket pair never drove — an upgrade with no seat under ` +
+    `it answers 400 and is skipped, which reads as covered. Got buy=${JSON.stringify(buyLine)} ` +
+    `upgrade=${JSON.stringify(upLine)}`);
+  assert(upLine.includes(asMoney(upBody.incomePerHr)) && /hour/i.test(upLine),
+    `an upgrade is bought FOR the new number and it read a bare price. Got: ${JSON.stringify(upLine)} ` +
+    `over incomePerHr ${upBody.incomePerHr}`);
+  assert(upLine.includes(String(upBody.level)),
+    `…and which rung it now stands on. Got: ${JSON.stringify(upLine)} over level ${upBody.level}`);
+}
 // and the CLUB's own line, driven on its own token in the wave-10 block, must still read as the club
 assert((said.get('/v1/speakeasy/upgrade') || '').includes('\u{1F37E}'),
   `…and the fix must not have taken the club's own upgrade line with it. Got: ${JSON.stringify(said.get('/v1/speakeasy/upgrade'))}`);
