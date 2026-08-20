@@ -2216,7 +2216,10 @@
     // BOTH cost real cash the Cornerman discounts, so the price rides the reply (see boxing.js).
     // The stable's own sheet is guarded on `heart`, which a boxer never has, so it cannot cross-fire
     // on the recruit branch above (both carry `stable`).
-    if (body && body.ok && body.heart !== undefined && body.stamina !== undefined && body.name)
+    // GATE `body.sire === undefined`: a BRED foal carries {heart, stamina, name} too, so it matched
+    // this buy line and read "undefined in the stable" (breed has no `stable` count) — the birth
+    // gets its own line further down (out of dam by sire). Only a fresh BUY reaches here.
+    if (body && body.ok && body.heart !== undefined && body.stamina !== undefined && body.name && body.sire === undefined)
       return `\u{1F3C7} ${txt(body.kindName || 'a racer')} bought — ${txt(body.name)}, ${body.speed} speed / ${body.stamina} stamina / ${body.heart} heart. ${body.stable} in the stable${body.spent ? `, $${fmt(body.spent)}` : ''}.`;
     if (body && body.ok && body.stat && body.value !== undefined && body.cap !== undefined)
       return body.value >= body.cap
@@ -2668,7 +2671,10 @@
     // the pad (business/territory upkeep, `fronts`) and the nut (crew wages, `crew`) each ALREADY get
     // their own line in a separate `if`-chain above/below — this last-resort `paid $N` was firing
     // ALONGSIDE them and printing the same figure twice ("…across 1 front · paid $168,000").
-    else if (body.paid > 0 && body.bought === undefined && body.fronts === undefined && body.crew === undefined) bits.push(`paid $${fmt(body.paid)}`);
+    // `toOwner`/`toSeller`: a speakeasy round pays the club owner and a buyout pays the seller — both
+    // get their own line below, and this last-resort `paid $N` was firing ALONGSIDE them ("paid $8,000
+    // · bought a round … $7,840 to the house", "paid $100,000 · took over the club …").
+    else if (body.paid > 0 && body.bought === undefined && body.fronts === undefined && body.crew === undefined && body.toOwner === undefined && body.toSeller === undefined && body.toLender === undefined) bits.push(`paid $${fmt(body.paid)}`);
     if (body.shuttered) bits.push(`closed up the ${body.shuttered} — the pad on it stops${body.back > 0 ? `, $${fmt(body.back)} back` : ', nothing back'}`);
     // `walked` means two different things: a kitchen hand let go, and the estate's staff downing
     // tools over unpaid wages. HIRING a groundskeeper answers {staff, name, wageOmrDay, walked:false}
@@ -2681,7 +2687,11 @@
       : `settled $${fmt(body.settled)} and let one go — ${body.crew} left on the corner`);
     // the circuit already sends YOUR power and the FIELD's; printing neither made a $25k tune a
     // coin-flip purchase — you could not tell whether one more level would have taken it.
-    if (typeof body.win === 'boolean' && (body.field !== undefined || body.wager !== undefined)) {
+    // GATE `body.you === undefined`: the NPC circuit sends `field` (no `you`), but a PvP race/match
+    // sends `you:{score}`+`wager` and its SCORE line (margin + money) already fires above — this
+    // "took the checkered / ate the loss" line was DOUBLING it ("lost … −$20,000 · ate the loss —
+    // $20,000") on every challenge and match. Fire only for the NPC circuit.
+    if (typeof body.win === 'boolean' && (body.field !== undefined || body.wager !== undefined) && body.you === undefined) {
       const margin = (body.power !== undefined && body.field !== undefined) ? ` — your ${body.power} vs the field's ${body.field}` : '';
       bits.push((body.win ? `🏁 took the checkered${margin} — ${body.net >= 0 ? '+' : ''}$${fmt(body.net)}`
                           : `🏁 ate the loss${margin} — $${fmt(Math.abs(body.net))}${body.dmg ? ` (car ${body.dmg}% dmg)` : ''}`)
@@ -2731,7 +2741,7 @@
     if (body.bid !== undefined && body.name && body.youLead) bits.push(`bid ${fmt(body.bid)} $OMR on ${body.name} — you lead`);
     if (body.place && body.amount !== undefined) bits.push(`dedicated ${body.place} to ${body.name} (${fmt(body.amount)} $OMR)`);
     if (body.toOwner !== undefined && body.round) bits.push(`bought ${body.round} — $${fmt(body.toOwner)} to the house${body.regular ? ' (you\'re a regular now)' : ''}`);
-    if (body.bottle && body.spent !== undefined) bits.push(`${body.bottle} — the room turned to look`);
+    if (body.bottle && body.spent !== undefined) bits.push(`${body.bottle} — the room turned to look, −${fmt(body.spent)} $OMR`);
     if (body.game && typeof body.win === 'boolean' && body.bet !== undefined) bits.push(body.win ? `the table paid — +$${fmt(Math.abs(body.net ?? 0))}` : `the house keeps it — −$${fmt(Math.abs(body.net ?? body.bet))}`);
     if (body.game === 'blackjack' && !body.done) bits.push(`dealt ${body.playerTotal} — dealer shows ${body.dealerUp === 1 ? 'an ace' : body.dealerUp}`);
     if (body.game === 'blackjack' && body.done) bits.push(
@@ -2749,6 +2759,22 @@
     if (body.racer && body.post !== undefined && body.fee !== undefined && body.race) bits.push(`${body.racer} is in today's ${body.race} — post ${body.post} at ${body.odds}:1 (the town's betting on your animal now)`);
     if (body.futurity && body.racer && body.fee !== undefined && body.form !== undefined) bits.push(`${body.racer} (form ${body.form}) is nominated to the futurity — the whole town's betting on the field`);
     if (body.futurity && body.on && body.amount !== undefined) bits.push(`$${fmt(body.amount)} on ${body.on} in the futurity`);
+    // THE FIGHT CIRCUIT main events (announce + a callout) and the back-room POKER ring both read
+    // "done." — the mute class, a whole screen at a time. Each keys on its own shape so none crosses.
+    if (body.champion && body.challenger && body.acceptWithinSeconds !== undefined)
+      bits.push(`\u{1F4E3} you called out ${txt(body.champion)} — they've got ${minsTxt(body.acceptWithinSeconds)} to answer or forfeit the belt`);
+    if (body.bout && body.card && body.closesSeconds !== undefined && body.on === undefined)
+      bits.push(`\u{1F4E2} ${body.title ? 'TITLE FIGHT booked' : 'the card is set'} — ${txt(body.card)}. The crowd bets for ${minsTxt(body.closesSeconds)}.`);
+    if (body.bout && body.on && body.amount !== undefined)
+      bits.push(`\u{1F4B5} $${fmt(body.amount)} on ${txt(body.on)} — riding on the main event`);
+    if (body.tableId && body.seat !== undefined && body.stack !== undefined)
+      bits.push(`\u{1F0A0} sat down at the table — $${fmt(body.stack)} behind, blinds $${fmt(body.bb)}`);
+    if (body.yourHole !== undefined && body.hand !== undefined)
+      bits.push(`\u{1F0A1} dealt in — hand #${body.hand}, ${body.players} at the table, pot $${fmt(body.pot)}`);
+    if (body.action && body.table && body.table.pot !== undefined)
+      bits.push(`\u{1F0A2} you ${txt(body.action)} — pot $${fmt(body.table.pot)}`);
+    if (body.cashedOut !== undefined)
+      bits.push(`\u{1F6AA} up from the table — $${fmt(body.cashedOut)} cashed out`);
     if (body.cost !== undefined && body.garrison !== undefined && body.name && body.npc) bits.push(`reinforced ${body.name}'s garrison to $${fmt(body.garrison)} (−$${fmt(body.cost)} from the treasury)`);
     if (body.settled !== undefined && Array.isArray(body.results) && body.results[0]?.winner !== undefined && body.results[0]?.race) bits.push(
       body.won > 0 ? `it came in — +$${fmt(body.won)} at the window` : `the tickets tore up — better luck at the next post`);

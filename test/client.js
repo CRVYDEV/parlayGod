@@ -2529,6 +2529,120 @@ if (traceLine) assert(/still listening/i.test(traceLine) && !/swept/i.test(trace
     `Got: ${JSON.stringify(specAssignLine)}`);
 }
 
+// WAVE 18 — THE VICE FLOOR (races / the stable / boxing / the ring / the speakeasy), a two- and
+// three-player cluster the single-token loop cannot drive. A whole screen at a time read "done."
+// (a boxing announce, a callout, a bout bet, and every verb of the back-room poker ring), a PvP
+// race and a stable match DOUBLED their score line with a redundant "took the checkered / ate the
+// loss", a bred foal read "undefined in the stable" (it matched the BUY line), and a round bought
+// for the house / a club buyout each read "paid $N · …" — the same figure twice. The mutes fold
+// into `said` so the silence sweep covers them; the doubles/lie/withheld are pinned by name.
+{
+  const mk18 = async (n, loc = 'neon') => { const t = (await inject('POST', '/v1/auth/guest')).body.token;
+    await inject('POST', '/v1/character', t, { name: n + Math.random().toString(36).slice(2, 6) });
+    const id = (await inject('GET', '/v1/me', t)).body.character.id;
+    await app.pool.query("UPDATE characters SET cash=50000000, respect=800000, energy=100, nerve=100, ammo=600, jail_until=NULL, hosp_until=NULL, loc=$2 WHERE id=$1", [id, loc]);
+    const acct = (await app.pool.query('SELECT account_id FROM characters WHERE id=$1', [id])).rows[0].account_id;
+    await app.pool.query("UPDATE account_persistent SET omr=5000, made_until=now()+interval '30 days' WHERE account_id=$1", [acct]);
+    return { t, id, acct }; };
+  const a = await mk18('Ledger Ace '), b = await mk18('Ledger Rival '), c = await mk18('Ledger Bettor ');
+  const fold18 = (m, url, r) => { described++;
+    let line; try { line = String(describeFn(r.body, r.code)); } catch (e) { line = 'THREW: ' + e.message; }
+    said.set(url, line); paidBody.set(url, r.body);
+    if (line === 'done.' || /^paid \$[\d,.]+$/.test(line) || /undefined|NaN|\[object|^THREW/.test(line)) mute.push(`${m} ${url} → ${JSON.stringify(line)}`);
+    return line; };
+  const kind = Object.keys((await inject('GET', '/v1/rules', a.t)).body.stable?.kinds || { dog: 1 })[0];
+
+  // RACES — a PvP wager. The score line already states margin + money; "ate the loss — $20,000" was
+  // firing alongside it. (Gate: the NPC circuit sends `field`; a PvP race sends `you`.)
+  const mkCar = async (cid) => { const cid2 = 'w18car' + Math.random().toString(36).slice(2, 10);
+    await app.pool.query("INSERT INTO cars (id, character_id, model_id, trim_id, tune) VALUES ($1,$2,'junker','stock',3)", [cid2, cid]); return cid2; };
+  const carA = await mkCar(a.id), carB = await mkCar(b.id);
+  await inject('POST', `/v1/races/list/${carB}`, b.t, { limit: 50000 });
+  const chURL = `/v1/races/challenge/${b.id}`;
+  const chLine = fold18('POST', chURL, await inject('POST', chURL, a.t, { myCar: carA, theirCar: carB, wager: 20000 }));
+  assert(chLine && /vs/.test(chLine) && !/ate the loss|took the checkered/.test(chLine),
+    `a PvP race read its score line AND a redundant "ate the loss — $N" — the double. Got: ${JSON.stringify(chLine)}`);
+
+  // THE STABLE — a match (score + racer-record, not a third "took the checkered") and a bred foal
+  // (which matched the BUY line and read "undefined in the stable").
+  await inject('POST', '/v1/stable/buy', a.t, { kind, name: 'Dasher' });
+  await inject('POST', '/v1/stable/buy', a.t, { kind, name: 'Comet' });
+  await inject('POST', '/v1/stable/buy', b.t, { kind, name: 'Rival' });
+  const aRac = (await app.pool.query('SELECT id FROM racers WHERE character_id=$1 ORDER BY created_at', [a.id])).rows;
+  const bRac = (await app.pool.query('SELECT id FROM racers WHERE character_id=$1 ORDER BY created_at DESC LIMIT 1', [b.id])).rows[0];
+  await inject('POST', `/v1/stable/list/${bRac.id}`, b.t, { limit: 20000 });
+  const mURL = `/v1/stable/match/${b.id}`;
+  const matchLine = fold18('POST', mURL, await inject('POST', mURL, a.t, { stake: 10000, myRacer: aRac[0].id, theirRacer: bRac.id }));
+  assert(matchLine && /\d+–\d+|got beat|WON/.test(matchLine) && !/took the checkered/.test(matchLine),
+    `a stable match read its score line AND a redundant "took the checkered". Got: ${JSON.stringify(matchLine)}`);
+  const breedLine = fold18('POST', '/v1/stable/breed', await inject('POST', '/v1/stable/breed', a.t, { sire: aRac[0].id, dam: aRac[1].id, name: 'Foalie' }));
+  assert(breedLine && /is born|out of/.test(breedLine) && !/in the stable/.test(breedLine),
+    `a bred foal matched the BUY line and read "undefined in the stable" — it must read the birth. Got: ${JSON.stringify(breedLine)}`);
+
+  // BOXING — a main-event announce, a bout bet (a THIRD party), and a title callout, all mute.
+  await inject('POST', '/v1/boxing/recruit', a.t, { name: 'Kid Malone' });
+  await inject('POST', '/v1/boxing/recruit', b.t, { name: 'Kid Blue' });
+  const fA = (await app.pool.query('SELECT id FROM fighters WHERE character_id=$1 LIMIT 1', [a.id])).rows[0];
+  const fB = (await app.pool.query('SELECT id FROM fighters WHERE character_id=$1 LIMIT 1', [b.id])).rows[0];
+  await inject('POST', '/v1/boxing/list', b.t, { fighter: fB.id, stake: 50000 });
+  const anURL = `/v1/boxing/announce/${b.id}`;
+  const an = await inject('POST', anURL, a.t, { myFighter: fA.id, theirFighter: fB.id });
+  fold18('POST', anURL, an);
+  const boutId = an.body?.bout;
+  if (boutId) { const betURL = `/v1/boxing/bout/${boutId}/bet`;
+    fold18('POST', betURL, await inject('POST', betURL, c.t, { fighter: fA.id, amount: 5000 })); }
+  // a separate pair for the CALLOUT (announce booked the first pair)
+  await inject('POST', '/v1/boxing/recruit', a.t, { name: 'Kid Sharp' });
+  await inject('POST', '/v1/boxing/recruit', b.t, { name: 'Champ Blue' });
+  const fA2 = (await app.pool.query('SELECT id FROM fighters WHERE character_id=$1 ORDER BY id DESC LIMIT 1', [a.id])).rows[0];
+  const fB2 = (await app.pool.query('SELECT id FROM fighters WHERE character_id=$1 ORDER BY id DESC LIMIT 1', [b.id])).rows[0];
+  await app.pool.query("INSERT INTO boxing_title (id, holder_fighter, holder_char, holder_name, since, defenses) VALUES (1,$1,$2,'Champ Blue',now(),0) ON CONFLICT (id) DO UPDATE SET holder_fighter=$1, holder_char=$2, holder_name='Champ Blue'", [fB2.id, b.id]);
+  await app.pool.query('UPDATE fighters SET wins=5 WHERE id=$1', [fA2.id]);
+  const coURL = `/v1/boxing/callout/${fA2.id}`;
+  fold18('POST', coURL, await inject('POST', coURL, a.t, {}));
+
+  // THE RING — open (auto-seats), a second player sits, deal, act, leave. Every verb was mute.
+  const ro = await inject('POST', '/v1/casino/ring/open', a.t, { bb: 100, buyin: 5000 });
+  fold18('POST', '/v1/casino/ring/open', ro);
+  const rid = ro.body?.tableId;
+  if (rid) {
+    fold18('POST', `/v1/casino/ring/${rid}/sit`, await inject('POST', `/v1/casino/ring/${rid}/sit`, b.t, { buyin: 5000 }));
+    fold18('POST', `/v1/casino/ring/${rid}/deal`, await inject('POST', `/v1/casino/ring/${rid}/deal`, a.t, {}));
+    fold18('POST', `/v1/casino/ring/${rid}/act`, await inject('POST', `/v1/casino/ring/${rid}/act`, a.t, { action: 'check' }));
+    fold18('POST', `/v1/casino/ring/${rid}/leave`, await inject('POST', `/v1/casino/ring/${rid}/leave`, b.t, {}));
+  }
+
+  // THE SPEAKEASY — a round (the generic `paid $N` doubled the "to the house" line), a bottle (which
+  // withheld the $OMR spent), and a buyout (the `paid $N` doubled "took over the club"). A club is
+  // ONE per district and the main fixture may hold one, so clear a district and move both here.
+  const D = 'docks';
+  await app.pool.query('DELETE FROM speakeasies WHERE district_id=$1', [D]);
+  await app.pool.query('UPDATE characters SET loc=$1 WHERE id IN ($2,$3)', [D, a.id, b.id]);
+  const sOpen = await inject('POST', `/v1/speakeasy/${D}/open`, a.t, {});
+  assert.equal(sOpen.code, 200, `the wave-18 speakeasy could not open (${JSON.stringify(sOpen.body)})`);
+  const roundLine = fold18('POST', `/v1/speakeasy/${D}/round`, await inject('POST', `/v1/speakeasy/${D}/round`, b.t, { round: 'round' }));
+  assert(roundLine && /to the house/.test(roundLine) && !/^paid \$/.test(roundLine),
+    `buying a round read "paid $N · bought a round …" — the same figure twice. Got: ${JSON.stringify(roundLine)}`);
+  const bottleLine = fold18('POST', `/v1/speakeasy/${D}/bottle`, await inject('POST', `/v1/speakeasy/${D}/bottle`, b.t, { bottle: 'bottle' }));
+  assert(bottleLine && /\$OMR/.test(bottleLine),
+    `bottle service withheld the $OMR it cost. Got: ${JSON.stringify(bottleLine)}`);
+  fold18('POST', `/v1/speakeasy/${D}/table`, await inject('POST', `/v1/speakeasy/${D}/table`, b.t, { bet: 2000 }));
+  await inject('POST', '/v1/speakeasy/list', a.t, { price: 100000 });
+  const buyoutLine = fold18('POST', `/v1/speakeasy/${D}/buy`, await inject('POST', `/v1/speakeasy/${D}/buy`, b.t, {}));
+  assert(buyoutLine && /took over/.test(buyoutLine) && !/^paid \$/.test(buyoutLine),
+    `a club buyout read "paid $N · took over the club …" — the same figure twice. Got: ${JSON.stringify(buyoutLine)}`);
+
+  // THE SHYLOCK — repaying a loan read "squared the marker … · paid $120,000": the catch-all `paid $N`
+  // fires from a SEPARATE if-chain than the toLender line, so both push (the same figure twice, and
+  // invisible to the silence sweep because the real line comes first). Gate the catch-all on `toLender`.
+  await inject('POST', '/v1/loans', a.t, { amount: 100000, rate: 0.2, hours: 24 });
+  const lid = (await app.pool.query('SELECT id FROM loans WHERE lender_character=$1 LIMIT 1', [a.id])).rows[0].id;
+  await inject('POST', `/v1/loans/${lid}/take`, b.t, {});
+  const repayLine = fold18('POST', `/v1/loans/${lid}/repay`, await inject('POST', `/v1/loans/${lid}/repay`, b.t, {}));
+  assert(repayLine && /squared the marker/.test(repayLine) && !/· paid \$/.test(repayLine),
+    `repaying a loan read "squared the marker … · paid $N" — the catch-all doubled the figure. Got: ${JSON.stringify(repayLine)}`);
+}
+
 // The four INVERSIONS. Each is a real sentence about a real system — just not the one the player is
 // looking at — so both silence patterns read straight past them and only a named claim can hold them.
 const invert = [
