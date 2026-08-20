@@ -2072,7 +2072,26 @@
     if (body && body.pulled) return `pulled your name back from ${txt(body.pulled)}`;
     // THE HIRED GUNS — a merc's firepower counts, but takes no cut. The toast says the crew grew.
     if (body && body.hired && body.fee != null) return `\u{1F52B} a gun's on the crew — $${fmt(body.fee)} up front, no cut of the score. crew ${body.crew}/${body.crewMax}`;
-    if (body && body.dismissed) return `sent a gun home — a slot's open for a real crewman. crew ${body.crew}/${body.crewMax}`;
+    // scoped to the soldier dismiss's own `crew` count — the consigliere dismiss also returns
+    // {dismissed:true} and was cross-firing here, printing "sent a gun home … crew undefined/undefined".
+    if (body && body.dismissed && body.crew !== undefined) return `sent a gun home — a slot's open for a real crewman. crew ${body.crew}/${body.crewMax}`;
+    // THE ALLIANCE — marriage + consigliere, the whole lifecycle. Every one of the 8 mutation replies
+    // shared {to,cost} or {dismissed} with another system and read "paid $N" / "done." / a soldier
+    // firing. `dynasty` NAMES the system (the exchange:/crew: precedent) so nothing can cross-fire.
+    if (body && typeof body.dynasty === 'string') {
+      const h = (n) => `${n > 0 ? '+' : ''}${n}`;
+      const m = {
+        proposed: `\u{1F54A} you offered a sit-down to the ${txt(body.to)} bloodline — $${fmt(body.cost)} on the envoy. It's theirs to accept, and a wedding buries the feud between you.`,
+        wed: `\u{1F48D} the houses are wed — ${txt(body.with)} is your ally now, and the feud between you is BURIED. $${fmt(body.cost)}, your half of the ceremony.`,
+        divorced: `\u{1F494} you cut the tie — honor ${h(body.honor)} for walking out on the vows`,
+        withdrawn: 'you pulled the proposal back — the envoy came home, no harm done',
+        consigliere_named: `\u{1F3A9} you asked ${txt(body.to)} to take the chair as your consigliere — $${fmt(body.cost)} on the envoy. It's theirs to accept.`,
+        consigliere_sworn: `\u{1F3A9} you're ${txt(body.advising)}'s consigliere now — their house keeps your counsel`,
+        consigliere_dismissed: 'you let the consigliere go — the chair sits empty until you name another',
+        consigliere_resigned: body.resigned > 1 ? `you stepped down from ${body.resigned} houses' counsel` : 'you stepped down from the chair',
+      };
+      if (m[body.dynasty]) return m[body.dynasty];
+    }
     // THE CREW (the account-level social pact) — the lifecycle toasts. `crew` is a string status here,
     // distinct from the hired-guns branches above where it's a member count.
     if (body && typeof body.crew === 'string') {
@@ -2430,6 +2449,7 @@
     const spec = body.game || body.field !== undefined || body.wager !== undefined || body.forPinks !== undefined ||
       body.opponent !== undefined || body.yourFighter !== undefined || body.record !== undefined ||
       body.stolen !== undefined || body.cut !== undefined || body.taken !== undefined || body.hospSeconds !== undefined ||
+      body.elo !== undefined ||  // a duel result — its own line (elo/stake/scores) reads the win; the generic casino WIN/LOSS below was cross-firing "the house keeps it (−$0)" over it.
       (body.win === false && body.dmg !== undefined);
     if (body.rerolled && body.stats) bits.push(`new build rolled — muscle ${body.stats.muscle} / cunning ${body.stats.cunning} / speed ${body.stats.speed}`);
     if (body.proposedTo) bits.push(`🕊 you offered a sit-down to the ${body.proposedTo} bloodline`);

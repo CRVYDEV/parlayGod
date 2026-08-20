@@ -73,7 +73,7 @@ export async function proposeMarriage(ch, targetCharacterId, client, h) {
   await client.query(
     'INSERT INTO dynasty_marriages (account_a, account_b, proposed_by) VALUES ($1,$2,$3)', [a, b, ch.account_id]);
   await notify(client, target.id, 'marriage_proposed', { from: ch.name });
-  return { ok: true, to: target.name, cost: MARRIAGE.PROPOSE_COST };
+  return { ok: true, to: target.name, cost: MARRIAGE.PROPOSE_COST, dynasty: 'proposed' };
 }
 
 export async function acceptMarriage(ch, fromAccountId, client, h) {
@@ -110,7 +110,7 @@ export async function acceptMarriage(ch, fromAccountId, client, h) {
     'SELECT id, name FROM characters WHERE account_id=$1 AND alive', [fromAccountId])).rows[0];
   if (spouse) await notify(client, spouse.id, 'marriage_sealed', { with: ch.name });
   bus.emit('streets', { type: 'wedding', a: ch.name, b: spouse?.name || 'a quiet house' });
-  return { ok: true, with: spouse?.name || null, cost: MARRIAGE.ACCEPT_COST };
+  return { ok: true, with: spouse?.name || null, cost: MARRIAGE.ACCEPT_COST, dynasty: 'wed' };
 }
 
 // withdraw a PENDING offer (either side, free) or DIVORCE an accepted marriage (the initiator
@@ -133,12 +133,12 @@ export async function divorceMarriage(ch, client, h) {
     const ex = (await client.query('SELECT id, name FROM characters WHERE account_id=$1 AND alive', [other])).rows[0];
     if (ex) await notify(client, ex.id, 'marriage_ended', { by: ch.name });
     bus.emit('streets', { type: 'divorce', by: ch.name });
-    return { ok: true, divorced: true, honor: MARRIAGE.DIVORCE };
+    return { ok: true, divorced: true, honor: MARRIAGE.DIVORCE, dynasty: 'divorced' };
   }
   // withdrawing/declining a pending offer — tell the other side their envoy came back empty (LOW-2)
   const counterpart = (await client.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [other])).rows[0];
   if (counterpart) await notify(client, counterpart.id, 'marriage_withdrawn', { by: ch.name });
-  return { ok: true, withdrawn: true };
+  return { ok: true, withdrawn: true, dynasty: 'withdrawn' };
 }
 
 // THE SCANDAL — called from runEstate when a killerCh exists (fire / shank / npc-hit payer): killing
@@ -177,7 +177,7 @@ export async function nameConsigliere(ch, targetCharacterId, client, h) {
   await client.query('INSERT INTO consiglieri (dynasty_account, adviser_account) VALUES ($1,$2)',
     [ch.account_id, target.account_id]);
   await notify(client, target.id, 'consigliere_offer', { from: ch.name });
-  return { ok: true, to: target.name, cost: MARRIAGE.CONSIGLIERE_COST };
+  return { ok: true, to: target.name, cost: MARRIAGE.CONSIGLIERE_COST, dynasty: 'consigliere_named' };
 }
 
 export async function acceptConsigliere(ch, dynastyAccountId, client, h) {
@@ -188,7 +188,7 @@ export async function acceptConsigliere(ch, dynastyAccountId, client, h) {
   const head = (await client.query(
     'SELECT id, name FROM characters WHERE account_id=$1 AND alive', [dynastyAccountId])).rows[0];
   if (head) await notify(client, head.id, 'consigliere_sworn', { adviser: ch.name });
-  return { ok: true, advising: head?.name || null };
+  return { ok: true, advising: head?.name || null, dynasty: 'consigliere_sworn' };
 }
 
 // end the arrangement — SCOPED by chair (audit LOW-1: the old OR-delete nuked the actor's own
@@ -197,12 +197,12 @@ export async function acceptConsigliere(ch, dynastyAccountId, client, h) {
 export async function endConsigliere(ch, client, role = null) {
   if (role !== 'adviser') {
     const own = await client.query('DELETE FROM consiglieri WHERE dynasty_account=$1', [ch.account_id]);
-    if (own.rowCount) return { ok: true, dismissed: true };
+    if (own.rowCount) return { ok: true, dismissed: true, dynasty: 'consigliere_dismissed' };
     if (role === 'house') throw new GameError('nothing', 'Your house keeps no adviser.');
   }
   const posts = await client.query('DELETE FROM consiglieri WHERE adviser_account=$1', [ch.account_id]);
   if (!posts.rowCount) throw new GameError('nothing', 'No arrangement to end.');
-  return { ok: true, resigned: posts.rowCount };
+  return { ok: true, resigned: posts.rowCount, dynasty: 'consigliere_resigned' };
 }
 
 // the public board — your marriage, pending proposals both ways, your consigliere + houses you counsel

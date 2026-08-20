@@ -2374,9 +2374,63 @@ const traceLine = said.get('/v1/wire/trace');
 if (traceLine) assert(/still listening/i.test(traceLine) && !/swept/i.test(traceLine),
   `the trace must say the taps are still live and name who is on the line — it is not the sweep, and it costs three times as much: ${JSON.stringify(traceLine)}`);
 
+// WAVE 16 — THE ALLIANCE + THE DUEL, a two-player lifecycle the single-token ACTIONS loop cannot
+// drive. Eight of the dynasty replies shared {to,cost} or {dismissed} with another system and read
+// "paid $N" / "done." / a soldier firing — the consigliere DISMISS was worst, cross-firing the crew-
+// fire line and printing "sent a gun home … crew undefined/undefined". A `dynasty` marker now names
+// the system (the exchange:/crew: precedent). And a DUEL result cross-fired the generic casino
+// WIN/LOSS ("the house keeps it (−$0)") over its own line, because `spec` did not cover `elo`. All
+// folded into `said` so the silence + undefined sweeps cover the mutes for free; the two COLLISIONS
+// (non-silent when reverted) are pinned by name in `invert` below.
+{
+  const mk16 = async (n) => { const t = (await inject('POST', '/v1/auth/guest')).body.token;
+    await inject('POST', '/v1/character', t, { name: n + Math.random().toString(36).slice(2, 6) });
+    const id = (await inject('GET', '/v1/me', t)).body.character.id;
+    await app.pool.query("UPDATE characters SET cash=5000000, respect=3000000, energy=100, nerve=100, ammo=600, loc='cathedral', jail_until=NULL, hosp_until=NULL WHERE id=$1", [id]);
+    const acct = (await app.pool.query('SELECT account_id FROM characters WHERE id=$1', [id])).rows[0].account_id;
+    return { t, id, acct }; };
+  const alh = await mk16('Ledger Groom '), alw = await mk16('Ledger Bride ');
+  await app.pool.query('UPDATE characters SET duel_limit=5000 WHERE id=$1', [alw.id]);  // consent-by-listing
+  const w16 = [
+    [alh.t, 'POST', `/v1/dynasty/propose/${alw.id}`, {}],
+    [alw.t, 'POST', `/v1/dynasty/accept/${alh.acct}`, {}],
+    [alh.t, 'POST', `/v1/dynasty/consigliere/${alw.id}`, {}],
+    [alw.t, 'POST', `/v1/dynasty/consigliere/accept/${alh.acct}`, {}],
+    [alh.t, 'DELETE', '/v1/dynasty/consigliere', null],   // the collision — {dismissed:true}, no crew
+    [alh.t, 'POST', '/v1/dynasty/divorce', {}],
+    [alh.t, 'POST', `/v1/duels/${alw.id}`, { amount: 1000 }],  // the casino-WIN cross-fire
+  ];
+  for (const [t, m, url, payload] of w16) {
+    const r = await inject(m, url, t, payload);
+    assert.equal(r.code, 200, `the wave-16 ledger could not drive ${m} ${url} (${JSON.stringify(r.body)}) — ` +
+      'fix the fixture, because a skipped action reads on the summary line as covered');
+    described++;
+    let line; try { line = String(describeFn(r.body, r.code)); } catch (e) { line = 'THREW: ' + e.message; }
+    said.set(url, line); paidBody.set(url, r.body);
+    if (line === 'done.' || /^paid \$[\d,.]+$/.test(line) || /undefined|NaN|\[object|^THREW/.test(line))
+      mute.push(`${m} ${url} → ${JSON.stringify(line)}`);
+  }
+  // the two mutes that the silence sweep can catch are covered by `said`; these two are the marquee
+  // acts and are pinned positively so a revert to a bare price fails HERE with a clear reason too.
+  const prop = said.get(`/v1/dynasty/propose/${alw.id}`);
+  assert(/sit-down|bloodline/i.test(prop),
+    `proposing a dynastic marriage is a social act, not a bare price — it must name the bloodline: ${JSON.stringify(prop)}`);
+  const named = said.get(`/v1/dynasty/consigliere/${alw.id}`);
+  assert(/consigliere|the chair/i.test(named),
+    `naming a consigliere must name the chair, not read "paid $N": ${JSON.stringify(named)}`);
+}
+
 // The four INVERSIONS. Each is a real sentence about a real system — just not the one the player is
 // looking at — so both silence patterns read straight past them and only a named claim can hold them.
 const invert = [
+  // A DUEL result carries `win` but its own elo/scores line; the generic casino WIN/LOSS below was
+  // cross-firing "the house keeps it (−$0)" over it because `spec` did not cover `elo`.
+  [/\/v1\/duels\/[^/]+$/, /the house keeps|^WIN —/i,
+    'a duel result reads its own line (scores, stake, elo) — the generic casino WIN/LOSS must not cross-fire over it'],
+  // THE CONSIGLIERE DISMISS returns {dismissed:true} with no crew — it was firing the SOLDIER-dismiss
+  // line ("sent a gun home … crew undefined/undefined"). The undefined sweep also catches it now.
+  ['/v1/dynasty/consigliere', /sent a gun home/i,
+    'dismissing a consigliere is not firing a soldier — {dismissed:true} collided with the crew-dismiss line'],
   [/\/v1\/assets\/[^/]+\/sell$/, /is yours/i, 'selling an asset must not say it is YOURS — that is the buy line, and the sale price goes with it'],
   ['/v1/loans', /took the loan/i, 'posting an offer is the LENDER escrowing their own money — it must not tell them they took a loan and owe it back'],
   [/\/v1\/estate\/staff\/[^/]+$/, /let one go|walks/i, 'hiring household staff must not read as firing a kitchen hand'],
