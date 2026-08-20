@@ -1991,6 +1991,14 @@
     internal: "something broke on our end — that's a bug, not you. Try again; if it keeps happening, say so.",
   };
   function describe(body, code) {
+    // PLAIN TEXT, not HTML. Every consumer of describe() is toast(), which assigns to textContent —
+    // injection-proof by construction — so HTML-escaping here protects nothing and CORRUPTS the very
+    // strings that most need to read right: 94 catalog names carry an apostrophe or ampersand
+    // (Motorcycle 'Wasp', A Dead Don's Watch, The Doc's Friend) and the street-name charset guard
+    // allows both, so a player named O'Malley was toasted as O&#39;Malley on every line that named
+    // them. Deliberately NOT the module-scope esc(): that one is right for the ~100 innerHTML
+    // renderers and wrong here, and naming them apart is what stops the next reader mixing them up.
+    const txt = (s) => String(s == null ? '' : s);
     // v3 step 7 — the rarity NFTs. The extraction line says the tradeoff out loud, because it is the
     // one action in the game with no way back.
     if (body && body.rarityName && body.was) return `\u2728 ${body.name} is ${body.rarityName} now — ${body.spent} $OMR`;
@@ -2014,40 +2022,40 @@
     if (body && body.referrer && body.ok) return `on the record — ${body.referrer} gets credit as you come up`;
     // STREET DEEDS — you claimed a named plot of the world (the claim response is {ok,name,district,districtName})
     if (body && body.ok && body.districtName && body.district && body.name && !body.tier)
-      return `\u{1F3F7} the deed to ${esc(body.name)} is yours — on ${esc(body.districtName)}. It's yours forever, and it outlives your street.`;
+      return `\u{1F3F7} the deed to ${txt(body.name)} is yours — on ${txt(body.districtName)}. It's yours forever, and it outlives your street.`;
     // STREET DEEDS Phase 2 — the corner take collect ({ok,total,collected}) and the shakedown ({ok,won,street,reclaim})
     if (body && body.ok && typeof body.total === 'number' && Array.isArray(body.collected))
       return `\u{1F4B5} corner take collected — $${body.total.toLocaleString()} off ${body.collected.length} corner${body.collected.length === 1 ? '' : 's'}`;
     if (body && body.ok && 'won' in body && body.street)
       return body.won
-        ? (body.reclaim ? `\u{1F91C} you took your corner back — ${esc(body.street)} is yours to run again` : `\u{1F91C} you muscled in on ${esc(body.street)} — you run the corner now`)
-        : `they held the corner — ${esc(body.street)} stayed theirs`;
+        ? (body.reclaim ? `\u{1F91C} you took your corner back — ${txt(body.street)} is yours to run again` : `\u{1F91C} you muscled in on ${txt(body.street)} — you run the corner now`)
+        : `they held the corner — ${txt(body.street)} stayed theirs`;
     // STREET DEEDS Phase 3 — the market: buy ({ok,street,price,net}), list ({ok,name,price}), unlist ({ok,name})
     if (body && body.ok && body.street && typeof body.net === 'number')
-      return `\u{1F3D8} you bought ${esc(body.street)} — the street and its whole legend are yours. The corner, you'll have to earn.`;
+      return `\u{1F3D8} you bought ${txt(body.street)} — the street and its whole legend are yours. The corner, you'll have to earn.`;
     if (body && body.ok && body.name && typeof body.price === 'number')
-      return `\u{1F3F7} ${esc(body.name)} is on the market for $${body.price.toLocaleString()}`;
+      return `\u{1F3F7} ${txt(body.name)} is on the market for $${body.price.toLocaleString()}`;
     // IDENTITY — the "about me" blurb (the setBio response is exactly {ok, bio})
     if (body && body.ok === true && Object.keys(body).length === 2 && 'bio' in body)
       return body.bio ? 'your story is on the record' : 'back to the auto-blurb';
     // THE STREAK — the daily check-in (best/rank are unique to the claim response, not the view)
     if (body && body.ok && body.streak != null && body.best != null && body.cash != null && typeof body.rank === 'string')
-      return `\u{1F525} checked in — day ${body.streak}, +$${fmt(body.cash)}${body.milestone ? ` · 🏅 ${body.milestone.day}-DAY MILESTONE — you're ${esc(body.milestone.title)}, +$${fmt(body.milestone.bonus)}` : (body.streak >= body.best ? ` · best yet (${esc(body.rank)})` : '')}`;
+      return `\u{1F525} checked in — day ${body.streak}, +$${fmt(body.cash)}${body.milestone ? ` · 🏅 ${body.milestone.day}-DAY MILESTONE — you're ${txt(body.milestone.title)}, +$${fmt(body.milestone.bonus)}` : (body.streak >= body.best ? ` · best yet (${txt(body.rank)})` : '')}`;
     // THE PROVENANCE COLORS — the birthmark claimed
     if (body && body.colors === 'claimed' && body.ward)
-      return `\u{1F396} you wear the colors of ${esc(body.ward)} — stamped on the bloodline's portrait, once ever`;
+      return `\u{1F396} you wear the colors of ${txt(body.ward)} — stamped on the bloodline's portrait, once ever`;
     // THE COMMUNITY DROP — the envelope opened (the claim response's unique conjunction)
     if (body && body.drop === 'claimed')
       return `\u{1F4E9} the envelope: +${fmt(body.omr)} $OMR${body.freeMint ? ' — and a FREE made-man credit (mint your identity on this screen)' : ''}`;
     // THE BROKERS' DESK — activated a window ({tier,name,omr,mult,until,spentOmr} is the activate shape)
     if (body && body.mult != null && body.spentOmr != null && body.until)
-      return `\u{1F3A9} you're an activated broker — ${esc(body.name)} (×${body.mult}). Now PLAY: the split pays the men who did.`;
+      return `\u{1F3A9} you're an activated broker — ${txt(body.name)} (×${body.mult}). Now PLAY: the split pays the men who did.`;
     // THE WEEKLY BULLETIN — claimed the week's title
-    if (body && body.title && body.theme) return `\u{1F4F0} ${esc(body.theme)} — you took the title: ${esc(body.title)}`;
+    if (body && body.title && body.theme) return `\u{1F4F0} ${txt(body.theme)} — you took the title: ${txt(body.title)}`;
     // PRIME TIME — answered tonight's call
     if (body && body.answered === true && (body.mode === 'value' || body.mode === 'honor'))
       return body.mode === 'honor'
-        ? `\u{1F303} you answered the call — tonight you're ${esc(body.title || 'in')}. ${body.turnout || 1} out so far.`
+        ? `\u{1F303} you answered the call — tonight you're ${txt(body.title || 'in')}. ${body.turnout || 1} out so far.`
         : `\u{1F303} you answered the call — ${body.turnout || 1} out so far. Your cut lands when the window closes.`;
     // PRIME TIME HAPPY HOUR — bought a round
     if (body && body.round != null && body.of != null)
@@ -2060,21 +2068,21 @@
         ? `\u{1F303} you stormed the gates — CRACKED! ${body.damage}/${body.target} (${body.fighters} in). Settled at close.`
         : `\u{1F303} you stormed the gates — ${body.damage}/${body.target}, ${body.target - body.damage} to go (${body.fighters} in). Crack it before close.`;
     // THE VOUCH — you staked your name (or pulled it back)
-    if (body && body.vouched) return body.mutual ? `\u{1F91D} you vouched ${esc(body.vouched)} back — a mutual bond` : `you vouched for ${esc(body.vouched)} — your name's on them now`;
-    if (body && body.pulled) return `pulled your name back from ${esc(body.pulled)}`;
+    if (body && body.vouched) return body.mutual ? `\u{1F91D} you vouched ${txt(body.vouched)} back — a mutual bond` : `you vouched for ${txt(body.vouched)} — your name's on them now`;
+    if (body && body.pulled) return `pulled your name back from ${txt(body.pulled)}`;
     // THE HIRED GUNS — a merc's firepower counts, but takes no cut. The toast says the crew grew.
     if (body && body.hired && body.fee != null) return `\u{1F52B} a gun's on the crew — $${fmt(body.fee)} up front, no cut of the score. crew ${body.crew}/${body.crewMax}`;
     if (body && body.dismissed) return `sent a gun home — a slot's open for a real crewman. crew ${body.crew}/${body.crewMax}`;
     // THE CREW (the account-level social pact) — the lifecycle toasts. `crew` is a string status here,
     // distinct from the hired-guns branches above where it's a member count.
     if (body && typeof body.crew === 'string') {
-      const m = { formed: 'the crew is yours — put some names in', joined: `you're in — ${esc(body.name || 'the crew')}`,
-        left: 'you walked — the pact\'s off', invited: `word put in for ${esc(body.to || 'them')}`,
-        kicked: `${esc(body.who || 'he')}'s out of the crew`, declined: 'passed on it', pulled: '',
+      const m = { formed: 'the crew is yours — put some names in', joined: `you're in — ${txt(body.name || 'the crew')}`,
+        left: 'you walked — the pact\'s off', invited: `word put in for ${txt(body.to || 'them')}`,
+        kicked: `${txt(body.who || 'he')}'s out of the crew`, declined: 'passed on it', pulled: '',
         recruiting: 'the doors are open — players can ask to join', closed: 'recruiting closed',
-        requested: `you asked to join ${esc(body.to || 'the crew')} — the boss decides`,
-        took_in: `${esc(body.who || 'they')} joined the crew`, turned_away: 'you turned them away',
-        target: `the crew's after ${esc(body.target || 'the mark')} — chip in on the hit`, target_cleared: 'the hit is called off',
+        requested: `you asked to join ${txt(body.to || 'the crew')} — the boss decides`,
+        took_in: `${txt(body.who || 'they')} joined the crew`, turned_away: 'you turned them away',
+        target: `the crew's after ${txt(body.target || 'the mark')} — chip in on the hit`, target_cleared: 'the hit is called off',
         objective_claimed: `you took your cut of the week's job — $${fmt(body.reward || 0)}` };
       if (m[body.crew] !== undefined && m[body.crew] !== '') return `\u{1F465} ${m[body.crew]}`;
     }
@@ -2107,22 +2115,22 @@
     if (body && body.ok && body.gross !== undefined && body.net !== undefined && body.street === undefined)
       return `sold her on — $${fmt(body.net)} in hand${body.gross > body.net ? ` (the fence took $${fmt(body.gross - body.net)})` : ''}`;
     if (body && body.ok && 'standDown' in body)
-      return body.standDown ? `${esc(body.standDown)} stands down — nobody's riding with you` : 'nobody was riding with you';
+      return body.standDown ? `${txt(body.standDown)} stands down — nobody's riding with you` : 'nobody was riding with you';
     // THE FIXTURES — all four Underworld buttons (gift / penance / favor / errand) go through one
     // act() handler and every one of them read "done.". The errand is the sharpest: it signs you up
     // for a THREE-DAY job and the response carries the drawn task, so saying nothing withholds the
     // one thing the player needs. Ordered most-specific first; npcName/taskLabel come from the
     // server (the client has no catalog of the cast, and the ids are keys, not names).
     if (body && body.ok && body.npcName && body.taskLabel)
-      return `${esc(body.npcName)} has work for you: ${esc(body.taskLabel)}, on ${body.steps} separate days — finish it and they warm to you (+${body.bonus} standing)${body.replacedName ? ` · you walked off ${esc(body.replacedName)}'s job to take it` : ''}`;
+      return `${txt(body.npcName)} has work for you: ${txt(body.taskLabel)}, on ${body.steps} separate days — finish it and they warm to you (+${body.bonus} standing)${body.replacedName ? ` · you walked off ${txt(body.replacedName)}'s job to take it` : ''}`;
     if (body && body.ok && body.npcName && body.squared !== undefined)
       return body.squared
-        ? `squared with ${esc(body.npcName)} — $${fmt(body.cost)}, and they'll do favors again`
-        : `paid $${fmt(body.cost)} toward ${esc(body.npcName)} — ${body.remaining} more to square`;
+        ? `squared with ${txt(body.npcName)} — $${fmt(body.cost)}, and they'll do favors again`
+        : `paid $${fmt(body.cost)} toward ${txt(body.npcName)} — ${body.remaining} more to square`;
     if (body && body.ok && body.npcName && body.standing !== undefined)
-      return `the envelope lands — ${esc(body.npcName)} is at ${body.standing}${body.tier ? ` (tier ${body.tier})` : ''}`;
+      return `the envelope lands — ${txt(body.npcName)} is at ${body.standing}${body.tier ? ` (tier ${body.tier})` : ''}`;
     if (body && body.ok && body.npcName)
-      return `${esc(body.npcName)} does you a favor — ${body.health !== undefined ? 'patched up, back to full'
+      return `${txt(body.npcName)} does you a favor — ${body.health !== undefined ? 'patched up, back to full'
         : body.energy !== undefined ? `you're rested (${body.energy} energy)`
         : body.nerve !== undefined ? `nerve back up (${body.nerve})`
         : body.repaired !== undefined ? 'her boys straightened out your worst iron'
@@ -2134,70 +2142,112 @@
       return body.currency === 'omr'
         ? `${fmt(body.amount)} $OMR into the family reserve — that's what seals and the Foundation are bought with`
         : `$${fmt(body.amount)} into the family treasury`;
-    if (body && body.ok && body.color && body.name === undefined) return `the family flies ${esc(body.color)} now`;
+    if (body && body.ok && body.color && body.name === undefined) return `the family flies ${txt(body.color)} now`;
     if (body && body.ok && body.id && body.kind && body.name && body.tier !== undefined)
       return body.tier > 1
-        ? `the ${esc(body.name)} moves up to tier ${body.tier}${body.collected ? ` — $${fmt(body.collected)} banked at the old rate first` : ''}`
-        : `the ${esc(body.name)} is yours — collect the till, and mind the pad`;
+        ? `the ${txt(body.name)} moves up to tier ${body.tier}${body.collected ? ` — $${fmt(body.collected)} banked at the old rate first` : ''}`
+        : `the ${txt(body.name)} is yours — collect the till, and mind the pad`;
     if (body && body.ok && body.berths !== undefined && body.fleetMax !== undefined)
       return `slip rented — $${fmt(body.spent)}, ${body.berths} berth${body.berths > 1 ? 's' : ''} held, room for ${body.fleetMax} boats`;
     if (body && body.ok && body.traitName && body.desc)
-      return `${esc(body.name)} signs on — ${esc(body.traitName)}: ${esc(body.desc)}. $${fmt(body.cost)}.`;
+      return `${txt(body.name)} signs on — ${txt(body.traitName)}: ${txt(body.desc)}. $${fmt(body.cost)}.`;
     if (body && body.ok && body.retainerSeconds !== undefined)
       return `the lawyer's on retainer — $${fmt(body.cost)}, good for ${minsTxt(body.retainerSeconds)}`;
     if (body && body.ok && body.stable !== undefined && body.power !== undefined && body.chin !== undefined)
-      return `\u{1F94A} signed ${esc(body.name)} — ${body.power} power / ${body.chin} chin / ${body.speed} speed. ${body.stable} in the stable.`;
+      return `\u{1F94A} signed ${txt(body.name)} — ${body.power} power / ${body.chin} chin / ${body.speed} speed. ${body.stable} in the stable.`;
     // THE TRAINING CAMP. Signing a fighter read well and every other verb on both screens said
     // "done." — the forgotten-sibling shape, three lines apart. A gym session and a stable workout
     // BOTH cost real cash the Cornerman discounts, so the price rides the reply (see boxing.js).
     // The stable's own sheet is guarded on `heart`, which a boxer never has, so it cannot cross-fire
     // on the recruit branch above (both carry `stable`).
     if (body && body.ok && body.heart !== undefined && body.stamina !== undefined && body.name)
-      return `\u{1F3C7} ${esc(body.kindName || 'a racer')} bought — ${esc(body.name)}, ${body.speed} speed / ${body.stamina} stamina / ${body.heart} heart. ${body.stable} in the stable${body.spent ? `, $${fmt(body.spent)}` : ''}.`;
+      return `\u{1F3C7} ${txt(body.kindName || 'a racer')} bought — ${txt(body.name)}, ${body.speed} speed / ${body.stamina} stamina / ${body.heart} heart. ${body.stable} in the stable${body.spent ? `, $${fmt(body.spent)}` : ''}.`;
     if (body && body.ok && body.stat && body.value !== undefined && body.cap !== undefined)
       return body.value >= body.cap
-        ? `\u{1F3CB} ${esc(body.fighter || body.name || 'they')} maxed out ${esc(body.stat)} — ${body.value}/${body.cap}${body.spent ? `, $${fmt(body.spent)}` : ''}. Nothing more to win there.`
-        : `\u{1F3CB} worked ${esc(body.fighter || body.name || 'them')} — ${esc(body.stat)} up to ${body.value}/${body.cap}${body.spent ? `, $${fmt(body.spent)}` : ''}`;
+        ? `\u{1F3CB} ${txt(body.fighter || body.name || 'they')} maxed out ${txt(body.stat)} — ${body.value}/${body.cap}${body.spent ? `, $${fmt(body.spent)}` : ''}. Nothing more to win there.`
+        : `\u{1F3CB} worked ${txt(body.fighter || body.name || 'them')} — ${txt(body.stat)} up to ${body.value}/${body.cap}${body.spent ? `, $${fmt(body.spent)}` : ''}`;
+    // THE PEN. A sentence is where a player has the least to do and the most to read, and the whole
+    // yard was mute or bare: working it stated the money and never the TIME (which is the point of
+    // good behaviour), and protection — six figures — never said it also stops you shanking, which
+    // is the same shield-not-bunker rule the street safehouse carries.
+    if (body && body.ok && body.pay !== undefined && body.cutSeconds !== undefined)
+      return `\u{1F528} worked the yard — $${fmt(body.pay)} and ${minsTxt(body.cutSeconds)} off the stretch. ${minsTxt(body.sentenceSeconds)} left.`;
+    if (body && body.ok && body.cutSeconds !== undefined && body.cost !== undefined)
+      return `\u{1F4B5} squared the guard — $${fmt(body.cost)} for ${minsTxt(body.cutSeconds)} off. ${body.sentenceSeconds ? `${minsTxt(body.sentenceSeconds)} left.` : "You're out."}`;
+    if (body && body.ok && body.protectedSeconds !== undefined)
+      return `\u{1F6E1} the yard boss has your back for ${minsTxt(body.protectedSeconds)} — $${fmt(body.cost)}. Nobody shanks you, and you can't shank anybody either.`;
+    if (body && body.ok && body.item && body.cost !== undefined)
+      return `\u{1F5DD} the guard slips you a ${txt(String(body.item).replace(/_/g, ' '))} — $${fmt(body.cost)}${
+        body.item === 'shiv' ? '. A shank spends it, win or lose.'
+        : body.item === 'burner' ? '. One call to the street, then it’s gone.'
+        : body.item === 'cutkit' ? '. It burns on the wall attempt whether you make it or not.' : '.'}`;
+    if (body && body.ok && body.faction && body.name)
+      return `\u{1F91D} you run with ${txt(body.name)} now — your crew watches your back on the yard, and you can't shank one of your own`;
+    // THE LAW. A bribe is the price with the purchase left off: what it BUYS is a lower file.
+    if (body && body.ok && body.exposure !== undefined && body.stage)
+      return `\u{1F4B0} $${fmt(body.cost)} to the man — the file drops to ${body.exposure} (${txt(String(body.stage).replace(/_/g, ' '))})`;
+    // THE PORT. An upgrade is permanent capability on a hull, and a rendezvous is CONSENT: another
+    // captain can take your run off you mid-sea, which is the whole reason to flag it.
+    if (body && body.ok && body.part && body.level !== undefined)
+      return `\u{1F6A2} ${txt(body.part)} up to ${body.level} — $${fmt(body.spent)}. She carries ${body.hold} and runs ${body.speed} knots now.`;
+    if (body && body.ok && body.rendezvous !== undefined)
+      return body.rendezvous
+        ? '\u{1F6A4} she’s taking handoffs — another captain can meet your run at sea and carry it in for you'
+        : 'no more handoffs — she rides alone';
     // THE STRIP. Tuning read well and every other verb on the screen said "done." — including PINKS,
     // which is the highest-stakes consent in the game: agree to it and a loss hands over the car.
     if (body && body.ok && body.pinkSlip !== undefined)
       return body.pinkSlip
-        ? `\u{1F380} the ${esc(body.car || 'car')} is up for PINKS — a challenger can race you for the title, and if you lose it's THEIRS`
-        : `the ${esc(body.car || 'car')} is off pinks — no more racing for the title`;
+        ? `\u{1F380} the ${txt(body.car || 'car')} is up for PINKS — a challenger can race you for the title, and if you lose it's THEIRS`
+        : `the ${txt(body.car || 'car')} is off pinks — no more racing for the title`;
     if (body && body.ok && body.nos !== undefined && body.carId)
-      return `\u{1F4A8} nitrous loaded in the ${esc(body.car || 'car')} — ${body.nos}/${body.max} charges, $${fmt(body.spent)}. One burns per race, win or lose.`;
+      return `\u{1F4A8} nitrous loaded in the ${txt(body.car || 'car')} — ${body.nos}/${body.max} charges, $${fmt(body.spent)}. One burns per race, win or lose.`;
     if (body && body.ok && body.carId && body.limit !== undefined)
       return body.limit
-        ? `\u{1F4CB} the ${esc(body.car || 'car')} is on the strip — any driver can wager you up to $${fmt(body.limit)}${body.asked > body.limit ? ` (you asked $${fmt(body.asked)}; the table caps there)` : ''}`
-        : `\u{1F4CB} the ${esc(body.car || 'car')} is off the strip — no new wager races`;
+        ? `\u{1F4CB} the ${txt(body.car || 'car')} is on the strip — any driver can wager you up to $${fmt(body.limit)}${body.asked > body.limit ? ` (you asked $${fmt(body.asked)}; the table caps there)` : ''}`
+        : `\u{1F4CB} the ${txt(body.car || 'car')} is off the strip — no new wager races`;
     if (body && body.ok && body.boutLimit !== undefined)
       return body.boutLimit
-        ? `\u{1F4CB} ${esc(body.fighter)} is on the card — anyone can make a match up to $${fmt(body.boutLimit)}, and the loser gets laid up`
-        : `\u{1F4CB} ${esc(body.fighter)} is off the card — no new matches`;
+        ? `\u{1F4CB} ${txt(body.fighter)} is on the card — anyone can make a match up to $${fmt(body.boutLimit)}, and the loser gets laid up`
+        : `\u{1F4CB} ${txt(body.fighter)} is off the card — no new matches`;
     if (body && body.ok && body.raceLimit !== undefined)
       return body.raceLimit
-        ? `\u{1F4CB} ${esc(body.name)} is on the strip — any owner can match you up to $${fmt(body.raceLimit)}, and a loss lays them up`
-        : `\u{1F4CB} ${esc(body.name)} is off the strip — no new match races`;
+        ? `\u{1F4CB} ${txt(body.name)} is on the strip — any owner can match you up to $${fmt(body.raceLimit)}, and a loss lays them up`
+        : `\u{1F4CB} ${txt(body.name)} is off the strip — no new match races`;
     // THE SCORE. The stake is FRONTED — it comes back only on a pre-execution disband — and the job
     // cannot go until the crew is filled, so both terms ride the line the leader reads when they pay.
     if (body && body.ok && body.crewNeeded !== undefined && body.role)
-      return `\u{1F5FA} ${esc(body.name)} is planned — you're ${esc(body.role)}, $${fmt(body.stake)} fronted${body.fenced ? ', taking it HOT (fenceable loot, not cash)' : ''}. ${body.crewNeeded ? `Needs ${body.crewNeeded} more on the crew before it goes; the stake comes back only if you disband first.` : 'Ready to go.'}`;
+      return `\u{1F5FA} ${txt(body.name)} is planned — you're ${txt(body.role)}, $${fmt(body.stake)} fronted${body.fenced ? ', taking it HOT (fenceable loot, not cash)' : ''}. ${body.crewNeeded ? `Needs ${body.crewNeeded} more on the crew before it goes; the stake comes back only if you disband first.` : 'Ready to go.'}`;
     // THE CONVOY. A shipment is for BULK and refuses to roll under the minimum — a player who opened
     // one with two crates used to hear that only at depart. The manifest total is the server's to say.
     // ...and DEPARTURE said "done." over the loudest thing the screen does: the run goes PUBLIC (the
     // streets feed carries the route and a value band), guards are paid, and it can be ambushed on
     // the road. A hammered lane also sheds guard defence, which is the one number a shipper can act on.
     if (body && body.ok && body.arrivesSeconds !== undefined && body.band && body.units !== undefined)
-      return `\u{1F6E3} rolling — ${body.units} units, ${minsTxt(body.arrivesSeconds)} on the road. The streets know a ${esc(body.band)} load is moving this route${body.guardCut ? `, and the lane's hot: your guards are ${body.guardCut} down` : ''}. Bandits get up to three cracks at it${body.premium ? ' — the freight is insured' : ''}.`;
+      return `\u{1F6E3} rolling — ${body.units} units, ${minsTxt(body.arrivesSeconds)} on the road. The streets know a ${txt(body.band)} load is moving this route${body.guardCut ? `, and the lane's hot: your guards are ${body.guardCut} down` : ''}. Bandits get up to three cracks at it${body.premium ? ' — the freight is insured' : ''}.`;
     if (body && body.ok && body.units !== undefined && body.minUnits !== undefined)
-      return `\u{1F69B} ${body.loaded} × ${esc(body.good || 'freight')} aboard${body.destination ? ` for ${esc($dist(body.destination))}` : ''} — ${body.units} on the manifest. ${body.units < body.minUnits ? `A convoy needs ${body.minUnits} units to roll: ${body.minUnits - body.units} short.` : 'Heavy enough to roll — pick your guards and go.'}`;
+      return `\u{1F69B} ${body.loaded} × ${txt(body.good || 'freight')} aboard${body.destination ? ` for ${txt($dist(body.destination))}` : ''} — ${body.units} on the manifest. ${body.units < body.minUnits ? `A convoy needs ${body.minUnits} units to roll: ${body.minUnits - body.units} short.` : 'Heavy enough to roll — pick your guards and go.'}`;
+    // THE CLUB. Three verbs on one screen, all mute or wrong: opening a house — the single biggest
+    // purchase there — said "done." over $750k, naming it said "done." over a $OMR burn, and the
+    // decor UPGRADE carried `collected` (the pending swept at the old rate) so it fell into the
+    // empty-till line below and reported a $600k renovation as nothing coming in. These sit ABOVE
+    // that branch on purpose: the upgrade's `collected` is a term to state, not a shape to match on.
+    // (no article before the name in any of the three — every rung of the decor ladder is already
+    // called "The Backroom"/"The Lounge"/…, and a player's own club name may carry one too, so
+    // prepending one read "the The Backroom". Only reading the output catches that.)
+    if (body && body.ok && body.opened && body.district && body.name)
+      return `\u{1F37E} ${txt(body.name)} is open in ${txt($dist(body.district))} — $${fmt(body.spent)}. Patrons buy rounds off you; build the decor up and they'll pay more.`;
+    if (body && body.ok && body.tier !== undefined && body.name && body.district && body.collected !== undefined)
+      return `\u{1F37E} built out to ${txt(body.name)} — $${fmt(body.spent)}${body.collected > 0 ? `, and $${fmt(body.collected)} swept out of the till first` : ''}. The room draws a better class of patron now.`;
+    if (body && body.ok && body.district && body.name && body.currency === 'omr' && body.spent !== undefined)
+      return `\u{1F37E} the house goes by ${txt(body.name)} now — ${fmt(body.spent)} $OMR`;
     if (body && body.ok && body.collected === 0 && body.total === undefined)
       return 'nothing in the till yet — come back when the day has run';
     if (body && body.banked !== undefined && body.clearSeconds !== undefined)
       return `banked $${fmt(body.banked)} — it rides IN TRANSIT for ${minsTxt(body.clearSeconds)}, and a killer can loot it off you until it clears${body.intransit > body.banked ? ` (${'$' + fmt(body.intransit)} in transit now — deposits stack and reset the clock)` : ''}`;
     if (body && body.withdrew !== undefined) return `drew $${fmt(body.withdrew)} out — $${fmt(body.bank)} still banked`;
     if (body && body.ok && body.loc && Object.keys(body).filter((k) => k !== 'events' && k !== 'ok' && k !== 'character' && k !== 'owned').length === 1)
-      return `you're in ${esc($dist(body.loc))} now`;
+      return `you're in ${txt($dist(body.loc))} now`;
     if (body && body.ok && body.qty !== undefined && body.unit !== undefined && (body.spent !== undefined || body.earned !== undefined))
       return body.spent !== undefined
         ? `bought ${body.qty} at $${fmt(body.unit)} a unit — $${fmt(body.spent)} out of pocket`
@@ -2237,9 +2287,9 @@
     if (body && body.ok && 'listed' in body && body.listed !== undefined && body.street === undefined)
       return body.listed ? 'you\'re on the duelling ladder — anyone can call you out now' : 'off the ladder — no more challenges';
     if (body && body.ok && body.folded) return 'paper folded — you\'re caught up';
-    if (body && body.ok && body.referralCodeChanged) return `the street knows you as ${esc(body.name)} now — your referral link changed with the name`;
+    if (body && body.ok && body.referralCodeChanged) return `the street knows you as ${txt(body.name)} now — your referral link changed with the name`;
     if (body && body.ok && 'title' in body && body.tier === undefined)
-      return body.title ? `they call you ${esc(body.title)} now` : 'title dropped — just your name from here';
+      return body.title ? `they call you ${txt(body.title)} now` : 'title dropped — just your name from here';
     if (body && body.ok && body.lab && body.cap !== undefined) return `\u{1F9EA} the lab is a ${String(body.lab).replace(/_/g, ' ')} now — ${body.cap} units a batch`;
     if (body && body.ok && body.path && body.spent === undefined)
       return `you're walking the ${String(body.path).replace(/_/g, ' ')} path now — it shapes what you're good at`;
@@ -2247,8 +2297,10 @@
       return body.bio ? 'your story is on your profile — anyone who looks you up reads it' : 'story cleared — the sheet speaks for itself';
     if (body && body.minted && body.alreadyMinted) return 'you\'re already made — the credit stays in your pocket';
     if (body && body.minted && !body.alreadyMinted) return '\u{1F396} you\'re MADE. The extraction rail is open to you now.';
+    if (body && body.ok && body.listed === false && body.street)
+      return `\u{1F3F7} ${txt(body.street)} is off the market — the deed stays yours`;
     if (body && body.ok && body.name && body.estate === undefined && body.district === undefined && body.price === undefined && body.tier === undefined && Object.keys(body).filter((k) => k !== 'events' && k !== 'ok' && k !== 'character' && k !== 'owned').length === 1)
-      return `the place has a name now — ${esc(body.name)}`;
+      return `the place has a name now — ${txt(body.name)}`;
     if (!body || typeof body !== 'object') return code < 400 ? 'done.' : 'no dice.';
     if (code >= 400) { const e = body.error; return body.message || (e && ERRMAP[e]) || (e ? e.replace(/_/g, ' ') : `the city said no (${code})`); }
     const bits = [];
@@ -2441,14 +2493,14 @@
     // the money bought anything; the extort is the moment the mark FINDS OUT (an un-extorted secret
     // is invisible to them — the demand IS the reveal) and starts a 24h clock; the expose spends the
     // leverage for good. Ordered above the `paid`/`kind` chain because the hush line reads `kind` too.
-    if (body.found === true && body.kindName) bits.push(`\u{1F5C3} you turned up ${esc(body.kindName)} on ${esc(body.on)} — worth up to $${fmt(body.hushCap)} in hush money, and it goes stale in ${minsTxt(body.ttlSeconds)}${body.spent ? ` (${fmt(body.spent)} $OMR)` : ''}`);
+    if (body.found === true && body.kindName) bits.push(`\u{1F5C3} you turned up ${txt(body.kindName)} on ${txt(body.on)} — worth up to $${fmt(body.hushCap)} in hush money, and it goes stale in ${minsTxt(body.ttlSeconds)}${body.spent ? ` (${fmt(body.spent)} $OMR)` : ''}`);
     else if (body.found === false) bits.push(`nothing in their trash${body.spent ? ` — ${fmt(body.spent)} $OMR gone` : ''}. Clean, or somebody swept it first; give it a day before you look again.`);
     if (body.demand !== undefined && body.deadlineSeconds !== undefined) bits.push(`\u{1F4B0} the demand is out — $${fmt(body.demand)}, ${minsTxt(body.deadlineSeconds)} to pay. They know you have it now, and they know what it is.`);
-    if (body.exposeHeat !== undefined && body.kind) bits.push(`\u{1F4E2} you handed ${esc(body.kind)} to the Bureau — +${body.exposeHeat} on their file, and the leverage is spent`);
+    if (body.exposeHeat !== undefined && body.kind) bits.push(`\u{1F4E2} you handed ${txt(body.kind)} to the Bureau — +${body.exposeHeat} on their file, and the leverage is spent`);
     // EVERY SECRET NAME ALREADY STARTS WITH "The" (The Wash Records, The Bodies, The Kitchen Books,
     // The Second Ledger — all four), so the article this line added read "The The Wash Records" on
     // every hush payment ever made, not on an edge case. Found by reading the line, not the code.
-    else if (body.paid > 0 && body.kind && body.omrSpent === undefined) bits.push(`paid the hush — $${fmt(body.paid)}. ${esc(body.kind)} stays buried, for now.`);
+    else if (body.paid > 0 && body.kind && body.omrSpent === undefined) bits.push(`paid the hush — $${fmt(body.paid)}. ${txt(body.kind)} stays buried, for now.`);
     else if (body.paid > 0 && body.bought === undefined) bits.push(`paid $${fmt(body.paid)}`);
     if (body.shuttered) bits.push(`closed up the ${body.shuttered} — the pad on it stops${body.back > 0 ? `, $${fmt(body.back)} back` : ', nothing back'}`);
     // `walked` means two different things: a kitchen hand let go, and the estate's staff downing
@@ -2456,7 +2508,7 @@
     // and landed in the crew-firing line — so a hire read as a firing AND printed the word
     // "undefined" twice at the player, because the crew line reads `settled` and `crew`, which the
     // estate never sends. Scope the crew line to `crew`, and give the hire its own.
-    if (body.wageOmrDay !== undefined && body.staff) bits.push(`${esc(body.name)} is on the household — ${fmt(body.wageOmrDay)} $OMR a day, and they down tools if the wages go unpaid`);
+    if (body.wageOmrDay !== undefined && body.staff) bits.push(`${txt(body.name)} is on the household — ${fmt(body.wageOmrDay)} $OMR a day, and they down tools if the wages go unpaid`);
     else if (body.walked !== undefined && body.crew !== undefined) bits.push(body.walked
       ? `they'd already downed tools — one hand walks, ${body.crew} left on the corner`
       : `settled $${fmt(body.settled)} and let one go — ${body.crew} left on the corner`);
@@ -2566,7 +2618,7 @@
     // sweep clears cheaply and anonymously, the trace names but LEAVES them — so the two lines have
     // to say which one you just did. Ordered first: `watchers` is the discriminator.
     if (body.watchers !== undefined) bits.push(body.watchers.length
-      ? `\u{1F50C} traced ${body.watchers.length} on your line — ${body.watchers.map((w) => esc(w.name)).join(', ')}${body.spent ? ` (${fmt(body.spent)} $OMR)` : ''}. They're STILL listening: a trace names them, it doesn't cut them. Sweep to clear.`
+      ? `\u{1F50C} traced ${body.watchers.length} on your line — ${body.watchers.map((w) => txt(w.name)).join(', ')}${body.spent ? ` (${fmt(body.spent)} $OMR)` : ''}. They're STILL listening: a trace names them, it doesn't cut them. Sweep to clear.`
       : 'nobody\u2019s on your line — nothing to trace, no charge');
     else if (body.bugsFound !== undefined) bits.push(body.bugsFound
       ? `swept ${body.bugsFound} bug${body.bugsFound === 1 ? '' : 's'} off your line${body.spent ? ` — ${fmt(body.spent)} $OMR` : ''}`
@@ -2604,9 +2656,9 @@
     if (body.kind === 'car' && body.minBid !== undefined)
       bits.push(`🏷 on the block — bidding opens at $${fmt(body.minBid)}${body.buyNow ? `, buy-now $${fmt(body.buyNow)}` : ''}${body.reserve ? ' (reserve set)' : ''}. Listing fee $${fmt(body.fee)}; it runs ${minsTxt(body.expiresSeconds)}, then comes back to you.`);
     if (body.kind === 'good' && body.qty !== undefined && body.price !== undefined)
-      bits.push(`🏷 ${body.qty} × ${esc(body.good)} up at $${fmt(body.price)} a unit in ${esc(body.district)} — buyers collect in person. Fee $${fmt(body.fee)}; it runs ${minsTxt(body.expiresSeconds)}.`);
+      bits.push(`🏷 ${body.qty} × ${txt(body.good)} up at $${fmt(body.price)} a unit in ${txt(body.district)} — buyers collect in person. Fee $${fmt(body.fee)}; it runs ${minsTxt(body.expiresSeconds)}.`);
     if (body.kind === 'order' && body.wanted !== undefined)
-      bits.push(`📇 WANTED: ${body.wanted} × ${esc(body.good)} at $${fmt(body.price)} in ${esc(body.district)} — $${fmt(body.escrow)} is ESCROWED out of your pocket until it fills or you pull it (fee $${fmt(body.fee)}). Sellers deliver to that dock; you claim it from there.`);
+      bits.push(`📇 WANTED: ${body.wanted} × ${txt(body.good)} at $${fmt(body.price)} in ${txt(body.district)} — $${fmt(body.escrow)} is ESCROWED out of your pocket until it fills or you pull it (fee $${fmt(body.fee)}). Sellers deliver to that dock; you claim it from there.`);
     if (body.delivered !== undefined && body.earned !== undefined)
       bits.push(`🚚 delivered ${body.delivered} — $${fmt(body.earned)} in${body.remaining > 0 ? `, the order still wants ${body.remaining}` : ' (order filled)'}`);
     if (body.claimed !== undefined && body.awaiting !== undefined)
@@ -2616,7 +2668,7 @@
       : 'pulled it off the board — what was on it comes back to you');
     if (body.bought !== undefined && body.paid !== undefined) bits.push(body.bought === 'car'
       ? `🚗 bought outright — $${fmt(body.paid)}. It's in your garage.`
-      : `bought ${body.qty} × ${esc(body.bought)} — $${fmt(body.paid)} out of pocket${body.remaining > 0 ? ` (${body.remaining} left on the lot)` : ''}`);
+      : `bought ${body.qty} × ${txt(body.bought)} — $${fmt(body.paid)} out of pocket${body.remaining > 0 ? ` (${body.remaining} left on the lot)` : ''}`);
     // a demanded RICO trial — the conviction gets the cinematic; the acquittal deserves a line too
     if (body.convicted === false && body.forfeited !== undefined) bits.push('ACQUITTED — the case fell apart. Walk out clean.');
     if (body.convicted === true && body.forfeited !== undefined) bits.push(`CONVICTED — they seized $${fmt(body.forfeited)}${body.jailSeconds ? ` and you're in for ${minsTxt(body.jailSeconds)}` : ''}`);
@@ -2631,8 +2683,18 @@
     // "paid $924,759": a price with no purchase attached, on the one action that also takes away your
     // ability to hit anyone, deal, launder or collect for as long as it lasts. Name both halves.
     if (body.safeUntil && body.cost !== undefined) bits.push(`🏠 off the grid — untargetable for ${minsTxt(Math.max(0, Math.round((new Date(body.safeUntil) - Date.now()) / 1000)))}, but no hits, deals, laundering or collecting while you're under · $${fmt(body.cost)}`);
+    // THE DOC'S BILL. It landed on the catch-all `paid $N` — a price with the purchase left off, on
+    // the one screen a player reaches while bleeding. Both halves are the server's to say: the bill is
+    // scaled by five independent modifiers, so nobody else can state the rate they actually got.
+    if (body.healed && body.cost !== undefined && body.health !== undefined)
+      bits.push(`\u{1FA79} patched up — ${body.healed} back, ${body.health}/100 — $${fmt(body.cost)}`);
     // A skill is permanent and a point is finite — and learning one said "done."
-    if (body.learned && body.name && body.points) bits.push(`🎓 learned ${esc(body.name)}${body.points.available !== undefined ? ` — ${fmt(body.points.available)} point${body.points.available === 1 ? '' : 's'} left` : ''}`);
+    if (body.learned && body.name && body.points) bits.push(`🎓 learned ${txt(body.name)}${body.points.available !== undefined ? ` — ${fmt(body.points.available)} point${body.points.available === 1 ? '' : 's'} left` : ''}`);
+    // AND ITS SIBLING, three lines away and mute: unlearning ONE skill burns $OMR on the same shared
+    // 24h respec clock the full wipe uses, and said "done." — the forgotten-sibling shape, where the
+    // verb next to a line that reads well is the one nobody wrote. The point comes back, so say so.
+    if (body.unlearned && body.name && body.points && !Array.isArray(body.unlearned))
+      bits.push(`\u{1F393} unlearned ${txt(body.name)} — ${fmt(body.omr)} $OMR${body.points.available !== undefined ? `, and the point is back (${fmt(body.points.available)} to spend)` : ''}. One respec a day, so the clock is spent too.`);
     // THE NUMBERS. One ticket per street per day, drawn off the seed at the roll — and buying one
     // said "done.", naming neither the number you took, what you staked, nor what it pays. The
     // stake is gone either way; the least the game owes you is the ticket.
@@ -2662,7 +2724,7 @@
     if (body.style && body.name && !body.learned) {
       const st = (rules?.duels?.styles || []).find((x) => x.id === body.style);
       const beat = st && (rules.duels.styles.find((x) => x.id === st.beats) || {}).name;
-      bits.push(`\u{1F94A} you fight as ${esc(body.name)}${beat ? ` \u2014 you have the edge on a ${esc(beat)}, and give it to whoever counters you` : ''}`);
+      bits.push(`\u{1F94A} you fight as ${txt(body.name)}${beat ? ` \u2014 you have the edge on a ${txt(beat)}, and give it to whoever counters you` : ''}`);
     }
     if (body.cost && body.fixed === undefined && !bits.length) bits.push(`paid $${fmt(body.cost)}`);
     return bits.length ? bits.join(' · ') : (body.message || 'done.');

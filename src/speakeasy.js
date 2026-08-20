@@ -99,7 +99,11 @@ export async function openSpeakeasy(ch, districtId, client, h) {
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -SPEAKEASY.OPEN_COST, reason: 'speakeasy:open' });
   await h.track(client, ch.account_id, 'speakeasy_open', { district: districtId });
   bus.emit('streets', { type: 'speakeasy_open', by: ch.name, district: districtId });
-  return { ok: true, district: districtId, tier: 0, name: speakeasyTierOf(0).name };
+  // WHAT IT COST and WHERE it stands. The biggest single purchase on the screen read "done." — a
+  // $750k club bought in silence — because a bare {district, tier, name} matches no shape. `opened`
+  // is the marker: an UPGRADE answers with the same three fields, so state, not shape, tells them
+  // apart (the tribute-currency precedent).
+  return { ok: true, district: districtId, tier: 0, name: speakeasyTierOf(0).name, spent: SPEAKEASY.OPEN_COST, opened: true };
 }
 
 // Collect the base bar take → pocket cash (lazy, capped, clock reset). An EXPOSED act (D2 safehouse gate).
@@ -150,7 +154,10 @@ export async function upgradeSpeakeasy(ch, client, h) {
   if (pending > 0) await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: pending, reason: 'speakeasy:income' });
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -next.cost, reason: 'speakeasy:decor' });
   await h.track(client, ch.account_id, 'speakeasy_upgrade', { district: row.district_id, tier: next.tier });
-  return { ok: true, district: row.district_id, tier: next.tier, name: next.name, collected: pending };
+  // The BUILD-OUT price, which only the server knows (the ladder is a catalog the client would have
+  // to walk). Without it the reply's `collected` — the pending swept at the OLD rate, itself a term —
+  // was the only thing any branch could see, so a $600k renovation read as an empty till.
+  return { ok: true, district: row.district_id, tier: next.tier, name: next.name, collected: pending, spent: next.cost };
 }
 
 // Name the club — a $OMR vanity burn (rides vanity:%, zero invariant change). 3–24 printable chars.
@@ -164,7 +171,10 @@ export async function nameSpeakeasy(ch, name, client, h) {
   await spendOmr(client, h, SPEAKEASY.NAME_OMR, 'vanity:speakeasy');
   await client.query('UPDATE speakeasies SET name=$2 WHERE district_id=$1', [row.district_id, n]);
   await h.track(client, ch.account_id, 'speakeasy_name', { district: row.district_id });
-  return { ok: true, district: row.district_id, name: n, spent: SPEAKEASY.NAME_OMR };
+  // `spent` alone is DOLLARS everywhere else it appears, and this one is $OMR — so the currency
+  // rides with it rather than leaving a reader to infer it from the route (the tribute precedent,
+  // where two verbs answering `{amount}` in two currencies could only be told apart at the source).
+  return { ok: true, district: row.district_id, name: n, spent: SPEAKEASY.NAME_OMR, currency: 'omr' };
 }
 
 // upsert the guest-list row (SELECT-then-write — pg-mem ON CONFLICT is unreliable). Returns the row's

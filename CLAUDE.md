@@ -14643,3 +14643,127 @@ reading the output.
 
 Suite green · pgquery 2980 statements + pgcheck 47/47 on a FRESH real-Postgres database · client
 wiring/mirror (68 driven actions) · mobile 78/78 · docs · gates · levers 703 · sim drift-0.
+
+**THE YARD, THE CLUB AND THE DEED — twelve more, and the two worst were fluent (2026-08-20).** Wave
+10 of the play session drove the screens no earlier wave had reached: the family/turf layer, the
+deed's own market, the speakeasy, the Law, the Underworld's fixtures, the Port and the Pen. Twelve
+findings. Ten were the mute class the session has been sweeping — but **the two that mattered most
+said something, and what they said was false**, which is the class no silence pattern can see.
+
+**THE DEED COLLIDED WITH TWO DIFFERENT SYSTEMS, IN SEQUENCE.** Pulling a street off the market
+answered a bare `{ok, name}` — which is the shape a RENAME answers with — so a player who had just
+cancelled a $400,000 listing was told *"the place has a name now — Marchetti Row"*. The obvious fix
+was a `listed: false` marker, and driving it back showed **that is the shape a duel DE-listing
+sends**, so it then read *"off the ladder — no more challenges"*: cancelled a property listing,
+told they had left the duelling ladder. The lesson is sharper than the bug — **a marker only
+disambiguates if it names the SYSTEM rather than the STATE**, and `street` (which every other reply
+in `deeds.js` already uses for the place, and which the duel branch's own `body.street === undefined`
+guard was written to exclude) makes the collision impossible rather than merely unlikely. Both
+collisions are pinned, because pinning only the second would leave half the assertion unproven —
+each was mutation-verified separately (M6 reproduces the ladder line, M6b the rename line).
+
+**THE CLUB'S DECOR UPGRADE REPORTED A $600,000 RENOVATION AS AN EMPTY TILL.** `upgradeSpeakeasy`
+sweeps the pending take at the OLD rate before it charges — a real term — and carries it back as
+`collected`, so the reply matched the collect branch (`collected === 0`) and read *"nothing in the
+till yet — come back when the day has run"*. Fluent, wrong, and about the largest single purchase on
+that screen after the club itself. Fixed by stating the build-out price the server alone knows (the
+decor ladder is a catalog the client would have to walk) and putting the branch ABOVE the collect
+line, since `collected` there is a term to STATE, not a shape to match on.
+
+The other ten: opening a house said **"done."** over $750,000; naming it said **"done."** over a
+$OMR burn — and `spent` is DOLLARS in every other reply in the game, so the currency now rides with
+it (the tribute-currency precedent); the Law's bribe, the shiv, the yard boss's protection and the
+guard's bribe all fell into the catch-all `paid $N`, a price with the purchase left off; working the
+yard stated the money and never the TIME, which is the entire point of good behaviour; and the hull
+upgrade, the rendezvous consent and joining a yard crew said nothing at all.
+
+**TWO TERMS were being withheld, not merely unstated.** The yard boss's protection is the Pen's
+safehouse and carries the same **shield-not-bunker** rule the street one does — six figures buys
+immunity AND takes your own shank away — so a player could buy protection, buy a shiv, and only
+discover the trade when the shank refused. And a rendezvous is a CONSENT: it lets another captain
+meet your run at sea and carry it in. Both are now on the line that announces them, and both are
+named assertions rather than pattern matches.
+
+**The guard needed a new shape, and the reason is structural.** The Pen cannot sit in `ACTIONS` at
+all — jail refuses nearly everything, so a jailed row would silence every row after it and **those
+rows would then read on the summary line as covered**, which is the vacuity this file has already
+been bitten by twice. So wave 10 drives on its own tokens after the main loop (the hush-line
+precedent) — but folds its lines back into `said` rather than asserting them in isolation, so the
+class sweeps below (no literal "undefined", no stacked article) cover them for free. **A sweep is a
+net, and a line that never enters it is a line nobody is checking.** 68 → 81 driven actions.
+
+**And reading the output caught what the check could not, again.** My own new copy rendered
+**"the The Backroom"** — every rung of the decor ladder is already called *The Backroom* / *The
+Lounge* / *The Copa*, so prepending an article doubled it, on all three of the lines I had just
+written. The existing `The The` sweep did not fire because it is anchored on a word boundary and
+mine read "the The". Fixed by dropping the article entirely and letting the name speak. A second
+apparent defect — `open in docks` rather than *The Docks* — was checked before being called one and
+is a **probe artifact**: `$dist` falls back to the raw id when `rules.districts` is empty, which is
+true only in the vm harness; `/v1/rules` really does ship `{id:'docks', name:'The Docks'}`, so the
+real client is fine. *A finding produced by a tool you wrote and did not check is not a finding.*
+
+Six mutations, each caught at its own named assertion — and **M2 first did not apply at all**
+(a `perl -0pi` whose pattern missed), which reads exactly like a fix that holds; every mutation
+after it asserts its own anchor landed before the run is believed.
+
+Suite green · pgquery 2980 statements + pgcheck 47/47 on a FRESH real-Postgres database · client
+wiring/mirror (81 driven actions) · mobile 78/78 · docs · gates · levers · sim drift-0.
+
+**AND `esc()` WAS CORRUPTING EVERY NAME IT TOUCHED — wave 11 (2026-08-20).** Driving the clusters no
+earlier wave had reached (the casino tables, the skill tree, the world raids, the vouch/streak/LFG
+rails, the vault) came back almost clean — two findings, and the second is the widest single defect
+this session has produced.
+
+**`describe()` HTML-escaped strings bound for `textContent`.** There is exactly one `esc()` in the
+client, shared between describe() and the ~100 `innerHTML` renderers, and **every consumer of
+describe() is `toast()`, which assigns to `textContent`** — injection-proof by construction. So the
+escaping protected nothing and rendered its entities as LITERAL TEXT: learning a skill toasted
+*"learned The Doc&#39;s Friend"*. Measured before fixing rather than assumed — **94 catalog names
+carry an apostrophe or ampersand** (Motorcycle 'Wasp', A Dead Don's Watch, A Made Man's Ring, The
+Week's Reaper), and the street-name charset guard allows both, so **a player called O'Malley was
+toasted as O&#39;Malley on every line that named them**. Fixed with a local `txt()` inside describe
+(85 sites) rather than by touching the shared `esc()`, which is right where it is and wrong here —
+naming them apart is what stops the next reader mixing them up.
+
+**The guard caught a temporal dead zone the moment the change landed**: `txt` was declared beside
+`$dist`, partway down the function, and the deed branches sit ABOVE it — so two actions threw
+*"Cannot access 'txt' before initialization"* rather than silently misbehaving. `$dist` never had the
+problem because every one of its uses is below its declaration. Hoisted to the first line of the body.
+
+The other finding is the forgotten-sibling shape at its plainest: **unlearning ONE skill** burns
+$OMR on the same shared 24h respec clock and hands the point back, and said **"done."** — three lines
+in `describe()` from `learned`, which has stated its own terms all along.
+
+**The entity guard is a SWEEP, and a sweep needs a line that can fail it.** It is only a net over
+what was driven, so with every name in the fixture happening to be plain it would pass over a broken
+tree and read exactly like a clean bill of health. *The Doc's Friend* is now driven for that reason,
+with its own direct assertion beside the sweep. Two mutations, each caught at its own named assertion
+(txt escaping again → the entity sweep names the line verbatim; the unlearn branch dropped → "done.").
+
+68 → 84 driven actions. Suite green · sim drift-0 · mobile 78/78 · client wiring/mirror.
+
+**AND THE DOC HANDED YOU A BILL WITH NO PURCHASE ON IT — wave 12 (2026-08-20).** The last untouched
+clusters (the garage, the armory, vanity, the phone, the chat, the Doc), driven with the **raw reply
+printed beside every line** so a fluent-but-wrong sentence would be visible rather than merely absent.
+
+**Four candidates, and three dissolved on checking — which is the point.** The phone's block and
+unblock and the chat's own send all go through the SILENT `api()` and toast their own wording
+(*"line blocked — they get a dead tone now"*, *"the line is open again"*); `describe()` is never
+invoked on any of them, so their `"done."` is a probe artifact rather than a defect. That
+discrimination — *is this actually `act()`-pressed?* — is what separates this sweep's findings from
+its noise, and it is worth stating that it removed three quarters of them.
+
+**The one that survived is the sharpest kind: `POST /v1/heal` read `"paid $540"`.** The catch-all —
+a price with the purchase left off — on the one screen a player reaches while bleeding. The reply
+was `{ok, cost}` and nothing else, so the client could not have said more; and it could not have
+computed the price either, because the bill is scaled by **five independent modifiers** (street rank,
+`doctors_friend`, the Doc's own Underworld standing, Iron Chin, and the Ring path's handicap). So
+only the server knows both halves, and it now sends both: *"patched up — 40 back, 100/100 — $540."*
+
+Its guard needed the fixture seeded **hurt**, because the Doc refuses a healthy man — a full-health
+fixture would have skipped the action, and a skipped action reads on the summary line as covered.
+That is the same vacuity this file has now been bitten by three times, headed off at the seed rather
+than discovered by a surviving mutation. One mutation, caught at its own named assertion.
+
+84 → 85 driven actions. Suite green · sim drift-0 · mobile 78/78 · pgquery + pgcheck 47/47 on a
+FRESH real-Postgres database.

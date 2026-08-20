@@ -363,7 +363,13 @@ export async function unlistDeed(ch, client, h) {
   if (!deed) throw new GameError('no_deed', "You don't hold a street.");
   if (deed.sale_price == null) throw new GameError('not_listed', "It's not for sale.");
   await client.query('UPDATE street_deeds SET sale_price=NULL WHERE account_id=$1', [ch.account_id]);
-  return { ok: true, name: deed.name };
+  // A BARE {ok, name} is the shape a RENAME answers with, and describe() reads shapes — so pulling a
+  // deed off the market told the player they had just named the place. Two verbs, one shape: the fix
+  // is a marker at the source (the tribute-currency precedent), never a cleverer guess at the client.
+  // `street` and not a bare `listed:false`, because THAT is the shape a duel DE-listing answers with
+  // ("off the ladder") — a marker only disambiguates if it names the SYSTEM rather than the state,
+  // and `street` is what every other deed reply here already calls the place.
+  return { ok: true, street: deed.name, listed: false };
 }
 // THE BUY-CONFIRM VAULT READ — what a listed street's vault has received, and (chain live) what it
 // holds RIGHT NOW. Two halves on purpose: the RECORD is a DB read the board already carries, and the
