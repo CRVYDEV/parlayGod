@@ -2242,6 +2242,14 @@
       return body.oathbreak
         ? `\u{1F5E1} you broke a sworn treaty — the city knows, and your honor is ${body.honor}. You can declare on them again, and they on you.`
         : '\u{1F91D} the offer is off the table — nothing was sworn, so nothing was broken';
+    // WAR read "done." — the loudest thing a boss can do, in a block where the pact, the treaty and
+    // the oathbreak all state their terms in full. The forgotten sibling, four lines apart. Note the
+    // DURATION rather than a date: a war runs 30 minutes, so the treaty line's toLocaleDateString()
+    // would print today and say nothing. Distinct from the treaty by `with` (which war never sends).
+    if (body && body.ok && body.rival && body.until && body.spoilsPct !== undefined)
+      return `\u{2694} war with ${txt(body.rival)} — $${fmt(body.cost)} out of the war chest. It runs `
+        + `${minsTxt(Math.max(0, Math.round((new Date(body.until) - Date.now()) / 1000)))}, and the `
+        + `winner takes ${Math.round(body.spoilsPct * 100)}% of the loser's treasury.`;
     if (body && body.ok && body.against && body.needed !== undefined)
       return `\u{2694} the coalition against ${txt(body.against)} is open — ${body.needed} families in and it arms: half the war chest and a cheaper price on their ground.`;
     if (body && body.ok && body.members !== undefined && body.armed !== undefined)
@@ -2388,6 +2396,15 @@
     if (body && body.ok && body.vest && body.mult !== undefined) return `strapped into the ${String(body.vest).replace(/_/g, ' ')} — it soaks ${Math.round((body.mult - 1) * 100)}% more punishment`;
     if (body && body.ok && body.racket && body.income !== undefined)
       return `the ${String(body.racket).replace(/_/g, ' ')} is yours — about $${fmt(Math.round(body.income * 60))} an hour while you're not looking`;
+    // …and the UPGRADE beside it, which read the bare catch-all `paid $6,250` — the forgotten
+    // sibling, three lines from a branch that already renders an hourly rate. It is the worst of the
+    // three to leave mute, because the whole POINT of an upgrade is the NEW number: driven, the
+    // laundro goes $540/hr -> 604 -> 669 -> 734 at $6,250 / $12,500 / $18,750, and the player was
+    // told only what it cost. The reply carried `level` and `incomePerHr` all along.
+    // Distinct from the buy by the SERVER's own field names (`income` is per-MINUTE, `incomePerHr`
+    // is already x60), so the two cannot cross-fire.
+    if (body && body.ok && body.racket && body.level !== undefined && body.incomePerHr !== undefined)
+      return `\u{2B06} the ${String(body.racket).replace(/_/g, ' ')} moves up to level ${body.level} — about $${fmt(body.incomePerHr)} an hour now, for $${fmt(body.cost)}`;
     // SELLING an asset answers {ok, asset, earned}; BUYING one answers {ok, asset}. One field apart,
     // and this branch read only the shared half — so selling the pawn shop said "the pawn shop is
     // yours": the exact inverse of what happened, with the price thrown away. Driven.
