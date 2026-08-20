@@ -4234,9 +4234,13 @@
     // GOING TO JAIL TAKES YOU TO JAIL (founder) — the moment a bust lands, the screen goes where
     // you went. A latch on the transition (and on a page that LOADS jailed), never on every poll,
     // so a jailed player who navigates away isn't yanked back.
+    // The COLD-LOAD half of this lives in buildTabs() — it is a landing, and landings are decided
+    // there. Here it is the in-session TRANSITION only, so it must not fire before the panels exist:
+    // renderSheet() runs first at boot, and a setTab('pen') at that moment threw on a null panel and
+    // spent the latch. `$('#tab-pen')` is the honest test for "has the app been built yet".
     { const was = renderSheet._jailed; const isJ = Number(me.jailSeconds) > 0; renderSheet._jailed = isJ;
       if (isJ && was === false) sfx('jail');
-      if (isJ && was !== true && currentTab !== 'pen') {
+      if (isJ && was === false && currentTab !== 'pen' && $('#tab-pen')) {
         setTab('pen');
         if (was === false) toast('they took you in — this is your world now. Work it, buy your way out, or wait.');
       } }
@@ -4480,7 +4484,18 @@
     }
     applyTabVisibility();
     renderStreets(); renderCity(); renderDen(); renderDeck();
-    setTab('streets');
+    // LOADING WHILE JAILED lands in the Pen, and nothing after this may argue with it. The latch in
+    // renderSheet() claims to cover "a page that LOADS jailed" and could not: renderSheet() runs
+    // BEFORE this function, so its setTab('pen') fired at a moment when #tab-pen did not exist yet —
+    // renderPen() threw on the null panel (an async throw, so boot()'s try/catch never saw it), the
+    // jump silently did nothing, and the latch was SPENT, so it never fired again for that sentence.
+    // Then this function's own setTab('streets') and the login hook below would each have overridden
+    // it anyway. Reproduced on a cold load in lockup: page error, an EMPTY Pen panel, and the player
+    // left on Home. So the landing decision lives here, where landings are decided, and jail outranks
+    // every other reason to land somewhere — being in a cell is the strongest thing the game can say
+    // about what you should be doing next.
+    const jailed = Number(me?.jailSeconds) > 0;
+    setTab(jailed ? 'pen' : 'streets');
     // THE LOGIN HOOK — where a returning player lands. The Morning Paper (while-you-were-gone) and
     // THE SITUATION (your people/threats) are the returning-player hook, and they live on Home — so a
     // player with anything to see there should LAND there, not a tab away:
@@ -4488,7 +4503,8 @@
     //   • a returning veteran with a fresh Morning Paper (away ≥4h) → Home, so the digest + situation
     //     land in one place instead of three
     //   • an active same-session player with nothing new → Streets (their bread and butter)
-    Promise.all([api('GET', '/v1/onboard'), api('GET', '/v1/paper')]).then(([o, p]) => {
+    // A jailed player is none of these — the digest keeps until they're out.
+    if (!jailed) Promise.all([api('GET', '/v1/onboard'), api('GET', '/v1/paper')]).then(([o, p]) => {
       if ((o.body && !o.body.allDone) || (p.body && p.body.fresh)) setTab('start');
     });
   }
