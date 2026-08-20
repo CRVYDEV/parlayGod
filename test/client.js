@@ -3887,6 +3887,325 @@ assert(offLine && /\$10,000|stake/i.test(offLine),
     `"done." Got: ${JSON.stringify(started)}`);
 }
 
+// ── WAVE 44 — THE ARMORY, AND THREE CO-OP SYSTEMS THAT ALL ANSWER "id + a crew count".
+// The armory half is the forgotten sibling at its plainest: UNEQUIPPING a piece has always read,
+// and EQUIPPING one three lines away said "done." — while BUYING one did not even reach the
+// catch-all, because the reply says `price` and the catch-all reads `cost`. So the loudest purchase
+// on the screen reported nothing: not the iron, not the money, not the CRATES it also costs (iron
+// is the one buy that debits two currencies), and not that the first piece you buy goes on your hip.
+//
+// The co-op half is the byte-shape collision class at its widest. A crew HEIST, a world RAID and a
+// prison BREAK all answer plan/join with an id and a crew count, and describe() is a flat if-chain,
+// so whichever branch comes first claims all three. Three separate defects fell out of that:
+//   · the break's plan and join said "done." — a plan STAKES a $50,000 cutkit and names the crew
+//     the wall needs; both are what a man in a cell wants to know;
+//   · leaving and disbanding a break read "the RAID goes on without you" / "you called the RAID
+//     off", wrong system both ways, with the staked kit's return unmentioned;
+//   · and JOINING a heist rendered the heist PLAN line — "$undefined fronted" for an unnamed job —
+//     because the plan branch guarded on `role`, which the join also carries. That one has been
+//     live since the plan line shipped, and it is here because the join had never been driven.
+//
+// The first cut of the break fix keyed on the FIELDS (a crew count and an id) and read
+// "you're in on the break" for a world RAID — the collision being fixed, reintroduced while fixing
+// it, and caught only by driving the sibling shapes. So all six replies now name their own `op` at
+// the SOURCE and every branch keys on that: absence is not a discriminator, it holds only until a
+// sibling adds the field you were relying on being missing.
+//
+// Its own block because the break needs two men in CELLS, and jail refuses nearly everything the
+// shared fixture goes on to drive.
+{
+  const mk44 = async (n) => { const t = (await inject('POST', '/v1/auth/guest')).body.token;
+    await inject('POST', '/v1/character', t, { name: n + Math.random().toString(36).slice(2, 6) });
+    const id = (await inject('GET', '/v1/me', t)).body.character.id;
+    await app.pool.query('UPDATE characters SET cash=90000000, respect=3000000, muscle=90, cunning=90, ' +
+      'speed=90, energy=300, health=100, cb=500 WHERE id=$1', [id]);
+    return { t, id }; };
+  const L44 = new Map();
+  const drive44 = async (t, m, url, payload, label) => {
+    const r = await inject(m, url, t, payload);
+    assert.equal(r.code, 200, `WAVE 44 could not drive ${label} (${JSON.stringify(r.body)}) — fix the ` +
+      'fixture rather than letting it skip, because a skipped action reads on the summary line as covered');
+    described++;
+    let line; try { line = String(describeFn(r.body, r.code)); } catch (e) { line = 'THREW: ' + e.message; }
+    L44.set(label, line); said.set(`${url}#${label}`, line);
+    if (line === 'done.' || /^paid \$[\d,.]+$/.test(line) || /undefined|NaN|\[object|^THREW/.test(line))
+      mute.push(`${m} ${url} (${label}) → ${JSON.stringify(line)}`);
+    return r; };
+
+  // ── THE ARMORY. Two guns, because the FIRST auto-equips and the second does not, and the line
+  // says which — a receipt that claims the wrong one is worse than the silence it replaced.
+  const shooter = await mk44('Ledger Iron ');
+  const rules44 = (await inject('GET', '/v1/rules')).body;
+  const guns44 = rules44.guns || [];
+  assert(guns44.length >= 2, 'WAVE 44: the gun catalog is too small to drive first-vs-second');
+  await drive44(shooter.t, 'POST', `/v1/armory/gun/${guns44[0].id}/buy`, null, 'buy the first piece');
+  await drive44(shooter.t, 'POST', `/v1/armory/gun/${guns44[1].id}/buy`, null, 'buy a second');
+  await drive44(shooter.t, 'POST', `/v1/armory/gun/${guns44[1].id}/equip`, null, 'carry the second');
+  await drive44(shooter.t, 'POST', '/v1/armory/unequip', null, 'put it away');
+  const bought1 = L44.get('buy the first piece');
+  assert(/\$[\d,]/.test(bought1) && /crate/i.test(bought1) && /hip/i.test(bought1),
+    `iron is the one purchase that debits TWO currencies, and the first piece you buy goes straight ` +
+    `on your hip — the reply carries price, crates and equipped, and the line read "done." because ` +
+    `the catch-all reads \`cost\` and this reply says \`price\`. Got: ${JSON.stringify(bought1)}`);
+  const bought2 = L44.get('buy a second');
+  assert(!/hip/i.test(bought2) && /carrying/i.test(bought2),
+    `the SECOND piece does not auto-equip — \`equipped\` is the difference between walking out armed ` +
+    `and walking out holding it, and a receipt that claims the wrong one is worse than silence. ` +
+    `Got: ${JSON.stringify(bought2)}`);
+  const carried = L44.get('carry the second');
+  assert(/carrying/i.test(carried) && /firepower|\bfp\b/i.test(carried),
+    `equipping said "done." while UNEQUIPPING three lines away has always read — and firepower is ` +
+    `the only reason to switch. Got: ${JSON.stringify(carried)}`);
+
+  // ── BELLA'S BUYBACK. Her card advertises the tier-3 perk and no button in the game collected it,
+  // so the route existed and was unreachable — the orphan-route class, inverted. The reply was also
+  // byte-identical to a gun BUY, so selling iron and buying it would have read the same line.
+  await app.pool.query(`INSERT INTO npc_standing (character_id, npc_id, standing, touched_at)
+    VALUES ($1,'armorer',95,now()) ON CONFLICT (character_id,npc_id)
+    DO UPDATE SET standing=95, touched_at=now()`, [shooter.id]);
+  await drive44(shooter.t, 'POST', `/v1/underworld/gun/${guns44[1].id}/sell`, null, 'sell it back to Bella');
+  const soldBack = L44.get('sell it back to Bella');
+  assert(/\$[\d,]/.test(soldBack) && /bella/i.test(soldBack) && !/crate/i.test(soldBack),
+    `Bella PAYS you — a buyback is not a purchase, and the two replies were byte-identical. ` +
+    `Got: ${JSON.stringify(soldBack)}`);
+
+  // ── THE CREW HEIST. The join is the pre-existing one: it carries a role and a crewNeeded, which
+  // is exactly what the PLAN branch guarded on, so it rendered the plan's sentence with the plan's
+  // fields missing — "$undefined fronted" for a job with no name.
+  const boss = await mk44('Ledger Score '), hand = await mk44('Ledger Hand ');
+  const jobs44 = (await inject('GET', '/v1/heists', boss.t)).body?.jobs || [];
+  const job44 = jobs44.find((j) => (j.crew || 0) >= 2) || jobs44[0];
+  assert(job44, 'WAVE 44: no crew job on the board — both heist assertions would skip in silence');
+  const planned = await drive44(boss.t, 'POST', '/v1/heists/plan', { job: job44.id }, 'plan a score');
+  await drive44(hand.t, 'POST', `/v1/heists/${planned.body.id}/join`, {}, 'get in on the score');
+  const planLine = L44.get('plan a score');
+  assert(/\$[\d,]/.test(planLine) && /fronted/i.test(planLine),
+    `the score's stake is FRONTED and that term rides the line the leader reads when they pay. ` +
+    `Got: ${JSON.stringify(planLine)}`);
+  const joinLine = L44.get('get in on the score');
+  assert(joinLine !== planLine && /in on the job/i.test(joinLine),
+    `JOINING a score is not planning one — the join carries a role and a crewNeeded, which is what ` +
+    `the plan branch guarded on, so it printed the plan's sentence with the plan's fields missing. ` +
+    `Got: ${JSON.stringify(joinLine)}`);
+
+  // ── THE BREAK, all four verbs, with a real cutkit staked so the disband's refund is real.
+  const lead = await mk44('Ledger Wall2 '), inmate = await mk44('Ledger Cell ');
+  for (const p of [lead, inmate])
+    await app.pool.query("UPDATE characters SET jail_until = now() + interval '1 hour' WHERE id=$1", [p.id]);
+  await app.pool.query(`INSERT INTO pen_contraband (character_id,item,qty) VALUES ($1,'cutkit',2)
+    ON CONFLICT (character_id,item) DO UPDATE SET qty=2`, [lead.id]);
+  const brk = await drive44(lead.t, 'POST', '/v1/pen/break/plan', null, 'plan the break');
+  await drive44(inmate.t, 'POST', `/v1/pen/break/${brk.body.id}/join`, null, 'get in on the break');
+  await drive44(inmate.t, 'POST', `/v1/pen/break/${brk.body.id}/leave`, null, 'walk off the break');
+  await drive44(lead.t, 'POST', `/v1/pen/break/${brk.body.id}/leave`, null, 'call the break off');
+  const brkPlan = L44.get('plan the break');
+  assert(/cutkit|kit/i.test(brkPlan) && /\d/.test(brkPlan),
+    `planning a break STAKES the cutkit and names the crew the wall needs — both are what a man in ` +
+    `a cell is deciding on. Got: ${JSON.stringify(brkPlan)}`);
+  // the collision, both verbs, both directions: a break is not a raid and is not a job
+  for (const label of ['plan the break', 'get in on the break', 'walk off the break', 'call the break off']) {
+    const line = L44.get(label);
+    assert(/break/i.test(line) && !/\braid\b/i.test(line) && !/\bthe job\b/i.test(line),
+      `"${label}" is a PRISON BREAK — three systems answer plan/join/leave with an id and a crew ` +
+      `count, and the flat if-chain gave all three to whichever branch came first, so a jailbreak ` +
+      `read as a world raid. Got: ${JSON.stringify(line)}`);
+  }
+  const called = L44.get('call the break off');
+  assert(/hacksaw|rope|kit/i.test(called),
+    `disbanding before the go returns the staked cutkit — $50,000 of contraband, unmentioned. ` +
+    `Got: ${JSON.stringify(called)}`);
+  assert(L44.get('walk off the break') !== called,
+    `a MEMBER walking off leaves the break standing and the LEADER calling it off ends it for ` +
+    `everyone — opposite senses that must not read as the same sentence`);
+
+  // ── THE DEFENSIVE HALF: the sibling shapes the break's first cut stole. These are SYNTHETIC on
+  // purpose — a world raid needs an apex outfit and a co-op crew, which this block is not — and each
+  // is the exact reply its route returns, so the guard holds the ordering that a fields-keyed branch
+  // broke once already. Without them the mutation that reverts to field-keying is silent here.
+  {
+    const raidJoin = describeFn({ ok: true, op: 'raid', id: 'r1', npc: 'volkov', crew: 2, crewMax: 4 }, 200);
+    assert(/\braid\b|volkov/i.test(raidJoin) && !/break/i.test(raidJoin),
+      `SYNTHETIC (the shape /v1/world/raids/:id/join returns): a world raid's join carries an id and ` +
+      `a crew count, which is what the break's first cut keyed on — so it read "you're in on the ` +
+      `break" for a raid. Got: ${JSON.stringify(raidJoin)}`);
+    const raidPlan = describeFn({ ok: true, op: 'raid', id: 'r1', npc: 'volkov', name: 'Volkov', crewMin: 2, crewMax: 4 }, 200);
+    assert(/volkov/i.test(raidPlan) && !/break/i.test(raidPlan),
+      `SYNTHETIC: opening a raid is not planning a break. Got: ${JSON.stringify(raidPlan)}`);
+    const heistJoinFull = describeFn({ ok: true, op: 'heist', id: 'h1', job: 'vault', role: 'muscle', crew: 3, crewNeeded: 0 }, 200);
+    assert(/ready to go/i.test(heistJoinFull) && !/undefined/.test(heistJoinFull),
+      `SYNTHETIC: the join that FILLS a crew says so — and never renders the plan's missing fields. ` +
+      `Got: ${JSON.stringify(heistJoinFull)}`);
+  }
+}
+
+
+// ── WAVE 45 — THE KITCHEN'S TWO ENDS, AND A RECEIPT WITH THE PURCHASE LEFT OFF.
+// The core drug loop had the same defect at both ends of the burner. COOKING a batch — which debits
+// a second currency (crates), the only other action that does being the armory — answered "the batch
+// is on the burner" and named none of it: not what was cooking, not how much, not the crates, and
+// not WHEN, which is the one thing you need to come back for. And CUTTING the stash rendered the
+// COLLECT's line, because both answer with a qty and a quality: the byte-shape collision class, with
+// the sting that the two mean opposite things about where that quality went. Cutting is a TRADE —
+// more units, weaker product — so a line reporting only the new totals is a receipt for a decision
+// it never mentions you made.
+//
+// The convoy's rig is the catch-all `paid $N`: a price with the purchase left off. A $2m Semi and a
+// $40k Panel Van read identically but for the figure, and the UPGRADE named neither which half of
+// the truck it built nor how far — which matters most there, because armor and engine are a CHOICE
+// and anything not exactly 'engine' falls to armor, so a mistyped track spends the money on the
+// other half and reads the same.
+//
+// Two more that only a drive would find: the Wire's DOSSIER is rendered as a case file on its own
+// card and never passes through describe() there — but the raw console posts the same route and
+// toasts whatever this makes of it, so the priciest read on the screen answered "done." for a player
+// using it. And a world raid's JOIN carried the outfit's ID where its NAME belongs, so the same
+// screen read "The Volkov Bratva" when you opened the raid and the raw `volkov` when you joined it.
+{
+  const mk45 = async (n) => { const t = (await inject('POST', '/v1/auth/guest')).body.token;
+    await inject('POST', '/v1/character', t, { name: n + Math.random().toString(36).slice(2, 6) });
+    const id = (await inject('GET', '/v1/me', t)).body.character.id;
+    await app.pool.query('UPDATE characters SET cash=900000000, respect=5000000, muscle=90, cunning=90, ' +
+      "speed=90, energy=300, health=100, cb=900, loc='docks' WHERE id=$1", [id]);
+    return { t, id }; };
+  const L45 = new Map();
+  // `new RegExp(undefined)` is /(?:)/ — the EMPTY pattern, which matches EVERYTHING. So an assertion
+  // of the shape `new RegExp(server.field).test(line)` passes silently the moment that field goes
+  // missing, which is the exact mutation it exists to catch: a check that cannot fail reads exactly
+  // like a clean bill of health. Found by mutation — stripping the rig's `name` left this block green
+  // and the failure fell through to check 8. So every "the line carries what the server sent" test
+  // goes through here, which asserts the SERVER SENT IT first and only then that the line says it.
+  const carries = (line, value, what, why) => {
+    assert(value !== undefined && value !== null && String(value) !== '',
+      `WAVE 45: the server sent no ${what} — the line cannot name what was never returned, and an ` +
+      `assertion built from an absent value silently matches anything`);
+    assert(new RegExp(String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(String(line)),
+      `${why} (server sent ${what}=${JSON.stringify(value)}). Got: ${JSON.stringify(line)}`);
+  };
+  const drive45 = async (t, m, url, payload, label) => {
+    const r = await inject(m, url, t, payload);
+    assert.equal(r.code, 200, `WAVE 45 could not drive ${label} (${JSON.stringify(r.body)}) — fix the ` +
+      'fixture rather than letting it skip, because a skipped action reads on the summary line as covered');
+    described++;
+    let line; try { line = String(describeFn(r.body, r.code)); } catch (e) { line = 'THREW: ' + e.message; }
+    L45.set(label, line); said.set(`${url}#${label}`, line);
+    if (line === 'done.' || /^paid \$[\d,.]+$/.test(line) || /undefined|NaN|\[object|^THREW/.test(line))
+      mute.push(`${m} ${url} (${label}) → ${JSON.stringify(line)}`);
+    return r; };
+
+  // ── THE BURNER. Drive the whole loop, because the cut can only be reached through a batch that
+  // did not catch fire — and the fire roll is real, so the collect is retried rather than assumed.
+  const cook = await mk45('Ledger Cook ');
+  for (let i = 0; i < 4; i++) await inject('POST', '/v1/kitchen/lab/upgrade', cook.t, null);
+  await inject('POST', '/v1/kitchen/makings/vim', cook.t, { qty: 60 });
+  const cookR = await drive45(cook.t, 'POST', '/v1/kitchen/cook', { drugId: 'vim', qty: 20 }, 'put a batch on');
+  const cookLine = L45.get('put a batch on');
+  // Every claim is measured against what the SERVER sent, never a literal — a literal passes while
+  // the two drift, which is the class this file exists to catch.
+  assert(new RegExp(`\\b${cookR.body.qty}\\b`).test(cookLine),
+    `the cook says how much is on the burner (server sent qty=${cookR.body.qty}). Got: ${JSON.stringify(cookLine)}`);
+  carries(cookLine, cookR.body.name, 'name',
+    'the cook says WHAT is on the burner — a drug id and its street name are different words');
+  assert(/crate/.test(cookLine),
+    `the cook names the CRATES it also spent — iron and the burner are the only two actions that ` +
+    `debit a second currency, so a receipt omitting it under-reports the cost. Got: ${JSON.stringify(cookLine)}`);
+  assert(/ready in|\d+[hm]/.test(cookLine),
+    `the cook says WHEN to come back — the batch is the one thing you have to return for. ` +
+    `Got: ${JSON.stringify(cookLine)}`);
+  assert(!/\b1 crates\b/.test(cookLine), `"1 crates" — the crate count is pluralised. Got: ${JSON.stringify(cookLine)}`);
+
+  await app.pool.query("UPDATE batches SET done_at = now() - interval '1 hour' WHERE character_id=$1", [cook.id]);
+  const got = await drive45(cook.t, 'POST', '/v1/kitchen/collect', null, 'pull it off the burner');
+  // The fire roll can take the batch; when it does there is no stash and the cut cannot be driven.
+  // Re-cook rather than skip — a skipped assertion reads on the summary line exactly like a passing one.
+  if (got.body.fire) {
+    await inject('POST', '/v1/kitchen/makings/vim', cook.t, { qty: 60 });
+    for (let n = 0; n < 12 && !(await app.pool.query('SELECT 1 FROM stash WHERE character_id=$1', [cook.id])).rows[0]; n++) {
+      await inject('POST', '/v1/kitchen/cook', cook.t, { drugId: 'vim', qty: 20 });
+      await app.pool.query("UPDATE batches SET done_at = now() - interval '1 hour' WHERE character_id=$1", [cook.id]);
+      await inject('POST', '/v1/kitchen/collect', cook.t, null);
+      await inject('POST', '/v1/kitchen/makings/vim', cook.t, { qty: 60 });
+    }
+  }
+  assert((await app.pool.query('SELECT 1 FROM stash WHERE character_id=$1', [cook.id])).rows[0],
+    'WAVE 45: could not land a batch in the stash — the cut is undrivable, and skipping it would read as covered');
+  const cutR = await drive45(cook.t, 'POST', '/v1/kitchen/cut/vim', null, 'step on the product');
+  const cutLine = L45.get('step on the product');
+  const collectLine = L45.get('pull it off the burner');
+  // THE COLLISION, stated as the property rather than as one phrasing: the two actions must not read
+  // as each other. Both carry a qty and a quality, which is exactly what a fields-keyed branch sees.
+  assert(cutLine !== collectLine,
+    `cutting the stash and pulling a batch off the burner rendered the SAME line — they answer with ` +
+    `the same two fields and mean opposite things about the quality. Got: ${JSON.stringify(cutLine)}`);
+  assert(new RegExp(`\\+${cutR.body.added}\\b`).test(cutLine),
+    `the cut says what it ADDED (server sent added=${cutR.body.added}) — the trade is the mechanic. ` +
+    `Got: ${JSON.stringify(cutLine)}`);
+  assert(new RegExp(fmtLike(cutR.body.cost)).test(cutLine),
+    `the cut says what the agent cost (server sent ${cutR.body.cost}). Got: ${JSON.stringify(cutLine)}`);
+  assert(String(cutLine).includes(String(cutR.body.quality)),
+    `the cut says where the quality LANDED (server sent ${cutR.body.quality}) — that fall is what you ` +
+    `paid for the units. Got: ${JSON.stringify(cutLine)}`);
+
+  // ── THE RIG. Both halves fell to `paid $N`, which drive45 itself now treats as mute.
+  const hauler = await mk45('Ledger Rig ');
+  const rigR = await drive45(hauler.t, 'POST', '/v1/convoy/rig/van', null, 'buy the truck');
+  const rigLine = L45.get('buy the truck');
+  carries(rigLine, rigR.body.name, 'name',
+    'the rig receipt names the truck — a Semi and a Panel Van read identically but for the figure');
+  assert(new RegExp(fmtLike(rigR.body.cost)).test(rigLine),
+    `the rig receipt states what left the pocket (server sent ${rigR.body.cost}). Got: ${JSON.stringify(rigLine)}`);
+  const upR = await drive45(hauler.t, 'POST', '/v1/convoy/rig/upgrade', { track: 'engine' }, 'build the engine');
+  const upLine = L45.get('build the engine');
+  assert.equal(upR.body.track, 'engine', 'WAVE 45: the fixture asked for the engine and the server built something else');
+  assert(/engine/i.test(upLine),
+    `the upgrade names WHICH half it built (server sent track=${upR.body.track}) — anything not ` +
+    `exactly 'engine' falls to armor, so a mistyped track buys the other half and reads the same. ` +
+    `Got: ${JSON.stringify(upLine)}`);
+  assert(new RegExp(`\\b${upR.body.level}\\b`).test(upLine),
+    `the upgrade says how far it got (server sent level=${upR.body.level}). Got: ${JSON.stringify(upLine)}`);
+
+  // ── THE DOSSIER, driven through the route the raw console posts. The Wire's own card renders a
+  // case file and never reaches describe(), so this is the ONLY surface that would have caught it.
+  const spy = await mk45('Ledger Spy ');
+  const mark = await mk45('Ledger Mark ');
+  await app.pool.query('UPDATE account_persistent SET omr=100000 WHERE account_id=' +
+    '(SELECT account_id FROM characters WHERE id=$1)', [spy.id]);
+  await inject('POST', '/v1/wire/subscribe', spy.t, { tier: 1 });
+  const dosR = await drive45(spy.t, 'POST', `/v1/wire/dossier/${mark.id}`, null, 'pull the file');
+  const dosLine = L45.get('pull the file');
+  assert(String(dosLine).includes(dosR.body.dossier.name),
+    `the dossier names the mark (server sent ${dosR.body.dossier.name}). Got: ${JSON.stringify(dosLine)}`);
+  assert(String(dosLine).includes(dosR.body.dossier.wealth),
+    `the dossier carries the money BAND the server sent (${dosR.body.dossier.wealth}) — banded, never ` +
+    `a figure, because an exact one on a read anyone can buy hands a hunter precise kill-EV. ` +
+    `Got: ${JSON.stringify(dosLine)}`);
+  assert(!/\$[\d,]/.test(String(dosLine).replace(/\d+ \$OMR/, '')),
+    `the dossier must never render an exact cash figure — the server sends none and one here would ` +
+    `breach the banded-wealth rule. Got: ${JSON.stringify(dosLine)}`);
+
+  // ── THE RAID JOIN, driven for real on BOTH players. The first cut asserted this against a literal
+  // object and a mutation stripping the server's `name` SURVIVED — a synthetic passes while the two
+  // drift, which is the whole reason the rule is "assert against what the server sent, never a
+  // literal". kryl is the cheapest co-op outfit (level 20), so the block's own fixture can reach it.
+  const boss = await mk45('Ledger Boss ');
+  const gun = await mk45('Ledger Gun ');
+  const planR = await drive45(boss.t, 'POST', '/v1/world/kryl/plan', null, 'plan the crew raid');
+  const joinR = await drive45(gun.t, 'POST', `/v1/world/raids/${planR.body.id}/join`, null, 'join the crew raid');
+  const raidJoin = L45.get('join the crew raid');
+  carries(raidJoin, joinR.body.name, 'outfit name',
+    'joining a raid names the OUTFIT, not its id — the plan line one screen up reads its name');
+  assert(!/\bthe The \b/.test(raidJoin),
+    `every outfit's name already carries its article, so "the ${'${name}'} job" doubles it. ` +
+    `Got: ${JSON.stringify(raidJoin)}`);
+  carries(raidJoin, joinR.body.crew, 'crew size',
+    'the join says how many guns are on it — the crew is the whole reason to co-ordinate');
+
+  // and the collision the cut now sits in front of, held from the other side
+  {
+    const collectShape = describeFn({ ok: true, op: 'collect', fire: false, qty: 20, quality: 0.9 }, 200);
+    assert(/pulled 20 units/.test(collectShape) && !/stepped on/.test(collectShape),
+      `SYNTHETIC: pulling a batch off the burner is not cutting it. Got: ${JSON.stringify(collectShape)}`);
+  }
+}
 
 const describedCount = described;
 assert(described >= 100, `only ${described} of ${ACTIONS.length} actions succeeded — the ledger is measuring almost nothing`);

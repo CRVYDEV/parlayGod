@@ -2393,8 +2393,14 @@
         : `\u{1F4CB} ${txt(body.name)} is off the strip — no new match races`;
     // THE SCORE. The stake is FRONTED — it comes back only on a pre-execution disband — and the job
     // cannot go until the crew is filled, so both terms ride the line the leader reads when they pay.
-    if (body && body.ok && body.crewNeeded !== undefined && body.role)
+    // Guarded on `stake`, not on `role` alone: JOINING a heist also answers with a role and a
+    // crewNeeded, so the plan line claimed it and rendered "$undefined fronted" for an unnamed job —
+    // three systems answer plan/join with an id and a crew, and only the op tells them apart.
+    if (body && body.ok && body.op === 'heist' && body.stake !== undefined)
       return `\u{1F5FA} ${txt(body.name)} is planned — you're ${txt(body.role)}, $${fmt(body.stake)} fronted${body.fenced ? ', taking it HOT (fenceable loot, not cash)' : ''}. ${body.crewNeeded ? `Needs ${body.crewNeeded} more on the crew before it goes; the stake comes back only if you disband first.` : 'Ready to go.'}`;
+    if (body && body.ok && body.op === 'heist' && body.crew !== undefined)
+      return `\u{1F5FA} you're in on the job — you're ${txt(body.role)}, ${body.crew} on the crew`
+        + `${body.crewNeeded ? ` and ${body.crewNeeded} more still needed` : ' — ready to go'}`;
     // CASING the job spends energy for a per-member bump on the roll, and said "done." — so the one
     // number it buys went unread. Guarded on `cased`, which nothing else sends.
     if (body && body.cased) return `\u{1F50D} cased the job — every man on the crew rolls +${Math.round(body.bonusStep * 100)} on the score. Case it again for more, up to the cap.`;
@@ -2411,11 +2417,40 @@
     // off leaves the job standing. The heist always carries `refunded` (the stake it hands back) and
     // the raid has no stake to carry, so that is the discriminator — the byte-shape collision class,
     // caught by the ledger the moment leaving a raid was first driven.
+    // THE CREW BREAK — planning one and joining one both said "done." Planning STAKES a cutkit (the
+    // hacksaw and rope you bought from the guard) and the reply carries the crew the wall needs; joining
+    // carries the count. Both are what a man in a cell wants to know, and neither was said. Keyed on
+    // Keyed on the op the break now names at the source. The first cut of this branch keyed on the
+    // FIELDS — a crew count and an id — and a world raid's join answers with exactly those, so it
+    // read "you're in on the break" for a raid: the collision being fixed, reintroduced while fixing
+    // it, and caught only by driving the sibling shapes rather than re-reading the diff.
+    if (body && body.ok && body.op === 'breakout' && body.crewNeeded !== undefined)
+      return `\u{1F513} the break is planned — your cutkit is staked, and it needs ${body.crewNeeded} more `
+        + `${body.crewNeeded === 1 ? 'man' : 'men'} in on it before you go (${body.crewMax} tops). `
+        + `Call it off before the go and the kit comes back.`;
+    if (body && body.ok && body.op === 'breakout' && body.crew !== undefined)
+      return `\u{1F513} you're in on the break — ${body.crew} on the crew now`;
+    // …and it was TWO systems only because nobody had swept it. There are THREE: a crew raid, a crew
+    // heist, and a PRISON BREAK — so calling off a jailbreak read "you called the raid off" and walking
+    // away from one read "the raid goes on without you". Wrong system, both ways, on both verbs. The
+    // heist's `refunded` discriminated it from the raid by accident of shape; the break matched neither
+    // and fell to the raid's line. Every one of the six replies now names its own op at the SOURCE.
+    // (wave 15 fixed heist-vs-raid and the pen was a third sender then too — applied where discovered,
+    // never swept to its edge, which is the whole reason this is one branch now rather than three.)
+    if (body && body.ok && body.op && (body.disbanded || body.left === true)) {
+      const what = body.op === 'breakout' ? 'the break' : body.op === 'heist' ? 'the job' : 'the raid';
+      if (body.left === true) return `\u{1F6B6} you walked off the crew — ${what} goes on without you`;
+      const back = body.refunded ? ` — your $${fmt(body.refunded)} stake is back in your pocket`
+        : body.cutkit ? ` — the hacksaw and rope come back to you` : '';
+      return `${body.op === 'breakout' ? '\u{1F513}' : body.op === 'heist' ? '\u{1F5FA}' : '\u{1F52B}'} `
+        + `you called ${what} off — the crew is stood down and it's gone${back}`;
+    }
+    // the pre-marker shapes, kept so a client that has not reloaded still reads something true
     if (body && body.disbanded && body.refunded !== undefined) return body.refunded
       ? `\u{1F5FA} called the job off — your $${fmt(body.refunded)} stake is back in your pocket`
       : '\u{1F5FA} you walked away from the job — the crew goes on without you';
-    if (body && body.ok && body.disbanded) return '\u{1F52B} you called the raid off — the crew is stood down and the op is gone';
-    if (body && body.ok && body.left === true) return '\u{1F52B} you walked off the crew — the raid goes on without you';
+    if (body && body.ok && body.disbanded) return '\u{1F52B} you called the op off — the crew is stood down';
+    if (body && body.ok && body.left === true) return '\u{1F6B6} you walked off the crew — the op goes on without you';
     // THE CONVOY. A shipment is for BULK and refuses to roll under the minimum — a player who opened
     // one with two crates used to hear that only at depart. The manifest total is the server's to say.
     // ...and DEPARTURE said "done." over the loudest thing the screen does: the run goes PUBLIC (the
@@ -2423,6 +2458,15 @@
     // the road. A hammered lane also sheds guard defence, which is the one number a shipper can act on.
     if (body && body.ok && body.arrivesSeconds !== undefined && body.band && body.units !== undefined)
       return `\u{1F6E3} rolling — ${body.units} units, ${minsTxt(body.arrivesSeconds)} on the road. The streets know a ${txt(body.band)} load is moving this route${body.guardCut ? `, and the lane's hot: your guards are ${body.guardCut} down` : ''}. Bandits get up to three cracks at it${body.premium ? ' — the freight is insured' : ''}.`;
+    // THE RIG — a truck and its two upgrade tracks. Both fell to the catch-all `paid $N`, which is a
+    // price with the purchase left off: buying a $2m Semi and a $40k Panel Van read the same but for
+    // the figure, and the UPGRADE named neither which half of the truck it built nor how far. That
+    // one matters most — armor and engine are a CHOICE, and anything not exactly 'engine' falls to
+    // armor, so a mistyped track spends the money on the other half and reads identical.
+    if (body && body.ok && body.op === 'rig')
+      return `\u{1F69A} the ${txt(body.name)} is in the yard — $${fmt(body.cost)}, ${body.armor} armour`;
+    if (body && body.ok && body.op === 'rig:up')
+      return `\u{1F527} ${txt(body.track)} up to ${body.level}${body.max ? `/${body.max}` : ''} — $${fmt(body.cost)}`;
     // CALLED IT OFF — the manifest comes back off the truck into the trunk and nothing is on the
     // road. Both halves matter to the player, and a bare {ok, returned} said neither.
     if (body && body.convoy === 'cancelled')
@@ -2509,6 +2553,29 @@
       return `\u{1F48A} used the ${txt(c?.name || body.used)}${body.effect ? ` — ${txt(body.effect)}` : ''}`;
     }
     if (body && body.ok && 'gun' in body && body.gun === null) return 'piece put away — you\'re carrying nothing';
+    // THE ARMORY. Its four buttons sit on one card and only two of them spoke: the vest and the ammo
+    // read fine, while BUYING a piece and CARRYING one both said "done." — the buy not even reaching the
+    // catch-all, because the reply says `price` and the catch-all reads `cost`. So the loudest purchase
+    // on the screen reported nothing: not the iron, not the money, not the CRATES it also costs (the
+    // till debits both), and not that the first piece you buy goes straight onto your hip.
+    if (body && body.ok && body.gun && body.price !== undefined && body.crates !== undefined) {
+      const g = (rules?.guns || []).find((x) => x.id === body.gun);
+      return `\u{1F52B} ${txt(g ? g.name : body.gun)} — $${fmt(body.price)}`
+        + `${body.crates ? ` + ${body.crates} crate${body.crates > 1 ? 's' : ''}` : ''}`
+        + `${body.equipped ? ", and it's on your hip" : ' — you\'re still carrying the other one'}`;
+    }
+    if (body && body.ok && body.gun && body.price === undefined) {
+      const g = (rules?.guns || []).find((x) => x.id === body.gun);
+      return `carrying ${txt(g ? g.name : body.gun)}${g ? ` — firepower ${g.fp}` : ''}`;
+    }
+    // BELLA'S BUYBACK — the tier-3 perk her card advertises. `sold` names the system; the old reply was
+    // byte-identical to a gun BUY, so selling iron and buying it would have read the same line.
+    if (body && body.ok && body.sold && body.price !== undefined) {
+      const g = (rules?.guns || []).find((x) => x.id === body.sold);
+      const c = (rules?.guns || []).find((x) => x.id === body.carrying);
+      return `\u{1F4B5} Bella took the ${txt(g ? g.name : body.sold)} off you — $${fmt(body.price)}`
+        + `${body.carrying ? `. You're carrying ${txt(c ? c.name : body.carrying)} now.` : '. You\'re carrying nothing now.'}`;
+    }
     if (body && body.ok && body.gangId && body.name === undefined) return '\u{1F3B4} the family is founded — you\'re the boss. Bring people in.';
     // …and JOINING one, which the guard above excludes by name and nothing then picked up. The
     // founding line has shipped since M3; the join — a one-way move that puts you under omertà,
@@ -2523,6 +2590,16 @@
       return `unlearned ${body.unlearned.join(', ')} — ${body.points.available} point${body.points.available === 1 ? '' : 's'} back to spend${body.omr !== undefined ? ` · ${fmt(body.omr)} $OMR left` : ''}`;
     if (body && body.ok && body.disinfoSeconds !== undefined)
       return `\u{1F5DE} the books are cooked for ${minsTxt(body.disinfoSeconds)} — anyone tapping your line reads lies${body.spent !== undefined ? ` · ${fmt(body.spent)} $OMR` : ''}`;
+    // THE DOSSIER. The Wire's own card renders this as a case file and never calls describe() on the
+    // way through — but the raw console posts the same route and toasts whatever this makes of it,
+    // so the priciest read on the screen answered "done." there. A summary, not the file: money
+    // stays BANDED (the server sends no figure and one here would hand a hunter exact kill-EV).
+    if (body && body.ok && body.dossier && body.dossier.name) {
+      const d = body.dossier;
+      const marks = [d.flags && d.flags.wanted && 'WANTED', d.flags && d.flags.welsher && 'WELSHER',
+        d.flags && d.flags.rat && 'RAT', d.flags && d.flags.indicted && 'INDICTED'].filter(Boolean);
+      return `\u{1F5C2} the file on ${txt(d.name)} — ${txt(d.law && d.law.stage)} with the law, ${txt(d.wealth)}, ${d.record ? d.record.kills : 0} on the record${marks.length ? ` · ${marks.join(' · ')}` : ''}${body.spent !== undefined ? ` · ${fmt(body.spent)} $OMR` : ''}`;
+    }
     if (body && body.ok && body.settled !== undefined && body.won !== undefined)
       return body.settled ? (body.won ? `\u{1F4B0} ${body.settled} ticket${body.settled === 1 ? '' : 's'} settled — $${fmt(body.won)} collected` : `${body.settled} ticket${body.settled === 1 ? '' : 's'} settled — nothing came in`)
         : 'nothing to collect — no tickets have come up yet';
@@ -2603,10 +2680,12 @@
     // crew MINIMUM is the number that decides whether the op can go at all. The crew-heist siblings
     // (`is planned — you're muscle…`) say the target and what is still needed; these say it too.
     // Guarded on crewMax, which only the raid board sends, and ordered before the result line.
-    if (body && body.ok && body.crewMax !== undefined && body.crew === undefined && body.name)
+    if (body && body.ok && body.op === 'raid' && body.crewMin !== undefined)
       return `\u{1F52B} the hit on ${txt(body.name)} is on the board — ${body.crewMin} guns minimum, ${body.crewMax} max. Get the crew up, then call the go.`;
-    if (body && body.ok && body.crewMax !== undefined && body.crew !== undefined && body.success === undefined)
-      return `\u{1F52B} you're in on the ${txt(body.npc)} job — ${body.crew} of ${body.crewMax} on the crew`;
+    if (body && body.ok && body.op === 'raid' && body.crew !== undefined)
+      // phrased like the PLAN line above it ("the hit on X"): every outfit's name already carries its
+      // own article, so "the ${name} job" reads "the The Volkov Bratva job".
+      return `\u{1F52B} you're in on the hit on ${txt(body.name || body.npc)} — ${body.crew} of ${body.crewMax} on the crew`;
     if (coop && body.success === true) bits.push(`cracked the ${body.npc} ${body.crew}-handed — your cut $${fmt(body.share)}${body.routed ? ' · ROUTED — the outfit is broken' : ''}${body.routUnits ? ` · ${body.routUnits} of ${body.material} out of the hold` : ''}${body.frontier ? ' · your family plants its flag on their turf' : ''}`);
     if (coop && body.success === false) bits.push(`the ${body.npc} held — their guns put the whole crew in hospital${body.hospSeconds ? ` for ${minsTxt(body.hospSeconds)}` : ''}`);
     // THE CREW HEIST is the same class again: the SOLO score returns `take`/`success` (the line above),
@@ -2916,9 +2995,18 @@
     // gross here would report a bigger number than the pocket actually moved.
     if (body.pay && !body.favor && !body.call && !body.contact) bits.push(`+$${fmt(body.pay)}${body.streak ? ` (day ${body.streak})` : ''}`);
     if (body.won !== undefined && body.settled) bits.push(body.won > 0 ? `settled — +$${fmt(body.won)}` : 'settled — nothing hit');
-    if (body.qty && body.quality) bits.push(`pulled ${body.qty} units at q${body.quality}`);
+    // CUTTING the stash and COLLECTING a batch both answer with a qty and a quality, so the cut has
+    // to be claimed FIRST and by its own `op` — and it says what it ADDED and what the quality fell
+    // to, because that trade is the entire mechanic. A line reporting only the new totals is a
+    // receipt for a decision it never mentions you made.
+    if (body.op === 'cut') bits.push(`stepped on the ${body.name || body.drug} — +${body.added} units, now ${body.qty} at q${body.quality} · $${fmt(body.cost)}`);
+    else if (body.qty && body.quality) bits.push(`pulled ${body.qty} units at q${body.quality}`);
     if (body.fire) bits.push('THE BATCH BURNED — you got out with your skin');
-    if (body.readyAt) bits.push('the batch is on the burner');
+    // The cook debits a SECOND currency (crates) and the only thing a player needs back is when to
+    // return for it, so the old line — which named neither, nor even what was cooking — reported the
+    // least useful third of the action.
+    if (body.op === 'cook' && body.readyAt) bits.push(`🧪 ${body.qty} × ${body.name || body.drug} on the burner — ${body.crates} crate${body.crates === 1 ? '' : 's'} packed, ready in ${minsTxt(Math.max(0, Math.round((new Date(body.readyAt) - Date.now()) / 1000)))}`);
+    else if (body.readyAt) bits.push('the batch is on the burner');
     // a corner deal already states its heat inside its own line, so the generic push made every deal
     // read "+0.1 heat · heat +0.1". Skip when some earlier bit has already said it — written as a
     // scan rather than a shape test so a future branch that mentions heat can't reintroduce the echo.
@@ -9336,7 +9424,12 @@
           ${n.standing < (uw.gift?.cap ?? 50) ? `<button class="act" data-uwgift="${n.id}">gift $${fmt(uw.gift?.cost || 5000)} (+${uw.gift?.standing || 5})</button>` : ''}
           ${n.grudge ? `<button class="act" data-uwpenance="${n.id}">penance $${fmt(uw.penance || 25000)}</button>` : ''}
           ${n.tier >= 3 && !uw.favor?.taken ? `<button class="act" data-uwfavor="${n.id}">the weekly favor</button>` : ''}
-          ${n.tier >= 1 && !uw.errand ? `<button class="act" data-uwerrand="${n.id}">take an errand</button>` : ''}</div>`).join('')}</div>
+          ${n.tier >= 1 && !uw.errand ? `<button class="act" data-uwerrand="${n.id}">take an errand</button>` : ''}
+          ${n.id === 'armorer' && n.tier >= 3 && (me.guns || []).length ? `<div style="margin-top:4px">
+            <select id="uw-sellgun" style="max-width:60%">${(me.guns || []).map((gid) => {
+              const g = (rules?.guns || []).find((x) => x.id === gid);
+              return `<option value="${gid}">${g ? g.name : gid}</option>`; }).join('')}</select>
+            <button class="act" id="uw-sellgun-go">sell it back</button></div>` : ''}</div>`).join('')}</div>
       ${me.hospSeconds > 0 ? `<div style="margin-top:8px"><button class="act" data-do="POST /v1/underworld/discharge">Doc's early discharge ($150/min left)</button></div>` : ''}
 
       <h2 style="margin-top:12px">The Fixers' Stories <span class="d" style="font-size:11px">(authored jobs — do the work, make the call, collect once per street · opens at standing ${cam.minStanding ?? 25})</span></h2>
@@ -9429,6 +9522,15 @@
     for (const [attr, path] of [['uwgift', 'gift'], ['uwpenance', 'penance'], ['uwfavor', 'favor'], ['uwerrand', 'errand']])
       t.querySelectorAll(`[data-${attr}]`).forEach((btn) => btn.onclick = () =>
         act('POST', `/v1/underworld/${btn.dataset[attr]}/${path}`, {}).then(() => renderLife()));
+    // BELLA'S BUYBACK. Her card has ADVERTISED "She buys guns back at 30%" as the tier-3 reward since
+    // the Underworld shipped, and the route to do it existed — with no button anywhere in the game and
+    // not even a raw-deck entry. A player who ground her standing to 90 was shown the reward and given
+    // no way to take it. The price is NOT restated here; the reply says what she paid.
+    {
+      const sg = t.querySelector('#uw-sellgun-go'), sel = t.querySelector('#uw-sellgun');
+      if (sg && sel) sg.onclick = () =>
+        act('POST', `/v1/underworld/gun/${sel.value}/sell`, {}).then(() => renderLife());
+    }
     // the Alliance (marriage + consigliere) — populate the pickers from the streets roster
     {
       const fillPicker = async (sel) => { if (!sel) return;

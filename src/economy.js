@@ -528,7 +528,11 @@ export async function buyGun(ch, gunId, client, h) {
   await h.ledger(client, { characterId: ch.id, currency: 'cb', amount: -g.crates, reason: `gun:buy:${gunId}` });
   await bumpStanding(client, h, ch, 'armorer', 3, { action: 'gun' }); // Bella remembers a customer
   await logCollect(client, ch.account_id, 'guns', gunId); // THE COLLECTION
-  return { ok: true, gun: gunId, price, equipped: ch.gun === gunId };
+  // `crates` because iron costs TWO things and the reply carried only one: the till debits cash AND
+  // g.crates of contraband (both ledgered `gun:buy:<id>` above), so without it the receipt cannot state
+  // what the purchase actually took. `equipped` was already here and unread — the first piece you buy
+  // auto-equips, which is the difference between walking out armed and walking out holding it.
+  return { ok: true, gun: gunId, price, crates: g.crates, equipped: ch.gun === gunId };
 }
 
 export function equipGun(ch, gunId, client, h) {
