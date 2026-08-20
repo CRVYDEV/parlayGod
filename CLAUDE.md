@@ -14708,3 +14708,36 @@ after it asserts its own anchor landed before the run is believed.
 
 Suite green · pgquery 2980 statements + pgcheck 47/47 on a FRESH real-Postgres database · client
 wiring/mirror (81 driven actions) · mobile 78/78 · docs · gates · levers · sim drift-0.
+
+**AND `esc()` WAS CORRUPTING EVERY NAME IT TOUCHED — wave 11 (2026-08-20).** Driving the clusters no
+earlier wave had reached (the casino tables, the skill tree, the world raids, the vouch/streak/LFG
+rails, the vault) came back almost clean — two findings, and the second is the widest single defect
+this session has produced.
+
+**`describe()` HTML-escaped strings bound for `textContent`.** There is exactly one `esc()` in the
+client, shared between describe() and the ~100 `innerHTML` renderers, and **every consumer of
+describe() is `toast()`, which assigns to `textContent`** — injection-proof by construction. So the
+escaping protected nothing and rendered its entities as LITERAL TEXT: learning a skill toasted
+*"learned The Doc&#39;s Friend"*. Measured before fixing rather than assumed — **94 catalog names
+carry an apostrophe or ampersand** (Motorcycle 'Wasp', A Dead Don's Watch, A Made Man's Ring, The
+Week's Reaper), and the street-name charset guard allows both, so **a player called O'Malley was
+toasted as O&#39;Malley on every line that named them**. Fixed with a local `txt()` inside describe
+(85 sites) rather than by touching the shared `esc()`, which is right where it is and wrong here —
+naming them apart is what stops the next reader mixing them up.
+
+**The guard caught a temporal dead zone the moment the change landed**: `txt` was declared beside
+`$dist`, partway down the function, and the deed branches sit ABOVE it — so two actions threw
+*"Cannot access 'txt' before initialization"* rather than silently misbehaving. `$dist` never had the
+problem because every one of its uses is below its declaration. Hoisted to the first line of the body.
+
+The other finding is the forgotten-sibling shape at its plainest: **unlearning ONE skill** burns
+$OMR on the same shared 24h respec clock and hands the point back, and said **"done."** — three lines
+in `describe()` from `learned`, which has stated its own terms all along.
+
+**The entity guard is a SWEEP, and a sweep needs a line that can fail it.** It is only a net over
+what was driven, so with every name in the fixture happening to be plain it would pass over a broken
+tree and read exactly like a clean bill of health. *The Doc's Friend* is now driven for that reason,
+with its own direct assertion beside the sweep. Two mutations, each caught at its own named assertion
+(txt escaping again → the entity sweep names the line verbatim; the unlearn branch dropped → "done.").
+
+68 → 84 driven actions. Suite green · sim drift-0 · mobile 78/78 · client wiring/mirror.

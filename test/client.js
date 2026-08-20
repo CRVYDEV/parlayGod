@@ -2097,6 +2097,13 @@ for (const [m, url, payload] of ACTIONS) {
     [con.t, 'POST', '/v1/pen/faction/northside', null],
     // the Law's own escape, which fell into the catch-all `paid $N` — a price with the purchase left off
     [club.t, 'POST', '/v1/law/bribe', null],
+    // the skill tree: learning one read well and UNLEARNING one — three lines away, on the same shared
+    // 24h respec clock, burning $OMR — said "done." The pair also keeps the entity sweep below honest:
+    // "The Doc's Friend" is a catalog name with an apostrophe in it, and it was reaching the player as
+    // "The Doc&#39;s Friend" because describe() HTML-escaped a string bound for textContent.
+    [club.t, 'POST', '/v1/skills/bruiser', null],
+    [club.t, 'POST', '/v1/skills/doctors_friend', null],
+    [club.t, 'POST', '/v1/skills/respec/doctors_friend', null],
     // and the deed's own market. Pulling a street off it answered a BARE {ok, name} — which is the
     // shape a RENAME answers with — so it told the player they had just named the place; the marker
     // that fixed it then had to name the SYSTEM rather than the state, because a bare `listed:false`
@@ -2154,6 +2161,15 @@ for (const [url, line] of said) assert(!/undefined/.test(line),
 // the hush line's own "The ${kind}" read "The The Wash Records" on every payment ever made — not an
 // edge case, and invisible to every pattern above because it is fluent. Swept rather than pinned at
 // the one site: the catalogs that start with an article are not going to stop growing.
+// NOR AN HTML ENTITY. Every consumer of describe() is toast(), which assigns to textContent — so an
+// HTML-escaped string is not safer there, it is simply WRONG, and it lands on exactly the names that
+// most need to read right: 94 catalog names carry an apostrophe or an ampersand (Motorcycle 'Wasp',
+// A Dead Don's Watch, The Doc's Friend) and the street-name charset guard allows both, so a player
+// called O'Malley was toasted as O&#39;Malley on every line that named them. Swept rather than pinned
+// at the one site that surfaced it, because the catalogs are not going to stop growing.
+for (const [url, line] of said) assert(!/&(?:amp|lt|gt|quot|#\d+);/.test(line),
+  `describe() rendered an HTML entity to the player for ${url} — its output goes to textContent, so ` +
+  `escaping corrupts the name instead of protecting anything: ${JSON.stringify(line)}`);
 for (const [url, line] of said) assert(!/\bThe The\b/i.test(line),
   `describe() stacked an article on a name that already had one for ${url} — the catalog entry ` +
   `already begins with "The": ${JSON.stringify(line)}`);
@@ -2269,13 +2285,26 @@ assert(clubNameLine && /\$OMR/.test(clubNameLine),
   `naming the house is a $OMR burn and "spent" is DOLLARS everywhere else it appears — the line has to ` +
   `name the unit, or it reads as a 48-dollar spend. Got: ${JSON.stringify(clubNameLine)}`);
 
+// The entity sweep above is only a net over what was DRIVEN, so it needs one line that really carries
+// an escapable character — otherwise it passes over a tree where every name happens to be plain and
+// reads exactly like a clean bill of health. This is that line, asserted directly.
+const skillLine = said.get('/v1/skills/doctors_friend');
+assert(skillLine && /Doc's Friend/.test(skillLine),
+  `the catalog name is "The Doc's Friend" and it must reach the player with an apostrophe in it — ` +
+  `describe()'s output goes to textContent, so escaping it produces "Doc&#39;s". Got: ${JSON.stringify(skillLine)}`);
+// and its mute sibling: unlearning ONE skill burns $OMR on a shared daily clock and gives a point back
+const unlearnLine = said.get('/v1/skills/respec/doctors_friend');
+assert(unlearnLine && /\$OMR/.test(unlearnLine) && /point/i.test(unlearnLine),
+  `unlearning a skill burns $OMR and hands the point back — both are terms, and the verb three lines ` +
+  `from it in describe() has stated its own all along. Got: ${JSON.stringify(unlearnLine)}`);
+
 const planLine = said.get('/v1/heists/plan');
 assert(planLine && /fronted|stake/i.test(planLine) && /crew|more/i.test(planLine),
   `planning a score fronts the stake and cannot go until the crew fills — both are terms the leader ` +
   `pays for at that moment. Got: ${JSON.stringify(planLine)}`);
 
 const describedCount = described;
-assert(described >= 67, `only ${described} of ${ACTIONS.length} actions succeeded — the ledger is measuring almost nothing`);
+assert(described >= 70, `only ${described} of ${ACTIONS.length} actions succeeded — the ledger is measuring almost nothing`);
 assert.deepEqual(mute, [], `${mute.length} action(s) a player PRESSES say nothing about what just happened ` +
   `(describe() fell through to "done." or rendered a hole). Every one of these moves money, an asset or a ` +
   `status — write the line, or the game is keeping its own result from the player:\n  ${mute.join('\n  ')}`);
