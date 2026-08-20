@@ -2159,6 +2159,11 @@
         ? `${fmt(body.amount)} $OMR into the family reserve — that's what seals and the Foundation are bought with`
         : `$${fmt(body.amount)} into the family treasury`;
     if (body && body.ok && body.color && body.name === undefined) return `the family flies ${txt(body.color)} now`;
+    // THE RENAME read "done." beside it — same card, same $OMR till, 150 for a name and tag that
+    // change on every surface in the game. Guarded on `tag` so it cannot take the street-name line
+    // above (which answers {name, referralCodeChanged}); `name` alone is far too common a field.
+    if (body && body.ok && body.tag && body.name && body.color === undefined)
+      return `\u{1F3F4} the family is ${txt(body.name)} [${txt(body.tag)}] now — the name changes everywhere it's written`;
     if (body && body.ok && body.id && body.kind && body.name && body.tier !== undefined)
       return body.tier > 1
         ? `the ${txt(body.name)} moves up to tier ${body.tier}${body.collected ? ` — $${fmt(body.collected)} banked at the old rate first` : ''}`
@@ -2234,6 +2239,27 @@
     // cannot go until the crew is filled, so both terms ride the line the leader reads when they pay.
     if (body && body.ok && body.crewNeeded !== undefined && body.role)
       return `\u{1F5FA} ${txt(body.name)} is planned — you're ${txt(body.role)}, $${fmt(body.stake)} fronted${body.fenced ? ', taking it HOT (fenceable loot, not cash)' : ''}. ${body.crewNeeded ? `Needs ${body.crewNeeded} more on the crew before it goes; the stake comes back only if you disband first.` : 'Ready to go.'}`;
+    // CASING the job spends energy for a per-member bump on the roll, and said "done." — so the one
+    // number it buys went unread. Guarded on `cased`, which nothing else sends.
+    if (body && body.cased) return `\u{1F50D} cased the job — every man on the crew rolls +${Math.round(body.bonusStep * 100)} on the score. Case it again for more, up to the cap.`;
+    // DISBANDING handed $10,000 back and said nothing — and the plan line two above it PROMISES that
+    // refund in so many words ("the stake comes back only if you disband first"), so the game made
+    // the promise and then never confirmed it was kept. `refunded` may legitimately be 0 for a member
+    // who never fronted the stake, so the two cases read differently rather than printing "+$0".
+    // DISBANDING handed $10,000 back and said nothing — and the plan line two above it PROMISES that
+    // refund in so many words ("the stake comes back only if you disband first"), so the game made
+    // the promise and then never confirmed it was kept.
+    //
+    // `disbanded` is sent by TWO systems, and reading them as one says the OPPOSITE of what happened:
+    // a crew RAID's leader disbanding kills the op for the whole crew, where a heist MEMBER walking
+    // off leaves the job standing. The heist always carries `refunded` (the stake it hands back) and
+    // the raid has no stake to carry, so that is the discriminator — the byte-shape collision class,
+    // caught by the ledger the moment leaving a raid was first driven.
+    if (body && body.disbanded && body.refunded !== undefined) return body.refunded
+      ? `\u{1F5FA} called the job off — your $${fmt(body.refunded)} stake is back in your pocket`
+      : '\u{1F5FA} you walked away from the job — the crew goes on without you';
+    if (body && body.ok && body.disbanded) return '\u{1F52B} you called the raid off — the crew is stood down and the op is gone';
+    if (body && body.ok && body.left === true) return '\u{1F52B} you walked off the crew — the raid goes on without you';
     // THE CONVOY. A shipment is for BULK and refuses to roll under the minimum — a player who opened
     // one with two crates used to hear that only at depart. The manifest total is the server's to say.
     // ...and DEPARTURE said "done." over the loudest thing the screen does: the run goes PUBLIC (the
@@ -2361,12 +2387,26 @@
     // a clean boost / a solo cartel raid — each carries success:true with no `take`, so each
     // needs its own line or the generic crime bit reads "clean job — $0" over a real result
     if (body.success === true && body.car) bits.push(`boosted a${body.car.rarity && body.car.rarity !== 'common' ? ` ${body.car.rarity}` : ''} ride — she's in the garage${body.car.dmg ? ` (took some dents: ${body.car.dmg} dmg)` : ''}`);
-    if (body.success === true && body.npc && body.loot !== undefined && body.family === undefined) bits.push(`raided the ${body.npc} — took $${fmt(body.loot)}${body.routBonus ? ` + a $${fmt(body.routBonus)} rout bonus` : ''}${body.routed ? ' · ROUTED' : ''}`);
+    // THE SOLO RAID dropped `frontier` — so a rout that planted the FAMILY'S FLAG on the outfit's
+    // turf (which starts tribute accruing to the treasury and can be invaded) read byte-for-byte
+    // like a rout by a man with no family at all. Its co-op sibling seven lines down reads that
+    // field, and `routUnits`/`material` with it: the forgotten-sibling shape with the sibling that
+    // gets it right in the same block. Both terms are guarded, so a raid that takes neither is
+    // unchanged — and if the solo path is ever given the material, the line already says so.
+    if (body.success === true && body.npc && body.loot !== undefined && body.family === undefined) bits.push(`raided the ${body.npc} — took $${fmt(body.loot)}${body.routBonus ? ` + a $${fmt(body.routBonus)} rout bonus` : ''}${body.routed ? ' · ROUTED' : ''}${body.routUnits ? ` · ${body.routUnits} of ${body.material} out of the hold` : ''}${body.frontier ? ' · your family plants its flag on their turf' : ''}`);
     // THE CO-OP RAID has its OWN shape — a crew splits a `pot` into a `share` where a soloist takes
     // `loot` — so the line above (keyed on `loot`) never fired for it and the deepest co-operative
     // content in the game reported "done." for a rout and "it went sideways" for a repel that put the
     // whole crew in hospital. Keyed on the pair only this path returns: an npc + a numeric crew.
     const coop = body.npc && typeof body.crew === 'number';
+    // OPENING and JOINING a crew raid both read "done." — on the game's hardest targets, where the
+    // crew MINIMUM is the number that decides whether the op can go at all. The crew-heist siblings
+    // (`is planned — you're muscle…`) say the target and what is still needed; these say it too.
+    // Guarded on crewMax, which only the raid board sends, and ordered before the result line.
+    if (body && body.ok && body.crewMax !== undefined && body.crew === undefined && body.name)
+      return `\u{1F52B} the hit on ${txt(body.name)} is on the board — ${body.crewMin} guns minimum, ${body.crewMax} max. Get the crew up, then call the go.`;
+    if (body && body.ok && body.crewMax !== undefined && body.crew !== undefined && body.success === undefined)
+      return `\u{1F52B} you're in on the ${txt(body.npc)} job — ${body.crew} of ${body.crewMax} on the crew`;
     if (coop && body.success === true) bits.push(`cracked the ${body.npc} ${body.crew}-handed — your cut $${fmt(body.share)}${body.routed ? ' · ROUTED — the outfit is broken' : ''}${body.routUnits ? ` · ${body.routUnits} of ${body.material} out of the hold` : ''}${body.frontier ? ' · your family plants its flag on their turf' : ''}`);
     if (coop && body.success === false) bits.push(`the ${body.npc} held — their guns put the whole crew in hospital${body.hospSeconds ? ` for ${minsTxt(body.hospSeconds)}` : ''}`);
     // THE CREW HEIST is the same class again: the SOLO score returns `take`/`success` (the line above),
@@ -2600,6 +2640,12 @@
       body.outcome === 'push' ? "a push — your bet's returned" :
       `${body.playerTotal} vs the dealer's ${body.dealerTotal} — ${body.net > 0 ? `+$${fmt(body.net)}` : body.net < 0 ? `−$${fmt(Math.abs(body.net))}` : 'even'}`);
     if (body.game === 'track') bits.push(`down on ${body.horse} at ${body.odds}× in the ${body.race} — pays $${fmt(Math.round(body.stake * body.odds))} if it comes in`);
+    // THE WEEKLY FIGHT read "done." one line under the track bet that gets it right — same screen,
+    // same shape (a wager on a named runner at stated odds), and every field was already there. The
+    // payout is the half a bettor is actually deciding on, and the fight is drawn for the WEEK, so
+    // the line says which corner they took as well as what it returns.
+    if (body.game === 'fight' && body.side && body.stake !== undefined) { const fav = body.side === 'a';
+      bits.push(`$${fmt(body.stake)} on ${txt(fav ? body.a : body.b)}${fav ? '' : ' (the dog)'} in this week's fight at ${fav ? body.favPays : body.dogPays}× — pays $${fmt(Math.round(body.stake * (fav ? body.favPays : body.dogPays)))} if they win`); }
     if (body.racer && body.post !== undefined && body.fee !== undefined && body.race) bits.push(`${body.racer} is in today's ${body.race} — post ${body.post} at ${body.odds}:1 (the town's betting on your animal now)`);
     if (body.futurity && body.racer && body.fee !== undefined && body.form !== undefined) bits.push(`${body.racer} (form ${body.form}) is nominated to the futurity — the whole town's betting on the field`);
     if (body.futurity && body.on && body.amount !== undefined) bits.push(`$${fmt(body.amount)} on ${body.on} in the futurity`);
@@ -2635,8 +2681,20 @@
     if (body.arrivesSeconds !== undefined && body.route) bits.push(`⚓ cast off on the ${body.route} run — back in ${Math.ceil(body.arrivesSeconds / 60)}m`);
     if (body.boat && body.boat.name && body.spent !== undefined) bits.push(`bought the ${body.boat.name} — $${fmt(body.spent)}`);
     if (body.refund !== undefined && body.boat === undefined && body.landed === undefined && !bits.length) bits.push(`sold her back to the yard — +$${fmt(body.refund)}`);
+    // THE SEAL, and its own sibling on the same card got it right. Both are bought from the family's
+    // POOLED $OMR reserve — money every member tributed in — and `foundation` one line down names
+    // the institution while the seal read "done.": no seal, no reserve left, no next rung, after 150
+    // $OMR of the family's money. The reserve balance is the half a boss actually needs, because the
+    // next rung is what they are saving toward and nothing else on the screen has re-rendered yet.
+    if (body.seal && body.seal.name) bits.push(`\u{1F4DC} the family bears the ${body.seal.name} now — ${fmt(body.reserve)} $OMR left in the reserve${body.nextSeal ? `, next is the ${body.nextSeal.name} at ${fmt(body.nextSeal.omr)}` : ' — the finest seal in the city'}`);
     if (body.foundation && body.foundation.name) bits.push(`the family endowed the ${body.foundation.name} — softer trials for everyone`);
-    if (body.gainMult !== undefined && body.envelopeSeconds) bits.push("the envelope's current — the cops will look the other way");
+    // THE ENVELOPE named neither its price nor its clock, in a block where five siblings around it
+    // name one or both. It is a RECURRING sink (the standing graft, not a one-shot bribe) and the
+    // reply carries `spent` AND `envelopeSeconds` — so the player who has just burned 150 $OMR could
+    // not read from the toast what it cost or when it lapses, which is exactly what they must track
+    // to renew it. The card states all three; the toast is what you read as the money leaves.
+    if (body.gainMult !== undefined && body.envelopeSeconds)
+      bits.push(`the envelope's current for ${minsTxt(body.envelopeSeconds)}${body.spent ? ` — ${fmt(body.spent)} $OMR` : ''} — the case builds at ${Math.round(body.gainMult * 100)}% while it lasts. Standing protection: it LAPSES.`);
     // THE WIRE'S PAID ACTIONS, WHICH ALL BUT ONE OF THEM DID NOT NAME. Six things on this screen cost
     // $OMR; `disinfo` three lines down states its price AND its clock, and the other five stated
     // neither — the forgotten-sibling shape with the sibling that gets it right in the same block.
