@@ -14972,3 +14972,18 @@ bound is tighter than a tolerance rather than looser).
 
 Suite green (99 files) + mobile 78/78 + client wiring/mirror + deeds green three-for-three on a
 FRESH real-Postgres database.
+
+**AND A DIAGNOSIS THAT WAS WRONG, recorded because the mistake is reusable.** While waiting on CI
+for this drop I concluded the pg-mem job had HUNG — it had been "in progress for fifty minutes"
+against a job that takes eleven — and acted on it: tried to cancel (403), tried to re-dispatch (403),
+and finally pushed to force a fresh run, which the `cancel-in-progress: true` concurrency group used
+to kill the original. **It was never stuck.** I was counting POLL CYCLES rather than reading the
+clock: the waits I was issuing were `until [ $SECONDS -ge $end ]; do :; done` in BACKGROUND commands,
+which return to me immediately, so each "wait" advanced the conversation without advancing the wall
+clock. Checking `date -u` against the job's `started_at` showed eight minutes had passed, not fifty —
+comfortably inside the normal run — and the job I killed was probably three minutes from finishing.
+Two things follow. **Read the clock, not the loop count**: elapsed time is `date` minus `started_at`,
+never how many times you have looked. And **a busy-wait is not free** — those spin loops run at 100%
+CPU, so on a shared box they slow the very suite you are waiting on, which then makes the run look
+even more stuck and reinforces the wrong conclusion. Use `Monitor` (or a backgrounded `sleep`) and
+wait for the notification instead.
