@@ -15,7 +15,7 @@
 // social front door (`NOT c.is_npc AND NOT a.agent_flag`); residents are already findable on the
 // streets roster. If you are genuinely alone the lists are empty, which is the TRUE state and the
 // empty-state honesty rule (never dress an empty board as full).
-import { DISCOVERY, CREW, DISTRICTS, levelOf, PACING } from './rules.js';
+import { DISCOVERY, CREW, DISTRICTS, levelOf, PACING, seenSince } from './rules.js';
 import { vouchCounts } from './vouch.js';
 
 const districtName = (id) => (DISTRICTS.find((d) => d.id === id) || {}).name || id;
@@ -79,23 +79,29 @@ export async function discoveryBoard(ch, client, onlineIds = [], filters = {}) {
   const lookingIds = new Set(looking.map((r) => r.id));
 
   // PEERS — everyone near your level (whether or not they're looking), so you can reach out to anyone;
-  // the looking-ones are excluded here so the two lists don't duplicate.
-  const pp = [ch.id, lo, hi, Number(ch.respect), DISCOVERY.LIMIT + looking.length];
+  // the looking-ones are excluded here so the two lists don't duplicate. STILL AROUND (SEEN_DAYS)
+  // applies: "reach out to anyone" is only useful advice about somebody who might answer. LOOKING
+  // above needs no such gate — an LFG flag set inside LFG_TTL_MS is an affirmative "I am here and
+  // want a crew", which is a stronger statement of being around than a timestamp.
+  const pp = [ch.id, lo, hi, Number(ch.respect), seenSince(), DISCOVERY.LIMIT + looking.length];
   const peers = applyOnline((await client.query(
     `${HUMAN_COLS}
       WHERE c.alive AND NOT c.is_npc AND NOT a.agent_flag AND c.id <> $1
-        AND c.respect BETWEEN $2 AND $3${filt(pp)}
-      ORDER BY (c.respect - $4) * (c.respect - $4) LIMIT $5`, pp)).rows
+        AND c.respect BETWEEN $2 AND $3 AND c.last_accrued_at > $5${filt(pp)}
+      ORDER BY (c.respect - $4) * (c.respect - $4) LIMIT $6`, pp)).rows
       .map((r) => card(r, online))).filter((r) => !lookingIds.has(r.id)).slice(0, DISCOVERY.LIMIT);
 
   // FRESH BLOOD — the newest humans, ANY level, so a veteran can welcome a newcomer and a new player
   // sees other new players even when nobody's in their band. The front door that's never empty while
-  // anyone at all has joined.
-  const np = [ch.id, DISCOVERY.LIMIT];
+  // anyone at all has joined. The gate costs a genuine newcomer nothing (they are recent on both
+  // counts) and keeps the list honest: somebody who signed up long ago and never came back is neither
+  // fresh nor blood, and on a quiet box they would otherwise fill the slots a real arrival wants.
+  const np = [ch.id, seenSince(), DISCOVERY.LIMIT];
   const newcomers = applyOnline((await client.query(
     `${HUMAN_COLS}
-      WHERE c.alive AND NOT c.is_npc AND NOT a.agent_flag AND c.id <> $1${filt(np)}
-      ORDER BY c.created_at DESC LIMIT $2`, np)).rows.map((r) => card(r, online)));
+      WHERE c.alive AND NOT c.is_npc AND NOT a.agent_flag AND c.id <> $1
+        AND c.last_accrued_at > $2${filt(np)}
+      ORDER BY c.created_at DESC LIMIT $3`, np)).rows.map((r) => card(r, online)));
 
   // CREWS RECRUITING — the push half: crews that opened their doors, near your level, with room. A flat
   // query + a JS fold (pg-mem can't run the correlated aggregate — the /v1/gangs precedent). A crew is

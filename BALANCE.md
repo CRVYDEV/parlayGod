@@ -5119,6 +5119,21 @@ and a fresh player sees whales, too narrow and an empty alpha reads as a dead bo
 recruit/peers lists to genuine peers while `newcomers` (any level, newest-first) is the never-empty
 front door. All three are founder sign-off levers, pinned in `test/levers.js`.
 
+**STILL AROUND — `DISCOVERY.SEEN_DAYS` (30), added 2026-08-20 by the launch dress rehearsal.** The
+human filters on these boards (`/v1/live` and the ROLODEX's peers + newcomers) knew about ONE kind of
+scenery — NPC residents and agents — and an ABANDONED account is a second kind. On the live box it was
+the MAJORITY: a first-player walkthrough opened "real players near you" and read 10 of 12 entries that
+were dead level-1 accounts from old smoke tests. `characters.last_accrued_at` is the signal (§7.1
+accrual stamps it on every authed request, so it means "a person was here"), and **the discriminator
+is RECENCY and deliberately not level, job count, or online-ness** — each of those looks reasonable
+and is wrong in the same fatal way: on launch night ten people arrive together, all level 1, none of
+whom has done anything, and an activity filter would hide exactly the cohort these boards exist to
+introduce. 30 days matches the digest's own `DIGEST_MAX_LAPSE_DAYS`: the game already decided that
+past a month of silence a player is gone, and this is the same judgement about the same person.
+`LOOKING` is deliberately UNGATED — a fresh LFG flag is an affirmative "I am here and want a crew",
+a stronger signal than any timestamp — and the suite pins that decision so a later sweep can't take
+it away. Pure scope, no faucet; `SEEN_DAYS: 0` disables the gate entirely.
+
 ## THE MENTOR — the protégé onboarding faucet (founder sign-off)
 
 THE MENTOR (`omerta-first-contact-and-events-design.md`, MOVE 1) adds ONE cash faucet: `mentor:protege`,

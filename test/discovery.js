@@ -91,6 +91,49 @@ assert.equal(has(b.newcomers, 'Johnny Front'), false, 'never yourself');
 assert.equal(has(b.newcomers, 'Bot Nine'), false, 'agents excluded here too');
 assert.equal(has(b.newcomers, 'Ghost Res'), false, 'residents excluded here too');
 
+// ════════════ STILL AROUND — the SECOND kind of scenery ════════════
+// The exclusions above know about NPCs and agents. An ABANDONED account is scenery too, and on a live
+// box it is the majority. Driven from BOTH ends: a filter that hid everyone would pass a one-sided
+// test. Dedicated characters, because the peer above is a fixture the later blocks depend on.
+{
+  const gone = await mk('Long Gone');                 // a near-level human who stopped playing
+  await seed(gone.id, 'respect=5000');
+  let s = await board(me.token);
+  assert.equal(has(s.peers, 'Long Gone'), true,
+    'PRECONDITION: a near-level human touched just now IS a peer — otherwise the gate below proves nothing');
+  assert.equal(has(s.newcomers, 'Long Gone'), true, 'PRECONDITION: and fresh blood');
+
+  // GROUND TRUTH IS THE DATABASE — the gate reads last_accrued_at, so the fixture moves
+  // last_accrued_at, not some proxy the board might not consult.
+  const past = new Date(Date.now() - (DISCOVERY.SEEN_DAYS + 5) * 86400000);
+  await pool.query('UPDATE characters SET last_accrued_at=$2 WHERE id=$1', [gone.id, past]);
+  s = await board(me.token);
+  assert.equal(has(s.peers, 'Long Gone'), false,
+    `nobody has touched them in ${DISCOVERY.SEEN_DAYS + 5} days — "reach out to anyone" is only useful ` +
+    'advice about somebody who might answer');
+  assert.equal(has(s.newcomers, 'Long Gone'), false,
+    'and somebody who signed up long ago and never came back is neither fresh nor blood');
+  assert.equal(has(s.peers, 'Sally Near'), true, 'the live peer beside them is untouched by the gate');
+
+  // THE LAUNCH-NIGHT CASE, which is the whole reason the discriminator is recency and not activity:
+  // ten people arrive together, all level 1, none of whom has done anything yet. FRESH BLOOD is the
+  // list they meet each other on, so it must show them on their first second — where a filter on
+  // level, job count or online-ness would have hidden the entire cohort from itself.
+  const arrival = await mk('Just Landed');            // level 1, zero respect, has done nothing at all
+  assert.equal(has((await board(me.token)).newcomers, 'Just Landed'), true,
+    'a brand-new arrival who has done NOTHING is fresh blood immediately — the gate is recency, not activity');
+
+  // LOOKING is deliberately UNGATED, and that is a decision rather than an oversight: an LFG flag set
+  // inside LFG_TTL_MS is an affirmative "I am here and want a crew", a stronger statement of being
+  // around than any timestamp. Sweeping the gate onto all three lists would silently drop it.
+  const flagged = await mk('Still Looking');
+  await seed(flagged.id, 'respect=5000');
+  await call('POST', '/v1/discovery/lfg', { token: flagged.token, body: { on: true } });
+  await pool.query('UPDATE characters SET last_accrued_at=$2 WHERE id=$1', [flagged.id, past]);
+  assert.equal(has((await board(me.token)).looking, 'Still Looking'), true,
+    'a fresh LFG flag keeps you on the RECRUIT list regardless of the seen-window — the flag is the stronger signal');
+}
+
 // ════════════ STEP TWO — online presence + recruiting crews ════════════
 // `discoveryBoard` takes an onlineIds set from the route (the WS registry). The suite drives the
 // board directly through the module to exercise presence + the crews list.
