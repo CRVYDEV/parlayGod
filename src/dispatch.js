@@ -230,6 +230,9 @@ let sender = async (to, subject, html, text) => {
   const res = await fetch(cfg.apiUrl(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.EMAIL_API_KEY}` },
+    // bounded (the verify.js AbortSignal pattern): sweepDispatch runs claim-then-send, so a HUNG provider
+    // would hold the worker sweep for undici's ~300s default per recipient — 10s bounds each send.
+    signal: AbortSignal.timeout(10_000),
     body: JSON.stringify({ from: cfg.from(), to: [to], subject, html, text }),
   });
   return res.ok;

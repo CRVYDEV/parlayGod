@@ -17,6 +17,34 @@ const SCHEMA = fs.readFileSync(path.join(here, '..', 'schema.sql'), 'utf8');
 // A fixed key for the boot-time schema advisory lock (any constant bigint — must match across processes).
 const SCHEMA_LOCK_KEY = 918273645;
 
+// ── THE SCHEMA STAMP (bulletproof audit, Schema Versioning) ─────────────────────────────────────
+// schema.sql is additive-only and applied idempotently at every boot — which is exactly why "which
+// schema is prod on?" was unanswerable during an incident: nothing in the DATABASE recorded who
+// applied it last. One row now does. The stamp also makes a ROLLBACK visible: an OLDER build booting
+// against a database a NEWER build already migrated is survivable BY the additive-only discipline,
+// but it should never be silent — that is usually somebody rolling back a bad deploy, and the warning
+// names the runbook. An older build deliberately does NOT overwrite the newer stamp (the row records
+// the newest build that touched the schema; overwriting would silence the warning on the next boot).
+const newerVersion = (a, b) => { // true when semver-ish `a` > `b`
+  const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
+  for (let i = 0; i < 3; i++) { if ((pa[i] || 0) > (pb[i] || 0)) return true; if ((pa[i] || 0) < (pb[i] || 0)) return false; }
+  return false;
+};
+export async function stampSchema(q) {
+  const appVer = JSON.parse(fs.readFileSync(path.join(here, '..', 'package.json'), 'utf8')).version || '0.0.0';
+  const { createHash } = await import('node:crypto');
+  const sha = createHash('sha256').update(SCHEMA).digest('hex').slice(0, 16);
+  const prev = (await q.query('SELECT app_version FROM schema_meta WHERE id=1')).rows[0];
+  if (prev && newerVersion(prev.app_version, appVer)) {
+    console.warn(`[db] ⚠ this build (v${appVer}) is OLDER than the build that last migrated this database (v${prev.app_version}) — likely a rollback in progress. Additive-only schema discipline makes this safe to run; see DEPLOY.md § Rolling back a bad deploy.`);
+    return { appVer, sha, rolledBack: true };
+  }
+  // UPDATE-then-INSERT, never ON CONFLICT (the recordReckoning pg-mem lesson: DO NOTHING lies about rowCount)
+  const upd = await q.query('UPDATE schema_meta SET app_version=$1, schema_sha=$2, applied_at=now() WHERE id=1', [appVer, sha]);
+  if (!upd.rowCount) await q.query('INSERT INTO schema_meta (id, app_version, schema_sha) VALUES (1,$1,$2)', [appVer, sha]);
+  return { appVer, sha, rolledBack: false };
+}
+
 // (red-team R30 MED-1 — the in-place-upgrade migration) schema.sql is 100% `CREATE TABLE IF NOT EXISTS`,
 // so on an ALREADY-created Postgres DB every column added to a table's CREATE block AFTER that table first
 // existed is silently absent — an in-place upgrade then 500s on every path that names a new column. This
@@ -190,6 +218,7 @@ export async function makeDb() {
       await boot.query(SCHEMA);
       // in-place upgrade: add any columns that a pre-existing table is missing (a fresh DB → all no-ops).
       const mig = await migrateColumns(boot, SCHEMA);
+      await stampSchema(boot); // which build applied this schema — see stampSchema above
       console.log(`[db] Postgres ready — column migration ran ${mig.total} ADD COLUMN IF NOT EXISTS statements${mig.failed ? ` (${mig.failed} skipped — see above)` : ''}.`);
     } finally {
       await boot.query('SELECT pg_advisory_unlock($1)', [SCHEMA_LOCK_KEY]).catch(() => {});
@@ -209,6 +238,7 @@ export async function makeDb() {
   const { Pool } = mem.adapters.createPg();
   const pool = new Pool();
   await pool.query(SCHEMA);
+  await stampSchema(pool); // same stamp as the real-PG path, so tests exercise it
   console.log('[db] pg-mem in-memory database (set DATABASE_URL for Postgres)');
   return pool;
 }

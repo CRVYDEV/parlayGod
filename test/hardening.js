@@ -1026,9 +1026,26 @@ if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actual
   }
   // …and the half that keeps it a legibility fix rather than a blanket swallow: a real bug is still
   // a real bug. Without this the branch could be widened to catch everything and nothing would notice.
-  const bug = await call('POST', '/v1/__genuine_bug');
+  // THE LOG LINE CARRIES THE ROUTE (bulletproof pass, 2026-08-21): `logger: false` is deliberate, so
+  // the console.error in the 500 branch is the ONLY record a crash leaves — and it carried the stack
+  // with no route, so "which button is 500ing?" meant reproducing the incident instead of reading the
+  // log. Driven through the REAL handler (never a restatement): capture console.error, hit the route,
+  // and the line must name method + url. The BODY stays a bare `internal` — a 500's body can carry
+  // money amounts and the response is the one place we never want them.
+  const logged = [];
+  const realErr = console.error;
+  console.error = (...a) => logged.push(a);
+  let bug;
+  try { bug = await call('POST', '/v1/__genuine_bug'); } finally { console.error = realErr; }
   assert.equal(bug.code, 500, 'a genuine error still reports as a server bug');
   assert.equal(bug.body.error, 'internal', 'and lands in the bug pile where somebody looks at it');
+  assert(!JSON.stringify(bug.body).includes('null-dereference'), 'the response never leaks the message or stack');
+  const line = logged.find((a) => typeof a[0] === 'string' && a[0].startsWith('[500]'));
+  assert(line, 'the 500 branch logs a [500] line — with logger:false it is the only record the crash leaves');
+  assert(line[0].includes('POST') && line[0].includes('/v1/__genuine_bug'),
+    `the log line names the route, or every 500 is "somewhere": got ${JSON.stringify(line[0])}`);
+  assert(line.some((a) => a instanceof Error && /null-dereference/.test(a.message)),
+    'and carries the error object itself, so the stack is in the log where it belongs');
 }
 
 // ── AN UNREACHABLE DATABASE SAYS SO — 503 db_down, never 500 internal ──
@@ -1050,6 +1067,14 @@ if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actual
     // a stopped Postgres on a UNIX SOCKET raises ENOENT — the socket file is gone. Observed against a
     // real Postgres; the errno alone is far too broad to trust, so it is the syscall that qualifies it.
     Object.assign(new Error('connect ENOENT /var/run/postgresql/.s.PGSQL.5432'), { code: 'ENOENT', syscall: 'connect' }),
+    // (bulletproof audit) a DNS failure reaching the DB host — the EXACT shape of the recorded
+    // 2026-07-30 production incident ("Temporary failure in name resolution"): node surfaces it as
+    // EAI_AGAIN/EAI_FAIL with syscall 'getaddrinfo', NOT 'connect', so the classifier missed it and
+    // the outage read as 500 internal. Both errno and syscall forms are pinned, both directions.
+    Object.assign(new Error('getaddrinfo EAI_AGAIN omerta-db.internal'), { code: 'EAI_AGAIN', syscall: 'getaddrinfo' }),
+    Object.assign(new Error('getaddrinfo EAI_FAIL omerta-db.internal'), { code: 'EAI_FAIL' }),
+    Object.assign(new Error('getaddrinfo ENOTFOUND omerta-db.internal'), { syscall: 'getaddrinfo' }),
+    Object.assign(new Error('all attempts failed'), { errors: [{ code: 'EAI_AGAIN' }] }), // aggregate DNS error
   ]) assert(isDbDown(e), `an unreachable database must be recognised: ${e.code || e.message}`);
   // …and a bare ENOENT (a missing file, not a failed connect) is NOT an outage
   assert(!isDbDown(Object.assign(new Error("ENOENT: no such file or directory, open 'x.html'"), { code: 'ENOENT', syscall: 'open' })),
@@ -1072,6 +1097,29 @@ if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actual
   // timed settlement) so an external monitor can catch it going dark. The schema seeds a fresh beat.
   assert(h.body.worker && typeof h.body.worker.beatAgoSeconds === 'number' && h.body.worker.stale === false,
     '/health carries worker liveness (fresh heartbeat → not stale)');
+
+  // (bulletproof audit) THE PRODUCTION LOAD SIGNAL — /health carries request-side SLIs (5-minute
+  // request/4xx/5xx counters + a recent-latency p95) and an rssMb memory gauge, so "is the box in
+  // trouble" is answerable from the same endpoint the uptime monitor already reads. Asserted as a
+  // DELTA around a driven 4xx, never as "some traffic happened" (the suite's own history would make
+  // that vacuous); HEALTH_TTL_MS=0 forces a fresh check both sides so the cache cannot serve a stale
+  // counter to either read.
+  {
+    process.env.HEALTH_TTL_MS = '0';
+    try {
+      const before = (await call('GET', '/health')).body;
+      assert(before.load && typeof before.load.req5m === 'number' && typeof before.load.p95Ms === 'number',
+        '/health carries the load block (req5m + latency percentiles)');
+      assert(typeof before.rssMb === 'number' && before.rssMb > 0, '/health carries the rssMb memory gauge');
+      const miss = await call('GET', '/v1/nothing-here-' + Date.now());
+      assert(miss.code >= 400 && miss.code < 500, 'the driven miss is a 4xx');
+      const after = (await call('GET', '/health')).body;
+      assert(after.load.err4xx5m >= before.load.err4xx5m + 1,
+        `a 4xx moves the err4xx5m counter (${before.load.err4xx5m} → ${after.load.err4xx5m})`);
+      assert(after.load.req5m > before.load.req5m, 'every request moves req5m');
+      assert(after.load.err5xx5m === before.load.err5xx5m, 'a 4xx is NOT counted as a 5xx');
+    } finally { delete process.env.HEALTH_TTL_MS; }
+  }
 
   // R32 F2 — /health is KEYLESS and touches the database twice, and it sits outside `/v1`, so the
   // BLUE-TEAM H4 default-throttle never saw it: measured accepting 400 hits where a keyless
@@ -1474,6 +1522,138 @@ if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actual
   // mod-gated like every other tool on that perimeter
   assert.equal((await app.inject({ method: 'POST', url: '/v1/mod/alert/test' })).statusCode, 401,
     'the drill is a mod tool — an unauthenticated caller cannot make the founder\'s phone buzz');
+
+  // ── THE ALARM SURVIVES A TRANSIENT FAILURE (bulletproof pass, 2026-08-21) ──
+  // This POST is the single most important outbound request in the app — the founder alarm the whole
+  // invariant machinery exists to deliver — and it was single-shot: one transient Discord 502 or one
+  // DNS blip and the page was gone, with only a console line nobody reads left behind. The retry has
+  // to cover BOTH failure shapes, because they arrive differently: a network failure REJECTS the
+  // fetch, while an HTTP 502/429 RESOLVES with ok=false (fetch never throws on status) — a loop that
+  // only catches throws reads like a retry and covers half the world. `retryDelaysMs=[1,1]` drives
+  // the path without sleeping through real backoff (the getDaily `day` precedent).
+  {
+    // (a) thrown twice, delivered third: exactly 3 calls, the delivered body intact, loop breaks on success
+    const tries = [];
+    process.env.INVARIANT_WEBHOOK_URL = 'http://127.0.0.1:1/hook';
+    globalThis.fetch = async (url, opts) => {
+      tries.push(JSON.parse(opts.body));
+      if (tries.length < 3) throw new Error('ECONNRESET');
+      return { ok: true };
+    };
+    try { await alertDrift(pool, drift, 'ledger', [1, 1]); } finally { globalThis.fetch = realFetch; }
+    assert.equal(tries.length, 3, 'a webhook that fails twice is retried and the third attempt delivers');
+    assert(tries[2].text && tries[2].content && Array.isArray(tries[2].failed),
+      'the attempt that lands carries the full payload — a retry that delivers a stub is not a retry');
+
+    // (b) HTTP failure (resolved, ok=false) is retried too — the actual Discord-502 shape
+    const httpTries = [];
+    globalThis.fetch = async () => { httpTries.push(1); return { ok: httpTries.length >= 2, status: 502 }; };
+    try { await alertDrift(pool, drift, 'ledger', [1, 1]); } finally { globalThis.fetch = realFetch; }
+    assert.equal(httpTries.length, 2, 'an HTTP 502 response must be retried — fetch resolves on it, it does not throw');
+
+    // (c) success on the FIRST attempt makes exactly one call — the retry must not double-post a real page
+    const once = [];
+    globalThis.fetch = async () => { once.push(1); return { ok: true }; };
+    try { await alertDrift(pool, drift, 'ledger', [1, 1]); } finally { globalThis.fetch = realFetch; }
+    assert.equal(once.length, 1, 'a delivered alert is posted exactly once — retries fire only on failure');
+
+    // (d) all attempts failing is SWALLOWED — an alarm must never take the worker's tick down with it
+    const boom = [];
+    globalThis.fetch = async () => { boom.push(1); throw new Error('EAI_AGAIN'); };
+    try { await alertDrift(pool, drift, 'ledger', [1, 1]); } finally { globalThis.fetch = realFetch; delete process.env.INVARIANT_WEBHOOK_URL; }
+    assert.equal(boom.length, 3, 'every configured attempt is used before giving up');
+    // reaching this line IS the assertion: alertDrift returned rather than throwing into the sweep
+  }
+}
+
+// ── THE BULLETPROOF BATCH (2026-08-21) — the audit's verified gaps, each pinned by name ──
+{
+  // (1) EVERY OUTBOUND WEBHOOK FETCH CARRIES A TIMEOUT. undici's default lets a hung endpoint hold
+  // the caller ~300 SECONDS, and all three callers run inside worker sweeps — a wedged Discord/email
+  // endpoint held the whole tick. Behavioral for the alarm (the one path a stub can drive cheaply);
+  // labelled SOURCE tripwires for the other two, whose default senders need a configured provider +
+  // a full sweep fixture to reach — the tripwire is against silent deletion, not a proof of behavior.
+  {
+    process.env.INVARIANT_WEBHOOK_URL = 'https://hooks.example/x';
+    const realFetch = globalThis.fetch;
+    let opts = null;
+    globalThis.fetch = async (_u, o) => { opts = o; return { ok: true }; };
+    try { await alertDrift(pool, [{ name: 'x', ok: false }], 'ledger', [1, 1]); }
+    finally { globalThis.fetch = realFetch; delete process.env.INVARIANT_WEBHOOK_URL; }
+    assert(opts && opts.signal instanceof AbortSignal,
+      'the drift-alarm webhook fetch carries an AbortSignal timeout — a hung endpoint must not hold the sweep');
+    for (const [f, what] of [['../src/citywire.js', 'city wire'], ['../src/dispatch.js', 'email dispatch']]) {
+      const src = readFileSync(new URL(f, import.meta.url), 'utf8');
+      assert(/AbortSignal\.timeout\(/.test(src), `${what} fetch carries an AbortSignal timeout (source tripwire)`);
+    }
+  }
+
+  // (2) WS BACKPRESSURE — a socket that pongs (tiny control frames) but never DRAINS data makes `ws`
+  // buffer every streets/chat/activity event unboundedly; the heartbeat only reaps DEAD sockets.
+  // wsSendable is the drop-not-queue predicate (safe: every durable event is a notifications row the
+  // 30s poll backfill re-derives). Unit-tested on fake sockets; the wiring — that the WS `send`
+  // helper actually CONSULTS it — is a labelled source tripwire, since a real full-buffer socket
+  // cannot be manufactured through pg-mem + inject.
+  {
+    const { wsSendable, WS_MAX_BUFFER } = await import('../src/server.js');
+    assert(WS_MAX_BUFFER > 0, 'WS_MAX_BUFFER is a positive bound');
+    assert(wsSendable({ bufferedAmount: 0 }) === true, 'an empty socket buffer is sendable');
+    assert(wsSendable({ bufferedAmount: WS_MAX_BUFFER - 1 }) === true, 'just under the bound is sendable');
+    assert(wsSendable({ bufferedAmount: WS_MAX_BUFFER }) === false, 'AT the bound the event is dropped, not queued');
+    assert(wsSendable({}) === true && wsSendable(undefined) === false, 'missing bufferedAmount → sendable; missing socket → not');
+    const srvSrc = readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
+    assert(/wsSendable\(socket\)/.test(srvSrc), 'the WS send helper consults wsSendable (source tripwire)');
+  }
+
+  // (3) SCHEMA VERSIONING — every applied schema is STAMPED with the build that applied it
+  // (schema_meta), and an OLDER build never overwrites a NEWER stamp (the rollback-in-progress
+  // signal DEPLOY.md's runbook reads). The pg-mem boot path calls stampSchema too, so the row here
+  // is the real code path, not a fixture.
+  {
+    const pkgVer = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
+    const row = (await pool.query('SELECT app_version, schema_sha FROM schema_meta WHERE id=1')).rows[0];
+    assert(row, 'boot stamps schema_meta');
+    assert.equal(row.app_version, pkgVer, 'the stamp carries the build version that applied the schema');
+    assert(/^[0-9a-f]{16}$/.test(row.schema_sha), 'the stamp carries the schema content hash');
+    // the rollback guard: a stored version NEWER than this build is warned about and NOT overwritten
+    const { stampSchema } = await import('../src/db.js');
+    await pool.query("UPDATE schema_meta SET app_version='999.0.0' WHERE id=1");
+    const res = await stampSchema(pool);
+    assert(res.rolledBack === true, 'an older build recognises a newer stamp as a rollback in progress');
+    const still = (await pool.query('SELECT app_version FROM schema_meta WHERE id=1')).rows[0];
+    assert.equal(still.app_version, '999.0.0', 'and does NOT overwrite the newer stamp');
+    await pool.query('UPDATE schema_meta SET app_version=$1 WHERE id=1', [pkgVer]); // restore
+  }
+
+  // (4) SELECTIVE TELEMETRY RETENTION — the sweep prunes old ENGAGEMENT noise and must NEVER touch
+  // the ledger/analytic types: 'death' feeds the §10.4 car-conservation check (a lifetime SUM), and
+  // the four funnel types feed funnelStats' lifetime tallies. Blanket retention here would silently
+  // drift a §10.4 check months later — the exact class this suite exists to pin.
+  {
+    const { sweepTelemetry, TELEMETRY_KEEP_EVENTS } = await import('../src/worker.js');
+    assert(TELEMETRY_KEEP_EVENTS.includes('death'), "'death' is on the keep-list — invariants.js sums it forever");
+    assert(TELEMETRY_KEEP_EVENTS.includes('first_week_step'), 'the funnel analytics are on the keep-list');
+    const old = new Date(Date.now() - 200 * 86400000);
+    await pool.query("INSERT INTO telemetry (id, at, event, props) VALUES ('bp-old-noise',$1,'checkin','{}')", [old]);
+    await pool.query(`INSERT INTO telemetry (id, at, event, props) VALUES ('bp-old-death',$1,'death','{"cars":3}')`, [old]);
+    await pool.query("INSERT INTO telemetry (id, event, props) VALUES ('bp-new-noise','checkin','{}')");
+    const pruned = await sweepTelemetry(pool);
+    assert(pruned >= 1, 'the sweep pruned the old engagement row');
+    const left = new Set((await pool.query("SELECT id FROM telemetry WHERE id LIKE 'bp-%'")).rows.map((r) => r.id));
+    assert(!left.has('bp-old-noise'), 'a 200-day-old engagement row is pruned');
+    assert(left.has('bp-old-death'), "a 200-day-old 'death' row SURVIVES — it is a §10.4 ledger input");
+    assert(left.has('bp-new-noise'), 'a fresh engagement row survives');
+    await pool.query("DELETE FROM telemetry WHERE id LIKE 'bp-%'");
+  }
+
+  // (5) THE API CONTRACT HAS A VERSION — /openapi.json carries the package.json version (1.x, not a
+  // hardcoded 0.1.0), so an agent can pin what it integrated against. Derived, never restated.
+  {
+    const pkgVer = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
+    const oa = await call('GET', '/openapi.json');
+    assert.equal(oa.body.info.version, pkgVer, 'the OpenAPI doc version is the package version, derived');
+    assert(Number(pkgVer.split('.')[0]) >= 1, 'the shipped surface is versioned 1.x — SemVer starts meaning something');
+  }
 }
 
 console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), catalog item art (${artCount} icons — ${photoCount} generated photos, SVG emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks), PRESENCE + THE TROLL BOX (online counter, city + family-gated chat, sanitized + flood-braked), ONE-CLICK X SIGN-IN (PKCE start/state/callback surface, dormant without env), THE CELLPHONE (DM send/gates/flood brake, threads + unread + seen, inbox peek without flipping delivered, zero ledger rows) + STEP TWO BLOCKED LINES (block/unblock, dead tone both directions, board + thread surfacing, history stands, self/double gates), DB-DOWN LEGIBILITY (503 db_down not 500 internal, GET /health up+down+recovery, real bugs still report as bugs), THE LOCK-FREE READ PATH (D1: a clean read is served without FOR UPDATE, a read with real accrual behind it declines and the route re-runs under the lock so the banked state and the rendered view agree, a read still CHECKPOINTS accrual while a read with nothing to bank leaves the clock alone, and the write guard refuses ten write/lock forms including MERGE, COPY, SELECT-INTO, setval and FOR UPDATE without refusing three legitimate reads), BACKUP HEALTH (pg_stat_archiver: shipping/failing/healed-not-realarming/quiet/unsupported, surfaced on the ops dashboard, and archive_mode=off reads as NOT RUNNING rather than healthy — the worker alerts on both), STREET LIFE (the black book: no_number gate, a jump-meeting is mutual, blocks precede the number gate; THE CALL: contact-only generation, one-open-call PK, located freight fulfilment paid from the contact's own pocket — contact:* legs net to zero, broke-void, expiry sweep) + STEP TWO THE BOOK (a ladder derived from the lines you hold, per-contact STANDING deepening with every settled call so a regular's next request is BIGGER — capped, and still refused outright when they can't cover it, so recycle-only holds at every tier — plus the lines-held leaderboard with residents excluded)`);

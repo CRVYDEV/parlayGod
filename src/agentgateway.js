@@ -68,8 +68,25 @@ const tagOf = (url) => {
 const oapiPath = (url) => url.replace(/:([A-Za-z0-9_]+)/g, '{$1}');
 const paramsOf = (url) => (url.match(/:([A-Za-z0-9_]+)/g) || []).map((p) => p.slice(1));
 
+// info.version is DERIVED from package.json (bulletproof audit, SemVer): a hardcoded literal here sat
+// frozen at '1.0.0' through real contract changes (retirements, new flows), so an agent caching the
+// contract could never detect that it moved. The practice, stated where the derivation lives: bump
+// package.json minor on new surface, major on a route retirement/breaking board change — the version
+// an agent reads then IS the version the repo ships. Read lazily so a missing file degrades, not throws.
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+let pkgVersion;
+export function appVersion() {
+  if (!pkgVersion) {
+    try { pkgVersion = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf8')).version || '0.0.0'; }
+    catch { pkgVersion = '0.0.0'; }
+  }
+  return pkgVersion;
+}
+
 // Build an OpenAPI 3.1 document from the collected [{method, url}] route list.
-export function buildOpenApi(routes, { baseUrl = 'https://www.omerta.fun', version = '1.0.0' } = {}) {
+export function buildOpenApi(routes, { baseUrl = 'https://www.omerta.fun', version = appVersion() } = {}) {
   const paths = {};
   const tagsSeen = new Set();
   for (const r of routes) {

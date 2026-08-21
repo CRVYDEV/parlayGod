@@ -77,6 +77,9 @@ export const OPERATIONAL_ENV = [
   'PG_STATEMENT_TIMEOUT_MS', 'PG_LOCK_TIMEOUT_MS', 'PG_IDLE_TX_TIMEOUT_MS',
   'PG_CONNECT_TIMEOUT_MS', 'PG_IDLE_TIMEOUT_MS',
   'WS_PING_MS', 'INVARIANT_WEBHOOK_URL', 'CITY_WIRE_WEBHOOK_URL',
+  // graceful shutdown: how long in-flight requests get to finish after SIGTERM before the hard exit
+  // (server.js drain). Operational — Render SIGKILLs ~30s after SIGTERM, so keep it well under that.
+  'DRAIN_MS',
   // access posture
   'INVITE_MODE', 'RATE_LIMIT', 'RATE_AUTH_BURST', 'RATE_AUTH_PER_SEC', 'RATE_HUMAN_BURST',
   'RATE_HUMAN_PER_SEC', 'RATE_PUBLIC_BURST', 'RATE_PUBLIC_PER_SEC', 'RATE_READ_BURST',

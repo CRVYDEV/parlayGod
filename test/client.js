@@ -5052,6 +5052,21 @@ assert.match(String(describeFn(dep.body, 200)), /transit/i,
   'a deposit must say the money rides IN TRANSIT and can be looted until it clears — that is a TERM, not flavour, ' +
   'and it is the reason this ledger exists');
 
+// ── WS RECONNECT BACKOFF (bulletproof audit) — a labelled SOURCE tripwire. A fixed 4s retry made
+// every open tab re-dial IN STEP after a server restart: a reconnect herd of simultaneous WS
+// upgrades at exactly the moment the box is coldest. The client must retry on a JITTERED
+// EXPONENTIAL schedule and reset it on a successful open. Source-level because a real WS close
+// cannot be manufactured through inject — the mobile harness owns the browser; this guards the
+// backoff against silent deletion.
+{
+  assert(!/setTimeout\(connectWs,\s*\d+\)/.test(html),
+    'the WS reconnect must not be a fixed-delay retry — that is the reconnect herd the backoff replaced');
+  assert(/wsRetryMs/.test(html) && /Math\.pow\(/.test(html.slice(html.indexOf('wsRetryMs'), html.indexOf('wsRetryMs') + 400)),
+    'the WS reconnect uses the jittered exponential wsRetryMs schedule');
+  assert(/onopen\s*=\s*\(\)\s*=>\s*\{\s*wsRetries\s*=\s*0/.test(html),
+    'a successful open RESETS the backoff — an ordinary blip must still reconnect fast');
+}
+
 await app.close();
 console.log(`✅ client wiring test passed — across the console AND /admin: of ${refs.size} routes they can ` +
   `call, ${refs.size - dynamic.length} resolve to a really-mounted route (segment-wise, so ` +

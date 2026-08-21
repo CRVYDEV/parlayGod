@@ -3572,3 +3572,15 @@ ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS drop_free_mint BOOLEAN N
 -- FOREVER (§9.4). Both are ALTERs — account_persistent is an existing table (the boot-crash lesson).
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS provenance TEXT;
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS provenance_pick INT;
+
+-- THE SCHEMA STAMP (bulletproof audit, Schema Versioning): one row recording which BUILD last applied
+-- this schema — makes "which schema is prod on?" answerable during an incident, and lets an OLD build
+-- WARN when it boots against a database a NEWER build already migrated (a rollback in progress — the
+-- additive-only discipline makes it safe; the stamp makes it visible). Written by src/db.js:stampSchema
+-- after every boot-time schema apply. A NEW table, so CREATE TABLE IF NOT EXISTS is live-DB-safe.
+CREATE TABLE IF NOT EXISTS schema_meta (
+  id INT PRIMARY KEY,
+  app_version TEXT NOT NULL,
+  schema_sha TEXT NOT NULL,
+  applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
