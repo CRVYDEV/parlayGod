@@ -60,7 +60,13 @@ export async function respec(ch, alloc, client, h) {
   ch.respec_at = new Date();
   ch.muscle = want.muscle; ch.cunning = want.cunning; ch.speed = want.speed;
   await h.track(client, ch.account_id, 'respec', want);
-  return { ok: true, stats: want };
+  // A REBUILD IS A DECISION, and it read "done." — neither what it cost nor, worse, that it is the
+  // only one you get today. The 24h clock above is stated NOWHERE before you commit: the card
+  // prices the burn and says nothing about the cadence, so the first a player hears of it is the
+  // refusal on the tweak they immediately want. Both terms ride back with the result (the pad/nut
+  // discipline), and the reply is where they belong because the reply is the only thing that knows
+  // what the trainer actually charged and when he reopens.
+  return { ok: true, stats: want, omr: M8.RESPEC_OMR, cooldownSeconds: Math.round(M8.RESPEC_CD_MS / 1000) };
 }
 
 // ── THE DAILY SCORE (§5.1): 8h cooldown, level-scaled faucet ──
