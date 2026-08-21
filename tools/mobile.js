@@ -271,6 +271,56 @@ for (const vp of VIEWPORTS) {
   }
   screensChecked++;
 
+  // ── I — THE SHEET'S CHROME BUTTONS STATE THEIR TERMS ──────────────────────────────────────────
+  // `heal` and `check in` sit in the always-visible row beside the money figure and said only their
+  // own names: a price with the purchase left off, and a ladder invisible until after the money
+  // landed. test/client.js proves the two figures are READ; only a browser can prove they are
+  // RENDERED, which is why the assertion lives here. Crossed against what /v1/me really sends —
+  // a literal would pass while the sheet and the till drifted.
+  const terms = await page.evaluate(async () => {
+    const r = await fetch('/v1/me', { headers: { authorization: 'Bearer ' + localStorage.omerta_token } });
+    const me = (await r.json())?.character || {};
+    return { text: document.querySelector('#sheet-terms')?.textContent || '', ci: me.checkin, heal: me.healCost,
+      ciDisabled: !!document.querySelector('[data-do="POST /v1/checkin"]')?.disabled };
+  });
+  const nf = (n) => Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
+  if (!terms.ci || terms.ci.done) {
+    fail('(sheet terms)', vp, `this check is vacuous unless the walk reaches the sheet BEFORE the press — `
+      + `that is the state the terms exist for. Got: ${JSON.stringify(terms.ci)}`);
+  } else if (!terms.text.includes(nf(terms.ci.pay))) {
+    fail('(sheet terms)', vp, `the button must name what today pays (${terms.ci.pay}) BEFORE the press. `
+      + `Got: ${JSON.stringify(terms.text)}`);
+  }
+  // and the honest half: at full health there is no bill, so the line must not invent one — a
+  // fabricated "$0" is a wrong number where a silence is the truth
+  if (!terms.heal && /Doc wants/i.test(terms.text))
+    fail('(sheet terms)', vp, `nothing to patch up, yet the line quotes a bill: ${JSON.stringify(terms.text)}`);
+  if (terms.heal && !terms.text.includes(nf(terms.heal)))
+    fail('(sheet terms)', vp, `the Doc's bill is ${terms.heal} and the line does not name it: ${JSON.stringify(terms.text)}`);
+  // …and the OTHER state, which is the one a player sees for the rest of the day: press it for real,
+  // then the line must say today is claimed, still carry the come-back-tomorrow figure, and the
+  // button must go dead rather than stay live and refuse on press.
+  // pressed the way a player presses it — the real act() path, so the re-render is the real one too.
+  // The layout walk above leaves the cellphone open, and its card intercepts the click.
+  await page.click('#phone-close'); await page.waitForTimeout(200);
+  await page.click('[data-do="POST /v1/checkin"]');
+  await page.waitForTimeout(2000);
+  const after = await page.evaluate(async () => {
+    const h = { authorization: 'Bearer ' + localStorage.omerta_token };
+    const me = (await (await fetch('/v1/me', { headers: h })).json())?.character || {};
+    return { text: document.querySelector('#sheet-terms')?.textContent || '', ci: me.checkin,
+      disabled: !!document.querySelector('[data-do="POST /v1/checkin"]')?.disabled };
+  });
+  if (!after.ci?.done) fail('(sheet terms)', vp, `the press did not land, so the claimed state is untested: ${JSON.stringify(after.ci)}`);
+  else {
+    if (!/checked in/i.test(after.text) || (after.ci.next && !after.text.includes(nf(after.ci.next))))
+      fail('(sheet terms)', vp, `today is claimed, so the line must say so and still name what tomorrow `
+        + `pays (${after.ci.next}). Got: ${JSON.stringify(after.text)}`);
+    if (!after.disabled) fail('(sheet terms)', vp, 'the check-in button must go dead once today is claimed '
+      + '— a control that stays live and refuses on press is the game withholding its own rule');
+  }
+  screensChecked++;
+
   if (pageErrors.length) fail('(any screen)', vp, `${pageErrors.length} page error(s): ${pageErrors.slice(0, 3).join(' | ')}`);
   console.log(`   ${screensChecked} screens checked so far, ${failures.length} failure(s)`);
   await browser.close();

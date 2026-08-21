@@ -1193,6 +1193,8 @@
           <button class="act" data-do="POST /v1/checkin" data-i18n="b_checkin">check in</button>
           <button class="act" id="btn-refresh" data-i18n="b_refresh">refresh</button>
         </div>
+        <!-- the two chrome buttons above state their terms BEFORE the press (renderSheet fills this) -->
+        <div id="sheet-terms" class="t" style="margin-top:6px"></div>
         <div id="claim-card"></div>
       </div>
       <div class="panel" style="margin-top:12px">
@@ -4527,6 +4529,28 @@
         else toast(r.body?.message || r.body?.error, true);
       };
     } else if (claim) claim.innerHTML = '';
+    // THE TWO CHROME BUTTONS STATE THEIR TERMS. They sit in the always-visible row beside the money
+    // figure and said only "heal" and "check in": a price with the purchase left off, and a ladder
+    // invisible until after the money landed. Both figures come from the server (the bill stacks
+    // five modifiers; the ladder is level-scaled) out of the same function the till charges from.
+    // The buttons also DISABLE when the server would refuse — a control that refuses on press is
+    // the class check 5 exists for, and here the reason is worth saying either way.
+    const terms = $('#sheet-terms');
+    if (terms) {
+      const ci = me.checkin || {}, lines = [];
+      const healBtn = $('[data-do="POST /v1/heal"]'), ciBtn = $('[data-do="POST /v1/checkin"]');
+      if (healBtn) { healBtn.disabled = !me.healCost; healBtn.title = me.healCost ? `the Doc wants $${fmt(me.healCost)}` : 'nothing to patch up'; }
+      if (ciBtn) { ciBtn.disabled = !!ci.done; ciBtn.title = ci.done ? 'already checked in today' : (ci.pay ? `day ${ci.streak} pays $${fmt(ci.pay)}` : ''); }
+      if (me.healCost) lines.push(`<b>heal</b> — the Doc wants <b class="neon">$${fmt(me.healCost)}</b> to put you back on 100`);
+      if (ci.done) lines.push(`<b>checked in</b> — day ${ci.streak}`
+        + (ci.next ? `. Back tomorrow and it's <b class="neon">$${fmt(ci.next)}</b>` : `. That's the top of the ladder`));
+      else if (ci.pay) lines.push(`<b>check in</b> — day ${ci.streak} pays <b class="neon">$${fmt(ci.pay)}</b>`
+        // the run only lapses if you MISS a day, and the rule is kinder than a player will assume —
+        // so say what it cost rather than leaving them to think the game ate the run
+        + (ci.lapsed ? `. A day missed cut your run of ${ci.lapsed} in half` : '')
+        + (ci.next ? `, and tomorrow it's <b>$${fmt(ci.next)}</b>` : `, the top of the ladder`));
+      terms.innerHTML = lines.join('<br>');
+    }
     checkTips(me);
   }
 

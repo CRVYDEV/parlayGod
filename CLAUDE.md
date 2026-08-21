@@ -15242,6 +15242,53 @@ sending**. Each now asserts the contract by name first. Six mutations, six disti
 M2 and M5 reproducing the originals verbatim (`"+$156,800 (day 1)"` and `"done."`). Suite green, sim
 drift-0, mobile 79/79, pgquery, **pgcheck 47/47 on a fresh real Postgres**. Driven actions 219 → 221.
 
+**WAVE 50 — THE TERMS BEFORE THE PRESS, AND THE HOLE IN THE GUARD THAT LET THEM HIDE
+(`src/game.js` + `public/index.html` + `test/client.js` + `tools/mobile.js`, 2026-08-21).** Wave 49
+fixed what the two daily buttons said AFTERWARDS; this fixes what they said BEFORE — which is the
+class every tester complaint in this project has actually been (the pad, the nut, the Port lane).
+Both live in the always-visible chrome row beside the money figure, on every screen, and both said
+one word. **`heal` was a price with the purchase left off, BEFORE the press rather than after it,
+on the one screen a player reaches while bleeding** — and the client could not have supplied the
+figure, because the bill stacks **five independent modifiers** (street rank, `doctors_friend`, the
+Doc's own Underworld standing, Iron Chin, the Ring path's handicap), so only the server knows what
+the Doc wants right now. **`check in` hid the whole ladder until after the money landed** —
+level-scaled and published nowhere (the `crewNextCost` case), so a player could not tell a day-1
+press from a day-7 one, and could not see that **a missed day HALVES the run rather than zeroing
+it**, which is kinder than anyone assumes and therefore worth saying.
+**BOTH QUOTES ARE THE SAME FUNCTION THE TILL CHARGES FROM**, extracted rather than restated
+(`healCostOf`, `checkinQuoteOf` — the `hunterSearchMs`/`marketPrices` discipline): the sheet and
+the till cannot disagree because there is nothing to drift. `healCostOf` takes `owned` rather than
+`h`, since the view has no handle and the two touchpoint helpers read nothing else off one. The
+buttons also GATE now — a full-health player's heal and an already-claimed check-in go dead with
+a title saying why, rather than staying live and refusing on press (check 5's own rule, applied to
+the chrome nobody had swept).
+**THE HEADLINE IS THE GUARD, not the copy.** A mutation renaming `me.healCost` **SURVIVED the client
+guard**, which exposed the **fourth member of the mirror's blind-spot family** (after raw-bind,
+promise-callback and declare-then-assign): `me` is a MODULE GLOBAL read inside functions that never
+bind it, so the mirror — which scopes a board to the function that fetched it — could not see a
+single one of its reads. **`/v1/me` is the most-read board in the game and 93 of its fields were
+unchecked.** Measured before it was claimed: 93 reads extracted, 93 real, the one apparent miss
+(`rainbow`) a quoted EIP-6963 rdns string, not a field. **THE SHEET LEDGER** (check 12) crosses every
+`me.X` read against a live `/v1/me`, with an anti-vacuity floor, and pins the new pair by NAME plus
+the sheet-vs-till agreement (`done`/`streak`/`next`) against the reply the drive itself produced —
+never a literal, which is the property rather than a restatement.
+**TWO MUTATIONS SURVIVED AND BOTH WERE RIGHT TO**, which is the more useful half. M3 (rename one
+read) survived because other reads of the same field remained — an honest scope limit now stated in
+the guard: it proves a field is READ, not that it is RENDERED. M4 (mutate `checkinQuoteOf`) survived
+because **mutating the SHARED function moves both sides**, which is the one-implementation property
+working; the mutation that matters breaks the SHARING (`{ ...checkinQuoteOf(ch), next: 0 }`) and
+fails by name. **A mutation that survives is a claim about the test before it is a claim about the
+code** — and here it was a claim about the ARCHITECTURE. **Mobile check I** (79 → 81) proves the
+line actually renders: it asserts the not-done state names today's pay, then **presses the button
+the way a player does** (a real `page.click`, the real `act()` path) and asserts the claimed state
+says so, still names tomorrow, and has gone dead. Its `done` branch was unreachable for a fresh
+guest on the first cut — declared-but-never-driven vacuity, which reads on the summary line exactly
+like coverage — and the click was intercepted by the cellphone modal the layout walk leaves open,
+found by driving rather than by reading. One process note re-paid: a `perl -0pi` mutation silently
+did not apply and the run came back green, so every mutation now asserts its own anchor landed
+first. Suite green, sim drift-0, mobile 81/81, pgquery 2982 statements, **pgcheck 47/47 on a fresh
+real Postgres**. Driven actions 221; sheet fields checked 0 → 93.
+
 **THE LAUNCH-NIGHT DRESS REHEARSAL — the second kind of scenery (founder-directed 2026-08-20: "Launch
 dress rehearsal").** The runbook existed; nobody had walked it. The value was in executing it as a
 FIRST PLAYER against the live box rather than reading it: the door, signup, the first ten minutes, and

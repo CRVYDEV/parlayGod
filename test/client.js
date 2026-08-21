@@ -3651,6 +3651,53 @@ assert(upgLine && /\u{1F3D9}/u.test(upgLine) && upgLine.includes(asMoney(upgBody
   if (ciBody.energyGained) assert(new RegExp(`\\+${ciBody.energyGained} energy`).test(ci),
     `…and the energy that really landed. Got: ${JSON.stringify(ci)} over ${ciBody.energyGained}`);
 }
+// ── THE SHEET LEDGER (12) — the mirror's blind spot, and it is the most-read board in the game.
+// The mirror checks what a screen reads off a board it FETCHED, and `me` is not one: it is a module
+// global assigned in refresh()/boot(), so every `me.X` read in all ~25 renderers — the money figure,
+// the vitals, the chips, the cooldowns, the coach — has never been checked against what /v1/me
+// really returns. Found by mutation: renaming a view field left the whole guard green.
+//   The tree is CLEAN through the hole (93 reads, 93 real fields), which is what makes this a guard
+// rather than a bug report — a renamed or dropped view field would render `undefined` on the sheet
+// and on every screen, and nothing would fail. Catalogue-or-declare, like the nine ledgers before it,
+// because the one thing a regex cannot tell from a property read is a string that looks like one.
+{
+  const meNow = (await inject('GET', '/v1/me', token)).body?.character;
+  assert(meNow && typeof meNow.name === 'string', 'the sheet ledger needs a real /v1/me to cross against');
+  // a quoted literal that HAPPENS to read like a property access. The one in the tree is the Rainbow
+  // wallet's EIP-6963 rdns, which is genuinely the string "me.rainbow" and not a field at all.
+  const NOT_A_READ = new Set(['rainbow']);
+  const reads = new Set();
+  for (const m of html.matchAll(/(?<![\w$.])me\??\.([A-Za-z_$][\w$]*)/g)) reads.add(m[1]);
+  assert(reads.size >= 80, `the sheet-read extractor found only ${reads.size} — it has stopped `
+    + 'reading the client, and a sweep that reaches nothing reads exactly like a sweep that passes');
+  const strays = [...reads].filter((k) => !NOT_A_READ.has(k) && !(k in meNow));
+  assert(strays.length === 0, `the sheet reads ${strays.length} field(s) /v1/me does not return, so they `
+    + `render as undefined on every screen that shows them: ${strays.join(', ')}. Either the view stopped `
+    + 'sending them, or they are quoted strings that only look like reads — in which case declare them '
+    + 'in NOT_A_READ with the reason, so it is a decision on the record.');
+  // the two chrome buttons this ledger was written for: they sit in the always-visible row beside
+  // the money figure and said only "heal" and "check in" — a price with the purchase left off, and
+  // a ladder invisible until after the money landed. Both are quoted out of the SAME function the
+  // till charges from, so what the sheet promises is by construction what the till pays.
+  assert(reads.has('healCost') && reads.has('checkin'),
+    'the sheet has to quote the Doc\'s bill and the check-in ladder BEFORE the press — neither is '
+    + 'derivable client-side (five modifiers on one, a level-scaled ladder on the other)');
+  // and the quote AGREES with the till — this fixture has already pressed it (the wave-49 block
+  // above), so the sheet is in the state a player sees for the rest of the day, and the hook has to
+  // survive it: `next` stands all day, which is the whole "come back tomorrow". Crossed against the
+  // reply rather than a literal, because a literal passes while the two drift.
+  const ciReply = paidBody.get('/v1/checkin');
+  assert(meNow.checkin?.done === true && meNow.checkin.streak === ciReply.streak
+    && meNow.checkin.next === ciReply.next,
+    'once today is claimed the sheet must say so and still carry tomorrow\'s figure — the quote and '
+    // NAME the three fields rather than dumping the reply: an action response carries the whole
+    // character envelope, so JSON.stringify(reply) buries the point in kilobytes of unrelated sheet
+    + `the till read the same function, so they cannot disagree. Got: ${JSON.stringify(meNow.checkin)} `
+    + `against till {streak:${ciReply.streak}, next:${ciReply.next}}`);
+  assert(typeof meNow.healCost === 'number' || meNow.healCost === null,
+    `the Doc's bill is a number while there is something to patch up and null when there is not — `
+    + `never absent, or the button has nothing to quote. Got: ${JSON.stringify(meNow.healCost)}`);
+}
 // and the CLUB's own line, driven on its own token in the wave-10 block, must still read as the club
 assert((said.get('/v1/speakeasy/upgrade') || '').includes('\u{1F37E}'),
   `…and the fix must not have taken the club's own upgrade line with it. Got: ${JSON.stringify(said.get('/v1/speakeasy/upgrade'))}`);

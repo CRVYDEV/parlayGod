@@ -1670,6 +1670,13 @@ export function view(ch, acct = {}, owned = {}) {
     guardedBy: (ch.guarded_by && ch.guarded_until && new Date(ch.guarded_until) > new Date()) ? ch.guarded_by : null,
     guardSeconds: (ch.guarded_by && ch.guarded_until) ? Math.max(0, Math.ceil((new Date(ch.guarded_until) - Date.now()) / 1000)) : 0,
     loc: ch.loc, path: ch.path, title: ch.title, bio: ch.bio || null, streak: ch.streak,
+    // THE SHEET'S TWO CHROME BUTTONS, quoted before the press. Both sat in the always-visible row
+    // beside the money figure saying only "heal" and "check in" — a price with the purchase left
+    // off, and a ladder invisible until after the money landed. Neither figure is derivable
+    // client-side (the bill stacks five modifiers, the ladder is level-scaled), and both are read
+    // out of the SAME function the till charges from, so the button and the till cannot disagree.
+    healCost: healCostOf(ch, owned) || null,   // null when there is nothing to patch up
+    checkin: checkinQuoteOf(ch),
     // THE REGIMEN — stamina/composure raise the caps; one helper pair, so view/coach/accrual agree
     maxEnergy: energyCapOf(lvl, assetEnergyCap(assets), owned.disciplines, ladderFx(acct, 'energy')),
     maxNerve: nerveCapOf(lvl, owned.disciplines, ladderFx(acct, 'nerve')),
@@ -2071,18 +2078,29 @@ export async function train(ch, stat, client, h) {
 }
 
 // ── §5.1 HEAL ──
-export async function heal(ch, client, h) {
+// THE DOC'S BILL, quoted where the money moves so the SHEET and the till can never disagree — the
+// hunterSearchMs shape (several readers, one implementation). The button beside the money figure
+// said only "heal": a price with the purchase left off, BEFORE the press rather than after it, on
+// the one screen a player reaches while bleeding. The client cannot supply it either — the bill
+// stacks FIVE independent modifiers (street rank, doctors_friend, the Doc's own standing, Iron
+// Chin, the Ring's handicap), so only the server knows what the Doc actually wants right now.
+// Takes `owned` rather than `h` because the view has no handle, and the two touchpoint helpers it
+// calls read nothing else off one.
+export function healCostOf(ch, owned = {}) {
   const lvl = levelOf(Number(ch.respect));
   // THE DOC'S FRIEND (skills) and DOC MORETTI T1 (underworld) both discount the bill —
   // new modifiers stacking multiplicatively (0.75 × 0.9), both sign-off levers
   // THE REGIMEN — Iron Chin: 1%/level off the bill, floored (a new stack, the doctors_friend shape)
-  const chinLvl = disciplineLvlOf(Number(h.owned.disciplines?.conditioning || 0));
+  const chinLvl = disciplineLvlOf(Number(owned.disciplines?.conditioning || 0));
   const chin = Math.max(REGIMEN.CONDITIONING_FLOOR, 1 - REGIMEN.CONDITIONING_BPS * (chinLvl - 1) / 10000);
-  const cost = Math.floor((100 - Math.floor(Number(ch.health))) * 15 * (rankIdxOf(lvl) >= 4 ? 0.9 : 1)
-    * skillMult(h, 'doctors_friend', SKILLS.FX.DOC_MULT)
-    * npcMult(h, 'doc', 1, UNDERWORLD.FX.DOC_MULT)
+  return Math.floor((100 - Math.floor(Number(ch.health))) * 15 * (rankIdxOf(lvl) >= 4 ? 0.9 : 1)
+    * skillMult({ owned }, 'doctors_friend', SKILLS.FX.DOC_MULT)
+    * npcMult({ owned }, 'doc', 1, UNDERWORLD.FX.DOC_MULT)
     * chin
     * pathFx(ch, 'healCost')); // PATHS v2 — the Ring's handicap (a brawler's medical bills)
+}
+export async function heal(ch, client, h) {
+  const cost = healCostOf(ch, h.owned);
   if (cost <= 0) throw new GameError('healthy', 'Already healthy.');
   if (Number(ch.cash) < cost) throw new GameError('cash', `The Doc wants ${usd(cost)}.`);
   // WHAT THE BILL BOUGHT. The reply carried the price alone, so the toast read a bare "paid $540" —
@@ -2098,18 +2116,37 @@ export async function heal(ch, client, h) {
 }
 
 // ── §7.4 CHECK-IN ──
+// THE CHECK-IN'S TERMS, quoted BEFORE the press for the same reason as the Doc's bill: the button
+// beside it said only "check in", so the whole ladder was invisible until after the money landed.
+// ONE implementation for the quote and the till — `checkin` runs on this too, so what the sheet
+// promises is by construction what the till pays. Neither figure is derivable client-side: the
+// ladder is level-scaled and the streak rule lives here.
+export function checkinQuoteOf(ch, today = dayOf()) {
+  const lvl = levelOf(Number(ch.respect));
+  const payAt = (s) => 250 * lvl + 100 * lvl * Math.min(s, 7);
+  const cur = Number(ch.streak) || 0;
+  const done = ch.checkin_day === today;
+  // what a press TODAY would make the streak — the rule is kinder than a player will assume (a miss
+  // HALVES it, it never zeroes it), so `lapsed` rides only when a gap has actually cost days and the
+  // sheet can say so before the press instead of leaving them to think the game ate the run.
+  const streak = done ? cur : (ch.checkin_day === today - 1 ? cur + 1 : Math.max(1, Math.floor(cur / 2)));
+  return { done, streak,
+    pay: done ? null : payAt(streak),
+    // the hook stands all day: even once today is claimed, this is what coming back tomorrow pays
+    next: streak < 7 ? payAt(streak + 1) : null,
+    ...(!done && streak < cur ? { lapsed: cur } : {}) };
+}
 export async function checkin(ch, client, h) {
   const today = dayOf();
   if (ch.checkin_day === today) throw new GameError('done', 'Already checked in today.');
+  const q = checkinQuoteOf(ch, today);
   const was = Number(ch.streak) || 0;
-  ch.streak = ch.checkin_day === today - 1 ? ch.streak + 1 : Math.max(1, Math.floor(ch.streak / 2)); // miss halves, never zero
+  ch.streak = q.streak; // miss halves, never zero — the rule lives in the quote, so both agree
   ch.checkin_day = today;
-  const lvl = levelOf(Number(ch.respect));
-  const payAt = (s) => 250 * lvl + 100 * lvl * Math.min(s, 7);
-  const pay = payAt(ch.streak);
+  const pay = q.pay;
   ch.cash = Number(ch.cash) + pay;
   const energyBefore = Number(ch.energy);
-  ch.energy = Math.min(50 + 2 * lvl, Number(ch.energy) + 20);
+  ch.energy = Math.min(50 + 2 * levelOf(Number(ch.respect)), Number(ch.energy) + 20);
   h.acct.checkins_lifetime = Number(h.acct.checkins_lifetime || 0) + 1; // referral gate §7.13
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: pay, reason: 'checkin' });
   // FOUND BY PLAYING: this reply carried `pay` and `streak` and nothing else, so the line read
@@ -2125,7 +2162,7 @@ export async function checkin(ch, client, h) {
   // the game ate it, and the real rule is kinder than the player will assume (a miss HALVES the
   // streak, it never zeroes it), so the one moment worth saying it is the moment it bites.
   return { ok: true, pay, streak: ch.streak,
-    next: ch.streak < 7 ? payAt(ch.streak + 1) : null,
+    next: q.next,
     // clamped at 0, and not defensively: the cap is LEVEL-scaled and the season rollover resets
     // respect, so a returning player's stored energy can sit ABOVE the new cap — `Math.min` then
     // clamps DOWN and the raw delta is NEGATIVE. "+-99,347 energy" is a wrong number where a silent
