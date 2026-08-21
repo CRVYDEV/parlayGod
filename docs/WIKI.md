@@ -66,8 +66,9 @@ speed. The increase becomes smaller as the stat becomes higher. **Heal** (`POST 
 return to full health. The cost increases with your injury. **Check in** (`POST /v1/checkin`) — do this one
 time each day. A daily streak pays `250×lvl + 100×lvl×min(streak,7)` plus 20 energy.
 
-**The Bank** (`POST /v1/bank/deposit|withdraw`) — **another player can steal the cash in your pocket when you
-die. The cash in your bank is safe.** But a new deposit is **"in transit" for 2 hours** before it is safe.
+**The Bank** (`POST /v1/bank/deposit|withdraw`) — **another player who kills you can steal the cash in your
+pocket. They cannot touch your bank.** (The bank stops your *killer*; it does not survive your death — see
+"What is safest when you die".) But a new deposit is **"in transit" for 2 hours** before it is safe.
 Another player can steal it during this time. A new deposit resets the 2-hour clock. The bank pays about 2%
 interest each 12 hours. The interest has a limit (12 hours of interest each day). The interest is smaller
 above $10M. **You cannot use the bank from a safehouse.**
@@ -1223,9 +1224,14 @@ safehouse, and a killer takes a quarter of every open favor you were holding.
 | Cathedral Hill | Nerve increases two times faster |
 
 ### What is safest when you die
-Cleared **bank** cash · **minted (on-chain)** gear · your account-level **estate,
-and prestige**. Staked $OMR is looted LIGHTER (a fifth vs half of a loose balance) — cheaper cover,
-never safe. Everything else in your pocket is at risk when you die.
+Your **$OMR** (liquid and staked — a killer takes a cut, the rest carries to your heir) ·
+**minted (on-chain)** gear · your account-level **estate, deeds and prestige**. Staked $OMR is
+looted LIGHTER (a fifth vs half of a loose balance) — cheaper cover, never safe.
+
+**Your bank is not one of them.** Banking puts cash out of a *killer's* reach — a killer's cut only
+touches your pocket and any deposit still in transit — but when the street falls the estate takes
+**pocket and bank together**, and your heir starts on $500 either way. Bank to deny your killer,
+never to save it for yourself. Everything else you were carrying dies with the street.
 
 ### Status marks on your sheet
 **wanted** (hunted, even by family — square it) · **welsher** (defaulted, cannot borrow — square it) ·

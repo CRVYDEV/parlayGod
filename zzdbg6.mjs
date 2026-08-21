@@ -1,0 +1,11 @@
+import { chromium } from 'playwright-core';
+const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium-1194/chrome-linux/chrome'});
+const p=await b.newPage({viewport:{width:1280,height:900}});
+await p.goto('http://127.0.0.1:8099/',{waitUntil:'networkidle'});
+await p.evaluate(()=>{const e=[...document.querySelectorAll('button')].find(x=>/enter as a ghost/i.test(x.innerText||''));e&&e.click();});
+await p.waitForTimeout(1200);
+const all=await p.evaluate(()=>[...document.querySelectorAll('button')].map(e=>{const r=e.getBoundingClientRect();
+  return {t:(e.innerText||e.innerHTML).trim().slice(0,28),vis:e.offsetParent!==null,y:Math.round(r.top),h:Math.round(r.height)};}).filter(x=>x.t));
+console.log('ALL buttons on the naming screen:'); all.forEach(x=>console.log('  ',JSON.stringify(x)));
+console.log('\npage scrollHeight:',await p.evaluate(()=>document.documentElement.scrollHeight),'viewport 900');
+await b.close();

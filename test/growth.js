@@ -752,14 +752,25 @@ const cday = dayOf();
 assert.equal(await coachOf(), 'A job came in from the family',
   'a mission off cooldown is the biggest respect on the board, so it leads the work board');
 await pool.query(`UPDATE characters SET mission_at = now() WHERE id='${rook.id}'`);
-assert.equal(await coachOf(), '3 of today\'s contracts unclaimed', 'then the day\'s contracts, counted');
 // the REAL drawn ids — the count subtracts what this player has actually claimed, so a placeholder
 // id would be silently ignored and the assertion below would pass for the wrong reason
 const cjobs = (await import('../src/rules.js')).dailyJobsOf(cday).map((j) => j.id);
-// rook already HAS a daily row (he pulled jobs above, which bumps the counters) — upsert, don't insert
-await pool.query(`INSERT INTO daily_progress (character_id, day, counters, claimed) VALUES ('${rook.id}', ${cday}, '{}', '${JSON.stringify(cjobs.slice(0, 2))}')
+// The LIVE count depends on the DAY: on the ~6 days in 31 the draw includes a `tribute` card,
+// gangless rook structurally cannot finish it and the rung must NOT count it (the uncompletable-
+// daily fix). A hardcoded "3" here was the recorded date-flaky class — a deterministic assertion
+// resting on the real day's draw — and failed exactly on tribute days. The expected count is an
+// INDEPENDENT restatement of the one blocked rule (dailyBlockedFor: tribute needs a family), so
+// this still checks the rung's subtraction rather than comparing dailyLiveFor to itself.
+const clive = (await import('../src/rules.js')).dailyJobsOf(cday)
+  .filter((j) => j.k !== 'tribute').map((j) => j.id);
+assert.ok(clive.length >= 1, 'precondition: at least one contract is live for a gangless street');
+assert.equal(await coachOf(), `${clive.length} of today's contracts unclaimed`,
+  'then the day\'s contracts, counted — LIVE ones only, a blocked tribute never inflates the rung');
+// rook already HAS a daily row (he pulled jobs above, which bumps the counters) — upsert, don't insert.
+// Claim all but ONE live contract so the "the count is REAL" assertion is exact on every day's draw.
+await pool.query(`INSERT INTO daily_progress (character_id, day, counters, claimed) VALUES ('${rook.id}', ${cday}, '{}', '${JSON.stringify(clive.slice(0, clive.length - 1))}')
   ON CONFLICT (character_id, day) DO UPDATE SET claimed = EXCLUDED.claimed`);
-assert.equal(await coachOf(), '1 of today\'s contracts unclaimed', 'and the count is REAL — two claimed leaves one');
+assert.equal(await coachOf(), '1 of today\'s contracts unclaimed', 'and the count is REAL — claimed ones leave exactly one');
 await pool.query(`UPDATE daily_progress SET claimed='${JSON.stringify(cjobs)}' WHERE character_id='${rook.id}' AND day=${cday}`);
 assert.equal(await coachOf(), 'Tonight\'s hustle is waiting', 'then tonight\'s hustle, unstarted');
 await pool.query(`INSERT INTO hustles (character_id, day, step, baseline) VALUES ('${rook.id}', ${cday}, 1, '{}')`);

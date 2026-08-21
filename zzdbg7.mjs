@@ -1,0 +1,18 @@
+import { chromium } from 'playwright-core';
+import pg from 'pg';
+const pool=new pg.Pool({connectionString:'postgres://postgres@/playsession?host=/tmp&port=5433'});
+const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium-1194/chrome-linux/chrome'});
+const p=await b.newPage({viewport:{width:1280,height:900}});
+await p.goto('http://127.0.0.1:8099/',{waitUntil:'networkidle'});
+await p.evaluate(()=>{const e=[...document.querySelectorAll('button')].find(x=>/enter as a ghost/i.test(x.innerText||''));e&&e.click();});
+await p.waitForTimeout(1200);
+const nm='Testo'+Math.random().toString(36).slice(2,6);
+await p.evaluate((n)=>{const i=[...document.querySelectorAll('input')].find(x=>x.offsetParent!==null&&/street name/i.test(x.placeholder||''));
+  i.value=n;i.dispatchEvent(new Event('input',{bubbles:true}));},nm);
+await p.evaluate(()=>{const e=[...document.querySelectorAll('button')].find(x=>x.offsetParent!==null&&/step out/i.test(x.innerText||''));e&&e.click();});
+await p.waitForTimeout(2000);
+const row=(await pool.query('SELECT id FROM characters WHERE name=$1',[nm])).rows[0];
+console.log('typed name:',nm);
+console.log('STEP OUT created the character?', !!row);
+console.log('screen now:', (await p.evaluate(()=>document.body.innerText.slice(0,160))).replace(/\n+/g,' | '));
+await b.close(); await pool.end();

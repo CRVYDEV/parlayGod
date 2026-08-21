@@ -365,6 +365,36 @@ assert.deepEqual([...new Set(phantom)], [], `docs/AUDITS.md lists reports that d
   assert(recycling.length >= DESK.SINK_REASONS.length - DESK.NOT_RECYCLED.length - 1,
     'essentially every $OMR sink must still recycle to the desk — if that changed, the copy rules '
     + 'above are the thing to revisit, not this assertion');
+
+  // ── AND THE MOST CONSEQUENTIAL PROMISE OF ALL: what death costs ─────────────────────────────────
+  // Found by PLAYING, not by reading: both codices listed "cleared bank cash" under "What is safest
+  // when you die", and it is false. Two different mechanics were conflated, and each is true on its
+  // own — a KILLER's whack:loot reaches pocket + in-transit only, so a cleared balance really is out
+  // of their reach; but runEstate then burns `cash + bank` together and the heir stands up on $500.
+  // Reproduced with a $60,000 fully-cleared balance: heir bank $0. So the game was advising players
+  // to bank for safety on the one screen that explains what dying costs, and they lose all of it.
+  //
+  // Same per-file, loose-about-wording shape as the extraction guard: a surface may describe what
+  // survives death however it likes, so long as it also says the bank does not.
+  const LISTS_DEATH_SURVIVORS = /safest when you die/i;
+  const CAVEATS_THE_BANK = /bank is not one of them|bank (does not|doesn't|never) survive|not survive (your )?death/i;
+  const misleading = [];
+  for (const f of ALL_SURFACES) {
+    let text;
+    try { text = surfaceText(f); } catch { continue; }
+    if (!LISTS_DEATH_SURVIVORS.test(text)) continue;
+    if (!CAVEATS_THE_BANK.test(text)) misleading.push(f);
+  }
+  assert.deepEqual(misleading, [], 'a surface lists what survives death without saying the bank does '
+    + 'not. Banking stops a KILLER taking a cut; the estate still takes pocket and bank together, so '
+    + `"bank it and it is safe" is the most expensive wrong thing the game could tell a player:\n  ${misleading.join('\n  ')}`);
+
+  // …and the positive half, so a stale prohibition cannot outlive the mechanic it describes: if the
+  // estate is ever changed to SPARE the bank, this fails and the copy above is what to revisit.
+  const estateSrc = read('src/social/estate.js');
+  assert(/Number\(victim\.cash\)\s*\+\s*Number\(victim\.bank\)/.test(estateSrc),
+    'the estate no longer burns pocket AND bank together — if that is deliberate, the death copy in '
+    + 'both codices (and this guard) is what to revisit, not this assertion');
 }
 
 // ── §6 must not send anyone back to finished work ────────────────────────────────────────────────

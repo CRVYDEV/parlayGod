@@ -356,6 +356,13 @@ assert.equal((await call('POST', `/v1/streets/${rocco.id}/search`, { token: don.
 const donCashPreKill = (await meOf(don.token)).cash;
 const donOmrPreKill = (await meOf(don.token)).omr;
 const roccoCashPreKill = (await meOf(rocco.token)).cash;
+// THE BANK STOPS THE KILLER, NOT THE STREET. Give the victim a fully CLEARED bank balance
+// (bank_intransit=0) so the two mechanics separate: a killer's whack:loot reaches pocket + IN-TRANSIT
+// only, so the cleared bank survives the LOOT — and then runEstate burns cash+bank together, so it does
+// NOT survive the DEATH. Nothing asserted this either way, and both codices had listed "cleared bank
+// cash" under WHAT IS SAFEST WHEN YOU DIE (found by playing; reproduced with a $60k cleared balance,
+// heir bank $0). Both halves are pinned below.
+await seedCh(rocco.id, 'bank=8000, bank_intransit=0');
 r = await call('POST', `/v1/streets/${rocco.id}/fire`, { token: don.token, body: { rounds: 2200 } });
 assert.equal(r.code, 200, 'shots fired');
 assert(r.body.kill, `level-11 target with 2200 rounds is a kill (eff vs btk: ${JSON.stringify(r.body)})`);
@@ -364,7 +371,8 @@ assert.equal(r.body.bounty, 5000, "the completed hit collects Mook's open kill c
 // Risk-to-Earn P1.1 — the killer loots 25% of the victim's POCKET cash and, since economy v3 step 5,
 // the TIERED $OMR rate: a loose balance is IDLE and is looted deepest (§11.1 — exposure is
 // proportional to idleness, not wealth).
-assert.equal(r.body.loot, Math.floor(roccoCashPreKill * 0.25), 'looted 25% of the victim pocket cash');
+// the loot is 25% of POCKET alone — the $8,000 CLEARED bank is out of the killer's reach
+assert.equal(r.body.loot, Math.floor(roccoCashPreKill * 0.25), 'looted 25% of the victim pocket cash — the cleared bank is out of a killer\'s reach');
 assert.equal(r.body.omrLoot, Math.floor(7 * 0.50), 'looted 50% of the victim IDLE (loose) $OMR (floor(7×0.5)=3)');
 assert.equal((await meOf(don.token)).omr, donOmrPreKill + 3, 'the looted $OMR landed in the killer\'s account');
 assert.equal((await meOf(don.token)).cash, donCashPreKill + r.body.chop + r.body.bounty + r.body.loot, 'chop + bounty + cash loot all paid to the killer');
@@ -374,6 +382,11 @@ const heir = await meOf(rocco.token);
 assert.equal(heir.generation, 2, 'heir generation');
 assert.equal(heir.name, 'Rocco Two-Knives', 'the bloodline keeps the name');
 assert.equal(heir.cash, 500 + 100 * 5, 'legacy stake: $500 + $100 × prestige (floor(11/2))');
+// ...and the OTHER half of the bank's story: the $8,000 the killer could not touch dies with the street.
+// asserted on the DEAD row, not the heir's: the heir is a fresh INSERT with no `bank` column, so
+// `heir.bank === 0` is true whatever the estate does and could never fail.
+assert.equal(Number((await pool.query(`SELECT bank FROM characters WHERE id='${rocco.id}'`)).rows[0].bank), 0,
+  'the cleared bank does NOT survive death — the estate zeroes pocket and bank together');
 assert.equal(heir.omr, 3, 'liquid $OMR survives death MINUS the 50% IDLE loot (7→4) MINUS the L2a 25% death duty (floor(4×0.25)=1 → 3)');
 assert.equal(heir.cars.length, 0, 'fleet died');
 assert(!heir.gang, 'gang seat vacated');
@@ -381,6 +394,11 @@ assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM cars WHERE charact
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM gangs WHERE id='${gangB}'`)).rows[0].n), 0, 'one-man family dissolved with its boss');
 const heirNotes = (await call('GET', '/v1/notifications', { token: rocco.token })).body.notifications;
 assert(heirNotes.some((n) => n.type === 'estate' && n.payload.legacy === 5), 'estate report delivered to the heir');
+// the figure the death modal prints: pocket-after-loot PLUS the whole bank. The client labelled it
+// "pocket cash" while it silently included the bank — so a player who banked $8,000 read a loss $8,000
+// larger than the number they thought it described, on the one screen that explains what death costs.
+assert.equal(heirNotes.find((n) => n.type === 'estate').payload.lost.cash, (roccoCashPreKill - r.body.loot) + 8000,
+  'the report\'s lost.cash sums pocket AND bank — the label must say so');
 const mookNotes = (await call('GET', '/v1/notifications', { token: mook.token })).body.notifications;
 // the kill notifies 3 RANDOM living witnesses — assert 3 were delivered globally (robust to which
 // ones the RNG picks from the now-larger cast), not that a specific character was chosen

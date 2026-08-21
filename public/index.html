@@ -3297,9 +3297,9 @@
         <div style="flex:1;min-width:150px"><div class="t" style="color:var(--ok)">the heir KEEPS</div>
           <div class="dim" style="font-size:13px">${line(k.omr, `${fmt(Math.floor(k.omr || 0))} $OMR liquid`)}${line(k.staked, `${fmt(Math.floor(k.staked || 0))} staked`)}${line(k.gear, `${k.gear} on-chain gear`)}${line(k.prestige, `prestige ${k.prestige}`)}${line(k.estate, `the ${esc(String(k.estate))}`)}the account, always</div></div>
         <div style="flex:1;min-width:150px"><div class="t" style="color:var(--blood)">the street LOST</div>
-          <div class="dim" style="font-size:13px">${line(l.cash, `$${fmt(l.cash || 0)} pocket cash`)}${line(l.cars, `${l.cars} car(s)`)}${line(l.guns, `${l.guns} gun(s)`)}${line(l.rackets, `${l.rackets} racket(s)`)}${line(l.assets, `${l.assets} asset(s)`)}level ${l.lvl || '?'} — you start again at 1</div></div>
+          <div class="dim" style="font-size:13px">${line(l.cash, `$${fmt(l.cash || 0)} cash — pocket AND bank`)}${line(l.cars, `${l.cars} car(s)`)}${line(l.guns, `${l.guns} gun(s)`)}${line(l.rackets, `${l.rackets} racket(s)`)}${line(l.assets, `${l.assets} asset(s)`)}level ${l.lvl || '?'} — you start again at 1</div></div>
       </div>
-      <p class="dim" style="margin-top:8px">Play like it counts. Bank your cash. Don't carry a body you can't answer for.</p>`;
+      <p class="dim" style="margin-top:8px">Play like it counts. The bank stops a <i>killer</i> taking a cut — it never survives the street. Spend it, sink it into the things that outlive you, and don't carry a body you can't answer for.</p>`;
     $('#deathmodal').classList.remove('hidden');
   }
 
