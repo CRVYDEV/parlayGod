@@ -1,6 +1,6 @@
 {
   "model": "bytedance/seedance-2.5/image-to-video",
-  "spentUsd": 217.31000000000012,
+  "spentUsd": 222.05000000000013,
   "clips": [
     {
       "plate": "hero-poster",
@@ -332,6 +332,20 @@
       "ar": "9:16",
       "t2v": true,
       "url": "https://v3b.fal.media/files/b/0aa7362c/vih1ZkCS89dvEC_aNEilw_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "mm-vaultdrop",
+      "ar": "16:9",
+      "t2v": true,
+      "url": "https://v3b.fal.media/files/b/0aa73d32/aPeW2WPpah5FfUSxEP-OT_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "mm-four",
+      "ar": "16:9",
+      "t2v": true,
+      "url": "https://v3b.fal.media/files/b/0aa73d3e/pzp7IbATu1MsSqlvwH646_video.mp4",
       "est": 2.37
     }
   ],
