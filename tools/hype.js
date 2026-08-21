@@ -128,6 +128,10 @@ const BESPOKE = {
   'mm-respect':   `a busy 1940s restaurant falls silent as a man in a tailored coat walks through, patrons rising, waiters stepping back, men tipping their hats as he passes, slow steadicam follow, ${ACTION}`,
   'mm-penthouse': `a man in a tailored suit stands silhouetted at a floor-to-ceiling penthouse window, whiskey glass in hand, the endless neon city glittering far below in the rain, slow push-in past his shoulder, ${ACTION}`,
   'mm-toast':     `a mafia family around a long candlelit dinner table raise their glasses in a toast, laughter and cigar smoke, warm lamplight on dark wood panelling, slow push down the table, ${ACTION}`,
+  // the SHORTS pack's two portrait-composed hook shots (2026-08-21): t2v honors a 9:16 request —
+  // no source still to pin the aspect — so these render NATIVELY vertical for the phone cuts.
+  'mm-mark':      `looking straight down from a high fire escape at night, a lone man in a suit walks a narrow rain-slick alley far below counting a fold of banknotes, a shadowed figure steps out of a doorway behind him, tall vertical composition, slow descending camera, ${ACTION}`,
+  'mm-fortune':   `a pair of dice tumbling in slow motion high above a green felt craps table, stacked chips and reaching hands below in lamplight, the dice falling toward the camera, tall vertical composition, low dramatic angle, ${ACTION}`,
 };
 
 // ── the cuts: each carries its own aspect + a mostly-distinct footage set ─────────────────────────
@@ -376,6 +380,32 @@ const VIDEOS = {
     { p: 'hero-backdrop', use: 3.6, off: 0.5, title: 'OMERTÀ',
       cta: 'one life · no respawns · extraction opens at launch · omerta.fun' },
   ] },
+  // 9 — THE SHORTS PACK (2026-08-21, the masterpiece budget): three native 9:16 per-hook cuts for
+  // X/TikTok/Reels — one hook each (the kill economy · the vice · the rise), ~13s, built to be
+  // watched MUTED: the subtitles carry the pitch, no narration. The two portrait-composed hook
+  // shots generate natively (t2v honors 9:16); everything else reuses the library free through
+  // shotClip's centre cover-crop. Copy stays mechanism-true + number-free (the HYPE.md rules).
+  'short-blood': { w: 1080, h: 1920, ar: '9:16', shots: [
+    { p: 'mm-mark',             use: 2.6, off: 0.4, sub: 'EVERY PLAYER IS A MARK' },
+    { p: 'hitman-professional', use: 2.0, off: 0.5, sub: 'TAKE THE CONTRACT' },
+    { p: 'cine-whacked',        use: 2.2, off: 1.2, sub: 'ONE LIFE. NO RESPAWNS.' },
+    { p: 'cine-payday',         use: 2.0, off: 0.4, sub: 'THEY DROP WHAT THEY HOLD' },
+    { p: 'hero-backdrop',       use: 3.2, off: 0.5, title: 'OMERTÀ', cta: 'the city pays the bold · omerta.fun' },
+  ] },
+  'short-vice': { w: 1080, h: 1920, ar: '9:16', shots: [
+    { p: 'mm-fortune',    use: 2.6, off: 0.4, sub: 'THE HOUSE IS OPEN' },
+    { p: 'crime-highroll', use: 2.0, off: 0.5, sub: 'HIGH STAKES' },
+    { p: 'mm-knockout',   use: 2.2, off: 0.3, sub: 'RUN THE FIGHTS' },
+    { p: 'mm-streetrace', use: 2.2, off: 0.4, sub: 'RACE FOR PINKS' },
+    { p: 'hero-backdrop', use: 3.2, off: 0.5, title: 'OMERTÀ', cta: 'every table is open · omerta.fun' },
+  ] },
+  'short-rise': { w: 1080, h: 1920, ar: '9:16', shots: [
+    { p: 'mm-arrival',    use: 2.4, off: 0.4, sub: 'ARRIVE WITH NOTHING' },
+    { p: 'mm-induction',  use: 2.4, off: 0.4, sub: 'GET MADE' },
+    { p: 'mm-respect',    use: 2.2, off: 0.4, sub: 'EARN THE NAME' },
+    { p: 'mm-penthouse',  use: 2.6, off: 0.4, sub: 'TAKE THE CITY' },
+    { p: 'hero-backdrop', use: 3.2, off: 0.5, title: 'OMERTÀ', cta: 'one life · no respawns · omerta.fun' },
+  ] },
 };
 
 // a clip file is (plate, aspect) — 16:9 sources and 9:16 sources are distinct renders
@@ -568,7 +598,12 @@ function titlePng(shot, i, w, h, overline) {
 
 // ── one shot → a silent clip: trim the liveliest window, fill the cut frame, burn the title ───────
 function shotClip(shot, i, v) {
-  const src = clipFile(shot.p, v.ar), w = v.w, h = v.h;
+  // a portrait cut prefers a native 9:16 render, but any landscape clip in the library serves it
+  // through the same centre cover-crop (the noir plates are centre-weighted — HYPE.md) — motion
+  // always beats the Ken-Burns still fallback, and the bespoke t2v clips HAVE no still to fall to.
+  let src = clipFile(shot.p, v.ar);
+  if (!fs.existsSync(src) && fs.existsSync(clipFile(shot.p, '16:9'))) src = clipFile(shot.p, '16:9');
+  const w = v.w, h = v.h;
   const out = path.join(TMP, `fx-${String(i).padStart(2, '0')}.mp4`);
   const title = titlePng(shot, i, w, h, v.overline);
   const tOut = Math.max(0.4, shot.use - 0.45);
@@ -670,7 +705,7 @@ async function buildCut(id, music, voMode) {
     else console.log(`  (no narration written for '${id}' — building without a voice)`);
   }
   let missing = 0;
-  const clips = v.shots.map((s, i) => { if (!fs.existsSync(clipFile(s.p, v.ar))) missing++; return shotClip(s, i, v); });
+  const clips = v.shots.map((s, i) => { if (!fs.existsSync(clipFile(s.p, v.ar)) && !fs.existsSync(clipFile(s.p, '16:9'))) missing++; return shotClip(s, i, v); });
   // act boundaries (the kicker cards) each land a small impact — computed here where the shot
   // metadata still exists, since assembleCut only sees the rendered clips.
   const hits = []; let t = 0;
@@ -754,16 +789,23 @@ async function falBespoke() {
   const man = fs.existsSync(ledger) ? JSON.parse(fs.readFileSync(ledger, 'utf8')) : { model: FAL_VIDEO_MODEL, spentUsd: 0, clips: [] };
   // only clips a cut actually REFERENCES are generated — the unreferenced BESPOKE prompts are
   // future options that cost nothing (the 2026-08-21 $30-budget trim).
-  const need = [...new Set(neededClips().filter((c) => BESPOKE[c.plate] && !fs.existsSync(clipFile(c.plate, c.ar))).map((c) => c.plate))];
+  // (plate, ar) pairs — t2v has no source still, so Seedance genuinely honors a 9:16 request and a
+  // portrait cut gets a NATIVE vertical render (i2v keeps the source aspect; t2v does not have one).
+  // A portrait plate whose 16:9 sibling already exists still renders — the two are distinct files.
+  // …but a plate whose 16:9 render is already in hand is SERVED by shotClip's cover-crop fallback —
+  // only a plate with no render at all is worth new money (the shorts reuse the trailer's footage
+  // for free; only their portrait-composed hook shots generate).
+  const need = neededClips().filter((c) => BESPOKE[c.plate] && !fs.existsSync(clipFile(c.plate, c.ar)) && !fs.existsSync(clipFile(c.plate, '16:9')));
   const todo = [];
-  for (const p of need) {
-    if (man.spentUsd + (todo.length + 1) * EST_PER > cap) { console.log(`cap $${cap} would be exceeded — stopping at ${p}`); break; }
-    todo.push(p);
+  for (const c of need) {
+    if (man.spentUsd + (todo.length + 1) * EST_PER > cap) { console.log(`cap $${cap} would be exceeded — stopping at ${c.plate}`); break; }
+    todo.push(c);
   }
   console.log(`bespoke: queueing ${todo.length} of ${need.length} needed on ${FAL_T2V_MODEL} @ ${FAL_RES} (est +$${(todo.length * EST_PER).toFixed(2)}, cap $${cap})`);
   const jobs = [];
-  for (const p of todo) {
-    const body = { prompt: BESPOKE[p], resolution: FAL_RES, aspect_ratio: '16:9', duration: '5', generate_audio: false };
+  for (const c of todo) {
+    const p = c.plate;
+    const body = { prompt: BESPOKE[p], resolution: FAL_RES, aspect_ratio: c.ar, duration: '5', generate_audio: false };
     // fal's balance gate is FLAKY under a queue of reserving jobs — a 403 "Exhausted balance" can be
     // followed seconds later by a clean accept (measured live 2026-08-21). Retry with backoff; only
     // a submit that stays locked through the whole ladder is a real out-of-money stop.
@@ -772,8 +814,8 @@ async function falBespoke() {
       const r = await fetch(`https://queue.fal.run/${FAL_T2V_MODEL}`, { method: 'POST', headers: H, body: JSON.stringify(body) });
       const j = await r.json();
       if (r.ok && j.request_id) {
-        jobs.push({ p, id: j.request_id, done: false });
-        console.log(`  queued ${p} (${j.request_id})`);
+        jobs.push({ p, ar: c.ar, id: j.request_id, done: false });
+        console.log(`  queued ${p} @ ${c.ar} (${j.request_id})`);
         accepted = true;
       } else if (r.status === 403 && a < 7) {
         console.log(`  … ${p} bounced (${r.status}, attempt ${a + 1}) — retrying`);
@@ -791,8 +833,8 @@ async function falBespoke() {
         const j = await rr.json();
         const url = j?.video?.url || j?.videos?.[0]?.url;
         if (url) {
-          fs.writeFileSync(clipFile(job.p, '16:9'), Buffer.from(await (await fetch(url)).arrayBuffer()));
-          man.spentUsd += EST_PER; man.clips.push({ plate: job.p, ar: '16:9', t2v: true, url, est: EST_PER });
+          fs.writeFileSync(clipFile(job.p, job.ar), Buffer.from(await (await fetch(url)).arrayBuffer()));
+          man.spentUsd += EST_PER; man.clips.push({ plate: job.p, ar: job.ar, t2v: true, url, est: EST_PER });
           fs.writeFileSync(ledger, JSON.stringify(man, null, 2));
           job.done = true; pending--;
           console.log(`  ✓ ${job.p}  (${pending} left, ~$${man.spentUsd.toFixed(2)})`);
