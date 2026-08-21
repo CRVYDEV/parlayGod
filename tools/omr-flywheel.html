@@ -1,0 +1,100 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face { font-family:'Oswald'; font-weight:600; src:url('file:///home/user/Omerta/public/art/display.woff2') format('woff2'); }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { width:1240px; height:1290px; position:relative; overflow:hidden; color:#cfc9ba;
+  font-family:'Oswald','Arial Narrow',Arial,sans-serif;
+  background: radial-gradient(90% 60% at 50% 30%, #14110d 0%, transparent 60%),
+              radial-gradient(80% 60% at 15% 90%, #0e1414 0%, transparent 55%),
+              #08090b; }
+body::before { content:''; position:absolute; inset:0;
+  background-image: repeating-linear-gradient(0deg, rgba(255,255,255,.012) 0 1px, transparent 1px 3px); }
+h1 { text-align:center; font-size:56px; letter-spacing:8px; padding-top:30px; color:#e9c25a;
+  text-shadow:0 0 34px rgba(233,194,90,.35); font-weight:600; }
+.sub { text-align:center; color:#8a8471; font-size:17px; letter-spacing:5px; margin-top:4px; }
+.wheel { position:absolute; top:60px; left:20px; width:1200px; height:940px; }
+svg.ring { position:absolute; inset:0; }
+.node { position:absolute; width:112px; height:112px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  font-size:44px; background:radial-gradient(circle at 50% 35%, rgba(255,255,255,.06), rgba(0,0,0,.4)); }
+.num { position:absolute; top:-10px; left:50%; transform:translateX(-50%); width:26px; height:26px; border-radius:50%;
+  color:#0a0a0a; font-size:15px; display:flex; align-items:center; justify-content:center; font-weight:600; }
+.ntxt { position:absolute; }
+.ntxt h3 { font-size:19px; letter-spacing:2px; line-height:1.15; margin-bottom:5px; font-weight:600; }
+.ntxt p { font-family:Arial,sans-serif; font-size:13.5px; line-height:1.4; color:#98917f; }
+.alab { position:absolute; text-align:center; font-size:13px; letter-spacing:1.6px; color:#7f8b99; line-height:1.35; width:190px; transform:translate(-50%,-50%); }
+.ilab { position:absolute; text-align:center; font-size:14.5px; letter-spacing:2px; line-height:1.4; color:#b9b09a; transform:translate(-50%,-50%); }
+.ilab .arr { display:block; font-size:16px; color:#6d6a5e; }
+.center { position:absolute; left:600px; top:560px; transform:translate(-50%,-50%); text-align:center; }
+.cring { width:150px; height:150px; margin:0 auto; border-radius:50%; border:2px solid #e9c25a; display:flex; align-items:center; justify-content:center;
+  font-size:58px; background:radial-gradient(circle at 50% 35%, #221b0e, #0d0b07); box-shadow:0 0 60px rgba(233,194,90,.35), inset 0 0 26px rgba(233,194,90,.15); }
+.center .tok { font-size:42px; letter-spacing:5px; color:#f0d789; margin-top:8px; font-weight:600; text-shadow:0 0 26px rgba(233,194,90,.4); }
+.center .tsub { font-size:13px; letter-spacing:4px; color:#8a8471; margin-top:2px; }
+.badges { position:absolute; left:44px; right:44px; top:1035px; display:grid; grid-template-columns:repeat(5,1fr);
+  border:1px solid #3a3324; border-radius:18px; padding:20px 8px; background:linear-gradient(180deg, rgba(24,20,12,.55), rgba(12,11,8,.7)); }
+.badge { text-align:center; padding:0 10px; border-right:1px solid #2a2517; }
+.badge:last-child { border-right:none; }
+.badge .bi { font-size:26px; margin-bottom:8px; }
+.badge .bt { font-size:13.5px; letter-spacing:1.6px; line-height:1.4; color:#c8bd9c; }
+.tagline { position:absolute; left:0; right:0; top:1200px; text-align:center; font-size:23px; letter-spacing:6px; color:#e9c25a; font-weight:600; }
+.fine { position:absolute; left:0; right:0; top:1244px; text-align:center; font-size:13.5px; letter-spacing:3px; color:#6d6a5e; }
+</style></head><body>
+<h1>THE $OMR FLYWHEEL</h1>
+<div class="sub">A MAFIA RPG · REAL REVENUE · NOTHING PRINTED · ROBINHOOD CHAIN</div>
+
+<div class="wheel">
+<svg class="ring" viewBox="0 0 1200 940">
+  <defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+    <path d="M0,0 L10,5 L0,10 z" fill="#7f96ab"/></marker></defs>
+  <g fill="none" stroke="#5c6f82" stroke-width="2.5" marker-end="url(#ah)" opacity=".9">
+    <path d="M 680 240 A 330 330 0 0 1 880 385"/>
+    <path d="M 929 537 A 330 330 0 0 1 853 772"/>
+    <path d="M 724 866 A 330 330 0 0 1 476 866"/>
+    <path d="M 347 772 A 330 330 0 0 1 271 537"/>
+    <path d="M 320 385 A 330 330 0 0 1 520 240"/>
+  </g>
+</svg>
+
+<div class="node" style="left:545px; top:175px; border:2px solid #a78bfa; box-shadow:0 0 40px rgba(167,139,250,.35);">🎲<span class="num" style="background:#a78bfa;">1</span></div>
+<div class="ntxt" style="left:672px; top:140px; width:255px;"><h3 style="color:#c4b5fd;">THE CITY PLAYS</h3>
+<p>A full mafia RPG — crews, families, rackets, heists, the den. Real fees at the door: identity mints, the Store, reserve bonds, the sell tax.</p></div>
+
+<div class="node" style="left:859px; top:403px; border:2px solid #34d399; box-shadow:0 0 40px rgba(52,211,153,.3);">🧾<span class="num" style="background:#34d399;">2</span></div>
+<div class="ntxt" style="left:988px; top:398px; width:200px;"><h3 style="color:#6ee7b7;">THE DECLARED WATERFALL</h3>
+<p>Every dollar splits by published rules — treasury, liquidity, vig, community pot. Nothing discretionary.</p></div>
+
+<div class="node" style="left:739px; top:772px; border:2px solid #60a5fa; box-shadow:0 0 40px rgba(96,165,250,.3);">💰<span class="num" style="background:#60a5fa;">3</span></div>
+<div class="ntxt" style="left:868px; top:782px; width:250px;"><h3 style="color:#93c5fd;">HARD-BOUNDED BUYBACKS</h3>
+<p>Revenue buys $OMR off the open market — filling the withdrawal reserve, the prize pool, and the community pot the top families split.</p></div>
+
+<div class="node" style="left:351px; top:772px; border:2px solid #f472b6; box-shadow:0 0 40px rgba(244,114,182,.3);">🪙<span class="num" style="background:#f472b6;">4</span></div>
+<div class="ntxt" style="left:80px; top:782px; width:250px; text-align:right;"><h3 style="color:#f9a8d4;">SINKS RECYCLE, NEVER BURN</h3>
+<p>$OMR spent in-game — the ladder, dues, the compound, intel — lands on the desk and resells for ETH at a daily auction.</p></div>
+
+<div class="node" style="left:231px; top:403px; border:2px solid #e9c25a; box-shadow:0 0 40px rgba(233,194,90,.3);">🏛<span class="num" style="background:#e9c25a;">5</span></div>
+<div class="ntxt" style="left:12px; top:398px; width:200px; text-align:right;"><h3 style="color:#f0d789;">THE RWA ARC</h3>
+<p>Families vote a daily ticker; the treasury buys tokenized stock behind price walls — delivered into Street Deed vaults, weighted by play.</p></div>
+
+<div class="alab" style="left:768px; top:322px;">every fee follows<br>the waterfall</div>
+<div class="alab" style="left:856px; top:645px;">revenue funds<br>the buybacks</div>
+<div class="alab" style="left:600px; top:838px;">$OMR reaches the players<br>who actually play</div>
+<div class="alab" style="left:344px; top:645px;">desk sales stack<br>the treasury</div>
+<div class="alab" style="left:432px; top:322px;">a real book brings<br>the next player in</div>
+
+<div class="ilab" style="left:600px; top:428px;">NOTHING PRINTS<br>AGAINST HYPE<span class="arr">↓</span></div>
+<div class="ilab" style="left:600px; top:706px;"><span class="arr">↑</span>REVENUE<br>BUYS IT BACK</div>
+<div class="ilab" style="left:415px; top:560px;">CASH CAN<br>NEVER BUY IT →</div>
+<div class="ilab" style="left:788px; top:560px;">← DEMAND IS<br>THE GAME</div>
+
+<div class="center"><div class="cring">🎩</div><div class="tok">$OMR</div><div class="tsub">THE CITY'S TOKEN</div></div>
+</div>
+
+<div class="badges">
+  <div class="badge"><div class="bi">👥</div><div class="bt">FAMILIES SPLIT<br>THE COMMUNITY POT</div></div>
+  <div class="badge"><div class="bi">🚫</div><div class="bt">NO APY · NO WAGE<br>NO DRIP</div></div>
+  <div class="badge"><div class="bi">🏦</div><div class="bt">EXTRACTION<br>≤ INFLOW</div></div>
+  <div class="badge"><div class="bi">📖</div><div class="bt">PUBLIC LEDGER<br>CHECKED NIGHTLY</div></div>
+  <div class="badge"><div class="bi">🪶</div><div class="bt">ON ROBINHOOD<br>CHAIN</div></div>
+</div>
+
+<div class="tagline">PLAY. PAY. BUY BACK. RECYCLE. GO LEGIT. REPEAT.</div>
+<div class="fine">THE LEDGER IS PUBLIC · EXTRACTION OPENS AT LAUNCH · OMERTA.FUN · @OMERTAONRH</div>
+</body></html>

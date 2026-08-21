@@ -268,9 +268,13 @@ that unfurls with the card. Every share link carries the player's own referral c
 
 **Lifetime art spend: $11.12.** Worth saying out loud to anyone asking about burn rate.
 
-Also: the approved **money-map explainer video** (`/art/hype-money.mp4`, on the landing page), and
-the **OHM-vs-$OMR comparison graphic** (`public/art/omr-vs-ohm.png`, generator kept in the repo
-history — §9a below is its thread).
+Also: the approved **money-map explainer video** (`/art/hype-money.mp4`, on the landing page), the
+**OHM-vs-$OMR comparison graphic** (`public/art/omr-vs-ohm.png`, generator `tools/omr-graphic.html`
+— §9a below is its thread), and the **$OMR flywheel graphic** (`public/art/omr-flywheel.png`,
+generator `tools/omr-flywheel.html`) — the five-node loop (the city plays → the declared waterfall →
+hard-bounded buybacks → sinks recycle → the RWA arc), badge row carrying the never-claim-safe
+posture (no APY/wage/drip, extraction ≤ inflow, public ledger, community pot), and the standing
+footer: the ledger is public, extraction opens at launch.
 
 ---
 
