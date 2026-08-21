@@ -10,7 +10,7 @@
 import crypto from 'node:crypto';
 import { recordEventResult } from './events.js';
 import { GameError, bus, ledger, notify, rngLog, bumpMastery, masteryFx } from './game.js';
-import { RACES, POPULATION, raceTierOf, raceRankOf, carPower, carVal, levelOf , jailed, hospitalized, usd } from './rules.js';
+import { RACES, POPULATION, REGIMEN, raceTierOf, raceRankOf, carPower, carVal, levelOf, disciplineLvlOf, jailed, hospitalized, usd } from './rules.js';
 import { logCarCollect } from './collection.js';
 
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
@@ -25,6 +25,11 @@ const raceable = (h, carId) => {
   if (car.pledged) throw new GameError('unavailable', "It's pledged as collateral — square the loan first.");
   return car;
 };
+// THE REGIMEN (the 2026-08-21 trio) — White Knuckle (handling): a driver's OWN score gains a small
+// flat term per level, its ONE touchpoint (the duels `marks`/DUEL_ADD twin). Symmetric in PvP —
+// each side reads its OWN owned handle — and variance-buried, so it is lever-pinned rather than
+// till-tested (the marksmanship precedent). A headless side (no handle) reads level 1 → +0.
+const handlingAdd = (owned) => (disciplineLvlOf(Number(owned?.disciplines?.handling || 0)) - 1) * REGIMEN.HANDLING_ADD;
 // step 2 — spend one NITROUS charge on the actor's OWN car for a one-race power bump (consumed win/lose).
 // Absolute write (pg-mem INT-arithmetic quirk). Returns the power bonus (0 if not used / no charge).
 async function spendNos(client, car, use) {
@@ -54,7 +59,7 @@ export async function raceNpc(ch, carId, tierId, useNos, client, h) {
   await client.query('UPDATE characters SET race_at=$2 WHERE id=$1', [ch.id, new Date(now.getTime() + raceCdMs())]);
   const nos = await spendNos(client, car, useNos); // step 2 — one-race nitrous bump (consumed win/lose)
   const power = carPower(car.model_id, car.trim_id, car.tune, ch.speed, car.dmg);
-  const mine = power + nos + rand(0, RACES.VARIANCE), field = tier.fieldPower + rand(0, RACES.VARIANCE);
+  const mine = power + nos + handlingAdd(h.owned) + rand(0, RACES.VARIANCE), field = tier.fieldPower + rand(0, RACES.VARIANCE);
   const win = mine > field;
   await h.rngLog(client, ch.id, `race:npc:${tier.id}`, mine, `${win ? 'win' : 'loss'}${nos ? ' +nos' : ''} (${mine} vs ${field})`);
   await bumpMastery(client, h, ch, 'wheels', 'race'); // THE TRADES — seat time, win or lose (the cooldown is the throttle)
@@ -173,8 +178,8 @@ export async function raceChallenge(ch, opponent, body, client, h) {
   if (Number(opponent.cash) < amt) throw new GameError('their_cash', "They can't cover the wager right now.");
   let mine, theirs;
   const nos = await spendNos(client, my, body?.nos); // step 2 — the challenger may burn one nitrous charge (their own car only; the passive owner's isn't touched without consent)
-  const mp = carPower(my.model_id, my.trim_id, my.tune, ch.speed, my.dmg) + nos;
-  const tp = carPower(their.model_id, their.trim_id, their.tune, opponent.speed, their.dmg);
+  const mp = carPower(my.model_id, my.trim_id, my.tune, ch.speed, my.dmg) + nos + handlingAdd(h.owned);
+  const tp = carPower(their.model_id, their.trim_id, their.tune, opponent.speed, their.dmg) + handlingAdd(h.victimOwned);
   do { mine = mp + rand(0, RACES.VARIANCE); theirs = tp + rand(0, RACES.VARIANCE); } while (mine === theirs);
   const win = mine > theirs;
   const pot = amt * 2;
@@ -239,8 +244,8 @@ export async function pinkSlipRace(ch, opponent, body, client, h) {
   if (!their.pink_slip) throw new GameError('not_offered', "That car isn't up for pinks.");
   let mine, theirs;
   const nos = await spendNos(client, my, body?.nos); // the challenger may burn one nitrous charge on their own car
-  const mp = carPower(my.model_id, my.trim_id, my.tune, ch.speed, my.dmg) + nos;
-  const tp = carPower(their.model_id, their.trim_id, their.tune, opponent.speed, their.dmg);
+  const mp = carPower(my.model_id, my.trim_id, my.tune, ch.speed, my.dmg) + nos + handlingAdd(h.owned);
+  const tp = carPower(their.model_id, their.trim_id, their.tune, opponent.speed, their.dmg) + handlingAdd(h.victimOwned);
   do { mine = mp + rand(0, RACES.VARIANCE); theirs = tp + rand(0, RACES.VARIANCE); } while (mine === theirs);
   const win = mine > theirs;
   const winner = win ? ch : opponent, loser = win ? opponent : ch;

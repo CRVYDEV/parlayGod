@@ -383,6 +383,13 @@ const SIGNED = [
   ['REGIMEN.CONDITIONING_BPS', 100],
   ['REGIMEN.CONDITIONING_FLOOR', 0.75],
   ['REGIMEN.DUEL_ADD', 0.6],
+  // the 2026-08-21 trio (founder-directed: "add more stats to the characters") — each ONE new
+  // single-touchpoint modifier: handling → the race score (variance-buried, this pin is its guard),
+  // poise → the laylow sink (till-tested to the dollar), vigilance → stored convoy guard defense.
+  ['REGIMEN.HANDLING_ADD', 0.5],
+  ['REGIMEN.POISE_BPS', 100],
+  ['REGIMEN.POISE_FLOOR', 0.75],
+  ['REGIMEN.VIGILANCE_DEF', 0.5],
   // THE HUSTLE (2026-07-30) — the daily three-stop chain's completion faucet (once a day,
   // level-scaled; the clue-casket posture: petty by design, the MOVEMENT is the product)
   // THE CAREER — the post-First-Week ladder's unlock bar (task cash values live in the CAREER
@@ -604,11 +611,28 @@ const SIGNED = [
   ['WALLET_FORGE.BUDGET_MAX', 3],
   ['WALLET_FORGE.AGE_TIERS_DAYS', [365, 1095]],
   ['WALLET_FORGE.VELOCITY_TIERS', [20, 200, 1000]],
+  ['WALLET_FORGE.AFFINITY_XP_PER_BAND', 40],
+  // TWELVE archetypes (founder-directed 2026-08-21: "a total of 12 archetypes for variety") — four
+  // history families × three wallet-hashed variants, each with a regimen-discipline AFFINITY.
   ['WALLET_FORGE.ARCHETYPES', {
-    patient:  { name: 'The Patient Man', muscle: 3, cunning: 9, speed: 3, boost: 'cunning' },
-    wheelman: { name: 'The Wheelman',    muscle: 3, cunning: 4, speed: 8, boost: 'speed' },
-    workhorse:{ name: 'The Workhorse',   muscle: 8, cunning: 4, speed: 3, boost: 'muscle' },
-    fixer:    { name: 'The Fixer',       muscle: 4, cunning: 7, speed: 4, boost: 'cunning' },
+    wheelman: { name: 'The Wheelman',    muscle: 3, cunning: 4, speed: 8, boost: 'speed',   affinity: 'handling' },
+    courier:  { name: 'The Night Courier', muscle: 3, cunning: 5, speed: 7, boost: 'speed', affinity: 'stamina' },
+    redline:  { name: 'The Redline Man', muscle: 4, cunning: 3, speed: 8, boost: 'speed',   affinity: 'vigilance' },
+    patient:  { name: 'The Patient Man', muscle: 3, cunning: 9, speed: 3, boost: 'cunning', affinity: 'composure' },
+    chessman: { name: 'The Chess Player', muscle: 4, cunning: 8, speed: 3, boost: 'cunning', affinity: 'poise' },
+    graybeard:{ name: 'The Graybeard',   muscle: 3, cunning: 8, speed: 4, boost: 'cunning', affinity: 'presence' },
+    workhorse:{ name: 'The Workhorse',   muscle: 8, cunning: 4, speed: 3, boost: 'muscle',  affinity: 'stamina' },
+    dockboss: { name: 'The Dock Boss',   muscle: 7, cunning: 4, speed: 4, boost: 'muscle',  affinity: 'vigilance' },
+    ironhand: { name: 'The Iron Hand',   muscle: 7, cunning: 5, speed: 3, boost: 'muscle',  affinity: 'conditioning' },
+    fixer:    { name: 'The Fixer',       muscle: 4, cunning: 7, speed: 4, boost: 'cunning', affinity: 'presence' },
+    sharp:    { name: 'The Card Sharp',  muscle: 4, cunning: 6, speed: 5, boost: 'cunning', affinity: 'poise' },
+    runner:   { name: 'The Runner',      muscle: 5, cunning: 4, speed: 6, boost: 'speed',   affinity: 'handling' },
+  }],
+  ['FORGE_FAMILIES', {
+    wheelman: ['wheelman', 'courier', 'redline'],
+    patient:  ['patient', 'chessman', 'graybeard'],
+    workhorse:['workhorse', 'dockboss', 'ironhand'],
+    fixer:    ['fixer', 'sharp', 'runner'],
   }],
   // THE MENTOR (omerta-first-contact-and-events-design.md) — MILESTONES is the one faucet (sim + BALANCE.md)
   ['MENTOR.MIN_LVL', 20],

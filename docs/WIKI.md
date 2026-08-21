@@ -1030,10 +1030,13 @@ bond time inside hard walls (a daily cap, a discount ceiling, a rate ceiling).
   and it becomes safe and tradeable).
 - **Wallet link** — SIWE (`/wallet/challenge`, sign, `/wallet/verify`).
 - **The Forge** (`GET /v1/forge`, `/character/forge`) — a linked wallet's on-chain HISTORY can forge
-  your build, once per wallet EVER: its age and mileage (never a balance) cast the stats as a named
-  archetype, plus a small capped bonus on the archetype's strong suit — and a genuinely deep
-  history forges a slightly BIGGER budget (a few extra points spread across the whole build,
-  hard-capped). Free early; past level 5 it costs a paid re-roll credit. A fresh empty wallet earns
+  your build, once per wallet EVER: its age and mileage (never a balance) cast the stats as one of
+  **twelve named archetypes** (four history families, the exact face a stable function of the wallet
+  itself — the same wallet forges the same face forever), plus a small capped bonus on the
+  archetype's strong suit — and a genuinely deep history forges a slightly BIGGER budget (a few
+  extra points spread across the whole build, hard-capped). Each archetype also SCHOOLS its own
+  regimen discipline with a banded head start (a few levels of a 25-level ladder — schooling, never
+  mastery). Free early; past level 5 it costs a paid re-roll credit. A fresh empty wallet earns
   an ordinary random roll on the standard budget. Note an ordinary paid RE-ROLL later replaces the
   whole build — bonus and budget perk included — with a fresh standard roll. **Character mint**
   (`/character/mint`) — a one-off ETH fee makes a free-trial character permanent (able to withdraw). The

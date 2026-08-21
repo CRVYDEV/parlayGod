@@ -6312,7 +6312,12 @@ buy power" ON THE STAT LAYER ONLY**, and the bounds are the sign-off:
 | `WALLET_FORGE.FREE_LVL` | 5 | at/below: free (an onboarding identity moment); above: consumes a paid reroll credit (the fees.js 0.01-ETH rail) |
 | `WALLET_FORGE.AGE_TIERS_DAYS` | [365, 1095] | wallet-age bands (1y/3y) — age is unfakeable after the fact |
 | `WALLET_FORGE.VELOCITY_TIERS` | [20, 200, 1000] | lifetime tx-count bands — each unit cost real gas |
-| `WALLET_FORGE.ARCHETYPES` | 4 shapes | each BASE shape load-guarded to sum exactly `CREATE_STAT_TOTAL` — only the two banded, capped grants sit on top |
+| `WALLET_FORGE.ARCHETYPES` | 12 shapes | **THE TWELVE** (founder-directed 2026-08-21: "Can we create a total of 12 archetypes for variety") — four history FAMILIES (the bands' answer, `forgeShape` unchanged) × three VARIANTS each, the variant a stable FNV-1a hash of the lowercased wallet (deterministic per wallet forever, auditable, never a roll); each BASE shape load-guarded to sum exactly `CREATE_STAT_TOTAL` — only the two banded, capped grants sit on top; the original four ids lead their families so stored rows stay live keys (no migration) |
+| `FORGE_FAMILIES` | 4 × 3 | the family→variant map, load-guarded to cover every archetype exactly once |
+| `WALLET_FORGE.AFFINITY_XP_PER_BAND` | 40 | **THE AFFINITY** (the same directive's "add more stats") — each archetype schools its regimen DISCIPLINE with banded head-start XP through the regimen's own `addXp` rail: max 5 bands = 200 XP ≈ discipline level 4 against a cap of 25 — schooling, never mastery; XP is not a currency (zero §10.4); 0 disables the schooling |
+| `REGIMEN.HANDLING_ADD` | 0.5 | **White Knuckle** (handling, the 2026-08-21 trio — "add more stats to the characters"): + (lvl−1) × this to YOUR score at all three race sites (PvE + both PvP sides, each side its own handle) — the DUEL_ADD twin, variance-buried → the levers pin is its guard; at the cap that is +12 against VARIANCE 30 |
+| `REGIMEN.POISE_BPS` / `POISE_FLOOR` | 100 / 0.75 | **Cool Head** (poise): laylow ×(1 − bps·(lvl−1)/10⁴) floored — the Iron Chin shape on the laylow SINK; the DISCOUNTED figure is the one ledgered (till-tested to the dollar); a discount on a sink is §10.4-safe (less cash leaves) but trims the sink — flagged, petty at ≤25% of a $5k laylow |
+| `REGIMEN.VIGILANCE_DEF` | 0.5 | **Night Eyes** (vigilance): + (lvl−1) × this baked into the STORED convoy guard defense at depart (the rig-armor site) — defense-side only, and an ambush is a pure ownership transfer, so no faucet widens (the fortify argument) |
 
 **Why it is Sybil-neutral by construction:** the latch is ONCE PER WALLET, EVER (`wallet_rolls`,
 lowercased-wallet PK), so wallet-shopping needs a fresh AGED, WORKED wallet per attempt — the

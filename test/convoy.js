@@ -9,7 +9,7 @@ process.env.MOD_KEY = 'test-mod-key'; // Tier-4 death test uses /v1/mod/kill
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { spawnNpcConvoys, despawnArrivedNpc, sweepConvoyHauls } from '../src/convoy.js';
-import { CONVOY, NOTORIETY, goodPriceOf } from '../src/rules.js';
+import { CONVOY, NOTORIETY, REGIMEN, goodPriceOf } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import crypto from 'node:crypto';
 
@@ -349,6 +349,24 @@ await call('POST', '/v1/convoy/depart', { token: tc.token, body: { guards: 'heav
 const cbTC = (await call('GET', '/v1/convoys', { token: tc.token })).body;
 assert(cbTC.reputation && cbTC.reputation.tollBreak && cbTC.reputation.coolsFaster, 'the board surfaces the hauler reputation perks');
 assert(cbTC.mine && cbTC.mine.notoriety > 0, 'the active shipment shows the lane heat');
+
+// ════════════════════ THE REGIMEN — Night Eyes (vigilance) at depart ════════════════════
+// the 2026-08-21 trio's convoy touchpoint: the shipper's discipline adds guard defense, baked into
+// the STORED guards exactly like the rig's armor. Ground truth is the DATABASE (convoys.guards) —
+// a fresh shipper on a COLD lane with no rig, so the stored figure is tier.def + the discipline term
+// and nothing else. Defense-side only: an ambush is an ownership transfer, so no faucet widens.
+{
+  const ve = await mk('Night Eyes Ned'); await seedCh(ve.id, "respect=1000, cash=8000000, loc='docks'");
+  await pool.query(`INSERT INTO character_disciplines (character_id, discipline, xp) VALUES ('${ve.id}','vigilance',${REGIMEN.XP_DIVISOR * 100})`); // lvl 11 → +5 def at 0.5/level
+  await call('POST', '/v1/goods/buy', { token: ve.token, body: { goodId: 'gin', qty: 10 } });
+  const vo = (await call('POST', '/v1/convoy', { token: ve.token, body: { to: 'neon', goodId: 'gin', qty: 10 } })).body;
+  const vd = await call('POST', '/v1/convoy/depart', { token: ve.token, body: { guards: 'crew' } });
+  assert.equal(vd.code, 200, 'the vigilant shipper departs');
+  const tierDef = CONVOY.GUARD_TIERS.find((t) => t.id === 'crew').def;
+  const expAdd = Math.round((11 - 1) * REGIMEN.VIGILANCE_DEF);
+  const vg = Number((await pool.query(`SELECT guards FROM convoys WHERE id='${vo.id}'`)).rows[0].guards);
+  assert.equal(vg, tierDef + expAdd, `Night Eyes lvl 11 stores EXACTLY +${expAdd} guard defense at depart (${tierDef} + ${expAdd})`);
+}
 
 // ── §10.4: the vocabulary knows the convoy reasons (cash + ammo) ──
 const vocab = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'reason vocabulary');
