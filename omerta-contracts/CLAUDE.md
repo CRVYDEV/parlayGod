@@ -168,9 +168,18 @@ Solidity suite for OMERTÀ on Robinhood Chain. Rules for future sessions:
      change**; it is a separate deployment with its own oracle stack and its own audit.
    - **NO POOL, THEREFORE NO SHARES.** Every depositor gets their own `CollateralEscrow` holding the
      external vault's ERC-4626 shares. The design's §5 sketch called for internal shares accounting
-     to FIX Runtime Verification's finding #1 against Alchemix; escrows make it UNREACHABLE, which
-     is strictly stronger, because that bug only exists when a pool must be divided. **Do not
-     reintroduce an internal share layer** — it re-creates the bug it was meant to fix.
+     to FIX Runtime Verification's finding #1 against Alchemix; escrows make that INTERNAL
+     pool-division bug UNREACHABLE, which is strictly stronger, because it only exists when a pool
+     must be divided. **Do not reintroduce an internal share layer** — it re-creates the bug it was
+     meant to fix. What escrows do NOT delete is the SHARED external sleeve's own first-depositor /
+     inflation case (audit M-1): every escrow deposits into the SAME ERC-4626 vault, so a griefer can
+     donate to inflate its share price and strand a later deposit's funds (zero shares minted) while
+     principal would be credited in full. `Alchemist.deposit` closes this ON-CHAIN — `deployToVault`
+     returns the shares minted, and principal is credited only against value that landed (`shares > 0`
+     + a round-trip slippage floor, `MAX_DEPOSIT_SLIPPAGE_BPS`). The residual expectation on the
+     sleeve is that it be inflation-resistant (OZ 5.x virtual-shares, no-fee); the guard is the
+     backstop if it is not, turning a bad sleeve into a clean revert rather than a stranded deposit.
+     Do not remove the deposit guard or credit principal against `assets` before checking `shares`.
    - **The escrow has no sweep, no rescue, no owner withdrawal, and must not gain one.** A sweep is
      how an escrow becomes a rug vector. Tokens sent directly by mistake are lost; that is the
      correct trade for a contract whose whole job is custody.

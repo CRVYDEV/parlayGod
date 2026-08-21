@@ -17,15 +17,28 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 ///
 ///         **We do not divide a pool, because there is no pool.** Each user's collateral sits in
 ///         their own contract at their own address. Their position is a concrete token balance, not
-///         a fraction of anything. So RV finding #1 is not *fixed* here — it is **unreachable**,
-///         which is a strictly stronger property and the reason the design's own mention of shares
-///         accounting was dropped rather than implemented.
+///         a fraction of anything. So RV finding #1 — the INTERNAL pool-division rounding advantage —
+///         is not *fixed* here, it is **unreachable**, which is a strictly stronger property and the
+///         reason the design's own mention of shares accounting was dropped rather than implemented.
 ///
 ///         The escrow holds the EXTERNAL yield vault's ERC-4626 shares. Those are that vault's
 ///         shares, not ours — one balance, one owner, no internal share price for us to round.
 ///         A depositor's yield is simply the growth of `convertToAssets` on the shares they alone
 ///         hold, so one user's rounding can never move another user's balance: there is no shared
 ///         denominator between them.
+///
+///         ── WHAT THIS DOES NOT DELETE, AND WHERE THAT IS HANDLED (audit M-1) ──────────────────
+///         Making OUR internal accounting bug unreachable is NOT the same as making the external
+///         sleeve safe, and it is easy to conflate the two. Every escrow deploys into the SAME
+///         shared ERC-4626 vault, so that vault's own first-depositor / inflation case is a real
+///         surface: a griefer can donate to inflate its share price so a later deposit mints zero
+///         shares (funds stranded) or few (value skimmed). That is the sleeve's bug, not this
+///         contract's — and it is closed at the one place value enters. `deployToVault` RETURNS the
+///         shares actually minted, and `Alchemist.deposit` credits principal only against value that
+///         landed (`shares > 0` + a round-trip slippage floor). The residual expectation on the
+///         sleeve is that it be inflation-resistant (an OZ 5.x virtual-shares, no-fee vault); the
+///         on-chain guard is the backstop if it is not. So: internal pool-division rounding —
+///         unreachable here; external first-depositor — bounded on-chain in the Alchemist.
 ///
 ///         ── THE TRUST MODEL, STATED PLAINLY ──────────────────────────────────────────────────
 ///         The escrow is DUMB. It holds tokens and obeys exactly one controller, set once at

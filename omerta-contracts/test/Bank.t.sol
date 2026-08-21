@@ -928,4 +928,75 @@ contract BankTest is Test {
         alchemist.sweepFees();
         assertEq(usdc.balanceOf(address(0xFEE)), owed, "and it reaches the recipient on the sweep");
     }
+
+    // ── M-1: first-depositor / ERC-4626 inflation backstop on deposit ──────────────────────────────
+    //
+    // The per-user escrows delete the INTERNAL pool-division bug, but every escrow deposits into the
+    // SAME external ERC-4626 sleeve, whose own first-depositor case they do not delete. `deposit` now
+    // credits principal ONLY against value that landed. These drive it against a REAL OZ vault and a
+    // REAL donation — not a bespoke mock — so the attack is the production one.
+
+    /// A donation-inflated SHARED sleeve mints a later deposit ZERO shares — the classic
+    /// first-depositor attack. Before the guard, alice's assets would land in the vault (donated to
+    /// the attacker's single share) while `principalOf[alice]` was credited in full. Now
+    /// `deployToVault` returns 0 shares and the deposit reverts, so nothing is stranded.
+    ///
+    /// MUTATION: delete `if (shares == 0) revert ZeroShares();` in `deposit` and alice's deposit
+    /// succeeds against a worthless position.
+    function test_a_donation_inflated_sleeve_mints_zero_shares_and_the_deposit_reverts() public {
+        uint256 V = 1000 * M;
+
+        // bob front-runs: a 1-wei deposit for a single share, then a donation larger than 2×alice's
+        // deposit so hers rounds to zero shares. (OZ's virtual-share offset only halves his
+        // efficiency — the attack still works at ~2× the victim's size, the known limitation.)
+        vm.startPrank(bob);
+        usdc.approve(address(vault), type(uint256).max);
+        vault.deposit(1, bob);
+        usdc.transfer(address(vault), 2001 * M); // > 2V
+        vm.stopPrank();
+
+        assertEq(vault.previewDeposit(V), 0, "precondition: the inflated sleeve mints zero shares");
+
+        vm.prank(alice);
+        vm.expectRevert(Alchemist.ZeroShares.selector);
+        alchemist.deposit(V);
+
+        assertEq(alchemist.principalOf(alice), 0, "no principal credited on the reverted deposit");
+    }
+
+    /// The PARTIAL skim the bare `shares > 0` check would miss: tune the donation so alice's deposit
+    /// mints exactly ONE share whose recoverable value is ~2/3 of what she put in. `shares > 0`
+    /// passes; the round-trip value floor is what catches it. This is why the guard is a VALUE check
+    /// and not merely a non-zero-shares check.
+    ///
+    /// MUTATION: delete the `vault.convertToAssets(shares) < ...` line in `deposit` and alice's
+    /// deposit succeeds, crediting a full 1000-USDC principal against a share worth ~667.
+    function test_a_partial_skim_below_the_slippage_floor_reverts() public {
+        uint256 V = 1000 * M;
+
+        vm.startPrank(bob);
+        usdc.approve(address(vault), type(uint256).max);
+        vault.deposit(1, bob);
+        usdc.transfer(address(vault), V - 1); // D = V-1: alice mints exactly 1 share, worth ~2/3 V
+        vm.stopPrank();
+
+        assertEq(vault.previewDeposit(V), 1, "precondition: the deposit mints a single share");
+
+        vm.prank(alice);
+        vm.expectRevert(Alchemist.DepositSlippage.selector);
+        alchemist.deposit(V);
+
+        assertEq(alchemist.principalOf(alice), 0, "no principal credited on the reverted deposit");
+    }
+
+    /// Happy path, so the guard is proven to pass value THROUGH rather than only to block it: an
+    /// ordinary deposit into a healthy sleeve still credits principal and collateral to the cent.
+    function test_a_normal_deposit_passes_the_M1_guard_and_credits_principal() public {
+        uint256 V = 1000 * M;
+        vm.prank(alice);
+        alchemist.deposit(V);
+        assertEq(alchemist.principalOf(alice), V, "principal credited in full");
+        // Collateral valued off the live vault accounting round-trips to ~V (wei-scale rounding only).
+        assertApproxEqAbs(alchemist.collateralOf(alice), V, 2, "collateral lands at ~the deposit");
+    }
 }

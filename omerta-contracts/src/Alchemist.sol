@@ -30,9 +30,17 @@ import {Denari} from "./Denari.sol";
 ///         ── NO POOL, THEREFORE NO SHARES ─────────────────────────────────────────────────────
 ///         Every depositor gets their own `CollateralEscrow`. The design's §5 sketch called for
 ///         shares accounting to fix Runtime Verification's finding #1 against Alchemix; escrows
-///         make that finding UNREACHABLE instead, because the bug it describes only exists when a
+///         make that INTERNAL pool-division bug UNREACHABLE instead, because it only exists when a
 ///         pool must be divided. See CollateralEscrow's header for the full argument. Do not
 ///         reintroduce an internal share layer — it would re-create the bug it was meant to fix.
+///
+///         What escrows do NOT delete is the SHARED external sleeve's own first-depositor /
+///         inflation case: every escrow deposits into the SAME ERC-4626 vault, so a griefer can
+///         donate to inflate its share price and strand a later deposit (zero shares minted) while
+///         `principalOf` would be credited in full (audit M-1). `deposit` closes that ON-CHAIN by
+///         crediting principal only against value that landed (`shares > 0` + a round-trip slippage
+///         floor). So: internal pool-division rounding is unreachable here; the external
+///         first-depositor case is bounded on-chain at deposit, with a sleeve-selection requirement.
 ///
 ///         ── THE INVARIANT THIS FILE EXISTS TO HOLD ───────────────────────────────────────────
 ///             Σ DNR supply ≤ Σ collateral × LTV
@@ -54,6 +62,16 @@ contract Alchemist is Ownable2Step, ReentrancyGuard, FlashGuard {
     ///         reason this is a constant rather than just an owner-set number: without it, the
     ///         self-repaying loan can be turned into a non-repaying one in a single transaction.
     uint16 public constant MAX_HARVEST_FEE_BPS = 3_000; // 30%
+
+    /// @notice Defense-in-depth ceiling on how much value a single deposit may lose to the external
+    ///         sleeve before it is REFUSED rather than credited (audit M-1). See `deposit`: a deposit
+    ///         that lands less than `1 - MAX_DEPOSIT_SLIPPAGE_BPS` of its assets as recoverable vault
+    ///         value is rejected, so a first-depositor / inflation-inflated or fee-charging sleeve
+    ///         cannot strand a user's funds while `principalOf` is credited in full. On a sane
+    ///         (OZ 5.x virtual-shares, no-fee) sleeve the round-trip loss is wei-scale — far inside
+    ///         this bound — so it never bites a legitimate deposit; a sleeve that fails it is one this
+    ///         market must not use, and the guard turns that into a clean revert rather than a loss.
+    uint16 public constant MAX_DEPOSIT_SLIPPAGE_BPS = 100; // 1%
 
     Denari public immutable debtToken;
     IERC20 public immutable asset;
@@ -143,6 +161,8 @@ contract Alchemist is Ownable2Step, ReentrancyGuard, FlashGuard {
     error LtvFeeIncompatible();
     error FeeRecipientUnset();
     error BadFeeRecipient();
+    error ZeroShares();
+    error DepositSlippage();
 
     constructor(Denari debtToken_, IERC20 asset_, IERC4626 vault_, Transmuter transmuter_, address safe)
         Ownable(safe)
@@ -269,7 +289,21 @@ contract Alchemist is Ownable2Step, ReentrancyGuard, FlashGuard {
         _recordEntry(msg.sender);
 
         asset.safeTransferFrom(msg.sender, address(e), assets);
-        e.deployToVault(assets);
+        // FIRST-DEPOSITOR / ERC-4626 INFLATION BACKSTOP (audit M-1). The per-user escrows delete the
+        // INTERNAL shares-accounting bug class (there is no pool to divide — CollateralEscrow's
+        // header), but every escrow deposits into the SAME external ERC-4626 sleeve, and THAT vault's
+        // own first-depositor case is not ours to wave away: a griefer can deposit a wei then donate
+        // to inflate the sleeve's share price so a later deposit mints ZERO shares (funds stranded)
+        // or few (value skimmed) — while `principalOf` would still be credited in full. So credit
+        // principal ONLY against value that actually landed. `deployToVault` returns the shares
+        // minted; `shares == 0` is the outright-strand case, and the round-trip value floor
+        // additionally catches a partial skim (a bad or fee-charging sleeve). This enforces
+        // "value landed" ON-CHAIN here rather than delegating it to the sleeve being inflation-safe.
+        uint256 shares = e.deployToVault(assets);
+        if (shares == 0) revert ZeroShares();
+        if (vault.convertToAssets(shares) < assets - (assets * MAX_DEPOSIT_SLIPPAGE_BPS) / BPS) {
+            revert DepositSlippage();
+        }
         principalOf[msg.sender] += assets;
         emit Deposited(msg.sender, assets);
     }

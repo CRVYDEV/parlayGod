@@ -46,7 +46,10 @@ pragma solidity 0.8.26;
 ///         L6  REENTRANCY — `nonReentrant` plus strict checks-effects-interactions everywhere.
 ///         L7  SHARE-INFLATION / DONATION — track assets in a variable, never `balanceOf(this)`,
 ///             so a direct transfer cannot move the share price. (OZ 5.x ERC4626 virtual shares
-///             cover the classic first-depositor case; internal accounting covers the rest.)
+///             cover the classic first-depositor case; internal accounting covers the rest.) The
+///             one place we deposit into an EXTERNAL sleeve — `Alchemist.deposit` — additionally
+///             enforces "value landed" on-chain (`shares > 0` + a slippage floor, audit M-1), so a
+///             sleeve that is NOT virtual-shares-hardened is rejected rather than silently trusted.
 ///
 /// @dev    Inherit and use. This contract holds no funds and has no owner.
 abstract contract FlashGuard {
