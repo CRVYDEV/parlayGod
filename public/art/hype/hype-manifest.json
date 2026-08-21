@@ -1,6 +1,6 @@
 {
   "model": "bytedance/seedance-2.5/image-to-video",
-  "spentUsd": 212.5700000000001,
+  "spentUsd": 217.31000000000012,
   "clips": [
     {
       "plate": "hero-poster",
@@ -318,6 +318,20 @@
       "ar": "16:9",
       "t2v": true,
       "url": "https://v3b.fal.media/files/b/0aa735c8/qYAI_vRp0_UCshWCSpwxz_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "mm-fortune",
+      "ar": "9:16",
+      "t2v": true,
+      "url": "https://v3b.fal.media/files/b/0aa73621/751eH5CrCrchOzi1U1Zuq_video.mp4",
+      "est": 2.37
+    },
+    {
+      "plate": "mm-mark",
+      "ar": "9:16",
+      "t2v": true,
+      "url": "https://v3b.fal.media/files/b/0aa7362c/vih1ZkCS89dvEC_aNEilw_video.mp4",
       "est": 2.37
     }
   ],

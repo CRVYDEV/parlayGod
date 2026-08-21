@@ -1,10 +1,11 @@
 # OMERTÀ — launch hype videos
 
-One tool (`tools/hype.js`), one library of AI motion clips (Seedance 2.5, fal.ai), **eight cuts** —
+One tool (`tools/hype.js`), one library of AI motion clips (Seedance 2.5, fal.ai), **eleven cuts** —
 five short hype cuts, each with its **own footage set and its own music track**, the long-form
 **money explainer** (`hype-money.mp4`), **the LIFE tour** (`hype-life.mp4` — every activity,
-path and loop in the game), and **the launch TRAILER** (`hype-trailer.mp4` — the ~31s story-arc
-flagship), all built from the same library.
+path and loop in the game), the **launch TRAILER** (`hype-trailer.mp4` — the ~31s story-arc
+flagship), and the **vertical SHORTS PACK** (`hype-short-{blood,vice,rise}.mp4` — three ~12s
+9:16 cuts, one per audience), all built from the same library.
 
 ## Build
 
@@ -42,6 +43,9 @@ the phone frame edge-to-edge — cleaner than a blur-fill of near-black footage)
 | `hype-money.mp4` | 1920×1080 | ~77s | explainer | the FULL money map — every fee, every flow, the RWA arc |
 | `hype-life.mp4` | 1920×1080 | ~87s | the tour | EVERY activity, path and loop — six act cards, Streets → Legit |
 | `hype-trailer.mp4` | 1920×1080 | ~31s | the flagship | the story arc — arrive with nothing → get made → the city at your feet |
+| `hype-short-blood.mp4` | 1080×1920 | ~12s | PvP audience | the kill economy — every player is a mark, one life, they drop what they hold |
+| `hype-short-vice.mp4` | 1080×1920 | ~12s | degen audience | the vice pillar — dice, high stakes, the fights, race for pinks |
+| `hype-short-rise.mp4` | 1080×1920 | ~13s | RPG audience | the rise — arrive with nothing, get made, earn the name, take the city |
 
 The five hype cuts have **distinct footage** (no reused shots between cuts except the shared OMERTÀ
 end-plate) so they don't feel repetitive when posted together; the explainer, being ~5× longer, draws
@@ -91,6 +95,21 @@ cutting it in. Narration: 5 sparse segments (`NARRATION.trailer`) in the real Mi
 "One family. One code." read 3.2s against its first 2.0s window, so the segment moved 25.6→24.6
 with a 3.4s window (the fit-check failing the build is what caught it). Founder signs wording +
 voice + a licensed track before anything goes public.
+
+### The vertical shorts pack (`hype-short-{blood,vice,rise}.mp4`, 2026-08-21)
+
+Three ~12s 9:16 cuts, second of the four approved assets — one per audience rather than one cut
+trying to serve everybody: **blood** (the PvP hook — every player is a mark, one life, they drop
+what they hold; `bed-pen`), **vice** (the degen hook — dice, high stakes, the fights, pinks;
+`bed-den`), **rise** (the RPG hook — the trailer's arc compressed to four beats; `bed-family`).
+No narration by design — shorts are watched muted, the subtitles carry the pitch. Two new native
+9:16 t2v renders (`mm-mark` — the fire-escape look-down on a mark counting cash; `mm-fortune` —
+dice tumbling over the felt) were the only paid footage ($4.74); everything else is served free by
+two tooling changes: `shotClip` falls back from a missing 9:16 clip to the 16:9 render via a centre
+cover-crop (the noir plates are centre-weighted, and bespoke t2v clips have no still to Ken-Burns),
+and `falBespoke` skips any plate whose 16:9 render exists so portrait cuts never re-buy footage in
+hand. One frame-read fix: "THEY DROP WHAT THEY HOLD" landed on `cine-payday`'s empty desk-lamp
+open — the cash lands at ~3.0s, so the shot's `off` moved 0.4→2.8.
 
 ## Copy — earnings + the flywheel (founder-directed 2026-08-14)
 

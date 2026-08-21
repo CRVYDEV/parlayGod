@@ -389,7 +389,7 @@ const VIDEOS = {
     { p: 'mm-mark',             use: 2.6, off: 0.4, sub: 'EVERY PLAYER IS A MARK' },
     { p: 'hitman-professional', use: 2.0, off: 0.5, sub: 'TAKE THE CONTRACT' },
     { p: 'cine-whacked',        use: 2.2, off: 1.2, sub: 'ONE LIFE. NO RESPAWNS.' },
-    { p: 'cine-payday',         use: 2.0, off: 0.4, sub: 'THEY DROP WHAT THEY HOLD' },
+    { p: 'cine-payday',         use: 2.0, off: 2.8, sub: 'THEY DROP WHAT THEY HOLD' }, // off 2.8: the cash lands at ~3.0s — 0.4s is still the empty desk lamp (frame-read)
     { p: 'hero-backdrop',       use: 3.2, off: 0.5, title: 'OMERTÀ', cta: 'the city pays the bold · omerta.fun' },
   ] },
   'short-vice': { w: 1080, h: 1920, ar: '9:16', shots: [
