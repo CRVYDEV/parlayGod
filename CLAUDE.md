@@ -15832,3 +15832,12 @@ unannounced block), maps them to fictional noir ARCHETYPES ("born The Patient Ma
 rule), stores no raw holding (the anti-precise-kill-EV rule), and puts the three depths up as §6
 founder picks (A shape-only recommended / B banded bonus points, a wall-retirement / C cosmetic).
 Suite green + three mutation kills + real-Postgres gates; SPEC's doc row moved with the new doc.
+**And the drop's own comment broke a guard, which is the better half of the record:** the two-line
+comment correction in `chain.js` shifted every line below it, and THE CONNECTION-SHARING LEDGER's
+viem waivers were keyed `src/chain.js:1533` — so the build failed on an edit that changed nothing,
+naming two RPC readers as pg offenders. **A line-keyed waiver rots on any edit above it** (the
+preflight-restatement class, inside a guard). Re-keyed on FILE + a content MARK inside the call's own
+argument (`functionName: 'PERIOD'`), with the stale-waiver assert its sibling ledgers already carry —
+a mark that stops matching now fails loudly instead of leaving a future pg site quietly waived. Both
+directions mutation-verified by name (a dropped waiver names the real site; a bogus one trips the
+stale assert).
