@@ -98,6 +98,18 @@ services:
     name: omerta-api
     runtime: node
     plan: starter                # always-on (~$7/mo). The free tier SLEEPS when idle — bad for a live game.
+    # ⚠ RUN EXACTLY ONE INSTANCE OF THIS SERVICE (numInstances is deliberately not declared — it
+    # defaults to 1). This process holds per-process state that does not exist across boxes:
+    #   · the in-process event bus (game.js `bus`) — streets/gang/me events fan out to the sockets
+    #     THIS process holds; with two instances a player on box A never hears an event emitted on
+    #     box B, silently and with nothing red anywhere
+    #   · the `wsClients` presence registry — /v1/online, discovery/circle "online" chips, the
+    #     push-skip signal all read it
+    #   · the in-memory rate-limit buckets (unless REDIS_URL is set) — N instances = N× every limit
+    #   · the /health request-metrics ring — per-instance numbers, harmless but misleading
+    # Scaling OUT (vs upgrading the database, which is the measured dial below) needs REDIS_URL for
+    # the rate limiter + a cross-process fanout for the bus. Until that exists, more instances make
+    # the game WORSE, not faster. Scale the DATABASE plan instead (+50% per doubling — see below).
     buildCommand: npm ci --omit=dev   # honour the audited lockfile exactly (npm install may re-resolve),
                                       # and keep devDependencies (playwright-core) OUT of the prod image.
                                       # Optional deps (@resvg/resvg-js) still install, so PNG cards work.
