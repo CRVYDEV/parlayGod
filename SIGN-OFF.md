@@ -818,9 +818,13 @@ ed25519 claim leg; the deed-extraction self-attestation; Street Deeds phase-2C t
    explicitly. Built: the frozen `GEAR_TOKEN_IDS` map (append-only, load-guarded), `GearVault.redeem`
    accepts gear one-at-a-time (audit batch — forge 306/306), the three-case rule in `applyReimport`
    (account-level: linked wallet, no living character needed), `GET /v1/mod/items/stranded`.
-2. **THE WALLET FORGE at depth B — SIGNED** (`omerta-wallet-forged-stats-design.md` §6): the
+2. **THE WALLET FORGE at depth B — SIGNED + ✅ BUILT same day** (`omerta-wallet-forged-stats-design.md` §6): the
    wallet decides the stat SHAPE (archetypes, all summing to `CREATE_STAT_TOTAL`) AND grants banded
    BONUS POINTS from wallet history/usage (age/gas tiers, capped at `WALLET_FORGE.BONUS_MAX`). This
    is an explicit, bounded retirement of "outside wealth must not buy power" on the stat layer — the
    §4.3-retirement shape: a small CEILING (+3 vs the 15-point base, once per wallet EVER, dwarfed by
-   ordinary stat training), recorded in BALANCE.md § THE LEDGER-BORN.
+   ordinary stat training), recorded in BALANCE.md § THE LEDGER-BORN. Built: `src/walletforge.js`
+   (the `wallet_rolls` once-per-wallet-EVER latch, banded storage only, fail-closed reader read
+   OUTSIDE the transaction), `POST /v1/character/forge` + `GET /v1/forge`, THE FORGE card on Going
+   Legit, the sheet's forged-archetype line, `WALLET_FORGE` levers pinned in `test/levers.js`,
+   `test/walletforge.js` (four mutations, each caught at its own named assertion).

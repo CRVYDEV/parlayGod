@@ -38,6 +38,7 @@ import { cityEventBoard, resultsBoard } from './events.js';
 import * as A from './auth.js';
 import * as Chain from './chain.js';
 import * as Fees from './fees.js';
+import * as Forge from './walletforge.js';
 import * as V from './vanity.js';
 import * as Brokers from './brokers.js';
 import * as Vig from './vig.js';
@@ -2707,6 +2708,11 @@ export async function buildServer() {
   // rng_audit'd, infinitely repeatable (one credit per re-roll).
   app.post('/v1/character/reroll', { preHandler: auth }, async (req) => Fees.rerollCharacter(pool, req.user.sub));
   app.get('/v1/fees/status', { preHandler: auth }, async (req) => Fees.feeStatus(pool, req.user.sub));
+  // ── THE WALLET FORGE (depth B, founder-signed 2026-08-21) — the linked wallet's history forges
+  // the build: an archetype SHAPE on the same fixed budget + a capped bonus. Once per wallet EVER;
+  // free at/below WALLET_FORGE.FREE_LVL, else it consumes a paid re-roll credit.
+  app.get('/v1/forge', { preHandler: auth }, async (req) => Forge.forgeBoard(pool, req.user.sub));
+  app.post('/v1/character/forge', { preHandler: auth }, async (req) => Forge.forgeCharacter(pool, req.user.sub));
 
   // ── THE PLEX BRIDGE — pay a real-money fee from EARNED $OMR, except the mint ──
   // The MINT route stays mounted as a tombstone rather than being removed: a client that has been

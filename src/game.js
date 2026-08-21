@@ -15,7 +15,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS, RANKS,
          KITCHENS, labModuleCost, recyclesToDesk, DESK_RECYCLE_REASON, isMade, madeSeconds,
          MADE_LADDER, madeRungIdx, madeRungOf, ladderFx,
          ASSETS, OPERATIONS, opSlotsOf, nextOpSlotLevel, MISSIONS, dailyLiveFor, jailed, safeHoused,
-         STABLE, SPEAKEASY, ESTATE, MADE, CREW, crewObjectiveOf, DEEDS, deedController , runOf, npcOf, usd } from './rules.js';
+         STABLE, SPEAKEASY, ESTATE, MADE, CREW, crewObjectiveOf, DEEDS, deedController , runOf, npcOf, usd, WALLET_FORGE } from './rules.js';
 import { dbCaps } from './db.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
@@ -1623,7 +1623,12 @@ export function view(ch, acct = {}, owned = {}) {
     stats: { muscle: ch.muscle, cunning: ch.cunning, speed: ch.speed },
     eff: { muscle: eff('muscle'), cunning: eff('cunning'), speed: eff('speed') },
     rerollCredits: Number(acct.reroll_credits || 0), // paid 0.01-ETH stat re-rolls in hand
-    statTotal: Number(ch.muscle) + Number(ch.cunning) + Number(ch.speed), // fixed budget — a re-roll only reshapes it
+    // The base budget every roll shares; a WALLET FORGE may sit up to WALLET_FORGE.BONUS_MAX above
+    // it (the founder-signed depth-B grant) — so the total is no longer a constant across streets.
+    statTotal: Number(ch.muscle) + Number(ch.cunning) + Number(ch.speed),
+    forged: ch.forged || null, // THE WALLET FORGE archetype, if this street was ledger-born
+    // the DISPLAY name (never the raw key on a player surface — the F12 raw-key lesson)
+    forgedName: ch.forged && WALLET_FORGE.ARCHETYPES[ch.forged] ? WALLET_FORGE.ARCHETYPES[ch.forged].name : null,
     ammo: Number(ch.ammo || 0), cb: Number(ch.cb || 0), heat: Math.round(Number(ch.heat || 0)),
     welsher: !!ch.welsher, // LOAN SHARKING: defaulted on a debt — can't borrow again (dies with the street)
     // LOAN step 4 — WANTED: a defaulter under active pursuit (omertà stripped + NPC hunters + a pool bounty)

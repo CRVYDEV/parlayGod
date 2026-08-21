@@ -1,6 +1,10 @@
 # The Ledger-Born — wallet-forged starting stats (founder idea 2026-08-21, expanded)
 
-**Status: DESIGN ONLY — awaiting the founder's pick on §6 before anything is built.**
+**Status: SIGNED AND BUILT (founder, 2026-08-21 — "B Wallets also grant bonus points based on
+history/usage"). Depth B shipped: `src/walletforge.js` + the `WALLET_FORGE` rules block +
+`wallet_rolls` latch + `POST /v1/character/forge` / `GET /v1/forge`; levers pinned in
+`test/levers.js`; the bounded wall-retirement recorded in BALANCE.md § THE LEDGER-BORN and
+SIGN-OFF § THE 2026-08-21 PAIR.**
 
 The founder's idea, verbatim in spirit: *a player submits a wallet, and the game rolls their stats
 from what that wallet IS — coins held, transaction count, volume, and similar.* Your on-chain life

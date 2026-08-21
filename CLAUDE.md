@@ -15878,3 +15878,50 @@ treated as a wait; the decode's gear branch dropped); the two new Foundry tests 
 one-at-a-time rule and the freed live-supply slot a burn vacates. **The levers register caught my
 own SIGN-OFF prose twice** — "the STAT layer" and "WALLET-FORGED STATS" both read as lever-leaf
 tokens (the SOLDIERS.LAST class, third occurrence) — lowercased rather than waived.
+
+**THE WALLET FORGE — depth B, the ledger-born build (founder-signed 2026-08-21: "B Wallets also
+grant bonus points based on history/usage") — BUILT** (`src/walletforge.js` — the 156th src module,
+`test/walletforge.js` — the 113th suite; the `WALLET_FORGE` rules-tail block + `walletBands`/
+`forgeShape`/`forgeBonus`; `wallet_rolls` — the 240th table + `characters.forged` (ALTER-added — the
+boot-crash lesson); `GET /v1/forge` + `POST /v1/character/forge`; THE FORGE card on Going Legit + the
+sheet's forged-archetype line + a `forged` wire template + a describe() branch; BALANCE.md § THE
+LEDGER-BORN; SIGN-OFF § THE 2026-08-21 PAIR flipped to BUILT in the same commit — the D13/D15 rule).
+A SIWE-proven wallet's on-chain HISTORY forges the living build: the wallet decides the stat SHAPE
+(four fictional-noir ARCHETYPES — the guessability rule — each load-guarded to sum exactly
+`CREATE_STAT_TOTAL`, so the wallet never buys the budget) and grants a banded BONUS of at most
+`WALLET_FORGE.BONUS_MAX` (3) on the archetype's strong suit — **the founder-signed, bounded
+retirement of "outside wealth must not buy power" ON THE STAT LAYER ONLY**, the §4.3-retirement
+shape: a small reachable ceiling (+20% of the 15-point base, once, ever; the gym out-trains it in a
+day), never a curve. **The walls, each mutation-verified by name:** ONCE PER WALLET, EVER
+(`wallet_rolls`, lowercased-wallet PK — SIWE uniqueness means a wallet MOVES between accounts, and
+the latch is exactly what makes wallet-shopping buy nothing; the in-txn SELECT is the check and the
+PK the backstop, and the mutation that matters is `ON CONFLICT DO NOTHING`, which pg-mem reports as
+success — the recordReckoning lesson, hit at the FIRSTS and headed off here); only the BANDS are
+stored, never a raw age/count/balance (the anti-precise-kill-EV rule on a permanent table — the
+suite asserts no raw-feature column exists on the latch); features chosen by COST-TO-FAKE (age is
+unfakeable after the fact, the nonce costs gas per unit; balances are deliberately never read — a
+balance is borrowable the block before the call), so a farmed fresh wallet maps to `unknown` and
+earns an honest RANDOM roll with zero bonus (a real rng_audit roll; a deterministic archetype audits
+roll 0 `(deterministic)`); FAIL-CLOSED (no reader refuses `chain_unconfigured`, a throwing reader
+refuses `read_failed` — never a guessed history), with the RPC read OUTSIDE the transaction (the
+bankPosition/quoteBond pool-exhaustion lesson) and the production viem reader carrying the
+wrong-chain guard + a binary-search first-tx age (~log2(head) nonce reads); free at/below
+`FREE_LVL` (5), above it one paid re-roll credit (the fees.js rail — an established street
+re-forging is a re-roll with a pedigree, priced the same); and **a later paid RE-ROLL replaces the
+forge whole** — `rerollCharacter` now clears `forged` alongside the stats, because a sheet claiming
+"forged: The Patient Man" over a fresh random build is the stale-promise class, and the codex line
+that states the term is only honest because the code enforces it (mutation: drop `forged=NULL` →
+fails by name). §10.4: ZERO surface — the whole flow (three forges + every refusal + the re-roll)
+writes NOT ONE `transactions` row, test-pinned, and the budget law is pinned against the LIVE
+constants (`total == CREATE_STAT_TOTAL + bonus`, `bonus ≤ BONUS_MAX`) — never literals, so a retune
+moves the test with it. Lock order is `rerollCharacter`'s verbatim (character FOR UPDATE → account
+FOR UPDATE, the canonical order). The view gained `forged` + `forgedName` (the display name rides
+the server — the F12 raw-key rule; the notify payload carries it too so the wire never prints
+`patient` at a player), and `statTotal`'s "fixed budget" comment was corrected — the total is no
+longer a constant across streets, which is the one visible cost of depth B and exactly what the
+sign-off bought. All `WALLET_FORGE.*` numbers are founder sign-off levers (pinned whole — the
+ARCHETYPES map as a parent-object pin, the bracket-accessed-leaves rule; BALANCE.md § THE
+LEDGER-BORN is the record, `BONUS_MAX: 0` reverts depth B to shape-only depth A). Five mutations,
+five distinct named kills (the latch neutered; the bonus landing double → the budget law; the bonus
+formula drifting; the fail-open reader; the re-roll keeping the stale mark). Codices synced in the
+same commit (docs/WIKI.md + public/wiki.html — The Forge's terms incl. the re-roll-replaces rule).

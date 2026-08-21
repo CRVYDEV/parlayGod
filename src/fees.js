@@ -206,7 +206,9 @@ export async function rerollCharacter(pool, accountId) {
       throw new GameError('no_reroll_credit', 'Pay the 0.01 ETH re-roll fee on-chain first, then re-roll your build.');
     const st = rollStats();
     await client.query('UPDATE account_persistent SET reroll_credits = reroll_credits - 1 WHERE account_id=$1', [accountId]);
-    await client.query('UPDATE characters SET muscle=$2, cunning=$3, speed=$4 WHERE id=$1', [ch.id, st.muscle, st.cunning, st.speed]);
+    // a re-roll REPLACES the build — a wallet-forged archetype (and its bonus) goes with it, so the
+    // sheet can never claim a forge over a build the forge did not cast (the stale-promise class)
+    await client.query('UPDATE characters SET muscle=$2, cunning=$3, speed=$4, forged=NULL WHERE id=$1', [ch.id, st.muscle, st.cunning, st.speed]);
     await client.query('INSERT INTO rng_audit (id, character_id, action, roll, outcome) VALUES ($1,$2,$3,$4,$5)',
       [crypto.randomUUID(), ch.id, 'reroll_stats', Math.random(), `${st.muscle}/${st.cunning}/${st.speed}`]);
     await notify(client, ch.id, 'rerolled', st);

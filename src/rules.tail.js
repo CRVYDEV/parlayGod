@@ -412,6 +412,63 @@ export function rollStats(rng = Math.random) {
   return stats;
 }
 
+// ── THE WALLET FORGE (founder-signed 2026-08-21, depth B — omerta-wallet-forged-stats-design.md §6) ──
+// A SIWE-proven wallet's HISTORY decides the stat SHAPE (an archetype summing to the same
+// CREATE_STAT_TOTAL every roll gets — the wallet never buys the budget) and grants a small banded
+// BONUS (≤ BONUS_MAX on the archetype's boost stat) — the founder-signed, bounded retirement of
+// "outside wealth must not buy power" on the stat layer. Features are read by COST-TO-FAKE (age is
+// unfakeable, tx count costs gas); only the BAND is ever stored (the anti-precise-kill-EV rule —
+// no raw holding, no raw count, leaves the reader). Once per wallet EVER (the wallet_rolls latch).
+// All numbers are founder sign-off levers (BALANCE.md § THE LEDGER-BORN; pinned in test/levers.js).
+export const WALLET_FORGE = {
+  FREE_LVL: 5,            // at/below this level the forge is free; above it, it costs a reroll credit
+  BONUS_MAX: 3,           // hard ceiling on bonus points — vs the 15-point base budget (+20% max)
+  AGE_TIERS_DAYS: [365, 1095],   // wallet age bands: 1y, 3y → ageTier 0/1/2
+  VELOCITY_TIERS: [20, 200, 1000], // lifetime tx-count bands → velTier 0/1/2/3
+  // Each archetype is a FIXED shape (the guessability rule: fictional noir names, never the
+  // feature that earned it) — every shape sums to CREATE_STAT_TOTAL (load-guarded below).
+  ARCHETYPES: {
+    patient:  { name: 'The Patient Man', muscle: 3, cunning: 9, speed: 3, boost: 'cunning' },
+    wheelman: { name: 'The Wheelman',    muscle: 3, cunning: 4, speed: 8, boost: 'speed' },
+    workhorse:{ name: 'The Workhorse',   muscle: 8, cunning: 4, speed: 3, boost: 'muscle' },
+    fixer:    { name: 'The Fixer',       muscle: 4, cunning: 7, speed: 4, boost: 'cunning' },
+  },
+};
+{ // load guard: every archetype's shape must sum to the SAME budget every random roll gets —
+  // a shape over the budget is power bought with a wallet, the exact thing depth B bounds at
+  // BONUS_MAX and nothing else. Fails the boot, never a player.
+  for (const [k, a] of Object.entries(WALLET_FORGE.ARCHETYPES)) {
+    if (a.muscle + a.cunning + a.speed !== CONSTANTS.CREATE_STAT_TOTAL)
+      throw new Error(`WALLET_FORGE.${k}: shape sums ${a.muscle + a.cunning + a.speed}, budget is ${CONSTANTS.CREATE_STAT_TOTAL}`);
+    if (!['muscle', 'cunning', 'speed'].includes(a.boost))
+      throw new Error(`WALLET_FORGE.${k}: bad boost stat ${a.boost}`);
+  }
+}
+// Band raw features → tiers. Pure, so the suite drives it without a chain.
+export function walletBands(features) {
+  const F = WALLET_FORGE;
+  const age = Number(features?.ageDays || 0), tx = Number(features?.txCount || 0);
+  let ageTier = 0;
+  for (const d of F.AGE_TIERS_DAYS) if (age >= d) ageTier++;
+  let velTier = 0;
+  for (const n of F.VELOCITY_TIERS) if (tx >= n) velTier++;
+  return { ageTier, velTier };
+}
+// Tiers → archetype id (deterministic; null = unknown wallet → the caller falls back to a real
+// random roll, rng_audit'd). Priority: a very-high-velocity wallet is a wheelman whatever its age;
+// an OLD and QUIET wallet is the patient man; a working wallet is the workhorse; anything with a
+// little history is a fixer; a fresh empty wallet earns nothing.
+export function forgeShape({ ageTier, velTier }) {
+  if (velTier >= 3) return 'wheelman';
+  if (ageTier >= 2 && velTier <= 1) return 'patient';
+  if (velTier >= 2) return 'workhorse';
+  if (velTier >= 1 || ageTier >= 1) return 'fixer';
+  return null;
+}
+// Tiers → bonus points on the archetype's boost stat, hard-capped at BONUS_MAX.
+export const forgeBonus = ({ ageTier, velTier }) =>
+  Math.min(WALLET_FORGE.BONUS_MAX, ageTier + (velTier >= 2 ? 1 : 0));
+
 // ── M3 helpers (§7.6–7.9, §5.5) ──
 export const gunObjOf=(id)=>GUNS.find(g=>g.id===id)||null;
 export const vestMultOf=(id)=>VESTS.find(v=>v.id===id)?.mult||1;

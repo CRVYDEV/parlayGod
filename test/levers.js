@@ -595,6 +595,20 @@ const SIGNED = [
   ['AHA.MIN_LVL', 3],
   ['AHA.REWARD_CASH', 2500],
   ['AHA.REWARD_RESPECT', 40],
+  // THE WALLET FORGE (src/walletforge.js, depth B founder-signed 2026-08-21 — BALANCE.md § THE
+  // LEDGER-BORN). BONUS_MAX is the bounded wall-retirement: the ONLY stat power a wallet can ever
+  // buy, vs the 15-point base budget. ARCHETYPES is a whole-map pin (every shape load-guarded to
+  // sum CREATE_STAT_TOTAL — the wallet decides the SHAPE, never the budget).
+  ['WALLET_FORGE.FREE_LVL', 5],
+  ['WALLET_FORGE.BONUS_MAX', 3],
+  ['WALLET_FORGE.AGE_TIERS_DAYS', [365, 1095]],
+  ['WALLET_FORGE.VELOCITY_TIERS', [20, 200, 1000]],
+  ['WALLET_FORGE.ARCHETYPES', {
+    patient:  { name: 'The Patient Man', muscle: 3, cunning: 9, speed: 3, boost: 'cunning' },
+    wheelman: { name: 'The Wheelman',    muscle: 3, cunning: 4, speed: 8, boost: 'speed' },
+    workhorse:{ name: 'The Workhorse',   muscle: 8, cunning: 4, speed: 3, boost: 'muscle' },
+    fixer:    { name: 'The Fixer',       muscle: 4, cunning: 7, speed: 4, boost: 'cunning' },
+  }],
   // THE MENTOR (omerta-first-contact-and-events-design.md) — MILESTONES is the one faucet (sim + BALANCE.md)
   ['MENTOR.MIN_LVL', 20],
   ['MENTOR.PROTEGE_MAX_LVL', 10],

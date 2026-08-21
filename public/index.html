@@ -2745,6 +2745,8 @@
       body.stolen !== undefined || body.cut !== undefined || body.taken !== undefined || body.hospSeconds !== undefined ||
       (body.win === false && body.dmg !== undefined);
     if (body.rerolled && body.stats) bits.push(`new build rolled — muscle ${body.stats.muscle} / cunning ${body.stats.cunning} / speed ${body.stats.speed}`);
+    // THE WALLET FORGE — `forged` + `stats` is this reply's own shape (nothing else sends `forged` on an action)
+    if (body.forged && body.stats) bits.push(`🔥 ${body.name ? `the ledger names you ${txt(body.name)}` : 'the ledger is silent — an ordinary hand rolled'} — muscle ${body.stats.muscle} / cunning ${body.stats.cunning} / speed ${body.stats.speed}${body.bonus ? ` (+${body.bonus} forged into the strong suit)` : ''}${body.spentCredit ? ' · one re-roll credit spent' : ''}`);
     if (body.proposedTo) bits.push(`🕊 you offered a sit-down to the ${body.proposedTo} bloodline`);
     if (body.peaceWith) bits.push(`🕊 the feud with ${body.peaceWith} is BURIED — peace`);
     if (body.success === true && body.take !== undefined) bits.push(`${body.approach === 'loud' ? '🔊 loud job' : body.approach === 'quiet' ? '🤫 quiet job' : 'clean job'} — $${fmt(body.take || 0)}${body.rep ? `, +${body.rep} respect` : ''}${body.crates ? `, ${body.crates} crate${body.crates > 1 ? 's' : ''}` : ''}${body.victim ? ` · the mark: ${body.victim}${body.markTook ? ` (took $${fmt(body.markTook)} off them)` : ''}` : ''}`);
@@ -4557,7 +4559,7 @@
       <div class="row stathelp" data-stathelp="health" title="Tap for how to heal up."><span class="k">${T('k_health')} <i class="ihint">ⓘ</i></span><span>${me.health}/100</span></div>${bar('health', me.health, 100)}
       <div class="row stathelp" data-stathelp="heat" title="Tap for how to cool off."><span class="k">${T('k_heat')} <i class="ihint">ⓘ</i></span><span>${me.heat}</span></div>${bar('heat', me.heat, 100)}
       <div class="row"><span class="k">${T('k_stats')}</span><span>${me.eff.muscle} / ${me.eff.cunning} / ${me.eff.speed}</span></div>
-      <div class="row"><span class="k">base build <span class="d" style="font-size:10px">(rolled at birth · total ${me.statTotal ?? 15})</span></span><span>${me.stats.muscle} / ${me.stats.cunning} / ${me.stats.speed}
+      <div class="row"><span class="k">base build <span class="d" style="font-size:10px">(${me.forgedName ? `forged: ${me.forgedName}` : 'rolled at birth'} · total ${me.statTotal ?? 15})</span></span><span>${me.stats.muscle} / ${me.stats.cunning} / ${me.stats.speed}
         ${me.rerollCredits > 0 ? `<button class="act" id="reroll-go" style="font-size:10px;padding:1px 5px">re-roll (${me.rerollCredits})</button>` : ''}</span></div>
       <div class="row"><span class="k">${T('k_gun')}</span><span>${me.gun || '—'}</span></div>
       <div class="row"><span class="k">${T('k_ammo')}</span><span>${fmt(me.ammo)} / ${fmt(me.cb)}</span></div>
@@ -9130,6 +9132,8 @@
       api('GET', '/v1/brokers'), api('GET', '/v1/drop'),
       api('GET', '/v1/provenance'),
     ]);
+    const fgR = await api('GET', '/v1/forge');
+    const fg = fgR.body || {};
     const vault = vaultR.body || {}, bd = bdR.body || {};
     const win = winR.body || {}, yld = yldR.body || {};
     const wd = wdR.body || {}, bk = bkR.body || {};
@@ -9226,6 +9230,24 @@
         ? `<span class="t">Linked <span class="chip good">${me.wallet.slice(0, 6)}…${me.wallet.slice(-4)}</span></span><div class="d">on-chain extraction is unlocked (mainnet rail is dormant until launch)</div>`
         : `<span class="t">No wallet linked</span><div class="d">sign a one-time challenge to link it — MetaMask, Coinbase, Trust, Rabby, Phantom, Crypto.com, Robinhood Wallet or any other browser wallet${rules?.walletConnect ? ', or scan the QR with a wallet on your phone (WalletConnect)' : ''}. Nothing leaves your wallet; it just proves the address.</div>
            <button class="act" id="wallet-link" style="border-color:var(--neon)">connect &amp; sign</button>`}</div>
+
+      ${fg.available ? `
+      <h2 style="margin-top:12px">The Forge <span class="d" style="font-size:11px">(your wallet's history shapes the build — once per wallet, ever)</span></h2>
+      <div class="card">
+        ${fg.forged
+          ? `<span class="t">Ledger-born: <b style="color:var(--neon)">${fg.archetypes?.[fg.forged]?.name || 'an unknown hand'}</b></span>
+             <div class="d">this street's build was forged from a wallet's history — the shape is yours for life.</div>`
+          : !fg.linked
+            ? `<div class="d">Link a wallet above and the forge reads its <b>history</b> — how old it is, how much it has worked —
+               and casts your build as an archetype on the <b>same fixed budget</b> every roll gets,
+               plus up to <b>+${fg.bonusMax}</b> on the archetype's strong suit. Never a balance read; never twice per wallet.</div>`
+            : fg.walletForged
+              ? `<div class="d">This wallet already forged a build — one forge per wallet, <b>ever</b>. A fresh street can still roll the ordinary way.</div>`
+              : `<div class="d">The forge reads your wallet's <b>age and mileage</b> — never a balance — and casts the build as an archetype
+                 on the same fixed budget every roll gets, plus up to <b>+${fg.bonusMax}</b> on its strong suit. Once per wallet, ever.
+                 ${fg.free ? '<b>Free at your level.</b>' : `Past level ${fg.freeLvl} it takes one paid re-roll credit (you hold ${fg.rerollCredits}).`}</div>
+                 <button class="act" id="forge-go" data-do="POST /v1/character/forge" data-confirm="Forge your build from this wallet's history? It replaces your current base stats, and the wallet can never forge again." style="border-color:var(--neon)">forge the build</button>`}
+      </div>` : ''}
 
       ${dr.announced ? `
       <h2 style="margin-top:12px">The Envelope <span class="d" style="font-size:11px">(the community drop — wallets the snapshots saw claim in-game $OMR, once, ever)</span></h2>
@@ -10219,6 +10241,7 @@
       // ── the chain & the store
       made: () => `YOU'RE MADE — the city knows your name now`,
       rerolled: () => `a new hand dealt — your build is re-rolled`,
+      forged: () => `the ledger speaks — ${d.name ? `born ${d.name}` : 'a build rolled from an unknown hand'}${d.bonus ? ` (+${d.bonus} on the strong suit)` : ''}`,
       fee_credited: () => `your ${String(d.kind || '').replace(/_/g, ' ')} payment landed`,
       store_grant: () => `${d.name} is yours`,
       // ── the world

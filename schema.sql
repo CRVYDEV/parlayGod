@@ -3572,3 +3572,23 @@ ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS drop_free_mint BOOLEAN N
 -- FOREVER (§9.4). Both are ALTERs — account_persistent is an existing table (the boot-crash lesson).
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS provenance TEXT;
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS provenance_pick INT;
+
+-- ── THE WALLET FORGE (founder-signed 2026-08-21, depth B — omerta-wallet-forged-stats-design.md §6) ──
+-- The once-per-wallet-EVER latch: a wallet's history forges exactly ONE build, whoever links it
+-- later. Stores ONLY the archetype + banded tiers + bonus — never a raw balance, tx count or age
+-- (the anti-precise-kill-EV rule: the band leaves the reader, the feature does not). Keyed by the
+-- LOWERCASED wallet (the SIWE storage case), account-keyed for the record → no character_id, so it
+-- sits outside the death-disposition guard by construction (a forge outlives the street).
+CREATE TABLE IF NOT EXISTS wallet_rolls (
+  wallet     TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  archetype  TEXT NOT NULL,               -- WALLET_FORGE.ARCHETYPES key, or 'unknown' (random roll)
+  age_tier   INT NOT NULL,
+  vel_tier   INT NOT NULL,
+  bonus      INT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- The forged archetype on the living street (display + the view's `forged` field). Direct-SQL
+-- (off persistCharacter's positional list → clobber-safe); dies with the street — the heir rolls
+-- or forges their own. characters is an EXISTING table, so an ALTER (the boot-crash lesson).
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS forged TEXT;

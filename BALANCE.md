@@ -6296,3 +6296,30 @@ scarcity and would also break the arbitrage board, convoy manifest values, the T
 and a signed §7.11 surface. And nothing here is ever marketed as scarce-and-appreciating — the deeds
 doc's §6 rule stands: the map grows, the objects are described as what they are, never as what they
 might be worth.
+
+## § THE LEDGER-BORN (THE WALLET FORGE, depth B — founder-signed 2026-08-21)
+
+The founder signed depth B of `omerta-wallet-forged-stats-design.md` §6: a SIWE-proven wallet's
+on-chain history forges the living build — an ARCHETYPE shape on the same `CREATE_STAT_TOTAL` (15)
+budget every random roll gets, PLUS a banded bonus of up to `WALLET_FORGE.BONUS_MAX` (3) points on
+the archetype's boost stat. **This is a bounded, deliberate retirement of "outside wealth must not
+buy power" ON THE STAT LAYER ONLY**, and the bounds are the sign-off:
+
+| lever | ships at | what it bounds |
+|---|---|---|
+| `WALLET_FORGE.BONUS_MAX` | 3 | the ONLY stat power a wallet can ever buy — +20% of the 15-point base, once, ever; 0 reverts depth B to shape-only (depth A) |
+| `WALLET_FORGE.FREE_LVL` | 5 | at/below: free (an onboarding identity moment); above: consumes a paid reroll credit (the fees.js 0.01-ETH rail) |
+| `WALLET_FORGE.AGE_TIERS_DAYS` | [365, 1095] | wallet-age bands (1y/3y) — age is unfakeable after the fact |
+| `WALLET_FORGE.VELOCITY_TIERS` | [20, 200, 1000] | lifetime tx-count bands — each unit cost real gas |
+| `WALLET_FORGE.ARCHETYPES` | 4 shapes | each load-guarded to sum exactly `CREATE_STAT_TOTAL` — the wallet decides the SHAPE, never the budget |
+
+**Why it is Sybil-neutral by construction:** the latch is ONCE PER WALLET, EVER (`wallet_rolls`,
+lowercased-wallet PK), so wallet-shopping needs a fresh AGED, WORKED wallet per attempt — the
+features are chosen by cost-to-fake (age cannot be manufactured after the announcement; tx count
+costs gas per unit; balances are deliberately never read, because a balance is borrowable the block
+before the call). A farmed fresh wallet maps to `unknown` and earns an ordinary random roll — zero
+bonus, zero edge. The gym out-trains the whole bonus in a day (~40 pts/hr vs a once-ever +3), so
+the grant is an IDENTITY moment, not a power curve — but it IS power bought with an outside asset,
+which is why it is a founder-signed lever and not a status axis. §10.4: zero surface (no currency
+moves; the forge writes no `transactions` row — test-pinned in `test/walletforge.js`). Only the
+BANDS are stored, never the raw features (the anti-precise-kill-EV rule on a permanent table).
