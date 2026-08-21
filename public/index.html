@@ -1731,17 +1731,22 @@
         <span class="d">${esc(r.note || '')}</span><span class="v">${esc(r.val ?? '')}</span></div>`).join('')}</div>`
     : `<p class="dim">${esc(empty)}</p>`;
   // the confirm. `danger` styles it as the irreversible thing it is.
-  function ask(title, body, { yes = 'do it', no = 'back off', danger = false } = {}) {
+  // `alt` adds an optional THIRD choice resolving to the string 'alt' — for the one case where a
+  // dialog has two real answers rather than one (sign out HERE vs sign out EVERYWHERE), because a
+  // second chained dialog makes the rarer, more urgent answer the harder one to reach.
+  function ask(title, body, { yes = 'do it', no = 'back off', danger = false, alt = null } = {}) {
     return new Promise((resolve) => {
       const { bg, close } = dialog(
         `<h2 style="${danger ? 'color:var(--bad)' : ''}">${esc(title)}</h2>
          <p class="dim" style="white-space:pre-line">${esc(body)}</p>
-         <div style="margin-top:15px;display:flex;gap:8px;justify-content:flex-end">
+         <div style="margin-top:15px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
            <button class="act" data-no>${esc(no)}</button>
+           ${alt ? `<button class="act risk" data-alt>${esc(alt)}</button>` : ''}
            <button class="act ${danger ? 'risk' : 'prime'}" data-yes>${esc(yes)}</button></div>`);
       let done = false;
       const fin = (v) => { if (done) return; done = true; close(); resolve(v); };
       bg.querySelector('[data-yes]').onclick = () => { haptic('tap'); fin(true); };
+      bg.querySelector('[data-alt]')?.addEventListener('click', () => { haptic('tap'); fin('alt'); });
       bg.querySelector('[data-no]').onclick = () => fin(false);
       bg.addEventListener('click', (e) => { if (e.target === bg) fin(false); });
       setTimeout(() => bg.querySelector('[data-no]')?.focus(), 30);
@@ -2561,8 +2566,21 @@
         : `paid ${fmt(body.omrSpent)} $OMR — the ${body.kind} is settled`;
     if (body && body.unbonding !== undefined && body.unbondSeconds !== undefined)
       return `unstaking ${fmt(body.unbonding)} $OMR — it unbonds over ${minsTxt(body.unbondSeconds)}, and it can be LOOTED off you the whole time${body.rewards ? ` · ${fmt(body.rewards)} $OMR rewards paid` : ''}${body.stillPending ? ` (${fmt(body.stillPending)} still owed — the pool refills)` : ''}`;
-    if (body && body.staked !== undefined && body.ok && body.unbonding === undefined)
-      return `staked — ${fmt(body.staked)} $OMR at work, and safe from a killer's hands`;
+    // THE VAULT CARD says "cheaper cover, not a safe harbour", the SERVER's own published note says
+    // "but nothing is safe", and the rules file says "NEVER safe" in those words — and THIS line, the
+    // one a player reads the second the money moves, said the opposite: "safe from a killer's hands".
+    // Economy v3 step 5 reversed that deliberately (a protected tier would be a fourth way for $OMR to
+    // move, which §4.1 admits no room for), so the toast was a fluent, confident, FALSE claim about the
+    // player's money — worse than silence, because a player stakes on it BELIEVING it. Its own sibling
+    // one branch up has told the truth about unbonding since an earlier wave. The rates come off the
+    // live `rules.loot` rather than being restated, so a retune cannot leave the line behind.
+    if (body && body.staked !== undefined && body.ok && body.unbonding === undefined) {
+      const lt = rules?.loot || {};
+      const cover = (lt.omrIdle && lt.omrCommitted)
+        ? ` — a killer takes ${Math.round(lt.omrCommitted * 100)}% of a staked balance against ${Math.round(lt.omrIdle * 100)}% of a loose one, so it's cheaper cover, never safe`
+        : ' — cheaper cover from a killer, never safe';
+      return `staked — ${fmt(body.staked)} $OMR at work${cover}`;
+    }
     // ROLLED is what the box added; AMMO is what you are carrying. They were one field rendered as a
     // total, so a player holding 55 was told 30 — the number you check before a hit. Both are stated,
     // and so is the price: ammo and guns are the only two purchases that spend a second currency.
@@ -3905,10 +3923,26 @@
     // forever. (A real player's alpha-critical bug: "burn the papers" read like a gameplay action,
     // logged them out, and lost the character to limbo.) Warn hard for guests; confirm for everyone.
     const guest = !session || session.provider === 'guest';
+    // THIS BUTTON ONLY EVER SIGNED OUT THIS DEVICE — it drops the token from localStorage and never
+    // touches the server, so a player whose session was stolen pressed it and THE THIEF KEPT PLAYING.
+    // The control that actually kills a stolen session (`POST /v1/auth/logout-all`, which bumps
+    // token_version and cuts the live sockets) was built and red-teamed twice and had NO BUTTON
+    // ANYWHERE — the orphan-route class inverted, on a security control, where the whole point of a
+    // self-serve revocation is that a compromised player can reach it themselves. Both are offered
+    // now, and the plain one says what it does rather than letting the player assume the other.
     const msg = guest
       ? "Sign out?\n\nYou're playing as a GUEST — this account has no login, so signing out will lose this street for good (there's no way back to it).\n\nTo keep it, cancel and use \"claim your account\" on The Sheet first."
-      : 'Sign out of this account?';
-    if (!await ask(guest ? 'Burn the papers?' : 'Sign out?', msg, { yes: guest ? 'lose this street' : 'sign out', no: 'stay', danger: guest })) return;
+      : "Sign out of this account?\n\nThis signs out THIS device only. If someone else has your session, use \"everywhere\" — it kills every signed-in device, cuts them off mid-move, and you sign back in fresh.";
+    const answer = await ask(guest ? 'Burn the papers?' : 'Sign out?', msg,
+      { yes: guest ? 'lose this street' : 'sign out here', no: 'stay', danger: guest,
+        alt: guest ? null : 'everywhere' });
+    if (!answer) return;
+    if (answer === 'alt') {
+      // Only clear on a CONFIRMED revoke. Telling a worried player their sessions are dead when the
+      // call failed is the worst possible lie on this particular button.
+      const r = await api('POST', '/v1/auth/logout-all');
+      if (r.code >= 400) { toast(ERRMAP[r.body?.error] || 'couldn’t reach the city to kill those sessions — try again', true); return; }
+    }
     localStorage.removeItem('omerta_token'); location.reload();
   };
   $('#btn-refresh').onclick = () => refresh();

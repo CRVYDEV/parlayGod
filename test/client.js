@@ -325,9 +325,15 @@ const NOT_API = new Set([
   'label',      // heroBand()'s stat label — the render caption under the big number, never sent
 ]);
 // `field: 'value'` (deck bodies, JS objects) and `"field":"value"` (data-body attributes).
+// A TERNARY's colon looks exactly like a key's: `alt: guest ? null : 'everywhere'` contains the
+// substring `null : 'everywhere'`, which this pattern reads as a field called `null`. The JS
+// keywords that can appear on a ternary's true-branch are never field names in this codebase, so
+// dropping them removes the false positive without weakening what the check sees — the recorded
+// ternary-extraction class, which has now bitten checks 1, 4 and this one.
+const KEYWORD_LHS = new Set(['null', 'undefined', 'true', 'false']);
 const literals = [];
-for (const m of html.matchAll(/([a-zA-Z_]+)\s*:\s*'([a-z0-9_]+)'/g)) literals.push([m[1], m[2]]);
-for (const m of html.matchAll(/"([a-zA-Z_]+)"\s*:\s*"([a-z0-9_]+)"/g)) literals.push([m[1], m[2]]);
+for (const m of html.matchAll(/([a-zA-Z_]+)\s*:\s*'([a-z0-9_]+)'/g)) if (!KEYWORD_LHS.has(m[1])) literals.push([m[1], m[2]]);
+for (const m of html.matchAll(/"([a-zA-Z_]+)"\s*:\s*"([a-z0-9_]+)"/g)) if (!KEYWORD_LHS.has(m[1])) literals.push([m[1], m[2]]);
 
 const checked = [], skipped = new Set(), bogus = [];
 for (const [field, value] of literals) {
@@ -594,6 +600,33 @@ for (const [method, path, field, why] of ASK_THE_PLAYER) {
     `spends the search, the energy, the ammo and the cooldown, and does nothing.`);
   for (const [, , keys] of hits) assert(keys.includes(field),
     `the ${method} ${path} control sends ${JSON.stringify(keys)} and NOT '${field}' — ${why}.`);
+}
+
+// ── 3c. THE SELF-SERVE REVOCATION MUST HAVE A BUTTON ────────────────────────────────────────────
+// The orphan-route class INVERTED: not a control that calls a route the server never mounted, but a
+// route the server mounts that NO control ever reaches. `POST /v1/auth/logout-all` bumps
+// token_version and cuts the live sockets — it is the answer to "someone has my session" — and it
+// was built, red-teamed twice, and had no button anywhere in the game. Meanwhile the button that
+// LOOKS like it does that job only dropped the token from localStorage, so a player whose session
+// was stolen pressed sign-out and the thief kept playing.
+//
+// A NAMED regression rather than a sweep, for the FIRE reason: most unbuttoned routes are legitimate
+// (mod, chain, and the raw Console covers them by design), so a general "every route needs a button"
+// check would be mostly waivers. What makes this one different is that it is a SECURITY control
+// whose entire premise is that a compromised player can reach it themselves — the Console is not an
+// answer for someone who is being locked out. Anchored on the sign-out handler specifically, because
+// "reachable from the raw deck" would satisfy a laxer check and miss the whole point.
+{
+  const i = html.indexOf("$('#btn-logout').onclick");
+  assert(i > -1, 'the sign-out control moved — this regression is vacuous. Find it and re-anchor.');
+  const handler = html.slice(i, html.indexOf("$('#btn-", i + 30));
+  assert(/\/v1\/auth\/logout-all/.test(handler),
+    'the sign-out handler never calls POST /v1/auth/logout-all — so the ONLY control a player can ' +
+    'reach kills this device and leaves a stolen session live. The revocation route exists; give it ' +
+    'a button here, or a compromised player has no self-serve way to cut the thief off.');
+  assert(/\balt\s*:/.test(handler),
+    'the sign-out dialog offers no third choice, so "everywhere" is unreachable from it. A second ' +
+    'chained dialog is not a fix: it makes the rarer, MORE URGENT answer the harder one to reach.');
 }
 
 // ── 4. every field the client READS must be one its route actually returns ───────────────────────
@@ -2360,6 +2393,16 @@ const ACTIONS = [
   ['POST', '/v1/gangs/tribute/omr', { amount: 400 }],
   ['POST', '/v1/gangs/foundation', null],
   ['POST', '/v1/gangs/vanity/name', { name: 'Ledger Two ' + Math.random().toString(36).slice(2, 5), tag: 'LD2' }],
+  // THE VAULT, and it is here because NEITHER stake NOR unstake was ever driven — which is exactly
+  // how the stake line survived every wave of this sweep saying "safe from a killer's hands" while
+  // the Vault card one screen over said "cheaper cover, not a safe harbour", the server's own
+  // published note said "but nothing is safe", and the rules file said "NEVER safe" in those words.
+  // Economy v3 step 5 reversed the protected tier on purpose. A fluent, confident, FALSE claim about
+  // the player's money is worse than silence, because a player stakes on it BELIEVING it — and no
+  // silence pattern can see it. An earlier wave fixed the UNSTAKE line by inspection; driving is
+  // what found its neighbour. $OMR from the tribute rows above.
+  ['POST', '/v1/stake', { amount: 25 }],
+  ['POST', '/v1/unstake', null],
   // DECLARING WAR said "done." — the loudest thing a boss can do, in a block where the pact, the
   // treaty and the oathbreak all state their terms in full. Resolved at drive time because the
   // TARGET has to be chosen against live state: the seeded rival is under a sworn pact with the
@@ -3751,6 +3794,26 @@ assert(upgLine && /\u{1F3D9}/u.test(upgLine) && upgLine.includes(asMoney(upgBody
   assert(fnd.nextFoundation && fLine.includes(fmtLike(fnd.nextFoundation.omr)),
     `and what the next rung costs (${fnd.nextFoundation?.omr}), so the ladder is visible from `
     + `the rung you just bought. Got: ${JSON.stringify(fLine)}`);
+}
+// THE VAULT — a line that is not silent but FALSE, which is the class no silence pattern can see.
+// The rates are asserted against the SERVER's own published `rules.loot` rather than against the
+// numbers, so a founder retune moves the assertion with the game; and the prohibition is separate
+// from the statement, because a line could drop the claim and still say nothing useful.
+{
+  const stLine = said.get('/v1/stake'), st = paidBody.get('/v1/stake');
+  assert(st && st.staked > 0, 'the stake row must actually have staked for this to test anything — '
+    + 'a refused row reads on the summary line exactly like a covered one');
+  assert(!/\bsafe\b(?!\w)/i.test(stLine.replace(/never safe|not safe|cheaper cover, never safe/gi, '')),
+    'staking is CHEAPER COVER, never safety — the Vault card, the server\'s published note and the '
+    + `rules file all say so, and this line said the opposite. Got: ${JSON.stringify(stLine)}`);
+  const lootIdle = Math.round((rulesBody.loot?.omrIdle ?? 0) * 100);
+  const lootComm = Math.round((rulesBody.loot?.omrCommitted ?? 0) * 100);
+  assert(lootIdle > lootComm && lootComm > 0,
+    'this block is meaningless unless a staked balance really is looted LESS than a loose one and '
+    + `still looted at all — got committed ${lootComm}% against idle ${lootIdle}%`);
+  assert(stLine.includes(String(lootComm)) && stLine.includes(String(lootIdle)),
+    'and it has to state the real relation off the live rates rather than a mood — a player deciding '
+    + `whether to commit needs both numbers. Expected ${lootComm}/${lootIdle}, got: ${JSON.stringify(stLine)}`);
 }
 // and the CLUB's own line, driven on its own token in the wave-10 block, must still read as the club
 assert((said.get('/v1/speakeasy/upgrade') || '').includes('\u{1F37E}'),

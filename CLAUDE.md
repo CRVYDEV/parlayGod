@@ -15332,6 +15332,60 @@ the mutation that proves it. Two more (drop `reserve`, drop `nextFoundation`) ea
 Suite green, sim drift-0, mobile 81/81, pgquery 2982 statements, **pgcheck 47/47 on a FRESH real
 Postgres** (both server modules changed). Driven actions 221 → 224.
 
+**WAVE 52 — A LINE THAT WAS FLUENT, CONFIDENT AND FALSE ABOUT THE PLAYER'S MONEY, AND A SECURITY
+CONTROL WITH NO BUTTON (`public/index.html` + `test/client.js`, 2026-08-21).** Kept playing, into the
+Vault and out through the top bar. Two findings, and neither is the mute class the last dozen waves
+have been sweeping — one says something and it is WRONG, and the other is the orphan-route class
+INVERTED.
+
+**THE STAKE TOAST PROMISED SAFETY THE ECONOMY DELIBERATELY REVERSED.** It read *"staked — 25 $OMR at
+work, and safe from a killer's hands"* — and **four separate surfaces say the opposite in the game's
+own words**: the Vault card one screen over (*"cheaper cover, not a safe harbour"*), the server's
+published note on `/v1/rules` (*"a staked balance is COMMITTED and is looted less — but nothing is
+safe"*), the rules file at the constant itself (*"less exposed, NEVER safe"*), and both codices.
+Economy v3 step 5 retired the protected tier ON PURPOSE — §4.1 admits no fourth way for $OMR to move,
+so a safe harbour would have been exactly that — and the toast was never moved with it. **This is the
+worst class in the sweep and the one no silence pattern can see**: a mute line is a player told
+nothing, while this is a player told the wrong thing *at the moment the money moves*, who then stakes
+BELIEVING it. Its own sibling one branch up has told the truth about unbonding since an earlier wave.
+Fixed to state the real relation — *"a killer takes 20% of a staked balance against 50% of a loose
+one, so it's cheaper cover, never safe"* — with both rates read off the live `rules.loot` rather than
+restated, so a founder retune moves the line with the game.
+
+**WHY IT SURVIVED EVERY EARLIER WAVE IS THE ROOT CAUSE, and it is a lesson about the guard rather than
+the game: NEITHER `/v1/stake` NOR `/v1/unstake` HAD EVER BEEN DRIVEN.** An earlier wave fixed the
+UNSTAKE line by INSPECTION — reading the branch and correcting it — and its neighbour, three lines
+away, was never read. Both are in the ACTION LEDGER now, which is the only reason this was found at
+all. *Inspection fixes the line you are looking at; driving is what finds the one beside it.*
+
+**AND THE SELF-SERVE SESSION REVOCATION HAD NO BUTTON ANYWHERE.** `POST /v1/auth/logout-all` bumps
+`token_version` and cuts the live sockets — it is the answer to *"someone has my session"*, built and
+red-teamed twice — and **nothing in the game reached it**. Meanwhile the control that LOOKS like it
+does that job only dropped the token from localStorage and never touched the server, so a player whose
+session was stolen pressed sign-out and **the thief kept playing**. The orphan-route class inverted, on
+a security control, where the entire premise is that a compromised player can reach it THEMSELVES —
+the raw Console is not an answer for somebody being locked out. Both are offered now (`ask()` gained an
+optional third choice rather than chaining a second dialog, because chaining makes the rarer and MORE
+URGENT answer the harder one to reach), the plain one now SAYS it is this device only rather than
+letting the player assume otherwise, and the local token is cleared **only on a confirmed revoke** — a
+failed call telling a worried player their sessions are dead is the worst possible lie on that
+particular button.
+
+**THE GUARD IS A NAMED REGRESSION (check 3c), for the FIRE reason.** Most unbuttoned routes are
+legitimate — mod, chain, and the raw Console covers them by design — so a general "every route needs a
+button" sweep would be mostly waivers, which is the shape this file calls worse than no check. What
+makes this one different is that it is a SECURITY control, so it is anchored on the sign-out handler
+specifically: *reachable from the raw deck* would satisfy a laxer check and miss the whole point.
+
+**One extractor bug of my own, and it is the ternary class for the third time.** The catalog check
+reads `key: 'value'` pairs out of the client, and `alt: guest ? null : 'everywhere'` contains the
+substring `null : 'everywhere'` — read as a field called `null`. It has now bitten checks 1, 4 and the
+catalog check; the fix drops the four JS keywords that can sit on a ternary's true-branch and are never
+field names here, which removes the false positive without weakening what the check sees. Verified end
+to end in real Chromium (the guest dialog correctly offers NO "everywhere"; the provider dialog offers
+all three; `token_version` really moved 0 → 1; zero page errors). Four mutations, four distinct named
+failures. Suite green, sim drift-0, mobile 81/81. Driven actions 224 → 226.
+
 **THE LAUNCH-NIGHT DRESS REHEARSAL — the second kind of scenery (founder-directed 2026-08-20: "Launch
 dress rehearsal").** The runbook existed; nobody had walked it. The value was in executing it as a
 FIRST PLAYER against the live box rather than reading it: the door, signup, the first ten minutes, and
