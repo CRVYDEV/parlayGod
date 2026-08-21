@@ -202,8 +202,10 @@ const SECTIONS = [
       <b>in-game items are lootable; extracted NFTs are safe, and inert</b>. An extracted car is an ERC-1155 in your own
       wallet — nobody can steal it, win it in a pink-slip race, chop it off your corpse or take it in a war, and it
       <b>survives your death</b> and passes down the bloodline. In exchange it never races, hauls, melts, fences or
-      earns again. Use it or own it; you cannot do both, and there is no way back. You must be MADE to take anything
-      on-chain.</p>
+      earns again while it stays on-chain. The door swings both ways: whoever <b>holds</b> the NFT — you, or whoever
+      bought it on a marketplace — can <b>burn it (redeem)</b> from their wallet, and the real thing comes back into
+      play on <i>their</i> account, fresh and stock (tune, trim and damage do not make the trip; gear is one-way and
+      stays a trophy). You must be MADE to take anything on-chain.</p>
       ${R(`POST /v1/garage/boost · /garage/:carId/melt|fence|repair · /armory/gun/:id/buy|equip · /armory/ammo · /workshop/craft/:id · GET /v1/nft · POST /v1/nft/:kind/:id/upgrade|withdraw`)}` },
 
   { id: 'city', group: 'The Basics', title: 'The City & the Living World', tag: 'events, weather, districts, NPC families',

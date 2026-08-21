@@ -163,11 +163,20 @@ assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM tra
 
 // ── gear-mint voucher (not reserve-bounded; contract caps supply) ──
 await pool.query(`UPDATE account_persistent SET omr = omr + 10 WHERE account_id = (SELECT account_id FROM characters WHERE id='${cid}')`);
+// EXTRACTED GEAR LEAVES PLAY — the RARITY tradeoff ("keep it in-game to use it (losable) or extract
+// it on-chain (safe + tradeable, but it leaves play)"), enforced at the ONE loadOwned filter. Before
+// that filter, extraction was strictly free upside: loot-immune AND still boosting every till.
+const effBase = (await meOf(token)).eff.muscle;
 await call('POST', '/v1/gear/knuckles/mint', { token }); // own the gear in-game first
+const effGeared = (await meOf(token)).eff.muscle;
+assert(effGeared > effBase, 'in-game knuckles boost muscle (the catalog boost reaches effStat)');
 r = await call('POST', '/v1/gear/knuckles/withdraw', { token });
 assert.equal(r.code, 200, 'gear withdraw signs'); assert.equal(r.body.status, 'signed');
 assert(r.body.voucher.kind === 1 && BigInt(r.body.voucher.gearId) > 0n, 'gear voucher: kind 1, nonzero gearId');
 assert.equal((await pool.query(`SELECT minted_onchain FROM account_gear WHERE gear_id='knuckles'`)).rows[0].minted_onchain, true, 'gear marked on-chain');
+assert.equal((await meOf(token)).eff.muscle, effBase, 'EXTRACTED gear boosts NOTHING — it left play, exactly as the tradeoff promises');
+const remint = await call('POST', '/v1/gear/knuckles/mint', { token });
+assert.equal(remint.body.error, 'extracted', 'a re-mint of an extracted piece is refused HONESTLY — it left play; "you already hold it" would be a lie');
 assert.equal((await call('POST', '/v1/gear/knuckles/withdraw', { token })).code, 400, 'no double-mint of the same gear');
 
 // ── Claimed watcher core: marking a nonce claimed frees its reserve ──

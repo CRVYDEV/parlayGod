@@ -240,7 +240,13 @@ export async function loadOwned(client, ch) {
     UNION ALL SELECT 'as', asset_id, NULL::text, NULL::numeric, NULL::numeric, NULL::timestamptz FROM character_assets WHERE character_id=$1
     UNION ALL SELECT 'cargo', good_id, NULL::text, qty::numeric, NULL::numeric, NULL::timestamptz FROM character_cargo WHERE character_id=$1 AND qty>0
     UNION ALL SELECT 'items', item_id, NULL::text, qty::numeric, NULL::numeric, NULL::timestamptz FROM character_items WHERE character_id=$1 AND qty>0
-    UNION ALL SELECT 'gear', gear_id, NULL::text, NULL::numeric, NULL::numeric, NULL::timestamptz FROM account_gear WHERE account_id=$2
+    -- gear splits IN-PLAY vs EXTRACTED (the owned.cars/nftCars pattern): an extracted piece is on the
+    -- player's own ERC-1155 and has LEFT PLAY (rules.tail RARITY: "keep it in-game to use it (losable)
+    -- or extract it on-chain (safe + tradeable, but it leaves play)") — before this split, extracted
+    -- gear still fed effStat at every till, making extraction strictly free upside. The extracted list
+    -- still matters: the account_gear row STAYS (PK-occupied), so re-mint and kill-loot must see it.
+    UNION ALL SELECT 'gear', gear_id, NULL::text, NULL::numeric, NULL::numeric, NULL::timestamptz FROM account_gear WHERE account_id=$2 AND NOT minted_onchain
+    UNION ALL SELECT 'gearnft', gear_id, NULL::text, NULL::numeric, NULL::numeric, NULL::timestamptz FROM account_gear WHERE account_id=$2 AND minted_onchain
     UNION ALL SELECT 'guns', gun_id, NULL::text, NULL::numeric, NULL::numeric, NULL::timestamptz FROM character_guns WHERE character_id=$1
     UNION ALL SELECT 'gm', gang_id, role, NULL::numeric, NULL::numeric, joined_at FROM gang_members WHERE character_id=$1
     UNION ALL SELECT 'mk', drug_id, NULL::text, qty::numeric, NULL::numeric, NULL::timestamptz FROM makings WHERE character_id=$1 AND qty>0
@@ -310,6 +316,7 @@ export async function loadOwned(client, ch) {
   const cargo = of('cargo', (r) => ({ good_id: r.k, qty: n(r.n) }));
   const items = of('items', (r) => ({ item_id: r.k, qty: n(r.n) }));
   const gear = of('gear', (r) => ({ gear_id: r.k }));
+  const gearnft = of('gearnft', (r) => ({ gear_id: r.k })); // extracted — out of play, but the PK slot is still held
   const guns = of('guns', (r) => ({ gun_id: r.k }));
   const gm = of('gm', (r) => ({ gang_id: r.k, role: r.k2, joined_at: r.ts }));
   const mk = of('mk', (r) => ({ drug_id: r.k, qty: n(r.n) }));
@@ -423,6 +430,7 @@ export async function loadOwned(client, ch) {
     nftCars: cars.rows.filter((c) => c.minted_onchain), // out of play: the board renders them, nothing else may touch them
     cargo: cargoMap(cargo.rows), items: itemMap(items.rows),
     gear: idList(gear.rows, 'gear_id'), guns: idList(guns.rows, 'gun_id'),
+    gearOnchain: idList(gearnft.rows, 'gear_id'), // extracted gear: boosts nothing, but blocks a re-mint and dedupes kill-loot (the row still holds the PK)
     gangId, gangRole: gm.rows[0]?.role || null, gangJoinedAt: gm.rows[0]?.joined_at || null, gang, held,
     deedPerk, deedSeat, // STREET DEEDS 2C — controlled-corner districts (turf perk) + the own-corner op seat
     crewId,   // THE CREW — the non-aggression gate reads this off owned/victimOwned (combat.js)

@@ -344,9 +344,11 @@ export async function requestGearWithdraw(pool, accountId, gearId, toAddress) {
 // capped ON-CHAIN per tokenId, so the wall is GearVault's `cap` rather than a funded tranche.
 //
 // The trade, stated once because it is the mechanic: the item LEAVES PLAY. It stops racing, hauling,
-// melting and being stolen, and in exchange it stops dying with the street. Nothing here reverses
-// that — there is no un-extract route, exactly as there is none for gear, because the token exists
-// in the player's own wallet the moment they claim it and the game cannot take it back.
+// melting and being stolen, and in exchange it stops dying with the street. Nothing HERE reverses
+// that — the game can never take the token back — but the way home exists and is the HOLDER's own
+// act: burn it (GearVault.redeem, cars/boats only — gear is one-way) and `reimportItem` lands a
+// fresh stock instance on the burner's living character, secondary buyer included
+// (omerta-nft-reimport-design.md; the founder-directed Option A pivot).
 export async function requestItemWithdraw(pool, accountId, kind, itemId, toAddress) {
   const k = nftKind(kind);
   if (!k) throw new GameError('bad_kind', 'Nothing of that sort to take on-chain.');

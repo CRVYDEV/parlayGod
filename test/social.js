@@ -1228,6 +1228,19 @@ assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM account_gear WHERE
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM account_gear WHERE account_id='${garyAcct}' AND gear_id='knuckles'`)).rows[0].n), 0, 'the victim lost it');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM account_gear WHERE account_id='${donAcct}' AND gear_id='brasspin'`)).rows[0].n), 0, 'the on-chain gear was NOT looted — it left the game, out of reach');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM account_gear WHERE account_id='${garyAcct}' AND gear_id='brasspin' AND minted_onchain`)).rows[0].n), 1, 'the extracted piece stays with the bloodline account, safe');
+// ── the dedupe must see the killer's EXTRACTED gear — the row still holds the (account, gear) PK.
+// loadOwned now filters extracted gear out of owned.gear (it boosts nothing), so if the loot dedupe
+// read only owned.gear, a killer who had EXTRACTED a piece could "loot" the same class again:
+// the INSERT hits the PK → 23505 → contention → the whole KILL rolls back. The skip is the fix.
+const glenn = await mk('Geared Glenn'); await seedCh(glenn.id, "respect=1000, muscle=1, speed=1, loc='docks'");
+const glennAcct = (await pool.query(`SELECT account_id FROM characters WHERE id='${glenn.id}'`)).rows[0].account_id;
+await pool.query(`INSERT INTO account_gear (account_id, gear_id, minted_onchain) VALUES ('${donAcct}','brasspin',true)`);   // the killer EXTRACTED his brasspin
+await pool.query(`INSERT INTO account_gear (account_id, gear_id, minted_onchain) VALUES ('${glennAcct}','brasspin',false)`); // the mark's is in-game
+const kx = await whack(glenn.id);
+assert(kx.kill, 'the kill lands — the extracted-class loot is SKIPPED, never a PK collision that rolls the whole kill back');
+assert.equal(kx.gearLoot, null, 'no loot: the killer\'s extracted brasspin still occupies the slot');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM account_gear WHERE account_id='${donAcct}' AND gear_id='brasspin'`)).rows[0].n), 1, 'the killer holds exactly ONE brasspin row — the extracted one, untouched');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM account_gear WHERE account_id='${glennAcct}' AND gear_id='brasspin' AND NOT minted_onchain`)).rows[0].n), 1, 'the mark\'s in-game piece stays with their bloodline — skipped, not destroyed');
 delete process.env.GEAR_LOOT_CHANCE; // restore the production default for the rest of the suite
 
 // ── THE PORT step five: WAREHOUSED CONTRABAND is a LOOT surface on a fire-kill (the P1.1 twin) ──

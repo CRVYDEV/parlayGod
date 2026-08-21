@@ -137,8 +137,11 @@ and this is the real decision:
 
 An extracted car is an ERC-1155 in your own wallet. Nobody can steal it, win it in a pink-slip race,
 chop it off your corpse or take it in a war — and it **survives your death**, passing down the
-bloodline. In exchange it never races, hauls, melts, fences or earns again. It is a trophy, not iron.
-Use it or own it; you cannot do both, and there is no way back. You must be MADE to take anything
+bloodline. In exchange it never races, hauls, melts, fences or earns again while it stays on-chain.
+The door swings both ways: whoever **holds** the NFT — you, or whoever bought it on a marketplace —
+can **burn it (redeem)** from their wallet, and the real thing comes back into play on *their*
+account, fresh and stock (tune, trim and damage do not make the trip; gear is one-way and stays a
+trophy). You must be MADE to take anything
 on-chain (the same gate as a $OMR withdrawal); a free-trial street plays the whole game and extracts
 nothing.
 - You cannot melt, fence, or repair a car that is **listed** on the market or **pledged** as loan collateral.

@@ -15794,3 +15794,41 @@ because a sweep that publishes only its hits cannot be audited: check H was the 
 comparison in any harness, and `tools/pollcost.js` already guards the same hazard in its own words
 (*"derived is not measured, so sit on the worst screen for a real window … and count what actually goes
 out"*), which is why its figures survived the very change that broke this one.
+
+**THE ROUND TRIP TOLD TRUE + EXTRACTED GEAR LEAVES PLAY + two founder designs (founder-directed
+2026-08-21: NFT marketplace round-trip + wallet-rolled stats).** The founder asked for two changes,
+and the survey found the first MOSTLY BUILT and mis-described: cars, boats and Street Deeds already
+do the full loop (buy the NFT anywhere → the HOLDER burns `redeem()` → the watcher lands it on the
+**burner's** linked account — secondary buyer included; `test/reimport.js` proves it), while four
+surfaces still said **"there is no way back"** — the Collection card AND its confirm dialog, both
+codices, and `requestItemWithdraw`'s own comment ("no un-extract route, exactly as there is none for
+gear"). All four corrected in lockstep (the stale-promise class — a player deciding whether to
+extract was reading a term that stopped being true when Option A shipped). **The survey also found a
+LIVE BUG, and it is the prerequisite for everything else: extracted gear never left play.**
+`loadOwned`'s gear leg had no `minted_onchain` filter, so an extracted piece was loot-immune AND
+still boosting `effStat` at every till — extraction was strictly free upside, contradicting the
+RARITY tradeoff the codices state, and any future gear re-import would have double-counted a buyer's
+gear. Fixed at the ONE filter (the owned.cars/nftCars pattern): `owned.gear` is in-play only,
+`owned.gearOnchain` carries the extracted set — which two consumers genuinely need, because the
+`account_gear` row still holds the PK: `mintGear` refuses a re-mint HONESTLY (`extracted` — "it left
+play", never "you already hold it", which would be a lie) instead of 23505ing, and the kill-loot
+dedupe includes it (without that, a killer who had extracted a class could "loot" it again → PK
+collision → contention → **the whole KILL rolls back**). Three mutations, each caught at its own
+named assertion (the filter reverted → "EXTRACTED gear boosts NOTHING"; the gate dropped → the
+honest-refusal assertion; killerHas narrowed → "the kill lands — never a PK collision").
+**The designs:** `omerta-nft-reimport-design.md` §7 specs GEAR joining the round trip — the one
+class that literally "applies to the character" — with the three-case rule resolving §0's
+set-membership ambiguity (no row → INSERT; own row extracted → un-flag, their token came home;
+in-game copy held → wait pending, the deed's already-hold-a-street rule), the FREEZE-the-gear-id-map
+prerequisite (positional `gearNumId` becomes load-bearing in both directions), and the founder call
+stated plainly: §0's pay-for-power pivot was signed for PROPERTY, gear is the STAT layer — same
+decision, materially larger, sign before build. And `omerta-wallet-forged-stats-design.md` expands
+the founder's wallet-rolled-stats idea on the one insight that makes it shippable: **the wallet
+decides the SHAPE, never the TOTAL** — all shapes sum to `CREATE_STAT_TOTAL`, so it breaks neither
+total-conservation nor "outside wealth must not buy power," is Sybil-neutral by construction (a
+farmed wallet gains zero power; the once-per-wallet latch + the reroll-credit price kill
+wallet-shopping), reads features by cost-to-fake (age unfakeable, gas costly, balances only at an
+unannounced block), maps them to fictional noir ARCHETYPES ("born The Patient Man" — the guessability
+rule), stores no raw holding (the anti-precise-kill-EV rule), and puts the three depths up as §6
+founder picks (A shape-only recommended / B banded bonus points, a wall-retirement / C cosmetic).
+Suite green + three mutation kills + real-Postgres gates; SPEC's doc row moved with the new doc.
