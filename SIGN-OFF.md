@@ -809,3 +809,18 @@ as the shipped watcher enforces); retrofit for every existing minted account con
 
 **Directed builds created by these answers (all three ✅ BUILT 2026-08-16):** the Solana snapshot +
 ed25519 claim leg; the deed-extraction self-attestation; Street Deeds phase-2C turf perks.
+
+## THE 2026-08-21 PAIR (founder: "Gear joins the roundtrip & B Wallets also grant bonus points based on history/usage")
+
+1. **GEAR JOINS THE NFT ROUND TRIP — SIGNED + ✅ BUILT same day** (`omerta-nft-reimport-design.md`
+   §7). This is the §0 pay-for-power pivot extended from property to the stat layer: a
+   marketplace-bought gear NFT, burned, raises `effStat` at every contest — the founder signed that
+   explicitly. Built: the frozen `GEAR_TOKEN_IDS` map (append-only, load-guarded), `GearVault.redeem`
+   accepts gear one-at-a-time (audit batch — forge 306/306), the three-case rule in `applyReimport`
+   (account-level: linked wallet, no living character needed), `GET /v1/mod/items/stranded`.
+2. **THE WALLET FORGE at depth B — SIGNED** (`omerta-wallet-forged-stats-design.md` §6): the
+   wallet decides the stat SHAPE (archetypes, all summing to `CREATE_STAT_TOTAL`) AND grants banded
+   BONUS POINTS from wallet history/usage (age/gas tiers, capped at `WALLET_FORGE.BONUS_MAX`). This
+   is an explicit, bounded retirement of "outside wealth must not buy power" on the stat layer — the
+   §4.3-retirement shape: a small CEILING (+3 vs the 15-point base, once per wallet EVER, dwarfed by
+   ordinary stat training), recorded in BALANCE.md § THE LEDGER-BORN.

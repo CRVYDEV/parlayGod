@@ -204,8 +204,9 @@ const SECTIONS = [
       <b>survives your death</b> and passes down the bloodline. In exchange it never races, hauls, melts, fences or
       earns again while it stays on-chain. The door swings both ways: whoever <b>holds</b> the NFT — you, or whoever
       bought it on a marketplace — can <b>burn it (redeem)</b> from their wallet, and the real thing comes back into
-      play on <i>their</i> account, fresh and stock (tune, trim and damage do not make the trip; gear is one-way and
-      stays a trophy). You must be MADE to take anything on-chain.</p>
+      play on <i>their</i> account, fresh and stock (tune, trim and damage do not make the trip). Gear makes the same
+      round trip: burn a gear NFT and the class joins the burner's account — unless they already run the in-game copy,
+      in which case the burn waits until that copy extracts or is lost. You must be MADE to take anything on-chain.</p>
       ${R(`POST /v1/garage/boost · /garage/:carId/melt|fence|repair · /armory/gun/:id/buy|equip · /armory/ammo · /workshop/craft/:id · GET /v1/nft · POST /v1/nft/:kind/:id/upgrade|withdraw`)}` },
 
   { id: 'city', group: 'The Basics', title: 'The City & the Living World', tag: 'events, weather, districts, NPC families',

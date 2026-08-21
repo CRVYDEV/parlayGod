@@ -163,7 +163,7 @@ function toVoucherMessage(row) {
 }
 // Gear class id → on-chain uint256. The game's gear are string ids (MARKET table); the
 // on-chain tokenId is their 1-based index (matches "one tokenId per gear class").
-import { MARKET, BONDS, bondPayout, TAX, withdrawTaxBps, nftTokenId, nftDecode, dayOf, DISTRICTS } from './rules.js';
+import { MARKET, BONDS, bondPayout, TAX, withdrawTaxBps, nftTokenId, nftDecode, dayOf, DISTRICTS, GEAR_TOKEN_IDS } from './rules.js';
 import { earlySurcharge, creditTollBuckets, splitToll } from './tax.js';
 import { nftKind } from './nft.js';
 // A car/boat voucher stores `<kind>:<catalogId>:<rarity>:<itemId>` in `gear_id` (no schema change).
@@ -181,9 +181,13 @@ export function itemTokenId(key) {
   return nftTokenId(kind, catalogId, rarity);
 }
 export function gearNumId(gearId) {
-  const i = MARKET.findIndex((m) => m.id === gearId);
-  if (i < 0) throw new GameError('bad_gear', 'No such gear class.');
-  return i + 1; // 1-based; 0 is reserved (contract rejects gearId 0)
+  // The FROZEN map (rules.tail.js GEAR_TOKEN_IDS), never a positional MARKET read — three audits
+  // flagged the findIndex form as latent (a MARKET reorder silently re-pointed every Safe-set cap
+  // and every held token). The map is append-only and load-guarded against the live catalog, so a
+  // reorder is harmless and a new class cannot ship without a frozen id.
+  const n = GEAR_TOKEN_IDS[gearId];
+  if (!Object.hasOwn(GEAR_TOKEN_IDS, gearId)) throw new GameError('bad_gear', 'No such gear class.');
+  return n; // 1-based; 0 is reserved (contract rejects gearId 0)
 }
 
 async function signVoucher(row) {
@@ -346,9 +350,9 @@ export async function requestGearWithdraw(pool, accountId, gearId, toAddress) {
 // The trade, stated once because it is the mechanic: the item LEAVES PLAY. It stops racing, hauling,
 // melting and being stolen, and in exchange it stops dying with the street. Nothing HERE reverses
 // that — the game can never take the token back — but the way home exists and is the HOLDER's own
-// act: burn it (GearVault.redeem, cars/boats only — gear is one-way) and `reimportItem` lands a
-// fresh stock instance on the burner's living character, secondary buyer included
-// (omerta-nft-reimport-design.md; the founder-directed Option A pivot).
+// act: burn it (GearVault.redeem — cars, boats and gear alike since §7) and `reimportItem` lands a
+// fresh stock instance on the burner's living character (gear: on their ACCOUNT), secondary buyer
+// included (omerta-nft-reimport-design.md; the founder-directed Option A pivot + the §7 gear signing).
 export async function requestItemWithdraw(pool, accountId, kind, itemId, toAddress) {
   const k = nftKind(kind);
   if (!k) throw new GameError('bad_kind', 'Nothing of that sort to take on-chain.');
@@ -562,16 +566,18 @@ export async function reclaimExpiredVouchers(pool, reader = undefined) {
   } finally { client.release(); }
 }
 
-// ── NFT RE-IMPORT (Option A, omerta-nft-reimport-design.md): a burned car/boat NFT re-created in-game ──
-// The inverse of requestItemWithdraw. Extraction flags `minted_onchain=true` on the ORIGINAL row and
-// mints the token; re-import BURNS the token (GearVault.redeem, on-chain) and re-creates a FRESH live
-// row on whoever burned it. It creates a NEW row (never un-flags an existing one) because the burner is
-// usually a DIFFERENT account — a buyer on a secondary market — and un-flagging the original extractor's
-// row would double-count (their flagged row stays inert, follows their bloodline, and can never be
-// re-imported since they no longer hold the token). §10.4-NEUTRAL: a car/boat is ownership, conserved by
-// ROW COUNT, never a currency — this writes ZERO ledger rows (each burned token is a −1 matched by a +1
-// row). Trim/tune/damage are NOT encoded in the tokenId (only model + rarity), so a re-imported car is a
-// clean STOCK instance — the NFT represents the class and rarity, never the tune.
+// ── NFT RE-IMPORT (Option A, omerta-nft-reimport-design.md): a burned car/boat/GEAR NFT re-created ──
+// The inverse of requestItemWithdraw / requestGearWithdraw. Extraction flags `minted_onchain=true` on
+// the ORIGINAL row and mints the token; re-import BURNS the token (GearVault.redeem, on-chain) and
+// lands it on whoever burned it. Cars/boats create a NEW row (never un-flag an existing one) because
+// the burner is usually a DIFFERENT account — a buyer on a secondary market — and un-flagging the
+// original extractor's row would double-count (their flagged row stays inert, follows their bloodline,
+// and can never be re-imported since they no longer hold the token). GEAR (§7, 2026-08-21) is
+// account-level SET MEMBERSHIP, so it takes the three-case rule in applyReimport instead of a row
+// insert. §10.4-NEUTRAL: a car/boat/gear class is ownership, never a currency — this writes ZERO
+// ledger rows (each burned token is a −1 matched by a +1 membership/row). Trim/tune/damage are NOT
+// encoded in the tokenId (only model + rarity), so a re-imported car is a clean STOCK instance —
+// the NFT represents the class and rarity, never the tune.
 async function insertReimportRows(client, characterId, kind, catalogId, rarity, amount) {
   for (let i = 0; i < amount; i++) {
     const rowId = uid();
@@ -597,6 +603,31 @@ async function applyReimport(client, ref, wallet, kind, catalogId, rarity, amoun
   const acct = (await client.query(
     'SELECT account_id FROM account_persistent WHERE lower(wallet_address)=lower($1)', [wallet])).rows[0];
   if (!acct) return null; // wallet not linked to any account yet — wait
+  if (kind === 'gear') {
+    // GEAR (§7, founder-signed 2026-08-21) — ACCOUNT-level SET MEMBERSHIP, so it needs a linked
+    // wallet and NOT a living character (gear survives death; a car needs a garage, a gear class
+    // just needs the account). The THREE-CASE rule resolves what a burn lands as:
+    //   1. no row            → INSERT minted_onchain=false — the class joins the account, live.
+    //   2. own row extracted → flip false — their OWN token came home (un-flag, never a second row:
+    //        the PK is the set membership, and a second row is impossible by construction).
+    //   3. in-game copy held → WAIT pending (the deed's "already hold a street" rule): the burn is
+    //        not lost — the sweep applies it the moment they extract or lose the in-game copy.
+    // amount is 1 by contract (GearVault requires amount==1 for gear — set membership); a >1 event
+    // is unreachable and logged rather than silently multiplied into nothing.
+    if (Number(amount) !== 1) console.error('gear reimport: amount != 1 (contract should forbid)', ref, amount);
+    const row = (await client.query(
+      'SELECT minted_onchain FROM account_gear WHERE account_id=$1 AND gear_id=$2 FOR UPDATE',
+      [acct.account_id, catalogId])).rows[0];
+    if (row && !row.minted_onchain) return null; // case 3 — in-game copy held; wait
+    if (!row)
+      await client.query('INSERT INTO account_gear (account_id, gear_id, minted_onchain) VALUES ($1,$2,false)',
+        [acct.account_id, catalogId]);
+    else
+      await client.query('UPDATE account_gear SET minted_onchain=false WHERE account_id=$1 AND gear_id=$2',
+        [acct.account_id, catalogId]);
+    await client.query("UPDATE nft_reimports SET status='applied', applied_at=now() WHERE id=$1", [ref]);
+    return 'account'; // truthy = applied; no character attached (account-level, applied_character stays NULL)
+  }
   const ch = (await client.query(
     'SELECT id FROM characters WHERE account_id=$1 AND alive ORDER BY created_at LIMIT 1', [acct.account_id])).rows[0];
   if (!ch) return null; // no living street — wait (you can't put a car in a dead man's garage)
@@ -617,7 +648,7 @@ export async function reimportItem(pool, { ref, from, tokenId, amount }) {
     console.error('reimport: malformed Redeemed event', ref, from, tokenId, amount); return { skipped: true };
   }
   let dec;
-  try { dec = nftDecode(tokenId); } // car/boat only — gear/unknown throws (the contract already rejects gear)
+  try { dec = nftDecode(tokenId); } // car/boat/gear — an UNKNOWN token throws (fail-closed)
   catch (e) { console.error('reimport: undecodable token', tokenId, e.message); return { skipped: true }; }
   const wallet = getAddress(from);
   const client = await pool.connect();
@@ -634,7 +665,7 @@ export async function reimportItem(pool, { ref, from, tokenId, amount }) {
     await client.query(
       `INSERT INTO nft_reimports (id, wallet_address, token_id, amount, kind, catalog_id, rarity)
        VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [ref, wallet, String(tokenId), amt, dec.kind, dec.catalogId, dec.rarity]);
+      [ref, wallet, String(tokenId), amt, dec.kind, dec.catalogId, dec.rarity || '']); // gear has no rarity — '' (the column predates gear and is NOT NULL on live DBs)
     // apply in the SAME txn so record + rows commit atomically; no living character → left pending.
     const character = await applyReimport(client, ref, wallet, dec.kind, dec.catalogId, dec.rarity, amt);
     await client.query('COMMIT');
@@ -661,6 +692,38 @@ export async function sweepReimports(pool) {
     finally { client.release(); }
   }
   return { applied, pending: pend.length };
+}
+
+// The waiting set — what an operator can see before wondering why a burn hasn't landed (the
+// strandedDeeds twin). Each pending row NAMES its reason (the community-keeper "silence reads as
+// fine" lesson): a burn that waits is by design, and the reason tells a human whether it will ever
+// resolve on its own (unlinked wallet → resolves at link; gear copy held → resolves at extraction/
+// loss; no living street → resolves at the next character).
+export async function strandedItems(pool) {
+  const pend = (await pool.query(
+    "SELECT id, wallet_address, kind, catalog_id, rarity, created_at FROM nft_reimports WHERE status='pending' ORDER BY created_at LIMIT 100")).rows;
+  const out = [];
+  for (const p of pend) {
+    const acct = (await pool.query(
+      'SELECT account_id FROM account_persistent WHERE lower(wallet_address)=lower($1)', [p.wallet_address])).rows[0];
+    let reason = 'wallet not linked to any account';
+    if (acct) {
+      if (p.kind === 'gear') {
+        const row = (await pool.query(
+          'SELECT minted_onchain FROM account_gear WHERE account_id=$1 AND gear_id=$2', [acct.account_id, p.catalog_id])).rows[0];
+        reason = row && !row.minted_onchain ? 'in-game copy held — applies when it extracts or is lost'
+          : 'resolvable — the next sweep should apply it';
+      } else {
+        const ch = (await pool.query(
+          'SELECT 1 FROM characters WHERE account_id=$1 AND alive LIMIT 1', [acct.account_id])).rows[0];
+        reason = ch ? 'resolvable — the next sweep should apply it' : 'no living character';
+      }
+    }
+    out.push({ ref: p.id, kind: p.kind, catalogId: p.catalog_id, rarity: p.rarity || null,
+      burnedBy: p.wallet_address, waitingHours: Math.floor((Date.now() - new Date(p.created_at).getTime()) / 3600000),
+      reason });
+  }
+  return { pending: out };
 }
 
 // ── STREET DEEDS on-chain (omerta-street-deeds-design.md §2/§3) ────────────────────────────────

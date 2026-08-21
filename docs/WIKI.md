@@ -140,8 +140,9 @@ chop it off your corpse or take it in a war — and it **survives your death**, 
 bloodline. In exchange it never races, hauls, melts, fences or earns again while it stays on-chain.
 The door swings both ways: whoever **holds** the NFT — you, or whoever bought it on a marketplace —
 can **burn it (redeem)** from their wallet, and the real thing comes back into play on *their*
-account, fresh and stock (tune, trim and damage do not make the trip; gear is one-way and stays a
-trophy). You must be MADE to take anything
+account, fresh and stock (tune, trim and damage do not make the trip). Gear makes the same round
+trip: burn a gear NFT and the class joins the burner's account — unless they already run the
+in-game copy, in which case the burn waits until that copy extracts or is lost. You must be MADE to take anything
 on-chain (the same gate as a $OMR withdrawal); a free-trial street plays the whole game and extracts
 nothing.
 - You cannot melt, fence, or repair a car that is **listed** on the market or **pledged** as loan collateral.

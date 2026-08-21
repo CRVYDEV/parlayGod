@@ -770,7 +770,7 @@ CREATE TABLE IF NOT EXISTS nft_reimports (
   wallet_address TEXT NOT NULL,                     -- the burner (Redeemed.from), checksummed
   token_id TEXT NOT NULL,                           -- the burned tokenId (string — > 2^53 safe)
   amount INT NOT NULL,
-  kind TEXT NOT NULL,                               -- 'car' | 'boat' (gear is one-way, not redeemable)
+  kind TEXT NOT NULL,                               -- 'car' | 'boat' | 'gear' (gear joined §7 2026-08-21; rarity '' for gear)
   catalog_id TEXT NOT NULL,                         -- decoded model_id / boat kind
   rarity TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending',           -- 'pending' | 'applied'

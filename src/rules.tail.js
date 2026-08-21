@@ -5305,6 +5305,47 @@ export const rollRarity = (roll) => {
   for (const t of RARITY.TIERS) { x -= t.w; if (x < 0) return t.id; }
   return RARITY.TIERS[0].id;
 };
+// ── THE FROZEN GEAR TOKEN-ID MAP (nft-reimport §7 prerequisite, 2026-08-21) ─────────────────────
+// The on-chain ERC-1155 gear tokenId used to be POSITIONAL (`MARKET.findIndex + 1` in chain.js),
+// which three audits flagged as latent: a MARKET reorder on a future re-extract would silently
+// re-point every Safe-set supply cap AND change the tokenId of gear players already hold. The
+// moment gear joins the round trip those ids are LOAD-BEARING in BOTH directions (a burn resolves
+// a tokenId back to a class), so the map is FROZEN here in the hand-written half where no
+// extractor run can touch it. Values are today's 1-based MARKET order, captured 2026-08-21 —
+// APPEND-ONLY forever: a new gear class takes the next free number, and a MARKET reorder is now
+// HARMLESS (the map, not the position, is the id). The load guard below makes the discipline
+// enforced rather than remembered: a re-extract that adds a class without adding its frozen id
+// refuses to boot, everywhere, loudly — never a silently re-pointed cap.
+export const GEAR_TOKEN_IDS = {
+  brasspin: 1, newscap: 2, knuckles: 3, dice: 4, matchbook: 5, gloves: 6, laces: 7, pipe: 8,
+  blade: 9, hook: 10, cosh: 11, deck: 12, plimsolls: 13, hshoe: 14, loupe: 15, sap: 16,
+  bookpad: 17, crepesoles: 18, vest: 19, lockpick: 20, barchain: 21, cipher: 22, stopwatch: 23,
+  suit: 24, wingtips: 25, wraps: 26, harness: 27, blackbook: 28, silks: 29, maul: 30,
+  wirekey: 31, supercharger: 32, wheels: 33, ironcorset: 34, forgebench: 35, railpass: 36,
+  sawed: 37, shovel: 38, anvilfists: 39, switchboard: 40, ironcrown: 41, cityshadow: 42,
+  confessor: 43, ledger: 44, signet: 45, midnight: 46, colossus: 47, zephyr: 48, apocase: 49,
+  chemscales: 50, supledger: 51,
+};
+{ // load guard: the map and the MARKET catalog must agree on MEMBERSHIP (never on position —
+  // position independence is the whole point). Unique positive ints, no zero (the contract
+  // rejects gearId 0), every class mapped, every mapped id a real class.
+  const ids = Object.values(GEAR_TOKEN_IDS);
+  if (new Set(ids).size !== ids.length || ids.some((n) => !Number.isInteger(n) || n < 1))
+    throw new Error('GEAR_TOKEN_IDS: ids must be unique positive integers');
+  for (const m of MARKET) if (!Object.hasOwn(GEAR_TOKEN_IDS, m.id))
+    throw new Error(`GEAR_TOKEN_IDS: gear class ${m.id} has no frozen tokenId — append one (never renumber)`);
+  for (const k of Object.keys(GEAR_TOKEN_IDS)) if (!MARKET.some((m) => m.id === k))
+    throw new Error(`GEAR_TOKEN_IDS: ${k} is not a MARKET gear class`);
+}
+// The inverse — a gear tokenId → its class id. Fail-closed: an unknown number throws rather than
+// resolving to a plausible class, because the caller re-creates a real owned asset from the answer.
+export const gearIdOfToken = (tokenId) => {
+  const n = Number(tokenId);
+  const hit = Object.entries(GEAR_TOKEN_IDS).find(([, v]) => v === n);
+  if (!hit) throw new Error(`gearIdOfToken: no gear class for token ${tokenId}`);
+  return hit[0];
+};
+
 // The on-chain tokenId for an extractable item. Throws on an unknown catalog id rather than
 // returning a plausible number — a wrong id here mints the wrong NFT, and the fail-closed rule that
 // governs every other chain surface applies with more force to something a player then sells.
@@ -5317,15 +5358,17 @@ export const nftTokenId = (kind, catalogId, rarity) => {
 };
 // The inverse of nftTokenId — a burned tokenId → { kind, catalogId, rarity } — used by the re-import
 // watcher (omerta-nft-reimport-design.md) to turn a `Redeemed` event back into the exact catalog class
-// and rarity to re-create in-game. CAR/BOAT ONLY: gear (below CAR_BASE) is not re-importable (its
-// in-game form is account-level set membership, the same reason character_assets are deferred; the
-// contract's redeem() rejects it), so a gear/out-of-range token throws — fail-closed, matching
-// nftTokenId. Never trusts the id blindly: an index past the catalog throws rather than pointing at a
-// plausible-but-wrong class, because this re-creates a real asset a player then owns.
+// and rarity to re-create in-game. GEAR joined the round trip 2026-08-21 (founder-signed §7): a
+// tokenId below CAR_BASE resolves through the FROZEN GEAR_TOKEN_IDS map (rarity null — gear has
+// none; its in-game form is account-level set membership, so the three-case rule in chain.js
+// decides what the burn lands as). Never trusts the id blindly: an unknown number throws rather
+// than pointing at a plausible-but-wrong class, because this re-creates a real asset a player
+// then owns — fail-closed, matching nftTokenId.
 export const nftDecode = (tokenId) => {
   const id = Number(tokenId);
   const { CAR_BASE, BOAT_BASE, STRIDE } = RARITY.TOKEN;
-  if (!Number.isInteger(id) || id < CAR_BASE) throw new Error(`nftDecode: token ${tokenId} is not a re-importable car/boat`);
+  if (!Number.isInteger(id) || id < 1) throw new Error(`nftDecode: token ${tokenId} is not re-importable`);
+  if (id < CAR_BASE) return { kind: 'gear', catalogId: gearIdOfToken(id), rarity: null };
   const isBoat = id >= BOAT_BASE;
   const base = isBoat ? BOAT_BASE : CAR_BASE;
   const idx = Math.floor((id - base) / STRIDE);

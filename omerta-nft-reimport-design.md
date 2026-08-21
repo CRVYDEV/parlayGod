@@ -200,3 +200,13 @@ the STAT layer: a bought-and-burned piece raises `effStat` at every contest in t
 decision, materially larger. It also touches the RICO wall ("staked $OMR and minted gear are SAFE"
 — unchanged: safety still applies only while on-chain) and the kill-loot economy (a re-imported
 piece is lootable again — correct, and worth saying in the copy).
+
+**SIGNED AND BUILT (founder, 2026-08-21: "Gear joins the roundtrip").** The whole build list above
+landed the same day: `GEAR_TOKEN_IDS` frozen (load-guarded against MARKET membership, append-only),
+`gearNumId` reads the map, `nftDecode` decodes gear (rarity null), `GearVault.redeem` accepts gear
+ONE AT A TIME (`amount == 1` — each Redeemed event maps to exactly one membership change, so a
+batch burn can never collapse N tokens into one membership), `applyReimport` implements the
+three-case rule (account-level — a linked wallet suffices, NO living character needed, proven in
+test/reimport.js with a character-less account), and `GET /v1/mod/items/stranded` names each
+pending burn's reason. The `rarity` column stores `''` for gear (NOT NULL on live DBs — never an
+ALTER for a sentinel); readers surface it as null.

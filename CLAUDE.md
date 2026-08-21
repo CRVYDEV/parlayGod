@@ -15841,3 +15841,40 @@ argument (`functionName: 'PERIOD'`), with the stale-waiver assert its sibling le
 a mark that stops matching now fails loudly instead of leaving a future pg site quietly waived. Both
 directions mutation-verified by name (a dropped waiver names the real site; a bogus one trips the
 stale assert).
+
+**GEAR JOINS THE ROUND TRIP (founder-signed 2026-08-21: "Gear joins the roundtrip") — BUILT**
+(`src/rules.tail.js` `GEAR_TOKEN_IDS`/`gearIdOfToken`, `src/chain.js` gearNumId/applyReimport/
+strandedItems, `omerta-contracts/src/GearVault.sol` redeem, `GET /v1/mod/items/stranded`,
+`test/reimport.js`; design `omerta-nft-reimport-design.md` §7 — forge **306/306**). The one class
+with no road back now makes the full marketplace round trip, and the §0 pay-for-power pivot is
+extended to the STAT layer with the founder's own signature on it. **The prerequisite landed first,
+exactly as the design ordered it: the gear token-id map is FROZEN.** `gearNumId` was a positional
+`MARKET.findIndex + 1` — three audits flagged that a MARKET reorder would silently re-point every
+Safe-set supply cap and every held token — and re-import makes those ids load-bearing in BOTH
+directions, so `GEAR_TOKEN_IDS` (rules.tail.js, the hand-written half no extractor can touch) is
+today's order captured as an append-only map, LOAD-GUARDED against the live catalog on membership
+(never position — position independence is the point): a re-extract that adds a class without a
+frozen id refuses to boot everywhere, and a reorder is now harmless. `nftDecode` gains the gear
+inverse (rarity null, fail-closed through `gearIdOfToken`). **The contract change is one clause with
+one rule in it**: `GearVault.redeem` accepts gear, ONE AT A TIME (`amount == 1`) — gear's in-game
+form is account-level SET MEMBERSHIP, so each `Redeemed` event must map to exactly one membership
+change or a batch burn collapses N tokens into one membership and silently destroys the rest;
+cars/boats still batch, tokenId 0 stays reserved. Into the pre-mainnet audit batch. **The three-case
+rule resolves §0's set-membership ambiguity in `applyReimport`**, and gear deliberately branches
+BEFORE the living-character requirement (a linked wallet suffices — gear survives death, so a burner
+with a dead street or no street at all still lands it, proven in the suite with a character-less
+account): (1) no row → INSERT live; (2) the burner's OWN row extracted → un-flag, their token came
+home, never a second row (the PK is the membership); (3) the in-game copy held → the burn WAITS
+pending (the deed's already-hold-a-street rule — not lost, applied by the sweep the moment the copy
+extracts or is lost). The `nft_reimports.rarity` column stores `''` for gear (NOT NULL on live DBs —
+never an ALTER for a sentinel; readers surface null). **`GET /v1/mod/items/stranded`** is the
+strandedDeeds twin with the community-keeper lesson applied: every pending burn NAMES its reason
+(wallet not linked / in-game copy held / no living street) — all self-resolving, so it is a read,
+not a recovery lever. Copy moved in lockstep (both codices' "gear is one-way and stays a trophy" —
+written EARLIER THE SAME DAY — replaced with the round-trip truth; the schema comment; chain.js's
+own §7-era comments), and the signature is recorded in SIGN-OFF + the design doc same-commit (the
+D13/D15 rule). Three mutations each killed at a named assertion (the case-3 wait removed; case 2
+treated as a wait; the decode's gear branch dropped); the two new Foundry tests pin the
+one-at-a-time rule and the freed live-supply slot a burn vacates. **The levers register caught my
+own SIGN-OFF prose twice** — "the STAT layer" and "WALLET-FORGED STATS" both read as lever-leaf
+tokens (the SOLDIERS.LAST class, third occurrence) — lowercased rather than waived.
