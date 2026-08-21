@@ -1,0 +1,69 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face { font-family: 'Oswald'; font-weight: 600; src: url('file:///home/user/Omerta/public/art/display.woff2') format('woff2'); }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { width:1600px; height:1030px; background:
+  radial-gradient(120% 90% at 20% 0%, #1a1410 0%, transparent 55%),
+  radial-gradient(120% 90% at 85% 100%, #101a18 0%, transparent 55%),
+  #0a0b0d;
+  font-family:'Oswald','Arial Narrow',Arial,sans-serif; color:#d9d2c0; overflow:hidden; position:relative; }
+body::before { content:''; position:absolute; inset:0;
+  background-image: repeating-linear-gradient(0deg, rgba(255,255,255,.014) 0 1px, transparent 1px 3px); }
+h1 { text-align:center; font-weight:600; font-size:54px; letter-spacing:6px; padding:34px 0 6px; color:#8fa3b8; }
+h1 .vs { color:#5b6470; font-size:40px; }
+h1 .omr { color:#e9c25a; text-shadow:0 0 30px rgba(233,194,90,.35); }
+.sub { text-align:center; color:#6d6a5e; font-size:17px; letter-spacing:3px; margin-bottom:22px; }
+.grid { display:grid; grid-template-columns: 300px 570px 620px; gap:0 18px; padding:0 44px; }
+.colhead { border-radius:14px 14px 0 0; padding:16px 18px 12px; text-align:center; }
+.colhead .sym { font-size:34px; line-height:1; margin-bottom:4px; }
+.colhead .nm { font-size:24px; letter-spacing:3px; }
+.ohm .colhead { background:linear-gradient(180deg,#161b22,#10141a); border:1px solid #2a3340; border-bottom:none; color:#9fb0c3; }
+.omr-c .colhead { background:linear-gradient(180deg,#1c170e,#141008); border:1px solid #6e5a24; border-bottom:none; color:#e9c25a; text-shadow:0 0 22px rgba(233,194,90,.3); }
+.crit { display:flex; align-items:center; gap:12px; background:linear-gradient(180deg,#14151a,#0f1013);
+  border:1px solid #23252c; border-radius:10px; padding:10px 14px; margin:5px 0; font-size:18.5px; letter-spacing:1px; color:#b9b4a4; }
+.crit .ico { font-size:22px; width:30px; text-align:center; filter:grayscale(.3); }
+.cell { display:flex; align-items:center; justify-content:center; text-align:center; margin:5px 0; padding:10px 20px;
+  border-radius:10px; font-size:17.5px; line-height:1.32; letter-spacing:.4px; font-family:Georgia,'Times New Roman',serif; }
+.ohm-cell { background:rgba(22,27,34,.75); border:1px solid #232c38; color:#8f9dad; }
+.omr-cell { background:rgba(28,23,14,.8); border:1px solid #55461c; color:#e3cf8f; }
+.omr-cell b { color:#f0d789; font-weight:600; font-family:'Oswald','Arial Narrow',Arial,sans-serif; letter-spacing:.6px; }
+.row { display:contents; }
+.foot { position:absolute; left:0; right:0; bottom:16px; text-align:center; color:#8a8471; font-size:16.5px; letter-spacing:3px; }
+.foot b { color:#e9c25a; font-weight:600; }
+</style></head><body>
+<h1>OHM 2021 <span class="vs">vs</span> <span class="omr">$OMR</span></h1>
+<div class="sub">THE RESERVE-TOKEN FAILURE MODES · AND A GAME TOKEN BUILT WITHOUT THEM · OMERTÀ ON ROBINHOOD CHAIN</div>
+<div class="grid">
+  <div></div>
+  <div class="ohm"><div class="colhead"><div class="sym">Ω</div><div class="nm">OHM 2021</div></div></div>
+  <div class="omr-c"><div class="colhead"><div class="sym">🎩</div><div class="nm">$OMR (OMERTÀ)</div></div></div>
+
+  <div class="row"><div class="crit"><span class="ico">🛡</span>1. Backing</div>
+  <div class="cell ohm-cell">RFV (stables + volatile assets); no hard enforcement against minting below RFV</div>
+  <div class="cell omr-cell"><span><b>Full-reserve extraction:</b> on-chain withdrawals can never exceed real revenue that already arrived — enforced in code, reconciled nightly</span></div></div>
+
+  <div class="row"><div class="crit"><span class="ico">📈</span>2. Emissions</div>
+  <div class="cell ohm-cell">High fixed APY, largely regardless of premium</div>
+  <div class="cell omr-cell"><span><b>No APY, no wage, no drip.</b> Nothing farms $OMR into existence; staking pays from a funded pool — redistribution, never a mint</span></div></div>
+
+  <div class="row"><div class="crit"><span class="ico">🏛</span>3. Treasury assets</div>
+  <div class="cell ohm-cell">DAI / FRAX + ETH / volatile assets</div>
+  <div class="cell omr-cell"><span><b>ETH + protocol-owned liquidity + tokenized stock</b> — keeper buys behind price-continuity walls; same-asset books: allocated ≤ held</span></div></div>
+
+  <div class="row"><div class="crit"><span class="ico">🔄</span>4. Buyback</div>
+  <div class="cell ohm-cell">Yes, but not hard-enforced</div>
+  <div class="cell omr-cell"><span><b>Three revenue-fed buybacks</b> (vig · desk · community pot), each root-capped at spend ≤ revenue, with fat-finger price walls</span></div></div>
+
+  <div class="row"><div class="crit"><span class="ico">👥</span>5. Governance</div>
+  <div class="cell ohm-cell">Policy committee / DAO driven</div>
+  <div class="cell omr-cell"><span><b>No emission governance to capture.</b> Bonds are the only mint — daily-capped, rate-walled, one-transaction kill switch. Players vote gameplay, never supply</span></div></div>
+
+  <div class="row"><div class="crit"><span class="ico">🚀</span>6. Growth drivers</div>
+  <div class="cell ohm-cell">Mainly bonding + meme demand</div>
+  <div class="cell omr-cell"><span><b>A full mafia RPG:</b> 9% sell tax → four destinations · every sink resold at the daily auction · families split the community pot · the RWA arc into Street Deed vaults</span></div></div>
+
+  <div class="row"><div class="crit"><span class="ico">⚠</span>7. Death spiral risk</div>
+  <div class="cell ohm-cell">High (dilution + RFV decline + panic selling)</div>
+  <div class="cell omr-cell"><span><b>No reflexive loop to unwind:</b> emission never chases price, game cash can never become $OMR, and the token was never sold as yield</span></div></div>
+</div>
+<div class="foot">THE LEDGER IS PUBLIC · <b>EXTRACTION OPENS AT LAUNCH</b> · OMERTA.FUN · @OMERTAONRH</div>
+</body></html>
